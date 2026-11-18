@@ -57,4 +57,16 @@ describe('SuggestedRail — kệ "Có thể bạn thích" ở màn rỗng/không
     await vi.waitFor(() => expect(mocks.fetchProducts).toHaveBeenCalledTimes(2));
     expect(second.container).toBeEmptyDOMElement();
   });
+  it('màn tìm không ra: tiêu đề "Bán chạy còn hàng", hỏi 6 món; khoá cache riêng theo số món', async () => {
+    mocks.fetchProducts.mockResolvedValue({ data: [product('1')], meta: { page: 1, limit: 6, total: 1 } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <SuggestedRail listSource="search_empty" title="Bán chạy còn hàng" limit={6} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('heading', { level: 2, name: 'Bán chạy còn hàng' })).toBeInTheDocument();
+    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
+    expect(qc.getQueryCache().find({ queryKey: ['products', 'suggested-rail', 6] })).toBeDefined();
+  });
 });

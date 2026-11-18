@@ -11,18 +11,18 @@ const SUGGESTED_LIMIT = 4;
  * CTV vào đúng ngõ cụt thì vẫn có chỗ đi tiếp. Là phần phụ — đang tải, lỗi hay hết hàng thì không vẽ gì, để màn bên trên
  * không nhảy và không thêm một khối lỗi thứ hai.
  */
-export function SuggestedRail({ listSource }: { listSource: string }) {
+export function SuggestedRail({ listSource, title = vi.suggested.title, limit = SUGGESTED_LIMIT }: { listSource: string; title?: string; limit?: number }) {
   const q = useQuery({
-    queryKey: ['products', 'suggested-rail'],
-    queryFn: () => fetchProducts({ limit: SUGGESTED_LIMIT, sort: 'best_seller' }),
+    queryKey: ['products', 'suggested-rail', limit],
+    queryFn: () => fetchProducts({ limit, sort: 'best_seller' }),
     staleTime: 60_000,
   });
   const items = (q.data?.data ?? []).filter((p) => p.inStock !== false);
   if (items.length === 0) return null;
   return (
-    <section aria-label={vi.suggested.title} style={{ padding: '16px 16px 0' }}>
+    <section aria-label={title} style={{ padding: '16px 16px 0' }}>
       <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
-        {vi.suggested.title}
+        {title}
       </Heading>
       <CatalogGrid products={items} listSource={listSource} />
     </section>

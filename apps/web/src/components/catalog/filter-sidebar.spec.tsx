@@ -61,11 +61,12 @@ describe('FilterSidebar (cột lọc từ lg)', () => {
     expect(onPatch).toHaveBeenCalledWith({ brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined });
   });
 
-  it('không dính, không giới hạn cao, không cuộn riêng (cột 200px của ListingLayout, trang cuộn chung)', () => {
+  it('từ lg dính dưới thanh đầu, cao tối đa bằng khung nhìn và tự cuộn khi cây dài; dưới lg vẫn ẩn', () => {
     const { c } = setup();
     const aside = c.querySelector('aside')!;
-    expect(aside.className).not.toMatch(/sticky|max-h-|overflow/);
-    expect(c.innerHTML).not.toMatch(/overflow-y-auto|max-h-/);
+    const cls = aside.className.split(/\s+/);
+    expect(cls).toEqual(expect.arrayContaining(['hidden', 'lg:block', 'lg:sticky', 'lg:top-[calc(var(--header-h)+var(--space-inline-md))]', 'lg:max-h-[calc(100svh-var(--header-h)-var(--space-stack-lg))]', 'lg:overflow-y-auto']));
+    expect(cls.filter((k) => /^(sticky|max-h-|overflow-)/.test(k))).toEqual([]);
   });
 });
 

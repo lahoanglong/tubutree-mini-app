@@ -4599,3 +4599,16 @@ model ProductEcoFact {
   @@index([variationId])
   @@map("product_eco_facts")
 }
+
+/// Từ đồng nghĩa của ô tìm (cờ `catalog.search_fuzzy_enabled`): khách gõ cụm `term` thì tìm thêm theo `canonical`. Cả hai vế lưu dạng đã gấp
+/// dấu, chữ thường (`foldVietnamese`), sửa ở web admin `/admin/tu-khoa-tim`.
+model SearchSynonym {
+  id        String   @id @default(cuid())
+  term      String   @unique @db.VarChar(60)
+  canonical String   @db.VarChar(60)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("search_synonyms")
+}

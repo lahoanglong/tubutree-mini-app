@@ -9,8 +9,10 @@ import { formatVnd } from '@/lib/format-vnd';
 import { cardPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { SUGGEST_MIN_CHARS } from '@/lib/use-suggest';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { foldVietnamese, includesFolded } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
+import { Chip } from '@/components/mini/chip';
 import { Skeleton } from '@/components/mini/skeleton';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
@@ -26,6 +28,7 @@ export const SUGGEST_LIMITS = { recent: 3, categories: 4 } as const;
 export function SuggestList({
   draft,
   recent,
+  popular = [],
   categories,
   products,
   loading,
@@ -38,6 +41,8 @@ export function SuggestList({
 }: {
   draft: string;
   recent: string[];
+  /** Cụm tìm phổ biến: hàng chip một dòng dưới "Tìm gần đây", chỉ khi ô trống. */
+  popular?: string[];
   categories: CategoryEntry[];
   products: ProductSuggestion[];
   loading: boolean;
@@ -59,7 +64,9 @@ export function SuggestList({
   const waiting = longEnough && loading && productsShown.length === 0;
   const nothing = longEnough && !loading && !failed && recentShown.length === 0 && categoriesShown.length === 0 && productsShown.length === 0;
 
-  if (!term && recentShown.length === 0) return null;
+  const popularShown = term ? [] : popular.filter((p) => !recent.some((r) => foldVietnamese(r) === foldVietnamese(p)));
+
+  if (!term && recentShown.length === 0 && popularShown.length === 0) return null;
 
   return (
     <section aria-label={browseText.suggest.title} className="pb-6">
@@ -84,6 +91,17 @@ export function SuggestList({
               {r}
             </SuggestRow>
           ))}
+        </Group>
+      )}
+      {popularShown.length > 0 && (
+        <Group title={fillCopy('search.popular')}>
+          <div data-testid="popular-searches" className="scroll-x gap-2 pb-1">
+            {popularShown.map((p) => (
+              <Chip key={p} onPress={() => onPickKeyword(p)}>
+                {p}
+              </Chip>
+            ))}
+          </div>
         </Group>
       )}
       {categoriesShown.length > 0 && (

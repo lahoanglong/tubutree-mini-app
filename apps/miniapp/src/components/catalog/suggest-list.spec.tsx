@@ -149,3 +149,23 @@ describe('SuggestList: giá sản phẩm khớp thẻ', () => {
     expect(screen.queryByText('159.000đ')).toBeNull();
   });
 });
+
+describe('SuggestList — Tìm phổ biến', () => {
+  it('ô trống: nhóm "Tìm phổ biến" sau "Tìm gần đây", bỏ cụm trùng lịch sử (so không dấu); chạm chip → onPickKeyword', () => {
+    const p = renderList({ popular: ['Nuoc rua', 'rửa tay', 'cho bé'] });
+    const groups = screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'));
+    expect(groups.indexOf('Tìm gần đây')).toBeLessThan(groups.indexOf('Tìm phổ biến'));
+    const popular = screen.getByRole('group', { name: 'Tìm phổ biến' });
+    expect(within(popular).getAllByRole('button').map((b) => b.textContent)).toEqual(['rửa tay', 'cho bé']);
+    fireEvent.click(within(popular).getByRole('button', { name: 'cho bé' }));
+    expect(p.onPickKeyword).toHaveBeenCalledWith('cho bé');
+  });
+
+  it('chưa có lịch sử nhưng có cụm phổ biến: vẫn hiện; đang gõ: ẩn', () => {
+    const first = renderList({ recent: [], popular: ['rửa tay'] });
+    expect(screen.getByRole('group', { name: 'Tìm phổ biến' })).toBeInTheDocument();
+    first.container.remove();
+    renderList({ draft: 'nuoc', recent: [], popular: ['rửa tay'] });
+    expect(screen.queryByRole('group', { name: 'Tìm phổ biến' })).toBeNull();
+  });
+});

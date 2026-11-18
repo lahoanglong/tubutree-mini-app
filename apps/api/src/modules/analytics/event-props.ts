@@ -4,6 +4,7 @@ import {
   CHECKOUT_STEPS,
   ECO_FACT_KIND_NAMES,
   MATCHER_ENTRIES,
+  isShareableSearchTerm,
   ORDER_ZALO_FRIEND_FROM,
   PDP_ACTIONS,
   RECYCLE_FUNNEL_STEPS,
@@ -110,6 +111,11 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   },
   matcher_add_all: { props: { itemCount: int(1, 4) }, required: ['itemCount'] },
   matcher_item_opened: { props: { productSlug: SLUG }, required: ['productSlug'] },
+  // Tìm không ra gì: `q` đã lọc ở app (isShareableSearchTerm), máy chủ kiểm lại để cụm có email/dãy số không vào bảng.
+  search_zero_result: {
+    props: { q: (v) => text(100)(v) && isShareableSearchTerm(v as string), hadSuggestion: bool },
+    required: ['q', 'hadSuggestion'],
+  },
 };
 
 /**

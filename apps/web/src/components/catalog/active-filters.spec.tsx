@@ -218,3 +218,27 @@ describe('ActiveFilters', () => {
     });
   });
 });
+
+describe('ActiveFilters — "Xoá tất cả"', () => {
+  const two: ActiveFilterChip[] = [
+    { key: 'brand:Tubu', label: 'Tubu', patch: { brands: [] } },
+    { key: 'inStock', label: 'Còn hàng', patch: { inStock: false } },
+  ];
+  const clearAll = (c: ParentNode) => [...c.querySelectorAll('button')].find((b) => b.textContent === 'Xoá tất cả') ?? null;
+
+  it('từ 2 chip: có chip "Xoá tất cả" cuối hàng, bấm gọi onClearAll một lần', () => {
+    const onClearAll = vi.fn();
+    const c = mount({ filtersIgnored: false, onPatch: vi.fn(), onClearAll, chips: two });
+    const btn = clearAll(c)!;
+    expect(btn).not.toBeNull();
+    expect(c.querySelector('[role="group"][aria-label="Đang lọc"]')!.lastElementChild).toBe(btn);
+    click(btn);
+    expect(onClearAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('1 chip, hoặc không truyền onClearAll: không có "Xoá tất cả"', () => {
+    expect(clearAll(mount({ filtersIgnored: false, onPatch: vi.fn(), onClearAll: vi.fn(), chips: two.slice(0, 1) }))).toBeNull();
+    mounted?.unmount();
+    expect(clearAll(mount({ filtersIgnored: false, onPatch: vi.fn(), chips: two }))).toBeNull();
+  });
+});

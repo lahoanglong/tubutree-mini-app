@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { CatalogService } from './catalog.service';
 import { ProductCompareService } from './product-compare.service';
+import { SearchMatchService } from './search-match.service';
+import { SearchPopularService } from './search-popular.service';
+import { SearchSynonymsAdminController } from './search-synonyms-admin.controller';
 import { CatalogController } from './catalog.controller';
 import { HomeController } from './home.controller';
 import { HomeService } from './home.service';
@@ -37,8 +40,8 @@ import { EcoImpactModule } from '../eco-impact/eco-impact.module';
 
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule, EcoImpactModule],
-  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, ProductCompareService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService],
+  controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController],
+  providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 import { truncateCodePoints } from '../../../common/truncate-code-points';
 import { trimInvisible } from '../../../common/text-trim';
 
@@ -12,4 +12,9 @@ export class SuggestQuery {
   @Transform(({ value }) => (typeof value === 'string' ? truncateCodePoints(trimInvisible(value), SEARCH_Q_MAX_LENGTH) : value))
   @IsString()
   q?: string;
+
+  /** `1`: trả `{ items, corrected, didYouMean }` (ô gợi ý ở thanh đầu web). Vắng thì mảng như cũ. */
+  @IsOptional()
+  @IsIn(['1'])
+  meta?: '1';
 }

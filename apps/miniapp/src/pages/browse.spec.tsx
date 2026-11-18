@@ -7,7 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), fetchCatalog: vi.fn(), fetchBrands: vi.fn(), fetchCategories: vi.fn(), suggestProducts: vi.fn(), coreGet: vi.fn(), fetchProducts: vi.fn(),
   routerNavigate: undefined as undefined | ((to: string) => void),
-  trackFilterApplied: vi.fn(), trackSearchPerformed: vi.fn(), trackSearchResultClicked: vi.fn(),
+  trackFilterApplied: vi.fn(), trackSearchPerformed: vi.fn(), trackSearchResultClicked: vi.fn(), trackEvent: vi.fn(),
+  getPublicConfig: vi.fn((): Promise<unknown> => Promise.reject(new Error('không có cấu hình'))),
   auth: { status: 'idle', user: null } as { status: string; user: null | { id: string; phone?: string | null; zaloId?: string | null } },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -18,13 +19,14 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCatalog: mocks.fetchCatalog, fetchBrands: mocks.fetchBrands, fetchCategories: mocks.fetchCategories,
-  suggestProducts: mocks.suggestProducts, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn(),
+  suggestProducts: mocks.suggestProducts, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn(), getPublicConfig: mocks.getPublicConfig,
   fetchProductsBySlugs: vi.fn().mockResolvedValue([{ id: 'id-old-1', slug: 'old-1', brand: 'Tubu', name: 'Sản phẩm xem trước', thumbnail: null, basePrice: 45000, salePrice: null, isFeatured: false, inStock: true }]),
 }));
 vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../services/discovery-events', () => ({
   trackFilterApplied: mocks.trackFilterApplied, trackSearchPerformed: mocks.trackSearchPerformed, trackSearchResultClicked: mocks.trackSearchResultClicked,
 }));
+vi.mock('../services/analytics', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), trackEvent: mocks.trackEvent }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: typeof mocks.auth) => unknown) => sel(mocks.auth) }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
@@ -620,20 +622,21 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(screen.queryByRole('region', { name: 'Đã xem gần đây' })).toBeNull();
     });
 
-    it('tìm không ra kết quả → có kệ "Có thể bạn thích" với sản phẩm bán chạy, không để màn trống', async () => {
+    it('tìm không ra kết quả → có kệ "Bán chạy còn hàng" (6 món bán chạy), không để màn trống', async () => {
       mocks.fetchCatalog.mockResolvedValue(pageOf([]));
-      mocks.fetchProducts.mockResolvedValue({ data: [card('b1', 'Dầu gội bưởi'), card('b2', 'Nước rửa chén')], meta: { page: 1, limit: 4, total: 2 } });
+      mocks.fetchProducts.mockResolvedValue({ data: [card('b1', 'Dầu gội bưởi'), card('b2', 'Nước rửa chén')], meta: { page: 1, limit: 6, total: 2 } });
       renderAt('/browse?q=mat%20hoa%20dua');
       expect(await screen.findByText('Không tìm thấy "mat hoa dua"')).toBeInTheDocument();
-      const rail = await screen.findByRole('region', { name: 'Có thể bạn thích' });
+      const rail = await screen.findByRole('region', { name: 'Bán chạy còn hàng' });
       expect(within(rail).getByRole('button', { name: 'Dầu gội bưởi' })).toBeInTheDocument();
-      expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 4, sort: 'best_seller' });
+      expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
     });
 
-    it('tìm có kết quả → không có kệ "Có thể bạn thích"', async () => {
+    it('tìm có kết quả → không có kệ bán chạy', async () => {
       mocks.fetchProducts.mockClear();
       renderAt('/browse?q=nuoc');
       await listPainted();
+      expect(screen.queryByRole('region', { name: 'Bán chạy còn hàng' })).toBeNull();
       expect(screen.queryByRole('region', { name: 'Có thể bạn thích' })).toBeNull();
       expect(mocks.fetchProducts).not.toHaveBeenCalled();
     });
@@ -1044,6 +1047,82 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
         await listPainted();
         expect(scroller.scrollTop).toBe(500);
       });
+    });
+  });
+  describe('tìm không ra có lối đi tiếp, thu gọn hàng tìm khi cuộn (wave tubu-w2-05)', () => {
+    const zero = (over: Record<string, unknown> = {}) => ({ ...pageOf([]), ...over });
+
+    it('thứ tự: Ý bạn là, danh mục gần (kèm nhãn), Bán chạy còn hàng; chạm "Ý bạn là" tìm lại bằng cụm gợi ý', async () => {
+      mocks.fetchCategories.mockResolvedValue([cat('giat', 'Nước giặt', 4), cat('da', 'Chăm sóc da', 3)]);
+      mocks.fetchCatalog.mockResolvedValue(zero({ corrected: true, didYouMean: 'nước giặt xả' }));
+      mocks.fetchProducts.mockResolvedValue({ data: [card('b1', 'Bán chạy 1')], meta: { page: 1, limit: 6, total: 1 } });
+      renderAt('/browse?q=nuoc+giat+xanh+la');
+      const hint = await screen.findByRole('button', { name: 'Ý bạn là "nước giặt xả"?' });
+      const near = await screen.findByRole('group', { name: 'Thử danh mục' });
+      expect(within(near).getAllByRole('button').map((b) => b.textContent)).toEqual(['Nước giặt']);
+      const rail = await screen.findByRole('region', { name: 'Bán chạy còn hàng' });
+      expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
+      expect(hint.compareDocumentPosition(near) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(near.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Chưa thấy món cần tìm? Nhắn Tubu' })).toBeNull();
+      fireEvent.click(hint);
+      await waitFor(() => expect(new URLSearchParams(loc()!.split('?')[1]).get('q')).toBe('nước giặt xả'));
+    });
+
+    it('chạm danh mục gần: mở danh mục, bỏ từ khoá', async () => {
+      mocks.fetchCategories.mockResolvedValue([cat('giat', 'Nước giặt', 4)]);
+      mocks.fetchCatalog.mockResolvedValue(zero());
+      renderAt('/browse?q=nuoc+giat+xanh+lb');
+      const near = await screen.findByRole('group', { name: 'Thử danh mục' });
+      fireEvent.click(within(near).getByRole('button', { name: 'Nước giặt' }));
+      await waitFor(() => expect(loc()).toBe('/browse?category=giat'));
+    });
+
+    it('bật chat: có dòng "Nhắn Tubu" mở màn chat', async () => {
+      mocks.getPublicConfig.mockResolvedValueOnce({ freeshipThreshold: 199000, subscribeDiscountPct: 0.12, chat: { enabled: true } });
+      mocks.fetchCatalog.mockResolvedValue(zero());
+      renderAt('/browse?q=qzxwv+lc');
+      fireEvent.click(await screen.findByRole('button', { name: 'Chưa thấy món cần tìm? Nhắn Tubu' }));
+      expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    });
+
+    it('sự kiện search_zero_result một lần cho mỗi từ khoá, kèm hadSuggestion', async () => {
+      mocks.fetchCatalog.mockResolvedValue(zero({ corrected: true, didYouMean: 'nước giặt' }));
+      renderAt('/browse?q=nuoc+gait+ld');
+      await screen.findByText('Không tìm thấy "nuoc gait ld"');
+      await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalledWith('search_zero_result', 'miniapp', { q: 'nuoc gait ld', hadSuggestion: true }));
+      expect(mocks.trackEvent.mock.calls.filter(([n]) => n === 'search_zero_result')).toHaveLength(1);
+    });
+
+    it('có kết quả do API sửa từ khoá: dòng "Đang hiện kết quả cho …", không bắn search_zero_result', async () => {
+      mocks.fetchCatalog.mockResolvedValue({ ...pageOf([card('p1', 'Nước giặt'), card('p2', 'Nước giặt 2')]), corrected: true, didYouMean: 'nước giặt' });
+      renderAt('/browse?q=nuoc+gait+le');
+      await listPainted();
+      expect(screen.getByText('Đang hiện kết quả cho "nước giặt"')).toBeInTheDocument();
+      expect(mocks.trackEvent.mock.calls.some(([n]) => n === 'search_zero_result')).toBe(false);
+    });
+
+    it('cuộn xuống quá 160px: hàng ô tìm trượt lên (transform, không đổi luồng); cuộn lên hoặc lấy tiêu điểm thì hiện lại', async () => {
+      renderAt('/browse?q=nuoc+lf');
+      await listPainted();
+      const row = screen.getByTestId('browse-search-row');
+      const scroller = document.querySelector('.zaui-page') as HTMLElement;
+      const scrollTo = (y: number) => {
+        Object.defineProperty(scroller, 'scrollTop', { configurable: true, value: y });
+        fireEvent.scroll(scroller);
+      };
+      expect(row.dataset.collapsed).toBeUndefined();
+      scrollTo(100);
+      expect(row.dataset.collapsed).toBeUndefined();
+      scrollTo(400);
+      expect(row.dataset.collapsed).toBe('true');
+      expect(row.style.transform).toContain('translateY');
+      scrollTo(300);
+      expect(row.dataset.collapsed).toBeUndefined();
+      scrollTo(600);
+      expect(row.dataset.collapsed).toBe('true');
+      fireEvent.focus(screen.getByRole('searchbox'));
+      await waitFor(() => expect(row.dataset.collapsed).toBeUndefined());
     });
   });
 });

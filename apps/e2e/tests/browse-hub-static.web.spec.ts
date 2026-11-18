@@ -54,7 +54,9 @@ test.describe('hub /san-pham tĩnh', () => {
     await expect(page.getByRole('button', { name: /Nước rửa chén/ })).toBeVisible();
 
     await page.goto('/san-pham?focus=search');
-    await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeFocused();
+    // Từ md con trỏ vào ô tìm của thanh đầu, ô này là combobox (có hộp gợi ý); khổ điện thoại là ô tìm riêng của trang.
+    const role = testInfo.project.name === 'Web Customer' ? 'combobox' : 'searchbox';
+    await expect(page.getByRole(role, { name: 'Tìm sản phẩm' })).toBeFocused();
   });
 
   test('hub → danh sách → Back: giữ vị trí cuộn của hub', async ({ page, api }) => {
@@ -79,7 +81,7 @@ test.describe('hub /san-pham tĩnh', () => {
 });
 
 test.describe('ô tìm ở /san-pham sau khi hub thành route riêng', () => {
-  test('/san-pham?focus=search tải đầy đủ: không lỗi hydrate, ô tìm có con trỏ', async ({ page, api }) => {
+  test('/san-pham?focus=search tải đầy đủ: không lỗi hydrate, ô tìm có con trỏ', async ({ page, api }, testInfo) => {
     api.get('/flash-sales/active', []);
     api.allowUnmocked('GET /categories', 'GET /brands', 'GET /products', 'GET /products/best-sellers', 'GET /me/coupons', 'POST /events', 'GET /me/wishlist/ids', 'GET /cart', 'GET /search/suggest');
     const errors: string[] = [];
@@ -88,7 +90,9 @@ test.describe('ô tìm ở /san-pham sau khi hub thành route riêng', () => {
       if (m.type() === 'error' && /hydrat|did not match/i.test(m.text())) errors.push(m.text());
     });
     await page.goto('/san-pham?focus=search');
-    await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeFocused();
+    // Từ md con trỏ vào ô tìm của thanh đầu, ô này là combobox (có hộp gợi ý); khổ điện thoại là ô tìm riêng của trang.
+    const role = testInfo.project.name === 'Web Customer' ? 'combobox' : 'searchbox';
+    await expect(page.getByRole(role, { name: 'Tìm sản phẩm' })).toBeFocused();
     await expect(page).toHaveURL(/\/san-pham$/);
     await page.waitForTimeout(500);
     expect(errors).toEqual([]);

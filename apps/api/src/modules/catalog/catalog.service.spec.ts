@@ -2133,3 +2133,57 @@ describe('CatalogService.list — tầng trưng bày (hàng chưa ảnh sau, h�
     expect(rankCalls()).toBe(2);
   });
 });
+
+describe('CatalogService — bước chịu gõ sai (SearchMatchService)', () => {
+  function setup(refine: jest.Mock) {
+    const findMany = jest.fn(async (args: { select?: unknown }) => (isRank(args) ? [{ id: 'p1' }, { id: 'p2' }] : [card('p1'), card('p2')]));
+    const prisma = {
+      product: { findMany: imgAware(findMany), count: jest.fn() },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const searchMatch = { refine } as unknown as ConstructorParameters<typeof CatalogService>[4];
+    return { svc: new CatalogService(prisma, undefined, undefined, undefined, searchMatch), prisma };
+  }
+
+  it('không sửa (cờ tắt): phản hồi /products không có thêm khoá nào so với khi không có service', async () => {
+    const refine = jest.fn(async (_q: string, ids: string[]) => ({ ids, corrected: false, didYouMean: null }));
+    const { svc } = setup(refine);
+    const out = await svc.list({ page: 1, limit: 20, q: 'nuoc gait' });
+    expect(Object.keys(out).sort()).toEqual(['data', 'meta']);
+    expect(refine).toHaveBeenCalledWith('nuoc gait', [], expect.any(Function));
+  });
+
+  it('đã sửa: danh sách theo id gần đúng, kèm corrected và didYouMean; trang 2 dùng lại bộ nhớ khớp (không chạy lại bước sửa)', async () => {
+    const refine = jest.fn(async () => ({ ids: ['p2', 'p1'], corrected: true, didYouMean: 'nước giặt' }));
+    const { svc } = setup(refine);
+    const out = await svc.list({ page: 1, limit: 20, q: 'nuoc gait' });
+    expect(out).toMatchObject({ corrected: true, didYouMean: 'nước giặt' });
+    expect(out.data.map((c: { id: string }) => c.id)).toEqual(['p2', 'p1']);
+    const page2 = await svc.list({ page: 2, limit: 20, q: 'nuoc gait' });
+    expect(page2).toMatchObject({ corrected: true, didYouMean: 'nước giặt' });
+    expect(refine).toHaveBeenCalledTimes(1);
+  });
+
+  it('đã sửa nhưng bộ lọc loại hết món (vd. còn hàng): trang rỗng vẫn kèm corrected và didYouMean, để hai app hiện "Ý bạn là"', async () => {
+    const refine = jest.fn(async () => ({ ids: ['p2', 'p1'], corrected: true, didYouMean: 'nước giặt' }));
+    const { svc, prisma } = setup(refine);
+    (prisma.product.findMany as jest.Mock).mockImplementation(async () => []);
+    (prisma.product.count as jest.Mock).mockResolvedValue(0);
+    const out = await svc.list({ page: 1, limit: 20, q: 'nuoc gait', inStock: true });
+    expect(out).toMatchObject({ data: [], corrected: true, didYouMean: 'nước giặt' });
+    const where = (prisma.product.findMany as jest.Mock).mock.calls.map((c) => JSON.stringify(c[0]?.where ?? {})).join(' ');
+    expect(where).toContain('"in":["p2","p1"]');
+  });
+
+  it('suggest giữ mảng; suggestWithMeta trả { items, corrected, didYouMean }', async () => {
+    const refine = jest.fn(async () => ({ ids: ['p1'], corrected: true, didYouMean: 'nước giặt' }));
+    const { svc } = setup(refine);
+    const arr = await svc.suggest('nuoc gait');
+    expect(Array.isArray(arr)).toBe(true);
+    const withMeta = await svc.suggestWithMeta('nuoc gait');
+    expect(withMeta).toMatchObject({ corrected: true, didYouMean: 'nước giặt' });
+    expect(Array.isArray(withMeta.items)).toBe(true);
+    await expect(svc.suggestWithMeta('a')).resolves.toEqual({ items: [], corrected: false, didYouMean: null });
+  });
+});

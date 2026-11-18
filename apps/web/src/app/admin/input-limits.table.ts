@@ -7,6 +7,8 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/product-story-studio.tsx::link": { dto: "apps/api/src/modules/catalog/story-assets.controller.ts:ExtractStoryAssetsDto.pageUrl", max: 2048 },
   "app/admin/catalog-seo-bulk.tsx::value.title": { dto: "apps/api/src/modules/catalog/catalog-quality.controller.ts:SeoApplyItemDto.metaTitle", max: 400 },
   "app/admin/catalog-seo-bulk.tsx::value.desc": { dto: "apps/api/src/modules/catalog/catalog-quality.controller.ts:SeoApplyItemDto.metaDesc", max: 1000 },
+  "components/admin/search-terms-card.tsx::form.term": { dto: "apps/api/src/modules/catalog/dto/search-synonym.dto.ts:CreateSearchSynonymDto.term", max: 60 },
+  "components/admin/search-terms-card.tsx::form.canonical": { dto: "apps/api/src/modules/catalog/dto/search-synonym.dto.ts:CreateSearchSynonymDto.canonical", max: 60 },
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
   "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },
   "app/admin/page.tsx::f.code": { dto: "apps/api/src/modules/admin/admin.controller.ts:CreateCouponDto.code", max: 64 },
@@ -152,6 +154,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
 
 /** Ô gõ chữ không đặt `maxLength`, kèm lý do. */
 export const EXEMPT_INPUTS: Record<string, string> = {
+  "components/admin/search-terms-card.tsx::popValue": "mỗi dòng một cụm: khoá catalog.search_popular_terms là mảng chuỗi kiểm bằng assertPopularTerms (admin-config-rules.ts: tối đa 12 cụm, mỗi cụm 2–40 ký tự), không có DTO; web đếm cụm và độ dài từng cụm (popularTermsError) rồi khoá nút Lưu trước khi gửi",
   "components/admin/eco-facts-card.tsx::form.productSlug": "thân /admin/eco-facts đọc tay bằng parseEcoFactInput (eco-facts.input.ts), không có @MaxLength trên EcoFactBodyDto; ô chặn đúng trần của bộ đọc (slug 200)",
   "components/admin/eco-facts-card.tsx::form.variationSku": "thân /admin/eco-facts đọc tay bằng parseEcoFactInput (eco-facts.input.ts), không có @MaxLength trên EcoFactBodyDto; ô chặn đúng trần của bộ đọc (SKU 100)",
   "components/admin/eco-facts-card.tsx::form.valueGrams": "số gam nguyên: bộ đọc parseEcoFactInput kiểm số nguyên 0…1.000.000 (ECO_LIMITS.maxGrams), ô chặn 9 chữ số",

@@ -124,6 +124,22 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Nút về lại "Tạm hết hàng" màu xám và không gửi tin hàng về nữa. Đăng ký khách đã bấm vẫn được giữ, bật lại thì gửi tiếp.',
   },
   {
+    key: 'catalog.search_fuzzy_enabled',
+    label: 'Ô tìm chịu gõ sai',
+    description: 'Khách gõ sai chính tả hay gõ dính ("nuoc gait", "nuocgiat") vẫn ra hàng, kèm dòng "Đang hiện kết quả cho …". Từ đồng nghĩa ("nước rửa bát" ra "nước rửa chén") sửa ở /admin/tu-khoa-tim. Chỉ chạy khi tìm chính xác ra dưới 3 món.',
+    fallback: false,
+    onWarning: 'Từ khoá ra ít hàng sẽ có thêm món gần đúng. Kết quả cập nhật chậm tối đa khoảng 5 phút.',
+    offWarning: 'Ô tìm về khớp chính xác như trước; từ đồng nghĩa không còn tác dụng. Không dữ liệu nào bị xoá.',
+  },
+  {
+    key: 'catalog.search_popular_enabled',
+    label: 'Hàng "Tìm phổ biến" ở ô tìm',
+    description: 'Ô tìm trống (Mini App và web) hiện tối đa 8 cụm khách hay tìm trong 14 ngày (mỗi cụm từ 3 người trở lên, bỏ cụm có số điện thoại hay email). Chưa đủ 4 cụm thì bù bằng danh sách dự phòng ở /admin/tu-khoa-tim.',
+    fallback: false,
+    onWarning: 'Khách bấm vào ô tìm thấy một hàng chip từ khoá. Danh sách tính lại mỗi giờ.',
+    offWarning: 'Hàng chip biến mất khỏi ô tìm trong vòng khoảng 1 giờ (bộ đệm). Không dữ liệu nào bị xoá.',
+  },
+  {
     key: 'notify.proactive_cap_enabled',
     label: 'Trần tin nhắc chủ động mỗi khách',
     description: 'Tin nhắc qua Zalo (ZNS) như nhắc giỏ, mua lại, điểm sắp hết hạn, nhắc chuỗi, hàng về, khuyến mãi: tối đa 1 tin mỗi ngày và 4 tin mỗi tuần cho mỗi khách. Tin đơn hàng, thanh toán, đổi trả, đổi rác không bao giờ bị chặn. Tin trong app vẫn đủ.',

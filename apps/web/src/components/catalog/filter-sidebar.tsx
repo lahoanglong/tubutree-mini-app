@@ -52,7 +52,12 @@ export function FilterSidebar({
   const shownBrands = allBrands ? brands : brands.filter((b, i) => i < BRANDS_SHOWN || state.brands.includes(b.brand));
 
   return (
-    <aside aria-label={browseText.filter.title} data-testid="filter-sidebar" className="hidden lg:block">
+    // Dính dưới thanh đầu khi cuộn lưới dài; cao tối đa bằng khung nhìn còn lại và tự cuộn bên trong (danh sách thương hiệu mở rộng dài).
+    <aside
+      aria-label={browseText.filter.title}
+      data-testid="filter-sidebar"
+      className="hidden lg:sticky lg:top-[calc(var(--header-h)+var(--space-inline-md))] lg:block lg:max-h-[calc(100svh-var(--header-h)-var(--space-stack-lg))] lg:overflow-y-auto lg:overscroll-contain"
+    >
       <Group title={browseText.categories}>
         <button type="button" aria-pressed={!hasCategory} onClick={onClearCategory} className={`${ROW} ${!hasCategory ? 'bg-forest-50 font-semibold text-forest-800' : 'text-stone-800'}`}>
           {browseText.sidebar.all}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { vi } from '../../i18n/vi';
 import type { ActiveFilterChip, SearchState } from '../../utils/search-state';
 import { Chip } from '../ui/chip';
@@ -10,12 +11,23 @@ export interface ActiveFiltersProps {
   chips: ActiveFilterChip[];
   filtersIgnored: boolean;
   onPatch: (patch: Partial<SearchState>) => void;
+  /** Gỡ mọi bộ lọc đang hiện (nút "Xoá tất cả" khi có từ 2 chip). */
+  onClearAll?: () => void;
   /** Id của tiêu đề kết quả: nhận focus khi chip cuối bị gỡ (chip biến mất kéo theo focus về đầu trang). */
   emptyFocusId?: string;
 }
 
+/** Chỉ bàn phím cần được đưa focus đi tiếp; chuột/cảm ứng không có vòng lấy nét nên không bị giật focus. */
+function viaKeyboard(): boolean {
+  try {
+    return !!document.activeElement?.matches(':focus-visible');
+  } catch {
+    return false;
+  }
+}
+
 /** Chip "đang lọc" gỡ được từng cái + câu báo khi API cũ bỏ qua bộ lọc. Không có gì để nói thì không vẽ gì (không để khoảng trống). */
-export function ActiveFilters({ chips, filtersIgnored, onPatch, emptyFocusId = 'danh-sach-san-pham' }: ActiveFiltersProps) {
+export function ActiveFilters({ chips, filtersIgnored, onPatch, onClearAll, emptyFocusId = 'danh-sach-san-pham' }: ActiveFiltersProps) {
   const groupRef = useRef<HTMLDivElement>(null);
   const focusAfter = useRef<number | null>(null);
   const signature = chips.map((c) => c.key).join('|');
@@ -40,14 +52,7 @@ export function ActiveFilters({ chips, filtersIgnored, onPatch, emptyFocusId = '
               ariaLabel={vi.browse.removeFilter(c.label)}
               style={{ background: 'var(--color-action-primary-bg)', color: 'var(--color-action-primary-fg)', boxShadow: 'none' }}
               onPress={() => {
-                // Chỉ bàn phím cần được đưa focus đi tiếp; chuột/cảm ứng không có vòng lấy nét nên không bị giật focus.
-                let keyboard = false;
-                try {
-                  keyboard = !!document.activeElement?.matches(':focus-visible');
-                } catch {
-                  keyboard = false;
-                }
-                focusAfter.current = keyboard ? i : null;
+                focusAfter.current = viaKeyboard() ? i : null;
                 onPatch(c.patch);
               }}
             >
@@ -55,6 +60,16 @@ export function ActiveFilters({ chips, filtersIgnored, onPatch, emptyFocusId = '
               <Icon icon={X} size="sm" tone="inverse" style={{ flexShrink: 0 }} />
             </Chip>
           ))}
+          {onClearAll && chips.length >= 2 && (
+            <Chip
+              onPress={() => {
+                focusAfter.current = viaKeyboard() ? 0 : null;
+                onClearAll();
+              }}
+            >
+              {fillCopy('search.clearFilters')}
+            </Chip>
+          )}
         </div>
       )}
       {filtersIgnored && (

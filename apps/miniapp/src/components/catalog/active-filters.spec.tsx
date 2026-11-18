@@ -186,3 +186,27 @@ describe('ActiveFilters', () => {
     });
   });
 });
+
+describe('ActiveFilters — "Xoá tất cả"', () => {
+  const two: ActiveFilterChip[] = [
+    { key: 'brand:Tubu', label: 'Tubu', patch: { brands: [] } },
+    { key: 'inStock', label: 'Còn hàng', patch: { inStock: false } },
+  ];
+
+  it('từ 2 chip: có "Xoá tất cả" cuối nhóm, bấm gọi onClearAll', () => {
+    const onClearAll = vi.fn();
+    render(<ActiveFilters filtersIgnored={false} onPatch={vi.fn()} onClearAll={onClearAll} chips={two} />);
+    const btn = screen.getByRole('button', { name: 'Xoá tất cả' });
+    expect(screen.getByRole('group', { name: 'Đang lọc' }).lastElementChild).toBe(btn);
+    fireEvent.click(btn);
+    expect(onClearAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('1 chip hoặc không có onClearAll: không có "Xoá tất cả"', () => {
+    const a = render(<ActiveFilters filtersIgnored={false} onPatch={vi.fn()} onClearAll={vi.fn()} chips={two.slice(0, 1)} />);
+    expect(screen.queryByRole('button', { name: 'Xoá tất cả' })).toBeNull();
+    a.unmount();
+    render(<ActiveFilters filtersIgnored={false} onPatch={vi.fn()} chips={two} />);
+    expect(screen.queryByRole('button', { name: 'Xoá tất cả' })).toBeNull();
+  });
+});

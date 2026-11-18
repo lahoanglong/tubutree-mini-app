@@ -1,21 +1,28 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ChevronRight, Search, X } from 'lucide-react';
+import { ChevronRight, MessageCircle, Search, X } from 'lucide-react';
 import type { CatalogPage, CategoryDTO, ProductCard as ProductCardData, ProductSuggestion } from '@tubutree/app-core/api/catalog';
 import { categoryTrail, chipScope, findCategory } from '@tubutree/app-core/browse/category-tree';
 import { softBreakLongWords } from '@tubutree/app-core/browse/soft-break';
 import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
 import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
+import { nearCategories, zeroResultBlocks, type SearchCorrection, type ZeroResultBlock } from '@tubutree/app-core/browse/search-ux';
 import { brandsQuery, browseQuery, categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { browseText } from '@/lib/browse-text';
 import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
 import { EmptyState } from '@/components/mini/empty-state';
+import { Chip } from '@/components/mini/chip';
+import { trackWebEvent } from '@/lib/analytics';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { platformBridge } from '@/lib/platform-bridge';
+import { loginHref } from '@/lib/return-to';
+import { foldVietnamese } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
@@ -26,7 +33,7 @@ import {
 } from '@/lib/search-state';
 import { useBrowseState } from '@/lib/use-browse-state';
 import { usePressLock } from '@/lib/use-press-lock';
-import { useSuggest } from '@/lib/use-suggest';
+import { usePopularSearches, useSuggest } from '@/lib/use-suggest';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
 import { PRIORITY_CARDS, ProductGrid, SortBar } from '@/components/mini';
 import { ListingBreadcrumb, ListingLayout, type BreadcrumbItem } from '@/components/layouts/listing-layout';
@@ -71,6 +78,12 @@ const uniqueById = (list: ProductCardData[]) => {
 };
 
 const errorMessage = loadErrorText;
+
+/**
+ * `search_performed` một lần cho mỗi khoá tìm (từ khoá + sắp xếp + bộ lọc), như Mini App (`utils/search-tracking`): Back từ trang sản phẩm
+ * hay làm mới nền không tính là lượt tìm mới. Ở cấp module nên sống qua việc trang Danh mục bị gỡ rồi dựng lại.
+ */
+let lastTrackedSearch: string | null = null;
 
 /**
  * Trang Danh mục / Tìm kiếm của web, cùng hành vi với pages/browse.tsx của Mini App, hai chế độ theo URL. Gốc `/san-pham` chưa tìm,
@@ -161,6 +174,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const entries = categoryEntries(categoriesQ.data);
   // Chỉ gợi ý khi khách đang gõ: vào thẳng /san-pham?q=… (link, Back) không được bắn request gợi ý.
   const suggest = useSuggest(editing ? draft : '');
+  const popular = usePopularSearches(editing);
+  const chatOn = usePublicConfig().chat?.enabled === true;
+  const guest = useAuthPhase() === 'guest';
 
   const seeded = initial !== null && initial.urlKey === urlKey && initial.startPage === page ? initial : null;
   // Danh sách seed bắt đầu từ trang > 1 thì khoá riêng: khi gỡ bộ lọc về đúng urlKey cũ, không dùng lại mục cache thiếu các trang đầu.
@@ -174,7 +190,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     // Hub không tải danh sách: `enabled` chặn cả lần tải đầu lẫn `refetch` tự động.
     enabled: !hubState,
   });
-  const firstPage = products.data?.pages[0];
+  const firstPage = products.data?.pages[0] as (CatalogPage & SearchCorrection) | undefined;
+  // Bước chịu gõ sai đã thay kết quả: "Đang hiện kết quả cho …" trên lưới, hay "Ý bạn là …?" khi bộ lọc khác loại hết.
+  const didYouMean = firstPage?.corrected ? (firstPage.didYouMean ?? null) : null;
   // Link phân trang cũ (?page=9 khi danh sách chỉ còn 3 trang) mà máy chủ không dựng sẵn: về trang cuối thay vì báo "không có sản phẩm"
   // dưới tiêu đề "45 sản phẩm". Trang cuối luôn nhỏ hơn trang hiện tại nên mỗi lần replace lùi ít nhất một trang, không lặp.
   const lastPageOfTotal = firstPage && firstPage.meta.total > 0 ? Math.ceil(firstPage.meta.total / PAGE_LIMIT) : 0;
@@ -211,7 +229,20 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
 
   // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm); khách mới
   // bấm vào ô trống vẫn thấy nguyên Danh mục/danh sách thay vì một trang trắng.
-  const showSuggest = editing && (draft.trim() !== '' || recent.length > 0);
+  const showSuggest = editing && (draft.trim() !== '' || recent.length > 0 || popular.length > 0);
+
+  // API bỏ riêng sự kiện có `q` giống số điện thoại hay email (event-props), nên không lọc lại ở đây.
+  useEffect(() => {
+    if (!state.q) {
+      lastTrackedSearch = null;
+      return;
+    }
+    if (!firstPage || pastLastPage || lastTrackedSearch === urlKey) return;
+    lastTrackedSearch = urlKey;
+    const q = state.q.slice(0, 100);
+    trackWebEvent('search_performed', { q, resultsCount: firstPage.meta.total });
+    if (firstPage.meta.total === 0) trackWebEvent('search_zero_result', { q, hadSuggestion: Boolean(firstPage.didYouMean) });
+  }, [state.q, urlKey, firstPage, pastLastPage]);
 
   const stopEditing = () => {
     setEditing(false);
@@ -267,6 +298,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const categoryName = state.category ? findCategory(categoriesQ.data, state.category)?.name : undefined;
   const segmentName = state.segment ? segmentLabel(state.segment) : undefined;
   const noResults = !products.isLoading && !products.isError && list.length === 0;
+  const near = noResults && state.q ? nearCategories(entries, state.q, foldVietnamese) : [];
+  const zeroBlocks = zeroResultBlocks({ didYouMean, nearCategories: near.length, canChat: chatOn || platformBridge.oa.available });
   const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
   const subscriptionTitle = state.filter === 'subscription' ? 'Mua xoay vòng (Đặt định kỳ)' : null;
   const listTitle = state.q ? null : (categoryName ?? segmentName ?? singleBrand ?? subscriptionTitle);
@@ -308,9 +341,32 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const lastPageMeta = products.data?.pages.at(-1)?.meta;
   const totalPages = lastPageMeta ? Math.max(1, Math.ceil(lastPageMeta.total / (lastPageMeta.limit || PAGE_LIMIT))) : page;
 
+  const showList = !showSuggest && !hubState;
+
+  // Điện thoại: cuộn xuống trong danh sách thì hàng ô tìm trượt lên khuất, chỉ còn thanh sắp xếp + Lọc dính đầu; cuộn lên hiện lại. Chỉ đổi
+  // transform của hàng ô tìm và chỗ dính của thanh sắp xếp (`--sort-bar-top`), không đổi chiều cao luồng nên lưới không nhảy.
+  const [scrolledDown, setScrolledDown] = useState(false);
+  useEffect(() => {
+    if (hubState || wide) return setScrolledDown(false);
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - last) < 8) return;
+      setScrolledDown(y > last && y > 160);
+      last = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [hubState, wide]);
+  const collapsed = scrolledDown && !editing && showList && !wide;
+
   const searchForm = (
     <form
       role="search"
+      data-testid="browse-search-row"
+      data-collapsed={collapsed || undefined}
+      onFocusCapture={() => setScrolledDown(false)}
+      style={collapsed ? { transform: 'translateY(-100%)' } : undefined}
       onSubmit={(e) => {
         e.preventDefault();
         commit(draft);
@@ -361,11 +417,14 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     </form>
   );
 
-  const showList = !showSuggest && !hubState;
 
   return (
     // `--sort-bar-top`: SortBar dính ngay dưới hàng ô tìm dính ở điện thoại (58px = 46 ô tìm + 2x6 đệm, số đo của Mini App), dưới thanh đầu từ md. Phải là chuỗi lớp nguyên văn để Tailwind thấy.
-    <div data-browse-scope className="max-md:[--sort-bar-top:58px] md:[--sort-bar-top:var(--header-h)]">
+    <div
+      data-browse-scope
+      className="max-md:[--sort-bar-top:58px] md:[--sort-bar-top:var(--header-h)]"
+      style={collapsed ? ({ '--sort-bar-top': '0px' } as CSSProperties) : undefined}
+    >
       <ListingLayout
         breadcrumb={<ListingBreadcrumb trail={trail} />}
         title={h1Text}
@@ -394,6 +453,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           <SuggestList
             draft={draft}
             recent={recent}
+            popular={popular}
             categories={entries}
             products={suggest.products}
             loading={suggest.isFetching}
@@ -499,11 +559,29 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                 leaveSearchField();
                 updateList(patch);
               }}
+              onClearAll={() => {
+                leaveSearchField();
+                // Gỡ đúng các chip đang hiện: giữ từ khoá và phạm vi đang làm tiêu đề.
+                updateList({
+                  ...CLEAR_SEARCH_PATCH,
+                  q: state.q,
+                  ...(titleScope === 'category'
+                    ? { category: state.category }
+                    : titleScope === 'segment'
+                      ? { segment: state.segment }
+                      : titleScope === 'brand'
+                        ? { brands: state.brands }
+                        : titleScope === 'subscription'
+                          ? { filter: state.filter }
+                          : null),
+                });
+              }}
             />
             <section aria-labelledby="danh-sach-san-pham" className="pb-6 pt-2">
               <h2 id="danh-sach-san-pham" tabIndex={-1} className="sr-only">
                 Danh sách sản phẩm
               </h2>
+              {didYouMean && list.length > 0 && <p className="pb-2 text-sm text-[color:var(--color-text-secondary)]">{fillCopy('search.showingFor', { q: didYouMean })}</p>}
               {products.isLoading || pastLastPage ? (
                 <ProductGridSkeleton count={8} className={GRID_PRODUCTS_WITH_FILTER} />
               ) : products.isError && list.length === 0 ? (
@@ -558,7 +636,19 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp. */}
             {noResults && !pastLastPage && (
               <>
-                <SuggestedRail flush />
+                {state.q ? (
+                  <ZeroResultPaths
+                    blocks={zeroBlocks}
+                    didYouMean={didYouMean}
+                    near={near}
+                    onDidYouMean={(q) => updateList({ ...CLEAR_SEARCH_PATCH, q })}
+                    onPickCategory={pickCategory}
+                    chatOn={chatOn}
+                    guest={guest}
+                  />
+                ) : (
+                  <SuggestedRail flush />
+                )}
                 <RecentlyViewedRail />
               </>
             )}
@@ -580,5 +670,71 @@ function EmptyResults({ q, root, onClear }: { q: string; root: boolean; onClear:
       ctaLabel={root ? undefined : browseText.clearAll}
       onCta={root ? undefined : onClear}
     />
+  );
+}
+
+const CHAT_PATH = '/ho-tro/chat';
+
+/**
+ * Lối đi tiếp dưới "Không tìm thấy" theo thứ tự `zeroResultBlocks`: "Ý bạn là …?", danh mục gần, kệ bán chạy còn hàng, nhắn Tubu (trò
+ * chuyện hỗ trợ khi bật, chưa đăng nhập thì qua đăng nhập; tắt thì Zalo OA nếu có).
+ */
+function ZeroResultPaths({
+  blocks,
+  didYouMean,
+  near,
+  onDidYouMean,
+  onPickCategory,
+  chatOn,
+  guest,
+}: {
+  blocks: ZeroResultBlock[];
+  didYouMean: string | null;
+  near: CategoryEntry[];
+  onDidYouMean: (q: string) => void;
+  onPickCategory: (e: CategoryEntry) => void;
+  chatOn: boolean;
+  guest: boolean;
+}) {
+  const chatClass = `${ui.btnText} gap-2 text-[color:var(--color-text-brand)] no-underline`;
+  return (
+    <div data-testid="zero-result-paths" className="flex flex-col gap-2">
+      {blocks.map((b) =>
+        b === 'didYouMean' && didYouMean ? (
+          <div key={b}>
+            <button type="button" onClick={() => onDidYouMean(didYouMean)} className={ui.btnSecondary}>
+              {fillCopy('search.didYouMean', { q: didYouMean })}
+            </button>
+          </div>
+        ) : b === 'categories' ? (
+          <div key={b} role="group" aria-label={fillCopy('search.nearCategories')} className="scroll-x items-center gap-2">
+            <span aria-hidden="true" className="flex-none text-sm font-semibold text-[color:var(--color-text-secondary)]">
+              {fillCopy('search.nearCategories')}
+            </span>
+            {near.map((e) => (
+              <Chip key={`${e.kind}:${e.key}`} onPress={() => onPickCategory(e)}>
+                {e.label}
+              </Chip>
+            ))}
+          </div>
+        ) : b === 'bestSellers' ? (
+          <SuggestedRail key={b} flush title={fillCopy('search.bestInStock')} limit={6} />
+        ) : b === 'chat' ? (
+          <div key={b} className="pt-2">
+            {chatOn ? (
+              <Link href={guest ? loginHref(CHAT_PATH) : CHAT_PATH} className={chatClass}>
+                <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                {fillCopy('search.askTubu')}
+              </Link>
+            ) : (
+              <button type="button" className={chatClass} onClick={() => void platformBridge.oa.openChat()}>
+                <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                {fillCopy('search.askTubu')}
+              </button>
+            )}
+          </div>
+        ) : null,
+      )}
+    </div>
   );
 }

@@ -7,6 +7,9 @@ import { NOT_NULL_CONSTRAINT } from './decorators/optional-not-null.decorator';
  * message[0] của lỗi 400 nên không để câu tiếng Anh của class-validator lọt ra.
  */
 export const FIELD_LABELS: Record<string, string> = {
+  term: 'Cụm khách gõ',
+  canonical: 'Cụm tìm thay',
+  meta: 'Kiểu trả về',
   a: 'Câu trả lời',
   rating: 'Số sao',
   pageUrl: 'Địa chỉ trang sản phẩm',

@@ -5,8 +5,10 @@ import { SUGGEST_MIN_CHARS } from '../../hooks/use-suggest';
 import type { FlashSaleActiveItem, ProductSuggestion } from '../../services/shop-api';
 import { tilePricing } from './catalog-pricing';
 import { vi } from '../../i18n/vi';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { foldVietnamese, includesFolded } from '../../utils/vn-fold';
 import { Button } from '../ui/button';
+import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
 import { PriceTag } from '../ui/price-tag';
 import { Skeleton } from '../ui/skeleton';
@@ -18,6 +20,8 @@ export const SUGGEST_LIMITS = { recent: 3, categories: 4 } as const;
 export interface SuggestListProps {
   draft: string;
   recent: string[];
+  /** Cụm tìm phổ biến: hàng chip một dòng dưới "Tìm gần đây", chỉ khi ô trống. */
+  popular?: string[];
   categories: CategoryEntry[];
   products: ProductSuggestion[];
   /** Đợt Giờ vàng đang chạy, để giá gợi ý khớp thẻ sản phẩm. */
@@ -42,7 +46,7 @@ const ELLIPSIS: CSSProperties = { display: 'block', overflow: 'hidden', textOver
  * nên chỉ được render dạng text của React (không bao giờ HTML).
  * Không có gì để hiện (chưa gõ + chưa có lịch sử) → không vẽ khung rỗng.
  */
-export function SuggestList({ draft, recent, categories, products, flashSales = [], loading, error = false, onRetry, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
+export function SuggestList({ draft, recent, popular = [], categories, products, flashSales = [], loading, error = false, onRetry, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
   const term = draft.trim();
   const recentShown = term ? recent.filter((r) => includesFolded(r, term)).slice(0, SUGGEST_LIMITS.recent) : recent;
   const categoriesShown = term ? categories.filter((c) => includesFolded(c.label, term)).slice(0, SUGGEST_LIMITS.categories) : [];
@@ -53,7 +57,9 @@ export function SuggestList({ draft, recent, categories, products, flashSales = 
   const waiting = longEnough && loading && productsShown.length === 0;
   const nothing = longEnough && !loading && !failed && recentShown.length === 0 && categoriesShown.length === 0 && productsShown.length === 0;
 
-  if (!term && recentShown.length === 0) return null;
+  const popularShown = term ? [] : popular.filter((p) => !recent.some((r) => foldVietnamese(r) === foldVietnamese(p)));
+
+  if (!term && recentShown.length === 0 && popularShown.length === 0) return null;
 
   return (
     <section aria-label={vi.browse.suggest.title} style={{ padding: '0 16px 24px' }}>
@@ -78,6 +84,17 @@ export function SuggestList({ draft, recent, categories, products, flashSales = 
               {r}
             </SuggestRow>
           ))}
+        </Group>
+      )}
+      {popularShown.length > 0 && (
+        <Group title={fillCopy('search.popular')}>
+          <div className="scroll-x" style={{ gap: 'var(--space-inline-sm)', paddingBottom: 'var(--space-stack-xs)' }}>
+            {popularShown.map((p) => (
+              <Chip key={p} onPress={() => onPickKeyword(p)}>
+                {p}
+              </Chip>
+            ))}
+          </div>
         </Group>
       )}
       {categoriesShown.length > 0 && (

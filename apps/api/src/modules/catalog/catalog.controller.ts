@@ -9,6 +9,7 @@ import { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { ForYouQuery } from './dto/for-you-query.dto';
 import { ProductQuery } from './dto/product-query.dto';
 import { SuggestQuery } from './dto/suggest-query.dto';
+import { SearchPopularService } from './search-popular.service';
 
 // Không còn @Public() ở class — mỗi route public tự khai báo, để route
 // /products/for-you (cá nhân hoá) bắt buộc JWT theo JwtAuthGuard mặc định.
@@ -18,6 +19,7 @@ export class CatalogController {
 
   // Tiêm qua thuộc tính để chữ ký constructor giữ một tham số: nhiều spec dựng controller trực tiếp chỉ với CatalogService.
   @Inject(ProductCompareService) private readonly productCompare!: ProductCompareService;
+  @Inject(SearchPopularService) private readonly searchPopular!: SearchPopularService;
 
   @Public()
   @PublicCache('CATALOG')
@@ -90,6 +92,14 @@ export class CatalogController {
   @Public()
   @Get('search/suggest')
   suggest(@Query() query: SuggestQuery) {
-    return this.catalog.suggest(query.q ?? '');
+    return query.meta === '1' ? this.catalog.suggestWithMeta(query.q ?? '') : this.catalog.suggest(query.q ?? '');
+  }
+
+  // Cờ `catalog.search_popular_enabled` tắt thì `{ terms: [] }`: hai app không vẽ hàng chip, không cần đọc cấu hình công khai.
+  @Public()
+  @PublicCache('STATIC')
+  @Get('search/popular')
+  popular() {
+    return this.searchPopular.popular();
   }
 }

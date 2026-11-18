@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { popularSearchesQuery } from '@tubutree/app-core/browse/search-ux';
+import { coreHttp } from '../services/core-http';
 import { suggestProducts, type ProductSuggestion } from '../services/shop-api';
 import { foldVietnamese } from '../utils/vn-fold';
 import { useDebounced } from '../utils/use-debounced';
@@ -42,3 +44,6 @@ export function useSuggest(draft: string): { products: ProductSuggestion[]; isFe
     refetch: () => void q.refetch(),
   };
 }
+
+/** Cụm tìm phổ biến cho ô tìm trống (cờ `catalog.search_popular_enabled`); chỉ tải khi khách đang ở ô tìm. */
+export const usePopularSearches = (enabled: boolean): string[] => useQuery({ ...popularSearchesQuery(coreHttp), enabled }).data ?? [];

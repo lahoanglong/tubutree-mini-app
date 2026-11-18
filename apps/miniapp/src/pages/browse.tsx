@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, MessageCircle } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { findCategory, chipScope } from '@tubutree/app-core/browse/category-tree';
 import { softBreakLongWords } from '@tubutree/app-core/browse/soft-break';
 import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
 import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
-import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
+import { nearCategories, type SearchCorrection } from '@tubutree/app-core/browse/search-ux';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type CatalogPage, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
 import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } from '../services/discovery-events';
+import { trackEvent } from '../services/analytics';
+import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { CartButton } from '../components/cart-button';
 import { CAPSULE_INSET_END } from '../utils/capsule';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -22,6 +26,7 @@ import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
 import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { Button } from '../components/ui/button';
+import { Chip } from '../components/ui/chip';
 import { SortBar } from '../components/ui/sort-bar';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Text } from '../components/ui/text';
@@ -29,11 +34,13 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { SearchField } from '../components/ui/search-field';
 import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
 import { useNavigationType } from '../hooks/use-navigation-type';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { useScrollRestoration } from '../hooks/use-scroll-restoration';
 import { useSearchState } from '../hooks/use-search-state';
 import { useAuthStore } from '../store/auth';
 import { isGuestUser } from '../utils/guest-user';
-import { useSuggest } from '../hooks/use-suggest';
+import { usePopularSearches, useSuggest } from '../hooks/use-suggest';
+import { foldVietnamese } from '../utils/vn-fold';
 import { vi } from '../i18n/vi';
 import { clearRecentSearches, forgetRecentSearchesOfSignedOutUser, pushRecentSearch, readRecentSearches, scopeRecentSearchesToUser } from '../utils/recent-searches';
 import { uniqueById } from '../utils/unique-by-id';
@@ -60,6 +67,9 @@ const STICKY_SEARCH: CSSProperties = {
   paddingRight: CAPSULE_INSET_END,
   background: 'var(--color-bg-canvas)',
 };
+
+/** Khối lối đi tiếp dưới "Không tìm thấy": cùng lề trang, cách khối trên một nhịp. */
+const ZERO_ROW: CSSProperties = { padding: 'var(--space-stack-sm) var(--space-block) 0' };
 
 const PAGE_STYLE = {
   background: 'var(--color-bg-canvas)',
@@ -147,6 +157,8 @@ export default function BrowsePage() {
   const categories = useCategories();
   // Chỉ gợi ý khi khách đang gõ: vào thẳng /browse?q=… (link, Back) không được bắn request gợi ý.
   const suggest = useSuggest(editing ? draft : '');
+  const popular = usePopularSearches(editing);
+  const chatOn = usePublicConfig().chat?.enabled === true;
 
   // Hub không tải danh sách: `enabled` chặn cả lần tải đầu lẫn `refetch` tự động.
   const products = useInfiniteQuery({
@@ -156,7 +168,9 @@ export default function BrowsePage() {
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
     enabled: !hubState,
   });
-  const firstPage = products.data?.pages[0];
+  const firstPage = products.data?.pages[0] as (CatalogPage & SearchCorrection) | undefined;
+  // Bước chịu gõ sai đã thay kết quả: "Đang hiện kết quả cho …" trên lưới.
+  const didYouMean = firstPage?.corrected ? (firstPage.didYouMean ?? null) : null;
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
 
   // `search_performed` (quy tắc ở utils/search-tracking): mỗi khoá tìm ghi một lần. Trang Browse bị gỡ khi mở
@@ -174,15 +188,36 @@ export default function BrowsePage() {
       return;
     }
     if (!firstPage) return;
-    if (shouldTrackSearch(urlKey)) trackSearchPerformed({ q: state.q, resultsCount: firstPage.meta.total });
+    if (!shouldTrackSearch(urlKey)) return;
+    trackSearchPerformed({ q: state.q, resultsCount: firstPage.meta.total });
+    // API bỏ riêng sự kiện có `q` giống số điện thoại hay email (event-props: luật của `search_zero_result`), như `search_performed`.
+    if (firstPage.meta.total === 0) trackEvent('search_zero_result', 'miniapp', { q: state.q.slice(0, 100), hadSuggestion: Boolean(firstPage.didYouMean) });
   }, [state.q, urlKey, firstPage]);
 
   // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm);
   // khách mới bấm vào ô trống vẫn thấy nguyên hub/danh sách thay vì một trang trắng.
-  const showSuggest = editing && (draft.trim() !== '' || recent.length > 0);
+  const showSuggest = editing && (draft.trim() !== '' || recent.length > 0 || popular.length > 0);
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: showSuggest });
 
   const { anchorRef } = useScrollRestoration(urlKey, !showSuggest && (hubState || list.length > 0));
+
+  // Cuộn xuống trong danh sách: hàng ô tìm trượt lên khuất, chỉ còn thanh sắp xếp + Lọc dính đầu; cuộn lên thì hiện lại. Chỉ đổi transform
+  // của hàng ô tìm và chỗ dính của thanh sắp xếp, không đổi chiều cao luồng nên lưới không nhảy.
+  const [scrolledDown, setScrolledDown] = useState(false);
+  useEffect(() => {
+    const scroller = searchRowRef.current?.closest<HTMLElement>('.zaui-page');
+    if (!scroller || hubState) return setScrolledDown(false);
+    let last = scroller.scrollTop;
+    const onScroll = () => {
+      const y = scroller.scrollTop;
+      if (Math.abs(y - last) < 8) return;
+      setScrolledDown(y > last && y > 160);
+      last = y;
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, [hubState]);
+  const collapsed = scrolledDown && !editing && !hubState;
 
   const stopEditing = () => {
     setEditing(false);
@@ -241,6 +276,9 @@ export default function BrowsePage() {
   const segmentName = state.segment ? segmentLabel(state.segment) : undefined;
   const scope = state.category ? chipScope(categories.categories, state.category) : null;
   const noResults = !products.isLoading && !products.isError && list.length === 0;
+  // Kết quả rỗng có lối đi tiếp (thứ tự `zeroResultBlocks`): "Ý bạn là", danh mục gần, kệ bán chạy còn hàng, nhắn Tubu.
+  const hint = noResults ? firstPage?.didYouMean : null;
+  const near = noResults && state.q ? nearCategories(categories.entries, state.q, foldVietnamese) : [];
   // Đã chọn danh mục, phân khúc hoặc đúng một nhãn thì nói rõ đang xem gì; nhãn công khai có thêm lối sang trang nhãn.
   const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
   const brandSlug = singleBrand ? (brands.data?.find((b) => b.brand === singleBrand)?.slug ?? null) : null;
@@ -255,7 +293,7 @@ export default function BrowsePage() {
   );
 
   return (
-    <Page className="page" style={PAGE_STYLE}>
+    <Page className="page" style={collapsed ? { ...PAGE_STYLE, '--sort-bar-top': 'var(--safe-top)' } as CSSProperties : PAGE_STYLE}>
       <PullToRefresh
         onRefresh={() =>
           Promise.all([
@@ -266,7 +304,13 @@ export default function BrowsePage() {
       />
       <div ref={anchorRef} />
       <h1 style={SR_ONLY}>{vi.browse.title}</h1>
-      <div ref={searchRowRef} data-testid="browse-search-row" style={STICKY_SEARCH}>
+      <div
+        ref={searchRowRef}
+        data-testid="browse-search-row"
+        data-collapsed={collapsed || undefined}
+        onFocusCapture={() => setScrolledDown(false)}
+        style={collapsed ? { ...STICKY_SEARCH, transform: 'translateY(calc(-100% - var(--safe-top)))' } : STICKY_SEARCH}
+      >
         <SearchField
           ref={inputRef}
           value={draft}
@@ -299,6 +343,7 @@ export default function BrowsePage() {
         <SuggestList
           draft={draft}
           recent={recent}
+          popular={popular}
           categories={categories.entries}
           products={suggest.products}
           flashSales={flashQ.data}
@@ -376,12 +421,22 @@ export default function BrowsePage() {
               leaveSearchField();
               updateList(patch);
             }}
+            onClearAll={() => {
+              leaveSearchField();
+              // Gỡ đúng các chip đang hiện: giữ từ khoá và phạm vi đang làm tiêu đề (danh mục, phân khúc hay thương hiệu).
+              updateList({ ...CLEAR_SEARCH_PATCH, q: state.q, ...(titleScope === 'category' ? { category: state.category } : titleScope === 'segment' ? { segment: state.segment } : titleScope === 'brand' ? { brands: state.brands } : null) });
+            }}
           />
           <div style={{ padding: '8px 16px 24px' }}>
             {/* Đích nhận focus của ActiveFilters khi chip cuối bị gỡ bằng bàn phím (cùng id với bản web). */}
             <h2 id="danh-sach-san-pham" tabIndex={-1} style={SR_ONLY}>
               {vi.browse.resultList}
             </h2>
+            {didYouMean && list.length > 0 && (
+              <Text variant="body-sm" tone="secondary" as="p" style={{ margin: '0 0 var(--space-stack-sm)' }}>
+                {fillCopy('search.showingFor', { q: didYouMean })}
+              </Text>
+            )}
             {products.isLoading ? (
               <CatalogGridSkeleton count={6} />
             ) : products.isError && list.length === 0 ? (
@@ -435,7 +490,33 @@ export default function BrowsePage() {
           {/* Tìm/lọc không ra gì → vẫn cho khách lối đi tiếp ("Đã xem gần đây" tự ẩn khi chưa xem gì). */}
           {noResults && (
             <>
-              <SuggestedRail listSource={state.q ? 'search_empty' : 'browse_empty'} />
+              {hint && (
+                <div style={ZERO_ROW}>
+                  <Chip onPress={() => commit(hint)}>{fillCopy('search.didYouMean', { q: hint })}</Chip>
+                </div>
+              )}
+              {near.length > 0 && (
+                <div role="group" aria-label={fillCopy('search.nearCategories')} className="scroll-x" style={{ ...ZERO_ROW, gap: 'var(--space-inline-sm)', alignItems: 'center' }}>
+                  <span aria-hidden="true" style={{ flex: 'none' }}>
+                    <Text variant="label" tone="secondary">
+                      {fillCopy('search.nearCategories')}
+                    </Text>
+                  </span>
+                  {near.map((e) => (
+                    <Chip key={e.key} onPress={() => pickCategory(e)}>
+                      {e.label}
+                    </Chip>
+                  ))}
+                </div>
+              )}
+              <SuggestedRail listSource={state.q ? 'search_empty' : 'browse_empty'} {...(state.q && { title: fillCopy('search.bestInStock'), limit: 6 })} />
+              {state.q && (chatOn || hasOA) && (
+                <div style={ZERO_ROW}>
+                  <Button variant="ghost" icon={MessageCircle} onPress={() => (chatOn ? navigate('/chat') : void openOAChat())}>
+                    {fillCopy('search.askTubu')}
+                  </Button>
+                </div>
+              )}
               <RecentlyViewedRail />
             </>
           )}

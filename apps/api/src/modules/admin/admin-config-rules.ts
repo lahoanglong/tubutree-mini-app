@@ -16,6 +16,8 @@ import {
 } from './coupon-input-rules';
 import { MINI_ENABLED_KEY, MINI_NUMERIC_SETTINGS, miniGameFlagKey } from '../game/mini/game-mini.settings';
 import { MINI_GAME_IDS } from '@tubutree/shared-types';
+import { POPULAR_FALLBACK_MAX, SEARCH_POPULAR_FLAG, SEARCH_POPULAR_TERMS_KEY, isPopularCandidate } from '../catalog/search-popular.service';
+import { SEARCH_FUZZY_FLAG } from '../catalog/search-fuzzy';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -39,6 +41,16 @@ const fail = (key: string, msg: string) => new BadRequestException(`"${key}": ${
 
 function assertBoolean(key: string, v: unknown) {
   if (typeof v !== 'boolean') throw fail(key, 'phải là true/false.');
+}
+
+/** Từ khoá dự phòng của "Tìm phổ biến": cùng luật với lúc đọc (`isPopularCandidate`), để admin không lưu cụm mà máy chủ sẽ lặng lẽ bỏ. */
+function assertPopularTerms(key: string, v: unknown) {
+  if (!Array.isArray(v) || v.length > POPULAR_FALLBACK_MAX) throw fail(key, `phải là danh sách tối đa ${POPULAR_FALLBACK_MAX} cụm.`);
+  for (const t of v) {
+    if (typeof t !== 'string' || !isPopularCandidate(t.trim())) {
+      throw fail(key, 'mỗi cụm 2–40 ký tự, không có @ hay dãy từ 6 chữ số.');
+    }
+  }
 }
 
 function assertIntInRange(key: string, v: unknown, min: number, max: number, unit: string) {
@@ -234,6 +246,9 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'notify.proactive_per_day': (k, v) => assertIntInRange(k, v, 1, 10, 'tin'),
   'notify.proactive_per_week': (k, v) => assertIntInRange(k, v, 1, 50, 'tin'),
   'catalog.restock_alert_enabled': assertBoolean,
+  [SEARCH_FUZZY_FLAG]: assertBoolean,
+  [SEARCH_POPULAR_FLAG]: assertBoolean,
+  [SEARCH_POPULAR_TERMS_KEY]: assertPopularTerms,
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

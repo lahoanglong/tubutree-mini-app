@@ -19,6 +19,8 @@ import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
 import type { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { foldVietnamese, likeContainsPattern, likePrefixPattern, likeTermPatterns } from './search-text';
+import { SearchMatchService } from './search-match.service';
+import { exactMatch, type TextMatch } from './search-fuzzy';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -272,6 +274,7 @@ export class CatalogService {
     @Optional() private readonly config?: SystemConfigService,
     @Optional() private readonly mssFlags?: MssFlagsService,
     @Optional() private readonly eco?: EcoFactsReader,
+    @Optional() private readonly searchMatch?: SearchMatchService,
   ) {}
 
   /**
@@ -314,10 +317,16 @@ export class CatalogService {
     }
   }
 
+  /**
+   * `corrected`/`didYouMean` chỉ có mặt khi bước chịu gõ sai (cờ `catalog.search_fuzzy_enabled`) đã sửa từ khoá: cờ tắt thì phản hồi giữ
+   * nguyên từng khoá như trước. Client cũ bỏ qua hai trường này.
+   */
   async list(query: ProductQuery) {
     const relevance: string[][] = [];
-    const where = await this.listWhere(query, relevance);
-    return this.listPage(where, query, relevance[0]);
+    const text: { match?: TextMatch } = {};
+    const where = await this.listWhere(query, relevance, text);
+    const page = await this.listPage(where, query, relevance[0]);
+    return text.match?.corrected ? { ...page, corrected: true, didYouMean: text.match.didYouMean } : page;
   }
 
   /**
@@ -578,7 +587,7 @@ export class CatalogService {
    * công khai gác thêm approvalStatus, giữ isActive là cờ vòng đời riêng.
    * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
    */
-  private async listWhere(query: ProductQuery, relevance?: string[][]): Promise<Prisma.ProductWhereInput> {
+  private async listWhere(query: ProductQuery, relevance?: string[][], textOut?: { match?: TextMatch }): Promise<Prisma.ProductWhereInput> {
     const { brand, category, segment, inStock, minRating, slugs } = query;
     const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE };
     const and: Prisma.ProductWhereInput[] = [];
@@ -613,6 +622,7 @@ export class CatalogService {
     const text = await this.textWhere(query.q, Boolean(relevance) && !query.sort, (query.page ?? 1) > 1);
     if (text) and.push(text.where);
     if (text?.ids) relevance?.push(text.ids);
+    if (text?.match && textOut) textOut.match = text.match;
     // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
     if (inStock) where.variations = { some: { isActive: true, stock: { gt: 0 } } };
     // ratingAvg mặc định 0 → SP chưa có đánh giá không lọt "Từ 4★" (đúng ý bộ lọc).
@@ -626,38 +636,47 @@ export class CatalogService {
    * đúng thứ tự trang 1 dù số đã bán đổi giữa hai lượt tải, nên không sản phẩm nào nhảy trang rồi bị sót. Chỉ trang > 1 đọc lại bộ nhớ;
    * trang 1 luôn chạy SQL rồi ghi đè, nên sản phẩm mới duyệt/đổi tên hiện ngay ở lượt tìm mới.
    */
-  private readonly matchCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  private readonly matchCache = new Map<string, { match: TextMatch; expiresAt: number }>();
   private readonly MATCH_TTL_MS = 60_000;
   private readonly MATCH_MAX_KEYS = 50;
 
-  private recallMatch(raw: string): string[] | undefined {
+  private recallMatch(raw: string): TextMatch | undefined {
     const hit = this.matchCache.get(raw.toLowerCase());
-    return hit && hit.expiresAt > Date.now() ? hit.ids : undefined;
+    return hit && hit.expiresAt > Date.now() ? hit.match : undefined;
   }
 
-  private async rememberMatch(raw: string, remember: boolean): Promise<string[]> {
+  private async exactIds(raw: string): Promise<string[]> {
     const rows = await this.prisma.$queryRaw<{ id: string }[]>(textMatchSql(raw));
-    const ids = rows.map((r) => r.id);
+    return rows.map((r) => r.id);
+  }
+
+  private async rememberMatch(raw: string, remember: boolean): Promise<TextMatch> {
+    const exact = await this.exactIds(raw);
+    const match = this.searchMatch ? await this.searchMatch.refine(raw, exact, (q) => this.exactIds(q)) : exactMatch(exact);
     if (remember) {
       const key = raw.toLowerCase();
       // Xoá trước khi ghi: Map giữ vị trí cũ của khoá có sẵn, nên khoá vừa làm mới sẽ bị coi là cũ nhất và bỏ đầu tiên.
       this.matchCache.delete(key);
       if (this.matchCache.size >= this.MATCH_MAX_KEYS) this.matchCache.delete(this.matchCache.keys().next().value as string);
-      this.matchCache.set(key, { ids, expiresAt: Date.now() + this.MATCH_TTL_MS });
+      this.matchCache.set(key, { match, expiresAt: Date.now() + this.MATCH_TTL_MS });
     }
-    return ids;
+    return match;
   }
 
   /**
    * Khớp từ khoá qua `textMatchSql`. SQL lỗi (vd DB chưa chạy migration cột nameSearch) → lùi về
    * `contains` cũ cho request đó, không tắt cờ vĩnh viễn (lỗi tạm thời không làm hỏng cả phiên).
    */
-  private async textWhere(q: string | undefined, remember = false, reuse = false): Promise<{ where: Prisma.ProductWhereInput; ids?: string[] } | undefined> {
+  private async textWhere(
+    q: string | undefined,
+    remember = false,
+    reuse = false,
+  ): Promise<{ where: Prisma.ProductWhereInput; ids?: string[]; match?: TextMatch } | undefined> {
     const raw = (q ?? '').trim();
     if (!foldVietnamese(raw)) return undefined;
     try {
-      const ids = (remember && reuse && this.recallMatch(raw)) || (await this.rememberMatch(raw, remember));
-      return { where: { id: { in: ids } }, ids };
+      const match = (remember && reuse && this.recallMatch(raw)) || (await this.rememberMatch(raw, remember));
+      return { where: { id: { in: match.ids } }, ids: match.ids, match };
     } catch (err) {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
       return { where: { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] } };
@@ -1069,9 +1088,19 @@ export class CatalogService {
   }
 
   async suggest(q: string) {
-    if (foldVietnamese(q).length < SUGGEST_MIN_CHARS) return [];
+    return (await this.suggestItems(q)).rows;
+  }
+
+  /** `?meta=1`: `{ items, corrected, didYouMean }` thay cho mảng, để client cũ (đọc mảng) không vỡ. */
+  async suggestWithMeta(q: string) {
+    const { rows, match } = await this.suggestItems(q);
+    return { items: rows, corrected: match?.corrected ?? false, didYouMean: match?.didYouMean ?? null };
+  }
+
+  private async suggestItems(q: string) {
+    if (foldVietnamese(q).length < SUGGEST_MIN_CHARS) return { rows: [], match: undefined };
     const text = await this.textWhere(q);
-    if (!text) return [];
+    if (!text) return { rows: [], match: undefined };
     // Theo thứ tự liên quan của textMatchSql: lấy 8 id đầu rồi xếp lại đúng thứ tự đó (findMany không giữ thứ tự của `in`).
     const top = text.ids ? text.ids.slice(0, 8) : undefined;
     const found = await this.prisma.product.findMany({
@@ -1086,11 +1115,14 @@ export class CatalogService {
     const sorted = top ? [...found].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)) : found;
     const overrides = await this.cardOverrides(sorted.map((r) => r.id));
     const rows = overrides.size ? sorted.map((r) => (overrides.has(r.id) ? mergeCardOverride(r, overrides.get(r.id)!) : r)) : sorted;
-    return rows.map(({ id, variations, ...r }) => ({
-      ...r,
-      ...cardPrices(r, variations),
-      thumbnail: publicImage('product', id, 'thumb', r.thumbnail),
-    }));
+    return {
+      match: text.match,
+      rows: rows.map(({ id, variations, ...r }) => ({
+        ...r,
+        ...cardPrices(r, variations),
+        thumbnail: publicImage('product', id, 'thumb', r.thumbnail),
+      })),
+    };
   }
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {

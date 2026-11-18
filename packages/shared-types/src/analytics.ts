@@ -48,6 +48,7 @@ export const CLIENT_EVENT_NAMES = [
   'matcher_completed',
   'matcher_add_all',
   'matcher_item_opened',
+  'search_zero_result',
 ] as const;
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
@@ -55,6 +56,15 @@ export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
 /** Lối khách vào Chọn Chuẩn Xanh (`matcher_started.entry`). */
 export const MATCHER_ENTRIES = ['play_today', 'tu_van', 'advisor_paused', 'empty_cart', 'direct'] as const;
 export type MatcherEntry = (typeof MATCHER_ENTRIES)[number];
+
+/**
+ * Từ khoá khách gõ được phép đi tiếp (sự kiện `search_zero_result`, danh sách "Tìm phổ biến"): bỏ cụm có `@` hay dãy từ 6 chữ số (bỏ qua
+ * mọi ký tự không phải chữ hay số giữa các số, vd. `0912_345_678`) để không lộ email, số điện thoại khách gõ nhầm vào ô tìm.
+ */
+export function isShareableSearchTerm(term: string): boolean {
+  if (term.includes('@')) return false;
+  return !/\d{6,}/.test(term.replace(/[^\p{L}\p{N}]/gu, ''));
+}
 
 /** Nơi khách bấm "Mở Zalo Tubu Tree" (`order_zalo_friend_click.from`). */
 export const ORDER_ZALO_FRIEND_FROM = ['success', 'order_detail'] as const;

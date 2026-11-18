@@ -398,6 +398,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/coupons/collectable/mine', { claimed: [], newCustomerOnly: [] });
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
+      // Cờ catalog.search_popular_enabled tắt (mặc định) thì API trả `terms: []`: ô tìm trống không có hàng chip.
+      api.fallback('GET', '/search/popular', { terms: [] });
       // Combo ưu đãi / Mua kèm (PDP) và kệ Combo tiết kiệm (Trang chủ) là công khai và tự ẩn khi rỗng: mặc định không có bộ nào.
       api.fallback('GET', '/bundles/combos', []);
       api.fallback('GET', '/products/:slug/bundles', { combos: [], addons: [] });

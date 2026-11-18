@@ -57,6 +57,8 @@ const http = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: http.get } }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+const track = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/analytics', async (orig) => ({ ...(await orig<typeof import('@/lib/analytics')>()), trackWebEvent: track }));
 
 import BrowseView from './browse-view';
 import { browseText } from '@/lib/browse-text';
@@ -1065,25 +1067,26 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     expect(buttonByName(container, 'Xoá tìm kiếm & bộ lọc')).not.toBeNull();
   });
 
-  it('tìm không ra: dưới thông báo có kệ "Có thể bạn thích" với sản phẩm bán chạy, không để màn trống', async () => {
+  it('tìm không ra: dưới thông báo có kệ "Bán chạy còn hàng" (tối đa 6 món bán chạy), không để màn trống', async () => {
     nav.search = 'q=mat+hoa+dua';
     routes['/products'] = (q) => (q?.sort === 'best_seller' ? pageOf([product(7), product(8)], 2) : pageOf([], 0));
     const { container } = mount();
     await flush(8);
     expect(container.textContent).toContain('Không tìm thấy "mat hoa dua"');
-    const rail = container.querySelector('section[aria-label="Có thể bạn thích"]');
+    const rail = container.querySelector('section[aria-label="Bán chạy còn hàng"]');
     expect(rail).not.toBeNull();
     expect(rail!.querySelector('a[href="/san-pham/sp-7"]')).not.toBeNull();
     // Đã nằm trong cột có đệm: kệ không thêm đệm ngang nữa (trước đó lùi vào 32px so với lề 16px của trang).
     expect(rail!.className).not.toContain('px-4');
-    expect(productCalls().some((q) => q?.sort === 'best_seller')).toBe(true);
+    expect(productCalls().some((q) => q?.sort === 'best_seller' && Number(q.limit) === 6)).toBe(true);
   });
 
-  it('có kết quả: không có kệ "Có thể bạn thích" và không tải thêm kệ bán chạy', async () => {
+  it('có kết quả: không có kệ bán chạy và không tải thêm kệ bán chạy', async () => {
     nav.search = 'q=nuoc';
     const { container } = mount();
     await flush(8);
-    expect(container.querySelector('section[aria-label="Có thể bạn thích"]')).toBeNull();
+    expect(container.querySelector('[data-testid="zero-result-paths"]')).toBeNull();
+    expect(container.querySelector('section[aria-label="Bán chạy còn hàng"]')).toBeNull();
     expect(productCalls().some((q) => q?.sort === 'best_seller')).toBe(false);
   });
 
@@ -1372,5 +1375,81 @@ describe('BrowseView — kiểu Mini App ở điện thoại', () => {
     expect(container.textContent).not.toContain('Mật ong Đối tác tự gửi');
     expect(container.textContent).not.toContain('Hàng tạm ngưng đối tác');
     expect(container.querySelector('[data-testid="result-count"]')?.textContent).toContain('1');
+  });
+});
+
+describe('BrowseView — tìm không ra có lối đi tiếp (wave tubu-w2-05 D)', () => {
+  const GIAT = { id: 'c-giat', parentId: null, name: 'Nước giặt', slug: 'nuoc-giat', image: null, sortOrder: 3, productCount: 5, children: [] };
+  const blocks = (c: HTMLElement) => {
+    const root = c.querySelector<HTMLElement>('[data-testid="zero-result-paths"]')!;
+    return [...root.children].map((el) =>
+      el.matches('[role="group"]') ? 'categories' : el.matches('section') ? 'bestSellers' : el.querySelector('a,button')?.textContent?.startsWith('Ý bạn là') ? 'didYouMean' : 'chat',
+    );
+  };
+  beforeEach(() => {
+    track.mockReset();
+    routes['/categories'] = () => [...CATEGORIES, GIAT];
+  });
+
+  it('đủ khối theo thứ tự: Ý bạn là, danh mục gần, Bán chạy còn hàng, Nhắn Tubu; khách chưa đăng nhập đi qua trang đăng nhập', async () => {
+    nav.search = 'q=nuoc+giat+xanh+la';
+    routes['/config/public'] = () => ({ freeshipThreshold: 199_000, subscribeDiscountPct: 0.12, chat: { enabled: true } });
+    routes['/products'] = (q) =>
+      q?.sort === 'best_seller' ? pageOf([product(7)], 1) : { ...pageOf([], 0), corrected: true, didYouMean: 'nước giặt xả' };
+    const { container } = mount();
+    await flush(10);
+    expect(blocks(container)).toEqual(['didYouMean', 'categories', 'bestSellers', 'chat']);
+    const group = container.querySelector('[data-testid="zero-result-paths"] [role="group"]')!;
+    expect(group.getAttribute('aria-label')).toBe('Thử danh mục');
+    expect([...group.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Nước giặt']);
+    const chat = [...container.querySelectorAll<HTMLAnchorElement>('[data-testid="zero-result-paths"] a')].find((a) => a.textContent === 'Chưa thấy món cần tìm? Nhắn Tubu')!;
+    expect(chat.getAttribute('href')).toContain('/dang-nhap');
+    expect(decodeURIComponent(chat.getAttribute('href')!)).toContain('/ho-tro/chat');
+    expect(unnamedControls(container)).toEqual([]);
+  });
+
+  it('bấm "Ý bạn là": tìm lại bằng cụm gợi ý; bấm danh mục gần: mở danh mục', async () => {
+    nav.search = 'q=nuoc+giat+xanh+lb';
+    routes['/products'] = (q) =>
+      q?.sort === 'best_seller' ? pageOf([], 0) : q?.q ? { ...pageOf([], 0), corrected: true, didYouMean: 'nước giặt xả' } : pageOf([product(1)], 1);
+    const { container } = mount();
+    await flush(10);
+    click(byText(container.querySelector('[data-testid="zero-result-paths"]')!, 'button', 'Ý bạn là "nước giặt xả"?')!);
+    await flush(4);
+    expect(new URLSearchParams(nav.search).get('q')).toBe('nước giặt xả');
+    nav.search = 'q=nuoc+giat+xanh+le';
+    nav.listeners.forEach((l) => l());
+    await flush(10);
+    click(byText(container.querySelector('[data-testid="zero-result-paths"] [role="group"]')!, 'button', 'Nước giặt')!);
+    await flush(4);
+    expect(new URLSearchParams(nav.search).get('category')).toBe('c-giat');
+  });
+
+  it('không có danh mục gần, không chat, không gợi ý: chỉ còn kệ bán chạy', async () => {
+    nav.search = 'q=qzxwv';
+    routes['/products'] = (q) => (q?.sort === 'best_seller' ? pageOf([product(7)], 1) : pageOf([], 0));
+    const { container } = mount();
+    await flush(10);
+    expect(blocks(container)).toEqual(['bestSellers']);
+  });
+
+  it('sự kiện: search_performed và search_zero_result mỗi từ khoá một lần, hadSuggestion theo didYouMean', async () => {
+    nav.search = 'q=nuoc+giat+xanh+lc';
+    routes['/products'] = (q) => (q?.sort === 'best_seller' ? pageOf([], 0) : { ...pageOf([], 0), corrected: true, didYouMean: 'nước giặt xả' });
+    const { container } = mount();
+    await flush(10);
+    expect(container.textContent).toContain('Không tìm thấy');
+    expect(track.mock.calls.filter(([n]) => n === 'search_performed')).toEqual([['search_performed', { q: 'nuoc giat xanh lc', resultsCount: 0 }]]);
+    expect(track.mock.calls.filter(([n]) => n === 'search_zero_result')).toEqual([['search_zero_result', { q: 'nuoc giat xanh lc', hadSuggestion: true }]]);
+  });
+
+  it('có kết quả: không bắn search_zero_result; API đã sửa từ khoá thì có dòng "Đang hiện kết quả cho …"', async () => {
+    nav.search = 'q=nuoc+gait+ld';
+    routes['/products'] = () => ({ ...pageOf([product(1)], 1), corrected: true, didYouMean: 'nước giặt' });
+    const { container } = mount();
+    await flush(10);
+    expect(container.textContent).toContain('Đang hiện kết quả cho "nước giặt"');
+    expect(track.mock.calls.some(([n]) => n === 'search_zero_result')).toBe(false);
+    expect(track.mock.calls.filter(([n]) => n === 'search_performed')).toHaveLength(1);
   });
 });
