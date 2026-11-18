@@ -60,7 +60,14 @@ export const CLIENT_EVENT_NAMES = [
   'guest_checkout_start',
   'web_vital',
   'mini_vital',
+  'refill_swap_shown',
+  'refill_swap_applied',
+  'refill_swap_undone',
 ] as const;
+
+/** Nơi hiện gợi ý đổi chai sang gói Refill (`refill_swap_*.surface`). */
+export const REFILL_SWAP_SURFACES = ['cart', 'reorder'] as const;
+export type RefillSwapSurface = (typeof REFILL_SWAP_SURFACES)[number];
 
 /** Nơi khách đổi địa chỉ giao ở màn thanh toán (`checkout_address_switched.from`). */
 export const CHECKOUT_ADDRESS_SWITCH_FROM = ['sheet'] as const;

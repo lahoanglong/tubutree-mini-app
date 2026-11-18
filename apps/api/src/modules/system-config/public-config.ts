@@ -20,6 +20,7 @@ import { FREESHIP_BOOSTER_ENABLED_KEY } from '../catalog/upsell/freeship-upsell'
 import { RETURN_PACKAGING_NUDGE_KEY } from '../waste-exchange/customer/waste-return-packaging';
 import { WEB_GUEST_CHECKOUT_ENABLED_KEY } from '../checkout/guest/guest-checkout.config';
 import { PERF_RUM_ENABLED_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT, PERF_RUM_SAMPLE_PCT_KEY, normalizeSamplePct } from '../analytics/vitals/vitals-rules';
+import { REFILL_FIRST_ENABLED_KEY } from '../catalog/refill/refill-pairs';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
@@ -31,6 +32,9 @@ export const UNIT_PRICE_ENABLED_KEY = 'catalog.unit_price_enabled';
 export const PDP_ETA_ENABLED_KEY = 'shipping.pdp_eta_enabled';
 
 export const WEB_GUEST_CART_ENABLED_KEY = 'web.guest_cart_enabled';
+
+/** Thẻ "Gửi lại như lần trước" ở màn Đổi rác (tubu-w4-04): chỉ là lối tắt điền sẵn luồng tạo yêu cầu có sẵn, máy chủ đổi rác không đổi. */
+export const WASTE_REPEAT_REQUEST_KEY = 'waste.repeat_request_enabled';
 
 /** Trang đích link mời và tiến độ mời; mặc định tắt (seed createOnly + migration 20261118015753). */
 export const REFERRAL_SHARE_CARD_KEY = 'referral.share_card_enabled';
@@ -129,6 +133,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     pdpEta,
     perfRumEnabled,
     perfRumSamplePct,
+    refillFirst,
+    wasteRepeatRequest,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -182,6 +188,9 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(PDP_ETA_ENABLED_KEY, false),
     config.get<unknown>(PERF_RUM_ENABLED_KEY, false),
     config.get<unknown>(PERF_RUM_SAMPLE_PCT_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT),
+    config.get<unknown>(REFILL_FIRST_ENABLED_KEY, false),
+    // Như các cờ đổi rác khác: đọc lỗi thì tắt, phần còn lại của cấu hình công khai vẫn trả.
+    config.get<unknown>(WASTE_REPEAT_REQUEST_KEY, false).catch(() => false),
   ]);
   return {
     freeshipThreshold,
@@ -271,6 +280,10 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     pdpEtaEnabled: pdpEta === true,
     // Đo tốc độ trên máy khách: app chỉ gửi khi `enabled` true, với xác suất `samplePct`%. Tắt (hay API cũ không trả) thì app không gửi gì.
     perfRum: { enabled: perfRumEnabled === true, samplePct: normalizeSamplePct(perfRumSamplePct) },
+    // Gợi ý đổi chai sang gói Refill ở giỏ và kệ Mua lại (`GET /catalog/refill-pairs/mine`); tắt hay API cũ thì app không gọi endpoint đó.
+    refillFirstEnabled: refillFirst === true,
+    // Thẻ "Gửi lại như lần trước" ở màn Đổi rác; tắt hay API cũ thì màn như trước, không đọc danh sách yêu cầu.
+    wasteRepeatRequestEnabled: wasteRepeatRequest === true,
   };
 }
 

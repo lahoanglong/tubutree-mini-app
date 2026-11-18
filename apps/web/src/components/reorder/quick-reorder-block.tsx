@@ -4,10 +4,12 @@
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { quickReorderLines, type QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
+import type { RefillQuickItem } from '@tubutree/app-core/refill/refill-rail';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
 import { QuickReorderStrip } from '@/components/mini/quick-reorder-strip';
 import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
+import { trackWebEvent } from '@/lib/analytics';
 import { playCartFeedback } from '@/lib/cart-feedback';
 import { productHref } from '@/lib/product-href';
 import { useBundleAdd } from '@/lib/use-bundle-add';
@@ -28,7 +30,7 @@ function addButtonOf(variationId: string): Element | null {
  * nổi "Đã thêm vào giỏ!" như mọi đường giỏ nhanh); "Thêm lại tất cả" là một lệnh lô (máy chủ thêm hết hoặc không món nào) và kết quả cũng hiện ở thông báo nổi.
  * Mỗi lúc chỉ một lệnh bay: lệnh thứ hai bấm lúc lệnh đầu chưa xong bị bỏ. Khách chưa đăng nhập bấm "Thêm lại tất cả" thì sang đăng nhập (do `useBundleAdd`).
  */
-export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[] }) {
+export function QuickReorderBlock({ items, onOpenBottle }: { items: readonly RefillQuickItem[]; onOpenBottle?: (bottle: QuickReorderItem) => void }) {
   const router = useRouter();
   const quick = useQuickAdd('repurchase', PURCHASED_ITEMS_KEY);
   const bundle = useBundleAdd([PURCHASED_ITEMS_KEY]);
@@ -55,6 +57,7 @@ export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[
         onAdd={(item) => {
           if (bundle.isBusy() || oneInFlight.current) return;
           oneInFlight.current = true;
+          if ((item as RefillQuickItem).bottle) trackWebEvent('refill_swap_applied', { surface: 'reorder' });
           void quick.addVariation(item.variationId, { origin: addButtonOf(item.variationId) }).finally(() => {
             oneInFlight.current = false;
           });
@@ -70,6 +73,9 @@ export function QuickReorderBlock({ items }: { items: readonly QuickReorderItem[
           });
         }}
         onOpen={(item) => {
+          // Ô đã đổi sang gói Refill: mở tấm Mua lại của đúng chai cũ (khách vẫn mua lại được món cũ).
+          const bottle = (item as RefillQuickItem).bottle;
+          if (bottle && onOpenBottle) return onOpenBottle(bottle);
           const href = productHref(encodeURIComponent(item.slug), null, item.variationId);
           announcePdpNavigation(href);
           router.push(href);

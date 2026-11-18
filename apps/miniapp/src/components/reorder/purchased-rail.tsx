@@ -1,9 +1,11 @@
-import { lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { cartUnitsByVariation } from '@tubutree/app-core/commerce/reorder-notice';
 import { QUICK_REORDER_MAX, buildQuickReorderItems, quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
+import { myRefillPairsQuery, refillFirstOn, refillQueryIds } from '@tubutree/app-core/refill/refill-api';
+import { refillQuickItems } from '@tubutree/app-core/refill/refill-rail';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { PURCHASED_LINE_HEIGHT, SECTION_HEADER_HEIGHT, purchasedSkeletonHeight, readPurchasedHint, writePurchasedHint } from '@tubutree/app-core/home-layout';
@@ -11,7 +13,9 @@ import { vi } from '../../i18n/vi';
 import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
+import { trackEvent } from '../../services/analytics';
 import { getLoadErrorMessage } from '../../services/api';
+import { coreHttp } from '../../services/core-http';
 import { useCartKey } from '../../services/cart-key';
 import { fetchActiveFlashSales, getCart, type PurchasedItem } from '../../services/shop-api';
 import { serverNow } from '../../utils/server-clock';
@@ -115,7 +119,8 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
     setReorderMounted(true);
     setTarget(itemReorderTarget(p));
   };
-  const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
+  const cfg = usePublicConfig();
+  const discountPct = Math.round(cfg.subscribeDiscountPct * 100);
   const onHome = source === 'home_rail';
   // Trang chủ vẽ đúng tập mà chống trùng Trang chủ (`use-home-shelves`) chiếm, tối đa `QUICK_REORDER_MAX` (như trần của kệ): không món nào vừa bị chiếm mà không ai vẽ
   // (biến khỏi các kệ dưới), hay được vẽ mà không ai chiếm (lặp ở kệ dưới). Tab Đơn hàng vẽ đủ như cũ.
@@ -134,7 +139,20 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: onHome && phase === 'authenticated' });
   const cartUnits = useMemo(() => cartUnitsByVariation(cartQ.data?.items), [cartQ.data]);
   // Dải "Mua lại món quen" thay kệ thẻ ở Trang chủ từ 2 món còn hàng; một món thì giữ dòng Mua lại. Tab Đơn hàng không đổi.
-  const quickItems = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now: serverNow() }) : [];
+  const baseQuick = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now: serverNow() }) : [];
+  // Cờ catalog.refill_first_enabled: ô chai khách đã có thành gói Refill (chạm "+ Thêm" thêm gói refill, mở ô vẫn mua lại đúng chai cũ).
+  // Khai với Trang chủ vẫn bằng món gốc (`use-home-shelves` đọc thẳng danh sách đã mua), nên chống trùng các kệ dưới không đổi.
+  const refillOn = refillFirstOn(cfg) && phase === 'authenticated';
+  const refillIds = refillQueryIds(baseQuick.map((i) => i.productId));
+  const refillPairs = useQuery({ ...myRefillPairsQuery(coreHttp, refillIds), enabled: refillOn && refillIds.length > 0 }).data;
+  const quickItems = refillQuickItems(baseQuick, refillOn ? refillPairs : undefined);
+  const refillShown = quickItems.some((i) => i.bottle);
+  const shownSent = useRef(false);
+  useEffect(() => {
+    if (!refillShown || shownSent.current) return;
+    shownSent.current = true;
+    trackEvent('refill_swap_shown', 'miniapp', { surface: 'reorder' });
+  }, [refillShown]);
 
   if ((restoring || q.isLoading) && onHome) {
     const height = purchasedSkeletonHeight(hint === 'none' ? 'one' : hint);
@@ -186,6 +204,12 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
     </div>
   );
 
+  const reorderSheet = (target || reorderMounted) && (
+    <Suspense fallback={null}>
+      <ReorderSheet target={target} source={source} navigateToCart onClose={() => setTarget(null)} />
+    </Suspense>
+  );
+
   if (quickItems.length > 0) {
     return (
       <>
@@ -193,11 +217,21 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
           items={quickItems}
           busyKey={quick.busyKey}
           busyAll={quick.busyAll}
-          onAdd={(item) => void quick.addOne(item)}
+          onAdd={(item) => {
+            const refill = !!(item as (typeof quickItems)[number]).bottle;
+            void quick.addOne(item).then((ok) => ok && refill && trackEvent('refill_swap_applied', 'miniapp', { surface: 'reorder' }));
+          }}
           onAddAll={() => quick.addAll(quickItems)}
-          onOpen={(item) => navigate(`/product/${encodeURIComponent(item.slug)}`, { state: { pinnedVariationId: item.variationId } })}
+          onOpen={(item) => {
+            // Ô đã đổi sang Refill: mở tấm Mua lại của đúng chai cũ (khách vẫn chọn được món cũ).
+            const bottle = (item as (typeof quickItems)[number]).bottle;
+            const old = bottle && shown.find((p) => p.variationId === bottle.variationId);
+            if (old) openReorder(old);
+            else navigate(`/product/${encodeURIComponent(item.slug)}`, { state: { pinnedVariationId: item.variationId } });
+          }}
         />
         {refreshError}
+        {reorderSheet}
       </>
     );
   }
@@ -246,11 +280,7 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
           ))}
         </RailShell>
       )}
-      {(target || reorderMounted) && (
-        <Suspense fallback={null}>
-          <ReorderSheet target={target} source={source} navigateToCart onClose={() => setTarget(null)} />
-        </Suspense>
-      )}
+      {reorderSheet}
       {subscribeFor && (
         <Suspense fallback={null}>
           <SubscribeSheet visible onClose={() => setSubscribeFor(null)} variationId={subscribeFor.variationId} quantity={1} />

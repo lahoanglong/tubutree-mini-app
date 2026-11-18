@@ -5,7 +5,9 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
-import { wasteCatalogueQuery, wasteMeQuery } from '@tubutree/app-core/queries/waste';
+import { wasteCatalogueQuery, wasteMeQuery, wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
+import { wasteRepeatOn } from '@tubutree/app-core/refill/refill-api';
+import { lastCompletedRequest } from '@tubutree/app-core/refill/repeat-waste';
 import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import { friendlyError as errText } from '@/lib/friendly-error';
@@ -15,6 +17,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { pointsSummary } from '@/lib/checkout-points';
 import { loginHref } from '@/lib/return-to';
 import { clearSubmitted } from '@/lib/recycle-wizard';
+import { RepeatWasteCard } from '@/components/refill/repeat-waste-card';
 import { trackRecycleStep } from '@/lib/recycle-funnel';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -207,6 +210,10 @@ export function RecycleHome() {
   const me = meQ.data;
   const fullPage = me?.programmeEnabled === true && me.eligibility === 'OK' && !me.blocked;
   const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: phase === 'authenticated' && fullPage });
+  // Cờ waste.repeat_request_enabled: khách đã có yêu cầu hoàn tất thấy "Gửi lại như lần trước" thay cho nút chính. Tắt thì không hỏi gì thêm.
+  const repeatOn = wasteRepeatOn(cfg) && fullPage;
+  const requestsQ = useQuery({ ...wasteRequestsQuery(coreHttp), enabled: phase === 'authenticated' && repeatOn });
+  const lastDone = repeatOn ? lastCompletedRequest(requestsQ.data) : null;
 
   const needCatalogue =
     cfg.waste.enabled && (phase === 'guest' || (phase === 'authenticated' && me !== undefined && me.programmeEnabled && me.eligibility !== 'OK'));
@@ -343,10 +350,14 @@ export function RecycleHome() {
                 )}
               </div>
             )}
-            {methods.length > 0 && (
-              <Link href="/doi-rac/tao" className={`${ui.btnPrimary} w-full sm:w-auto`}>
-                Đổi rác ngay
-              </Link>
+            {methods.length > 0 && lastDone ? (
+              <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/doi-rac/tao" />
+            ) : (
+              methods.length > 0 && (
+                <Link href="/doi-rac/tao" className={`${ui.btnPrimary} w-full sm:w-auto`}>
+                  Đổi rác ngay
+                </Link>
+              )
             )}
           </div>
 

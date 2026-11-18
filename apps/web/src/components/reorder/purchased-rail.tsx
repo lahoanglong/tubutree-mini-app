@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
@@ -10,8 +10,13 @@ import { QUICK_REORDER_MAX, buildQuickReorderItems, quickReorderShelfItems } fro
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { PURCHASED_LINE_HEIGHT, SECTION_HEADER_HEIGHT, purchasedSkeletonHeight, readPurchasedHint, writePurchasedHint, type PurchasedHint } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { myRefillPairsQuery, refillFirstOn, refillQueryIds } from '@tubutree/app-core/refill/refill-api';
+import { refillQuickItems } from '@tubutree/app-core/refill/refill-rail';
+import { trackWebEvent } from '@/lib/analytics';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useCartKey } from '@/lib/cart-key';
+import { coreHttp } from '@/lib/core-http';
 import { homeText, reorderText } from '@/lib/home-text';
 import { browserStorage } from '@/lib/recently-viewed';
 import { getCart } from '@/lib/shop-client';
@@ -231,7 +236,22 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   const phase = useAuthPhase();
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: onHome && phase === 'authenticated' });
   const cartUnits = useMemo(() => cartUnitsByVariation(cartQ.data?.items), [cartQ.data]);
-  const quickItems = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now }) : [];
+  const baseQuick = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now }) : [];
+  // Cờ catalog.refill_first_enabled: ô chai khách đã có thành gói Refill (chạm "+ Thêm" thêm gói refill, mở ô vẫn mua lại đúng chai cũ).
+  // Khai với Trang chủ vẫn bằng món gốc (`use-home-shelves` đọc thẳng danh sách đã mua), nên chống trùng các kệ dưới không đổi.
+  // Cờ đọc từ cùng truy vấn cấu hình công khai, chỉ khi dải có thể hiện (Trang chủ, đã đăng nhập): khách chưa đăng nhập không phát thêm yêu cầu nào.
+  const refillCfg = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, enabled: onHome && phase === 'authenticated' }).data;
+  const refillOn = refillFirstOn(refillCfg) && onHome && phase === 'authenticated';
+  const refillIds = refillQueryIds(baseQuick.map((i) => i.productId));
+  const refillPairs = useQuery({ ...myRefillPairsQuery(coreHttp, refillIds), enabled: refillOn && refillIds.length > 0 }).data;
+  const quickItems = refillQuickItems(baseQuick, refillOn ? refillPairs : undefined);
+  const refillShown = quickItems.some((i) => i.bottle);
+  const shownSent = useRef(false);
+  useEffect(() => {
+    if (!refillShown || shownSent.current) return;
+    shownSent.current = true;
+    trackWebEvent('refill_swap_shown', { surface: 'reorder' });
+  }, [refillShown]);
   useEffect(() => {
     if (onHome && settledCount !== null) writePurchasedHint(browserStorage(), settledCount);
   }, [onHome, settledCount]);
@@ -275,8 +295,15 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   if (quickItems.length > 0) {
     return (
       <>
-        <QuickReorderBlock items={quickItems} />
+        <QuickReorderBlock
+          items={quickItems}
+          onOpenBottle={(bottle) => {
+            const old = shown.find((p) => p.variationId === bottle.variationId);
+            if (old) setTarget(itemReorderTarget(old));
+          }}
+        />
         {refreshError}
+        <ReorderSheet target={target} navigateToCart onClose={() => setTarget(null)} />
       </>
     );
   }

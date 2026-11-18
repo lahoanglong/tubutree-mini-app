@@ -5,7 +5,10 @@ import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
-import { getWasteCatalogue, getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
+import { getWasteCatalogue, getWasteMe, listWasteRequests, WASTE_QUERY_KEYS } from '../services/waste-api';
+import { wasteRepeatOn } from '@tubutree/app-core/refill/refill-api';
+import { lastCompletedRequest } from '@tubutree/app-core/refill/repeat-waste';
+import { RepeatWasteCard } from '../components/refill/repeat-waste-card';
 import { getLoyaltyRewards } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -203,6 +206,10 @@ export default function RecyclePage() {
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const me = meQ.data;
   const fullPage = me?.programmeEnabled === true && me.eligibility === 'OK' && !me.blocked;
+  // Cờ waste.repeat_request_enabled: khách đã có yêu cầu hoàn tất thấy "Gửi lại như lần trước" thay cho nút chính. Tắt thì không hỏi gì thêm.
+  const repeatOn = wasteRepeatOn(cfg) && fullPage;
+  const requestsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.requests, queryFn: listWasteRequests, enabled: phase === 'authenticated' && repeatOn });
+  const lastDone = repeatOn ? lastCompletedRequest(requestsQ.data) : null;
   const rewardsQ = useQuery({
     queryKey: WASTE_QUERY_KEYS.rewards,
     queryFn: getLoyaltyRewards,
@@ -383,10 +390,14 @@ export default function RecyclePage() {
               )}
             </div>
           )}
-          {methods.length > 0 && (
-            <Button fullWidth onPress={() => navigate('/recycle/new')}>
-              Đổi rác ngay
-            </Button>
+          {methods.length > 0 && lastDone ? (
+            <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/recycle/new" />
+          ) : (
+            methods.length > 0 && (
+              <Button fullWidth onPress={() => navigate('/recycle/new')}>
+                Đổi rác ngay
+              </Button>
+            )
           )}
         </div>
       </Card>

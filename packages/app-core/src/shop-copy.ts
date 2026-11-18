@@ -750,6 +750,23 @@ export const SHOP_COPY: Record<string, string> = {
   'giftTrial.none': 'Không nhận quà',
   'giftTrial.noneHint': 'Đơn vẫn giữ nguyên số tiền',
   'giftTrial.saveFailed': 'Chưa đổi được quà. Bạn thử lại nhé.',
+  // Gói Refill cho khách đã có chai (cờ catalog.refill_first_enabled, wave tubu-w4-04): chỉ nói điều kiểm được ngay (giá, dung tích, dùng lại chai).
+  'refill.swapLink': 'Đã có chai? Đổi sang Refill{size} · {price}',
+  'refill.dropFreeship': 'Giỏ sẽ thiếu {amount} để Miễn phí giao hàng',
+  'refill.dropGift': 'Giỏ sẽ thiếu {amount} để nhận quà 0đ',
+  'refill.dropGreenBox': 'Hộp Xanh sẽ giảm {pct}%',
+  'refill.loseGreenBox': 'Giỏ sẽ mất giảm Hộp Xanh',
+  'refill.confirmTitle': 'Đổi sang Refill?',
+  'refill.confirmBody': '{name} · {price}, dùng lại chai bạn đang có.',
+  'refill.confirmUp': 'Dòng này tăng {amount}.',
+  'refill.confirmCta': 'Đổi sang Refill',
+  'refill.swapped': 'Đã đổi sang Refill',
+  'wasteRepeat.title': 'Gửi lại như lần trước',
+  'wasteRepeat.sub': '{method}{point} · {n} loại',
+  'wasteRepeat.cta': 'Gửi lại',
+  'wasteRepeat.newRequest': 'Tạo yêu cầu mới',
+  'wasteRepeat.droppedItems': 'Đã bỏ {n} loại rác nay không còn nhận',
+  'wasteRepeat.pickAgain': 'Cách gửi hoặc điểm nhận lần trước nay tạm đóng, bạn chọn lại nhé',
   // Khối Giờ vàng dạng Giờ Xanh (cờ flashsale.green_hour_enabled): cùng suất Giờ vàng, tông xanh, có nút thêm nhanh.
   'greenHour.title': 'Giờ Xanh Ưu Đãi',
   // Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A)

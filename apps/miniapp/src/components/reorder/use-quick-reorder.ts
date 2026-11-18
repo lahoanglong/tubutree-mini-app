@@ -33,8 +33,9 @@ export function useQuickReorder() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const inflight = useRef(false);
 
-  const addOne = async (item: QuickReorderItem) => {
-    if (inflight.current || bundle.inFlight()) return;
+  /** `true` khi món đã vào giỏ (bị khoá bận bỏ qua hoặc máy chủ từ chối thì `false`). */
+  const addOne = async (item: QuickReorderItem): Promise<boolean> => {
+    if (inflight.current || bundle.inFlight()) return false;
     inflight.current = true;
     setBusyKey(item.variationId);
     try {
@@ -43,6 +44,7 @@ export function useQuickReorder() {
       haptic('medium');
       playCartFeedback(addButtonOf(item.variationId));
       notify({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
+      return true;
     } catch (e) {
       notify({ text: getErrorMessage(e), type: 'error' });
       // Máy chủ từ chối (món hết hàng, ngừng bán, giá đổi): giữ khoá và vòng bận tới khi giỏ và dải làm mới về (tối đa `settleWithin`), kẻo chạm lại trên số cũ nhận đúng lỗi đó.
@@ -50,6 +52,7 @@ export function useQuickReorder() {
       if (isStaleStateError(e)) {
         await settleWithin(Promise.all([queryClient.invalidateQueries({ queryKey: ['cart'] }), queryClient.invalidateQueries({ queryKey: ['purchased-items'] })]));
       }
+      return false;
     } finally {
       inflight.current = false;
       setBusyKey(null);

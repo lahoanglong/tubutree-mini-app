@@ -9,6 +9,7 @@ import {
   ORDER_ZALO_FRIEND_FROM,
   PDP_ACTIONS,
   RECYCLE_FUNNEL_STEPS,
+  REFILL_SWAP_SURFACES,
   SUBTOTAL_BUCKETS,
   MINI_VITAL_NAMES,
   VITAL_NAV_TYPES,
@@ -153,6 +154,10 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   // Số đo tốc độ (wave tubu-w4-05, cờ perf.rum_enabled): mẫu route và nhóm khung nhìn, không URL thật, không mã khách.
   web_vital: vitalProps(WEB_VITAL_NAMES),
   mini_vital: vitalProps(MINI_VITAL_NAMES),
+  // Gói Refill cho khách đã có chai (wave tubu-w4-04): chỉ nơi hiện, không mang món, tiền hay khách.
+  refill_swap_shown: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
+  refill_swap_applied: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
+  refill_swap_undone: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
 };
 
 /**

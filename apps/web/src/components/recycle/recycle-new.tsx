@@ -86,6 +86,7 @@ import { WasteItemStep } from './waste-item-step';
 import { HomePickupComposer } from './recycle-home-pickup';
 import { WebRecyclePhoneCard } from './web-recycle-phone-card';
 import { trackRecycleStep } from '@/lib/recycle-funnel';
+import { clearRepeatNotes, readRepeatNotes, type RepeatNotes } from '@/components/refill/repeat-notes';
 import {
   METHOD_LABELS,
   METHOD_LINE,
@@ -159,6 +160,8 @@ export function RecycleNew() {
   const createBusy = useRef(false);
   const toPicker = useRef(false);
   const resumeSeen = useRef<boolean | null>(null);
+  // "Gửi lại như lần trước": phần lần trước đã bị bỏ, nói ở đúng bước (loại rác / cách gửi). Vào mới (không nối tiếp) thì bỏ lời báo cũ.
+  const [repeatNotes, setRepeatNotes] = useState<RepeatNotes | null>(null);
   // Nháp đọc ở client sau khi gắn vào cây: lần render đầu của server và client phải giống nhau.
   useEffect(() => {
     const back = takeReturn();
@@ -168,6 +171,8 @@ export function RecycleNew() {
     const resume = resumeSeen.current ?? (step === 'method' ? peekResume() : takeResume());
     resumeSeen.current = resume;
     if (resume && step === 'method') markResume();
+    if (resume) setRepeatNotes(readRepeatNotes());
+    else clearRepeatNotes();
     const next = back ?? (resume ? loadDraft() : null);
     if (!next && step === 'items') clearDraft();
     // Hàm cập nhật giữ giá trị đã đọc khi effect chạy lần hai (StrictMode), vì cờ đã bị xoá ở lần đầu.
@@ -436,9 +441,17 @@ export function RecycleNew() {
   };
 
   const subtitle = step === 'items' ? wasteStepCopy.items : wasteStepCopy.method;
+  // Lời báo cách gửi/điểm nhận cũ đã đóng chỉ hiện tới khi khách chọn lại xong.
+  const methodOpen = draft.method === null || (draft.method === 'DROP_OFF' && !draft.pointId);
+  const repeatNote = step === 'items' ? repeatNotes?.items : methodOpen ? repeatNotes?.method : null;
   const shell = (content: ReactNode, bar?: ReactNode) => (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
       <PageHeader title="Đổi rác" subtitle={subtitle} backHref={step === 'method' ? WIZARD_PATH : '/doi-rac'} backLabel={step === 'method' ? 'Chọn món' : 'Đổi rác lấy quà'} />
+      {repeatNote && (
+        <p data-testid="waste-repeat-note" className="text-sm text-warning-fg">
+          {repeatNote}
+        </p>
+      )}
       {content}
       {bar}
     </main>

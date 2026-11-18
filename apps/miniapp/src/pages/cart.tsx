@@ -84,6 +84,9 @@ import { CartVoucherHintStrip } from '../components/ui/cart-voucher-hint-strip';
 import { useCartVoucherHint } from '../components/checkout/use-cart-voucher-hint';
 import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
 import { settleWithin } from '../utils/settle-within';
+import { refillConfirmText, refillSwapOffers } from '@tubutree/app-core/refill/refill-swap';
+import { RefillSwapLink } from '../components/refill/refill-swap-link';
+import { useCartRefill } from '../components/refill/use-cart-refill';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 
 const UNDO_WINDOW_MS = 3500;
@@ -212,6 +215,26 @@ export default function CartPage() {
   const [voucherOpen, setVoucherOpen] = useState(false);
   const sfCtx = useStorefrontContext();
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Gợi ý đổi dòng chai sang gói Refill (cờ tắt: không gọi máy chủ, không vẽ gì). Một thanh Hoàn tác cho cả bỏ món lẫn đổi Refill.
+  // Đổi và Hoàn tác đi cùng nhịp sửa giỏ của các lệnh khác (`countEdits`): bản đọc giỏ cũ không ghi đè kết quả, lệnh xong cuối mới đọc lại.
+  const refill = useCartRefill(
+    cart.data?.items,
+    (c) => {
+      removedCoupon.remember(c);
+      queryClient.setQueryData(cartKey(), c);
+      setRemoved(null);
+    },
+    (e) => notify({ text: getErrorMessage(e), type: 'error' }),
+    {
+      begin: () => {
+        countEdits(queryClient, 1);
+        return queryClient.cancelQueries({ queryKey: ['cart'] });
+      },
+      end: () => {
+        if (countEdits(queryClient, -1) <= 0) void queryClient.invalidateQueries({ queryKey: ['cart'] });
+      },
+    },
+  );
   // Chọn từng món: lưu tập ĐÃ BỎ CHỌN (deselected) → món mới auto-chọn, món xoá tự biến mất
   // (không cần đồng bộ tay). checkout chỉ thanh toán các món đang chọn.
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
@@ -270,7 +293,11 @@ export default function CartPage() {
     ({ id, qty }: { id: string; qty: number }) => inLineOrder(queryClient, id, () => updateCartItem(id, qty)),
     (prev, { id, qty }) =>
       recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l)), id),
-    removedCoupon.remember,
+    (response) => {
+      removedCoupon.remember(response);
+      // Đã sửa giỏ sau khi đổi sang Refill: Hoàn tác không còn trả đúng trạng thái cũ nên đóng lại.
+      refill.dismiss();
+    },
   );
   // Khoá đồng bộ theo dòng: hai cú chạm sát nhau vào cùng nút Xoá không gọi xoá hai lần (lần hai nhận 404 và hoàn lại giỏ).
   // Thanh Hoàn tác mở ở `onSuccess` cấp mutation, không ở callback của `mutate`: callback đó chỉ chạy cho lần gọi cuối, xoá dòng B khi dòng A còn bay thì mất của A.
@@ -281,6 +308,7 @@ export default function CartPage() {
       (prev, { id }) => recompute(prev, prev.items.filter((l) => l.id !== id)),
       (response, { line }) => {
         removedCoupon.remember(response);
+        refill.dismiss();
         setRemoved(line);
         if (undoTimer.current) clearTimeout(undoTimer.current);
         undoTimer.current = setTimeout(() => setRemoved(null), UNDO_WINDOW_MS);
@@ -429,6 +457,20 @@ export default function CartPage() {
   const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
   // Mức mở khoá của dải đầu giỏ: tăng khi vừa đạt Miễn phí giao hàng hay lên bậc Hộp Xanh thì dải nảy mừng một lần (`CartUnlockSlot`).
   const unlockLevel = cartUnlockLevel(freeship.reached, greenBox?.tier?.minItems);
+  // Liên kết "Đã có chai? Đổi sang Refill …" theo đúng mốc màn đang hiện (phần đang chọn): đổi làm tụt mốc thì hỏi lại trước.
+  const refillViews = refillSwapOffers({
+    lines: summary.items,
+    pairs: refill.pairs,
+    comboGroups: summary.comboGroups,
+    milestones: {
+      freeship: showFreeship ? { base: freeshipBase, threshold: summary.freeshipThreshold, reached: freeship.reached, tubuOnly: hasMerchant } : null,
+      giftTrial: giftTrialShown,
+      greenBox,
+    },
+    isSelected: (id) => !deselected.has(id),
+  });
+  const refillConfirm = refill.confirm && refillConfirmText(refill.confirm);
+  const undoBar = refill.receipt ? { text: fillCopy('refill.swapped'), onUndo: refill.undo } : removed ? { text: vi.cart.removed, onUndo: handleUndo } : null;
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
   // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
@@ -529,19 +571,23 @@ export default function CartPage() {
             // Các món cùng bộ combo gom dưới một đầu nhóm; món lẻ vẽ như cũ phía dưới. API cũ không có nhóm thì mọi món là món lẻ.
             const comboWaiting = comboSavingPending({ editing: summary.comboPending, partial: subsetSig !== null, priced: priced !== null });
             const { blocks, loose } = cartComboBlocks(g.items, summary.comboGroups, deselected, priced?.comboGroups, comboWaiting);
-            const renderLine = (line: CartLine) => (
-              <CartLineRow
-                key={line.id}
-                line={line}
-                selected={!deselected.has(line.id)}
-                onToggleSelect={() => !isPendingAddonLine(line) && toggleSelect(line.id)}
-                onQty={(qty) => !isPendingAddonLine(line) && update.mutate({ id: line.id, qty })}
-                onRemove={() => !isPendingAddonLine(line) && requestRemove(line)}
-                onOpen={() => navigate(`/product/${line.slug}`)}
-                onFlashEnd={() => void queryClient.invalidateQueries({ queryKey: ['cart'] })}
-                pending={update.isPending && update.variables?.id === line.id}
-              />
-            );
+            const renderLine = (line: CartLine) => {
+              const swap = refillViews.get(line.id);
+              return (
+                <CartLineRow
+                  key={line.id}
+                  line={line}
+                  selected={!deselected.has(line.id)}
+                  onToggleSelect={() => !isPendingAddonLine(line) && toggleSelect(line.id)}
+                  onQty={(qty) => !isPendingAddonLine(line) && update.mutate({ id: line.id, qty })}
+                  onRemove={() => !isPendingAddonLine(line) && requestRemove(line)}
+                  onOpen={() => navigate(`/product/${line.slug}`)}
+                  onFlashEnd={() => void queryClient.invalidateQueries({ queryKey: ['cart'] })}
+                  pending={update.isPending && update.variables?.id === line.id}
+                  refill={swap && <RefillSwapLink view={swap} disabled={refill.busy} onPress={refill.press} />}
+                />
+              );
+            };
             return (
               <section key={g.key} aria-label={withHeaders ? fulfillerLabel(g.fulfiller) : 'Sản phẩm trong giỏ'}>
                 {withHeaders && (
@@ -582,7 +628,7 @@ export default function CartPage() {
       )}
 
       {/* Undo bar — hiện 3.5s sau khi xoá (DI #3) */}
-      {removed && (
+      {undoBar && (
         <Box
           className="tubu-rise"
           style={{
@@ -600,14 +646,14 @@ export default function CartPage() {
           }}
         >
           <Text size="small" style={{ color: 'white' }}>
-            {vi.cart.removed}
+            {undoBar.text}
           </Text>
           <Text
             role="button"
             {...rowKeyboardProps()}
             size="small"
             bold
-            onClick={handleUndo}
+            onClick={undoBar.onUndo}
             className="tubu-hit-44"
             style={{ color: 'var(--forest-200)', padding: '8px 6px', display: 'inline-block' }}
           >
@@ -653,6 +699,18 @@ export default function CartPage() {
           cancelLabel={pendingRemove.notice.keepLabel}
           onConfirm={confirmRemove}
           onCancel={() => setConfirmOpen(false)}
+        />
+      )}
+
+      {!empty && refillConfirm && (
+        <ConfirmSheet
+          open
+          title={refillConfirm.title}
+          message={refillConfirm.body}
+          confirmLabel={refillConfirm.confirm}
+          cancelLabel={refillConfirm.cancel}
+          onConfirm={() => refill.confirm && refill.apply(refill.confirm)}
+          onCancel={refill.cancel}
         />
       )}
 
@@ -761,6 +819,7 @@ function CartLineRow({
   onOpen,
   onFlashEnd,
   pending,
+  refill,
 }: {
   line: CartLine;
   selected: boolean;
@@ -772,6 +831,8 @@ function CartLineRow({
   onFlashEnd: () => void;
   /** PATCH số lượng của chính dòng này đang bay: line.total lúc đó là số client tự nhân (optimistic), chưa phải số server. */
   pending: boolean;
+  /** Liên kết đổi sang gói Refill dưới dòng (chỉ dòng chai khách đã có). */
+  refill?: ReactNode;
 }) {
   // Bấm +/- nhanh 5 lần trước đây gọi 5 PATCH song song → debounce qty cuối cùng
   // (UI cập nhật tức thời qua local state, request chỉ bay sau ~380ms ổn định).
@@ -907,6 +968,7 @@ function CartLineRow({
             Thành tiền {formatVnd(line.total)}
           </Text>
         )}
+        {refill}
       </Box>
       <IconButton
         icon={Trash2}

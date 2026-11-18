@@ -111,6 +111,8 @@ export type WasteWizardDraft = {
   sid?: string;
   /** Lựa chọn ở khối "Shipper lấy tận nhà" (giữ khi khách mở Thể lệ rồi quay lại). */
   homePickup?: HomePickupForm;
+  /** "Gửi lại như lần trước": phần lần trước đã bị bỏ, nói ở đúng bước (loại rác / cách gửi). */
+  repeat?: { items: string | null; method: string | null };
 };
 export type WastePointsNavState = { returnTo: string; draft: WasteWizardDraft; selectedItemIds: string[] };
 export type WastePointsReturnState = { draft: WasteWizardDraft };
@@ -537,10 +539,20 @@ export default function RecycleNewPage() {
     },
   });
 
+  // Lời báo cách gửi/điểm nhận cũ đã đóng chỉ hiện tới khi khách chọn lại xong.
+  const methodOpen = draft.method === null || (draft.method === 'DROP_OFF' && !draft.pointId);
+  const repeatNote = step === 'items' ? draft.repeat?.items : methodOpen ? draft.repeat?.method : null;
   const shell = (content: React.ReactNode, subtitle: string, bar?: React.ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Đổi rác" subtitle={subtitle} />
-      <div style={{ ...COLUMN, padding: 16, paddingBottom: bar ? 'calc(var(--sticky-bar-h, 9rem) + var(--space-gutter))' : 'calc(var(--space-gutter) + var(--safe-bottom))', gap: 16 }}>{content}</div>
+      <div style={{ ...COLUMN, padding: 16, paddingBottom: bar ? 'calc(var(--sticky-bar-h, 9rem) + var(--space-gutter))' : 'calc(var(--space-gutter) + var(--safe-bottom))', gap: 16 }}>
+        {repeatNote && (
+          <Text variant="body-sm" tone="warning" as="p" data-testid="waste-repeat-note" style={{ margin: 0 }}>
+            {repeatNote}
+          </Text>
+        )}
+        {content}
+      </div>
       {bar}
     </Page>
   );

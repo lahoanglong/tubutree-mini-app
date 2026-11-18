@@ -78,6 +78,10 @@ export interface PublicConfig {
   unitPriceEnabled?: boolean;
   /** Cờ `shipping.pdp_eta_enabled`: trang chi tiết hiện "Nhận dự kiến …" và câu còn thiếu để miễn phí giao hàng. Thiếu khi API cũ → tắt. */
   pdpEtaEnabled?: boolean;
+  /** Cờ `catalog.refill_first_enabled`: gợi ý gói Refill cho chai khách đã có ở giỏ và kệ Mua lại (`GET /catalog/refill-pairs/mine`). Thiếu khi API cũ → tắt, không gọi. */
+  refillFirstEnabled?: boolean;
+  /** Cờ `waste.repeat_request_enabled`: thẻ "Gửi lại như lần trước" ở màn Đổi rác. Thiếu khi API cũ → tắt, màn như trước. */
+  wasteRepeatRequestEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

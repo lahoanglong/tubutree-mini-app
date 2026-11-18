@@ -54,6 +54,9 @@ import { FreeshipAddons } from './freeship-addons';
 import { CartUnlockSlot } from '@/components/cart/freeship-booster/cart-unlock-slot';
 import { GuestCartView } from './guest-cart-view';
 import { GreenBoxEvents, GreenBoxStrip } from './green-box-strip';
+import { refillConfirmText, refillSwapOffers } from '@tubutree/app-core/refill/refill-swap';
+import { RefillSwapLink } from '@/components/refill/refill-swap-link';
+import { useCartRefill } from '@/components/refill/use-cart-refill';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { runGuestMerge, takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
 import { readGuestCart } from '@/lib/guest-cart/store';
@@ -205,6 +208,15 @@ export default function CartPage() {
   // Lỗi nhớ theo từng dòng: `mutation.error` chỉ giữ lệnh sau cùng nên lệnh của dòng A lỗi sau khi dòng B đã chạy sẽ mất lời báo.
   const [lineErrors, setLineErrors] = useState<ReadonlyMap<string, unknown>>(() => new Map());
   const cartWrite = useCartWrite();
+  // Gợi ý đổi dòng chai sang gói Refill (cờ tắt: không gọi máy chủ, không vẽ gì). Một thanh Hoàn tác cho cả bỏ món lẫn đổi Refill.
+  const refill = useCartRefill(
+    cartQ.data?.items,
+    (e) => setUndoError(actionErrorText(e)),
+    () => {
+      setUndoError(null);
+      setRemovedLine(null);
+    },
+  );
   // Khoá đồng bộ theo dòng (không theo lệnh sau cùng): state chỉ đúng sau lần vẽ kế, và `variables` của mutation đổi sang dòng khác sẽ mở nhầm dòng đang bay.
   const lineOp = useLockedMutation(
     {
@@ -219,6 +231,8 @@ export default function CartPage() {
       // Trả lời hứa tải lại giỏ (khi có lệnh chồng): lệnh còn "đang bay", khoá dòng còn giữ, tới khi giỏ mới về.
       onSuccess: (data, v, cmd) => {
         const refreshed = cartWrite.write(cmd, data);
+        // Đã sửa giỏ sau khi đổi sang Refill: Hoàn tác không còn trả đúng trạng thái cũ nên đóng lại.
+        refill.dismiss();
         if (v.op === 'remove' && v.line) {
           setUndoError(null);
           setRemovedLine(v.line);
@@ -429,6 +443,25 @@ export default function CartPage() {
           : CART_OVER_STOCK_BLOCKED
         : null;
   const showBar = !cartQ.isLoading && !!cart && cart.items.length > 0;
+  // Liên kết "Đã có chai? Đổi sang Refill …" theo đúng mốc màn đang hiện (phần đang chọn): đổi làm tụt mốc thì hỏi lại trước.
+  const refillViews = refillSwapOffers({
+    lines: allItems,
+    pairs: refill.pairs,
+    comboGroups: cart?.comboGroups,
+    milestones: {
+      freeship: showFreeship && freeship && cart ? { base: freeshipBase, threshold: cart.freeshipThreshold, reached: freeship.reached, tubuOnly: hasMerchant } : null,
+      giftTrial: giftTrialShown,
+      greenBox,
+    },
+    isSelected: (id) => !deselected.has(id),
+  });
+  const refillConfirm = refill.confirm && refillConfirmText(refill.confirm);
+  // Một thanh Hoàn tác cho cả đổi Refill lẫn bỏ món (như Mini App): lệnh sau cùng thắng, thanh của lệnh trước đóng.
+  const undoBar = refill.receipt
+    ? { text: fillCopy('refill.swapped'), onUndo: refill.undo, hold: refill.hold }
+    : removedLine
+      ? { text: 'Đã bỏ khỏi giỏ', onUndo: undoRemove, hold: undoHold }
+      : null;
 
   // Một dòng giỏ; dòng của bộ combo và dòng lẻ vẽ cùng một hàm.
   const renderLine = (it: CartLine) => {
@@ -441,6 +474,7 @@ export default function CartPage() {
     const lineError = lineErrors.get(it.id);
     const compareAt = lineCompareAt(it);
     const lineVariation = variationLabel(it.variationName);
+    const swap = refillViews.get(it.id);
     return (
       <div key={it.id} data-testid="cart-line" data-variation-id={it.variationId} className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
         <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center md:max-lg:-mx-1 md:max-lg:min-w-11">
@@ -564,6 +598,7 @@ export default function CartPage() {
               <span className="max-md:hidden">Xoá</span>
             </button>
           </div>
+          {swap && <RefillSwapLink view={swap} disabled={refill.busy} onPress={refill.press} />}
           {lineErrors.has(it.id) && (
             <p role="alert" className="mt-1 basis-full text-caption text-danger-fg max-md:order-5">
               {actionErrorText(lineError)}
@@ -830,18 +865,30 @@ export default function CartPage() {
           onCancel={() => setConfirmOpen(false)}
         />
       )}
+      {cart && cart.items.length > 0 && refillConfirm && (
+        <ConfirmSheet
+          open
+          title={refillConfirm.title}
+          message={refillConfirm.body}
+          confirmLabel={refillConfirm.confirm}
+          cancelLabel={refillConfirm.cancel}
+          onConfirm={() => refill.confirm && refill.apply(refill.confirm)}
+          onCancel={refill.cancel}
+        />
+      )}
       {/* Vùng báo luôn có mặt trong cây (chỉ đổi phần con): vùng live vừa gắn cùng chữ thường không được đọc ra. */}
       <div role="status" data-testid="undo-region">
-        {removedLine && (
+        {undoBar && (
           <div
             data-surface="inverse"
-            {...undoHold}
+            data-testid={refill.receipt ? 'refill-undo' : undefined}
+            {...undoBar.hold}
             className={`fixed inset-x-3 z-30 mx-auto flex max-w-md items-center justify-between rounded-control bg-stone-900 px-4 py-2 text-sm text-stone-0 ${
               showBar ? 'bottom-[calc(var(--sticky-bar-h,8rem)+0.5rem)] lg:bottom-6' : 'bottom-6'
             }`}
           >
-            <span>Đã bỏ khỏi giỏ</span>
-            <button ref={undoRef} type="button" onClick={undoRemove} className="min-h-11 px-2 font-bold text-forest-200">
+            <span>{undoBar.text}</span>
+            <button ref={undoRef} type="button" onClick={undoBar.onUndo} className="min-h-11 px-2 font-bold text-forest-200">
               Hoàn tác
             </button>
           </div>

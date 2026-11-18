@@ -1,0 +1,8 @@
+-- Gợi ý gói Refill cho khách đã có chai và thẻ "Gửi lại như lần trước" ở Đổi rác (tubu-w4-04): hai cờ mặc định TẮT, hai cấu hình ghép
+-- cặp rỗng. Chỉ thêm dòng khi chưa có, không đổi giá trị admin đã đặt.
+INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES
+  ('catalog.refill_first_enabled', 'false'::jsonb, 'Gợi ý gói Refill cho khách đã có chai (Mini App và web): ở giỏ, dưới dòng chai khách từng nhận trong một đơn bán lẻ đã giao, có liên kết "Đã có chai? Đổi sang Refill …" ghi giá đầy đủ (giá tăng thì ghi mức tăng và hỏi lại trước khi đổi, đổi xong có Hoàn tác); kệ "Mua lại món quen" hiện gói Refill thay cho chai. Cặp chai ↔ refill ghép theo tên (cùng thương hiệu, cùng công thức, đúng một gói refill), sửa bằng catalog.refill_pairs_override và catalog.refill_pairs_block. Không đổi giá, không phát điểm. Tắt thì giỏ và kệ như cũ.', 'catalog', NOW()),
+  ('catalog.refill_pairs_override', '[]'::jsonb, 'Cặp chai ↔ gói Refill ghép tay, thắng luật ghép theo tên: [{"bottleSlug":"<slug chai>","refillSlug":"<slug gói refill>"}]. Mục sai dạng bị bỏ qua.', 'catalog', NOW()),
+  ('catalog.refill_pairs_block', '[]'::jsonb, 'Slug sản phẩm không bao giờ được ghép chai ↔ gói Refill (chai hay gói refill đều được): ["<slug>"].', 'catalog', NOW()),
+  ('waste.repeat_request_enabled', 'false'::jsonb, 'Màn Đổi rác (Mini App và web): khách đã có yêu cầu hoàn tất thấy thẻ "Gửi lại như lần trước" ở đầu màn; chạm mở luồng tạo yêu cầu điền sẵn các loại rác, cách gửi và điểm nhận của lần hoàn tất gần nhất (phần nào không còn hợp lệ thì bỏ, khách chọn lại; ô đồng ý thể lệ vẫn phải tick). "Tạo yêu cầu mới" thành liên kết phụ. Không đổi luật đổi rác, không đổi điểm. Tắt thì màn như cũ.', 'waste', NOW())
+ON CONFLICT ("key") DO NOTHING;
