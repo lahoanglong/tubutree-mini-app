@@ -70,6 +70,11 @@ test.describe('A11Y-01: vòng focus đạt 3:1 trên nền tối', () => {
 });
 
 test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
+  // Từ md, chuỗi Tab đi qua ô tìm ở thanh đầu; ô nhận focus là hỏi danh mục (chỉ dùng khi đã gõ chữ, ô trống không vẽ danh mục nào).
+  test.beforeEach(({ api }) => {
+    api.get('/categories', []);
+  });
+
   for (const width of [375, 800]) {
     test(`/gio-hang 8 dòng ở ${width}px: Tab qua từng phần tử, tâm phần tử không bị thanh/đầu trang đè`, async ({ page, api }) => {
       mockBuyer(api, { lines: 8 });
