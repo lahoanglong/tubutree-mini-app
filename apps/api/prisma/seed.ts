@@ -417,6 +417,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'mss.order_status_enabled', value: false, category: 'mss', description: 'Nhận trạng thái đơn từ MSS cho đơn đi đường MSS.', createOnly: true },
   { key: 'mss.invoice_enabled', value: false, category: 'mss', description: 'Yêu cầu hoá đơn điện tử qua MSS cho đơn đi đường MSS.', createOnly: true },
   { key: 'mss.catalog_shadow_enabled', value: false, category: 'mss', description: 'Đọc thử danh mục từ MSS để so với Pancake, không hiện cho khách.', createOnly: true },
+  { key: 'mss.stock_sync_enabled', value: false, category: 'mss', description: 'Nhận tồn kho Pancake do MSS đẩy sang (POST /api/integrations/mss/catalog-sync) và áp ngay: hết hàng thì trang sản phẩm hiện "Báo tôi khi có hàng", về hàng thì gửi tin báo hàng về. Đồng bộ Pancake của Tubu vẫn chạy song song; số cũ hơn số đã áp bị bỏ. Tắt thì bỏ qua phần tồn MSS gửi.', createOnly: true },
   { key: 'mss.catalog_source', value: 'pancake', category: 'mss', description: 'Nguồn SKU, giá, tồn kho: pancake (hiện tại) hoặc mss.', createOnly: true },
 ];
 assertWasteConfigSeedRows(SYSTEM_CONFIGS);

@@ -12,6 +12,7 @@ export const MSS_FLAG_KEYS = {
   orderStatus: 'mss.order_status_enabled',
   invoice: 'mss.invoice_enabled',
   catalogShadow: 'mss.catalog_shadow_enabled',
+  stockSync: 'mss.stock_sync_enabled',
 } as const;
 
 export type MssFlag = keyof typeof MSS_FLAG_KEYS;
@@ -57,6 +58,8 @@ export const MSS_FLAG_CAPABILITY: Record<MssFlag, string> = {
   orderStatus: 'orders',
   invoice: 'invoice',
   catalogShadow: 'catalog.source',
+  // MSS chỉ công bố `catalog.source` khi đã bật gương Pancake (có SKU, giá, tồn): không có gương thì không có số tồn để đẩy.
+  stockSync: 'catalog.source',
 };
 
 export function clampRolloutPct(v: unknown): number {

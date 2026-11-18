@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BTN_SECONDARY, Notice, ToneBadge } from '@/components/admin/ui';
 import { actionErrorText } from '@/lib/admin-error-text';
-import { getMssCatalog, pullMssCatalog, type MssCatalogOpsCard as Card, type MssCatalogSkipReason, type MssCatalogTrimReason } from '@/lib/admin-client';
+import {
+  getMssCatalog,
+  pullMssCatalog,
+  type MssCatalogOpsCard as Card,
+  type MssCatalogSkipReason,
+  type MssCatalogTrimReason,
+  type MssStockSkipReason,
+} from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
 import type { Tone } from '@/lib/recycling';
 
@@ -24,7 +31,16 @@ export const TRIM_LABEL: Record<MssCatalogTrimReason, string> = {
   html_emptied: 'Mô tả HTML rỗng sau khi lọc',
   string_truncated: 'Chữ quá dài, đã cắt',
   array_truncated: 'Danh sách quá dài, đã cắt',
+  story_rejected: 'Câu chuyện sản phẩm sai dạng hoặc ảnh ngoài host, đã bỏ',
+  eco_fact_rejected: 'Nhãn xanh sai dạng hoặc thiếu nguồn https, đã bỏ',
   unknown_category_slug: 'Danh mục lạ, đã bỏ',
+};
+
+export const STOCK_SKIP_LABEL: Record<MssStockSkipReason, string> = {
+  unknown_variation: 'Biến thể chưa có trên Tubu',
+  stale: 'Đọc trước số Tubu đã có',
+  too_old: 'Đọc quá 60 phút trước',
+  clock_skew: 'Giờ MSS lệch quá 5 phút',
 };
 
 const TRIGGER_LABEL: Record<NonNullable<Card['lastTrigger']>, string> = {
@@ -161,12 +177,74 @@ function CardBody({ card }: { card: Card }) {
         </Notice>
       )}
 
+      <PushSummary card={card} />
+
       <button type="button" className={BTN_SECONDARY} disabled={pull.isPending} onClick={() => pull.mutate()}>
         {pull.isPending ? 'Đang xếp lượt kéo…' : 'Kéo lại ngay'}
       </button>
       {msg && (
         <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
           {msg.text}
+        </Notice>
+      )}
+    </div>
+  );
+}
+
+function stockBadge(flag: Card['stockSync']): { tone: Tone; label: string } {
+  if (!flag?.enabled) return { tone: 'neutral', label: 'Tắt' };
+  if (!flag.effective) return { tone: 'warning', label: 'Chưa có hiệu lực' };
+  return { tone: 'success', label: 'Đang nhận' };
+}
+
+/**
+ * Lần MSS ĐẨY gần nhất (`POST /api/integrations/mss/catalog-sync`): nội dung theo cờ của thẻ này, tồn theo cờ mss.stock_sync_enabled.
+ * Chỉ dòng có số; lần đẩy có phần bị bỏ vì cờ tắt thì nói rõ để admin không tưởng tồn đã cập nhật.
+ */
+function PushSummary({ card }: { card: Card }) {
+  const push = card.push ?? null;
+  const flag = stockBadge(card.stockSync);
+  const st = push?.stats ?? null;
+  const status = push?.status ? STATUS_BADGE[push.status] : null;
+  const stockSkipped = reasonRows(st?.stock.skipped, STOCK_SKIP_LABEL);
+  return (
+    <div data-testid="mss-catalog-push" className="space-y-1 border-t border-stone-200 pt-3 text-stone-700">
+      <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>Tồn kho MSS đẩy sang (mss.stock_sync_enabled):</span>
+        <ToneBadge tone={flag.tone}>{flag.label}</ToneBadge>
+      </p>
+      {push?.at ? (
+        <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>
+            Lần MSS đẩy gần nhất: <span className="tabular-nums">{formatDateTime(push.at)}</span>
+          </span>
+          {status && <ToneBadge tone={status.tone}>{status.label}</ToneBadge>}
+        </p>
+      ) : (
+        <p className="m-0">MSS chưa đẩy lần nào.</p>
+      )}
+      {st && st.products.status !== 'none' && (
+        <p className="m-0 tabular-nums text-stone-600">
+          {st.products.status === 'disabled'
+            ? `Nội dung: bỏ qua ${st.products.received} tài liệu vì cờ chưa có hiệu lực`
+            : `Nội dung: nhận ${st.products.received}, ghép ${st.products.applied}, không đổi ${st.products.unchanged}`}
+          {st.products.eco_proposed > 0 && `, ${st.products.eco_proposed} nhãn xanh nháp chờ duyệt ở Sự thật xanh`}
+        </p>
+      )}
+      {st && st.stock.status !== 'none' && (
+        <p className="m-0 tabular-nums text-stone-600">
+          {st.stock.status === 'disabled'
+            ? `Tồn: bỏ qua ${st.stock.received} dòng vì cờ chưa có hiệu lực`
+            : `Tồn: nhận ${st.stock.received}, áp ${st.stock.applied}, vừa hết hàng ${st.stock.out_of_stock}, vừa về hàng ${st.stock.back_in_stock}${
+                st.stock.restock_waiting > 0 ? ` (${st.stock.restock_waiting} khách chờ báo hàng về)` : ''
+              }${st.stock.invalid > 0 ? `, ${st.stock.invalid} dòng sai dạng` : ''}`}
+        </p>
+      )}
+      {st && st.deferred.bundles > 0 && <p className="m-0 tabular-nums text-stone-600">Combo MSS gửi kèm chưa áp: {st.deferred.bundles}</p>}
+      {stockSkipped.length > 0 && <ReasonList title="Dòng tồn bị bỏ ở lần đẩy gần nhất" rows={stockSkipped} />}
+      {push?.error && (
+        <Notice tone="danger">
+          <span className="break-all">Lỗi lần đẩy gần nhất: {push.error}</span>
         </Notice>
       )}
     </div>

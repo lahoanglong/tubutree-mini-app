@@ -136,6 +136,14 @@ describe('mergeEnrichment: ghép từng trường', () => {
     expect(readStoredPayload(JSON.parse(JSON.stringify(fullPayload())))).toEqual(fullPayload());
   });
 
+  it('câu chuyện xanh MSS thay câu chuyện Tubu; không gửi thì giữ; dòng đã lưu hỏng khung thì coi như không có ý kiến', () => {
+    const storyConfig = { version: 1 as const, enabled: true, scenes: [{ kind: 'variant_arc' as const, items: [{ variationId: 'v1', label: '2L', ambient: 'leaf' as const }] }] };
+    expect(mergeEnrichment(tubu(), { ...EMPTY_MSS_PAYLOAD, storyConfig }).storyConfig).toEqual(storyConfig);
+    expect(mergeEnrichment({ ...tubu(), storyConfig: { version: 1, enabled: false, scenes: [] } }, EMPTY_MSS_PAYLOAD).storyConfig).toEqual({ version: 1, enabled: false, scenes: [] });
+    expect(readStoredPayload({ v: 1, storyConfig }).storyConfig).toEqual(storyConfig);
+    expect('storyConfig' in readStoredPayload({ v: 1, storyConfig: { version: 9 } })).toBe(false);
+  });
+
   it('danh mục hiệu lực và điều kiện lọc khi cờ bật', () => {
     expect(effectiveCategoryIds({ categoryIds: ['a'], mssEnrichment: { state: 'published', categoryOverride: true, categoryIds: ['b'] } })).toEqual(['b']);
     expect(effectiveCategoryIds({ categoryIds: ['a'], mssEnrichment: { state: 'unpublished', categoryOverride: true, categoryIds: ['b'] } })).toEqual(['a']);

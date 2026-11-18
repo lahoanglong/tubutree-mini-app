@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { parseStoryConfig, type ProductStoryConfig } from '@tubutree/shared-types';
 
 /**
  * Nội dung bổ sung MSS đã kiểm và lọc, đúng như lưu ở `product_mss_enrichment.payload` (hợp đồng commerce v0.9 mục 1.2). Quy ước:
@@ -25,6 +26,22 @@ export interface MssEnrichmentIngredient {
   note: string | null;
 }
 
+/**
+ * Một "nhãn xanh" MSS đề xuất (từ vựng của bảng `product_eco_facts`). Không bao giờ hiện thẳng cho khách: Tubu tạo dòng NHÁP để admin
+ * duyệt ở màn Sự thật xanh (luật duyệt của wave w2-01 giữ nguyên).
+ */
+export interface MssEcoFactProposal {
+  kind: string;
+  /** `pancake_variation_id` của nhãn riêng một biến thể; null = cả sản phẩm. */
+  variationId: string | null;
+  valueGrams: number | null;
+  baselineText: string | null;
+  label: string | null;
+  co2Grams: number | null;
+  sourceUrl: string;
+  sourceNote: string;
+}
+
 export interface MssEnrichmentPayload {
   v: 1;
   title: string | null;
@@ -38,6 +55,12 @@ export interface MssEnrichmentPayload {
   metaDesc: string | null;
   /** Id danh mục Tubu (đã đổi từ `category_slugs`, slug lạ bị bỏ). */
   categoryIds: string[] | null;
+  /**
+   * Câu chuyện xanh (khung `ProductStoryConfig`, đã qua `parseStoryConfig`). Hai trường dưới chỉ có mặt khi MSS gửi: vắng = không có ý kiến,
+   * và băm payload của tài liệu không có chúng giữ y như trước khi thêm trường.
+   */
+  storyConfig?: ProductStoryConfig;
+  ecoFacts?: MssEcoFactProposal[];
 }
 
 export const EMPTY_MSS_PAYLOAD: MssEnrichmentPayload = {
@@ -82,7 +105,15 @@ export function readStoredPayload(raw: Prisma.JsonValue | unknown): MssEnrichmen
     metaTitle: strOrNull(raw.metaTitle),
     metaDesc: strOrNull(raw.metaDesc),
     categoryIds: arr(raw.categoryIds, (x) => (typeof x === 'string' && x ? x : null)),
+    ...storedStory(raw.storyConfig),
   };
+}
+
+/** Câu chuyện đã lưu được kiểm lại bằng chính bộ kiểm của shared-types: dòng hỏng thì coi như không có ý kiến, PDP dùng câu chuyện Tubu. */
+function storedStory(raw: unknown): { storyConfig?: ProductStoryConfig } {
+  if (raw === undefined || raw === null) return {};
+  const parsed = parseStoryConfig(raw);
+  return parsed.ok ? { storyConfig: parsed.value } : {};
 }
 
 /** Ảnh chung trước, ảnh riêng biến thể sau (thư viện ảnh PDP mở bằng ảnh chung). */
@@ -103,6 +134,7 @@ export interface EnrichableProduct {
   certifications: string[];
   metaTitle: string | null;
   metaDesc: string | null;
+  storyConfig?: Prisma.JsonValue | null;
 }
 
 /**
@@ -124,6 +156,7 @@ export function mergeEnrichment<T extends EnrichableProduct>(product: T, e: MssE
   if (e.metaTitle !== null) out.metaTitle = e.metaTitle;
   if (e.metaDesc !== null) out.metaDesc = e.metaDesc;
   if (e.categoryIds !== null) out.categoryIds = [...e.categoryIds];
+  if (e.storyConfig) out.storyConfig = e.storyConfig as unknown as Prisma.JsonValue;
   return out;
 }
 

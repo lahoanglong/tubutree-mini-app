@@ -152,6 +152,45 @@ describe('MssCatalogCard', () => {
     expect(r.container.textContent).toContain('Không đọc được trạng thái nội dung từ MSS');
   });
 
+  it('lần MSS đẩy: cờ tồn, giờ, nội dung bị bỏ vì cờ tắt, tồn áp + hết/về hàng + khách chờ, dòng tồn bị bỏ theo lý do tiếng Việt, combo chưa áp', async () => {
+    stub({
+      ...runningCard(),
+      stockSync: { enabled: true, effective: true },
+      push: {
+        at: '2026-11-17T03:00:01.000Z',
+        status: 'partial',
+        error: null,
+        stats: {
+          syncId: 'sync-0001',
+          sentAt: null,
+          products: { status: 'disabled', received: 2, applied: 0, unchanged: 0, skipped: {}, trimmed: {}, eco_proposed: 0, eco_kept: 0 },
+          stock: { status: 'applied', received: 6, applied: 3, invalid: 1, skipped: { stale: 1, unknown_variation: 1 }, out_of_stock: 1, back_in_stock: 1, restock_waiting: 4 },
+          deferred: { bundles: 2 },
+        },
+      },
+    });
+    const r = mount();
+    await flush(10);
+    const push = r.container.querySelector('[data-testid="mss-catalog-push"]')!.textContent!;
+    expect(push).toContain('Tồn kho MSS đẩy sang (mss.stock_sync_enabled):Đang nhận');
+    expect(push).toContain('Lần MSS đẩy gần nhất: 10:00 17/11/2026');
+    expect(push).toContain('Xong một phần');
+    expect(push).toContain('Nội dung: bỏ qua 2 tài liệu vì cờ chưa có hiệu lực');
+    expect(push).toContain('Tồn: nhận 6, áp 3, vừa hết hàng 1, vừa về hàng 1 (4 khách chờ báo hàng về), 1 dòng sai dạng');
+    expect(push).toContain('Combo MSS gửi kèm chưa áp: 2');
+    expect(reasons(r, 'Dòng tồn bị bỏ ở lần đẩy gần nhất')).toEqual(['Đọc trước số Tubu đã có1', 'Biến thể chưa có trên Tubu1']);
+    expect(push).not.toMatch(/unknown_variation|stale\b/);
+  });
+
+  it('lần MSS đẩy: chưa đẩy lần nào và API cũ không có trường push thì báo "MSS chưa đẩy lần nào", cờ tồn Tắt', async () => {
+    stub(offCard());
+    const r = mount();
+    await flush(10);
+    const push = r.container.querySelector('[data-testid="mss-catalog-push"]')!.textContent!;
+    expect(push).toContain('Tồn kho MSS đẩy sang (mss.stock_sync_enabled):Tắt');
+    expect(push).toContain('MSS chưa đẩy lần nào.');
+  });
+
   it('lỗi dài không tràn ngang ở 360px: lỗi break-all, nhãn lý do co được (min-w-0)', async () => {
     stub(runningCard());
     const r = mount();

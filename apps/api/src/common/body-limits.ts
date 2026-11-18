@@ -20,6 +20,8 @@ export const LARGE_BODY_LIMIT = '10mb';
 // Pancake gửi nguyên object đơn (dòng hàng + variation_info + customer + histories). Đơn lớn mà bị 400/413 thì sự kiện không được lưu
 // và reconcile không cứu được; token đã kiểm trước khi parse (mọi method) nên người ẩn danh không tới được trần này.
 export const PANCAKE_WEBHOOK_BODY_LIMIT = '10mb';
+/** MSS đẩy nội dung + tồn (`POST /api/integrations/mss/catalog-sync`): tới 20 tài liệu sản phẩm ~25 KB và 200 dòng tồn mỗi lần. */
+export const MSS_CATALOG_SYNC_BODY_LIMIT = '1mb';
 
 /** Nhóm route nhận ảnh base64 hoặc CSV: đối chiếu với DTO dùng IsUploadedImage/IsImageRef/IMAGE_MAX/*_CSV_MAX_LENGTH. */
 const LARGE_BODY_ROUTES: readonly RegExp[] = [
@@ -38,8 +40,12 @@ const LARGE_BODY_ROUTES: readonly RegExp[] = [
 // Cờ i: Express định tuyến không phân biệt hoa thường, /api/Admin/... vẫn tới controller admin.
 const WEBHOOK_ROUTE = /^\/api\/webhooks(\/|$)/i;
 const PANCAKE_WEBHOOK_ROUTE = /^\/api\/webhooks\/pancake(\/|$)/i;
-/** MSS gọi vào Tubu (hợp đồng commerce v0.9): ký HMAC trên byte gốc nên đi tầng webhook (giữ rawBody, trần 64 KB). */
-const MSS_INTEGRATION_ROUTE = /^\/api\/integrations\/mss(\/|$)/i;
+/**
+ * MSS gọi vào Tubu (hợp đồng commerce v0.9): ký HMAC trên byte gốc nên đi tầng webhook (giữ rawBody, trần 64 KB). `/api/internal/mss` là
+ * tên khác của cùng nhóm cho lời gọi trong mạng nội bộ (biên chặn `/api/internal/*` với Internet).
+ */
+const MSS_INTEGRATION_ROUTE = /^\/api\/(integrations|internal)\/mss(\/|$)/i;
+const MSS_CATALOG_SYNC_ROUTE = /^\/api\/(integrations|internal)\/mss\/catalog-sync\/?$/i;
 /** Đúng route của controller (Express không phân biệt hoa thường, cho phép dấu / cuối): đường dẫn con quét dò không được đếm vào nguồn Pancake. */
 const PANCAKE_WEBHOOK_EXACT_ROUTE = /^\/api\/webhooks\/pancake\/?$/i;
 
@@ -58,11 +64,12 @@ export const BODY_TOO_LARGE_MESSAGE = 'Dữ liệu gửi lên quá lớn. Bạn 
 export const BODY_TOO_COMPLEX_MESSAGE = 'Dữ liệu gửi lên quá phức tạp. Bạn kiểm tra lại nhé.';
 export const NUL_CHAR_MESSAGE = 'Dữ liệu gửi lên có ký tự không hợp lệ.';
 
-type BodyTier = 'default' | 'webhook' | 'pancake' | 'large';
+type BodyTier = 'default' | 'webhook' | 'mssSync' | 'pancake' | 'large';
 
 function tierFor(path: string): BodyTier {
   if (PANCAKE_WEBHOOK_ROUTE.test(path)) return 'pancake';
   if (LARGE_BODY_ROUTES.some((re) => re.test(path))) return 'large';
+  if (MSS_CATALOG_SYNC_ROUTE.test(path)) return 'mssSync';
   if (WEBHOOK_ROUTE.test(path) || MSS_INTEGRATION_ROUTE.test(path)) return 'webhook';
   return 'default';
 }
@@ -205,6 +212,7 @@ export function createBodyParsers(accessSecret: string, refreshTtlDays = 30): Re
   const specs: Record<BodyTier, { limit: string; inflate: boolean; verify: ReturnType<typeof rawGuard> }> = {
     default: { limit: DEFAULT_BODY_LIMIT, inflate: false, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
     webhook: { limit: WEBHOOK_BODY_LIMIT, inflate: true, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
+    mssSync: { limit: MSS_CATALOG_SYNC_BODY_LIMIT, inflate: true, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
     pancake: { limit: PANCAKE_WEBHOOK_BODY_LIMIT, inflate: true, verify: rawGuard(MAX_PANCAKE_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH) },
     large: { limit: LARGE_BODY_LIMIT, inflate: false, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
   };
