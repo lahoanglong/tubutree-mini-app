@@ -151,6 +151,14 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
       'Đánh giá mới về lại bảng thưởng cũ lúc gửi và hiện ngay. Đánh giá đang chờ vẫn nằm ở chip "Chờ duyệt", duyệt vẫn cộng điểm như đã báo khách. Dải ở Trang chủ ẩn.',
   },
   {
+    key: 'commerce.freeship_booster_enabled',
+    label: 'Dải "Thêm 1 món nhỏ để đủ Miễn phí giao hàng" ở giỏ',
+    description: 'Giỏ hàng (Mini App và web) chưa đủ mức Miễn phí giao hàng: dải gợi ý chọn món Tubu giao còn hàng, chưa có trong giỏ, giá từ số còn thiếu tới số còn thiếu + 45.000đ, bán chạy 30 ngày trước. Mỗi món một chạm "+ Thêm", không rời giỏ.',
+    fallback: false,
+    onWarning: 'Dải gợi ý ở giỏ đổi tiêu đề và đổi món theo số tiền còn thiếu của từng giỏ. Danh sách món cập nhật chậm tối đa khoảng 30 giây.',
+    offWarning: 'Dải gợi ý về lại món lấy từ kệ Bán chạy nhất như trước (trong vòng khoảng 5 phút). Không dữ liệu nào bị xoá.',
+  },
+  {
     key: 'notify.proactive_cap_enabled',
     label: 'Trần tin nhắc chủ động mỗi khách',
     description: 'Tin nhắc qua Zalo (ZNS) như nhắc giỏ, mua lại, điểm sắp hết hạn, nhắc chuỗi, hàng về, khuyến mãi: tối đa 1 tin mỗi ngày và 4 tin mỗi tuần cho mỗi khách. Tin đơn hàng, thanh toán, đổi trả, đổi rác không bao giờ bị chặn. Tin trong app vẫn đủ.',

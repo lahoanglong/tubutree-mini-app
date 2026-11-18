@@ -558,8 +558,8 @@ export class CatalogService {
     return ids;
   }
 
-  /** Suất Giờ vàng đang chạy gom theo sản phẩm: một truy vấn, cùng điều kiện và cùng luật "còn rẻ hơn" với dải Giờ vàng. */
-  private async activeFlashOffers(): Promise<Map<string, FlashOffer[]>> {
+  /** Suất Giờ vàng đang chạy gom theo sản phẩm: một truy vấn, cùng điều kiện và cùng luật "còn rẻ hơn" với dải Giờ vàng. Dải bù đơn ở Giỏ (`FreeshipUpsellService`) cũng đọc. */
+  async activeFlashOffers(): Promise<Map<string, FlashOffer[]>> {
     const rows = await this.prisma.flashSaleItem.findMany({
       where: activeFlashWhere(new Date()),
       select: {

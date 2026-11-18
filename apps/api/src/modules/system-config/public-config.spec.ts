@@ -148,3 +148,12 @@ describe('buildPublicConfig — referralShareCardEnabled (trang đích link mờ
     expect((await build({ 'referral.share_card_enabled': 1 })).referralShareCardEnabled).toBe(false);
   });
 });
+
+describe('buildPublicConfig — freeshipBoosterEnabled (dải "Thêm 1 món nhỏ" ở giỏ)', () => {
+  it('mặc định tắt; chỉ boolean true thật mới bật', async () => {
+    expect((await build({})).freeshipBoosterEnabled).toBe(false);
+    expect((await build({ 'commerce.freeship_booster_enabled': true })).freeshipBoosterEnabled).toBe(true);
+    expect((await build({ 'commerce.freeship_booster_enabled': 'true' })).freeshipBoosterEnabled).toBe(false);
+    expect((await build({ 'commerce.freeship_booster_enabled': 1 })).freeshipBoosterEnabled).toBe(false);
+  });
+});

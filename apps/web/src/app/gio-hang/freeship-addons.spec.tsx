@@ -18,13 +18,27 @@ const state = vi.hoisted(() => ({
   update: null as null | ((id: string, qty: number) => Promise<unknown>),
   addCalls: [] as [string, number][],
   push: vi.fn(),
+  // Cấu hình công khai: null = lỗi (dải cũ từ kệ Bán chạy, như các ca W42A); có giá trị = cờ đọc được.
+  config: null as unknown,
+  upsell: [] as unknown,
+  upsellError: false,
+  upsellCalls: [] as unknown[],
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push, replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
-    get: async (path: string) => {
+    get: async (path: string, opts?: { query?: unknown }) => {
+      if (path === '/config/public') {
+        if (!state.config) throw new Error('mạng');
+        return state.config;
+      }
+      if (path === '/upsell/freeship') {
+        state.upsellCalls.push(opts?.query);
+        if (state.upsellError) throw new Error('mạng');
+        return state.upsell;
+      }
       if (path === '/products') {
         state.bestGets += 1;
         if (state.bestGate) await state.bestGate;
@@ -91,6 +105,10 @@ beforeEach(() => {
   state.push.mockClear();
   state.add = async () => state.cart;
   state.update = async () => state.cart;
+  state.config = null;
+  state.upsell = [];
+  state.upsellError = false;
+  state.upsellCalls = [];
 });
 afterEach(() => {
   mounted?.unmount();
@@ -716,3 +734,62 @@ describe('/gio-hang — món bù freeship tải lại giỏ khi lệnh đổi s�
   });
 });
 
+
+describe('/gio-hang — dải "Thêm 1 món nhỏ để đủ Miễn phí giao hàng" (tubu-w3-02, cờ commerce.freeship_booster_enabled)', () => {
+  const on = { freeshipThreshold: 500000, freeshipBoosterEnabled: true };
+  // Còn thiếu 211.000 (giỏ 289.000, mốc 500.000): cửa sổ mới tới 256.000.
+  const UPSELL = [card('hot', 250000), card('close', 215000), card('over', 256001), card('cheap', 50000), card('serum', 220000)];
+
+  it('cờ bật: hỏi /upsell/freeship đúng số còn thiếu và slug trong giỏ, không hỏi kệ Bán chạy; tiêu đề mới, giữ thứ tự máy chủ, cửa sổ 45.000', async () => {
+    state.config = on;
+    state.upsell = UPSELL;
+    const c = await mount();
+    expect(state.upsellCalls).toEqual([{ gap: 211000, exclude: 'serum' }]);
+    expect(state.bestGets).toBe(0);
+    expect(q(c, 'freeship-addons')!.getAttribute('aria-label')).toBe('Thêm 1 món nhỏ để đủ Miễn phí giao hàng');
+    // "hot" (250.000) đứng trước "close" (215.000) vì máy chủ xếp bán chạy trước; 256.001 vượt cửa sổ; "serum" đã trong giỏ.
+    expect(slugs(c)).toEqual(['hot', 'close', 'cheap']);
+  });
+
+  it('cờ tắt (cấu hình đọc được): dải cũ từ kệ Bán chạy, tiêu đề cũ, không hỏi /upsell/freeship', async () => {
+    state.config = { freeshipThreshold: 500000, freeshipBoosterEnabled: false };
+    const c = await mount();
+    expect(state.upsellCalls).toEqual([]);
+    expect(q(c, 'freeship-addons')!.getAttribute('aria-label')).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('/upsell/freeship lỗi (cờ vừa tắt, cấu hình còn trong bộ nhớ đệm nên máy chủ trả 404): lùi về dải cũ từ kệ Bán chạy, giỏ vẫn dùng được', async () => {
+    state.config = on;
+    state.upsellError = true;
+    const c = await mount();
+    expect(state.upsellCalls).toHaveLength(1);
+    expect(q(c, 'freeship-addons')!.getAttribute('aria-label')).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(q(c, 'freeship-progress')!.textContent).toContain('Mua thêm 211.000đ');
+    expect(q(c, 'sticky-bar')!.querySelector('a[href="/thanh-toan"]')).not.toBeNull();
+  });
+
+  it('một chạm "+ Thêm" đủ mốc: thanh chuyển sang câu chúc mừng và dải đầu giỏ chạy hiệu ứng mừng một lần; dải gợi ý biến mất', async () => {
+    state.config = on;
+    state.upsell = UPSELL;
+    state.add = async () => cartOf([line(), line({ id: 'i2', slug: 'hot', variationId: 'v-hot', productName: 'Món hot', unitPrice: 250000, total: 250000 })]);
+    const c = await mount();
+    expect(q(c, 'cart-freeship')!.hasAttribute('data-celebrate')).toBe(false);
+    click(qa(c, 'freeship-add')[0]!);
+    await flush(6);
+    expect(state.addCalls).toEqual([['v-hot', 1]]);
+    expect(q(c, 'freeship-progress')!.dataset.reached).toBe('true');
+    expect(q(c, 'cart-freeship')!.getAttribute('data-celebrate')).toBe('true');
+    expect(q(c, 'freeship-addons')).toBeNull();
+  });
+
+  it('giỏ mở ra đã đủ mốc: không chạy hiệu ứng mừng (không có gì vừa mở khoá)', async () => {
+    state.config = on;
+    state.cart = cartOf([line({ total: 600000, unitPrice: 600000 })]);
+    const c = await mount();
+    expect(q(c, 'freeship-progress')!.dataset.reached).toBe('true');
+    expect(q(c, 'cart-freeship')!.hasAttribute('data-celebrate')).toBe(false);
+    expect(state.upsellCalls).toEqual([]);
+  });
+});

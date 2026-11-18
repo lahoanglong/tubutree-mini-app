@@ -92,6 +92,38 @@
   }
 }
 
+/* Mừng mở khoá (tubu-w3-02, `CartUnlockSlot`): khách vừa đạt Miễn phí giao hàng hoặc lên bậc Hộp Xanh thì dải đầu giỏ nảy nhẹ một lần và toả một vòng sáng màu
+   thành công rồi tắt (UNLOCK_CELEBRATE_MS = 1,2 giây). Chỉ transform và box-shadow nên không đẩy bố cục; giảm chuyển động thì không chạy. */
+.tubu-unlock[data-celebrate='true'] > .tubu-freeship {
+  animation:
+    tubu-unlock-pop var(--dur-slow) var(--ease-spring),
+    tubu-unlock-ring 1.2s var(--ease-out);
+}
+@keyframes tubu-unlock-pop {
+  0% {
+    transform: scale(0.97);
+  }
+  60% {
+    transform: scale(1.015);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tubu-unlock-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-success-fg) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-status-success-fg) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tubu-unlock[data-celebrate='true'] > .tubu-freeship {
+    animation: none;
+  }
+}
+
 /* Dải gợi ý bù đơn: thẻ rộng cố định `--tile-w-sm`, hàng cao theo thẻ cao nhất, nút "+ Thêm" nằm đáy thẻ. */
 .tubu-addon {
   min-width: 0;

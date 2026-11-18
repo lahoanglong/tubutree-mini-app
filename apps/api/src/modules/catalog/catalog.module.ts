@@ -31,6 +31,8 @@ import { CategorySuggestionController } from './category-suggestion.controller';
 import { CategorySuggestionService } from './category-suggestion.service';
 import { WpImageSyncController } from './wp-image-sync.controller';
 import { WpImageSyncService } from './wp-image-sync.service';
+import { FreeshipUpsellController } from './upsell/freeship-upsell.controller';
+import { FreeshipUpsellService } from './upsell/freeship-upsell.service';
 import { ImageRegistryModule } from './image-registry.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { OrdersModule } from '../orders/orders.module';
@@ -40,8 +42,8 @@ import { EcoImpactModule } from '../eco-impact/eco-impact.module';
 
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule, EcoImpactModule],
-  controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService],
+  controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController, FreeshipUpsellController],
+  providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService, FreeshipUpsellService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}

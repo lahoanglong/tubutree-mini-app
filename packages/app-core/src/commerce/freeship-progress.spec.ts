@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { FREESHIP_ADDON_MAX, FREESHIP_ADDON_MIN, FREESHIP_ADDON_WINDOW, freeshipProgress, pickFreeshipAddons, type FreeshipAddonCandidate } from './freeship-progress';
+import { FREESHIP_UPSELL_WINDOW } from '@tubutree/shared-types';
+import {
+  FREESHIP_ADDON_MAX,
+  FREESHIP_ADDON_MIN,
+  FREESHIP_ADDON_WINDOW,
+  FREESHIP_BOOSTER_WINDOW,
+  cartUnlockLevel,
+  freeshipProgress,
+  pickFreeshipAddons,
+  shouldCelebrateUnlock,
+  type FreeshipAddonCandidate,
+} from './freeship-progress';
 
 const c = (slug: string, price: number, over: Partial<FreeshipAddonCandidate> = {}): FreeshipAddonCandidate => ({
   slug,
@@ -91,5 +102,51 @@ describe('pickFreeshipAddons', () => {
     const input = [...pool];
     pickFreeshipAddons(input, { remaining: 35_000 });
     expect(input).toEqual(pool);
+  });
+});
+
+describe('pickFreeshipAddons — dải "Thêm 1 món nhỏ" (cửa sổ 45.000, thứ tự máy chủ)', () => {
+  it('cửa sổ bằng đúng số của máy chủ', () => {
+    expect(FREESHIP_BOOSTER_WINDOW).toBe(FREESHIP_UPSELL_WINDOW);
+    expect(FREESHIP_BOOSTER_WINDOW).toBe(45_000);
+  });
+
+  it('window 45.000: món đắt tới remaining + 45.000 vào, hơn 1 đồng thì không', () => {
+    const pool = [c('a', 80_000), c('b', 80_001), c('c', 10_000), c('d', 20_000)];
+    expect(pickFreeshipAddons(pool, { remaining: 35_000, window: FREESHIP_BOOSTER_WINDOW }).map((x) => x.slug)).toEqual(['a', 'c', 'd']);
+    // Cửa sổ cũ (mặc định 25.000) vẫn như trước khi không truyền.
+    expect(pickFreeshipAddons(pool, { remaining: 35_000 })).toEqual([]);
+  });
+
+  it('ranked: món đóng khoảng giữ thứ tự nguồn (bán chạy trước), không xếp lại theo giá', () => {
+    const pool = [c('hot', 70_000), c('mid', 40_000), c('cheap', 10_000), c('cold', 36_000)];
+    const opts = { remaining: 35_000, window: FREESHIP_BOOSTER_WINDOW };
+    expect(pickFreeshipAddons(pool, { ...opts, ranked: true }).map((x) => x.slug)).toEqual(['hot', 'mid', 'cold', 'cheap']);
+    expect(pickFreeshipAddons(pool, opts).map((x) => x.slug)).toEqual(['cold', 'mid', 'hot', 'cheap']);
+  });
+
+  it('ranked vẫn xét lại theo giỏ mới nhất: món vừa vào giỏ bị bỏ, dưới 3 món thì ẩn', () => {
+    const pool = [c('a', 40_000), c('b', 50_000), c('c', 60_000)];
+    expect(pickFreeshipAddons(pool, { remaining: 35_000, window: FREESHIP_BOOSTER_WINDOW, ranked: true, inCartSlugs: new Set(['b']) })).toEqual([]);
+  });
+});
+
+describe('cartUnlockLevel / shouldCelebrateUnlock', () => {
+  it('mức: 0 khi chưa đạt; đạt thì 1 + số món của bậc Hộp Xanh', () => {
+    expect(cartUnlockLevel(false, 5)).toBe(0);
+    expect(cartUnlockLevel(true)).toBe(1);
+    expect(cartUnlockLevel(true, null)).toBe(1);
+    expect(cartUnlockLevel(true, 3)).toBe(4);
+    expect(cartUnlockLevel(true, 0)).toBe(1);
+  });
+
+  it('lần vẽ đầu không mừng; chỉ mừng khi vượt mức cao nhất đã thấy', () => {
+    expect(shouldCelebrateUnlock(null, 1)).toBe(false);
+    expect(shouldCelebrateUnlock(0, 1)).toBe(true);
+    expect(shouldCelebrateUnlock(1, 4)).toBe(true);
+    expect(shouldCelebrateUnlock(1, 1)).toBe(false);
+    // Tụt rồi lên lại tới mức cũ (bỏ chọn rồi chọn lại): không mừng lần hai.
+    expect(shouldCelebrateUnlock(4, 1)).toBe(false);
+    expect(shouldCelebrateUnlock(4, 4)).toBe(false);
   });
 });

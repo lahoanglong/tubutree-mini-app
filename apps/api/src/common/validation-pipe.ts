@@ -210,6 +210,8 @@ export const FIELD_LABELS: Record<string, string> = {
   sku: 'Mã SKU',
   slug: 'Đường dẫn',
   slugs: 'Danh sách sản phẩm',
+  gap: 'Số tiền còn thiếu',
+  exclude: 'Món đã có trong giỏ',
   sortOrder: 'Thứ tự',
   startDate: 'Ngày bắt đầu',
   startMin: 'Giờ bắt đầu',

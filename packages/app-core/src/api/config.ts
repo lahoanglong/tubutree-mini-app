@@ -66,6 +66,8 @@ export interface PublicConfig {
   webGuestCartEnabled?: boolean;
   /** Cờ `referral.share_card_enabled`: link mời trỏ trang đích `/moi/<mã>` và khối mời hiện tiến độ. API cũ chưa trả. */
   referralShareCardEnabled?: boolean;
+  /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship` (cửa sổ 45.000đ). Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */
+  freeshipBoosterEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

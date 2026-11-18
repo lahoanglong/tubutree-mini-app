@@ -320,6 +320,8 @@ export interface PublicConfig {
   tubuZaloPhone?: string;
   /** Góc Sống Xanh: cùng nghĩa với `PublicConfig.reviewGreenCorner` ở app-core. Thiếu khi API cũ → như tắt. */
   reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
+  /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship`. Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */
+  freeshipBoosterEnabled?: boolean;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
