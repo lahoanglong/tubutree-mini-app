@@ -44,6 +44,7 @@ describe('engagement daily missions + badges race (real Postgres)', () => {
     'game.mini.origin.enabled': true,
     'game.mini.match.enabled': false,
     'game.mini.basket.enabled': false,
+    'game.mini.kitchen_swap.enabled': false,
     'game.mini.rounds_per_game_per_day': 2,
     'game.mini.water_daily_cap': 40,
     'game.mini.points_daily_cap': 100,

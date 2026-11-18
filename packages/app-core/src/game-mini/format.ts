@@ -13,7 +13,7 @@ import type { RoundFailure } from './api';
 import { gameCopy } from './copy';
 
 /** Game đã có giao diện, theo thứ tự hiện trong "Chơi hôm nay". */
-export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'sort', 'match', 'origin', 'basket'] as const satisfies readonly MiniGameId[];
+export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap'] as const satisfies readonly MiniGameId[];
 export type PlayableMiniGame = (typeof PLAYABLE_MINI_GAMES)[number];
 
 export function isPlayableMiniGame(v: unknown): v is PlayableMiniGame {
@@ -43,7 +43,7 @@ export function playableToday(today: MiniTodayResponse | undefined): Array<MiniT
 
 /**
  * Game phát được trong Mini App. Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc chỉ phát ở web: ba bàn chơi cần khoảng 21 KB mà gói Mini chỉ còn chưa tới
- * 9 KB dưới trần 2350 KB, nên danh sách ở Mini nêu tên chúng trong một dòng "chơi trên tubutree.com".
+ * 9 KB dưới trần 2350 KB, nên danh sách ở Mini nêu tên chúng trong một dòng "chơi trên tubutree.com". Căn Bếp Xanh cũng chỉ phát ở web vì cùng lý do.
  */
 export const MINIAPP_MINI_GAMES = ['daily_quiz', 'sort'] as const satisfies readonly PlayableMiniGame[];
 export type MiniAppGame = (typeof MINIAPP_MINI_GAMES)[number];
@@ -190,6 +190,7 @@ export function miniProgressLabel(game: PlayableMiniGame, done: number, total: n
   if (game === 'origin') return gameCopy('progress.turn', { n: Math.min(done + 1, m), m });
   if (game === 'match') return gameCopy('progress.pairs', { n: done, m: total });
   if (game === 'basket') return gameCopy('progress.picked', { n: done, m: total });
+  if (game === 'kitchen_swap') return gameCopy('progress.swapped', { n: done, m: total });
   return gameCopy('progress.items', { n: done, m: total });
 }
 

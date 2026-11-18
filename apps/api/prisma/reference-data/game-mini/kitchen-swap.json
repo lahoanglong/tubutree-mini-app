@@ -1,0 +1,378 @@
+{
+  "game": "kitchen_swap",
+  "note": "Căn Bếp Xanh: mỗi món là một đồ dùng trong góc nhà, 3 sản phẩm Tubu để đổi, đúng một sản phẩm làm đúng việc theo tên và nhãn. Điều nhãn (fact) chỉ chép tên sản phẩm, quy cách, và câu 'eco-enzyme lên men từ vỏ dứa' khi bảng FUWA3E_SKUS (shared-types/fuwa3e-skus.ts) xếp SKU ở bậc 2. Nạp TẮT, chuyên gia duyệt rồi bật.",
+  "items": [
+    {
+      "id": "gm-kitchen-chai-nuoc-rua-chen",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "kitchen",
+        "item": "Chai nước rửa chén 500 ml, hết là mua chai mới",
+        "emoji": "🧴",
+        "hidden": "Mỗi lần mua chai mới là thêm một vỏ chai nhựa phải bỏ đi.",
+        "options": [
+          {
+            "slug": "refill-nuoc-rua-chen-fuwa3e-10l-69f244",
+            "fact": "Can 10L nước rửa chén. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-lau-da-nang-fuwa3e-10l-a08433",
+            "fact": "Can 10L nước lau đa năng. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-nuoc-giat-cam-fuwa3e-10l-dc4433",
+            "fact": "Can 10L nước giặt quần áo hương Cam. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "refill-nuoc-rua-chen-fuwa3e-10l-69f244"
+      },
+      "explanation": "Rót can 10L vào chai cũ thì chai được dùng tiếp, bớt vỏ nhựa mới. Chai nhựa dùng hết thì đổ sạch bên trong rồi bỏ vào nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-ngam-rau-javel",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "kitchen",
+        "item": "Ngâm rau quả trong nước có pha vài giọt javel",
+        "emoji": "🥬",
+        "hidden": "Javel là dung dịch natri hypoclorit dùng tẩy trắng.",
+        "options": [
+          {
+            "slug": "nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601",
+            "fact": "Nước ngâm rửa thực phẩm, chai 1L. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-rua-chen-fuwa3e-500ml-185d77",
+            "fact": "Nước rửa chén, chai 500ml."
+          },
+          {
+            "slug": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309",
+            "fact": "Nước lau đa năng hương Nhu, chai 500ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601"
+      },
+      "explanation": "Javel (natri hypoclorit) là chất tẩy trắng, gặp chất tẩy có axit sẽ sinh khí clo. Ngâm rau quả thì chọn loại có tên ghi để ngâm rửa thực phẩm.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_hypochlorite",
+      "sourceRef": "Mục Safety: phản ứng với axit sinh khí clo",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-gel-may-rua-chen",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "kitchen",
+        "item": "Chai gel rửa chén cho máy, hết là mua chai mới",
+        "emoji": "🍽️",
+        "hidden": "Mỗi chai gel dùng hết là thêm một vỏ chai nhựa.",
+        "options": [
+          {
+            "slug": "refill-gel-rua-chen-cho-may-fuwa3e-10l-13467d",
+            "fact": "Can 10L gel rửa chén cho máy. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-nuoc-rua-chen-fuwa3e-10l-69f244",
+            "fact": "Can 10L nước rửa chén. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-nuoc-ngam-rua-thuc-pham-fuwa3e-10l-fbbea5",
+            "fact": "Can 10L nước ngâm rửa thực phẩm. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "refill-gel-rua-chen-cho-may-fuwa3e-10l-13467d"
+      },
+      "explanation": "Máy rửa chén cần loại có tên ghi dùng cho máy. Rót can 10L vào chai cũ thì chai được dùng tiếp; chai nhựa dùng hết thì bỏ vào nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-binh-xit-lau-bep",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "kitchen",
+        "item": "Bình xịt lau bếp, hết chai là bỏ cả bình",
+        "emoji": "🧽",
+        "hidden": "Bình xịt dùng hết là thêm một vỏ nhựa và một đầu xịt.",
+        "options": [
+          {
+            "slug": "refill-lau-da-nang-fuwa3e-10l-a08433",
+            "fact": "Can 10L nước lau đa năng. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-nuoc-lau-san-que-fuwa3e-10l-fe82e8",
+            "fact": "Can 10L nước lau sàn hương Quế. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-ve-sinh-bon-cau-fuwa3e-10l-9a032c",
+            "fact": "Can 10L nước vệ sinh bồn cầu. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "refill-lau-da-nang-fuwa3e-10l-a08433"
+      },
+      "explanation": "Rót can 10L vào bình xịt cũ thì bình được dùng tiếp, bớt vỏ nhựa mới. Nước lau sàn và nước vệ sinh bồn cầu có tên ghi việc khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-duong-tui-nilon",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "table",
+        "item": "Đường đựng trong túi nilon, mở ra là bỏ túi",
+        "emoji": "🍬",
+        "hidden": "Túi nilon còn dính đường phải rửa sạch mới tái chế được.",
+        "options": [
+          {
+            "slug": "duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3",
+            "fact": "Đường hoa dừa đựng trong hũ thuỷ tinh 150g."
+          },
+          {
+            "slug": "nuoc-tuong-mat-hoa-dua-sokfarm-cham-034cc1",
+            "fact": "Nước tương mật hoa dừa, loại dùng để chấm."
+          },
+          {
+            "slug": "granola-mix-nuts-tui-tien-loi-bh-nong-3b8792",
+            "fact": "Granola trộn hạt, đóng túi tiện lợi."
+          }
+        ],
+        "answer": "duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3"
+      },
+      "explanation": "Hũ thuỷ tinh dùng hết rửa sạch là đựng được đồ khác, bỏ đi thì thuộc nhóm tái chế. Bao bì nhựa phải bỏ hết phần chứa bên trong trước khi tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 và 1.4.1",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-lau-ban-an-javel",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "table",
+        "item": "Lau bàn ăn bằng khăn nhúng nước javel",
+        "emoji": "🧻",
+        "hidden": "Javel là dung dịch natri hypoclorit dùng tẩy trắng.",
+        "options": [
+          {
+            "slug": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309",
+            "fact": "Nước lau đa năng hương Nhu, chai 500ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f",
+            "fact": "Nước lau sàn hương Sả chanh, chai 1L."
+          },
+          {
+            "slug": "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4",
+            "fact": "Nước giặt đồ lót hương Chanh vàng, chai 500ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309"
+      },
+      "explanation": "Javel (natri hypoclorit) là chất tẩy trắng, gặp chất tẩy có axit sẽ sinh khí clo. Lau bàn ăn hằng ngày thì chọn loại có tên ghi lau đa năng.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_hypochlorite",
+      "sourceRef": "Mục Safety: phản ứng với axit sinh khí clo",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-binh-rua-tay-ban-an",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "table",
+        "item": "Bình rửa tay cạnh bàn ăn, hết là mua bình có vòi mới",
+        "emoji": "🫧",
+        "hidden": "Mỗi bình bỏ đi là thêm một vỏ nhựa và một vòi bơm.",
+        "options": [
+          {
+            "slug": "nuoc-rua-tay-dang-bot-fuwa3e-3-8l-948cc5",
+            "fact": "Nước rửa tay dạng bọt hương Quýt, can 3,8L. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-ngam-rua-thuc-pham-fuwa3e-3-8l-7ececb",
+            "fact": "Nước ngâm rửa thực phẩm, can 3,8L. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-rua-chen-fuwa3e-3-8l-ef3979",
+            "fact": "Nước rửa chén, can 3,8L."
+          }
+        ],
+        "answer": "nuoc-rua-tay-dang-bot-fuwa3e-3-8l-948cc5"
+      },
+      "explanation": "Rót can 3,8L vào bình cũ thì bình và vòi bơm được dùng tiếp, bớt vỏ nhựa mới. Chai nhựa dùng hết thì đổ sạch bên trong rồi bỏ vào nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-tay-bon-cau-javel",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "bathroom",
+        "item": "Nước tẩy bồn cầu có javel",
+        "emoji": "🚽",
+        "hidden": "Javel là dung dịch natri hypoclorit dùng tẩy trắng.",
+        "options": [
+          {
+            "slug": "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92",
+            "fact": "Nước vệ sinh nhà tắm và toilet, chai 500ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4",
+            "fact": "Nước giặt đồ lót hương Chanh vàng, chai 500ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+            "fact": "Nước giặt hương Bạc hà, chai 500ml."
+          }
+        ],
+        "answer": "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92"
+      },
+      "explanation": "Javel (natri hypoclorit) gặp chất tẩy có axit sẽ sinh khí clo, nên không pha javel với bất kỳ chất tẩy nào khác. Nhà tắm và bồn cầu thì chọn loại có tên ghi đúng việc đó và dùng riêng.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_hypochlorite",
+      "sourceRef": "Mục Safety: phản ứng với axit sinh khí clo",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-sua-rua-mat-hat-cha",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "bathroom",
+        "item": "Sữa rửa mặt có hạt chà li ti",
+        "emoji": "🪞",
+        "hidden": "Một số sữa rửa mặt từng dùng hạt vi nhựa để chà, hạt nhỏ dưới 5 mm.",
+        "options": [
+          {
+            "slug": "dau-rua-mat-po-lang-100ml-55ml-8478ee",
+            "fact": "Dầu rửa mặt, chai 100ml hoặc 55ml."
+          },
+          {
+            "slug": "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345",
+            "fact": "Nước rửa tay dạng bọt hương Quýt, chai 300ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "dau-goi-dau-xa-qua-bo-po-lang-300g-bef378",
+            "fact": "Dầu gội và dầu xả quả bơ, 300g."
+          }
+        ],
+        "answer": "dau-rua-mat-po-lang-100ml-55ml-8478ee"
+      },
+      "explanation": "NOAA cho biết hạt vi nhựa từng có trong một số sữa rửa mặt để chà và đủ nhỏ để lọt qua hệ thống lọc nước. Đọc bảng thành phần trước khi mua đồ rửa mặt.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "S7: Microbeads",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-chai-rua-tay-voi-bom",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "bathroom",
+        "item": "Chai nước rửa tay có vòi bơm, hết là bỏ cả vòi",
+        "emoji": "🧼",
+        "hidden": "Mỗi chai bỏ đi là thêm một vỏ nhựa và một vòi bơm.",
+        "options": [
+          {
+            "slug": "refill-nuoc-rua-tay-dang-gel-fuwa3e-10l-f3ac3e",
+            "fact": "Can 10L nước rửa tay dạng gel. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-ve-sinh-bon-cau-fuwa3e-10l-9a032c",
+            "fact": "Can 10L nước vệ sinh bồn cầu. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "refill-nuoc-giat-bac-ha-fuwa3e-10l-a5ea8f",
+            "fact": "Can 10L nước giặt hương Bạc hà. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "refill-nuoc-rua-tay-dang-gel-fuwa3e-10l-f3ac3e"
+      },
+      "explanation": "Rót can 10L vào chai bơm cũ thì chai và vòi được dùng tiếp, bớt vỏ nhựa mới. Chai nhựa dùng hết thì đổ sạch bên trong rồi bỏ vào nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-lo-rua-tay-mini",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "bag",
+        "item": "Lọ nước rửa tay mini mua lẻ, vài hôm lại mua lọ mới",
+        "emoji": "👜",
+        "hidden": "Lọ nhỏ nhanh hết, mỗi lọ là thêm một vỏ nhựa nhỏ.",
+        "options": [
+          {
+            "slug": "nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0",
+            "fact": "Nước rửa tay dạng gel hương Quýt, chai 300ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "xit-thom-huong-xuan-fuwa3e-300ml-ff93d6",
+            "fact": "Xịt thơm hương Xuân, chai 300ml."
+          },
+          {
+            "slug": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309",
+            "fact": "Nước lau đa năng hương Nhu, chai 500ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0"
+      },
+      "explanation": "Chiết dần từ chai lớn ra lọ nhỏ mang theo thì lọ nhỏ được dùng lại nhiều lần, bớt vỏ nhựa mới. Lọ nhựa dùng hết thì bỏ vào nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    },
+    {
+      "id": "gm-kitchen-goi-nuoc-giat-du-lich",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "corner": "bag",
+        "item": "Gói nước giặt nhỏ dùng một lần khi đi công tác",
+        "emoji": "🧳",
+        "hidden": "Mỗi gói nhỏ dùng một lần là thêm một vỏ gói nhựa.",
+        "options": [
+          {
+            "slug": "nuoc-giat-huong-bac-ha-fuwa3e-100ml-a53262",
+            "fact": "Nước giặt hương Bạc hà, chai 100ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-lau-san-sa-chanh-fuwa3e-100ml-d10bec",
+            "fact": "Nước lau sàn hương Sả chanh, chai 100ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          },
+          {
+            "slug": "nuoc-ngam-rua-thuc-pham-fuwa3e-100ml-8b4cd8",
+            "fact": "Nước ngâm rửa thực phẩm, chai 100ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa."
+          }
+        ],
+        "answer": "nuoc-giat-huong-bac-ha-fuwa3e-100ml-a53262"
+      },
+      "explanation": "Chai 100ml rót lại từ chai lớn ở nhà thì dùng được nhiều chuyến, thay cho nhiều gói nhỏ. Bao bì nhựa phải bỏ hết phần chứa bên trong trước khi tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1 (bao bì nhựa)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Món mới của Căn Bếp Xanh: chờ chuyên gia duyệt chữ, nguồn và điều nhãn sản phẩm rồi mới bật trong admin."
+    }
+  ]
+}

@@ -284,6 +284,15 @@
       "title": "Trang sản phẩm (nhãn)",
       "note": "Trang sản phẩm trên tubutree.com; chỉ dùng để dẫn công dụng ghi trên nhãn, không dùng cho khẳng định khoa học.",
       "checkedAt": "2026-11-17"
+    },
+    {
+      "code": "NAOCL",
+      "url": "https://en.wikipedia.org/wiki/Sodium_hypochlorite",
+      "grade": "C",
+      "publisher": "Wikipedia",
+      "title": "Sodium hypochlorite",
+      "note": "Mục Safety: natri hypoclorit (javel) gặp axit sinh khí clo, gặp amoniac sinh cloramin. Nguồn của các món javel trong Căn Bếp Xanh.",
+      "checkedAt": "2026-11-18"
     }
   ]
 }

@@ -10,6 +10,7 @@ const MINI_GAME_FLAG_KEYS: Record<MiniGameId, string> = {
   match: 'game.mini.match.enabled',
   origin: 'game.mini.origin.enabled',
   basket: 'game.mini.basket.enabled',
+  kitchen_swap: 'game.mini.kitchen_swap.enabled',
 };
 export const miniGameFlagKey = (game: MiniGameId): string => MINI_GAME_FLAG_KEYS[game];
 

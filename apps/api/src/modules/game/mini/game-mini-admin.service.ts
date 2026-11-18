@@ -18,6 +18,7 @@ export const MINI_CONTENT_KIND: Record<MiniGameId, string> = {
   match: 'match_pair',
   origin: 'origin_question',
   basket: 'basket_task',
+  kitchen_swap: 'kitchen_swap_item',
 };
 
 export const MINI_EXPLANATION_MAX = 220;
@@ -38,7 +39,7 @@ export interface MiniContentCreateInput {
 
 export type MiniContentUpdateInput = Partial<Omit<MiniContentCreateInput, 'game'>>;
 
-/** Game được lọc ở màn duyệt: 5 game mini và "Chọn Chuẩn Xanh" (nội dung `game = 'matcher'`, chỉ bật/tắt và sửa, không thêm từ admin). */
+/** Game được lọc ở màn duyệt: 6 game mini và "Chọn Chuẩn Xanh" (nội dung `game = 'matcher'`, chỉ bật/tắt và sửa, không thêm từ admin). */
 export type MiniContentGameFilter = MiniGameId | typeof MATCHER_GAME;
 
 export interface MiniContentListQuery {
@@ -107,7 +108,7 @@ function checkMatcherPayload(kind: string, payload: unknown): Prisma.InputJsonVa
 /** Nhãn ngắn để bảng số đọc được: câu hỏi, tên vật, nguyên liệu hoặc đề giỏ. */
 function labelOf(payload: unknown): string {
   if (!isRecord(payload)) return '';
-  for (const key of ['prompt', 'label', 'ingredient', 'task', 'title'] as const) {
+  for (const key of ['prompt', 'label', 'ingredient', 'task', 'title', 'item'] as const) {
     const v = payload[key];
     if (typeof v === 'string') return v.slice(0, 120);
   }
@@ -115,7 +116,7 @@ function labelOf(payload: unknown): string {
 }
 
 /**
- * Nội dung 5 game mini cho ADMIN: thêm, sửa, bật/tắt từng mục (không xoá: ván đã phát vẫn phải chấm được mục cũ) và bảng số.
+ * Nội dung 6 game mini cho ADMIN: thêm, sửa, bật/tắt từng mục (không xoá: ván đã phát vẫn phải chấm được mục cũ) và bảng số.
  * Mục mới mặc định TẮT; sửa nội dung tăng `version`. Mỗi game cần ít nhất `MINI_MIN_ACTIVE_ITEMS` mục bật mới hiện cho khách.
  */
 @Injectable()

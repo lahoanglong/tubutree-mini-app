@@ -106,7 +106,7 @@ describe('GrowthHubTab', () => {
     expect(text).toContain('5/20 người chơi');
     expect(text).toContain('Từ xem sản phẩm tới đặt đơn: 5%');
     expect(text).toContain('Ghép Cặp');
-    expect(text).toContain('Căn Bếp Không Nhựa');
+    expect(text).toContain('Căn Bếp Xanh');
     expect(text).toContain('Kỳ 7 ngày còn ngắn');
     expect(container.querySelectorAll('svg[role="img"]')).toHaveLength(2);
   });
@@ -148,14 +148,14 @@ describe('GrowthHubTab', () => {
     expect(puts).toEqual([]);
   });
 
-  it('khoá chưa có trên hệ thống (Căn Bếp Không Nhựa, quà 0đ, thưởng đánh giá ảnh) bị khoá, không gửi ghi', async () => {
+  it('khoá chưa có trên hệ thống (Căn Bếp Xanh, quà 0đ, thưởng đánh giá ảnh) bị khoá, không gửi ghi', async () => {
     const { container, puts } = setup(cfg({ 'game.mini.enabled': true }));
     await flush(8);
-    expect(sw(container, 'Căn Bếp Không Nhựa').disabled).toBe(true);
+    expect(sw(container, 'Căn Bếp Xanh').disabled).toBe(true);
     expect(row(container, 'game.mini.kitchen_swap.enabled').textContent).toContain('Chưa có trên hệ thống');
     expect(input(container, 'Mốc mở quà tặng dùng thử 0đ').disabled).toBe(true);
     expect(input(container, 'Thưởng đánh giá có ảnh thật (Góc Sống Xanh)').disabled).toBe(true);
-    click(sw(container, 'Căn Bếp Không Nhựa'));
+    click(sw(container, 'Căn Bếp Xanh'));
     await flush();
     expect(confirmDialog()).toBeNull();
     expect(puts).toEqual([]);

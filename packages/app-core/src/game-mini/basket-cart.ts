@@ -19,6 +19,8 @@ import { gameCopy } from './copy';
  * `sessionStorage`; quay về màn Giỏ Đúng Việc trong `BASKET_PENDING_TTL_MS` thì bộ hiện lại để khách bấm thêm (không tự thêm khi khách chưa bấm).
  */
 export const BASKET_PENDING_KEY = 'tubu.mini.basketPending.v1';
+/** Cùng cơ chế cho 3 sản phẩm của ván Căn Bếp Xanh ("Thêm vào giỏ dùng thử"), khoá riêng để hai game không hiện nhầm bộ của nhau. */
+export const KITCHEN_PENDING_KEY = 'tubu.mini.kitchenPending.v1';
 export const BASKET_PENDING_TTL_MS = 30 * 60_000;
 const BASKET_PENDING_MAX = 6;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,199}$/;

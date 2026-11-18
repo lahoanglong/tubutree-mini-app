@@ -27,7 +27,7 @@ describe('danh sách điều khiển', () => {
 
   it('đủ 6 game PO nêu và công tắc riêng cho mọi game mini đang có', () => {
     const labels = all.map((i) => ('label' in i ? i.label : ''));
-    for (const name of ['Ghép Cặp', 'Đoán Xuất Xứ', 'Giỏ Đúng Việc', 'Chọn Chuẩn Xanh', 'Căn Bếp Không Nhựa', 'Điểm danh ngày']) expect(labels).toContain(name);
+    for (const name of ['Ghép Cặp', 'Đoán Xuất Xứ', 'Giỏ Đúng Việc', 'Chọn Chuẩn Xanh', 'Căn Bếp Xanh', 'Điểm danh ngày']) expect(labels).toContain(name);
     for (const id of MINI_GAME_IDS) expect(sw(`game.mini.${id}.enabled`)?.kind).toBe('switch');
     // Công tắc game mini chỉ có tác dụng khi công tắc chung bật.
     for (const id of MINI_GAME_IDS) expect(sw(`game.mini.${id}.enabled`).requires).toBe('game.mini.enabled');

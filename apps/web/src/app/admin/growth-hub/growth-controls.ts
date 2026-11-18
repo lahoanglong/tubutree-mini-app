@@ -91,8 +91,8 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
       {
         kind: 'switch',
         key: 'game.mini.kitchen_swap.enabled',
-        label: 'Căn Bếp Không Nhựa',
-        description: `Đổi đồ dùng có vi nhựa trong nhà sang món Tubu, cuối ván gợi ý 3 món. ${NEEDS_MASTER}`,
+        label: 'Căn Bếp Xanh',
+        description: `Đổi đồ ở 3 góc nhà sang sản phẩm Tubu trong 45 giây, cuối ván có 3 sản phẩm để thêm vào giỏ dùng thử. Món nạp sẵn đang tắt: bật ít nhất 10 món (đủ 3 góc nhà) ở trang nội dung game thì game mới hiện. ${WEB_ONLY} ${NEEDS_MASTER}`,
         fallback: false,
         needsRow: true,
         requires: MINI_MASTER_KEY,

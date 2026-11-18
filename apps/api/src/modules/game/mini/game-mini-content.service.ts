@@ -4,6 +4,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { PUBLIC_PRODUCT_WHERE } from '../../catalog/public-product';
 import { publicProductThumb } from '../../../common/public-image';
 import { MINI_GAMES, type MiniContentRow } from './games';
+import { kitchenSwapReady } from './games/kitchen-swap';
 import type { MiniPickCtx } from './games/game-def';
 
 /** Câu `game_quizzes` đi qua bộ chuyển mang id có tiền tố này, để không đụng id của `game_content_items`. */
@@ -15,9 +16,9 @@ const CONTENT_SELECT = { id: true, game: true, payload: true, explanation: true,
 export interface MiniPool {
   rows: MiniContentRow[];
   products: Map<string, MiniProductCard>;
-  /** Số mục đang bật dùng được (đề Giỏ Đúng Việc: còn đủ hàng hôm nay). */
+  /** Số mục đang bật dùng được (đề Giỏ Đúng Việc, món Căn Bếp Xanh: còn đủ hàng hôm nay). */
   usableCount: number;
-  /** Đủ để hiện game: ít nhất `MINI_MIN_ACTIVE_ITEMS` mục bật, và có mục phát được ngay. */
+  /** Đủ để hiện game: ít nhất `MINI_MIN_ACTIVE_ITEMS` mục bật, và phát được một ván ngay (Căn Bếp Xanh: món dùng được ở đủ số góc nhà của một ván). */
   available: boolean;
   sortHazardous: boolean;
 }
@@ -92,7 +93,8 @@ export class GameMiniContentService {
     const products = await this.products(rows.flatMap((r) => def.productSlugs(r)));
     const ctx: MiniPickCtx = { rng: Math.random, dayKey, products };
     const usableCount = rows.filter((r) => def.usable(r, ctx)).length;
-    const available = rows.length >= MINI_MIN_ACTIVE_ITEMS && (game === 'basket' ? usableCount > 0 : usableCount >= MINI_MIN_ACTIVE_ITEMS);
+    const playable = game === 'basket' ? usableCount > 0 : game === 'kitchen_swap' ? kitchenSwapReady(rows, ctx) : usableCount >= MINI_MIN_ACTIVE_ITEMS;
+    const available = rows.length >= MINI_MIN_ACTIVE_ITEMS && playable;
     const sortHazardous = game === 'sort' && rows.some((r) => (r.payload as { bin?: unknown } | null)?.bin === 'hazardous');
     return { rows, products, usableCount, available, sortHazardous };
   }
