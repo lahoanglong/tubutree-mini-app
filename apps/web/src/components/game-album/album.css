@@ -1,0 +1,81 @@
+/* Sổ tay Xanh: Mini App và web dùng CÙNG nội dung file này (web: apps/web/src/components/game-album/album.css). */
+.album,
+.album-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+.album {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-stack-sm) var(--space-inset-page) var(--space-block);
+}
+.album-ring {
+  flex: none;
+  transform: rotate(-90deg);
+  stroke: var(--color-track);
+}
+.album-ring :last-child {
+  stroke: var(--color-text-brand);
+}
+.album-chips {
+  display: flex;
+  gap: var(--space-inline-sm);
+}
+.album-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-inline-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 1024px) {
+  .album-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+.album-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-stack-xs);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  padding: var(--space-stack-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  color: var(--color-text-brand);
+  font: inherit;
+  text-align: left;
+}
+.album-tile > :first-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--color-text-primary);
+}
+span.album-tile {
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+}
+.album-tile[data-fresh] {
+  animation: album-flip 0.4s var(--ease-out);
+}
+@keyframes album-flip {
+  from {
+    transform: perspective(600px) rotateY(90deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .album-tile[data-fresh] {
+    animation: none;
+  }
+}

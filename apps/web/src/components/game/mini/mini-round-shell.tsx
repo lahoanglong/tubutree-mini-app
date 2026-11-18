@@ -50,6 +50,7 @@ import { coreHttp } from '@/lib/core-http';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { AlbumLine } from '@/components/game-album/album-line';
 import { takePendingBasket, type MiniCartGame } from './basket-pending';
 import './mini-game.css';
 import './mini-game-b.css';
@@ -222,7 +223,7 @@ function MatchProducts({ slugs }: { slugs: string[] }) {
   );
 }
 
-function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
+export function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
   const waste = usePublicConfig().waste.enabled && isWebRouteReady(MINI_RECYCLE_PATH.web);
   const r = state.result!;
   const summary = miniResultSummary(r);
@@ -261,6 +262,7 @@ function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; 
       <Button fullWidth size="lg" onPress={summary.loginToReward ? onLogin : onDone}>
         {gameCopy(summary.loginToReward ? 'result.login' : 'result.done')}
       </Button>
+      <AlbumLine roundId={r.roundId} />
       {game === 'sort' && waste && (
         <Link href={MINI_RECYCLE_PATH.web} className="tubu-mg-link">
           {gameCopy('invite.sort')}

@@ -77,6 +77,7 @@ const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
 const GamePlayPage = lazy(() => import('../pages/game-play'));
 const GameMatcherPage = lazy(() => import('../pages/game-matcher'));
+const GameAlbumPage = lazy(() => import('../pages/game-album'));
 const FeedPage = lazy(() => import('../pages/feed'));
 const CommunityEventsPage = lazy(() => import('../pages/community-events'));
 const PostDetailPage = lazy(() => import('../pages/post-detail'));
@@ -232,6 +233,7 @@ export default function MyApp() {
                     <Route path="/game" element={<RouteShell><GamePage /></RouteShell>} />
                     <Route path="/game/play/:game" element={<RouteShell><GamePlayPage /></RouteShell>} />
                     <Route path="/game/matcher" element={<RouteShell><GameMatcherPage /></RouteShell>} />
+                    <Route path="/game/album" element={<RouteShell><GameAlbumPage /></RouteShell>} />
                     <Route path="/feed" element={<RouteShell><FeedPage /></RouteShell>} />
                     <Route path="/feed/leaderboard" element={<Navigate to="/feed" replace />} />
                     <Route path="/feed/events" element={<RouteShell><CommunityEventsPage /></RouteShell>} />

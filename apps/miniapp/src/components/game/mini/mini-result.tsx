@@ -13,6 +13,7 @@ import { useSmartNavigate } from '../../../lib/smart-nav';
 // Sản phẩm của ván và "Thêm vào giỏ" là một chunk lười riêng; Đúng Thùng không có sản phẩm nên không tải nó. Tải chunk lỗi (mạng chập chờn)
 // thì chỉ khối này biến mất, điểm và "Vì sao" của ván vẫn còn.
 const ResultProducts = lazy(() => import('./mini-result-cart'));
+const AlbumLine = lazy(() => import('../../../pages/game-album').then((m) => ({ default: m.AlbumLine })));
 
 /** Nguồn ở Mini App: chỉ hiện tên miền, vì chính sách Zalo không cho Mini App mở trang ngoài Zalo. */
 function SourceNote({ url }: { url: string }) {
@@ -94,6 +95,11 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
       <Button fullWidth size="lg" onPress={summary.loginToReward ? onLogin : onDone}>
         {gameCopy(summary.loginToReward ? 'result.login' : 'result.done')}
       </Button>
+      <SilentBoundary>
+        <Suspense fallback={null}>
+          <AlbumLine roundId={r.roundId} />
+        </Suspense>
+      </SilentBoundary>
       {game === 'sort' && waste && (
         <button type="button" className="tubu-mg-link" onClick={() => navigate(MINI_RECYCLE_PATH.miniapp)}>
           {gameCopy('invite.sort')}

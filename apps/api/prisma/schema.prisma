@@ -323,6 +323,7 @@ model User {
   gameWaterEvents        GameWaterEvent[]
   gameArcadeScores       GameArcadeScore[]
   gamePlayRounds         GamePlayRound[]
+  gameAlbumReviews       GameAlbumReview[]
   gameDailyLedgers       GameDailyLedger[]
   userBadges             UserBadge[]
   gameDeviceDailies      GameDeviceDaily[]
@@ -3162,6 +3163,29 @@ model GamePlayRound {
 }
 
 /// Nội dung giáo dục của 5 game mini, admin sửa được. `payload` theo loại game (game-mini/games/*.ts kiểm hình dạng).
+/// Ván "Ôn 5 thẻ" của Sổ tay Xanh (cờ game.album_enabled): ván ôn KHÔNG thưởng, tách khỏi `game_play_rounds` để không truy vấn thưởng,
+/// nhiệm vụ ngày, chuỗi hay trần nào đếm nó là một ván đã chơi.
+model GameAlbumReview {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Ngày VN 'YYYY-MM-DD' lúc phát ván.
+  dayKey      String
+  contentIds  String[]
+  /// Mục khách làm đúng (con của contentIds).
+  correctIds  String[]  @default([])
+  /// Câu hỏi đã phát kèm đáp án (prompt, options, answer, explanation, sourceUrl): chấm theo đúng câu đã phát dù nội dung đổi sau đó.
+  questions   Json
+  issuedAt    DateTime  @default(now())
+  expiresAt   DateTime
+  submittedAt DateTime?
+  correct     Int?
+  total       Int?
+
+  @@index([userId, dayKey])
+  @@map("game_album_reviews")
+}
+
 model GameContentItem {
   id              String    @id @default(cuid())
   game            String

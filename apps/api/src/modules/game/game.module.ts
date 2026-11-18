@@ -18,6 +18,8 @@ import { GameMiniContentService } from './mini/game-mini-content.service';
 import { GameMiniRewardService } from './mini/game-mini-reward.service';
 import { MatcherController } from './mini/matcher/matcher.controller';
 import { MatcherService } from './mini/matcher/matcher.service';
+import { GameAlbumController } from './album/album.controller';
+import { GameAlbumService } from './album/album.service';
 import { EngagementController } from './missions/engagement.controller';
 import { DailyMissionsService } from './missions/daily-missions.service';
 import { BadgesService } from './missions/badges.service';
@@ -28,7 +30,7 @@ import { FeedModule } from '../feed/feed.module';
 
 @Module({
   imports: [NotificationsModule, WalletModule, FeedModule],
-  controllers: [GameController, GameMiniController, MatcherController, EngagementController],
+  controllers: [GameController, GameMiniController, MatcherController, EngagementController, GameAlbumController],
   providers: [
     GameService,
     GameEconomyService,
@@ -46,6 +48,7 @@ import { FeedModule } from '../feed/feed.module';
     GameMiniContentService,
     GameMiniRewardService,
     MatcherService,
+    GameAlbumService,
     DailyMissionsService,
     BadgesService,
     // Đố Xanh xong là điểm danh: dùng lại đúng luồng điểm danh gộp (không trạng thái, phụ thuộc đều có trong module này hoặc global).

@@ -43,6 +43,7 @@
       { "miniapp": "/game", "web": "/vuon-xanh", "private": false },
       { "miniapp": "/game/play/:game", "web": "/vuon-xanh/choi/:game", "private": false },
       { "miniapp": "/game/matcher", "web": "/vuon-xanh/chon-chuan-xanh", "private": false },
+      { "miniapp": "/game/album", "web": "/vuon-xanh/so-tay", "private": true },
       { "miniapp": "/ai-advisor", "web": "/tu-van", "private": false }
     ]},
     { "lane": "community", "items": [

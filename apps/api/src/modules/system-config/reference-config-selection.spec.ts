@@ -97,6 +97,7 @@ const APPROVED_LOADED_KEYS = [
     'flashsale.max_duration_days',
     'flashsale.min_discount_pct',
     'flashsale.slots',
+    'game.album_enabled',
     'game.arcade_enabled',
     'game.arcade_points_per_run',
     'game.arcade_water_base',
