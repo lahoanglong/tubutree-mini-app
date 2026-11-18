@@ -17,6 +17,10 @@ export interface VariationChipProps {
   onClick: () => void;
   /** Hết hàng mà vẫn chọn được: cờ báo hàng về bật, khách chọn đúng phân loại rồi bấm "Báo tôi khi có hàng". Mặc định khoá như trước. */
   outSelectable?: boolean;
+  /** Giá theo đơn vị của phân loại này ("≈ 9.900đ / 100ml", `commerce/unit-price.ts`); không truyền thì chip giữ như cũ. */
+  unit?: string | null;
+  /** Nhãn "Lợi hơn 37% mỗi 100ml" nếu đây là phân loại được nhãn; nằm cùng dòng giá theo đơn vị để chip chỉ thêm một dòng. */
+  better?: string | null;
 }
 
 /**
@@ -25,7 +29,7 @@ export interface VariationChipProps {
  * nên chip hai app cao bằng nhau. Không ghi chiều cao tuyệt đối: viền 1,5px làm tròn theo mật độ điểm ảnh của từng thiết bị (xem `apps/e2e/tests/support/variation-chip.ts`). Từ md giữ "tên · giá" một
  * dòng để nút mua còn trong 1280×800.
  */
-export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick, outSelectable = false }: VariationChipProps) {
+export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick, outSelectable = false, unit, better }: VariationChipProps) {
   const out = variation.stock <= 0;
   const locked = out && !outSelectable;
   const label = variationLabel(variation.name, siblingCount);
@@ -82,6 +86,12 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
         )}
       </span>
       {pricing.isFlash && !out && <span className="ml-1.5 text-xs font-bold text-promo-fg max-md:sr-only">Giờ vàng</span>}
+      {!out && unit && (
+        <span data-testid="variation-unit-price" className={`block text-xs font-normal tabular-nums text-[var(--color-text-secondary)] ${phoneCaption}`}>
+          {unit}
+          {better && <span className="font-semibold text-[var(--color-text-brand)]"> · {better}</span>}
+        </span>
+      )}
     </button>
   );
 }

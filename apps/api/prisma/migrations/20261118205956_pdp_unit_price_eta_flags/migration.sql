@@ -1,0 +1,5 @@
+-- Trang sản phẩm quyết nhanh (tubu-w4-02): hai cờ mặc định TẮT. Chỉ thêm dòng khi chưa có, không đổi giá trị admin đã đặt.
+INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES
+  ('catalog.unit_price_enabled', 'false'::jsonb, 'Trang sản phẩm (Mini App và web): dòng giá theo đơn vị dưới giá ("≈ 12.300đ / 100ml", "/ 100g" hay "/ viên"), giá theo đơn vị trong chip từng cỡ và nhãn "Lợi hơn X% mỗi 100ml" ở cỡ còn hàng rẻ nhất (rẻ hơn cỡ đang chọn từ 5%). Lượng đọc từ tên phân loại (tên phân loại không có số thì từ tên sản phẩm); một phân loại không đọc chắc thì cả sản phẩm không hiện. Tắt thì trang như cũ.', 'catalog', NOW()),
+  ('shipping.pdp_eta_enabled', 'false'::jsonb, 'Trang sản phẩm (Mini App và web), dòng Vận chuyển: "Nhận dự kiến 20/11 – 24/11" (cùng khoảng ngày với thanh toán, theo shipping.eta_min_days/eta_max_days, chỉ hàng kho Tubu còn hàng) và câu còn thiếu để Miễn phí giao hàng theo giỏ hiện có cộng món đang xem (ngưỡng theo hạng của khách). Tắt thì dòng Vận chuyển như cũ.', 'shipping', NOW())
+ON CONFLICT ("key") DO NOTHING;

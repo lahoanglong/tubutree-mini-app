@@ -14,6 +14,8 @@ import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
 import { PdpPrice } from '@/components/flash-price';
+import { PdpShipDecision } from '@/components/pdp-decision/pdp-ship-decision';
+import { PdpUnitPrice } from '@/components/pdp-decision/pdp-unit-price';
 import { PdpSelectionProvider } from '@/components/pdp-selection';
 import ProductGallery from '@/components/product-gallery';
 import ShareButton from '@/components/share-button';
@@ -222,6 +224,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <div className="flex flex-wrap items-baseline gap-x-3 empty:hidden">
                 <PdpPrice product={product} />
                 {soldText && <PdpSold text={soldText} product={product} slot="price" />}
+                <PdpUnitPrice product={product} initialConfig={publicConfig} />
               </div>
               <PdpPointsEarn product={product} initialConfig={publicConfig} />
               {/* Gian hàng tạm nghỉ thì khối mua không dựng ("Tạm thời chưa mua được"), nên không nhắc chốt sớm. */}
@@ -235,7 +238,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   data-pdp-block="variations"
                   className={`min-w-0 ${product.variations.length > 1 ? 'max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:pt-4' : ''}`}
                 >
-                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} productId={product.id} />
+                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} productId={product.id} initialConfig={publicConfig} />
                 </div>
               )}
 
@@ -259,7 +262,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                           {fulfillerText}
                         </p>
                       )}
-                      {!fromStore && <PdpFreeship initialConfig={publicConfig} />}
+                      <PdpShipDecision product={product} initialConfig={publicConfig} freeship={!fromStore && <PdpFreeship initialConfig={publicConfig} />} />
                     </PdpShippingRow>
                   )}
                 </div>

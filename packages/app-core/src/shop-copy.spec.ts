@@ -56,6 +56,9 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'invite.progress': { a: '999', b: '999', c: '999' },
   'invite.progressNoPoints': { a: '999', b: '999' },
   'greenBox.progressNext': { next: '10' },
+  'pdp.unitPrice': { per: '100ml' },
+  'pdp.unitBetter': { per: '100ml' },
+  'pdp.eta': { range: '31/12 – 04/01' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);

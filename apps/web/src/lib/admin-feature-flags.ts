@@ -100,6 +100,22 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Bảng so sánh biến mất khỏi trang sản phẩm trong vòng khoảng 10 phút. Không dữ liệu nào bị xoá.',
   },
   {
+    key: 'catalog.unit_price_enabled',
+    label: 'Giá theo đơn vị và cỡ lợi hơn trên trang sản phẩm',
+    description: 'Trang sản phẩm (Mini App và web) ghi giá theo 100ml, 100g hay theo món dưới giá và trong chip từng cỡ; cỡ còn hàng rẻ nhất (rẻ hơn cỡ đang chọn từ 5%) có nhãn "Lợi hơn X% mỗi 100ml". Lượng đọc từ tên phân loại; sản phẩm có một phân loại không đọc chắc thì không hiện gì.',
+    fallback: false,
+    onWarning: 'Khách thấy giá theo đơn vị trên trang sản phẩm. Lượng tính tự động từ tên phân loại (tên phân loại không ghi lượng thì lấy ở tên sản phẩm, chỉ khi các phân loại cùng giá), nên đổi tên phân loại khác giá (ví dụ "500ml" thành "Chai lớn") làm dòng này biến mất ở sản phẩm đó.',
+    offWarning: 'Giá theo đơn vị và nhãn "Lợi hơn" biến mất khỏi trang sản phẩm trong vòng khoảng 5 phút. Không dữ liệu nào bị xoá.',
+  },
+  {
+    key: 'shipping.pdp_eta_enabled',
+    label: 'Ngày nhận dự kiến và phần còn thiếu để Miễn phí giao hàng trên trang sản phẩm',
+    description: 'Dòng Vận chuyển ở trang sản phẩm (Mini App và web) ghi "Nhận dự kiến …" (cùng khoảng ngày với thanh toán, chỉ hàng kho Tubu còn hàng) và câu "Món này + … là miễn phí giao" theo giỏ của khách cộng món đang xem.',
+    fallback: false,
+    onWarning: 'Khoảng ngày lấy từ "shipping.eta_min_days" và "shipping.eta_max_days", không tính giờ chốt đơn hay ngày kho nghỉ. Kiểm hai khoá này trước khi bật.',
+    offWarning: 'Dòng Vận chuyển về lại câu Miễn phí giao hàng cố định như trước (trong vòng khoảng 5 phút). Không dữ liệu nào bị xoá.',
+  },
+  {
     key: 'orders.timeline_v2_enabled',
     label: 'Một dòng thời gian ở chi tiết đơn',
     description: 'Chi tiết đơn (Mini App và web) gộp thanh tiến trình và khối hành trình thành một: 4 bước kèm giờ, ngày giao dự kiến, mốc hãng vận chuyển gập dưới "Đang giao hàng", dòng "Đã báo qua Zalo" khi tin hành trình đã tới khách.',

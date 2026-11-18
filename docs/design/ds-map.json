@@ -988,6 +988,14 @@
         "/cart",
         "/checkout"
       ]
+    },
+    {
+      "name": "UnitPriceLine",
+      "miniapp": "apps/miniapp/src/components/pdp-decision/unit-price-line.tsx",
+      "web": "apps/web/src/components/pdp-decision/unit-price-line.tsx",
+      "screens": [
+        "/product/:slug"
+      ]
     }
   ],
   "webOnly": [

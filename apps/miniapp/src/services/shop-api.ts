@@ -331,6 +331,10 @@ export interface PublicConfig {
   flashGreenHourEnabled?: boolean;
   /** Cờ `checkout.return_packaging_nudge_enabled`: thẻ gửi lại bao bì ở chi tiết đơn đã giao và thanh toán. Thiếu khi API cũ → tắt. */
   returnPackagingNudgeEnabled?: boolean;
+  /** Cờ `catalog.unit_price_enabled`: cùng nghĩa với `PublicConfig.unitPriceEnabled` ở app-core. Thiếu khi API cũ → tắt. */
+  unitPriceEnabled?: boolean;
+  /** Cờ `shipping.pdp_eta_enabled`: cùng nghĩa với `PublicConfig.pdpEtaEnabled` ở app-core. Thiếu khi API cũ → tắt. */
+  pdpEtaEnabled?: boolean;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

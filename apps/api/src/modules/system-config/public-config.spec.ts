@@ -166,3 +166,26 @@ describe('buildPublicConfig — freeshipBoosterEnabled (dải "Thêm 1 món nh�
     expect((await build({ 'commerce.freeship_booster_enabled': 1 })).freeshipBoosterEnabled).toBe(false);
   });
 });
+
+describe('buildPublicConfig — unitPriceEnabled, pdpEtaEnabled (trang chi tiết, tubu-w4-02)', () => {
+  it('mặc định tắt; chỉ boolean true thật mới bật', async () => {
+    const off = await build({});
+    expect(off.unitPriceEnabled).toBe(false);
+    expect(off.pdpEtaEnabled).toBe(false);
+    expect((await build({ 'catalog.unit_price_enabled': true })).unitPriceEnabled).toBe(true);
+    expect((await build({ 'catalog.unit_price_enabled': 'true' })).unitPriceEnabled).toBe(false);
+    expect((await build({ 'shipping.pdp_eta_enabled': true })).pdpEtaEnabled).toBe(true);
+    expect((await build({ 'shipping.pdp_eta_enabled': 1 })).pdpEtaEnabled).toBe(false);
+  });
+
+  it('bật hai cờ không đổi các mốc kinh tế đã chốt (ngưỡng miễn phí giao, trần dùng điểm)', async () => {
+    const cfg = { 'shipping.free_threshold': 199_000, 'loyalty.max_redeem_pct': 0.2 };
+    const off = await build(cfg);
+    const on = await build({ ...cfg, 'catalog.unit_price_enabled': true, 'shipping.pdp_eta_enabled': true });
+    expect(on.freeshipThreshold).toBe(199_000);
+    expect(on.loyalty.maxRedeemPct).toBe(0.2);
+    const { unitPriceEnabled: _u, pdpEtaEnabled: _p, ...restOn } = on;
+    const { unitPriceEnabled: _u2, pdpEtaEnabled: _p2, ...restOff } = off;
+    expect(restOn).toEqual(restOff);
+  });
+});

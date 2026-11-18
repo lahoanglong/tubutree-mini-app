@@ -9,6 +9,7 @@ import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { isLowStock, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
+import { variationUnitPrices } from '@tubutree/app-core/commerce/unit-price';
 import { formatVnd } from '@/lib/shop-client';
 import { variationLabel } from '@/lib/variation-label';
 import { Badge } from '@/components/mini/badge';
@@ -45,6 +46,7 @@ export function VariationSheet({
   busy = false,
   cartLines,
   cartMayArrive = true,
+  unitOn = false,
   onConfirm,
 }: {
   open: boolean;
@@ -68,6 +70,8 @@ export function VariationSheet({
    * `false`: giỏ không bao giờ về, không có gì để nhảy nên không giữ dải trống. Chỉ đọc ở chế độ "Mua ngay", và chốt theo giá trị lúc mở bảng; mặc định `true` (giữ chỗ, như trước).
    */
   cartMayArrive?: boolean;
+  /** Cờ `catalog.unit_price_enabled`: mỗi chip thêm dòng giá theo đơn vị và một phân loại có thể nhận nhãn "Lợi hơn". */
+  unitOn?: boolean;
   onConfirm: (variation: VariationOption, qty: number) => void | Promise<void>;
 }) {
   const [id, setId] = useState<string | null>(null);
@@ -88,6 +92,7 @@ export function VariationSheet({
 
   const selected = variations.find((v) => v.id === id);
   const selectedLabel = selected ? variationLabel(selected.name, variations.length) : null;
+  const units = unitOn ? variationUnitPrices(variations, flash, productName, id) : null;
   const available = (selected?.stock ?? 0) > 0;
   const label = mode === 'buy' ? 'Mua ngay' : 'Thêm vào giỏ';
   const shownQty = clampPickerQty(selected, qty);
@@ -169,6 +174,8 @@ export function VariationSheet({
             siblingCount={variations.length}
             pricing={variationPricing(v, flash)}
             active={v.id === id}
+            unit={units?.chips?.[v.id]}
+            better={units?.better?.id === v.id ? units.better.text : null}
             onClick={() => {
               if (busy) return;
               setId(v.id);

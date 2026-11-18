@@ -45,6 +45,9 @@ import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { addGuestLine, GUEST_CART_MAX_LINES as GUEST_CART_LINE_CAP, guestCartCount, type GuestAddResult } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 import { RestockButton, useRestock } from './restock-button';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
+import { variationUnitPrices } from '@tubutree/app-core/commerce/unit-price';
+import { usePublicConfig } from '@/lib/use-public-config';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -90,6 +93,7 @@ export default function AddToCart({
   thumbnail = null,
   pdpSlug,
   productId,
+  initialConfig,
 }: {
   slug: string;
   productName?: string;
@@ -101,6 +105,8 @@ export default function AddToCart({
   pdpSlug?: string;
   /** Có thì phân loại hết hàng hiện "Báo tôi khi có hàng" (khi cờ bật) thay cho nút xám. */
   productId?: string;
+  /** Cấu hình công khai máy chủ đã đọc: cờ `catalog.unit_price_enabled` có ngay trong HTML nên dòng giá theo đơn vị của chip không chèn sau khi tải. */
+  initialConfig?: PublicConfig;
 }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -159,6 +165,8 @@ export default function AddToCart({
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
+  const unitOn = usePublicConfig(initialConfig).unitPriceEnabled === true;
+  const units = unitOn ? variationUnitPrices(variations, flash, productName, selectedId) : null;
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước): một request cho các suất của sản phẩm này, chỉ khi đã đăng nhập; chỉ nút, tổng và ghi chú đọc nó.
   const flashWithAllowance = useFlashAllowance(flash, variations.map((v) => v.id));
   // Tiền theo luật máy chủ: quá giới hạn Giờ vàng mỗi khách thì cả dòng giỏ (số có sẵn + số thêm) tính giá thường, không phải qty × giá Giờ vàng.
@@ -499,6 +507,8 @@ export default function AddToCart({
                 pricing={variationPricing(v, flash)}
                 active={v.id === selectedId}
                 outSelectable={restock.enabled}
+                unit={units?.chips?.[v.id]}
+                better={units?.better?.id === v.id ? units.better.text : null}
                 onClick={() => {
                   userPicked.current = true;
                   setSelectedId(v.id);
@@ -571,6 +581,7 @@ export default function AddToCart({
           cartLines={cartLines}
           // Khách chưa đăng nhập chỉ có giỏ khách (đã có ngay, không chờ mạng): bảng Mua ngay không giữ dải ghi chú trống. Đang khôi phục phiên hay mất mạng tạm thời thì giỏ vẫn có thể về.
           cartMayArrive={phase !== 'guest'}
+          unitOn={unitOn}
           onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
         />
       )}

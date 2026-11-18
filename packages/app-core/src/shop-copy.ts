@@ -358,6 +358,14 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.offers': 'Ưu đãi',
   'pdp.shipping': 'Vận chuyển',
   'pdp.variation': 'Phân loại',
+  // Quyết nhanh ở trang chi tiết (tubu-w4-02): giá theo đơn vị (cờ catalog.unit_price_enabled), ngày nhận và phần còn thiếu để miễn phí giao (cờ shipping.pdp_eta_enabled).
+  // Câu còn thiếu phải vừa MỘT dòng của khối Vận chuyển ở 360px (khối chỉ được cao thêm 24px, đã dành cho dòng ngày nhận), nên ngắn hơn câu tĩnh cũ.
+  'pdp.unitPrice': '≈ {price} / {per}',
+  'pdp.unitBetter': 'Lợi hơn {pct}% mỗi {per}',
+  'pdp.eta': 'Nhận dự kiến {range}',
+  'pdp.freeshipGap': 'Món này + {amount} là miễn phí giao',
+  'pdp.freeshipReach': 'Thêm món này là đủ miễn phí giao',
+  'pdp.freeshipFree': 'Đơn này được miễn phí giao hàng',
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.reviewsMore': 'Xem thêm đánh giá',

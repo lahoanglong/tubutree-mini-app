@@ -335,6 +335,8 @@ export class SystemConfigService {
     'reviews.green_corner_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [GIFT_TRIAL_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     'flashsale.green_hour_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    'catalog.unit_price_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    'shipping.pdp_eta_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
     // Nhóm hàng Pancake → danh mục Tubu (PancakeSyncService.mappedCategoryIds): sai dạng thì đồng bộ lặng lẽ không gán danh mục nào.
     [PANCAKE_CATEGORY_MAP_KEY]: categoryMapProblem,

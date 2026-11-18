@@ -17,13 +17,17 @@ export interface VariationChipProps {
   onClick: () => void;
   /** Hết hàng mà vẫn chọn được: cờ báo hàng về bật, khách chọn đúng phân loại rồi bấm "Báo tôi khi có hàng". Mặc định khoá như trước. */
   outSelectable?: boolean;
+  /** Giá theo đơn vị của phân loại này ("≈ 9.900đ / 100ml", `commerce/unit-price.ts`); không truyền thì chip giữ hai dòng như cũ. */
+  unit?: string | null;
+  /** Nhãn "Lợi hơn 37% mỗi 100ml" nếu đây là phân loại được nhãn; nằm cùng dòng giá theo đơn vị để chip chỉ thêm một dòng. */
+  better?: string | null;
 }
 
 /**
  * Chip phân loại 2 dòng: tên + giá khách thật sự trả (đã áp Giờ vàng). Dùng chung ở trang chi tiết và bảng chọn phân loại để hai nơi ghi
  * cùng giá, cùng dấu Giờ vàng và cùng chữ hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Hết hàng = mờ + gạch nhưng vẫn xem được, không chọn được (trừ khi `outSelectable`).
  */
-export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick, outSelectable = false }: VariationChipProps) {
+export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick, outSelectable = false, unit, better }: VariationChipProps) {
   const out = variation.stock <= 0;
   const locked = out && !outSelectable;
   const label = variationLabel(variation.name, siblingCount);
@@ -81,6 +85,12 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
           </>
         )}
       </Text>
+      {!out && unit && (
+        <Text variant="caption" as="div" tone="secondary" numeric data-testid="variation-unit-price">
+          {unit}
+          {better && <span style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}> · {better}</span>}
+        </Text>
+      )}
     </div>
   );
 }

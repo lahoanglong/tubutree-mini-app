@@ -72,6 +72,10 @@ export interface PublicConfig {
   freeshipBoosterEnabled?: boolean;
   /** Cờ `checkout.return_packaging_nudge_enabled`: thẻ đổi rác kèm đơn điền sẵn bao bì của đơn đã giao. Thiếu khi API cũ → thẻ như trước. */
   returnPackagingNudgeEnabled?: boolean;
+  /** Cờ `catalog.unit_price_enabled`: trang chi tiết hiện giá theo đơn vị và nhãn "Lợi hơn" giữa các cỡ. Thiếu khi API cũ → tắt. */
+  unitPriceEnabled?: boolean;
+  /** Cờ `shipping.pdp_eta_enabled`: trang chi tiết hiện "Nhận dự kiến …" và câu còn thiếu để miễn phí giao hàng. Thiếu khi API cũ → tắt. */
+  pdpEtaEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

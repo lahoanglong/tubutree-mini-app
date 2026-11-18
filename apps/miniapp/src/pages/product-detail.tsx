@@ -58,7 +58,9 @@ import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation,
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { addOneVariationPricing } from '@tubutree/app-core/commerce/add-one-pricing';
 import { buildFrequentlyBoughtBundle, pickFbtPartners } from '@tubutree/app-core/commerce/frequently-bought';
-import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { pdpEtaText, pdpFreeshipGap, pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { variationUnitPrices } from '@tubutree/app-core/commerce/unit-price';
+import { UnitPriceLine } from '../components/pdp-decision/unit-price-line';
 import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { withProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
@@ -526,6 +528,22 @@ export default function ProductDetailPage() {
   // freeship, đặt định kỳ hay mua chung.
   const unavailable = p.fulfiller?.kind === 'UNAVAILABLE' ? p.fulfiller : null;
   const fromStore = merchant ?? unavailable;
+  // Cờ catalog.unit_price_enabled / shipping.pdp_eta_enabled: logic ở app-core (unit-price.ts, pdp-view.ts), trang chỉ gắn chỗ vẽ.
+  const units = config.unitPriceEnabled === true ? variationUnitPrices(variations, flashList, p.name, selected?.id) : null;
+  const decideShip = config.pdpEtaEnabled === true && !unavailable;
+  const etaText = decideShip ? pdpEtaText(config.shippingEta, p.fulfiller?.kind, inStock) : null;
+  // Mini chỉ có giỏ khi đã đăng nhập: khách chưa đăng nhập giỏ rỗng; đang khôi phục phiên hay lỗi thì chưa biết giỏ, giữ câu tĩnh.
+  const gapText =
+    decideShip && selected
+      ? pdpFreeshipGap({
+          lines: status === 'authenticated' ? cart.data?.items : status === 'idle' ? [] : null,
+          threshold: merchant ? (merchant.shippingFee ? merchant.freeShipFrom : null) : freeshipFrom,
+          serverFree: cart.data?.freeship,
+          variationId: selected.id,
+          lineTotal: inStock ? line.lineTotal : null,
+          store: merchant?.name,
+        })
+      : null;
   const retailOnly = isRetailOnly(p);
   // Thêm giỏ và Mua ngay chung một khoá ghi giỏ nên nút kia bị bỏ qua khi một nút đang chạy: báo bằng aria-disabled (không `disabled`, để nút đang giữ focus không rớt focus).
   // Giá trị tường minh thắng giá trị Button suy từ loading/disabled, nên phải gộp cả `!selected` vào đây.
@@ -703,6 +721,16 @@ export default function ProductDetailPage() {
       </div>,
     );
     if (merchant.shippingFee != null) shippingLines.push(<div key="fee">{merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}</div>);
+    // Gian hàng có ngưỡng: trong lúc giỏ đang về thì giữ chỗ một dòng ẩn để câu còn thiếu điền vào, không chèn dòng mới đẩy phần dưới (giống web).
+    const reserveGap =
+      decideShip && Boolean(merchant.shippingFee) && Boolean(merchant.freeShipFrom) && inStock && (status === 'loading' || (status === 'authenticated' && cart.isPending));
+    if (gapText || reserveGap) {
+      shippingLines.push(
+        <div key="gap" data-testid={gapText ? 'pdp-freeship-gap' : undefined} aria-hidden={gapText ? undefined : true} style={gapText ? undefined : { visibility: 'hidden' }}>
+          {gapText ?? '\u00a0'}
+        </div>,
+      );
+    }
     shippingNotes.push(<div key="cod">Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.</div>);
     shippingNotes.push(<div key="retail">Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
   }
@@ -717,10 +745,11 @@ export default function ProductDetailPage() {
     shippingNotes.push(<div key="partner">Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
   }
   // Badge freeship ở nơi ra quyết định mua (trước đây chỉ có ở giỏ).
+  if (etaText) shippingLines.push(<div key="eta" data-testid="pdp-eta" style={{ fontVariantNumeric: 'tabular-nums' }}>{etaText}</div>);
   if (!fromStore && freeshipFrom != null) {
     shippingLines.push(
-      <div key="freeship" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-        {freeshipFrom > 0 ? vi.product.freeshipFrom(formatVnd(freeshipFrom)) : vi.product.freeshipAll}
+      <div key="freeship" data-testid={gapText ? 'pdp-freeship-gap' : undefined} style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+        {gapText ?? (freeshipFrom > 0 ? vi.product.freeshipFrom(formatVnd(freeshipFrom)) : vi.product.freeshipAll)}
       </div>,
     );
   }
@@ -909,6 +938,8 @@ export default function ProductDetailPage() {
           </Box>
         )}
 
+        {units && <UnitPriceLine text={units.line} />}
+
         <PointsEarnLine goods={line.total} authStatus={status} tierId={user?.tierId} />
 
         {inStock && !unavailable && (
@@ -933,6 +964,8 @@ export default function ProductDetailPage() {
                 pricing={variationPricing(v, flashList)}
                 active={selected?.id === v.id}
                 outSelectable={restockOn}
+                unit={units?.chips?.[v.id]}
+                better={units?.better?.id === v.id ? units.better.text : null}
                 onClick={() => {
                   haptic('light');
                   setSelectedId(v.id);
@@ -1278,6 +1311,7 @@ export default function ProductDetailPage() {
           cartLines={cartLines}
           // 'idle' = khách chưa đăng nhập, giỏ không bao giờ về nên bảng Mua ngay không giữ dải ghi chú trống; 'loading' và 'error' thì giỏ vẫn có thể về.
           cartMayArrive={status !== 'idle'}
+          unitOn={units !== null}
           onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}

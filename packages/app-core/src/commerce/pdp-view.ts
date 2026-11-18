@@ -1,4 +1,51 @@
 import { applyShelfDedupe } from '../merch/shelves';
+import type { ShippingEta } from '../api/config';
+import { fillCopy } from '../shop-copy';
+import { checkoutEtaLabel } from '../shipping-eta';
+import { vnd } from './money';
+
+/**
+ * "Nhận dự kiến 20/11 – 24/11" ở khối vận chuyển của trang chi tiết (cờ `shipping.pdp_eta_enabled`). Gọi đúng `checkoutEtaLabel` của thanh toán với
+ * cùng cấu hình nên hai nơi ra cùng khoảng ngày ở cùng thời điểm. Chỉ hàng kho Tubu giao còn hàng; hàng gian hàng tự giao, hết hàng hay không rõ nơi giao thì null.
+ */
+export function pdpEtaText(eta: ShippingEta | null | undefined, kind: string | null | undefined, inStock: boolean, now?: Date): string | null {
+  const range = inStock && kind === 'TUBU' ? checkoutEtaLabel(eta, [kind], now) : null;
+  return range ? fillCopy('pdp.eta', { range }) : null;
+}
+
+/** Dòng giỏ đủ để tính phần còn thiếu: giỏ máy chủ (`CartLine`) và giỏ khách của web cùng dạng này. */
+export interface GapCartLine {
+  variationId: string;
+  total: number;
+  stock: number;
+  fulfiller?: { kind: string; name?: string } | null;
+}
+
+/**
+ * Câu Miễn phí giao hàng ở trang chi tiết khi khách thêm món đang xem: giỏ hiện có cộng đúng phân loại và số lượng đang chọn, so với ngưỡng máy chủ đã tính
+ * cho chính khách (`CartSummary.freeshipThreshold`, đã gồm hạng và đơn đầu) hay ngưỡng chung của khách chưa đăng nhập. Cùng luật với thanh tiến độ ở giỏ:
+ * dòng hết hàng không cộng; hàng Tubu chỉ cộng phần Tubu giao; món của gian hàng tự giao (`store` = tên gian hàng) cộng phần của gian hàng đó và dùng
+ * `freeShipFrom` của gian hàng. `serverFree` (mã miễn phí giao của máy chủ) chỉ tin khi giỏ toàn hàng Tubu còn hàng. `lineTotal`: tiền cả dòng của phân loại
+ * này sau khi thêm (luật Giờ vàng của máy chủ), null khi không thêm được (hết hàng). null = không nói gì, app giữ câu tĩnh cũ.
+ */
+export function pdpFreeshipGap(p: {
+  lines: readonly GapCartLine[] | null | undefined;
+  threshold: number | null | undefined;
+  serverFree?: boolean;
+  variationId: string;
+  lineTotal: number | null;
+  store?: string | null;
+}): string | null {
+  const { lines, threshold } = p;
+  if (!lines || typeof threshold !== 'number' || !(threshold > 0)) return null;
+  const mine = (l: GapCartLine) => (p.store ? l.fulfiller?.kind === 'MERCHANT' && l.fulfiller.name === p.store : (l.fulfiller?.kind ?? 'TUBU') === 'TUBU');
+  const group = lines.filter((l) => l.stock > 0 && mine(l));
+  const before = group.reduce((s, l) => s + l.total, 0);
+  if ((!p.store && p.serverFree && group.length === lines.length) || before >= threshold) return fillCopy('pdp.freeshipFree');
+  if (p.lineTotal === null) return null;
+  const after = before - group.filter((l) => l.variationId === p.variationId).reduce((s, l) => s + l.total, 0) + p.lineTotal;
+  return after >= threshold ? fillCopy('pdp.freeshipReach') : fillCopy('pdp.freeshipGap', { amount: vnd(threshold - after) });
+}
 
 /** Dòng giỏ có giá gạch (`listUnitPrice`, luật `strikePrice`) cao hơn giá bán mới gạch giá; API cũ chưa trả `listUnitPrice` thì không gạch. */
 export function lineCompareAt(l: { unitPrice: number; listUnitPrice?: number | null }): number | null {

@@ -24,6 +24,10 @@ import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PH
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 /** Cờ Giờ Xanh Ưu Đãi (tubu-w3-06): chỉ đổi cách vẽ khối Giờ vàng ở Trang chủ và Ưu đãi, giá và suất vẫn của Giờ vàng. */
 export const FLASH_GREEN_HOUR_KEY = 'flashsale.green_hour_enabled';
+/** Trang chi tiết: giá theo đơn vị giữa các cỡ và nhãn "Lợi hơn" (tubu-w4-02). */
+export const UNIT_PRICE_ENABLED_KEY = 'catalog.unit_price_enabled';
+/** Trang chi tiết: dòng "Nhận dự kiến" và phần còn thiếu để miễn phí giao hàng (tubu-w4-02). */
+export const PDP_ETA_ENABLED_KEY = 'shipping.pdp_eta_enabled';
 
 export const WEB_GUEST_CART_ENABLED_KEY = 'web.guest_cart_enabled';
 
@@ -120,6 +124,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     flashGreenHour,
     returnPackagingNudge,
     webGuestCheckout,
+    unitPrice,
+    pdpEta,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -169,6 +175,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(FLASH_GREEN_HOUR_KEY, false),
     config.get<unknown>(RETURN_PACKAGING_NUDGE_KEY, false),
     config.get<unknown>(WEB_GUEST_CHECKOUT_ENABLED_KEY, false),
+    config.get<unknown>(UNIT_PRICE_ENABLED_KEY, false),
+    config.get<unknown>(PDP_ETA_ENABLED_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -252,6 +260,10 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     returnPackagingNudgeEnabled: returnPackagingNudge === true,
     // Đặt hàng không cần đăng nhập trên web (checkout/guest). Chỉ boolean true mới bật; API cũ không trả thì trang thanh toán bắt đăng nhập như cũ.
     webGuestCheckoutEnabled: webGuestCheckout === true,
+    // Trang chi tiết (Mini App và web): giá theo đơn vị ("≈ 12.300đ / 100ml", "Lợi hơn 18% mỗi 100ml"). Chỉ boolean true mới bật; API cũ không trả thì như cũ.
+    unitPriceEnabled: unitPrice === true,
+    // Trang chi tiết: "Nhận dự kiến …" theo `shippingEta` và câu còn thiếu để miễn phí giao hàng theo giỏ. Chỉ boolean true mới bật.
+    pdpEtaEnabled: pdpEta === true,
   };
 }
 
