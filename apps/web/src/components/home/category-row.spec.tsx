@@ -304,6 +304,14 @@ describe('CategoryRow web — từ md là hàng 5 thẻ ngang (W134)', () => {
     expect(label.className).toContain('lg:!text-left');
   });
 
+  it('ô "Tất cả" cùng kiểu nhãn với ô danh mục từ lg (căn trái, giãn hết thẻ): không lệch hàng chữ với bốn ô bên cạnh', () => {
+    const { c } = mount(12);
+    const all = labelOf(c, 'Tất cả');
+    const cat = labelOf(c, 'Danh mục 0');
+    expect(all.className).toBe(cat.className);
+    expect(all.className).toContain('lg:!flex-1');
+  });
+
   it('nhiều danh mục (12): vẫn một hàng 5 thẻ ngang từ md, không có lưới cột cuộn', () => {
     const { c, grid } = mount(12);
     expect(grid.className).toContain('lg:!grid-cols-5');

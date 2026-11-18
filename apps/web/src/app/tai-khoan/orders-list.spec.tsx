@@ -141,6 +141,32 @@ describe('danh sách đơn — ô tìm kiếm', () => {
   });
 });
 
+describe('danh sách đơn — bố cục máy tính (tubu-w3-04)', () => {
+  it('từ xl hai cột thẻ đơn; thẻ là cột dọc, hàng "Xem chi tiết" dồn đáy để hai thẻ cùng hàng thẳng nút; khung chờ tải cùng lưới', async () => {
+    state.orders = [
+      { ...order('TB-1', [item('Dầu gội')]), status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() },
+      order('TB-2', [item('Xà phòng')]),
+    ];
+    const c = await mount();
+    const ul = c.querySelector('ul')!;
+    expect(ul.className.split(/\s+/)).toEqual(expect.arrayContaining(['grid', 'gap-3', 'xl:grid-cols-2']));
+    expect(ul.className).not.toMatch(/\bspace-y-/);
+    for (const li of Array.from(ul.children)) {
+      expect(li.className).toMatch(/\bflex\b/);
+      expect(li.className).toMatch(/\bflex-col\b/);
+    }
+    const detailRow = c.querySelector('a[aria-label="Xem chi tiết đơn TB-2"]')!.parentElement!;
+    expect(detailRow.className).toMatch(/\bmt-auto\b/);
+  });
+
+  it('đang tải: khung chờ dùng cùng lưới hai cột từ xl', async () => {
+    state.gate = new Promise(() => {});
+    const c = await mount();
+    const busy = c.querySelector('[role="status"][aria-busy="true"]')!;
+    expect(busy.className).toMatch(/\bxl:grid-cols-2\b/);
+  });
+});
+
 describe('danh sách đơn — nút Thanh toán', () => {
   it('đơn chuyển khoản chờ tiền dẫn tới trang chuyển khoản như onPay của Mini App, đơn khác về chi tiết', async () => {
     state.orders = [

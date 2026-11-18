@@ -695,8 +695,9 @@ export default function CartPage() {
             {(cart.pendingGiftRedemptions?.length ?? 0) > 0 && <GiftNote />}
           </div>
 
-          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start`}>
-            <div data-testid="cart-summary-rows" className="max-md:hidden">
+          {/* Giỏ chưa có dòng nào trước tổng (không giảm, không phí giao): khung từ md mở đầu bằng khối mã giảm giá, bỏ vạch kẻ + khoảng trống của nó. */}
+          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start md:[&>[data-testid=cart-summary-rows]:empty+*]:mt-0 md:[&>[data-testid=cart-summary-rows]:empty+*]:border-t-0 md:[&>[data-testid=cart-summary-rows]:empty+*]:pt-0`}>
+            <div data-testid="cart-summary-rows" className="empty:hidden max-md:hidden">
             {/* Có giảm hay có phí giao thì hàng này là tiền hàng chưa trừ, hàng cuối là tổng; không có gì xen giữa thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
             {(hasDiscount || ship) && (
               <div className="flex justify-between text-sm">

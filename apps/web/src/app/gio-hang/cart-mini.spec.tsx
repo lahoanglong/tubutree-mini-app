@@ -219,6 +219,14 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     expect(card.className).toMatch(/\bmax-md:contents\b/);
     expect(card.querySelector('[data-testid="cart-summary-rows"]')!.className).toMatch(/\bmax-md:hidden\b/);
   });
+
+  it('từ md: khối dòng tóm tắt rỗng thì ẩn, khối kế tiếp bỏ vạch kẻ + khoảng trống đầu (khung không mở đầu bằng vạch)', async () => {
+    const c = await mount();
+    const card = c.querySelector('[data-testid="cart-summary"]')!;
+    const rows = card.querySelector('[data-testid="cart-summary-rows"]')!;
+    expect(rows.className).toMatch(/(^|\s)empty:hidden(\s|$)/);
+    for (const cls of ['mt-0', 'border-t-0', 'pt-0']) expect(card.className).toContain(`md:[&>[data-testid=cart-summary-rows]:empty+*]:${cls}`);
+  });
 });
 
 describe('/gio-hang — khổ máy tính bảng và máy tính (W133)', () => {

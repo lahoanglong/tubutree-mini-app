@@ -17,6 +17,7 @@ import { loginHref } from '@/lib/return-to';
 import { clearSubmitted } from '@/lib/recycle-wizard';
 import { trackRecycleStep } from '@/lib/recycle-funnel';
 import { ui } from '@/lib/guest-ui';
+import { PAGE_WIDE } from '@/lib/page-frame';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -54,7 +55,7 @@ import {
 
 function Shell({ children, showHistory = false }: { children: ReactNode; showHistory?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
+    <main className={`${PAGE_WIDE} space-y-4 py-6 pb-12 tabular-nums`}>
       <PageHeader
         title="Đổi rác lấy quà"
         actions={

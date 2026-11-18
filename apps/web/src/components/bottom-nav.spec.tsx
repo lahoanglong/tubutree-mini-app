@@ -62,6 +62,11 @@ describe('BottomNav (điện thoại)', () => {
     expect(out).toContain('data-bottom-nav');
   });
 
+  it('khoảng chừa cuối trang bằng thanh 60px + phần nút giữa nhô 22px (top-[-22px]) + safe-area: hết trang không có chữ nằm dưới nút', () => {
+    const out = render('/');
+    expect(out).toMatch(/data-testid="bottom-nav-spacer" style="height:calc\(60px \+ 22px \+ env\(safe-area-inset-bottom, 0px\)\)"/);
+  });
+
   it('hiện ở 5 route gốc, kể cả route gốc chưa làm xong', () => {
     for (const p of ['/', '/san-pham', '/vuon-xanh', '/uu-dai', '/tai-khoan']) {
       expect(render(p), p).toContain('<nav');

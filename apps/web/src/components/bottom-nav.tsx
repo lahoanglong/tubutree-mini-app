@@ -45,7 +45,8 @@ export default function BottomNav() {
 
   return (
     <div data-bottom-nav className="md:hidden">
-      <div aria-hidden="true" style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))' }} />
+      {/* Chừa cả phần nút Vườn Xanh nhô 22px trên thanh: cuộn hết trang thì dòng chữ cuối của chân trang không nằm dưới nút. */}
+      <div aria-hidden="true" data-testid="bottom-nav-spacer" style={{ height: 'calc(60px + 22px + env(safe-area-inset-bottom, 0px))' }} />
       <nav
         aria-label="Thanh điều hướng dưới"
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch bg-stone-0 shadow-nav"

@@ -150,7 +150,7 @@ export function OrdersSection() {
       </div>
 
       {ordersQ.isLoading ? (
-        <div role="status" aria-busy="true" className="mt-3 flex flex-col gap-3">
+        <div role="status" aria-busy="true" className="mt-3 grid gap-3 xl:grid-cols-2">
           <span className="sr-only">Đang tải…</span>
           <LineItemSkeleton />
           <LineItemSkeleton />
@@ -164,9 +164,10 @@ export function OrdersSection() {
         </div>
       ) : orders.length > 0 ? (
         <>
-          <ul className="mt-3 space-y-3">
+          {/* Từ xl hai cột: một cột thẻ đơn kéo ngang gần 900px ở máy tính thì thưa và khó dò; nút "Xem chi tiết" dồn đáy để hai thẻ cùng hàng thẳng nút. */}
+          <ul className="mt-3 grid gap-3 xl:grid-cols-2">
             {orders.map((o) => (
-              <li key={o.code} className={`p-4 ${ui.card}`}>
+              <li key={o.code} className={`flex flex-col p-4 ${ui.card}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 break-all font-medium text-stone-900">#{o.code}</span>
                   <span className={`flex-none rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
@@ -187,7 +188,7 @@ export function OrdersSection() {
                     </Link>
                   </div>
                 )}
-                <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                   <Link href={orderDetailHref(o.code)} aria-label={`Xem chi tiết đơn ${o.code}`} className={`${ui.btnText} -ml-2 text-forest-700`}>
                     Xem chi tiết
                   </Link>

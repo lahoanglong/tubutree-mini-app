@@ -113,7 +113,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
                 <span aria-hidden style={{ ...TILE_FIT, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
                   <Icon icon={LayoutGrid} size="lg" tone="current" />
                 </span>
-                <Label>{homeCopy.categories.all}</Label>
+                <Label card>{homeCopy.categories.all}</Label>
               </button>
             )}
           </>
