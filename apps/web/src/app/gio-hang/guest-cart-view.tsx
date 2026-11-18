@@ -112,8 +112,8 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
           )}
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <div className="flex-[1000_1_0%]">
-              <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
-              <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
+              <div className="whitespace-nowrap text-label text-[color:var(--color-text-secondary)]">{totalLabel}</div>
+              <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-[color:var(--color-text-primary)]">
                 {formatVnd(total)}
               </div>
             </div>
@@ -155,7 +155,7 @@ function GuestLine({ row, retry }: { row: GuestCartRow; retry: { status: string;
           </Link>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex items-start gap-1">
-              <Link href={href} className="tubu-hit-44 min-w-0 flex-1 break-words text-sm font-medium text-stone-900 hover:underline">
+              <Link href={href} className="tubu-hit-44 min-w-0 flex-1 break-words text-sm font-medium text-[color:var(--color-text-primary)] hover:underline">
                 {name}
               </Link>
               <IconButton
@@ -181,7 +181,7 @@ function GuestLine({ row, retry }: { row: GuestCartRow; retry: { status: string;
               </p>
             )}
             {row.state === 'error' && retry?.refetch && (
-              <button type="button" onClick={retry.refetch} className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-forest-700 underline">
+              <button type="button" onClick={retry.refetch} className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-[color:var(--color-action-secondary-fg)] underline">
                 {fillCopy('guestCart.retry')}
               </button>
             )}
@@ -203,7 +203,7 @@ function GuestLine({ row, retry }: { row: GuestCartRow; retry: { status: string;
                 )}
               </div>
             )}
-            {buyable && row.quantity > 1 && <div className="text-caption tabular-nums text-stone-600">Thành tiền {formatVnd(row.total)}</div>}
+            {buyable && row.quantity > 1 && <div className="text-caption tabular-nums text-[color:var(--color-text-secondary)]">Thành tiền {formatVnd(row.total)}</div>}
           </div>
         </div>
       </Card>

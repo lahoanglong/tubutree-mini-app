@@ -107,8 +107,11 @@ describe('.github/workflows/ci.yml — báo cáo bundle miniapp (D6-08)', () => 
 describe('scripts/ci/bundle-budget.cjs', () => {
   const SCRIPT = join(REPO, 'scripts/ci/bundle-budget.cjs');
 
-  /** Thư mục build giả: entry JS `entryKb` KB, một chunk nhỏ, một CSS. Nội dung ngẫu nhiên để gzip không nén mất. */
-  function run(opts: { entryKb: number; chunkKb?: number; env?: Record<string, string>; noDir?: boolean }) {
+  /**
+   * Thư mục build giả: entry JS `entryKb` KB, một chunk nhỏ, một chunk game mini 2 KB (`noGameChunk` bỏ nó), một CSS. Nội dung ngẫu nhiên
+   * để gzip không nén mất. Bản build thật luôn có chunk `mini-*`, nên thiếu nó là một cảnh báo riêng.
+   */
+  function run(opts: { entryKb: number; chunkKb?: number; env?: Record<string, string>; noDir?: boolean; noGameChunk?: boolean }) {
     const dir = mkdtempSync(join(tmpdir(), 'tubu-bundle-'));
     const www = join(dir, 'www');
     if (!opts.noDir) {
@@ -116,6 +119,7 @@ describe('scripts/ci/bundle-budget.cjs', () => {
       const blob = (kb: number) => Buffer.from(Array.from({ length: kb * 1024 }, (_, i) => (i * 7919 + (i >> 3)) % 251));
       writeFileSync(join(www, 'assets/index.abc.module.js'), blob(opts.entryKb));
       writeFileSync(join(www, 'assets/product.def.js'), blob(opts.chunkKb ?? 10));
+      if (!opts.noGameChunk) writeFileSync(join(www, 'assets/mini-round-shell.ghi.js'), blob(2));
       writeFileSync(join(www, 'assets/index.abc.css'), blob(5));
     }
     const summary = join(dir, 'summary.md');
@@ -166,6 +170,14 @@ describe('scripts/ci/bundle-budget.cjs', () => {
     const { status, out } = run({ entryKb: 1, noDir: true });
     expect(status).toBe(0);
     expect(warnings(out).join('\n')).toMatch(/không thấy thư mục/);
+  });
+
+  it('không có chunk game mini (mini-*): đúng một cảnh báo riêng, vẫn thoát 0', () => {
+    const { status, out } = run({ entryKb: 100, noGameChunk: true, env: { MINIAPP_ENTRY_WARN_KB: '700', MINIAPP_TOTAL_WARN_KB: '2048' } });
+    expect(status).toBe(0);
+    const w = warnings(out);
+    expect(w).toHaveLength(1);
+    expect(w[0]).toMatch(/Không thấy chunk game mini \(mini-\*\)/);
   });
 
   it('ngưỡng sai dạng thì dùng mặc định, không thoát lỗi', () => {
