@@ -22,6 +22,7 @@ import { WEB_GUEST_CHECKOUT_ENABLED_KEY } from '../checkout/guest/guest-checkout
 import { PERF_RUM_ENABLED_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT, PERF_RUM_SAMPLE_PCT_KEY, normalizeSamplePct } from '../analytics/vitals/vitals-rules';
 import { REFILL_FIRST_ENABLED_KEY } from '../catalog/refill/refill-pairs';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
+import { REFERRAL_VIRAL_ENABLED_KEY } from '../referral/viral-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 /** Cờ Giờ Xanh Ưu Đãi (tubu-w3-06): chỉ đổi cách vẽ khối Giờ vàng ở Trang chủ và Ưu đãi, giá và suất vẫn của Giờ vàng. */
@@ -136,6 +137,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     perfRumSamplePct,
     refillFirst,
     wasteRepeatRequest,
+    referralViral,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -193,6 +195,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(REFILL_FIRST_ENABLED_KEY, false),
     // Như các cờ đổi rác khác: đọc lỗi thì tắt, phần còn lại của cấu hình công khai vẫn trả.
     config.get<unknown>(WASTE_REPEAT_REQUEST_KEY, false).catch(() => false),
+    config.get<unknown>(REFERRAL_VIRAL_ENABLED_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -289,6 +292,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     refillFirstEnabled: refillFirst === true,
     // Thẻ "Gửi lại như lần trước" ở màn Đổi rác; tắt hay API cũ thì màn như trước, không đọc danh sách yêu cầu.
     wasteRepeatRequestEnabled: wasteRepeatRequest === true,
+    // Thẻ thành tích Sổ tay Xanh kèm link mời (`GET /me/green-card`) và thưởng đơn đầu cho cả hai phía; tắt hay API cũ thì app không gọi endpoint đó.
+    referralViralEnabled: referralViral === true,
   };
 }
 

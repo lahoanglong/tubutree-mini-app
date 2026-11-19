@@ -4,6 +4,7 @@ import {
   CHECKOUT_LAST_STEPS,
   CHECKOUT_STEPS,
   ECO_FACT_KIND_NAMES,
+  GREEN_CARD_SHARE_METHODS,
   MATCHER_ENTRIES,
   isShareableSearchTerm,
   ORDER_ZALO_FRIEND_FROM,
@@ -158,6 +159,8 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   refill_swap_shown: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
   refill_swap_applied: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
   refill_swap_undone: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
+  // Thẻ thành tích ở Sổ tay Xanh: chỉ cách gửi, không mang mã mời (mã mời chỉ ra người mời).
+  green_card_shared: { props: { method: oneOf(GREEN_CARD_SHARE_METHODS) }, required: ['method'] },
 };
 
 /**

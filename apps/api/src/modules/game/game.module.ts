@@ -54,6 +54,7 @@ import { FeedModule } from '../feed/feed.module';
     // Đố Xanh xong là điểm danh: dùng lại đúng luồng điểm danh gộp (không trạng thái, phụ thuộc đều có trong module này hoặc global).
     DailyCheckInService,
   ],
-  exports: [GameService, GameEconomyService, GameOrderWaterService],
+  // GameAlbumService: thẻ thành tích ở modules/referral đọc số thẻ đã mở của Sổ tay Xanh.
+  exports: [GameService, GameEconomyService, GameOrderWaterService, GameAlbumService],
 })
 export class GameModule {}

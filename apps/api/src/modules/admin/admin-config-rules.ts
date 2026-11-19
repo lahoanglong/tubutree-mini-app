@@ -18,6 +18,15 @@ import { MINI_ENABLED_KEY, MINI_NUMERIC_SETTINGS, miniGameFlagKey } from '../gam
 import { MINI_GAME_IDS } from '@tubutree/shared-types';
 import { POPULAR_FALLBACK_MAX, SEARCH_POPULAR_FLAG, SEARCH_POPULAR_TERMS_KEY, isPopularCandidate } from '../catalog/search-popular.service';
 import { SEARCH_FUZZY_FLAG } from '../catalog/search-fuzzy';
+import {
+  REFERRAL_FIRST_ORDER_MIN_KEY,
+  REFERRAL_FIRST_ORDER_MIN_MAX,
+  REFERRAL_FIRST_ORDER_POINTS_KEY,
+  REFERRAL_FIRST_ORDER_POINTS_MAX,
+  REFERRAL_MONTHLY_CAP_KEY,
+  REFERRAL_MONTHLY_CAP_MAX,
+  REFERRAL_VIRAL_ENABLED_KEY,
+} from '../referral/viral-config';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -235,6 +244,11 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'orders.timeline_v2_enabled': assertBoolean,
   'orders.tracking_stale_hours': (k, v) => assertIntInRange(k, v, 1, 720, 'giờ'),
   'referral.share_card_enabled': assertBoolean,
+  // Cùng biên với lúc đọc (referral/viral-config.ts): admin không lưu được số mà máy chủ sẽ lặng lẽ đổi về mặc định.
+  [REFERRAL_VIRAL_ENABLED_KEY]: assertBoolean,
+  [REFERRAL_FIRST_ORDER_POINTS_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_FIRST_ORDER_POINTS_MAX, 'Điểm Xanh'),
+  [REFERRAL_FIRST_ORDER_MIN_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_FIRST_ORDER_MIN_MAX, 'đ'),
+  [REFERRAL_MONTHLY_CAP_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_MONTHLY_CAP_MAX, 'lần/tháng'),
   [MINI_ENABLED_KEY]: assertBoolean,
   ...Object.fromEntries(MINI_GAME_IDS.map((g) => [miniGameFlagKey(g), assertBoolean])),
   // Cùng biên máy chủ kẹp khi đọc (game-mini.settings.ts): admin không lưu được giá trị mà máy chủ sẽ lặng lẽ đổi.

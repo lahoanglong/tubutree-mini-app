@@ -13,6 +13,8 @@ import type { MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniClock, miniProgressLabel } from '@tubutree/app-core/game-mini/format';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { referralViralOn } from '@tubutree/app-core/referral/green-card';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { Button, Chip, EmptyState, ScrollRow, Text } from '@/components/mini';
 import { ErrorState } from '@/components/ui/error-state';
@@ -29,6 +31,8 @@ const skeleton = () => <Skeleton height={240} />;
 const Quiz = dynamic(() => import('@/components/game/mini/mini-daily-quiz'), { ssr: false, loading: skeleton });
 const ResultView = dynamic(() => import('@/components/game/mini/mini-round-shell').then((m) => m.ResultView), { ssr: false, loading: skeleton });
 const CardSheet = dynamic(() => import('./album-card-sheet'), { ssr: false });
+// Thẻ thành tích kèm link mời (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật.
+const GreenCardBlock = dynamic(() => import('@/components/referral/green-card'), { ssr: false });
 
 const round = (phase: RoundState['phase'], r: MiniStartResponse | null = null, answers: unknown[] | null = null, result: MiniSubmitResponse | null = null): RoundState => ({
   phase,
@@ -53,6 +57,7 @@ export function AlbumScreen() {
   const router = useRouter();
   const phase = useAuthPhase();
   const q = useQuery({ ...albumQuery(coreHttp, false), enabled: phase === 'authenticated' });
+  const viral = referralViralOn(useQuery({ ...publicConfigQuery(coreHttp), enabled: phase === 'authenticated' }).data);
   const [rv, setRv] = useState<RoundState | null>(null);
   const [filter, setFilter] = useState<AlbumFilter>('all');
   const [open, setOpen] = useState<AlbumCard | null>(null);
@@ -170,6 +175,7 @@ export function AlbumScreen() {
               </li>
             ))}
           </ul>
+          {viral && <GreenCardBlock actions />}
           {open && <CardSheet card={open} onClose={() => setOpen(null)} />}
         </>
       );

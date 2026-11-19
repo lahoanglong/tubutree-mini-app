@@ -21,6 +21,7 @@ import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { EcoImpactModule } from './modules/eco-impact/eco-impact.module';
+import { ReferralModule } from './modules/referral/referral.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { GuestCheckoutModule } from './modules/checkout/guest/guest-checkout.module';
@@ -93,6 +94,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     UsersModule,
     CatalogModule,
     EcoImpactModule,
+    ReferralModule,
     CartModule,
     CheckoutModule,
     GuestCheckoutModule,

@@ -2054,14 +2054,16 @@ describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER,
   }
   function makeCoins() {
     const grantReferralOrderReward = jest.fn().mockResolvedValue(true);
-    return { svc: { grantReferralOrderReward } as unknown as RewardPointsService, grantReferralOrderReward };
+    const grantReferralFirstOrderReward = jest.fn().mockResolvedValue({ status: 'SKIPPED', reason: 'OFF' });
+    return { svc: { grantReferralOrderReward, grantReferralFirstOrderReward } as unknown as RewardPointsService, grantReferralOrderReward, grantReferralFirstOrderReward };
   }
 
-  it('đơn lẻ giao xong → xét thưởng xu cho người mời của chủ đơn, KHÔNG tạo voucher', async () => {
+  it('đơn lẻ giao xong → xét thưởng xu cho người mời của chủ đơn và thưởng đơn đầu theo đơn, KHÔNG tạo voucher', async () => {
     const { prisma, couponCreate } = makePrisma({ userId: 'referee', type: 'RETAIL', placedForCustomer: false });
     const c = makeCoins();
     await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
     expect(c.grantReferralOrderReward).toHaveBeenCalledWith('referee');
+    expect(c.grantReferralFirstOrderReward).toHaveBeenCalledWith('o1');
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
@@ -2070,6 +2072,7 @@ describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER,
     const c = makeCoins();
     await new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1');
     expect(c.grantReferralOrderReward).not.toHaveBeenCalled();
+    expect(c.grantReferralFirstOrderReward).not.toHaveBeenCalled();
   });
 
   it('đơn đại lý → không xét thưởng giới thiệu', async () => {

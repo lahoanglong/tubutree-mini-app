@@ -1362,7 +1362,7 @@ export class AdminService {
     ]);
     // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
     // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
-    const data = items.map(({ guestTokenHash: _token, guestIpHash: _ip, user, ...o }) => {
+    const data = items.map(({ guestTokenHash: _token, guestIpHash: _ip, placedIpHash: _placedIp, user, ...o }) => {
       const dealerOnCredit = o.type === 'DEALER' ? onCredit.has(o.id) : undefined;
       const retry = o.pancakeOrderId ? null : pushRetryGateDecision(o);
       return {

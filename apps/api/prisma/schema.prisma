@@ -1250,6 +1250,9 @@ model Order {
   guestTokenHash         String?
   /// HMAC của IP lúc đặt đơn vãng lai (common/ip-hash.ts, mục đích guest-checkout): đếm trần đơn mỗi IP mỗi ngày, không lưu IP thô.
   guestIpHash            String?
+  /// HMAC của IP lúc đặt mọi đơn qua checkout (cùng mã băm với guestIpHash, flash-buyer-keys.ts): thưởng đơn đầu của chương trình giới thiệu
+  /// chặn cặp người mời và bạn được mời đặt từ cùng IP trong 24 giờ (modules/referral). Không lưu IP thô; null ở đơn cũ và đơn không qua checkout.
+  placedIpHash           String?
   /// Khoá giới hạn Giờ vàng phụ mà lần đặt này đã trừ (flash-buyer-keys.ts: SĐT đã băm, IP đã băm). Huỷ/trả đơn hoàn đúng các khoá này.
   /// Rỗng: người mua là khách thật, đơn không có món Giờ vàng, hay đơn đặt trước khi có khoá phụ.
   flashLimitKeys         String[]              @default([])

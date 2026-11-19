@@ -53,6 +53,14 @@ describe('danh sách điều khiển', () => {
     expect(num('shipping.free_threshold').needsRow).toBeUndefined();
   });
 
+  it('thưởng đơn đầu mời bạn: công tắc tắt sẵn, biên trùng máy chủ (referral/viral-config.ts), mức chuẩn 100 điểm và 199.000đ', () => {
+    const viral = sw('growth.referral_viral_enabled');
+    expect([viral.fallback, viral.needsRow]).toEqual([false, true]);
+    expect([num('growth.referral_first_order_points').max, num('growth.referral_first_order_points').standard]).toEqual([10_000, 100]);
+    expect([num('growth.referral_first_order_min').max, num('growth.referral_first_order_min').standard]).toEqual([100_000_000, 199_000]);
+    expect([num('growth.referral_monthly_cap').min, num('growth.referral_monthly_cap').max, num('growth.referral_monthly_cap').fallback]).toEqual([0, 1_000, 10]);
+  });
+
   it('biên trần game trùng biên máy chủ kẹp (game-mini.settings.ts)', () => {
     expect([num('game.mini.points_daily_cap').min, num('game.mini.points_daily_cap').max]).toEqual([0, 500]);
     expect([num('game.mini.global_points_daily_budget').min, num('game.mini.global_points_daily_budget').max]).toEqual([0, 1_000_000]);

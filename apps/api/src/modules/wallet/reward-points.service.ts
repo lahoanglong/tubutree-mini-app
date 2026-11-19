@@ -6,6 +6,7 @@ import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from '../loyalty/points
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from './referral-notify';
+import { grantFirstOrderReferralReward, type FirstOrderOutcome } from '../referral/first-order-reward';
 import {
   countReferralSuccesses,
   findReferralRewardedOrders,
@@ -307,6 +308,27 @@ export class RewardPointsService {
     // (cron chạy lại việc sau giao) là cơ hội duy nhất để cấp bù. Mốc idempotent theo reason từng đời.
     if (granted === true || granted === 'ALREADY') await this.awardReferralMilestones(referrerId);
     return granted === true;
+  }
+
+  /**
+   * Thưởng đơn đầu (cờ growth.referral_viral_enabled): cả người mời và bạn được mời nhận Điểm Xanh khi đơn giao thành công đầu tiên
+   * đạt mốc của bạn được mời là `orderId`, sau các luật chống tự giới thiệu ở referral/first-order-guard.ts. Gọi mỗi khi một đơn sang
+   * DELIVERED; idempotent theo người được mời. Cặp bị chặn chỉ ghi log (không tên, không SĐT).
+   */
+  async grantReferralFirstOrderReward(orderId: string): Promise<FirstOrderOutcome> {
+    const outcome = await grantFirstOrderReferralReward(
+      {
+        prisma: this.prisma,
+        config: this.config,
+        grant: (userId, points, reason, refType, refId, tx, expiresAt) => this.grant(userId, points, reason, refType, refId, tx, expiresAt),
+        expiresAt: () => this.expiresAt(),
+      },
+      orderId,
+    );
+    if (outcome.status === 'BLOCKED' || (outcome.status === 'SKIPPED' && outcome.reason === 'CAPPED')) {
+      this.logger.warn(`Thưởng đơn đầu không cấp cho đơn ${orderId}: ${outcome.reason}`);
+    }
+    return outcome;
   }
 
   /**

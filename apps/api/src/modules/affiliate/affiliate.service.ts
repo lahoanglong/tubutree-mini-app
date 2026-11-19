@@ -1208,6 +1208,8 @@ export class AffiliateService {
     });
     if (order.type !== 'RETAIL' || order.placedForCustomer) return;
     await this.rewards.grantReferralOrderReward(order.userId);
+    // Thưởng đơn đầu cho cả hai phía (cờ growth.referral_viral_enabled, tự xét đơn này có phải đơn đầu đạt mốc không).
+    await this.rewards.grantReferralFirstOrderReward(orderId);
   }
 
   /**

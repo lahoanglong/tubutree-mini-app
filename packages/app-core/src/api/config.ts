@@ -95,6 +95,8 @@ export interface PublicConfig {
   refillFirstEnabled?: boolean;
   /** Cờ `waste.repeat_request_enabled`: thẻ "Gửi lại như lần trước" ở màn Đổi rác. Thiếu khi API cũ → tắt, màn như trước. */
   wasteRepeatRequestEnabled?: boolean;
+  /** Cờ `growth.referral_viral_enabled`: thẻ thành tích Sổ tay Xanh (`GET /me/green-card`) và thưởng đơn đầu cho cả hai phía. API cũ chưa trả. */
+  referralViralEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

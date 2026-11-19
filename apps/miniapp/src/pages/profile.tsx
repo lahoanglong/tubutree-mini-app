@@ -1,6 +1,6 @@
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bell, Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Store, Settings, Info, ChevronDown, ChevronRight, Copy, Share2, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, CreditCard, Package, Truck, PackageCheck, Recycle, Gift, Ticket, CircleHelp, type LucideIcon,
@@ -14,6 +14,7 @@ import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/sh
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { buildProfileMenu, PROFILE_MENU_COPY, PROFILE_ORDER_ROW, type ProfileLinkKey, type ProfileMenuLink, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
+import { referralViralOn } from '@tubutree/app-core/referral/green-card';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getReferral, getWallet } from '../services/account-api';
 import { ProfileAvatar } from '../components/account/profile-avatar';
@@ -46,6 +47,7 @@ import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
 import { miniAppLink } from '../utils/miniapp-link';
+import { SilentBoundary } from '../components/route-shell';
 
 const PAGE_TITLE = 'Cá nhân';
 
@@ -84,6 +86,9 @@ const ORDER_ROW_ICON: Record<string, LucideIcon> = {
 };
 
 const DIVIDER = '1px solid var(--color-border-subtle)';
+
+// Dòng thành tích xanh trong khối mời (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật và khối mời mở.
+const GreenCardBlock = lazy(() => import('../components/referral/green-card'));
 
 /** Mỗi lần khối mời mở và có dòng tiến độ (chỉ số đếm, không tên) thì báo `invite_progress_viewed`. */
 function InviteProgressViewed() {
@@ -296,6 +301,13 @@ export default function ProfilePage() {
       <Text variant="body-sm" tone="secondary" as="p">
         {inviteBody(welcomeOffer, referralRules, earnsPoints)}
       </Text>
+      {referralViralOn(cfg) && (
+        <SilentBoundary>
+          <Suspense fallback={null}>
+            <GreenCardBlock actions={false} />
+          </Suspense>
+        </SilentBoundary>
+      )}
       {(progress || (referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0))) && (
         <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }} data-testid={progress ? 'invite-progress' : undefined}>
           {progress ?? (referral ? homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints)) : null)}

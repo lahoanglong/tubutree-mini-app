@@ -690,6 +690,8 @@ export class CheckoutService {
                 source: orderSource,
                 platform,
                 ...(guest ? { guestPhone: guest.phone, guestTokenHash: guest.tokenHash, guestIpHash: guest.ipHash } : {}),
+                // IP đã băm của mọi lần đặt (vãng lai lẫn đã đăng nhập): thưởng đơn đầu của chương trình giới thiệu so IP người mời và bạn được mời.
+                placedIpHash: guest ? guest.ipHash : buyerIpHash,
                 // Khoá phụ đã trừ ở consumeFlashQuotas: huỷ/trả đơn hoàn đúng các khoá này (không suy lại từ người mua lúc huỷ).
                 ...(flashLines.length > 0 && flashLimitKeys.length > 0 ? { flashLimitKeys: [...flashLimitKeys] } : {}),
                 paidAt: paid ? new Date() : null,

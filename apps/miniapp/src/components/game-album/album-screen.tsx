@@ -10,8 +10,10 @@ import type { MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniClock, miniProgressLabel, sourceHost } from '@tubutree/app-core/game-mini/format';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
+import { referralViralOn } from '@tubutree/app-core/referral/green-card';
 import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
+import { usePublicConfig } from '../../hooks/use-public-config';
 import { vi } from '../../i18n/vi';
 import { useSmartNavigate } from '../../lib/smart-nav';
 import { getLoadErrorMessage } from '../../services/api';
@@ -34,6 +36,8 @@ import './album.css';
 const Quiz = lazy(() => import('../game/mini/mini-daily-quiz'));
 const MiniResult = lazy(() => import('../game/mini/mini-result'));
 const Learned = lazy(() => import('../game/mini/mini-result-cart').then((m) => ({ default: m.LearnedProducts })));
+// Thẻ thành tích kèm link mời (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật.
+const GreenCardBlock = lazy(() => import('../referral/green-card'));
 
 const round = (phase: RoundState['phase'], r: MiniStartResponse | null = null, answers: unknown[] | null = null, result: MiniSubmitResponse | null = null): RoundState => ({
   phase,
@@ -95,6 +99,7 @@ export function AlbumScreen() {
   const navigate = useSmartNavigate();
   const login = useLoginWithNotice();
   const phase = useAuthPhase();
+  const viral = referralViralOn(usePublicConfig());
   const q = useQuery({ ...albumQuery(coreHttp, false), enabled: phase === 'authenticated' });
   const [rv, setRv] = useState<RoundState | null>(null);
   const [filter, setFilter] = useState<AlbumFilter>('all');
@@ -212,6 +217,13 @@ export function AlbumScreen() {
               </li>
             ))}
           </ul>
+          {viral && (
+            <SilentBoundary>
+              <Suspense fallback={null}>
+                <GreenCardBlock actions />
+              </Suspense>
+            </SilentBoundary>
+          )}
           <BottomSheet open={open !== null} onClose={() => setOpen(null)} title={albumCopy('title')}>
             {open && (
               <div className="album-sheet" data-testid="album-card-sheet">
