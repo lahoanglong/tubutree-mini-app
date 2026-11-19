@@ -344,6 +344,8 @@ export interface PublicConfig {
   pdpEtaEnabled?: boolean;
   /** Lịch kho của ngày nhận dự kiến: cùng nghĩa với `PublicConfig.deliverySchedule` ở app-core. Thiếu khi API cũ → dùng `shippingEta`. */
   deliverySchedule?: DeliverySchedule;
+  /** Cờ `growth.referral_viral_enabled`: cùng nghĩa với `PublicConfig.referralViralEnabled` ở app-core. Thiếu khi API cũ → tắt. */
+  referralViralEnabled?: boolean;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
