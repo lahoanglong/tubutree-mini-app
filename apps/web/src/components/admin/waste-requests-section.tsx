@@ -129,13 +129,13 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
     enabled: view === 'queue',
   });
   const lookup = useMutation({ mutationFn: (c: string) => lookupWasteRequests(c), meta: { skipAdminInvalidate: true } });
-  // Kết quả tra mã là một lần gọi, không nằm trong cache truy vấn: nút một chạm xong thì tra lại để dòng đổi trạng thái theo.
-  const quick = useWasteQuickActions(setOpenId, () => {
-    if (lookup.isSuccess && lookup.variables) lookup.mutate(lookup.variables);
-  });
+  // Kết quả tra mã là một lần gọi, không nằm trong cache: nút một chạm xong thì vá dòng tại chỗ. Không tra lại, vì mã đơn/vận đơn chỉ
+  // khớp yêu cầu chưa xong: tra lại sau khi cộng điểm sẽ ra 404 và ghi một LOOKUP_MISS dưới tên nhân viên.
+  const [lookupPatch, setLookupPatch] = useState<Record<string, Partial<AdminWasteRequestRowDTO>>>({});
+  const quick = useWasteQuickActions(setOpenId, (id, patch) => setLookupPatch((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } })));
 
   const queueRows = (queue.data?.pages ?? []).flatMap((p) => p.rows);
-  const lookupRows = lookup.data ?? [];
+  const lookupRows = (lookup.data ?? []).map((r) => (lookupPatch[r.id] ? { ...r, ...lookupPatch[r.id] } : r));
 
   const choosePreset = (key: WasteQueuePreset) => {
     setCustomerOn(false);
@@ -156,7 +156,9 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
   };
   const submitLookup = () => {
     const c = code.trim();
-    if (c && !lookup.isPending) lookup.mutate(c);
+    if (!c || lookup.isPending) return;
+    setLookupPatch({});
+    lookup.mutate(c);
   };
 
   return (

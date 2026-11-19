@@ -108,7 +108,7 @@ test.describe('Admin — bàn vận hành đơn (w7-03)', () => {
 const ROW: AdminWasteRequestRowDTO = {
   id: 'wr-1',
   code: 'TR-7K3M9Q',
-  method: 'DROP_OFF',
+  method: 'MAIL_IN',
   status: 'RECEIVED',
   closeReason: null,
   createdAt: '2026-11-18T02:00:00.000Z',
@@ -134,7 +134,7 @@ const PICK_ROW: AdminWasteRequestRowDTO = { ...ROW, id: 'wr-2', code: 'TR-PICK22
 const DETAIL = {
   id: 'wr-1',
   code: 'TR-7K3M9Q',
-  method: 'DROP_OFF',
+  method: 'MAIL_IN',
   status: 'RECEIVED',
   point: { id: 'pt-hcm', name: 'Kho Tubu HCM', kind: 'WAREHOUSE' },
   lines: [

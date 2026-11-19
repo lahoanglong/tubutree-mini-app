@@ -287,6 +287,8 @@ export class WasteAdminRequestsService {
       orderBy: phone ? [{ createdAt: 'desc' }, { id: 'desc' }] : [{ createdAt: 'asc' }, { id: 'asc' }],
       take: 20,
     });
+    // A phone with no requests is a customer lookup, not a parcel the warehouse failed to find: it stays out of the LOOKUP_MISS alert.
+    if (rows.length === 0 && phone) throw new NotFoundException(NOT_FOUND);
     if (rows.length === 0) {
       await writeWasteEvent(this.prisma, {
         kind: 'LOOKUP_MISS',

@@ -1228,14 +1228,15 @@ export class AdminService {
    * bị huỷ (cron chạy mỗi 10 phút, đơn có khoản chưa gắn được giữ thêm, đơn đã bàn giao thôi tự huỷ).
    */
   async orderOpsCounts(
-    f: Omit<AdminOrderFilterInput, 'status'>,
+    f: AdminOrderFilterInput,
     viewer: OrderActor = { role: 'ADMIN' },
     now: Date = new Date(),
   ): Promise<{ guestWeb: number; guestWebUnmerged: number; bankTransferPending: number; bankTransferOverdue: number; overdueCancelled: number; ttlHours: number }> {
-    const { queue: _queue, guest: _guest, ...rest } = f;
+    const { queue, guest: _guest, status, ...rest } = f;
     const exactPhoneOnly = !seesFullOrderPhones(viewer);
+    // Bấm ô vãng lai giữ trạng thái và hàng đợi đang chọn, nên số của ô đếm theo chúng; hai ô CK tự đặt trạng thái riêng nên bỏ qua.
     const [noGuest, withGuest, overdueWhere, ttlHours] = await Promise.all([
-      this.adminOrderWhere({ ...rest, guest: 'web' }, { exactPhoneOnly }),
+      this.adminOrderWhere({ ...rest, ...(status ? { status } : {}), ...(queue ? { queue } : {}), guest: 'web' }, { exactPhoneOnly }),
       this.adminOrderWhere(f.guest ? { ...rest, guest: f.guest } : rest, { exactPhoneOnly }),
       this.adminOrderWhere({ ...rest, ...(f.guest ? { guest: f.guest } : {}), queue: 'bank_transfer_overdue_cancelled' }, { exactPhoneOnly }),
       readPendingPaymentTtlHours(this.config),
@@ -1245,7 +1246,8 @@ export class AdminService {
       this.prisma.order.count({ where: noGuest }),
       this.prisma.order.count({ where: { AND: [noGuest, { user: { phone: null, zaloId: { startsWith: 'guest_' } } }] } }),
       this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE] } }),
-      this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: cutoff } }] } }),
+      // Đơn đã thôi tự huỷ (autoCancelBlockedAt) không có hạn CK trên dòng đơn (pendingPaymentDeadline trả null): không tính là quá hạn.
+      this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: cutoff }, autoCancelBlockedAt: null }] } }),
       this.prisma.order.count({ where: overdueWhere }),
     ]);
     return { guestWeb, guestWebUnmerged, bankTransferPending, bankTransferOverdue, overdueCancelled, ttlHours };

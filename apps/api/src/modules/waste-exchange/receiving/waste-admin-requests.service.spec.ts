@@ -466,10 +466,11 @@ describe('WasteAdminRequestsService.lookup', () => {
     expect(JSON.stringify(arg.where.OR)).not.toContain('"phone"');
   });
 
-  it('a missed phone lookup never stores the number in the LOOKUP_MISS event', async () => {
+  it('a full phone with no requests 404s without a LOOKUP_MISS event (customer lookup, not a lost parcel)', async () => {
     const { service } = adminSetup({ rows: [] });
+    (writeWasteEvent as jest.Mock).mockClear();
     await expect(service.lookup('s1', '0901234567')).rejects.toThrow(NotFoundException);
-    expect(JSON.stringify((writeWasteEvent as jest.Mock).mock.calls.at(-1))).not.toContain('0901234567');
+    expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
   it('masks the customer for STAFF', async () => {

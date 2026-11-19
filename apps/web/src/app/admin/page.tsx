@@ -1489,11 +1489,12 @@ function OrdersTab({
       getOrderStatusCounts({ search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
     enabled: !badRange,
   });
-  // Ô KPI đầu tab: cùng bộ lọc danh sách trừ trạng thái/hàng đợi (API tự bỏ), khoá dưới 'admin-orders' để làm mới cùng danh sách.
+  // Ô KPI đầu tab: cùng bộ lọc danh sách; ô vãng lai đếm theo trạng thái đang chọn, hai ô chuyển khoản tự bỏ trạng thái/hàng đợi
+  // (API lo). Khoá dưới 'admin-orders' để làm mới cùng danh sách.
   const opsCountsQ = useQuery({
-    queryKey: ['admin-orders', 'ops-counts', search, recycling, invoice, pancake, from, to, orderExtraFilters(extra)],
+    queryKey: ['admin-orders', 'ops-counts', status, search, recycling, invoice, pancake, from, to, orderExtraFilters(extra)],
     queryFn: () =>
-      getOrderOpsCounts({ search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
+      getOrderOpsCounts({ status: status || undefined, search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
     enabled: !badRange,
   });
   // Chưa có dữ liệu (đang tải, lỗi, khoảng ngày sai) thì không có số: in "(0)" sẽ bị đọc nhầm thành hết đơn.

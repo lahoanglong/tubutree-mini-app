@@ -18,9 +18,11 @@ import { canCountRequest, wastePointsForLines } from './waste-request-detail';
 export const canQuickReceive = (r: AdminWasteRequestRowDTO) =>
   r.method === 'PICKUP' && r.status === 'OPEN' && r.orderCode !== null && r.waitingReason === null;
 
-/** Dòng có thể đã tới bước đếm: kho đã nhận, hay khách mang tới (máy chủ còn kiểm điểm nhận là kho khi mở chi tiết). */
-export const canQuickCount = (r: AdminWasteRequestRowDTO) =>
-  r.status === 'RECEIVED' || (r.method === 'DROP_OFF' && r.status === 'OPEN' && r.waitingReason === null);
+/**
+ * Chỉ kiện kho đã nhận. Mang tới kho còn mở thì chưa chắc khách đã tới (máy chủ không đối chiếu gì với DROP_OFF), nên vẫn đếm tay
+ * ở chi tiết: bấm nhầm ở hàng "Chờ tiếp nhận" sẽ cộng điểm cho túi chưa ai nhận.
+ */
+export const canQuickCount = (r: AdminWasteRequestRowDTO) => r.status === 'RECEIVED';
 
 export type QuickFlash = { tone: 'success' | 'warning' | 'danger'; text: string };
 
@@ -33,7 +35,7 @@ const declaredSummary = (d: WasteRequestAdminDetailDTO) => d.lines.map((l) => `$
  * Nút một chạm trên dòng yêu cầu: "Nhận kiện" cho túi thu kèm đơn và "Cộng điểm" theo đúng số khách khai. Món nguy hại, dòng chưa
  * đếm được hay yêu cầu không có dòng hàng thì mở chi tiết để đếm tay, không cộng điểm thẳng.
  */
-export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: () => void) {
+export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: (id: string, patch: Partial<AdminWasteRequestRowDTO>) => void) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -41,11 +43,12 @@ export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: () =
   // React Query re-renders only after a zero-delay timer, so a second synchronous click still sees the button enabled.
   const inFlight = useRef(false);
 
+  // Lỗi 409 (đã có người xử lý) hay kiện vào hàng không rõ chủ cũng đổi dữ liệu: làm mới cả khi thao tác không thành.
   const refresh = (id: string) => {
     void qc.invalidateQueries({ queryKey: ['admin-waste-request', id] });
     void qc.invalidateQueries({ queryKey: ['admin-waste-requests'] });
+    void qc.invalidateQueries({ queryKey: ['admin-waste-unmatched'] });
     void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
-    onDone?.();
   };
 
   const run = async (r: AdminWasteRequestRowDTO, work: () => Promise<boolean>) => {
@@ -57,6 +60,7 @@ export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: () =
       if (await work()) refresh(r.id);
     } catch (e) {
       setFlash({ tone: 'danger', text: `${r.code}: ${actionErrorText(e)}` });
+      refresh(r.id);
     } finally {
       inFlight.current = false;
       setBusyId(null);
@@ -72,15 +76,20 @@ export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: () =
       });
       if (!ok) return false;
       const res = await receiveWasteRequest(r.id, {});
-      if (res.outcome === 'RECEIVED') setFlash({ tone: 'success', text: `Đã nhận ${r.code} lúc ${formatDateTime(res.receivedAt).slice(0, 5)}.` });
-      else if (res.outcome === 'ALREADY_RECEIVED') setFlash({ tone: 'warning', text: `${r.code} đã được nhận lúc ${formatDateTime(res.receivedAt).slice(0, 5)}.` });
-      else setFlash({ tone: 'warning', text: `${WASTE_UNMATCHED_REASON_LABELS[res.reason]}: kiện ${r.code} đã chuyển vào hàng không rõ chủ` });
+      if (res.outcome === 'UNMATCHED') {
+        setFlash({ tone: 'warning', text: `${WASTE_UNMATCHED_REASON_LABELS[res.reason]}: kiện ${r.code} đã chuyển vào hàng không rõ chủ` });
+        return true;
+      }
+      const at = formatDateTime(res.receivedAt).slice(0, 5);
+      setFlash(res.outcome === 'RECEIVED' ? { tone: 'success', text: `Đã nhận ${r.code} lúc ${at}.` } : { tone: 'warning', text: `${r.code} đã được nhận lúc ${at}.` });
+      onDone?.(r.id, { status: 'RECEIVED', receivedAt: res.receivedAt, waitingReason: null });
       return true;
     });
 
   const count = (r: AdminWasteRequestRowDTO) =>
     run(r, async () => {
-      const d = await qc.fetchQuery({ queryKey: ['admin-waste-request', r.id], queryFn: () => getWasteRequest(r.id) });
+      // staleTime 0: hộp thoại phải dựa trên trạng thái mới nhất, không phải bản 30 giây trong cache admin.
+      const d = await qc.fetchQuery({ queryKey: ['admin-waste-request', r.id], queryFn: () => getWasteRequest(r.id), staleTime: 0 });
       const manual = !canCountRequest(d)
         ? 'chưa tới bước đếm ở kho'
         : d.lines.length === 0
@@ -101,6 +110,7 @@ export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: () =
       if (!ok) return false;
       const res = await confirmWasteRequest(r.id, { lines: d.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty, receivedQty: l.declaredQty })) });
       setFlash({ tone: 'success', text: `Đã cộng ${formatCount(res.pointsAwarded)} điểm cho ${r.code}.` });
+      onDone?.(r.id, { status: 'COMPLETED', pointsAwarded: res.pointsAwarded });
       return true;
     });
 

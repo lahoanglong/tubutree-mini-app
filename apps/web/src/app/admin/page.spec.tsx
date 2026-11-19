@@ -4976,7 +4976,7 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     expect(lastArgs()[9]).toEqual({});
   });
 
-  it('w7-03: ô KPI đầu tab đọc số từ GET orders/ops-counts cùng bộ lọc (trừ trạng thái), số dạng tabular-nums; lỗi thì hiện "—" chứ không in 0', async () => {
+  it('w7-03: ô KPI đầu tab đọc số từ GET orders/ops-counts cùng bộ lọc kể cả trạng thái (ô vãng lai đếm theo nó), số dạng tabular-nums; lỗi thì hiện "—" chứ không in 0', async () => {
     window.history.replaceState(null, '', '/admin?tab=orders&status=CONFIRMED&invoice=pending');
     const { container } = await mount();
     const strip = container.querySelector('[data-order-ops]')!;
@@ -4984,8 +4984,7 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     expect(tile(container, 'guest').textContent).toBe('Khách vãng lai (Web)52 chưa gộp Zalo');
     expect(tile(container, 'overdueCancelled').textContent).toBe('Tự huỷ quá hạn CK 24h4');
     expect(tile(container, 'guest').querySelector('.tabular-nums')).not.toBeNull();
-    expect(mocks.opsCountsCalls.at(-1)![0]).toEqual(expect.objectContaining({ invoice: 'pending' }));
-    expect(mocks.opsCountsCalls.at(-1)![0]).not.toHaveProperty('status');
+    expect(mocks.opsCountsCalls.at(-1)![0]).toEqual(expect.objectContaining({ invoice: 'pending', status: 'CONFIRMED' }));
 
     document.body.innerHTML = '';
     mocks.opsCountsMode = 'fail';

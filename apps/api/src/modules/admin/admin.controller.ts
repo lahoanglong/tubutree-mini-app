@@ -405,6 +405,11 @@ export class OrderStatusCountsQuery {
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
 
+/** Số ô KPI đầu tab Đơn hàng: bộ lọc danh sách kèm trạng thái đang chọn (ô vãng lai đếm theo nó, hai ô chuyển khoản bỏ qua). */
+export class OrderOpsCountsQuery extends OrderStatusCountsQuery {
+  @IsOptional() @IsIn([...ADMIN_ORDER_STATUSES]) status?: (typeof ADMIN_ORDER_STATUSES)[number];
+}
+
 export class ExportUsersQuery {
   @IsOptional() @Trim() @IsString() @MaxLength(100) search?: string;
   /** `guests=1`: xuất cả phiên khách vãng lai (mặc định chỉ tài khoản thật, như danh sách). */
@@ -627,7 +632,7 @@ export class AdminController {
    */
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders/ops-counts')
-  orderOpsCounts(@Query() q: OrderStatusCountsQuery, @CurrentUser() viewer: JwtPayload) {
+  orderOpsCounts(@Query() q: OrderOpsCountsQuery, @CurrentUser() viewer: JwtPayload) {
     return this.admin.orderOpsCounts(q, viewer);
   }
 

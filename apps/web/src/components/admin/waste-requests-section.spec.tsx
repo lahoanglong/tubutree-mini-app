@@ -530,7 +530,11 @@ describe('WasteRequestsSection', () => {
     expect(sent).toHaveLength(1);
     expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({});
     expect(c.textContent).toContain('Đã nhận TR-PICK99 lúc 09:05.');
-    expect(api.calls.filter((x) => x.url.includes('/admin/waste/requests/lookup'))).toHaveLength(2);
+    // Vá dòng tại chỗ, không tra lại (tra lại yêu cầu đã xong ra 404 và ghi LOOKUP_MISS).
+    expect(api.calls.filter((x) => x.url.includes('/admin/waste/requests/lookup'))).toHaveLength(1);
+    expect(lookupRow(c, 'r9').textContent).toContain('Kho đã nhận');
+    expect(lookupRow(c, 'r9').querySelector('[data-quick="receive"]')).toBeNull();
+    expect(lookupRow(c, 'r9').querySelector('[data-quick="count"]')).not.toBeNull();
   });
 
   it('thu kèm đơn: huỷ hộp thoại thì không gửi gì; đơn chưa giao hay yêu cầu không còn mở thì không có nút một chạm', async () => {
@@ -575,7 +579,7 @@ describe('WasteRequestsSection', () => {
     expect(c.textContent).toContain('Đã cộng 20.000 điểm cho TR-7K3M9Q.');
   });
 
-  it('w7-03: Cộng điểm gặp món nguy hại hay yêu cầu chưa tới bước đếm thì mở chi tiết, không hỏi và không gửi', async () => {
+  it('w7-03: Cộng điểm chỉ có ở kiện kho đã nhận; gặp món nguy hại hay chi tiết đã đổi trạng thái thì mở chi tiết, không hỏi và không gửi', async () => {
     const detail = wasteRequestDetail();
     const hazardous = { ...detail, lines: detail.lines.map((l, i) => (i === 0 ? { ...l, hazardous: true } : l)) };
     const a = await mount({ queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' })], nextCursor: null } }, detail: { body: hazardous } });
@@ -587,9 +591,16 @@ describe('WasteRequestsSection', () => {
     a.c.ownerDocument.body.innerHTML = '';
 
     const b = await mount({
-      queue: { body: { rows: [wasteRequestRow({ method: 'DROP_OFF', status: 'OPEN', carrier: null, trackingCode: null })], nextCursor: null } },
-      detail: { body: wasteRequestDetail({ method: 'DROP_OFF', status: 'OPEN', point: null }) },
+      queue: {
+        body: {
+          rows: [wasteRequestRow({ status: 'RECEIVED' }), wasteRequestRow({ id: 'r7', code: 'TR-GGGG77', method: 'DROP_OFF', status: 'OPEN', carrier: null, trackingCode: null })],
+          nextCursor: null,
+        },
+      },
+      detail: { body: wasteRequestDetail({ status: 'COMPLETED' }) },
     });
+    // Mang tới kho còn mở: chưa chắc khách đã tới, nên không có nút cộng điểm thẳng.
+    expect(row(b.c, 'r7').querySelector('[data-quick="count"]')).toBeNull();
     click(row(b.c, 'r1').querySelector('[data-quick="count"]'));
     await flush();
     expect(confirmDialog()).toBeNull();
@@ -598,7 +609,7 @@ describe('WasteRequestsSection', () => {
   });
 
   it('w7-03: lỗi máy chủ khi Cộng điểm hiện nguyên văn kèm mã yêu cầu', async () => {
-    const { c } = await mount({
+    const { c, api } = await mount({
       queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' })], nextCursor: null } },
       confirm: { status: 409, body: { message: 'Yêu cầu đã được xác nhận' } },
     });
@@ -607,6 +618,8 @@ describe('WasteRequestsSection', () => {
     answerConfirm(true);
     await flush();
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('TR-7K3M9Q: Yêu cầu đã được xác nhận');
+    // Lỗi cũng làm mới danh sách: người khác có thể đã xử lý yêu cầu.
+    expect(requestUrls(api).filter((u) => u.includes('/admin/waste/requests?')).length).toBeGreaterThan(1);
   });
 
   it('nhận kiện từ hàng đợi: kết quả vẫn hiện sau khi danh sách tải lại', async () => {

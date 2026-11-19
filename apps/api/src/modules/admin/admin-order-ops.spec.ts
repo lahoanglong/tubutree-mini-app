@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdminService } from './admin.service';
-import { AdminController, ExportOrdersQuery, ListOrdersQuery, OrderStatusCountsQuery } from './admin.controller';
+import { AdminController, ExportOrdersQuery, ListOrdersQuery, OrderOpsCountsQuery, OrderStatusCountsQuery } from './admin.controller';
 import {
   BANK_TRANSFER_OVERDUE_CANCELLED_WHERE,
   BANK_TRANSFER_TO_CONFIRM_WHERE,
@@ -197,15 +197,15 @@ describe('AdminService.orderOpsCounts — KPI đầu tab Đơn hàng', () => {
     expect(where(0)).toEqual(GUEST_WEB_ORDER_WHERE);
     expect(where(1)).toEqual({ AND: [GUEST_WEB_ORDER_WHERE, { user: { phone: null, zaloId: { startsWith: 'guest_' } } }] });
     expect(where(2)).toEqual({ AND: [{}, BANK_TRANSFER_TO_CONFIRM_WHERE] });
-    expect(where(3)).toEqual({ AND: [{}, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: new Date('2026-11-18T12:00:00Z') } }] });
+    expect(where(3)).toEqual({ AND: [{}, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: new Date('2026-11-18T12:00:00Z') }, autoCancelBlockedAt: null }] });
     expect(where(4)).toEqual({ AND: [BANK_TRANSFER_OVERDUE_CANCELLED_WHERE, { id: { in: ['c1'] } }] });
     expect($queryRaw).toHaveBeenCalledTimes(1);
   });
 
-  it('bỏ queue/status đang chọn; đang lọc vãng lai thì số CK và tự huỷ tính trong đơn vãng lai, số vãng lai không tự lọc chồng', async () => {
-    const { where } = await run({ guest: 'web', queue: 'bank_transfer_to_confirm', kind: 'retail' });
+  it('số vãng lai đếm theo trạng thái + hàng đợi đang chọn (bấm ô giữ chúng); số CK và tự huỷ bỏ chúng nhưng tính trong đơn vãng lai khi đang lọc', async () => {
+    const { where } = await run({ guest: 'web', queue: 'bank_transfer_to_confirm', status: 'PENDING_PAYMENT', kind: 'retail' });
     const kind = { type: 'RETAIL', placedForCustomer: false, storefrontId: null, referrerUserId: null };
-    expect(where(0)).toEqual({ AND: [kind, GUEST_WEB_ORDER_WHERE] });
+    expect(where(0)).toEqual({ AND: [{ status: 'PENDING_PAYMENT' }, kind, BANK_TRANSFER_TO_CONFIRM_WHERE, GUEST_WEB_ORDER_WHERE] });
     expect(where(2)).toEqual({ AND: [{ AND: [kind, GUEST_WEB_ORDER_WHERE] }, BANK_TRANSFER_TO_CONFIRM_WHERE] });
     expect(where(4)).toEqual({ AND: [kind, BANK_TRANSFER_OVERDUE_CANCELLED_WHERE, { id: { in: ['c1'] } }, GUEST_WEB_ORDER_WHERE] });
   });
@@ -215,7 +215,7 @@ describe('AdminService.orderOpsCounts — KPI đầu tab Đơn hàng', () => {
     const prisma = { order: { count }, storefront: { findFirst: jest.fn() }, $queryRaw: jest.fn().mockResolvedValue([]) };
     const r = await mkAdmin(prisma, 48).orderOpsCounts({}, ADMIN as never, new Date('2026-11-19T12:00:00Z'));
     expect(r.ttlHours).toBe(48);
-    expect(count.mock.calls[3][0].where.AND[2]).toEqual({ createdAt: { lt: new Date('2026-11-17T12:00:00Z') } });
+    expect(count.mock.calls[3][0].where.AND[2]).toEqual({ createdAt: { lt: new Date('2026-11-17T12:00:00Z') }, autoCancelBlockedAt: null });
   });
 });
 
@@ -223,7 +223,7 @@ describe('Controller + DTO — guest và hàng đợi tự huỷ quá hạn', ()
   const errs = async (cls: new () => object, q: object) => (await validate(plainToInstance(cls, q))).map((e) => e.property);
 
   it('guest chỉ nhận "web"; queue nhận bank_transfer_overdue_cancelled (danh sách, CSV, số đếm)', async () => {
-    for (const cls of [ListOrdersQuery, ExportOrdersQuery, OrderStatusCountsQuery]) {
+    for (const cls of [ListOrdersQuery, ExportOrdersQuery, OrderStatusCountsQuery, OrderOpsCountsQuery]) {
       expect(await errs(cls, { guest: 'web', queue: 'bank_transfer_overdue_cancelled' })).toEqual([]);
       expect(await errs(cls, { guest: 'zalo' })).toEqual(['guest']);
       expect(await errs(cls, { queue: 'overdue' })).toEqual(['queue']);
@@ -245,7 +245,8 @@ describe('Controller + DTO — guest và hàng đợi tự huỷ quá hạn', ()
     const orderOpsCounts = jest.fn().mockResolvedValue({});
     const ctl = new AdminController({ orderOpsCounts } as never, {} as never);
     const viewer = { sub: 's', role: 'STAFF', staffPermissions: ['KE_TOAN'] };
-    await ctl.orderOpsCounts(Object.assign(new OrderStatusCountsQuery(), { guest: 'web' }), viewer as never);
-    expect(orderOpsCounts).toHaveBeenCalledWith(expect.objectContaining({ guest: 'web' }), viewer);
+    await ctl.orderOpsCounts(Object.assign(new OrderOpsCountsQuery(), { guest: 'web', status: 'CANCELLED' }), viewer as never);
+    expect(orderOpsCounts).toHaveBeenCalledWith(expect.objectContaining({ guest: 'web', status: 'CANCELLED' }), viewer);
+    expect(await errs(OrderOpsCountsQuery, { status: 'NOPE' })).toEqual(['status']);
   });
 });

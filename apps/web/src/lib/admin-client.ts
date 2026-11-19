@@ -606,7 +606,7 @@ export interface OrderOpsCounts {
   overdueCancelled: number;
   ttlHours: number;
 }
-export const getOrderOpsCounts = (f: { search?: string; recycling?: RecyclingFilter; invoice?: InvoiceFilter; pancake?: PancakeFilter; from?: string; to?: string } & Omit<OrderListExtra, 'order'>) =>
+export const getOrderOpsCounts = (f: { status?: string; search?: string; recycling?: RecyclingFilter; invoice?: InvoiceFilter; pancake?: PancakeFilter; from?: string; to?: string } & Omit<OrderListExtra, 'order'>) =>
   apiFetch<OrderOpsCounts>(
     `/admin/orders/ops-counts?${(Object.entries(f) as [string, string | undefined][])
       .filter(([, v]) => v)
