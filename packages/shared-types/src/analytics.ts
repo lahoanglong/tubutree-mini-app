@@ -66,10 +66,6 @@ export const CLIENT_EVENT_NAMES = [
   'green_card_shared',
 ] as const;
 
-/** Cách khách gửi link mời từ thẻ thành tích Sổ tay Xanh (`green_card_shared.method`). */
-export const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
-export type GreenCardShareMethod = (typeof GREEN_CARD_SHARE_METHODS)[number];
-
 /** Nơi hiện gợi ý đổi chai sang gói Refill (`refill_swap_*.surface`). */
 export const REFILL_SWAP_SURFACES = ['cart', 'reorder'] as const;
 export type RefillSwapSurface = (typeof REFILL_SWAP_SURFACES)[number];

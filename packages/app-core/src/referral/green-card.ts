@@ -1,6 +1,6 @@
 import type { HttpClient } from '../http';
-import { fillCopy } from '../shop-copy';
 import { vnd, vndShort } from '../commerce/money';
+import { greenCardCopy } from './copy';
 
 /**
  * Thẻ thành tích Sổ tay Xanh kèm link mời (cờ `growth.referral_viral_enabled`). Hợp đồng `GET /me/green-card`, bản sao của `GreenCard` ở
@@ -58,24 +58,19 @@ export const greenCardQuery = (http: HttpClient) => ({
   retry: false,
 });
 
-/** Cờ `growth.referral_viral_enabled` từ cấu hình công khai: chỉ boolean true thật mới bật. */
-export function referralViralOn(cfg: unknown): boolean {
-  return typeof cfg === 'object' && cfg !== null && (cfg as Record<string, unknown>).referralViralEnabled === true;
-}
-
 /** Dòng số: "12 thẻ xanh đã mở · 7 vỏ đã đổi". Sổ tay tắt thì chỉ còn số vỏ. */
 export function greenCardStats(card: GreenCard): string {
-  const parts = [card.album ? fillCopy('greenCard.cards', { n: card.album.seen }) : null, fillCopy('greenCard.waste', { n: card.wasteItems })];
+  const parts = [card.album ? greenCardCopy('cards', { n: card.album.seen }) : null, greenCardCopy('waste', { n: card.wasteItems })];
   return parts.filter(Boolean).join(' · ');
 }
 
 /** Câu thưởng đơn đầu cho cả hai bên. CTV không nhận Điểm Xanh giới thiệu, thưởng 0 là Admin tắt: không hứa thưởng, dùng câu mời chung. */
 export function greenCardRewardLine(card: GreenCard): string {
   const { points, minOrderAmount } = card.firstOrderReward;
-  if (!card.earnsPoints || points <= 0) return fillCopy('greenCard.invitePlain');
+  if (!card.earnsPoints || points <= 0) return greenCardCopy('invitePlain');
   // Số có dấu chấm ngăn nghìn như khối mời: 5000 → "5.000".
   const pts = vnd(points).slice(0, -1);
   return minOrderAmount > 0
-    ? fillCopy('greenCard.reward', { points: pts, min: vndShort(minOrderAmount) })
-    : fillCopy('greenCard.rewardNoMin', { points: pts });
+    ? greenCardCopy('reward', { points: pts, min: vndShort(minOrderAmount) })
+    : greenCardCopy('rewardNoMin', { points: pts });
 }

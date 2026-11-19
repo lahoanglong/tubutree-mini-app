@@ -14,7 +14,7 @@ import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/sh
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { buildProfileMenu, PROFILE_MENU_COPY, PROFILE_ORDER_ROW, type ProfileLinkKey, type ProfileMenuLink, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
-import { referralViralOn } from '@tubutree/app-core/referral/green-card';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getReferral, getWallet } from '../services/account-api';
 import { ProfileAvatar } from '../components/account/profile-avatar';

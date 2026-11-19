@@ -14,7 +14,7 @@ import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniClock, miniProgressLabel } from '@tubutree/app-core/game-mini/format';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
-import { referralViralOn } from '@tubutree/app-core/referral/green-card';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { Button, Chip, EmptyState, ScrollRow, Text } from '@/components/mini';
 import { ErrorState } from '@/components/ui/error-state';
@@ -24,6 +24,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
 import { loginHref } from '@/lib/return-to';
+import { GreenCardBlock } from '@/components/referral/green-card-lazy';
 import './album.css';
 
 const skeleton = () => <Skeleton height={240} />;
@@ -31,8 +32,6 @@ const skeleton = () => <Skeleton height={240} />;
 const Quiz = dynamic(() => import('@/components/game/mini/mini-daily-quiz'), { ssr: false, loading: skeleton });
 const ResultView = dynamic(() => import('@/components/game/mini/mini-round-shell').then((m) => m.ResultView), { ssr: false, loading: skeleton });
 const CardSheet = dynamic(() => import('./album-card-sheet'), { ssr: false });
-// Thẻ thành tích kèm link mời (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật.
-const GreenCardBlock = dynamic(() => import('@/components/referral/green-card'), { ssr: false });
 
 const round = (phase: RoundState['phase'], r: MiniStartResponse | null = null, answers: unknown[] | null = null, result: MiniSubmitResponse | null = null): RoundState => ({
   phase,

@@ -4,7 +4,6 @@ import {
   CHECKOUT_LAST_STEPS,
   CHECKOUT_STEPS,
   ECO_FACT_KIND_NAMES,
-  GREEN_CARD_SHARE_METHODS,
   MATCHER_ENTRIES,
   isShareableSearchTerm,
   ORDER_ZALO_FRIEND_FROM,
@@ -21,6 +20,9 @@ import {
   type ClientEventName,
 } from '@tubutree/shared-types';
 import { isVitalRoute } from './vitals/vitals-rules';
+
+// Cách khách gửi link mời từ thẻ thành tích Sổ tay Xanh. Không đặt ở shared-types: gói đó (CJS) nằm trọn trong chunk khởi động của web.
+const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
 
 type Rule = (v: unknown) => boolean;
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -20,7 +19,7 @@ import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery, loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
 import { hasDeskPointQuery, ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
-import { referralViralOn } from '@tubutree/app-core/referral/green-card';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
 import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -38,12 +37,10 @@ import { ProfileAvatar } from '@/components/account/profile-avatar';
 import { buildAccountMenu, IN_ACCOUNT_SHELL } from '@/components/account/account-menu';
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
+import { GreenCardBlock } from '@/components/referral/green-card-lazy';
 import { BadgeRow, useBadges } from '@/components/game/badge-row';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
-
-// Dòng thành tích xanh trong khối mời bạn (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật.
-const GreenCardBlock = dynamic(() => import('@/components/referral/green-card'), { ssr: false });
 
 const ORDER_ROW_ICON: Record<string, LucideIcon> = {
   pending_payment: CreditCard,

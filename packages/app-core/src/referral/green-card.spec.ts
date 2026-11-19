@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getGreenCard, greenCardRewardLine, greenCardStats, parseGreenCard, referralViralOn, type GreenCard } from './green-card';
+import { FORBIDDEN_TERMS } from '../shop-copy';
+import { GREEN_CARD_COPY, GREEN_CARD_COPY_MAX, greenCardCopy, type GreenCardCopyKey } from './copy';
+import { getGreenCard, greenCardRewardLine, greenCardStats, parseGreenCard, type GreenCard } from './green-card';
+import { referralViralOn } from './viral-flag';
 
 const card = (over: Partial<GreenCard> = {}): GreenCard => ({
   referralCode: 'TUBU123',
@@ -53,5 +56,22 @@ describe('chữ của thẻ', () => {
     expect(referralViralOn({ referralViralEnabled: true })).toBe(true);
     expect(referralViralOn({ referralViralEnabled: 'true' })).toBe(false);
     expect(referralViralOn(undefined)).toBe(false);
+  });
+});
+
+describe('chữ thẻ thành tích xanh', () => {
+  const keys = Object.keys(GREEN_CARD_COPY) as GreenCardCopyKey[];
+  const sample = { n: 186, points: '10.000', min: '199k' };
+
+  it('không có thuật ngữ cấm', () => {
+    for (const key of keys) for (const { pattern, use } of FORBIDDEN_TERMS) expect(GREEN_CARD_COPY[key], `${key}: dùng "${use}"`).not.toMatch(pattern);
+  });
+
+  it('điền được mọi khoá và không vượt ngân sách độ dài', () => {
+    for (const key of keys) {
+      const text = greenCardCopy(key, sample);
+      expect(text, key).not.toMatch(/[{}]/);
+      expect(text.length, key).toBeLessThanOrEqual(GREEN_CARD_COPY_MAX[key]);
+    }
   });
 });

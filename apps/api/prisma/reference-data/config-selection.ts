@@ -79,7 +79,7 @@ export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'orders.timeline_v2_enabled': 'cờ một dòng thời gian ở chi tiết đơn: migration 20261118015753_order_timeline_v2_referral_share_card đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   'orders.tracking_stale_hours': 'như orders.timeline_v2_enabled (mặc định 72 giờ)',
   'referral.share_card_enabled': 'cờ trang đích link mời /moi/<mã> và tiến độ mời: như orders.timeline_v2_enabled',
-  'growth.referral_viral_enabled': 'cờ thưởng đơn đầu của chương trình giới thiệu và thẻ thành tích Sổ tay Xanh: migration 20261119150000_referral_first_order_reward đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
+  'growth.referral_viral_enabled': 'cờ thưởng đơn đầu của chương trình giới thiệu và thẻ thành tích Sổ tay Xanh: migration 20261119230000_referral_first_order_reward đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   'growth.referral_first_order_points': 'như growth.referral_viral_enabled (mặc định 100 Điểm Xanh mỗi bên)',
   'growth.referral_first_order_min': 'như growth.referral_viral_enabled (mặc định 199.000đ)',
   'growth.referral_monthly_cap': 'như growth.referral_viral_enabled (mặc định 10 lần mỗi người mời mỗi tháng)',

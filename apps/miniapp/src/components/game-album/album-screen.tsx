@@ -10,7 +10,7 @@ import type { MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniClock, miniProgressLabel, sourceHost } from '@tubutree/app-core/game-mini/format';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
-import { referralViralOn } from '@tubutree/app-core/referral/green-card';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
 import { usePublicConfig } from '../../hooks/use-public-config';

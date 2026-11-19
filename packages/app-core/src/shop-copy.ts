@@ -733,14 +733,6 @@ export const SHOP_COPY: Record<string, string> = {
   'invite.landing.cta': 'Bắt đầu mua sắm',
   'invite.progress': '{a} bạn đã nhận mã · {b} bạn đã mua đơn đầu · {c} bạn đã đủ điều kiện, bạn nhận {points} Điểm Xanh',
   'invite.progressNoPoints': '{a} bạn đã nhận mã · {b} bạn đã mua đơn đầu',
-  // Thẻ thành tích ở Sổ tay Xanh và khối mời ở Tài khoản (cờ growth.referral_viral_enabled). Số thưởng và đơn tối thiểu đọc từ GET /me/green-card.
-  'greenCard.title': 'Thành tích xanh',
-  'greenCard.cards': '{n} thẻ xanh đã mở',
-  'greenCard.waste': '{n} vỏ đã đổi',
-  'greenCard.reward': 'Bạn bè mua đơn đầu từ {min}, cả hai nhận +{points} Điểm Xanh',
-  'greenCard.rewardNoMin': 'Bạn bè mua đơn đầu, cả hai nhận +{points} Điểm Xanh',
-  'greenCard.invitePlain': 'Gửi link mời để bạn bè sống xanh cùng bạn',
-  'greenCard.copy': 'Sao chép link',
   // Hộp Xanh ở giỏ và thanh toán (chữ chỉ có ở web nằm ở GREEN_BOX_WEB_COPY của commerce/green-box.ts). Bậc và % đọc từ máy chủ, không gõ cứng.
   'greenBox.name': 'Hộp Xanh',
   'greenBox.cartHint': 'Thêm {n} món nữa giảm {pct}% Hộp Xanh',

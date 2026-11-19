@@ -12,6 +12,7 @@ import {
   greenCardRewardLine,
   greenCardStats,
 } from '@tubutree/app-core/referral/green-card';
+import { greenCardCopy } from '@tubutree/app-core/referral/copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { trackEvent } from '../../services/analytics';
@@ -86,7 +87,7 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
     <section data-testid="green-card">
       <Card padding={12}>
         <Heading variant="title-sm" as="h2">
-          {fillCopy('greenCard.title')}
+          {greenCardCopy('title')}
         </Heading>
         <Text variant="body-sm" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
           {stats}
@@ -124,7 +125,7 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
             aria-disabled={lock.busy || undefined}
             onPress={onCopy}
           >
-            {fillCopy('greenCard.copy')}
+            {greenCardCopy('copy')}
           </Button>
         </div>
       </Card>
