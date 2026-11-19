@@ -43,10 +43,13 @@ import {
 import type { GuestPlaceOrderDto } from '../../src/modules/checkout/guest/dto/guest-checkout.dto';
 import type { Env } from '../../src/config/env.validation';
 import { createOrder, createRealUser, createUser, pinConfig, randCode, setConfig, uniquePhone, warmPool } from './helpers';
+import { flashLimitKeys } from '../../src/modules/flash-sale/flash-buyer-keys';
+import { PHOTO_REWARD_POINTS_DEFAULT } from '../../src/modules/reviews/review-green-corner';
 
 /**
  * Đặt hàng không đăng nhập trên web (tubu-w4-01) trên Postgres thật: tiền đơn khách vãng lai bằng đúng tài khoản thường không mã/điểm/hạng
- * (12 giỏ mẫu, cùng một đường tính tiền), giỏ có hàng Giờ vàng tính giá thường và không trừ suất, bấm đúp ra một đơn, đơn vị cuối chỉ một
+ * (12 giỏ mẫu, cùng một đường tính tiền), giỏ có hàng Giờ vàng được giá Giờ vàng như tài khoản và giới hạn mua đếm thêm theo SĐT/IP
+ * (tubu-w6-01 P1-b), bấm đúp ra một đơn, đơn vị cuối chỉ một
  * người được, trần theo SĐT/IP/thiết bị cùng một câu báo, khoá theo dõi (sai khoá = sai mã = 404, hết hạn 60 ngày sau giao), gộp đơn về tài
  * khoản Zalo đúng một lần và không cộng điểm, cờ tắt thì đường đặt 404 còn đường theo dõi vẫn chạy.
  */
@@ -101,7 +104,7 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
     const rbac = new RbacService(prisma, new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma)));
     auth = new AuthService(prisma, new JwtService(), env, {} as ZaloService, rbac);
     const bank = { getBankQr: jest.fn(async (code: string, userId: string) => ({ code, userId })) } as unknown as BankTransferService;
-    guest = new GuestCheckoutService(prisma, checkout, auth, bank, config, moduleRef.get(AnalyticsEventsService), env, moduleRef.get(FlashSaleService));
+    guest = new GuestCheckoutService(prisma, checkout, auth, bank, config, moduleRef.get(AnalyticsEventsService), env);
 
     adminId = (await createRealUser(prisma, { role: 'ADMIN' })).id;
     giftVariationId = (await product(35_000, 500)).variationId;
@@ -144,11 +147,11 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
     return { productId: p.id, variationId: p.variations[0]!.id };
   }
 
-  async function flashOn(variationId: string, flashPrice: number) {
+  async function flashOn(variationId: string, flashPrice: number, perUserLimit = 10) {
     const s = await prisma.flashSale.create({
       data: { title: `IT ${randCode(4)}`, startAt: new Date(Date.now() - 3_600_000), endAt: new Date(Date.now() + 3_600_000), createdBy: adminId },
     });
-    return prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId, flashPrice, quota: 50, perUserLimit: 10 } });
+    return prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId, flashPrice, quota: 50, perUserLimit } });
   }
 
   const addressOf = (phone: string) => ({
@@ -247,7 +250,7 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
       expect(guestOrder.guestTokenHash).toMatch(/^[0-9a-f]{64}$/);
     });
 
-    it('2 giỏ có hàng Giờ vàng: tài khoản được giá flash, khách vãng lai trả giá thường, không trừ suất, không có dòng mua flash', async () => {
+    it('2 giỏ có hàng Giờ vàng: khách vãng lai được đúng giá Giờ vàng như tài khoản, trừ suất một lần, đếm theo thiết bị + SĐT + IP', async () => {
       for (const [regular, flashPrice] of [[150_000, 99_000], [320_000, 240_000]] as const) {
         const v = (await product(regular)).variationId;
         const item = await flashOn(v, flashPrice);
@@ -259,13 +262,24 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
         const meta = { deviceId: device(), ip: ip() };
         const phone = uniquePhone();
         const gq = await guest.quote(meta, { lines: [{ variationId: v, quantity: 1 }], address: addressOf(phone) });
-        expect(gq.subtotal).toBe(regular);
-        expect(gq.flashNotice).toBe(true);
+        expect({ subtotal: gq.subtotal, shippingFee: gq.shippingFee, total: gq.total }).toEqual({
+          subtotal: accQuote.subtotal,
+          shippingFee: accQuote.shippingFee,
+          total: accQuote.total,
+        });
+        expect(gq.flashNotice).toBe(false);
+        expect(gq.items[0]).toMatchObject({ unitPrice: flashPrice, isFlash: true });
         const placed = await guest.placeOrder(meta, placeDto([{ variationId: v, quantity: 1 }], phone, { expectedTotal: gq.total }), idem());
         const o = await prisma.order.findUniqueOrThrow({ where: { code: placed.code }, include: { items: true } });
-        expect(o.items.find((i) => !i.isGift)).toMatchObject({ unitPrice: regular, flashSaleItemId: null });
-        expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(0);
-        expect(await prisma.flashSalePurchase.count({ where: { flashSaleItemId: item.id } })).toBe(0);
+        expect(o.items.find((i) => !i.isGift)).toMatchObject({ unitPrice: flashPrice, flashSaleItemId: item.id });
+        expect(o).toMatchObject({ pointsEarned: 0, pointsUsed: 0, couponCode: null });
+        expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(1);
+        const holders = await prisma.flashSalePurchase.findMany({ where: { flashSaleItemId: item.id }, select: { userId: true, quantity: true } });
+        const keys = flashLimitKeys({ phone, ipHash: o.guestIpHash });
+        expect(keys).toHaveLength(2);
+        expect(holders.map((h) => h.userId).sort()).toEqual([o.userId, ...keys].sort());
+        expect(holders.every((h) => h.quantity === 1)).toBe(true);
+        expect(o.flashLimitKeys).toEqual(keys);
       }
     });
 
@@ -535,8 +549,194 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
     });
   });
 
+  describe('Giờ vàng cho người mua chưa xác thực (tubu-w6-01 P1-b): giá đúng, hạn mức giữ theo thiết bị, SĐT và IP', () => {
+    /** Tài khoản guest_ của Mini (đăng nhập theo deviceId, không SĐT, không Zalo thật) có địa chỉ giao với `phone`. */
+    async function miniGuest(phone: string) {
+      const u = await auth.ensureGuestUser(`m_${randomBytes(18).toString('base64url')}`);
+      const addr = await prisma.address.create({ data: { userId: u.id, ...addressOf(phone) } });
+      return { userId: u.id, addressId: addr.id };
+    }
+
+    it('Mini guest_: báo giá và đơn theo giá Giờ vàng; thiết bị khác cùng SĐT đã hết suất thì báo giá giá thường kèm lý do, đặt đơn không trừ suất', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 1);
+      const phone = uniquePhone();
+
+      const a = await miniGuest(phone);
+      await cart.addItem(a.userId, { variationId: v, quantity: 1 });
+      const qa = await checkout.quote(a.userId, { addressId: a.addressId });
+      expect(qa.subtotal).toBe(99_000);
+      expect(qa.items[0]).toMatchObject({ isFlash: true, flashLimitNotice: null });
+      const oa = await checkout.placeOrder(a.userId, { addressId: a.addressId, paymentMethod: 'COD', expectedTotal: qa.total } as never, idem(), 'miniapp');
+      expect((await prisma.orderItem.findFirstOrThrow({ where: { orderId: oa.id, isGift: false } })).unitPrice).toBe(99_000);
+
+      // Cùng SĐT, thiết bị mới (tài khoản guest_ mới): suất 1/khách đã dùng hết theo SĐT.
+      const b = await miniGuest(phone);
+      await cart.addItem(b.userId, { variationId: v, quantity: 1 });
+      const qb = await checkout.quote(b.userId, { addressId: b.addressId });
+      expect(qb.subtotal).toBe(150_000);
+      expect(qb.items[0]).toMatchObject({ isFlash: false });
+      expect(qb.items[0]!.flashLimitNotice).toContain('hết suất Giờ vàng');
+      await checkout.placeOrder(b.userId, { addressId: b.addressId, paymentMethod: 'COD', expectedTotal: qb.total } as never, idem(), 'miniapp');
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(1);
+
+      // SĐT khác thì vẫn được giá Giờ vàng.
+      const c = await miniGuest(uniquePhone());
+      await cart.addItem(c.userId, { variationId: v, quantity: 1 });
+      expect((await checkout.quote(c.userId, { addressId: c.addressId })).subtotal).toBe(99_000);
+    });
+
+    it('Mini guest_: hai thiết bị cùng SĐT đặt CHỒNG khi còn 1 suất của SĐT → đúng một đơn giá Giờ vàng, lần kia báo FLASH_LIMIT, suất không âm không dư', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 1);
+      const phone = uniquePhone();
+      const buyers = [await miniGuest(phone), await miniGuest(phone)];
+      const quotes = [];
+      for (const g of buyers) {
+        await cart.addItem(g.userId, { variationId: v, quantity: 1 });
+        quotes.push(await checkout.quote(g.userId, { addressId: g.addressId }));
+      }
+      expect(quotes.map((q) => q.subtotal)).toEqual([99_000, 99_000]);
+      const results = await Promise.allSettled(
+        buyers.map((g, i) => checkout.placeOrder(g.userId, { addressId: g.addressId, paymentMethod: 'COD', expectedTotal: quotes[i]!.total } as never, idem(), 'miniapp')),
+      );
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect(codeOf(rejected)).toBe('FLASH_LIMIT');
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(1);
+      const [phoneKey] = flashLimitKeys({ phone });
+      expect((await prisma.flashSalePurchase.findUniqueOrThrow({ where: { flashSaleItemId_userId: { flashSaleItemId: item.id, userId: phoneKey! } } })).quantity).toBe(1);
+      // Lần thua không để lại dòng của tài khoản đã bị trả.
+      const loser = buyers[results.findIndex((r) => r.status === 'rejected')]!;
+      const loserRow = await prisma.flashSalePurchase.findUnique({ where: { flashSaleItemId_userId: { flashSaleItemId: item.id, userId: loser.userId } } });
+      expect(loserRow?.quantity ?? 0).toBe(0);
+    });
+
+    it('Mini guest_: huỷ đơn hoàn suất ở cả tài khoản và SĐT, thiết bị khác cùng SĐT lại được giá Giờ vàng', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 1);
+      const phone = uniquePhone();
+      const a = await miniGuest(phone);
+      await cart.addItem(a.userId, { variationId: v, quantity: 1 });
+      const qa = await checkout.quote(a.userId, { addressId: a.addressId });
+      const oa = await checkout.placeOrder(a.userId, { addressId: a.addressId, paymentMethod: 'COD', expectedTotal: qa.total } as never, idem(), 'miniapp');
+      const order = await prisma.order.findUniqueOrThrow({ where: { id: oa.id }, include: { items: true } });
+      expect(order.flashLimitKeys).toEqual(flashLimitKeys({ phone }));
+      await prisma.$transaction((tx) => moduleRef.get(OrderReversalService).reverseFinancials(tx, order));
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(0);
+      const rows = await prisma.flashSalePurchase.findMany({ where: { flashSaleItemId: item.id } });
+      expect(rows.every((r) => r.quantity === 0)).toBe(true);
+      const b = await miniGuest(phone);
+      await cart.addItem(b.userId, { variationId: v, quantity: 1 });
+      expect((await checkout.quote(b.userId, { addressId: b.addressId })).subtotal).toBe(99_000);
+    });
+
+    it('đơn đặt trước khi có cột flashLimitKeys (mảng rỗng): huỷ chỉ hoàn suất của tài khoản, không hoàn khoá SĐT mà đơn chưa từng trừ', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 2);
+      const phone = uniquePhone();
+      const a = await miniGuest(phone);
+      await cart.addItem(a.userId, { variationId: v, quantity: 1 });
+      const qa = await checkout.quote(a.userId, { addressId: a.addressId });
+      const oa = await checkout.placeOrder(a.userId, { addressId: a.addressId, paymentMethod: 'COD', expectedTotal: qa.total } as never, idem(), 'miniapp');
+      const order = await prisma.order.update({ where: { id: oa.id }, data: { flashLimitKeys: [] }, include: { items: true } });
+      await prisma.$transaction((tx) => moduleRef.get(OrderReversalService).reverseFinancials(tx, order));
+      const [phoneKey] = flashLimitKeys({ phone });
+      const byKey = async (userId: string) =>
+        (await prisma.flashSalePurchase.findUnique({ where: { flashSaleItemId_userId: { flashSaleItemId: item.id, userId } } }))?.quantity ?? 0;
+      expect(await byKey(a.userId)).toBe(0);
+      expect(await byKey(phoneKey!)).toBe(1);
+    });
+
+    it('Mini guest_: một IP (nhiều máy sau cùng NAT) được tối đa 3 lần giới hạn mỗi khách dù đổi SĐT và thiết bị', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 1);
+      const ipHash = `it-${randCode(10)}`;
+      for (let i = 0; i < 3; i += 1) {
+        const g = await miniGuest(uniquePhone());
+        await cart.addItem(g.userId, { variationId: v, quantity: 1 });
+        const q = await checkout.quote(g.userId, { addressId: g.addressId }, false, ipHash);
+        expect(q.subtotal).toBe(99_000);
+        const o = await checkout.placeOrder(g.userId, { addressId: g.addressId, paymentMethod: 'COD', expectedTotal: q.total } as never, idem(), 'miniapp', undefined, ipHash);
+        expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).flashLimitKeys).toContain(`fsk:i:${ipHash}`);
+      }
+      const late = await miniGuest(uniquePhone());
+      await cart.addItem(late.userId, { variationId: v, quantity: 1 });
+      const q4 = await checkout.quote(late.userId, { addressId: late.addressId }, false, ipHash);
+      expect(q4.subtotal).toBe(150_000);
+      expect(q4.items[0]!.flashLimitNotice).toContain('hết suất Giờ vàng');
+      // Cùng máy đó, IP khác thì lại được giá Giờ vàng.
+      expect((await checkout.quote(late.userId, { addressId: late.addressId }, false, `it-${randCode(10)}`)).subtotal).toBe(99_000);
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(3);
+    });
+
+    it('Web vãng lai: một SĐT không mua quá giới hạn dù đổi thiết bị và IP; một IP (nhiều máy sau NAT) tối đa 3 lần giới hạn dù đổi SĐT và thiết bị', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 1);
+      const lines = [{ variationId: v, quantity: 1 }];
+      const phone = uniquePhone();
+      const sharedIp = ip();
+      const first = { deviceId: device(), ip: sharedIp };
+      const q1 = await guest.quote(first, { lines, address: addressOf(phone) });
+      expect(q1).toMatchObject({ subtotal: 99_000, flashNotice: false });
+      await guest.placeOrder(first, placeDto(lines, phone, { expectedTotal: q1.total }), idem());
+
+      // Cùng SĐT, thiết bị + IP mới: giá thường kèm câu hết suất.
+      const samePhone = await guest.quote({ deviceId: device(), ip: ip() }, { lines, address: addressOf(phone) });
+      expect(samePhone).toMatchObject({ subtotal: 150_000, flashNotice: true });
+      expect(samePhone.items[0]).toMatchObject({ isFlash: false, unitPrice: 150_000 });
+      // Cùng IP, SĐT + thiết bị mới: IP mới dùng 1/3 nên vẫn giá Giờ vàng; đặt thêm 2 đơn thì IP đủ 3.
+      for (let n = 0; n < 2; n += 1) {
+        const meta = { deviceId: device(), ip: sharedIp };
+        const p = uniquePhone();
+        const q = await guest.quote(meta, { lines, address: addressOf(p) });
+        expect(q).toMatchObject({ subtotal: 99_000, flashNotice: false });
+        await guest.placeOrder(meta, placeDto(lines, p, { expectedTotal: q.total }), idem());
+      }
+      const sameIp = await guest.quote({ deviceId: device(), ip: sharedIp }, { lines, address: addressOf(uniquePhone()) });
+      expect(sameIp).toMatchObject({ subtotal: 150_000, flashNotice: true });
+      // SĐT, IP, thiết bị đều mới: giá Giờ vàng.
+      const fresh = await guest.quote({ deviceId: device(), ip: ip() }, { lines, address: addressOf(uniquePhone()) });
+      expect(fresh).toMatchObject({ subtotal: 99_000, flashNotice: false });
+      // Đặt theo giá thường cùng SĐT thì đơn giá thường, suất không đổi.
+      const meta2 = { deviceId: device(), ip: ip() };
+      const placed = await guest.placeOrder(meta2, placeDto(lines, phone, { expectedTotal: samePhone.total }), idem());
+      const o = await prisma.order.findUniqueOrThrow({ where: { code: placed.code }, include: { items: true } });
+      expect(o.items.find((i) => !i.isGift)).toMatchObject({ unitPrice: 150_000, flashSaleItemId: null });
+      expect(o.flashLimitKeys).toEqual([]);
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(3);
+    });
+
+    it('4 mốc kinh tế với hàng Giờ vàng: giá Giờ vàng chạm 199.000đ thì miễn phí giao, 299.000đ thì mở quà 0đ; khách vãng lai không tích, không dùng điểm hay mã; thưởng ảnh vẫn +100', async () => {
+      const at = async (regular: number, flashPrice: number) => {
+        const v = (await product(regular)).variationId;
+        await flashOn(v, flashPrice);
+        const meta = { deviceId: device(), ip: ip() };
+        const phone = uniquePhone();
+        const lines = [{ variationId: v, quantity: 1 }];
+        const q = await guest.quote(meta, { lines, address: addressOf(phone) });
+        return { q, meta, phone, lines };
+      };
+      const below = await at(260_000, 198_000);
+      expect(below.q).toMatchObject({ subtotal: 198_000, shippingFee: 19_000, total: 217_000, discount: 0 });
+      const free = await at(260_000, 199_000);
+      expect(free.q).toMatchObject({ subtotal: 199_000, shippingFee: 0, total: 199_000, discount: 0 });
+      const noGift = await at(400_000, 298_000);
+      expect(noGift.q.giftTrial?.selectedVariationId ?? null).toBeNull();
+      const gift = await at(400_000, 299_000);
+      expect(gift.q.giftTrial?.selectedVariationId).toBe(giftVariationId);
+      const placed = await guest.placeOrder(gift.meta, placeDto(gift.lines, gift.phone, { expectedTotal: gift.q.total }), idem());
+      const o = await prisma.order.findUniqueOrThrow({ where: { code: placed.code }, include: { items: true } });
+      expect(o).toMatchObject({ subtotal: 299_000, total: 299_000, shippingFee: 0, discount: 0, pointsUsed: 0, pointsEarned: 0, couponCode: null });
+      expect(o.items.filter((i) => i.isGift).map((i) => [i.variationId, i.unitPrice])).toEqual([[giftVariationId, 0]]);
+      // Trần gộp mã + Điểm Xanh: khách vãng lai không có đường giảm nào ngoài giá Giờ vàng, nên giảm từ mã/điểm = 0 ≤ 20%.
+      expect(o.discount + o.pointsDiscount).toBeLessThanOrEqual(Math.floor(o.subtotal * 0.2));
+      expect(PHOTO_REWARD_POINTS_DEFAULT).toBe(100);
+    });
+  });
+
   describe('cờ tắt', () => {
-    it('báo giá và đặt đơn 404; theo dõi đơn đã đặt vẫn chạy; giá Giờ vàng của tài khoản vãng lai như cũ', async () => {
+    it('báo giá và đặt đơn 404; theo dõi đơn đã đặt vẫn chạy; tài khoản vãng lai vẫn được giá Giờ vàng', async () => {
       const v = (await product(150_000)).variationId;
       const dto = placeDto([{ variationId: v, quantity: 1 }], uniquePhone());
       const meta = { deviceId: device(), ip: ip() };

@@ -34,6 +34,7 @@ import { WpImageSyncService } from './wp-image-sync.service';
 import { FreeshipUpsellController } from './upsell/freeship-upsell.controller';
 import { FreeshipUpsellService } from './upsell/freeship-upsell.service';
 import { RefillPairsController } from './refill/refill-pairs.controller';
+import { RefillPairsAdminController } from './refill/refill-pairs-admin.controller';
 import { RefillPairsService } from './refill/refill-pairs.service';
 import { ImageRegistryModule } from './image-registry.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
@@ -44,7 +45,7 @@ import { EcoImpactModule } from '../eco-impact/eco-impact.module';
 
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule, EcoImpactModule],
-  controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController, FreeshipUpsellController, RefillPairsController],
+  controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController, FreeshipUpsellController, RefillPairsController, RefillPairsAdminController],
   providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService, FreeshipUpsellService, RefillPairsService],
   exports: [CatalogService, ImageResizeService],
 })

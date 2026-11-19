@@ -24,7 +24,7 @@ import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/c
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
-import { createOrder, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createOrder, createRealUser, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const PRICE = 100_000;
 const FLASH_PRICE = 50_000;
@@ -120,8 +120,9 @@ describe('Duyệt trả đơn nhiều dòng giờ vàng ‖ đặt đơn cùng c
     const a = await flashLine(sale.id);
     const b = await flashLine(sale.id);
     expect(a.flash.id < b.flash.id).toBe(true);
-    const owner = await createUser(prisma, { role: 'CUSTOMER' });
-    const buyer = await createUser(prisma, { role: 'CUSTOMER' });
+    // Khách thật (Zalo): người mua chưa xác thực còn có dòng khoá SĐT (flash-buyer-keys.ts), ca này chỉ xét thứ tự khoá theo tài khoản.
+    const owner = await createRealUser(prisma, { role: 'CUSTOMER' });
+    const buyer = await createRealUser(prisma, { role: 'CUSTOMER' });
     created.userIds.push(owner.id, buyer.id);
     const addr = await prisma.address.create({
       data: {

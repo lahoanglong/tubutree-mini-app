@@ -60,6 +60,7 @@ import {
   type FlashQuotaLine,
   type FlashQuotaOutcome,
 } from '../flash-sale/flash-sale.service';
+import { buyerFlashLimitKeys } from '../flash-sale/flash-buyer-keys';
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { formatPoints } from '../../common/format-points';
 import { formatVndText } from '../../common/format-vnd';
@@ -191,9 +192,16 @@ export interface CheckoutShipment extends GroupAmounts {
 }
 
 /**
+ * Báo giá của khách vãng lai trên web: IP đã băm của lần gửi, để giới hạn Giờ vàng còn đếm theo IP (flash-buyer-keys.ts).
+ */
+export interface GuestPricingContext {
+  ipHash: string | null;
+}
+
+/**
  * Lần đặt của khách vãng lai trên web (checkout/guest, cờ web.guest_checkout_enabled). Tính tiền đúng đường của tài khoản thường, chỉ khác
- * đầu vào: không mã giảm giá, không hạng, không Điểm Xanh (dùng hay tích), không ghi công giới thiệu, không thu kèm rác. Giá Giờ vàng đã bị
- * bỏ ngay ở chỗ giỏ lấy giá (FlashSaleService.resolveEffective) nên không có suất nào bị trừ.
+ * đầu vào: không mã giảm giá, không hạng, không Điểm Xanh (dùng hay tích), không ghi công giới thiệu, không thu kèm rác. Giá Giờ vàng như
+ * mọi khách, giới hạn mua mỗi suất đếm thêm theo SĐT nhận hàng và IP (flash-buyer-keys.ts).
  */
 export interface GuestCheckoutContext {
   /** SĐT khách gõ, dạng 0xxxxxxxxx: chỉ ghi lên đơn (orders.guestPhone), không ghi vào users.phone. */
@@ -326,10 +334,13 @@ export class CheckoutService {
     return resolveAttribution(this.prisma, this.affiliate, userId, input);
   }
 
-  /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
-  async quote(userId: string, dto: QuoteDto, guest = false) {
+  /**
+   * Tính tạm đơn (ship + giảm + điểm) cho màn checkout. `buyerIpHash`: IP đã băm của lần gọi (flashIpHash), chỉ dùng làm khoá giới hạn Giờ
+   * vàng khi người mua chưa xác thực; khách web vãng lai mang IP trong `guest`.
+   */
+  async quote(userId: string, dto: QuoteDto, guest: GuestPricingContext | false = false, buyerIpHash: string | null = null) {
     try {
-      return await this.quoteInner(userId, dto, guest);
+      return await this.quoteInner(userId, dto, guest, buyerIpHash);
     } catch (err) {
       if (err instanceof BadRequestException) {
         const message = typeof err.getResponse() === 'string'
@@ -348,10 +359,10 @@ export class CheckoutService {
     }
   }
 
-  private async quoteInner(userId: string, dto: QuoteDto, guest = false) {
+  private async quoteInner(userId: string, dto: QuoteDto, guest: GuestPricingContext | false, buyerIpHash: string | null) {
     const pickupInput = pickupInputOf(dto);
     const { storefront } = guest ? { storefront: null } : await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, guest ? null : pickupInput, guest);
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, guest ? null : pickupInput, !!guest, guest ? guest.ipHash : buyerIpHash);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU') ?? null;
     // W179-C (G2): cùng hàm thuần giftAttachDecision cho cả báo giá lẫn đặt đơn (SĐT xác minh Zalo, kiện Tubu >= 99.000đ ròng, tối đa 1 quà/đơn).
@@ -436,9 +447,11 @@ export class CheckoutService {
     idempotencyKey?: string,
     platform: 'miniapp' | 'web' = 'miniapp',
     guest?: GuestCheckoutContext,
+    /** IP đã băm của lần gọi (xem `quote`); khách web vãng lai mang IP trong `guest`. */
+    buyerIpHash: string | null = null,
   ) {
     try {
-      return await this.placeOrderInner(userId, dto, idempotencyKey, platform, guest);
+      return await this.placeOrderInner(userId, dto, idempotencyKey, platform, guest, buyerIpHash);
     } catch (err) {
       if (err instanceof BadRequestException) {
         const message = typeof err.getResponse() === 'string'
@@ -461,6 +474,7 @@ export class CheckoutService {
     idempotencyKey?: string,
     platform: 'miniapp' | 'web' = 'miniapp',
     guest?: GuestCheckoutContext,
+    buyerIpHash: string | null = null,
   ) {
     // Gửi cả phiếu có sẵn lẫn món rác chọn ngay là yêu cầu sai: báo trước mọi việc khác, kể cả lần gửi lại cùng Idempotency-Key.
     const pickupInput = pickupInputOf(dto);
@@ -491,7 +505,7 @@ export class CheckoutService {
     const referrerFor = (fulfiller: { ownerUserId: string | null }) =>
       referrerUserId && fulfiller.ownerUserId === referrerUserId ? null : referrerUserId;
 
-    const { cart, user, address, computed } = await this.compute(
+    const { cart, user, address, computed, flashLimitKeys } = await this.compute(
       userId,
       dto.addressId,
       dto.pointsToUse,
@@ -499,6 +513,7 @@ export class CheckoutService {
       dto.itemIds,
       wantsPickup && !guest ? pickupInput : null,
       !!guest,
+      guest ? guest.ipHash : buyerIpHash,
     );
     if (cart.items.length === 0) {
       const recent = await this.recentlyPlacedOrder(userId, dto);
@@ -617,7 +632,7 @@ export class CheckoutService {
         const flashLines = cart.items
           .slice(0, short)
           .flatMap((l) => (l.flashSaleItemId ? [{ flashSaleItemId: l.flashSaleItemId, quantity: l.quantity }] : []));
-        const outcomes = flashLines.length > 0 ? await this.consumeFlashQuotas(tx, userId, flashLines, code) : [];
+        const outcomes = flashLines.length > 0 ? await this.consumeFlashQuotas(tx, userId, flashLines, code, flashLimitKeys) : [];
         const failed = outcomes.findIndex((o) => o !== 'OK');
         if (failed >= 0) {
           // Vượt giới hạn mua = lỗi hợp lệ sửa được ở giỏ (FLASH_LIMIT kèm giới hạn của suất). Hết suất/hết giờ → PRICE_CHANGED để FE hỏi lại giá mới
@@ -675,6 +690,8 @@ export class CheckoutService {
                 source: orderSource,
                 platform,
                 ...(guest ? { guestPhone: guest.phone, guestTokenHash: guest.tokenHash, guestIpHash: guest.ipHash } : {}),
+                // Khoá phụ đã trừ ở consumeFlashQuotas: huỷ/trả đơn hoàn đúng các khoá này (không suy lại từ người mua lúc huỷ).
+                ...(flashLines.length > 0 && flashLimitKeys.length > 0 ? { flashLimitKeys: [...flashLimitKeys] } : {}),
                 paidAt: paid ? new Date() : null,
                 // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
                 couponCode: isPrimary && computed.couponApplied ? cart.couponCode : null,
@@ -1130,9 +1147,10 @@ export class CheckoutService {
     userId: string,
     lines: FlashQuotaLine[],
     code: string,
+    limitKeys: readonly string[],
   ): Promise<FlashQuotaOutcome[]> {
     try {
-      return await this.flashSale.consumeQuotas(tx, userId, lines, new Date());
+      return await this.flashSale.consumeQuotas(tx, userId, lines, new Date(), limitKeys);
     } catch (e) {
       const original = e instanceof FlashQuotaLineError ? e.original : e;
       const fid = e instanceof FlashQuotaLineError ? lines[e.lineIndex]?.flashSaleItemId : undefined;
@@ -1241,8 +1259,8 @@ export class CheckoutService {
    * Dòng hàng của lần đặt: toàn giỏ hoặc tập con đã chọn, chặn dòng ngừng bán được chọn và dòng chưa có giá. Báo giá, đặt đơn
    * và xem trước mã dùng chung.
    */
-  private async checkoutLines(userId: string, itemIds?: string[]) {
-    const fullCart = await this.cart.getCartForCheckout(userId);
+  private async checkoutLines(userId: string, itemIds?: string[], flashLimitKeys: readonly string[] = []) {
+    const fullCart = await this.cart.getCartForCheckout(userId, flashLimitKeys);
     // Checkout TẬP CON: chỉ tính trên các dòng được chọn, tính lại subtotal từ subset (combo/
     // coupon/điểm/ship đều dựa subtotal này). Rỗng/thiếu itemIds = toàn giỏ (tương thích ngược).
     const subset = Array.isArray(itemIds) && itemIds.length > 0;
@@ -1318,12 +1336,17 @@ export class CheckoutService {
     pickupInput: PickupRequestInput | null = null,
     /** Khách vãng lai (GuestCheckoutContext): tính như tài khoản trắng, không mã, không hạng, không Điểm Xanh dùng hay tích. */
     guest = false,
+    /** IP đã băm của lần gọi: khoá giới hạn Giờ vàng của người mua chưa xác thực (flash-buyer-keys.ts). */
+    ipHash: string | null = null,
   ) {
-    const cart = await this.checkoutLines(userId, itemIds);
     const account = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const address = await this.deliveryAddress(userId, addressId);
+    // Người mua chưa xác thực (guest_ Mini, khách web vãng lai) được giá Giờ vàng; giới hạn mua đếm thêm theo SĐT nhận hàng và IP web, nên
+    // giá giỏ ở đây và lần trừ suất lúc đặt dùng cùng các khoá.
+    const flashLimitKeys = buyerFlashLimitKeys(account, { phone: address.phone, ipHash });
+    const cart = await this.checkoutLines(userId, itemIds, flashLimitKeys);
     const user = guest ? { ...account, tierId: null, pointsBalance: 0, pointsConvertedBalance: 0 } : account;
     const couponCode = guest ? null : cart.couponCode;
-    const address = await this.deliveryAddress(userId, addressId);
 
     // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
     // giá trị hàng (giữ invariant subtotal - tổng-giảm = goods):
@@ -1500,6 +1523,7 @@ export class CheckoutService {
       cart,
       user,
       address,
+      flashLimitKeys,
       computed: {
         discount,
         couponApplied,

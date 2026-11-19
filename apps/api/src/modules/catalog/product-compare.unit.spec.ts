@@ -1,4 +1,5 @@
-import { formatSize, measureOf, nameGroup, parseMeasure, unitPriceOf } from './product-compare.unit';
+import { roundUnitPrice as appRound } from '../../../../../packages/app-core/src/commerce/unit-price';
+import { formatSize, measureOf, nameGroup, parseMeasure, roundUnitPrice, unitPriceOf } from './product-compare.unit';
 
 describe('parseMeasure: tách dung tích/khối lượng từ tên', () => {
   it.each([
@@ -88,7 +89,7 @@ describe('formatSize', () => {
 
 describe('unitPriceOf', () => {
   it('giá trên 100ml làm tròn đồng', () => {
-    expect(unitPriceOf(189_000, { unit: 'ml', qty: 3800 }, { unit: 'ml', qty: 500 })).toEqual({ per: '100ml', value: 4974 });
+    expect(unitPriceOf(189_000, { unit: 'ml', qty: 3800 }, { unit: 'ml', qty: 500 })).toEqual({ per: '100ml', value: 5000 });
   });
 
   it('giá trên 100g', () => {
@@ -121,5 +122,19 @@ describe('nameGroup', () => {
 
   it('nhãn viết liền trong tên vẫn dừng nhóm', () => {
     expect(nameGroup('Nước giặt Polang 2L', 'PƠ LANG')).toBe('nuoc giat');
+  });
+});
+
+describe('roundUnitPrice: bảng so sánh cỡ và dòng giá theo đơn vị cùng một số (tubu-w6-01 P2-7)', () => {
+  it('13.571đ/100ml ghi 13.600đ như dòng dưới giá, không ghi hai số', () => {
+    expect(unitPriceOf(95_000, { unit: 'ml', qty: 700 }, { unit: 'ml', qty: 700 })).toEqual({ per: '100ml', value: 13_600 });
+    expect(roundUnitPrice(13_571.43)).toBe(13_600);
+    expect(roundUnitPrice(456.4)).toBe(460);
+    expect(roundUnitPrice(42.4)).toBe(42);
+    expect(roundUnitPrice(0.2)).toBe(1);
+  });
+
+  it('cùng luật với app-core trên mọi mức giá', () => {
+    for (let v = 0.5; v < 300_000; v = v * 1.37 + 0.73) expect(roundUnitPrice(v)).toBe(appRound(v));
   });
 });

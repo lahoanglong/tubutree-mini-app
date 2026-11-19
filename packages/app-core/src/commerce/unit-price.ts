@@ -88,8 +88,11 @@ export interface UnitPriceView {
 /** Tên phân loại bỏ lượng: "Da khô – 30ml" và "Da khô – 150ml" cùng loại. */
 const kindOf = (name: string) => (name ?? '').normalize('NFC').toLowerCase().replace(MEASURE, '$1').replace(/[\s–-]+/g, ' ').trim();
 
-/** Giá trên 100ml, 100g hay một món, làm tròn để đọc: từ 1.000đ tròn trăm, từ 100đ tròn chục. */
-const rounded = (v: number) => {
+/**
+ * Giá trên 100ml, 100g hay một món, làm tròn để đọc: từ 1.000đ tròn trăm, từ 100đ tròn chục. Bảng so sánh cỡ (API
+ * `product-compare.unit.ts`, `roundUnitPrice`) làm tròn đúng luật này để một trang không ghi hai số cho cùng một giá.
+ */
+export const roundUnitPrice = (v: number) => {
   const step = v >= 1e3 ? 100 : v >= 100 ? 10 : 1;
   return Math.max(step, Math.round(v / step) * step);
 };
@@ -107,7 +110,7 @@ export function unitPriceView(variations: readonly UnitPriceVariation[], product
   if (rows.some((r) => scan(r.v.name ?? '') === null) && rows.some((r) => r.v.price !== rows[0]!.v.price)) return null;
   const per = unit === 'ml' || unit === 'g' ? `100${unit}` : unit;
   const of = (r: (typeof rows)[number]) => (r.v.price / r.a!.qty) * (per === unit ? 1 : 100);
-  const text = (r: (typeof rows)[number]) => fillCopy('pdp.unitPrice', { price: vnd(rounded(of(r))), per });
+  const text = (r: (typeof rows)[number]) => fillCopy('pdp.unitPrice', { price: vnd(roundUnitPrice(of(r))), per });
   const sel = rows.find((r) => r.v.id === selectedId) ?? rows[0]!;
   // Bằng giá theo đơn vị thì nhãn ưu tiên phân loại cùng loại với cái đang chọn ("Da khô 150ml" khi đang chọn "Da khô 30ml", không sang "Da dầu").
   const other = (r: (typeof rows)[number]) => (r.kind === sel.kind ? 0 : 1);

@@ -152,6 +152,21 @@ test.describe('Dải Mua lại món quen: chai khách đã có thành ô gói Re
       await first.scrollIntoViewIfNeeded();
       await shot(page, `rail-${vp.width}`);
 
+      // tubu-w6-01 P1-a: ô đổi nói rõ món sẽ vào giỏ trước khi chạm; nhãn nằm trọn trong thẻ, nút từ 44px.
+      const badge = first.getByText('Đổi sang túi Refill 10L');
+      await expect(badge).toBeVisible();
+      const cardBox = (await first.boundingBox())!;
+      const badgeBox = (await badge.boundingBox())!;
+      expect(badgeBox.x).toBeGreaterThanOrEqual(cardBox.x);
+      expect(badgeBox.x + badgeBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
+      const addRefill = first.getByTestId('quick-reorder-add');
+      await expect(addRefill).toHaveText('+ Thêm Refill');
+      await expect(addRefill).toHaveAttribute('aria-label', 'Thêm Refill 10L thay cho Nước rửa chén Fuwa3e 500ml vào giỏ, 650.000đ. Rẻ hơn 35% mỗi 100ml');
+      const addBox = (await addRefill.boundingBox())!;
+      expect(addBox.width).toBeGreaterThanOrEqual(44);
+      expect(addBox.height).toBeGreaterThanOrEqual(44);
+      await expect(strip.getByRole('button', { name: /^Thêm lại tất cả 3 món vào giỏ, tổng .*, gồm 1 túi Refill$/ })).toBeVisible();
+
       await first.getByTestId('quick-reorder-add').click();
       await expect.poll(() => api.callsTo('POST', '/cart/items').map((c) => (c.body as { variationId: string }).variationId)).toEqual(['v-refill']);
     });

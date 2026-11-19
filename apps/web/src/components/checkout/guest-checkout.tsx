@@ -65,7 +65,8 @@ const LOGIN_HINT_CODES = new Set(['GUEST_LIMIT', 'GUEST_LOGIN_REQUIRED']);
 
 /**
  * Thanh toán không đăng nhập trên web (cờ `web.guest_checkout_enabled`): một biểu mẫu (họ tên, SĐT, địa chỉ, ghi chú, cách trả tiền) và đúng một
- * nút Đặt hàng. Giỏ nằm trong trình duyệt (giỏ khách); máy chủ tính tiền như tài khoản thường không mã, không Điểm Xanh, không giá Giờ vàng.
+ * nút Đặt hàng. Giỏ nằm trong trình duyệt (giỏ khách); máy chủ tính tiền như tài khoản thường không mã, không Điểm Xanh. Giá Giờ vàng như mọi
+ * khách, giới hạn mỗi suất đếm theo SĐT nhận hàng và IP: hết suất thì phần vượt tính giá thường và báo một dòng.
  * Đặt xong chuyển tới trang theo dõi `/don/<mã>#k=<khoá>` (COD) hoặc trang QR chuyển khoản mở bằng cùng khoá.
  */
 export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null }) {
@@ -74,9 +75,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
   const slugs = useMemo(() => [...new Set(lines.map((l) => l.slug))], [lines]);
   const products = useGuestCartProducts(slugs);
   const { flash } = useRunningFlash();
-  // Khách vãng lai mua giá thường: dựng dòng không có giá Giờ vàng; bản có Giờ vàng chỉ để biết giỏ có món đang giảm.
-  const view = guestCartView(lines, products, []);
-  const flashInCart = guestCartView(lines, products, flash).rows.some((r) => r.isFlash);
+  const view = guestCartView(lines, products, flash);
   const buyable: GuestLineInput[] = view.rows.filter((r) => r.state === 'ok').map((r) => ({ variationId: r.variationId, quantity: r.quantity }));
 
   const [name, setName] = useState('');
@@ -269,14 +268,15 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
               </Link>
             </p>
           )}
-          {(quote?.flashNotice ?? flashInCart) && (
-            <p data-testid="guest-flash-login" className={`${LOOSE_LINE} flex items-center gap-1.5 pb-1 md:mt-2 md:pb-0`}>
-              <Zap size={14} aria-hidden="true" className="shrink-0 text-[color:var(--color-text-brand)]" />
-              <Link href={LOGIN_RETURN} className="flex min-h-11 items-center font-semibold text-[color:var(--color-text-brand)] underline">
-                {guestCopy('flashLogin')}
-              </Link>
-            </p>
-          )}
+          {/* Vùng báo luôn có mặt, chỉ đổi nội dung: vùng role=status gắn cùng lúc với chữ thì nhiều trình đọc màn hình không đọc. */}
+          <div role="status">
+            {quote?.flashNotice && (
+              <p data-testid="guest-flash-limit" className={`${LOOSE_LINE} flex min-h-11 items-center gap-1.5 pb-1 md:mt-2 md:pb-0`}>
+                <Zap size={14} aria-hidden="true" className="shrink-0 text-[color:var(--color-text-brand)]" />
+                {guestCopy('flashLimit')}
+              </p>
+            )}
+          </div>
 
           <section aria-labelledby={`${ids.name}-h`} className={BAND}>
             <h2 id={`${ids.name}-h`} className={`${ui.sectionTitle} ${mini.sectionLabel}`}>

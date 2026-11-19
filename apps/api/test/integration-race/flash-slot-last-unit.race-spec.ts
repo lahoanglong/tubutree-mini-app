@@ -24,7 +24,7 @@ import { CashbackService } from '../../src/modules/cashback/cashback.service';
 import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/cashback-provider.registry';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
-import { barrierOnFirstCalls, createUser, deleteItData, randCode, summarize, warmPool } from './helpers';
+import { barrierOnFirstCalls, createRealUser, deleteItData, randCode, summarize, warmPool } from './helpers';
 
 const PRICE = 100_000;
 const FLASH_PRICE = 60_000;
@@ -85,7 +85,8 @@ describe('Khung Giờ vàng: hai khách mua món cuối, giới hạn mỗi khá
   });
 
   async function customer() {
-    const u = await createUser(prisma, { role: 'CUSTOMER' });
+    // Khách thật (Zalo): người mua chưa xác thực còn bị đếm thêm theo SĐT (flash-buyer-keys.ts), ca này chỉ xét giới hạn theo tài khoản.
+    const u = await createRealUser(prisma, { role: 'CUSTOMER' });
     created.userIds.push(u.id);
     const addr = await prisma.address.create({
       data: {

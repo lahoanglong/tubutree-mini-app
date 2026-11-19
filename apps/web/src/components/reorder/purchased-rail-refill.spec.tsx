@@ -83,6 +83,11 @@ describe('web: dải "Mua lại món quen", chai khách đã có thành gói Ref
     const card = c.querySelector('[data-testid="quick-reorder-card"]')!;
     expect(card.textContent).toContain('Nước rửa chén Fuwa3e 10L');
     expect(card.textContent).toContain('650.000đ');
+    expect(card.textContent).toContain('Đổi sang túi Refill 10L');
+    const add = card.querySelector('[data-testid="quick-reorder-add"]')!;
+    expect(add.textContent).toBe('+ Thêm Refill');
+    expect(add.getAttribute('aria-label')).toBe('Thêm Refill 10L thay cho Chai 0 vào giỏ, 650.000đ');
+    expect([...c.querySelectorAll('button')].some((b) => /, gồm 1 túi Refill$/.test(b.getAttribute('aria-label') ?? ''))).toBe(true);
     expect(mocks.track).toHaveBeenCalledWith('refill_swap_shown', { surface: 'reorder' });
     click(card.querySelector('[data-testid="quick-reorder-add"]'));
     await flush(6);

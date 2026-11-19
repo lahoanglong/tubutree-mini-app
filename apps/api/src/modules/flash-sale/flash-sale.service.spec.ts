@@ -174,6 +174,129 @@ describe('FlashSaleService.listActive / listUpcoming — giá flash không còn 
   });
 });
 
+describe('FlashSaleService.resolveEffective — người mua chưa xác thực (tubu-w6-01 P1-b)', () => {
+  it('tài khoản guest_ vẫn được giá Giờ vàng (không còn đọc cờ đặt hàng không đăng nhập hay đọc người mua)', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([activeItem({ perUserLimit: 2, bought: 0 })]);
+    const findUnique = jest.fn();
+    const get = jest.fn(async <T>(_k: string, fb?: T) => (_k === 'web.guest_checkout_enabled' ? (true as T) : (fb as T)));
+    const svc = new FlashSaleService({ $queryRaw: queryRaw, user: { findUnique } } as unknown as PrismaService, { get } as unknown as SystemConfigService, notifications, lifecycle);
+    const map = await svc.resolveEffective(['v1'], NOW, 'guest-u1');
+    expect(map.get('v1')).toMatchObject({ flashPrice: 80000, allowance: 2 });
+    expect(get).not.toHaveBeenCalled();
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it('có khoá phụ → số đã mua là số lớn nhất giữa tài khoản và các khoá (khoá IP trừ phần trần nới thêm), cùng một câu SQL', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([activeItem({ perUserLimit: 3, bought: 2 })]);
+    const svc = new FlashSaleService({ $queryRaw: queryRaw } as unknown as PrismaService, config, notifications, lifecycle);
+    const map = await svc.resolveEffective(['v1'], NOW, 'guest-u1', ['fsk:i:h', 'fsk:p:abc']);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const q = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(q.sql).toContain('GREATEST(');
+    expect(q.sql).toContain('MAX(CASE WHEN k."userId" LIKE');
+    expect(q.sql).toContain('* i."perUserLimit"');
+    expect(q.values).toEqual(expect.arrayContaining(['fsk:i:h', 'fsk:p:abc', 'guest-u1', 'fsk:i:%', 2]));
+    expect(map.get('v1')).toMatchObject({ allowance: 1, perUserLeft: 1 });
+  });
+
+  it('không có khoá phụ → câu SQL không đọc bảng theo khoá', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    await new FlashSaleService({ $queryRaw: queryRaw } as unknown as PrismaService, config, notifications, lifecycle).resolveEffective(['v1'], NOW, 'u1');
+    expect((queryRaw.mock.calls[0][0] as { sql: string }).sql).not.toContain('flash_sale_purchases k');
+  });
+});
+
+describe('FlashSaleService.consumeQuotas — khoá phụ SĐT/IP (tubu-w6-01 P1-b)', () => {
+  const now = new Date('2026-07-05T10:00:00Z');
+  /** Tx giả: suất fi1 (đã bán 0, quota 10, giới hạn `limit`), dòng tài khoản có sẵn, bảng khoá phụ `keys`. */
+  function mkTx(limit: number, keys: Record<string, number>, accountBought = 0) {
+    const log: string[] = [];
+    const purchases: Record<string, number> = { u1: accountBought, ...keys };
+    const item = { sold: 0, quota: 10 };
+    const tx = {
+      $executeRaw: jest.fn(async (sql: TemplateStringsArray, ...v: unknown[]) => {
+        const text = sql.join('?');
+        if (text.includes('UPDATE flash_sale_items')) {
+          const qty = v[0] as number;
+          log.push('sold');
+          if (item.sold + qty > item.quota) return 0;
+          item.sold += qty;
+          return 1;
+        }
+        // INSERT ... ON CONFLICT: (id, itemId, key, qty, limit)
+        const [, , key, qty, cap] = v as [string, string, string, number, number];
+        log.push(`key:${key}`);
+        const cur = purchases[key];
+        if (cur === undefined) {
+          purchases[key] = qty;
+          return 1;
+        }
+        if (cur + qty > cap) return 0;
+        purchases[key] = cur + qty;
+        return 1;
+      }),
+      $queryRaw: jest.fn(async () => [{ flashSaleItemId: 'fi1' }]),
+      flashSaleItem: {
+        findMany: jest.fn(async () => [{ id: 'fi1', perUserLimit: limit }]),
+        updateMany: jest.fn(async ({ data }: { data: { soldCount: { decrement: number } } }) => {
+          log.push('undo-sold');
+          item.sold -= data.soldCount.decrement;
+          return { count: 1 };
+        }),
+      },
+      flashSalePurchase: {
+        updateMany: jest.fn(async ({ where, data }: { where: { userId: string; quantity: { lte?: number; gte?: number } }; data: { quantity: { increment?: number; decrement?: number } } }) => {
+          const cur = purchases[where.userId] ?? 0;
+          if (data.quantity.increment !== undefined) {
+            if (cur > where.quantity.lte!) return { count: 0 };
+            purchases[where.userId] = cur + data.quantity.increment;
+            log.push(`bump:${where.userId}`);
+          } else {
+            if (cur < where.quantity.gte!) return { count: 0 };
+            purchases[where.userId] = cur - data.quantity.decrement!;
+            log.push(`undo:${where.userId}`);
+          }
+          return { count: 1 };
+        }),
+        create: jest.fn(),
+      },
+    };
+    return { tx, log, purchases, item };
+  }
+  const svc = () => new FlashSaleService({} as any, config, notifications, lifecycle);
+
+  it('trong trần ở mọi khoá → OK, cộng tài khoản rồi từng khoá theo thứ tự', async () => {
+    const { tx, log, purchases } = mkTx(2, {});
+    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OK']);
+    expect(log).toEqual(['sold', 'bump:u1', 'key:fsk:i:h', 'key:fsk:p:x']);
+    expect(purchases).toMatchObject({ u1: 1, 'fsk:i:h': 1, 'fsk:p:x': 1 });
+  });
+
+  it('SĐT đã mua hết suất trên thiết bị khác → OVER_LIMIT, trả lại suất, dòng tài khoản và khoá đã cộng trước đó', async () => {
+    const { tx, log, purchases, item } = mkTx(2, { 'fsk:p:x': 2 });
+    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OVER_LIMIT']);
+    expect(log).toEqual(['sold', 'bump:u1', 'key:fsk:i:h', 'key:fsk:p:x', 'undo:u1', 'undo:fsk:i:h', 'undo-sold']);
+    expect(purchases).toMatchObject({ u1: 0, 'fsk:i:h': 0, 'fsk:p:x': 2 });
+    expect(item.sold).toBe(0);
+  });
+
+  it('khoá IP trần gấp 3 lần (IP dùng chung): IP đã có 5/6 vẫn mua được 1; SĐT trần đúng perUserLimit', async () => {
+    const ok = mkTx(2, { 'fsk:i:h': 5 });
+    expect(await svc().consumeQuotas(ok.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OK']);
+    expect(ok.purchases).toMatchObject({ 'fsk:i:h': 6, 'fsk:p:x': 1 });
+    const full = mkTx(2, { 'fsk:i:h': 6 });
+    expect(await svc().consumeQuotas(full.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OVER_LIMIT']);
+    expect(full.purchases).toMatchObject({ u1: 0, 'fsk:i:h': 6 });
+    expect(full.purchases['fsk:p:x']).toBeUndefined();
+  });
+
+  it('không có khoá phụ → không ghi gì thêm (khách thật như cũ)', async () => {
+    const { tx, log } = mkTx(2, {});
+    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now)).toEqual(['OK']);
+    expect(log).toEqual(['sold', 'bump:u1']);
+  });
+});
+
 describe('FlashSaleService.consumeQuotas', () => {
   const now = new Date('2026-07-05T10:00:00Z');
   type Item = { sold: number; quota: number; active?: boolean; limit: number };
@@ -335,18 +458,32 @@ describe('FlashSaleService.consumeQuotas', () => {
 });
 
 describe('FlashSaleService.restore', () => {
-  it('hoàn soldCount + purchase.quantity (guard gte)', async () => {
+  it('hoàn soldCount + purchase.quantity (guard gte), khoá dòng suất trước', async () => {
     const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
       flashSaleItem: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       flashSalePurchase: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     await new FlashSaleService({} as any, config, notifications, lifecycle).restore(tx as any, 'fi1', 'u1', 2);
+    expect((tx.$queryRaw.mock.calls[0][0] as TemplateStringsArray).join('?')).toContain('FOR NO KEY UPDATE');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.flashSaleItem.updateMany.mock.invocationCallOrder[0]!);
     expect(tx.flashSaleItem.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { soldCount: { decrement: 2 } } }),
     );
     expect(tx.flashSalePurchase.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { quantity: { decrement: 2 } } }),
     );
+  });
+
+  it('khoá phụ của đơn (SĐT, IP) được hoàn cùng số, sau dòng tài khoản', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      flashSaleItem: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      flashSalePurchase: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    await new FlashSaleService({} as any, config, notifications, lifecycle).restore(tx as any, 'fi1', 'u1', 2, ['fsk:i:h', 'fsk:p:x']);
+    expect(tx.flashSalePurchase.updateMany.mock.calls.map(([a]) => a.where.userId)).toEqual(['u1', 'fsk:i:h', 'fsk:p:x']);
+    for (const [a] of tx.flashSalePurchase.updateMany.mock.calls) expect(a).toMatchObject({ where: { quantity: { gte: 2 } }, data: { quantity: { decrement: 2 } } });
   });
 });
 

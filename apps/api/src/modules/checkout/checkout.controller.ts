@@ -1,8 +1,13 @@
-import { Body, Controller, Get, Header, Headers, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, HttpCode, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
+import { clientIp, throttleIpKey } from '../../common/throttle/throttle.config';
+import type { Env } from '../../config/env.validation';
+import { flashIpHash } from '../flash-sale/flash-buyer-keys';
 import { CheckoutService } from './checkout.service';
 import { ShippingEstimateService } from './shipping-estimate.service';
 import { CouponPreviewDto, PickupOptionsQueryDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
@@ -13,7 +18,13 @@ export class CheckoutController {
   constructor(
     private readonly checkout: CheckoutService,
     private readonly shippingEstimate: ShippingEstimateService,
+    private readonly env: ConfigService<Env, true>,
   ) {}
+
+  /** IP của lần gọi, gom và băm như khách web vãng lai: khoá giới hạn Giờ vàng khi người mua chưa xác thực (tài khoản `guest_` Mini). */
+  private ipHash(req: Request): string | null {
+    return flashIpHash(throttleIpKey(clientIp(req)), this.env.get('JWT_ACCESS_SECRET', { infer: true }));
+  }
 
   /**
    * Phí giao ước tính cho giỏ và trang sản phẩm, trước khi có địa chỉ. Công khai; có phiên thì tính theo hạng, ưu đãi đơn đầu và địa chỉ
@@ -30,8 +41,8 @@ export class CheckoutController {
   }
 
   @Post('quote')
-  quote(@CurrentUser('sub') userId: string, @Body() dto: QuoteDto) {
-    return this.checkout.quote(userId, dto);
+  quote(@CurrentUser('sub') userId: string, @Body() dto: QuoteDto, @Req() req: Request) {
+    return this.checkout.quote(userId, dto, false, this.ipHash(req));
   }
 
   /** Món rác, ngưỡng điểm, trần cân nặng và phiếu thu kèm đang chờ để dựng ngăn chọn thu rác ngay trên thanh toán (chỉ đọc). */
@@ -53,10 +64,11 @@ export class CheckoutController {
   placeOrder(
     @CurrentUser('sub') userId: string,
     @Body() dto: PlaceOrderDto,
-    @Headers('idempotency-key') idempotencyKey?: string,
-    @Headers('x-client-platform') clientPlatform?: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('x-client-platform') clientPlatform: string | undefined,
+    @Req() req: Request,
   ) {
     const platform = clientPlatform === 'web' ? 'web' : 'miniapp';
-    return this.checkout.placeOrder(userId, dto, idempotencyKey, platform);
+    return this.checkout.placeOrder(userId, dto, idempotencyKey, platform, undefined, this.ipHash(req));
   }
 }

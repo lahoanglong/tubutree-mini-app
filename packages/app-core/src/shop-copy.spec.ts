@@ -59,6 +59,9 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'pdp.unitPrice': { per: '100ml' },
   'pdp.unitBetter': { per: '100ml' },
   'pdp.eta': { range: '31/12 – 04/01' },
+  'refill.railBadge': { size: ' 10L' },
+  'refill.railSave': { pct: '99', per: '100ml' },
+  'refill.railAllNote': { n: '10' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);

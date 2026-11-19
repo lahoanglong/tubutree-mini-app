@@ -1,18 +1,25 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { CatalogService } from '../catalog.service';
 import { PUBLIC_PRODUCT_WHERE } from '../public-product';
 import {
+  REFILL_AUTO_MAX_RATIO,
   REFILL_FIRST_ENABLED_KEY,
   REFILL_PAIRS_BLOCK_KEY,
   REFILL_PAIRS_OVERRIDE_KEY,
+  isRefillProduct,
   pairRefills,
   parseRefillBlock,
   parseRefillOverrides,
+  refillPairRows,
   refillSizeLabel,
+  type RefillCatalogRow,
+  type RefillPairOverride,
+  type RefillPairStatus,
 } from './refill-pairs';
+import { parseMeasure } from '../product-compare.unit';
 
 /** Bảng cặp (quét danh mục công khai + hai khoá cấu hình) đọc lại sau chừng này; mỗi lần hỏi chỉ tra trong bộ nhớ. */
 export const REFILL_PAIRS_TTL_MS = 60_000;
@@ -39,6 +46,51 @@ export interface RefillOffer {
 
 type Card = Awaited<ReturnType<CatalogService['cardsByIds']>>[number];
 
+export interface AdminRefillProduct {
+  id: string;
+  slug: string;
+  name: string;
+  /** "10L"; null khi tên không ghi lượng. */
+  sizeLabel: string | null;
+}
+
+export interface AdminRefillPairRow {
+  bottle: AdminRefillProduct;
+  refill: AdminRefillProduct | null;
+  status: RefillPairStatus;
+  candidates: number;
+  /** Gói refill gấp mấy lần chai (một chữ số thập phân); null khi một bên không ghi lượng hay khác chiều. */
+  ratio: number | null;
+}
+
+/** Thẻ admin "Cặp Refill": cờ, luật lượng, bảng cặp, ghép tay và danh sách chặn hiện hành. */
+export interface AdminRefillPairs {
+  enabled: boolean;
+  maxRatio: number;
+  rows: AdminRefillPairRow[];
+  overrides: RefillPairOverride[];
+  /** Slug đang chặn, kèm tên khi còn trong danh mục công khai (gói refill bị chặn không có dòng nào trong `rows`). */
+  block: { slug: string; name: string | null }[];
+  /** Lựa chọn cho ô "Ghép tay": mọi chai (không phải refill, không phải combo) và mọi gói Refill đang bán, theo tên. */
+  choices: { bottles: AdminRefillProduct[]; refills: AdminRefillProduct[] };
+}
+
+export interface AdminRefillPairsInput {
+  enabled?: boolean;
+  overrides?: readonly RefillPairOverride[];
+  block?: readonly string[];
+}
+
+const adminProduct = (p: RefillCatalogRow): AdminRefillProduct => ({ id: p.id, slug: p.slug, name: p.name, sizeLabel: refillSizeLabel(p.name) });
+
+const byName = (rows: readonly RefillCatalogRow[]) => rows.map(adminProduct).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+function ratioOf(bottle: string, refill: string): number | null {
+  const b = parseMeasure(bottle);
+  const r = parseMeasure(refill);
+  return b && r && b.unit === r.unit && b.qty > 0 ? Math.round((r.qty / b.qty) * 10) / 10 : null;
+}
+
 function toOffer(card: Card): RefillOffer | null {
   if (!card.repVariationId) return null;
   const price = card.salePrice ?? card.basePrice;
@@ -60,6 +112,8 @@ function toOffer(card: Card): RefillOffer | null {
 export class RefillPairsService {
   private table: { pairs: Map<string, string>; expiresAt: number } | null = null;
   private loading: Promise<Map<string, string>> | null = null;
+  /** Tăng mỗi lần admin lưu: lần quét bắt đầu trước đó (đọc cấu hình cũ) không được ghi vào bộ nhớ đệm. */
+  private generation = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -117,27 +171,94 @@ export class RefillPairsService {
     return out;
   }
 
+  /** Thẻ admin: mọi chai có ứng viên refill (tự ghép, chờ ghép tay vì lệch lượng, nhiều ứng viên, đã ghép tay, đã chặn). */
+  async adminOverview(): Promise<AdminRefillPairs> {
+    const [products, overridesRaw, blockRaw, enabled] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_OVERRIDE_KEY), this.configValue(REFILL_PAIRS_BLOCK_KEY), this.enabled()]);
+    const overrides = parseRefillOverrides(overridesRaw);
+    const block = parseRefillBlock(blockRaw);
+    const nameOf = new Map(products.map((p) => [p.slug, p.name]));
+    return {
+      enabled,
+      maxRatio: REFILL_AUTO_MAX_RATIO,
+      rows: refillPairRows(products, { overrides, block }).map((r) => ({
+        bottle: adminProduct(r.bottle),
+        refill: r.refill ? adminProduct(r.refill) : null,
+        status: r.status,
+        candidates: r.candidates,
+        ratio: r.refill ? ratioOf(r.bottle.name, r.refill.name) : null,
+      })),
+      overrides,
+      block: [...block].map((slug) => ({ slug, name: nameOf.get(slug) ?? null })),
+      choices: {
+        bottles: byName(products.filter((p) => !p.isCombo && !isRefillProduct(p))),
+        refills: byName(products.filter((p) => !p.isCombo && isRefillProduct(p))),
+      },
+    };
+  }
+
+  /**
+   * Lưu thẻ admin: phần nào có trong `input` thì ghi đè khoá cấu hình đó (có lịch sử, ghi người sửa). Ghép tay phải là một chai (không phải
+   * gói refill) và một gói refill đang bán, mỗi chai một cặp. Bảng cặp trong bộ nhớ bỏ ngay; /catalog/refill-pairs công khai còn cache CDN
+   * như danh mục.
+   */
+  async adminSave(input: AdminRefillPairsInput, actor: string): Promise<AdminRefillPairs> {
+    if (!this.config) throw new ServiceUnavailableException('Chưa đọc được cấu hình hệ thống.');
+    let overrides: RefillPairOverride[] | undefined;
+    if (input.overrides) {
+      const bySlug = new Map((await this.catalogRows()).map((p) => [p.slug, p]));
+      const seen = new Set<string>();
+      overrides = [];
+      for (const o of input.overrides) {
+        const bottleSlug = o.bottleSlug.trim();
+        const refillSlug = o.refillSlug.trim();
+        const bottle = bySlug.get(bottleSlug);
+        const refill = bySlug.get(refillSlug);
+        if (!bottle || !refill) throw new BadRequestException(`Không có sản phẩm đang bán "${!bottle ? bottleSlug : refillSlug}".`);
+        if (isRefillProduct(bottle)) throw new BadRequestException(`"${bottle.name}" là gói Refill, không làm chai được.`);
+        if (!isRefillProduct(refill)) throw new BadRequestException(`"${refill.name}" không phải gói Refill (tên hay slug phải bắt đầu bằng Refill).`);
+        if (seen.has(bottleSlug)) throw new BadRequestException(`"${bottle.name}" đang có hai cặp ghép tay, giữ một.`);
+        seen.add(bottleSlug);
+        overrides.push({ bottleSlug, refillSlug });
+      }
+    }
+    if (input.enabled !== undefined) await this.config.set(REFILL_FIRST_ENABLED_KEY, input.enabled, actor);
+    if (overrides) await this.config.set(REFILL_PAIRS_OVERRIDE_KEY, overrides, actor);
+    if (input.block) await this.config.set(REFILL_PAIRS_BLOCK_KEY, [...new Set(input.block.map((s) => s.trim()).filter(Boolean))], actor);
+    this.generation += 1;
+    this.table = null;
+    this.loading = null;
+    return this.adminOverview();
+  }
+
   /** Bảng cặp hiện hành (id chai → id gói refill), dùng chung bộ nhớ đệm. */
   async pairs(): Promise<Map<string, string>> {
     const now = Date.now();
     if (this.table && this.table.expiresAt > now) return this.table.pairs;
-    this.loading ??= this.load()
-      .then((pairs) => {
-        this.table = { pairs, expiresAt: Date.now() + REFILL_PAIRS_TTL_MS };
-        return pairs;
-      })
-      .finally(() => {
-        this.loading = null;
-      });
+    if (!this.loading) {
+      const generation = this.generation;
+      const loading: Promise<Map<string, string>> = this.load()
+        .then((pairs) => {
+          if (generation === this.generation) this.table = { pairs, expiresAt: Date.now() + REFILL_PAIRS_TTL_MS };
+          return pairs;
+        })
+        .finally(() => {
+          if (this.loading === loading) this.loading = null;
+        });
+      this.loading = loading;
+    }
     return this.loading;
   }
 
   private async load(): Promise<Map<string, string>> {
-    const [products, overrides, block] = await Promise.all([
-      this.prisma.product.findMany({ where: { ...PUBLIC_PRODUCT_WHERE }, select: { id: true, slug: true, name: true, brand: true, isCombo: true } }),
-      this.config?.get<unknown>(REFILL_PAIRS_OVERRIDE_KEY, []) ?? [],
-      this.config?.get<unknown>(REFILL_PAIRS_BLOCK_KEY, []) ?? [],
-    ]);
+    const [products, overrides, block] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_OVERRIDE_KEY), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
     return pairRefills(products, { overrides: parseRefillOverrides(overrides), block: parseRefillBlock(block) });
+  }
+
+  private catalogRows(): Promise<RefillCatalogRow[]> {
+    return this.prisma.product.findMany({ where: { ...PUBLIC_PRODUCT_WHERE }, select: { id: true, slug: true, name: true, brand: true, isCombo: true } });
+  }
+
+  private async configValue(key: string): Promise<unknown> {
+    return (await this.config?.get<unknown>(key, [])) ?? [];
   }
 }

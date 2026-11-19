@@ -2,7 +2,7 @@
 
 // Nguồn: apps/miniapp/src/components/ui/quick-reorder-strip.tsx (cùng props, cùng test-id, cùng lớp tubu-quick-*).
 import { QUICK_REORDER_CARD_HEIGHT } from '@tubutree/app-core/home-layout';
-import { quickReorderTotal, type QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
+import { quickReorderAddAllAria, type QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { formatVnd } from '@/lib/format-vnd';
 import { Badge } from './badge';
@@ -11,6 +11,9 @@ import { PriceTag } from './price-tag';
 import { ProductThumb } from './product-thumb';
 import { ScrollRow } from './scroll-row';
 import { SectionHeader } from './section-header';
+
+/** Nhãn dài (ô đã đổi sang túi Refill) được xuống dòng trong khung ảnh thay vì bị cắt. */
+const WRAP = { whiteSpace: 'normal', display: 'inline-block' } as const;
 
 export interface QuickReorderStripProps {
   items: readonly QuickReorderItem[];
@@ -34,7 +37,7 @@ export function QuickReorderStrip({ items, busyKey = null, busyAll = false, onAd
   const title = fillCopy('quickReorder.title');
   // Một lệnh bay mỗi lúc: nút khác khoá hẳn thay vì xếp hàng, vì lệnh sau có thể thành "đã có trong giỏ" ngoài ý khách.
   const locked = busyAll || busyKey !== null;
-  const addAllSpoken = fillCopy('quickReorder.addAllAria', { n: items.length, total: formatVnd(quickReorderTotal(items)) });
+  const addAllSpoken = quickReorderAddAllAria(items, formatVnd);
   return (
     <section data-testid="quick-reorder" aria-label={title} aria-busy={locked || undefined}>
       <div className="tubu-quick-head">
@@ -55,7 +58,7 @@ export function QuickReorderStrip({ items, busyKey = null, busyAll = false, onAd
         <div className="tubu-quick-track">
           {items.map((item) => {
             const busy = busyKey === item.variationId;
-            const badge = item.savePct > 0 ? `-${item.savePct}%` : item.timesBought > 1 ? fillCopy('quickReorder.timesBought', { n: item.timesBought }) : null;
+            const badge = item.badge ?? (item.savePct > 0 ? `-${item.savePct}%` : item.timesBought > 1 ? fillCopy('quickReorder.timesBought', { n: item.timesBought }) : null);
             return (
               <div key={item.key} className="tubu-quick-cell">
                 <div data-testid="quick-reorder-card" data-variation-id={item.variationId} className="tubu-quick-card" style={{ height: QUICK_REORDER_CARD_HEIGHT }}>
@@ -64,7 +67,7 @@ export function QuickReorderStrip({ items, busyKey = null, busyAll = false, onAd
                       <ProductThumb src={item.thumbnail} alt="" size={108} />
                       {badge && (
                         <span className="tubu-quick-badge">
-                          <Badge tone={item.savePct > 0 ? 'promo' : 'brand'} size="sm">
+                          <Badge tone={item.savePct > 0 ? 'promo' : 'brand'} size="sm" style={item.badge ? WRAP : undefined}>
                             {badge}
                           </Badge>
                         </span>
@@ -86,12 +89,12 @@ export function QuickReorderStrip({ items, busyKey = null, busyAll = false, onAd
                     className="tubu-quick-add"
                     data-testid="quick-reorder-add"
                     data-variation-id={item.variationId}
-                    aria-label={fillCopy('quickReorder.addAria', { name: item.name, price: formatVnd(item.price) })}
+                    aria-label={item.addAria ?? fillCopy('quickReorder.addAria', { name: item.name, price: formatVnd(item.price) })}
                     loading={busy}
                     disabled={locked && !busy}
                     onPress={() => onAdd(item)}
                   >
-                    {fillCopy('quickReorder.add')}
+                    {item.addLabel ?? fillCopy('quickReorder.add')}
                   </Button>
                 </div>
               </div>

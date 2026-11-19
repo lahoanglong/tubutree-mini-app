@@ -6,6 +6,7 @@ import { serverNow } from '../server-clock';
 import { joinVariationLine, variationLabel } from '../variation-label';
 import { addOneCardPricing } from './add-one-pricing';
 import { variationLinePreview } from './flash-line';
+import { fillCopy } from '../shop-copy';
 
 /**
  * Dải "Mua lại món quen" ở Trang chủ: món khách đã nhận hàng (hoặc, khi chưa có đơn nào, món vừa xem) dưới dạng thẻ thêm một chạm.
@@ -34,6 +35,12 @@ export interface QuickReorderItem {
   /** Số lần đã đặt; 0 với món chỉ mới xem. */
   timesBought: number;
   source: 'purchased' | 'viewed';
+  /** Nhãn trên ảnh thay cho "-x%"/"Đã mua n lần" (ô đã đổi sang túi Refill: "Đổi sang túi Refill 1L"). */
+  badge?: string;
+  /** Chữ nút thêm thay cho "+ Thêm". */
+  addLabel?: string;
+  /** Câu đọc của nút thêm thay cho câu mặc định. */
+  addAria?: string;
 }
 
 export interface QuickReorderParams {
@@ -147,4 +154,14 @@ export function quickReorderLines(items: readonly QuickReorderItem[]): { variati
 /** Tổng tiền khách trả khi thêm lại cả dải (mỗi món một đơn vị, giá đang hiện). */
 export function quickReorderTotal(items: readonly QuickReorderItem[]): number {
   return items.reduce((sum, i) => sum + i.price, 0);
+}
+
+/**
+ * Câu đọc của "Thêm lại tất cả": đúng số món và tổng tiền của các ô đang hiện (nút chỉ thêm các ô này), và nói rõ bao nhiêu ô là túi Refill
+ * để khách dùng trình đọc màn hình không bị đổi món mà không biết.
+ */
+export function quickReorderAddAllAria(items: readonly QuickReorderItem[], money: (n: number) => string): string {
+  const spoken = fillCopy('quickReorder.addAllAria', { n: items.length, total: money(quickReorderTotal(items)) });
+  const refills = items.filter((i) => i.badge).length;
+  return refills > 0 ? `${spoken}${fillCopy('refill.railAllNote', { n: refills })}` : spoken;
 }

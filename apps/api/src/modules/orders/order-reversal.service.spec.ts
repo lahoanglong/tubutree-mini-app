@@ -146,8 +146,15 @@ describe('OrderReversalService', () => {
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
     // Tham số của câu UPDATE hoàn kho: (số lượng, số lượng, variationId).
     expect(tx.$executeRaw.mock.calls[0]!.slice(1)).toEqual([2, 2, 'v1']);
-    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
+    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1, []);
     expect(flashSale.restore).toHaveBeenCalledTimes(1);
+  });
+
+  it('hoàn suất giờ vàng trả đúng các khoá SĐT/IP đã ghi trên đơn lúc đặt, không tính lại từ địa chỉ', async () => {
+    const order = makeOrder({ flashLimitKeys: ['fsk:i:abc', 'fsk:p:def'], guestPhone: '0900000000' });
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1, ['fsk:i:abc', 'fsk:p:def']);
   });
 
   it('hoàn thẳng vào Ví → ghi dòng vết khoản hoàn (WALLET, COMPLETED) để chi tiết đơn của khách nói đã hoàn bao nhiêu, về đâu', async () => {
@@ -1577,7 +1584,7 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
       prior: NO_PARTIAL_RETURNS,
       standardPointsExpiresAt: null,
     });
-    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
+    expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1, []);
     // Ca này phải đi qua cả hai đường: khoá users trước khi thu điểm tích, và dòng sổ trả điểm đã dùng.
     // Hai câu khoá users: lần hoàn Ví (creditWalletUnlessAnonymized) và lần khoá để thu điểm tích.
     expect(rawOn(tx.$queryRaw, 'users')).toHaveLength(2);

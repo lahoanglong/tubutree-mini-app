@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProductCard } from '../api/catalog';
 import type { PurchasedItem } from '../api/orders';
 import type { FlashPriceItem } from '../flash-price';
-import { QUICK_REORDER_MAX, QUICK_REORDER_MIN, buildQuickReorderItems, quickReorderAvailable, quickReorderLines, quickReorderShelfItems, quickReorderTotal } from './quick-reorder';
+import { QUICK_REORDER_MAX, QUICK_REORDER_MIN, buildQuickReorderItems, quickReorderAddAllAria, quickReorderAvailable, quickReorderLines, quickReorderShelfItems, quickReorderTotal } from './quick-reorder';
 
 const NOW = Date.parse('2026-11-08T03:00:00Z');
 
@@ -208,6 +208,14 @@ describe('dòng giỏ và tổng của cả dải', () => {
   it('tổng là tổng giá khách trả đang hiện', () => {
     expect(quickReorderTotal(items)).toBe(90_000 + 40_000);
     expect(quickReorderTotal([])).toBe(0);
+  });
+
+  it('câu đọc "Thêm lại tất cả" nêu đúng số món đang hiện; có ô đã đổi sang Refill thì nói rõ bao nhiêu túi Refill', () => {
+    const money = (n: number) => `${n}đ`;
+    const plain = quickReorderAddAllAria(items, money);
+    expect(plain).not.toContain('Refill');
+    const swapped = [{ ...items[0]!, badge: 'Đổi sang túi Refill 1L' }, items[1]!];
+    expect(quickReorderAddAllAria(swapped, money)).toBe(`${plain}, gồm 1 túi Refill`);
   });
 });
 

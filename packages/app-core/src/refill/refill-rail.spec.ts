@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { QuickReorderItem } from '../commerce/quick-reorder';
 import type { RefillOfferDTO } from './refill-api';
-import { refillQuickItems } from './refill-rail';
+import { refillQuickItems, refillUnitSaving } from './refill-rail';
 
 const tile = (id: string, over: Partial<QuickReorderItem> = {}): QuickReorderItem => ({
   key: `k-${id}`,
@@ -56,8 +56,26 @@ describe('refillQuickItems: ô chai khách đã có thành gói Refill ở dải
       timesBought: 0,
       source: 'purchased',
       bottle: a,
+      badge: 'Đổi sang túi Refill 10L',
+      addLabel: '+ Thêm Refill',
+      addAria: 'Thêm Refill 10L thay cho Chai a vào giỏ, 650.000đ',
     });
     expect(keep).toEqual(tile('b'));
+    expect(keep!.badge).toBeUndefined();
+  });
+
+  it('khách thấy rõ món đổi: nhãn ghi dung tích, câu đọc nêu chai cũ, giá và mức rẻ hơn mỗi 100ml', () => {
+    const [out] = refillQuickItems([tile('a', { name: 'Nước giặt 1L', price: 60_000 })], {
+      'p-a': offer('r', { name: 'Nước giặt Refill 3L', sizeLabel: '3L', price: 150_000 }),
+    });
+    expect(out!.badge).toBe('Đổi sang túi Refill 3L');
+    expect(out!.addAria).toBe('Thêm Refill 3L thay cho Nước giặt 1L vào giỏ, 150.000đ. Rẻ hơn 16% mỗi 100ml');
+  });
+
+  it('gói không ghi dung tích: nhãn vẫn nói đổi sang túi Refill, không bịa số', () => {
+    const [out] = refillQuickItems([tile('a')], { 'p-a': offer('r', { sizeLabel: null, name: 'Refill r' }) });
+    expect(out!.badge).toBe('Đổi sang túi Refill');
+    expect(out!.addAria).toBe('Thêm Refill thay cho Chai a vào giỏ, 650.000đ');
   });
 
   it('gói refill hết hàng: giữ ô chai', () => {
@@ -81,5 +99,18 @@ describe('refillQuickItems: ô chai khách đã có thành gói Refill ở dải
     const copy = structuredClone(items);
     refillQuickItems(items, { 'p-a': offer('r') });
     expect(items).toEqual(copy);
+  });
+});
+
+describe('refillUnitSaving: mức rẻ hơn tính trên cùng lượng', () => {
+  const bottle = { name: 'Sữa tắm 500ml', price: 100_000 };
+  it('làm tròn xuống, theo 100ml', () => {
+    expect(refillUnitSaving(bottle, { name: 'Sữa tắm Refill 1L', sizeLabel: '1L', price: 150_000 })).toEqual({ pct: 25, per: '100ml' });
+  });
+  it('không đọc được lượng, khác chiều, hay đắt hơn: null', () => {
+    expect(refillUnitSaving({ name: 'Sữa tắm', price: 100_000 }, { name: 'Refill 1L', sizeLabel: '1L', price: 150_000 })).toBeNull();
+    expect(refillUnitSaving(bottle, { name: 'Refill 1kg', sizeLabel: '1kg', price: 150_000 })).toBeNull();
+    expect(refillUnitSaving(bottle, { name: 'Refill 1L', sizeLabel: '1L', price: 200_000 })).toBeNull();
+    expect(refillUnitSaving(bottle, { name: 'Refill 1L', sizeLabel: '1L', price: 0 })).toBeNull();
   });
 });

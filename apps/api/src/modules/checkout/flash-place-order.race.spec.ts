@@ -127,6 +127,7 @@ function setup(opts: Opts) {
       cart: { items, unavailableItems: [], couponCode: null, couponRemoved: null, subtotal },
       user,
       address,
+      flashLimitKeys: [],
       computed: {
         discount: 0,
         couponApplied: false,

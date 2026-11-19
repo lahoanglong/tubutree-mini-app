@@ -87,8 +87,13 @@ describe('Dải "Mua lại món quen": chai khách đã có thành gói Refill (
     expect(mocks.pairs).toHaveBeenCalledWith(['p0', 'p1']);
     expect(cards(strip)[0]).toHaveTextContent('Nước rửa chén Fuwa3e 10L');
     expect(cards(strip)[0]).toHaveTextContent('650.000đ');
+    expect(cards(strip)[0]).toHaveTextContent('Đổi sang túi Refill 10L');
     expect(trackEvent).toHaveBeenCalledWith('refill_swap_shown', 'miniapp', { surface: 'reorder' });
     const add = within(cards(strip)[0]!).getByTestId('quick-reorder-add');
+    expect(add).toHaveTextContent('+ Thêm Refill');
+    expect(add).toHaveAttribute('aria-label', 'Thêm Refill 10L thay cho Chai 0 vào giỏ, 650.000đ');
+    expect(within(cards(strip)[1]!).getByTestId('quick-reorder-add')).toHaveTextContent('+ Thêm');
+    expect(within(strip).getByRole('button', { name: /^Thêm lại tất cả 2 món vào giỏ, tổng .*, gồm 1 túi Refill$/ })).toBeInTheDocument();
     fireEvent.click(add);
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-r', 1, 'repurchase'));
     expect(trackEvent).toHaveBeenCalledWith('refill_swap_applied', 'miniapp', { surface: 'reorder' });

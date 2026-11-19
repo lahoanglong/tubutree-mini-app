@@ -23,7 +23,7 @@ export interface GuestAddressInput {
 }
 
 export interface GuestQuote {
-  /** Có món đang có giá Giờ vàng: khách chưa đăng nhập mua giá thường. */
+  /** Có món đã hết suất Giờ vàng của SĐT nhận hàng (hay IP) này: phần vượt tính giá thường. */
   flashNotice: boolean;
   shipments?: QuoteShipment[];
   /** Lý do từng cách trả tiền đang khoá (COD trên trần, gian hàng không nhận COD…). */
@@ -44,6 +44,9 @@ export interface GuestQuote {
     slug: string | null;
     thumbnail: string | null;
     unitPrice: number;
+    /** Giá niêm yết một đơn vị (trước Giờ vàng). */
+    listUnitPrice?: number;
+    isFlash?: boolean;
     quantity: number;
     total: number;
   }[];

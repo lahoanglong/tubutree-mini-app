@@ -59,6 +59,14 @@ export function flashHandlers(db: RaceDb): void {
       },
     },
     {
+      // restore khoá dòng suất trước (cùng khoá với UPDATE trừ suất ở trên) rồi mới hoàn bộ đếm và lượt mua.
+      match: /FROM "flash_sale_items" WHERE "id" = \?? FOR NO KEY UPDATE/,
+      run: async (c) => {
+        await c.lockRow('flashSaleItem', c.params[0] as string);
+        return [];
+      },
+    },
+    {
       // Khoá các dòng suất của khách (FOR NO KEY UPDATE), theo thứ tự ORDER BY khi câu còn có nó.
       match: /FROM "flash_sale_purchases"/,
       run: async (c) => {

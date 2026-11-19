@@ -5,13 +5,12 @@ import { createHash } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { isRealUser } from '../../../common/real-user';
-import { hashIp } from '../../../common/ip-hash';
+import { flashIpHash } from '../../flash-sale/flash-buyer-keys';
 import { safeEqualStrings } from '../../../common/safe-equal';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { AuthService } from '../../auth/auth.service';
 import { BankTransferService } from '../../integrations/payment/bank-transfer.service';
-import { FlashSaleService } from '../../flash-sale/flash-sale.service';
 import { CheckoutService, type GuestCheckoutContext } from '../checkout.service';
 import type { PlaceOrderDto, QuoteDto } from '../dto/checkout.dto';
 import { MAX_ITEM_QUANTITY } from '../../cart/dto/cart.dto';
@@ -79,8 +78,8 @@ export interface GuestRequestMeta {
 /**
  * Đặt hàng trên web không cần đăng nhập Zalo (cờ web.guest_checkout_enabled). Khách là một dòng users vãng lai theo deviceId của trình
  * duyệt (không cấp phiên), giỏ trên trình duyệt được chép vào giỏ máy chủ của dòng đó rồi đi đúng đường tính tiền và đặt đơn của
- * CheckoutService (chế độ khách: không mã, không hạng, không Điểm Xanh, không giá Giờ vàng). Đơn mang SĐT khách gõ (orders.guestPhone),
- * băm khoá theo dõi (orders.guestTokenHash) và băm IP (orders.guestIpHash) để kiểm trần.
+ * CheckoutService (chế độ khách: không mã, không hạng, không Điểm Xanh; giá Giờ vàng như mọi khách, giới hạn mua mỗi suất đếm thêm theo SĐT
+ * và IP). Đơn mang SĐT khách gõ (orders.guestPhone), băm khoá theo dõi (orders.guestTokenHash) và băm IP (orders.guestIpHash) để kiểm trần.
  */
 @Injectable()
 export class GuestCheckoutService {
@@ -92,8 +91,11 @@ export class GuestCheckoutService {
     private readonly config: SystemConfigService,
     private readonly analytics: AnalyticsEventsService,
     private readonly env: ConfigService<Env, true>,
-    private readonly flash: FlashSaleService,
   ) {}
+
+  private ipHashOf(ip: string): string | null {
+    return flashIpHash(ip, this.env.get('JWT_ACCESS_SECRET', { infer: true }));
+  }
 
   private async settingsOrNotFound(): Promise<GuestCheckoutSettings> {
     const settings = await readGuestCheckoutSettings(this.config);
@@ -193,17 +195,16 @@ export class GuestCheckoutService {
     const user = await this.guestUser(meta.deviceId);
     await this.syncCart(user.id, dto.lines);
     const addressId = await this.addressFor(user.id, dto.address);
-    const q = await this.checkout.quote(user.id, { addressId } as QuoteDto, true);
+    const q = await this.checkout.quote(user.id, { addressId } as QuoteDto, { ipHash: this.ipHashOf(meta.ip) });
     const blockedPaymentMethods: Record<string, string> = {};
     for (const method of ['COD', 'BANK_TRANSFER'] as const) {
       const reason = q.blockedPaymentMethods[method];
       if (reason) blockedPaymentMethods[method] = reason;
     }
     if (!blockedPaymentMethods.COD && q.total > settings.codMax) blockedPaymentMethods.COD = guestCodOverMaxMessage(settings.codMax);
-    // Món đang có giá Giờ vàng (tính như khách chưa xác định, không theo lượt đã mua): khách vãng lai mua giá thường nên web mời đăng nhập.
-    const flashNow = await this.flash.resolveEffective([...new Set(dto.lines.map((l) => l.variationId))]);
     return {
-      flashNotice: flashNow.size > 0,
+      // Món đang Giờ vàng mà lần mua này tính giá thường (SĐT, IP hay thiết bị đã mua hết suất của món): web mời đăng nhập Zalo.
+      flashNotice: q.items.some((it) => it.flashLimitNotice != null),
       shipments: q.shipments,
       blockedPaymentMethods,
       codMax: settings.codMax,
@@ -222,6 +223,8 @@ export class GuestCheckoutService {
         slug: it.slug,
         thumbnail: it.thumbnail,
         unitPrice: it.unitPrice,
+        listUnitPrice: it.listUnitPrice,
+        isFlash: it.isFlash,
         quantity: it.quantity,
         total: it.total,
       })),
@@ -270,7 +273,7 @@ export class GuestCheckoutService {
     await this.syncCart(user.id, dto.lines, { idempotencyKey, address: dto.address, paymentMethod: dto.paymentMethod });
     const addressId = await this.addressFor(user.id, dto.address);
     const tokenHash = sha256Hex(dto.trackingKey);
-    const ipHash = meta.ip ? hashIp(meta.ip, this.env.get('JWT_ACCESS_SECRET', { infer: true }), 'guest-checkout') : null;
+    const ipHash = this.ipHashOf(meta.ip);
     const ctx: GuestCheckoutContext = {
       phone,
       tokenHash,

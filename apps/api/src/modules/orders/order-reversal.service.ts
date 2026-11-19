@@ -390,7 +390,7 @@ export class OrderReversalService {
     }
     await this.restoreFlashInIdOrder(
       tx,
-      order.userId,
+      order,
       order.items.map((item) => ({ flashSaleItemId: item.flashSaleItemId, quantity: item.quantity - (prior.approvedQty.get(item.id) ?? 0) })),
     );
   }
@@ -402,12 +402,15 @@ export class OrderReversalService {
    */
   private async restoreFlashInIdOrder(
     tx: Prisma.TransactionClient,
-    userId: string,
+    order: { userId: string; flashLimitKeys?: readonly string[] | null },
     lines: { flashSaleItemId: string | null; quantity: number }[],
   ): Promise<void> {
     const flash = lines.flatMap((l) => (l.flashSaleItemId && l.quantity > 0 ? [{ id: l.flashSaleItemId, quantity: l.quantity }] : []));
+    if (flash.length === 0) return;
     flash.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
-    for (const l of flash) await this.flashSale.restore(tx, l.id, userId, l.quantity);
+    // Khoá giới hạn phụ (SĐT, IP) đơn đã trừ lúc đặt, ghi trên đơn: hoàn đúng các khoá đó, đơn cũ (chưa ghi) không hoàn khoá nào.
+    const keys = order.flashLimitKeys ?? [];
+    for (const l of flash) await this.flashSale.restore(tx, l.id, order.userId, l.quantity, keys);
   }
 
   /**
@@ -451,7 +454,7 @@ export class OrderReversalService {
     const byId = new Map(order.items.map((i) => [i.id, i]));
     await this.restoreFlashInIdOrder(
       tx,
-      order.userId,
+      order,
       shares.lines.map((line) => ({ flashSaleItemId: byId.get(line.orderItemId)?.flashSaleItemId ?? null, quantity: line.quantity })),
     );
 

@@ -158,7 +158,7 @@ describe('CartService guard tồn kho', () => {
       expect.objectContaining({ id: 'ci-off', productName: 'SP off', quantity: 1 }),
     );
     // Giá giờ vàng chỉ tra cho dòng còn bán.
-    expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date), 'u1');
+    expect(resolveEffective).toHaveBeenCalledWith(['ok'], expect.any(Date), 'u1', []);
   });
 
   it('getCartForCheckout (D9-07): cùng dòng, subtotal, mã như getCart nhưng không đọc lại hạng, khách và đơn cũ mà checkout tự đọc', async () => {

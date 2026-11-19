@@ -1,9 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { FLASH_IP_KEY_PREFIX, FLASH_IP_LIMIT_FACTOR, flashKeyLimit } from './flash-buyer-keys';
 import { PrismaService } from '../../prisma/prisma.service';
-import { isRealUser } from '../../common/real-user';
-import { guestCheckoutEnabled } from '../checkout/guest/guest-checkout.config';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
@@ -177,12 +177,23 @@ export class FlashSaleService {
     variationIds: string[],
     now: Date = new Date(),
     userId?: string,
+    /** Khoá giới hạn phụ của người mua chưa xác thực (flash-buyer-keys.ts): số đã mua là số lớn nhất giữa tài khoản và từng khoá. */
+    limitKeys: readonly string[] = [],
   ): Promise<Map<string, EffectivePrice>> {
     const map = new Map<string, EffectivePrice>();
     if (variationIds.length === 0) return map;
     // Một câu JOIN (không tra đợt flash bằng câu thứ hai): giỏ và báo giá gọi hàm này mỗi lần xem giá.
     // Lượt đã mua của khách nối luôn vào câu này (unique theo item + khách nên mỗi item tối đa một dòng).
-    const boughtCol = userId ? Prisma.sql`COALESCE(p."quantity", 0)::int` : Prisma.sql`0`;
+    // Khoá phụ quy về cùng thang với dòng của tài khoản: khoá IP trần gấp FLASH_IP_LIMIT_FACTOR lần nên trừ phần nới thêm trước khi so.
+    const keyBought =
+      userId && limitKeys.length > 0
+        ? Prisma.sql`, (SELECT MAX(CASE WHEN k."userId" LIKE ${`${FLASH_IP_KEY_PREFIX}%`}
+                                       THEN k."quantity" - ${FLASH_IP_LIMIT_FACTOR - 1} * i."perUserLimit"
+                                       ELSE k."quantity" END)
+             FROM flash_sale_purchases k
+             WHERE k."flashSaleItemId" = i."id" AND k."userId" IN (${Prisma.join([...limitKeys])}))`
+        : Prisma.empty;
+    const boughtCol = userId ? Prisma.sql`GREATEST(COALESCE(p."quantity", 0)${keyBought}, 0)::int` : Prisma.sql`0`;
     const boughtJoin = userId
       ? Prisma.sql`LEFT JOIN flash_sale_purchases p ON p."flashSaleItemId" = i."id" AND p."userId" = ${userId}`
       : Prisma.empty;
@@ -199,17 +210,11 @@ export class FlashSaleService {
         AND v."isActive" = true
         AND s."isActive" = true AND s."startAt" <= ${now} AND s."endAt" > ${now}`);
     const items = rows.map(({ endAt, createdBy, ...it }) => ({ ...it, flashSale: { endAt, createdBy } }));
-    let buyer: { role: string; phone: string | null; zaloId: string | null } | null | undefined;
-    const loadBuyer = async () =>
-      buyer !== undefined ? buyer : (buyer = await this.prisma.user.findUnique({ where: { id: userId! }, select: { role: true, phone: true, zaloId: true } }));
-    // Khi đặt hàng không đăng nhập đang bật, tài khoản vãng lai (guest_, chưa có SĐT) mua theo giá thường: giới hạn mỗi khách đếm theo userId
-    // mà deviceId mới tạo được vô hạn tài khoản vãng lai. Cờ tắt thì không đọc gì thêm, giá như cũ.
-    if (userId && items.length > 0 && (await guestCheckoutEnabled(this.config)) && !isRealUser(await loadBuyer())) return map;
     // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá, isOwnStaffCoupon): nhân viên tự đặt giá rồi tự mua.
     // ADMIN được miễn như với mã giảm giá; chỉ tra vai trò khi người mua thật sự là người tạo một đợt đang xét.
     let ownSalesBlocked = false;
     if (userId && items.some((it) => it.flashSale.createdBy === userId)) {
-      ownSalesBlocked = (await loadBuyer())?.role !== 'ADMIN';
+      ownSalesBlocked = (await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } }))?.role !== 'ADMIN';
     }
     const isOwn = (it: (typeof items)[number]) => ownSalesBlocked && it.flashSale.createdBy === userId;
     const open = items.filter((it) => it.soldCount < it.quota && !isOwn(it));
@@ -425,6 +430,8 @@ export class FlashSaleService {
     userId: string,
     lines: readonly FlashQuotaLine[],
     now: Date = new Date(),
+    /** Khoá giới hạn phụ của người mua chưa xác thực (flash-buyer-keys.ts): mỗi khoá không vượt trần của nó (`flashKeyLimit`). */
+    limitKeys: readonly string[] = [],
   ): Promise<FlashQuotaOutcome[]> {
     const outcomes: FlashQuotaOutcome[] = lines.map(() => 'OK');
     if (lines.length === 0) return outcomes;
@@ -490,19 +497,54 @@ export class FlashSaleService {
         if (own.has(lines[i]!.flashSaleItemId)) await bump(i);
         else missing.push(i);
       }
-      if (missing.length === 0) return outcomes;
-
-      at = missing[0]!;
-      await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR KEY SHARE`;
-      for (const id of await lockOwn([...new Set(missing.map((i) => lines[i]!.flashSaleItemId))])) own.add(id);
-      for (const i of missing) {
-        at = i;
-        const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
-        if (own.has(itemId)) await bump(i);
-        else if (qty > (limits.get(itemId) ?? 0)) await overLimit(i);
-        else {
-          await tx.flashSalePurchase.create({ data: { flashSaleItemId: itemId, userId, quantity: qty } });
-          own.add(itemId);
+      if (missing.length > 0) {
+        at = missing[0]!;
+        await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR KEY SHARE`;
+        for (const id of await lockOwn([...new Set(missing.map((i) => lines[i]!.flashSaleItemId))])) own.add(id);
+        for (const i of missing) {
+          at = i;
+          const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
+          if (own.has(itemId)) await bump(i);
+          else if (qty > (limits.get(itemId) ?? 0)) await overLimit(i);
+          else {
+            await tx.flashSalePurchase.create({ data: { flashSaleItemId: itemId, userId, quantity: qty } });
+            own.add(itemId);
+          }
+        }
+      }
+      // Khoá phụ sau cùng, theo suất rồi theo khoá: dòng suất (flash_sale_items) đã bị khoá ở pha (1) nên hai lần đặt cùng SĐT/IP vào cùng
+      // suất đã nối tiếp nhau từ đó; ON CONFLICT cộng dồn có điều kiện nên không có khe "đọc rồi ghi". Một khoá vượt trần thì dòng đó
+      // OVER_LIMIT và mọi phần vừa trừ của dòng (suất, dòng của tài khoản, các khoá trước) được trả lại.
+      if (limitKeys.length > 0) {
+        for (const i of byItem) {
+          if (outcomes[i] !== 'OK') continue;
+          at = i;
+          const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
+          const limit = limits.get(itemId) ?? 0;
+          const claimed: string[] = [];
+          for (const key of limitKeys) {
+            const cap = flashKeyLimit(key, limit);
+            const ok =
+              qty <= cap &&
+              (await tx.$executeRaw`
+                INSERT INTO "flash_sale_purchases" ("id", "flashSaleItemId", "userId", "quantity", "updatedAt")
+                VALUES (${randomUUID()}, ${itemId}, ${key}, ${qty}, (now() AT TIME ZONE 'UTC'))
+                ON CONFLICT ("flashSaleItemId", "userId") DO UPDATE
+                  SET "quantity" = "flash_sale_purchases"."quantity" + EXCLUDED."quantity", "updatedAt" = (now() AT TIME ZONE 'UTC')
+                  WHERE "flash_sale_purchases"."quantity" + EXCLUDED."quantity" <= ${cap}`) > 0;
+            if (ok) {
+              claimed.push(key);
+              continue;
+            }
+            for (const holder of [userId, ...claimed]) {
+              await tx.flashSalePurchase.updateMany({
+                where: { flashSaleItemId: itemId, userId: holder, quantity: { gte: qty } },
+                data: { quantity: { decrement: qty } },
+              });
+            }
+            await overLimit(i);
+            break;
+          }
         }
       }
       return outcomes;
@@ -511,16 +553,24 @@ export class FlashSaleService {
     }
   }
 
-  /** Hoàn suất flash khi huỷ/hoàn đơn (mirror khôi phục stock). Guard gte để không âm. */
-  async restore(tx: Prisma.TransactionClient, itemId: string, userId: string, qty: number): Promise<void> {
+  /**
+   * Hoàn suất flash khi huỷ/hoàn đơn (mirror khôi phục stock). Guard gte để không âm. `limitKeys`: khoá phụ đơn đã trừ lúc đặt
+   * (orderFlashLimitKeys), hoàn cùng số, sau dòng của tài khoản như thứ tự lúc trừ.
+   */
+  async restore(tx: Prisma.TransactionClient, itemId: string, userId: string, qty: number, limitKeys: readonly string[] = []): Promise<void> {
+    // Khoá dòng suất trước như consumeQuotas, kể cả khi soldCount đã lệch (lệnh trừ dưới không khớp thì không khoá dòng nào): giữ đúng
+    // thứ tự suất → dòng mua, không tạo vòng chờ với một lần đặt cùng SĐT/IP.
+    await tx.$queryRaw`SELECT 1 FROM "flash_sale_items" WHERE "id" = ${itemId} FOR NO KEY UPDATE`;
     await tx.flashSaleItem.updateMany({
       where: { id: itemId, soldCount: { gte: qty } },
       data: { soldCount: { decrement: qty } },
     });
-    await tx.flashSalePurchase.updateMany({
-      where: { flashSaleItemId: itemId, userId, quantity: { gte: qty } },
-      data: { quantity: { decrement: qty } },
-    });
+    for (const holder of [userId, ...limitKeys]) {
+      await tx.flashSalePurchase.updateMany({
+        where: { flashSaleItemId: itemId, userId: holder, quantity: { gte: qty } },
+        data: { quantity: { decrement: qty } },
+      });
+    }
   }
 
   /** Tạo đợt flash sale mới (admin). */

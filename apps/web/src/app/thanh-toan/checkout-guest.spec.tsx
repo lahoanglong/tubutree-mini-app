@@ -46,10 +46,10 @@ vi.mock('@/lib/guest-cart/view', () => ({
     rows: [
       {
         variationId: 'v1', slug: 'dau-goi', quantity: 2, state: 'ok', productName: 'Dầu gội', variationName: 'Chai 500ml', thumbnail: null,
-        unitPrice: 120_000, compareAt: null, isFlash: flash.length > 0, total: 240_000, stock: 9, maxQty: 9, tubu: true, blockedText: null,
+        unitPrice: flash.length > 0 ? 99_000 : 120_000, compareAt: null, isFlash: flash.length > 0, total: flash.length > 0 ? 198_000 : 240_000, stock: 9, maxQty: 9, tubu: true, blockedText: null,
       },
     ],
-    subtotal: 240_000,
+    subtotal: flash.length > 0 ? 198_000 : 240_000,
     tubuSubtotal: 240_000,
     hasMerchant: false,
     settled: true,
@@ -167,10 +167,21 @@ describe('/thanh-toan chưa đăng nhập, cờ bật', () => {
     expect(r.container.querySelector('[data-testid="guest-login-link"]')).toBeNull();
   });
 
-  it('giỏ có món Giờ vàng: dòng "Đăng nhập Zalo để mua giá Giờ vàng"', async () => {
+  it('giỏ có món Giờ vàng: dòng giỏ ghi giá Giờ vàng như khách đăng nhập, không mời đăng nhập để có giá (tubu-w6-01 P1-b)', async () => {
     m.flash = true;
     const r = await mount();
-    expect(r.container.querySelector('[data-testid="guest-flash-login"]')?.textContent).toContain('Đăng nhập Zalo để mua giá Giờ vàng');
+    expect(r.container.textContent).toContain('198.000');
+    expect(r.container.textContent).not.toContain('Đăng nhập Zalo để mua giá Giờ vàng');
+    expect(r.container.querySelector('[data-testid="guest-flash-limit"]')).toBeNull();
+  });
+
+  it('báo giá nói SĐT này đã hết suất Giờ vàng: một dòng "phần vượt tính giá thường"', async () => {
+    m.flash = true;
+    m.quote.mockResolvedValue({ ...QUOTE, flashNotice: true });
+    const r = await mount();
+    await fillForm(r);
+    expect(m.quote).toHaveBeenCalled();
+    expect(r.container.querySelector('[data-testid="guest-flash-limit"]')?.textContent).toBe('Hết suất Giờ vàng: phần vượt tính giá thường');
   });
 
   it('bấm Đặt hàng khi còn trống: lỗi ngay dưới từng ô, không gọi báo giá hay đặt đơn', async () => {

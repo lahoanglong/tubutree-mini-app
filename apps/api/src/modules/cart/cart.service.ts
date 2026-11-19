@@ -158,12 +158,16 @@ export class CartService {
    * hiển thị giỏ (giảm hạng, ngưỡng freeship). Checkout tự tính lại hai thứ đó từ khách nó đã đọc, nên không đọc hạng, khách và
    * đơn cũ thêm một lần nữa.
    */
-  async getCartForCheckout(userId: string): Promise<Omit<Awaited<ReturnType<CartService['getCart']>>, 'tierDiscount' | 'freeshipThreshold'>> {
-    const { tierDiscount: _tier, freeshipThreshold: _threshold, ...priced } = await this.priceCart(userId, undefined, undefined, true);
+  async getCartForCheckout(
+    userId: string,
+    /** Khoá giới hạn Giờ vàng phụ của người mua chưa xác thực (flash-buyer-keys.ts); rỗng với khách thật. */
+    flashLimitKeys: readonly string[] = [],
+  ): Promise<Omit<Awaited<ReturnType<CartService['getCart']>>, 'tierDiscount' | 'freeshipThreshold'>> {
+    const { tierDiscount: _tier, freeshipThreshold: _threshold, ...priced } = await this.priceCart(userId, undefined, undefined, true, flashLimitKeys);
     return priced;
   }
 
-  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[], forCheckout = false) {
+  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[], forCheckout = false, flashLimitKeys: readonly string[] = []) {
     const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
     // Đọc giỏ bằng một lần findUnique theo userId: GET không tạo giỏ (khách chưa có giỏ thì giỏ rỗng), giỏ chỉ được tạo khi ghi.
     const found = await this.prisma.cart.findUnique({
@@ -215,6 +219,7 @@ export class CartService {
       sellable.map((it) => it.variationId),
       now,
       userId,
+      flashLimitKeys,
     );
     const lines = (selection ? sellable.filter((it) => selection.has(it.id)) : sellable).map((it) => {
       const { unitPrice, flash, flashLimitNotice } = priceFlashLine(

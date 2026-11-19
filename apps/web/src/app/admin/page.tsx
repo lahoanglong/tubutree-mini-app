@@ -240,6 +240,7 @@ type Tab =
   | 'growth'
   | 'catalogQuality'
   | 'merchShelves'
+  | 'refillPairs'
   | 'reports';
 // Mọi tab có tệp riêng trừ trang vào mặc định (Việc cần xử lý) tải khi mở tab: gói đầu của /admin không chứa mã của cả 60 tab.
 const tabLoading = () => <ListSkeleton label="Đang tải" rows={5} />;
@@ -277,6 +278,7 @@ const LaunchWatchTab = dynamic(() => import('@/components/admin/launch-watch-tab
 const GrowthHubTab = dynamic(() => import('./growth-hub/growth-hub-tab').then((m) => m.GrowthHubTab), { loading: tabLoading });
 const CatalogQualityTab = dynamic(() => import('./catalog-quality-tab').then((m) => m.CatalogQualityTab), { loading: tabLoading });
 const MerchShelvesTab = dynamic(() => import('@/components/admin/merch-shelves/merch-shelves-tab').then((m) => m.MerchShelvesTab), { loading: tabLoading });
+const RefillPairsTab = dynamic(() => import('@/components/admin/refill-pairs/refill-pairs-tab').then((m) => m.RefillPairsTab), { loading: tabLoading });
 const ReportsTab = dynamic(() => import('@/components/admin/reports-tab').then((m) => m.ReportsTab), { loading: tabLoading });
 const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
 const CommunityModerationTab = dynamic(() => import('@/components/admin/community-moderation-tab').then((m) => m.CommunityModerationTab), { loading: tabLoading });
@@ -319,6 +321,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'productCategories', label: 'Sản phẩm', keywords: 'ảnh mô tả sửa sản phẩm danh mục ẩn hiện nổi bật' },
       { k: 'catalogQuality', label: 'Kiểm tra catalog', keywords: 'chất lượng catalog thiếu ảnh ảnh lệch tên mô tả trống pancake kiểm tra csv tồn kho giả biến thể giá 0 mô tả AI thống kê AI tư vấn' },
       { k: 'merchShelves', label: 'Xếp kệ', keywords: 'ghim món đầu kệ trang chủ bán chạy danh mục gợi ý hôm nay tubu chọn cho bạn sắp xếp nổi bật lối vào trống' },
+      { k: 'refillPairs', label: 'Cặp Refill', keywords: 'refill túi can đổi chai ghép cặp mua lại món quen giỏ dung tích 10L' },
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
       { k: 'returns', label: 'Đổi / Trả' },
@@ -424,7 +427,7 @@ const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['waste'],
   CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community', 'supportChat'],
   KHO: ['inbox', 'orders', 'returns'],
-  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'campaigns', 'bundles', 'merchShelves', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
+  MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'campaigns', 'bundles', 'merchShelves', 'refillPairs', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'orders', 'externalClaims', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
 };
 type WasteInboxKey =
@@ -865,6 +868,7 @@ export default function AdminPage() {
           )}
           {active === 'catalogQuality' && <CatalogQualityTab />}
           {active === 'merchShelves' && <MerchShelvesTab />}
+          {active === 'refillPairs' && <RefillPairsTab />}
           {active === 'reports' && <ReportsTab key={reportsSeed} initialPreset={reportsSeed > 0 ? 'today' : undefined} sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
           </TabErrorBoundary>
         </div>

@@ -68,6 +68,8 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/merch-shelves/suggest': [MARKETING],
   'GET /admin/merch-shelves/product': [MARKETING],
   'GET /admin/merch-shelves/empty-entrances': [MARKETING],
+  'GET /admin/refill-pairs': [MARKETING],
+  'PUT /admin/refill-pairs': [MARKETING],
   'GET /admin/campaigns': [MARKETING],
   'POST /admin/campaigns': [MARKETING],
   'POST /admin/campaigns/check': [MARKETING],

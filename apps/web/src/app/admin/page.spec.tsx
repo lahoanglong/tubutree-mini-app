@@ -537,7 +537,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(57);
+    expect(items).toHaveLength(58);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -547,6 +547,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Bán hàng')).toContain('Sản phẩm');
     expect(group('Bán hàng')).toContain('Kiểm tra catalog');
     expect(group('Bán hàng')).toContain('Xếp kệ');
+    expect(group('Bán hàng')).toContain('Cặp Refill');
     expect(group('Hay dùng')).toEqual(['Hôm nay', 'Đơn hàng', 'Sản phẩm', 'Người dùng', 'Chat CSKH', 'Cộng đồng', 'Mã giảm giá', 'Đổi rác', 'Gian hàng', 'Duyệt SP đối tác', 'Đại lý']);
     expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch', 'Combo và mua kèm']);
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
@@ -3246,6 +3247,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Đổi rác',
       'Báo cáo',
       'Xếp kệ',
+      'Cặp Refill',
       'Giờ vàng',
       'Chiến dịch',
       'Combo và mua kèm',

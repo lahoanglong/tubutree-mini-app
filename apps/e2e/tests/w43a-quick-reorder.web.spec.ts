@@ -29,6 +29,8 @@ const product = (n: number) => ({
   id: `p${n}`, slug: `sp-${n}`, brand: 'Tubu', name: `Sản phẩm ${n}`, thumbnail: null, basePrice: 100_000 + n, salePrice: null, isFeatured: false, inStock: true,
 });
 
+const REFILL_OFFER = { productId: 'p-refill', slug: 'refill-nuoc-rua-chen-10l', name: 'Refill Nước rửa chén Fuwa3e 10L', thumbnail: null, variationId: 'v-refill', price: 650_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true };
+
 const strip = (page: Page) => page.getByTestId('quick-reorder');
 const cards = (page: Page) => page.getByTestId('quick-reorder-card');
 const adds = (page: Page) => page.getByTestId('quick-reorder-add');
@@ -106,6 +108,32 @@ for (const size of SIZES) {
         await expectTouchTarget44(cards(page).nth(i).locator('button.tubu-quick-open'));
       }
       expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test('tubu-w6-01: ô chai khách đã có đổi sang túi Refill có nhãn rõ trong thẻ, nút "+ Thêm Refill" 44px, "Thêm lại tất cả" thêm đúng các ô đang hiện', async ({ page, api }) => {
+      mockHome(api, [bought(1, { productName: 'Nước rửa chén Fuwa3e 500ml' }), bought(2), bought(4)]);
+      api.get('/config/public', { freeshipThreshold: 350_000, subscribeDiscountPct: 0.12, loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000 }, refillFirstEnabled: true });
+      api.get('/catalog/refill-pairs/mine', { 'prod-q1': REFILL_OFFER });
+      await openHome(page);
+      const first = cards(page).first();
+      await expect(first).toHaveAttribute('data-variation-id', 'v-refill');
+      const badge = first.getByText('Đổi sang túi Refill 10L');
+      await expect(badge).toBeVisible();
+      const cardBox = (await first.boundingBox())!;
+      const badgeBox = (await badge.boundingBox())!;
+      expect(badgeBox.x + badgeBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
+      expect(cardBox.height).toBe(232);
+      const add = first.getByTestId('quick-reorder-add');
+      await expect(add).toHaveText('+ Thêm Refill');
+      await expect(add).toHaveAttribute('aria-label', 'Thêm Refill 10L thay cho Nước rửa chén Fuwa3e 500ml vào giỏ, 650.000đ. Rẻ hơn 35% mỗi 100ml');
+      await expectTouchTarget44(add);
+      await expect(addAll(page)).toHaveAccessibleName(/, gồm 1 túi Refill$/);
+      expect(await noHorizontalScroll(page)).toBe(true);
+      const shown = await cards(page).evaluateAll((els) => els.map((e) => e.getAttribute('data-variation-id')));
+      expect(shown).toEqual(['v-refill', 'var-q2', 'var-q4']);
+      const batch = api.waitForCall('POST', '/cart/items/batch');
+      await addAll(page).click();
+      expect(((await batch).body as { items: { variationId: string }[] }).items.map((i) => i.variationId)).toEqual(shown);
     });
 
     test('thẻ cao đúng 232px, rộng 128px, lề trái thẻ đầu 12px (khổ điện thoại); cả dải cao 292px', async ({ page, api }) => {

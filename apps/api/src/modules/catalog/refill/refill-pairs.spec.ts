@@ -5,7 +5,9 @@ import {
   parseRefillBlock,
   parseRefillIds,
   parseRefillOverrides,
+  refillAutoSizeOk,
   refillFormulaKey,
+  refillPairRows,
   refillSizeLabel,
   REFILL_PAIRS_IDS_MAX,
   type RefillCatalogRow,
@@ -17,10 +19,18 @@ const table = (pairs: Map<string, string>) =>
   [...pairs].map(([b, r]) => `${nameOf.get(b) ?? b} -> ${nameOf.get(r) ?? r}`).sort((a, b) => a.localeCompare(b, 'vi'));
 
 /**
- * Bảng cặp trên ảnh chụp PROD 18/11/2026, đã rà tay 100% (cùng thương hiệu Fuwa3e, cùng công thức, gói Refill 10L lớn hơn chai). Đổi bảng
- * này phải rà lại tay và chép sang báo cáo wave.
+ * Bảng cặp trên ảnh chụp PROD 18/11/2026, đã rà tay 100% (cùng thương hiệu Fuwa3e, cùng công thức). Chỉ chai 3,8L tự ghép với can 10L
+ * (2,6 lần); chai 100ml–2L lệch 5–100 lần nên chờ admin ghép tay (tubu-w6-01 P1-a). Đổi bảng này phải rà lại tay và chép sang báo cáo wave.
  */
 const EXPECTED = [
+  'Nước ngâm rửa thực phẩm Fuwa3e 3,8L -> Refill Nước ngâm rửa thực phẩm Fuwa3e 10L',
+  'Nước rửa chén Fuwa3e 3,8L -> Refill Nước rửa chén Fuwa3e 10L',
+  'Nước rửa tay dạng Bọt Fuwa3e 3,8L -> Refill Nước rửa tay dạng Bọt Fuwa3e 10L',
+  'Nước rửa tay dạng Gel Fuwa3e 3,8L -> Refill Nước rửa tay dạng Gel Fuwa3e 10L',
+].sort((a, b) => a.localeCompare(b, 'vi'));
+
+/** Cùng công thức nhưng can 10L gấp hơn 3 lần chai: admin thấy trong bảng, trạng thái `size`, không tự đổi cho khách. */
+const EXPECTED_SIZE = [
   'Gel rửa chén cho máy Fuwa3e 100ml -> Refill Gel rửa chén cho máy Fuwa3e 10L',
   'Gel rửa chén cho máy Fuwa3e 2000ml -> Refill Gel rửa chén cho máy Fuwa3e 10L',
   'Gel rửa chén cho máy Fuwa3e 500ml -> Refill Gel rửa chén cho máy Fuwa3e 10L',
@@ -29,13 +39,9 @@ const EXPECTED = [
   'Nước lau sàn Sả chanh Fuwa3e 1L -> Refill Nước lau sàn Sả chanh Fuwa3e 10L',
   'Nước ngâm rửa thực phẩm Fuwa3e 100ml -> Refill Nước ngâm rửa thực phẩm Fuwa3e 10L',
   'Nước ngâm rửa thực phẩm Fuwa3e 1L -> Refill Nước ngâm rửa thực phẩm Fuwa3e 10L',
-  'Nước ngâm rửa thực phẩm Fuwa3e 3,8L -> Refill Nước ngâm rửa thực phẩm Fuwa3e 10L',
   'Nước rửa chén Fuwa3e 100ml -> Refill Nước rửa chén Fuwa3e 10L',
-  'Nước rửa chén Fuwa3e 3,8L -> Refill Nước rửa chén Fuwa3e 10L',
   'Nước rửa chén Fuwa3e 500ml -> Refill Nước rửa chén Fuwa3e 10L',
-  'Nước rửa tay dạng Bọt Fuwa3e 3,8L -> Refill Nước rửa tay dạng Bọt Fuwa3e 10L',
   'Nước rửa tay dạng Bọt Fuwa3e 300ml -> Refill Nước rửa tay dạng Bọt Fuwa3e 10L',
-  'Nước rửa tay dạng Gel Fuwa3e 3,8L -> Refill Nước rửa tay dạng Gel Fuwa3e 10L',
   'Nước rửa tay dạng Gel Fuwa3e 300ml -> Refill Nước rửa tay dạng Gel Fuwa3e 10L',
 ].sort((a, b) => a.localeCompare(b, 'vi'));
 
@@ -45,8 +51,23 @@ describe('pairRefills trên catalog PROD 18/11/2026', () => {
     expect(rows.filter(isRefillProduct)).toHaveLength(11);
   });
 
-  it('ra đúng bảng cặp đã rà tay, không cặp sai nào', () => {
+  it('ra đúng bảng cặp đã rà tay, không cặp sai nào; không chai 100ml–2L nào tự ghép với can 10L', () => {
     expect(table(pairRefills(rows))).toEqual(EXPECTED);
+  });
+
+  it('bảng admin: chai lệch lượng hiện trạng thái size (chờ ghép tay), tự ghép hiện auto', () => {
+    const all = refillPairRows(rows);
+    const by = (status: string) => table(new Map(all.filter((r) => r.status === status).map((r) => [r.bottle.id, r.refill!.id])));
+    expect(by('auto')).toEqual(EXPECTED);
+    expect(by('size')).toEqual(EXPECTED_SIZE);
+    expect(all.every((r) => ['auto', 'size'].includes(r.status))).toBe(true);
+  });
+
+  it('admin ghép tay chai 1L với can 10L thì khách mới thấy cặp đó', () => {
+    const slug = PROD.find((p) => p.name === 'Nước rửa chén Fuwa3e 500ml')!.slug;
+    const refill = PROD.find((p) => p.name === 'Refill Nước rửa chén Fuwa3e 10L')!.slug;
+    expect(pairRefills(rows).has(slug)).toBe(false);
+    expect(pairRefills(rows, { overrides: [{ bottleSlug: slug, refillSlug: refill }] }).get(slug)).toBe(refill);
   });
 
   it('mọi cặp: cùng thương hiệu, cùng tên công thức, chai không phải refill, gói kia là refill', () => {
@@ -89,13 +110,33 @@ describe('pairRefills: bẫy', () => {
     expect(pairRefills([r('refill-x', 'Refill Nước rửa chén Fuwa3e 10L')]).size).toBe(0);
   });
 
-  it('"chai" không nhỏ hơn gói refill, hay khác loại đơn vị: không ghép', () => {
+  it('"chai" không nhỏ hơn gói refill, khác loại đơn vị, gói lớn quá 3 lần hay một bên không ghi lượng: không tự ghép', () => {
     expect(pairRefills([r('b', 'Nước rửa chén Fuwa3e 10L'), r('refill-x', 'Refill Nước rửa chén Fuwa3e 10L')]).size).toBe(0);
     expect(pairRefills([r('b', 'Nước rửa chén Fuwa3e 2kg'), r('refill-x', 'Refill Nước rửa chén Fuwa3e 10L')]).size).toBe(0);
+    expect(pairRefills([r('b', 'Nước rửa chén Fuwa3e 1L'), r('refill-x', 'Refill Nước rửa chén Fuwa3e 10L')]).size).toBe(0);
+    expect(pairRefills([r('b', 'Nước rửa chén Fuwa3e'), r('refill-x', 'Refill Nước rửa chén Fuwa3e 10L')]).size).toBe(0);
+    expect(pairRefills([r('b', 'Nước rửa chén Fuwa3e 1L'), r('refill-x', 'Refill Nước rửa chén Fuwa3e')]).size).toBe(0);
+  });
+
+  it('luật lượng: lớn hơn chai và tối đa 3 lần (biên 3 lần vẫn ghép)', () => {
+    expect(refillAutoSizeOk('Nước rửa chén 1L', 'Refill Nước rửa chén 3L')).toBe(true);
+    expect(refillAutoSizeOk('Nước rửa chén 1L', 'Refill Nước rửa chén 3,1L')).toBe(false);
+    expect(refillAutoSizeOk('Nước rửa chén 3,8L', 'Refill Nước rửa chén 10L')).toBe(true);
+    expect(refillAutoSizeOk('Sữa tắm 500ml', 'Refill Sữa tắm 1L')).toBe(true);
+    expect(refillAutoSizeOk('Nước rửa chén 100ml', 'Refill Nước rửa chén 10L')).toBe(false);
   });
 
   it('chữ bao bì (chai, bình, can, túi) không làm lệch tên công thức', () => {
-    expect(pairRefills([r('b', 'Chai nước rửa chén Fuwa3e 500ml'), r('refill-x', 'Refill Nước rửa chén Fuwa3e can 10L')]).get('b')).toBe('refill-x');
+    expect(pairRefills([r('b', 'Chai nước rửa chén Fuwa3e 3,8L'), r('refill-x', 'Refill Nước rửa chén Fuwa3e can 10L')]).get('b')).toBe('refill-x');
+  });
+
+  it('bảng admin: nhiều gói cùng công thức là ambiguous; chai bị chặn vẫn hiện (để bật lại), không vào bảng khách', () => {
+    const amb = refillPairRows([r('b', 'Nước rửa chén Fuwa3e 3,8L'), r('refill-5', 'Refill Nước rửa chén Fuwa3e 5L'), r('refill-10', 'Refill Nước rửa chén Fuwa3e 10L')]);
+    expect(amb).toEqual([expect.objectContaining({ status: 'ambiguous', refill: null, candidates: 2 })]);
+    const base = [r('b', 'Nước rửa chén Fuwa3e 3,8L'), r('refill-x', 'Refill Nước rửa chén Fuwa3e 10L')];
+    const blocked = refillPairRows(base, { block: new Set(['b']) });
+    expect(blocked).toEqual([expect.objectContaining({ status: 'blocked', refill: expect.objectContaining({ id: 'refill-x' }) })]);
+    expect(pairRefills(base, { block: new Set(['b']) }).size).toBe(0);
   });
 
   it('combo không bao giờ là chai', () => {

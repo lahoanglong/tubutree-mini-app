@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { flashIpHash } from '../flash-sale/flash-buyer-keys';
 import { GUARDS_METADATA, HEADERS_METADATA } from '@nestjs/common/constants';
 import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { plainToInstance } from 'class-transformer';
@@ -106,11 +107,24 @@ describe('GET /checkout/shipping-estimate', () => {
 
   it('chuyển người gọi (hoặc không ai) và đúng tham số sang service', async () => {
     const estimate = jest.fn().mockResolvedValue({ fee: 0 });
-    const c = new CheckoutController({} as CheckoutService, { estimate } as unknown as ShippingEstimateService);
+    const c = new CheckoutController({} as CheckoutService, { estimate } as unknown as ShippingEstimateService, {} as never);
     await c.estimateShipping({ subtotal: 1000, provinceCode: '84_VN01' }, undefined);
     await c.estimateShipping({ subtotal: 2000 }, 'u9');
     expect(estimate).toHaveBeenNthCalledWith(1, undefined, { subtotal: 1000, provinceCode: '84_VN01' });
     expect(estimate).toHaveBeenNthCalledWith(2, 'u9', { subtotal: 2000, provinceCode: undefined });
+  });
+
+  it('báo giá và đặt đơn chuyển IP đã băm của lần gọi (khoá Giờ vàng của người mua chưa xác thực, tubu-w6-01)', async () => {
+    const quote = jest.fn();
+    const placeOrder = jest.fn();
+    const env = { get: () => 'secret-for-ip-hash' };
+    const c = new CheckoutController({ quote, placeOrder } as unknown as CheckoutService, {} as ShippingEstimateService, env as never);
+    const req = { ip: '::ffff:1.2.3.4' } as never;
+    const hash = flashIpHash('1.2.3.4', 'secret-for-ip-hash');
+    await c.quote('u1', {} as never, req);
+    expect(quote).toHaveBeenCalledWith('u1', {}, false, hash);
+    await c.placeOrder('u1', {} as never, 'k1', 'web', req);
+    expect(placeOrder).toHaveBeenCalledWith('u1', {}, 'k1', 'web', undefined, hash);
   });
 
   const check = (q: Record<string, unknown>) => validateSync(plainToInstance(ShippingEstimateQueryDto, q));

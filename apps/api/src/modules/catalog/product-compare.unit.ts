@@ -88,10 +88,19 @@ export function formatSize(m: Measure): string {
   return m.qty >= 1000 ? `${decimal(m.qty / 1000)}kg` : `${decimal(m.qty)}g`;
 }
 
+/**
+ * Làm tròn giá trên 100ml/100g để đọc: từ 1.000đ tròn trăm, từ 100đ tròn chục. Cùng luật với `roundUnitPrice` của app-core (dòng "≈ …/100ml"
+ * dưới giá ở trang chi tiết): bảng so sánh cỡ và dòng giá theo đơn vị cùng trang không được ra 13.571đ và 13.600đ cho một món.
+ */
+export function roundUnitPrice(v: number): number {
+  const step = v >= 1e3 ? 100 : v >= 100 ? 10 : 1;
+  return Math.max(step, Math.round(v / step) * step);
+}
+
 /** Giá trên 100ml/100g; null khi món không tách được lượng, khi món đang xem không tách được, hay khi hai món khác loại đơn vị. */
 export function unitPriceOf(price: number, measure: Measure | null, reference: Measure | null): UnitPrice | null {
   if (!measure || !reference || measure.unit !== reference.unit) return null;
-  return { per: measure.unit === 'ml' ? '100ml' : '100g', value: Math.round((price / measure.qty) * 100) };
+  return { per: measure.unit === 'ml' ? '100ml' : '100g', value: roundUnitPrice((price / measure.qty) * 100) };
 }
 
 /** Số từ đầu của tên tạo thành nhóm. */
