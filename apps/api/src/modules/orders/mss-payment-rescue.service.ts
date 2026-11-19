@@ -52,22 +52,24 @@ export class MssPaymentRescueService {
 
   /**
    * Ghi số tin MSS đã nhắc chuyển khoản và lúc nhắc gần nhất lên đơn để màn admin Đơn hàng hiện cạnh trạng thái quá hạn. Ghi cả khi cờ huỷ
-   * tắt (chỉ là số liệu hiển thị), chỉ cho đơn chuyển khoản. Số nhắc không lùi khi tin tới trễ. Lỗi ghi chỉ log: việc huỷ phía sau vẫn chạy.
+   * tắt (chỉ là số liệu hiển thị), chỉ cho đơn chuyển khoản. Số nhắc và mốc nhắc mỗi thứ chỉ tiến, không lùi khi tin tới trễ; hai lệnh ghi riêng để tin
+   * thiếu hay hỏng một trường vẫn không kéo lùi trường kia. Lỗi ghi chỉ log: việc huỷ phía sau vẫn chạy.
    */
   async recordReminders(orderCode: string, r: { sent: number | null; lastAt: Date | null }): Promise<void> {
-    if (r.sent === null && r.lastAt === null) return;
+    const order = { code: orderCode, paymentMethod: 'BANK_TRANSFER' as const };
     try {
-      await this.prisma.order.updateMany({
-        where: {
-          code: orderCode,
-          paymentMethod: 'BANK_TRANSFER',
-          ...(r.sent !== null ? { OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: r.sent } }] } : {}),
-        },
-        data: {
-          ...(r.sent !== null ? { paymentRemindersSent: r.sent } : {}),
-          ...(r.lastAt !== null ? { paymentLastRemindedAt: r.lastAt } : {}),
-        },
-      });
+      if (r.sent !== null) {
+        await this.prisma.order.updateMany({
+          where: { ...order, OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: r.sent } }] },
+          data: { paymentRemindersSent: r.sent },
+        });
+      }
+      if (r.lastAt !== null) {
+        await this.prisma.order.updateMany({
+          where: { ...order, OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lte: r.lastAt } }] },
+          data: { paymentLastRemindedAt: r.lastAt },
+        });
+      }
     } catch (err) {
       this.logger.warn(`Không ghi được số lần MSS nhắc chuyển khoản đơn ${orderCode}: ${err instanceof Error ? err.message : String(err)}`);
     }

@@ -777,7 +777,8 @@ export default function CartPage() {
           <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start md:[&>[data-testid=cart-summary-rows]:empty+*]:mt-0 md:[&>[data-testid=cart-summary-rows]:empty+*]:border-t-0 md:[&>[data-testid=cart-summary-rows]:empty+*]:pt-0`}>
             <div data-testid="cart-summary-rows" className="empty:hidden max-md:hidden">
             {/* Có giảm hay có phí giao thì hàng này là tiền hàng chưa trừ, hàng cuối là tổng; không có gì xen giữa thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
-            {(hasDiscount || shipRow) && (
+            {/* Chỉ theo số phí thật: lúc phí còn chờ, hàng cuối vẫn là "Tạm tính" nên thêm hàng này là hai dòng "Tạm tính" cùng số. */}
+            {(hasDiscount || ship) && (
               <div className="flex justify-between text-sm">
                 <span className="text-stone-600">{cartTotalLabel(0)}</span>
                 <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>

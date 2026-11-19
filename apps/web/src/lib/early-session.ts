@@ -35,7 +35,8 @@ export const PRIMED_TTL_MS = 30_000;
 
 /**
  * GET mỗi trang gọi ngay khi phiên khôi phục xong, đúng chuỗi đường dẫn `apiFetch` nhận (không có query). Lệch một ký tự thì phản hồi mồi
- * không ai lấy và trang gọi lại như cũ (chậm, không sai): `early-session.spec.ts` so với chính các hàm gọi API để bắt lệch.
+ * không ai lấy và trang gọi lại như cũ (chậm, không sai): `early-session.spec.ts` so với chính các hàm gọi API để bắt lệch. Chỉ thêm đường dẫn
+ * trang ĐỌC ngay khi phiên khôi phục xong, trước mọi lệnh ghi: phản hồi mồi là ảnh chụp lúc đọc HTML, không biết tới lệnh ghi xảy ra sau đó.
  * - Giỏ: giỏ (phần tử LCP là thanh Miễn phí giao hàng) và mã của tôi (dải nhắc mã nằm TRÊN các dòng giỏ, hiện muộn thì đẩy cả danh sách).
  * - Vườn Xanh: hồ sơ game (phần tử LCP là bình nước), các khối GameBody chờ trước khi bỏ khung chờ, khối đầu trang và thanh đầu.
  */

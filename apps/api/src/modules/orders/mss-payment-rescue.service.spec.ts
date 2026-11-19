@@ -157,19 +157,31 @@ describe('MssPaymentRescueService.recordReminders (w8-01, số lần MSS nhắc 
   };
   const AT = new Date('2026-11-19T13:02:00.000Z');
 
-  it('ghi cả hai trường lên đơn chuyển khoản, chỉ khi số nhắc mới không nhỏ hơn số đang lưu (tin tới trễ không làm lùi)', async () => {
+  it('ghi cả hai trường lên đơn chuyển khoản, mỗi trường chỉ khi giá trị mới không nhỏ hơn giá trị đang lưu (tin tới trễ không làm lùi)', async () => {
     const { svc, updateMany } = make();
     await svc.recordReminders('TUBU2026111912345', { sent: 2, lastAt: AT });
-    expect(updateMany).toHaveBeenCalledWith({
-      where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: 2 } }] },
-      data: { paymentRemindersSent: 2, paymentLastRemindedAt: AT },
-    });
+    expect(updateMany.mock.calls).toEqual([
+      [
+        {
+          where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: 2 } }] },
+          data: { paymentRemindersSent: 2 },
+        },
+      ],
+      [
+        {
+          where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lte: AT } }] },
+          data: { paymentLastRemindedAt: AT },
+        },
+      ],
+    ]);
   });
 
-  it('chỉ có last_reminded_at: ghi mốc, không đặt điều kiện số nhắc', async () => {
+  it('chỉ có last_reminded_at (số nhắc thiếu hay hỏng): vẫn chỉ ghi mốc mới hơn mốc đang lưu, không đụng số nhắc', async () => {
     const { svc, updateMany } = make();
     await svc.recordReminders('C', { sent: null, lastAt: AT });
-    expect(updateMany).toHaveBeenCalledWith({ where: { code: 'C', paymentMethod: 'BANK_TRANSFER' }, data: { paymentLastRemindedAt: AT } });
+    expect(updateMany.mock.calls).toEqual([
+      [{ where: { code: 'C', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lte: AT } }] }, data: { paymentLastRemindedAt: AT } }],
+    ]);
   });
 
   it('MSS chưa gửi hai trường (bản cũ): không ghi gì', async () => {

@@ -53,6 +53,11 @@ async function mount(
 
 const btn = (root: ParentNode, label: string) => Array.from(root.querySelectorAll('button')).find((b) => b.textContent === label) ?? null;
 const input = (c: ParentNode, name: string) => c.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+/** Yêu cầu mặc định khai 60 vỏ (trên trần 10): ô thực nhận mở trống, nhân viên gõ số đếm; ở đây gõ đúng số khai. */
+const countAsDeclared = (c: ParentNode) => {
+  typeInto(input(c, 'received-i1'), '10');
+  typeInto(input(c, 'received-i3'), '50');
+};
 const select = (c: ParentNode, name: string) => c.querySelector<HTMLSelectElement>(`select[name="${name}"]`);
 const area = (c: ParentNode, name: string) => c.querySelector<HTMLTextAreaElement>(`textarea[name="${name}"]`);
 const optionLabels = (s: HTMLSelectElement) => Array.from(s.options).filter((o) => o.value !== '').map((o) => o.textContent);
@@ -77,10 +82,9 @@ describe('wastePointsForLines', () => {
 });
 
 describe('WasteRequestDetail: màn đếm và từ chối', () => {
-  it('màn đếm: mặc định nhận đủ, dòng thiếu phải chọn lý do, xác nhận gửi đúng body', async () => {
+  it('màn đếm: dòng thiếu phải chọn lý do, xác nhận gửi đúng body', async () => {
     const { c, api } = await mount();
-    expect(input(c, 'received-i1')!.value).toBe('10');
-    expect(input(c, 'received-i3')!.value).toBe('50');
+    countAsDeclared(c);
     expect(c.textContent).toContain('Điểm sẽ cộng: 20.000');
 
     typeInto(input(c, 'received-i1'), '8');
@@ -113,6 +117,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
     const base = wasteRequestDetail();
     const detail = wasteRequestDetail({ lines: [base.lines[0]!, { ...base.lines[1]!, hazardous: true }] });
     const { c, api } = await mount({ detail });
+    countAsDeclared(c);
     expect(input(c, 'received-i3')!.value).toBe('50');
     expect(input(c, 'received-i3')!.disabled).toBe(false);
     expect(select(c, 'shortfall-i3')).toBeNull();
@@ -140,6 +145,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
         return { body: CONFIRMED };
       },
     });
+    countAsDeclared(confirmed.c);
     click(btn(confirmed.c, 'Xác nhận số đếm'));
     answerConfirm(true);
     await flush();
@@ -166,6 +172,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
 
   it('nhận đủ: không gửi khoá shortfallReason, không gửi cân nặng trống', async () => {
     const { c, api } = await mount();
+    countAsDeclared(c);
     click(btn(c, 'Xác nhận số đếm'));
     answerConfirm(true);
     await flush();
@@ -179,6 +186,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
 
   it('nhận lại đủ sau khi chọn lý do thì không gửi lý do cũ', async () => {
     const { c, api } = await mount();
+    countAsDeclared(c);
     typeInto(input(c, 'received-i1'), '8');
     selectValue(select(c, 'shortfall-i1'), 'WET');
     typeInto(input(c, 'received-i1'), '10');
@@ -191,6 +199,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
 
   it('số thực nhận ngoài 0..số khai bị chặn', async () => {
     const { c } = await mount();
+    countAsDeclared(c);
     for (const bad of ['11', '-1', '', '1.5']) {
       typeInto(input(c, 'received-i1'), bad);
       expect(c.textContent).toContain('Số thực nhận từ 0 tới 10');
@@ -206,6 +215,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
 
   it('cân nặng sai định dạng chặn nút', async () => {
     const { c } = await mount();
+    countAsDeclared(c);
     for (const bad of ['0', '100001', '1.5', 'abc']) {
       typeInto(input(c, 'receivedWeightGrams'), bad);
       expect(c.textContent).toContain('Cân nặng là số nguyên từ 1 tới 100000 gram');
@@ -256,11 +266,43 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
 
   it('lỗi API hiện nguyên văn', async () => {
     const { c } = await mount({ confirm: { status: 409, body: { message: 'Yêu cầu không còn ở trạng thái chờ đếm' } } });
+    countAsDeclared(c);
     click(btn(c, 'Xác nhận số đếm'));
     answerConfirm(true);
     await flush();
     expect(alerts(c).join('|')).toContain('Yêu cầu không còn ở trạng thái chờ đếm');
     expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(false);
+  });
+
+  it('w8-01: khai trên 10 vỏ thì ô thực nhận mở trống kèm lời nhắc, chưa báo lỗi, điểm 0 và nút khoá tới khi gõ đủ các dòng', async () => {
+    const { c } = await mount();
+    expect(input(c, 'received-i1')!.value).toBe('');
+    expect(input(c, 'received-i3')!.value).toBe('');
+    expect(c.querySelector('[data-count-required]')!.textContent).toBe('Đơn trên 10 vỏ — vui lòng nhập số đếm thực tế từng dòng');
+    expect(c.textContent).not.toContain('Số thực nhận từ 0 tới');
+    expect(c.textContent).toContain('Điểm sẽ cộng: 0');
+    expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(true);
+    typeInto(input(c, 'received-i1'), '10');
+    expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(true);
+    typeInto(input(c, 'received-i3'), '50');
+    expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(false);
+  });
+
+  it('w8-01: khai tới 10 vỏ, hay mang tới điểm nhận (đếm một bước) dù khai nhiều: ô thực nhận điền sẵn số khai như cũ, không có lời nhắc', async () => {
+    const base = wasteRequestDetail();
+    const small = await mount({ detail: wasteRequestDetail({ lines: [{ ...base.lines[0]!, declaredQty: 4 }, { ...base.lines[1]!, declaredQty: 6 }] }) });
+    expect([input(small.c, 'received-i1')!.value, input(small.c, 'received-i3')!.value]).toEqual(['4', '6']);
+    expect(small.c.querySelector('[data-count-required]')).toBeNull();
+    expect(btn(small.c, 'Xác nhận số đếm')!.disabled).toBe(false);
+    const dropOff = await mount({
+      detail: wasteRequestDetail({
+        method: 'DROP_OFF',
+        status: 'OPEN',
+        point: { id: 'wh', kind: 'WAREHOUSE', name: 'Kho Tubu HCM', addressLine: '1 A', communeName: 'B', provinceName: 'C', phone: null, openingHours: {} },
+      }),
+    });
+    expect([input(dropOff.c, 'received-i1')!.value, input(dropOff.c, 'received-i3')!.value]).toEqual(['10', '50']);
+    expect(dropOff.c.querySelector('[data-count-required]')).toBeNull();
   });
 
   it('kho nhận tại điểm mang tới: màn đếm hiện cho DROP_OFF OPEN ở kho, không hiện ở đại lý', async () => {

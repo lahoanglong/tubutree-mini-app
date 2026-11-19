@@ -13,6 +13,7 @@ import type {
   WasteRequestAdminDetailDTO,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
+import { WASTE_ONE_TAP_MAX_UNITS, WASTE_ONE_TAP_OVER_CAP_TEXT } from '@tubutree/shared-types';
 import {
   closeLostWasteRequest,
   confirmWasteFeeBankPaid,
@@ -188,9 +189,14 @@ const parseQty = (raw: string, max: number): number | null => {
 function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const refresh = useRefresh(r.id);
   const { confirm, dialog } = useConfirm();
-  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, String(l.declaredQty)])));
+  // Khai trên WASTE_ONE_TAP_MAX_UNITS vỏ (trừ mang tới điểm nhận, vẫn đếm một bước): ô thực nhận để trống, nhân viên phải gõ số đếm từng dòng. Điền sẵn số khai
+  // thì đơn lớn bị chặn ở nút một chạm vẫn cộng đủ số khai bằng hai cú bấm, đúng điều trần một chạm muốn chặn (spec PO A6).
+  const mustCount = r.method !== 'DROP_OFF' && r.lines.reduce((s, l) => s + l.declaredQty, 0) > WASTE_ONE_TAP_MAX_UNITS;
+  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, mustCount ? '' : String(l.declaredQty)])));
   // Last valid count per line, so the points line never shows NaN while a field is mid-edit.
-  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty])));
+  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, mustCount ? 0 : l.declaredQty])));
+  // Ô trống lúc mở chưa phải lỗi: chỉ báo "Số thực nhận từ 0 tới …" khi nhân viên đã sửa dòng đó.
+  const [edited, setEdited] = useState<ReadonlySet<string>>(() => new Set());
   const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
   const [weight, setWeight] = useState('');
   const [result, setResult] = useState<number | null>(null);
@@ -222,6 +228,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
 
   const setQty = (itemId: string, declaredQty: number, raw: string) => {
     setReceived((prev) => ({ ...prev, [itemId]: raw }));
+    setEdited((prev) => (prev.has(itemId) ? prev : new Set(prev).add(itemId)));
     const n = parseQty(raw, declaredQty);
     if (n !== null) setLastValid((prev) => ({ ...prev, [itemId]: n }));
   };
@@ -250,6 +257,11 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
   return (
     <div data-counting className={PANEL}>
       <h3 className="text-sm font-semibold text-stone-900">Đếm hàng thực nhận</h3>
+      {mustCount && (
+        <p data-count-required className="text-xs text-warning-fg">
+          {WASTE_ONE_TAP_OVER_CAP_TEXT}
+        </p>
+      )}
       <div className="overflow-x-auto">
         <table data-counting-lines className="w-full min-w-[560px] table-fixed border-collapse text-sm">
           <thead>
@@ -295,7 +307,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                         </select>
                       )}
                       {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <span key={t} className="block text-xs text-danger-fg">{t}</span>)}
-                      {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
+                      {qty === null && edited.has(l.itemId) && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
                     </div>
                   </td>
                 </tr>
