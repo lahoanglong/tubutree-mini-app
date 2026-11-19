@@ -15,6 +15,8 @@ import { SYSTEM_SUBDOMAINS, TENANT_ROOT_DOMAIN, tenantSubdomain } from './tenant
 // `||` chứ không `??`: ARG/ENV của Dockerfile biến build không truyền arg thành chuỗi rỗng, mà `new URL('')` ném lỗi.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://app.tubutree.com').replace(/\/+$/, '');
 
+// Không gồm /don/<mã> (theo dõi đơn vãng lai): layout của nó tự khai noindex. Chặn trong robots thì Googlebot không đọc được thẻ noindex,
+// URL chứa mã đơn vẫn có thể lên kết quả tìm kiếm dạng URL trần khi có link trỏ tới. Sitemap không nộp /don vì nó không nằm trong route map.
 const BASE_PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap'];
 
 /**

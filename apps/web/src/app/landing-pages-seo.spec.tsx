@@ -10,6 +10,8 @@ import { META_DESCRIPTION_MAX } from '@/lib/product-seo';
 const segment = vi.hoisted(() => ({ value: null as string | null }));
 vi.mock('next/navigation', () => ({ useSelectedLayoutSegment: () => segment.value }));
 vi.mock('@/components/recycle/recycle-home', () => ({ RecycleHome: () => <i id="recycle-home" /> }));
+// FAQ của /doi-rac có spec riêng (doi-rac/page.spec.tsx); ở đây trang không có câu hỏi nào để chỉ còn khối WebPage của landing.
+vi.mock('@/lib/recycle-faq', () => ({ loadRecycleFaq: async () => [] }));
 
 import RecyclePage, { metadata as recycle } from './doi-rac/page';
 import GameLayout, { metadata as garden } from './vuon-xanh/layout';
@@ -21,10 +23,10 @@ import MyRewardsLayout, { metadata as myRewards } from './kho-qua/cua-toi/layout
 import AdvisorLayout, { metadata as advisor } from './tu-van/layout';
 import { metadata as rootMetadata } from './layout';
 
-type Case = { path: string; metadata: Metadata; render: () => string };
+type Case = { path: string; metadata: Metadata; render: () => string | Promise<string> };
 const child = <i id="child" />;
 const CASES: Case[] = [
-  { path: '/doi-rac', metadata: recycle, render: () => renderToStaticMarkup(<RecyclePage />) },
+  { path: '/doi-rac', metadata: recycle, render: async () => renderToStaticMarkup(await RecyclePage()) },
   { path: '/vuon-xanh', metadata: garden, render: () => renderToStaticMarkup(<GameLayout>{child}</GameLayout>) },
   { path: '/ctv', metadata: ctv, render: () => renderToStaticMarkup(<CtvLayout>{child}</CtvLayout>) },
   { path: '/dai-ly', metadata: dealer, render: () => renderToStaticMarkup(<DealerLayout>{child}</DealerLayout>) },
@@ -51,9 +53,9 @@ describe.each(CASES)('$path — thẻ SEO của landing công khai', ({ path, me
     expect(metadata.robots).toBeUndefined();
   });
 
-  it('HTML có đúng một khối WebPage + BreadcrumbList trỏ về URL tuyệt đối của chính trang; nội dung trang vẫn được dựng nguyên vẹn', () => {
+  it('HTML có đúng một khối WebPage + BreadcrumbList trỏ về URL tuyệt đối của chính trang; nội dung trang vẫn được dựng nguyên vẹn', async () => {
     segment.value = null;
-    const markup = render();
+    const markup = await render();
     expect(markup).toMatch(/<i id="(child|recycle-home)">/);
     const graphs = ldBlocks(markup).filter((d) => Array.isArray(d['@graph']));
     expect(graphs).toHaveLength(1);

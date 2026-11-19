@@ -53,3 +53,15 @@ export function staticPageJsonLd({ path, title, description, trail }: StaticPage
     ],
   };
 }
+
+/**
+ * schema.org/FAQPage từ đúng danh sách câu hỏi trang đang hiển thị (cùng mảng vẽ phần hiển thị), để dữ liệu có cấu trúc không khai câu nào
+ * khách không đọc được trên trang. Danh sách rỗng thì không dùng hàm này (trang không khai FAQPage).
+ */
+export function faqPageJsonLd(items: readonly { q: string; a: string }[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  };
+}

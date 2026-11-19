@@ -75,9 +75,10 @@ describe.each(CASES)('$path — thẻ chia sẻ và dữ liệu có cấu trúc'
 });
 
 describe('/doi-rac/quy-dinh — vệt breadcrumb', () => {
-  it('không chứa /doi-rac (trang noindex) trong dữ liệu có cấu trúc', async () => {
-    const graph = ldBlocks(await html(RecycleRulesPage))[0]!['@graph'] as { itemListElement?: { item: string }[] }[];
-    const items = graph[1]!.itemListElement!.map((i) => i.item);
-    expect(items).toEqual([`${SITE_URL}/`, `${SITE_URL}/doi-rac/quy-dinh`]);
+  it('đi qua landing /doi-rac (công khai, có trong sitemap) rồi tới thể lệ', async () => {
+    const graph = ldBlocks(await html(RecycleRulesPage))[0]!['@graph'] as { itemListElement?: { item: string; name: string }[] }[];
+    const items = graph[1]!.itemListElement!;
+    expect(items.map((i) => i.item)).toEqual([`${SITE_URL}/`, `${SITE_URL}/doi-rac`, `${SITE_URL}/doi-rac/quy-dinh`]);
+    expect(items.map((i) => i.name)).toEqual(['Trang chủ', 'Đổi rác lấy quà', 'Thể lệ Đổi rác lấy quà']);
   });
 });

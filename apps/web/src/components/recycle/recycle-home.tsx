@@ -31,6 +31,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RecycleLinkRow } from './recycle-link-row';
+import { useRecyclePageFooter } from './recycle-page-footer';
 import { RecycleTimeline } from './recycle-timeline';
 import { WasteItemThumb } from './waste-item-thumb';
 import { WebRecyclePhoneCard } from './web-recycle-phone-card';
@@ -57,6 +58,7 @@ import {
 } from './recycle-labels';
 
 function Shell({ children, showHistory = false }: { children: ReactNode; showHistory?: boolean }) {
+  const footer = useRecyclePageFooter();
   return (
     <main className={`${PAGE_WIDE} space-y-4 py-6 pb-12 tabular-nums`}>
       <PageHeader
@@ -71,6 +73,7 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
       />
       <RecycleRewardsNavPills />
       {children}
+      {footer}
     </main>
   );
 }

@@ -87,5 +87,9 @@ export E2E_LOG_DIR="${E2E_LOG_DIR:-$E2E_DIR/server-logs}"
   npx tsx -e "const w = require('../e2e/tests/support/waste-db'); w.seedWasteRulesText(w.WASTE_RULES_TEXT)"
 )
 
+# Cache fetch của next build còn dữ liệu của DB tạm lượt trước: bản hết hạn vẫn được dùng để dựng trang ISR (Next chỉ làm mới ngầm sau đó),
+# nên trang dựng sẵn có thể không khớp DB lượt này.
+rm -rf "$ROOT/apps/web/.next/cache/fetch-cache"
+
 cd "$E2E_DIR"
 E2E_SCOPE=web npx playwright test "$@"

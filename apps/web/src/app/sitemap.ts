@@ -2,7 +2,8 @@ import type { MetadataRoute } from 'next';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { NOINDEX_PUBLIC_PATHS, SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
-import { getBrands, getLegalDoc, getProducts, getStorefrontList } from '@/lib/api';
+import { getBrands, getCategories, getLegalDoc, getProducts, getStorefrontList, type CategoryItem } from '@/lib/api';
+import { browseCanonicalPath } from '@/lib/home-seo';
 import { LEGAL_SLUGS } from '@/lib/legal';
 
 export const revalidate = 3600;
@@ -29,6 +30,22 @@ const MAX_PRODUCT_PAGES = 5;
  * thay đổi thật. Trang chủ, trang tĩnh, nhãn và chính sách cũng không có nguồn ngày thật nên để trống thay vì dùng giờ dựng sitemap.
  * Ngày hỏng hoặc ở tương lai (lệch đồng hồ quá một ngày) bị bỏ, để sitemap không khai một mốc vô lý.
  */
+/** Mọi nút của cây danh mục (cả danh mục con), mỗi id một lần; `children` hỏng tạo vòng cũng không treo. */
+function flattenCategories(tree: readonly CategoryItem[]): CategoryItem[] {
+  const seen = new Set<string>();
+  const out: CategoryItem[] = [];
+  const walk = (nodes: readonly CategoryItem[]) => {
+    for (const n of nodes) {
+      if (seen.has(n.id)) continue;
+      seen.add(n.id);
+      out.push(n);
+      walk(n.children ?? []);
+    }
+  };
+  walk(tree);
+  return out;
+}
+
 function lastModified(iso: string | null | undefined, now = Date.now()): Date | undefined {
   if (!iso) return undefined;
   const at = new Date(iso);
@@ -54,6 +71,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       base.push({ url: `${SITE_URL}/san-pham/${p.slug}`, changeFrequency: 'weekly', priority: 0.7 });
     }
     if (products.length < PRODUCTS_PER_PAGE) break;
+  }
+  // Trang danh mục (/san-pham?category=<id>, cả danh mục con) được lập chỉ mục với canonical tự trỏ về chính nó (browseMetadata), cùng dạng URL ở đây.
+  // Chỉ nộp danh mục còn sản phẩm đang bán: danh mục rỗng là trang trống. API cũ chưa trả productCount thì không nộp danh mục nào thay vì đoán.
+  for (const c of flattenCategories(await getCategories())) {
+    if ((c.productCount ?? 0) > 0) {
+      base.push({ url: `${SITE_URL}${browseCanonicalPath({ category: { id: c.id, name: c.name } })}`, changeFrequency: 'daily', priority: 0.7 });
+    }
   }
   // Nhãn đã công khai (có slug) mới có trang /brand/[slug]; nhãn chưa công khai không có URL để nộp.
   for (const b of await getBrands()) {

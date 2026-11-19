@@ -29,7 +29,7 @@ const users: Record<string, unknown> = {
 const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k, jest.fn().mockResolvedValue({ ok: k })])) as Record<T, jest.Mock>;
 async function build(enabled: boolean) {
   const me = svc('me', 'rules', 'openCount');
-  const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
+  const catalogue = svc('listItems', 'listPoints', 'nearbyPoints', 'publicWarehouses');
   const requests = svc('list', 'detail', 'feeQr', 'byOrder', 'create', 'edit', 'setTracking', 'cancel', 'pickupQuote');
   const preview = svc('preview');
   const packaging = { forOrder: jest.fn().mockResolvedValue(null) };
@@ -54,6 +54,8 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     const proto = WasteCustomerController.prototype as unknown as Record<string, object>;
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.rules!)).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.publicCatalogue!)).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.publicWarehouses!)).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.points!)).toBeUndefined();
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.me!)).toBeUndefined();
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.items!)).toBeUndefined();
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, WasteCustomerController)).toBeUndefined();
@@ -63,6 +65,11 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     await expect(c.me('guest')).resolves.toEqual({ ok: 'me' });
     await expect(c.rules()).resolves.toEqual({ ok: 'rules' });
     expect(me.me).toHaveBeenCalledWith('guest');
+  });
+  it('/warehouses: công khai, không qua cổng khách, trả nguyên kết quả của dịch vụ', async () => {
+    const { c, catalogue } = await build(false);
+    await expect(c.publicWarehouses()).resolves.toEqual({ ok: 'publicWarehouses' });
+    expect(catalogue.publicWarehouses).toHaveBeenCalledWith();
   });
   it('/me/open-count: cần đăng nhập (không công khai), chạy cả khi chương trình tắt, truyền đúng userId', async () => {
     const proto = WasteCustomerController.prototype as unknown as Record<string, object>;
@@ -117,11 +124,12 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteCustomerController)).toBe('waste');
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
-      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['returnPackagingOf', 0, 'return-packaging'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'], ['pickupQuote', 1, 'pickup-quote'],
+      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['publicWarehouses', 0, 'warehouses'], ['items', 0, 'items'], ['points', 0, 'points'], ['returnPackagingOf', 0, 'return-packaging'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'], ['pickupQuote', 1, 'pickup-quote'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['feeQr', 0, 'requests/:id/fee-qr'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);
     expect(Reflect.getMetadata('__headers__', p.publicCatalogue)).toEqual([{ name: 'Cache-Control', value: 'public, max-age=60' }]);
+    expect(Reflect.getMetadata('__headers__', p.publicWarehouses)).toEqual([{ name: 'Cache-Control', value: 'public, max-age=300' }]);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.nearby)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.nearby)).toBe(30);
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.nearby)).toBe(60_000);

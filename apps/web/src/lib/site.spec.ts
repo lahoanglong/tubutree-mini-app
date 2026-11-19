@@ -154,8 +154,11 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
     const rule = [robots().rules].flat()[0]!;
     const disallow = [rule.disallow].flat();
     expect(disallow).toEqual(
-      expect.arrayContaining(['/doi-rac/tao', '/doi-rac/tao/', '/kho-qua/cua-toi', '/kho-qua/cua-toi/', '/ctv/gian-hang', '/ho-tro/chat', '/ho-tro/chat/']),
+      expect.arrayContaining(['/doi-rac/tao', '/doi-rac/tao/', '/kho-qua/cua-toi', '/kho-qua/cua-toi/', '/ctv/gian-hang', '/ho-tro/chat', '/ho-tro/chat/', '/gio-hang', '/thanh-toan', '/admin']),
     );
+    // /don/<mã> tự khai noindex ở layout; chặn cào thì Googlebot không đọc được thẻ đó.
+    expect(disallow).not.toContain('/don');
+    expect(disallow).not.toContain('/don/');
     for (const pub of ['/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/vuon-xanh', '/tu-van', '/doi-rac/quy-dinh']) {
       expect(disallow).not.toContain(pub);
       expect(disallow).not.toContain(`${pub}/`);

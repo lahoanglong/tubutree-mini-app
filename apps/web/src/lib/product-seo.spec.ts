@@ -110,9 +110,14 @@ describe('productJsonLd — dữ liệu có cấu trúc cho Google (BUYERWEB-16)
     expect(productJsonLd(BASE, URL)).not.toHaveProperty('aggregateRating');
     expect(productJsonLd(BASE, URL)).not.toHaveProperty('image');
     expect(productJsonLd({ ...BASE, ratingAvg: 4.6, reviewCount: 12 }, URL).aggregateRating).toEqual({
-      '@type': 'AggregateRating', ratingValue: 4.6, reviewCount: 12,
+      '@type': 'AggregateRating', ratingValue: 4.6, reviewCount: 12, bestRating: 5, worstRating: 1,
     });
+    expect(productJsonLd({ ...BASE, ratingAvg: 5, reviewCount: 1 }, URL).aggregateRating).toMatchObject({ ratingValue: 5, reviewCount: 1 });
     expect(productJsonLd({ ...BASE, ratingAvg: 0, reviewCount: 0 }, URL)).not.toHaveProperty('aggregateRating');
+    // Không bao giờ khai điểm khi chưa có đánh giá hiển thị nào, hay khi số lệch thang 1–5 (dữ liệu hỏng): không bịa sao.
+    for (const bad of [{ ratingAvg: 4.5, reviewCount: 0 }, { ratingAvg: 0, reviewCount: 3 }, { ratingAvg: 6, reviewCount: 3 }, { ratingAvg: 0.5, reviewCount: 3 }, { ratingAvg: 4, reviewCount: 1.5 }]) {
+      expect(productJsonLd({ ...BASE, ...bad }, URL)).not.toHaveProperty('aggregateRating');
+    }
   });
 
   it('mô tả lấy từ bản đã làm sạch, rút gọn 500 ký tự', () => {

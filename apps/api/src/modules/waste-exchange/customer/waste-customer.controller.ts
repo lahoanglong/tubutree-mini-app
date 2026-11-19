@@ -245,6 +245,14 @@ export class WasteCustomerController {
     return this.catalogue.publicItems();
   }
 
+  // Công khai: tên, tỉnh và giờ mở cửa của kho Tubu cho mục Câu hỏi thường gặp của trang /doi-rac, trang dựng ở máy chủ cho khách chưa đăng nhập.
+  @Public()
+  @Header('Cache-Control', 'public, max-age=300')
+  @Get('warehouses')
+  publicWarehouses() {
+    return this.catalogue.publicWarehouses();
+  }
+
   @Get('items')
   async items(@CurrentUser('sub') userId: string) {
     await this.gate(userId, 'FULL');

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getProducts: vi.fn(), getStorefrontList: vi.fn(), getBrands: vi.fn(), getLegalDoc: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getProducts: vi.fn(), getStorefrontList: vi.fn(), getBrands: vi.fn(), getLegalDoc: vi.fn(), getCategories: vi.fn() }));
 const flags = vi.hoisted(() => ({ cashback: false }));
 vi.mock('@tubutree/app-core/features', () => ({
   get CASHBACK_ENABLED() {
@@ -18,6 +18,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   getStorefrontList: mocks.getStorefrontList,
   getBrands: mocks.getBrands,
   getLegalDoc: mocks.getLegalDoc,
+  getCategories: mocks.getCategories,
 }));
 
 import sitemap from './sitemap';
@@ -34,9 +35,36 @@ beforeEach(() => {
   mocks.getStorefrontList.mockReset().mockResolvedValue([]);
   mocks.getBrands.mockReset().mockResolvedValue([]);
   mocks.getLegalDoc.mockReset().mockResolvedValue({ content: null, vars: {} });
+  mocks.getCategories.mockReset().mockResolvedValue([]);
 });
 
 describe('sitemap', () => {
+  it('nộp mọi danh mục còn sản phẩm đang bán (cả danh mục con) theo đúng dạng canonical của trang danh mục; danh mục rỗng hay thiếu số đếm thì bỏ', async () => {
+    mocks.getCategories.mockResolvedValue([
+      { id: 'cat-tay-rua', name: 'Tẩy rửa', slug: 'tay-rua', sortOrder: 1, productCount: 40, children: [
+        { id: 'cat-nuoc-giat', name: 'Nước giặt', slug: 'nuoc-giat', sortOrder: 1, productCount: 12 },
+        { id: 'cat-rong', name: 'Rỗng', slug: 'rong', sortOrder: 2, productCount: 0 },
+      ] },
+      { id: 'cat-cu', name: 'API cũ', slug: 'cu', sortOrder: 2 },
+      { id: 'cat-tay-rua', name: 'Lặp vòng', slug: 'lap', sortOrder: 3, productCount: 5 },
+    ]);
+    const out = await sitemap();
+    const urls = out.filter((e) => e.url.includes('?category=')).map((e) => e.url);
+    expect(urls).toEqual(['https://app.tubutree.com/san-pham?category=cat-tay-rua', 'https://app.tubutree.com/san-pham?category=cat-nuoc-giat']);
+    const { browseCanonicalPath } = await import('@/lib/home-seo');
+    expect(urls[1]).toBe(`https://app.tubutree.com${browseCanonicalPath({ category: { id: 'cat-nuoc-giat', name: 'Nước giặt' } })}`);
+  });
+
+  it('không nộp trang riêng tư (giỏ, thanh toán, theo dõi đơn, quản trị) dù dùng route map thật', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+    const paths = (await sitemap()).map((e) => new URL(e.url).pathname);
+    for (const p of ['/gio-hang', '/thanh-toan', '/don', '/admin', '/tai-khoan', '/dang-nhap', '/merchant']) {
+      expect(paths.filter((x) => x === p || x.startsWith(`${p}/`))).toEqual([]);
+    }
+    for (const p of ['/doi-rac', '/doi-rac/quy-dinh', '/vuon-xanh', '/gioi-thieu', '/san-pham']) expect(paths).toContain(p);
+  });
+
   it('thêm route công khai tĩnh của route map, trang chủ không bị lặp', async () => {
     routeMocks.publicStaticRoutes.mockReturnValueOnce(['/', '/gioi-thieu']);
     const urls = (await sitemap()).map((e) => e.url);

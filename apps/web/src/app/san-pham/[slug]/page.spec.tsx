@@ -452,7 +452,7 @@ describe('/san-pham/[slug] — SEO (BUYERWEB-16)', () => {
     expect(ld.url).toBe('https://app.tubutree.com/san-pham/dau-goi-bo-ket');
     expect(ld.image).toEqual(['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg']);
     expect(ld.offers).toMatchObject({ priceCurrency: 'VND', price: 150000, availability: 'https://schema.org/InStock' });
-    expect(ld.aggregateRating).toEqual({ '@type': 'AggregateRating', ratingValue: 4.5, reviewCount: 8 });
+    expect(ld.aggregateRating).toEqual({ '@type': 'AggregateRating', ratingValue: 4.5, reviewCount: 8, bestRating: 5, worstRating: 1 });
   });
 
   it('JSON-LD không thể bị phá bằng tên sản phẩm chứa </script>', async () => {

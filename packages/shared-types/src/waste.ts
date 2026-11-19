@@ -56,6 +56,8 @@ export interface WasteFeeEstimate { zoneName: string; provinceCode: string; prov
 export interface WasteAlertThresholds { quotaPacePct: number; quotaPaceDays: number; fullMatchPct: number; fullMatchMinSample: number; repeatCustomerCount: number; repeatCustomerDays: number; avgUnitsFactor: number; lookupMissCount: number; lookupMissDays: number; staffDirectCount: number; staffDirectDays: number }
 export interface WastePublicFlags { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean }
 export type WasteOpeningHours = Partial<Record<WasteWeekday, { open: string; close: string }[]>>;
+/** Kho Tubu đang nhận rác, phần công khai cho mục Câu hỏi thường gặp của trang Đổi rác (không địa chỉ, không số điện thoại). */
+export interface WastePublicWarehouseDTO { name: string; provinceName: string; openingHours: WasteOpeningHours }
 export interface WasteLaneFlags { dropoff: boolean; mailin: boolean; pickup: boolean }
 export interface WasteParcelLimits { maxWeightKg: number; maxEdgeCm: number }
 

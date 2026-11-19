@@ -2,8 +2,7 @@ import type { Metadata } from 'next';
 import { fetchFaqs, fetchSupportContact, getPublicConfig } from '@tubutree/app-core/api/config';
 import { createServerHttp } from '@/lib/core-http-server';
 import { fallbackFaq } from '@/lib/faq-fallback';
-import { staticPageJsonLd, staticPageMetadata } from '@/lib/page-seo';
-import { jsonLdScript } from '@/lib/product-seo';
+import { faqPageJsonLd, staticPageJsonLd, staticPageMetadata } from '@/lib/page-seo';
 import { JsonLd } from '@/components/seo/json-ld';
 import { AboutView } from './about-view';
 
@@ -32,18 +31,7 @@ export default async function AboutPage() {
     <>
       <AboutView initialFaqs={faqs} initialConfig={config} initialSupport={support} />
       <JsonLd data={staticPageJsonLd(SEO)} />
-      {faqItems.length > 0 && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: jsonLdScript({
-              '@context': 'https://schema.org',
-              '@type': 'FAQPage',
-              mainEntity: faqItems.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
-            }),
-          }}
-        />
-      )}
+      {faqItems.length > 0 && <JsonLd data={faqPageJsonLd(faqItems)} />}
     </>
   );
 }

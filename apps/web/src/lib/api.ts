@@ -253,6 +253,8 @@ export interface CategoryItem {
   sortOrder: number;
   /** Số sản phẩm đang bán; API cũ chưa trả thì thiếu. */
   productCount?: number;
+  /** GET /categories trả cây: danh mục con nằm trong nút cha. */
+  children?: CategoryItem[];
 }
 export async function getCategories(): Promise<CategoryItem[]> {
   return fetchList<CategoryItem>('/categories', 600, (json) => json as CategoryItem[]);

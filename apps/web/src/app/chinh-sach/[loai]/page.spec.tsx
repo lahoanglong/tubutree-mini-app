@@ -122,5 +122,8 @@ describe('/chinh-sach/[loai] (D5-01)', () => {
     const live = await generateMetadata({ params: Promise.resolve({ loai: 'van-chuyen' }) });
     expect(live.robots).toBeUndefined();
     expect(live.alternates?.canonical).toBe('/chinh-sach/van-chuyen');
+    expect(live.title).toBe('Chính sách vận chuyển');
+    expect(live.openGraph).toMatchObject({ type: 'website', siteName: 'Tubu Tree', locale: 'vi_VN', url: '/chinh-sach/van-chuyen', title: 'Chính sách vận chuyển — Tubu Tree', description: live.description });
+    expect(draft.openGraph).toBeUndefined();
   });
 });

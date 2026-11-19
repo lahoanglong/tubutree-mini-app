@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { WasteItem, WastePoint, WastePointKind } from '@prisma/client';
-import type { WasteItemDTO, WasteNearbyRequest, WasteOpeningHours, WastePointDTO } from '@tubutree/shared-types';
+import type { WasteItemDTO, WasteNearbyRequest, WasteOpeningHours, WastePointDTO, WastePublicWarehouseDTO } from '@tubutree/shared-types';
 import { vnMonthKey } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { resolveZaloLocation } from '../../staff/attendance/zalo-location';
@@ -100,6 +100,22 @@ export class WasteCatalogueService {
   /** Danh mục món cho khách chưa đăng nhập xem chương trình; chỉ trả khi chương trình đang bật. */
   async publicItems(): Promise<WasteItemDTO[]> {
     return (await this.config.isEnabled()) ? this.listItems() : [];
+  }
+
+  /**
+   * Kho Tubu mà khách đang mang rác tới được, cho mục Câu hỏi thường gặp công khai của /doi-rac. Với kho, luật hiện điểm của `listPoints`
+   * rút về `status = ACTIVE`: `availablePointIds` luôn nhận kho ACTIVE và `isHiddenInactive` không bao giờ ẩn kho, nên trang không nêu một
+   * kho khách không chọn được mà không phải đọc cả danh sách điểm. Chương trình tắt thì rỗng.
+   */
+  async publicWarehouses(): Promise<WastePublicWarehouseDTO[]> {
+    if (!(await this.config.isEnabled())) return [];
+    const rows = await this.prisma.wastePoint.findMany({
+      where: { status: 'ACTIVE', kind: 'WAREHOUSE' },
+      select: { name: true, provinceName: true, openingHours: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      take: MAX_POINTS,
+    });
+    return rows.map((p) => ({ name: p.name, provinceName: p.provinceName, openingHours: p.openingHours as unknown as WasteOpeningHours }));
   }
 
   async listPoints(provinceCode?: string): Promise<WastePointDTO[]> {

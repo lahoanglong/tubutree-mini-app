@@ -15,7 +15,7 @@ function setup(points: unknown[], o: { enabled?: boolean; available?: string[]; 
   const config = { snapshot: jest.fn().mockResolvedValue({ pointInactiveDays: 60 }), isEnabled: jest.fn().mockResolvedValue(o.enabled ?? true) };
   const svc = new WasteCatalogueService(prisma as never, access as never, config as never);
   jest.useFakeTimers({ now: NOW });
-  return { svc, prisma };
+  return { svc, prisma, access };
 }
 afterEach(() => jest.useRealTimers());
 
@@ -110,5 +110,26 @@ describe('WasteCatalogueService.publicItems', () => {
     const { svc, prisma } = setup([], { enabled: false });
     await expect(svc.publicItems()).resolves.toEqual([]);
     expect(prisma.wasteItem.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('WasteCatalogueService.publicWarehouses (FAQ công khai /doi-rac)', () => {
+  const HOURS = { MON: [{ open: '08:30', close: '17:30' }], SAT: [{ open: '08:30', close: '17:30' }] };
+  it('chỉ kho ACTIVE (kho luôn nhận được, không bao giờ bị ẩn), chỉ đọc tên + tỉnh + giờ mở cửa (không địa chỉ, số điện thoại, toạ độ)', async () => {
+    const { svc, prisma, access } = setup([{ name: 'Kho Tubu HCM', provinceName: 'TP.HCM', openingHours: HOURS }]);
+    await expect(svc.publicWarehouses()).resolves.toEqual([{ name: 'Kho Tubu HCM', provinceName: 'TP.HCM', openingHours: HOURS }]);
+    expect(prisma.wastePoint.findMany).toHaveBeenCalledWith({
+      where: { status: 'ACTIVE', kind: 'WAREHOUSE' },
+      select: { name: true, provinceName: true, openingHours: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      take: 200,
+    });
+    expect(access.availablePointIds).not.toHaveBeenCalled();
+    expect(isHiddenInactive({ kind: 'WAREHOUSE', lastConfirmedAt: null, activatedAt: day(9999) }, NOW, 60)).toBe(false);
+  });
+  it('chương trình tắt thì không đọc điểm nào và trả rỗng', async () => {
+    const { svc, prisma } = setup([pt({ id: 'wh', kind: 'WAREHOUSE' })], { enabled: false });
+    await expect(svc.publicWarehouses()).resolves.toEqual([]);
+    expect(prisma.wastePoint.findMany).not.toHaveBeenCalled();
   });
 });

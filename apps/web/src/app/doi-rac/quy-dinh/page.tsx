@@ -1,18 +1,24 @@
 import type { Metadata } from 'next';
 import { getWasteRules } from '@tubutree/app-core/api/waste';
 import { createServerHttp } from '@/lib/core-http-server';
+import { LANDING_SEO } from '@/lib/landing-seo';
 import { staticPageJsonLd, staticPageMetadata } from '@/lib/page-seo';
 import { JsonLd } from '@/components/seo/json-ld';
 import { RecycleRulesView } from '@/components/recycle/recycle-rules-view';
 
 export const revalidate = 300;
 
-// Vệt breadcrumb không có "Đổi rác lấy quà" (/doi-rac): trang đó noindex (route private), không nên nằm trong dữ liệu có cấu trúc.
 const SEO = {
   path: '/doi-rac/quy-dinh',
   title: 'Thể lệ Đổi rác lấy quà',
   description: 'Thể lệ chương trình Đổi rác lấy quà của Tubu Tree: món nhận, cách quy đổi Điểm Xanh và điều kiện tham gia.',
 };
+
+// Vệt breadcrumb đi qua landing /doi-rac (trang công khai, có trong sitemap) rồi tới thể lệ.
+const TRAIL = [
+  { name: LANDING_SEO.recycle.title, href: LANDING_SEO.recycle.path },
+  { name: SEO.title, href: SEO.path },
+];
 
 export const metadata: Metadata = staticPageMetadata(SEO);
 
@@ -22,7 +28,7 @@ export default async function RecycleRulesPage() {
   return (
     <>
       <RecycleRulesView initialText={rules ? rules.text : undefined} />
-      <JsonLd data={staticPageJsonLd(SEO)} />
+      <JsonLd data={staticPageJsonLd({ ...SEO, trail: TRAIL })} />
     </>
   );
 }

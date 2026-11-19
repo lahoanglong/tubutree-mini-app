@@ -48,6 +48,7 @@ vi.mock('@/lib/core-http', () => ({
 }));
 
 import { RecycleHome } from './recycle-home';
+import { RecyclePageFooter } from './recycle-page-footer';
 
 let mounted: Rendered[] = [];
 const mount = async () => {
@@ -531,5 +532,30 @@ describe('/doi-rac: thẻ Shipper lấy tận nhà', () => {
     state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' });
     c = await mount();
     expect(c.textContent).not.toContain('Shipper lấy tận nhà');
+  });
+});
+
+describe('/doi-rac: khối dựng ở máy chủ (Câu hỏi thường gặp) nằm cuối <main> ở mọi trạng thái', () => {
+  const withFooter = async () => {
+    const r = render(
+      <RecyclePageFooter footer={<section id="faq-slot">FAQ</section>}>
+        <RecycleHome />
+      </RecyclePageFooter>,
+    );
+    mounted.push(r);
+    await flush(8);
+    return r.container;
+  };
+  it.each(['loading', 'guest', 'authenticated'])('%s', async (phase) => {
+    state.phase = phase;
+    const c = await withFooter();
+    const main = c.querySelector('main')!;
+    expect(main.lastElementChild?.id).toBe('faq-slot');
+    expect(c.querySelectorAll('#faq-slot')).toHaveLength(1);
+  });
+  it('không bọc RecyclePageFooter (màn cũ, spec khác) thì không thêm gì', async () => {
+    state.phase = 'guest';
+    const c = await mount();
+    expect(c.querySelector('#faq-slot')).toBeNull();
   });
 });

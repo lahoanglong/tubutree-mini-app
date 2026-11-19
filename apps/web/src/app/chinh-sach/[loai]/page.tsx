@@ -5,6 +5,7 @@ import { getLegalDoc, getPublicSupport } from '@/lib/api';
 import { LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug, merchantIdentityOrDefault } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { staticPageMetadata } from '@/lib/page-seo';
 
 export const revalidate = 300;
 
@@ -22,7 +23,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const page = LEGAL_PAGES[loai];
   // Bản nháp chưa được duyệt không nên nằm trên Google như chính sách thật của cửa hàng; noindex kèm canonical là hai tín hiệu mâu thuẫn.
   if (content === null) return { title: page.title, description: page.description, robots: { index: false, follow: true } };
-  return { title: page.title, description: page.description, alternates: { canonical: `/chinh-sach/${loai}` } };
+  // Đủ canonical + og:url/og:title/og:description như các trang tĩnh khác: thiếu og thì link chia sẻ qua Zalo/Facebook chỉ còn thẻ chung của trang gốc.
+  return staticPageMetadata({ path: `/chinh-sach/${loai}`, title: page.title, description: page.description });
 }
 
 export default async function LegalPage({ params }: Params) {

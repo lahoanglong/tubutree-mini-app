@@ -66,7 +66,7 @@ import DealerPage from './dai-ly/page';
 import StaffPage from './nhan-vien/page';
 import MyPayrollPage from './nhan-vien/bang-luong/page';
 import BrandOwnerPage from './chu-thuong-hieu/page';
-import RecyclePage from './doi-rac/page';
+import { RecycleHome } from '@/components/recycle/recycle-home';
 import RecycleRequestsPage from './doi-rac/yeu-cau/page';
 import RecycleNewPage from './doi-rac/tao/page';
 import RecyclePointsPage from './doi-rac/diem-nhan/page';
@@ -137,7 +137,7 @@ const PRO: PageCase[] = [
   ['/chu-thuong-hieu', () => <BrandOwnerPage />],
 ];
 const RECYCLE: PageCase[] = [
-  ['/doi-rac', () => <RecyclePage />],
+  ['/doi-rac', () => <RecycleHome />],
   ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />],
   ['/doi-rac/tao', () => <RecycleNewPage />],
   ['/doi-rac/diem-nhan', () => <RecyclePointsPage />],

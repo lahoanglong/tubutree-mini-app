@@ -18,6 +18,7 @@ import type {
   WastePointMonthlyReportDTO,
   WastePreviewDTO,
   WastePreviewRequest,
+  WastePublicWarehouseDTO,
   WasteRejectRequest,
   WasteRejectResultDTO,
   WasteRequestDetailDTO,
@@ -55,6 +56,8 @@ export const getReturnPackaging = (http: HttpClient, orderCode: string) =>
   http.get<ReturnPackagingResponse>('/waste/return-packaging', { query: { orderCode } });
 /** Công khai: khách chưa đăng nhập xem món nhận và mức điểm. */
 export const getWasteCatalogue = (http: HttpClient) => http.get<WasteItemDTO[]>('/waste/catalogue');
+/** Kho Tubu đang nhận rác (tên, tỉnh, giờ mở cửa), công khai: trang /doi-rac dựng mục Câu hỏi thường gặp ở máy chủ. */
+export const getWasteWarehouses = (http: HttpClient) => http.get<WastePublicWarehouseDTO[]>('/waste/warehouses');
 export const getWasteItems = (http: HttpClient) => http.get<WasteItemDTO[]>('/waste/items');
 export const getWastePoints = (http: HttpClient, provinceCode?: string) =>
   http.get<WastePointDTO[]>('/waste/points', { query: provinceCode ? { provinceCode } : {} });

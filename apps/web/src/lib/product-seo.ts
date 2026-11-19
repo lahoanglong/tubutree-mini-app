@@ -227,8 +227,12 @@ export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string, polic
   };
   if (images.length > 0) ld.image = images;
   if (p.variations.length === 1 && p.variations[0]!.sku) ld.sku = p.variations[0]!.sku;
-  if ((p.reviewCount ?? 0) > 0 && (p.ratingAvg ?? 0) > 0) {
-    ld.aggregateRating = { '@type': 'AggregateRating', ratingValue: p.ratingAvg, reviewCount: p.reviewCount };
+  // `ratingAvg`/`reviewCount` của API chỉ tính đánh giá đang hiển thị (isVisible: đánh giá ảnh chờ duyệt và đánh giá admin ẩn không vào), nên
+  // AggregateRating chỉ có khi đã có ít nhất một đánh giá thật khách đọc được trên trang. Số lệch thang 1–5 (dữ liệu hỏng) thì không khai.
+  const reviewCount = p.reviewCount ?? 0;
+  const ratingAvg = p.ratingAvg ?? 0;
+  if (Number.isInteger(reviewCount) && reviewCount >= 1 && ratingAvg >= 1 && ratingAvg <= 5) {
+    ld.aggregateRating = { '@type': 'AggregateRating', ratingValue: ratingAvg, reviewCount, bestRating: 5, worstRating: 1 };
   }
   return ld;
 }

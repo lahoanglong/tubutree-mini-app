@@ -1,4 +1,4 @@
-import type { WasteOpeningHours } from '@tubutree/shared-types';
+import type { WasteOpeningHours, WasteWeekday } from '@tubutree/shared-types';
 
 const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
 const WEEKDAY_NAMES = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'] as const;
@@ -51,4 +51,21 @@ export function todayHoursText(hours: WasteOpeningHours, now: Date): string | nu
   const today = windowsOn(hours, vnTime(now).getUTCDay());
   if (today.length === 0) return 'Hôm nay nghỉ';
   return `Hôm nay ${today.map((w) => `${shortTime(w.open)}–${shortTime(w.close)}`).join(', ')}`;
+}
+
+const WEEKDAY_SHORT: Record<WasteWeekday, string> = { MON: 'T2', TUE: 'T3', WED: 'T4', THU: 'T5', FRI: 'T6', SAT: 'T7', SUN: 'CN' };
+const WEEKDAY_ORDER = Object.keys(WEEKDAY_SHORT) as WasteWeekday[];
+
+/** Gộp các ngày liền nhau có cùng khung giờ: "T2–T6 08:00–17:00 · T7 08:00–12:00". Không có giờ nào thì trả mảng rỗng. */
+export function summarizeOpeningHours(hours: WasteOpeningHours): string[] {
+  const groups: { from: WasteWeekday; to: WasteWeekday; text: string }[] = [];
+  WEEKDAY_ORDER.forEach((d) => {
+    const slots = hours[d];
+    if (!slots || slots.length === 0) return;
+    const text = slots.map((s) => `${s.open}–${s.close}`).join(', ');
+    const last = groups[groups.length - 1];
+    if (last && last.text === text && WEEKDAY_ORDER.indexOf(last.to) === WEEKDAY_ORDER.indexOf(d) - 1) last.to = d;
+    else groups.push({ from: d, to: d, text });
+  });
+  return groups.map((g) => `${g.from === g.to ? WEEKDAY_SHORT[g.from] : `${WEEKDAY_SHORT[g.from]}–${WEEKDAY_SHORT[g.to]}`} ${g.text}`);
 }
