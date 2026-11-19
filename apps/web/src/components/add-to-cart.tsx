@@ -473,9 +473,9 @@ export default function AddToCart({
         <p className={success ? 'text-success-fg' : 'text-danger-fg'}>
           {msg}{' '}
           {success && !buying && (
-            <a href="/gio-hang" className="font-semibold underline">
+            <BackAwareLink href="/gio-hang" className="font-semibold underline">
               Xem giỏ hàng →
-            </a>
+            </BackAwareLink>
           )}
         </p>
       )}
