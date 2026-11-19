@@ -441,6 +441,71 @@ describe('WasteConfirmService.confirm', () => {
     });
   });
 
+  describe('16b. w8-01 one-tap Cộng điểm (spec PO A6)', () => {
+    const pickupRx = (o: Record<string, unknown> = {}) => whRow({ method: 'PICKUP', orderId: 'o1', order: { status: 'DELIVERED' }, ...o });
+    const six = { ...carton, declaredQty: 6 };
+    const five = { ...milk, declaredQty: 5 };
+    const linesOf = (a: number, b: number) => [
+      { itemId: 'wi-carton', declaredQty: a, receivedQty: a },
+      { itemId: 'wi-milk', declaredQty: b, receivedQty: b },
+    ];
+    const nothingWritten = (h: ReturnType<typeof setup>) => {
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+      expect(h.rewards.grant).not.toHaveBeenCalled();
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+    };
+
+    it('exactly 10 declared units on a received PICKUP bag completes and the event records oneTap', async () => {
+      const h = warehouseCase({ row: pickupRx({ lines: [six, { ...milk, declaredQty: 4 }] }) });
+      await expect(h.svc.confirm(h.call, body(linesOf(6, 4), { oneTap: true }))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+      expect((writeWasteEvent as jest.Mock).mock.calls[0][1].meta.oneTap).toBe(true);
+    });
+
+    it('11 declared units across lines is a 409 with the PO text and writes nothing', async () => {
+      const h = warehouseCase({ row: pickupRx({ lines: [six, five] }) });
+      await expect(h.svc.confirm(h.call, body(linesOf(6, 5), { oneTap: true }))).rejects.toThrow(
+        new ConflictException('Đơn trên 10 vỏ — vui lòng nhập số đếm thực tế từng dòng'),
+      );
+      nothingWritten(h);
+    });
+
+    it('the same 11 units counted line by line (no oneTap) still complete: the cap only binds the one-tap button', async () => {
+      const h = warehouseCase({ row: pickupRx({ lines: [six, five] }) });
+      await expect(h.svc.confirm(h.call, body(linesOf(6, 5)))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+      expect((writeWasteEvent as jest.Mock).mock.calls[0][1].meta.oneTap).toBe(false);
+    });
+
+    it('oneTap with a received figure below the declared one is a 400', async () => {
+      const h = warehouseCase({ row: pickupRx() });
+      await expect(
+        h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 10, receivedQty: 9, shortfallReason: 'DAMAGED' }], { oneTap: true })),
+      ).rejects.toThrow(new BadRequestException('Cộng điểm một chạm chỉ ghi đúng số khách khai'));
+      nothingWritten(h);
+    });
+
+    it.each([
+      ['a PICKUP bag still OPEN', { method: 'PICKUP', status: 'OPEN', orderId: 'o1', order: { status: 'DELIVERED' } }],
+      ['an OPEN DROP_OFF at the warehouse', { method: 'DROP_OFF', status: 'OPEN' }],
+    ])('oneTap on %s is a 409: only a received bag can be credited in one tap', async (_n, over) => {
+      const h = warehouseCase({ row: whRow({ ...over, lines: [{ ...carton, declaredQty: 2 }] }) });
+      await expect(h.svc.confirm(h.call, body([{ itemId: 'wi-carton', declaredQty: 2, receivedQty: 2 }], { oneTap: true }))).rejects.toThrow(
+        new ConflictException('Yêu cầu chưa tới bước đếm ở kho, đếm ở màn chi tiết'),
+      );
+      nothingWritten(h);
+    });
+
+    it('an OPEN DROP_OFF counted at the detail keeps its single count-and-credit step', async () => {
+      const h = warehouseCase({ row: whRow({ method: 'DROP_OFF', status: 'OPEN', lines: [six, five] }) });
+      await expect(h.svc.confirm(h.call, body(linesOf(6, 5)))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED' }));
+    });
+
+    it('a replay of a request completed by a one-tap still answers with the stored result', async () => {
+      const h = warehouseCase({ row: completed({ method: 'PICKUP', pointId: 'wh' }), pointRow: { kind: 'WAREHOUSE', monthlyQuotaPoints: null } });
+      await expect(h.svc.confirm(h.call, body(full, { oneTap: true }))).resolves.toEqual(expect.objectContaining({ status: 'COMPLETED', pointsAwarded: 10_000 }));
+      expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
   it('17. receivedWeightGrams at the warehouse is stored and ignored by a replay', async () => {
     const h = warehouseCase({ row: whRow() });
     await h.svc.confirm(h.call, body(full, { receivedWeightGrams: 1200 }));

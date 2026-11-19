@@ -90,14 +90,36 @@ export function orderCustomerPhone(o: AdminOrder): string | null {
   return o.user?.phone ?? o.guestPhone ?? null;
 }
 
-/** Dòng hạn chuyển khoản của đơn chờ tiền: còn hạn ghi giờ, đã qua hạn tô đỏ (cron sắp huỷ, hoặc đơn được giữ vì khoản chưa gắn). */
+/** Câu số tin MSS đã nhắc chuyển khoản (khối payment_rescue, hợp đồng W4-02). MSS chưa báo (đơn cũ, MSS bản cũ) thì null, không hiện gì. */
+export function orderReminderText(o: Pick<AdminOrder, 'paymentRemindersSent' | 'paymentLastRemindedAt'>): string | null {
+  const n = o.paymentRemindersSent ?? null;
+  const at = o.paymentLastRemindedAt ? formatDateTime(o.paymentLastRemindedAt) : null;
+  if (n === null && at === null) return null;
+  if (n === 0) return 'MSS chưa gửi tin nhắc CK';
+  const head = n === null ? 'MSS đã nhắc CK' : `MSS đã nhắc CK ${n} lần`;
+  return at ? `${head} · gần nhất ${at}` : head;
+}
+
+function OrderPaymentReminders({ order: o }: { order: AdminOrder }) {
+  const text = orderReminderText(o);
+  return text ? <span data-payment-reminders className="block text-[11px] tabular-nums leading-snug text-stone-600">{text}</span> : null;
+}
+
+/**
+ * Dòng hạn chuyển khoản của đơn chờ tiền: còn hạn ghi giờ, đã qua hạn tô đỏ (cron sắp huỷ, hoặc đơn được giữ vì khoản chưa gắn), kèm số
+ * tin MSS đã nhắc. Đơn đã trả hay đã huỷ không hiện số nhắc ở đây (đơn tự huỷ quá hạn hiện ở dòng lý do huỷ).
+ */
 export function OrderPaymentDeadline({ order: o, now = Date.now() }: { order: AdminOrder; now?: number }) {
-  if (!o.paymentDeadline) return null;
+  const reminders = o.status === 'PENDING_PAYMENT' ? <OrderPaymentReminders order={o} /> : null;
+  if (!o.paymentDeadline) return reminders;
   const overdue = Date.parse(o.paymentDeadline) <= now;
   return (
-    <span data-payment-deadline className={`block text-[11px] font-medium tabular-nums ${overdue ? 'text-danger-fg' : 'text-stone-600'}`}>
-      {overdue ? `Quá hạn CK từ ${formatDateTime(o.paymentDeadline)}` : `Hạn CK ${formatDateTime(o.paymentDeadline)}`}
-    </span>
+    <>
+      <span data-payment-deadline className={`block text-[11px] font-medium tabular-nums ${overdue ? 'text-danger-fg' : 'text-stone-600'}`}>
+        {overdue ? `Quá hạn CK từ ${formatDateTime(o.paymentDeadline)}` : `Hạn CK ${formatDateTime(o.paymentDeadline)}`}
+      </span>
+      {reminders}
+    </>
   );
 }
 
@@ -111,6 +133,7 @@ export function OrderCancellationLine({ order: o }: { order: AdminOrder }) {
       <span className={c.overdue ? 'font-medium text-danger-fg' : 'font-medium text-stone-700'}>{who}</span>
       <span className="tabular-nums"> · nhả kho {formatDateTime(c.at)}</span>
       {c.note && <span className="block break-words text-stone-500">{c.note}</span>}
+      {c.overdue && <OrderPaymentReminders order={o} />}
     </span>
   );
 }

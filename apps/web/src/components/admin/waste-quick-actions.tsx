@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AdminWasteRequestRowDTO, WasteRequestAdminDetailDTO } from '@tubutree/shared-types';
+import { WASTE_ONE_TAP_MAX_UNITS, WASTE_ONE_TAP_OVER_CAP_TEXT, type AdminWasteRequestRowDTO, type WasteRequestAdminDetailDTO } from '@tubutree/shared-types';
 import { confirmWasteRequest, getWasteRequest, receiveWasteRequest } from '@/lib/admin-client';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { formatCount } from '@/lib/checkout-points';
@@ -24,6 +24,9 @@ export const canQuickReceive = (r: AdminWasteRequestRowDTO) =>
  */
 export const canQuickCount = (r: AdminWasteRequestRowDTO) => r.status === 'RECEIVED';
 
+/** Trên WASTE_ONE_TAP_MAX_UNITS vỏ khai thì không cộng một chạm (spec PO A6); dòng thiếu tổng khai thì để count() đọc chi tiết rồi quyết. */
+export const quickCountOverCap = (r: AdminWasteRequestRowDTO) => r.declaredQtyTotal !== undefined && r.declaredQtyTotal > WASTE_ONE_TAP_MAX_UNITS;
+
 export type QuickFlash = { tone: 'success' | 'warning' | 'danger'; text: string };
 
 const declaredPoints = (d: WasteRequestAdminDetailDTO) =>
@@ -33,7 +36,7 @@ const declaredSummary = (d: WasteRequestAdminDetailDTO) => d.lines.map((l) => `$
 
 /**
  * Nút một chạm trên dòng yêu cầu: "Nhận kiện" cho túi thu kèm đơn và "Cộng điểm" theo đúng số khách khai. Món nguy hại, dòng chưa
- * đếm được hay yêu cầu không có dòng hàng thì mở chi tiết để đếm tay, không cộng điểm thẳng.
+ * đếm được, yêu cầu không có dòng hàng hay khai trên WASTE_ONE_TAP_MAX_UNITS vỏ thì mở chi tiết để đếm tay, không cộng điểm thẳng.
  */
 export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: (id: string, patch: Partial<AdminWasteRequestRowDTO>) => void) {
   const qc = useQueryClient();
@@ -91,14 +94,16 @@ export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: (id:
       // staleTime 0: hộp thoại phải dựa trên trạng thái mới nhất, không phải bản 30 giây trong cache admin.
       const d = await qc.fetchQuery({ queryKey: ['admin-waste-request', r.id], queryFn: () => getWasteRequest(r.id), staleTime: 0 });
       const manual = !canCountRequest(d)
-        ? 'chưa tới bước đếm ở kho'
+        ? `${r.code} chưa tới bước đếm ở kho: đếm ở màn chi tiết.`
         : d.lines.length === 0
-          ? 'không có dòng hàng'
+          ? `${r.code} không có dòng hàng: đếm ở màn chi tiết.`
           : d.lines.some((l) => l.hazardous)
-            ? 'có món nguy hại cần kiểm'
-            : null;
+            ? `${r.code} có món nguy hại cần kiểm: đếm ở màn chi tiết.`
+            : d.lines.reduce((s, l) => s + l.declaredQty, 0) > WASTE_ONE_TAP_MAX_UNITS
+              ? `${r.code}: ${WASTE_ONE_TAP_OVER_CAP_TEXT}.`
+              : null;
       if (manual) {
-        setFlash({ tone: 'warning', text: `${r.code} ${manual}: đếm ở màn chi tiết.` });
+        setFlash({ tone: 'warning', text: manual });
         onOpen(r.id);
         return false;
       }
@@ -108,7 +113,10 @@ export function useWasteQuickActions(onOpen: (id: string) => void, onDone?: (id:
         confirmLabel: 'Cộng điểm',
       });
       if (!ok) return false;
-      const res = await confirmWasteRequest(r.id, { lines: d.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty, receivedQty: l.declaredQty })) });
+      const res = await confirmWasteRequest(r.id, {
+        lines: d.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty, receivedQty: l.declaredQty })),
+        oneTap: true,
+      });
       setFlash({ tone: 'success', text: `Đã cộng ${formatCount(res.pointsAwarded)} điểm cho ${r.code}.` });
       onDone?.(r.id, { status: 'COMPLETED', pointsAwarded: res.pointsAwarded });
       return true;

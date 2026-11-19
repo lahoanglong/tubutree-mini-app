@@ -26,6 +26,7 @@ export class WasteConfirmDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(WASTE_MAX_REQUEST_LINES) @ValidateNested({ each: true }) @Type(() => WasteConfirmLineDto) lines!: WasteConfirmLineDto[];
   @IsOptional() @IsInt() @Min(1) @Max(100000) receivedWeightGrams?: number;
   @IsOptional() @ValidateNested() @Type(() => WasteMatchDto) match?: WasteMatchDto;
+  @IsOptional() @IsBoolean() oneTap?: boolean;
 }
 
 export class WasteRejectDto {

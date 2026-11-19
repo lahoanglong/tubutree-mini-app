@@ -1304,6 +1304,11 @@ model Order {
   autoCancelBlockedAt    DateTime?
   /// Số tiền chuyển khoản (cộng dồn) Pancake báo đã nhận khi đơn còn chưa đủ tiền — đơn bị huỷ thì hoàn đúng số này.
   pancakePaidReported    Int?
+  /// Số tin MSS đã (hoặc có thể đã) nhắc khách chuyển khoản, đọc từ khối payment_rescue của webhook order-status (hợp đồng W4-02).
+  /// Chỉ tăng, không lùi khi tin tới trễ. Null = MSS chưa báo (đơn cũ, đơn không qua MSS, hay MSS chưa gửi trường này).
+  paymentRemindersSent   Int?
+  /// Lúc MSS nhắc chuyển khoản gần nhất (last_reminded_at của khối payment_rescue). Null = MSS chưa báo.
+  paymentLastRemindedAt  DateTime?
   /// Đẩy đơn sang Pancake (pancake-order.service.ts): WAITING_PAYMENT (trả trước qua cổng, chờ tiền) | PENDING
   /// (đang thử lại) | PUSHING | SYNCED | FAILED (hết lượt thử, cron vẫn thử tiếp trong cửa sổ) | NOT_CONFIGURED |
   /// SKIPPED (đơn đã huỷ/trả trước khi lên Pancake) | STALE (quá cửa sổ tự đẩy hoặc đã rời kho mà chưa lên Pancake —

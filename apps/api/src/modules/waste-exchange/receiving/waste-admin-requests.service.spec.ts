@@ -250,6 +250,7 @@ const listRow = (o: Record<string, unknown> = {}) => ({
   user: { id: 'u1', fullName: 'Nguyễn Văn An', phone: '0901234567', isBlocked: false, wasteFlags: null },
   point: { name: 'Kho Tubu' },
   order: null,
+  lines: [{ declaredQty: 4 }],
   ...o,
 });
 
@@ -413,6 +414,14 @@ describe('WasteAdminRequestsService.queue', () => {
     const out = await service.queue('a1', {});
     expect(out.rows.map((r) => r.waitingReason)).toEqual(['CUSTOMER_BLOCKED', 'CUSTOMER_BLOCKED', null, 'ORDER_NOT_DELIVERED', null]);
     expect(out.rows[3]!.orderCode).toBe('DH1');
+  });
+
+  it('w8-01: declaredQtyTotal sums the declared figures of every line (the one-tap cap reads it), 0 with no lines', async () => {
+    const rows = [listRow({ id: 'a', lines: [{ declaredQty: 6 }, { declaredQty: 5 }] }), listRow({ id: 'b', lines: [] })];
+    const { service, prisma } = adminSetup({ rows });
+    const out = await service.queue('a1', {});
+    expect(out.rows.map((r) => r.declaredQtyTotal)).toEqual([11, 0]);
+    expect(findManyArg(prisma).include.lines).toEqual({ select: { declaredQty: true } });
   });
 });
 

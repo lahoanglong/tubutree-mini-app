@@ -18,6 +18,7 @@ import type {
   WasteRejectResultDTO,
   WasteRequestAdminDetailDTO,
 } from '@tubutree/shared-types';
+import { WASTE_ONE_TAP_MAX_UNITS, WASTE_ONE_TAP_OVER_CAP_TEXT } from '@tubutree/shared-types';
 import { assertActiveAdmin } from '../../../common/staff-access';
 import { formatPoints } from '../../../common/format-points';
 import { vnMonthKey } from '../../../common/vn-time';
@@ -69,6 +70,18 @@ const RETRY = 'Bạn thử lại nhé';
 const DIFFERENT_FIGURES = 'Yêu cầu đã được xác nhận với số liệu khác';
 const PARTNER_NOT_ACCEPTED = 'Điểm đại lý không xác nhận được món chỉ kho Tubu HCMC nhận. Từ chối yêu cầu hoặc chuyển khách tới kho.';
 const PROGRAMME_OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.';
+const ONE_TAP_NOT_RECEIVED = 'Yêu cầu chưa tới bước đếm ở kho, đếm ở màn chi tiết';
+const ONE_TAP_NOT_DECLARED = 'Cộng điểm một chạm chỉ ghi đúng số khách khai';
+
+/**
+ * Luật của nút Cộng điểm một chạm (spec PO A6): chỉ kiện kho đã nhận (DROP_OFF còn mở chưa chắc khách đã tới), số nhận bằng số
+ * khai, và tổng khai không quá WASTE_ONE_TAP_MAX_UNITS. Kiểm theo dòng đã lưu, không theo thân request.
+ */
+function assertOneTapAllowed(status: WasteRequestStatus, stored: ReadonlyArray<{ declaredQty: number }>, lines: ReadonlyArray<{ declaredQty: number; receivedQty: number }>) {
+  if (status !== 'RECEIVED') throw new ConflictException(ONE_TAP_NOT_RECEIVED);
+  if (lines.some((l) => l.receivedQty !== l.declaredQty)) throw new BadRequestException(ONE_TAP_NOT_DECLARED);
+  if (stored.reduce((s, l) => s + l.declaredQty, 0) > WASTE_ONE_TAP_MAX_UNITS) throw new ConflictException(WASTE_ONE_TAP_OVER_CAP_TEXT);
+}
 
 function isUniqueViolation(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'P2002';
@@ -127,6 +140,7 @@ export class WasteConfirmService {
           })),
           body.lines,
         );
+        if (body.oneTap === true) assertOneTapAllowed(req.status, req.lines, lines);
         // After the replay branch on purpose: a request completed before the rule keeps answering its retries.
         // Counted 0 is let through: nothing from the warehouse-only line reaches the partner point, and the customer keeps the other lines.
         if (pointKind === 'PARTNER') {
@@ -217,6 +231,7 @@ export class WasteConfirmService {
             after: { status: 'COMPLETED', pointsAwarded: points, dropsAwarded },
             lines: lines.map(({ itemId, declaredQty, receivedQty, shortfallReason }) => ({ itemId, declaredQty, receivedQty, shortfallReason })),
             receivedWeightGrams: body.receivedWeightGrams ?? null,
+            oneTap: body.oneTap === true,
           },
         });
 

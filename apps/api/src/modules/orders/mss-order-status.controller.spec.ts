@@ -27,9 +27,29 @@ const OVERDUE = {
   payment_rescue: { state: 'overdue', overdue_at: '2026-11-20T14:00:00+07:00', reminders_sent: 2, last_reminded_at: '2026-11-19T20:02:00+07:00' },
 };
 
+const NOW = Date.parse('2026-11-20T07:00:05Z');
+
 describe('parseMssOrderStatus', () => {
   it('đọc order_code và khối payment_rescue "overdue", bỏ qua khoá lạ', () => {
-    expect(parseMssOrderStatus({ ...OVERDUE, extra: { a: 1 } })).toEqual({ orderCode: 'TUBU2026111912345', paymentRescue: { state: 'overdue' } });
+    expect(parseMssOrderStatus({ ...OVERDUE, extra: { a: 1 } }, NOW)).toEqual({
+      orderCode: 'TUBU2026111912345',
+      paymentRescue: { state: 'overdue', sent: 2, lastAt: new Date('2026-11-19T13:02:00.000Z') },
+    });
+  });
+
+  it.each([
+    ['MSS chưa gửi hai trường', {}, { sent: null, lastAt: null }],
+    ['số nhắc âm', { reminders_sent: -1 }, { sent: null, lastAt: null }],
+    ['số nhắc lẻ', { reminders_sent: 1.5 }, { sent: null, lastAt: null }],
+    ['số nhắc là chuỗi', { reminders_sent: '2' }, { sent: null, lastAt: null }],
+    ['số nhắc quá lớn', { reminders_sent: 1001 }, { sent: null, lastAt: null }],
+    ['mốc không có múi giờ', { reminders_sent: 0, last_reminded_at: '2026-11-19T20:02:00' }, { sent: 0, lastAt: null }],
+    ['mốc không đọc được', { last_reminded_at: 'hôm qua' }, { sent: null, lastAt: null }],
+    ['mốc quá xa trong tương lai', { last_reminded_at: '2026-11-25T20:02:00+07:00' }, { sent: null, lastAt: null }],
+    ['mốc trước 2026', { last_reminded_at: '2025-12-31T23:59:00Z' }, { sent: null, lastAt: null }],
+  ])('%s: trường sai bỏ qua, khối overdue vẫn xử lý', (_name, extra, want) => {
+    const body = { order_code: 'TUBU1', payment_rescue: { state: 'overdue', ...extra } };
+    expect(parseMssOrderStatus(body, NOW)).toEqual({ orderCode: 'TUBU1', paymentRescue: { state: 'overdue', ...want } });
   });
 
   it.each([
@@ -50,6 +70,7 @@ describe('POST /api/integrations/mss/order-status (HTTP thật, chữ ký HMAC)'
   let app: INestApplication;
   let base: string;
   const handleOverdue = jest.fn(async () => ({ outcome: 'cancelled' as const }));
+  const recordReminders = jest.fn(async () => undefined);
 
   beforeAll(async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
@@ -57,7 +78,7 @@ describe('POST /api/integrations/mss/order-status (HTTP thật, chữ ký HMAC)'
       controllers: [MssOrderStatusController],
       providers: [
         { provide: MSS_ENV_READER, useValue: () => env },
-        { provide: MssPaymentRescueService, useValue: { handleOverdue } },
+        { provide: MssPaymentRescueService, useValue: { handleOverdue, recordReminders } },
       ],
     }).compile();
     app = mod.createNestApplication({ bodyParser: false, logger: false });
@@ -70,7 +91,10 @@ describe('POST /api/integrations/mss/order-status (HTTP thật, chữ ký HMAC)'
     await app?.close();
     jest.restoreAllMocks();
   });
-  beforeEach(() => handleOverdue.mockClear());
+  beforeEach(() => {
+    handleOverdue.mockClear();
+    recordReminders.mockClear();
+  });
 
   const sign = (raw: string, ts = Math.floor(Date.now() / 1000), secret = INBOUND) => ({
     'x-mss-key-id': 'tubu-test',
@@ -87,6 +111,9 @@ describe('POST /api/integrations/mss/order-status (HTTP thật, chữ ký HMAC)'
     expect(await res.json()).toEqual({ ok: true, outcome: 'cancelled' });
     expect(handleOverdue).toHaveBeenCalledTimes(1);
     expect(handleOverdue).toHaveBeenCalledWith('TUBU2026111912345');
+    // Ghi số lần nhắc trước khi quyết huỷ, để đơn vừa tự huỷ vẫn hiện số nhắc ở admin.
+    expect(recordReminders).toHaveBeenCalledWith('TUBU2026111912345', { sent: 2, lastAt: new Date('2026-11-19T13:02:00.000Z') });
+    expect(recordReminders.mock.invocationCallOrder[0]).toBeLessThan(handleOverdue.mock.invocationCallOrder[0]!);
   });
 
   it('thân trạng thái thường (không có khối payment_rescue): 200 ignored, không đụng đơn', async () => {
@@ -95,6 +122,7 @@ describe('POST /api/integrations/mss/order-status (HTTP thật, chữ ký HMAC)'
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, outcome: 'ignored' });
     expect(handleOverdue).not.toHaveBeenCalled();
+    expect(recordReminders).not.toHaveBeenCalled();
   });
 
   it('chữ ký sai, đổi thân sau khi ký, thiếu chữ ký, lệch giờ quá 300 giây: 401 thân chung, không gọi service', async () => {

@@ -5067,6 +5067,38 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     }
   });
 
+  it('w8-01: số tin MSS đã nhắc chuyển khoản hiện cạnh quá hạn CK (đơn chờ tiền) và cạnh lý do tự huỷ; MSS chưa báo hay đơn đã trả thì không hiện', async () => {
+    const reminded = { paymentRemindersSent: 2, paymentLastRemindedAt: '2026-11-19T13:02:00.000Z' };
+    mocks.orders = [
+      orderOf('TBR1', { status: 'PENDING_PAYMENT', paymentDeadline: '2020-01-01T01:00:00.000Z', ...reminded }),
+      orderOf('TBR2', {
+        status: 'CANCELLED',
+        allowedTransitions: [],
+        canConfirmPayment: false,
+        cancellation: { at: '2026-11-19T02:05:00.000Z', note: 'Tự động hủy do quá hạn chuyển khoản 24h', actorType: 'SYSTEM', overdue: true },
+        ...reminded,
+      }),
+      orderOf('TBR3', { status: 'PENDING_PAYMENT', paymentDeadline: '2020-01-01T01:00:00.000Z' }),
+      orderOf('TBR4', { status: 'CONFIRMED', paymentStatus: 'PAID', paymentDeadline: null, ...reminded }),
+      orderOf('TBR5', { status: 'PENDING_PAYMENT', paymentDeadline: '2020-01-01T01:00:00.000Z', paymentRemindersSent: 0, paymentLastRemindedAt: null }),
+    ];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    for (const narrow of [false, true]) {
+      document.body.innerHTML = '';
+      if (narrow) narrowScreen();
+      const { container } = await mount();
+      const rowOf = (code: string) => [...container.querySelectorAll(narrow ? '[data-orders-cards] li' : 'tbody tr')].find((r) => r.textContent?.includes(code))!;
+      const lines = (code: string) => [...rowOf(code).querySelectorAll('[data-payment-reminders]')].map((e) => e.textContent);
+      // Bảng có bản sao md:hidden trong ô mã đơn (jsdom không ẩn theo CSS): mỗi bản một dòng, cùng nội dung.
+      expect(new Set(lines('TBR1'))).toEqual(new Set(['MSS đã nhắc CK 2 lần · gần nhất 20:02 19/11/2026']));
+      expect(rowOf('TBR1').textContent).toContain('Quá hạn CK từ 08:00 01/01');
+      expect(new Set(lines('TBR2'))).toEqual(new Set(['MSS đã nhắc CK 2 lần · gần nhất 20:02 19/11/2026']));
+      expect(lines('TBR3')).toEqual([]);
+      expect(lines('TBR4')).toEqual([]);
+      expect(new Set(lines('TBR5'))).toEqual(new Set(['MSS chưa gửi tin nhắc CK']));
+    }
+  });
+
   it('chi tiết đơn có tên và SĐT khách kèm nút "Xem hồ sơ"; mã đơn trong hồ sơ mở đúng đơn đó', async () => {
     mocks.orders = [orderOf('TB10')];
     mocks.userDetail.mockResolvedValue(PROFILE);

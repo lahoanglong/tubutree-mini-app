@@ -200,6 +200,10 @@ export interface AdminOrder {
   paymentDeadline?: string | null;
   /** Lần huỷ mới nhất của đơn đã huỷ: lý do, ai huỷ, lúc huỷ (cũng là lúc nhả giữ kho). */
   cancellation?: AdminOrderCancellation | null;
+  /** Số tin MSS đã nhắc khách chuyển khoản (webhook payment_rescue, hợp đồng W4-02); null/vắng = MSS chưa báo. */
+  paymentRemindersSent?: number | null;
+  /** Lúc MSS nhắc chuyển khoản gần nhất (ISO); null/vắng = MSS chưa báo. */
+  paymentLastRemindedAt?: string | null;
 }
 
 export interface AdminOrderCancellation {

@@ -47,6 +47,7 @@ const ROW_INCLUDE = {
   user: { select: { id: true, fullName: true, phone: true, isBlocked: true, wasteFlags: { select: { blockedAt: true } } } },
   point: { select: { name: true } },
   order: { select: { code: true, status: true } },
+  lines: { select: { declaredQty: true } },
 } satisfies Prisma.WasteRequestInclude;
 
 type QueueRow = Prisma.WasteRequestGetPayload<{ include: typeof ROW_INCLUDE }>;
@@ -85,6 +86,7 @@ function toRow(r: QueueRow, isAdmin: boolean): AdminWasteRequestRowDTO {
     trackingConflict: r.trackingConflict,
     orderCode: r.order?.code ?? null,
     waitingReason,
+    declaredQtyTotal: r.lines.reduce((sum, l) => sum + l.declaredQty, 0),
   };
 }
 

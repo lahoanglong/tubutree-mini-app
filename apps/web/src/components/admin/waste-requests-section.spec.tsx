@@ -558,23 +558,30 @@ describe('WasteRequestsSection', () => {
     expect(btn(lookupRow(c, 'r11'), 'Nhận kiện')).not.toBeNull();
   });
 
+  // Đúng 10 vỏ khai: còn trong trần một chạm (w8-01). Mặc định của wasteRequestDetail là 60.
+  const tenUnits = () => wasteRequestDetail({ lines: wasteRequestDetail().lines.map((l, i) => ({ ...l, declaredQty: i === 0 ? 4 : 6 })) });
+
   it('w7-03: Cộng điểm một chạm đọc chi tiết, hỏi lại kèm số điểm theo khai, gửi số nhận bằng số khai', async () => {
-    const { c, api } = await mount({ queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' }), wasteRequestRow({ id: 'r2', code: 'TR-BBBB22' })], nextCursor: null } } });
+    const { c, api } = await mount({
+      queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED', declaredQtyTotal: 10 }), wasteRequestRow({ id: 'r2', code: 'TR-BBBB22' })], nextCursor: null } },
+      detail: { body: tenUnits() },
+    });
     expect(row(c, 'r2').querySelector('[data-quick]')).toBeNull();
     const b = row(c, 'r1').querySelector<HTMLButtonElement>('[data-quick="count"]')!;
     expect(b.textContent).toBe('Cộng điểm');
     click(b);
     await flush();
-    expect(confirmDialog()!.textContent).toContain('Cộng 20.000 điểm theo đúng số khách khai: 10 thùng Thùng carton cũ, 50 vỏ Vỏ hộp sữa');
+    expect(confirmDialog()!.textContent).toContain('Cộng 5.000 điểm theo đúng số khách khai: 4 thùng Thùng carton cũ, 6 vỏ Vỏ hộp sữa');
     answerConfirm(true);
     await flush();
     const sent = posts(api, '/admin/waste/requests/r1/confirm');
     expect(sent).toHaveLength(1);
     expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({
       lines: [
-        { itemId: 'i1', declaredQty: 10, receivedQty: 10 },
-        { itemId: 'i3', declaredQty: 50, receivedQty: 50 },
+        { itemId: 'i1', declaredQty: 4, receivedQty: 4 },
+        { itemId: 'i3', declaredQty: 6, receivedQty: 6 },
       ],
+      oneTap: true,
     });
     expect(c.textContent).toContain('Đã cộng 20.000 điểm cho TR-7K3M9Q.');
   });
@@ -608,9 +615,35 @@ describe('WasteRequestsSection', () => {
     expect(posts(b.api, '/confirm')).toHaveLength(0);
   });
 
+  it('w8-01: dòng khai trên 10 vỏ không có nút Cộng điểm, thay bằng chú thích đếm tay; đúng 10 vỏ vẫn có nút', async () => {
+    const { c } = await mount({
+      queue: {
+        body: {
+          rows: [wasteRequestRow({ status: 'RECEIVED', declaredQtyTotal: 11 }), wasteRequestRow({ id: 'r2', code: 'TR-BBBB22', status: 'RECEIVED', declaredQtyTotal: 10 })],
+          nextCursor: null,
+        },
+      },
+    });
+    expect(row(c, 'r1').querySelector('[data-quick="count"]')).toBeNull();
+    expect(row(c, 'r1').querySelector('[data-quick-locked="count"]')!.textContent).toBe('Đơn trên 10 vỏ — vui lòng nhập số đếm thực tế từng dòng');
+    expect(btn(row(c, 'r1'), 'Mở')).not.toBeNull();
+    expect(row(c, 'r2').querySelector('[data-quick="count"]')).not.toBeNull();
+    expect(row(c, 'r2').querySelector('[data-quick-locked]')).toBeNull();
+  });
+
+  it('w8-01: dòng chưa có tổng khai (bản cũ) mà chi tiết trên 10 vỏ thì mở chi tiết kèm chú thích, không hỏi và không gửi', async () => {
+    const { c, api } = await mount({ queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' })], nextCursor: null } } });
+    click(row(c, 'r1').querySelector('[data-quick="count"]'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(c.textContent).toContain('TR-7K3M9Q: Đơn trên 10 vỏ — vui lòng nhập số đếm thực tế từng dòng.');
+    expect(posts(api, '/confirm')).toHaveLength(0);
+  });
+
   it('w7-03: lỗi máy chủ khi Cộng điểm hiện nguyên văn kèm mã yêu cầu', async () => {
     const { c, api } = await mount({
       queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' })], nextCursor: null } },
+      detail: { body: tenUnits() },
       confirm: { status: 409, body: { message: 'Yêu cầu đã được xác nhận' } },
     });
     click(row(c, 'r1').querySelector('[data-quick="count"]'));

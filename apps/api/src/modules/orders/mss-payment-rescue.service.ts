@@ -50,6 +50,29 @@ export class MssPaymentRescueService {
     private readonly orderStatus: OrderStatusService,
   ) {}
 
+  /**
+   * Ghi số tin MSS đã nhắc chuyển khoản và lúc nhắc gần nhất lên đơn để màn admin Đơn hàng hiện cạnh trạng thái quá hạn. Ghi cả khi cờ huỷ
+   * tắt (chỉ là số liệu hiển thị), chỉ cho đơn chuyển khoản. Số nhắc không lùi khi tin tới trễ. Lỗi ghi chỉ log: việc huỷ phía sau vẫn chạy.
+   */
+  async recordReminders(orderCode: string, r: { sent: number | null; lastAt: Date | null }): Promise<void> {
+    if (r.sent === null && r.lastAt === null) return;
+    try {
+      await this.prisma.order.updateMany({
+        where: {
+          code: orderCode,
+          paymentMethod: 'BANK_TRANSFER',
+          ...(r.sent !== null ? { OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: r.sent } }] } : {}),
+        },
+        data: {
+          ...(r.sent !== null ? { paymentRemindersSent: r.sent } : {}),
+          ...(r.lastAt !== null ? { paymentLastRemindedAt: r.lastAt } : {}),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Không ghi được số lần MSS nhắc chuyển khoản đơn ${orderCode}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   async handleOverdue(orderCode: string, now: Date = new Date()): Promise<PaymentRescueResult> {
     const result = await this.decide(orderCode, now);
     if (result.outcome !== 'disabled') {

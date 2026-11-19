@@ -176,7 +176,14 @@ export interface WasteDeskGiftDTO { id: string; giftName: string; customerName: 
 export type WasteDeskLookupDTO = { type: 'REQUEST'; request: WasteDeskRequestDTO } | { type: 'GIFT'; redemption: WasteDeskGiftDTO };
 export interface WasteMatchInput { parcelCode?: string; phoneMatchConfirmed?: boolean; parcelTracking?: string }
 export interface WasteConfirmLineInput { itemId: string; declaredQty: number; receivedQty: number; shortfallReason?: WasteShortfallReason }
-export interface WasteConfirmRequest { lines: WasteConfirmLineInput[]; receivedWeightGrams?: number /* integer 1..100000, outside the replay comparison (spec 15.3) */; match?: WasteMatchInput }
+/**
+ * Nút "Cộng điểm" một chạm của admin ghi đúng số khách khai. Trên mức này nhân viên phải gõ số đếm thực tế từng dòng: xác nhận
+ * đúng số khai hàng loạt là dấu hiệu cảnh báo FULL_MATCH_CONFIRMER. API và giao diện dùng chung hằng số và câu báo.
+ */
+export const WASTE_ONE_TAP_MAX_UNITS = 10;
+export const WASTE_ONE_TAP_OVER_CAP_TEXT = `Đơn trên ${WASTE_ONE_TAP_MAX_UNITS} vỏ — vui lòng nhập số đếm thực tế từng dòng`;
+/** oneTap: gửi từ nút Cộng điểm một chạm; API chỉ nhận khi kiện kho đã nhận, số nhận bằng số khai và tổng khai không quá WASTE_ONE_TAP_MAX_UNITS. */
+export interface WasteConfirmRequest { lines: WasteConfirmLineInput[]; receivedWeightGrams?: number /* integer 1..100000, outside the replay comparison (spec 15.3) */; match?: WasteMatchInput; oneTap?: boolean }
 export interface WasteRejectRequest { rejectionReason: WasteRejectionReason; rejectionNote?: string; match?: WasteMatchInput }
 export interface WasteConfirmResultDTO { requestId: string; code: string; status: 'COMPLETED'; pointsAwarded: number; dropsAwarded: number; quota: { limit: number; used: number; remaining: number } | null; staffDailyCapRemaining: number }
 export interface WasteRejectResultDTO { requestId: string; code: string; status: 'REJECTED' }
@@ -195,7 +202,7 @@ export interface WastePointUpsertRequest { kind?: WastePointKind; name: string; 
 export interface WastePointStaffAddRequest { userId: string; role: WastePointStaffRole }
 export interface WastePerkReviewRequest { expectedPendingText: string }
 export interface AdminWasteRequestQuery { method?: WasteMethod; status?: WasteRequestStatus; filter?: WasteRequestQueueFilter; userId?: string; pointId?: string; cursor?: string; limit?: number }
-export interface AdminWasteRequestRowDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; closeReason: WasteCloseReason | null; createdAt: string; expiresAt: string | null; inTransitAt: string | null; receivedAt: string | null; completedAt: string | null; estimatedPoints: number; pointsAwarded: number | null; pointId: string; pointName: string; customerName: string; customerPhone: string | null; userId?: string; carrier: string | null; trackingCode: string | null; trackingConflict: boolean; orderCode: string | null; waitingReason: 'CUSTOMER_BLOCKED' | 'ORDER_NOT_DELIVERED' | null }
+export interface AdminWasteRequestRowDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; closeReason: WasteCloseReason | null; createdAt: string; expiresAt: string | null; inTransitAt: string | null; receivedAt: string | null; completedAt: string | null; estimatedPoints: number; pointsAwarded: number | null; pointId: string; pointName: string; customerName: string; customerPhone: string | null; userId?: string; carrier: string | null; trackingCode: string | null; trackingConflict: boolean; orderCode: string | null; waitingReason: 'CUSTOMER_BLOCKED' | 'ORDER_NOT_DELIVERED' | null; /** Tổng số khách khai của mọi dòng; tùy chọn cho dữ liệu giả cũ (vắng thì giao diện đọc chi tiết rồi mới quyết). */ declaredQtyTotal?: number }
 export interface WasteRequestAdminDetailDTO extends WasteRequestDetailDTO { lines: (WasteRequestLineDTO & { hazardous: boolean })[]; customerName: string; customerPhone: string | null; userId?: string; shipFeeBankRef?: string | null; trackingConflict: boolean; confirmedByUserId: string | null; receivedWeightGrams: number | null; carrierCostVnd: number | null; reversedAt: string | null; reversedByUserId: string | null; reversalShortfallPoints: number | null; capDayKey: string; capMonthKey: string; consentAt: string; consentVersion: string; /** Chỉ admin, yêu cầu COMPLETED: số dư hiện tại và số điểm Thu hồi sẽ trừ nếu bấm lúc này. */ reversePreview?: { pointsBalance: number; expectedTake: number }; events?: AdminWasteEventDTO[] }
 export interface AdminWasteEventDTO { id: string; createdAt: string; kind: string; actorUserId: string | null; actorRole: WasteActorRole; requestId: string | null; pointId: string | null; giftRedemptionId: string | null; meta: Record<string, unknown> | null }
 export interface WasteReceiveRequest { match?: WasteMatchInput; receivedWeightGrams?: number /* integer 1..100000, outside the replay comparison (spec 15.3) */ }

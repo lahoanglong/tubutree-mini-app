@@ -149,3 +149,40 @@ describe('MssPaymentRescueService.handleOverdue (hợp đồng W4-02)', () => {
     await expect(svc.handleOverdue('C', AFTER_24H)).resolves.toEqual({ outcome: 'already_cancelled' });
   });
 });
+
+describe('MssPaymentRescueService.recordReminders (w8-01, số lần MSS nhắc chuyển khoản)', () => {
+  const make = (updateMany: jest.Mock = jest.fn().mockResolvedValue({ count: 1 })) => {
+    const prisma = { order: { updateMany } } as unknown as PrismaService;
+    return { svc: new MssPaymentRescueService(prisma, { get: jest.fn() } as unknown as SystemConfigService, {} as OrderStatusService), updateMany };
+  };
+  const AT = new Date('2026-11-19T13:02:00.000Z');
+
+  it('ghi cả hai trường lên đơn chuyển khoản, chỉ khi số nhắc mới không nhỏ hơn số đang lưu (tin tới trễ không làm lùi)', async () => {
+    const { svc, updateMany } = make();
+    await svc.recordReminders('TUBU2026111912345', { sent: 2, lastAt: AT });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: 2 } }] },
+      data: { paymentRemindersSent: 2, paymentLastRemindedAt: AT },
+    });
+  });
+
+  it('chỉ có last_reminded_at: ghi mốc, không đặt điều kiện số nhắc', async () => {
+    const { svc, updateMany } = make();
+    await svc.recordReminders('C', { sent: null, lastAt: AT });
+    expect(updateMany).toHaveBeenCalledWith({ where: { code: 'C', paymentMethod: 'BANK_TRANSFER' }, data: { paymentLastRemindedAt: AT } });
+  });
+
+  it('MSS chưa gửi hai trường (bản cũ): không ghi gì', async () => {
+    const { svc, updateMany } = make();
+    await svc.recordReminders('C', { sent: null, lastAt: null });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('lỗi DB khi ghi chỉ log cảnh báo, không chặn việc huỷ phía sau', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const { svc } = make(jest.fn().mockRejectedValue(new Error('db down')));
+    await expect(svc.recordReminders('C', { sent: 1, lastAt: null })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    warn.mockRestore();
+  });
+});

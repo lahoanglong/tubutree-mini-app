@@ -13,6 +13,7 @@ import type {
   WasteUnmatchedResolveRequest,
   WasteUnmatchedStatus,
 } from '@tubutree/shared-types';
+import { WASTE_ONE_TAP_OVER_CAP_TEXT } from '@tubutree/shared-types';
 import {
   createWasteUnmatched,
   listWasteRequests,
@@ -36,7 +37,7 @@ import type { WasteSeed } from './waste-tab';
 import { WasteRequestDetail } from './waste-request-detail';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { getPublicConfig } from '@/lib/shop-client';
-import { canQuickCount, canQuickReceive, useWasteQuickActions } from './waste-quick-actions';
+import { canQuickCount, canQuickReceive, quickCountOverCap, useWasteQuickActions } from './waste-quick-actions';
 
 export type WasteQueuePreset = 'toCount' | 'inTransit' | 'customerBlocked' | 'orderNotDelivered' | 'expired' | 'transitOverdue' | 'orderMismatch';
 
@@ -339,12 +340,17 @@ function RequestTable({
                         </button>
                       )
                     )}
-                    {canQuickCount(r) && (
+                    {canQuickCount(r) && !quickCountOverCap(r) && (
                       <button type="button" data-quick="count" className={BTN_XS_SECONDARY} disabled={quick.busyId !== null} onClick={() => quick.count(r)}>
                         Cộng điểm
                       </button>
                     )}
                   </div>
+                  {canQuickCount(r) && quickCountOverCap(r) && (
+                    <p data-quick-locked="count" className="mt-1 max-w-64 text-xs text-warning-fg">
+                      {WASTE_ONE_TAP_OVER_CAP_TEXT}
+                    </p>
+                  )}
                 </td>
               </tr>
             );

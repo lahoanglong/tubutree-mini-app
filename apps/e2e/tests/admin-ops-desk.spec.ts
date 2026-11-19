@@ -48,6 +48,8 @@ const GUEST_ORDER: AdminOrder = {
   guestPhone: '0977000111',
   guestSource: 'guest',
   paymentDeadline: '2026-11-19T01:00:00.000Z',
+  paymentRemindersSent: 2,
+  paymentLastRemindedAt: '2026-11-18T13:02:00.000Z',
   items: [],
 };
 
@@ -91,6 +93,11 @@ test.describe('Admin — bàn vận hành đơn (w7-03)', () => {
       // Bảng có bản sao md:hidden cho khổ hẹp trong ô mã đơn: chỉ đếm bản đang hiện.
       await expect(p.locator('[data-cancellation]:visible')).toContainText(['Tự huỷ quá hạn CK · nhả kho 09:05 18/11/2026Tự động hủy do quá hạn chuyển khoản 24h']);
       await expect(p.locator('[data-payment-deadline]:visible').first()).toContainText('CK');
+      // w8-01: số tin MSS đã nhắc chuyển khoản, cạnh quá hạn CK (đơn chờ tiền) và cạnh lý do tự huỷ.
+      await expect(p.locator('[data-payment-reminders]:visible')).toHaveText([
+        'MSS đã nhắc CK 2 lần · gần nhất 20:02 18/11/2026',
+        'MSS đã nhắc CK 2 lần · gần nhất 20:02 18/11/2026',
+      ]);
       expect(await noHorizontalOverflow(p)).toBeLessThanOrEqual(0);
       await shot(p, `orders-${vp.tag}`);
 
@@ -127,9 +134,11 @@ const ROW: AdminWasteRequestRowDTO = {
   trackingConflict: false,
   orderCode: null,
   waitingReason: null,
+  declaredQtyTotal: 8,
 };
 
 const PICK_ROW: AdminWasteRequestRowDTO = { ...ROW, id: 'wr-2', code: 'TR-PICK22', method: 'PICKUP', status: 'OPEN', receivedAt: null, orderCode: 'TT-20261117-AB12' };
+const OVER_CAP_ROW: AdminWasteRequestRowDTO = { ...ROW, id: 'wr-3', code: 'TR-PICK33', method: 'PICKUP', orderCode: 'TT-20261117-CD34', declaredQtyTotal: 24 };
 
 const DETAIL = {
   id: 'wr-1',
@@ -138,7 +147,7 @@ const DETAIL = {
   status: 'RECEIVED',
   point: { id: 'pt-hcm', name: 'Kho Tubu HCM', kind: 'WAREHOUSE' },
   lines: [
-    { itemId: 'i1', itemName: 'Thùng carton cũ', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: 20, receivedQty: null, shortfallReason: null, pointsAwarded: null, hazardous: false },
+    { itemId: 'i1', itemName: 'Thùng carton cũ', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, gramsPerUnit: null, declaredQty: 8, receivedQty: null, shortfallReason: null, pointsAwarded: null, hazardous: false },
   ],
 } as unknown as WasteRequestAdminDetailDTO;
 
@@ -157,9 +166,9 @@ test.describe('Admin — bảng yêu cầu đổi rác: lọc nhanh và nút m�
       api.get('/admin/waste/gift-redemptions', []);
       api.get('/admin/waste/requests/lookup', [PICK_ROW]);
       api.get('/admin/waste/requests/:id', DETAIL);
-      api.get('/admin/waste/requests', { rows: [ROW, PICK_ROW], nextCursor: null });
+      api.get('/admin/waste/requests', { rows: [ROW, PICK_ROW, OVER_CAP_ROW], nextCursor: null });
       api.post('/admin/waste/requests/:id/receive', { outcome: 'RECEIVED', requestId: 'wr-2', receivedAt: '2026-11-19T02:05:00.000Z' });
-      api.post('/admin/waste/requests/:id/confirm', { requestId: 'wr-1', code: 'TR-7K3M9Q', status: 'COMPLETED', pointsAwarded: 20_000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 5 });
+      api.post('/admin/waste/requests/:id/confirm', { requestId: 'wr-1', code: 'TR-7K3M9Q', status: 'COMPLETED', pointsAwarded: 8_000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 5 });
 
       await p.goto('/admin?tab=waste');
       const quick = p.getByRole('group', { name: 'Lọc theo cách giao và trạng thái' });
@@ -184,13 +193,18 @@ test.describe('Admin — bảng yêu cầu đổi rác: lọc nhanh và nút m�
       await expect(p.getByText('Đã nhận TR-PICK22 lúc 09:05.')).toBeVisible();
       expect(api.callsTo('POST', '/admin/waste/requests/:id/receive')).toHaveLength(1);
 
+      // w8-01: khai trên 10 vỏ thì không có nút một chạm, chỉ chú thích đếm tay.
+      const over = p.locator('[data-request="wr-3"]').first();
+      await expect(over.locator('[data-quick-locked="count"]')).toHaveText('Đơn trên 10 vỏ — vui lòng nhập số đếm thực tế từng dòng');
+      await expect(over.locator('[data-quick="count"]')).toHaveCount(0);
+
       await p.locator('[data-request="wr-1"] [data-quick="count"]').first().click();
-      await expect(dialog).toContainText('Cộng 20.000 điểm theo đúng số khách khai: 20 thùng Thùng carton cũ');
+      await expect(dialog).toContainText('Cộng 8.000 điểm theo đúng số khách khai: 8 thùng Thùng carton cũ');
       await dialog.locator('[data-confirm="accept"]').click();
-      await expect(p.getByText('Đã cộng 20.000 điểm cho TR-7K3M9Q.')).toBeVisible();
+      await expect(p.getByText('Đã cộng 8.000 điểm cho TR-7K3M9Q.')).toBeVisible();
       const sent = api.callsTo('POST', '/admin/waste/requests/:id/confirm');
       expect(sent).toHaveLength(1);
-      expect(sent[0]!.body).toEqual({ lines: [{ itemId: 'i1', declaredQty: 20, receivedQty: 20 }] });
+      expect(sent[0]!.body).toEqual({ lines: [{ itemId: 'i1', declaredQty: 8, receivedQty: 8 }], oneTap: true });
       expect(await noHorizontalOverflow(p)).toBeLessThanOrEqual(0);
     });
   }
