@@ -9,6 +9,9 @@
  *
  *   node scripts/perf/lab-vitals.mjs --base http://localhost:3132 [--runs 3] [--out kết-quả.json] [--shots thư-mục] [--api https://api.tubutree.com]
  *     [--pages /gio-hang,/vuon-xanh]   chỉ đo các trang này (bỏ qua bước tìm PDP)
+ *     [--signed-in] [--mock-ms 250]     đo như khách ĐÃ đăng nhập (xem signed-in-fixtures.mjs): máy có cờ + cookie phiên, POST /auth/refresh
+ *                                       và các GET cần phiên trả dữ liệu giả sau `--mock-ms` ms (một vòng mạng + máy chủ), preflight CORS tới
+ *                                       API chờ một RTT; GET công khai vẫn lấy hộ từ API thật. Không request nào có token thật rời máy.
  *
  * Cột "phần tử LCP" ghi thẻ, lớp đầu và vài chữ đầu của phần tử, kèm diện tích (px²) và URL ảnh nếu là ảnh, để biết phải tối ưu khối nào.
  */
@@ -28,6 +31,9 @@ const args = Object.fromEntries(
 const BASE = (args.base ?? 'http://localhost:3132').replace(/\/$/, '');
 const RUNS = Number(args.runs ?? 3);
 const API_HOSTS = (args.api ?? 'https://api.tubutree.com').split(',').map((u) => new URL(u).host);
+const SIGNED_IN = args['signed-in'] === '1';
+const MOCK_MS = Number(args['mock-ms'] ?? 250);
+const signedIn = SIGNED_IN ? await import('./signed-in-fixtures.mjs').then((m) => m.createSignedIn({ api: `https://${API_HOSTS[0]}/api`, mockMs: MOCK_MS })) : null;
 
 /** Chrome DevTools "Fast 4G": 9 Mb/s xuống, 1,5 Mb/s lên, RTT 60 ms, đã nhân hệ số của Lighthouse (độ trễ ×2,75, băng thông ×0,9). */
 const FAST_4G = { offline: false, latency: 60 * 2.75, downloadThroughput: ((9 * 1e6) / 8) * 0.9, uploadThroughput: ((1.5 * 1e6) / 8) * 0.9 };
@@ -77,12 +83,23 @@ async function guard(context) {
     const url = new URL(req.url());
     const method = req.method();
     if (/\/events(\/|$)/.test(url.pathname)) return route.abort();
+    if (signedIn && API_HOSTS.includes(url.host)) {
+      const mocked = await signedIn.handle(req, url);
+      if (mocked) return route.fulfill({ ...mocked, headers: { ...mocked.headers, ...cors(req) } });
+    }
     if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: cors(req) });
     if (method !== 'GET' && method !== 'HEAD') return route.abort();
     // Ảnh, font, script đi thẳng qua mạng giả lập (bị bóp băng thông như thật); chỉ fetch/XHR tới API khác origin mới cần gắn CORS.
     if (!API_HOSTS.includes(url.host) || !['fetch', 'xhr'].includes(req.resourceType())) return route.continue();
     try {
-      const res = await route.fetch();
+      // Token giả của chế độ đăng nhập không được tới API thật: GET công khai lấy hộ không kèm Authorization.
+      const res = await route.fetch(signedIn ? { headers: signedIn.publicHeaders(req.headers()) } : undefined);
+      if (signedIn && res.status() === 401) signedIn.missing(url.pathname);
+      const patched = signedIn ? await signedIn.patchPublic(url, res) : null;
+      if (patched !== null) {
+        const { 'content-encoding': _e, 'content-length': _l, ...headers } = res.headers();
+        return route.fulfill({ status: res.status(), headers: { ...headers, ...cors(req) }, body: patched });
+      }
       return route.fulfill({ response: res, headers: { ...res.headers(), ...cors(req) } });
     } catch {
       return route.abort();
@@ -96,7 +113,7 @@ function cors(req) {
     'access-control-allow-origin': origin,
     'access-control-allow-credentials': 'true',
     'access-control-allow-headers': req.headers()['access-control-request-headers'] ?? '*',
-    'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+    'access-control-allow-methods': 'GET, HEAD, POST, OPTIONS',
   };
 }
 
@@ -104,18 +121,21 @@ async function measureOnce(browser, path) {
   const context = await browser.newContext({ viewport: VIEWPORT, isMobile: true, hasTouch: true, deviceScaleFactor: 3, locale: 'vi-VN' });
   await guard(context);
   await context.addInitScript(OBSERVE);
+  if (signedIn) await signedIn.prepare(context, BASE);
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.emulateNetworkConditions', FAST_4G);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_SLOWDOWN });
+  signedIn?.mark();
   const res = await page.goto(BASE + path, { waitUntil: 'load', timeout: 120_000 });
   await page.waitForTimeout(SETTLE_MS);
   const m = await page.evaluate(() => window.__lab);
+  const api = signedIn?.timeline() ?? null;
   await context.close();
   const tbt = m.longTasks.filter(([start]) => start >= m.fcp).reduce((sum, [, d]) => sum + Math.max(0, d - 50), 0);
   const longMs = m.longTasks.reduce((sum, [, d]) => sum + d, 0);
-  return { status: res?.status() ?? 0, lcp: Math.round(m.lcp), lcpTag: m.lcpTag, lcpEl: m.lcpEl, clsSrc: m.clsSrc, cls: Math.round(m.cls * 1e4) / 1e4, tbt: Math.round(tbt), fcp: Math.round(m.fcp), longTasks: m.longTasks.length, longMs: Math.round(longMs) };
+  return { status: res?.status() ?? 0, lcp: Math.round(m.lcp), lcpTag: m.lcpTag, lcpEl: m.lcpEl, clsSrc: m.clsSrc, cls: Math.round(m.cls * 1e4) / 1e4, tbt: Math.round(tbt), fcp: Math.round(m.fcp), longTasks: m.longTasks.length, longMs: Math.round(longMs), ...(api ? { api } : {}) };
 }
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
@@ -180,7 +200,7 @@ try {
     for (let i = 0; i < RUNS; i++) runs.push(await measureOnce(browser, p));
     lab[p] = { lcp: median(runs.map((r) => r.lcp)), cls: median(runs.map((r) => r.cls)), tbt: median(runs.map((r) => r.tbt)), runs };
   }
-  const out = { base: BASE, at: new Date().toISOString(), conditions: { viewport: VIEWPORT, network: 'Fast 4G (DevTools)', cpuSlowdown: CPU_SLOWDOWN, runs: RUNS }, html, lab };
+  const out = { base: BASE, at: new Date().toISOString(), conditions: { viewport: VIEWPORT, network: 'Fast 4G (DevTools)', cpuSlowdown: CPU_SLOWDOWN, runs: RUNS, signedIn: SIGNED_IN, mockMs: SIGNED_IN ? MOCK_MS : null }, html, lab };
   if (args.out) writeFileSync(args.out, JSON.stringify(out, null, 2));
   console.log('| Trang | HTML chưa nén (B) | HTML gzip (B) | FCP (ms) | LCP (ms) | CLS | TBT (ms) | tác vụ dài (số / ms) | phần tử LCP |');
   console.log('|---|---:|---:|---:|---:|---:|---:|---|---|');
@@ -190,7 +210,8 @@ try {
     const lt = `${median(l.runs.map((r) => r.longTasks))} / ${median(l.runs.map((r) => r.longMs))}`;
     console.log(`| ${p} | ${html[p].raw.bytes} | ${html[p].gzip.bytes} | ${fcp} | ${l.lcp} | ${l.cls} | ${l.tbt} | ${lt} | ${l.runs.map((r) => r.lcpTag).join(', ')} |`);
   }
-  for (const p of pages) for (const r of lab[p].runs) console.log(`${p}: LCP ${r.lcp} ms, FCP ${r.fcp} ms, ${r.lcpTag} ${r.lcpEl}${r.clsSrc.length ? `\n  CLS ${r.cls}: ${r.clsSrc.join(' | ')}` : ''}`);
+  for (const p of pages) for (const r of lab[p].runs) console.log(`${p}: LCP ${r.lcp} ms, FCP ${r.fcp} ms, ${r.lcpTag} ${r.lcpEl}${r.clsSrc.length ? `\n  CLS ${r.cls}: ${r.clsSrc.join(' | ')}` : ''}${r.api ? `\n  API ${r.api}` : ''}`);
+  if (signedIn) console.log(`đăng nhập giả: ${signedIn.report()}`);
   if (args.shots) await shots(browser, args.shots);
 } finally {
   await browser.close();

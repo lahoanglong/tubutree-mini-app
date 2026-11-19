@@ -438,6 +438,9 @@ export default function CartPage() {
   // Có phí giao ước tính: "Tổng tạm tính" = tiền hàng đã giảm + phí. Chưa có thì như cũ: `payTotal` chưa gồm phí giao nên không ghi "Tổng".
   // Một nhãn và một số cho chân dính (375) và khung tóm tắt (md, lg), cùng chữ với Mini App.
   const ship = cartShippingView(shipQ.estimate, { goodsNet: payTotal, freeshipReached: !!freeship?.reached, stale: shipQ.stale });
+  // Ước tính phí giao về sau giỏ: lúc còn chờ thì giữ sẵn dòng phí ("Đang tính…"), không thì thanh dính đáy cao thêm một dòng khi số về và cả
+  // thanh nhảy lên (CLS ở 390px). Tổng và nhãn tổng vẫn chỉ theo số thật (`ship`).
+  const shipRow = ship ?? (shipQ.pending ? { feeLabel: fillCopy('cart.shipEstimate'), feeText: fillCopy('checkout.calculating'), free: false } : null);
   const totalLabel = ship?.totalLabel ?? cartTotalLabel(shownCombo + shownDiscount + shownTier);
   const shownTotal = ship?.total ?? payTotal;
   // Tiết kiệm = giá gạch của dòng mua được đang chọn + giảm combo đang hiện (chỉ hiển thị; tiền thật do máy chủ tính). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
@@ -774,7 +777,7 @@ export default function CartPage() {
           <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start md:[&>[data-testid=cart-summary-rows]:empty+*]:mt-0 md:[&>[data-testid=cart-summary-rows]:empty+*]:border-t-0 md:[&>[data-testid=cart-summary-rows]:empty+*]:pt-0`}>
             <div data-testid="cart-summary-rows" className="empty:hidden max-md:hidden">
             {/* Có giảm hay có phí giao thì hàng này là tiền hàng chưa trừ, hàng cuối là tổng; không có gì xen giữa thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
-            {(hasDiscount || ship) && (
+            {(hasDiscount || shipRow) && (
               <div className="flex justify-between text-sm">
                 <span className="text-stone-600">{cartTotalLabel(0)}</span>
                 <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
@@ -804,10 +807,10 @@ export default function CartPage() {
                 <span>-{formatVnd(shownTier)}</span>
               </div>
             )}
-            {ship && (
-              <div data-testid="cart-ship-estimate" className="mt-1 flex justify-between text-sm">
-                <span className="text-[var(--color-text-secondary)]">{ship.feeLabel}</span>
-                <span className={ship.free ? 'text-success-fg' : 'text-[var(--color-text-primary)]'}>{ship.feeText}</span>
+            {shipRow && (
+              <div data-testid={ship ? 'cart-ship-estimate' : 'cart-ship-estimate-pending'} className="mt-1 flex justify-between text-sm">
+                <span className="text-[var(--color-text-secondary)]">{shipRow.feeLabel}</span>
+                <span className={shipRow.free ? 'text-success-fg' : 'text-[var(--color-text-primary)]'}>{shipRow.feeText}</span>
               </div>
             )}
             {saving > 0 && (
@@ -923,13 +926,17 @@ export default function CartPage() {
             {phoneCoupon && couponBox(true)}
             <div className="mt-1 space-y-1">
               {/* Từ md khung tóm tắt trong thân trang đã ghi các khoản giảm và "Tiết kiệm": thanh dính chỉ giữ tổng + nút, không lặp lại. */}
-              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0 || ship || greenBoxHint) && (
+              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0 || shipRow || greenBoxHint) && (
                 <div className="space-y-1 md:hidden">
                   {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" style={{ padding: 0 }} />}
                   {shownGreenBox > 0 && <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} tone="success" style={{ padding: 0 }} />}
                   {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
                   {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
-                  {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={{ padding: 0 }} dataDs="cart-ship-estimate" />}
+                  {ship ? (
+                    <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={{ padding: 0 }} dataDs="cart-ship-estimate" />
+                  ) : (
+                    shipRow && <KeyValueRow label={shipRow.feeLabel} value={shipRow.feeText} style={{ padding: 0 }} />
+                  )}
                   {greenBoxHint && (
                     <p data-testid="green-box-hint" className="text-caption text-success-fg">
                       {greenBoxHint}

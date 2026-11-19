@@ -127,6 +127,36 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     expect(qa(c, 'freeship-progress')).toHaveLength(1);
   });
 
+  it('tubu-w8-01: nguồn món còn tải thì khung chờ giữ đúng chỗ của dải (trong khối thanh, trên "Chọn tất cả", cùng tiêu đề); món về thì dải thay khung', async () => {
+    let open!: () => void;
+    state.bestGate = new Promise<void>((r) => (open = r));
+    const c = await mount();
+    const pending = q(c, 'freeship-addons-pending')!;
+    expect(pending).not.toBeNull();
+    expect(pending.getAttribute('aria-hidden')).toBe('true');
+    expect(q(c, 'cart-freeship')!.contains(pending)).toBe(true);
+    expect(pending.compareDocumentPosition(c.querySelector('input[aria-label="Chọn tất cả sản phẩm"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pending.textContent).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+    expect(pending.className).toBe(q(c, 'cart-freeship')!.querySelector('.tubu-addon')!.className);
+    expect(q(c, 'freeship-addons')).toBeNull();
+    await act(async () => open());
+    await flush(6);
+    expect(q(c, 'freeship-addons-pending')).toBeNull();
+    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('tubu-w8-01: nguồn về mà dưới 2 món hợp lệ thì khung chờ thu lại, không để khối rỗng', async () => {
+    let open!: () => void;
+    state.bestGate = new Promise<void>((r) => (open = r));
+    state.best = best([card('a', 30000)]);
+    const c = await mount();
+    expect(q(c, 'freeship-addons-pending')).not.toBeNull();
+    await act(async () => open());
+    await flush(6);
+    expect(q(c, 'freeship-addons-pending')).toBeNull();
+    expect(q(c, 'freeship-addons')).toBeNull();
+  });
+
   it('thứ tự gợi ý: món đóng được khoảng thiếu trước, rồi các món rẻ hơn; món vượt cửa sổ giá bị loại', async () => {
     const c = await mount();
     expect(slugs(c)).toEqual(['c', 'a', 'b']);

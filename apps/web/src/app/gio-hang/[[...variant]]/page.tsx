@@ -4,6 +4,7 @@ import { suggestedRailQuery } from '@tubutree/app-core/queries/catalog';
 import { matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
 import { QuerySeed, type QuerySeedEntry } from '@/components/query-seed';
 import { PrebuiltGuest } from '@/lib/auth-phase';
+import { EARLY_API_BASE, EARLY_GETS, earlySessionScript } from '@/lib/early-session';
 import { createServerHttp } from '@/lib/core-http-server';
 import CartPage from '../cart-page';
 
@@ -25,7 +26,15 @@ export function generateStaticParams() {
 
 export default async function CartRoute({ params }: { params: Promise<{ variant?: string[] }> }) {
   const { variant = [] } = await params;
-  if (variant.length === 0) return <CartPage />;
+  if (variant.length === 0) {
+    return (
+      <>
+        {/* Bản thường là bản của khách có cờ phiên: refresh và các GET đầu trang chạy ngay khi đọc HTML, không chờ JS (lib/early-session.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: earlySessionScript(EARLY_API_BASE, EARLY_GETS.cart) }} />
+        <CartPage />
+      </>
+    );
+  }
   if (variant.length !== 1 || variant[0] !== 'khach') notFound();
   const http = createServerHttp({ revalidate });
   const fetchedAt = Date.now();

@@ -6,11 +6,11 @@ import { recallCheckoutSelection } from '@/lib/checkout-selection';
 
 // D7 việc 4: giỏ hàng trên điện thoại có thanh dính đáy (tạm tính đã giảm + "Thanh toán (N)" như Mini App), checkbox ≥ 24px.
 
-const state = vi.hoisted(() => ({ cart: null as unknown, ship: null as unknown, shipBase: undefined as number | null | undefined }));
+const state = vi.hoisted(() => ({ cart: null as unknown, ship: null as unknown, shipPending: false, shipBase: undefined as number | null | undefined }));
 vi.mock('@/components/checkout/use-shipping-estimate', () => ({
   useShippingEstimate: (base: number | null) => {
     state.shipBase = base;
-    return { estimate: base ? (state.ship ?? undefined) : undefined, stale: false };
+    return { estimate: base ? (state.ship ?? undefined) : undefined, stale: false, pending: !!base && state.shipPending };
   },
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/gio-hang' }));
@@ -48,6 +48,7 @@ beforeEach(() => {
   sessionStorage.clear();
   state.cart = cartOf([line({})]);
   state.ship = null;
+  state.shipPending = false;
   state.shipBase = undefined;
 });
 afterEach(() => {
@@ -290,6 +291,23 @@ describe('/gio-hang — phí giao ước tính dưới Tạm tính', () => {
     const c = await mount();
     expect(bar(c)!.textContent).toContain('Phí giao (ước tính)Miễn phí');
     expect(bar(c)!.textContent).toContain('Tổng tạm tính300.000đ');
+  });
+
+  it('tubu-w8-01: ước tính còn chờ thì dòng phí đã có sẵn ("Đang tính…") để thanh dính không cao thêm khi số về; tổng chưa cộng phí', async () => {
+    state.shipPending = true;
+    const c = await mount();
+    const rowsOf = (el: HTMLElement) => el.querySelectorAll('.md\\:hidden > div').length;
+    expect(bar(c)!.textContent).toContain('Phí giao (ước tính)Đang tính…');
+    expect(bar(c)!.textContent).toContain('Tạm tính300.000đ');
+    expect(bar(c)!.textContent).not.toContain('Tổng tạm tính');
+    expect(c.querySelector('[data-testid="cart-ship-estimate"]')).toBeNull();
+    expect(c.querySelector('[data-testid="cart-ship-estimate-pending"]')!.textContent).toBe('Phí giao (ước tính)Đang tính…');
+    const pendingRows = rowsOf(bar(c)!);
+    state.shipPending = false;
+    state.ship = est();
+    const done = await mount();
+    expect(rowsOf(bar(done)!)).toBe(pendingRows);
+    expect(done.querySelector('[data-testid="cart-ship-estimate-pending"]')).toBeNull();
   });
 
   it('có hàng gian hàng tự giao: không hỏi ước tính, giữ "Tạm tính" như cũ', async () => {

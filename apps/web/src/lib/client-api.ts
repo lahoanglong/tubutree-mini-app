@@ -14,6 +14,7 @@
 // của chính origin web (JS ghi, không HttpOnly, không chứa bí mật), cùng lúc và cùng vòng đời với cờ localStorage.
 import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { ERROR_GENERIC, ERROR_NETWORK } from '@tubutree/app-core/client-copy';
+import { EARLY_SESSION_GLOBAL, type EarlySession } from './early-session';
 import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 
 const BASE =
@@ -119,6 +120,10 @@ async function doRefresh(): Promise<RefreshOutcome> {
     // Mất mạng/quá hạn (NetworkError) hoặc thân 2xx hỏng: không nói lên gì về phiên, giữ cờ.
     return { kind: 'transient' };
   }
+  return interpretRefresh(reply);
+}
+
+function interpretRefresh(reply: Reply): RefreshOutcome {
   // 400 = không còn cookie (BE đã xoá), 401/403 = token chết/bị thu hồi/tài khoản bị khoá. Mất mạng, 5xx,
   // 429 thì cookie vẫn có thể còn sống: giữ cờ để lần sau còn khôi phục được.
   if (reply.status === 400 || reply.status === 401 || reply.status === 403) {
@@ -136,10 +141,17 @@ async function doRefresh(): Promise<RefreshOutcome> {
 
 let refreshInFlight: Promise<RefreshOutcome> | null = null;
 
-/** Một lượt refresh bằng cookie, gộp các lời gọi trùng trong tab và xếp hàng giữa các tab. */
+/** Script khôi phục phiên sớm của Giỏ và Vườn Xanh (`early-session.ts`): chỉ có ở lượt tải đầu của hai trang đó, khách đã có cờ phiên. */
+const early = () => (typeof window === 'undefined' ? undefined : (window as unknown as Record<string, EarlySession | undefined>)[EARLY_SESSION_GLOBAL]);
+
+/** Một lượt refresh bằng cookie, gộp các lời gọi trùng trong tab và xếp hàng giữa các tab. Lượt đầu của trang dùng lượt refresh sớm nếu có. */
 export function refreshSession(): Promise<RefreshOutcome> {
   if (!hasSessionMarker()) return Promise.resolve({ kind: 'dead' });
-  refreshInFlight ??= withRefreshLock(doRefresh).finally(() => {
+  refreshInFlight ??= (
+    // Script ném (mất mạng, quá hạn, thân 2xx hỏng) như `exchange` ném: không nói lên gì về phiên.
+    early()?.claim()?.then((r) => interpretRefresh({ ...r, body: resolveServedMedia(r.body, BASE) }), (): RefreshOutcome => ({ kind: 'transient' })) ??
+    withRefreshLock(doRefresh)
+  ).finally(() => {
     refreshInFlight = null;
   });
   return refreshInFlight;
@@ -263,14 +275,18 @@ export async function apiFetch<T>(
   // request là thêm một lượt OPTIONS cho từng lần gọi API.
   if (path.startsWith('/auth/')) Object.assign(headers, WEB_CLIENT_HEADER);
 
-  const reply = await exchange(`${BASE}${path}`, {
-    method: opts.method ?? 'GET',
-    headers,
-    // Cookie refresh giới hạn Path=/api/auth nên chỉ thực sự được gửi ở các route auth.
-    credentials: 'include',
-    ...(opts.cache ? { cache: opts.cache } : {}),
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  }, opts.timeoutMs);
+  // GET thường (có phiên, không header/cache riêng) lấy phản hồi script sớm đã gọi nếu có. Chỉ `await` khi có: không có thì fetch vẫn chạy ngay trong lượt gọi.
+  const primed = !_retried && accessToken && (opts.method ?? 'GET') === 'GET' && opts.auth !== false && !opts.headers && !opts.cache ? early()?.take(path, accessToken) : null;
+  const reply =
+    (primed ? await primed.then((r) => r && { ...r, body: resolveServedMedia(r.body, BASE) }) : null) ??
+    (await exchange(`${BASE}${path}`, {
+      method: opts.method ?? 'GET',
+      headers,
+      // Cookie refresh giới hạn Path=/api/auth nên chỉ thực sự được gửi ở các route auth.
+      credentials: 'include',
+      ...(opts.cache ? { cache: opts.cache } : {}),
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    }, opts.timeoutMs));
 
   // opts.auth === false đánh dấu endpoint không cần Authorization (login/refresh/logout) —
   // bỏ qua guard này thì một 401 từ chính /auth/refresh hay /auth/zalo-oauth (vd code đã

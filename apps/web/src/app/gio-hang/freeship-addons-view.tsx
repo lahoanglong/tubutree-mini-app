@@ -14,7 +14,7 @@ import { settleWithin } from '@/lib/settle-within';
 import { addToCart } from '@/lib/shop-client';
 import type { useCardPricing } from '@/lib/use-card-pricing';
 import { useCartWrite } from '@/lib/use-cart-write';
-import type { FreeshipAddonsProps } from './freeship-addons';
+import { FreeshipAddonsPending, type FreeshipAddonsProps } from './freeship-addons';
 
 const ADD_KEY = ['freeship-add'] as const;
 
@@ -95,7 +95,7 @@ export function FreeshipAddonsView({ goal, lines, exclude, onShownChange, source
     return () => onShownChange(false);
   }, [shown, onShownChange]);
 
-  if (railGone && !error) return null;
+  if (railGone && !error) return source.pending ? <FreeshipAddonsPending title={goal.headline} /> : null;
   return (
     <>
       <FreeshipAddonRail

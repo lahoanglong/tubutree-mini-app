@@ -309,7 +309,7 @@ function adminSetup(o: AdminSetup = {}) {
   return { service, prisma, tx, access, config };
 }
 
-const findManyArg = (prisma: { wasteRequest: { findMany: jest.Mock } }) => prisma.wasteRequest.findMany.mock.calls[0]![0] as { where: { AND: unknown[] }; take: number; orderBy: unknown };
+const findManyArg = (prisma: { wasteRequest: { findMany: jest.Mock } }) => prisma.wasteRequest.findMany.mock.calls[0]![0] as { where: { AND: unknown[] }; take: number; orderBy: unknown; include: Record<string, unknown> };
 
 describe('WasteAdminRequestsService.queue', () => {
   beforeEach(() => {

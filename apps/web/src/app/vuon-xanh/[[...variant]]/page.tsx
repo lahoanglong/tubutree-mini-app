@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { PrebuiltGuest } from '@/lib/auth-phase';
+import { EARLY_API_BASE, EARLY_GETS, earlySessionScript } from '@/lib/early-session';
 import GamePage from '../garden-page';
 
 export const dynamicParams = false;
@@ -18,7 +19,15 @@ export function generateStaticParams() {
 
 export default async function GardenRoute({ params }: { params: Promise<{ variant?: string[] }> }) {
   const { variant = [] } = await params;
-  if (variant.length === 0) return <GamePage />;
+  if (variant.length === 0) {
+    return (
+      <>
+        {/* Bản thường là bản của khách có cờ phiên: refresh và các GET đầu trang chạy ngay khi đọc HTML, không chờ JS (lib/early-session.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: earlySessionScript(EARLY_API_BASE, EARLY_GETS.garden) }} />
+        <GamePage />
+      </>
+    );
+  }
   if (variant.length !== 1 || variant[0] !== 'khach') notFound();
   return (
     <PrebuiltGuest>
