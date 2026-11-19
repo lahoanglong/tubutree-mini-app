@@ -60,6 +60,7 @@ import { useCartRefill } from '@/components/refill/use-cart-refill';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { runGuestMerge, takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
 import { readGuestCart } from '@/lib/guest-cart/store';
+import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 // 10 giây: người dùng bàn phím/đọc màn hình cần đủ thời gian tới nút "Hoàn tác" (WCAG 2.2.1); đồng hồ còn dừng khi trỏ/focus đang ở trên thanh.
@@ -74,9 +75,9 @@ const qtyButton =
 // Nút −/+ còn bấm được thì co 0,97 khi nhấn (`.tubu-press`, tắt khi khách chọn giảm chuyển động); đã khoá thì đứng yên như Mini App.
 const qtyButtonFor = (off: boolean) => (off ? qtyButton : `${qtyButton} tubu-press`);
 
-// Chunk giỏ trống chỉ tải khi giỏ rỗng: lúc chờ giữ chỗ bằng khung giả thay vì để trắng một nhịp.
+// Chunk giỏ trống chỉ tải khi giỏ rỗng: lúc chờ giữ chỗ bằng khung giả thay vì để trắng một nhịp. Có vẽ ở máy chủ: bản dựng sẵn cho khách
+// (app/gio-hang/khach) đưa giỏ trống và kệ gợi ý vào HTML đầu.
 const EmptyCart = dynamic(() => import('./empty-cart'), {
-  ssr: false,
   loading: () => (
     <div role="status" aria-busy="true" className="flex flex-col items-center gap-3 py-10">
       <span className="sr-only">Đang tải giỏ hàng…</span>
@@ -131,6 +132,8 @@ const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math
 export default function CartPage() {
   const phase = useAuthPhase();
   const guestCart = useGuestCartFlag();
+  // Qua hook (máy chủ và lượt hydrate thấy giỏ trống), không đọc thẳng localStorage lúc vẽ: bản dựng sẵn cho khách hydrate ngay nhánh khách.
+  const guestLines = useGuestCartLines();
   // Món chọn lúc chưa đăng nhập vừa chuyển vào giỏ tài khoản mà có món không chuyển đủ: báo một lần ở đầu giỏ.
   const [mergeNote, setMergeNote] = useState<GuestMergeNote | null>(null);
   const queryClient = useQueryClient();
@@ -352,7 +355,7 @@ export default function CartPage() {
   if (phase === 'guest') {
     // Cờ đang tải lần đầu mà giỏ khách có món (cờ từng bật): chờ, kẻo tường đăng nhập chớp lên rồi đổi sang giỏ khách. Giỏ khách trống thì
     // hiện tường đăng nhập ngay như khi chưa có giỏ khách.
-    if (guestCart.pending && readGuestCart().length > 0) {
+    if (guestCart.pending && guestLines.length > 0) {
       return (
         <Shell>
           <AuthLoading />

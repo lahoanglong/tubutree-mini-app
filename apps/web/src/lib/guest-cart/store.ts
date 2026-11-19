@@ -4,6 +4,9 @@
 // localStorage (không phải sessionStorage): khách quay lại hôm sau từ Google vẫn thấy món đã chọn. Mọi đọc/ghi bọc try/catch:
 // trình duyệt chặn bộ nhớ hay dữ liệu hỏng thì giỏ coi như trống, trang không vỡ.
 
+import { writeWebCookie } from '../client-api';
+import { GUEST_CART_COOKIE } from '../guest-prebuilt';
+
 export const GUEST_CART_KEY = 'tubu.guestCart.v1';
 export const GUEST_CART_MAX_LINES = 30;
 export const GUEST_CART_MAX_QTY = 99;
@@ -81,6 +84,14 @@ export function parseGuestCart(raw: string | null): readonly GuestCartLine[] {
 // Ảnh chụp cho useSyncExternalStore phải giữ cùng tham chiếu khi chuỗi đã lưu không đổi, kẻo React vẽ lại vô hạn.
 let cached: { raw: string | null; lines: readonly GuestCartLine[] } = { raw: null, lines: EMPTY };
 
+// Cookie "giỏ khách có món" cho middleware (lib/guest-prebuilt.ts): có món thì /gio-hang không đi bản dựng sẵn giỏ trống. Ghi lại ở mỗi lần đổi giỏ,
+// và một lần mỗi lượt tải trang ở lần đọc đầu (giỏ có từ trước khi có cookie, hoặc cookie hết hạn trước localStorage).
+let cookieSynced = false;
+function syncCartCookie(hasItems: boolean): void {
+  cookieSynced = true;
+  writeWebCookie(GUEST_CART_COOKIE, hasItems ? '1' : null);
+}
+
 export function readGuestCart(): readonly GuestCartLine[] {
   const s = storage();
   if (!s) return EMPTY;
@@ -91,6 +102,7 @@ export function readGuestCart(): readonly GuestCartLine[] {
     return EMPTY;
   }
   if (raw !== cached.raw) cached = { raw, lines: parseGuestCart(raw) };
+  if (!cookieSynced) syncCartCookie(cached.lines.length > 0);
   return cached.lines;
 }
 
@@ -103,6 +115,7 @@ function write(lines: readonly GuestCartLine[]): boolean {
   } catch {
     return false;
   }
+  syncCartCookie(lines.length > 0);
   try {
     window.dispatchEvent(new Event(CHANGE_EVENT));
   } catch {

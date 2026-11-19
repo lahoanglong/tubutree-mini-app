@@ -29,6 +29,7 @@ import { variationLabel } from '@/lib/variation-label';
 import { useGuestCartProducts } from '@/lib/guest-cart/products';
 import { removeGuestLine, setGuestQuantity } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
+import { useHydrated } from '@/lib/use-hydrated';
 import { guestCartView, type GuestCartRow } from '@/lib/guest-cart/view';
 
 const LOGIN_TO_ORDER = loginHref('/gio-hang');
@@ -55,13 +56,15 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   const shipQ = useShippingEstimate(view.settled && !view.hasMerchant ? view.subtotal : null, { anonymous: true });
 
   // Cùng sự kiện với giỏ đã đăng nhập; khách chưa đăng nhập phân biệt bằng sự kiện không có tài khoản. Một lần mỗi lần mở giỏ, khi mọi dòng đã có giá.
+  // Chờ hydrate: bản dựng sẵn cho khách hydrate ngay khối này với giỏ trống của máy chủ, giỏ thật (localStorage) chỉ có từ lượt vẽ sau.
+  const hydrated = useHydrated();
   const viewed = useRef(false);
   useEffect(() => {
-    if (viewed.current || !view.settled) return;
+    if (!hydrated || viewed.current || !view.settled) return;
     viewed.current = true;
     trackPurchase('cart_viewed', { itemCount: Math.min(500, lines.length), subtotalBucket: subtotalBucket(view.subtotal) });
     if (lines.length > 0) trackPurchase('login_wall_shown', { from: '/gio-hang' });
-  }, [view.settled, view.subtotal, lines.length]);
+  }, [hydrated, view.settled, view.subtotal, lines.length]);
 
   if (lines.length === 0) return <>{empty}</>;
 

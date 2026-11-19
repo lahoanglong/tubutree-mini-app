@@ -98,7 +98,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 vi.mock('@/components/storefront-tracker', () => ({ StorefrontTracker: () => null, ReferralCapture: () => null }));
 
-import CartPage from './gio-hang/page';
+import CartPage from './gio-hang/cart-page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
 import LoginPage from './dang-nhap/page';

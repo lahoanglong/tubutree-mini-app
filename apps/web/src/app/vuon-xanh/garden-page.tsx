@@ -11,6 +11,7 @@ import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, gameNewbieCopy, type MissionTar
 import { checkInQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { useHydrated } from '@/lib/use-hydrated';
 import { loginHref } from '@/lib/return-to';
 import { refreshSession } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
@@ -457,7 +458,11 @@ function GameBody() {
 
 export default function GamePage() {
   const phase = useAuthPhase();
-  const guestMini = useMiniToday(false, phase === 'guest');
+  // Bản dựng sẵn cho khách (app/vuon-xanh/khach) chỉ đưa khối giới thiệu vào HTML đầu (phần tử LCP); sảnh trò chơi vẽ theo giờ trên máy khách
+  // và "Chơi hôm nay" chờ dữ liệu, nên vẽ sau hydrate như bản thường để HTML máy chủ không lệch. Cũng chỉ tải "Chơi hôm nay" sau hydrate: lượt
+  // hydrate của bản dựng sẵn là nhánh khách cả với máy còn cờ phiên (sẽ thành khung chờ ngay sau đó), không gọi API cho nhánh sắp bỏ.
+  const hydrated = useHydrated();
+  const guestMini = useMiniToday(false, phase === 'guest' && hydrated);
   return (
     <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pt-0`}>
       <PageHeader title={TITLE} backHref="/" />
@@ -467,8 +472,8 @@ export default function GamePage() {
         {phase === 'guest' && (
           <div className="flex flex-col gap-3">
             <GameLoginGate returnTo="/vuon-xanh" />
-            {guestMini ? <PlayTodayCard today={guestMini} /> : <ArcadeHub />}
-            <HomeQuizCard />
+            {hydrated && (guestMini ? <PlayTodayCard today={guestMini} /> : <ArcadeHub />)}
+            {hydrated && <HomeQuizCard />}
           </div>
         )}
         {phase === 'authenticated' && (

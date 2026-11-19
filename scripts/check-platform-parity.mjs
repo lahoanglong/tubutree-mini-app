@@ -32,7 +32,8 @@ export function webPathToFileCandidates(webPath) {
     .filter(Boolean)
     .map((s) => (s.startsWith(':') ? `[${s.slice(1)}]` : s));
   const dir = [WEB_APP_DIR, ...segments].join('/');
-  return ['page.tsx', 'route.ts'].map((f) => `${dir}/${f}`);
+  // `[[...variant]]`: trang có thêm bản dựng sẵn (vd /gio-hang và /gio-hang/khach, xem apps/web/src/lib/guest-prebuilt.ts) đặt cả hai trong một route catch-all tuỳ chọn.
+  return [...['page.tsx', 'route.ts'].map((f) => `${dir}/${f}`), `${dir}/[[...variant]]/page.tsx`];
 }
 
 export function checkParity({ miniappRoutes, miniappRedirects = [], map, webFileExists, fileHasSymbol, strict = false }) {

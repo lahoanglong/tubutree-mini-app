@@ -11,6 +11,12 @@ describe('shellPath: đường dẫn cho vỏ trang', () => {
     expect(shellPath('/hub-san-pham/x')).toBe('/hub-san-pham/x');
   });
 
+  it('bản dựng sẵn cho khách của Giỏ hàng và Vườn Xanh tính là đường dẫn thật (thanh đáy, tab đang chọn khớp lần hydrate)', () => {
+    expect(shellPath('/gio-hang/khach')).toBe('/gio-hang');
+    expect(shellPath('/vuon-xanh/khach')).toBe('/vuon-xanh');
+    expect(shellPath('/vuon-xanh/khach/x')).toBe('/vuon-xanh/khach/x');
+  });
+
   it('đường dẫn khác giữ nguyên, null giữ null', () => {
     for (const p of ['/', '/san-pham', '/khoi-phuc', '/khoi-phuc/a/b', '/tai-khoan/khoi-phuc/x']) expect(shellPath(p)).toBe(p);
     expect(shellPath(null)).toBeNull();

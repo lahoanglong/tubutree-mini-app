@@ -18,7 +18,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import CartPage from './page';
+import CartPage from './cart-page';
 
 const product = (id: string, over: Record<string, unknown> = {}) => ({
   id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100000, salePrice: null, isFeatured: false, inStock: true, ...over,

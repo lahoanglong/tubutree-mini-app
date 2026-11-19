@@ -49,7 +49,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import GamePage from './page';
+import GamePage from './garden-page';
 
 const todayIso = () => new Date().toISOString();
 const yesterdayIso = () => new Date(Date.now() - 24 * 3600 * 1000).toISOString();

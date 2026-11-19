@@ -1,5 +1,5 @@
 {
-  "$comment": "Ngưỡng gzip (mức 9) của JS tải lần đầu = số đo sau tubu-w4-05 + 3%. Chặn cứng chỉ / và /san-pham; bốn route còn lại chỉ cảnh báo vì các wave đợt 4 khác đang thêm mã, wave release ghi số cuối rồi đợt sau mới siết. HTML / là byte chưa nén, chỉ kiểm khi có --html-base.",
+  "$comment": "Ngưỡng gzip (mức 9) của JS tải lần đầu = số đo sau tubu-w4-05 + 3%. Chặn cứng chỉ / và /san-pham; bốn route còn lại chỉ cảnh báo vì các wave đợt 4 khác đang thêm mã, wave release ghi số cuối rồi đợt sau mới siết. HTML / là byte chưa nén, chỉ kiểm khi có --html-base. /gio-hang và /vuon-xanh là route `[[...variant]]` (bản thường và bản dựng sẵn cho khách `/khach` chung một trang, cùng JS).",
   "routes": {
     "/": {
       "maxGzipBytes": 388992
@@ -10,13 +10,13 @@
     "/san-pham/[slug]": {
       "warnGzipBytes": 402734
     },
-    "/gio-hang": {
+    "/gio-hang/[[...variant]]": {
       "warnGzipBytes": 342716
     },
     "/thanh-toan": {
       "warnGzipBytes": 365563
     },
-    "/vuon-xanh": {
+    "/vuon-xanh/[[...variant]]": {
       "warnGzipBytes": 332417
     }
   },

@@ -2,7 +2,7 @@ import { Controller, Get, Headers, Query, Req, Res, StreamableFile } from '@nest
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
-import { ImageResizeService } from './image-resize.service';
+import { ImageFallbackRedirect, ImageResizeService } from './image-resize.service';
 import { negotiateFormat } from './image-resize';
 import { clientIp } from '../../common/throttle/throttle.config';
 
@@ -39,8 +39,21 @@ export class ImageResizeController {
       res.status(304).set({ ...headers, ETag: `"${key}"` });
       return;
     }
-    const out = await this.images.get(source, width, format, clientIp(req));
-    res.set({ ...headers, ETag: out.etag });
+    let out;
+    try {
+      out = await this.images.get(source, width, format, clientIp(req));
+    } catch (e) {
+      // Máy bận (hàng đợi đầy, IP gửi quá nhiều ?v= sai): chuyển về ảnh gốc thay vì 503, không cho cache để lần sau xin lại bản đổi cỡ.
+      if (!(e instanceof ImageFallbackRedirect)) throw e;
+      res.status(302).set({ ...headers, 'Cache-Control': 'no-store', Location: e.location, 'X-Image-Fallback': e.reason });
+      return;
+    }
+    if (out.degraded) {
+      // Bản WebP thay cho AVIF lúc bận mã hoá: cache ngắn, riêng trình duyệt, để vài phút sau xin lại được AVIF.
+      res.set({ ...headers, 'Cache-Control': 'private, max-age=300', ETag: out.etag, 'X-Image-Fallback': 'avif-busy' });
+    } else {
+      res.set({ ...headers, ETag: out.etag });
+    }
     return new StreamableFile(out.data, { type: out.mime });
   }
 }

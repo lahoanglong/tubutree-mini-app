@@ -21,7 +21,7 @@ const DISCOUNT_SITES: readonly (readonly [file: string, count: number])[] = [
   ['apps/miniapp/src/pages/checkout.tsx', 1],
 ];
 const BOX_SITES: readonly (readonly [file: string, count: number])[] = [
-  ['apps/web/src/app/gio-hang/page.tsx', 1],
+  ['apps/web/src/app/gio-hang/cart-page.tsx', 1],
   ['apps/web/src/app/thanh-toan/page.tsx', 1],
 ];
 const CSS_ROOTS = ['apps/web/src', 'apps/miniapp/src'];

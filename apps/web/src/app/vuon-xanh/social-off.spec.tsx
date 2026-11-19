@@ -35,7 +35,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import GamePage from './page';
+import GamePage from './garden-page';
 import { GAME_SOCIAL_ON_WEB } from '@tubutree/app-core/features';
 
 const PROFILE = {

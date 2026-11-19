@@ -72,7 +72,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import GamePage from './page';
+import GamePage from './garden-page';
 
 const HOME = { id: null, slot: 1, isHome: true, treeType: 'Sồi', speciesId: null, progress: 10, target: 50, treeStage: 1, treesPlanted: 3, treeHealth: 'HEALTHY' };
 const plot = (n: number, over: Record<string, unknown> = {}) => ({

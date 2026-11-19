@@ -149,6 +149,8 @@ test.describe('Giỏ khách trên web, cờ bật', () => {
         // không có localStorage: giỏ trống
       }
     }, JSON.stringify([line]));
+    // Giỏ khách ghi món luôn đặt kèm cookie này (lib/guest-cart/store.ts); thiếu nó middleware phục vụ bản dựng sẵn giỏ trống của /gio-hang.
+    await page.context().addCookies([{ name: 'tubu_guest_cart', value: '1', domain: 'localhost', path: '/' }]);
     for (const size of WEB_SIZES_GUARD) {
       await page.setViewportSize(size);
       await page.goto('/gio-hang');

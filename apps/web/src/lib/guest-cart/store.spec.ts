@@ -278,3 +278,30 @@ describe('giỏ khách: mốc gộp (mergeBase)', () => {
     expect(lineOf('v1')!.mergeBase).toEqual({ inCart: 2, at: 1000 });
   });
 });
+
+describe('giỏ khách: cookie "có món" cho middleware (bản dựng sẵn giỏ trống)', () => {
+  const cookieOn = () => document.cookie.split('; ').includes('tubu_guest_cart=1');
+
+  it('thêm món thì bật cookie, xoá hết món thì gỡ', () => {
+    addGuestLine({ variationId: 'vc1', slug: 'xa-phong', quantity: 1 }, 1000);
+    expect(cookieOn()).toBe(true);
+    removeGuestLine('vc1');
+    expect(cookieOn()).toBe(false);
+    addGuestLine({ variationId: 'vc2', slug: 'xa-phong', quantity: 1 }, 1000);
+    clearGuestCart();
+    expect(cookieOn()).toBe(false);
+  });
+
+  it('giỏ có món từ trước khi có cookie (hay cookie đã hết hạn): lần đọc đầu của trang ghi bù cookie, một lần', async () => {
+    window.localStorage.setItem('tubu.guestCart.v1', JSON.stringify([{ variationId: 'old1', slug: 'xa-phong', quantity: 1, addedAt: 1 }]));
+    document.cookie = 'tubu_guest_cart=; Path=/; Max-Age=0';
+    expect(cookieOn()).toBe(false);
+    vi.resetModules();
+    const fresh = await import('./store');
+    expect(fresh.readGuestCart()).toHaveLength(1);
+    expect(cookieOn()).toBe(true);
+    document.cookie = 'tubu_guest_cart=; Path=/; Max-Age=0';
+    fresh.readGuestCart();
+    expect(cookieOn(), 'chỉ đồng bộ ở lần đọc đầu, không ghi cookie mỗi lượt vẽ').toBe(false);
+  });
+});

@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ImageResizeController } from './image-resize.controller';
-import { ImageResizeService } from './image-resize.service';
+import { ImageFallbackRedirect, ImageResizeService } from './image-resize.service';
 
 /**
  * Hạn mức sai ?v= đếm theo `client` mà controller truyền xuống. Triển khai Vietnix chỉ có MỘT proxy (Apache aaPanel, sau
@@ -67,6 +67,67 @@ describe('ImageResizeController: định dạng theo Accept', () => {
       expect(seen.map((x) => x.type)).toEqual(['image/avif', 'image/webp', 'image/jpeg']);
       expect(seen.every((x) => x.vary === 'Accept' && x.cache === 'public, max-age=31536000, immutable')).toBe(true);
       expect(get.mock.calls.map((c) => c[2])).toEqual(['avif', 'webp', 'jpeg']);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('ImageResizeController: máy bận thì không trả 503', () => {
+  async function bootWith(get: jest.Mock) {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [ImageResizeController],
+      providers: [{ provide: ImageResizeService, useValue: { keyFor: () => null, get } }],
+    }).compile();
+    const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
+    await app.listen(0, '127.0.0.1');
+    const { port } = app.getHttpServer().address() as { port: number };
+    return { app, base: `http://127.0.0.1:${port}` };
+  }
+
+  it('AVIF bận: bản WebP thay thế có cache ngắn riêng trình duyệt, vẫn Vary: Accept', async () => {
+    const { app, base } = await bootWith(jest.fn(async () => ({ data: Buffer.from('w'), mime: 'image/webp', etag: '"wk"', degraded: true })));
+    try {
+      const res = await fetch(`${base}/img?u=https%3A%2F%2Fcontent.pancake.vn%2Fa.jpg&w=320`, { headers: { accept: 'image/avif,image/webp,*/*' } });
+      await res.arrayBuffer();
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/webp');
+      expect(res.headers.get('cache-control')).toBe('private, max-age=300');
+      expect(res.headers.get('vary')).toBe('Accept');
+      expect(res.headers.get('x-image-fallback')).toBe('avif-busy');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('hàng đợi đầy: 302 về ảnh gốc, no-store, vẫn Vary: Accept; ảnh của API chuyển tương đối nên đúng cả sau tiền tố /api', async () => {
+    const get = jest
+      .fn()
+      .mockRejectedValueOnce(new ImageFallbackRedirect('https://content.pancake.vn/a.jpg', 'queue-full'))
+      .mockRejectedValueOnce(new ImageFallbackRedirect('public-image/product/p/0?v=x', 'miss-limit'));
+    const { app, base } = await bootWith(get);
+    try {
+      const a = await fetch(`${base}/img?u=https%3A%2F%2Fcontent.pancake.vn%2Fa.jpg&w=320`, { redirect: 'manual' });
+      expect(a.status).toBe(302);
+      expect(a.headers.get('location')).toBe('https://content.pancake.vn/a.jpg');
+      expect(a.headers.get('cache-control')).toBe('no-store');
+      expect(a.headers.get('vary')).toBe('Accept');
+      expect(a.headers.get('x-image-fallback')).toBe('queue-full');
+      const b = await fetch(`${base}/img?u=%2Fpublic-image%2Fproduct%2Fp%2F0%3Fv%3Dx&w=320`, { redirect: 'manual' });
+      expect(b.status).toBe(302);
+      expect(new URL(b.headers.get('location') as string, `${base}/api/img?w=320`).pathname).toBe('/api/public-image/product/p/0');
+      expect(b.headers.get('x-image-fallback')).toBe('miss-limit');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('lỗi khác (ảnh không có) vẫn đi đường lỗi thường', async () => {
+    const { NotFoundException } = await import('@nestjs/common');
+    const { app, base } = await bootWith(jest.fn().mockRejectedValue(new NotFoundException()));
+    try {
+      const res = await fetch(`${base}/img?u=https%3A%2F%2Fcontent.pancake.vn%2Fa.jpg&w=320`, { redirect: 'manual' });
+      expect(res.status).toBe(404);
     } finally {
       await app.close();
     }

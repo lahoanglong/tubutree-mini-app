@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { HUB, isHubQuery } from './lib/browse-hub-route';
 import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
+import { GUEST_PREBUILT_ORIGINS, guestPrebuiltTarget } from './lib/guest-prebuilt';
 import { isLegalSlug } from './lib/legal';
 import { carryLegacyParams, resolveLegacyWpPath, type LegacyResolution } from './lib/legacy-wp-redirects';
 import { isLegacyAppHost, tenantSubdomain } from './lib/tenant-subdomain';
@@ -85,6 +86,10 @@ function route(request: NextRequest): NextResponse {
     return NextResponse.redirect(target, 308);
   }
 
+  // Bản dựng sẵn cho khách (app/gio-hang/khach, app/vuon-xanh/khach) cũng chỉ đi qua rewrite cuối hàm.
+  const prebuiltOrigin = GUEST_PREBUILT_ORIGINS[pathname];
+  if (prebuiltOrigin) return redirectTo(request, 308, `${prebuiltOrigin}${url.search}`);
+
   const slugRoute = SLUG_ROUTE.exec(pathname);
   if (slugRoute && !isPlausibleSlug(slugRoute[1] ?? '', slugRoute[2] ?? '')) {
     // Đường dẫn không tồn tại nên Next dựng not-found.tsx của site với mã 404.
@@ -123,6 +128,15 @@ function route(request: NextRequest): NextResponse {
       ? NextResponse.rewrite(new URL(`/khoi-phuc/${parseHintSlug(request.cookies.get(HOME_HINT_COOKIE)?.value)}`, request.url))
       : NextResponse.next();
     return response;
+  }
+
+  // Khách chưa có phiên (và giỏ khách trống) mở Giỏ hàng / Vườn Xanh: bản ISR đã vẽ sẵn giao diện khách (lib/guest-prebuilt.ts), URL không đổi.
+  // Như "/" ở trên, hai bản khác nhau theo cookie nên cache chung phía trước không được giữ HTML của hai đường dẫn này.
+  const prebuilt = guestPrebuiltTarget(pathname, (name) => request.cookies.get(name)?.value);
+  if (prebuilt) {
+    const target = new URL(prebuilt, request.url);
+    target.search = url.search;
+    return NextResponse.rewrite(target);
   }
 
   return NextResponse.next();

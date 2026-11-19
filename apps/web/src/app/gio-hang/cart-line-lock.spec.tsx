@@ -65,7 +65,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import CartPage from './page';
+import CartPage from './cart-page';
 
 const line = (over: Record<string, unknown>) => ({
   id: 'i1', variationId: 'v1', productName: 'Dầu gội bồ kết', variationName: '500ml', slug: 'dau-goi', thumbnail: null,

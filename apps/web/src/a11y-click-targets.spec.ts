@@ -18,7 +18,7 @@ const FILES = [
   'app/san-pham/[slug]/page.tsx',
   'app/san-pham/[slug]/pdp-extras.tsx',
   'app/san-pham/[slug]/pdp-sections.tsx',
-  'app/gio-hang/page.tsx',
+  'app/gio-hang/cart-page.tsx',
   'app/thanh-toan/page.tsx',
   'app/tai-khoan/don-hang/[code]/page.tsx',
 ];

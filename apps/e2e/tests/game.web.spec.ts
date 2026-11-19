@@ -89,6 +89,8 @@ test.describe('Web khách: Vườn Xanh', () => {
         // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
       }
     });
+    // Đăng nhập thật ghi cờ phiên ở cả localStorage lẫn cookie (setSessionMarker); thiếu cookie thì middleware phục vụ bản dựng sẵn cho khách.
+    await page.context().addCookies([{ name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' }]);
   });
 
   test('thẻ vườn, ba tab và các khối của tab Hôm nay hiện đúng số từ API', async ({ page, api }) => {

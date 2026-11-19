@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -10,7 +10,7 @@ jest.mock('node:https', () => ({ request: (...args: unknown[]) => requestMock(..
 const lookupMock = jest.fn();
 jest.mock('node:dns', () => ({ lookup: (...args: unknown[]) => lookupMock(...args) }));
 
-import { ImageResizeService } from './image-resize.service';
+import { ImageFallbackRedirect, ImageResizeService } from './image-resize.service';
 import { ImageRegistryStale } from './image-registry-stale';
 import { MAX_SOURCE_BYTES, RESIZE_PIPELINE_VERSION, cacheKey } from './image-resize';
 
@@ -87,7 +87,7 @@ describe('ImageResizeService', () => {
     expect((await sharp(again.data).metadata()).format).toBe('webp');
   });
 
-  it('AVIF: tối đa 2 việc mã hoá AVIF cùng lúc, việc WebP vẫn chạy song song', async () => {
+  it('AVIF: tối đa 2 việc mã hoá AVIF cùng lúc, việc thứ 4 trở đi (cache lạnh) được phát WebP cache ngắn, việc WebP vẫn chạy song song', async () => {
     const { svc } = make();
     const proto = Object.getPrototypeOf(sharp());
     const realAvif = proto.avif;
@@ -114,12 +114,59 @@ describe('ImageResizeService', () => {
         svc.get('/public-image/product/pw/0', 160, 'webp'),
       ];
       const out = await Promise.all(jobs);
-      expect(out.slice(0, 5).every((o) => o.mime === 'image/avif')).toBe(true);
-      expect(out[5]!.mime).toBe('image/webp');
+      expect(out.map((o) => o.mime)).toEqual(['image/avif', 'image/avif', 'image/avif', 'image/webp', 'image/webp', 'image/webp']);
+      expect(out.map((o) => !!o.degraded)).toEqual([false, false, false, true, true, false]);
+      expect((await sharp(out[3]!.data).metadata()).format).toBe('webp');
+      expect(out[3]!.etag).toBe(`"${svc.keyFor('/public-image/product/pa3/0', 160, 'webp')}"`);
       expect(peak).toBe(2);
     } finally {
       avifSpy.mockRestore();
     }
+  });
+
+  it('AVIF bận: ảnh ngoài đã có bản WebP trên đĩa thì phát luôn bản đó (không tải nguồn), xong việc thì lần sau lại được AVIF', async () => {
+    const { svc } = make();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const proto = Object.getPrototypeOf(sharp());
+    const realAvif = proto.avif;
+    const avifSpy = jest.spyOn(proto, 'avif').mockImplementation(function (this: ReturnType<typeof sharp>, ...a: unknown[]) {
+      const inst = realAvif.apply(this, a);
+      const toBuffer = inst.toBuffer.bind(inst);
+      inst.toBuffer = (async () => {
+        await gate;
+        return toBuffer();
+      }) as never;
+      return inst;
+    });
+    try {
+      const busy = [0, 1, 2].map((i) => svc.get(`/public-image/product/hold${i}/0`, 160, 'avif'));
+      const src = 'https://content.pancake.vn/a.jpg';
+      const webpKey = svc.keyFor(src, 320, 'webp') as string;
+      mkdirSync(join(dir, webpKey.slice(0, 2)), { recursive: true });
+      writeFileSync(join(dir, webpKey.slice(0, 2), webpKey), 'webp-tren-dia');
+      const out = await svc.get(src, 320, 'avif');
+      expect(out).toMatchObject({ mime: 'image/webp', etag: `"${webpKey}"`, degraded: true });
+      expect(out.data.toString()).toBe('webp-tren-dia');
+      expect(requestMock).not.toHaveBeenCalled();
+      release();
+      await Promise.all(busy);
+      fakeHttps({ status: 200, headers: { 'content-type': 'image/jpeg' }, body: png });
+      const later = await svc.get(src, 320, 'avif');
+      expect(later.mime).toBe('image/avif');
+      expect(later.degraded).toBeUndefined();
+    } finally {
+      avifSpy.mockRestore();
+    }
+  });
+
+  it('AVIF bận: request cùng khoá AVIF đang chạy vẫn chờ chung bản AVIF, không bị hạ xuống WebP', async () => {
+    const { svc, own } = make();
+    const jobs = [0, 1, 2].map((i) => svc.get(`/public-image/product/same${i}/0`, 160, 'avif'));
+    jobs.push(svc.get('/public-image/product/same0/0', 160, 'avif'));
+    const out = await Promise.all(jobs);
+    expect(out.map((o) => o.mime)).toEqual(['image/avif', 'image/avif', 'image/avif', 'image/avif']);
+    expect(own.get).toHaveBeenCalledTimes(3);
   });
 
   it('ảnh nguồn hỏng: AVIF cũng trả lỗi như WebP (502), không ghi cache', async () => {
@@ -260,11 +307,13 @@ describe('ImageResizeService', () => {
     await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
-  it('một IP gửi sai ?v= quá 30 lần mỗi phút thì bị 503, không tốn thêm lượt đọc DB', async () => {
+  it('một IP gửi sai ?v= quá 30 lần mỗi phút thì được chuyển hướng về ảnh gốc (không 503), không tốn thêm lượt đọc DB', async () => {
     const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: false })) };
     const { svc } = make(own as never);
     for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/p1/0?v=bad${i}`, 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(svc.get('/public-image/product/p1/0?v=badlast', 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const err = await svc.get('/public-image/product/p1/0?v=badlast', 320, 'webp', '1.1.1.1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ImageFallbackRedirect);
+    expect(err).toMatchObject({ location: 'public-image/product/p1/0?v=badlast', reason: 'miss-limit' });
     expect(own.get).toHaveBeenCalledTimes(30);
   });
 
@@ -272,7 +321,7 @@ describe('ImageResizeService', () => {
     const own = { get: jest.fn(async (_k: string, id: string) => ({ mime: 'image/png', data: png, versionOk: id !== 'bad' })) };
     const { svc } = make(own as never);
     for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/bad/0?v=x${i}`, 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(svc.get('/public-image/product/bad/0?v=y', 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(svc.get('/public-image/product/bad/0?v=y', 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(ImageFallbackRedirect);
     const ok = await svc.get('/public-image/product/good/0?v=ok', 320, 'webp', '2.2.2.2');
     expect(ok.data.length).toBeGreaterThan(0);
   });
@@ -295,14 +344,19 @@ describe('ImageResizeService', () => {
     await expect(make().svc.get('https://content.pancake.vn/bomb.png', 320, 'webp')).rejects.toBeInstanceOf(BadGatewayException);
   });
 
-  it('hàng đợi đầy thì 503, không tải thêm ảnh nguồn', async () => {
+  it('hàng đợi đầy thì chuyển hướng về ảnh gốc (không 503), không tải thêm ảnh nguồn', async () => {
     let unblock: () => void = () => undefined;
     const gate = new Promise<void>((r) => (unblock = r));
     const own = { get: jest.fn(async () => { await gate; return { mime: 'image/png', data: png, versionOk: true }; }) };
     const { svc } = make(own as never);
     const calls = Array.from({ length: 4 + 32 }, (_, i) => svc.get(`/public-image/product/q${i}/0`, 160, 'webp'));
     await new Promise((r) => setTimeout(r, 20));
-    await expect(svc.get('/public-image/product/over/0', 160, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(svc.get('/public-image/product/over/0?v=v1', 160, 'webp')).rejects.toMatchObject({ location: 'public-image/product/over/0?v=v1', reason: 'queue-full' });
+    const remote = await svc.get('https://content.pancake.vn/a.png', 160, 'avif').catch((e: unknown) => e);
+    expect(remote).toBeInstanceOf(ImageFallbackRedirect);
+    expect(remote).toMatchObject({ location: 'https://content.pancake.vn/a.png', reason: 'queue-full' });
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(own.get).toHaveBeenCalledTimes(4);
     unblock();
     await Promise.all(calls);
   });

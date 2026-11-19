@@ -8,6 +8,9 @@
  * một sự kiện hay thao tác ghi nào tới máy chủ thật. Request GET tới API khác origin được lấy hộ và gắn header CORS cho origin cục bộ.
  *
  *   node scripts/perf/lab-vitals.mjs --base http://localhost:3132 [--runs 3] [--out kết-quả.json] [--shots thư-mục] [--api https://api.tubutree.com]
+ *     [--pages /gio-hang,/vuon-xanh]   chỉ đo các trang này (bỏ qua bước tìm PDP)
+ *
+ * Cột "phần tử LCP" ghi thẻ, lớp đầu và vài chữ đầu của phần tử, kèm diện tích (px²) và URL ảnh nếu là ảnh, để biết phải tối ưu khối nào.
  */
 import { createRequire } from 'node:module';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -35,7 +38,7 @@ const SETTLE_MS = 6000;
 
 /** Ghi số đo từ trước khi trang chạy dòng script nào: tác vụ dài không có bộ đệm nên phải nghe từ đầu. */
 const OBSERVE = () => {
-  const m = { lcp: 0, lcpTag: '', cls: 0, fcp: 0, longTasks: [] };
+  const m = { lcp: 0, lcpTag: '', lcpEl: '', cls: 0, clsSrc: [], fcp: 0, longTasks: [] };
   window.__lab = m;
   const on = (type, fn) => {
     try {
@@ -45,9 +48,22 @@ const OBSERVE = () => {
   on('largest-contentful-paint', (e) => {
     m.lcp = e.startTime;
     m.lcpTag = e.element ? `${e.element.tagName.toLowerCase()}${e.element.closest('[data-home-block]') ? `@${e.element.closest('[data-home-block]').getAttribute('data-home-block')}` : ''}` : '';
+    const el = e.element;
+    const cls = el ? String(el.getAttribute('class') ?? '').split(/\s+/).slice(0, 2).join('.') : '';
+    const text = el ? (el.textContent ?? '').trim().slice(0, 32) : '';
+    const testId = el?.closest('[data-testid]')?.getAttribute('data-testid') ?? '';
+    m.lcpEl = `${testId ? `[${testId}] ` : ''}${cls ? `.${cls}` : ''} "${text}" ${e.size}px²${e.url ? ` ${e.url.slice(-60)}` : ''}`;
   });
   on('layout-shift', (e) => {
-    if (!e.hadRecentInput) m.cls += e.value;
+    if (e.hadRecentInput) return;
+    m.cls += e.value;
+    // Nguồn dịch chuyển: phần tử bị đẩy, kèm testid gần nhất và lúc xảy ra, để biết khối nào làm trang nhảy.
+    for (const src of e.sources ?? []) {
+      const n = src.node;
+      if (!n || n.nodeType !== 1) continue;
+      const tid = n.closest('[data-testid]')?.getAttribute('data-testid') ?? '';
+      m.clsSrc.push(`${Math.round(e.startTime)}ms ${e.value.toFixed(4)} ${n.tagName.toLowerCase()}${tid ? `[${tid}]` : ''}.${String(n.getAttribute('class') ?? '').split(/\s+/).slice(0, 2).join('.')} y${Math.round(src.previousRect.y)}→${Math.round(src.currentRect.y)}`);
+    }
   });
   on('paint', (e) => {
     if (e.name === 'first-contentful-paint') m.fcp = e.startTime;
@@ -99,7 +115,7 @@ async function measureOnce(browser, path) {
   await context.close();
   const tbt = m.longTasks.filter(([start]) => start >= m.fcp).reduce((sum, [, d]) => sum + Math.max(0, d - 50), 0);
   const longMs = m.longTasks.reduce((sum, [, d]) => sum + d, 0);
-  return { status: res?.status() ?? 0, lcp: Math.round(m.lcp), lcpTag: m.lcpTag, cls: Math.round(m.cls * 1e4) / 1e4, tbt: Math.round(tbt), fcp: Math.round(m.fcp), longTasks: m.longTasks.length, longMs: Math.round(longMs) };
+  return { status: res?.status() ?? 0, lcp: Math.round(m.lcp), lcpTag: m.lcpTag, lcpEl: m.lcpEl, clsSrc: m.clsSrc, cls: Math.round(m.cls * 1e4) / 1e4, tbt: Math.round(tbt), fcp: Math.round(m.fcp), longTasks: m.longTasks.length, longMs: Math.round(longMs) };
 }
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
@@ -152,8 +168,7 @@ async function shots(browser, dir) {
 
 const browser = await chromium.launch();
 try {
-  const pdp = await productPath();
-  const pages = ['/', '/san-pham', pdp, '/gio-hang', '/vuon-xanh'];
+  const pages = args.pages ? args.pages.split(',').map((p) => p.trim()).filter(Boolean) : ['/', '/san-pham', await productPath(), '/gio-hang', '/vuon-xanh'];
   const html = {};
   for (const p of pages) {
     await htmlBytes(p, 'identity');
@@ -175,6 +190,7 @@ try {
     const lt = `${median(l.runs.map((r) => r.longTasks))} / ${median(l.runs.map((r) => r.longMs))}`;
     console.log(`| ${p} | ${html[p].raw.bytes} | ${html[p].gzip.bytes} | ${fcp} | ${l.lcp} | ${l.cls} | ${l.tbt} | ${lt} | ${l.runs.map((r) => r.lcpTag).join(', ')} |`);
   }
+  for (const p of pages) for (const r of lab[p].runs) console.log(`${p}: LCP ${r.lcp} ms, FCP ${r.fcp} ms, ${r.lcpTag} ${r.lcpEl}${r.clsSrc.length ? `\n  CLS ${r.cls}: ${r.clsSrc.join(' | ')}` : ''}`);
   if (args.shots) await shots(browser, args.shots);
 } finally {
   await browser.close();

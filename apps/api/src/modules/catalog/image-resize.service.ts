@@ -29,12 +29,34 @@ export interface ResizedImage {
   data: Buffer;
   mime: string;
   etag: string;
+  /** Bản thay tạm lúc máy bận mã hoá AVIF (WebP cùng bề rộng): controller cho cache ngắn để lần sau trình duyệt xin lại AVIF. */
+  degraded?: boolean;
+}
+
+/**
+ * Không nhận thêm việc đổi cỡ (hàng đợi đầy, hoặc IP đã gửi quá nhiều ?v= sai): controller chuyển hướng 302 về ảnh gốc thay vì trả 503.
+ * Ảnh gốc là ảnh Pancake/Cloudinary đã có trong danh sách, hoặc `/public-image/...` của chính API (có hạn mức và kiểm ?v= riêng), nên
+ * chuyển hướng không tốn CPU, RAM hay lượt đọc DB của /img và không mở thêm đường nào kẻ xấu chưa gọi thẳng được.
+ */
+export class ImageFallbackRedirect extends Error {
+  constructor(
+    readonly location: string,
+    readonly reason: 'queue-full' | 'miss-limit',
+  ) {
+    super(`image fallback: ${reason}`);
+  }
 }
 
 const MAX_CONCURRENT_JOBS = 4;
 /** Mã hoá AVIF (effort 2) tốn CPU gấp 2–3 lần WebP: trong 4 việc đổi cỡ cùng lúc, tối đa ngần này việc mã hoá AVIF, chỗ còn lại vẫn làm WebP/JPEG. */
 const MAX_CONCURRENT_AVIF = 2;
-/** Hàng đợi chờ xử lý tối đa: đầy thì 503 để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */
+/**
+ * Việc AVIF đã nhận (đang mã hoá + đang chờ chỗ AVIF) tối đa ngần này. Lúc cache lạnh (sau deploy, ảnh mới) một trang xin hàng chục ảnh AVIF cùng lúc;
+ * vượt mức thì lần xin AVIF kế được phát bản WebP cùng bề rộng (đã cache thì đọc đĩa, chưa thì mã hoá WebP rẻ hơn 2–3 lần), cache ngắn.
+ * Ba việc AVIF giữ tối đa 3 trong 4 chỗ đổi cỡ, nên WebP/JPEG luôn còn ít nhất một chỗ.
+ */
+const MAX_AVIF_BACKLOG = 3;
+/** Hàng đợi chờ xử lý tối đa: đầy thì chuyển hướng về ảnh gốc (ImageFallbackRedirect) để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */
 const MAX_QUEUED_JOBS = 32;
 const REGISTRY_TTL_MS = 5 * 60 * 1000;
 const REGISTRY_MISS_RELOAD_MS = 30_000;
@@ -66,6 +88,11 @@ export class ImageResizeService {
   private readonly waiters: (() => void)[] = [];
   private avifActive = 0;
   private readonly avifWaiters: (() => void)[] = [];
+  /** Việc AVIF đã nhận, từ lúc vào hàng tới lúc xong (xem MAX_AVIF_BACKLOG). */
+  private avifJobs = 0;
+  /** Đếm lần phát bản thay/chuyển hướng để ghi cảnh báo tối đa mỗi phút một lần (theo dõi cache lạnh sau deploy). */
+  private fallbackCount = 0;
+  private fallbackLoggedAt = 0;
   private lastPrune = 0;
   private cacheBytes: number | null = null;
   /** Lần quét đầu của tiến trình (tính dung lượng cache đã có trong volume): các lần ghi đầu tiên chờ chung một lần quét. */
@@ -119,12 +146,48 @@ export class ImageResizeService {
         if (hit) return { data: hit, mime, etag };
       }
     }
+    // Đang bận mã hoá AVIF (cache lạnh): không xếp thêm việc AVIF mà phát WebP cùng bề rộng, cache ngắn. Việc AVIF cùng khoá đang chạy thì vẫn chờ chung.
+    if (format === 'avif' && !this.inFlight.has(key) && this.avifJobs >= MAX_AVIF_BACKLOG) {
+      this.noteFallback('avif-busy');
+      const webpKey = this.keyFor(source, width, 'webp') as string;
+      const verified = !own || (this.ownVerified.get(ownRef(own)) ?? 0) > Date.now();
+      const hit = verified ? await this.readCache(webpKey) : null;
+      const webp = hit ? { data: hit, mime: FORMAT_MIME.webp, etag: `"${webpKey}"` } : await this.run(source as string, webpKey, width, 'webp', client);
+      return { ...webp, degraded: true };
+    }
+    return this.run(source as string, key, width, format, client);
+  }
+
+  /** Việc đổi cỡ của một khoá: request cùng khoá đang chạy thì dùng chung một lần xử lý (in-flight coalescing). */
+  private run(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
     let job = this.inFlight.get(key);
     if (!job) {
-      job = this.produce(source as string, key, width, format, client).finally(() => this.inFlight.delete(key));
+      job = this.produce(source, key, width, format, client).finally(() => this.inFlight.delete(key));
       this.inFlight.set(key, job);
     }
     return job;
+  }
+
+  /** Ảnh gốc để chuyển hướng tới: URL Pancake/Cloudinary đã chuẩn hoá, hoặc `public-image/...` tương đối so với `/img` (đúng cả khi API nằm sau tiền tố `/api`). */
+  private fallbackLocation(source: string): string {
+    if (parseOwnImagePath(source)) return source.slice(1);
+    const remote = parseRemoteSource(source);
+    if (!remote) throw new BadRequestException('Nguồn ảnh không được hỗ trợ.');
+    return remote.toString();
+  }
+
+  private fallback(source: string, reason: ImageFallbackRedirect['reason']): ImageFallbackRedirect {
+    this.noteFallback(reason);
+    return new ImageFallbackRedirect(this.fallbackLocation(source), reason);
+  }
+
+  private noteFallback(reason: string): void {
+    this.fallbackCount += 1;
+    const now = Date.now();
+    if (now - this.fallbackLoggedAt < 60_000) return;
+    this.log.warn(`Đổi cỡ ảnh đang bận (${reason}): ${this.fallbackCount} lần phát bản thay/chuyển hướng về ảnh gốc từ lần ghi trước.`);
+    this.fallbackLoggedAt = now;
+    this.fallbackCount = 0;
   }
 
   /**
@@ -226,10 +289,23 @@ export class ImageResizeService {
   }
 
   private async produce(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
+    if (format !== 'avif') return this.produceNow(source, key, width, format, client);
+    this.avifJobs += 1;
+    try {
+      return await this.produceNow(source, key, width, format, client);
+    } finally {
+      this.avifJobs -= 1;
+    }
+  }
+
+  private async produceNow(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
     const own = parseOwnImagePath(source) !== null;
-    if (own && this.ownMissLimited(client)) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+    // IP đã gửi quá nhiều ?v= sai (thường là NAT nhà mạng dùng chung): không đọc DB thay họ nữa, chuyển hướng về ảnh gốc (có hạn mức riêng).
+    if (own && this.ownMissLimited(client)) throw this.fallback(source, 'miss-limit');
     const mime = FORMAT_MIME[format];
-    const release = await this.acquire();
+    const release = await this.acquire().catch(() => {
+      throw this.fallback(source, 'queue-full');
+    });
     let data: Buffer;
     try {
       // Ảnh của chính API: 404 khi sản phẩm bị từ chối, nhãn gỡ công bố, chiến dịch tắt hay ảnh đã thay (sai ?v=), kể cả khi bản đổi cỡ còn trong cache.
@@ -331,7 +407,7 @@ export class ImageResizeService {
       };
     };
     if (this.active < MAX_CONCURRENT_JOBS) return Promise.resolve(take());
-    if (this.waiters.length >= MAX_QUEUED_JOBS) return Promise.reject(new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.'));
+    if (this.waiters.length >= MAX_QUEUED_JOBS) return Promise.reject(new Error('queue-full'));
     return new Promise((resolve) => this.waiters.push(() => resolve(take())));
   }
 

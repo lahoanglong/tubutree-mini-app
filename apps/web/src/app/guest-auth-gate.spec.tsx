@@ -39,7 +39,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   getPublicSupport: async () => ({ hotline: '0984 606 774', email: 'tubutree@gmail.com' }),
 }));
 
-import CartPage from './gio-hang/page';
+import CartPage from './gio-hang/cart-page';
 import CheckoutPage from './thanh-toan/page';
 import AccountPage from './tai-khoan/page';
 import BankPaymentPage from './thanh-toan/chuyen-khoan/[code]/page';
@@ -52,7 +52,7 @@ import LoyaltyPage from './tai-khoan/diem-xanh/page';
 import WalletPage from './tai-khoan/vi-tubu/page';
 import RewardsPage from './kho-qua/page';
 import RewardsMinePage from './kho-qua/cua-toi/page';
-import GamePage from './vuon-xanh/page';
+import GamePage from './vuon-xanh/garden-page';
 import AdvisorPage from './tu-van/page';
 import CashbackPage from './hoan-tien/page';
 import WishlistPage from './tai-khoan/yeu-thich/page';

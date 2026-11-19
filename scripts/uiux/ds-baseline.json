@@ -49,7 +49,7 @@
    "open-snackbar": {},
    "primitive-color": {
     "app/brand/[slug]/brand-actions.tsx": 14,
-    "app/gio-hang/page.tsx": 29,
+    "app/gio-hang/cart-page.tsx": 29,
     "app/mua-chung/group-buy-view.tsx": 12,
     "app/s/[slug]/page.tsx": 27,
     "app/san-pham/[slug]/content-kit-sheet.tsx": 9,
@@ -83,7 +83,7 @@
     "components/shop-page/shop-pager.tsx": 7
    },
    "shadow-var-color": {
-    "app/gio-hang/page.tsx": 1,
+    "app/gio-hang/cart-page.tsx": 1,
     "app/thanh-toan/bank-transfer-panel.tsx": 1
    },
    "strike-element": {
@@ -94,7 +94,7 @@
    "tile-custom": {
     "app/cau-chuyen/brand-story-view.tsx": 1,
     "app/cong-dong/[id]/page.tsx": 1,
-    "app/gio-hang/page.tsx": 1,
+    "app/gio-hang/cart-page.tsx": 1,
     "app/merchant/page.tsx": 2,
     "app/mua-chung/group-buy-view.tsx": 2,
     "app/san-pham/[slug]/pdp-bundles.tsx": 1,
@@ -128,7 +128,7 @@
   "apps/web/src/app/ctv/gian-hang/page.tsx": 3,
   "apps/web/src/app/ctv/page.tsx": 19,
   "apps/web/src/app/gio-hang/empty-cart.tsx": 2,
-  "apps/web/src/app/gio-hang/page.tsx": 76,
+  "apps/web/src/app/gio-hang/cart-page.tsx": 76,
   "apps/web/src/app/gio-vang/flash-slots-view.tsx": 2,
   "apps/web/src/app/gioi-thieu/about-view.tsx": 37,
   "apps/web/src/app/ho-tro/chat/page.tsx": 7,
@@ -163,7 +163,7 @@
   "apps/web/src/app/thanh-toan/page.tsx": 57,
   "apps/web/src/app/tu-van/page.tsx": 9,
   "apps/web/src/app/uu-dai/page.tsx": 1,
-  "apps/web/src/app/vuon-xanh/page.tsx": 1,
+  "apps/web/src/app/vuon-xanh/garden-page.tsx": 1,
   "apps/web/src/components/account/account-deletion-section.tsx": 4,
   "apps/web/src/components/add-to-cart.tsx": 8,
   "apps/web/src/components/advisor-paused.tsx": 3,
@@ -440,7 +440,7 @@
   "apps/web/src/app/ctv/page.tsx": 1,
   "apps/web/src/app/dang-nhap/login-skeleton.tsx": 4,
   "apps/web/src/app/dang-nhap/page.tsx": 2,
-  "apps/web/src/app/gio-hang/page.tsx": 8,
+  "apps/web/src/app/gio-hang/cart-page.tsx": 8,
   "apps/web/src/app/gio-vang/flash-slots-view.tsx": 13,
   "apps/web/src/app/gioi-thieu/about-view.tsx": 1,
   "apps/web/src/app/ho-tro/chat/page.tsx": 9,

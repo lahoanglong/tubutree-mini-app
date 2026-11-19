@@ -25,7 +25,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import CartPage from './page';
+import CartPage from './cart-page';
 
 const line = (over: Record<string, unknown>) => ({
   id: 'i1', variationId: 'v1', productName: 'Serum dưỡng ẩm', variationName: '30ml', slug: 'serum', thumbnail: null,

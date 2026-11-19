@@ -7,7 +7,8 @@ import { EmptyState } from '@/components/mini/empty-state';
 import { MatcherEntryLink } from '@/components/game/matcher/matcher-entry-link';
 
 /**
- * Giỏ trống như Mini App: minh hoạ + lời mời + nút, rồi kệ gợi ý. Tải lười vì chỉ khách giỏ trống mới cần. Ở điện thoại khung
+ * Giỏ trống như Mini App: minh hoạ + lời mời + nút, rồi kệ gợi ý (hàng ảnh đầu là phần tử LCP của trang ở 390px nên tải ưu tiên).
+ * Tải lười vì chỉ khách giỏ trống mới cần. Ở điện thoại khung
  * của trang chừa lề 12px hai bên và 8px phía trên cho danh sách dòng giỏ; màn trống bỏ phần đó để kệ sát lề 16px như Mini App.
  */
 export default function EmptyCart() {
@@ -24,7 +25,7 @@ export default function EmptyCart() {
       <div className="flex justify-center px-4">
         <MatcherEntryLink from="empty_cart" />
       </div>
-      <SuggestedRail />
+      <SuggestedRail priorityCount={2} />
     </div>
   );
 }

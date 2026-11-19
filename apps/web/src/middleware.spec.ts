@@ -53,6 +53,40 @@ describe('middleware: Trang chủ cho khách đã có cookie phiên', () => {
   });
 });
 
+describe('middleware: bản dựng sẵn cho khách của Giỏ hàng và Vườn Xanh', () => {
+  const open = (path: string, cookie?: string, host = 'tubutree.com') =>
+    middleware(new NextRequest(`https://${host}${path}`, { headers: { host, ...(cookie ? { cookie } : {}) } }));
+
+  it('khách không có cookie phiên: rewrite sang bản dựng sẵn, giữ query, URL trình duyệt không đổi', () => {
+    expect(rewriteOf(open('/gio-hang'))).toBe('https://tubutree.com/gio-hang/khach');
+    expect(rewriteOf(open('/vuon-xanh'))).toBe('https://tubutree.com/vuon-xanh/khach');
+    expect(rewriteOf(open('/vuon-xanh?tab=garden&utm_source=zalo'))).toBe('https://tubutree.com/vuon-xanh/khach?tab=garden&utm_source=zalo');
+    expect(rewriteOf(open('/gio-hang', 'tubu_web_session=0; tubu_guest_cart=0'))).toBe('https://tubutree.com/gio-hang/khach');
+  });
+
+  it('có cookie phiên: bản thường (khung chờ khôi phục phiên), không vẽ giao diện khách rồi đổi', () => {
+    expect(rewriteOf(open('/gio-hang', 'tubu_web_session=1'))).toBeNull();
+    expect(rewriteOf(open('/vuon-xanh', 'tubu_web_session=1'))).toBeNull();
+  });
+
+  it('giỏ khách có món: Giỏ hàng đi bản thường (bản dựng sẵn là giỏ trống); Vườn Xanh không phụ thuộc giỏ', () => {
+    expect(rewriteOf(open('/gio-hang', 'tubu_guest_cart=1'))).toBeNull();
+    expect(rewriteOf(open('/vuon-xanh', 'tubu_guest_cart=1'))).toBe('https://tubutree.com/vuon-xanh/khach');
+  });
+
+  it('vào thẳng bản dựng sẵn thì 308 về đường dẫn thật, giữ query', () => {
+    const res = open('/gio-hang/khach?from=zalo');
+    expect(res.status).toBe(308);
+    expect(new URL(res.headers.get('location') ?? '', 'https://tubutree.com').pathname + new URL(res.headers.get('location') ?? '', 'https://tubutree.com').search).toBe('/gio-hang?from=zalo');
+    expect(open('/vuon-xanh/khach').status).toBe(308);
+  });
+
+  it('đường dẫn con và subdomain gian hàng không bị viết lại', () => {
+    expect(rewriteOf(open('/vuon-xanh/so-tay'))).toBeNull();
+    expect(rewriteOf(open('/gio-hang', undefined, 'ctv-an.tubutree.com'))).toBeNull();
+  });
+});
+
 describe('middleware: slug dài vô lý không vào cache trang theo [slug]', () => {
   const notFoundOf = (res: Response) => res.status === 404 && res.headers.get('cache-control') === 'no-store' && !!rewriteOf(res);
   // Slug dài nhất API sinh ra: tên 200 ký tự (tối đa merchant DTO) -> slugify + '-' + Date.now().toString(36).

@@ -10,7 +10,8 @@ import { coreHttp } from '@/lib/core-http';
  * Kệ "Có thể bạn thích" dưới màn rỗng hoặc không tìm thấy (giỏ trống, sản phẩm không còn; bản web của `suggested-rail.tsx`). Là phần phụ: đang tải, lỗi hay hết hàng thì không vẽ gì,
  * để màn bên trên không nhảy và không thêm khối lỗi thứ hai.
  */
-export function SuggestedRail({ flush = false, title = 'Có thể bạn thích', limit }: { flush?: boolean; title?: string; limit?: number } = {}) {
+/** `priorityCount`: số ảnh đầu tải ưu tiên (không lười, fetchpriority cao) khi kệ nằm trong màn đầu và ảnh là phần tử LCP (giỏ trống). */
+export function SuggestedRail({ flush = false, title = 'Có thể bạn thích', limit, priorityCount = 0 }: { flush?: boolean; title?: string; limit?: number; priorityCount?: number } = {}) {
   const base = suggestedRailQuery(coreHttp);
   const q = useQuery({
     queryKey: limit ? [...base.queryKey, limit] : base.queryKey,
@@ -25,7 +26,7 @@ export function SuggestedRail({ flush = false, title = 'Có thể bạn thích',
       <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
         {title}
       </Heading>
-      <ProductGrid items={items} variant="grid" shelf="suggested" />
+      <ProductGrid items={items} variant="grid" shelf="suggested" priorityCount={priorityCount} />
     </section>
   );
 }

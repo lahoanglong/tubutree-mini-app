@@ -72,7 +72,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import GamePage from './page';
+import GamePage from './garden-page';
 
 const NOW = () => new Date().toISOString();
 const profile = (over: Record<string, unknown> = {}) => ({

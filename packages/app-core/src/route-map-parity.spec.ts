@@ -64,6 +64,10 @@ describe('webPathToFileCandidates', () => {
     );
     expect(webPathToFileCandidates('/product/:slug')).toContain('apps/web/src/app/product/[slug]/route.ts');
   });
+
+  it('nhận route catch-all tuỳ chọn [[...variant]] (trang có bản dựng sẵn cho khách)', () => {
+    expect(webPathToFileCandidates('/gio-hang?tab=x')).toContain('apps/web/src/app/gio-hang/[[...variant]]/page.tsx');
+  });
 });
 
 describe('checkParity dòng thiếu web', () => {

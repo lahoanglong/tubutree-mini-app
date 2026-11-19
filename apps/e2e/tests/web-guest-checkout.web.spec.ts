@@ -157,6 +157,8 @@ async function seedGuestCart(page: Page, d: Detail, quantity: number): Promise<v
     },
     [GUEST_CART_KEY, JSON.stringify([line])],
   );
+  // Giỏ khách ghi món luôn đặt kèm cookie này (lib/guest-cart/store.ts); thiếu nó middleware phục vụ bản dựng sẵn giỏ trống của /gio-hang.
+  await page.context().addCookies([{ name: 'tubu_guest_cart', value: '1', domain: 'localhost', path: '/' }]);
 }
 
 const visible = (page: Page, testId: string) => page.locator(`[data-testid="${testId}"]:visible`).first();

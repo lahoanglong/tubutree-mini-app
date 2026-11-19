@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient } from '@tanstack/react-query';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { subtotalBucket } from '@tubutree/shared-types';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -38,9 +38,9 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import CartPage from './page';
+import CartPage from './cart-page';
 import { GuestCartView } from './guest-cart-view';
-import { CART_OUT_OF_STOCK } from '@tubutree/app-core/cart-copy';
+import { CART_EMPTY, CART_OUT_OF_STOCK } from '@tubutree/app-core/cart-copy';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { PUBLIC_CONFIG_FALLBACK } from '@/lib/use-public-config';
 import { GUEST_CART_KEY } from '@/lib/guest-cart/store';
@@ -92,6 +92,11 @@ const mount = async (qc: QueryClient, until: (c: HTMLElement) => boolean) => {
   await flush(4);
   return r.container;
 };
+
+// Giỏ trống là chunk dynamic(): nạp sẵn một lần (như trình duyệt đã có chunk), để ca chờ "Giỏ còn trống" không phụ thuộc thời gian dịch module khi máy bận.
+beforeAll(async () => {
+  await import('./empty-cart');
+});
 
 beforeEach(() => {
   localStorage.clear();
@@ -387,5 +392,101 @@ describe('GuestCartView — tiêu đề dòng khi chưa có tên sản phẩm', 
     expect(c.querySelector('[data-state="error"]')!.textContent).toContain(fillCopy('guestCart.loadFailed'));
     expect(c.querySelector('[data-state="error"]')!.textContent).toContain(fillCopy('guestCart.retry'));
     expect(title('da-go')).toBe('Sản phẩm đã ngừng bán');
+  });
+});
+
+describe('bản dựng sẵn cho khách (/gio-hang/khach): HTML máy chủ', () => {
+  const tree = async (flag: boolean | null) => {
+    const { QueryClientProvider } = await import('@tanstack/react-query');
+    const { PrebuiltGuest } = await import('@/lib/auth-phase');
+    const { QuerySeed } = await import('@/components/query-seed');
+    // Chunk giỏ trống đã nạp (như trình duyệt đã có chunk khi hydrate): HTML máy chủ có nội dung thật, không phải khung chờ của dynamic().
+    await import('./empty-cart');
+    const entries = flag === null ? [] : [{ queryKey: ['public-config'], data: { ...PUBLIC_CONFIG_FALLBACK, webGuestCartEnabled: flag }, fetchedAt: Date.now() }];
+    return (
+      <QueryClientProvider client={new QueryClient()}>
+        <PrebuiltGuest>
+          <QuerySeed entries={entries}>
+            <CartPage />
+          </QuerySeed>
+        </PrebuiltGuest>
+      </QueryClientProvider>
+    );
+  };
+  const ssr = async (flag: boolean | null, lines: { variationId: string; slug: string; quantity: number }[] = []) => {
+    const { renderToString } = await import('react-dom/server');
+    putGuestLines(lines);
+    state.auth = { user: null, status: 'idle', initialized: false };
+    return renderToString(await tree(flag));
+  };
+
+  /** HTML máy chủ (giỏ trống) rồi hydrate trên máy có giỏ khách trong localStorage mà chưa có cookie (giỏ từ trước khi có cookie, cookie hết hạn). */
+  const hydrateWithLines = async (flag: boolean | null, lines: { variationId: string; slug: string; quantity: number }[]) => {
+    const { hydrateRoot } = await import('react-dom/client');
+    const { act } = await import('react');
+    const html = await ssr(flag);
+    putGuestLines(lines);
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const recoverable: unknown[] = [];
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const element = await tree(flag);
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    await act(async () => {
+      root = hydrateRoot(container, element, { onRecoverableError: (e) => recoverable.push(e) });
+    });
+    await flush(10);
+    const hydrationLogs = errors.mock.calls.map((c) => String(c[0])).filter((m) => /hydrat/i.test(m));
+    errors.mockRestore();
+    return {
+      container,
+      recoverable,
+      hydrationLogs,
+      cleanup: () => {
+        act(() => root!.unmount());
+        container.remove();
+      },
+    };
+  };
+
+  it('cờ giỏ khách bật: HTML đầu là giỏ khách trống (không phải khung chờ đăng nhập hay tường đăng nhập)', async () => {
+    const html = await ssr(true);
+    expect(html).toContain(CART_EMPTY.heading);
+    expect(html).not.toContain('Đăng nhập để xem giỏ hàng');
+  });
+
+  it('cờ tắt: HTML đầu là tường đăng nhập như bản thường sau khi tải xong', async () => {
+    expect(await ssr(false)).toContain('Đăng nhập để xem giỏ hàng');
+  });
+
+  it('máy chủ không đọc localStorage: giỏ khách có món vẫn vẽ giỏ trống ở máy chủ (middleware không đưa khách có món tới đây)', async () => {
+    const html = await ssr(true, [{ variationId: 'v1', slug: 'dau-goi', quantity: 1 }]);
+    expect(html).toContain(CART_EMPTY.heading);
+    expect(html).not.toContain('Dầu gội bồ kết');
+  });
+
+  it('khách có món mà chưa có cookie vẫn tới bản dựng sẵn: hydrate không lệch, rồi hiện món; cart_viewed đếm đúng số món, không phát với giỏ trống', async () => {
+    const h = await hydrateWithLines(true, [{ variationId: 'v1', slug: 'dau-goi', quantity: 2 }]);
+    try {
+      expect(h.recoverable).toEqual([]);
+      expect(h.hydrationLogs).toEqual([]);
+      expect(h.container.textContent).toContain('Dầu gội bồ kết');
+      const viewed = state.track.mock.calls.filter((c) => c[0] === 'cart_viewed');
+      expect(viewed).toHaveLength(1);
+      expect(viewed[0]![1]).toMatchObject({ itemCount: 1 });
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it('cấu hình chưa có lúc dựng mà máy khách có món: hydrate không lệch (giỏ đọc qua hook, không đọc thẳng localStorage lúc vẽ)', async () => {
+    const h = await hydrateWithLines(null, [{ variationId: 'v1', slug: 'dau-goi', quantity: 1 }]);
+    try {
+      expect(h.recoverable).toEqual([]);
+      expect(h.hydrationLogs).toEqual([]);
+    } finally {
+      h.cleanup();
+    }
   });
 });

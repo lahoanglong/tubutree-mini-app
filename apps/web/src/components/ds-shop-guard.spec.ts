@@ -61,7 +61,7 @@ describe('ds-shop-guard (web)', () => {
       'components/flash-price.tsx', // khối giá lớn của trang chi tiết (PdpPrice)
       'components/add-to-cart.tsx', // giá theo phân loại ở thanh mua
       'components/variation-chip.tsx', // tên phân loại hết hàng gạch ngang, không phải giá gạch
-      'app/gio-hang/page.tsx', // dòng giỏ hàng
+      'app/gio-hang/cart-page.tsx', // dòng giỏ hàng
       'app/merchant/settlement-tab.tsx',
       'components/dealer/price-tab.tsx', // bảng giá đại lý
       'components/admin/merchant-products-tab.tsx',

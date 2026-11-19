@@ -52,7 +52,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import CartPage from './page';
+import CartPage from './cart-page';
 
 const BOTTLE = {
   id: 'ci-bottle', productId: 'p-bottle', variationId: 'v-bottle', productName: 'Nước rửa chén Fuwa3e 500ml', variationName: null, slug: 'nrc-500',
