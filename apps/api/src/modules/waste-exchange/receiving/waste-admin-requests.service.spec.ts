@@ -324,6 +324,7 @@ describe('WasteAdminRequestsService.queue', () => {
     ['ORDER_NOT_DELIVERED', () => wasteOrderNotDeliveredWhere()],
     ['TRANSIT_OVERDUE', () => wasteTransitOverdueWhere(NOW, 30)],
     ['ORDER_MISMATCH', () => wasteOrderMismatchWhere()],
+    ['AWAITING_RECEIPT', () => ({ status: { in: ['OPEN', 'IN_TRANSIT'] } })],
   ] as const)('maps filter %s to its shared where', async (filter, expected) => {
     const { service, prisma } = adminSetup();
     await service.queue('a1', { filter });
@@ -447,6 +448,28 @@ describe('WasteAdminRequestsService.lookup', () => {
       }),
     );
     expect(out).toHaveLength(1);
+  });
+
+  it.each(['0901234567', '+84 901 234 567', '84901234567', '0901.234.567'])('a full phone (%s) adds an exact user phone match in any status, newest first', async (typed) => {
+    const { service, prisma } = adminSetup({ rows: [listRow()] });
+    await service.lookup('s1', typed);
+    const arg = (prisma.wasteRequest.findMany.mock.calls as unknown[][])[0]![0] as { where: { OR: unknown[] }; orderBy: unknown };
+    expect(arg.where.OR).toContainEqual({ user: { phone: '0901234567' } });
+    expect(arg.where.OR[1]).toEqual({ user: { phone: '0901234567' } });
+    expect(arg.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+  });
+
+  it.each(['0901', '901234567', '090123456789'])('a partial or malformed number (%s) never matches by phone', async (typed) => {
+    const { service, prisma } = adminSetup({ rows: [listRow()] });
+    await service.lookup('s1', typed);
+    const arg = (prisma.wasteRequest.findMany.mock.calls as unknown[][])[0]![0] as { where: { OR: unknown[] } };
+    expect(JSON.stringify(arg.where.OR)).not.toContain('"phone"');
+  });
+
+  it('a missed phone lookup never stores the number in the LOOKUP_MISS event', async () => {
+    const { service } = adminSetup({ rows: [] });
+    await expect(service.lookup('s1', '0901234567')).rejects.toThrow(NotFoundException);
+    expect(JSON.stringify((writeWasteEvent as jest.Mock).mock.calls.at(-1))).not.toContain('0901234567');
   });
 
   it('masks the customer for STAFF', async () => {

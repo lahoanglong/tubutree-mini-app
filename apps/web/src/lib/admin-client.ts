@@ -192,6 +192,23 @@ export interface AdminOrder {
   fulfillerStorefront?: { title: string } | null;
   /** Khoản hoàn của đơn, cũ nhất trước (trừ khoản đã bỏ qua) — "Đang hoàn tiền" khi khoản chuyển khoản còn Chờ/Đang chuyển. */
   customerRefunds?: AdminOrderRefund[];
+  /** SĐT khách vãng lai gõ khi đặt trên web không đăng nhập (đã che với người xem bị che SĐT); null = không phải đơn vãng lai web. */
+  guestPhone?: string | null;
+  /** guest = đơn vãng lai (web không đăng nhập, hay phiên `guest_` Mini App); merged = đơn vãng lai web đã gộp vào tài khoản Zalo. */
+  guestSource?: 'guest' | 'merged' | null;
+  /** Hạn chuyển khoản ghi cho khách (ISO), đúng mốc cron tự huỷ; null = đơn không chờ tiền hay hệ thống đã thôi tự huỷ. */
+  paymentDeadline?: string | null;
+  /** Lần huỷ mới nhất của đơn đã huỷ: lý do, ai huỷ, lúc huỷ (cũng là lúc nhả giữ kho). */
+  cancellation?: AdminOrderCancellation | null;
+}
+
+export interface AdminOrderCancellation {
+  at: string;
+  note: string | null;
+  /** ADMIN | CUSTOMER | MERCHANT | PANCAKE | SYSTEM */
+  actorType: string;
+  /** Hệ thống tự huỷ vì quá hạn thanh toán (cron hay MSS báo quá hạn chuyển khoản). */
+  overdue: boolean;
 }
 
 /** Khoản hoàn ở danh sách đơn admin (AdminService ORDER_LIST_REFUNDS): không kèm tài khoản ngân hàng của khách. */
@@ -517,8 +534,14 @@ export type PancakeFilter = 'attention' | 'unsynced';
 export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefront';
 export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
 export type OrderListPlatform = 'miniapp' | 'web';
-/** Hàng đợi của hộp việc, đúng điều kiện của số đếm (không có ô chọn riêng trên bộ lọc). */
-export type OrderQueue = 'bank_transfer_to_confirm' | 'dealer_transfer_to_confirm';
+/**
+ * Hàng đợi của hộp việc và ô KPI đầu tab, đúng điều kiện của số đếm: chờ chuyển khoản (lẻ / đại lý), và đơn lẻ chuyển khoản hệ thống
+ * tự huỷ vì quá hạn thanh toán.
+ */
+export type OrderQueue = 'bank_transfer_to_confirm' | 'dealer_transfer_to_confirm' | 'bank_transfer_overdue_cancelled';
+export const ORDER_QUEUE_VALUES: readonly OrderQueue[] = ['bank_transfer_to_confirm', 'dealer_transfer_to_confirm', 'bank_transfer_overdue_cancelled'];
+/** web = đơn khách vãng lai đặt trên web không đăng nhập (kể cả đơn đã gộp vào tài khoản Zalo). */
+export type OrderGuestFilter = 'web';
 /** Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake: open = đơn còn mở (Kế toán đóng bằng "Đã nhận tiền"), closed = đơn đã huỷ/trả (ADMIN đóng). */
 export type PaymentUnlinkedFilter = 'open' | 'closed';
 /** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
@@ -528,6 +551,7 @@ export interface OrderListExtra {
   platform?: OrderListPlatform;
   queue?: OrderQueue;
   paymentUnlinked?: PaymentUnlinkedFilter;
+  guest?: OrderGuestFilter;
   referrerUserId?: string;
   /** Khách đặt đơn (từ hồ sơ khách: "Xem tất cả đơn"). */
   userId?: string;
@@ -566,6 +590,25 @@ export interface OrderStatusCounts {
 export const getOrderStatusCounts = (f: { search?: string; recycling?: RecyclingFilter; invoice?: InvoiceFilter; pancake?: PancakeFilter; from?: string; to?: string } & Omit<OrderListExtra, 'order'>) =>
   apiFetch<OrderStatusCounts>(
     `/admin/orders/status-counts?${(Object.entries(f) as [string, string | undefined][])
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v!)}`)
+      .join('&')}`,
+  );
+/**
+ * Số KPI đầu tab Đơn hàng, cùng bộ lọc với danh sách trừ trạng thái và hàng đợi (AdminService.orderOpsCounts): đơn vãng lai web (và phần
+ * chưa gộp Zalo), chờ chuyển khoản (và phần đã quá hạn), tự huỷ quá hạn chuyển khoản; `ttlHours` là hạn thanh toán đang cấu hình.
+ */
+export interface OrderOpsCounts {
+  guestWeb: number;
+  guestWebUnmerged: number;
+  bankTransferPending: number;
+  bankTransferOverdue: number;
+  overdueCancelled: number;
+  ttlHours: number;
+}
+export const getOrderOpsCounts = (f: { search?: string; recycling?: RecyclingFilter; invoice?: InvoiceFilter; pancake?: PancakeFilter; from?: string; to?: string } & Omit<OrderListExtra, 'order'>) =>
+  apiFetch<OrderOpsCounts>(
+    `/admin/orders/ops-counts?${(Object.entries(f) as [string, string | undefined][])
       .filter(([, v]) => v)
       .map(([k, v]) => `${k}=${encodeURIComponent(v!)}`)
       .join('&')}`,

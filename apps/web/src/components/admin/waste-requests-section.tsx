@@ -5,6 +5,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import type {
   AdminWasteRequestQuery,
   AdminWasteRequestRowDTO,
+  WasteMethod,
+  WasteRequestStatus,
   WasteMatchInput,
   WasteReceiveResultDTO,
   WasteUnmatchedDTO,
@@ -33,6 +35,8 @@ import { useConfirm } from './confirm-dialog';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestDetail } from './waste-request-detail';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { getPublicConfig } from '@/lib/shop-client';
+import { canQuickCount, canQuickReceive, useWasteQuickActions } from './waste-quick-actions';
 
 export type WasteQueuePreset = 'toCount' | 'inTransit' | 'customerBlocked' | 'orderNotDelivered' | 'expired' | 'transitOverdue' | 'orderMismatch';
 
@@ -47,8 +51,25 @@ export const WASTE_QUEUE_PRESETS: readonly { key: WasteQueuePreset; label: strin
 ];
 
 const WAITING_LABELS = { CUSTOMER_BLOCKED: 'Chờ: khách bị khoá', ORDER_NOT_DELIVERED: 'Chờ: đơn chưa giao' } as const;
-const METHOD_KEYS = Object.keys(WASTE_METHOD_LABELS) as (keyof typeof WASTE_METHOD_LABELS)[];
-const STATUS_KEYS = Object.keys(WASTE_REQUEST_STATUS_LABELS) as (keyof typeof WASTE_REQUEST_STATUS_LABELS)[];
+const METHOD_KEYS = Object.keys(WASTE_METHOD_LABELS) as WasteMethod[];
+
+/** Chip cách giao theo luồng đang bật trong cấu hình công khai (`waste.dropoff|pickup|mailin`); luồng tắt và cách khác nằm ở ô chọn. */
+const METHOD_CHIPS: readonly { method: WasteMethod; lane: 'dropoff' | 'pickup' | 'mailin'; label: string }[] = [
+  { method: 'DROP_OFF', lane: 'dropoff', label: 'Mang tới kho HCM' },
+  { method: 'PICKUP', lane: 'pickup', label: 'Tài xế lấy kèm đơn' },
+  { method: 'MAIL_IN', lane: 'mailin', label: 'Gửi về kho' },
+];
+
+/** AWAITING = bộ lọc AWAITING_RECEIPT của máy chủ (Đang mở hoặc Đang gửi). */
+type StatusPick = '' | 'AWAITING' | WasteRequestStatus;
+const STATUS_CHIPS: readonly { value: Exclude<StatusPick, ''>; label: string }[] = [
+  { value: 'AWAITING', label: 'Chờ tiếp nhận' },
+  { value: 'RECEIVED', label: 'Đã nhận' },
+  { value: 'COMPLETED', label: 'Đã cộng điểm' },
+];
+const OTHER_STATUS_KEYS = (Object.keys(WASTE_REQUEST_STATUS_LABELS) as WasteRequestStatus[]).filter(
+  (s) => !['OPEN', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED'].includes(s),
+);
 const TH = 'px-2 py-2 text-left text-xs font-medium text-stone-600';
 const TD = 'px-2 py-2 align-top text-sm text-stone-800';
 const WEIGHT_ERROR = 'Cân nặng là số nguyên từ 1 tới 100000 gram';
@@ -74,7 +95,7 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
   const [view, setView] = useState<'queue' | 'unmatched'>(() => (!customerId && startsOnUnmatched(seed) ? 'unmatched' : 'queue'));
   const [preset, setPreset] = useState<WasteQueuePreset | null>(() => (customerId ? null : initialPreset(isAdmin, seed)));
   const [method, setMethod] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<StatusPick>('');
   const [code, setCode] = useState('');
   const [receiving, setReceiving] = useState<AdminWasteRequestRowDTO | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -87,10 +108,18 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
     const chosen = presets.find((p) => p.key === preset);
     if (chosen) return chosen.query;
     const q: AdminWasteRequestQuery = {};
-    if (method) q.method = method as AdminWasteRequestQuery['method'];
-    if (status) q.status = status as AdminWasteRequestQuery['status'];
+    if (method) q.method = method as WasteMethod;
+    if (status === 'AWAITING') q.filter = 'AWAITING_RECEIPT';
+    else if (status) q.status = status;
     return q;
   })();
+
+  // Chưa tải được cấu hình hay chương trình đang tắt thì hiện đủ chip: kho vẫn xử lý yêu cầu cũ khi tắt luồng mới.
+  const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const lanes = configQ.data?.waste;
+  const enabledChips = lanes?.enabled ? METHOD_CHIPS.filter((m) => lanes[m.lane]) : [];
+  const methodChips = enabledChips.length > 0 ? enabledChips : METHOD_CHIPS;
+  const otherMethods = METHOD_KEYS.filter((m) => !methodChips.some((c) => c.method === m));
 
   const queue = useInfiniteQuery({
     queryKey: ['admin-waste-requests', query],
@@ -100,6 +129,10 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
     enabled: view === 'queue',
   });
   const lookup = useMutation({ mutationFn: (c: string) => lookupWasteRequests(c), meta: { skipAdminInvalidate: true } });
+  // Kết quả tra mã là một lần gọi, không nằm trong cache truy vấn: nút một chạm xong thì tra lại để dòng đổi trạng thái theo.
+  const quick = useWasteQuickActions(setOpenId, () => {
+    if (lookup.isSuccess && lookup.variables) lookup.mutate(lookup.variables);
+  });
 
   const queueRows = (queue.data?.pages ?? []).flatMap((p) => p.rows);
   const lookupRows = lookup.data ?? [];
@@ -116,7 +149,7 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
     setPreset(null);
     setMethod(v);
   };
-  const chooseStatus = (v: string) => {
+  const chooseStatus = (v: StatusPick) => {
     setCustomerOn(false);
     setPreset(null);
     setStatus(v);
@@ -140,8 +173,8 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
         <input
           type="text"
           className={`${FIELD_CLASS} w-72 max-w-full`}
-          aria-label="Mã yêu cầu, mã đơn hoặc mã vận đơn"
-          placeholder="Mã yêu cầu, mã đơn hoặc mã vận đơn"
+          aria-label="Mã yêu cầu, SĐT khách, mã đơn hoặc mã vận đơn"
+          placeholder="Mã TR-, SĐT, mã đơn, vận đơn"
           maxLength={64}
           value={code}
           onChange={(e) => setCode(e.target.value)}
@@ -152,13 +185,16 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
       {lookup.isSuccess && (
         <div data-lookup-results className="space-y-2">
           <h4 className="text-sm font-semibold text-stone-900">Kết quả tra mã</h4>
-          <RequestTable label="Kết quả tra mã" rows={lookupRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} />
+          <RequestTable label="Kết quả tra mã" rows={lookupRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} quick={quick} />
         </div>
       )}
 
       {receiving && (
         <ReceivePanel key={receiving.id} row={receiving} onClose={() => setReceiving(null)} />
       )}
+
+      {quick.flash && <Notice tone={quick.flash.tone} role={quick.flash.tone === 'danger' ? 'alert' : 'status'}>{quick.flash.text}</Notice>}
+      {quick.dialog}
 
       {openId && <WasteRequestDetail key={openId} id={openId} isAdmin={isAdmin} onClose={() => setOpenId(null)} />}
 
@@ -173,19 +209,38 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
         <UnmatchedView isAdmin={isAdmin} />
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <select className={FIELD_XS} aria-label="Cách giao" value={method} onChange={(e) => chooseMethod(e.target.value)}>
-              <option value="">Mọi cách giao</option>
-              {METHOD_KEYS.map((m) => <option key={m} value={m}>{WASTE_METHOD_LABELS[m]}</option>)}
-            </select>
-            <select className={FIELD_XS} aria-label="Trạng thái" value={status} onChange={(e) => chooseStatus(e.target.value)}>
-              <option value="">Mọi trạng thái</option>
-              {STATUS_KEYS.map((s) => <option key={s} value={s}>{WASTE_REQUEST_STATUS_LABELS[s]}</option>)}
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Lọc theo cách giao và trạng thái">
+            {methodChips.map((m) => (
+              <PresetChip key={m.method} label={m.label} pressed={!preset && !customerOn && method === m.method} onClick={() => chooseMethod(method === m.method ? '' : m.method)} />
+            ))}
+            {otherMethods.length > 0 && (
+              <select
+                className={FIELD_XS}
+                aria-label="Cách giao khác"
+                value={otherMethods.includes(method as WasteMethod) ? method : ''}
+                onChange={(e) => chooseMethod(e.target.value)}
+              >
+                <option value="">Cách giao khác</option>
+                {otherMethods.map((m) => <option key={m} value={m}>{WASTE_METHOD_LABELS[m]}</option>)}
+              </select>
+            )}
+            <span aria-hidden className="hidden h-5 w-px bg-stone-200 sm:block" />
+            {STATUS_CHIPS.map((s) => (
+              <PresetChip key={s.value} label={s.label} pressed={!preset && !customerOn && status === s.value} onClick={() => chooseStatus(status === s.value ? '' : s.value)} />
+            ))}
+            <select
+              className={FIELD_XS}
+              aria-label="Trạng thái khác"
+              value={(OTHER_STATUS_KEYS as string[]).includes(status) ? status : ''}
+              onChange={(e) => chooseStatus(e.target.value as StatusPick)}
+            >
+              <option value="">Trạng thái khác</option>
+              {OTHER_STATUS_KEYS.map((s) => <option key={s} value={s}>{WASTE_REQUEST_STATUS_LABELS[s]}</option>)}
             </select>
           </div>
 
           {queue.isError && <LoadError onRetry={() => void queue.refetch()} retrying={queue.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
-          <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} />
+          <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} quick={quick} />
           {queue.isSuccess && queueRows.length === 0 && <p className="text-sm text-stone-600">Không có yêu cầu nào trong hàng đợi này.</p>}
           {queue.hasNextPage && (
             <button type="button" className={BTN_SECONDARY} disabled={queue.isFetchingNextPage} onClick={() => void queue.fetchNextPage()}>
@@ -213,6 +268,7 @@ function RequestTable({
   onReceive,
   openId,
   onOpen,
+  quick,
 }: {
   label: string;
   rows: AdminWasteRequestRowDTO[];
@@ -220,6 +276,7 @@ function RequestTable({
   onReceive: (row: AdminWasteRequestRowDTO) => void;
   openId: string | null;
   onOpen: (id: string) => void;
+  quick: { busyId: string | null; receive: (r: AdminWasteRequestRowDTO) => void; count: (r: AdminWasteRequestRowDTO) => void };
 }) {
   return (
     <ScrollRegion label={label}>
@@ -269,9 +326,20 @@ function RequestTable({
                     <button type="button" className={BTN_XS_SECONDARY} aria-pressed={openId === r.id} onClick={() => onOpen(r.id)}>
                       Mở
                     </button>
-                    {canReceive(r) && (
-                      <button type="button" className={BTN_XS_SECONDARY} aria-pressed={receivingId === r.id} onClick={() => onReceive(r)}>
+                    {canQuickReceive(r) ? (
+                      <button type="button" data-quick="receive" className={BTN_XS_SECONDARY} disabled={quick.busyId !== null} onClick={() => quick.receive(r)}>
                         Nhận kiện
+                      </button>
+                    ) : (
+                      canReceive(r) && (
+                        <button type="button" className={BTN_XS_SECONDARY} aria-pressed={receivingId === r.id} onClick={() => onReceive(r)}>
+                          Nhận kiện
+                        </button>
+                      )
+                    )}
+                    {canQuickCount(r) && (
+                      <button type="button" data-quick="count" className={BTN_XS_SECONDARY} disabled={quick.busyId !== null} onClick={() => quick.count(r)}>
+                        Cộng điểm
                       </button>
                     )}
                   </div>

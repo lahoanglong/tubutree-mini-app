@@ -74,6 +74,8 @@ const mocks = vi.hoisted(() => ({
   dealerRevoked: false,
   statusCountsCalls: [] as unknown[][],
   statusCountsMode: 'ok' as 'ok' | 'fail' | 'pending',
+  opsCountsCalls: [] as unknown[][],
+  opsCountsMode: 'ok' as 'ok' | 'fail',
   orders: [] as unknown[],
   users: [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -263,6 +265,11 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       return { filename: 'nguoi-dung-2026-10-14.csv', bytes: 10 };
     },
     getUserDetail: async (id: string) => mocks.userDetail(id),
+    getOrderOpsCounts: async (...args: unknown[]) => {
+      mocks.opsCountsCalls.push(args);
+      if (mocks.opsCountsMode === 'fail') throw new Error('500');
+      return { guestWeb: 5, guestWebUnmerged: 2, bankTransferPending: 3, bankTransferOverdue: 1, overdueCancelled: 4, ttlHours: 24 };
+    },
     getOrderStatusCounts: async (...args: unknown[]) => {
       mocks.statusCountsCalls.push(args);
       if (mocks.statusCountsMode === 'fail') throw new Error('500');
@@ -411,6 +418,8 @@ beforeEach(() => {
   mocks.dealerRevoked = false;
   mocks.statusCountsCalls = [];
   mocks.statusCountsMode = 'ok';
+  mocks.opsCountsCalls = [];
+  mocks.opsCountsMode = 'ok';
   mocks.orders = [];
   mocks.users = [
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
@@ -4846,7 +4855,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
 });
 
 describe('admin/page — 390px: hàng đợi và Gomdon nằm trong ngăn kéo "Lọc (n)" (R-189)', () => {
-  it('trên danh sách chỉ còn hàng chip trạng thái; thu gom, VAT, hàng đợi tiền tính vào (n) và bật/tắt được trong ngăn kéo', async () => {
+  it('trên danh sách chỉ còn ô KPI vận hành và hàng chip trạng thái; thu gom, VAT tính vào (n) và bật/tắt được trong ngăn kéo, chờ CK bật ở ô KPI', async () => {
     const mm = vi.fn().mockImplementation((q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     window.matchMedia = mm as unknown as typeof window.matchMedia;
     try {
@@ -4858,16 +4867,19 @@ describe('admin/page — 390px: hàng đợi và Gomdon nằm trong ngăn kéo "
       expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"]')).toBeNull();
       expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Chưa lên Pancake'))).toBe(false);
       expect(container.querySelectorAll('[role="group"][aria-label="Lọc đơn theo trạng thái"]')).toHaveLength(1);
+      expect(container.querySelector('[data-ops-tile="bankPending"]')!.getAttribute('aria-pressed')).toBe('true');
       const open = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!;
-      expect(open.textContent).toBe('Lọc (3)');
+      expect(open.textContent).toBe('Lọc (2)');
       click(open);
       await flush();
       const queue = document.body.querySelector('[role="dialog"] [role="group"][aria-label="Cần xử lý"]')!;
       const pressed = [...queue.querySelectorAll('[aria-pressed="true"]')].map((b) => b.textContent);
-      expect(pressed).toEqual([expect.stringContaining('Chuyển khoản chờ tiền'), expect.stringContaining('Cần xử lý thu gom'), expect.stringContaining('VAT chờ xuất')]);
+      expect(pressed).toEqual([expect.stringContaining('Cần xử lý thu gom'), expect.stringContaining('VAT chờ xuất')]);
+      // Một lối vào cho một việc: chờ chuyển khoản lẻ chỉ còn ở ô KPI, ngăn kéo không lặp lại.
+      expect([...queue.querySelectorAll('button')].some((b) => b.textContent?.includes('Chuyển khoản chờ tiền'))).toBe(false);
       click([...queue.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Cần xử lý thu gom'))!);
       await flush();
-      expect([...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!.textContent).toBe('Lọc (2)');
+      expect([...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Lọc'))!.textContent).toBe('Lọc (1)');
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
     }
@@ -4905,6 +4917,7 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
   const group = (c: HTMLElement, label: string) => c.querySelector(`[role="group"][aria-label="${label}"]`)!;
   const chip = (c: HTMLElement, startsWith: string) =>
     [...group(c, 'Chờ nhận tiền chuyển khoản').querySelectorAll('button')].find((b) => b.textContent?.startsWith(startsWith))!;
+  const tile = (c: HTMLElement, k: 'guest' | 'bankPending' | 'overdueCancelled') => c.querySelector<HTMLButtonElement>(`[data-ops-tile="${k}"]`)!;
   const narrowScreen = () => {
     const mm = vi.fn().mockImplementation((q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
     window.matchMedia = mm as unknown as typeof window.matchMedia;
@@ -4928,17 +4941,18 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     expect(window.location.search).toBe('?tab=orders');
   });
 
-  it('hàng đợi chuyển khoản vào bằng link: chip có số từ hộp việc, bấm đổi hàng đợi và tắt được, link theo kịp', async () => {
+  it('hàng đợi chuyển khoản vào bằng link: ô KPI "Chờ chuyển khoản" bật kèm số quá hạn, chip đại lý có số từ hộp việc, bấm đổi hàng đợi và tắt được, link theo kịp', async () => {
     window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
     const { container } = await mount();
     expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc' });
-    expect(chip(container, 'Chuyển khoản chờ tiền').textContent).toBe('Chuyển khoản chờ tiền (1)');
-    expect(chip(container, 'Chuyển khoản chờ tiền').getAttribute('aria-pressed')).toBe('true');
+    expect(tile(container, 'bankPending').textContent).toBe('Chờ chuyển khoản31 quá hạn');
+    expect(tile(container, 'bankPending').getAttribute('aria-pressed')).toBe('true');
     expect(chip(container, 'Đại lý chờ tiền').textContent).toBe('Đại lý chờ tiền (2)');
 
     click(chip(container, 'Đại lý chờ tiền'));
     await flush();
     expect(lastArgs()[9]).toEqual({ queue: 'dealer_transfer_to_confirm', order: 'asc' });
+    expect(tile(container, 'bankPending').getAttribute('aria-pressed')).toBe('false');
     expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=dealer_transfer_to_confirm');
 
     click(chip(container, 'Đại lý chờ tiền'));
@@ -4952,14 +4966,106 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     window.history.replaceState(null, '', '/admin?tab=orders&status=CONFIRMED');
     const { container } = await mount();
     expect(lastArgs()[1]).toBe('CONFIRMED');
-    click(chip(container, 'Chuyển khoản chờ tiền'));
+    click(tile(container, 'bankPending'));
     await flush();
     expect(lastArgs()[1]).toBe('PENDING_PAYMENT');
     expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc' });
-    click(chip(container, 'Chuyển khoản chờ tiền'));
+    click(tile(container, 'bankPending'));
     await flush();
     expect(lastArgs()[1]).toBe('CONFIRMED');
     expect(lastArgs()[9]).toEqual({});
+  });
+
+  it('w7-03: ô KPI đầu tab đọc số từ GET orders/ops-counts cùng bộ lọc (trừ trạng thái), số dạng tabular-nums; lỗi thì hiện "—" chứ không in 0', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders&status=CONFIRMED&invoice=pending');
+    const { container } = await mount();
+    const strip = container.querySelector('[data-order-ops]')!;
+    expect(strip.getAttribute('aria-label')).toBe('Lọc nhanh vận hành đơn');
+    expect(tile(container, 'guest').textContent).toBe('Khách vãng lai (Web)52 chưa gộp Zalo');
+    expect(tile(container, 'overdueCancelled').textContent).toBe('Tự huỷ quá hạn CK 24h4');
+    expect(tile(container, 'guest').querySelector('.tabular-nums')).not.toBeNull();
+    expect(mocks.opsCountsCalls.at(-1)![0]).toEqual(expect.objectContaining({ invoice: 'pending' }));
+    expect(mocks.opsCountsCalls.at(-1)![0]).not.toHaveProperty('status');
+
+    document.body.innerHTML = '';
+    mocks.opsCountsMode = 'fail';
+    const again = await mount();
+    expect(tile(again.container, 'guest').textContent).toBe('Khách vãng lai (Web)—');
+    expect(tile(again.container, 'overdueCancelled').textContent).toBe('Tự huỷ quá hạn CK 24h—');
+  });
+
+  it('w7-03: ô "Tự huỷ quá hạn CK" lọc đơn CK hệ thống tự huỷ (Đã huỷ, mới nhất trước), F5 giữ; bấm lại trả về trạng thái trước', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    click(tile(container, 'overdueCancelled'));
+    await flush();
+    expect(lastArgs()[1]).toBe('CANCELLED');
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_overdue_cancelled', order: 'desc' });
+    expect(tile(container, 'overdueCancelled').getAttribute('aria-pressed')).toBe('true');
+    expect(window.location.search).toBe('?tab=orders&status=CANCELLED&queue=bank_transfer_overdue_cancelled');
+
+    document.body.innerHTML = '';
+    const again = await mount();
+    expect(lastArgs()[1]).toBe('CANCELLED');
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_overdue_cancelled', order: 'desc' });
+    click(tile(again.container, 'overdueCancelled'));
+    await flush();
+    expect(lastArgs()[1]).toBeUndefined();
+    expect(lastArgs()[9]).toEqual({});
+    expect(window.location.search).toBe('?tab=orders');
+  });
+
+  it('w7-03: ô "Khách vãng lai (Web)" thêm guest=web, ghép được với chờ CK, link giữ; số KPI gửi kèm guest', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    click(tile(container, 'guest'));
+    await flush();
+    expect(lastArgs()[9]).toEqual({ guest: 'web' });
+    expect(window.location.search).toBe('?tab=orders&guest=web');
+    expect(mocks.opsCountsCalls.at(-1)![0]).toEqual(expect.objectContaining({ guest: 'web' }));
+    click(tile(container, 'bankPending'));
+    await flush();
+    expect(lastArgs()[9]).toEqual({ guest: 'web', queue: 'bank_transfer_to_confirm', order: 'asc' });
+    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm&guest=web');
+
+    document.body.innerHTML = '';
+    const again = await mount();
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc', guest: 'web' });
+    expect(tile(again.container, 'guest').getAttribute('aria-pressed')).toBe('true');
+    click(tile(again.container, 'guest'));
+    await flush();
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc' });
+  });
+
+  it('w7-03: dòng đơn hiện badge nguồn khách, SĐT vãng lai, hạn/quá hạn CK, lý do huỷ và lúc nhả kho (bảng lẫn thẻ 390px)', async () => {
+    mocks.orders = [
+      orderOf('TBG1', { user: { id: 'g1', fullName: null, phone: null }, guestPhone: '0977000111', guestSource: 'guest', paymentDeadline: '2020-01-01T01:00:00.000Z' }),
+      orderOf('TBG2', { guestPhone: '0977000222', guestSource: 'merged', paymentDeadline: '2099-01-01T01:00:00.000Z' }),
+      orderOf('TBG3', {
+        status: 'CANCELLED',
+        allowedTransitions: [],
+        canConfirmPayment: false,
+        cancellation: { at: '2026-11-19T02:05:00.000Z', note: 'Tự động hủy do quá hạn chuyển khoản 24h', actorType: 'SYSTEM', overdue: true },
+      }),
+      orderOf('TBG4', { status: 'CANCELLED', allowedTransitions: [], canConfirmPayment: false, cancellation: { at: '2026-11-19T02:05:00.000Z', note: null, actorType: 'CUSTOMER', overdue: false } }),
+    ];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    for (const narrow of [false, true]) {
+      document.body.innerHTML = '';
+      if (narrow) narrowScreen();
+      const { container } = await mount();
+      const text = (code: string) =>
+        [...container.querySelectorAll(narrow ? '[data-orders-cards] li' : 'tbody tr')].find((r) => r.textContent?.includes(code))!.textContent!;
+      expect(text('TBG1')).toContain('Vãng lai');
+      expect(text('TBG1')).toContain('0977000111');
+      expect(text('TBG1')).toContain('Quá hạn CK từ 08:00 01/01');
+      expect(text('TBG2')).toContain('Đã gộp Zalo');
+      expect(text('TBG2')).toContain('Hạn CK 08:00 01/01');
+      expect(text('TBG3')).toContain('Tự huỷ quá hạn CK · nhả kho 09:05 19/11');
+      expect(text('TBG3')).toContain('Tự động hủy do quá hạn chuyển khoản 24h');
+      expect(text('TBG4')).toContain('Khách huỷ · nhả kho 09:05 19/11');
+      expect(text('TBG4')).not.toContain('Vãng lai');
+    }
   });
 
   it('chi tiết đơn có tên và SĐT khách kèm nút "Xem hồ sơ"; mã đơn trong hồ sơ mở đúng đơn đó', async () => {

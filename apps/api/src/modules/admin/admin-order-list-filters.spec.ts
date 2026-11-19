@@ -33,6 +33,7 @@ function listPrisma(storefrontRow: { id: string } | null = null, titleRows: { id
   const storefrontMany = jest.fn().mockResolvedValue(titleRows);
   const prisma = {
     order: { findMany, count },
+    orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
     storefront: { findFirst: storefrontFind, findMany: storefrontMany },
     $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
   };

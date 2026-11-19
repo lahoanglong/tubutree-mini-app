@@ -24,9 +24,26 @@ const PAGE_ONE = {
 };
 
 async function mount(
-  opts: { isAdmin?: boolean; seed?: WasteSeed | null; initialUserId?: string | null; queue?: Route; lookup?: Route; receive?: Route; receive9?: Route; reject?: Route; reject9?: Route; unmatched?: Route } = {},
+  opts: {
+    isAdmin?: boolean;
+    seed?: WasteSeed | null;
+    initialUserId?: string | null;
+    queue?: Route;
+    lookup?: Route;
+    receive?: Route;
+    receive9?: Route;
+    reject?: Route;
+    reject9?: Route;
+    unmatched?: Route;
+    config?: Route;
+    detail?: Route;
+    confirm?: Route;
+  } = {},
 ) {
   const api = mockFetch({
+    '/config/public': opts.config ?? { body: {} },
+    '/admin/waste/requests/r1/confirm':
+      opts.confirm ?? { body: { requestId: 'r1', code: 'TR-7K3M9Q', status: 'COMPLETED', pointsAwarded: 20_000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 5 } },
     '/admin/waste/requests/r1/reject': opts.reject ?? { body: { requestId: 'r1' } },
     '/admin/waste/requests/r9/reject': opts.reject9 ?? { body: { requestId: 'r9' } },
     '/admin/waste/unmatched/un1/resolve': { body: wasteUnmatched({ status: 'RESOLVED' }) },
@@ -42,7 +59,7 @@ async function mount(
             ? { id: 'un1' }
             : [wasteUnmatched(), wasteUnmatched({ id: 'un3', reason: 'TR_TRACKING_CONFLICT', trackingCode: 'GHN777', relatedRequestId: 'r4' })],
       })),
-    '/admin/waste/requests/r1': { body: wasteRequestDetail() },
+    '/admin/waste/requests/r1': opts.detail ?? { body: wasteRequestDetail() },
     '/admin/waste/requests': opts.queue ?? { body: PAGE_ONE },
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -52,7 +69,11 @@ async function mount(
   return { api, c: r.container };
 }
 
-const LOOKUP_INPUT = 'input[aria-label="Mã yêu cầu, mã đơn hoặc mã vận đơn"]';
+const LOOKUP_INPUT = 'input[aria-label="Mã yêu cầu, SĐT khách, mã đơn hoặc mã vận đơn"]';
+const quickGroup = (c: HTMLElement) => c.querySelector('[role="group"][aria-label="Lọc theo cách giao và trạng thái"]')!;
+const quickChip = (c: HTMLElement, label: string) => Array.from(quickGroup(c).querySelectorAll('button')).find((b) => b.textContent === label)!;
+const optionTexts = (sel: Element | null) => Array.from(sel!.querySelectorAll('option')).map((o) => o.textContent);
+const lastRequestUrl = (api: { calls: { url: string }[] }) => requestUrls(api).at(-1)!;
 const chipGroup = (c: HTMLElement) => c.querySelector('[role="group"][aria-label="Hàng đợi yêu cầu"]')!;
 const chips = (c: HTMLElement) => Array.from(chipGroup(c).querySelectorAll('button'));
 const chip = (c: HTMLElement, label: string) => chips(c).find((b) => b.textContent === label)!;
@@ -117,15 +138,67 @@ describe('WasteRequestsSection', () => {
     expect(codeCell.className).toContain('font-mono');
   });
 
-  it('lọc theo cách giao và trạng thái', async () => {
-    const { c, api } = await mount();
-    selectValue(c.querySelector('select[aria-label="Cách giao"]'), 'MAIL_IN');
+  it('w7-03: chip cách giao chỉ theo luồng đang bật, chip Chờ tiếp nhận / Đã nhận / Đã cộng điểm, ô chọn cho phần còn lại', async () => {
+    const { c, api } = await mount({ config: { body: { waste: { enabled: true, dropoff: true, mailin: false, pickup: true } } } });
+    expect(Array.from(quickGroup(c).querySelectorAll('button')).map((b) => b.textContent)).toEqual([
+      'Mang tới kho HCM',
+      'Tài xế lấy kèm đơn',
+      'Chờ tiếp nhận',
+      'Đã nhận',
+      'Đã cộng điểm',
+    ]);
+    expect(optionTexts(quickGroup(c).querySelector('select[aria-label="Cách giao khác"]'))).toEqual(['Cách giao khác', 'Gửi về kho', 'Shipper lấy tận nhà']);
+    expect(optionTexts(quickGroup(c).querySelector('select[aria-label="Trạng thái khác"]'))).toEqual(['Trạng thái khác', 'Bị từ chối', 'Đã huỷ', 'Hết hạn', 'Đã thu hồi điểm']);
+
+    click(quickChip(c, 'Mang tới kho HCM'));
     await flush();
-    selectValue(c.querySelector('select[aria-label="Trạng thái"]'), 'IN_TRANSIT');
-    await flush();
-    const urls = requestUrls(api);
-    expect(urls[urls.length - 1]!.endsWith('/admin/waste/requests?method=MAIL_IN&status=IN_TRANSIT')).toBe(true);
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=DROP_OFF')).toBe(true);
     expect(chips(c).some((b) => b.getAttribute('aria-pressed') === 'true')).toBe(false);
+    click(quickChip(c, 'Chờ tiếp nhận'));
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=DROP_OFF&filter=AWAITING_RECEIPT')).toBe(true);
+    click(quickChip(c, 'Đã nhận'));
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=DROP_OFF&status=RECEIVED')).toBe(true);
+    expect(quickChip(c, 'Chờ tiếp nhận').getAttribute('aria-pressed')).toBe('false');
+    click(quickChip(c, 'Đã nhận'));
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=DROP_OFF')).toBe(true);
+    click(quickChip(c, 'Đã cộng điểm'));
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=DROP_OFF&status=COMPLETED')).toBe(true);
+
+    selectValue(quickGroup(c).querySelector('select[aria-label="Trạng thái khác"]'), 'EXPIRED');
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=DROP_OFF&status=EXPIRED')).toBe(true);
+    expect(quickChip(c, 'Đã cộng điểm').getAttribute('aria-pressed')).toBe('false');
+    selectValue(quickGroup(c).querySelector('select[aria-label="Cách giao khác"]'), 'MAIL_IN');
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?method=MAIL_IN&status=EXPIRED')).toBe(true);
+    expect(quickChip(c, 'Mang tới kho HCM').getAttribute('aria-pressed')).toBe('false');
+
+    click(chip(c, 'Kho cần đếm'));
+    await flush();
+    expect(lastRequestUrl(api).endsWith('/admin/waste/requests?filter=TO_COUNT')).toBe(true);
+    expect(Array.from(quickGroup(c).querySelectorAll('[aria-pressed="true"]'))).toHaveLength(0);
+  });
+
+  it('w7-03: chưa tải được cấu hình hay chương trình đang tắt thì đủ 3 chip cách giao (kho vẫn xử lý yêu cầu cũ)', async () => {
+    for (const config of [{ status: 500, body: {} }, { body: { waste: { enabled: false, dropoff: false, mailin: false, pickup: false } } }]) {
+      const { c } = await mount({ config });
+      expect(Array.from(quickGroup(c).querySelectorAll('button')).map((b) => b.textContent).slice(0, 3)).toEqual(['Mang tới kho HCM', 'Tài xế lấy kèm đơn', 'Gửi về kho']);
+      expect(optionTexts(quickGroup(c).querySelector('select[aria-label="Cách giao khác"]'))).toEqual(['Cách giao khác', 'Shipper lấy tận nhà']);
+    }
+  });
+
+  it('w7-03: ô tra nhận SĐT khách (gửi nguyên văn để máy chủ chuẩn hoá), trần 64 ký tự', async () => {
+    const { c, api } = await mount({ lookup: { body: [wasteRequestRow()] } });
+    expect(c.querySelector<HTMLInputElement>(LOOKUP_INPUT)!.maxLength).toBe(64);
+    await lookup(c, '0901 234 567');
+    const urls = api.calls.map((x) => x.url).filter((u) => u.includes('/lookup'));
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0]!, 'http://x').searchParams.get('code')).toBe('0901 234 567');
+    expect(lookupRow(c, 'r1')).not.toBeNull();
   });
 
   it('dòng yêu cầu: nhãn tiếng Việt, số điện thoại đúng như máy chủ trả, lý do chờ, trùng mã vận đơn', async () => {
@@ -249,9 +322,8 @@ describe('WasteRequestsSection', () => {
       await lookup(c);
       click(btn(lookupRow(c, 'r1'), 'Nhận kiện'));
       expect(doorBtn(c)).not.toBeNull();
-      click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
-      expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
-      expect(doorBtn(c)).toBeNull();
+      // Túi thu kèm đơn nhận một chạm qua hộp thoại, không mở bảng nhận kiện nên không có lối từ chối tại cửa.
+      expect(lookupRow(c, 'r9').querySelector('[data-quick="receive"]')).not.toBeNull();
       click(btn(lookupRow(c, 'r5'), 'Nhận kiện'));
       expect(c.querySelector('[data-receive-panel]')).not.toBeNull();
       expect(doorBtn(c)).toBeNull();
@@ -439,38 +511,102 @@ describe('WasteRequestsSection', () => {
     expect(c.textContent).toContain('Yêu cầu đã hết hạn: kiện đã chuyển vào hàng không rõ chủ');
   });
 
-  it('thu kèm đơn nhận theo mã đơn, không cần đối chiếu', async () => {
-    const { c, api } = await mount({
-      lookup: {
-        body: [wasteRequestRow({ id: 'r9', code: 'TR-PICK99', method: 'PICKUP', orderCode: 'TUBU2026101546241', carrier: null, trackingCode: null })],
-      },
-    });
+  const PICK = { id: 'r9', code: 'TR-PICK99', method: 'PICKUP', status: 'OPEN', orderCode: 'TUBU2026101546241', carrier: null, trackingCode: null } as const;
+
+  it('thu kèm đơn đã giao: Nhận kiện một chạm theo mã đơn, hỏi lại rồi gửi thân rỗng, tra lại để dòng đổi trạng thái', async () => {
+    const { c, api } = await mount({ lookup: { body: [wasteRequestRow(PICK)] } });
     await lookup(c, 'TUBU2026101546241');
-    click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
-    expect(c.querySelector('input[name="phoneMatchConfirmed"]')).toBeNull();
-    expect(confirmBtn(c).disabled).toBe(false);
-    click(confirmBtn(c));
+    const b = lookupRow(c, 'r9').querySelector<HTMLButtonElement>('[data-quick="receive"]')!;
+    expect(b.textContent).toBe('Nhận kiện');
+    click(b);
+    click(b);
+    await flush();
+    expect(c.querySelector('[data-receive-panel]')).toBeNull();
+    expect(confirmDialog()!.textContent).toContain('Kho đã nhận túi thu kèm đơn TUBU2026101546241');
+    answerConfirm(true);
+    await flush();
     await flush();
     const sent = posts(api, '/admin/waste/requests/r9/receive');
     expect(sent).toHaveLength(1);
     expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({});
+    expect(c.textContent).toContain('Đã nhận TR-PICK99 lúc 09:05.');
+    expect(api.calls.filter((x) => x.url.includes('/admin/waste/requests/lookup'))).toHaveLength(2);
   });
 
-  it('thu kèm đơn: gõ mã TR- trên kiện thì gửi parcelCode để máy chủ đối chiếu', async () => {
+  it('thu kèm đơn: huỷ hộp thoại thì không gửi gì; đơn chưa giao hay yêu cầu không còn mở thì không có nút một chạm', async () => {
     const { c, api } = await mount({
       lookup: {
-        body: [wasteRequestRow({ id: 'r9', code: 'TR-PICK99', method: 'PICKUP', orderCode: 'TUBU2026101546241', carrier: null, trackingCode: null })],
+        body: [
+          wasteRequestRow(PICK),
+          wasteRequestRow({ ...PICK, id: 'r10', code: 'TR-PICK10', waitingReason: 'ORDER_NOT_DELIVERED' }),
+          wasteRequestRow({ ...PICK, id: 'r11', code: 'TR-PICK11', status: 'COMPLETED', pointsAwarded: 5000 }),
+        ],
       },
     });
     await lookup(c, 'TUBU2026101546241');
-    click(btn(lookupRow(c, 'r9'), 'Nhận kiện'));
-    expect(c.querySelector('input[name="parcelTracking"]')).toBeNull();
-    typeInto(c.querySelector('input[name="parcelCode"]'), 'TR-PICK99');
-    click(confirmBtn(c));
+    click(lookupRow(c, 'r9').querySelector('[data-quick="receive"]'));
     await flush();
-    const sent = posts(api, '/admin/waste/requests/r9/receive');
+    answerConfirm(false);
+    await flush();
+    expect(posts(api, '/receive')).toHaveLength(0);
+    expect(lookupRow(c, 'r10').querySelector('[data-quick="receive"]')).toBeNull();
+    expect(lookupRow(c, 'r11').querySelector('[data-quick="receive"]')).toBeNull();
+    expect(btn(lookupRow(c, 'r11'), 'Nhận kiện')).not.toBeNull();
+  });
+
+  it('w7-03: Cộng điểm một chạm đọc chi tiết, hỏi lại kèm số điểm theo khai, gửi số nhận bằng số khai', async () => {
+    const { c, api } = await mount({ queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' }), wasteRequestRow({ id: 'r2', code: 'TR-BBBB22' })], nextCursor: null } } });
+    expect(row(c, 'r2').querySelector('[data-quick]')).toBeNull();
+    const b = row(c, 'r1').querySelector<HTMLButtonElement>('[data-quick="count"]')!;
+    expect(b.textContent).toBe('Cộng điểm');
+    click(b);
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Cộng 20.000 điểm theo đúng số khách khai: 10 thùng Thùng carton cũ, 50 vỏ Vỏ hộp sữa');
+    answerConfirm(true);
+    await flush();
+    const sent = posts(api, '/admin/waste/requests/r1/confirm');
     expect(sent).toHaveLength(1);
-    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ match: { parcelCode: 'TR-PICK99' } });
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({
+      lines: [
+        { itemId: 'i1', declaredQty: 10, receivedQty: 10 },
+        { itemId: 'i3', declaredQty: 50, receivedQty: 50 },
+      ],
+    });
+    expect(c.textContent).toContain('Đã cộng 20.000 điểm cho TR-7K3M9Q.');
+  });
+
+  it('w7-03: Cộng điểm gặp món nguy hại hay yêu cầu chưa tới bước đếm thì mở chi tiết, không hỏi và không gửi', async () => {
+    const detail = wasteRequestDetail();
+    const hazardous = { ...detail, lines: detail.lines.map((l, i) => (i === 0 ? { ...l, hazardous: true } : l)) };
+    const a = await mount({ queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' })], nextCursor: null } }, detail: { body: hazardous } });
+    click(row(a.c, 'r1').querySelector('[data-quick="count"]'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(a.c.textContent).toContain('TR-7K3M9Q có món nguy hại cần kiểm: đếm ở màn chi tiết.');
+    expect(posts(a.api, '/confirm')).toHaveLength(0);
+    a.c.ownerDocument.body.innerHTML = '';
+
+    const b = await mount({
+      queue: { body: { rows: [wasteRequestRow({ method: 'DROP_OFF', status: 'OPEN', carrier: null, trackingCode: null })], nextCursor: null } },
+      detail: { body: wasteRequestDetail({ method: 'DROP_OFF', status: 'OPEN', point: null }) },
+    });
+    click(row(b.c, 'r1').querySelector('[data-quick="count"]'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(b.c.textContent).toContain('TR-7K3M9Q chưa tới bước đếm ở kho: đếm ở màn chi tiết.');
+    expect(posts(b.api, '/confirm')).toHaveLength(0);
+  });
+
+  it('w7-03: lỗi máy chủ khi Cộng điểm hiện nguyên văn kèm mã yêu cầu', async () => {
+    const { c } = await mount({
+      queue: { body: { rows: [wasteRequestRow({ status: 'RECEIVED' })], nextCursor: null } },
+      confirm: { status: 409, body: { message: 'Yêu cầu đã được xác nhận' } },
+    });
+    click(row(c, 'r1').querySelector('[data-quick="count"]'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('TR-7K3M9Q: Yêu cầu đã được xác nhận');
   });
 
   it('nhận kiện từ hàng đợi: kết quả vẫn hiện sau khi danh sách tải lại', async () => {

@@ -47,7 +47,8 @@ export const WASTE_PREVIEW_BLOCK_VALUES = ['BELOW_MIN', 'MONTH_CAP_FOR_MIN', 'IT
 export type WastePreviewBlock = (typeof WASTE_PREVIEW_BLOCK_VALUES)[number];
 export const WASTE_ALERT_KIND_VALUES = ['QUOTA_PACE', 'FULL_MATCH', 'FULL_MATCH_CONFIRMER', 'AVG_UNITS', 'AVG_UNITS_CONFIRMER', 'REPEAT_CUSTOMER', 'LOOKUP_MISS', 'STAFF_ACCOUNT_CONFIRMED', 'STAFF_DIRECT'] as const;
 export type WasteAlertKind = (typeof WASTE_ALERT_KIND_VALUES)[number];
-export const WASTE_REQUEST_QUEUE_FILTER_VALUES = ['TO_COUNT', 'EXPIRED', 'CUSTOMER_BLOCKED', 'ORDER_NOT_DELIVERED', 'TRANSIT_OVERDUE', 'ORDER_MISMATCH'] as const;
+/** AWAITING_RECEIPT = chờ tiếp nhận: yêu cầu còn OPEN hay IN_TRANSIT (kho chưa nhận hàng, chưa cộng điểm). */
+export const WASTE_REQUEST_QUEUE_FILTER_VALUES = ['TO_COUNT', 'EXPIRED', 'CUSTOMER_BLOCKED', 'ORDER_NOT_DELIVERED', 'TRANSIT_OVERDUE', 'ORDER_MISMATCH', 'AWAITING_RECEIPT'] as const;
 export type WasteRequestQueueFilter = (typeof WASTE_REQUEST_QUEUE_FILTER_VALUES)[number];
 
 export interface WasteFeeTable { zones: { name: string; provinceCodes: string[]; low: number; high: number }[]; defaultZone: { name: string; low: number; high: number } }

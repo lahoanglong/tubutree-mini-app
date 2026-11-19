@@ -51,7 +51,7 @@ export function OrderExtraFilters({
   useEffect(() => setStoreInput(value.storefront ?? ''), [value.storefront]);
   const picked: PickedItem | null = value.referrerUserId ? { id: value.referrerUserId, label: referrerLabel || 'CTV đang lọc' } : null;
   const set = <K extends keyof OrderListExtra>(key: K, v: OrderListExtra[K] | '') => onChange(v ? { ...value, [key]: v } : without(value, key));
-  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.paymentUnlinked || value.referrerUserId || value.userId || value.storefront);
+  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.paymentUnlinked || value.guest || value.referrerUserId || value.userId || value.storefront);
   const kindHint = ORDER_KIND_OPTIONS.find((o) => o.k === value.kind)?.hint;
 
   const submitStore = (e: React.FormEvent) => {

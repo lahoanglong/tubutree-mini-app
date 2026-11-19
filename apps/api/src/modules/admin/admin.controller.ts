@@ -46,6 +46,7 @@ import {
   ORDER_KINDS,
   ORDER_QUEUES,
   PAYMENT_UNLINKED_FILTERS,
+  ORDER_GUEST_FILTERS,
   ORDER_LIST_PLATFORMS,
   ORDER_PAYMENT_STATUSES,
   PANCAKE_FILTERS,
@@ -54,6 +55,7 @@ import {
   type OrderListPlatform,
   type OrderQueue,
   type PaymentUnlinkedFilter,
+  type OrderGuestFilter,
   type OrderPaymentFilter,
   type PancakeFilter,
   type RecyclingFilter,
@@ -350,6 +352,8 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
+  /** web = đơn khách vãng lai đặt trên web không đăng nhập (có orders.guestPhone), kể cả đơn đã gộp vào tài khoản Zalo. */
+  @IsOptional() @IsIn([...ORDER_GUEST_FILTERS]) guest?: OrderGuestFilter;
   /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   /** Id khách đặt đơn (từ hồ sơ khách: "Xem tất cả đơn"). */
@@ -374,6 +378,8 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
+  /** web = đơn khách vãng lai đặt trên web không đăng nhập (có orders.guestPhone), kể cả đơn đã gộp vào tài khoản Zalo. */
+  @IsOptional() @IsIn([...ORDER_GUEST_FILTERS]) guest?: OrderGuestFilter;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
@@ -392,6 +398,8 @@ export class OrderStatusCountsQuery {
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   @IsOptional() @IsIn([...PAYMENT_UNLINKED_FILTERS]) paymentUnlinked?: PaymentUnlinkedFilter;
+  /** web = đơn khách vãng lai đặt trên web không đăng nhập (có orders.guestPhone), kể cả đơn đã gộp vào tài khoản Zalo. */
+  @IsOptional() @IsIn([...ORDER_GUEST_FILTERS]) guest?: OrderGuestFilter;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
@@ -591,13 +599,14 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    const { kind, payment, platform, queue, paymentUnlinked, referrerUserId, userId, storefront, order } = q;
+    const { kind, payment, platform, queue, paymentUnlinked, guest, referrerUserId, userId, storefront, order } = q;
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
       kind,
       payment,
       platform,
       queue,
       paymentUnlinked,
+      guest,
       referrerUserId,
       userId,
       storefront,
@@ -610,6 +619,16 @@ export class AdminController {
   @Get('orders/status-counts')
   orderStatusCounts(@Query() q: OrderStatusCountsQuery, @CurrentUser() viewer: JwtPayload) {
     return this.admin.orderStatusCounts(q, viewer);
+  }
+
+  /**
+   * Số KPI đầu tab Đơn hàng (khách vãng lai web, chờ chuyển khoản, tự huỷ quá hạn chuyển khoản): cùng bộ lọc danh sách trừ trạng thái và
+   * hàng đợi; số "vãng lai" bỏ luôn bộ lọc vãng lai để bấm vào ra đúng bấy nhiêu đơn.
+   */
+  @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
+  @Get('orders/ops-counts')
+  orderOpsCounts(@Query() q: OrderStatusCountsQuery, @CurrentUser() viewer: JwtPayload) {
+    return this.admin.orderOpsCounts(q, viewer);
   }
 
   /**

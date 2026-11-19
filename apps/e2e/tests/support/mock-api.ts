@@ -388,6 +388,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/waste/me/open-count', { count: 0 });
       // Đầu và chân trang web đọc cờ Đổi rác ở MỌI trang; spec nào cần cờ bật thì tự mock /config/public.
       api.fallback('GET', '/config/public', {});
+      // Ô KPI đầu tab Đơn hàng (admin) đọc số đếm vận hành ở mọi lần mở tab; spec kiểm ô KPI tự mock số khác 0.
+      api.fallback('GET', '/admin/orders/ops-counts', { guestWeb: 0, guestWebUnmerged: 0, bankTransferPending: 0, bankTransferOverdue: 0, overdueCancelled: 0, ttlHours: 24 });
       // Thẻ xem trước chuyển khoản ở thanh toán hỏi cờ checkout.transfer_preview_enabled khi khách chọn Chuyển khoản: mặc định cờ tắt như PROD.
       api.fallback('GET', '/payments/bank-preview', { enabled: false, bank: null });
       // Banner chiến dịch (Trang chủ, Ưu đãi) là công khai và tự ẩn khi không có: mặc định không có chiến dịch nào.

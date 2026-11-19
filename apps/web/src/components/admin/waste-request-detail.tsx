@@ -54,7 +54,7 @@ export function wastePointsForLines(lines: { receivedQty: number; unitsPerPoint:
   return lines.reduce((sum, l) => sum + Math.floor(l.receivedQty / l.unitsPerPoint) * l.pointsPerGroup, 0);
 }
 
-const canCountRequest = (r: WasteRequestAdminDetailDTO) =>
+export const canCountRequest = (r: WasteRequestAdminDetailDTO) =>
   r.status === 'RECEIVED' || (r.method === 'DROP_OFF' && r.status === 'OPEN' && r.point?.kind === 'WAREHOUSE');
 
 function useRefresh(id: string) {

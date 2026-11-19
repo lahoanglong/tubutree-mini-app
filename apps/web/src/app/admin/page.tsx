@@ -79,6 +79,9 @@ import {
   type AdminQuickReply,
   countInvoicePending,
   getOrderStatusCounts,
+  getOrderOpsCounts,
+  ORDER_QUEUE_VALUES,
+  type OrderGuestFilter,
   countRecyclingAttention,
   countPancakeAttention,
   listDealerRewardClaims,
@@ -188,6 +191,7 @@ import { DEALER_APP_FILTERS, dealerAppStatusLabel } from '@/lib/dealer-applicati
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { isRefundInProgress, orderPaymentStatusShort, shippingStatusLabel } from '@/lib/order-view';
 import { OrderPaymentSummary } from '@/components/admin/order-payment-summary';
+import { OrderCancellationLine, OrderGuestBadge, OrderOpsStrip, OrderPaymentDeadline, orderCustomerPhone, type OrderOpsKey } from '@/components/admin/order-ops';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { hasVisibleText, isPhoneInput, stripInvisible } from '@/lib/admin-visible-text';
 import { STAFF_USER_MAX_PAGE, staffUserSearchProblem } from '@/lib/staff-user-search';
@@ -470,8 +474,8 @@ function firstAllowedTab(allowed: ReadonlySet<Tab>): Tab {
  * F5 không mất chỗ đang xem. Đọc window.location sau khi mount (không dùng useSearchParams — trang
  * client thuần, tránh bắt buộc Suspense boundary khi build).
  */
-type OrdersUrlExtras = { status: string; invoice: InvoiceFilter | ''; queue: OrderQueue | ''; paymentUnlinked: PaymentUnlinkedFilter | '' };
-const NO_ORDERS_URL_EXTRAS: OrdersUrlExtras = { status: '', invoice: '', queue: '', paymentUnlinked: '' };
+type OrdersUrlExtras = { status: string; invoice: InvoiceFilter | ''; queue: OrderQueue | ''; paymentUnlinked: PaymentUnlinkedFilter | ''; guest: OrderGuestFilter | '' };
+const NO_ORDERS_URL_EXTRAS: OrdersUrlExtras = { status: '', invoice: '', queue: '', paymentUnlinked: '', guest: '' };
 
 function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pancake: PancakeFilter | ''; orders: OrdersUrlExtras } {
   if (typeof window === 'undefined') return { tab: null, recycling: '', pancake: '', orders: NO_ORDERS_URL_EXTRAS };
@@ -483,6 +487,7 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
   const i = sp.get('invoice');
   const q = sp.get('queue');
   const pu = sp.get('paymentUnlinked');
+  const g = sp.get('guest');
   return {
     tab: t && TAB_KEYS.has(t as Tab) ? (t as Tab) : null,
     recycling: r === 'attention' || r === 'all' ? r : '',
@@ -490,8 +495,9 @@ function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pan
     orders: {
       status: s && ORDER_STATUS_CHIPS.some((c) => c.k === s) ? s : '',
       invoice: i === 'pending' || i === 'issued' || i === 'all' ? i : '',
-      queue: q === 'bank_transfer_to_confirm' || q === 'dealer_transfer_to_confirm' ? q : '',
+      queue: q && (ORDER_QUEUE_VALUES as readonly string[]).includes(q) ? (q as OrderQueue) : '',
       paymentUnlinked: pu === 'open' || pu === 'closed' ? pu : '',
+      guest: g === 'web' ? g : '',
     },
   };
 }
@@ -506,9 +512,15 @@ function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: Panca
   if (tab === 'orders' && orders.invoice) sp.set('invoice', orders.invoice);
   if (tab === 'orders' && orders.queue) sp.set('queue', orders.queue);
   if (tab === 'orders' && orders.paymentUnlinked) sp.set('paymentUnlinked', orders.paymentUnlinked);
+  if (tab === 'orders' && orders.guest) sp.set('guest', orders.guest);
   const qs = sp.toString();
   window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
 }
+
+/** Hàng đợi chờ tiền xem cũ nhất trước (sắp hết hạn); đơn đã tự huỷ xem mới nhất trước. */
+const queueSort = (q: OrderQueue): 'asc' | 'desc' => (q === 'bank_transfer_overdue_cancelled' ? 'desc' : 'asc');
+/** Trạng thái đi kèm hàng đợi: chờ tiền là PENDING_PAYMENT, tự huỷ quá hạn là CANCELLED. */
+const queueStatus = (q: OrderQueue) => (q === 'bank_transfer_overdue_cancelled' ? 'CANCELLED' : 'PENDING_PAYMENT');
 
 export default function AdminPage() {
   const { user, status, initialized } = useAuth();
@@ -542,13 +554,19 @@ export default function AdminPage() {
     if (u.recycling) setOrdersRecycling(u.recycling);
     if (u.pancake) setOrdersPancake(u.pancake);
     // Link/F5 mang trạng thái, hoá đơn hoặc hàng đợi chuyển khoản: gieo cho tab Đơn hàng mở đúng bộ lọc đó.
-    if (u.tab === 'orders' && (u.orders.status || u.orders.invoice || u.orders.queue || u.orders.paymentUnlinked)) {
+    if (u.tab === 'orders' && (u.orders.status || u.orders.invoice || u.orders.queue || u.orders.paymentUnlinked || u.orders.guest)) {
+      const queueExtra: OrderListExtra | undefined = u.orders.queue
+        ? { queue: u.orders.queue, order: queueSort(u.orders.queue) }
+        : u.orders.paymentUnlinked
+          ? { paymentUnlinked: u.orders.paymentUnlinked, order: 'asc' }
+          : undefined;
+      const extra = u.orders.guest ? { ...queueExtra, guest: u.orders.guest } : queueExtra;
       setOrderSeed({
         search: '',
         n: 1,
         status: u.orders.status || undefined,
         invoice: u.orders.invoice || undefined,
-        extra: u.orders.queue ? { queue: u.orders.queue, order: 'asc' } : u.orders.paymentUnlinked ? { paymentUnlinked: u.orders.paymentUnlinked, order: 'asc' } : undefined,
+        extra,
       });
     }
   }, []);
@@ -1471,6 +1489,13 @@ function OrdersTab({
       getOrderStatusCounts({ search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
     enabled: !badRange,
   });
+  // Ô KPI đầu tab: cùng bộ lọc danh sách trừ trạng thái/hàng đợi (API tự bỏ), khoá dưới 'admin-orders' để làm mới cùng danh sách.
+  const opsCountsQ = useQuery({
+    queryKey: ['admin-orders', 'ops-counts', search, recycling, invoice, pancake, from, to, orderExtraFilters(extra)],
+    queryFn: () =>
+      getOrderOpsCounts({ search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, ...orderExtraFilters(extra) }),
+    enabled: !badRange,
+  });
   // Chưa có dữ liệu (đang tải, lỗi, khoảng ngày sai) thì không có số: in "(0)" sẽ bị đọc nhầm thành hết đơn.
   const statusCount = (k: string) => (countsQ.data ? (k ? countsQ.data.byStatus[k] ?? 0 : countsQ.data.all) : undefined);
   const exportAll = async () => {
@@ -1497,8 +1522,8 @@ function OrdersTab({
   const expandedOrder = q.data?.data.find((o) => (o.id || o.code) === expandedId) ?? null;
   // F5 và link gửi đồng nghiệp giữ trạng thái, hoá đơn và hàng đợi chuyển khoản (thu gom/Pancake do trang cha ghi).
   useEffect(() => {
-    writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '', paymentUnlinked: extra.paymentUnlinked ?? '' });
-  }, [recycling, pancake, status, invoice, extra.queue, extra.paymentUnlinked]);
+    writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '', paymentUnlinked: extra.paymentUnlinked ?? '', guest: extra.guest ?? '' });
+  }, [recycling, pancake, status, invoice, extra.queue, extra.paymentUnlinked, extra.guest]);
   const inboxQ = useOpsInbox({ enabled: inboxEnabled });
   const inboxCount = (k: InboxKey) => inboxQ.data?.items.find((i) => i.key === k)?.count;
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
@@ -1521,8 +1546,11 @@ function OrdersTab({
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
   const [filterOpen, setFilterOpen] = useState(false);
   const invoicePendingQ = useQuery({ queryKey: ['admin-invoice-pending-count'], queryFn: countInvoicePending, enabled: narrow });
+  // Vãng lai và hai hàng đợi tự huỷ/chờ CK bật bằng ô KPI ngoài ngăn lọc, không đếm vào nút "Lọc".
+  const { guest: _guest, ...drawerExtra } = orderExtraFilters(extra);
+  const drawerQueue = drawerExtra.queue === 'dealer_transfer_to_confirm' ? 1 : 0;
   const activeFilterCount =
-    (from || to ? 1 : 0) + Object.keys(orderExtraFilters(extra)).length + (recycling ? 1 : 0) + (pancake ? 1 : 0) + (invoice ? 1 : 0);
+    (from || to ? 1 : 0) + Object.keys(drawerExtra).length - (drawerExtra.queue ? 1 : 0) + drawerQueue + (recycling ? 1 : 0) + (pancake ? 1 : 0) + (invoice ? 1 : 0);
   const setRange = (f: string, t: string) => {
     setFrom(f);
     setTo(t);
@@ -1604,11 +1632,18 @@ function OrdersTab({
       return;
     }
     if (!extra.queue) queueBefore.current = { status, ...(extra.order ? { order: extra.order } : {}) };
-    setStatus('PENDING_PAYMENT');
-    setExtra({ ...extra, queue, order: 'asc' });
+    setStatus(queueStatus(queue));
+    setExtra({ ...extra, queue, order: queueSort(queue) });
   };
+  const toggleOps = (k: OrderOpsKey) => {
+    if (k === 'bankPending') return toggleQueue('bank_transfer_to_confirm');
+    if (k === 'overdueCancelled') return toggleQueue('bank_transfer_overdue_cancelled');
+    resetPaging();
+    const { guest: _g, ...rest } = extra;
+    setExtra(extra.guest ? rest : { ...extra, guest: 'web' });
+  };
+  // Chuyển khoản lẻ chờ tiền bật ở ô KPI "Chờ chuyển khoản" đầu tab (một lối vào cho một việc); ở đây còn hàng đợi đại lý.
   const queueChips = [
-    { id: 'queue-bank', label: `Chuyển khoản chờ tiền${inboxCount('bankTransferToConfirm') !== undefined ? ` (${inboxCount('bankTransferToConfirm')})` : ''}`, on: extra.queue === 'bank_transfer_to_confirm', flip: () => toggleQueue('bank_transfer_to_confirm') },
     { id: 'queue-dealer', label: `Đại lý chờ tiền${inboxCount('dealerTransferToConfirm') !== undefined ? ` (${inboxCount('dealerTransferToConfirm')})` : ''}`, on: extra.queue === 'dealer_transfer_to_confirm', flip: () => toggleQueue('dealer_transfer_to_confirm') },
   ];
   // Xác nhận tiền xong đơn rời hàng đợi: giữ câu báo trên danh sách, và trên điện thoại mở luôn đơn kế tiếp thay vì đóng ngăn kéo.
@@ -1785,6 +1820,11 @@ function OrdersTab({
 
   return (
     <div className="space-y-4">
+      <OrderOpsStrip
+        counts={opsCountsQ.data}
+        active={{ guest: extra.guest === 'web', bankPending: extra.queue === 'bank_transfer_to_confirm', overdueCancelled: extra.queue === 'bank_transfer_overdue_cancelled' }}
+        onToggle={toggleOps}
+      />
       {/* Search, Filter, and Export bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
         <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
@@ -1887,7 +1927,11 @@ function OrdersTab({
       )}
       {narrow && extra.queue && (
         <p className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-          {extra.queue === 'dealer_transfer_to_confirm' ? 'Đang xem đơn đại lý trả trước chưa nhận tiền, cũ nhất trước.' : 'Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước.'}
+          {extra.queue === 'dealer_transfer_to_confirm'
+            ? 'Đang xem đơn đại lý trả trước chưa nhận tiền, cũ nhất trước.'
+            : extra.queue === 'bank_transfer_overdue_cancelled'
+              ? 'Đang xem đơn chuyển khoản hệ thống tự huỷ vì quá hạn, mới nhất trước.'
+              : 'Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước.'}
           <button
             type="button"
             onClick={() => {
@@ -1943,6 +1987,7 @@ function OrdersTab({
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-1.5">
                     <OrderStatusBadge status={o.status} />
+                    <OrderGuestBadge order={o} />
                     {o.fulfiller === 'MERCHANT' && <ToneBadge tone="info">Gian hàng tự giao</ToneBadge>}
                     <RecyclingBadge order={o} />
                     <PancakeAttentionBadge order={o} />
@@ -1951,12 +1996,14 @@ function OrdersTab({
                   </span>
                   <span className="mt-1 block text-xs text-stone-600">
                     {o.user?.fullName ?? 'Khách lẻ'}
-                    {o.user?.phone ? ` · ${o.user.phone}` : ''}
+                    {orderCustomerPhone(o) ? ` · ${orderCustomerPhone(o)}` : ''}
                   </span>
                   <span className="mt-0.5 block text-xs text-stone-500">
                     {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                   </span>
                   {o.paymentStatus && <PaymentStatusShort order={o} />}
+                  <OrderPaymentDeadline order={o} />
+                  <OrderCancellationLine order={o} />
                   <OrderRecipientLine order={o} />
                 </button>
               </li>
@@ -2002,6 +2049,7 @@ function OrdersTab({
                         <td className={`${STICKY_FIRST_TD} px-3 py-3`}>
                           <div className="font-semibold text-stone-800">{o.code}</div>
                           <div className="mt-0.5 flex flex-wrap gap-1">
+                            <OrderGuestBadge order={o} />
                             {o.fulfiller === 'MERCHANT' && (
                               <ToneBadge tone="info" title={o.fulfillerStorefront?.title ?? undefined}>
                                 Gian hàng tự giao
@@ -2018,11 +2066,13 @@ function OrdersTab({
                               {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                             </div>
                             {o.paymentStatus && <PaymentStatusShort order={o} />}
+                            <OrderPaymentDeadline order={o} />
+                            <OrderCancellationLine order={o} />
                           </div>
                         </td>
                         <td className="min-w-[9rem] px-3 py-3">
                           <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
-                          {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
+                          {orderCustomerPhone(o) && <div className="text-xs text-stone-500">{orderCustomerPhone(o)}</div>}
                           <OrderRecipientLine order={o} />
                         </td>
                         <td className="hidden px-3 py-3 md:table-cell">
@@ -2030,6 +2080,7 @@ function OrdersTab({
                             {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
                           </div>
                           {o.paymentStatus && <PaymentStatusShort order={o} />}
+                          <OrderPaymentDeadline order={o} />
                           {o.type === 'DEALER' && (
                             <div className="text-[11px] font-medium text-warning-fg">
                               Đại lý{o.dealerOnCredit === true ? ' · công nợ' : o.dealerOnCredit === false ? ' · trả trước' : ''}
@@ -2039,6 +2090,7 @@ function OrdersTab({
                         <td className="px-3 py-3 font-semibold text-forest-700">{formatVnd(o.total)}</td>
                         <td className="hidden px-3 py-3 md:table-cell">
                           <OrderStatusBadge status={o.status} />
+                          <OrderCancellationLine order={o} />
                         </td>
                         <td className="hidden px-3 py-3 text-xs text-stone-500 md:table-cell">
                           {formatDate(o.createdAt)}

@@ -130,7 +130,7 @@ export type OrderListPlatform = (typeof ORDER_LIST_PLATFORMS)[number];
  * thẻ ra đúng bấy nhiêu đơn, không lẫn đơn ZaloPay, VNPay, ví hay đơn đại lý chưa trả. Đơn đại lý "Trả trước" có hàng đợi riêng vì
  * hạn tự huỷ khác (TTL đại lý) và người xác nhận tiền là kế toán đại lý.
  */
-export const ORDER_QUEUES = ['bank_transfer_to_confirm', 'dealer_transfer_to_confirm'] as const;
+export const ORDER_QUEUES = ['bank_transfer_to_confirm', 'dealer_transfer_to_confirm', 'bank_transfer_overdue_cancelled'] as const;
 export type OrderQueue = (typeof ORDER_QUEUES)[number];
 export const BANK_TRANSFER_TO_CONFIRM_WHERE = {
   type: 'RETAIL',
@@ -144,6 +144,28 @@ export const DEALER_TRANSFER_TO_CONFIRM_WHERE = {
   paymentStatus: 'UNPAID',
   paymentMethod: 'BANK_TRANSFER',
 } as const;
+
+/**
+ * Đơn lẻ chuyển khoản hệ thống tự huỷ vì quá hạn thanh toán: cron PendingPaymentExpiryCron hay webhook MSS payment_rescue, cả hai ghi một
+ * dòng order_status_history PENDING_PAYMENT → CANCELLED với actorType SYSTEM (pending-payment-cancel.ts). Không đường nào khác ghi SYSTEM
+ * từ PENDING_PAYMENT sang CANCELLED (Gomdon chỉ ghi SHIPPING/DELIVERED). Bảng lịch sử không có quan hệ Prisma với orders, nên tập id tra
+ * trước bằng SQL (AdminService.overdueCancelledIds) rồi lọc `id IN (...)` cùng điều kiện cột này.
+ */
+export const BANK_TRANSFER_OVERDUE_CANCELLED_WHERE = {
+  type: 'RETAIL',
+  status: 'CANCELLED',
+  paymentMethod: 'BANK_TRANSFER',
+} as const;
+/** Trần tập id đơn tự huỷ quá hạn tra trước; Postgres nhận tối đa 32767 tham số mỗi câu. */
+export const OVERDUE_CANCELLED_ID_CAP = 20_000;
+
+/**
+ * Đơn khách vãng lai đặt trên web không đăng nhập (checkout/guest, cờ web.guest_checkout_enabled): chỉ đường đó ghi orders.guestPhone.
+ * Đã gộp vào tài khoản Zalo thì đơn vẫn mang guestPhone, chỉ userId đổi sang tài khoản thật (AuthService.claimGuestOrders).
+ */
+export const ORDER_GUEST_FILTERS = ['web'] as const;
+export type OrderGuestFilter = (typeof ORDER_GUEST_FILTERS)[number];
+export const GUEST_WEB_ORDER_WHERE = { guestPhone: { not: null } } as const satisfies Prisma.OrderWhereInput;
 
 /**
  * Khoản Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake (Order.paymentUnlinkedAt, xem PancakeProcessor.holdUnattachedPayment). Chỉ tính khi
@@ -176,6 +198,9 @@ export interface AdminOrderFilter {
   platform?: OrderListPlatform;
   queue?: OrderQueue;
   paymentUnlinked?: PaymentUnlinkedFilter;
+  guest?: OrderGuestFilter;
+  /** Id đơn tự huỷ quá hạn chuyển khoản, tra trước khi `queue = bank_transfer_overdue_cancelled` (AdminService.adminOrderWhere). */
+  overdueCancelledIds?: string[];
   /** Id CTV / người giới thiệu (Order.referrerUserId). */
   referrerUserId?: string;
   /** Id khách đặt đơn (Order.userId): "Xem tất cả đơn" từ hồ sơ khách. */
@@ -207,6 +232,7 @@ export interface OrderListExtra {
   platform?: OrderListPlatform;
   queue?: OrderQueue;
   paymentUnlinked?: PaymentUnlinkedFilter;
+  guest?: OrderGuestFilter;
   referrerUserId?: string;
   userId?: string;
   storefront?: string;
@@ -214,7 +240,7 @@ export interface OrderListExtra {
 }
 
 /** Đầu vào của AdminService.adminOrderWhere/orderCsv: bộ lọc đơn, gian hàng đưa vào dạng slug chứ chưa phải id. */
-export type AdminOrderFilterInput = Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds' | 'storefrontId' | 'exactPhoneOnly'> &
+export type AdminOrderFilterInput = Omit<AdminOrderFilter, 'searchUserIds' | 'searchOrderIds' | 'storefrontId' | 'exactPhoneOnly' | 'overdueCancelledIds'> &
   Pick<OrderListExtra, 'storefront'>;
 
 /** Id không thể trùng gian hàng nào (cuid không có dấu gạch) — dùng khi slug gõ vào không khớp gian hàng. */
@@ -377,6 +403,8 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.platform) and.push({ platform: f.platform });
   if (f.queue === 'bank_transfer_to_confirm') and.push(BANK_TRANSFER_TO_CONFIRM_WHERE);
   else if (f.queue === 'dealer_transfer_to_confirm') and.push(DEALER_TRANSFER_TO_CONFIRM_WHERE);
+  else if (f.queue === 'bank_transfer_overdue_cancelled') and.push(BANK_TRANSFER_OVERDUE_CANCELLED_WHERE, { id: { in: f.overdueCancelledIds ?? [] } });
+  if (f.guest === 'web') and.push(GUEST_WEB_ORDER_WHERE);
   if (f.paymentUnlinked === 'open') and.push(PAYMENT_UNLINKED_OPEN_WHERE);
   else if (f.paymentUnlinked === 'closed') and.push(PAYMENT_UNLINKED_CLOSED_WHERE);
   if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });

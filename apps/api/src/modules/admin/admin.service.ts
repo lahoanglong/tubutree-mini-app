@@ -39,8 +39,11 @@ import { throwIfLockBusy } from '../../common/lock-busy';
 import { storedThumbnailOf } from '../../common/public-image';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
+import { findOverdueCancelledIds, latestCancellations, orderGuestSource } from './admin-order-ops';
+import { pendingPaymentDeadlines, readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import {
   ADMIN_SEARCH_USER_CAP,
+  BANK_TRANSFER_TO_CONFIRM_WHERE,
   buildAdminOrderWhere,
   findSearchUserIds,
   NO_SUCH_STOREFRONT_ID,
@@ -174,8 +177,10 @@ function maskOrderPhones<
     shippingAddress?: unknown;
     note?: string | null;
     endCustomerKey?: string | null;
+    guestPhone?: string | null;
     recyclingNote?: string | null;
     gomdonAlerts?: { message: string }[];
+    cancellation?: { note: string | null } | null;
   },
 >(o: T): T {
   const addr = o.shippingAddress && typeof o.shippingAddress === 'object' ? (o.shippingAddress as Record<string, unknown>) : null;
@@ -185,6 +190,8 @@ function maskOrderPhones<
     ...(addr ? { shippingAddress: { ...addr, ...(typeof addr.phone === 'string' ? { phone: maskPhoneKeepLast3(addr.phone) } : {}) } } : {}),
     ...(o.note ? { note: maskVnPhonesInText(o.note) } : {}),
     ...(o.endCustomerKey ? { endCustomerKey: maskPhoneKeepLast3(o.endCustomerKey) } : {}),
+    ...(o.guestPhone ? { guestPhone: maskPhoneKeepLast3(o.guestPhone) } : {}),
+    ...(o.cancellation?.note ? { cancellation: { ...o.cancellation, note: maskVnPhonesInText(o.cancellation.note) } } : {}),
     ...(o.recyclingNote ? { recyclingNote: maskVnPhonesInText(o.recyclingNote) } : {}),
     ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskVnPhonesInText(a.message) })) } : {}),
   };
@@ -1199,12 +1206,49 @@ export class AdminService {
   async adminOrderWhere(f: AdminOrderFilterInput, opts: { exactPhoneOnly?: boolean } = {}): Promise<Prisma.OrderWhereInput> {
     const { storefront, ...filter } = f;
     const exactPhoneOnly = opts.exactPhoneOnly === true;
-    const [searchUserIds, searchOrderIds, storefrontId] = await Promise.all([
+    const [searchUserIds, searchOrderIds, storefrontId, overdueCancelledIds] = await Promise.all([
       findSearchUserIds(this.prisma, f.search, exactPhoneOnly),
       this.findSearchOrderIds(f.search),
       this.findStorefrontId(storefront),
+      f.queue === 'bank_transfer_overdue_cancelled' ? findOverdueCancelledIds(this.prisma, f.from, f.to) : undefined,
     ]);
-    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, exactPhoneOnly, ...(storefrontId ? { storefrontId } : {}) });
+    return buildAdminOrderWhere({
+      ...filter,
+      searchUserIds,
+      searchOrderIds,
+      exactPhoneOnly,
+      ...(storefrontId ? { storefrontId } : {}),
+      ...(overdueCancelledIds ? { overdueCancelledIds } : {}),
+    });
+  }
+
+  /**
+   * Số KPI đầu tab Đơn hàng. Mỗi ô là số dòng danh sách hiện ra khi bấm ô đó với bộ lọc đang chọn: bỏ `status` và `queue` (ô tự đặt), ô
+   * "vãng lai" bỏ cả bộ lọc vãng lai. `bankTransferOverdue` là phần của `bankTransferPending` đã qua hạn thanh toán ghi cho khách mà chưa
+   * bị huỷ (cron chạy mỗi 10 phút, đơn có khoản chưa gắn được giữ thêm, đơn đã bàn giao thôi tự huỷ).
+   */
+  async orderOpsCounts(
+    f: Omit<AdminOrderFilterInput, 'status'>,
+    viewer: OrderActor = { role: 'ADMIN' },
+    now: Date = new Date(),
+  ): Promise<{ guestWeb: number; guestWebUnmerged: number; bankTransferPending: number; bankTransferOverdue: number; overdueCancelled: number; ttlHours: number }> {
+    const { queue: _queue, guest: _guest, ...rest } = f;
+    const exactPhoneOnly = !seesFullOrderPhones(viewer);
+    const [noGuest, withGuest, overdueWhere, ttlHours] = await Promise.all([
+      this.adminOrderWhere({ ...rest, guest: 'web' }, { exactPhoneOnly }),
+      this.adminOrderWhere(f.guest ? { ...rest, guest: f.guest } : rest, { exactPhoneOnly }),
+      this.adminOrderWhere({ ...rest, ...(f.guest ? { guest: f.guest } : {}), queue: 'bank_transfer_overdue_cancelled' }, { exactPhoneOnly }),
+      readPendingPaymentTtlHours(this.config),
+    ]);
+    const cutoff = new Date(now.getTime() - ttlHours * 3_600_000);
+    const [guestWeb, guestWebUnmerged, bankTransferPending, bankTransferOverdue, overdueCancelled] = await Promise.all([
+      this.prisma.order.count({ where: noGuest }),
+      this.prisma.order.count({ where: { AND: [noGuest, { user: { phone: null, zaloId: { startsWith: 'guest_' } } }] } }),
+      this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE] } }),
+      this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: cutoff } }] } }),
+      this.prisma.order.count({ where: overdueWhere }),
+    ]);
+    return { guestWeb, guestWebUnmerged, bankTransferPending, bankTransferOverdue, overdueCancelled, ttlHours };
   }
 
   /** Số đơn theo trạng thái với cùng điều kiện lọc của danh sách (bỏ `status`): chip "Tất cả" là tổng các trạng thái. */
@@ -1270,7 +1314,7 @@ export class AdminService {
         ...skipTake(page, limit),
         include: {
           items: true,
-          user: { select: { id: true, phone: true, fullName: true } },
+          user: { select: { id: true, phone: true, fullName: true, zaloId: true } },
           fulfillerStorefront: { select: { title: true } },
           customerRefunds: ORDER_LIST_REFUNDS,
           gomdonAlerts: {
@@ -1306,13 +1350,26 @@ export class AdminService {
           ).map((r) => r.orderId)
         : [],
     );
+    // Hạn chuyển khoản ghi cho khách (đúng mốc cron tự huỷ) và lần huỷ mới nhất (lý do + lúc nhả kho) cho màn vận hành.
+    const [deadlines, cancellations] = await Promise.all([
+      pendingPaymentDeadlines(items, this.config),
+      latestCancellations(
+        this.prisma,
+        items.filter((o) => o.status === 'CANCELLED').map((o) => o.id),
+      ),
+    ]);
     // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
     // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
-    const data = items.map((o) => {
+    const data = items.map(({ guestTokenHash: _token, guestIpHash: _ip, user, ...o }) => {
       const dealerOnCredit = o.type === 'DEALER' ? onCredit.has(o.id) : undefined;
       const retry = o.pancakeOrderId ? null : pushRetryGateDecision(o);
       return {
         ...o,
+        user: user ? { id: user.id, phone: user.phone, fullName: user.fullName } : user,
+        // Nguồn khách: đơn vãng lai (web không đăng nhập hay phiên `guest_`) và đơn vãng lai đã gộp vào tài khoản Zalo.
+        guestSource: orderGuestSource({ guestPhone: o.guestPhone, user }),
+        paymentDeadline: deadlines.get(o.id) ?? null,
+        cancellation: cancellations.get(o.id) ?? null,
         ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
         allowedTransitions: actorAllowedTransitions(viewer, o, allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true })),
         canConfirmPayment: canAdminConfirmRetailPayment(o),

@@ -29,6 +29,7 @@ import { lockWasteCustomer } from '../waste-locks';
 import { lookupMissMeta, normalizeTracking, normalizeWasteCode } from '../waste-codes';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { loadAdminRequestDetail } from './waste-admin-detail.mapper';
+import { parseTypedVnPhone } from '../../../common/phone';
 
 const NOT_FOUND = 'Không tìm thấy mã';
 const RETRY = 'Bạn thử lại nhé';
@@ -228,6 +229,9 @@ export class WasteAdminRequestsService {
       case 'ORDER_MISMATCH':
         and.push(wasteOrderMismatchWhere());
         break;
+      case 'AWAITING_RECEIPT':
+        and.push({ status: { in: ['OPEN', 'IN_TRANSIT'] } });
+        break;
       default:
         break;
     }
@@ -252,11 +256,16 @@ export class WasteAdminRequestsService {
     const raw = code.trim();
     const n = normalizeWasteCode(raw);
     const t = normalizeTracking(raw);
+    // A full customer phone (any common spelling) lists that customer's requests in any status; only an exact 10-digit match, so a
+    // partial number never reveals which digits a masked phone holds.
+    const phone = parseTypedVnPhone(raw);
+    const byPhone = phone ? [{ user: { phone } }] : [];
     // The exact TR- code matches in any status so the warehouse can receive an EXPIRED request; tracking and order matches only while unclosed.
     const rows = await this.prisma.wasteRequest.findMany({
       where: {
         OR: [
           { code: n },
+          ...byPhone,
           {
             AND: [
               { status: { in: [...WASTE_OPEN_STATUSES] } },
@@ -274,7 +283,8 @@ export class WasteAdminRequestsService {
         ],
       },
       include: ROW_INCLUDE,
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      // A phone lists the customer's newest requests first; a code or tracking match is usually one row.
+      orderBy: phone ? [{ createdAt: 'desc' }, { id: 'desc' }] : [{ createdAt: 'asc' }, { id: 'asc' }],
       take: 20,
     });
     if (rows.length === 0) {

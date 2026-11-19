@@ -39,7 +39,8 @@ jest.mock('../wallet/wallet-ledger.service', () => ({
   ),
 }));
 
-const config = {} as unknown as SystemConfigService;
+// Đọc khoá cấu hình trả mặc định (TTL thanh toán của danh sách đơn); spec cần giá trị khác tự truyền deps.config.
+const config = { get: jest.fn((_key: string, fallback?: unknown) => Promise.resolve(fallback)) } as unknown as SystemConfigService;
 const loyalty = {
   creditOrderPoints: jest.fn().mockResolvedValue(undefined),
   reverseOrderPoints: jest.fn().mockResolvedValue(undefined),
@@ -100,6 +101,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     user: { findUnique: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]) },
     returnRequest: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) },
     order: { findUniqueOrThrow: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+    orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
     userAdminEvent: { create: jest.fn().mockResolvedValue({}) },
     $executeRaw: jest.fn().mockResolvedValue(0),
     // Liên kết "Tubu giao hộ" đọc lại gian hàng (FOR SHARE) để từ chối gian hàng không còn là đối tác.
@@ -1802,6 +1804,7 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     pancakeOrderId: `pk-${String(o.code)}`,
     paymentMethod: 'BANK_TRANSFER',
     paymentStatus: 'UNPAID',
+    createdAt: new Date('2026-11-19T01:00:00Z'),
     items: [],
     user: null,
     ...o,
