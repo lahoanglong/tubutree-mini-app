@@ -6,6 +6,17 @@ export interface ShippingEta {
   minDays: number;
   maxDays: number;
 }
+/**
+ * Lịch kho cho ngày nhận dự kiến (`shipping.warehouse_schedule`, dùng khi bật `shipping.pdp_eta_enabled`): giờ cắt đơn "HH:mm" theo giờ VN, ngày kho
+ * làm (0 = Chủ nhật … 6 = Thứ 7), ngày nghỉ lễ "YYYY-MM-DD", và [ít nhất, nhiều nhất] ngày làm việc giao tới TP.HCM / tỉnh khác.
+ */
+export interface DeliverySchedule {
+  cutoff: string;
+  workDays: number[];
+  holidays: string[];
+  hcmDays: [number, number];
+  provinceDays: [number, number];
+}
 export interface PublicConfig {
   freeshipThreshold: number;
   /** Phí giao cố định (đồng) của phần hàng Tubu Tree giao chưa đạt ngưỡng miễn phí; thiếu khi API cũ. */
@@ -78,6 +89,8 @@ export interface PublicConfig {
   unitPriceEnabled?: boolean;
   /** Cờ `shipping.pdp_eta_enabled`: trang chi tiết hiện "Nhận dự kiến …" và câu còn thiếu để miễn phí giao hàng. Thiếu khi API cũ → tắt. */
   pdpEtaEnabled?: boolean;
+  /** Lịch kho của ngày nhận dự kiến; thiếu khi API cũ → trang chi tiết và thanh toán dùng `shippingEta` như trước. */
+  deliverySchedule?: DeliverySchedule;
   /** Cờ `catalog.refill_first_enabled`: gợi ý gói Refill cho chai khách đã có ở giỏ và kệ Mua lại (`GET /catalog/refill-pairs/mine`). Thiếu khi API cũ → tắt, không gọi. */
   refillFirstEnabled?: boolean;
   /** Cờ `waste.repeat_request_enabled`: thẻ "Gửi lại như lần trước" ở màn Đổi rác. Thiếu khi API cũ → tắt, màn như trước. */

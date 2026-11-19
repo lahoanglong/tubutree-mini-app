@@ -9,7 +9,7 @@ import { useStorefrontContext } from '../../store/storefront-context';
 import { copyText } from '../../utils/clipboard';
 import { formatVnd } from '../../utils/format';
 import { isRetailOnly } from '../../utils/retail-only';
-import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
+import { checkoutEtaLabel, etaSchedule, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
 import { OrderZaloFriend } from './order-zalo';
 import { vi } from '../../i18n/vi';
@@ -105,7 +105,7 @@ export function OrderSuccess({
   // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ
   // đầu; gợi ý định kỳ nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
   // Gian hàng đối tác tự giao nên không hứa ngày thay họ: chỉ phần hàng Tubu giao mới có ngày (cùng luật với chi tiết đơn).
-  const eta = cfg.isLoaded ? checkoutEtaLabel(cfg.shippingEta, placedOrderKinds(order)) : null;
+  const eta = cfg.isLoaded ? checkoutEtaLabel(cfg.shippingEta, placedOrderKinds(order), undefined, etaSchedule(cfg), order.shippingAddress?.province) : null;
   const grandTotal = split ? split.reduce((sum, o) => sum + o.total, 0) : order.total;
   // Màn Thanh toán hứa điểm của cả lần đặt — màn này phải nói cùng con số, không chỉ điểm của đơn đầu.
   const pointsEarned = split && split.every((o) => o.pointsEarned != null)

@@ -215,3 +215,12 @@ describe('buildPublicConfig — perfRum (đo tốc độ trên máy khách)', ()
     expect((restOn as { loyalty: { maxRedeemPct: number } }).loyalty.maxRedeemPct).toBeLessThanOrEqual(0.2);
   });
 });
+
+describe('buildPublicConfig — lịch kho của ngày nhận dự kiến (tubu-w6-02)', () => {
+  it('chưa có dòng: lịch chuẩn; có dòng: theo dòng, trường hỏng về mặc định', async () => {
+    expect((await build({})).deliverySchedule).toEqual({ cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], holidays: [], hcmDays: [1, 2], provinceDays: [2, 4] });
+    const cfg = await build({ 'shipping.warehouse_schedule': { cutoff: '14:00', workDays: [1, 2, 3, 4, 5], holidays: ['2026-12-25'], hcmDays: [1, 1], provinceDays: 'x' } });
+    expect(cfg.deliverySchedule).toEqual({ cutoff: '14:00', workDays: [1, 2, 3, 4, 5], holidays: ['2026-12-25'], hcmDays: [1, 1], provinceDays: [2, 4] });
+    expect(cfg.pdpEtaEnabled).toBe(false);
+  });
+});

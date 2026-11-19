@@ -45,7 +45,7 @@ import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { checkoutLineProblems, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { giftTrialPlaceField } from '@tubutree/app-core/commerce/gift-trial';
-import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
+import { checkoutEtaLabel, etaSchedule, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
@@ -321,7 +321,10 @@ export default function CheckoutPage() {
     formatVnd(quote.shippingFee)
   );
   // Chưa có cấu hình (đang tải, lỗi, API cũ) thì không hứa ngày giao; giỏ chỉ có hàng gian hàng tự giao thì cũng không.
-  const etaLabel = checkoutEtaLabel(shippingEta, shipments.map((s) => s.fulfiller.kind));
+  // Cờ ngày nhận theo lịch kho bật thì ngày tính theo giờ cắt đơn và tỉnh của địa chỉ đang chọn (TP.HCM hay tỉnh khác).
+  const schedule = etaSchedule(configQ.data);
+  const addressProvince = addrQ.data?.find((a) => a.id === addressId)?.province;
+  const etaLabel = checkoutEtaLabel(shippingEta, shipments.map((s) => s.fulfiller.kind), undefined, schedule, addressProvince);
   // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
   // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
   const pickedPayment = quote ? pickPaymentMethod(payment, quote, walletBalance) : payment;
@@ -660,7 +663,7 @@ export default function CheckoutPage() {
       <Shell bare>
         <OrderSuccess
           order={placed}
-          etaLabel={checkoutEtaLabel(shippingEta, placedOrderKinds(placed))}
+          etaLabel={checkoutEtaLabel(shippingEta, placedOrderKinds(placed), undefined, schedule, addressProvince)}
           continueHref={continueHref}
         />
       </Shell>

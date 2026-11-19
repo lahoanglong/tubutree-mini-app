@@ -365,6 +365,9 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.unitPrice': '≈ {price} / {per}',
   'pdp.unitBetter': 'Lợi hơn {pct}% mỗi {per}',
   'pdp.eta': 'Nhận dự kiến {range}',
+  // Ngày nhận theo lịch kho (tubu-w6-02, cùng cờ shipping.pdp_eta_enabled): {range} kiểu "T6 20/11 – T3 24/11", {cutoff} là giờ cắt đơn "15:00".
+  // Khoảng trắng không ngắt: khổ Mini xuống dòng ngay sau "·", giữ nguyên cụm giờ cắt thay vì cắt đôi "Đặt / trước".
+  'pdp.etaSchedule': 'Dự kiến nhận {range}\u00a0· Đặt\u00a0trước\u00a0{cutoff}\u00a0giao\u00a0sớm\u00a0hơn',
   'pdp.freeshipGap': 'Món này + {amount} là miễn phí giao',
   'pdp.freeshipReach': 'Thêm món này là đủ miễn phí giao',
   'pdp.freeshipFree': 'Đơn này được miễn phí giao hàng',

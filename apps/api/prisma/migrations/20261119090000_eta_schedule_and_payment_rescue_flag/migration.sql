@@ -1,0 +1,6 @@
+-- tubu-w6-02: lịch kho cho ngày nhận dự kiến (đọc khi bật shipping.pdp_eta_enabled) và cờ huỷ đơn chuyển khoản MSS báo quá hạn (mặc định TẮT).
+-- Chỉ thêm dòng khi chưa có, không đổi giá trị admin đã đặt.
+INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES
+  ('shipping.warehouse_schedule', '{"cutoff":"15:00","workDays":[1,2,3,4,5,6],"holidays":[],"hcmDays":[1,2],"provinceDays":[2,4]}'::jsonb, 'Lịch kho Tubu HCM cho ngày nhận dự kiến ở trang sản phẩm và thanh toán (khi bật shipping.pdp_eta_enabled): cutoff = giờ cắt đơn theo giờ VN (HH:mm), workDays = ngày kho làm (0 = Chủ nhật, 1 = Thứ 2 … 6 = Thứ 7), holidays = ngày nghỉ lễ (YYYY-MM-DD), hcmDays / provinceDays = [ít nhất, nhiều nhất] ngày làm việc giao tới TP.HCM / tỉnh khác. Đặt trước giờ cắt vào ngày kho làm thì xuất kho trong ngày, sau đó dời sang ngày làm việc kế tiếp.', 'shipping', NOW()),
+  ('mss.payment_rescue_cancel_enabled', 'false'::jsonb, 'Huỷ đơn chuyển khoản chưa trả khi MSS báo quá hạn (webhook order-status, khối payment_rescue, hợp đồng W4-02): chỉ đơn BANK_TRANSFER đang chờ thanh toán, chưa có khoản tiền nào Pancake báo về và đã qua hạn thanh toán Tubu ghi cho khách. Hoàn kho, mã giảm giá, Điểm Xanh và báo khách một lần như cron tự huỷ. Tắt thì Tubu bỏ qua tin của MSS, cron tự huỷ vẫn chạy.', 'mss', NOW())
+ON CONFLICT ("key") DO NOTHING;

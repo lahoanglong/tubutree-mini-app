@@ -1,6 +1,7 @@
 'use client';
 
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
+import type { DeliverySchedule } from '@tubutree/app-core/api/config';
 import type {
   CartComboGroup,
   CheckoutPickupFields,
@@ -224,6 +225,9 @@ export interface PublicConfig {
   loyalty?: { vndPerPointRedeem?: number };
   /** Cờ `checkout.return_packaging_nudge_enabled`: gợi ý gửi lại bao bì ở thẻ Đổi rác kèm đơn. Thiếu khi API cũ → tắt. */
   returnPackagingNudgeEnabled?: boolean;
+  /** Cờ `shipping.pdp_eta_enabled` và lịch kho: bật thì ngày giao dự kiến ở thanh toán tính theo lịch kho (cùng nghĩa với app-core). */
+  pdpEtaEnabled?: boolean;
+  deliverySchedule?: DeliverySchedule;
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 

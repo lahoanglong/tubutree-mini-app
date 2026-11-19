@@ -20,6 +20,7 @@ import { GIFT_TRIAL_ENABLED_KEY, GIFT_TRIAL_MIN_ORDER_KEY, GIFT_TRIAL_OPTIONS_KE
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
 import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/catalog-launch-date';
 import { FLASH_SLOTS_KEY, flashSlotsProblem } from '../flash-sale/flash-slots';
+import { WAREHOUSE_SCHEDULE_KEY, warehouseScheduleProblem } from './shipping-eta';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { PUBLIC_VISIBILITY_CONFIG_KEYS } from '../storefront/public-visibility';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
@@ -483,6 +484,8 @@ export class SystemConfigService {
     // Lưới khung mặc định của nút "Tạo khung giờ" ở tab Giờ vàng: mốc sai thì nút sinh ra đợt lệch giờ.
     [FLASH_SLOTS_KEY]: flashSlotsProblem,
     [GIFT_TRIAL_OPTIONS_KEY]: giftTrialOptionsProblem,
+    // Lịch kho của ngày nhận dự kiến: phía đọc lặng lẽ về lịch chuẩn khi trường sai, nên chặn ngay lúc lưu.
+    [WAREHOUSE_SCHEDULE_KEY]: warehouseScheduleProblem,
     ...WASTE_JSON_RULES,
     ...MSS_JSON_RULES,
   };

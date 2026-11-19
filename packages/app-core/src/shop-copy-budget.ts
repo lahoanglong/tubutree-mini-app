@@ -367,6 +367,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'pdp.unitPrice': 24,
   'pdp.unitBetter': 26,
   'pdp.eta': 28,
+  'pdp.etaSchedule': 64,
   'pdp.freeshipGap': 38,
   'pdp.freeshipReach': 34,
   'pdp.freeshipFree': 34,

@@ -24,6 +24,11 @@ export const MSS_ORDER_EVENTS_ROLLOUT_PCT_KEY = 'mss.order_events_rollout_pct';
 export const MSS_ORDER_CONSENT_PRECHECKED_KEY = 'mss.order_consent_prechecked';
 /** Nguồn SKU/giá/tồn: `pancake` (hiện tại) hoặc `mss` (bật sau cùng, hợp đồng commerce mục 0.4). */
 export const MSS_CATALOG_SOURCE_KEY = 'mss.catalog_source';
+/**
+ * Huỷ đơn chuyển khoản chưa trả khi MSS báo `payment_rescue.state = "overdue"` trên webhook `order-status` (hợp đồng W4-02).
+ * Không nằm trong MSS_FLAG_KEYS: không cần năng lực nào ở `GET /health` của MSS, MSS chỉ gửi khối này khi chính nó đã bật.
+ */
+export const MSS_PAYMENT_RESCUE_CANCEL_KEY = 'mss.payment_rescue_cancel_enabled';
 
 /** Luật ghi của khoá số MSS, trải vào SystemConfigService.RANGES (cùng cách WASTE_RANGES): admin không lưu được giá trị ngoài khoảng. */
 export const MSS_CONFIG_RANGES: Record<string, { min: number; max: number; note: string; integer?: true }> = {
@@ -42,6 +47,7 @@ const booleanOnly = (value: unknown): string | null => (typeof value === 'boolea
 export const MSS_JSON_RULES: Record<string, (value: unknown) => string | null> = {
   ...Object.fromEntries(Object.values(MSS_FLAG_KEYS).map((k) => [k, booleanOnly])),
   [MSS_ORDER_CONSENT_PRECHECKED_KEY]: booleanOnly,
+  [MSS_PAYMENT_RESCUE_CANCEL_KEY]: booleanOnly,
   [MSS_CATALOG_SOURCE_KEY]: (value) =>
     (MSS_CATALOG_SOURCES as readonly unknown[]).includes(value) ? null : `phải là một trong: ${MSS_CATALOG_SOURCES.join(', ')}`,
 };

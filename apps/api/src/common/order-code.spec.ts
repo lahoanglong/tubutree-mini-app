@@ -48,6 +48,16 @@ describe('sinh mã đơn (đặc tả hành vi từng nơi)', () => {
       expect(randomIntMock).toHaveBeenCalledWith(0, randomMax);
     });
 
+    it('mã (kể cả mã dự phòng khi hết lượt) chỉ gồm chữ và số, tối đa 25 ký tự: nội dung chuyển khoản MSS ghi trong tin nhắc trùng đúng mã Tubu đối soát', async () => {
+      // MSS: transferMemo(code) = code.replace(/[^A-Za-z0-9]/g, '').slice(0, 25) (hợp đồng W4-02, câu hỏi 2); Tubu: nội dung CK = order.code.
+      const transferMemo = (code: string) => code.replace(/[^A-Za-z0-9]/g, '').slice(0, 25);
+      jest.setSystemTime(new Date('2026-12-31T23:59:59.999Z'));
+      randomIntMock.mockReturnValue(randomMax - 1);
+      const code = await gen(makePrisma(0));
+      const fallback = await gen(makePrisma(6));
+      for (const c of [code, fallback]) expect(transferMemo(c)).toBe(c);
+    });
+
     it('trùng mã thì thử lại, trả mã của lần thử không trùng', async () => {
       randomIntMock.mockReturnValueOnce(1).mockReturnValueOnce(2).mockReturnValueOnce(3);
       const prisma = makePrisma(2);

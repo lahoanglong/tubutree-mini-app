@@ -531,7 +531,7 @@ export default function ProductDetailPage() {
   // Cờ catalog.unit_price_enabled / shipping.pdp_eta_enabled: logic ở app-core (unit-price.ts, pdp-view.ts), trang chỉ gắn chỗ vẽ.
   const units = config.unitPriceEnabled === true ? variationUnitPrices(variations, flashList, p.name, selected?.id) : null;
   const decideShip = config.pdpEtaEnabled === true && !unavailable;
-  const etaText = decideShip ? pdpEtaText(config.shippingEta, p.fulfiller?.kind, inStock) : null;
+  const etaText = decideShip ? pdpEtaText(config.shippingEta, p.fulfiller?.kind, inStock, undefined, config.deliverySchedule) : null;
   // Mini chỉ có giỏ khi đã đăng nhập: khách chưa đăng nhập giỏ rỗng; đang khôi phục phiên hay lỗi thì chưa biết giỏ, giữ câu tĩnh.
   const gapText =
     decideShip && selected

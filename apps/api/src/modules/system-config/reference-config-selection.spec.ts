@@ -220,6 +220,7 @@ const APPROVED_LOADED_KEYS = [
     'shipping.eta_max_days',
     'shipping.eta_min_days',
     'shipping.pdp_eta_enabled',
+    'shipping.warehouse_schedule',
     'staff.grant_invite_ttl_days',
     'storefront.identifier_cooldown_days',
     'storefront.require_approval',

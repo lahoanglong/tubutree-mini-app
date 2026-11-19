@@ -23,11 +23,14 @@ const cart = (items: ReturnType<typeof cartLine>[]) => ({
   items, couponCode: null, subtotal: items.reduce((s, l) => s + l.total, 0), discount: 0, freeship: false, freeshipThreshold: 199_000, itemCount: items.length, unavailableItems: [],
 });
 
-function mock(api: MockApi, o: { flags: boolean; product?: Record<string, unknown> }): void {
+const HINT = '\u00a0· Đặt\u00a0trước\u00a015:00\u00a0giao\u00a0sớm\u00a0hơn';
+const SCHEDULE = { cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], holidays: ['2026-11-21'], hcmDays: [1, 2] as [number, number], provinceDays: [2, 4] as [number, number] };
+
+function mock(api: MockApi, o: { flags: boolean; product?: Record<string, unknown>; schedule?: boolean }): void {
   mockPilotProduct(api);
   api.get('/products/:slug', { ...PILOT_PRODUCT, name: 'Nước giặt sinh học Fuwa3e', variations: SIZES, fulfiller: TUBU, ...o.product });
   api.get('/cart', cart([cartLine('khac', 60_000)]));
-  api.get('/config/public', publicConfig({ freeshipThreshold: 199_000, shippingEta: ETA, ...(o.flags ? { unitPriceEnabled: true, pdpEtaEnabled: true } : {}) }));
+  api.get('/config/public', publicConfig({ freeshipThreshold: 199_000, shippingEta: ETA, ...(o.flags ? { unitPriceEnabled: true, pdpEtaEnabled: true } : {}), ...(o.schedule ? { deliverySchedule: SCHEDULE } : {}) }));
   api.get('/products/:slug/reviews/can-review', { canReview: false, reason: 'NOT_PURCHASED', rewardAvailable: false, purchaseCount: 0, reviewableOrders: [], myReviews: [] });
 }
 
@@ -88,6 +91,33 @@ for (const vp of [
       expect(on.cls, `CLS bật ${on.cls} so với tắt ${off.cls}: ${on.sources.join(' ; ')}`).toBeLessThanOrEqual(Math.max(off.cls, 0) + 0.001);
       expect(await noHorizontalScroll(page)).toBe(true);
       test.info().annotations.push({ type: 'đo', description: `ship ${offHeight}→${onHeight}px, CLS ${off.cls.toFixed(4)}→${on.cls.toFixed(4)}` });
+    });
+
+    test('lịch kho (tubu-w6-02): ngày nhận cụ thể theo giờ cắt đơn và ngày lễ, khối Vận chuyển cao thêm tối đa 2 dòng, không tràn ngang', async ({ page, api }) => {
+      // 14:59 thứ Năm 19/11 giờ VN, trước giờ cắt đơn; thứ Bảy 21/11 khai là ngày nghỉ: xuất kho T5 19/11, nhận T6 20/11 tới T4 25/11.
+      await page.clock.setFixedTime(new Date('2026-11-19T07:59:00Z'));
+      mock(api, { flags: false });
+      await openPdp(page);
+      const offHeight = await shipHeight(page);
+
+      mock(api, { flags: true, schedule: true });
+      await page.reload();
+      await openPdp(page);
+      await expect(page.getByTestId('pdp-eta')).toHaveText(`Dự kiến nhận T6 20/11 – T4 25/11${HINT}`);
+      const onHeight = await shipHeight(page);
+      await shoot(page, `mini-${vp.width}-schedule`);
+      // Mẫu PO duyệt (khoảng ngày + câu giờ cắt) không vừa một dòng ở khổ Mini: dòng ngày thành 2 dòng, ngắt ngay sau "·", nên khối
+      // cao thêm 2 dòng chữ so với lúc tắt (cờ cũ chỉ thêm 1 dòng, ngưỡng 24px).
+      expect(onHeight - offHeight, `khối Vận chuyển ${offHeight} → ${onHeight}`).toBeLessThanOrEqual(44);
+      const etaBox = (await page.getByTestId('pdp-eta').boundingBox())!;
+      expect(etaBox.height, 'dòng ngày tối đa 2 dòng').toBeLessThanOrEqual(44);
+      expect(await noHorizontalScroll(page)).toBe(true);
+
+      // 15:00 đúng giờ cắt: sang ngày kho làm kế tiếp (T6 20/11), nhận T2 23/11 tới T5 26/11.
+      await page.clock.setFixedTime(new Date('2026-11-19T08:00:00Z'));
+      await page.reload();
+      await openPdp(page);
+      await expect(page.getByTestId('pdp-eta')).toHaveText(`Dự kiến nhận T2 23/11 – T5 26/11${HINT}`);
     });
 
     test('bảng chọn phân loại: mỗi chip còn hàng có giá theo đơn vị, đổi chip thì nhãn tính lại', async ({ page, api }) => {

@@ -1,5 +1,8 @@
 import type { WasteCreateRequest, WasteFeeCashMethod, WasteLineInput, WastePickupQuoteRequest } from '@tubutree/shared-types';
+import { isHcmProvince } from './hcm-province';
 import { formatVnNumber } from './number-format';
+
+export { isHcmProvince };
 
 /** Chờ khách ngừng đổi địa chỉ / món / số kg rồi mới xin báo phí, để nhiều lần bấm nhanh chỉ tốn một lời gọi. */
 export const HOME_PICKUP_QUOTE_DEBOUNCE_MS = 300;
@@ -9,27 +12,6 @@ export const HOME_PICKUP_WEIGHT_CHIPS_GRAMS: readonly number[] = [500, 1000, 200
 
 /** Số kg hiện cho khách: 500 → "0,5", 2000 → "2". */
 export const homePickupKgLabel = (grams: number): string => formatVnNumber(grams / 1000);
-
-/** Bỏ dấu, hạ chữ thường, gộp mọi ký tự không phải chữ/số thành một khoảng trắng (bản sao của máy chủ waste-pickup-rules). */
-function fold(raw: string): string {
-  return raw
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/gi, 'd')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-/**
- * Tỉnh/thành của địa chỉ là TP. Hồ Chí Minh. Chỉ để báo sớm cho khách; máy chủ vẫn là nơi chặn thật.
- * Bản sao của `isHcmProvince` ở `apps/api/.../waste-pickup-rules.ts` (app-core không import được mã Nest); spec dùng đúng bảng ca của spec bên API.
- */
-export function isHcmProvince(province: string | null | undefined): boolean {
-  if (!province) return false;
-  const text = fold(province);
-  return /^(thanh pho |tp )?(ho chi minh|hcm|hochiminh)( city)?$/.test(text) || text === 'sai gon';
-}
 
 /** Cách "Shipper lấy tận nhà" dùng chung cổng với thu kèm đơn (máy chủ lấy lane pickup), và cũng dừng khi khách bị khoá đường vận chuyển. */
 export function homePickupEnabled(args: { cfgPickup: boolean; lanePickup: boolean; shipLocked: boolean }): boolean {

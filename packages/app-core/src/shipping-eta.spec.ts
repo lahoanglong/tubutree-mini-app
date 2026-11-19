@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { PlacedOrder } from './api/checkout';
-import { checkoutEtaLabel, orderDeliveryEtaLabel, placedOrderKinds, shippingEtaLabel } from './shipping-eta';
+import type { DeliverySchedule } from './api/config';
+import { checkoutEtaLabel, etaSchedule, orderDeliveryEtaLabel, placedOrderKinds, scheduleEtaLabel, shippingEtaLabel } from './shipping-eta';
 
 describe('shippingEtaLabel', () => {
   const now = new Date('2026-09-30T05:00:00.000Z'); // 12:00 giờ VN
@@ -120,5 +121,70 @@ describe('placedOrderKinds', () => {
     expectTypeOf<PlacedOrder['fulfiller']>().toEqualTypeOf<'TUBU' | 'MERCHANT' | undefined>();
     const placed = { fulfiller: 'MERCHANT' } as PlacedOrder;
     expect(placedOrderKinds(placed)).toEqual(['MERCHANT']);
+  });
+});
+
+describe('scheduleEtaLabel: lịch kho (Thứ 2 – Thứ 7, cắt đơn 15:00, nghỉ Chủ nhật), giờ Việt Nam', () => {
+  const S: DeliverySchedule = { cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], holidays: [], hcmDays: [1, 2], provinceDays: [2, 4] };
+  // 19/11/2026 là Thứ 5. Giờ VN = UTC + 7.
+  const vn = (iso: string) => new Date(`${iso}+07:00`);
+  const HCM = 'Thành phố Hồ Chí Minh';
+
+  it.each([
+    ['Thứ 5 10:00, trước giờ cắt: xuất kho trong ngày (đúng ví dụ PO)', '2026-11-19T10:00:00', 'T6 20/11 – T7 21/11'],
+    ['Thứ 5 14:59', '2026-11-19T14:59:59', 'T6 20/11 – T7 21/11'],
+    ['Thứ 5 đúng 15:00: đã qua giờ cắt, xuất Thứ 6, bỏ Chủ nhật', '2026-11-19T15:00:00', 'T7 21/11 – T2 23/11'],
+    ['Thứ 7 10:00: ngày giao bỏ Chủ nhật', '2026-11-21T10:00:00', 'T2 23/11 – T3 24/11'],
+    ['Thứ 7 16:00: xuất kho Thứ 2', '2026-11-21T16:00:00', 'T3 24/11 – T4 25/11'],
+    ['Chủ nhật: kho nghỉ, xuất kho Thứ 2', '2026-11-22T09:00:00', 'T3 24/11 – T4 25/11'],
+    ['03:00 sáng Thứ 6 giờ VN (vẫn là Thứ 5 theo UTC)', '2026-11-20T03:00:00', 'T7 21/11 – T2 23/11'],
+    ['qua năm mới', '2026-12-31T10:00:00', 'T6 01/01 – T7 02/01'],
+  ])('TP.HCM, %s', (_name, at, want) => {
+    expect(scheduleEtaLabel(S, HCM, vn(at))).toBe(want);
+  });
+
+  it('tỉnh khác 2–4 ngày làm việc; chưa biết tỉnh (trang chi tiết) thì từ sớm nhất TP.HCM tới muộn nhất tỉnh khác', () => {
+    const at = vn('2026-11-19T10:00:00');
+    expect(scheduleEtaLabel(S, 'Tỉnh Đồng Nai', at)).toBe('T7 21/11 – T3 24/11');
+    expect(scheduleEtaLabel(S, null, at)).toBe('T6 20/11 – T3 24/11');
+    expect(scheduleEtaLabel(S, '', at)).toBe('T6 20/11 – T3 24/11');
+    expect(scheduleEtaLabel(S, 'TP.HCM', at)).toBe('T6 20/11 – T7 21/11');
+  });
+
+  it('ngày lễ: không xuất kho và không tính là ngày giao', () => {
+    expect(scheduleEtaLabel({ ...S, holidays: ['2026-11-20'] }, HCM, vn('2026-11-19T10:00:00'))).toBe('T7 21/11 – T2 23/11');
+    expect(scheduleEtaLabel({ ...S, holidays: ['2026-11-19'] }, HCM, vn('2026-11-19T10:00:00'))).toBe('T7 21/11 – T2 23/11');
+  });
+
+  it('giờ cắt và khoảng ngày theo cấu hình; ít nhất bằng nhiều nhất thì một ngày', () => {
+    expect(scheduleEtaLabel({ ...S, cutoff: '09:30' }, HCM, vn('2026-11-19T10:00:00'))).toBe('T7 21/11 – T2 23/11');
+    expect(scheduleEtaLabel({ ...S, hcmDays: [1, 1] }, HCM, vn('2026-11-19T10:00:00'))).toBe('T6 20/11');
+  });
+
+  it('lịch không còn ngày làm nào: vẫn trả về, không treo', () => {
+    expect(typeof scheduleEtaLabel({ ...S, workDays: [] }, HCM, vn('2026-11-19T10:00:00'))).toBe('string');
+  });
+});
+
+describe('checkoutEtaLabel + etaSchedule: lịch kho thay khoảng ngày lịch khi bật cờ', () => {
+  const S: DeliverySchedule = { cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], holidays: [], hcmDays: [1, 2], provinceDays: [2, 4] };
+  const at = new Date('2026-11-19T10:00:00+07:00');
+
+  it('etaSchedule chỉ trả lịch khi cờ pdpEtaEnabled bật và API có gửi lịch', () => {
+    expect(etaSchedule({ pdpEtaEnabled: false, deliverySchedule: S })).toBeNull();
+    expect(etaSchedule({ pdpEtaEnabled: true })).toBeNull();
+    expect(etaSchedule(undefined)).toBeNull();
+    expect(etaSchedule({ pdpEtaEnabled: true, deliverySchedule: S })).toBe(S);
+  });
+
+  it('có lịch: theo tỉnh của địa chỉ, không cần shippingEta; trộn gian hàng thì ghi rõ phần hàng Tubu', () => {
+    expect(checkoutEtaLabel(null, ['TUBU'], at, S, 'Thành phố Hồ Chí Minh')).toBe('T6 20/11 – T7 21/11');
+    expect(checkoutEtaLabel({ minDays: 9, maxDays: 9 }, ['TUBU', 'MERCHANT'], at, S, 'Tỉnh Cà Mau')).toBe('T7 21/11 – T3 24/11 (hàng Tubu Tree)');
+    expect(checkoutEtaLabel(null, ['MERCHANT'], at, S, 'TP.HCM')).toBeNull();
+  });
+
+  it('không lịch: giữ khoảng ngày lịch cũ, thiếu cấu hình thì không hứa', () => {
+    expect(checkoutEtaLabel({ minDays: 1, maxDays: 2 }, ['TUBU'], at, null, 'TP.HCM')).toBe('20/11 – 21/11');
+    expect(checkoutEtaLabel(null, ['TUBU'], at, null)).toBeNull();
   });
 });

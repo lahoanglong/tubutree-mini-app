@@ -118,10 +118,18 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
   {
     key: 'shipping.pdp_eta_enabled',
     label: 'Ngày nhận dự kiến và phần còn thiếu để Miễn phí giao hàng trên trang sản phẩm',
-    description: 'Dòng Vận chuyển ở trang sản phẩm (Mini App và web) ghi "Nhận dự kiến …" (cùng khoảng ngày với thanh toán, chỉ hàng kho Tubu còn hàng) và câu "Món này + … là miễn phí giao" theo giỏ của khách cộng món đang xem.',
+    description: 'Dòng Vận chuyển ở trang sản phẩm (Mini App và web) ghi "Dự kiến nhận T6 20/11 – T3 24/11 · Đặt trước 15:00 giao sớm hơn" theo lịch kho (chỉ hàng kho Tubu còn hàng), thanh toán tính ngày theo cùng lịch và tỉnh của địa chỉ (TP.HCM hay tỉnh khác), và câu "Món này + … là miễn phí giao" theo giỏ của khách cộng món đang xem.',
     fallback: false,
-    onWarning: 'Khoảng ngày lấy từ "shipping.eta_min_days" và "shipping.eta_max_days", không tính giờ chốt đơn hay ngày kho nghỉ. Kiểm hai khoá này trước khi bật.',
+    onWarning: 'Ngày tính theo "shipping.warehouse_schedule": cắt đơn 15:00 Thứ 2 – Thứ 7, nghỉ Chủ nhật và ngày lễ trong danh sách, TP.HCM 1–2 và tỉnh khác 2–4 ngày làm việc. Thêm ngày nghỉ lễ vào khoá đó trước dịp lễ. Chi tiết đơn vẫn dùng "shipping.eta_min_days" và "shipping.eta_max_days".',
     offWarning: 'Dòng Vận chuyển về lại câu Miễn phí giao hàng cố định như trước (trong vòng khoảng 5 phút). Không dữ liệu nào bị xoá.',
+  },
+  {
+    key: 'mss.payment_rescue_cancel_enabled',
+    label: 'Huỷ đơn chuyển khoản khi MSS báo quá hạn',
+    description: 'MSS nhắc khách chuyển khoản và báo Tubu khi đơn quá hạn. Bật thì Tubu huỷ ngay đơn chuyển khoản còn chờ tiền, chưa có khoản nào về và đã qua hạn thanh toán ghi cho khách (mặc định 24 giờ): hoàn kho, mã giảm giá, Điểm Xanh và báo khách một lần như cron tự huỷ.',
+    fallback: false,
+    onWarning: 'Tin của MSS không huỷ đơn đã trả, đã xác nhận, COD hay chưa tới hạn. Đơn khách chuyển một phần thì tin này bỏ qua, nhưng cron tự huỷ vẫn huỷ ở hạn và ghi hoàn số đã nhận như trước. MSS chỉ gửi tin khi bên MSS đã bật nhắc chuyển khoản.',
+    offWarning: 'Tubu bỏ qua tin quá hạn của MSS; cron tự huỷ vẫn huỷ đơn quá hạn mỗi 10 phút như trước.',
   },
   {
     key: 'orders.timeline_v2_enabled',

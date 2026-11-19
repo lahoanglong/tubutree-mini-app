@@ -50,7 +50,7 @@ import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { trackRecycleStep } from '../services/recycle-funnel';
-import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
+import { checkoutEtaLabel, etaSchedule } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
 import { settleWithin } from '../utils/settle-within';
 import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
@@ -747,7 +747,9 @@ export default function CheckoutPage() {
   const tubuShippingFee = quote.data ? (tubuShipment ? tubuShipment.shippingFee : shipments.length === 0 ? quote.data.shippingFee : 0) : undefined;
   const shipRow = quote.data ? shippingRowView(quote.data) : null;
   // Cùng điều kiện với màn thành công: chưa có cấu hình thì không hứa ngày giao; giỏ chỉ có hàng gian hàng tự giao thì cũng không.
-  const etaLabel = publicConfig.isLoaded ? checkoutEtaLabel(publicConfig.shippingEta, shipments.map((sh) => sh.fulfiller.kind)) : null;
+  const etaLabel = publicConfig.isLoaded
+    ? checkoutEtaLabel(publicConfig.shippingEta, shipments.map((sh) => sh.fulfiller.kind), undefined, etaSchedule(publicConfig), addresses.data?.find((a) => a.id === addressId)?.province)
+    : null;
 
   const shownItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))

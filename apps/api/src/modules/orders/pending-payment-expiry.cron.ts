@@ -7,6 +7,7 @@ import { PREPAID_METHODS } from './order-transition';
 import { CRON_TZ } from '../../common/cron-tz';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
+import { pendingPaymentCancelOpts } from './pending-payment-cancel';
 
 export {
   DEALER_PENDING_PAYMENT_TTL_KEY,
@@ -111,18 +112,15 @@ export class PendingPaymentExpiryCron {
       // ZaloPay có cron đối soát (ZalopayReconcileCron) hỏi cổng cả sau khi huỷ; cổng khác thì chưa — để lại dấu cho người đối soát.
       const gatewayAttempted = o.paymentMethod !== 'BANK_TRANSFER' && (o._count?.paymentAttempts ?? 0) > 0;
       try {
-        const res = await this.orderStatus.setStatus(o.id, 'CANCELLED', {
-          actorType: 'SYSTEM',
-          note: `Tự huỷ: quá ${o.type === 'DEALER' ? dealerTtlHours : ttlHours} giờ chưa thanh toán${
-            gatewayAttempted ? ` — đã mở lệnh ${o.paymentMethod}: đối chiếu ${o.paymentMethod}, đã trừ tiền thì hoàn thủ công` : ''
-          }`,
-          onlyIfUnpaid: true,
-          expectedStatus: 'PENDING_PAYMENT',
-          // D1: đơn chuyển khoản chờ tiền đã lên Pancake (kèm "CHỜ CHUYỂN KHOẢN") — huỷ cả bên Pancake.
-          pancakeGate: true,
-          // Khách cần biết VÌ SAO đơn huỷ và nếu lỡ chuyển khoản muộn thì tiền đi đâu (BUYERMINI-8).
-          notifyEvent: 'ORDER_PAYMENT_EXPIRED',
-        });
+        const res = await this.orderStatus.setStatus(
+          o.id,
+          'CANCELLED',
+          pendingPaymentCancelOpts(
+            `Tự huỷ: quá ${o.type === 'DEALER' ? dealerTtlHours : ttlHours} giờ chưa thanh toán${
+              gatewayAttempted ? ` — đã mở lệnh ${o.paymentMethod}: đối chiếu ${o.paymentMethod}, đã trừ tiền thì hoàn thủ công` : ''
+            }`,
+          ),
+        );
         if (res.status === 'CANCELLED') {
           cancelled += 1;
           if (gatewayAttempted) {

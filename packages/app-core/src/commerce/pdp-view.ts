@@ -1,15 +1,25 @@
 import { applyShelfDedupe } from '../merch/shelves';
-import type { ShippingEta } from '../api/config';
+import type { DeliverySchedule, ShippingEta } from '../api/config';
 import { fillCopy } from '../shop-copy';
-import { checkoutEtaLabel } from '../shipping-eta';
+import { checkoutEtaLabel, scheduleEtaLabel } from '../shipping-eta';
 import { vnd } from './money';
 
 /**
- * "Nhận dự kiến 20/11 – 24/11" ở khối vận chuyển của trang chi tiết (cờ `shipping.pdp_eta_enabled`). Gọi đúng `checkoutEtaLabel` của thanh toán với
+ * "Nhận dự kiến 20/11 – 24/11" ở khối vận chuyển của trang chi tiết (cờ `shipping.pdp_eta_enabled`); có lịch kho (`schedule`) thì
+ * "Dự kiến nhận T6 20/11 – T3 24/11 · Đặt trước 15:00 giao sớm hơn". Gọi đúng `checkoutEtaLabel` của thanh toán với
  * cùng cấu hình nên hai nơi ra cùng khoảng ngày ở cùng thời điểm. Chỉ hàng kho Tubu giao còn hàng; hàng gian hàng tự giao, hết hàng hay không rõ nơi giao thì null.
  */
-export function pdpEtaText(eta: ShippingEta | null | undefined, kind: string | null | undefined, inStock: boolean, now?: Date): string | null {
-  const range = inStock && kind === 'TUBU' ? checkoutEtaLabel(eta, [kind], now) : null;
+export function pdpEtaText(
+  eta: ShippingEta | null | undefined,
+  kind: string | null | undefined,
+  inStock: boolean,
+  now?: Date,
+  schedule?: DeliverySchedule | null,
+): string | null {
+  if (!inStock || kind !== 'TUBU') return null;
+  // Lịch kho: trang chi tiết chưa biết tỉnh của khách nên nói khoảng rộng nhất (scheduleEtaLabel), thanh toán thu hẹp theo địa chỉ.
+  if (schedule) return fillCopy('pdp.etaSchedule', { range: scheduleEtaLabel(schedule, null, now), cutoff: schedule.cutoff });
+  const range = checkoutEtaLabel(eta, [kind], now);
   return range ? fillCopy('pdp.eta', { range }) : null;
 }
 

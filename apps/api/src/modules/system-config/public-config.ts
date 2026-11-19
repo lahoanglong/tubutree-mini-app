@@ -1,5 +1,5 @@
 import type { SystemConfigService } from './system-config.service';
-import { toShippingEta } from './shipping-eta';
+import { WAREHOUSE_SCHEDULE_KEY, toShippingEta, toWarehouseSchedule } from './shipping-eta';
 import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
 import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
 import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
@@ -131,6 +131,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     webGuestCheckout,
     unitPrice,
     pdpEta,
+    warehouseSchedule,
     perfRumEnabled,
     perfRumSamplePct,
     refillFirst,
@@ -186,6 +187,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(WEB_GUEST_CHECKOUT_ENABLED_KEY, false),
     config.get<unknown>(UNIT_PRICE_ENABLED_KEY, false),
     config.get<unknown>(PDP_ETA_ENABLED_KEY, false),
+    config.get<unknown>(WAREHOUSE_SCHEDULE_KEY, null),
     config.get<unknown>(PERF_RUM_ENABLED_KEY, false),
     config.get<unknown>(PERF_RUM_SAMPLE_PCT_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT),
     config.get<unknown>(REFILL_FIRST_ENABLED_KEY, false),
@@ -278,6 +280,9 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     unitPriceEnabled: unitPrice === true,
     // Trang chi tiết: "Nhận dự kiến …" theo `shippingEta` và câu còn thiếu để miễn phí giao hàng theo giỏ. Chỉ boolean true mới bật.
     pdpEtaEnabled: pdpEta === true,
+    // Lịch kho (cắt đơn, ngày làm, ngày lễ, số ngày giao TP.HCM / tỉnh khác): khi cờ trên bật, trang chi tiết và thanh toán tính ngày nhận theo lịch này
+    // thay cho khoảng ngày lịch `shippingEta`. Luôn đủ trường (trường hỏng về lịch chuẩn), app cũ không đọc thì bỏ qua.
+    deliverySchedule: toWarehouseSchedule(warehouseSchedule),
     // Đo tốc độ trên máy khách: app chỉ gửi khi `enabled` true, với xác suất `samplePct`%. Tắt (hay API cũ không trả) thì app không gửi gì.
     perfRum: { enabled: perfRumEnabled === true, samplePct: normalizeSamplePct(perfRumSamplePct) },
     // Gợi ý đổi chai sang gói Refill ở giỏ và kệ Mua lại (`GET /catalog/refill-pairs/mine`); tắt hay API cũ thì app không gọi endpoint đó.

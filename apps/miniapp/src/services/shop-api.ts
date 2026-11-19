@@ -1,4 +1,5 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
+import type { DeliverySchedule } from '@tubutree/app-core/api/config';
 import { flashAllowancePath } from '@tubutree/app-core/api/flash-allowance';
 import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
@@ -341,6 +342,8 @@ export interface PublicConfig {
   unitPriceEnabled?: boolean;
   /** Cờ `shipping.pdp_eta_enabled`: cùng nghĩa với `PublicConfig.pdpEtaEnabled` ở app-core. Thiếu khi API cũ → tắt. */
   pdpEtaEnabled?: boolean;
+  /** Lịch kho của ngày nhận dự kiến: cùng nghĩa với `PublicConfig.deliverySchedule` ở app-core. Thiếu khi API cũ → dùng `shippingEta`. */
+  deliverySchedule?: DeliverySchedule;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

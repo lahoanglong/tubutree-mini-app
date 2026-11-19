@@ -73,8 +73,8 @@ function ShipDecisionOn({ product, initialConfig, freeship }: { product: Product
   const inStock = selection?.buyable ?? (selected?.stock ?? 0) > 0;
   // Chỗ giữ của dòng ngày là chính câu đó tính ở một ngày cố định (cùng số chữ số, chữ số đều bề ngang): HTML máy chủ và lần vẽ đầu ở trình duyệt
   // giống nhau, và hàng hẹp (768px) gãy dòng y như khi có ngày thật. Cùng điều kiện còn hàng với dòng thật để không giữ chỗ rồi bỏ.
-  const etaShape = pdpEtaText(initialConfig?.shippingEta ?? cfg.shippingEta, kind, inStock, ETA_SHAPE_DATE);
-  const etaText = hydrated ? pdpEtaText(cfg.shippingEta, kind, inStock) : null;
+  const etaShape = pdpEtaText(initialConfig?.shippingEta ?? cfg.shippingEta, kind, inStock, ETA_SHAPE_DATE, (initialConfig ?? cfg).deliverySchedule);
+  const etaText = hydrated ? pdpEtaText(cfg.shippingEta, kind, inStock, undefined, cfg.deliverySchedule) : null;
 
   const guest = phase === 'guest';
   // Gian hàng không có câu tĩnh để thay: giữ sẵn một dòng ẩn (từ HTML tới khi biết giỏ) để câu còn thiếu điền vào, không chèn dòng mới đẩy phần dưới.

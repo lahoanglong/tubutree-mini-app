@@ -4,6 +4,21 @@ import { pdpEtaText, pdpFreeshipGap, type GapCartLine } from './pdp-view';
 
 const ETA = { minDays: 2, maxDays: 4 };
 
+describe('pdpEtaText: lịch kho (tubu-w6-02)', () => {
+  const S = { cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], holidays: [], hcmDays: [1, 2] as [number, number], provinceDays: [2, 4] as [number, number] };
+
+  it('ngày cụ thể kèm thứ và giờ cắt đơn; chưa biết tỉnh nên từ sớm nhất TP.HCM tới muộn nhất tỉnh khác', () => {
+    expect(pdpEtaText(null, 'TUBU', true, new Date('2026-11-19T10:00:00+07:00'), S)).toBe('Dự kiến nhận T6 20/11 – T3 24/11\u00a0· Đặt\u00a0trước\u00a015:00\u00a0giao\u00a0sớm\u00a0hơn');
+    expect(pdpEtaText(ETA, 'TUBU', true, new Date('2026-11-21T16:00:00+07:00'), S)).toBe('Dự kiến nhận T3 24/11 – T6 27/11\u00a0· Đặt\u00a0trước\u00a015:00\u00a0giao\u00a0sớm\u00a0hơn');
+  });
+
+  it('cùng luật không hứa ngày: gian hàng tự giao, hết hàng', () => {
+    const now = new Date('2026-11-19T10:00:00+07:00');
+    expect(pdpEtaText(ETA, 'MERCHANT', true, now, S)).toBeNull();
+    expect(pdpEtaText(ETA, 'TUBU', false, now, S)).toBeNull();
+  });
+});
+
 describe('pdpEtaText: cùng khoảng ngày với thanh toán', () => {
   it.each([
     ['giữa ngày', '2026-11-18T05:00:00Z'],

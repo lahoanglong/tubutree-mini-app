@@ -1,7 +1,44 @@
-import type { ShippingEta } from './api/config';
+import type { DeliverySchedule, PublicConfig, ShippingEta } from './api/config';
+import { isHcmProvince } from './hcm-province';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+const DAY_MS = 864e5;
+
+/** Lịch kho khi bật cờ `shipping.pdp_eta_enabled` (API cũ không gửi lịch thì null): trang chi tiết và thanh toán tính ngày nhận theo lịch này. */
+export function etaSchedule(cfg: Pick<PublicConfig, 'pdpEtaEnabled' | 'deliverySchedule'> | null | undefined): DeliverySchedule | null {
+  return (cfg?.pdpEtaEnabled === true && cfg.deliverySchedule) || null;
+}
+
+/**
+ * "T6 20/11 – T7 21/11": ngày nhận theo lịch kho, giờ Việt Nam. Đặt trước giờ cắt vào ngày kho làm thì xuất kho hôm nay, không thì ngày kho làm kế
+ * tiếp; rồi cộng số ngày làm việc giao (bỏ ngày kho nghỉ và ngày lễ). Biết tỉnh thì dùng khoảng TP.HCM hoặc tỉnh khác; chưa biết (trang chi tiết)
+ * thì từ sớm nhất của TP.HCM tới muộn nhất của tỉnh khác, để không hứa sớm hơn thật.
+ */
+export function scheduleEtaLabel(s: DeliverySchedule, province: string | null | undefined, now: Date = new Date()): string {
+  const [lo, hi] = !province ? [s.hcmDays[0], s.provinceDays[1]] : isHcmProvince(province) ? s.hcmDays : s.provinceDays;
+  const vn = now.getTime() + VN_OFFSET_MS;
+  const open = (t: number) => s.workDays.includes(new Date(t).getUTCDay()) && !s.holidays.includes(new Date(t).toISOString().slice(0, 10));
+  // Tối đa 60 bước: lịch không còn ngày làm nào thì vẫn trả một ngày, không treo trang.
+  const next = (t: number) => {
+    let i = 0;
+    do t += DAY_MS;
+    while (!open(t) && ++i < 60);
+    return t;
+  };
+  const [h, m] = s.cutoff.split(':').map(Number);
+  let ship = vn - (vn % DAY_MS);
+  if (!open(ship) || vn - ship >= ((h ?? 0) * 60 + (m ?? 0)) * 6e4) ship = next(ship);
+  const fmt = (n: number) => {
+    let t = ship;
+    for (let i = 0; i < n; i++) t = next(t);
+    const d = new Date(t);
+    const w = d.getUTCDay();
+    return `${w ? `T${w + 1}` : 'CN'} ${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
+  };
+  const [a, b] = [fmt(lo), fmt(hi)];
+  return a === b ? a : `${a} – ${b}`;
+}
 
 /**
  * "02/10 – 04/10" từ khoảng ngày cấu hình (ngày lịch, chưa theo tỉnh). Tự ghép dd/MM từ ngày-tháng theo giờ Việt Nam (không theo múi giờ máy) thay vì
@@ -21,14 +58,18 @@ export function shippingEtaLabel(eta: ShippingEta, now: Date = new Date()): stri
  * Ngày giao dự kiến ở thanh toán và màn đặt xong. Khoảng ngày cấu hình chỉ là của kho Tubu: lần đặt chỉ có hàng gian hàng
  * tự giao thì không hứa ngày thay họ (cùng luật với chi tiết đơn); lần đặt trộn thì nói rõ ngày chỉ cho phần hàng Tubu Tree.
  * `kinds` là loại nơi giao của từng kiện ('TUBU' | 'MERCHANT'); không biết kiện nào thì không hứa.
+ * Có `schedule` (cờ ngày nhận theo lịch kho bật) thì ngày tính theo lịch kho và tỉnh của địa chỉ giao (`province`), thay khoảng ngày lịch `eta`.
  */
 export function checkoutEtaLabel(
   eta: ShippingEta | null | undefined,
   kinds: ReadonlyArray<string | null | undefined>,
   now: Date = new Date(),
+  schedule?: DeliverySchedule | null,
+  province?: string | null,
 ): string | null {
-  if (!eta || !kinds.includes('TUBU')) return null;
-  const label = shippingEtaLabel(eta, now);
+  if (!kinds.includes('TUBU')) return null;
+  const label = schedule ? scheduleEtaLabel(schedule, province, now) : eta ? shippingEtaLabel(eta, now) : null;
+  if (!label) return null;
   return kinds.includes('MERCHANT') ? `${label} (hàng Tubu Tree)` : label;
 }
 
