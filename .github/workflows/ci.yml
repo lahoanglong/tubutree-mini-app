@@ -66,7 +66,7 @@ jobs:
         run: node scripts/ci/bundle-budget.cjs apps/miniapp/www
         env:
           MINIAPP_ENTRY_WARN_KB: ${{ vars.MINIAPP_ENTRY_WARN_KB || '700' }}
-          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2380' }}
+          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2350' }}
 
       - name: Ngân sách JS tải lần đầu của web (chặn / và /san-pham)
         # Ngưỡng ở scripts/ci/web-budget.json. Chỉ / và /san-pham đỏ CI khi vượt; bốn route còn lại chỉ cảnh báo vì các wave khác đang thêm mã vào đó.

@@ -19,6 +19,7 @@ const FILES = [
   'components/recycle/recycle-request.tsx',
   'components/site-search.tsx',
   'app/san-pham/[slug]/product-reviews.tsx',
+  'app/san-pham/[slug]/review-editor.tsx',
   'app/thanh-toan/page.tsx',
 ];
 

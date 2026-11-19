@@ -1,5 +1,7 @@
 // packages/design-tokens/src/fonts.spec.ts
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
 const css = readFileSync(new URL('./fonts.css', import.meta.url), 'utf-8');
@@ -52,5 +54,55 @@ describe('design-tokens/fonts.css', () => {
     );
     const declared = new Set(declaredWeights('Inter'));
     for (const weight of used) expect(declared.has(weight), `Inter ${weight}`).toBe(true);
+  });
+
+  // The Inter files are subset to the glyphs reachable through features browsers turn on by themselves plus tnum/pnum/case
+  // (see the comment at the top of fonts.css). A full Inter file is ~27 KB and costs the Zalo Mini App bundle 43 KB in total.
+  it('keeps the Inter files at the default-feature subset size', () => {
+    for (const weight of [400, 500, 600, 700]) {
+      const bytes = statSync(new URL(`./fonts/inter-${weight}.woff2`, import.meta.url)).size;
+      expect(bytes, `inter-${weight}.woff2`).toBeLessThanOrEqual(18_000);
+    }
+  });
+
+  it('no stylesheet or component asks Inter for an OpenType feature the subset dropped', () => {
+    const repo = fileURLToPath(new URL('../../../', import.meta.url));
+    const roots = ['apps/web/src', 'apps/miniapp/src', 'apps/web/tailwind.config.ts', 'apps/miniapp/tailwind.config.ts', 'packages'];
+    const files: string[] = [];
+    const walk = (p: string): void => {
+      if (!existsSync(p)) return;
+      if (statSync(p).isFile()) {
+        if (/\.(css|scss|html|[cm]?[jt]sx?)$/.test(p) && !/\.(spec|test)\.[cm]?[jt]sx?$/.test(p)) files.push(p);
+        return;
+      }
+      for (const name of readdirSync(p)) if (!['node_modules', 'dist', '.next', 'www', '.turbo'].includes(name)) walk(join(p, name));
+    };
+    for (const root of roots) walk(join(repo, root));
+    expect(files.length).toBeGreaterThan(100);
+
+    const allowedNumeric = new Set(['tabular-nums', 'proportional-nums', 'lining-nums', 'normal', 'inherit', 'initial', 'unset']);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const src = readFileSync(file, 'utf-8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+      const where = relative(repo, file);
+      // Shorthand `font-variant:` / `fontVariant:` cũng bật được tính năng (small-caps, ordinal…): cấm hẳn như font-feature-settings.
+      if (/font-feature-settings|fontFeatureSettings|font-variant(?:-(?:ligatures|caps|alternates|position|east-asian))?\s*:|fontVariant(?:Ligatures|Caps|Alternates|Position|EastAsian)?\s*:/.test(src)) {
+        offenders.push(`${where}: font-feature-settings / font-variant-* other than numeric`);
+      }
+      // Cả dạng class tuỳ ý của Tailwind `[font-variant-numeric:…]`; `!important` và biến CSS không phải tên tính năng.
+      for (const m of src.matchAll(/(?:font-variant-numeric\s*:\s*|fontVariantNumeric\s*:\s*['"`])([^;'"`}\]\n]+)/g)) {
+        const values = (m[1] ?? '').replace(/!important/g, '').trim().split(/\s+/).filter(Boolean);
+        for (const value of values) if (!value.startsWith('var(') && !allowedNumeric.has(value)) offenders.push(`${where}: font-variant-numeric ${value}`);
+      }
+      // Class Tailwind bật tính năng đã bỏ, ở bất kỳ chuỗi nào (className, hằng, cn()/clsx()), không chỉ thuộc tính className.
+      for (const m of src.matchAll(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g)) {
+        for (const cls of m[0].slice(1, -1).split(/\s+/)) {
+          if (/^(?:[\w-]+:)*(?:ordinal|slashed-zero|diagonal-fractions|stacked-fractions|oldstyle-nums)$/.test(cls)) offenders.push(`${where}: class ${cls}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

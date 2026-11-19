@@ -1,4 +1,11 @@
 /* packages/design-tokens/src/fonts.css */
+/* Bốn tệp Inter chỉ giữ glyph mà trình duyệt dùng khi không ai bật tính năng OpenType riêng (cùng 294 ký tự, cùng nét chữ, cùng kerning):
+   bỏ các bộ thay thế cv01–cv13, ss01–ss07, frac/sups/subs/ordn/zero/dlig/salt/aalt mà không CSS nào bật. Gói Mini App (Zalo cân tổng dung lượng) giảm 43 KB.
+   Ảnh chụp Chromium và WebKit của mọi ký tự × 4 weight × có/không tabular-nums trùng từng pixel với bản đầy đủ.
+   Cần thêm tính năng (vd `font-variant-numeric: slashed-zero` → `zero`): lấy tệp đầy đủ ở commit 0d518f283 rồi cắt lại, thêm tag vào --layout-features:
+     pyftsubset inter-400.woff2 --unicodes='*' --flavor=woff2 --output-file=inter-400.woff2 \
+       --layout-features='kern,calt,locl,ccmp,mark,mkmk,liga,clig,rlig,rvrn,tnum,pnum,case'
+   fonts.spec.ts chặn CSS/TSX bật tính năng ngoài danh sách đó. */
 @font-face {
   font-family: 'Fraunces';
   src: url('./fonts/fraunces-500.woff2') format('woff2');

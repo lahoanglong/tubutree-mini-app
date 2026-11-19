@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { ApiError, NetworkError } from '@/lib/client-api';
@@ -29,6 +29,11 @@ vi.mock('@/lib/reviews-client', async (importOriginal) => ({
 }));
 
 import { ProductReviews } from './product-reviews';
+
+// Form viết/sửa và khung xem ảnh là chunk tải lười (next/dynamic): nạp sẵn để lần mở đầu tiên của tệp không phụ thuộc thời gian biên dịch mô-đun của vitest.
+beforeAll(async () => {
+  await Promise.all([import('./review-editor'), import('./review-video-upload'), import('@/components/review-media-lightbox')]);
+});
 
 const O1 = { orderId: 'o1', code: 'TB0001', deliveredAt: '2026-08-01T00:00:00.000Z' };
 const ELIG_NEW = { canReview: true, reason: null, rewardAvailable: true, purchaseCount: 1, reviewableOrders: [O1], myReviews: [] };

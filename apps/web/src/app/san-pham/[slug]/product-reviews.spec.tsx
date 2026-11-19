@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { reviewListKey } from '@tubutree/app-core/commerce/review-filter';
@@ -107,6 +107,11 @@ vi.mock('@/lib/reviews-client', async (importOriginal) => ({
 }));
 
 import { ProductReviews, Stars } from './product-reviews';
+
+// Form viết/sửa và khung xem ảnh là chunk tải lười (next/dynamic): nạp sẵn để lần mở đầu tiên của tệp không phụ thuộc thời gian biên dịch mô-đun của vitest.
+beforeAll(async () => {
+  await Promise.all([import('./review-editor'), import('./review-video-upload'), import('@/components/review-media-lightbox')]);
+});
 
 const review = (id: string, rating: number, extra: Record<string, unknown> = {}) => ({
   id,

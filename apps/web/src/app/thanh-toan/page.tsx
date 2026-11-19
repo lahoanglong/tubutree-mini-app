@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ChevronRight, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useMutationState, useQueryClient, useIsMutating } from '@tanstack/react-query';
@@ -66,9 +67,9 @@ import { settleWithin } from '@/lib/settle-within';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { CouponBox, COUPON_MUTATION_KEY, forgetAutoCoupon, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { GuestCheckout } from '@/components/checkout/guest-checkout';
 import { useGuestOrderClaim } from '@/lib/guest-checkout/claim';
 import { guestCheckoutOn, welcomeAmountOf } from '@/lib/guest-checkout/flag';
+import { useServerGuestConfig } from '@/components/checkout/server-guest-config';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
@@ -100,6 +101,13 @@ import { EmptyState } from '@/components/mini/empty-state';
 import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
+
+// Form đặt hàng không đăng nhập chỉ hiện cho khách chưa đăng nhập khi cờ web.guest_checkout_enabled bật: tách khỏi JS tải lần đầu của trang
+// (khách đã đăng nhập không bao giờ cần). Khung chờ là RouteSkeleton như lúc chờ phiên đăng nhập và chờ cấu hình.
+const GuestCheckout = dynamic(() => import('@/components/checkout/guest-checkout').then((m) => m.GuestCheckout), {
+  ssr: false,
+  loading: () => <AuthLoading />,
+});
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -173,6 +181,7 @@ export default function CheckoutPage() {
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
   const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const serverGuestConfig = useServerGuestConfig();
   const zalo = useOrderZaloConsent();
   const shippingEta = configQ.data?.shippingEta;
 
@@ -607,17 +616,20 @@ export default function CheckoutPage() {
 
   if (phase === 'guest') {
     // Đặt hàng không đăng nhập (web.guest_checkout_enabled): đọc cờ từ chính truy vấn /config/public trang vẫn gọi, cờ tắt thì không thêm yêu cầu nào.
-    if (configQ.isPending) {
+    // Trong lúc truy vấn đó chưa về, dùng bản máy chủ đã đọc sẵn ở layout để không giữ khách ở khung chờ; chỉ chờ khi máy chủ cũng không có.
+    // Bản máy chủ có thể cũ vài phút ngay sau khi đổi cờ (xem thanh-toan/layout.tsx): bản của trình duyệt về thì luôn theo bản đó.
+    const guestConfig = configQ.data ?? serverGuestConfig;
+    if (configQ.isPending && guestConfig === undefined) {
       return (
         <Shell>
           <AuthLoading />
         </Shell>
       );
     }
-    if (guestCheckoutOn(configQ.data)) {
+    if (guestCheckoutOn(guestConfig)) {
       return (
         <Shell>
-          <GuestCheckout welcomeAmount={welcomeAmountOf(configQ.data)} />
+          <GuestCheckout welcomeAmount={welcomeAmountOf(guestConfig)} />
         </Shell>
       );
     }

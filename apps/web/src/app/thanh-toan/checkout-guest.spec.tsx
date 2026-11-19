@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, chooseGeo, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { act } from 'react';
 import { ApiError } from '@/lib/client-api';
@@ -10,6 +10,8 @@ import { ApiError } from '@/lib/client-api';
  */
 const m = vi.hoisted(() => ({
   config: {} as Record<string, unknown>,
+  /** /config/public của trình duyệt treo (mạng chậm): trang chỉ còn bản máy chủ đọc sẵn ở layout. */
+  configPending: false,
   quote: vi.fn(),
   place: vi.fn(),
   replace: vi.fn(),
@@ -32,7 +34,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMe: vi.fn(async () => {
     throw new Error('không gọi /users/me khi chưa đăng nhập');
   }),
-  getPublicConfig: async () => m.config,
+  getPublicConfig: () => (m.configPending ? new Promise<never>(() => undefined) : Promise.resolve(m.config)),
 }));
 vi.mock('@/lib/guest-cart/use-guest-cart', () => ({
   useGuestCartLines: () => [{ variationId: 'v1', slug: 'dau-goi', quantity: 2, addedAt: 1 }],
@@ -66,6 +68,12 @@ vi.mock('@/lib/guest-checkout/api', () => ({
 }));
 
 import CheckoutPage from './page';
+import { ServerGuestConfigProvider } from '@/components/checkout/server-guest-config';
+
+// Form đặt không đăng nhập là chunk tải lười (next/dynamic): nạp sẵn để lần dựng đầu của tệp không phụ thuộc thời gian biên dịch mô-đun của vitest.
+beforeAll(async () => {
+  await import('@/components/checkout/guest-checkout');
+});
 
 const QUOTE = {
   flashNotice: false,
@@ -116,6 +124,7 @@ beforeEach(() => {
   m.replace.mockReset();
   m.clear.mockReset();
   m.flash = false;
+  m.configPending = false;
 });
 afterEach(() => {
   mounted.forEach((x) => x.unmount());
@@ -246,5 +255,46 @@ describe('/thanh-toan chưa đăng nhập, cờ bật', () => {
     expect(alert?.textContent).toContain('Hiện chưa đặt thêm được đơn khi chưa đăng nhập.');
     expect(byText(alert!, 'a', 'Đăng nhập Zalo')?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fthanh-toan');
     expect(m.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('/thanh-toan chưa đăng nhập: không giữ khung chờ khi máy chủ đã đọc sẵn cờ (P2-6)', () => {
+  const mountWith = async (server: Record<string, unknown> | undefined) => {
+    const r = render(
+      <ServerGuestConfigProvider value={server}>
+        <CheckoutPage />
+      </ServerGuestConfigProvider>,
+    );
+    mounted.push(r);
+    await flush(8);
+    return r;
+  };
+
+  it('máy chủ không có cờ và /config/public chưa về: vẫn khung chờ như trước, chưa mời đăng nhập hay hiện form', async () => {
+    m.configPending = true;
+    const r = await mountWith(undefined);
+    expect(r.container.textContent).not.toContain('Đăng nhập để thanh toán đơn hàng.');
+    expect(r.container.querySelector('[data-testid="guest-checkout"]')).toBeNull();
+  });
+
+  it('máy chủ đọc cờ tắt, /config/public treo: mời đăng nhập ngay, không khung chờ', async () => {
+    m.configPending = true;
+    const r = await mountWith({ webGuestCheckoutEnabled: false, newCustomer: { welcomeVoucher: null } });
+    expect(r.container.textContent).toContain('Đăng nhập để thanh toán đơn hàng.');
+    expect(r.container.querySelector('[data-testid="guest-checkout"]')).toBeNull();
+  });
+
+  it('máy chủ đọc cờ bật, /config/public treo: form đặt không đăng nhập ngay, dòng mời ghi đúng quà đơn đầu', async () => {
+    m.configPending = true;
+    const r = await mountWith({ webGuestCheckoutEnabled: true, newCustomer: { welcomeVoucher: { amount: 30_000 } } });
+    expect(r.container.querySelector('[data-testid="guest-checkout"]')).not.toBeNull();
+    expect(r.container.querySelector('[data-testid="guest-login-link"]')?.textContent).toContain('30.000đ');
+    expect(r.container.textContent).not.toContain('Đăng nhập để thanh toán đơn hàng.');
+  });
+
+  it('bản của trình duyệt về thì theo bản đó (máy chủ còn cờ cũ đã tắt, trình duyệt thấy bật)', async () => {
+    const r = await mountWith({ webGuestCheckoutEnabled: false, newCustomer: { welcomeVoucher: null } });
+    expect(r.container.querySelector('[data-testid="guest-checkout"]')).not.toBeNull();
+    expect(r.container.textContent).not.toContain('Đăng nhập để thanh toán đơn hàng.');
   });
 });
