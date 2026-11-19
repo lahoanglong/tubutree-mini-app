@@ -9,7 +9,7 @@ interface World {
   cfg?: Record<string, unknown>;
   users?: Record<string, Record<string, unknown> | null>;
   order?: Record<string, unknown>;
-  refereeOrders?: { id: string; createdAt: Date }[];
+  refereeOrders?: { id: string; createdAt: Date; status?: string }[];
   referrerOrders?: Record<string, unknown>[];
   addresses?: Record<string, unknown>[];
   entries?: { reason: string; refId: string }[];
@@ -37,10 +37,10 @@ function setup(w: World = {}) {
     $queryRaw: jest.fn(async () => [{ pointsBalance: 0, pointsConvertedBalance: 0 }]),
     coinTransaction: { findFirst: jest.fn(async () => null) },
     pointsTransaction: {
-      findFirst: jest.fn(async (args: { where: { reason?: { in?: string[] }; refId?: string } }) => {
+      findFirst: jest.fn(async (args: { where: { reason?: { in?: string[] }; refId?: { in: string[] } } }) => {
         const { where } = args;
         if (where.reason?.in) return entries.find((e) => where.reason!.in!.includes(e.reason)) ?? null;
-        if (where.refId) return entries.find((e) => e.refId === where.refId && e.reason.startsWith('REFERRAL_FIRST_ORDER_')) ?? null;
+        if (where.refId) return entries.find((e) => where.refId!.in.includes(e.refId) && e.reason.startsWith('REFERRAL_FIRST_ORDER_')) ?? null;
         return null;
       }),
       count: jest.fn(async () => w.monthCount ?? 0),
@@ -125,6 +125,27 @@ describe('grantFirstOrderReferralReward', () => {
   it('không phải đơn đầu đạt mốc (đơn trước đã giao) thì không thưởng', async () => {
     const s = setup({ refereeOrders: [{ id: 'o0', createdAt: new Date('2026-11-01T00:00:00Z') }, { id: 'o1', createdAt: at }] });
     expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_FIRST' });
+  });
+
+  it('đơn đầu đã giao rồi bị trả (cặp bị chặn/chạm trần ở đơn đó): đơn sau không thành đơn đầu', async () => {
+    const s = setup({ refereeOrders: [{ id: 'o0', createdAt: new Date('2026-11-01T00:00:00Z'), status: 'RETURNED' }, { id: 'o1', createdAt: at }] });
+    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_FIRST' });
+    expect(s.grant).not.toHaveBeenCalled();
+  });
+
+  it('chính đơn đầu đã trả hết trước lúc xét: không thưởng', async () => {
+    const s = setup({ refereeOrders: [{ id: 'o1', createdAt: at, status: 'RETURNED' }] });
+    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
+    expect(s.grant).not.toHaveBeenCalled();
+  });
+
+  it('một đơn khác của tài khoản đã được thưởng đơn đầu dưới id phiên khách đã gộp: không thưởng lần hai', async () => {
+    const s = setup({
+      refereeOrders: [{ id: 'o1', createdAt: at }, { id: 'oG', createdAt: new Date('2026-11-20T00:00:00Z') }],
+      entries: [{ reason: `${FIRST_ORDER_REFEREE_PREFIX}guest9`, refId: 'oG' }],
+    });
+    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'ALREADY' });
+    expect(s.grant).not.toHaveBeenCalled();
   });
 
   it('đã thưởng người được mời này (đơn chạy lại trạng thái, cron chạy lại): không cấp lần hai', async () => {

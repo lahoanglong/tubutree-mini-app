@@ -79,6 +79,9 @@ export function addressKey(a: unknown): string | null {
 
 const nonEmpty = (xs: (string | null | undefined)[]): string[] => xs.filter((x): x is string => typeof x === 'string' && x.trim() !== '');
 
+/** Phiên khách đã gộp đổi zaloId thành `<khoá>_merged_<giờ>` (auth.service): bỏ đuôi đó để cùng một máy so ra trùng. */
+const zaloKey = (z: string): string => z.replace(/_merged_\d+$/, '');
+
 /** Lý do chặn đầu tiên, hoặc null khi cặp này được thưởng. Thứ tự cố định để log và test ổn định. */
 export function firstOrderBlockReason(input: FirstOrderFraudInput): FirstOrderBlockReason | null {
   const { referrer, referee, order } = input;
@@ -92,8 +95,8 @@ export function firstOrderBlockReason(input: FirstOrderFraudInput): FirstOrderBl
   ]);
   if (refereePhones.some((p) => referrerPhones.has(p))) return 'PHONE';
 
-  const referrerZalo = new Set(nonEmpty(referrer.zaloIds));
-  if (nonEmpty(referee.zaloIds).some((z) => referrerZalo.has(z))) return 'ZALO';
+  const referrerZalo = new Set(nonEmpty(referrer.zaloIds).map(zaloKey));
+  if (nonEmpty(referee.zaloIds).some((z) => referrerZalo.has(zaloKey(z)))) return 'ZALO';
 
   const orderAddress = addressKey(order.shippingAddress);
   if (orderAddress) {

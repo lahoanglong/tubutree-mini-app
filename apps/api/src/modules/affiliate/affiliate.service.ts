@@ -1207,9 +1207,16 @@ export class AffiliateService {
       select: { userId: true, type: true, placedForCustomer: true },
     });
     if (order.type !== 'RETAIL' || order.placedForCustomer) return;
-    await this.rewards.grantReferralOrderReward(order.userId);
+    // Hai thưởng độc lập: lỗi của thưởng đơn thứ 2 không được chặn thưởng đơn đầu (và ngược lại); lỗi vẫn ném để cron chạy lại.
+    let failure: unknown = null;
+    await this.rewards.grantReferralOrderReward(order.userId).catch((e: unknown) => {
+      failure = e;
+    });
     // Thưởng đơn đầu cho cả hai phía (cờ growth.referral_viral_enabled, tự xét đơn này có phải đơn đầu đạt mốc không).
-    await this.rewards.grantReferralFirstOrderReward(orderId);
+    await this.rewards.grantReferralFirstOrderReward(orderId).catch((e: unknown) => {
+      failure ??= e;
+    });
+    if (failure) throw failure;
   }
 
   /**

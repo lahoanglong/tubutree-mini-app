@@ -35,6 +35,10 @@ describe('firstOrderBlockReason', () => {
 
   it('trùng Zalo (kể cả phiên khách đã gộp)', () => {
     expect(firstOrderBlockReason(input({ referee: { zaloIds: ['zalo-f', 'zalo-r'] } }))).toBe('ZALO');
+    // Cùng một máy, hai phiên khách đã gộp vào hai tài khoản: auth.service đổi zaloId thành `<khoá>_merged_<giờ>`.
+    expect(
+      firstOrderBlockReason(input({ referrer: { zaloIds: ['zalo-r', 'guest_D_merged_1700000000000'] }, referee: { zaloIds: ['zalo-f', 'guest_D_merged_1800000000000'] } })),
+    ).toBe('ZALO');
   });
 
   it('đơn đầu giao tới địa chỉ người mời (khác dấu, khác cách viết)', () => {

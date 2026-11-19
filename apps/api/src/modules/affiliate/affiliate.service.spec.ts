@@ -2067,6 +2067,14 @@ describe('AffiliateService.grantReferralReward (Q-05: không còn voucher REFER,
     expect(couponCreate).not.toHaveBeenCalled();
   });
 
+  it('thưởng đơn thứ 2 lỗi: thưởng đơn đầu vẫn chạy, lỗi vẫn ném để cron chạy lại', async () => {
+    const { prisma } = makePrisma({ userId: 'referee', type: 'RETAIL', placedForCustomer: false });
+    const c = makeCoins();
+    c.grantReferralOrderReward.mockRejectedValue(new Error('order2 down'));
+    await expect(new AffiliateService(prisma, config, pricing, pancakeOrder, c.svc, analytics).grantReferralReward('o1')).rejects.toThrow('order2 down');
+    expect(c.grantReferralFirstOrderReward).toHaveBeenCalledWith('o1');
+  });
+
   it('đơn CTV lên hộ khách (userId là CTV) → không xét thưởng giới thiệu', async () => {
     const { prisma } = makePrisma({ userId: 'ctv', type: 'RETAIL', placedForCustomer: true });
     const c = makeCoins();

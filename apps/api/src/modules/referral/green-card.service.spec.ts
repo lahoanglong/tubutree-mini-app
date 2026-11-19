@@ -2,10 +2,15 @@ import { NotFoundException } from '@nestjs/common';
 import { GreenCardService } from './green-card.service';
 import { REFERRAL_FIRST_ORDER_MIN_KEY, REFERRAL_VIRAL_ENABLED_KEY } from './viral-config';
 
-function make(opts: { cfg?: Record<string, unknown>; role?: string; album?: () => Promise<unknown>; wasteSum?: number | null } = {}) {
+function make(
+  opts: { cfg?: Record<string, unknown>; user?: Record<string, unknown>; album?: () => Promise<unknown>; wasteSum?: number | null; monthCount?: number } = {},
+) {
   const cfg: Record<string, unknown> = { [REFERRAL_VIRAL_ENABLED_KEY]: true, ...opts.cfg };
   const prisma = {
-    user: { findUniqueOrThrow: jest.fn(async () => ({ referralCode: 'TUBU123', role: opts.role ?? 'CUSTOMER' })) },
+    user: {
+      findUniqueOrThrow: jest.fn(async () => ({ referralCode: 'TUBU123', role: 'CUSTOMER', isBlocked: false, metadata: null, phone: '0901111111', zaloId: 'zalo-u', ...opts.user })),
+    },
+    pointsTransaction: { count: jest.fn(async () => opts.monthCount ?? 0) },
     wasteRequestLine: { aggregate: jest.fn(async () => ({ _sum: { receivedQty: opts.wasteSum === undefined ? 7 : opts.wasteSum } })) },
   };
   const config = { get: async <T,>(k: string, fb?: T) => (k in cfg ? (cfg[k] as T) : (fb as T)) };
@@ -38,8 +43,18 @@ describe('GreenCardService.card', () => {
     expect(await svc.card('u1')).toMatchObject({ album: null, wasteItems: 0 });
   });
 
-  it('CTV không nhận Điểm Xanh giới thiệu', async () => {
-    const { svc } = make({ role: 'AFFILIATE' });
+  it.each([
+    ['CTV', { role: 'AFFILIATE' }],
+    ['khách chưa xác thực', { phone: null, zaloId: 'guest_abc' }],
+    ['tài khoản bị khoá', { isBlocked: true }],
+    ['chủ gian hàng mẫu', { metadata: { sampleStorefront: true } }],
+  ])('không hứa thưởng khi máy chủ sẽ không trả: %s', async (_name, user) => {
+    const { svc } = make({ user });
     expect(await svc.card('u1')).toMatchObject({ earnsPoints: false });
+  });
+
+  it('đã đủ trần tháng: thẻ không hứa thưởng nữa', async () => {
+    expect(await make({ monthCount: 10 }).svc.card('u1')).toMatchObject({ earnsPoints: false });
+    expect(await make({ monthCount: 9 }).svc.card('u1')).toMatchObject({ earnsPoints: true });
   });
 });

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { GameAlbumService } from '../game/album/album.service';
+import { canEarnAsReferrer, referrerFirstOrderCount } from './first-order-reward';
 import { readViralRules } from './viral-config';
 
 /** `GET /me/green-card`: thẻ thành tích Sổ tay Xanh kèm mã mời (cùng dạng `GreenCard` ở packages/app-core/src/referral/green-card.ts). */
@@ -13,7 +14,7 @@ export interface GreenCard {
   wasteItems: number;
   /** Thưởng đơn đầu cho mỗi bên; points 0 = Admin tắt thưởng (thẻ vẫn hiện). */
   firstOrderReward: { points: number; minOrderAmount: number };
-  /** CTV chỉ hưởng hoa hồng: không nhận Điểm Xanh giới thiệu, thẻ không hứa thưởng cho họ. */
+  /** Tài khoản này nhận được thưởng đơn đầu lúc này (không phải CTV, khách chưa xác thực, bị khoá, gian hàng mẫu; chưa chạm trần tháng). */
   earnsPoints: boolean;
 }
 
@@ -29,21 +30,25 @@ export class GreenCardService {
   async card(userId: string): Promise<GreenCard> {
     const rules = await readViralRules(this.config);
     if (!rules.enabled) throw new NotFoundException('Không tìm thấy.');
-    const [user, album, waste] = await Promise.all([
-      this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { referralCode: true, role: true } }),
+    const [user, album, waste, monthCount] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { referralCode: true, role: true, isBlocked: true, metadata: true, phone: true, zaloId: true },
+      }),
       // Sổ tắt hoặc đọc lỗi: thẻ vẫn hiện số vỏ và link mời, không hiện số thẻ.
       this.album.album(userId, { summary: true }).then(
         (r) => ({ seen: r.seen, total: r.total }),
         () => null,
       ),
       this.prisma.wasteRequestLine.aggregate({ where: { request: { userId, status: 'COMPLETED' } }, _sum: { receivedQty: true } }),
+      referrerFirstOrderCount(this.prisma, userId, new Date()),
     ]);
     return {
       referralCode: user.referralCode,
       album,
       wasteItems: Math.max(0, waste._sum.receivedQty ?? 0),
       firstOrderReward: { points: rules.points, minOrderAmount: rules.minOrder },
-      earnsPoints: user.role !== 'AFFILIATE',
+      earnsPoints: canEarnAsReferrer(user) && monthCount < rules.monthlyCap,
     };
   }
 }

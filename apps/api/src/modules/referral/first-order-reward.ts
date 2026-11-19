@@ -32,8 +32,6 @@ export const FIRST_ORDER_REFEREE_PREFIX = 'REFERRAL_FIRST_ORDER_REFEREE:';
 
 /** Số đơn gần nhất của người mời đem so địa chỉ giao và IP. */
 const REFERRER_ORDER_SAMPLE = 50;
-/** Số đơn ứng viên đọc mỗi trang khi tìm đơn đầu đạt mốc (bỏ đơn đã trả hết). */
-const CANDIDATE_PAGE = 10;
 
 export type FirstOrderSkip = 'OFF' | 'NOT_ELIGIBLE' | 'NO_REFERRER' | 'REFERRER_INELIGIBLE' | 'GUEST' | 'STALE' | 'ALREADY' | 'NOT_FIRST' | 'CAPPED';
 
@@ -60,29 +58,32 @@ async function zaloIdsOf(db: Db, userId: string, own: string | null): Promise<st
   return [own, ...merged.map((m) => m.zaloId)].filter((z): z is string => typeof z === 'string' && z !== '');
 }
 
-/** Đơn giao thành công đầu tiên đạt mốc của `refereeId` (createdAt, id), bỏ đơn đã trả hết phần có tiền. */
-async function firstQualifyingOrder(db: Db, refereeId: string, minOrder: number): Promise<{ id: string } | null> {
-  let after: { id: string; createdAt: Date } | undefined;
-  for (;;) {
-    const page = await db.order.findMany({
-      where: {
-        userId: refereeId,
-        status: 'DELIVERED',
-        type: 'RETAIL',
-        placedForCustomer: false,
-        total: { gte: minOrder },
-        ...(after && { OR: [{ createdAt: { gt: after.createdAt } }, { createdAt: after.createdAt, id: { gt: after.id } }] }),
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: { id: true, createdAt: true },
-      take: CANDIDATE_PAGE,
-    });
-    const returnedAll = await fullyReturnedOrderIds(db, page.map((o) => o.id));
-    const first = page.find((o) => !returnedAll.has(o.id));
-    if (first) return { id: first.id };
-    if (page.length < CANDIDATE_PAGE) return null;
-    after = page[page.length - 1];
-  }
+/**
+ * Đơn đầu đạt mốc của `refereeId` (createdAt, id) trong các đơn đã giao, kể cả đơn giao rồi bị trả (RETURNED, hoặc còn DELIVERED nhưng đã
+ * trả hết phần có tiền). Đơn đầu bị trả vẫn là đơn đầu: cặp bị chặn hay chạm trần ở đơn đó không được xét lại bằng cách trả đơn rồi mua đơn khác.
+ */
+async function firstQualifyingOrder(db: Db, refereeId: string, minOrder: number): Promise<{ id: string; returned: boolean } | null> {
+  const [first] = await db.order.findMany({
+    where: { userId: refereeId, status: { in: ['DELIVERED', 'RETURNED'] }, type: 'RETAIL', placedForCustomer: false, total: { gte: minOrder } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, status: true },
+    take: 1,
+  });
+  if (!first) return null;
+  const returned = first.status === 'RETURNED' || (await fullyReturnedOrderIds(db, [first.id])).has(first.id);
+  return { id: first.id, returned };
+}
+
+/** Người mời có thể nhận Điểm Xanh giới thiệu: dùng chung cho lúc cấp thưởng và lời hứa trên thẻ thành tích. */
+export function canEarnAsReferrer(u: { role: string; isBlocked: boolean; metadata: unknown; phone: string | null; zaloId: string | null }): boolean {
+  return u.role !== 'AFFILIATE' && !u.isBlocked && !sampleOwner(u.metadata) && !isAnonymized(u.metadata) && isRealUser(u);
+}
+
+/** Số bạn đã thưởng đơn đầu cho `referrerId` trong tháng (giờ Việt Nam) chứa `now`. */
+export function referrerFirstOrderCount(db: Pick<Db, 'pointsTransaction'>, referrerId: string, now: Date): Promise<number> {
+  return db.pointsTransaction.count({
+    where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: vnMonthStart(now) } },
+  });
 }
 
 /**
@@ -126,16 +127,7 @@ export async function grantFirstOrderReferralReward(deps: FirstOrderDeps, orderI
     where: { id: referrerId },
     select: { role: true, metadata: true, phone: true, zaloId: true, isBlocked: true },
   });
-  if (
-    !referrer ||
-    referrer.role === 'AFFILIATE' ||
-    referrer.isBlocked ||
-    sampleOwner(referrer.metadata) ||
-    isAnonymized(referrer.metadata) ||
-    !isRealUser(referrer)
-  ) {
-    return { status: 'SKIPPED', reason: 'REFERRER_INELIGIBLE' };
-  }
+  if (!referrer || !canEarnAsReferrer(referrer)) return { status: 'SKIPPED', reason: 'REFERRER_INELIGIBLE' };
   // Hạn điểm đọc TRƯỚC khi mở tx: đọc cấu hình trong tx xin kết nối pool thứ hai (RewardPointsService.grant).
   const expiresAt = await deps.expiresAt();
   const now = deps.now?.() ?? new Date();
@@ -152,11 +144,13 @@ export async function grantFirstOrderReferralReward(deps: FirstOrderDeps, orderI
 
     const first = await firstQualifyingOrder(tx, refereeId, rules.minOrder);
     if (!first || first.id !== order.id) return { status: 'SKIPPED', reason: 'NOT_FIRST' };
-    // Đơn đã thưởng dưới id phiên khách (trước khi gộp vào tài khoản này) không thưởng lần hai.
+    if (first.returned) return { status: 'SKIPPED', reason: 'NOT_ELIGIBLE' };
+    // Một đơn bất kỳ của tài khoản này đã được thưởng đơn đầu dưới id khác (phiên khách đã gộp vào): người này đã nhận rồi.
+    const ownOrders = await tx.order.findMany({ where: { userId: refereeId, status: { in: ['DELIVERED', 'RETURNED'] } }, select: { id: true } });
     const usedOrder = await tx.pointsTransaction.findFirst({
       where: {
         refType: 'REFERRAL',
-        refId: order.id,
+        refId: { in: [order.id, ...ownOrders.map((o) => o.id)] },
         OR: [{ reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX } }, { reason: { startsWith: FIRST_ORDER_REFEREE_PREFIX } }],
       },
       select: { id: true },
@@ -192,10 +186,7 @@ export async function grantFirstOrderReferralReward(deps: FirstOrderDeps, orderI
 
     // Khoá người mời rồi mới đếm trần tháng: hai đơn đầu của hai bạn khác nhau giao cùng lúc không cùng đọc một số đếm cũ.
     await lockReferrer(tx, referrerId);
-    const thisMonth = await tx.pointsTransaction.count({
-      where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: vnMonthStart(now) } },
-    });
-    if (thisMonth >= rules.monthlyCap) return { status: 'SKIPPED', reason: 'CAPPED' };
+    if ((await referrerFirstOrderCount(tx, referrerId, now)) >= rules.monthlyCap) return { status: 'SKIPPED', reason: 'CAPPED' };
 
     const paidReferrer = await deps.grant(referrerId, rules.points, referrerReason, 'REFERRAL', order.id, tx, expiresAt);
     const paidReferee = await deps.grant(refereeId, rules.points, refereeReason, 'REFERRAL', order.id, tx, expiresAt);
