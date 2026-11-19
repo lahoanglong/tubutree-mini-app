@@ -1,4 +1,4 @@
-import { FREESHIP_UPSELL_LIMIT, FREESHIP_UPSELL_WINDOW } from '@tubutree/shared-types';
+import { FREESHIP_UPSELL_LIMIT, FREESHIP_UPSELL_MAX_PRICE, FREESHIP_UPSELL_WINDOW } from '@tubutree/shared-types';
 
 /**
  * Cờ dải "Thêm 1 món nhỏ để đủ Miễn phí giao hàng" ở đầu Giỏ. Tắt (mặc định, migration 20261118150000): `GET /upsell/freeship` trả 404 và hai app
@@ -20,9 +20,10 @@ const byConversion = (a: FreeshipUpsellRow, b: FreeshipUpsellRow) =>
   b.soldApp30d - a.soldApp30d || b.sold - a.sold || a.price - b.price || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
- * Thứ tự gợi ý bù đơn cho khoảng thiếu `gap` (đồng, > 0). Trước hết là món đóng được khoảng thiếu một mình (giá từ `gap` tới `gap + 45.000`), xếp bán chạy
- * nhất trước; sau đó, để dải vẫn đủ món khi ít món vừa khoảng, là các món bán chạy rẻ hơn khoảng thiếu. Món đắt hơn `gap + 45.000` không bao giờ vào:
- * dải chỉ đẩy khách vượt mốc vừa đủ. Món trùng slug (cùng sản phẩm) chỉ lấy một lần. Trả id theo thứ tự, tối đa `limit`.
+ * Thứ tự gợi ý bù đơn cho khoảng thiếu `gap` (đồng, > 0). `gap` là số còn thiếu tới mốc kế tiếp mà app đang nhắm: Miễn phí giao hàng, hoặc quà dùng thử 0đ
+ * khi đã được miễn phí giao. Trước hết là món đóng được khoảng thiếu một mình (giá từ `gap` tới `gap + 45.000`), xếp bán chạy nhất trước; sau đó, để dải vẫn
+ * đủ món khi ít món vừa khoảng, là các món bán chạy rẻ hơn khoảng thiếu. Món đắt hơn `gap + 45.000` hay hơn `FREESHIP_UPSELL_MAX_PRICE` (120.000đ) không bao giờ
+ * vào: dải chỉ đẩy khách vượt mốc vừa đủ bằng món nhỏ. Món trùng slug (cùng sản phẩm) chỉ lấy một lần. Trả id theo thứ tự, tối đa `limit`.
  */
 export function rankFreeshipUpsell(
   rows: readonly FreeshipUpsellRow[],
@@ -31,7 +32,7 @@ export function rankFreeshipUpsell(
   const { gap } = opts;
   if (!(gap > 0)) return [];
   const limit = Math.max(0, Math.min(opts.limit ?? FREESHIP_UPSELL_LIMIT, FREESHIP_UPSELL_LIMIT));
-  const max = gap + FREESHIP_UPSELL_WINDOW;
+  const max = Math.min(gap + FREESHIP_UPSELL_WINDOW, FREESHIP_UPSELL_MAX_PRICE);
   const seen = new Set<string>();
   const closers: FreeshipUpsellRow[] = [];
   const fillers: FreeshipUpsellRow[] = [];

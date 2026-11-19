@@ -128,8 +128,10 @@
 .tubu-addon {
   min-width: 0;
 }
+/* Dòng đầu dải mốc quà nói số còn thiếu (tubu-w7-02): số đều để "42.000đ" không xô chữ khi đổi sau mỗi lần thêm món. */
 .tubu-addon-title {
   padding-block: var(--space-stack-xs);
+  font-variant-numeric: tabular-nums;
 }
 .tubu-addon-row {
   box-sizing: border-box;

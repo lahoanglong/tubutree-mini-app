@@ -12,6 +12,7 @@ import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
+import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import { cartProgressStrip, comboOnlyDiscount, greenBoxCartHint, greenBoxDiscountOf, greenBoxProgress, readGreenBox } from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -335,6 +336,8 @@ export default function CartPage() {
       ? estSelected.filter((it) => it.stock > 0).reduce((sum, it) => sum + it.total, 0)
       : null;
   const shipQ = useShippingEstimate(estBase);
+  // Dải mua thêm ở đầu Giỏ có đang hiện không (`onShownChange`); gọi trước các `return` theo phiên đăng nhập.
+  const [aovRailShown, setAovRailShown] = useState<boolean | null>(null);
 
   if (phase === 'loading') {
     return (
@@ -421,6 +424,13 @@ export default function CartPage() {
   const strip = cartProgressStrip(!!freeship?.reached, greenBox);
   const greenBoxView = strip === 'greenBox' ? greenBoxProgress(greenBox) : null;
   const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
+  // Dải mua thêm món nhỏ: mốc kế tiếp là Miễn phí giao hàng, đạt rồi thì quà dùng thử 0đ của đúng phần đang chọn (giá phần chọn chưa về thì không có mốc quà).
+  const aovGoal =
+    showFreeship && freeship && cart
+      ? aovUpsellGoal({ base: freeshipBase, freeship: { ...freeship, threshold: cart.freeshipThreshold }, giftTrial: giftTrialShown, tubuOnly: hasMerchant })
+      : null;
+  // Ô quà khoá không nói lại số dải mốc quà đang nói, và không nói "Thêm …" khi giỏ tạm đã đủ mốc mà giỏ chưa đọc lại.
+  const giftLockedShown = aovGiftLockedRowShown({ goal: aovGoal, railShown: aovRailShown, base: freeshipBase, giftTrial: giftTrialShown });
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
@@ -687,7 +697,7 @@ export default function CartPage() {
                 ) : (
                   <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} onShopMore={() => router.push('/')} />
                 )}
-                {!freeship.reached && <FreeshipAddons remaining={freeship.remaining} lines={allItems} />}
+                {aovGoal && <FreeshipAddons goal={aovGoal} lines={allItems} exclude={aovGiftExclusions(giftTrialShown ?? cart.giftTrial)} onShownChange={setAovRailShown} />}
               </CartUnlockSlot>
             )}
             <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
@@ -746,7 +756,7 @@ export default function CartPage() {
             {(cart.pendingGiftRedemptions?.length ?? 0) > 0 && <GiftNote />}
             <GiftTrialRow
               summary={giftTrialShown}
-              showLocked
+              showLocked={giftLockedShown}
               busy={giftChoice.isPending}
               onChoose={(variationId) => {
                 if (giftChoice.isPending) return;

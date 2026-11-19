@@ -785,6 +785,9 @@ export const SHOP_COPY: Record<string, string> = {
   'freeship.barAria': 'Đã đạt {pct}% để được Miễn phí giao hàng',
   'freeship.addonsTitle': 'Gợi ý mua thêm cho đủ Miễn phí giao hàng',
   'freeship.boosterTitle': 'Thêm 1 món nhỏ để đủ Miễn phí giao hàng',
+  // Dòng đầu dải gợi ý mua thêm ở Giỏ khi đã Miễn phí giao hàng (tubu-w7-02, `aovUpsellGoal`): số còn thiếu tới quà dùng thử 0đ. Có hàng gian hàng tự giao thì nói rõ chỉ hàng Tubu Tree giao được tính.
+  'aov.giftLine': 'Thêm {amount} nữa để nhận quà dùng thử 0đ',
+  'aov.giftLineTubu': 'Thêm {amount} hàng Tubu Tree giao để nhận quà dùng thử 0đ',
   'freeship.add': '+ Thêm',
   'freeship.addAria': 'Thêm {name} vào giỏ, {price}',
   'freeship.shopMoreCta': 'Mua thêm',

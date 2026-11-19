@@ -23,8 +23,10 @@ export interface FreeshipAddonItem {
 
 export interface FreeshipAddonRailProps {
   items: readonly FreeshipAddonItem[];
-  /** Tiêu đề dải; không truyền thì "Gợi ý mua thêm cho đủ Miễn phí giao hàng". Dải "Thêm 1 món nhỏ" (cờ `commerce.freeship_booster_enabled`) truyền `freeship.boosterTitle`. */
+  /** Tiêu đề dải; không truyền thì "Gợi ý mua thêm cho đủ Miễn phí giao hàng". Giỏ truyền `aovUpsellGoal().headline` (mốc quà có số còn thiếu, số đều `tabular-nums`). */
   title?: string;
+  /** Mốc dải đang nhắm (`AovStage`): ghi ra `data-stage` để kiểm và đo, không đổi cách vẽ. */
+  stage?: 'freeship' | 'gift';
   /** Món đang được thêm: nút khoá và báo bận để bấm liên tiếp không tạo hai lệnh. Web cho nhiều món bay cùng lúc nên nhận cả danh sách. */
   busySlug?: string | readonly string[] | null;
   onAdd: (item: FreeshipAddonItem) => void;
@@ -32,14 +34,14 @@ export interface FreeshipAddonRailProps {
 
 /**
  * Gợi ý món bù đơn dưới thanh Miễn phí giao hàng: hàng cuộn ngang các thẻ rộng cố định (ảnh, tên hai dòng, giá, "+ Thêm"), thêm một sản phẩm chỉ một chạm.
- * Rỗng thì không vẽ gì (nơi dùng đã lọc: dưới 3 món hợp lệ thì để rỗng).
+ * Rỗng thì không vẽ gì (nơi dùng đã lọc: ít món hợp lệ quá thì để rỗng, xem `pickAovAddons`).
  */
-export function FreeshipAddonRail({ items, title: titleProp, busySlug = null, onAdd }: FreeshipAddonRailProps) {
+export function FreeshipAddonRail({ items, title: titleProp, stage, busySlug = null, onAdd }: FreeshipAddonRailProps) {
   if (items.length === 0) return null;
   const title = titleProp ?? fillCopy('freeship.addonsTitle');
   const busySlugs = typeof busySlug === 'string' ? [busySlug] : (busySlug ?? []);
   return (
-    <section data-testid="freeship-addons" aria-label={title} aria-busy={busySlugs.length > 0 || undefined} className="tubu-addon">
+    <section data-testid="freeship-addons" data-stage={stage} aria-label={title} aria-busy={busySlugs.length > 0 || undefined} className="tubu-addon">
       <div className="tubu-addon-head">
         <SectionTitle block>{title}</SectionTitle>
       </div>

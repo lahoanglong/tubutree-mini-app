@@ -8,6 +8,7 @@ import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
+import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import {
   cartProgressStrip,
@@ -392,6 +393,9 @@ export default function CartPage() {
       });
   };
 
+  // Dải mua thêm ở đầu Giỏ có đang hiện không (`onShownChange`); gọi trước các `return` theo phiên đăng nhập.
+  const [aovRailShown, setAovRailShown] = useState<boolean | null>(null);
+
   // Chưa đăng nhập xong: đang khôi phục → khung chờ (không chớp màn đăng nhập); mất kết nối → Thử lại; khách → mời đăng nhập.
   if (phase !== 'authenticated') {
     return (
@@ -457,6 +461,15 @@ export default function CartPage() {
   const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
   // Mức mở khoá của dải đầu giỏ: tăng khi vừa đạt Miễn phí giao hàng hay lên bậc Hộp Xanh thì dải nảy mừng một lần (`CartUnlockSlot`).
   const unlockLevel = cartUnlockLevel(freeship.reached, greenBox?.tier?.minItems);
+  // Dải mua thêm món nhỏ: mốc kế tiếp là Miễn phí giao hàng, đạt rồi thì quà dùng thử 0đ của đúng phần đang chọn (giá phần chọn chưa về thì không có mốc quà).
+  const aovGoal = aovUpsellGoal({
+    base: freeshipBase,
+    freeship: showFreeship ? { ...freeship, threshold: summary.freeshipThreshold } : null,
+    giftTrial: giftTrialShown,
+    tubuOnly: hasMerchant,
+  });
+  // Ô quà khoá không nói lại số dải mốc quà đang nói, và không nói "Thêm …" khi giỏ tạm đã đủ mốc mà giỏ chưa đọc lại.
+  const giftLockedShown = aovGiftLockedRowShown({ goal: aovGoal, railShown: aovRailShown, base: freeshipBase, giftTrial: giftTrialShown });
   // Liên kết "Đã có chai? Đổi sang Refill …" theo đúng mốc màn đang hiện (phần đang chọn): đổi làm tụt mốc thì hỏi lại trước.
   const refillViews = refillSwapOffers({
     lines: summary.items,
@@ -525,12 +538,14 @@ export default function CartPage() {
             </Box>
           )}
           <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
-          {showFreeship && !freeship.reached && (
+          {aovGoal && (
             <FreeshipBoosterRail
-              remaining={freeship.remaining}
+              goal={aovGoal}
               lines={summary.items}
+              exclude={aovGiftExclusions(giftTrialShown ?? summary.giftTrial)}
               busySlug={addon.isPending ? addon.variables?.item.slug : null}
               onAdd={handleAddAddon}
+              onShownChange={setAovRailShown}
             />
           )}
           <CartVoucherHintSection
@@ -615,7 +630,7 @@ export default function CartPage() {
             <Box px={3}>
               <GiftTrialRow
                 summary={giftTrialShown}
-                showLocked
+                showLocked={giftLockedShown}
                 busy={giftChoice.isPending}
                 onChoose={(variationId) => {
                   if (giftChoice.isPending) return;

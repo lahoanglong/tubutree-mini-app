@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { FREESHIP_UPSELL_EXCLUDE_MAX, FREESHIP_UPSELL_LIMIT, FREESHIP_UPSELL_WINDOW } from '@tubutree/shared-types';
+import { FREESHIP_UPSELL_EXCLUDE_MAX, FREESHIP_UPSELL_LIMIT, FREESHIP_UPSELL_MAX_PRICE, FREESHIP_UPSELL_WINDOW } from '@tubutree/shared-types';
 import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator';
 import { PUBLIC_CACHE_POLICY_KEY } from '../../../common/decorators/public-cache.decorator';
 import { createValidationPipe } from '../../../common/validation-pipe';
@@ -27,6 +27,12 @@ describe('rankFreeshipUpsell', () => {
 
   it('biên cửa sổ: đúng gap + 45.000 vẫn vào, hơn 1 đồng thì không', () => {
     expect(rankFreeshipUpsell([row('edge', 30_000 + FREESHIP_UPSELL_WINDOW), row('over', 30_001 + FREESHIP_UPSELL_WINDOW)], { gap: 30_000 })).toEqual(['edge']);
+  });
+
+  it('trần món nhỏ 120.000đ thắng cửa sổ khi khoảng thiếu lớn (giỏ còn xa mốc, hay mốc quà 0đ): đúng trần vẫn vào, hơn 1 đồng thì không', () => {
+    const rows = [row('edge', FREESHIP_UPSELL_MAX_PRICE, 1), row('over', FREESHIP_UPSELL_MAX_PRICE + 1, 99), row('small', 40_000, 5)];
+    expect(rankFreeshipUpsell(rows, { gap: 100_000 })).toEqual(['edge', 'small']);
+    expect(rankFreeshipUpsell(rows, { gap: 150_000 })).toEqual(['small', 'edge']);
   });
 
   it('hoà số bán 30 ngày thì tổng đã bán, rồi giá rẻ hơn, rồi id: hai lần gọi cùng thứ tự', () => {

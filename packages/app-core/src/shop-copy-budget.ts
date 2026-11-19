@@ -745,6 +745,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'freeship.barAria': 50,
   'freeship.addonsTitle': 44,
   'freeship.boosterTitle': 44,
+  // Dòng đầu dải gợi ý mua thêm: tối đa hai dòng ở 360px (cỡ chữ tiêu đề mục).
+  'aov.giftLine': 41,
+  'aov.giftLineTubu': 57,
   'freeship.add': 8,
   'freeship.addAria': null,
   'freeship.shopMoreCta': 12,

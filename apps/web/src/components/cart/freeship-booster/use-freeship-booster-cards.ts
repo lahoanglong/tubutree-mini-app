@@ -12,12 +12,12 @@ import { usePublicConfig } from '@/lib/use-public-config';
 export const FREESHIP_UPSELL_QUERY_PREFIX = ['upsell', 'freeship'] as const;
 
 /**
- * Thẻ nguồn của dải bù đơn ở Giỏ. Cờ `commerce.freeship_booster_enabled` bật: `GET /upsell/freeship` (đã xếp ở máy chủ, `booster` true để nơi gọi giữ thứ tự và dùng
- * cửa sổ 45.000đ cùng tiêu đề "Thêm 1 món nhỏ"). Tắt, API cũ, cấu hình lỗi hay `/upsell/freeship` lỗi (cờ vừa tắt mà cấu hình còn trong bộ nhớ đệm thì máy chủ
+ * Thẻ nguồn của dải mua thêm ở Giỏ; `remaining` là số còn thiếu tới mốc kế tiếp (Miễn phí giao hàng hoặc quà dùng thử 0đ). Cờ `commerce.freeship_booster_enabled` bật:
+ * `GET /upsell/freeship` (đã xếp ở máy chủ, `booster` true để nơi gọi giữ thứ tự và dùng cửa sổ 45.000đ). Tắt, API cũ, cấu hình lỗi hay `/upsell/freeship` lỗi (cờ vừa tắt mà cấu hình còn trong bộ nhớ đệm thì máy chủ
  * trả 404): kệ Bán chạy nhất như trước (cùng khoá với Trang chủ). Còn chờ cấu hình thì chưa trả thẻ nào, kể cả khi kệ Bán chạy đã có sẵn từ Trang chủ, để dải không
  * hiện món cũ rồi đổi sang món mới. Đổi khoảng thiếu thì giữ thẻ cũ tới khi danh sách mới về.
  */
-export function useFreeshipBoosterCards(remaining: number, lines: readonly { slug: string }[]): { booster: boolean; cards: readonly ProductCard[]; bestKey: readonly unknown[] } {
+export function useFreeshipBoosterCards(remaining: number, lines: readonly { slug: string }[]): { booster: boolean; cards: readonly ProductCard[]; bestKey: readonly unknown[]; pending: boolean } {
   const cfg = usePublicConfig();
   const flagOn = cfg.isLoaded && cfg.freeshipBoosterEnabled === true;
   const params = flagOn ? freeshipUpsellParams(remaining, lines) : null;
@@ -33,5 +33,6 @@ export function useFreeshipBoosterCards(remaining: number, lines: readonly { slu
   const bestQuery = homeBestSellerQuery(coreHttp);
   const best = useQuery({ ...bestQuery, enabled: !cfg.isPending && !booster, staleTime: 60_000, retry: false });
   const cards = cfg.isPending ? [] : booster ? (upsell.data ?? []) : (best.data?.data ?? []);
-  return { booster, cards, bestKey: bestQuery.queryKey };
+  const pending = cfg.isPending || (booster ? upsell.isPending : best.isPending);
+  return { booster, cards, bestKey: bestQuery.queryKey, pending };
 }

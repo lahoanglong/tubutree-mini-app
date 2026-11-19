@@ -1,8 +1,9 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { fetchFreeshipUpsell, freeshipUpsellParams, freeshipUpsellQueryKey } from '@tubutree/app-core/api/upsell';
-import { FREESHIP_BOOSTER_WINDOW, pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { pickAovAddons, type AovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
+import { FREESHIP_BOOSTER_WINDOW } from '@tubutree/app-core/commerce/freeship-progress';
 import { Box } from 'zmp-ui';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { coreHttp } from '../../../services/core-http';
@@ -13,25 +14,31 @@ import { homeBestSellerQuery } from '../../home/home-best-seller-query';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '../../ui/freeship-addon-rail';
 
 export interface FreeshipBoosterRailProps {
-  /** Số còn thiếu để Miễn phí giao hàng (đồng, > 0). */
-  remaining: number;
+  /** Mốc kế tiếp (`aovUpsellGoal`): Miễn phí giao hàng hoặc quà dùng thử 0đ; dòng đầu dải và số còn thiếu gửi cho `GET /upsell/freeship`. */
+  goal: AovUpsellGoal;
   /** Các dòng giỏ HIỆN CÓ: món đã trong giỏ không được gợi ý lại. */
   lines: readonly { slug: string; variationId: string }[];
+  /** Quà dùng thử 0đ (`aovGiftExclusions`): không gợi ý khách trả tiền cho món quà. */
+  exclude?: { slugs: ReadonlySet<string>; variationIds: ReadonlySet<string> };
   busySlug?: string | null;
   onAdd: (item: FreeshipAddonItem) => void;
+  /** Dải có hiện không: true đủ món, false không (nguồn đã về hay lỗi, hoặc dải rời màn), null còn chờ nguồn. Giỏ dùng cho `aovGiftLockedRowShown`. */
+  onShownChange?: (shown: boolean | null) => void;
 }
 
 /**
- * Dải gợi ý bù đơn dưới thanh Miễn phí giao hàng của Giỏ. Cờ `commerce.freeship_booster_enabled` bật: tiêu đề "Thêm 1 món nhỏ để đủ Miễn phí giao hàng", món lấy từ
- * `GET /upsell/freeship` (giá từ số còn thiếu tới số còn thiếu + 45.000đ, bán chạy trước, giữ thứ tự máy chủ). Tắt, API cũ, cấu hình lỗi hay `/upsell/freeship` lỗi
- * (cờ vừa tắt mà cấu hình còn trong bộ nhớ đệm thì máy chủ trả 404): dải cũ từ kệ Bán chạy nhất (cửa sổ 25.000đ). Cấu hình còn chờ thì chưa vẽ gì, kể cả khi kệ Bán
- * chạy đã có sẵn từ Trang chủ, để dải không hiện món cũ rồi đổi. Cả hai nguồn đều được xét lại theo giá Giờ vàng và giỏ mới nhất (`pickFreeshipAddons`). Đổi số còn
- * thiếu (vừa thêm món) thì giữ món cũ tới khi danh sách mới về, dải không nháy trống.
+ * Dải gợi ý mua thêm món nhỏ ở đầu Giỏ (tubu-w7-02): nhắm mốc kế tiếp (Miễn phí giao hàng, rồi quà dùng thử 0đ; dòng đầu theo `aovUpsellGoal().headline`), tối đa 4 món
+ * giá không quá 120.000đ (`pickAovAddons`). Cờ `commerce.freeship_booster_enabled` bật: món lấy từ `GET /upsell/freeship` với `gap` là số còn thiếu (giá tới số
+ * còn thiếu + 45.000đ, bán chạy trước, giữ thứ tự máy chủ). Tắt, API cũ, cấu hình lỗi hay `/upsell/freeship` lỗi (cờ vừa tắt mà cấu hình còn trong bộ nhớ đệm
+ * thì máy chủ trả 404): món từ kệ Bán chạy nhất (cửa sổ 25.000đ). Cấu hình còn chờ thì chưa vẽ gì, kể cả khi kệ Bán chạy đã có sẵn từ Trang chủ, để dải không
+ * hiện món cũ rồi đổi. Cả hai nguồn đều được xét lại theo giá Giờ vàng và giỏ mới nhất. Đổi số còn thiếu (vừa thêm món) thì giữ món cũ tới khi danh sách mới
+ * về, dải không nháy trống.
  */
-export function FreeshipBoosterRail({ remaining, lines, busySlug = null, onAdd }: FreeshipBoosterRailProps) {
+export function FreeshipBoosterRail({ goal, lines, exclude, busySlug = null, onAdd, onShownChange }: FreeshipBoosterRailProps) {
   const cfg = usePublicConfig();
   const flagOn = cfg.isLoaded && cfg.freeshipBoosterEnabled === true;
-  const params = flagOn ? freeshipUpsellParams(remaining, lines) : null;
+  // Món quà cũng gửi vào `exclude`: máy chủ không tốn chỗ trong danh sách cho món app sẽ bỏ.
+  const params = flagOn ? freeshipUpsellParams(goal.shortfall, [...lines, ...[...(exclude?.slugs ?? [])].map((slug) => ({ slug }))]) : null;
   const upsellQ = useQuery({
     queryKey: params ? freeshipUpsellQueryKey(params) : ['upsell', 'freeship', 'off'],
     queryFn: () => fetchFreeshipUpsell(coreHttp, params!),
@@ -45,8 +52,8 @@ export function FreeshipBoosterRail({ remaining, lines, busySlug = null, onAdd }
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
 
   const cards: readonly ProductCard[] = cfg.isPending ? [] : booster ? (upsellQ.data ?? []) : (bestQ.data?.data ?? []);
-  const items: FreeshipAddonItem[] = pickFreeshipAddons(
-    // Hàng gian hàng tự giao (hoặc gian hàng đang nghỉ) không hưởng Miễn phí giao hàng của Tubu: thêm vào cũng không bù được khoảng thiếu.
+  const items: FreeshipAddonItem[] = pickAovAddons(
+    // Hàng gian hàng tự giao (hoặc gian hàng đang nghỉ) không tính vào mốc của Tubu: thêm vào cũng không bù được khoảng thiếu.
     cards
       .filter((card) => (card.fulfiller?.kind ?? 'TUBU') === 'TUBU')
       .map((card) => {
@@ -54,22 +61,27 @@ export function FreeshipBoosterRail({ remaining, lines, busySlug = null, onAdd }
         return { slug: card.slug, name: card.name, thumbnail: card.thumbnail, price: target.price, compareAt: target.compareAt, variationId: target.variationId, inStock: card.inStock !== false };
       }),
     {
-      remaining,
+      shortfall: goal.shortfall,
       inCartSlugs: new Set(lines.map((l) => l.slug)),
       inCartVariationIds: new Set(lines.map((l) => l.variationId)),
+      excludeSlugs: exclude?.slugs,
+      excludeVariationIds: exclude?.variationIds,
       ...(booster ? { window: FREESHIP_BOOSTER_WINDOW, ranked: true } : {}),
     },
   ).map((c) => ({ slug: c.slug, name: c.name, thumbnail: c.thumbnail, price: c.price, compareAt: c.compareAt, variationId: c.variationId! }));
 
-  if (items.length === 0) return null;
+  const loading = cfg.isPending || (booster ? upsellQ.isPending : bestQ.isPending);
+  const shown = items.length > 0 ? true : loading ? null : false;
+  useEffect(() => {
+    if (!onShownChange) return undefined;
+    onShownChange(shown);
+    return () => onShownChange(false);
+  }, [shown, onShownChange]);
+
+  if (shown !== true) return null;
   return (
     <Box px={3} pt={2}>
-      <FreeshipAddonRail
-        title={booster ? fillCopy('freeship.boosterTitle') : undefined}
-        items={items}
-        busySlug={busySlug}
-        onAdd={onAdd}
-      />
+      <FreeshipAddonRail title={goal.headline} stage={goal.stage} items={items} busySlug={busySlug} onAdd={onAdd} />
     </Box>
   );
 }
