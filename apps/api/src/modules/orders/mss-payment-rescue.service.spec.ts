@@ -157,19 +157,19 @@ describe('MssPaymentRescueService.recordReminders (w8-01, số lần MSS nhắc 
   };
   const AT = new Date('2026-11-19T13:02:00.000Z');
 
-  it('ghi cả hai trường lên đơn chuyển khoản, mỗi trường chỉ khi giá trị mới không nhỏ hơn giá trị đang lưu (tin tới trễ không làm lùi)', async () => {
+  it('ghi cả hai trường lên đơn chuyển khoản, mỗi trường chỉ khi giá trị mới lớn hơn giá trị đang lưu (tin tới trễ không làm lùi, tin gửi lại cùng giá trị không ghi)', async () => {
     const { svc, updateMany } = make();
     await svc.recordReminders('TUBU2026111912345', { sent: 2, lastAt: AT });
     expect(updateMany.mock.calls).toEqual([
       [
         {
-          where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: 2 } }] },
+          where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lt: 2 } }] },
           data: { paymentRemindersSent: 2 },
         },
       ],
       [
         {
-          where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lte: AT } }] },
+          where: { code: 'TUBU2026111912345', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lt: AT } }] },
           data: { paymentLastRemindedAt: AT },
         },
       ],
@@ -180,7 +180,7 @@ describe('MssPaymentRescueService.recordReminders (w8-01, số lần MSS nhắc 
     const { svc, updateMany } = make();
     await svc.recordReminders('C', { sent: null, lastAt: AT });
     expect(updateMany.mock.calls).toEqual([
-      [{ where: { code: 'C', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lte: AT } }] }, data: { paymentLastRemindedAt: AT } }],
+      [{ where: { code: 'C', paymentMethod: 'BANK_TRANSFER', OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lt: AT } }] }, data: { paymentLastRemindedAt: AT } }],
     ]);
   });
 

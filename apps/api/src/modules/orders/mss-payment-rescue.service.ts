@@ -53,20 +53,21 @@ export class MssPaymentRescueService {
   /**
    * Ghi số tin MSS đã nhắc chuyển khoản và lúc nhắc gần nhất lên đơn để màn admin Đơn hàng hiện cạnh trạng thái quá hạn. Ghi cả khi cờ huỷ
    * tắt (chỉ là số liệu hiển thị), chỉ cho đơn chuyển khoản. Số nhắc và mốc nhắc mỗi thứ chỉ tiến, không lùi khi tin tới trễ; hai lệnh ghi riêng để tin
-   * thiếu hay hỏng một trường vẫn không kéo lùi trường kia. Lỗi ghi chỉ log: việc huỷ phía sau vẫn chạy.
+   * thiếu hay hỏng một trường vẫn không kéo lùi trường kia. Giá trị bằng giá trị đang lưu thì không ghi: MSS gửi lại cùng khối nhắc không được
+   * đẩy `updatedAt` của đơn, vì cron thử lại huỷ Pancake và mốc dò tin huỷ đã gửi đọc cột đó. Lỗi ghi chỉ log: việc huỷ phía sau vẫn chạy.
    */
   async recordReminders(orderCode: string, r: { sent: number | null; lastAt: Date | null }): Promise<void> {
     const order = { code: orderCode, paymentMethod: 'BANK_TRANSFER' as const };
     try {
       if (r.sent !== null) {
         await this.prisma.order.updateMany({
-          where: { ...order, OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lte: r.sent } }] },
+          where: { ...order, OR: [{ paymentRemindersSent: null }, { paymentRemindersSent: { lt: r.sent } }] },
           data: { paymentRemindersSent: r.sent },
         });
       }
       if (r.lastAt !== null) {
         await this.prisma.order.updateMany({
-          where: { ...order, OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lte: r.lastAt } }] },
+          where: { ...order, OR: [{ paymentLastRemindedAt: null }, { paymentLastRemindedAt: { lt: r.lastAt } }] },
           data: { paymentLastRemindedAt: r.lastAt },
         });
       }
