@@ -46,6 +46,7 @@ const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = 
   'components/admin/engagement-tab.tsx': { count: 2, why: 'REWARD_POINTS_MAX: cận trên của ô điểm thưởng nhiệm vụ (sửa và thêm mới)' },
   'components/admin/reviews-tab.tsx': { count: 2, why: 'rewardPoints, photoRewardPoints: Điểm Xanh cộng khi duyệt đánh giá ảnh (Góc Sống Xanh)' },
   'components/admin/pos-credits-tab.tsx': { count: 1, why: 'sum.points (điểm đã tích)' },
+  'components/admin/order-ops.tsx': { count: 1, why: 'num: số đơn ở các ô đếm của bàn vận hành đơn' },
   'components/admin/ns1-card.tsx': { count: 1, why: 'formatPct: phần trăm làm tròn 1 chữ số' },
   'components/settlement-table.tsx': { count: 1, why: 'formatPct: phần trăm phí sàn / phí Tubu giao hộ' },
   'components/admin/account-deletion-panel.tsx': { count: 1, why: 'pointsConvertedBalance (điểm không hết hạn)' },
