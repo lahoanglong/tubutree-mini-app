@@ -242,7 +242,9 @@ describe('routeTemplate', () => {
         if (statSync(p).isDirectory()) walk(p);
         else if (name === 'page.tsx') {
           // Thư mục `%5Fpreview` là đường `/_preview` (Next mã hoá `_` để thư mục không thành thư mục riêng tư).
-          const route = '/' + relative(appDir, dir).split(sep).filter((s) => !/^\(.*\)$/.test(s)).map(decodeURIComponent).join('/');
+          // Optional catch-all `[[...x]]` (/gio-hang, /vuon-xanh) chỉ là đích rewrite của middleware cho bản dựng sẵn: trình duyệt luôn
+          // ở đường gốc, vào thẳng `/…/khach` bị 308 về đó, nên route analytics thấy là đường gốc tĩnh.
+          const route = '/' + relative(appDir, dir).split(sep).filter((s) => !/^\(.*\)$/.test(s) && !/^\[\[\.\.\.[^\]]+\]\]$/.test(s)).map(decodeURIComponent).join('/');
           if (route.includes('[')) found.push(route.replace(/\[\.{0,3}([^\]]+)\]/g, ':$1'));
         }
       }
