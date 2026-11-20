@@ -7,7 +7,6 @@ import {
   ORDER_ECO_COPY_MAX,
   ecoImpactHeadline,
   ecoImpactInviteLine,
-  ecoImpactPointsLine,
   ecoImpactShareLead,
   ecoImpactShareText,
   hasEcoImpact,
@@ -76,12 +75,6 @@ describe('chữ của thẻ', () => {
     expect(hasEcoImpact(impact({ bottlesSaved: 0, plasticGrams: 0 }))).toBe(false);
   });
 
-  it('Điểm Xanh: đã giao thì "từ đơn này", chưa giao thì "khi nhận hàng"; 0 điểm thì không có dòng', () => {
-    expect(ecoImpactPointsLine(impact())).toBe('+120 Điểm Xanh từ đơn này');
-    expect(ecoImpactPointsLine(impact({ pointsCredited: false, points: 1500 }))).toBe('+1.500 Điểm Xanh khi nhận hàng');
-    expect(ecoImpactPointsLine(impact({ points: 0 }))).toBeNull();
-  });
-
   it('dòng mời: hứa thưởng đơn đầu khi khách nhận được, không thì câu mời chung', () => {
     expect(ecoImpactInviteLine(impact())).toBe('Bạn bè mua đơn đầu từ 199k, cả hai nhận +100 Điểm Xanh');
     expect(ecoImpactInviteLine(impact({ inviteReward: { points: 100, minOrderAmount: 0 } }))).toBe('Bạn bè mua đơn đầu, cả hai nhận +100 Điểm Xanh');
@@ -102,7 +95,6 @@ describe('chữ của thẻ', () => {
     const big = impact({ bottlesSaved: 9999, points: 99_999, pointsCredited: false });
     expect(ecoImpactHeadline(big).length).toBeLessThanOrEqual(ORDER_ECO_COPY_MAX.bottles);
     expect(ecoImpactHeadline(impact({ bottlesSaved: 0, plasticGrams: 99_999 })).length).toBeLessThanOrEqual(ORDER_ECO_COPY_MAX.grams);
-    expect(ecoImpactPointsLine(big)!.length).toBeLessThanOrEqual(ORDER_ECO_COPY_MAX.pointsPending);
     expect(ecoImpactShareLead(big).length).toBeLessThanOrEqual(ORDER_ECO_COPY_MAX.shareBottles);
     expect(ecoImpactShareLead(impact({ bottlesSaved: 0, plasticGrams: 99_999 })).length).toBeLessThanOrEqual(ORDER_ECO_COPY_MAX.shareGrams);
     expect(Object.keys(ORDER_ECO_COPY_MAX).sort()).toEqual(Object.keys(ORDER_ECO_COPY).sort());

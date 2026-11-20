@@ -43,6 +43,11 @@ describe('refillBottlesPerPack', () => {
     expect(refillBottlesPerPack('Túi Refill 400ml', ['Chai 500ml'])).toBe(1);
     expect(refillBottlesPerPack('Refill 10L', [])).toBe(1);
   });
+
+  it('lượng gói đọc theo biến thể đã mua trước, tên sản phẩm sau: biến thể 1L của "Refill … 3,8L" với chai 500ml là 2 chai', () => {
+    expect(refillBottlesPerPack('Refill Nước rửa chén 3,8L', ['Nước rửa chén 500ml'], '1L')).toBe(2);
+    expect(refillBottlesPerPack('Refill Nước rửa chén 3,8L', ['Nước rửa chén 500ml'], 'Hương chanh')).toBeCloseTo(7.6);
+  });
 });
 
 describe('computeOrderEcoImpact', () => {

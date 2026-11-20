@@ -1,4 +1,4 @@
-import { parseMeasure } from '../catalog/product-compare.unit';
+import { measureOf, parseMeasure } from '../catalog/product-compare.unit';
 import { isRefillProduct } from '../catalog/refill/refill-pairs';
 import { factsForVariation } from '../eco-impact/eco-facts.rules';
 
@@ -18,11 +18,12 @@ export function ecoImpactEligible(o: { status: string; paymentStatus: string; ty
 }
 
 /**
- * Một gói Refill thay bao nhiêu chai: lượng gói / lượng chai ghép với nó (cùng chiều ml hay g). Nhiều chai ghép cùng gói thì lấy chai
- * LỚN nhất, ra ít chai nhất. Không đọc được lượng, khác chiều hay gói không lớn hơn chai: một gói thay một chai.
+ * Một gói Refill thay bao nhiêu chai: lượng gói (theo biến thể đã mua, không có thì theo tên sản phẩm) / lượng chai ghép với nó (cùng
+ * chiều ml hay g). Nhiều chai ghép cùng gói thì lấy chai LỚN nhất, ra ít chai nhất. Không đọc được lượng, khác chiều hay gói không lớn
+ * hơn chai: một gói thay một chai.
  */
-export function refillBottlesPerPack(refillName: string, bottleNames: readonly string[]): number {
-  const r = parseMeasure(refillName);
+export function refillBottlesPerPack(refillName: string, bottleNames: readonly string[], refillVariationName = ''): number {
+  const r = measureOf(refillVariationName, refillName);
   if (!r) return 1;
   let largest = 0;
   for (const name of bottleNames) {
@@ -36,8 +37,10 @@ export interface EcoImpactLine {
   productId: string;
   variationId: string;
   slug: string;
-  /** Tên sản phẩm hiện hành (đọc lượng của gói Refill). */
+  /** Tên sản phẩm hiện hành (đọc lượng của gói Refill khi tên biến thể không ghi lượng). */
   name: string;
+  /** Tên biến thể lúc đặt (dòng đơn). */
+  variationName?: string | null;
   /** Số lượng khách còn giữ: số mua trừ số thuộc yêu cầu trả chưa bị từ chối. Quà 0đ không có dòng ở đây. */
   netQty: number;
 }
@@ -82,7 +85,7 @@ export function computeOrderEcoImpact(lines: readonly EcoImpactLine[], ctx: EcoI
       const bottleNames = (bottlesOf.get(l.productId) ?? []).map((id) => ctx.names.get(id)).filter((n): n is string => !!n);
       packs += qty;
       // Làm tròn xuống trên cả dòng; tỉ lệ ≥ 1 nên mỗi gói luôn ≥ một chai. Cộng một chút để 10L/500ml không ra 19,999…
-      bottles += Math.floor(qty * refillBottlesPerPack(l.name, bottleNames) + 1e-9);
+      bottles += Math.floor(qty * refillBottlesPerPack(l.name, bottleNames, l.variationName ?? '') + 1e-9);
     }
     for (const f of factsForVariation(factsByProduct.get(l.productId) ?? [], l.variationId)) {
       if (f.kind === 'PLASTIC_AVOIDED') grams += pos(f.valueGrams) * qty;

@@ -4,7 +4,6 @@ import { inviteLandingOn, inviteShareLink } from '@tubutree/app-core/commerce/in
 import {
   ecoImpactHeadline,
   ecoImpactInviteLine,
-  ecoImpactPointsLine,
   ecoImpactShareLead,
   ecoImpactShareText,
   type OrderEcoImpact,
@@ -22,8 +21,9 @@ import { Card } from '../ui/card';
 import { Heading, Text } from '../ui/text';
 
 /**
- * Thẻ "đơn này giảm bao nhiêu nhựa" ở Chi tiết đơn (cờ growth.referral_viral_enabled, chunk tải lười): số chai, Điểm Xanh của đơn và
- * một chạm gửi link mời qua Zalo. Trang chỉ vẽ khi máy chủ trả số lớn hơn 0. Cùng web (`web/src/components/orders/eco-impact-card.tsx`).
+ * Thẻ "đơn này giảm bao nhiêu nhựa" ở Chi tiết đơn (cờ growth.referral_viral_enabled, chunk tải lười): số chai và một chạm gửi
+ * link mời qua Zalo. Điểm Xanh của đơn đã có ở dòng "Đã cộng … Điểm Xanh" ngay trên nên thẻ không nhắc lại. Trang
+ * chỉ vẽ khi máy chủ trả số lớn hơn 0. Cùng web (`web/src/components/orders/eco-impact-card.tsx`).
  */
 export default function OrderEcoImpactCard({ impact }: { impact: OrderEcoImpact }) {
   const cfg = usePublicConfig();
@@ -31,7 +31,6 @@ export default function OrderEcoImpactCard({ impact }: { impact: OrderEcoImpact 
   const share = useShareWithFallback();
   const { openSnackbar } = useSnackbar();
   const code = impact.referralCode;
-  const points = ecoImpactPointsLine(impact);
   const link = () => inviteShareLink({ landing: inviteLandingOn(cfg), baseUrl: miniAppLink('/'), referralCode: code });
   const onShare = () =>
     void lock.run('share', async () => {
@@ -54,17 +53,12 @@ export default function OrderEcoImpactCard({ impact }: { impact: OrderEcoImpact 
       );
     });
   return (
-    <section data-testid="order-eco-impact" style={{ marginTop: 'var(--space-stack-sm)' }}>
+    <section data-testid="order-eco-impact" style={{ marginTop: 'var(--space-stack-sm)', paddingInline: 'var(--space-gutter)' }}>
       <Card padding={12}>
         <Heading variant="title-sm" as="h2">
           {ecoImpactHeadline(impact)}
         </Heading>
-        {points && (
-          <Text variant="body-sm" tone="brand" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
-            {points}
-          </Text>
-        )}
-        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-inline-xs)' }}>
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
           {ecoImpactInviteLine(impact)}
         </Text>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)', marginTop: 'var(--space-stack-sm)' }}>

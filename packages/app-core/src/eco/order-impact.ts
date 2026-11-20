@@ -31,8 +31,6 @@ export interface OrderEcoImpact {
 export const ORDER_ECO_COPY = {
   bottles: 'Đơn này bạn đã giảm {n} chai nhựa dùng 1 lần',
   grams: 'Đơn này bạn đã giảm {g} nhựa dùng 1 lần',
-  points: '+{n} Điểm Xanh từ đơn này',
-  pointsPending: '+{n} Điểm Xanh khi nhận hàng',
   shareBottles: 'Mình vừa giảm {n} chai nhựa dùng 1 lần nhờ mua Refill ở Tubu Tree 🌱',
   shareGrams: 'Mình vừa giảm {g} nhựa dùng 1 lần khi mua sắm ở Tubu Tree 🌱',
 } as const;
@@ -43,8 +41,6 @@ export type OrderEcoCopyKey = keyof typeof ORDER_ECO_COPY;
 export const ORDER_ECO_COPY_MAX: Record<OrderEcoCopyKey, number> = {
   bottles: 46,
   grams: 46,
-  points: 30,
-  pointsPending: 32,
   shareBottles: 72,
   shareGrams: 72,
 };
@@ -102,11 +98,6 @@ function savedPart(i: OrderEcoImpact): { key: 'bottles' | 'grams'; vars: Record<
 export function ecoImpactHeadline(i: OrderEcoImpact): string {
   const p = savedPart(i);
   return orderEcoCopy(p.key, p.vars);
-}
-
-export function ecoImpactPointsLine(i: OrderEcoImpact): string | null {
-  if (i.points <= 0) return null;
-  return orderEcoCopy(i.pointsCredited ? 'points' : 'pointsPending', { n: formatVnNumber(i.points) });
 }
 
 /** Cùng câu thưởng của thẻ thành tích xanh: hứa thưởng đơn đầu khi máy chủ nói khách còn nhận được. */
