@@ -1,4 +1,10 @@
-import { FIRST_ORDER_REFEREE_PREFIX, FIRST_ORDER_REFERRER_PREFIX, grantFirstOrderReferralReward, type FirstOrderDeps } from './first-order-reward';
+import {
+  FIRST_ORDER_REFEREE_PREFIX,
+  FIRST_ORDER_REFERRER_PREFIX,
+  FirstOrderRetryableError,
+  grantFirstOrderReferralReward,
+  type FirstOrderDeps,
+} from './first-order-reward';
 import { REFERRAL_FIRST_ORDER_POINTS_KEY, REFERRAL_MONTHLY_CAP_KEY, REFERRAL_VIRAL_ENABLED_KEY } from './viral-config';
 
 const at = new Date('2026-11-19T10:00:00.000Z');
@@ -195,17 +201,99 @@ describe('grantFirstOrderReferralReward', () => {
     expect(await setup({ grant }).run()).toEqual({ status: 'SKIPPED', reason: 'ALREADY' });
   });
 
-  it('người mời đổi giữa lúc đọc và lúc khoá (gộp khách): bỏ qua', async () => {
+  it('bạn được mời bị khoá tài khoản: không ai nhận', async () => {
+    const s = setup({ users: { f1: { id: 'f1', referredById: 'r1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: true } } });
+    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'REFEREE_INELIGIBLE' });
+    expect(s.grant).not.toHaveBeenCalled();
+    expect(s.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('bạn được mời bị khoá giữa lúc đọc và lúc khoá dòng: không ai nhận', async () => {
     const s = setup();
+    let reads = 0;
+    s.db.user.findUnique.mockImplementation(async (args: { where: { id: string } }) => {
+      if (args.where.id === 'f1') {
+        reads += 1;
+        return { id: 'f1', referredById: 'r1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: reads > 1 };
+      }
+      return { id: 'r1', role: 'CUSTOMER', metadata: null, phone: '0901111111', zaloId: 'zalo-r', isBlocked: false, mergedIntoId: null };
+    });
+    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'REFEREE_INELIGIBLE' });
+    expect(s.grant).not.toHaveBeenCalled();
+  });
+
+  it('người mời đổi giữa lúc đọc và lúc khoá (người mời vừa gộp): xét lại ngay theo người mời mới', async () => {
+    const s = setup({ users: { r2: { id: 'r2', role: 'CUSTOMER', metadata: null, phone: '0903333333', zaloId: 'zalo-r2', isBlocked: false, mergedIntoId: null } } });
     let calls = 0;
+    const base = s.db.user.findUnique.getMockImplementation()!;
     s.db.user.findUnique.mockImplementation(async (args: { where: { id: string } }) => {
       if (args.where.id === 'f1') {
         calls += 1;
-        return { id: 'f1', referredById: calls === 1 ? 'r1' : 'r2', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null };
+        return { id: 'f1', referredById: calls === 1 ? 'r1' : 'r2', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: false };
       }
-      if (args.where.id === 'r1') return { id: 'r1', role: 'CUSTOMER', metadata: null, phone: '0901111111', zaloId: 'zalo-r', isBlocked: false, mergedIntoId: null };
-      return { id: args.where.id, mergedIntoId: null, metadata: null };
+      return base(args);
     });
-    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'STALE' });
+    expect(await s.run()).toEqual({ status: 'GRANTED', referrerId: 'r2', refereeId: 'f1', points: 100 });
+    expect(s.grant).toHaveBeenCalledWith('r2', 100, `${FIRST_ORDER_REFERRER_PREFIX}f1`, 'REFERRAL', 'o1', expect.anything(), expiresAt);
+  });
+});
+
+/**
+ * Gộp tài khoản chạy chen đúng lúc đơn đầu sang DELIVERED: lúc đọc đơn còn thuộc f1, tới lúc khoá dòng thì f1 đã gộp vào T và đơn đã
+ * chuyển sang T (auth.service gộp chuyển đơn cùng transaction với mergedIntoId). Trước đây trả SKIPPED/STALE nên việc sau giao ghi mốc
+ * xong, lần sau xét thì đơn này thành đơn đầu của T mà không phải đơn đang xét (NOT_FIRST): cặp mất hẳn 100 + 100 Điểm Xanh.
+ */
+describe('grantFirstOrderReferralReward — gộp tài khoản chạy chen', () => {
+  const T = { id: 'T', referredById: 'r1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-t', metadata: null, isBlocked: false };
+
+  /** `merges` = số lần dòng người được mời đổi chủ ngay trước khi tx khoá được dòng (mỗi lần một tài khoản đích mới). */
+  function racing(merges: number) {
+    const s = setup();
+    const owners = ['f1', 'T', 'T2', 'T3'];
+    let merged = 0;
+    let order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', total: 250_000, placedForCustomer: false, createdAt: at, shippingAddress: shipTo, guestPhone: null, guestIpHash: null, placedIpHash: 'ip-f' };
+    const fresh = (id: string) => ({ ...T, id, zaloId: `zalo-${id}`, mergedIntoId: null as string | null });
+    s.db.order.findUnique.mockImplementation(async () => order);
+    s.db.order.findMany.mockImplementation(async (args: { where: { userId?: string } }) => (args.where.userId === order.userId ? [{ id: 'o1', createdAt: at }] : []));
+    s.db.user.findUnique.mockImplementation(async (args: { where: { id: string } }) => {
+      if (args.where.id === 'r1') return { id: 'r1', role: 'CUSTOMER', metadata: null, phone: '0901111111', zaloId: 'zalo-r', isBlocked: false, mergedIntoId: null };
+      return fresh(args.where.id);
+    });
+    // lockReferee là câu khoá đầu tiên trong tx: lần gộp commit đúng lúc đó, dòng cũ mang mergedIntoId và đơn sang chủ mới.
+    const tx = s.db.$transaction.getMockImplementation()!;
+    s.db.$transaction.mockImplementation(async (cb: (db: typeof s.db) => unknown) => {
+      if (merged < merges) {
+        const from = owners[merged]!;
+        const to = owners[merged + 1]!;
+        merged += 1;
+        const inner = s.db.user.findUnique.getMockImplementation()!;
+        s.db.user.findUnique.mockImplementation(async (args: { where: { id: string } }) => (args.where.id === from ? { ...fresh(from), mergedIntoId: to } : inner(args)));
+        order = { ...order, userId: to };
+      }
+      return tx(cb);
+    });
+    return s;
+  }
+
+  it('gộp xong lúc khoá dòng: xét lại ngay theo tài khoản đích, cả hai nhận thưởng (đơn là đơn đầu của T)', async () => {
+    const s = racing(1);
+    expect(await s.run()).toEqual({ status: 'GRANTED', referrerId: 'r1', refereeId: 'T', points: 100 });
+    expect(s.grant).toHaveBeenCalledTimes(2);
+    expect(s.grant).toHaveBeenCalledWith('T', 100, `${FIRST_ORDER_REFEREE_PREFIX}T`, 'REFERRAL', 'o1', expect.anything(), expiresAt);
+  });
+
+  it('gộp chạy chen hai lần liền: ném lỗi thử lại (việc sau giao để đơn chưa có mốc), lượt cron sau cấp được thưởng', async () => {
+    const s = racing(2);
+    await expect(s.run()).rejects.toBeInstanceOf(FirstOrderRetryableError);
+    expect(s.grant).not.toHaveBeenCalled();
+    // Lượt chạy lại của DeliveredEffectsResyncCron: các lần gộp đã xong, đơn thuộc T2.
+    expect(await s.run()).toEqual({ status: 'GRANTED', referrerId: 'r1', refereeId: 'T2', points: 100 });
+  });
+
+  it('đơn còn nằm ở dòng đã gộp sau khi đọc lại (không phải chạy chen): bỏ qua hẳn, không ném', async () => {
+    const s = setup({ users: { f1: { id: 'f1', referredById: 'r1', mergedIntoId: 'T', phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: false } } });
+    expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
+    expect(s.db.order.findUnique).toHaveBeenCalledTimes(2);
+    expect(s.grant).not.toHaveBeenCalled();
   });
 });

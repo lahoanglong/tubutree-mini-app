@@ -9,7 +9,7 @@ import {
   resolveMergedUserId,
 } from '../wallet/referral-reward';
 import { firstOrderBlockReason, vnMonthStart, type FirstOrderBlockReason } from './first-order-guard';
-import { readViralRules, type ConfigReader } from './viral-config';
+import { readViralRules, type ConfigReader, type ViralRules } from './viral-config';
 
 /**
  * Thưởng ĐƠN ĐẦU của chương trình giới thiệu (cờ growth.referral_viral_enabled, mặc định TẮT). Nối tiếp chương trình duy nhất ở
@@ -18,7 +18,7 @@ import { readViralRules, type ConfigReader } from './viral-config';
  * Bạn được mời (người dùng thật) có đơn lẻ giao thành công ĐẦU TIÊN đạt growth.referral_first_order_min (mặc định 199.000đ, không
  * tính đơn đã trả hết phần có tiền) thì cả người mời lẫn người được mời nhận growth.referral_first_order_points Điểm Xanh lô
  * STANDARD (có hạn, nằm dưới trần dùng điểm loyalty.max_redeem_pct như mọi điểm thưởng). Người mời là CTV, chủ gian hàng mẫu,
- * tài khoản bị khoá, đã xoá hoặc chưa là người dùng thật thì không ai nhận.
+ * tài khoản bị khoá, đã xoá hoặc chưa là người dùng thật thì không ai nhận; bạn được mời bị khoá tài khoản cũng vậy.
  *
  * Idempotent: reason theo NGƯỜI ĐƯỢC MỜI (REFERRAL_FIRST_ORDER_REFERRER:<id> ở sổ người mời, REFERRAL_FIRST_ORDER_REFEREE:<id> ở sổ
  * người được mời), refId = id đơn. Một người được mời chỉ thưởng một lần dù đơn lật trạng thái lại, cron chạy lại việc sau giao hay
@@ -33,12 +33,26 @@ export const FIRST_ORDER_REFEREE_PREFIX = 'REFERRAL_FIRST_ORDER_REFEREE:';
 /** Số đơn gần nhất của người mời đem so địa chỉ giao và IP. */
 const REFERRER_ORDER_SAMPLE = 50;
 
-export type FirstOrderSkip = 'OFF' | 'NOT_ELIGIBLE' | 'NO_REFERRER' | 'REFERRER_INELIGIBLE' | 'GUEST' | 'STALE' | 'ALREADY' | 'NOT_FIRST' | 'CAPPED';
+export type FirstOrderSkip = 'OFF' | 'NOT_ELIGIBLE' | 'NO_REFERRER' | 'REFERRER_INELIGIBLE' | 'REFEREE_INELIGIBLE' | 'GUEST' | 'ALREADY' | 'NOT_FIRST' | 'CAPPED';
 
 export type FirstOrderOutcome =
   | { status: 'GRANTED'; referrerId: string; refereeId: string; points: number }
   | { status: 'BLOCKED'; reason: FirstOrderBlockReason }
   | { status: 'SKIPPED'; reason: FirstOrderSkip };
+
+/**
+ * Hai lần xét liền nhau đều gặp tài khoản người được mời (hay người mời) đổi giữa lúc đọc và lúc khoá dòng: có lần gộp tài khoản đang chạy
+ * chen. Ném để việc sau giao của đơn chưa có mốc và DeliveredEffectsResyncCron xét lại sau khi gộp xong, thay vì bỏ hẳn thưởng của cặp.
+ */
+export class FirstOrderRetryableError extends Error {
+  constructor(orderId: string) {
+    super(`Thưởng đơn đầu cho đơn ${orderId}: tài khoản đang được gộp, xét lại ở lượt sau`);
+    this.name = 'FirstOrderRetryableError';
+  }
+}
+
+/** Lần xét gặp tài khoản đổi giữa chừng (gộp chạy chen): đọc lại từ đầu. */
+const STALE = Symbol('STALE');
 
 export interface FirstOrderDeps {
   prisma: Pick<PrismaClient, '$transaction' | 'order' | 'user'>;
@@ -89,11 +103,22 @@ export function referrerFirstOrderCount(db: Pick<Db, 'pointsTransaction'>, refer
 /**
  * Xét thưởng đơn đầu cho một đơn vừa sang DELIVERED (gọi trong việc sau giao, lặp/song song an toàn). Lỗi DB ném lên để việc sau giao
  * của đơn chưa có mốc và cron chạy lại; mọi trường hợp không thưởng trả về `SKIPPED`/`BLOCKED`.
+ *
+ * Gộp tài khoản chạy chen (auth.service chuyển đơn sang tài khoản đích cùng transaction với mergedIntoId): lần xét đầu thấy dòng đã đổi
+ * thì xét lại ngay. Lúc đó lần gộp đã commit (tx chờ khoá dòng tới khi gộp xong) nên lần đọc lại thấy đơn thuộc tài khoản đích và xét theo
+ * nó. Lần thứ hai vẫn đổi thì ném FirstOrderRetryableError cho cron xét lại sau.
  */
 export async function grantFirstOrderReferralReward(deps: FirstOrderDeps, orderId: string): Promise<FirstOrderOutcome> {
   const rules = await readViralRules(deps.config);
   if (!rules.enabled || rules.points <= 0) return { status: 'SKIPPED', reason: 'OFF' };
+  const first = await evaluate(deps, rules, orderId, false);
+  if (first !== STALE) return first;
+  const second = await evaluate(deps, rules, orderId, true);
+  if (second !== STALE) return second;
+  throw new FirstOrderRetryableError(orderId);
+}
 
+async function evaluate(deps: FirstOrderDeps, rules: ViralRules, orderId: string, reread: boolean): Promise<FirstOrderOutcome | typeof STALE> {
   const order = await deps.prisma.order.findUnique({
     where: { id: orderId },
     select: {
@@ -116,10 +141,14 @@ export async function grantFirstOrderReferralReward(deps: FirstOrderDeps, orderI
   const refereeId = order.userId;
   const referee = await deps.prisma.user.findUnique({
     where: { id: refereeId },
-    select: { referredById: true, mergedIntoId: true, phone: true, zaloId: true, metadata: true },
+    select: { referredById: true, mergedIntoId: true, phone: true, zaloId: true, metadata: true, isBlocked: true },
   });
+  // Đơn đọc trước khi lần gộp commit, dòng người được mời đọc sau: đọc lại thì đơn đã thuộc tài khoản đích. Đọc lại rồi mà đơn vẫn nằm ở
+  // dòng đã gộp thì không phải chạy chen.
+  if (referee?.mergedIntoId && !reread) return STALE;
   if (!referee || referee.mergedIntoId || isAnonymized(referee.metadata)) return { status: 'SKIPPED', reason: 'NOT_ELIGIBLE' };
   if (!isRealUser(referee)) return { status: 'SKIPPED', reason: 'GUEST' };
+  if (referee.isBlocked) return { status: 'SKIPPED', reason: 'REFEREE_INELIGIBLE' };
   const referrerId = referee.referredById ? await resolveMergedUserId(deps.prisma as unknown as Db, referee.referredById) : null;
   if (!referrerId) return { status: 'SKIPPED', reason: 'NO_REFERRER' };
   if (referrerId === refereeId) return { status: 'BLOCKED', reason: 'SELF' };
@@ -134,12 +163,13 @@ export async function grantFirstOrderReferralReward(deps: FirstOrderDeps, orderI
   const referrerReason = `${FIRST_ORDER_REFERRER_PREFIX}${refereeId}`;
   const refereeReason = `${FIRST_ORDER_REFEREE_PREFIX}${refereeId}`;
 
-  return deps.prisma.$transaction(async (tx): Promise<FirstOrderOutcome> => {
+  return deps.prisma.$transaction(async (tx): Promise<FirstOrderOutcome | typeof STALE> => {
     // Cùng thứ tự khoá với thưởng đơn thứ 2 và mọi đường thu hồi: người được mời rồi người mời.
     await lockReferee(tx, refereeId);
-    const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true, mergedIntoId: true } });
-    if (fresh?.mergedIntoId) return { status: 'SKIPPED', reason: 'STALE' };
-    if ((fresh?.referredById ? await resolveMergedUserId(tx, fresh.referredById) : null) !== referrerId) return { status: 'SKIPPED', reason: 'STALE' };
+    const fresh = await tx.user.findUnique({ where: { id: refereeId }, select: { referredById: true, mergedIntoId: true, isBlocked: true } });
+    if (fresh?.mergedIntoId) return STALE;
+    if ((fresh?.referredById ? await resolveMergedUserId(tx, fresh.referredById) : null) !== referrerId) return STALE;
+    if (fresh?.isBlocked) return { status: 'SKIPPED', reason: 'REFEREE_INELIGIBLE' };
     if (await hasReferralEntry(tx, [referrerReason, refereeReason])) return { status: 'SKIPPED', reason: 'ALREADY' };
 
     const first = await firstQualifyingOrder(tx, refereeId, rules.minOrder);
