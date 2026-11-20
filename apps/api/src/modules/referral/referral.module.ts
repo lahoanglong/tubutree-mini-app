@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { GameModule } from '../game/game.module';
 import { GreenCardController } from './green-card.controller';
 import { GreenCardService } from './green-card.service';
+import { OrderEcoImpactController } from './order-eco-impact.controller';
+import { OrderEcoImpactService } from './order-eco-impact.service';
 
 /**
  * Vòng giới thiệu bạn bè: thẻ thành tích Sổ tay Xanh kèm link mời. Thưởng đơn đầu nằm cạnh thưởng đơn thứ 2 ở
@@ -9,7 +11,7 @@ import { GreenCardService } from './green-card.service';
  */
 @Module({
   imports: [GameModule],
-  controllers: [GreenCardController],
-  providers: [GreenCardService],
+  controllers: [GreenCardController, OrderEcoImpactController],
+  providers: [GreenCardService, OrderEcoImpactService],
 })
 export class ReferralModule {}

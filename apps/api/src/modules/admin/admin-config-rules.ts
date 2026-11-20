@@ -18,6 +18,7 @@ import { MINI_ENABLED_KEY, MINI_NUMERIC_SETTINGS, miniGameFlagKey } from '../gam
 import { MINI_GAME_IDS } from '@tubutree/shared-types';
 import { POPULAR_FALLBACK_MAX, SEARCH_POPULAR_FLAG, SEARCH_POPULAR_TERMS_KEY, isPopularCandidate } from '../catalog/search-popular.service';
 import { SEARCH_FUZZY_FLAG } from '../catalog/search-fuzzy';
+import { REFILL_REMINDER_ENABLED_KEY, REFILL_REMINDER_ZNS_KEY } from '../notifications/refill-reminder.rules';
 import {
   REFERRAL_FIRST_ORDER_MIN_KEY,
   REFERRAL_FIRST_ORDER_MIN_MAX,
@@ -265,6 +266,8 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [SEARCH_FUZZY_FLAG]: assertBoolean,
   [SEARCH_POPULAR_FLAG]: assertBoolean,
   [SEARCH_POPULAR_TERMS_KEY]: assertPopularTerms,
+  [REFILL_REMINDER_ENABLED_KEY]: assertBoolean,
+  [REFILL_REMINDER_ZNS_KEY]: assertBoolean,
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

@@ -196,12 +196,13 @@ export class NotificationsService {
    * `retryZns` (cần `dedupeKey`): khoá được tính riêng cho kênh ZNS. Tin trong app đã lưu mà bước ZNS lỗi thì lần gọi lại chỉ
    * gửi nốt ZNS (không lưu thêm tin trong app); log ZNS mang cùng khoá nên đã gửi thì không gửi lại. Chỉ dành cho nơi gọi
    * đã tự tuần tự hoá các lượt (vd cron có bước nhận phần việc), vì lượt song song đều thấy "chưa có log ZNS".
+   * `inAppOnly`: chỉ lưu tin trong app, không gửi ZNS kể cả khi mẫu đã gắn mã ZNS (nơi gọi giữ cờ riêng cho kênh ngoài app).
    */
   async notify(
     userId: string,
     templateCode: string,
     data: Record<string, string>,
-    opts: { dedupeKey?: string; dedupeWithinMs?: number; znsTemplateId?: string; retryZns?: boolean } = {},
+    opts: { dedupeKey?: string; dedupeWithinMs?: number; znsTemplateId?: string; retryZns?: boolean; inAppOnly?: boolean } = {},
   ): Promise<void> {
     const dedupeKey = opts.dedupeKey;
     const withinMs = opts.dedupeWithinMs != null && opts.dedupeWithinMs > 0 ? opts.dedupeWithinMs : null;
@@ -263,7 +264,7 @@ export class NotificationsService {
     // ZNS nếu template là kênh ZNS + user có phone. `opts.znsTemplateId` (mã mẫu ZNS lấy từ cấu hình của nơi gọi) chỉ dùng khi
     // mẫu chưa gắn mã ZNS riêng.
     const znsTemplateId = (tpl?.channel === 'ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId || null;
-    if (user?.phone && znsTemplateId) {
+    if (user?.phone && znsTemplateId && !opts.inAppOnly) {
       // MSS đang giữ hoặc đã gửi tin Zalo của sự kiện đơn này: ZNS hoãn, đường lui của MSS gửi nếu MSS không gửi được.
       if (this.mssZnsHold && (await this.mssZnsHold.holdZns(userId, templateCode, data, znsTemplateId))) return;
       await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, opts.retryZns ? dedupeKey : undefined, withinMs);

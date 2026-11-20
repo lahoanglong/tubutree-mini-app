@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
@@ -67,6 +67,9 @@ import { OrderRefunds } from '../components/orders/order-refunds';
 import { SecondOrderInvite } from '../components/orders/second-order-invite';
 import { OrderZaloDetail } from '../components/checkout/order-zalo';
 import { inviteLandingOn } from '@tubutree/app-core/commerce/invite-card';
+import { hasEcoImpact, orderEcoImpactBase, orderEcoImpactGate } from '@tubutree/app-core/eco/order-impact-gate';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
+import { coreHttp } from '../services/core-http';
 import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { trackEvent } from '../services/analytics';
 import {
@@ -82,6 +85,9 @@ import {
   type RefundMethodChoice,
 } from '../utils/refund-rules';
 import { bankDetailsError } from '../utils/refund-form-rules';
+
+// Thẻ nhựa đã giảm của đơn: chữ, số và module tiền chỉ tải khi máy chủ trả số lớn hơn 0.
+const OrderEcoImpactCard = lazy(() => import('../components/orders/eco-impact-card'));
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
@@ -174,6 +180,14 @@ export default function OrderDetailPage() {
   const deadlineLeft = useCountdown(
     order.data?.status === 'PENDING_PAYMENT' && !order.data.manualHandling ? (order.data.paymentDeadline ?? null) : null,
   );
+
+  const ecoAsked = !!order.data && orderEcoImpactGate(order.data, referralViralOn(publicConfig));
+  const ecoQ = useQuery({
+    ...orderEcoImpactBase(code ?? ''),
+    queryFn: () => import('@tubutree/app-core/eco/order-impact').then((m) => m.getOrderEcoImpact(coreHttp, code!)),
+    enabled: ecoAsked,
+  });
+  const eco = hasEcoImpact(ecoQ.data) ? ecoQ.data! : null;
 
   const wasteQ = useQuery({
     queryKey: [...WASTE_QUERY_KEYS.all, 'by-order', order.data?.id],
@@ -631,11 +645,18 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
+      {eco && (
+        <Suspense fallback={null}>
+          <OrderEcoImpactCard impact={eco} />
+        </Suspense>
+      )}
+
       {/* ── Mời giữ bao bì gửi kèm đơn kế tiếp (đơn đã giao, chưa kèm rác) ── */}
+      {/* Thẻ nhựa đã giảm đã có nút gửi link mời: không thêm dòng mời thứ hai, chờ thẻ trả lời rồi mới quyết. */}
       <SecondOrderInvite
         order={o}
         fallback={
-          o.status === 'DELIVERED' && inviteLandingOn(publicConfig) ? (
+          o.status === 'DELIVERED' && inviteLandingOn(publicConfig) && !eco && !(ecoAsked && ecoQ.isPending) ? (
             <Box mt={2} p={4} style={{ background: 'var(--color-bg-surface)' }}>
               <Text size="small">
                 {fillCopy('order.journey.inviteLead')}{' '}

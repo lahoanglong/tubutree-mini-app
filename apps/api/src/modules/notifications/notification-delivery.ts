@@ -151,6 +151,7 @@ export const NOTIFICATION_DELIVERY: Readonly<Record<string, NotificationDelivery
   VOUCHER_EXPIRING: P('expiry'),
   TIER_DROP_NOTICE: P('expiry'),
   REORDER_REMINDER: P('reorder'),
+  REORDER_REMINDER_REFILL: P('reorder'),
   GAME_CHECKIN_REMINDER: P('streak'),
   GAME_TREE_THIRSTY: P('streak'),
   WELCOME_VOUCHER: P('promo'),

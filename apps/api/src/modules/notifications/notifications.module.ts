@@ -8,11 +8,12 @@ import { ZnsClient } from '../integrations/zns/zns.client';
 import { ZaloOaTokenService } from '../integrations/zns/zalo-oa-token.service';
 import { ZaloOaTokenCron } from '../integrations/zns/zalo-oa-token.cron';
 import { ZnsStuckLogCron } from './zns-stuck-log.cron';
+import { RefillReminderService } from './refill-reminder.service';
 
 @Global()
 @Module({
   controllers: [NotificationsController, NotificationTemplatesAdminController],
-  providers: [NotificationsService, NotificationFeedService, NotificationTemplatesAdminService, ZnsClient, ZaloOaTokenService, ZaloOaTokenCron, ZnsStuckLogCron],
+  providers: [NotificationsService, NotificationFeedService, NotificationTemplatesAdminService, ZnsClient, ZaloOaTokenService, ZaloOaTokenCron, ZnsStuckLogCron, RefillReminderService],
   // ZaloOaTokenService cũng cần cho ZaloOaMessageClient (module zalo-oa, CSKH quick-reply/auto-reply).
   exports: [NotificationsService, ZaloOaTokenService],
 })

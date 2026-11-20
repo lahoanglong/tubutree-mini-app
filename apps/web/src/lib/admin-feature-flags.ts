@@ -207,4 +207,22 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     onWarning: 'Tin nhắc vượt trần chỉ còn nằm trong app, không gửi qua Zalo. Nhiều tin cùng ngày thì tin hàng về và giỏ bỏ quên được ưu tiên.',
     offWarning: 'Tin nhắc qua Zalo gửi như trước, không giới hạn số tin mỗi ngày (vẫn giữ trần 2 tin khuyến mãi mỗi tháng).',
   },
+  {
+    key: 'retention.refill_21d_reminder_enabled',
+    label: 'Nhắc châm lại bằng gói Refill sau 21 ngày',
+    description:
+      'Mỗi sáng 9:30: khách nhận một chai có gói Refill ghép cặp từ 21 tới 28 ngày trước được một tin trong app mở thẳng trang gói Refill. Mỗi đơn nhắc tối đa một lần, mỗi khách tối đa một tin mỗi 7 ngày. Bỏ qua khách đã đặt lại gói Refill đó, đã trả chai, đã tắt tin khuyến mãi hay MSS báo từ chối tin.',
+    fallback: false,
+    onWarning: 'Từ sáng mai khách bắt đầu nhận tin. Chỉ đơn giao trong 21–28 ngày gần nhất, không nhắc lại đơn cũ hơn. Chai đã được nhắc ở đây thì tin "Nhắc mua lại" 30 ngày bỏ chu kỳ đó.',
+    offWarning: 'Ngừng nhắc từ lượt sau. Tin đã gửi vẫn nằm trong chuông thông báo của khách.',
+  },
+  {
+    key: 'retention.refill_21d_zns_enabled',
+    label: 'Gửi tin nhắc Refill 21 ngày qua Zalo (ZNS)',
+    description:
+      'Khi bật, tin nhắc Refill 21 ngày gửi thêm qua Zalo nếu mẫu REORDER_REMINDER_REFILL đã gắn mã mẫu ZNS được Zalo duyệt. Tắt thì tin chỉ nằm trong app.',
+    fallback: false,
+    onWarning: 'Mỗi tin qua Zalo tốn phí ZNS và tính vào trần 2 tin khuyến mãi mỗi tháng cùng trần tin chủ động mỗi ngày/tuần. Chỉ bật khi mẫu đã có mã ZNS được duyệt.',
+    offWarning: 'Tin nhắc Refill chỉ còn trong app, không gửi qua Zalo.',
+  },
 ];

@@ -23,6 +23,8 @@ import { isVitalRoute } from './vitals/vitals-rules';
 
 // Cách khách gửi link mời từ thẻ thành tích Sổ tay Xanh. Không đặt ở shared-types: gói đó (CJS) nằm trọn trong chunk khởi động của web.
 const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
+// Nơi khách bấm gửi: không có trường là Sổ tay Xanh; `order` là thẻ nhựa đã giảm ở Chi tiết đơn.
+const GREEN_CARD_SHARE_SURFACES = ['order'] as const;
 
 type Rule = (v: unknown) => boolean;
 
@@ -161,8 +163,8 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   refill_swap_shown: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
   refill_swap_applied: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
   refill_swap_undone: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
-  // Thẻ thành tích ở Sổ tay Xanh: chỉ cách gửi, không mang mã mời (mã mời chỉ ra người mời).
-  green_card_shared: { props: { method: oneOf(GREEN_CARD_SHARE_METHODS) }, required: ['method'] },
+  // Thẻ thành tích ở Sổ tay Xanh và thẻ nhựa đã giảm của đơn: chỉ cách gửi và nơi gửi, không mang mã mời hay mã đơn.
+  green_card_shared: { props: { method: oneOf(GREEN_CARD_SHARE_METHODS), surface: oneOf(GREEN_CARD_SHARE_SURFACES) }, required: ['method'] },
 };
 
 /**
