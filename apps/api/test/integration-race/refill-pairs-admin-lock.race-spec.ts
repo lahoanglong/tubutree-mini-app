@@ -16,6 +16,18 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
   const REFILL = 'refill-nuoc-rua-chen-w10lock-10l';
   const BOTTLES = ['nuoc-rua-chen-w10lock-100ml', 'nuoc-rua-chen-w10lock-500ml', 'nuoc-rua-chen-w10lock-1l', 'nuoc-rua-chen-w10lock-2l'];
   const pair = (bottleSlug: string): RefillPairOverride => ({ bottleSlug, refillSlug: REFILL });
+  // tubu-w11-01: ba chai chỉ lệch chữ "hương" với gói Refill cùng mùi (dòng `near`), và một gói Refill khác họ cùng thương hiệu để ghép tay chen ngang.
+  const NEAR_BRAND = 'W11Near';
+  const SCENTS = ['bac-ha', 'cam', 'tra-xanh'];
+  const SCENT_NAMES: Record<string, string> = { 'bac-ha': 'Bạc hà', cam: 'Cam', 'tra-xanh': 'Trà xanh' };
+  const NEAR: RefillPairOverride[] = SCENTS.map((x) => ({ bottleSlug: `nuoc-giat-huong-${x}-w11near-500ml`, refillSlug: `refill-nuoc-giat-${x}-w11near-10l` }));
+  const OTHER_REFILL = 'refill-nuoc-lau-san-w11near-10l';
+  const NEAR_PRODUCTS: Array<{ slug: string; name: string }> = [
+    ...SCENTS.map((x) => ({ slug: `nuoc-giat-huong-${x}-w11near-500ml`, name: `Nước giặt hương ${SCENT_NAMES[x]} ${NEAR_BRAND} 500ml` })),
+    ...SCENTS.map((x) => ({ slug: `refill-nuoc-giat-${x}-w11near-10l`, name: `Refill nước giặt ${SCENT_NAMES[x]} ${NEAR_BRAND} 10L` })),
+    { slug: OTHER_REFILL, name: `Refill Nước lau sàn ${NEAR_BRAND} 10L` },
+  ];
+  const sortPairs = (xs: RefillPairOverride[]) => [...xs].sort((a, b) => a.bottleSlug.localeCompare(b.bottleSlug));
   const restores: Array<() => Promise<void>> = [];
   const apiProcess = () => new RefillPairsService(prisma, null as never, new SystemConfigService(prisma));
 
@@ -71,6 +83,13 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
         create: { slug, name, brand: BRAND, description: '', basePrice: 100_000 },
       });
     }
+    for (const p of NEAR_PRODUCTS) {
+      await prisma.product.upsert({
+        where: { slug: p.slug },
+        update: { isActive: true, approvalStatus: 'APPROVED', brand: NEAR_BRAND, name: p.name, isCombo: false },
+        create: { slug: p.slug, name: p.name, brand: NEAR_BRAND, description: '', basePrice: 100_000 },
+      });
+    }
     restores.push(await pinConfig(prisma, REFILL_PAIRS_BLOCK_KEY, []));
     restores.push(await pinConfig(prisma, REFILL_PAIRS_OVERRIDE_KEY, []));
   });
@@ -85,7 +104,7 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
   afterAll(async () => {
     for (const restore of restores.reverse()) await restore();
     await prisma.systemConfigHistory.deleteMany({ where: { key: REFILL_PAIRS_OVERRIDE_KEY, changedBy: { startsWith: 'w10-lock' } } });
-    await prisma.product.deleteMany({ where: { slug: { in: [...BOTTLES, REFILL] } } });
+    await prisma.product.deleteMany({ where: { slug: { in: [...BOTTLES, REFILL, ...NEAR_PRODUCTS.map((p) => p.slug)] } } });
     await prisma?.$disconnect();
   });
 
@@ -155,5 +174,39 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
     expect(results[1].status).toBe('fulfilled');
     expect(await stored()).toEqual([pair(BOTTLES[1])]);
     expect(await history()).toHaveLength(1);
+  });
+
+  it('tubu-w11-01 Duyệt nhanh: bảng có đúng 3 dòng near; hai admin (hai tiến trình) bấm cùng lúc → mỗi cặp đúng một lần, chỉ một dòng lịch sử', async () => {
+    const before = await apiProcess().adminOverview();
+    expect(sortPairs(before.rows.filter((r) => r.status === 'near' && r.bottle.slug.includes('w11near')).map((r) => ({ bottleSlug: r.bottle.slug, refillSlug: r.refill!.slug })))).toEqual(sortPairs(NEAR));
+
+    holdCatalogScans(2);
+    const [a, b] = [apiProcess(), apiProcess()];
+    const [ra, rb] = await Promise.all([a.adminSave({ confirm: NEAR }, 'w10-lock-po1'), b.adminSave({ confirm: NEAR }, 'w10-lock-po2')]);
+
+    expect(sortPairs(await stored())).toEqual(sortPairs(NEAR));
+    // Lần sau thấy cả 3 cặp đã ghép tay đúng gói: không đổi gì nên không ghi, không thêm dòng lịch sử.
+    expect(await history()).toHaveLength(1);
+    for (const r of [ra, rb]) expect(r.rows.filter((x) => x.status === 'near' && x.bottle.slug.includes('w11near'))).toEqual([]);
+  });
+
+  it('tubu-w11-01 Duyệt nhanh chen với một lần ghép tay chai đầu sang gói khác: cả lần duyệt hoặc không cặp nào của nó (409), không bao giờ một phần', async () => {
+    holdCatalogScans(2);
+    const [a, b] = [apiProcess(), apiProcess()];
+    const hand = { bottleSlug: NEAR[0]!.bottleSlug, refillSlug: OTHER_REFILL };
+    const [batch, single] = await Promise.allSettled([a.adminSave({ confirm: NEAR }, 'w10-lock-po1'), b.adminSave({ add: hand }, 'w10-lock-b')]);
+
+    expect(single.status).toBe('fulfilled');
+    const now = sortPairs(await stored());
+    if (batch.status === 'fulfilled') {
+      // Duyệt ghi trước, ghép tay thay cặp của chai đầu sau.
+      expect(now).toEqual(sortPairs([hand, NEAR[1]!, NEAR[2]!]));
+      expect(await history()).toHaveLength(2);
+    } else {
+      // Ghép tay ghi trước: chai đầu không còn là gợi ý nên cả lần duyệt bị từ chối, hai cặp còn đúng cũng không được ghi.
+      expect((batch.reason as { getStatus?: () => number }).getStatus?.()).toBe(409);
+      expect(now).toEqual([hand]);
+      expect(await history()).toHaveLength(1);
+    }
   });
 });

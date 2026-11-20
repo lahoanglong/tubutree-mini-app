@@ -67,6 +67,7 @@ function coreChecks(env: Env): CheckResult[] {
   out.push(cookieSameSiteCheck(env));
   out.push(cookieDomainCheck(env));
   out.push(throttleBypassCheck(env));
+  out.push(phoneHmacCheck(env));
   out.push(webhookSecretsDistinct(env));
   return out;
 }
@@ -155,6 +156,24 @@ function cookieDomainCheck(env: Env): CheckResult {
     return warn(G_CORE, 'env.cookie_domain', title, `${v} không khớp host nào trong CORS_ORIGINS`, 'Domain cookie phải là đuôi của host web (ví dụ .tubutree.com cho app.tubutree.com), nếu không trình duyệt bỏ cookie.');
   }
   return pass(G_CORE, 'env.cookie_domain', title, v);
+}
+
+/**
+ * Bí mật của mã băm SĐT (`hmacPhone`, apps/api/src/common/crypto/phone-hmac.ts). Không bao giờ FAIL: thiếu thì API dùng khoá suy ra từ
+ * JWT_ACCESS_SECRET (vẫn là bí mật), nên deploy không hỏng; chỉ nhắc đặt khoá riêng để đổi khoá JWT không kéo theo đổi mã băm SĐT.
+ */
+function phoneHmacCheck(env: Env): CheckResult {
+  const title = 'PHONE_HMAC_SECRET cho mã băm số điện thoại';
+  const v = envValue(env, 'PHONE_HMAC_SECRET').trim();
+  const hint =
+    'Sinh bằng `openssl rand -hex 32`, đặt trong .env của api rồi tạo lại container. Đặt ngoài khung Giờ vàng: đổi khoá là đổi mã băm SĐT, khách vãng lai đã mua trong đợt đang chạy được đếm lại từ đầu. Sau khi đặt thì giữ nguyên, không xoay như khoá JWT.';
+  if (!v) {
+    return warn(G_CORE, 'env.phone_hmac', title, 'chưa đặt: mã băm SĐT dùng khoá suy ra từ JWT_ACCESS_SECRET (an toàn, nhưng xoay khoá JWT sẽ đổi luôn mã băm SĐT)', hint);
+  }
+  if (looksLikePlaceholder(v)) return warn(G_CORE, 'env.phone_hmac', title, 'còn là giá trị mẫu', hint);
+  if (v.length < 32) return warn(G_CORE, 'env.phone_hmac', title, `${describeSecret(v)}, nên dài ít nhất 32 ký tự`, hint);
+  if (v === envValue(env, 'JWT_ACCESS_SECRET').trim()) return warn(G_CORE, 'env.phone_hmac', title, 'trùng JWT_ACCESS_SECRET', hint);
+  return pass(G_CORE, 'env.phone_hmac', title, describeSecret(v));
 }
 
 function throttleBypassCheck(env: Env): CheckResult {

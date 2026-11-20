@@ -43,7 +43,7 @@ import {
 import type { GuestPlaceOrderDto } from '../../src/modules/checkout/guest/dto/guest-checkout.dto';
 import type { Env } from '../../src/config/env.validation';
 import { createOrder, createRealUser, createUser, pinConfig, randCode, setConfig, uniquePhone, warmPool } from './helpers';
-import { flashLimitKeys } from '../../src/modules/flash-sale/flash-buyer-keys';
+import { buyerFlashLimitKeys, flashLimitKeys, isLegacyFlashKey } from '../../src/modules/flash-sale/flash-buyer-keys';
 import { PHOTO_REWARD_POINTS_DEFAULT } from '../../src/modules/reviews/review-green-corner';
 
 /**
@@ -629,6 +629,41 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
       const b = await miniGuest(phone);
       await cart.addItem(b.userId, { variationId: v, quantity: 1 });
       expect((await checkout.quote(b.userId, { addressId: b.addressId })).subtotal).toBe(99_000);
+    });
+
+    it('tubu-w11-01: lượt mua dưới khoá SĐT cũ (sha256 trần, trước HMAC) vẫn được đếm; không ghi dòng khoá cũ mới; đơn cũ huỷ thì hoàn vào khoá cũ', async () => {
+      const v = (await product(150_000)).variationId;
+      const item = await flashOn(v, 99_000, 1);
+      const phone = uniquePhone();
+      const legacy = buyerFlashLimitKeys(null, { phone }).find(isLegacyFlashKey)!;
+      expect(legacy).toMatch(/^fsk:p:[0-9a-f]{64}$/);
+      // Đơn đặt trước khi deploy: dòng khoá cũ đã có 1 (= perUserLimit).
+      await prisma.flashSalePurchase.create({ data: { flashSaleItemId: item.id, userId: legacy, quantity: 1 } });
+      await prisma.flashSaleItem.update({ where: { id: item.id }, data: { soldCount: 1 } });
+
+      const a = await miniGuest(phone);
+      await cart.addItem(a.userId, { variationId: v, quantity: 1 });
+      // SQL đọc giá (SUM khoá SĐT mới + cũ) trên Postgres thật: hết suất của SĐT nên không còn giá Giờ vàng.
+      expect((await checkout.quote(a.userId, { addressId: a.addressId })).subtotal).toBe(150_000);
+      const flash = moduleRef.get(FlashSaleService);
+      const keys = buyerFlashLimitKeys(null, { phone });
+      expect(await prisma.$transaction((tx) => flash.consumeQuotas(tx, a.userId, [{ flashSaleItemId: item.id, quantity: 1 }], new Date(), keys))).toEqual(['OVER_LIMIT']);
+      const rows = await prisma.flashSalePurchase.findMany({ where: { flashSaleItemId: item.id }, orderBy: { userId: 'asc' } });
+      expect(rows.filter((r) => r.quantity > 0).map((r) => [r.userId, r.quantity])).toEqual([[legacy, 1]]);
+      expect((await prisma.flashSaleItem.findUniqueOrThrow({ where: { id: item.id } })).soldCount).toBe(1);
+
+      // Đơn cũ (ghi khoá cũ) bị huỷ: hoàn vào khoá cũ, SĐT lại được giá Giờ vàng và lần mua mới chỉ cộng khoá HMAC.
+      await prisma.$transaction((tx) => flash.restore(tx, item.id, `old-${randCode(6)}`, 1, [legacy]));
+      expect((await checkout.quote(a.userId, { addressId: a.addressId })).subtotal).toBe(99_000);
+      const qa = await checkout.quote(a.userId, { addressId: a.addressId });
+      const oa = await checkout.placeOrder(a.userId, { addressId: a.addressId, paymentMethod: 'COD', expectedTotal: qa.total } as never, idem(), 'miniapp');
+      const order = await prisma.order.findUniqueOrThrow({ where: { id: oa.id } });
+      expect(order.flashLimitKeys).toEqual(flashLimitKeys({ phone }));
+      expect(order.flashLimitKeys.some(isLegacyFlashKey)).toBe(false);
+      const byKey = async (userId: string) =>
+        (await prisma.flashSalePurchase.findUnique({ where: { flashSaleItemId_userId: { flashSaleItemId: item.id, userId } } }))?.quantity ?? 0;
+      expect(await byKey(flashLimitKeys({ phone })[0]!)).toBe(1);
+      expect(await byKey(legacy)).toBe(0);
     });
 
     it('đơn đặt trước khi có cột flashLimitKeys (mảng rỗng): huỷ chỉ hoàn suất của tài khoản, không hoàn khoá SĐT mà đơn chưa từng trừ', async () => {

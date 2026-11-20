@@ -276,6 +276,14 @@ export const FIELD_LABELS: Record<string, string> = {
   game: 'Trò chơi',
   sourceUrl: 'Link nguồn',
   sourceCheckedAt: 'Ngày kiểm nguồn',
+  // Thẻ admin Cặp Refill (SaveRefillPairsDto, RefillPairOverrideDto).
+  bottleSlug: 'Chai',
+  refillSlug: 'Gói Refill',
+  overrides: 'Danh sách ghép tay',
+  add: 'Cặp ghép tay',
+  remove: 'Chai bỏ ghép tay',
+  block: 'Danh sách món đang chặn',
+  confirm: 'Cặp duyệt gợi ý',
 };
 
 /** Nhãn riêng của một trường trong một DTO, khi chữ trên màn hình khác nhãn toàn cục (cùng tên `category` mà là "Nhóm", "Chủ đề" hay "Danh mục"). */

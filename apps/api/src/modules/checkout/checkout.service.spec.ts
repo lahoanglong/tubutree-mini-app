@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { flashLimitKeys } from '../flash-sale/flash-buyer-keys';
+import { buyerFlashLimitKeys, flashLimitKeys } from '../flash-sale/flash-buyer-keys';
 import { join } from 'node:path';
 import { BadRequestException, ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -1044,7 +1044,9 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(flashSale.consumeQuotas).toHaveBeenCalledTimes(1);
     // u1 của bộ dựng chưa có SĐT/Zalo (chưa xác thực): suất còn đếm theo SĐT nhận hàng của địa chỉ giao.
-    expect(flashSale.consumeQuotas).toHaveBeenCalledWith(prisma, 'u1', [{ flashSaleItemId: 'fi1', quantity: 2 }], expect.any(Date), flashLimitKeys({ phone: '09' }));
+    // Khoá kiểm gồm bí danh khoá SĐT cũ (chỉ đọc); đơn chỉ ghi các khoá được cộng (flashLimitKeys), để huỷ đơn hoàn đúng các khoá đó.
+    expect(flashSale.consumeQuotas).toHaveBeenCalledWith(prisma, 'u1', [{ flashSaleItemId: 'fi1', quantity: 2 }], expect.any(Date), buyerFlashLimitKeys(null, { phone: '09' }));
+    expect(orderCreate.mock.calls[0][0].data.flashLimitKeys).toEqual(flashLimitKeys({ phone: '09' }));
     // OrderItem được đóng dấu flashSaleItemId để reconciliation/hoàn suất về sau.
     const items = orderCreate.mock.calls[0][0].data.items.create;
     expect(items).toContainEqual(expect.objectContaining({ flashSaleItemId: 'fi1' }));
@@ -1102,7 +1104,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
     const executeRaw = jest.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(0).mockResolvedValue(1);
     const { svc } = build({ cartData: flashCart(flashLine('i1', 'fi1'), flashLine('i2', 'fi2')), executeRaw, flashSale: flashWith(consumeQuotas) });
     await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never)).rejects.toThrow('PRICE_CHANGED');
-    expect(consumeQuotas).toHaveBeenCalledWith(expect.anything(), 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], expect.any(Date), flashLimitKeys({ phone: '09' }));
+    expect(consumeQuotas).toHaveBeenCalledWith(expect.anything(), 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], expect.any(Date), buyerFlashLimitKeys(null, { phone: '09' }));
   });
 
   it('dòng 1 thiếu hàng → lỗi tồn kho của dòng 1, không trừ suất', async () => {

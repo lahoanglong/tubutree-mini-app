@@ -88,7 +88,8 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
     expect(rowEl(c, BLAU.name).textContent).toContain('Tên gần giống gói Refill: xác nhận ghép tay');
     click(btn(rowEl(c, BLAU.name), 'Ghép tay cặp này'));
     await flush();
-    expect(api.save).toHaveBeenCalledWith({ add: { bottleSlug: 'nuoc-lau-500ml', refillSlug: 'refill-lau-10l' } });
+    // Duyệt đúng cặp đang gợi ý (tubu-w11-01): máy chủ từ chối (409) nếu bảng đã đổi, không ghi đè cặp admin khác vừa ghép.
+    expect(api.save).toHaveBeenCalledWith({ confirm: [{ bottleSlug: 'nuoc-lau-500ml', refillSlug: 'refill-lau-10l' }] });
   });
 
   it('tắt cặp tự ghép: thêm chai vào danh sách chặn, giữ món đã chặn', async () => {
@@ -103,7 +104,7 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
     const c = await mount();
     click(btn(c, 'Ghép tay cặp này'));
     await flush();
-    expect(api.save).toHaveBeenLastCalledWith({ add: { bottleSlug: 'nrc-500ml', refillSlug: 'refill-nrc-10l' } });
+    expect(api.save).toHaveBeenLastCalledWith({ confirm: [{ bottleSlug: 'nrc-500ml', refillSlug: 'refill-nrc-10l' }] });
     click(btn(c, 'Bỏ ghép tay'));
     await flush();
     expect(api.save).toHaveBeenLastCalledWith({ remove: 'gel-300ml' });
@@ -143,5 +144,92 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
     click(btn(c, 'Tắt gợi ý Refill'));
     await flush();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Chỉ quản trị viên');
+  });
+
+  describe('Duyệt nhanh tất cả gợi ý (tubu-w11-01)', () => {
+    const BH = prod('nuoc-giat-bac-ha-500ml', 'Nước giặt hương Bạc hà Fuwa3e 500ml', '500ml');
+    const RBH = prod('refill-giat-bac-ha-10l', 'Refill nước giặt Bạc hà Fuwa3e 10L', '10L');
+    const CAM = prod('nuoc-giat-cam-500ml', 'Nước giặt hương Cam Fuwa3e 500ml', '500ml');
+    const RCAM = prod('refill-giat-cam-10l', 'Refill nước giặt Cam Fuwa3e 10L', '10L');
+    const LAU = prod('nuoc-lau-500ml', 'Nước lau đa năng FUWA3E 500ml', '500ml');
+    const RLAU = prod('refill-lau-10l', 'Refill Lau đa năng Fuwa3e 10L', '10L');
+    const WITH_NEAR = (): AdminRefillPairs => ({ ...DATA(), rows: [...DATA().rows, row(BH, RBH, 'near', null), row(CAM, RCAM, 'near', null), row(LAU, RLAU, 'near', null)] });
+    const PAIRS = [
+      { bottleSlug: BH.slug, refillSlug: RBH.slug },
+      { bottleSlug: CAM.slug, refillSlug: RCAM.slug },
+      { bottleSlug: LAU.slug, refillSlug: RLAU.slug },
+    ];
+    const preview = (c: ParentNode) => c.querySelector('[data-testid="refill-confirm-preview"]') as HTMLElement | null;
+
+    it('nút đếm đúng số dòng tên gần giống (không tính dòng lệch lượng); bấm thì xem trước đúng từng cặp chai → gói Refill, chưa gửi gì', async () => {
+      api.get.mockResolvedValue(WITH_NEAR());
+      const c = await mount();
+      expect(preview(c)).toBeNull();
+      click(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      await flush();
+      const box = preview(c)!;
+      expect(box).not.toBeNull();
+      // Chữ nhìn thấy (bỏ phần chỉ dành cho trình đọc màn hình).
+      const visible = (li: Element) => {
+        const copy = li.cloneNode(true) as Element;
+        copy.querySelectorAll('.sr-only').forEach((n) => n.remove());
+        return copy.textContent?.replace(/\s+/g, ' ').trim();
+      };
+      const items = Array.from(box.querySelectorAll('li')).map(visible);
+      expect(box.querySelector('li')!.textContent).toContain('đổi sang');
+      expect(items).toEqual([`${BH.name} → ${RBH.name}`, `${CAM.name} → ${RCAM.name}`, `${LAU.name} → ${RLAU.name}`]);
+      expect(api.save).not.toHaveBeenCalled();
+      // Khung xem trước thay chỗ nút: không hai nút cho cùng một việc.
+      expect(btn(c, 'Duyệt nhanh tất cả gợi ý (3)')).toBeNull();
+      expect(document.activeElement === box.querySelector('h3')).toBe(true);
+      expect(unnamedControls(c)).toEqual([]);
+    });
+
+    it('"Duyệt 3 cặp" gửi MỘT lần lưu với đúng các cặp đã xem trước; khung đóng; báo đã duyệt', async () => {
+      api.get.mockResolvedValue(WITH_NEAR());
+      api.save.mockImplementation(async () => ({ ...DATA(), enabled: true }));
+      const c = await mount();
+      click(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      await flush();
+      click(btn(preview(c)!, 'Duyệt 3 cặp'));
+      await flush();
+      expect(api.save).toHaveBeenCalledTimes(1);
+      expect(api.save).toHaveBeenCalledWith({ confirm: PAIRS });
+      expect(preview(c)).toBeNull();
+      expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã duyệt 3 cặp gợi ý. Khách thấy thay đổi trong vài phút.');
+      // Bảng trả về không còn dòng gần giống: không còn nút.
+      expect(btn(c, /Duyệt nhanh tất cả gợi ý/)).toBeNull();
+    });
+
+    it('Huỷ: không gửi gì, khung đóng, nút trở lại', async () => {
+      api.get.mockResolvedValue(WITH_NEAR());
+      const c = await mount();
+      click(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      await flush();
+      click(btn(preview(c)!, 'Huỷ'));
+      await flush();
+      expect(api.save).not.toHaveBeenCalled();
+      expect(preview(c)).toBeNull();
+      expect(btn(c, 'Duyệt nhanh tất cả gợi ý (3)')).not.toBeNull();
+    });
+
+    it('bảng đã đổi (409): báo lỗi máy chủ, đóng khung, đọc lại bảng', async () => {
+      api.get.mockResolvedValue(WITH_NEAR());
+      const c = await mount();
+      expect(api.get).toHaveBeenCalledTimes(1);
+      api.save.mockRejectedValueOnce(new ApiError('"Nước giặt hương Cam Fuwa3e 500ml" không còn được gợi ý ghép với gói này: bảng cặp vừa đổi, chưa cặp nào được duyệt. Tải lại thẻ Cặp Refill rồi duyệt lại.', 409));
+      click(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      await flush();
+      click(btn(preview(c)!, 'Duyệt 3 cặp'));
+      await flush();
+      expect(c.querySelector('[role="alert"]')?.textContent).toContain('chưa cặp nào được duyệt');
+      expect(preview(c)).toBeNull();
+      expect(api.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('không có dòng tên gần giống thì không có nút (dòng lệch lượng vẫn duyệt từng dòng)', async () => {
+      const c = await mount();
+      expect(btn(c, /Duyệt nhanh tất cả gợi ý/)).toBeNull();
+    });
   });
 });

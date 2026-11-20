@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { RefillPairsService } from './refill-pairs.service';
 import { REFILL_FIRST_ENABLED_KEY, REFILL_PAIRS_BLOCK_KEY, REFILL_PAIRS_OVERRIDE_KEY } from './refill-pairs';
 
@@ -20,9 +21,9 @@ const CARD = {
   fulfiller: { kind: 'TUBU' },
 };
 
-function build(flag: unknown, cfg: Record<string, unknown> = {}, stored: Record<string, unknown> = {}) {
+function build(flag: unknown, cfg: Record<string, unknown> = {}, stored: Record<string, unknown> = {}, products: readonly object[] = PRODUCTS) {
   const prisma = {
-    product: { findMany: jest.fn(async () => PRODUCTS) },
+    product: { findMany: jest.fn(async () => products) },
     $queryRaw: jest.fn(async (..._args: unknown[]) => [{ id: 'bottle' }] as { id: string }[]),
   };
   const catalog = { cardsByIds: jest.fn(async (..._args: unknown[]) => [CARD] as (typeof CARD)[]) };
@@ -239,5 +240,51 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
       svc.adminSave({ overrides: [{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'nuoc-rua-chen-fuwa3e-3-8l' }, { bottleSlug: 'nuoc-rua-chen-fuwa3e-3-8l', refillSlug: 'nuoc-rua-chen-fuwa3e-500ml' }] }, 'a'),
     ).rejects.toThrow('"Nước rửa chén Fuwa3e 3,8L" không phải gói Refill');
     expect(config.set).not.toHaveBeenCalled();
+  });
+});
+
+describe('RefillPairsService: Duyệt nhanh gợi ý (tubu-w11-01)', () => {
+  const NEAR_PRODUCTS = [
+    ...PRODUCTS,
+    { id: 'bh', slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Fuwa3e', isCombo: false },
+    { id: 'cam', slug: 'nuoc-giat-huong-cam-fuwa3e-500ml', name: 'Nước giặt hương Cam Fuwa3e 500ml', brand: 'Fuwa3e', isCombo: false },
+    { id: 'rbh', slug: 'refill-nuoc-giat-bac-ha-fuwa3e-10l', name: 'Refill nước giặt Bạc hà Fuwa3e 10L', brand: 'Fuwa3e', isCombo: false },
+    { id: 'rcam', slug: 'refill-nuoc-giat-cam-fuwa3e-10l', name: 'Refill nước giặt Cam Fuwa3e 10L', brand: 'Fuwa3e', isCombo: false },
+  ];
+  const BH = { bottleSlug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml', refillSlug: 'refill-nuoc-giat-bac-ha-fuwa3e-10l' };
+  const CAM = { bottleSlug: 'nuoc-giat-huong-cam-fuwa3e-500ml', refillSlug: 'refill-nuoc-giat-cam-fuwa3e-10l' };
+  const OLD = { bottleSlug: 'chai-da-ngung-ban', refillSlug: 'refill-da-ngung-ban' };
+
+  it('bảng admin có 2 dòng near; duyệt cả hai trong MỘT lần ghi dưới khoá dòng (update), giữ cặp đang lưu, bảng trả về hết near', async () => {
+    const { svc, config, cfg } = build(true, {}, { [REFILL_PAIRS_OVERRIDE_KEY]: [OLD] }, NEAR_PRODUCTS);
+    expect((await svc.adminOverview()).rows.filter((r) => r.status === 'near').map((r) => r.bottle.slug).sort()).toEqual([BH.bottleSlug, CAM.bottleSlug]);
+    const out = await svc.adminSave({ confirm: [BH, CAM] }, 'po');
+    expect(config.update).toHaveBeenCalledTimes(1);
+    expect(config.update).toHaveBeenCalledWith(REFILL_PAIRS_OVERRIDE_KEY, [], expect.any(Function), 'po');
+    expect(config.set).not.toHaveBeenCalled();
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toEqual([OLD, BH, CAM]);
+    expect(out.rows.filter((r) => r.status === 'near')).toEqual([]);
+    expect(out.rows.filter((r) => r.status === 'manual').map((r) => r.bottle.slug).sort()).toEqual([BH.bottleSlug, CAM.bottleSlug]);
+  });
+
+  it('gửi lại đúng lần duyệt đó: danh sách không đổi, không cặp trùng', async () => {
+    const { svc, cfg } = build(true, {}, { [REFILL_PAIRS_OVERRIDE_KEY]: [OLD] }, NEAR_PRODUCTS);
+    await svc.adminSave({ confirm: [BH, CAM] }, 'po');
+    await svc.adminSave({ confirm: [BH, CAM] }, 'po');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toEqual([OLD, BH, CAM]);
+  });
+
+  it('bảng vừa đổi (admin khác đã ghép chai Bạc hà sang gói khác): 409, không cặp nào của lần duyệt được ghi, kể cả cặp còn đúng', async () => {
+    const other = { bottleSlug: BH.bottleSlug, refillSlug: 'refill-nuoc-rua-chen-fuwa3e-10l' };
+    const { svc, cfg } = build(true, {}, { [REFILL_PAIRS_OVERRIDE_KEY]: [other] }, NEAR_PRODUCTS);
+    await expect(svc.adminSave({ confirm: [CAM, BH] }, 'po')).rejects.toThrow(ConflictException);
+    await expect(svc.adminSave({ confirm: [CAM, BH] }, 'po')).rejects.toThrow('chưa cặp nào được duyệt');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toBeUndefined();
+  });
+
+  it('cùng chai hai lần trong một lần duyệt: 400', async () => {
+    const { svc, cfg } = build(true, {}, {}, NEAR_PRODUCTS);
+    await expect(svc.adminSave({ confirm: [BH, BH] }, 'po')).rejects.toThrow('hai lần');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toBeUndefined();
   });
 });

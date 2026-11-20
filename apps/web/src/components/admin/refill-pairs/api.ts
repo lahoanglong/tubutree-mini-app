@@ -39,6 +39,8 @@ export interface SaveRefillPairsInput {
   add?: RefillPairOverride;
   /** Bỏ ghép tay một chai (slug chai) trên danh sách đang lưu. */
   remove?: string;
+  /** Duyệt các cặp bảng đang gợi ý: máy chủ ghi tất cả trong một lần, hoặc trả 409 và không ghi cặp nào khi bảng đã đổi. */
+  confirm?: RefillPairOverride[];
   block?: string[];
 }
 

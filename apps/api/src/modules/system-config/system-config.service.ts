@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { isDeepStrictEqual } from 'node:util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { formatPoints } from '../../common/format-points';
 import { COMMUNITY_LINK_KEYS, communityUrlProblem } from './community-links';
@@ -573,18 +574,20 @@ export class SystemConfigService {
    * giá trị mới. Hai lần gọi cùng khoá (kể cả từ hai tiến trình API) chạy nối tiếp, nên lần sau gộp trên bản lần trước vừa ghi; `get()` rồi `set()`
    * thì hai admin lưu cùng lúc cùng đọc một bản cũ và lần ghi sau xoá mất phần của lần trước. Khoá chưa có dòng thì tạo dòng `fallback` trước để có
    * dòng mà khoá. `next` ném lỗi thì transaction huỷ, không ghi gì (kể cả dòng vừa tạo). Dòng do chính lần gọi này tạo không sinh dòng lịch sử,
-   * như `set()` trên khoá chưa có.
+   * như `set()` trên khoá chưa có. `next` trả đúng bản đang lưu (thao tác lặp lại, như bấm "Duyệt" hai lần) thì không ghi gì và không thêm dòng lịch sử.
    */
   async update<T extends object | string | number | boolean>(key: string, fallback: T, next: (current: unknown) => T | Promise<T>, changedBy: string): Promise<T> {
-    const value = await this.prisma.$transaction(async (tx) => {
+    const { value, wrote } = await this.prisma.$transaction(async (tx) => {
       const created = await tx.systemConfig.createMany({ data: [{ key, value: fallback as Prisma.InputJsonValue, category: categoryOf(key), updatedBy: changedBy }], skipDuplicates: true });
       const [locked] = await tx.$queryRaw<{ value: Prisma.JsonValue }[]>`SELECT "value" FROM system_configs WHERE "key" = ${key} FOR UPDATE`;
       const v = await next(locked?.value ?? fallback);
+      // So sâu, không theo thứ tự khoá: jsonb trả object với khoá đã sắp lại.
+      if (created.count === 0 && locked && isDeepStrictEqual(JSON.parse(JSON.stringify(v)), locked.value)) return { value: v, wrote: false };
       const unset = await this.checkValue(key, v);
       await this.writeInTx(tx, key, v, unset, changedBy, created.count > 0 ? null : (locked ?? null));
-      return v;
+      return { value: v, wrote: true };
     });
-    this.afterWrite(key);
+    if (wrote) this.afterWrite(key);
     return value;
   }
 

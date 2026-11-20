@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { FLASH_IP_KEY_PREFIX, FLASH_IP_LIMIT_FACTOR, flashKeyLimit } from './flash-buyer-keys';
+import { FLASH_IP_KEY_PREFIX, FLASH_IP_LIMIT_FACTOR, FLASH_PHONE_KEY_PREFIX, flashKeyLimit, isLegacyFlashKey } from './flash-buyer-keys';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -185,11 +185,13 @@ export class FlashSaleService {
     // Một câu JOIN (không tra đợt flash bằng câu thứ hai): giỏ và báo giá gọi hàm này mỗi lần xem giá.
     // Lượt đã mua của khách nối luôn vào câu này (unique theo item + khách nên mỗi item tối đa một dòng).
     // Khoá phụ quy về cùng thang với dòng của tài khoản: khoá IP trần gấp FLASH_IP_LIMIT_FACTOR lần nên trừ phần nới thêm trước khi so.
+    // Khoá còn lại là của SĐT nhận hàng: khoá HMAC và bí danh sha256 cũ (chỉ đọc) của cùng một số được CỘNG, vì lượt mua trước và sau
+    // khi đổi sang HMAC nằm ở hai dòng khác nhau.
     const keyBought =
       userId && limitKeys.length > 0
-        ? Prisma.sql`, (SELECT MAX(CASE WHEN k."userId" LIKE ${`${FLASH_IP_KEY_PREFIX}%`}
-                                       THEN k."quantity" - ${FLASH_IP_LIMIT_FACTOR - 1} * i."perUserLimit"
-                                       ELSE k."quantity" END)
+        ? Prisma.sql`, (SELECT GREATEST(
+                 MAX(CASE WHEN k."userId" LIKE ${`${FLASH_IP_KEY_PREFIX}%`} THEN k."quantity" - ${FLASH_IP_LIMIT_FACTOR - 1} * i."perUserLimit" END),
+                 SUM(CASE WHEN k."userId" NOT LIKE ${`${FLASH_IP_KEY_PREFIX}%`} THEN k."quantity" END))
              FROM flash_sale_purchases k
              WHERE k."flashSaleItemId" = i."id" AND k."userId" IN (${Prisma.join([...limitKeys])}))`
         : Prisma.empty;
@@ -515,15 +517,20 @@ export class FlashSaleService {
       // Khoá phụ sau cùng, theo suất rồi theo khoá: dòng suất (flash_sale_items) đã bị khoá ở pha (1) nên hai lần đặt cùng SĐT/IP vào cùng
       // suất đã nối tiếp nhau từ đó; ON CONFLICT cộng dồn có điều kiện nên không có khe "đọc rồi ghi". Một khoá vượt trần thì dòng đó
       // OVER_LIMIT và mọi phần vừa trừ của dòng (suất, dòng của tài khoản, các khoá trước) được trả lại.
-      if (limitKeys.length > 0) {
+      // Bí danh SĐT cũ (isLegacyFlashKey) không bao giờ được cộng: lượt đã mua dưới nó trừ vào trần của khoá SĐT mới. Dòng cũ chỉ còn
+      // giảm (huỷ đơn cũ) nên đọc không khoá cũng chỉ làm trần chặt hơn, không lỏng hơn.
+      const writable = limitKeys.filter((k) => !isLegacyFlashKey(k));
+      const legacy = limitKeys.filter(isLegacyFlashKey);
+      if (writable.length > 0) {
         for (const i of byItem) {
           if (outcomes[i] !== 'OK') continue;
           at = i;
           const { flashSaleItemId: itemId, quantity: qty } = lines[i]!;
           const limit = limits.get(itemId) ?? 0;
+          const legacyBought = legacy.length > 0 ? await this.legacyKeyBought(tx, itemId, legacy) : 0;
           const claimed: string[] = [];
-          for (const key of limitKeys) {
-            const cap = flashKeyLimit(key, limit);
+          for (const key of writable) {
+            const cap = flashKeyLimit(key, limit) - (key.startsWith(FLASH_PHONE_KEY_PREFIX) ? legacyBought : 0);
             const ok =
               qty <= cap &&
               (await tx.$executeRaw`
@@ -551,6 +558,14 @@ export class FlashSaleService {
     } catch (e) {
       throw new FlashQuotaLineError(at, e);
     }
+  }
+
+  /** Lượt đã mua của suất `itemId` dưới các bí danh SĐT cũ (chỉ đọc). */
+  private async legacyKeyBought(tx: Prisma.TransactionClient, itemId: string, keys: readonly string[]): Promise<number> {
+    const [row] = await tx.$queryRaw<{ legacy: number }[]>`
+      SELECT COALESCE(SUM("quantity"), 0)::int AS "legacy" FROM "flash_sale_purchases"
+       WHERE "flashSaleItemId" = ${itemId} AND "userId" IN (${Prisma.join([...keys])})`;
+    return Number(row?.legacy ?? 0);
   }
 
   /**

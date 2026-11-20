@@ -1,11 +1,25 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, ListSkeleton, LoadError, Notice, ToneBadge, chipClass } from '@/components/admin/ui';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { getRefillPairs, saveRefillPairs, type AdminRefillPairRow, type AdminRefillPairs, type SaveRefillPairsInput } from './api';
-import { FILTERS, REFILL_PAIRS_KEY as QUERY_KEY, addOverride, countRows, filterRows, looseBlocks, ratioText, rowAction, statusOf, type RefillPairFilter } from './refill-pairs';
+import {
+  FILTERS,
+  REFILL_PAIRS_KEY as QUERY_KEY,
+  addOverride,
+  confirmPairs,
+  countRows,
+  filterRows,
+  looseBlocks,
+  nearSuggestions,
+  ratioText,
+  rowAction,
+  statusOf,
+  type RefillPairFilter,
+  type SuggestedPair,
+} from './refill-pairs';
 
 function PairRow({ row, maxRatio, busy, onAct }: { row: AdminRefillPairRow; maxRatio: number; busy: boolean; onAct: (row: AdminRefillPairRow) => void }) {
   const status = statusOf(row, maxRatio);
@@ -35,8 +49,44 @@ function PairRow({ row, maxRatio, busy, onAct }: { row: AdminRefillPairRow; maxR
 }
 
 /**
+ * Xem trước của "Duyệt nhanh tất cả gợi ý": đúng danh sách chai → gói Refill sẽ được gửi (chụp lúc bấm, không đổi theo bảng), một nút
+ * duyệt và một nút huỷ. Mở ra thì đưa focus vào tiêu đề để trình đọc màn hình đọc danh sách.
+ */
+function SuggestionsPreview({ pairs, busy, onConfirm, onCancel }: { pairs: readonly SuggestedPair[]; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const ids = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+  return (
+    <section data-testid="refill-confirm-preview" aria-labelledby={`${ids}-title`} className="space-y-2 rounded-card border border-forest-600 bg-stone-0 p-3">
+      <h3 id={`${ids}-title`} ref={heading} tabIndex={-1} className="text-sm font-semibold text-stone-900">
+        Duyệt {pairs.length} cặp tên gần giống
+      </h3>
+      <p className="text-xs text-stone-600">Mỗi chai được ghép tay với gói Refill bên phải. Bảng vừa đổi ở nơi khác thì không cặp nào được duyệt, bảng tải lại để xem lại.</p>
+      <ol className="space-y-1 text-sm text-stone-800">
+        {pairs.map((p) => (
+          <li key={p.bottle.slug} className="break-words">
+            {p.bottle.name} <span aria-hidden="true">→ </span>
+            <span className="sr-only">đổi sang </span>
+            {p.refill.name}
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={onConfirm}>
+          Duyệt {pairs.length} cặp
+        </button>
+        <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={onCancel}>
+          Huỷ
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
  * Thẻ "Cặp Refill": chai nào đang được mời đổi sang gói Refill nào (giỏ và dải "Mua lại món quen" của khách đã nhận chai). Mỗi nút lưu
- * ngay (không có bản nháp): tắt hay bật lại một cặp, ghép tay cặp đang chờ, ghép tay chai bất kỳ với gói Refill bất kỳ.
+ * ngay (không có bản nháp): tắt hay bật lại một cặp, duyệt cặp đang gợi ý, duyệt cả các cặp tên gần giống một lần (có xem trước), ghép tay
+ * chai bất kỳ với gói Refill bất kỳ.
  */
 export function RefillPairsTab() {
   const qc = useQueryClient();
@@ -46,6 +96,7 @@ export function RefillPairsTab() {
   const [message, setMessage] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const [bottle, setBottle] = useState('');
   const [refill, setRefill] = useState('');
+  const [preview, setPreview] = useState<SuggestedPair[] | null>(null);
   const ids = useId();
 
   const save = async (input: SaveRefillPairsInput, done: string) => {
@@ -73,6 +124,15 @@ export function RefillPairsTab() {
   const act = (row: AdminRefillPairRow) => {
     const a = rowAction(row);
     if (a) void save(a.input(data), `${a.done}: ${row.bottle.name}.`);
+  };
+
+  const suggestions = nearSuggestions(data.rows);
+
+  const confirmAll = async (pairs: readonly SuggestedPair[]) => {
+    const ok = await save(confirmPairs(pairs), `Đã duyệt ${pairs.length} cặp gợi ý.`);
+    setPreview(null);
+    // 409 khi bảng vừa đổi ở nơi khác: đọc lại bảng để admin xem gợi ý mới trước khi duyệt lại.
+    if (!ok) void qc.invalidateQueries({ queryKey: QUERY_KEY });
   };
 
   const pairByHand = async () => {
@@ -113,6 +173,16 @@ export function RefillPairsTab() {
           </button>
         ))}
       </div>
+
+      {preview ? (
+        <SuggestionsPreview pairs={preview} busy={busy} onConfirm={() => void confirmAll(preview)} onCancel={() => setPreview(null)} />
+      ) : (
+        suggestions.length > 0 && (
+          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => setPreview(suggestions)}>
+            Duyệt nhanh tất cả gợi ý ({suggestions.length})
+          </button>
+        )
+      )}
 
       {rows.length === 0 ? (
         <p data-testid="refill-pairs-empty" className="rounded-control bg-stone-50 px-3 py-6 text-center text-sm text-stone-600">

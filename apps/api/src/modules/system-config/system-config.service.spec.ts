@@ -944,3 +944,34 @@ describe('SystemConfigService.get: không ghi giá trị cũ vào cache khi set(
     expect(findUnique.mock.calls.filter((c) => c[0].where.key === 'misc.a').length).toBe(2);
   });
 });
+
+describe('SystemConfigService.update: giá trị không đổi thì không ghi (tubu-w11-01)', () => {
+  function makeTx(stored: unknown) {
+    const upsert = jest.fn().mockResolvedValue({});
+    const historyCreate = jest.fn().mockResolvedValue({});
+    const tx = {
+      systemConfig: { createMany: jest.fn().mockResolvedValue({ count: 0 }), upsert, findUnique: jest.fn() },
+      systemConfigHistory: { create: historyCreate },
+      $queryRaw: jest.fn().mockResolvedValue([{ value: stored }]),
+    };
+    const prisma = { $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { prisma, upsert, historyCreate };
+  }
+  const KEY = 'catalog.refill_pairs_override';
+  const STORED = [{ bottleSlug: 'a', refillSlug: 'r' }];
+
+  it('bản mới bằng bản đang lưu (kể cả khác thứ tự khoá trong object): không upsert, không thêm dòng lịch sử, vẫn trả giá trị', async () => {
+    const { prisma, upsert, historyCreate } = makeTx(STORED);
+    const out = await new SystemConfigService(prisma).update(KEY, [], () => [{ refillSlug: 'r', bottleSlug: 'a' }], 'po');
+    expect(out).toEqual(STORED);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(historyCreate).not.toHaveBeenCalled();
+  });
+
+  it('bản mới khác: ghi như cũ, kèm một dòng lịch sử', async () => {
+    const { prisma, upsert, historyCreate } = makeTx(STORED);
+    await new SystemConfigService(prisma).update(KEY, [], (cur) => [...(cur as object[]), { bottleSlug: 'b', refillSlug: 'r' }], 'po');
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(historyCreate).toHaveBeenCalledTimes(1);
+  });
+});

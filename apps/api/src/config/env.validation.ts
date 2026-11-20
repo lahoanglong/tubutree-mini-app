@@ -148,6 +148,9 @@ export const envSchema = z.object({
     .string()
     .refine((v) => v === '' || v.length >= 32, 'THROTTLE_BYPASS_TOKEN phải rỗng hoặc dài ít nhất 32 ký tự.')
     .default(''),
+  // Bí mật HMAC cho mã băm SĐT (common/crypto/phone-hmac.ts). Tuỳ chọn và không bao giờ chặn khởi động: trống thì dùng khoá suy ra từ
+  // JWT_ACCESS_SECRET; kiểm go-live báo WARN (env.phone_hmac) để đặt khoá riêng.
+  PHONE_HMAC_SECRET: z.string().default(''),
 
   // AI tư vấn 24/7 (§6.14.3) — DeepSeek (chính) + Gemini (dự phòng). Trống → tính năng tự tắt graceful.
   // CẢ HAI đều gọi qua endpoint OpenAI-compatible (/chat/completions, Bearer). Gemini ở đây là

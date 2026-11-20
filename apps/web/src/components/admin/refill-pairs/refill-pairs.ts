@@ -1,5 +1,5 @@
 import type { Tone } from '@/lib/recycling';
-import type { AdminRefillPairRow, AdminRefillPairs, RefillPairStatus, SaveRefillPairsInput } from './api';
+import type { AdminRefillPairRow, AdminRefillPairs, AdminRefillProduct, RefillPairStatus, SaveRefillPairsInput } from './api';
 
 /** Khoá truy vấn bảng cặp, dùng chung thẻ "Cặp Refill" và chip "Chưa ghép Refill" của thẻ Sản phẩm. */
 export const REFILL_PAIRS_KEY = ['admin-refill-pairs'] as const;
@@ -50,7 +50,7 @@ export type RowAction = { label: string; done: string; input: (data: AdminRefill
 const without = <T>(xs: readonly T[], drop: (x: T) => boolean) => xs.filter((x) => !drop(x));
 
 /**
- * Việc một chạm của từng dòng: tắt cặp tự ghép (chặn chai), bỏ ghép tay, ghép tay đúng cặp đang gợi ý (lệch lượng hay tên gần giống), bật lại chai đã tắt.
+ * Việc một chạm của từng dòng: tắt cặp tự ghép (chặn chai), bỏ ghép tay, duyệt đúng cặp đang gợi ý (lệch lượng hay tên gần giống), bật lại chai đã tắt.
  * Dòng nhiều gói Refill không có nút: admin chọn gói ở ô Ghép tay.
  */
 export function rowAction(row: AdminRefillPairRow): RowAction {
@@ -62,7 +62,7 @@ export function rowAction(row: AdminRefillPairRow): RowAction {
       return { label: 'Bỏ ghép tay', done: 'Đã bỏ ghép tay', input: () => ({ remove: slug }) };
     case 'size':
     case 'near':
-      return row.refill ? { label: 'Ghép tay cặp này', done: 'Đã ghép tay', input: () => addOverride(slug, row.refill!.slug) } : null;
+      return row.refill ? { label: 'Ghép tay cặp này', done: 'Đã ghép tay', input: () => confirmPairs([{ bottle: row.bottle, refill: row.refill! }]) } : null;
     case 'blocked':
       return { label: 'Bật lại', done: 'Đã bật lại', input: (d) => ({ block: without(d.block.map((b) => b.slug), (s) => s === slug) }) };
     default:
@@ -75,6 +75,24 @@ export function rowAction(row: AdminRefillPairRow): RowAction {
  * nên trang mở từ trước không xoá mất cặp người khác (hay migration) vừa thêm.
  */
 export const addOverride = (bottleSlug: string, refillSlug: string): SaveRefillPairsInput => ({ add: { bottleSlug, refillSlug } });
+
+export interface SuggestedPair {
+  bottle: AdminRefillProduct;
+  refill: AdminRefillProduct;
+}
+
+/** Dòng "tên gần giống gói Refill" (`near`) kèm gói gợi ý, theo thứ tự bảng: nội dung của nút "Duyệt nhanh tất cả gợi ý". */
+export function nearSuggestions(rows: readonly AdminRefillPairRow[]): SuggestedPair[] {
+  return rows.flatMap((r) => (r.status === 'near' && r.refill ? [{ bottle: r.bottle, refill: r.refill }] : []));
+}
+
+/**
+ * Duyệt cặp đang gợi ý: máy chủ so từng cặp với bảng đang lưu, ghi tất cả trong một lần hoặc trả 409 không ghi gì khi bảng đã đổi (admin
+ * khác vừa ghép chai sang gói khác). Gửi lại cặp đã duyệt thì không đổi gì.
+ */
+export const confirmPairs = (pairs: readonly SuggestedPair[]): SaveRefillPairsInput => ({
+  confirm: pairs.map((p) => ({ bottleSlug: p.bottle.slug, refillSlug: p.refill.slug })),
+});
 
 /** Slug đang chặn mà không phải chai của dòng nào (thường là gói Refill bị chặn): hiện riêng để bỏ chặn. */
 export function looseBlocks(d: AdminRefillPairs): { slug: string; name: string | null }[] {

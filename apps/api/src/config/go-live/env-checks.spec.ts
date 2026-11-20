@@ -170,6 +170,33 @@ describe('evaluateEnv', () => {
     });
   });
 
+  describe('PHONE_HMAC_SECRET (mã băm SĐT, tubu-w11-01)', () => {
+    const secret = 'ph-Rk2Tw8Yq5Ue1Io7Pa4Sd0Fg3Hj6Kl9Zx';
+    it('không đặt thì WARN, không bao giờ FAIL: API vẫn chạy với khoá suy ra từ JWT_ACCESS_SECRET', () => {
+      const r = byId(evaluateEnv(envWith({ PHONE_HMAC_SECRET: undefined })), 'env.phone_hmac');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('JWT_ACCESS_SECRET');
+      expect(r.hint).toContain('openssl rand -hex 32');
+      expect(r.hint).toContain('Giờ vàng');
+      expect(status({ PHONE_HMAC_SECRET: '   ' }, 'env.phone_hmac')).toBe('WARN');
+    });
+    it('đặt đủ 32 ký tự thì PASS và không in giá trị', () => {
+      const r = byId(evaluateEnv(envWith({ PHONE_HMAC_SECRET: secret })), 'env.phone_hmac');
+      expect(r.status).toBe('PASS');
+      expect(JSON.stringify(r)).not.toContain(secret);
+    });
+    it('ngắn, còn giá trị mẫu, hay trùng khoá JWT thì chỉ WARN (không chặn deploy) và không in giá trị', () => {
+      for (const v of ['ngan-qua', 'changeme', 'k9Zq-access-Vb3nT7xW2mLpR8sYd4HfGc6JaQe1UoNi']) {
+        const r = byId(evaluateEnv(envWith({ PHONE_HMAC_SECRET: v })), 'env.phone_hmac');
+        expect(r.status).toBe('WARN');
+        expect(JSON.stringify(r)).not.toContain(v);
+      }
+    });
+    it('schema lúc khởi động nhận mọi giá trị, kể cả rỗng (bí mật này không bao giờ làm API dừng)', () => {
+      for (const v of [undefined, '', 'x']) expect(status({ PHONE_HMAC_SECRET: v }, 'env.schema')).toBe('PASS');
+    });
+  });
+
   describe('Pancake', () => {
     it('thiếu khoá API hoặc mã shop thì FAIL', () => {
       expect(status({ PANCAKE_API_KEY: '' }, 'env.pancake.credentials')).toBe('FAIL');

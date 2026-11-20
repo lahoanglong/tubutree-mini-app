@@ -1,7 +1,8 @@
 import { Body, Controller, ForbiddenException, Get, Put } from '@nestjs/common';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsNotEmpty, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../../common/staff-permissions';
@@ -16,11 +17,11 @@ export class RefillPairOverrideDto {
   @IsString() @IsNotEmpty() @MaxLength(SLUG_MAX) refillSlug!: string;
 }
 
-/** Phần nào gửi thì ghi đè phần đó; bỏ trống thì giữ nguyên. */
+/** Phần nào gửi thì ghi đè phần đó; bỏ trống thì giữ nguyên. `null` không phải "bỏ trường": 400 (patch-null-contract). */
 export class SaveRefillPairsDto {
-  @IsOptional() @IsBoolean() enabled?: boolean;
+  @OptionalNotNull() @IsBoolean() enabled?: boolean;
 
-  @IsOptional()
+  @OptionalNotNull()
   @IsArray()
   @ArrayMaxSize(REFILL_ADMIN_LIST_MAX)
   @ValidateNested({ each: true })
@@ -28,12 +29,21 @@ export class SaveRefillPairsDto {
   overrides?: RefillPairOverrideDto[];
 
   /** Ghép tay một chai, gộp vào danh sách đang lưu ở máy chủ (không ghi đè cặp trang chưa thấy). */
-  @IsOptional() @ValidateNested() @Type(() => RefillPairOverrideDto) add?: RefillPairOverrideDto;
+  @OptionalNotNull() @ValidateNested() @Type(() => RefillPairOverrideDto) add?: RefillPairOverrideDto;
 
   /** Bỏ ghép tay một chai (slug chai) trên danh sách đang lưu. */
-  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(SLUG_MAX) remove?: string;
+  @OptionalNotNull() @IsString() @IsNotEmpty() @MaxLength(SLUG_MAX) remove?: string;
 
-  @IsOptional() @IsArray() @ArrayMaxSize(REFILL_ADMIN_LIST_MAX) @IsString({ each: true }) @MaxLength(SLUG_MAX, { each: true }) block?: string[];
+  /** Duyệt các cặp đang gợi ý (tên gần giống, lệch lượng) trong một lần lưu: tất cả, hoặc không cặp nào khi bảng đã đổi (409). */
+  @OptionalNotNull()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(REFILL_ADMIN_LIST_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => RefillPairOverrideDto)
+  confirm?: RefillPairOverrideDto[];
+
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(REFILL_ADMIN_LIST_MAX) @IsString({ each: true }) @MaxLength(SLUG_MAX, { each: true }) block?: string[];
 }
 
 /**

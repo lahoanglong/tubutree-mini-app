@@ -60,7 +60,7 @@ import {
   type FlashQuotaLine,
   type FlashQuotaOutcome,
 } from '../flash-sale/flash-sale.service';
-import { buyerFlashLimitKeys } from '../flash-sale/flash-buyer-keys';
+import { buyerFlashLimitKeys, writableFlashKeys } from '../flash-sale/flash-buyer-keys';
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { formatPoints } from '../../common/format-points';
 import { formatVndText } from '../../common/format-vnd';
@@ -692,8 +692,9 @@ export class CheckoutService {
                 ...(guest ? { guestPhone: guest.phone, guestTokenHash: guest.tokenHash, guestIpHash: guest.ipHash } : {}),
                 // IP đã băm của mọi lần đặt (vãng lai lẫn đã đăng nhập): thưởng đơn đầu của chương trình giới thiệu so IP người mời và bạn được mời.
                 placedIpHash: guest ? guest.ipHash : buyerIpHash,
-                // Khoá phụ đã trừ ở consumeFlashQuotas: huỷ/trả đơn hoàn đúng các khoá này (không suy lại từ người mua lúc huỷ).
-                ...(flashLines.length > 0 && flashLimitKeys.length > 0 ? { flashLimitKeys: [...flashLimitKeys] } : {}),
+                // Khoá phụ đã trừ ở consumeFlashQuotas: huỷ/trả đơn hoàn đúng các khoá này (không suy lại từ người mua lúc huỷ). Bí danh
+                // SĐT cũ chỉ để đọc, không bị cộng nên không ghi.
+                ...(flashLines.length > 0 && writableFlashKeys(flashLimitKeys).length > 0 ? { flashLimitKeys: writableFlashKeys(flashLimitKeys) } : {}),
                 paidAt: paid ? new Date() : null,
                 // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
                 couponCode: isPrimary && computed.couponApplied ? cart.couponCode : null,

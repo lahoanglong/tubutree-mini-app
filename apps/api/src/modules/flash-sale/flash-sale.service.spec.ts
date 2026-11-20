@@ -199,6 +199,15 @@ describe('FlashSaleService.resolveEffective — người mua chưa xác thực (
     expect(map.get('v1')).toMatchObject({ allowance: 1, perUserLeft: 1 });
   });
 
+  it('khoá SĐT mới (fsk:h:) và khoá cũ (fsk:p:) của cùng một số được CỘNG (lượt mua trước và sau khi đổi sang HMAC), khoá IP vẫn lấy lớn nhất', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([activeItem({ perUserLimit: 3, bought: 2 })]);
+    const svc = new FlashSaleService({ $queryRaw: queryRaw } as unknown as PrismaService, config, notifications, lifecycle);
+    await svc.resolveEffective(['v1'], NOW, 'guest-u1', ['fsk:h:new', 'fsk:i:h', 'fsk:p:old']);
+    const q = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(q.sql).toContain('SUM(CASE WHEN k."userId" NOT LIKE');
+    expect(q.values).toEqual(expect.arrayContaining(['fsk:h:new', 'fsk:i:h', 'fsk:p:old']));
+  });
+
   it('không có khoá phụ → câu SQL không đọc bảng theo khoá', async () => {
     const queryRaw = jest.fn().mockResolvedValue([]);
     await new FlashSaleService({ $queryRaw: queryRaw } as unknown as PrismaService, config, notifications, lifecycle).resolveEffective(['v1'], NOW, 'u1');
@@ -235,7 +244,14 @@ describe('FlashSaleService.consumeQuotas — khoá phụ SĐT/IP (tubu-w6-01 P1-
         purchases[key] = cur + qty;
         return 1;
       }),
-      $queryRaw: jest.fn(async () => [{ flashSaleItemId: 'fi1' }]),
+      $queryRaw: jest.fn(async (sql: TemplateStringsArray) => {
+        // Lượt đã mua theo khoá SĐT cũ (sha256 trần, trước tubu-w11-01): chỉ đọc.
+        if (sql.join('?').includes('AS "legacy"')) {
+          log.push('legacy');
+          return [{ legacy: Object.entries(purchases).reduce((n, [k, q]) => (k.startsWith('fsk:p:') ? n + q : n), 0) }];
+        }
+        return [{ flashSaleItemId: 'fi1' }];
+      }),
       flashSaleItem: {
         findMany: jest.fn(async () => [{ id: 'fi1', perUserLimit: limit }]),
         updateMany: jest.fn(async ({ data }: { data: { soldCount: { decrement: number } } }) => {
@@ -267,27 +283,52 @@ describe('FlashSaleService.consumeQuotas — khoá phụ SĐT/IP (tubu-w6-01 P1-
 
   it('trong trần ở mọi khoá → OK, cộng tài khoản rồi từng khoá theo thứ tự', async () => {
     const { tx, log, purchases } = mkTx(2, {});
-    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OK']);
-    expect(log).toEqual(['sold', 'bump:u1', 'key:fsk:i:h', 'key:fsk:p:x']);
-    expect(purchases).toMatchObject({ u1: 1, 'fsk:i:h': 1, 'fsk:p:x': 1 });
+    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:h:x'])).toEqual(['OK']);
+    expect(log).toEqual(['sold', 'bump:u1', 'key:fsk:i:h', 'key:fsk:h:x']);
+    expect(purchases).toMatchObject({ u1: 1, 'fsk:i:h': 1, 'fsk:h:x': 1 });
   });
 
   it('SĐT đã mua hết suất trên thiết bị khác → OVER_LIMIT, trả lại suất, dòng tài khoản và khoá đã cộng trước đó', async () => {
-    const { tx, log, purchases, item } = mkTx(2, { 'fsk:p:x': 2 });
-    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OVER_LIMIT']);
-    expect(log).toEqual(['sold', 'bump:u1', 'key:fsk:i:h', 'key:fsk:p:x', 'undo:u1', 'undo:fsk:i:h', 'undo-sold']);
-    expect(purchases).toMatchObject({ u1: 0, 'fsk:i:h': 0, 'fsk:p:x': 2 });
+    const { tx, log, purchases, item } = mkTx(2, { 'fsk:h:x': 2 });
+    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:h:x'])).toEqual(['OVER_LIMIT']);
+    expect(log).toEqual(['sold', 'bump:u1', 'key:fsk:i:h', 'key:fsk:h:x', 'undo:u1', 'undo:fsk:i:h', 'undo-sold']);
+    expect(purchases).toMatchObject({ u1: 0, 'fsk:i:h': 0, 'fsk:h:x': 2 });
     expect(item.sold).toBe(0);
   });
 
   it('khoá IP trần gấp 3 lần (IP dùng chung): IP đã có 5/6 vẫn mua được 1; SĐT trần đúng perUserLimit', async () => {
     const ok = mkTx(2, { 'fsk:i:h': 5 });
-    expect(await svc().consumeQuotas(ok.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OK']);
-    expect(ok.purchases).toMatchObject({ 'fsk:i:h': 6, 'fsk:p:x': 1 });
+    expect(await svc().consumeQuotas(ok.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:h:x'])).toEqual(['OK']);
+    expect(ok.purchases).toMatchObject({ 'fsk:i:h': 6, 'fsk:h:x': 1 });
     const full = mkTx(2, { 'fsk:i:h': 6 });
-    expect(await svc().consumeQuotas(full.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:p:x'])).toEqual(['OVER_LIMIT']);
+    expect(await svc().consumeQuotas(full.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:i:h', 'fsk:h:x'])).toEqual(['OVER_LIMIT']);
     expect(full.purchases).toMatchObject({ u1: 0, 'fsk:i:h': 6 });
-    expect(full.purchases['fsk:p:x']).toBeUndefined();
+    expect(full.purchases['fsk:h:x']).toBeUndefined();
+  });
+
+  it('khoá SĐT cũ (fsk:p:, trước HMAC) chỉ để đọc: lượt đã mua dưới nó trừ vào trần của khoá SĐT mới, không bao giờ được ghi', async () => {
+    const keys = ['fsk:h:x', 'fsk:i:h', 'fsk:p:old'];
+    const half = mkTx(2, { 'fsk:p:old': 1 });
+    expect(await svc().consumeQuotas(half.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, keys)).toEqual(['OK']);
+    expect(half.log).toEqual(['sold', 'bump:u1', 'legacy', 'key:fsk:h:x', 'key:fsk:i:h']);
+    expect(half.purchases).toMatchObject({ u1: 1, 'fsk:h:x': 1, 'fsk:i:h': 1, 'fsk:p:old': 1 });
+
+    const again = mkTx(2, { 'fsk:p:old': 1, 'fsk:h:x': 1 });
+    expect(await svc().consumeQuotas(again.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, keys)).toEqual(['OVER_LIMIT']);
+    expect(again.purchases).toMatchObject({ u1: 0, 'fsk:h:x': 1, 'fsk:p:old': 1 });
+    expect(again.item.sold).toBe(0);
+
+    const full = mkTx(2, { 'fsk:p:old': 2 });
+    expect(await svc().consumeQuotas(full.tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, keys)).toEqual(['OVER_LIMIT']);
+    expect(full.purchases['fsk:h:x']).toBeUndefined();
+    expect(full.log.some((l) => l === 'key:fsk:p:old')).toBe(false);
+    expect(full.item.sold).toBe(0);
+  });
+
+  it('không có khoá cũ trong danh sách → không đọc thêm câu nào', async () => {
+    const { tx, log } = mkTx(2, {});
+    expect(await svc().consumeQuotas(tx as any, 'u1', [{ flashSaleItemId: 'fi1', quantity: 1 }], now, ['fsk:h:x'])).toEqual(['OK']);
+    expect(log).not.toContain('legacy');
   });
 
   it('không có khoá phụ → không ghi gì thêm (khách thật như cũ)', async () => {

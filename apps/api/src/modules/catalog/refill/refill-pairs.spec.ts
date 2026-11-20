@@ -5,6 +5,7 @@ import {
   REFILL_PAIRS_OVERRIDE_KEY,
   applyRefillOverrideOps,
   checkRefillOverrides,
+  confirmRefillSuggestions,
   isRefillProduct,
   refillBlockProblem,
   refillOverridesProblem,
@@ -267,6 +268,56 @@ describe('checkRefillOverrides (lưu ghép tay)', () => {
     expect(checkRefillOverrides([...kept, { bottleSlug: 'chai-da-tat', refillSlug: 'refill-da-tat' }], bySlug, { kept })).toEqual({
       error: '"chai-da-tat" đang có hai cặp ghép tay, giữ một.',
     });
+  });
+});
+
+describe('confirmRefillSuggestions (Duyệt nhanh gợi ý, tubu-w11-01)', () => {
+  const near = () => refillPairRows(rows).filter((r) => r.status === 'near');
+  const asPair = (r: { bottle: { slug: string }; refill: { slug: string } | null }) => ({ bottleSlug: r.bottle.slug, refillSlug: r.refill!.slug });
+
+  it('catalog PROD: duyệt cả 7 gợi ý near một lần → 7 cặp ghép tay, không còn dòng near, khách thấy đủ 7 cặp', () => {
+    const batch = near().map(asPair);
+    expect(batch).toHaveLength(7);
+    const r = confirmRefillSuggestions(refillPairRows(rows), batch);
+    expect(r).toEqual({ add: batch });
+    const overrides = (r as { add: typeof batch }).add;
+    const after = refillPairRows(rows, { overrides });
+    expect(after.filter((x) => x.status === 'near')).toEqual([]);
+    expect(after.filter((x) => x.status === 'manual').map(asPair)).toEqual(expect.arrayContaining(batch));
+    const pairs = pairRefills(rows, { overrides });
+    for (const p of batch) expect(pairs.get(p.bottleSlug)).toBe(p.refillSlug);
+  });
+
+  it('duyệt lại đúng các cặp đã ghép tay: không thêm gì (bấm hai lần, hai tab, mạng gửi lại)', () => {
+    const batch = near().map(asPair);
+    expect(confirmRefillSuggestions(refillPairRows(rows, { overrides: batch }), batch)).toEqual({ add: [] });
+    // Một nửa đã duyệt ở tab khác: chỉ thêm nửa còn lại.
+    expect(confirmRefillSuggestions(refillPairRows(rows, { overrides: batch.slice(0, 3) }), batch)).toEqual({ add: batch.slice(3) });
+  });
+
+  it('dòng lệch lượng (size) cũng duyệt được bằng đúng gói đang gợi ý', () => {
+    const size = refillPairRows(rows).find((x) => x.status === 'size')!;
+    expect(confirmRefillSuggestions(refillPairRows(rows), [asPair(size)])).toEqual({ add: [asPair(size)] });
+  });
+
+  it('bảng vừa đổi (trang mở từ trước): gói khác gợi ý, chai đã ghép tay sang gói khác, chai đã tắt, chai tự ghép hay không có dòng → stale cho CẢ lần duyệt', () => {
+    const [first, second] = near().map(asPair);
+    const auto = refillPairRows(rows).find((x) => x.status === 'auto')!;
+    const otherRefill = auto.refill!.slug;
+    const wrong = { ...first!, refillSlug: otherRefill };
+    expect(confirmRefillSuggestions(refillPairRows(rows), [second!, wrong])).toMatchObject({ stale: expect.stringContaining('Tải lại thẻ Cặp Refill') });
+    const handOther = refillPairRows(rows, { overrides: [wrong] });
+    expect(confirmRefillSuggestions(handOther, [first!])).toMatchObject({ stale: expect.stringContaining(nameOf.get(first!.bottleSlug)!) });
+    const blocked = refillPairRows(rows, { block: new Set([first!.bottleSlug]) });
+    expect(confirmRefillSuggestions(blocked, [first!])).toHaveProperty('stale');
+    expect(confirmRefillSuggestions(refillPairRows(rows), [asPair(auto)])).toHaveProperty('stale');
+    expect(confirmRefillSuggestions(refillPairRows(rows), [{ bottleSlug: 'khong-co', refillSlug: otherRefill }])).toHaveProperty('stale');
+  });
+
+  it('một chai hai lần trong cùng lần duyệt → lỗi (400), không phải stale; slug được bỏ khoảng trắng', () => {
+    const [first] = near().map(asPair);
+    expect(confirmRefillSuggestions(refillPairRows(rows), [first!, first!])).toMatchObject({ error: expect.stringContaining('hai lần') });
+    expect(confirmRefillSuggestions(refillPairRows(rows), [{ bottleSlug: ` ${first!.bottleSlug} `, refillSlug: `${first!.refillSlug} ` }])).toEqual({ add: [first] });
   });
 });
 

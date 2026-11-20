@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
@@ -11,6 +11,7 @@ import {
   REFILL_PAIRS_OVERRIDE_KEY,
   applyRefillOverrideOps,
   checkRefillOverrides,
+  confirmRefillSuggestions,
   isRefillProduct,
   pairRefills,
   parseRefillBlock,
@@ -85,6 +86,8 @@ export interface AdminRefillPairsInput {
   add?: RefillPairOverride;
   /** Bỏ ghép tay một chai (slug chai), trên danh sách đang lưu. */
   remove?: string;
+  /** Duyệt các cặp bảng đang gợi ý (`near`, `size`): tất cả trong một lần ghi, hoặc không cặp nào (bảng đã đổi → 409). */
+  confirm?: readonly RefillPairOverride[];
   block?: readonly string[];
 }
 
@@ -210,12 +213,15 @@ export class RefillPairsService {
    *
    * Ghép tay đọc, gộp và ghi danh sách đang lưu dưới khoá dòng (`SystemConfigService.update`): hai admin ghép hai chai cùng lúc thì cả hai cặp còn.
    * Ghép tay lưu trước các phần khác, nên ghép sai (400) thì không phần nào được ghi.
+   *
+   * `confirm` (nút "Duyệt nhanh tất cả gợi ý" và nút duyệt từng dòng): so từng cặp với bảng dựng từ danh sách đọc dưới cùng khoá dòng, rồi gộp
+   * tất cả trong cùng lần ghi đó. Cặp không còn là gợi ý → 409, không cặp nào được ghi; gửi lại lần duyệt đã xong → không đổi gì.
    */
   async adminSave(input: AdminRefillPairsInput, actor: string): Promise<AdminRefillPairs> {
     const config = this.config;
     if (!config) throw new ServiceUnavailableException('Chưa đọc được cấu hình hệ thống.');
     try {
-      if (input.overrides || input.add || input.remove) {
+      if (input.overrides || input.add || input.remove || input.confirm?.length) {
         const [products, blockRaw] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
         const bySlug = new Map(products.map((p) => [p.slug, p]));
         const block = input.block ? new Set(input.block.map((s) => s.trim())) : parseRefillBlock(blockRaw);
@@ -224,7 +230,13 @@ export class RefillPairsService {
           [],
           (storedRaw) => {
             const stored = parseRefillOverrides(storedRaw);
-            const next = applyRefillOverrideOps(input.overrides ?? stored, { add: input.add, remove: input.remove });
+            let next = applyRefillOverrideOps(input.overrides ?? stored, { add: input.add, remove: input.remove });
+            if (input.confirm?.length) {
+              const confirmed = confirmRefillSuggestions(refillPairRows(products, { overrides: next, block }), input.confirm);
+              if ('stale' in confirmed) throw new ConflictException(confirmed.stale);
+              if ('error' in confirmed) throw new BadRequestException(confirmed.error);
+              for (const add of confirmed.add) next = applyRefillOverrideOps(next, { add });
+            }
             const checked = checkRefillOverrides(next, bySlug, { kept: stored, block });
             if ('error' in checked) throw new BadRequestException(checked.error);
             return checked.ok;

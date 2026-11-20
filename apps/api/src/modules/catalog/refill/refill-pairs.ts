@@ -251,6 +251,40 @@ export function applyRefillOverrideOps(current: readonly RefillPairOverride[], o
   return next;
 }
 
+/** Dòng có gói Refill gợi ý mà admin duyệt được bằng một chạm: tên gần giống (`near`) và cùng công thức nhưng lệch lượng (`size`). */
+export const REFILL_CONFIRMABLE_STATUSES: readonly RefillPairStatus[] = ['near', 'size'];
+
+/**
+ * Duyệt gợi ý (THUẦN), trên bảng dựng từ danh sách ghép tay ĐANG LƯU: mỗi cặp phải đúng là gói bảng đang gợi ý cho chai đó, hoặc chai đã
+ * được ghép tay đúng gói đó (duyệt lại không thêm gì, nên bấm hai lần hay gửi lại vẫn ra một kết quả). Một cặp không còn khớp (trang mở từ
+ * trước: admin khác đã ghép chai sang gói khác, đã tắt chai, danh mục đổi) thì cả lần duyệt bị từ chối (`stale`), để admin không duyệt thứ
+ * họ không còn thấy. Một chai hai lần trong cùng lần duyệt là `error`.
+ */
+export function confirmRefillSuggestions(
+  rows: readonly RefillPairRow[],
+  confirm: readonly RefillPairOverride[],
+): { add: RefillPairOverride[] } | { stale: string } | { error: string } {
+  const bySlug = new Map(rows.map((r) => [r.bottle.slug, r]));
+  const seen = new Set<string>();
+  const add: RefillPairOverride[] = [];
+  for (const c of confirm) {
+    const bottleSlug = c.bottleSlug.trim();
+    const refillSlug = c.refillSlug.trim();
+    if (seen.has(bottleSlug)) return { error: `Chai "${bySlug.get(bottleSlug)?.bottle.name ?? bottleSlug}" có hai lần trong cùng lần duyệt.` };
+    seen.add(bottleSlug);
+    const row = bySlug.get(bottleSlug);
+    if (row?.status === 'manual' && row.refill?.slug === refillSlug) continue;
+    if (row && REFILL_CONFIRMABLE_STATUSES.includes(row.status) && row.refill?.slug === refillSlug) {
+      add.push({ bottleSlug, refillSlug });
+      continue;
+    }
+    return {
+      stale: `"${row?.bottle.name ?? bottleSlug}" không còn được gợi ý ghép với gói này: bảng cặp vừa đổi, chưa cặp nào được duyệt. Tải lại thẻ Cặp Refill rồi duyệt lại.`,
+    };
+  }
+  return { add };
+}
+
 /** Bảng cặp khách dùng (id chai → id gói refill): chỉ dòng `auto` và `manual` của `refillPairRows`. */
 export function pairRefills(
   products: readonly RefillCatalogRow[],
