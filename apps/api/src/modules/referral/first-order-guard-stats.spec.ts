@@ -21,10 +21,14 @@ describe('recordFirstOrderBlocked', () => {
 });
 
 describe('firstOrderGuardStats', () => {
-  function db(rows: unknown[], rewarded = 0) {
+  /** `grants` = id người được mời có dòng thưởng phía người mời trong kỳ; `revoked` = số dòng thu hồi khớp (count). */
+  function db(rows: unknown[], grants: string[] = [], revoked = 0) {
     return {
       $queryRaw: jest.fn().mockResolvedValue(rows),
-      pointsTransaction: { count: jest.fn().mockResolvedValue(rewarded) },
+      pointsTransaction: {
+        findMany: jest.fn().mockResolvedValue(grants.map((id) => ({ reason: `${FIRST_ORDER_REFERRER_PREFIX}${id}` }))),
+        count: jest.fn().mockResolvedValue(revoked),
+      },
     };
   }
 
@@ -36,18 +40,30 @@ describe('firstOrderGuardStats', () => {
         { reason: 'LẠ', n: 5n },
         { reason: null, n: 1n },
       ],
-      12,
+      Array.from({ length: 12 }, (_, i) => `u${i}`),
     );
     expect(await firstOrderGuardStats(d as never, since, until)).toEqual({
       rewarded: 12,
       blocked: { SELF: 0, PHONE: 2, ZALO: 0, ADDRESS: 0, IP: 7 },
     });
-    expect(d.pointsTransaction.count).toHaveBeenCalledWith({
+    expect(d.pointsTransaction.findMany).toHaveBeenCalledWith({
       where: { refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: since, lte: until } },
+      select: { reason: true },
     });
     const call = d.$queryRaw.mock.calls[0]!;
     expect((call[0] as TemplateStringsArray).join('?')).toContain('"eventName" = ?');
     expect(call).toEqual(expect.arrayContaining([FIRST_ORDER_BLOCKED_EVENT, since.toISOString(), until.toISOString()]));
+  });
+
+  it('cặp đã bị thu hồi khi gộp phiên khách tự mời (dòng REFERRAL_FIRST_ORDER_REVOKE:REFERRER:<id>) không tính là đã thưởng', async () => {
+    const d = db([], ['a', 'b', 'c'], 1);
+    expect((await firstOrderGuardStats(d as never, since, until)).rewarded).toBe(2);
+    expect(d.pointsTransaction.count).toHaveBeenCalledWith({
+      where: {
+        refType: 'REFERRAL',
+        reason: { in: ['REFERRAL_FIRST_ORDER_REVOKE:REFERRER:a', 'REFERRAL_FIRST_ORDER_REVOKE:REFERRER:b', 'REFERRAL_FIRST_ORDER_REVOKE:REFERRER:c'] },
+      },
+    });
   });
 
   it('chưa có gì: mọi số là 0', async () => {
