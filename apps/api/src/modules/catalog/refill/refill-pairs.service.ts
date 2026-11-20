@@ -9,6 +9,8 @@ import {
   REFILL_FIRST_ENABLED_KEY,
   REFILL_PAIRS_BLOCK_KEY,
   REFILL_PAIRS_OVERRIDE_KEY,
+  applyRefillOverrideOps,
+  checkRefillOverrides,
   isRefillProduct,
   pairRefills,
   parseRefillBlock,
@@ -77,7 +79,12 @@ export interface AdminRefillPairs {
 
 export interface AdminRefillPairsInput {
   enabled?: boolean;
+  /** Thay cả danh sách ghép tay (API cũ). Thẻ admin gửi `add`/`remove` để không ghi đè cặp nó chưa thấy. */
   overrides?: readonly RefillPairOverride[];
+  /** Ghép tay một chai (thay cặp cũ của cùng chai), gộp vào danh sách đang lưu. */
+  add?: RefillPairOverride;
+  /** Bỏ ghép tay một chai (slug chai), trên danh sách đang lưu. */
+  remove?: string;
   block?: readonly string[];
 }
 
@@ -198,28 +205,20 @@ export class RefillPairsService {
 
   /**
    * Lưu thẻ admin: phần nào có trong `input` thì ghi đè khoá cấu hình đó (có lịch sử, ghi người sửa). Ghép tay phải là một chai (không phải
-   * gói refill) và một gói refill đang bán, mỗi chai một cặp. Bảng cặp trong bộ nhớ bỏ ngay; /catalog/refill-pairs công khai còn cache CDN
+   * gói refill) và một gói refill đang bán, hai slug khác nhau, mỗi chai một cặp (`checkRefillOverrides`). Bảng cặp trong bộ nhớ bỏ ngay; /catalog/refill-pairs công khai còn cache CDN
    * như danh mục.
    */
   async adminSave(input: AdminRefillPairsInput, actor: string): Promise<AdminRefillPairs> {
     if (!this.config) throw new ServiceUnavailableException('Chưa đọc được cấu hình hệ thống.');
     let overrides: RefillPairOverride[] | undefined;
-    if (input.overrides) {
-      const bySlug = new Map((await this.catalogRows()).map((p) => [p.slug, p]));
-      const seen = new Set<string>();
-      overrides = [];
-      for (const o of input.overrides) {
-        const bottleSlug = o.bottleSlug.trim();
-        const refillSlug = o.refillSlug.trim();
-        const bottle = bySlug.get(bottleSlug);
-        const refill = bySlug.get(refillSlug);
-        if (!bottle || !refill) throw new BadRequestException(`Không có sản phẩm đang bán "${!bottle ? bottleSlug : refillSlug}".`);
-        if (isRefillProduct(bottle)) throw new BadRequestException(`"${bottle.name}" là gói Refill, không làm chai được.`);
-        if (!isRefillProduct(refill)) throw new BadRequestException(`"${refill.name}" không phải gói Refill (tên hay slug phải bắt đầu bằng Refill).`);
-        if (seen.has(bottleSlug)) throw new BadRequestException(`"${bottle.name}" đang có hai cặp ghép tay, giữ một.`);
-        seen.add(bottleSlug);
-        overrides.push({ bottleSlug, refillSlug });
-      }
+    if (input.overrides || input.add || input.remove) {
+      const [products, storedRaw, blockRaw] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_OVERRIDE_KEY), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
+      const stored = parseRefillOverrides(storedRaw);
+      const next = applyRefillOverrideOps(input.overrides ?? stored, { add: input.add, remove: input.remove });
+      const block = input.block ? new Set(input.block.map((s) => s.trim())) : parseRefillBlock(blockRaw);
+      const checked = checkRefillOverrides(next, new Map(products.map((p) => [p.slug, p])), { kept: stored, block });
+      if ('error' in checked) throw new BadRequestException(checked.error);
+      overrides = checked.ok;
     }
     if (input.enabled !== undefined) await this.config.set(REFILL_FIRST_ENABLED_KEY, input.enabled, actor);
     if (overrides) await this.config.set(REFILL_PAIRS_OVERRIDE_KEY, overrides, actor);

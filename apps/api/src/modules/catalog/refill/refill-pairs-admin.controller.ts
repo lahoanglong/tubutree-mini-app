@@ -27,6 +27,12 @@ export class SaveRefillPairsDto {
   @Type(() => RefillPairOverrideDto)
   overrides?: RefillPairOverrideDto[];
 
+  /** Ghép tay một chai, gộp vào danh sách đang lưu ở máy chủ (không ghi đè cặp trang chưa thấy). */
+  @IsOptional() @ValidateNested() @Type(() => RefillPairOverrideDto) add?: RefillPairOverrideDto;
+
+  /** Bỏ ghép tay một chai (slug chai) trên danh sách đang lưu. */
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(SLUG_MAX) remove?: string;
+
   @IsOptional() @IsArray() @ArrayMaxSize(REFILL_ADMIN_LIST_MAX) @IsString({ each: true }) @MaxLength(SLUG_MAX, { each: true }) block?: string[];
 }
 

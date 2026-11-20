@@ -3,6 +3,7 @@ import type { CartLine, CartSummary } from '../api/cart';
 import { claimsIn } from '../commerce/copy-claims-guard';
 import { SHOP_COPY } from '../shop-copy';
 import type { RefillOfferDTO } from './refill-api';
+import { refillSavingBadge } from './refill-saving';
 import {
   applyRefillSwap,
   refillConfirmText,
@@ -43,7 +44,7 @@ const offer = (o: Partial<RefillOfferDTO> = {}): RefillOfferDTO => ({
 
 const NONE: RefillMilestones = { freeship: null, giftTrial: null, greenBox: null };
 const run = (o: Partial<RefillSwapInput> & Pick<RefillSwapInput, 'lines'>) =>
-  refillSwapOffers({ pairs: { 'p-bottle': offer() }, comboGroups: [], milestones: NONE, ...o });
+  refillSwapOffers({ pairs: { 'p-bottle': offer() }, comboGroups: [], milestones: NONE, saving: refillSavingBadge, ...o });
 const GIFT = {
   base: 310_000,
   minOrder: 299_000,
@@ -72,7 +73,7 @@ describe('refillSwapOffers', () => {
     expect(c.confirm).toBe('Đổi sang Refill');
     expect(c.cancel).toBe('Giữ lại');
     expect(c.title).toBe('Đổi sang Refill?');
-    expect(c.body).toBe('Refill nước giặt Bồ Hòn 5L · 650.000đ, dùng lại chai bạn đang có. Dòng này tăng 530.000đ.');
+    expect(c.body).toBe('Refill nước giặt Bồ Hòn 5L · 650.000đ, dùng lại chai bạn đang có. Dòng này tăng 530.000đ. Rẻ hơn 45%/100ml.');
   });
 
   it('tên không ghi lượng thì "Refill"', () => {

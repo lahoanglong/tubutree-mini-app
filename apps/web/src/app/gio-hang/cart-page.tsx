@@ -470,6 +470,7 @@ export default function CartPage() {
       greenBox,
     },
     isSelected: (id) => !deselected.has(id),
+    saving: refill.saving,
   });
   const refillConfirm = refill.confirm && refillConfirmText(refill.confirm);
   // Một thanh Hoàn tác cho cả đổi Refill lẫn bỏ món (như Mini App): lệnh sau cùng thắng, thanh của lệnh trước đóng.

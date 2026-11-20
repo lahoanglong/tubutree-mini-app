@@ -79,6 +79,18 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
     expect(Array.from(c.querySelectorAll('[data-testid="refill-pair-row"]')).map((e) => e.getAttribute('data-status'))).toEqual(['size']);
   });
 
+  it('tên gần giống (tubu-w9-03): dòng chờ ghép tay, một chạm "Ghép tay cặp này" lưu đúng cặp gợi ý', async () => {
+    const BLAU = prod('nuoc-lau-500ml', 'Nước lau đa năng FUWA3E 500ml', '500ml');
+    const RLAU = prod('refill-lau-10l', 'Refill Lau đa năng Fuwa3e 10L', '10L');
+    api.get.mockResolvedValue({ ...DATA(), rows: [...DATA().rows, row(BLAU, RLAU, 'near', null)] });
+    const c = await mount();
+    expect(btn(c, 'Chờ ghép tay (2)')).not.toBeNull();
+    expect(rowEl(c, BLAU.name).textContent).toContain('Tên gần giống gói Refill: xác nhận ghép tay');
+    click(btn(rowEl(c, BLAU.name), 'Ghép tay cặp này'));
+    await flush();
+    expect(api.save).toHaveBeenCalledWith({ add: { bottleSlug: 'nuoc-lau-500ml', refillSlug: 'refill-lau-10l' } });
+  });
+
   it('tắt cặp tự ghép: thêm chai vào danh sách chặn, giữ món đã chặn', async () => {
     const c = await mount();
     click(btn(c, 'Tắt cặp'));
@@ -87,19 +99,14 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
     expect(c.textContent).toContain('Đã tắt cặp: Nước rửa chén Fuwa3e 3,8L. Khách thấy thay đổi trong vài phút.');
   });
 
-  it('ghép tay cặp đang chờ; bỏ ghép tay; bật lại chai đã tắt', async () => {
+  it('ghép tay cặp đang chờ; bỏ ghép tay; bật lại chai đã tắt (ghép và bỏ ghép gửi thao tác, máy chủ gộp vào danh sách đang lưu)', async () => {
     const c = await mount();
     click(btn(c, 'Ghép tay cặp này'));
     await flush();
-    expect(api.save).toHaveBeenLastCalledWith({
-      overrides: [
-        { bottleSlug: 'gel-300ml', refillSlug: 'refill-gel-10l' },
-        { bottleSlug: 'nrc-500ml', refillSlug: 'refill-nrc-10l' },
-      ],
-    });
+    expect(api.save).toHaveBeenLastCalledWith({ add: { bottleSlug: 'nrc-500ml', refillSlug: 'refill-nrc-10l' } });
     click(btn(c, 'Bỏ ghép tay'));
     await flush();
-    expect(api.save).toHaveBeenLastCalledWith({ overrides: [] });
+    expect(api.save).toHaveBeenLastCalledWith({ remove: 'gel-300ml' });
     click(btn(c, 'Bật lại'));
     await flush();
     expect(api.save).toHaveBeenLastCalledWith({ block: ['refill-cu'] });
@@ -114,7 +121,7 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
     await flush();
     click(btn(c, /^Ghép tay$/));
     await flush();
-    expect(api.save).toHaveBeenCalledWith({ overrides: [{ bottleSlug: 'gel-300ml', refillSlug: 'refill-nrc-10l' }] });
+    expect(api.save).toHaveBeenCalledWith({ add: { bottleSlug: 'gel-300ml', refillSlug: 'refill-nrc-10l' } });
     expect((bottle as HTMLSelectElement).value).toBe('');
   });
 

@@ -100,7 +100,7 @@ describe('/gio-hang: đổi dòng chai sang gói Refill (catalog.refill_first_en
   it('liên kết chữ ghi giá gói và phần tăng; xác nhận thì thêm gói rồi mới bỏ chai; Hoàn tác trả lại đúng chai', async () => {
     const { container } = await mount();
     expect(state.pairs).toHaveBeenCalledWith(['p-bottle']);
-    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ)');
+    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Rẻ hơn 45%/100ml');
     expect(state.track).toHaveBeenCalledWith('refill_swap_shown', { surface: 'cart' });
 
     click(link(container));
@@ -138,7 +138,7 @@ describe('/gio-hang: đổi dòng chai sang gói Refill (catalog.refill_first_en
     state.afterAdd = cartOf([many, REFILL_LINE]);
     state.afterRemove = cartOf([REFILL_LINE]);
     const { container } = await mount();
-    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ');
+    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Rẻ hơn 45%/100ml');
     click(link(container));
     await flush(8);
     expect(document.body.textContent).not.toContain('Đổi sang Refill?');

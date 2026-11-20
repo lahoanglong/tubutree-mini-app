@@ -26,6 +26,7 @@ import { QuickReorderStrip } from './quick-reorder-strip';
 import { ProductTrustStrip } from './product-trust-strip';
 import { LoyaltyRulesCard } from '../loyalty/loyalty-rules-card';
 import { GiftTrialRow } from '../checkout/gift-rows';
+import { PdpRebuyRow } from '../product/pdp-rebuy';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -113,6 +114,17 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['AffiliateFeaturedProducts (nút Chép link giới thiệu)', () => <AffiliateFeaturedProducts products={featured} />],
     ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />],
     ['LoyaltyRulesCard (nút gập Cách kiếm và dùng Điểm Xanh)', () => <LoyaltyRulesCard lines={['A']} />],
+    ['PdpRebuyRow (nút Mua lại, liên kết đổi sang túi Refill)', () => (
+      <PdpRebuyRow
+        dateLabel="03/11"
+        variationName="500ml"
+        busy={false}
+        blocked={false}
+        onRebuy={() => {}}
+        refill={{ slug: 'refill-a', label: 'Đổi sang túi Refill 10L', badge: 'Rẻ hơn 34%/100ml', spoken: 'Đổi sang túi Refill 10L, rẻ hơn 34% mỗi 100ml' }}
+        onRefill={() => {}}
+      />
+    )],
     ['GiftTrialRow (nút Đổi quà tặng dùng thử 0đ)', () => (
       <GiftTrialRow
         summary={{

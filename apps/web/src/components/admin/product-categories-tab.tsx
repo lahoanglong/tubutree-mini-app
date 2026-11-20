@@ -17,6 +17,7 @@ import { useOpsInbox } from './use-ops-inbox';
 import { CategoryTreePanel } from './category-tree-panel';
 import { ProductEditDrawer } from './product-edit-drawer';
 import { WpImageCandidatesPanel } from './wp-image-candidates-panel';
+import { RefillUnpairedChip, RefillUnpairedPanel } from './refill-pairs/refill-unpaired';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { useToastedMessage } from './admin-toast';
@@ -49,6 +50,7 @@ export function ProductCategoriesTab({
   const [uncategorized, setUncategorized] = useState(initialUncategorized);
   const [pancakeOnly, setPancakeOnly] = useState(false);
   const [missingImage, setMissingImage] = useState(initialMissingImage);
+  const [refillOnly, setRefillOnly] = useState(false);
   // Mở từ thẻ hộp việc là đang đi gán sản phẩm: thu cây lại để danh sách sản phẩm lên đầu màn hình điện thoại.
   const [treeOpen, setTreeOpen] = useState(!(initialMissingImage || initialUncategorized));
   const inbox = useOpsInbox().data;
@@ -179,105 +181,113 @@ export function ProductCategoriesTab({
         <button type="button" aria-pressed={missingImage} onClick={() => setMissingImage((v) => !v)} className={chipClass(missingImage)}>
           Đang bán, thiếu ảnh{missingImageCount !== undefined ? ` (${missingImageCount})` : ''}
         </button>
-        {total !== undefined && <span className="text-xs text-stone-500">{total} sản phẩm khớp bộ lọc</span>}
+        <RefillUnpairedChip on={refillOnly} onToggle={() => setRefillOnly((v) => !v)} />
+        {total !== undefined && !refillOnly && <span className="text-xs text-stone-500">{total} sản phẩm khớp bộ lọc</span>}
       </div>
 
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3">
-        <span className="text-sm text-stone-700">Đã chọn {picked.length}</span>
-        <select
-          aria-label="Danh mục"
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
-          className={`${FIELD_XS} w-full sm:w-64`}
-        >
-          <option value="">Chọn danh mục…</option>
-          {options.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <button type="button" disabled={!canAdd || mut.isPending} onClick={() => void run('ADD')} aria-describedby={chosen?.hasChildren ? 'assign-leaf-hint' : undefined} className={BTN_XS_PRIMARY}>
-          Gán danh mục
-        </button>
-        <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('REMOVE')} className={BTN_XS_DANGER}>
-          Gỡ danh mục
-        </button>
-      </div>
-      {chosen?.hasChildren && (
-        <p id="assign-leaf-hint" role="status" className="text-xs text-warning-fg">
-          Mục này có mục con. Chọn một mục con để gán.
-        </p>
-      )}
-      {inlineMsg && <Notice tone={inlineMsg.ok ? 'success' : 'danger'} role={inlineMsg.ok ? 'status' : 'alert'}>{inlineMsg.text}</Notice>}
+      {/* Chip "Chưa ghép Refill" đổi danh sách: chai chờ ghép gói Refill thay cho danh sách gán danh mục. */}
+      {refillOnly ? (
+        <RefillUnpairedPanel />
+      ) : (
+        <>
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3">
+            <span className="text-sm text-stone-700">Đã chọn {picked.length}</span>
+            <select
+              aria-label="Danh mục"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className={`${FIELD_XS} w-full sm:w-64`}
+            >
+              <option value="">Chọn danh mục…</option>
+              {options.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <button type="button" disabled={!canAdd || mut.isPending} onClick={() => void run('ADD')} aria-describedby={chosen?.hasChildren ? 'assign-leaf-hint' : undefined} className={BTN_XS_PRIMARY}>
+              Gán danh mục
+            </button>
+            <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('REMOVE')} className={BTN_XS_DANGER}>
+              Gỡ danh mục
+            </button>
+          </div>
+          {chosen?.hasChildren && (
+            <p id="assign-leaf-hint" role="status" className="text-xs text-warning-fg">
+              Mục này có mục con. Chọn một mục con để gán.
+            </p>
+          )}
+          {inlineMsg && <Notice tone={inlineMsg.ok ? 'success' : 'danger'} role={inlineMsg.ok ? 'status' : 'alert'}>{inlineMsg.text}</Notice>}
 
-      {list.isLoading && <ListSkeleton label="Đang tải danh sách sản phẩm" rows={5} className="h-14" />}
-      {list.isError && (
-        <p role="alert" className="text-sm text-danger-fg">
-          {listErrorText}{' '}
-          <button
-            type="button"
-            onClick={() => {
-              void list.refetch();
-              if (cats.isError) void cats.refetch();
-            }}
-            className="min-h-[44px] font-medium underline sm:min-h-0"
-          >
-            Thử lại
-          </button>
-        </p>
-      )}
-      {list.isSuccess && products.length === 0 && (
-        <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
-          {q ? `Không có sản phẩm nào khớp "${q}".` : uncategorized ? 'Không còn sản phẩm đang bán nào chưa có danh mục.' : 'Chưa có sản phẩm nào.'}
-        </p>
-      )}
-      {products.length > 0 && (
-        <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-700 sm:min-h-0">
-          <input
-            type="checkbox"
-            checked={allShown}
-            onChange={() => setSelected(allShown ? new Set() : new Set(products.map((p) => p.id)))}
-          />
-          Chọn tất cả {products.length} sản phẩm đang hiện
-        </label>
-      )}
-      <ul className="space-y-2">
-        {products.map((p) => (
-          <li key={p.id} className="flex items-start gap-1 rounded-card border border-stone-200 bg-stone-0 p-3 pl-1 sm:gap-3 sm:pl-3">
-            {/* Ô tích trần chỉ 13px: nhãn bao quanh cho vùng chạm 44px trên điện thoại (cùng cách ở catalog-issue-list). */}
-            <label className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center sm:min-h-0 sm:min-w-0 sm:pt-1">
-              <input type="checkbox" aria-label={`Chọn ${p.name}`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} />
+          {list.isLoading && <ListSkeleton label="Đang tải danh sách sản phẩm" rows={5} className="h-14" />}
+          {list.isError && (
+            <p role="alert" className="text-sm text-danger-fg">
+              {listErrorText}{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  void list.refetch();
+                  if (cats.isError) void cats.refetch();
+                }}
+                className="min-h-[44px] font-medium underline sm:min-h-0"
+              >
+                Thử lại
+              </button>
+            </p>
+          )}
+          {list.isSuccess && products.length === 0 && (
+            <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
+              {q ? `Không có sản phẩm nào khớp "${q}".` : uncategorized ? 'Không còn sản phẩm đang bán nào chưa có danh mục.' : 'Chưa có sản phẩm nào.'}
+            </p>
+          )}
+          {products.length > 0 && (
+            <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-700 sm:min-h-0">
+              <input
+                type="checkbox"
+                checked={allShown}
+                onChange={() => setSelected(allShown ? new Set() : new Set(products.map((p) => p.id)))}
+              />
+              Chọn tất cả {products.length} sản phẩm đang hiện
             </label>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="break-words text-sm font-medium text-stone-900">{p.name}</span>
-                {!p.isActive && <ToneBadge tone="neutral">Đang tắt</ToneBadge>}
-                <button type="button" onClick={() => setEditing(p.id)} aria-label={`Sửa ${p.name}`} className={`${BTN_XS_SECONDARY} ml-auto`}>
-                  Sửa
-                </button>
-              </div>
-              <div className="mt-1 flex flex-wrap gap-1 text-xs text-stone-600">
-                {p.categoryIds.length === 0 ? (
-                  <span className="text-warning-fg">Chưa có danh mục</span>
-                ) : (
-                  p.categoryIds.map((id) => (
-                    <span key={id} className="rounded-control bg-stone-100 px-2 py-0.5">
-                      {catName.get(id) ?? id}
-                    </span>
-                  ))
-                )}
-              </div>
+          )}
+          <ul className="space-y-2">
+            {products.map((p) => (
+              <li key={p.id} className="flex items-start gap-1 rounded-card border border-stone-200 bg-stone-0 p-3 pl-1 sm:gap-3 sm:pl-3">
+                {/* Ô tích trần chỉ 13px: nhãn bao quanh cho vùng chạm 44px trên điện thoại (cùng cách ở catalog-issue-list). */}
+                <label className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center sm:min-h-0 sm:min-w-0 sm:pt-1">
+                  <input type="checkbox" aria-label={`Chọn ${p.name}`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} />
+                </label>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="break-words text-sm font-medium text-stone-900">{p.name}</span>
+                    {!p.isActive && <ToneBadge tone="neutral">Đang tắt</ToneBadge>}
+                    <button type="button" onClick={() => setEditing(p.id)} aria-label={`Sửa ${p.name}`} className={`${BTN_XS_SECONDARY} ml-auto`}>
+                      Sửa
+                    </button>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1 text-xs text-stone-600">
+                    {p.categoryIds.length === 0 ? (
+                      <span className="text-warning-fg">Chưa có danh mục</span>
+                    ) : (
+                      p.categoryIds.map((id) => (
+                        <span key={id} className="rounded-control bg-stone-100 px-2 py-0.5">
+                          {catName.get(id) ?? id}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {list.hasNextPage && (
+            <div className="text-center">
+              <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className={BTN_SECONDARY}>
+                {list.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
+              </button>
             </div>
-          </li>
-        ))}
-      </ul>
-      {list.hasNextPage && (
-        <div className="text-center">
-          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className={BTN_SECONDARY}>
-            {list.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
-          </button>
-        </div>
+          )}
+        </>
       )}
 
       {editing && (

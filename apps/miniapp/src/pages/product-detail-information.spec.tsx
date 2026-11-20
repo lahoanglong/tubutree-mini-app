@@ -14,8 +14,10 @@ const mocks = vi.hoisted(() => ({
   fetchPurchasedItems: vi.fn(),
   fetchCompare: vi.fn(),
   addToCart: vi.fn(),
+  fetchRefillPair: vi.fn(),
   authStatus: 'authenticated',
   subscribeDiscountPct: 0.12 as number | undefined,
+  refillFirst: false,
 }));
 vi.mock('../utils/features', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), SUBSCRIPTIONS_IN_MINIAPP: true }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -36,6 +38,10 @@ vi.mock('../services/shop-api', () => ({
   addToCart: mocks.addToCart,
 }));
 vi.mock('@tubutree/app-core/api/product-compare', () => ({ fetchProductCompare: (_http: unknown, slug: string) => mocks.fetchCompare(slug) }));
+vi.mock('@tubutree/app-core/refill/refill-saving', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  refillPairQuery: (_http: unknown, id: string) => ({ queryKey: ['refill-pairs', 'public', id], queryFn: () => mocks.fetchRefillPair(id), retry: false }),
+}));
 vi.mock('../services/bundle-api', () => ({ getProductBundles: vi.fn().mockResolvedValue({ combos: [], addons: [] }) }));
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
@@ -47,7 +53,7 @@ vi.mock('../store/auth', () => {
   return { useAuthStore: Object.assign(state, { getState: state }) };
 });
 vi.mock('../hooks/use-public-config', () => ({
-  usePublicConfig: () => ({ isLoaded: true, freeshipThreshold: 200_000, subscribeDiscountPct: mocks.subscribeDiscountPct, returnWindowDays: 7 }),
+  usePublicConfig: () => ({ isLoaded: true, freeshipThreshold: 200_000, subscribeDiscountPct: mocks.subscribeDiscountPct, returnWindowDays: 7, refillFirstEnabled: mocks.refillFirst }),
 }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => <section aria-label="Đánh giá sản phẩm" id="danh-gia" />, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -124,6 +130,8 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [purchased()], nextCursor: null });
     mocks.fetchCompare.mockResolvedValue(COMPARE);
     mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    mocks.fetchRefillPair.mockResolvedValue({});
+    mocks.refillFirst = false;
   });
   afterEach(() => {
     mocks.authStatus = 'authenticated';
@@ -188,6 +196,69 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
       await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
       await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
       expect(block('rebuy')).toBeNull();
+    });
+
+    describe('chai đã ghép gói Refill (tubu-w9-03)', () => {
+      const BOTTLE = { name: 'Nước rửa chén Fuwa3e 500ml', basePrice: 68_000 };
+      const REFILL = {
+        productId: 'p-refill', slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244', name: 'Refill Nước rửa chén Fuwa3e 10L', thumbnail: null,
+        variationId: 'v-refill', price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
+      };
+      const SPOKEN = 'Đổi sang túi Refill 10L, rẻ hơn 34% mỗi 100ml';
+
+      it('cờ bật, khách đã nhận chai: liên kết đổi sang Refill kèm huy hiệu rẻ hơn mỗi 100ml dưới dòng Mua lại; chạm mở trang gói Refill', async () => {
+        mocks.refillFirst = true;
+        mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+        mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
+        renderPdp();
+        const link = await screen.findByRole('button', { name: SPOKEN });
+        expect(link).toHaveTextContent('Đổi sang túi Refill 10L');
+        expect(link).toHaveTextContent('Rẻ hơn 34%/100ml');
+        expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1');
+        expect(within(block('rebuy')!).getAllByRole('button')).toHaveLength(1);
+        expect(block('rebuy')!.contains(link)).toBe(false);
+        fireEvent.click(link);
+        expect(mocks.navigate).toHaveBeenCalledWith('/product/refill-nuoc-rua-chen-fuwa3e-10l-69f244');
+        expect(mocks.addToCart).not.toHaveBeenCalled();
+      });
+
+      it('cờ tắt, khách chưa mua sản phẩm này hay chưa đăng nhập: không hỏi cặp, không có liên kết', async () => {
+        mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+        mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
+        const off = renderPdp();
+        await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
+        off.unmount();
+
+        mocks.refillFirst = true;
+        mocks.fetchPurchasedItems.mockResolvedValue({ items: [purchased({ productId: 'p-khac', slug: 'khac' })], nextCursor: null });
+        const notBought = renderPdp();
+        await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
+        await screen.findByRole('heading', { level: 1, name: BOTTLE.name });
+        notBought.unmount();
+
+        mocks.authStatus = 'guest';
+        renderPdp();
+        await screen.findByRole('heading', { level: 1, name: BOTTLE.name });
+        expect(mocks.fetchRefillPair).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('pdp-refill')).toBeNull();
+      });
+
+      it('gói Refill hết hàng hay chai không có cặp: dòng Mua lại giữ nguyên, không có liên kết', async () => {
+        mocks.refillFirst = true;
+        mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+        mocks.fetchRefillPair.mockResolvedValue({ p1: { ...REFILL, inStock: false } });
+        const soldOut = renderPdp();
+        await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
+        await waitFor(() => expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1'));
+        expect(screen.queryByTestId('pdp-refill')).toBeNull();
+        soldOut.unmount();
+
+        mocks.fetchRefillPair.mockResolvedValue({});
+        renderPdp();
+        await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
+        await waitFor(() => expect(mocks.fetchRefillPair).toHaveBeenCalledTimes(2));
+        expect(screen.queryByTestId('pdp-refill')).toBeNull();
+      });
     });
   });
 

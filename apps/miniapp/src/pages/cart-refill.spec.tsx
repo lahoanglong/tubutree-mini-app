@@ -122,7 +122,7 @@ describe('Giỏ Mini: đổi dòng chai sang gói Refill (catalog.refill_first_e
     renderPage();
     await waitFor(() => expect(link()).not.toBeNull());
     expect(mocks.pairs).toHaveBeenCalledWith(['p-bottle']);
-    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ)');
+    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Rẻ hơn 45%/100ml');
     expect(trackEvent).toHaveBeenCalledWith('refill_swap_shown', 'miniapp', { surface: 'cart' });
 
     fireEvent.click(link()!);
@@ -172,7 +172,7 @@ describe('Giỏ Mini: đổi dòng chai sang gói Refill (catalog.refill_first_e
     mocks.removeCartItem.mockResolvedValue(summary([REFILL_LINE]));
     renderPage();
     await waitFor(() => expect(link()).not.toBeNull());
-    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ');
+    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Rẻ hơn 45%/100ml');
     fireEvent.click(link()!);
     expect(await screen.findByText('Đã đổi sang Refill')).toBeInTheDocument();
     expect(screen.queryByText('Đổi sang Refill?')).toBeNull();

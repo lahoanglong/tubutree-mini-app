@@ -5,9 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, ListSkeleton, LoadError, Notice, ToneBadge, chipClass } from '@/components/admin/ui';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { getRefillPairs, saveRefillPairs, type AdminRefillPairRow, type AdminRefillPairs, type SaveRefillPairsInput } from './api';
-import { FILTERS, addOverride, countRows, filterRows, looseBlocks, ratioText, rowAction, statusOf, type RefillPairFilter } from './refill-pairs';
-
-const QUERY_KEY = ['admin-refill-pairs'];
+import { FILTERS, REFILL_PAIRS_KEY as QUERY_KEY, addOverride, countRows, filterRows, looseBlocks, ratioText, rowAction, statusOf, type RefillPairFilter } from './refill-pairs';
 
 function PairRow({ row, maxRatio, busy, onAct }: { row: AdminRefillPairRow; maxRatio: number; busy: boolean; onAct: (row: AdminRefillPairRow) => void }) {
   const status = statusOf(row, maxRatio);
@@ -79,7 +77,7 @@ export function RefillPairsTab() {
 
   const pairByHand = async () => {
     if (!bottle || !refill) return;
-    if (await save(addOverride(data, bottle, refill), 'Đã ghép tay.')) {
+    if (await save(addOverride(bottle, refill), 'Đã ghép tay.')) {
       setBottle('');
       setRefill('');
     }

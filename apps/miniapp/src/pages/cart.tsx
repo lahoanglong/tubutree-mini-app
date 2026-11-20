@@ -86,6 +86,7 @@ import { useCartVoucherHint } from '../components/checkout/use-cart-voucher-hint
 import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
 import { settleWithin } from '../utils/settle-within';
 import { refillConfirmText, refillSwapOffers } from '@tubutree/app-core/refill/refill-swap';
+import { refillSavingBadge } from '@tubutree/app-core/refill/refill-saving';
 import { RefillSwapLink } from '../components/refill/refill-swap-link';
 import { useCartRefill } from '../components/refill/use-cart-refill';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
@@ -481,6 +482,7 @@ export default function CartPage() {
       greenBox,
     },
     isSelected: (id) => !deselected.has(id),
+    saving: refillSavingBadge,
   });
   const refillConfirm = refill.confirm && refillConfirmText(refill.confirm);
   const undoBar = refill.receipt ? { text: fillCopy('refill.swapped'), onUndo: refill.undo } : removed ? { text: vi.cart.removed, onUndo: handleUndo } : null;
