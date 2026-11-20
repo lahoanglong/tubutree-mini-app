@@ -26,7 +26,11 @@ export function dropOverriddenRootVars(css: string): { css: string; removed: num
   return removed === 0 ? { css, removed } : { css: root.toString(), removed };
 }
 
-/** Chạy trên CSS đã nén cuối cùng (`generateBundle` `order: 'post'`), từng tệp riêng: thứ tự giữa các tệp tải lười không đoán được lúc build. */
+/**
+ * Chạy trên CSS đã nén cuối cùng (`generateBundle` `order: 'post'`), từng tệp riêng: thứ tự giữa các tệp tải lười không đoán được lúc build.
+ * Tên tệp CSS băm từ nội dung TRƯỚC bước này: đổi luật ở đây làm khác đầu ra thì phải đổi cả mẫu `assetFileNames`, không thì bản cũ còn trong
+ * bộ đệm mang cùng tên với bản mới.
+ */
 export function dropOverriddenRootVarsPlugin(): Plugin {
   return {
     name: 'tubu:css-root-vars',

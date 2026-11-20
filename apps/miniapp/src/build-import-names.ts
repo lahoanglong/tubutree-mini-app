@@ -17,11 +17,13 @@ interface TerserDef {
   undeclared: boolean;
   references: unknown[];
   mangled_name?: string | null;
+  unmangleable(options: object): boolean;
 }
 interface TerserNode {
   TYPE: string;
   name?: string;
   thedef?: TerserDef;
+  variables?: Map<string, TerserDef>;
 }
 interface TerserNameMapping {
   foreign_name: { name: string };
@@ -35,6 +37,8 @@ interface TerserStatement extends TerserNode {
 interface TerserToplevel {
   body: TerserStatement[];
   globals: Map<string, TerserDef>;
+  uses_eval?: boolean;
+  uses_with?: boolean;
   figure_out_scope(options: object): void;
   compute_char_frequency(options: object): void;
   mangle_names(options: object): void;
@@ -78,20 +82,31 @@ function worthPinning(def: TerserDef, linkName: string): boolean {
   return def.references.length * (linkName.length - 1) <= 5;
 }
 
+const MANGLE_OPTIONS = { module: true, toplevel: true };
+
 /**
  * Ghim biến nhập (`import{j as e}`) rồi biến xuất cục bộ (`export{t as j}`, không tính `export … from`) về tên nối, trừ `default`, `*`, tên
- * không phải định danh, tên trùng biến toàn cục hay tên đã ghim; biến vừa nhập vừa xuất giữ tên nhập. Sau đó terser đặt lại mọi tên còn lại.
+ * không phải định danh, tên trùng biến toàn cục, tên của khai báo terser không được đổi tên (`export const j`…) hay tên đã ghim; biến vừa
+ * nhập vừa xuất giữ tên nhập. Sau đó terser đặt lại mọi tên còn lại.
+ * Bỏ qua biến không còn tham chiếu nào: terser không ghi nó vào danh sách tên phạm vi đang dùng nên có thể cấp đúng tên đã ghim cho biến khác.
+ * Chunk có `eval`/`with` để nguyên: tên trong chuỗi eval không nằm trong cây cú pháp nên không kiểm được.
  */
 export function unaliasModuleNames(T: TerserAstApi, code: string): { code: string; pinned: number } {
   const ast = T.parse(code, { module: true });
   ast.figure_out_scope({});
+  if (ast.uses_eval || ast.uses_with) return { code, pinned: 0 };
   const taken = new Set(ast.globals.keys());
+  ast.walk(
+    new T.TreeWalker((node) => {
+      for (const [name, def] of node.variables ?? []) if (def.unmangleable(MANGLE_OPTIONS)) taken.add(name);
+    }),
+  );
   let pinned = 0;
   const pinAll = (names: TerserNameMapping[] | null | undefined) => {
     for (const nm of names ?? []) {
       const linkName = nm.foreign_name.name;
       const def = nm.name.definition();
-      if (!def || def.mangled_name || (def.global && def.undeclared)) continue;
+      if (!def || def.mangled_name || def.references.length === 0 || def.unmangleable(MANGLE_OPTIONS)) continue;
       if (linkName === 'default' || !IDENTIFIER.test(linkName) || taken.has(linkName) || !worthPinning(def, linkName)) continue;
       def.mangled_name = linkName;
       taken.add(linkName);
@@ -102,7 +117,7 @@ export function unaliasModuleNames(T: TerserAstApi, code: string): { code: strin
   for (const node of ast.body) if (node.TYPE === 'Export' && !node.module_name) pinAll(node.exported_names);
   if (pinned === 0) return { code, pinned };
   ast.compute_char_frequency({});
-  ast.mangle_names({ module: true });
+  ast.mangle_names(MANGLE_OPTIONS);
   return { code: ast.print_to_string({ ecma: 2020, comments: false }), pinned };
 }
 
@@ -135,24 +150,35 @@ export function sameBindings(T: TerserAstApi, before: string, after: string): bo
   return bindingShape(T, before) === bindingShape(T, after);
 }
 
+/**
+ * Bản của bước đổi tên này. Tên tệp chunk băm từ mã TRƯỚC bước này, nên sửa luật mà quên đổi số thì chunk đầu vào không đổi giữ tên cũ với
+ * nội dung mới, và bản cũ còn trong bộ đệm không bao giờ được thay.
+ */
+export const UNALIAS_PASS_VERSION = 'tubu-unalias-1';
+
 /** Chạy sau mọi `generateBundle` khác (`order: 'post'`), tức sau khi Vite chèn bản đồ preload. Chunk có source map thì để nguyên. */
 export function unaliasModuleNamesPlugin(): Plugin {
   return {
     name: 'tubu:unalias-module-names',
     apply: 'build',
+    augmentChunkHash: () => UNALIAS_PASS_VERSION,
     generateBundle: {
       order: 'post',
       async handler(_options, bundle) {
         const T = await loadTerserAst();
         for (const item of Object.values(bundle)) {
           if (item.type !== 'chunk' || item.map) continue;
-          const { code, pinned } = unaliasModuleNames(T, item.code);
-          if (pinned === 0) continue;
-          if (!sameBindings(T, item.code, code)) {
-            this.warn(`${item.fileName}: ghim tên nối làm đổi cấu trúc gắn tên, giữ nguyên chunk.`);
-            continue;
+          try {
+            const { code, pinned } = unaliasModuleNames(T, item.code);
+            if (pinned === 0) continue;
+            if (!sameBindings(T, item.code, code)) {
+              this.warn(`${item.fileName}: ghim tên nối làm đổi cấu trúc gắn tên, giữ nguyên chunk.`);
+              continue;
+            }
+            item.code = code;
+          } catch (error) {
+            this.warn(`${item.fileName}: không ghim được tên nối (${error instanceof Error ? error.message : String(error)}), giữ nguyên chunk.`);
           }
-          item.code = code;
         }
       },
     },

@@ -30,7 +30,7 @@ import { homeErrorMessage, HomeBlockErrorSuppressed } from '@/components/home/ho
 import { isEndpointMissing } from '@/components/home/home-blocks';
 import { useBlockQuery } from '@/components/home/use-block-query';
 import { QuickReorderBlock } from './quick-reorder-block';
-import { ReorderSheetLazy as ReorderSheet, SubscribeSheetLazy as SubscribeSheet } from './reorder-sheets-lazy';
+import { preloadReorderSheet, ReorderSheetLazy as ReorderSheet, SubscribeSheetLazy as SubscribeSheet } from './reorder-sheets-lazy';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
 import { ProductCard } from '@/components/mini/product-card';
@@ -219,6 +219,10 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   // Trang chủ đã hiện một dải lỗi cấp trang với một "Thử lại": kệ không thêm nút giống hệt.
   const pageErrorShown = useContext(HomeBlockErrorSuppressed);
   const [target, setTarget] = useState<ReorderTarget | null>(null);
+  // Sheet tải lười chỉ gắn vào sau lần mở đầu (rồi giữ để hiệu ứng đóng còn chạy): chunk của nó không tải ở mọi lượt xem Trang chủ,
+  // và nếu tải hỏng thì chỉ hỏng sau khi khách đã bấm, không đẩy cả Trang chủ sang khung lỗi.
+  const [reorderMounted, setReorderMounted] = useState(false);
+  if (target !== null && !reorderMounted) setReorderMounted(true);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const items = useMemo(() => (q.data?.items ?? []).filter((p) => !excludeVariations?.has(p.variationId)), [q.data, excludeVariations]);
@@ -254,6 +258,8 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   useEffect(() => {
     if (onHome && settledCount !== null) writePurchasedHint(browserStorage(), settledCount);
   }, [onHome, settledCount]);
+  const hasItems = shown.length > 0;
+  useEffect(() => (hasItems ? preloadReorderSheet() : undefined), [hasItems]);
 
   if ((restoring || q.isLoading) && onHome) {
     const height = purchasedSkeletonHeight(hint === 'none' ? 'one' : hint);
@@ -302,7 +308,7 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
           }}
         />
         {refreshError}
-        <ReorderSheet target={target} navigateToCart onClose={() => setTarget(null)} />
+        {reorderMounted && <ReorderSheet target={target} navigateToCart onClose={() => setTarget(null)} />}
       </>
     );
   }
@@ -353,7 +359,7 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
           {notice}
         </p>
       )}
-      <ReorderSheet target={target} navigateToCart onClose={() => setTarget(null)} />
+      {reorderMounted && <ReorderSheet target={target} navigateToCart onClose={() => setTarget(null)} />}
       {subscribeFor && (
         <SubscribeSheet visible onClose={() => setSubscribeFor(null)} onNotice={setNotice} variationId={subscribeFor.variationId} quantity={1} />
       )}

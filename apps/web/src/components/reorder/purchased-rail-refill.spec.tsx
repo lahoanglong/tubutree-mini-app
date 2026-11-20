@@ -100,8 +100,8 @@ describe('web: dải "Mua lại món quen", chai khách đã có thành gói Ref
     click(c.querySelector('[data-testid="quick-reorder-card"] .tubu-quick-open'));
     await flush(6);
     expect(mocks.push).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog).not.toBeNull();
     expect(dialog!.textContent).toContain('Chai 0');
   });
 });
