@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page, Request } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { test, expect, publicConfig, reply, type MockApi } from './support/mock-api';
-import { setServerGuestCheckout } from './support/guest-checkout-flag';
+import { serverGuestCheckoutReady, setServerGuestCheckout } from './support/guest-checkout-flag';
 import { assertProductOnCi, singleVariationProduct } from './support/pdp-product';
 import { probeW182 } from './support/w182-probe';
 
@@ -14,7 +14,7 @@ import { probeW182 } from './support/w182-probe';
  * chủ và trả 404 khi cờ tắt, nên ca nào mở `/don` bật cờ thật trong DB tạm ngay trước lúc đó (support/guest-checkout-flag.ts) và tắt lại sau ca.
  */
 
-const NEEDS_TEMP_DB = 'trang /don đọc cờ ở máy chủ: cần DB tạm của web-gate.sh (hoặc job CI) để bật cờ thật';
+const NEEDS_TEMP_DB = 'trang /don đọc cờ ở máy chủ: cần DB tạm của web-gate.sh (hoặc job CI) và một worker để bật cờ thật';
 
 const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
 const SHOTS_DIR = process.env.GUEST_CHECKOUT_SHOTS_DIR;
@@ -215,7 +215,7 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
   test('trang sản phẩm → Mua ngay → giỏ → Đặt hàng → một biểu mẫu → đơn COD → trang theo dõi, đúng 9 chạm', async ({ page, api, request }, testInfo) => {
     const d = await inStockProduct(request);
     test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
-    test.skip(!(await setServerGuestCheckout(request, false)), NEEDS_TEMP_DB);
+    test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
     const mobile = testInfo.project.name === 'Web Customer Mobile';
     await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
     mockShop(api, d!, true);
@@ -323,10 +323,11 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     expect(api.callsTo('GET', '/payments/bank-qr/:code')).toHaveLength(0);
   });
 
-  test('/don: sai khoá, thiếu khoá và sai mã cùng một câu không tìm thấy', async ({ page, api, request }) => {
+  test('/don: sai khoá, thiếu khoá và sai mã cùng một câu không tìm thấy', async ({ page, api, request }, testInfo) => {
     const d = await inStockProduct(request);
     test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
-    test.skip(!(await setServerGuestCheckout(request, true)), NEEDS_TEMP_DB);
+    test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
+    await setServerGuestCheckout(request, true);
     mockShop(api, d!, true);
     mockGuestOrders(api, d!);
     const texts: string[] = [];
@@ -343,7 +344,7 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     test.skip(testInfo.project.name !== 'Web Customer', 'tự đặt khổ từng ca, chỉ chạy ở một project');
     const d = await inStockProduct(request);
     test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
-    test.skip(!(await setServerGuestCheckout(request, false)), NEEDS_TEMP_DB);
+    test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
     mockShop(api, d!, true);
     mockGuestOrders(api, d!);
     await seedGuestCart(page, d!, 1);

@@ -57,6 +57,14 @@ async function adminToken(): Promise<string | null> {
 }
 
 /**
+ * Ca có thể bật cờ ở máy chủ: DB tạm, có khoá ký JWT, và chạy MỘT worker (web-gate.sh và CI đặt `CI` nên playwright.config cho 1 worker). Cờ là dữ
+ * liệu dùng chung của cả lượt chạy: nhiều worker thì lần tắt cờ cuối ca này có thể rơi đúng lúc ca khác đang mở `/don`. Không ghi gì.
+ */
+export async function serverGuestCheckoutReady(workers: number): Promise<boolean> {
+  return workers === 1 && (await adminToken()) !== null;
+}
+
+/**
  * Đặt cờ ở máy chủ và chờ `/config/public` trả đúng giá trị. `false` khi không ghi được (không phải DB tạm, thiếu khoá ký JWT): ca cần cờ bật ở máy
  * chủ thì bỏ qua thay vì đỏ giả.
  */

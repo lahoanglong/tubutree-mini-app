@@ -151,7 +151,8 @@ async function evaluate(deps: FirstOrderDeps, rules: ViralRules, orderId: string
   if (referee.isBlocked) return { status: 'SKIPPED', reason: 'REFEREE_INELIGIBLE' };
   const referrerId = referee.referredById ? await resolveMergedUserId(deps.prisma as unknown as Db, referee.referredById) : null;
   if (!referrerId) return { status: 'SKIPPED', reason: 'NO_REFERRER' };
-  if (referrerId === refereeId) return { status: 'BLOCKED', reason: 'SELF' };
+  // Tự mời (referrerId === refereeId) để luật SELF của firstOrderBlockReason chặn trong tx, sau ALREADY/NOT_FIRST: mỗi người chỉ một đơn đầu
+  // nên số đếm chặn (một dòng theo đơn) không cộng thêm cho mỗi đơn sau của cùng người.
   const referrer = await deps.prisma.user.findUnique({
     where: { id: referrerId },
     select: { role: true, metadata: true, phone: true, zaloId: true, isBlocked: true },

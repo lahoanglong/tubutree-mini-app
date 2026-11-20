@@ -201,6 +201,16 @@ describe('grantFirstOrderReferralReward', () => {
     expect(await setup({ grant }).run()).toEqual({ status: 'SKIPPED', reason: 'ALREADY' });
   });
 
+  it('tự mời: đơn đầu bị chặn SELF trong tx; đơn sau của cùng người là NOT_FIRST, không thêm một lần chặn để đếm', async () => {
+    const self = { id: 'f1', referredById: 'f1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, role: 'CUSTOMER', isBlocked: false };
+    const first = setup({ users: { f1: self } });
+    expect(await first.run()).toEqual({ status: 'BLOCKED', reason: 'SELF' });
+    expect(first.db.$transaction).toHaveBeenCalledTimes(1);
+    expect(first.grant).not.toHaveBeenCalled();
+    const later = setup({ users: { f1: self }, refereeOrders: [{ id: 'o0', createdAt: new Date('2026-11-01T00:00:00Z') }, { id: 'o1', createdAt: at }] });
+    expect(await later.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_FIRST' });
+  });
+
   it('bạn được mời bị khoá tài khoản: không ai nhận', async () => {
     const s = setup({ users: { f1: { id: 'f1', referredById: 'r1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: true } } });
     expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'REFEREE_INELIGIBLE' });

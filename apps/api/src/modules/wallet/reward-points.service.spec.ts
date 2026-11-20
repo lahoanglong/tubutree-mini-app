@@ -414,15 +414,22 @@ describe('RewardPointsService.getReferralOverview (GET /me/referral)', () => {
 
 describe('RewardPointsService.grantReferralFirstOrderReward — số đếm chặn cho Trung tâm tăng trưởng', () => {
   const order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', total: 250_000, placedForCustomer: false, createdAt: new Date('2026-11-19T10:00:00Z'), shippingAddress: null, guestPhone: null, guestIpHash: null, placedIpHash: null };
-  // Bạn được mời tự mời mình (referredById là chính họ): luật SELF chặn trước khi mở tx.
+  // Bạn được mời tự mời mình (referredById là chính họ), đơn này là đơn đầu: luật SELF chặn trong tx.
   function selfReferral(createMany: jest.Mock) {
-    const user = { referredById: 'f1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: false };
-    return {
-      order: { findUnique: jest.fn().mockResolvedValue(order) },
-      user: { findUnique: jest.fn().mockResolvedValue(user) },
+    const user = { referredById: 'f1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: false, role: 'CUSTOMER' };
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([{ id: 'o1', status: 'DELIVERED' }]) },
+      user: { findUnique: jest.fn().mockResolvedValue(user), findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: { findFirst: jest.fn().mockResolvedValue(null) },
+      coinTransaction: { findFirst: jest.fn().mockResolvedValue(null) },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      address: { findMany: jest.fn().mockResolvedValue([]) },
       analyticsEvent: { createMany },
+      $queryRaw: jest.fn().mockResolvedValue([{ pointsBalance: 0, pointsConvertedBalance: 0 }]),
       $transaction: jest.fn(),
-    } as unknown as PrismaService;
+    };
+    prisma.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+    return prisma as unknown as PrismaService;
   }
 
   it('cặp bị chặn: ghi một sự kiện chặn theo đơn (eventId cố định, bỏ trùng)', async () => {
