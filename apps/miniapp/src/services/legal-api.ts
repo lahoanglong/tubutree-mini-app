@@ -1,4 +1,4 @@
-import { DEFAULT_LEGAL_VARS, type LegalSlug, type LegalVars } from '@tubutree/app-core/legal';
+import { DEFAULT_LEGAL_VARS, legalDeliveryOf, type LegalSlug, type LegalVars } from '@tubutree/app-core/legal';
 import { api } from './api';
 
 export type { LegalSlug };
@@ -19,6 +19,7 @@ export async function fetchLegalDoc(slug: LegalSlug): Promise<{ content: string 
       returnWindowDays: nonNegativeOr(v?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
       freeshipThreshold: nonNegativeOr(v?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
       shippingFlatFee: nonNegativeOr(v?.shippingFlatFee, DEFAULT_LEGAL_VARS.shippingFlatFee ?? 0),
+      delivery: legalDeliveryOf(v?.delivery),
       ...(legalName ? { legalName } : {}),
       ...(taxCode ? { taxCode } : {}),
       ...(address ? { address } : {}),

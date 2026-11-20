@@ -195,7 +195,7 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     vatCheckboxOnRight: true,
     pointsTitle: 'Điểm Xanh',
     pointsSubtext: 'Dùng 100 điểm, giảm 100đ trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng',
-    consentText: 'Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.',
+    consentText: 'Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.',
     consentAboveButton: true,
     consentGapToButton: 'gần',
     walletLabel: 'Ví Tubu (350.000đ)',

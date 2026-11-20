@@ -116,7 +116,7 @@ const MEDIA_DB_SPEC = /w181-pdp-media-db\.web\.spec\.ts/;
 const DB_SPECS = [FLASH_DB_SPEC, THUMBS_DB_SPEC, MEDIA_DB_SPEC];
 // Luồng lõi của khách ở đúng hai khổ chuẩn 390×844 và 1440×900: "Web Customer Mobile" là Pixel 7 (412px), "Web Customer" là 1280px.
 // Tên tệp không đuôi .web.spec.ts nên chỉ chạy ở hai project dưới.
-const CORE_VIEWPORT_SPEC = /core-flows\.viewport\.spec\.ts/;
+const CORE_VIEWPORT_SPEC = /(core-flows|legal-compliance)\.viewport\.spec\.ts/;
 
 const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
   {

@@ -224,10 +224,10 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     await waitFor(() => expect(JSON.parse(localStorage.getItem('tubu_home_todo_rows') ?? 'null')).toEqual({ userId: 'u1', rows: 1 }));
   });
 
-  it('dòng đồng ý điều khoản nằm trong nội dung trang ngay trên thanh Đặt hàng (không làm thanh cao thêm), hai link mở popup Điều khoản và Chính sách đổi trả trong app, không có ô tick', async () => {
+  it('dòng đồng ý điều khoản nằm trong nội dung trang ngay trên thanh Đặt hàng (không làm thanh cao thêm), năm link mở popup chính sách trong app, không có ô tick', async () => {
     renderPage();
     const line = await screen.findByTestId('order-consent');
-    expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.');
+    expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.');
     expect(screen.getByTestId('sticky-bar')).not.toContainElement(line);
     expect(line.compareDocumentPosition(screen.getByTestId('sticky-bar')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(line).queryByRole('checkbox')).toBeNull();
@@ -235,6 +235,14 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(screen.getByTestId('policy-sheet')).toHaveTextContent('dieu-khoan');
     fireEvent.click(within(line).getByRole('button', { name: 'Chính sách đổi trả' }));
     expect(screen.getByTestId('policy-sheet')).toHaveTextContent('doi-tra');
+    for (const [name, slug] of [
+      ['Chính sách bảo mật', 'bao-mat'],
+      ['Chính sách vận chuyển', 'van-chuyen'],
+      ['Chính sách thanh toán', 'thanh-toan'],
+    ]) {
+      fireEvent.click(within(line).getByRole('button', { name }));
+      expect(screen.getByTestId('policy-sheet')).toHaveTextContent(slug!);
+    }
   });
 
   it('đáy trang chừa chỗ cho thanh Đặt hàng cộng vùng an toàn (không để dòng đồng ý nằm dưới thanh)', async () => {

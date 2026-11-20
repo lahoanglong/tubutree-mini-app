@@ -143,9 +143,15 @@
   }
 }
 
-/* ── Link nằm giữa câu (Điều khoản, Chính sách): đệm dọc của phần tử inline làm hộp chạm cao 44px mà không đổi chiều cao dòng ── */
-.tubu-inline-link {
-  padding-block: 13px;
+/* Dòng năm link chính sách dưới câu đồng ý (OrderConsent): mỗi dòng link cao 44px nên khi phải xuống dòng (cột tóm tắt 326px ở máy tính,
+   máy 360px) vùng chạm của link dòng trên không đè link dòng dưới. Lề dọc âm trả lại phần cao thêm: vừa một dòng thì khối vẫn cao đúng một
+   dòng chữ phụ. inline-block (không phải block) để lề âm không lọt qua đáy đoạn văn kéo nút Đặt hàng lên. */
+.tubu-consent-links {
+  display: inline-block;
+  width: 100%;
+  vertical-align: top;
+  line-height: 44px;
+  margin-block: calc((var(--type-caption-size) * var(--type-caption-lh) - 44px) / 2);
 }
 
 .tubu-scroll-fade[data-fade-end] {

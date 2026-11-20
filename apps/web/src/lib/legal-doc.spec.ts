@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiUnavailableError, getLegalDoc } from './api';
-import { DEFAULT_LEGAL_VARS } from './legal';
+import { DEFAULT_LEGAL_DELIVERY, DEFAULT_LEGAL_VARS } from './legal';
 
 function res(status: number, body: unknown = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -18,7 +18,7 @@ describe('getLegalDoc — nội dung chính sách do admin nhập (D5-01)', () =
     vi.stubGlobal('fetch', f);
     await expect(getLegalDoc('doi-tra')).resolves.toEqual({
       content: '## 1. Đổi trả',
-      vars: { returnWindowDays: 10, freeshipThreshold: 300000, shippingFlatFee: 19000 },
+      vars: { returnWindowDays: 10, freeshipThreshold: 300000, shippingFlatFee: 19000, delivery: DEFAULT_LEGAL_DELIVERY },
     });
     expect(String(f.mock.calls[0]![0])).toMatch(/\/config\/legal\/doi-tra$/);
   });
@@ -35,7 +35,10 @@ describe('getLegalDoc — nội dung chính sách do admin nhập (D5-01)', () =
 
   it('biến bằng 0 là hợp lệ (freeship mọi đơn, hạn đổi trả 0): giữ nguyên, không rơi về mặc định', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { content: null, vars: { returnWindowDays: 0, freeshipThreshold: 0, shippingFlatFee: 19000 } })));
-    await expect(getLegalDoc('van-chuyen')).resolves.toEqual({ content: null, vars: { returnWindowDays: 0, freeshipThreshold: 0, shippingFlatFee: 19000 } });
+    await expect(getLegalDoc('van-chuyen')).resolves.toEqual({
+      content: null,
+      vars: { returnWindowDays: 0, freeshipThreshold: 0, shippingFlatFee: 19000, delivery: DEFAULT_LEGAL_DELIVERY },
+    });
   });
 
   it('biến âm → rơi về mặc định', async () => {
@@ -50,7 +53,7 @@ describe('getLegalDoc — nội dung chính sách do admin nhập (D5-01)', () =
     );
     await expect(getLegalDoc('van-chuyen')).resolves.toEqual({
       content: null,
-      vars: { returnWindowDays: DEFAULT_LEGAL_VARS.returnWindowDays, freeshipThreshold: 150000, shippingFlatFee: 19000 },
+      vars: { returnWindowDays: DEFAULT_LEGAL_VARS.returnWindowDays, freeshipThreshold: 150000, shippingFlatFee: 19000, delivery: DEFAULT_LEGAL_DELIVERY },
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { content: '  \n ' })));
     expect((await getLegalDoc('van-chuyen')).content).toBeNull();
@@ -60,8 +63,16 @@ describe('getLegalDoc — nội dung chính sách do admin nhập (D5-01)', () =
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { vars: { shippingFlatFee: 25000, legalName: ' Công ty A ', taxCode: '', address: null } })));
     await expect(getLegalDoc('van-chuyen')).resolves.toEqual({
       content: null,
-      vars: { returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 25000, legalName: 'Công ty A' },
+      vars: { returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 25000, delivery: DEFAULT_LEGAL_DELIVERY, legalName: 'Công ty A' },
     });
+  });
+
+  it('lịch kho cho thời gian giao ở chính sách vận chuyển: lấy từ API, trường hỏng về lịch chuẩn', async () => {
+    const delivery = { cutoff: '14:00', workDays: [1, 2, 3, 4, 5], hcmDays: [1, 1], provinceDays: [3, 5] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { content: null, vars: { delivery } })));
+    expect((await getLegalDoc('van-chuyen')).vars.delivery).toEqual(delivery);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { content: null, vars: { delivery: { cutoff: 'x', workDays: [9], hcmDays: [2, 1], provinceDays: 'a' } } })));
+    expect((await getLegalDoc('van-chuyen')).vars.delivery).toEqual(DEFAULT_LEGAL_DELIVERY);
   });
 
   it('lỗi tạm thời (5xx, mất kết nối) → ném ApiUnavailableError để ISR giữ bản đã render, không thay bằng bản nháp', async () => {

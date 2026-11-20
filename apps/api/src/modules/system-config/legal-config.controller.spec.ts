@@ -78,7 +78,26 @@ describe('LegalConfigController.get — nội dung điều khoản/chính sách 
 describe('LegalConfigController.get — đơn vị vận hành và phí giao cố định', () => {
   it('mặc định: phí giao cố định 19.000, thông tin công ty null', async () => {
     const out = await new LegalConfigController(makeConfig()).get('van-chuyen');
-    expect(out.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 19000, legalName: null, taxCode: null, address: null });
+    expect(out.vars).toEqual({
+      returnWindowDays: 7,
+      freeshipThreshold: 199000,
+      shippingFlatFee: 19000,
+      legalName: null,
+      taxCode: null,
+      address: null,
+      delivery: { cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], hcmDays: [1, 2], provinceDays: [2, 4] },
+    });
+  });
+
+  it('thời gian giao lấy từ lịch kho đang chạy (shipping.warehouse_schedule), không gửi ngày lễ; trường hỏng về lịch chuẩn', async () => {
+    const config = makeConfig({
+      'shipping.warehouse_schedule': { cutoff: '14:00', workDays: [1, 2, 3, 4, 5], holidays: ['2026-12-25'], hcmDays: [1, 1], provinceDays: [3, 5] },
+    });
+    const out = await new LegalConfigController(config).get('van-chuyen');
+    expect(out.vars.delivery).toEqual({ cutoff: '14:00', workDays: [1, 2, 3, 4, 5], hcmDays: [1, 1], provinceDays: [3, 5] });
+    expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('shipping.warehouse_schedule', null);
+    const broken = await new LegalConfigController(makeConfig({ 'shipping.warehouse_schedule': { cutoff: '25:00', hcmDays: [3, 1] } })).get('van-chuyen');
+    expect(broken.vars.delivery).toEqual({ cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], hcmDays: [1, 2], provinceDays: [2, 4] });
   });
 
   it('lấy phí giao cố định và thông tin công ty (cắt khoảng trắng) từ khoá hệ thống', async () => {

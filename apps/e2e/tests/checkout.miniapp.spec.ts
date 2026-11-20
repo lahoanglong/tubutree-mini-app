@@ -49,7 +49,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.locator('#checkout-waste-pickup')).toHaveCount(0);
   });
 
-  test('Dòng đồng ý Điều khoản ở 375px: link giữa câu có vùng chạm 44px mà câu không phình cao quá hai dòng', async ({ page }) => {
+  test('Dòng đồng ý ở 375px: năm link chính sách chung một dòng, mỗi link có vùng chạm 44px của riêng nó, cả khối không quá hai dòng', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/checkout');
     const consent = page.getByTestId('order-consent');
@@ -59,15 +59,20 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
       return { height: el.getBoundingClientRect().height - parseFloat(getComputedStyle(el).paddingTop), lineHeight: Number.isFinite(lh) ? lh : 20 };
     });
     expect(m.height).toBeLessThanOrEqual(m.lineHeight * 2 + 1);
-    const link = consent.getByRole('button', { name: 'Điều khoản' });
-    await link.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-    const box = (await link.boundingBox())!;
-    const hit = await link.evaluate((el, b) => {
-      const x = b.x + b.width / 2;
-      const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-      return { above: at(b.y + b.height / 2 - 20), below: at(b.y + b.height / 2 + 20) };
-    }, box);
-    expect(hit).toEqual({ above: true, below: true });
+    const links = consent.getByRole('button');
+    await expect(links).toHaveCount(5);
+    await consent.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const tops = await links.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+    expect(new Set(tops).size, `năm link phải chung một dòng: ${tops.join(', ')}`).toBe(1);
+    const hits = await links.evaluateAll((els) =>
+      els.map((el) => {
+        const b = el.getBoundingClientRect();
+        const x = b.left + b.width / 2;
+        const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
+        return { name: el.getAttribute('aria-label') ?? el.textContent, above: at(b.top + b.height / 2 - 20), below: at(b.top + b.height / 2 + 20) };
+      }),
+    );
+    for (const h of hits) expect(h, h.name ?? '').toMatchObject({ above: true, below: true });
   });
 
   // R5-BUYER-5: giỏ rỗng mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.

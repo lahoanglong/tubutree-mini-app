@@ -4,6 +4,7 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
 import { FREE_SHIP_THRESHOLD_DEFAULT } from '../pricing/pricing.service';
 import { readCompanyIdentity } from './company-config';
+import { WAREHOUSE_SCHEDULE_KEY, toWarehouseSchedule } from './shipping-eta';
 
 /**
  * Nội dung điều khoản/chính sách hiển thị ở web (/chinh-sach/:loai). Admin nhập ở tab Cấu hình dưới dạng markdown hoặc chữ
@@ -44,13 +45,15 @@ export class LegalConfigController {
   async get(@Param('loai') loai: string) {
     const key = Object.prototype.hasOwnProperty.call(LEGAL_CONFIG_KEYS, loai) ? LEGAL_CONFIG_KEYS[loai] : undefined;
     if (!key) throw new NotFoundException('Không có trang chính sách này.');
-    const [raw, returnWindowDays, freeshipThreshold, flatFee, company] = await Promise.all([
+    const [raw, returnWindowDays, freeshipThreshold, flatFee, company, schedule] = await Promise.all([
       this.config.get<unknown>(key, ''),
       this.config.get<unknown>('returns.window_days', DEFAULT_RETURN_WINDOW_DAYS),
       this.config.get<unknown>('shipping.free_threshold', DEFAULT_FREESHIP_THRESHOLD),
       this.config.get<unknown>('shipping.flat_fee_below_threshold', DEFAULT_FLAT_SHIPPING_FEE),
       readCompanyIdentity(this.config),
+      this.config.get<unknown>(WAREHOUSE_SCHEDULE_KEY, null),
     ]);
+    const { cutoff, workDays, hcmDays, provinceDays } = toWarehouseSchedule(schedule);
     return {
       loai,
       content: typeof raw === 'string' && raw.trim() !== '' ? raw : null,
@@ -62,6 +65,8 @@ export class LegalConfigController {
         legalName: company.legalName,
         taxCode: company.taxCode,
         address: company.address,
+        // Thời gian giao ở chính sách vận chuyển: cùng lịch kho với ngày nhận dự kiến ở trang sản phẩm và thanh toán.
+        delivery: { cutoff, workDays, hcmDays, provinceDays },
       },
     };
   }

@@ -54,7 +54,7 @@ export function merchantIdentityOrDefault(company?: MerchantIdentityInput | null
   return own.legalName || own.taxCode || own.address ? own : { ...TUBU_TREE_MERCHANT };
 }
 
-export interface CompanyRegistrationInput {
+export interface CompanyRegistrationInput extends MerchantIdentityInput {
   representative?: string | null;
   registrationNumber?: string | null;
   registrationDate?: string | null;
@@ -80,13 +80,26 @@ export function normalizeRegistrationDate(value: unknown, now: Date = new Date()
 
 const filled = (v?: string | null): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
+/** Tên pháp nhân là doanh nghiệp (công ty TNHH, cổ phần, hợp danh hoặc doanh nghiệp tư nhân), không phải hộ kinh doanh: chỉ khi đó mã số thuế mới đồng thời là số ĐKDN. */
+const isEnterpriseName = (name?: string | null): boolean =>
+  typeof name === 'string' && /^\s*(c[oô]ng\s+ty|doanh\s+nghi[eệ]p\s+t[uư]\s+nh[aâ]n)(?![\p{L}\p{N}])/iu.test(name.normalize('NFC'));
+/** Mã số doanh nghiệp 10 chữ số; mã 13 số (chi nhánh, đơn vị phụ thuộc) không phải số ĐKDN của doanh nghiệp. */
+const enterpriseNumber = (taxCode?: string | null): string | null => {
+  const code = filled(taxCode);
+  return code && /^\d{10}$/.test(code) ? code : null;
+};
+
 /**
  * Dòng hồ sơ pháp lý ở chân trang web và trang Về Tubu Tree: "Người đại diện theo pháp luật: X · Giấy chứng nhận đăng ký doanh nghiệp số N
- * do P cấp ngày D". Chỉ nêu phần admin đã nhập (không suy ra số ĐKDN từ MST, không điền mặc định); chưa nhập gì thì null để ẩn cả dòng.
+ * do P cấp ngày D". Người đại diện, ngày và nơi cấp chỉ hiện khi admin đã nhập (không bịa). Số ĐKDN admin để trống thì lấy MST của đơn vị
+ * vận hành đang hiện ở chân trang, chỉ khi đó là doanh nghiệp (không phải hộ kinh doanh) có MST 10 số: Luật Doanh nghiệp 2020 (Điều 29) quy định
+ * mã số doanh nghiệp đồng thời là mã số thuế.
+ * Không có gì để nêu thì null để ẩn cả dòng.
  */
 export function companyLegalLine(company?: CompanyRegistrationInput | null): string | null {
   const representative = filled(company?.representative);
-  const number = filled(company?.registrationNumber);
+  const operator = merchantIdentityOrDefault(company);
+  const number = filled(company?.registrationNumber) ?? (isEnterpriseName(operator.legalName) ? enterpriseNumber(operator.taxCode) : null);
   const date = filled(company?.registrationDate);
   const place = filled(company?.registrationPlace);
   const parts: string[] = [];
@@ -127,15 +140,49 @@ export interface LegalVars {
   freeshipThreshold: number;
   /** Phí giao cố định cho đơn dưới ngưỡng freeship (shipping.flat_fee_below_threshold). */
   shippingFlatFee?: number;
+  /** Lịch kho đang chạy (shipping.warehouse_schedule), cùng lịch tính ngày nhận ở trang sản phẩm và thanh toán. Thiếu thì dùng lịch chuẩn. */
+  delivery?: LegalDelivery;
   /** Đơn vị vận hành (company.*); chưa nhập thì không có trường và bản nháp giữ chỗ [ ] để điền. */
   legalName?: string;
   taxCode?: string;
   address?: string;
 }
 
+export interface LegalDelivery {
+  /** Giờ cắt đơn "HH:mm" theo giờ Việt Nam. */
+  cutoff: string;
+  /** Ngày kho làm việc: 0 = Chủ nhật … 6 = Thứ 7. */
+  workDays: number[];
+  /** [ít nhất, nhiều nhất] ngày làm việc tới tay khách ở TP.HCM / tỉnh khác. */
+  hcmDays: [number, number];
+  provinceDays: [number, number];
+}
+
+/** Lịch chuẩn PO duyệt 19/11/2026, khớp DEFAULT_WAREHOUSE_SCHEDULE của API (API không phụ thuộc app-core). */
+export const DEFAULT_LEGAL_DELIVERY: LegalDelivery = { cutoff: '15:00', workDays: [1, 2, 3, 4, 5, 6], hcmDays: [1, 2], provinceDays: [2, 4] };
+
+const isDayRange = (v: unknown): v is [number, number] =>
+  Array.isArray(v) && v.length === 2 && v.every((n) => Number.isInteger(n) && n >= 0 && n <= 30) && v[0] <= v[1];
+
+/** Lịch kho từ JSON của GET /config/legal/:loai; từng trường hỏng thì về trường của lịch chuẩn (cùng luật với API). */
+export function legalDeliveryOf(raw: unknown): LegalDelivery {
+  const d = DEFAULT_LEGAL_DELIVERY;
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const days = r.workDays;
+  return {
+    cutoff: typeof r.cutoff === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(r.cutoff) ? r.cutoff : d.cutoff,
+    workDays:
+      Array.isArray(days) && days.length > 0 && days.every((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+        ? [...new Set(days as number[])].sort((a, b) => a - b)
+        : [...d.workDays],
+    hcmDays: isDayRange(r.hcmDays) ? [r.hcmDays[0], r.hcmDays[1]] : [...d.hcmDays],
+    provinceDays: isDayRange(r.provinceDays) ? [r.provinceDays[0], r.provinceDays[1]] : [...d.provinceDays],
+  };
+}
+
 export const DEFAULT_LEGAL_SUPPORT: LegalSupport = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 
-export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 19000 };
+export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 19000, delivery: DEFAULT_LEGAL_DELIVERY };
 
 const DEFAULT_SHIPPING_FLAT_FEE = 19000;
 
@@ -164,6 +211,30 @@ function inspectionDeadlineText(days: number): string {
   return days > 0
     ? `Thời hạn báo: nếu hàng có vấn đề, bạn báo cho Tubu Tree trong vòng ${days} ngày kể từ khi đơn được giao thành công, kèm ảnh hoặc video.`
     : 'Thời hạn báo: Tubu Tree chưa nhận yêu cầu đổi trả sau khi giao thành công, vì vậy hãy kiểm tra và báo ngay tại thời điểm nhận hàng, kèm ảnh hoặc video.';
+}
+
+/** "1–2 ngày làm việc", "2 ngày làm việc"; khoảng bắt đầu từ 0 là "trong vòng N ngày làm việc", 0–0 là "trong ngày". */
+function workingDays([lo, hi]: [number, number]): string {
+  if (hi === 0) return 'giao trong ngày';
+  if (lo === 0) return `trong vòng ${hi} ngày làm việc`;
+  return lo === hi ? `${lo} ngày làm việc` : `${lo}–${hi} ngày làm việc`;
+}
+const weekdayName = (d: number): string => (d === 0 ? 'Chủ nhật' : `Thứ ${d + 1}`);
+
+/** "Thứ 2 đến Thứ 7" khi các ngày liền nhau (Chủ nhật tính sau Thứ 7), không thì liệt kê "Thứ 2, Thứ 4, Thứ 6". */
+function workDaysText(days: number[]): string {
+  const order = [...days].map((d) => (d === 0 ? 7 : d)).sort((a, b) => a - b);
+  const contiguous = order.length >= 3 && order.every((d, i, all) => i === 0 || d === (all[i - 1] ?? -1) + 1);
+  const names = order.map((d) => weekdayName(d % 7));
+  return contiguous ? `${names[0]} đến ${names[names.length - 1]}` : names.join(', ');
+}
+
+function deliveryTimes(d: LegalDelivery): string {
+  return [
+    `- Nội thành Thành phố Hồ Chí Minh: ${workingDays(d.hcmDays)}.`,
+    `- Tỉnh thành khác: ${workingDays(d.provinceDays)}.`,
+    `- Kho Tubu Tree xuất hàng từ ${workDaysText(d.workDays)}, trừ ngày lễ. Đơn đặt trước ${d.cutoff} của ngày kho làm việc thường được xuất kho trong ngày, đặt sau giờ này thì xuất kho vào ngày làm việc kế tiếp. Ngày nhận dự kiến hiển thị trong ứng dụng chỉ để tham khảo; thời gian giao áp dụng là thời gian ở hai dòng trên.`,
+  ].join('\n');
 }
 
 function dieuKhoan(vars: LegalVars, support: LegalSupport): string {
@@ -229,7 +300,7 @@ Mọi thắc mắc về điều khoản này, vui lòng liên hệ hotline ${sup
 function baoMat(vars: LegalVars, support: LegalSupport): string {
   return `## 1. Phạm vi
 
-Chính sách này giải thích cách ${companyName(vars)} ("Tubu Tree") thu thập, sử dụng, chia sẻ và bảo vệ thông tin cá nhân của bạn khi dùng website và mini app Zalo của Tubu Tree.
+Chính sách này giải thích cách ${companyName(vars)} ("Tubu Tree") thu thập, sử dụng, chia sẻ và bảo vệ thông tin cá nhân của bạn khi dùng website và mini app Zalo của Tubu Tree. Chính sách được xây dựng theo quy định về bảo vệ thông tin cá nhân trong thương mại điện tử tại Nghị định 52/2013/NĐ-CP, Nghị định 85/2021/NĐ-CP và các văn bản sửa đổi, bổ sung, thay thế, cùng pháp luật về bảo vệ dữ liệu cá nhân.
 
 ${operator(support, vars)}
 
@@ -363,8 +434,7 @@ ${flatFee}
 
 ## 3. Thời gian giao hàng dự kiến
 
-- Nội thành: [số ngày] ngày làm việc.
-- Tỉnh thành khác: [số ngày] ngày làm việc.
+${deliveryTimes(vars.delivery ?? DEFAULT_LEGAL_DELIVERY)}
 - Thời gian tính từ lúc đơn được xác nhận (với chuyển khoản là từ lúc Tubu Tree nhận được tiền) và không tính ngày lễ, ngày nghỉ. Đơn gặp thiên tai, dịch bệnh hoặc sự cố vận chuyển có thể lâu hơn dự kiến.
 
 ## 4. Nhận hàng và kiểm tra

@@ -253,15 +253,18 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(inCard!.className).toMatch(/\blg:inline-flex\b/);
   });
 
-  it('dòng đồng ý điều khoản nằm ngay trên nút Đặt hàng ở thanh dính và ở khung tóm tắt, có link tới Điều khoản và Chính sách đổi trả, không có ô tick', async () => {
+  it('dòng đồng ý điều khoản nằm ngay trên nút Đặt hàng ở thanh dính và ở khung tóm tắt, có link tới đủ năm chính sách Bộ Công Thương yêu cầu, không có ô tick', async () => {
     const c = await mount();
     const lines = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="order-consent"]'));
     expect(lines).toHaveLength(2);
     for (const line of lines) {
-      expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.');
-      expect(Array.from(line.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-        ['Điều khoản', '/chinh-sach/dieu-khoan'],
-        ['Chính sách đổi trả', '/chinh-sach/doi-tra'],
+      expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.');
+      expect(Array.from(line.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('aria-label'), a.getAttribute('href')])).toEqual([
+        ['Điều khoản', null, '/chinh-sach/dieu-khoan'],
+        ['Bảo mật', 'Chính sách bảo mật', '/chinh-sach/bao-mat'],
+        ['Đổi trả', 'Chính sách đổi trả', '/chinh-sach/doi-tra'],
+        ['Vận chuyển', 'Chính sách vận chuyển', '/chinh-sach/van-chuyen'],
+        ['Thanh toán', 'Chính sách thanh toán', '/chinh-sach/thanh-toan'],
       ]);
     }
     const desk = lines.find((l) => /\blg:block\b/.test(l.className))!;

@@ -2,7 +2,7 @@ Hiệu lực từ ngày 31/10/2026.
 
 ## 1. Chính sách này nói về điều gì
 
-Chính sách này giải thích Tubu Tree thu thập, dùng, chia sẻ và bảo vệ thông tin cá nhân của bạn như thế nào khi bạn dùng website app.tubutree.com và Mini App Zalo "Tubu Tree". Chúng tôi xử lý thông tin cá nhân theo pháp luật Việt Nam, gồm Luật Bảo vệ dữ liệu cá nhân 2025 (số 91/2025/QH15) và Nghị định 356/2025/NĐ-CP hướng dẫn luật này.
+Chính sách này giải thích Tubu Tree thu thập, dùng, chia sẻ và bảo vệ thông tin cá nhân của bạn như thế nào khi bạn dùng website app.tubutree.com và Mini App Zalo "Tubu Tree". Chúng tôi xử lý thông tin cá nhân theo pháp luật Việt Nam, gồm Luật Bảo vệ dữ liệu cá nhân 2025 (số 91/2025/QH15) và Nghị định 356/2025/NĐ-CP hướng dẫn luật này, cùng các quy định về bảo vệ thông tin cá nhân trong thương mại điện tử tại Nghị định 52/2013/NĐ-CP, Nghị định 85/2021/NĐ-CP và các văn bản sửa đổi, bổ sung, thay thế.
 
 Đơn vị quyết định mục đích và cách xử lý thông tin:
 
@@ -42,7 +42,7 @@ Khi bạn đăng nhập hoặc đặt hàng, bạn đồng ý để chúng tôi 
 - Tin nhắn bạn gửi cho Zalo OA của Tubu Tree.
 - Tin nhắn và ảnh bạn gửi qua mục "Chat với Tubu Tree" trong ứng dụng, kèm mã đơn hoặc sản phẩm bạn đang hỏi.
 - Câu hỏi bạn nhập vào Trợ lý AI.
-- Nếu bạn tham gia Đổi rác lấy quà: loại và số lượng vỏ, bao bì bạn gửi, cách gửi (mang tới điểm nhận, gửi về kho hoặc thu kèm đơn hàng), mã vận đơn khi gửi về kho, kết quả kiểm đếm, quà đã đổi và thời điểm bạn đồng ý thể lệ.
+- Nếu bạn tham gia Đổi rác lấy quà: loại và số lượng vỏ, bao bì bạn gửi, cách gửi (mang tới điểm nhận, shipper lấy tận nhà hoặc thu kèm đơn hàng), mã vận đơn của chuyến lấy hàng (nếu có), kết quả kiểm đếm, quà đã đổi và thời điểm bạn đồng ý thể lệ.
 
 **Thông tin sử dụng**
 - Nhật ký thao tác trong ứng dụng: trang xem, nút bấm, sản phẩm quan tâm, phiên bản ứng dụng, thông tin kỹ thuật về thiết bị hoặc trình duyệt.
@@ -89,7 +89,7 @@ Chúng tôi không bán thông tin cá nhân của bạn. Chúng tôi chỉ chia
 - **Zalo**: đăng nhập bằng tài khoản Zalo, gửi thông báo qua Zalo OA và ZNS. Zalo xử lý thông tin theo chính sách riêng của Zalo.
 - **Kênh chat chăm sóc khách hàng qua Zalo**: khi bạn dùng mục "Chat với Tubu Tree", tin nhắn của bạn được chuyển vào nhóm Zalo nội bộ của đội chăm sóc khách hàng, kèm tên, số điện thoại đã che bớt, hạng thành viên, mã đơn hoặc sản phẩm bạn hỏi và đường dẫn ảnh bạn gửi. Câu trả lời của nhân viên được chuyển lại cho bạn trong ứng dụng.
 - **Pancake (phần mềm quản lý bán hàng và kho)**: họ tên, số điện thoại, địa chỉ nhận hàng, sản phẩm trong đơn, ghi chú giao hàng và thông tin xuất hoá đơn (nếu bạn yêu cầu), để xử lý đơn, xuất hoá đơn, đối soát chuyển khoản và đồng bộ đơn sàn.
-- **Đơn vị vận chuyển**: họ tên, số điện thoại, địa chỉ nhận hàng, tiền thu hộ (nếu có). Đơn vị vận chuyển do Tubu Tree chọn cho từng đơn. Nếu bạn chọn thu gom vỏ, bao bì kèm đơn hàng (Đổi rác lấy quà), thông tin này còn đến đơn vị trung gian vận chuyển và thu gom (hiện là Gomdon) thực hiện chuyến giao và lấy hàng đó.
+- **Đơn vị vận chuyển**: họ tên, số điện thoại, địa chỉ nhận hàng, tiền thu hộ (nếu có). Đơn vị vận chuyển do Tubu Tree chọn cho từng đơn. Nếu bạn chọn shipper lấy tận nhà hoặc thu gom vỏ, bao bì kèm đơn hàng (Đổi rác lấy quà), thông tin này còn đến đơn vị trung gian vận chuyển và thu gom (hiện là Gomdon) thực hiện chuyến giao và lấy hàng đó.
 - **Điểm nhận Đổi rác lấy quà** (đại lý hoặc cửa hàng nhận vỏ, bao bì): khi bạn mang tới, nhân viên ở đó thấy mã yêu cầu, tên và số điện thoại đã che bớt của bạn để xác nhận.
 - **Gian hàng đối tác**: khi bạn mua hàng do gian hàng đối tác giao, gian hàng nhận họ tên, số điện thoại, địa chỉ và nội dung đơn để giao hàng và xử lý đổi trả. Gian hàng không thấy tài khoản ngân hàng nhận hoàn tiền của bạn.
 - **Ngân hàng**: khi bạn chuyển khoản cho Tubu Tree hoặc khi Tubu Tree chuyển tiền hoàn cho bạn, ngân hàng ghi nhận giao dịch theo quy định của ngân hàng.
