@@ -3092,6 +3092,22 @@ model ReorderReminder {
   @@map("reorder_reminders")
 }
 
+/// Nhắc đổi sang gói Refill 21 ngày sau khi khách nhận chai (tubu-w11-03, cờ retention.refill_21d_reminder_enabled). Một dòng mỗi
+/// đơn, ghi lúc nhận việc: đơn đã có dòng không bao giờ được xét lại. outcome: SENT | REORDERED (khách đã đặt lại gói Refill trong
+/// 21 ngày) | OPTED_OUT (tắt tin khuyến mãi, bị khoá, MSS báo từ chối). Không khoá ngoại: chỉ là sổ chống trùng, không chặn xoá đơn.
+model RefillReminder {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  userId          String
+  bottleProductId String?
+  refillProductId String?
+  outcome         String
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("refill_reminders")
+}
+
 model GameSpin {
   id          String   @id @default(cuid())
   userId      String

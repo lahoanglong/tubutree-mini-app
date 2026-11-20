@@ -51,6 +51,8 @@ import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, or
 import { OrderShipping } from '@/components/orders/order-shipping';
 import { OrderZaloDetail } from '@/components/checkout/order-zalo';
 import { inviteLandingOn } from '@tubutree/app-core/commerce/invite-card';
+import { hasEcoImpact, orderEcoImpactBase, orderEcoImpactGate } from '@tubutree/app-core/eco/order-impact-gate';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { trackWebEvent } from '@/lib/analytics';
 import { mini } from '@/components/order-mobile/mobile-ui';
@@ -66,6 +68,8 @@ const FollowOaPrompt = dynamic(() => import('./order-extras').then((m) => m.Foll
 const OrderInvoice = dynamic(() => import('./order-extras').then((m) => m.OrderInvoice), { ssr: false });
 const OrderWasteLink = dynamic(() => import('./order-extras').then((m) => m.OrderWasteLink), { ssr: false });
 const OrderSecondOrderInvite = dynamic(() => import('./order-extras').then((m) => m.OrderSecondOrderInvite), { ssr: false });
+// Thẻ nhựa đã giảm của đơn: chữ, số và module tiền chỉ tải khi máy chủ trả số lớn hơn 0.
+const OrderEcoImpactCard = dynamic(() => import('@/components/orders/eco-impact-card'), { ssr: false });
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -107,6 +111,13 @@ export default function OrderDetailPage() {
   });
   // Cùng khoá với khối thao tác (OrderActions): yêu cầu trả đã duyệt để đánh dấu dòng đã trả và gộp khoản hoàn vào dòng yêu cầu.
   const orderStatus = orderQ.data?.status;
+  const ecoAsked = !!orderStatus && orderEcoImpactGate({ status: orderStatus }, referralViralOn(cfgQ.data));
+  const ecoQ = useQuery({
+    ...orderEcoImpactBase(code),
+    queryFn: () => import('@tubutree/app-core/eco/order-impact').then((m) => m.getOrderEcoImpact(coreHttp, code)),
+    enabled: ecoAsked,
+  });
+  const eco = hasEcoImpact(ecoQ.data) ? ecoQ.data! : null;
   const returnsQ = useQuery({
     queryKey: ['my-returns'],
     queryFn: fetchMyReturns,
@@ -426,10 +437,12 @@ export default function OrderDetailPage() {
           <div className="order-10 max-md:px-4 max-md:empty:hidden">
             <OrderInvoice order={o} />
             <OrderWasteLink order={o} />
+            {eco && <OrderEcoImpactCard impact={eco} />}
+            {/* Thẻ nhựa đã giảm đã có nút gửi link mời: không thêm dòng mời thứ hai, chờ thẻ trả lời rồi mới quyết. */}
             <OrderSecondOrderInvite
               order={o}
               fallback={
-                o.status === 'DELIVERED' && inviteLandingOn(cfgQ.data) ? (
+                o.status === 'DELIVERED' && inviteLandingOn(cfgQ.data) && !eco && !(ecoAsked && ecoQ.isPending) ? (
                   <p className={`mt-4 p-4 text-sm ${ui.card}`}>
                     {fillCopy('order.journey.inviteLead')}{' '}
                     <Link href={MISSION_PATHS.web.invite} className="inline-flex min-h-11 items-center font-semibold text-[color:var(--color-text-brand)] underline">

@@ -12,7 +12,6 @@ import {
   applyRefillOverrideOps,
   checkRefillOverrides,
   isRefillProduct,
-  pairRefills,
   parseRefillBlock,
   parseRefillOverrides,
   refillPairRows,
@@ -22,6 +21,7 @@ import {
   type RefillPairStatus,
 } from './refill-pairs';
 import { parseMeasure } from '../product-compare.unit';
+import { loadRefillPairTable } from './refill-pair-table';
 
 /** Bảng cặp (quét danh mục công khai + hai khoá cấu hình) đọc lại sau chừng này; mỗi lần hỏi chỉ tra trong bộ nhớ. */
 export const REFILL_PAIRS_TTL_MS = 60_000;
@@ -262,9 +262,8 @@ export class RefillPairsService {
     return this.loading;
   }
 
-  private async load(): Promise<Map<string, string>> {
-    const [products, overrides, block] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_OVERRIDE_KEY), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
-    return pairRefills(products, { overrides: parseRefillOverrides(overrides), block: parseRefillBlock(block) });
+  private load(): Promise<Map<string, string>> {
+    return loadRefillPairTable(this.prisma, this.config);
   }
 
   private catalogRows(): Promise<RefillCatalogRow[]> {

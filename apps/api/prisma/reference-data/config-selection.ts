@@ -90,6 +90,8 @@ export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'catalog.refill_first_enabled': 'cờ gợi ý gói Refill cho khách đã có chai (giỏ và kệ "Mua lại món quen"): migration 20261118234308_refill_first_and_repeat_request_flags đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   'catalog.refill_pairs_override': 'cặp chai ↔ gói Refill ghép tay: như catalog.refill_first_enabled (mặc định [])',
   'catalog.refill_pairs_block': 'slug không ghép chai ↔ gói Refill: như catalog.refill_first_enabled (mặc định [])',
+  'retention.refill_21d_reminder_enabled': 'cờ nhắc đổi sang gói Refill 21 ngày sau khi giao chai: migration 20261121000000_refill_21d_reminder đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
+  'retention.refill_21d_zns_enabled': 'kênh ZNS của tin nhắc Refill 21 ngày: như retention.refill_21d_reminder_enabled (mặc định false)',
   'app.miniapp_base_url': 'như shipping.first_order_free_enabled (mặc định rỗng, không rơi về biến môi trường: link thiếu thì QR dùng đường dẫn tương đối)',
   'merchant.consignment_settle_from': 'mốc đối soát hàng giao hộ là quyết định của chủ shop: thiếu dòng thì go-live:check WARN (db.consignment_from) buộc đặt mốc; nạp ngày nào cũng làm WARN thành PASS mà chưa ai xác nhận, và nạp null chỉ đổi WARN sang thông báo "giá trị không hợp lệ". Chủ shop đặt ở Quản trị, Cấu hình (ghi được dù chưa có dòng nhờ luật ghi trong SystemConfigService.JSON_RULES), theo gợi ý của go-live:check',
 };
