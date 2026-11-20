@@ -2,7 +2,9 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import zaloMiniApp from 'zmp-vite-plugin';
+import { dropOverriddenRootVarsPlugin } from './src/build-css-root-vars';
 import { assertMiniappBuildEnv } from './src/build-env';
+import { unaliasModuleNamesPlugin } from './src/build-import-names';
 import { preloadTrim } from './src/build-preload-trim';
 import { pruneUnusedZauiCssPlugin } from './src/build-zaui-prune';
 
@@ -46,7 +48,17 @@ export default defineConfig(({ command, mode }) => {
   return {
     root: '.',
     base: '',
-    plugins: [zaloMiniApp(), react(), pruneUnusedZauiCssPlugin(), trim.plugin, apiPreconnect(env.VITE_API_BASE_URL)],
+    // Hai bước cuối chỉ đổi byte đã nén, không đổi hành vi: bỏ ` as x` ở chỗ nối giữa các chunk (build-import-names.ts, ~24 KB) và bỏ khai báo
+    // `:root` bị ghi đè trong cùng tệp CSS (build-css-root-vars.ts, ~3 KB).
+    plugins: [
+      zaloMiniApp(),
+      react(),
+      pruneUnusedZauiCssPlugin(),
+      trim.plugin,
+      apiPreconnect(env.VITE_API_BASE_URL),
+      unaliasModuleNamesPlugin(),
+      dropOverriddenRootVarsPlugin(),
+    ],
     // Hai bản React trong một bundle làm hook null; web dùng React 19 nên ép một bản duy nhất.
     // shared-types phát hành CJS (dist); Vite gói sẵn CJS nên tên export qua `export *` không thấy được ("Importing binding name ... is not found")
     // khi Mini App lấy giá trị chạy thật (không chỉ kiểu). Trỏ thẳng vào mã nguồn TS như jest của API.
