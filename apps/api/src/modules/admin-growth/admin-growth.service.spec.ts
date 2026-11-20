@@ -1,6 +1,7 @@
 import { PURCHASE_FUNNEL_STEPS, toGrowthWindowDays, type PurchaseFunnelDTO, type PurchaseFunnelWindowDTO } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { PurchaseFunnelService } from '../analytics/purchase-funnel.service';
+import { FIRST_ORDER_REFERRER_PREFIX } from '../referral/first-order-reasons';
 import { AdminGrowthService, vnDayRange } from './admin-growth.service';
 
 const win = (n: number): PurchaseFunnelWindowDTO => ({
@@ -14,9 +15,10 @@ function makeService(answers: unknown[][], rewarded = 0) {
   const $queryRaw = jest.fn();
   for (const a of answers) $queryRaw.mockResolvedValueOnce(a);
   const getSnapshot = jest.fn().mockResolvedValue(funnel);
-  const count = jest.fn().mockResolvedValue(rewarded);
-  const svc = new AdminGrowthService({ $queryRaw, pointsTransaction: { count } } as unknown as PrismaService, { getSnapshot } as unknown as PurchaseFunnelService);
-  return { svc, $queryRaw, getSnapshot, count };
+  const findMany = jest.fn().mockResolvedValue(Array.from({ length: rewarded }, (_, i) => ({ reason: `${FIRST_ORDER_REFERRER_PREFIX}u${i}` })));
+  const count = jest.fn().mockResolvedValue(0);
+  const svc = new AdminGrowthService({ $queryRaw, pointsTransaction: { findMany, count } } as unknown as PrismaService, { getSnapshot } as unknown as PurchaseFunnelService);
+  return { svc, $queryRaw, getSnapshot, findMany };
 }
 
 const NO_BLOCKS = { SELF: 0, PHONE: 0, ZALO: 0, ADDRESS: 0, IP: 0 };
@@ -28,7 +30,7 @@ describe('AdminGrowthService', () => {
   const now = new Date('2026-11-18T15:00:00.000Z');
 
   it('7 ngày: kỳ bắt đầu 00:00 VN ngày 12/11, phễu lấy cửa sổ d7, bigint thành number, đủ 7 ngày kể cả ngày trống', async () => {
-    const { svc, $queryRaw, count } = makeService([
+    const { svc, $queryRaw, findMany } = makeService([
       [{ buyers: 10n, returning_buyers: 3n, new_buyers: 7n, new_with_second: 2n }],
       [
         { game: '*', players: 5n, buyers: 2n },
@@ -74,7 +76,7 @@ describe('AdminGrowthService', () => {
     expect(gamesCall).toContain('2026-11-12');
     // Thưởng mời bạn đơn đầu: cùng kỳ 00:00 VN ngày đầu tới lúc xem.
     expect(dto.referralFirstOrder).toEqual({ rewarded: 9, blocked: { ...NO_BLOCKS, IP: 4, ADDRESS: 1 } });
-    expect(count.mock.calls[0]![0].where.createdAt).toEqual({ gte: new Date('2026-11-11T17:00:00.000Z'), lte: now });
+    expect(findMany.mock.calls[0]![0].where.createdAt).toEqual({ gte: new Date('2026-11-11T17:00:00.000Z'), lte: now });
     expect($queryRaw.mock.calls[4]!).toEqual(expect.arrayContaining(['referral_first_order_blocked', '2026-11-11T17:00:00.000Z', now.toISOString()]));
   });
 

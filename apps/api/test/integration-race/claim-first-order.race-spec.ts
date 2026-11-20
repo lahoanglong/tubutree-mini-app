@@ -237,7 +237,8 @@ describe('claim-first-order: mã thẻ hộp hàng + freeship đơn đầu (real
     it('khách gõ mã thẻ ở giỏ thay vì quét QR → nhận luôn và áp được; đặt đơn ghi 1 lượt dùng', async () => {
       const u = await realUser();
       const c = await coupon();
-      const p = await product(100_000);
+      // 150.000đ: mã 30.000đ vừa đúng trần mã + Điểm Xanh 20% tiền hàng (pricing/redeem-cap.ts), nên đơn giữ đủ mệnh giá mã.
+      const p = await product(150_000);
       const addr = await address(u.id);
       await cart.addItem(u.id, { variationId: p.variationId, quantity: 1 });
       await cart.applyCoupon(u.id, c.code.toLowerCase());
