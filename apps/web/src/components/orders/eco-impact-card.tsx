@@ -8,7 +8,6 @@ import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import {
   ecoImpactHeadline,
   ecoImpactInviteLine,
-  ecoImpactPointsLine,
   ecoImpactShareLead,
   ecoImpactShareText,
   type OrderEcoImpact,
@@ -21,15 +20,15 @@ import { coreHttp } from '@/lib/core-http';
 import { useActionLock } from '@/lib/use-action-lock';
 
 /**
- * Thẻ "đơn này giảm bao nhiêu nhựa" ở Chi tiết đơn (cờ growth.referral_viral_enabled, chunk tải sau): số chai, Điểm Xanh của đơn và
- * một chạm gửi link mời. Trang chỉ vẽ khi máy chủ trả số lớn hơn 0. Cùng Mini App (`miniapp/src/components/orders/eco-impact-card.tsx`).
+ * Thẻ "đơn này giảm bao nhiêu nhựa" ở Chi tiết đơn (cờ growth.referral_viral_enabled, chunk tải lười): số chai và một chạm gửi
+ * link mời. Điểm Xanh của đơn đã có ở dòng "Đã cộng … Điểm Xanh" ngay trên nên thẻ không nhắc lại. Trang
+ * chỉ vẽ khi máy chủ trả số lớn hơn 0. Cùng Mini App (`miniapp/src/components/orders/eco-impact-card.tsx`).
  */
 export default function OrderEcoImpactCard({ impact }: { impact: OrderEcoImpact }) {
   const cfg = useQuery(publicConfigQuery(coreHttp)).data;
   const lock = useActionLock();
   const [msg, setMsg] = useState<string | null>(null);
   const code = impact.referralCode;
-  const points = ecoImpactPointsLine(impact);
   const invite = ecoImpactInviteLine(impact);
   const link = () =>
     inviteShareLink({
@@ -71,12 +70,7 @@ export default function OrderEcoImpactCard({ impact }: { impact: OrderEcoImpact 
         <Heading variant="title-sm" as="h2">
           {ecoImpactHeadline(impact)}
         </Heading>
-        {points && (
-          <Text variant="body-sm" tone="brand" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
-            {points}
-          </Text>
-        )}
-        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-inline-xs)' }}>
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
           {invite}
         </Text>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)', marginTop: 'var(--space-stack-sm)' }}>

@@ -63,7 +63,7 @@ export class OrderEcoImpactService {
     };
     if (!ecoImpactEligible(order)) return empty;
 
-    const items = await this.prisma.orderItem.findMany({ where: { orderId: order.id, isGift: false }, select: { id: true, variationId: true, quantity: true } });
+    const items = await this.prisma.orderItem.findMany({ where: { orderId: order.id, isGift: false }, select: { id: true, variationId: true, variationName: true, quantity: true } });
     if (items.length === 0) return empty;
     const [returned, reversals, variations, pairs, badgesOn] = await Promise.all([
       // Yêu cầu trả còn chờ duyệt cũng trừ: thẻ không được khoe nhiều hơn hàng khách thật sự giữ (cùng luật Hộ chiếu Xanh).
@@ -95,7 +95,16 @@ export class OrderEcoImpactService {
     const lines: EcoImpactLine[] = items.flatMap((i) => {
       const product = byId.get(productOf.get(i.variationId) ?? '');
       if (!product) return [];
-      return [{ productId: product.id, variationId: i.variationId, slug: product.slug, name: product.name, netQty: i.quantity - (returnedQty.get(i.id) ?? 0) }];
+      return [
+        {
+          productId: product.id,
+          variationId: i.variationId,
+          slug: product.slug,
+          name: product.name,
+          variationName: i.variationName,
+          netQty: i.quantity - (returnedQty.get(i.id) ?? 0),
+        },
+      ];
     });
     const numbers = computeOrderEcoImpact(lines, { pairs, names: new Map(products.map((p) => [p.id, p.name])), facts });
     if (numbers.bottlesSaved === 0 && numbers.plasticGrams === 0) return empty;

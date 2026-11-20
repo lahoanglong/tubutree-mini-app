@@ -43,19 +43,14 @@ afterEach(() => {
 });
 
 describe('OrderEcoImpactCard (web)', () => {
-  it('số chai là tiêu đề, Điểm Xanh của đơn, câu thưởng mời; hai nút đủ 44px có tên', async () => {
+  it('số chai là tiêu đề, câu thưởng mời; không nhắc lại Điểm Xanh của đơn; hai nút đủ 44px có tên', async () => {
     const root = await mount();
     expect(root.querySelector('h2')!.textContent).toBe('Đơn này bạn đã giảm 5 chai nhựa dùng 1 lần');
-    expect(root.textContent).toContain('+120 Điểm Xanh từ đơn này');
+    expect(root.textContent).not.toContain('+120');
     expect(root.textContent).toContain('Bạn bè mua đơn đầu từ 199k, cả hai nhận +100 Điểm Xanh');
     expect(root.querySelectorAll('button')).toHaveLength(2);
     expect(unnamedControls(root)).toEqual([]);
     expect(smallTouchTargets(root)).toEqual([]);
-  });
-
-  it('0 điểm: không có dòng điểm', async () => {
-    const root = await mount({ ...IMPACT, points: 0 });
-    expect(root.textContent).not.toContain('Điểm Xanh từ đơn này');
   });
 
   it('sao chép: ghi link mời có mã, báo đã chép, đo green_card_shared surface=order', async () => {

@@ -15,7 +15,7 @@ const pairs = new Map([
   ['bottle-b', 'refill-b'],
 ]);
 
-const base = { bottleIds: ['bottle-a'], pairs, reorderedRefillIds: new Set<string>(), optedOut: false, recentlyReminded: false };
+const base = { bottleIds: ['bottle-a'], pairs, reorderedRefillIds: new Set<string>(), optedOut: false, alreadyNudged: false, recentlyReminded: false };
 
 describe('pickRefillReminder', () => {
   it('chai có cặp Refill đang bán: nhắc đúng gói Refill của chai', () => {
@@ -26,7 +26,7 @@ describe('pickRefillReminder', () => {
     expect(pickRefillReminder({ ...base, bottleIds: ['bottle-x'] })).toEqual({ outcome: 'NO_PAIR' });
   });
 
-  it('khách đã mua lại gói Refill trong 21 ngày: bỏ qua', () => {
+  it('khách đã có gói Refill (cùng đơn hay đơn sau, chưa huỷ): bỏ qua', () => {
     expect(pickRefillReminder({ ...base, reorderedRefillIds: new Set(['refill-a']) })).toEqual({ outcome: 'REORDERED' });
   });
 
@@ -41,6 +41,12 @@ describe('pickRefillReminder', () => {
   it('khách tắt tin khuyến mãi / MSS báo từ chối: bỏ qua, xét trước mọi thứ khác', () => {
     expect(pickRefillReminder({ ...base, optedOut: true })).toEqual({ outcome: 'OPTED_OUT' });
     expect(pickRefillReminder({ ...base, optedOut: true, reorderedRefillIds: new Set(['refill-a']) })).toEqual({ outcome: 'OPTED_OUT' });
+  });
+
+  it('tin "Nhắc mua lại" 30 ngày đã nhắc chai này sau khi đặt đơn: dừng hẳn, không nhắc đôi cùng chai', () => {
+    expect(pickRefillReminder({ ...base, alreadyNudged: true })).toEqual({ outcome: 'NUDGED' });
+    expect(pickRefillReminder({ ...base, alreadyNudged: true, recentlyReminded: true })).toEqual({ outcome: 'NUDGED' });
+    expect(pickRefillReminder({ ...base, alreadyNudged: true, optedOut: true })).toEqual({ outcome: 'OPTED_OUT' });
   });
 
   it('khách vừa nhận một tin nhắc Refill trong 7 ngày: hoãn (không ghi, không gửi)', () => {
@@ -64,14 +70,14 @@ describe('refillReminderOptedOut', () => {
 });
 
 describe('refillReminderWindow', () => {
-  it('đơn giao từ 21 tới 28 ngày trước; mua lại tính trong 21 ngày; mỗi khách tối đa một tin / 7 ngày', () => {
+  it('đơn giao từ 21 tới 28 ngày trước; mỗi khách tối đa một tin / 7 ngày', () => {
     const now = new Date('2026-11-21T02:30:00.000Z');
     const day = 864e5;
     const w = refillReminderWindow(now);
     expect(REFILL_REMINDER_DAYS).toBe(21);
     expect(now.getTime() - w.dueBefore.getTime()).toBe(21 * day);
     expect(now.getTime() - w.oldest.getTime()).toBe(28 * day);
-    expect(w.reorderedSince.getTime()).toBe(w.dueBefore.getTime());
+    expect(Object.keys(w).sort()).toEqual(['dueBefore', 'oldest', 'userGapSince']);
     expect(now.getTime() - w.userGapSince.getTime()).toBe(7 * day);
   });
 });

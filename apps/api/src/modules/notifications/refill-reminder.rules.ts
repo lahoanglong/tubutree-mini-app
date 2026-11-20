@@ -16,13 +16,11 @@ export const REFILL_REMINDER_USER_GAP_DAYS = 7;
 
 const DAY_MS = 864e5;
 
-export function refillReminderWindow(now: Date): { dueBefore: Date; oldest: Date; reorderedSince: Date; userGapSince: Date } {
+export function refillReminderWindow(now: Date): { dueBefore: Date; oldest: Date; userGapSince: Date } {
   const t = now.getTime();
-  const dueBefore = new Date(t - REFILL_REMINDER_DAYS * DAY_MS);
   return {
-    dueBefore,
+    dueBefore: new Date(t - REFILL_REMINDER_DAYS * DAY_MS),
     oldest: new Date(t - (REFILL_REMINDER_DAYS + REFILL_REMINDER_WINDOW_DAYS) * DAY_MS),
-    reorderedSince: dueBefore,
     userGapSince: new Date(t - REFILL_REMINDER_USER_GAP_DAYS * DAY_MS),
   };
 }
@@ -42,18 +40,23 @@ export function refillReminderOptedOut(u: {
   return u.notifyPromo !== true || u.isBlocked || u.notifyOrderZaloSource === 'mss_opt_out';
 }
 
-/** Ghi vào refill_reminders (đơn đó không bao giờ được xét lại): SENT, REORDERED, OPTED_OUT. NO_PAIR và CAPPED không ghi, lượt sau xét lại. */
+/**
+ * Ghi vào refill_reminders (đơn đó không bao giờ được xét lại): SENT, REORDERED, OPTED_OUT, NUDGED, và NO_PAIR khi khách đã trả hết chai.
+ * CAPPED và NO_PAIR vì bảng cặp không ghi, lượt sau xét lại.
+ */
 export type RefillReminderDecision =
   | { outcome: 'SEND'; bottleId: string; refillId: string }
-  | { outcome: 'REORDERED' | 'OPTED_OUT' | 'NO_PAIR' | 'CAPPED' };
+  | { outcome: 'REORDERED' | 'OPTED_OUT' | 'NO_PAIR' | 'NUDGED' | 'CAPPED' };
 
 export function pickRefillReminder(input: {
   /** Chai trong đơn (theo thứ tự dòng), đã bỏ quà 0đ và dòng đã trả hết. */
   bottleIds: readonly string[];
   pairs: ReadonlyMap<string, string>;
-  /** Gói Refill khách đã đặt (đơn không huỷ) trong 21 ngày qua. */
+  /** Gói Refill khách đã có từ lúc đặt đơn này (chính đơn này hay đơn sau đã chốt, chưa huỷ hay hoàn). */
   reorderedRefillIds: ReadonlySet<string>;
   optedOut: boolean;
+  /** Tin "Nhắc mua lại" 30 ngày đã nhắc chai của đơn sau khi đơn được đặt: chu kỳ này đã được nhắc. */
+  alreadyNudged: boolean;
   /** Khách đã nhận một tin nhắc Refill trong REFILL_REMINDER_USER_GAP_DAYS ngày. */
   recentlyReminded: boolean;
 }): RefillReminderDecision {
@@ -62,6 +65,7 @@ export function pickRefillReminder(input: {
   if (input.optedOut) return { outcome: 'OPTED_OUT' };
   const bottleId = paired.find((id) => !input.reorderedRefillIds.has(input.pairs.get(id)!));
   if (!bottleId) return { outcome: 'REORDERED' };
+  if (input.alreadyNudged) return { outcome: 'NUDGED' };
   if (input.recentlyReminded) return { outcome: 'CAPPED' };
   return { outcome: 'SEND', bottleId, refillId: input.pairs.get(bottleId)! };
 }

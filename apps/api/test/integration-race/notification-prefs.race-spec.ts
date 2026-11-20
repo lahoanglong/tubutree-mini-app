@@ -49,7 +49,7 @@ describe('Tuỳ chọn thông báo khuyến mãi (real Postgres)', () => {
 
   it('khách mới mặc định nhận cả hai nhóm tin', async () => {
     const u = await createUser(prisma);
-    await expect(svc.getPrefs(u.id)).resolves.toEqual({ notifyPromo: true, notifyGarden: true });
+    await expect(svc.getPrefs(u.id)).resolves.toEqual({ notifyPromo: true, notifyGarden: true, notifySocial: true });
   });
 
   it('tắt khuyến mãi → lưu DB, notify bỏ qua tin khuyến mãi nhưng vẫn gửi tin đơn hàng', async () => {
@@ -58,6 +58,7 @@ describe('Tuỳ chọn thông báo khuyến mãi (real Postgres)', () => {
     await expect(svc.updatePrefs(u.id, { notifyPromo: false })).resolves.toEqual({
       notifyPromo: false,
       notifyGarden: true,
+      notifySocial: true,
     });
     expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).notifyPromo).toBe(false);
 

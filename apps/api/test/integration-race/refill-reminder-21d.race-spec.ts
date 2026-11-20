@@ -91,7 +91,7 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     expect(generic.remindedAt!.getTime()).toBeGreaterThanOrEqual(order.createdAt.getTime());
   });
 
-  it('tin "Nhắc mua lại" đã nhắc chai này 2 ngày trước: lượt này bỏ, không ghi dòng (hết 7 ngày còn trong cửa sổ thì xét lại)', async () => {
+  it('tin "Nhắc mua lại" 30 ngày đã nhắc chai này sau khi đặt đơn: không nhắc đôi, đơn dừng hẳn (NUDGED)', async () => {
     const u = await createRealUser(prisma, { notifyPromo: true });
     await bottleOrder(u.id, 22);
     await prisma.reorderReminder.create({
@@ -99,9 +99,57 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     });
 
     await runOnce(service());
+    await runOnce(service());
 
     expect(callsFor(u.id)).toHaveLength(0);
-    expect(await rowsFor(u.id)).toHaveLength(0);
+    expect((await rowsFor(u.id)).map((r) => r.outcome)).toEqual(['NUDGED']);
+  });
+
+  it('gói Refill mua cùng đơn với chai: khách đã có gói, không nhắc (REORDERED)', async () => {
+    const u = await createRealUser(prisma, { notifyPromo: true });
+    await createOrder(prisma, {
+      userId: u.id,
+      status: 'DELIVERED',
+      createdAt: new Date(now.getTime() - 24 * DAY),
+      deliveredAt: new Date(now.getTime() - 22 * DAY),
+      items: {
+        create: [
+          { variationId: bottleVariation, productName: 'Chai IT', variationName: '3,8L', unitPrice: 100_000, quantity: 1, total: 100_000 },
+          { variationId: refillVariation, productName: 'Refill IT', variationName: '10L', unitPrice: 200_000, quantity: 1, total: 200_000 },
+        ],
+      },
+    });
+
+    await runOnce(service());
+
+    expect(callsFor(u.id)).toHaveLength(0);
+    expect((await rowsFor(u.id)).map((r) => r.outcome)).toEqual(['REORDERED']);
+  });
+
+  it('đơn gói Refill còn chờ chuyển khoản không tính là đã mua lại: vẫn nhắc', async () => {
+    const u = await createRealUser(prisma, { notifyPromo: true });
+    await bottleOrder(u.id, 22);
+    await createOrder(prisma, {
+      userId: u.id,
+      status: 'PENDING_PAYMENT',
+      createdAt: new Date(now.getTime() - 3 * DAY),
+      items: { create: { variationId: refillVariation, productName: 'Refill IT', variationName: '10L', unitPrice: 200_000, quantity: 1, total: 200_000 } },
+    });
+
+    await runOnce(service());
+
+    expect(callsFor(u.id)).toHaveLength(1);
+  });
+
+  it('khách đã mua chai đó lần nữa: tin Refill không đánh dấu chu kỳ "Nhắc mua lại" của đơn mới', async () => {
+    const u = await createRealUser(prisma, { notifyPromo: true });
+    await bottleOrder(u.id, 22);
+    await bottleOrder(u.id, 3);
+
+    await runOnce(service());
+
+    expect(callsFor(u.id)).toHaveLength(1);
+    expect(await prisma.reorderReminder.findUnique({ where: { userId_variationId: { userId: u.id, variationId: bottleVariation } } })).toBeNull();
   });
 
   it('hai lượt chạy song song (hai instance): đúng một tin và một dòng cho đơn', async () => {
@@ -114,7 +162,7 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     expect((await rowsFor(u.id)).map((r) => r.orderId)).toEqual([order.id]);
   });
 
-  it('khách đã đặt lại gói Refill trong 21 ngày: không nhắc, ghi REORDERED', async () => {
+  it('khách đã đặt lại gói Refill sau đơn chai: không nhắc, ghi REORDERED', async () => {
     const u = await createRealUser(prisma, { notifyPromo: true });
     await bottleOrder(u.id, 22);
     await createOrder(prisma, {
@@ -159,7 +207,7 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     expect((await rowsFor(mss.id)).map((r) => r.outcome)).toEqual(['OPTED_OUT']);
   });
 
-  it('ngoài cửa sổ 21–28 ngày, chai đã trả, quà 0đ: không nhắc, không ghi', async () => {
+  it('ngoài cửa sổ 21–28 ngày, quà 0đ: không nhắc, không ghi; chai đã trả: không nhắc, ghi NO_PAIR để đơn không chiếm lô', async () => {
     const early = await createRealUser(prisma, { notifyPromo: true });
     const old = await createRealUser(prisma, { notifyPromo: true });
     const returned = await createRealUser(prisma, { notifyPromo: true });
@@ -181,10 +229,9 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
 
     await runOnce(service());
 
-    for (const u of [early, old, returned, gift]) {
-      expect(callsFor(u.id)).toHaveLength(0);
-      expect(await rowsFor(u.id)).toHaveLength(0);
-    }
+    for (const u of [early, old, returned, gift]) expect(callsFor(u.id)).toHaveLength(0);
+    for (const u of [early, old, gift]) expect(await rowsFor(u.id)).toHaveLength(0);
+    expect((await rowsFor(returned.id)).map((r) => r.outcome)).toEqual(['NO_PAIR']);
   });
 
   it('khách có hai đơn tới hạn: một tin; đơn kia không ghi để lượt sau xét lại', async () => {

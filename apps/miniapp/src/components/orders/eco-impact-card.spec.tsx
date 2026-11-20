@@ -32,11 +32,11 @@ const IMPACT: OrderEcoImpact = {
 afterEach(() => vi.clearAllMocks());
 
 describe('OrderEcoImpactCard Mini (tubu-w11-03)', () => {
-  it('số chai, điểm chờ nhận hàng, câu mời chung khi không hứa thưởng', () => {
+  it('số chai, câu mời chung khi không hứa thưởng; không nhắc lại Điểm Xanh của đơn', () => {
     render(<OrderEcoImpactCard impact={IMPACT} />);
     const card = screen.getByTestId('order-eco-impact');
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Đơn này bạn đã giảm 5 chai nhựa dùng 1 lần');
-    expect(card.textContent).toContain('+120 Điểm Xanh khi nhận hàng');
+    expect(card.textContent).not.toContain('+120');
     expect(card.textContent).toContain('Gửi link mời để bạn bè sống xanh cùng bạn');
   });
 
