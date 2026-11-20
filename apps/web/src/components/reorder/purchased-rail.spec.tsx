@@ -119,7 +119,7 @@ describe('PurchasedRail', () => {
   it('"Mua lại" → sheet → "Thêm vào giỏ (1)" → POST /cart/items addSource repurchase rồi tự sang giỏ', async () => {
     const c = await mount();
     click(byText(c, 'button', 'Mua lại'));
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).not.toBeNull());
     // Nút khoá tới khi giỏ tải xong: chờ giỏ về rồi mới bấm, như khách thật.
     await flush();
     const cta = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Thêm vào giỏ (1)')!;

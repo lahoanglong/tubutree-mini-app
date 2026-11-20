@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { loadTerserAst, sameBindings, unaliasModuleNames, unaliasModuleNamesPlugin } from './build-import-names';
+import { loadTerserAst, sameBindings, UNALIAS_PASS_VERSION, unaliasModuleNames, unaliasModuleNamesPlugin } from './build-import-names';
 
 // Hai chunk dạng Rollup + terser xuất ra, cài sẵn bẫy: tham số và biến trong hàm trùng tên nối (`j`, `s`), chunk dùng biến toàn cục `Map`
 // trùng tên một export của chunk kia, và một import mặc định.
@@ -48,6 +48,34 @@ describe('build-import-names', () => {
     const out = unaliasModuleNames(T, code);
     expect(out.pinned).toBe(0);
     expect(out.code).toBe(code);
+  });
+
+  it('không ghim biến nhập không còn tham chiếu, tên trùng `export const` hay chunk có eval', async () => {
+    const T = await loadTerserAst();
+    // Đầu ra thật của terser (cấu hình như vite.config.mts) khi hàm duy nhất dùng `jsx` bị bỏ: import còn, không tham chiếu. Biến không tham chiếu
+    // không có trong danh sách tên phạm vi đang dùng của terser, nên ghim nó về `j` thì terser vẫn cấp `j` cho một const dưới (khai báo trùng).
+    const names = 'o m n r t d h M s c j l e f g i p b k q u v w x y z A B C D E F G H I J K L N O P Q R S T U V W X Y Z $ _ aa oa ma na ra ta da'.split(' ');
+    const unused = `import{j as a}from"./a.js";const ${names.map((n) => `${n}=Math.random()`).join(',')};console.log(1,${names.join(',')},0);`;
+    const sameName = 'import{x as e}from"./a.js";e();export const x=1;';
+    const withEval = 'import{j as e}from"./a.js";e();eval("e()");export{};';
+    for (const code of [unused, sameName, withEval]) {
+      const out = unaliasModuleNames(T, code);
+      expect(() => T.parse(out.code, { module: true })).not.toThrow();
+      expect(sameBindings(T, code, out.code)).toBe(true);
+    }
+    expect(unaliasModuleNames(T, sameName).code).toMatch(/import\{x as \w+\}/);
+    expect(unaliasModuleNames(T, withEval)).toEqual({ code: withEval, pinned: 0 });
+  });
+
+  it('plugin giữ nguyên chunk và cảnh báo khi không dựng được cây cú pháp; đổi bản thì đổi băm tên chunk', async () => {
+    const plugin = unaliasModuleNamesPlugin();
+    const bundle = { 'assets/bad.js': { type: 'chunk', fileName: 'assets/bad.js', code: 'import{j as e}from"./a.js";e(', map: null } };
+    const warn = vi.fn();
+    const hook = plugin.generateBundle as { handler: (this: unknown, o: unknown, b: unknown) => Promise<void> };
+    await hook.handler.call({ warn }, {}, bundle);
+    expect(bundle['assets/bad.js'].code).toBe('import{j as e}from"./a.js";e(');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect((plugin.augmentChunkHash as () => string)()).toBe(UNALIAS_PASS_VERSION);
   });
 
   it('`sameBindings` bắt được đổi tên làm một tham chiếu trỏ sang khai báo khác', async () => {
