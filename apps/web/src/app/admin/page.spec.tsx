@@ -4776,6 +4776,8 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(last).toContain('uncategorized=1');
     expect(last).toContain('onSale=1');
     expect(last).not.toContain('missingImage=1');
+    // ADMIN mở được thẻ Cặp Refill nên thẻ Sản phẩm vẫn hỏi bảng cặp cho chip "Chưa ghép Refill" (tubu-w10-01).
+    expect(api.calls.some((c) => c.url.includes('/admin/refill-pairs'))).toBe(true);
   });
 
   it('tab Người dùng: mặc định chỉ tài khoản thật, chip "Hiện cả khách vãng lai (n)" bật thì gửi guests', async () => {

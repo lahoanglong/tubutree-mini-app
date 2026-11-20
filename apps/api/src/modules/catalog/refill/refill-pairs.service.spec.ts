@@ -20,7 +20,7 @@ const CARD = {
   fulfiller: { kind: 'TUBU' },
 };
 
-function build(flag: unknown, cfg: Record<string, unknown> = {}) {
+function build(flag: unknown, cfg: Record<string, unknown> = {}, stored: Record<string, unknown> = {}) {
   const prisma = {
     product: { findMany: jest.fn(async () => PRODUCTS) },
     $queryRaw: jest.fn(async (..._args: unknown[]) => [{ id: 'bottle' }] as { id: string }[]),
@@ -33,9 +33,16 @@ function build(flag: unknown, cfg: Record<string, unknown> = {}) {
       if (key === REFILL_FIRST_ENABLED_KEY) on = value;
       else cfg[key] = value;
     }),
+    // Như SystemConfigService.update: `next` nhận bản đang lưu (đọc dưới khoá dòng, không qua cache của get), lỗi thì không ghi.
+    update: jest.fn(async (key: string, fallback: unknown, next: (current: unknown) => unknown) => {
+      const value = await next(key in stored ? stored[key] : key in cfg ? cfg[key] : fallback);
+      cfg[key] = value;
+      stored[key] = value;
+      return value;
+    }),
   };
   const svc = new RefillPairsService(prisma as never, catalog as never, config as never);
-  return { svc, prisma, catalog, config };
+  return { svc, prisma, catalog, config, cfg };
 }
 
 describe('RefillPairsService', () => {
@@ -128,14 +135,15 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
   });
 
   it('lưu: ghép tay, chặn, cờ ghi qua SystemConfig kèm người sửa; bảng cặp trong bộ nhớ bỏ ngay', async () => {
-    const { svc, config } = build(false);
+    const { svc, config, cfg } = build(false);
     expect([...(await svc.pairs())]).toEqual([['bottle', 'refill']]);
     const o = await svc.adminSave(
       { enabled: true, overrides: [{ bottleSlug: ' nuoc-rua-chen-fuwa3e-500ml ', refillSlug: 'refill-nuoc-rua-chen-fuwa3e-10l' }], block: ['nuoc-rua-chen-fuwa3e-3-8l', ' nuoc-rua-chen-fuwa3e-3-8l', ''] },
       'admin-1',
     );
     expect(config.set).toHaveBeenCalledWith(REFILL_FIRST_ENABLED_KEY, true, 'admin-1');
-    expect(config.set).toHaveBeenCalledWith(REFILL_PAIRS_OVERRIDE_KEY, [{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'refill-nuoc-rua-chen-fuwa3e-10l' }], 'admin-1');
+    expect(config.update).toHaveBeenCalledWith(REFILL_PAIRS_OVERRIDE_KEY, [], expect.any(Function), 'admin-1');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toEqual([{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'refill-nuoc-rua-chen-fuwa3e-10l' }]);
     expect(config.set).toHaveBeenCalledWith(REFILL_PAIRS_BLOCK_KEY, ['nuoc-rua-chen-fuwa3e-3-8l'], 'admin-1');
     expect(o.rows.map((r) => [r.bottle.id, r.status])).toEqual([
       ['bottle', 'blocked'],
@@ -160,15 +168,27 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
     expect([...(await svc.pairs())]).toEqual([]);
   });
 
+  it('ghép tay đã ghi rồi bước ghi cờ lỗi: lần lưu báo lỗi nhưng bảng cặp trong bộ nhớ vẫn bỏ, lần hỏi sau thấy cặp vừa ghép', async () => {
+    const { svc, config } = build(true);
+    expect([...(await svc.pairs())]).toEqual([['bottle', 'refill']]);
+    config.set.mockRejectedValueOnce(new Error('mất kết nối DB'));
+    await expect(svc.adminSave({ enabled: true, add: { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'refill-nuoc-rua-chen-fuwa3e-10l' } }, 'a')).rejects.toThrow('mất kết nối DB');
+    expect([...(await svc.pairs())]).toEqual([
+      ['bottle', 'refill'],
+      ['small', 'refill'],
+    ]);
+  });
+
   it('chỉ gửi phần nào thì ghi phần đó', async () => {
     const { svc, config } = build(true);
     await svc.adminSave({ block: [] }, 'a');
+    expect(config.update).not.toHaveBeenCalled();
     expect(config.set).toHaveBeenCalledTimes(1);
     expect(config.set).toHaveBeenCalledWith(REFILL_PAIRS_BLOCK_KEY, [], 'a');
   });
 
   it('ghép tay sai: slug không đang bán, chai là gói refill, đích không phải refill, một chai hai cặp → 400, không ghi gì', async () => {
-    const { svc, config } = build(true);
+    const { svc, config, cfg } = build(true);
     const R = 'refill-nuoc-rua-chen-fuwa3e-10l';
     await expect(svc.adminSave({ overrides: [{ bottleSlug: 'khong-co', refillSlug: R }] }, 'a')).rejects.toThrow('Không có sản phẩm đang bán "khong-co"');
     await expect(svc.adminSave({ overrides: [{ bottleSlug: R, refillSlug: R }] }, 'a')).rejects.toThrow('Chai và gói Refill phải là hai sản phẩm khác nhau.');
@@ -178,6 +198,7 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
       svc.adminSave({ enabled: true, overrides: [{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }, { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }] }, 'a'),
     ).rejects.toThrow('hai cặp');
     expect(config.set).not.toHaveBeenCalled();
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toBeUndefined();
   });
 
   it('add/remove gộp vào danh sách ĐANG LƯU: trang mở từ trước (chưa thấy cặp migration hay admin khác vừa thêm) không xoá mất các cặp đó', async () => {
@@ -186,11 +207,21 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
       { bottleSlug: 'chai-da-ngung-ban', refillSlug: 'refill-da-ngung-ban' },
       { bottleSlug: 'nuoc-rua-chen-fuwa3e-3-8l', refillSlug: R },
     ];
-    const { svc, config } = build(true, { [REFILL_PAIRS_OVERRIDE_KEY]: stored });
+    const { svc, cfg } = build(true, { [REFILL_PAIRS_OVERRIDE_KEY]: stored });
     await svc.adminSave({ add: { bottleSlug: ' nuoc-rua-chen-fuwa3e-500ml ', refillSlug: R } }, 'a');
-    expect(config.set).toHaveBeenLastCalledWith(REFILL_PAIRS_OVERRIDE_KEY, [...stored, { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }], 'a');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toEqual([...stored, { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }]);
     await svc.adminSave({ remove: 'nuoc-rua-chen-fuwa3e-500ml' }, 'a');
-    expect(config.set).toHaveBeenLastCalledWith(REFILL_PAIRS_OVERRIDE_KEY, stored, 'a');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toEqual(stored);
+  });
+
+  it('add gộp trên bản đọc dưới khoá dòng (update), không trên bản cache của get: admin khác vừa ghép ở tiến trình API khác thì cặp đó còn (tubu-w10-01)', async () => {
+    const R = 'refill-nuoc-rua-chen-fuwa3e-10l';
+    const other = { bottleSlug: 'nuoc-rua-chen-fuwa3e-3-8l', refillSlug: R };
+    // get() còn cache 60 giây của bản rỗng; trong DB đã có cặp admin kia vừa lưu.
+    const { svc, config, cfg } = build(true, { [REFILL_PAIRS_OVERRIDE_KEY]: [] }, { [REFILL_PAIRS_OVERRIDE_KEY]: [other] });
+    await svc.adminSave({ add: { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R } }, 'a');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toEqual([other, { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }]);
+    expect(config.set).not.toHaveBeenCalledWith(REFILL_PAIRS_OVERRIDE_KEY, expect.anything(), expect.anything());
   });
 
   it('cặp mới khác thương hiệu hay ghép vào gói đang tắt: 400, không ghi gì', async () => {

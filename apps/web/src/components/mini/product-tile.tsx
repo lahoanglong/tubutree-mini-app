@@ -12,7 +12,6 @@ import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
 import { PriceTag } from './price-tag';
 import { ProductImage } from './product-image';
-import { SR_ONLY } from './sr-only';
 import { STRETCHED_LINK_CLASS } from './stretched-link';
 import { Text } from './text';
 
@@ -313,7 +312,7 @@ export function ProductTile({
             {view.name}
           </Text>
         </Link>
-        <span id={descId} aria-hidden style={SR_ONLY}>
+        <span id={descId} aria-hidden className="sr-only">
           {description}
         </span>
         {/* Anh em của liên kết tên (không phải con) để không lồng phần tử tương tác. Đứng NGAY SAU liên kết trong DOM để Tab/đọc đi tên rồi tới tim; vị trí thật do absolute theo vỏ thẻ. */}

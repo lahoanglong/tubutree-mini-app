@@ -2,20 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { preconnect, prefetchDNS } from 'react-dom';
 import './globals.css';
-import { Providers } from './providers';
-import SiteHeader from '@/components/site-header';
+import { LayoutShell } from './layout-shell';
 import SiteFooter from '@/components/site-footer';
-import HideOnPortals from '@/components/hide-on-portals';
-import PortalHeader from '@/components/admin/portal-header';
-import { ReferralCapture } from '@/components/storefront-tracker';
-import { AppGates } from '@/components/app-gates';
-import BottomNav from '@/components/bottom-nav';
-import BackButton from '@/components/mini/back-button';
-import { ErrorReporter } from '@/components/error-reporter';
-import { EntrySourceCapture } from '@/components/entry-source-capture';
-import { ScreenTracker } from '@/components/analytics/screen-tracker';
-import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
-import { SkipLink } from '@/components/skip-link';
 import { VitalsGate } from '@/lib/vitals/vitals-gate';
 import { apiImageOrigin } from '@/lib/image-origin';
 import { SITE_URL, fontScaleBootScript, offersHintBootScript, recentlyViewedBootScript, restoringBootScript, tenantHostBootScript } from '@/lib/site';
@@ -61,39 +49,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: offersHintBootScript() }} />
       </head>
       <body className="flex min-h-screen flex-col font-ui">
-        <Providers>
-          {/* Link CTV chia sẻ thường trỏ thẳng tới trang sản phẩm kèm ?ref= — bắt ở mọi trang. */}
-          <ReferralCapture />
-          <EntrySourceCapture />
-          <ScreenTracker />
-          {/* Cờ đo tốc độ đọc ở máy chủ (bất đồng bộ): ranh giới riêng để nó không bao giờ giữ khung trang lại. */}
-          <Suspense fallback={null}>
-            <VitalsGate />
-          </Suspense>
-          <ErrorReporter />
-          <AppGates />
-          <PdpNavSkeleton />
-          <SkipLink />
-          {/* Nút lùi nổi (position: fixed) đặt trước nội dung để thứ tự Tab/đọc màn hình khớp vị trí: ở điện thoại nó là điểm dừng đầu của trang con, không phải cuối cùng sau chân trang. */}
-          <HideOnPortals>
-            <BackButton className="md:!hidden" />
-          </HideOnPortals>
-          <HideOnPortals>
-            <SiteHeader />
-          </HideOnPortals>
-          <PortalHeader />
+        {/* Thanh đầu, nút lùi, thanh đáy và các bộ bắt sự kiện nằm trong LayoutShell (một thành phần client: ít dòng tham chiếu RSC trong HTML mỗi trang). */}
+        <LayoutShell
+          // Cờ đo tốc độ đọc ở máy chủ (bất đồng bộ): ranh giới riêng để nó không bao giờ giữ khung trang lại.
+          vitals={
+            <Suspense fallback={null}>
+              <VitalsGate />
+            </Suspense>
+          }
+          footer={<SiteFooter />}
+        >
           {/* Khối bọc cao ít nhất phần khung nhìn còn lại dưới thanh đầu: chân trang luôn bắt đầu ở mép dưới màn đầu, nên khi nội dung thay khung chờ
               (dài ra hay ngắn lại) chân trang chỉ dịch ngoài tầm nhìn, không gây CLS. <main> bên trong giữ nguyên bố cục. Đích của liên kết bỏ qua tự nhận tabindex khi được kích hoạt (SkipLink). */}
           <div id="main-content" className="flex-1 min-h-[calc(100svh_-_var(--header-h))] outline-none">
             {children}
           </div>
-          <HideOnPortals>
-            <SiteFooter />
-          </HideOnPortals>
-          <HideOnPortals>
-            <BottomNav />
-          </HideOnPortals>
-        </Providers>
+        </LayoutShell>
       </body>
     </html>
   );

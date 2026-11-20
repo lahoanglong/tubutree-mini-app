@@ -557,6 +557,39 @@ export class SystemConfigService {
   }
 
   async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
+    const unset = await this.checkValue(key, value);
+    await this.prisma.$transaction(async (tx) => {
+      // Đọc `existing` TRONG transaction (thay vì trước đó) để thu hẹp cửa sổ race: 2 admin sửa
+      // cùng key gần như đồng thời trước đây có thể tạo 2 dòng history cùng oldValue (v1→v2 và
+      // v1→v3), làm mất bản ghi v1→v2 thật sự đã xảy ra trong audit trail.
+      const existing = await tx.systemConfig.findUnique({ where: { key } });
+      await this.writeInTx(tx, key, value, unset, changedBy, existing);
+    });
+    this.afterWrite(key);
+  }
+
+  /**
+   * Đọc-gộp-ghi một khoá dưới khoá dòng: `next` nhận giá trị đang lưu, đọc bằng `SELECT … FOR UPDATE` trong cùng transaction với lần ghi, và trả
+   * giá trị mới. Hai lần gọi cùng khoá (kể cả từ hai tiến trình API) chạy nối tiếp, nên lần sau gộp trên bản lần trước vừa ghi; `get()` rồi `set()`
+   * thì hai admin lưu cùng lúc cùng đọc một bản cũ và lần ghi sau xoá mất phần của lần trước. Khoá chưa có dòng thì tạo dòng `fallback` trước để có
+   * dòng mà khoá. `next` ném lỗi thì transaction huỷ, không ghi gì (kể cả dòng vừa tạo). Dòng do chính lần gọi này tạo không sinh dòng lịch sử,
+   * như `set()` trên khoá chưa có.
+   */
+  async update<T extends object | string | number | boolean>(key: string, fallback: T, next: (current: unknown) => T | Promise<T>, changedBy: string): Promise<T> {
+    const value = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.systemConfig.createMany({ data: [{ key, value: fallback as Prisma.InputJsonValue, category: categoryOf(key), updatedBy: changedBy }], skipDuplicates: true });
+      const [locked] = await tx.$queryRaw<{ value: Prisma.JsonValue }[]>`SELECT "value" FROM system_configs WHERE "key" = ${key} FOR UPDATE`;
+      const v = await next(locked?.value ?? fallback);
+      const unset = await this.checkValue(key, v);
+      await this.writeInTx(tx, key, v, unset, changedBy, created.count > 0 ? null : (locked ?? null));
+      return v;
+    });
+    this.afterWrite(key);
+    return value;
+  }
+
+  /** Kiểm giá trị trước khi ghi; true khi là lệnh bỏ giá trị (khoá cho phép JSON null). */
+  private async checkValue(key: string, value: unknown): Promise<boolean> {
     const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
     if ((value === null && !unset) || value === undefined) {
       throw new BadRequestException(`Giá trị cho SystemConfig "${key}" không được null/undefined.`);
@@ -566,48 +599,53 @@ export class SystemConfigService {
       await this.assertRateCapsConsistent(key, value);
       await this.assertWasteRulesPublished(key, value);
     }
+    return unset;
+  }
+
+  /** Ghi trong transaction: dòng lịch sử (khi đã có dòng `existing`, đọc trong cùng transaction) rồi upsert. */
+  private async writeInTx(tx: Prisma.TransactionClient, key: string, value: unknown, unset: boolean, changedBy: string, existing: { value: Prisma.JsonValue } | null): Promise<void> {
     const stored = unset ? Prisma.JsonNull : (value as object);
-    const dotIndex = key.indexOf('.');
-    const category = dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';
-    await this.prisma.$transaction(async (tx) => {
-      // Đọc `existing` TRONG transaction (thay vì trước đó) để thu hẹp cửa sổ race: 2 admin sửa
-      // cùng key gần như đồng thời trước đây có thể tạo 2 dòng history cùng oldValue (v1→v2 và
-      // v1→v3), làm mất bản ghi v1→v2 thật sự đã xảy ra trong audit trail.
-      const existing = await tx.systemConfig.findUnique({ where: { key } });
-      if (existing) {
-        // JSON null = khoá có dòng nhưng chưa đặt giá trị (seed ETA giao hàng): chưa có kiểu để giữ, và `typeof null`
-        // là 'object' nên nếu không bỏ qua thì admin không bao giờ đặt được số đầu tiên.
-        const wasUnset = existing.value === null;
-        const oldType = Array.isArray(existing.value) ? 'array' : typeof existing.value;
-        const newType = Array.isArray(value) ? 'array' : typeof value;
-        if (!wasUnset && !unset && oldType !== newType) {
-          throw new BadRequestException(
-            `Kiểu dữ liệu mới ("${newType}") khác kiểu hiện tại ("${oldType}") của "${key}". ` +
-              'Đổi kiểu có thể làm crash nơi khác đang dùng get<T>() với kiểu cũ. Nếu chắc chắn muốn đổi, xoá config này trước rồi tạo lại.',
-          );
-        }
-        await tx.systemConfigHistory.create({
-          data: {
-            key,
-            oldValue: wasUnset ? Prisma.JsonNull : (existing.value as object),
-            newValue: stored,
-            changedBy,
-          },
-        });
+    if (existing) {
+      // JSON null = khoá có dòng nhưng chưa đặt giá trị (seed ETA giao hàng): chưa có kiểu để giữ, và `typeof null`
+      // là 'object' nên nếu không bỏ qua thì admin không bao giờ đặt được số đầu tiên.
+      const wasUnset = existing.value === null;
+      const oldType = Array.isArray(existing.value) ? 'array' : typeof existing.value;
+      const newType = Array.isArray(value) ? 'array' : typeof value;
+      if (!wasUnset && !unset && oldType !== newType) {
+        throw new BadRequestException(
+          `Kiểu dữ liệu mới ("${newType}") khác kiểu hiện tại ("${oldType}") của "${key}". ` +
+            'Đổi kiểu có thể làm crash nơi khác đang dùng get<T>() với kiểu cũ. Nếu chắc chắn muốn đổi, xoá config này trước rồi tạo lại.',
+        );
       }
-      await tx.systemConfig.upsert({
-        where: { key },
-        update: { value: stored, updatedBy: changedBy },
-        create: { key, value: stored, category, updatedBy: changedBy },
+      await tx.systemConfigHistory.create({
+        data: {
+          key,
+          oldValue: wasUnset ? Prisma.JsonNull : (existing.value as object),
+          newValue: stored,
+          changedBy,
+        },
       });
-      // Hàng "Tubu giao hộ" chốt phí sàn theo lúc đặt: gian hàng đang theo mặc định cần dòng lịch sử cho mức mới.
-      if (key === MERCHANT_COMMISSION_KEY && typeof value === 'number') {
-        await freezeDefaultCommissionChange(tx, commissionPctOf(existing?.value), value, new Date(), changedBy);
-      }
+    }
+    await tx.systemConfig.upsert({
+      where: { key },
+      update: { value: stored, updatedBy: changedBy },
+      create: { key, value: stored, category: categoryOf(key), updatedBy: changedBy },
     });
+    // Hàng "Tubu giao hộ" chốt phí sàn theo lúc đặt: gian hàng đang theo mặc định cần dòng lịch sử cho mức mới.
+    if (key === MERCHANT_COMMISSION_KEY && typeof value === 'number') {
+      await freezeDefaultCommissionChange(tx, commissionPctOf(existing?.value), value, new Date(), changedBy);
+    }
+  }
+
+  private afterWrite(key: string): void {
     this.writes += 1;
     this.cache.delete(key);
     // Đánh dấu sau khi xoá cache: lần nạp danh sách ảnh kế tiếp đọc lại giá trị mới, không phải bản cache 60 giây.
     if (PUBLIC_VISIBILITY_CONFIG_KEYS.includes(key)) this.imageStale?.markStale();
   }
+}
+
+function categoryOf(key: string): string {
+  const dotIndex = key.indexOf('.');
+  return dotIndex > 0 ? key.slice(0, dotIndex) : 'misc';
 }

@@ -43,7 +43,13 @@ const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionEr
 export function ProductCategoriesTab({
   initialMissingImage = false,
   initialUncategorized = false,
-}: { initialMissingImage?: boolean; initialUncategorized?: boolean } = {}) {
+  canPairRefill = false,
+}: {
+  initialMissingImage?: boolean;
+  initialUncategorized?: boolean;
+  /** Vai trò mở được thẻ "Cặp Refill" (cùng quyền `GET /admin/refill-pairs`): chỉ khi đó mới hỏi bảng cặp và hiện chip "Chưa ghép Refill", vai trò khác không gây log 403. */
+  canPairRefill?: boolean;
+} = {}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [typed, setTyped] = useState('');
@@ -181,12 +187,12 @@ export function ProductCategoriesTab({
         <button type="button" aria-pressed={missingImage} onClick={() => setMissingImage((v) => !v)} className={chipClass(missingImage)}>
           Đang bán, thiếu ảnh{missingImageCount !== undefined ? ` (${missingImageCount})` : ''}
         </button>
-        <RefillUnpairedChip on={refillOnly} onToggle={() => setRefillOnly((v) => !v)} />
+        {canPairRefill && <RefillUnpairedChip on={refillOnly} onToggle={() => setRefillOnly((v) => !v)} />}
         {total !== undefined && !refillOnly && <span className="text-xs text-stone-500">{total} sản phẩm khớp bộ lọc</span>}
       </div>
 
       {/* Chip "Chưa ghép Refill" đổi danh sách: chai chờ ghép gói Refill thay cho danh sách gán danh mục. */}
-      {refillOnly ? (
+      {canPairRefill && refillOnly ? (
         <RefillUnpairedPanel />
       ) : (
         <>

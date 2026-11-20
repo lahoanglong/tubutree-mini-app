@@ -217,6 +217,13 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect(described(c)).toBe('Giảm 25%, 4,8 sao, đã bán hơn 1.200, Giá 39.000đ, giá gốc 52.000đ');
   });
 
+  it('chữ chỉ cho máy đọc (mô tả, "Giá", giá gốc) ẩn bằng lớp sr-only, không bằng style inline: mỗi thẻ ở Trang chủ đỡ ~0,4 KB HTML (tubu-w10-01)', () => {
+    const c = tile(viewOf({ basePrice: 52_000, salePrice: 39_000 }), 'grid');
+    expect(c.querySelectorAll('span.sr-only')).toHaveLength(3);
+    expect(c.querySelector(`#${CSS.escape(link(c).getAttribute('aria-describedby')!)}`)!.className).toBe('sr-only');
+    expect(c.querySelectorAll('[style*="clip"]')).toHaveLength(0);
+  });
+
   it('phần nhìn thấy của giá, meta, nhãn hiệu không bị đọc lại ngoài mô tả (aria-hidden)', () => {
     const c = tile(viewOf({ ratingAvg: 4.8, sold: 1234 }), 'grid');
     for (const name of ['meta', 'price', 'brand']) expect(part(c, name)!.getAttribute('aria-hidden')).toBe('true');

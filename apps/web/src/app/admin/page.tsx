@@ -808,7 +808,7 @@ export default function AdminPage() {
           {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
-          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed?.n ?? 0} initialMissingImage={productsSeed?.view === 'missingImage'} initialUncategorized={productsSeed?.view === 'uncategorized'} />}
+          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed?.n ?? 0} initialMissingImage={productsSeed?.view === 'missingImage'} initialUncategorized={productsSeed?.view === 'uncategorized'} canPairRefill={allowed.has('refillPairs')} />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab key={externalSeed?.n ?? 0} seed={externalSeed} isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}

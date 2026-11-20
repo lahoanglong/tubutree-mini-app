@@ -7,6 +7,7 @@ import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './suppo
 import { expectChipHitArea44 } from './support/hit-area';
 import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
+import { homeInterleaveCard } from '../../../packages/app-core/src/home-layout';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
@@ -773,11 +774,34 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
   };
 
-  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở Ưu đãi rồi tab Mã của tôi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
+  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và đúng thẻ chen của ngày (lẻ khối Cộng đồng, chẵn Chẩn đoán tổ ấm); mở Ưu đãi rồi tab Mã của tôi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
+    // Lưới Gợi ý chỉ chen thẻ khi có từ HOME_INTERLEAVE_AFTER (8) thẻ: mock mặc định của mockHome chỉ có một món nên không thẻ chen nào hiện.
+    api.get('/products', ({ call }) => {
+      if (call.query.get('sort') === 'best_seller_30d') return pageOf(BEST_SELLERS, BEST_SELLERS.length, 1, 12);
+      const grid = Array.from({ length: 10 }, (_, i) => product(31 + i, { name: `Gợi ý lưới ${i + 1}` }));
+      return pageOf(grid, grid.length, 1, 20);
+    });
+    // Thẻ chen của lưới Gợi ý luân phiên theo hạt giống ngày VN của bản dựng trang (`homeInterleaveCard`), không theo đồng hồ của máy chạy test:
+    // đọc đúng hạt giống lưới đã gửi lên /products, nên ca này qua cả ngày chẵn lẫn ngày lẻ, kể cả khi trang dựng sẵn từ hôm trước.
+    const seeds: string[] = [];
+    page.on('request', (r) => {
+      const url = new URL(r.url());
+      const seed = url.searchParams.get('seed');
+      if (seed && url.pathname.endsWith('/products')) seeds.push(seed);
+    });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
+    await expect.poll(() => seeds.length).toBeGreaterThan(0);
+    const community = page.getByRole('region', { name: 'Cộng đồng' });
+    const quiz = page.getByTestId('home-quiz-card');
+    if (homeInterleaveCard(seeds[0]!) === 'community') {
+      await expect(community).toBeVisible();
+      await expect(quiz).toHaveCount(0);
+    } else {
+      await expect(quiz).toBeVisible();
+      await expect(community).toHaveCount(0);
+    }
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
     // Mã của tôi là một tab của Ưu đãi (mặc định mở Săn mã): phiếu sắp hết hạn chỉ hiện sau khi mở tab này.

@@ -118,6 +118,8 @@ function mockAdmin(api: MockApi, tree: AdminCategoryList = baseTree()) {
   api.get('/admin/analytics/retention-daily', []);
   api.get('/admin/product-categories/products', ({ call }) => productsPage(call.query));
   api.get('/admin/pancake/categories', []);
+  // Vai trò ADMIN có quyền ghép Refill nên tab Sản phẩm đọc bảng ghép cho chip "Chưa ghép Refill" (bảng rỗng: chip ghi 0).
+  api.get('/admin/refill-pairs', { enabled: true, maxRatio: 0.2, rows: [], overrides: [], block: [], choices: { bottles: [], refills: [] } });
   return mockTree(api, tree);
 }
 

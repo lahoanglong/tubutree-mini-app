@@ -4,7 +4,6 @@
 import type { CSSProperties } from 'react';
 import { TILE_COPY } from '@tubutree/app-core/commerce/tile-copy';
 import { formatVndShort } from '@/lib/browse-text';
-import { SR_ONLY } from './sr-only';
 
 const POINTS_FORMAT = new Intl.NumberFormat('vi-VN');
 // Giá thiếu hiện "—", không phải "0đ" (0đ nghĩa là miễn phí); khớp formatVnd của Mini App.
@@ -56,13 +55,13 @@ export function PriceTag({ value, compareAt, flash, size = 'md', tone = 'default
       }}
       {...rest}
     >
-      {shown !== null && <span style={SR_ONLY}>{flash ? SPOKEN_FLASH : SPOKEN_PRICE}</span>}
+      {shown !== null && <span className="sr-only">{flash ? SPOKEN_FLASH : SPOKEN_PRICE}</span>}
       <span style={{ fontFamily: 'var(--font-ui)', color, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', ...typeStyleFor(variant) }}>
         {formatVnd(displayValue)}
       </span>
       {showCompare && (
         <>
-          <span style={SR_ONLY}>{SPOKEN_COMPARE}</span>
+          <span className="sr-only">{SPOKEN_COMPARE}</span>
           <span
             style={{
               color: 'var(--color-text-price-compare)',

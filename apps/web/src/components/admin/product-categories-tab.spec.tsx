@@ -54,7 +54,7 @@ const REFILL_PAIRS = {
   choices: { bottles: [], refills: [{ id: 'r1', slug: 'refill-nrc-10l', name: 'Refill Nước rửa chén Fuwa3e 10L', sizeLabel: '10L' }] },
 };
 
-function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; assignBody?: unknown; toast?: boolean; refillPairs?: unknown } = {}) {
+function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; canPairRefill?: boolean; assignBody?: unknown; toast?: boolean; refillPairs?: unknown } = {}) {
   const { toast, refillPairs, ...tabProps } = props;
   let tree = TREE;
   const m = mockFetch({
@@ -98,7 +98,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
   });
 
   it('chip "Chưa ghép Refill (n)" (tubu-w9-03): bật lên thì danh sách chai chờ ghép thay cho danh sách gán danh mục, tắt thì trở lại', async () => {
-    const { container } = setup({ refillPairs: REFILL_PAIRS });
+    const { container } = setup({ refillPairs: REFILL_PAIRS, canPairRefill: true });
     await flush();
     const chip = byText(container, 'button', 'Chưa ghép Refill') as HTMLButtonElement;
     expect(chip.textContent).toBe('Chưa ghép Refill (1)');
@@ -117,9 +117,18 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     expect(container.querySelector('[data-testid="refill-unpaired-row"]')).toBeNull();
   });
 
-  it('không tải được bảng cặp Refill: không có chip "Chưa ghép Refill", phần còn lại của thẻ không đổi', async () => {
-    const { container } = setup();
+  it('vai trò không mở được thẻ Cặp Refill (nhân viên không có nhóm MARKETING): không gọi /admin/refill-pairs (không log 403), không có chip (tubu-w10-01)', async () => {
+    const { m, container } = setup({ refillPairs: REFILL_PAIRS });
     await flush();
+    expect(m.calls.some((c) => c.url.includes('/admin/refill-pairs'))).toBe(false);
+    expect(byText(container, 'button', 'Chưa ghép Refill')).toBeNull();
+    expect(container.querySelector('select[aria-label="Danh mục"]')).not.toBeNull();
+  });
+
+  it('không tải được bảng cặp Refill: không có chip "Chưa ghép Refill", phần còn lại của thẻ không đổi', async () => {
+    const { m, container } = setup({ canPairRefill: true });
+    await flush();
+    expect(m.calls.some((c) => c.url.includes('/admin/refill-pairs'))).toBe(true);
     expect(byText(container, 'button', 'Chưa ghép Refill')).toBeNull();
     expect(container.querySelector('select[aria-label="Danh mục"]')).not.toBeNull();
   });

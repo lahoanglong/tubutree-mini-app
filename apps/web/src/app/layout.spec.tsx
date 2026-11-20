@@ -16,7 +16,8 @@ import RootLayout, { metadata, viewport } from './layout';
 
 // D7 việc 10: quản trị/POS/đối tác có thanh đầu riêng; header bán hàng (giỏ, tìm sản phẩm) chỉ dành cho khách.
 describe('RootLayout — thanh đầu theo khu vực', () => {
-  const src = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
+  // Thanh đầu, nút lùi, thanh đáy nằm trong LayoutShell (một thành phần client), layout.tsx chỉ đưa phần server vào.
+  const src = readFileSync(fileURLToPath(new URL('./layout-shell.tsx', import.meta.url)), 'utf8');
 
   it('SiteHeader nằm trong HideOnPortals, PortalHeader đứng ngay sau và tự ẩn ở trang khách', () => {
     expect(src).toMatch(/<HideOnPortals>\s*<SiteHeader \/>\s*<\/HideOnPortals>\s*<PortalHeader \/>/);
@@ -69,9 +70,16 @@ describe('RootLayout — thứ tự Tab và liên kết bỏ qua', () => {
   });
 
   it('nút Quay lại nổi đứng trước nội dung trang trong DOM', () => {
-    const src = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
+    const src = readFileSync(fileURLToPath(new URL('./layout-shell.tsx', import.meta.url)), 'utf8');
+    expect(src.indexOf('<BackButton')).toBeGreaterThan(-1);
     expect(src.indexOf('<BackButton')).toBeLessThan(src.indexOf('{children}'));
-    expect(src.indexOf('<BackButton')).toBeLessThan(src.indexOf('<SiteFooter />'));
+    expect(src.indexOf('<BackButton')).toBeLessThan(src.indexOf('{footer}'));
+  });
+
+  it('layout server chỉ dựng MỘT thành phần client (LayoutShell): mỗi thành phần client dựng thẳng từ layout thêm ~0,8 KB tham chiếu RSC vào HTML mọi trang (tubu-w10-01)', () => {
+    const src = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
+    const used = [...src.matchAll(/<([A-Z][A-Za-z]*)\b/g)].map((m) => m[1]);
+    expect([...new Set(used)].sort()).toEqual(['LayoutShell', 'SiteFooter', 'Suspense', 'VitalsGate']);
   });
 });
 

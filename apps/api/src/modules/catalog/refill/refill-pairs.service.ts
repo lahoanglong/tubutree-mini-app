@@ -207,25 +207,39 @@ export class RefillPairsService {
    * Lưu thẻ admin: phần nào có trong `input` thì ghi đè khoá cấu hình đó (có lịch sử, ghi người sửa). Ghép tay phải là một chai (không phải
    * gói refill) và một gói refill đang bán, hai slug khác nhau, mỗi chai một cặp (`checkRefillOverrides`). Bảng cặp trong bộ nhớ bỏ ngay; /catalog/refill-pairs công khai còn cache CDN
    * như danh mục.
+   *
+   * Ghép tay đọc, gộp và ghi danh sách đang lưu dưới khoá dòng (`SystemConfigService.update`): hai admin ghép hai chai cùng lúc thì cả hai cặp còn.
+   * Ghép tay lưu trước các phần khác, nên ghép sai (400) thì không phần nào được ghi.
    */
   async adminSave(input: AdminRefillPairsInput, actor: string): Promise<AdminRefillPairs> {
-    if (!this.config) throw new ServiceUnavailableException('Chưa đọc được cấu hình hệ thống.');
-    let overrides: RefillPairOverride[] | undefined;
-    if (input.overrides || input.add || input.remove) {
-      const [products, storedRaw, blockRaw] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_OVERRIDE_KEY), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
-      const stored = parseRefillOverrides(storedRaw);
-      const next = applyRefillOverrideOps(input.overrides ?? stored, { add: input.add, remove: input.remove });
-      const block = input.block ? new Set(input.block.map((s) => s.trim())) : parseRefillBlock(blockRaw);
-      const checked = checkRefillOverrides(next, new Map(products.map((p) => [p.slug, p])), { kept: stored, block });
-      if ('error' in checked) throw new BadRequestException(checked.error);
-      overrides = checked.ok;
+    const config = this.config;
+    if (!config) throw new ServiceUnavailableException('Chưa đọc được cấu hình hệ thống.');
+    try {
+      if (input.overrides || input.add || input.remove) {
+        const [products, blockRaw] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
+        const bySlug = new Map(products.map((p) => [p.slug, p]));
+        const block = input.block ? new Set(input.block.map((s) => s.trim())) : parseRefillBlock(blockRaw);
+        await config.update<RefillPairOverride[]>(
+          REFILL_PAIRS_OVERRIDE_KEY,
+          [],
+          (storedRaw) => {
+            const stored = parseRefillOverrides(storedRaw);
+            const next = applyRefillOverrideOps(input.overrides ?? stored, { add: input.add, remove: input.remove });
+            const checked = checkRefillOverrides(next, bySlug, { kept: stored, block });
+            if ('error' in checked) throw new BadRequestException(checked.error);
+            return checked.ok;
+          },
+          actor,
+        );
+      }
+      if (input.enabled !== undefined) await config.set(REFILL_FIRST_ENABLED_KEY, input.enabled, actor);
+      if (input.block) await config.set(REFILL_PAIRS_BLOCK_KEY, [...new Set(input.block.map((s) => s.trim()).filter(Boolean))], actor);
+    } finally {
+      // Một bước sau lỗi thì các bước trước đã ghi rồi: bảng cặp đang nhớ phải bỏ cả khi lần lưu báo lỗi.
+      this.generation += 1;
+      this.table = null;
+      this.loading = null;
     }
-    if (input.enabled !== undefined) await this.config.set(REFILL_FIRST_ENABLED_KEY, input.enabled, actor);
-    if (overrides) await this.config.set(REFILL_PAIRS_OVERRIDE_KEY, overrides, actor);
-    if (input.block) await this.config.set(REFILL_PAIRS_BLOCK_KEY, [...new Set(input.block.map((s) => s.trim()).filter(Boolean))], actor);
-    this.generation += 1;
-    this.table = null;
-    this.loading = null;
     return this.adminOverview();
   }
 
