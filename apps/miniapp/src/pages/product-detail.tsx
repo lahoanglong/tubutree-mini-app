@@ -118,6 +118,9 @@ import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpFeed } from '../components/product/pdp-feed';
 import { PdpCompare } from '../components/product/pdp-compare';
 import { PdpRebuyRow } from '../components/product/pdp-rebuy';
+import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
+import { pdpRefillPill, refillPairQuery } from '@tubutree/app-core/refill/refill-saving';
+import { coreHttp } from '../services/core-http';
 import { PdpDescription, PdpIngredients } from '../components/product/pdp-info-blocks';
 import { ListRow } from '../components/ui/list-row';
 
@@ -272,6 +275,10 @@ export default function ProductDetailPage() {
     retry: false,
     staleTime: 60_000,
   });
+  // Cặp Refill của chai này (liên kết dưới dòng "Mua lại"): chỉ hỏi khi cờ bật và khách đã mua đúng sản phẩm này.
+  const pdpProductId = product.data?.id ?? '';
+  const boughtThis = Array.isArray(purchasedQ.data?.items) && purchasedQ.data.items.some((i) => i.productId === pdpProductId);
+  const refillPairQ = useQuery({ ...refillPairQuery(coreHttp, pdpProductId), enabled: refillFirstOn(config) && status === 'authenticated' && boughtThis });
   // Câu chuyện chỉ khi có cấu hình riêng đang bật; khối không lặp ảnh đầu thư viện ngay phía trên. Ghi nhớ theo dữ liệu để khối không dựng lại cảnh mỗi lần trang vẽ.
   const storyProduct = useMemo(() => {
     const d = product.data;
@@ -674,6 +681,8 @@ export default function ProductDetailPage() {
   const purchasedItems = purchasedQ.data?.items;
   const rebuy = status === 'authenticated' && !unavailable ? pdpRebuy(Array.isArray(purchasedItems) ? purchasedItems : null, p.id, variations) : null;
   const rebuyVariation = rebuy ? variations.find((v) => v.id === rebuy.variationId) : undefined;
+  const bottleOnFlash = runningFlash(flashQ.data).some((f) => variations.some((v) => v.id === f.variationId));
+  const refillPill = rebuy ? pdpRefillPill({ name: p.name, price: p.salePrice ?? p.basePrice }, refillPairQ.data?.[p.id], { flash: bottleOnFlash }) : null;
   // Một chạm thêm đúng phân loại lần trước, số lượng 1, qua cùng khoá ghi giỏ và cùng phản hồi "Đã thêm" của nút Thêm vào giỏ. Không đổi phân loại đang xem.
   const handleRebuy = (variation: VariationDetail) => {
     haptic('light');
@@ -1019,6 +1028,8 @@ export default function ProductDetailPage() {
           busy={addMutation.isPending && addMutation.variables?.source === 'rebuy'}
           blocked={cartWriting}
           onRebuy={() => handleRebuy(rebuyVariation)}
+          refill={refillPill}
+          onRefill={(refillSlug) => navigate(`/product/${encodeURIComponent(refillSlug)}`)}
         />
       )}
 

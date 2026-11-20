@@ -73,7 +73,7 @@ test.describe('Giỏ Mini: đổi dòng chai sang gói Refill', () => {
       await page.setViewportSize(vp);
       await page.goto('/cart');
 
-      await expect(link(page)).toHaveText('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ)', { timeout: 15_000 });
+      await expect(link(page)).toHaveText('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Rẻ hơn 45%/100ml', { timeout: 15_000 });
       await expect(link(page)).toHaveCount(1);
       expect(api.callsTo('GET', '/catalog/refill-pairs/mine')[0]?.query.get('ids')).toBe('p-bottle');
       const box = (await link(page).boundingBox())!;

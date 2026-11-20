@@ -22,6 +22,7 @@ import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/ca
 import { FLASH_SLOTS_KEY, flashSlotsProblem } from '../flash-sale/flash-slots';
 import { WAREHOUSE_SCHEDULE_KEY, warehouseScheduleProblem } from './shipping-eta';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
+import { REFILL_PAIRS_BLOCK_KEY, REFILL_PAIRS_OVERRIDE_KEY, refillBlockProblem, refillOverridesProblem } from '../catalog/refill/refill-pairs';
 import { PUBLIC_VISIBILITY_CONFIG_KEYS } from '../storefront/public-visibility';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
@@ -486,6 +487,9 @@ export class SystemConfigService {
     [GIFT_TRIAL_OPTIONS_KEY]: giftTrialOptionsProblem,
     // Lịch kho của ngày nhận dự kiến: phía đọc lặng lẽ về lịch chuẩn khi trường sai, nên chặn ngay lúc lưu.
     [WAREHOUSE_SCHEDULE_KEY]: warehouseScheduleProblem,
+    // Phía đọc bỏ qua phần tử hỏng, nên sửa thô sai dạng sẽ lặng lẽ mất cặp: chặn ngay lúc lưu, kể cả cặp tự ghép hay vòng.
+    [REFILL_PAIRS_OVERRIDE_KEY]: refillOverridesProblem,
+    [REFILL_PAIRS_BLOCK_KEY]: refillBlockProblem,
     ...WASTE_JSON_RULES,
     ...MSS_JSON_RULES,
   };

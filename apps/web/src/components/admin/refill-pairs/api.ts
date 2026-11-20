@@ -1,7 +1,7 @@
 import { apiFetch } from '@/lib/client-api';
 
 /** Kiểu khớp `apps/api/src/modules/catalog/refill/refill-pairs.service.ts` (`AdminRefillPairs`). */
-export type RefillPairStatus = 'auto' | 'manual' | 'size' | 'ambiguous' | 'blocked';
+export type RefillPairStatus = 'auto' | 'manual' | 'size' | 'ambiguous' | 'near' | 'blocked';
 
 export interface AdminRefillProduct {
   id: string;
@@ -35,6 +35,10 @@ export interface AdminRefillPairs {
 export interface SaveRefillPairsInput {
   enabled?: boolean;
   overrides?: RefillPairOverride[];
+  /** Ghép tay một chai; máy chủ gộp vào danh sách đang lưu (không ghi đè cặp trang này chưa thấy). */
+  add?: RefillPairOverride;
+  /** Bỏ ghép tay một chai (slug chai) trên danh sách đang lưu. */
+  remove?: string;
   block?: string[];
 }
 

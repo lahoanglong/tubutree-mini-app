@@ -14,6 +14,9 @@ export interface RefillCartLine {
   total: number;
   isFlash?: boolean;
   fulfiller?: { kind: string } | null;
+  /** Tên sản phẩm và đơn giá dòng: đủ thì liên kết đổi có huy hiệu "Rẻ hơn …/100ml". */
+  productName?: string;
+  unitPrice?: number;
 }
 
 /** Giỏ máy chủ trả sau mỗi lệnh (chỉ cần dòng để tìm dòng refill khi hoàn tác). */
@@ -37,6 +40,8 @@ export interface RefillSwapView {
   needsConfirm: boolean;
   /** Các mốc khách đang đạt sẽ mất nếu đổi (Miễn phí giao hàng, quà 0đ, bậc Hộp Xanh), nối bằng ". "; nói trước, không âm thầm. */
   warning: string | null;
+  /** Huy hiệu "Rẻ hơn 34%/100ml" (gói Refill so với đơn giá dòng chai); null khi không đọc được lượng hay không rẻ hơn. */
+  saving: string | null;
 }
 
 /**
@@ -56,6 +61,11 @@ export interface RefillSwapInput {
   milestones: RefillMilestones;
   /** Dòng đang được chọn để thanh toán (mặc định: mọi dòng). Dòng bỏ chọn không góp vào mốc. */
   isSelected?: (lineId: string) => boolean;
+  /**
+   * Huy hiệu "Rẻ hơn …/100ml" (`refillSavingBadge` của `./refill-saving`). Truyền vào thay vì import: bộ đọc dung tích nặng vài KB, web
+   * nạp lười để không vào JS tải đầu của giỏ. Vắng thì liên kết không có huy hiệu.
+   */
+  saving?: (bottle: { name: string; price: number }, offer: RefillOfferDTO) => string | null;
 }
 
 const isTubu = (l: RefillCartLine) => !l.fulfiller || l.fulfiller.kind === 'TUBU';
@@ -137,6 +147,7 @@ export function refillSwapOffers(input: RefillSwapInput): Map<string, RefillSwap
       delta,
       needsConfirm: delta > 0 || warning !== null,
       warning,
+      saving: input.saving && line.productName && line.unitPrice ? input.saving({ name: line.productName, price: line.unitPrice }, offer) : null,
     });
   }
   return out;
@@ -146,6 +157,7 @@ export function refillSwapOffers(input: RefillSwapInput): Map<string, RefillSwap
 export function refillConfirmText(view: RefillSwapView): { title: string; body: string; confirm: string; cancel: string } {
   const parts = [fillCopy('refill.confirmBody', { name: view.refill.name, price: vnd(view.refill.price) })];
   if (view.delta > 0) parts.push(fillCopy('refill.confirmUp', { amount: vnd(view.delta) }));
+  if (view.saving) parts.push(`${view.saving}.`);
   if (view.warning) parts.push(`${view.warning}.`);
   return { title: fillCopy('refill.confirmTitle'), body: parts.join(' '), confirm: fillCopy('refill.confirmCta'), cancel: fillCopy('cart.comboRemoveKeep') };
 }

@@ -1,6 +1,9 @@
 import type { Tone } from '@/lib/recycling';
 import type { AdminRefillPairRow, AdminRefillPairs, RefillPairStatus, SaveRefillPairsInput } from './api';
 
+/** Khoá truy vấn bảng cặp, dùng chung thẻ "Cặp Refill" và chip "Chưa ghép Refill" của thẻ Sản phẩm. */
+export const REFILL_PAIRS_KEY = ['admin-refill-pairs'] as const;
+
 export type RefillPairFilter = 'all' | 'live' | 'waiting' | 'off';
 
 export const FILTERS: { key: RefillPairFilter; label: string }[] = [
@@ -11,9 +14,9 @@ export const FILTERS: { key: RefillPairFilter; label: string }[] = [
 ];
 
 const IN_FILTER: Record<RefillPairFilter, readonly RefillPairStatus[]> = {
-  all: ['auto', 'manual', 'size', 'ambiguous', 'blocked'],
+  all: ['auto', 'manual', 'size', 'ambiguous', 'near', 'blocked'],
   live: ['auto', 'manual'],
-  waiting: ['size', 'ambiguous'],
+  waiting: ['size', 'ambiguous', 'near'],
   off: ['blocked'],
 };
 
@@ -34,6 +37,8 @@ export function statusOf(row: AdminRefillPairRow, maxRatio: number): { text: str
       return { text: row.ratio == null ? 'Không đọc được dung tích: chờ ghép tay' : row.ratio > maxRatio ? `Gói lớn hơn ${maxRatio} lần chai: chờ ghép tay` : 'Gói không lớn hơn chai: chờ ghép tay', tone: 'warning' };
     case 'ambiguous':
       return { text: `${row.candidates} gói Refill cùng công thức: chọn ở Ghép tay`, tone: 'warning' };
+    case 'near':
+      return { text: 'Tên gần giống gói Refill: xác nhận ghép tay', tone: 'warning' };
     case 'blocked':
       return { text: 'Đã tắt', tone: 'neutral' };
   }
@@ -45,7 +50,7 @@ export type RowAction = { label: string; done: string; input: (data: AdminRefill
 const without = <T>(xs: readonly T[], drop: (x: T) => boolean) => xs.filter((x) => !drop(x));
 
 /**
- * Việc một chạm của từng dòng: tắt cặp tự ghép (chặn chai), bỏ ghép tay, ghép tay đúng cặp đang gợi ý (lệch lượng), bật lại chai đã tắt.
+ * Việc một chạm của từng dòng: tắt cặp tự ghép (chặn chai), bỏ ghép tay, ghép tay đúng cặp đang gợi ý (lệch lượng hay tên gần giống), bật lại chai đã tắt.
  * Dòng nhiều gói Refill không có nút: admin chọn gói ở ô Ghép tay.
  */
 export function rowAction(row: AdminRefillPairRow): RowAction {
@@ -54,9 +59,10 @@ export function rowAction(row: AdminRefillPairRow): RowAction {
     case 'auto':
       return { label: 'Tắt cặp', done: 'Đã tắt cặp', input: (d) => ({ block: [...d.block.map((b) => b.slug), slug] }) };
     case 'manual':
-      return { label: 'Bỏ ghép tay', done: 'Đã bỏ ghép tay', input: (d) => ({ overrides: without(d.overrides, (o) => o.bottleSlug === slug) }) };
+      return { label: 'Bỏ ghép tay', done: 'Đã bỏ ghép tay', input: () => ({ remove: slug }) };
     case 'size':
-      return row.refill ? { label: 'Ghép tay cặp này', done: 'Đã ghép tay', input: (d) => addOverride(d, slug, row.refill!.slug) } : null;
+    case 'near':
+      return row.refill ? { label: 'Ghép tay cặp này', done: 'Đã ghép tay', input: () => addOverride(slug, row.refill!.slug) } : null;
     case 'blocked':
       return { label: 'Bật lại', done: 'Đã bật lại', input: (d) => ({ block: without(d.block.map((b) => b.slug), (s) => s === slug) }) };
     default:
@@ -64,10 +70,11 @@ export function rowAction(row: AdminRefillPairRow): RowAction {
   }
 }
 
-/** Ghép tay: mỗi chai một cặp, cặp mới thay cặp cũ của cùng chai. */
-export const addOverride = (d: AdminRefillPairs, bottleSlug: string, refillSlug: string): SaveRefillPairsInput => ({
-  overrides: [...without(d.overrides, (o) => o.bottleSlug === bottleSlug), { bottleSlug, refillSlug }],
-});
+/**
+ * Ghép tay: mỗi chai một cặp, cặp mới thay cặp cũ của cùng chai. Gửi thao tác, không gửi cả danh sách: máy chủ gộp vào danh sách đang lưu,
+ * nên trang mở từ trước không xoá mất cặp người khác (hay migration) vừa thêm.
+ */
+export const addOverride = (bottleSlug: string, refillSlug: string): SaveRefillPairsInput => ({ add: { bottleSlug, refillSlug } });
 
 /** Slug đang chặn mà không phải chai của dòng nào (thường là gói Refill bị chặn): hiện riêng để bỏ chặn. */
 export function looseBlocks(d: AdminRefillPairs): { slug: string; name: string | null }[] {

@@ -37,14 +37,32 @@ const TREE = {
 };
 const INBOX = { generatedAt: '2026-11-01T03:00:00.000Z', items: [{ key: 'productsUncategorized', count: 2 }, { key: 'productsMissingImage', count: 7 }] };
 
-function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; assignBody?: unknown; toast?: boolean } = {}) {
-  const { toast, ...tabProps } = props;
+const REFILL_PAIRS = {
+  enabled: true,
+  maxRatio: 3,
+  rows: [
+    {
+      bottle: { id: 'b1', slug: 'nrc-500ml', name: 'Nước rửa chén Fuwa3e 500ml', sizeLabel: '500ml' },
+      refill: { id: 'r1', slug: 'refill-nrc-10l', name: 'Refill Nước rửa chén Fuwa3e 10L', sizeLabel: '10L' },
+      status: 'size',
+      candidates: 1,
+      ratio: 20,
+    },
+  ],
+  overrides: [],
+  block: [],
+  choices: { bottles: [], refills: [{ id: 'r1', slug: 'refill-nrc-10l', name: 'Refill Nước rửa chén Fuwa3e 10L', sizeLabel: '10L' }] },
+};
+
+function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; assignBody?: unknown; toast?: boolean; refillPairs?: unknown } = {}) {
+  const { toast, refillPairs, ...tabProps } = props;
   let tree = TREE;
   const m = mockFetch({
     '/admin/product-categories/assign': { body: props.assignBody ?? { requested: 2, changed: 1, unchanged: 1, category: { id: 'c2', name: 'Nhà bếp' } } },
     '/admin/product-categories/products': { body: PAGE },
     '/admin/pancake/categories': { body: [{ id: '865301', name: 'Bếp', path: 'Nhà > Bếp', mappedTo: 'c2' }] },
     '/admin/ops/inbox': { body: INBOX },
+    ...(refillPairs ? { '/admin/refill-pairs': { body: refillPairs } } : {}),
     '/admin/categories/order': (init) => {
       const b = JSON.parse(String(init?.body)) as { orderedIds: string[] };
       tree = { ...tree, items: tree.items.map((c) => (b.orderedIds.includes(c.id) ? { ...c, sortOrder: b.orderedIds.indexOf(c.id) } : c)) };
@@ -77,6 +95,33 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     const filtered = m.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!;
     expect(filtered.url).toContain('uncategorized=1');
     expect(filtered.url).toContain('onSale=1');
+  });
+
+  it('chip "Chưa ghép Refill (n)" (tubu-w9-03): bật lên thì danh sách chai chờ ghép thay cho danh sách gán danh mục, tắt thì trở lại', async () => {
+    const { container } = setup({ refillPairs: REFILL_PAIRS });
+    await flush();
+    const chip = byText(container, 'button', 'Chưa ghép Refill') as HTMLButtonElement;
+    expect(chip.textContent).toBe('Chưa ghép Refill (1)');
+    expect(container.querySelector('select[aria-label="Danh mục"]')).not.toBeNull();
+    click(chip);
+    await flush();
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('select[aria-label="Danh mục"]')).toBeNull();
+    expect(container.querySelector('input[aria-label="Chọn Nước rửa chén"]')).toBeNull();
+    expect(container.textContent).not.toContain('sản phẩm khớp bộ lọc');
+    expect(container.querySelectorAll('[data-testid="refill-unpaired-row"]')).toHaveLength(1);
+    expect((container.querySelector('select[aria-label="Gói Refill cho Nước rửa chén Fuwa3e 500ml"]') as HTMLSelectElement).value).toBe('refill-nrc-10l');
+    click(chip);
+    await flush();
+    expect(container.querySelector('select[aria-label="Danh mục"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="refill-unpaired-row"]')).toBeNull();
+  });
+
+  it('không tải được bảng cặp Refill: không có chip "Chưa ghép Refill", phần còn lại của thẻ không đổi', async () => {
+    const { container } = setup();
+    await flush();
+    expect(byText(container, 'button', 'Chưa ghép Refill')).toBeNull();
+    expect(container.querySelector('select[aria-label="Danh mục"]')).not.toBeNull();
   });
 
   it('ô tích chọn từng sản phẩm nằm trong nhãn có vùng chạm 44px trên điện thoại, nút xem nhóm hàng Pancake cũng cao 44px', async () => {

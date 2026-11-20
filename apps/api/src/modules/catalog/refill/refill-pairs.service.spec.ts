@@ -171,11 +171,42 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
     const { svc, config } = build(true);
     const R = 'refill-nuoc-rua-chen-fuwa3e-10l';
     await expect(svc.adminSave({ overrides: [{ bottleSlug: 'khong-co', refillSlug: R }] }, 'a')).rejects.toThrow('Không có sản phẩm đang bán "khong-co"');
-    await expect(svc.adminSave({ overrides: [{ bottleSlug: R, refillSlug: R }] }, 'a')).rejects.toThrow('là gói Refill');
+    await expect(svc.adminSave({ overrides: [{ bottleSlug: R, refillSlug: R }] }, 'a')).rejects.toThrow('Chai và gói Refill phải là hai sản phẩm khác nhau.');
+    await expect(svc.adminSave({ overrides: [{ bottleSlug: R, refillSlug: 'refill-khac' }] }, 'a')).rejects.toThrow('Không có sản phẩm đang bán "refill-khac"');
     await expect(svc.adminSave({ overrides: [{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'xit-thom-fuwa3e-300ml' }] }, 'a')).rejects.toThrow('không phải gói Refill');
     await expect(
       svc.adminSave({ enabled: true, overrides: [{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }, { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }] }, 'a'),
     ).rejects.toThrow('hai cặp');
+    expect(config.set).not.toHaveBeenCalled();
+  });
+
+  it('add/remove gộp vào danh sách ĐANG LƯU: trang mở từ trước (chưa thấy cặp migration hay admin khác vừa thêm) không xoá mất các cặp đó', async () => {
+    const R = 'refill-nuoc-rua-chen-fuwa3e-10l';
+    const stored = [
+      { bottleSlug: 'chai-da-ngung-ban', refillSlug: 'refill-da-ngung-ban' },
+      { bottleSlug: 'nuoc-rua-chen-fuwa3e-3-8l', refillSlug: R },
+    ];
+    const { svc, config } = build(true, { [REFILL_PAIRS_OVERRIDE_KEY]: stored });
+    await svc.adminSave({ add: { bottleSlug: ' nuoc-rua-chen-fuwa3e-500ml ', refillSlug: R } }, 'a');
+    expect(config.set).toHaveBeenLastCalledWith(REFILL_PAIRS_OVERRIDE_KEY, [...stored, { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R }], 'a');
+    await svc.adminSave({ remove: 'nuoc-rua-chen-fuwa3e-500ml' }, 'a');
+    expect(config.set).toHaveBeenLastCalledWith(REFILL_PAIRS_OVERRIDE_KEY, stored, 'a');
+  });
+
+  it('cặp mới khác thương hiệu hay ghép vào gói đang tắt: 400, không ghi gì', async () => {
+    const R = 'refill-nuoc-rua-chen-fuwa3e-10l';
+    const { svc, prisma, config } = build(true, { [REFILL_PAIRS_BLOCK_KEY]: [R] });
+    prisma.product.findMany.mockResolvedValue([...PRODUCTS, { id: 'pine', slug: 'refill-nuoc-rua-chen-pineboo-5l', name: 'Refill Nước rửa chén Pineboo 5L', brand: 'Pineboo', isCombo: false }]);
+    await expect(svc.adminSave({ add: { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'refill-nuoc-rua-chen-pineboo-5l' } }, 'a')).rejects.toThrow('khác thương hiệu');
+    await expect(svc.adminSave({ add: { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: R } }, 'a')).rejects.toThrow('đang tắt ở thẻ Cặp Refill');
+    expect(config.set).not.toHaveBeenCalled();
+  });
+
+  it('ghép tay vòng (chai A → chai B, chai B → chai A): 400, không ghi gì', async () => {
+    const { svc, config } = build(true);
+    await expect(
+      svc.adminSave({ overrides: [{ bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'nuoc-rua-chen-fuwa3e-3-8l' }, { bottleSlug: 'nuoc-rua-chen-fuwa3e-3-8l', refillSlug: 'nuoc-rua-chen-fuwa3e-500ml' }] }, 'a'),
+    ).rejects.toThrow('"Nước rửa chén Fuwa3e 3,8L" không phải gói Refill');
     expect(config.set).not.toHaveBeenCalled();
   });
 });

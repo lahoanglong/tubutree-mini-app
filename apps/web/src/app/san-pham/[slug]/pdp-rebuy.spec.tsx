@@ -93,3 +93,33 @@ describe('PdpRebuyRow', () => {
     expect(c.querySelector('[data-pdp-block="rebuy"]')).toBeNull();
   });
 });
+
+describe('PdpRebuyRow: dải gói Refill của chai đã ghép (tubu-w9-03)', () => {
+  const REFILL = { slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244', label: 'Đổi sang túi Refill 10L', badge: 'Rẻ hơn 34%/100ml', spoken: 'Đổi sang túi Refill 10L, rẻ hơn 34% mỗi 100ml' };
+
+  it('khách đã nhận chai: liên kết mở trang gói Refill, huy hiệu rẻ hơn mỗi 100ml, tên đọc bắt đầu bằng chữ nhìn thấy, vùng chạm 44px', async () => {
+    const c = await mount({ refill: REFILL });
+    const link = c.querySelector<HTMLAnchorElement>('[data-testid="pdp-refill"]')!;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('href')).toBe('/san-pham/refill-nuoc-rua-chen-fuwa3e-10l-69f244');
+    expect(link.textContent).toBe('Đổi sang túi Refill 10LRẻ hơn 34%/100ml');
+    expect(link.getAttribute('aria-label')?.startsWith(REFILL.label)).toBe(true);
+    expect(link.className).toContain('min-h-11');
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+  });
+
+  it('không đọc được mức rẻ hơn: chỉ nhãn đổi, không huy hiệu', async () => {
+    const c = await mount({ refill: { ...REFILL, badge: null, spoken: REFILL.label } });
+    expect(c.querySelector('[data-testid="pdp-refill"]')!.textContent).toBe('Đổi sang túi Refill 10L');
+  });
+
+  it.each([
+    ['khách chưa đăng nhập', () => (mocks.phase = 'guest')],
+    ['chưa nhận chai này', () => (items = [bought({ productId: 'p9' })])],
+  ])('%s: không có dải Refill dù chai đã ghép', async (_name, arrange) => {
+    arrange();
+    const c = await mount({ refill: REFILL });
+    expect(c.querySelector('[data-testid="pdp-refill"]')).toBeNull();
+  });
+});
