@@ -41,6 +41,7 @@ import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-confi
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import { findOverdueCancelledIds, latestCancellations, orderGuestSource } from './admin-order-ops';
 import { pendingPaymentDeadlines, readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
+import { paymentUnlinkedHoldOverWhere } from '../orders/pending-payment-hold';
 import {
   ADMIN_SEARCH_USER_CAP,
   BANK_TRANSFER_TO_CONFIRM_WHERE,
@@ -1224,8 +1225,8 @@ export class AdminService {
 
   /**
    * Số KPI đầu tab Đơn hàng. Mỗi ô là số dòng danh sách hiện ra khi bấm ô đó với bộ lọc đang chọn: bỏ `status` và `queue` (ô tự đặt), ô
-   * "vãng lai" bỏ cả bộ lọc vãng lai. `bankTransferOverdue` là phần của `bankTransferPending` đã qua hạn thanh toán ghi cho khách mà chưa
-   * bị huỷ (cron chạy mỗi 10 phút, đơn có khoản chưa gắn được giữ thêm, đơn đã bàn giao thôi tự huỷ).
+   * "vãng lai" bỏ cả bộ lọc vãng lai. `bankTransferOverdue` là phần của `bankTransferPending` mà cron tự huỷ sẽ huỷ ở lượt tới: đã qua hạn
+   * thanh toán ghi cho khách, không thôi tự huỷ (đã bàn giao), không còn trong thời gian giữ vì khoản chưa gắn được (cùng điều kiện với cron).
    */
   async orderOpsCounts(
     f: AdminOrderFilterInput,
@@ -1246,8 +1247,11 @@ export class AdminService {
       this.prisma.order.count({ where: noGuest }),
       this.prisma.order.count({ where: { AND: [noGuest, { user: { phone: null, zaloId: { startsWith: 'guest_' } } }] } }),
       this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE] } }),
-      // Đơn đã thôi tự huỷ (autoCancelBlockedAt) không có hạn CK trên dòng đơn (pendingPaymentDeadline trả null): không tính là quá hạn.
-      this.prisma.order.count({ where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: cutoff }, autoCancelBlockedAt: null }] } }),
+      // Đơn đã thôi tự huỷ (autoCancelBlockedAt) không có hạn CK trên dòng đơn (pendingPaymentDeadline trả null): không tính là quá hạn. Đơn đang
+      // giữ vì Pancake báo một khoản chưa gắn được (Kế toán đối chiếu) cũng chưa quá hạn: cron chưa huỷ, nhân viên thấy "quá hạn" dễ huỷ tay đơn đã trả.
+      this.prisma.order.count({
+        where: { AND: [withGuest, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: cutoff }, autoCancelBlockedAt: null }, paymentUnlinkedHoldOverWhere(now)] },
+      }),
       this.prisma.order.count({ where: overdueWhere }),
     ]);
     return { guestWeb, guestWebUnmerged, bankTransferPending, bankTransferOverdue, overdueCancelled, ttlHours };

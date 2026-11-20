@@ -197,7 +197,17 @@ describe('AdminService.orderOpsCounts — KPI đầu tab Đơn hàng', () => {
     expect(where(0)).toEqual(GUEST_WEB_ORDER_WHERE);
     expect(where(1)).toEqual({ AND: [GUEST_WEB_ORDER_WHERE, { user: { phone: null, zaloId: { startsWith: 'guest_' } } }] });
     expect(where(2)).toEqual({ AND: [{}, BANK_TRANSFER_TO_CONFIRM_WHERE] });
-    expect(where(3)).toEqual({ AND: [{}, BANK_TRANSFER_TO_CONFIRM_WHERE, { createdAt: { lt: new Date('2026-11-18T12:00:00Z') }, autoCancelBlockedAt: null }] });
+    // Cùng điều kiện với cron tự huỷ: đơn còn trong 48 giờ giữ khoản Pancake đã báo mà chưa gắn được (Kế toán đang đối chiếu) chưa quá hạn,
+    // nếu không nhân viên thấy "quá hạn" có thể huỷ tay một đơn khách đã trả tiền.
+    const hold = new Date('2026-11-17T12:00:00Z');
+    expect(where(3)).toEqual({
+      AND: [
+        {},
+        BANK_TRANSFER_TO_CONFIRM_WHERE,
+        { createdAt: { lt: new Date('2026-11-18T12:00:00Z') }, autoCancelBlockedAt: null },
+        { OR: [{ paymentUnlinkedAt: null }, { paymentUnlinkedFirstAt: { lt: hold } }, { paymentUnlinkedFirstAt: null, paymentUnlinkedAt: { lt: hold } }] },
+      ],
+    });
     expect(where(4)).toEqual({ AND: [BANK_TRANSFER_OVERDUE_CANCELLED_WHERE, { id: { in: ['c1'] } }] });
     expect($queryRaw).toHaveBeenCalledTimes(1);
   });

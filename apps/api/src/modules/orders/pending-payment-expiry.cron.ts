@@ -8,6 +8,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { pendingPaymentCancelOpts } from './pending-payment-cancel';
+import { paymentUnlinkedHoldOverWhere } from './pending-payment-hold';
 
 export {
   DEALER_PENDING_PAYMENT_TTL_KEY,
@@ -21,11 +22,7 @@ export {
 } from './pending-payment-ttl';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
-/**
- * Đơn có cờ "Pancake báo đã thanh toán, chờ đối chiếu" được hoãn tự huỷ chừng này giờ kể từ khoản đầu tiên (paymentUnlinkedFirstAt): đủ để Kế toán đối
- * chiếu sao kê. Quá hạn mà khách không trả thì cron huỷ như thường; cờ còn nguyên nên đơn sang hàng đợi của ADMIN (đơn đã huỷ).
- */
-export const PAYMENT_UNLINKED_HOLD_HOURS = 48;
+export { PAYMENT_UNLINKED_HOLD_HOURS } from './pending-payment-hold';
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
 
@@ -85,7 +82,6 @@ export class PendingPaymentExpiryCron {
     ]);
     const cutoff = new Date(now.getTime() - ttlHours * 3_600_000);
     const dealerCutoff = new Date(now.getTime() - dealerTtlHours * 3_600_000);
-    const unlinkedHoldCutoff = new Date(now.getTime() - PAYMENT_UNLINKED_HOLD_HOURS * 3_600_000);
     const stale = await this.prisma.order.findMany({
       where: {
         status: 'PENDING_PAYMENT',
@@ -94,8 +90,7 @@ export class PendingPaymentExpiryCron {
         // Đã bàn giao vận chuyển (D1): lần thử đầu đã nhắc người xử lý, thử lại mỗi lượt chỉ lặp lỗi và nhắc lại (R4-SYNC-5).
         autoCancelBlockedAt: null,
         // Pancake báo đã thanh toán mà đơn chưa gắn đúng đơn Pancake: để Kế toán đối chiếu sao kê trong PAYMENT_UNLINKED_HOLD_HOURS, quá hạn thì huỷ như thường.
-        // Dòng chưa có mốc đầu (cờ đặt trước khi có cột) thì tính theo paymentUnlinkedAt.
-        AND: [{ OR: [{ paymentUnlinkedAt: null }, { paymentUnlinkedFirstAt: { lt: unlinkedHoldCutoff } }, { paymentUnlinkedFirstAt: null, paymentUnlinkedAt: { lt: unlinkedHoldCutoff } }] }],
+        AND: [paymentUnlinkedHoldOverWhere(now)],
         OR: [
           { type: 'RETAIL', createdAt: { lt: cutoff } },
           { type: 'DEALER', createdAt: { lt: dealerCutoff } },
