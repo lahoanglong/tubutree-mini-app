@@ -535,6 +535,7 @@ function makeGuestMergeFixture(opts: {
   }
   for (const table of ['pointsTransaction', 'coinTransaction'] as const) {
     (base[table] as Record<string, unknown>).findMany = jest.fn(async () => []);
+    (base[table] as Record<string, unknown>).findFirst = jest.fn(async () => null);
   }
   (base.gameProfile as Record<string, unknown>).count = jest.fn(async () => 0);
   (base.gameProfile as Record<string, unknown>).findUnique = jest.fn(async () => null);

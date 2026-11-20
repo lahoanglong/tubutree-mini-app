@@ -120,6 +120,28 @@ describe('Gộp phiên khách tự mời thu hồi thưởng đơn đầu (real 
     expect(debt).toEqual([{ reason: `REFERRAL_FIRST_ORDER_DEBT:REFEREE:${guest.id}:60`, delta: 0 }]);
   });
 
+  it('hai phiên khách của T trên một vòng (G mời r, r mời T): gộp G cắt r và thu phần người mời; gộp r sau đó thu nốt phần r giữ', async () => {
+    const g = await createUser(prisma, { zaloId: `guest_dev_${randCode(10)}`, phone: phone() });
+    const { guest: r } = await rewardedGuest(g.id);
+    const target = await createUser(prisma, { zaloId: `zalo_it_${randCode(10)}`, referredById: r.id });
+
+    await merge(g.id, target);
+    // r nằm trên vòng T -> r -> (G = T): liên kết của r bị cắt, phần người mời (đã theo sổ G sang T) bị thu; r còn là phiên riêng nên giữ phần mình.
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: r.id } })).referredById).toBeNull();
+    expect(await balanceOf(target.id)).toBe(0);
+    expect(await balanceOf(r.id)).toBe(POINTS);
+
+    await merge(r.id, target);
+
+    expect(await balanceOf(target.id)).toBe(0);
+    expect(
+      (await firstOrderRows(target.id)).filter((x) => x.reason.startsWith('REFERRAL_FIRST_ORDER_REVOKE:')).map((x) => [x.reason, x.delta, x.refId]),
+    ).toEqual([
+      [`REFERRAL_FIRST_ORDER_REVOKE:REFEREE:${r.id}`, -POINTS, `MERGE:${r.id}`],
+      [`REFERRAL_FIRST_ORDER_REVOKE:REFERRER:${r.id}`, -POINTS, `MERGE:${g.id}`],
+    ]);
+  });
+
   it('phiên khách do người khác (R) mời gộp vào T: không cắt liên kết, R và T giữ thưởng đơn đầu', async () => {
     const referrer = await createUser(prisma, { zaloId: `zalo_it_${randCode(10)}` });
     const target = await createUser(prisma, { zaloId: `zalo_it_${randCode(10)}` });
