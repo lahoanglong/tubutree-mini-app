@@ -2,7 +2,6 @@
 
 // Nguồn: apps/miniapp/src/components/reorder/subscription-suggestion.tsx (cùng chữ, cùng test-id, cùng sự kiện).
 import { useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarClock, ChevronRight } from 'lucide-react';
 import { getSubscriptionSuggestions } from '@tubutree/app-core/api/subscriptions';
@@ -17,8 +16,7 @@ import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { trackWebEvent } from '@/lib/analytics';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
-
-const SubscribeSheet = dynamic(() => import('@/app/san-pham/[slug]/subscribe-sheet').then((m) => m.SubscribeSheet), { ssr: false });
+import { SubscribeSheetLazy as SubscribeSheet } from './reorder-sheets-lazy';
 
 const NOTICE_MS = 6000;
 

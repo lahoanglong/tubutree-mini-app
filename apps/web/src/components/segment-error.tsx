@@ -2,10 +2,10 @@
 
 import { startTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle } from 'lucide-react';
 import { useChunkRecovery } from '@/lib/use-chunk-recovery';
-import { ui } from '@/lib/guest-ui';
+import { BTN_PRIMARY } from '@/lib/btn-primary';
 import { SupportHotline } from '@/components/support-hotline';
+import { TriangleAlertIcon } from '@/components/triangle-alert-icon';
 
 /**
  * Lỗi của MỘT nhóm trang (thanh toán, tài khoản, chi tiết sản phẩm): nằm trong khung chung nên đầu trang, thanh đáy và menu vẫn còn,
@@ -29,11 +29,11 @@ export function SegmentError({ error, reset, message }: { error: Error & { diges
   return (
     <main className="mx-auto max-w-3xl px-4 py-16 text-center">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-warning-bg text-warning-fg shadow-card">
-        <AlertTriangle className="h-8 w-8" aria-hidden="true" />
+        <TriangleAlertIcon />
       </div>
       <h1 className="mt-5 font-display text-2xl font-semibold text-stone-900">Chưa tải được trang này</h1>
       <p className="mx-auto mt-2 max-w-sm text-stone-700">{chunkMessage ?? message}</p>
-      <button type="button" onClick={retry} className={`${ui.btnPrimary} mt-6`}>
+      <button type="button" onClick={retry} className={`${BTN_PRIMARY} mt-6`}>
         {chunkError ? 'Tải lại trang' : 'Thử lại'}
       </button>
       <div className="mt-3">
