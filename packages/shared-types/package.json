@@ -2,6 +2,7 @@
   "name": "@tubutree/shared-types",
   "version": "0.0.0",
   "private": true,
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

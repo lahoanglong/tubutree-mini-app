@@ -58,6 +58,16 @@ const commonSecurityHeaders = (policy) => [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // shared-types phát hành CJS (dist/index.js gọi `__exportStar(require(...))` cho cả 33 tệp): webpack không lắc được CJS nên mọi trang tải nguyên
+  // barrel (~60 KB thô, ~20 KB gzip) dù chỉ dùng vài hằng. Trỏ vào mã nguồn ESM như Mini App (vite.config.mts) và jest của API; cùng mã nguồn mà dist
+  // dựng ra, chỉ khác định dạng mô-đun. Dấu `$` chỉ khớp đúng tên gói (không có đường dẫn con).
+  webpack(config) {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@tubutree/shared-types$': path.join(dirname, '../../packages/shared-types/src/index.ts'),
+    };
+    return config;
+  },
   reactStrictMode: true,
   poweredByHeader: false, // ẩn header X-Powered-By: Next.js (info-disclosure nhỏ, không cần thiết)
   // Next mặc định bỏ dấu `/` cuối bằng 308 TRƯỚC middleware, nên URL WordPress `/product/<slug>/` đi hai chặng (308 rồi 301). Tắt luật đó để

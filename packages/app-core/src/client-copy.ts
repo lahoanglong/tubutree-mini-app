@@ -3,7 +3,7 @@
  * Giọng "bạn" và "Tubu"; câu lỗi nói chuyện gì xảy ra và khách làm gì tiếp.
  */
 
-export const ERROR_GENERIC = 'Đã có lỗi xảy ra. Bạn thử lại nhé.';
+export { ERROR_GENERIC } from './error-generic';
 export const ERROR_NETWORK = 'Mất kết nối. Kiểm tra mạng rồi thử lại.';
 export const AVATAR_READ_FAILED = 'Không tải được ảnh. Thử lại sau ít phút.';
 export const loadMoreFailed = (what: string): string => `Không tải thêm được ${what}. Bạn thử lại nhé.`;
