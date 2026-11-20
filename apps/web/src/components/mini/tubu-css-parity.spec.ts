@@ -113,6 +113,9 @@ const ALLOWED: Record<string, string> = {
   '.tubu-addon-name | font-weight': 'Mini in đậm tên (label 600) trong ô hẹp, web để chữ thường trong thẻ rộng.',
   // Gợi ý mua kèm.
   '.tubu-fbt-name | color': 'Mini kế thừa --color-text-primary từ body (tokens.css), web đặt rõ.',
+  // Dòng năm link chính sách ở trang thanh toán (w11-02): lề âm bù phần dòng 44px vượt dòng chữ, mỗi bên theo cỡ chữ của câu đồng ý.
+  '.tubu-consent-links | margin-block':
+    'Mini đặt câu trong Text xSmall (13px, dòng 18px) nên bù (18 − 44) / 2 = −13px; web dùng text-caption (13px × 1,54 ≈ 20px) nên bù theo token ≈ −12px. Cả hai giữ khối cao đúng 2 dòng chữ khi 5 link vừa một dòng.',
 };
 
 describe('tubu-css-parity: .tubu-* dùng chung giữa web và Mini App', () => {

@@ -152,6 +152,22 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     expect(await prisma.reorderReminder.findUnique({ where: { userId_variationId: { userId: u.id, variationId: bottleVariation } } })).toBeNull();
   });
 
+  it('đơn chai mới còn đang giao cũng là mua lại: tin Refill không đánh dấu, chu kỳ "Nhắc mua lại" của đơn mới vẫn còn khi đơn giao xong', async () => {
+    const u = await createRealUser(prisma, { notifyPromo: true });
+    await bottleOrder(u.id, 22);
+    await createOrder(prisma, {
+      userId: u.id,
+      status: 'SHIPPING',
+      createdAt: new Date(now.getTime() - 2 * DAY),
+      items: { create: { variationId: bottleVariation, productName: 'Chai IT', variationName: '3,8L', unitPrice: 100_000, quantity: 1, total: 100_000 } },
+    });
+
+    await runOnce(service());
+
+    expect(callsFor(u.id)).toHaveLength(1);
+    expect(await prisma.reorderReminder.findUnique({ where: { userId_variationId: { userId: u.id, variationId: bottleVariation } } })).toBeNull();
+  });
+
   it('hai lượt chạy song song (hai instance): đúng một tin và một dòng cho đơn', async () => {
     const u = await createRealUser(prisma, { notifyPromo: true });
     const order = await bottleOrder(u.id, 23);

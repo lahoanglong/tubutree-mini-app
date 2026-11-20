@@ -229,13 +229,19 @@ export class RefillReminderService {
   }
 
   /**
-   * Tin Refill đã nhắc chai của đơn: chu kỳ "Nhắc mua lại" của chai đó coi như đã nhắc. Khách đã mua chai đó lần nữa (đơn giao sau đơn này)
-   * thì để nguyên: chu kỳ của đơn mới vẫn được nhắc. Lỗi chỉ ghi log, tin đã gửi.
+   * Tin Refill đã nhắc chai của đơn: chu kỳ "Nhắc mua lại" của chai đó coi như đã nhắc. Khách đã mua chai đó lần nữa (đơn đặt sau đơn này,
+   * đã chốt, kể cả còn đang giao) thì để nguyên: chu kỳ của đơn mới vẫn được nhắc sau khi đơn đó giao xong. Lỗi chỉ ghi log, tin đã gửi.
    */
   private async markGenericReminded(o: DueOrder, items: { variationId: string; productName: string }[], now: Date): Promise<void> {
     for (const it of items) {
       const newer = await this.prisma.order.count({
-        where: { userId: o.userId, status: 'DELIVERED', type: 'RETAIL', createdAt: { gt: o.createdAt }, items: { some: { variationId: it.variationId, isGift: false } } },
+        where: {
+          userId: o.userId,
+          status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] },
+          type: 'RETAIL',
+          createdAt: { gt: o.createdAt },
+          items: { some: { variationId: it.variationId, isGift: false } },
+        },
       });
       if (newer > 0) continue;
       await this.prisma.reorderReminder

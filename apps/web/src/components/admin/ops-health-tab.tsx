@@ -261,6 +261,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'ZaloOaTokenCron.refresh': 'Làm mới khoá kết nối Zalo OA khi sắp hết hạn',
   'zalo-oa.events-reconcile': 'Cứu tin khách nhắn vào Zalo OA bị kẹt',
   'LifecycleService.sendReorderReminders': 'Nhắc khách mua lại',
+  'RefillReminderService.sendDue': 'Nhắc khách đổi sang gói Refill 21 ngày sau khi nhận chai (cờ retention.refill_21d_reminder_enabled)',
   'RemarketingService.sendCartAbandonReminders': 'Nhắc khách có giỏ hàng bỏ quên',
   'RemarketingService.sendVoucherExpiryReminders': 'Nhắc khách mã giảm giá sắp hết hạn',
   'ReviewInviteService.sendReviewInvites': 'Mời khách đánh giá (10 giờ và 19 giờ)',
