@@ -185,7 +185,7 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
         offWarning: 'Ngừng thưởng đơn đầu, thẻ thành tích ẩn. Điểm đã cộng giữ nguyên.',
       },
       { kind: 'number', key: 'growth.referral_first_order_points', label: 'Thưởng đơn đầu: điểm mỗi bên', hint: 'Cộng cho cả người mời và bạn được mời, hạn dùng như điểm thường.', unit: 'Điểm Xanh', min: 0, max: 10_000, fallback: 100, standard: 100, needsRow: true },
-      { kind: 'number', key: 'growth.referral_first_order_min', label: 'Thưởng đơn đầu: giá trị đơn tối thiểu', hint: 'Tổng tiền khách trả của đơn đầu.', unit: 'đ', min: 0, max: 100_000_000, fallback: 199_000, standard: 199_000, needsRow: true },
+      { kind: 'number', key: 'growth.referral_first_order_min', label: 'Thưởng đơn đầu: tiền hàng tối thiểu', hint: 'Tiền hàng của đơn đầu (trước mã giảm giá và điểm, không gồm phí giao), cùng cách tính với mốc miễn phí giao.', unit: 'đ', min: 0, max: 100_000_000, fallback: 199_000, standard: 199_000, needsRow: true },
       { kind: 'number', key: 'growth.referral_monthly_cap', label: 'Thưởng đơn đầu: số bạn tối đa mỗi người mời mỗi tháng', hint: 'Tính theo tháng giờ Việt Nam; quá trần thì cả hai không nhận.', unit: 'bạn', min: 0, max: 1_000, fallback: 10, needsRow: true },
       {
         kind: 'switch',

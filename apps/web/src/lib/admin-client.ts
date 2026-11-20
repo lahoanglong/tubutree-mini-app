@@ -608,6 +608,8 @@ export interface OrderOpsCounts {
   bankTransferPending: number;
   bankTransferOverdue: number;
   overdueCancelled: number;
+  /** Tập đơn tự huỷ quá hạn bị cắt ở trần 20.000 đơn mới nhất: số thật lớn hơn `overdueCancelled`. API cũ không trả. */
+  overdueCancelledCapped?: boolean;
   ttlHours: number;
 }
 export const getOrderOpsCounts = (f: { status?: string; search?: string; recycling?: RecyclingFilter; invoice?: InvoiceFilter; pancake?: PancakeFilter; from?: string; to?: string } & Omit<OrderListExtra, 'order'>) =>

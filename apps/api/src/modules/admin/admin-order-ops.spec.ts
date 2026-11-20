@@ -54,13 +54,24 @@ describe('findOverdueCancelledIds — tập id đơn tự huỷ quá hạn chuy�
 
   it('chỉ lấy dòng lịch sử SYSTEM PENDING_PAYMENT → CANCELLED của đơn lẻ chuyển khoản, mới nhất trước, có trần', async () => {
     const $queryRaw = jest.fn().mockResolvedValue([{ id: 'o2' }, { id: 'o1' }]);
-    expect(await findOverdueCancelledIds({ $queryRaw } as never)).toEqual(['o2', 'o1']);
+    expect(await findOverdueCancelledIds({ $queryRaw } as never)).toEqual({ ids: ['o2', 'o1'], capped: false });
     const { text, values } = sqlOf($queryRaw);
     expect(text).toContain(`o.status = 'CANCELLED' AND o."paymentMethod" = 'BANK_TRANSFER' AND o.type = 'RETAIL'`);
     expect(text).toContain(`h."toStatus" = 'CANCELLED' AND h."fromStatus" = 'PENDING_PAYMENT' AND h."actorType" = 'SYSTEM'`);
     expect(text).toContain('ORDER BY o."createdAt" DESC');
     expect(text).not.toContain('>=');
-    expect(values).toEqual([OVERDUE_CANCELLED_ID_CAP]);
+    // Lấy dư một dòng để biết tập id có bị cắt ở trần không.
+    expect(values).toEqual([OVERDUE_CANCELLED_ID_CAP + 1]);
+  });
+
+  it('vượt trần: trả đúng OVERDUE_CANCELLED_ID_CAP id mới nhất và báo capped, không cắt lặng lẽ', async () => {
+    const rows = Array.from({ length: OVERDUE_CANCELLED_ID_CAP + 1 }, (_, i) => ({ id: `o${i}` }));
+    const r = await findOverdueCancelledIds({ $queryRaw: jest.fn().mockResolvedValue(rows) } as never);
+    expect(r.capped).toBe(true);
+    expect(r.ids).toHaveLength(OVERDUE_CANCELLED_ID_CAP);
+    expect(r.ids[0]).toBe('o0');
+    const exact = await findOverdueCancelledIds({ $queryRaw: jest.fn().mockResolvedValue(rows.slice(0, OVERDUE_CANCELLED_ID_CAP)) } as never);
+    expect(exact.capped).toBe(false);
   });
 
   it('khoảng ngày giờ VN đổi về mốc UTC, so với cột timestamp không múi giờ', async () => {
@@ -69,7 +80,7 @@ describe('findOverdueCancelledIds — tập id đơn tự huỷ quá hạn chuy�
     const { text, values } = sqlOf($queryRaw);
     expect(text).toContain(`o."createdAt" >= (?::timestamptz AT TIME ZONE 'UTC')`);
     expect(text).toContain(`o."createdAt" < (?::timestamptz AT TIME ZONE 'UTC')`);
-    expect(values).toEqual(['2026-11-18T17:00:00.000Z', '2026-11-19T17:00:00.000Z', OVERDUE_CANCELLED_ID_CAP]);
+    expect(values).toEqual(['2026-11-18T17:00:00.000Z', '2026-11-19T17:00:00.000Z', OVERDUE_CANCELLED_ID_CAP + 1]);
   });
 });
 
@@ -193,7 +204,7 @@ describe('AdminService.orderOpsCounts — KPI đầu tab Đơn hàng', () => {
 
   it('trả 5 số + TTL; mỗi số đúng where của ô đó', async () => {
     const { r, where, $queryRaw } = await run({});
-    expect(r).toEqual({ guestWeb: 9, guestWebUnmerged: 4, bankTransferPending: 3, bankTransferOverdue: 1, overdueCancelled: 6, ttlHours: 24 });
+    expect(r).toEqual({ guestWeb: 9, guestWebUnmerged: 4, bankTransferPending: 3, bankTransferOverdue: 1, overdueCancelled: 6, overdueCancelledCapped: false, ttlHours: 24 });
     expect(where(0)).toEqual(GUEST_WEB_ORDER_WHERE);
     expect(where(1)).toEqual({ AND: [GUEST_WEB_ORDER_WHERE, { user: { phone: null, zaloId: { startsWith: 'guest_' } } }] });
     expect(where(2)).toEqual({ AND: [{}, BANK_TRANSFER_TO_CONFIRM_WHERE] });
@@ -218,6 +229,18 @@ describe('AdminService.orderOpsCounts — KPI đầu tab Đơn hàng', () => {
     expect(where(0)).toEqual({ AND: [{ status: 'PENDING_PAYMENT' }, kind, BANK_TRANSFER_TO_CONFIRM_WHERE, GUEST_WEB_ORDER_WHERE] });
     expect(where(2)).toEqual({ AND: [{ AND: [kind, GUEST_WEB_ORDER_WHERE] }, BANK_TRANSFER_TO_CONFIRM_WHERE] });
     expect(where(4)).toEqual({ AND: [kind, BANK_TRANSFER_OVERDUE_CANCELLED_WHERE, { id: { in: ['c1'] } }, GUEST_WEB_ORDER_WHERE] });
+  });
+
+  it('tập id tự huỷ quá hạn chạm trần: ô báo overdueCancelledCapped để web ghi "20.000+", và ghi cảnh báo vận hành', async () => {
+    const count = jest.fn().mockResolvedValue(OVERDUE_CANCELLED_ID_CAP);
+    const rows = Array.from({ length: OVERDUE_CANCELLED_ID_CAP + 1 }, (_, i) => ({ id: `o${i}` }));
+    const prisma = { order: { count }, storefront: { findFirst: jest.fn() }, $queryRaw: jest.fn().mockResolvedValue(rows) };
+    const admin = mkAdmin(prisma, 24);
+    const warn = jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+    const r = await admin.orderOpsCounts({ from: '2026-01-01' }, ADMIN as never, new Date('2026-11-19T12:00:00Z'));
+    expect(r.overdueCancelledCapped).toBe(true);
+    expect(r.overdueCancelled).toBe(OVERDUE_CANCELLED_ID_CAP);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`${OVERDUE_CANCELLED_ID_CAP}`));
   });
 
   it('TTL cấu hình 48 giờ: mốc quá hạn lùi 48 giờ và trả về để web ghi đúng nhãn', async () => {

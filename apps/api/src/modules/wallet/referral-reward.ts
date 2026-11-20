@@ -265,7 +265,7 @@ export function milestoneGrantReason(referrerId: string, count: number, gen: num
  * REFERRAL_DEBT (reason `${debtReason}:<số điểm thiếu>`). Đã có dòng đối ứng (ở sổ nào cũng vậy) thì
  * trả null, không trừ gì thêm. `due` (Điểm Xanh) mặc định cả khoản; thu hồi từng phần và phần còn lại sau đó truyền số riêng.
  */
-async function debitReferralReward(
+export async function debitReferralReward(
   tx: Db,
   referrerId: string,
   grant: ReferralGrant,

@@ -56,6 +56,10 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['REFERRAL_ORDER2_DEBT:u1:9', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 9 điểm'],
   ['REFERRAL_ORDER2_PARTIAL_DEBT:u1:req1:11', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 11 điểm'],
   ['REFERRAL_MILESTONE_DEBT:u1:3#1:12', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 12 điểm'],
+  // Gộp phiên khách tự mời thu hồi thưởng đơn đầu (referral/first-order-reward.ts revokeFirstOrderRewardOnMerge).
+  ['REFERRAL_FIRST_ORDER_REFERRER:u1', 'Thưởng giới thiệu bạn bè', 'Thưởng giới thiệu bạn bè'],
+  ['REFERRAL_FIRST_ORDER_REVOKE:REFERRER:u1', 'Thu hồi toàn bộ thưởng giới thiệu', 'Thu hồi toàn bộ thưởng giới thiệu'],
+  ['REFERRAL_FIRST_ORDER_DEBT:REFEREE:u1:50', 'Ghi nợ thu hồi thưởng giới thiệu', 'Ghi nợ thu hồi thưởng giới thiệu · nợ 50 điểm'],
   ['AFFILIATE_MILESTONE_REVOKE:c1:1', 'Thu hồi thưởng mốc doanh số CTV', 'Thu hồi thưởng mốc doanh số CTV'],
   ['AFFILIATE_MILESTONE_DEBT:c1:1:40000', 'Ghi nợ thu hồi thưởng mốc doanh số CTV', 'Ghi nợ thu hồi thưởng mốc doanh số CTV · nợ 40000 điểm'],
   ['COMMUNITY_POST:p1', 'Thưởng cộng đồng', 'Thưởng cộng đồng'],

@@ -14,6 +14,7 @@ import {
   REFERRAL_ORDER2_PREFIX,
   REFERRAL_ORDER2_REVOKE_PREFIX,
 } from '../wallet/referral-reward';
+import { FIRST_ORDER_REFEREE_PREFIX, FIRST_ORDER_REFERRER_PREFIX, FIRST_ORDER_REVOKE_PREFIX } from '../referral/first-order-reasons';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { CTV_MILESTONE_REF_TYPE, CTV_MILESTONE_REVOKE_REF_TYPE, ctvMilestoneLotKey } from '../affiliate/ctv-milestone-ref';
 
@@ -179,12 +180,35 @@ const CTV_MILESTONE_RULE: ReversalRule = {
   reversedLotKey: (t) => (t.refType === CTV_MILESTONE_REVOKE_REF_TYPE && t.refId ? ctvMilestoneLotKey(t.refId) : null),
 };
 
+/**
+ * Thưởng đơn đầu (referral/first-order-reward.ts) và lần thu hồi khi gộp phiên khách tự mời (revokeFirstOrderRewardOnMerge): mỗi phía một lô,
+ * REFERRAL_FIRST_ORDER_<REFERRER|REFEREE>:<id người được mời>, thu hồi REFERRAL_FIRST_ORDER_REVOKE:<REFERRER|REFEREE>:<id>. Hai phía có thể
+ * cùng nằm ở một tài khoản (tự mời) nên khoá gồm cả phía.
+ */
+export const firstOrderLotKey = (side: string, refereeId: string): string => `REFERRAL_FIRST_ORDER:${side}:${refereeId}`;
+const REFERRAL_FIRST_ORDER_RULE: ReversalRule = {
+  lotKey: (t) => {
+    if (t.refType !== 'REFERRAL') return null;
+    for (const [side, prefix] of [['REFERRER', FIRST_ORDER_REFERRER_PREFIX], ['REFEREE', FIRST_ORDER_REFEREE_PREFIX]] as const) {
+      if (startsWith(t.reason, prefix)) return firstOrderLotKey(side, t.reason.slice(prefix.length));
+    }
+    return null;
+  },
+  reversedLotKey: (t) => {
+    if (t.refType !== 'REFERRAL' || !startsWith(t.reason, FIRST_ORDER_REVOKE_PREFIX)) return null;
+    const rest = t.reason.slice(FIRST_ORDER_REVOKE_PREFIX.length);
+    const sep = rest.indexOf(':');
+    return sep > 0 ? firstOrderLotKey(rest.slice(0, sep), rest.slice(sep + 1)) : null;
+  },
+};
+
 const REVERSAL_RULES: readonly ReversalRule[] = [
   ORDER_RULE,
   ORDER_PARTIAL_RETURN_RULE,
   REVIEW_RULE,
   REFERRAL_ORDER2_RULE,
   REFERRAL_MILESTONE_RULE,
+  REFERRAL_FIRST_ORDER_RULE,
   EXTERNAL_RULE,
   RECYCLE_RULE,
   CTV_MILESTONE_RULE,

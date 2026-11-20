@@ -7,8 +7,13 @@ import { OVERDUE_CANCELLED_ID_CAP, vnDayRange } from './admin-order-filter';
  * Id đơn lẻ chuyển khoản hệ thống tự huỷ vì quá hạn thanh toán (xem BANK_TRANSFER_OVERDUE_CANCELLED_WHERE), mới nhất trước, tối đa
  * OVERDUE_CANCELLED_ID_CAP. Khoảng ngày đặt (giờ VN) thu hẹp ngay ở đây để tập id không phình theo năm tháng. Cột `createdAt` là
  * timestamp không múi giờ ghi giờ UTC: mốc so sánh đổi về UTC bằng `AT TIME ZONE 'UTC'`, không phụ thuộc TimeZone của phiên.
+ * Lấy dư một dòng: `capped` = còn đơn cũ hơn bị bỏ ngoài tập (ô đếm và danh sách chỉ phủ OVERDUE_CANCELLED_ID_CAP đơn mới nhất).
  */
-export async function findOverdueCancelledIds(prisma: Pick<PrismaService, '$queryRaw'>, from?: string, to?: string): Promise<string[]> {
+export async function findOverdueCancelledIds(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  from?: string,
+  to?: string,
+): Promise<{ ids: string[]; capped: boolean }> {
   const range = vnDayRange(from, to);
   const gte = range?.gte instanceof Date ? range.gte.toISOString() : null;
   const lt = range?.lt instanceof Date ? range.lt.toISOString() : null;
@@ -22,8 +27,9 @@ export async function findOverdueCancelledIds(prisma: Pick<PrismaService, '$quer
         WHERE h."orderId" = o.id AND h."toStatus" = 'CANCELLED' AND h."fromStatus" = 'PENDING_PAYMENT' AND h."actorType" = 'SYSTEM'
       )
     ORDER BY o."createdAt" DESC
-    LIMIT ${OVERDUE_CANCELLED_ID_CAP}`;
-  return rows.map((r) => r.id);
+    LIMIT ${OVERDUE_CANCELLED_ID_CAP + 1}`;
+  const capped = rows.length > OVERDUE_CANCELLED_ID_CAP;
+  return { ids: (capped ? rows.slice(0, OVERDUE_CANCELLED_ID_CAP) : rows).map((r) => r.id), capped };
 }
 
 /** guest = đơn của phiên vãng lai (web không đăng nhập, hay tài khoản `guest_` của Mini App); merged = đơn vãng lai web đã gộp vào tài khoản Zalo. */

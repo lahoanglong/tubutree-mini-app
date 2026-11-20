@@ -87,6 +87,30 @@ describe('middleware: bản dựng sẵn cho khách của Giỏ hàng và Vườ
   });
 });
 
+describe('middleware: trang có hai bản theo cookie không để cache chung giữ HTML (w7-04 M2)', () => {
+  const open = (path: string, cookie?: string, host = 'tubutree.com') =>
+    middleware(new NextRequest(`https://${host}${path}`, { headers: { host, ...(cookie ? { cookie } : {}) } }));
+  const caching = (res: Response) => res.headers.get('cache-control');
+
+  it('"/", Giỏ hàng, Vườn Xanh: bản khách lẫn bản có phiên đều private, no-cache', () => {
+    for (const path of ['/', '/gio-hang', '/vuon-xanh', '/gio-hang?from=zalo']) {
+      for (const cookie of [undefined, 'tubu_web_session=1', 'tubu_guest_cart=1', 'tubu_web_session=1; tubu_home_hint=returning-2']) {
+        expect(caching(open(path, cookie)), `${path} ${cookie ?? '(không cookie)'}`).toBe('private, no-cache');
+      }
+    }
+  });
+
+  it('không dùng no-store: trình duyệt vẫn giữ được trang trong bộ nhớ quay lại (bfcache)', () => {
+    expect(open('/gio-hang').headers.get('cache-control')).not.toContain('no-store');
+  });
+
+  it('trang khác, đường dẫn con và host gian hàng không bị đụng', () => {
+    for (const [host, path] of [['tubutree.com', '/san-pham/serum-a'], ['tubutree.com', '/vuon-xanh/so-tay'], ['tubutree.com', '/san-pham'], ['ctv-an.tubutree.com', '/'], ['ctv-an.tubutree.com', '/gio-hang']] as const) {
+      expect(caching(open(path, undefined, host)), `${host}${path}`).toBeNull();
+    }
+  });
+});
+
 describe('middleware: slug dài vô lý không vào cache trang theo [slug]', () => {
   const notFoundOf = (res: Response) => res.status === 404 && res.headers.get('cache-control') === 'no-store' && !!rewriteOf(res);
   // Slug dài nhất API sinh ra: tên 200 ký tự (tối đa merchant DTO) -> slugify + '-' + Date.now().toString(36).
