@@ -13,7 +13,8 @@ describe('Admin order list filters (real Postgres)', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
-    admin = new AdminService(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    // listOrders đọc TTL chờ chuyển khoản (pending-payment-ttl) qua config.get: trả fallback như DB chưa có dòng cấu hình.
+    admin = new AdminService(prisma, { get: async (_key: string, fallback: unknown) => fallback } as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
   });
 
   afterAll(async () => {
