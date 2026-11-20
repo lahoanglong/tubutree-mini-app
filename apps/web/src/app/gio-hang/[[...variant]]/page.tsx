@@ -5,10 +5,11 @@ import { matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status'
 import { QuerySeed, type QuerySeedEntry } from '@/components/query-seed';
 import { PrebuiltGuest } from '@/lib/auth-phase';
 import { EARLY_API_BASE, EARLY_GETS, earlySessionScript } from '@/lib/early-session';
+import { prebuiltConfigSeededAt, prebuiltMismatchScript } from '@/lib/guest-prebuilt-script';
 import { createServerHttp } from '@/lib/core-http-server';
 import CartPage from '../cart-page';
 
-// Ngắn để tắt cờ giỏ khách tới khách mới nhanh: cấu hình nạp sẵn mang mốc lấy của bản ISR, còn tươi thêm staleTime của usePublicConfig.
+// Ngắn để tắt cờ giỏ khách tới khách mới nhanh; cấu hình nạp sẵn hết tươi cùng lúc với bản ISR (prebuiltConfigSeededAt).
 export const revalidate = 60;
 export const dynamicParams = false;
 
@@ -49,11 +50,13 @@ export default async function CartRoute({ params }: { params: Promise<{ variant?
   ]);
   // Không có cấu hình (cờ giỏ khách) thì không biết nên vẽ giỏ khách hay tường đăng nhập: phục vụ khung chờ như bản thường, không lưu đoán sai vào ISR.
   if (!cfg) return <CartPage />;
-  const entries: QuerySeedEntry[] = [{ queryKey: config.queryKey, data: cfg, fetchedAt }];
+  const entries: QuerySeedEntry[] = [{ queryKey: config.queryKey, data: cfg, fetchedAt: prebuiltConfigSeededAt(fetchedAt, revalidate) }];
   if (products) entries.push({ queryKey: rail.queryKey, data: products, fetchedAt });
   if (matcherStatus) entries.push({ queryKey: matcher.queryKey, data: matcherStatus, fetchedAt });
   return (
     <PrebuiltGuest>
+      {/* Máy còn dấu phiên hay giỏ khách có món mà thiếu cookie: ghi lại cookie, tải lại một lần sang bản thường (lib/guest-prebuilt-script.ts). */}
+      <script dangerouslySetInnerHTML={{ __html: prebuiltMismatchScript('cart') }} />
       <QuerySeed entries={entries}>
         <CartPage />
       </QuerySeed>

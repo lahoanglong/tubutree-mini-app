@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { PrebuiltGuest } from '@/lib/auth-phase';
 import { EARLY_API_BASE, EARLY_GETS, earlySessionScript } from '@/lib/early-session';
+import { prebuiltMismatchScript } from '@/lib/guest-prebuilt-script';
 import GamePage from '../garden-page';
 
 export const dynamicParams = false;
@@ -31,6 +32,8 @@ export default async function GardenRoute({ params }: { params: Promise<{ varian
   if (variant.length !== 1 || variant[0] !== 'khach') notFound();
   return (
     <PrebuiltGuest>
+      {/* Máy còn dấu phiên mà thiếu cookie: ghi lại cookie, tải lại một lần sang bản thường (lib/guest-prebuilt-script.ts). */}
+      <script dangerouslySetInnerHTML={{ __html: prebuiltMismatchScript('garden') }} />
       <GamePage />
     </PrebuiltGuest>
   );

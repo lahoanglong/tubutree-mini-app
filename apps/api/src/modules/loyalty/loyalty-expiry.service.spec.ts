@@ -557,6 +557,52 @@ describe('computePointExpiry (pure FIFO helper)', () => {
       });
     });
 
+    describe('thu hồi thưởng đơn đầu khi gộp khách (REFERRAL_FIRST_ORDER_REVOKE): ăn đúng lô thưởng cùng phía và cùng người được mời', () => {
+      const REFERRAL = { refType: 'REFERRAL' };
+      const grant = (id: string, side: 'REFERRER' | 'REFEREE', createdAt: string, expiresAt: string | null, refereeId: string) =>
+        tx(id, 100, createdAt, expiresAt, `REFERRAL_FIRST_ORDER_${side}:${refereeId}`, { ...REFERRAL, refId: 'o1' });
+      const revoke = (id: string, delta: number, side: 'REFERRER' | 'REFEREE', createdAt: string, refereeId: string) =>
+        tx(id, delta, createdAt, null, `REFERRAL_FIRST_ORDER_REVOKE:${side}:${refereeId}`, { ...REFERRAL, refId: `MERGE:${refereeId}` });
+
+      it('hai lô đơn đầu đã thu hồi hết thì tới hạn không trừ thêm, lô cũ không hạn còn nguyên', () => {
+        const r = computePointExpiry(
+          [
+            tx('a', 30, '2025-01-01', null),
+            grant('g1', 'REFERRER', '2025-05-01', PAST, 'u1'),
+            grant('g2', 'REFEREE', '2025-05-01', PAST, 'u1'),
+            revoke('v1', -100, 'REFERRER', '2025-05-02', 'u1'),
+            revoke('v2', -100, 'REFEREE', '2025-05-02', 'u1'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(0);
+      });
+
+      it('thu hồi phía người mời không ăn lô phía người được mời, cũng không ăn lô của người được mời khác', () => {
+        const r = computePointExpiry(
+          [
+            grant('g2', 'REFEREE', '2025-04-01', PAST, 'u1'),
+            grant('g1', 'REFERRER', '2025-05-01', FUTURE, 'u1'),
+            grant('g3', 'REFERRER', '2025-05-01', PAST, 'u2'),
+            revoke('v1', -100, 'REFERRER', '2025-05-02', 'u1'),
+          ],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(200);
+      });
+
+      it('thu hồi thiếu (đã tiêu bớt): lô còn phần dư hết hạn đúng phần dư', () => {
+        const r = computePointExpiry(
+          [tx('a', 30, '2025-01-01', null), grant('g', 'REFEREE', '2025-05-01', PAST, 'u1'), revoke('v', -60, 'REFEREE', '2025-05-02', 'u1')],
+          NOW,
+          WINDOW,
+        );
+        expect(r.expiredNow).toBe(40);
+      });
+    });
+
     describe('thu hồi thưởng giới thiệu: dòng REVOKE ăn lô thưởng cùng hậu tố reason', () => {
       const REFERRAL = { refType: 'REFERRAL' };
       const grant = (id: string, delta: number, createdAt: string, expiresAt: string | null, refereeId: string) =>

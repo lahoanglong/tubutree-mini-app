@@ -5,9 +5,9 @@
 // trình duyệt chặn bộ nhớ hay dữ liệu hỏng thì giỏ coi như trống, trang không vỡ.
 
 import { writeWebCookie } from '../client-api';
-import { GUEST_CART_COOKIE } from '../guest-prebuilt';
+import { GUEST_CART_COOKIE, GUEST_CART_ID_RE as ID_RE, GUEST_CART_KEY, GUEST_CART_SLUG_RE as SLUG_RE } from '../guest-prebuilt';
 
-export const GUEST_CART_KEY = 'tubu.guestCart.v1';
+export { GUEST_CART_KEY };
 export const GUEST_CART_MAX_LINES = 30;
 export const GUEST_CART_MAX_QTY = 99;
 const CHANGE_EVENT = 'tubu:guest-cart-change';
@@ -28,8 +28,6 @@ export type GuestAddResult =
   | { ok: true; added: number; quantity: number }
   | { ok: false; reason: 'full' | 'max' | 'storage' };
 
-const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const SLUG_RE = /^[^\s/?#\\]{1,200}$/;
 const EMPTY: readonly GuestCartLine[] = Object.freeze([]);
 
 function storage(): Storage | null {

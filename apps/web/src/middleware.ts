@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { HUB, isHubQuery } from './lib/browse-hub-route';
 import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
-import { GUEST_PREBUILT_ORIGINS, guestPrebuiltTarget } from './lib/guest-prebuilt';
+import { GUEST_PREBUILT_ORIGINS, GUEST_PREBUILT_ROUTES, guestPrebuiltTarget } from './lib/guest-prebuilt';
 import { isLegalSlug } from './lib/legal';
 import { carryLegacyParams, resolveLegacyWpPath, type LegacyResolution } from './lib/legacy-wp-redirects';
 import { isLegacyAppHost, tenantSubdomain } from './lib/tenant-subdomain';
@@ -17,6 +17,18 @@ const SLUG_MAX: Record<string, number> = { 'san-pham': 256, brand: 256, s: 256, 
 function isPlausibleSlug(route: string, slug: string): boolean {
   if (slug.length > (SLUG_MAX[route] ?? 0) || !SLUG_CHARS.test(slug)) return false;
   return route !== 'chinh-sach' || isLegalSlug(slug);
+}
+
+/**
+ * "/", Giỏ hàng và Vườn Xanh có hai bản ISR theo cookie phiên (và cookie giỏ khách), cùng một URL. Bản ISR mang `s-maxage`, nên một cache chung
+ * đặt trước web (CDN, `proxy_cache`) sẽ giữ bản của người này trả cho người kia. `private` cấm cache chung giữ HTML; `no-cache` (không phải
+ * `no-store`) để trình duyệt vẫn hỏi lại máy chủ mỗi lần mà trang vẫn vào được bộ nhớ quay lại. Next chỉ tự đặt Cache-Control khi response chưa
+ * có, nên header này tới được trình duyệt; `Vary` thì Next ghi đè bằng danh sách của nó, nên không đặt (đã kiểm cả hai bằng `next start`).
+ * Cache nào bỏ qua `private` (luật "cache everything" ghi đè header gốc) vẫn phải bypass theo cookie: runbook 0.3.
+ */
+function privatePerCookie(response: NextResponse): NextResponse {
+  response.headers.set('cache-control', 'private, no-cache');
+  return response;
 }
 
 // Cache ngắn (1 giờ trình duyệt, 1 ngày CDN) để còn sửa được bảng chuyển hướng sau cutover mà không mắc kẹt trong cache của khách.
@@ -121,22 +133,22 @@ function route(request: NextRequest): NextResponse {
   if (pathname === '/san-pham' && isHubQuery(url.searchParams)) return NextResponse.rewrite(new URL(HUB, request.url));
 
   // Khách đã có cookie phiên: Trang chủ dựng sẵn khung chờ đúng loại khách (xem app/khoi-phuc/[hint]/page.tsx), URL vẫn là "/".
-  // Hai bản khác nhau theo cookie; Next không giữ Vary trên "/", nên cache chung phía trước phải bỏ qua khi có cookie (xem runbook 0.3).
   if (pathname === '/') {
     const restoring = request.cookies.get(SESSION_COOKIE)?.value === '1';
-    const response = restoring
-      ? NextResponse.rewrite(new URL(`/khoi-phuc/${parseHintSlug(request.cookies.get(HOME_HINT_COOKIE)?.value)}`, request.url))
-      : NextResponse.next();
-    return response;
+    return privatePerCookie(
+      restoring
+        ? NextResponse.rewrite(new URL(`/khoi-phuc/${parseHintSlug(request.cookies.get(HOME_HINT_COOKIE)?.value)}`, request.url))
+        : NextResponse.next(),
+    );
   }
 
   // Khách chưa có phiên (và giỏ khách trống) mở Giỏ hàng / Vườn Xanh: bản ISR đã vẽ sẵn giao diện khách (lib/guest-prebuilt.ts), URL không đổi.
-  // Như "/" ở trên, hai bản khác nhau theo cookie nên cache chung phía trước không được giữ HTML của hai đường dẫn này.
-  const prebuilt = guestPrebuiltTarget(pathname, (name) => request.cookies.get(name)?.value);
-  if (prebuilt) {
+  if (GUEST_PREBUILT_ROUTES[pathname]) {
+    const prebuilt = guestPrebuiltTarget(pathname, (name) => request.cookies.get(name)?.value);
+    if (!prebuilt) return privatePerCookie(NextResponse.next());
     const target = new URL(prebuilt, request.url);
     target.search = url.search;
-    return NextResponse.rewrite(target);
+    return privatePerCookie(NextResponse.rewrite(target));
   }
 
   return NextResponse.next();

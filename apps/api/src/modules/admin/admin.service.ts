@@ -49,6 +49,7 @@ import {
   findSearchUserIds,
   NO_SUCH_STOREFRONT_ID,
   normalizeAdminOrderSearch,
+  OVERDUE_CANCELLED_ID_CAP,
   recipientPhoneVariants,
   searchPhone,
   type AdminOrderFilterInput,
@@ -276,6 +277,8 @@ export type DealerApplicationImageField = keyof typeof DEALER_APPLICATION_IMAGE_
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
+  /** Lần cuối ghi cảnh báo tập id tự huỷ quá hạn chạm trần: ô đếm gọi lại mỗi lần mở tab Đơn hàng, chỉ cần nhắc vận hành thưa. */
+  private overdueCapWarnedAt = 0;
   private readonly userCounts = new TtlMemo<number>(60_000);
 
   constructor(
@@ -1204,15 +1207,28 @@ export class AdminService {
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
-  async adminOrderWhere(f: AdminOrderFilterInput, opts: { exactPhoneOnly?: boolean } = {}): Promise<Prisma.OrderWhereInput> {
+  async adminOrderWhere(
+    f: AdminOrderFilterInput,
+    opts: { exactPhoneOnly?: boolean; meta?: { overdueCapped?: boolean } } = {},
+  ): Promise<Prisma.OrderWhereInput> {
     const { storefront, ...filter } = f;
     const exactPhoneOnly = opts.exactPhoneOnly === true;
-    const [searchUserIds, searchOrderIds, storefrontId, overdueCancelledIds] = await Promise.all([
+    const [searchUserIds, searchOrderIds, storefrontId, overdue] = await Promise.all([
       findSearchUserIds(this.prisma, f.search, exactPhoneOnly),
       this.findSearchOrderIds(f.search),
       this.findStorefrontId(storefront),
       f.queue === 'bank_transfer_overdue_cancelled' ? findOverdueCancelledIds(this.prisma, f.from, f.to) : undefined,
     ]);
+    const overdueCancelledIds = overdue?.ids;
+    if (overdue?.capped) {
+      if (opts.meta) opts.meta.overdueCapped = true;
+      if (Date.now() - this.overdueCapWarnedAt > 3_600_000) {
+        this.overdueCapWarnedAt = Date.now();
+        this.logger.warn(
+          `Hàng đợi "Tự huỷ quá hạn CK" chạm trần ${OVERDUE_CANCELLED_ID_CAP} đơn (khoảng ${f.from ?? 'đầu'}..${f.to ?? 'nay'}): danh sách và số đếm chỉ gồm ${OVERDUE_CANCELLED_ID_CAP} đơn mới nhất, thu hẹp khoảng ngày để xem đơn cũ hơn.`,
+        );
+      }
+    }
     return buildAdminOrderWhere({
       ...filter,
       searchUserIds,
@@ -1232,14 +1248,24 @@ export class AdminService {
     f: AdminOrderFilterInput,
     viewer: OrderActor = { role: 'ADMIN' },
     now: Date = new Date(),
-  ): Promise<{ guestWeb: number; guestWebUnmerged: number; bankTransferPending: number; bankTransferOverdue: number; overdueCancelled: number; ttlHours: number }> {
+  ): Promise<{
+    guestWeb: number;
+    guestWebUnmerged: number;
+    bankTransferPending: number;
+    bankTransferOverdue: number;
+    overdueCancelled: number;
+    /** Tập id tự huỷ quá hạn bị cắt ở OVERDUE_CANCELLED_ID_CAP: số thật lớn hơn `overdueCancelled`. */
+    overdueCancelledCapped: boolean;
+    ttlHours: number;
+  }> {
     const { queue, guest: _guest, status, ...rest } = f;
     const exactPhoneOnly = !seesFullOrderPhones(viewer);
     // Bấm ô vãng lai giữ trạng thái và hàng đợi đang chọn, nên số của ô đếm theo chúng; hai ô CK tự đặt trạng thái riêng nên bỏ qua.
+    const overdueMeta: { overdueCapped?: boolean } = {};
     const [noGuest, withGuest, overdueWhere, ttlHours] = await Promise.all([
       this.adminOrderWhere({ ...rest, ...(status ? { status } : {}), ...(queue ? { queue } : {}), guest: 'web' }, { exactPhoneOnly }),
       this.adminOrderWhere(f.guest ? { ...rest, guest: f.guest } : rest, { exactPhoneOnly }),
-      this.adminOrderWhere({ ...rest, ...(f.guest ? { guest: f.guest } : {}), queue: 'bank_transfer_overdue_cancelled' }, { exactPhoneOnly }),
+      this.adminOrderWhere({ ...rest, ...(f.guest ? { guest: f.guest } : {}), queue: 'bank_transfer_overdue_cancelled' }, { exactPhoneOnly, meta: overdueMeta }),
       readPendingPaymentTtlHours(this.config),
     ]);
     const cutoff = new Date(now.getTime() - ttlHours * 3_600_000);
@@ -1254,7 +1280,7 @@ export class AdminService {
       }),
       this.prisma.order.count({ where: overdueWhere }),
     ]);
-    return { guestWeb, guestWebUnmerged, bankTransferPending, bankTransferOverdue, overdueCancelled, ttlHours };
+    return { guestWeb, guestWebUnmerged, bankTransferPending, bankTransferOverdue, overdueCancelled, overdueCancelledCapped: overdueMeta.overdueCapped === true, ttlHours };
   }
 
   /** Số đơn theo trạng thái với cùng điều kiện lọc của danh sách (bỏ `status`): chip "Tất cả" là tổng các trạng thái. */

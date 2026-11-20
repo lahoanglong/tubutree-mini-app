@@ -30,7 +30,7 @@ export function OrderOpsStrip({
   active: Record<OrderOpsKey, boolean>;
   onToggle: (k: OrderOpsKey) => void;
 }) {
-  const tiles: { k: OrderOpsKey; label: string; value?: number; sub: string | null; alert: boolean }[] = [
+  const tiles: { k: OrderOpsKey; label: string; value?: number; capped?: boolean; sub: string | null; alert: boolean }[] = [
     {
       k: 'guest',
       label: 'Khách vãng lai (Web)',
@@ -49,6 +49,7 @@ export function OrderOpsStrip({
       k: 'overdueCancelled',
       label: overdueCancelledLabel(counts?.ttlHours),
       value: counts?.overdueCancelled,
+      capped: counts?.overdueCancelledCapped === true,
       sub: null,
       alert: false,
     },
@@ -69,7 +70,7 @@ export function OrderOpsStrip({
             }`}
           >
             <span className="text-[11px] font-medium leading-tight text-stone-600">{t.label}</span>
-            <span className="mt-0.5 font-display text-xl font-semibold tabular-nums leading-none text-stone-900">{num(t.value)}</span>
+            <span className="mt-0.5 font-display text-xl font-semibold tabular-nums leading-none text-stone-900">{num(t.value)}{t.capped ? '+' : ''}</span>
             {t.sub && <span className={`mt-1 text-[11px] font-medium tabular-nums leading-tight ${t.alert ? 'text-danger-fg' : 'text-stone-500'}`}>{t.sub}</span>}
           </button>
         );

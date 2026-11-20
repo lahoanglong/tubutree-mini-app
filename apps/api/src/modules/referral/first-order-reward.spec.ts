@@ -1,8 +1,11 @@
 import {
+  FIRST_ORDER_DEBT_PREFIX,
   FIRST_ORDER_REFEREE_PREFIX,
   FIRST_ORDER_REFERRER_PREFIX,
+  FIRST_ORDER_REVOKE_PREFIX,
   FirstOrderRetryableError,
   grantFirstOrderReferralReward,
+  revokeFirstOrderRewardOnMerge,
   type FirstOrderDeps,
 } from './first-order-reward';
 import { REFERRAL_FIRST_ORDER_POINTS_KEY, REFERRAL_MONTHLY_CAP_KEY, REFERRAL_VIRAL_ENABLED_KEY } from './viral-config';
@@ -29,7 +32,7 @@ function setup(w: World = {}) {
     r1: { id: 'r1', role: 'CUSTOMER', metadata: null, phone: '0901111111', zaloId: 'zalo-r', isBlocked: false, mergedIntoId: null },
     ...w.users,
   };
-  const order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', total: 250_000, placedForCustomer: false, createdAt: at, shippingAddress: shipTo, guestPhone: null, guestIpHash: null, placedIpHash: 'ip-f', ...w.order };
+  const order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', subtotal: 250_000, total: 250_000, placedForCustomer: false, createdAt: at, shippingAddress: shipTo, guestPhone: null, guestIpHash: null, placedIpHash: 'ip-f', ...w.order };
   const entries = w.entries ?? [];
   const db = {
     order: {
@@ -96,7 +99,8 @@ describe('grantFirstOrderReferralReward', () => {
   });
 
   it.each([
-    ['dưới 199.000đ', { total: 198_999 }],
+    ['tiền hàng dưới 199.000đ', { subtotal: 198_999, total: 198_999 }],
+    ['tiền hàng dưới 199.000đ dù cộng phí giao thì tổng trả vượt mốc', { subtotal: 198_999, total: 214_999 }],
     ['chưa giao', { status: 'SHIPPING' }],
     ['đơn CTV đặt hộ', { placedForCustomer: true }],
     ['đơn đại lý', { type: 'DEALER' }],
@@ -104,6 +108,14 @@ describe('grantFirstOrderReferralReward', () => {
     const s = setup({ order });
     expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
     expect(s.grant).not.toHaveBeenCalled();
+  });
+
+  it('mốc 199.000đ tính trên tiền hàng như dòng chữ "mua đơn đầu từ 199k": mã giảm giá kéo tổng trả xuống dưới mốc vẫn thưởng', async () => {
+    const s = setup({ order: { subtotal: 199_000, total: 169_000 } });
+    expect(await s.run()).toEqual({ status: 'GRANTED', referrerId: 'r1', refereeId: 'f1', points: 100 });
+    const firstQuery = (s.db.order.findMany.mock.calls as unknown as [{ where: Record<string, unknown> }][]).find(([a]) => a.where.userId === 'f1')![0];
+    expect(firstQuery.where).toMatchObject({ subtotal: { gte: 199_000 } });
+    expect(firstQuery.where).not.toHaveProperty('total');
   });
 
   it('bạn được mời là khách vãng lai (chưa xác thực) thì không thưởng', async () => {
@@ -261,7 +273,7 @@ describe('grantFirstOrderReferralReward — gộp tài khoản chạy chen', () 
     const s = setup();
     const owners = ['f1', 'T', 'T2', 'T3'];
     let merged = 0;
-    let order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', total: 250_000, placedForCustomer: false, createdAt: at, shippingAddress: shipTo, guestPhone: null, guestIpHash: null, placedIpHash: 'ip-f' };
+    let order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', subtotal: 250_000, total: 250_000, placedForCustomer: false, createdAt: at, shippingAddress: shipTo, guestPhone: null, guestIpHash: null, placedIpHash: 'ip-f' };
     const fresh = (id: string) => ({ ...T, id, zaloId: `zalo-${id}`, mergedIntoId: null as string | null });
     s.db.order.findUnique.mockImplementation(async () => order);
     s.db.order.findMany.mockImplementation(async (args: { where: { userId?: string } }) => (args.where.userId === order.userId ? [{ id: 'o1', createdAt: at }] : []));
@@ -305,5 +317,156 @@ describe('grantFirstOrderReferralReward — gộp tài khoản chạy chen', () 
     expect(await s.run()).toEqual({ status: 'SKIPPED', reason: 'NOT_ELIGIBLE' });
     expect(s.db.order.findUnique).toHaveBeenCalledTimes(2);
     expect(s.grant).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * MINOR 3 của w8-02: gộp phiên khách vào chính người mời (auth.service mergeGuestInto bước 10 cắt liên kết tự mời / tạo vòng) trước đây chỉ
+ * thu hồi thưởng đơn thứ 2. Hai dòng thưởng đơn đầu (người mời + phiên khách, đã cùng sang tài khoản đích ở bước 5) ở lại: tự mời giữ 200 điểm.
+ */
+describe('revokeFirstOrderRewardOnMerge', () => {
+  const REFERRER_ROW = { reason: `${FIRST_ORDER_REFERRER_PREFIX}G`, delta: 100 };
+  const REFEREE_ROW = { reason: `${FIRST_ORDER_REFEREE_PREFIX}G`, delta: 100 };
+
+  type ExpiryTxn = { id: string; delta: number; expiresAt: Date | null; createdAt: Date; reason: string; refType: string | null; refId: string | null };
+  const grantTxn = (reason: string, i: number, expiresAt: Date | null = null): ExpiryTxn => ({
+    id: `g${i}`,
+    delta: 100,
+    expiresAt,
+    createdAt: new Date(2026, 0, 1 + i),
+    reason,
+    refType: 'REFERRAL',
+    refId: 'O1',
+  });
+
+  function ledger(opts: { rows?: { reason: string; delta: number }[]; balance?: number; existing?: string[]; txns?: ExpiryTxn[] } = {}) {
+    let balance = opts.balance ?? 500;
+    const written: { userId: string; delta: number; lot: string; reason: string; refType: string; refId: string }[] = [];
+    const existing = new Set(opts.existing ?? []);
+    const tx = {
+      $queryRaw: jest.fn(async () => [{ pointsBalance: balance, pointsConvertedBalance: 0 }]),
+      coinTransaction: { findFirst: jest.fn(async () => null) },
+      pointsTransaction: {
+        // Hai loại truy vấn: dòng thưởng đang giữ (lọc refType REFERRAL) và sổ lô STANDARD cho lotRecoverable (lọc lot).
+        findMany: jest.fn(async (args: { where: { lot?: string } }) => {
+          const rows = opts.rows ?? [REFERRER_ROW, REFEREE_ROW];
+          if (args.where.lot !== 'STANDARD') return rows;
+          return opts.txns ?? rows.map((r, i) => grantTxn(r.reason, i));
+        }),
+        findFirst: jest.fn(async (args: { where: { reason: { in: string[] } } }) => (args.where.reason.in.some((r) => existing.has(r)) ? { id: 'x' } : null)),
+        createMany: jest.fn(async (args: { data: (typeof written)[number][] }) => {
+          const fresh = args.data.filter((d) => !existing.has(d.reason));
+          for (const d of fresh) {
+            existing.add(d.reason);
+            written.push(d);
+          }
+          return { count: fresh.length };
+        }),
+        create: jest.fn(async (args: { data: (typeof written)[number] }) => {
+          written.push(args.data);
+          return args.data;
+        }),
+      },
+      user: {
+        updateMany: jest.fn(async (args: { data: { pointsBalance: { decrement: number } } }) => {
+          balance -= args.data.pointsBalance.decrement;
+          return { count: 1 };
+        }),
+      },
+    };
+    return { tx, written, balance: () => balance };
+  }
+
+  it('tự mời: thu cả hai dòng thưởng đơn đầu tài khoản đích đang giữ, mỗi dòng một dòng đối ứng lô thường, một tin báo', async () => {
+    const l = ledger();
+    const res = await revokeFirstOrderRewardOnMerge(l.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' });
+    expect(res).toEqual({
+      revoked: 200,
+      shortfall: 0,
+      notices: [{ kind: 'REVOKED', referrerId: 'T', refereeId: 'G', taken: 200, debt: 0, cause: 'MERGE', key: `${FIRST_ORDER_REVOKE_PREFIX}REFERRER:G` }],
+    });
+    expect(l.written).toEqual([
+      { userId: 'T', delta: -100, lot: 'STANDARD', reason: `${FIRST_ORDER_REVOKE_PREFIX}REFERRER:G`, refType: 'REFERRAL', refId: 'MERGE:G' },
+      { userId: 'T', delta: -100, lot: 'STANDARD', reason: `${FIRST_ORDER_REVOKE_PREFIX}REFEREE:G`, refType: 'REFERRAL', refId: 'MERGE:G' },
+    ]);
+    expect(l.balance()).toBe(300);
+    // Chỉ dòng thưởng dương mà tài khoản đích đang giữ: bạn thật (người được mời trong vòng) giữ phần của mình.
+    expect(l.tx.pointsTransaction.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'T', refType: 'REFERRAL', delta: { gt: 0 }, reason: { in: [`${FIRST_ORDER_REFERRER_PREFIX}G`, `${FIRST_ORDER_REFEREE_PREFIX}G`] } },
+      }),
+    );
+  });
+
+  it('lô thưởng đã hết hạn (cron đã trừ POINTS_EXPIRED): không thu lại phần đó từ điểm khác của tài khoản đích', async () => {
+    const past = new Date(2026, 3, 1);
+    const l = ledger({
+      txns: [
+        grantTxn(REFERRER_ROW.reason, 0, past),
+        grantTxn(REFEREE_ROW.reason, 1, past),
+        { id: 'e1', delta: -200, expiresAt: null, createdAt: new Date(2026, 3, 2), reason: 'POINTS_EXPIRED', refType: null, refId: null },
+        { id: 'k1', delta: 500, expiresAt: null, createdAt: new Date(2026, 4, 1), reason: 'DAILY_CHECKIN:DAY_1', refType: null, refId: null },
+      ],
+    });
+    const res = await revokeFirstOrderRewardOnMerge(l.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' });
+    expect(l.balance()).toBe(500);
+    expect(res).toMatchObject({ revoked: 0, shortfall: 0, notices: [] });
+    // Vẫn ghi dòng đối ứng 0 điểm: gộp chạy lại không xét lại, sổ cho thấy liên kết đã bị cắt.
+    expect(l.written).toEqual([
+      { userId: 'T', delta: 0, lot: 'STANDARD', reason: `${FIRST_ORDER_REVOKE_PREFIX}REFERRER:G`, refType: 'REFERRAL', refId: 'MERGE:G' },
+      { userId: 'T', delta: 0, lot: 'STANDARD', reason: `${FIRST_ORDER_REVOKE_PREFIX}REFEREE:G`, refType: 'REFERRAL', refId: 'MERGE:G' },
+    ]);
+  });
+
+  it('một phía hết hạn, phía kia còn: chỉ thu phía còn', async () => {
+    const l = ledger({
+      txns: [
+        grantTxn(REFERRER_ROW.reason, 0, new Date(2026, 3, 1)),
+        grantTxn(REFEREE_ROW.reason, 1, new Date(2027, 3, 1)),
+        { id: 'e1', delta: -100, expiresAt: null, createdAt: new Date(2026, 3, 2), reason: 'POINTS_EXPIRED', refType: null, refId: null },
+        { id: 'k1', delta: 500, expiresAt: null, createdAt: new Date(2026, 4, 1), reason: 'DAILY_CHECKIN:DAY_1', refType: null, refId: null },
+      ],
+      balance: 600,
+    });
+    const res = await revokeFirstOrderRewardOnMerge(l.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' });
+    expect(res).toMatchObject({ revoked: 100, shortfall: 0 });
+    expect(l.balance()).toBe(500);
+  });
+
+  it('số dư không đủ: trừ phần có, phần thiếu ghi nợ REFERRAL_DEBT theo từng phía, không để số dư âm', async () => {
+    const l = ledger({ balance: 150 });
+    const res = await revokeFirstOrderRewardOnMerge(l.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' });
+    expect(res).toMatchObject({ revoked: 150, shortfall: 50 });
+    expect(l.balance()).toBe(0);
+    expect(l.written.find((w) => w.refType === 'REFERRAL_DEBT')).toEqual({
+      userId: 'T',
+      delta: 0,
+      lot: 'STANDARD',
+      reason: `${FIRST_ORDER_DEBT_PREFIX}REFEREE:G:50`,
+      refType: 'REFERRAL_DEBT',
+      refId: 'MERGE:G',
+    });
+  });
+
+  it('chỉ một phía đang ở tài khoản đích (người được mời trong vòng là bạn thật): chỉ thu phía đó, tin mang khoá của phía đó', async () => {
+    const l = ledger({ rows: [REFERRER_ROW] });
+    const res = await revokeFirstOrderRewardOnMerge(l.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' });
+    expect(res?.revoked).toBe(100);
+    expect(l.written.map((w) => w.reason)).toEqual([`${FIRST_ORDER_REVOKE_PREFIX}REFERRER:G`]);
+  });
+
+  it('chạy lại (dòng thu hồi đã có) hoặc không có thưởng đơn đầu: không ghi gì, trả null', async () => {
+    const again = ledger({ existing: [`${FIRST_ORDER_REVOKE_PREFIX}REFERRER:G`, `${FIRST_ORDER_REVOKE_PREFIX}REFEREE:G`] });
+    expect(await revokeFirstOrderRewardOnMerge(again.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' })).toBeNull();
+    expect(again.written).toEqual([]);
+    expect(again.balance()).toBe(500);
+    const none = ledger({ rows: [] });
+    expect(await revokeFirstOrderRewardOnMerge(none.tx as never, { refereeId: 'G', targetId: 'T', refId: 'MERGE:G' })).toBeNull();
+    expect(none.tx.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('dòng thu hồi không mang tiền tố đếm thưởng (Trung tâm tăng trưởng, trần tháng): không bị đếm là một lần thưởng', () => {
+    expect(`${FIRST_ORDER_REVOKE_PREFIX}REFERRER:G`.startsWith(FIRST_ORDER_REFERRER_PREFIX)).toBe(false);
+    expect(`${FIRST_ORDER_REVOKE_PREFIX}REFEREE:G`.startsWith(FIRST_ORDER_REFEREE_PREFIX)).toBe(false);
   });
 });

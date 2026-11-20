@@ -15,6 +15,7 @@ import { isAnonymized, renameMergedMilestones, resolveMergedUserId, revokeReferr
 import { roleClaims } from './session-state.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
+import { revokeFirstOrderRewardOnMerge } from '../referral/first-order-reward';
 import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
@@ -878,9 +879,18 @@ export class AuthService {
       if (cut.length > 0) {
         await tx.user.updateMany({ where: { id: { in: cut } }, data: { referredById: null } });
         for (const refereeId of cut) {
-          const revoked = await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
           // Tự mời: người được mời là chính T hoặc phiên khách của T, không có "bạn" nào để nêu tên.
-          if (revoked) referralNotices.push(...revoked.notices.map((n) => (refereeId === gid || refereeId === tid ? { ...n, hideFriend: true } : n)));
+          const hide = (n: ReferralNotice): ReferralNotice => (n.kind === 'REVOKED' && (refereeId === gid || refereeId === tid) ? { ...n, hideFriend: true } : n);
+          const revoked = await revokeReferralRewardForReferee(tx, refereeId, `MERGE:${gid}`);
+          if (revoked) referralNotices.push(...revoked.notices.map(hide));
+          // Thưởng đơn đầu của cùng liên kết (cả phần phiên khách đã theo sổ sang T ở bước 5): tự mời không được giữ 100 + 100 điểm.
+          const firstOrder = await revokeFirstOrderRewardOnMerge(tx, { refereeId, targetId: tid, refId: `MERGE:${gid}` });
+          if (firstOrder) {
+            referralNotices.push(...firstOrder.notices.map(hide));
+            this.logger.warn(
+              `Gộp khách ${gid} vào ${tid}: thu hồi thưởng đơn đầu của liên kết giới thiệu bị cắt (người được mời ${refereeId}), trừ ${firstOrder.revoked} điểm, nợ ${firstOrder.shortfall}.`,
+            );
+          }
         }
       }
 

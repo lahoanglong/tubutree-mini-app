@@ -1,22 +1,27 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { isRealUser } from '../../common/real-user';
 import {
+  debitReferralReward,
   fullyReturnedOrderIds,
   hasReferralEntry,
   isAnonymized,
   lockReferee,
   lockReferrer,
   resolveMergedUserId,
+  type ReferralRevokeResult,
 } from '../wallet/referral-reward';
+import { firstOrderLotKey, loadPointExpiryTxns, lotRecoverable } from '../loyalty/loyalty-expiry.service';
+import type { ReferralNotice } from '../wallet/referral-notify';
 import { firstOrderBlockReason, vnMonthStart, type FirstOrderBlockReason } from './first-order-guard';
+import { FIRST_ORDER_DEBT_PREFIX, FIRST_ORDER_REFEREE_PREFIX, FIRST_ORDER_REFERRER_PREFIX, FIRST_ORDER_REVOKE_PREFIX } from './first-order-reasons';
 import { readViralRules, type ConfigReader, type ViralRules } from './viral-config';
 
 /**
  * Thưởng ĐƠN ĐẦU của chương trình giới thiệu (cờ growth.referral_viral_enabled, mặc định TẮT). Nối tiếp chương trình duy nhất ở
  * wallet/referral-reward.ts (users.referredById, refType REFERRAL, partial unique index theo reason), không thay thưởng đơn thứ 2.
  *
- * Bạn được mời (người dùng thật) có đơn lẻ giao thành công ĐẦU TIÊN đạt growth.referral_first_order_min (mặc định 199.000đ, không
- * tính đơn đã trả hết phần có tiền) thì cả người mời lẫn người được mời nhận growth.referral_first_order_points Điểm Xanh lô
+ * Bạn được mời (người dùng thật) có đơn lẻ giao thành công ĐẦU TIÊN có tiền hàng (orders.subtotal) đạt growth.referral_first_order_min
+ * (mặc định 199.000đ, không tính đơn đã trả hết phần có tiền) thì cả người mời lẫn người được mời nhận growth.referral_first_order_points Điểm Xanh lô
  * STANDARD (có hạn, nằm dưới trần dùng điểm loyalty.max_redeem_pct như mọi điểm thưởng). Người mời là CTV, chủ gian hàng mẫu,
  * tài khoản bị khoá, đã xoá hoặc chưa là người dùng thật thì không ai nhận; bạn được mời bị khoá tài khoản cũng vậy.
  *
@@ -24,11 +29,13 @@ import { readViralRules, type ConfigReader, type ViralRules } from './viral-conf
  * người được mời), refId = id đơn. Một người được mời chỉ thưởng một lần dù đơn lật trạng thái lại, cron chạy lại việc sau giao hay
  * đơn khác của họ giao sau. Đơn đã dùng để thưởng (kể cả dưới id phiên khách trước khi gộp) không dùng lại.
  *
+ * Mốc tính trên tiền hàng, cùng cơ sở với "Miễn phí giao hàng cho đơn từ 199k" và mã khách mới "cho đơn đầu từ 199k": thẻ thành tích ghi
+ * "Bạn bè mua đơn đầu từ 199k", khách đọc là giá trị món hàng đã mua. Mã giảm giá hay điểm làm tổng trả thấp hơn vẫn đạt, phí giao không cộng vào.
+ *
  * Không thu hồi khi đơn bị trả sau lúc thưởng: mỗi bên 100 điểm = 100đ, có trần tháng; chỉ cần đơn còn DELIVERED và chưa trả hết
- * lúc xét.
+ * lúc xét. Ngoại lệ: gộp phiên khách cắt liên kết tự mời hay tạo vòng thì thu hồi (revokeFirstOrderRewardOnMerge).
  */
-export const FIRST_ORDER_REFERRER_PREFIX = 'REFERRAL_FIRST_ORDER_REFERRER:';
-export const FIRST_ORDER_REFEREE_PREFIX = 'REFERRAL_FIRST_ORDER_REFEREE:';
+export { FIRST_ORDER_DEBT_PREFIX, FIRST_ORDER_REFEREE_PREFIX, FIRST_ORDER_REFERRER_PREFIX, FIRST_ORDER_REVOKE_PREFIX };
 
 /** Số đơn gần nhất của người mời đem so địa chỉ giao và IP. */
 const REFERRER_ORDER_SAMPLE = 50;
@@ -78,7 +85,7 @@ async function zaloIdsOf(db: Db, userId: string, own: string | null): Promise<st
  */
 async function firstQualifyingOrder(db: Db, refereeId: string, minOrder: number): Promise<{ id: string; returned: boolean } | null> {
   const [first] = await db.order.findMany({
-    where: { userId: refereeId, status: { in: ['DELIVERED', 'RETURNED'] }, type: 'RETAIL', placedForCustomer: false, total: { gte: minOrder } },
+    where: { userId: refereeId, status: { in: ['DELIVERED', 'RETURNED'] }, type: 'RETAIL', placedForCustomer: false, subtotal: { gte: minOrder } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { id: true, status: true },
     take: 1,
@@ -126,7 +133,7 @@ async function evaluate(deps: FirstOrderDeps, rules: ViralRules, orderId: string
       userId: true,
       type: true,
       status: true,
-      total: true,
+      subtotal: true,
       placedForCustomer: true,
       createdAt: true,
       shippingAddress: true,
@@ -135,7 +142,7 @@ async function evaluate(deps: FirstOrderDeps, rules: ViralRules, orderId: string
       placedIpHash: true,
     },
   });
-  if (!order || order.type !== 'RETAIL' || order.placedForCustomer || order.status !== 'DELIVERED' || order.total < rules.minOrder) {
+  if (!order || order.type !== 'RETAIL' || order.placedForCustomer || order.status !== 'DELIVERED' || order.subtotal < rules.minOrder) {
     return { status: 'SKIPPED', reason: 'NOT_ELIGIBLE' };
   }
   const refereeId = order.userId;
@@ -226,4 +233,51 @@ async function evaluate(deps: FirstOrderDeps, rules: ViralRules, orderId: string
     if (!paidReferrer) return { status: 'SKIPPED', reason: 'ALREADY' };
     return { status: 'GRANTED', referrerId, refereeId, points: rules.points };
   });
+}
+
+/**
+ * Gộp phiên khách (auth.service mergeGuestInto, bước 10) vừa cắt liên kết giới thiệu của `refereeId` vì tự mời (khách do chính tài khoản đích
+ * mời) hay tạo vòng: thu hồi thưởng đơn đầu của liên kết đó, như thưởng đơn thứ 2 (revokeReferralRewardForReferee). BẮT BUỘC chạy trong tx gộp,
+ * sau bước 5 (sổ điểm của khách đã sang `targetId`) và khi đang giữ khoá dòng users của `targetId`.
+ *
+ * Chỉ thu các dòng thưởng `targetId` đang giữ: tự mời thì cả hai dòng (phần người mời và phần phiên khách) đều đã về tài khoản đích; trong vòng
+ * thì phần người được mời nằm ở một người bạn thật và được giữ. Mỗi dòng một dòng đối ứng lô STANDARD mang reason duy nhất (partial unique
+ * index theo reason): chạy lại không trừ lần hai. Không để số dư âm, phần thiếu ghi REFERRAL_DEBT. Mỗi phía chỉ thu phần lô thưởng còn lại
+ * theo sổ lô (lotRecoverable): phần cron đã trừ vì hết hạn không thu lần nữa từ điểm khác; hết sạch thì dòng đối ứng 0 điểm, không tin báo.
+ * Tin báo là best-effort như tin thưởng đơn đầu: không nằm trong REFERRAL_NOTICE_REASON_PREFIXES nên cron đối soát không gửi lại.
+ * Trả null khi không có dòng thưởng nào để xét hoặc đã thu rồi.
+ */
+export async function revokeFirstOrderRewardOnMerge(
+  tx: Db,
+  input: { refereeId: string; targetId: string; refId: string },
+): Promise<ReferralRevokeResult | null> {
+  const { refereeId, targetId, refId } = input;
+  const sides = [
+    { side: 'REFERRER', grantReason: `${FIRST_ORDER_REFERRER_PREFIX}${refereeId}` },
+    { side: 'REFEREE', grantReason: `${FIRST_ORDER_REFEREE_PREFIX}${refereeId}` },
+  ] as const;
+  const held = await tx.pointsTransaction.findMany({
+    where: { userId: targetId, refType: 'REFERRAL', delta: { gt: 0 }, reason: { in: sides.map((s) => s.grantReason) } },
+    select: { reason: true, delta: true },
+  });
+  let revoked = 0;
+  let shortfall = 0;
+  let key: string | null = null;
+  for (const { side, grantReason } of sides) {
+    const row = held.find((h) => h.reason === grantReason);
+    if (!row) continue;
+    const reason = `${FIRST_ORDER_REVOKE_PREFIX}${side}:${refereeId}`;
+    const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, targetId), firstOrderLotKey(side, refereeId));
+    const due = Math.max(0, Math.min(row.delta, recoverable ?? row.delta));
+    const grant = { amount: row.delta, ledger: 'POINTS' } as const;
+    const res = await debitReferralReward(tx, targetId, grant, reason, refId, `${FIRST_ORDER_DEBT_PREFIX}${side}:${refereeId}`, due);
+    if (!res) continue;
+    revoked += res.revoked;
+    shortfall += res.shortfall;
+    key ??= reason;
+  }
+  if (key === null) return null;
+  const notices: ReferralNotice[] =
+    revoked + shortfall > 0 ? [{ kind: 'REVOKED', referrerId: targetId, refereeId, taken: revoked, debt: shortfall, cause: 'MERGE', key }] : [];
+  return { revoked, shortfall, notices };
 }

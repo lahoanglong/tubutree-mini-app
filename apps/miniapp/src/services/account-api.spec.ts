@@ -46,6 +46,7 @@ describe('pointsReasonLabel', () => {
     ['REFERRAL_MILESTONE:u1:3', 'Thưởng giới thiệu bạn bè'],
     ['REFERRAL_ORDER2_REVOKE:u1', 'Thu hồi thưởng giới thiệu'],
     ['REFERRAL_MILESTONE_REVOKE:u1:3#1', 'Thu hồi thưởng giới thiệu'],
+    ['REFERRAL_FIRST_ORDER_REVOKE:REFERRER:u1', 'Thu hồi thưởng giới thiệu'],
     ['COMMUNITY_POST:p1', 'Thưởng cộng đồng'],
     ['COMMUNITY_EVENT_WIN:e1:u1', 'Thưởng cộng đồng'],
     ['STOREFRONT_QUEST:PROFILE', 'Thưởng nhiệm vụ gian hàng'],

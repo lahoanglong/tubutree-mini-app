@@ -9,6 +9,14 @@ import { SESSION_COOKIE } from './home-restore-hint';
 /** Cookie `1` khi giỏ khách (localStorage) có món: bản dựng sẵn vẽ giỏ trống, nên khách có món phải đi bản thường. */
 export const GUEST_CART_COOKIE = 'tubu_guest_cart';
 
+/** Khoá localStorage và luật một dòng hợp lệ của giỏ khách (guest-cart/store.ts dùng chung), để script ở guest-prebuilt-script.ts xét "giỏ có món" y như store. */
+export const GUEST_CART_KEY = 'tubu.guestCart.v1';
+export const GUEST_CART_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export const GUEST_CART_SLUG_RE = /^[^\s/?#\\]{1,200}$/;
+
+/** Hạn cookie web tự ghi: 30 ngày, bằng SESSION_COOKIE_MAX_AGE_S của writeWebCookie (client-api không import module này để JS mọi trang không nặng thêm; spec so hai số). */
+export const WEB_COOKIE_MAX_AGE_S = 30 * 24 * 3600;
+
 /** Đường dẫn thật → đường dẫn bản dựng sẵn (app/gio-hang/khach, app/vuon-xanh/khach). */
 export const GUEST_PREBUILT_ROUTES: Readonly<Record<string, string>> = {
   '/gio-hang': '/gio-hang/khach',

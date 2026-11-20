@@ -61,6 +61,14 @@ describe('danh sách điều khiển', () => {
     expect([num('growth.referral_monthly_cap').min, num('growth.referral_monthly_cap').max, num('growth.referral_monthly_cap').fallback]).toEqual([0, 1_000, 10]);
   });
 
+  it('mốc đơn đầu ghi đúng cơ sở máy chủ tính (orders.subtotal, w8-02 MINOR 7): tiền hàng như mốc freeship, không phải tổng khách trả', () => {
+    const min = num('growth.referral_first_order_min');
+    expect(min.label).toBe('Thưởng đơn đầu: tiền hàng tối thiểu');
+    expect(min.hint).toContain('Tiền hàng');
+    expect(min.hint).toContain('không gồm phí giao');
+    expect(min.hint).not.toContain('Tổng tiền khách trả');
+  });
+
   it('biên trần game trùng biên máy chủ kẹp (game-mini.settings.ts)', () => {
     expect([num('game.mini.points_daily_cap').min, num('game.mini.points_daily_cap').max]).toEqual([0, 500]);
     expect([num('game.mini.global_points_daily_budget').min, num('game.mini.global_points_daily_budget').max]).toEqual([0, 1_000_000]);
