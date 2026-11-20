@@ -1450,8 +1450,15 @@ export default function CheckoutPage() {
       {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
 
       <Text size="xSmall" data-testid="order-consent" style={{ display: 'block', padding: '12px 16px 0', color: 'var(--color-text-secondary)' }}>
-        Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => setPolicy('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}
-        <ConsentLink onPress={() => setPolicy('doi-tra')}>Chính sách đổi trả</ConsentLink>.
+        Bằng việc đặt hàng, bạn đồng ý với:{' '}
+        <br />
+        <span className="tubu-consent-links">
+          <ConsentLink onPress={() => setPolicy('dieu-khoan')}>Điều khoản</ConsentLink>,{' '}
+          <ConsentLink label="Chính sách bảo mật" onPress={() => setPolicy('bao-mat')}>Bảo mật</ConsentLink>,{' '}
+          <ConsentLink label="Chính sách đổi trả" onPress={() => setPolicy('doi-tra')}>Đổi trả</ConsentLink>,{' '}
+          <ConsentLink label="Chính sách vận chuyển" onPress={() => setPolicy('van-chuyen')}>Vận chuyển</ConsentLink>,{' '}
+          <ConsentLink label="Chính sách thanh toán" onPress={() => setPolicy('thanh-toan')}>Thanh toán</ConsentLink>.
+        </span>
       </Text>
 
       <PolicySheet slug={policy} onClose={() => setPolicy(null)} />
@@ -1673,12 +1680,16 @@ function CheckoutSkeleton() {
   );
 }
 
-/** Liên kết nằm giữa câu: chữ có gạch chân, giữ nguyên dòng chữ xung quanh (vùng chạm là cả dòng cao 16px + khoảng đệm của thanh). */
-function ConsentLink({ onPress, children }: { onPress: () => void; children: ReactNode }) {
+/**
+ * Link chính sách ở dòng đồng ý; chữ ngắn ("Bảo mật") thì `label` mang tên đầy đủ cho trình đọc màn hình. Năm link nằm trong
+ * `.tubu-consent-links` (mỗi dòng cao 44px) nên khi phải xuống dòng, vùng chạm 44px không chồng lên link dòng khác.
+ */
+function ConsentLink({ onPress, label, children }: { onPress: () => void; label?: string; children: ReactNode }) {
   return (
     <button
       type="button"
       className="tubu-hit-44"
+      aria-label={label}
       onClick={onPress}
       style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', color: 'var(--color-text-brand)', textDecoration: 'underline', cursor: 'pointer' }}
     >

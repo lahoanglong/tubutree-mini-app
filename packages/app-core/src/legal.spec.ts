@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  DEFAULT_LEGAL_DELIVERY,
   DEFAULT_LEGAL_SUPPORT,
   DEFAULT_LEGAL_VARS,
   LEGAL_DRAFT_NOTICE,
@@ -12,8 +13,10 @@ import {
   isBctNoticeUrl,
   isLegalSlug,
   companyLegalLine,
+  legalDeliveryOf,
   merchantIdentityOrDefault,
   normalizeRegistrationDate,
+  type LegalDelivery,
 } from './legal';
 
 const VARS = { returnWindowDays: 7, freeshipThreshold: 199000 };
@@ -326,10 +329,34 @@ describe('isBctNoticeUrl — chỉ link thật của Bộ Công Thương mới �
 });
 
 describe('companyLegalLine — người đại diện và ĐKDN ở chân trang', () => {
-  it('chưa nhập gì (hoặc chỉ khoảng trắng) thì null để ẩn cả dòng, không điền mặc định', () => {
-    expect(companyLegalLine(undefined)).toBeNull();
-    expect(companyLegalLine({})).toBeNull();
-    expect(companyLegalLine({ representative: ' ', registrationNumber: null, registrationDate: '', registrationPlace: '  ' })).toBeNull();
+  const HOUSEHOLD = { legalName: 'Hộ kinh doanh Tubu', taxCode: '8123456789' };
+
+  it('chưa nhập gì: số ĐKDN là MST của thương nhân mặc định (công ty: mã số doanh nghiệp đồng thời là MST), không bịa ngày, nơi cấp hay người đại diện', () => {
+    const line = `Giấy chứng nhận đăng ký doanh nghiệp số ${TUBU_TREE_MERCHANT.taxCode}`;
+    expect(companyLegalLine(undefined)).toBe(line);
+    expect(companyLegalLine({})).toBe(line);
+    expect(companyLegalLine({ representative: ' ', registrationNumber: null, registrationDate: '', registrationPlace: '  ' })).toBe(line);
+  });
+
+  it('admin đã nhập tên công ty và MST (như PROD) mà chưa nhập số ĐKDN: số ĐKDN lấy đúng MST đó', () => {
+    expect(companyLegalLine({ legalName: 'CÔNG TY TNHH TUBU TREE', taxCode: '0319585995', address: 'Số 33' })).toBe(
+      'Giấy chứng nhận đăng ký doanh nghiệp số 0319585995',
+    );
+    expect(companyLegalLine({ legalName: 'Công ty Cổ phần A', taxCode: '0312345678' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0312345678');
+    expect(companyLegalLine({ legalName: 'Công ty Cổ phần A', taxCode: '0312345678', registrationNumber: '0399999999' })).toBe(
+      'Giấy chứng nhận đăng ký doanh nghiệp số 0399999999',
+    );
+  });
+
+  it('doanh nghiệp tư nhân cũng có mã số doanh nghiệp là MST', () => {
+    expect(companyLegalLine({ legalName: 'Doanh nghiệp tư nhân Xanh', taxCode: '0312345678' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0312345678');
+  });
+
+  it('không phải doanh nghiệp (hộ kinh doanh), thiếu MST hoặc MST không phải 10 số (chi nhánh 13 số): không suy số ĐKDN từ MST', () => {
+    expect(companyLegalLine(HOUSEHOLD)).toBeNull();
+    expect(companyLegalLine({ legalName: 'Công ty Cổ phần A', address: 'Số 1' })).toBeNull();
+    expect(companyLegalLine({ legalName: 'Công ty Cổ phần A', taxCode: '0312345678-001' })).toBeNull();
+    expect(companyLegalLine({ legalName: 'Công tyX', taxCode: '0312345678' })).toBeNull();
   });
 
   it('đủ bốn trường: một dòng, số + nơi cấp + ngày cấp', () => {
@@ -339,11 +366,105 @@ describe('companyLegalLine — người đại diện và ĐKDN ở chân trang'
   });
 
   it('chỉ nêu phần đã nhập: không bịa nơi cấp hay ngày còn thiếu', () => {
-    expect(companyLegalLine({ representative: 'Nguyễn Văn A' })).toBe('Người đại diện theo pháp luật: Nguyễn Văn A');
-    expect(companyLegalLine({ registrationNumber: '0319585995' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995');
-    expect(companyLegalLine({ registrationNumber: '0319585995', registrationDate: '12/03/2020' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995, cấp ngày 12/03/2020');
-    expect(companyLegalLine({ registrationNumber: '0319585995', registrationPlace: 'Sở Tài chính' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995 do Sở Tài chính cấp');
-    expect(companyLegalLine({ registrationDate: '12/03/2020' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp cấp ngày 12/03/2020');
+    expect(companyLegalLine({ ...HOUSEHOLD, representative: 'Nguyễn Văn A' })).toBe('Người đại diện theo pháp luật: Nguyễn Văn A');
+    expect(companyLegalLine({ ...HOUSEHOLD, registrationNumber: '0319585995' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995');
+    expect(companyLegalLine({ ...HOUSEHOLD, registrationNumber: '0319585995', registrationDate: '12/03/2020' })).toBe(
+      'Giấy chứng nhận đăng ký doanh nghiệp số 0319585995, cấp ngày 12/03/2020',
+    );
+    expect(companyLegalLine({ ...HOUSEHOLD, registrationNumber: '0319585995', registrationPlace: 'Sở Tài chính' })).toBe(
+      'Giấy chứng nhận đăng ký doanh nghiệp số 0319585995 do Sở Tài chính cấp',
+    );
+    expect(companyLegalLine({ ...HOUSEHOLD, registrationDate: '12/03/2020' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp cấp ngày 12/03/2020');
+  });
+});
+
+describe('legal — thời gian giao theo lịch kho đang chạy (w11-02)', () => {
+  const vc = (delivery?: LegalDelivery) => defaultLegalContent('van-chuyen', { ...VARS, ...(delivery ? { delivery } : {}) }, SUPPORT);
+
+  it('mặc định là lịch PO duyệt: TP.HCM 1–2, tỉnh khác 2–4 ngày làm việc, cắt đơn 15:00, Thứ 2 đến Thứ 7; không còn chỗ giữ [số ngày]', () => {
+    const text = vc();
+    expect(text).toContain('- Nội thành Thành phố Hồ Chí Minh: 1–2 ngày làm việc.');
+    expect(text).toContain('- Tỉnh thành khác: 2–4 ngày làm việc.');
+    expect(text).toContain('Kho Tubu Tree xuất hàng từ Thứ 2 đến Thứ 7, trừ ngày lễ. Đơn đặt trước 15:00');
+    expect(text).toContain('Ngày nhận dự kiến hiển thị trong ứng dụng chỉ để tham khảo; thời gian giao áp dụng là thời gian ở hai dòng trên.');
+    expect(text).not.toContain('tính theo đúng lịch');
+    expect(text).not.toContain('[số ngày]');
+    expect(vc(DEFAULT_LEGAL_DELIVERY)).toBe(text);
+  });
+
+  it('đổi lịch kho thì chính sách đổi theo: một ngày không in khoảng, ngày làm không liền nhau thì liệt kê, có Chủ nhật', () => {
+    const text = vc({ cutoff: '14:00', workDays: [1, 3, 5], hcmDays: [1, 1], provinceDays: [3, 5] });
+    expect(text).toContain('Thành phố Hồ Chí Minh: 1 ngày làm việc.');
+    expect(text).toContain('Tỉnh thành khác: 3–5 ngày làm việc.');
+    expect(text).toContain('xuất hàng từ Thứ 2, Thứ 4, Thứ 6, trừ ngày lễ. Đơn đặt trước 14:00');
+    expect(vc({ ...DEFAULT_LEGAL_DELIVERY, workDays: [0, 1, 2, 3, 4, 5, 6] })).toContain('xuất hàng từ Thứ 2 đến Chủ nhật');
+  });
+
+  it('khoảng có 0 ngày: không in "0–2 ngày" hay "0 ngày"', () => {
+    const text = vc({ ...DEFAULT_LEGAL_DELIVERY, hcmDays: [0, 0], provinceDays: [0, 2] });
+    expect(text).toContain('- Nội thành Thành phố Hồ Chí Minh: giao trong ngày.');
+    expect(text).toContain('- Tỉnh thành khác: trong vòng 2 ngày làm việc.');
+    expect(text).not.toMatch(/\b0(–\d+)? ngày/);
+  });
+
+  it('legalDeliveryOf: nhận lịch hợp lệ, trường hỏng về lịch chuẩn', () => {
+    expect(legalDeliveryOf({ cutoff: '09:30', workDays: [5, 1, 1], hcmDays: [0, 2], provinceDays: [4, 4] })).toEqual({
+      cutoff: '09:30',
+      workDays: [1, 5],
+      hcmDays: [0, 2],
+      provinceDays: [4, 4],
+    });
+    for (const bad of [null, undefined, 'x', [], { cutoff: '24:00', workDays: [7], hcmDays: [2, 1], provinceDays: [1.5, 2] }]) {
+      expect(legalDeliveryOf(bad)).toEqual(DEFAULT_LEGAL_DELIVERY);
+    }
+  });
+});
+
+describe('legal — căn cứ bảo vệ thông tin cá nhân trong TMĐT (w11-02)', () => {
+  it('bản nháp chính sách bảo mật nêu Nghị định 52/2013/NĐ-CP và 85/2021/NĐ-CP', () => {
+    const text = defaultLegalContent('bao-mat', VARS, SUPPORT);
+    expect(text).toContain('Nghị định 52/2013/NĐ-CP');
+    expect(text).toContain('Nghị định 85/2021/NĐ-CP');
+  });
+});
+
+describe('legal — bản PROD đã lưu khớp luật đang chạy (migration w11-02)', () => {
+  const sql = readFileSync(resolve(__dirname, '../../../apps/api/prisma/migrations/20261120233000_w11_02_legal_live_rules/migration.sql'), 'utf8');
+  const pairs = (key: string) => {
+    const part = sql.split('UNION ALL').find((p) => p.includes(`c."key" = '${key}'`)) ?? '';
+    return [...part.matchAll(/\$o(\d)\$([\s\S]*?)\$o\1\$,\s*\$n\1\$([\s\S]*?)\$n\1\$/g)].map((m) => [m[2], m[3]] as const);
+  };
+
+  it('chỉ thay đúng câu cũ, giữ nguyên bản admin đã sửa, ghi lịch sử một lần', () => {
+    expect(sql).toContain(`normalize(c."value" #>> '{}', NFC)`);
+    expect(sql).toContain('WHERE body <> nfc_body');
+    expect(sql).toMatch(/INSERT INTO "system_config_history"[\s\S]*'sch_w1102_' \|\| md5\(t."key"\)[\s\S]*ON CONFLICT \("id"\) DO NOTHING/);
+    expect(sql).not.toMatch(/DELETE|DROP|ALTER/);
+  });
+
+  it('dòng hiệu lực đầu văn bản thêm "Cập nhật ngày" (giờ Việt Nam), chỉ trên bản thật sự đổi', () => {
+    expect(sql).toContain(`'^(Hiệu lực từ ngày [0-9/]+\\.)( Cập nhật ngày [0-9/]+\\.)?'`);
+    expect(sql).toContain(`to_char(now() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY')`);
+    expect(sql).toMatch(/WHERE body <> nfc_body/);
+  });
+
+  it('bảo mật: bỏ đường gửi về kho đang tắt, nêu hai đường đang mở và căn cứ Nghị định 52/2013, 85/2021', () => {
+    const bm = pairs('legal.bao-mat');
+    expect(bm).toHaveLength(3);
+    const after = bm.map(([, n]) => n).join('\n');
+    expect(bm.map(([o]) => o).join('\n')).toContain('gửi về kho');
+    expect(after).not.toContain('gửi về kho');
+    expect(after).toContain('mang tới điểm nhận, shipper lấy tận nhà hoặc thu kèm đơn hàng');
+    expect(after).toContain('Nghị định 52/2013/NĐ-CP, Nghị định 85/2021/NĐ-CP');
+  });
+
+  it('vận chuyển: tỉnh khác 2–4 ngày làm việc và câu lịch kho trùng bản nháp mặc định', () => {
+    const vcPairs = pairs('legal.van-chuyen');
+    expect(vcPairs).toHaveLength(2);
+    const draft = defaultLegalContent('van-chuyen', VARS, SUPPORT);
+    expect(vcPairs[0]![1]).toBe('- Các tỉnh thành khác: 2–4 ngày làm việc.');
+    expect(draft).toContain(vcPairs[1]![1]);
+    for (const [o] of vcPairs) expect(draft).not.toContain(o);
   });
 });
 

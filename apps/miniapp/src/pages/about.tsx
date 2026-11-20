@@ -88,7 +88,7 @@ export default function AboutPage() {
 
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const operator = operatorLine(publicConfig.company);
-  // Người đại diện và số/ngày/nơi cấp ĐKDN: chỉ hiện phần admin đã nhập, để trống thì ẩn cả dòng.
+  // Người đại diện, ngày và nơi cấp ĐKDN chỉ hiện khi admin đã nhập (không bịa). Số ĐKDN để trống thì doanh nghiệp dùng MST (mã số doanh nghiệp), hộ kinh doanh thì ẩn.
   const legalLine = companyLegalLine(publicConfig.company);
   const bctRaw = publicConfig.company?.bctNoticeUrl;
   const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;

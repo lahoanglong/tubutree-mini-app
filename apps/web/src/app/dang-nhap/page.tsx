@@ -23,7 +23,7 @@ import { QrCode } from '@/components/ui/qr-code';
 import { LoginSkeleton } from './login-skeleton';
 
 /** Link giữa câu đồng ý: hộp chạm 44px là hộp thật của link (dòng chứa link cao theo), không phải đệm inline tràn sang dòng và đoạn kề,
- * vì phần tràn đó bị dòng sau và nút phía trên giành mất khi chạm. `.tubu-inline-link` chỉ ra ~41px với chữ 12px. */
+ * vì phần tràn đó bị dòng sau và nút phía trên giành mất khi chạm. Đệm dọc 13px của link inline chỉ ra ~41px với chữ 12px. */
 const TERMS_LINK = 'inline-flex min-h-11 items-center font-medium text-forest-700 underline underline-offset-2';
 
 function LoginInner() {

@@ -15,7 +15,7 @@ const COMPANY_FIELDS = [
   { key: 'company.tax_code', label: 'Mã số thuế', hint: 'Hiện cho khách ở chân trang.', placeholder: '0123456789' },
   { key: 'company.address', label: 'Địa chỉ trụ sở', hint: 'Địa chỉ đã đăng ký kinh doanh.', placeholder: 'Số nhà, đường, phường, tỉnh' },
   { key: 'company.representative', label: 'Người đại diện theo pháp luật', hint: 'Họ tên đúng như trên giấy chứng nhận đăng ký doanh nghiệp. Hiện ở chân trang web và trang Về Tubu Tree; để trống thì ẩn.', placeholder: 'Họ và tên' },
-  { key: 'company.business_registration_number', label: 'Số giấy chứng nhận đăng ký doanh nghiệp', hint: 'Nhập đúng số trên giấy (hệ thống không tự lấy từ mã số thuế). Để trống thì ẩn.', placeholder: 'Số ghi trên giấy chứng nhận' },
+  { key: 'company.business_registration_number', label: 'Số giấy chứng nhận đăng ký doanh nghiệp', hint: 'Nhập đúng số trên giấy. Để trống: doanh nghiệp dùng mã số thuế 10 số (mã số doanh nghiệp), hộ kinh doanh thì ẩn.', placeholder: 'Số ghi trên giấy chứng nhận' },
   { key: 'company.business_registration_date', label: 'Ngày cấp giấy chứng nhận', hint: 'Dạng ngày/tháng/năm, ví dụ 12/03/2020. Ngày không có thật hoặc chưa tới thì chân trang ẩn dòng này.', placeholder: 'dd/mm/yyyy' },
   { key: 'company.business_registration_place', label: 'Nơi cấp giấy chứng nhận', hint: 'Cơ quan đăng ký kinh doanh đã cấp giấy. Để trống thì ẩn.', placeholder: 'Sở Tài chính Thành phố ...' },
   { key: 'company.bct_notice_url', label: 'Link thông báo Bộ Công Thương', hint: 'Chỉ dán khi Bộ Công Thương đã duyệt hồ sơ: link https do cổng online.gov.vn cấp. Để trống thì ẩn huy hiệu "Đã thông báo Bộ Công Thương".', placeholder: 'https://online.gov.vn/...' },

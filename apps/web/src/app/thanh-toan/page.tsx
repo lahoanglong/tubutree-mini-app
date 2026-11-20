@@ -1261,7 +1261,7 @@ export default function CheckoutPage() {
             disabled={placeDisabled}
             aria-busy={place.isPending || undefined}
             aria-disabled={place.isPending || undefined}
-            className={`${ui.btnPrimary} mt-2 hidden w-full tabular-nums lg:inline-flex`}
+            className={`${ui.btnPrimary} mt-3 hidden w-full tabular-nums lg:inline-flex`}
           >
             {placeLabel}
           </button>

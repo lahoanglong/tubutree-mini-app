@@ -405,10 +405,17 @@ describe('Đơn vị vận hành trên trang Về Tubu Tree', () => {
     expect(await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678 · 1 Đường A, Quận B')).toBeInTheDocument();
   });
 
-  it('chưa nhập người đại diện / ĐKDN thì KHÔNG có dòng hồ sơ pháp lý (không bịa)', async () => {
+  it('công ty chưa nhập số ĐKDN: số là MST (mã số doanh nghiệp), không bịa người đại diện, ngày hay nơi cấp', async () => {
     mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: null, bctNoticeUrl: null, representative: null, registrationNumber: null, registrationDate: null, registrationPlace: null } });
     renderPage();
     await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678');
+    expect(screen.getByTestId('about-company-legal')).toHaveTextContent(/^Giấy chứng nhận đăng ký doanh nghiệp số 0312345678$/);
+  });
+
+  it('hộ kinh doanh chưa nhập người đại diện / ĐKDN thì KHÔNG có dòng hồ sơ pháp lý (không bịa)', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: 'Hộ kinh doanh Tubu', taxCode: '8123456789', address: null, bctNoticeUrl: null, representative: null, registrationNumber: null, registrationDate: null, registrationPlace: null } });
+    renderPage();
+    await screen.findByText('Đơn vị vận hành: Hộ kinh doanh Tubu · MST 8123456789');
     expect(screen.queryByTestId('about-company-legal')).toBeNull();
   });
 

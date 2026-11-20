@@ -66,7 +66,7 @@ function LinkColumn({ title, links }: { title: string; links: DiscoverLink[] }) 
 
 function CompanyInfo({ company, className }: { company: SupportContact['company']; className: string }) {
   const line = operatorLine(company);
-  // Người đại diện và số/ngày/nơi cấp ĐKDN: chỉ hiện phần admin đã nhập, để trống thì ẩn cả dòng (không mặc định, không bịa).
+  // Người đại diện, ngày và nơi cấp ĐKDN chỉ hiện khi admin đã nhập (không bịa). Số ĐKDN để trống thì doanh nghiệp dùng MST (mã số doanh nghiệp), hộ kinh doanh thì ẩn.
   const legalLine = companyLegalLine(company);
   const bctRaw = company?.bctNoticeUrl;
   const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;
@@ -161,13 +161,17 @@ export default async function SiteFooter() {
       <CompanyInfo company={company} className={`${PAGE_WIDE} pb-6`} />
     </footer>
 
-    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline và chính sách vẫn phải với tới được từ mọi trang.
+    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline, email và chính sách vẫn phải với tới được từ mọi trang (Bộ Công Thương).
         Trang có thanh dính đáy ([data-sticky-bar]) thì globals.css ẩn luôn chân trang gọn này, nhắm theo data-compact-footer. */}
     <footer aria-label="Hỗ trợ và chính sách" data-compact-footer className="mt-8 border-t border-stone-200 bg-stone-0 px-4 py-4 md:hidden">
       <div className="flex flex-wrap items-center gap-x-4">
         <a href={`tel:${tel}`} className={LINK}>
           <Phone className="h-4 w-4" aria-hidden="true" />
           <span>Hotline: {formatPhoneDisplay(hotline)}</span>
+        </a>
+        <a href={`mailto:${email}`} className={LINK}>
+          <Mail className="h-4 w-4" aria-hidden="true" />
+          <span>{email}</span>
         </a>
         <a href="https://blog.tubutree.com" target="_blank" rel="noopener noreferrer" className={LINK}>
           <span>Blog</span>

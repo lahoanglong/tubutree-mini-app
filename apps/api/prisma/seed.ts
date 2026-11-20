@@ -87,7 +87,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'company.address', value: '', category: 'company', description: 'Địa chỉ trụ sở đã đăng ký, hiển thị cho khách', createOnly: true },
   { key: 'company.bct_notice_url', value: '', category: 'company', description: 'Link https do cổng online.gov.vn cấp sau khi Bộ Công Thương duyệt thông báo (host online.gov.vn hoặc *.gov.vn). Để trống = ẩn huy hiệu "Đã thông báo Bộ Công Thương"; chỉ điền khi hồ sơ đã được duyệt', createOnly: true },
   { key: 'company.representative', value: '', category: 'company', description: 'Họ tên người đại diện theo pháp luật, hiển thị ở chân trang web và trang Về Tubu Tree. Để trống = ẩn dòng', createOnly: true },
-  { key: 'company.business_registration_number', value: '', category: 'company', description: 'Số Giấy chứng nhận đăng ký doanh nghiệp, hiển thị ở chân trang. Để trống = ẩn (không tự lấy từ mã số thuế)', createOnly: true },
+  { key: 'company.business_registration_number', value: '', category: 'company', description: 'Số Giấy chứng nhận đăng ký doanh nghiệp, hiển thị ở chân trang. Để trống: doanh nghiệp có mã số thuế 10 số thì hiện số đó (mã số doanh nghiệp theo Luật Doanh nghiệp 2020), hộ kinh doanh thì ẩn', createOnly: true },
   { key: 'company.business_registration_date', value: '', category: 'company', description: 'Ngày cấp Giấy chứng nhận đăng ký doanh nghiệp, dạng dd/mm/yyyy. Sai định dạng hoặc ngày không có thật thì chân trang ẩn dòng', createOnly: true },
   { key: 'company.business_registration_place', value: '', category: 'company', description: 'Nơi cấp Giấy chứng nhận đăng ký doanh nghiệp (vd Sở Tài chính Thành phố Hồ Chí Minh), hiển thị ở chân trang. Để trống = ẩn', createOnly: true },
   {

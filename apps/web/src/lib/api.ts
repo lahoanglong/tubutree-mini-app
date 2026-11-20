@@ -1,7 +1,7 @@
 import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { withProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
 import { formatVnd } from './format-vnd';
-import { DEFAULT_LEGAL_VARS, isBctNoticeUrl, type LegalVars } from './legal';
+import { DEFAULT_LEGAL_VARS, isBctNoticeUrl, legalDeliveryOf, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
 // NEXT_PUBLIC_* bị inline lúc build nên chỉ dùng làm fallback.
 const BASE =
@@ -488,7 +488,10 @@ function nonNegativeOr(v: unknown, fallback: number): number {
  * Lỗi tạm thời thì ném: ISR giữ bản đã render thay vì thay nội dung đã duyệt bằng bản nháp.
  */
 export async function getLegalDoc(loai: string): Promise<LegalDoc> {
-  const json = await fetchDetail<{ content?: unknown; vars?: { returnWindowDays?: unknown; freeshipThreshold?: unknown; shippingFlatFee?: unknown; legalName?: unknown; taxCode?: unknown; address?: unknown } }>(
+  const json = await fetchDetail<{
+    content?: unknown;
+    vars?: { returnWindowDays?: unknown; freeshipThreshold?: unknown; shippingFlatFee?: unknown; legalName?: unknown; taxCode?: unknown; address?: unknown; delivery?: unknown };
+  }>(
     `/config/legal/${encodeURIComponent(loai)}`,
     300,
   );
@@ -498,6 +501,7 @@ export async function getLegalDoc(loai: string): Promise<LegalDoc> {
       returnWindowDays: nonNegativeOr(json?.vars?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
       freeshipThreshold: nonNegativeOr(json?.vars?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
       shippingFlatFee: nonNegativeOr(json?.vars?.shippingFlatFee, DEFAULT_LEGAL_VARS.shippingFlatFee ?? 0),
+      delivery: legalDeliveryOf(json?.vars?.delivery),
       ...(trimmed(json?.vars?.legalName) ? { legalName: trimmed(json?.vars?.legalName) } : {}),
       ...(trimmed(json?.vars?.taxCode) ? { taxCode: trimmed(json?.vars?.taxCode) } : {}),
       ...(trimmed(json?.vars?.address) ? { address: trimmed(json?.vars?.address) } : {}),

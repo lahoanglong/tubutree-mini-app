@@ -95,7 +95,7 @@ describe('PageHeader (web) ở điện thoại', () => {
   });
 
   it('layout gắn nút lùi trong HideOnPortals, cạnh BottomNav', () => {
-    const layout = readFileSync(join(__dirname, '../app/layout.tsx'), 'utf8');
+    const layout = readFileSync(join(__dirname, '../app/layout-shell.tsx'), 'utf8');
     expect(layout).toMatch(/<HideOnPortals>\s*<BackButton className="md:!hidden" \/>/);
   });
 

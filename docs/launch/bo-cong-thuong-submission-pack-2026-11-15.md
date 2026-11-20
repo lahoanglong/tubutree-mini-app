@@ -26,7 +26,7 @@ Lưu ý:
 2. Mini App chưa từng gửi duyệt với Zalo. Chỉ khai kèm ứng dụng di động khi Mini App đã được Zalo duyệt và phát hành; chưa thì bỏ trống ô này, không ảnh hưởng hồ sơ website.
 3. Ngành hàng phải khớp ngành nghề đăng ký kinh doanh. Chương trình Đổi rác lấy quà là chương trình tích điểm cho khách, không phải hàng hoá bán ra nên không khai ở ô ngành hàng.
 
-Chế độ vận hành công khai của `app.tubutree.com` là website bán hàng của CÔNG TY TNHH TUBU TREE (MST 0319585995): chân trang web và trang Về Tubu Tree của Mini App luôn hiện dòng "Đơn vị vận hành: CÔNG TY TNHH TUBU TREE · MST 0319585995 · Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh" (admin nhập `company.*` khác thì hiện đúng giá trị admin nhập). Web khách không có form đăng ký gian hàng công khai: cổng `/merchant` không có lối dẫn từ web khách, không vào sitemap, bị chặn ở robots và có thẻ noindex.
+Chế độ vận hành công khai của `app.tubutree.com` là website bán hàng của CÔNG TY TNHH TUBU TREE (MST 0319585995): chân trang web và trang Về Tubu Tree của Mini App luôn hiện dòng "Đơn vị vận hành: CÔNG TY TNHH TUBU TREE · MST 0319585995 · Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh" (admin nhập `company.*` khác thì hiện đúng giá trị admin nhập), kèm dòng "Giấy chứng nhận đăng ký doanh nghiệp số 0319585995" (từ w11-02: công ty để trống số ĐKDN thì dùng mã số thuế, vì theo Luật Doanh nghiệp 2020 mã số doanh nghiệp đồng thời là mã số thuế; ngày cấp, nơi cấp và người đại diện chỉ hiện khi admin đã nhập). Chân trang gọn ở điện thoại có cả hotline và email. Web khách không có form đăng ký gian hàng công khai: cổng `/merchant` không có lối dẫn từ web khách, không vào sitemap, bị chặn ở robots và có thẻ noindex.
 
 ## 2. Năm đường link chính sách (dán vào 5 ô bắt buộc)
 
@@ -40,18 +40,18 @@ Route thật của web là `/chinh-sach/<mã>` (file `apps/web/src/app/chinh-sac
 | Chính sách vận chuyển và giao nhận | `https://app.tubutree.com/chinh-sach/van-chuyen` |
 | Chính sách và hình thức thanh toán | `https://app.tubutree.com/chinh-sach/thanh-toan` |
 
-Cả năm link đều nằm ở chân trang web (dòng "Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán") và ở mục "Điều khoản & Chính sách" của trang Về Tubu Tree trong Mini App.
+Cả năm link đều nằm ở chân trang web (dòng "Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán"), ở mục "Điều khoản & Chính sách" của trang Về Tubu Tree trong Mini App, và ở dòng đồng ý ngay trên nút Đặt hàng của trang thanh toán ở cả web và Mini App: "Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán." (ở điện thoại trang thanh toán ẩn chân trang, nên dòng này là lối tới chính sách).
 
 Trước khi nộp, mở từng link trên điện thoại và máy tính, kiểm tra:
 
 - Trang không còn dòng "BẢN NHÁP - chờ Tubu Tree duyệt" (dòng này hiện khi `legal.<mã>` ở Quản trị, Cấu hình còn trống). Bản nháp cũng không được lập chỉ mục, nên chuyên viên có thể thấy nội dung khác với bản đã duyệt.
-- Không còn chỗ giữ `[ ]` (ví dụ `[số ngày]` ở Chính sách vận chuyển, mục 3). Điền số ngày giao thật rồi lưu bản đã duyệt ở Quản trị, Cấu hình, nhóm legal.
+- Không còn chỗ giữ `[ ]`. Từ w11-02 bản nháp mặc định của Chính sách vận chuyển lấy thời gian giao từ lịch kho đang chạy (`shipping.warehouse_schedule`: TP.HCM 1–2, tỉnh khác 2–4 ngày làm việc, cắt đơn 15:00, Thứ 2 đến Thứ 7), không còn `[số ngày]`. Bản đã lưu trên PROD (20/11/2026: cả năm chính sách đã lưu) không có chỗ giữ nào.
 
 ## 3. Ba trường chủ điền nốt (lấy từ Giấy chứng nhận ĐKDN)
 
 | Trường | Điền |
 |---|---|
-| Ngày cấp ĐKDN | `[Ngày cấp ĐKDN]` |
+| Ngày cấp ĐKDN | `[Ngày cấp ĐKDN]` (nhập thêm ở Quản trị, Cấu hình, thẻ Thông tin cửa hàng để chân trang hiện đủ "do <nơi cấp> cấp ngày <ngày>") |
 | Nơi cấp | `[Nơi cấp: Sở Tài chính / Sở KH&ĐT TP.HCM]` (chọn đúng tên cơ quan ghi trên giấy) |
 | Người đại diện theo pháp luật | `[Họ tên & SĐT Người đại diện pháp luật]` |
 
@@ -75,7 +75,9 @@ Huy hiệu chỉ hiện khi giá trị là link `https` của `online.gov.vn` ho
 Chân trang và thông tin thương nhân:
 
 - [ ] Chân trang web (cả máy tính và điện thoại) hiện "Đơn vị vận hành: CÔNG TY TNHH TUBU TREE · MST 0319585995 · Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh".
-- [ ] Chân trang có hotline `0984 606 774` và email `tubutree@gmail.com`.
+- [ ] Chân trang (cả máy tính và điện thoại) có hotline `0984 606 774` và email `tubutree@gmail.com`.
+- [ ] Chân trang có dòng "Giấy chứng nhận đăng ký doanh nghiệp số 0319585995"; khi đã nhập ngày cấp, nơi cấp ở Quản trị thì dòng này ghi đủ "do <nơi cấp> cấp ngày <ngày>".
+- [ ] Trang thanh toán (web và Mini App) có dòng đồng ý dẫn tới Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.
 - [ ] Chân trang chưa có huy hiệu "Đã thông báo Bộ Công Thương" (đúng, vì chưa duyệt).
 
 Năm chính sách (mỗi link mở được, không còn BẢN NHÁP, không còn `[ ]`):
@@ -96,5 +98,15 @@ Mục "Chính sách kiểm hàng khi nhận hàng" (mục chuyên viên kiểm k
 Việc dữ liệu PROD cần làm khi deploy (không nằm trong hồ sơ nộp):
 
 - [ ] Migration `20261115172000_w168_legal_thanh_toan` đã chạy: có dòng `legal.thanh-toan`; `legal.van-chuyen` và `legal.doi-tra` đã lưu nội dung mà chưa có chữ "kiểm hàng" được nối tiểu mục kiểm hàng (dòng còn trống thì web dùng bản nháp mặc định, đã có tiểu mục này). Bản admin đã tự viết mục kiểm hàng không bị đụng.
+- [ ] Migration `20261120233000_w11_02_legal_live_rules` (w11-02) đã chạy: `legal.bao-mat` không còn nhắc đường gửi Đổi rác về kho (đang tắt), nêu hai đường đang mở (mang tới điểm nhận, shipper lấy tận nhà hoặc thu kèm đơn) và căn cứ Nghị định 52/2013/NĐ-CP, 85/2021/NĐ-CP; `legal.van-chuyen` ghi tỉnh khác 2–4 ngày làm việc và lịch kho (Thứ 2 đến Thứ 7, cắt đơn 15:00). Câu ngày nhận dự kiến trong ứng dụng vẫn ghi "chỉ để tham khảo". Dòng đầu của hai bản có đổi thành "Hiệu lực từ ngày 31/10/2026. Cập nhật ngày <ngày deploy>.". Migration chỉ thay đúng câu cũ, câu admin đã tự sửa giữ nguyên, mỗi dòng đổi có một dòng `system_config_history` (`changedBy` = `migration:w11_02_legal_live_rules`).
+- [ ] Kiểm sau deploy (đọc công khai, không cần đăng nhập). Bốn lệnh đầu phải in `0`, hai lệnh sau phải in `1`. Lệnh nào khác thì bản trên PROD đã được admin sửa khác câu cũ: mở Quản trị, Cấu hình, nhóm legal và sửa tay câu đó.
+  ```bash
+  curl -s https://api.tubutree.com/api/config/legal/bao-mat | grep -c "gửi về kho"
+  curl -s https://api.tubutree.com/api/config/legal/van-chuyen | grep -c "3–5 ngày"
+  curl -s https://api.tubutree.com/api/config/legal/van-chuyen | grep -c "ngày lịch"
+  curl -s https://api.tubutree.com/api/config/legal/van-chuyen | grep -c "tính theo đúng lịch"
+  curl -s https://api.tubutree.com/api/config/legal/bao-mat | grep -c "52/2013/NĐ-CP"
+  curl -s https://api.tubutree.com/api/config/legal/van-chuyen | grep -c "2–4 ngày làm việc"
+  ```
 - [ ] Mở lại 5 link ở mục 2 sau deploy (trang chính sách cập nhật tối đa 5 phút).
 - [ ] Chạy `go-live:check`: `db.legal_policies` báo đủ 5 chính sách đã lưu.

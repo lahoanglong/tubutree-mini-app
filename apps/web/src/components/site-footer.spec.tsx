@@ -25,6 +25,14 @@ describe('SiteFooter', () => {
     expect(out).toContain('tubutree@gmail.com');
   });
 
+  it('chân trang gọn ở điện thoại cũng có cả hotline và email (Bộ Công Thương), không chỉ chân trang máy tính', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    const compact = (await html()).match(/<footer[^>]*data-compact-footer[^>]*>[\s\S]*?<\/footer>/)?.[0] ?? '';
+    expect(compact).toContain('href="tel:0984606774"');
+    expect(compact).toContain('href="mailto:tubutree@gmail.com"');
+    expect(compact.match(/<nav[^>]*aria-label="Chính sách \(điện thoại\)"[^>]*>[\s\S]*?<\/nav>/)?.[0].match(/href="\/chinh-sach\//g)).toHaveLength(5);
+  });
+
   it('tổng đài cấu hình số liền 18001234: hiển thị "1800 1234", tel: vẫn là số gốc (R5-BUYER-5)', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '18001234', email: 'tubutree@gmail.com' });
     const out = await html();
@@ -103,10 +111,17 @@ describe('SiteFooter', () => {
       expect(out.split('Đã thông báo Bộ Công Thương')).toHaveLength(3);
     });
 
-    it('chưa nhập người đại diện / ĐKDN thì KHÔNG có dòng hồ sơ pháp lý (không bịa)', async () => {
+    it('chưa nhập số ĐKDN: số là MST của công ty (mã số doanh nghiệp), không bịa người đại diện, ngày hay nơi cấp', async () => {
       mocks.getPublicSupport.mockResolvedValue({ ...base, company });
       const out = await html();
       expect(out).not.toContain('Người đại diện');
+      expect(out.split('Giấy chứng nhận đăng ký doanh nghiệp số 0312345678<')).toHaveLength(3);
+      expect(out).not.toMatch(/cấp ngày|do [^<]* cấp/);
+    });
+
+    it('hộ kinh doanh (tên không phải công ty) chưa nhập ĐKDN thì KHÔNG có dòng hồ sơ pháp lý', async () => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company: { ...company, legalName: 'Hộ kinh doanh Tubu' } });
+      const out = await html();
       expect(out).not.toContain('Giấy chứng nhận');
       expect(out).not.toContain('footer-company-legal');
     });
@@ -121,11 +136,11 @@ describe('SiteFooter', () => {
       expect(out.split(line)).toHaveLength(3);
     });
 
-    it('chỉ có người đại diện thì chỉ nêu người đại diện', async () => {
+    it('chỉ có người đại diện: nêu người đại diện, số ĐKDN theo MST của thương nhân đang hiện ở dòng vận hành', async () => {
       mocks.getPublicSupport.mockResolvedValue({ ...base, company: { representative: 'Nguyễn Văn A' } });
       const out = await html();
-      expect(out).toContain('Người đại diện theo pháp luật: Nguyễn Văn A<');
-      expect(out).not.toContain('Giấy chứng nhận');
+      expect(out).toContain('Người đại diện theo pháp luật: Nguyễn Văn A · Giấy chứng nhận đăng ký doanh nghiệp số 0319585995<');
+      expect(out.split(MERCHANT_LINE)).toHaveLength(3);
     });
 
     it('ẩn từng phần còn trống, không để dấu nối thừa', async () => {

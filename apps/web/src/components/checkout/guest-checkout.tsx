@@ -419,7 +419,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
           )}
           <div className="hidden lg:block">
             <OrderConsent className="mt-3" />
-            {placeButton(`${ui.btnPrimary} mt-2 w-full tabular-nums`)}
+            {placeButton(`${ui.btnPrimary} mt-3 w-full tabular-nums`)}
           </div>
           <p role="status" className={hint ? 'mt-2 hidden text-caption text-[color:var(--color-text-secondary)] lg:block' : 'sr-only'}>
             {hint}
