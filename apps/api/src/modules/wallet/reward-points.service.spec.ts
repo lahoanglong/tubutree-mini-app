@@ -411,3 +411,40 @@ describe('RewardPointsService.getReferralOverview (GET /me/referral)', () => {
     expect(r).toMatchObject({ milestones: [], nextMilestone: null, earnedPoints: 0 });
   });
 });
+
+describe('RewardPointsService.grantReferralFirstOrderReward — số đếm chặn cho Trung tâm tăng trưởng', () => {
+  const order = { id: 'o1', userId: 'f1', type: 'RETAIL', status: 'DELIVERED', total: 250_000, placedForCustomer: false, createdAt: new Date('2026-11-19T10:00:00Z'), shippingAddress: null, guestPhone: null, guestIpHash: null, placedIpHash: null };
+  // Bạn được mời tự mời mình (referredById là chính họ): luật SELF chặn trước khi mở tx.
+  function selfReferral(createMany: jest.Mock) {
+    const user = { referredById: 'f1', mergedIntoId: null, phone: '0902222222', zaloId: 'zalo-f', metadata: null, isBlocked: false };
+    return {
+      order: { findUnique: jest.fn().mockResolvedValue(order) },
+      user: { findUnique: jest.fn().mockResolvedValue(user) },
+      analyticsEvent: { createMany },
+      $transaction: jest.fn(),
+    } as unknown as PrismaService;
+  }
+
+  it('cặp bị chặn: ghi một sự kiện chặn theo đơn (eventId cố định, bỏ trùng)', async () => {
+    const createMany = jest.fn().mockResolvedValue({ count: 1 });
+    const out = await new RewardPointsService(selfReferral(createMany), cfg({ 'growth.referral_viral_enabled': true })).grantReferralFirstOrderReward('o1');
+    expect(out).toEqual({ status: 'BLOCKED', reason: 'SELF' });
+    expect(createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ eventId: 'referral_first_order_blocked:o1', eventName: 'referral_first_order_blocked', platform: 'system', props: { orderId: 'o1', reason: 'SELF' } })],
+      skipDuplicates: true,
+    });
+  });
+
+  it('ghi số đếm lỗi: vẫn trả kết quả, không ném (việc sau giao không phải chạy lại vì một dòng thống kê)', async () => {
+    const createMany = jest.fn().mockRejectedValue(new Error('db down'));
+    const out = await new RewardPointsService(selfReferral(createMany), cfg({ 'growth.referral_viral_enabled': true })).grantReferralFirstOrderReward('o1');
+    expect(out).toEqual({ status: 'BLOCKED', reason: 'SELF' });
+  });
+
+  it('cờ tắt: không ghi gì', async () => {
+    const createMany = jest.fn();
+    const out = await new RewardPointsService(selfReferral(createMany), cfg()).grantReferralFirstOrderReward('o1');
+    expect(out).toEqual({ status: 'SKIPPED', reason: 'OFF' });
+    expect(createMany).not.toHaveBeenCalled();
+  });
+});

@@ -9,14 +9,17 @@ const win = (n: number): PurchaseFunnelWindowDTO => ({
 });
 const funnel: PurchaseFunnelDTO = { generatedAt: 'x', windows: { h72: win(1), d7: win(7), d30: win(30) } };
 
-/** Thứ tự truy vấn của compute: mua lần 2, game, đơn theo ngày, người chơi theo ngày. */
-function makeService(answers: unknown[][]) {
+/** Thứ tự truy vấn của compute: mua lần 2, game, đơn theo ngày, người chơi theo ngày, chặn thưởng đơn đầu. */
+function makeService(answers: unknown[][], rewarded = 0) {
   const $queryRaw = jest.fn();
   for (const a of answers) $queryRaw.mockResolvedValueOnce(a);
   const getSnapshot = jest.fn().mockResolvedValue(funnel);
-  const svc = new AdminGrowthService({ $queryRaw } as unknown as PrismaService, { getSnapshot } as unknown as PurchaseFunnelService);
-  return { svc, $queryRaw, getSnapshot };
+  const count = jest.fn().mockResolvedValue(rewarded);
+  const svc = new AdminGrowthService({ $queryRaw, pointsTransaction: { count } } as unknown as PrismaService, { getSnapshot } as unknown as PurchaseFunnelService);
+  return { svc, $queryRaw, getSnapshot, count };
 }
+
+const NO_BLOCKS = { SELF: 0, PHONE: 0, ZALO: 0, ADDRESS: 0, IP: 0 };
 
 const sqlOf = (call: unknown[]) => (call[0] as TemplateStringsArray).join('?');
 
@@ -25,7 +28,7 @@ describe('AdminGrowthService', () => {
   const now = new Date('2026-11-18T15:00:00.000Z');
 
   it('7 ngày: kỳ bắt đầu 00:00 VN ngày 12/11, phễu lấy cửa sổ d7, bigint thành number, đủ 7 ngày kể cả ngày trống', async () => {
-    const { svc, $queryRaw } = makeService([
+    const { svc, $queryRaw, count } = makeService([
       [{ buyers: 10n, returning_buyers: 3n, new_buyers: 7n, new_with_second: 2n }],
       [
         { game: '*', players: 5n, buyers: 2n },
@@ -34,7 +37,8 @@ describe('AdminGrowthService', () => {
       ],
       [{ day: '2026-11-18', n: 4n }, { day: '2026-11-12', n: 1n }],
       [{ day: '2026-11-17', n: 3n }],
-    ]);
+      [{ reason: 'IP', n: 4n }, { reason: 'ADDRESS', n: 1n }],
+    ], 9);
     const dto = await svc.overview(7, now);
     expect(dto.days).toBe(7);
     expect(dto.sinceDay).toBe('2026-11-12');
@@ -68,29 +72,34 @@ describe('AdminGrowthService', () => {
     expect(sqlOf(gamesCall)).toContain('r."submittedAt" IS NOT NULL OR r.game = ?');
     expect(gamesCall).toContain('matcher');
     expect(gamesCall).toContain('2026-11-12');
+    // Thưởng mời bạn đơn đầu: cùng kỳ 00:00 VN ngày đầu tới lúc xem.
+    expect(dto.referralFirstOrder).toEqual({ rewarded: 9, blocked: { ...NO_BLOCKS, IP: 4, ADDRESS: 1 } });
+    expect(count.mock.calls[0]![0].where.createdAt).toEqual({ gte: new Date('2026-11-11T17:00:00.000Z'), lte: now });
+    expect($queryRaw.mock.calls[4]!).toEqual(expect.arrayContaining(['referral_first_order_blocked', '2026-11-11T17:00:00.000Z', now.toISOString()]));
   });
 
   it('30 ngày: lấy cửa sổ d30 của phễu và 30 điểm theo ngày', async () => {
-    const { svc } = makeService([[], [], [], []]);
+    const { svc } = makeService([[], [], [], [], []]);
     const dto = await svc.overview(30, now);
     expect(dto.sinceDay).toBe('2026-10-20');
     expect(dto.funnel).toEqual(funnel.windows.d30);
     expect(dto.daily).toHaveLength(30);
     expect(dto.repeat).toEqual({ buyers: 0, returningBuyers: 0, newBuyers: 0, newBuyersWithSecond: 0 });
     expect(dto.games).toEqual({ players: 0, buyers: 0, byGame: [] });
+    expect(dto.referralFirstOrder).toEqual({ rewarded: 0, blocked: NO_BLOCKS });
   });
 
   it('đệm 60 giây theo từng kỳ; lỗi thì lần sau tính lại', async () => {
-    const { svc, $queryRaw } = makeService([[], [], [], []]);
+    const { svc, $queryRaw } = makeService([[], [], [], [], []]);
     await svc.overview(7, now);
     await svc.overview(7, new Date(now.getTime() + 59_000));
-    expect($queryRaw).toHaveBeenCalledTimes(4);
+    expect($queryRaw).toHaveBeenCalledTimes(5);
     $queryRaw.mockRejectedValueOnce(new Error('db down'));
     await expect(svc.overview(30, now)).rejects.toThrow('db down');
     $queryRaw.mockResolvedValue([]);
     await expect(svc.overview(30, now)).resolves.toMatchObject({ days: 30 });
     await svc.overview(7, new Date(now.getTime() + 61_000));
-    expect($queryRaw.mock.calls.length).toBe(4 + 1 + 4 + 4);
+    expect($queryRaw.mock.calls.length).toBe(5 + 1 + 5 + 5);
   });
 });
 

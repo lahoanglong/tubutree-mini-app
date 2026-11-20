@@ -1,3 +1,4 @@
+import type { ReferralGuardReason } from '@tubutree/shared-types';
 import { toLocalPhone } from '../../common/phone';
 
 /**
@@ -8,7 +9,8 @@ import { toLocalPhone } from '../../common/phone';
 /** Cửa sổ so IP: đơn của người mời đặt trong ±24 giờ quanh đơn đầu của bạn được mời, cùng mã băm IP thì chặn. */
 export const FIRST_ORDER_IP_WINDOW_MS = 24 * 3600_000;
 
-export type FirstOrderBlockReason = 'SELF' | 'PHONE' | 'ZALO' | 'ADDRESS' | 'IP';
+/** Cùng danh sách với REFERRAL_GUARD_REASONS: Trung tâm tăng trưởng đếm theo đúng các lý do này. */
+export type FirstOrderBlockReason = ReferralGuardReason;
 
 export interface AddressLike {
   phone?: unknown;

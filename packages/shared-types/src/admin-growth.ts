@@ -28,6 +28,18 @@ export interface GrowthGameRow {
   buyers: number;
 }
 
+/** Lý do luật chống tự giới thiệu chặn thưởng đơn đầu (apps/api referral/first-order-guard.ts), theo thứ tự xét. */
+export const REFERRAL_GUARD_REASONS = ['SELF', 'PHONE', 'ZALO', 'ADDRESS', 'IP'] as const;
+export type ReferralGuardReason = (typeof REFERRAL_GUARD_REASONS)[number];
+
+/** Thưởng mời bạn đơn đầu trong kỳ: để theo dõi luật IP chặn nhầm bạn thật (4G, Wi-Fi văn phòng dùng chung IP). */
+export interface ReferralFirstOrderGuardDTO {
+  /** Cặp đã nhận thưởng đơn đầu (mỗi cặp một dòng sổ điểm của người mời). */
+  rewarded: number;
+  /** Đơn đầu bị chặn, mỗi đơn một lần theo lý do của lần chặn đầu tiên. */
+  blocked: Record<ReferralGuardReason, number>;
+}
+
 export interface AdminGrowthOverviewDTO {
   generatedAt: string;
   days: GrowthWindowDays;
@@ -47,4 +59,5 @@ export interface AdminGrowthOverviewDTO {
   };
   games: { players: number; buyers: number; byGame: GrowthGameRow[] };
   daily: GrowthDailyPoint[];
+  referralFirstOrder: ReferralFirstOrderGuardDTO;
 }

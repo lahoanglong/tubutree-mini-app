@@ -6,6 +6,7 @@ import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from '../loyalty/points
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { sendReferralNotices, type ReferralNotice } from './referral-notify';
+import { recordFirstOrderBlocked } from '../referral/first-order-guard-stats';
 import { grantFirstOrderReferralReward, type FirstOrderOutcome } from '../referral/first-order-reward';
 import {
   countReferralSuccesses,
@@ -327,6 +328,13 @@ export class RewardPointsService {
     );
     if (outcome.status === 'BLOCKED' || (outcome.status === 'SKIPPED' && outcome.reason === 'CAPPED')) {
       this.logger.warn(`Thưởng đơn đầu không cấp cho đơn ${orderId}: ${outcome.reason}`);
+    }
+    // Đếm lần chặn cho Trung tâm tăng trưởng (theo dõi luật IP chặn nhầm). Không ghi được thì chỉ thiếu số đếm: không ném, để việc sau
+    // giao không phải chạy lại vì một dòng thống kê.
+    if (outcome.status === 'BLOCKED') {
+      await recordFirstOrderBlocked(this.prisma, orderId, outcome.reason, new Date()).catch((e: unknown) =>
+        this.logger.warn(`Không ghi được số đếm chặn thưởng đơn đầu cho đơn ${orderId}: ${e instanceof Error ? e.message : String(e)}`),
+      );
     }
     return outcome;
   }

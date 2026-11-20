@@ -4,10 +4,13 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   GROWTH_WINDOW_DAYS,
+  REFERRAL_GUARD_REASONS,
   type AdminGrowthOverviewDTO,
   type GrowthDailyPoint,
   type GrowthWindowDays,
   type PurchaseFunnelStep,
+  type ReferralFirstOrderGuardDTO,
+  type ReferralGuardReason,
 } from '@tubutree/shared-types';
 import { apiFetch } from '@/lib/client-api';
 import { formatCount, formatPct, ratioPct } from '@/components/admin/launch-watch-format';
@@ -124,6 +127,39 @@ function DailyBars({ title, points, field, unit }: { title: string; points: Grow
   );
 }
 
+const GUARD_REASON_LABELS: Record<Exclude<ReferralGuardReason, 'IP'>, string> = { SELF: 'Tự mời', PHONE: 'SĐT', ZALO: 'Zalo', ADDRESS: 'Địa chỉ' };
+
+/**
+ * Thưởng mời bạn đơn đầu: luật IP so đúng địa chỉ IP, mà 4G và Wi-Fi văn phòng dùng chung một IP công khai, nên bạn thật có thể bị chặn.
+ * Tỷ lệ chặn theo IP tính trên số đơn đầu đã thưởng cộng số bị chặn theo IP.
+ */
+function ReferralGuard({ stats }: { stats: ReferralFirstOrderGuardDTO }) {
+  const others = REFERRAL_GUARD_REASONS.filter((r): r is Exclude<ReferralGuardReason, 'IP'> => r !== 'IP');
+  const otherTotal = others.reduce((sum, r) => sum + stats.blocked[r], 0);
+  const otherParts = others.filter((r) => stats.blocked[r] > 0).map((r) => `${GUARD_REASON_LABELS[r]} ${formatCount(stats.blocked[r])}`);
+  const ipPct = ratioPct(stats.blocked.IP, stats.rewarded + stats.blocked.IP);
+  const cell = (key: string, label: string, value: number, sub?: string) => (
+    <div className="min-w-0">
+      <dt className="text-xs text-stone-600">{label}</dt>
+      <dd data-guard={key} className="mt-0.5 font-display text-lg font-semibold tabular-nums text-stone-900">{formatCount(value)}</dd>
+      {sub && <dd className="text-xs text-stone-600">{sub}</dd>}
+    </div>
+  );
+  return (
+    <section aria-labelledby="growth-referral-guard" data-referral-guard className="rounded-card border border-stone-200 p-3">
+      <h3 id="growth-referral-guard" className="text-sm font-semibold text-stone-900">Thưởng mời bạn đơn đầu</h3>
+      <dl className="mt-2 grid grid-cols-3 gap-2">
+        {cell('rewarded', 'Đã thưởng (cặp)', stats.rewarded)}
+        {cell('ip', 'Chặn theo IP', stats.blocked.IP)}
+        {cell('other', 'Chặn lý do khác', otherTotal, otherParts.length > 0 ? otherParts.join(' · ') : undefined)}
+      </dl>
+      <p className="mt-2 text-xs text-stone-600">
+        Chặn theo IP chiếm {formatPct(ipPct)} số đơn đầu đã xét (đã thưởng và chặn theo IP). 4G và Wi-Fi văn phòng dùng chung IP, nên tỷ lệ này cao có thể là chặn nhầm bạn thật.
+      </p>
+    </section>
+  );
+}
+
 function Overview({ data }: { data: AdminGrowthOverviewDTO }) {
   const steps = funnelSteps(data.funnel);
   const { repeat, games } = data;
@@ -199,6 +235,8 @@ function Overview({ data }: { data: AdminGrowthOverviewDTO }) {
           <p className="mt-2 text-xs text-stone-600">Người chơi là tài khoản đã nộp một ván game mini hoặc có lượt Chọn Chuẩn Xanh; một người chơi nhiều game được tính ở mỗi game.</p>
         </section>
       </div>
+
+      {data.referralFirstOrder && <ReferralGuard stats={data.referralFirstOrder} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         <DailyBars title="Đơn thành công mỗi ngày" points={data.daily} field="orders" unit="đơn" />

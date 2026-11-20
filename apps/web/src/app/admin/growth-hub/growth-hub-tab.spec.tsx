@@ -31,6 +31,7 @@ const overview = (days: 7 | 30): AdminGrowthOverviewDTO => ({
     orders: i,
     players: 2,
   })),
+  referralFirstOrder: { rewarded: 12, blocked: { SELF: 0, PHONE: 1, ZALO: 0, ADDRESS: 1, IP: 3 } },
 });
 
 const campaign = (o: Partial<AdminCampaignRow>): AdminCampaignRow => ({
@@ -109,6 +110,21 @@ describe('GrowthHubTab', () => {
     expect(text).toContain('Căn Bếp Xanh');
     expect(text).toContain('Kỳ 7 ngày còn ngắn');
     expect(container.querySelectorAll('svg[role="img"]')).toHaveLength(2);
+  });
+
+  it('thưởng mời bạn đơn đầu: số cặp đã thưởng, số đơn chặn theo IP và lý do khác, tỷ lệ chặn theo IP để theo dõi chặn nhầm', async () => {
+    const { container } = setup([]);
+    await flush(8);
+    const box = container.querySelector<HTMLElement>('[data-referral-guard]')!;
+    expect(box).not.toBeNull();
+    const text = box.textContent!;
+    expect(text).toContain('Thưởng mời bạn đơn đầu');
+    expect(box.querySelector('[data-guard="rewarded"]')!.textContent).toBe('12');
+    expect(box.querySelector('[data-guard="ip"]')!.textContent).toBe('3');
+    expect(box.querySelector('[data-guard="other"]')!.textContent).toBe('2');
+    expect(text).toContain('SĐT 1 · Địa chỉ 1');
+    // 3 chặn theo IP / (12 đã thưởng + 3 chặn theo IP) = 20%.
+    expect(text).toContain('Chặn theo IP chiếm 20%');
   });
 
   it('chọn 30 ngày thì gọi lại với days=30 và vẽ 30 cột mỗi biểu đồ', async () => {

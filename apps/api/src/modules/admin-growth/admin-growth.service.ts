@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { vnDateKey } from '../../common/vn-time';
 import { PurchaseFunnelService } from '../analytics/purchase-funnel.service';
 import { MATCHER_GAME } from '../game/mini/matcher/matcher.rules';
+import { firstOrderGuardStats } from '../referral/first-order-guard-stats';
 
 const DAY_MS = 86_400_000;
 /** Cùng mức của Phễu mua: ADMIN bấm qua lại 7/30 ngày không dồn truy vấn quét bảng đơn vào DB. */
@@ -34,7 +35,8 @@ export function vnDayRange(sinceDay: string, today: string): string[] {
 /**
  * Số liệu của Trung tâm tăng trưởng. Đơn tính như bảng Theo dõi 72h (đơn thứ hai): bán lẻ, khách tự đặt, bỏ đơn huỷ, trả hàng và chờ thanh toán,
  * gộp các đơn tách theo nhà bán của cùng một lần đặt (`checkoutGroup`). Người chơi là tài khoản đã nộp một ván game mini, hoặc có một lượt
- * Chọn Chuẩn Xanh (game đó chỉ ghi lượt có thưởng và để `submittedAt` trống). Kỳ là `days` ngày VN gần nhất, gồm cả hôm nay.
+ * Chọn Chuẩn Xanh (game đó chỉ ghi lượt có thưởng và để `submittedAt` trống). Kỳ là `days` ngày VN gần nhất, gồm cả hôm nay. Thưởng mời bạn
+ * đơn đầu: số cặp đã thưởng và số đơn bị luật chống tự giới thiệu chặn trong kỳ (referral/first-order-guard-stats.ts).
  */
 @Injectable()
 export class AdminGrowthService {
@@ -67,6 +69,7 @@ export class AdminGrowthService {
     const repeat = await this.repeat(since, now);
     const games = await this.games(sinceDay, since, now);
     const daily = await this.daily(sinceDay, today, since, now);
+    const referralFirstOrder = await firstOrderGuardStats(this.prisma, since, now);
     return {
       generatedAt: now.toISOString(),
       days,
@@ -75,6 +78,7 @@ export class AdminGrowthService {
       repeat,
       games,
       daily,
+      referralFirstOrder,
     };
   }
 

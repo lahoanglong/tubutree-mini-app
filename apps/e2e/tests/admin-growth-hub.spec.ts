@@ -38,6 +38,7 @@ const overview = (days: 7 | 30): AdminGrowthOverviewDTO => {
       orders: 4 + ((i * 7) % 11),
       players: 18 + ((i * 5) % 13),
     })),
+    referralFirstOrder: { rewarded: 14, blocked: { SELF: 0, PHONE: 1, ZALO: 1, ADDRESS: 0, IP: 4 } },
   };
 };
 
