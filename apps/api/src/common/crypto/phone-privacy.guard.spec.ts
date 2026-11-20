@@ -38,16 +38,23 @@ function hashHelpers(text: string): string[] {
 function unsaltedPhoneHashes(file: string, text: string): string[] {
   const calls = ['createHash(', ...hashHelpers(text).map((n) => `${n}(`)];
   const hits: string[] = [];
-  text.split('\n').forEach((line, i) => {
+  const lines = text.split('\n');
+  lines.forEach((line, i) => {
     const t = line.trim();
     if (t.startsWith('*') || t.startsWith('//') || t.startsWith('/*')) return;
-    if (calls.some((c) => line.includes(c)) && PHONE_WORD.test(line) && !allowed(file, line)) hits.push(`${file}:${i + 1}: ${t}`);
+    if (!calls.some((c) => line.includes(c))) return;
+    // Lệnh băm xuống dòng (`createHash(...)` rồi `.update(phone)` ở dòng sau): xét tới hết câu lệnh, tối đa 3 dòng sau.
+    const end = lines.slice(i, i + 4).findIndex((l) => l.trimEnd().endsWith(';'));
+    const stmt = lines.slice(i, end === -1 ? i + 4 : i + end + 1).join('\n');
+    if (PHONE_WORD.test(stmt) && !allowed(file, line)) hits.push(`${file}:${i + 1}: ${t}`);
   });
   return hits;
 }
 
 const LOG_CALL = /\b(?:logger|log|console)\.(?:log|warn|error|debug|verbose|info)\(/;
-const MASKED = /mask|hmacPhone|\.slice\(-\d\)|\.length\b/;
+const MASKED = /mask|hmacPhone|\.slice\(-\d\)/;
+/** Chỉ đếm số lượng (`${phones.length}`) thì không lộ số; `.length` nằm trong biểu thức lớn hơn thì vẫn xét. */
+const LENGTH_ONLY = /^\s*[\w.?!]+\.length\s*$/;
 
 function rawPhoneLogs(file: string, text: string): string[] {
   const hits: string[] = [];
@@ -58,7 +65,7 @@ function rawPhoneLogs(file: string, text: string): string[] {
     const stmt = [line, ...lines.slice(i + 1, i + 5)].join('\n').split(/\);\s*$/m)[0]!;
     for (const m of stmt.matchAll(/\$\{([^}]*)\}/g)) {
       const expr = m[1]!;
-      if (PHONE_WORD.test(expr) && !MASKED.test(expr) && !allowed(file, line)) hits.push(`${file}:${i + 1}: \${${expr}}`);
+      if (PHONE_WORD.test(expr) && !MASKED.test(expr) && !LENGTH_ONLY.test(expr) && !allowed(file, line)) hits.push(`${file}:${i + 1}: \${${expr}}`);
     }
   });
   return hits;
@@ -92,5 +99,12 @@ describe('quyền riêng tư SĐT trong apps/api/src (tubu-w11-01)', () => {
     expect(rawPhoneLogs('x.ts', 'this.logger.warn(\n  `Gửi tin cho ${dto.recipientPhone} lỗi`,\n);')).toHaveLength(1);
     expect(rawPhoneLogs('x.ts', 'this.logger.warn(`Gửi tin cho ${maskPhone(order.phone)} lỗi`);')).toEqual([]);
     expect(rawPhoneLogs('x.ts', 'this.logger.warn(`SĐT đuôi ${phone.slice(-3)}`);')).toEqual([]);
+  });
+
+  it('bắt cả lệnh băm viết trên nhiều dòng và biểu thức log chỉ "có dính" `.length`', () => {
+    expect(unsaltedPhoneHashes('x.ts', "const h = createHash('sha256')\n  .update(order.phone)\n  .digest('hex');")).toHaveLength(1);
+    expect(unsaltedPhoneHashes('x.ts', "const h = createHash('sha256').update(token).digest('hex');\nconst phone = order.phone;")).toEqual([]);
+    expect(rawPhoneLogs('x.ts', 'this.logger.warn(`Gửi ${phones.length ? phones.join(",") : ""}`);')).toHaveLength(1);
+    expect(rawPhoneLogs('x.ts', 'this.logger.warn(`Gửi ${phones.length} số`);')).toEqual([]);
   });
 });

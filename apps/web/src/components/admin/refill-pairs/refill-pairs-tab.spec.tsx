@@ -227,6 +227,31 @@ describe('RefillPairsTab (tubu-w6-01 P1-a)', () => {
       expect(api.get).toHaveBeenCalledTimes(2);
     });
 
+    it('nút từng dòng gặp 409 (bảng đã đổi): báo lỗi và đọc lại bảng, không kẹt ở dòng cũ', async () => {
+      api.get.mockResolvedValue(WITH_NEAR());
+      const c = await mount();
+      api.save.mockRejectedValueOnce(new ApiError('"Nước giặt hương Cam Fuwa3e 500ml" không còn được gợi ý ghép với gói này: bảng cặp vừa đổi, chưa cặp nào được duyệt. Tải lại thẻ Cặp Refill rồi duyệt lại.', 409));
+      click(btn(rowEl(c, CAM.name), 'Ghép tay cặp này'));
+      await flush();
+      expect(c.querySelector('[role="alert"]')?.textContent).toContain('chưa cặp nào được duyệt');
+      expect(api.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('đóng khung xem trước không bỏ rơi focus: Huỷ trả focus về nút mở; duyệt xong (hết gợi ý) đưa focus về tiêu đề thẻ', async () => {
+      api.get.mockResolvedValue(WITH_NEAR());
+      const c = await mount();
+      click(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      await flush();
+      click(btn(preview(c)!, 'Huỷ'));
+      await flush();
+      expect(document.activeElement).toBe(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      click(btn(c, 'Duyệt nhanh tất cả gợi ý (3)'));
+      await flush();
+      click(btn(preview(c)!, 'Duyệt 3 cặp'));
+      await flush();
+      expect(document.activeElement).toBe(byText(c, 'h2', 'Cặp Refill'));
+    });
+
     it('không có dòng tên gần giống thì không có nút (dòng lệch lượng vẫn duyệt từng dòng)', async () => {
       const c = await mount();
       expect(btn(c, /Duyệt nhanh tất cả gợi ý/)).toBeNull();

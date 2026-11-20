@@ -575,12 +575,19 @@ export class SystemConfigService {
    * thì hai admin lưu cùng lúc cùng đọc một bản cũ và lần ghi sau xoá mất phần của lần trước. Khoá chưa có dòng thì tạo dòng `fallback` trước để có
    * dòng mà khoá. `next` ném lỗi thì transaction huỷ, không ghi gì (kể cả dòng vừa tạo). Dòng do chính lần gọi này tạo không sinh dòng lịch sử,
    * như `set()` trên khoá chưa có. `next` trả đúng bản đang lưu (thao tác lặp lại, như bấm "Duyệt" hai lần) thì không ghi gì và không thêm dòng lịch sử.
+   * `read(khoá khác)` đọc thẳng DB trong cùng transaction (không khoá dòng đó, không qua cache 60 giây của `get`); khoá chưa có → undefined.
    */
-  async update<T extends object | string | number | boolean>(key: string, fallback: T, next: (current: unknown) => T | Promise<T>, changedBy: string): Promise<T> {
+  async update<T extends object | string | number | boolean>(
+    key: string,
+    fallback: T,
+    next: (current: unknown, read: (otherKey: string) => Promise<unknown>) => T | Promise<T>,
+    changedBy: string,
+  ): Promise<T> {
     const { value, wrote } = await this.prisma.$transaction(async (tx) => {
       const created = await tx.systemConfig.createMany({ data: [{ key, value: fallback as Prisma.InputJsonValue, category: categoryOf(key), updatedBy: changedBy }], skipDuplicates: true });
       const [locked] = await tx.$queryRaw<{ value: Prisma.JsonValue }[]>`SELECT "value" FROM system_configs WHERE "key" = ${key} FOR UPDATE`;
-      const v = await next(locked?.value ?? fallback);
+      const read = async (otherKey: string) => (await tx.systemConfig.findUnique({ where: { key: otherKey } }))?.value ?? undefined;
+      const v = await next(locked?.value ?? fallback, read);
       // So sâu, không theo thứ tự khoá: jsonb trả object với khoá đã sắp lại.
       if (created.count === 0 && locked && isDeepStrictEqual(JSON.parse(JSON.stringify(v)), locked.value)) return { value: v, wrote: false };
       const unset = await this.checkValue(key, v);

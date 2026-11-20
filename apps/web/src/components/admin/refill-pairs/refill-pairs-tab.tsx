@@ -97,7 +97,23 @@ export function RefillPairsTab() {
   const [bottle, setBottle] = useState('');
   const [refill, setRefill] = useState('');
   const [preview, setPreview] = useState<SuggestedPair[] | null>(null);
+  const [restoreFocus, setRestoreFocus] = useState(false);
+  const openPreviewBtn = useRef<HTMLButtonElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
   const ids = useId();
+
+  // Khung xem trước đóng khi focus đang ở nút bên trong nó: trả focus về nút mở, hết gợi ý thì về tiêu đề thẻ, không rơi về <body>.
+  useEffect(() => {
+    if (!restoreFocus || preview) return;
+    setRestoreFocus(false);
+    (openPreviewBtn.current ?? title.current)?.focus();
+  }, [restoreFocus, preview]);
+  const closePreview = () => {
+    setPreview(null);
+    setRestoreFocus(true);
+  };
+  // 409 khi bảng vừa đổi ở nơi khác: đọc lại bảng để admin xem gợi ý mới trước khi duyệt lại.
+  const reload = () => void qc.invalidateQueries({ queryKey: QUERY_KEY });
 
   const save = async (input: SaveRefillPairsInput, done: string) => {
     setBusy(true);
@@ -121,18 +137,17 @@ export function RefillPairsTab() {
   const rows = filterRows(data.rows, filter);
   const loose = looseBlocks(data);
 
-  const act = (row: AdminRefillPairRow) => {
+  const act = async (row: AdminRefillPairRow) => {
     const a = rowAction(row);
-    if (a) void save(a.input(data), `${a.done}: ${row.bottle.name}.`);
+    if (a && !(await save(a.input(data), `${a.done}: ${row.bottle.name}.`))) reload();
   };
 
   const suggestions = nearSuggestions(data.rows);
 
   const confirmAll = async (pairs: readonly SuggestedPair[]) => {
     const ok = await save(confirmPairs(pairs), `Đã duyệt ${pairs.length} cặp gợi ý.`);
-    setPreview(null);
-    // 409 khi bảng vừa đổi ở nơi khác: đọc lại bảng để admin xem gợi ý mới trước khi duyệt lại.
-    if (!ok) void qc.invalidateQueries({ queryKey: QUERY_KEY });
+    closePreview();
+    if (!ok) reload();
   };
 
   const pairByHand = async () => {
@@ -146,7 +161,9 @@ export function RefillPairsTab() {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-stone-900">Cặp Refill</h2>
+        <h2 ref={title} tabIndex={-1} className="text-lg font-semibold text-stone-900">
+          Cặp Refill
+        </h2>
         <p className="text-sm text-stone-600">
           Khách đã nhận chai trong một đơn đã giao được mời đổi sang gói Refill ở giỏ và dải &ldquo;Mua lại món quen&rdquo;. Tự ghép khi cùng thương hiệu, cùng công thức, gói Refill lớn hơn chai và không quá{' '}
           {data.maxRatio} lần chai. Các cặp khác chỉ có khi ghép tay.
@@ -175,10 +192,10 @@ export function RefillPairsTab() {
       </div>
 
       {preview ? (
-        <SuggestionsPreview pairs={preview} busy={busy} onConfirm={() => void confirmAll(preview)} onCancel={() => setPreview(null)} />
+        <SuggestionsPreview pairs={preview} busy={busy} onConfirm={() => void confirmAll(preview)} onCancel={closePreview} />
       ) : (
         suggestions.length > 0 && (
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => setPreview(suggestions)}>
+          <button ref={openPreviewBtn} type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => setPreview(suggestions)}>
             Duyệt nhanh tất cả gợi ý ({suggestions.length})
           </button>
         )
@@ -191,7 +208,7 @@ export function RefillPairsTab() {
       ) : (
         <ul aria-label="Cặp chai và gói Refill" className="space-y-2">
           {rows.map((r) => (
-            <PairRow key={r.bottle.id} row={r} maxRatio={data.maxRatio} busy={busy} onAct={act} />
+            <PairRow key={r.bottle.id} row={r} maxRatio={data.maxRatio} busy={busy} onAct={(r) => void act(r)} />
           ))}
         </ul>
       )}

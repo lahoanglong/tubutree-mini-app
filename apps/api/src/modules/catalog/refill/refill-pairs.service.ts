@@ -222,13 +222,14 @@ export class RefillPairsService {
     if (!config) throw new ServiceUnavailableException('Chưa đọc được cấu hình hệ thống.');
     try {
       if (input.overrides || input.add || input.remove || input.confirm?.length) {
-        const [products, blockRaw] = await Promise.all([this.catalogRows(), this.configValue(REFILL_PAIRS_BLOCK_KEY)]);
+        const products = await this.catalogRows();
         const bySlug = new Map(products.map((p) => [p.slug, p]));
-        const block = input.block ? new Set(input.block.map((s) => s.trim())) : parseRefillBlock(blockRaw);
         await config.update<RefillPairOverride[]>(
           REFILL_PAIRS_OVERRIDE_KEY,
           [],
-          (storedRaw) => {
+          async (storedRaw, read) => {
+            // Danh sách chặn đọc trong cùng transaction: bản cache của get có thể chậm tới 60 giây sau khi tiến trình API khác vừa chặn một chai.
+            const block = input.block ? new Set(input.block.map((s) => s.trim())) : parseRefillBlock(await read(REFILL_PAIRS_BLOCK_KEY));
             const stored = parseRefillOverrides(storedRaw);
             let next = applyRefillOverrideOps(input.overrides ?? stored, { add: input.add, remove: input.remove });
             if (input.confirm?.length) {

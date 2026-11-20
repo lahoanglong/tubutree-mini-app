@@ -34,9 +34,11 @@ function build(flag: unknown, cfg: Record<string, unknown> = {}, stored: Record<
       if (key === REFILL_FIRST_ENABLED_KEY) on = value;
       else cfg[key] = value;
     }),
-    // Như SystemConfigService.update: `next` nhận bản đang lưu (đọc dưới khoá dòng, không qua cache của get), lỗi thì không ghi.
-    update: jest.fn(async (key: string, fallback: unknown, next: (current: unknown) => unknown) => {
-      const value = await next(key in stored ? stored[key] : key in cfg ? cfg[key] : fallback);
+    // Như SystemConfigService.update: `next` nhận bản đang lưu (đọc dưới khoá dòng, không qua cache của get) và hàm `read` đọc khoá khác
+    // trong cùng transaction (cũng không qua cache); lỗi thì không ghi.
+    update: jest.fn(async (key: string, fallback: unknown, next: (current: unknown, read: (k: string) => Promise<unknown>) => unknown) => {
+      const read = async (k: string) => (k in stored ? stored[k] : cfg[k]);
+      const value = await next(key in stored ? stored[key] : key in cfg ? cfg[key] : fallback, read);
       cfg[key] = value;
       stored[key] = value;
       return value;
@@ -279,6 +281,12 @@ describe('RefillPairsService: Duyệt nhanh gợi ý (tubu-w11-01)', () => {
     const { svc, cfg } = build(true, {}, { [REFILL_PAIRS_OVERRIDE_KEY]: [other] }, NEAR_PRODUCTS);
     await expect(svc.adminSave({ confirm: [CAM, BH] }, 'po')).rejects.toThrow(ConflictException);
     await expect(svc.adminSave({ confirm: [CAM, BH] }, 'po')).rejects.toThrow('chưa cặp nào được duyệt');
+    expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toBeUndefined();
+  });
+
+  it('danh sách chặn đọc trong cùng transaction, không qua cache 60 giây của get: chai vừa bị chặn ở tiến trình API khác → 409, không ghi gì', async () => {
+    const { svc, cfg } = build(true, {}, { [REFILL_PAIRS_BLOCK_KEY]: [CAM.bottleSlug] }, NEAR_PRODUCTS);
+    await expect(svc.adminSave({ confirm: [BH, CAM] }, 'po')).rejects.toThrow(ConflictException);
     expect(cfg[REFILL_PAIRS_OVERRIDE_KEY]).toBeUndefined();
   });
 

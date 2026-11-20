@@ -955,7 +955,7 @@ describe('SystemConfigService.update: giá trị không đổi thì không ghi (
       $queryRaw: jest.fn().mockResolvedValue([{ value: stored }]),
     };
     const prisma = { $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
-    return { prisma, upsert, historyCreate };
+    return { prisma, tx, upsert, historyCreate };
   }
   const KEY = 'catalog.refill_pairs_override';
   const STORED = [{ bottleSlug: 'a', refillSlug: 'r' }];
@@ -966,6 +966,19 @@ describe('SystemConfigService.update: giá trị không đổi thì không ghi (
     expect(out).toEqual(STORED);
     expect(upsert).not.toHaveBeenCalled();
     expect(historyCreate).not.toHaveBeenCalled();
+  });
+
+  it('`read` đọc khoá khác bằng chính transaction đang giữ khoá dòng, không qua cache của get', async () => {
+    const { prisma, tx } = makeTx(STORED);
+    tx.systemConfig.findUnique.mockResolvedValueOnce({ value: ['chai-moi-chan'] }).mockResolvedValueOnce(null);
+    const service = new SystemConfigService(prisma);
+    const seen: unknown[] = [];
+    await service.update(KEY, [], async (cur, read) => {
+      seen.push(await read('catalog.refill_pairs_block'), await read('misc.none'));
+      return cur as object[];
+    }, 'po');
+    expect(seen).toEqual([['chai-moi-chan'], undefined]);
+    expect(tx.systemConfig.findUnique).toHaveBeenCalledWith({ where: { key: 'catalog.refill_pairs_block' } });
   });
 
   it('bản mới khác: ghi như cũ, kèm một dòng lịch sử', async () => {
