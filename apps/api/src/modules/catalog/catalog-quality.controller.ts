@@ -19,7 +19,7 @@ export class CopyDraftsDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(COPY_DRAFT_MAX_BATCH) @ArrayUnique() @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) ids!: string[];
 }
 
-// Trần ở DTO rộng hơn trần nội dung (140/800/8/80): vượt trần nội dung chỉ từ chối riêng mục đó kèm lý do, không làm 400 cả lô.
+// Trần ở DTO rộng hơn trần nội dung (140/800/COPY_INGREDIENTS_MAX/80): vượt trần nội dung chỉ từ chối riêng mục đó kèm lý do, không làm 400 cả lô.
 export class CopyApproveItemDto implements CopyApproveItem {
   @IsString() @IsNotEmpty() @MaxLength(64) id!: string;
   @Trim() @IsString() @MaxLength(400) shortDesc!: string;
@@ -40,7 +40,7 @@ export class ExtractIngredientsDto {
   @IsString() @IsNotEmpty() @MaxLength(INGREDIENT_IMAGE_DTO_MAX) image!: string;
 }
 
-// Trần ở DTO rộng hơn trần nội dung (8 tên, 80 ký tự): vượt trần nội dung thì service trả 400 kèm lý do cụ thể.
+// Trần ở DTO rộng hơn trần nội dung (COPY_INGREDIENTS_MAX tên, 80 ký tự): vượt trần nội dung thì service trả 400 kèm lý do cụ thể.
 export class SaveIngredientsDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(COPY_INGREDIENTS_MAX + 12) @TrimEach() @IsString({ each: true }) @MaxLength(200, { each: true }) ingredients!: string[];
 }

@@ -97,7 +97,7 @@ describe('CatalogQualityTab', () => {
     expect(body.parentElement!.hidden).toBe(false);
   });
 
-  it('bấm kiểm tra: MỘT lời gọi admin thay cho đọc từng sản phẩm, hiện số đếm, 6 chip loại lỗi và badge tình trạng mô tả', async () => {
+  it('bấm kiểm tra: MỘT lời gọi admin thay cho đọc từng sản phẩm, hiện số đếm, 6 chip loại lỗi + chip Thiếu thành phần và badge tình trạng mô tả', async () => {
     const m = mockFetch(routes());
     vi.stubGlobal('fetch', m.fn);
     const r = mount(<CatalogQualityTab />);
@@ -115,6 +115,7 @@ describe('CatalogQualityTab', () => {
       'Tồn kho giả (1)',
       'Biến thể chưa đặt tên (1)',
       'Trống mô tả (2)',
+      'Thiếu thành phần (0)',
     ]);
     expect(t).toContain('Mô tả trên 6 sản phẩm: Đã có mô tả gốc DB: 4 · Đang dùng bản dự phòng: 1 · Chưa có mô tả: 1');
     expect(t).not.toContain('Sản phẩm ổn');
@@ -376,6 +377,86 @@ describe('CatalogQualityTab', () => {
     expect(sections[2]!.textContent).toContain('Sản phẩm A');
     expect(m.calls.filter((c) => c.url.includes('/admin/ai-advisor/stats'))).toHaveLength(1);
     expect(m.calls.filter((c) => c.url.includes('/admin/catalog-quality/pancake-zero-price'))).toHaveLength(1);
+  });
+});
+
+describe('CatalogQualityTab — phủ thành phần (INCI) và câu chuyện sản phẩm', () => {
+  const MIX = [
+    // Thiếu thành phần nhưng không lỗi nào khác: bình thường không nằm trong danh sách cần sửa.
+    P({ id: 'p-sach', slug: 'sua-rua-mat', name: 'Sữa rửa mặt PƠ LANG', hasIngredients: false, hasStoryConfig: true }),
+    // Thiếu thành phần và thiếu ảnh.
+    P({ id: 'p-anh', slug: 'dau-goi', name: 'Dầu gội Visante', thumbnail: null, hasIngredients: false, hasStoryConfig: false }),
+    P({ id: 'p-du', slug: 'nuoc-rua-chen', name: 'Nước rửa chén Fuwa3e', hasIngredients: true, hasStoryConfig: true }),
+    P({ id: 'p-trong', slug: 'sp-trong', name: 'Sản phẩm trống mô tả', description: '', hasIngredients: true, hasStoryConfig: false }),
+    // Đang ẩn: không tính vào phủ, không vào bộ lọc (khách không thấy).
+    P({ id: 'p-an', slug: 'dang-an', name: 'Đang ẩn thiếu thành phần', isActive: false, hasIngredients: false, hasStoryConfig: false }),
+  ];
+  const coverage = (r: Rendered) => r.container.querySelector('[data-testid="catalog-content-coverage"]')?.textContent;
+  const chip = (r: Rendered) => byText(r.container, 'button', 'Thiếu thành phần (2)');
+
+  it('dòng phủ nội dung trên sản phẩm ĐANG BÁN: bao nhiêu có/thiếu thành phần, bao nhiêu câu chuyện đã tuỳ chỉnh ở Story Studio và bao nhiêu dùng kịch bản mẫu (storyConfig NULL)', async () => {
+    vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(MIX) })).fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    expect(coverage(r)).toBe('Trên 4 sản phẩm đang bán: thành phần (INCI) có 2, thiếu 2 · câu chuyện tuỳ chỉnh ở Story Studio 2, dùng kịch bản mẫu 2.');
+  });
+
+  it('API cũ chưa trả hasStoryConfig: chỉ nêu phần thành phần, không đoán số câu chuyện', async () => {
+    const old = MIX.map(({ hasStoryConfig: _drop, ...p }) => p);
+    vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(old) })).fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    expect(coverage(r)).toBe('Trên 4 sản phẩm đang bán: thành phần (INCI) có 2, thiếu 2.');
+  });
+
+  it('một chạm "Thiếu thành phần": danh sách còn đúng SKU đang bán thiếu thành phần, kể cả SKU không lỗi nào khác; mỗi dòng có nhãn và ô chọn soạn AI; bấm "Tất cả" thì về như cũ', async () => {
+    vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(MIX) })).fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    expect(listItems(r).some((li) => li.textContent?.includes('Sữa rửa mặt PƠ LANG'))).toBe(false);
+    expect(chip(r)!.getAttribute('aria-pressed')).toBe('false');
+    expect(chip(r)!.closest('[role="group"]')!.getAttribute('aria-label')).toBe('Lọc theo loại lỗi');
+    click(chip(r));
+    expect(chip(r)!.getAttribute('aria-pressed')).toBe('true');
+    const names = listItems(r).map((li) => li.textContent ?? '');
+    expect(names).toHaveLength(2);
+    expect(names.some((t) => t.includes('Sữa rửa mặt PƠ LANG'))).toBe(true);
+    expect(names.some((t) => t.includes('Dầu gội Visante') && t.includes('Thiếu ảnh'))).toBe(true);
+    for (const li of listItems(r)) expect(li.textContent).toContain('Thiếu thành phần');
+    expect(box(r, 'Sữa rửa mặt PƠ LANG')).not.toBeNull();
+    expect(listItems(r).find((li) => li.textContent?.includes('Sữa rửa mặt PƠ LANG'))!.textContent).toContain('Đã có mô tả gốc DB');
+    // Số trên chip tình trạng mô tả đếm đúng danh sách đang lọc (cả SKU không lỗi), không đếm theo danh sách lỗi.
+    expect(byText(r.container, 'button', 'Chưa có mô tả (0)')).not.toBeNull();
+    click(byText(r.container, 'button', 'Đã có mô tả gốc DB (2)'));
+    expect(listItems(r)).toHaveLength(2);
+    click(byText(r.container, 'button', 'Mọi tình trạng mô tả'));
+    click(byText(r.container, 'button', 'Tất cả (2)'));
+    expect(byText(r.container, 'button', 'Chưa có mô tả (1)')).not.toBeNull();
+    expect(listItems(r).map((li) => li.textContent ?? '').some((t) => t.includes('Sữa rửa mặt PƠ LANG'))).toBe(false);
+    expect(listItems(r)).toHaveLength(2);
+  });
+
+  it('tích SKU thiếu thành phần mà không lỗi nào khác: lên nút Soạn mô tả bằng AI như dòng lỗi', async () => {
+    vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(MIX) })).fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    click(chip(r));
+    const compose = () => byText(r.container, 'button', 'Soạn mô tả bằng AI') as HTMLButtonElement;
+    expect(compose().textContent).toBe('Soạn mô tả bằng AI (0)');
+    click(box(r, 'Sữa rửa mặt PƠ LANG'));
+    click(box(r, 'Dầu gội Visante'));
+    expect(compose().textContent).toBe('Soạn mô tả bằng AI (2)');
+    expect(compose().getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('mọi SKU đang bán đã có thành phần: chip ghi (0), bấm vào thì báo không có sản phẩm nào', async () => {
+    const full = MIX.map((p) => ({ ...p, hasIngredients: true }));
+    vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(full) })).fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    click(byText(r.container, 'button', 'Thiếu thành phần (0)'));
+    expect(listItems(r)).toHaveLength(0);
+    expect(r.container.textContent).toContain('Không có sản phẩm nào thuộc bộ lọc này.');
   });
 });
 

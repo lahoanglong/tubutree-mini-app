@@ -41,6 +41,32 @@ const draftOf = (out: ReturnType<typeof composeCopyDraft>) => {
   return out.draft;
 };
 
+
+/** Nhãn INCI kiểu sữa rửa mặt/dầu gội thật: 21 tên, đều là chữ thuần không mang tuyên bố bị chặn. */
+const INCI_21 = [
+  'Aqua',
+  'Glycerin',
+  'Sodium Lauroyl Sarcosinate',
+  'Cocamidopropyl Betaine',
+  'Decyl Glucoside',
+  'Sodium Cocoyl Isethionate',
+  'Aloe Barbadensis Leaf Juice',
+  'Camellia Sinensis Leaf Extract',
+  'Centella Asiatica Extract',
+  'Panthenol',
+  'Allantoin',
+  'Niacinamide',
+  'Sodium Hyaluronate',
+  'Xanthan Gum',
+  'Citric Acid',
+  'Sodium Benzoate',
+  'Potassium Sorbate',
+  'Tocopherol',
+  'Coco-Glucoside',
+  'Glyceryl Oleate',
+  'Parfum',
+];
+
 describe('parseCopyReply', () => {
   it('đọc JSON thuần, JSON trong rào ``` và JSON sau lời dẫn', () => {
     const json = JSON.stringify({ shortDesc: 'a', description: 'b', ingredients: ['c'] });
@@ -230,7 +256,7 @@ describe('composeCopyDraft — thành phần', () => {
   });
 
   it(`bỏ tên trùng, tên dài quá ${COPY_INGREDIENT_NAME_MAX} ký tự và phần vượt ${COPY_INGREDIENTS_MAX} tên`, () => {
-    const names = Array.from({ length: 12 }, (_, i) => `Nguyên liệu ${String.fromCharCode(97 + i)}`);
+    const names = Array.from({ length: COPY_INGREDIENTS_MAX + 4 }, (_, i) => `Nguyên liệu ${String.fromCharCode(97 + i)}`);
     const long = `Dầu ${'dừa '.repeat(30)}`.trim();
     const d = draftOf(composeCopyDraft(input({ ingredients: [...names, long] }), reply({ ingredients: ['Nguyên liệu a', 'nguyên liệu A', long, ...names] }), COPY_REASON.unusable));
     expect(d.ingredients).toHaveLength(COPY_INGREDIENTS_MAX);
@@ -332,6 +358,23 @@ describe('checkCopyForSave', () => {
 
   it.each([[''], ['   '], ['<p></p>'], ['<p>&nbsp;</p>']])('mô tả trống %j bị từ chối', (description) => {
     expect(checkCopyForSave(item({ description }))).toEqual({ ok: false, reasons: ['Mô tả đang trống.'] });
+  });
+
+  it('trần thành phần là 20 để lưu đủ nhãn INCI mỹ phẩm (PƠ LANG, Fuwa3e, Visante): đủ 20 tên lưu được, 21 tên bị từ chối nêu số đang có', () => {
+    expect(COPY_INGREDIENTS_MAX).toBe(20);
+    const ok = checkCopyForSave(item({ ingredients: INCI_21.slice(0, 20) }));
+    expect(ok).toMatchObject({ ok: true, value: { ingredients: INCI_21.slice(0, 20) } });
+    expect(checkCopyForSave(item({ ingredients: INCI_21 }))).toEqual({ ok: false, reasons: ['Tối đa 20 thành phần (đang 21).'] });
+    expect(checkIngredientsForSave(INCI_21.slice(0, 20))).toEqual({ ok: true, value: INCI_21.slice(0, 20) });
+    expect(checkIngredientsForSave(INCI_21)).toEqual({ ok: false, reasons: ['Tối đa 20 thành phần (đang 21).'] });
+  });
+
+  it('tên INCI có chữ "ocop" ở giữa (Tocopherol, Tocopheryl Acetate) không bị nhầm là nhãn OCOP; chữ OCOP đứng riêng vẫn bị chặn', () => {
+    expect(checkIngredientsForSave(['Tocopherol', 'Tocopheryl Acetate'])).toEqual({ ok: true, value: ['Tocopherol', 'Tocopheryl Acetate'] });
+    expect(checkIngredientsForSave(['Gừng OCOP 4 sao']).ok).toBe(false);
+    expect(checkIngredientsForSave(['Gừng OCOP4 sao']).ok).toBe(false);
+    expect(checkIngredientsForSave(['Mật ongOCOP']).ok).toBe(false);
+    expect(checkCopyForSave(item({ description: 'Sản phẩm đạt OCOP.' })).ok).toBe(false);
   });
 
   it('từ chối khi vượt trần độ dài hay số thành phần', () => {

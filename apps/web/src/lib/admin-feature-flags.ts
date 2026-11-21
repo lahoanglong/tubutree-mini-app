@@ -208,6 +208,16 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Tin nhắc qua Zalo gửi như trước, không giới hạn số tin mỗi ngày (vẫn giữ trần 2 tin khuyến mãi mỗi tháng).',
   },
   {
+    key: 'eco.product_badges_enabled',
+    label: 'Nhãn xanh có nguồn trên thẻ và trang sản phẩm',
+    description:
+      'Thẻ sản phẩm (Mini App và web) mang tối đa 1 nhãn xanh (Can refill, Giảm ~g nhựa, Trả vỏ đổi điểm) và trang sản phẩm có khối "Điểm cộng xanh" kèm link Nguồn. Chỉ sự thật đã duyệt ở /admin/su-that-xanh mới hiện. Mặc định TẮT: giữ tắt tới khi khối lượng bao bì đã được cân trên hàng thật.',
+    fallback: false,
+    onWarning:
+      'Chỉ bật khi số gram nhựa của từng sự thật đã duyệt được cân trên bao bì thật, không dùng số ước. Thẻ và trang sản phẩm đổi theo trong vòng vài phút (bộ đệm trang); thẻ tác động xanh của đơn cũng bắt đầu tính nhựa bớt theo các sự thật này.',
+    offWarning: 'Nhãn xanh và khối "Điểm cộng xanh" biến mất khỏi thẻ và trang sản phẩm; thẻ tác động xanh của đơn thôi tính nhựa bớt. Sự thật đã duyệt được giữ nguyên.',
+  },
+  {
     key: 'retention.refill_21d_reminder_enabled',
     label: 'Nhắc châm lại bằng gói Refill sau 21 ngày',
     description:

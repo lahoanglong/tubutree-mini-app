@@ -1,5 +1,5 @@
 /** Khớp COPY_INGREDIENTS_MAX và COPY_INGREDIENT_NAME_MAX của apps/api (modules/ai-advisor/copy-draft.ts); máy chủ kiểm lại khi lưu. */
-export const INGREDIENTS_MAX = 8;
+export const INGREDIENTS_MAX = 20;
 export const INGREDIENT_NAME_MAX = 80;
 
 const OPEN = '([{';

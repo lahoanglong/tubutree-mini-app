@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MINI_GAME_IDS } from '@tubutree/shared-types';
 import type { ConfigRow } from '@/lib/admin-client';
+import { FEATURE_FLAGS } from '@/lib/admin-feature-flags';
 import {
   GIFT_TRIAL_MIN_ORDER_KEY,
   GROWTH_GROUPS,
@@ -74,6 +75,48 @@ describe('danh sách điều khiển', () => {
     expect([num('game.mini.global_points_daily_budget').min, num('game.mini.global_points_daily_budget').max]).toEqual([0, 1_000_000]);
     expect([num('game.mini.water_daily_cap').min, num('game.mini.water_daily_cap').max]).toEqual([0, 200]);
     expect([num('game.mini.rounds_per_game_per_day').min, num('game.mini.rounds_per_game_per_day').max]).toEqual([0, 10]);
+  });
+});
+
+describe('đồng bộ với thẻ "Bật/tắt tính năng" (lib/admin-feature-flags.ts)', () => {
+  const flag = (key: string) => FEATURE_FLAGS.find((f) => f.key === key);
+  const SHARED = ['eco.product_badges_enabled', 'retention.refill_21d_reminder_enabled', 'retention.refill_21d_zns_enabled'];
+
+  it('nhãn xanh có nguồn và hai cờ nhắc Refill 21 ngày có ở CẢ Trung tâm tăng trưởng lẫn thẻ Bật/tắt tính năng, cùng nhãn, mô tả, mặc định và cảnh báo', () => {
+    for (const key of SHARED) {
+      const f = flag(key);
+      const g = sw(key);
+      expect(f, key).toBeDefined();
+      expect(g?.kind, key).toBe('switch');
+      expect({ label: g.label, description: g.description, fallback: g.fallback, onWarning: g.onWarning, offWarning: g.offWarning }, key).toEqual({
+        label: f!.label,
+        description: f!.description,
+        fallback: f!.fallback,
+        onWarning: f!.onWarning,
+        offWarning: f!.offWarning,
+      });
+    }
+  });
+
+  it('mọi khoá có ở cả hai nơi dùng cùng giá trị mặc định (cùng mặc định máy chủ)', () => {
+    const shared = all.filter((i): i is GrowthSwitch => i.kind === 'switch' && flag(i.key) !== undefined);
+    expect(shared.map((i) => i.key)).toEqual(expect.arrayContaining(SHARED));
+    for (const i of shared) expect(i.fallback, i.key).toBe(flag(i.key)!.fallback);
+  });
+
+  it('eco.product_badges_enabled mặc định TẮT; cảnh báo bật nói rõ chỉ bật khi khối lượng bao bì đã được cân trên hàng thật', () => {
+    const f = flag('eco.product_badges_enabled')!;
+    expect(f.fallback).toBe(false);
+    expect(f.description).toContain('Mặc định TẮT');
+    expect(f.onWarning).toContain('cân');
+    expect(sw('eco.product_badges_enabled').needsRow).toBe(true);
+  });
+
+  it('ZNS Refill chỉ có tác dụng khi công tắc nhắc Refill bật; cả hai chờ dòng cấu hình của migration', () => {
+    expect(sw('retention.refill_21d_zns_enabled').requires).toBe('retention.refill_21d_reminder_enabled');
+    expect(sw('retention.refill_21d_reminder_enabled').needsRow).toBe(true);
+    expect(sw('retention.refill_21d_zns_enabled').needsRow).toBe(true);
+    expect([sw('retention.refill_21d_reminder_enabled').fallback, sw('retention.refill_21d_zns_enabled').fallback]).toEqual([false, false]);
   });
 });
 

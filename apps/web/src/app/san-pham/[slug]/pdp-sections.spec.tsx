@@ -74,6 +74,20 @@ describe('PdpIngredients', () => {
     expect(rows().filter((r) => r.className.split(' ').includes('hidden'))).toHaveLength(2);
     expect(smallTouchTargets(container)).toEqual([]);
   });
+
+  it('nhãn INCI đủ 20 tên (trần lưu mới của admin): mặc định chỉ hiện tối đa 8 dòng kèm một nút "Xem đủ (20)", cả 20 tên vẫn nằm trong HTML', () => {
+    const inci = Array.from({ length: 20 }, (_, i) => ({ name: `INCI ${i + 1}` }));
+    const { container } = mount(<PdpIngredients ingredients={inci} />);
+    const rows = Array.from(container.querySelectorAll('[data-testid="pdp-ingredient"]'));
+    expect(rows).toHaveLength(20);
+    const visible = rows.filter((r) => !r.className.split(' ').includes('hidden'));
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.length).toBeLessThanOrEqual(8);
+    const toggles = container.querySelectorAll<HTMLButtonElement>('[data-testid="pdp-ingredients-toggle"]');
+    expect(toggles).toHaveLength(1);
+    expect(toggles[0]!.textContent).toBe('Xem đủ (20)');
+    expect(container.textContent).toContain('INCI 20');
+  });
 });
 
 describe('PdpPromises', () => {

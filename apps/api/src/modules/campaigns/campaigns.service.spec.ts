@@ -58,6 +58,15 @@ describe('CampaignsService.listPublic', () => {
   });
 });
 
+describe('CampaignsService.listPublicSlugs', () => {
+  it('đọc slug + updatedAt của chiến dịch đang chạy có trang riêng (cho sitemap web)', async () => {
+    const { svc, prisma } = setup();
+    prisma.campaign.findMany.mockResolvedValue([{ slug: 'giua-thu', updatedAt: new Date('2026-11-04T01:00:00Z') }]);
+    await expect(svc.listPublicSlugs(NOW)).resolves.toEqual([{ slug: 'giua-thu', updatedAt: '2026-11-04T01:00:00.000Z' }]);
+    expect(prisma.campaign.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { ...liveWhere(NOW), linkType: 'CAMPAIGN_PAGE' }, select: { slug: true, updatedAt: true } }));
+  });
+});
+
 describe('CampaignsService.getPublic', () => {
   it('không có / đã tắt / chưa tới giờ / hết hạn: 404, điều kiện nằm trong truy vấn (không lộ bản nháp)', async () => {
     const { svc, prisma } = setup({ campaign: null });

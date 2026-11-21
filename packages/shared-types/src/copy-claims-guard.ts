@@ -7,13 +7,13 @@
  * - `MEDICAL_CLAIMS`: công dụng y tế hay diệt khuẩn. Không bao giờ được xuất hiện trong chữ dựng sẵn, kể cả khi bao bì có in.
  * - `PROOF_CLAIMS`: chứng nhận, con số, so sánh hơn, nhãn an toàn tuyệt đối. Bao bì có in cũng không chép lại: cần giấy tờ đi kèm mà catalog chưa có.
  *
- * Mẫu chọn hẹp (từ ghép hoặc có biên từ) để không chặn nhầm chữ đã duyệt; chữ "trị" đứng riêng xử lý ở `hasStandaloneTri` vì "giá trị", "quản trị" là chữ thường dùng.
+ * Mẫu chọn hẹp (từ ghép hoặc có biên từ) để không chặn nhầm chữ đã duyệt ("ocop" không được theo sau bởi "her" vì nằm giữa tên INCI "Tocopherol"/"Tocopheryl", vitamin E có trên hầu hết nhãn mỹ phẩm; không dùng biên từ vì "OCOP4 sao" viết liền vẫn phải bị chặn); chữ "trị" đứng riêng xử lý ở `hasStandaloneTri` vì "giá trị", "quản trị" là chữ thường dùng.
  */
 export const MEDICAL_CLAIMS =
   /chữa|điều trị|trị (?:bệnh|mụn|nám|ho|cảm|viêm|sẹo)|bệnh|kháng viêm|kháng khuẩn|diệt khuẩn|sát khuẩn|khử khuẩn|tiệt trùng|vô trùng|vi khuẩn|vi rút|virus|dị ứng|y khoa|bác sĩ|lâm sàng|kiểm nghiệm|xua đuổi|côn trùng|muỗi|giảm đau|hạ sốt|thải độc|detox|ung thư|tiểu đường|\bmụn\b|\bnám\b|\bsẹo\b|mọc tóc|trẻ hoá|trẻ hóa|làm trắng|\bgàu\b|gãy rụng|rụng tóc|sáng da|\bchàm\b|kháng nấm|trị nấm|nấm da|nấm móng|\bngứa\b|\bhăm\b|khỏi hẳn|phòng ngừa|\bngừa\b|trị liệu/i;
 
 export const PROOF_CLAIMS =
-  /chứng nhận|chứng chỉ|usda|haccp|ocop|pasteur|viện |hữu cơ|organic|đặc sản|\bgmp\b|\biso\b|control union|vegan|thuần chay|không hoá chất|không hóa chất|hoá chất độc hại|hóa chất độc hại|an toàn|lành tính|tuyệt đối|hàng đầu|tốt nhất|số 1|số một|thượng hạng|nhập khẩu|israel|xuất xứ|\d+(?:[.,]\d+)? ?%|low ?gi\b|hấp thu chậm|đạt chuẩn|tiêu chuẩn|\bfda\b|ecocert|phần trăm|gấp \d+ lần/i;
+  /chứng nhận|chứng chỉ|usda|haccp|ocop(?!her)|pasteur|viện |hữu cơ|organic|đặc sản|\bgmp\b|\biso\b|control union|vegan|thuần chay|không hoá chất|không hóa chất|hoá chất độc hại|hóa chất độc hại|an toàn|lành tính|tuyệt đối|hàng đầu|tốt nhất|số 1|số một|thượng hạng|nhập khẩu|israel|xuất xứ|\d+(?:[.,]\d+)? ?%|low ?gi\b|hấp thu chậm|đạt chuẩn|tiêu chuẩn|\bfda\b|ecocert|phần trăm|gấp \d+ lần/i;
 
 /** Từ "tự nhiên/thiên nhiên" là lời quảng cáo chưa có kiểm chứng; chữ dựng sẵn chỉ chép điều bao bì ghi cụ thể (loại enzyme, bột ngô...). */
 export const NATURAL_CLAIMS = /tự nhiên|thiên nhiên/i;

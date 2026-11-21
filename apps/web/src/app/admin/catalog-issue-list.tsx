@@ -25,11 +25,13 @@ interface Props {
   selected: ReadonlySet<string>;
   /** Đã chọn đủ trần một lượt soạn: ô chưa tích bị khoá, ô đã tích vẫn bỏ được. */
   selectionFull: boolean;
+  /** Id SKU đang bán chưa có thành phần (INCI): dòng mang thêm nhãn "Thiếu thành phần". */
+  missingIngredients?: ReadonlySet<string>;
   onToggle: (id: string, on: boolean) => void;
 }
 
 /** Danh sách sản phẩm cần sửa; ô tích chọn là để đưa sản phẩm vào lượt soạn mô tả bằng AI. */
-export function CatalogIssueList({ rows, selected, selectionFull, onToggle }: Props) {
+export function CatalogIssueList({ rows, selected, selectionFull, missingIngredients, onToggle }: Props) {
   return (
     <ul className="divide-y divide-stone-200 rounded-control border border-stone-200" aria-label="Sản phẩm cần sửa">
       {rows.map((r) => {
@@ -55,6 +57,7 @@ export function CatalogIssueList({ rows, selected, selectionFull, onToggle }: Pr
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="min-w-0 break-words text-sm font-medium text-stone-900">{r.name}</span>
                 <ToneBadge tone={COPY_STATUS_TONE[r.copyStatus]}>{COPY_STATUS_LABELS[r.copyStatus]}</ToneBadge>
+                {id !== undefined && missingIngredients?.has(id) && <ToneBadge tone="warning">Thiếu thành phần</ToneBadge>}
                 {r.isActive === false && <ToneBadge tone="neutral">Đang ẩn</ToneBadge>}
                 {r.inStock === false && <ToneBadge tone="neutral">Hết hàng</ToneBadge>}
               </div>

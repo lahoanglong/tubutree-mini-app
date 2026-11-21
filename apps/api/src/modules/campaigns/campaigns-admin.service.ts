@@ -6,7 +6,7 @@ import { publicImage } from '../../common/public-image';
 import { PRISMA_TRANSACTION_OPTIONS, PrismaService } from '../../prisma/prisma.service';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { normalizeCouponCode } from '../coupons/coupons.service';
-import { assertWindow, campaignStatus, normalizeLink, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
+import { assertWindow, campaignStatus, normalizeLink, RESERVED_CAMPAIGN_SLUGS, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
 import { campaignPhase, countHealth, needsCleanSlate, saveVerdict, type HealthIssue, type HealthSubject, type SaveVerdict, type VerdictState } from './campaign-health';
 import { campaignHealthBatch } from './campaign-health-loader';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CheckCampaignDto, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
@@ -247,6 +247,7 @@ export class CampaignsAdminService {
     const audience = dto.audience ?? 'ALL';
     const sortOrder = dto.sortOrder ?? 0;
     const slug = dto.slug ?? slugFromTitle(dto.title);
+    if (RESERVED_CAMPAIGN_SLUGS.has(slug)) throw new BadRequestException(`Slug "${slug}" trùng đường dẫn hệ thống. Đổi tên hoặc nhập slug khác.`);
     if (await this.prisma.campaign.findUnique({ where: { slug }, select: { id: true } })) {
       throw new ConflictException(`Đã có chiến dịch dùng slug "${slug}". Đổi tên hoặc nhập slug khác.`);
     }

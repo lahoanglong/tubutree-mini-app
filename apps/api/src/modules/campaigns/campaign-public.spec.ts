@@ -1,4 +1,4 @@
-import { audienceWhere, BANNER_FETCH_LIMIT, liveWhere, listLiveBanners, toBannerDTO } from './campaign-public';
+import { audienceWhere, BANNER_FETCH_LIMIT, liveWhere, listLiveBanners, listPublicCampaignSlugs, PUBLIC_SLUGS_LIMIT, toBannerDTO } from './campaign-public';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 const SVG = 'data:image/svg+xml;base64,PHN2Zz4=';
@@ -80,5 +80,68 @@ describe('listLiveBanners', () => {
     const { prisma, findMany } = make([row()]);
     await listLiveBanners(prisma, 'HOME_TOP', { now: NOW, audience: 'RETURNING' });
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { ...liveWhere(NOW, 'HOME_TOP'), audience: { in: ['ALL', 'RETURNING'] } } }));
+  });
+});
+
+describe('listPublicCampaignSlugs', () => {
+  type Row = Record<string, unknown> & { isActive: boolean; startAt: Date; endAt: Date; linkType: string };
+  /** Prisma giả chạy đúng các điều kiện `where` mà hàm gửi xuống, và cố tình trả CẢ dòng (bỏ qua `select`) để thử hàm không làm lộ cột nội bộ. */
+  const make = (rows: Row[]) => {
+    const findMany = jest.fn(async (args: { where: { isActive?: boolean; startAt?: { lte: Date }; endAt?: { gt: Date }; linkType?: string } }) =>
+      rows.filter(
+        (r) =>
+          (args.where.isActive === undefined || r.isActive === args.where.isActive) &&
+          (!args.where.startAt || r.startAt <= args.where.startAt.lte) &&
+          (!args.where.endAt || r.endAt > args.where.endAt.gt) &&
+          (args.where.linkType === undefined || r.linkType === args.where.linkType),
+      ),
+    );
+    return { prisma: { campaign: { findMany } } as never, findMany };
+  };
+  const full = (over: Record<string, unknown>): Row =>
+    ({
+      ...(row(over) as unknown as Row),
+      isActive: true,
+      subtitle: 'Nội bộ',
+      sortOrder: 3,
+      placement: 'HOME_TOP',
+      createdAt: new Date('2026-10-30T00:00:00Z'),
+      updatedAt: new Date('2026-11-09T02:00:00Z'),
+      coupons: [{ code: 'BIMAT' }],
+      products: [{ productId: 'p1' }],
+      ...over,
+    }) as Row;
+
+  it('chỉ chiến dịch đang chạy có trang riêng: bỏ bản tắt (nháp), chưa mở, đã hết (đúng lúc endAt) và banner trỏ sản phẩm/danh mục', async () => {
+    const { prisma } = make([
+      full({ id: 'live', slug: 'giua-thu' }),
+      full({ id: 'off', slug: 'ban-nhap', isActive: false }),
+      full({ id: 'soon', slug: 'sap-mo', startAt: new Date('2026-11-20T00:00:00Z') }),
+      full({ id: 'ended', slug: 'da-het', endAt: NOW }),
+      full({ id: 'product', slug: 'tro-san-pham', linkType: 'PRODUCT', linkValue: 'tinh-dau-sa' }),
+      full({ id: 'live2', slug: 'black-friday', startAt: NOW, updatedAt: new Date('2026-11-10T01:00:00Z') }),
+    ]);
+    const out = await listPublicCampaignSlugs(prisma, NOW);
+    expect(out.map((c) => c.slug).sort()).toEqual(['black-friday', 'giua-thu']);
+  });
+
+  it('mỗi dòng đúng hai khoá slug + updatedAt (ISO): không lộ id, tiêu đề, ảnh, mã giảm giá, sản phẩm hay cờ nội bộ', async () => {
+    const { prisma } = make([full({ id: 'live', slug: 'giua-thu' })]);
+    const out = await listPublicCampaignSlugs(prisma, NOW);
+    expect(out).toEqual([{ slug: 'giua-thu', updatedAt: '2026-11-09T02:00:00.000Z' }]);
+    expect(Object.keys(out[0]!)).toEqual(['slug', 'updatedAt']);
+    expect(JSON.stringify(out)).not.toMatch(/BIMAT|Nội bộ|p1|live|cdn\.example/);
+  });
+
+  it('truy vấn: liveWhere + linkType CAMPAIGN_PAGE, chỉ select slug/updatedAt, mới sửa trước, có trần', async () => {
+    const { prisma, findMany } = make([]);
+    expect(await listPublicCampaignSlugs(prisma, NOW)).toEqual([]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { ...liveWhere(NOW), linkType: 'CAMPAIGN_PAGE' },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      take: PUBLIC_SLUGS_LIMIT,
+      select: { slug: true, updatedAt: true },
+    });
+    expect(PUBLIC_SLUGS_LIMIT).toBe(500);
   });
 });

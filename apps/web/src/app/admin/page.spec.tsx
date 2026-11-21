@@ -4601,6 +4601,58 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(container.querySelector('nav[aria-label="Mục quản trị"]')!.textContent).not.toContain('Bổ sung ảnh hàng loạt');
   });
 
+  it('quản trị viên có lối vào hai trang riêng "Sự thật xanh" và "Từ khoá tìm kiếm" cuối nhóm Nội dung: liên kết đúng trang, đủ 44px, bấm không đổi tab', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const group = container.querySelector('nav[aria-label="Mục quản trị"] [role="group"][aria-label="Nội dung"]')!;
+    const rows = [...group.querySelectorAll('li')].map((li) => navLabel(li));
+    expect(rows.slice(-2)).toEqual(['Sự thật xanh', 'Từ khoá tìm kiếm']);
+    for (const [key, href] of [
+      ['ecoFacts', '/admin/su-that-xanh'],
+      ['searchTerms', '/admin/tu-khoa-tim'],
+    ] as const) {
+      const a = group.querySelector<HTMLAnchorElement>(`a[data-nav-item="${key}"]`)!;
+      expect(a.getAttribute('href')).toBe(href);
+      expect(a.className).toContain('min-h-[44px]');
+      a.addEventListener('click', (e) => e.preventDefault());
+      click(a);
+      await flush();
+      expect(window.location.search).toBe('?tab=orders');
+    }
+  });
+
+  it('nhân viên (kể cả đủ mọi nhóm việc) không thấy lối vào "Sự thật xanh" và "Từ khoá tìm kiếm": API admin/eco-facts, admin/search-synonyms chỉ nhận ADMIN', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const nav = container.querySelector('nav[aria-label="Mục quản trị"]')!;
+    expect(nav.querySelector('a[href="/admin/su-that-xanh"]')).toBeNull();
+    expect(nav.querySelector('a[href="/admin/tu-khoa-tim"]')).toBeNull();
+    expect(nav.textContent).not.toContain('Sự thật xanh');
+    expect(nav.textContent).not.toContain('Từ khoá tìm kiếm');
+  });
+
+  it('mọi trang con /admin/<thư mục>/page.tsx đều có lối vào từ menu quản trị (không còn trang mồ côi)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dir = path.resolve(__dirname);
+    const pages = fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && fs.existsSync(path.join(dir, d.name, 'page.tsx')))
+      .map((d) => `/admin/${d.name}`);
+    expect(pages.length).toBeGreaterThan(0);
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const links = new Set([...container.querySelectorAll<HTMLAnchorElement>('a[href^="/admin/"]')].map((a) => a.getAttribute('href')));
+    expect(pages.filter((p) => !links.has(p))).toEqual([]);
+  });
+
   it('mã đơn ở "Đơn hàng mới nhất" của Tổng quan bấm được, mở tab Đơn hàng tìm đúng mã (E-56)', async () => {
     window.history.replaceState(null, '', '/admin?tab=dashboard');
     const { container } = await mount();

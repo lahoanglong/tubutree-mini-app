@@ -17,6 +17,14 @@ export class CampaignsController {
     return this.campaigns.listPublic(q.placement, q.audience);
   }
 
+  /** Slug + ngày sửa cho sitemap web. Phải khai trước `:slug`: Express khớp route theo thứ tự khai. */
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('public-slugs')
+  publicSlugs() {
+    return this.campaigns.listPublicSlugs();
+  }
+
   @Public()
   @PublicCache('CATALOG')
   @Get(':slug')

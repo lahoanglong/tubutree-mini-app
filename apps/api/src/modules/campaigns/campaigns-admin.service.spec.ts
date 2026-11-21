@@ -794,6 +794,15 @@ describe('CampaignsAdminService: một lệnh lưu trường + danh sách trong 
     expect(prisma.campaignProduct.createMany).toHaveBeenCalledWith({ data: [{ campaignId: 'new', productId: 'p1', sortOrder: 0 }] });
   });
 
+  it('tạo mới mang slug dành riêng (public-slugs, kể cả tự sinh từ tiêu đề): 400 trước khi ghi gì', async () => {
+    const { svc, prisma } = setup({ existing: row({ products: [], coupons: [] }), ...hasP('p1') });
+    const base = { placement: 'HOME_TOP', image: PNG, linkType: 'CAMPAIGN_PAGE', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: false } as const;
+    await expect(svc.create({ ...base, title: 'Mới', slug: 'public-slugs' }, NOW)).rejects.toThrow(/đường dẫn hệ thống/);
+    await expect(svc.create({ ...base, title: 'Public slugs' }, NOW)).rejects.toThrow(/đường dẫn hệ thống/);
+    expect(prisma.campaign.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('tạo mới đang bật mà trang trống: 400, không tạo dòng nào', async () => {
     const { svc, prisma } = setup();
     await expect(svc.create({ title: 'Mới', placement: 'HOME_TOP', image: PNG, linkType: 'CAMPAIGN_PAGE', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-20T00:00:00.000Z', isActive: true }, NOW)).rejects.toThrow(/Trang chiến dịch đang trống/);

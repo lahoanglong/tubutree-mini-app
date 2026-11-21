@@ -5,7 +5,7 @@
  * - `POST /admin/catalog-quality/copy-drafts` body `{ ids }` (1..`COPY_DRAFT_MAX_BATCH`) → `CopyDraftsResponse` (ADMIN; không ghi DB)
  * - `POST /admin/catalog-quality/copy-approve` body `{ items }` (1..`COPY_DRAFT_MAX_BATCH`) → `CopyApproveResponse` (ADMIN; ghi DB sau khi lọc lại phía máy chủ)
  * - `POST /admin/catalog-quality/:id/extract-ingredients` body `{ image }` (data URL JPEG/PNG/WebP, tối đa 5 MB) → `IngredientsFromImageResponse` (ADMIN; AI đọc nhãn bao bì, KHÔNG ghi DB; 503 tiếng Việt khi chưa có khoá AI)
- * - `POST /admin/catalog-quality/:id/ingredients` body `{ ingredients }` (1..8 tên) → `IngredientsSaveResponse` (ADMIN; chỉ NỐI thêm tên mới vào cột `ingredients`, cùng bộ chặn với duyệt mô tả)
+ * - `POST /admin/catalog-quality/:id/ingredients` body `{ ingredients }` (1..20 tên) → `IngredientsSaveResponse` (ADMIN; chỉ NỐI thêm tên mới vào cột `ingredients`, cùng bộ chặn với duyệt mô tả)
  * - `GET  /admin/ai-advisor/stats`            → `AdvisorStatsDto` (ADMIN; bộ đếm trong bộ nhớ của instance API)
  */
 export const COPY_DRAFT_MAX_BATCH = 10;
@@ -32,6 +32,8 @@ export interface CatalogAuditProductDto {
   shortDesc: string | null;
   /** `ingredients` trong DB có ít nhất một tên thật. */
   hasIngredients: boolean;
+  /** `storyConfig` đã lưu từ Story Studio; `false` là cột NULL, trang khách dùng kịch bản mẫu theo slug hoặc tự sinh. API cũ chưa trả thì thiếu. */
+  hasStoryConfig?: boolean;
   /** Còn ít nhất một biến thể đang bán và còn hàng (cùng nghĩa với `inStock` của danh sách công khai). */
   inStock: boolean;
   variations: CatalogAuditVariationDto[];

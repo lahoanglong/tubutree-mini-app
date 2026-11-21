@@ -1,3 +1,4 @@
+import { COPY_INGREDIENTS_MAX } from '../ai-advisor/copy-draft';
 import {
   applyBackfill,
   extractIngredientsFromText,
@@ -61,9 +62,10 @@ describe('extractIngredientsFromText', () => {
     expect(extractIngredientsFromText('Thành phần: Gừng hữu cơ, mật ong').ok).toBe(false);
   });
 
-  it('từ chối danh sách quá 8 thành phần thay vì cắt lặng lẽ', () => {
-    const r = extractIngredientsFromText('Thành phần: a1, b2, c3, d4, e5, f6, g7, h8, i9');
-    expect(r.ok).toBe(false);
+  it(`từ chối danh sách quá ${COPY_INGREDIENTS_MAX} thành phần thay vì cắt lặng lẽ; vừa đúng ${COPY_INGREDIENTS_MAX} thì nhận`, () => {
+    const names = (n: number) => Array.from({ length: n }, (_, i) => `${String.fromCharCode(97 + i)}${i + 1}`).join(', ');
+    expect(extractIngredientsFromText(`Thành phần: ${names(COPY_INGREDIENTS_MAX + 1)}`).ok).toBe(false);
+    expect(extractIngredientsFromText(`Thành phần: ${names(COPY_INGREDIENTS_MAX)}`).ok).toBe(true);
   });
 });
 

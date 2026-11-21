@@ -6,6 +6,9 @@ export type CampaignStatus = 'live' | 'scheduled' | 'ended' | 'off';
 
 const SLUG_MAX = 80;
 
+/** Slug trùng đường dẫn tĩnh của `GET /campaigns/<...>` (khai trước `:slug`): chiến dịch mang slug này không bao giờ mở được trang chi tiết. */
+export const RESERVED_CAMPAIGN_SLUGS: ReadonlySet<string> = new Set(['public-slugs']);
+
 /** "Chiến dịch Giữa Thu" → "chien-dich-giua-thu". Tiêu đề toàn ký hiệu vẫn ra một slug dùng được. */
 export function slugFromTitle(title: string): string {
   const slug = title

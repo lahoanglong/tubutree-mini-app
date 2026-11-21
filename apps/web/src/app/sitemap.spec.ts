@@ -12,6 +12,11 @@ vi.mock('@/lib/route-map', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/route-map')>()),
   publicStaticRoutes: routeMocks.publicStaticRoutes,
 }));
+const http = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock('@/lib/core-http-server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-http-server')>()),
+  createServerHttp: () => ({ get: http.get }),
+}));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProducts: mocks.getProducts,
@@ -22,6 +27,8 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 
 import sitemap from './sitemap';
+import { ApiNotFoundError } from '@/lib/core-http-server';
+import { ApiUnavailableError } from '@/lib/api';
 
 // API chặn limit > 100 (apps/api/src/common/pagination.ts): gọi limit lớn hơn trả 400 và sitemap 500.
 const API_MAX_LIMIT = 100;
@@ -36,6 +43,7 @@ beforeEach(() => {
   mocks.getBrands.mockReset().mockResolvedValue([]);
   mocks.getLegalDoc.mockReset().mockResolvedValue({ content: null, vars: {} });
   mocks.getCategories.mockReset().mockResolvedValue([]);
+  http.get.mockReset().mockResolvedValue([]);
 });
 
 describe('sitemap', () => {
@@ -178,5 +186,56 @@ describe('sitemap lastmod', () => {
     const out = await sitemap();
     for (const e of out) expect('lastModified' in e, e.url).toBe(false);
     expect(out.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('sitemap trang chiến dịch (/chien-dich/[slug])', () => {
+  const campaignEntries = (out: Awaited<ReturnType<typeof sitemap>>) => out.filter((e) => e.url.includes('/chien-dich/'));
+
+  it('nộp mỗi chiến dịch đang chạy một URL đúng dạng canonical của trang, lastModified từ updatedAt (ngày admin sửa thật)', async () => {
+    http.get.mockResolvedValue([
+      { slug: 'giua-thu', updatedAt: '2026-11-09T02:00:00.000Z' },
+      { slug: 'black-friday', updatedAt: '2026-11-15T10:00:00.000Z' },
+    ]);
+    const out = await sitemap();
+    expect(http.get).toHaveBeenCalledWith('/campaigns/public-slugs', undefined);
+    expect(campaignEntries(out)).toEqual([
+      { url: 'https://app.tubutree.com/chien-dich/giua-thu', lastModified: new Date('2026-11-09T02:00:00.000Z'), changeFrequency: 'daily', priority: 0.6 },
+      { url: 'https://app.tubutree.com/chien-dich/black-friday', lastModified: new Date('2026-11-15T10:00:00.000Z'), changeFrequency: 'daily', priority: 0.6 },
+    ]);
+  });
+
+  it('API trả rỗng: không có URL chiến dịch, sitemap vẫn đủ phần khác', async () => {
+    mocks.getProducts.mockResolvedValueOnce([{ slug: 'sp-a' }]);
+    http.get.mockResolvedValue([]);
+    const out = await sitemap();
+    expect(campaignEntries(out)).toEqual([]);
+    expect(entryOf(out, '/san-pham/sp-a')).toBeDefined();
+  });
+
+  it('API chưa có endpoint (404, API bản cũ): bỏ qua chiến dịch, không làm hỏng sitemap', async () => {
+    http.get.mockRejectedValue(new ApiNotFoundError('/campaigns/public-slugs'));
+    const out = await sitemap();
+    expect(campaignEntries(out)).toEqual([]);
+    expect(out[0]!.url).toBe('https://app.tubutree.com/');
+  });
+
+  it('dữ liệu hỏng: bỏ dòng thiếu slug, slug trùng chỉ nộp một lần, ngày hỏng thì bỏ lastModified, thân không phải mảng thì coi như rỗng', async () => {
+    http.get.mockResolvedValue([{ slug: 'giua-thu', updatedAt: 'xxx' }, { slug: '' }, { updatedAt: '2026-11-09T02:00:00.000Z' }, null, { slug: 'giua-thu', updatedAt: '2026-11-09T02:00:00.000Z' }]);
+    const out = campaignEntries(await sitemap());
+    expect(out.map((e) => e.url)).toEqual(['https://app.tubutree.com/chien-dich/giua-thu']);
+    expect('lastModified' in out[0]!).toBe(false);
+    http.get.mockResolvedValue({ data: [] });
+    expect(campaignEntries(await sitemap())).toEqual([]);
+  });
+
+  it('slug lạ được mã hoá như canonical của trang (encodeURIComponent)', async () => {
+    http.get.mockResolvedValue([{ slug: 'a b/c', updatedAt: '2026-11-09T02:00:00.000Z' }]);
+    expect(campaignEntries(await sitemap()).map((e) => e.url)).toEqual(['https://app.tubutree.com/chien-dich/a%20b%2Fc']);
+  });
+
+  it('API lỗi tạm (5xx) lúc chạy: ném như mọi danh sách khác để Next giữ sitemap đầy đủ lần trước', async () => {
+    http.get.mockRejectedValue(new ApiUnavailableError('/campaigns/public-slugs', 503));
+    await expect(sitemap()).rejects.toThrow('không sẵn sàng');
   });
 });

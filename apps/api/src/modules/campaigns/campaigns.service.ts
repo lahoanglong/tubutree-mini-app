@@ -5,7 +5,7 @@ import { publicImage } from '../../common/public-image';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
-import { listLiveBanners, liveWhere, type CampaignBannerDTO } from './campaign-public';
+import { listLiveBanners, listPublicCampaignSlugs, liveWhere, type CampaignBannerDTO, type CampaignSlugDTO } from './campaign-public';
 
 export interface CampaignCouponDTO {
   code: string;
@@ -62,6 +62,10 @@ export class CampaignsService {
 
   listPublic(placement: CampaignPlacement, audience?: 'NEW' | 'RETURNING'): Promise<CampaignBannerDTO[]> {
     return listLiveBanners(this.prisma, placement, { ...(audience ? { audience } : {}) });
+  }
+
+  listPublicSlugs(now: Date = new Date()): Promise<CampaignSlugDTO[]> {
+    return listPublicCampaignSlugs(this.prisma, now);
   }
 
   /** Chiến dịch tắt, chưa mở, đã hết hạn hay không có đều 404 như nhau: bản nháp không lộ qua đoán slug. */
