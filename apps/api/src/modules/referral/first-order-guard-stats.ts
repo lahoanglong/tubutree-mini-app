@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { REFERRAL_GUARD_REASONS, type ReferralFirstOrderGuardDTO } from '@tubutree/shared-types';
 import type { FirstOrderBlockReason } from './first-order-guard';
-import { FIRST_ORDER_REFERRER_PREFIX, FIRST_ORDER_REVOKE_PREFIX } from './first-order-reward';
+import { FIRST_ORDER_REFERRER_PREFIX, revokedReferrerGrantCount } from './first-order-reward';
 
 /**
  * Đếm để theo dõi luật chống tự giới thiệu của thưởng đơn đầu, nhất là luật IP 24 giờ: 4G Việt Nam và Wi-Fi văn phòng dùng chung IP công
@@ -41,16 +41,7 @@ export async function firstOrderGuardStats(
     where: { refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: since, lte: until } },
     select: { reason: true },
   });
-  const revoked =
-    grants.length === 0
-      ? 0
-      : await db.pointsTransaction.count({
-          where: {
-            refType: 'REFERRAL',
-            reason: { in: grants.map((g) => `${FIRST_ORDER_REVOKE_PREFIX}REFERRER:${g.reason.slice(FIRST_ORDER_REFERRER_PREFIX.length)}`) },
-          },
-        });
-  const rewarded = grants.length - revoked;
+  const rewarded = grants.length - (await revokedReferrerGrantCount(db, grants.map((g) => g.reason)));
   const rows = await db.$queryRaw<Array<{ reason: string | null; n: Count }>>`
     SELECT e.props->>'reason' AS reason, count(*) AS n
       FROM "analytics_events" e

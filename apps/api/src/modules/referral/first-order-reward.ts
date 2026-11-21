@@ -100,11 +100,31 @@ export function canEarnAsReferrer(u: { role: string; isBlocked: boolean; metadat
   return u.role !== 'AFFILIATE' && !u.isBlocked && !sampleOwner(u.metadata) && !isAnonymized(u.metadata) && isRealUser(u);
 }
 
-/** Số bạn đã thưởng đơn đầu cho `referrerId` trong tháng (giờ Việt Nam) chứa `now`. */
-export function referrerFirstOrderCount(db: Pick<Db, 'pointsTransaction'>, referrerId: string, now: Date): Promise<number> {
+/**
+ * Trong các dòng thưởng phía người mời `grantReasons` (`REFERRAL_FIRST_ORDER_REFERRER:<id bạn>`), số dòng đã bị thu hồi khi gộp phiên khách
+ * tự mời (`REFERRAL_FIRST_ORDER_REVOKE:REFERRER:<id bạn>`), dòng thu hồi ghi ở kỳ nào cũng tính. Một nguồn cho trần tháng và số "đã thưởng"
+ * của Trung tâm tăng trưởng (firstOrderGuardStats), để hai số luôn khớp.
+ */
+export async function revokedReferrerGrantCount(db: Pick<Db, 'pointsTransaction'>, grantReasons: readonly string[]): Promise<number> {
+  if (grantReasons.length === 0) return 0;
   return db.pointsTransaction.count({
-    where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: vnMonthStart(now) } },
+    where: {
+      refType: 'REFERRAL',
+      reason: { in: grantReasons.map((r) => `${FIRST_ORDER_REVOKE_PREFIX}REFERRER:${r.slice(FIRST_ORDER_REFERRER_PREFIX.length)}`) },
+    },
   });
+}
+
+/**
+ * Số bạn đã thưởng đơn đầu cho `referrerId` trong tháng (giờ Việt Nam) chứa `now`, trừ cặp đã bị thu hồi khi gộp phiên khách tự mời: cặp
+ * đó không còn là một lần thưởng nên không chiếm chỗ trong trần tháng.
+ */
+export async function referrerFirstOrderCount(db: Pick<Db, 'pointsTransaction'>, referrerId: string, now: Date): Promise<number> {
+  const grants = await db.pointsTransaction.findMany({
+    where: { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: vnMonthStart(now) } },
+    select: { reason: true },
+  });
+  return grants.length - (await revokedReferrerGrantCount(db, grants.map((g) => g.reason)));
 }
 
 /**

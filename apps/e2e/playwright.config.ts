@@ -78,7 +78,9 @@ const apiServer: WebServer = {
   // PORT truyền thẳng: main.ts đọc process.env.PORT → server Playwright spawn nghe đúng cổng đang chờ.
   env: { PORT: API_PORT },
   timeout: 180_000,
-  reuseExistingServer: !process.env.CI,
+  // scripts/web-gate.sh tự bật API và chờ nó trả dữ liệu trước (E2E_API_PREBOOTED=1) để `next build` của webServer dưới không dựng trang ISR
+  // khi API chưa lên; dùng lại API đó thay vì báo cổng đã bận.
+  reuseExistingServer: !process.env.CI || process.env.E2E_API_PREBOOTED === '1',
 };
 const webServer: WebServer = {
   command: withLog(WEB_COMMAND, 'web'),

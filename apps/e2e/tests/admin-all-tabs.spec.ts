@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { createHmac } from 'crypto';
 import { test, expect, type Page } from '@playwright/test';
+import { withSharedConfigLock } from './support/shared-config-lock';
 
 /**
  * Mở lần lượt MỌI mục của menu quản trị bằng tài khoản ADMIN thật, với API và DB thật (chạy qua scripts/web-gate.sh, E2E_SCOPE=web).
@@ -17,6 +18,7 @@ const dbUrl = process.env.DATABASE_URL ?? '';
 const secret = process.env.JWT_ACCESS_SECRET ?? '';
 const runnable = process.env.E2E_SCOPE === 'web' && GATE_DB.test(dbUrl) && secret.length >= 16;
 const SCREENS = process.env.A1_SCREENS_DIR;
+const API = `http://127.0.0.1:${process.env.E2E_API_PORT}/api`;
 
 /** Mục menu ADMIN phải thấy: đếm thẳng từ NAV_GROUPS trong mã trang (trang Next không export được), để thêm hay bớt mục mà test không biết thì đỏ. */
 /** Huy hiệu số việc chờ nằm trong nút menu (chữ ẩn ", 44 việc đang chờ"): bỏ đi để còn đúng tên mục. */
@@ -55,11 +57,13 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
   test.beforeAll(async () => {
     const prisma = prismaClient();
     try {
-      await prisma.user.upsert({
-        where: { id: ADMIN_ID },
-        update: { role: 'ADMIN', isBlocked: false },
-        create: { id: ADMIN_ID, zaloId: 'e2e-admin-zalo', role: 'ADMIN', fullName: 'E2E Admin', referralCode: 'E2EADM01' },
+      // fullyParallel: mỗi worker chạy beforeAll riêng, có khi cùng lúc. upsert theo id thành INSERT … ON CONFLICT (id), lần chèn thứ hai vẫn
+      // vấp unique zaloId/referralCode. ON CONFLICT DO NOTHING không chỉ định cột che mọi chỉ mục unique và chờ lần chèn kia commit.
+      await prisma.user.createMany({
+        data: [{ id: ADMIN_ID, zaloId: 'e2e-admin-zalo', role: 'ADMIN', fullName: 'E2E Admin', referralCode: 'E2EADM01' }],
+        skipDuplicates: true,
       });
+      await prisma.user.update({ where: { id: ADMIN_ID }, data: { role: 'ADMIN', isBlocked: false } });
     } finally {
       await prisma.$disconnect();
     }
@@ -176,6 +180,12 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
   });
 
   test('tab Đổi rác mở được; công tắc Đổi rác tạo được dòng khi khoá chưa có trong DB', async ({ page }) => {
+    test.setTimeout(150_000);
+    // organic-seo so FAQ của /doi-rac (dựng lúc build, cờ tắt) với cờ đọc lúc chạy: không được đọc đúng lúc ca này đang bật thử cờ.
+    await withSharedConfigLock('waste.enabled', () => toggleWasteSwitch(page));
+  });
+
+  async function toggleWasteSwitch(page: Page) {
     const prisma = prismaClient();
     // DB gate dùng chung cho cả bộ: trả công tắc Đổi rác về đúng trạng thái cũ, kẻo spec khác (Trang chủ khách) chạy sau thấy cờ bật.
     let before: { value: unknown; category: string | null; description: string | null } | null = null;
@@ -201,6 +211,12 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       await page.reload();
       await expect(page.getByRole('switch', { name: 'Đổi rác lấy quà' })).toHaveAttribute('aria-checked', 'true');
     } finally {
+      // API giữ cache cấu hình 60 giây. Chỉ ghi thẳng DB thì /config/public còn báo bật tới một phút sau (organic-seo /doi-rac đọc lệch), nên trả
+      // giá trị qua PUT /admin/config để xoá cache trước, rồi mới dựng lại đúng dòng cũ (nhóm, mô tả) bằng prisma.
+      const reset = await page.request.put(`${API}/admin/config`, {
+        headers: { authorization: `Bearer ${adminToken()}` },
+        data: { key: 'waste.enabled', value: before?.value ?? false },
+      });
       const restore = prismaClient();
       try {
         await restore.systemConfig.deleteMany({ where: { key: 'waste.enabled' } });
@@ -208,8 +224,9 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       } finally {
         await restore.$disconnect();
       }
+      expect(reset.status(), 'PUT /admin/config trả waste.enabled về giá trị cũ').toBe(200);
     }
-  });
+  }
 
   test('Thông tin cửa hàng lưu chuỗi thường và chính sách xem trước được', async ({ page }) => {
     await openAdmin(page, '/admin?tab=config');

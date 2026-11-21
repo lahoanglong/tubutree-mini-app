@@ -7,8 +7,9 @@ import { DEFAULT_ORDER_SOURCE_MAP, EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MA
 /** PUT /admin/config → AdminService.setConfig → SystemConfigService.set thật, DB chưa có dòng của khoá. */
 function mk() {
   const tx = {
-    systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+    systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   const prisma = {
     systemConfig: { findUnique: jest.fn().mockResolvedValue(null) },

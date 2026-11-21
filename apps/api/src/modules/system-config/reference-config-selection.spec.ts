@@ -353,8 +353,9 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
   // Dòng nạp lên DB thật là dòng admin sửa tiếp: khoá có JSON/mảng/số tiền mà chưa có luật ghi thì gõ nhầm đơn vị là "đã lưu", hệ thống chạy sai.
   it('mọi khoá bổ sung và khoá giá trị kinh doanh đều có luật ghi, và giá trị nạp tự nó hợp lệ với luật đó', async () => {
     const tx = {
-      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     const prisma = { systemConfig: tx.systemConfig, $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
     const service = new SystemConfigService(prisma);
@@ -382,8 +383,9 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
       const fallback = await (dealer as unknown as { bonusTiers(): Promise<unknown> }).bonusTiers();
       expect(row().value).toEqual(fallback);
       const tx = {
-        systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+        systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
         systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
       };
       const service = new SystemConfigService({ $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService);
       await expect(service.set(KEY, row().value as object, 'admin-it')).resolves.toBeUndefined();

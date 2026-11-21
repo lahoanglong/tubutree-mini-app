@@ -167,15 +167,16 @@ describe('scripts/ci/web-budget.cjs (ngân sách JS tải lần đầu + HTML Tr
     expect(block).not.toContain('continue-on-error');
   });
 
-  it('ngưỡng thật nằm trong scripts/ci/web-budget.json: chặn cứng chỉ / và /san-pham, bốn route còn lại chỉ cảnh báo, có ngân sách HTML Trang chủ', () => {
+  it('ngưỡng thật nằm trong scripts/ci/web-budget.json: cả sáu route đều chặn cứng (không route nào chỉ cảnh báo), có ngân sách HTML Trang chủ', () => {
     const real = JSON.parse(readFileSync(join(REPO, 'scripts/ci/web-budget.json'), 'utf8')) as {
       routes: Record<string, { maxGzipBytes?: number; warnGzipBytes?: number }>;
       html: Record<string, { maxBytes: number }>;
     };
     const blocking = Object.entries(real.routes).filter(([, r]) => r.maxGzipBytes !== undefined).map(([k]) => k);
     const warnOnly = Object.entries(real.routes).filter(([, r]) => r.maxGzipBytes === undefined && r.warnGzipBytes !== undefined).map(([k]) => k);
-    expect(blocking.sort()).toEqual(['/', '/san-pham']);
-    expect(warnOnly.sort()).toEqual(['/gio-hang', '/san-pham/[slug]', '/thanh-toan', '/vuon-xanh']);
+    expect(blocking.sort()).toEqual(['/', '/gio-hang/[[...variant]]', '/san-pham', '/san-pham/[slug]', '/thanh-toan', '/vuon-xanh/[[...variant]]']);
+    expect(warnOnly).toEqual([]);
+    for (const [route, r] of Object.entries(real.routes)) expect([route, r.maxGzipBytes! > 0]).toEqual([route, true]);
     expect(real.html['/']?.maxBytes).toBeLessThanOrEqual(245_000);
   });
 });

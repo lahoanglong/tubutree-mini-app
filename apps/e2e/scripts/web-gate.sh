@@ -25,7 +25,9 @@ require_free() {
   fi
 }
 
+API_PID=""
 cleanup() {
+  if [[ -n "$API_PID" ]]; then kill "$API_PID" >/dev/null 2>&1 || true; fi
   docker rm -f -v "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -69,7 +71,10 @@ export ZALO_OA_ACCESS_TOKEN= ZALO_OA_REFRESH_TOKEN= ZALO_OA_WEBHOOK_SECRET= ZALO
 export ZALOPAY_APP_ID= ZALOPAY_KEY1= ZALOPAY_KEY2= ACCESSTRADE_TOKEN= ACCESSTRADE_PUBLISHER_ID= ACCESSTRADE_WEBHOOK_SECRET=
 export OPS_ALERT_WEBHOOK_URL= OPS_ALERT_EMAIL_TO= SMTP_HOST= SMTP_USER= SMTP_PASS=
 export DEEPSEEK_API_KEY= GEMINI_API_KEY= ANTIGRAVITY_GATEWAY_URL= ANTIGRAVITY_GATEWAY_KEY=
-export AUTH_COOKIE_DOMAIN= AUTH_COOKIE_SAMESITE=lax ZALO_APP_ID= ZALO_OA_ID= THROTTLE_BYPASS_TOKEN=
+export AUTH_COOKIE_DOMAIN= AUTH_COOKIE_SAMESITE=lax ZALO_APP_ID= ZALO_OA_ID=
+# Token bypass (API đòi ≥ 32 ký tự) cho fetch của máy chủ web: `next build`, SSR và lượt làm mới ISR đều đi từ một IP, không được chạm trần
+# 300 request/phút/route của khách (429 lúc build là trang ISR rỗng tới hết revalidate). Trình duyệt của test không gửi header này.
+export THROTTLE_BYPASS_TOKEN="gate-ssr-$(openssl rand -hex 24)"
 export CORS_ORIGINS="http://localhost:$E2E_WEB_PORT"
 export NODE_ENV=test
 export PORT="$E2E_API_PORT"
@@ -86,6 +91,32 @@ export E2E_LOG_DIR="${E2E_LOG_DIR:-$E2E_DIR/server-logs}"
   npx tsx prisma/seed.ts
   npx tsx -e "const w = require('../e2e/tests/support/waste-db'); w.seedWasteRulesText(w.WASTE_RULES_TEXT)"
 )
+
+# API lên và trả dữ liệu TRƯỚC khi Playwright chạy `next build`: trang ISR lấy dữ liệu lúc build (/doi-rac đọc /config/public, /waste/warehouses,
+# /waste/catalogue), gặp lỗi mạng hay 429/5xx thì dựng bản rỗng và giữ tới hết revalidate 5 phút, test chạy trong khoảng đó thấy FAQ rỗng.
+# Chạy bản dist một tiến trình (không watch nên không tự khởi động lại giữa lượt); Playwright dùng lại API này (E2E_API_PREBOOTED=1).
+mkdir -p "$E2E_LOG_DIR"
+(
+  cd "$ROOT/apps/api"
+  npx nest build
+) > "$E2E_LOG_DIR/api-build.log" 2>&1 || { echo "Dựng API lỗi, xem $E2E_LOG_DIR/api-build.log" >&2; tail -20 "$E2E_LOG_DIR/api-build.log" >&2; exit 1; }
+(cd "$ROOT/apps/api" && exec node dist/main.js) > "$E2E_LOG_DIR/webserver-api.log" 2>&1 &
+API_PID=$!
+API_BASE="http://127.0.0.1:$E2E_API_PORT/api"
+# --max-time: API mở cổng mà một handler treo (chờ DB/Redis lúc khởi động) thì curl không được chờ mãi, hạn chót 180 giây phải còn tác dụng.
+api_ready() {
+  local p
+  for p in health config/public waste/warehouses waste/catalogue; do
+    curl -fsS --max-time 5 -o /dev/null "$API_BASE/$p" || return 1
+  done
+}
+deadline=$((SECONDS + 180))
+until api_ready 2>/dev/null; do
+  kill -0 "$API_PID" 2>/dev/null || { echo "API thoát trước khi sẵn sàng, xem $E2E_LOG_DIR/webserver-api.log" >&2; tail -30 "$E2E_LOG_DIR/webserver-api.log" >&2; exit 1; }
+  ((SECONDS < deadline)) || { echo "API không trả đủ /health, /config/public, /waste/* sau 180 giây" >&2; exit 1; }
+  sleep 1
+done
+export E2E_API_PREBOOTED=1
 
 # Cache fetch của next build còn dữ liệu của DB tạm lượt trước: bản hết hạn vẫn được dùng để dựng trang ISR (Next chỉ làm mới ngầm sau đó),
 # nên trang dựng sẵn có thể không khớp DB lượt này.

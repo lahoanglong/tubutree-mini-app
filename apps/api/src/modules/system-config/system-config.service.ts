@@ -557,14 +557,19 @@ export class SystemConfigService {
     }
   }
 
+  /**
+   * Ghi đè một khoá dưới khoá dòng, như `update()`: tạo dòng nếu chưa có (lần chèn chen với một lần tạo dòng chưa commit thì chờ lần đó), rồi đọc
+   * bản đang lưu bằng `SELECT … FOR UPDATE` trong cùng transaction với lần ghi. Hai lần ghi cùng khoá (hai admin, hai tiến trình API, hay chen
+   * với `update()`) chạy nối tiếp: dòng lịch sử của lần sau có oldValue là bản lần trước vừa ghi, kiểm kiểu so với bản mới nhất. Đọc không khoá
+   * thì hai lần cùng thấy một bản cũ, lịch sử có hai dòng cùng oldValue và mất mắt xích ở giữa. Dòng do chính lần ghi này tạo không sinh lịch sử.
+   */
   async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
     const unset = await this.checkValue(key, value);
     await this.prisma.$transaction(async (tx) => {
-      // Đọc `existing` TRONG transaction (thay vì trước đó) để thu hẹp cửa sổ race: 2 admin sửa
-      // cùng key gần như đồng thời trước đây có thể tạo 2 dòng history cùng oldValue (v1→v2 và
-      // v1→v3), làm mất bản ghi v1→v2 thật sự đã xảy ra trong audit trail.
-      const existing = await tx.systemConfig.findUnique({ where: { key } });
-      await this.writeInTx(tx, key, value, unset, changedBy, existing);
+      const stored = unset ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
+      const created = await tx.systemConfig.createMany({ data: [{ key, value: stored, category: categoryOf(key), updatedBy: changedBy }], skipDuplicates: true });
+      const [locked] = await tx.$queryRaw<{ value: Prisma.JsonValue }[]>`SELECT "value" FROM system_configs WHERE "key" = ${key} FOR UPDATE`;
+      await this.writeInTx(tx, key, value, unset, changedBy, created.count > 0 ? null : (locked ?? null));
     });
     this.afterWrite(key);
   }

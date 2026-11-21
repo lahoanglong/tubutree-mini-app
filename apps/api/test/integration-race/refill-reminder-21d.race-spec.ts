@@ -1,10 +1,22 @@
+import { randomBytes } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RefillReminderService } from '../../src/modules/notifications/refill-reminder.service';
-import { createOrder, createRealUser, randCode, warmPool } from './helpers';
+import { loadRefillPairTable } from '../../src/modules/catalog/refill/refill-pair-table';
+import { createOrder as createOrderRow, createRealUser as createRealUserRow, warmPool } from './helpers';
 
 const DAY = 864e5;
+
+/**
+ * Tag thương hiệu chỉ gồm chữ, không có "x": tên sản phẩm mang tag nên tag có số và "x" ("…68x 3,8L", "a3x5…") bị luật gói nhiều món
+ * (`\d x \d`) đọc thành gói nhiều món, cặp rơi sang `size` và cả file đỏ cùng lúc (khoảng 1,6% số lần chạy với randCode).
+ */
+function letterTag(len: number): string {
+  const letters = 'abcdefghjkmnpqrstuvwyz';
+  return [...randomBytes(len)].map((b) => letters[b % letters.length]).join('');
+}
 
 /**
  * Nhắc đổi sang gói Refill 21 ngày (tubu-w11-03) trên Postgres THẬT: một đơn một tin kể cả hai lượt chạy song song, bỏ khách đã mua
@@ -17,16 +29,31 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify } as unknown as NotificationsService;
   const now = new Date();
+  const tag = letterTag(8);
   let bottleVariation: string;
   let refillVariation: string;
   let refillSlug: string;
+  const productIds: string[] = [];
+  const userIds: string[] = [];
+  const orderIds: string[] = [];
+
+  // Mọi khách và đơn của file đi qua hai hàm này để afterAll dọn đúng phần của mình trên DB dùng chung.
+  const createRealUser = async (p: PrismaService, data: Parameters<typeof createRealUserRow>[1] = {}) => {
+    const u = await createRealUserRow(p, data);
+    userIds.push(u.id);
+    return u;
+  };
+  const createOrder = async (p: PrismaService, data: Parameters<typeof createOrderRow>[1]) => {
+    const o = await createOrderRow(p, data);
+    orderIds.push(o.id);
+    return o;
+  };
 
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
     await warmPool(prisma);
     // Thương hiệu riêng mỗi lượt: bảng cặp quét cả danh mục công khai của DB dùng chung, cặp này không trùng cặp của spec khác.
-    const tag = randCode(6).toLowerCase();
     const brand = `ITRF${tag}`;
     const bottle = await prisma.product.create({
       data: { brand, slug: `itrf-${tag}-chai`, name: `Nước rửa chén ${brand} 3,8L`, description: 'IT', basePrice: 100_000 },
@@ -41,14 +68,28 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     refillVariation = (
       await prisma.variation.create({ data: { productId: refill.id, sku: `ITRF-${tag}-R`, name: '10L', attributes: {}, retailPrice: 200_000, stock: 10 } })
     ).id;
+    productIds.push(bottle.id, refill.id);
+    // Chốt trước mọi ca: cặp của file phải tự ghép. Thiếu cặp thì job không xét đơn nào và mọi ca đỏ với lý do khó đọc.
+    const pairs = await loadRefillPairTable(prisma, config);
+    if (pairs.get(bottle.id) !== refill.id) throw new Error(`Cặp ${bottle.name} → ${refill.name} không tự ghép: đổi tên/tag của spec`);
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    if (prisma) {
+      await prisma.refillReminder.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { orderId: { in: orderIds } }] } });
+      await prisma.reorderReminder.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.returnRequest.deleteMany({ where: { orderId: { in: orderIds } } });
+      await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      await prisma.variation.deleteMany({ where: { productId: { in: productIds } } });
+      await prisma.product.deleteMany({ where: { id: { in: productIds } } });
+    }
+    await prisma?.$disconnect();
   });
 
   beforeEach(() => {
-    notify.mockClear();
+    // mockReset: một ca giả lập gửi lỗi mà đỏ giữa chừng không để lại hàm ném lỗi cho ca sau.
+    notify.mockReset().mockResolvedValue(undefined);
     values['retention.refill_21d_reminder_enabled'] = true;
     values['retention.refill_21d_zns_enabled'] = false;
   });
@@ -285,6 +326,57 @@ describe('Nhắc Refill 21 ngày (real Postgres)', () => {
     await runOnce(service());
     expect(callsFor(u.id)).toHaveLength(1);
     expect((await rowsFor(u.id)).map((r) => r.outcome)).toEqual(['SENT']);
+  });
+
+  it('hơn một lô đơn tới hạn cũ hơn đứng đầu hàng mà lần nào gửi cũng lỗi: đơn mới hơn vẫn tới lượt ngay trong lượt chạy đó', async () => {
+    // Đơn gửi lỗi không ghi dòng (để lượt sau thử lại) nên ngày nào cũng đứng đầu hàng theo deliveredAt. Chỉ lấy một lô 300 thì đơn
+    // phía sau không bao giờ tới lượt trong cả cửa sổ 7 ngày.
+    const n = RefillReminderService.BATCH + 5;
+    const noisy = await createRealUser(prisma, { notifyPromo: true });
+    const u = await createRealUser(prisma, { notifyPromo: true });
+    const ids = Array.from({ length: n }, (_, i) => `itrf-${tag}-old-${i}`);
+    const address = { recipient: 'Khach IT', phone: '0900000000', street: '1 Duong IT', ward: 'Phuong IT', district: '', province: 'Ha Noi', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' };
+    // Cùng một mốc giao cho cả lô cũ: lô sau phải nối tiếp theo (deliveredAt, id), con trỏ chỉ theo deliveredAt sẽ bỏ sót 5 đơn cuối.
+    const deliveredAt = new Date(now.getTime() - 27 * DAY);
+    const rows: Prisma.OrderCreateManyInput[] = ids.map((id, i) => {
+      return {
+        id,
+        code: `ITRF${tag.toUpperCase()}${i}`,
+        userId: noisy.id,
+        type: 'RETAIL',
+        status: 'DELIVERED',
+        subtotal: 100_000,
+        total: 100_000,
+        paymentMethod: 'COD',
+        paymentStatus: 'UNPAID',
+        shippingAddress: address,
+        createdAt: new Date(deliveredAt.getTime() - 2 * DAY),
+        deliveredAt,
+        deliveredEffectsAt: deliveredAt,
+      };
+    });
+    orderIds.push(...ids);
+    await prisma.order.createMany({ data: rows });
+    await prisma.orderItem.createMany({
+      data: ids.map((orderId) => ({ orderId, variationId: bottleVariation, productName: 'Chai IT', variationName: '3,8L', unitPrice: 100_000, quantity: 1, total: 100_000 })),
+    });
+    const order = await bottleOrder(u.id, 22);
+    notify.mockImplementation(async (userId: string) => {
+      if (userId === noisy.id) throw new Error('kênh gửi lỗi');
+    });
+
+    try {
+      const stats = (await runOnce(service())) as { sent: number; failed: number };
+
+      expect(callsFor(noisy.id)).toHaveLength(n);
+      expect(await rowsFor(noisy.id)).toHaveLength(0);
+      expect(stats.failed).toBe(n);
+      expect(callsFor(u.id)).toHaveLength(1);
+      expect((await rowsFor(u.id)).map((r) => [r.orderId, r.outcome])).toEqual([[order.id, 'SENT']]);
+    } finally {
+      // Đơn lỗi của ca này không được đứng đầu hàng của các ca sau.
+      await prisma.order.deleteMany({ where: { id: { in: ids } } });
+    }
   });
 
   it('cờ tắt: không đọc đơn, không gửi', async () => {

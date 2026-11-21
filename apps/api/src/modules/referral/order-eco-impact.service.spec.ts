@@ -50,7 +50,10 @@ function setup(opts: { viral?: boolean; order?: Record<string, unknown> | null; 
       ),
     },
     productEcoFact: { findMany: jest.fn().mockResolvedValue([]) },
-    pointsTransaction: { count: jest.fn().mockResolvedValue(opts.monthCount ?? 0) },
+    pointsTransaction: {
+      findMany: jest.fn().mockResolvedValue(Array.from({ length: opts.monthCount ?? 0 }, (_, i) => ({ reason: `REFERRAL_FIRST_ORDER_REFERRER:f${i}` }))),
+      count: jest.fn().mockResolvedValue(0),
+    },
   };
   return { svc: new OrderEcoImpactService(prisma as unknown as PrismaService, config), prisma, orderFind };
 }
