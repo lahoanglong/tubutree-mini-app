@@ -1,6 +1,6 @@
 import { writeFileSync } from 'fs';
 import { Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type ProductApprovalStatus } from '@prisma/client';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -94,7 +94,7 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
   let prisma: PrismaService;
   let fuzzyOn = false;
   let catalog: CatalogService;
-  let hidden: string[] = [];
+  let hidden: { id: string; approvalStatus: ProductApprovalStatus }[] = [];
   const report: Record<string, unknown> = { threshold: FUZZY_THRESHOLD };
   const warn = jest.spyOn(Logger.prototype, 'warn');
   const config = {
@@ -135,7 +135,9 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
         })),
       });
     }
-    await prisma.$executeRawUnsafe('ANALYZE products');
+    // VACUUM (không chỉ ANALYZE): dồn danh sách chờ của chỉ mục GIN trigram và bỏ mục chỉ mục chết như autovacuum làm trên PROD; danh sách
+    // chờ vài nghìn dòng mới chèn làm planner ước chỉ mục trigram đắt và chọn chỉ mục btree khác khi bảng còn SP của suite khác.
+    await prisma.$executeRawUnsafe('VACUUM ANALYZE products');
   }
 
   async function measure(queries: { q: string; slug: string }[]) {
@@ -180,8 +182,10 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
-    hidden = (await prisma.product.findMany({ where: { isActive: true, NOT: { id: { startsWith: BENCH } } }, select: { id: true } })).map((r) => r.id);
-    await prisma.product.updateMany({ where: { id: { in: hidden } }, data: { isActive: false } });
+    // Ẩn SP của suite khác bằng approvalStatus, không bằng isActive: hàng nghìn dòng isActive=false làm planner (enable_seqscan=off) chọn
+    // chỉ mục products_isActive_isFeatured_idx thay chỉ mục trigram, nên EXPLAIN đổi theo số suite chạy trước (đỏ khi chạy cả bộ race).
+    hidden = await prisma.product.findMany({ where: { approvalStatus: { not: 'PENDING_REVIEW' }, NOT: { id: { startsWith: BENCH } } }, select: { id: true, approvalStatus: true } });
+    await prisma.product.updateMany({ where: { id: { in: hidden.map((h) => h.id) } }, data: { approvalStatus: 'PENDING_REVIEW' } });
     catalog = new CatalogService(prisma, undefined, undefined, undefined, new SearchMatchService(prisma, config));
   });
 
@@ -189,7 +193,9 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     if (prisma) {
       await prisma.variation.deleteMany({ where: { productId: { startsWith: BENCH } } });
       await prisma.product.deleteMany({ where: { id: { startsWith: BENCH } } });
-      await prisma.product.updateMany({ where: { id: { in: hidden } }, data: { isActive: true } });
+      for (const status of new Set(hidden.map((h) => h.approvalStatus))) {
+        await prisma.product.updateMany({ where: { id: { in: hidden.filter((h) => h.approvalStatus === status).map((h) => h.id) } }, data: { approvalStatus: status } });
+      }
     }
     if (process.env.SEARCH_BENCH_OUT) writeFileSync(process.env.SEARCH_BENCH_OUT, JSON.stringify(report, null, 2));
     warn.mockRestore();

@@ -4,6 +4,7 @@ import { Prisma, type SystemConfig } from '@prisma/client';
 import type { WasteConfirmResultDTO } from '@tubutree/shared-types';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { vnMonthKey } from '../../src/common/vn-time';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
@@ -117,6 +118,7 @@ beforeAll(async () => {
       WasteConfigService,
       WasteAccessService,
       WasteHoldService,
+      AnalyticsEventsService,
       WasteConfirmService,
       {
         provide: WasteNotifierService,

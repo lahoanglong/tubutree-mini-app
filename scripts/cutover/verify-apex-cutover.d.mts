@@ -57,6 +57,7 @@ export function extractCanonical(html: string): string | null;
 export function extractMeta(html: string, key: string): string | null;
 export function extractJsonLd(html: string): Record<string, unknown>[];
 export function extractImgUrls(html: string, pageUrl?: string): string[];
+export function imgFindings(request: Requester, html: string, pageUrl: string, base: string): Promise<Finding[]>;
 export function followRedirects(input: {
   base: string;
   path: string;

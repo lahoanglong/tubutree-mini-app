@@ -29,7 +29,7 @@ import { computeReturnShares } from '../../src/modules/orders/refund-allocation'
 import { GroupBuyService } from '../../src/modules/groupbuy/groupbuy.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
-import { createDealer, createUser, randCode, pinConfig, setConfig, warmPool } from './helpers';
+import { createDealer, createUser, randCode, pinConfig, warmPool } from './helpers';
 
 /**
  * Hồi quy phía người mua cho nhánh Q8: đơn KHÔNG có hàng đối tác phải ra đúng số tiền như code trước nhánh (uat/integration
@@ -52,8 +52,9 @@ type Snapshot = { placement: Json; perLine: Json };
  *
  * Ba kịch bản `cod-coupon-tier-points`, `transfer-scoped-coupon-tier`, `ctv-combo-coupon-points` được ghi lại ở w5-01 (trần giảm gộp
  * voucher + Điểm Xanh ≤ 20% tạm tính kẹp phần Điểm Xanh của chúng), trên code đã có M1, nên bản ghi của chúng đã gồm khác biệt M1.
+ * `dealer-prepaid.placement` theo W154: dòng hàng đại lý ghi đơn giá gốc, chiết khấu bậc gom vào `discount` (dòng giảm trên hoá đơn);
+ * `total` khách trả không đổi (1.432.500).
  */
-const ROUNDING = 'làm tròn theo từng dòng (paidTotal) thay vì theo tỉ lệ cả đơn, lệch 1đ';
 const FLASH = 'hàng giờ vàng không gánh mã giảm giá: hoàn đúng giá giờ vàng đã trả (trừ phần Điểm Xanh), dòng thường hoàn ít hơn';
 const SCOPED = 'mã gắn sản phẩm chỉ trừ vào dòng sản phẩm đó: dòng đó hoàn ít hơn, dòng khác hoàn nhiều hơn';
 const POINTS = 'Điểm Xanh hoàn theo đúng phần điểm của dòng (OrderItem.pointsDiscount) thay vì theo giá trị dòng: tiền hoàn + điểm hoàn của một dòng khớp giá trị dòng đó';

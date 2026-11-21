@@ -292,6 +292,8 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
       expect(await pc.product.count()).toBeGreaterThan(0);
       expect(await pc.gameQuiz.count()).toBe(NATURE_QUIZZES.length + 6);
 
+      const configKeys = async () => (await pc.systemConfig.findMany({ select: { key: true } })).map((r) => r.key);
+      const keysBefore = new Set(await configKeys());
       const results = await seedReference(pc, withFlag);
 
       expect(createdBy(results)).toMatchObject({
@@ -342,7 +344,13 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'loyalty.chat_order_creator_monthly_points',
         'pancake.staff_map',
         'staff.grant_invite_ttl_days',
+        'game.arcade_enabled',
+        'game.arcade_points_per_run',
+        'game.arcade_water_base',
+        'game.home_quiz_seeds',
       ];
+      // So theo tên trước (lỗi chỉ ra đúng khoá lệch), rồi mới so số đếm.
+      expect((await configKeys()).filter((k) => !keysBefore.has(k)).sort()).toEqual([...extraKeys].sort());
       expect(createdBy(results).system_configs).toBe(extraKeys.length);
       expect(await pc.systemConfig.count({ where: { key: { in: extraKeys } } })).toBe(extraKeys.length);
       // seed.ts (dev) nạp cả mùa mẫu đã hết hạn; seed-reference thì không (kiểm ở DB A và B).

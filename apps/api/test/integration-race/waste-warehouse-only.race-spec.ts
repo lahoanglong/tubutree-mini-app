@@ -8,6 +8,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import type { SystemConfig } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
@@ -82,6 +83,7 @@ beforeAll(async () => {
       WasteConfigService,
       WasteAccessService,
       WasteHoldService,
+      AnalyticsEventsService,
       WasteConfirmService,
       WasteRequestsService,
       WasteAdminPointsService,

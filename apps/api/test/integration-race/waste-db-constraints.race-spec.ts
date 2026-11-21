@@ -7,6 +7,10 @@ import {
   cleanupWaste, createGiftRedemption, createWarehouse, createWasteGift, createWasteItem, createWastePoint, createWasteRequest,
 } from './fixtures/waste-fixtures';
 import { WASTE_CONFIG_KEYS } from '../../src/modules/waste-exchange/waste-config.keys';
+import { WASTE_REPEAT_REQUEST_KEY } from '../../src/modules/system-config/public-config';
+
+// Cờ giao diện mang tiền tố waste.* nhưng khai ở public-config, không thuộc bảng tham số đổi rác (w4-04 "Gửi lại như lần trước").
+const WASTE_UI_FLAGS: string[] = [WASTE_REPEAT_REQUEST_KEY];
 
 const MIGRATION = 'prisma/migrations/20261020000000_waste_exchange/migration.sql';
 // Trạng thái BATTERY sau khi áp hết chuỗi migration (20261115171000_w168_waste_catalog_gifts mở thành ACTIVE).
@@ -331,7 +335,9 @@ describe('seeded reference data after migrate deploy', () => {
     expect(await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } })).toEqual(before);
   });
   it('the 24 waste.* config rows exist after migrate deploy (prod never runs seed.ts)', async () => {
-    const rows = await prisma.systemConfig.findMany({ where: { key: { startsWith: 'waste.' } }, orderBy: { key: 'asc' } });
+    const all = await prisma.systemConfig.findMany({ where: { key: { startsWith: 'waste.' } }, orderBy: { key: 'asc' } });
+    expect(all.map((r) => r.key)).toEqual(expect.arrayContaining(WASTE_UI_FLAGS));
+    const rows = all.filter((r) => !WASTE_UI_FLAGS.includes(r.key));
     expect(rows.map((r) => r.key)).toEqual(Object.keys(WASTE_CONFIG_KEYS).sort());
     for (const r of rows) {
       const def = WASTE_CONFIG_KEYS[r.key as keyof typeof WASTE_CONFIG_KEYS];

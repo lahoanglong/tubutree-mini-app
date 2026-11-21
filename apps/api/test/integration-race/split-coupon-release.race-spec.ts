@@ -149,7 +149,7 @@ describe('Trả lượt dùng mã của lần đặt bị tách (real Postgres)'
       {} as unknown as LoyaltyService,
       {} as unknown as CartService,
       {} as unknown as NotificationsService,
-      {} as unknown as SystemConfigService,
+      { get: async (_k: string, fallback?: unknown) => fallback } as unknown as SystemConfigService,
       {} as unknown as AffiliateService,
       reversal,
     );

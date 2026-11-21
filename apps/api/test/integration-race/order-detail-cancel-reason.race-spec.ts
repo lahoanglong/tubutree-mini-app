@@ -18,7 +18,9 @@ describe('Chi tiết đơn: cancelReason (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     const stub = {} as never;
-    orders = new OrdersService(prisma, stub, stub, stub, stub, stub, stub);
+    // detailView đọc cờ dòng thời gian và ngưỡng "chưa cập nhật" qua SystemConfigService: trả mặc định trong mã.
+    const config = { get: async (_k: string, fallback?: unknown) => fallback } as never;
+    orders = new OrdersService(prisma, stub, stub, stub, config, stub, stub);
   });
 
   afterAll(async () => {

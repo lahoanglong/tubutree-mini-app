@@ -185,6 +185,24 @@ describe('PilotOrdersPanel', () => {
     expect(c.querySelector('[data-testid="pilot-preview"]')?.textContent).toContain('Huỷ 1 đơn');
   });
 
+  it('hơn 50 đơn dọn được: Xem trước chỉ gửi 50 mã đầu (trần mỗi lượt của API), phần còn lại để lượt sau', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => prow(`TB${100 + i}`, 'CANCEL'));
+    const m = mockFetch({
+      '/admin/golive/pilot-orders/cleanup': () => ({ body: { ...result(true), orders: many.slice(0, 50) } }),
+      '/admin/golive/pilot-orders': { body: { ...VIEW, orders: many, counts: { CANCEL: 60, ARCHIVE: 0, MANUAL: 0, DONE: 0 } } },
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<PilotOrdersPanel />);
+    mounted.push(r);
+    await flush(8);
+    click(byText(r.container, 'button', 'Xem trước dọn 50 đơn'));
+    await flush(8);
+    const posts = m.calls.filter((x) => x.url.includes('/cleanup')).map((x) => JSON.parse(String(x.init?.body)));
+    expect(posts).toHaveLength(1);
+    expect(posts[0].codes).toEqual(many.slice(0, 50).map((o) => o.code));
+    expect(r.container.textContent).toContain('còn 10 đơn');
+  });
+
   it('Dọn thật: hộp xác nhận khoá nút tới khi gõ đúng XOA DON THU, rồi gửi dryRun false đúng mã đã xem trước', async () => {
     const { c, posts } = await mount();
     click(byText(c, 'button', 'Xem trước dọn 2 đơn'));

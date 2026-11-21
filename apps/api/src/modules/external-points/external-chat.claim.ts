@@ -422,7 +422,7 @@ export async function linkClaimsByPhone(prisma: PrismaService, deps: ChatDeps, u
 
 /**
  * Cron: gom các SĐT đang có claim chờ mà đã có thành viên đủ điều kiện (thành viên đăng ký trước khi claim tới, hoặc đăng nhập đã lỡ)
- * rồi liên kết. Chỉ lấy thành viên có thể nhận (không bị khoá/gộp/vãng lai; SĐT xác minh cũ vẫn lấy, claim sẽ vào REVIEW) và claim còn liên kết được (chưa quá hạn
+ * rồi liên kết. Chỉ lấy thành viên có thể nhận (không bị khoá/gộp/vãng lai, SĐT đã từng xác minh như `linkableMemberPhone`; SĐT xác minh cũ vẫn lấy, claim sẽ vào REVIEW) và claim còn liên kết được (chưa quá hạn
  * giữ, SĐT đơn chưa bị đổi), lô xếp theo claim chờ lâu nhất, để claim không thể liên kết không chiếm chỗ mãi. Chạy song song với đăng nhập an toàn nhờ khoá SĐT và điều kiện `userId IS NULL`.
  */
 export async function linkWaitingClaims(prisma: PrismaService, deps: ChatDeps, now: Date = new Date(), limit: number = SWEEP_BATCH): Promise<number> {
@@ -437,6 +437,7 @@ export async function linkWaitingClaims(prisma: PrismaService, deps: ChatDeps, n
        AND NOT (c."state" = 'HELD_NO_MEMBER' AND (c."holdUntil" IS NULL OR c."holdUntil" <= ${now}))
        AND (o."phone" IS NULL OR o."phone" = c."orderPhone" OR c."decidedById" IS NOT NULL)
        AND u."isBlocked" = false AND u."mergedIntoId" IS NULL AND u."zaloId" IS NOT NULL AND u."zaloId" NOT LIKE 'guest!_%' ESCAPE '!'
+       AND u."phoneVerifiedAt" IS NOT NULL
      GROUP BY u."id" ORDER BY MIN(c."createdAt") ASC, u."id" ASC
      LIMIT ${limit}`;
   let linked = 0;

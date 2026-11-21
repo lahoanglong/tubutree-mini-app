@@ -76,9 +76,9 @@ describe('Báo cáo admin (real Postgres)', () => {
 
       const csv = await collect(orderCsvChunks(prisma, { id: order.id }));
       const [header, line] = csv.trimEnd().split('\r\n');
-      expect(header!.endsWith('Nền tảng,Nguồn đơn,CTV giới thiệu,SĐT CTV,Gian hàng')).toBe(true);
+      expect(header!.endsWith('Nền tảng,Nguồn đơn,CTV giới thiệu,SĐT CTV,Gian hàng,CK thương mại trên HĐ (VNĐ)')).toBe(true);
       expect(line).toContain(',Mini App,Gian hàng (khách tự mua),CTV Lan,');
-      expect(line!.endsWith(',Gian hàng Lan')).toBe(true);
+      expect(line!.endsWith(',Gian hàng Lan,0')).toBe(true);
 
       const items = await collect(orderItemCsvChunks(prisma, { id: order.id }));
       const rows = items.trimEnd().split('\r\n');

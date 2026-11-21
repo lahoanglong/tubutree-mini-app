@@ -13,6 +13,8 @@ import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Lis
 import { cleanupPilotOrders, listPilotOrders, splitPhones, type PilotAction, type PilotCleanupResult, type PilotOrderRow } from './golive-api';
 
 const PILOT_KEY = ['admin', 'golive', 'pilot-orders'] as const;
+/** Trần mã mỗi lượt dọn, trùng PILOT_CLEANUP_MAX ở apps/api/src/modules/admin/golive/golive-pilot.ts (gửi quá thì API trả 400). */
+const PILOT_CLEANUP_BATCH = 50;
 
 const ACTION_LABEL: Record<PilotAction, string> = { CANCEL: 'Sẽ huỷ', ARCHIVE: 'Ghi sổ', MANUAL: 'Làm tay', DONE: 'Đã dọn' };
 const ACTION_TONE = { CANCEL: 'danger', ARCHIVE: 'info', MANUAL: 'warning', DONE: 'neutral' } as const satisfies Record<PilotAction, 'danger' | 'info' | 'warning' | 'neutral'>;
@@ -57,7 +59,9 @@ export function PilotOrdersPanel() {
   };
 
   const rows = q.data?.orders ?? [];
-  const actionable = rows.filter((r) => r.action === 'CANCEL' || r.action === 'ARCHIVE').map((r) => r.code);
+  const allActionable = rows.filter((r) => r.action === 'CANCEL' || r.action === 'ARCHIVE').map((r) => r.code);
+  const actionable = allActionable.slice(0, PILOT_CLEANUP_BATCH);
+  const leftover = allActionable.length - actionable.length;
   const confirmText = q.data?.confirmText ?? '';
   const busy = dry.isPending || run.isPending;
 
@@ -131,6 +135,7 @@ export function PilotOrdersPanel() {
               <button type="button" className={BTN_PRIMARY} disabled={busy || actionable.length === 0} onClick={() => dry.mutate(actionable)}>
                 {dry.isPending ? 'Đang xem trước…' : `Xem trước dọn ${actionable.length} đơn`}
               </button>
+              {leftover > 0 ? <p className="w-full text-xs text-stone-600">Mỗi lượt tối đa {PILOT_CLEANUP_BATCH} đơn: còn {leftover} đơn cho lượt sau.</p> : null}
               {rows.some((r) => r.action === 'MANUAL') ? (
                 <Link href="/admin?tab=orders" className={`${BTN_SECONDARY} inline-flex items-center`}>
                   Mở Đơn hàng để làm tay

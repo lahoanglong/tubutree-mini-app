@@ -223,7 +223,7 @@ describe('Điểm đơn chat sau review lượt 1 (real Postgres)', () => {
   });
 
   describe('N4: SĐT thành viên phải còn xác minh gần đây', () => {
-    it('phoneVerifiedAt quá 180 ngày hoặc chưa có: claim vẫn gắn thành viên nhưng chờ kiểm (không tự cộng); còn mới thì PENDING', async () => {
+    it('phoneVerifiedAt quá 180 ngày: claim vẫn gắn thành viên nhưng chờ kiểm (không tự cộng); chưa từng xác minh (SĐT tự nhập trên web): không gắn; còn mới thì PENDING', async () => {
       const stale = await mkUser({ phoneVerifiedAt: new Date(Date.now() - 200 * DAY) });
       const never = await mkUser({ phoneVerifiedAt: null });
       const fresh = await mkUser({ phoneVerifiedAt: new Date(Date.now() - 10 * DAY) });
@@ -233,7 +233,7 @@ describe('Điểm đơn chat sau review lượt 1 (real Postgres)', () => {
         await ingest(payload({ id: ids[u.id], phone: u.phone!, goods: 500_000 }));
       }
       expect(await claimOf(ids[stale.id]!)).toMatchObject({ userId: stale.id, state: 'REVIEW' });
-      expect(await claimOf(ids[never.id]!)).toMatchObject({ userId: never.id, state: 'REVIEW' });
+      expect(await claimOf(ids[never.id]!)).toMatchObject({ userId: null, state: 'PENDING' });
       expect(await claimOf(ids[fresh.id]!)).toMatchObject({ userId: fresh.id, state: 'PENDING' });
     });
   });

@@ -50,7 +50,7 @@ describe('Đơn trả cho người đặt không kèm cột nội bộ (real Pos
     affiliate = moduleRef.get(AffiliateService);
     dealer = moduleRef.get(DealerService);
     const none = {} as never;
-    orders = new OrdersService(prisma, none, none, none, none, none, none);
+    orders = new OrdersService(prisma, none, none, none, moduleRef.get(SystemConfigService), none, none);
   });
 
   afterAll(async () => {

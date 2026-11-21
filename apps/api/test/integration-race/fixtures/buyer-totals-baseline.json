@@ -635,8 +635,8 @@
           "paymentMethod": "BANK_TRANSFER",
           "paymentStatus": "UNPAID",
           "fulfiller": "TUBU",
-          "subtotal": 1432500,
-          "discount": 0,
+          "subtotal": 1910000,
+          "discount": 477500,
           "couponDiscount": 0,
           "comboDiscount": 0,
           "tierDiscount": 0,
@@ -650,15 +650,15 @@
           "couponCode": false,
           "items": {
             "A": {
-              "unitPrice": 172500,
+              "unitPrice": 230000,
               "quantity": 4,
-              "total": 690000,
+              "total": 920000,
               "flash": false
             },
             "B": {
-              "unitPrice": 74250,
+              "unitPrice": 99000,
               "quantity": 10,
-              "total": 742500,
+              "total": 990000,
               "flash": false
             }
           }

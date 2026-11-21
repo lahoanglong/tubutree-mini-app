@@ -4,9 +4,9 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { ExternalClaimsAdminService } from '../../src/modules/external-points/external-claims-admin.service';
 import { ExternalClaimService } from '../../src/modules/external-points/external-claim.service';
-import { backfillChatClaims, ensureChatClaim, linkClaimsByPhone, linkWaitingClaims } from '../../src/modules/external-points/external-chat.claim';
+import { linkClaimsByPhone, linkWaitingClaims } from '../../src/modules/external-points/external-chat.claim';
 import { loadChatConfig } from '../../src/modules/external-points/external-chat.config';
-import { releaseClaim, releaseDueClaims } from '../../src/modules/external-points/external-claim-release';
+import { releaseClaim } from '../../src/modules/external-points/external-claim-release';
 import { ingestAndApply } from '../../src/modules/external-points/external-order.sync';
 import { createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
 
@@ -22,7 +22,6 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
   const restore: (() => Promise<void>)[] = [];
   const userIds: string[] = [];
   const orderIds: string[] = [];
-  const tierIds: string[] = [];
   const notify = jest.fn(async (..._args: unknown[]) => undefined);
   const MAP = { marketplaceIds: { '-3': 'shopee' }, chatSources: ['ITCHAT|itacc|'] };
 
@@ -57,7 +56,6 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
     await prisma.externalPointsClaim.deleteMany({ where: { id: { in: claimIds } } });
     await prisma.externalOrder.deleteMany({ where: { id: { in: orderIds } } });
     await deleteItData(prisma, { userIds });
-    await prisma.membershipTier.deleteMany({ where: { id: { in: tierIds } } });
     await prisma?.$disconnect();
   });
 
@@ -66,13 +64,6 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
     const u = await createUser(prisma, { phone: phone(), phoneVerifiedAt: new Date(), zaloId: `zalo_${randCode(10)}`, ...over });
     userIds.push(u.id);
     return u;
-  }
-  async function mkTier(multiplier: number, over: Partial<Prisma.MembershipTierUncheckedCreateInput> = {}) {
-    const t = await prisma.membershipTier.create({
-      data: { id: `ITR1_${randCode(8)}`, name: `x${multiplier}`, sortOrder: 60, minPoints: 2_000_000_000, minSpending: 2_000_000_000, discountPct: 0, pointMultiplier: multiplier, perks: {}, ...over },
-    });
-    tierIds.push(t.id);
-    return t;
   }
 
   function payload(o: { id?: string; phone?: string; goods?: number; status?: number; deliveredDaysAgo?: number; extendCode?: string | null; updatedAt?: Date; creator?: { id: string; name: string } } = {}) {
@@ -110,11 +101,8 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
     new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
 
   describe('B1: SĐT xác minh đã cũ thì claim vẫn gắn thành viên, chờ kiểm', () => {
-    it.each([
-      ['quá 180 ngày', () => new Date(Date.now() - 181 * DAY)],
-      ['chưa từng xác minh', () => null],
-    ])('tạo claim cho thành viên có SĐT khớp mà mốc xác minh %s: gắn userId, REVIEW, không để userId null', async (_n, at) => {
-      const m = await mkUser({ phoneVerifiedAt: at() });
+    it('tạo claim cho thành viên có SĐT khớp mà mốc xác minh quá 180 ngày: gắn userId, REVIEW, không để userId null', async () => {
+      const m = await mkUser({ phoneVerifiedAt: new Date(Date.now() - 181 * DAY) });
       const p = payload({ phone: m.phone!, goods: 500_000, deliveredDaysAgo: 20 });
       await ingest(p);
       const c = (await claimOf(String(p.id)))!;
@@ -124,7 +112,15 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
       expect(await balanceOf(m.id)).toBe(0);
     });
 
-    it('claim chưa có chủ, thành viên (xác minh cũ) đăng nhập: liên kết vào REVIEW; cron quét cũng vậy', async () => {
+    it('SĐT chưa từng xác minh (tự nhập trên web, w171): claim không gắn tài khoản đó, chờ chủ SĐT xác minh', async () => {
+      const m = await mkUser({ phoneVerifiedAt: null });
+      const p = payload({ phone: m.phone!, goods: 500_000, deliveredDaysAgo: 20 });
+      await ingest(p);
+      expect(await claimOf(String(p.id))).toMatchObject({ userId: null });
+      expect(await balanceOf(m.id)).toBe(0);
+    });
+
+    it('claim chưa có chủ, thành viên (xác minh cũ) đăng nhập: liên kết vào REVIEW; cron quét cũng vậy; SĐT chưa từng xác minh thì không', async () => {
       const ph1 = phone();
       const ph2 = phone();
       const p1 = payload({ phone: ph1, goods: 500_000 });
@@ -135,9 +131,10 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
       const m1 = await mkUser({ phone: ph1, phoneVerifiedAt: new Date(Date.now() - 200 * DAY) });
       const m2 = await mkUser({ phone: ph2, phoneVerifiedAt: null });
       expect((await linkClaimsByPhone(prisma, deps(), m1)).linked).toBe(1);
-      expect(await linkWaitingClaims(prisma, deps())).toBeGreaterThanOrEqual(1);
+      await linkWaitingClaims(prisma, deps());
       expect(await claimOf(String(p1.id))).toMatchObject({ userId: m1.id, state: 'REVIEW' });
-      expect(await claimOf(String(p2.id))).toMatchObject({ userId: m2.id, state: 'REVIEW' });
+      expect(await claimOf(String(p2.id))).toMatchObject({ userId: null, state: 'PENDING' });
+      expect((await linkClaimsByPhone(prisma, deps(), m2)).linked).toBe(0);
     });
   });
 

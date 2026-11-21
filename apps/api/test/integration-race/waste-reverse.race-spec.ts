@@ -3,6 +3,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { Prisma, type SystemConfig } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { LoyaltyExpiryService } from '../../src/modules/loyalty/loyalty-expiry.service';
 import { applyPointsDelta } from '../../src/modules/loyalty/points-ledger';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
@@ -124,6 +125,7 @@ beforeAll(async () => {
       WasteConfigService,
       WasteAccessService,
       WasteHoldService,
+      AnalyticsEventsService,
       WasteConfirmService,
       WasteReverseService,
       LoyaltyExpiryService,

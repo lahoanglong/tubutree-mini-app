@@ -16,7 +16,7 @@
 //              0 URL localhost/staging/host khác canonical.
 //   pages      Trang chủ, /san-pham và vài trang sản phẩm lấy từ sitemap: 200, canonical + og:url đúng host, Product JSON-LD đúng host, giá VND,
 //              AggregateRating chỉ khi reviewCount >= 1; header bảo mật (HSTS khi https, nosniff, chống nhúng khung, Referrer/Permissions-Policy, CSP).
-//   img        Ảnh /api/img lấy từ chính HTML trang sản phẩm: Accept webp -> 200 image/webp (đúng chữ ký RIFF/WEBP), Vary: Accept, cache dài.
+//   img        Ảnh /api/img lấy từ chính HTML trang sản phẩm: Accept avif -> 200 AVIF hoặc WebP, Accept chỉ webp -> 200 WebP (đúng chữ ký tệp), Vary: Accept, cache dài.
 //   edge       http:// -> https:// và www. -> apex bằng 301/308 (chỉ khi --base là https trên tên miền thật).
 // Mã thoát: 0 không có FAIL (WARN vẫn 0, trừ --strict), 1 có FAIL, 2 sai tham số.
 // Node in cảnh báo ExperimentalWarning khi nạp tệp .ts: vô hại.
@@ -794,7 +794,21 @@ async function pageFindings(request, fetchUrl, expectedCanonical, canonical, { p
   return { findings, html };
 }
 
-async function imgFindings(request, html, pageUrl, base) {
+/** Chữ ký tệp: WebP = RIFF....WEBP, AVIF = hộp ftyp nhãn avif/avis. */
+function sniffImage(body) {
+  if (body.length >= 12 && body.subarray(0, 4).toString('latin1') === 'RIFF' && body.subarray(8, 12).toString('latin1') === 'WEBP') return 'webp';
+  if (body.length >= 12 && body.subarray(4, 8).toString('latin1') === 'ftyp' && /^avi[fs]$/.test(body.subarray(8, 12).toString('latin1'))) return 'avif';
+  return null;
+}
+
+// Máy chủ ưu tiên AVIF khi trình duyệt nhận AVIF, rồi WebP (pickFormat, apps/api/src/modules/catalog/image-resize.ts).
+// Hỏi hai kiểu: trình duyệt mới (AVIF hoặc WebP đều đạt) và trình duyệt chỉ nhận WebP (Safari cũ: phải là WebP).
+const IMG_PROBES = [
+  { accept: 'image/avif,image/webp,image/*;q=0.8', ok: ['avif', 'webp'], label: 'Accept avif' },
+  { accept: 'image/webp,image/*;q=0.8', ok: ['webp'], label: 'Accept webp' },
+];
+
+export async function imgFindings(request, html, pageUrl, base) {
   const urls = extractImgUrls(html, pageUrl);
   if (urls.length === 0) return [finding('img', 'WARN', 'không thấy ảnh /img?u= trong HTML trang sản phẩm (sản phẩm không có ảnh?)')];
   const target = new URL(urls[0]);
@@ -802,18 +816,32 @@ async function imgFindings(request, html, pageUrl, base) {
   if (!isLocalOrStagingHost(new URL(base).hostname) && isLocalOrStagingHost(target.hostname)) {
     findings.push(finding('img', 'FAIL', `ảnh trỏ host cục bộ/staging ${target.host} (NEXT_PUBLIC_API_BASE_URL của bản dựng sai)`));
   }
-  const res = await request(target, { headers: { accept: 'image/avif,image/webp,image/*;q=0.8' }, maxBody: 16 });
-  const type = String(res.headers['content-type'] ?? '');
   const short = `${target.pathname}?w=${target.searchParams.get('w') ?? '?'}`;
-  if (res.status === 302) findings.push(finding('img', 'WARN', `${short}: 302 về ảnh gốc (X-Image-Fallback: ${res.headers['x-image-fallback'] ?? '?'}) — máy bận, thử lại`));
-  else if (res.status !== 200) findings.push(finding('img', 'FAIL', `${target.href}: ${statusText(res)}`));
-  else {
-    const magic = res.body.subarray(0, 4).toString('latin1') === 'RIFF' && res.body.subarray(8, 12).toString('latin1') === 'WEBP';
-    if (!type.startsWith('image/webp') || !magic) findings.push(finding('img', 'FAIL', `${short}: Accept webp mà nhận ${type || '(không content-type)'}${magic ? '' : ', không phải tệp WebP'}`));
-    if (!/accept/i.test(String(res.headers.vary ?? ''))) findings.push(finding('img', 'WARN', `${short}: thiếu Vary: Accept (CDN có thể phát WebP cho trình duyệt không đọc được)`));
-    if (!/max-age=\d{6,}/.test(String(res.headers['cache-control'] ?? ''))) findings.push(finding('img', 'WARN', `${short}: Cache-Control ngắn (${res.headers['cache-control'] ?? 'không có'})`));
-    if (findings.length === 0) findings.push(finding('img', 'PASS', `${target.origin}${short}: 200 image/webp, Vary: Accept, cache dài`));
+  const got = [];
+  let headersChecked = false;
+  for (const probe of IMG_PROBES) {
+    const res = await request(target, { headers: { accept: probe.accept }, maxBody: 16 });
+    const type = String(res.headers?.['content-type'] ?? '');
+    if (res.status === 302) {
+      findings.push(finding('img', 'WARN', `${short} (${probe.label}): 302 về ảnh gốc (X-Image-Fallback: ${res.headers?.['x-image-fallback'] ?? '?'}) — máy bận, thử lại`));
+      continue;
+    }
+    if (res.status !== 200) {
+      findings.push(finding('img', 'FAIL', `${target.href} (${probe.label}): ${statusText(res)}`));
+      continue;
+    }
+    const kind = sniffImage(res.body ?? Buffer.alloc(0));
+    if (!kind || !probe.ok.includes(kind) || !type.startsWith(`image/${kind}`)) {
+      findings.push(finding('img', 'FAIL', `${short}: ${probe.label} mà nhận ${type || '(không content-type)'}${kind ? ` (tệp ${kind})` : ', không phải tệp AVIF/WebP'}; cần ${probe.ok.join(' hoặc ')}`));
+      continue;
+    }
+    got.push(kind);
+    if (headersChecked) continue;
+    headersChecked = true;
+    if (!/accept/i.test(String(res.headers?.vary ?? ''))) findings.push(finding('img', 'WARN', `${short}: thiếu Vary: Accept (CDN có thể phát AVIF/WebP cho trình duyệt không đọc được)`));
+    if (!/max-age=\d{6,}/.test(String(res.headers?.['cache-control'] ?? ''))) findings.push(finding('img', 'WARN', `${short}: Cache-Control ngắn (${res.headers?.['cache-control'] ?? 'không có'})`));
   }
+  if (findings.length === 0) findings.push(finding('img', 'PASS', `${target.origin}${short}: 200 ${got.map((k, i) => `${IMG_PROBES[i].label} -> image/${k}`).join(', ')}, Vary: Accept, cache dài`));
   return findings;
 }
 

@@ -123,6 +123,8 @@ export function planFor(o: PilotOrderShape, matchedBy: readonly PilotMatch[], al
   if (!matchedBy.includes('NOTE_MARKER')) {
     return { action: 'MANUAL', reason: `Chỉ khớp SĐT người thử, ghi chú không có ${PILOT_NOTE_MARKER}: có thể là đơn thật của chính người đó. Kiểm rồi xử lý tay ở Đơn hàng.` };
   }
+  // Ghi chú do người đặt gõ: CTV đặt hộ khách thật có thể gõ trúng [PILOT], nên đơn đặt hộ không bao giờ tự huỷ hay ghi sổ.
+  if (o.placedForCustomer) return { action: 'MANUAL', reason: `Đơn CTV đặt hộ khách có ${PILOT_NOTE_MARKER}: có thể là đơn thật của khách. Kiểm rồi xử lý tay ở Đơn hàng.` };
   if (FINAL.has(o.status)) return { action: 'ARCHIVE', reason: 'Đơn đã xong: chỉ ghi mã vào sổ dọn đơn thử, không đổi đơn. Báo cáo doanh thu chưa tự loại các mã này.' };
   if (o.type === 'DEALER') return { action: 'MANUAL', reason: 'Đơn đại lý: xử lý tay ở mục đơn đại lý.' };
   if (!CANCELLABLE.has(o.status)) return { action: 'MANUAL', reason: 'Đơn đã đóng gói hoặc đã giao vận chuyển: xử lý tay theo kịch bản (mục 2.6), không tự huỷ.' };

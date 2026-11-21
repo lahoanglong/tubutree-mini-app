@@ -17,6 +17,9 @@ import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-f
 import type { Prisma } from '@prisma/client';
 import { createOrder, createUser, randCode, sleep, warmPool } from './helpers';
 
+// Từ W174 chỉ SĐT đã xác minh trên Mini App mới được gán vai trò hay nhận quyền nhân viên; SĐT gắn sau khi tạo phải mang mốc xác minh như createUser.
+const VERIFIED_AT = new Date('2026-01-01T00:00:00Z');
+
 describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -168,7 +171,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
   it('đại lý bị admin hạ về khách (có dấu) → cấp rồi thu hồi nhân viên về DEALER (đơn còn APPROVED): dấu còn nguyên, rút vẫn 403', async () => {
     const created = await ctvWithCommission(100_000);
     const boss = await createUser(prisma, { role: 'ADMIN' });
-    const dealer = await prisma.user.update({ where: { id: created.id }, data: { role: 'DEALER', phone: newPhone() } });
+    const dealer = await prisma.user.update({ where: { id: created.id }, data: { role: 'DEALER', phone: newPhone(), phoneVerifiedAt: VERIFIED_AT } });
     await prisma.dealerApplication.create({
       data: { userId: dealer.id, status: 'APPROVED', businessName: 'IT', ownerName: 'IT', phone: dealer.phone!, address: 'IT', cccdFrontUrl: 'x', cccdBackUrl: 'x' },
     });
@@ -190,7 +193,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
   it('M1: CTV bị hạ (có dấu) nộp hồ sơ đại lý rồi được duyệt → DEALER nhưng dấu còn, rút 403; admin đặt lại DEALER tường minh mới xoá dấu và rút được', async () => {
     const created = await ctvWithCommission(100_000);
     const phone = newPhone();
-    await prisma.user.update({ where: { id: created.id }, data: { phone } });
+    await prisma.user.update({ where: { id: created.id }, data: { phone, phoneVerifiedAt: VERIFIED_AT } });
     const boss = await createUser(prisma, { role: 'ADMIN' });
     const { admin } = adminServices();
     await admin.setUserRole(boss.id, phone, 'CUSTOMER');
@@ -215,7 +218,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
   it('m1: CTV hợp lệ được cấp rồi thu hồi nhân viên → CUSTOMER không dấu, tự đăng ký lại CTV được và rút được', async () => {
     const ctv = await ctvWithCommission(100_000);
     const phone = newPhone();
-    await prisma.user.update({ where: { id: ctv.id }, data: { phone } });
+    await prisma.user.update({ where: { id: ctv.id }, data: { phone, phoneVerifiedAt: VERIFIED_AT } });
     const boss = await createUser(prisma, { role: 'ADMIN' });
     const { rbac } = adminServices();
     await rbac.addGrant(boss.id, phone, 'STAFF');
@@ -231,7 +234,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
   it('A1: hạ CTV rồi đặt lại cùng vai trò đại lý (dấu còn) → sổ có đúng 2 dòng AFFILIATE_REVOKE theo thứ tự đặt rồi xoá', async () => {
     const created = await ctvWithCommission(100_000);
     const phone = newPhone();
-    await prisma.user.update({ where: { id: created.id }, data: { phone } });
+    await prisma.user.update({ where: { id: created.id }, data: { phone, phoneVerifiedAt: VERIFIED_AT } });
     const boss = await createUser(prisma, { role: 'ADMIN' });
     const tier = await prisma.dealerTier.create({ data: { id: `tier-${randCode(6)}`, name: 'T', minOrderVolume: 0, discountRules: {} } });
     const { admin } = adminServices();
@@ -331,7 +334,7 @@ describe('Hạ quyền CTV chạy song song với rút hoa hồng về Ví (real
     async function ctvWithPhone() {
       const ctv = await ctvWithCommission(60_000);
       const phone = newPhone();
-      await prisma.user.update({ where: { id: ctv.id }, data: { phone } });
+      await prisma.user.update({ where: { id: ctv.id }, data: { phone, phoneVerifiedAt: VERIFIED_AT } });
       return { id: ctv.id, phone };
     }
     /** Giả lập trạng thái trước deploy: mã cũ chưa có cột nên không dấu nào còn lại. */

@@ -48,6 +48,13 @@ describe('golive-pilot: luật nhận diện và việc sẽ làm', () => {
     expect(pilotMatches({ note: '[PILOT]', user: { phone: '0901234567' }, guestPhone: null, placedForCustomer: true }, phones)).toEqual(['NOTE_MARKER']);
   });
 
+  it('đơn CTV đặt hộ khách có [PILOT]: luôn làm tay (có thể là đơn thật của khách), không huỷ, không ghi sổ', () => {
+    expect(plan({ placedForCustomer: true })).toBe('MANUAL');
+    expect(plan({ placedForCustomer: true, status: 'PENDING_PAYMENT', paymentMethod: 'COD' })).toBe('MANUAL');
+    expect(plan({ placedForCustomer: true, status: 'DELIVERED' })).toBe('MANUAL');
+    expect(plan({ placedForCustomer: true }, true)).toBe('DONE');
+  });
+
   it('chỉ khớp SĐT (không có [PILOT]): luôn làm tay, kể cả đơn chưa trả tiền hay đơn đã xong', () => {
     for (const status of ['CONFIRMED', 'PENDING_PAYMENT', 'DELIVERED'] as const) {
       expect(planFor({ ...base, note: null, status }, ['TEST_PHONE'], false).action).toBe('MANUAL');

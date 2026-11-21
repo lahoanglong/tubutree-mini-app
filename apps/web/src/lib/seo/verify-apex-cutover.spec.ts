@@ -14,6 +14,7 @@ import {
   findRuleCycles,
   followRedirects,
   hostProblem,
+  imgFindings,
   parseArgs,
   runDryRun,
 } from '../../../../../scripts/cutover/verify-apex-cutover.mjs';
@@ -202,6 +203,48 @@ describe('đọc HTML: canonical và ảnh /img', () => {
     expect(extractCanonical(html)).toBe('https://tubutree.com/san-pham/a');
     expect(extractImgUrls(html)).toEqual(['https://api.tubutree.com/api/img?w=320&u=https%3A%2F%2Fx%2Fa.jpg', 'https://api.tubutree.com/api/img?w=640&u=https%3A%2F%2Fx%2Fa.jpg']);
     expect(extractCanonical('<html></html>')).toBeNull();
+  });
+});
+
+describe('imgFindings — /api/img chọn định dạng theo Accept', () => {
+  const PDP = 'https://tubutree.com/san-pham/a';
+  const html = '<img src="https://api.tubutree.com/api/img?w=320&amp;u=https%3A%2F%2Fx%2Fa.jpg">';
+  const AVIF = Buffer.from('\0\0\0\x1cftypavif\0\0\0\0', 'latin1');
+  const WEBP = Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1');
+  const JPEG = Buffer.from('\xff\xd8\xff\xe0\0\x10JFIF\0\x01\x01\0\0\x01', 'latin1');
+  const cacheHeaders = { vary: 'Accept', 'cache-control': 'public, max-age=31536000, immutable' };
+  type Body = { type: string; body: Buffer };
+  /** Máy chủ giả: `pick(accept)` trả loại + thân ảnh; ghi lại mọi Accept đã gửi. */
+  const imgServer = (pick: (accept: string) => Body, seen: string[] = []) => async (_url: URL, init?: { headers?: Record<string, string> }) => {
+    const accept = init?.headers?.accept ?? '';
+    seen.push(accept);
+    const { type, body } = pick(accept);
+    return { status: 200, headers: { ...cacheHeaders, 'content-type': type }, location: null, body };
+  };
+  // Như pickFormat ở apps/api/src/modules/catalog/image-resize.ts: có image/avif thì AVIF, có image/webp thì WebP, còn lại JPEG.
+  const negotiating = (accept: string): Body =>
+    accept.includes('image/avif') ? { type: 'image/avif', body: AVIF } : accept.includes('image/webp') ? { type: 'image/webp', body: WEBP } : { type: 'image/jpeg', body: JPEG };
+
+  it('máy chủ trả AVIF cho trình duyệt nhận AVIF và WebP cho trình duyệt chỉ nhận WebP: không FAIL', async () => {
+    const seen: string[] = [];
+    const findings = await imgFindings(imgServer(negotiating, seen), html, PDP, APEX);
+    expect(fails(findings)).toEqual([]);
+    expect(levels(findings)).toContain('PASS');
+    expect(seen.some((a) => a.includes('image/avif'))).toBe(true);
+    expect(seen.some((a) => a.includes('image/webp') && !a.includes('image/avif'))).toBe(true);
+  });
+
+  it('WebP cho mọi Accept vẫn đạt', async () => {
+    expect(fails(await imgFindings(imgServer(() => ({ type: 'image/webp', body: WEBP })), html, PDP, APEX))).toEqual([]);
+  });
+
+  it('JPEG cho mọi Accept, hay nhãn AVIF mà thân là WebP: FAIL', async () => {
+    expect(fails(await imgFindings(imgServer(() => ({ type: 'image/jpeg', body: JPEG })), html, PDP, APEX)).length).toBeGreaterThan(0);
+    expect(fails(await imgFindings(imgServer(() => ({ type: 'image/avif', body: WEBP })), html, PDP, APEX)).length).toBeGreaterThan(0);
+  });
+
+  it('chỉ nhận WebP mà vẫn được AVIF: FAIL (Safari cũ không đọc được)', async () => {
+    expect(fails(await imgFindings(imgServer(() => ({ type: 'image/avif', body: AVIF })), html, PDP, APEX)).join()).toMatch(/webp/i);
   });
 });
 

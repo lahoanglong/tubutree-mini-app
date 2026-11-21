@@ -227,7 +227,7 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
       rewardUnavailableReason: 'NO_ORDER',
       purchaseCount: 1,
       reviewableOrders: [],
-      myReviews: [{ id: first.id, orderId: o.id, orderCode: o.code, rating: 4, createdAt: first.createdAt, isVisible: true }],
+      myReviews: [{ id: first.id, orderId: o.id, orderCode: o.code, rating: 4, createdAt: first.createdAt, isVisible: true, awaitingApproval: false }],
     });
     expect(await reviews.findOwn(u.id, first.id)).toMatchObject({
       id: first.id,

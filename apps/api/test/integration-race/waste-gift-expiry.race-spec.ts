@@ -4,6 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { WasteGiftAttachService } from '../../src/modules/waste-exchange/catalog/waste-gift-attach.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
@@ -67,6 +68,7 @@ describe('waste-gift-expiry race (real Postgres)', () => {
         RewardPointsService,
         LoyaltyService,
         WasteGiftRedemptionsService,
+        WasteGiftAttachService,
         WasteGiftExpiryCron,
         { provide: WasteNotifierService, useValue: { giftCancelled: jest.fn().mockResolvedValue(undefined), giftExpired } },
       ],
