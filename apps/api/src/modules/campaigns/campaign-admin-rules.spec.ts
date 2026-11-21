@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { CAMPAIGN_ENTITY_SLUG_MAX, CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 import { getMetadataStorage } from 'class-validator';
 import { CreateCampaignDto } from './dto/campaign.dto';
-import { assertWindow, campaignStatus, normalizeLink, slugFromTitle } from './campaign-admin-rules';
+import { assertWindow, campaignStatus, normalizeLink, RESERVED_CAMPAIGN_SLUGS, slugFromTitle } from './campaign-admin-rules';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
 const d = (iso: string) => new Date(iso);
@@ -19,6 +19,13 @@ describe('slugFromTitle', () => {
     const slug = slugFromTitle(`${'a'.repeat(79)} b`);
     expect(slug.length).toBeLessThanOrEqual(80);
     expect(slug.endsWith('-')).toBe(false);
+  });
+});
+
+describe('RESERVED_CAMPAIGN_SLUGS', () => {
+  it('giữ chỗ cho đường dẫn tĩnh của GET /campaigns/<...>: chiến dịch mang slug đó sẽ không bao giờ mở được trang chi tiết', () => {
+    expect([...RESERVED_CAMPAIGN_SLUGS]).toEqual(['public-slugs']);
+    expect(RESERVED_CAMPAIGN_SLUGS.has(slugFromTitle('Public slugs'))).toBe(true);
   });
 });
 

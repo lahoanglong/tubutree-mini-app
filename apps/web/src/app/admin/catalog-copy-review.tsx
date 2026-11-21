@@ -5,11 +5,11 @@ import { COPY_DRAFT_MAX_BATCH, isBlankHtmlText, type CopyApproveItem, type CopyA
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { postCopyApprove, postCopyDrafts } from './catalog-quality-api';
+import { INGREDIENTS_MAX } from './ingredient-draft';
 
 // Cùng trần với `checkCopyForSave` của API; API vẫn kiểm lại từng mục khi lưu nên lệch số chỉ làm mục bị từ chối kèm lý do, không ghi bản sai.
 const SHORT_MAX = 140;
 const DESC_MAX = 800;
-const INGREDIENTS_MAX = 8;
 
 /** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
 const BUSY_CLASS = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-60';

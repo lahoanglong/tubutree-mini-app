@@ -39,8 +39,8 @@ describe('ingredientsToText', () => {
 });
 
 describe('trần thành phần khớp API', () => {
-  it('tối đa 8 tên, mỗi tên tối đa 80 ký tự (COPY_INGREDIENTS_MAX, COPY_INGREDIENT_NAME_MAX của apps/api copy-draft.ts)', () => {
-    expect(INGREDIENTS_MAX).toBe(8);
+  it('tối đa 20 tên (đủ nhãn INCI mỹ phẩm), mỗi tên tối đa 80 ký tự (COPY_INGREDIENTS_MAX, COPY_INGREDIENT_NAME_MAX của apps/api copy-draft.ts)', () => {
+    expect(INGREDIENTS_MAX).toBe(20);
     expect(INGREDIENT_NAME_MAX).toBe(80);
   });
 });

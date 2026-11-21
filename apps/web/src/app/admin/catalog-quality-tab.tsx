@@ -11,6 +11,7 @@ import {
   COPY_STATUS_LABELS,
   COPY_STATUSES,
   type CatalogIssueKind,
+  type CatalogIssueRow,
   type CopyStatus,
 } from '@tubutree/app-core/commerce/catalog-quality-audit';
 import Link from 'next/link';
@@ -28,7 +29,8 @@ import { PancakeZeroPriceCard } from './pancake-zero-price-card';
 
 const hasFallbackCopy = (slug: string) => findProductCopyFallback(slug) !== undefined;
 
-type IssueFilter = CatalogIssueKind | 'all';
+/** `missing_ingredients` không phải loại lỗi của lần kiểm (app-core) mà là lọc nội dung: SKU đang bán chưa có thành phần (INCI). */
+type IssueFilter = CatalogIssueKind | 'all' | 'missing_ingredients';
 type CopyFilter = CopyStatus | 'any';
 
 const loadFailureText = (e: unknown): string =>
@@ -87,15 +89,28 @@ export function CatalogQualityTab() {
 
   const activeProducts = (data?.products ?? []).filter((p) => p.isActive);
   const missingIngredients = activeProducts.filter((p) => !p.hasIngredients).map((p) => ({ id: p.id, name: p.name }));
+  const missingIds = new Set(missingIngredients.map((p) => p.id));
+  const storyKnown = activeProducts.filter((p) => p.hasStoryConfig !== undefined);
+  const storyCustom = storyKnown.filter((p) => p.hasStoryConfig).length;
 
   const allRows = result?.rows ?? [];
-  const rows = allRows.filter((r) => (filter === 'all' || r.issues.some((i) => i.kind === filter)) && (copyFilter === 'any' || r.copyStatus === copyFilter));
+  const flaggedById = new Map(allRows.filter((r) => r.id !== undefined).map((r) => [r.id!, r]));
+  // SKU không có lỗi nào thì mô tả gốc không trống (trống là lỗi `empty_native_description`), nên tình trạng mô tả của dòng dựng thêm là `native`.
+  const missingRows: CatalogIssueRow[] = activeProducts
+    .filter((p) => missingIds.has(p.id))
+    .map((p) => flaggedById.get(p.id) ?? { slug: p.slug, name: p.name, id: p.id, pancakeId: p.pancakeId, isActive: p.isActive, inStock: p.inStock, copyStatus: 'native', issues: [] });
+  const baseRows = filter === 'missing_ingredients' ? missingRows : allRows.filter((r) => filter === 'all' || r.issues.some((i) => i.kind === filter));
+  const rows = baseRows.filter((r) => copyFilter === 'any' || r.copyStatus === copyFilter);
+  // Lọc "Thiếu thành phần" có dòng không nằm trong `allRows` (SKU không lỗi), nên đếm chip tình trạng mô tả trên chính danh sách đó để số khớp với dòng hiện ra.
+  const countRows = filter === 'missing_ingredients' ? missingRows : allRows;
   const copyCounts = COPY_STATUSES.reduce<Record<CopyStatus, number>>(
-    (acc, s) => ({ ...acc, [s]: allRows.filter((r) => r.copyStatus === s).length }),
+    (acc, s) => ({ ...acc, [s]: countRows.filter((r) => r.copyStatus === s).length }),
     { native: 0, fallback: 0, none: 0, unknown: 0 },
   );
   const emptyRows = rows.filter((r) => r.id !== undefined && r.issues.some((i) => i.kind === 'empty_native_description'));
-  const selectedRows = allRows.filter((r) => r.id !== undefined && selected.has(r.id));
+  // Dòng dựng thêm của SKU thiếu thành phần cũng tick được, nên tìm dòng đã chọn trên cả hai nguồn (không trùng vì dòng có lỗi đã dùng lại dòng của `allRows`).
+  const selectableRows = [...allRows, ...missingRows.filter((r) => !flaggedById.has(r.id!))];
+  const selectedRows = selectableRows.filter((r) => r.id !== undefined && selected.has(r.id));
 
   const toggle = (id: string, on: boolean) =>
     setSelected((prev) => {
@@ -174,6 +189,10 @@ export function CatalogQualityTab() {
                     </span>
                   ))}
                 </p>
+                <p data-testid="catalog-content-coverage" className="text-sm text-stone-600">
+                  {`Trên ${activeProducts.length} sản phẩm đang bán: thành phần (INCI) có ${activeProducts.length - missingIngredients.length}, thiếu ${missingIngredients.length}`}
+                  {storyKnown.length > 0 && ` · câu chuyện tuỳ chỉnh ở Story Studio ${storyCustom}, dùng kịch bản mẫu ${storyKnown.length - storyCustom}`}.
+                </p>
                 <div role="group" aria-label="Lọc theo loại lỗi" className="flex flex-wrap gap-2">
                   <FilterChip active={filter === 'all'} onPress={() => setFilter('all')}>
                     Tất cả <Count n={result.summary.flagged} />
@@ -183,6 +202,9 @@ export function CatalogQualityTab() {
                       {CATALOG_ISSUE_LABELS[k]} <Count n={result.summary.byKind[k]} />
                     </FilterChip>
                   ))}
+                  <FilterChip active={filter === 'missing_ingredients'} onPress={() => setFilter('missing_ingredients')}>
+                    Thiếu thành phần <Count n={missingIngredients.length} />
+                  </FilterChip>
                 </div>
                 <Link
                   href="/admin/catalog-wp-images"
@@ -227,7 +249,7 @@ export function CatalogQualityTab() {
                 {rows.length === 0 ? (
                   <p className="text-sm text-stone-500">Không có sản phẩm nào thuộc bộ lọc này.</p>
                 ) : (
-                  <CatalogIssueList rows={rows} selected={selected} selectionFull={selected.size >= COPY_DRAFT_MAX_BATCH} onToggle={toggle} />
+                  <CatalogIssueList rows={rows} selected={selected} selectionFull={selected.size >= COPY_DRAFT_MAX_BATCH} missingIngredients={missingIds} onToggle={toggle} />
                 )}
               </>
             )}

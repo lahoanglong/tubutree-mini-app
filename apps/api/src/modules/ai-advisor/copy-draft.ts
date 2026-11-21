@@ -36,10 +36,11 @@ export type CopyDraftOutcome = { id: string; draft: CopyDraft } | { id: string; 
 
 export const COPY_SHORT_MAX = 140;
 export const COPY_DESCRIPTION_MAX = 800;
-export const COPY_INGREDIENTS_MAX = 8;
+/** Đủ một nhãn INCI mỹ phẩm (PƠ LANG, Fuwa3e, Visante thường 12–20 tên); trang sản phẩm chỉ mở sẵn vài dòng đầu nên danh sách dài không làm dày màn. */
+export const COPY_INGREDIENTS_MAX = 20;
 export const COPY_INGREDIENT_NAME_MAX = 80;
-/** Haiku không suy nghĩ thích ứng nên JSON cỡ 1 KB chữ tiếng Việt (vài trăm token) dư sức; trần cao hơn chỉ kéo dài lúc model lan man. */
-export const COPY_AI_MAX_TOKENS = 1500;
+/** Haiku không suy nghĩ thích ứng: mô tả 800 ký tự tiếng Việt cộng tối đa COPY_INGREDIENTS_MAX tên INCI (khoảng 1,1 nghìn token) còn dư; trần cao hơn chỉ kéo dài lúc model lan man. */
+export const COPY_AI_MAX_TOKENS = 2000;
 
 /** Lý do chữ dự phòng thay bản AI, ghi vào `warnings` cho admin đọc. */
 export const COPY_REASON = {

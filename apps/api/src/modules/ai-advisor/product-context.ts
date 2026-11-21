@@ -1,8 +1,10 @@
 import { claimsIn, normalizeCopyText, sanitizeCopyText, withProductCopyFallback } from '@tubutree/shared-types';
 import { sortVariationsByPrice } from '../catalog/variation-order';
+import { COPY_INGREDIENTS_MAX } from './copy-draft';
 
 const MAX_DESCRIPTION_CHARS = 400;
-const MAX_INGREDIENTS = 8;
+/** Cùng trần với danh sách admin lưu được, để AI trả lời được mọi thành phần trang sản phẩm đang hiện (prompt tối đa 5 sản phẩm nên vẫn gọn). */
+const MAX_INGREDIENTS = COPY_INGREDIENTS_MAX;
 const MAX_VARIANT_LINES = 6;
 const MAX_VARIANT_NAME_CHARS = 60;
 
@@ -29,7 +31,7 @@ const plainText = (html: string, max: number): string => clip(normalizeCopyText(
 
 /**
  * `ingredients` là cột Json: danh sách `{name, ...}` (admin) hoặc chuỗi tách bằng dấu phẩy/chấm phẩy (Pancake). Chỉ lấy tên: phần trăm và công dụng không đưa vào để AI không nhắc lại con số nó không kiểm chứng được.
- * Tên nguồn ngoài (DB) được chuẩn hoá một lần rồi lọc tuyên bố bằng chính bản đó, trước khi cắt còn 8 tên để tên sạch phía sau được lên thay chỗ.
+ * Tên nguồn ngoài (DB) được chuẩn hoá một lần rồi lọc tuyên bố bằng chính bản đó, trước khi cắt còn `MAX_INGREDIENTS` tên để tên sạch phía sau được lên thay chỗ.
  */
 function ingredientNames(raw: unknown): string[] {
   // Chuẩn hoá CẢ chuỗi trước khi tách: dấu ";" của thực thể (`Ch&#7919;a`) sẽ bị tách nhầm làm đôi nếu tách trước, và hai nửa đều qua bộ chặn.

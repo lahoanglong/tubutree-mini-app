@@ -1,5 +1,6 @@
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import type { ConfigRow } from '@/lib/admin-client';
+import { FEATURE_FLAGS } from '@/lib/admin-feature-flags';
 
 /**
  * Công tắc và ô số của Trung tâm tăng trưởng. Mọi khoá ghi qua PUT /admin/config chung, nên biên ở đây phải trùng biên máy chủ
@@ -61,6 +62,22 @@ export const GIFT_TRIAL_MIN_ORDER_KEY = 'commerce.gift_trial_min_order';
 export const GIFT_TRIAL_ENABLED_KEY = 'commerce.gift_trial_enabled';
 export const GREEN_HOUR_KEY = 'flashsale.green_hour_enabled';
 export const CHECKIN_POINTS_KEY = 'loyalty.checkin_points';
+
+/** Công tắc cũng có ở thẻ "Bật/tắt tính năng" (tab Cấu hình): lấy nhãn, mô tả, mặc định và cảnh báo từ đó để hai nơi không lệch chữ. */
+function sharedSwitch(key: string, extra: Pick<GrowthSwitch, 'needsRow' | 'requires'> = {}): GrowthSwitch {
+  const f = FEATURE_FLAGS.find((x) => x.key === key);
+  if (!f) throw new Error(`Cờ ${key} chưa có trong lib/admin-feature-flags.ts`);
+  return {
+    kind: 'switch',
+    key,
+    label: f.label,
+    description: f.description,
+    fallback: f.fallback,
+    ...(f.onWarning ? { onWarning: f.onWarning } : {}),
+    ...(f.offWarning ? { offWarning: f.offWarning } : {}),
+    ...extra,
+  };
+}
 
 const WEB_ONLY = 'Chỉ chơi trên web; Mini App hiện một dòng dẫn sang tubutree.com.';
 const NEEDS_MASTER = 'Chỉ mở với khách khi "Lượt chơi có thưởng" cũng bật.';
@@ -125,7 +142,7 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
   },
   {
     id: 'growth',
-    title: 'Hộ chiếu Xanh, Mời bạn, Góc Sống Xanh, Giờ Xanh và tin Zalo',
+    title: 'Hộ chiếu Xanh, nhãn xanh, Mời bạn, Góc Sống Xanh, Giờ Xanh, nhắc Refill và tin Zalo',
     description: 'Các tính năng giữ chân khách và kết nối MSS.',
     items: [
       {
@@ -136,6 +153,8 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
         fallback: false,
         offWarning: 'Trang Hộ chiếu Xanh trả "Không tìm thấy" và lối vào ẩn. Không dữ liệu nào bị xoá.',
       },
+      // Dòng cấu hình do migration eco_facts tạo.
+      sharedSwitch('eco.product_badges_enabled', { needsRow: true }),
       {
         kind: 'switch',
         key: 'referral.share_card_enabled',
@@ -187,6 +206,9 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
       { kind: 'number', key: 'growth.referral_first_order_points', label: 'Thưởng đơn đầu: điểm mỗi bên', hint: 'Cộng cho cả người mời và bạn được mời, hạn dùng như điểm thường.', unit: 'Điểm Xanh', min: 0, max: 10_000, fallback: 100, standard: 100, needsRow: true },
       { kind: 'number', key: 'growth.referral_first_order_min', label: 'Thưởng đơn đầu: tiền hàng tối thiểu', hint: 'Tiền hàng của đơn đầu (trước mã giảm giá và điểm, không gồm phí giao), cùng cách tính với mốc miễn phí giao.', unit: 'đ', min: 0, max: 100_000_000, fallback: 199_000, standard: 199_000, needsRow: true },
       { kind: 'number', key: 'growth.referral_monthly_cap', label: 'Thưởng đơn đầu: số bạn tối đa mỗi người mời mỗi tháng', hint: 'Tính theo tháng giờ Việt Nam; quá trần thì cả hai không nhận.', unit: 'bạn', min: 0, max: 1_000, fallback: 10, needsRow: true },
+      // Dòng cấu hình do migration refill_21d_reminder tạo; ZNS chỉ gửi kèm khi tin nhắc trong app đang bật.
+      sharedSwitch('retention.refill_21d_reminder_enabled', { needsRow: true }),
+      sharedSwitch('retention.refill_21d_zns_enabled', { needsRow: true, requires: 'retention.refill_21d_reminder_enabled' }),
       {
         kind: 'switch',
         key: 'mss.customer_sync_enabled',

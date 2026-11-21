@@ -126,14 +126,19 @@ describe('CatalogIngredientsFill — bổ sung thành phần cho sản phẩm c�
     expect(container.textContent).not.toContain('Đã lưu 0 thành phần');
   });
 
-  it('quá 8 tên hoặc một tên quá 80 ký tự: báo ngay tại dòng, không gọi máy chủ, giữ nguyên chữ đã gõ', async () => {
+  it('quá 20 tên hoặc một tên quá 80 ký tự: báo ngay tại dòng, không gọi máy chủ, giữ nguyên chữ đã gõ; đủ 20 tên (nhãn INCI) thì không báo', async () => {
     const { m, container } = setup();
-    const nine = Array.from({ length: 9 }, (_, i) => `Thành phần ${i + 1}`).join('\n');
-    typeInto(areaOf(container, 'p1'), nine);
+    const twenty = Array.from({ length: 20 }, (_, i) => `INCI ${i + 1}`).join('\n');
+    typeInto(areaOf(container, 'p1'), twenty);
+    expect(container.querySelector('[data-testid="ingredients-row-p1"]')!.textContent).toContain('20/20');
+    expect(areaOf(container, 'p1').getAttribute('aria-invalid')).toBeNull();
+    const many = Array.from({ length: 21 }, (_, i) => `Thành phần ${i + 1}`).join('\n');
+    typeInto(areaOf(container, 'p1'), many);
+    expect(areaOf(container, 'p1').getAttribute('aria-invalid')).toBe('true');
     click(saveBtn(container, 'p1'));
     await flush();
-    expect(alertOf(container, 'p1')).toBe('Tối đa 8 thành phần mỗi lần lưu (đang có 9). Bớt đi rồi lưu.');
-    expect(areaOf(container, 'p1').value).toBe(nine);
+    expect(alertOf(container, 'p1')).toBe('Tối đa 20 thành phần mỗi lần lưu (đang có 21). Bớt đi rồi lưu.');
+    expect(areaOf(container, 'p1').value).toBe(many);
 
     typeInto(areaOf(container, 'p1'), 'x'.repeat(81));
     click(saveBtn(container, 'p1'));

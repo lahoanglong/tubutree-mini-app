@@ -71,3 +71,27 @@ export async function listLiveBanners(
   });
   return rows.map(toBannerDTO).filter((b): b is CampaignBannerDTO => b !== null);
 }
+
+/** Trần số slug cho sitemap: chiến dịch đang chạy cùng lúc chỉ vài chục, trần này chỉ để bảo vệ máy chủ (cùng mức 500 với sản phẩm và gian hàng của sitemap). */
+export const PUBLIC_SLUGS_LIMIT = 500;
+
+export interface CampaignSlugDTO {
+  slug: string;
+  /** Lần admin sửa gần nhất, dùng làm `lastmod` của sitemap. */
+  updatedAt: string;
+}
+
+/**
+ * Slug các trang /chien-dich/<slug> đang mở cho khách, cho sitemap web. Chỉ chiến dịch đang chạy (`liveWhere`) có trang riêng (`CAMPAIGN_PAGE`):
+ * banner trỏ sản phẩm, danh mục hay màn nội bộ không có lối nào dẫn tới trang chiến dịch nên không nộp. Chỉ trả slug và ngày sửa, dựng lại từng
+ * dòng thay vì trả thẳng dòng DB, để không lộ id, tiêu đề, mã giảm giá hay bản nháp.
+ */
+export async function listPublicCampaignSlugs(prisma: Pick<PrismaService, 'campaign'>, now: Date = new Date()): Promise<CampaignSlugDTO[]> {
+  const rows = await prisma.campaign.findMany({
+    where: { ...liveWhere(now), linkType: 'CAMPAIGN_PAGE' },
+    orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+    take: PUBLIC_SLUGS_LIMIT,
+    select: { slug: true, updatedAt: true },
+  });
+  return rows.map((r) => ({ slug: r.slug, updatedAt: r.updatedAt.toISOString() }));
+}

@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { AiAdvisorService } from './ai-advisor.service';
+import { COPY_INGREDIENTS_MAX } from './copy-draft';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { LlmUnavailableException, type LlmClient } from './llm.client';
 import type { FaqService } from '../faq/faq.service';
@@ -247,7 +248,9 @@ describe('AiAdvisorService.chat — ngữ cảnh sản phẩm trung thực', () 
     expect(desc.length).toBeLessThanOrEqual(401);
     expect(desc.endsWith('…')).toBe(true);
     const tp = /Thành phần: (.*)/.exec(prompt)![1]!.split(', ');
-    expect(tp).toHaveLength(8);
+    // Cùng trần với danh sách admin lưu được (trang sản phẩm hiện đủ), để AI không nói "chưa có thông tin" về thành phần khách đang thấy.
+    expect(tp).toHaveLength(COPY_INGREDIENTS_MAX);
+    expect(tp.at(-1)).toBe(`tp${COPY_INGREDIENTS_MAX - 1}`);
   });
 
   it('sản phẩm không có mô tả lẫn thành phần: không bịa dòng nào, ghi rõ là chưa có', async () => {

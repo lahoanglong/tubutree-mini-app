@@ -407,19 +407,45 @@ const TABS = NAV_GROUPS.flatMap((g) => g.items);
 const DEFAULT_TAB: Tab = 'inbox';
 
 /** Mục menu dẫn sang trang riêng, không phải tab: nên không nằm trong `Tab`, `NAV_GROUPS` hay `STAFF_TABS` mà chỉ gắn vào menu của ADMIN (xem `adminNavGroups`). */
-type NavKey = Tab | 'catalogWpImages';
-const WP_IMAGES_NAV_ITEM: NavItem<NavKey> = {
-  k: 'catalogWpImages',
-  label: 'Bổ sung ảnh hàng loạt',
-  href: '/admin/catalog-wp-images',
-  keywords: 'ảnh sản phẩm thiếu ảnh kéo thả dán ảnh duyệt ảnh wordpress tubutree.com tải ảnh đại diện',
+type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms';
+type NavKey = Tab | AdminPageKey;
+const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms']);
+const isTabKey = (k: NavKey): k is Tab => !ADMIN_PAGE_KEYS.has(k);
+
+/**
+ * Trang riêng chỉ ADMIN mở được (API của chúng chỉ nhận ADMIN), xếp ngay sau mục tab neo: bổ sung ảnh dưới "Kiểm tra catalog" (API ảnh WordPress),
+ * Sự thật xanh và Từ khoá tìm kiếm cuối nhóm Nội dung (`admin/eco-facts`, `admin/search-synonyms`).
+ */
+const ADMIN_PAGE_LINKS: Partial<Record<Tab, NavItem<NavKey>[]>> = {
+  catalogQuality: [
+    {
+      k: 'catalogWpImages',
+      label: 'Bổ sung ảnh hàng loạt',
+      href: '/admin/catalog-wp-images',
+      keywords: 'ảnh sản phẩm thiếu ảnh kéo thả dán ảnh duyệt ảnh wordpress tubutree.com tải ảnh đại diện',
+    },
+  ],
+  notificationTemplates: [
+    {
+      k: 'ecoFacts',
+      label: 'Sự thật xanh',
+      href: '/admin/su-that-xanh',
+      keywords: 'sự thật xanh nhãn xanh bao bì nhựa gram can refill trả vỏ nguồn giấy tờ hộ chiếu xanh eco facts điểm cộng xanh',
+    },
+    {
+      k: 'searchTerms',
+      label: 'Từ khoá tìm kiếm',
+      href: '/admin/tu-khoa-tim',
+      keywords: 'từ khoá tìm kiếm từ đồng nghĩa ô tìm gõ sai tìm phổ biến cụm dự phòng synonym',
+    },
+  ],
 };
 
-/** Menu theo quyền: chỉ mục `allowed` mở được; ADMIN có thêm lối vào trang bổ sung ảnh ngay dưới "Kiểm tra catalog" (API ảnh WordPress chỉ nhận ADMIN). */
+/** Menu theo quyền: chỉ mục `allowed` mở được; ADMIN có thêm lối vào các trang riêng của `ADMIN_PAGE_LINKS` ngay sau mục neo. */
 function adminNavGroups(allowed: ReadonlySet<Tab>, isAdmin: boolean): NavGroup<NavKey>[] {
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => allowed.has(i.k)).flatMap((i): NavItem<NavKey>[] => (isAdmin && i.k === 'catalogQuality' ? [i, WP_IMAGES_NAV_ITEM] : [i])),
+    items: g.items.filter((i) => allowed.has(i.k)).flatMap((i): NavItem<NavKey>[] => [i, ...(isAdmin ? (ADMIN_PAGE_LINKS[i.k] ?? []) : [])]),
   })).filter((g) => g.items.length > 0);
 }
 
@@ -794,10 +820,10 @@ export default function AdminPage() {
           groups={groups}
           active={active}
           onSelect={(k) => {
-            if (k !== 'catalogWpImages') setTab(k);
+            if (isTabKey(k)) setTab(k);
           }}
           summaryBadge={<InboxBadge tab="inbox" enabled={allowed.has('inbox')} />}
-          badge={(k) => (k === 'catalogWpImages' ? null : k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} enabled={allowed.has('inbox')} />)}
+          badge={(k) => (!isTabKey(k) ? null : k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} enabled={allowed.has('inbox')} />)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>

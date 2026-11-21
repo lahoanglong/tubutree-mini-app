@@ -11,6 +11,7 @@ import type { CopyDraftService } from './copy-draft.service';
 import type { IngredientEnrichService } from './ingredient-enrich.service';
 import { SEO_APPLY_MAX_BATCH, SEO_DESC_MAX, SEO_TITLE_MAX, type SeoEnrichService } from './seo-enrich.service';
 import { OCR_IMAGE_MAX_BYTES } from '../ai-advisor/ingredient-ocr';
+import { COPY_INGREDIENTS_MAX } from '../ai-advisor/copy-draft';
 
 const errs = (cls: new () => object, body: object) => validate(plainToInstance(cls, body));
 const approveItem = (id: string, over: object = {}) => ({ id, shortDesc: 'ngắn', description: 'Mô tả', ingredients: ['Bơ'], ...over });
@@ -61,11 +62,11 @@ describe('DTO copy-approve', () => {
     expect(await errs(CopyApproveDto, { items: [approveItem('a', { description: '', shortDesc: '', ingredients: [] })] })).toHaveLength(0);
   });
 
-  it('trần thô chặn thân quá lớn nhưng không chặn mục vượt trần nội dung (140/800/8/80) để service nêu lý do', async () => {
-    expect(await errs(CopyApproveDto, { items: [approveItem('a', { description: 'x'.repeat(900), shortDesc: 'y'.repeat(200), ingredients: ids(12) })] })).toHaveLength(0);
+  it('trần thô chặn thân quá lớn nhưng không chặn mục vượt trần nội dung (140/800/20/80) để service nêu lý do', async () => {
+    expect(await errs(CopyApproveDto, { items: [approveItem('a', { description: 'x'.repeat(900), shortDesc: 'y'.repeat(200), ingredients: ids(COPY_INGREDIENTS_MAX + 4) })] })).toHaveLength(0);
     expect(await errs(CopyApproveDto, { items: [approveItem('a', { description: 'x'.repeat(6001) })] })).not.toHaveLength(0);
     expect(await errs(CopyApproveDto, { items: [approveItem('a', { shortDesc: 'y'.repeat(401) })] })).not.toHaveLength(0);
-    expect(await errs(CopyApproveDto, { items: [approveItem('a', { ingredients: ids(21) })] })).not.toHaveLength(0);
+    expect(await errs(CopyApproveDto, { items: [approveItem('a', { ingredients: ids(COPY_INGREDIENTS_MAX + 13) })] })).not.toHaveLength(0);
   });
 
   it('chữ được cắt khoảng trắng và ký tự vô hình hai đầu', () => {
@@ -210,10 +211,10 @@ describe('DTO seo-apply', () => {
 });
 
 describe('DTO save-ingredients', () => {
-  it('ingredients: 1..20 chuỗi, mỗi chuỗi tối đa 200 ký tự; chữ được cắt khoảng trắng', async () => {
+  it('ingredients: 1..COPY_INGREDIENTS_MAX + 12 chuỗi (trần thô rộng hơn trần nội dung để service nêu lý do), mỗi chuỗi tối đa 200 ký tự; chữ được cắt khoảng trắng', async () => {
     expect(await errs(SaveIngredientsDto, { ingredients: ['Đường'] })).toHaveLength(0);
-    expect(await errs(SaveIngredientsDto, { ingredients: ids(20) })).toHaveLength(0);
-    expect(await errs(SaveIngredientsDto, { ingredients: ids(21) })).not.toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: ids(COPY_INGREDIENTS_MAX + 12) })).toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: ids(COPY_INGREDIENTS_MAX + 13) })).not.toHaveLength(0);
     expect(await errs(SaveIngredientsDto, { ingredients: [] })).not.toHaveLength(0);
     expect(await errs(SaveIngredientsDto, { ingredients: 'Đường' })).not.toHaveLength(0);
     expect(await errs(SaveIngredientsDto, { ingredients: [3] })).not.toHaveLength(0);

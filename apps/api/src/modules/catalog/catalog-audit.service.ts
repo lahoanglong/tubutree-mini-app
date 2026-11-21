@@ -38,6 +38,8 @@ export class CatalogAuditService {
         description: true,
         shortDesc: true,
         ingredients: true,
+        // Chỉ để biết có hay không (đếm phủ Story Studio); nội dung cấu hình không đi ra.
+        storyConfig: true,
         variations: {
           orderBy: VARIATION_ORDER_BY,
           select: { id: true, pancakeId: true, sku: true, name: true, stock: true, retailPrice: true, isActive: true },
@@ -55,6 +57,7 @@ export class CatalogAuditService {
       description: p.description,
       shortDesc: p.shortDesc,
       hasIngredients: ingredientNames(p.ingredients).length > 0,
+      hasStoryConfig: p.storyConfig !== null,
       inStock: p.isActive && p.variations.some((v) => v.isActive && v.stock > 0),
       variations: p.variations,
     }));

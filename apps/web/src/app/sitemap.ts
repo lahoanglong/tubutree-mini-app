@@ -3,6 +3,7 @@ import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { NOINDEX_PUBLIC_PATHS, SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
 import { getBrands, getCategories, getLegalDoc, getProducts, getStorefrontList, type CategoryItem } from '@/lib/api';
+import { ApiNotFoundError, createServerHttp, getListOrEmptyAtBuild } from '@/lib/core-http-server';
 import { browseCanonicalPath } from '@/lib/home-seo';
 import { LEGAL_SLUGS } from '@/lib/legal';
 
@@ -17,7 +18,8 @@ export const revalidate = 3600;
  * dùng GET /storefront/public-list (chỉ gian hàng đã đăng, 500 gian hàng cập nhật gần nhất —
  * mirror đúng giới hạn 500 sản phẩm bên dưới, không cần liệt kê TOÀN BỘ).
  *
- * Chiến dịch (/chien-dich/[slug]) chưa vào: lib/api.ts chưa có endpoint công khai liệt kê chúng (chỉ có banner theo vị trí hiển thị).
+ * Chiến dịch (/chien-dich/[slug]): GET /campaigns/public-slugs trả slug + ngày sửa của chiến dịch đang chạy có trang riêng (bản tắt, chưa mở,
+ * đã hết và banner trỏ sản phẩm/danh mục không có trong đó).
  */
 
 // API chặn limit > 100 (common/pagination.ts); xin 200 một lần từng trả 400 nên sitemap không có sản phẩm nào.
@@ -25,7 +27,7 @@ const PRODUCTS_PER_PAGE = 100;
 const MAX_PRODUCT_PAGES = 5;
 
 /**
- * `lastmod` chỉ cho gian hàng CTV, nơi `updatedAt` là ngày sửa thật (người dùng chỉnh gian hàng). Sản phẩm KHÔNG có `lastmod`: `Product.updatedAt` bị
+ * `lastmod` chỉ cho gian hàng CTV và chiến dịch, nơi `updatedAt` là ngày sửa thật (người dùng chỉnh gian hàng, admin sửa chiến dịch). Sản phẩm KHÔNG có `lastmod`: `Product.updatedAt` bị
  * đồng bộ Pancake ban đêm và việc tính lại số đã bán đẩy tiến cho mọi sản phẩm dù nội dung không đổi, mà crawler bỏ qua `lastmod` khi thấy nó không phản ánh
  * thay đổi thật. Trang chủ, trang tĩnh, nhãn và chính sách cũng không có nguồn ngày thật nên để trống thay vì dùng giờ dựng sitemap.
  * Ngày hỏng hoặc ở tương lai (lệch đồng hồ quá một ngày) bị bỏ, để sitemap không khai một mốc vô lý.
@@ -44,6 +46,31 @@ function flattenCategories(tree: readonly CategoryItem[]): CategoryItem[] {
   };
   walk(tree);
   return out;
+}
+
+interface CampaignSlug {
+  slug: string;
+  updatedAt?: string;
+}
+
+/** Thân trả về không phải mảng hay dòng thiếu slug thì bỏ (không đoán URL). */
+const campaignSlugRows = (json: unknown): CampaignSlug[] =>
+  Array.isArray(json)
+    ? json.filter((r): r is CampaignSlug => typeof r === 'object' && r !== null && typeof (r as CampaignSlug).slug === 'string' && (r as CampaignSlug).slug !== '')
+    : [];
+
+/**
+ * Chiến dịch đang chạy cho sitemap. Lúc build lỗi API ra rỗng (getListOrEmptyAtBuild). Lúc chạy, 404 nghĩa là API bản cũ chưa có endpoint
+ * (đường dẫn rơi vào `:slug`): không có chiến dịch để nộp, đừng làm hỏng cả sitemap. Lỗi tạm (5xx, mất kết nối) vẫn ném như mọi danh sách
+ * khác để Next giữ bản đầy đủ lần trước.
+ */
+async function getCampaignSlugs(): Promise<CampaignSlug[]> {
+  try {
+    return await getListOrEmptyAtBuild(createServerHttp({ revalidate }), '/campaigns/public-slugs', campaignSlugRows);
+  } catch (err) {
+    if (err instanceof ApiNotFoundError) return [];
+    throw err;
+  }
 }
 
 function lastModified(iso: string | null | undefined, now = Date.now()): Date | undefined {
@@ -99,6 +126,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${SITE_URL}/s/${s.slug}`,
       ...(lastmod ? { lastModified: lastmod } : {}),
       changeFrequency: 'weekly',
+      priority: 0.6,
+    });
+  }
+  // Cùng dạng đường dẫn với canonical của trang (`/chien-dich/${encodeURIComponent(slug)}`); mỗi slug một lần.
+  const campaignSeen = new Set<string>();
+  for (const c of await getCampaignSlugs()) {
+    if (campaignSeen.has(c.slug)) continue;
+    campaignSeen.add(c.slug);
+    const lastmod = lastModified(c.updatedAt);
+    base.push({
+      url: `${SITE_URL}/chien-dich/${encodeURIComponent(c.slug)}`,
+      ...(lastmod ? { lastModified: lastmod } : {}),
+      changeFrequency: 'daily',
       priority: 0.6,
     });
   }

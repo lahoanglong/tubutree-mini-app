@@ -13,6 +13,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   description: 'Mô tả',
   shortDesc: null,
   ingredients: null,
+  storyConfig: null,
   variations: [variation()],
   ...over,
 });
@@ -73,6 +74,19 @@ describe('CatalogAuditService.audit', () => {
     ]);
   });
 
+  it('hasStoryConfig: cột storyConfig NULL là đang dùng kịch bản mẫu/tự sinh, có cấu hình (lưu từ Story Studio) là đã tuỳ chỉnh; không trả nội dung cấu hình', async () => {
+    const story = { version: 1, scenes: [{ kind: 'hero', title: 'Bí mật' }] };
+    const { svc, findMany } = make([row({ id: 'custom', storyConfig: story }), row({ id: 'preset', storyConfig: null })]);
+    const { products } = await svc.audit();
+    expect(products.map((p) => [p.id, p.hasStoryConfig])).toEqual([
+      ['custom', true],
+      ['preset', false],
+    ]);
+    expect(JSON.stringify(products)).not.toContain('Bí mật');
+    const arg = (findMany.mock.calls[0] as unknown as [{ select: Record<string, unknown> }])[0];
+    expect(arg.select.storyConfig).toBe(true);
+  });
+
   it('trả đúng các trường của hợp đồng, không lộ cột nội bộ', async () => {
     const { svc } = make([row({ description: '<p></p>', shortDesc: 'ngắn', ingredients: 'Bơ' })]);
     expect((await svc.audit()).products[0]).toEqual({
@@ -85,6 +99,7 @@ describe('CatalogAuditService.audit', () => {
       description: '<p></p>',
       shortDesc: 'ngắn',
       hasIngredients: true,
+      hasStoryConfig: false,
       inStock: true,
       variations: [{ id: 'v1', pancakeId: 'pv1', sku: 'SKU1', name: '100ml', stock: 5, retailPrice: 50_000, isActive: true }],
     });

@@ -1,5 +1,6 @@
 import { findProductCopyFallback, listProductCopyFallbackSlugs } from '@tubutree/shared-types';
 import { factLines, productFacts, promptShortDesc, variantSpecs } from './product-context';
+import { COPY_INGREDIENTS_MAX } from './copy-draft';
 
 const PINEBOO = 'xit-tram-cho-be-pineboo-150ml';
 const MAX_DESCRIPTION_CHARS = 400;
@@ -126,10 +127,11 @@ describe('productFacts: bộ chặn tuyên bố cho chữ nguồn ngoài (DB)', 
     expect(f.ingredients).toEqual(['Dầu tràm', 'Dầu dừa']);
   });
 
-  it('lọc thành phần trước khi cắt còn 8 tên: tên sạch phía sau được lên thay chỗ tên bị bỏ', () => {
-    const names = [{ name: 'Kháng khuẩn A' }, ...Array.from({ length: 9 }, (_, i) => ({ name: `tp${i}` }))];
+  it('lọc thành phần trước khi cắt còn COPY_INGREDIENTS_MAX tên (cùng trần admin lưu được): tên sạch phía sau được lên thay chỗ tên bị bỏ', () => {
+    const names = [{ name: 'Kháng khuẩn A' }, ...Array.from({ length: COPY_INGREDIENTS_MAX + 1 }, (_, i) => ({ name: `tp${i}` }))];
     const f = productFacts({ slug: SKU, description: '', ingredients: names });
-    expect(f.ingredients).toEqual(['tp0', 'tp1', 'tp2', 'tp3', 'tp4', 'tp5', 'tp6', 'tp7']);
+    expect(COPY_INGREDIENTS_MAX).toBe(20);
+    expect(f.ingredients).toEqual(Array.from({ length: COPY_INGREDIENTS_MAX }, (_, i) => `tp${i}`));
   });
 
   it('thành phần DB toàn tên bị bỏ thì rơi về thành phần dự phòng đã duyệt', () => {
@@ -142,7 +144,7 @@ describe('productFacts: bộ chặn tuyên bố cho chữ nguồn ngoài (DB)', 
       const fb = findProductCopyFallback(slug)!;
       const f = productFacts({ slug, description: null, ingredients: null });
       expect(f.description).toBe(fb.description.replace(/\s+/g, ' ').trim());
-      expect(f.ingredients).toEqual((fb.ingredients ?? []).map((i) => i.name).slice(0, 8));
+      expect(f.ingredients).toEqual((fb.ingredients ?? []).map((i) => i.name).slice(0, COPY_INGREDIENTS_MAX));
     }
   });
 

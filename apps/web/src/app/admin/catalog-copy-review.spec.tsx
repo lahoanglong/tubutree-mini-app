@@ -231,12 +231,12 @@ describe('CatalogCopyReview: sửa tay và duyệt', () => {
     await compose(r);
     const a = card(r, 'a');
     expect(a.textContent).toContain('6/140');
-    expect(a.textContent).toContain('2/8');
+    expect(a.textContent).toContain('2/20');
     typeInto(field(a, 'Mô tả ngắn'), 'Nước rửa chén dịu nhẹ');
     typeInto(field(a, 'Mô tả'), 'Chai 500ml, mùi dứa.');
     typeInto(field(a, 'Thành phần'), 'Dứa\nHạt, củ, quả\nGừng\n dứa ');
     expect(a.textContent).toContain('21/140');
-    expect(a.textContent).toContain('3/8');
+    expect(a.textContent).toContain('3/20');
     click(approveBtn(a));
     await flush(20);
     expect(bodyOf(posts(m, 'copy-approve')[0]!)).toEqual({ items: [{ id: 'a', shortDesc: 'Nước rửa chén dịu nhẹ', description: 'Chai 500ml, mùi dứa.', ingredients: ['Dứa', 'Hạt, củ, quả', 'Gừng'] }] });
@@ -248,7 +248,7 @@ describe('CatalogCopyReview: sửa tay và duyệt', () => {
     await compose(r);
     const a = card(r, 'a');
     expect(field(a, 'Thành phần').value).toBe('Hạt, củ, quả\nMuối; tiêu');
-    expect(a.textContent).toContain('2/8');
+    expect(a.textContent).toContain('2/20');
     expect(a.textContent).toContain('Mỗi dòng là một thành phần');
   });
 
@@ -375,7 +375,7 @@ describe('CatalogCopyReview: sửa tay và duyệt', () => {
     const m = api(
       draftsOk(
         D('a', { description: 'x'.repeat(801) }),
-        D('b', { ingredients: ['1', '2', '3', '4', '5', '6', '7', '8', '9'] }),
+        D('b', { ingredients: Array.from({ length: 21 }, (_, i) => String(i + 1)) }),
         D('c', { description: '   ' }),
       ),
       approveOk(['a', 'b', 'c']),
@@ -383,7 +383,7 @@ describe('CatalogCopyReview: sửa tay và duyệt', () => {
     const r = mount({ batches: [sel('a', 'b', 'c')] });
     await compose(r);
     expect(card(r, 'a').textContent).toContain('Mô tả dài quá 800 ký tự.');
-    expect(card(r, 'b').textContent).toContain('Tối đa 8 thành phần (đang 9).');
+    expect(card(r, 'b').textContent).toContain('Tối đa 20 thành phần (đang 21).');
     expect(card(r, 'c').textContent).toContain('Mô tả đang trống.');
     for (const id of ['a', 'b', 'c']) {
       expect(approveBtn(card(r, id)).getAttribute('aria-disabled')).toBe('true');

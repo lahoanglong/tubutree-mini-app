@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { CopyApproveItem } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { COPY_DESCRIPTION_MAX } from '../ai-advisor/copy-draft';
+import { COPY_DESCRIPTION_MAX, COPY_INGREDIENTS_MAX } from '../ai-advisor/copy-draft';
 import { CopyApproveService } from './copy-approve.service';
 
 const item = (id: string, over: Partial<CopyApproveItem> = {}): CopyApproveItem => ({
@@ -154,19 +154,19 @@ describe('CopyApproveService.approve', () => {
       expect(dataOf(update).data).toMatchObject({ ingredients: [{ name: 'Bơ tươi' }, { name: 'Gấc' }, { name: 'Dầu dừa' }] });
     });
 
-    it('trần 8 áp lên cột sau khi nối: 7 tên đã có + 2 tên mới bị từ chối kèm lý do, mục khác trong lô vẫn ghi', async () => {
-      const { svc, update } = make([product('a', { ingredients: names(7) }), product('b')]);
+    it(`trần ${COPY_INGREDIENTS_MAX} áp lên cột sau khi nối: ${COPY_INGREDIENTS_MAX - 1} tên đã có + 2 tên mới bị từ chối kèm lý do, mục khác trong lô vẫn ghi`, async () => {
+      const { svc, update } = make([product('a', { ingredients: names(COPY_INGREDIENTS_MAX - 1) }), product('b')]);
       const res = await svc.approve('admin1', [item('a', { ingredients: ['Gấc', 'Bơ tươi'] }), item('b')]);
       expect(res.saved).toEqual(['b']);
-      expect(res.rejected).toEqual([{ id: 'a', reasons: [expect.stringContaining('vượt trần 8')] }]);
-      expect(res.rejected[0]!.reasons[0]).toContain('đã có 7 thành phần, thêm 2 tên mới sẽ thành 9');
+      expect(res.rejected).toEqual([{ id: 'a', reasons: [expect.stringContaining(`vượt trần ${COPY_INGREDIENTS_MAX}`)] }]);
+      expect(res.rejected[0]!.reasons[0]).toContain(`đã có ${COPY_INGREDIENTS_MAX - 1} thành phần, thêm 2 tên mới sẽ thành ${COPY_INGREDIENTS_MAX + 1}`);
       expect(update).toHaveBeenCalledTimes(1);
       expect(dataOf(update).where.id).toBe('b');
       expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('sản phẩm a '));
     });
 
-    it('7 tên đã có + 1 tên mới = 8 vẫn nhận; cột đã quá trần sẵn nhưng không thêm tên nào thì không bị chặn', async () => {
-      const { svc, update } = make([product('a', { ingredients: names(7) }), product('b', { ingredients: names(9) })]);
+    it(`${COPY_INGREDIENTS_MAX - 1} tên đã có + 1 tên mới = ${COPY_INGREDIENTS_MAX} vẫn nhận; cột đã quá trần sẵn nhưng không thêm tên nào thì không bị chặn`, async () => {
+      const { svc, update } = make([product('a', { ingredients: names(COPY_INGREDIENTS_MAX - 1) }), product('b', { ingredients: names(COPY_INGREDIENTS_MAX + 1) })]);
       const res = await svc.approve('admin1', [item('a', { ingredients: ['Gấc'] }), item('b', { ingredients: ['Thành phần A'] })]);
       expect(res).toEqual({ saved: ['a', 'b'], rejected: [] });
       expect(update).toHaveBeenCalledTimes(2);
