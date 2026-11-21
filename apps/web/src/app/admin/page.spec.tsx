@@ -5459,3 +5459,75 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     expect(container.textContent).toContain('Nếu tên quá phổ biến, gõ họ tên đầy đủ hơn.');
   });
 });
+
+describe('admin/page — đối soát tồn Pancake và đổi trạng thái hàng loạt (w14-03)', () => {
+  const order = { id: 'o1', code: 'TT100', status: 'CONFIRMED', total: 250000, paymentMethod: 'COD', paymentStatus: 'UNPAID', createdAt: '2026-10-02T03:00:00.000Z', user: { fullName: 'Khách A', phone: '0922222222' }, items: [] };
+  const asStaff = (perms: string[]) => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: perms };
+  };
+
+  it('quản trị viên có lối vào "Đối soát tồn Pancake" ngay dưới "Đổi / Trả" trong nhóm Bán hàng: liên kết /admin/doi-soat-kho, đủ 44px', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
+    const { container } = await mount();
+    const group = container.querySelector('nav[aria-label="Mục quản trị"] [role="group"][aria-label="Bán hàng"]')!;
+    const rows = [...group.querySelectorAll('li')].map((li) => navLabel(li));
+    expect(rows.slice(rows.indexOf('Đổi / Trả'), rows.indexOf('Đổi / Trả') + 2)).toEqual(['Đổi / Trả', 'Đối soát tồn Pancake']);
+    const a = group.querySelector<HTMLAnchorElement>('a[data-nav-item="stockReconcile"]')!;
+    expect(a.getAttribute('href')).toBe('/admin/doi-soat-kho');
+    expect(a.className).toContain('min-h-[44px]');
+  });
+
+  it('nhân viên KHO cũng có lối vào (API mở cho KHO); CSKH, MARKETING, KE_TOAN thì không', async () => {
+    asStaff(['KHO']);
+    vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
+    let r = await mount();
+    expect(r.container.querySelector('nav[aria-label="Mục quản trị"] a[href="/admin/doi-soat-kho"]')).not.toBeNull();
+    r.unmount();
+    mounted = mounted.filter((m) => m !== r);
+    asStaff(['CSKH', 'MARKETING', 'KE_TOAN']);
+    r = await mount();
+    expect(r.container.querySelector('nav[aria-label="Mục quản trị"] a[href="/admin/doi-soat-kho"]')).toBeNull();
+    expect(r.container.querySelector('nav[aria-label="Mục quản trị"]')!.textContent).not.toContain('Đối soát tồn Pancake');
+  });
+
+  it('bảng Đơn hàng: ô chọn ở cột Mã đơn, bấm ô không mở chi tiết, thanh dưới hiện số đã chọn và cả hai đích với ADMIN', async () => {
+    mocks.orders = [order];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    const boxEl = container.querySelector<HTMLInputElement>('tbody tr td input[aria-label="Chọn đơn TT100"]')!;
+    expect(boxEl).not.toBeNull();
+    act(() => boxEl.click());
+    await flush();
+    expect(container.textContent).not.toContain('Hạt chia');
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đóng')).toBe(false);
+    const bar = container.querySelector('[data-bulk-bar]')!;
+    expect(bar.textContent).toContain('Đã chọn 1/50 đơn');
+    expect([...bar.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Sang «Đã đóng gói»', 'Sang «Đã huỷ»']);
+    expect(unlabeledFields(container)).toEqual([]);
+  });
+
+  it('theo nhóm việc: KHO chỉ đóng gói, CSKH chỉ huỷ, KE_TOAN không có ô chọn', async () => {
+    const open = async (perms: string[]) => {
+      asStaff(perms);
+      mocks.orders = [order];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const r = await mount();
+      const boxEl = r.container.querySelector<HTMLInputElement>('input[aria-label="Chọn đơn TT100"]');
+      if (boxEl) act(() => boxEl.click());
+      await flush();
+      const text = r.container.querySelector('[data-bulk-bar]')?.textContent ?? null;
+      r.unmount();
+      mounted = mounted.filter((m) => m !== r);
+      return { hasBox: !!boxEl, text };
+    };
+    const kho = await open(['KHO']);
+    expect(kho.hasBox).toBe(true);
+    expect(kho.text).toContain('Xem trước: sang «Đã đóng gói»');
+    const cskh = await open(['CSKH']);
+    expect(cskh.text).toContain('Xem trước: sang «Đã huỷ»');
+    const ketoan = await open(['KE_TOAN']);
+    expect(ketoan).toEqual({ hasBox: false, text: null });
+  });
+});

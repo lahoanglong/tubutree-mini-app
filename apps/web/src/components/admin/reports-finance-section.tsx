@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  downloadAccountingCsv,
   downloadPaymentDiscountsCsv,
   downloadPayoutsCsv,
   downloadPitCsv,
@@ -32,9 +33,9 @@ const REFUND_STATUS_OPTIONS: { value: '' | RefundExportStatus; label: string }[]
   { value: 'DISMISSED', label: 'Không phải tiền dư' },
 ];
 
-type Kind = 'tax' | 'payouts' | 'refunds' | 'paymentDiscounts';
+type Kind = 'accounting' | 'tax' | 'payouts' | 'refunds' | 'paymentDiscounts';
 
-/** Ba file CSV cho kế toán: khấu trừ TNCN của CTV, lệnh chuyển hoa hồng, hoàn tiền khách. Dùng khoảng ngày chung của tab Báo cáo. */
+/** File CSV cho kế toán: đối soát doanh thu và hoàn tiền theo đơn, khấu trừ TNCN của CTV, lệnh chuyển hoa hồng, hoàn tiền khách, chiết khấu thanh toán. Dùng khoảng ngày chung của tab Báo cáo. */
 export function ReportsFinanceSection({ range }: { range: ReportRange }) {
   const error = rangeError(range.from, range.to, REVENUE_MAX_DAYS);
   const [payoutStatus, setPayoutStatus] = useState<'' | PayoutExportStatus>('');
@@ -47,7 +48,9 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
     setBusy(kind);
     try {
       const r =
-        kind === 'tax'
+        kind === 'accounting'
+          ? await downloadAccountingCsv(range)
+          : kind === 'tax'
           ? await downloadPitCsv(range)
           : kind === 'payouts'
             ? await downloadPayoutsCsv(range, payoutStatus || undefined)
@@ -70,6 +73,16 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
       </h3>
       {error && <Notice tone="warning" role="alert">{error}</Notice>}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+          <h4 className="text-sm font-medium text-stone-900">Đối soát doanh thu và hoàn tiền</h4>
+          <p className="text-xs text-stone-500">
+            Mỗi đơn đặt trong khoảng ngày (giờ Việt Nam) một dòng: tiền hàng, CK thương mại, giảm voucher, giảm Điểm Xanh, phí giao, khách trả, đã hoàn, hoàn đang chờ chi,
+            tiền chuyển thừa trả lại và doanh thu ghi nhận (cộng cột này ra đúng số Doanh thu ở trên; đã trừ phần trả hàng). Không có SĐT hay tên khách.
+          </p>
+          <button type="button" disabled={disabled} onClick={() => void run('accounting')} className={BTN_SECONDARY}>
+            {busy === 'accounting' ? 'Đang xuất…' : 'Xuất CSV đối soát kế toán'}
+          </button>
+        </div>
         <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
           <h4 className="text-sm font-medium text-stone-900">Khấu trừ thuế TNCN của CTV</h4>
           <p className="text-xs text-stone-500">Mỗi người nhận một dòng, gồm các lệnh đã chi hoa hồng trong khoảng ngày chi (giờ Việt Nam). Cùng số với bảng theo tháng ở mục Thuế TNCN hoa hồng.</p>

@@ -59,6 +59,9 @@ const PAYMENT_METHOD: Record<string, string> = {
   WALLET: 'Ví Tubu',
   XU: 'Xu cũ',
 };
+/** Nhãn tiếng Việt dùng chung cho mọi file CSV có cột trạng thái đơn / phương thức thanh toán. */
+export { ORDER_STATUS as ORDER_STATUS_CSV_LABEL, PAYMENT_METHOD as PAYMENT_METHOD_CSV_LABEL };
+
 const PAYMENT_STATUS: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
   PAID: 'Đã thanh toán',

@@ -58,6 +58,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/notification-templates-tab.tsx::f.zaloTemplateId": { dto: "apps/api/src/modules/notifications/dto/update-notification-template.dto.ts:UpdateNotificationTemplateDto.zaloTemplateId", max: 20 },
   "components/admin/notification-templates-tab.tsx::f.bodyTemplate": { dto: "apps/api/src/modules/notifications/dto/update-notification-template.dto.ts:UpdateNotificationTemplateDto.bodyTemplate", max: 1000 },
   "components/admin/payroll-admin-tab.tsx::note": { dto: "apps/api/src/modules/staff/payroll/payroll.dto.ts:MarkPaidDto.note", max: 500 },
+  "components/admin/order-bulk-bar.tsx::note": { dto: "apps/api/src/modules/admin/bulk-ops/bulk-ops.controller.ts:BulkOrderStatusDto.note", max: 500 },
   "components/admin/return-request-row.tsx::note": { dto: "apps/api/src/modules/orders/dto/return-request.dto.ts:ReviewReturnDto.note", max: 500 },
   "components/admin/shift-approval-tab.tsx::name": { dto: "apps/api/src/modules/staff/shifts/dto/shift.dto.ts:ShiftTemplateDto.name", max: 60 },
   "components/admin/staff-roster-tab.tsx::phone": { dto: "apps/api/src/modules/staff/dto/grant-role.dto.ts:GrantRoleDto.phone", max: 11 },
