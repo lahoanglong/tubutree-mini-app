@@ -47,6 +47,6 @@ import { EcoImpactModule } from '../eco-impact/eco-impact.module';
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule, EcoImpactModule],
   controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController, FreeshipUpsellController, RefillPairsController, RefillPairsAdminController],
   providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService, FreeshipUpsellService, RefillPairsService],
-  exports: [CatalogService, ImageResizeService],
+  exports: [CatalogService, ImageResizeService, RefillPairsService],
 })
 export class CatalogModule {}

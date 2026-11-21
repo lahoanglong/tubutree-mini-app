@@ -236,4 +236,5 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "components/admin/campaign-form.tsx::codesText": "mỗi dòng một mã: DTO giới hạn số mã (CAMPAIGN_MAX_COUPONS) và từng mã (64), không giới hạn cả khối chữ",
   "components/admin/vn-date-input.tsx::text": "ô ngày dd/mm/yyyy định dạng cố định (10 ký tự), kiểm bằng bộ chọn ngày",
   "components/admin/gomdon-config-card.tsx::warehouse[f]": "SetConfigDto.value dùng @Allow, không có trần; 255 là trần do chính màn đặt",
+  "app/admin/gio-g/pilot-orders-panel.tsx::phonesInput": "ô gõ thô tối đa 5 SĐT người thử, có thể kèm dấu cách, chấm phẩy; web tách và bỏ khoảng trắng (splitPhones) trước khi gửi ?phones=, API kiểm từng số bằng parseTestPhones (golive-pilot.service.ts: tối đa 5 số dạng 0xxxxxxxxx) và PilotOrdersQuery.phones tối đa PILOT_PHONES_MAX * 16 ký tự; 120 là trần do chính màn đặt",
 };

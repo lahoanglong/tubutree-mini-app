@@ -59,6 +59,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261117120000_engagement_daily_badges',
   // Chỉ thêm một dòng cờ tắt vào `system_configs`, không đổi schema.
   '20261118170000_mss_stock_sync_flag',
+  // Bảng mới `admin_audit_logs` (sổ dọn đơn thử ở /admin/gio-g), rỗng lúc tạo; image cũ không đọc, không ghi.
+  '20261121130000_w13_02_admin_audit_logs',
 ];
 
 /**
@@ -522,7 +524,7 @@ function bankCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.bank_account', title, `BIN ${(bin as string).trim()}, số tài khoản đuôi ${last4}`);
 }
 
-const LEGAL_DOCS = { 'legal.dieu-khoan': 'điều khoản', 'legal.bao-mat': 'bảo mật', 'legal.doi-tra': 'đổi trả', 'legal.van-chuyen': 'vận chuyển', 'legal.thanh-toan': 'thanh toán' } as const;
+export const LEGAL_DOCS = { 'legal.dieu-khoan': 'điều khoản', 'legal.bao-mat': 'bảo mật', 'legal.doi-tra': 'đổi trả', 'legal.van-chuyen': 'vận chuyển', 'legal.thanh-toan': 'thanh toán' } as const;
 
 function legalPoliciesCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   const title = 'Chính sách hiển thị cho khách';

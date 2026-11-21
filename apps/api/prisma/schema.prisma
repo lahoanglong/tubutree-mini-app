@@ -4711,3 +4711,23 @@ model MerchShelfPin {
   @@index([productId])
   @@map("merch_shelf_pins")
 }
+
+
+/// Sổ thao tác quản trị đụng nhiều bản ghi một lần (vd dọn đơn thử sau Giờ G ở /admin/gio-g): ai làm, việc gì, trên mã nào, kết quả từng mã.
+/// Chỉ thêm, không sửa, không xoá. `targetIds` là mã đơn (không phải id) để tra ngược "đơn này đã được dọn chưa" bằng chỉ mục GIN.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  /// GOLIVE_PILOT_CLEANUP
+  action     String
+  /// ORDER
+  targetType String
+  targetIds  String[] @default([])
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetIds], type: Gin)
+  @@map("admin_audit_logs")
+}

@@ -4636,6 +4636,34 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(nav.textContent).not.toContain('Từ khoá tìm kiếm');
   });
 
+  it('quản trị viên có lối vào "Bảng kiểm Giờ G" ngay dưới "Sức khoẻ hệ thống" trong nhóm Cài đặt: liên kết /admin/gio-g, đủ 44px, bấm không đổi tab', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const group = container.querySelector('nav[aria-label="Mục quản trị"] [role="group"][aria-label="Cài đặt"]')!;
+    const rows = [...group.querySelectorAll('li')].map((li) => navLabel(li));
+    expect(rows.slice(-2)).toEqual(['Sức khoẻ hệ thống', 'Bảng kiểm Giờ G']);
+    const a = group.querySelector<HTMLAnchorElement>('a[data-nav-item="goLive"]')!;
+    expect(a.getAttribute('href')).toBe('/admin/gio-g');
+    expect(a.className).toContain('min-h-[44px]');
+    a.addEventListener('click', (e) => e.preventDefault());
+    click(a);
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+  });
+
+  it('nhân viên (kể cả đủ mọi nhóm việc) không thấy lối vào "Bảng kiểm Giờ G": API admin/golive chỉ nhận ADMIN', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const nav = container.querySelector('nav[aria-label="Mục quản trị"]')!;
+    expect(nav.querySelector('a[href="/admin/gio-g"]')).toBeNull();
+    expect(nav.textContent).not.toContain('Bảng kiểm Giờ G');
+  });
+
   it('mọi trang con /admin/<thư mục>/page.tsx đều có lối vào từ menu quản trị (không còn trang mồ côi)', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
