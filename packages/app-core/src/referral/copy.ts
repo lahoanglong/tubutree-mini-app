@@ -12,6 +12,15 @@ export const GREEN_CARD_COPY = {
   rewardNoMin: 'Bạn bè mua đơn đầu, cả hai nhận +{points} Điểm Xanh',
   invitePlain: 'Gửi link mời để bạn bè sống xanh cùng bạn',
   copy: 'Sao chép link',
+  // Thẻ chia sẻ ở khối Mời bạn (`share-card.ts`): lời mời, câu gửi kèm link và nhãn ô số.
+  shareTitle: 'Tặng bạn trải nghiệm thuần khiết',
+  shareOffer: 'Nhận +{points} Điểm Xanh khi bạn đặt đơn đầu từ {min}',
+  shareOfferNoMin: 'Nhận +{points} Điểm Xanh khi bạn đặt đơn đầu',
+  shareMessage: 'Tặng bạn trải nghiệm thuần khiết — nhận +{points} Điểm Xanh khi bạn đặt đơn đầu từ {min}',
+  shareMessageNoMin: 'Tặng bạn trải nghiệm thuần khiết — nhận +{points} Điểm Xanh khi bạn đặt đơn đầu',
+  statInvited: 'Bạn bè đã mời',
+  statSucceeded: 'Bạn mời thành công',
+  statPoints: 'Điểm Xanh đã nhận',
 } as const;
 
 export type GreenCardCopyKey = keyof typeof GREEN_CARD_COPY;
@@ -25,6 +34,14 @@ export const GREEN_CARD_COPY_MAX: Record<GreenCardCopyKey, number> = {
   rewardNoMin: 52,
   invitePlain: 44,
   copy: 14,
+  shareTitle: 34,
+  shareOffer: 60,
+  shareOfferNoMin: 48,
+  shareMessage: 100,
+  shareMessageNoMin: 84,
+  statInvited: 16,
+  statSucceeded: 20,
+  statPoints: 20,
 };
 
 export function greenCardCopy(key: GreenCardCopyKey, vars: Record<string, string | number> = {}): string {

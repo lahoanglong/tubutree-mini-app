@@ -40,6 +40,14 @@ export interface ReferralFirstOrderGuardDTO {
   blocked: Record<ReferralGuardReason, number>;
 }
 
+/** Lượt khách bấm gửi link mời trong kỳ (sự kiện `green_card_shared`), theo cách gửi. */
+export interface ReferralShareStatsDTO {
+  /** Mở hộp chia sẻ (Zalo Mini App, Web Share API, hay chép lời mời khi máy không có hộp chia sẻ). */
+  share: number;
+  /** Sao chép link mời. */
+  copy: number;
+}
+
 export interface AdminGrowthOverviewDTO {
   generatedAt: string;
   days: GrowthWindowDays;
@@ -60,4 +68,6 @@ export interface AdminGrowthOverviewDTO {
   games: { players: number; buyers: number; byGame: GrowthGameRow[] };
   daily: GrowthDailyPoint[];
   referralFirstOrder: ReferralFirstOrderGuardDTO;
+  /** Optional: API cũ chưa trả, khi đó khối không có dòng lượt gửi. */
+  referralShares?: ReferralShareStatsDTO;
 }

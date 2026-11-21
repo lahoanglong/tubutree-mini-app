@@ -88,6 +88,13 @@ describe('sitemap', () => {
     expect(urls.filter((u) => u.includes('ds-gallery'))).toEqual([]);
   });
 
+  it('nộp /bo-qua-tang (trang Bộ quà tặng & combo khởi đầu, lập chỉ mục) theo route map thật', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+    const entry = (await sitemap()).find((e) => e.url === 'https://app.tubutree.com/bo-qua-tang');
+    expect(entry).toMatchObject({ changeFrequency: 'weekly', priority: 0.6 });
+  });
+
   it('không nộp /uu-dai và /ma-giam-gia: hai trang công khai nhưng noindex (dùng route map thật)', async () => {
     const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
     routeMocks.publicStaticRoutes.mockReturnValueOnce([...actual.publicStaticRoutes(), '/uu-dai', '/ma-giam-gia']);

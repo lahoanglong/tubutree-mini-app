@@ -4,11 +4,11 @@ import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { BundlesController } from './bundles.controller';
 
 describe('BundlesController', () => {
-  const svc = { forProduct: jest.fn().mockResolvedValue({ combos: [], addons: [] }), homeCombos: jest.fn().mockResolvedValue([]) };
+  const svc = { forProduct: jest.fn().mockResolvedValue({ combos: [], addons: [] }), homeCombos: jest.fn().mockResolvedValue([]), giftLanding: jest.fn().mockResolvedValue({ combos: [], freeshipThreshold: 199_000, giftTrialMinOrder: null }) };
   const ctrl = new BundlesController(svc as never);
 
-  it('hai route đều công khai và cache chung CATALOG', () => {
-    for (const name of ['forProduct', 'homeCombos'] as const) {
+  it('các route đều công khai và cache chung CATALOG', () => {
+    for (const name of ['forProduct', 'homeCombos', 'giftLanding'] as const) {
       const fn = BundlesController.prototype[name];
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, fn)).toBe(true);
       expect(Reflect.getMetadata(PUBLIC_CACHE_POLICY_KEY, fn)).toBe('CATALOG');
@@ -18,6 +18,12 @@ describe('BundlesController', () => {
   it('đường dẫn: products/:slug/bundles và bundles/combos', () => {
     expect(Reflect.getMetadata('path', BundlesController.prototype.forProduct)).toBe('products/:slug/bundles');
     expect(Reflect.getMetadata('path', BundlesController.prototype.homeCombos)).toBe('bundles/combos');
+    expect(Reflect.getMetadata('path', BundlesController.prototype.giftLanding)).toBe('bundles/gift-landing');
+  });
+
+  it('trang Bộ quà tặng gọi thẳng service', async () => {
+    await expect(ctrl.giftLanding()).resolves.toEqual({ combos: [], freeshipThreshold: 199_000, giftTrialMinOrder: null });
+    expect(svc.giftLanding).toHaveBeenCalledWith();
   });
 
   it('chuyển slug và limit xuống service', async () => {

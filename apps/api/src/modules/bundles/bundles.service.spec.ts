@@ -296,6 +296,58 @@ describe('BundlesService.homeCombos', () => {
   });
 });
 
+describe('BundlesService.giftLanding (trang Bộ quà tặng)', () => {
+  const GIFT_KEYS: Record<string, unknown> = {
+    'commerce.gift_trial_enabled': true,
+    'commerce.gift_trial_min_order': 299_000,
+    'commerce.gift_trial_options': [{ variationId: 'g1' }, { variationId: 'g2', minOrder: 499_000 }],
+  };
+  const landingSetup = (o: { keys?: Record<string, unknown>; giftStock?: string[]; rows?: unknown[] } = {}) => {
+    const base = setup({ rows: o.rows });
+    const keys = { ...GIFT_KEYS, ...(o.keys ?? {}) };
+    const config = { get: jest.fn().mockImplementation(async (k: string, fb: unknown) => (k in keys ? keys[k] : fb)) };
+    // Lần gọi variation.findMany theo id quà: trả đúng các quà còn đưa ra được.
+    base.prisma.variation.findMany.mockImplementation(async (args: { where: { id: { in: string[] } } }) =>
+      args.where.id.in.filter((id) => (o.giftStock ?? ['g1', 'g2']).includes(id)).map((id) => ({ id })),
+    );
+    return { svc: new BundlesService(base.prisma as never, base.catalog as never, config as never), prisma: base.prisma };
+  };
+
+  it('combo như Trang chủ (tối đa 8) và mốc quà thấp nhất còn quà thật', async () => {
+    const rows = Array.from({ length: 10 }, (_, i) => row({ id: `b${i}` }));
+    const { svc, prisma } = landingSetup({ rows });
+    const out = await svc.giftLanding(NOW);
+    expect(out.combos).toHaveLength(8);
+    expect(out.freeshipThreshold).toBe(199_000);
+    expect(out.giftTrialMinOrder).toBe(299_000);
+    expect(prisma.bundle.findMany.mock.calls[0][0].where).toMatchObject({ ...bundleLiveWhere(NOW), kind: 'BUNDLE_PCT' });
+    const giftWhere = prisma.variation.findMany.mock.calls.map((c: unknown[]) => (c[0] as { where: Record<string, unknown> }).where).find((w: Record<string, unknown>) => 'stock' in w);
+    expect(giftWhere).toMatchObject({ id: { in: ['g1', 'g2'] }, stock: { gte: 1 } });
+  });
+
+  it('quà mốc thấp đã hết: mốc là quà còn lại; mốc chung sửa ở Growth Hub được đọc lại, không ghi cứng', async () => {
+    expect((await landingSetup({ giftStock: ['g2'] }).svc.giftLanding(NOW)).giftTrialMinOrder).toBe(499_000);
+    expect((await landingSetup({ keys: { 'commerce.gift_trial_min_order': 350_000 } }).svc.giftLanding(NOW)).giftTrialMinOrder).toBe(350_000);
+  });
+
+  it('ngưỡng Miễn phí giao hàng đọc từ cấu hình; số hỏng thì null', async () => {
+    expect((await landingSetup({ keys: { 'shipping.free_threshold': 250_000 } }).svc.giftLanding(NOW)).freeshipThreshold).toBe(250_000);
+    expect((await landingSetup({ keys: { 'shipping.free_threshold': 'abc' } }).svc.giftLanding(NOW)).freeshipThreshold).toBeNull();
+    expect((await landingSetup({ keys: { 'shipping.free_threshold': 0 } }).svc.giftLanding(NOW)).freeshipThreshold).toBeNull();
+  });
+
+  it('cờ tắt, không có quà, hay mọi quà hết: null (không hứa quà)', async () => {
+    expect((await landingSetup({ keys: { 'commerce.gift_trial_enabled': false } }).svc.giftLanding(NOW)).giftTrialMinOrder).toBeNull();
+    expect((await landingSetup({ keys: { 'commerce.gift_trial_options': [] } }).svc.giftLanding(NOW)).giftTrialMinOrder).toBeNull();
+    expect((await landingSetup({ giftStock: [] }).svc.giftLanding(NOW)).giftTrialMinOrder).toBeNull();
+  });
+
+  it('không có combo nào đang chạy: danh sách rỗng, mốc quà vẫn trả', async () => {
+    const out = await landingSetup({ rows: [] }).svc.giftLanding(NOW);
+    expect(out).toEqual({ combos: [], freeshipThreshold: 199_000, giftTrialMinOrder: 299_000 });
+  });
+});
+
 describe('BundlesService.greenBoxPage (trang ghép Hộp Xanh)', () => {
   const pageSetup = (o: { on?: boolean; products?: { id: string; categoryIds: string[] }[]; cards?: ReturnType<typeof card>[]; flash?: FlashRow[] } = {}) => {
     const prisma = {

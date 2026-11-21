@@ -99,7 +99,17 @@
       "web": "apps/web/src/components/mini/combo-card.tsx",
       "props": "ComboCardProps",
       "screens": [
-        "/s/:slug"
+        "/s/:slug",
+        "/gift-combos"
+      ]
+    },
+    {
+      "name": "InviteShareCard",
+      "miniapp": "apps/miniapp/src/components/referral/invite-share-card.tsx",
+      "web": "apps/web/src/components/referral/invite-share-card.tsx",
+      "props": "InviteShareCardProps",
+      "screens": [
+        "/profile"
       ]
     },
     {

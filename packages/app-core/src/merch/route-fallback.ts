@@ -13,6 +13,7 @@ const ENTRIES: Record<string, Entry> = {
   '/vouchers': { mini: '/offers?codes=all', web: '/uu-dai?codes=all', pending: false },
   '/orders': { mini: '/orders', web: '/tai-khoan/don-hang', pending: false },
   '/browse': { mini: '/browse', web: '/san-pham', pending: false },
+  '/gift-combos': { mini: '/gift-combos', web: '/bo-qua-tang', pending: false },
 };
 
 /**

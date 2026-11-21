@@ -232,23 +232,31 @@ describe('hub /tai-khoan — thẻ danh tính và mã giới thiệu', () => {
     expect(share.mock.calls[0]![0].text).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu');
   });
 
-  it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp; chưa có ai thì không hiện dòng thống kê', async () => {
-    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 2, earnedPoints: 20, nextMilestone: { count: 5, bonusPoints: 50 } });
+  const statTiles = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll('[data-testid="invite-share-stats"] > div')).map((d) => `${d.querySelector('dt')!.textContent}: ${d.querySelector('dd')!.textContent}`);
+
+  it('đã có bạn thành công: ô số bạn và điểm đã nhận (số canh cột), mốc kế tiếp; chưa có ai thì không có ô số', async () => {
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 2, earnedPoints: 1200, nextMilestone: { count: 5, bonusPoints: 50 } });
     const c = await mount();
-    expect(c.textContent).toContain('Đã mời thành công 2 bạn, nhận 20 điểm.');
+    expect(statTiles(c)).toEqual(['Bạn mời thành công: 2', 'Điểm Xanh đã nhận: 1.200']);
     expect(c.textContent).toContain('Mời thêm 3 bạn để nhận 50 điểm');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0 });
+    const c2 = await mount();
+    expect(c2.querySelector('[data-testid="invite-share-stats"]')).toBeNull();
   });
 
-  it('đã đủ hoặc vượt mốc: không in "Mời thêm" số âm; CTV không thấy thống kê Điểm Xanh', async () => {
+  it('đã đủ hoặc vượt mốc: không in "Mời thêm" số âm; CTV không thấy ô Điểm Xanh', async () => {
     mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 7, earnedPoints: 70, nextMilestone: { count: 5, bonusPoints: 50 } });
     const c = await mount();
-    expect(c.textContent).toContain('Đã mời thành công 7 bạn, nhận 70 điểm.');
+    expect(statTiles(c)).toEqual(['Bạn mời thành công: 7', 'Điểm Xanh đã nhận: 70']);
     expect(c.textContent).not.toContain('Mời thêm');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
     const c2 = await mount();
-    expect(c2.textContent).not.toContain('Đã mời thành công');
+    expect(statTiles(c2)).toEqual(['Bạn mời thành công: 7']);
   });
 
   it('chưa có mã giới thiệu: không có dòng Mời bạn nhận quà, không có nút chép/chia sẻ', async () => {

@@ -32,6 +32,7 @@ const overview = (days: 7 | 30): AdminGrowthOverviewDTO => ({
     players: 2,
   })),
   referralFirstOrder: { rewarded: 12, blocked: { SELF: 0, PHONE: 1, ZALO: 0, ADDRESS: 1, IP: 3 } },
+  referralShares: { share: 1234, copy: 56 },
 });
 
 const campaign = (o: Partial<AdminCampaignRow>): AdminCampaignRow => ({
@@ -125,6 +126,9 @@ describe('GrowthHubTab', () => {
     expect(text).toContain('SĐT 1 · Địa chỉ 1');
     // 3 chặn theo IP / (12 đã thưởng + 3 chặn theo IP) = 20%.
     expect(text).toContain('Chặn theo IP chiếm 20%');
+    // Lượt bấm gửi link mời (sự kiện green_card_shared) cùng khối với thưởng đơn đầu.
+    expect(box.querySelector('[data-guard="shares"]')!.textContent).toBe('1.290');
+    expect(box.querySelector('[data-referral-shares]')!.textContent).toContain('chia sẻ 1.234 · sao chép 56');
   });
 
   it('chọn 30 ngày thì gọi lại với days=30 và vẽ 30 cột mỗi biểu đồ', async () => {

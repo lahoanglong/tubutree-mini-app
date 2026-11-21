@@ -22,6 +22,14 @@ export class BundlesController {
     return this.bundles.homeCombos(limit);
   }
 
+  /** Trang Bộ quà tặng & combo khởi đầu: combo đang bán được và mốc quà dùng thử 0đ (null khi không còn quà). */
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('bundles/gift-landing')
+  giftLanding() {
+    return this.bundles.giftLanding();
+  }
+
   /** Trang ghép Hộp Xanh: món đủ điều kiện nhóm theo danh mục, kèm bảng bậc. Cờ tắt trả `enabled: false`. */
   @Public()
   @PublicCache('CATALOG')

@@ -637,6 +637,15 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.itemsLabel': 'Gồm {n} món',
   'combo.more': '+{n}',
   'combo.soldOutSpoken': 'Combo tạm hết: {title}',
+  // Trang Bộ quà tặng & combo khởi đầu (web /bo-qua-tang, Mini App /gift-combos): số tiền đều do máy chủ trả.
+  'giftCombos.title': 'Bộ quà tặng & combo khởi đầu',
+  'giftCombos.intro': 'Combo sản phẩm xanh chọn sẵn, giá cả bộ đã giảm. Thêm cả bộ vào giỏ chỉ một chạm.',
+  'giftCombos.metaDescription': 'Bộ quà tặng và combo khởi đầu sống xanh của Tubu Tree: giá cả bộ đã giảm, thêm vào giỏ một chạm, kèm Miễn phí giao hàng và quà dùng thử theo mốc đơn.',
+  'giftCombos.freeship': 'Miễn phí giao hàng cho đơn từ {amount}',
+  'giftCombos.gift': 'Tặng quà dùng thử 0đ cho đơn từ {amount}',
+  'giftCombos.calloutsLabel': 'Ưu đãi kèm đơn',
+  'giftCombos.listLabel': 'Danh sách combo, {n} bộ',
+  'giftCombos.empty': 'Chưa có combo nào đang mở bán',
 
   // Trang shop (gian hàng CTV, thương hiệu)
   'shop.tabShop': 'Shop',

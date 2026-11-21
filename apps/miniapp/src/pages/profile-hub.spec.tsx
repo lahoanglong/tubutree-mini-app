@@ -499,23 +499,26 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     expect(await screen.findByText(/hoàn tất đơn thứ hai từ 200k trong 30 ngày/)).toBeInTheDocument();
   });
 
-  it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp (chuyển từ trang Ví sang đây)', async () => {
-    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 20, nextMilestone: { count: 5, bonusPoints: 50 } });
+  const statTiles = async () =>
+    Array.from((await screen.findByTestId('invite-share-stats')).querySelectorAll(':scope > div')).map((d) => `${d.querySelector('dt')!.textContent}: ${d.querySelector('dd')!.textContent}`);
+
+  it('đã có bạn thành công: ô số bạn và điểm đã nhận, mốc kế tiếp (chuyển từ trang Ví sang đây)', async () => {
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 1200, nextMilestone: { count: 5, bonusPoints: 50 } });
     renderPage();
-    expect(await screen.findByText('Đã mời thành công 2 bạn, nhận 20 điểm.')).toBeInTheDocument();
+    expect(await statTiles()).toEqual(['Bạn mời thành công: 2', 'Điểm Xanh đã nhận: 1.200']);
     expect(screen.getByText('Mời thêm 3 bạn để nhận 50 điểm')).toBeInTheDocument();
   });
 
-  it('chưa có ai: không hiện dòng thống kê; đã đủ hoặc vượt mốc: không in "Mời thêm -2 bạn"', async () => {
+  it('chưa có ai: không có ô số; đã đủ hoặc vượt mốc: không in "Mời thêm -2 bạn"', async () => {
     mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 7, earnedPoints: 70, nextMilestone: { count: 5, bonusPoints: 50 } });
     const { unmount } = renderPage();
-    await screen.findByText('Đã mời thành công 7 bạn, nhận 70 điểm.');
+    expect(await statTiles()).toEqual(['Bạn mời thành công: 7', 'Điểm Xanh đã nhận: 70']);
     expect(screen.queryByText(/Mời thêm/)).toBeNull();
     unmount();
     mocks.getReferral.mockResolvedValue(REFERRAL);
     renderPage();
     await screen.findByText(/hoàn tất đơn thứ hai từ 200k/);
-    expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
+    expect(screen.queryByTestId('invite-share-stats')).toBeNull();
   });
 
   it('"Chia sẻ" gọi shareLink với đường dẫn ?ref=; Zalo từ chối thì chép liên kết kèm mã và báo qua snackbar', async () => {
@@ -571,8 +574,8 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 20 });
     renderPage();
     await openInvite();
-    await waitFor(() => expect(mocks.getReferral).toHaveBeenCalled());
-    expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
+    // CTV: chỉ ô bạn bè, không có ô Điểm Xanh giới thiệu.
+    expect(await statTiles()).toEqual(['Bạn mời thành công: 2']);
     // CTV chỉ hưởng hoa hồng: khối không hứa Điểm Xanh giới thiệu mà máy chủ sẽ không trả.
     expect(screen.queryByText(/hoàn tất đơn thứ hai/)).toBeNull();
     expect(screen.getByText('Bạn mới nhận mã giảm giá cho đơn đầu.')).toBeInTheDocument();

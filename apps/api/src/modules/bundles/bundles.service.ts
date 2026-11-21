@@ -9,6 +9,9 @@ import { BUNDLE_MIN_PRODUCTS, addonPayPrice } from './bundle-rules';
 import { bundleLiveWhere, isTubuOnlyBundle, loadFlashFootprint, readBundleMaxPct, type FlashFootprint } from './bundle-read';
 import { loadGreenBoxSettings, type GreenBoxTier } from './green-box';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from '../integrations/pancake/pancake-fulfilment';
+import { loadGiftTrialSettings } from '../gift-tiers/gift-trial';
+import { GIFT_TRIAL_VARIATION_WHERE } from '../gift-tiers/gift-trial.service';
+import { FREE_SHIP_THRESHOLD_DEFAULT } from '../pricing/pricing.service';
 
 export const PDP_COMBO_MAX = 2;
 export const PDP_ADDON_MAX = 3;
@@ -48,6 +51,19 @@ export interface BundleDTO {
 export interface GreenBoxPageGroup {
   category: { id: string; name: string; slug: string } | null;
   products: CardOf[];
+}
+
+/** Trang Bộ quà tặng & combo khởi đầu (`/bo-qua-tang` web, `/gift-combos` Mini App). */
+export interface GiftLandingDTO {
+  /** Cùng luật Combo Trang chủ (đang chạy, mọi món còn hàng), tối đa `HOME_COMBOS_MAX`, theo thứ tự admin sắp. */
+  combos: BundleDTO[];
+  /** Ngưỡng Miễn phí giao hàng: cùng khoá và mặc định với cấu hình công khai (`shipping.free_threshold`); số hỏng thì null, trang không hứa. */
+  freeshipThreshold: number | null;
+  /**
+   * Mốc thấp nhất mở quà dùng thử 0đ (`commerce.gift_trial_min_order`, quà có mốc riêng thì mốc nhỏ nhất). null khi cờ tắt hay không còn quà
+   * nào đưa ra được (hết hàng, ngừng bán): trang không hứa quà mà giỏ sẽ không tặng.
+   */
+  giftTrialMinOrder: number | null;
 }
 
 export interface GreenBoxPageDTO {
@@ -134,6 +150,30 @@ export class BundlesService {
     });
     const shown = await this.toPublic(rows, now);
     return shown.filter((b) => b.items.every((i) => i.inStock)).slice(0, take);
+  }
+
+  /**
+   * Trang Bộ quà tặng & combo khởi đầu: combo đang bán được và mốc quà dùng thử 0đ còn quà thật. Số tiền đều do máy chủ trả (giá combo tính như
+   * Trang chủ, giỏ vẫn tính lại); trang không ghi cứng giá hay mốc nào.
+   */
+  async giftLanding(now: Date = new Date()): Promise<GiftLandingDTO> {
+    const [combos, freeship, giftTrialMinOrder] = await Promise.all([
+      this.homeCombos(HOME_COMBOS_MAX, now),
+      this.config.get<unknown>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
+      this.giftTrialFloor(),
+    ]);
+    const freeshipThreshold = typeof freeship === 'number' && Number.isInteger(freeship) && freeship > 0 ? freeship : null;
+    return { combos, freeshipThreshold, giftTrialMinOrder };
+  }
+
+  private async giftTrialFloor(): Promise<number | null> {
+    const settings = await loadGiftTrialSettings(this.config);
+    if (!settings.enabled || settings.options.length === 0) return null;
+    const ids = settings.options.map((o) => o.variationId);
+    const live = await this.prisma.variation.findMany({ where: { id: { in: ids }, ...GIFT_TRIAL_VARIATION_WHERE }, select: { id: true } });
+    const inStock = new Set(live.map((v) => v.id));
+    const floors = settings.options.filter((o) => inStock.has(o.variationId)).map((o) => o.minOrder);
+    return floors.length > 0 ? Math.min(...floors) : null;
   }
 
   /**

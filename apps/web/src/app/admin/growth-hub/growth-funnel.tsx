@@ -11,6 +11,7 @@ import {
   type PurchaseFunnelStep,
   type ReferralFirstOrderGuardDTO,
   type ReferralGuardReason,
+  type ReferralShareStatsDTO,
 } from '@tubutree/shared-types';
 import { apiFetch } from '@/lib/client-api';
 import { formatCount, formatPct, ratioPct } from '@/components/admin/launch-watch-format';
@@ -133,7 +134,7 @@ const GUARD_REASON_LABELS: Record<Exclude<ReferralGuardReason, 'IP'>, string> = 
  * Thưởng mời bạn đơn đầu: luật IP so đúng địa chỉ IP, mà 4G và Wi-Fi văn phòng dùng chung một IP công khai, nên bạn thật có thể bị chặn.
  * Tỷ lệ chặn theo IP tính trên số đơn đầu đã thưởng cộng số bị chặn theo IP.
  */
-function ReferralGuard({ stats }: { stats: ReferralFirstOrderGuardDTO }) {
+function ReferralGuard({ stats, shares }: { stats: ReferralFirstOrderGuardDTO; shares?: ReferralShareStatsDTO }) {
   const others = REFERRAL_GUARD_REASONS.filter((r): r is Exclude<ReferralGuardReason, 'IP'> => r !== 'IP');
   const otherTotal = others.reduce((sum, r) => sum + stats.blocked[r], 0);
   const otherParts = others.filter((r) => stats.blocked[r] > 0).map((r) => `${GUARD_REASON_LABELS[r]} ${formatCount(stats.blocked[r])}`);
@@ -156,6 +157,11 @@ function ReferralGuard({ stats }: { stats: ReferralFirstOrderGuardDTO }) {
       <p className="mt-2 text-xs text-stone-600">
         Chặn theo IP chiếm {formatPct(ipPct)} số đơn đầu đã xét (đã thưởng và chặn theo IP). 4G và Wi-Fi văn phòng dùng chung IP, nên tỷ lệ này cao có thể là chặn nhầm bạn thật.
       </p>
+      {shares && (
+        <p data-referral-shares className="mt-2 text-xs tabular-nums text-stone-600">
+          Lượt khách bấm gửi link mời: <strong data-guard="shares" className="font-semibold text-stone-900">{formatCount(shares.share + shares.copy)}</strong> (chia sẻ {formatCount(shares.share)} · sao chép {formatCount(shares.copy)})
+        </p>
+      )}
     </section>
   );
 }
@@ -236,7 +242,7 @@ function Overview({ data }: { data: AdminGrowthOverviewDTO }) {
         </section>
       </div>
 
-      {data.referralFirstOrder && <ReferralGuard stats={data.referralFirstOrder} />}
+      {data.referralFirstOrder && <ReferralGuard stats={data.referralFirstOrder} shares={data.referralShares} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         <DailyBars title="Đơn thành công mỗi ngày" points={data.daily} field="orders" unit="đơn" />

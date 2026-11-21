@@ -1,4 +1,5 @@
 import type { ComboView } from '@tubutree/app-core/commerce/bundle-view';
+import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useNavigate } from 'zmp-ui';
 import { ComboCard } from '../ui/combo-card';
@@ -14,16 +15,17 @@ export interface HomeCombosProps {
   views: readonly ComboView[];
 }
 
-/** Combo tiết kiệm (khối `combos` của Trang chủ, sau Bán chạy nhất): mỗi thẻ một combo toàn sàn, "Thêm cả combo" vào giỏ ngay tại Trang chủ. */
+/** Combo tiết kiệm (khối `combos` của Trang chủ, sau Bán chạy nhất): mỗi thẻ một combo toàn sàn, "Thêm cả combo" vào giỏ ngay tại Trang chủ; "Xem tất cả" mở trang Bộ quà tặng. */
 export function HomeCombos({ views }: HomeCombosProps) {
   const { add, busyId } = useBundleAdd();
   const navigate = useNavigate();
   if (views.length === 0) return null;
   const title = fillCopy('combo.homeTitle');
+  const seeAll = seeAllHref('home.combos');
   return (
     <section aria-label={title} data-testid="home-combos">
       <div style={{ padding: '0 16px' }}>
-        <SectionHeader title={title} />
+        <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />
       </div>
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {views.map((v) => {

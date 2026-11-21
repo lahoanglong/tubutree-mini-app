@@ -48,6 +48,18 @@ export const fetchProductBundles = (http: HttpClient, slug: string) =>
 export const fetchHomeCombos = (http: HttpClient, limit?: number) =>
   http.get<BundleDTO[]>('/bundles/combos', { query: limit ? { limit } : {}, anonymous: true });
 
+/** `GET /bundles/gift-landing`: trang Bộ quà tặng & combo khởi đầu (web `/bo-qua-tang`, Mini App `/gift-combos`). */
+export interface GiftLanding {
+  /** Combo đang chạy mà mọi món còn hàng (luật Combo Trang chủ), tối đa 8. */
+  combos: BundleDTO[];
+  /** Ngưỡng Miễn phí giao hàng của cấu hình; null thì không nói. */
+  freeshipThreshold: number | null;
+  /** Mốc thấp nhất mở quà dùng thử 0đ còn quà thật; null khi cờ tắt hay hết quà. */
+  giftTrialMinOrder: number | null;
+}
+
+export const fetchGiftLanding = (http: HttpClient) => http.get<GiftLanding>('/bundles/gift-landing', { anonymous: true });
+
 /** Một danh mục của trang ghép Hộp Xanh. */
 export interface GreenBoxPageGroup {
   category: { id: string; name: string; slug: string } | null;

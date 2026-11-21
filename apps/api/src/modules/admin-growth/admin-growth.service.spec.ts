@@ -10,7 +10,7 @@ const win = (n: number): PurchaseFunnelWindowDTO => ({
 });
 const funnel: PurchaseFunnelDTO = { generatedAt: 'x', windows: { h72: win(1), d7: win(7), d30: win(30) } };
 
-/** Thứ tự truy vấn của compute: mua lần 2, game, đơn theo ngày, người chơi theo ngày, chặn thưởng đơn đầu. */
+/** Thứ tự truy vấn của compute: mua lần 2, game, đơn theo ngày, người chơi theo ngày, chặn thưởng đơn đầu, lượt gửi link mời. */
 function makeService(answers: unknown[][], rewarded = 0) {
   const $queryRaw = jest.fn();
   for (const a of answers) $queryRaw.mockResolvedValueOnce(a);
@@ -40,6 +40,7 @@ describe('AdminGrowthService', () => {
       [{ day: '2026-11-18', n: 4n }, { day: '2026-11-12', n: 1n }],
       [{ day: '2026-11-17', n: 3n }],
       [{ reason: 'IP', n: 4n }, { reason: 'ADDRESS', n: 1n }],
+      [{ method: 'share', n: 6n }, { method: 'copy', n: 2n }, { method: null, n: 9n }],
     ], 9);
     const dto = await svc.overview(7, now);
     expect(dto.days).toBe(7);
@@ -78,10 +79,17 @@ describe('AdminGrowthService', () => {
     expect(dto.referralFirstOrder).toEqual({ rewarded: 9, blocked: { ...NO_BLOCKS, IP: 4, ADDRESS: 1 } });
     expect(findMany.mock.calls[0]![0].where.createdAt).toEqual({ gte: new Date('2026-11-11T17:00:00.000Z'), lte: now });
     expect($queryRaw.mock.calls[4]!).toEqual(expect.arrayContaining(['referral_first_order_blocked', '2026-11-11T17:00:00.000Z', now.toISOString()]));
+    // Lượt gửi link mời: chỉ hai cách gửi đã biết, dòng thiếu cách gửi bị bỏ.
+    expect(dto.referralShares).toEqual({ share: 6, copy: 2 });
+    expect($queryRaw.mock.calls[5]!).toEqual(expect.arrayContaining(['green_card_shared', '2026-11-11T17:00:00.000Z', now.toISOString()]));
+    // Lượt bấm lọc theo giờ máy chủ nhận: occurredAt do máy khách gửi, đồng hồ lệch thì rơi khỏi khung.
+    const shareSql = ($queryRaw.mock.calls[5]![0] as TemplateStringsArray).join('?');
+    expect(shareSql).toContain('e."receivedAt" >=');
+    expect(shareSql).not.toContain('occurredAt');
   });
 
   it('30 ngày: lấy cửa sổ d30 của phễu và 30 điểm theo ngày', async () => {
-    const { svc } = makeService([[], [], [], [], []]);
+    const { svc } = makeService([[], [], [], [], [], []]);
     const dto = await svc.overview(30, now);
     expect(dto.sinceDay).toBe('2026-10-20');
     expect(dto.funnel).toEqual(funnel.windows.d30);
@@ -89,19 +97,20 @@ describe('AdminGrowthService', () => {
     expect(dto.repeat).toEqual({ buyers: 0, returningBuyers: 0, newBuyers: 0, newBuyersWithSecond: 0 });
     expect(dto.games).toEqual({ players: 0, buyers: 0, byGame: [] });
     expect(dto.referralFirstOrder).toEqual({ rewarded: 0, blocked: NO_BLOCKS });
+    expect(dto.referralShares).toEqual({ share: 0, copy: 0 });
   });
 
   it('đệm 60 giây theo từng kỳ; lỗi thì lần sau tính lại', async () => {
-    const { svc, $queryRaw } = makeService([[], [], [], [], []]);
+    const { svc, $queryRaw } = makeService([[], [], [], [], [], []]);
     await svc.overview(7, now);
     await svc.overview(7, new Date(now.getTime() + 59_000));
-    expect($queryRaw).toHaveBeenCalledTimes(5);
+    expect($queryRaw).toHaveBeenCalledTimes(6);
     $queryRaw.mockRejectedValueOnce(new Error('db down'));
     await expect(svc.overview(30, now)).rejects.toThrow('db down');
     $queryRaw.mockResolvedValue([]);
     await expect(svc.overview(30, now)).resolves.toMatchObject({ days: 30 });
     await svc.overview(7, new Date(now.getTime() + 61_000));
-    expect($queryRaw.mock.calls.length).toBe(5 + 1 + 5 + 5);
+    expect($queryRaw.mock.calls.length).toBe(6 + 1 + 6 + 6);
   });
 });
 

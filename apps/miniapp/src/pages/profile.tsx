@@ -1,25 +1,26 @@
-import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Bell, Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Store, Settings, Info, ChevronDown, ChevronRight, Copy, Share2, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, CreditCard, Package, Truck, PackageCheck, Recycle, Gift, Ticket, CircleHelp, type LucideIcon,
+  Bell, Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Store, Settings, Info, ChevronDown, ChevronRight, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, CreditCard, Package, Truck, PackageCheck, Recycle, Gift, Ticket, CircleHelp, type LucideIcon,
 } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { inviteBody, inviteLandingOn, inviteProgressLine, inviteShareLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { inviteBody, inviteLandingOn, inviteProgressLine, inviteShareLink } from '@tubutree/app-core/commerce/invite-card';
 import { trackEvent } from '../services/analytics';
 import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { buildProfileMenu, PROFILE_MENU_COPY, PROFILE_ORDER_ROW, type ProfileLinkKey, type ProfileMenuLink, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
+import { inviteShareStats } from '@tubutree/app-core/referral/share-card';
 import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getReferral, getWallet } from '../services/account-api';
 import { ProfileAvatar } from '../components/account/profile-avatar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { InviteShareCard } from '../components/referral/invite-share-card';
 import { Card } from '../components/ui/card';
 import { EmptyState } from '../components/ui/empty-state';
 import { AuthPhaseView, useBlockedMessage } from '../components/ui/auth-gate';
@@ -32,7 +33,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
 import { GuestLinkCard } from '../components/home/guest-link-card';
-import { useActionLock, useShareWithFallback } from '../components/share-sheet';
+import { useActionLock } from '../components/share-sheet';
 import { getAuthMeFlags, getOwnedBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
@@ -44,7 +45,6 @@ import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
 import { miniAppLink } from '../utils/miniapp-link';
 import { SilentBoundary } from '../components/route-shell';
@@ -121,11 +121,7 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const goSmart = useSmartNavigate();
   const location = useLocation();
-  const { openSnackbar } = useSnackbar();
-  const shareWithFallback = useShareWithFallback();
-  // Chép và chia sẻ mã giới thiệu cùng một đối tượng nên chung một khoá; thử lại số đếm/hạng là khoá riêng. Cả hai là ref đồng bộ:
-  // state `busy` chỉ đổi sau lần vẽ kế nên hai cú chạm cùng nhịp vẫn đều đi qua.
-  const referralLock = useActionLock();
+  // Thử lại số đếm/hạng: khoá ref đồng bộ, vì state `busy` chỉ đổi sau lần vẽ kế nên hai cú chạm cùng nhịp vẫn đều đi qua (chép/chia sẻ mã có khoá riêng trong InviteShareCard).
   const reloadLock = useActionLock();
   const { user, status } = useAuthStore();
   const phase = useAuthPhase();
@@ -215,8 +211,8 @@ export default function ProfilePage() {
   const referralRules = { referrerPoints: referral?.referrerRewardPoints, minOrderAmount: referral?.minOrderAmount, windowDays: referral?.windowDays };
   // Cờ referral.share_card_enabled: link chép và chữ chia sẻ trỏ trang đích tubutree.com/moi/<mã>; nút "Chia sẻ qua Zalo" vẫn mở thẳng Mini App.
   const landing = inviteLandingOn(cfg);
-  const inviteUrl = code ? inviteShareLink({ landing, baseUrl: miniAppLink('/'), referralCode: code }) : '';
   const progress = landing ? inviteProgressLine(referral, earnsPoints) : null;
+  const viralOn = referralViralOn(cfg);
 
   const rows = buildProfileMenu({
     role: user.role,
@@ -233,29 +229,6 @@ export default function ProfilePage() {
     ctvAccess: ctvAccessQ.data,
     deskPointNames: deskQ.data?.map((p) => p.name),
   });
-
-  const copyReferral = () => {
-    if (!code) return;
-    void referralLock.run('copy', async () => {
-      haptic('light');
-      const ok = await copyText(inviteUrl);
-      openSnackbar(
-        ok
-          ? { text: fillCopy('invite.copied'), type: 'success' }
-          : { text: fillCopy('invite.copyFailed', { code }), type: 'info', duration: 4000 },
-      );
-    });
-  };
-  const shareReferral = () => {
-    if (!code) return;
-    void referralLock.run('share', async () => {
-      haptic('light');
-      await shareWithFallback(
-        { title: fillCopy('invite.shareTitle'), description: shareDescription(null, welcomeOffer), path: `/?ref=${code}` },
-        inviteShareText(inviteUrl),
-      );
-    });
-  };
 
   const countsFailed = summaryQ.isError;
   const reloadCounts = () => {
@@ -301,36 +274,33 @@ export default function ProfilePage() {
       <Text variant="body-sm" tone="secondary" as="p">
         {inviteBody(welcomeOffer, referralRules, earnsPoints)}
       </Text>
-      {referralViralOn(cfg) && (
+      {viralOn && (
         <SilentBoundary>
           <Suspense fallback={null}>
             <GreenCardBlock actions={false} />
           </Suspense>
         </SilentBoundary>
       )}
-      {(progress || (referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0))) && (
-        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }} data-testid={progress ? 'invite-progress' : undefined}>
-          {progress ?? (referral ? homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints)) : null)}
-        </Text>
-      )}
-      {progress && <InviteProgressViewed />}
-      {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
-      {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
-        <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
-          {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, formatPoints(referral.nextMilestone.bonusPoints))}
-        </Text>
-      )}
-      <Text variant="caption" as="p" style={{ marginTop: 10, color: 'var(--color-action-secondary-fg)' }}>
-        {fillCopy('invite.codeLabel')}: <strong>{code}</strong>
-      </Text>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-        <Button fullWidth icon={Share2} loading={referralLock.active === 'share'} aria-disabled={referralLock.busy || undefined} onPress={shareReferral}>
-          {fillCopy('invite.shareZalo')}
-        </Button>
-        <Button fullWidth variant="secondary" icon={Copy} loading={referralLock.active === 'copy'} aria-disabled={referralLock.busy || undefined} onPress={copyReferral}>
-          {fillCopy('invite.copyLink')}
-        </Button>
-      </div>
+      <InviteShareCard
+        code={code ?? ''}
+        shareUrl={(c) => inviteShareLink({ landing, baseUrl: miniAppLink('/'), referralCode: c })}
+        fallbackText={shareDescription(null, welcomeOffer)}
+        viral={viralOn}
+        stats={progress ? [] : inviteShareStats(referral, earnsPoints)}
+      >
+        {progress && (
+          <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-sm)' }} data-testid="invite-progress">
+            {progress}
+          </Text>
+        )}
+        {progress && <InviteProgressViewed />}
+        {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
+        {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
+          <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
+            {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, formatPoints(referral.nextMilestone.bonusPoints))}
+          </Text>
+        )}
+      </InviteShareCard>
     </div>
   );
 

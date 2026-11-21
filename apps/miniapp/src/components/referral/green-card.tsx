@@ -27,7 +27,7 @@ import { Heading, Text } from '../ui/text';
 
 /**
  * Thẻ thành tích Sổ tay Xanh (cờ growth.referral_viral_enabled, chunk tải lười). `actions`: ở Sổ tay Xanh thẻ có nút chia sẻ Zalo và sao
- * chép link mời; ở khối "Mời bạn sống xanh" của Cá nhân chỉ hai dòng số và thưởng, vì khối đó đã có sẵn hai nút cùng việc (một việc một nút).
+ * chép link mời; ở khối "Mời bạn sống xanh" của Cá nhân chỉ một dòng số, vì thẻ chia sẻ của khối đó đã nêu thưởng và có hai nút cùng việc.
  * Chưa có số hoặc lỗi thì không vẽ gì (cùng `web/components/referral/green-card.tsx`).
  */
 export default function GreenCardBlock({ actions }: { actions: boolean }) {
@@ -39,7 +39,6 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
   const card = q.data;
   if (!card) return null;
   const stats = greenCardStats(card);
-  const reward = greenCardRewardLine(card);
   if (!actions) {
     return (
       <Text
@@ -49,7 +48,7 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
         style={{ marginTop: 'var(--space-stack-xs)' }}
         data-testid="green-card-stats"
       >
-        {stats}. {reward}
+        {stats}
       </Text>
     );
   }
@@ -98,7 +97,7 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
           as="p"
           style={{ marginTop: 'var(--space-inline-xs)' }}
         >
-          {reward}
+          {greenCardRewardLine(card)}
         </Text>
         <div
           style={{

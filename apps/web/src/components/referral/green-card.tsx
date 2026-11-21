@@ -24,7 +24,7 @@ import { useActionLock } from '@/lib/use-action-lock';
 
 /**
  * Thẻ thành tích Sổ tay Xanh (cờ growth.referral_viral_enabled, chunk tải sau). `actions`: ở Sổ tay Xanh thẻ có nút chia sẻ và sao chép
- * link mời; ở khối "Mời bạn sống xanh" của Tài khoản chỉ một dòng số và thưởng, vì khối đó đã có hai nút cùng việc. Cùng Mini App
+ * link mời; ở khối "Mời bạn sống xanh" của Tài khoản chỉ một dòng số, vì thẻ chia sẻ của khối đó đã nêu thưởng và có hai nút cùng việc. Cùng Mini App
  * (`miniapp/src/components/referral/green-card.tsx`); chưa có số hoặc lỗi thì không vẽ gì.
  */
 export default function GreenCardBlock({ actions }: { actions: boolean }) {
@@ -35,7 +35,6 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
   const card = q.data;
   if (!card) return null;
   const stats = greenCardStats(card);
-  const reward = greenCardRewardLine(card);
   if (!actions) {
     return (
       <Text
@@ -45,7 +44,7 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
         style={{ marginTop: 'var(--space-stack-xs)' }}
         data-testid="green-card-stats"
       >
-        {stats}. {reward}
+        {stats}
       </Text>
     );
   }
@@ -101,7 +100,7 @@ export default function GreenCardBlock({ actions }: { actions: boolean }) {
           as="p"
           style={{ marginTop: 'var(--space-inline-xs)' }}
         >
-          {reward}
+          {greenCardRewardLine(card)}
         </Text>
         <div
           style={{
