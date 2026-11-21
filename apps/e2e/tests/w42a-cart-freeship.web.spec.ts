@@ -19,7 +19,8 @@ const USER = {
   id: 'u-w42a-cart', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
   pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0,
 };
-// Còn thiếu 200.000: "Khoai" (210.000) đóng được khoảng thiếu nên đứng đầu; thêm "Bơ" (60.000) thì còn thiếu 140.000 và "Mận" (150.000) thành món đóng.
+// Còn thiếu 200.000, trần giá món 120.000 (tubu-w7-02) nên "Khoai", "Mận", "Sầu riêng" rời dải; dải tối đa 2 món (tubu-w13-01), đắt trước: "Dâu", "Bơ".
+// Thêm "Bơ" thì còn "Dâu", "Ổi"; thêm "Dâu" thì còn thiếu 20.000, trần giá 45.000: "Chanh" và "Ổi" đều bù đủ (rẻ trước); dải cần đủ 2 món mới hiện.
 const BEST = [
   { slug: 'bo', name: 'Bơ', price: 60_000 },
   { slug: 'khoai', name: 'Khoai', price: 210_000 },
@@ -27,6 +28,7 @@ const BEST = [
   { slug: 'man', name: 'Mận', price: 150_000 },
   { slug: 'oi', name: 'Ổi', price: 40_000 },
   { slug: 'sau-rieng', name: 'Sầu riêng', price: 400_000 },
+  { slug: 'chanh', name: 'Chanh', price: 30_000 },
 ] as const;
 
 interface Line {
@@ -119,9 +121,8 @@ for (const vp of VIEWPORTS) {
 
       await expect(page.getByTestId('freeship-addons')).toBeVisible();
       const cards = page.getByTestId('freeship-addon');
-      expect(await cards.count()).toBeGreaterThanOrEqual(3);
-      expect(await cards.count()).toBeLessThanOrEqual(5);
-      await expect(cards.first()).toHaveAttribute('data-slug', 'khoai');
+      await expect(cards).toHaveCount(2);
+      await expect(cards.first()).toHaveAttribute('data-slug', 'dau');
       await expect(page.getByTestId('freeship-addon').filter({ hasText: 'Sầu riêng' })).toHaveCount(0);
       const buttons = page.getByTestId('freeship-add');
       for (let i = 0; i < (await buttons.count()); i += 1) {
@@ -149,9 +150,13 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
 
       const second = api.waitForCall('POST', '/cart/items');
-      await addButton(page, 'Mận').click();
-      expect((await second).body).toMatchObject({ variationId: 'v-man', quantity: 1 });
-      expect(shop.lines()).toHaveLength(3);
+      await addButton(page, 'Dâu').click();
+      expect((await second).body).toMatchObject({ variationId: 'v-dau', quantity: 1 });
+      await expect(progress(page)).toContainText('Mua thêm 20.000đ');
+      const third = api.waitForCall('POST', '/cart/items');
+      await addButton(page, 'Ổi').click();
+      expect((await third).body).toMatchObject({ variationId: 'v-oi', quantity: 1 });
+      expect(shop.lines()).toHaveLength(4);
       await expect(progress(page)).toHaveAttribute('data-reached', 'true');
       await expect(progress(page)).toHaveText('🎉 Đơn hàng đã được Miễn phí giao hàng');
       await expect(page.getByTestId('freeship-bar')).toHaveCount(0);

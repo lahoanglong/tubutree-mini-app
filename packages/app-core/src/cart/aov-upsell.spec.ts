@@ -133,15 +133,21 @@ describe('aovGiftExclusions', () => {
 });
 
 describe('pickAovAddons', () => {
-  it('món bù đủ khoảng thiếu đứng trước (rẻ trước), rồi món gần đủ (đắt trước); tối đa 4', () => {
+  it('tối đa 2 thẻ gọn (tubu-w13-01): món vừa đủ bù khoảng thiếu đứng trước, rẻ trước (vượt mốc ít tiền nhất)', () => {
+    expect(AOV_ADDON_MAX).toBe(2);
     const picked = pickAovAddons([c('a', 10_000), c('b', 50_000), c('d', 38_000), c('e', 30_000), c('f', 36_000), c('g', 20_000)], { shortfall: 35_000 });
-    expect(picked.map((p) => p.slug)).toEqual(['f', 'd', 'b', 'e']);
+    expect(picked.map((p) => p.slug)).toEqual(['f', 'd']);
     expect(picked).toHaveLength(AOV_ADDON_MAX);
+  });
+
+  it('không món nào bù đủ một mình: món gần đủ nhất (đắt trước) lấp khoảng thiếu', () => {
+    const picked = pickAovAddons([c('a', 10_000), c('e', 30_000), c('g', 20_000)], { shortfall: 35_000 });
+    expect(picked.map((p) => p.slug)).toEqual(['e', 'g']);
   });
 
   it('nguồn đã xếp ở máy chủ: giữ thứ tự nguồn trong nhóm bù đủ', () => {
     const picked = pickAovAddons([c('hot', 70_000), c('cheap', 36_000), c('near', 30_000)], { shortfall: 35_000, window: FREESHIP_BOOSTER_WINDOW, ranked: true });
-    expect(picked.map((p) => p.slug)).toEqual(['hot', 'cheap', 'near']);
+    expect(picked.map((p) => p.slug)).toEqual(['hot', 'cheap']);
   });
 
   it('trần món nhỏ 120.000đ: khoảng thiếu lớn vẫn không gợi ý món đắt', () => {
@@ -174,8 +180,10 @@ describe('pickAovAddons', () => {
     expect(picked.map((p) => p.slug)).toEqual(['keep', 'dup']);
   });
 
-  it(`dưới ${AOV_ADDON_MIN} món thì rỗng; đã đạt mốc (số còn thiếu 0, âm, NaN) cũng rỗng`, () => {
+  it(`dưới ${AOV_ADDON_MIN} món thì rỗng (sàn = trần: dải luôn đúng 2 thẻ hay không có); đã đạt mốc (số còn thiếu 0, âm, NaN) cũng rỗng`, () => {
+    expect(AOV_ADDON_MIN).toBe(2);
     expect(pickAovAddons([c('only', 40_000)], { shortfall: 35_000 })).toEqual([]);
+    expect(pickAovAddons([c('out', 40_000, { inStock: false })], { shortfall: 35_000 })).toEqual([]);
     for (const shortfall of [0, -1, Number.NaN]) expect(pickAovAddons([c('a', 1_000), c('b', 2_000)], { shortfall })).toEqual([]);
     expect(pickAovAddons(null, { shortfall: 35_000 })).toEqual([]);
   });

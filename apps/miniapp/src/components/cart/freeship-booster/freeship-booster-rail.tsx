@@ -27,7 +27,7 @@ export interface FreeshipBoosterRailProps {
 }
 
 /**
- * Dải gợi ý mua thêm món nhỏ ở đầu Giỏ (tubu-w7-02): nhắm mốc kế tiếp (Miễn phí giao hàng, rồi quà dùng thử 0đ; dòng đầu theo `aovUpsellGoal().headline`), tối đa 4 món
+ * Dải gợi ý mua thêm món nhỏ ở đầu Giỏ (tubu-w7-02): nhắm mốc kế tiếp (Miễn phí giao hàng, rồi quà dùng thử 0đ; dòng đầu theo `aovUpsellGoal().headline`), tối đa 2 món
  * giá không quá 120.000đ (`pickAovAddons`). Cờ `commerce.freeship_booster_enabled` bật: món lấy từ `GET /upsell/freeship` với `gap` là số còn thiếu (giá tới số
  * còn thiếu + 45.000đ, bán chạy trước, giữ thứ tự máy chủ). Tắt, API cũ, cấu hình lỗi hay `/upsell/freeship` lỗi (cờ vừa tắt mà cấu hình còn trong bộ nhớ đệm
  * thì máy chủ trả 404): món từ kệ Bán chạy nhất (cửa sổ 25.000đ). Cấu hình còn chờ thì chưa vẽ gì, kể cả khi kệ Bán chạy đã có sẵn từ Trang chủ, để dải không

@@ -119,8 +119,9 @@ import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpFeed } from '../components/product/pdp-feed';
 import { PdpCompare } from '../components/product/pdp-compare';
 import { PdpRebuyRow } from '../components/product/pdp-rebuy';
+import { PdpRefillOffer } from '../components/product/pdp-refill-offer';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
-import { pdpRefillPill, refillPairQuery } from '@tubutree/app-core/refill/refill-saving';
+import { pdpRefillOffer, refillPairQuery, type PdpRefillOfferView } from '@tubutree/app-core/refill/refill-saving';
 import { coreHttp } from '../services/core-http';
 import { PdpDescription, PdpIngredients } from '../components/product/pdp-info-blocks';
 import { ListRow } from '../components/ui/list-row';
@@ -276,10 +277,9 @@ export default function ProductDetailPage() {
     retry: false,
     staleTime: 60_000,
   });
-  // Cặp Refill của chai này (liên kết dưới dòng "Mua lại"): chỉ hỏi khi cờ bật và khách đã mua đúng sản phẩm này.
+  // Cặp Refill công khai của chai này (thẻ "Chọn túi Refill … tiết kiệm …", tubu-w13-01): hỏi cho mọi khách khi cờ bật; cờ tắt thì máy chủ trả `{}`.
   const pdpProductId = product.data?.id ?? '';
-  const boughtThis = Array.isArray(purchasedQ.data?.items) && purchasedQ.data.items.some((i) => i.productId === pdpProductId);
-  const refillPairQ = useQuery({ ...refillPairQuery(coreHttp, pdpProductId), enabled: refillFirstOn(config) && status === 'authenticated' && boughtThis });
+  const refillPairQ = useQuery({ ...refillPairQuery(coreHttp, pdpProductId), enabled: refillFirstOn(config) && pdpProductId !== '' });
   // Câu chuyện chỉ khi có cấu hình riêng đang bật; khối không lặp ảnh đầu thư viện ngay phía trên. Ghi nhớ theo dữ liệu để khối không dựng lại cảnh mỗi lần trang vẽ.
   const storyProduct = useMemo(() => {
     const d = product.data;
@@ -386,10 +386,11 @@ export default function ProductDetailPage() {
   };
   const pdpAction = (action: PdpAction) => trackEvent('pdp_action', 'miniapp', { action, productSlug: product.data?.slug ?? slug });
   // Đếm thêm giỏ/Mua ngay ở đây (sau khoá ghi giỏ): chạm đúp hay lối vào thứ hai của cùng một nút không thành hai lần bấm.
-  const writeCart = (action: PdpAction, run: () => void) => {
+  // `null`: lệnh ghi giỏ không phải của sản phẩm đang xem (thẻ gói Refill), không đếm vào thêm giỏ của trang này.
+  const writeCart = (action: PdpAction | null, run: () => void) => {
     if (cartWrite.current) return;
     cartWrite.current = true;
-    pdpAction(action);
+    if (action) pdpAction(action);
     run();
   };
 
@@ -403,17 +404,23 @@ export default function ProductDetailPage() {
   };
 
   const addMutation = useLockedMutation({
-    // `source` chỉ để nút Mua lại biết lệnh đang chạy là của nó (vòng chờ trên đúng nút); máy chủ không nhận trường này.
-    mutationFn: async (input: { variation: VariationDetail; qty: number; source?: 'rebuy' }) =>
+    // `source` chỉ để nút Mua lại / "+ Thêm" của thẻ Refill biết lệnh đang chạy là của nó (vòng chờ trên đúng nút); máy chủ không nhận trường này.
+    mutationFn: async (input: { variation: Pick<VariationDetail, 'id'>; qty: number; source?: 'rebuy' | 'refill' }) =>
       applyGroupCoupon(await addToCart(input.variation.id, input.qty)),
-    onSuccess: ({ cart: updatedCart, note, couponRejected }) => {
+    onSuccess: ({ cart: updatedCart, note, couponRejected }, input) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
-      // Nút nguồn: bấm từ bảng chọn phân loại thì nút này vẫn nằm sau tấm, vẫn đo được; không thấy thì chỉ nảy huy hiệu.
-      playCartFeedback(document.querySelector('.tubu-add-source'));
-      clearTimeout(addedTimer.current);
-      setJustAdded(true);
-      addedTimer.current = setTimeout(() => setJustAdded(false), ADDED_FLASH_MS);
+      if (input.source === 'refill') {
+        // Gói Refill là món khác chai đang xem: không bật "Đã thêm" trên nút mua chính của chai, phản hồi bay từ chính nút của thẻ.
+        playCartFeedback(document.querySelector('[data-testid="pdp-refill-add"]'));
+        trackEvent('refill_swap_applied', 'miniapp', { surface: 'pdp' });
+      } else {
+        // Nút nguồn: bấm từ bảng chọn phân loại thì nút này vẫn nằm sau tấm, vẫn đo được; không thấy thì chỉ nảy huy hiệu.
+        playCartFeedback(document.querySelector('.tubu-add-source'));
+        clearTimeout(addedTimer.current);
+        setJustAdded(true);
+        addedTimer.current = setTimeout(() => setJustAdded(false), ADDED_FLASH_MS);
+      }
       if (note) dropGroupCouponState();
       // Không có ghi chú thì nút đã xác nhận bằng mắt; thanh thông báo chỉ còn khi có điều cần nói thêm (mã mua chung). Người dùng đọc màn hình vẫn nghe.
       if (note) notify({ text: `${vi.product.added} · ${note.text}`, type: note.ok ? 'success' : 'warning', duration: 3200, position: 'top' });
@@ -422,9 +429,10 @@ export default function ProductDetailPage() {
       if (!couponRejected) return undefined;
       return settleWithin(Promise.all([queryClient.invalidateQueries({ queryKey: ['coupons'] }), queryClient.invalidateQueries({ queryKey: ['quote'] })]));
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, input) => {
       notify({ text: getErrorMessage(e), type: 'error' });
-      return holdUntilFresh(e, [['product', slug], ['cart']]);
+      // Thẻ Refill bị từ chối (gói vừa hết hàng, đổi giá): tải lại cặp của chai, không tải lại chai.
+      return holdUntilFresh(e, [input.source === 'refill' ? ['refill-pairs', 'public', pdpProductId] : ['product', slug], ['cart']]);
     },
     onSettled: releaseCartWrite,
   });
@@ -683,11 +691,24 @@ export default function ProductDetailPage() {
   const rebuy = status === 'authenticated' && !unavailable ? pdpRebuy(Array.isArray(purchasedItems) ? purchasedItems : null, p.id, variations) : null;
   const rebuyVariation = rebuy ? variations.find((v) => v.id === rebuy.variationId) : undefined;
   const bottleOnFlash = runningFlash(flashQ.data).some((f) => variations.some((v) => v.id === f.variationId));
-  const refillPill = rebuy ? pdpRefillPill({ name: p.name, price: p.salePrice ?? p.basePrice }, refillPairQ.data?.[p.id], { flash: bottleOnFlash }) : null;
+  // Thẻ gói Refill cho mọi khách (tubu-w13-01); gian hàng tạm nghỉ thì không mời mua gì trên trang này.
+  const refillPair = refillPairQ.data?.[p.id];
+  const packFlashPrice = refillPair ? runningFlash(flashQ.data).find((f) => f.variationId === refillPair.variationId)?.flashPrice : undefined;
+  const refillOffer = unavailable ? null : pdpRefillOffer({ name: p.name, price: p.salePrice ?? p.basePrice }, refillPair, { flash: bottleOnFlash, packFlashPrice });
   // Một chạm thêm đúng phân loại lần trước, số lượng 1, qua cùng khoá ghi giỏ và cùng phản hồi "Đã thêm" của nút Thêm vào giỏ. Không đổi phân loại đang xem.
   const handleRebuy = (variation: VariationDetail) => {
     haptic('light');
     writeCart('add_to_cart', () => addMutation.mutate({ variation, qty: 1, source: 'rebuy' }));
+  };
+  // "+ Thêm" của thẻ gói Refill: một cái đúng phân loại gói, qua cùng khoá ghi giỏ với nút mua chính. Khách chưa đăng nhập thì đăng nhập trước như nút Thêm vào giỏ.
+  const handleRefillAdd = async (view: PdpRefillOfferView) => {
+    if (cartWrite.current) return;
+    if (status !== 'authenticated') {
+      await loginWithNotice();
+      if (useAuthStore.getState().status !== 'authenticated') return;
+    }
+    haptic('light');
+    writeCart(null, () => addMutation.mutate({ variation: { id: view.variationId }, qty: 1, source: 'refill' }));
   };
 
   const trustView = productTrustStrip({ fulfillerKind: p.fulfiller?.kind, returnWindowDays: config.returnWindowDays });
@@ -1029,8 +1050,16 @@ export default function ProductDetailPage() {
           busy={addMutation.isPending && addMutation.variables?.source === 'rebuy'}
           blocked={cartWriting}
           onRebuy={() => handleRebuy(rebuyVariation)}
-          refill={refillPill}
-          onRefill={(refillSlug) => navigate(`/product/${encodeURIComponent(refillSlug)}`)}
+        />
+      )}
+
+      {refillOffer && (
+        <PdpRefillOffer
+          view={refillOffer}
+          busy={addMutation.isPending && addMutation.variables?.source === 'refill'}
+          blocked={cartWriting}
+          onAdd={(view) => void handleRefillAdd(view)}
+          onOpen={(refillSlug) => navigate(`/product/${encodeURIComponent(refillSlug)}`)}
         />
       )}
 

@@ -80,7 +80,8 @@ async function openCart(page: Page, api: MockApi, width: number, cart: ReturnTyp
 async function expectRailFits(page: Page, width: number) {
   const rail = page.getByTestId('freeship-addons');
   const cards = rail.getByTestId('freeship-addon');
-  expect(await cards.count()).toBeLessThanOrEqual(4);
+  await expect(cards).toHaveCount(2);
+  await expect(rail.locator('.scroll-x')).toHaveCount(0);
   const add = cards.first().getByTestId('freeship-add');
   const box = (await add.boundingBox())!;
   expect(Math.min(box.width, box.height), 'nút "+ Thêm" tối thiểu 44×44').toBeGreaterThanOrEqual(44);
@@ -88,8 +89,25 @@ async function expectRailFits(page: Page, width: number) {
   expect(await pageWidth(page), 'không tràn ngang').toBeLessThanOrEqual(width);
 }
 
+/** Thanh hai mốc (tubu-w13-01): vạch mốc Miễn phí giao hàng, hai nhãn mốc số đều nằm trọn trong khổ, mốc đầu đạt đúng theo giỏ. */
+async function expectTwoMilestones(page: Page, width: number, freeshipReached: boolean) {
+  const bar = page.getByTestId('freeship-progress');
+  await expect(bar).toHaveAttribute('data-gift', 'locked');
+  await expect(bar.getByTestId('freeship-mark')).toHaveCount(1);
+  const marks = bar.getByTestId('freeship-milestone');
+  await expect(marks).toHaveCount(2);
+  await expect(marks.nth(0)).toHaveAttribute('data-reached', freeshipReached ? 'true' : 'false');
+  await expect(marks.nth(1)).toHaveAttribute('data-reached', 'false');
+  await expect(marks.nth(0)).toContainText('200.000đ Miễn phí giao hàng');
+  await expect(marks.nth(1)).toContainText('300.000đ Quà dùng thử');
+  expect(await bar.getByTestId('freeship-milestones').evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+  for (const box of await marks.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().right))) {
+    expect(box, 'nhãn mốc không tràn khổ').toBeLessThanOrEqual(width);
+  }
+}
+
 test.describe('Web /gio-hang: dải mua thêm món nhỏ chạm mốc (tubu-w7-02)', () => {
-  for (const width of [360, 390, 1440]) {
+  for (const width of [320, 375, 393, 1440]) {
     test(`${width}px, chưa Miễn phí giao hàng: thanh nói số còn thiếu, dải không lặp, món nhỏ bù đủ trước, không món quà, không món quá 120.000đ`, async ({ page, api }) => {
       await openCart(page, api, width, cartAt(45_000));
       const rail = page.getByTestId('freeship-addons');
@@ -97,11 +115,9 @@ test.describe('Web /gio-hang: dải mua thêm món nhỏ chạm mốc (tubu-w7-0
       await expect(rail.getByRole('heading')).toHaveText('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
       await expect(page.getByTestId('freeship-progress')).toContainText('Mua thêm 110.000đ để được Miễn phí giao hàng');
       expect(api.callsTo('GET', '/upsell/freeship')[0]!.query.get('gap')).toBe('110000');
-      await expect(rail.getByTestId('freeship-addon')).toHaveCount(4);
-      expect(await rail.getByTestId('freeship-addon').evaluateAll((els) => els.map((e) => e.getAttribute('data-slug')))).toEqual([
-        'nuoc-rua-chen-mini', 'binh-nuoc', 'xa-phong-sa', 'ban-chai-tre',
-      ]);
+      expect(await rail.getByTestId('freeship-addon').evaluateAll((els) => els.map((e) => e.getAttribute('data-slug')))).toEqual(['nuoc-rua-chen-mini', 'binh-nuoc']);
       await expectRailFits(page, width);
+      await expectTwoMilestones(page, width, false);
       await rail.scrollIntoViewIfNeeded();
       await shot(page, `aov-freeship-${width}`);
     });
@@ -113,11 +129,12 @@ test.describe('Web /gio-hang: dải mua thêm món nhỏ chạm mốc (tubu-w7-0
       await expect(rail.getByRole('heading')).toHaveText('Thêm 60.000đ nữa để nhận quà dùng thử 0đ');
       expect(api.callsTo('GET', '/upsell/freeship')[0]!.query.get('gap')).toBe('60000');
       // 115.000đ vượt số còn thiếu + 45.000đ nên rời dải; "binh-nuoc" bù đủ mốc quà một mình nên đứng đầu.
-      expect(await rail.getByTestId('freeship-addon').evaluateAll((els) => els.map((e) => e.getAttribute('data-slug')))).toEqual([
-        'binh-nuoc', 'xa-phong-sa', 'ban-chai-tre', 'tui-luoi',
-      ]);
+      expect(await rail.getByTestId('freeship-addon').evaluateAll((els) => els.map((e) => e.getAttribute('data-slug')))).toEqual(['binh-nuoc', 'xa-phong-sa']);
       await expect(page.getByTestId('gift-trial-row')).toHaveCount(0);
+      await expect(page.getByTestId('freeship-progress')).toContainText('Đơn hàng đã được Miễn phí giao hàng');
+      await expect(page.getByTestId('freeship-progress')).not.toContainText('60.000đ');
       await expectRailFits(page, width);
+      await expectTwoMilestones(page, width, true);
       await rail.scrollIntoViewIfNeeded();
       await shot(page, `aov-gift-${width}`);
     });

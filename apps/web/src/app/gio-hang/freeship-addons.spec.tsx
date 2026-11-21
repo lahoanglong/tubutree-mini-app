@@ -142,7 +142,7 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
     await act(async () => open());
     await flush(6);
     expect(q(c, 'freeship-addons-pending')).toBeNull();
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
   });
 
   it('tubu-w8-01: nguồn về mà dưới 2 món hợp lệ thì khung chờ thu lại, không để khối rỗng', async () => {
@@ -159,14 +159,14 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
 
   it('thứ tự gợi ý: món đóng được khoảng thiếu trước, rồi các món rẻ hơn; món vượt cửa sổ giá bị loại', async () => {
     const c = await mount();
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
   });
 
   it('món đã có trong giỏ (theo slug hoặc phân loại) không được gợi ý lại', async () => {
     state.cart = cartOf([line(), line({ id: 'i2', slug: 'a', variationId: 'v-a', total: 1, unitPrice: 1 })], { freeship: false, subtotal: 289000 });
     state.best = best([card('a', 30000), card('b', 10000), card('c', 60000), card('e', 20000, { slug: 'e2', repVariationId: 'v-line' }), card('f', 5000)]);
     const c = await mount();
-    expect(slugs(c)).toEqual(['c', 'b', 'f']);
+    expect(slugs(c)).toEqual(['c', 'b']);
   });
 
   it('dưới 2 món hợp lệ thì dải ẩn hẳn, thanh vẫn hiện', async () => {
@@ -344,7 +344,7 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
       await flush(2);
       expect(addBtn(c, 'c').getAttribute('aria-busy')).toBe('true');
       expect(addBtn(c, 'a').getAttribute('aria-busy')).toBe('true');
-      expect(addBtn(c, 'b').getAttribute('aria-busy')).toBeNull();
+      expect(qa(c, 'freeship-addon')).toHaveLength(2);
       expect(q(c, 'freeship-addons')!.getAttribute('aria-busy')).toBe('true');
     });
   });
@@ -471,7 +471,7 @@ describe('/gio-hang — thanh Miễn phí giao hàng + dải món bù đơn (W42
       card('f', 5000),
     ]);
     const c = await mount();
-    expect(slugs(c)).toEqual(['c', 'b', 'f']);
+    expect(slugs(c)).toEqual(['c', 'b']);
   });
 });
 
@@ -633,7 +633,7 @@ describe('/gio-hang — món bù freeship bị từ chối rồi rời dải: l�
       throw new ApiError('Món c vừa hết hàng.', 409);
     };
     const { c } = await mountWithClient();
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
     state.best = soldOutC;
     click(addOf(c, 'c'));
     await flush(10);
@@ -656,7 +656,7 @@ describe('/gio-hang — món bù freeship bị từ chối rồi rời dải: l�
       await client.invalidateQueries({ queryKey: ['products', 'home-best-seller'] });
     });
     await flush(8);
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
     expect(alerts()).not.toContain('Món c vừa hết hàng.');
   });
 
@@ -667,7 +667,7 @@ describe('/gio-hang — món bù freeship bị từ chối rồi rời dải: l�
     const { c } = await mountWithClient();
     click(addOf(c, 'c'));
     await flush(8);
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
     expect(alerts().join(' ')).toContain('Máy chủ đang bận');
   });
 });
@@ -778,7 +778,7 @@ describe('/gio-hang — dải "Thêm 1 món nhỏ để đủ Miễn phí giao h
     expect(state.bestGets).toBe(0);
     expect(q(c, 'freeship-addons')!.getAttribute('aria-label')).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
     // "hot" (90.000) đứng trước "close" (55.000) vì máy chủ xếp bán chạy trước; 96.001 vượt cửa sổ; "serum" đã trong giỏ.
-    expect(slugs(c)).toEqual(['hot', 'close', 'cheap']);
+    expect(slugs(c)).toEqual(['hot', 'close']);
   });
 
   it('cờ tắt (cấu hình đọc được): món từ kệ Bán chạy, cùng dòng số còn thiếu, không hỏi /upsell/freeship', async () => {
@@ -786,7 +786,7 @@ describe('/gio-hang — dải "Thêm 1 món nhỏ để đủ Miễn phí giao h
     const c = await mount();
     expect(state.upsellCalls).toEqual([]);
     expect(q(c, 'freeship-addons')!.getAttribute('aria-label')).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
   });
 
   it('/upsell/freeship lỗi (cờ vừa tắt, cấu hình còn trong bộ nhớ đệm nên máy chủ trả 404): lùi về dải cũ từ kệ Bán chạy, giỏ vẫn dùng được', async () => {
@@ -795,7 +795,7 @@ describe('/gio-hang — dải "Thêm 1 món nhỏ để đủ Miễn phí giao h
     const c = await mount();
     expect(state.upsellCalls).toHaveLength(1);
     expect(q(c, 'freeship-addons')!.getAttribute('aria-label')).toBe('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
-    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(slugs(c)).toEqual(['c', 'a']);
     expect(q(c, 'freeship-progress')!.textContent).toContain('Mua thêm 51.000đ');
     expect(q(c, 'sticky-bar')!.querySelector('a[href="/thanh-toan"]')).not.toBeNull();
   });
@@ -853,7 +853,7 @@ describe('/gio-hang — dải mua thêm nhắm quà dùng thử 0đ sau khi đã
     const rail = q(c, 'freeship-addons')!;
     expect(rail.getAttribute('data-stage')).toBe('gift');
     expect(rail.getAttribute('aria-label')).toBe('Thêm 51.000đ nữa để nhận quà dùng thử 0đ');
-    expect(slugs(c)).toEqual(['hot', 'close', 'cheap']);
+    expect(slugs(c)).toEqual(['hot', 'close']);
     expect(q(c, 'gift-trial-row')).toBeNull();
   });
 

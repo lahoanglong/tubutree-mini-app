@@ -103,14 +103,8 @@ const ALLOWED: Record<string, string> = {
   '.tubu-reel-skel-label | height': 'Xem .tubu-reel-skel-label | width: web giữ ô 32px bằng nhãn thật cho khỏi nhảy.',
   // Thanh Miễn phí giao hàng.
   '.tubu-freeship | min-height': 'Web chừa chỗ hai dòng chữ + thanh (chú thích mini.css), Mini chừa một dòng + thanh (56px). Chủ chưa quyết giữ bên nào: nêu ở báo cáo W142C.',
-  // Dải gợi ý mua thêm: thẻ web nằm ngang rộng 272px, thẻ Mini là ô dọc 128px (thiết kế riêng từng nền tảng, chú thích W42A ở mini.css).
-  '.tubu-addon-card | flex': 'Thẻ web ngang cố định 272px, Mini ô dọc --tile-w-sm (128px): thiết kế riêng từng nền tảng (W42A).',
-  '.tubu-addon-card | width': 'Xem .tubu-addon-card | flex.',
-  '.tubu-addon-card | gap': 'Thẻ web xếp ngang (ảnh + chữ) cần khe 8px, Mini xếp dọc khe 4px.',
-  '.tubu-addon-card | box-shadow': 'Thẻ web viền 1px --color-border-subtle thay cho đổ bóng của ô dọc Mini (thiết kế riêng, W42A).',
-  '.tubu-addon-name | font-size': 'Thẻ web rộng 272px dùng chữ caption 13px, ô dọc 128px của Mini dùng label 12px.',
-  '.tubu-addon-name | line-height': 'Đi theo cỡ chữ ở .tubu-addon-name | font-size.',
-  '.tubu-addon-name | font-weight': 'Mini in đậm tên (label 600) trong ô hẹp, web để chữ thường trong thẻ rộng.',
+  // Thẻ gói Refill ở trang chi tiết (tubu-w13-01): nền trắng của dải do khối `pdp-subscribe` của web lo (phoneBandPad), Mini tự tô.
+  '.tubu-refill-offer | background': 'Web: dải `pdp-subscribe` đã tô --color-bg-surface dưới md (phoneBandPad) nên thẻ không tô lại; Mini thẻ tự là dải trắng.',
   // Gợi ý mua kèm.
   '.tubu-fbt-name | color': 'Mini kế thừa --color-text-primary từ body (tokens.css), web đặt rõ.',
   // Dòng năm link chính sách ở trang thanh toán (w11-02): lề âm bù phần dòng 44px vượt dòng chữ, mỗi bên theo cỡ chữ của câu đồng ý.

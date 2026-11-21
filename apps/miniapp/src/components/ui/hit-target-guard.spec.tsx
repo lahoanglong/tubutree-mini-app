@@ -27,6 +27,8 @@ import { ProductTrustStrip } from './product-trust-strip';
 import { LoyaltyRulesCard } from '../loyalty/loyalty-rules-card';
 import { GiftTrialRow } from '../checkout/gift-rows';
 import { PdpRebuyRow } from '../product/pdp-rebuy';
+import { PdpRefillOffer } from '../product/pdp-refill-offer';
+import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -114,15 +116,24 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['AffiliateFeaturedProducts (nút Chép link giới thiệu)', () => <AffiliateFeaturedProducts products={featured} />],
     ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />],
     ['LoyaltyRulesCard (nút gập Cách kiếm và dùng Điểm Xanh)', () => <LoyaltyRulesCard lines={['A']} />],
-    ['PdpRebuyRow (nút Mua lại, liên kết đổi sang túi Refill)', () => (
+    ['PdpRebuyRow (nút Mua lại)', () => (
       <PdpRebuyRow
         dateLabel="03/11"
         variationName="500ml"
         busy={false}
         blocked={false}
         onRebuy={() => {}}
-        refill={{ slug: 'refill-a', label: 'Đổi sang túi Refill 10L', badge: 'Rẻ hơn 34%/100ml', spoken: 'Đổi sang túi Refill 10L, rẻ hơn 34% mỗi 100ml' }}
-        onRefill={() => {}}
+      />
+    )],
+    ['PdpRefillOffer (mở trang gói Refill, nút + Thêm)', () => (
+      <PdpRefillOffer
+        view={pdpRefillOffer({ name: 'Nước rửa chén 500ml', price: 68_000 }, {
+          productId: 'p-refill', slug: 'refill-a', name: 'Túi Refill 10L', thumbnail: null, variationId: 'v-refill',
+          price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
+        })!}
+        busy={false}
+        onAdd={() => {}}
+        onOpen={() => {}}
       />
     )],
     ['GiftTrialRow (nút Đổi quà tặng dùng thử 0đ)', () => (

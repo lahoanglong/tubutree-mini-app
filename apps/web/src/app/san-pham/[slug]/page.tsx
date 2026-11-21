@@ -6,7 +6,7 @@ import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { fetchProductCompare } from '@tubutree/app-core/api/product-compare';
-import { fetchRefillPair, pdpRefillPill } from '@tubutree/app-core/refill/refill-saving';
+import { fetchRefillPair, pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { addonRows, comboView } from '@tubutree/app-core/commerce/bundle-view';
 import { pdpVideoUrls } from '@tubutree/app-core/commerce/pdp-media';
 import { parseRichText } from '@tubutree/app-core/rich-text';
@@ -40,6 +40,7 @@ import { compareRows } from './compare-view';
 import { PdpCompare } from './pdp-compare';
 import { PdpRails } from './pdp-rails';
 import { PdpRebuyRow } from './pdp-rebuy';
+import { PdpRefillOfferBlock } from './pdp-refill-offer';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import { PdpStory } from './pdp-story';
@@ -96,7 +97,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     orUndefined(publicConfigQuery(http).queryFn()),
     // Cờ so sánh tắt thì máy chủ trả 404: coi như không có bảng.
     orUndefined(fetchProductCompare(http, product.slug)),
-    // Gói Refill đã ghép với chai này (cờ tắt thì `{}`): dải chỉ hiện dưới "Bạn đã mua · Mua lại", nên dựng sẵn ở đây, trình duyệt không gọi thêm.
+    // Gói Refill đã ghép với chai này (cờ tắt thì `{}`): thẻ "Chọn túi Refill … tiết kiệm …" cho mọi khách, dựng sẵn ở đây, trình duyệt không gọi thêm.
     orUndefined(fetchRefillPair(http, product.id)),
   ]);
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.
@@ -118,7 +119,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
   const fulfillerIsTubu = fulfillerText === 'Tubu Tree giao hàng';
   const retailOnly = isRetailOnly(product);
-  const refillPill = pdpRefillPill({ name: product.name, price: product.salePrice ?? product.basePrice }, refillPairs?.[product.id], { flash: hasFlash });
+  const refillPair = refillPairs?.[product.id];
+  const packFlashPrice = refillPair ? runningFlash(flash ?? [], generatedAt).find((f) => f.variationId === refillPair.variationId)?.flashPrice : undefined;
+  const refillOffer = pdpRefillOffer({ name: product.name, price: product.salePrice ?? product.basePrice }, refillPair, { flash: hasFlash, packFlashPrice });
   const soldText = formatSold(product.sold);
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
   // Đổi trả và vận chuyển khai cho hàng Tubu Tree giao; hàng của gian hàng đối tác có phí và hạn riêng nên không khai thay họ.
@@ -248,7 +251,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
               {/* "Bạn đã mua · Mua lại" đứng trước "Đặt định kỳ" (lối phụ); cả hai rỗng thì dải không chiếm chỗ. */}
               <div data-section="pdp-subscribe" className={`${phoneBandPad} max-md:pb-4 empty:hidden`}>
-                <PdpRebuyRow productId={product.id} slug={product.slug} productName={product.name} variations={product.variations} blocked={!!unavailableText} refill={refillPill} />
+                <PdpRebuyRow productId={product.id} slug={product.slug} productName={product.name} variations={product.variations} blocked={!!unavailableText} />
+                {refillOffer && !unavailableText && <PdpRefillOfferBlock view={refillOffer} />}
                 {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} initialConfig={publicConfig} />}
               </div>
 

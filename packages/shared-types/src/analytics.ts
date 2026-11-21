@@ -66,8 +66,8 @@ export const CLIENT_EVENT_NAMES = [
   'green_card_shared',
 ] as const;
 
-/** Nơi hiện gợi ý đổi chai sang gói Refill (`refill_swap_*.surface`). */
-export const REFILL_SWAP_SURFACES = ['cart', 'reorder'] as const;
+/** Nơi hiện gợi ý đổi chai sang gói Refill (`refill_swap_*.surface`); `pdp` là thẻ gói Refill ở trang chi tiết chai (hiện và "+ Thêm"). */
+export const REFILL_SWAP_SURFACES = ['cart', 'reorder', 'pdp'] as const;
 export type RefillSwapSurface = (typeof REFILL_SWAP_SURFACES)[number];
 
 /** Nơi khách đổi địa chỉ giao ở màn thanh toán (`checkout_address_switched.from`). */

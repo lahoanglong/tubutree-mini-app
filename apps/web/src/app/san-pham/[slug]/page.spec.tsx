@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   config: { freeshipThreshold: 199000, subscribeDiscountPct: 0.12 } as unknown,
   compare: null as unknown,
   purchased: [] as unknown[],
+  refillPairs: {} as unknown,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
@@ -41,6 +42,7 @@ vi.mock('@/lib/core-http-server', () => ({
       if (path.endsWith('/bundles')) return api.bundles;
       if (path === '/flash-sales/active') return api.flash;
       if (path === '/config/public') return api.config;
+      if (path === '/catalog/refill-pairs') return api.refillPairs;
       // Cờ so sánh tắt: máy chủ trả 404.
       if (path.endsWith('/compare')) {
         if (!api.compare) throw new Error('404');
@@ -72,6 +74,11 @@ const PRODUCT = {
   thumbnail: 'https://cdn/a.jpg', basePrice: 200000, salePrice: 150000, certifications: ['Hữu cơ'],
   variations: [{ id: 'v1', sku: 'DG-250', name: '250ml', retailPrice: 200000, salePrice: 150000, stock: 5 }],
   ratingAvg: 4.5, reviewCount: 8,
+};
+
+const REFILL_PAIR = {
+  productId: 'p-refill', slug: 'refill-dau-goi-bo-ket-5l', name: 'Túi Refill dầu gội bồ kết 5L', thumbnail: null, variationId: 'v-refill',
+  price: 1_500_000, compareAt: null, sizeLabel: '5L', inStock: true, tubu: true,
 };
 
 const COMPARE = {
@@ -128,6 +135,7 @@ beforeEach(() => {
   api.coupons = [];
   api.compare = null;
   api.purchased = [];
+  api.refillPairs = {};
   api.config = { freeshipThreshold: 199000, subscribeDiscountPct: 0.12 };
 });
 afterEach(() => {
@@ -810,6 +818,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     api.bundles = BUNDLES_FOR_ORDER;
     api.compare = COMPARE;
     api.related = [{ id: 'r1', slug: 'sp-1', brand: 'Xanh Việt', name: 'Gợi ý 1', thumbnail: null, basePrice: 90000, salePrice: null, isFeatured: false, inStock: true }];
+    api.refillPairs = { p1: REFILL_PAIR };
     const c = await mount();
     await flush(8);
     const blocks = Array.from(c.querySelectorAll('[data-pdp-block]')).map((el) => el.getAttribute('data-pdp-block'));

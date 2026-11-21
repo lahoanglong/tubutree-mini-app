@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RefillOfferDTO } from './refill-api';
-import { REFILL_SAVING_COPY, REFILL_SAVING_COPY_MAX, fetchRefillPair, pdpRefillPill, refillPairQuery, refillSavingBadge, refillSavingCopy, type RefillSavingCopyKey } from './refill-saving';
+import { REFILL_SAVING_COPY, REFILL_SAVING_COPY_MAX, fetchRefillPair, pdpRefillOffer, refillPairQuery, refillSavingBadge, refillSavingCopy, type RefillSavingCopyKey } from './refill-saving';
 import { refillConfirmText, refillSwapOffers } from './refill-swap';
 
 const offer = (over: Partial<RefillOfferDTO> = {}): RefillOfferDTO => ({
@@ -17,37 +17,60 @@ const offer = (over: Partial<RefillOfferDTO> = {}): RefillOfferDTO => ({
   ...over,
 });
 
-describe('pdpRefillPill (trang chi tiết chai khách đã mua)', () => {
-  it('chai 500ml 68.000đ → Refill 10L 890.000đ: nhãn đổi, huy hiệu rẻ hơn mỗi 100ml (làm tròn xuống), câu đọc bắt đầu bằng chữ nhìn thấy', () => {
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 }, offer())).toEqual({
-      slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244',
-      label: 'Đổi sang túi Refill 10L',
-      badge: 'Rẻ hơn 34%/100ml',
-      spoken: 'Đổi sang túi Refill 10L, rẻ hơn 34% mỗi 100ml',
-    });
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 100ml', price: 17_000 }, offer())?.badge).toBe('Rẻ hơn 47%/100ml');
-  });
+describe('pdpRefillOffer (thẻ so túi/can Refill ở trang chi tiết chai, mọi khách)', () => {
+  const bottle = { name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 };
 
-  it('chai đang Giờ vàng: vẫn mời đổi nhưng không nêu mức rẻ hơn (giá khách thấy thấp hơn giá dùng để tính)', () => {
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 }, offer(), { flash: true })).toEqual({
+  it('chai 500ml 68.000đ → Refill 10L 890.000đ: tiết kiệm đúng số đồng (~%), thay 20 chai, giá gói, phân loại để thêm giỏ một chạm', () => {
+    expect(pdpRefillOffer(bottle, offer())).toEqual({
       slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244',
-      label: 'Đổi sang túi Refill 10L',
-      badge: null,
-      spoken: 'Đổi sang túi Refill 10L',
+      productId: 'p-refill',
+      variationId: 'v-refill',
+      name: 'Refill Nước rửa chén Fuwa3e 10L',
+      price: 890_000,
+      title: 'Chọn túi Refill 10L tiết kiệm 470.000đ (~34%)',
+      meta: 'Thay thế 20 chai nhựa · 890.000đ',
+      addAria: 'Thêm Refill Nước rửa chén Fuwa3e 10L vào giỏ, 890.000đ',
+      comparison: { savedVnd: 470_000, savedPct: 34, bottlesReplaced: 20 },
     });
   });
 
-  it('không có cặp hay gói Refill hết hàng: không có dải', () => {
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 }, undefined)).toBeNull();
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 }, null)).toBeNull();
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 }, offer({ inStock: false }))).toBeNull();
+  it('gói tên "Can": nói can, không nói túi', () => {
+    expect(pdpRefillOffer(bottle, offer({ name: 'Can Refill Nước rửa chén Fuwa3e 10L' }))?.title).toBe('Chọn can Refill 10L tiết kiệm 470.000đ (~34%)');
+    expect(pdpRefillOffer(bottle, offer({ name: 'Refill nước rửa chén Candy 10L' }))?.title).toMatch(/^Chọn túi Refill/);
   });
 
-  it('không đọc được lượng hay Refill không rẻ hơn: chỉ nhãn đổi, không hứa rẻ hơn', () => {
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e', price: 68_000 }, offer())).toEqual(expect.objectContaining({ badge: null, spoken: 'Đổi sang túi Refill 10L' }));
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 30_000 }, offer())?.badge).toBeNull();
-    expect(pdpRefillPill({ name: 'Nước rửa chén Fuwa3e 500ml', price: 68_000 }, offer({ sizeLabel: null, name: 'Refill Nước rửa chén Fuwa3e' }))).toEqual(
-      expect.objectContaining({ label: 'Đổi sang túi Refill', badge: null }),
+  it('gói Refill nhỏ hơn một chai: chỉ mời chọn và giá gói, không so tiết kiệm với nửa chai', () => {
+    const o = pdpRefillOffer({ name: 'Nước giặt 1L', price: 100_000 }, offer({ name: 'Refill Nước giặt 500ml', sizeLabel: '500ml', price: 40_000 }));
+    expect(o).toEqual(expect.objectContaining({ title: 'Chọn túi Refill 500ml', meta: '40.000đ', comparison: null }));
+  });
+
+  it('gói Refill đang Giờ vàng: giá trên thẻ là giá Giờ vàng giỏ tính, không nêu số tiết kiệm dựa trên giá tạm thời', () => {
+    const o = pdpRefillOffer(bottle, offer(), { packFlashPrice: 690_000 });
+    expect(o).toEqual(expect.objectContaining({ title: 'Chọn túi Refill 10L', meta: '690.000đ', price: 690_000, comparison: null, addAria: 'Thêm Refill Nước rửa chén Fuwa3e 10L vào giỏ, 690.000đ' }));
+    for (const bad of [0, -1, Number.NaN, null, undefined]) expect(pdpRefillOffer(bottle, offer(), { packFlashPrice: bad })?.meta).toBe('Thay thế 20 chai nhựa · 890.000đ');
+  });
+
+  it('chai đang Giờ vàng: vẫn mời chọn Refill nhưng không nêu số tiết kiệm hay số chai (giá khách thấy thấp hơn giá dùng để tính)', () => {
+    const o = pdpRefillOffer(bottle, offer(), { flash: true });
+    expect(o).toEqual(expect.objectContaining({ title: 'Chọn túi Refill 10L', meta: '890.000đ', comparison: null }));
+  });
+
+  it('không có cặp hay gói Refill hết hàng: không có thẻ', () => {
+    expect(pdpRefillOffer(bottle, undefined)).toBeNull();
+    expect(pdpRefillOffer(bottle, null)).toBeNull();
+    expect(pdpRefillOffer(bottle, offer({ inStock: false }))).toBeNull();
+  });
+
+  it('không đọc được lượng, khác chiều (ml với g), hay Refill không rẻ hơn: chỉ mời chọn, không hứa tiết kiệm, không bịa số chai', () => {
+    for (const o of [
+      pdpRefillOffer({ name: 'Nước rửa chén Fuwa3e', price: 68_000 }, offer()),
+      pdpRefillOffer({ name: 'Nước rửa chén Fuwa3e 500ml', price: 30_000 }, offer()),
+      pdpRefillOffer({ name: 'Bột giặt 500g', price: 68_000 }, offer()),
+    ]) {
+      expect(o).toEqual(expect.objectContaining({ title: 'Chọn túi Refill 10L', meta: '890.000đ', comparison: null }));
+    }
+    expect(pdpRefillOffer(bottle, offer({ sizeLabel: null, name: 'Refill Nước rửa chén Fuwa3e' }))).toEqual(
+      expect.objectContaining({ title: 'Chọn túi Refill', comparison: null }),
     );
   });
 });
@@ -84,7 +107,7 @@ describe('cặp công khai của một sản phẩm', () => {
 
 describe('chữ', () => {
   it('trần độ dài sau khi điền số xấu nhất (một dòng ở khổ 360)', () => {
-    const vars = { pct: 99, per: '100ml', label: 'Đổi sang túi Refill 10L' };
+    const vars = { pct: 99, per: '100ml', pack: 'túi', size: ' 10,5L', amount: '1.234.567đ', n: 99, price: '1.234.567đ' };
     for (const key of Object.keys(REFILL_SAVING_COPY) as RefillSavingCopyKey[]) {
       expect(refillSavingCopy(key, vars).length, key).toBeLessThanOrEqual(REFILL_SAVING_COPY_MAX[key]);
     }

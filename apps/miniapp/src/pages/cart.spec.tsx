@@ -1522,7 +1522,8 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
   // A, B đóng được khoảng thiếu một mình; C, D rẻ hơn (gần đủ trước); xb (đã có trong giỏ), quá đắt (vượt trần món nhỏ 120.000đ) và hết hàng bị loại.
   const CARDS = () => [
     best(1, 'Món A', 110_000),
-    best(2, 'Món B', 115_000),
+    // Dải tối đa 2 món (tubu-w13-01): B vượt trần 120.000đ nên rời dải, để dải vừa có một món bù đủ (A) vừa có một món gần đủ (D).
+    best(2, 'Món B', 121_000),
     best(3, 'Món C', 60_000),
     best(4, 'Món D', 90_000),
     best(5, 'Đã có trong giỏ', 40_000, { slug: 'xb', repVariationId: 'v-ok' }),
@@ -1548,7 +1549,7 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
   it('chưa đạt: dải gợi ý hiện dưới thanh (thanh nói số còn thiếu, dải không lặp), ưu tiên món đóng được khoảng thiếu (rẻ trước) rồi món gần đủ; loại món đã có trong giỏ, quá đắt, hết hàng', async () => {
     renderPage();
     const rail = await screen.findByTestId('freeship-addons');
-    expect(within(rail).getAllByTestId('freeship-addon').map((c) => within(c).getByText(/^Món /).textContent)).toEqual(['Món A', 'Món B', 'Món D', 'Món C']);
+    expect(within(rail).getAllByTestId('freeship-addon').map((c) => within(c).getByText(/^Món /).textContent)).toEqual(['Món A', 'Món D']);
     expect(rail).toHaveAttribute('data-stage', 'freeship');
     expect(within(rail).getByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
     expect(within(rail).queryByText('Đã có trong giỏ')).toBeNull();
@@ -1557,39 +1558,39 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     const bar = screen.getByTestId('freeship-progress');
     expect(bar.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rail.compareDocumentPosition(screen.getByRole('checkbox', { name: 'Chọn tất cả' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(addBtn('Món C')).toHaveAccessibleName('Thêm Món C vào giỏ, 60.000đ');
+    expect(addBtn('Món D')).toHaveAccessibleName('Thêm Món D vào giỏ, 90.000đ');
   });
 
   it('một chạm "+ Thêm": thêm đúng phân loại 1 cái, thanh chạy ngay (không chờ máy chủ), nút của thẻ đó khoá + bận', async () => {
-    // E, G là món nhỏ còn vừa khoảng thiếu mới (40.000đ) để dải còn đứng sau khi thêm C.
+    // E, G là món nhỏ còn vừa khoảng thiếu mới (10.000đ) để dải còn đứng sau khi thêm D.
     mocks.fetchProducts.mockResolvedValue(PAGE([...CARDS(), best(9, 'Món E', 30_000), best(10, 'Món G', 20_000)]));
     renderPage();
     await screen.findByTestId('freeship-addons');
     expect(barText()).toBe('Mua thêm 100.000đ để được Miễn phí giao hàng 🚚');
-    fireEvent.click(addBtn('Món C'));
-    await waitFor(() => expect(barText()).toBe('Mua thêm 40.000đ để được Miễn phí giao hàng 🚚'));
+    fireEvent.click(addBtn('Món D'));
+    await waitFor(() => expect(barText()).toBe('Mua thêm 10.000đ để được Miễn phí giao hàng 🚚'));
     expect(mocks.addToCart).toHaveBeenCalledTimes(1);
-    expect(mocks.addToCart).toHaveBeenCalledWith('vb3', 1);
-    expect(screen.getByTestId('freeship-bar')).toHaveAttribute('aria-valuenow', '80');
-    expect(screen.getByTestId('freeship-fill')).toHaveStyle({ width: '80%' });
+    expect(mocks.addToCart).toHaveBeenCalledWith('vb4', 1);
+    expect(screen.getByTestId('freeship-bar')).toHaveAttribute('aria-valuenow', '95');
+    expect(screen.getByTestId('freeship-fill')).toHaveStyle({ width: '95%' });
     // Món vừa thêm đã vào giỏ nên rời khỏi dải; nút các thẻ còn lại dùng được.
-    expect(screen.queryByRole('button', { name: /^Thêm Món C vào giỏ/ })).toBeNull();
-    expect(screen.getAllByText('Món C').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /^Thêm Món D vào giỏ/ })).toBeNull();
+    expect(screen.getAllByText('Món D').length).toBeGreaterThan(0);
     act(() => resolveAdd());
   });
 
   it('hai cú chạm sát nhau vào cùng một món trước khi vẽ lại: chỉ thêm một lần; món khác vẫn thêm được ngay', async () => {
     renderPage();
     await screen.findByTestId('freeship-addons');
-    const [d, c] = [addBtn('Món D'), addBtn('Món C')];
+    const [d, a] = [addBtn('Món D'), addBtn('Món A')];
     fireEvent.click(d);
     fireEvent.click(d);
-    fireEvent.click(c);
+    fireEvent.click(a);
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
     await act(async () => {
       await new Promise((r) => setTimeout(r, 30));
     });
-    expect(mocks.addToCart.mock.calls).toEqual([['vb4', 1], ['vb3', 1]]);
+    expect(mocks.addToCart.mock.calls).toEqual([['vb4', 1], ['vb1', 1]]);
     const base = mocks.getCart.mock.calls.length;
     act(() => pendingAdds[1]!());
     await act(async () => {});
@@ -1602,12 +1603,12 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     mocks.addToCart.mockResolvedValue(cart100());
     renderPage();
     await screen.findByTestId('freeship-addons');
-    fireEvent.click(addBtn('Món C'));
+    fireEvent.click(addBtn('Món D'));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(1));
-    fireEvent.click(addBtn('Món D'));
+    fireEvent.click(addBtn('Món A'));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
-    expect(mocks.addToCart).toHaveBeenLastCalledWith('vb4', 1);
+    expect(mocks.addToCart).toHaveBeenLastCalledWith('vb1', 1);
   });
 
   it('thêm món đủ bù khoảng thiếu: thanh chuyển sang chúc mừng, dải biến mất', async () => {
@@ -1627,12 +1628,12 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     mocks.addToCart.mockRejectedValue(new Error('hết hàng rồi'));
     renderPage();
     await screen.findByTestId('freeship-addons');
-    fireEvent.click(addBtn('Món C'));
+    fireEvent.click(addBtn('Món D'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     await waitFor(() => expect(barText()).toBe('Mua thêm 100.000đ để được Miễn phí giao hàng 🚚'));
-    expect(addBtn('Món C')).toBeEnabled();
-    expect(addBtn('Món C')).not.toHaveAttribute('aria-busy');
-    expect(addBtn('Món C')).not.toHaveAttribute('aria-disabled');
+    expect(addBtn('Món D')).toBeEnabled();
+    expect(addBtn('Món D')).not.toHaveAttribute('aria-busy');
+    expect(addBtn('Món D')).not.toHaveAttribute('aria-disabled');
   });
 
   it('chỉ gợi ý món Tubu giao: món gian hàng tự giao hoặc gian hàng đang nghỉ bị loại; thẻ cũ không ghi người giao vẫn tính là Tubu giao', async () => {
@@ -1649,7 +1650,7 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
     );
     renderPage();
     const rail = await screen.findByTestId('freeship-addons');
-    expect(within(rail).getAllByTestId('freeship-addon').map((c) => c.getAttribute('data-slug'))).toEqual(['bs-1', 'bs-4', 'bs-8']);
+    expect(within(rail).getAllByTestId('freeship-addon').map((c) => c.getAttribute('data-slug'))).toEqual(['bs-1', 'bs-4']);
   });
 
   it('Bán chạy nhất lỗi: thanh vẫn hiện, chỉ ẩn dải (không chặn giỏ)', async () => {
@@ -2295,7 +2296,7 @@ describe('CartPage: máy chủ từ chối thì giữ khoá tới khi giỏ làm
         mocks.fetchProducts.mockResolvedValue({ data: [card(3, 'Món C', 60_000), card(4, 'Món D', 90_000), card(5, 'Món E', 70_000)], meta: { page: 1, limit: 8, total: 3 } });
         const invalidate = renderLive(refresh);
         await screen.findByTestId('freeship-addons');
-        return { invalidate, button: () => screen.getByRole('button', { name: /^Thêm Món C vào giỏ/ }) };
+        return { invalidate, button: () => screen.getByRole('button', { name: /^Thêm Món D vào giỏ/ }) };
       },
     },
   ];

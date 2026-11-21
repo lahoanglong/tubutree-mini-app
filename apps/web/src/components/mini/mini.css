@@ -1201,6 +1201,22 @@
 .tubu-freeship-head { display: flex; align-items: center; gap: var(--space-inline-md); }
 .tubu-freeship-head .tubu-freeship-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .tubu-freeship-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-variant-numeric: inherit; }
+/* Thanh hai mốc (tubu-w13-01, `giftThreshold`), cùng số đo với apps/miniapp/src/css/freeship.css: đã Miễn phí giao hàng mà chưa đủ mốc quà thì khối giữ nền thẻ và đệm
+   đủ (thanh và nhãn mốc vẫn còn). Vạch mốc giao hàng là khe màu nền thẻ cắt ngang thanh; khổ 320 thiếu chỗ thì nhãn quà xuống dòng và vẫn bám phải. */
+.tubu-freeship[data-reached='true'][data-gift='locked'] { background: var(--color-bg-surface); box-shadow: var(--elevation-1); padding-block: var(--space-inset-card); }
+.tubu-freeship-meter { display: flex; flex-direction: column; gap: var(--space-stack-xs); margin-top: var(--p-space-3); }
+.tubu-freeship-meter .tubu-freeship-track { margin-top: 0; }
+.tubu-freeship-rail { position: relative; }
+.tubu-freeship-mark { position: absolute; top: 0; bottom: 0; width: 3px; transform: translateX(-50%); background: var(--color-bg-surface); }
+.tubu-freeship-legend {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--space-inline-sm); margin: 0; padding: 0; list-style: none;
+  color: var(--color-text-secondary); font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: var(--type-caption-weight); font-variant-numeric: tabular-nums;
+}
+.tubu-freeship-milestone { white-space: nowrap; }
+.tubu-freeship-milestone:last-child { margin-left: auto; }
+.tubu-freeship-milestone[data-reached='true'] { color: var(--color-text-success); font-weight: var(--type-label-weight); }
+/* Dòng đầu cho trình duyệt cũ không hiểu chữ thay thế; dòng sau giấu dấu với trình đọc màn hình (câu chúc mừng đầu khối đã nói). */
+.tubu-freeship-milestone[data-reached='true']::before { content: '✓ '; content: '✓ ' / ''; }
 .tubu-freeship-fill {
   position: relative; height: 100%; border-radius: var(--radius-pill); overflow: hidden;
   background: linear-gradient(90deg, var(--color-progress-fill-from), var(--color-action-primary-bg));
@@ -1231,25 +1247,47 @@
   .tubu-unlock[data-celebrate='true'] > .tubu-freeship { animation: none; }
 }
 
-/* ── Dải gợi ý mua thêm cho đủ Miễn phí giao hàng (W42A, FreeshipAddonRail): thẻ rộng cố định 272, cao 116; hàng cuộn nằm trong khối (không tràn mép) vì Giỏ có đệm riêng. ── */
+/* ── Dải gợi ý mua thêm (FreeshipAddonRail, tubu-w13-01): tối đa 2 thẻ gọn, không cuộn ngang. Điện thoại xếp dọc, cùng số đo với
+   apps/miniapp/src/css/freeship.css (ảnh 48, tên hai dòng + giá, nút "+ Thêm" 44×44); từ md hai thẻ cạnh nhau. ── */
 .tubu-addon { margin-top: var(--p-space-3); font-variant-numeric: tabular-nums; }
 .tubu-addon-head { margin-bottom: var(--space-stack-sm); }
-.tubu-addon-row { gap: var(--p-space-3); padding: var(--space-stack-xs) 0; }
-.tubu-addon-card {
-  flex: 0 0 auto; box-sizing: border-box; width: 272px; display: flex; gap: var(--p-space-3); padding: var(--p-space-3);
-  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-bg-surface);
+.tubu-addon-list { display: flex; flex-direction: column; gap: var(--space-stack-sm); margin: 0; padding: var(--space-stack-xs) 0; list-style: none; }
+@media (min-width: 768px) {
+  .tubu-addon-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.tubu-addon-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: var(--p-space-2); }
+.tubu-addon-card {
+  box-sizing: border-box; display: flex; align-items: center; gap: var(--space-inline-md); min-width: 0; padding: var(--space-stack-sm) var(--space-inline-md);
+  border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1); font-variant-numeric: tabular-nums;
+}
+.tubu-addon-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--space-stack-xs); }
 .tubu-addon-name {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
-  min-height: calc(2 * var(--type-caption-size) * var(--type-caption-lh)); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); color: var(--color-text-primary);
+  font-size: var(--type-label-size); line-height: 16px; font-weight: var(--type-label-weight); color: var(--color-text-primary);
 }
-.tubu-addon-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--p-space-2); }
-.tubu-addon-add.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-size: var(--type-body-sm-size); }
+.tubu-addon-price { display: flex; min-width: 0; }
+.tubu-addon-add.zaui-btn { flex: 0 0 auto; min-width: 44px; height: 44px; padding: 0 var(--space-inline-md); font-size: var(--type-body-sm-size); }
 @media (prefers-reduced-motion: reduce) {
   .tubu-freeship-fill { transition: none; }
   .tubu-freeship-fill::after { animation: none; display: none; }
 }
+
+/* ── Thẻ gói Refill ở trang chi tiết chai (PdpRefillOffer, tubu-w13-01): cùng số đo với apps/miniapp/src/css/refill-offer.css. Đệm ngang do dải
+   `pdp-subscribe` (phoneBandPad) lo, nên thẻ chỉ có lề trên như dòng Mua lại. Tiêu đề tối đa hai dòng, dòng phụ một ý, nút "+ Thêm" 44×44. ── */
+.tubu-refill-offer { margin-top: var(--p-space-3); }
+.tubu-refill-offer-card {
+  box-sizing: border-box; display: flex; align-items: center; gap: var(--space-inline-md); min-width: 0; padding: var(--space-stack-sm) var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-bg-surface); font-variant-numeric: tabular-nums;
+}
+.tubu-refill-offer-main {
+  flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; gap: var(--space-stack-xs);
+  color: inherit; background: none; text-decoration: none;
+}
+.tubu-refill-offer-title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  color: var(--color-text-brand); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); font-weight: var(--type-label-weight);
+}
+.tubu-refill-offer-meta { color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); overflow-wrap: anywhere; }
+.tubu-refill-offer-add.zaui-btn { flex: 0 0 auto; min-width: 44px; height: 44px; padding: 0 var(--space-inline-md); }
 
 /* ── Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng (W44B, CartVoucherHintStrip): chữ + thanh (+ nút "Mua thêm" 44px). Nút `.tubu-vhint-cta` cũng dùng cho "Áp dụng" ở hàng mã chân dính. ── */
 .tubu-vhint { display: flex; flex-direction: column; gap: var(--space-stack-sm); margin-bottom: var(--p-space-3); }

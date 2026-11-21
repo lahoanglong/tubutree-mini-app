@@ -128,6 +128,7 @@ describe('PDP_BLOCK_ORDER', () => {
     const at = (k: (typeof PDP_BLOCK_ORDER)[number]) => PDP_BLOCK_ORDER.indexOf(k);
     expect(at('ingredients')).toBe(at('benefits') + 1);
     expect(at('rebuy')).toBeLessThan(at('subscribe'));
+    expect(at('refill')).toBe(at('rebuy') + 1);
     expect(at('addons')).toBeLessThan(at('reviews'));
     expect(at('reviews')).toBeLessThan(at('compare'));
     expect(new Set(PDP_BLOCK_ORDER).size).toBe(PDP_BLOCK_ORDER.length);

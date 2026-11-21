@@ -138,6 +138,10 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
   });
 
   it('đủ dữ liệu: mọi khối có mặt, mỗi khối một lần, đúng thứ tự PDP_BLOCK_ORDER', async () => {
+    mocks.refillFirst = true;
+    mocks.fetchRefillPair.mockResolvedValue({
+      p1: { productId: 'p-refill', slug: 'refill-xa-phong', name: 'Refill Xà phòng sả chanh 5L', thumbnail: null, variationId: 'v-refill', price: 390_000, compareAt: null, sizeLabel: '5L', inStock: true, tubu: true },
+    });
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     await screen.findByTestId('product-story');
@@ -197,68 +201,87 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
       await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
       expect(block('rebuy')).toBeNull();
     });
+  });
 
-    describe('chai đã ghép gói Refill (tubu-w9-03)', () => {
-      const BOTTLE = { name: 'Nước rửa chén Fuwa3e 500ml', basePrice: 68_000 };
-      const REFILL = {
-        productId: 'p-refill', slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244', name: 'Refill Nước rửa chén Fuwa3e 10L', thumbnail: null,
-        variationId: 'v-refill', price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
-      };
-      const SPOKEN = 'Đổi sang túi Refill 10L, rẻ hơn 34% mỗi 100ml';
+  describe('thẻ gói Refill của chai đã ghép cặp (tubu-w13-01, thay liên kết đổi của tubu-w9-03)', () => {
+    const BOTTLE = { name: 'Nước rửa chén Fuwa3e 500ml', basePrice: 68_000 };
+    const REFILL = {
+      productId: 'p-refill', slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244', name: 'Refill Nước rửa chén Fuwa3e 10L', thumbnail: null,
+      variationId: 'v-refill', price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
+    };
 
-      it('cờ bật, khách đã nhận chai: liên kết đổi sang Refill kèm huy hiệu rẻ hơn mỗi 100ml dưới dòng Mua lại; chạm mở trang gói Refill', async () => {
-        mocks.refillFirst = true;
-        mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
-        mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
-        renderPdp();
-        const link = await screen.findByRole('button', { name: SPOKEN });
-        expect(link).toHaveTextContent('Đổi sang túi Refill 10L');
-        expect(link).toHaveTextContent('Rẻ hơn 34%/100ml');
-        expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1');
-        expect(within(block('rebuy')!).getAllByRole('button')).toHaveLength(1);
-        expect(block('rebuy')!.contains(link)).toBe(false);
-        fireEvent.click(link);
-        expect(mocks.navigate).toHaveBeenCalledWith('/product/refill-nuoc-rua-chen-fuwa3e-10l-69f244');
-        expect(mocks.addToCart).not.toHaveBeenCalled();
-      });
+    it('cờ bật: MỘT khối ngay sau dòng Mua lại, tiết kiệm đúng số đồng (~%), số chai thay, giá gói; chạm chữ mở trang gói, "+ Thêm" thêm đúng phân loại gói 1 cái', async () => {
+      mocks.refillFirst = true;
+      mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+      mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
+      renderPdp();
+      const card = await screen.findByTestId('pdp-refill');
+      expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1');
+      expect(card).toHaveTextContent('Chọn túi Refill 10L tiết kiệm 470.000đ (~34%)');
+      expect(card).toHaveTextContent('Thay thế 20 chai nhựa · 890.000đ');
+      expect(screen.getAllByTestId('pdp-refill')).toHaveLength(1);
+      await waitFor(() => expect(blockKeys().indexOf('refill')).toBe(blockKeys().indexOf('rebuy') + 1));
+      expect(within(block('rebuy')!).getAllByRole('button')).toHaveLength(1);
+      expect(within(card).getAllByRole('button')).toHaveLength(2);
+      fireEvent.click(within(card).getByTestId('pdp-refill-open'));
+      expect(mocks.navigate).toHaveBeenCalledWith('/product/refill-nuoc-rua-chen-fuwa3e-10l-69f244');
+      expect(mocks.addToCart).not.toHaveBeenCalled();
+      fireEvent.click(within(card).getByRole('button', { name: 'Thêm Refill Nước rửa chén Fuwa3e 10L vào giỏ, 890.000đ' }));
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-refill', 1));
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    });
 
-      it('cờ tắt, khách chưa mua sản phẩm này hay chưa đăng nhập: không hỏi cặp, không có liên kết', async () => {
-        mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
-        mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
-        const off = renderPdp();
-        await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
-        off.unmount();
+    it('khách chưa mua chai này hay chưa đăng nhập: vẫn có thẻ (cặp công khai), không cần dòng Mua lại', async () => {
+      mocks.refillFirst = true;
+      mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+      mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [purchased({ productId: 'p-khac', slug: 'khac' })], nextCursor: null });
+      const notBought = renderPdp();
+      expect(await screen.findByTestId('pdp-refill')).toHaveTextContent('tiết kiệm 470.000đ');
+      expect(block('rebuy')).toBeNull();
+      notBought.unmount();
 
-        mocks.refillFirst = true;
-        mocks.fetchPurchasedItems.mockResolvedValue({ items: [purchased({ productId: 'p-khac', slug: 'khac' })], nextCursor: null });
-        const notBought = renderPdp();
-        await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
-        await screen.findByRole('heading', { level: 1, name: BOTTLE.name });
-        notBought.unmount();
+      mocks.authStatus = 'guest';
+      renderPdp();
+      expect(await screen.findByTestId('pdp-refill')).toHaveTextContent('Chọn túi Refill 10L');
+      expect(mocks.fetchPurchasedItems).toHaveBeenCalledTimes(1);
+    });
 
-        mocks.authStatus = 'guest';
-        renderPdp();
-        await screen.findByRole('heading', { level: 1, name: BOTTLE.name });
-        expect(mocks.fetchRefillPair).not.toHaveBeenCalled();
-        expect(screen.queryByTestId('pdp-refill')).toBeNull();
-      });
+    it('cờ tắt: không hỏi cặp, không có thẻ', async () => {
+      mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+      mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
+      renderPdp();
+      await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
+      expect(mocks.fetchRefillPair).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('pdp-refill')).toBeNull();
+    });
 
-      it('gói Refill hết hàng hay chai không có cặp: dòng Mua lại giữ nguyên, không có liên kết', async () => {
-        mocks.refillFirst = true;
-        mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
-        mocks.fetchRefillPair.mockResolvedValue({ p1: { ...REFILL, inStock: false } });
-        const soldOut = renderPdp();
-        await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
-        await waitFor(() => expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1'));
-        expect(screen.queryByTestId('pdp-refill')).toBeNull();
-        soldOut.unmount();
+    it('gói Refill hết hàng hay chai không có cặp: không có thẻ, dòng Mua lại giữ nguyên', async () => {
+      mocks.refillFirst = true;
+      mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
+      mocks.fetchRefillPair.mockResolvedValue({ p1: { ...REFILL, inStock: false } });
+      const soldOut = renderPdp();
+      await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
+      await waitFor(() => expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1'));
+      expect(screen.queryByTestId('pdp-refill')).toBeNull();
+      soldOut.unmount();
 
-        mocks.fetchRefillPair.mockResolvedValue({});
-        renderPdp();
-        await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
-        await waitFor(() => expect(mocks.fetchRefillPair).toHaveBeenCalledTimes(2));
-        expect(screen.queryByTestId('pdp-refill')).toBeNull();
-      });
+      mocks.fetchRefillPair.mockResolvedValue({});
+      renderPdp();
+      await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
+      await waitFor(() => expect(mocks.fetchRefillPair).toHaveBeenCalledTimes(2));
+      expect(screen.queryByTestId('pdp-refill')).toBeNull();
+    });
+
+    it('không đọc được lượng chai: chỉ mời chọn gói và giá, không hứa tiết kiệm, không bịa số chai', async () => {
+      mocks.refillFirst = true;
+      mocks.fetchProduct.mockResolvedValue(product({ name: 'Nước rửa chén Fuwa3e', basePrice: 68_000 }));
+      mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
+      renderPdp();
+      const card = await screen.findByTestId('pdp-refill');
+      expect(card).toHaveTextContent('Chọn túi Refill 10L');
+      expect(card).toHaveTextContent('890.000đ');
+      expect(card.textContent).not.toMatch(/tiết kiệm|chai nhựa|%/);
     });
   });
 

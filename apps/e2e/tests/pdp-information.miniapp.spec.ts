@@ -43,11 +43,18 @@ const COMPARE: ProductCompare = {
 
 const EMPTY_CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200_000, itemCount: 0 };
 
-function mockPdp(api: MockApi, opts: { compare?: boolean; purchased?: boolean } = {}): void {
+// Gói Refill đã ghép với chai 500ml 65.000đ: 10L 890.000đ = 20 chai (1.300.000đ), tiết kiệm 410.000đ (~31%).
+const REFILL_OFFER = {
+  productId: 'p-refill', slug: 'tui-refill-nuoc-rua-chen-10l', name: 'Túi Refill nước rửa chén 10L', thumbnail: null, variationId: 'var-refill',
+  price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
+};
+
+function mockPdp(api: MockApi, opts: { compare?: boolean; purchased?: boolean; refill?: boolean } = {}): void {
   mockPilotProduct(api);
   api.get('/products/:slug', PRODUCT);
   api.get('/cart', EMPTY_CART);
-  api.get('/config/public', { freeshipThreshold: 200_000, returnWindowDays: 7, subscribeDiscountPct: 0.12 });
+  api.get('/config/public', { freeshipThreshold: 200_000, returnWindowDays: 7, subscribeDiscountPct: 0.12, ...(opts.refill ? { refillFirstEnabled: true } : {}) });
+  if (opts.refill) api.get('/catalog/refill-pairs', { [PILOT_PRODUCT.id]: REFILL_OFFER });
   api.get('/products/:slug/reviews/can-review', { canReview: false, reason: 'NOT_PURCHASED', rewardAvailable: false, purchaseCount: 0, reviewableOrders: [], myReviews: [] });
   if (opts.compare) api.get('/products/:slug/compare', COMPARE);
   if (opts.purchased) {
@@ -191,5 +198,53 @@ test.describe('Mini App 360px: trang sản phẩm sắp lại thông tin', () =>
     await openPdp(page);
     await expect(page.locator('[data-pdp-block="reviews"]')).toBeVisible();
     await expect(page.locator('[data-pdp-block="compare"]')).toHaveCount(0);
+  });
+});
+
+test.describe('Mini App: thẻ gói Refill ở trang chai (tubu-w13-01)', () => {
+  for (const width of [320, 375, 393]) {
+    test(`${width}px: một thẻ ngay sau dòng Mua lại, số tiết kiệm và số chai, vùng chạm 44px, số đều, không tràn ngang; "+ Thêm" thêm đúng gói`, async ({ page, api }) => {
+      await page.setViewportSize({ width, height: 740 });
+      mockPdp(api, { purchased: true, refill: true });
+      await openPdp(page);
+      const card = page.getByTestId('pdp-refill');
+      await expect(card).toHaveCount(1);
+      await expect(card).toContainText('Chọn túi Refill 10L tiết kiệm 410.000đ (~31%)');
+      await expect(card).toContainText('Thay thế 20 chai nhựa · 890.000đ');
+      await expect(card.getByRole('button')).toHaveCount(2);
+      const order = await blockOrder(page);
+      expect(order.indexOf('refill'), 'thẻ Refill ngay sau dòng Mua lại').toBe(order.indexOf('rebuy') + 1);
+
+      const add = card.getByTestId('pdp-refill-add');
+      await add.scrollIntoViewIfNeeded();
+      const addBox = (await add.boundingBox())!;
+      expect(Math.min(addBox.width, addBox.height), 'nút "+ Thêm" tối thiểu 44×44').toBeGreaterThanOrEqual(44);
+      const openBox = (await card.getByTestId('pdp-refill-open').boundingBox())!;
+      expect(openBox.height, 'vùng mở trang gói cao từ 44px').toBeGreaterThanOrEqual(44);
+      expect(await card.locator('.tubu-refill-offer-card').evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+      expect(await card.evaluate((el) => el.getBoundingClientRect().right), 'thẻ nằm trọn trong khổ').toBeLessThanOrEqual(width);
+      expect(await noHorizontalScroll(page)).toBe(true);
+
+      const before = api.callsTo('POST', '/cart/items').length;
+      await add.click();
+      await expect.poll(() => api.callsTo('POST', '/cart/items').length).toBe(before + 1);
+      expect(api.callsTo('POST', '/cart/items').at(-1)!.body).toMatchObject({ variationId: 'var-refill', quantity: 1 });
+    });
+  }
+
+  test('375px: chạm phần chữ mở trang gói Refill', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 740 });
+    mockPdp(api, { refill: true });
+    await openPdp(page);
+    await page.getByTestId('pdp-refill-open').click();
+    await expect(page).toHaveURL(/\/product\/tui-refill-nuoc-rua-chen-10l$/);
+  });
+
+  test('cờ Refill tắt: không hỏi cặp, không có thẻ', async ({ page, api }) => {
+    mockPdp(api, { purchased: true });
+    await openPdp(page);
+    await expect(page.locator('[data-pdp-block="rebuy"]')).toBeVisible();
+    await expect(page.getByTestId('pdp-refill')).toHaveCount(0);
+    expect(api.callsTo('GET', '/catalog/refill-pairs')).toHaveLength(0);
   });
 });

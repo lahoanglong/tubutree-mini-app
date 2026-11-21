@@ -1,12 +1,9 @@
 'use client';
 
 import { useRef } from 'react';
-import Link from 'next/link';
 import { PDP_PURCHASED_LIMIT, pdpRebuy } from '@tubutree/app-core/commerce/pdp-info';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import type { RefillSavingPill } from '@tubutree/app-core/refill/refill-saving';
 import { useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
-import { Badge } from '@/components/mini/badge';
 import { useProductStock } from '@/components/pdp-stock';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -22,8 +19,7 @@ const PURCHASED_ITEMS_KEY = ['purchased-items'] as const;
  * Một chạm thêm đúng phân loại lần trước, số lượng 1, qua đường giỏ nhanh dùng chung với dải "Mua lại món quen" (`useQuickAdd`: ghi giỏ vào cache,
  * thông báo nổi, khoá chạm đúp, tải lại danh sách khi máy chủ từ chối). Phân loại đó hết hàng hay không còn trên trang thì không có dòng.
  * Nút phụ, không phải nút chính: nút mua chính của trang vẫn là "Thêm vào giỏ".
- * Chai đã ghép gói Refill (`refill`, trang dựng ở máy chủ từ cặp công khai, cờ `catalog.refill_first_enabled`) thì dưới dòng có liên kết
- * "Đổi sang túi Refill 10L · Rẻ hơn 34%/100ml" mở trang gói Refill; chỉ hiện cùng dòng này, tức khách đã nhận chai.
+ * Gói Refill của chai là khối riêng ngay sau dòng này (`PdpRefillOfferBlock`, cho mọi khách), không nằm trong dòng.
  */
 export function PdpRebuyRow({
   productId,
@@ -31,7 +27,6 @@ export function PdpRebuyRow({
   productName,
   variations,
   blocked = false,
-  refill = null,
 }: {
   productId: string;
   slug: string;
@@ -39,7 +34,6 @@ export function PdpRebuyRow({
   variations: readonly { id: string; name: string; stock: number }[];
   /** Gian hàng tạm nghỉ/ngừng bán: không mời mua lại. */
   blocked?: boolean;
-  refill?: RefillSavingPill | null;
 }) {
   const authed = useAuthPhase() === 'authenticated';
   const purchased = usePurchasedItems(PDP_PURCHASED_LIMIT);
@@ -70,21 +64,6 @@ export function PdpRebuyRow({
           {fillCopy('pdp.rebuyCta')}
         </button>
       </div>
-      {refill && (
-        <Link
-          href={`/san-pham/${encodeURIComponent(refill.slug)}`}
-          data-testid="pdp-refill"
-          aria-label={refill.spoken}
-          className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-[color:var(--color-text-brand)]"
-        >
-          <span className="underline">{refill.label}</span>
-          {refill.badge && (
-            <Badge tone="success" size="sm">
-              {refill.badge}
-            </Badge>
-          )}
-        </Link>
-      )}
       {quick.feedback}
     </>
   );

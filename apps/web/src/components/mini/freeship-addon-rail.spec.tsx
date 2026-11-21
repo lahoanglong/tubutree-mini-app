@@ -45,9 +45,11 @@ describe('FreeshipAddonRail (web)', () => {
   });
 
   it('busySlug nhận danh sách: mọi món trong danh sách báo bận, món ngoài danh sách không, thẻ gốc aria-busy', () => {
-    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b'), item('c')]} busySlug={['a', 'c']} onAdd={vi.fn()} />);
-    expect(adds(container).map((b) => b.getAttribute('aria-busy'))).toEqual(['true', null, 'true']);
-    expect(adds(container).map((b) => b.getAttribute('aria-disabled'))).toEqual(['true', null, 'true']);
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} busySlug={['a', 'c']} onAdd={vi.fn()} />);
+    expect(adds(container).map((b) => b.getAttribute('aria-busy'))).toEqual(['true', null]);
+    expect(adds(container).map((b) => b.getAttribute('aria-disabled'))).toEqual(['true', null]);
+    const both = mount(<FreeshipAddonRail items={[item('a'), item('b')]} busySlug={['a', 'b']} onAdd={vi.fn()} />);
+    expect(adds(both.container).map((b) => b.getAttribute('aria-busy'))).toEqual(['true', 'true']);
     expect(container.querySelector('[data-testid="freeship-addons"]')!.getAttribute('aria-busy')).toBe('true');
   });
 
@@ -73,9 +75,11 @@ describe('FreeshipAddonRail (web)', () => {
     expect(busy.container.querySelector('[data-testid="freeship-addons"]')!.getAttribute('aria-busy')).toBe('true');
   });
 
-  it('hàng cuộn bật nút ‹ › (arrows): hàng được bọc khung relative để nút mũi tên định vị từ md', () => {
-    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b')]} onAdd={vi.fn()} />);
-    expect(container.querySelector('.tubu-addon-row')!.parentElement!.className).toBe('relative');
+  it('tối đa 2 thẻ gọn trong một danh sách, không có hàng cuộn ngang (tubu-w13-01)', () => {
+    const { container } = mount(<FreeshipAddonRail items={[item('a'), item('b'), item('c')]} onAdd={vi.fn()} />);
+    expect(cards(container).map((c) => c.dataset.slug)).toEqual(['a', 'b']);
+    expect(container.querySelector('ul.tubu-addon-list')!.children).toHaveLength(2);
+    expect(container.querySelector('.scroll-x, .tubu-addon-row')).toBeNull();
   });
 
   it('a11y: mọi nút có tên và vùng chạm >= 44px, cả khi một món đang bận (vòng xoay không làm mất tên nút)', () => {
@@ -111,11 +115,13 @@ describe('FreeshipAddonRail (web)', () => {
     const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
     const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-    it('thẻ rộng cố định, không co (không tràn ngang), nút "+ Thêm" cao 44; số đều', () => {
-      expect(rule('.tubu-addon-card')).toMatch(/flex:\s*0 0 /);
-      expect(rule('.tubu-addon-card')).toMatch(/width:\s*272px/);
+    it('thẻ gọn co theo khung (không rộng cố định, không tràn ngang), nút "+ Thêm" 44×44; số đều; từ md hai cột', () => {
+      expect(rule('.tubu-addon-card')).toMatch(/min-width:\s*0/);
+      expect(rule('.tubu-addon-card')).not.toMatch(/width:\s*272px/);
       expect(rule('.tubu-addon-add.zaui-btn')).toMatch(/height:\s*44px/);
+      expect(rule('.tubu-addon-add.zaui-btn')).toMatch(/min-width:\s*44px/);
       expect(rule('.tubu-addon')).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(css).toMatch(/@media \(min-width: 768px\) \{\s*\.tubu-addon-list \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
     });
   });
 });

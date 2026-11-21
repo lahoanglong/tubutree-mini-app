@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/free-shipping-progress-bar.tsx (cùng props, cùng test-id).
-import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { computeCartThresholdProgress, type CartThresholdMilestone } from '@tubutree/app-core/commerce/cart-progress';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { formatVnd } from '@/lib/format-vnd';
 import { Button } from './button';
@@ -16,21 +16,56 @@ export interface FreeShippingProgressBarProps {
   tubuOnly?: boolean;
   /** Một chạm quay lại chọn thêm món, đặt cạnh dòng chữ khi chưa đạt ngưỡng; đạt rồi thì không có nút. Không truyền thì khối giữ nguyên như cũ. */
   onShopMore?: () => void;
+  /**
+   * Mốc quà dùng thử (`cartGiftThreshold`, tubu-w13-01): có thì thanh hai mốc (vạch Miễn phí giao hàng giữa thanh, Quà dùng thử ở cuối, nhãn
+   * hai mốc dưới thanh) và thanh còn hiện sau khi đã Miễn phí giao hàng, tới khi đủ mốc quà. Thiếu thì một mốc như cũ.
+   */
+  giftThreshold?: number | null;
+}
+
+function Milestone({ m }: { m: CartThresholdMilestone }) {
+  return (
+    <li data-testid="freeship-milestone" data-kind={m.kind} data-reached={m.reached ? 'true' : 'false'} className="tubu-freeship-milestone">
+      {m.label}
+    </li>
+  );
 }
 
 /**
- * Thanh tiến độ Miễn phí giao hàng ở đầu Giỏ. Chưa đạt: một dòng "Mua thêm … để được Miễn phí giao hàng" và thanh đầy dần (số đo khớp bước tính ở app-core), kèm nút "Mua thêm" nếu có `onShopMore`.
- * Đạt: một dòng chúc mừng màu xanh ngọc, không còn thanh, không còn nút. Khối co về dòng gọn cao 36px (mini.css), không giữ chiều cao của trạng thái chưa đạt: một dòng chữ không cần hộp gần trống đẩy danh sách xuống.
+ * Thanh tiến độ ở đầu Giỏ. Số còn thiếu, phần trăm và các mốc do `computeCartThresholdProgress` (app-core) tính, dùng chung với Mini App. Chưa đạt: một dòng
+ * "Mua thêm … để được Miễn phí giao hàng" và thanh đầy dần, kèm nút "Mua thêm" nếu có `onShopMore`. Có mốc quà: thanh đo tới mốc quà, vạch giữa thanh là mốc
+ * Miễn phí giao hàng, dưới thanh hai nhãn mốc (mốc đã đạt có dấu ✓). Đạt hết: một dòng chúc mừng màu xanh ngọc, không còn thanh, không còn nút; khối co về
+ * dòng gọn cao 36px (mini.css).
  */
-export function FreeShippingProgressBar({ base, threshold, serverReached, tubuOnly = false, onShopMore }: FreeShippingProgressBarProps) {
-  const p = freeshipProgress({ base, threshold, serverReached });
-  const text = p.reached
-    ? fillCopy(tubuOnly ? 'freeship.reachedTubu' : 'freeship.reached')
-    : fillCopy(tubuOnly ? 'freeship.progressTubu' : 'freeship.progress', { price: formatVnd(p.remaining) });
-  const showCta = !p.reached && !!onShopMore;
-  const label = <p className="tubu-freeship-text">{text}</p>;
+export function FreeShippingProgressBar({ base, threshold, serverReached, tubuOnly = false, onShopMore, giftThreshold }: FreeShippingProgressBarProps) {
+  const p = computeCartThresholdProgress(base, { freeshipThreshold: threshold, giftThreshold, serverFreeship: serverReached, tubuOnly });
+  const showCta = !p.freeship.reached && !!onShopMore;
+  const label = (
+    <p role="status" aria-live="polite" aria-atomic="true" className="tubu-freeship-text">
+      {p.headline}
+    </p>
+  );
+  const track = (
+    <div
+      data-testid="freeship-bar"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={p.pct}
+      aria-label={p.barAria}
+      className="tubu-freeship-track"
+    >
+      <div data-testid="freeship-fill" className="tubu-freeship-fill" style={{ width: `${p.pct}%` }} />
+    </div>
+  );
   return (
-    <div data-testid="freeship-progress" data-reached={p.reached ? 'true' : 'false'} data-cta={onShopMore ? 'true' : undefined} aria-live="polite" className="tubu-freeship">
+    <div
+      data-testid="freeship-progress"
+      data-reached={p.freeship.reached ? 'true' : 'false'}
+      data-gift={p.gift ? (p.gift.reached ? 'reached' : 'locked') : undefined}
+      data-cta={onShopMore ? 'true' : undefined}
+      className="tubu-freeship"
+    >
       {onShopMore ? (
         <div className="tubu-freeship-head">
           {label}
@@ -39,7 +74,7 @@ export function FreeShippingProgressBar({ base, threshold, serverReached, tubuOn
               variant="secondary"
               className="tubu-freeship-cta"
               data-testid="freeship-shop-more-cta"
-              aria-label={fillCopy(tubuOnly ? 'freeship.shopMoreAriaTubu' : 'freeship.shopMoreAria', { price: formatVnd(p.remaining) })}
+              aria-label={fillCopy(tubuOnly ? 'freeship.shopMoreAriaTubu' : 'freeship.shopMoreAria', { price: formatVnd(p.freeship.remaining) })}
               onPress={onShopMore}
             >
               {fillCopy('freeship.shopMoreCta')}
@@ -49,19 +84,21 @@ export function FreeShippingProgressBar({ base, threshold, serverReached, tubuOn
       ) : (
         label
       )}
-      {!p.reached && (
-        <div
-          data-testid="freeship-bar"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={p.pct}
-          aria-label={fillCopy('freeship.barAria', { pct: p.pct })}
-          className="tubu-freeship-track"
-        >
-          <div data-testid="freeship-fill" className="tubu-freeship-fill" style={{ width: `${p.pct}%` }} />
-        </div>
-      )}
+      {!p.done &&
+        (p.gift ? (
+          <div className="tubu-freeship-meter">
+            <div className="tubu-freeship-rail">
+              {track}
+              <span aria-hidden="true" data-testid="freeship-mark" className="tubu-freeship-mark" style={{ left: `${p.freeship.at}%` }} />
+            </div>
+            <ul data-testid="freeship-milestones" className="tubu-freeship-legend">
+              <Milestone m={p.freeship} />
+              <Milestone m={p.gift} />
+            </ul>
+          </div>
+        ) : (
+          track
+        ))}
     </div>
   );
 }

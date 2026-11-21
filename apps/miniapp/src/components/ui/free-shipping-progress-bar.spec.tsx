@@ -257,3 +257,76 @@ describe('FreeShippingProgressBar (Mini): vùng báo cho trình đọc màn hìn
     expect(within(status).queryByRole('button')).toBeNull();
   });
 });
+
+describe('FreeShippingProgressBar (Mini): thanh hai mốc Miễn phí giao hàng → Quà dùng thử (tubu-w13-01)', () => {
+  const two = (base: number, extra: Partial<Parameters<typeof FreeShippingProgressBar>[0]> = {}) =>
+    render(<FreeShippingProgressBar base={base} threshold={199_000} giftThreshold={299_000} onShopMore={() => {}} {...extra} />);
+  const marks = () => screen.getAllByTestId('freeship-milestone').map((m) => [m.textContent, m.getAttribute('data-reached')]);
+
+  it('chưa Miễn phí giao hàng: thanh đo tới mốc quà, vạch mốc giao hàng ở 66,5%, hai nhãn mốc, nút "Mua thêm" vẫn một', () => {
+    two(100_000);
+    expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-gift', 'locked');
+    expect(screen.getByRole('status')).toHaveTextContent('Mua thêm 99.000đ để được Miễn phí giao hàng');
+    const bar = screen.getByRole('progressbar');
+    expect(bar).toHaveAttribute('aria-valuenow', '33');
+    expect(bar).toHaveAccessibleName('Đã đạt 33% chặng tới Quà dùng thử, mốc Miễn phí giao hàng ở 199.000đ');
+    expect(screen.getByTestId('freeship-fill').getAttribute('style')).toBe('width: 33%;');
+    expect(screen.getByTestId('freeship-mark').getAttribute('style')).toBe('left: 66.5%;');
+    expect(screen.getByTestId('freeship-mark')).toHaveAttribute('aria-hidden', 'true');
+    expect(marks()).toEqual([
+      ['199.000đ Miễn phí giao hàng', 'false'],
+      ['299.000đ Quà dùng thử', 'false'],
+    ]);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('đã Miễn phí giao hàng, chưa đủ quà: câu chúc mừng (không nói lại số còn thiếu tới quà), thanh và nhãn còn, mốc đầu đánh dấu đã đạt, không nút', () => {
+    two(250_000);
+    const block = screen.getByTestId('freeship-progress');
+    expect(block).toHaveAttribute('data-reached', 'true');
+    expect(block).toHaveAttribute('data-gift', 'locked');
+    expect(screen.getByRole('status')).toHaveTextContent('🎉 Đơn hàng đã được Miễn phí giao hàng');
+    expect(block.textContent).not.toContain('49.000đ');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '83');
+    expect(marks()).toEqual([
+      ['199.000đ Miễn phí giao hàng', 'true'],
+      ['299.000đ Quà dùng thử', 'false'],
+    ]);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('đủ mốc quà: co về dòng chúc mừng, không thanh, không nhãn mốc', () => {
+    two(299_000);
+    expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-gift', 'reached');
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByTestId('freeship-milestones')).toBeNull();
+  });
+
+  it('giftThreshold null hay không cao hơn mốc giao hàng: một mốc, khối y như trước (không data-gift, không vạch, không nhãn)', () => {
+    for (const giftThreshold of [null, 150_000]) {
+      const { unmount } = two(100_000, { giftThreshold });
+      expect(screen.getByTestId('freeship-progress')).not.toHaveAttribute('data-gift');
+      expect(screen.queryByTestId('freeship-mark')).toBeNull();
+      expect(screen.queryByTestId('freeship-milestones')).toBeNull();
+      expect(screen.getByRole('progressbar')).toHaveAccessibleName('Đã đạt 50% để được Miễn phí giao hàng');
+      unmount();
+    }
+  });
+
+  it('thuộc tính style chỉ có % (bề rộng phần đầy, vị trí vạch), không px, không màu thô', () => {
+    const { container } = two(120_000, { onShopMore: undefined });
+    expect(container.querySelectorAll('[style*="px"]').length).toBe(0);
+    expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+describe('css/freeship.css: thanh hai mốc', () => {
+  const css = readFileSync(resolve(__dirname, '../../css/freeship.css'), 'utf8');
+  it('phần đầy chạy mượt theo bề rộng, tắt khi giảm chuyển động; nhãn mốc số đều; mốc đã đạt màu thành công', () => {
+    expect(css).toMatch(/\.tubu-freeship-fill \{[^}]*transition: width var\(--dur-slow\)/);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.tubu-freeship-fill \{\s*transition: none;/);
+    expect(css).toMatch(/\.tubu-freeship-legend \{[^}]*font-variant-numeric: tabular-nums;/);
+    expect(css).toMatch(/\.tubu-freeship-milestone\[data-reached='true'\] \{[^}]*color: var\(--color-text-success\);/);
+    expect(css).toMatch(/\.tubu-freeship\[data-reached='true'\]\[data-gift='locked'\] \{[^}]*background: var\(--color-bg-surface\);/);
+  });
+});

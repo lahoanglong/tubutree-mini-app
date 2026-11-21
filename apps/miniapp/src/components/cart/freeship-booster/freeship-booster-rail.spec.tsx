@@ -70,7 +70,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
     expect(mocks.get).toHaveBeenCalledWith('/upsell/freeship', { query: { gap: 35_000, exclude: 'fuwa3e,xb' } });
     expect(mocks.fetchProducts).not.toHaveBeenCalled();
     expect(screen.getByTestId('freeship-addons').getAttribute('data-stage')).toBe('freeship');
-    expect(slugs()).toEqual(['hot', 'close', 'cheap']);
+    expect(slugs()).toEqual(['hot', 'close']);
   });
 
   it('đã Miễn phí giao hàng, chưa đủ mốc quà: hỏi /upsell/freeship với số thiếu tới mốc quà, dòng đầu nói quà dùng thử 0đ', async () => {
@@ -80,7 +80,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
     expect(mocks.get).toHaveBeenCalledWith('/upsell/freeship', { query: { gap: 42_000, exclude: 'fuwa3e,xb' } });
     expect(screen.getByTestId('freeship-addons').getAttribute('data-stage')).toBe('gift');
     // Cửa sổ 45.000đ trên 42.000đ: "over" (80.001đ) bù đủ mốc quà; món rẻ hơn khoảng thiếu xếp gần đủ trước.
-    expect(slugs()).toEqual(['hot', 'over', 'close', 'cheap']);
+    expect(slugs()).toEqual(['hot', 'over']);
   });
 
   it('cờ tắt: món từ kệ Bán chạy (cửa sổ 25.000đ, bù đủ rẻ trước rồi món gần đủ), không hỏi /upsell/freeship', async () => {
@@ -88,7 +88,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
     mount();
     expect(await screen.findByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
     expect(mocks.get).not.toHaveBeenCalled();
-    expect(slugs()).toEqual(['a', 'b', 'c']);
+    expect(slugs()).toEqual(['a', 'b']);
   });
 
   it('cấu hình lỗi: vẫn có dải từ kệ Bán chạy như trước khi có cờ', async () => {
@@ -122,15 +122,15 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
     mount();
     expect(await screen.findByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
     expect(mocks.get).toHaveBeenCalled();
-    expect(slugs()).toEqual(['a', 'b', 'c']);
+    expect(slugs()).toEqual(['a', 'b']);
   });
 
-  it('tối đa 4 món, giá không quá 120.000đ kể cả khi khoảng thiếu lớn', async () => {
+  it('tối đa 2 món, giá không quá 120.000đ kể cả khi khoảng thiếu lớn', async () => {
     mocks.getPublicConfig.mockResolvedValue(CFG(true));
     mocks.get.mockResolvedValue([card('m1', 119_000), card('m2', 120_001), card('m3', 90_000), card('m4', 80_000), card('m5', 60_000), card('m6', 50_000)]);
     mount(goalAt(60_000));
     await screen.findByTestId('freeship-addons');
-    expect(slugs()).toEqual(['m1', 'm3', 'm4', 'm5']);
+    expect(slugs()).toEqual(['m1', 'm3']);
   });
 
   it('dưới 2 món hợp lệ: không vẽ gì', async () => {

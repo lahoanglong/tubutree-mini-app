@@ -9,9 +9,9 @@ import { fillCopy } from '../shop-copy';
  * `giftTrial.minOrder` (khoá `commerce.gift_trial_min_order`, mặc định 299.000đ). Dải chỉ đổi thứ tự khách nhìn thấy món; tiền, quà và điểm vẫn do máy chủ tính.
  */
 
-/** Số món tối đa trên dải. */
-export const AOV_ADDON_MAX = 4;
-/** Dưới số này thì ẩn cả dải: một thẻ trơ dưới dòng chữ trông như lỗi, và khách vẫn còn nút "Mua thêm" của thanh Miễn phí giao hàng. */
+/** Số món tối đa trên dải (tubu-w13-01): hai thẻ gọn xếp dọc, không cuộn ngang, để danh sách giỏ vẫn hiện trong màn đầu ở khổ 375. */
+export const AOV_ADDON_MAX = 2;
+/** Dưới số này thì ẩn cả dải (PO duyệt sàn 2 ở tubu-w7-02): một thẻ trơ dưới dòng chữ trông như lỗi, và khách vẫn còn nút "Mua thêm" của thanh Miễn phí giao hàng. */
 export const AOV_ADDON_MIN = 2;
 /** Trần giá một món nhỏ (đồng), cùng số máy chủ dùng khi xếp `GET /upsell/freeship`. */
 export const AOV_ADDON_MAX_PRICE = FREESHIP_UPSELL_MAX_PRICE;
@@ -118,7 +118,7 @@ export interface AovPickOptions {
 /**
  * Món nhỏ gợi ý mua thêm: đang bán và còn hàng, có phân loại để thêm một chạm, giá dương không quá `AOV_ADDON_MAX_PRICE` và không quá số còn thiếu + cửa sổ,
  * chưa có trong giỏ, không phải quà 0đ, mỗi sản phẩm một thẻ. Thứ tự: món bù đủ khoảng thiếu một mình trước (nguồn đã xếp thì giữ thứ tự nguồn, không thì rẻ
- * trước để khách vượt mốc ít tiền nhất), rồi món gần đủ (đắt trước: gần số còn thiếu nhất). Tối đa `AOV_ADDON_MAX`; dưới `AOV_ADDON_MIN` thì rỗng.
+ * trước để khách vượt mốc ít tiền nhất), rồi món gần đủ (đắt trước: gần số còn thiếu nhất). Tối đa `AOV_ADDON_MAX` (2); dưới `AOV_ADDON_MIN` thì rỗng.
  * Giá là giá thẻ app đang hiện (gồm Giờ vàng), nên món máy chủ trả vẫn được xét lại theo giá và giỏ mới nhất.
  */
 export function pickAovAddons<T extends FreeshipAddonCandidate>(candidates: readonly T[] | null | undefined, opts: AovPickOptions): T[] {

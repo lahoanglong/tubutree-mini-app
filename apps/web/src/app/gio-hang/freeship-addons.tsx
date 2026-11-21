@@ -28,9 +28,9 @@ function NoFreeshipAddonsView({ onShownChange }: FreeshipAddonsViewProps) {
 }
 
 /**
- * Khung chờ đúng khối của `FreeshipAddonRail` (tiêu đề + hàng thẻ 272 × 116 trong `.tubu-addon`): giữ chỗ lúc chunk phần vẽ hay nguồn món còn tải.
- * Dải nằm TRÊN các dòng giỏ, nên hiện muộn mà không giữ chỗ thì đẩy cả danh sách xuống ~150px (CLS 0,105 ở 390px khi đã đăng nhập, tubu-w8-01).
- * Nguồn về mà không đủ món thì khung thu lại như trước: ít gặp hơn nhiều so với dải hiện.
+ * Khung chờ đúng khối của `FreeshipAddonRail` (tiêu đề + 2 thẻ gọn xếp dọc trong `.tubu-addon`): giữ chỗ lúc chunk phần vẽ hay nguồn món còn tải.
+ * Dải nằm TRÊN các dòng giỏ, nên hiện muộn mà không giữ chỗ thì đẩy cả danh sách xuống (CLS 0,105 ở 390px khi đã đăng nhập, tubu-w8-01).
+ * Nguồn về mà chỉ một món hay không món nào thì khung thu lại: ít gặp hơn nhiều so với dải đủ hai món.
  */
 export function FreeshipAddonsPending({ title }: { title?: string | undefined }) {
   return (
@@ -44,19 +44,17 @@ export function FreeshipAddonsPending({ title }: { title?: string | undefined })
           <Skeleton width="70%" height="var(--type-title-sm-lh)" />
         )}
       </div>
-      <div className="scroll-x tubu-addon-row" style={{ overflow: 'hidden' }}>
+      <div className="tubu-addon-list">
         {[0, 1].map((i) => (
           <div key={i} className="tubu-addon-card">
-            <Skeleton width={64} height={64} radius="var(--radius-media)" />
+            <Skeleton width={48} height={48} radius="var(--radius-media)" />
             <div className="tubu-addon-body">
               <div className="tubu-addon-name">
                 <Skeleton width="80%" height={12} />
               </div>
-              <div className="tubu-addon-foot">
-                <Skeleton width={64} height={16} />
-                <Skeleton width={72} height={44} />
-              </div>
+              <Skeleton width={64} height={16} />
             </div>
+            <Skeleton width={72} height={44} />
           </div>
         ))}
       </div>
@@ -79,7 +77,7 @@ const FreeshipAddonsView = dynamic(
 );
 
 /**
- * Dải gợi ý mua thêm món nhỏ ở đầu Giỏ (tubu-w7-02): nhắm mốc kế tiếp (Miễn phí giao hàng, rồi quà dùng thử 0đ; dòng đầu theo `aovUpsellGoal().headline`), tối đa 4 món
+ * Dải gợi ý mua thêm món nhỏ ở đầu Giỏ (tubu-w7-02): nhắm mốc kế tiếp (Miễn phí giao hàng, rồi quà dùng thử 0đ; dòng đầu theo `aovUpsellGoal().headline`), tối đa 2 món
  * giá không quá 120.000đ (`pickAovAddons`). Nguồn do `useFreeshipBoosterCards` chọn: cờ `commerce.freeship_booster_enabled` bật thì `GET /upsell/freeship`
  * (cửa sổ 45.000đ, giữ thứ tự máy chủ), tắt thì kệ Bán chạy nhất (cùng khoá query với Trang chủ). Lỗi tải thì không vẽ gì: dải chỉ là phần thêm, không được
  * làm giỏ hỏng. Thêm một món là một chạm, cập nhật giỏ theo phản hồi của máy chủ (giá Giờ vàng, combo, mã giảm giá và quà tính lại ở đó nên không cập nhật

@@ -51,9 +51,13 @@ describe('FreeShippingProgressBar (web)', () => {
     expect(root(container).dataset.reached).toBe('true');
   });
 
-  it('khối là vùng aria-live lịch sự để lời chúc được đọc ra khi đạt ngưỡng; số đã được định dạng bằng dấu chấm', () => {
-    const { container } = mount(<FreeShippingProgressBar base={0} threshold={1234000} />);
-    expect(root(container).getAttribute('aria-live')).toBe('polite');
+  it('câu đầu là vùng aria-live lịch sự để lời chúc được đọc ra khi đạt ngưỡng (chữ mốc dưới thanh không đọc lại); số đã được định dạng bằng dấu chấm', () => {
+    const { container } = mount(<FreeShippingProgressBar base={0} threshold={1234000} giftThreshold={2000000} />);
+    expect(root(container).getAttribute('aria-live')).toBeNull();
+    const live = root(container).querySelector('[aria-live="polite"]')!;
+    expect(live.textContent).toBe('Mua thêm 1.234.000đ để được Miễn phí giao hàng 🚚');
+    expect(live.getAttribute('role')).toBe('status');
+    expect(root(container).querySelectorAll('[aria-live]')).toHaveLength(1);
     expect(root(container).textContent).toContain('1.234.000đ');
   });
 
@@ -167,5 +171,69 @@ describe('FreeShippingProgressBar (web)', () => {
       expect(height).toBeLessThanOrEqual(40);
       expect(height).toBeGreaterThan(30);
     });
+  });
+});
+
+describe('FreeShippingProgressBar (web): thanh hai mốc Miễn phí giao hàng → Quà dùng thử (tubu-w13-01), cùng số với Mini App', () => {
+  const two = (base: number, extra: { giftThreshold?: number | null; onShopMore?: () => void } = { onShopMore: () => {} }) =>
+    mount(<FreeShippingProgressBar base={base} threshold={199000} giftThreshold={299000} {...extra} />);
+  const marks = (c: ParentNode) =>
+    Array.from(c.querySelectorAll<HTMLElement>('[data-testid="freeship-milestone"]')).map((m) => [m.textContent, m.dataset.reached]);
+
+  it('chưa Miễn phí giao hàng: thanh đo tới mốc quà, vạch mốc giao hàng ở 66,5%, hai nhãn mốc, một nút "Mua thêm"', () => {
+    const { container } = two(100000);
+    expect(root(container).dataset.gift).toBe('locked');
+    expect(root(container).textContent).toContain('Mua thêm 99.000đ để được Miễn phí giao hàng');
+    const bar = q(container, 'freeship-bar')!;
+    expect(bar.getAttribute('aria-valuenow')).toBe('33');
+    expect(bar.getAttribute('aria-label')).toBe('Đã đạt 33% chặng tới Quà dùng thử, mốc Miễn phí giao hàng ở 199.000đ');
+    expect(q(container, 'freeship-fill')!.getAttribute('style')).toBe('width: 33%;');
+    expect(q(container, 'freeship-mark')!.getAttribute('style')).toBe('left: 66.5%;');
+    expect(q(container, 'freeship-mark')!.getAttribute('aria-hidden')).toBe('true');
+    expect(marks(container)).toEqual([
+      ['199.000đ Miễn phí giao hàng', 'false'],
+      ['299.000đ Quà dùng thử', 'false'],
+    ]);
+    expect(container.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('đã Miễn phí giao hàng, chưa đủ quà: câu chúc mừng (không nói lại số còn thiếu tới quà), thanh và nhãn còn, mốc đầu đã đạt, không nút', () => {
+    const { container } = two(250000);
+    expect(root(container).dataset.reached).toBe('true');
+    expect(root(container).dataset.gift).toBe('locked');
+    expect(root(container).textContent).toContain('🎉 Đơn hàng đã được Miễn phí giao hàng');
+    expect(root(container).textContent).not.toContain('49.000đ');
+    expect(q(container, 'freeship-bar')!.getAttribute('aria-valuenow')).toBe('83');
+    expect(marks(container)).toEqual([
+      ['199.000đ Miễn phí giao hàng', 'true'],
+      ['299.000đ Quà dùng thử', 'false'],
+    ]);
+    expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('đủ mốc quà: co về dòng chúc mừng, không thanh, không nhãn mốc', () => {
+    const { container } = two(299000);
+    expect(root(container).dataset.gift).toBe('reached');
+    expect(q(container, 'freeship-bar')).toBeNull();
+    expect(q(container, 'freeship-milestones')).toBeNull();
+  });
+
+  it('không mốc quà hay mốc quà không cao hơn mốc giao hàng: một mốc, khối y như trước', () => {
+    for (const giftThreshold of [null, 150000]) {
+      const { container, unmount } = two(100000, { giftThreshold });
+      expect(root(container).hasAttribute('data-gift')).toBe(false);
+      expect(q(container, 'freeship-mark')).toBeNull();
+      expect(q(container, 'freeship-milestones')).toBeNull();
+      expect(q(container, 'freeship-bar')!.getAttribute('aria-label')).toBe('Đã đạt 50% để được Miễn phí giao hàng');
+      unmount();
+    }
+  });
+
+  it('mini.css: nhãn mốc số đều, mốc đã đạt màu thành công, trạng thái giữa hai mốc giữ nền thẻ, thanh trong khối mốc không thêm lề trên', () => {
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-freeship-legend \{[^}]*font-variant-numeric: tabular-nums;/);
+    expect(css).toMatch(/\.tubu-freeship-milestone\[data-reached='true'\] \{[^}]*color: var\(--color-text-success\);/);
+    expect(css).toMatch(/\.tubu-freeship\[data-reached='true'\]\[data-gift='locked'\] \{[^}]*background: var\(--color-bg-surface\);/);
+    expect(css).toMatch(/\.tubu-freeship-meter \.tubu-freeship-track \{ margin-top: 0; \}/);
   });
 });

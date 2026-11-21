@@ -373,6 +373,21 @@
       ]
     },
     {
+      "name": "PdpRefillOffer",
+      "miniapp": "apps/miniapp/src/components/product/pdp-refill-offer.tsx",
+      "web": "apps/web/src/components/mini/pdp-refill-offer.tsx",
+      "props": "PdpRefillOfferProps",
+      "propsDiff": {
+        "miniOnly": [
+          "onOpen"
+        ],
+        "reason": "web mở trang gói bằng liên kết thật /san-pham/[slug] (Link của Next, có href cho máy tìm kiếm và mở tab mới); Mini không có thẻ a nên cần hàm mở trang"
+      },
+      "screens": [
+        "/product/:slug"
+      ]
+    },
+    {
       "name": "CartVoucherHintStrip",
       "miniapp": "apps/miniapp/src/components/ui/cart-voucher-hint-strip.tsx",
       "web": "apps/web/src/components/mini/cart-voucher-hint-strip.tsx",

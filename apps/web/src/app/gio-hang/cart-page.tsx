@@ -13,6 +13,7 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
+import { cartGiftThreshold } from '@tubutree/app-core/commerce/cart-progress';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import { cartProgressStrip, comboOnlyDiscount, greenBoxCartHint, greenBoxDiscountOf, greenBoxProgress, readGreenBox } from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -699,7 +700,14 @@ export default function CartPage() {
                 {greenBoxView ? (
                   <GreenBoxStrip view={greenBoxView} onMore={() => router.push('/hop-xanh')} />
                 ) : (
-                  <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} onShopMore={() => router.push('/')} />
+                  <FreeShippingProgressBar
+                    base={freeshipBase}
+                    threshold={cart.freeshipThreshold}
+                    serverReached={serverFreeship}
+                    tubuOnly={hasMerchant}
+                    giftThreshold={cartGiftThreshold(giftTrialShown)}
+                    onShopMore={() => router.push('/')}
+                  />
                 )}
                 {aovGoal && <FreeshipAddons goal={aovGoal} lines={allItems} exclude={aovGiftExclusions(giftTrialShown ?? cart.giftTrial)} onShownChange={setAovRailShown} />}
               </CartUnlockSlot>

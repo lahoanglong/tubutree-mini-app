@@ -19,6 +19,8 @@ import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { StoryReelStrip } from '../components/ui/story-reel-strip';
 import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
 import { FreeshipAddonRail } from '../components/ui/freeship-addon-rail';
+import { PdpRefillOffer } from '../components/product/pdp-refill-offer';
+import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { FrequentlyBoughtTogether } from '../components/ui/frequently-bought-together';
 import { QuickReorderStrip } from '../components/ui/quick-reorder-strip';
 import { ProductTrustStrip } from '../components/ui/product-trust-strip';
@@ -32,6 +34,12 @@ const GALLERY_REEL_ITEMS = [
   { slug: 'dau-goi', name: 'Dầu gội bưởi', thumbnail: null, seen: false },
   { slug: 'nuoc-rua-chen', name: 'Nước rửa chén sinh học', thumbnail: null, seen: false },
 ];
+const GALLERY_REFILL_OFFER = {
+  productId: 'p-refill', slug: 'refill-nuoc-rua-chen-10l', name: 'Túi Refill nước rửa chén 10L', thumbnail: null, variationId: 'v-refill',
+  price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
+};
+const GALLERY_REFILL_VIEW = pdpRefillOffer({ name: 'Nước rửa chén 500ml', price: 68_000 }, GALLERY_REFILL_OFFER)!;
+const GALLERY_REFILL_PLAIN = pdpRefillOffer({ name: 'Nước rửa chén bồ hòn', price: 68_000 }, GALLERY_REFILL_OFFER)!;
 const GALLERY_ADDON_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, price: 29_000, variationId: 'v1' },
   { slug: 'mat-ong', name: 'Mật ong rừng', thumbnail: null, price: 39_000, compareAt: 49_000, variationId: 'v2' },
@@ -331,10 +339,28 @@ export default function DsGalleryPage() {
           <Variant label="đã đạt">
             <FreeShippingProgressBar base={210_000} threshold={199_000} />
           </Variant>
+          <Variant label="hai mốc: chưa Miễn phí giao hàng (vạch mốc đầu, chữ hai mốc dưới thanh)">
+            <FreeShippingProgressBar base={150_000} threshold={199_000} giftThreshold={299_000} />
+          </Variant>
+          <Variant label="hai mốc: đã Miễn phí giao hàng, còn tới Quà dùng thử">
+            <FreeShippingProgressBar base={240_000} threshold={199_000} giftThreshold={299_000} />
+          </Variant>
+        </Group>
+
+        <Group name="pdp-refill-offer">
+          <Variant label="so được lượng: số tiết kiệm, phần trăm, số chai nhựa thay thế">
+            <PdpRefillOffer view={GALLERY_REFILL_VIEW} busy={false} onAdd={() => undefined} onOpen={() => undefined} />
+          </Variant>
+          <Variant label="tên chai không ghi lượng: chỉ cỡ gói và giá">
+            <PdpRefillOffer view={GALLERY_REFILL_PLAIN} busy={false} onAdd={() => undefined} onOpen={() => undefined} />
+          </Variant>
+          <Variant label="đang thêm">
+            <PdpRefillOffer view={GALLERY_REFILL_VIEW} busy onAdd={() => undefined} onOpen={() => undefined} />
+          </Variant>
         </Group>
 
         <Group name="freeship-addon-rail">
-          <Variant label="3 món bù đơn, có giá gạch">
+          <Variant label="3 món gợi ý, dải chỉ vẽ 2 hàng gọn (có giá gạch)">
             <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} onAdd={() => undefined} />
           </Variant>
           <Variant label="đang thêm món đầu">

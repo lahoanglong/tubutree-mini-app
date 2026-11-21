@@ -15,11 +15,12 @@ const addon = (slug: string, price: number, over: Partial<FreeshipAddonItem> = {
 const ITEMS = [addon('a', 49_000), addon('b', 59_000, { compareAt: 79_000 }), addon('c', 39_000)];
 
 describe('FreeshipAddonRail (Mini)', () => {
-  it('có tiêu đề "Gợi ý mua thêm…" và một thẻ cho mỗi món, vùng cuộn có tên', () => {
+  it('có tiêu đề "Gợi ý mua thêm…", tối đa 2 thẻ gọn trong một danh sách, không có hàng cuộn ngang (tubu-w13-01)', () => {
     render(<FreeshipAddonRail items={ITEMS} onAdd={vi.fn()} />);
     expect(screen.getByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
-    expect(screen.getAllByTestId('freeship-addon')).toHaveLength(3);
-    expect(screen.getAllByRole('region', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' }).some((r) => r.className.includes('scroll-x'))).toBe(true);
+    expect(screen.getAllByTestId('freeship-addon')).toHaveLength(2);
+    expect(screen.getByRole('list').children).toHaveLength(2);
+    expect(document.querySelector('.scroll-x, .tubu-addon-row')).toBeNull();
   });
 
   it('thẻ gốc là <section> có tên "Gợi ý mua thêm…"; báo bận (aria-busy) khi có món đang thêm, không báo khi rảnh', () => {
@@ -44,7 +45,7 @@ describe('FreeshipAddonRail (Mini)', () => {
 
   it('mỗi thẻ mang data-slug của món', () => {
     render(<FreeshipAddonRail items={ITEMS} onAdd={vi.fn()} />);
-    expect(screen.getAllByTestId('freeship-addon').map((c) => c.getAttribute('data-slug'))).toEqual(['a', 'b', 'c']);
+    expect(screen.getAllByTestId('freeship-addon').map((c) => c.getAttribute('data-slug'))).toEqual(['a', 'b']);
   });
 
   it('giá dùng số đều (tabular-nums)', () => {
@@ -54,7 +55,7 @@ describe('FreeshipAddonRail (Mini)', () => {
 
   it('một chạm "+ Thêm" gọi onAdd đúng món (kèm variationId)', () => {
     const onAdd = vi.fn();
-    render(<FreeshipAddonRail items={ITEMS} onAdd={onAdd} />);
+    render(<FreeshipAddonRail items={[ITEMS[2]!, ITEMS[0]!]} onAdd={onAdd} />);
     fireEvent.click(screen.getByRole('button', { name: /Thêm Món c vào giỏ/ }));
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ slug: 'c', variationId: 'v-c', price: 39_000 }));
@@ -85,8 +86,8 @@ describe('FreeshipAddonRail (Mini)', () => {
 
   it('các phần tử do dải tự vẽ không mang thuộc tính style và không có màu thô (số đo ở css/freeship.css)', () => {
     const { container } = render(<FreeshipAddonRail items={ITEMS} onAdd={vi.fn()} />);
-    const own = container.querySelectorAll('.tubu-addon-card, .tubu-addon-name, .tubu-addon-price');
-    expect(own.length).toBe(9);
+    const own = container.querySelectorAll('.tubu-addon-card, .tubu-addon-body, .tubu-addon-name, .tubu-addon-price');
+    expect(own.length).toBe(8);
     own.forEach((el) => expect(el.hasAttribute('style')).toBe(false));
     expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
@@ -108,15 +109,17 @@ describe('css/freeship.css: thẻ gợi ý bù đơn', () => {
   afterEach(() => document.head.querySelectorAll('style').forEach((s) => s.remove()));
   const rule = (sel: string) => loadRules().find((r) => r.selectorText === sel)!;
 
-  it('thẻ rộng cố định theo token --tile-w-sm, không co (không tràn ngang), số đều', () => {
+  it('thẻ gọn co theo khung (không rộng cố định, không tràn ngang), số đều', () => {
     const card = rule('.tubu-addon-card').style;
-    expect(card.getPropertyValue('width')).toBe('var(--tile-w-sm)');
-    expect(card.getPropertyValue('flex')).toContain('0 0');
+    expect(card.getPropertyValue('width')).toBe('');
+    expect(card.getPropertyValue('min-width')).toMatch(/^0(px)?$/);
     expect(card.getPropertyValue('font-variant-numeric')).toBe('tabular-nums');
   });
 
-  it('nút đáy thẻ: ép xuống đáy (margin-top:auto) và rộng đủ thẻ', () => {
-    expect(rule('.tubu-addon-add').style.getPropertyValue('margin-top')).toBe('auto');
-    expect(rule('.tubu-addon-add').style.getPropertyValue('width')).toBe('100%');
+  it('nút "+ Thêm" cạnh phải thẻ, vùng chạm 44×44, không co', () => {
+    const add = rule('.tubu-addon-add.zaui-btn').style;
+    expect(add.getPropertyValue('height')).toBe('44px');
+    expect(add.getPropertyValue('min-width')).toBe('44px');
+    expect(add.getPropertyValue('flex')).toContain('0 0');
   });
 });

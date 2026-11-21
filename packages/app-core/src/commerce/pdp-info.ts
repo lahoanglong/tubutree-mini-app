@@ -10,6 +10,7 @@ export const PDP_BLOCK_ORDER = [
   'main', // nhãn, xuất xứ, tim, chia sẻ, tên, sao, giá, Điểm Xanh, tồn
   'variations', // chip phân loại + Số lượng
   'rebuy', // "Bạn đã mua ngày dd/mm · Mua lại" (thay chỗ dòng định kỳ)
+  'refill', // "Chọn túi Refill 10L tiết kiệm …" (chai đã ghép gói Refill còn hàng, mọi khách; tubu-w13-01)
   'subscribe', // Đặt định kỳ (lùi xuống sau Mua lại khi có)
   'shipping', // Ưu đãi, Vận chuyển, lưu ý
   'benefits', // mô tả ngắn (lợi ích) + chứng nhận

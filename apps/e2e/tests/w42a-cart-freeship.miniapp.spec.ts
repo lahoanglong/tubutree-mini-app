@@ -16,7 +16,8 @@ const VIEWPORTS = [
 ] as const;
 
 const THRESHOLD = 200_000;
-// Còn thiếu 120.000: "Khoai" (130.000) đóng được khoảng thiếu nên đứng đầu; thêm "Bơ" (40.000) thì còn thiếu 80.000 và "Mận" (95.000) thành món đóng.
+// Còn thiếu 120.000, trần giá món 120.000 (tubu-w7-02) nên "Khoai" (130.000) và "Sầu riêng" rời dải; dải tối đa 2 món (tubu-w13-01), đắt trước: "Mận", "Dâu".
+// Thêm "Dâu" (60.000) thì còn thiếu 60.000, trần giá 85.000 nên "Mận" rời dải, còn "Bơ", "Ổi".
 const BEST = [
   { slug: 'bo', name: 'Bơ', price: 40_000 },
   { slug: 'khoai', name: 'Khoai', price: 130_000 },
@@ -120,10 +121,9 @@ for (const vp of VIEWPORTS) {
       const rail = page.getByTestId('freeship-addons');
       await expect(rail).toBeVisible();
       const cards = page.getByTestId('freeship-addon');
+      await expect(cards).toHaveCount(2);
       const count = await cards.count();
-      expect(count).toBeGreaterThanOrEqual(3);
-      expect(count).toBeLessThanOrEqual(5);
-      await expect(cards.first()).toHaveAttribute('data-slug', 'khoai');
+      await expect(cards.first()).toHaveAttribute('data-slug', 'man');
       await expect(cards.filter({ hasText: 'Sầu riêng' })).toHaveCount(0);
       const buttons = page.getByTestId('freeship-add');
       for (let i = 0; i < count; i += 1) {
@@ -142,24 +142,22 @@ for (const vp of VIEWPORTS) {
       mockCart(api);
       await openCart(page);
 
-      await addButton(page, 'Bơ').scrollIntoViewIfNeeded();
+      await addButton(page, 'Dâu').scrollIntoViewIfNeeded();
       const adding = api.waitForCall('POST', '/cart/items');
-      await addButton(page, 'Bơ').click();
+      await addButton(page, 'Dâu').click();
       const call = await adding;
-      expect(call.body).toMatchObject({ variationId: 'v-bo', quantity: 1 });
+      expect(call.body).toMatchObject({ variationId: 'v-dau', quantity: 1 });
 
-      await expect(progress(page)).toContainText('Mua thêm 80.000đ để được Miễn phí giao hàng');
-      await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '60');
-      await expect(page.getByTestId('freeship-fill')).toHaveAttribute('style', /width:\s*60%/);
-      await expect(page.getByText('Bơ', { exact: true }).first()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Thêm Bơ vào giỏ/ })).toHaveCount(0);
+      await expect(progress(page)).toContainText('Mua thêm 60.000đ để được Miễn phí giao hàng');
+      await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '70');
+      await expect(page.getByTestId('freeship-fill')).toHaveAttribute('style', /width:\s*70%/);
+      await expect(page.getByText('Dâu', { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Thêm Dâu vào giỏ/ })).toHaveCount(0);
       expect(api.callsTo('POST', '/cart/items')).toHaveLength(1);
 
-      // Còn thiếu 80.000: "Mận" (95.000) thành món đóng, "Khoai" (130.000) quá đắt nên rời dải.
+      // Còn thiếu 60.000: trần giá 85.000 nên "Mận" (95.000) rời dải; "Bơ", "Ổi" bù dần, đắt trước.
       const slugs = await page.getByTestId('freeship-addon').evaluateAll((els) => els.map((e) => e.getAttribute('data-slug')));
-      expect(slugs[0]).toBe('man');
-      expect(slugs).not.toContain('khoai');
-      expect(slugs.length).toBeGreaterThanOrEqual(3);
+      expect(slugs).toEqual(['bo', 'oi']);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
@@ -169,9 +167,9 @@ for (const vp of VIEWPORTS) {
       const before = (await progress(page).boundingBox())!.height;
       expect(before).toBeGreaterThanOrEqual(56);
 
-      await addButton(page, 'Bơ').click();
-      await expect(progress(page)).toContainText('Mua thêm 80.000đ');
       await addButton(page, 'Mận').click();
+      await expect(progress(page)).toContainText('Mua thêm 25.000đ');
+      await addButton(page, 'Bơ').click();
 
       await expect(progress(page)).toHaveAttribute('data-reached', 'true');
       await expect(progress(page)).toContainText('🎉 Đơn hàng đã được Miễn phí giao hàng');
@@ -186,7 +184,7 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('Bán chạy nhất chỉ có hai món: thanh vẫn hiện, dải ẩn hẳn (không để tiêu đề trơ)', async ({ page, api }) => {
+    test('Bán chạy nhất chỉ có hai món (một món hợp lệ): thanh vẫn hiện, dải ẩn hẳn (không để tiêu đề trơ)', async ({ page, api }) => {
       mockCart(api, BEST.slice(0, 2));
       await openCart(page);
       await expect(progress(page)).toContainText('Mua thêm 120.000đ');
