@@ -3,6 +3,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import zaloMiniApp from 'zmp-vite-plugin';
 import { dropOverriddenRootVarsPlugin } from './src/build-css-root-vars';
+import { dropDemoStoryPresetsPlugin } from './src/build-demo-story-presets';
 import { assertMiniappBuildEnv } from './src/build-env';
 import { unaliasModuleNamesPlugin } from './src/build-import-names';
 import { preloadTrim } from './src/build-preload-trim';
@@ -54,6 +55,7 @@ export default defineConfig(({ command, mode }) => {
       zaloMiniApp(),
       react(),
       pruneUnusedZauiCssPlugin(),
+      dropDemoStoryPresetsPlugin(),
       trim.plugin,
       apiPreconnect(env.VITE_API_BASE_URL),
       unaliasModuleNamesPlugin(),

@@ -4,7 +4,7 @@ import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { fetchFreeshipUpsell, freeshipUpsellParams, freeshipUpsellQueryKey } from '@tubutree/app-core/api/upsell';
 import { pickAovAddons, type AovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
 import { FREESHIP_BOOSTER_WINDOW } from '@tubutree/app-core/commerce/freeship-progress';
-import { Box } from 'zmp-ui';
+import { Box } from '../../ui/box';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { coreHttp } from '../../../services/core-http';
 import { fetchActiveFlashSales } from '../../../services/shop-api';

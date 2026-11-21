@@ -8,7 +8,9 @@ import type { Plugin } from 'vite';
  * và `build-zaui-prune.spec.ts` canh để chúng không lọt vào phần bao đóng import của thành phần app đang dùng.
  */
 export const PRUNED_ZMP_UI_COMPONENTS = [
+  'avatar',
   'bottom-navigation',
+  'box',
   'calendar',
   'center',
   'cluster',
@@ -33,6 +35,14 @@ export const PRUNED_ZMP_UI_COMPONENTS = [
  */
 export const PRUNE_EXEMPT_CLASSES = ['zaui-modal-wrapper'] as const;
 
+/**
+ * Lớp bổ nghĩa của Button (thành phần vẫn dùng) mà không đường dựng nào của Mini sinh ra. zmp-ui Button chỉ thêm chúng theo prop `type`
+ * (highlight/danger), `size` (small/medium/large) và `suffixIcon`: nút của app (`ui/button.tsx`, `ui/empty-state.tsx`) không truyền các prop đó,
+ * nút kính lúp của `Input.Search` truyền `type="neutral"` cùng `size` của ô tìm (app không đặt), còn `Sheet.Actions` app không dùng.
+ * `build-zaui-prune.spec.ts` canh cả ba điều kiện.
+ */
+export const PRUNED_ZAUI_CLASSES = ['zaui-btn-highlight', 'zaui-btn-danger', 'zaui-btn-small', 'zaui-btn-medium', 'zaui-btn-large', 'zaui-btn-suffix-icon'] as const;
+
 /** Token đầu của lớp CSS (`.zaui-<token>-...`) tương ứng thư mục thành phần: `image-viewer` → `image`, `date-picker` → `date`. */
 export function zauiClassToken(component: string): string {
   return component.split('-')[0] ?? component;
@@ -44,9 +54,11 @@ function isExempt(className: string): boolean {
   return PRUNE_EXEMPT_CLASSES.some((c) => className === c || className.startsWith(`${c}-`));
 }
 
-/** Các lớp `.zaui-*` trong một vế selector mà thành phần bị cắt sở hữu (token thuộc danh sách cắt và không được miễn). */
-export function deadZauiClasses(selector: string, deadTokens: ReadonlySet<string>): string[] {
-  return [...selector.matchAll(CLASS_RE)].filter((m) => deadTokens.has(m[2] ?? '') && !isExempt(m[1] ?? '')).map((m) => m[1] ?? '');
+/** Các lớp `.zaui-*` trong một vế selector không bao giờ khớp: của thành phần bị cắt (token thuộc danh sách cắt, không được miễn) hoặc là lớp bổ nghĩa bị cắt. */
+export function deadZauiClasses(selector: string, deadTokens: ReadonlySet<string>, deadClasses: ReadonlySet<string> = new Set()): string[] {
+  return [...selector.matchAll(CLASS_RE)]
+    .filter((m) => (deadTokens.has(m[2] ?? '') || deadClasses.has(m[1] ?? '')) && !isExempt(m[1] ?? ''))
+    .map((m) => m[1] ?? '');
 }
 
 /**
@@ -59,9 +71,14 @@ export function isDarkThemeOnly(selector: string): boolean {
   return selector.split(',').every((part) => DARK_THEME_RE.test(part));
 }
 
-/** Bỏ mọi luật mà MỌI vế của danh sách selector đều nhắm vào lớp của thành phần bị cắt hoặc chỉ khớp chủ đề tối; luật chung (`:root`, biến, lớp dùng chung) giữ nguyên. */
-export function pruneZauiCss(css: string, components: readonly string[] = PRUNED_ZMP_UI_COMPONENTS): { css: string; removedSelectors: string[] } {
+/** Bỏ mọi luật mà MỌI vế của danh sách selector đều nhắm vào lớp của thành phần bị cắt, lớp bổ nghĩa bị cắt hoặc chỉ khớp chủ đề tối; luật chung (`:root`, biến, lớp dùng chung) giữ nguyên. */
+export function pruneZauiCss(
+  css: string,
+  components: readonly string[] = PRUNED_ZMP_UI_COMPONENTS,
+  classes: readonly string[] = PRUNED_ZAUI_CLASSES,
+): { css: string; removedSelectors: string[] } {
   const dead = new Set(components.map(zauiClassToken));
+  const deadClasses = new Set(classes);
   const root = postcss.parse(css);
   const removedSelectors: string[] = [];
   const animationNames = (decl: postcss.Declaration): string[] => decl.value.split(/[\s,]+/).filter(Boolean);
@@ -70,7 +87,7 @@ export function pruneZauiCss(css: string, components: readonly string[] = PRUNED
 
   root.walkRules((rule) => {
     const parts = rule.selector.split(',').map((s) => s.trim());
-    const allDead = parts.every((part) => deadZauiClasses(part, dead).length > 0 || DARK_THEME_RE.test(part));
+    const allDead = parts.every((part) => deadZauiClasses(part, dead, deadClasses).length > 0 || DARK_THEME_RE.test(part));
     if (!allDead) return;
     removedSelectors.push(rule.selector);
     rule.walkDecls(/^(-webkit-)?animation(-name)?$/i, (decl) => animationNames(decl).forEach((n) => orphanCandidates.add(n)));

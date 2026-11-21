@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Box } from 'zmp-ui';
+import { Box } from '../ui/box';
 import { Leaf } from 'lucide-react';
 import { ecoFactLines } from '@tubutree/app-core/eco/facts';
 import { fillCopy } from '@tubutree/app-core/shop-copy';

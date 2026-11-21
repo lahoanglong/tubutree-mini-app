@@ -1,7 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Recycle } from 'lucide-react';
-import { Box, useNavigate } from 'zmp-ui';
+import { useNavigate } from 'zmp-ui';
+import { Box } from '../ui/box';
 import {
   SECOND_ORDER_METHOD,
   secondOrderInviteCopyFor,

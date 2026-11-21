@@ -294,11 +294,13 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
-  it('admin chưa nhập nội dung: hiện bản nháp đầy đủ kèm biển BẢN NHÁP', async () => {
+  it('admin chưa nhập nội dung: hiện bản tóm tắt kèm biển BẢN NHÁP và địa chỉ bản đầy đủ (chỉ chữ, không mở web)', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
-    expect(await screen.findByTestId('legal-draft-banner')).toBeInTheDocument();
+    expect(await screen.findByTestId('legal-draft-banner')).toHaveTextContent('bản đầy đủ đăng tại app.tubutree.com/chinh-sach/van-chuyen');
     expect(screen.getByText('1. Phạm vi giao hàng')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-markdown').textContent).toContain('Bản đầy đủ đăng tại app.tubutree.com/chinh-sach/van-chuyen.');
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
   it('đủ năm mục chính sách, theo thứ tự', async () => {
@@ -354,6 +356,24 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
     expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+  });
+
+  it('lỗi mạng: vẫn hiện bản tóm tắt với đơn vị vận hành đã đăng ký và hotline, không có biển BẢN NHÁP', async () => {
+    mocks.apiGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('/config/legal/')) throw new Error('x');
+      return { data: [] };
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
+    await screen.findByRole('button', { name: 'Thử lại' });
+    const body = screen.getByTestId('legal-markdown').textContent ?? '';
+    expect(body).toContain('Thời hạn đổi trả');
+    expect(body).toContain('trong vòng 7 ngày');
+    expect(body).toContain('Đơn vị vận hành: CÔNG TY TNHH TUBU TREE');
+    expect(body).toContain('Mã số thuế: 0319585995');
+    expect(body).toContain(`Hotline: ${SUPPORT.hotline}`);
+    expect(screen.queryByTestId('legal-draft-banner')).toBeNull();
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
   it('nút "Đã hiểu" đóng sheet và không mở web', async () => {

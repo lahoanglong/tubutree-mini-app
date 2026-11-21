@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import postcss from 'postcss';
-import { PRUNED_ZMP_UI_COMPONENTS, ZAUI_JS_VARS, deadZauiClasses, isDarkThemeOnly, pruneUnusedZauiVars, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
+import ts from 'typescript';
+import { PRUNED_ZAUI_CLASSES, PRUNED_ZMP_UI_COMPONENTS, ZAUI_JS_VARS, deadZauiClasses, isDarkThemeOnly, pruneUnusedZauiVars, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ZMP_UI = fs.realpathSync(path.resolve(here, '../node_modules/zmp-ui'));
@@ -159,6 +160,15 @@ describe('pruneZauiCss — chỉ bỏ luật của thành phần zmp-ui không c
     expect(out).toContain('--color-x:1px');
   });
 
+  it('lớp bổ nghĩa bị cắt: bỏ luật mà mọi vế đều cần nó (khớp cả tên lớp, không khớp lớp dài hơn), giữ lớp gốc và biến thể còn dùng', () => {
+    const css = '.zaui-btn{color:blue}.zaui-btn-small{height:32px}.zaui-btn-icon-only.zaui-btn-small{width:32px}.zaui-btn-small-x{color:red}.zaui-btn-small,.zaui-btn-tertiary{color:green}';
+    const { css: out, removedSelectors } = pruneZauiCss(css, [], ['zaui-btn-small']);
+    expect(removedSelectors).toEqual(['.zaui-btn-small', '.zaui-btn-icon-only.zaui-btn-small']);
+    expect(out).toContain('.zaui-btn{color:blue}');
+    expect(out).toContain('.zaui-btn-small-x{color:red}');
+    expect(out).toContain('.zaui-btn-small,.zaui-btn-tertiary{color:green}');
+  });
+
   it('token lớp của thư mục nhiều từ lấy từ đầu: image-viewer → image, date-picker → date', () => {
     expect(zauiClassToken('image-viewer')).toBe('image');
     expect(zauiClassToken('date-picker')).toBe('date');
@@ -180,9 +190,10 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
   it('thật sự cắt được một phần đáng kể (>10 KB) và vẫn giữ biến :root cùng lớp của thành phần đang dùng', () => {
     expect(raw.length - pruned.length).toBeGreaterThan(10_000);
     expect(removedSelectors.length).toBeGreaterThan(50);
-    for (const keep of [':root', '.zaui-sheet', '.zaui-btn', '.zaui-input', '.zaui-page', '.zaui-mask', '.zaui-avatar', '.zaui-checkbox']) {
+    for (const keep of [':root', '.zaui-sheet', '.zaui-btn', '.zaui-input', '.zaui-page', '.zaui-mask', '.zaui-switch', '.zaui-checkbox']) {
       expect(pruned, keep).toContain(keep);
     }
+    for (const gone of ['.zaui-avatar', '.zaui-box']) expect(pruned, gone).not.toContain(gone);
   });
 
   it('thành phần app dùng (kể cả gián tiếp qua import của zmp-ui) không nằm trong danh sách bị cắt', () => {
@@ -237,6 +248,57 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
     }
     expect(readers).toEqual([]);
     expect(pruned).toContain('--zaui-light-color-primary');
+  });
+
+  it('lớp bổ nghĩa Button bị cắt không đường dựng nào sinh ra: nút app không truyền type/size/suffixIcon, ô tìm không đặt size, không dùng Sheet.Actions', () => {
+    const buttonUsers: string[] = [];
+    const offenders: string[] = [];
+    const spreads: string[] = [];
+    for (const file of walk(here).filter((f) => /\.tsx?$/.test(f) && !/\.spec\.tsx?$/.test(f))) {
+      const rel = path.relative(here, file);
+      const sf = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const aliases = new Set<string>();
+      const visit = (node: ts.Node): void => {
+        if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === 'zmp-ui') {
+          const named = node.importClause?.namedBindings;
+          if (named && ts.isNamedImports(named)) for (const el of named.elements) if ((el.propertyName ?? el.name).text === 'Button') aliases.add(el.name.text);
+        }
+        if (ts.isPropertyAccessExpression(node) && node.getText(sf) === 'Sheet.Actions') offenders.push(`${rel}: Sheet.Actions`);
+        if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+          const tag = node.tagName.getText(sf);
+          const watched = tag === 'Input.Search' ? ['size'] : aliases.has(tag) ? ['type', 'size', 'suffixIcon'] : [];
+          if (watched.length) {
+            for (const attr of node.attributes.properties) {
+              if (ts.isJsxSpreadAttribute(attr)) spreads.push(`${rel}: <${tag} {...${attr.expression.getText(sf)}}>`);
+              else if (watched.includes(attr.name.getText(sf))) offenders.push(`${rel}: <${tag} ${attr.name.getText(sf)}>`);
+            }
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sf);
+      if (aliases.size) buttonUsers.push(rel);
+    }
+    expect(buttonUsers.sort()).toEqual([path.join('components', 'ui', 'button.tsx'), path.join('components', 'ui', 'empty-state.tsx')]);
+    expect(offenders).toEqual([]);
+    // `aria` là phần còn lại sau khi tách mọi prop đã biết của ButtonProps, kiểu AriaAttributes, nên không mang type/size/suffixIcon.
+    expect(spreads).toEqual([`${path.join('components', 'ui', 'button.tsx')}: <ZButton {...aria}>`]);
+
+    const renderers = [...closure.files].filter((f) => /from "\.\.\/button"/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(path.join(ESM, 'components'), f));
+    expect(renderers.sort()).toEqual([path.join('input', 'Search.js'), path.join('sheet', 'action-sheet.js')]);
+    expect(fs.readFileSync(path.join(ESM, 'components', 'input', 'Search.js'), 'utf8')).toMatch(/createElement\(Button, \{[^}]*type: "neutral"[^}]*size: size/);
+
+    // Luật trộn (`.zaui-btn-primary, .zaui-btn-primary.zaui-btn-highlight`) còn vế sống nên giữ nguyên; chỉ luật mà mọi vế đều cần lớp bị cắt mới phải biến mất.
+    const needsDead = (part: string) => PRUNED_ZAUI_CLASSES.some((cls) => new RegExp(`\\.${cls}(?![a-z0-9-])`).test(part));
+    const leftovers: string[] = [];
+    postcss.parse(pruned).walkRules((rule) => {
+      if (rule.selectors.every(needsDead)) leftovers.push(rule.selector);
+    });
+    expect(leftovers).toEqual([]);
+    for (const cls of ['zaui-btn-danger', 'zaui-btn-small', 'zaui-btn-large', 'zaui-btn-suffix-icon']) expect(removedSelectors.some((sel) => sel.includes(cls)), cls).toBe(true);
+    for (const keep of ['.zaui-btn-primary', '.zaui-btn-secondary', '.zaui-btn-tertiary', '.zaui-btn-neutral', '.zaui-btn-icon-only', '.zaui-btn-loading', '.zaui-btn-prefix-icon', '.zaui-btn-full-width', '.zaui-btn-disabled']) {
+      expect(pruned, keep).toContain(keep);
+    }
   });
 
   it('mã app không tự viết lớp zaui-* của thành phần bị cắt', () => {

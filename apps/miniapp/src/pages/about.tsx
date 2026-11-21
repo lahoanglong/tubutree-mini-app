@@ -8,7 +8,7 @@ import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import type { PublicConfig } from '../services/shop-api';
 import { callPhone } from '../services/zmp-bridge';
-import { companyLegalLine, isBctNoticeUrl, merchantIdentityOrDefault } from '@tubutree/app-core/legal';
+import { companyLegalLine, isBctNoticeUrl, merchantIdentityOrDefault } from '@tubutree/app-core/legal-core';
 import type { WebPolicySlug } from '../utils/web-policy';
 import { PolicySheet } from '../components/policy-sheet';
 import { Card } from '../components/ui/card';

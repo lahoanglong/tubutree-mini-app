@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';

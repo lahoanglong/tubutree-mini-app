@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import { isLegalSlug, type LegalSlug } from '@tubutree/app-core/legal';
+import { isLegalSlug, type LegalSlug } from '@tubutree/app-core/legal-core';
 import { Heading, Text } from './ui/text';
 
 type Block =

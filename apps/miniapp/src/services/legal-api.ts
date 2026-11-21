@@ -1,4 +1,4 @@
-import { DEFAULT_LEGAL_VARS, legalDeliveryOf, type LegalSlug, type LegalVars } from '@tubutree/app-core/legal';
+import { DEFAULT_LEGAL_VARS, legalDeliveryOf, type LegalSlug, type LegalVars } from '@tubutree/app-core/legal-core';
 import { api } from './api';
 
 export type { LegalSlug };

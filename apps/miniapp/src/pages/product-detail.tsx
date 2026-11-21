@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
+import { Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
+import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useQueryClient } from '@tanstack/react-query';

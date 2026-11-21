@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import type { ReactNode } from 'react';
-import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box } from '../components/ui/box';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
-import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
+import { Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
+import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ChevronRight, Sprout, AlertCircle } from 'lucide-react';

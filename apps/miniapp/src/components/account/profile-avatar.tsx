@@ -1,4 +1,4 @@
-import { Avatar } from 'zmp-ui';
+import { Avatar } from '../ui/avatar';
 import { avatarInitial } from '@tubutree/app-core/initials-avatar';
 
 /** Ảnh đại diện của chính khách: có ảnh thì hiện ảnh, chưa có thì chữ cái đầu của tên trên nền xanh (giống web). */

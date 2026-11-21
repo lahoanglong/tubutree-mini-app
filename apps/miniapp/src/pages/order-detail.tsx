@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
-import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';

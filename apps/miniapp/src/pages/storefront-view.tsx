@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Page, useParams, useNavigate } from 'zmp-ui';
+import { Page, useParams, useNavigate } from 'zmp-ui';
+import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Share2, Sparkles } from 'lucide-react';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CASHBACK_REDIRECT } from '@tubutree/app-core/client-copy';
-import { Page, Avatar, useSnackbar } from 'zmp-ui';
+import { Page, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AlertTriangle, Undo2 } from 'lucide-react';
@@ -17,6 +17,7 @@ import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateEr
 import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { openAffiliateLink } from '../services/zmp-bridge';
 import { AuthPhaseView } from '../components/ui/auth-gate';
+import { Avatar } from '../components/ui/avatar';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { formatVnd, formatRatePct } from '../utils/format';
