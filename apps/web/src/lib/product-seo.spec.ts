@@ -95,6 +95,10 @@ describe('productJsonLd — dữ liệu có cấu trúc cho Google (BUYERWEB-16)
     );
     expect(ld.offers).toEqual({
       '@type': 'AggregateOffer', priceCurrency: 'VND', lowPrice: 150000, highPrice: 300000, offerCount: 2, availability: 'https://schema.org/InStock',
+      offers: [
+        { '@type': 'Offer', name: '250ml', sku: 'a', priceCurrency: 'VND', price: 150000, availability: 'https://schema.org/OutOfStock', itemCondition: 'https://schema.org/NewCondition' },
+        { '@type': 'Offer', name: '500ml', sku: 'b', priceCurrency: 'VND', price: 300000, availability: 'https://schema.org/InStock', itemCondition: 'https://schema.org/NewCondition' },
+      ],
     });
   });
 

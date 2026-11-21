@@ -1,4 +1,4 @@
-import type { ProductDetail } from './api';
+import type { ProductDetail, VariationDetail } from './api';
 import { SITE_URL } from './site';
 
 const MAX_GALLERY = 12;
@@ -191,10 +191,45 @@ function shippingLd(prices: number[], shipping: ProductPolicySeo['shipping']): R
   };
 }
 
-/** Dữ liệu có cấu trúc schema.org/Product để Google hiện giá, tình trạng hàng, đổi trả, vận chuyển và đánh giá ở kết quả tìm kiếm. */
-export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string, policy?: ProductPolicySeo): Record<string, unknown> {
+/**
+ * Giá khách thấy của một phân loại lúc dựng trang (giá Giờ vàng khi đợt đang chạy và rẻ hơn) và mốc hết hạn ISO của giá đó khi nó có hạn thật.
+ * Trang truyền vào để file này không phụ thuộc quy tắc Giờ vàng; thiếu thì dùng giá đang bán (salePrice ?? retailPrice).
+ */
+export type VariationPriceSeo = (v: VariationDetail) => { price: number; endAt?: string };
+
+const NEW_CONDITION = 'https://schema.org/NewCondition';
+const VN_OFFSET_MS = 7 * 3_600_000;
+
+/** Ngày YYYY-MM-DD theo giờ Việt Nam (+07, không đổi giờ theo mùa) của một mốc ISO; mốc thiếu hoặc hỏng thì undefined. */
+export function vnDateOf(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? new Date(t + VN_OFFSET_MS).toISOString().slice(0, 10) : undefined;
+}
+
+/** Ngày cuối (giờ Việt Nam) còn giá có hạn tới `endAt`. `endAt` là mốc loại trừ: đợt hết lúc 00:00 ngày 22 thì ngày cuối là 21. */
+function lastVnDayBefore(endAt: string | undefined): string | undefined {
+  const t = endAt ? Date.parse(endAt) : NaN;
+  return Number.isFinite(t) ? vnDateOf(new Date(t - 1).toISOString()) : undefined;
+}
+
+/** Tình trạng một phân loại: gian hàng chưa nhận đơn thì theo cả sản phẩm (hết hàng/ngừng bán), còn lại theo tồn của chính phân loại. */
+function variationAvailability(p: Pick<ProductDetail, 'variations' | 'fulfiller'>, v: VariationDetail): string {
+  if (p.fulfiller?.kind === 'UNAVAILABLE') return productAvailability(p);
+  return v.stock > 0 ? IN_STOCK : OUT_OF_STOCK;
+}
+
+/**
+ * Dữ liệu có cấu trúc schema.org/Product để Google hiện giá, tình trạng hàng, đổi trả, vận chuyển và đánh giá ở kết quả tìm kiếm.
+ * Giá phải khớp giá hiển thị: `priceOf` đưa giá Giờ vàng vào khi đợt đang chạy, và chỉ khi đó mới có `priceValidUntil` (ngày kết thúc đợt). Giá thường
+ * không có hạn nên không khai ngày nào. Nhiều phân loại: AggregateOffer kèm một Offer cho mỗi phân loại (sku, giá, tồn kho riêng).
+ * Ngưỡng miễn phí vận chuyển xét trên chính giá đã khai (giá khách trả): giá Giờ vàng dưới ngưỡng thì phí ship không được ghi 0 đ.
+ */
+export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string, policy?: ProductPolicySeo, priceOf?: VariationPriceSeo): Record<string, unknown> {
   const images = galleryImages(p);
-  const prices = p.variations.map((v) => v.salePrice ?? v.retailPrice);
+  const listed = p.variations.map((v) => v.salePrice ?? v.retailPrice);
+  const priced = p.variations.map((v, i) => ({ v, ...(priceOf?.(v) ?? { price: listed[i]! }) }));
+  const prices = priced.map((x) => x.price);
   const availability = productAvailability(p);
 
   let offers: Record<string, unknown>;
@@ -206,9 +241,22 @@ export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string, polic
       highPrice: Math.max(...prices),
       offerCount: p.variations.length,
       availability,
+      offers: priced.map(({ v, price, endAt }) => {
+        const offer: Record<string, unknown> = { '@type': 'Offer' };
+        const name = v.name?.trim();
+        if (name) offer.name = name;
+        const sku = v.sku?.trim();
+        if (sku) offer.sku = sku;
+        Object.assign(offer, { priceCurrency: 'VND', price, availability: variationAvailability(p, v), itemCondition: NEW_CONDITION });
+        const until = lastVnDayBefore(endAt);
+        if (until) offer.priceValidUntil = until;
+        return offer;
+      }),
     };
   } else {
-    offers = { '@type': 'Offer', url, priceCurrency: 'VND', price: prices[0] ?? p.salePrice ?? p.basePrice, availability };
+    offers = { '@type': 'Offer', url, priceCurrency: 'VND', price: prices[0] ?? p.salePrice ?? p.basePrice, availability, itemCondition: NEW_CONDITION };
+    const until = lastVnDayBefore(priced[0]?.endAt);
+    if (until) offers.priceValidUntil = until;
   }
   const returnPolicy = returnPolicyLd(policy?.returnWindowDays);
   if (returnPolicy) offers.hasMerchantReturnPolicy = returnPolicy;
@@ -218,6 +266,7 @@ export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string, polic
   const ld: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'Product',
+    '@id': `${url}#product`,
     name: p.name,
     url,
     brand: { '@type': 'Brand', name: p.brand?.trim() || BRAND_NAME },

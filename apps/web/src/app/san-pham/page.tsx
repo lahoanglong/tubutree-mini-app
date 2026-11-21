@@ -11,7 +11,8 @@ import { firstParam, normalizeSearchQuery, parsePage } from '@/lib/catalog-filte
 import { createServerHttp } from '@/lib/core-http-server';
 import { BROWSE_INDEX_MAX_PAGE, browseBreadcrumb, browseMetadata, browseNoindex } from '@/lib/home-seo';
 import { browseText } from '@/lib/browse-text';
-import { jsonLdScript, breadcrumbJsonLd } from '@/lib/product-seo';
+import { jsonLdScript } from '@/lib/product-seo';
+import { browseCollectionJsonLd, withBrowseSocial } from '@/lib/seo/browse-structured-data';
 import { BROWSE_PATH, PAGE_LIMIT, appendForeignParams, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery, type SearchState } from '@/lib/search-state';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
@@ -32,23 +33,45 @@ function toParams(sp: Record<string, string | string[] | undefined>): URLSearchP
 // Mỗi từ khoá và mỗi cách lọc/sắp xếp là một URL riêng: không để công cụ tìm kiếm lập chỉ mục vô số trang kết quả
 // (cùng sản phẩm với danh mục gốc, chỉ khác lối vào). Nhãn, danh mục (đứng một mình, có thật) và số trang thì mỗi biến thể có tiêu đề + canonical
 // riêng (xem home-seo) để không bị coi là bản trùng của trang gốc.
-export async function generateMetadata({ searchParams }: { searchParams: BrowseSearchParams }): Promise<Metadata> {
-  const params = toParams(await searchParams);
+type CategoryTree = Parameters<typeof categoryTrail>[0];
+
+function browseBrandOf(params: URLSearchParams): string | undefined {
+  const rawBrand = firstParam(params.get('brand') ?? undefined);
+  return rawBrand ? canonicalBrandName(rawBrand) : rawBrand;
+}
+
+/**
+ * Metadata của một trạng thái danh mục từ tham số + danh sách nhãn/danh mục đã tải. Trang và `generateMetadata` dùng chung để JSON-LD
+ * (CollectionPage) mang đúng tiêu đề, mô tả, canonical của thẻ meta. Null khi trạng thái cần một danh sách mà danh sách đó không có (API lỗi).
+ */
+function browseMetaFor(params: URLSearchParams, brands: { brand: string }[] | undefined, categories: CategoryTree | undefined): Metadata | null {
   if (browseNoindex(params)) return { robots: { index: false, follow: true } };
   const categoryId = params.get('category') ?? undefined;
   if (categoryId) {
-    // Danh mục không có trong cây (id bịa) → noindex, như nhãn lạ. Lỗi API thì để nổi lên (như nhánh nhãn): nuốt lỗi sẽ trả 200 + noindex
-    // cho danh mục thật và làm URL rớt khỏi chỉ mục.
-    const trail = categoryTrail(await fetchCategories(createServerHttp()), categoryId);
-    const node = trail.at(-1);
+    if (!categories) return null;
+    // Danh mục không có trong cây (id bịa) → noindex, như nhãn lạ.
+    const node = categoryTrail(categories, categoryId).at(-1);
     if (!node) return { robots: { index: false, follow: true } };
     return browseMetadata({ category: { id: categoryId, name: node.name } }, true);
   }
   // Link cũ `?brand=Sokfram` dùng metadata và canonical của "Sokfarm", không bị noindex vì tên không có trong /brands.
-  const rawBrand = firstParam(params.get('brand') ?? undefined);
-  const brand = rawBrand ? canonicalBrandName(rawBrand) : rawBrand;
-  const brandKnown = brand ? (await fetchBrands(createServerHttp())).some((b) => b.brand === brand) : true;
+  const brand = browseBrandOf(params);
+  if (brand && !brands) return null;
+  const brandKnown = brand ? brands!.some((b) => b.brand === brand) : true;
   return browseMetadata({ brand, page: parsePage(params.get('page')) }, brandKnown);
+}
+
+export async function generateMetadata({ searchParams }: { searchParams: BrowseSearchParams }): Promise<Metadata> {
+  const params = toParams(await searchParams);
+  // Lỗi API thì để nổi lên (cả nhánh nhãn lẫn danh mục): nuốt lỗi sẽ trả 200 + noindex cho trang thật và làm URL rớt khỏi chỉ mục.
+  const indexable = !browseNoindex(params);
+  const needsCategories = indexable && !!params.get('category');
+  const needsBrands = indexable && !needsCategories && !!browseBrandOf(params);
+  const [categories, brands] = await Promise.all([
+    needsCategories ? fetchCategories(createServerHttp()) : undefined,
+    needsBrands ? fetchBrands(createServerHttp()) : undefined,
+  ]);
+  return withBrowseSocial(browseMetaFor(params, brands, categories)!);
 }
 
 /** Phần phụ của trang (nhãn, danh mục, danh sách đầu): lỗi thì bỏ phần đó, để BrowseView tự tải lại phía trình duyệt. */
@@ -93,9 +116,12 @@ function redirectToLastPage(state: SearchState, total: number, params: URLSearch
   redirect(`${BROWSE_PATH}${qs.size > 0 ? `?${qs.toString()}` : ''}`);
 }
 
-/** BreadcrumbList cho trang nhãn / danh mục đứng một mình (cùng vệt với breadcrumb hiển thị của BrowseView); trạng thái khác không có. */
-function breadcrumbOf(params: URLSearchParams, stateBrands: string[], brands: { brand: string }[] | undefined, categories: Parameters<typeof categoryTrail>[0]) {
-  if (browseNoindex(params)) return null;
+/**
+ * Vệt breadcrumb của trang được lập chỉ mục (cùng vệt với breadcrumb hiển thị của BrowseView): nhãn, danh mục đứng một mình, hoặc hub
+ * "Trang chủ › Danh mục". Trang noindex (không canonical) không có.
+ */
+function breadcrumbOf(meta: Metadata | null, params: URLSearchParams, stateBrands: string[], categories: CategoryTree | undefined) {
+  if (!meta?.alternates?.canonical) return null;
   const home = fillCopy('browse.crumbHome');
   const categoryId = params.get('category');
   if (categoryId) {
@@ -103,7 +129,7 @@ function breadcrumbOf(params: URLSearchParams, stateBrands: string[], brands: { 
     return trail.length > 0 ? browseBreadcrumb({ home, browse: browseText.title, category: trail }) : null;
   }
   const brand = stateBrands.length === 1 ? stateBrands[0] : undefined;
-  return brand && brands?.some((b) => b.brand === brand) ? browseBreadcrumb({ home, browse: browseText.title, brand }) : null;
+  return browseBreadcrumb({ home, browse: browseText.title, brand });
 }
 
 export default async function BrowsePage({ searchParams }: { searchParams: BrowseSearchParams }) {
@@ -134,11 +160,17 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const initial: BrowseInitial | null = catalog
     ? { urlKey: serializeSearchState(state).toString(), page: catalog, startPage }
     : null;
-  const crumbs = breadcrumbOf(params, state.brands, brands, categories);
+  const meta = browseMetaFor(params, brands, categories);
+  const crumbs = breadcrumbOf(meta, params, state.brands, categories);
+  // ItemList = đúng các món có trong HTML máy chủ: kệ Bán chạy ở hub, trang danh sách đầu ở trạng thái khác (vị trí nối tiếp các trang trước).
+  const collection =
+    meta && crumbs
+      ? browseCollectionJsonLd(meta, crumbs, hub ? (bestSellers ?? []) : (catalog?.data ?? []), hub ? 0 : (startPage - 1) * PAGE_LIMIT)
+      : null;
   return (
     <main className={`${PAGE_WIDE} md:py-8`}>
       <BrowseView initial={initial} bestSellers={bestSellers} brands={brands} categories={categories} />
-      {crumbs && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd(crumbs)) }} />}
+      {collection && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(collection) }} />}
     </main>
   );
 }

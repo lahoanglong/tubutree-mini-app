@@ -67,7 +67,9 @@ ssh -i ~/.ssh/chodeli_vietnix_vps root@14.225.207.177 'cd /opt/tubutree && bash 
 # 1. CÀI vhost apex (một lệnh): kiểm, cài, configtest, graceful, kiểm 459 URL qua Apache thật; hỏng bước nào thì TỰ rollback:
 ssh -i ~/.ssh/chodeli_vietnix_vps root@14.225.207.177 'cd /opt/tubutree && bash ops/cutover-apex-apply.sh --apply'
 
-# 2. (việc của chủ, Cloudflare) đổi A của tubutree.com về 14.225.207.177, ☁ xám. Sau đó từ máy ngoài:
+# 2. (việc của chủ, Cloudflare) đổi A của tubutree.com về 14.225.207.177, ☁ xám. Sau đó từ máy ngoài, MỘT lệnh kiểm D-Day (mục 5.1):
+node scripts/cutover/verify-apex-cutover.mjs --base https://tubutree.com
+# Chi tiết thêm khi lệnh trên báo FAIL: TLS/edge và từng URL WordPress
 bash ops/check-edge.sh --app-host tubutree.com
 node scripts/ops/check-cutover-redirects.mjs --base https://tubutree.com --urls scripts/ops/data/wp-live-urls-20261114.txt --blog proxy
 
@@ -82,6 +84,35 @@ Hành vi (đã đo, mục 7):
 - Cài: ghi tệp `0600` qua tệp tạm rồi `mv`, `apachectl -t`, rồi `apachectl -k graceful`. **Không `restart`** (Apache dùng chung với ChoDeli đang bán thật). Test tự động cấm `restart/stop/systemctl` và bắt `-t` đứng trước `-k graceful`.
 - Sau cài: app và api giữ nguyên mã, 459 URL cộng mẫu 24 ảnh uploads qua HTTPS của vhost mới. Có FAIL thì gọi rollback, in lý do, lưu kết quả đầy đủ ở `$BACKUP_DIR/logs/`.
 - `rollback` trả bản cũ nguyên byte nếu từng có vhost, hoặc gỡ tệp nếu trước đó chưa có; **từ chối xoá tệp lạ** nếu không có `--force`; không đụng ảnh uploads, DNS, ZenCloud.
+
+### 5.1. Kiểm D-Day MỘT lệnh (W13-03): `scripts/cutover/verify-apex-cutover.mjs`
+
+Chạy ở gốc repo trên máy ngoài VPS, Node >= 22.18. Lệnh chỉ ĐỌC: gửi GET/HEAD công khai, không đăng nhập, không ghi gì. Mã thoát: `0` không có FAIL (WARN vẫn 0, trừ `--strict`), `1` có FAIL, `2` sai tham số. Thêm `--json` để lưu kết quả.
+
+```bash
+# Trước D-Day, KHÔNG gọi mạng: bảng chuyển hướng + 462 URL WordPress đã lưu, vhost apex, header của next.config, robots/sitemap của bản dựng web
+# (apps/web/.next). Bản dựng phải có NEXT_PUBLIC_SITE_URL=https://tubutree.com, nếu không thì mục [build] báo FAIL "bản dựng chưa đặt NEXT_PUBLIC_SITE_URL".
+node scripts/cutover/verify-apex-cutover.mjs --dry-run
+
+# Sau bước 1 (vhost đã cài), TRƯỚC khi đổi DNS: nhắm thẳng VPS, giữ Host/SNI tubutree.com (như curl --resolve; áp cho tubutree.com và www).
+node scripts/cutover/verify-apex-cutover.mjs --base https://tubutree.com --resolve-ip 14.225.207.177
+
+# Sau bước 2 (đã đổi bản ghi A): lệnh D-Day.
+node scripts/cutover/verify-apex-cutover.mjs --base https://tubutree.com
+```
+
+| Nhóm | FAIL khi |
+| --- | --- |
+| `redirects` | URL WordPress cũ (bảng luật + `scripts/ops/data/wp-live-urls-20261114.txt`, trừ ảnh uploads) không 301 một chặng tới đúng đích, đích trả 404/khác 2xx, có vòng lặp, quá 6 chặng, sang origin lạ (blog phải sang đúng `https://blog.tubutree.com/...`), hoặc trang phải 410 mà không 410 |
+| `robots` | `/robots.txt` không 200, thiếu `Sitemap:` hoặc Sitemap trỏ host khác `https://tubutree.com`, có `Disallow: /`, không chặn `/admin` |
+| `sitemap` | `/sitemap.xml` không phải XML hợp lệ (thẻ lệch, `&` trần, nhiều gốc, trang HTML), gốc không phải `urlset`/`sitemapindex` đúng xmlns, `<url>` thiếu `<loc>`; không có sản phẩm hay danh mục; có URL localhost, staging, `app.tubutree.com`, `http://` hoặc `www`. Không có `/chien-dich/*` chỉ là WARN (đúng khi không có chiến dịch nào có trang riêng) |
+| `pages` | Trang chủ, `/san-pham` và 5 trang sản phẩm lấy đều từ sitemap: không 200, canonical hoặc `og:url` không phải `https://tubutree.com/...` đúng trang, Product JSON-LD sai host, giá không phải VND, AggregateRating khi `reviewCount` < 1; thiếu HSTS, `nosniff`, chống nhúng khung |
+| `img` | Ảnh `/api/img` lấy từ HTML trang sản phẩm: với `Accept: image/webp` không trả 200 `image/webp` có chữ ký RIFF/WEBP. Thiếu `Vary: Accept` hay cache ngắn là WARN; 302 về ảnh gốc (máy bận) là WARN |
+| `edge` | `http://tubutree.com/` hoặc `https://www.tubutree.com/` không 301/308 về `https://tubutree.com/` |
+
+Bỏ nhóm bằng `--skip redirects,img`; `--sample 100` để kiểm nhanh 100 URL chuyển hướng lấy đều; `--canonical` khi host kiểm khác host canonical (vd diễn tập trên `next start` cục bộ: `--base http://localhost:3122 --canonical https://app.tubutree.com --skip redirects,img,edge`).
+
+Đã chạy ngày 21/11/2026 trên nhánh `feat/tubu-w13-03` (mục 7.1).
 
 ## 6. Việc còn lại trước khi cutover thật (cần chủ)
 
@@ -132,6 +163,17 @@ Diễn tập Apache (VPS, một tiến trình Apache thứ hai chạy binary và
 Preflight THẬT trên VPS (`bash ops/cutover-apex-apply.sh`, không `--apply`, đường dẫn mặc định thật): 9 mục PASS, 4 FAIL (chứng chỉ, SITE_URL, CORS 403, Next chưa qua 9 URL), thoát 2, "Chưa đổi gì trên máy".
 
 Dọn dẹp (đã xác nhận): dừng Apache sandbox, xoá mọi tệp tạm `/tmp/w148b-*` trên VPS và ở máy local, đóng tunnel SSH. Cổng 80/443 thật vẫn nghe, `apachectl -t` `Syntax OK`, app=200 api=200. Backup ở mục 4 và 3556 ảnh được giữ nguyên.
+
+### 7.1. `verify-apex-cutover.mjs` (W13-03, 21/11/2026, chưa chạm VPS hay tubutree.com)
+
+- `node scripts/cutover/verify-apex-cutover.mjs --dry-run` trên máy local, chưa có bản dựng web: `redirects` PASS (bảng luật + danh sách URL, 612 URL, 0 vòng lặp, 0 chuỗi 2 chặng), `vhost` PASS, `headers` PASS (`next.config.mjs`), `build` WARN (chưa có `apps/web/.next`). Kết quả 3 PASS, 1 WARN, 0 FAIL, thoát 0.
+- `--dry-run` trên bản dựng của gate e2e (không đặt `NEXT_PUBLIC_SITE_URL`): mục `[build]` FAIL đúng chỗ. Robots trỏ `https://app.tubutree.com/sitemap.xml`, 67/67 URL sitemap không thuộc `https://tubutree.com`, kèm gợi ý đặt biến. Thoát 1. Cùng bản dựng với `--canonical https://app.tubutree.com`: 5 PASS, 0 FAIL, thoát 0.
+- Chế độ chạy thật trên bản dựng `next start` của gate e2e (`apps/e2e/scripts/web-gate.sh tests/organic-seo.web.spec.ts`), lệnh `--base http://localhost:3122 --canonical https://app.tubutree.com --skip redirects,img,edge`:
+  - `robots` PASS;
+  - `sitemap`: XML hợp lệ, 67 URL (44 sản phẩm, 7 danh mục), đúng host; WARN vì DB gate không có chiến dịch;
+  - `pages`: Trang chủ, `/san-pham` và 5 trang sản phẩm đều 200, canonical đúng, Product JSON-LD đúng host, đủ header bảo mật;
+  - 0 FAIL.
+- Chưa chạy chế độ thật trên `https://tubutree.com` (WordPress còn ở ZenCloud) hay qua `--resolve-ip 14.225.207.177` (vhost apex chưa cài). Đó là hai lệnh của D-Day ở mục 5.1.
 
 ## 8. Giới hạn của bằng chứng này
 
