@@ -24,10 +24,13 @@ import { MerchantModule } from '../merchant/merchant.module';
 // Thao tác vận đơn thu gom (tạo lại / huỷ) + tình trạng tích hợp — dùng GomdonOrderService/GomdonClient
 // đã export. GomdonModule không import ngược AdminModule nên không có vòng phụ thuộc.
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
+import { GoLiveController } from './golive/golive.controller';
+import { GoLiveCockpitService } from './golive/golive-cockpit.service';
+import { GoLivePilotService } from './golive/golive-pilot.service';
 
 @Module({
   imports: [ImageRegistryModule, CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
-  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController],
-  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService],
+  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController, GoLiveController],
+  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService, GoLiveCockpitService, GoLivePilotService],
 })
 export class AdminModule {}

@@ -407,14 +407,14 @@ const TABS = NAV_GROUPS.flatMap((g) => g.items);
 const DEFAULT_TAB: Tab = 'inbox';
 
 /** Mục menu dẫn sang trang riêng, không phải tab: nên không nằm trong `Tab`, `NAV_GROUPS` hay `STAFF_TABS` mà chỉ gắn vào menu của ADMIN (xem `adminNavGroups`). */
-type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms';
+type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms' | 'goLive';
 type NavKey = Tab | AdminPageKey;
-const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms']);
+const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms', 'goLive']);
 const isTabKey = (k: NavKey): k is Tab => !ADMIN_PAGE_KEYS.has(k);
 
 /**
  * Trang riêng chỉ ADMIN mở được (API của chúng chỉ nhận ADMIN), xếp ngay sau mục tab neo: bổ sung ảnh dưới "Kiểm tra catalog" (API ảnh WordPress),
- * Sự thật xanh và Từ khoá tìm kiếm cuối nhóm Nội dung (`admin/eco-facts`, `admin/search-synonyms`).
+ * Sự thật xanh và Từ khoá tìm kiếm cuối nhóm Nội dung (`admin/eco-facts`, `admin/search-synonyms`), Bảng kiểm Giờ G ngay sau "Sức khoẻ hệ thống" (`admin/golive`).
  */
 const ADMIN_PAGE_LINKS: Partial<Record<Tab, NavItem<NavKey>[]>> = {
   catalogQuality: [
@@ -437,6 +437,14 @@ const ADMIN_PAGE_LINKS: Partial<Record<Tab, NavItem<NavKey>[]>> = {
       label: 'Từ khoá tìm kiếm',
       href: '/admin/tu-khoa-tim',
       keywords: 'từ khoá tìm kiếm từ đồng nghĩa ô tìm gõ sai tìm phổ biến cụm dự phòng synonym',
+    },
+  ],
+  opsHealth: [
+    {
+      k: 'goLive',
+      label: 'Bảng kiểm Giờ G',
+      href: '/admin/gio-g',
+      keywords: 'giờ g go-live mở bán sẵn sàng đơn thử pilot dọn đơn thử kịch bản migration hmac zns pancake gomdon bộ công thương',
     },
   ],
 };

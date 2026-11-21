@@ -284,6 +284,8 @@ export const FIELD_LABELS: Record<string, string> = {
   remove: 'Chai bỏ ghép tay',
   block: 'Danh sách món đang chặn',
   confirm: 'Cặp duyệt gợi ý',
+  confirmText: 'Câu xác nhận',
+  phones: 'SĐT người thử',
 };
 
 /** Nhãn riêng của một trường trong một DTO, khi chữ trên màn hình khác nhãn toàn cục (cùng tên `category` mà là "Nhóm", "Chủ đề" hay "Danh mục"). */
