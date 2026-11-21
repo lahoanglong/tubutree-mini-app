@@ -18,8 +18,9 @@ const ok = { id: 'p1', name: '5 điểm Xanh', weight: 30, rewardType: 'POINTS',
 function service() {
   const upsert = jest.fn().mockResolvedValue({});
   const base: Record<string, unknown> = {
-    systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: [ok] }), upsert },
+    systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: [ok] }), upsert, createMany: jest.fn().mockResolvedValue({ count: 0 }) },
     systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    $queryRaw: jest.fn().mockResolvedValue([{ value: [ok] }]),
   };
   base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
   return { svc: new SystemConfigService(base as unknown as PrismaService), upsert };

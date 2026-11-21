@@ -285,8 +285,14 @@ describe('Bản chụp bảng bậc thưởng theo quý', () => {
         upsert: jest.fn(async ({ where, update }: { where: { key: string }; update: { value: unknown } }) => {
           store.set(where.key, update.value);
         }),
+        createMany: jest.fn(async ({ data }: { data: { key: string; value: unknown }[] }) => {
+          const fresh = data.filter((d) => !store.has(d.key));
+          for (const d of fresh) store.set(d.key, d.value);
+          return { count: fresh.length };
+        }),
       },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+      $queryRaw: jest.fn(async (_sql: TemplateStringsArray, key: string) => (store.has(key) ? [{ value: store.get(key) }] : [])),
     };
     const realConfig = new SystemConfigService({
       systemConfig: tx.systemConfig,

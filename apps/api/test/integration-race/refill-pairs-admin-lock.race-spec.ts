@@ -14,7 +14,7 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
   let prisma: PrismaService;
   const BRAND = 'W10Lock';
   const REFILL = 'refill-nuoc-rua-chen-w10lock-10l';
-  const BOTTLES = ['nuoc-rua-chen-w10lock-100ml', 'nuoc-rua-chen-w10lock-500ml', 'nuoc-rua-chen-w10lock-1l', 'nuoc-rua-chen-w10lock-2l'];
+  const BOTTLES = ['nuoc-rua-chen-w10lock-100ml', 'nuoc-rua-chen-w10lock-500ml', 'nuoc-rua-chen-w10lock-1l', 'nuoc-rua-chen-w10lock-2l'] as const;
   const pair = (bottleSlug: string): RefillPairOverride => ({ bottleSlug, refillSlug: REFILL });
   // tubu-w11-01: ba chai chỉ lệch chữ "hương" với gói Refill cùng mùi (dòng `near`), và một gói Refill khác họ cùng thương hiệu để ghép tay chen ngang.
   const NEAR_BRAND = 'W11Near';
@@ -48,7 +48,7 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
     for (;;) {
       const i = left.findIndex((r) => JSON.stringify(r.oldValue) === JSON.stringify(values.at(-1)));
       if (i < 0) return values;
-      values.push(left.splice(i, 1)[0].newValue);
+      values.push(left.splice(i, 1)[0]!.newValue);
     }
   }
 
@@ -154,8 +154,8 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
       // Lần tạo dòng không ghi lịch sử (như set() trên khoá mới); lần sau ghi một dòng từ bản lần đầu vừa ghi.
       const h = await prisma.systemConfigHistory.findMany({ where: { key: KEY }, select: { oldValue: true, newValue: true } });
       expect(h).toHaveLength(1);
-      expect((h[0].oldValue as string[]).length).toBe(1);
-      expect([...(h[0].newValue as string[])].sort()).toEqual(['a', 'b']);
+      expect((h[0]!.oldValue as string[]).length).toBe(1);
+      expect([...(h[0]!.newValue as string[])].sort()).toEqual(['a', 'b']);
     } finally {
       await prisma.systemConfigHistory.deleteMany({ where: { key: KEY } });
       await prisma.systemConfig.deleteMany({ where: { key: KEY } });
@@ -208,5 +208,77 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
       expect(now).toEqual([hand]);
       expect(await history()).toHaveLength(1);
     }
+  });
+
+  /**
+   * tubu-w12-02 (MINOR của w10-01): `set()` (lưu thô ở tab Cấu hình) đọc bản đang lưu không khoá dòng. Một transaction khác giữ khoá dòng (như
+   * `update()` đang gộp) trong lúc hai lần `set()` bắt đầu: trước đây cả hai đọc cùng bản cũ, ghi hai dòng lịch sử cùng oldValue, mắt xích ở
+   * giữa mất khỏi lịch sử. Hai SystemConfigService riêng như hai tiến trình API.
+   */
+  async function holdRow(key: string, insertValue?: string[]) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let ready!: () => void;
+    const holding = new Promise<void>((r) => (ready = r));
+    const done = prisma.$transaction(
+      async (tx) => {
+        // Khoá có dòng: giữ khoá dòng. Khoá chưa có dòng: chèn dòng mà chưa commit, lần chèn khác phải chờ.
+        if (insertValue) await tx.systemConfig.createMany({ data: [{ key, value: insertValue, category: 'w10lock', updatedBy: 'w10-lock-holder' }] });
+        else await tx.$queryRaw`SELECT "value" FROM system_configs WHERE "key" = ${key} FOR UPDATE`;
+        ready();
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
+    await holding;
+    return async () => {
+      // Cho hai lần set() kịp tới bước đọc (bản cũ đọc ngay, bản mới chờ khoá) rồi mới nhả.
+      await new Promise((r) => setTimeout(r, 500));
+      release();
+      await done;
+    };
+  }
+
+  async function setProbe(key: string, run: () => Promise<void>) {
+    await prisma.systemConfigHistory.deleteMany({ where: { key } });
+    await prisma.systemConfig.deleteMany({ where: { key } });
+    try {
+      await run();
+    } finally {
+      await prisma.systemConfigHistory.deleteMany({ where: { key } });
+      await prisma.systemConfig.deleteMany({ where: { key } });
+    }
+  }
+
+  it('tubu-w12-02 SystemConfigService.set trên khoá có dòng, chen với một transaction đang khoá dòng: hai lần ghi nối tiếp, lịch sử đủ mắt xích', async () => {
+    const KEY = 'w10lock.set_probe';
+    await setProbe(KEY, async () => {
+      await new SystemConfigService(prisma).set(KEY, ['v0'], 'w10-lock-seed');
+      const release = await holdRow(KEY);
+      const writes = Promise.all([new SystemConfigService(prisma).set(KEY, ['a'], 'w10-lock-a'), new SystemConfigService(prisma).set(KEY, ['b'], 'w10-lock-b')]);
+      await release();
+      await writes;
+
+      const h = await prisma.systemConfigHistory.findMany({ where: { key: KEY }, select: { oldValue: true, newValue: true } });
+      const row = await prisma.systemConfig.findUniqueOrThrow({ where: { key: KEY } });
+      expect(h).toHaveLength(2);
+      expect(chain(h, ['v0'])).toEqual([['v0'], expect.anything(), row.value]);
+    });
+  });
+
+  it('tubu-w12-02 SystemConfigService.set trên khoá chưa có dòng, chen với một lần tạo dòng chưa commit: không lần ghi nào mất dấu trong lịch sử', async () => {
+    const KEY = 'w10lock.set_new_probe';
+    await setProbe(KEY, async () => {
+      const release = await holdRow(KEY, ['h']);
+      const writes = Promise.all([new SystemConfigService(prisma).set(KEY, ['a'], 'w10-lock-a'), new SystemConfigService(prisma).set(KEY, ['b'], 'w10-lock-b')]);
+      await release();
+      await writes;
+
+      // Dòng do transaction kia tạo là bản đầu; hai lần set() mỗi lần một dòng lịch sử nối tiếp từ đó.
+      const h = await prisma.systemConfigHistory.findMany({ where: { key: KEY }, select: { oldValue: true, newValue: true } });
+      const row = await prisma.systemConfig.findUniqueOrThrow({ where: { key: KEY } });
+      expect(h).toHaveLength(2);
+      expect(chain(h, ['h'])).toEqual([['h'], expect.anything(), row.value]);
+    });
   });
 });

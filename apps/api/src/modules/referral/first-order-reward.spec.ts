@@ -23,6 +23,8 @@ interface World {
   addresses?: Record<string, unknown>[];
   entries?: { reason: string; refId: string }[];
   monthCount?: number;
+  /** Số cặp trong `monthCount` đã có dòng thu hồi phía người mời (gộp phiên khách tự mời). */
+  revokedCount?: number;
   grant?: jest.Mock;
 }
 
@@ -52,7 +54,9 @@ function setup(w: World = {}) {
         if (where.refId) return entries.find((e) => where.refId!.in.includes(e.refId) && e.reason.startsWith('REFERRAL_FIRST_ORDER_')) ?? null;
         return null;
       }),
-      count: jest.fn(async () => w.monthCount ?? 0),
+      // Trần tháng: các dòng thưởng phía người mời trong tháng, rồi đếm dòng thu hồi khớp các dòng đó.
+      findMany: jest.fn(async () => Array.from({ length: w.monthCount ?? 0 }, (_, i) => ({ reason: `${FIRST_ORDER_REFERRER_PREFIX}f${i}` }))),
+      count: jest.fn(async () => w.revokedCount ?? 0),
     },
     returnRequest: { findMany: jest.fn(async () => []) },
     address: { findMany: jest.fn(async () => w.addresses ?? []) },
@@ -197,10 +201,24 @@ describe('grantFirstOrderReferralReward', () => {
     const capped = setup({ monthCount: 10 });
     expect(await capped.run()).toEqual({ status: 'SKIPPED', reason: 'CAPPED' });
     expect(capped.grant).not.toHaveBeenCalled();
-    const where = (capped.db.pointsTransaction.count.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where;
+    const where = (capped.db.pointsTransaction.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where;
     expect(where).toMatchObject({ userId: 'r1', refType: 'REFERRAL', reason: { startsWith: FIRST_ORDER_REFERRER_PREFIX }, createdAt: { gte: new Date('2026-10-31T17:00:00.000Z') } });
     const zero = setup({ cfg: { [REFERRAL_MONTHLY_CAP_KEY]: 0 } });
     expect(await zero.run()).toEqual({ status: 'SKIPPED', reason: 'CAPPED' });
+  });
+
+  it('w10-03 M3: cặp đã bị thu hồi khi gộp phiên khách tự mời trả lại chỗ trong trần tháng, đếm khớp số "đã thưởng" của Trung tâm tăng trưởng', async () => {
+    const s = setup({ monthCount: 10, revokedCount: 1 });
+    expect(await s.run()).toEqual({ status: 'GRANTED', referrerId: 'r1', refereeId: 'f1', points: 100 });
+    // Cùng cách ghép với firstOrderGuardStats: dòng thu hồi phía người mời của đúng từng bạn đã thưởng trong tháng, ghi kỳ nào cũng tính.
+    expect(s.db.pointsTransaction.count).toHaveBeenCalledWith({
+      where: { refType: 'REFERRAL', reason: { in: Array.from({ length: 10 }, (_, i) => `${FIRST_ORDER_REVOKE_PREFIX}REFERRER:f${i}`) } },
+    });
+    expect(await setup({ monthCount: 11, revokedCount: 1 }).run()).toEqual({ status: 'SKIPPED', reason: 'CAPPED' });
+    // Tháng chưa thưởng ai: không cần đếm dòng thu hồi.
+    const fresh = setup({ monthCount: 0 });
+    expect((await fresh.run()).status).toBe('GRANTED');
+    expect(fresh.db.pointsTransaction.count).not.toHaveBeenCalled();
   });
 
   it('chỉ một trong hai dòng ghi được: ném để rollback cả hai', async () => {

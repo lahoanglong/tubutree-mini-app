@@ -10,7 +10,10 @@ function make(
     user: {
       findUniqueOrThrow: jest.fn(async () => ({ referralCode: 'TUBU123', role: 'CUSTOMER', isBlocked: false, metadata: null, phone: '0901111111', zaloId: 'zalo-u', ...opts.user })),
     },
-    pointsTransaction: { count: jest.fn(async () => opts.monthCount ?? 0) },
+    pointsTransaction: {
+      findMany: jest.fn(async () => Array.from({ length: opts.monthCount ?? 0 }, (_, i) => ({ reason: `REFERRAL_FIRST_ORDER_REFERRER:f${i}` }))),
+      count: jest.fn(async () => 0),
+    },
     wasteRequestLine: { aggregate: jest.fn(async () => ({ _sum: { receivedQty: opts.wasteSum === undefined ? 7 : opts.wasteSum } })) },
   };
   const config = { get: async <T,>(k: string, fb?: T) => (k in cfg ? (cfg[k] as T) : (fb as T)) };

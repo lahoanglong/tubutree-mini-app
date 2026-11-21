@@ -90,7 +90,11 @@ const INTS = EXPECTED.filter((e) => e[1] === 'int') as [string, string, number, 
 const BOOLS = EXPECTED.filter((e) => e[1] === 'boolean').map((e) => e[0]);
 
 function makeService() {
-  const tx = { systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() }, systemConfigHistory: { create: jest.fn() } };
+  const tx = {
+    systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn(), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    systemConfigHistory: { create: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
+  };
   const prisma = { systemConfig: tx.systemConfig, $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
   return new SystemConfigService(prisma);
 }
@@ -258,8 +262,9 @@ describe('write rules (SystemConfigService.set and the admin form rules)', () =>
   });
   it('a change to a waste.* key is recorded in system_config_history like every config key, and setting waste.max_open_requests > 2 (e.g. 5) is rejected (spec 9, W179-B)', async () => {
     const tx = {
-      systemConfig: { findUnique: jest.fn().mockResolvedValue({ key: 'waste.max_open_requests', value: 2 }), upsert: jest.fn() },
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ key: 'waste.max_open_requests', value: 2 }), upsert: jest.fn(), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       systemConfigHistory: { create: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([{ value: 2 }]),
     };
     const prisma = { $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
     const svc = new SystemConfigService(prisma);

@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { summarizeOpeningHours } from '../../../packages/app-core/src/waste-hours';
+import { withSharedConfigLock } from './support/shared-config-lock';
 
 /**
  * SEO organic của web trên API thật (DB tạm của web-gate.sh): sitemap phủ đủ sản phẩm và danh mục đang bán, robots chặn trang riêng tư,
@@ -107,19 +108,27 @@ test.describe('SEO organic (sitemap, robots, JSON-LD, FAQ)', () => {
   });
 
   test('/doi-rac: FAQPage đúng phần hiển thị trong HTML máy chủ, chỉ nêu cách giao đang mở và giờ kho thật', async ({ browser, request, baseURL }) => {
-    const { waste } = await apiJson<{ waste: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean } }>(request, '/config/public');
-    // Route công khai: không cần đăng nhập.
-    const warehouses = await apiJson<{ name: string; openingHours: Record<string, { open: string; close: string }[]> }[]>(request, '/waste/warehouses');
-    expect(Array.isArray(warehouses)).toBe(true);
+    test.setTimeout(120_000);
+    // admin-all-tabs bật thử cờ waste.enabled trên cùng DB gate: chờ ca đó trả cờ xong mới đọc cờ và trang, kẻo so trang dựng lúc cờ tắt với cờ đang bật.
+    const { waste, warehouses, shown, blocks } = await withSharedConfigLock('waste.enabled', async () => {
+      const { waste } = await apiJson<{ waste: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean } }>(request, '/config/public');
+      // Route công khai: không cần đăng nhập.
+      const warehouses = await apiJson<{ name: string; openingHours: Record<string, { open: string; close: string }[]> }[]>(request, '/waste/warehouses');
+      expect(Array.isArray(warehouses)).toBe(true);
 
-    const ctx = await browser.newContext({ javaScriptEnabled: false });
-    const page = await ctx.newPage();
-    await page.goto(`${baseURL}/doi-rac`);
-    const shown = await page.locator('main details').evaluateAll((els) =>
-      els.map((d) => ({ q: d.querySelector('summary')!.textContent!.trim(), a: d.querySelector('p')!.textContent!.trim() })),
-    );
-    const blocks = await page.locator('script[type="application/ld+json"]').evaluateAll((els) => els.map((s) => JSON.parse(s.textContent!)));
-    await ctx.close();
+      const ctx = await browser.newContext({ javaScriptEnabled: false });
+      try {
+        const page = await ctx.newPage();
+        await page.goto(`${baseURL}/doi-rac`);
+        const shown = await page.locator('main details').evaluateAll((els) =>
+          els.map((d) => ({ q: d.querySelector('summary')!.textContent!.trim(), a: d.querySelector('p')!.textContent!.trim() })),
+        );
+        const blocks = await page.locator('script[type="application/ld+json"]').evaluateAll((els) => els.map((s) => JSON.parse(s.textContent!)));
+        return { waste, warehouses, shown, blocks };
+      } finally {
+        await ctx.close();
+      }
+    });
     const faq = blocks.find((b) => b['@type'] === 'FAQPage') as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] } | undefined;
 
     if (!waste.enabled) {

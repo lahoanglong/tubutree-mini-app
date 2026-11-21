@@ -1165,8 +1165,9 @@ describe('khoá cấu hình mini-game: luật ghi của admin khớp biên đọ
   function configService() {
     const upsert = jest.fn().mockResolvedValue({});
     const base: Record<string, unknown> = {
-      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert },
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert, createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       systemConfigHistory: { create: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
     return { svc: new SystemConfigService(base as unknown as PrismaService), upsert };

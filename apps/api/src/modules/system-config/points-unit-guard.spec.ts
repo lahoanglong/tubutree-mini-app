@@ -84,8 +84,9 @@ function configService() {
   const findUnique = jest.fn().mockResolvedValue(null);
   const upsert = jest.fn().mockResolvedValue({});
   const base: Record<string, unknown> = {
-    systemConfig: { findUnique, upsert },
+    systemConfig: { findUnique, upsert, createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     systemConfigHistory: { create: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
   return { svc: new SystemConfigService(base as unknown as PrismaService), upsert };

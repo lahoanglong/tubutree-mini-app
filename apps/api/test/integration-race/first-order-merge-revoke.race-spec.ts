@@ -9,7 +9,8 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
-import { REFERRAL_VIRAL_ENABLED_KEY } from '../../src/modules/referral/viral-config';
+import { REFERRAL_MONTHLY_CAP_KEY, REFERRAL_VIRAL_ENABLED_KEY } from '../../src/modules/referral/viral-config';
+import { referrerFirstOrderCount } from '../../src/modules/referral/first-order-reward';
 import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
 
 const POINTS = 100;
@@ -153,5 +154,44 @@ describe('Gộp phiên khách tự mời thu hồi thưởng đơn đầu (real 
     expect(await balanceOf(target.id)).toBe(POINTS);
     expect(await prisma.pointsTransaction.count({ where: { reason: { startsWith: 'REFERRAL_FIRST_ORDER_REVOKE:' }, refId: `MERGE:${guest.id}` } })).toBe(0);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: guest.id } })).referredById).toBe(referrer.id);
+  });
+
+  it('w10-03 M3: cặp tự mời bị thu hồi khi gộp trả lại chỗ trong trần tháng của T; trần vẫn chặn bạn kế tiếp', async () => {
+    const sys = moduleRef.get(SystemConfigService);
+    const saved = await prisma.systemConfig.findUnique({ where: { key: REFERRAL_MONTHLY_CAP_KEY } });
+    // set() xoá cache của chính service mà RewardPointsService đọc, nên trần 1 có hiệu lực ngay.
+    await sys.set(REFERRAL_MONTHLY_CAP_KEY, 1, 'w12-02-it');
+    try {
+      const target = await createUser(prisma, { zaloId: `zalo_it_${randCode(10)}` });
+      const { guest } = await rewardedGuest(target.id);
+      await merge(guest.id, target);
+      expect(await referrerFirstOrderCount(prisma, target.id, new Date())).toBe(0);
+
+      // Bạn thật của T (SĐT, địa chỉ khác sổ của T) có đơn đầu: trước đây cặp đã thu hồi vẫn chiếm chỗ nên lần này bị CAPPED.
+      const friendOrder = async () => {
+        const friend = await createUser(prisma, { zaloId: `zalo_it_${randCode(10)}`, phone: phone(), referredById: target.id });
+        const order = await createOrder(prisma, {
+          userId: friend.id,
+          status: 'DELIVERED',
+          subtotal: 250_000,
+          total: 250_000,
+          deliveredAt: new Date(),
+          shippingAddress: { recipient: 'Ban IT', phone: phone(), street: `${randCode(4)} Le Loi`, ward: 'Ben Thanh', district: 'Quan 1', province: 'TP.HCM', provinceCode: '79', districtCode: '760', wardCode: '26743' },
+        });
+        return { friend, order };
+      };
+      const first = await friendOrder();
+      expect(await rewards.grantReferralFirstOrderReward(first.order.id)).toEqual({ status: 'GRANTED', referrerId: target.id, refereeId: first.friend.id, points: POINTS });
+      expect(await referrerFirstOrderCount(prisma, target.id, new Date())).toBe(1);
+
+      const second = await friendOrder();
+      expect(await rewards.grantReferralFirstOrderReward(second.order.id)).toEqual({ status: 'SKIPPED', reason: 'CAPPED' });
+      // Sổ của T: hai dòng thưởng phía người mời trong tháng (phiên khách đã thu hồi và bạn thật), trần đếm 1.
+      expect(await prisma.pointsTransaction.count({ where: { userId: target.id, refType: 'REFERRAL', reason: { startsWith: 'REFERRAL_FIRST_ORDER_REFERRER:' } } })).toBe(2);
+    } finally {
+      if (saved) await sys.set(REFERRAL_MONTHLY_CAP_KEY, saved.value as never, 'w12-02-it');
+      else await prisma.systemConfig.deleteMany({ where: { key: REFERRAL_MONTHLY_CAP_KEY } });
+      await prisma.systemConfigHistory.deleteMany({ where: { key: REFERRAL_MONTHLY_CAP_KEY, changedBy: 'w12-02-it' } });
+    }
   });
 });

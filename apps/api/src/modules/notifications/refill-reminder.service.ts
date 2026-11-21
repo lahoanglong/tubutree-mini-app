@@ -32,6 +32,8 @@ interface DueOrder {
   id: string;
   userId: string;
   createdAt: Date;
+  /** deliveredAt dạng chữ của chính Postgres: con trỏ lô sau so lại đúng giá trị cột, không đi vòng qua Date và múi giờ phiên. */
+  deliveredKey: string;
 }
 
 /**
@@ -40,7 +42,9 @@ interface DueOrder {
  *
  * - Một đơn một lượt xét: dòng `refill_reminders` (unique theo đơn) ghi lúc nhận việc, cộng khoá chống trùng `refill21d:<đơn>` của tin.
  * - Bỏ qua khách đã tắt tin khuyến mãi, bị khoá, hay MSS báo từ chối; khách đã đặt lại gói Refill đó trong 21 ngày.
- * - Mỗi khách tối đa một tin nhắc Refill mỗi 7 ngày (kiểm dưới khoá advisory theo khách); tối đa BATCH đơn mỗi lượt.
+ * - Mỗi khách tối đa một tin nhắc Refill mỗi 7 ngày (kiểm dưới khoá advisory theo khách). Mỗi lượt đọc từng lô BATCH đơn theo con trỏ
+ *   (deliveredAt, id), tối đa MAX_BATCHES lô: đơn không ghi dòng (gửi lỗi, CAPPED) vẫn đứng đầu hàng ngày sau, nhưng không chiếm
+ *   chỗ của đơn phía sau trong cùng lượt.
  * - Không nhắc đôi cùng chai với tin "Nhắc mua lại" 30 ngày (LifecycleService): tin đó đã nhắc chai sau khi đặt đơn thì đơn dừng
  *   (NUDGED); tin Refill đã gửi thì chu kỳ của chai được nêu ở `reorder_reminders` coi như đã nhắc, trừ khi khách đã mua chai đó lần nữa.
  * - Chỉ đơn giao từ 21 tới 28 ngày trước: bật cờ lần đầu không nhắc cả lịch sử đơn.
@@ -51,6 +55,8 @@ interface DueOrder {
 export class RefillReminderService {
   private static readonly LOCK_KEY = 'cron:notify.refill_21d';
   static readonly BATCH = 300;
+  /** Trần số lô mỗi lượt (BATCH × MAX_BATCHES đơn): khoá lượt chạy tự gia hạn, trần chỉ chặn một lượt chạy quá lâu. */
+  static readonly MAX_BATCHES = 10;
   private readonly logger = new Logger(RefillReminderService.name);
   private running = false;
 
@@ -100,40 +106,55 @@ export class RefillReminderService {
     const w = refillReminderWindow(now);
     // Chặn dưới createdAt để truy vấn đi qua index (status, createdAt): đơn giao trong cửa sổ không thể đặt trước đó quá 60 ngày.
     const createdFloor = new Date(w.oldest.getTime() - 60 * 864e5);
-    const orders = await this.prisma.$queryRaw<DueOrder[]>`
-      SELECT o.id, o."userId", o."createdAt"
-        FROM orders o
-       WHERE o.status::text = 'DELIVERED'
-         AND o.type::text = 'RETAIL'
-         AND o."placedForCustomer" = false
-         AND o."createdAt" >= ${createdFloor}
-         AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${w.dueBefore} AND o."deliveredAt" > ${w.oldest}
-         -- Chỉ khách thật: tài khoản guest_ không có chuông thông báo để nhận tin.
-         AND EXISTS (SELECT 1 FROM users u WHERE u.id = o."userId" AND ${REAL_USER_SQL})
-         AND NOT EXISTS (SELECT 1 FROM refill_reminders rr WHERE rr."orderId" = o.id)
-         -- Khách vừa nhận tin trong 7 ngày: đơn chờ ngoài truy vấn, không chiếm chỗ của lô (đơn khác vẫn tới lượt).
-         AND NOT EXISTS (
-           SELECT 1 FROM refill_reminders r2
-            WHERE r2."userId" = o."userId" AND r2.outcome = 'SENT' AND r2."createdAt" >= ${w.userGapSince})
-         AND EXISTS (
-           SELECT 1 FROM order_items oi JOIN variations v ON v.id = oi."variationId"
-            WHERE oi."orderId" = o.id AND oi."isGift" = false AND v."productId" IN (${Prisma.join([...pairs.keys()])}))
-       ORDER BY o."deliveredAt" ASC, o.id ASC
-       LIMIT ${RefillReminderService.BATCH}`;
-    for (const o of orders) {
-      const outcome = await this.remindOne(o, pairs, now, zns).catch((err: unknown): Outcome => {
-        this.logger.error(`Nhắc Refill lỗi (order=${o.id}): ${err instanceof Error ? err.message : err}`);
-        return 'FAILED';
-      });
-      if (outcome === 'SENT') stats.sent++;
-      else if (outcome === 'REORDERED') stats.reordered++;
-      else if (outcome === 'OPTED_OUT') stats.optedOut++;
-      else if (outcome === 'NUDGED') stats.nudged++;
-      else if (outcome === 'CAPPED') stats.capped++;
-      else if (outcome === 'NO_PAIR') stats.noPair++;
-      else if (outcome === 'FAILED') stats.failed++;
+    const pairIds = Prisma.join([...pairs.keys()]);
+    let after: DueOrder | null = null;
+    let total = 0;
+    for (let batch = 0; batch < RefillReminderService.MAX_BATCHES; batch++) {
+      const cursor: Prisma.Sql = after
+        ? Prisma.sql`AND (o."deliveredAt", o.id) > (${after.deliveredKey}::timestamp, ${after.id})`
+        : Prisma.empty;
+      const orders: DueOrder[] = await this.prisma.$queryRaw<DueOrder[]>`
+        SELECT o.id, o."userId", o."createdAt", o."deliveredAt"::text AS "deliveredKey"
+          FROM orders o
+         WHERE o.status::text = 'DELIVERED'
+           AND o.type::text = 'RETAIL'
+           AND o."placedForCustomer" = false
+           AND o."createdAt" >= ${createdFloor}
+           AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${w.dueBefore} AND o."deliveredAt" > ${w.oldest}
+           ${cursor}
+           -- Chỉ khách thật: tài khoản guest_ không có chuông thông báo để nhận tin.
+           AND EXISTS (SELECT 1 FROM users u WHERE u.id = o."userId" AND ${REAL_USER_SQL})
+           AND NOT EXISTS (SELECT 1 FROM refill_reminders rr WHERE rr."orderId" = o.id)
+           -- Khách vừa nhận tin trong 7 ngày (kể cả ở lô trước của lượt này): đơn chờ ngoài truy vấn, không chiếm chỗ của lô.
+           AND NOT EXISTS (
+             SELECT 1 FROM refill_reminders r2
+              WHERE r2."userId" = o."userId" AND r2.outcome = 'SENT' AND r2."createdAt" >= ${w.userGapSince})
+           AND EXISTS (
+             SELECT 1 FROM order_items oi JOIN variations v ON v.id = oi."variationId"
+              WHERE oi."orderId" = o.id AND oi."isGift" = false AND v."productId" IN (${pairIds}))
+         ORDER BY o."deliveredAt" ASC, o.id ASC
+         LIMIT ${RefillReminderService.BATCH}`;
+      for (const o of orders) {
+        const outcome = await this.remindOne(o, pairs, now, zns).catch((err: unknown): Outcome => {
+          this.logger.error(`Nhắc Refill lỗi (order=${o.id}): ${err instanceof Error ? err.message : err}`);
+          return 'FAILED';
+        });
+        if (outcome === 'SENT') stats.sent++;
+        else if (outcome === 'REORDERED') stats.reordered++;
+        else if (outcome === 'OPTED_OUT') stats.optedOut++;
+        else if (outcome === 'NUDGED') stats.nudged++;
+        else if (outcome === 'CAPPED') stats.capped++;
+        else if (outcome === 'NO_PAIR') stats.noPair++;
+        else if (outcome === 'FAILED') stats.failed++;
+      }
+      total += orders.length;
+      if (orders.length < RefillReminderService.BATCH) break;
+      after = orders[orders.length - 1]!;
+      if (batch === RefillReminderService.MAX_BATCHES - 1) {
+        this.logger.warn(`Nhắc Refill 21 ngày: chạm trần ${RefillReminderService.MAX_BATCHES} lô (${total} đơn), phần còn lại để lượt sau.`);
+      }
     }
-    if (orders.length > 0) this.logger.log(`Nhắc Refill 21 ngày: ${orders.length} đơn tới hạn, ${JSON.stringify(stats)}.`);
+    if (total > 0) this.logger.log(`Nhắc Refill 21 ngày: ${total} đơn tới hạn, ${JSON.stringify(stats)}.`);
     return stats;
   }
 

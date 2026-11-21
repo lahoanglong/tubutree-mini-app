@@ -19,8 +19,9 @@ function seededConfigs(): { key: string; value: unknown }[] {
 
 function makeService() {
   const tx = {
-    systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
+    systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn(), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     systemConfigHistory: { create: jest.fn() },
+    $queryRaw: jest.fn().mockResolvedValue([]),
   };
   const prisma = { $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
   return new SystemConfigService(prisma);

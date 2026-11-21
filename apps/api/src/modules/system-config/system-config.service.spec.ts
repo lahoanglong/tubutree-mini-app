@@ -14,11 +14,31 @@ function makePrisma(opts: {
   const upsert = opts.upsert ?? jest.fn().mockResolvedValue({});
   const historyCreate = opts.historyCreate ?? jest.fn().mockResolvedValue({});
   const base: Record<string, unknown> = {
-    systemConfig: { findUnique, upsert },
+    // set(): createMany (dòng đã có → 0) rồi SELECT … FOR UPDATE trả đúng bản findUnique đang giả lập.
+    systemConfig: { findUnique, upsert, createMany: jest.fn().mockResolvedValue({ count: 0 }) },
     systemConfigHistory: { create: historyCreate },
+    $queryRaw: jest.fn(async (_sql: TemplateStringsArray, key: string) => {
+      const row = await findUnique({ where: { key } });
+      return row ? [row] : [];
+    }),
   };
   base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
-  return { prisma: base as unknown as PrismaService, findUnique, upsert, historyCreate };
+  return { prisma: base as unknown as PrismaService, findUnique, upsert, historyCreate, queryRaw: base.$queryRaw as jest.Mock };
+}
+
+/**
+ * set() tạo dòng nếu chưa có (createMany, dòng đã có → 0) rồi đọc bản đang lưu bằng SELECT … FOR UPDATE: mock tx của các ca chỉ khai
+ * findUnique nên lần đọc khoá trả đúng bản findUnique đang giả lập.
+ */
+function lockable<T extends { systemConfig: object }>(tx: T): T {
+  const sc = tx.systemConfig as { findUnique: jest.Mock; createMany?: jest.Mock };
+  sc.createMany ??= jest.fn().mockResolvedValue({ count: 0 });
+  const t = tx as T & { $queryRaw?: jest.Mock };
+  t.$queryRaw ??= jest.fn(async (_sql: TemplateStringsArray, key: string) => {
+    const row = await sc.findUnique({ where: { key } });
+    return row ? [row] : [];
+  });
+  return t;
 }
 
 describe('SystemConfigService.get', () => {
@@ -81,6 +101,27 @@ describe('SystemConfigService.set', () => {
     );
   });
 
+  it('đọc bản đang lưu bằng SELECT … FOR UPDATE trong transaction ghi (như update()), không đọc thường: hai lần ghi cùng khoá nối tiếp nhau', async () => {
+    const { prisma, queryRaw, historyCreate } = makePrisma({ existing: { value: 100000 } });
+    await new SystemConfigService(prisma).set('wallet.withdraw_min', 150000, 'admin1');
+    const sql = (queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
+    expect(sql).toMatch(/FROM system_configs WHERE "key" = \? FOR UPDATE/);
+    expect(historyCreate).toHaveBeenCalledWith({ data: { key: 'wallet.withdraw_min', oldValue: 100000, newValue: 150000, changedBy: 'admin1' } });
+  });
+
+  it('dòng do chính lần ghi tạo (createMany đếm 1): không ghi lịch sử, kể cả khi đọc khoá thấy dòng vừa tạo', async () => {
+    const { prisma, historyCreate, upsert } = makePrisma({ existing: { value: 5 } });
+    const tx = prisma as unknown as { systemConfig: { createMany: jest.Mock } };
+    tx.systemConfig.createMany.mockResolvedValueOnce({ count: 1 });
+    await new SystemConfigService(prisma).set('wallet.withdraw_min', 150000, 'admin1');
+    expect(tx.systemConfig.createMany).toHaveBeenCalledWith({
+      data: [{ key: 'wallet.withdraw_min', value: 150000, category: 'wallet', updatedBy: 'admin1' }],
+      skipDuplicates: true,
+    });
+    expect(historyCreate).not.toHaveBeenCalled();
+    expect(upsert).toHaveBeenCalled();
+  });
+
   it('key chưa tồn tại + không có dấu chấm → category = misc (không phải chính key đó)', async () => {
     const { prisma, upsert } = makePrisma({ existing: null });
     const service = new SystemConfigService(prisma);
@@ -125,11 +166,12 @@ describe('SystemConfigService.set', () => {
 describe('SystemConfigService.set — biên đơn vị cho khoá nhạy cảm', () => {
   function mk() {
     const tx = {
-      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: 0.7 }), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: 0.7 }), upsert: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+      $queryRaw: jest.fn().mockResolvedValue([{ value: 0.7 }]),
     };
     const prisma = {
-      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))),
     } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
@@ -180,7 +222,7 @@ describe('SystemConfigService.set — khoá seed null = "chưa đặt" (ETA giao
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))),
     } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
@@ -207,7 +249,7 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))),
     } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
@@ -277,7 +319,7 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))),
     } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
@@ -445,7 +487,8 @@ describe('SystemConfigService.set — phí sàn mặc định của gian hàng �
     const { prisma } = makePrisma({ existing });
     const tx = prisma as unknown as Record<string, unknown>;
     tx.$executeRaw = jest.fn().mockResolvedValue(0);
-    tx.$queryRaw = jest.fn().mockResolvedValue(stores);
+    // Câu đọc khoá dòng của set() trả bản đang lưu; câu còn lại là danh sách gian hàng của freezeDefaultCommissionChange.
+    tx.$queryRaw = jest.fn(async (sql: TemplateStringsArray) => (sql.join('?').includes('FROM system_configs') ? (existing ? [existing] : []) : stores));
     const createMany = jest.fn().mockResolvedValue({ count: 0 });
     tx.storefrontTermsHistory = {
       groupBy: jest.fn().mockResolvedValue(withHistory.map((storefrontId) => ({ storefrontId }))),
@@ -531,7 +574,7 @@ describe('SystemConfigService.set — điểm uy tín cộng đồng và thưở
       systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
-    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))) } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
 
@@ -586,7 +629,7 @@ describe('SystemConfigService.set — freeship đơn đầu và link Mini App ch
       systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
-    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))) } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
 
@@ -638,7 +681,7 @@ describe('SystemConfigService.set — khoá chat CSKH (chat.*)', () => {
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))),
     } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
@@ -728,7 +771,7 @@ describe('SystemConfigService.set — khoá nhịp chơi người mới của V�
       systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
       systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
     };
-    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(lockable(tx))) } as unknown as PrismaService;
     return { svc: new SystemConfigService(prisma), tx };
   }
 
