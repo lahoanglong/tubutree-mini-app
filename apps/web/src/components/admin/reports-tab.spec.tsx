@@ -12,8 +12,9 @@ const mocks = vi.hoisted(() => ({
   downloadPayoutsCsv: vi.fn(),
   downloadRefundsCsv: vi.fn(),
   downloadPaymentDiscountsCsv: vi.fn(),
+  downloadAccountingCsv: vi.fn(),
 }));
-vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv, downloadPaymentDiscountsCsv: mocks.downloadPaymentDiscountsCsv }));
+vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv, downloadPaymentDiscountsCsv: mocks.downloadPaymentDiscountsCsv, downloadAccountingCsv: mocks.downloadAccountingCsv }));
 vi.mock('@/lib/admin-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-client')>()), downloadOrdersCsv: mocks.downloadOrdersCsv }));
 
 let mounted: Rendered[] = [];
@@ -321,6 +322,21 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(mocks.downloadPaymentDiscountsCsv).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' });
       expect(mocks.downloadRefundsCsv).not.toHaveBeenCalled();
       expect(container.textContent).toContain('Đã tải ck-tt.csv');
+    });
+
+    it('nút đối soát kế toán tải file theo đơn với khoảng ngày đang chọn; khoảng ngày sai thì khoá nút', async () => {
+      mocks.downloadAccountingCsv.mockResolvedValue({ filename: 'doi-soat-ke-toan.csv', bytes: 1 });
+      const { container } = mount(<ReportsTab />);
+      await flush();
+      expect(container.textContent).toContain('Đối soát doanh thu và hoàn tiền');
+      expect(container.textContent).toContain('Không có SĐT hay tên khách.');
+      click(btn(container, 'Xuất CSV đối soát kế toán'));
+      await flush();
+      expect(mocks.downloadAccountingCsv).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' });
+      expect(container.textContent).toContain('Đã tải doi-soat-ke-toan.csv');
+      typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]'), '01012024');
+      await flush();
+      expect(btn(container, 'Xuất CSV đối soát kế toán').disabled).toBe(true);
     });
 
     it('câu chỉ sang tab thuế dùng đúng tên mục trên thanh bên ("Thuế TNCN hoa hồng")', async () => {

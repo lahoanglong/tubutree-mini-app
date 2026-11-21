@@ -27,10 +27,14 @@ import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 import { GoLiveController } from './golive/golive.controller';
 import { GoLiveCockpitService } from './golive/golive-cockpit.service';
 import { GoLivePilotService } from './golive/golive-pilot.service';
+import { BulkOpsController } from './bulk-ops/bulk-ops.controller';
+import { OrderBulkStatusService } from './bulk-ops/order-bulk-status.service';
+import { PancakeReconcileController } from './pancake-reconcile/pancake-reconcile.controller';
+import { AccountingExportController } from './accounting-export/accounting-export.controller';
 
 @Module({
   imports: [ImageRegistryModule, CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
-  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController, GoLiveController],
-  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService, GoLiveCockpitService, GoLivePilotService],
+  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController, GoLiveController, BulkOpsController, PancakeReconcileController, AccountingExportController],
+  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService, GoLiveCockpitService, GoLivePilotService, OrderBulkStatusService],
 })
 export class AdminModule {}

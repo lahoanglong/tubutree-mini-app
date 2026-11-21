@@ -173,6 +173,8 @@ import { AdminPagination } from '@/components/admin/admin-pagination';
 import { useToastedMessage } from '@/components/admin/admin-toast';
 import { reportSectionsFor } from '@/components/admin/report-sections';
 import { AdminNav, type NavGroup, type NavItem } from '@/components/admin/admin-nav';
+import { OrderBulkBar, OrderSelectBox, useOrderBulkSelection } from '@/components/admin/order-bulk-bar';
+import type { BulkStatusTarget } from '@/lib/admin-bulk-ops-client';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
 import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbox-filter-seeds';
 import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
@@ -407,16 +409,18 @@ const TABS = NAV_GROUPS.flatMap((g) => g.items);
 const DEFAULT_TAB: Tab = 'inbox';
 
 /** Mục menu dẫn sang trang riêng, không phải tab: nên không nằm trong `Tab`, `NAV_GROUPS` hay `STAFF_TABS` mà chỉ gắn vào menu của ADMIN (xem `adminNavGroups`). */
-type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms' | 'goLive';
+type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms' | 'goLive' | 'stockReconcile';
 type NavKey = Tab | AdminPageKey;
-const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms', 'goLive']);
+const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms', 'goLive', 'stockReconcile']);
+/** Trang riêng có API mở thêm cho một nhóm nhân viên (`@AllowStaff`): nhân viên có nhóm đó cũng thấy lối vào, miễn mục neo nằm trong menu của họ. */
+type AdminPageLink = NavItem<NavKey> & { staff?: StaffPermission };
 const isTabKey = (k: NavKey): k is Tab => !ADMIN_PAGE_KEYS.has(k);
 
 /**
  * Trang riêng chỉ ADMIN mở được (API của chúng chỉ nhận ADMIN), xếp ngay sau mục tab neo: bổ sung ảnh dưới "Kiểm tra catalog" (API ảnh WordPress),
  * Sự thật xanh và Từ khoá tìm kiếm cuối nhóm Nội dung (`admin/eco-facts`, `admin/search-synonyms`), Bảng kiểm Giờ G ngay sau "Sức khoẻ hệ thống" (`admin/golive`).
  */
-const ADMIN_PAGE_LINKS: Partial<Record<Tab, NavItem<NavKey>[]>> = {
+const ADMIN_PAGE_LINKS: Partial<Record<Tab, AdminPageLink[]>> = {
   catalogQuality: [
     {
       k: 'catalogWpImages',
@@ -439,6 +443,15 @@ const ADMIN_PAGE_LINKS: Partial<Record<Tab, NavItem<NavKey>[]>> = {
       keywords: 'từ khoá tìm kiếm từ đồng nghĩa ô tìm gõ sai tìm phổ biến cụm dự phòng synonym',
     },
   ],
+  returns: [
+    {
+      k: 'stockReconcile',
+      label: 'Đối soát tồn Pancake',
+      href: '/admin/doi-soat-kho',
+      staff: 'KHO',
+      keywords: 'đối soát tồn kho pancake lệch tồn âm tồn chưa gắn pancake biến thể sku đồng bộ kho',
+    },
+  ],
   opsHealth: [
     {
       k: 'goLive',
@@ -449,11 +462,13 @@ const ADMIN_PAGE_LINKS: Partial<Record<Tab, NavItem<NavKey>[]>> = {
   ],
 };
 
-/** Menu theo quyền: chỉ mục `allowed` mở được; ADMIN có thêm lối vào các trang riêng của `ADMIN_PAGE_LINKS` ngay sau mục neo. */
-function adminNavGroups(allowed: ReadonlySet<Tab>, isAdmin: boolean): NavGroup<NavKey>[] {
+/** Menu theo quyền: chỉ mục `allowed` mở được; ADMIN (và nhân viên có nhóm `staff` của link) có thêm lối vào các trang riêng của `ADMIN_PAGE_LINKS` ngay sau mục neo. */
+function adminNavGroups(allowed: ReadonlySet<Tab>, isAdmin: boolean, perms: readonly string[] = []): NavGroup<NavKey>[] {
+  const pageLinks = (k: Tab): NavItem<NavKey>[] =>
+    (ADMIN_PAGE_LINKS[k] ?? []).filter((l) => isAdmin || (l.staff !== undefined && perms.includes(l.staff)));
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => allowed.has(i.k)).flatMap((i): NavItem<NavKey>[] => [i, ...(isAdmin ? (ADMIN_PAGE_LINKS[i.k] ?? []) : [])]),
+    items: g.items.filter((i) => allowed.has(i.k)).flatMap((i): NavItem<NavKey>[] => [i, ...pageLinks(i.k)]),
   })).filter((g) => g.items.length > 0);
 }
 
@@ -804,7 +819,7 @@ export default function AdminPage() {
 
   const isAdmin = role === 'ADMIN';
   const allowed: ReadonlySet<Tab> = isAdmin ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
-  const groups = adminNavGroups(allowed, isAdmin);
+  const groups = adminNavGroups(allowed, isAdmin, accessQ.data?.staffPermissions ?? []);
   const active: Tab = allowed.has(tab) ? tab : firstAllowedTab(allowed);
   const canReviewReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH');
   const canReceiveReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO');
@@ -865,6 +880,7 @@ export default function AdminPage() {
               inboxEnabled={allowed.has('inbox')}
               canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
+              canCancel={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')}
               recycling={ordersRecycling}
               onRecyclingChange={onRecyclingFilterChange}
               pancake={ordersPancake}
@@ -1442,6 +1458,7 @@ function OrdersTab({
   initialTo,
   initialUserLabel,
   canViewProfile = false,
+  canCancel = false,
   inboxEnabled = true,
 }: {
   recycling: RecyclingFilter | '';
@@ -1464,6 +1481,8 @@ function OrdersTab({
   initialUserLabel?: string;
   /** Xem hồ sơ khách từ chi tiết đơn: API hồ sơ chỉ mở cho ADMIN và nhân viên CSKH. */
   canViewProfile?: boolean;
+  /** Huỷ đơn hàng loạt: `POST /admin/orders/bulk-status` cho nhân viên CSKH chỉ nhận đích CANCELLED (KHO chỉ nhận PACKED). */
+  canCancel?: boolean;
   /** Số hàng đợi chuyển khoản lấy từ hộp việc, chỉ ADMIN và nhóm việc được mở hộp việc mới gọi được. */
   inboxEnabled?: boolean;
 }) {
@@ -1498,6 +1517,8 @@ function OrdersTab({
     detailRowRef.current?.scrollIntoView?.({ block: 'nearest' });
   }, [expandedId, narrow]);
   const badRange = !!from && !!to && from > to;
+  const bulkTargets: BulkStatusTarget[] = [...(isAdmin || canWarehouse ? (['PACKED'] as const) : []), ...(isAdmin || canCancel ? (['CANCELLED'] as const) : [])];
+  const bulk = useOrderBulkSelection(JSON.stringify([page, status, search, recycling, invoice, pancake, from, to, extra]));
 
   const q = useQuery({
     queryKey: ['admin-orders', page, status, search, recycling, invoice, pancake, from, to, extra],
@@ -2014,8 +2035,9 @@ function OrdersTab({
             <li className="py-8 text-center text-sm text-stone-500">Không tìm thấy đơn hàng nào phù hợp.</li>
           ) : (
             q.data.data.map((o) => (
-              <li key={o.id || o.code}>
-                <button type="button" aria-haspopup="dialog" onClick={() => setExpandedId(o.id || o.code)} className="block min-h-[44px] w-full px-3 py-3 text-left">
+              <li key={o.id || o.code} className="flex items-start">
+                {bulkTargets.length > 0 && <OrderSelectBox order={{ id: o.id || o.code, code: o.code }} selection={bulk} />}
+                <button type="button" aria-haspopup="dialog" onClick={() => setExpandedId(o.id || o.code)} className="block min-h-[44px] w-full min-w-0 px-3 py-3 text-left">
                   <span className="flex items-start justify-between gap-2">
                     <span className="min-w-0 break-words font-semibold text-forest-700">{o.code}</span>
                     <span className="shrink-0 font-semibold text-forest-700">{formatVnd(o.total)}</span>
@@ -2082,7 +2104,10 @@ function OrdersTab({
                         }}
                       >
                         <td className={`${STICKY_FIRST_TD} px-3 py-3`}>
-                          <div className="font-semibold text-stone-800">{o.code}</div>
+                          <div className="flex items-center gap-1">
+                            {bulkTargets.length > 0 && <OrderSelectBox order={{ id: o.id || o.code, code: o.code }} selection={bulk} />}
+                            <div className="font-semibold text-stone-800">{o.code}</div>
+                          </div>
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             <OrderGuestBadge order={o} />
                             {o.fulfiller === 'MERCHANT' && (
@@ -2212,6 +2237,7 @@ function OrdersTab({
         onPageChange={setPage}
         scrollTargetRef={narrow ? cardsTopRef : tableTopRef}
       />
+      {bulkTargets.length > 0 && <OrderBulkBar selection={bulk} targets={bulkTargets} pageOrders={(q.data?.data ?? []).map((o) => ({ id: o.id || o.code, code: o.code }))} />}
     </div>
   );
 }
