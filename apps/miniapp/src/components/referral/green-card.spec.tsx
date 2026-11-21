@@ -72,10 +72,10 @@ describe('GreenCardBlock Mini (tubu-w8-02)', () => {
     expect(mocks.track).toHaveBeenCalledWith('green_card_shared', 'miniapp', { method: 'copy' });
   });
 
-  it('khối mời ở Cá nhân: chỉ một dòng, không có nút', async () => {
+  it('khối mời ở Cá nhân: chỉ một dòng số, không lặp thưởng (thẻ chia sẻ đã nêu), không có nút', async () => {
     mocks.get.mockResolvedValue(CARD);
     mount(false);
-    expect((await screen.findByTestId('green-card-stats')).textContent).toContain('7 vỏ đã đổi');
+    expect((await screen.findByTestId('green-card-stats')).textContent).toBe('12 thẻ xanh đã mở · 7 vỏ đã đổi');
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 

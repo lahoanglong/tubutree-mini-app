@@ -93,6 +93,7 @@ describe('checkEventProps', () => {
   it('green_card_shared: thẻ nhựa đã giảm của đơn gửi kèm nơi gửi; nơi lạ hay mã đơn thì bỏ', () => {
     expect(checkEventProps('green_card_shared', { method: 'share' })).toBe('ok');
     expect(checkEventProps('green_card_shared', { method: 'copy', surface: 'order' })).toBe('ok');
+    expect(checkEventProps('green_card_shared', { method: 'share', surface: 'account' })).toBe('ok');
     expect(checkEventProps('green_card_shared', { method: 'copy', surface: 'home' })).toBe('bad_value');
     expect(checkEventProps('green_card_shared', { method: 'copy', surface: 'order', orderCode: 'TUBU1' })).toBe('unknown_key');
   });

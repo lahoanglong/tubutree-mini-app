@@ -23,8 +23,8 @@ import { isVitalRoute } from './vitals/vitals-rules';
 
 // Cách khách gửi link mời từ thẻ thành tích Sổ tay Xanh. Không đặt ở shared-types: gói đó (CJS) nằm trọn trong chunk khởi động của web.
 const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
-// Nơi khách bấm gửi: không có trường là Sổ tay Xanh; `order` là thẻ nhựa đã giảm ở Chi tiết đơn.
-const GREEN_CARD_SHARE_SURFACES = ['order'] as const;
+// Nơi khách bấm gửi: không có trường là Sổ tay Xanh; `order` là thẻ nhựa đã giảm ở Chi tiết đơn; `account` là thẻ chia sẻ ở khối Mời bạn của Tài khoản.
+const GREEN_CARD_SHARE_SURFACES = ['order', 'account'] as const;
 
 type Rule = (v: unknown) => boolean;
 

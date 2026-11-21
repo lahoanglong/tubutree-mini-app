@@ -4,14 +4,13 @@ import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Copy, CreditCard, Leaf, Package, PackageCheck, Share2, Truck, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ChevronRight, CreditCard, Leaf, Package, PackageCheck, Truck, type LucideIcon } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
-import { inviteBody, inviteLandingOn, inviteProgressLine, inviteShareLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { inviteBody, inviteLandingOn, inviteProgressLine, inviteShareLink } from '@tubutree/app-core/commerce/invite-card';
 import { trackWebEvent } from '@/lib/analytics';
 import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PROFILE_MENU_COPY, PROFILE_ORDER_ROW, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
@@ -19,6 +18,7 @@ import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery, loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
 import { hasDeskPointQuery, ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { inviteShareStats } from '@tubutree/app-core/referral/share-card';
 import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
 import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
@@ -38,6 +38,7 @@ import { buildAccountMenu, IN_ACCOUNT_SHELL } from '@/components/account/account
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
 import { GreenCardBlock } from '@/components/referral/green-card-lazy';
+import { InviteShareCard } from '@/components/referral/invite-share-card';
 import { BadgeRow, useBadges } from '@/components/game/badge-row';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -161,9 +162,7 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
 function AccountContent() {
   const { user } = useAuth();
   const phase = useAuthPhase();
-  const [copyMsg, setCopyMsg] = useState<string | null>(null);
-  // Chép và chia sẻ mã giới thiệu cùng một đối tượng nên chung một khoá; tải lại số đếm/hạng là khoá riêng (hai nút Thử lại dùng chung).
-  const referralLock = useActionLock();
+  // Tải lại số đếm/hạng: hai nút Thử lại dùng chung một khoá (chép/chia sẻ mã có khoá riêng trong InviteShareCard).
   const reloadLock = useActionLock();
   const authed = phase === 'authenticated';
   // Hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập: số điểm/ví phải đổi ngay sau khi đặt đơn hay huỷ đơn, nên lấy lại mỗi lần vào trang và quay lại tab.
@@ -248,6 +247,7 @@ function AccountContent() {
   // Cờ referral.share_card_enabled: link chép và chia sẻ trỏ trang đích /moi/<mã> của chính trang web này.
   const landing = inviteLandingOn(cfgQ.data);
   const progress = landing ? inviteProgressLine(referral, earnsPoints) : null;
+  const viralOn = referralViralOn(cfgQ.data);
   const shareUrl = (c: string) => inviteShareLink({ landing, baseUrl: window.location.origin, referralCode: c, landingOrigin: window.location.origin });
 
   const menu = buildAccountMenu({
@@ -275,38 +275,6 @@ function AccountContent() {
   const countFor = (key: string): number | null => {
     if (!summaryQ.data) return null;
     return summaryQ.data.orders[key as keyof typeof summaryQ.data.orders] ?? null;
-  };
-
-  const copyReferral = () => {
-    if (!code) return;
-    void referralLock.run('copy', async () => {
-      try {
-        await navigator.clipboard.writeText(shareUrl(code));
-        setCopyMsg(fillCopy('invite.copied'));
-      } catch {
-        setCopyMsg(fillCopy('invite.copyFailed', { code }));
-      }
-    });
-  };
-  const shareReferral = () => {
-    if (!code) return;
-    void referralLock.run('share', async () => {
-      const url = shareUrl(code);
-      if (typeof navigator.share === 'function') {
-        try {
-          await navigator.share({ title: fillCopy('invite.shareTitle'), text: shareDescription(null, welcomeOffer), url });
-          return;
-        } catch (e) {
-          if (e instanceof DOMException && e.name === 'AbortError') return;
-        }
-      }
-      try {
-        await navigator.clipboard.writeText(inviteShareText(url));
-        setCopyMsg(fillCopy('invite.copied'));
-      } catch {
-        setCopyMsg(fillCopy('invite.copyFailed', { code }));
-      }
-    });
   };
 
   return (
@@ -461,47 +429,27 @@ function AccountContent() {
                         <Text variant="body-sm" tone="secondary" as="p">
                           {inviteBody(welcomeOffer, referralRules, earnsPoints)}
                         </Text>
-                        {referralViralOn(cfgQ.data) && <GreenCardBlock actions={false} />}
-                        {(progress || (referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0))) && (
-                          <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }} data-testid={progress ? 'invite-progress' : undefined}>
-                            {progress ?? (referral ? homeCopy.profile.referralStats(referral.successCount, `${formatCount(referral.earnedPoints)} điểm`) : null)}
-                          </Text>
-                        )}
-                        {progress && <InviteProgressViewed />}
-                        {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
-                        {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
-                          <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
-                            {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, `${formatCount(referral.nextMilestone.bonusPoints)} điểm`)}
-                          </Text>
-                        )}
-                        <p className="mt-2.5 text-caption tabular-nums text-[color:var(--color-action-secondary-fg)]">
-                          {fillCopy('invite.codeLabel')}: <strong>{code}</strong>
-                        </p>
-                        <div className="mt-2 flex flex-col gap-2">
-                          <button
-                            type="button"
-                            aria-busy={referralLock.active === 'share' || undefined}
-                            aria-disabled={referralLock.busy || undefined}
-                            onClick={shareReferral}
-                            className={`${ui.btnPrimary} w-full gap-2`}
-                          >
-                            <Share2 className="h-4 w-4" aria-hidden="true" />
-                            {fillCopy('invite.shareZalo')}
-                          </button>
-                          <button
-                            type="button"
-                            aria-busy={referralLock.active === 'copy' || undefined}
-                            aria-disabled={referralLock.busy || undefined}
-                            onClick={copyReferral}
-                            className={`${ui.btnSecondary} w-full gap-2`}
-                          >
-                            <Copy className="h-4 w-4" aria-hidden="true" />
-                            {fillCopy('invite.copyLink')}
-                          </button>
-                        </div>
-                        <p role="status" className={copyMsg ? 'mt-1.5 text-caption text-stone-600' : 'sr-only'}>
-                          {copyMsg ?? ''}
-                        </p>
+                        {viralOn && <GreenCardBlock actions={false} />}
+                        <InviteShareCard
+                          code={code}
+                          shareUrl={shareUrl}
+                          fallbackText={shareDescription(null, welcomeOffer)}
+                          viral={viralOn}
+                          stats={progress ? [] : inviteShareStats(referral, earnsPoints)}
+                        >
+                          {progress && (
+                            <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-sm)' }} data-testid="invite-progress">
+                              {progress}
+                            </Text>
+                          )}
+                          {progress && <InviteProgressViewed />}
+                          {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
+                          {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
+                            <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
+                              {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, `${formatCount(referral.nextMilestone.bonusPoints)} điểm`)}
+                            </Text>
+                          )}
+                        </InviteShareCard>
                       </div>
                     ) : (
                       <ul>

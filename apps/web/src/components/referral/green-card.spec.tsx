@@ -65,10 +65,10 @@ describe('GreenCardBlock (web)', () => {
     expect(root.querySelector('[role="status"]')!.textContent).not.toBe('');
   });
 
-  it('khối mời ở Tài khoản: chỉ một dòng số và thưởng, không thêm nút', async () => {
+  it('khối mời ở Tài khoản: chỉ một dòng số, không lặp thưởng (thẻ chia sẻ đã nêu), không thêm nút', async () => {
     const root = await mount(false);
-    expect(root.querySelector('[data-testid="green-card-stats"]')!.textContent).toContain(
-      '7 vỏ đã đổi',
+    expect(root.querySelector('[data-testid="green-card-stats"]')!.textContent).toBe(
+      '12 thẻ xanh đã mở · 7 vỏ đã đổi',
     );
     expect(root.querySelectorAll('button')).toHaveLength(0);
   });

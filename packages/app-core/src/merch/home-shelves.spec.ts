@@ -242,7 +242,11 @@ describe('seeAllHref', () => {
     expect(seeAllHref('offers.flash', 'web')).toBe('/gio-vang');
   });
   it('kệ không có lối xem tất cả trả null', () => {
-    expect(seeAllHref('home.combos')).toBeNull();
+    expect(seeAllHref('pdp.combos')).toBeNull();
+  });
+  it('Combo tiết kiệm mở trang Bộ quà tặng trên cả hai nền', () => {
+    expect(seeAllHref('home.combos')).toBe('/gift-combos');
+    expect(seeAllHref('home.combos', 'web')).toBe('/bo-qua-tang');
   });
 });
 

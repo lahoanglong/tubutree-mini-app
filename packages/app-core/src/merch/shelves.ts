@@ -27,7 +27,8 @@ export const SHELVES: readonly ShelfSpec[] = [
   { id: 'home.flash', screen: 'home', intent: 'deal có hạn', layout: 'rail', maxItems: 8, minItems: 3, dedupeRank: 1, seeAllRoute: '/flash-sale' },
   // Dải "Mua lại món quen" (QuickReorderStrip): kệ ngang tối đa 6 thẻ thêm một chạm. Một món thì trang vẫn vẽ dòng Mua lại cũ, nên sàn vẫn là 1 (để món đó còn chiếm chỗ chống trùng).
   { id: 'home.purchased', screen: 'home', intent: 'mua lại', layout: 'rail', maxItems: QUICK_REORDER_MAX, minItems: 1, dedupeRank: 2, seeAllRoute: '/orders' },
-  { id: 'home.combos', screen: 'home', intent: 'mua nhiều tiết kiệm', layout: 'rail', maxItems: 4, minItems: 2, dedupeRank: 3, seeAllRoute: null },
+  // "Xem tất cả" của Combo tiết kiệm mở trang Bộ quà tặng (đủ 8 combo); Trang chủ web chưa đọc lối này (khối Trang chủ web giữ nguyên HTML).
+  { id: 'home.combos', screen: 'home', intent: 'mua nhiều tiết kiệm', layout: 'rail', maxItems: 4, minItems: 2, dedupeRank: 3, seeAllRoute: '/gift-combos' },
   { id: 'home.bestSellers', screen: 'home', intent: 'xã hội chứng thực', layout: 'rail', maxItems: 10, minItems: 3, dedupeRank: 4, seeAllRoute: '/best-sellers' },
   { id: 'home.suggest', screen: 'home', intent: 'khám phá', layout: 'feed', maxItems: 100, minItems: 4, dedupeRank: 6, seeAllRoute: '/browse' },
 
