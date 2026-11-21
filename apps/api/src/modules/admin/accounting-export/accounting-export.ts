@@ -13,8 +13,10 @@ import type { ReportRange } from '../report-range';
  *
  * Mỗi dòng: Tiền hàng − CK thương mại − Giảm voucher − Giảm Điểm Xanh + Phí giao = Khách trả sau giảm (cột `total` của đơn).
  * "Doanh thu ghi nhận" theo đúng định nghĩa của báo cáo Doanh thu (admin-revenue.ts): cộng cột này trên cùng khoảng ngày ra đúng số "Doanh thu" ở
- * tab Báo cáo. Doanh thu đã trừ phần trả hàng đã duyệt, nên với đơn còn tính doanh thu: Khách trả − Đã hoàn − Hoàn đang chờ = Doanh thu ghi nhận
- * (không lấy Doanh thu trừ tiếp cột hoàn). Tiền khách chuyển thừa hoặc chuyển sau khi đơn đã huỷ không thuộc `total` nên nằm cột riêng.
+ * tab Báo cáo. Doanh thu đã trừ phần trả hàng đã duyệt (`return_requests` APPROVED), nên không lấy Doanh thu trừ tiếp cột hoàn. Hai cột hoàn chỉ
+ * đếm `order_customer_refunds` COMPLETED / PENDING / PROCESSING, nên đẳng thức Khách trả − Đã hoàn − Hoàn đang chờ = Doanh thu ghi nhận chỉ đúng
+ * khi mọi khoản hoàn của phần trả hàng đã vào hai trạng thái đó. Khoản hoàn trả hàng COD còn UNVERIFIED (`recordCodReturnUnverified`) và khoản hoàn
+ * END_CUSTOMER của đơn CTV làm lệch đẳng thức này. Tiền khách chuyển thừa hoặc chuyển sau khi đơn đã huỷ không thuộc `total` nên nằm cột riêng.
  */
 export const ACCOUNTING_CSV_HEADERS = [
   'Mã đơn',

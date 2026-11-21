@@ -28,8 +28,10 @@ export interface BulkStatusResponse {
 /**
  * Lượt đổi thật gửi từng nhóm `BULK_RUN_CHUNK` đơn: mỗi đơn huỷ còn hỏi Pancake trước (tới hai lần, mỗi lần chờ tối đa 5 giây), nên 50 đơn
  * trong một yêu cầu vượt xa hạn chờ 20 giây mặc định và người bấm mất kết quả từng đơn. Mỗi nhóm có hạn chờ riêng `BULK_RUN_TIMEOUT_MS`.
+ * Nhóm 5 đơn (tối đa ~50 giây) vẫn nằm dưới `Timeout` 60 giây mặc định của Apache (`ProxyPass` của vhost API không đặt `timeout=`; máy chủ hiện
+ * đặt 600 giây), nên proxy không cắt yêu cầu giữa chừng trong khi API vẫn đổi tiếp phía sau.
  */
-export const BULK_RUN_CHUNK = 10;
+export const BULK_RUN_CHUNK = 5;
 export const BULK_RUN_TIMEOUT_MS = 120_000;
 
 export const bulkOrderStatus = (body: { orderIds: string[]; targetStatus: BulkStatusTarget; dryRun: boolean; note?: string }, opts: { timeoutMs?: number } = {}) =>

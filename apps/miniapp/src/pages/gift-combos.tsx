@@ -14,6 +14,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Text } from '../components/ui/text';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { getLoadErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
 
@@ -50,6 +51,7 @@ function GiftCombosCallouts({ items }: { items: readonly GiftCombosCallout[] }) 
  */
 export default function GiftCombosPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const q = useQuery(giftLandingQuery(coreHttp));
   const { add, busyId } = useBundleAdd();
   const views = giftCombosViews(q.data, serverNow());
@@ -75,7 +77,7 @@ export default function GiftCombosPage() {
           ) : q.isError && !q.data ? (
             <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
           ) : views.length === 0 ? (
-            <EmptyState variant="inline" art="basket" heading={fillCopy('giftCombos.empty')} ctaLabel={fillCopy('flash.emptyCta')} onCta={() => navigate('/browse')} />
+            <EmptyState variant="inline" art="basket" heading={fillCopy('giftCombos.empty')} ctaLabel={fillCopy('flash.emptyCta')} onCta={() => goSmart('/browse')} />
           ) : (
             <section aria-labelledby="gift-combos-list-title" data-testid="gift-combos-list" style={LIST}>
               <h2 id="gift-combos-list-title" style={SR_ONLY}>

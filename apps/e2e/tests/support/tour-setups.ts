@@ -169,6 +169,18 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
   '/flash-sale': (api) => {
     mockFlashSlots(api);
   },
+  '/gift-combos': (api) => {
+    const [a, b, c, d] = catalogCards();
+    const item = (p: ReturnType<typeof productCard>) => ({ productId: p.id, variationId: `v-${p.id}`, maxQty: 1, addonPrice: null, inStock: true, product: p });
+    const combo = (id: string, title: string, pct: number, items: ReturnType<typeof productCard>[]) => ({
+      id, kind: 'BUNDLE_PCT', title, pct, endAt: '2027-12-31T16:59:59.000Z', anchorProductId: null, items: items.map(item),
+    });
+    api.get('/bundles/gift-landing', {
+      combos: [combo('tour-combo-1', 'Combo khởi đầu bếp xanh', 10, [a!, b!]), combo('tour-combo-2', 'Bộ quà tắm thuần khiết', 15, [c!, d!])],
+      freeshipThreshold: 199_000,
+      giftTrialMinOrder: 299_000,
+    });
+  },
   '/offers': (api) => {
     mockCollectable(api);
     mockWallet(api);

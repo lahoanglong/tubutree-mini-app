@@ -159,7 +159,7 @@ describe('OrderBulkBar', () => {
     expect(bar()!.textContent).toContain('Đã chọn 1/50 đơn');
     expect(posts()).toHaveLength(1);
   });
-  it('lượt đổi thật gửi từng nhóm 10 đơn với hạn chờ dài, gộp kết quả; nút báo tiến độ', async () => {
+  it('lượt đổi thật gửi từng nhóm 5 đơn với hạn chờ dài, gộp kết quả; nút báo tiến độ', async () => {
     const { c, posts } = await mount(orders(23), ['PACKED']);
     click(box(c, 'TB0001'));
     await flush();
@@ -168,10 +168,12 @@ describe('OrderBulkBar', () => {
     click(button(bar(), /Xem trước/));
     await flush();
     click(dialog()!.querySelector('[data-bulk-confirm]'));
-    await flush(12);
+    await flush(24);
     expect(posts().slice(1).map((p) => [p.orderIds.length, p.dryRun])).toEqual([
-      [10, false],
-      [10, false],
+      [5, false],
+      [5, false],
+      [5, false],
+      [5, false],
       [3, false],
     ]);
     expect(dialog()!.querySelector('[data-bulk-summary]')!.textContent).toBe('Đã đổi 23 đơn.');
@@ -197,8 +199,8 @@ describe('OrderBulkBar', () => {
     click(button(bar(), /Xem trước/));
     await flush();
     click(dialog()!.querySelector('[data-bulk-confirm]'));
-    await flush(12);
-    expect(dialog()!.querySelector('[data-bulk-summary]')!.textContent).toBe('Đã đổi 10 đơn.');
+    await flush(24);
+    expect(dialog()!.querySelector('[data-bulk-summary]')!.textContent).toBe('Đã đổi 5 đơn.');
     expect(dialog()!.textContent).toContain('có thể đã đổi hoặc chưa');
     click(button(dialog(), 'Xong'));
     await flush();

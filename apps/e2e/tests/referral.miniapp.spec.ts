@@ -65,7 +65,10 @@ test.describe('Giới thiệu bạn bè', () => {
     await expect(page.getByRole('heading', { name: 'Mời bạn sống xanh' })).toHaveCount(0);
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
     await expect(page.getByText(/Bạn nhận 5\.000 Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai từ 250k trong 14 ngày/)).toBeVisible();
-    await expect(page.getByText('Đã mời thành công 2 bạn, nhận 40 điểm.')).toBeVisible();
+    // w14-02: số bạn thành công và điểm đã nhận là hai ô dt/dd của InviteShareCard, không còn câu "Đã mời thành công N bạn".
+    const stats = page.getByTestId('invite-share-stats');
+    await expect(stats.locator('dt')).toHaveText(['Bạn mời thành công', 'Điểm Xanh đã nhận']);
+    await expect(stats.locator('dd')).toHaveText(['2', '40']);
     await expect(page.getByText('Mời thêm 3 bạn để nhận 100 điểm')).toBeVisible();
   });
 
