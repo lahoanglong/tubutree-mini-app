@@ -228,19 +228,58 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     }
   }
 
+  /**
+   * Ghi tạm khoá khách nhìn thấy rồi trả lại đúng giá trị cũ qua PUT /admin/config (xoá cache 60 giây của API). Tên công ty mà thiếu mã số
+   * thuế làm chân trang và trang chính sách in "[Mã số thuế]" cho mọi spec chạy sau trên cùng DB gate. Trang Next dựng trong lúc ghi tạm
+   * vẫn giữ bản đó tới hết revalidate 300 giây, nên legal-compliance chạy chung lượt với spec này vẫn có thể đỏ.
+   */
+  async function withRestoredConfig(page: Page, keys: string[], fn: () => Promise<void>) {
+    const prisma = prismaClient();
+    let before: { key: string; value: unknown }[] = [];
+    try {
+      before = await prisma.systemConfig.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
+    } finally {
+      await prisma.$disconnect();
+    }
+    try {
+      await fn();
+    } finally {
+      const statuses: Record<string, number> = {};
+      for (const row of before) {
+        const res = await page.request.put(`${API}/admin/config`, {
+          headers: { authorization: `Bearer ${adminToken()}` },
+          data: { key: row.key, value: row.value },
+        });
+        statuses[row.key] = res.status();
+      }
+      const created = keys.filter((k) => !before.some((r) => r.key === k));
+      if (created.length > 0) {
+        const cleanup = prismaClient();
+        try {
+          await cleanup.systemConfig.deleteMany({ where: { key: { in: created } } });
+        } finally {
+          await cleanup.$disconnect();
+        }
+      }
+      expect(statuses, 'PUT /admin/config trả các khoá về giá trị cũ').toEqual(Object.fromEntries(before.map((r) => [r.key, 200])));
+    }
+  }
+
   test('Thông tin cửa hàng lưu chuỗi thường và chính sách xem trước được', async ({ page }) => {
-    await openAdmin(page, '/admin?tab=config');
-    const card = page.locator('[data-shop-info]');
-    await card.getByLabel('Tên công ty').fill('Công ty TNHH Tubu Tree');
-    await card.getByRole('button', { name: 'Lưu thông tin cửa hàng' }).click();
-    await expect(card.getByText('Đã lưu.').first()).toBeVisible();
-    const legal = card.locator('[data-legal="doi-tra"]');
-    await legal.getByRole('textbox').fill('# Đổi trả\n\n- 7 ngày');
-    await legal.getByRole('button', { name: 'Xem trước' }).click();
-    await expect(legal.locator('[data-legal-preview] li')).toContainText('7 ngày');
-    await legal.getByRole('button', { name: 'Quay lại soạn' }).click();
-    await legal.getByRole('button', { name: 'Lưu', exact: true }).click();
-    await expect(legal.getByText('Đã lưu.')).toBeVisible();
+    await withRestoredConfig(page, ['company.legal_name', 'legal.doi-tra'], async () => {
+      await openAdmin(page, '/admin?tab=config');
+      const card = page.locator('[data-shop-info]');
+      await card.getByLabel('Tên công ty').fill('Công ty TNHH Tubu Tree');
+      await card.getByRole('button', { name: 'Lưu thông tin cửa hàng' }).click();
+      await expect(card.getByText('Đã lưu.').first()).toBeVisible();
+      const legal = card.locator('[data-legal="doi-tra"]');
+      await legal.getByRole('textbox').fill('# Đổi trả\n\n- 7 ngày');
+      await legal.getByRole('button', { name: 'Xem trước' }).click();
+      await expect(legal.locator('[data-legal-preview] li')).toContainText('7 ngày');
+      await legal.getByRole('button', { name: 'Quay lại soạn' }).click();
+      await legal.getByRole('button', { name: 'Lưu', exact: true }).click();
+      await expect(legal.getByText('Đã lưu.')).toBeVisible();
+    });
   });
 
   test('tab lỗi giữ nguyên menu, Thử lại và Về Việc cần xử lý', async ({ page }) => {
