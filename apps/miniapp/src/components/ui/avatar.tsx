@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
-/** Nền chuyển sắc mặc định của zmp-ui Avatar: hiện khi ảnh đang tải, ảnh có nền trong suốt (logo đối tác) hoặc chưa có ảnh. */
-export const AVATAR_BACKGROUND = 'linear-gradient(45deg, #34b764 0%, #99e5b5 100%)';
+/** Nền chuyển sắc mặc định của zmp-ui Avatar: hiện khi ảnh đang tải, ảnh có nền trong suốt (logo đối tác), ảnh lỗi hoặc chưa có ảnh. */
+export const AVATAR_BACKGROUND = 'linear-gradient(45deg, var(--color-avatar-gradient-from) 0%, var(--color-avatar-gradient-to) 100%)';
 
 const IMAGE_STYLE: CSSProperties = {
   position: 'absolute',
@@ -33,7 +34,7 @@ export function Avatar({ src, size, style }: { src?: string | null; size: number
         ...style,
       }}
     >
-      {src ? <img src={src} alt="" style={IMAGE_STYLE} /> : null}
+      {src ? <img src={src} alt="" style={IMAGE_STYLE} onError={hideBrokenImage} /> : null}
     </div>
   );
 }

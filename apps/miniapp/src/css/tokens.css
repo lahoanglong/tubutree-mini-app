@@ -44,6 +44,9 @@
   --color-media-dot-idle: rgba(255, 255, 255, 0.85);
   --color-pulse-ring: rgba(224, 140, 28, 0.35);
   --color-pulse-ring-end: rgba(224, 140, 28, 0);
+  /* Nền chuyển sắc của ảnh đại diện (components/ui/avatar.tsx), giữ đúng màu mặc định của Avatar zmp-ui mà component đó thay. */
+  --color-avatar-gradient-from: #34b764;
+  --color-avatar-gradient-to: #99e5b5;
 }
 
 /* Dynamic Font Scale (Accessibility) */

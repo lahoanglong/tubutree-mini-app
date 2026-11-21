@@ -358,7 +358,7 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
   });
 
-  it('lỗi mạng: vẫn hiện bản tóm tắt với đơn vị vận hành đã đăng ký và hotline, không có biển BẢN NHÁP', async () => {
+  it('lỗi mạng: vẫn hiện bản tóm tắt với đơn vị vận hành đã đăng ký và hotline, không có biển BẢN NHÁP, không in số mặc định như thể đang áp dụng', async () => {
     mocks.apiGet.mockImplementation(async (url: string) => {
       if (url.startsWith('/config/legal/')) throw new Error('x');
       return { data: [] };
@@ -367,8 +367,8 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
     await screen.findByRole('button', { name: 'Thử lại' });
     const body = screen.getByTestId('legal-markdown').textContent ?? '';
-    expect(body).toContain('Thời hạn đổi trả');
-    expect(body).toContain('trong vòng 7 ngày');
+    expect(body).toContain('Thời hạn đổi trả đang áp dụng ghi trong bản đầy đủ tại');
+    expect(body).not.toMatch(/trong vòng \d+ ngày|\d+\.000đ/);
     expect(body).toContain('Đơn vị vận hành: CÔNG TY TNHH TUBU TREE');
     expect(body).toContain('Mã số thuế: 0319585995');
     expect(body).toContain(`Hotline: ${SUPPORT.hotline}`);

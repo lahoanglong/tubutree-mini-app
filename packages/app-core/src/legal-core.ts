@@ -249,13 +249,28 @@ export function legalWebAddress(slug: LegalSlug, webBaseUrl: string): string {
  * Bản tóm tắt Mini App hiện khi chưa có nội dung đã duyệt hoặc chưa tải được nội dung đó: các điều khách cần nhất với số liệu đang áp dụng (thời hạn đổi trả,
  * mức miễn phí giao, lịch giao), đơn vị vận hành, liên hệ, liên kết sang chính sách liên quan và địa chỉ bản đầy đủ trên web. Cùng nguồn số liệu với bản nháp
  * đầy đủ ở legal.ts (web dùng), nên hai nơi không nói lệch nhau; Mini không mang bản nháp đầy đủ để gói Zalo nhẹ hơn.
+ * `live = false` khi chưa tải được số đang áp dụng: bỏ mọi số lấy từ cấu hình (thời hạn đổi trả, mức miễn phí, phí, lịch giao) để không hứa theo số mặc định,
+ * chỉ dẫn tới bản đầy đủ và bước thanh toán.
  */
-export function legalSummary(slug: LegalSlug, vars: LegalVars, support: LegalSupport, webBaseUrl: string): string {
+export function legalSummary(slug: LegalSlug, vars: LegalVars, support: LegalSupport, webBaseUrl: string, live = true): string {
   const days = vars.returnWindowDays;
   const fee = vars.shippingFlatFee ?? LEGAL_DEFAULT_SHIPPING_FLAT_FEE;
-  const refund = `Tiền hoàn về Ví Tubu hoặc tài khoản ngân hàng bạn chọn, trong ${LEGAL_REFUND_WORKING_DAYS} ngày làm việc.`;
+  const address = legalWebAddress(slug, webBaseUrl);
+  const refund = `Tiền hoàn về Ví Tubu hoặc tài khoản ngân hàng bạn chọn, trong ${LEGAL_REFUND_WORKING_DAYS} ngày làm việc kể từ khi Tubu Tree duyệt yêu cầu (với đổi trả là kể từ khi nhận lại và kiểm tra sản phẩm). Thời gian ghi có còn phụ thuộc ngân hàng.`;
   const contact = `## Liên hệ\n\n${legalOperatorBlock(support, vars)}`;
-  const full = `Bản đầy đủ đăng tại ${legalWebAddress(slug, webBaseUrl)}.`;
+  const full = `Bản đầy đủ đăng tại ${address}.`;
+  const deadline = live ? legalInspectionDeadline(days) : `Thời hạn báo hàng lỗi, thiếu hoặc sai đang áp dụng ghi trong bản đầy đủ tại ${address}.`;
+  const returnWindow = !live
+    ? `Thời hạn đổi trả đang áp dụng ghi trong bản đầy đủ tại ${address}; yêu cầu gửi ngay trong mục Đơn hàng.`
+    : days > 0
+      ? `Bạn có thể yêu cầu đổi hoặc trả hàng trong vòng ${days} ngày kể từ khi đơn được giao thành công, ngay trong mục Đơn hàng.`
+      : 'Hiện Tubu Tree chưa nhận yêu cầu đổi trả sau khi giao hàng thành công; hãy kiểm tra và báo ngay khi nhận hàng.';
+  const shippingFee = !live
+    ? '- Mức miễn phí vận chuyển và phí của từng đơn hiện ở giỏ hàng và bước thanh toán, trước khi bạn bấm đặt hàng.'
+    : vars.freeshipThreshold > 0
+      ? `- Phần hàng do Tubu Tree giao từ ${legalVnd(vars.freeshipThreshold)} được miễn phí vận chuyển. Một số hạng thành viên hoặc chương trình có thể có ngưỡng miễn phí khác, được hiển thị ở giỏ hàng.\n- ${fee > 0 ? `Chưa đạt mức này: phí cố định ${legalVnd(fee)}, không phụ thuộc địa chỉ hay khối lượng.` : 'Chưa đạt mức này cũng không mất phí vận chuyển.'}`
+      : '- Mọi phần hàng do Tubu Tree giao đều được miễn phí vận chuyển.';
+  const deliveryTimes = live ? legalDeliveryTimes(vars.delivery ?? DEFAULT_LEGAL_DELIVERY) : `Thời gian giao dự kiến của từng đơn hiện ở bước thanh toán; lịch giao đang áp dụng ghi trong bản đầy đủ tại ${address}.`;
   const body: Record<LegalSlug, string> = {
     'dieu-khoan': `## 1. Giới thiệu
 
@@ -265,7 +280,7 @@ Tubu Tree do ${legalCompanyName(vars)} vận hành. Khi dùng website, mini app 
 
 - Bạn đăng nhập bằng tài khoản Zalo, cung cấp thông tin đúng và tự giữ an toàn cho tài khoản.
 - Đơn được xác nhận khi bạn nhận thông báo xác nhận từ Tubu Tree. Giá đã gồm thuế (nếu có); phí vận chuyển hiện trước khi bạn bấm đặt hàng.
-- Thanh toán khi nhận hàng (COD), chuyển khoản (quét mã QR) hoặc Ví Tubu, xem [Chính sách và hình thức thanh toán](/chinh-sach/thanh-toan).
+- Thanh toán khi nhận hàng (COD), chuyển khoản (quét mã QR) hoặc Ví Tubu; cách khả dụng của từng đơn hiện ở bước thanh toán, xem [Chính sách và hình thức thanh toán](/chinh-sach/thanh-toan).
 - Mã giảm giá, Điểm Xanh và ưu đãi áp dụng theo điều kiện của từng chương trình.
 
 ## 3. Chính sách liên quan
@@ -277,32 +292,36 @@ ${legalCompanyName(vars)} thu thập, sử dụng và bảo vệ thông tin cá 
 
 ## 2. Thông tin và mục đích
 
-- Thông tin tài khoản, giao hàng, đơn hàng và thanh toán, chỉ dùng để xử lý đơn, giao hàng, đổi trả, chăm sóc khách hàng và phòng gian lận.
+- Thông tin thu thập: tài khoản, giao hàng, đơn hàng và thanh toán, cùng thông tin sử dụng (thiết bị, trình duyệt, trang đã xem, nguồn truy cập như liên kết giới thiệu).
+- Mục đích: xử lý đơn hàng, giao hàng, thanh toán, đổi trả và chăm sóc khách hàng; vận hành tài khoản, điểm thưởng, mã giảm giá và chương trình giới thiệu; gửi thông báo về đơn hàng (tin khuyến mãi chỉ gửi khi bạn đồng ý nhận); phòng ngừa gian lận, bảo đảm an toàn hệ thống và tuân thủ pháp luật.
 - Tubu Tree không lưu số thẻ ngân hàng và không bán thông tin cá nhân của bạn.
-- Thông tin chỉ chia sẻ phần cần thiết cho đơn vị vận chuyển, ngân hàng hoặc cổng thanh toán, và cơ quan có thẩm quyền khi có yêu cầu hợp pháp.
 
-## 3. Quyền của bạn
+## 3. Chia sẻ thông tin
+
+Chỉ chia sẻ phần thông tin cần thiết để thực hiện dịch vụ bạn yêu cầu, cho: đơn vị vận chuyển; ngân hàng, cổng thanh toán hoặc đối tác đối soát chuyển khoản; nhà cung cấp hạ tầng, lưu trữ và công cụ vận hành làm việc theo hợp đồng bảo mật; cơ quan nhà nước có thẩm quyền khi có yêu cầu hợp pháp.
+
+## 4. Quyền của bạn
 
 Bạn có quyền được biết, đồng ý hoặc rút lại sự đồng ý, truy cập, chỉnh sửa, yêu cầu xoá dữ liệu và khiếu nại qua thông tin liên hệ bên dưới. Xem thêm [Điều khoản sử dụng](/chinh-sach/dieu-khoan).`,
     'doi-tra': `## 1. Thời hạn đổi trả
 
-${days > 0 ? `Bạn có thể yêu cầu đổi hoặc trả hàng trong vòng ${days} ngày kể từ khi đơn được giao thành công, ngay trong mục Đơn hàng.` : 'Hiện Tubu Tree chưa nhận yêu cầu đổi trả sau khi giao hàng thành công; hãy kiểm tra và báo ngay khi nhận hàng.'}
+${returnWindow}
 
 ## 2. Trường hợp được chấp nhận
 
 - Sản phẩm bị lỗi, hư hỏng, đổ vỡ hoặc hết hạn khi nhận hàng.
 - Giao sai sản phẩm, sai phân loại, thiếu hàng hoặc không đúng mô tả.
-- Không áp dụng cho sản phẩm đã mở hoặc đã dùng mà không do lỗi sản xuất, vận chuyển.
+- Không áp dụng cho: sản phẩm đã mở hoặc đã dùng mà không do lỗi sản xuất, vận chuyển; sản phẩm hư hỏng do bảo quản hoặc sử dụng sai cách; quà tặng kèm hoặc sản phẩm thuộc chương trình ghi rõ không đổi trả.
 
 ## 3. Hoàn tiền và phí đổi trả
 
 - ${refund}
-- Nếu lỗi thuộc về Tubu Tree hoặc đơn vị vận chuyển, Tubu Tree chịu phí vận chuyển đổi trả.
+- Nếu lỗi thuộc về Tubu Tree hoặc đơn vị vận chuyển, Tubu Tree chịu phí vận chuyển đổi trả. Trường hợp khác, chi phí được thông báo trước khi bạn xác nhận.
 
 ## 4. Kiểm hàng khi nhận hàng
 
 - Bạn được đồng kiểm ngoại quan và số lượng cùng nhân viên giao hàng trước khi ký nhận, nên quay video lúc mở kiện.
-- ${legalInspectionDeadline(days)}
+- ${deadline}
 
 Xem thêm [Chính sách vận chuyển](/chinh-sach/van-chuyen) và [Chính sách và hình thức thanh toán](/chinh-sach/thanh-toan).`,
     'van-chuyen': `## 1. Phạm vi giao hàng
@@ -311,21 +330,21 @@ Tubu Tree giao tới các khu vực đơn vị vận chuyển phục vụ; đị
 
 ## 2. Phí vận chuyển
 
-${vars.freeshipThreshold > 0 ? `- Phần hàng do Tubu Tree giao từ ${legalVnd(vars.freeshipThreshold)} được miễn phí vận chuyển.\n- ${fee > 0 ? `Chưa đạt mức này: phí cố định ${legalVnd(fee)}, không phụ thuộc địa chỉ hay khối lượng.` : 'Chưa đạt mức này cũng không mất phí vận chuyển.'}` : '- Mọi phần hàng do Tubu Tree giao đều được miễn phí vận chuyển.'}
+${shippingFee}
 - Hàng của gian hàng đối tác giao riêng theo phí của gian hàng đó, hiện ở bước thanh toán.
 
 ## 3. Thời gian giao hàng dự kiến
 
-${legalDeliveryTimes(vars.delivery ?? DEFAULT_LEGAL_DELIVERY)}
+${deliveryTimes}
 
 ## Chính sách kiểm hàng khi nhận hàng
 
 - Bạn được đồng kiểm ngoại quan và số lượng cùng nhân viên giao hàng trước khi ký nhận hoặc thanh toán (đơn COD), nên quay video lúc mở kiện.
-- ${legalInspectionDeadline(days)}
+- ${deadline}
 - ${refund} Xem [Chính sách đổi trả](/chinh-sach/doi-tra).`,
     'thanh-toan': `## 1. Các hình thức thanh toán
 
-- Thanh toán khi nhận hàng (COD): trả tiền cho nhân viên giao hàng khi nhận.
+- Thanh toán khi nhận hàng (COD): trả tiền cho nhân viên giao hàng khi nhận. Một số đơn có thể không áp dụng COD (ví dụ đơn giá trị cao), hệ thống báo ở bước thanh toán.
 - Chuyển khoản ngân hàng (quét mã VietQR) đúng số tiền và nội dung hiển thị ở bước thanh toán.
 - Ví Tubu, ZaloPay (khi hiện ở bước thanh toán) và Điểm Xanh theo điều kiện hiển thị.
 

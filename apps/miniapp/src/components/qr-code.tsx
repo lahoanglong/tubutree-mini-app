@@ -5,7 +5,7 @@ const MARGIN = 1;
 
 /**
  * Điểm ảnh của ảnh QR vuông `width`, lề 1 module: đúng phép chia của `qrcode.toDataURL({ width, margin: 1 })` trước đây
- * (bước module có thể lẻ, mỗi điểm ảnh lấy module chứa nó), nên mã cũ và mới vẽ ra cùng một ảnh. 1 = điểm tối.
+ * (bước module có thể lẻ, mỗi điểm ảnh lấy module chứa nó), nên cùng ma trận thì mã cũ và mới vẽ ra cùng một ảnh. 1 = điểm tối.
  */
 export function qrPixels(qr: Pick<QrMatrix, 'size' | 'modules'>, width: number): { width: number; dark: Uint8Array } {
   const span = qr.size + MARGIN * 2;

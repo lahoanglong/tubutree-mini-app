@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ProfileAvatar } from '../account/profile-avatar';
 import { Avatar } from './avatar';
@@ -19,6 +19,14 @@ describe('Avatar — ảnh tròn thay Avatar của zmp-ui', () => {
     expect(img?.style.objectFit).toBe('cover');
     expect(img?.style.position).toBe('absolute');
     expect(img?.style.width).toBe('100%');
+  });
+
+  it('ảnh lỗi: ẩn thẻ img (không hiện biểu tượng ảnh gãy), còn vòng nền', () => {
+    const { container } = render(<Avatar size={40} src="https://cdn.tubutree.com/gone.png" />);
+    const img = container.querySelector('img')!;
+    fireEvent.error(img);
+    expect(img.style.visibility).toBe('hidden');
+    expect(screen.getByTestId('avatar')).toBeTruthy();
   });
 
   it('chưa có ảnh: chỉ vòng nền, không thẻ img vỡ', () => {

@@ -36,6 +36,8 @@ vi.mock('../services/core-http', () => ({
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: mocks.getOwnedBrand, getAuthMeFlags: mocks.getAuthMeFlags }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
+// Hook thật gọi /waste/me/open-count qua axios (không qua core-http đã mock): lỗi mạng về sớm hay muộn tuỳ nhịp chạy, làm khẳng định "không query lỗi" chập chờn.
+vi.mock('../hooks/use-recycle-open-requests', () => ({ useRecycleOpenRequests: () => false }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: vi.fn() }));
 vi.mock('../store/auth', () => {

@@ -2,6 +2,8 @@
  * Bộ mã hoá QR (ISO/IEC 18004) đủ cho Mini App: một đoạn dữ liệu (số, chữ-số hoặc byte UTF-8), mức sửa lỗi M, phiên bản 1–40,
  * mặt nạ chọn theo điểm phạt N1–N4. Thay thư viện `qrcode` (24 KB trong gói, Zalo cân tổng dung lượng).
  * Cách đặt module và tính điểm phạt chép đúng `qrcode` 1.5 nên cùng chế độ thì ra cùng ma trận: `qr-matrix.spec.ts` so từng module.
+ * Khác thư viện cũ duy nhất ở chuỗi trộn kiểu ký tự (vd chữ thường lẫn dãy số dài): `qrcode` tự tách nhiều đoạn, ở đây cả chuỗi là một đoạn byte,
+ * nên mã có thể lớn hơn một phiên bản nhưng vẫn quét ra đúng chuỗi.
  * Không gọi mạng, không dùng số ngẫu nhiên: cùng chuỗi luôn ra cùng ảnh.
  */
 

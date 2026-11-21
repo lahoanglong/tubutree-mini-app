@@ -21,11 +21,11 @@ export const POLICY_TITLES: Record<LegalSlug, string> = {
 };
 
 /**
- * Số liệu cho bản tóm tắt: vars của endpoint khi admin chưa nhập nội dung; không tải được thì số chuẩn và mức miễn phí giao của cấu hình công khai.
- * Đơn vị vận hành luôn có tên (admin chưa nhập thì là thương nhân đã đăng ký), để bản tóm tắt không lộ chỗ trống "[Tên công ty]".
+ * Số liệu cho bản tóm tắt: vars của endpoint khi admin chưa nhập nội dung. Không tải được thì bản tóm tắt chạy `live = false` (không in số nào từ cấu hình),
+ * vars mặc định chỉ còn cấp đơn vị vận hành: luôn có tên (admin chưa nhập thì là thương nhân đã đăng ký), để không lộ chỗ trống "[Tên công ty]".
  */
-function summaryVars(vars: LegalVars | undefined, freeshipThreshold: number | undefined): LegalVars {
-  const base = vars ?? { ...DEFAULT_LEGAL_VARS, ...(typeof freeshipThreshold === 'number' ? { freeshipThreshold } : {}) };
+function summaryVars(vars: LegalVars | undefined): LegalVars {
+  const base = vars ?? DEFAULT_LEGAL_VARS;
   return { ...base, ...merchantIdentityOrDefault(base) };
 }
 
@@ -79,7 +79,7 @@ export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose
               </Text>
             </div>
           )}
-          <LegalMarkdown onPolicy={setLinked} source={legalSummary(active, summaryVars(q.data?.vars, cfg.freeshipThreshold), support, WEB_BASE_URL)} />
+          <LegalMarkdown onPolicy={setLinked} source={legalSummary(active, summaryVars(q.data?.vars), support, WEB_BASE_URL, q.data !== undefined)} />
         </>
       ) : null}
     </BottomSheet>
