@@ -108,7 +108,8 @@ test.describe('SEO organic (sitemap, robots, JSON-LD, FAQ)', () => {
   });
 
   test('/doi-rac: FAQPage đúng phần hiển thị trong HTML máy chủ, chỉ nêu cách giao đang mở và giờ kho thật', async ({ browser, request, baseURL }) => {
-    test.setTimeout(120_000);
+    // Dài hơn thời gian chờ khoá (160 giây) cộng phần đọc trang: ca admin giữ khoá tới 150 giây khi máy tải nặng.
+    test.setTimeout(240_000);
     // admin-all-tabs bật thử cờ waste.enabled trên cùng DB gate: chờ ca đó trả cờ xong mới đọc cờ và trang, kẻo so trang dựng lúc cờ tắt với cờ đang bật.
     const { waste, warehouses, shown, blocks } = await withSharedConfigLock('waste.enabled', async () => {
       const { waste } = await apiJson<{ waste: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean } }>(request, '/config/public');

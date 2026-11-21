@@ -223,7 +223,7 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     description:
       'Mỗi sáng 9:30: khách nhận một chai có gói Refill ghép cặp từ 21 tới 28 ngày trước được một tin trong app mở thẳng trang gói Refill. Mỗi đơn nhắc tối đa một lần, mỗi khách tối đa một tin mỗi 7 ngày. Bỏ qua khách đã đặt lại gói Refill đó, đã trả chai, đã tắt tin khuyến mãi hay MSS báo từ chối tin.',
     fallback: false,
-    onWarning: 'Từ sáng mai khách bắt đầu nhận tin. Chỉ đơn giao trong 21–28 ngày gần nhất, không nhắc lại đơn cũ hơn. Chai đã được nhắc ở đây thì tin "Nhắc mua lại" 30 ngày bỏ chu kỳ đó.',
+    onWarning: 'Khách bắt đầu nhận tin từ lượt 9:30 kế tiếp (sáng nay nếu chưa tới 9:30, không thì sáng mai). Chỉ đơn giao trong 21–28 ngày gần nhất, không nhắc lại đơn cũ hơn. Chai đã được nhắc ở đây thì tin "Nhắc mua lại" 30 ngày bỏ chu kỳ đó.',
     offWarning: 'Ngừng nhắc từ lượt sau. Tin đã gửi vẫn nằm trong chuông thông báo của khách.',
   },
   {

@@ -13,6 +13,11 @@ vi.mock('@/lib/api', () => ({
   getCategories: vi.fn().mockResolvedValue([]),
   getLegalDoc: vi.fn().mockResolvedValue({ content: '# ok', vars: {} }),
 }));
+// Phần chiến dịch của sitemap đi qua createServerHttp, không qua @/lib/api: mock để không gọi mạng thật.
+vi.mock('@/lib/core-http-server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-http-server')>()),
+  createServerHttp: () => ({ get: vi.fn().mockResolvedValue([{ slug: 'chien-dich-1', updatedAt: '2026-11-01T00:00:00.000Z' }]) }),
+}));
 
 import robots from './app/robots';
 import sitemap from './app/sitemap';
