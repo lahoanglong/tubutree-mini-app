@@ -180,7 +180,7 @@ for (const vp of VIEWPORTS) {
       expect(ab.y + ab.height).toBeLessThanOrEqual(vp.height + 1);
     });
 
-    test('qua từng chương: thẻ sáng đúng, mọi chữ vẫn hiện, thẻ đổi nền theo đường cong 240ms, số đều', async ({ page, api, request }) => {
+    test('qua từng chương: thẻ sáng đúng, mọi chữ vẫn hiện, thẻ đổi nền theo đường cong story 220ms, số đều', async ({ page, api, request }) => {
       const p = await seeded(request);
       test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
       mockShop(api, p!);
@@ -208,8 +208,8 @@ for (const vp of VIEWPORTS) {
           const s = getComputedStyle(el);
           return { duration: s.transitionDuration.split(',')[0]!.trim(), easing: s.transitionTimingFunction, numeric: getComputedStyle(el.querySelector('.tubu-story-num')!).fontVariantNumeric };
         });
-        expect(style.duration).toBe('0.24s');
-        expect(style.easing).toContain('cubic-bezier(0.22, 1, 0.36, 1)');
+        expect(style.duration).toBe('0.22s');
+        expect(style.easing).toContain('cubic-bezier(0.32, 0.72, 0, 1)');
         expect(style.numeric).toContain('tabular-nums');
       }
       expect(await noHorizontalScroll(page)).toBe(true);

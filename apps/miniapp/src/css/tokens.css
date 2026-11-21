@@ -270,6 +270,13 @@ body.with-back-btn .page.page-bleed {
   line-height: 44px;
   margin-block: -13px;
 }
+/* Link chữ ngắn ("Đổi trả" 13px chỉ rộng ~41px) vẫn chạm đủ 44px bề ngang: lớp phủ giãn quanh tâm, lấn vào ", " bên cạnh chứ không đổi bố cục dòng. */
+.tubu-consent-links .tubu-hit-44::after {
+  left: 50%;
+  right: auto;
+  width: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
 
 /* ── Vùng chạm 44x44 cho nút vuông nhìn nhỏ hơn (QuantitySelector sm 36px): giãn cả hai chiều, không đổi hình ── */
 .tubu-hit-44-square {

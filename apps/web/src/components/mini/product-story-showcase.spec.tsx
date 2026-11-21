@@ -529,7 +529,7 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
     const line = (sel: string) => new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-    it('chọn thẻ chương, lớp rơi và nền cảnh dùng ease-story 240ms như Mini', () => {
+    it('chọn thẻ chương, lớp rơi và nền cảnh dùng ease-story 220ms như Mini', () => {
       expect(line(".tubu-story-layer[data-animated='true']")).toMatch(/animation:\s*tubu-story-fall var\(--dur-story\) var\(--ease-story\) both/);
       expect(line('.tubu-story-stage')).toMatch(/transition:\s*background var\(--dur-story\) var\(--ease-story\)/);
       expect(line('.tubu-story-step')).toMatch(/transition:\s*background-color var\(--dur-story\) var\(--ease-story\), border-color var\(--dur-story\) var\(--ease-story\)/);

@@ -113,6 +113,13 @@ async function openHome(page: Page, api: MockApi): Promise<void> {
   await expect(page.getByTestId('story-reel-strip')).toBeVisible({ timeout: 20_000 });
 }
 
+/** Nhịp hiện lên của phần thân khung Reel (animation tính được trên phần tử, không đọc CSS nguồn). */
+const enterMotion = (t: Locator) =>
+  t.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { name: s.animationName, duration: s.animationDuration, easing: s.animationTimingFunction };
+  });
+
 async function expectTouchTarget44(t: Locator): Promise<void> {
   const b = (await t.boundingBox())!;
   expect(b.width, 'chiều rộng vùng chạm').toBeGreaterThanOrEqual(44);
@@ -230,6 +237,47 @@ for (const vp of VIEWPORTS) {
       await expect(dialog).toHaveCount(0);
       await expect(page.getByText('Đã thêm vào giỏ!')).toBeVisible();
       expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test('Reel hiện lên theo nhịp story 220ms cubic-bezier(0.32, 0.72, 0, 1) như Mini, giá trên nút là số đều, đóng/kế/thêm từ 44px, không tràn ngang', async ({ page, api, request }) => {
+      const cards = await seededBestSellers(request);
+      test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
+      mockHome(api, cards!);
+      await openHome(page, api);
+
+      await rings(page).first().click();
+      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
+      const split = dialog.locator('.tubu-story-split');
+      await expect(split).toBeVisible();
+      expect(await enterMotion(split)).toEqual({ name: 'tubu-story-enter', duration: '0.22s', easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
+      for (const id of ['story-close', 'story-next', 'story-add-to-cart']) await expectTouchTarget44(dialog.getByTestId(id));
+      const add = dialog.getByTestId('story-add-to-cart');
+      await expect(add).toHaveText(/^Thêm vào giỏ · [\d.]+đ$/);
+      expect(await add.evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+      expect(await noHorizontalScroll(page)).toBe(true);
+      expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+      await dialog.getByTestId('story-next').click();
+      await expect(dialog.getByTestId('story-position')).toHaveText(/^2\//);
+      expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test.describe('khách bật giảm chuyển động', () => {
+      test('Reel mở ngay không nhịp hiện lên, lớp nguyên liệu và cung phân loại đứng yên', async ({ page, api, request }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        const cards = await seededBestSellers(request);
+        test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
+        mockHome(api, cards!);
+        await openHome(page, api);
+
+        await rings(page).first().click();
+        const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
+        await expect(dialog).toHaveAttribute('data-animated', 'false');
+        expect((await enterMotion(dialog.locator('.tubu-story-split'))).name).toBe('none');
+        for (const layer of await dialog.locator('.tubu-story-layer').all()) expect(await layer.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+        for (const chip of await dialog.locator('.tubu-story-arc-item').all()) expect(await chip.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0s');
+        expect(await noHorizontalScroll(page)).toBe(true);
+      });
     });
   });
 }

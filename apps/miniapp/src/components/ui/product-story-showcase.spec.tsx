@@ -403,7 +403,7 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
     const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-    it('chọn thẻ chương, lớp rơi và nền cảnh dùng đường cong ease-story 240ms (token, không số rải rác)', () => {
+    it('chọn thẻ chương, lớp rơi và nền cảnh dùng đường cong ease-story 220ms (token, không số rải rác)', () => {
       expect(rule('.tubu-story-layer')).toMatch(/animation:\s*tubu-story-drop var\(--dur-story\) var\(--ease-story\) both/);
       expect(rule('.tubu-story-stage')).toMatch(/transition:\s*background var\(--dur-story\) var\(--ease-story\)/);
       expect(rule('.tubu-story-step')).toMatch(/transition:\s*background-color var\(--dur-story\) var\(--ease-story\), border-color var\(--dur-story\) var\(--ease-story\)/);

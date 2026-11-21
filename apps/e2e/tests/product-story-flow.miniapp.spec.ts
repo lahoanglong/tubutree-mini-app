@@ -119,7 +119,7 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('bấm qua năm chương 01 → 05: thẻ sáng đúng, lớp nguyên liệu thêm dần, hiệu ứng rơi theo ease-story 240ms, ảnh chương kế được tải trước', async ({ page, api }) => {
+    test('bấm qua năm chương 01 → 05: thẻ sáng đúng, lớp nguyên liệu thêm dần, hiệu ứng rơi theo ease-story 220ms, ảnh chương kế được tải trước', async ({ page, api }) => {
       mockFlow(api);
       const requested: string[] = [];
       page.on('request', (r) => {
@@ -147,7 +147,7 @@ for (const vp of VIEWPORTS) {
           const s = getComputedStyle(el);
           return { name: s.animationName, duration: s.animationDuration, easing: s.animationTimingFunction };
         });
-        expect(drop).toEqual({ name: 'tubu-story-drop', duration: '0.24s', easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+        expect(drop).toEqual({ name: 'tubu-story-drop', duration: '0.22s', easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
         expect(await cards.nth(i).evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
 
         // Chương kế (nếu còn) đã được yêu cầu tải ngay khi chương này hiện.

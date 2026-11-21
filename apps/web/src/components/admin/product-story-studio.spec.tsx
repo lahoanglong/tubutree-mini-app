@@ -276,7 +276,10 @@ describe('ProductStoryStudio', () => {
     selectValue(document.querySelector('select[aria-label="Thêm nguyên liệu vào bước 1"]'), 'honey-drop');
     let asm = last(onChange)!.scenes.find((s) => s.kind === 'ingredient_assembly');
     expect(asm && asm.kind === 'ingredient_assembly' && asm.steps[0]!.layers.map((l) => l.spriteId)).toEqual(['pomelo-peel', 'honey-drop']);
-    click(document.querySelector('button[aria-label="Xoá Vỏ bưởi khỏi bước 1"]'));
+    const remove = document.querySelector<HTMLButtonElement>('button[aria-label="Xoá Vỏ bưởi khỏi bước 1"]')!;
+    // Nút ✕ chỉ một ký tự: trên điện thoại phải đủ 44×44 (cả bề ngang), từ sm mới về cỡ gọn trong hàng chip.
+    expect(remove.className.split(/\s+/)).toEqual(expect.arrayContaining(['min-h-[44px]', 'min-w-[44px]', 'sm:min-h-0', 'sm:min-w-0']));
+    click(remove);
     asm = last(onChange)!.scenes.find((s) => s.kind === 'ingredient_assembly');
     expect(asm && asm.kind === 'ingredient_assembly' && asm.steps[0]!.layers.map((l) => l.spriteId)).toEqual(['honey-drop']);
   });

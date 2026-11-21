@@ -79,7 +79,7 @@
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transform: translateX(calc(var(--arc-offset) * 6px)) translateY(calc(var(--arc-lift) * 1px)) rotate(var(--arc-rot)) scale(var(--arc-scale));
-  transition: transform var(--dur-base) var(--ease-out);
+  transition: transform var(--dur-story) var(--ease-story);
 }
 .tubu-story-arc-item[aria-checked='true'] {
   border: 2px solid var(--color-action-primary-bg);
@@ -256,6 +256,20 @@
   flex-direction: column;
   background: var(--color-bg-surface);
 }
+/* Nội dung khung toàn màn hiện lên (mờ dần, nhích 12px) mỗi lần mở và mỗi lần sang câu chuyện kế (khung dựng lại theo món). Đầu khung và thanh mua
+   đứng yên, cùng chỗ với khung chờ, nên không nháy khi khung thật thay vào. `to` không có transform: xong nhịp thì khối không còn tạo khung chứa mới. */
+.tubu-story-dialog .tubu-story {
+  animation: tubu-story-enter var(--dur-story) var(--ease-story) both;
+}
+@keyframes tubu-story-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+  }
+}
 .tubu-story-dialog-head {
   display: flex;
   align-items: center;
@@ -303,6 +317,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tubu-story-dialog .tubu-story,
   .tubu-story-layer {
     animation: none;
   }

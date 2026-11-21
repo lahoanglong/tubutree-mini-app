@@ -52,7 +52,8 @@ for (const width of NARROW_WIDTHS) {
       const place = page.getByRole('button', { name: /Đặt hàng/ });
       await expect(place).toBeVisible({ timeout: 15_000 });
       await expectPressFeedback(page, page.getByTestId('coupon-row'), 'hàng mã giảm giá của thanh toán');
-      await expectPressFeedback(page, page.getByTestId('checkout-address-block').getByRole('radio').first(), 'thẻ địa chỉ');
+      // Địa chỉ đang chọn là một dòng bấm để mở sheet đổi địa chỉ (w2-06), không còn thẻ radio trên trang.
+      await expectPressFeedback(page, page.getByTestId('checkout-address-block').getByRole('button', { name: /Đổi địa chỉ giao hàng/ }), 'dòng địa chỉ');
       await expectPressFeedback(page, place, 'nút Đặt hàng');
     });
 

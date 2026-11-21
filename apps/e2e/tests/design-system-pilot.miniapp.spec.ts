@@ -25,7 +25,7 @@ import type { Locator, Page } from '@playwright/test';
  *      không vẽ spinner — audit A4-07).
  *   3. Cart: bấm vào ảnh sản phẩm (xa chữ tên) vẫn mở trang sản phẩm.
  *   4. Storefront: hàng hết có overlay "tạm hết", hàng còn thì không (audit A4-06).
- *   5. Đơn đã giao: "Mua lại đơn này" (trong menu Thêm thao tác) mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart.
+ *   5. Đơn đã giao: "Mua lại đơn này" là nút chính một chạm, khoá chạm lại khi đang gửi rồi chuyển sang /cart.
  *   6. PDP 375px: thanh CTA dính đáy không tràn màn hình (còn hàng giá dài + hết hàng).
  *   7-8. Component con CHƯA migrate trong luồng pilot (quantity-selector, address-section) vẫn
  *      có viền/nền thật nhờ khối alias v1 → v2 (final review C1: trước đó resolve ra "không gì").
@@ -207,8 +207,12 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     api.get('/me/addresses', [CHECKOUT_ADDRESS, other]); // đăng ký sau → thắng route của mockCheckout
     await page.goto('/checkout');
 
-    const selected = page.getByRole('radio', { name: new RegExp(CHECKOUT_ADDRESS.recipient) });
-    const unselected = page.getByRole('radio', { name: new RegExp(other.recipient) });
+    // Trang thanh toán chỉ hiện một dòng địa chỉ đang chọn kèm "Đổi" (w2-06); các thẻ chọn địa chỉ nằm trong sheet mở từ dòng đó.
+    await page.getByTestId('checkout-address-block').getByRole('button', { name: /Đổi địa chỉ giao hàng/ }).click({ timeout: 15_000 });
+    const sheet = page.getByRole('radiogroup', { name: 'Chọn địa chỉ giao hàng' });
+    await expect(sheet).toBeVisible();
+    const selected = sheet.getByRole('radio', { name: new RegExp(CHECKOUT_ADDRESS.recipient) });
+    const unselected = sheet.getByRole('radio', { name: new RegExp(other.recipient) });
     await expect(selected).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 });
     await expect(unselected).toHaveAttribute('aria-checked', 'false');
 
@@ -261,24 +265,23 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     await expect(overlay(page)).toHaveCount(1);
   });
 
-  test('Đơn đã giao: "Mua lại đơn này" (menu Thêm thao tác) mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart', async ({ page, api }) => {
+  test('Đơn đã giao: "Mua lại đơn này" là nút chính một chạm; khoá chạm lại khi đang gửi rồi chuyển sang /cart', async ({ page, api }) => {
     mockPilotDeliveredOrder(api, { repurchaseDelayMs: 1500 });
+    // Chạm Mua lại ghi sự kiện reorder_clicked; lô sự kiện có thể gửi trước khi test xong.
+    api.post('/events', { accepted: 1 });
     await page.goto(`/order/${PILOT_ORDER_CODE}`);
 
-    // Đơn còn dòng chưa đánh giá: nút chính là "Đánh giá sản phẩm", "Mua lại đơn này" nằm trong menu "Thêm thao tác".
-    const more = page.getByRole('button', { name: 'Thêm thao tác' });
-    await expect(more).toBeVisible({ timeout: 15_000 });
-    await more.click();
-    await page.getByRole('button', { name: 'Mua lại đơn này' }).click();
-
-    // makeOrder: 1 dòng SL 2, API mock cũ không trả stock → coi như còn hàng (Ruling 19).
-    const cta = page.getByRole('button', { name: 'Thêm vào giỏ (2)' });
-    await expect(cta).toBeEnabled();
+    // Đơn đã giao luôn lấy "Mua lại đơn này" làm nút chính (6a060f937): một chạm gửi mọi dòng với số lượng cũ, không mở sheet chọn món.
+    // Lối đánh giá nằm trên từng món; menu "Thêm thao tác" chỉ còn Đổi/trả và Liên hệ.
+    const cta = page.getByRole('button', { name: 'Mua lại đơn này' });
+    await expect(cta).toBeEnabled({ timeout: 15_000 });
     const posted = api.waitForCall('POST', '/orders/:code/repurchase');
     await cta.click();
 
-    await expect(cta.locator('.zaui-btn-loading-icon')).toBeVisible();
-    await expect(cta).toHaveAttribute('aria-busy', 'true');
+    // Lời gọi đang bay (mock trễ 1,5 giây): nút khoá nên chạm thêm không gửi lần hai.
+    await expect(cta).toBeDisabled();
+    await cta.click({ force: true });
+    // makeOrder: 1 dòng SL 2, API mock cũ không trả stock → coi như còn hàng (Ruling 19).
     const call = await posted;
     expect(call.body).toEqual({ items: [{ orderItemId: `item-${PILOT_ORDER_CODE}`, quantity: 2 }], addSource: 'repurchase' });
     await expect(page).toHaveURL(/\/cart$/, { timeout: 10_000 });

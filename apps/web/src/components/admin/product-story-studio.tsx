@@ -480,7 +480,7 @@ export function ProductStoryStudio({
                   <button
                     type="button"
                     aria-label={`Xoá ${l.label} khỏi bước ${i + 1}`}
-                    className="min-h-[44px] px-2 sm:min-h-0"
+                    className="min-h-[44px] min-w-[44px] px-2 sm:min-h-0 sm:min-w-0"
                     onClick={() =>
                       setStep(i, (st) => {
                         st.layers.splice(j, 1);

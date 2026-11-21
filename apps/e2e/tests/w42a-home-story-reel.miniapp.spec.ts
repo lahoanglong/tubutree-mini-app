@@ -32,6 +32,13 @@ async function expectTouchTarget44(t: Locator): Promise<void> {
   expect(b.height, 'chiều cao vùng chạm').toBeGreaterThanOrEqual(44);
 }
 
+/** Nhịp hiện lên của nội dung khung Reel (animation tính được trên phần tử, không đọc CSS nguồn). */
+const enterMotion = (t: Locator) =>
+  t.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { name: s.animationName, duration: s.animationDuration, easing: s.animationTimingFunction };
+  });
+
 async function openHome(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByTestId('story-reel-strip')).toBeVisible({ timeout: 20_000 });
@@ -173,6 +180,52 @@ for (const vp of VIEWPORTS) {
       await expect(add).toBeDisabled();
       await expect(add).toHaveText('Hết hàng');
       expect(api.callsTo('POST', '/cart/items')).toHaveLength(0);
+    });
+
+    test('Reel hiện lên theo nhịp story 220ms cubic-bezier(0.32, 0.72, 0, 1), giá trên nút là số đều, đóng/kế/thêm từ 44px, thanh đáy chừa vùng an toàn, không tràn ngang', async ({ page, api }) => {
+      mockDiscovery(api);
+      await openHome(page);
+
+      await rings(page).first().click();
+      const dialog = reel(page);
+      const body = dialog.getByTestId('product-story');
+      await expect(body).toBeVisible();
+      expect(await enterMotion(body)).toEqual({ name: 'tubu-story-enter', duration: '0.22s', easing: 'cubic-bezier(0.32, 0.72, 0, 1)' });
+      for (const id of ['story-close', 'story-next', 'story-add-to-cart']) await expectTouchTarget44(dialog.getByTestId(id));
+      const add = dialog.getByTestId('story-add-to-cart');
+      await expect(add).toHaveText(/^Thêm vào giỏ · [\d.]+đ$/);
+      expect(await add.evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+      // Máy test không có tai thỏ nên env(safe-area-inset-bottom) = 0: thanh cao đúng --story-bar-h, đáy trùng đáy màn hình.
+      const bar = dialog.locator('.tubu-story-bar');
+      const barH = await bar.evaluate((el) => ({ h: el.getBoundingClientRect().height, token: parseFloat(getComputedStyle(el).getPropertyValue('--story-bar-h')) }));
+      expect(Math.abs(barH.h - barH.token)).toBeLessThanOrEqual(1);
+      expect(await noHorizontalScroll(page)).toBe(true);
+      expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+
+      // Khung dựng lại theo món (key = slug) nên nhịp hiện lên chạy lại: phần thân cũ rời DOM, phần thân mới có animation tubu-story-enter của riêng nó.
+      const firstBody = await body.elementHandle();
+      await dialog.getByTestId('story-next').click();
+      await expect(dialog.getByTestId('story-position')).toHaveText(/^2\//);
+      expect(await firstBody!.evaluate((el) => el.isConnected)).toBe(false);
+      expect(await dialog.getByTestId('product-story').evaluate((el) => el.getAnimations().some((a) => (a as CSSAnimation).animationName === 'tubu-story-enter'))).toBe(true);
+      expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test.describe('khách bật giảm chuyển động', () => {
+      test('Reel mở ngay không nhịp hiện lên, lớp nguyên liệu và cung phân loại đứng yên', async ({ page, api }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        mockDiscovery(api);
+        await openHome(page);
+
+        await rings(page).first().click();
+        const body = reel(page).getByTestId('product-story');
+        await expect(body).toBeVisible();
+        expect((await enterMotion(body)).name).toBe('none');
+        await expect(body).toHaveAttribute('data-animated', 'false');
+        for (const layer of await body.locator('.tubu-story-layer').all()) expect(await layer.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+        for (const chip of await body.locator('.tubu-story-arc-item').all()) expect(await chip.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0s');
+        expect(await noHorizontalScroll(page)).toBe(true);
+      });
     });
   });
 }

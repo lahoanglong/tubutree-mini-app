@@ -3,6 +3,7 @@ import path from 'path';
 import { createHmac } from 'crypto';
 import { test, expect, type Page } from '@playwright/test';
 import { withSharedConfigLock } from './support/shared-config-lock';
+import { DEFAULT_LEGAL_SUPPORT, DEFAULT_LEGAL_VARS, TUBU_TREE_MERCHANT, defaultLegalContent } from '../../../packages/app-core/src/legal';
 
 /**
  * Mở lần lượt MỌI mục của menu quản trị bằng tài khoản ADMIN thật, với API và DB thật (chạy qua scripts/web-gate.sh, E2E_SCOPE=web).
@@ -229,9 +230,10 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
   }
 
   /**
-   * Ghi tạm khoá khách nhìn thấy rồi trả lại đúng giá trị cũ qua PUT /admin/config (xoá cache 60 giây của API). Tên công ty mà thiếu mã số
-   * thuế làm chân trang và trang chính sách in "[Mã số thuế]" cho mọi spec chạy sau trên cùng DB gate. Trang Next dựng trong lúc ghi tạm
-   * vẫn giữ bản đó tới hết revalidate 300 giây, nên legal-compliance chạy chung lượt với spec này vẫn có thể đỏ.
+   * Ghi tạm khoá khách nhìn thấy rồi trả lại đúng giá trị cũ qua PUT /admin/config (xoá cache 60 giây của API). Khoá chưa có dòng thì cũng
+   * PUT chuỗi rỗng trước khi xoá dòng, để cache API không giữ giá trị tạm thêm một phút. Cache của Next thì không xoá được từ đây: mọi trang
+   * dựng trong lúc ghi tạm (chân trang đọc /config/public, giữ 1 giờ; trang chính sách giữ 300 giây) mang giá trị tạm đó, nên ca ghi phải
+   * ghi giá trị mà khách thấy vẫn hợp lệ (xem ca "Thông tin cửa hàng").
    */
   async function withRestoredConfig(page: Page, keys: string[], fn: () => Promise<void>) {
     const prisma = prismaClient();
@@ -254,6 +256,13 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       }
       const created = keys.filter((k) => !before.some((r) => r.key === k));
       if (created.length > 0) {
+        for (const key of created) {
+          const res = await page.request.put(`${API}/admin/config`, {
+            headers: { authorization: `Bearer ${adminToken()}` },
+            data: { key, value: '' },
+          });
+          statuses[key] = res.status();
+        }
         const cleanup = prismaClient();
         try {
           await cleanup.systemConfig.deleteMany({ where: { key: { in: created } } });
@@ -261,21 +270,40 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
           await cleanup.$disconnect();
         }
       }
-      expect(statuses, 'PUT /admin/config trả các khoá về giá trị cũ').toEqual(Object.fromEntries(before.map((r) => [r.key, 200])));
+      expect(statuses, 'PUT /admin/config trả các khoá về giá trị cũ').toEqual(Object.fromEntries(keys.map((k) => [k, 200])));
     }
   }
 
   test('Thông tin cửa hàng lưu chuỗi thường và chính sách xem trước được', async ({ page }) => {
-    await withRestoredConfig(page, ['company.legal_name', 'legal.doi-tra'], async () => {
+    // Spec khác chạy song song trên cùng máy chủ Next dựng trang trong lúc ca này ghi tạm, và Next giữ bản đó tới 1 giờ (chân trang) hay 300 giây
+    // (trang chính sách) sau khi dòng đã được trả lại. Nên ca này ghi đúng định danh và bản chính sách mà khách vẫn thấy khi admin chưa nhập:
+    // đủ tên, mã số thuế, địa chỉ (chỉ có tên mà thiếu mã số thuế thì chân trang và trang chính sách in "[Mã số thuế]", legal-compliance đỏ),
+    // và chính sách đổi trả đầy đủ thay cho một dòng ngắn.
+    const identity: [label: string, value: string][] = [
+      ['Tên công ty', TUBU_TREE_MERCHANT.legalName],
+      ['Mã số thuế', TUBU_TREE_MERCHANT.taxCode],
+      ['Địa chỉ trụ sở', TUBU_TREE_MERCHANT.address],
+    ];
+    const policy = defaultLegalContent('doi-tra', { ...DEFAULT_LEGAL_VARS, ...TUBU_TREE_MERCHANT }, DEFAULT_LEGAL_SUPPORT);
+    const keys = ['company.legal_name', 'company.tax_code', 'company.address', 'legal.doi-tra'];
+    await withRestoredConfig(page, keys, async () => {
+      // Lượt gate bị giết giữa chừng có thể để lại đúng các giá trị dưới trong DB: ô không đổi thì nút Lưu khoá và ca kẹt mãi. Đưa về chuỗi rỗng
+      // (bản seed; khách vẫn thấy định danh và chính sách mặc định) rồi mới gõ.
+      for (const key of keys) {
+        const res = await page.request.put(`${API}/admin/config`, { headers: { authorization: `Bearer ${adminToken()}` }, data: { key, value: '' } });
+        expect(res.status(), `PUT ${key} = ''`).toBe(200);
+      }
       await openAdmin(page, '/admin?tab=config');
       const card = page.locator('[data-shop-info]');
-      await card.getByLabel('Tên công ty').fill('Công ty TNHH Tubu Tree');
+      // Tên truy cập của ô gồm nhãn và dòng gợi ý ("Mã số thuế Hiện cho khách…"); khớp chuỗi con thì "Mã số thuế" trúng cả gợi ý của ô Số giấy chứng nhận.
+      for (const [label, value] of identity) await card.getByLabel(new RegExp(`^${label}`)).fill(value);
       await card.getByRole('button', { name: 'Lưu thông tin cửa hàng' }).click();
       await expect(card.getByText('Đã lưu.').first()).toBeVisible();
       const legal = card.locator('[data-legal="doi-tra"]');
-      await legal.getByRole('textbox').fill('# Đổi trả\n\n- 7 ngày');
+      await legal.getByRole('textbox').fill(policy);
       await legal.getByRole('button', { name: 'Xem trước' }).click();
-      await expect(legal.locator('[data-legal-preview] li')).toContainText('7 ngày');
+      await expect(legal.locator('[data-legal-preview] h2').first()).toHaveText('1. Thời hạn đổi trả');
+      await expect(legal.locator('[data-legal-preview] li').first()).toContainText('Sản phẩm bị lỗi');
       await legal.getByRole('button', { name: 'Quay lại soạn' }).click();
       await legal.getByRole('button', { name: 'Lưu', exact: true }).click();
       await expect(legal.getByText('Đã lưu.')).toBeVisible();
