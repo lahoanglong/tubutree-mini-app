@@ -27,7 +27,8 @@ import { createServerHttp } from '@/lib/core-http-server';
 import { defaultVariationFor, runningFlash } from '@/lib/flash-price';
 import { FlashSalesSeed } from '@/lib/use-flash-sales';
 import { isRetailOnly } from '@/lib/pdp-logic';
-import { breadcrumbJsonLd, galleryImages, jsonLdScript, plainText, productJsonLd, productMetaDescription, productTitle } from '@/lib/product-seo';
+import { galleryImages, jsonLdScript, plainText, productMetaDescription, productTitle } from '@/lib/product-seo';
+import { pdpJsonLd } from '@/lib/seo/pdp-structured-data';
 import { ogBase, withBrand } from '@/lib/og';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
@@ -380,19 +381,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </PdpSelectionProvider>
       </FlashSalesSeed>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl, productPolicy)) }} />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: jsonLdScript(
-            breadcrumbJsonLd([
-              { name: 'Trang chủ', href: '/' },
-              { name: product.brand, href: `/san-pham?brand=${encodeURIComponent(product.brand)}` },
-              { name: product.name, href: `/san-pham/${encodeURIComponent(product.slug)}` },
-            ]),
-          ),
-        }}
-      />
+      {pdpJsonLd({ product, url: productUrl, policy: productPolicy, flash, now: generatedAt }).map((ld, i) => (
+        <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }} />
+      ))}
     </main>
   );
 }

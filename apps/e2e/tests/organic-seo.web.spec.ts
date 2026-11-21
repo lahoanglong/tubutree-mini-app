@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { summarizeOpeningHours } from '../../../packages/app-core/src/waste-hours';
 import { withSharedConfigLock } from './support/shared-config-lock';
@@ -76,15 +78,33 @@ test.describe('SEO organic (sitemap, robots, JSON-LD, FAQ)', () => {
     const slugs = (await activeProductSlugs(request)).slice(0, 12);
     let checked = 0;
     for (const slug of slugs) {
-      const api = await apiJson<{ name: string; ratingAvg: number; reviewCount: number; variations: { stock: number }[] }>(request, `/products/${encodeURIComponent(slug)}`);
+      const api = await apiJson<{ name: string; ratingAvg: number; reviewCount: number; variations: { stock: number }[]; fulfiller?: { kind: string } }>(
+        request,
+        `/products/${encodeURIComponent(slug)}`,
+      );
       const res = await request.get(`${baseURL}/san-pham/${encodeURIComponent(slug)}`);
       expect(res.status(), slug).toBe(200);
       const blocks = ldBlocks(await res.text());
-      const product = blocks.find((b) => b['@type'] === 'Product') as { name: string; offers: { priceCurrency: string; availability: string }; aggregateRating?: Ld } | undefined;
+      type Offer = { '@type': string; priceCurrency: string; availability: string; itemCondition?: string; offers?: Offer[] };
+      const product = blocks.find((b) => b['@type'] === 'Product') as { '@id': string; url: string; name: string; offers: Offer; aggregateRating?: Ld } | undefined;
       expect(product, slug).toBeTruthy();
       expect(product!.name).toBe(api.name);
+      expect(product!['@id']).toBe(`${product!.url}#product`);
       expect(product!.offers.priceCurrency).toBe('VND');
       if (api.variations.some((v) => v.stock > 0)) expect(product!.offers.availability, slug).toBe('https://schema.org/InStock');
+      // Nhiều phân loại: AggregateOffer kèm đúng một Offer mỗi phân loại, tình trạng theo tồn của chính phân loại đó.
+      if (api.variations.length > 1) {
+        expect(product!.offers['@type'], slug).toBe('AggregateOffer');
+        expect(product!.offers.offers, slug).toHaveLength(api.variations.length);
+        product!.offers.offers!.forEach((o, i) => {
+          expect(o, slug).toMatchObject({ '@type': 'Offer', priceCurrency: 'VND', itemCondition: 'https://schema.org/NewCondition' });
+          if (api.fulfiller?.kind !== 'UNAVAILABLE') {
+            expect(o.availability, slug).toBe(api.variations[i]!.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock');
+          }
+        });
+      } else {
+        expect(product!.offers, slug).toMatchObject({ '@type': 'Offer', itemCondition: 'https://schema.org/NewCondition' });
+      }
       if (api.reviewCount >= 1) {
         expect(product!.aggregateRating, slug).toEqual({ '@type': 'AggregateRating', ratingValue: api.ratingAvg, reviewCount: api.reviewCount, bestRating: 5, worstRating: 1 });
       } else {
@@ -95,6 +115,56 @@ test.describe('SEO organic (sitemap, robots, JSON-LD, FAQ)', () => {
       checked++;
     }
     expect(checked).toBeGreaterThan(0);
+  });
+
+  test('/san-pham: hub và danh mục có một @graph CollectionPage + ItemList + BreadcrumbList cùng URL với canonical và og:url; trang sắp xếp (noindex) không có', async ({
+    request,
+    baseURL,
+  }) => {
+    const selling = flatten(await apiJson<CategoryNode[]>(request, '/categories')).filter((c) => (c.productCount ?? 0) > 0);
+    expect(selling.length).toBeGreaterThan(0);
+    const category = `/san-pham?category=${encodeURIComponent(selling[0]!.id)}`;
+    type Node = { '@type': string; '@id'?: string; url?: string; breadcrumb?: { '@id': string }; mainEntity?: { itemListElement: { position: number; url: string }[] } };
+    for (const path of ['/san-pham', category]) {
+      const res = await request.get(`${baseURL}${path}`);
+      expect(res.status(), path).toBe(200);
+      const html = await res.text();
+      const attr = (re: RegExp) => re.exec(html)?.[1]?.replace(/&amp;/g, '&');
+      const canonical = attr(/<link rel="canonical" href="([^"]+)"/);
+      expect(canonical, path).toBeTruthy();
+      expect(pathOf(canonical!), path).toBe(path);
+      expect(attr(/<meta property="og:url" content="([^"]+)"/), path).toBe(canonical);
+      const blocks = ldBlocks(html);
+      expect(blocks, path).toHaveLength(1);
+      const graph = blocks[0]!['@graph'] as Node[];
+      const page = graph.find((n) => n['@type'] === 'CollectionPage');
+      const crumbs = graph.find((n) => n['@type'] === 'BreadcrumbList');
+      expect(page?.url, path).toBe(canonical);
+      expect(page?.breadcrumb?.['@id'], path).toBe(crumbs?.['@id']);
+      const items = page?.mainEntity?.itemListElement ?? [];
+      // Hub liệt kê kệ Bán chạy (có thể trống trên DB gate chưa có đơn); danh mục còn hàng thì có ít nhất một món.
+      if (path === category) expect(items.length, path).toBeGreaterThan(0);
+      items.forEach((it, i) => {
+        expect(it.position, path).toBe(i + 1);
+        expect(pathOf(it.url), path).toMatch(/^\/san-pham\/[^/?]+$/);
+      });
+    }
+    expect(ldBlocks(await (await request.get(`${baseURL}${category}&sort=newest`)).text())).toEqual([]);
+  });
+
+  test('verify-apex-cutover --base trên chính bản build này: robots, sitemap, canonical, JSON-LD, header không có FAIL', async ({ baseURL }) => {
+    test.setTimeout(120_000);
+    // Canonical mong đợi là NEXT_PUBLIC_SITE_URL của bản build (web-gate.sh không đặt nên là mặc định của lib/site.ts), không đọc lại từ
+    // chính robots/sitemap. Bỏ redirects (DB gate không có sản phẩm WordPress cũ nên đích 404), img (ảnh seed trỏ host ngoài) và edge
+    // (http trên localhost): ba nhóm đó chỉ có nghĩa trên host thật.
+    const canonical = new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://app.tubutree.com').origin;
+    const script = path.resolve(__dirname, '../../../scripts/cutover/verify-apex-cutover.mjs');
+    const run = spawnSync(process.execPath, [script, '--base', baseURL!, '--canonical', canonical, '--skip', 'redirects,img,edge', '--json'], { encoding: 'utf8', timeout: 100_000 });
+    const report = JSON.parse(run.stdout) as { findings: { check: string; level: string; message: string }[] };
+    console.log(report.findings.map((f) => `${f.level} [${f.check}] ${f.message}`).join('\n'));
+    expect(report.findings.filter((f) => f.level === 'FAIL')).toEqual([]);
+    expect(run.status).toBe(0);
+    expect(new Set(report.findings.map((f) => f.check))).toEqual(new Set(['robots', 'sitemap', 'pages']));
   });
 
   test(`Trang chủ: Organization + WebSite, HTML dưới ${HOME_HTML_MAX} B`, async ({ request, baseURL }) => {

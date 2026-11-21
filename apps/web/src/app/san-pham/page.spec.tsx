@@ -324,19 +324,65 @@ describe('BrowsePage — SEO', () => {
     await expect(generateMetadata({ searchParams: sp({ category: 'c-goi' }) })).rejects.toThrow('API lỗi');
   });
 
-  it('BreadcrumbList JSON-LD ở trạng thái nhãn và danh mục (theo vệt breadcrumb hiển thị), không có ở hub hay trạng thái noindex', async () => {
-    const ld = (html: string) => Array.from(html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)).map((m) => JSON.parse(m[1]!));
-    const brandLd = ld(await render({ brand: 'Tubu' }))[0];
-    expect(brandLd.itemListElement.map((i: { name: string; item: string }) => [i.name, i.item])).toEqual([
+  // Mỗi trang được lập chỉ mục có đúng một khối JSON-LD: `@graph` [CollectionPage, BreadcrumbList].
+  const ld = (html: string) => Array.from(html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)).map((m) => JSON.parse(m[1]!));
+  const nodeOf = (html: string, type: string): any => ld(html).flatMap((b) => b['@graph'] ?? [b]).find((n: { '@type': string }) => n['@type'] === type);
+
+  it('BreadcrumbList JSON-LD ở trạng thái nhãn, danh mục và hub (theo vệt breadcrumb hiển thị), không có ở trạng thái noindex', async () => {
+    const brandCrumbs = nodeOf(await render({ brand: 'Tubu' }), 'BreadcrumbList');
+    expect(brandCrumbs.itemListElement.map((i: { name: string; item: string }) => [i.name, i.item])).toEqual([
       ['Trang chủ', 'https://app.tubutree.com/'],
       ['Danh mục', 'https://app.tubutree.com/san-pham'],
       ['Tubu', 'https://app.tubutree.com/san-pham?brand=Tubu'],
     ]);
-    const catLd = ld(await render({ category: 'c-goi' }))[0];
-    expect(catLd.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Danh mục', 'Dầu gội']);
-    expect(ld(await render({}))).toEqual([]);
-    expect(ld(await render({ brand: 'khong-co' }))).toEqual([]);
-    expect(ld(await render({ category: 'c-goi', sort: 'newest' }))).toEqual([]);
+    const catCrumbs = nodeOf(await render({ category: 'c-goi' }), 'BreadcrumbList');
+    expect(catCrumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Danh mục', 'Dầu gội']);
+    expect(nodeOf(await render({}), 'BreadcrumbList').itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Danh mục']);
+    for (const o of [{ brand: 'khong-co' }, { category: 'c-goi', sort: 'newest' }, { page: '2' }, { q: 'gội' }, { all: '1' }]) {
+      expect(ld(await render(o)), JSON.stringify(o)).toEqual([]);
+    }
+    // Trang vượt trần lập chỉ mục (nhãn có đủ hàng để không bị đưa về trang cuối) cũng noindex.
+    catalog = () => pageOf([PRODUCT], 2000);
+    expect(ld(await render({ brand: 'Tubu', page: '51' }))).toEqual([]);
+  });
+
+  it('CollectionPage cùng tên, mô tả, canonical với thẻ meta; ItemList là các món có trong HTML máy chủ', async () => {
+    for (const o of [{}, { brand: 'Tubu' }, { category: 'c-goi' }]) {
+      const m = await generateMetadata({ searchParams: sp(o) });
+      const page = nodeOf(await render(o), 'CollectionPage');
+      expect(page.url, JSON.stringify(o)).toBe(`https://app.tubutree.com${m.alternates!.canonical}`);
+      expect(page.name, JSON.stringify(o)).toBe(m.title);
+      expect(page.description, JSON.stringify(o)).toBe(m.description);
+    }
+    // Hub: kệ Bán chạy nhất (3 món); trang nhãn: danh sách đầu.
+    const hub = nodeOf(await render({}), 'CollectionPage');
+    expect(hub.mainEntity.itemListElement.map((i: { url: string }) => i.url)).toEqual(['dau-goi', 'nrc', 'xp'].map((s) => `https://app.tubutree.com/san-pham/${s}`));
+    const brand = nodeOf(await render({ brand: 'Tubu' }), 'CollectionPage');
+    expect(brand.mainEntity.itemListElement).toEqual([{ '@type': 'ListItem', position: 1, url: 'https://app.tubutree.com/san-pham/dau-goi', name: 'Dầu gội bồ kết' }]);
+  });
+
+  it('trang nhãn N: vị trí trong ItemList nối tiếp các trang trước (20 món mỗi trang)', async () => {
+    catalog = () => pageOf([PRODUCT], 45, 3);
+    const page = nodeOf(await render({ brand: 'Tubu', page: '3' }), 'CollectionPage');
+    expect(page.mainEntity.itemListElement[0].position).toBe(41);
+  });
+
+  it('API danh mục lỗi: trang vẫn dựng, không khai CollectionPage cho danh mục không kiểm được', async () => {
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
+      if (path === '/categories') throw new Error('API lỗi');
+      if (path === '/brands') return BRANDS;
+      return opts?.query?.sort ? bestSellers() : catalog();
+    });
+    expect(ld(await render({ category: 'c-goi' }))).toEqual([]);
+  });
+
+  it('og/twitter khớp canonical, tiêu đề (có hậu tố nhãn) và mô tả ở trang được lập chỉ mục; trang noindex chỉ có robots', async () => {
+    for (const o of [{}, { brand: 'Tubu', page: '2' }, { category: 'c-goi' }]) {
+      const m = await generateMetadata({ searchParams: sp(o) });
+      expect(m.openGraph, JSON.stringify(o)).toMatchObject({ url: m.alternates!.canonical, title: `${m.title} — Tubu Tree`, description: m.description, siteName: 'Tubu Tree' });
+      expect(m.twitter, JSON.stringify(o)).toMatchObject({ card: 'summary_large_image', title: `${m.title} — Tubu Tree` });
+    }
+    expect(await generateMetadata({ searchParams: sp({ page: '2' }) })).not.toHaveProperty('openGraph');
   });
 
   it('kết quả tìm kiếm, phân khúc và lọc/sắp xếp không cho công cụ tìm kiếm lập chỉ mục (vô hạn biến thể URL)', async () => {

@@ -2,17 +2,22 @@ import type { Metadata } from 'next';
 import { fetchBrands, fetchCategories } from '@tubutree/app-core/api/catalog';
 import { fetchBestSellers } from '@tubutree/app-core/api/browse';
 import { shelf } from '@tubutree/app-core/merch/shelves';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import BrowseView from '@/components/catalog/browse-view';
+import { browseText } from '@/lib/browse-text';
 import { createServerHttp } from '@/lib/core-http-server';
 import { BUILD_GAP_REVALIDATE_S } from '@/lib/home-initial';
-import { browseMetadata } from '@/lib/home-seo';
+import { browseBreadcrumb, browseMetadata } from '@/lib/home-seo';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { jsonLdScript } from '@/lib/product-seo';
+import { browseCollectionJsonLd, withBrowseSocial } from '@/lib/seo/browse-structured-data';
 
 // useSearchParams trong BrowseView trả rỗng lúc dựng nhờ force-static; trình duyệt đọc lại URL thật (utm, focus) sau hydrate.
 export const dynamic = 'force-static';
 export const revalidate = 300;
 
-export const metadata: Metadata = browseMetadata({ page: 1 }, true);
+const HUB_META: Metadata = browseMetadata({ page: 1 }, true);
+export const metadata: Metadata = withBrowseSocial(HUB_META);
 
 const valueOf = <T,>(r: PromiseSettledResult<T>): T | undefined => (r.status === 'fulfilled' ? r.value : undefined);
 
@@ -31,9 +36,13 @@ export default async function BrowseHubPage() {
   if (failed && !isBuild()) throw failed.reason;
   if (failed) await createServerHttp({ revalidate: BUILD_GAP_REVALIDATE_S }).get('/config/public').catch(() => undefined);
   const [bestSellers, brands, categories] = parts;
+  // Cùng khối JSON-LD với nhánh hub của app/san-pham/page.tsx: ItemList là kệ Bán chạy có trong HTML này.
+  const crumbs = browseBreadcrumb({ home: fillCopy('browse.crumbHome'), browse: browseText.title });
+  const collection = browseCollectionJsonLd(HUB_META, crumbs, valueOf(bestSellers) ?? []);
   return (
     <main className={`${PAGE_WIDE} md:py-8`}>
       <BrowseView initial={null} bestSellers={valueOf(bestSellers)} brands={valueOf(brands)} categories={valueOf(categories)} />
+      {collection && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(collection) }} />}
     </main>
   );
 }
