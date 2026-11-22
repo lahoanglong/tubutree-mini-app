@@ -31,6 +31,7 @@ const DISCOVER_LINKS: DiscoverLink[] = [
   { to: '/gio-vang', label: 'Giờ vàng' },
   // Mã giảm giá nằm trong hub Ưu đãi; `?codes=all` mở sẵn cả danh sách mã nhận được (đích cũ /ma-giam-gia chỉ còn là chuyển hướng).
   { to: '/uu-dai?codes=all', label: 'Mã giảm giá' },
+  { to: '/bo-qua-tang', label: 'Bộ quà tặng' },
   { to: '/mua-chung', label: 'Mua chung' },
   { to: '/cong-dong', label: 'Cộng đồng' },
   { to: '/cau-chuyen', label: 'Câu chuyện thương hiệu' },

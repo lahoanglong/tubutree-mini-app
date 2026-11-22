@@ -20,7 +20,7 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
 vi.mock('@/lib/route-map', async (orig) => ({
   ...(await orig<object>()),
-  isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/san-pham', '/vuon-xanh', '/doi-rac', '/mua-chung', '/cau-chuyen', '/tai-khoan/thong-bao'].includes(p),
+  isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/san-pham', '/bo-qua-tang', '/vuon-xanh', '/doi-rac', '/mua-chung', '/cau-chuyen', '/tai-khoan/thong-bao'].includes(p),
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => mocks.path }));
 
@@ -124,7 +124,7 @@ describe('SiteHeader', () => {
     expect(out).not.toContain('SỐNG XANH AN LÀNH');
   });
 
-  it('máy tính: điều hướng chính gồm đúng 5 mục ổn định từ khung đầu, không cuộn ngang và khớp nhóm đường dẫn con', () => {
+  it('máy tính: điều hướng chính gồm 5 mục ổn định (+ Bộ quà tặng từ lg) từ khung đầu, không cuộn ngang và khớp nhóm đường dẫn con', () => {
     mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
     const out = render();
     const desk = out.match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
@@ -140,10 +140,19 @@ describe('SiteHeader', () => {
     expect(desk).toMatch(/href="\/doi-rac"/);
     expect(desk).toMatch(/href="\/mua-chung"/);
     expect(desk).toMatch(/href="\/cau-chuyen"/);
+    // "Bộ quà tặng" là mục thứ 6, có trong HTML từ khung đầu (không chèn sau hydrate) nhưng chỉ hiện từ lg; 5 mục còn lại hiện từ md.
+    const items = desk.match(/<li[^>]*>.*?<\/li>/gs) ?? [];
+    expect(items).toHaveLength(6);
+    expect(items[1]).toMatch(/^<li class="flex-none max-lg:hidden">.*href="\/bo-qua-tang".*>Bộ quà tặng<\/a><\/li>$/s);
+    expect(items.filter((li) => li.includes('max-lg:hidden'))).toHaveLength(1);
 
     mocks.path = '/kho-qua/cua-toi';
     const onRewards = render().match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
     expect(onRewards).toMatch(/href="\/doi-rac"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/doi-rac"/);
+
+    mocks.path = '/bo-qua-tang';
+    const onGifts = render().match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
+    expect(onGifts).toMatch(/href="\/bo-qua-tang"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/bo-qua-tang"/);
 
     mocks.path = '/gio-vang';
     const onFlash = render().match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';

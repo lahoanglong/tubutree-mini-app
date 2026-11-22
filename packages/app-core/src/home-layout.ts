@@ -205,7 +205,7 @@ export function customerKind(purchasedCount: number | undefined): HomeCustomerKi
 
 // ---- Lối tắt ----
 
-export type HomeShortcutId = 'flash' | 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'claim' | 'earn' | 'community';
+export type HomeShortcutId = 'flash' | 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'gifts' | 'claim' | 'earn' | 'community';
 export type ShortcutTint = 'forest' | 'sage' | 'clay' | 'amber' | 'sky' | 'rose';
 
 export interface HomeShortcutSpec {
@@ -239,6 +239,7 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
   { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
   { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
+  { id: 'gifts', label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu', tint: 'rose' },
   { id: 'claim', label: 'Đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
   { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },

@@ -73,7 +73,50 @@ describe('refillSwapOffers', () => {
     expect(c.confirm).toBe('Đổi sang Refill');
     expect(c.cancel).toBe('Giữ lại');
     expect(c.title).toBe('Đổi sang Refill?');
-    expect(c.body).toBe('Refill nước giặt Bồ Hòn 5L · 650.000đ, dùng lại chai bạn đang có. Dòng này tăng 530.000đ. Rẻ hơn 45%/100ml.');
+    expect(c.body).toBe('Refill nước giặt Bồ Hòn 5L · 650.000đ, dùng lại chai bạn đang có. Dòng này tăng 530.000đ. Tiết kiệm 550.000đ so với mua chai cùng lượng.');
+    expect(v.gain).toBeNull();
+  });
+
+  it('đổi xong đủ mốc đang thiếu: tấm xác nhận nói trước "Giỏ sẽ đủ …" cho cả Miễn phí giao hàng lẫn quà 0đ', () => {
+    const v = run({
+      lines: [line({ id: 'l1', productId: 'p-bottle' })],
+      pairs: { 'p-bottle': offer({ price: 650_000, sizeLabel: '10L' }) },
+      milestones: {
+        ...NONE,
+        freeship: { base: 120_000, threshold: 199_000, reached: false, tubuOnly: false },
+        giftTrial: { ...GIFT, base: 120_000, shortfall: 179_000, options: [{ ...GIFT.options[0]!, unlocked: false }], selectedVariationId: null },
+      },
+    }).get('l1')!;
+    expect(v.gain).toBe('Giỏ sẽ đủ Miễn phí giao hàng. Giỏ sẽ đủ nhận quà 0đ');
+    expect(v.warning).toBeNull();
+    expect(v.needsConfirm).toBe(true);
+    expect(refillConfirmText(v).body).toBe(
+      'Refill nước giặt Bồ Hòn 5L · 650.000đ, dùng lại chai bạn đang có. Dòng này tăng 530.000đ. Tiết kiệm 550.000đ so với mua chai cùng lượng. Giỏ sẽ đủ Miễn phí giao hàng. Giỏ sẽ đủ nhận quà 0đ.',
+    );
+  });
+
+  it('mốc sẽ đạt đọc đúng ngưỡng giỏ đưa vào (cấu hình máy chủ), không tự đặt 199.000đ / 299.000đ', () => {
+    const lines = [line({ id: 'l1', productId: 'p-bottle' })];
+    const pairs = { 'p-bottle': offer({ price: 650_000, sizeLabel: '10L' }) };
+    const gainAt = (threshold: number) =>
+      run({ lines, pairs, milestones: { ...NONE, freeship: { base: 120_000, threshold, reached: false, tubuOnly: false } } }).get('l1')!.gain;
+    expect(gainAt(650_000)).toBe('Giỏ sẽ đủ Miễn phí giao hàng');
+    expect(gainAt(650_001)).toBeNull();
+    expect(gainAt(0)).toBeNull();
+    const giftAt = (minOrder: number) =>
+      run({ lines, pairs, milestones: { ...NONE, giftTrial: { ...GIFT, base: 120_000, minOrder, options: [{ ...GIFT.options[0]!, minOrder, unlocked: false }] } } }).get('l1')!.gain;
+    expect(giftAt(650_000)).toBe('Giỏ sẽ đủ nhận quà 0đ');
+    expect(giftAt(700_000)).toBeNull();
+  });
+
+  it('không hứa mốc khi: đã đạt sẵn, khách không nhận quà, gói gian hàng tự giao không góp vào mốc hàng Tubu, giá giảm', () => {
+    const lines = [line({ id: 'l1', productId: 'p-bottle' })];
+    const big = { 'p-bottle': offer({ price: 650_000, sizeLabel: '10L' }) };
+    expect(run({ lines, pairs: big, milestones: { ...NONE, freeship: { base: 250_000, threshold: 199_000, reached: true, tubuOnly: false }, giftTrial: GIFT } }).get('l1')!.gain).toBeNull();
+    expect(run({ lines, pairs: big, milestones: { ...NONE, giftTrial: { ...GIFT, base: 120_000, declined: true, selectedVariationId: null } } }).get('l1')!.gain).toBeNull();
+    const vendor = { 'p-bottle': offer({ price: 650_000, sizeLabel: '10L', tubu: false }) };
+    expect(run({ lines, pairs: vendor, milestones: { ...NONE, freeship: { base: 120_000, threshold: 199_000, reached: false, tubuOnly: true } } }).get('l1')!.gain).toBeNull();
+    expect(run({ lines, milestones: { ...NONE, freeship: { base: 120_000, threshold: 199_000, reached: false, tubuOnly: false } } }).get('l1')!.gain).toBeNull();
   });
 
   it('tên không ghi lượng thì "Refill"', () => {

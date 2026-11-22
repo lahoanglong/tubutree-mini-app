@@ -12,8 +12,8 @@ export interface RefillSwapLinkProps {
 }
 
 /**
- * Liên kết chữ dưới dòng chai trong giỏ ("Đã có chai? Đổi sang Refill 10L · 650.000đ"), kèm huy hiệu "Rẻ hơn 34%/100ml" khi đọc được lượng:
- * không phải dải, không phải nút chính. Cùng props với Mini App.
+ * Liên kết chữ dưới dòng chai trong giỏ ("Đã có chai? Đổi sang Refill 10L · 650.000đ"), kèm huy hiệu "Tiết kiệm 470.000đ" (so với mua chai
+ * cùng lượng; gói nhỏ hơn một chai thì "Rẻ hơn 34%/100ml") khi đọc được lượng: không phải dải, không phải nút chính. Cùng props với Mini App.
  */
 export function RefillSwapLink({ view, disabled, onPress }: RefillSwapLinkProps) {
   const id = view.refill.productId;
@@ -31,7 +31,7 @@ export function RefillSwapLink({ view, disabled, onPress }: RefillSwapLinkProps)
       {view.saving && (
         <>
           {' '}
-          <Badge tone="success" size="sm">
+          <Badge tone="success" size="sm" className="tabular-nums">
             {view.saving}
           </Badge>
         </>

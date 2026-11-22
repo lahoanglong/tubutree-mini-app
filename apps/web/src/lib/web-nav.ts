@@ -54,14 +54,18 @@ export interface WebDesktopNavItem {
   path: string;
   label: string;
   matchPrefixes: readonly string[];
+  /** Chỉ hiện từ `lg` (1024px): ở 768px–1023px hàng 5 mục chính đã gần kín, mục thêm sẽ đẩy mục cuối ra ngoài màn. */
+  wideOnly?: boolean;
 }
 
 /**
- * 5 mục điều hướng ổn định trên thanh đầu máy tính (W171): không cuộn ngang ở 1024px–1440px,
- * không chờ `useWasteVisible()` chèn muộn gây nhảy bố cục sau hydrate.
+ * 5 mục điều hướng ổn định trên thanh đầu máy tính (W171): không cuộn ngang ở 768px–1440px,
+ * không chờ `useWasteVisible()` chèn muộn gây nhảy bố cục sau hydrate. "Bộ quà tặng" là mục thứ 6, chỉ hiện từ `lg`
+ * (dưới `lg` vẫn vào được từ chân trang và "Xem tất cả" của Combo tiết kiệm ở Trang chủ); mục có trong HTML từ khung đầu, ẩn bằng CSS.
  */
 export const WEB_DESKTOP_NAV: readonly WebDesktopNavItem[] = [
   { path: '/san-pham', label: 'Sản phẩm', matchPrefixes: ['/san-pham'] },
+  { path: '/bo-qua-tang', label: 'Bộ quà tặng', matchPrefixes: ['/bo-qua-tang'], wideOnly: true },
   { path: '/vuon-xanh', label: 'Vườn Xanh', matchPrefixes: ['/vuon-xanh'] },
   { path: '/doi-rac', label: 'Đổi rác & Kho quà', matchPrefixes: ['/doi-rac', '/kho-qua'] },
   { path: '/mua-chung', label: 'Mua chung & Xoay vòng', matchPrefixes: ['/mua-chung', '/uu-dai', '/gio-vang'] },

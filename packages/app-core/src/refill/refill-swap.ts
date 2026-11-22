@@ -14,7 +14,7 @@ export interface RefillCartLine {
   total: number;
   isFlash?: boolean;
   fulfiller?: { kind: string } | null;
-  /** Tên sản phẩm và đơn giá dòng: đủ thì liên kết đổi có huy hiệu "Rẻ hơn …/100ml". */
+  /** Tên sản phẩm và đơn giá dòng: đủ thì liên kết đổi có huy hiệu tiết kiệm ("Tiết kiệm 470.000đ"). */
   productName?: string;
   unitPrice?: number;
 }
@@ -40,7 +40,9 @@ export interface RefillSwapView {
   needsConfirm: boolean;
   /** Các mốc khách đang đạt sẽ mất nếu đổi (Miễn phí giao hàng, quà 0đ, bậc Hộp Xanh), nối bằng ". "; nói trước, không âm thầm. */
   warning: string | null;
-  /** Huy hiệu "Rẻ hơn 34%/100ml" (gói Refill so với đơn giá dòng chai); null khi không đọc được lượng hay không rẻ hơn. */
+  /** Mốc giỏ đang thiếu mà đổi xong thì đạt (Miễn phí giao hàng, quà 0đ), nối bằng ". "; cùng số với thanh mốc của giỏ, nói ở tấm xác nhận. */
+  gain: string | null;
+  /** Huy hiệu "Tiết kiệm 470.000đ" (gói Refill so với mua chai cùng lượng theo đơn giá dòng); null khi không đọc được lượng hay không rẻ hơn. */
   saving: string | null;
 }
 
@@ -62,7 +64,7 @@ export interface RefillSwapInput {
   /** Dòng đang được chọn để thanh toán (mặc định: mọi dòng). Dòng bỏ chọn không góp vào mốc. */
   isSelected?: (lineId: string) => boolean;
   /**
-   * Huy hiệu "Rẻ hơn …/100ml" (`refillSavingBadge` của `./refill-saving`). Truyền vào thay vì import: bộ đọc dung tích nặng vài KB, web
+   * Huy hiệu "Tiết kiệm 470.000đ" (`refillSavingBadge` của `./refill-saving`). Truyền vào thay vì import: bộ đọc dung tích nặng vài KB, web
    * nạp lười để không vào JS tải đầu của giỏ. Vắng thì liên kết không có huy hiệu.
    */
   saving?: (bottle: { name: string; price: number }, offer: RefillOfferDTO) => string | null;
@@ -78,15 +80,37 @@ type Ctx = { line: RefillCartLine; offer: RefillOfferDTO };
 
 function freeshipWarning(m: RefillMilestones['freeship'], c: Ctx): string | null {
   if (!m || !m.reached || !(m.threshold > 0)) return null;
-  const lineShare = c.line.stock > 0 && (!m.tubuOnly || isTubu(c.line)) ? c.line.total : 0;
-  const after = m.base - lineShare + (!m.tubuOnly || c.offer.tubu ? c.offer.price : 0);
+  const after = freeshipAfter(m, c);
   return after < m.threshold ? fillCopy('refill.dropFreeship', { amount: vnd(m.threshold - after) }) : null;
+}
+
+/** Tiền hàng tính mốc sau khi đổi: bỏ phần dòng chai đang góp, cộng gói refill (gian hàng tự giao không góp khi mốc chỉ tính hàng Tubu). */
+function freeshipAfter(m: NonNullable<RefillMilestones['freeship']>, c: Ctx): number {
+  const lineShare = c.line.stock > 0 && (!m.tubuOnly || isTubu(c.line)) ? c.line.total : 0;
+  return m.base - lineShare + (!m.tubuOnly || c.offer.tubu ? c.offer.price : 0);
+}
+
+function giftAfter(gift: GiftTrialSummaryDTO, c: Ctx): number {
+  const lineShare = c.line.stock > 0 && isTubu(c.line) ? c.line.total : 0;
+  return gift.base - lineShare + (c.offer.tubu ? c.offer.price : 0);
+}
+
+/** Mốc đang thiếu mà đổi xong thì đạt: Miễn phí giao hàng (chưa đạt, sau đổi đủ ngưỡng) và quà 0đ (có lựa chọn quà mới vào tầm). */
+function milestoneGain(m: RefillMilestones, c: Ctx): string | null {
+  const gains: string[] = [];
+  const f = m.freeship;
+  if (f && !f.reached && f.threshold > 0 && freeshipAfter(f, c) >= f.threshold) gains.push(fillCopy('refill.gainFreeship'));
+  const g = m.giftTrial;
+  if (g && !g.declined && g.options.length > 0) {
+    const after = giftAfter(g, c);
+    if (g.options.some((o) => o.minOrder > g.base && o.minOrder <= after)) gains.push(fillCopy('refill.gainGift'));
+  }
+  return gains.length > 0 ? gains.join('. ') : null;
 }
 
 function giftWarning(gift: GiftTrialSummaryDTO | null | undefined, c: Ctx): string | null {
   if (!gift || gift.declined || gift.options.length === 0) return null;
-  const lineShare = c.line.stock > 0 && isTubu(c.line) ? c.line.total : 0;
-  const after = gift.base - lineShare + (c.offer.tubu ? c.offer.price : 0);
+  const after = giftAfter(gift, c);
   const lost = gift.options.filter((o) => o.minOrder <= gift.base && o.minOrder > after);
   if (lost.length === 0) return null;
   const selected = lost.find((o) => o.variationId === gift.selectedVariationId);
@@ -147,17 +171,19 @@ export function refillSwapOffers(input: RefillSwapInput): Map<string, RefillSwap
       delta,
       needsConfirm: delta > 0 || warning !== null,
       warning,
+      gain: milestoneGain(input.milestones, c),
       saving: input.saving && line.productName && line.unitPrice ? input.saving({ name: line.productName, price: line.unitPrice }, offer) : null,
     });
   }
   return out;
 }
 
-/** Chữ của tấm xác nhận: tên đủ + giá, mức tăng (nếu có), mốc sẽ mất (nếu có). */
+/** Chữ của tấm xác nhận: tên đủ + giá, mức tăng (nếu có), tiết kiệm so với chai (nếu có), mốc sẽ đạt và mốc sẽ mất (nếu có). */
 export function refillConfirmText(view: RefillSwapView): { title: string; body: string; confirm: string; cancel: string } {
   const parts = [fillCopy('refill.confirmBody', { name: view.refill.name, price: vnd(view.refill.price) })];
   if (view.delta > 0) parts.push(fillCopy('refill.confirmUp', { amount: vnd(view.delta) }));
-  if (view.saving) parts.push(`${view.saving}.`);
+  if (view.saving) parts.push(fillCopy('refill.confirmSaving', { saving: view.saving }));
+  if (view.gain) parts.push(`${view.gain}.`);
   if (view.warning) parts.push(`${view.warning}.`);
   return { title: fillCopy('refill.confirmTitle'), body: parts.join(' '), confirm: fillCopy('refill.confirmCta'), cancel: fillCopy('cart.comboRemoveKeep') };
 }

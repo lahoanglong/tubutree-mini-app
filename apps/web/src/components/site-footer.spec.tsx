@@ -206,6 +206,13 @@ describe('SiteFooter', () => {
     expect(out).not.toContain('href="/ma-giam-gia"');
   });
 
+  it('cột Khám phá có "Bộ quà tặng" (/bo-qua-tang) ngay sau Mã giảm giá', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    const out = await html();
+    expect(out).toMatch(/<a [^>]*href="\/bo-qua-tang"[^>]*>Bộ quà tặng<\/a>/);
+    expect(out.indexOf('href="/bo-qua-tang"')).toBeGreaterThan(out.indexOf('href="/uu-dai?codes=all"'));
+  });
+
   it('Đổi rác tắt (và khách không có yêu cầu đang mở) thì chân trang không có lối vào Đổi rác', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     mocks.wasteVisible = false;

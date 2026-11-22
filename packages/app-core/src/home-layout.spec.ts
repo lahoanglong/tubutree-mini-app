@@ -149,9 +149,9 @@ describe('homeInterleaveCard', () => {
 
 describe('visibleHomeShortcuts', () => {
   it('khai 9 lối tắt; khi mọi cờ bật hiện đủ 9, mở đầu bằng Giờ vàng và không có Vườn Xanh (đã là tab giữa)', () => {
-    expect(HOME_SHORTCUTS).toHaveLength(9);
+    expect(HOME_SHORTCUTS).toHaveLength(10);
     const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'claim', 'earn', 'community']);
+    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'gifts', 'claim', 'earn', 'community']);
     expect(ids).not.toContain('garden');
   });
   it('ô Giờ vàng hiện khi chưa biết hay có suất, không phụ thuộc cờ nào; biết chắc không có suất nào thì bỏ', () => {
@@ -181,11 +181,20 @@ describe('visibleHomeShortcuts', () => {
   });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
     const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'groupBuy', 'rewards', 'orders', 'earn', 'community']);
+    expect(ids).toEqual(['flash', 'coupons', 'groupBuy', 'rewards', 'orders', 'gifts', 'earn', 'community']);
   });
   it('Giờ vàng đi tới /flash-sale, Mã giảm giá ghi đúng chữ chốt', () => {
     expect(HOME_SHORTCUTS.find((s) => s.id === 'flash')).toMatchObject({ label: 'Giờ vàng' });
     expect(HOME_SHORTCUTS.find((s) => s.id === 'coupons')).toMatchObject({ label: 'Mã giảm giá' });
+  });
+  it('Bộ quà tặng luôn có trong "Tất cả lối tắt" (không theo cờ) và không chiếm 4 ô cố định', () => {
+    for (const wasteEnabled of [true, false]) {
+      for (const claimEnabled of [true, false]) {
+        const { pinned, all } = homeShortcutSlots({ wasteEnabled, claimEnabled, flashLive: false });
+        expect(all.find((s) => s.id === 'gifts')).toMatchObject({ label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu' });
+        expect(pinned.map((s) => s.id)).not.toContain('gifts');
+      }
+    }
   });
 });
 
@@ -194,8 +203,8 @@ describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
     expect(HOME_SHORTCUT_SLOTS).toBe(4);
     const { pinned, all } = homeShortcutSlots({ wasteEnabled: true, claimEnabled: true });
     expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'recycle', 'groupBuy']);
-    expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'claim']));
-    expect(all).toHaveLength(9);
+    expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'claim', 'gifts']));
+    expect(all).toHaveLength(10);
   });
   it('Đổi rác tắt thì ô trống được mục kế lấp, vẫn đủ 4 ô', () => {
     const { pinned } = homeShortcutSlots({ wasteEnabled: false, claimEnabled: false });

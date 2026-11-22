@@ -100,12 +100,15 @@ describe('/gio-hang: đổi dòng chai sang gói Refill (catalog.refill_first_en
   it('liên kết chữ ghi giá gói và phần tăng; xác nhận thì thêm gói rồi mới bỏ chai; Hoàn tác trả lại đúng chai', async () => {
     const { container } = await mount();
     expect(state.pairs).toHaveBeenCalledWith(['p-bottle']);
-    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Rẻ hơn 45%/100ml');
+    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Tiết kiệm 550.000đ');
+    expect(link(container)!.querySelector('.tabular-nums')?.textContent).toBe('Tiết kiệm 550.000đ');
     expect(state.track).toHaveBeenCalledWith('refill_swap_shown', { surface: 'cart' });
 
     click(link(container));
     await flush();
     expect(document.body.textContent).toContain('Đổi sang Refill?');
+    // Mốc lấy đúng ngưỡng giỏ máy chủ trả (freeshipThreshold 199.000đ của cấu hình), cùng số với thanh mốc của giỏ.
+    expect(document.body.textContent).toContain('Dòng này tăng 530.000đ. Tiết kiệm 550.000đ so với mua chai cùng lượng. Giỏ sẽ đủ Miễn phí giao hàng.');
     expect(state.order).toEqual([]);
 
     state.afterAdd = cartOf([BOTTLE, REFILL_LINE]);
@@ -138,7 +141,7 @@ describe('/gio-hang: đổi dòng chai sang gói Refill (catalog.refill_first_en
     state.afterAdd = cartOf([many, REFILL_LINE]);
     state.afterRemove = cartOf([REFILL_LINE]);
     const { container } = await mount();
-    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Rẻ hơn 45%/100ml');
+    expect(link(container)!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Tiết kiệm 550.000đ');
     click(link(container));
     await flush(8);
     expect(document.body.textContent).not.toContain('Đổi sang Refill?');
@@ -152,5 +155,14 @@ describe('/gio-hang: đổi dòng chai sang gói Refill (catalog.refill_first_en
     click(link(container));
     await flush();
     expect(document.body.textContent).toContain('Giỏ sẽ thiếu 49.000đ để Miễn phí giao hàng');
+  });
+
+  it('ngưỡng Miễn phí giao hàng đổi ở cấu hình (700.000đ): đổi xong vẫn chưa đủ thì không hứa mốc', async () => {
+    state.cart = { ...cartOf([BOTTLE]), freeshipThreshold: 700_000 };
+    const { container } = await mount();
+    click(link(container));
+    await flush();
+    expect(document.body.textContent).toContain('Đổi sang Refill?');
+    expect(document.body.textContent).not.toContain('Giỏ sẽ đủ');
   });
 });

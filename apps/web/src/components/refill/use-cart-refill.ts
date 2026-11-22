@@ -26,7 +26,7 @@ type SavingBadge = NonNullable<RefillSwapInput['saving']>;
 const noBadge: SavingBadge = () => null;
 
 /**
- * Hàm huy hiệu "Rẻ hơn …/100ml" nạp lười (bộ đọc dung tích vài KB không vào JS tải đầu của giỏ). Bắt đầu nạp cùng lúc hỏi cặp, nên liên
+ * Hàm huy hiệu "Tiết kiệm …" nạp lười (bộ đọc dung tích vài KB không vào JS tải đầu của giỏ). Bắt đầu nạp cùng lúc hỏi cặp, nên liên
  * kết đổi và huy hiệu hiện cùng lúc; nạp hỏng thì liên kết vẫn hiện, không có huy hiệu.
  */
 function useSavingBadge(wanted: boolean): SavingBadge | null {

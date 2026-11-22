@@ -90,13 +90,13 @@ export default function SiteHeader() {
         </nav>
       </div>
 
-      {/* Máy tính: 5 mục điều hướng chính ổn định, không cuộn ngang ở 1024px–1440px và không nhảy sau hydrate. */}
+      {/* Máy tính: 5 mục điều hướng chính ổn định (thêm "Bộ quà tặng" từ lg), không cuộn ngang ở 768px–1440px và không nhảy sau hydrate. */}
       <nav aria-label="Điều hướng chính" data-desktop-nav className="border-t border-stone-100">
         <ul className={`${PAGE_WIDE} flex h-11 items-center gap-2 text-sm lg:gap-4`}>
           {navItems.map((t) => {
             const active = isDesktopNavActive(pathname, t);
             return (
-              <li key={t.path} className="flex-none">
+              <li key={t.path} className={t.wideOnly ? 'flex-none max-lg:hidden' : 'flex-none'}>
                 <Link
                   href={t.path}
                   aria-current={active ? 'page' : undefined}
