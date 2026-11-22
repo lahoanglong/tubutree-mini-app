@@ -174,9 +174,9 @@ export function WasteBulkBar({ selection, actions, pageRows }: { selection: Wast
             setPreview(null);
             if (changed) {
               selection.clear();
-              void qc.invalidateQueries({ queryKey: ['admin-waste-requests'] });
-              void qc.invalidateQueries({ queryKey: ['admin-waste-unmatched'] });
-              void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
+              for (const key of ['admin-waste-requests', 'admin-waste-request', 'admin-waste-overview', 'admin-waste-unmatched', 'admin-ops-inbox']) {
+                void qc.invalidateQueries({ queryKey: [key] });
+              }
             }
           }}
         />

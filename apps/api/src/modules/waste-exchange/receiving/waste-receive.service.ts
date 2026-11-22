@@ -50,18 +50,31 @@ type CandidateRow = {
   user: { id: string; fullName: string | null; phone: string | null };
 };
 
+/** Kiện không có gợi ý: TR- tranh chấp (admin tự quyết) và mã vận đơn khớp nhiều yêu cầu (nút Nhận kiện đã từ chối đúng vì không rõ của ai). */
+const NO_SUGGESTION_REASONS: ReadonlySet<string> = new Set(['TR_TRACKING_CONFLICT', 'TRACKING_MULTI']);
+
+/**
+ * Mã vận đơn chỉ là bằng chứng khi nhân viên đọc nó trên kiện (kiện nhập tay, MANUAL_ENTRY). Kiện do nút Nhận kiện ghi lại mang mã chép từ chính
+ * yêu cầu vừa quét: gợi ý theo mã đó sẽ trỏ ngược về yêu cầu vừa bị từ chối đối chiếu SĐT. Mã trỏ tới yêu cầu của hơn một khách cũng không gợi ý.
+ */
+function trackingSuggestionAllowed<T extends { reason: string; trackingNorm: string | null }>(parcel: T): parcel is T & { trackingNorm: string } {
+  return parcel.reason === 'MANUAL_ENTRY' && parcel.trackingNorm !== null;
+}
+
 /**
  * Gợi ý xếp hạng cho một kiện: trùng mã vận đơn trước (mạnh nhất), rồi cùng SĐT khách với yêu cầu gắn kèm kiện; trong mỗi nhóm, Đang gửi trước
  * Đang mở, cũ trước mới. Bỏ trùng theo yêu cầu (trùng mã vận đơn thắng). Hàm thuần để spec kiểm thứ tự.
  */
 export function rankCandidates(
-  parcel: { trackingNorm: string | null; relatedRequestId: string | null },
+  parcel: { reason: string; trackingNorm: string | null; relatedRequestId: string | null },
   relatedPhone: string | null,
   pool: readonly (CandidateRow & { phone: string | null })[],
 ): (CandidateRow & { basis: WasteUnmatchedSuggestion })[] {
+  if (NO_SUGGESTION_REASONS.has(parcel.reason)) return [];
   const order = (a: CandidateRow, b: CandidateRow) =>
     (a.status === 'IN_TRANSIT' ? 0 : 1) - (b.status === 'IN_TRANSIT' ? 0 : 1) || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id);
-  const byTracking = parcel.trackingNorm === null ? [] : pool.filter((r) => r.trackingNorm === parcel.trackingNorm).sort(order);
+  const sameTracking = trackingSuggestionAllowed(parcel) ? pool.filter((r) => r.trackingNorm === parcel.trackingNorm && r.id !== parcel.relatedRequestId) : [];
+  const byTracking = new Set(sameTracking.map((r) => r.userId)).size === 1 ? [...sameTracking].sort(order) : [];
   const taken = new Set(byTracking.map((r) => r.id));
   const byPhone =
     relatedPhone === null
@@ -341,8 +354,8 @@ export class WasteReceiveService {
    */
   private async candidatesFor(parcels: readonly UnmatchedRow[], isAdmin: boolean): Promise<Map<string, WasteUnmatchedCandidateDTO[]>> {
     const out = new Map<string, WasteUnmatchedCandidateDTO[]>();
-    const eligible = parcels.filter((p) => p.reason !== 'TR_TRACKING_CONFLICT');
-    const norms = [...new Set(eligible.map((p) => p.trackingNorm).filter((n): n is string => !!n))];
+    const eligible = parcels.filter((p) => !NO_SUGGESTION_REASONS.has(p.reason));
+    const norms = [...new Set(eligible.filter(trackingSuggestionAllowed).map((p) => p.trackingNorm))];
     const relatedIds = [...new Set(eligible.map((p) => p.relatedRequestId).filter((id): id is string => !!id))];
     const related = relatedIds.length
       ? await this.prisma.wasteRequest.findMany({ where: { id: { in: relatedIds } }, select: { id: true, user: { select: { phone: true } } } })
@@ -375,7 +388,11 @@ export class WasteReceiveService {
     const pool = found.map((r) => ({ ...r, phone: r.user.phone }));
     for (const p of eligible) {
       const norm = p.trackingNorm;
-      const ranked = rankCandidates({ trackingNorm: norm, relatedRequestId: p.relatedRequestId }, p.relatedRequestId ? (phoneOf.get(p.relatedRequestId) ?? null) : null, pool);
+      const ranked = rankCandidates(
+        { reason: p.reason, trackingNorm: norm, relatedRequestId: p.relatedRequestId },
+        p.relatedRequestId ? (phoneOf.get(p.relatedRequestId) ?? null) : null,
+        pool,
+      );
       out.set(
         p.id,
         ranked.map((r) => {
@@ -511,10 +528,14 @@ export class WasteReceiveService {
     tx: Prisma.TransactionClient,
     suggestion: WasteUnmatchedSuggestion,
     parcel: { reason: string; trackingNorm: string | null; relatedRequestId: string | null },
-    req: { id: string; trackingNorm: string | null; user: { phone: string | null } },
+    req: { id: string; userId: string; trackingNorm: string | null; user: { phone: string | null } },
   ): Promise<boolean> {
-    if (parcel.reason === 'TR_TRACKING_CONFLICT') return false;
-    if (suggestion === 'TRACKING') return parcel.trackingNorm !== null && req.trackingNorm === parcel.trackingNorm;
+    if (NO_SUGGESTION_REASONS.has(parcel.reason)) return false;
+    if (suggestion === 'TRACKING') {
+      if (!trackingSuggestionAllowed(parcel) || req.id === parcel.relatedRequestId || req.trackingNorm !== parcel.trackingNorm) return false;
+      const peers = await tx.wasteRequest.findMany({ where: { trackingNorm: parcel.trackingNorm, status: { in: ['OPEN', 'IN_TRANSIT'] } }, select: { userId: true } });
+      return peers.every((p) => p.userId === req.userId);
+    }
     if (parcel.relatedRequestId === null || parcel.relatedRequestId === req.id || req.user.phone === null) return false;
     const related = await tx.wasteRequest.findUnique({ where: { id: parcel.relatedRequestId }, select: { user: { select: { phone: true } } } });
     return related?.user.phone === req.user.phone;

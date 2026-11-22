@@ -209,3 +209,78 @@ test.describe('Admin — bảng yêu cầu đổi rác: lọc nhanh và nút m�
     });
   }
 });
+
+const TRANSIT_ROW: AdminWasteRequestRowDTO = { ...ROW, id: 'wr-4', code: 'TR-MAIL44', method: 'MAIL_IN', status: 'IN_TRANSIT', receivedAt: null, inTransitAt: '2026-11-10T02:00:00.000Z', carrier: 'SPX', trackingCode: 'SPX4444' };
+
+test.describe('Admin — nhận kiện hàng loạt (w17-03)', () => {
+  for (const vp of VIEWPORTS) {
+    test(`ô chọn 44 px, thanh dính đáy đếm số đã chọn, hộp xem trước giữ phím trong hộp, lượt thật gửi đúng mã đã xem (${vp.tag} px)`, async ({ page: p, api }) => {
+      mockAdminSession(api);
+      await p.setViewportSize({ width: vp.width, height: vp.height });
+      await p.addInitScript(() => window.localStorage.setItem('tubu_web_session', '1'));
+      api.get('/config/public', { waste: { enabled: true, dropoff: true, mailin: true, pickup: true } });
+      api.allowUnmocked('GET /admin/waste/overview');
+      api.get('/admin/waste/items', []);
+      api.get('/admin/waste/points', []);
+      api.get('/admin/waste/unmatched', []);
+      api.get('/admin/waste/gifts', []);
+      api.get('/admin/waste/gift-redemptions', []);
+      api.get('/admin/waste/requests', { rows: [ROW, PICK_ROW, TRANSIT_ROW], nextCursor: null });
+      const result = (dryRun: boolean) => ({
+        dryRun,
+        action: 'MARK_RECEIVED',
+        total: 2,
+        okCount: 2,
+        skippedCount: 0,
+        failedCount: 0,
+        results: [
+          { id: 'wr-2', code: 'TR-PICK22', method: 'PICKUP', from: 'OPEN', ok: true, outcome: dryRun ? 'READY' : 'UPDATED', reason: null, needsPhoneConfirm: false },
+          { id: 'wr-4', code: 'TR-MAIL44', method: 'MAIL_IN', from: 'IN_TRANSIT', ok: true, outcome: dryRun ? 'READY' : 'UPDATED', reason: null, needsPhoneConfirm: true },
+        ],
+        auditLogId: dryRun ? null : 'log-1',
+        auditError: null,
+      });
+      api.post('/admin/waste/requests/bulk-action', ({ call }) => result((call.body as { dryRun: boolean }).dryRun));
+
+      await p.goto('/admin?tab=waste');
+      const box = p.locator('[data-waste-bulk-select="TR-PICK22"]');
+      await expect(box).toBeVisible({ timeout: 15_000 });
+      await expect(p.locator('[data-waste-bulk-select="TR-7K3M9Q"]')).toHaveCount(0);
+      const size = await box.boundingBox();
+      expect(size!.width).toBeGreaterThanOrEqual(44);
+      expect(size!.height).toBeGreaterThanOrEqual(44);
+      await box.locator('input').check();
+      await p.locator('[data-waste-bulk-select="TR-MAIL44"] input').check();
+      const bar = p.getByRole('region', { name: 'Thao tác với yêu cầu đã chọn' });
+      await expect(bar).toContainText('Đã chọn 2/50 yêu cầu');
+      expect(await noHorizontalOverflow(p)).toBeLessThanOrEqual(0);
+      await shot(p, `waste-bulk-bar-${vp.tag}`);
+
+      await bar.getByRole('button', { name: /Xem trước/ }).click();
+      const d = p.getByRole('dialog');
+      await expect(d).toContainText('2 yêu cầu làm được');
+      await expect(d.locator('[data-waste-bulk-close]')).toBeFocused();
+      const confirm = d.locator('[data-waste-bulk-confirm]');
+      await expect(confirm).toBeDisabled();
+      await d.locator('[data-waste-bulk-phone] input').check();
+      await expect(confirm).toHaveText('Nhận 2 yêu cầu');
+      const box2 = await d.boundingBox();
+      expect(box2!.x).toBeGreaterThanOrEqual(0);
+      expect(box2!.x + box2!.width).toBeLessThanOrEqual(vp.width);
+      for (let i = 0; i < 8; i++) {
+        await p.keyboard.press('Tab');
+        expect(await d.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+      }
+      await shot(p, `waste-bulk-dialog-${vp.tag}`);
+      await confirm.click();
+      await expect(d.locator('[data-waste-bulk-summary]')).toHaveText('Đã nhận 2 yêu cầu.');
+      const sent = api.callsTo('POST', '/admin/waste/requests/bulk-action').map((c) => c.body);
+      expect(sent).toEqual([
+        { action: 'MARK_RECEIVED', requestIds: ['wr-2', 'wr-4'], dryRun: true },
+        { action: 'MARK_RECEIVED', requestIds: ['wr-2', 'wr-4'], dryRun: false, phoneMatchConfirmed: true },
+      ]);
+      await p.keyboard.press('Escape');
+      await expect(d).toHaveCount(0);
+    });
+  }
+});

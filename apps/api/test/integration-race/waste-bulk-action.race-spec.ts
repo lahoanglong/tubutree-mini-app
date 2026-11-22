@@ -236,6 +236,32 @@ describe('Unmatched parcel suggestions (real Postgres)', () => {
     await expect(prisma.wasteUnmatchedParcel.findUniqueOrThrow({ where: { id: parcel.id } })).resolves.toMatchObject({ status: 'OPEN' });
   });
 
+  it('a parcel recorded by Nhận kiện without the phone tick does not suggest the scanned request back, and a forged TRACKING suggestion is a 409', async () => {
+    const r = await mailIn(cust.id);
+    const res = await receive.receive(staffA.id, r.id, { match: { phoneMatchConfirmed: false } });
+    expect(res).toMatchObject({ outcome: 'UNMATCHED', reason: 'NO_MATCH' });
+    const unmatchedId = (res as { unmatchedId: string }).unmatchedId;
+    const listed = (await receive.listUnmatched(staffA.id, {})).find((p) => p.id === unmatchedId);
+    expect(listed?.candidates?.map((c) => c.requestId)).not.toContain(r.id);
+    await expect(
+      receive.resolveUnmatched(staffA.id, unmatchedId, { action: 'MATCH', requestId: r.id, note: 'gợi ý giả', suggestion: 'TRACKING' }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: r.id } })).resolves.toMatchObject({ status: 'IN_TRANSIT' });
+  });
+
+  it('a hand-entered parcel whose tracking code two customers share gets no tracking suggestion', async () => {
+    const a = await mailIn(cust.id);
+    const other = await newUser();
+    const b = await mailIn(other.id);
+    await prisma.wasteRequest.update({ where: { id: b.id }, data: { trackingCode: a.trackingCode, trackingNorm: a.trackingNorm } });
+    const parcel = await receive.createUnmatched(staffA.id, { description: 'kiện chung mã', trackingCode: a.trackingCode! });
+    const listed = (await receive.listUnmatched(staffA.id, {})).find((p) => p.id === parcel.id);
+    expect(listed?.candidates).toEqual([]);
+    await expect(
+      receive.resolveUnmatched(staffA.id, parcel.id, { action: 'MATCH', requestId: b.id, note: 'gợi ý giả', suggestion: 'TRACKING' }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
   it('quick match × bulk receive on the same request: one receive only', async () => {
     const r = await mailIn(cust.id);
     const parcel = await receive.createUnmatched(staffA.id, { description: 'kiện đôi', trackingCode: r.trackingCode! });

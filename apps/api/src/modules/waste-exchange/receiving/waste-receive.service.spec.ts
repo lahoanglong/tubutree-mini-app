@@ -68,6 +68,8 @@ interface Setup {
   createId?: string;
   relatedRows?: unknown[];
   candidatePool?: unknown[];
+  /** Yêu cầu đang chờ nhận cùng mã vận đơn, đọc dưới khoá khi kiểm lại gợi ý. */
+  trackingPeers?: { userId: string }[];
 }
 
 function setup(o: Setup = {}) {
@@ -87,6 +89,7 @@ function setup(o: Setup = {}) {
     wasteRequest: {
       findUnique: jest.fn(async () => (o.row === undefined ? row() : o.row)),
       updateMany: jest.fn(async () => (order.push('request updateMany'), { count: o.updateCount ?? 1 })),
+      findMany: jest.fn(async () => o.trackingPeers ?? []),
     },
     wasteEvent: {
       findFirst: jest.fn(async (a: { where: { kind: string } }) => {
@@ -585,31 +588,50 @@ describe('Unmatched parcel suggestions', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  it('rankCandidates: same tracking first, then same phone as the related request; in transit before open, oldest first, capped at 3', () => {
+  it('rankCandidates: a hand-entered parcel lists same-tracking requests, in transit before open, oldest first, capped at 3', () => {
     const pool = [
-      cand({ id: 'p-open-new', trackingNorm: 'X1', status: 'OPEN', createdAt: at(9) }),
       cand({ id: 't-open', status: 'OPEN', createdAt: at(1) }),
       cand({ id: 't-transit', status: 'IN_TRANSIT', createdAt: at(5) }),
-      cand({ id: 'related', trackingNorm: 'X2' }),
-      cand({ id: 'p-transit', trackingNorm: 'X3', status: 'IN_TRANSIT', createdAt: at(8) }),
-      cand({ id: 'other-phone', trackingNorm: 'X4', phone: '0999999999' }),
+      cand({ id: 't-open-2', status: 'OPEN', createdAt: at(2) }),
+      cand({ id: 't-open-3', status: 'OPEN', createdAt: at(3) }),
+      cand({ id: 'other-norm', trackingNorm: 'X4' }),
     ];
-    const ranked = rankCandidates({ trackingNorm: 'SPX123', relatedRequestId: 'related' }, '0901234567', pool as never);
+    const ranked = rankCandidates({ reason: 'MANUAL_ENTRY', trackingNorm: 'SPX123', relatedRequestId: null }, null, pool as never);
     expect(ranked.map((r) => [r.id, r.basis])).toEqual([
       ['t-transit', 'TRACKING'],
       ['t-open', 'TRACKING'],
-      ['p-transit', 'PHONE'],
+      ['t-open-2', 'TRACKING'],
     ]);
-    expect(rankCandidates({ trackingNorm: null, relatedRequestId: null }, null, pool as never)).toEqual([]);
+    expect(rankCandidates({ reason: 'MANUAL_ENTRY', trackingNorm: null, relatedRequestId: null }, null, pool as never)).toEqual([]);
   });
 
-  it('rankCandidates: a request matching both tracking and phone is listed once, as TRACKING', () => {
-    const ranked = rankCandidates({ trackingNorm: 'SPX123', relatedRequestId: 'rel' }, '0901234567', [cand()] as never);
-    expect(ranked.map((r) => [r.id, r.basis])).toEqual([['r1', 'TRACKING']]);
+  it('rankCandidates: a parcel recorded by Nhận kiện suggests only the same customer\'s other requests, never the scanned request by its copied tracking code', () => {
+    const pool = [
+      cand({ id: 'scanned', status: 'IN_TRANSIT' }),
+      cand({ id: 'p-open-new', trackingNorm: 'X1', status: 'OPEN', createdAt: at(9) }),
+      cand({ id: 'p-transit', trackingNorm: 'X3', status: 'IN_TRANSIT', createdAt: at(8) }),
+      cand({ id: 'same-tracking-other-customer', userId: 'u2', user: { id: 'u2', fullName: 'B', phone: '0977777777' }, phone: '0977777777' }),
+      cand({ id: 'other-phone', trackingNorm: 'X4', phone: '0999999999' }),
+    ];
+    for (const reason of ['NO_MATCH', 'EXPIRED_REQUEST', 'NOT_RECEIVABLE']) {
+      const ranked = rankCandidates({ reason, trackingNorm: 'SPX123', relatedRequestId: 'scanned' }, '0901234567', pool as never);
+      expect(ranked.map((r) => [r.id, r.basis])).toEqual([
+        ['p-transit', 'PHONE'],
+        ['p-open-new', 'PHONE'],
+      ]);
+    }
+  });
+
+  it('rankCandidates: no suggestion when the tracking code points at more than one customer, or the parcel is disputed', () => {
+    const pool = [cand({ id: 'a' }), cand({ id: 'b', userId: 'u2', user: { id: 'u2', fullName: 'B', phone: '0977777777' }, phone: '0977777777' })];
+    expect(rankCandidates({ reason: 'MANUAL_ENTRY', trackingNorm: 'SPX123', relatedRequestId: null }, null, pool as never)).toEqual([]);
+    for (const reason of ['TRACKING_MULTI', 'TR_TRACKING_CONFLICT']) {
+      expect(rankCandidates({ reason, trackingNorm: 'SPX123', relatedRequestId: 'a' }, '0901234567', pool as never)).toEqual([]);
+    }
   });
 
   it('listUnmatched masks candidate name and phone for staff', async () => {
-    const h = setup({ listRows: [unmatchedRow()], candidatePool: [cand()] });
+    const h = setup({ listRows: [unmatchedRow({ reason: 'MANUAL_ENTRY' })], candidatePool: [cand()] });
     const [p] = await h.svc.listUnmatched('s1', {});
     expect(p!.candidates).toHaveLength(1);
     expect(p!.candidates![0]).toMatchObject({ requestId: 'r1', code: 'TR-AAAAA', basis: 'TRACKING' });
@@ -617,8 +639,8 @@ describe('Unmatched parcel suggestions', () => {
     expect(p!.candidates![0]!.customerName).not.toBe('Nguyễn Văn An');
   });
 
-  it('listUnmatched gives no suggestion for a disputed TR parcel and skips the candidate query', async () => {
-    const h = setup({ listRows: [unmatchedRow({ reason: 'TR_TRACKING_CONFLICT', relatedRequestId: 'r9' })], candidatePool: [cand()] });
+  it.each(['TR_TRACKING_CONFLICT', 'TRACKING_MULTI'])('listUnmatched gives no suggestion for a %s parcel and skips the candidate query', async (reason) => {
+    const h = setup({ listRows: [unmatchedRow({ reason, relatedRequestId: 'r9' })], candidatePool: [cand()] });
     const [p] = await h.svc.listUnmatched('s1', {});
     expect(p!.candidates).toEqual([]);
     expect(h.prisma.wasteRequest.findMany).not.toHaveBeenCalled();
@@ -632,18 +654,29 @@ describe('Unmatched parcel suggestions', () => {
   });
 
   it('MATCH with a TRACKING suggestion that no longer holds is a 409 with no change', async () => {
-    const h = setup({ row: row({ pointId: null, trackingNorm: 'CHANGED', user: { phone: '0901234567' } }) });
+    const h = setup({ umRow: unmatchedRow({ reason: 'MANUAL_ENTRY' }), row: row({ pointId: null, trackingNorm: 'CHANGED', user: { phone: '0901234567' } }), trackingPeers: [{ userId: 'u1' }] });
     await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'r1', note: 'gợi ý', suggestion: 'TRACKING' })).rejects.toBeInstanceOf(ConflictException);
     expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
     expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
   it('MATCH with a TRACKING suggestion that holds records the suggestion on the event', async () => {
-    const h = setup({ row: row({ pointId: null, user: { phone: '0901234567' } }) });
+    const h = setup({ umRow: unmatchedRow({ reason: 'MANUAL_ENTRY' }), row: row({ pointId: null, user: { phone: '0901234567' } }), trackingPeers: [{ userId: 'u1' }] });
     await h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'r1', note: 'gợi ý', suggestion: 'TRACKING' });
     expect(h.tx.wasteRequest.updateMany).toHaveBeenCalledTimes(1);
     const ev = (writeWasteEvent as jest.Mock).mock.calls.find((c) => c[1].kind === 'UNMATCHED_RESOLVED')![1];
     expect(ev.meta).toMatchObject({ suggestion: 'TRACKING' });
+  });
+
+  it.each([
+    ['a parcel recorded by Nhận kiện (tracking copied from the scanned request)', { reason: 'NO_MATCH', relatedRequestId: 'r1' }, [{ userId: 'u1' }]],
+    ['a hand-entered parcel whose tracking also matches another customer', { reason: 'MANUAL_ENTRY' }, [{ userId: 'u1' }, { userId: 'u2' }]],
+    ['a TRACKING_MULTI parcel', { reason: 'TRACKING_MULTI', relatedRequestId: 'r0' }, [{ userId: 'u1' }]],
+  ])('MATCH with a TRACKING suggestion on %s is a 409 with no change', async (_label, um, peers) => {
+    const h = setup({ umRow: unmatchedRow(um), row: row({ pointId: null, user: { phone: '0901234567' } }), trackingPeers: peers });
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'r1', note: 'gợi ý', suggestion: 'TRACKING' })).rejects.toBeInstanceOf(ConflictException);
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
   it('MATCH with a PHONE suggestion needs the related request to share the phone', async () => {
