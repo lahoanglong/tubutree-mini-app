@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { type ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -6,12 +6,13 @@ import {
   InjectThrottlerOptions,
   InjectThrottlerStorage,
   ThrottlerGuard,
+  type ThrottlerLimitDetail,
   type ThrottlerModuleOptions,
   type ThrottlerStorage,
 } from '@nestjs/throttler';
 import type { Request } from 'express';
 import type { Env } from '../../config/env.validation';
-import { throttleIpTracker } from './throttle.config';
+import { throttleIpTracker, throttleRefusalOf } from './throttle.config';
 
 export { THROTTLE_BYPASS_HEADER } from './throttle.config';
 
@@ -42,6 +43,17 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     if (req.user?.sub) return `u:${req.user.sub}`;
     const sub = this.subFromBearer(req);
     return sub ? `u:${sub}` : `ip:${throttleIpTracker(req)}`;
+  }
+
+  /** Route gắn @ThrottleRefusalMessage trả 429 có `code` và câu tiếng Việt kèm số phút còn bị chặn; route khác giữ câu mặc định. */
+  protected override async throwThrottlingException(context: ExecutionContext, detail: ThrottlerLimitDetail): Promise<void> {
+    const refusal = throttleRefusalOf(context.getHandler());
+    if (!refusal) return super.throwThrottlingException(context, detail);
+    const minutes = Math.max(1, Math.ceil(detail.timeToBlockExpire / 60));
+    throw new HttpException(
+      { statusCode: HttpStatus.TOO_MANY_REQUESTS, error: 'Too Many Requests', code: refusal.code, message: refusal.message(minutes) },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   /** Route @Public không qua JwtAuthGuard, nên tự xác minh Bearer (nếu có) để đếm theo user. */

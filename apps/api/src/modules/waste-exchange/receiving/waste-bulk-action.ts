@@ -64,6 +64,7 @@ export const BULK_TEXT = {
   PHONE_NOT_CONFIRMED: 'Chưa xác nhận đã đối chiếu SĐT người gửi và mã vận đơn trên kiện.',
   ALREADY_LOST: 'Yêu cầu đã đóng vì thất lạc từ trước, lượt này không đổi.',
   NOT_TRANSIT: 'Chỉ đóng hàng loạt yêu cầu gửi kho đang trên đường (hàng Gửi kho quá hạn xem lại).',
+  OPEN_UNMATCHED_PARCEL: 'Kho đang có kiện «Hàng không rõ chủ» chưa xử lý gắn với yêu cầu này hoặc cùng mã vận đơn: xử lý kiện đó trước, chưa đóng thất lạc.',
   RETRY: 'Yêu cầu vừa được thao tác khác đổi, lượt này không đổi. Tải lại rồi xem lại.',
 } as const;
 

@@ -156,7 +156,7 @@ export function StaleBatchDialog({ preview, onClose }: { preview: StaleBatchResp
         </p>
         {!done && (
           <p className="mt-1 text-xs text-stone-600">
-            Chỉ claim đơn chat vướng duy nhất SĐT cũ, SĐT trên đơn vẫn thuộc đúng thành viên và thành viên đã nhận ít nhất 1 đơn app. Không duyệt được claim
+            Chỉ claim đơn chat vướng duy nhất SĐT cũ, SĐT trên đơn vẫn thuộc đúng thành viên và thành viên đã nhận ít nhất 1 đơn app tự đặt (không tính đơn CTV đặt hộ, đơn đại lý). Không duyệt được claim
             của chính bạn.
           </p>
         )}

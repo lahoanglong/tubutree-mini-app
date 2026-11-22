@@ -47,3 +47,11 @@ export interface GuestOrderLookupDTO {
   bankPath: string | null;
   linkExpiresAt: string;
 }
+
+/**
+ * `code` trong body lỗi của POST /checkout/guest/lookup:
+ * - GUEST_ORDER_CLAIMED (403): mã + SĐT khớp nhưng đơn đã về một tài khoản Zalo, nên không trả bản xem hay khoá tạm; khách đăng nhập Zalo để xem.
+ * - GUEST_LOOKUP_LIMIT (429): chạm trần tra cứu (theo mã, IP hoặc SĐT); `message` ghi số phút còn phải chờ.
+ */
+export const GUEST_ORDER_CLAIMED = 'GUEST_ORDER_CLAIMED';
+export const GUEST_LOOKUP_LIMIT = 'GUEST_LOOKUP_LIMIT';

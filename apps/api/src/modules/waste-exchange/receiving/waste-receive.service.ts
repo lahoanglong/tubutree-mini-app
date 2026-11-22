@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { Prisma, WasteActorRole, WasteRequestStatus } from '@prisma/client';
+import { Prisma, type WasteActorRole, type WasteRequestStatus } from '@prisma/client';
 import type {
   WasteReceiveRequest,
   WasteReceiveResultDTO,
@@ -34,8 +34,22 @@ const UNMATCHED_LIST_LIMIT = 200;
 const SUGGESTION_STALE = 'Gợi ý không còn khớp với kiện này, hãy tra mã và khớp tay';
 /** Mỗi kiện hiện tối đa ngần này gợi ý; kiện trùng mã vận đơn nhiều yêu cầu hơn thì tra tay. */
 export const UNMATCHED_CANDIDATES_MAX = 3;
-/** Trần dòng yêu cầu đọc để dựng gợi ý cho cả trang kiện (200 kiện): vượt thì kiện cuối thiếu gợi ý, vẫn khớp tay được. */
-const CANDIDATE_SCAN_LIMIT = 600;
+/**
+ * Dòng yêu cầu đọc cho MỖI mã vận đơn và MỖI SĐT của trang kiện (theo đúng thứ tự xếp hạng của `rankCandidates`), thay cho một trần chung cả trang:
+ * tồn đọng ở một khoá không đẩy mất gợi ý của khoá khác, và trang 200 kiện đọc tối đa 200 × (4 + 7) dòng. Theo mã vận đơn: 3 gợi ý + 1 dòng dư
+ * (kiện có thể gắn đúng một yêu cầu cùng mã). Theo SĐT: mỗi kiện bỏ yêu cầu gắn kiện và tối đa 3 yêu cầu đã gợi ý theo mã vận đơn, nên 3 + 1 + 3.
+ */
+export const CANDIDATE_ROWS_PER_TRACKING = UNMATCHED_CANDIDATES_MAX + 1;
+export const CANDIDATE_ROWS_PER_PHONE = 2 * UNMATCHED_CANDIDATES_MAX + 1;
+
+/**
+ * Yêu cầu còn chờ nhận được gợi ý: Đang mở/Đang gửi, gửi kho/lấy tận nhà/túi kèm đơn; túi kèm đơn chỉ khi đơn đã giao hoặc hoàn (cùng luật nút
+ * khớp). Bảng `waste_requests` alias `r`, `orders` alias `o` (LEFT JOIN theo `r."orderId"`).
+ */
+const CANDIDATE_ELIGIBLE_SQL = Prisma.sql`r."status" IN ('OPEN', 'IN_TRANSIT') AND r."method" IN ('MAIL_IN', 'HOME_PICKUP', 'PICKUP')
+  AND NOT (r."method" = 'PICKUP' AND (r."orderId" IS NULL OR o."status" IS NULL OR o."status" NOT IN ('DELIVERED', 'RETURNED')))`;
+/** Cùng thứ tự với `rankCandidates`: Đang gửi trước Đang mở, cũ trước mới, rồi theo id. */
+const CANDIDATE_ORDER_SQL = Prisma.sql`(r."status" = 'IN_TRANSIT') DESC, r."createdAt" ASC, r."id" COLLATE "C" ASC`;
 
 type CandidateRow = {
   id: string;
@@ -69,11 +83,16 @@ export function rankCandidates(
   parcel: { reason: string; trackingNorm: string | null; relatedRequestId: string | null },
   relatedPhone: string | null,
   pool: readonly (CandidateRow & { phone: string | null })[],
+  /** Mã vận đơn mà các yêu cầu còn chờ thuộc hơn một khách, xét trên mọi dòng (pool chỉ giữ vài dòng đầu mỗi mã). */
+  sharedTracking: ReadonlySet<string> = new Set(),
 ): (CandidateRow & { basis: WasteUnmatchedSuggestion })[] {
   if (NO_SUGGESTION_REASONS.has(parcel.reason)) return [];
   const order = (a: CandidateRow, b: CandidateRow) =>
-    (a.status === 'IN_TRANSIT' ? 0 : 1) - (b.status === 'IN_TRANSIT' ? 0 : 1) || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id);
-  const sameTracking = trackingSuggestionAllowed(parcel) ? pool.filter((r) => r.trackingNorm === parcel.trackingNorm && r.id !== parcel.relatedRequestId) : [];
+    (a.status === 'IN_TRANSIT' ? 0 : 1) - (b.status === 'IN_TRANSIT' ? 0 : 1) || a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const sameTracking =
+    trackingSuggestionAllowed(parcel) && !sharedTracking.has(parcel.trackingNorm)
+      ? pool.filter((r) => r.trackingNorm === parcel.trackingNorm && r.id !== parcel.relatedRequestId)
+      : [];
   const byTracking = new Set(sameTracking.map((r) => r.userId)).size === 1 ? [...sameTracking].sort(order) : [];
   const taken = new Set(byTracking.map((r) => r.id));
   const byPhone =
@@ -363,13 +382,32 @@ export class WasteReceiveService {
     const phoneOf = new Map(related.map((r) => [r.id, r.user.phone]));
     const phones = [...new Set(related.map((r) => r.user.phone).filter((p): p is string => !!p))];
     if (norms.length === 0 && phones.length === 0) return out;
+    // Vài dòng đầu của từng mã vận đơn và từng SĐT (window function), không phải N dòng cũ nhất của cả trang: chỉ mục trackingNorm và users.phone.
+    const [byTracking, byPhone] = await Promise.all([
+      norms.length
+        ? this.prisma.$queryRaw<{ id: string; key: string; shared: boolean }[]>`
+            SELECT t."id", t."key", t."shared" FROM (
+              SELECT r."id", r."trackingNorm" AS "key",
+                ROW_NUMBER() OVER (PARTITION BY r."trackingNorm" ORDER BY ${CANDIDATE_ORDER_SQL}) AS "rn",
+                MIN(r."userId") OVER (PARTITION BY r."trackingNorm") <> MAX(r."userId") OVER (PARTITION BY r."trackingNorm") AS "shared"
+              FROM "waste_requests" r LEFT JOIN "orders" o ON o."id" = r."orderId"
+              WHERE r."trackingNorm" = ANY(${norms}) AND ${CANDIDATE_ELIGIBLE_SQL}
+            ) t WHERE t."rn" <= ${CANDIDATE_ROWS_PER_TRACKING}`
+        : Promise.resolve([]),
+      phones.length
+        ? this.prisma.$queryRaw<{ id: string }[]>`
+            SELECT t."id" FROM (
+              SELECT r."id", ROW_NUMBER() OVER (PARTITION BY u."phone" ORDER BY ${CANDIDATE_ORDER_SQL}) AS "rn"
+              FROM "waste_requests" r JOIN "users" u ON u."id" = r."userId" LEFT JOIN "orders" o ON o."id" = r."orderId"
+              WHERE u."phone" = ANY(${phones}) AND ${CANDIDATE_ELIGIBLE_SQL}
+            ) t WHERE t."rn" <= ${CANDIDATE_ROWS_PER_PHONE}`
+        : Promise.resolve([]),
+    ]);
+    const sharedTracking = new Set(byTracking.filter((r) => r.shared).map((r) => r.key));
+    const ids = [...new Set([...byTracking, ...byPhone].map((r) => r.id))];
+    if (ids.length === 0) return out;
     const found = await this.prisma.wasteRequest.findMany({
-      where: {
-        status: { in: ['OPEN', 'IN_TRANSIT'] },
-        method: { in: ['MAIL_IN', 'HOME_PICKUP', 'PICKUP'] },
-        OR: [...(norms.length ? [{ trackingNorm: { in: norms } }] : []), ...(phones.length ? [{ user: { phone: { in: phones } } }] : [])],
-        NOT: { method: 'PICKUP', OR: [{ orderId: null }, { order: { is: { status: { notIn: ['DELIVERED', 'RETURNED'] } } } }] },
-      },
+      where: { id: { in: ids } },
       select: {
         id: true,
         code: true,
@@ -382,8 +420,6 @@ export class WasteReceiveService {
         createdAt: true,
         user: { select: { id: true, fullName: true, phone: true } },
       },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: CANDIDATE_SCAN_LIMIT,
     });
     const pool = found.map((r) => ({ ...r, phone: r.user.phone }));
     for (const p of eligible) {
@@ -392,6 +428,7 @@ export class WasteReceiveService {
         { reason: p.reason, trackingNorm: norm, relatedRequestId: p.relatedRequestId },
         p.relatedRequestId ? (phoneOf.get(p.relatedRequestId) ?? null) : null,
         pool,
+        sharedTracking,
       );
       out.set(
         p.id,

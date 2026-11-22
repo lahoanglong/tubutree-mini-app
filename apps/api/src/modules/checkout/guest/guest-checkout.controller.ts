@@ -3,7 +3,8 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
-import { clientIp, LookupThrottle, throttleIpKey } from '../../../common/throttle/throttle.config';
+import { GUEST_LOOKUP_LIMIT } from '@tubutree/shared-types';
+import { clientIp, LookupThrottle, throttleIpKey, ThrottleRefusalMessage } from '../../../common/throttle/throttle.config';
 import { GuestCheckoutService } from './guest-checkout.service';
 import {
   GUEST_DEVICE_RE,
@@ -23,6 +24,8 @@ export const GUEST_LOOKUP_IP_LIMIT = 30;
 /** Mỗi SĐT tối đa chừng này lượt tra mỗi 15 phút trên mọi mã và mọi IP: mã đơn chỉ có 10^5 giá trị mỗi ngày nên biết SĐT là dò được mã nếu không chặn. */
 export const GUEST_LOOKUP_PHONE_LIMIT = 10;
 export const GUEST_LOOKUP_PHONE_TTL_MS = 15 * 60_000;
+/** Câu 429 của route tra cứu (mọi trần: mã, IP, SĐT), kèm số phút còn bị chặn của trần vừa chạm. */
+export const guestLookupLimitMessage = (minutes: number) => `Bạn tra hơi nhiều lần. Thử lại sau ${minutes} phút nhé.`;
 
 /** Định danh đếm trần của route tra cứu: mã đơn đã chuẩn hoá như DTO (gõ thường hay có dấu cách vẫn chung một bộ đếm). */
 export function lookupThrottleId(req: Request): string | undefined {
@@ -99,6 +102,7 @@ export class GuestCheckoutController {
     limit: GUEST_LOOKUP_PHONE_LIMIT,
     ttlMs: GUEST_LOOKUP_PHONE_TTL_MS,
   })
+  @ThrottleRefusalMessage({ code: GUEST_LOOKUP_LIMIT, message: guestLookupLimitMessage })
   @Header('Cache-Control', 'no-store')
   @Post('lookup')
   @HttpCode(HttpStatus.OK)

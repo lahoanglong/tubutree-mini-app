@@ -116,6 +116,47 @@ describe('/don tra cứu đơn đặt không đăng nhập', () => {
     expect(alert()?.textContent).toBe('Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.');
   });
 
+  it('tubu-w18-01: 429 có mã GUEST_LOOKUP_LIMIT thì hiện câu máy chủ (đúng số phút còn chờ)', async () => {
+    m.lookup.mockRejectedValueOnce(new ApiError('Bạn tra hơi nhiều lần. Thử lại sau 1 phút nhé.', 429, 'GUEST_LOOKUP_LIMIT'));
+    const r = await mount();
+    typeInto(codeInput(r), 'TUBU2026112212345');
+    typeInto(phoneInput(r), '0912345678');
+    await submit(r);
+    expect(r.container.querySelector('[data-testid="guest-lookup-error"]')?.textContent).toBe('Bạn tra hơi nhiều lần. Thử lại sau 1 phút nhé.');
+  });
+
+  it('tubu-w18-01: đơn đã về tài khoản Zalo (403 GUEST_ORDER_CLAIMED): không sang trang theo dõi, mời đăng nhập Zalo rồi quay về chi tiết đơn', async () => {
+    m.lookup.mockRejectedValueOnce(
+      new ApiError('Đơn này đã được lưu vào tài khoản Zalo. Bạn đăng nhập Zalo để xem đơn trong Đơn của tôi nhé.', 403, 'GUEST_ORDER_CLAIMED'),
+    );
+    const r = await mount();
+    typeInto(codeInput(r), ' tubu2026112212345');
+    typeInto(phoneInput(r), '0912345678');
+    await submit(r);
+    const box = r.container.querySelector('[data-testid="guest-lookup-claimed"]');
+    expect(box?.getAttribute('role')).toBe('alert');
+    expect(box?.textContent).toContain('Đơn này đã được lưu vào tài khoản Zalo.');
+    const link = r.container.querySelector<HTMLAnchorElement>('[data-testid="guest-lookup-claimed-login"]')!;
+    expect(link.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/don-hang/TUBU2026112212345')}`);
+    expect(link.className).toContain('min-h-11');
+    expect(r.container.querySelector('[data-testid="guest-lookup-error"]')).toBeNull();
+    expect(m.push).not.toHaveBeenCalled();
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+    typeInto(phoneInput(r), '0912345679');
+    await flush(2);
+    expect(r.container.querySelector('[data-testid="guest-lookup-claimed"]')).toBeNull();
+  });
+
+  it('403 khác (không mã GUEST_ORDER_CLAIMED) vẫn là câu lỗi thường, không mời đăng nhập', async () => {
+    m.lookup.mockRejectedValueOnce(new ApiError('Không có quyền.', 403));
+    const r = await mount();
+    typeInto(codeInput(r), 'TUBU2026112212345');
+    typeInto(phoneInput(r), '0912345678');
+    await submit(r);
+    expect(r.container.querySelector('[data-testid="guest-lookup-claimed"]')).toBeNull();
+    expect(r.container.querySelector('[data-testid="guest-lookup-error"]')).not.toBeNull();
+  });
+
   it('đang tra: ô chỉ đọc và nút aria-disabled (không `disabled`, giữ focus); bấm đúp chỉ gọi một lần', async () => {
     let resolve: (v: unknown) => void = () => undefined;
     m.lookup.mockReturnValue(new Promise((res) => (resolve = res)));

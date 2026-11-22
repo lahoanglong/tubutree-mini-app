@@ -17,6 +17,11 @@ import { maskClaimCode } from './external-points-rate';
 export const STALE_BATCH_MAX = 50;
 /** Thành viên phải đã nhận ít nhất ngần này đơn app (đơn Tubu, đã giao) thì SĐT cũ mới được duyệt nhanh. */
 export const STALE_BATCH_MIN_DELIVERED = 1;
+/**
+ * "Đơn app đã nhận" của thành viên: đơn bán lẻ chính thành viên đặt, đã giao. Không đếm đơn đại lý (DEALER) và đơn CTV đặt hộ khách cuối
+ * (`placedForCustomer`): người nhận các đơn đó không phải thành viên, nên chúng không chứng minh SĐT cũ vẫn là của thành viên.
+ */
+export const DIRECT_APP_DELIVERED_WHERE = { status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false } satisfies Prisma.OrderWhereInput;
 export const STALE_BATCH_AUDIT_ACTION = 'EXTERNAL_CLAIM_STALE_BATCH_APPROVE';
 /** Ghi chú duyệt của mỗi claim (approve bọc thêm dấu "SĐT xác minh cũ:"): lượt kiểm thay cho cuộc gọi xác nhận người nhận. */
 export const STALE_BATCH_NOTE = 'Duyệt nhanh: thành viên đã nhận đơn app đã giao, SĐT trên đơn vẫn thuộc tài khoản này, không vướng luật nào khác';
@@ -81,7 +86,7 @@ export async function staleOnlyBlock(db: Prisma.TransactionClient, c: LockedClai
   const member = await resolveMemberByPhone(db, phone, { now: ctx.now, maxDays: ctx.cfg.phoneVerifiedMaxDays });
   if (!member) return 'SĐT trên đơn không còn gắn một thành viên đủ điều kiện (tài khoản bị khoá, đã gộp hoặc số đã đổi).';
   if (member.id !== (await canonicalUserId(db, c.userId))) return 'SĐT trên đơn nay thuộc một tài khoản khác: duyệt tay.';
-  const delivered = await db.order.count({ where: { userId: member.id, status: 'DELIVERED' } });
+  const delivered = await db.order.count({ where: { userId: member.id, ...DIRECT_APP_DELIVERED_WHERE } });
   if (delivered < STALE_BATCH_MIN_DELIVERED) return 'Thành viên chưa nhận đơn app nào: cần gọi xác nhận người nhận rồi duyệt tay.';
   const o = c.externalOrder;
   const lastPayload = (o.lastPayload ?? {}) as Record<string, unknown>;
@@ -154,7 +159,7 @@ export class ExternalClaimsStaleBatchService {
     const [users, delivered] = userIds.length
       ? await Promise.all([
           this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, fullName: true, phone: true } }),
-          this.prisma.order.groupBy({ by: ['userId'], where: { userId: { in: userIds }, status: 'DELIVERED' }, _count: { _all: true } }),
+          this.prisma.order.groupBy({ by: ['userId'], where: { userId: { in: userIds }, ...DIRECT_APP_DELIVERED_WHERE }, _count: { _all: true } }),
         ])
       : [[], []];
     const userOf = new Map(users.map((u) => [u.id, u]));

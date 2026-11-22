@@ -14,7 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../decorators/public.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AppThrottlerGuard } from './app-throttler.guard';
-import { LookupThrottle, StaffLookupThrottle, throttlerOptions } from './throttle.config';
+import { LookupThrottle, StaffLookupThrottle, ThrottleRefusalMessage, throttlerOptions } from './throttle.config';
 
 /**
  * Chính sách Q-22 (C-005, C-033), chạy qua HTTP thật với đúng thứ tự guard toàn cục của
@@ -51,8 +51,20 @@ class ProbeController {
     limit: 3,
     ttlMs: 900_000,
   })
+  @ThrottleRefusalMessage({ code: 'PROBE_LIMIT', message: (m) => `Thử lại sau ${m} phút.` })
   @Post('lookup')
   lookup() {
+    return { ok: true };
+  }
+
+  @Public()
+  @LookupThrottle((req) => (req.body as { code?: string } | undefined)?.code, 2, 50, {
+    identify: (req) => (req.body as { phone?: string } | undefined)?.phone,
+    limit: 50,
+    ttlMs: 900_000,
+  })
+  @Post('lookup-plain')
+  lookupPlain() {
     return { ok: true };
   }
 }
@@ -337,6 +349,32 @@ describe('AppThrottlerGuard (Q-22)', () => {
       const codes = await hitMany(base, 5, (i) => call(i, '0912345678'));
       expect(count429(codes)).toBe(2);
       expect(await hit(base, call(9, '0987654321'))).toBe(201);
+    });
+
+    it('tubu-w18-01: 429 của route gắn ThrottleRefusalMessage có mã + câu riêng kèm số phút của trần vừa chạm (trần SĐT 15 phút)', async () => {
+      const send = (i: number) =>
+        fetch(`${base}/probe/lookup`, {
+          method: 'POST',
+          headers: { 'x-forwarded-for': `10.4.${i}.1`, 'content-type': 'application/json' },
+          body: JSON.stringify({ code: `D${i}`, phone: '0911222333' }),
+        });
+      for (let i = 0; i < 3; i++) expect((await send(i)).status).toBe(201);
+      const res = await send(3);
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({ statusCode: 429, error: 'Too Many Requests', code: 'PROBE_LIMIT', message: 'Thử lại sau 15 phút.' });
+    });
+
+    it('tubu-w18-01: route không gắn ThrottleRefusalMessage giữ câu 429 mặc định (app khách nhận 429 qua chuỗi ThrottlerException)', async () => {
+      const send = () =>
+        fetch(`${base}/probe/lookup-plain`, {
+          method: 'POST',
+          headers: { 'x-forwarded-for': '10.5.0.1', 'content-type': 'application/json' },
+          body: JSON.stringify({ code: 'SAME', phone: '0911222444' }),
+        });
+      for (let i = 0; i < 2; i++) expect((await send()).status).toBe(201);
+      const res = await send();
+      expect(res.status).toBe(429);
+      expect(((await res.json()) as { message: string }).message).toContain('ThrottlerException');
     });
 
     it('route không gắn LookupThrottle không chịu trần phụ', async () => {

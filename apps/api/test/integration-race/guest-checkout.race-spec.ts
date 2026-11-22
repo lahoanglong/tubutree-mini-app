@@ -32,7 +32,7 @@ import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import type { BankTransferService } from '../../src/modules/integrations/payment/bank-transfer.service';
-import { GuestCheckoutService, GUEST_LIMIT, GUEST_LIMIT_MESSAGE } from '../../src/modules/checkout/guest/guest-checkout.service';
+import { GuestCheckoutService, GUEST_LIMIT, GUEST_LIMIT_MESSAGE, GUEST_ORDER_CLAIMED_MESSAGE } from '../../src/modules/checkout/guest/guest-checkout.service';
 import {
   GUEST_BLOCKED_PHONES_KEY,
   GUEST_COD_MAX_KEY,
@@ -598,6 +598,43 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
       expect(await invited(mini.code)).toBeNull();
       expect(await invited(moved.code)).not.toBeNull();
       expect(notify.mock.calls.some(([userId]) => userId === target.id)).toBe(true);
+    });
+
+    it('tubu-w18-01: đơn đã về tài khoản Zalo thì tra mã + SĐT ra 403 GUEST_ORDER_CLAIMED, không bản xem, không khoá; khoá tạm cũ thôi mở được', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const d = device();
+      const dto = placeDto([{ variationId: v, quantity: 1 }], phone, { paymentMethod: 'BANK_TRANSFER' });
+      const o = await guest.placeOrder({ deviceId: d, ip: ip() }, dto, idem());
+      const before = await guest.lookup({ orderCode: o.code, phone } as GuestLookupDto);
+      const target = await createRealUser(prisma, { phone: uniquePhone() });
+      await expect(guest.claim(target.id, d)).resolves.toEqual({ claimed: 1 });
+
+      const err = await guest.lookup({ orderCode: o.code, phone } as GuestLookupDto).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(ForbiddenException);
+      const body = (err as ForbiddenException).getResponse();
+      expect(body).toEqual({ statusCode: 403, error: 'Forbidden', code: 'GUEST_ORDER_CLAIMED', message: GUEST_ORDER_CLAIMED_MESSAGE });
+
+      // Sai SĐT trên đơn đã nhận: vẫn cùng một 404 như mọi lần không khớp, không lộ đơn đã về tài khoản.
+      await expect(guest.lookup({ orderCode: o.code, phone: uniquePhone() } as GuestLookupDto)).rejects.toMatchObject({
+        message: 'Không tìm thấy đơn khớp mã đơn và số điện thoại này.',
+      });
+      // Khoá tạm cấp trước khi nhận đơn: theo dõi và QR đều 404; khoá trình duyệt gốc (người đặt) vẫn mở được.
+      await expect(guest.track(o.code, before.trackingKey)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(guest.bankQr(o.code, before.trackingKey)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(guest.track(o.code, dto.trackingKey)).resolves.toMatchObject({ code: o.code });
+    });
+
+    it('tubu-w18-01: dòng khách được nâng tại chỗ thành tài khoản Zalo (zaloId thật): tra cứu cũng ra GUEST_ORDER_CLAIMED', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const o = await guest.placeOrder({ deviceId: device(), ip: ip() }, placeDto([{ variationId: v, quantity: 1 }], phone), idem());
+      const owner = (await prisma.order.findUniqueOrThrow({ where: { code: o.code }, select: { userId: true } })).userId;
+      await prisma.user.update({ where: { id: owner }, data: { zaloId: `zalo_it_${randCode(10)}` } });
+      await expect(guest.lookup({ orderCode: o.code, phone } as GuestLookupDto)).rejects.toMatchObject({ response: { code: 'GUEST_ORDER_CLAIMED' } });
     });
 
     it('thiết bị không có đơn vãng lai: không gộp gì', async () => {

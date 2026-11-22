@@ -48,6 +48,7 @@ const isBypass = (ctx: ExecutionContext): boolean => hasValidBypass(ctx.switchTo
 const AUTH_IP_THROTTLE = 'tubu:auth-ip-throttle';
 const LOOKUP_PHONE_THROTTLE = 'tubu:lookup-phone-throttle';
 const STAFF_LOOKUP_THROTTLE = 'tubu:staff-lookup-throttle';
+const THROTTLE_REFUSAL = 'tubu:throttle-refusal';
 
 export type AuthIdentity = (req: Request) => string | undefined;
 
@@ -165,6 +166,24 @@ function hashedTracker(prefix: string, identify: AuthIdentity) {
     const id = identify(req);
     return id ? `${prefix}:${createHash('sha256').update(id).digest('hex')}` : `ip:${throttleIpTracker(req)}`;
   };
+}
+
+/**
+ * Câu 429 riêng của một route công khai thay cho câu tiếng Anh mặc định của throttler ("ThrottlerException: Too Many Requests"): `code` ổn định
+ * cho máy khách, `message` nhận số phút còn bị chặn (làm tròn lên, tối thiểu 1) của trần vừa chạm. Route không gắn giữ câu mặc định vì app khách
+ * nhận 429 chung qua chuỗi đó.
+ */
+export interface ThrottleRefusal {
+  code: string;
+  message: (retryMinutes: number) => string;
+}
+
+export function ThrottleRefusalMessage(refusal: ThrottleRefusal) {
+  return SetMetadata(THROTTLE_REFUSAL, refusal);
+}
+
+export function throttleRefusalOf(handler: object): ThrottleRefusal | undefined {
+  return Reflect.getMetadata(THROTTLE_REFUSAL, handler) as ThrottleRefusal | undefined;
 }
 
 function identityThrottle(prefix: string, identify: AuthIdentity, identityLimit: number, ipLimit: number) {

@@ -14,7 +14,7 @@ import { BankTransferService } from '../../integrations/payment/bank-transfer.se
 import { CheckoutService, type GuestCheckoutContext } from '../checkout.service';
 import type { PlaceOrderDto, QuoteDto } from '../dto/checkout.dto';
 import { MAX_ITEM_QUANTITY } from '../../cart/dto/cart.dto';
-import type { GuestOrderLookupDTO, GuestOrderTrackDTO } from '@tubutree/shared-types';
+import { GUEST_ORDER_CLAIMED, type GuestOrderLookupDTO, type GuestOrderTrackDTO } from '@tubutree/shared-types';
 import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
 import { signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
 import {
@@ -46,6 +46,7 @@ export const GUEST_LIMIT_MESSAGE = 'Hiện chưa đặt thêm được đơn khi
 const LOGIN_REQUIRED_MESSAGE = 'Trình duyệt này đã gắn với một tài khoản. Bạn đăng nhập Zalo để đặt hàng nhé.';
 const NOT_FOUND_MESSAGE = 'Không tìm thấy đơn hàng.';
 const LOOKUP_NOT_FOUND_MESSAGE = 'Không tìm thấy đơn khớp mã đơn và số điện thoại này.';
+export const GUEST_ORDER_CLAIMED_MESSAGE = 'Đơn này đã được lưu vào tài khoản Zalo. Bạn đăng nhập Zalo để xem đơn trong Đơn của tôi nhé.';
 
 const sha256Hex = (s: string) => createHash('sha256').update(s).digest('hex');
 /** Băm giả để nhánh "không có đơn" vẫn so một lần như nhánh có đơn. */
@@ -56,6 +57,10 @@ const DUMMY_PHONE = 'no-guest-phone';
 /** 0912345678 → 091****678. */
 export function maskPhone(phone: string): string {
   return phone.length >= 10 ? `${phone.slice(0, 3)}****${phone.slice(-3)}` : '****';
+}
+
+function orderClaimed(): ForbiddenException {
+  return new ForbiddenException({ statusCode: 403, error: 'Forbidden', code: GUEST_ORDER_CLAIMED, message: GUEST_ORDER_CLAIMED_MESSAGE });
 }
 
 function guestLimit(): ForbiddenException {
@@ -334,7 +339,8 @@ export class GuestCheckoutService {
 
   /**
    * Đơn theo mã + khoá; mọi trường hợp sai (không có mã, không phải đơn vãng lai, sai khoá, hết hạn) cùng một 404. Khoá là khoá trình duyệt
-   * tạo lúc đặt (so băm) hoặc khoá tạm do tra cứu mã + SĐT cấp (`guest-track-link`).
+   * tạo lúc đặt (so băm) hoặc khoá tạm do tra cứu mã + SĐT cấp (`guest-track-link`). Khoá tạm cấp trước khi đơn về tài khoản Zalo thôi mở được
+   * đơn đó (404 như hết hạn); khoá trình duyệt gốc vẫn mở được, vì người giữ nó là người đặt.
    */
   private async orderByKey(code: string, key: string | undefined) {
     const order = await this.findGuestOrder(code);
@@ -342,7 +348,16 @@ export class GuestCheckoutService {
     const byOwnKey = safeEqualStrings(hash, sha256Hex(key ?? ''));
     const byLookupKey = !!key && verifyGuestLookupKey(key, order?.code ?? code, hash, this.linkSecret());
     if (!order?.guestTokenHash || !key || !(byOwnKey || byLookupKey)) throw new NotFoundException(NOT_FOUND_MESSAGE);
+    if (!byOwnKey && (await this.claimedByAccount(order.userId))) throw new NotFoundException(NOT_FOUND_MESSAGE);
     return this.trackable(order);
+  }
+
+  /**
+   * Đơn vãng lai đã về một tài khoản Zalo (nhận đơn ở `claim` hay gộp khi đăng nhập trên trình duyệt đã đặt): dòng users của đơn không còn là
+   * khách vãng lai. Đơn vẫn giữ `guestPhone`/`guestTokenHash` (đối soát, trần đặt hàng), nên phải kiểm chủ đơn chứ không dựa vào hai cột đó.
+   */
+  private async claimedByAccount(userId: string): Promise<boolean> {
+    return isRealUser(await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }));
   }
 
   /** Đơn đã xong (giao, huỷ, hoàn) quá GUEST_TRACK_TTL_DAYS thì 404 như sai mã (cùng câu với nơi gọi). */
@@ -424,12 +439,14 @@ export class GuestCheckoutService {
   /**
    * Tra đơn đặt không đăng nhập bằng mã đơn + SĐT đặt hàng (khách mất đường dẫn, đổi máy, xoá dữ liệu trình duyệt). Mọi trường hợp không khớp
    * (không có mã, không phải đơn vãng lai, sai SĐT, hết hạn theo dõi) cùng một 404 và cùng số lần so, để không dò được mã đơn nào có thật.
-   * Khớp thì cấp khoá theo dõi tạm (24 giờ) thay cho khoá gốc mà máy chủ không giữ.
+   * Khớp thì cấp khoá theo dõi tạm (24 giờ) thay cho khoá gốc mà máy chủ không giữ. Khớp nhưng đơn đã về tài khoản Zalo: 403 GUEST_ORDER_CLAIMED,
+   * không bản xem, không khoá (chủ tài khoản xem đơn sau khi đăng nhập); câu báo không nói tài khoản nào, và chỉ ai đã gõ đúng cả mã lẫn SĐT mới thấy.
    */
   async lookup(dto: GuestLookupDto): Promise<GuestOrderLookupDTO> {
     const order = await this.findGuestOrder(dto.orderCode);
     const phoneMatches = safeEqualStrings(order?.guestPhone ?? DUMMY_PHONE, dto.phone);
     if (!order?.guestTokenHash || !order.guestPhone || !phoneMatches) throw new NotFoundException(LOOKUP_NOT_FOUND_MESSAGE);
+    if (await this.claimedByAccount(order.userId)) throw orderClaimed();
     const view = await this.viewOf(await this.trackable(order, LOOKUP_NOT_FOUND_MESSAGE));
     const { key, expiresAt } = signGuestLookupKey(order.code, order.guestTokenHash, this.linkSecret());
     const code = encodeURIComponent(order.code);

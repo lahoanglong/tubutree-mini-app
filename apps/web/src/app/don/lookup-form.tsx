@@ -4,6 +4,7 @@ import { useId, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { GUEST_LOOKUP_LIMIT, GUEST_ORDER_CLAIMED } from '@tubutree/shared-types';
 import { parseVnContactPhone, parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { GuestField } from '@/components/checkout/guest-field';
 import { PageHeader } from '@/components/ui/page-header';
@@ -13,6 +14,8 @@ import { actionErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
 import { guestLookupOrder } from '@/lib/guest-checkout/api';
 import { guestCopy } from '@/lib/guest-checkout/copy';
+import { orderDetailHref } from '@/lib/order-view';
+import { loginHref } from '@/lib/return-to';
 
 /** Cùng khuôn với `GUEST_LOOKUP_CODE_RE` của API: mã đơn in trên đơn hàng. */
 const ORDER_CODE_RE = /^[A-Z0-9-]{4,40}$/;
@@ -25,9 +28,15 @@ export function normalizeOrderCode(raw: string): string {
 
 function lookupErrorText(error: unknown): string {
   if (error instanceof ApiError && error.status === 404) return guestCopy('lookupNotFound');
-  if (error instanceof ApiError && error.status === 429) return guestCopy('lookupTooMany');
+  if (error instanceof ApiError && error.status === 429) {
+    // Câu của máy chủ ghi đúng số phút còn phải chờ (trần mã/IP 1 phút, trần SĐT 15 phút); không có mã thì câu cố định.
+    return error.code === GUEST_LOOKUP_LIMIT && error.message ? error.message : guestCopy('lookupTooMany');
+  }
   return actionErrorText(error);
 }
+
+/** Mã + SĐT khớp nhưng đơn đã về một tài khoản Zalo: máy chủ không trả bản xem, khách đăng nhập để xem trong Đơn của tôi. */
+const isClaimed = (error: unknown): boolean => error instanceof ApiError && error.status === 403 && error.code === GUEST_ORDER_CLAIMED;
 
 /**
  * Biểu mẫu tra đơn đặt không đăng nhập: mã đơn + SĐT đặt hàng, một nút. Khớp thì sang trang theo dõi bằng khoá tạm máy chủ cấp (đơn chuyển
@@ -123,11 +132,23 @@ export function GuestOrderLookup({ initialCode }: { initialCode: string }) {
               className={`${phoneError ? ui.fieldError : ui.field} mt-1 tabular-nums`}
             />
           </GuestField>
-          {lookup.isError && (
-            <p role="alert" data-testid="guest-lookup-error" className={ui.error}>
-              {lookupErrorText(lookup.error)}
-            </p>
-          )}
+          {lookup.isError &&
+            (isClaimed(lookup.error) ? (
+              <div role="alert" data-testid="guest-lookup-claimed" className="text-sm text-[color:var(--color-text-primary)]">
+                <p>{guestCopy('lookupClaimed')}</p>
+                <Link
+                  href={loginHref(orderDetailHref(lookup.variables?.orderCode ?? orderCode))}
+                  data-testid="guest-lookup-claimed-login"
+                  className="inline-flex min-h-11 items-center font-semibold text-[color:var(--color-text-brand)] underline"
+                >
+                  {guestCopy('lookupClaimedLogin')}
+                </Link>
+              </div>
+            ) : (
+              <p role="alert" data-testid="guest-lookup-error" className={ui.error}>
+                {lookupErrorText(lookup.error)}
+              </p>
+            ))}
           {/* Bận thì aria-disabled + ô chỉ đọc, không `disabled`: Chromium thả focus về body, tra lỗi xong khách phải chạm lại vào ô. */}
           <button type="submit" aria-busy={lookup.isPending || undefined} aria-disabled={busy || undefined} data-testid="guest-lookup-submit" className={`${ui.btnPrimary} w-full`}>
             {busy ? guestCopy('lookupBusy') : guestCopy('lookupSubmit')}

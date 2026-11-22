@@ -143,6 +143,18 @@ describe('Duyệt nhanh claim SĐT cũ (real Postgres)', () => {
     expect(await approveEvents(c.id)).toBe(0);
   });
 
+  it('tubu-w18-01: đơn CTV đặt hộ và đơn đại lý đã giao không tính là "đơn app đã nhận"', async () => {
+    const { m, c } = await staleClaim({ delivered: 0 });
+    await createOrder(prisma, { userId: m.id, status: 'DELIVERED', deliveredAt: new Date(), placedForCustomer: true, endCustomerKey: '0912345678' });
+    await createOrder(prisma, { userId: m.id, status: 'DELIVERED', deliveredAt: new Date(), type: 'DEALER' });
+    const cskh = await mkUser({ role: 'STAFF' });
+    const dry = await batch().run(cskh.id, { dryRun: true, claimIds: [c.id] });
+    expect(dry.results[0]).toMatchObject({ ok: false, deliveredAppOrders: 0, reason: expect.stringContaining('chưa nhận đơn app') });
+    await createOrder(prisma, { userId: m.id, status: 'DELIVERED', deliveredAt: new Date() });
+    const res = await batch().run(cskh.id, { dryRun: true, claimIds: [c.id] });
+    expect(res.results[0]).toMatchObject({ ok: true, outcome: 'READY', deliveredAppOrders: 1 });
+  });
+
   it('claim vướng thêm ngưỡng tiền: không duyệt nhanh', async () => {
     const { c } = await staleClaim({ goods: 6_000_000 });
     expect(c).toMatchObject({ state: 'REVIEW', reviewReason: PHONE_STALE_REASON });

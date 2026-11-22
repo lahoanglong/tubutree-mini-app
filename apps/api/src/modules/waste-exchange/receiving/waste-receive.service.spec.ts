@@ -110,8 +110,12 @@ function setup(o: Setup = {}) {
       findUnique: jest.fn(async () => (o.umRow === undefined ? unmatchedRow() : o.umRow)),
       findMany: jest.fn(async () => o.listRows ?? [unmatchedRow()]),
     },
+    // Gợi ý: hai truy vấn window (theo mã vận đơn, theo SĐT) trả id, rồi findMany đủ cột theo id; dòng gắn kiện chỉ chọn SĐT khách.
+    $queryRaw: jest.fn(async () =>
+      ((o.candidatePool ?? []) as { id: string; trackingNorm: string | null }[]).map((c) => ({ id: c.id, key: c.trackingNorm, shared: false })),
+    ),
     wasteRequest: {
-      findMany: jest.fn(async (a: { where: { id?: unknown } }) => (a.where.id ? (o.relatedRows ?? []) : (o.candidatePool ?? []))),
+      findMany: jest.fn(async (a: { select?: { code?: unknown } }) => (a.select?.code ? (o.candidatePool ?? []) : (o.relatedRows ?? []))),
     },
     $transaction: jest.fn(async (fn: (t: unknown) => Promise<unknown>) => {
       inTx = true;
@@ -628,6 +632,29 @@ describe('Unmatched parcel suggestions', () => {
     for (const reason of ['TRACKING_MULTI', 'TR_TRACKING_CONFLICT']) {
       expect(rankCandidates({ reason, trackingNorm: 'SPX123', relatedRequestId: 'a' }, '0901234567', pool as never)).toEqual([]);
     }
+  });
+
+  it('tubu-w18-01 rankCandidates: no tracking suggestion when the code is shared by another customer beyond the rows read for it', () => {
+    const pool = [cand({ id: 'a', status: 'IN_TRANSIT' }), cand({ id: 'b' })];
+    const parcel = { reason: 'MANUAL_ENTRY', trackingNorm: 'SPX123', relatedRequestId: null };
+    expect(rankCandidates(parcel, null, pool as never).map((r) => r.id)).toEqual(['a', 'b']);
+    expect(rankCandidates(parcel, null, pool as never, new Set(['SPX123']))).toEqual([]);
+    expect(rankCandidates(parcel, null, pool as never, new Set(['OTHER'])).map((r) => r.id)).toEqual(['a', 'b']);
+  });
+
+  it('tubu-w18-01 listUnmatched reads candidates per tracking code and per phone, then loads only those ids', async () => {
+    const h = setup({ listRows: [unmatchedRow({ reason: 'MANUAL_ENTRY' })], candidatePool: [cand()] });
+    await h.svc.listUnmatched('s1', {});
+    expect(h.prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = ((h.prisma.$queryRaw as jest.Mock).mock.calls[0] as [TemplateStringsArray])[0].join('?');
+    expect(sql).toContain('ROW_NUMBER() OVER (PARTITION BY r."trackingNorm"');
+    expect(sql).not.toMatch(/LIMIT|take/i);
+    const load = (h.prisma.wasteRequest.findMany as jest.Mock).mock.calls.find(([a]) => (a as { select?: { code?: unknown } }).select?.code)![0] as {
+      where: unknown;
+      take?: number;
+    };
+    expect(load.where).toEqual({ id: { in: ['r1'] } });
+    expect(load.take).toBeUndefined();
   });
 
   it('listUnmatched masks candidate name and phone for staff', async () => {

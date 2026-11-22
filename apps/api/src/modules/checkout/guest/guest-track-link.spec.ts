@@ -12,9 +12,11 @@ import {
   GUEST_LOOKUP_PHONE_LIMIT,
   GUEST_LOOKUP_PHONE_TTL_MS,
   GuestCheckoutController,
+  guestLookupLimitMessage,
   lookupPhoneThrottleId,
   lookupThrottleId,
 } from './guest-checkout.controller';
+import { throttleRefusalOf } from '../../../common/throttle/throttle.config';
 
 const SECRET = 'unit-secret-guest-track-link';
 const CODE = 'TUBU2026112212345';
@@ -101,6 +103,22 @@ describe('POST /checkout/guest/lookup: trần theo mã đơn, theo SĐT và theo
     expect(a).toBe(`lookup-phone:${createHash('sha256').update('0912345678').digest('hex')}`);
     expect(tracker({ body: { orderCode: 'TUBU2026112299999', phone: '+84 912.345.678' }, ip: '2.2.2.2' })).toBe(a);
     expect(tracker({ body: { phone: 'abc' }, ip: '3.3.3.3' })).toBe('ip:3.3.3.3');
+  });
+
+  it('tubu-w18-01: mọi cách gõ cùng một SĐT (84…, +84 0…, dấu cách, gạch, ngoặc) đếm chung một bộ đếm trần SĐT', () => {
+    const tracker = Reflect.getMetadata('THROTTLER:TRACKERlookupPhone', handler) as (r: unknown) => string;
+    const a = tracker({ body: { phone: '0912345678' }, ip: '1.1.1.1' });
+    for (const phone of ['84912345678', '+84 0912 345 678', '0912-345-678', '(+84) 912 345 678', ' 091 234 5678 ']) {
+      expect(tracker({ body: { phone }, ip: `9.9.9.${phone.length}` })).toBe(a);
+    }
+  });
+
+  it('tubu-w18-01: 429 của route tra cứu mang mã GUEST_LOOKUP_LIMIT và câu tiếng Việt kèm số phút còn phải chờ', () => {
+    const refusal = throttleRefusalOf(handler);
+    expect(refusal?.code).toBe('GUEST_LOOKUP_LIMIT');
+    expect(refusal?.message(15)).toBe('Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.');
+    expect(guestLookupLimitMessage(1)).toBe('Bạn tra hơi nhiều lần. Thử lại sau 1 phút nhé.');
+    expect(throttleRefusalOf(GuestCheckoutController.prototype.track)).toBeUndefined();
   });
 
   it('định danh đếm trần bỏ qua giá trị không phải chuỗi', () => {

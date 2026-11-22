@@ -196,6 +196,32 @@ describe('WasteBulkActionService (real Postgres)', () => {
     expect(notifier.requestExpired).toHaveBeenCalledWith(cust.id, { id: old.id, code: old.code, method: 'MAIL_IN' }, 'LOST', expect.any(Date));
   });
 
+  it('tubu-w18-01: CLOSE_LOST refuses a request while an OPEN unmatched parcel is linked to it or carries its tracking code', async () => {
+    const [linked, sameTracking, clear] = [await mailIn(cust.id, 40), await mailIn(cust.id, 40), await mailIn(cust.id, 40)];
+    const scanned = await prisma.wasteUnmatchedParcel.create({
+      data: { createdByUserId: staffA.id, description: 'kiện quét không đối chiếu được', reason: 'NO_MATCH', relatedRequestId: linked.id },
+    });
+    await receive.createUnmatched(staffA.id, { description: 'kiện nhập tay từ nhãn', trackingCode: sameTracking.trackingCode! });
+    const resolved = await prisma.wasteUnmatchedParcel.create({
+      data: { createdByUserId: staffA.id, description: 'kiện đã xử lý', reason: 'NO_MATCH', relatedRequestId: clear.id, status: 'RESOLVED' },
+    });
+    const ids = [linked.id, sameTracking.id, clear.id];
+
+    const dry = await bulk.run(admin.id, { action: 'CLOSE_LOST', requestIds: ids, dryRun: true });
+    expect(dry.results.map((x) => x.outcome)).toEqual(['FAILED', 'FAILED', 'READY']);
+    expect(dry.results[0]!.reason).toMatch(/Hàng không rõ chủ/);
+
+    const res = await bulk.run(admin.id, { action: 'CLOSE_LOST', requestIds: ids, dryRun: false, reason: 'Hãng báo thất lạc' });
+    expect(res.results.map((x) => x.outcome)).toEqual(['FAILED', 'FAILED', 'UPDATED']);
+    expect(res.results[1]!.reason).toMatch(/Hàng không rõ chủ/);
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: linked.id } })).resolves.toMatchObject({ status: 'IN_TRANSIT' });
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: sameTracking.id } })).resolves.toMatchObject({ status: 'IN_TRANSIT' });
+    await expect(prisma.wasteRequest.findUniqueOrThrow({ where: { id: clear.id } })).resolves.toMatchObject({ status: 'EXPIRED', closeReason: 'LOST' });
+    await expect(events(linked.id, 'REQUEST_CLOSED_LOST')).resolves.toBe(0);
+    await expect(prisma.wasteUnmatchedParcel.findUniqueOrThrow({ where: { id: scanned.id } })).resolves.toMatchObject({ status: 'OPEN' });
+    expect(resolved.status).toBe('RESOLVED');
+  });
+
   it('CLOSE_LOST × MARK_RECEIVED on the same overdue parcel: exactly one wins', async () => {
     const r = await mailIn(cust.id, 40);
     const s = summarize(
@@ -260,6 +286,43 @@ describe('Unmatched parcel suggestions (real Postgres)', () => {
     await expect(
       receive.resolveUnmatched(staffA.id, parcel.id, { action: 'MATCH', requestId: b.id, note: 'gợi ý giả', suggestion: 'TRACKING' }),
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('tubu-w18-01: 605 older open requests of one customer do not crowd out a newer request\'s tracking suggestion (no page-wide oldest-600 cap)', async () => {
+    const heavy = await newUser();
+    const stamp = new Date(Date.now() - 100 * DAY);
+    await prisma.wasteRequest.createMany({
+      data: Array.from({ length: 605 }, (_, i) => ({
+        code: `TR-BL${tag()}${i}`,
+        userId: heavy.id,
+        method: 'MAIL_IN' as const,
+        status: 'OPEN' as const,
+        pointId: wh.id,
+        estimatedPoints: 1,
+        capDayKey: 'it-backlog',
+        capMonthKey: 'it-backlog',
+        idempotencyKey: `it-backlog-${i}`,
+        consentAt: stamp,
+        consentVersion: 'it',
+        createdAt: stamp,
+      })),
+    });
+    try {
+      const anchor = await prisma.wasteRequest.findFirstOrThrow({ where: { userId: heavy.id }, select: { id: true } });
+      const heavyParcel = await prisma.wasteUnmatchedParcel.create({
+        data: { createdByUserId: staffA.id, description: 'kiện của khách tồn nhiều', reason: 'NO_MATCH', relatedRequestId: anchor.id },
+      });
+      const r = await mailIn(cust.id);
+      const parcel = await receive.createUnmatched(staffA.id, { description: 'kiện mới nhập tay', trackingCode: r.trackingCode! });
+      const listed = await receive.listUnmatched(staffA.id, {});
+      expect(listed.find((p) => p.id === parcel.id)?.candidates?.map((c) => [c.code, c.basis])).toEqual([[r.code, 'TRACKING']]);
+      const byPhone = listed.find((p) => p.id === heavyParcel.id)?.candidates ?? [];
+      expect(byPhone).toHaveLength(3);
+      expect(byPhone.every((c) => c.basis === 'PHONE' && c.requestId !== anchor.id)).toBe(true);
+    } finally {
+      await prisma.wasteUnmatchedParcel.deleteMany({ where: { relatedRequestId: { in: (await prisma.wasteRequest.findMany({ where: { userId: heavy.id }, select: { id: true } })).map((x) => x.id) } } });
+      await prisma.wasteRequest.deleteMany({ where: { userId: heavy.id } });
+    }
   });
 
   it('quick match × bulk receive on the same request: one receive only', async () => {

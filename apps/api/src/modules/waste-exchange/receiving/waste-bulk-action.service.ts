@@ -5,6 +5,7 @@ import { describeError } from '../../../config/go-live/secrets';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
+import { WASTE_UNMATCHED_OPEN_WHERE } from '../core/waste-queue-filters';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { lockWasteCustomer } from '../waste-locks';
@@ -87,6 +88,14 @@ function errorText(err: unknown): string {
   return `Lỗi máy chủ khi xử lý yêu cầu này (${describeError(err)}). Mở chi tiết để xem lại.`;
 }
 
+/**
+ * Kiện "hàng không rõ chủ" còn mở có thể chính là kiện của yêu cầu: kiện gắn yêu cầu (nút Nhận kiện ghi lại khi không đối chiếu được) hoặc kiện cùng
+ * mã vận đơn đã chuẩn hoá (nhân viên nhập tay từ nhãn kiện). Còn kiện như vậy thì đóng thất lạc sẽ báo khách "thất lạc" trong khi kiện đang ở kho.
+ */
+export function openParcelForRequestWhere(r: { id: string; trackingNorm: string | null }): Prisma.WasteUnmatchedParcelWhereInput {
+  return { ...WASTE_UNMATCHED_OPEN_WHERE, OR: [{ relatedRequestId: r.id }, ...(r.trackingNorm ? [{ trackingNorm: r.trackingNorm }] : [])] };
+}
+
 /** Ném trong transaction để rollback và mang kết quả SKIP/FAIL ra ngoài mà không đổi gì. */
 class RowStop extends Error {
   constructor(readonly decision: Exclude<WasteBulkDecision, { kind: 'OK' }>) {
@@ -135,7 +144,12 @@ export class WasteBulkActionService {
     }
 
     const decide = async (db: Prisma.TransactionClient, r: Loaded, asDry: boolean): Promise<WasteBulkDecision> => {
-      if (action === 'CLOSE_LOST') return closeLostDecision(rowOf(r), { now, reviewDays });
+      if (action === 'CLOSE_LOST') {
+        const d = closeLostDecision(rowOf(r), { now, reviewDays });
+        if (d.kind !== 'OK') return d;
+        const parcel = await db.wasteUnmatchedParcel.findFirst({ where: openParcelForRequestWhere(r), select: { id: true } });
+        return parcel ? { kind: 'FAIL', reason: BULK_TEXT.OPEN_UNMATCHED_PARCEL } : d;
+      }
       const d = receiveDecision(rowOf(r), { phoneMatchConfirmed, dryRun: asDry });
       if (d.kind !== 'OK') return d;
       // Cùng hàm đối chiếu của nút Nhận kiện từng kiện: túi kèm đơn khớp theo đơn, kiện gửi kho khớp theo mã vận đơn duy nhất.
