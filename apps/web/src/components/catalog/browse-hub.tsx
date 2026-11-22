@@ -74,10 +74,11 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
       <BrandGrid brands={brands} onSelect={onPickBrand} />
       <Section id="browse-see-all">
         <div style={{ paddingBottom: 16, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
-          {refillOn && <RefillLandingEntry />}
           <Button variant="secondary" fullWidth onPress={onPickAll}>
             {fillCopy('browse.seeAllProducts')}
           </Button>
+          {/* Dưới nút: lối vào hiện muộn (tải lười + chờ API) không được đẩy nút khách đang định chạm. */}
+          {refillOn && <RefillLandingEntry />}
         </div>
       </Section>
     </div>

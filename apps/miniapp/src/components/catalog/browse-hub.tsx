@@ -63,10 +63,11 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount, brands
       <BrandGrid brands={brands} onSelect={onPickBrand} />
       <Section id="browse-see-all">
         <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
-          <RefillLandingEntry />
           <Button variant="secondary" fullWidth onPress={onPickAll}>
             {fillCopy('browse.seeAllProducts')}
           </Button>
+          {/* Dưới nút: lối vào hiện muộn (chờ API) không được đẩy nút khách đang định chạm. */}
+          <RefillLandingEntry />
         </div>
       </Section>
     </div>

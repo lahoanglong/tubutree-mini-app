@@ -8,6 +8,12 @@ const http = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: http.get } }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+const refill = vi.hoisted(() => ({ on: false }));
+vi.mock('@tubutree/app-core/refill/refill-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tubutree/app-core/refill/refill-api')>()),
+  refillFirstOn: () => refill.on,
+}));
+vi.mock('@/components/refill/refill-landing-entry', () => ({ RefillLandingEntry: () => <a data-testid="refill-landing-entry" href="/tiet-kiem-refill">Refill</a> }));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/san-pham',
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -32,6 +38,7 @@ const region = (c: ParentNode, name: string) => c.querySelector<HTMLElement>(`se
 const button = (c: ParentNode, name: string) => c.querySelector<HTMLElement>(`button[aria-label="${name}"]`) ?? byText(c, 'button', name);
 
 beforeEach(() => {
+  refill.on = false;
   mounted?.unmount();
   mounted = null;
   localStorage.clear();
@@ -140,5 +147,22 @@ describe('BrowseHub', () => {
     const c = mount();
     await flush();
     expect(c.textContent).not.toMatch(/\bTop\b|Voucher|cửa hàng/);
+  });
+});
+
+describe('BrowseHub — lối vào Refill (tubu-w17-04)', () => {
+  it('cờ bật: lối vào nằm DƯỚI nút "Xem tất cả sản phẩm", nên hiện muộn không đẩy nút khách đang định chạm', async () => {
+    refill.on = true;
+    http.get.mockResolvedValue(page(10));
+    const c = mount();
+    let entry: Element | null = null;
+    for (let i = 0; i < 10 && !entry; i++) {
+      await flush();
+      entry = c.querySelector('[data-testid="refill-landing-entry"]');
+    }
+    const all = button(c, 'Xem tất cả sản phẩm');
+    expect(entry).not.toBeNull();
+    expect(all).not.toBeNull();
+    expect(all!.compareDocumentPosition(entry!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

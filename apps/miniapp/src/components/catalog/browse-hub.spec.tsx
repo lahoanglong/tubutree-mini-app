@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({ navigate: vi.fn(), coreGet: vi.fn(), fetchProd
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../wishlist-heart', () => ({ WishlistHeart: () => null }));
+const refill = vi.hoisted(() => ({ on: false }));
+vi.mock('../refill/refill-landing-entry', () => ({
+  RefillLandingEntry: () => (refill.on ? <a data-testid="refill-landing-entry" href="#">Refill</a> : null),
+}));
 vi.mock('../../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../../services/shop-api', () => ({
   getPublicConfig: vi.fn().mockResolvedValue({}),
@@ -39,6 +43,7 @@ function renderHub(over: Partial<BrowseHubProps> = {}, qc = new QueryClient({ de
 
 describe('BrowseHub', () => {
   beforeEach(() => {
+    refill.on = false;
     localStorage.clear();
     vi.clearAllMocks();
     mocks.fetchProducts.mockResolvedValue(page(10));
@@ -121,6 +126,15 @@ describe('BrowseHub', () => {
     expect(handlers.onPickAll).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Cỏ Mềm, xem thương hiệu' }));
     expect(handlers.onPickBrand).toHaveBeenCalledWith('Cỏ Mềm');
+  });
+
+  it('lối vào Refill nằm DƯỚI nút "Xem tất cả sản phẩm": hiện muộn (chờ API) không đẩy nút khách đang định chạm (tubu-w17-04)', async () => {
+    refill.on = true;
+    renderHub();
+    await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    const all = screen.getByRole('button', { name: 'Xem tất cả sản phẩm' });
+    const entry = screen.getByTestId('refill-landing-entry');
+    expect(all.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('không có chữ "Top", "Voucher", "cửa hàng" trên hub', async () => {
