@@ -10,13 +10,11 @@ import HomeViewClient from './home-view-client';
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
   bestSellers?: BestSellersPage;
-  /** Trang 1 của lưới gợi ý (chip "Tất cả"), xếp theo `suggestSeed`. Không gửi xuống client (xem `homeClientInitial`). */
+  /** Trang 1 của lưới gợi ý (chip "Tất cả"), xếp theo `suggestSeed`. Máy chủ không tải (`loadHomeInitial`) và không gửi xuống client (xem `homeClientInitial`): lưới tự tải khi gần khung nhìn. */
   suggest?: PageResponse<ProductCard>;
   /** Hạt giống ngày VN lúc dựng trang: client dùng lại đúng hạt giống này để lưới Gợi ý và thẻ chen không đổi thứ tự trong cả lần mở. */
   suggestSeed?: string;
   categories?: CategoryDTO[];
-  /** Không còn khối nào dùng (Hành trình nguyên liệu đã rời Trang chủ); giữ kiểu để `loadHomeInitial` vẫn trả được. Không gửi xuống client. */
-  brands?: { brand: string; count: number; slug?: string | null }[];
   /** Cấu hình công khai: dải Quà khách mới của khách vãng lai có ngay trong HTML server, cao đúng 64px (không hiện sau hydrate làm Danh mục nhảy). */
   publicConfig?: PublicConfig;
   /** Suất Giờ vàng đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate làm cả trang nhảy. */
@@ -33,12 +31,11 @@ export interface HomeInitial {
 
 /**
  * Phần `initial` gửi xuống client. Mọi prop của thành phần client được chép nguyên vào dữ liệu RSC nằm trong HTML, nên bỏ phần HTML đầu không vẽ:
- * lưới Gợi ý dựng khi gần tới khung nhìn và tự tải trang 1 (cùng `suggestSeed` nên cùng thứ tự), `brands` không khối nào dùng.
+ * lưới Gợi ý dựng khi gần tới khung nhìn và tự tải trang 1 (cùng `suggestSeed` nên cùng thứ tự).
  */
 export function homeClientInitial(initial: HomeInitial): HomeInitial {
   const slim = { ...initial };
   delete slim.suggest;
-  delete slim.brands;
   return slim;
 }
 

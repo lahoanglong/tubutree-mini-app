@@ -118,7 +118,7 @@ async function metaCells(root: Locator): Promise<MetaCell[]> {
 
 const describeCell = (c: MetaCell) => `${c.variant} "${c.text}" ${c.width}px${c.clipped ? ' bị cắt' : ''}`;
 
-// Kệ Bán chạy nhất có hai bản, mỗi bản `display:none` ở một khổ: kệ vuốt ngang dưới lg, lưới 5×2 từ lg. Spec này đo khổ điện thoại nên chỉ lấy bản kệ.
+// Kệ Bán chạy nhất là một danh sách: kệ vuốt ngang dưới lg, lưới 5×2 từ lg (lớp CSS). Spec này đo khổ điện thoại.
 const bestRail = (page: Page) => page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).getByTestId('best-seller-rail');
 
 async function openHome(page: Page, api: MockApi, width = 375, promo: 'flash' | 'combos' = 'flash'): Promise<void> {

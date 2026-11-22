@@ -115,12 +115,11 @@ describe('DeferUntilNear', () => {
 });
 
 describe('HomeView (vỏ server)', () => {
-  it('không gửi lưới Gợi ý và danh sách thương hiệu xuống client, giữ nguyên phần còn lại', async () => {
+  it('không gửi lưới Gợi ý xuống client, giữ nguyên phần còn lại', async () => {
     const { default: HomeView, homeClientInitial } = await import('./home-view');
     const initial = {
       suggest: { data: [], meta: { page: 1, limit: 12, total: 0 } },
       suggestSeed: '20261118',
-      brands: [{ brand: 'A', count: 1 }],
       categories: [],
       flash: [],
       flashUpcomingCount: 0,

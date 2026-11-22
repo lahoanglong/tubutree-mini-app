@@ -21,7 +21,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import CtvPage from './page';
+import CtvPage from './ctv-page';
 
 let mounted: Rendered | null = null;
 const advance = (ms: number) =>

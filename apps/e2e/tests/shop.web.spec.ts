@@ -234,9 +234,9 @@ test.describe('Web khách: Trang chủ /', () => {
     mockHome(api);
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
-    // Hai bản, mỗi bản `display:none` ở một khổ: kệ vuốt ngang dưới lg, lưới 5×2 từ lg.
-    const phoneRail = (page.viewportSize()?.width ?? 1280) < 1024;
-    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).getByTestId(phoneRail ? 'best-seller-rail' : 'best-seller-grid');
+    // Một danh sách cho mọi khổ: kệ vuốt ngang dưới lg, cùng danh sách thành lưới 5×2 từ lg (lớp CSS, không có bản thẻ thứ hai).
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).getByTestId('best-seller-rail');
+    await expect(page.getByTestId('best-seller-grid')).toHaveCount(0);
     await expect(best.getByText('Sữa rửa mặt bán chạy')).toBeVisible();
     for (const rank of ['#1', '#2', '#3']) await expect(best.getByText(rank, { exact: true })).toBeVisible();
     const suggest = page.getByRole('region', { name: 'Gợi ý hôm nay' });

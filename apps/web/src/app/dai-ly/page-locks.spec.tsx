@@ -56,7 +56,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import DealerPage from './page';
+import DealerPage from './dealer-page';
 
 const APPROVED = { isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000 };
 const NOT_DEALER = { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 };

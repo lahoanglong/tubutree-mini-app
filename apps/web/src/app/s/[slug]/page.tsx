@@ -11,9 +11,32 @@ import { isPartnerStore } from '@/lib/partner-store';
 import { LearnStorefrontLink, MoreAtTubuLink, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { jsonLdScript } from '@/lib/product-seo';
+import { storefrontJsonLd } from '@/lib/seo/storefront-structured-data';
 import { StorefrontBody } from '@/components/shop-page/storefront-body';
 
 export const revalidate = 300;
+
+/**
+ * Dải cam kết: điện thoại là hàng chip gọn (chữ ngắn, tối đa hai hàng ở 375px) ngay dưới đầu gian hàng; từ md là bốn ô như cũ (chữ đủ).
+ * Một bộ thẻ cho mọi khổ, chữ ngắn/đủ đổi bằng CSS. Chỉ nói điều luôn đúng với mọi gian hàng (duyệt, theo dõi đơn, thanh toán qua Tubu Tree, đổi trả).
+ */
+const TRUST_LIST = 'flex flex-wrap gap-1.5 md:grid md:grid-cols-4 md:gap-3';
+const TRUST_CHIP =
+  'flex items-center gap-1.5 rounded-pill bg-[var(--color-bg-subtle)] px-2.5 py-1 md:gap-2 md:rounded-card md:border md:border-[var(--color-border-subtle)] md:bg-[var(--color-bg-surface)] md:p-3 md:[box-shadow:var(--elevation-1)]';
+const TRUST_ICON = 'h-3.5 w-3.5 shrink-0 text-[var(--color-text-brand)] md:h-4 md:w-4';
+
+function TrustChip({ icon: Icon, short, full }: { icon: typeof ShieldCheck; short: string; full: string }) {
+  return (
+    <li className={TRUST_CHIP}>
+      <Icon className={TRUST_ICON} aria-hidden="true" />
+      <span className="text-xs font-semibold text-[var(--color-text-primary)]">
+        <span className="md:hidden">{short}</span>
+        <span className="hidden md:inline">{full}</span>
+      </span>
+    </li>
+  );
+}
 
 // Không dựng sẵn trang nào lúc build; trang đầu tiên của mỗi đường dẫn dựng khi có người vào rồi giữ theo revalidate (ISR thay vì dựng mỗi lượt).
 export function generateStaticParams() {
@@ -69,6 +92,8 @@ export default async function StorefrontPage({
   const collections = (sf.collections ?? [])
     .map((c) => ({ ...c, items: (c.items ?? []).filter((it) => Boolean(it?.product)) }))
     .filter((c) => c.items.length > 0);
+  // Gian hàng đã đăng, không phải gian hàng mẫu: OnlineStore + ItemList đúng các sản phẩm có trong HTML.
+  const jsonLd = storefrontJsonLd({ slug: sf.slug, title: sf.title, headerNote: sf.headerNote, isSample: sf.isSample, avatarUrl: sf.avatarUrl, collections });
 
   const intro = (
     <>
@@ -115,31 +140,16 @@ export default async function StorefrontPage({
        * storefront nào (CTV/dealer/brand) được nhận tiền trực tiếp cho tới khi có một hệ thống
        * đối tác-tự-thu-tiền thật sự (xem A5-34, còn mở). */}
 
-      {/* ── Trust Ribbon: chỉ từ md; điện thoại giống Mini App không có dải này ── */}
-      <section aria-labelledby="cam-ket-gian-hang" className="mt-4 max-md:hidden">
+      <section aria-labelledby="cam-ket-gian-hang" className="mx-4 mt-3 md:mx-0 md:mt-4">
         <h2 id="cam-ket-gian-hang" className="sr-only">
           Cam kết của gian hàng
         </h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-            <ShieldCheck className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">Sản phẩm đã qua duyệt của Tubu Tree</span>
-          </div>
-          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-            <PackageSearch className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">Theo dõi đơn trên Tubu Tree</span>
-          </div>
-          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-            <CreditCard className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">Thanh toán qua Tubu Tree</span>
-          </div>
-          {returns && (
-            <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-              <RotateCcw className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-              <span className="text-xs font-semibold text-stone-800">{returns}</span>
-            </div>
-          )}
-        </div>
+        <ul role="list" className={TRUST_LIST}>
+          <TrustChip icon={ShieldCheck} short="Hàng đã qua duyệt" full="Sản phẩm đã qua duyệt của Tubu Tree" />
+          <TrustChip icon={PackageSearch} short="Theo dõi đơn" full="Theo dõi đơn trên Tubu Tree" />
+          <TrustChip icon={CreditCard} short="Thanh toán qua Tubu" full="Thanh toán qua Tubu Tree" />
+          {returns && <TrustChip icon={RotateCcw} short="Đổi trả nếu lỗi" full={returns} />}
+        </ul>
       </section>
     </>
   );
@@ -170,6 +180,7 @@ export default async function StorefrontPage({
       {collections.length === 0 && <StorefrontEmpty referralCode={sf.referralCode} />}
       {sf.type === 'CTV' && <LearnStorefrontLink referralCode={sf.referralCode} />}
       {collections.length > 0 && <MoreAtTubuLink referralCode={sf.referralCode} />}
+      {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }} />}
     </main>
   );
 }

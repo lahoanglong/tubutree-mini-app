@@ -153,7 +153,8 @@ const COMMUNITY: string[] = [
   'components/community/rank.tsx',
 ];
 const AFFILIATE: string[] = [
-  'app/ctv/page.tsx',
+  'app/ctv/ctv-page.tsx',
+  'components/affiliate/ctv-guest-landing.tsx',
   'components/affiliate/ctv-shortcuts.tsx',
   'components/affiliate/ctv-copy.ts',
   'components/affiliate/choice-card.tsx',
