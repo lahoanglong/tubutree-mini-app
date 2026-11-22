@@ -6,7 +6,9 @@ import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
  *
  * Sheet chỉ đọc `down`, `first`, `movement`, `velocity[1]`, `event` và `memo` (giá trị handler trả về ở lần gọi trước trong cùng lượt kéo):
  * thả tay khi kéo xuống quá DRAG_THRESHOLD (100px) thì gọi `onClose`, chưa tới thì bật về chỗ cũ. Như `filterTaps`, chạm không dời quá
- * 3px không tính là kéo nên không gọi handler. Bắt con trỏ (`setPointerCapture`) như use-gesture để kéo ra ngoài thanh vẫn theo dõi được.
+ * 3px trên trục nào không tính là kéo nên không gọi handler. Như use-gesture: bắt con trỏ (`setPointerCapture`) để kéo ra ngoài thanh vẫn theo
+ * dõi được; đang có một ngón thì bỏ qua ngón khác; lúc kết thúc (thả, `pointercancel`, mất bắt con trỏ) báo quãng kéo của lần move cuối,
+ * không đọc toạ độ của sự kiện kết thúc (sự kiện huỷ có thể mang toạ độ 0).
  */
 
 const TAP_THRESHOLD_PX = 3;
@@ -30,6 +32,7 @@ interface Gesture {
   lastY: number;
   lastT: number;
   vy: number;
+  movement: [number, number];
   active: boolean;
   memo: unknown;
 }
@@ -44,7 +47,7 @@ export function useDrag(handler: DragHandler, _options?: { filterTaps?: boolean 
       down,
       first,
       last: !down,
-      movement: [event.clientX - g.x0, event.clientY - g.y0],
+      movement: g.movement,
       velocity: [0, g.vy],
       event,
       memo: g.memo,
@@ -61,7 +64,18 @@ export function useDrag(handler: DragHandler, _options?: { filterTaps?: boolean 
   return () => ({
     onPointerDown(event: ReactPointerEvent<Element>) {
       if (event.button > 0) return;
-      gesture.current = { id: event.pointerId, x0: event.clientX, y0: event.clientY, lastY: event.clientY, lastT: event.timeStamp, vy: 0, active: false, memo: undefined };
+      if (gesture.current?.active) return;
+      gesture.current = {
+        id: event.pointerId,
+        x0: event.clientX,
+        y0: event.clientY,
+        lastY: event.clientY,
+        lastT: event.timeStamp,
+        vy: 0,
+        movement: [0, 0],
+        active: false,
+        memo: undefined,
+      };
       try {
         (event.currentTarget as Element).setPointerCapture(event.pointerId);
       } catch {
@@ -75,12 +89,14 @@ export function useDrag(handler: DragHandler, _options?: { filterTaps?: boolean 
       if (dt > 0) g.vy = Math.abs(event.clientY - g.lastY) / dt;
       g.lastY = event.clientY;
       g.lastT = event.timeStamp;
+      g.movement = [event.clientX - g.x0, event.clientY - g.y0];
       const first = !g.active;
-      if (first && Math.hypot(event.clientX - g.x0, event.clientY - g.y0) < TAP_THRESHOLD_PX) return;
+      if (first && Math.abs(g.movement[0]) < TAP_THRESHOLD_PX && Math.abs(g.movement[1]) < TAP_THRESHOLD_PX) return;
       g.active = true;
       emit(g, event, true, first);
     },
     onPointerUp: end,
     onPointerCancel: end,
+    onLostPointerCapture: end,
   });
 }

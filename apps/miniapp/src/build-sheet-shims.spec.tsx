@@ -57,8 +57,8 @@ function renderSheet(visible: boolean, onClose = vi.fn()) {
 }
 
 const handle = (content: HTMLElement) => content.querySelector('.zaui-sheet-content-handler-wrapper') as HTMLElement;
-const pointer = (type: 'pointerDown' | 'pointerMove' | 'pointerUp', el: HTMLElement, y: number) =>
-  act(() => void fireEvent[type](el, { pointerId: 1, button: 0, clientX: 10, clientY: y }));
+const pointer = (type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel', el: HTMLElement, y: number, pointerId = 1, clientX = 10) =>
+  act(() => void fireEvent[type](el, { pointerId, button: 0, clientX, clientY: y }));
 
 describe('zmp-ui Sheet trên shim spring/drag', () => {
   it('zmp-ui thật sự nạp shim chứ không phải gói gốc', async () => {
@@ -115,6 +115,59 @@ describe('zmp-ui Sheet trên shim spring/drag', () => {
     pointer('pointerUp', bar, 150);
     advance(300);
     expect(content().style.transform).toBe('translateY(0px)');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('ngón thứ hai chạm vào giữa lúc đang kéo thì bị bỏ qua, ngón đầu kéo tiếp và thả ra vẫn đóng', () => {
+    const { content, onClose } = renderSheet(true);
+    advance(300);
+    const bar = handle(content());
+    pointer('pointerDown', bar, 100, 1);
+    pointer('pointerMove', bar, 150, 1);
+    pointer('pointerDown', bar, 300, 2);
+    pointer('pointerMove', bar, 310, 2);
+    pointer('pointerUp', bar, 310, 2);
+    expect(content().style.transform).toBe('translateY(50px)');
+    pointer('pointerMove', bar, 260, 1);
+    expect(content().style.transform).toBe('translateY(160px)');
+    pointer('pointerUp', bar, 260, 1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('pointercancel (cử chỉ hệ thống cướp ngón tay) dùng quãng kéo của lần move cuối, không đọc toạ độ của sự kiện huỷ', () => {
+    const { content, onClose } = renderSheet(true);
+    advance(300);
+    const bar = handle(content());
+    pointer('pointerDown', bar, 100);
+    pointer('pointerMove', bar, 250);
+    pointer('pointerCancel', bar, 0, 1, 0);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('mất bắt con trỏ giữa lúc kéo thì kết thúc lượt kéo như khi thả', () => {
+    const { content, onClose } = renderSheet(true);
+    advance(300);
+    const bar = handle(content());
+    pointer('pointerDown', bar, 100);
+    pointer('pointerMove', bar, 150);
+    act(() => void fireEvent.lostPointerCapture(bar, { pointerId: 1 }));
+    advance(300);
+    expect(content().style.transform).toBe('translateY(0px)');
+    expect(onClose).not.toHaveBeenCalled();
+    // Lượt kéo đã xong: lượt mới bắt đầu lại từ chỗ chạm mới.
+    pointer('pointerDown', bar, 100);
+    pointer('pointerMove', bar, 120);
+    expect(content().style.transform).toBe('translateY(20px)');
+  });
+
+  it('ngưỡng chạm 3px tính riêng từng trục như use-gesture: chéo 2px/2px vẫn là chạm', () => {
+    const { content, onClose } = renderSheet(true);
+    advance(300);
+    const bar = handle(content());
+    pointer('pointerDown', bar, 100, 1, 10);
+    pointer('pointerMove', bar, 102.5, 1, 12.5);
+    expect(content().style.transform).toBe('translateY(0px)');
+    pointer('pointerUp', bar, 102.5, 1, 12.5);
     expect(onClose).not.toHaveBeenCalled();
   });
 
