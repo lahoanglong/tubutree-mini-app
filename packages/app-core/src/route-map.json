@@ -117,12 +117,6 @@
       "flag": ["apps/api/src/modules/bundles/green-box.ts", "GREEN_BOX_ENABLED_KEY"],
       "missingOn": "miniapp",
       "reason": "Trang ghép Hộp Xanh (/hop-xanh: danh mục lọc sẵn, lưới nút ＋, thanh đáy Đã chọn {n} món) và nút \"Ghép thêm\" của dải giỏ chỉ có trên web. Gói Mini của wave tubu-w2-03 đo 2.368.181 B khi có cả trang lẫn gợi ý, vượt ngân sách wave +3.500 B so với 2.360.168 B; theo luật wave, Mini chỉ giữ phần giỏ (dải tiến độ, dòng gợi ý dưới tổng, dòng Hộp Xanh ở giỏ và thanh toán), đo 2.363.629 B (+3.461 B). Máy chủ tính Hộp Xanh như nhau cho đơn từ cả hai nền tảng."
-    },
-    {
-      "id": "subscription-suggestion-web-only",
-      "flag": ["apps/api/src/modules/subscriptions/smart-interval.ts", "SMART_INTERVAL_ENABLED_KEY"],
-      "missingOn": "miniapp",
-      "reason": "Dòng gợi ý giao định kỳ theo nhịp mua (sheet Mua lại và tab Định kỳ khi chưa có gói) chỉ có trên web. Bản Mini làm chunk reorder-sheet tăng 2.288 B trong khi gói Mini của wave tubu-w2-03 vượt ngân sách +3.500 B; theo luật wave Mini chỉ giữ phần giỏ của Hộp Xanh. Tab Định kỳ của Mini (subscriptions-panel.tsx) cũng nằm ngoài danh sách file wave được sửa. API GET /me/subscriptions/suggestions dùng chung, thêm vào Mini khi gói còn chỗ."
     }
   ],
   "features": [

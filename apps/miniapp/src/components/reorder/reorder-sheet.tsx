@@ -21,6 +21,8 @@ import {
 } from './reorder-types';
 import { ProductThumb } from '../ui/product-thumb';
 import { reorderSavingsNote, reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import type { SubscriptionSuggestion } from '@tubutree/app-core/commerce/green-box';
+import { SubscriptionSuggestionRow, SuggestedSubscribe, useSubscriptionSuggestion } from './subscription-suggestion';
 
 /** Khoảng giữa ô chọn, ảnh và chữ của một hàng (web: gap-2.5): dòng sản phẩm và hàng Chọn tất cả dùng chung để chữ thẳng cột. */
 const ROW_GAP = 10;
@@ -78,6 +80,13 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   const savedNote = view ? reorderSavingsNote(selectionSavings(view, sel, cart)) : null;
   const availableCount = view ? availableLines(view).length : 0;
   const selectionState = view ? availableSelectionState(view, sel) : 'none';
+  const { suggestion, discountFraction } = useSubscriptionSuggestion(target !== null, lines.map((l) => l.variationId));
+  // Sheet sống qua các lần mở (cha chỉ đổi `target`) nên sheet Đặt định kỳ mở từ đây còn sau khi sheet mua lại đóng.
+  const [subscribeTo, setSubscribeTo] = useState<SubscriptionSuggestion | null>(null);
+  const acceptSuggestion = (s: SubscriptionSuggestion) => {
+    setSubscribeTo(s);
+    onClose();
+  };
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify
   // (setTimeout 0) nên cú chạm thứ hai trong cùng nhịp vẫn thấy isPending=false.
@@ -105,69 +114,73 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   };
 
   return (
-    <BottomSheet
-      open={target !== null}
-      onClose={onClose}
-      title={vi.reorder.sheetTitle}
-      description={view?.kind === 'order' ? vi.reorder.fromOrder(view.orderCode) : undefined}
-      footer={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <KeyValueRow label={vi.reorder.subtotal} value={formatVnd(subtotal)} emphasis />
-          {savedNote && (
-            <Text variant="caption" tone="success" as="div" numeric data-testid="reorder-savings-note" style={{ fontWeight: 600 }}>
-              {savedNote}
+    <>
+      <BottomSheet
+        open={target !== null}
+        onClose={onClose}
+        title={vi.reorder.sheetTitle}
+        description={view?.kind === 'order' ? vi.reorder.fromOrder(view.orderCode) : undefined}
+        footer={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <KeyValueRow label={vi.reorder.subtotal} value={formatVnd(subtotal)} emphasis />
+            {savedNote && (
+              <Text variant="caption" tone="success" as="div" numeric data-testid="reorder-savings-note" style={{ fontWeight: 600 }}>
+                {savedNote}
+              </Text>
+            )}
+            <Text variant="caption" tone="tertiary" as="div">
+              {vi.reorder.priceNote}
+            </Text>
+            <Button fullWidth size="lg" loading={reorder.isPending || !cartReady} disabled={units === 0} onPress={() => void submit()}>
+              {vi.reorder.addCta(units)}
+            </Button>
+          </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {suggestion && <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={acceptSuggestion} />}
+          {skippedNote && (
+            <Text variant="body-sm" tone="secondary" as="p" data-testid="reorder-skipped-note">
+              {skippedNote}
             </Text>
           )}
-          <Text variant="caption" tone="tertiary" as="div">
-            {vi.reorder.priceNote}
-          </Text>
-          <Button fullWidth size="lg" loading={reorder.isPending || !cartReady} disabled={units === 0} onPress={() => void submit()}>
-            {vi.reorder.addCta(units)}
-          </Button>
-        </div>
-      }
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {skippedNote && (
-          <Text variant="body-sm" tone="secondary" as="p" data-testid="reorder-skipped-note">
-            {skippedNote}
-          </Text>
-        )}
-        {view && availableCount >= 2 && (
-          // Cùng nhịp với dòng sản phẩm bên dưới (ô 44px + khoảng 10px) để chữ thẳng hàng với ảnh và với web; chữ nhìn thấy ẩn khỏi trình đọc
-          // màn hình (tên của ô đã nằm trong nhãn ẩn) và vẫn chạm được.
-          <div style={{ display: 'flex', alignItems: 'center', gap: ROW_GAP }}>
-            <Checkbox
-              data-testid="reorder-toggle-all"
-              checked={selectionState === 'all'}
-              indeterminate={selectionState === 'some'}
-              onChange={() => setSel((s) => toggleAllAvailable(view, s))}
-            >
-              <span style={SR_ONLY}>{vi.reorder.selectAll(availableCount)}</span>
-            </Checkbox>
-            <div
-              aria-hidden="true"
-              data-testid="reorder-toggle-all-label"
-              onClick={() => setSel((s) => toggleAllAvailable(view, s))}
-              style={{ flex: 1, alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}
-            >
-              <Text variant="body-sm" tone="primary" style={{ fontWeight: 600 }}>
-                {vi.reorder.selectAll(availableCount)}
-              </Text>
+          {view && availableCount >= 2 && (
+            // Cùng nhịp với dòng sản phẩm bên dưới (ô 44px + khoảng 10px) để chữ thẳng hàng với ảnh và với web; chữ nhìn thấy ẩn khỏi trình đọc
+            // màn hình (tên của ô đã nằm trong nhãn ẩn) và vẫn chạm được.
+            <div style={{ display: 'flex', alignItems: 'center', gap: ROW_GAP }}>
+              <Checkbox
+                data-testid="reorder-toggle-all"
+                checked={selectionState === 'all'}
+                indeterminate={selectionState === 'some'}
+                onChange={() => setSel((s) => toggleAllAvailable(view, s))}
+              >
+                <span style={SR_ONLY}>{vi.reorder.selectAll(availableCount)}</span>
+              </Checkbox>
+              <div
+                aria-hidden="true"
+                data-testid="reorder-toggle-all-label"
+                onClick={() => setSel((s) => toggleAllAvailable(view, s))}
+                style={{ flex: 1, alignSelf: 'stretch', display: 'flex', alignItems: 'center' }}
+              >
+                <Text variant="body-sm" tone="primary" style={{ fontWeight: 600 }}>
+                  {vi.reorder.selectAll(availableCount)}
+                </Text>
+              </div>
             </div>
-          </div>
-        )}
-        {lines.map((line) => (
-          <ReorderLineRow
-            key={line.key}
-            line={line}
-            value={sel[line.key]}
-            inCart={view ? unitsSharingCartLine(view, sel, cart, line) : 0}
-            onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))}
-          />
-        ))}
-      </div>
-    </BottomSheet>
+          )}
+          {lines.map((line) => (
+            <ReorderLineRow
+              key={line.key}
+              line={line}
+              value={sel[line.key]}
+              inCart={view ? unitsSharingCartLine(view, sel, cart, line) : 0}
+              onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))}
+            />
+          ))}
+        </div>
+      </BottomSheet>
+      {subscribeTo && <SuggestedSubscribe suggestion={subscribeTo} onDone={() => setSubscribeTo(null)} />}
+    </>
   );
 }
 

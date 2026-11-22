@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -6,7 +6,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   goSmart: vi.fn(),
   phase: 'guest' as 'guest' | 'authenticated' | 'loading',
-  hasSubscription: false,
+  subscriptions: [] as { status: string }[],
+  getSubscriptions: vi.fn(),
+  getSuggestions: vi.fn(),
+  trackEvent: vi.fn(),
   subscribeDiscountPct: 0.12 as unknown,
   bestSellers: {
     data: [
@@ -22,10 +25,17 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../lib/smart-nav', () => ({ useSmartNavigate: () => mocks.goSmart }));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
-vi.mock('../hooks/use-has-subscription', () => ({
-  useHasSubscription: () => ({ hasSubscription: mocks.hasSubscription, isLoading: false }),
+vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: mocks.getSubscriptions }));
+vi.mock('@tubutree/app-core/api/subscriptions', () => ({ getSubscriptionSuggestions: mocks.getSuggestions }));
+vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
+vi.mock('../components/subscribe-sheet', () => ({
+  SubscribeSheet: (p: { variationId: string; initialWeeks?: number }) => (
+    <div data-testid="subscribe-sheet-stub">
+      {p.variationId} · {p.initialWeeks} tuần
+    </div>
+  ),
 }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: mocks.subscribeDiscountPct }) }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, subscribeDiscountPct: mocks.subscribeDiscountPct }) }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
 vi.mock('../components/subscriptions-panel', () => ({
   SubscriptionsPanel: () => <div data-testid="subscriptions-panel-mock">Gói đang chạy của tôi</div>,
@@ -50,6 +60,11 @@ vi.mock('@tubutree/app-core/queries/browse', () => ({
 
 import SubscriptionsPage from './subscriptions';
 
+const SUGGESTION = {
+  variationId: 'v-giat', productName: 'Nước giặt Tubu', variationName: 'Can 3,8L', slug: 'nuoc-giat', thumbnail: null,
+  unitPrice: 189000, intervalWeeks: 10, lastDeliveredAt: '2026-11-01T00:00:00.000Z',
+};
+
 function mount() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -63,7 +78,9 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.phase = 'guest';
-    mocks.hasSubscription = false;
+    mocks.subscriptions = [];
+    mocks.getSubscriptions.mockImplementation(async () => mocks.subscriptions);
+    mocks.getSuggestions.mockResolvedValue({ enabled: false, items: [] });
     mocks.subscribeDiscountPct = 0.12;
   });
 
@@ -108,10 +125,50 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
 
   it('khách đã đăng nhập và đang có gói thấy ngay lịch định kỳ đang chạy trên kệ sản phẩm', async () => {
     mocks.phase = 'authenticated';
-    mocks.hasSubscription = true;
+    mocks.subscriptions = [{ status: 'ACTIVE' }];
+    mocks.getSuggestions.mockResolvedValue({ enabled: true, items: [SUGGESTION] });
     mount();
-    expect(screen.getByTestId('subscriptions-panel-mock')).toBeInTheDocument();
+    expect(await screen.findByTestId('subscriptions-panel-mock')).toBeInTheDocument();
     expect(await screen.findByText('Nước rửa chén sinh học')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' })).toBeNull();
+    expect(screen.queryByTestId('subscription-suggestion')).toBeNull();
+    expect(mocks.getSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('đang chờ danh sách gói: chưa hiện nút "Xem mục Định kỳ", khách có gói không thấy nút hiện rồi mất', async () => {
+    mocks.phase = 'authenticated';
+    let resolve!: (v: unknown) => void;
+    mocks.getSubscriptions.mockImplementation(() => new Promise((r) => (resolve = r)));
+    mount();
+    await screen.findByText('Nước rửa chén sinh học');
+    expect(screen.queryByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' })).toBeNull();
+    await act(async () => resolve([{ status: 'ACTIVE' }]));
+    expect(await screen.findByTestId('subscriptions-panel-mock')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' })).toBeNull();
+  });
+
+  it('đăng nhập, chưa có gói còn hiệu lực (chỉ gói đã huỷ): gợi ý theo nhịp mua trong khối quyền lợi, chạm mở sheet Đặt định kỳ chọn sẵn chu kỳ', async () => {
+    mocks.phase = 'authenticated';
+    mocks.subscriptions = [{ status: 'CANCELLED' }];
+    mocks.getSuggestions.mockResolvedValue({ enabled: true, items: [SUGGESTION] });
+    mount();
+    const row = await screen.findByTestId('subscription-suggestion');
+    expect(screen.getByTestId('subscription-hero')).toContainElement(row);
+    expect(row).toHaveTextContent('Bạn thường mua Nước giặt Tubu khoảng 10 tuần một lần. Đặt giao định kỳ, giảm 12%');
+    expect(screen.queryByTestId('subscriptions-panel-mock')).toBeNull();
+    fireEvent.click(row);
+    expect(mocks.trackEvent).toHaveBeenCalledWith('subscription_suggestion_accepted', 'miniapp', { intervalWeeks: 10 });
+    expect(await screen.findByTestId('subscribe-sheet-stub')).toHaveTextContent('v-giat · 10 tuần');
+    fireEvent.click(screen.getByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' }));
+    expect(mocks.goSmart).toHaveBeenCalledWith('/orders?tab=subscriptions');
+  });
+
+  it('khách chưa đăng nhập: không gọi danh sách gói hay gợi ý', async () => {
+    mount();
+    await screen.findByText('Nước rửa chén sinh học');
+    expect(mocks.getSubscriptions).not.toHaveBeenCalled();
+    expect(mocks.getSuggestions).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('subscription-suggestion')).toBeNull();
   });
 
   it('loại bỏ sản phẩm đối tác tự gửi (MERCHANT / UNAVAILABLE) khỏi kệ Mua xoay vòng để mọi món đều hỗ trợ Đặt định kỳ', async () => {

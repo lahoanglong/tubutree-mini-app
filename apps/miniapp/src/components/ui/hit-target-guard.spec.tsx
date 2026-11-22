@@ -29,14 +29,16 @@ import { GiftTrialRow } from '../checkout/gift-rows';
 import { PdpRebuyRow } from '../product/pdp-rebuy';
 import { PdpRefillOffer } from '../product/pdp-refill-offer';
 import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
+import { SubscriptionSuggestionRow } from '../reorder/subscription-suggestion';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
+vi.mock('../../services/analytics', () => ({ trackEvent: vi.fn() }));
 
 /**
  * Vùng chạm >= 44x44 (C-021, WCAG 2.5.5) cho mọi phần tử bấm được mà DS v2 dựng. jsdom không có layout,
  * nên đọc kích thước KHAI BÁO: width/height/min* >= 44 trên chính phần tử hoặc cha bọc ngay trên nó,
- * hoặc lớp `tubu-hit-44*` (pseudo-element 44px). Component mới thêm vào danh sách này sẽ bị bắt nếu quên.
+ * hoặc lớp `tubu-hit-44*` (pseudo-element 44px), `touch-target` (min 44x44 trong tokens.css). Component mới thêm vào danh sách này sẽ bị bắt nếu quên.
  */
 const storyProduct = {
   id: 'p', slug: 's', brand: 'Tubu', name: 'Sp', images: [], thumbnail: null, variations: [], certifications: [],
@@ -63,7 +65,7 @@ function declared(el: HTMLElement, axis: 'w' | 'h'): number {
 }
 
 function reaches44(el: HTMLElement): boolean {
-  if (/\btubu-hit-44(-square)?\b/.test(el.className)) return true;
+  if (/\btubu-hit-44(-square)?\b|\btouch-target\b/.test(el.className)) return true;
   for (let node: HTMLElement | null = el; node && node.parentElement !== document.body; node = node.parentElement) {
     if (declared(node, 'w') >= 44 && declared(node, 'h') >= 44) return true;
     // Chiều rộng do bố cục quyết định: nút ZaUI (min-width 120px trong CSS) và hàng <div> block full-width.
@@ -149,6 +151,13 @@ describe('vùng chạm DS v2 >= 44x44', () => {
         }}
         showLocked
         onChoose={() => {}}
+      />
+    )],
+    ['SubscriptionSuggestionRow (dòng gợi ý giao định kỳ)', () => (
+      <SubscriptionSuggestionRow
+        suggestion={{ variationId: 'v', productName: 'Nước giặt', variationName: 'Can 3,8L', slug: 'n', thumbnail: null, unitPrice: 189_000, intervalWeeks: 6, lastDeliveredAt: '2026-11-01T00:00:00.000Z' }}
+        discountFraction={0.12}
+        onAccept={() => {}}
       />
     )],
   ];

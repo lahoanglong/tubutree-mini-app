@@ -1,5 +1,5 @@
 import type { ElementType, ReactNode } from 'react';
-import { ChevronRight, Flame, Gift, Leaf, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Flame, Gift, Leaf, Loader2, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { haptic } from '../../utils/haptic';
@@ -38,6 +38,8 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const actionLabel = action?.label ?? fillCopy('section.seeAll');
   const H = Heading as ElementType;
   const actionLocked = Boolean(action?.onPress && (action.disabled || action.busy));
+  // Đang chạy (vd "Thêm lại tất cả"): vòng xoay thay mũi tên và chữ giữ đậm, khách thấy lệnh đang bay chứ không tưởng nút bị khoá.
+  const actionBusy = Boolean(action?.onPress && action.busy);
   return (
     <div data-testid="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 'var(--section-header-h)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
@@ -97,7 +99,7 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
             border: 'none',
             background: 'transparent',
             cursor: actionLocked ? 'not-allowed' : 'pointer',
-            opacity: actionLocked ? 0.5 : undefined,
+            opacity: actionLocked && !actionBusy ? 0.5 : undefined,
             fontFamily: 'inherit',
             display: 'inline-flex',
             alignItems: 'center',
@@ -109,7 +111,11 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
           }}
         >
           {actionLabel}
-          <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+          {actionBusy ? (
+            <Loader2 data-testid="section-header-spinner" size={16} strokeWidth={1.75} aria-hidden="true" className="ptr-spin" />
+          ) : (
+            <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+          )}
         </button>
       )}
     </div>

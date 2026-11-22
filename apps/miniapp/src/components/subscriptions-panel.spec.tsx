@@ -7,7 +7,10 @@ import type { BottomSheetProps } from './ui/bottom-sheet';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), getSubscriptions: vi.fn(), setSubscriptionStatus: vi.fn(), skipSubscriptionCycle: vi.fn(),
   updateSubscription: vi.fn(), getAddresses: vi.fn(), getWallet: vi.fn(),
+  getSuggestions: vi.fn(), trackEvent: vi.fn(),
 }));
+const NO_SUGGESTIONS = { enabled: false, items: [] };
+mocks.getSuggestions.mockResolvedValue(NO_SUGGESTIONS);
 // Bọc BottomSheet để đọc props mới nhất (open/dismissible/onClose): guard `onClose` của sheet giữ chân không có đường bấm nào chạm tới
 // khi `dismissible=false` đã ẩn nút X, nên chỉ gọi thẳng onClose mới chứng minh được nó.
 const sheetSpy = vi.hoisted(() => ({
@@ -43,6 +46,15 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../services/account-api', () => ({ getWallet: mocks.getWallet }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('@tubutree/app-core/api/subscriptions', () => ({ getSubscriptionSuggestions: mocks.getSuggestions }));
+vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
+vi.mock('./subscribe-sheet', () => ({
+  SubscribeSheet: (p: { variationId: string; initialWeeks?: number }) => (
+    <div data-testid="subscribe-sheet-stub">
+      {p.variationId} · {p.initialWeeks} tuần
+    </div>
+  ),
+}));
 
 import { haptic } from '../utils/haptic';
 import { HttpError } from '../services/http';
@@ -63,6 +75,46 @@ function renderPanel() {
 const ADDR = (id: string, street: string) => ({
   id, recipient: 'Lan', phone: '0900000000', province: 'HCM', district: 'Q.1', ward: 'P.1', street,
   provinceCode: '79', districtCode: '760', wardCode: '1', isDefault: id === 'a1',
+});
+
+describe('SubscriptionsPanel: gợi ý giao định kỳ theo nhịp mua', () => {
+  const SUGGESTION = {
+    variationId: 'v-giat', productName: 'Nước giặt Tubu', variationName: 'Can 3,8L', slug: 'nuoc-giat', thumbnail: null,
+    unitPrice: 189000, intervalWeeks: 8, lastDeliveredAt: '2026-11-01T00:00:00.000Z',
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSuggestions.mockResolvedValue({ enabled: true, items: [SUGGESTION] });
+  });
+  afterEach(() => mocks.getSuggestions.mockResolvedValue(NO_SUGGESTIONS));
+
+  it('chưa có gói đang chạy hay tạm dừng (chỉ gói đã huỷ): dòng gợi ý theo nhịp mua; chạm mở sheet Đặt định kỳ chọn sẵn 8 tuần', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, status: 'CANCELLED' }]);
+    renderPanel();
+    const row = await screen.findByTestId('subscription-suggestion');
+    expect(row).toHaveTextContent('Bạn thường mua Nước giặt Tubu khoảng 8 tuần một lần. Đặt giao định kỳ, giảm 12%');
+    fireEvent.click(row);
+    expect(mocks.trackEvent).toHaveBeenCalledWith('subscription_suggestion_accepted', 'miniapp', { intervalWeeks: 8 });
+    expect(await screen.findByTestId('subscribe-sheet-stub')).toHaveTextContent('v-giat · 8 tuần');
+  });
+
+  it('chưa có gói nào: dòng gợi ý nằm trên khối trống (khối trống vẫn còn)', async () => {
+    mocks.getSubscriptions.mockResolvedValue([]);
+    renderPanel();
+    const row = await screen.findByTestId('subscription-suggestion');
+    const empty = screen.getByRole('button', { name: 'Khám phá sản phẩm' });
+    expect(row.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('đang có gói chạy: không hỏi gợi ý, không có dòng gợi ý', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    renderPanel();
+    expect(await screen.findByText('Nước xả vải Tubu')).toBeInTheDocument();
+    expect(mocks.getSuggestions).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('subscription-suggestion')).toBeNull();
+  });
 });
 
 describe('SubscriptionsPanel', () => {

@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { Page } from 'zmp-ui';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
+import type { SubscriptionSuggestion } from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PullToRefresh } from '../components/pull-to-refresh';
+import { SubscriptionSuggestionRow, SuggestedSubscribe, useSubscriptionSuggestion } from '../components/reorder/subscription-suggestion';
 import { SubscriptionsPanel } from '../components/subscriptions-panel';
 import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -11,11 +14,12 @@ import { PageHeader } from '../components/ui/page-header';
 import { ProductGrid } from '../components/ui/product-grid';
 import { Heading, Text } from '../components/ui/text';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { useHasSubscription } from '../hooks/use-has-subscription';
+import { hasLiveSubscription } from '../hooks/use-has-subscription';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { getLoadErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
+import { getSubscriptions } from '../services/subscriptions-api';
 import { uniqueById } from '../utils/unique-by-id';
 import '../css/ecosystem-hub.css';
 
@@ -31,7 +35,12 @@ export default function SubscriptionsPage() {
   const cfg = usePublicConfig();
   // Số trên màn phải đúng số máy chủ tính: cấu hình thiếu hay sai thì không nêu số, không tự đặt sàn.
   const pct = subscribePct(cfg.subscribeDiscountPct);
-  const { hasSubscription } = useHasSubscription(authed);
+  // Đọc thẳng danh sách gói (cùng khoá với tab Định kỳ): `useHasSubscription` chỉ gọi API khi Mini App tắt lối tạo gói, nên khi cờ bật nó luôn báo "chưa có".
+  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed });
+  const hasSubscription = hasLiveSubscription(subsQ.data);
+  const noOpenSub = authed && subsQ.isSuccess && !hasSubscription;
+  const { suggestion, discountFraction } = useSubscriptionSuggestion(noOpenSub);
+  const [subscribeTo, setSubscribeTo] = useState<SubscriptionSuggestion | null>(null);
 
   const products = useInfiniteQuery(bestSellersListQuery(coreHttp, undefined));
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []).filter(
@@ -64,7 +73,10 @@ export default function SubscriptionsPage() {
           <Text variant="caption" tone="secondary" as="p">
             Chọn sản phẩm bên dưới, mở chi tiết món và bấm Đặt định kỳ để bắt đầu.
           </Text>
-          {authed && !hasSubscription && (
+          {noOpenSub && suggestion && (
+            <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={setSubscribeTo} />
+          )}
+          {authed && !subsQ.isLoading && !hasSubscription && (
             <div>
               <Button variant="secondary" size="md" className="tubu-subs-cta" onPress={() => goSmart('/orders?tab=subscriptions')}>
                 Xem mục Định kỳ trong Đơn hàng
@@ -106,6 +118,7 @@ export default function SubscriptionsPage() {
           )}
         </section>
       </div>
+      {subscribeTo && <SuggestedSubscribe suggestion={subscribeTo} onDone={() => setSubscribeTo(null)} />}
     </Page>
   );
 }

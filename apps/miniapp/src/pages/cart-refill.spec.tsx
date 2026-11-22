@@ -124,6 +124,8 @@ describe('Giỏ Mini: đổi dòng chai sang gói Refill (catalog.refill_first_e
     expect(mocks.pairs).toHaveBeenCalledWith(['p-bottle']);
     expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Tiết kiệm 550.000đ');
     expect(screen.getByText('Tiết kiệm 550.000đ').style.fontVariantNumeric).toBe('tabular-nums');
+    // Chạm lần đầu mở hộp xác nhận: trình đọc màn hình biết trước (như web).
+    expect(link()).toHaveAttribute('aria-haspopup', 'dialog');
     expect(trackEvent).toHaveBeenCalledWith('refill_swap_shown', 'miniapp', { surface: 'cart' });
 
     fireEvent.click(link()!);
@@ -176,11 +178,22 @@ describe('Giỏ Mini: đổi dòng chai sang gói Refill (catalog.refill_first_e
     renderPage();
     await waitFor(() => expect(link()).not.toBeNull());
     expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Tiết kiệm 550.000đ');
+    expect(link()).not.toHaveAttribute('aria-haspopup');
     fireEvent.click(link()!);
     expect(await screen.findByText('Đã đổi sang Refill')).toBeInTheDocument();
     expect(screen.queryByText('Đổi sang Refill?')).toBeNull();
     expect(mocks.addToCart).toHaveBeenCalledWith('v-refill', 1);
     expect(mocks.removeCartItem).toHaveBeenCalledWith('ci-bottle');
+  });
+
+  it('gói Refill do gian hàng tự giao không bao giờ góp vào mốc Miễn phí giao hàng của Tubu: hộp xác nhận không hứa "Giỏ sẽ đủ"', async () => {
+    mocks.pairs.mockResolvedValue({ 'p-bottle': { ...OFFER, tubu: false } });
+    renderPage();
+    await waitFor(() => expect(link()).not.toBeNull());
+    fireEvent.click(link()!);
+    expect(await screen.findByText('Đổi sang Refill?')).toBeInTheDocument();
+    expect(document.body.textContent).toContain('Dòng này tăng 530.000đ.');
+    expect(document.body.textContent).not.toContain('Giỏ sẽ đủ Miễn phí giao hàng');
   });
 
   it('đổi làm giỏ rơi dưới mốc Miễn phí giao hàng: hộp xác nhận nói trước số còn thiếu', async () => {

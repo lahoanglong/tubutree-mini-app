@@ -37,17 +37,20 @@ export function SubscribeSheet({
   onClose,
   variationId,
   quantity,
+  initialWeeks = 4,
 }: {
   visible: boolean;
   onClose: () => void;
   variationId: string;
   quantity: number;
+  /** Chu kỳ chọn sẵn khi sheet dựng (gợi ý theo nhịp mua chọn sẵn nhịp đó). */
+  initialWeeks?: number;
 }) {
   const t = vi.subscriptions;
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [weeks, setWeeks] = useState(4);
+  const [weeks, setWeeks] = useState(initialWeeks);
   const [startMode, setStartMode] = useState<'now' | 'date'>('now');
   const [startDate, setStartDate] = useState('');
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>('COD');

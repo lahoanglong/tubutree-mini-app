@@ -41,7 +41,7 @@ describe('SectionHeader', () => {
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
-  it('action.onPress khoá (disabled hoặc busy): nút disabled, mờ, con trỏ not-allowed; busy thêm aria-busy; bấm không gọi onPress và không rung', () => {
+  it('action.onPress khoá (disabled hoặc busy): nút disabled, con trỏ not-allowed; disabled thì mờ, busy giữ đậm kèm vòng xoay và aria-busy; bấm không gọi onPress và không rung', () => {
     const onPress = vi.fn();
     const action = { label: 'Thêm lại tất cả', spoken: 'Thêm lại tất cả 3 món', onPress };
     const { rerender } = render(<SectionHeader title="Mua lại" action={{ ...action, disabled: true }} />);
@@ -50,13 +50,18 @@ describe('SectionHeader', () => {
     expect(btn).not.toHaveAttribute('aria-busy');
     expect(btn.style.opacity).toBe('0.5');
     expect(btn.style.cursor).toBe('not-allowed');
+    expect(screen.queryByTestId('section-header-spinner')).toBeNull();
     fireEvent.click(btn);
     rerender(<SectionHeader title="Mua lại" action={{ ...action, busy: true }} />);
     btn = screen.getByRole('button', { name: 'Thêm lại tất cả 3 món' });
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute('aria-busy', 'true');
-    expect(btn.style.opacity).toBe('0.5');
+    expect(btn.style.opacity).toBe('');
     expect(btn.style.cursor).toBe('not-allowed');
+    const spinner = screen.getByTestId('section-header-spinner');
+    expect(btn).toContainElement(spinner);
+    expect(spinner).toHaveAttribute('aria-hidden', 'true');
+    expect(spinner.getAttribute('class')).toContain('ptr-spin');
     fireEvent.click(btn);
     expect(onPress).not.toHaveBeenCalled();
     expect(haptic).not.toHaveBeenCalled();

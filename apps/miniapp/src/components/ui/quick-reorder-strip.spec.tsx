@@ -82,7 +82,11 @@ describe('QuickReorderStrip (Mini)', () => {
     const onAdd = vi.fn();
     const onAddAll = vi.fn();
     render(<QuickReorderStrip items={ITEMS} busyKey="v1" onAdd={onAdd} onAddAll={onAddAll} onOpen={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Thêm Món 1 vào giỏ/ })).toHaveAttribute('aria-busy', 'true');
+    const busy = screen.getByRole('button', { name: /Thêm Món 1 vào giỏ/ });
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    // Vòng xoay của ZaUI chỉ vẽ khi nút loading mà không disabled: thẻ đang thêm phải thấy nó.
+    expect(busy).not.toBeDisabled();
+    expect(busy.querySelector('.zaui-btn-loading-container')).not.toBeNull();
     const other = screen.getByRole('button', { name: /Thêm Món 2 vào giỏ/ });
     expect(other).toBeDisabled();
     fireEvent.click(other);
@@ -103,6 +107,7 @@ describe('QuickReorderStrip (Mini)', () => {
     const addAllBtn = screen.getByRole('button', { name: /Thêm lại tất cả 3 món/ });
     expect(addAllBtn).toBeDisabled();
     expect(addAllBtn).toHaveAttribute('aria-busy', 'true');
+    expect(addAllBtn).toContainElement(screen.getByTestId('section-header-spinner'));
     fireEvent.click(addAllBtn);
     expect(onAddAll).not.toHaveBeenCalled();
   });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries } from '@tanstack/react-query';
 import { CheckCircle2, ChevronRight, Copy, Repeat } from 'lucide-react';
@@ -11,6 +11,7 @@ import { formatVnd } from '../../utils/format';
 import { isRetailOnly } from '../../utils/retail-only';
 import { checkoutEtaLabel, etaSchedule, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { OrderZaloFriend } from './order-zalo';
 import { vi } from '../../i18n/vi';
 import { SubscribeSheet } from '../subscribe-sheet';
@@ -23,6 +24,9 @@ import { KeyValueRow } from '../ui/key-value-row';
 import { Heading, Text } from '../ui/text';
 
 const MAX_SUBSCRIBE_CHECKS = 3;
+
+// Lời mời bạn (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật.
+const OrderInviteNudge = lazy(() => import('../referral/order-invite-nudge'));
 
 export interface SubscribeCandidate {
   variationId: string;
@@ -265,6 +269,12 @@ export function OrderSuccess({
             {vi.success.subscribeCta}
           </Button>
         </Card>
+      )}
+
+      {referralViralOn(cfg) && (
+        <Suspense fallback={null}>
+          <OrderInviteNudge />
+        </Suspense>
       )}
 
       {candidate && (

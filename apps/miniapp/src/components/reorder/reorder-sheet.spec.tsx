@@ -23,6 +23,12 @@ vi.mock('../../services/buy-flow-events', () => ({
   trackReorderCompleted: mocks.trackReorderCompleted,
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+// Gợi ý giao định kỳ có spec riêng (subscription-suggestion.spec.tsx); ở đây không có gợi ý và không gọi mạng.
+vi.mock('./subscription-suggestion', () => ({
+  useSubscriptionSuggestion: () => ({ suggestion: null, discountFraction: 0 }),
+  SubscriptionSuggestionRow: () => null,
+  SuggestedSubscribe: () => null,
+}));
 vi.mock('../ui/form', async (importOriginal) => {
   const actual = await importOriginal<typeof UiForm>();
   return {
