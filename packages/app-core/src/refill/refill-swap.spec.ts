@@ -119,6 +119,19 @@ describe('refillSwapOffers', () => {
     expect(run({ lines, milestones: { ...NONE, freeship: { base: 120_000, threshold: 199_000, reached: false, tubuOnly: false } } }).get('l1')!.gain).toBeNull();
   });
 
+  it('giỏ toàn hàng Tubu, gói Refill do gian hàng tự giao: sau khi đổi giỏ chỉ còn tính phần Tubu, không hứa Miễn phí giao hàng', () => {
+    const lines = [line({ id: 'l1', productId: 'p-bottle' })];
+    const vendor = { 'p-bottle': offer({ price: 650_000, sizeLabel: '10L', tubu: false }) };
+    expect(run({ lines, pairs: vendor, milestones: { ...NONE, freeship: { base: 120_000, threshold: 199_000, reached: false, tubuOnly: false } } }).get('l1')!.gain).toBeNull();
+  });
+
+  it('quà 0đ đang được tặng: lựa chọn quà cao hơn vào tầm không phải "Giỏ sẽ đủ nhận quà" (mỗi đơn một quà)', () => {
+    const lines = [line({ id: 'l1', productId: 'p-bottle' })];
+    const big = { 'p-bottle': offer({ price: 650_000, sizeLabel: '10L' }) };
+    const options = [GIFT.options[0]!, { ...GIFT.options[0]!, variationId: 'g2', minOrder: 500_000, unlocked: false }];
+    expect(run({ lines, pairs: big, milestones: { ...NONE, giftTrial: { ...GIFT, base: 320_000, options } } }).get('l1')!.gain).toBeNull();
+  });
+
   it('tên không ghi lượng thì "Refill"', () => {
     const v = run({ lines: [line({ id: 'l1', productId: 'p-bottle' })], pairs: { 'p-bottle': offer({ sizeLabel: null }) } }).get('l1')!;
     expect(v.label).toBe('Đã có chai? Đổi sang Refill · 95.000đ');
@@ -162,6 +175,15 @@ describe('refillSwapOffers', () => {
       lines: [line({ id: 'l1', productId: 'p-bottle' }), line({ id: 'l2', productId: 'p-x', total: 100_000 })],
       pairs: { 'p-bottle': offer({ tubu: false, price: 150_000 }) },
       milestones: { ...NONE, freeship: { base: 220_000, threshold: 199_000, reached: true, tubuOnly: true } },
+    }).get('l1')!;
+    expect(v.warning).toBe('Giỏ sẽ thiếu 99.000đ để Miễn phí giao hàng');
+  });
+
+  it('giỏ toàn hàng Tubu đang đạt Miễn phí giao hàng, gói Refill gian hàng tự giao: báo trước giỏ sẽ thiếu (phần Tubu còn lại)', () => {
+    const v = run({
+      lines: [line({ id: 'l1', productId: 'p-bottle' }), line({ id: 'l2', productId: 'p-x', total: 100_000 })],
+      pairs: { 'p-bottle': offer({ tubu: false, price: 150_000 }) },
+      milestones: { ...NONE, freeship: { base: 220_000, threshold: 199_000, reached: true, tubuOnly: false } },
     }).get('l1')!;
     expect(v.warning).toBe('Giỏ sẽ thiếu 99.000đ để Miễn phí giao hàng');
   });
