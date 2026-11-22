@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dealerReviewLine } from '@tubutree/app-core/dealer-apply-copy';
 import { applyPitch } from '@/lib/dealer-view';
-import { GUEST_ONLY_WHILE_RESTORING } from '@/lib/restoring-swap';
+import { GUEST_ONLY_WHILE_RESTORING, RESTORING_ONLY } from '@/lib/restoring-swap';
 
 type Detail = { slug: string; type: string; isSample?: boolean; collections: { items: unknown[] }[] };
 const state = vi.hoisted(() => ({
@@ -48,8 +48,20 @@ async function ssr(route: () => Promise<ReactElement>) {
   box.innerHTML = html;
   return box;
 }
+/** Ô màn khách (không phải ô bọc link lùi khách, cũng mang lớp này). */
 const guestSlot = (box: HTMLElement) =>
-  Array.from(box.querySelectorAll<HTMLElement>('div')).find((d) => d.className === GUEST_ONLY_WHILE_RESTORING) ?? null;
+  Array.from(box.querySelectorAll<HTMLElement>('div')).find(
+    (d) => d.className === GUEST_ONLY_WHILE_RESTORING && !d.querySelector(':scope > a[data-back-link]'),
+  ) ?? null;
+
+/** Link lùi "← ..." (data-back-link) trong HTML máy chủ, kèm lớp của ô bọc nó: CSS chọn ô nào hiện theo <html data-restoring>. */
+const backLinks = (box: HTMLElement) =>
+  Array.from(box.querySelectorAll<HTMLAnchorElement>('a[data-back-link]')).map((a) => ({
+    href: a.getAttribute('href'),
+    text: a.textContent,
+    slot: (a.parentElement as HTMLElement).className,
+    linkClass: a.className,
+  }));
 
 const store = (slug: string, over: Partial<Detail> = {}): Detail => ({ slug, type: 'CTV', collections: [{ items: [{ id: 'i1' }] }], ...over });
 
@@ -113,5 +125,20 @@ describe('/dai-ly dựng ở máy chủ: số thật của cấu hình công kha
     const guest = guestSlot(await ssr(DealerRoute))!;
     expect(guest.textContent).toContain(`${applyPitch(null)} ${dealerReviewLine(null)}`);
     expect(applyPitch(12)).not.toBe(applyPitch(null));
+  });
+});
+
+describe('/ctv và /dai-ly: link lùi ở máy tính không chớp "← Trang chủ" với người đã đăng nhập', () => {
+  it.each([
+    ['/ctv', CtvRoute],
+    ['/dai-ly', DealerRoute],
+  ] as const)('%s: HTML đầu có link khách (giấu khi <html data-restoring>) và link Tài khoản (chỉ hiện khi đó), cùng kiểu link', async (_path, route) => {
+    const links = backLinks(await ssr(route));
+    expect(links.map(({ href, text, slot }) => ({ href, text, slot }))).toEqual([
+      { href: '/', text: '← Trang chủ', slot: GUEST_ONLY_WHILE_RESTORING },
+      { href: '/tai-khoan', text: '← Tài khoản', slot: RESTORING_ONLY },
+    ]);
+    expect(links[1]!.linkClass).toBe(links[0]!.linkClass);
+    expect(links[0]!.linkClass).toContain('min-h-11');
   });
 });

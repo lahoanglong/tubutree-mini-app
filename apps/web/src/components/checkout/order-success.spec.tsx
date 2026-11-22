@@ -5,7 +5,8 @@ import type { OrderDTO as ShopOrderDTO } from '@/lib/shop-client';
 type OrderDTO = ShopOrderDTO & { pointsEarned?: number };
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
-// Màn "Đặt hàng thành công" của web ở điện thoại = OrderSuccess của Mini App (cùng chữ, cùng điều kiện hiện từng dòng).
+// Màn "Đặt hàng thành công" của web ở điện thoại: cùng chữ và cùng điều kiện hiện từng dòng với OrderSuccess của Mini App; bố cục gọn ở 375×812
+// (nút chính ngay dưới thẻ mã đơn, 3 bước một hàng, gợi ý phụ gom dưới cùng) là của web từ tubu-w18-03, Mini App chưa theo.
 
 const push = vi.hoisted(() => vi.fn());
 const replace = vi.hoisted(() => vi.fn());
@@ -181,6 +182,64 @@ describe('OrderSuccess khổ điện thoại', () => {
   });
 });
 
+describe('OrderSuccess khổ điện thoại gọn ở 375×812 (w18-03)', () => {
+  const after = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const buttonNamed = (root: ParentNode, name: string) =>
+    Array.from(root.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') ?? b.textContent) === name) ?? null;
+
+  it('thứ tự: lời cảm ơn, thẻ mã đơn + tiền (tổng, tiền mặt COD, điểm, Giao dự kiến), rồi ngay hai nút; Tiếp theo và gợi ý phụ nằm dưới nút', async () => {
+    apiFetch.mockResolvedValue({ variations: [{ id: 'v1', stock: 5 }] });
+    const m = mount(
+      order({ paymentMethod: 'COD', pointsEarned: 20, items: [{ productSlug: 'a', variationId: 'v1', quantity: 1, productName: 'SP a' }] } as unknown as Partial<OrderDTO>),
+      '02/10 – 04/10',
+    );
+    await flush();
+    const h1 = m.querySelector('h1')!;
+    const code = leaf(m, 'TB-9')!;
+    const track = buttonNamed(m, 'Theo dõi đơn')!;
+    const keep = buttonNamed(m, 'Tiếp tục mua sắm')!;
+    const steps = m.querySelector('section[aria-label="Tiếp theo"]')!;
+    const extras = m.querySelector('section[aria-label="Thêm cho đơn này"]')!;
+    expect(after(h1, code) && after(code, track) && after(track, keep) && after(keep, steps) && after(steps, extras)).toBe(true);
+    for (const text of ['Tổng thanh toán', 'Chuẩn bị tiền mặt khi nhận hàng', '+20 điểm, về khi đơn giao xong', '02/10 – 04/10']) {
+      expect(after(leaf(m, text)!, track), text).toBe(true);
+    }
+    const subscribe = Array.from(m.querySelectorAll('button')).filter((b) => b.textContent?.includes('Đặt định kỳ'));
+    expect(subscribe).toHaveLength(1);
+    expect(extras.contains(subscribe[0]!)).toBe(true);
+  });
+
+  it('đơn tách: danh sách từng đơn nằm dưới hai nút, mã và tổng cả lần đặt vẫn ở thẻ đầu', () => {
+    const m = mount(order({ code: 'TB-1', splitOrders: SPLIT }));
+    const track = buttonNamed(m, 'Theo dõi đơn')!;
+    const list = m.querySelector('section[aria-label="Đơn cùng lần đặt"]')!;
+    expect(after(track, list)).toBe(true);
+    expect(after(leaf(m, 'Tổng 2 đơn')!, track)).toBe(true);
+    expect(after(leaf(m, 'TB-2')!, track)).toBe(true);
+  });
+
+  it('3 bước Tiếp theo thành một hàng: số và tên bước hiện, câu giải thích chỉ cho trình đọc màn hình', () => {
+    const m = mount(order());
+    const items = Array.from(m.querySelectorAll('section[aria-label="Tiếp theo"] li'));
+    expect(items).toHaveLength(3);
+    expect(m.querySelector('section[aria-label="Tiếp theo"] ol')?.className).toContain('grid-cols-3');
+    expect(items.map((li) => li.querySelector('.sr-only')?.textContent)).toEqual([
+      ': Tubu kiểm tra và xác nhận đơn của bạn.',
+      ': Sản phẩm được đóng gói cẩn thận.',
+      ': Đơn vị vận chuyển giao tới địa chỉ của bạn.',
+    ]);
+  });
+
+  it('không nút nào trùng tên; không có gợi ý phụ thì nhóm gợi ý rỗng và tự ẩn', () => {
+    const m = mount(order({ code: 'TB-1', splitOrders: SPLIT, paymentMethod: 'COD' }));
+    const names = Array.from(m.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(new Set(names).size).toBe(names.length);
+    const extras = m.querySelector('section[aria-label="Thêm cho đơn này"]')!;
+    expect(extras.childElementCount).toBe(0);
+    expect(extras.className).toContain('empty:hidden');
+  });
+});
+
 describe('OrderSuccess từ md giữ màn máy tính, thêm các dòng thông tin', () => {
   const desktop = (o: OrderDTO, etaLabel: string | null = null) => {
     const r = render(<OrderSuccess order={o} etaLabel={etaLabel} continueHref="/" />);
@@ -199,6 +258,15 @@ describe('OrderSuccess từ md giữ màn máy tính, thêm các dòng thông ti
     expect(d.textContent).toContain('+20 điểm');
     expect(d.textContent).toContain('Giao dự kiến');
     expect(d.textContent).toContain('02/10');
+  });
+
+  it('hàng nút nằm trước 3 bước Tiếp theo (nút chính trong màn đầu 1280×800); điểm ghi một lần như khổ điện thoại', () => {
+    const d = desktop(order({ paymentMethod: 'COD', pointsEarned: 20 }));
+    const track = byText(d, 'a', 'Theo dõi đơn')!;
+    const steps = d.querySelector('section[aria-label="Tiếp theo"]')!;
+    expect(track.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(d.textContent).toContain('Điểm Xanh sẽ nhận: +20 điểm, về khi đơn giao xong');
+    expect(d.textContent).not.toContain('sẽ về tay');
   });
 
   it('đơn tách dùng chữ Mini App', () => {

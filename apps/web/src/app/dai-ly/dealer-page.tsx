@@ -57,7 +57,7 @@ export default function DealerPage({ guestLanding }: { guestLanding?: ReactNode 
   }
   if (phase === 'guest') {
     return (
-      <DealerShell title={TITLE} guest>
+      <DealerShell title={TITLE} guest restoring={!hydrated}>
         <div className={hydrated ? undefined : GUEST_ONLY_WHILE_RESTORING}>{guestLanding ?? <DealerGuestLandingLive />}</div>
         {!hydrated && (
           <div className={RESTORING_ONLY} aria-hidden="true">

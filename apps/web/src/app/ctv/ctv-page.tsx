@@ -60,7 +60,7 @@ import {
   PAYOUT_META,
   WITHDRAWING_META,
 } from '@/components/affiliate/ctv-copy';
-import BackLink from '@/components/back-link';
+import BackLink, { RestoringBackLink } from '@/components/back-link';
 import { PartnerEarnNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
@@ -83,21 +83,26 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+const GUEST_BACK = { href: '/', label: '← Trang chủ' } as const;
+const MEMBER_BACK = { href: '/tai-khoan', label: '← Tài khoản' } as const;
+
+/** `restoring`: màn khách chưa hydrate (HTML máy chủ); máy còn cờ phiên thì link lùi đã là của người đăng nhập (`RestoringBackLink`). */
 function Shell({
   children,
   narrow = false,
   guest = false,
+  restoring = false,
 }: {
   children: ReactNode;
   narrow?: boolean;
   guest?: boolean;
+  restoring?: boolean;
 }) {
-  const backHref = guest ? '/' : '/tai-khoan';
+  const back = guest ? GUEST_BACK : MEMBER_BACK;
+  const backHref = back.href;
   return (
     <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6 tabular-nums`}>
-      <BackLink href={backHref}>
-        {guest ? '← Trang chủ' : '← Tài khoản'}
-      </BackLink>
+      {guest && restoring ? <RestoringBackLink guest={GUEST_BACK} member={MEMBER_BACK} /> : <BackLink href={backHref}>{back.label}</BackLink>}
       <PageHeader title={TITLE} parentHref={backHref} className="md:mt-1" />
       <div className="mt-3">
         <PartnerEarnNavPills />
@@ -137,7 +142,7 @@ export default function CtvPage({ guestLanding }: { guestLanding?: ReactNode }) 
   }
   if (phase === 'guest') {
     return (
-      <Shell guest>
+      <Shell guest restoring={!hydrated}>
         <div className={hydrated ? undefined : GUEST_ONLY_WHILE_RESTORING}>{guestLanding ?? <CtvGuestLanding />}</div>
         {!hydrated && (
           <div className={RESTORING_ONLY} aria-hidden="true">
