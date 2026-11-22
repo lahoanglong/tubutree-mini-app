@@ -207,11 +207,11 @@ export interface WasteRequestAdminDetailDTO extends WasteRequestDetailDTO { line
 export interface AdminWasteEventDTO { id: string; createdAt: string; kind: string; actorUserId: string | null; actorRole: WasteActorRole; requestId: string | null; pointId: string | null; giftRedemptionId: string | null; meta: Record<string, unknown> | null }
 export interface WasteReceiveRequest { match?: WasteMatchInput; receivedWeightGrams?: number /* integer 1..100000, outside the replay comparison (spec 15.3) */ }
 export type WasteReceiveResultDTO = { outcome: 'RECEIVED'; requestId: string; receivedAt: string } | { outcome: 'ALREADY_RECEIVED'; receivedAt: string } | { outcome: 'UNMATCHED'; unmatchedId: string; reason: WasteUnmatchedReason };
-/** Vì sao một yêu cầu được gợi ý cho kiện không rõ chủ: trùng mã vận đơn, hoặc cùng SĐT khách với yêu cầu gắn kèm kiện. */
+/** Vì sao một yêu cầu được gợi ý cho kiện không rõ chủ: trùng mã vận đơn đọc trên kiện nhập tay (một khách duy nhất), hoặc cùng SĐT khách với yêu cầu gắn kèm kiện. */
 export type WasteUnmatchedSuggestion = 'TRACKING' | 'PHONE';
 /** Yêu cầu đang chờ nhận (Đang mở/Đang gửi) gợi ý cho một kiện không rõ chủ. Chỉ là gợi ý: nhân viên vẫn bấm khớp từng kiện. */
 export interface WasteUnmatchedCandidateDTO { requestId: string; code: string; method: WasteMethod; status: WasteRequestStatus; basis: WasteUnmatchedSuggestion; customerName: string; customerPhone: string | null; carrier: string | null; trackingCode: string | null; createdAt: string }
-/** `candidates` chỉ có ở kiện đang mở (danh sách mặc định), xếp trùng mã vận đơn trước; kiện TR- tranh chấp không có gợi ý (admin tự quyết). */
+/** `candidates` chỉ có ở kiện đang mở (danh sách mặc định), xếp trùng mã vận đơn trước; kiện TR- tranh chấp và kiện mã vận đơn khớp nhiều yêu cầu không có gợi ý. */
 export interface WasteUnmatchedDTO { id: string; receivedAt: string; createdByUserId: string; carrier: string | null; trackingCode: string | null; description: string; reason: WasteUnmatchedReason; relatedRequestId: string | null; status: WasteUnmatchedStatus; matchedRequestId: string | null; resolvedByUserId: string | null; resolvedAt: string | null; resolveNote: string | null; candidates?: WasteUnmatchedCandidateDTO[] }
 export interface WasteUnmatchedCreateRequest { carrier?: string; trackingCode?: string; description: string }
 /** `suggestion`: khớp bằng một gợi ý; máy chủ kiểm lại gợi ý còn đúng rồi mới nhận kiện. */

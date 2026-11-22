@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { WasteBulkAction, WasteBulkResponse } from '@/lib/admin-waste-bulk-client';
 import { useWasteBulkSelection, WasteBulkBar, wasteBulkSelectable, WasteSelectBox, type WastePick } from './waste-bulk-bar';
@@ -148,6 +149,28 @@ describe('WasteBulkBar', () => {
     click(confirmBtn());
     await flush(10);
     expect(posts()[1]).toEqual({ action: 'MARK_RECEIVED', requestIds: ['r1', 'r2'], dryRun: false });
+  });
+
+  it('after a run that changed something, the queue, open detail, overview counters, unmatched list and inbox all refetch', async () => {
+    const m = mockFetch({ '/admin/waste/requests/bulk-action': (init) => ({ body: respond(JSON.parse(String(init?.body)) as Body, { pickup: ['r1'] }) }) });
+    vi.stubGlobal('fetch', m.fn);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const spy = vi.spyOn(client, 'invalidateQueries');
+    const r = render(<Harness list={reqs(1)} actions={['MARK_RECEIVED']} />, client);
+    mounted.push(r);
+    await flush();
+    click(box(r.container, 'TR-A0001'));
+    await flush();
+    click(byText(bar()!, 'button', /Xem trước/));
+    await flush();
+    click(confirmBtn());
+    await flush(10);
+    expect(spy).not.toHaveBeenCalled();
+    click(byText(dialog()!, 'button', 'Xong'));
+    await flush();
+    expect(spy.mock.calls.map(([f]) => (f as { queryKey: string[] }).queryKey[0]).sort()).toEqual(
+      ['admin-ops-inbox', 'admin-waste-overview', 'admin-waste-request', 'admin-waste-requests', 'admin-waste-unmatched'],
+    );
   });
 
   it('close-lost: picked from the action list, red button, needs a reason that is sent trimmed', async () => {
