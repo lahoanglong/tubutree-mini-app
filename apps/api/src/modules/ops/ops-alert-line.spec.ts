@@ -3,6 +3,7 @@ import { cronAlertError } from './cron-run.service';
 import { clipText, OPS_ALERT_LINE_MAX, OPS_ALERT_SLOT_MAX, OPS_NOTICE_MAX, opsAlertLine, opsAlertSlot, opsText } from './ops-alert-line';
 import { alertWebhookBody, opsProblems, type OpsThresholds, type ProblemInput } from './ops-alerts';
 import { alertEmail } from './ops-email';
+import { OpsHealthService } from './ops-health.service';
 
 /** Điền mẫu như NotificationsService.render: `{{khoá}}` thiếu thì rỗng. */
 function render(code: string, data: Record<string, string>): string {
@@ -38,6 +39,12 @@ describe('opsText: lời tự do trước khi ra khỏi hệ thống', () => {
     expect(out).toContain('[số điện thoại đã ẩn]');
     expect(out).toContain('pos.pages.fm');
     expect(out).toContain('10.0.0.5:6379');
+  });
+
+  it('khoá ngắn có tiền tố (refresh_token=, access_token:) và dạng JSON ("password":"…") cũng bị che', () => {
+    const out = opsText('lỗi refresh_token=abc123XYZ access_token: q9w8e7 body {"password":"hunter22","client_secret": "s3cr3t"} x-api-key=k1');
+    for (const leak of ['abc123XYZ', 'q9w8e7', 'hunter22', 's3cr3t', 'k1']) expect(out).not.toContain(leak);
+    expect(out).toContain('refresh_token');
   });
 
   it('giữ nguyên mã đơn, #id Pancake, tên hàng đợi, giờ, số tiền', () => {
@@ -143,6 +150,20 @@ describe('mọi sự cố của opsProblems: ≤ 180 ký tự, không lộ SĐT/
     const email = alertEmail(m, { appName: 'Tubu Tree', envLabel: 'production' });
     expectClean(email.text);
     expectClean(email.html);
+  });
+
+  it('tin in-app OPS_HEALTH_ALERT (tiêu đề + tóm tắt): ≤ 200 ký tự dù 13 sự cố cùng lúc, nêu số sự cố và tên từng loại còn chỗ', () => {
+    const svc = new OpsHealthService({} as never, { get: () => '' } as never, []);
+    const msg = (kind: 'ALERT', problems: typeof all) =>
+      (svc as unknown as { message(k: 'ALERT', p: typeof all, s: Date | null, n: Date): { title: string; summary: string } }).message(kind, problems, null, new Date());
+    const many = msg('ALERT', all);
+    const body = render('OPS_HEALTH_ALERT', many);
+    expect(body.length).toBeLessThanOrEqual(OPS_NOTICE_MAX);
+    expect(many.summary).toMatch(/^\[Cảnh báo\] 13 sự cố vận hành · Đơn chưa lên Pancake, .+ · Admin › Sức khoẻ hệ thống$/);
+    expectClean(body);
+    const one = msg('ALERT', [all[0]!]);
+    expect(one.summary).toBe(all[0]!.message);
+    expect(render('OPS_HEALTH_ALERT', one).length).toBeLessThanOrEqual(OPS_NOTICE_MAX);
   });
 
   it('một sự cố lạ không dựng bằng opsAlertLine vẫn bị che và cắt ở webhook', () => {

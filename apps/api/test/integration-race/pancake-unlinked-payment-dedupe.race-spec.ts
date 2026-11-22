@@ -5,6 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
+import { OPS_WHERE } from '../../src/modules/ops/ops-alert-line';
 import { createOrder, createUser, warmPool } from './helpers';
 
 /**
@@ -65,7 +66,8 @@ describe('Giữ khoản thanh toán chưa gắn Pancake: hai worker đua cùng c
     expect(after.pancakeAttention).toBeNull();
     const row = await prisma.orderStatusHistory.findFirstOrThrow({ where: { orderId: order.id, actorType: 'PANCAKE' } });
     expect([row.fromStatus, row.toStatus]).toEqual(['CANCELLED', 'CANCELLED']);
-    expect(alerts.alert.mock.calls[0][1]).toContain('Đơn đã huỷ/trả');
+    expect(alerts.alert.mock.calls[0][1]).toContain('cho đơn đã huỷ/trả, KHÔNG tạo khoản hoàn');
+    expect(alerts.alert.mock.calls[0][4]).toBe(OPS_WHERE.paymentUnlinked);
   });
   it('markPaid commit trước khi khoá: bản đơn cũ báo UNPAID nhưng DB đã PAID → không ghi lịch sử, không báo động, không đặt cờ', async () => {
     const user = await createUser(prisma);

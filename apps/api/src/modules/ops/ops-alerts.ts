@@ -281,6 +281,16 @@ export function decideAlert(
   return { send: null, next: { keys, alertSince, alertedAt: prev?.alertedAt ?? null, tracked } };
 }
 
+/**
+ * Tóm tắt cho tin in-app OPS_HEALTH_ALERT ("{{title}}: {{summary}}"), không quá `max`: một sự cố thì đúng dòng của nó; nhiều sự cố thì
+ * `[Cảnh báo] N sự cố vận hành · <tên từng loại> · Admin › Sức khoẻ hệ thống`, vì danh sách đủ nằm ở màn sức khoẻ, webhook và email.
+ */
+export function opsAlertSummary(problems: OpsProblem[], max: number): string {
+  if (problems.length === 1) return clipText(problems[0]!.message, max);
+  const names = problems.map((p) => p.message.replace(/^\[(?:Cảnh báo|Ổn)\] /, '').split(' · ')[0]!);
+  return opsAlertLine({ name: `${problems.length} sự cố vận hành`, detail: names.join(', '), where: OPS_WHERE.health, max });
+}
+
 export interface AlertMessage {
   status: 'ALERT' | 'RECOVERED';
   title: string;

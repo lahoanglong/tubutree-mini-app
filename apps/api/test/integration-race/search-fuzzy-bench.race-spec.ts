@@ -111,15 +111,17 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     await prisma.product.deleteMany({ where: { id: { startsWith: BENCH } } });
     const rows0 = PROD_CATALOG_2026_11_12;
     // 3.000 dòng ẩn hoặc chờ duyệt: trước chỉ mục một phần, chừng này dòng isActive=false làm planner chọn products_isActive_isFeatured_idx
-    // (đỏ khi chạy cả bộ race). Tên dịch vòng 13 chữ để bước khớp chính xác không phải lọc bỏ chúng: số đo p95 chỉ nói về catalog thật.
-    // Mã bắt đầu bằng BENCH nên afterAll xoá cùng.
+    // (đỏ khi chạy cả bộ race). 222 dòng đầu trùng đúng tên món thật (mỗi món một bản ẩn, một bản chờ duyệt): chúng chỉ lọt vào kết quả khi
+    // cả bước gõ sai lẫn bước lọc cuối của CatalogService bỏ điều kiện isActive/approvalStatus; bỏ riêng ở bước gõ sai thì EXPLAIN mất chỉ mục
+    // một phần (assert bên dưới đỏ). Phần còn lại dịch vòng 13 chữ để bước khớp chính xác không phải lọc bỏ hàng nghìn dòng trùng
+    // tên: số đo p95 chỉ nói về catalog thật. Mã bắt đầu bằng BENCH nên afterAll xoá cùng.
     await prisma.product.createMany({
       data: Array.from({ length: 3_000 }, (_, k) => ({
         id: `${DECOY}${String(k).padStart(5, '0')}`,
         pancakeId: `${DECOY}-${k}`,
         brand: 'Bench',
         slug: `${DECOY}-${k}`,
-        name: `${shiftLetters(foldVietnamese(rows0[k % rows0.length]!.name), 13)} an ${k}`,
+        name: k < 2 * rows0.length ? rows0[k % rows0.length]!.name : `${shiftLetters(foldVietnamese(rows0[k % rows0.length]!.name), 13)} an ${k}`,
         description: 'bench',
         basePrice: 100_000,
         isActive: k % 2 === 0 ? false : true,
@@ -175,18 +177,22 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     return { hit, total: queries.length, pct: round1((hit / queries.length) * 100), p95: round1(p95(ms)), misses, decoys };
   }
 
+  // Chỉ chấm dòng của bench: chạy cả bộ race thì bảng còn sản phẩm của suite khác (tên ngẫu nhiên có thể gần từ vô nghĩa), không phải đối tượng đo.
   async function nonsense() {
     let emptyCount = 0;
+    let foreign = 0;
     const ms: number[] = [];
     const leaks: string[] = [];
     for (const q of NONSENSE) {
       const t = performance.now();
       const res = await catalog.list({ page: 1, limit: 20, q });
       ms.push(performance.now() - t);
-      if (res.meta.total === 0) emptyCount++;
-      else leaks.push(`${q} → ${res.meta.total}`);
+      const own = res.data.filter((c: { id: string }) => c.id.startsWith(BENCH)).length;
+      foreign += res.data.length - own;
+      if (own === 0) emptyCount++;
+      else leaks.push(`${q} → ${own}`);
     }
-    return { empty: emptyCount, total: NONSENSE.length, pct: round1((emptyCount / NONSENSE.length) * 100), p95: round1(p95(ms)), leaks };
+    return { empty: emptyCount, total: NONSENSE.length, pct: round1((emptyCount / NONSENSE.length) * 100), p95: round1(p95(ms)), leaks, foreign };
   }
 
   async function explain(q: string, analyze = false): Promise<string> {

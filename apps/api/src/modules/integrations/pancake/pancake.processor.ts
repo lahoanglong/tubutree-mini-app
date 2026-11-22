@@ -8,6 +8,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { GomdonAlertService, PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
+import { OPS_WHERE } from '../../ops/ops-alert-line';
 import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
 import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
@@ -789,7 +790,11 @@ export class PancakeProcessor extends WorkerHost {
       `Chờ đối chiếu: đơn Pancake #${pancakeRef} mang mã ${order.code} báo đã thanh toán (${amount}), nhưng đơn Tubu chưa gắn đúng đơn Pancake nên hệ thống KHÔNG tự xác nhận đã nhận tiền. ` +
       `${next} Kiểm tra đơn Pancake này có phải đơn do Tubu đẩy không.`;
     this.logger.warn(`Đơn ${order.code}: ${reason}`);
-    await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
+    // Tin in-app ngắn: đơn này không ghi pancakeAttention nên không nằm ở hàng "Cần xử lý Pancake"; cách xử lý đủ ở thẻ của tab Hôm nay.
+    const short = closed
+      ? `Pancake #${pancakeRef} báo đã trả ${amount} cho đơn đã huỷ/trả, KHÔNG tạo khoản hoàn`
+      : `Pancake #${pancakeRef} báo đã trả ${amount} nhưng chưa gắn đúng đơn, KHÔNG tự xác nhận`;
+    await this.alerts.alert(order.code, short, PANCAKE_ALERT_TEMPLATE, undefined, OPS_WHERE.paymentUnlinked);
   }
 
   private async recordLatePancakePayment(order: Order, reported: number): Promise<void> {

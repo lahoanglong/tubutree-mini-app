@@ -7,7 +7,7 @@ import type { Env } from '../../config/env.validation';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDateTime } from '../../common/vn-time';
 import { notifyAdmins } from '../../common/notify-admins';
-import { OPS_WHERE, opsAlertLine } from './ops-alert-line';
+import { OPS_NOTICE_MAX, OPS_WHERE, opsAlertLine } from './ops-alert-line';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -31,6 +31,7 @@ import {
   alertWebhookBody,
   decideAlert,
   OPS_THRESHOLD_KEYS,
+  opsAlertSummary,
   opsProblems,
   type AlertMemory,
   type AlertMessage,
@@ -761,7 +762,7 @@ export class OpsHealthService {
     const title = kind === 'ALERT' ? '⚠️ Sự cố vận hành' : '✅ Vận hành đã ổn trở lại';
     const summary =
       kind === 'ALERT'
-        ? problems.map((p) => p.message).join('; ')
+        ? opsAlertSummary(problems, OPS_NOTICE_MAX - title.length - 2)
         : opsAlertLine({
             tone: 'OK',
             name: 'Hết sự cố vận hành',
