@@ -41,14 +41,41 @@ const bar = () => document.querySelector<HTMLElement>('[data-bulk-bar]');
 const dialog = () => document.querySelector<HTMLElement>('[data-bulk-dialog]');
 const button = (root: ParentNode | null, text: string | RegExp) => byText(root ?? document, 'button', text) as HTMLButtonElement | null;
 
-function respond(body: { orderIds: string[]; targetStatus: BulkStatusTarget; dryRun: boolean }, blocked: Record<string, string>): BulkStatusResponse {
-  const results = body.orderIds.map((id) => ({ id, code: id.replace('id-', 'TB').padEnd(6, '0'), from: 'CONFIRMED', ok: !blocked[id], reason: blocked[id] ?? null }));
+function respond(
+  body: { orderIds: string[]; targetStatus: BulkStatusTarget; dryRun: boolean },
+  blocked: Record<string, string>,
+  skipped: (dryRun: boolean) => Record<string, string> = () => ({}),
+): BulkStatusResponse {
+  const skip = skipped(body.dryRun);
+  const results = body.orderIds.map((id) => {
+    const code = id.replace('id-', 'TB').padEnd(6, '0');
+    if (skip[id]) return { id, code, from: 'CONFIRMED', ok: false, outcome: 'SKIPPED' as const, reason: skip[id]! };
+    if (blocked[id]) return { id, code, from: 'CONFIRMED', ok: false, outcome: 'FAILED' as const, reason: blocked[id]! };
+    return { id, code, from: 'CONFIRMED', ok: true, outcome: body.dryRun ? ('READY' as const) : ('UPDATED' as const), reason: null };
+  });
   const okCount = results.filter((r) => r.ok).length;
-  return { dryRun: body.dryRun, targetStatus: body.targetStatus, total: results.length, okCount, failedCount: results.length - okCount, results, auditLogId: body.dryRun ? null : 'log-1', auditError: null };
+  const skippedCount = results.filter((r) => r.outcome === 'SKIPPED').length;
+  return {
+    dryRun: body.dryRun,
+    targetStatus: body.targetStatus,
+    total: results.length,
+    okCount,
+    skippedCount,
+    failedCount: results.length - okCount - skippedCount,
+    results,
+    auditLogId: body.dryRun ? null : 'log-1',
+    auditError: null,
+  };
 }
 
-async function mount(list: BulkPick[], targets: BulkStatusTarget[], blocked: Record<string, string> = {}, onRowClick?: () => void) {
-  const m = mockFetch({ '/admin/orders/bulk-status': (init) => ({ body: respond(JSON.parse(String(init?.body)), blocked) }) });
+async function mount(
+  list: BulkPick[],
+  targets: BulkStatusTarget[],
+  blocked: Record<string, string> = {},
+  onRowClick?: () => void,
+  skipped?: (dryRun: boolean) => Record<string, string>,
+) {
+  const m = mockFetch({ '/admin/orders/bulk-status': (init) => ({ body: respond(JSON.parse(String(init?.body)), blocked, skipped) }) });
   vi.stubGlobal('fetch', m.fn);
   const r = render(<Harness list={list} targets={targets} onRowClick={onRowClick} />);
   mounted.push(r);
@@ -146,8 +173,62 @@ describe('OrderBulkBar', () => {
     expect(posts()[1]).toEqual({ orderIds: ['id-1'], targetStatus: 'CANCELLED', dryRun: false, note: 'Khách đổi ý' });
   });
 
+  it('đơn đã ở đích là bỏ qua (chữ xám, không tính vào đơn bị giữ); lượt thật có đơn người khác vừa đổi trước thì báo bỏ qua, không báo đã đổi', async () => {
+    const skipped = (dryRun: boolean): Record<string, string> =>
+      dryRun ? { 'id-2': 'Đơn TB0002 đã ở «Đã đóng gói», không cần đổi.' } : { 'id-1': 'Đơn TB0001 vừa được thao tác khác đổi sang «Đã đóng gói», lượt này không đổi.' };
+    const { c, posts } = await mount(orders(3), ['PACKED'], { 'id-3': 'Đơn TB0003 chưa thanh toán: chưa đóng gói được.' }, undefined, skipped);
+    for (const code of ['TB0001', 'TB0002', 'TB0003']) click(box(c, code));
+    await flush();
+    click(button(bar(), /Xem trước/));
+    await flush();
+    const d = dialog()!;
+    expect(d.querySelector('[data-bulk-summary]')!.textContent).toBe('1 đơn đổi được, 1 đơn đã ở «Đã đóng gói» (bỏ qua), 1 đơn bị giữ lại (không đổi).');
+    const skippedRow = d.querySelector<HTMLElement>('[data-outcome="SKIPPED"]')!;
+    expect(skippedRow.textContent).toContain('không cần đổi');
+    expect(skippedRow.querySelector('span:last-child')!.className).toContain('text-stone-600');
+    expect(d.querySelector<HTMLElement>('[data-outcome="FAILED"] span:last-child')!.className).toContain('text-danger-fg');
+
+    click(d.querySelector('[data-bulk-confirm]'));
+    await flush();
+    expect(posts()[1]).toEqual({ orderIds: ['id-1'], targetStatus: 'PACKED', dryRun: false });
+    expect(dialog()!.querySelector('[data-bulk-summary]')!.textContent).toBe('Đã đổi 0 đơn, 2 đơn đã ở «Đã đóng gói» (bỏ qua), 1 đơn không đổi được.');
+    expect([...dialog()!.querySelectorAll('[data-bulk-results] li')].map((li) => li.getAttribute('data-outcome'))).toEqual(['SKIPPED', 'SKIPPED', 'FAILED']);
+    click(button(dialog(), 'Xong'));
+    await flush();
+    expect(bar()).toBeNull();
+  });
+
+  it('đơn đã ở đích từ lúc xem trước, lượt thật không đổi được đơn nào: đóng hộp không tải lại, giữ nguyên lựa chọn', async () => {
+    let real = 0;
+    const m = mockFetch({
+      '/admin/orders/bulk-status': (init) => {
+        const body = JSON.parse(String(init?.body));
+        if (!body.dryRun) real += 1;
+        const blocked: Record<string, string> = body.dryRun ? {} : { 'id-1': 'Đơn TB0001 vừa chuyển sang Đang giao.' };
+        return { body: respond(body, blocked, (dryRun) => (dryRun ? { 'id-2': 'Đơn TB0002 đã ở «Đã đóng gói», không cần đổi.' } : {})) };
+      },
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<Harness list={orders(2)} targets={['PACKED']} />);
+    mounted.push(r);
+    await flush();
+    click(box(r.container, 'TB0001'));
+    click(box(r.container, 'TB0002'));
+    await flush();
+    click(button(bar(), /Xem trước/));
+    await flush();
+    click(dialog()!.querySelector('[data-bulk-confirm]'));
+    await flush();
+    expect(real).toBe(1);
+    expect(dialog()!.querySelector('[data-bulk-summary]')!.textContent).toBe('Đã đổi 0 đơn, 1 đơn đã ở «Đã đóng gói» (bỏ qua), 1 đơn không đổi được.');
+    click(button(dialog(), 'Xong'));
+    await flush();
+    expect(dialog()).toBeNull();
+    expect(bar()!.textContent).toContain('Đã chọn 2/50 đơn');
+  });
+
   it('mọi đơn đều bị giữ lại thì không có gì để xác nhận; Escape đóng hộp và giữ nguyên lựa chọn', async () => {
-    const { c, posts } = await mount(orders(1), ['PACKED'], { 'id-1': 'Đơn TB0001 đã ở «Đã đóng gói», không cần đổi.' });
+    const { c, posts } = await mount(orders(1), ['PACKED'], { 'id-1': 'Đơn TB0001 chưa thanh toán: chưa đóng gói được.' });
     click(box(c, 'TB0001'));
     await flush();
     click(button(bar(), /Xem trước/));

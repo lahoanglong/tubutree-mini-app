@@ -119,6 +119,11 @@ const HANDOVER_ASKER: Record<'CUSTOMER' | 'STAFF' | 'SYSTEM', string> = {
 export interface SetStatusOutcome {
   /** true khi chính lần gọi này thắng lần lật trạng thái. */
   flipped: boolean;
+  /**
+   * setStatus ghi: true chỉ khi câu `updateMany` có điều kiện của CHÍNH lần gọi này đổi dòng đơn (count 1). Khác `flipped` (người gọi tay
+   * khởi tạo true để lần bấm lặp vào đơn đã ở đúng đích vẫn là thành công): đơn đã ở đích từ trước, hay lần gọi khác thắng cuộc đua, thì false.
+   */
+  changed?: boolean;
   /** Lý do chờ Kế toán lần lật này vừa ghi lên đơn (COD chưa thu, hoàn tay sau Pancake 15), để báo ADMIN đúng một lần. */
   heldReasons: string[];
 }
@@ -247,6 +252,7 @@ export class OrderStatusService {
       customerReason?: string;
     } = {},
   ) {
+    if (opts.outcome) opts.outcome.changed = false;
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: orderId }, { code: orderId }] },
       include: { items: true },
@@ -452,6 +458,7 @@ export class OrderStatusService {
     });
     if (opts.outcome) {
       opts.outcome.flipped = won;
+      opts.outcome.changed = won;
       opts.outcome.heldReasons = heldReasons;
     }
     if (!won) {

@@ -60,6 +60,10 @@ export type OrderBulkSelection = ReturnType<typeof useOrderBulkSelection>;
 
 const stop = (e: MouseEvent) => e.stopPropagation();
 
+/** Đơn đã ở trạng thái đích (từ trước, hoặc người khác vừa đổi trước) là bỏ qua, không gộp vào số đơn lỗi. */
+const skippedText = (r: Pick<BulkStatusResponse, 'skippedCount'>, target: BulkStatusTarget) =>
+  r.skippedCount ? `, ${r.skippedCount} đơn đã ở «${TARGET_LABEL[target]}» (bỏ qua)` : '';
+
 /** Ô chọn một đơn, vùng bấm 44×44. Không lan sự kiện bấm lên dòng/thẻ (bấm dòng là mở chi tiết đơn). */
 export function OrderSelectBox({ order, selection }: { order: BulkPick; selection: OrderBulkSelection }) {
   const checked = selection.has(order.id);
@@ -237,16 +241,20 @@ function BulkPreviewDialog({ target, preview, onClose }: { target: BulkStatusTar
       setStale(true);
       setError(`${actionErrorText(e)} Đơn chưa có kết quả ở đây có thể đã đổi hoặc chưa: đóng hộp để tải lại danh sách rồi kiểm lại.`);
     } finally {
+      // Đơn lượt thật báo bỏ qua là đơn người khác vừa đổi trước: danh sách đang xem đã cũ, đóng hộp thì tải lại như khi có đơn đã đổi.
+      if (results.some((r) => r.outcome === 'SKIPPED')) setStale(true);
       if (results.length > 0) {
         // Đơn bị giữ lại từ lúc xem trước vẫn nằm trong kết quả cuối để người bấm thấy đủ cả lượt.
         const all = [...results, ...preview.results.filter((r) => !r.ok)];
         const okCount = all.filter((r) => r.ok).length;
+        const skippedCount = all.filter((r) => r.outcome === 'SKIPPED').length;
         setDone({
           dryRun: false,
           targetStatus: target,
           total: all.length,
           okCount,
-          failedCount: all.length - okCount,
+          skippedCount,
+          failedCount: all.length - okCount - skippedCount,
           results: all,
           auditLogId: null,
           auditError: auditErrors.length ? auditErrors.join(' ') : null,
@@ -272,8 +280,8 @@ function BulkPreviewDialog({ target, preview, onClose }: { target: BulkStatusTar
         </h2>
         <p className="mt-1 text-sm text-stone-700" data-bulk-summary>
           {done
-            ? `Đã đổi ${done.okCount} đơn${done.failedCount ? `, ${done.failedCount} đơn không đổi được` : ''}.`
-            : `${preview.okCount} đơn đổi được${preview.failedCount ? `, ${preview.failedCount} đơn bị giữ lại (không đổi)` : ''}.`}
+            ? `Đã đổi ${done.okCount} đơn${skippedText(done, target)}${done.failedCount ? `, ${done.failedCount} đơn không đổi được` : ''}.`
+            : `${preview.okCount} đơn đổi được${skippedText(preview, target)}${preview.failedCount ? `, ${preview.failedCount} đơn bị giữ lại (không đổi)` : ''}.`}
         </p>
         {done?.auditError && (
           <div className="mt-2">
@@ -284,10 +292,10 @@ function BulkPreviewDialog({ target, preview, onClose }: { target: BulkStatusTar
         )}
         <ul className="mt-3 min-h-0 flex-1 divide-y divide-stone-100 overflow-y-auto rounded-control border border-stone-200" tabIndex={0} aria-label="Từng đơn" data-bulk-results>
           {shown.results.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-x-2 px-3 py-2 text-sm" data-ok={r.ok ? 'true' : 'false'}>
+            <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-x-2 px-3 py-2 text-sm" data-ok={r.ok ? 'true' : 'false'} data-outcome={r.outcome}>
               <span className="font-semibold text-stone-900">{r.code ?? r.id}</span>
               <span className="text-xs text-stone-500">{r.from ? (ORDER_STATUS_LABELS[r.from] ?? r.from) : ''}</span>
-              <span className={`w-full text-xs ${r.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+              <span className={`w-full text-xs ${r.ok ? 'text-success-fg' : r.outcome === 'SKIPPED' ? 'text-stone-600' : 'text-danger-fg'}`}>
                 {r.ok ? (done ? `Đã sang «${TARGET_LABEL[target]}»` : `Sẽ sang «${TARGET_LABEL[target]}»`) : r.reason}
               </span>
             </li>

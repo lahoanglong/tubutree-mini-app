@@ -74,8 +74,8 @@ export const downloadRefundsCsv = (r: ReportRange, status?: RefundExportStatus) 
   apiDownload(`/admin/reports/exports/refunds?${withStatus(r, status)}`, `hoan-tien-khach-${r.from}-${r.to}.csv`);
 
 /**
- * Đối soát doanh thu và hoàn tiền theo đơn (ngày đặt, giờ VN): tiền hàng, ba khoản giảm, phí giao, khách trả, đã hoàn, hoàn đang chờ, doanh thu ghi nhận.
- * Chỉ ADMIN và nhân viên Kế toán tải được.
+ * Đối soát doanh thu và hoàn tiền theo đơn (ngày đặt, giờ VN): tiền hàng, ba khoản giảm, phí giao, khách trả, đã hoàn, hoàn đang chờ, hoàn trả hàng
+ * chưa xác minh (chờ Kế toán đối soát), doanh thu ghi nhận (đơn thử Giờ G đã dọn ghi 0). Chỉ ADMIN và nhân viên Kế toán tải được.
  */
 export const downloadAccountingCsv = (r: ReportRange) =>
   apiDownload(`/admin/reports/accounting-export?${rangeQuery(r)}`, `doi-soat-ke-toan-${r.from}-${r.to}.csv`);

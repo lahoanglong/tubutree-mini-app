@@ -2,6 +2,7 @@ import { PURCHASE_FUNNEL_STEPS, toGrowthWindowDays, type PurchaseFunnelDTO, type
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { PurchaseFunnelService } from '../analytics/purchase-funnel.service';
 import { FIRST_ORDER_REFERRER_PREFIX } from '../referral/first-order-reasons';
+import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
 import { AdminGrowthService, vnDayRange } from './admin-growth.service';
 
 const win = (n: number): PurchaseFunnelWindowDTO => ({
@@ -62,8 +63,11 @@ describe('AdminGrowthService', () => {
     // Mốc đầu kỳ là 00:00 giờ VN (17:00 UTC hôm trước), không phải now − 7 ngày.
     const repeatCall = $queryRaw.mock.calls[0]!;
     expect(repeatCall).toContain('2026-11-11T17:00:00.000Z');
-    // Cùng bộ lọc đơn với bảng đơn thứ hai: bán lẻ, khách tự đặt, bỏ huỷ/trả/chờ thanh toán, gộp theo checkoutGroup.
-    for (const call of $queryRaw.mock.calls.filter((c) => sqlOf(c).includes('"orders"'))) {
+    // Cùng bộ lọc đơn với bảng đơn thứ hai: bán lẻ, khách tự đặt, bỏ huỷ/trả/chờ thanh toán, bỏ đơn thử Giờ G đã dọn, gộp theo checkoutGroup.
+    const orderCalls = $queryRaw.mock.calls.filter((c) => sqlOf(c).includes('"orders"'));
+    expect(orderCalls).toHaveLength(3);
+    for (const call of orderCalls) {
+      expect(call).toContain(NOT_PILOT_CLEANED_SQL);
       const sql = sqlOf(call);
       expect(sql).toContain("o.status NOT IN ('CANCELLED', 'RETURNED', 'PENDING_PAYMENT')");
       expect(sql).toContain("o.type = 'RETAIL'");

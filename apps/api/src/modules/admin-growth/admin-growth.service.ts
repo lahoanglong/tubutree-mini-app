@@ -6,6 +6,7 @@ import { PurchaseFunnelService } from '../analytics/purchase-funnel.service';
 import { MATCHER_GAME } from '../game/mini/matcher/matcher.rules';
 import { firstOrderGuardStats } from '../referral/first-order-guard-stats';
 import { referralShareStats } from '../referral/share-stats';
+import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
 
 const DAY_MS = 86_400_000;
 /** Cùng mức của Phễu mua: ADMIN bấm qua lại 7/30 ngày không dồn truy vấn quét bảng đơn vào DB. */
@@ -96,6 +97,7 @@ export class AdminGrowthService {
          WHERE o.status NOT IN ('CANCELLED', 'RETURNED', 'PENDING_PAYMENT')
            AND o.type = 'RETAIL'
            AND o."placedForCustomer" = false
+           AND ${NOT_PILOT_CLEANED_SQL}
            AND o."createdAt" <= ${ts(now)}::timestamp
          GROUP BY o."userId", COALESCE(o."checkoutGroup", o.id)
       ),
@@ -141,6 +143,7 @@ export class AdminGrowthService {
          WHERE o.status NOT IN ('CANCELLED', 'RETURNED', 'PENDING_PAYMENT')
            AND o.type = 'RETAIL'
            AND o."placedForCustomer" = false
+           AND ${NOT_PILOT_CLEANED_SQL}
            AND o."createdAt" >= ${ts(since)}::timestamp
            AND o."createdAt" <= ${ts(now)}::timestamp
          GROUP BY o."userId", COALESCE(o."checkoutGroup", o.id)
@@ -169,6 +172,7 @@ export class AdminGrowthService {
            WHERE o.status NOT IN ('CANCELLED', 'RETURNED', 'PENDING_PAYMENT')
              AND o.type = 'RETAIL'
              AND o."placedForCustomer" = false
+             AND ${NOT_PILOT_CLEANED_SQL}
              AND o."createdAt" >= ${ts(since)}::timestamp
              AND o."createdAt" <= ${ts(now)}::timestamp
            GROUP BY COALESCE(o."checkoutGroup", o.id)
