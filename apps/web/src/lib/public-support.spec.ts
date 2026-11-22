@@ -23,6 +23,16 @@ describe('getPublicSupport', () => {
     expect(String(f.mock.calls[0]![0])).toMatch(/\/config\/public$/);
   });
 
+  it('cờ web.guest_checkout_enabled: chỉ đúng boolean true mới bật lối tra cứu đơn ở chân trang', async () => {
+    const support = { hotline: '1900 1234', email: 'cskh@tubutree.com' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support, webGuestCheckoutEnabled: true })));
+    await expect(getPublicSupport()).resolves.toEqual({ ...support, guestOrderLookup: true });
+    for (const v of [false, 'true', 1, null]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support, webGuestCheckoutEnabled: v })));
+      await expect(getPublicSupport()).resolves.toEqual(support);
+    }
+  });
+
   it('một trường admin để trống (API trả null) thì chỉ trường đó rơi về mặc định', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { hotline: null, email: 'cskh@tubutree.com' } })));
     await expect(getPublicSupport()).resolves.toEqual({ hotline: DEFAULT_SUPPORT.hotline, email: 'cskh@tubutree.com' });

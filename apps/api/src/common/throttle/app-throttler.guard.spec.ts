@@ -1,4 +1,4 @@
-import { Controller, Get, type INestApplication, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, type INestApplication, Post, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -14,7 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../decorators/public.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AppThrottlerGuard } from './app-throttler.guard';
-import { StaffLookupThrottle, throttlerOptions } from './throttle.config';
+import { LookupThrottle, StaffLookupThrottle, throttlerOptions } from './throttle.config';
 
 /**
  * Chính sách Q-22 (C-005, C-033), chạy qua HTTP thật với đúng thứ tự guard toàn cục của
@@ -42,6 +42,17 @@ class ProbeController {
   @StaffLookupThrottle(5)
   @Get('staff-lookup')
   staffLookup() {
+    return { ok: true };
+  }
+
+  @Public()
+  @LookupThrottle((req) => (req.body as { code?: string } | undefined)?.code, 50, 50, {
+    identify: (req) => (req.body as { phone?: string } | undefined)?.phone,
+    limit: 3,
+    ttlMs: 900_000,
+  })
+  @Post('lookup')
+  lookup() {
     return { ok: true };
   }
 }
@@ -307,6 +318,29 @@ describe('AppThrottlerGuard (Q-22)', () => {
 
     it('khách thường không bị trần này (route vẫn bị trần mặc định)', async () => {
       const codes = await hitMany(base, 20, () => call('cus-1', '10.1.0.3'));
+      expect(count429(codes)).toBe(0);
+    });
+  });
+
+  describe('LookupThrottle: trần phụ theo định danh thứ hai (SĐT) dù đổi mã và IP', () => {
+    let app: INestApplication;
+    let base: string;
+    beforeAll(async () => {
+      ({ app, base } = await bootApp(BYPASS));
+    });
+    afterAll(async () => {
+      await app.close();
+    });
+    const call = (i: number, phone: string): Call => ({ path: '/probe/lookup', method: 'POST', ip: `10.2.${i}.1`, body: { code: `C${i}`, phone } });
+
+    it('cùng SĐT: quá 3 lượt thì 429 dù mỗi lượt khác mã và khác IP; SĐT khác không bị ảnh hưởng', async () => {
+      const codes = await hitMany(base, 5, (i) => call(i, '0912345678'));
+      expect(count429(codes)).toBe(2);
+      expect(await hit(base, call(9, '0987654321'))).toBe(201);
+    });
+
+    it('route không gắn LookupThrottle không chịu trần phụ', async () => {
+      const codes = await hitMany(base, 10, (i) => ({ path: '/probe/public', ip: `10.3.${i}.1` }));
       expect(count429(codes)).toBe(0);
     });
   });

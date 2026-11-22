@@ -1,5 +1,5 @@
 import { syncServerClock } from '@tubutree/app-core/server-clock';
-import type { GiftTrialSummaryDTO } from '@tubutree/shared-types';
+import type { GiftTrialSummaryDTO, GuestOrderLookupDTO, GuestOrderTrackDTO } from '@tubutree/shared-types';
 import { apiFetch } from '../client-api';
 import type { BankQrDTO, QuoteShipment } from '../shop-client';
 import { guestDeviceId } from './keys';
@@ -75,24 +75,8 @@ export interface GuestPlaced {
   keyAccepted: boolean;
 }
 
-export interface GuestTrackedOrder {
-  code: string;
-  status: string;
-  paymentMethod: string;
-  paymentStatus: string;
-  createdAt: string;
-  deliveredAt: string | null;
-  statusTimes: Record<string, string>;
-  subtotal: number;
-  discount: number;
-  shippingFee: number;
-  total: number;
-  items: { productName: string; variationName: string | null; quantity: number; unitPrice: number; total: number; isGift: boolean }[];
-  phoneMasked: string;
-  area: { ward: string; province: string };
-  siblings: { code: string; status: string; total: number }[];
-  expiresAt: string | null;
-}
+/** Bản xem đã che của trang theo dõi (hợp đồng chung với API). */
+export type GuestTrackedOrder = GuestOrderTrackDTO;
 
 const deviceHeader = () => ({ 'x-guest-device': guestDeviceId() });
 
@@ -123,6 +107,10 @@ export const guestBankQr = async (code: string, key: string) => {
   syncServerClock(qr?.serverNow);
   return qr;
 };
+
+/** Tra đơn bằng mã đơn + SĐT đặt hàng (khách mất đường dẫn theo dõi). Sai mã hay sai SĐT: ApiError 404. */
+export const guestLookupOrder = (body: { orderCode: string; phone: string }) =>
+  apiFetch<GuestOrderLookupDTO>('/checkout/guest/lookup', { method: 'POST', body, auth: false, cache: 'no-store' });
 
 /** Đưa đơn vãng lai của trình duyệt này về tài khoản đang đăng nhập (cần phiên). */
 export const claimGuestOrdersRequest = (deviceId: string) =>

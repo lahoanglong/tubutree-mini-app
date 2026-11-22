@@ -256,6 +256,57 @@ describe('/thanh-toan chưa đăng nhập, cờ bật', () => {
     expect(a![0].trackingKey).toBe(b![0].trackingKey);
   });
 
+  it('quay về giỏ rồi trở lại (trang dựng lại): họ tên, SĐT, tỉnh/phường, số nhà, ghi chú còn nguyên, báo giá chạy luôn; không giữ cách trả tiền', async () => {
+    const first = await mount();
+    await fillForm(first);
+    typeInto(field(first, 'Ghi chú cho đơn (không bắt buộc)'), 'Gọi trước khi giao');
+    click(first.container.querySelectorAll<HTMLInputElement>('input[name="guest-pay"]')[1]!);
+    await flush(2);
+    const saved = JSON.parse(sessionStorage.getItem('tubu.guestCheckout.draft')!) as Record<string, unknown>;
+    expect(saved).toEqual({
+      name: 'Lan',
+      phone: '0912345678',
+      geo: { province: 'Hà Nội', provinceCode: '84_VN01', ward: 'Cầu Giấy', wardCode: '84_VN01_001' },
+      street: '12 Ngõ 5',
+      note: 'Gọi trước khi giao',
+    });
+    expect(localStorage.getItem('tubu.guestCheckout.draft')).toBeNull();
+    first.unmount();
+    mounted = mounted.filter((x) => x !== first);
+    m.quote.mockClear();
+
+    const again = await mount();
+    expect(field(again, 'Họ tên người nhận').value).toBe('Lan');
+    expect(field(again, 'Số điện thoại').value).toBe('0912345678');
+    expect(field(again, 'Số nhà, tên đường').value).toBe('12 Ngõ 5');
+    expect(field(again, 'Ghi chú cho đơn (không bắt buộc)').value).toBe('Gọi trước khi giao');
+    expect(again.container.textContent).toContain('Cầu Giấy');
+    expect(again.container.querySelectorAll<HTMLInputElement>('input[name="guest-pay"]')[0]!.checked).toBe(true);
+    await new Promise((res) => setTimeout(res, 700));
+    await flush(6);
+    expect(m.quote).toHaveBeenCalledTimes(1);
+    expect((m.quote.mock.calls[0]![0] as { address: Record<string, string> }).address).toMatchObject({ recipient: 'Lan', phone: '0912345678', wardCode: '84_VN01_001' });
+  });
+
+  it('đặt xong: xoá nháp; xoá hết các ô thì cũng xoá bản lưu', async () => {
+    m.place.mockResolvedValue({ code: 'TB77', status: 'PENDING', paymentMethod: 'COD', total: 240_000, codes: ['TB77'], keyAccepted: true });
+    const r = await mount();
+    await fillForm(r);
+    expect(sessionStorage.getItem('tubu.guestCheckout.draft')).not.toBeNull();
+    click(placeButtons(r)[0]!);
+    await flush(6);
+    expect(m.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/don\/TB77#k=/));
+    expect(sessionStorage.getItem('tubu.guestCheckout.draft')).toBeNull();
+
+    const blank = await mount();
+    typeInto(field(blank, 'Họ tên người nhận'), 'A');
+    await flush(1);
+    expect(sessionStorage.getItem('tubu.guestCheckout.draft')).not.toBeNull();
+    typeInto(field(blank, 'Họ tên người nhận'), '');
+    await flush(1);
+    expect(sessionStorage.getItem('tubu.guestCheckout.draft')).toBeNull();
+  });
+
   it('vượt trần: hiện câu của máy chủ kèm lối Đăng nhập Zalo, ở lại biểu mẫu', async () => {
     m.place.mockRejectedValue(new ApiError('Hiện chưa đặt thêm được đơn khi chưa đăng nhập. Bạn đăng nhập Zalo để đặt tiếp và theo dõi đơn ở một nơi nhé.', 403, 'GUEST_LIMIT'));
     const r = await mount();

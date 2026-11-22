@@ -69,9 +69,15 @@ export default function GuestOrderPage() {
     body = (
       <div data-testid="guest-order-not-found" className="py-12 text-center">
         <p className="text-[color:var(--color-text-secondary)]">{guestCopy('notFound')}</p>
-        <Link href="/" className={`mt-4 inline-block ${ui.btnSecondary}`}>
-          Về trang chủ
-        </Link>
+        {/* Mất đường dẫn hay đường dẫn hết hạn: tra lại bằng mã đơn (điền sẵn) + SĐT đặt hàng. */}
+        <div className="mt-4 flex flex-col items-center gap-2">
+          <Link href={code ? `/don?ma=${encodeURIComponent(code)}` : '/don'} data-testid="guest-order-lookup-link" className={ui.btnPrimary}>
+            {guestCopy('lookupFromNotFound')}
+          </Link>
+          <Link href="/" className={ui.btnSecondary}>
+            Về trang chủ
+          </Link>
+        </div>
       </div>
     );
   } else if (q.isError || !o) {

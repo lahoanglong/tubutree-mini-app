@@ -8,8 +8,9 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { parseVnContactPhone, parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { comboOnlyDiscount } from '@tubutree/app-core/commerce/green-box';
-import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
+import { GeoPicker, type GeoValue } from '@/components/geo-picker';
 import { GiftTrialRow } from '@/components/checkout/gift-rows';
+import { GuestField } from '@/components/checkout/guest-field';
 import { DesktopLines, MobileItems, NO_LINE_FIX, RECALC_DIM, Row, type CheckoutLineView } from '@/components/checkout/checkout-lines';
 import { OrderConsent } from '@/components/order-consent';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -28,6 +29,7 @@ import { guestCartView } from '@/lib/guest-cart/view';
 import { useRunningFlash } from '@/lib/use-flash-sales';
 import { guestPlaceOrder, guestQuote, type GuestAddressInput, type GuestLineInput, type GuestPlaceBody } from '@/lib/guest-checkout/api';
 import { guestCopy } from '@/lib/guest-checkout/copy';
+import { clearGuestDraft, readGuestDraft, saveGuestDraft } from '@/lib/guest-checkout/draft';
 import { guestBankHref, guestTrackHref, newTrackingKey, rememberGuestOrder, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
 
 const NAME_MAX = 120;
@@ -78,11 +80,13 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
   const view = guestCartView(lines, products, flash);
   const buyable: GuestLineInput[] = view.rows.filter((r) => r.state === 'ok').map((r) => ({ variationId: r.variationId, quantity: r.quantity }));
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [geo, setGeo] = useState<GeoValue>(EMPTY_GEO);
-  const [street, setStreet] = useState('');
-  const [note, setNote] = useState('');
+  // Trang chỉ dựng ở trình duyệt (dynamic ssr:false) nên đọc nháp ngay lúc khởi tạo, không lệch với HTML máy chủ.
+  const [draft] = useState(readGuestDraft);
+  const [name, setName] = useState(draft.name);
+  const [phone, setPhone] = useState(draft.phone);
+  const [geo, setGeo] = useState<GeoValue>(draft.geo);
+  const [street, setStreet] = useState(draft.street);
+  const [note, setNote] = useState(draft.note);
   const [payment, setPayment] = useState<Pay>('COD');
   const [gift, setGift] = useState<string | null | undefined>(undefined);
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
@@ -101,6 +105,11 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
     started.current = true;
     trackWebEvent('guest_checkout_start', { itemCount: Math.min(500, lines.reduce((s, l) => s + l.quantity, 0)) });
   }, [lines]);
+
+  const placed = useRef(false);
+  useEffect(() => {
+    if (!placed.current) saveGuestDraft({ name, phone, geo, street, note });
+  }, [name, phone, geo, street, note]);
 
   const errors = fieldErrors({ name, phone, geo, street });
   const shown = (f: Field) => (attempted || touched[f] ? errors[f] : undefined);
@@ -154,6 +163,8 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
     onSuccess: ({ res, trackingKey }) => {
       const key = res.keyAccepted ? trackingKey : (savedGuestOrderKey(res.code) ?? trackingKey);
       rememberGuestOrder(res.codes.length > 0 ? res.codes : [res.code], key);
+      placed.current = true;
+      clearGuestDraft();
       keyRing.current.reset();
       trackingKeys.current.clear();
       clearGuestCart();
@@ -283,7 +294,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
               {guestCopy('contactTitle')}
             </h2>
             <div className="mt-2 space-y-3">
-              <Field id={ids.name} label={guestCopy('name')} error={shown('name')}>
+              <GuestField id={ids.name} label={guestCopy('name')} error={shown('name')}>
                 <input
                   id={ids.name}
                   value={name}
@@ -297,8 +308,8 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
                   disabled={busy}
                   className={`${shown('name') ? ui.fieldError : ui.field} mt-1`}
                 />
-              </Field>
-              <Field id={ids.phone} label={guestCopy('phone')} error={shown('phone')} hint={guestCopy('phoneHint')}>
+              </GuestField>
+              <GuestField id={ids.phone} label={guestCopy('phone')} error={shown('phone')} hint={guestCopy('phoneHint')}>
                 <input
                   id={ids.phone}
                   value={phone}
@@ -317,9 +328,9 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
                   disabled={busy}
                   className={`${shown('phone') ? ui.fieldError : ui.field} mt-1 tabular-nums`}
                 />
-              </Field>
+              </GuestField>
               <GeoPicker value={geo} onChange={setGeo} errorProvince={shown('province')} errorWard={shown('ward')} />
-              <Field id={ids.street} label={guestCopy('street')} error={shown('street')}>
+              <GuestField id={ids.street} label={guestCopy('street')} error={shown('street')}>
                 <input
                   id={ids.street}
                   value={street}
@@ -333,8 +344,8 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
                   disabled={busy}
                   className={`${shown('street') ? ui.fieldError : ui.field} mt-1`}
                 />
-              </Field>
-              <Field id={ids.note} label={guestCopy('note')}>
+              </GuestField>
+              <GuestField id={ids.note} label={guestCopy('note')}>
                 <input
                   id={ids.note}
                   value={note}
@@ -343,7 +354,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
                   disabled={busy}
                   className={`${ui.field} mt-1`}
                 />
-              </Field>
+              </GuestField>
               {/* Ô bẫy cho máy tự điền: ẩn khỏi người dùng và trình đọc màn hình, không nhận Tab. */}
               <div aria-hidden="true" className="sr-only">
                 <label>
@@ -455,27 +466,5 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
         </div>
       </StickyActionBar>
     </>
-  );
-}
-
-function Field({ id, label, error, hint, children }: { id: string; label: string; error?: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label htmlFor={id} className="block text-field-label text-[color:var(--color-text-secondary)]">
-        {label}
-      </label>
-      {children}
-      {hint && (
-        <p id={`${id}-hint`} className="mt-0.5 text-caption text-[color:var(--color-text-tertiary)]">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={`${id}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
-          <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

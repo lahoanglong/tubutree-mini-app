@@ -115,7 +115,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(container.textContent).toContain('9984606774');
   });
 
-  it('có nút "Tôi đã chuyển khoản — Kiểm tra" — bấm thì gọi lại API kiểm tra trạng thái', async () => {
+  it('có nút "Tôi đã chuyển khoản — Kiểm tra ngay" — bấm thì gọi lại API kiểm tra trạng thái', async () => {
     const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<BankTransferPanel order={order()} />);
@@ -183,7 +183,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     await flush(2);
     expect(calls).toBeGreaterThanOrEqual(2);
     expect(btn().disabled).toBe(false);
-    expect(btn().textContent).toBe('Tôi đã chuyển khoản — Kiểm tra');
+    expect(btn().textContent).toBe('Tôi đã chuyển khoản — Kiểm tra ngay');
     expect(container.querySelector('[data-testid="bank-poll-status"]')?.textContent).toContain('Đang kiểm tra');
 
     release();
@@ -360,6 +360,43 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(writeText).toHaveBeenCalledWith('250000');
   });
 
+  it('điện thoại: chép xong nút đổi dấu tích trên nền xanh 2 giây (tính từ lần chép cuối), không đổi nhãn đọc; chép lỗi thì không đổi', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let ok = true;
+      const writeText = vi.fn(async () => {
+        if (!ok) throw new Error('denied');
+      });
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      const btn = () => container.querySelector<HTMLButtonElement>('button[aria-label="Sao chép số tài khoản"]')!;
+      expect(btn().hasAttribute('data-copied')).toBe(false);
+      click(btn());
+      await flush(2);
+      expect(btn().getAttribute('data-copied')).toBe('true');
+      expect(btn().className).toMatch(/\bbg-success-bg\b/);
+      expect(btn().className).toMatch(/\btext-success-fg\b/);
+      expect(btn().getAttribute('aria-label')).toBe('Sao chép số tài khoản');
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+      click(btn());
+      await flush(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+      expect(btn().getAttribute('data-copied')).toBe('true');
+      await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+      expect(btn().hasAttribute('data-copied')).toBe(false);
+      expect(btn().className).not.toMatch(/\bbg-success-bg\b/);
+      ok = false;
+      click(btn());
+      await flush(2);
+      expect(btn().hasAttribute('data-copied')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('khoá đồng bộ chạm đúp (W78B)', () => {
     const twice = (...els: (Element | null)[]) =>
       act(() => {
@@ -411,7 +448,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
       );
       const { container } = mount(<BankTransferPanel order={order()} stickyCheck />);
       await flush();
-      const both = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra');
+      const both = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra ngay');
       expect(both).toHaveLength(2);
       act(() => {
         both[0]!.click();
