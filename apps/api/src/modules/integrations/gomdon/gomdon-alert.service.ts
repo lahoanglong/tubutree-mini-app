@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { OPS_WHERE, opsAlertSlot } from '../../ops/ops-alert-line';
+import { isWasteGomdonCustomerId } from '../../waste-exchange/home-pickup/waste-home-pickup-text';
 
 /** Template in-app gửi admin (seed: nt-ops-gomdon). */
 export const GOMDON_ALERT_TEMPLATE = 'OPS_GOMDON_ALERT';
@@ -83,9 +85,11 @@ export class GomdonAlertService {
         orderBy: { role: 'asc' },
         take: MAX_RECIPIENTS,
       });
+      // Lời đủ (cách tra/huỷ vận đơn từng bước) nằm ở báo động trên chi tiết đơn; tin in-app chỉ mang câu đầu, đã che SĐT, và chỗ xử lý.
+      const short = opsAlertSlot(message, alertWhere(source, orderCode));
       for (const a of admins) {
         await this.notifications
-          .notify(a.id, template, { order_code: orderCode, message })
+          .notify(a.id, template, { order_code: orderCode, message: short })
           .catch((err) =>
             this.logger.warn(`Gửi báo động Gomdon tới admin ${a.id} lỗi: ${err instanceof Error ? err.message : err}`),
           );
@@ -117,6 +121,12 @@ export class GomdonAlertService {
   async resolveKinds(orderId: string, kinds: readonly GomdonAlertKind[]): Promise<number> {
     return resolveGomdonAlertKinds(this.prisma, orderId, kinds);
   }
+}
+
+/** Việc Pancake ở hàng "Cần xử lý Pancake"; phiếu thu gom rác (mã WR-…) ở Đổi rác; vận đơn của đơn mua ở "Cần xử lý thu gom". */
+function alertWhere(source: 'PANCAKE' | 'GOMDON', orderCode: string): string {
+  if (source === 'PANCAKE') return OPS_WHERE.pancakeQueue;
+  return isWasteGomdonCustomerId(orderCode) ? OPS_WHERE.waste : OPS_WHERE.gomdonQueue;
 }
 
 /** Dùng chung cho nơi không inject được GomdonAlertService (OrderStatusService — tránh vòng module). */

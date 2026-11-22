@@ -101,7 +101,7 @@ describe('Hoàn tiền cho tài khoản đã xoá: khoản chờ chuyển tay + 
     expect(new Set(recipients).size).toBe(recipients.length);
     const admins = await prisma.user.count({ where: { role: 'ADMIN', isBlocked: false } });
     expect(recipients.length).toBe(Math.min(20, admins));
-    expect((calls[0]![2] as { message: string }).message).toContain('Tài khoản đã xoá, không còn thông tin liên hệ');
+    expect((calls[0]![2] as { message: string }).message).toMatch(/^tài khoản đã xoá, chờ khách liên hệ CSKH để chuyển khoản [\d.]+đ · Admin › Hoàn tiền khách$/);
   }
 
   it.each(['ADMIN', 'PANCAKE'] as const)('%s chuyển đơn đã giao sang RETURNED sau khi khách xoá tài khoản → khoản PENDING chờ chuyển tay, Ví 0, admin được báo đúng một lần', async (actorType) => {

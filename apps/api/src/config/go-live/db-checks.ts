@@ -61,6 +61,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261118170000_mss_stock_sync_flag',
   // Bảng mới `admin_audit_logs` (sổ dọn đơn thử ở /admin/gio-g), rỗng lúc tạo; image cũ không đọc, không ghi.
   '20261121130000_w13_02_admin_audit_logs',
+  // Chỉ thêm chỉ mục trigram một phần trên products (món đang bán + đã duyệt) cho bước chịu gõ sai; image cũ vẫn dùng chỉ mục đầy đủ.
+  '20261122090000_w16_03_products_active_approved_trgm_idx',
 ];
 
 /**

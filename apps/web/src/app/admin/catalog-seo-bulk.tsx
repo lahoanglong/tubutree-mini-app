@@ -81,7 +81,7 @@ export function CatalogSeoBulk() {
     }
   }, []);
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data]);
   const shown = useMemo(() => {
     const q = fold(query.trim());
     return rows.filter((r) => (filter === 'all' || r.missingTitle || r.missingDesc) && (q === '' || fold(`${r.name} ${r.brand}`).includes(q)));

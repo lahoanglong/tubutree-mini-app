@@ -1,6 +1,6 @@
 import { writeFileSync } from 'fs';
 import { Logger } from '@nestjs/common';
-import { Prisma, type ProductApprovalStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -15,15 +15,19 @@ import { PROD_CATALOG_2026_11_12 } from '../../../../packages/app-core/src/comme
 /**
  * Chốt ngưỡng của bước chịu gõ sai trên Postgres THẬT (đề wave mục A.4, A.5): 60 truy vấn gõ sai sinh từ tên 111 món PROD (đổi chỗ 2 chữ
  * kề, thiếu 1 chữ, sai phím kề, thiếu dấu cách) phải tìm lại đúng món trong 5 kết quả đầu ≥ 85%; 20 truy vấn vô nghĩa phải rỗng ≥ 90%;
- * EXPLAIN bước hai dùng chỉ mục trigram; p95 < 80 ms trên 111 dòng và trên 5.550 dòng (111 món thật + 5.439 tên lạ: chữ của tên thật
+ * EXPLAIN ANALYZE bước hai dùng chỉ mục trigram một phần `products_active_approved_nameSearch_trgm_idx`; p95 < 80 ms trên 111 dòng và trên 5.550 dòng (111 món thật + 5.439 tên lạ: chữ của tên thật
  * dịch vòng 1–25 bước, cùng độ dài và cấu trúc từ, như một catalog lớn mà đa số món không liên quan tới từ khoá). Truy vấn vô nghĩa chỉ
  * đo trên 111 món thật: tên lạ dịch vòng cũng là chữ vô nghĩa nên khớp chúng không nói gì về catalog thật.
  *
- * Món có sẵn trong DB (migration nạp 44 món mẫu, spec khác để lại) bị ẩn (`isActive=false`) suốt lúc đo rồi trả lại như cũ: số đo chỉ trên
- * 111 món của catalog.
+ * Không sửa dòng của suite khác: món có sẵn trong DB (migration nạp 44 món mẫu, spec khác để lại, kể cả hàng nghìn dòng ẩn hay chờ duyệt)
+ * vẫn nằm trong bảng lúc đo. Chỉ mục một phần chỉ chứa món đang bán + đã duyệt nên planner chọn nó bất kể bảng còn bao nhiêu dòng khác;
+ * spec chèn thêm 3.000 dòng ẩn/chờ duyệt (đúng tình huống từng làm planner chọn chỉ mục btree) để chốt điều đó.
  * `SEARCH_BENCH_OUT=<file>` ghi bảng kết quả JSON cho báo cáo wave.
  */
 const BENCH = 'bench';
+/** Dòng mồi ẩn/chờ duyệt (tên giống catalog thật): chúng không được lọt vào kết quả hay làm planner đổi chỉ mục. */
+const DECOY = 'benchdecoy';
+const PARTIAL_INDEX = 'products_active_approved_nameSearch_trgm_idx';
 const KEYBOARD: Record<string, string> = {
   a: 's', b: 'v', c: 'x', d: 's', e: 'r', g: 'h', h: 'g', i: 'o', k: 'l', l: 'k', m: 'n', n: 'm', o: 'i', p: 'o', r: 't', s: 'a', t: 'r', u: 'y', v: 'b', x: 'c', y: 'u',
 };
@@ -94,7 +98,6 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
   let prisma: PrismaService;
   let fuzzyOn = false;
   let catalog: CatalogService;
-  let hidden: { id: string; approvalStatus: ProductApprovalStatus }[] = [];
   const report: Record<string, unknown> = { threshold: FUZZY_THRESHOLD };
   const warn = jest.spyOn(Logger.prototype, 'warn');
   const config = {
@@ -106,6 +109,23 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
   async function seed(copies: number) {
     await prisma.variation.deleteMany({ where: { productId: { startsWith: BENCH } } });
     await prisma.product.deleteMany({ where: { id: { startsWith: BENCH } } });
+    const rows0 = PROD_CATALOG_2026_11_12;
+    // 3.000 dòng ẩn hoặc chờ duyệt: trước chỉ mục một phần, chừng này dòng isActive=false làm planner chọn products_isActive_isFeatured_idx
+    // (đỏ khi chạy cả bộ race). Tên dịch vòng 13 chữ để bước khớp chính xác không phải lọc bỏ chúng: số đo p95 chỉ nói về catalog thật.
+    // Mã bắt đầu bằng BENCH nên afterAll xoá cùng.
+    await prisma.product.createMany({
+      data: Array.from({ length: 3_000 }, (_, k) => ({
+        id: `${DECOY}${String(k).padStart(5, '0')}`,
+        pancakeId: `${DECOY}-${k}`,
+        brand: 'Bench',
+        slug: `${DECOY}-${k}`,
+        name: `${shiftLetters(foldVietnamese(rows0[k % rows0.length]!.name), 13)} an ${k}`,
+        description: 'bench',
+        basePrice: 100_000,
+        isActive: k % 2 === 0 ? false : true,
+        approvalStatus: k % 2 === 0 ? ('APPROVED' as const) : ('PENDING_REVIEW' as const),
+      })),
+    });
     const rows = PROD_CATALOG_2026_11_12;
     for (let c = 0; c < copies; c++) {
       await prisma.product.createMany({
@@ -135,24 +155,24 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
         })),
       });
     }
-    // VACUUM (không chỉ ANALYZE): dồn danh sách chờ của chỉ mục GIN trigram và bỏ mục chỉ mục chết như autovacuum làm trên PROD; danh sách
-    // chờ vài nghìn dòng mới chèn làm planner ước chỉ mục trigram đắt và chọn chỉ mục btree khác khi bảng còn SP của suite khác.
-    await prisma.$executeRawUnsafe('VACUUM ANALYZE products');
+    await prisma.$executeRawUnsafe('ANALYZE products');
   }
 
   async function measure(queries: { q: string; slug: string }[]) {
     let hit = 0;
+    let decoys = 0;
     const ms: number[] = [];
     const misses: string[] = [];
     for (const { q, slug } of queries) {
       const t = performance.now();
       const res = await catalog.list({ page: 1, limit: 20, q });
       ms.push(performance.now() - t);
+      decoys += res.data.filter((c: { id: string }) => c.id.startsWith(DECOY)).length;
       const top = res.data.slice(0, 5).map((c: { slug: string }) => c.slug);
       if (top.some((s: string) => s.startsWith(`${slug}-${BENCH}`))) hit++;
       else misses.push(q);
     }
-    return { hit, total: queries.length, pct: round1((hit / queries.length) * 100), p95: round1(p95(ms)), misses };
+    return { hit, total: queries.length, pct: round1((hit / queries.length) * 100), p95: round1(p95(ms)), misses, decoys };
   }
 
   async function nonsense() {
@@ -182,10 +202,6 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
-    // Ẩn SP của suite khác bằng approvalStatus, không bằng isActive: hàng nghìn dòng isActive=false làm planner (enable_seqscan=off) chọn
-    // chỉ mục products_isActive_isFeatured_idx thay chỉ mục trigram, nên EXPLAIN đổi theo số suite chạy trước (đỏ khi chạy cả bộ race).
-    hidden = await prisma.product.findMany({ where: { approvalStatus: { not: 'PENDING_REVIEW' }, NOT: { id: { startsWith: BENCH } } }, select: { id: true, approvalStatus: true } });
-    await prisma.product.updateMany({ where: { id: { in: hidden.map((h) => h.id) } }, data: { approvalStatus: 'PENDING_REVIEW' } });
     catalog = new CatalogService(prisma, undefined, undefined, undefined, new SearchMatchService(prisma, config));
   });
 
@@ -193,9 +209,6 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     if (prisma) {
       await prisma.variation.deleteMany({ where: { productId: { startsWith: BENCH } } });
       await prisma.product.deleteMany({ where: { id: { startsWith: BENCH } } });
-      for (const status of new Set(hidden.map((h) => h.approvalStatus))) {
-        await prisma.product.updateMany({ where: { id: { in: hidden.filter((h) => h.approvalStatus === status).map((h) => h.id) } }, data: { approvalStatus: status } });
-      }
     }
     if (process.env.SEARCH_BENCH_OUT) writeFileSync(process.env.SEARCH_BENCH_OUT, JSON.stringify(report, null, 2));
     warn.mockRestore();
@@ -217,7 +230,9 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     report.after111 = after;
     report.nonsense111 = junk;
     report.explain111 = await explain('dong trung ha thoa', true);
+    expect(report.explain111).toContain(PARTIAL_INDEX);
     expect(after.pct).toBeGreaterThanOrEqual(85);
+    expect(after.decoys).toBe(0);
     expect(junk.pct).toBeGreaterThanOrEqual(90);
     expect(after.p95).toBeLessThan(80);
     expect(errors()).toEqual([]);
@@ -240,7 +255,7 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     expect(diffs).toEqual([]);
   });
 
-  it('5.550 dòng (111 thật + 5.439 tên lạ): EXPLAIN dùng products_nameSearch_trgm_idx, p95 < 80 ms', async () => {
+  it('5.550 dòng (111 thật + 5.439 tên lạ) cùng 3.000 dòng ẩn/chờ duyệt: EXPLAIN ANALYZE luôn dùng chỉ mục trigram một phần, p95 < 80 ms', async () => {
     await seed(50);
     fuzzyOn = true;
     const plan = await explain('dong trung ha thoa', true);
@@ -250,7 +265,8 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     for (const q of queries.slice(0, 5)) await catalog.list({ page: 1, limit: 20, q: q.q });
     const after = await measure(queries);
     report.after5550 = { pct: after.pct, p95: after.p95 };
-    expect(plan).toContain('products_nameSearch_trgm_idx');
+    expect(plan).toContain(PARTIAL_INDEX);
+    expect(report.explain5550Common).toContain(PARTIAL_INDEX);
     expect(after.p95).toBeLessThan(80);
     expect(errors()).toEqual([]);
   });
@@ -265,7 +281,7 @@ describe('Bước chịu gõ sai — bộ 60 + 20 truy vấn, EXPLAIN, p95 (real
     const pct = await catalog.list({ page: 1, limit: 20, q: '%%%%' });
     expect(pct.meta.total).toBe(0);
     expect(errors()).toEqual([]);
-    expect(await prisma.product.count({ where: { id: { startsWith: BENCH } } })).toBe(111);
+    expect(await prisma.product.count({ where: { id: { startsWith: BENCH }, NOT: { id: { startsWith: DECOY } } } })).toBe(111);
   });
 
   it('search/popular: ≥ 3 người khác nhau, có kết quả, khớp tên hàng; bỏ số điện thoại, email, cụm không phải tên hàng; bù dự phòng', async () => {

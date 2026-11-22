@@ -62,27 +62,30 @@ export function AlbumScreen() {
   const [open, setOpen] = useState<AlbumCard | null>(null);
   const [status, setStatus] = useState<MiniBoardStatus | null>(null);
   const play = () => router.push(ALBUM_PLAY_PATH.web);
-  const back = () => {
+  const back = useCallback(() => {
     setRv(null);
     void qc.invalidateQueries({ queryKey: ALBUM_KEY });
-  };
-  const submit = (r: MiniStartResponse, answers: unknown[], wait: number) => {
-    setRv(round('submitting', r, answers));
-    setTimeout(
-      () =>
-        submitAlbumReview(coreHttp, r.roundId!, answers).then(
-          (result) => (setRv(round('result', r, answers, result)), void qc.invalidateQueries({ queryKey: ALBUM_KEY })),
-          (e: unknown) => {
-            const f = albumFailure(e);
-            if (f === 'already_submitted') back();
-            else setRv(round('error', r, f === 'network' ? answers : null));
-          },
-        ),
-      wait,
-    );
-  };
+  }, [qc]);
+  const submit = useCallback(
+    (r: MiniStartResponse, answers: unknown[], wait: number) => {
+      setRv(round('submitting', r, answers));
+      setTimeout(
+        () =>
+          submitAlbumReview(coreHttp, r.roundId!, answers).then(
+            (result) => (setRv(round('result', r, answers, result)), void qc.invalidateQueries({ queryKey: ALBUM_KEY })),
+            (e: unknown) => {
+              const f = albumFailure(e);
+              if (f === 'already_submitted') back();
+              else setRv(round('error', r, f === 'network' ? answers : null));
+            },
+          ),
+        wait,
+      );
+    },
+    [qc, back],
+  );
   // Bàn chơi chạy lại hiệu ứng đếm giờ mỗi khi `onFinish` đổi: giữ hàm cố định trong cả ván.
-  const finish = useCallback((a: unknown[]) => rv?.round && submit(rv.round, a, rv.receivedAt! + MINI_MIN_ROUND_MS + 500 - Date.now()), [rv]);
+  const finish = useCallback((a: unknown[]) => rv?.round && submit(rv.round, a, rv.receivedAt! + MINI_MIN_ROUND_MS + 500 - Date.now()), [rv, submit]);
   const start = () => {
     if (rv) return;
     setRv(round('starting'));

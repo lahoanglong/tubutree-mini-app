@@ -119,3 +119,34 @@ describe('GomdonAlertService (UAT GOMDON-2: báo động phải xem lại đư�
     });
   });
 });
+
+describe('GomdonAlertService: tin in-app ngắn, không lộ SĐT; báo động trên đơn giữ lời đủ', () => {
+  const LONG =
+    'Gomdon báo "Giao thất bại: khách 0912345678 không nghe máy" khi giao vận đơn BE123456789. Liên hệ khách qua Zalo, hẹn lại giờ giao; ' +
+    'nếu khách huỷ thì huỷ vận đơn trên cổng Gomdon rồi bấm "Đã xử lý tay" — không tự huỷ đơn ở Tubu. Kiểm thêm POST /admin/gomdon/retry nếu cần.';
+
+  it('đơn mua: bảng gomdon_alerts lưu nguyên văn, tin in-app ≤ 150 ký tự, che SĐT, chỉ tới "Cần xử lý thu gom"', async () => {
+    const { svc, prisma, notifications } = build();
+    await svc.alert('TUBU2026101500001', LONG);
+    expect(prisma.gomdonAlert.create).toHaveBeenCalledWith({ data: { orderId: 'o1', message: LONG } });
+    const sent = (notifications.notify.mock.calls[0] as [string, string, { message: string }])[2].message;
+    expect(sent.length).toBeLessThanOrEqual(150);
+    expect(sent).not.toContain('0912345678');
+    expect(sent).not.toContain('/admin/');
+    expect(sent.endsWith(' · Admin › Đơn hàng › Cần xử lý thu gom')).toBe(true);
+    expect(`⚠️ Vận đơn thu gom đơn TUBU2026101500001: ${sent}`.length).toBeLessThanOrEqual(200);
+  });
+
+  it('phiếu thu gom rác (WR-…) chỉ tới Đổi rác; việc Pancake chỉ tới "Cần xử lý Pancake"', async () => {
+    const waste = build({ order: null });
+    await waste.svc.alert('WR-RAC123', 'Phiếu thu gom RAC123 đã đóng nhưng bưu tá đã lấy rác.');
+    expect((waste.notifications.notify.mock.calls[0] as [string, string, { message: string }])[2].message).toBe(
+      'Phiếu thu gom RAC123 đã đóng nhưng bưu tá đã lấy rác. · Admin › Đổi rác',
+    );
+    const pk = build();
+    await pk.svc.alert('TUBU1', 'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake', PANCAKE_ALERT_TEMPLATE);
+    expect((pk.notifications.notify.mock.calls[0] as [string, string, { message: string }])[2].message).toBe(
+      'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake · Admin › Đơn hàng › Cần xử lý Pancake',
+    );
+  });
+});

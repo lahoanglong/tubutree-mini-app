@@ -5,6 +5,7 @@ import { markCronSkipped, noteCronError, TrackCron } from '../../../common/cron-
 import { notifyAdmins } from '../../../common/notify-admins';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { OPS_NOTICE_MAX, OPS_WHERE, opsAlertLine } from '../../ops/ops-alert-line';
 import { isMssConfigured, type MssEnvStatus } from './mss-config';
 import { MSS_SHARED_STORE, type MssCircuitSnapshot, type MssSharedStore } from './mss-circuit';
 import { MSS_FLAG_CAPABILITY, MSS_FLAG_KEYS, MSS_FLAGS, MssFlagsService, type MssCatalogSource, type MssFlag } from './mss-flags';
@@ -18,6 +19,7 @@ export const MSS_HEALTH_STALE_MS = 15 * 60_000;
 export const MSS_CAPABILITY_WARN_MS = 60 * 60_000;
 /** Hỏi lại `/health` theo nhu cầu (khi chưa có kết quả) tối đa một lần mỗi chừng này. */
 const ON_DEMAND_REFRESH_MS = 60_000;
+const MSS_ALERT_TITLE = 'Kết nối MSS';
 
 const HEALTH_KEY = 'tubu:mss:health';
 const capWarnKey = (flag: MssFlag) => `tubu:mss:capwarn:${flag}`;
@@ -159,12 +161,17 @@ export class MssHealthService {
         first = this.memoryFirst(flag, now);
       }
       if (!first) return;
-      const why = !health ? 'chưa dò được /health của MSS' : !health.ok ? `MSS không trả lời tốt (${health.error ?? 'không rõ'})` : `MSS chưa công bố năng lực "${capability}"`;
-      const summary = `Cờ ${MSS_FLAG_KEYS[flag]} đang bật nhưng ${why}. Tubu coi cờ này như tắt và đi đường cũ.`;
-      this.logger.warn(summary);
+      const why = !health ? 'chưa dò được trạng thái MSS' : !health.ok ? `MSS trả lời lỗi (${health.error ?? 'không rõ'})` : `MSS chưa có năng lực "${capability}"`;
+      this.logger.warn(`Cờ ${MSS_FLAG_KEYS[flag]} đang bật nhưng ${why}. Tubu coi cờ này như tắt và đi đường cũ.`);
+      const summary = opsAlertLine({
+        name: 'Cờ MSS bật mà chưa dùng được',
+        detail: `${MSS_FLAG_KEYS[flag]}: ${why}, Tubu tạm đi đường cũ`,
+        where: OPS_WHERE.mss,
+        max: OPS_NOTICE_MAX - MSS_ALERT_TITLE.length - 2,
+      });
       await notifyAdmins(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-        { template: 'OPS_HEALTH_ALERT', subject: `cờ MSS ${MSS_FLAG_KEYS[flag]} thiếu năng lực`, data: () => ({ title: 'Kết nối MSS', summary }) },
+        { template: 'OPS_HEALTH_ALERT', subject: `cờ MSS ${MSS_FLAG_KEYS[flag]} thiếu năng lực`, data: () => ({ title: MSS_ALERT_TITLE, summary }) },
       );
     } catch (err) {
       this.logger.warn(`Không báo được Ops về cờ MSS ${MSS_FLAG_KEYS[flag]}: ${err instanceof Error ? err.message : err}`);

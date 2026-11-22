@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { notifyAdmins } from '../../../common/notify-admins';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { OPS_NOTICE_MAX, OPS_WHERE, opsAlertLine, type OpsAlertLineParts } from '../../ops/ops-alert-line';
 import { MSS_SHARED_STORE, type MssSharedStore } from './mss-circuit';
 import { MssFlagsService } from './mss-flags';
 import { MssClient, MssRequestError } from './mss.client';
@@ -22,6 +23,7 @@ const FINAL_MSS_STATUSES: ReadonlySet<string> = new Set<MssResultStatus>(['sent'
 const REASON_RE = /^[a-z][a-z0-9_]{0,63}$/;
 /** Báo Ops tối đa một lần mỗi giờ cho mỗi loại lỗi cấu hình (401 sai khoá, 409 thân khác). */
 const ALERT_EVERY_MS = 60 * 60_000;
+const ORDER_EVENTS_TITLE = 'Tin đơn hàng qua MSS';
 const ERROR_MAX = 300;
 
 interface ClaimedRow {
@@ -123,12 +125,20 @@ export class MssOrderEventSender {
     const http = err.status ?? null;
     const code = err.details.code;
     if (err.kind === 'unauthorized') {
-      await this.alertOnce('unauthorized', 'MSS từ chối chữ ký của Tubu (401 unauthorized) khi gửi tin đơn hàng. Kiểm MSS_KEY_ID và MSS_OUTBOUND_SECRET.');
+      await this.alertOnce(
+        'unauthorized',
+        { name: 'MSS từ chối chữ ký của Tubu', detail: 'lỗi 401 khi gửi tin đơn hàng', where: `${OPS_WHERE.tech} kiểm khoá MSS` },
+        'Kiểm MSS_KEY_ID và MSS_OUTBOUND_SECRET.',
+      );
       return this.finishClaimed(row, 'DEAD', 'unauthorized', { lastHttpStatus: http, lastError: err.message });
     }
     if (err.kind === 'client_error') {
       if (http === 409) {
-        await this.alertOnce('event_id_reused', `MSS báo trùng event_id nhưng khác thân (409) cho đơn ${row.orderCode}. Đây là lỗi lập trình phía Tubu.`);
+        await this.alertOnce(
+          'event_id_reused',
+          { name: 'MSS báo trùng mã tin đơn hàng', detail: `đơn ${row.orderCode} (lỗi 409)`, where: OPS_WHERE.tech },
+          'event_id trùng nhưng khác thân: lỗi lập trình phía Tubu.',
+        );
         return this.finishClaimed(row, 'DEAD', 'event_id_reused', { lastHttpStatus: http, lastError: err.message });
       }
       return this.finishClaimed(row, 'DEAD', mssReasonOf(code) ?? `http_${http ?? 'unknown'}`, { lastHttpStatus: http, lastError: err.message });
@@ -259,7 +269,8 @@ export class MssOrderEventSender {
     });
   }
 
-  private async alertOnce(kind: string, summary: string): Promise<void> {
+  /** `devHint` (tên biến môi trường, nguyên nhân kỹ thuật) chỉ vào log lỗi; admin nhận một dòng ngắn chỉ chỗ xử lý. */
+  private async alertOnce(kind: string, line: Pick<OpsAlertLineParts, 'name' | 'detail' | 'where'>, devHint: string): Promise<void> {
     try {
       const now = Date.now();
       let first: boolean;
@@ -269,10 +280,11 @@ export class MssOrderEventSender {
         first = this.memoryFirst(kind, now);
       }
       if (!first) return;
-      this.logger.error(summary);
+      const summary = opsAlertLine({ ...line, max: OPS_NOTICE_MAX - ORDER_EVENTS_TITLE.length - 2 });
+      this.logger.error(`${summary} ${devHint}`);
       await notifyAdmins(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-        { template: 'OPS_HEALTH_ALERT', subject: `tin đơn hàng MSS: ${kind}`, data: () => ({ title: 'Tin đơn hàng qua MSS', summary }) },
+        { template: 'OPS_HEALTH_ALERT', subject: `tin đơn hàng MSS: ${kind}`, data: () => ({ title: ORDER_EVENTS_TITLE, summary }) },
       );
     } catch (err) {
       this.logger.warn(`Không báo được Ops về lỗi MSS ${kind}: ${err instanceof Error ? err.message : String(err)}`);

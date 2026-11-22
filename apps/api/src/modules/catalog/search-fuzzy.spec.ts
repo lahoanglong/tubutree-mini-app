@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   DID_YOU_MEAN_MAX,
   FUZZY_LIMIT,
@@ -60,6 +62,15 @@ describe('search-fuzzy: helper thuần', () => {
     expect(synonymQuery('motor', syn)).toBeNull();
     expect(synonymQuery('khu mui oto', syn)).toBe('khu mui o to');
     expect(synonymQuery('nuoc giat', syn)).toBeNull();
+  });
+
+  it('fuzzyMatchSql: điều kiện món đang bán + đã duyệt viết literal đúng WHERE của chỉ mục trigram một phần (planner mới dùng được)', () => {
+    const migration = readFileSync(join(__dirname, '../../../prisma/migrations/20261122090000_w16_03_products_active_approved_trgm_idx/migration.sql'), 'utf8');
+    const where = /WHERE ("isActive") = true AND ("approvalStatus") = 'APPROVED'/.exec(migration);
+    expect(where).not.toBeNull();
+    const sql = fuzzyMatchSql('nuoc giat').sql;
+    expect(sql).toContain(`p.${where![1]} = true`);
+    expect(sql).toContain(`p.${where![2]} = 'APPROVED'`);
   });
 
   it('fuzzyMatchSql: toán tử <% dùng chỉ mục, mọi giá trị là tham số, LIMIT là tham số', () => {

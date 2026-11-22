@@ -1,5 +1,6 @@
 import { formatVnDateTime } from '../../common/vn-time';
 import type { AlertMessage } from './ops-alerts';
+import { clipText, OPS_ALERT_LINE_MAX, opsText, redactSensitive, scrubSecrets } from './ops-alert-line';
 
 export const OPS_EMAIL_APP_NAME = 'Tubu Tree';
 
@@ -14,72 +15,23 @@ export interface AlertEmail {
   html: string;
 }
 
-/** Một thông điệp sự cố dài hơn chừng này bị cắt: lỗi tự do từ Pancake/Redis có thể kèm cả thân phản hồi. */
-const MESSAGE_MAX = 500;
-const MIN_SECRET_LEN = 4;
+/**
+ * Gạch đầu dòng email dùng cùng giới hạn với webhook/in-app: lời sự cố đã được rút gọn ở nơi tạo (ops-alert-line), đây chỉ là lưới an
+ * toàn cho lỗi tự do (Pancake/Redis) lọt vào dài.
+ */
+const MESSAGE_MAX = OPS_ALERT_LINE_MAX;
 
 /** Nhãn đặt tay (OPS_ALERT_ENV_LABEL) → NODE_ENV → development. */
 export function emailEnvLabel(label: string | undefined, nodeEnv: string | undefined): string {
   return label?.trim() || nodeEnv?.trim() || 'development';
 }
 
-const PHONE_MASK = '[số điện thoại đã ẩn]';
-/** 0 hoặc 84/+84, rồi 8-10 chữ số (cho phép cách bằng dấu cách, chấm, gạch). Không bắt đầu giữa một dãy số dài hơn. */
-const PHONE_RE = /(?<!\d)(?:\+?84|0)(?:[ .-]?\d){8,10}(?!\d)/g;
-/** Mã đơn sinh ra: TUBU + ngày + 5 số, TUBUSUB + 7 số epoch + 3 số — phần số của chúng có thể bắt đầu bằng 0. */
-const ORDER_CODE_PREFIX = /TUBU(?:SUB)?$/i;
-/** Đầu số quốc gia sau 0/84 của số Việt Nam hiện hành: 2 (bàn), 3, 5, 7, 8, 9 (di động). */
-const VN_NATIONAL_START = /^[235789]/;
-
-/**
- * Che số điện thoại Việt Nam bất kể ký tự đứng trước ("SĐT0912345678" cũng bị che). Dính liền chữ cái thì chỉ che khi đúng
- * đầu số Việt Nam và không phải phần số của mã đơn (TUBU…/TUBUSUB… có thể có phần số bắt đầu bằng 0): che thừa một mã đơn
- * làm người vận hành không tra được đơn, nên các dãy khác thì giữ nguyên.
- */
-function maskPhones(text: string): string {
-  return text.replace(PHONE_RE, (m, offset: number) => {
-    const before = text.slice(0, offset);
-    if (/[\p{L}_]$/u.test(before)) {
-      if (ORDER_CODE_PREFIX.test(before)) return m;
-      const digits = m.replace(/\D/g, '');
-      const national = digits.startsWith('84') ? digits.slice(2) : digits.slice(1);
-      if (!VN_NATIONAL_START.test(national)) return m;
-    }
-    return PHONE_MASK;
-  });
-}
-
-/**
- * Lời báo động chỉ mang mã đơn và số lượng, nhưng vài thông điệp chứa lỗi tự do (đồng bộ danh mục, hàng đợi) — che số
- * điện thoại, thông tin đăng nhập trong URL, khoá/token trước khi ra khỏi hệ thống. Mã đơn (TUBU…), #id Pancake và tên
- * hàng đợi không khớp các mẫu này nên giữ nguyên. Chuỗi dài giống khoá/token được che trước số điện thoại để một khoá có
- * lẫn dãy số không bị chẻ đôi, lộ nửa còn lại.
- */
-export function redactSensitive(text: string): string {
-  return maskPhones(
-    text
-      .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
-      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
-      .replace(/\b(api[_-]?key|token|secret|password|passwd|authorization)\b(\s*[:=]\s*)\S+/gi, '$1$2***')
-      .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '***'),
-  );
-}
-
-/** Thay mọi giá trị bí mật đã biết (tài khoản/mật khẩu SMTP) trong chuỗi lỗi; giá trị quá ngắn bỏ qua để không phá chữ thường. */
-export function scrubSecrets(text: string, secrets: string[]): string {
-  let out = text;
-  for (const s of secrets) {
-    const v = s.trim();
-    if (v.length >= MIN_SECRET_LEN) out = out.split(v).join('***');
-  }
-  return out;
-}
+export { redactSensitive, scrubSecrets };
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-const clip = (s: string) => (s.length > MESSAGE_MAX ? `${s.slice(0, MESSAGE_MAX - 1)}…` : s);
-const safeMessage = (s: string) => clip(redactSensitive(s));
+const safeMessage = (s: string) => clipText(opsText(s), MESSAGE_MAX);
 
 const subjectPrefix = (ctx: AlertEmailContext) => `[${ctx.appName} · ${ctx.envLabel}]`;
 const WHERE_TO_HANDLE = 'vào trang quản trị Tubu Tree → mục "Sức khoẻ hệ thống"';

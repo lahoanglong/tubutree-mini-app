@@ -21,6 +21,7 @@ export interface CliOptions {
   concurrency: number;
   timeout: number;
   strict: boolean;
+  allowNoCampaigns: boolean;
   json: boolean;
   help: boolean;
 }
@@ -50,7 +51,7 @@ export function isLocalOrStagingHost(host: string): boolean;
 export function hostProblem(url: string, canonicalOrigin: string): string | null;
 export function findBadHosts(urls: string[], canonicalOrigin: string): { url: string; reason: string }[];
 export function checkSitemapXml(xml: string): { errors: string[]; warnings: string[]; locs: string[]; root: string | null };
-export function analyzeSitemap(locs: string[], canonicalOrigin: string): { counts: { total: number; products: number; categories: number; campaigns: number }; findings: Finding[] };
+export function analyzeSitemap(locs: string[], canonicalOrigin: string, opts?: { allowNoCampaigns?: boolean }): { counts: { total: number; products: number; categories: number; campaigns: number }; findings: Finding[] };
 export function checkRobots(text: string, canonicalOrigin: string): Finding[];
 export function checkSecurityHeaders(headers: Record<string, string | string[] | undefined>, options?: { https?: boolean; where?: string; check?: string }): Finding[];
 export function extractCanonical(html: string): string | null;

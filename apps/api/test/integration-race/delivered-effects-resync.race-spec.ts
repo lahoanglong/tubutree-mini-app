@@ -244,7 +244,7 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
     expect(snap.orders.deliveredEffectsPending).toBe(1);
     expect(snap.orders.deliveredEffectsOrders.map((o) => o.code)).toEqual([s.order.code]);
     const problem = snap.problems.find((p) => p.key === PROBLEM);
-    expect(problem?.message).toContain('đơn đã giao chưa xong việc sau giao');
+    expect(problem?.message).toContain('Việc sau giao chưa xong');
     expect(problem?.message).toContain(s.order.code);
     // Báo theo cơ chế chống lặp sẵn có: lượt kiểm sau không báo lại cùng sự cố.
     await expect(health.checkAndAlert(later(15))).resolves.toMatchObject({ sent: 'ALERT' });
@@ -457,7 +457,7 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
     const snap = await health.snapshot();
     expect(snap.orders.deliveredEffectsOrders.map((o) => o.code)).toEqual([old.order.code]);
     expect(snap.orders.deliveredEffectsStale).toBe(1);
-    expect(snap.problems.find((p) => p.key === PROBLEM)?.message).toContain('KHÔNG tự chạy lại');
+    expect(snap.problems.find((p) => p.key === PROBLEM)?.message).toContain('cần chạy lại tay');
     // Đường chạy lại tay (endpoint admin) không giới hạn cửa sổ ngày.
     await expect(orderStatus.resyncDeliveredEffects(old.order.id)).resolves.toMatchObject({ outcome: 'DONE', pointsCredited: true, commissionsLocked: 1 });
     await expect(orderStatus.resyncDeliveredEffects(old.order.code)).resolves.toEqual({ outcome: 'ALREADY_DONE' });

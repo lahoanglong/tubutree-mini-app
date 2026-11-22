@@ -226,6 +226,19 @@ describe('evaluateDb', () => {
       expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
+    it('w16-03: chỉ mục trigram một phần trên products (đúng điều kiện bước chịu gõ sai) nằm trong danh sách tương thích image, không phải migration nặng', () => {
+      const name = '20261122090000_w16_03_products_active_approved_trgm_idx';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS.map((m) => m.name)).not.toContain(name);
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+      const sql = readFileSync(join(__dirname, '../../../prisma/migrations', name, 'migration.sql'), 'utf8').replace(/--[^\n]*/g, '');
+      // Chỉ thêm chỉ mục: không UPDATE/DELETE/ALTER/DROP.
+      expect(sql).not.toMatch(/\b(?:UPDATE|DELETE|ALTER|DROP|INSERT)\b/i);
+      expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS "products_active_approved_nameSearch_trgm_idx"/);
+      // Predicate phải khớp literal của fuzzyMatchSql thì planner mới chứng minh được và dùng chỉ mục.
+      expect(sql).toMatch(/WHERE "isActive" = true AND "approvalStatus" = 'APPROVED'/);
+    });
+
     it('mss_catalog_enrichment: hai bảng mới nằm trong danh sách tương thích image, không phải migration nặng', () => {
       const name = '20261117100000_mss_catalog_enrichment';
       expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);

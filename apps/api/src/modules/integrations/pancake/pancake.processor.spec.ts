@@ -690,7 +690,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     expect(notifications.notify).toHaveBeenCalledWith(
       'admin1',
       'OPS_REFUND_ALERT',
-      expect.objectContaining({ order_code: 'TUBU1', message: expect.stringContaining('Đối chiếu sao kê') }),
+      expect.objectContaining({ order_code: 'TUBU1', message: expect.stringContaining('đối chiếu sao kê') }),
     );
   });
 

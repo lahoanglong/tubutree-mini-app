@@ -12,7 +12,8 @@
 // Nhóm kiểm (bỏ nhóm bằng --skip a,b):
 //   redirects  URL WordPress cũ (bảng luật + scripts/ops/data/wp-live-urls-20261114.txt): 301 một chặng tới đích trả 2xx, 410 đúng chỗ, 0 vòng lặp, 0 đích 404.
 //   robots     /robots.txt: 200, có Sitemap trỏ đúng host canonical, chặn /admin, không chặn cả site.
-//   sitemap    /sitemap.xml: XML hợp lệ, gốc urlset/sitemapindex đúng xmlns, có sản phẩm + danh mục (+ /chien-dich/*: WARN nếu không có chiến dịch nào chạy),
+//   sitemap    /sitemap.xml: XML hợp lệ, gốc urlset/sitemapindex đúng xmlns, có sản phẩm + danh mục (+ /chien-dich/*: WARN nếu không có chiến dịch nào chạy;
+//              đã kiểm ở admin là không có chiến dịch nào có trang riêng thì thêm --allow-no-campaigns để bỏ WARN này, cần cho --strict),
 //              0 URL localhost/staging/host khác canonical.
 //   pages      Trang chủ, /san-pham và vài trang sản phẩm lấy từ sitemap: 200, canonical + og:url đúng host, Product JSON-LD đúng host, giá VND,
 //              AggregateRating chỉ khi reviewCount >= 1; header bảo mật (HSTS khi https, nosniff, chống nhúng khung, Referrer/Permissions-Policy, CSP).
@@ -237,8 +238,11 @@ const isProductUrl = (loc) => {
   }
 };
 
-/** Phân loại URL của sitemap theo đường dẫn (bất kể host) và xếp FAIL/WARN: thiếu sản phẩm/danh mục, URL host lạ, trùng, thiếu chiến dịch. */
-export function analyzeSitemap(locs, canonicalOrigin) {
+/**
+ * Phân loại URL của sitemap theo đường dẫn (bất kể host) và xếp FAIL/WARN: thiếu sản phẩm/danh mục, URL host lạ, trùng, thiếu chiến dịch.
+ * `allowNoCampaigns`: người chạy đã xác nhận không có chiến dịch nào đang chạy có trang riêng, nên 0 /chien-dich/* không còn là WARN.
+ */
+export function analyzeSitemap(locs, canonicalOrigin, { allowNoCampaigns = false } = {}) {
   const findings = [];
   const counts = { total: locs.length, products: 0, categories: 0, campaigns: 0 };
   const seen = new Set();
@@ -262,11 +266,14 @@ export function analyzeSitemap(locs, canonicalOrigin) {
   if (bad.length) findings.push(finding('sitemap', 'FAIL', `${bad.length} URL không thuộc ${new URL(canonicalOrigin).origin}: ${sample(bad.map((b) => `${b.url} (${b.reason})`))}`));
   if (counts.products === 0) findings.push(finding('sitemap', 'FAIL', 'không có trang sản phẩm /san-pham/<slug> nào'));
   if (counts.categories === 0) findings.push(finding('sitemap', 'FAIL', 'không có trang danh mục /san-pham?category=<id> nào'));
-  if (counts.campaigns === 0) findings.push(finding('sitemap', 'WARN', 'không có /chien-dich/* (đúng nếu không có chiến dịch nào đang chạy có trang riêng; kiểm ở admin)'));
+  if (counts.campaigns === 0 && !allowNoCampaigns) {
+    findings.push(finding('sitemap', 'WARN', 'không có /chien-dich/* (đúng nếu không có chiến dịch nào đang chạy có trang riêng; kiểm ở admin rồi chạy lại với --allow-no-campaigns)'));
+  }
   if (!home) findings.push(finding('sitemap', 'WARN', 'không có trang chủ "/"'));
   if (duplicates.length) findings.push(finding('sitemap', 'WARN', `${duplicates.length} URL trùng: ${sample(duplicates)}`));
   if (!findings.some((f) => f.level === 'FAIL')) {
-    findings.push(finding('sitemap', 'PASS', `${counts.total} URL: ${counts.products} sản phẩm, ${counts.categories} danh mục, ${counts.campaigns} chiến dịch, đúng host`));
+    const campaigns = counts.campaigns === 0 && allowNoCampaigns ? '0 chiến dịch (--allow-no-campaigns)' : `${counts.campaigns} chiến dịch`;
+    findings.push(finding('sitemap', 'PASS', `${counts.total} URL: ${counts.products} sản phẩm, ${counts.categories} danh mục, ${campaigns}, đúng host`));
   }
   return { counts, findings };
 }
@@ -532,6 +539,7 @@ Tuỳ chọn:
   --skip LIST         bỏ nhóm kiểm, cách nhau bằng dấu phẩy: ${CHECKS.join(',')}
   --concurrency N     số request song song (mặc định 4)
   --timeout MS        thời gian chờ mỗi request (mặc định 15000)
+  --allow-no-campaigns  sitemap không có /chien-dich/* không còn là WARN (chỉ dùng khi admin xác nhận không có chiến dịch nào có trang riêng)
   --strict            WARN cũng làm thoát mã 1
   --json              in kết quả dạng JSON
   -h, --help          in trợ giúp này
@@ -564,6 +572,7 @@ export function parseArgs(argv) {
     concurrency: 4,
     timeout: 15000,
     strict: false,
+    allowNoCampaigns: false,
     json: false,
     help: false,
   };
@@ -574,6 +583,7 @@ export function parseArgs(argv) {
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--no-build') opts.build = false;
     else if (arg === '--strict') opts.strict = true;
+    else if (arg === '--allow-no-campaigns') opts.allowNoCampaigns = true;
     else if (arg === '--json') opts.json = true;
     else if (takes.has(arg)) {
       i += 1;
@@ -906,7 +916,7 @@ export async function runLive(opts) {
       if (!skip.has('sitemap')) {
         for (const e of errors.slice(0, 5)) findings.push(finding('sitemap', 'FAIL', e));
         if (!/xml/i.test(String(res.headers['content-type'] ?? ''))) findings.push(finding('sitemap', 'WARN', `/sitemap.xml: content-type ${res.headers['content-type'] ?? '(trống)'}`));
-        findings.push(...analyzeSitemap(locs, canonical).findings);
+        findings.push(...analyzeSitemap(locs, canonical, { allowNoCampaigns: opts.allowNoCampaigns === true }).findings);
       }
     }
   }
