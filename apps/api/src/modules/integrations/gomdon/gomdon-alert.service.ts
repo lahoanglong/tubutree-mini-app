@@ -49,7 +49,8 @@ export class GomdonAlertService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  async alert(orderCode: string, message: string, template: string = GOMDON_ALERT_TEMPLATE, kind?: GomdonAlertKind): Promise<void> {
+  /** `where`: chỗ xử lý khi nơi gọi biết rõ hơn mặc định theo nguồn (vd. khoản Pancake báo đã trả chờ đối chiếu ở tab Hôm nay). */
+  async alert(orderCode: string, message: string, template: string = GOMDON_ALERT_TEMPLATE, kind?: GomdonAlertKind, where?: string): Promise<void> {
     const source = template === PANCAKE_ALERT_TEMPLATE ? 'PANCAKE' : 'GOMDON';
     this.logger.error(`[${source} CẦN XỬ LÝ] Đơn ${orderCode}: ${message}`);
     try {
@@ -85,8 +86,9 @@ export class GomdonAlertService {
         orderBy: { role: 'asc' },
         take: MAX_RECIPIENTS,
       });
-      // Lời đủ (cách tra/huỷ vận đơn từng bước) nằm ở báo động trên chi tiết đơn; tin in-app chỉ mang câu đầu, đã che SĐT, và chỗ xử lý.
-      const short = opsAlertSlot(message, alertWhere(source, orderCode));
+      // Lời đủ nằm ở log và, với đơn mua, ở báo động trên chi tiết đơn; tin in-app chỉ mang phần đầu (đã che SĐT) và chỗ xử lý, nên nơi gọi
+      // đặt việc cần làm và mã lên trước, lỗi tự do để cuối.
+      const short = opsAlertSlot(message, where ?? alertWhere(source, orderCode));
       for (const a of admins) {
         await this.notifications
           .notify(a.id, template, { order_code: orderCode, message: short })

@@ -93,9 +93,14 @@ describe('q6 báo động vận hành (real Postgres)', () => {
     const hook = snap.problems.find((p) => p.key === 'pancake.webhook');
     expect(hook?.message).toContain(code);
 
-    await expect(health.checkAndAlert(t0)).resolves.toMatchObject({ sent: 'ALERT' });
+    const first = await health.checkAndAlert(t0);
+    expect(first).toMatchObject({ sent: 'ALERT' });
     // Người nhận là tối đa MAX_ADMINS admin đầu bảng: DB dùng chung với spec khác có thể đã quá số đó, nên không chờ đúng adminId.
-    expect(notify).toHaveBeenCalledWith(expect.any(String), 'OPS_HEALTH_ALERT', expect.objectContaining({ summary: expect.stringContaining(code) }));
+    // Tin in-app ≤ 200 ký tự: một sự cố thì đúng dòng của nó (có mã đơn); nhiều sự cố (DB dùng chung) thì nêu tên từng loại, còn mã đơn đi theo
+    // từng dòng của webhook, email và màn sức khoẻ (đã kiểm ở hook.message bên trên).
+    const inApp = notify.mock.calls.find((c) => c[1] === 'OPS_HEALTH_ALERT')![2] as { title: string; summary: string };
+    expect(`${inApp.title}: ${inApp.summary}`.length).toBeLessThanOrEqual(200);
+    expect(inApp.summary).toContain(first.problems.length === 1 ? code : 'Webhook Pancake lỗi');
 
     // Thêm 24 giờ nữa trôi qua: sự kiện vẫn lỗi → không được báo "đã ổn".
     notify.mockClear();

@@ -21,6 +21,8 @@ export const OPS_WHERE = {
   cron: 'Admin › Sức khoẻ hệ thống › Tác vụ nền',
   mss: 'Admin › Sức khoẻ hệ thống › MSS',
   pancakeQueue: 'Admin › Đơn hàng › Cần xử lý Pancake',
+  /** Thẻ "Pancake báo đã thanh toán…" của tab Hôm nay (đơn chưa gắn đúng đơn Pancake, chờ đối chiếu sao kê): không nằm ở hàng Pancake. */
+  paymentUnlinked: 'Admin › Hôm nay › Pancake báo đã thanh toán',
   gomdonQueue: 'Admin › Đơn hàng › Cần xử lý thu gom',
   waste: 'Admin › Đổi rác',
   refunds: 'Admin › Hoàn tiền khách',
@@ -62,7 +64,8 @@ function maskPhones(text: string): string {
 
 /**
  * Lời báo động chỉ mang mã đơn và số lượng, nhưng vài thông điệp chứa lỗi tự do (đồng bộ danh mục, hàng đợi) — che số
- * điện thoại, thông tin đăng nhập trong URL, khoá/token trước khi ra khỏi hệ thống. Mã đơn (TUBU…), #id Pancake và tên
+ * điện thoại, thông tin đăng nhập trong URL, khoá/token (cả tên có tiền tố như refresh_token, client_secret và dạng JSON "password":"…")
+ * trước khi ra khỏi hệ thống. Mã đơn (TUBU…), #id Pancake và tên
  * hàng đợi không khớp các mẫu này nên giữ nguyên. Chuỗi dài giống khoá/token được che trước số điện thoại để một khoá có
  * lẫn dãy số không bị chẻ đôi, lộ nửa còn lại.
  */
@@ -71,7 +74,7 @@ export function redactSensitive(text: string): string {
     text
       .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
       .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
-      .replace(/\b(api[_-]?key|token|secret|password|passwd|authorization)\b(\s*[:=]\s*)\S+/gi, '$1$2***')
+      .replace(/((?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|token|secret|password|passwd|authorization))("?\s*[:=]\s*"?)[^\s",}]+/gi, '$1$2***')
       .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '***'),
   );
 }

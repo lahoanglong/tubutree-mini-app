@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PancakeProcessor } from './pancake.processor';
+import { OPS_WHERE, opsAlertSlot } from '../../ops/ops-alert-line';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -387,7 +388,11 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(historyCreate.mock.calls[0]![0].data.note).toContain('chờ đối chiếu sao kê');
       expect(historyCreate.mock.calls[0]![0].data.createdAt).toEqual(unlinkedFlags(orderUpdateMany)[0]!.data.paymentUnlinkedFirstAt);
       expect(alerts.alert).toHaveBeenCalledTimes(1);
-      expect(alerts.alert.mock.calls[0]![1]).toContain('Kế toán đối chiếu sao kê rồi bấm "Đã nhận tiền"');
+      // Đơn này không vào hàng "Cần xử lý Pancake" (không ghi pancakeAttention) mà ở thẻ của tab Hôm nay: tin chỉ đúng chỗ đó, không bị cắt.
+      const [code, msg, template, kind, where] = alerts.alert.mock.calls[0]! as [string, string, string, unknown, string];
+      expect([code, template, kind, where]).toEqual(['TUBU1', 'OPS_PANCAKE_ALERT', undefined, OPS_WHERE.paymentUnlinked]);
+      expect(msg).toContain('KHÔNG tự xác nhận');
+      expect(opsAlertSlot(msg, where)).toBe(`${msg} · ${OPS_WHERE.paymentUnlinked}`);
       // Cờ riêng, mỗi cặp Pancake mới đẩy mốc lên mới nhất (resolve phải thấy đúng mốc đó); không đụng ô chữ pancakeAttention.
       expect(unlinkedFlags(orderUpdateMany)).toEqual([
         { where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { paymentUnlinkedAt: expect.any(Date), paymentUnlinkedFirstAt: expect.any(Date) } },
@@ -442,10 +447,12 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       expect(unlinkedFlags(t.orderUpdateMany)).toHaveLength(1);
       expect(attentionFlags(t.orderUpdateMany)).toHaveLength(0);
       expect(alerts.alert).toHaveBeenCalledTimes(1);
-      const msg = alerts.alert.mock.calls[0]![1] as string;
-      expect(msg).toContain('quản trị viên đối chiếu sao kê');
-      expect(msg).toContain('bấm "Đã đối chiếu"');
-      expect(msg).not.toContain('bấm "Đã nhận tiền"');
+      const [, msg, , , where] = alerts.alert.mock.calls[0]! as [string, string, string, unknown, string];
+      expect(where).toBe(OPS_WHERE.paymentUnlinked);
+      expect(msg).toContain('đơn đã huỷ/trả');
+      expect(msg).toContain('KHÔNG tạo khoản hoàn');
+      expect(msg).not.toContain('Đã nhận tiền');
+      expect(opsAlertSlot(msg, where)).toBe(`${msg} · ${OPS_WHERE.paymentUnlinked}`);
     });
 
     it('dấu "đã ghi lý do" theo cặp (đơn, đơn Pancake): đã chốt #p1 thì #p1 không ghim lại, #p2 vẫn được ghim', async () => {

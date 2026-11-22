@@ -169,7 +169,7 @@ export class GomdonWastePickupService {
     const cashNote = (res.refundedCashVnd ?? 0) > 0 ? `, hoàn ${res.refundedCashVnd!.toLocaleString('vi-VN')}đ về Ví` : '';
     await this.alerts.alert(
       wasteGomdonCustomerId(req.code),
-      `Không tạo được vận đơn Gomdon cho phiếu thu gom ${req.code} (${reason}). Hệ thống đã huỷ phiếu, hoàn ${res.refunded} Điểm Xanh phí ship${cashNote} và báo khách.`,
+      `Phiếu thu gom ${req.code}: Gomdon không tạo được vận đơn, hệ thống đã huỷ phiếu, hoàn ${res.refunded} Điểm Xanh phí ship${cashNote} và báo khách (lỗi: ${reason})`,
       GOMDON_ALERT_TEMPLATE,
     );
   }
@@ -209,7 +209,7 @@ export class GomdonWastePickupService {
       }
       const res = await this.gomdonClient.cancelOrder(req.gomdonOrderId);
       if (!res.ok && looksLikeCancelNotFound(res.message)) {
-        await this.alerts.alert(id, `Gomdon báo "${res.message}" khi huỷ vận đơn ${req.gomdonPartnerCode ?? req.gomdonOrderId} của phiếu ${req.code} — tra cổng Gomdon, còn chạy thì huỷ tay.`);
+        await this.alerts.alert(id, `Phiếu thu gom ${req.code}: tra cổng Gomdon vận đơn ${req.gomdonPartnerCode ?? req.gomdonOrderId}, còn chạy thì huỷ tay (Gomdon báo "${res.message}")`);
         return;
       }
       if (!res.ok) throw new Error(`Gomdon không huỷ được vận đơn: ${res.message ?? 'không rõ lý do'}`);
@@ -228,7 +228,7 @@ export class GomdonWastePickupService {
       if (!isLastAttempt) throw err;
       await this.alerts.alert(
         id,
-        `Không huỷ được vận đơn Gomdon ${req.gomdonPartnerCode ?? req.gomdonOrderId ?? ''} của phiếu thu gom ${req.code} đã đóng (${err instanceof Error ? err.message : err}) — huỷ tay trên Gomdon để bưu tá không tới lấy rác.`,
+        `Phiếu thu gom ${req.code} đã đóng, vận đơn ${req.gomdonPartnerCode ?? req.gomdonOrderId ?? ''}: huỷ tay trên Gomdon để bưu tá không tới lấy rác (lỗi khi huỷ: ${err instanceof Error ? err.message : err})`,
         GOMDON_ALERT_TEMPLATE,
       );
     }
@@ -249,7 +249,8 @@ export class GomdonWastePickupService {
       throw new UnrecoverableError(`Không ghi được NEEDS_MANUAL_CHECK cho phiếu ${req.code} (${reason}): ${err instanceof Error ? err.message : err}`);
     }
     const id = wasteGomdonCustomerId(req.code);
-    await this.alerts.alert(id, `${reason}. ${advice ?? `KIỂM TRA GOMDON (mã ${id}) trước khi tạo vận đơn tay.`}`, GOMDON_ALERT_TEMPLATE);
+    const todo = advice ?? `KIỂM TRA GOMDON (mã ${id}) trước khi tạo vận đơn tay.`;
+    await this.alerts.alert(id, `Phiếu thu gom ${req.code}: ${todo} Lý do: ${reason}`, GOMDON_ALERT_TEMPLATE);
   }
 
   /** Ghi mã vận đơn, thử lại tại chỗ khi DB chập chờn: để BullMQ retry thì lần sau thấy CREATING (không tạo trùng) nhưng MẤT mã vừa tạo. */

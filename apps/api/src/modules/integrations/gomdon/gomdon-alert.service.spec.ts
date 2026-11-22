@@ -149,4 +149,12 @@ describe('GomdonAlertService: tin in-app ngắn, không lộ SĐT; báo động 
       'Đã huỷ ở Tubu nhưng CHƯA huỷ được trên Pancake · Admin › Đơn hàng › Cần xử lý Pancake',
     );
   });
+
+  it('nơi gọi chỉ rõ chỗ xử lý (khoản Pancake báo đã trả chờ đối chiếu nằm ở thẻ Hôm nay, không ở hàng Pancake): dùng đúng chỗ đó', async () => {
+    const pk = build();
+    await pk.svc.alert('TUBU1', 'Pancake #9 báo đã trả 100.000đ', PANCAKE_ALERT_TEMPLATE, undefined, 'Admin › Hôm nay › Pancake báo đã thanh toán');
+    expect((pk.notifications.notify.mock.calls[0] as [string, string, { message: string }])[2].message).toBe(
+      'Pancake #9 báo đã trả 100.000đ · Admin › Hôm nay › Pancake báo đã thanh toán',
+    );
+  });
 });

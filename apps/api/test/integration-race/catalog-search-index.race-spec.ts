@@ -108,7 +108,8 @@ describe('C-038 — tìm không dấu có index (real Postgres)', () => {
         },
       );
     expect(text).toMatch(/BitmapOr/);
-    expect(text).toContain('products_nameSearch_trgm_idx');
+    // Câu tìm của service lọc isActive/approvalStatus đúng như chỉ mục một phần (migration w16_03) nên planner dùng được cả hai chỉ mục trigram.
+    expect(text).toMatch(/products_(active_approved_)?nameSearch_trgm_idx/);
     expect(text).toContain('products_tags_gin');
     expect(text).not.toMatch(/Seq Scan on products/);
     const [still] = await prisma.$queryRaw<{ n: bigint }[]>`

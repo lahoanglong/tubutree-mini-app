@@ -5,6 +5,7 @@ import type { PrismaService } from '../../../prisma/prisma.service';
 import type { GomdonClient } from './gomdon.client';
 import type { GomdonAlertService } from './gomdon-alert.service';
 import type { WasteHomePickupService } from '../../waste-exchange/home-pickup/waste-home-pickup.service';
+import { OPS_ALERT_SLOT_MAX, OPS_WHERE, opsAlertSlot } from '../../ops/ops-alert-line';
 
 const mockEnqueueCancel = jest.fn();
 jest.mock('./gomdon-queue', () => ({ ...jest.requireActual('./gomdon-queue'), enqueueGomdonWasteCancel: (...a: unknown[]) => mockEnqueueCancel(...a) }));
@@ -375,5 +376,42 @@ describe('GomdonWastePickupService.cancelOnGomdon', () => {
     await svc.cancelOnGomdon('r1', false);
     expect(client.cancelOrder).not.toHaveBeenCalled();
     expect(alerts.alert).toHaveBeenCalledWith('WR-TR-AAAAA', expect.stringContaining('HUỶ TAY'));
+  });
+});
+
+describe('tin in-app của phiếu thu gom (không có dòng gomdon_alerts nên là bản duy nhất admin đọc): lỗi Gomdon dài không đẩy mất việc cần làm', () => {
+  const LONG = `HTTP 500 ${'gomdon upstream timeout while calling carrier api '.repeat(8)}`;
+  const slot = (alerts: { alert: jest.Mock }) => opsAlertSlot(alerts.alert.mock.calls[0]![1] as string, OPS_WHERE.waste);
+  const closed = { status: 'CANCELLED', gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1' };
+
+  it('huỷ vận đơn lỗi ở lượt cuối: còn mã phiếu, mã vận đơn và "huỷ tay"', async () => {
+    const { svc, client, alerts } = build(closed);
+    client.cancelOrder.mockResolvedValue({ ok: false, message: LONG });
+    await svc.cancelOnGomdon('r1', true);
+    const s = slot(alerts);
+    expect(s.length).toBeLessThanOrEqual(OPS_ALERT_SLOT_MAX);
+    for (const part of ['TR-AAAAA', 'BE77', 'huỷ tay', OPS_WHERE.waste]) expect(s).toContain(part);
+  });
+
+  it('Gomdon báo không tìm thấy (lời dài): còn mã phiếu, mã vận đơn và "tra cổng Gomdon"', async () => {
+    const { svc, client, alerts } = build(closed);
+    client.cancelOrder.mockResolvedValue({ ok: false, message: `Không tìm thấy đơn ${LONG}` });
+    await svc.cancelOnGomdon('r1', false);
+    const s = slot(alerts);
+    for (const part of ['TR-AAAAA', 'BE77', 'tra cổng Gomdon']) expect(s).toContain(part);
+  });
+
+  it('không rõ đã tạo vận đơn chưa (lỗi dài): còn "KIỂM TRA GOMDON" và mã tra', async () => {
+    const { svc, alerts } = build({ gomdonStatus: 'CREATING' });
+    await svc.markFinalPushFailure('r1', new Error(LONG));
+    const s = slot(alerts);
+    for (const part of ['KIỂM TRA GOMDON', 'WR-TR-AAAAA']) expect(s).toContain(part);
+  });
+
+  it('hết lượt tạo vận đơn (lỗi dài): còn mã phiếu và số điểm đã hoàn', async () => {
+    const { svc, alerts } = build();
+    await svc.markFinalPushFailure('r1', new Error(LONG));
+    const s = slot(alerts);
+    for (const part of ['TR-AAAAA', 'hoàn 15000 Điểm Xanh']) expect(s).toContain(part);
   });
 });
