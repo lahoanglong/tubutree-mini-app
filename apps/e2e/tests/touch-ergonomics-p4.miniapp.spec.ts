@@ -91,10 +91,8 @@ for (const width of NARROW_WIDTHS) {
     });
 
     test('tấm chọn Tỉnh/Phường mở từ tấm sửa địa chỉ', async ({ page, api }) => {
-      // Lỗi có sẵn trên main, lộ ra khi đo sau lúc tấm trượt xong: GeoPicker là Sheet ZaUI lồng trong tấm sửa địa chỉ. Tấm cha đang có transform
-      // nên `position: fixed` của tấm con bám theo tấm cha (đỉnh ~200px) và bị cắt mất phần đầu: tiêu đề, nút đóng, ô "Tìm tỉnh/thành phố" ở trên
-      // mép đó không hiện, không bấm được. Sửa ở geo-picker (đưa Sheet ra body bằng portal), ngoài phạm vi tubu-w14-01. Sửa xong thì bỏ test.fixme.
-      test.fixme(true, 'Tấm chọn Tỉnh/Phường lồng trong tấm sửa địa chỉ bị cắt mất đầu (ô tìm không chạm được), chờ sửa geo-picker');
+      // GeoPicker là tấm lồng trong tấm sửa địa chỉ; tấm cha có transform nên tấm con phải dựng ra ngoài (BottomSheet portal vào #app), không thì
+      // `position: fixed` bám theo tấm cha và mất phần đầu: tiêu đề, ô tìm không hiện, không bấm được.
       mockAddressBook(api);
       await page.goto('/addresses');
       await expect(page.getByText('Mặc định', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -103,8 +101,16 @@ for (const width of NARROW_WIDTHS) {
       await expect(province).toBeVisible();
 
       await province.click();
-      await expect(page.getByRole('option').first()).toBeVisible();
+      const list = page.getByRole('listbox', { name: 'Tỉnh/Thành phố' });
+      await expect(list.getByRole('option').first()).toBeVisible();
       await expectClean(page, 'Tấm chọn Tỉnh/Thành phố', width);
+      const search = page.getByRole('searchbox', { name: 'Tìm tỉnh/thành phố' });
+      await expect(search).toBeInViewport({ ratio: 1 });
+      await search.fill('ha noi');
+      await expect(list.getByRole('option')).toHaveText(['Hà Nội']);
+      await list.getByRole('option', { name: 'Hà Nội' }).click();
+      await expect(list).toBeHidden();
+      await expect(page.getByRole('button', { name: 'Tỉnh/Thành phố: Hà Nội' })).toBeVisible();
     });
 
     test('Đánh giá sản phẩm có ảnh/video và tấm viết đánh giá', async ({ page, api }) => {

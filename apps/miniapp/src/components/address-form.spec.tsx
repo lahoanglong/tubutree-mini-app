@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactElement } from 'react';
 import { AddressForm } from './address-form';
+import { BottomSheet } from './ui/bottom-sheet';
 import * as shopApi from '../services/shop-api';
 import * as accountApi from '../services/account-api';
 import { LAST_GEO_KEY, ZALO_PREFILL_ASKED_KEY } from '../utils/address-memory';
@@ -731,5 +732,34 @@ describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
     fireEvent.click(screen.getByText('Lưu'));
     await waitFor(() => expect(shopApi.createAddress).toHaveBeenCalledTimes(1));
     expect(shopApi.createAddress).toHaveBeenCalledWith(expect.objectContaining({ phone: '0912345678' }));
+  });
+});
+
+describe('AddressForm trong sheet sửa địa chỉ — tấm Tỉnh/Phường không bị sheet ngoài cắt (w14-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.user.current = { fullName: 'Long', phone: '0900000000' };
+  });
+  afterEach(() => document.getElementById('app')?.remove());
+
+  it('mở ô Tỉnh/Thành phố: danh sách nằm ở #app, ngoài khung .zaui-sheet-content của sheet sửa địa chỉ', async () => {
+    const app = document.createElement('div');
+    app.id = 'app';
+    document.body.appendChild(app);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BottomSheet open title="Sửa địa chỉ" size="full" onClose={() => {}}>
+          <AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />
+        </BottomSheet>
+      </QueryClientProvider>,
+      { container: app.appendChild(document.createElement('div')) },
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Tỉnh\/Thành phố:/ }));
+    const list = await screen.findByRole('listbox', { name: 'Tỉnh/Thành phố' });
+    await screen.findByRole('option', { name: 'TP. Hồ Chí Minh' });
+    const editSheet = screen.getByRole('dialog', { name: 'Sửa địa chỉ' }).closest('.zaui-sheet-content')!;
+    expect(editSheet.contains(list)).toBe(false);
+    expect(list.closest('.zaui-sheet')!.parentElement).toBe(app);
   });
 });

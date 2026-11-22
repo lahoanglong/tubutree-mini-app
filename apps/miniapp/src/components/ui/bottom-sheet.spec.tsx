@@ -1,6 +1,7 @@
 import { act, render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { BottomSheet } from './bottom-sheet';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { Sheet } from 'zmp-ui';
+import { BottomSheet, SheetLayer } from './bottom-sheet';
 
 describe('BottomSheet', () => {
   it('renders children and title when open', () => {
@@ -100,6 +101,67 @@ describe('BottomSheet', () => {
       </BottomSheet>,
     );
     expect(screen.getByText('Xác nhận')).toBeInTheDocument();
+  });
+
+  describe('sheet lồng (tấm Tỉnh/Phường trong sheet sửa địa chỉ bị cắt phần trên, w14-01)', () => {
+    afterEach(() => document.getElementById('app')?.remove());
+
+    function mountApp(): HTMLElement {
+      const app = document.createElement('div');
+      app.id = 'app';
+      document.body.appendChild(app);
+      return app;
+    }
+
+    it('sheet cấp đầu vẫn dựng tại chỗ trong cây của trang', () => {
+      const app = mountApp();
+      const { container } = render(<BottomSheet open title="Ngoài" onClose={() => {}}>x</BottomSheet>, { container: app.appendChild(document.createElement('div')) });
+      expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    });
+
+    it('sheet mở trong sheet khác dựng ở #app, không nằm trong khung .zaui-sheet-content (có transform + overflow:hidden) của sheet ngoài', () => {
+      const app = mountApp();
+      render(
+        <BottomSheet open title="Sửa địa chỉ" onClose={() => {}}>
+          <BottomSheet open title="Tỉnh/Thành phố" size="full" onClose={() => {}}>
+            danh sách tỉnh
+          </BottomSheet>
+        </BottomSheet>,
+        { container: app.appendChild(document.createElement('div')) },
+      );
+      const outer = screen.getByRole('dialog', { name: 'Sửa địa chỉ' });
+      const inner = screen.getByRole('dialog', { name: 'Tỉnh/Thành phố' });
+      expect(outer.closest('.zaui-sheet-content')!.contains(inner)).toBe(false);
+      expect(inner.closest('.zaui-sheet')!.parentElement).toBe(app);
+      expect((inner.closest('.zaui-sheet-content') as HTMLElement).style.height).toBe('92vh');
+    });
+
+    it('nội dung của <Sheet> ZaUI dùng trực tiếp bọc SheetLayer: BottomSheet bên trong cũng dựng ở #app', () => {
+      const app = mountApp();
+      render(
+        <Sheet visible onClose={() => {}} autoHeight>
+          <SheetLayer>
+            <BottomSheet open title="Phường/Xã" onClose={() => {}}>
+              danh sách phường
+            </BottomSheet>
+          </SheetLayer>
+        </Sheet>,
+        { container: app.appendChild(document.createElement('div')) },
+      );
+      const inner = screen.getByRole('dialog', { name: 'Phường/Xã' });
+      expect(inner.closest('.zaui-sheet')!.parentElement).toBe(app);
+    });
+
+    it('không có #app (môi trường test, trang lạ): sheet lồng dựng ở body', () => {
+      render(
+        <BottomSheet open title="Ngoài" onClose={() => {}}>
+          <BottomSheet open title="Trong" onClose={() => {}}>
+            y
+          </BottomSheet>
+        </BottomSheet>,
+      );
+      expect(screen.getByRole('dialog', { name: 'Trong' }).closest('.zaui-sheet')!.parentElement).toBe(document.body);
+    });
   });
 
   it('Dialog is the same component as BottomSheet (reused per brief, no separate centered modal in this task)', async () => {

@@ -43,6 +43,24 @@ export const PRUNE_EXEMPT_CLASSES = ['zaui-modal-wrapper'] as const;
  */
 export const PRUNED_ZAUI_CLASSES = ['zaui-btn-highlight', 'zaui-btn-danger', 'zaui-btn-small', 'zaui-btn-medium', 'zaui-btn-large', 'zaui-btn-suffix-icon'] as const;
 
+/**
+ * Họ lớp (`tiền-tố` và `tiền-tố-*`) của thành phần con mà bản build bỏ cả mã (`ZMP_UI_UNUSED_STATICS` trong build-vendor-shims.ts:
+ * `Input.OTP`, `Input.Password`, `Sheet.Actions`), cùng các lớp `zaui-sheet-content-action(s)`/`-main` mà `sheet/content.js` (nơi duy nhất sinh
+ * lớp `zaui-sheet-content*`) không sinh. `build-zaui-prune.spec.ts` canh: không tệp nào còn trong bản build sinh ra các lớp này.
+ */
+export const PRUNED_ZAUI_CLASS_FAMILIES = [
+  'zaui-action-sheet',
+  'zaui-input-otp',
+  'zaui-input-password',
+  'zaui-sheet-content-action',
+  'zaui-sheet-content-actions',
+  'zaui-sheet-content-main',
+] as const;
+
+function inPrunedFamily(className: string, families: readonly string[]): boolean {
+  return families.some((f) => className === f || className.startsWith(`${f}-`));
+}
+
 /** Token đầu của lớp CSS (`.zaui-<token>-...`) tương ứng thư mục thành phần: `image-viewer` → `image`, `date-picker` → `date`. */
 export function zauiClassToken(component: string): string {
   return component.split('-')[0] ?? component;
@@ -54,10 +72,15 @@ function isExempt(className: string): boolean {
   return PRUNE_EXEMPT_CLASSES.some((c) => className === c || className.startsWith(`${c}-`));
 }
 
-/** Các lớp `.zaui-*` trong một vế selector không bao giờ khớp: của thành phần bị cắt (token thuộc danh sách cắt, không được miễn) hoặc là lớp bổ nghĩa bị cắt. */
-export function deadZauiClasses(selector: string, deadTokens: ReadonlySet<string>, deadClasses: ReadonlySet<string> = new Set()): string[] {
+/** Các lớp `.zaui-*` trong một vế selector không bao giờ khớp: của thành phần bị cắt (token thuộc danh sách cắt, không được miễn), lớp bổ nghĩa bị cắt, hoặc thuộc họ lớp bị cắt. */
+export function deadZauiClasses(
+  selector: string,
+  deadTokens: ReadonlySet<string>,
+  deadClasses: ReadonlySet<string> = new Set(),
+  deadFamilies: readonly string[] = [],
+): string[] {
   return [...selector.matchAll(CLASS_RE)]
-    .filter((m) => (deadTokens.has(m[2] ?? '') || deadClasses.has(m[1] ?? '')) && !isExempt(m[1] ?? ''))
+    .filter((m) => (deadTokens.has(m[2] ?? '') || deadClasses.has(m[1] ?? '') || inPrunedFamily(m[1] ?? '', deadFamilies)) && !isExempt(m[1] ?? ''))
     .map((m) => m[1] ?? '');
 }
 
@@ -71,11 +94,12 @@ export function isDarkThemeOnly(selector: string): boolean {
   return selector.split(',').every((part) => DARK_THEME_RE.test(part));
 }
 
-/** Bỏ mọi luật mà MỌI vế của danh sách selector đều nhắm vào lớp của thành phần bị cắt, lớp bổ nghĩa bị cắt hoặc chỉ khớp chủ đề tối; luật chung (`:root`, biến, lớp dùng chung) giữ nguyên. */
+/** Bỏ mọi luật mà MỌI vế của danh sách selector đều nhắm vào lớp của thành phần bị cắt, lớp bổ nghĩa bị cắt, họ lớp bị cắt hoặc chỉ khớp chủ đề tối; luật chung (`:root`, biến, lớp dùng chung) giữ nguyên. */
 export function pruneZauiCss(
   css: string,
   components: readonly string[] = PRUNED_ZMP_UI_COMPONENTS,
   classes: readonly string[] = PRUNED_ZAUI_CLASSES,
+  families: readonly string[] = PRUNED_ZAUI_CLASS_FAMILIES,
 ): { css: string; removedSelectors: string[] } {
   const dead = new Set(components.map(zauiClassToken));
   const deadClasses = new Set(classes);
@@ -87,7 +111,7 @@ export function pruneZauiCss(
 
   root.walkRules((rule) => {
     const parts = rule.selector.split(',').map((s) => s.trim());
-    const allDead = parts.every((part) => deadZauiClasses(part, dead, deadClasses).length > 0 || DARK_THEME_RE.test(part));
+    const allDead = parts.every((part) => deadZauiClasses(part, dead, deadClasses, families).length > 0 || DARK_THEME_RE.test(part));
     if (!allDead) return;
     removedSelectors.push(rule.selector);
     rule.walkDecls(/^(-webkit-)?animation(-name)?$/i, (decl) => animationNames(decl).forEach((n) => orphanCandidates.add(n)));

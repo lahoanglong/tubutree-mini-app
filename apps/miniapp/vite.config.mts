@@ -7,6 +7,7 @@ import { dropDemoStoryPresetsPlugin } from './src/build-demo-story-presets';
 import { assertMiniappBuildEnv } from './src/build-env';
 import { unaliasModuleNamesPlugin } from './src/build-import-names';
 import { preloadTrim } from './src/build-preload-trim';
+import { vendorShimsPlugin } from './src/build-vendor-shims';
 import { pruneUnusedZauiCssPlugin } from './src/build-zaui-prune';
 
 /**
@@ -55,6 +56,7 @@ export default defineConfig(({ command, mode }) => {
       zaloMiniApp(),
       react(),
       pruneUnusedZauiCssPlugin(),
+      vendorShimsPlugin(),
       dropDemoStoryPresetsPlugin(),
       trim.plugin,
       apiPreconnect(env.VITE_API_BASE_URL),

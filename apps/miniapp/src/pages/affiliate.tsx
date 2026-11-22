@@ -41,7 +41,7 @@ import { newIdempotencyKey } from '../utils/idempotency';
 import { PERSONAL_TAX_ID_PATTERN } from '../utils/tax-id';
 import { vi as copy } from '../i18n/vi';
 import { Badge, type BadgeTone } from '../components/ui/badge';
-import { BottomSheet } from '../components/ui/bottom-sheet';
+import { BottomSheet, SheetLayer } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Checkbox } from '../components/ui/form';
@@ -1090,7 +1090,8 @@ function Dashboard() {
 
       <Sheet visible={ctvOrdering} onClose={() => setCtvOrdering(false)} autoHeight>
         {/* Mount khi mở để reset state form mỗi lần lên đơn mới. */}
-        {ctvOrdering && <CtvOrderSheet onClose={() => setCtvOrdering(false)} />}
+        {/* SheetLayer: tấm Tỉnh/Phường của form lên đơn là sheet lồng, phải dựng ngoài sheet này (ui/bottom-sheet.tsx). */}
+        <SheetLayer>{ctvOrdering && <CtvOrderSheet onClose={() => setCtvOrdering(false)} />}</SheetLayer>
       </Sheet>
     </Page>
   );

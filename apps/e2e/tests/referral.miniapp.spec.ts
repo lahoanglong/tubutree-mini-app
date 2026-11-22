@@ -72,13 +72,16 @@ test.describe('Giới thiệu bạn bè', () => {
     await expect(page.getByText('Mời thêm 3 bạn để nhận 100 điểm')).toBeVisible();
   });
 
-  test('chưa có ai giới thiệu và hết mốc: vẫn hiện mã, số 0, không còn dòng "Mời thêm"', async ({ page, api }) => {
+  test('chưa có ai giới thiệu và hết mốc: vẫn hiện mã, không có ô số liệu toàn 0, không còn dòng "Mời thêm"', async ({ page, api }) => {
     mockProfilePage(api, { ...REFERRAL, successCount: 0, earnedPoints: 0, milestones: [], nextMilestone: null });
     await page.goto('/profile');
 
     await openInvite(page);
-    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
+    const card = page.getByTestId('invite-share-card');
+    await expect(card.getByText('BANBE77', { exact: true })).toBeVisible();
+    // inviteShareStats bỏ cả khối khi mọi số đều 0: thẻ không có ô dt/dd nào.
+    await expect(card.getByTestId('invite-share-stats')).toHaveCount(0);
+    await expect(card.locator('dt, dd')).toHaveCount(0);
     await expect(page.getByText(/Mời thêm \d+ bạn/)).toHaveCount(0);
   });
 
@@ -102,8 +105,10 @@ test.describe('Giới thiệu bạn bè', () => {
     await page.goto('/profile');
 
     await openInvite(page);
-    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
+    const card = page.getByTestId('invite-share-card');
+    await expect(card.getByText('BANBE77', { exact: true })).toBeVisible();
+    await expect(card.getByTestId('invite-share-stats')).toHaveCount(0);
+    await expect(card.locator('dt, dd')).toHaveCount(0);
     await expect(page.getByText('Bạn mới nhận mã giảm giá cho đơn đầu. Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.')).toBeVisible();
   });
 
@@ -114,7 +119,10 @@ test.describe('Giới thiệu bạn bè', () => {
 
     await expect(page.getByRole('button', { name: /^Mời bạn nhận quà/ })).toHaveAttribute('aria-expanded', 'true', { timeout: 15_000 });
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
+    // Vẫn thấy số bạn mời thành công, không có ô Điểm Xanh đã nhận.
+    const stats = page.getByTestId('invite-share-stats');
+    await expect(stats.locator('dt')).toHaveText(['Bạn mời thành công']);
+    await expect(stats.locator('dd')).toHaveText(['2']);
   });
 
   test('hồ sơ: chạm Sao chép link mời bạn báo đã sao chép; clipboard bị từ chối thì báo mã để chép tay', async ({ page, api }) => {

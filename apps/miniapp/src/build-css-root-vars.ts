@@ -26,6 +26,50 @@ export function dropOverriddenRootVars(css: string): { css: string; removed: num
   return removed === 0 ? { css, removed } : { css: root.toString(), removed };
 }
 
+const TW_VAR_REF = /var\(\s*(--tw-[A-Za-z0-9_-]+)/g;
+const TW_VAR_NAME = /--tw-[A-Za-z0-9_-]+/g;
+/** Selector chuẩn hoá để so: bỏ khoảng trắng, `::before` → `:before`, các vế xếp theo thứ tự (`*, ::before, ::after` = `*,:after,:before`). */
+const normalizeSelector = (s: string) => s.replace(/\s+/g, '').replace(/::(before|after)/g, ':$1').split(',').sort().join(',');
+
+/** Biến `--tw-*` mà CSS đọc qua `var()` hoặc JS nhắc tên, gom trên MỌI tệp của bản build (tiện ích Tailwind có thể nằm ở tệp CSS tải lười qua `@apply`). */
+export function tailwindVarUsage(cssFiles: readonly string[], jsFiles: readonly string[]): { used: Set<string>; backdropRules: boolean } {
+  const used = new Set<string>();
+  for (const css of cssFiles) for (const m of css.matchAll(TW_VAR_REF)) used.add(m[1] ?? '');
+  for (const js of jsFiles) for (const m of js.matchAll(TW_VAR_NAME)) used.add(m[0]);
+  let backdropRules = false;
+  for (const css of cssFiles) {
+    postcss.parse(css).walkRules((rule) => {
+      if (rule.selector.includes('::backdrop') && normalizeSelector(rule.selector) !== '::backdrop') backdropRules = true;
+    });
+  }
+  return { used, backdropRules };
+}
+
+/**
+ * Tailwind 3 luôn chép giá trị gốc của MỌI biến tiện ích vào `*, ::before, ::after` và `::backdrop`, kể cả biến của tiện ích app không dùng
+ * (pan/pinch-zoom, backdrop-*, contain-*…). Biến không ai đọc qua `var()` không có tác dụng gì nên bỏ; khối `::backdrop` chỉ phục vụ biến thể
+ * `backdrop:` nên khi không luật nào nhắm `::backdrop` thì bỏ cả khối. Hành vi hiển thị không đổi, nên bản cũ cùng tên tệp còn trong bộ đệm
+ * (tên băm trước bước này) vẫn đúng.
+ */
+export function dropUnusedTailwindDefaults(css: string, usage: { used: ReadonlySet<string>; backdropRules: boolean }): { css: string; removed: number } {
+  const root = postcss.parse(css);
+  let removed = 0;
+  root.walkRules((rule) => {
+    const sel = normalizeSelector(rule.selector);
+    const isUniversal = sel === normalizeSelector('*, ::before, ::after');
+    const isBackdrop = sel === '::backdrop';
+    if (!isUniversal && !isBackdrop) return;
+    rule.each((n) => {
+      if (n.type !== 'decl' || !n.prop.startsWith('--tw-')) return;
+      if (isBackdrop ? usage.backdropRules && usage.used.has(n.prop) : usage.used.has(n.prop)) return;
+      n.remove();
+      removed++;
+    });
+    if (rule.nodes.length === 0) rule.remove();
+  });
+  return removed === 0 ? { css, removed } : { css: root.toString(), removed };
+}
+
 /**
  * Chạy trên CSS đã nén cuối cùng (`generateBundle` `order: 'post'`), từng tệp riêng: thứ tự giữa các tệp tải lười không đoán được lúc build.
  * Tên tệp CSS băm từ nội dung TRƯỚC bước này: đổi luật ở đây làm khác đầu ra thì phải đổi cả mẫu `assetFileNames`, không thì bản cũ còn trong
@@ -38,10 +82,13 @@ export function dropOverriddenRootVarsPlugin(): Plugin {
     generateBundle: {
       order: 'post',
       handler(_options, bundle) {
-        for (const item of Object.values(bundle)) {
-          if (item.type !== 'asset' || !item.fileName.endsWith('.css') || typeof item.source !== 'string') continue;
-          item.source = dropOverriddenRootVars(item.source).css;
-        }
+        const items = Object.values(bundle);
+        const css = items.filter((i): i is typeof i & { type: 'asset'; source: string } => i.type === 'asset' && i.fileName.endsWith('.css') && typeof i.source === 'string');
+        const usage = tailwindVarUsage(
+          css.map((i) => i.source),
+          items.flatMap((i) => (i.type === 'chunk' ? [i.code] : [])),
+        );
+        for (const item of css) item.source = dropUnusedTailwindDefaults(dropOverriddenRootVars(item.source).css, usage).css;
       },
     },
   };

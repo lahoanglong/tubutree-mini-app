@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import postcss from 'postcss';
 import ts from 'typescript';
-import { PRUNED_ZAUI_CLASSES, PRUNED_ZMP_UI_COMPONENTS, ZAUI_JS_VARS, deadZauiClasses, isDarkThemeOnly, pruneUnusedZauiVars, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
+import { dropUnusedZmpUiStatics } from './build-vendor-shims';
+import { PRUNED_ZAUI_CLASS_FAMILIES, PRUNED_ZAUI_CLASSES, PRUNED_ZMP_UI_COMPONENTS, ZAUI_JS_VARS, deadZauiClasses, isDarkThemeOnly, pruneUnusedZauiVars, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ZMP_UI = fs.realpathSync(path.resolve(here, '../node_modules/zmp-ui'));
@@ -45,6 +46,12 @@ function appZmpUiImports(): { names: Set<string>; unsupported: string[] } {
   return { names, unsupported };
 }
 
+/** Mã zmp-ui như bản build thấy: đã bỏ thành phần con không dùng (`ZMP_UI_UNUSED_STATICS` của build-vendor-shims.ts). */
+const builtSource = (file: string): string => {
+  const src = fs.readFileSync(file, 'utf8');
+  return dropUnusedZmpUiStatics(src, file) ?? src;
+};
+
 /** Bao đóng import tương đối trong esm của zmp-ui, bắt đầu từ các export app đang dùng; trả về tập thư mục `components/<tên>` và mọi tệp chạm tới. */
 function zmpUiClosure(exportNames: Set<string>): { components: Set<string>; files: Set<string> } {
   const indexSrc = fs.readFileSync(path.join(ESM, 'index.js'), 'utf8');
@@ -75,7 +82,7 @@ function zmpUiClosure(exportNames: Set<string>): { components: Set<string>; file
     files.add(f);
     const rel = path.relative(path.join(ESM, 'components'), f);
     if (!rel.startsWith('..')) components.add(rel.split(path.sep)[0] ?? rel);
-    const src = fs.readFileSync(f, 'utf8');
+    const src = builtSource(f);
     for (const m of src.matchAll(/(?:import|export)\s[^;]*?from\s*"(\.[^"]+)"|import\s*"(\.[^"]+)"/g)) {
       const next = resolve(f, m[1] ?? m[2] ?? '');
       if (next && !/\.stories\./.test(next) && !next.includes(`${path.sep}.storybook${path.sep}`)) queue.push(next);
@@ -284,8 +291,9 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
     // `aria` là phần còn lại sau khi tách mọi prop đã biết của ButtonProps, kiểu AriaAttributes, nên không mang type/size/suffixIcon.
     expect(spreads).toEqual([`${path.join('components', 'ui', 'button.tsx')}: <ZButton {...aria}>`]);
 
-    const renderers = [...closure.files].filter((f) => /from "\.\.\/button"/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(path.join(ESM, 'components'), f));
-    expect(renderers.sort()).toEqual([path.join('input', 'Search.js'), path.join('sheet', 'action-sheet.js')]);
+    // `sheet/action-sheet.js` cũng dựng Button nhưng bản build bỏ hẳn (`Sheet.Actions`, build-vendor-shims.ts) nên không còn trong bao đóng.
+    const renderers = [...closure.files].filter((f) => /from "\.\.\/button"/.test(builtSource(f))).map((f) => path.relative(path.join(ESM, 'components'), f));
+    expect(renderers.sort()).toEqual([path.join('input', 'Search.js')]);
     expect(fs.readFileSync(path.join(ESM, 'components', 'input', 'Search.js'), 'utf8')).toMatch(/createElement\(Button, \{[^}]*type: "neutral"[^}]*size: size/);
 
     // Luật trộn (`.zaui-btn-primary, .zaui-btn-primary.zaui-btn-highlight`) còn vế sống nên giữ nguyên; chỉ luật mà mọi vế đều cần lớp bị cắt mới phải biến mất.
@@ -299,6 +307,25 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
     for (const keep of ['.zaui-btn-primary', '.zaui-btn-secondary', '.zaui-btn-tertiary', '.zaui-btn-neutral', '.zaui-btn-icon-only', '.zaui-btn-loading', '.zaui-btn-prefix-icon', '.zaui-btn-full-width', '.zaui-btn-disabled']) {
       expect(pruned, keep).toContain(keep);
     }
+  });
+
+  it('họ lớp bị cắt (OTP, Password, ActionSheet, sheet-content-action(s)/main) không còn tệp nào trong bao đóng sinh ra, và vẫn có thật trong zaui.css', () => {
+    const inFamily = (cls: string) => PRUNED_ZAUI_CLASS_FAMILIES.some((f) => cls === f || cls.startsWith(`${f}-`));
+    const offenders: string[] = [];
+    for (const f of closure.files) {
+      const src = builtSource(f);
+      const prefixes = [...src.matchAll(/getPrefixCls\("([a-z0-9-]+)"\)/g)].map((m) => `zaui-${m[1]}`);
+      const suffixes = [...src.matchAll(/\+ "(-[a-z0-9-]+)"|\$\{[A-Za-z]+\}(-[a-z0-9-]+)/g)].map((m) => m[1] ?? m[2] ?? '');
+      for (const p of prefixes) for (const cls of [p, ...suffixes.map((s) => `${p}${s}`)]) if (inFamily(cls)) offenders.push(`${path.relative(ESM, f)}: ${cls}`);
+    }
+    expect(offenders).toEqual([]);
+    // Danh sách không cũ: mỗi họ đều có luật trong zaui.css gốc, và không còn luật nào cần một lớp của họ đó sau khi cắt.
+    for (const fam of PRUNED_ZAUI_CLASS_FAMILIES) expect(raw, fam).toMatch(new RegExp(`\\.${fam}(?![a-z0-9])`));
+    const leftovers: string[] = [];
+    postcss.parse(pruned).walkRules((rule) => {
+      if (rule.selectors.every((part) => [...part.matchAll(/\.(zaui-[a-z0-9-]+)/g)].some((m) => inFamily(m[1] ?? '')))) leftovers.push(rule.selector);
+    });
+    expect(leftovers).toEqual([]);
   });
 
   it('mã app không tự viết lớp zaui-* của thành phần bị cắt', () => {

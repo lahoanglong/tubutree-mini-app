@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Sheet } from 'zmp-ui';
 import { X } from 'lucide-react';
 import { Heading, Text } from './text';
@@ -13,6 +14,19 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 // Chỉ sheet mở sau cùng (trên cùng) nhận Esc/Tab; sheet chồng nhau không đóng cùng một lúc.
 const openStack: symbol[] = [];
+
+/**
+ * ZaUI dựng Sheet ngay tại chỗ (không portal), mà khung `.zaui-sheet-content` có `transform` và `overflow: hidden`: với mọi phần tử
+ * `position: fixed` bên trong, khung đó thành hộp chứa. Sheet mở từ trong một sheet khác (tấm Tỉnh/Phường của `GeoPicker` trong sheet sửa
+ * địa chỉ) vì vậy chỉ cao bằng sheet ngoài và bị cắt mất phần trên. Sheet lồng nên dựng ở `#app`: trên điện thoại hộp chứa là màn hình, ở khổ
+ * rộng là khung 480px của `#app` (tokens.css) như mọi sheet khác. Sheet cấp đầu giữ nguyên chỗ dựng.
+ */
+const InsideSheet = createContext(false);
+
+/** Bọc nội dung của `<Sheet>` ZaUI dùng trực tiếp (không qua BottomSheet) để BottomSheet mở bên trong biết mình là sheet lồng. */
+export function SheetLayer({ children }: { children: ReactNode }) {
+  return <InsideSheet.Provider value>{children}</InsideSheet.Provider>;
+}
 
 export interface BottomSheetProps {
   open: boolean;
@@ -86,6 +100,7 @@ export function BottomSheet({
   children,
 }: BottomSheetProps) {
   const sizeConfig = SIZE_CONFIG[size];
+  const nested = useContext(InsideSheet);
   const titleId = `${useId()}-title`;
   // Nội dung ZaUI có thể dựng muộn một nhịp sau `open`, nên khung lấy bằng callback ref chứ không dùng ref + effect theo `open`.
   const [panel, setPanel] = useState<HTMLDivElement | null>(null);
@@ -152,7 +167,7 @@ export function BottomSheet({
     if (!open) setClosedAt(Date.now());
     else if (closedAt !== null && Date.now() - closedAt < REOPEN_REMOUNT_MS) setInstance((n) => n + 1);
   }
-  return (
+  const sheet = (
     <Sheet
       key={instance}
       visible={open}
@@ -185,15 +200,18 @@ export function BottomSheet({
           </div>
           {description && <Text variant="body-sm" tone="secondary">{description}</Text>}
         </div>
-        <div data-testid="bottom-sheet-body" style={{ padding: '0 16px 16px', overflowY: 'auto' }}>
-          {children}
-        </div>
-        {footer && (
-          <div style={{ padding: 16, borderTop: '1px solid var(--color-border-subtle)' }}>{footer}</div>
-        )}
+        <SheetLayer>
+          <div data-testid="bottom-sheet-body" style={{ padding: '0 16px 16px', overflowY: 'auto' }}>
+            {children}
+          </div>
+          {footer && (
+            <div style={{ padding: 16, borderTop: '1px solid var(--color-border-subtle)' }}>{footer}</div>
+          )}
+        </SheetLayer>
       </div>
     </Sheet>
   );
+  return nested ? createPortal(sheet, document.getElementById('app') ?? document.body) : sheet;
 }
 
 /**

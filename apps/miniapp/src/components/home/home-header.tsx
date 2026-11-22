@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bell, Search } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
 import { HOME_HEADER_HEIGHT } from '@tubutree/app-core/home-layout';
-import logo from '../../assets/tubu-logo-home.png';
+import logo from '../../assets/tubu-logo-mark.png';
 import { vi } from '../../i18n/vi';
 import { CAPSULE_INSET_END } from '../../utils/capsule';
 import { haptic } from '../../utils/haptic';
@@ -12,11 +12,10 @@ import { Icon } from '../ui/icon';
 import { IconButton } from '../ui/icon-button';
 import { Text } from '../ui/text';
 
-// Hiện 83x30; ảnh 249x90 (3x) đủ nét cho màn 3x mà nhẹ (bản gốc 1059x384 ở assets/tubu-logo.png nặng ~54 KB). Khai báo cả hai để trình duyệt giữ chỗ trước khi ảnh tải.
+// Chỉ hiện dấu logo (khối vuông có lá), không kèm chữ "Tubu Tree": chữ sẽ chiếm chỗ của ô tìm ở 375px. Ảnh là 60 cột đầu (3x) của logo ngang
+// 249x90 (bản gốc 1059x384 ở assets/tubu-logo.png): dấu hết ở cột 58, chữ bắt đầu ở cột 63, nên 60 cột cắt đúng khe trống.
+// Hiện 20x30; khai báo cả hai để trình duyệt giữ chỗ trước khi ảnh tải.
 const LOGO_HEIGHT = 30;
-const LOGO_WIDTH = 83;
-// Chỉ lấy dấu logo (khối vuông có lá) ở mép trái ảnh: chữ "Tubu Tree" đi kèm sẽ chiếm chỗ của ô tìm ở 375px. Dấu hết ở cột 58/249 của ảnh,
-// chữ bắt đầu ở cột 63: 20px (= cột 60) cắt đúng khe trống; rộng hơn sẽ lộ một dải chữ "T"/"S" bên phải.
 const LOGO_MARK_WIDTH = 20;
 // Chừa vùng viên thuốc 96px thì ô tìm còn ~116px ở 360 (chữ gợi ý chỉ lọt ~60px, thành "Bạn tì…"): từ khổ này trở xuống chỉ giữ biểu tượng kính lúp, tên truy cập vẫn là aria-label.
 // Ở 375 ô tìm còn ~131px (chữ lọt ~77px, một dòng cần ~115px): chữ xuống hai dòng cân nhau ("Bạn tìm gì" / "hôm nay?", 2 × 22px + viền 1px ≈ 46px, vẫn lọt header 56px; `WebkitLineClamp: 2` chặn khi chữ phóng to) thay vì cắt thành "Bạn tìm gì hôm…".
@@ -52,9 +51,7 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
     >
       {/* h1 của trang: logo là tên trang (tên truy cập lấy từ alt) để trình đọc màn hình có điểm mốc tiêu đề. */}
       <h1 style={{ margin: 0, fontSize: 0, lineHeight: 0, flex: '0 0 auto' }}>
-        <span style={{ display: 'block', width: LOGO_MARK_WIDTH, height: LOGO_HEIGHT, overflow: 'hidden' }}>
-          <img src={logo} alt="Tubu Tree" width={LOGO_WIDTH} height={LOGO_HEIGHT} style={{ height: LOGO_HEIGHT, width: LOGO_WIDTH, maxWidth: 'none', display: 'block' }} />
-        </span>
+        <img src={logo} alt="Tubu Tree" width={LOGO_MARK_WIDTH} height={LOGO_HEIGHT} style={{ height: LOGO_HEIGHT, width: LOGO_MARK_WIDTH, display: 'block' }} />
       </h1>
       <button
         type="button"

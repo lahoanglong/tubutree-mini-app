@@ -113,8 +113,6 @@ export const homeCopy = {
     orderStatusLabel: (label: string, n: number) => (n > 0 ? `${label}, ${n} đơn` : label),
     statPoints: 'Điểm Xanh',
     statWallet: 'Ví Tubu',
-    /** `points` đã có đơn vị ("40 điểm"). Chỉ nêu khi đã có bạn thành công hoặc đã nhận điểm. */
-    referralStats: (count: number, points: string) => `Đã mời thành công ${count} bạn, nhận ${points}.`,
     referralMilestone: (remaining: number, bonus: string) => `Mời thêm ${remaining} bạn để nhận ${bonus}`,
     guestTitle: 'Liên kết Zalo để giữ điểm và nhận quà',
     guestBody: 'Bạn đang dùng tài khoản khách. Liên kết Zalo để không mất điểm, đơn hàng và nhận quà khách mới.',
