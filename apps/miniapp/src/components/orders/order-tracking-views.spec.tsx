@@ -12,6 +12,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { OrderActionBar } from './order-action-bar';
 import { OrderShipping } from './order-shipping';
+import { OrderTrackingPill } from './order-tracking-pill';
 import { OrderStatusHero } from './order-status-hero';
 import { OrderTrack } from './order-track';
 
@@ -125,10 +126,11 @@ describe('OrderShipping', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('nút chép mã có tên truy cập nêu mã vận đơn, chữ hiện vẫn là "Chép mã"', () => {
+  it('mã vận đơn chỉ để đọc, số đều: nút "Chép mã" nằm ở viên vận đơn dưới thẻ trạng thái (một nút chép mỗi trang)', () => {
     render(<OrderShipping code="GHN123" />);
-    const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' });
-    expect(button).toHaveTextContent('Chép mã');
+    expect(screen.getByText('GHN123').getAttribute('style')).toContain('tabular-nums');
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('mốc mới nhất có data-latest="true", các mốc còn lại không có', () => {
@@ -153,17 +155,11 @@ describe('OrderShipping', () => {
     expect(items()).toHaveLength(3);
   });
 
-  it('hiện hãng và mã; "Chép mã" chép đúng mã và báo thành công tại chỗ, lỗi thì nhắc chép tay', async () => {
-    mocks.copyText.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+  it('hiện hãng, mã và trạng thái hãng', () => {
     render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" status="Đang giao hàng" />);
     expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
     expect(screen.getByText('GHN123')).toBeInTheDocument();
     expect(screen.getByText('Đang giao hàng')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
-    expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.'));
   });
 
   it('có mốc truyền riêng (đơn đã hoàn) thì liệt kê mới nhất trên cùng', () => {
@@ -180,7 +176,31 @@ describe('OrderShipping', () => {
   });
 });
 
-describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đều (W69A)', () => {
+describe('OrderTrackingPill: viên vận đơn chạm để chép mã (Mini không mở trang hãng)', () => {
+  it('in mã và hãng, tên truy cập nêu mã, chữ hiện "Chép mã"; không có liên kết ra trang hãng', () => {
+    render(<OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />);
+    const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' });
+    expect(button).toHaveTextContent('GHN123 · Giao Hàng NhanhChép mã');
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('không có hãng: chỉ mã', () => {
+    render(<OrderTrackingPill code="GHN123" />);
+    expect(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' })).toHaveTextContent('GHN123Chép mã');
+  });
+
+  it('chép đúng mã và báo thành công tại chỗ, lỗi thì nhắc chép tay', async () => {
+    mocks.copyText.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    render(<OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
+    expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.'));
+  });
+});
+
+describe('OrderTrackingPill: chép mã khoá chạm đúp, báo tại chỗ, số đều (W69A)', () => {
   const copyButton = () => screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' });
   const deferred = () => {
     let resolve!: (ok: boolean) => void;
@@ -193,14 +213,14 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
   afterEach(() => vi.useRealTimers());
 
   it('vùng báo role=status có sẵn và rỗng trước khi bấm', () => {
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   it('chạm đúp "Chép mã" trong cùng một khung hình chỉ chép một lần', async () => {
     const d = deferred();
     mocks.copyText.mockReturnValueOnce(d.promise);
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     act(() => {
       fireEvent.click(copyButton());
       fireEvent.click(copyButton());
@@ -211,7 +231,7 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
 
   it('khoá nhả sau khi chép xong: lần bấm sau chép lại', async () => {
     mocks.copyText.mockResolvedValue(true);
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     await act(async () => {
       fireEvent.click(copyButton());
     });
@@ -224,7 +244,7 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
   it('chép được: báo "Đã sao chép mã vận đơn" ngay dưới mã (không bắn snackbar) rồi tự tắt sau 2 giây', async () => {
     vi.useFakeTimers();
     mocks.copyText.mockResolvedValue(true);
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     await act(async () => {
       fireEvent.click(copyButton());
     });
@@ -240,7 +260,7 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
   it('chép lỗi: nhắc chép tay bằng chữ đỏ, giữ 4 giây rồi tự tắt', async () => {
     vi.useFakeTimers();
     mocks.copyText.mockResolvedValue(false);
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     await act(async () => {
       fireEvent.click(copyButton());
     });
@@ -256,7 +276,7 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
   it('chép lần hai khi báo cũ còn hiện: đếm lại đủ 2 giây, báo không tắt sớm', async () => {
     vi.useFakeTimers();
     mocks.copyText.mockResolvedValue(true);
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     await act(async () => {
       fireEvent.click(copyButton());
     });
@@ -272,7 +292,7 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
 
   it('chép lần hai khi báo cũ còn hiện: dòng báo dựng lại để trình đọc màn hình đọc lại', async () => {
     mocks.copyText.mockResolvedValue(true);
-    render(<OrderShipping code="GHN123" />);
+    render(<OrderTrackingPill code="GHN123" />);
     await act(async () => {
       fireEvent.click(copyButton());
     });
@@ -288,7 +308,7 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
   it('tháo màn khi báo còn hiện: không còn hẹn giờ treo', async () => {
     vi.useFakeTimers();
     mocks.copyText.mockResolvedValue(true);
-    const { unmount } = render(<OrderShipping code="GHN123" />);
+    const { unmount } = render(<OrderTrackingPill code="GHN123" />);
     await act(async () => {
       fireEvent.click(copyButton());
     });
@@ -297,10 +317,10 @@ describe('OrderShipping: chép mã khoá chạm đúp, báo tại chỗ, số đ
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('mã vận đơn số đều (tabular-nums) và nút Chép mã cao ít nhất 44px', () => {
-    render(<OrderShipping code="GHN123" />);
+  it('mã vận đơn số đều (tabular-nums) và viên chạm cao ít nhất 44px (lớp touch-target)', () => {
+    render(<OrderTrackingPill code="GHN123" />);
     expect(screen.getByText('GHN123').getAttribute('style')).toContain('tabular-nums');
-    expect(copyButton().style.minHeight).toBe('44px');
+    expect(copyButton().className).toContain('touch-target');
   });
 });
 

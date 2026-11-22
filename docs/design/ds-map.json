@@ -687,6 +687,15 @@
       ]
     },
     {
+      "name": "StorefrontTrustChips",
+      "miniapp": "apps/miniapp/src/components/shop-page/storefront-trust-chips.tsx",
+      "web": "apps/web/src/components/shop-page/storefront-trust-chips.tsx",
+      "props": "StorefrontTrustChipsProps",
+      "screens": [
+        "/s/:slug"
+      ]
+    },
+    {
       "name": "Skeleton",
       "miniapp": "apps/miniapp/src/components/ui/skeleton.tsx",
       "web": "apps/web/src/components/mini/skeleton.tsx",
@@ -933,6 +942,40 @@
           "trackingHref"
         ],
         "reason": "Mini App không mở trang ngoài (Zalo 4.1) nên không có liên kết tra cứu của hãng; web mở tab mới, chỉ http/https đã lọc"
+      },
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
+      "name": "OrderTrackingPill",
+      "miniapp": "apps/miniapp/src/components/orders/order-tracking-pill.tsx",
+      "web": "apps/web/src/components/orders/order-tracking-pill.tsx",
+      "props": "OrderTrackingPillProps",
+      "propsDiff": {
+        "miniOnly": [
+          "code"
+        ],
+        "webOnly": [
+          "href"
+        ],
+        "reason": "Mini App không mở trang hãng (Zalo 4.1) nên viên in mã vận đơn và chạm để chép mã; web mở trang tra cứu của hãng ở tab mới (href chỉ http/https đã lọc)"
+      },
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
+      "name": "OrderRefillShortcut",
+      "miniapp": "apps/miniapp/src/components/orders/order-refill-shortcut.tsx",
+      "web": "apps/web/src/components/orders/order-refill-shortcut.tsx",
+      "props": "OrderRefillShortcutProps",
+      "propsDiff": {
+        "webOnly": [
+          "className",
+          "titleClassName"
+        ],
+        "reason": "web nhận lớp Tailwind thứ tự cột và dải thẻ của khuôn hai cột từ trang; Mini vẽ dải nền và tiêu đề cố định như các khối khác của Chi tiết đơn"
       },
       "screens": [
         "/order/:code"

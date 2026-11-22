@@ -13,6 +13,8 @@ import type { CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-h
 import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { PdpRefillOffer } from '@/components/mini/pdp-refill-offer';
+import { OrderTrackingPill } from '@/components/orders/order-tracking-pill';
+import { StorefrontTrustChips } from '@/components/shop-page/storefront-trust-chips';
 import { BannerCarousel, CartVoucherHintStrip, ComboCard, Countdown, FlashSoldBar, Heading, FreeShippingProgressBar, FreeshipAddonRail, FrequentlyBoughtTogether, ProductStoryShowcase, ProductTrustStrip, QuickReorderStrip, Section, SectionHeader, SortBar, StoryReelStrip, Text, VoucherPicker, VoucherTicket } from '@/components/mini';
 
 const GALLERY_REEL_ITEMS = [
@@ -353,6 +355,24 @@ export function DsGallery() {
           </Variant>
           <Variant label="đang thêm">
             <PdpRefillOffer view={GALLERY_REFILL_VIEW} busy onAdd={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="storefront-trust-chips">
+          <Variant label="đủ bốn chip (đổi trả 7 ngày)">
+            <StorefrontTrustChips returnWindowDays={7} />
+          </Variant>
+          <Variant label="không nhận đổi trả (0 ngày): ba chip">
+            <StorefrontTrustChips returnWindowDays={0} />
+          </Variant>
+        </Group>
+
+        <Group name="order-tracking-pill">
+          <Variant label="có hãng">
+            <OrderTrackingPill href="https://tracking.ghn.vn/?order_code=GHNAB12CD34" partner="Giao Hàng Nhanh" />
+          </Variant>
+          <Variant label="không có hãng">
+            <OrderTrackingPill href="https://tracking.ghn.vn/?order_code=GHNAB12CD34" />
           </Variant>
         </Group>
 

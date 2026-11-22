@@ -42,7 +42,8 @@ export async function expectShippingTracking(page: Page): Promise<void> {
   const shipping = page.getByTestId('order-shipping');
   await expect(shipping).toContainText('Giao Hàng Nhanh');
   await expect(shipping).toContainText('GHN6789012345');
-  await expect(shipping.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' })).toBeVisible();
+  // Đúng một nút chép mỗi trang: web ở khối Vận chuyển, Mini App ở viên vận đơn dưới thẻ trạng thái.
+  await expect(page.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }).locator('visible=true')).toHaveCount(1);
 
   await expect(shown(page, 'Liên hệ Tubu')).toHaveCount(1);
   for (const forbidden of ['Huỷ đơn', 'Thanh toán ngay', 'Mua lại đơn này']) {

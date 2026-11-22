@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   shareSheetProps: vi.fn(),
   navigate: vi.fn(),
   fetchFlash: vi.fn(),
+  getPublicConfig: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -18,6 +19,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchActiveFlashSales: mocks.fetchFlash,
+  getPublicConfig: mocks.getPublicConfig,
 }));
 vi.mock('../services/storefront-api', () => ({ getPublicStorefront: mocks.getPublicStorefront }));
 vi.mock('../components/share-sheet', () => ({
@@ -392,5 +394,45 @@ describe('StorefrontViewPage: khung shop (tab, khối theo layout, thống kê)'
     await title();
     expect(mocks.getPublicStorefront).toHaveBeenCalledTimes(1);
     expect(tileCount('shop-rail')).toBe(10);
+  });
+});
+
+describe('StorefrontViewPage — dải cam kết như web /s/[slug] trên điện thoại (tubu-w18-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+    useAuthStore.setState({ user: null });
+  });
+  const chips = (section: HTMLElement) => Array.from(section.querySelectorAll(':scope ul > li')).map((li) => li.textContent);
+
+  it('bốn chip chữ ngắn (cùng chữ với web dưới md) sau số liệu, trước dải tab; chip chỉ để đọc', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+    mocks.getPublicStorefront.mockResolvedValue(storefront(withItems));
+    renderPage('abcd1234');
+    await title();
+    const section = screen.getByRole('region', { name: 'Cam kết của gian hàng' });
+    await waitFor(() => expect(chips(section)).toEqual(['Hàng đã qua duyệt', 'Theo dõi đơn', 'Thanh toán qua Tubu', 'Đổi trả nếu lỗi']));
+    expect(section.querySelector('ul')!.getAttribute('role')).toBe('list');
+    expect(section.querySelectorAll('button, a, [role="button"]')).toHaveLength(0);
+    const stats = screen.getAllByTestId('shop-stat')[0]!;
+    expect(stats.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('không nhận đổi trả (0 ngày): bỏ chip đổi trả, ba chip còn lại', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 0 });
+    mocks.getPublicStorefront.mockResolvedValue(storefront(withItems));
+    renderPage('abcd1234');
+    await title();
+    const section = screen.getByRole('region', { name: 'Cam kết của gian hàng' });
+    await waitFor(() => expect(chips(section)).toEqual(['Hàng đã qua duyệt', 'Theo dõi đơn', 'Thanh toán qua Tubu']));
+  });
+
+  it('gian hàng chưa có sản phẩm vẫn có dải cam kết (như web), nằm trước lời trống', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+    mocks.getPublicStorefront.mockResolvedValue(storefront({}));
+    renderPage('abcd1234');
+    await title();
+    expect(screen.getByRole('region', { name: 'Cam kết của gian hàng' })).toBeInTheDocument();
   });
 });

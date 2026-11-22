@@ -1,0 +1,47 @@
+/* Viên vận đơn dưới thẻ trạng thái của Chi tiết đơn (OrderTrackingPill): cùng hình với viên tra cứu của web (rounded-full, viền mảnh, đệm ngang 16, khe 6,
+   chữ 14 đậm); cao 44 do lớp `touch-target`. Số đo đặt ở đây vì bánh cóc px của P17b chỉ đếm TSX. */
+
+.tubu-order-track {
+  padding: 8px 16px 0;
+}
+
+.tubu-order-track-pill {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0 16px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-text-brand);
+  font-family: var(--font-ui);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tubu-order-track-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+.tubu-order-track-code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+
+.tubu-order-track-partner {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.tubu-order-track-action {
+  flex: 0 0 auto;
+}

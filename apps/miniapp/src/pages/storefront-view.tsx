@@ -30,6 +30,8 @@ import { ShopStatsRow } from '../components/ui/shop-stats-row';
 import { ShopTopBar } from '../components/ui/shop-top-bar';
 import { ShopCategoriesTab } from '../components/shop-page/shop-categories-tab';
 import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
+import { StorefrontTrustChips } from '../components/shop-page/storefront-trust-chips';
+import { usePublicConfig } from '../hooks/use-public-config';
 
 export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
@@ -85,6 +87,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
   const [scopeId, setScopeId] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const myReferralCode = useAuthStore((s) => s.user?.referralCode);
+  const { returnWindowDays } = usePublicConfig();
 
   // Chỉ gian hàng CTV có mã giới thiệu để nhận ra chủ; chủ gian hàng đối tác chia sẻ từ trình dựng.
   const isOwner = Boolean(myReferralCode && sf.referralCode && myReferralCode.toUpperCase() === sf.referralCode.toUpperCase());
@@ -144,6 +147,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
           <Text variant="caption" tone="tertiary" as="div" data-testid="sample-note">{SAMPLE_STOREFRONT_NOTE}</Text>
         </Box>
       )}
+      <StorefrontTrustChips returnWindowDays={returnWindowDays} />
 
       {collections.length === 0 ? (
         <EmptyState

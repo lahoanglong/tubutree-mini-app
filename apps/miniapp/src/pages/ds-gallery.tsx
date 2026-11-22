@@ -27,6 +27,8 @@ import { ProductTrustStrip } from '../components/ui/product-trust-strip';
 import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commerce/frequently-bought';
 import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
+import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
+import { StorefrontTrustChips } from '../components/shop-page/storefront-trust-chips';
 
 const GALLERY_REEL_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, seen: false },
@@ -356,6 +358,24 @@ export default function DsGalleryPage() {
           </Variant>
           <Variant label="đang thêm">
             <PdpRefillOffer view={GALLERY_REFILL_VIEW} busy onAdd={() => undefined} onOpen={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="storefront-trust-chips">
+          <Variant label="đủ bốn chip (đổi trả 7 ngày)">
+            <StorefrontTrustChips returnWindowDays={7} />
+          </Variant>
+          <Variant label="không nhận đổi trả (0 ngày): ba chip">
+            <StorefrontTrustChips returnWindowDays={0} />
+          </Variant>
+        </Group>
+
+        <Group name="order-tracking-pill">
+          <Variant label="có hãng">
+            <OrderTrackingPill code="GHNAB12CD34" partner="Giao Hàng Nhanh" />
+          </Variant>
+          <Variant label="không có hãng">
+            <OrderTrackingPill code="GHNAB12CD34" />
           </Variant>
         </Group>
 
