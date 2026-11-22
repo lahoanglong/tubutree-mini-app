@@ -16,13 +16,18 @@ const mocks = vi.hoisted(() => ({
   qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined, error: null as unknown },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
   eta: null as null | { minDays: number; maxDays: number },
+  refillFirstEnabled: false,
+  landing: { enabled: false, pairs: [] } as unknown,
+  paths: [] as string[],
 }));
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string) => {
+      mocks.paths.push(path);
+      if (path === '/catalog/refill-pairs/landing') return mocks.landing;
       if (path !== '/config/public') throw new Error(`chưa mock ${path}`);
       if (mocks.support instanceof Error) throw mocks.support;
-      return { support: mocks.support, shippingEta: mocks.eta };
+      return { support: mocks.support, shippingEta: mocks.eta, refillFirstEnabled: mocks.refillFirstEnabled };
     },
   },
 }));
@@ -95,6 +100,9 @@ beforeEach(() => {
   mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined, error: null };
   mocks.support = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
   mocks.eta = null;
+  mocks.refillFirstEnabled = false;
+  mocks.landing = { enabled: false, pairs: [] };
+  mocks.paths = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -321,6 +329,90 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     expect(mocks.qr.calls).toBe(0);
     expect(container.textContent).toContain('Đã huỷ');
+  });
+
+  it('viên tra cứu hành trình ngay dưới thẻ trạng thái, là liên kết tra cứu DUY NHẤT (khối Vận chuyển chỉ còn hãng, mã và nút chép)', async () => {
+    mocks.order = {
+      ...ORDER, status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      shippingPartner: 'Best Express', shippingCode: 'BE123', trackingLink: 'https://tracking.example/BE123',
+    };
+    const { container } = await mount();
+    const links = container.querySelectorAll<HTMLAnchorElement>('a[href="https://tracking.example/BE123"]');
+    expect(links).toHaveLength(1);
+    const pill = container.querySelector<HTMLAnchorElement>('[data-testid="order-tracking-pill"]')!;
+    expect(pill).toBe(links[0]);
+    expect(pill.textContent).toContain('Tra cứu hành trình');
+    expect(pill.textContent).toContain('Best Express');
+    expect(pill.target).toBe('_blank');
+    expect(pill.rel).toContain('noopener');
+    const hero = container.querySelector('[data-testid="status-hero"]')!;
+    const shipping = container.querySelector('[data-testid="order-shipping"]')!;
+    expect(hero.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pill.compareDocumentPosition(shipping) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pill.parentElement!.className).toContain('order-1');
+    expect(shipping.querySelector('a')).toBeNull();
+    expect(shipping.textContent).toContain('BE123');
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+
+  it('không có link tra cứu: không có viên', async () => {
+    mocks.order = { ...ORDER, status: 'SHIPPING', paymentMethod: 'COD', shippingPartner: 'GHN', shippingCode: 'G1', trackingLink: null };
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
+  });
+
+  describe('lối tắt Refill ở đơn đã giao (tubu-w17-01)', () => {
+    const offer = { productId: 'p-r', slug: 'refill-dau-goi-2l', name: 'Túi Refill dầu gội 2L', thumbnail: null, variationId: 'v-r', price: 400_000, compareAt: null, sizeLabel: '2L', inStock: true, tubu: true };
+    const bottle = { productId: 'p-b', slug: 'dau-goi-bo-ket', name: 'Dầu gội bồ kết 500ml', thumbnail: null, price: 150_000, compareAt: null, sizeLabel: '500ml', inStock: true };
+    const delivered = (over: Record<string, unknown> = {}) => ({
+      ...ORDER, status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID',
+      items: [{ ...ORDER.items[0], productSlug: 'dau-goi-bo-ket', productName: 'Dầu gội bồ kết' }],
+      ...over,
+    });
+    beforeEach(() => {
+      mocks.refillFirstEnabled = true;
+      mocks.landing = { enabled: true, pairs: [{ bottle, refill: offer, savingPct: 33 }] };
+    });
+
+    it('cờ bật, chai có trong đơn: một khối "Lần sau rót lại bằng Refill" với thẻ gói một chạm, báo đã hiện surface order', async () => {
+      mocks.order = delivered();
+      const { container } = await mount();
+      const block = container.querySelector('[data-testid="order-refill"]')!;
+      expect(block).not.toBeNull();
+      expect(block.querySelector('h2')!.textContent).toBe('Lần sau rót lại bằng Refill');
+      expect(block.querySelector('[data-testid="pdp-refill-open"]')!.getAttribute('href')).toBe('/san-pham/refill-dau-goi-2l');
+      expect(block.querySelectorAll('[data-testid="pdp-refill-add"]')).toHaveLength(1);
+      expect(headingProblems(container)).toEqual([]);
+      expect(smallTouchTargets(container)).toEqual([]);
+    });
+
+    it('đơn chưa giao: không hỏi trang Refill, không có khối', async () => {
+      mocks.order = delivered({ status: 'SHIPPING', paymentStatus: 'UNPAID' });
+      const { container } = await mount();
+      expect(container.querySelector('[data-testid="order-refill"]')).toBeNull();
+      expect(mocks.paths).not.toContain('/catalog/refill-pairs/landing');
+    });
+
+    it('cờ tắt, chai là quà hay gói đã có trong đơn: không có khối', async () => {
+      mocks.refillFirstEnabled = false;
+      mocks.order = delivered();
+      let r = await mount();
+      expect(r.container.querySelector('[data-testid="order-refill"]')).toBeNull();
+      expect(mocks.paths).not.toContain('/catalog/refill-pairs/landing');
+      r.unmount();
+      mounted = [];
+
+      mocks.refillFirstEnabled = true;
+      mocks.order = delivered({ items: [{ ...ORDER.items[0], productSlug: 'dau-goi-bo-ket', isGift: true }] });
+      r = await mount();
+      expect(r.container.querySelector('[data-testid="order-refill"]')).toBeNull();
+      r.unmount();
+      mounted = [];
+
+      mocks.order = delivered({ items: [{ ...ORDER.items[0], productSlug: 'dau-goi-bo-ket' }, { ...ORDER.items[0], productSlug: 'refill-dau-goi-2l' }] });
+      r = await mount();
+      expect(r.container.querySelector('[data-testid="order-refill"]')).toBeNull();
+    });
   });
 
   it('link tra cứu vận đơn không phải http(s) bị bỏ, không thành liên kết', async () => {

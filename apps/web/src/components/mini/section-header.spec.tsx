@@ -79,23 +79,33 @@ describe('SectionHeader (web)', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('action.onPress khoá (disabled hoặc busy): nút disabled, mờ, con trỏ not-allowed; busy thêm aria-busy; bấm không gọi onPress', () => {
+  it('action.onPress khoá (disabled hoặc busy): nút disabled, con trỏ not-allowed, bấm không gọi onPress; disabled thì mờ, không vòng xoay', () => {
     const onPress = vi.fn();
     const action = { label: 'Thêm lại tất cả', spoken: 'Thêm lại tất cả 3 món', onPress };
-    const a = mount(<SectionHeader title="Mua lại" action={{ ...action, disabled: true }} />);
-    let btn = q('button')! as HTMLButtonElement;
+    mount(<SectionHeader title="Mua lại" action={{ ...action, disabled: true }} />);
+    const btn = q('button')! as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute('aria-busy')).toBeNull();
     expect(btn.style.opacity).toBe('0.5');
     expect(btn.style.cursor).toBe('not-allowed');
+    expect(q('[data-testid="section-header-spinner"]')).toBeNull();
     btn.click();
-    a.unmount();
-    mount(<SectionHeader title="Mua lại" action={{ ...action, busy: true }} />);
-    btn = q('button')! as HTMLButtonElement;
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('action.busy (cùng Mini App): vòng xoay thay mũi tên, chữ không mờ, aria-busy, vẫn khoá bấm', () => {
+    const onPress = vi.fn();
+    mount(<SectionHeader title="Mua lại" action={{ label: 'Thêm lại tất cả', spoken: 'Thêm lại tất cả 3 món', onPress, busy: true }} />);
+    const btn = q('button')! as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute('aria-busy')).toBe('true');
-    expect(btn.style.opacity).toBe('0.5');
+    expect(btn.style.opacity).toBe('');
     expect(btn.style.cursor).toBe('not-allowed');
+    const spinner = btn.querySelector('[data-testid="section-header-spinner"]')!;
+    expect(spinner).not.toBeNull();
+    expect(spinner.getAttribute('aria-hidden')).toBe('true');
+    expect(spinner.getAttribute('class')).toContain('motion-safe:animate-spin');
+    expect(btn.querySelectorAll('svg')).toHaveLength(1);
     btn.click();
     expect(onPress).not.toHaveBeenCalled();
   });

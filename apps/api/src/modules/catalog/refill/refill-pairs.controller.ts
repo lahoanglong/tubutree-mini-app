@@ -25,6 +25,14 @@ export class RefillPairsController {
     return this.refill.pairsFor(parseRefillIds(q.ids));
   }
 
+  /** Trang "Tiết kiệm với Refill": mọi cặp đang hiệu lực kèm giá và % rẻ hơn. Không đọc người gọi nên cache chung như danh mục; cờ tắt trả `enabled: false`. */
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('landing')
+  landing() {
+    return this.refill.landing();
+  }
+
   /** Chỉ chai khách đã nhận trong một đơn đã giao; theo khách nên không để proxy/CDN giữ chung. */
   @Header('Cache-Control', 'private, no-store')
   @Get('mine')

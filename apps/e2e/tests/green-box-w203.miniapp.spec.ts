@@ -8,7 +8,8 @@ import { CHECKOUT_QUOTE, mockCheckout } from './support/checkout-mocks';
 /**
  * Wave tubu-w2-03, Mini App ở 360×780 và 393×852 (API mock toàn bộ):
  * - giỏ đã đạt Miễn phí giao hàng: dải Hộp Xanh THAY dải đó (một dải tại một thời điểm), mốc 3 · 5 · 7, dòng "Hộp Xanh −{tiền}" ở chân dính; bậc cao nhất
- *   chỉ một dòng; Mini không có trang ghép hộp nên dải không có nút;
+ *   chỉ một dòng; nút "Ghép thêm" của dải mở trang ghép `/green-box` (w17-01, cùng dữ liệu với web `/hop-xanh`);
+ * - `/green-box`: nhóm theo danh mục, thanh "Đã chọn {n} món · giảm {pct}%" đọc giỏ máy chủ, một nút "Xem giỏ" về giỏ;
  * - chưa đạt Miễn phí giao: dải Miễn phí giao giữ nguyên, thêm một dòng nhỏ "Thêm {n} món nữa giảm {pct}% Hộp Xanh" trên tổng;
  * - API không có trường Hộp Xanh (cờ tắt): giỏ như cũ;
  * - thanh toán: dòng "Hộp Xanh −{tiền}" tách khỏi dòng combo.
@@ -20,6 +21,17 @@ const TIERS = [
   { minItems: 7, pct: 7 },
 ];
 const THRESHOLD = 200_000;
+const pageCard = (slug: string, name: string, price: number) => ({
+  id: `p-${slug}`, slug, brand: 'Tubu', name, thumbnail: null, basePrice: price, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${slug}`,
+});
+const GREEN_BOX_PAGE = {
+  enabled: true,
+  tiers: TIERS,
+  groups: [
+    { category: { id: 'c-bep', name: 'Nhà bếp', slug: 'nha-bep' }, products: [pageCard('rua-chen', 'Nước rửa chén', 65_000), pageCard('khan-lau', 'Khăn lau', 35_000)] },
+    { category: { id: 'c-tam', name: 'Phòng tắm', slug: 'phong-tam' }, products: [pageCard('xa-phong', 'Xà phòng', 45_000), pageCard('ban-chai', 'Bàn chải', 30_000)] },
+  ],
+};
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
 async function shoot(page: Page, name: string): Promise<void> {
@@ -70,8 +82,9 @@ for (const vp of [
   test.describe(`w2-03 Hộp Xanh Mini ${vp.width}`, () => {
     test.use({ viewport: vp });
 
-    test('đã đạt Miễn phí giao: dải Hộp Xanh thay dải Miễn phí giao, mốc 3 · 5 · 7, dòng Hộp Xanh ở chân, không nút, không tràn ngang', async ({ page, api }) => {
+    test('đã đạt Miễn phí giao: dải Hộp Xanh thay dải Miễn phí giao, mốc 3 · 5 · 7, dòng Hộp Xanh ở chân, "Ghép thêm" mở trang ghép, không tràn ngang', async ({ page, api }) => {
       mockGreenCart(api, greenCart(4, 60_000, { tier: TIERS[0]!, next: TIERS[1]!, discount: 7_200 }));
+      api.get('/bundles/green-box', GREEN_BOX_PAGE);
       await page.goto('/cart');
       const strip = page.getByTestId('green-box-progress');
       await expect(strip).toBeVisible({ timeout: 20_000 });
@@ -82,13 +95,38 @@ for (const vp of [
       const bar = strip.getByRole('progressbar');
       await expect(bar).toHaveAttribute('aria-valuenow', '57');
       await expect(bar).toHaveAttribute('aria-label', 'Mốc 3 · 5 · 7 món');
-      await expect(page.getByTestId('green-box-more-cta')).toHaveCount(0);
+      const more = page.getByTestId('green-box-more-cta');
+      await expect(more).toHaveCount(1);
+      expect((await more.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       const row = page.locator('[data-ds="cart-green-box"]');
       await expect(row).toContainText('Hộp Xanh');
       await expect(row).toContainText(`-${vnd(7_200)}`);
       await expect(page.getByTestId('green-box-hint')).toHaveCount(0);
       expect(await noHorizontalScroll(page)).toBe(true);
       await shoot(page, 'cart-green-box');
+
+      await more.click();
+      await expect(page).toHaveURL(/\/green-box$/);
+      await expect(page.getByRole('heading', { name: 'Hộp Xanh tự chọn' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole('heading', { name: 'Nhà bếp' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Phòng tắm' })).toBeVisible();
+      await expect(page.getByTestId('green-box-bar-text')).toHaveText('Đã chọn 4 món · giảm 3%');
+      await expect(page.getByTestId('green-box-view-cart')).toHaveCount(1);
+      expect(await noHorizontalScroll(page)).toBe(true);
+      await shoot(page, 'green-box-page');
+      await page.getByTestId('green-box-view-cart').click();
+      await expect(page).toHaveURL(/\/cart$/);
+      await expect(page.getByTestId('green-box-progress')).toBeVisible({ timeout: 20_000 });
+    });
+
+    test('/green-box khi cờ tắt: báo chưa mở, có lối sang danh mục', async ({ page, api }) => {
+      mockGreenCart(api, greenCart(1, 60_000, null));
+      api.get('/bundles/green-box', { enabled: false, tiers: [], groups: [] });
+      await page.goto('/green-box');
+      await expect(page.getByRole('heading', { name: 'Hộp Xanh tự chọn' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId('green-box-bar-text')).toHaveCount(0);
+      await expect(page.getByTestId('green-box-view-cart')).toHaveCount(0);
+      expect(await noHorizontalScroll(page)).toBe(true);
     });
 
     test('bậc cao nhất: một dòng xác nhận, không thanh', async ({ page, api }) => {

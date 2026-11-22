@@ -10,6 +10,7 @@ import { Button } from '../ui/button';
 import { ProductRail } from '../ui/product-rail';
 import { Section } from '../ui/section';
 import { SectionHeader } from '../ui/section-header';
+import { RefillLandingEntry } from '../refill/refill-landing-entry';
 import { BrandGrid, type HubBrand } from './brand-grid';
 import { CategoryTiles } from './category-tiles';
 import { RecentlyViewedRail } from './recently-viewed-rail';
@@ -26,7 +27,7 @@ export interface BrowseHubProps {
 
 /**
  * Hub của Danh mục (gốc `/browse` khi chưa có từ khoá, bộ lọc hay `all=1`): lối vào theo danh mục, món đã xem, Bán chạy nhất,
- * thương hiệu, rồi nút mở cả danh sách. KHÔNG tải danh sách sản phẩm; kệ Bán chạy nhất lỗi hay dưới 3 món thì ẩn hẳn và hub vẫn đủ lối vào.
+ * thương hiệu, lối vào Tiết kiệm với Refill (khi có gói), rồi nút mở cả danh sách. KHÔNG tải danh sách sản phẩm; kệ Bán chạy nhất lỗi hay dưới 3 món thì ẩn hẳn và hub vẫn đủ lối vào.
  */
 export function BrowseHub({ entries, categoriesLoading, placeholderCount, brands, onPickCategory, onPickAll, onPickBrand }: BrowseHubProps) {
   // Cùng khoá với kệ Trang chủ: vào Danh mục sau Trang chủ dùng lại dữ liệu đã tải; `hubBestSellers` tự cắt còn maxItems của kệ.
@@ -61,7 +62,8 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount, brands
       )}
       <BrandGrid brands={brands} onSelect={onPickBrand} />
       <Section id="browse-see-all">
-        <div style={{ padding: '0 16px 16px' }}>
+        <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
+          <RefillLandingEntry />
           <Button variant="secondary" fullWidth onPress={onPickAll}>
             {fillCopy('browse.seeAllProducts')}
           </Button>

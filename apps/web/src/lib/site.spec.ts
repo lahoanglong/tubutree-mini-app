@@ -181,10 +181,10 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
   });
 });
 
-describe('trang công khai nhưng noindex (/uu-dai, /ma-giam-gia)', () => {
+describe('trang công khai nhưng noindex (/uu-dai, /ma-giam-gia, /hop-xanh)', () => {
   it('NOINDEX_PUBLIC_PATHS không nằm trong PRIVATE_PATHS (không bị chặn cào)', async () => {
     const { NOINDEX_PUBLIC_PATHS, PRIVATE_PATHS } = await loadSite();
-    expect(NOINDEX_PUBLIC_PATHS).toEqual(['/uu-dai', '/ma-giam-gia']);
+    expect(NOINDEX_PUBLIC_PATHS).toEqual(['/uu-dai', '/ma-giam-gia', '/hop-xanh']);
     for (const p of NOINDEX_PUBLIC_PATHS) expect(PRIVATE_PATHS).not.toContain(p);
     expect(new Set(PRIVATE_PATHS).size).toBe(PRIVATE_PATHS.length);
   });

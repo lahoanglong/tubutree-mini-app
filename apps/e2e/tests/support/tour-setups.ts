@@ -181,6 +181,39 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
       giftTrialMinOrder: 299_000,
     });
   },
+  '/refill-deals': (api) => {
+    const [a, b, c, d] = catalogCards();
+    // Tên ghi dung tích: thẻ chỉ lên trang khi so được và rẻ hơn chai cùng lượng (10 chai 500ml so với gói 5L).
+    const bottle = (p: ReturnType<typeof productCard>, name: string, price: number) => ({
+      productId: p.id, slug: p.slug, name, thumbnail: p.thumbnail, price, compareAt: null, sizeLabel: '500ml', inStock: true,
+    });
+    const refill = (p: ReturnType<typeof productCard>, name: string, price: number) => ({
+      productId: p.id, slug: p.slug, name, thumbnail: p.thumbnail, variationId: `v-${p.id}`, price, compareAt: null, sizeLabel: '5L', inStock: true, tubu: true,
+    });
+    api.get('/config/public', { ...publicConfig(), refillFirstEnabled: true } as never);
+    api.get('/catalog/refill-pairs/landing', {
+      enabled: true,
+      pairs: [
+        { bottle: bottle(a!, 'Nước rửa chén sinh học 500ml', 60_000), refill: refill(b!, 'Túi Refill nước rửa chén sinh học 5L', 450_000), savingPct: 25 },
+        { bottle: bottle(c!, 'Sữa tắm thảo mộc 500ml', 80_000), refill: refill(d!, 'Can Refill sữa tắm thảo mộc 5L', 640_000), savingPct: 20 },
+      ],
+    });
+  },
+  '/green-box': (api) => {
+    const [a, b, c, d] = catalogCards();
+    api.get('/bundles/green-box', {
+      enabled: true,
+      tiers: [
+        { minItems: 3, pct: 3 },
+        { minItems: 5, pct: 5 },
+        { minItems: 7, pct: 7 },
+      ],
+      groups: [
+        { category: { id: 'c-bep', name: 'Nhà bếp', slug: 'nha-bep' }, products: [a!, b!] },
+        { category: { id: 'c-tam', name: 'Phòng tắm', slug: 'phong-tam' }, products: [c!, d!] },
+      ],
+    });
+  },
   '/offers': (api) => {
     mockCollectable(api);
     mockWallet(api);

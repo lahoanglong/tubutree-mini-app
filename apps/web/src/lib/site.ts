@@ -23,8 +23,9 @@ const BASE_PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/
  * Route công khai trong route map (`private: false`: khách chưa đăng nhập vẫn mở được) nhưng chính trang đánh dấu noindex vì nội dung
  * là của riêng khách (ví mã, điểm). KHÔNG `Disallow` trong robots: Googlebot bị chặn thì không đọc được thẻ meta noindex, URL vẫn có thể
  * lên kết quả tìm kiếm khi có link trỏ tới. Chỉ meta noindex của trang (layout) và việc sitemap không nộp chúng giữ chúng khỏi chỉ mục.
+ * `/hop-xanh` (trang ghép Hộp Xanh): ưu đãi theo cờ, danh sách đổi theo tồn kho từng giờ nên page.tsx của nó khai noindex, follow.
  */
-export const NOINDEX_PUBLIC_PATHS = ['/uu-dai', '/ma-giam-gia'];
+export const NOINDEX_PUBLIC_PATHS = ['/uu-dai', '/ma-giam-gia', '/hop-xanh'];
 
 /** Trang riêng tư/nội bộ — robots chặn cào. Danh sách gốc + tiền tố các route `private` của route map (không gồm NOINDEX_PUBLIC_PATHS). */
 export const PRIVATE_PATHS = [

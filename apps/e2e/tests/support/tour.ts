@@ -45,6 +45,8 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/wishlist': { name: 'Yêu thích', miniapp: '/wishlist', web: '/tai-khoan/yeu-thich', role: 'CUSTOMER' },
   '/flash-sale': { name: 'Giờ vàng', miniapp: '/flash-sale', web: '/gio-vang', role: 'CUSTOMER' },
   '/gift-combos': { name: 'Bộ quà tặng & combo khởi đầu', miniapp: '/gift-combos', web: '/bo-qua-tang', role: 'CUSTOMER' },
+  '/refill-deals': { name: 'Tiết kiệm với Refill', miniapp: '/refill-deals', web: '/tiet-kiem-refill', role: 'CUSTOMER' },
+  '/green-box': { name: 'Hộp Xanh tự chọn', miniapp: '/green-box', web: '/hop-xanh', role: 'CUSTOMER' },
   '/offers': { name: 'Ưu đãi', miniapp: '/offers', web: '/uu-dai', role: 'CUSTOMER' },
   '/vouchers': { name: 'Mã giảm giá', miniapp: '/vouchers', web: '/ma-giam-gia', role: 'CUSTOMER' },
   '/group-buy': { name: 'Mua chung', miniapp: '/group-buy', web: '/mua-chung', role: 'CUSTOMER' },

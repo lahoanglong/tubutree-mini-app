@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { fetchRefillLanding, REFILL_LANDING_PATH, refillLandingRows } from '@tubutree/app-core/refill/refill-landing';
 import { NOINDEX_PUBLIC_PATHS, SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
 import { getBrands, getCategories, getLegalDoc, getProducts, getStorefrontList, type CategoryItem } from '@/lib/api';
@@ -73,6 +74,20 @@ async function getCampaignSlugs(): Promise<CampaignSlug[]> {
   }
 }
 
+/**
+ * Trang "Tiết kiệm với Refill" chỉ được lập chỉ mục khi có ít nhất một thẻ gói bán được (cùng luật noindex của page.tsx: cờ `catalog.refill_first_enabled` tắt
+ * hay mọi gói hết hàng thì trang chỉ còn lời trống). Lúc build API thường chưa chạy, và 404 là API bản cũ chưa có endpoint: không nộp. Lỗi tạm lúc chạy thì ném
+ * như mọi danh sách khác để Next giữ bản đầy đủ lần trước.
+ */
+async function refillLandingIndexed(): Promise<boolean> {
+  try {
+    return refillLandingRows(await fetchRefillLanding(createServerHttp({ revalidate }))).length > 0;
+  } catch (err) {
+    if (err instanceof ApiNotFoundError || process.env.NEXT_PHASE === 'phase-production-build') return false;
+    throw err;
+  }
+}
+
 function lastModified(iso: string | null | undefined, now = Date.now()): Date | undefined {
   if (!iso) return undefined;
   const at = new Date(iso);
@@ -84,10 +99,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1 },
   ];
-  for (const route of publicStaticRoutes()) {
+  const routes = publicStaticRoutes();
+  const refillOn = routes.includes(REFILL_LANDING_PATH.web) && (await refillLandingIndexed());
+  for (const route of routes) {
     if (route === '/' || NOINDEX_PUBLIC_PATHS.includes(route)) continue;
     // Cùng cờ với robots noindex của layout /hoan-tien: không nộp URL mà chính trang đánh dấu noindex.
     if (route === '/hoan-tien' && !CASHBACK_ENABLED) continue;
+    if (route === REFILL_LANDING_PATH.web && !refillOn) continue;
     base.push({ url: `${SITE_URL}${route}`, changeFrequency: 'weekly', priority: 0.6 });
   }
   // Không bắt lỗi: nếu nuốt lỗi rồi trả sitemap rút gọn thì ISR sẽ giữ bản thiếu cả giờ; để lỗi nổi lên

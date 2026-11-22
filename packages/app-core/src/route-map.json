@@ -5,6 +5,8 @@
       { "miniapp": "/browse", "web": "/san-pham", "private": false },
       { "miniapp": "/best-sellers", "web": "/ban-chay", "private": false },
       { "miniapp": "/gift-combos", "web": "/bo-qua-tang", "private": false },
+      { "miniapp": "/refill-deals", "web": "/tiet-kiem-refill", "private": false },
+      { "miniapp": "/green-box", "web": "/hop-xanh", "private": false },
       { "miniapp": "/flash-sale", "web": "/gio-vang", "private": false },
       { "miniapp": "/product/:slug", "web": "/san-pham/:slug", "private": false },
       { "miniapp": "/wishlist", "web": "/tai-khoan/yeu-thich", "private": true },
@@ -111,12 +113,6 @@
       "flag": ["apps/api/src/modules/eco-impact/eco-facts.rules.ts", "ECO_BADGES_KEY"],
       "missingOn": "miniapp",
       "reason": "Hàng Điểm cộng xanh trong bảng So với món tương tự chỉ có trên web: bảng của Mini nằm ở apps/miniapp/src/components/product/pdp-compare.tsx, ngoài danh sách file wave tubu-w2-01 được sửa; API đã trả ecoFactCount cho cả hai."
-    },
-    {
-      "id": "green-box-builder-web-only",
-      "flag": ["apps/api/src/modules/bundles/green-box.ts", "GREEN_BOX_ENABLED_KEY"],
-      "missingOn": "miniapp",
-      "reason": "Trang ghép Hộp Xanh (/hop-xanh: danh mục lọc sẵn, lưới nút ＋, thanh đáy Đã chọn {n} món) và nút \"Ghép thêm\" của dải giỏ chỉ có trên web. Gói Mini của wave tubu-w2-03 đo 2.368.181 B khi có cả trang lẫn gợi ý, vượt ngân sách wave +3.500 B so với 2.360.168 B; theo luật wave, Mini chỉ giữ phần giỏ (dải tiến độ, dòng gợi ý dưới tổng, dòng Hộp Xanh ở giỏ và thanh toán), đo 2.363.629 B (+3.461 B). Máy chủ tính Hộp Xanh như nhau cho đơn từ cả hai nền tảng."
     }
   ],
   "features": [

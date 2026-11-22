@@ -3,7 +3,7 @@
 // Nguồn: apps/miniapp/src/components/ui/section-header.tsx
 import type { ElementType, ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Flame, Gift, Leaf, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Flame, Gift, Leaf, Loader2, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 
 /** Bảng icon nhỏ cho tiêu đề khối: chỉ 7 icon để `SectionHeader` vào gói đầu (Trang chủ) không kéo cả thư viện; icon khác truyền thẳng `LucideIcon`. */
@@ -39,6 +39,8 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const actionLabel = action?.label ?? fillCopy('section.seeAll');
   const H = Heading as ElementType;
   const actionLocked = Boolean(action?.onPress && (action.disabled || action.busy));
+  // Đang chạy (vd "Thêm lại tất cả"): vòng xoay thay mũi tên và chữ giữ đậm, khách thấy lệnh đang bay chứ không tưởng nút bị khoá.
+  const actionBusy = Boolean(action?.onPress && action.busy);
   const actionStyle = {
     flex: '0 0 auto',
     minHeight: 44,
@@ -55,7 +57,11 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const actionInner = (
     <>
       {actionLabel}
-      <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+      {actionBusy ? (
+        <Loader2 data-testid="section-header-spinner" size={16} strokeWidth={1.75} aria-hidden="true" className="motion-safe:animate-spin" />
+      ) : (
+        <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+      )}
     </>
   );
   return (
@@ -113,7 +119,7 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
             border: 'none',
             background: 'transparent',
             cursor: actionLocked ? 'not-allowed' : 'pointer',
-            opacity: actionLocked ? 0.5 : undefined,
+            opacity: actionLocked && !actionBusy ? 0.5 : undefined,
             fontFamily: 'inherit',
           }}
         >

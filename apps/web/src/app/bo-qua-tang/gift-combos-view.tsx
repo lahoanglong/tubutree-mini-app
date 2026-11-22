@@ -11,6 +11,7 @@ import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { EmptyState } from '@/components/empty-state';
 import { Card, ComboCard, Skeleton, Text } from '@/components/mini';
+import { RefillLandingEntry } from '@/components/refill/refill-landing-entry';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { coreHttp } from '@/lib/core-http';
@@ -107,6 +108,7 @@ export default function GiftCombosView({ initial, initialFetchedAt }: { initial?
       <div role="status" className={result ? 'mt-2 text-sm' : 'sr-only'}>
         {result && <p className={result.ok ? 'text-success-fg' : 'text-danger-fg'}>{result.text}</p>}
       </div>
+      <RefillLandingEntry className="mt-4" />
     </>
   );
 }

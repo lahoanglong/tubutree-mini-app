@@ -114,6 +114,49 @@ describe('RefillPairsService', () => {
     await expect(svc.pairsFor(['bottle'])).resolves.toEqual({});
   });
 
+  it('trang Tiết kiệm với Refill, cờ tắt: enabled false, không đọc danh mục hay thẻ', async () => {
+    for (const flag of [false, undefined, 'true']) {
+      const { svc, prisma, catalog } = build(flag);
+      await expect(svc.landing()).resolves.toEqual({ enabled: false, pairs: [] });
+      expect(prisma.product.findMany).not.toHaveBeenCalled();
+      expect(catalog.cardsByIds).not.toHaveBeenCalled();
+    }
+  });
+
+  it('trang Tiết kiệm với Refill, cờ bật: mỗi cặp đang hiệu lực có thẻ chai, thẻ gói và % rẻ hơn; chai chờ ghép tay (500ml) không có', async () => {
+    const { svc, catalog } = build(true);
+    const BOTTLE = { ...CARD, id: 'bottle', slug: 'nuoc-rua-chen-fuwa3e-3-8l', name: 'Nước rửa chén Fuwa3e 3,8L', thumbnail: null, basePrice: 129_000, salePrice: null, repVariationId: 'v-bottle' };
+    catalog.cardsByIds.mockResolvedValueOnce([BOTTLE, CARD] as never);
+    const res = await svc.landing();
+    expect(catalog.cardsByIds).toHaveBeenCalledWith(['bottle', 'refill']);
+    expect(res.enabled).toBe(true);
+    expect(res.pairs).toEqual([
+      {
+        bottle: { productId: 'bottle', slug: 'nuoc-rua-chen-fuwa3e-3-8l', name: 'Nước rửa chén Fuwa3e 3,8L', thumbnail: null, price: 129_000, compareAt: null, sizeLabel: '3,8L', inStock: true },
+        refill: expect.objectContaining({ productId: 'refill', variationId: 'v-refill', price: 850_000, compareAt: 890_000, sizeLabel: '10L', tubu: true }),
+        // 10L mua bằng chai 3,8L là 339.473đ; gói 850.000đ đắt hơn nên không có số.
+        savingPct: null,
+      },
+    ]);
+  });
+
+  it('trang Tiết kiệm với Refill: gói rẻ hơn thì có %, chai hay gói ngừng bán (không còn thẻ) thì bỏ cặp', async () => {
+    const { svc, catalog } = build(true);
+    const BOTTLE = { ...CARD, id: 'bottle', slug: 'nuoc-rua-chen-fuwa3e-3-8l', name: 'Nước rửa chén Fuwa3e 3,8L', basePrice: 129_000, salePrice: null, repVariationId: 'v-bottle' };
+    catalog.cardsByIds.mockResolvedValueOnce([BOTTLE, { ...CARD, basePrice: 250_000, salePrice: null }] as never);
+    expect((await svc.landing()).pairs.map((p) => p.savingPct)).toEqual([26]);
+    catalog.cardsByIds.mockResolvedValueOnce([CARD]);
+    await expect(svc.landing()).resolves.toEqual({ enabled: true, pairs: [] });
+    catalog.cardsByIds.mockResolvedValueOnce([BOTTLE] as never);
+    await expect(svc.landing()).resolves.toEqual({ enabled: true, pairs: [] });
+  });
+
+  it('trang Tiết kiệm với Refill: bảng cặp rỗng (gói bị chặn) thì không hỏi thẻ', async () => {
+    const { svc, catalog } = build(true, { [REFILL_PAIRS_BLOCK_KEY]: ['refill-nuoc-rua-chen-fuwa3e-10l'] });
+    await expect(svc.landing()).resolves.toEqual({ enabled: true, pairs: [] });
+    expect(catalog.cardsByIds).not.toHaveBeenCalled();
+  });
+
   it('bảng cặp dùng chung bộ nhớ đệm: nhiều lần hỏi cùng lúc chỉ quét danh mục một lần', async () => {
     const { svc, prisma } = build(true);
     await Promise.all([svc.pairsFor(['bottle']), svc.pairsFor(['bottle']), svc.minePairsFor('u1', ['bottle'])]);

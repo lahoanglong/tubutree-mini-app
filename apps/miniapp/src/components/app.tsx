@@ -65,6 +65,8 @@ const CampaignPage = lazy(() => import('../pages/campaign'));
 const BrowsePage = lazy(loadBrowse);
 const BestSellersPage = lazy(() => import('../pages/best-sellers'));
 const GiftCombosPage = lazy(() => import('../pages/gift-combos'));
+const RefillDealsPage = lazy(() => import('../pages/refill-deals'));
+const GreenBoxPage = lazy(() => import('../pages/green-box'));
 const loadProductDetail = () => import('../pages/product-detail');
 const ProductDetailPage = lazy(loadProductDetail);
 const loadCart = () => import('../pages/cart');
@@ -224,6 +226,8 @@ export default function MyApp() {
                     <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
                     <Route path="/best-sellers" element={<RouteShell skeleton="grid"><BestSellersPage /></RouteShell>} />
                     <Route path="/gift-combos" element={<RouteShell skeleton="grid"><GiftCombosPage /></RouteShell>} />
+                    <Route path="/refill-deals" element={<RouteShell><RefillDealsPage /></RouteShell>} />
+                    <Route path="/green-box" element={<RouteShell skeleton="grid"><GreenBoxPage /></RouteShell>} />
                     <Route path="/vouchers" element={<LegacyVouchersRedirect />} />
                     <Route path="/campaign/:slug" element={<RouteShell skeleton="grid"><CampaignPage /></RouteShell>} />
                     <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />

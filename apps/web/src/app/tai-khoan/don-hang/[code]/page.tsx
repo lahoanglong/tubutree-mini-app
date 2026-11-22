@@ -49,6 +49,9 @@ import { OrderTrack } from '@/components/orders/order-track';
 import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
 import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '@/components/orders/order-shipping';
+import { OrderRefillShortcut } from '@/components/orders/order-refill-shortcut';
+import { OrderTrackingPill } from '@/components/orders/order-tracking-pill';
+import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { OrderZaloDetail } from '@/components/checkout/order-zalo';
 import { inviteLandingOn } from '@tubutree/app-core/commerce/invite-card';
 import { hasEcoImpact, orderEcoImpactBase, orderEcoImpactGate } from '@tubutree/app-core/eco/order-impact-gate';
@@ -255,6 +258,11 @@ export default function OrderDetailPage() {
           <div className="order-1 md:overflow-hidden md:rounded-card">
             <OrderStatusHero headline={headline} statusLabel={buyerOrderStatusLabel(o)} stamp={stamp} tone={STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!} />
           </div>
+          {tracking && (
+            <div className="order-1 mt-2 px-4 md:px-0">
+              <OrderTrackingPill href={tracking} partner={o.shippingPartner} />
+            </div>
+          )}
       {showPayPanel && (
         <div id="order-pay-panel" tabIndex={-1} className="order-2 mt-2 outline-none max-md:px-4">
           {canPayNow(o) && panelState === 'ready' && (
@@ -267,6 +275,13 @@ export default function OrderDetailPage() {
       )}
 
           <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
+          <OrderRefillShortcut
+            delivered={o.status === 'DELIVERED'}
+            refillOn={refillFirstOn(cfgQ.data)}
+            slugs={o.items.filter((it) => !it.isGift).map((it) => it.productSlug)}
+            className={`order-3 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}
+            titleClassName={`${ui.sectionTitle} ${mini.sectionLabel}`}
+          />
           {journey ? (
             <OrderJourneySection status={o.status} hasCarrierEvents={journey.hasCarrierEvents}>
               <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
@@ -288,13 +303,12 @@ export default function OrderDetailPage() {
               )}
             </>
           )}
-          {(o.shippingPartner || o.shippingCode || tracking || historyEvents.length > 0) && (
+          {(o.shippingPartner || o.shippingCode || historyEvents.length > 0) && (
             <section className={`order-5 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
               <OrderShipping
                 partner={o.shippingPartner}
                 code={o.shippingCode}
                 status={shippingEventLabel(o.shippingStatus)}
-                trackingHref={tracking}
                 events={trackView || journey ? undefined : historyEvents}
               />
             </section>

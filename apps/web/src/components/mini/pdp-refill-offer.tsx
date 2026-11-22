@@ -16,6 +16,11 @@ export interface PdpRefillOfferProps {
   /** Một lệnh ghi giỏ khác đang chạy: báo bằng aria-disabled, không `disabled`, để nút đang giữ focus không rớt focus. */
   blocked?: boolean;
   onAdd: (view: PdpRefillOfferView) => void;
+  /**
+   * Nơi đặt thẻ (`refill_swap_shown.surface`): `pdp` (mặc định) và `order` ghi một lần hiện mỗi thẻ; `landing` (trang Tiết kiệm với Refill, nhiều thẻ)
+   * không ghi ở thẻ, trang ghi một lần cho cả danh sách.
+   */
+  surface?: 'pdp' | 'landing' | 'order';
 }
 
 /**
@@ -23,11 +28,11 @@ export interface PdpRefillOfferProps {
  * Trái: "Chọn túi Refill 10L tiết kiệm 470.000đ (~34%)" và "Thay thế 20 chai nhựa · 890.000đ" (liên kết thật tới trang gói). Phải: "+ Thêm" 44px thêm gói
  * vào giỏ một chạm. Số đo dưới md cùng Mini App (mini.css).
  */
-export function PdpRefillOffer({ view, busy, blocked, onAdd }: PdpRefillOfferProps) {
+export function PdpRefillOffer({ view, busy, blocked, onAdd, surface = 'pdp' }: PdpRefillOfferProps) {
   const id = view.productId;
   useEffect(() => {
-    trackWebEvent('refill_swap_shown', { surface: 'pdp' });
-  }, [id]);
+    if (surface !== 'landing') trackWebEvent('refill_swap_shown', { surface });
+  }, [id, surface]);
   return (
     <div data-pdp-block="refill" data-testid="pdp-refill" className="tubu-refill-offer">
       <div className="tubu-refill-offer-card">

@@ -7,6 +7,7 @@ import { giftLandingQuery } from '@tubutree/app-core/queries/bundle';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useBundleAdd } from '../components/product/use-bundle-add';
+import { RefillLandingEntry } from '../components/refill/refill-landing-entry';
 import { Card } from '../components/ui/card';
 import { ComboCard } from '../components/ui/combo-card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -103,6 +104,7 @@ export default function GiftCombosPage() {
             </section>
           )}
         </div>
+        <RefillLandingEntry style={{ marginTop: 'var(--space-stack-md)' }} />
       </div>
     </Page>
   );

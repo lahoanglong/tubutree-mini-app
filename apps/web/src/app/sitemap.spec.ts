@@ -104,6 +104,62 @@ describe('sitemap', () => {
     expect(urls).not.toContain('https://app.tubutree.com/ma-giam-gia');
   });
 
+  it('/hop-xanh (trang ghép Hộp Xanh, noindex) có dòng route map nhưng không vào sitemap', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    const routes = actual.publicStaticRoutes();
+    expect(routes).toContain('/hop-xanh');
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(routes);
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).toContain('https://app.tubutree.com/bo-qua-tang');
+    expect(urls).not.toContain('https://app.tubutree.com/hop-xanh');
+  });
+
+  it('/tiet-kiem-refill chỉ vào sitemap khi trang có thẻ gói bán được (cùng luật noindex của trang)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    const routes = actual.publicStaticRoutes();
+    expect(routes).toContain('/tiet-kiem-refill');
+    const offer = { productId: 'p-refill', slug: 'refill-10l', name: 'Túi Refill 10L', thumbnail: null, variationId: 'v-refill', price: 250_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true };
+    const bottle = { productId: 'p-chai', slug: 'chai-500ml', name: 'Nước rửa chén 500ml', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true };
+    const landing = (body: unknown) => (path: string) => Promise.resolve(path === '/catalog/refill-pairs/landing' ? body : []);
+
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(routes);
+    http.get.mockImplementation(landing({ enabled: true, pairs: [{ bottle, refill: offer, savingPct: 26 }] }));
+    expect(entryOf(await sitemap(), '/tiet-kiem-refill')).toMatchObject({ url: 'https://app.tubutree.com/tiet-kiem-refill', changeFrequency: 'weekly', priority: 0.6 });
+    expect(http.get).toHaveBeenCalledWith('/catalog/refill-pairs/landing', { anonymous: true });
+
+    for (const body of [
+      { enabled: false, pairs: [] },
+      { enabled: true, pairs: [] },
+      { enabled: true, pairs: [{ bottle, refill: { ...offer, inStock: false }, savingPct: 26 }] },
+    ]) {
+      routeMocks.publicStaticRoutes.mockReturnValueOnce(routes);
+      http.get.mockImplementation(landing(body));
+      expect(entryOf(await sitemap(), '/tiet-kiem-refill')).toBeUndefined();
+    }
+  });
+
+  it('/tiet-kiem-refill: lỗi lúc build hay 404 (API cũ) thì không nộp, lỗi tạm lúc chạy thì ném (Next giữ bản trước)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    const PATH = '/catalog/refill-pairs/landing';
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+    http.get.mockImplementation((path: string) => (path === PATH ? Promise.reject(new ApiNotFoundError(PATH)) : Promise.resolve([])));
+    expect(entryOf(await sitemap(), '/tiet-kiem-refill')).toBeUndefined();
+    const fail = (path: string) => (path === PATH ? Promise.reject(new ApiUnavailableError(PATH, 503)) : Promise.resolve([]));
+    const prev = process.env.NEXT_PHASE;
+    try {
+      process.env.NEXT_PHASE = 'phase-production-build';
+      routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+      http.get.mockImplementation(fail);
+      expect(entryOf(await sitemap(), '/tiet-kiem-refill')).toBeUndefined();
+      delete process.env.NEXT_PHASE;
+      routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+      await expect(sitemap()).rejects.toThrow('không sẵn sàng');
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PHASE;
+      else process.env.NEXT_PHASE = prev;
+    }
+  });
+
   it('/hoan-tien chỉ vào sitemap khi CASHBACK_ENABLED bật, vì trang đang noindex khi cờ tắt', async () => {
     routeMocks.publicStaticRoutes.mockReturnValue(['/', '/hoan-tien']);
     try {

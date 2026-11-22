@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { bestSellersHeading, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
@@ -7,13 +8,24 @@ import { hubBestSellers } from '@tubutree/app-core/browse/hub';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { bestSellersQuery } from '@tubutree/app-core/queries/browse';
+import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
 import { Button, ProductRail, Section, SectionHeader } from '@/components/mini';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { BrandGrid, type HubBrand } from './brand-grid';
 import { CategoryTiles } from './category-tiles';
 import { RecentlyViewedRail } from './recently-viewed-rail';
+
+// Ngoài JS lần đầu của /san-pham (ngân sách web-budget): lối vào chỉ hiện sau khi trang Refill tải xong và chỉ khi cờ bật.
+const RefillLandingEntry = dynamic(
+  () => import('@/components/refill/refill-landing-entry').then((m) => m.RefillLandingEntry, () => NoRefillLandingEntry),
+  { ssr: false },
+);
+function NoRefillLandingEntry() {
+  return null;
+}
 
 export interface BrowseHubProps {
   entries: CategoryEntry[];
@@ -29,11 +41,12 @@ export interface BrowseHubProps {
 
 /**
  * Hub của Danh mục (gốc `/san-pham` chưa có từ khoá, bộ lọc hay `all=1`; nguồn: apps/miniapp/src/components/catalog/browse-hub.tsx): lối
- * vào theo danh mục, món đã xem, Bán chạy nhất, thương hiệu, rồi nút mở cả danh sách. KHÔNG tải danh sách sản phẩm; kệ Bán chạy nhất
+ * vào theo danh mục, món đã xem, Bán chạy nhất, thương hiệu, lối vào Tiết kiệm với Refill (khi có gói), rồi nút mở cả danh sách. KHÔNG tải danh sách sản phẩm; kệ Bán chạy nhất
  * lỗi hay dưới 3 món thì ẩn hẳn và hub vẫn đủ lối vào.
  */
 export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, brands, initialBestSellers, onPickCategory, onPickAll, onPickBrand }: BrowseHubProps) {
   const max = shelf('browse.bestSellers').maxItems;
+  const refillOn = refillFirstOn(usePublicConfig());
   const q = useQuery({
     ...bestSellersQuery(coreHttp, max),
     staleTime: 60_000,
@@ -60,7 +73,8 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
       )}
       <BrandGrid brands={brands} onSelect={onPickBrand} />
       <Section id="browse-see-all">
-        <div style={{ paddingBottom: 16 }}>
+        <div style={{ paddingBottom: 16, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
+          {refillOn && <RefillLandingEntry />}
           <Button variant="secondary" fullWidth onPress={onPickAll}>
             {fillCopy('browse.seeAllProducts')}
           </Button>

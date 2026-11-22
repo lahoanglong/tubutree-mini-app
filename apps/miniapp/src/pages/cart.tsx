@@ -19,6 +19,7 @@ import {
   greenBoxDiscountOf,
   greenBoxProgress,
   greenBoxTierRise,
+  greenBoxWebCopy,
   readGreenBox,
   type GreenBoxProgressView,
   type GreenBoxState,
@@ -534,7 +535,7 @@ export default function CartPage() {
             <Box px={3} pt={2}>
               <CartUnlockSlot level={unlockLevel}>
                 {greenBoxView ? (
-                  <GreenBoxStrip view={greenBoxView} />
+                  <GreenBoxStrip view={greenBoxView} onMore={() => goSmart('/green-box')} />
                 ) : (
                   <FreeShippingProgressBar
                     base={freeshipBase}
@@ -1149,31 +1150,42 @@ const COMPACT_ROW = { padding: 0 } as const;
 
 /**
  * Dải Hộp Xanh ở đầu giỏ, thay chỗ dải Miễn phí giao hàng khi đã đạt ngưỡng (một dải tại một thời điểm). Dùng chung khung `tubu-freeship` nên đổi dải
- * không đổi chiều cao. Bậc cao nhất: một dòng xác nhận, không thanh. Mini không có trang ghép hộp (chỉ web, `gaps` của route-map) nên không có nút.
+ * không đổi chiều cao. "Ghép thêm" mở trang ghép `/green-box` (cùng web `/hop-xanh`). Bậc cao nhất: một dòng xác nhận, không thanh, không nút.
  */
-function GreenBoxStrip({ view }: { view: GreenBoxProgressView }) {
+function GreenBoxStrip({ view, onMore }: { view: GreenBoxProgressView; onMore: () => void }) {
+  const label = (
+    <p role="status" aria-live="polite" aria-atomic="true" className="tubu-freeship-text">
+      {view.text}
+    </p>
+  );
+  if (view.done) {
+    return (
+      <div data-testid="green-box-progress" data-reached="true" className="tubu-freeship">
+        {label}
+      </div>
+    );
+  }
   return (
-    <div data-testid="green-box-progress" data-reached={view.done} className="tubu-freeship">
-      <p role="status" aria-live="polite" aria-atomic="true" className="tubu-freeship-text">
-        {view.text}
+    <div data-testid="green-box-progress" data-reached="false" data-cta="true" className="tubu-freeship">
+      <div className="tubu-freeship-head">
+        {label}
+        <Button variant="secondary" className="tubu-freeship-cta" data-testid="green-box-more-cta" aria-label={greenBoxWebCopy('ctaAria')} onPress={onMore}>
+          {greenBoxWebCopy('cta')}
+        </Button>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={view.marksText}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={view.pct}
+        className="tubu-freeship-track"
+      >
+        <div className="tubu-freeship-fill" style={{ width: `${view.pct}%` }} />
+      </div>
+      <p className="tubu-freeship-text" data-testid="green-box-marks">
+        {view.marksText}
       </p>
-      {!view.done && (
-        <>
-          <div
-            role="progressbar"
-            aria-label={view.marksText}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={view.pct}
-            className="tubu-freeship-track"
-          >
-            <div className="tubu-freeship-fill" style={{ width: `${view.pct}%` }} />
-          </div>
-          <p className="tubu-freeship-text" data-testid="green-box-marks">
-            {view.marksText}
-          </p>
-        </>
-      )}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   type RefillPairStatus,
 } from './refill-pairs';
 import { parseMeasure } from '../product-compare.unit';
+import { REFILL_LANDING_MAX, compareRefillLandingPairs, refillSavingPct } from './refill-landing';
 import { loadRefillPairTable } from './refill-pair-table';
 
 /** Bảng cặp (quét danh mục công khai + hai khoá cấu hình) đọc lại sau chừng này; mỗi lần hỏi chỉ tra trong bộ nhớ. */
@@ -48,6 +49,31 @@ export interface RefillOffer {
 }
 
 type Card = Awaited<ReturnType<CatalogService['cardsByIds']>>[number];
+
+/** Chai của một cặp trên trang "Tiết kiệm với Refill": tên, ảnh, giá đang bán trên thẻ (chưa gồm Giờ vàng), giá gạch, cỡ, còn hàng. */
+export interface RefillLandingBottle {
+  productId: string;
+  slug: string;
+  name: string;
+  thumbnail: string | null;
+  price: number;
+  compareAt: number | null;
+  sizeLabel: string | null;
+  inStock: boolean;
+}
+
+export interface RefillLandingPair {
+  bottle: RefillLandingBottle;
+  refill: RefillOffer;
+  /** Gói rẻ hơn mua chai cùng lượng bao nhiêu % (`refillSavingPct`); null khi không so được. */
+  savingPct: number | null;
+}
+
+/** GET /catalog/refill-pairs/landing. Cờ `catalog.refill_first_enabled` tắt: `{ enabled: false, pairs: [] }`. */
+export interface RefillLanding {
+  enabled: boolean;
+  pairs: RefillLandingPair[];
+}
 
 export interface AdminRefillProduct {
   id: string;
@@ -101,17 +127,32 @@ function ratioOf(bottle: string, refill: string): number | null {
   return b && r && b.unit === r.unit && b.qty > 0 ? Math.round((r.qty / b.qty) * 10) / 10 : null;
 }
 
+function cardPrice(card: Card): { price: number; compareAt: number | null } {
+  const price = card.salePrice ?? card.basePrice;
+  return { price, compareAt: card.salePrice != null && card.basePrice > card.salePrice ? card.basePrice : null };
+}
+
+function toBottle(card: Card): RefillLandingBottle {
+  return {
+    productId: card.id,
+    slug: card.slug,
+    name: card.name,
+    thumbnail: card.thumbnail ?? null,
+    ...cardPrice(card),
+    sizeLabel: refillSizeLabel(card.name),
+    inStock: card.inStock === true,
+  };
+}
+
 function toOffer(card: Card): RefillOffer | null {
   if (!card.repVariationId) return null;
-  const price = card.salePrice ?? card.basePrice;
   return {
     productId: card.id,
     slug: card.slug,
     name: card.name,
     thumbnail: card.thumbnail ?? null,
     variationId: card.repVariationId,
-    price,
-    compareAt: card.salePrice != null && card.basePrice > card.salePrice ? card.basePrice : null,
+    ...cardPrice(card),
     sizeLabel: refillSizeLabel(card.name),
     inStock: card.inStock === true,
     tubu: card.fulfiller?.kind === 'TUBU',
@@ -161,6 +202,27 @@ export class RefillPairsService {
          AND v."productId" IN (${Prisma.join(bottleIds)})`);
     if (owned.length === 0) return {};
     return this.offersFor(owned.map((r) => r.id));
+  }
+
+  /**
+   * Trang "Tiết kiệm với Refill" (web /tiet-kiem-refill, Mini /refill-deals): mọi cặp đang hiệu lực của bảng cặp (tự ghép, ghép tay, đã duyệt;
+   * chai bị chặn không có) mà cả chai lẫn gói còn bán công khai, kèm % rẻ hơn. Công khai, không đọc người gọi. Cờ tắt thì chỉ đọc cờ.
+   */
+  async landing(): Promise<RefillLanding> {
+    if (!(await this.enabled())) return { enabled: false, pairs: [] };
+    const pairs = await this.pairs();
+    if (pairs.size === 0) return { enabled: true, pairs: [] };
+    const cards = new Map((await this.catalog.cardsByIds([...new Set([...pairs.keys(), ...pairs.values()])])).map((c) => [c.id, c]));
+    const out: RefillLandingPair[] = [];
+    for (const [bottleId, refillId] of pairs) {
+      const bottleCard = cards.get(bottleId);
+      const refillCard = cards.get(refillId);
+      const refill = refillCard ? toOffer(refillCard) : null;
+      if (!bottleCard || !refill) continue;
+      const bottle = toBottle(bottleCard);
+      out.push({ bottle, refill, savingPct: refillSavingPct(bottle, refill) });
+    }
+    return { enabled: true, pairs: out.sort(compareRefillLandingPairs).slice(0, REFILL_LANDING_MAX) };
   }
 
   private async offersFor(ids: readonly string[]): Promise<Record<string, RefillOffer>> {

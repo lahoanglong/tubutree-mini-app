@@ -17,6 +17,8 @@ import { orderDetailHref } from '@/lib/order-view';
 import { isRetailOnly } from '@/lib/pdp-logic';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
+import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
+import { OrderInviteNudge } from '@/components/referral/order-invite-nudge';
 import { OrderZaloFriend } from './order-zalo';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import type { ProductDetail } from '@/lib/api';
@@ -134,6 +136,7 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
   const [notice, setNotice] = useState<string | null>(null);
   const cfg = usePublicConfig();
   const friend = showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />;
+  const invite = referralViralOn(cfg) && <OrderInviteNudge />;
   const subscribe = candidate && (
     <>
       <SubscribeCard candidate={candidate} onOpen={() => setSubscribeOpen(true)} />
@@ -148,11 +151,11 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
     <>
       <MobileSuccess
         order={order} etaLabel={etaLabel} split={split} codes={codes} grandTotal={grandTotal} pointsEarned={pointsEarned}
-        continueHref={continueHref} subscribe={subscribe} friend={friend}
+        continueHref={continueHref} subscribe={subscribe} friend={friend} invite={invite}
       />
       <DesktopSuccess
         order={order} etaLabel={etaLabel} split={split} codes={codes} grandTotal={grandTotal} pointsEarned={pointsEarned}
-        continueHref={continueHref} subscribe={subscribe} friend={friend}
+        continueHref={continueHref} subscribe={subscribe} friend={friend} invite={invite}
       />
       {candidate && (
         <SubscribeSheet
@@ -178,6 +181,8 @@ interface View {
   subscribe: React.ReactNode;
   /** Lời mời kết bạn Zalo (liên kết phụ, chỉ khi cờ bật và đơn có đồng ý); đặt sau các nút để không tranh vai nút chính. */
   friend: React.ReactNode;
+  /** Lời mời bạn nhận thưởng đơn đầu (cờ `growth.referral_viral_enabled`): một dòng dưới gợi ý Đặt định kỳ, như Mini App. */
+  invite: React.ReactNode;
 }
 
 // Chép cả danh sách mã (đơn tách thì mọi mã, không chỉ mã đầu); báo kết quả bằng role="status" để trình đọc màn hình đọc lên.
@@ -225,7 +230,7 @@ function NextSteps() {
   );
 }
 
-function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend }: View) {
+function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend, invite }: View) {
   const router = useRouter();
   const codesText = codes.join(', ');
   const { copyNote, copyCode } = useCopyCodes(codesText);
@@ -332,11 +337,12 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
       </div>
       {friend}
       {subscribe}
+      {invite}
     </div>
   );
 }
 
-function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend }: View) {
+function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend, invite }: View) {
   const codesText = codes.join(', ');
   const { copyNote, copyCode } = useCopyCodes(codesText);
   return (
@@ -408,7 +414,10 @@ function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarne
         </Link>
       </div>
       {friend && <div className="mx-auto mt-6 max-w-md text-left">{friend}</div>}
-      <div className="mx-auto mt-6 flex max-w-md flex-col gap-2 text-left">{subscribe}</div>
+      <div className="mx-auto mt-6 flex max-w-md flex-col gap-2 text-left">
+        {subscribe}
+        {invite}
+      </div>
     </div>
   );
 }
