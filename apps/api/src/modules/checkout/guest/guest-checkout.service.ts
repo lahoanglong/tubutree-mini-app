@@ -353,11 +353,15 @@ export class GuestCheckoutService {
   }
 
   /**
-   * Đơn vãng lai đã về một tài khoản Zalo (nhận đơn ở `claim` hay gộp khi đăng nhập trên trình duyệt đã đặt): dòng users của đơn không còn là
-   * khách vãng lai. Đơn vẫn giữ `guestPhone`/`guestTokenHash` (đối soát, trần đặt hàng), nên phải kiểm chủ đơn chứ không dựa vào hai cột đó.
+   * Đơn vãng lai đã rời tay khách vãng lai: về một tài khoản Zalo (nhận đơn ở `claim`, gộp hay nâng dòng khách khi đăng nhập trên trình duyệt đã
+   * đặt), kể cả tài khoản đó về sau bị xoá (xoá tài khoản đặt `zaloId`/`phone` về null nhưng không xoá `guestPhone`/`guestTokenHash` của đơn).
+   * Nên kiểm theo chiều ngược: chỉ dòng khách vãng lai còn sống (zaloId `guest_`, chưa gộp, chưa có SĐT xác minh) mới còn tra được bằng mã + SĐT.
    */
   private async claimedByAccount(userId: string): Promise<boolean> {
-    return isRealUser(await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }));
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true, mergedIntoId: true } });
+    const liveGuest =
+      !!owner?.zaloId && owner.zaloId.startsWith('guest_') && !owner.zaloId.includes('_merged_') && owner.phone === null && owner.mergedIntoId === null;
+    return !liveGuest;
   }
 
   /** Đơn đã xong (giao, huỷ, hoàn) quá GUEST_TRACK_TTL_DAYS thì 404 như sai mã (cùng câu với nơi gọi). */
@@ -446,8 +450,9 @@ export class GuestCheckoutService {
     const order = await this.findGuestOrder(dto.orderCode);
     const phoneMatches = safeEqualStrings(order?.guestPhone ?? DUMMY_PHONE, dto.phone);
     if (!order?.guestTokenHash || !order.guestPhone || !phoneMatches) throw new NotFoundException(LOOKUP_NOT_FOUND_MESSAGE);
+    const tracked = await this.trackable(order, LOOKUP_NOT_FOUND_MESSAGE);
     if (await this.claimedByAccount(order.userId)) throw orderClaimed();
-    const view = await this.viewOf(await this.trackable(order, LOOKUP_NOT_FOUND_MESSAGE));
+    const view = await this.viewOf(tracked);
     const { key, expiresAt } = signGuestLookupKey(order.code, order.guestTokenHash, this.linkSecret());
     const code = encodeURIComponent(order.code);
     const awaitingTransfer = view.paymentMethod === 'BANK_TRANSFER' && view.status === 'PENDING_PAYMENT' && view.paymentStatus !== 'PAID';

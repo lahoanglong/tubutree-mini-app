@@ -332,13 +332,19 @@ export class WasteReceiveService {
   async createUnmatched(callerUserId: string, body: WasteUnmatchedCreateRequest): Promise<WasteUnmatchedDTO> {
     const caller = callerUserId;
     const staff = await this.access.assertWarehouseActor(caller);
+    const trackingNorm = body.trackingCode ? normalizeTracking(body.trackingCode) : null;
     return this.prisma.$transaction(async (tx) => {
+      // Khoá các yêu cầu còn chờ cùng mã vận đơn (theo id, một thứ tự) trước khi ghi kiện: đóng thất lạc hàng loạt khoá đúng dòng đó rồi mới tìm
+      // kiện đang mở, nên hai bên xếp hàng và không bên nào đọc trượt bên kia.
+      if (trackingNorm) {
+        await tx.$queryRaw`SELECT "id" FROM "waste_requests" WHERE "trackingNorm" = ${trackingNorm} AND "status" IN ('OPEN', 'IN_TRANSIT') ORDER BY "id" FOR UPDATE`;
+      }
       const row = await tx.wasteUnmatchedParcel.create({
         data: {
           createdByUserId: caller,
           carrier: body.carrier ?? null,
           trackingCode: body.trackingCode ?? null,
-          trackingNorm: body.trackingCode ? normalizeTracking(body.trackingCode) : null,
+          trackingNorm,
           description: body.description.trim(),
           reason: 'MANUAL_ENTRY',
         },

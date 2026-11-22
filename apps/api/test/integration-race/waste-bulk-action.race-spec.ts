@@ -222,6 +222,18 @@ describe('WasteBulkActionService (real Postgres)', () => {
     expect(resolved.status).toBe('RESOLVED');
   });
 
+  it('tubu-w18-01: CLOSE_LOST refuses the request whose TR- code is on a disputed OPEN parcel scanned under another request', async () => {
+    const other = await newUser();
+    const [scannedAs, owner] = [await mailIn(cust.id, 40), await mailIn(other.id, 40)];
+    const res = await receive.receive(staffA.id, scannedAs.id, { match: { parcelCode: owner.code } });
+    expect(res).toMatchObject({ outcome: 'UNMATCHED', reason: 'TR_TRACKING_CONFLICT' });
+    const dry = await bulk.run(admin.id, { action: 'CLOSE_LOST', requestIds: [owner.id, scannedAs.id], dryRun: true });
+    expect(dry.results.map((x) => [x.outcome, x.reason])).toEqual([
+      ['FAILED', expect.stringMatching(/Hàng không rõ chủ/)],
+      ['FAILED', expect.stringMatching(/Hàng không rõ chủ/)],
+    ]);
+  });
+
   it('CLOSE_LOST × MARK_RECEIVED on the same overdue parcel: exactly one wins', async () => {
     const r = await mailIn(cust.id, 40);
     const s = summarize(
@@ -323,6 +335,17 @@ describe('Unmatched parcel suggestions (real Postgres)', () => {
       await prisma.wasteUnmatchedParcel.deleteMany({ where: { relatedRequestId: { in: (await prisma.wasteRequest.findMany({ where: { userId: heavy.id }, select: { id: true } })).map((x) => x.id) } } });
       await prisma.wasteRequest.deleteMany({ where: { userId: heavy.id } });
     }
+  });
+
+  it('tubu-w18-01: a tracking code held by two customers gets no tracking suggestion even when one customer fills the rows read for that code', async () => {
+    const a = [await mailIn(cust.id, 9), await mailIn(cust.id, 8), await mailIn(cust.id, 7), await mailIn(cust.id, 6), await mailIn(cust.id, 5)];
+    const other = await newUser();
+    const b = await mailIn(other.id, 1);
+    const shared = a[0]!.trackingNorm!;
+    await prisma.wasteRequest.updateMany({ where: { id: { in: [...a.slice(1), b].map((r) => r.id) } }, data: { trackingCode: shared, trackingNorm: shared } });
+    const parcel = await receive.createUnmatched(staffA.id, { description: 'kiện chung mã nhiều dòng', trackingCode: shared });
+    const listed = (await receive.listUnmatched(staffA.id, {})).find((p) => p.id === parcel.id);
+    expect(listed?.candidates).toEqual([]);
   });
 
   it('quick match × bulk receive on the same request: one receive only', async () => {

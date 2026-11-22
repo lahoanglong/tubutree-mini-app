@@ -626,6 +626,16 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
       await expect(guest.track(o.code, before.trackingKey)).rejects.toBeInstanceOf(NotFoundException);
       await expect(guest.bankQr(o.code, before.trackingKey)).rejects.toBeInstanceOf(NotFoundException);
       await expect(guest.track(o.code, dto.trackingKey)).resolves.toMatchObject({ code: o.code });
+
+      // Tài khoản nhận đơn bị xoá (zaloId, SĐT về null): đơn vẫn không mở lại cho tra cứu khách, khoá tạm cũ vẫn 404.
+      await prisma.user.update({ where: { id: target.id }, data: { zaloId: null, phone: null, isBlocked: true } });
+      await expect(guest.lookup({ orderCode: o.code, phone } as GuestLookupDto)).rejects.toMatchObject({ response: { code: 'GUEST_ORDER_CLAIMED' } });
+      await expect(guest.track(o.code, before.trackingKey)).rejects.toBeInstanceOf(NotFoundException);
+      // Quá hạn theo dõi (giao hơn 60 ngày): cùng 404 như đơn chưa nhận, không báo đã về tài khoản.
+      await prisma.order.update({ where: { code: o.code }, data: { status: 'DELIVERED', deliveredAt: new Date(Date.now() - 61 * 86_400_000), deliveredEffectsAt: new Date() } });
+      await expect(guest.lookup({ orderCode: o.code, phone } as GuestLookupDto)).rejects.toMatchObject({
+        message: 'Không tìm thấy đơn khớp mã đơn và số điện thoại này.',
+      });
     });
 
     it('tubu-w18-01: dòng khách được nâng tại chỗ thành tài khoản Zalo (zaloId thật): tra cứu cũng ra GUEST_ORDER_CLAIMED', async () => {

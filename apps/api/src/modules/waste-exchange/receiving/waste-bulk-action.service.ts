@@ -96,6 +96,19 @@ export function openParcelForRequestWhere(r: { id: string; trackingNorm: string 
   return { ...WASTE_UNMATCHED_OPEN_WHERE, OR: [{ relatedRequestId: r.id }, ...(r.trackingNorm ? [{ trackingNorm: r.trackingNorm }] : [])] };
 }
 
+/**
+ * Kiện tranh chấp mã TR- (quét yêu cầu A nhưng kiện mang mã của yêu cầu B): dòng kiện gắn A, còn B chỉ nằm ở `meta.parcelRequestId` của sự kiện
+ * PARCEL_UNMATCHED. Đi từ các kiện đang mở (ít) sang sự kiện theo `requestId` của kiện (có chỉ mục), không quét cả bảng sự kiện.
+ */
+async function openConflictParcelNames(db: Prisma.TransactionClient, requestId: string): Promise<boolean> {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT p."id" FROM "waste_unmatched_parcels" p
+    JOIN "waste_events" e ON e."requestId" = p."relatedRequestId" AND e."kind" = 'PARCEL_UNMATCHED' AND e."meta"->>'unmatchedId' = p."id"
+    WHERE p."status" = 'OPEN' AND p."relatedRequestId" IS NOT NULL AND e."meta"->>'parcelRequestId' = ${requestId}
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
 /** Ném trong transaction để rollback và mang kết quả SKIP/FAIL ra ngoài mà không đổi gì. */
 class RowStop extends Error {
   constructor(readonly decision: Exclude<WasteBulkDecision, { kind: 'OK' }>) {
@@ -148,7 +161,7 @@ export class WasteBulkActionService {
         const d = closeLostDecision(rowOf(r), { now, reviewDays });
         if (d.kind !== 'OK') return d;
         const parcel = await db.wasteUnmatchedParcel.findFirst({ where: openParcelForRequestWhere(r), select: { id: true } });
-        return parcel ? { kind: 'FAIL', reason: BULK_TEXT.OPEN_UNMATCHED_PARCEL } : d;
+        return parcel || (await openConflictParcelNames(db, r.id)) ? { kind: 'FAIL', reason: BULK_TEXT.OPEN_UNMATCHED_PARCEL } : d;
       }
       const d = receiveDecision(rowOf(r), { phoneMatchConfirmed, dryRun: asDry });
       if (d.kind !== 'OK') return d;
