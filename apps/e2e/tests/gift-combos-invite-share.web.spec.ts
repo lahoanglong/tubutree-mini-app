@@ -3,6 +3,7 @@ import { test, expect, makeUser, mockSession, publicConfig, type MockApi } from 
 import { mockNewbieGame } from './support/game-newbie-states';
 import { mockAlbum } from './support/game-album-mocks';
 import { expectNoHorizontalOverflow, expectTargets44, mockMiniGames } from './support/game-mini-mocks';
+import { mockDiscovery } from './support/discovery-mocks';
 
 /**
  * tubu-w14-02, web khách ở 320 và 375px (project "Web Customer Mobile"; lời gọi /api/** từ trình duyệt đi qua mock):
@@ -81,6 +82,26 @@ for (const width of [320, 375]) {
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-${width}-bo-qua-tang.png`, fullPage: true });
     });
 
+    test('tubu-w15-02 Trang chủ: "Bộ quà tặng" nằm trong "Tất cả lối tắt" (hàng lối tắt nhanh không thêm ô), chạm mở /bo-qua-tang', async ({ page, api }) => {
+      mockDiscovery(api, { returning: true });
+      api.get('/bundles/gift-landing', LANDING);
+      await page.goto('/');
+      const shortcuts = page.getByRole('region', { name: 'Lối tắt', exact: true });
+      const more = shortcuts.getByRole('button', { name: 'Thêm lối tắt', exact: true });
+      await expect(more).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId('shortcut-quick-pills').locator('a, button')).toHaveCount(3);
+      await expect(shortcuts.getByText('Bộ quà tặng')).toHaveCount(0);
+      await more.click();
+      const dialog = page.getByRole('dialog', { name: 'Tất cả lối tắt' });
+      const gifts = dialog.getByRole('button', { name: /Bộ quà tặng/ });
+      await expect(gifts).toBeVisible({ timeout: 15_000 });
+      expect((await gifts.boundingBox())!.height, 'vùng chạm dòng Bộ quà tặng').toBeGreaterThanOrEqual(44);
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-${width}-home-shortcuts-sheet.png` });
+      await gifts.click();
+      await expect(page).toHaveURL(/\/bo-qua-tang$/, { timeout: 15_000 });
+      await expect(page.getByRole('heading', { level: 1, name: 'Bộ quà tặng & combo khởi đầu' })).toBeVisible({ timeout: 15_000 });
+    });
+
     test('/bo-qua-tang 0 combo: trạng thái trống có lối sang Sản phẩm, mốc vẫn hiện', async ({ page, api }) => {
       api.get('/bundles/gift-landing', { ...LANDING, combos: [] });
       api.get('/config/public', publicConfig({}));
@@ -113,3 +134,51 @@ for (const width of [320, 375]) {
     });
   });
 }
+
+test.describe('tubu-w15-02 web máy tính: "Bộ quà tặng" ở thanh điều hướng chính và chân trang', () => {
+  test.beforeEach(({}, testInfo) => test.skip(testInfo.project.name !== 'Web Customer', 'khổ máy tính chạy ở project Web Customer'));
+
+  const navLink = (page: Page, name: string) => page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name, exact: true });
+  const inViewport = (page: Page, name: string) =>
+    navLink(page, name).evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      return b.left >= 0 && b.right <= window.innerWidth;
+    });
+
+  for (const width of [1024, 1440]) {
+    test(`${width}px: mục thứ 6 hiện, mục cuối vẫn nằm gọn trong màn, không tràn ngang; chạm mở /bo-qua-tang và gạch chân mục đang mở`, async ({ page, api }) => {
+      api.get('/bundles/gift-landing', LANDING);
+      api.get('/config/public', publicConfig({}));
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/bo-qua-tang');
+      await expect(page.getByRole('heading', { level: 1, name: 'Bộ quà tặng & combo khởi đầu' })).toBeVisible({ timeout: 15_000 });
+      const gifts = navLink(page, 'Bộ quà tặng');
+      await expect(gifts).toBeVisible();
+      await expect(gifts).toHaveAttribute('aria-current', 'page');
+      await expect(page.locator('[data-desktop-nav] li')).toHaveCount(6);
+      expect(await inViewport(page, 'Hành trình nguyên liệu')).toBe(true);
+      expect((await gifts.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await expectNoHorizontalOverflow(page);
+      const footerLink = page.getByRole('navigation', { name: 'Khám phá' }).getByRole('link', { name: 'Bộ quà tặng', exact: true });
+      await expect(footerLink).toHaveAttribute('href', '/bo-qua-tang');
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-${width}-nav-bo-qua-tang.png` });
+      await navLink(page, 'Sản phẩm').click();
+      await expect(page).toHaveURL(/\/san-pham/, { timeout: 15_000 });
+      await navLink(page, 'Bộ quà tặng').click();
+      await expect(page).toHaveURL(/\/bo-qua-tang$/, { timeout: 15_000 });
+    });
+  }
+
+  test('800px: hàng điều hướng giữ 5 mục nhìn thấy (Bộ quà tặng ẩn tới lg), mục cuối không bị đẩy ra ngoài; chân trang vẫn có lối vào', async ({ page, api }) => {
+    api.get('/bundles/gift-landing', LANDING);
+    api.get('/config/public', publicConfig({}));
+    await page.setViewportSize({ width: 800, height: 800 });
+    await page.goto('/bo-qua-tang');
+    await expect(page.getByRole('heading', { level: 1, name: 'Bộ quà tặng & combo khởi đầu' })).toBeVisible({ timeout: 15_000 });
+    await expect(navLink(page, 'Bộ quà tặng')).toBeHidden();
+    await expect(navLink(page, 'Hành trình nguyên liệu')).toBeVisible();
+    expect(await inViewport(page, 'Hành trình nguyên liệu')).toBe(true);
+    await expect(page.getByRole('navigation', { name: 'Khám phá' }).getByRole('link', { name: 'Bộ quà tặng', exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+});

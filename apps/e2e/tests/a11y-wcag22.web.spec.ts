@@ -130,7 +130,7 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
     });
   }
 
-  test('800px: cấu hình công khai về muộn không đổi hàng điều hướng (5 mục cố định) nên mục đang focus không bị đẩy ra ngoài khung', async ({ page, api }) => {
+  test('800px: cấu hình công khai về muộn không đổi hàng điều hướng (5 mục cố định, Bộ quà tặng chỉ hiện từ lg) nên mục đang focus không bị đẩy ra ngoài khung', async ({ page, api }) => {
     mockBuyer(api, { lines: 2 });
     let release!: () => void;
     const configGate = new Promise<void>((resolve) => {
@@ -142,8 +142,10 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
     });
     await page.setViewportSize({ width: 800, height: 720 });
     await page.goto('/gio-hang');
+    // 6 mục có sẵn trong HTML từ khung đầu; "Bộ quà tặng" ẩn bằng CSS dưới lg nên ở 800px chỉ 5 mục nhìn thấy.
     const navItems = page.locator('[data-desktop-nav] li');
-    await expect(navItems).toHaveCount(5, { timeout: 20_000 });
+    await expect(navItems).toHaveCount(6, { timeout: 20_000 });
+    await expect(page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Bộ quà tặng' })).toBeHidden();
     const last = page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Hành trình nguyên liệu' });
     for (let i = 0; i < 20 && !(await last.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
     await expect(last).toBeFocused();
@@ -151,7 +153,7 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
     release();
     await configLoaded;
     await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
-    await expect(navItems).toHaveCount(5);
+    await expect(navItems).toHaveCount(6);
     await expect
       .poll(() =>
         last.evaluate((el) => {

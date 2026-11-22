@@ -3,6 +3,7 @@ import { test, expect, makeUser, mockSession, publicConfig, type MockApi } from 
 import { mockNewbieGame } from './support/game-newbie-states';
 import { mockAlbum } from './support/game-album-mocks';
 import { expectNoHorizontalOverflow, expectTargets44, mockMiniGames } from './support/game-mini-mocks';
+import { mockDiscovery } from './support/discovery-mocks';
 
 /**
  * tubu-w14-02, Mini App ở 320 và 375px:
@@ -70,6 +71,26 @@ for (const width of [320, 375]) {
       await expectTargets44(list);
       await expectNoHorizontalOverflow(page);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-${width}-gift-combos.png`, fullPage: true });
+    });
+
+    test('tubu-w15-02 Trang chủ: "Bộ quà tặng" nằm trong "Tất cả lối tắt" (hàng lối tắt nhanh vẫn 3 nút), chạm mở /gift-combos', async ({ page, api }) => {
+      mockDiscovery(api, { returning: true });
+      api.get('/bundles/gift-landing', LANDING);
+      await page.goto('/');
+      const shortcuts = page.getByRole('region', { name: 'Lối tắt', exact: true });
+      const more = shortcuts.getByRole('button', { name: 'Thêm lối tắt', exact: true });
+      await expect(more).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId('shortcut-quick-pills').getByRole('button')).toHaveCount(3);
+      await expect(shortcuts.getByRole('button', { name: /Bộ quà tặng/ })).toHaveCount(0);
+      await more.click();
+      const dialog = page.getByRole('dialog', { name: 'Tất cả lối tắt' });
+      const gifts = dialog.getByRole('button', { name: /Bộ quà tặng/ });
+      await expect(gifts).toBeVisible({ timeout: 15_000 });
+      expect((await gifts.boundingBox())!.height, 'vùng chạm dòng Bộ quà tặng').toBeGreaterThanOrEqual(44);
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-${width}-home-shortcuts-sheet.png` });
+      await gifts.click();
+      await expect(page).toHaveURL(/\/gift-combos$/, { timeout: 15_000 });
+      await expect(page.getByRole('heading', { level: 1, name: 'Bộ quà tặng & combo khởi đầu' })).toBeVisible({ timeout: 15_000 });
     });
 
     test('Bộ quà tặng 0 combo: trạng thái trống có lối sang Sản phẩm, mốc vẫn hiện', async ({ page, api }) => {
