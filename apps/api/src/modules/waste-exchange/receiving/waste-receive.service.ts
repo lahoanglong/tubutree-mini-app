@@ -1,18 +1,21 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { WasteActorRole, WasteRequestStatus } from '@prisma/client';
+import type { Prisma, WasteActorRole, WasteRequestStatus } from '@prisma/client';
 import type {
   WasteReceiveRequest,
   WasteReceiveResultDTO,
+  WasteUnmatchedCandidateDTO,
   WasteUnmatchedCreateRequest,
   WasteUnmatchedDTO,
   WasteUnmatchedReason,
   WasteUnmatchedResolveRequest,
   WasteUnmatchedStatus,
+  WasteUnmatchedSuggestion,
 } from '@tubutree/shared-types';
 import { assertActiveAdmin, assertActiveStaff, type ActiveStaff } from '../../../common/staff-access';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
 import { writeWasteEvent } from '../core/waste-events';
+import { customerView } from '../core/waste-mask';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { WASTE_UNMATCHED_OPEN_WHERE } from '../core/waste-queue-filters';
 import { normalizeTracking } from '../waste-codes';
@@ -28,6 +31,47 @@ const UNMATCHED_NOT_FOUND = 'Không tìm thấy dòng hàng không rõ chủ';
 const REQUEST_EXPIRED_REOPEN = 'Yêu cầu đã hết hạn, admin dùng Mở lại kèm dòng này';
 const REQUEST_NOT_RECEIVABLE = 'Yêu cầu không ở trạng thái nhận được';
 const UNMATCHED_LIST_LIMIT = 200;
+const SUGGESTION_STALE = 'Gợi ý không còn khớp với kiện này, hãy tra mã và khớp tay';
+/** Mỗi kiện hiện tối đa ngần này gợi ý; kiện trùng mã vận đơn nhiều yêu cầu hơn thì tra tay. */
+export const UNMATCHED_CANDIDATES_MAX = 3;
+/** Trần dòng yêu cầu đọc để dựng gợi ý cho cả trang kiện (200 kiện): vượt thì kiện cuối thiếu gợi ý, vẫn khớp tay được. */
+const CANDIDATE_SCAN_LIMIT = 600;
+
+type CandidateRow = {
+  id: string;
+  code: string;
+  userId: string;
+  method: WasteUnmatchedCandidateDTO['method'];
+  status: WasteUnmatchedCandidateDTO['status'];
+  carrier: string | null;
+  trackingCode: string | null;
+  trackingNorm: string | null;
+  createdAt: Date;
+  user: { id: string; fullName: string | null; phone: string | null };
+};
+
+/**
+ * Gợi ý xếp hạng cho một kiện: trùng mã vận đơn trước (mạnh nhất), rồi cùng SĐT khách với yêu cầu gắn kèm kiện; trong mỗi nhóm, Đang gửi trước
+ * Đang mở, cũ trước mới. Bỏ trùng theo yêu cầu (trùng mã vận đơn thắng). Hàm thuần để spec kiểm thứ tự.
+ */
+export function rankCandidates(
+  parcel: { trackingNorm: string | null; relatedRequestId: string | null },
+  relatedPhone: string | null,
+  pool: readonly (CandidateRow & { phone: string | null })[],
+): (CandidateRow & { basis: WasteUnmatchedSuggestion })[] {
+  const order = (a: CandidateRow, b: CandidateRow) =>
+    (a.status === 'IN_TRANSIT' ? 0 : 1) - (b.status === 'IN_TRANSIT' ? 0 : 1) || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id);
+  const byTracking = parcel.trackingNorm === null ? [] : pool.filter((r) => r.trackingNorm === parcel.trackingNorm).sort(order);
+  const taken = new Set(byTracking.map((r) => r.id));
+  const byPhone =
+    relatedPhone === null
+      ? []
+      : pool.filter((r) => r.phone === relatedPhone && r.id !== parcel.relatedRequestId && !taken.has(r.id)).sort(order);
+  return [...byTracking.map((r) => ({ ...r, basis: 'TRACKING' as const })), ...byPhone.map((r) => ({ ...r, basis: 'PHONE' as const }))].slice(
+    0,
+    UNMATCHED_CANDIDATES_MAX,
+  );
+}
 
 interface UnmatchedRow {
   id: string;
@@ -35,6 +79,7 @@ interface UnmatchedRow {
   createdByUserId: string;
   carrier: string | null;
   trackingCode: string | null;
+  trackingNorm: string | null;
   description: string;
   reason: string;
   relatedRequestId: string | null;
@@ -277,20 +322,86 @@ export class WasteReceiveService {
   }
 
   async listUnmatched(viewerUserId: string, q: { status?: WasteUnmatchedStatus }): Promise<WasteUnmatchedDTO[]> {
-    await assertActiveStaff(this.prisma, viewerUserId);
+    const viewer = await assertActiveStaff(this.prisma, viewerUserId);
     const status = q.status ?? 'OPEN';
     const rows = await this.prisma.wasteUnmatchedParcel.findMany({
       where: status === 'OPEN' ? WASTE_UNMATCHED_OPEN_WHERE : { status },
       orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }],
       take: UNMATCHED_LIST_LIMIT,
     });
-    return rows.map(toUnmatchedDTO);
+    if (status !== 'OPEN') return rows.map(toUnmatchedDTO);
+    const candidates = await this.candidatesFor(rows, viewer.role === 'ADMIN');
+    return rows.map((r) => ({ ...toUnmatchedDTO(r), candidates: candidates.get(r.id) ?? [] }));
+  }
+
+  /**
+   * Gợi ý yêu cầu còn chờ nhận (Đang mở/Đang gửi) cho mỗi kiện đang mở: trùng chính xác mã vận đơn đã chuẩn hoá, hoặc cùng SĐT khách với yêu cầu
+   * gắn kèm kiện. Kiện TR- tranh chấp (hai khách cùng nhận một kiện) không có gợi ý: chỉ admin quyết bằng tra tay. Mang tới điểm nhận không nhận qua
+   * kho; túi kèm đơn chỉ khi đơn đã giao/hoàn (cùng luật nút khớp). SĐT và tên khách che như hàng đợi yêu cầu khi người xem không phải admin.
+   */
+  private async candidatesFor(parcels: readonly UnmatchedRow[], isAdmin: boolean): Promise<Map<string, WasteUnmatchedCandidateDTO[]>> {
+    const out = new Map<string, WasteUnmatchedCandidateDTO[]>();
+    const eligible = parcels.filter((p) => p.reason !== 'TR_TRACKING_CONFLICT');
+    const norms = [...new Set(eligible.map((p) => p.trackingNorm).filter((n): n is string => !!n))];
+    const relatedIds = [...new Set(eligible.map((p) => p.relatedRequestId).filter((id): id is string => !!id))];
+    const related = relatedIds.length
+      ? await this.prisma.wasteRequest.findMany({ where: { id: { in: relatedIds } }, select: { id: true, user: { select: { phone: true } } } })
+      : [];
+    const phoneOf = new Map(related.map((r) => [r.id, r.user.phone]));
+    const phones = [...new Set(related.map((r) => r.user.phone).filter((p): p is string => !!p))];
+    if (norms.length === 0 && phones.length === 0) return out;
+    const found = await this.prisma.wasteRequest.findMany({
+      where: {
+        status: { in: ['OPEN', 'IN_TRANSIT'] },
+        method: { in: ['MAIL_IN', 'HOME_PICKUP', 'PICKUP'] },
+        OR: [...(norms.length ? [{ trackingNorm: { in: norms } }] : []), ...(phones.length ? [{ user: { phone: { in: phones } } }] : [])],
+        NOT: { method: 'PICKUP', OR: [{ orderId: null }, { order: { is: { status: { notIn: ['DELIVERED', 'RETURNED'] } } } }] },
+      },
+      select: {
+        id: true,
+        code: true,
+        userId: true,
+        method: true,
+        status: true,
+        carrier: true,
+        trackingCode: true,
+        trackingNorm: true,
+        createdAt: true,
+        user: { select: { id: true, fullName: true, phone: true } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: CANDIDATE_SCAN_LIMIT,
+    });
+    const pool = found.map((r) => ({ ...r, phone: r.user.phone }));
+    for (const p of eligible) {
+      const norm = p.trackingNorm;
+      const ranked = rankCandidates({ trackingNorm: norm, relatedRequestId: p.relatedRequestId }, p.relatedRequestId ? (phoneOf.get(p.relatedRequestId) ?? null) : null, pool);
+      out.set(
+        p.id,
+        ranked.map((r) => {
+          const v = customerView(r.user, isAdmin);
+          return {
+            requestId: r.id,
+            code: r.code,
+            method: r.method,
+            status: r.status,
+            basis: r.basis,
+            customerName: v.name,
+            customerPhone: v.phone,
+            carrier: r.carrier,
+            trackingCode: r.trackingCode,
+            createdAt: r.createdAt.toISOString(),
+          };
+        }),
+      );
+    }
+    return out;
   }
 
   async resolveUnmatched(callerUserId: string, id: string, body: WasteUnmatchedResolveRequest): Promise<WasteUnmatchedDTO> {
     const caller = callerUserId;
     if (body.action === 'CLOSE') return this.closeUnmatched(caller, id, body.note);
-    return this.matchUnmatched(caller, id, body.requestId, body.note);
+    return this.matchUnmatched(caller, id, body.requestId, body.note, body.suggestion);
   }
 
   private async closeUnmatched(caller: string, id: string, note: string): Promise<WasteUnmatchedDTO> {
@@ -312,8 +423,14 @@ export class WasteReceiveService {
     });
   }
 
-  private async matchUnmatched(caller: string, id: string, requestId: string, note: string): Promise<WasteUnmatchedDTO> {
-    const parcel = await this.prisma.wasteUnmatchedParcel.findUnique({ where: { id }, select: { reason: true } });
+  private async matchUnmatched(
+    caller: string,
+    id: string,
+    requestId: string,
+    note: string,
+    suggestion?: WasteUnmatchedSuggestion,
+  ): Promise<WasteUnmatchedDTO> {
+    const parcel = await this.prisma.wasteUnmatchedParcel.findUnique({ where: { id }, select: { reason: true, trackingNorm: true, relatedRequestId: true } });
     if (!parcel) throw new NotFoundException(UNMATCHED_NOT_FOUND);
     // A tracking conflict means two customers claim one parcel: only an admin decides it.
     const staff: ActiveStaff =
@@ -331,7 +448,9 @@ export class WasteReceiveService {
           method: true,
           status: true,
           orderId: true,
+          trackingNorm: true,
           order: { select: { status: true } },
+          user: { select: { phone: true } },
         },
       });
       if (!req) throw new NotFoundException(NOT_FOUND);
@@ -339,6 +458,8 @@ export class WasteReceiveService {
       if (req.method === 'PICKUP' && (req.orderId === null || !req.order || !['DELIVERED', 'RETURNED'].includes(req.order.status))) {
         throw new ConflictException(ORDER_NOT_DELIVERED);
       }
+      // Bấm "Khớp & nhận" trên một gợi ý: gợi ý phải còn đúng lúc khoá (mã vận đơn hay SĐT khách có thể đã đổi từ lúc tải danh sách).
+      if (suggestion !== undefined && !(await this.suggestionHolds(tx, suggestion, parcel, req))) throw new ConflictException(SUGGESTION_STALE);
       if (req.status === 'EXPIRED') throw new ConflictException(REQUEST_EXPIRED_REOPEN);
       if (req.status !== 'OPEN' && req.status !== 'IN_TRANSIT') throw new ConflictException(REQUEST_NOT_RECEIVABLE);
 
@@ -368,6 +489,7 @@ export class WasteReceiveService {
           unmatchedId: id,
           note,
           matchBasis: 'MANUAL',
+          ...(suggestion ? { suggestion } : {}),
           subjectUserId: req.userId,
           before: { status: before },
           after: { status: 'RECEIVED' },
@@ -383,5 +505,18 @@ export class WasteReceiveService {
       this.logger.warn(`parcelReceived notify failed for ${done.req.id}: ${String(e)}`);
     }
     return done.unmatched;
+  }
+
+  private async suggestionHolds(
+    tx: Prisma.TransactionClient,
+    suggestion: WasteUnmatchedSuggestion,
+    parcel: { reason: string; trackingNorm: string | null; relatedRequestId: string | null },
+    req: { id: string; trackingNorm: string | null; user: { phone: string | null } },
+  ): Promise<boolean> {
+    if (parcel.reason === 'TR_TRACKING_CONFLICT') return false;
+    if (suggestion === 'TRACKING') return parcel.trackingNorm !== null && req.trackingNorm === parcel.trackingNorm;
+    if (parcel.relatedRequestId === null || parcel.relatedRequestId === req.id || req.user.phone === null) return false;
+    const related = await tx.wasteRequest.findUnique({ where: { id: parcel.relatedRequestId }, select: { user: { select: { phone: true } } } });
+    return related?.user.phone === req.user.phone;
   }
 }

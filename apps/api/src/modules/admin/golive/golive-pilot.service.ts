@@ -38,6 +38,8 @@ export interface PilotCleanupInput {
   confirmText?: string;
   codes?: string[];
   phones?: string[];
+  /** Đơn chỉ khớp SĐT người thử mà quản trị viên tự tay chọn dọn; phải nằm trong `codes`. */
+  optInCodes?: string[];
 }
 
 export interface PilotCleanupResult {
@@ -86,7 +88,8 @@ export function parseTestPhones(raw: readonly string[] | undefined): string[] {
 
 /**
  * Bàn dọn đơn thử sau Giờ G. Xem trước (dryRun, mặc định) không ghi gì. Dọn thật cần gõ đúng `XOA DON THU` và danh sách mã đã xem; mã nào
- * không còn là đơn thử (không có `[PILOT]`, không khớp SĐT người thử) thì từ chối cả lượt, không đơn nào bị đụng. Huỷ đi qua
+ * không còn là đơn thử (không có `[PILOT]`, không khớp SĐT người thử) thì từ chối cả lượt, không đơn nào bị đụng. Đơn chỉ khớp SĐT chỉ được
+ * dọn khi nằm trong `optInCodes` (quản trị viên tự tick từng đơn) và qua mọi chặn của `planFor`. Huỷ đi qua
  * `AdminService.updateOrderStatus` (cùng đường nút Huỷ, cùng bảng chuyển trạng thái và hệ quả hoàn tồn/điểm). Mỗi lượt dọn thật ghi một dòng
  * `admin_audit_logs` (cả khi một số đơn lỗi).
  */
@@ -99,7 +102,7 @@ export class GoLivePilotService {
     private readonly admin: AdminService,
   ) {}
 
-  private async rows(phones: readonly string[], now: Date): Promise<{ rows: PilotOrderRow[]; truncated: boolean }> {
+  private async rows(phones: readonly string[], now: Date, optIn: ReadonlySet<string> = new Set()): Promise<{ rows: PilotOrderRow[]; truncated: boolean }> {
     const found = await this.prisma.order.findMany({
       where: pilotCandidateWhere(phones, now),
       orderBy: [{ createdAt: 'desc' }, { code: 'asc' }],
@@ -120,7 +123,7 @@ export class GoLivePilotService {
       });
       for (const l of logs) for (const c of l.targetIds) done.add(c);
     }
-    return { rows: matched.map(({ o, by }) => toPilotRow(o, by, done.has(o.code))), truncated: found.length > PILOT_LIST_MAX };
+    return { rows: matched.map(({ o, by }) => toPilotRow(o, by, done.has(o.code), optIn.has(o.code))), truncated: found.length > PILOT_LIST_MAX };
   }
 
   async list(rawPhones: readonly string[] | undefined, now: Date = new Date()): Promise<PilotOrdersView> {
@@ -137,8 +140,11 @@ export class GoLivePilotService {
     if (!dryRun && requested.length === 0) throw new BadRequestException('Dọn thật cần danh sách mã đơn đã xem trước.');
     if (requested.length > PILOT_CLEANUP_MAX) throw new BadRequestException(`Mỗi lượt dọn tối đa ${PILOT_CLEANUP_MAX} đơn.`);
     const phones = parseTestPhones(input.phones);
+    const optIn = new Set((input.optInCodes ?? []).map((c) => c.trim()).filter(Boolean));
+    const strayOptIn = [...optIn].filter((c) => !requested.includes(c));
+    if (strayOptIn.length > 0) throw new BadRequestException(`Đơn tự chọn dọn phải nằm trong danh sách mã của lượt này: ${strayOptIn.join(', ')}.`);
 
-    const { rows } = await this.rows(phones, now);
+    const { rows } = await this.rows(phones, now, optIn);
     const byCode = new Map(rows.map((r) => [r.code, r]));
     const refused = requested.filter((c) => !byCode.has(c));
     if (refused.length > 0) {
@@ -174,7 +180,7 @@ export class GoLivePilotService {
         // Đọc lại ngay trước khi huỷ: giữa lúc xem trước và lúc dọn, đơn có thể đã được trả tiền (webhook ngân hàng) hoặc đã đóng gói.
         const fresh = await this.prisma.order.findUnique({ where: { code: r.code }, select: PILOT_ORDER_SELECT });
         const by = fresh ? pilotMatches(fresh, phoneSet) : [];
-        const plan = fresh && by.length > 0 ? planFor(fresh, by, false) : null;
+        const plan = fresh && by.length > 0 ? planFor(fresh, by, false, optIn.has(r.code)) : null;
         if (!plan || plan.action !== 'CANCEL') {
           skipped.push({ code: r.code, reason: plan ? `Đơn đổi giữa lúc xem trước và lúc dọn. ${plan.reason}` : 'Không còn là đơn thử.' });
           continue;
@@ -203,6 +209,8 @@ export class GoLivePilotService {
             failed,
             phones: phones.map((p) => maskPhone(p)),
             matchedBy: Object.fromEntries(target.map((r) => [r.code, r.matchedBy])),
+            // Đơn chỉ khớp SĐT mà quản trị viên tự chọn dọn: dấu vết riêng để soát lại khi khách thật khiếu nại.
+            optIn: [...optIn],
           },
         },
         select: { id: true },

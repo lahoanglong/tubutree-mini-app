@@ -9,8 +9,10 @@ import type {
   WasteRequestStatus,
   WasteMatchInput,
   WasteReceiveResultDTO,
+  WasteUnmatchedCandidateDTO,
   WasteUnmatchedDTO,
   WasteUnmatchedResolveRequest,
+  WasteUnmatchedSuggestion,
   WasteUnmatchedStatus,
 } from '@tubutree/shared-types';
 import { WASTE_ONE_TAP_OVER_CAP_TEXT } from '@tubutree/shared-types';
@@ -31,13 +33,15 @@ import {
   WASTE_REQUEST_STATUS_LABELS,
   WASTE_UNMATCHED_REASON_LABELS,
 } from '@/lib/waste-labels';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestDetail } from './waste-request-detail';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { getPublicConfig } from '@/lib/shop-client';
 import { canQuickCount, canQuickReceive, quickCountOverCap, useWasteQuickActions } from './waste-quick-actions';
+import type { WasteBulkAction } from '@/lib/admin-waste-bulk-client';
+import { useWasteBulkSelection, WasteBulkBar, wasteBulkSelectable, WasteSelectBox, type WasteBulkSelection } from './waste-bulk-bar';
 
 export type WasteQueuePreset = 'toCount' | 'inTransit' | 'customerBlocked' | 'orderNotDelivered' | 'expired' | 'transitOverdue' | 'orderMismatch';
 
@@ -136,6 +140,11 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
   const quick = useWasteQuickActions(setOpenId, (id, patch) => setLookupPatch((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } })));
 
   const queueRows = (queue.data?.pages ?? []).flatMap((p) => p.rows);
+  const selection = useWasteBulkSelection(view === 'queue' ? JSON.stringify(query) : 'unmatched');
+  // Đóng thất lạc hàng loạt chỉ ở hàng "Gửi kho quá hạn xem lại" và chỉ admin; máy chủ xét lại cả hai.
+  const bulkActions: readonly WasteBulkAction[] =
+    isAdmin && !customerOn && preset === 'transitOverdue' ? ['MARK_RECEIVED', 'CLOSE_LOST'] : ['MARK_RECEIVED'];
+  const bulkPageRows = queueRows.filter(wasteBulkSelectable).map((r) => ({ id: r.id, code: r.code }));
   const lookupRows = (lookup.data ?? []).map((r) => (lookupPatch[r.id] ? { ...r, ...lookupPatch[r.id] } : r));
 
   const choosePreset = (key: WasteQueuePreset) => {
@@ -243,13 +252,23 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
           </div>
 
           {queue.isError && <LoadError onRetry={() => void queue.refetch()} retrying={queue.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
-          <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} quick={quick} />
+          <RequestTable
+            label="Danh sách yêu cầu"
+            rows={queueRows}
+            receivingId={receiving?.id ?? null}
+            onReceive={setReceiving}
+            openId={openId}
+            onOpen={setOpenId}
+            quick={quick}
+            selection={selection}
+          />
           {queue.isSuccess && queueRows.length === 0 && <p className="text-sm text-stone-600">Không có yêu cầu nào trong hàng đợi này.</p>}
           {queue.hasNextPage && (
             <button type="button" className={BTN_SECONDARY} disabled={queue.isFetchingNextPage} onClick={() => void queue.fetchNextPage()}>
               Tải thêm
             </button>
           )}
+          <WasteBulkBar selection={selection} actions={bulkActions} pageRows={bulkPageRows} />
         </>
       )}
     </section>
@@ -272,6 +291,7 @@ function RequestTable({
   openId,
   onOpen,
   quick,
+  selection,
 }: {
   label: string;
   rows: AdminWasteRequestRowDTO[];
@@ -280,12 +300,18 @@ function RequestTable({
   openId: string | null;
   onOpen: (id: string) => void;
   quick: { busyId: string | null; receive: (r: AdminWasteRequestRowDTO) => void; count: (r: AdminWasteRequestRowDTO) => void };
+  selection?: WasteBulkSelection;
 }) {
   return (
     <ScrollRegion label={label}>
       <table className="w-full min-w-[960px] border-collapse">
         <thead>
           <tr className="border-b border-stone-200">
+            {selection && (
+              <th className={`${TH} w-11`}>
+                <span className="sr-only">Chọn</span>
+              </th>
+            )}
             <th className={TH}>Mã</th>
             <th className={TH}>Cách giao · trạng thái</th>
             <th className={TH}>Điểm nhận</th>
@@ -301,7 +327,10 @@ function RequestTable({
             const tracking = [r.carrier, r.trackingCode].filter((x): x is string => x !== null && x !== '').join(' · ');
             return (
               <tr key={r.id} data-request={r.id} className="border-b border-stone-100">
-                <td className={`${TD} whitespace-nowrap font-mono font-medium text-stone-900`}>{r.code}</td>
+                {selection && (
+                  <td className="w-11 p-0 align-top">{wasteBulkSelectable(r) && <WasteSelectBox row={{ id: r.id, code: r.code }} selection={selection} />}</td>
+                )}
+                <td data-code-cell className={`${TD} whitespace-nowrap font-mono font-medium text-stone-900`}>{r.code}</td>
                 <td className={TD}>
                   <div>{WASTE_METHOD_LABELS[r.method]}</div>
                   <div className="text-xs text-stone-600">
@@ -571,10 +600,11 @@ function ReceivePanel({ row, onClose }: { row: AdminWasteRequestRowDTO; onClose:
 const DESCRIPTION_MAX = 200;
 const NOTE_MAX = 500;
 const TR_CONFLICT_ADMIN_ONLY = 'Chỉ admin khớp được kiện này';
+const SUGGESTION_LABELS: Record<WasteUnmatchedSuggestion, string> = { TRACKING: 'Trùng mã vận đơn', PHONE: 'Cùng SĐT khách' };
 
 function UnmatchedView({ isAdmin }: { isAdmin: boolean }) {
   const qc = useQueryClient();
-  const { ask, dialog } = useConfirm();
+  const { ask, confirm, dialog } = useConfirm();
   const [status, setStatus] = useState<WasteUnmatchedStatus>('OPEN');
   const [matchingId, setMatchingId] = useState<string | null>(null);
   const [carrier, setCarrier] = useState('');
@@ -649,6 +679,14 @@ function UnmatchedView({ isAdmin }: { isAdmin: boolean }) {
     });
     if (note) submitResolve(id, { action: 'CLOSE', note });
   };
+  const quickMatch = async (id: string, c: WasteUnmatchedCandidateDTO) => {
+    const ok = await confirm({
+      title: 'Khớp & nhận kiện',
+      message: `Kiện sẽ khớp với ${c.code} (${SUGGESTION_LABELS[c.basis].toLowerCase()}) và yêu cầu chuyển sang Đã nhận. Đếm vỏ và cộng điểm vẫn làm ở chi tiết yêu cầu.`,
+      confirmLabel: 'Khớp & nhận',
+    });
+    if (ok) submitResolve(id, { action: 'MATCH', requestId: c.requestId, note: `Khớp nhanh theo gợi ý: ${SUGGESTION_LABELS[c.basis].toLowerCase()} ${c.code}`, suggestion: c.basis });
+  };
 
   const rows = list.data ?? [];
 
@@ -712,6 +750,7 @@ function UnmatchedView({ isAdmin }: { isAdmin: boolean }) {
             onMatch={() => setMatchingId(matchingId === r.id ? null : r.id)}
             onClose={() => void closeParcel(r.id)}
             onSubmitMatch={(requestId, note) => submitResolve(r.id, { action: 'MATCH', requestId, note })}
+            onQuickMatch={(c) => void quickMatch(r.id, c)}
           />
         ))}
       </ul>
@@ -728,6 +767,7 @@ function UnmatchedRow({
   onMatch,
   onClose,
   onSubmitMatch,
+  onQuickMatch,
 }: {
   row: WasteUnmatchedDTO;
   isAdmin: boolean;
@@ -736,10 +776,12 @@ function UnmatchedRow({
   onMatch: () => void;
   onClose: () => void;
   onSubmitMatch: (requestId: string, note: string) => void;
+  onQuickMatch: (c: WasteUnmatchedCandidateDTO) => void;
 }) {
   const tracking = [row.carrier, row.trackingCode].filter((x): x is string => x !== null && x !== '').join(' · ');
   const open = row.status === 'OPEN';
   const adminOnly = row.reason === 'TR_TRACKING_CONFLICT' && !isAdmin;
+  const candidates = row.candidates ?? [];
   return (
     <li data-unmatched={row.id} className="space-y-2 rounded-control border border-stone-200 bg-stone-0 p-3 text-sm text-stone-800">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -762,6 +804,32 @@ function UnmatchedRow({
             <button type="button" className={BTN_XS_SECONDARY} aria-pressed={matching} onClick={onMatch}>Khớp yêu cầu</button>
           )}
           <button type="button" className={BTN_XS_SECONDARY} disabled={busy} onClick={onClose}>Đóng kiện</button>
+        </div>
+      )}
+      {open && !adminOnly && candidates.length > 0 && (
+        <div data-unmatched-candidates className="space-y-1 rounded-control border border-stone-200 bg-stone-50 p-2">
+          <p className="text-xs font-medium text-stone-700">Gợi ý yêu cầu khớp</p>
+          <ul className="space-y-1">
+            {candidates.map((c) => (
+              <li key={c.requestId} data-candidate={c.code} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="font-mono font-medium text-stone-900">{c.code}</span>
+                  {` · ${WASTE_METHOD_LABELS[c.method]} · ${WASTE_REQUEST_STATUS_LABELS[c.status]} · ${c.customerName}`}
+                  {c.customerPhone !== null ? ` · ${c.customerPhone}` : ''}{' '}
+                  <ToneBadge tone="info">{SUGGESTION_LABELS[c.basis]}</ToneBadge>
+                </span>
+                <button
+                  type="button"
+                  className={BTN_XS_PRIMARY}
+                  disabled={busy}
+                  aria-label={`Khớp & nhận kiện với ${c.code}`}
+                  onClick={() => onQuickMatch(c)}
+                >
+                  Khớp & nhận
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {open && matching && !adminOnly && <MatchPanel busy={busy} onSubmit={onSubmitMatch} />}

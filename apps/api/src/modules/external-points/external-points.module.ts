@@ -7,6 +7,7 @@ import { ExternalClaimPollService } from './external-claim-poll.service';
 import { ExternalClaimService } from './external-claim.service';
 import { ExternalClaimsAdminController } from './external-claims-admin.controller';
 import { ExternalClaimsAdminService } from './external-claims-admin.service';
+import { ExternalClaimsStaleBatchService } from './external-claims-stale-batch.service';
 import { ExternalClaimsController } from './external-claims.controller';
 import { ExternalOrdersAdminController } from './external-orders-admin.controller';
 import { ExternalOrdersAdminService } from './external-orders-admin.service';
@@ -20,6 +21,7 @@ import { ExternalOrdersAdminService } from './external-orders-admin.service';
     ExternalClaimLookupService,
     ExternalClaimPollService,
     ExternalClaimsAdminService,
+    ExternalClaimsStaleBatchService,
     ExternalChatService,
     ExternalClaimCron,
   ],

@@ -1,7 +1,23 @@
 import { Body, Controller, Get, HttpCode, Optional, Param, Patch, Post, Put, Query, Req, ServiceUnavailableException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import type { Request } from 'express';
 import {
   WASTE_METHOD_VALUES,
@@ -23,6 +39,8 @@ import { deviceMetaOf } from '../core/waste-events';
 import { WASTE_MESSAGES } from '../core/waste-messages';
 import { WasteFeeBankService } from '../home-pickup/waste-fee-bank.service';
 import { WasteAdminRequestsService } from './waste-admin-requests.service';
+import { WASTE_BULK_ACTIONS, WASTE_BULK_MAX, type WasteBulkAction } from './waste-bulk-action';
+import { WasteBulkActionService } from './waste-bulk-action.service';
 import { WasteConfirmService } from './waste-confirm.service';
 import { WasteReceiveService } from './waste-receive.service';
 import { WasteConfirmDto, WasteMatchDto, WasteRejectDto } from './waste-receiving.dto';
@@ -65,6 +83,26 @@ export class WasteCostDto {
   @OptionalNotNull() @IsInt() @Min(1) @Max(100000) receivedWeightGrams?: number;
 }
 
+export class WasteBulkActionDto {
+  @IsIn(WASTE_BULK_ACTIONS, { message: 'Thao tác hàng loạt chỉ nhận «Nhận kiện» hoặc «Đóng vì thất lạc».' }) action!: WasteBulkAction;
+
+  @IsArray({ message: 'Danh sách yêu cầu không hợp lệ.' })
+  @ArrayMinSize(1, { message: 'Chọn ít nhất một yêu cầu.' })
+  @ArrayMaxSize(WASTE_BULK_MAX, { message: `Mỗi lượt tối đa ${WASTE_BULK_MAX} yêu cầu.` })
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  requestIds!: string[];
+
+  /** true: chỉ xem trước kết quả từng yêu cầu, không ghi gì. */
+  @IsOptional() @IsBoolean() dryRun?: boolean;
+
+  /** Nhận kiện gửi kho/lấy tận nhà: đã đối chiếu SĐT người gửi và mã vận đơn trên từng kiện. */
+  @IsOptional() @IsBoolean() phoneMatchConfirmed?: boolean;
+
+  /** Đóng vì thất lạc: bắt buộc ở lượt thật (service kiểm), cùng trần với nút từng yêu cầu. */
+  @OptionalNotNull() @Trim() @IsString() @MaxLength(500) reason?: string;
+}
+
 export class WasteUnmatchedCreateDto {
   @IsOptional() @Trim() @IsString() @MaxLength(60) carrier?: string;
   @IsOptional() @Trim() @IsString() @MaxLength(64) trackingCode?: string;
@@ -75,6 +113,8 @@ export class WasteUnmatchedResolveDto {
   @IsIn(['MATCH', 'CLOSE']) action!: 'MATCH' | 'CLOSE';
   @ValidateIf((o: WasteUnmatchedResolveDto) => o.action === 'MATCH') @IsString() @MaxLength(64) requestId?: string;
   @Trim() @IsString() @IsNotEmpty() @MaxLength(500) note!: string;
+  /** Khớp bằng một gợi ý của danh sách: máy chủ kiểm lại gợi ý còn đúng trước khi nhận kiện. */
+  @IsOptional() @IsIn(['TRACKING', 'PHONE']) suggestion?: 'TRACKING' | 'PHONE';
 }
 
 export class WasteUnmatchedListQueryDto {
@@ -99,6 +139,7 @@ export class WasteAdminRequestsController {
     private readonly receiveService: WasteReceiveService,
     private readonly confirmService: WasteConfirmService,
     private readonly reverseService: WasteReverseService,
+    private readonly bulk: WasteBulkActionService,
     @Optional() private readonly feeBank?: WasteFeeBankService,
   ) {}
 
@@ -113,6 +154,18 @@ export class WasteAdminRequestsController {
   @Throttle({ default: { ttl: 60_000, limit: 30 } })
   lookup(@CurrentUser('sub') userId: string, @Query() query: WasteLookupQueryDto) {
     return this.admin.lookup(userId, query.code);
+  }
+
+  /**
+   * Nhận kiện hàng loạt (nhân viên kho, admin) hoặc đóng thất lạc hàng loạt (chỉ admin, service kiểm). Trần 50 yêu cầu; web gửi lượt thật
+   * từng nhóm 5 yêu cầu nên trần lượt gọi rộng hơn nút từng kiện.
+   */
+  @Post('requests/bulk-action')
+  @Roles('STAFF', 'ADMIN')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @HttpCode(200)
+  bulkAction(@CurrentUser('sub') userId: string, @Body() body: WasteBulkActionDto) {
+    return this.bulk.run(userId, body);
   }
 
   @Get('requests/:id')

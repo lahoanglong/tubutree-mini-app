@@ -1,7 +1,10 @@
 import 'reflect-metadata';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, RequestMethod } from '@nestjs/common';
+import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { ROLES_KEY } from '../../common/decorators/roles.decorator';
+import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { ExternalClaimsAdminController } from './external-claims-admin.controller';
+import { ExternalClaimsAdminController, StaleBatchDto } from './external-claims-admin.controller';
 
 describe('ExternalClaimsAdminController.approve: body qua ValidationPipe thật', () => {
   const metatype = (Reflect.getMetadata('design:paramtypes', ExternalClaimsAdminController.prototype, 'approve') as unknown[])[1] as new () => object;
@@ -22,5 +25,43 @@ describe('ExternalClaimsAdminController.approve: body qua ValidationPipe thật'
   it('body rỗng và ghi chú hợp lệ đi qua', async () => {
     await expect(run({})).resolves.toBeDefined();
     await expect(run({ note: 'Đã gọi khách' })).resolves.toMatchObject({ note: 'Đã gọi khách' });
+  });
+});
+
+describe('ExternalClaimsAdminController.staleBatchApprove', () => {
+  const pipe = (body: unknown) => createValidationPipe().transform(body, { type: 'body', metatype: StaleBatchDto as never });
+  const fn = ExternalClaimsAdminController.prototype.staleBatchApprove;
+
+  it('POST stale-phone-batch, 200, ADMIN + CSKH from the class, declared before :id', () => {
+    expect(RequestMethod[Reflect.getMetadata(METHOD_METADATA, fn)]).toBe('POST');
+    expect(Reflect.getMetadata(PATH_METADATA, fn)).toBe('stale-phone-batch');
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, fn)).toBe(200);
+    expect(Reflect.getMetadata(ROLES_KEY, fn)).toBeUndefined();
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, fn)).toBeUndefined();
+    expect(Reflect.getMetadata(ROLES_KEY, ExternalClaimsAdminController)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, ExternalClaimsAdminController)).toEqual(['CSKH']);
+    const names = Object.getOwnPropertyNames(ExternalClaimsAdminController.prototype);
+    expect(names.indexOf('staleBatchApprove')).toBeLessThan(names.indexOf('detail'));
+  });
+
+  it('delegates to the batch service with the caller id', async () => {
+    const staleBatch = { run: jest.fn().mockResolvedValue('ok') };
+    const c = new ExternalClaimsAdminController({} as never, staleBatch as never);
+    await expect(c.staleBatchApprove({ dryRun: false, claimIds: ['c1'] }, { sub: 'u1', role: 'STAFF' } as never)).resolves.toBe('ok');
+    expect(staleBatch.run).toHaveBeenCalledWith('u1', { dryRun: false, claimIds: ['c1'] });
+  });
+
+  it.each([
+    ['dryRun là chuỗi', { dryRun: 'yes' }],
+    ['claimIds không phải mảng', { claimIds: 'c1' }],
+    ['51 claim', { claimIds: Array.from({ length: 51 }, (_, i) => `c${i}`) }],
+    ['mã claim 41 ký tự', { claimIds: ['a'.repeat(41)] }],
+  ])('%s: 400', async (_n, body) => {
+    await expect(pipe(body)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('body rỗng (xem trước) và danh sách 50 claim đi qua', async () => {
+    await expect(pipe({})).resolves.toBeDefined();
+    await expect(pipe({ dryRun: false, claimIds: Array.from({ length: 50 }, (_, i) => `c${i}`) })).resolves.toBeDefined();
   });
 });

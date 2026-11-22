@@ -1,12 +1,13 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import type { JwtPayload } from '@tubutree/shared-types';
-import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AllowStaff } from '../../common/staff-permissions';
 import { ExternalClaimsAdminService } from './external-claims-admin.service';
+import { ExternalClaimsStaleBatchService, STALE_BATCH_MAX } from './external-claims-stale-batch.service';
 
 const STATES = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'] as const;
 
@@ -39,6 +40,13 @@ export class AttachAttemptDto {
   @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
 }
 
+export class StaleBatchDto {
+  /** Mặc định true: chỉ xem trước, không duyệt gì. */
+  @IsOptional() @IsBoolean() dryRun?: boolean;
+  /** Lượt thật: đúng danh sách claim vừa xem trước. */
+  @IsOptional() @IsArray() @ArrayMaxSize(STALE_BATCH_MAX) @IsString({ each: true }) @MaxLength(40, { each: true }) claimIds?: string[];
+}
+
 export class RejectAttemptDto {
   @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
 }
@@ -51,7 +59,10 @@ export class RejectAttemptDto {
 @AllowStaff('CSKH')
 @Controller('admin/external-claims')
 export class ExternalClaimsAdminController {
-  constructor(private readonly admin: ExternalClaimsAdminService) {}
+  constructor(
+    private readonly admin: ExternalClaimsAdminService,
+    private readonly staleBatch: ExternalClaimsStaleBatchService,
+  ) {}
 
   @Get()
   @AllowStaff('CSKH', 'KE_TOAN')
@@ -74,6 +85,13 @@ export class ExternalClaimsAdminController {
   @Post('attempts/:id/reject')
   rejectAttempt(@Param('id') id: string, @Body() dto: RejectAttemptDto, @CurrentUser() user: JwtPayload) {
     return this.admin.rejectAttempt(id, user.sub, dto.note);
+  }
+
+  /** Duyệt nhanh claim đơn chat chỉ vướng "SĐT xác minh đã cũ" của thành viên đã nhận đơn app (CSKH bấm, không tự chạy). */
+  @Post('stale-phone-batch')
+  @HttpCode(200)
+  staleBatchApprove(@Body() dto: StaleBatchDto, @CurrentUser() user: JwtPayload) {
+    return this.staleBatch.run(user.sub, dto);
   }
 
   @Get(':id')

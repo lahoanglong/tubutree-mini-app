@@ -143,6 +143,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/season-admin.tsx::f.theme": { dto: "apps/api/src/modules/admin/admin-game-season.controller.ts:CreateSeasonDto.theme", max: 120 },
   "components/admin/season-admin.tsx::f.region": { dto: "apps/api/src/modules/admin/admin-game-season.controller.ts:CreateSeasonDto.region", max: 80 },
   "components/admin/support-chat/conversation-detail.tsx::reply": { dto: "apps/api/src/modules/support-chat/dto/admin.dto.ts:AdminReplyDto.body", max: 1000 },
+  "components/admin/waste-bulk-bar.tsx::reason": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteBulkActionDto.reason", max: 500 },
   "components/admin/waste-gifts-section.tsx::reason": { dto: "apps/api/src/modules/waste-exchange/catalog/waste-admin-gifts.controller.ts:WasteGiftCancelDto.reason", max: 500 },
   "components/admin/waste-request-detail.tsx::note": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteReverseDto.reason", max: 500 },
   "components/admin/waste-request-detail.tsx::reason": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteCloseLostDto.reason", max: 500 },

@@ -13,6 +13,7 @@ import { deviceMetaOf } from '../core/waste-events';
 import {
   AdminWasteRequestQueryDto,
   WasteAdminRequestsController,
+  WasteBulkActionDto,
   WasteCloseLostDto,
   WasteCostDto,
   WasteFeeBankConfirmDto,
@@ -34,6 +35,7 @@ const A = ['ADMIN'];
 const table: [string, string, string, string[], number | undefined][] = [
   ['queue', 'GET', 'requests', SA, undefined],
   ['lookup', 'GET', 'requests/lookup', SA, 30],
+  ['bulkAction', 'POST', 'requests/bulk-action', SA, 30],
   ['detail', 'GET', 'requests/:id', SA, undefined],
   ['receive', 'POST', 'requests/:id/receive', SA, 30],
   ['confirm', 'POST', 'requests/:id/confirm', SA, 30],
@@ -58,9 +60,9 @@ const rows = Object.getOwnPropertyNames(proto)
   ]);
 
 describe('WasteAdminRequestsController routes', () => {
-  it('exposes the sixteen admin routes (registry 5 + W178 confirm-fee-paid)', () => {
+  it('exposes the seventeen admin routes (registry 5 + W178 confirm-fee-paid + w17-03 bulk-action)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteAdminRequestsController)).toBe('admin/waste');
-    expect(rows).toHaveLength(16);
+    expect(rows).toHaveLength(17);
     expect(rows).toEqual(expect.arrayContaining(table.map(([, method, path]) => [method, 'admin/waste/' + path])));
   });
 
@@ -77,10 +79,10 @@ describe('WasteAdminRequestsController routes', () => {
     for (const [handler] of table) expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, (proto as never)[handler])).toBeUndefined();
   });
 
-  it('answers receive and confirmFeePaid with 200 and no other handler overrides the status', () => {
-    expect(Reflect.getMetadata(HTTP_CODE_METADATA, proto.receive)).toBe(200);
-    expect(Reflect.getMetadata(HTTP_CODE_METADATA, proto.confirmFeePaid)).toBe(200);
-    for (const [handler] of table.filter(([h]) => h !== 'receive' && h !== 'confirmFeePaid')) {
+  it('answers receive, confirmFeePaid and bulkAction with 200 and no other handler overrides the status', () => {
+    const ok200 = ['receive', 'confirmFeePaid', 'bulkAction'];
+    for (const h of ok200) expect(Reflect.getMetadata(HTTP_CODE_METADATA, (proto as never)[h])).toBe(200);
+    for (const [handler] of table.filter(([h]) => !ok200.includes(h))) {
       expect(Reflect.getMetadata(HTTP_CODE_METADATA, (proto as never)[handler])).toBeUndefined();
     }
   });
@@ -89,6 +91,8 @@ describe('WasteAdminRequestsController routes', () => {
     const names = Object.getOwnPropertyNames(WasteAdminRequestsController.prototype);
     expect(names.indexOf('lookup')).toBeGreaterThanOrEqual(0);
     expect(names.indexOf('lookup')).toBeLessThan(names.indexOf('detail'));
+    expect(names.indexOf('bulkAction')).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf('bulkAction')).toBeLessThan(names.indexOf('detail'));
   });
 });
 
@@ -113,7 +117,8 @@ describe('WasteAdminRequestsController handlers', () => {
   const confirm = { confirm: jest.fn().mockResolvedValue('c'), reject: jest.fn().mockResolvedValue('r'), closeLost: jest.fn().mockResolvedValue('lost') };
   const reverse = { reverse: jest.fn().mockResolvedValue('rev') };
   const feeBank = { confirmFeeBankPaid: jest.fn().mockResolvedValue('feePaid') };
-  const controller = new WasteAdminRequestsController(admin as never, receive as never, confirm as never, reverse as never, feeBank as never);
+  const bulk = { run: jest.fn().mockResolvedValue('bulk') };
+  const controller = new WasteAdminRequestsController(admin as never, receive as never, confirm as never, reverse as never, bulk as never, feeBank as never);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -144,6 +149,8 @@ describe('WasteAdminRequestsController handlers', () => {
     await controller.resolveUnmatched('u1', 'um1', { action: 'CLOSE', note: 'n' });
     await controller.getFlags('u1', 'u2');
     await controller.setFlags('u1', 'u2', { blocked: true, reason: 'x' });
+    await controller.bulkAction('u1', { action: 'MARK_RECEIVED', requestIds: ['r1'], dryRun: true });
+    expect(bulk.run).toHaveBeenCalledWith('u1', { action: 'MARK_RECEIVED', requestIds: ['r1'], dryRun: true });
     expect(admin.queue).toHaveBeenCalledWith('u1', { limit: 5 });
     expect(admin.lookup).toHaveBeenCalledWith('u1', 'TR-1');
     expect(admin.detail).toHaveBeenCalledWith('u1', 'r1');
@@ -191,6 +198,12 @@ describe('WasteAdminRequestsController validation', () => {
     ['receive match parcelCode not a string', WasteReceiveDto, { match: { parcelCode: 5 } }],
     ['confirm-fee amount 0', WasteFeeBankConfirmDto, { amount: 0, bankRef: 'FT1' }],
     ['confirm-fee blank bankRef', WasteFeeBankConfirmDto, { amount: 1000, bankRef: '   ' }],
+    ['bulk unknown action', WasteBulkActionDto, { action: 'CONFIRM', requestIds: ['r1'] }],
+    ['bulk empty list', WasteBulkActionDto, { action: 'MARK_RECEIVED', requestIds: [] }],
+    ['bulk 51 requests', WasteBulkActionDto, { action: 'MARK_RECEIVED', requestIds: Array.from({ length: 51 }, (_, i) => `r${i}`) }],
+    ['bulk id of 65 characters', WasteBulkActionDto, { action: 'MARK_RECEIVED', requestIds: ['a'.repeat(65)] }],
+    ['bulk reason of 501 characters', WasteBulkActionDto, { action: 'CLOSE_LOST', requestIds: ['r1'], reason: 'a'.repeat(501) }],
+    ['resolve MATCH unknown suggestion', WasteUnmatchedResolveDto, { action: 'MATCH', requestId: 'r1', note: 'x', suggestion: 'GUESS' }],
   ])('rejects %s with 400', async (_name, cls, body) => {
     await expect(bad('body', cls, body)).resolves.toBe(true);
   });
@@ -199,6 +212,9 @@ describe('WasteAdminRequestsController validation', () => {
     await expect(bad('body', WasteCostDto, { carrierCostVnd: 0 })).resolves.toBe(false);
     await expect(bad('body', WasteUserFlagsDto, { blocked: false, reason: 'x' })).resolves.toBe(false);
     await expect(bad('body', WasteUnmatchedResolveDto, { action: 'MATCH', requestId: 'r1', note: 'x' })).resolves.toBe(false);
+    await expect(bad('body', WasteUnmatchedResolveDto, { action: 'MATCH', requestId: 'r1', note: 'x', suggestion: 'PHONE' })).resolves.toBe(false);
+    await expect(bad('body', WasteBulkActionDto, { action: 'MARK_RECEIVED', requestIds: ['r1', 'TR-ABCDE'], dryRun: false, phoneMatchConfirmed: true })).resolves.toBe(false);
+    await expect(bad('body', WasteBulkActionDto, { action: 'CLOSE_LOST', requestIds: Array.from({ length: 50 }, (_, i) => `r${i}`), reason: 'mất' })).resolves.toBe(false);
     await expect(bad('body', WasteUnmatchedResolveDto, { action: 'CLOSE', note: 'x' })).resolves.toBe(false);
     await expect(bad('body', WasteReceiveDto, { match: { parcelCode: 'TR-1' }, receivedWeightGrams: 100000 })).resolves.toBe(false);
     await expect(bad('body', WasteFeeBankConfirmDto, { amount: 17000, bankRef: ' FT123 ' })).resolves.toBe(false);

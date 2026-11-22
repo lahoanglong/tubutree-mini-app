@@ -578,3 +578,39 @@ describe('ExternalClaimsTab', () => {
     expect(r.container.querySelector('[data-claim-events]')).not.toBeNull();
   });
 });
+
+describe('w17-03: nút duyệt nhanh SĐT cũ', () => {
+  const BTN = 'Duyệt nhanh đơn chat SĐT đã từng nhận app';
+
+  it('CSKH và admin thấy nút ở danh sách Cần duyệt; Kế toán (chỉ xem) không thấy; đổi sang trạng thái khác thì ẩn', async () => {
+    stub();
+    const cskh = mount(<ExternalClaimsTab isAdmin={false} canAct meId="cs1" />);
+    await flush();
+    expect(buttons(cskh.container)).toContain(BTN);
+    const tab = [...cskh.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.getAttribute('aria-selected') === 'false')!;
+    click(tab);
+    await flush();
+    expect(buttons(cskh.container)).not.toContain(BTN);
+    cskh.unmount();
+    mounted = [];
+
+    stub();
+    const admin = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+    await flush();
+    expect(buttons(admin.container)).toContain(BTN);
+    admin.unmount();
+    mounted = [];
+
+    stub();
+    const ketoan = mount(<ExternalClaimsTab isAdmin={false} canAct={false} meId="kt1" />);
+    await flush();
+    expect(buttons(ketoan.container)).not.toContain(BTN);
+  });
+
+  it('mở tab không tự gọi duyệt nhanh', async () => {
+    const m = stub();
+    mount(<ExternalClaimsTab isAdmin={false} canAct meId="cs1" />);
+    await flush();
+    expect(m.calls.some((x) => x.url.includes('stale-phone-batch'))).toBe(false);
+  });
+});
