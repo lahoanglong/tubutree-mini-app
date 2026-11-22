@@ -149,6 +149,9 @@ test.describe('tubu-w15-02 web máy tính: "Bộ quà tặng" ở thanh điều 
     test(`${width}px: mục thứ 6 hiện, mục cuối vẫn nằm gọn trong màn, không tràn ngang; chạm mở /bo-qua-tang và gạch chân mục đang mở`, async ({ page, api }) => {
       api.get('/bundles/gift-landing', LANDING);
       api.get('/config/public', publicConfig({}));
+      // Lưới Sản phẩm (bước sang /san-pham) tải danh mục và thương hiệu ở trình duyệt.
+      api.get('/categories', []);
+      api.get('/brands', []);
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/bo-qua-tang');
       await expect(page.getByRole('heading', { level: 1, name: 'Bộ quà tặng & combo khởi đầu' })).toBeVisible({ timeout: 15_000 });

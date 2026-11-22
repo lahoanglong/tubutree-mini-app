@@ -25,7 +25,7 @@ export type RefillSavingCopyKey = keyof typeof REFILL_SAVING_COPY;
 /** Trần độ dài sau khi điền số: huy hiệu một dòng cạnh nhãn ở khổ 360; tiêu đề thẻ tối đa hai dòng, dòng phụ một dòng cạnh nút "+ Thêm" ở khổ 320. */
 export const REFILL_SAVING_COPY_MAX: Record<RefillSavingCopyKey, number> = {
   badge: 18,
-  cartSave: 20,
+  cartSave: 21,
   offerTitle: 28,
   offerTitleSave: 52,
   offerMeta: 36,

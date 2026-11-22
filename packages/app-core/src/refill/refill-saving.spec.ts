@@ -119,7 +119,7 @@ describe('cặp công khai của một sản phẩm', () => {
 
 describe('chữ', () => {
   it('trần độ dài sau khi điền số xấu nhất (một dòng ở khổ 360)', () => {
-    const vars = { pct: 99, per: '100ml', pack: 'túi', size: ' 10,5L', amount: '1.234.567đ', n: 99, price: '1.234.567đ' };
+    const vars = { pct: 99, per: '100ml', pack: 'túi', size: ' 10,5L', amount: '12.345.678đ', n: 99, price: '1.234.567đ' };
     for (const key of Object.keys(REFILL_SAVING_COPY) as RefillSavingCopyKey[]) {
       expect(refillSavingCopy(key, vars).length, key).toBeLessThanOrEqual(REFILL_SAVING_COPY_MAX[key]);
     }

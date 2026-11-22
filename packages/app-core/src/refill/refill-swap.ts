@@ -84,10 +84,13 @@ function freeshipWarning(m: RefillMilestones['freeship'], c: Ctx): string | null
   return after < m.threshold ? fillCopy('refill.dropFreeship', { amount: vnd(m.threshold - after) }) : null;
 }
 
-/** Tiền hàng tính mốc sau khi đổi: bỏ phần dòng chai đang góp, cộng gói refill (gian hàng tự giao không góp khi mốc chỉ tính hàng Tubu). */
+/**
+ * Tiền hàng tính mốc sau khi đổi: bỏ phần dòng chai đang góp, cộng gói refill chỉ khi Tubu giao. Gói gian hàng tự giao không bao giờ góp:
+ * giỏ đang toàn hàng Tubu thì gói đó đưa hàng gian hàng vào giỏ và mốc chuyển sang chỉ tính phần Tubu giao.
+ */
 function freeshipAfter(m: NonNullable<RefillMilestones['freeship']>, c: Ctx): number {
   const lineShare = c.line.stock > 0 && (!m.tubuOnly || isTubu(c.line)) ? c.line.total : 0;
-  return m.base - lineShare + (!m.tubuOnly || c.offer.tubu ? c.offer.price : 0);
+  return m.base - lineShare + (c.offer.tubu ? c.offer.price : 0);
 }
 
 function giftAfter(gift: GiftTrialSummaryDTO, c: Ctx): number {
@@ -95,13 +98,16 @@ function giftAfter(gift: GiftTrialSummaryDTO, c: Ctx): number {
   return gift.base - lineShare + (c.offer.tubu ? c.offer.price : 0);
 }
 
-/** Mốc đang thiếu mà đổi xong thì đạt: Miễn phí giao hàng (chưa đạt, sau đổi đủ ngưỡng) và quà 0đ (có lựa chọn quà mới vào tầm). */
+/**
+ * Mốc đang thiếu mà đổi xong thì đạt: Miễn phí giao hàng (chưa đạt, sau đổi đủ ngưỡng) và quà 0đ (chưa có quà nào mở, sau đổi có). Mỗi đơn
+ * chỉ một quà: đã có quà thì lựa chọn cao hơn vào tầm không phải mốc mới.
+ */
 function milestoneGain(m: RefillMilestones, c: Ctx): string | null {
   const gains: string[] = [];
   const f = m.freeship;
   if (f && !f.reached && f.threshold > 0 && freeshipAfter(f, c) >= f.threshold) gains.push(fillCopy('refill.gainFreeship'));
   const g = m.giftTrial;
-  if (g && !g.declined && g.options.length > 0) {
+  if (g && !g.declined && g.options.length > 0 && !g.options.some((o) => o.minOrder <= g.base)) {
     const after = giftAfter(g, c);
     if (g.options.some((o) => o.minOrder > g.base && o.minOrder <= after)) gains.push(fillCopy('refill.gainGift'));
   }
