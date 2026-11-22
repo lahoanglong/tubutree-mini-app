@@ -106,7 +106,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import AffiliatePage from './page';
+import AffiliatePage from './ctv-page';
 
 let mounted: Rendered[] = [];
 const mount = (client?: QueryClient) => {

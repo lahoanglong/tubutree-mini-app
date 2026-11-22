@@ -61,7 +61,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import DealerPage from './page';
+import DealerPage from './dealer-page';
 
 function amountInput() {
   const label = byText(document.body, 'label', 'Số tiền đã chuyển');

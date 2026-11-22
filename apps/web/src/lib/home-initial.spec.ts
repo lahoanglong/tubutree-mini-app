@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const revalidates: (number | undefined)[] = [];
 let failAll = false;
+let failBest = false;
 let failFlash = false;
 let failCampaigns = false;
 let failCombos = false;
@@ -10,6 +11,7 @@ const comboLimits: (number | undefined)[] = [];
 let campaignList: { id: string; endAt: string }[] | null = null;
 let flashList: { itemId: string; endAt: string }[] | null = null;
 const productCalls: Record<string, unknown>[] = [];
+let brandCalls = 0;
 const campaignPlacements: string[] = [];
 
 vi.mock('@/lib/core-http-server', () => ({
@@ -49,7 +51,7 @@ vi.mock('@tubutree/app-core/api/campaign', () => ({
   },
 }));
 vi.mock('@tubutree/app-core/api/catalog', () => ({
-  fetchBrands: async () => { if (failAll) throw new Error('x'); return []; },
+  fetchBrands: async () => { brandCalls += 1; if (failAll) throw new Error('x'); return []; },
   fetchCategories: async () => { if (failAll) throw new Error('x'); return []; },
   fetchProducts: async (_http: unknown, query: Record<string, unknown>) => {
     productCalls.push(query);
@@ -58,14 +60,16 @@ vi.mock('@tubutree/app-core/api/catalog', () => ({
   },
 }));
 vi.mock('@tubutree/app-core/queries/config', () => ({ publicConfigQuery: () => ({ queryFn: async () => { if (failAll) throw new Error('x'); return { freeshipThreshold: 350000 }; } }) }));
-vi.mock('@tubutree/app-core/queries/home', () => ({ homeBestSellerQuery: () => ({ queryFn: async () => { if (failAll) throw new Error('x'); return bestSellerRows; } }) }));
+vi.mock('@tubutree/app-core/queries/home', () => ({ homeBestSellerQuery: () => ({ queryFn: async () => { if (failAll || failBest) throw new Error('x'); return bestSellerRows; } }) }));
 
 import { BUILD_GAP_REVALIDATE_S, CAMPAIGN_REVALIDATE_S, COMBO_REVALIDATE_S, FLASH_REVALIDATE_S, loadHomeInitial } from './home-initial';
 
 afterEach(() => {
   productCalls.length = 0;
+  brandCalls = 0;
   revalidates.length = 0;
   failAll = false;
+  failBest = false;
   failFlash = false;
   failCampaigns = false;
   failCombos = false;
@@ -95,6 +99,13 @@ describe('loadHomeInitial: bản dựng sẵn thiếu dữ liệu', () => {
     failAll = true;
     await expect(loadHomeInitial()).rejects.toThrow();
   });
+
+  it('runtime khi riêng Bán chạy lỗi (Danh mục vẫn về): không ném, bỏ phần Bán chạy để client tự tải lại', async () => {
+    failBest = true;
+    const initial = await loadHomeInitial();
+    expect(initial.bestSellers).toBeUndefined();
+    expect(initial.categories).toEqual([]);
+  });
 });
 
 describe('loadHomeInitial: Giờ vàng có trong HTML đầu', () => {
@@ -121,13 +132,16 @@ describe('loadHomeInitial: Giờ vàng có trong HTML đầu', () => {
   });
 });
 
-describe('loadHomeInitial: trang 1 của Gợi ý hôm nay', () => {
-  it('xin trang 1 kèm hạt giống ngày VN và trả hạt giống đó để client dùng đúng khoá dữ liệu dựng sẵn', async () => {
+describe('loadHomeInitial: Gợi ý hôm nay và thương hiệu không tải ở máy chủ', () => {
+  it('không xin trang 1 của lưới Gợi ý hay danh sách thương hiệu (HTML đầu không vẽ), chỉ trả hạt giống ngày VN để client tải đúng thứ tự', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-31T18:00:00Z'));
     try {
       const initial = await loadHomeInitial();
-      expect(productCalls).toEqual([expect.objectContaining({ page: 1, seed: '20261101' })]);
+      expect(productCalls).toEqual([]);
+      expect(brandCalls).toBe(0);
+      expect(initial).not.toHaveProperty('suggest');
+      expect(initial).not.toHaveProperty('brands');
       expect(initial.suggestSeed).toBe('20261101');
     } finally {
       vi.useRealTimers();

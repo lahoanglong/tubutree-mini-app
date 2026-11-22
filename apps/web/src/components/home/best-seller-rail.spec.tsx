@@ -43,14 +43,7 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
   });
 
   it('hạng hụt vì kệ trên chiếm (#1, #2, #4) hay mất hạng 1 (#2, #3): thẻ chỉ ghi "Bán chạy" không số; hạng liền 1..k giữ số (P2 #4)', () => {
-    const badgesIn = (part: 'best-seller-rail' | 'best-seller-grid') =>
-      Array.from(mounted!.container.querySelectorAll(`[data-testid="${part}"] [data-ds-part="rank"]`)).map((n) => n.textContent);
-    // Kệ (dưới lg) và lưới (từ lg) là hai bản của cùng một dữ liệu nên luôn ghi cùng một nhãn hạng.
-    const badges = () => {
-      const rail = badgesIn('best-seller-rail');
-      expect(badgesIn('best-seller-grid')).toEqual(rail);
-      return rail;
-    };
+    const badges = () => Array.from(mounted!.container.querySelectorAll('[data-testid="best-seller-rail"] [data-ds-part="rank"]')).map((n) => n.textContent);
     mounted = render(<BestSellerRail items={[card(1), card(2), card(4)]} ranks={[1, 2, 4]} loading={false} />);
     expect(badges()).toEqual(['Bán chạy', 'Bán chạy', 'Bán chạy']);
     mounted.unmount();
@@ -61,29 +54,48 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(badges()).toEqual(['#1', '#2', '#3']);
   });
 
-  it('từ lg kệ thành lưới 5 cột (10 món = hai hàng đầy, không thanh cuộn ngang); dưới lg giữ kệ vuốt ngang như Mini', () => {
+  it('một danh sách cho mọi khổ (HTML không có bản thẻ thứ hai): kệ vuốt ngang dưới lg, lưới 5 cột từ lg bằng lớp CSS', () => {
     mounted = render(<BestSellerRail items={cards(10)} loading={false} />);
     const c = mounted.container;
+    // Bản lưới riêng (hidden lg:block) từng nhân đôi 10 thẻ trong HTML Trang chủ (~58 KB): không còn bản nào bị display:none.
+    expect(c.querySelector('[data-testid="best-seller-grid"]')).toBeNull();
+    expect(c.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(10);
+    expect(c.querySelectorAll('a[href^="/san-pham/"]')).toHaveLength(10);
     const rail = c.querySelector<HTMLElement>('[data-testid="best-seller-rail"]')!;
-    const grid = c.querySelector<HTMLElement>('[data-testid="best-seller-grid"]')!;
-    expect(rail.className).toContain('lg:hidden');
-    expect(rail.querySelector('[role="region"][aria-label*="vuốt ngang"]')).not.toBeNull();
-    expect(grid.className).toContain('hidden');
-    expect(grid.className).toContain('lg:block');
-    expect(grid.querySelector('[role="region"]')).toBeNull();
-    const list = grid.querySelector('ul')!;
-    expect(list.className).toContain('grid-cols-5');
-    expect(list.querySelectorAll(':scope > li')).toHaveLength(10);
-    expect(Array.from(list.querySelectorAll('a[href^="/san-pham/"]')).map((a) => a.getAttribute('href'))).toEqual(
-      Array.from(rail.querySelectorAll('a[href^="/san-pham/"]')).map((a) => a.getAttribute('href')),
-    );
+    expect(rail.className).not.toContain('hidden');
+    const region = rail.querySelector<HTMLElement>('[role="region"][aria-label*="vuốt ngang"]')!;
+    expect(region.className).toContain('tubu-bleed-rail');
+    for (const cls of ['lg:mx-0', 'lg:p-0', 'lg:overflow-visible']) expect(region.className.split(' ')).toContain(cls);
+    const list = region.querySelector<HTMLElement>(':scope > ul')!;
+    for (const cls of ['flex', 'w-max', 'gap-3', 'lg:grid', 'lg:grid-cols-5', 'lg:gap-4']) expect(list.className.split(' ')).toContain(cls);
+    const cells = Array.from(list.querySelectorAll<HTMLElement>(':scope > li'));
+    expect(cells).toHaveLength(10);
+    for (const li of cells) expect(li.className).toContain('w-[var(--tile-w-sm)]');
   });
 
-  it('đang tải: lưới lg có 10 khung chờ (hai hàng), kệ có 5; không có thẻ thật', () => {
+  it('ảnh: hai thẻ đầu tải ngay khi Trang chủ xin (priorityCount), sizes theo cả kệ dưới lg (128px) lẫn lưới 5 cột từ lg', () => {
+    // Ảnh Pancake đi qua /img có srcset theo bề rộng nên mới mang sizes (ảnh nguồn khác giữ nguyên cỡ, không cần sizes).
+    const withPhoto = cards(4).map((p) => ({ ...p, thumbnail: `https://content.pancake.vn/2-26/${p.id}.jpg` }));
+    mounted = render(<BestSellerRail items={withPhoto} loading={false} priorityCount={2} />);
+    const imgs = Array.from(mounted.container.querySelectorAll('[data-testid="best-seller-rail"] img'));
+    expect(imgs.map((i) => [i.getAttribute('loading'), i.getAttribute('fetchpriority')])).toEqual([
+      ['eager', 'high'],
+      ['eager', 'high'],
+      ['lazy', null],
+      ['lazy', null],
+    ]);
+    for (const i of imgs) expect(i.getAttribute('sizes')).toBe('(max-width: 1023px) 128px, calc((min(100vw, 1200px) - 112px) / 5)');
+  });
+
+  it('đang tải: 10 khung chờ (5 dưới lg, thêm 5 chỉ hiện từ lg cho hai hàng lưới); không có thẻ thật', () => {
     mounted = render(<BestSellerRail items={[]} loading />);
     const c = mounted.container;
-    expect(c.querySelector('[data-testid="best-seller-grid"] ul')).toBeNull();
-    expect(c.querySelectorAll('[data-testid="best-seller-grid"] > div[aria-hidden="true"] > *')).toHaveLength(10);
+    expect(c.querySelector('[data-testid="best-seller-rail"] ul')).toBeNull();
+    const track = c.querySelector<HTMLElement>('[data-testid="best-seller-rail"] [role="region"] > [aria-hidden="true"]')!;
+    for (const cls of ['flex', 'lg:grid', 'lg:grid-cols-5']) expect(track.className.split(' ')).toContain(cls);
+    const cells = Array.from(track.querySelectorAll<HTMLElement>(':scope > div'));
+    expect(cells).toHaveLength(10);
+    expect(cells.filter((d) => d.className.includes('max-lg:hidden'))).toHaveLength(5);
   });
 
   it('kệ đã bỏ món trùng kệ trên (hạng #2, #3, #5): không đánh lại từ #1 và không ghi số hụt', () => {
@@ -102,12 +114,13 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('đang tải: khung chờ 5 ô cùng cỡ thẻ hạng, vẫn có tiêu đề', () => {
+  it('đang tải: khung chờ cùng cỡ thẻ hạng (ô kệ như ô thẻ thật), vẫn có tiêu đề', () => {
     mounted = render(<BestSellerRail items={[]} loading />);
     const section = mounted.container.querySelector('section[aria-label="Bán chạy nhất"]')!;
     expect(section.querySelector('h2')?.textContent).toBe('Bán chạy nhất');
-    const cells = section.querySelectorAll('[role="region"] [style*="--tile-w-sm"]');
-    expect(cells).toHaveLength(5);
+    const cells = Array.from(section.querySelectorAll<HTMLElement>('[role="region"] > [aria-hidden="true"] > div'));
+    expect(cells.filter((d) => !d.className.includes('max-lg:hidden'))).toHaveLength(5);
+    for (const d of cells) expect(d.className).toContain('w-[var(--tile-w-sm)]');
     expect(section.textContent).not.toContain('#');
   });
 });

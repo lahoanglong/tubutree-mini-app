@@ -91,7 +91,32 @@ describe('trang gian hàng /s/[slug] — tin cậy chỉ khi đúng sự thật 
   });
 });
 
-// Kiểu Mini App ở điện thoại (StorePageShell + ProductTile): bìa tràn mép 84px, đầu trang phẳng không thẻ, không dải cam kết, thẻ sản phẩm chung.
+describe('trang gian hàng /s/[slug] — JSON-LD OnlineStore + ItemList', () => {
+  const ldOf = (box: HTMLElement) => Array.from(box.querySelectorAll('script[type="application/ld+json"]')).map((n) => JSON.parse(n.textContent ?? 'null'));
+
+  it('gian hàng đã đăng: một khối OnlineStore + ItemList đúng các sản phẩm trong HTML', async () => {
+    const [ld, ...rest] = ldOf(await html());
+    expect(rest).toEqual([]);
+    const graph = ld['@graph'] as { '@type': string; name?: string; itemListElement?: { url: string }[] }[];
+    expect(graph.map((n) => n['@type'])).toEqual(['OnlineStore', 'ItemList']);
+    expect(graph[0]!.name).toBe('Shop của Linh');
+    expect(graph[1]!.itemListElement!.map((e) => e.url.endsWith('/san-pham/binh-nuoc'))).toEqual([true]);
+  });
+
+  it('gian hàng mẫu: không có JSON-LD', async () => {
+    mocks.sf = { ...SF, isSample: true };
+    expect(ldOf(await html())).toEqual([]);
+  });
+
+  it('tên gian hàng có "</script>": khối JSON-LD không đóng thẻ sớm', async () => {
+    mocks.sf = { ...SF, title: 'Shop </script><img src=x onerror=alert(1)>' };
+    const box = await html();
+    expect(box.querySelector('img[src="x"]')).toBeNull();
+    expect(ldOf(box)[0]['@graph'][0].name).toBe('Shop </script><img src=x onerror=alert(1)>');
+  });
+});
+
+// Kiểu Mini App ở điện thoại (StorePageShell + ProductTile): bìa tràn mép 84px, đầu trang phẳng không thẻ, thẻ sản phẩm chung; dải cam kết là hàng chip gọn.
 describe('trang gian hàng /s/[slug] — gian hàng mẫu và lối mở gian hàng', () => {
   it('gian hàng mẫu: có nhãn "Gian hàng mẫu" và dòng giải thích; gian hàng thật thì không', async () => {
     mocks.sf = { ...SF, isSample: true };
@@ -172,9 +197,24 @@ describe('trang gian hàng — khung shop giống Mini App', () => {
     expect((await html()).textContent).toContain('CTV Cây Con');
   });
 
-  it('dải cam kết chỉ cho máy tính (md trở lên)', async () => {
+  it('dải cam kết có cả ở điện thoại: hàng chip gọn chữ ngắn (dưới md), bốn ô chữ đủ từ md; một bộ thẻ cho mọi khổ', async () => {
     const box = await html();
-    expect(box.querySelector('section[aria-labelledby="cam-ket-gian-hang"]')!.className).toContain('max-md:hidden');
+    const section = box.querySelector<HTMLElement>('section[aria-labelledby="cam-ket-gian-hang"]')!;
+    expect(section.className).not.toContain('hidden');
+    const list = section.querySelector<HTMLElement>('ul')!;
+    for (const cls of ['flex', 'flex-wrap', 'md:grid', 'md:grid-cols-4']) expect(list.className.split(' ')).toContain(cls);
+    const chips = Array.from(list.querySelectorAll<HTMLElement>(':scope > li'));
+    expect(chips).toHaveLength(4);
+    const short = chips.map((li) => li.querySelector('.md\\:hidden')!.textContent);
+    expect(short).toEqual(['Hàng đã qua duyệt', 'Theo dõi đơn', 'Thanh toán qua Tubu', 'Đổi trả nếu lỗi']);
+    // Chữ ngắn đủ gọn để bốn chip nằm trong hai hàng ở 375px (mỗi hàng hai chip).
+    for (const t of short) expect(t!.length).toBeLessThanOrEqual(19);
+    expect(chips.map((li) => li.querySelector('.hidden.md\\:inline')!.textContent)).toEqual([
+      'Sản phẩm đã qua duyệt của Tubu Tree',
+      'Theo dõi đơn trên Tubu Tree',
+      'Thanh toán qua Tubu Tree',
+      'Đổi trả nếu sản phẩm lỗi',
+    ]);
   });
 
   it('thẻ sản phẩm là thẻ chung của web (có tim); ghi chú của chủ nằm trong thẻ', async () => {
@@ -241,9 +281,18 @@ describe('trang gian hàng — mô tả khi chia sẻ (D3-02)', () => {
 });
 
 describe('trang gian hàng /s/[slug] — link subdomain theo cờ (D3-11)', () => {
+  // Chữ khách thấy: bỏ khối JSON-LD (khối đó mang URL canonical app.tubutree.com, không phải link subdomain).
+  const visibleText = (box: HTMLElement) => {
+    const copy = box.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('script').forEach((n) => n.remove());
+    return copy.textContent ?? '';
+  };
+
   it('cờ tắt: không hiện URL subdomain dù dữ liệu có subdomain', async () => {
     mocks.sf = { ...SF, subdomain: 'linh-xanh', subdomainEnabled: false };
-    expect((await html()).textContent).not.toContain('tubutree.com');
+    const box = await html();
+    expect(visibleText(box)).not.toContain('tubutree.com');
+    expect(box.textContent).not.toContain('linh-xanh');
   });
 
   it('API cũ chưa trả cờ: coi như tắt', async () => {

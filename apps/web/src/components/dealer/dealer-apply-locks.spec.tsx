@@ -37,7 +37,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import DealerPage from '@/app/dai-ly/page';
+import DealerPage from '@/app/dai-ly/dealer-page';
 
 const NOT_DEALER = { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 };
 const PENDING_ME = { ...NOT_DEALER, status: 'PENDING' };

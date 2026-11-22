@@ -18,8 +18,7 @@ vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOr
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_BEST_SELLER_LIMIT, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
-import { vnDateSeed } from '@tubutree/app-core/home-suggest';
+import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import HomePage, { metadata } from './page';
 
 const card = (id: string, name: string) => ({
@@ -73,16 +72,10 @@ describe('HomePage — server render phần công khai', () => {
     expect(metadata.alternates?.canonical).toBe('/');
   });
 
-  it('hỏi API đúng như Mini App: bán chạy HOME_BEST_SELLER_LIMIT món theo best_seller_30d và trang 1 của lưới gợi ý kèm hạt giống ngày VN; không còn nổi bật/mới về riêng', async () => {
-    const before = vnDateSeed(Date.now());
+  it('hỏi API đúng như Mini App: chỉ kệ bán chạy HOME_BEST_SELLER_LIMIT món theo best_seller_30d; lưới gợi ý tự tải khi khách cuộn gần nên không hỏi lúc dựng; không còn nổi bật/mới về riêng', async () => {
     await render();
-    const after = vnDateSeed(Date.now());
     const queries = mocks.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o?.query as Record<string, unknown>);
-    expect(queries).toHaveLength(2);
-    expect(queries).toContainEqual({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' });
-    const suggest = queries.find((q) => q.page === 1)!;
-    expect(suggest).toEqual({ limit: SUGGEST_PAGE_SIZE, page: 1, seed: expect.stringMatching(/^\d{8}$/) });
-    expect([before, after]).toContain(suggest.seed);
+    expect(queries).toEqual([{ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' }]);
   });
 
   it('HTML đầu đã có sản phẩm của kệ Bán chạy, hàng danh mục (ẩn danh mục rỗng); lưới gợi ý chỉ là khung giữ chỗ (dựng khi khách cuộn gần tới); Hành trình nguyên liệu không còn trên Trang chủ', async () => {

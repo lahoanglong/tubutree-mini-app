@@ -48,7 +48,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import DealerPage from './page';
+import DealerPage from './dealer-page';
 
 const APPROVED = { isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000 };
 const row = { variationId: 'v1', sku: 'POLANG-500', product: 'Nước rửa chén', brand: 'Pơ Lang', variation: '500ml', retailPrice: 100_000, dealerPrice: 80_000, discountPct: 20, stock: 9 };

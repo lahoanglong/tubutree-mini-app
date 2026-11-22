@@ -27,6 +27,9 @@ export const GRID_RANK_IMAGE_SIZES = `${GRID_PHONE}, ${GRID_MD}, calc(${frameMin
 /** Kệ ngang và thẻ dòng: ô cố định. */
 export const TILE_IMAGE_SIZES = { rail: px(148), flash: px(128), line: px(64) } as const;
 
+/** Kệ hạng Trang chủ: dưới lg ô cố định của kệ vuốt ngang (`--tile-w-sm`), từ lg ô của lưới 5 cột (như `GRID_RANK_IMAGE_SIZES`). */
+export const RANK_SHELF_IMAGE_SIZES = `${upTo(MD)} ${TILE_IMAGE_SIZES.flash}, calc(${frameMinus(112)} / 5)`;
+
 /** Banner Trang chủ: điện thoại tràn khung trừ lề 16; md lề 24; lg 8/12 cột của khung 1200 (~728). */
 export const BANNER_SLIDE_SIZES = `${upTo(PHONE)} ${vwMinus(32)}, ${upTo(MD)} ${vwMinus(48)}, ${px(728)}`;
 /** Banner Ưu đãi từ lg tràn cả khung nội dung (~1152). */
