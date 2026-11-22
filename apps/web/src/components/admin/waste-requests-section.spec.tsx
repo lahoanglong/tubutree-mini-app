@@ -132,7 +132,7 @@ describe('WasteRequestsSection', () => {
 
   it('mã yêu cầu nằm trên một dòng và dùng chữ đơn cách', async () => {
     const { c } = await mount();
-    const codeCell = row(c, 'r1').querySelector('td')!;
+    const codeCell = row(c, 'r1').querySelector('td[data-code-cell]')!;
     expect(codeCell.textContent).toBe('TR-7K3M9Q');
     expect(codeCell.className).toContain('whitespace-nowrap');
     expect(codeCell.className).toContain('font-mono');
@@ -869,5 +869,90 @@ describe('hàng không rõ chủ', () => {
     expectNoBannedCopy(admin.c.textContent);
     const staff = await openView({ isAdmin: false });
     expectNoBannedCopy(staff.c.textContent);
+  });
+});
+
+describe('w17-03: nhận kiện hàng loạt và gợi ý khớp kiện', () => {
+  const unRow = (c: HTMLElement, id: string) => c.querySelector<HTMLElement>(`[data-unmatched="${id}"]`)!;
+  const cand = {
+    requestId: 'r7',
+    code: 'TR-CAND77',
+    method: 'MAIL_IN' as const,
+    status: 'IN_TRANSIT' as const,
+    basis: 'TRACKING' as const,
+    customerName: 'N*** A',
+    customerPhone: '090***4567',
+    carrier: 'GHN',
+    trackingCode: 'GHN123456',
+    createdAt: '2026-10-15T02:00:00.000Z',
+  };
+  const withCandidates = (init?: RequestInit) => ({
+    body:
+      init?.method === 'POST'
+        ? { id: 'un1' }
+        : [
+            wasteUnmatched({ candidates: [cand] }),
+            wasteUnmatched({ id: 'un3', reason: 'TR_TRACKING_CONFLICT', trackingCode: 'GHN777', relatedRequestId: 'r4', candidates: [{ ...cand, requestId: 'r8', code: 'TR-CAND88' }] }),
+          ],
+  });
+
+  it('hàng đợi có ô chọn 44×44 cho yêu cầu còn chờ nhận; staff chỉ có Nhận kiện', async () => {
+    const { c } = await mount({ isAdmin: false });
+    const pick = c.querySelector<HTMLElement>('[data-waste-bulk-select="TR-7K3M9Q"]')!;
+    expect(pick.className).toContain('min-h-[44px]');
+    click(pick.querySelector('input'));
+    await flush();
+    const bar = document.querySelector<HTMLElement>('[data-waste-bulk-bar]')!;
+    expect(bar.textContent).toContain('Đã chọn 1/50 yêu cầu');
+    expect(bar.querySelector('select')).toBeNull();
+    expect(byText(bar, 'button', 'Xem trước: Nhận kiện')).not.toBeNull();
+  });
+
+  it('admin ở hàng Gửi kho quá hạn chọn được Đóng vì thất lạc; đổi hàng đợi thì bỏ chọn', async () => {
+    const { c } = await mount({ isAdmin: true, seed: { section: 'requests', preset: 'transitOverdue', n: 1 } });
+    click(c.querySelector('[data-waste-bulk-select="TR-7K3M9Q"] input'));
+    await flush();
+    const options = Array.from(document.querySelectorAll('[data-waste-bulk-bar] select option')).map((o) => o.textContent);
+    expect(options).toEqual(['Nhận kiện', 'Đóng vì thất lạc']);
+    click(chip(c, 'Kho cần đếm'));
+    await flush();
+    expect(document.querySelector('[data-waste-bulk-bar]')).toBeNull();
+  });
+
+  it('kiện không rõ chủ có gợi ý: Khớp & nhận hỏi xác nhận rồi gửi MATCH kèm suggestion', async () => {
+    const { c, api } = await mount({ isAdmin: false, unmatched: withCandidates });
+    click(chip(c, 'Hàng không rõ chủ'));
+    await flush();
+    const list = unRow(c, 'un1').querySelector<HTMLElement>('[data-unmatched-candidates]')!;
+    expect(list.textContent).toContain('TR-CAND77');
+    expect(list.textContent).toContain('090***4567');
+    expect(list.textContent).toContain('Trùng mã vận đơn');
+    const go = byText(list, 'button', 'Khớp & nhận')!;
+    expect(go.getAttribute('aria-label')).toBe('Khớp & nhận kiện với TR-CAND77');
+    click(go);
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('TR-CAND77');
+    answerConfirm(true);
+    await flush();
+    const sent = posts(api, '/admin/waste/unmatched/un1/resolve');
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({
+      action: 'MATCH',
+      requestId: 'r7',
+      note: 'Khớp nhanh theo gợi ý: trùng mã vận đơn TR-CAND77',
+      suggestion: 'TRACKING',
+    });
+  });
+
+  it('huỷ xác nhận thì không gửi; kiện tranh chấp TR- không hiện gợi ý cho staff', async () => {
+    const { c, api } = await mount({ isAdmin: false, unmatched: withCandidates });
+    click(chip(c, 'Hàng không rõ chủ'));
+    await flush();
+    expect(unRow(c, 'un3').querySelector('[data-unmatched-candidates]')).toBeNull();
+    click(byText(unRow(c, 'un1'), 'button', 'Khớp & nhận'));
+    await flush();
+    answerConfirm(false);
+    await flush();
+    expect(posts(api, '/resolve')).toHaveLength(0);
   });
 });

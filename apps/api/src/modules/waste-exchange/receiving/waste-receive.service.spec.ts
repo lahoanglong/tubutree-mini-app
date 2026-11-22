@@ -3,7 +3,7 @@ import type { WasteReceiveRequest } from '@tubutree/shared-types';
 import { assertActiveAdmin, assertActiveStaff } from '../../../common/staff-access';
 import { writeWasteEvent } from '../core/waste-events';
 import * as matchModule from './waste-match';
-import { WasteReceiveService } from './waste-receive.service';
+import { rankCandidates, WasteReceiveService } from './waste-receive.service';
 
 jest.mock('../../../common/staff-access');
 jest.mock('../core/waste-events');
@@ -66,6 +66,8 @@ interface Setup {
   unmatchedCount?: number;
   listRows?: unknown[];
   createId?: string;
+  relatedRows?: unknown[];
+  candidatePool?: unknown[];
 }
 
 function setup(o: Setup = {}) {
@@ -104,6 +106,9 @@ function setup(o: Setup = {}) {
     wasteUnmatchedParcel: {
       findUnique: jest.fn(async () => (o.umRow === undefined ? unmatchedRow() : o.umRow)),
       findMany: jest.fn(async () => o.listRows ?? [unmatchedRow()]),
+    },
+    wasteRequest: {
+      findMany: jest.fn(async (a: { where: { id?: unknown } }) => (a.where.id ? (o.relatedRows ?? []) : (o.candidatePool ?? []))),
     },
     $transaction: jest.fn(async (fn: (t: unknown) => Promise<unknown>) => {
       inTx = true;
@@ -552,5 +557,101 @@ describe('WasteReceiveService unmatched parcels', () => {
     await h.svc.resolveUnmatched('s1', 'um1', { action: 'CLOSE', note: 'n' });
     expect(assertActiveAdmin).not.toHaveBeenCalled();
     expect(h.access.assertWarehouseActor).toHaveBeenCalledWith('s1');
+  });
+});
+
+describe('Unmatched parcel suggestions', () => {
+  const STAFF = { id: 's1', role: 'STAFF', phone: '0900000002' };
+  const at = (min: number) => new Date(Date.UTC(2026, 10, 20, 0, min));
+  const cand = (o: Record<string, unknown> = {}) => ({
+    id: 'r1',
+    code: 'TR-AAAAA',
+    userId: 'u1',
+    method: 'MAIL_IN',
+    status: 'OPEN',
+    carrier: 'GHN',
+    trackingCode: 'SPX123',
+    trackingNorm: 'SPX123',
+    createdAt: at(0),
+    user: { id: 'u1', fullName: 'Nguyễn Văn An', phone: '0901234567' },
+    phone: '0901234567',
+    ...o,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    (assertActiveStaff as jest.Mock).mockResolvedValue(STAFF);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('rankCandidates: same tracking first, then same phone as the related request; in transit before open, oldest first, capped at 3', () => {
+    const pool = [
+      cand({ id: 'p-open-new', trackingNorm: 'X1', status: 'OPEN', createdAt: at(9) }),
+      cand({ id: 't-open', status: 'OPEN', createdAt: at(1) }),
+      cand({ id: 't-transit', status: 'IN_TRANSIT', createdAt: at(5) }),
+      cand({ id: 'related', trackingNorm: 'X2' }),
+      cand({ id: 'p-transit', trackingNorm: 'X3', status: 'IN_TRANSIT', createdAt: at(8) }),
+      cand({ id: 'other-phone', trackingNorm: 'X4', phone: '0999999999' }),
+    ];
+    const ranked = rankCandidates({ trackingNorm: 'SPX123', relatedRequestId: 'related' }, '0901234567', pool as never);
+    expect(ranked.map((r) => [r.id, r.basis])).toEqual([
+      ['t-transit', 'TRACKING'],
+      ['t-open', 'TRACKING'],
+      ['p-transit', 'PHONE'],
+    ]);
+    expect(rankCandidates({ trackingNorm: null, relatedRequestId: null }, null, pool as never)).toEqual([]);
+  });
+
+  it('rankCandidates: a request matching both tracking and phone is listed once, as TRACKING', () => {
+    const ranked = rankCandidates({ trackingNorm: 'SPX123', relatedRequestId: 'rel' }, '0901234567', [cand()] as never);
+    expect(ranked.map((r) => [r.id, r.basis])).toEqual([['r1', 'TRACKING']]);
+  });
+
+  it('listUnmatched masks candidate name and phone for staff', async () => {
+    const h = setup({ listRows: [unmatchedRow()], candidatePool: [cand()] });
+    const [p] = await h.svc.listUnmatched('s1', {});
+    expect(p!.candidates).toHaveLength(1);
+    expect(p!.candidates![0]).toMatchObject({ requestId: 'r1', code: 'TR-AAAAA', basis: 'TRACKING' });
+    expect(p!.candidates![0]!.customerPhone).not.toBe('0901234567');
+    expect(p!.candidates![0]!.customerName).not.toBe('Nguyễn Văn An');
+  });
+
+  it('listUnmatched gives no suggestion for a disputed TR parcel and skips the candidate query', async () => {
+    const h = setup({ listRows: [unmatchedRow({ reason: 'TR_TRACKING_CONFLICT', relatedRequestId: 'r9' })], candidatePool: [cand()] });
+    const [p] = await h.svc.listUnmatched('s1', {});
+    expect(p!.candidates).toEqual([]);
+    expect(h.prisma.wasteRequest.findMany).not.toHaveBeenCalled();
+  });
+
+  it('resolved parcels carry no candidates', async () => {
+    const h = setup({ listRows: [unmatchedRow({ status: 'RESOLVED' })], candidatePool: [cand()] });
+    const [p] = await h.svc.listUnmatched('s1', { status: 'RESOLVED' });
+    expect(p!.candidates).toBeUndefined();
+    expect(h.prisma.wasteRequest.findMany).not.toHaveBeenCalled();
+  });
+
+  it('MATCH with a TRACKING suggestion that no longer holds is a 409 with no change', async () => {
+    const h = setup({ row: row({ pointId: null, trackingNorm: 'CHANGED', user: { phone: '0901234567' } }) });
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'r1', note: 'gợi ý', suggestion: 'TRACKING' })).rejects.toBeInstanceOf(ConflictException);
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  it('MATCH with a TRACKING suggestion that holds records the suggestion on the event', async () => {
+    const h = setup({ row: row({ pointId: null, user: { phone: '0901234567' } }) });
+    await h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'r1', note: 'gợi ý', suggestion: 'TRACKING' });
+    expect(h.tx.wasteRequest.updateMany).toHaveBeenCalledTimes(1);
+    const ev = (writeWasteEvent as jest.Mock).mock.calls.find((c) => c[1].kind === 'UNMATCHED_RESOLVED')![1];
+    expect(ev.meta).toMatchObject({ suggestion: 'TRACKING' });
+  });
+
+  it('MATCH with a PHONE suggestion needs the related request to share the phone', async () => {
+    const h = setup({ umRow: unmatchedRow({ trackingNorm: null, relatedRequestId: 'r0' }), row: row({ pointId: null, user: { phone: '0901234567' } }) });
+    (h.tx.wasteRequest.findUnique as jest.Mock).mockImplementation(async (a: { where: { id: string } }) =>
+      a.where.id === 'r0' ? { user: { phone: '0988888888' } } : row({ pointId: null, user: { phone: '0901234567' } }),
+    );
+    await expect(h.svc.resolveUnmatched('s1', 'um1', { action: 'MATCH', requestId: 'r1', note: 'gợi ý', suggestion: 'PHONE' })).rejects.toBeInstanceOf(ConflictException);
+    expect(h.tx.wasteRequest.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,8 @@ export class PilotCleanupDto {
   @IsOptional() @IsBoolean() dryRun?: boolean;
   @IsOptional() @IsString() @MaxLength(40) confirmText?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(PILOT_CLEANUP_MAX) @IsString({ each: true }) @MaxLength(40, { each: true }) codes?: string[];
+  /** Đơn chỉ khớp SĐT người thử mà quản trị viên tự tick để dọn; phải nằm trong `codes`. */
+  @IsOptional() @IsArray() @ArrayMaxSize(PILOT_CLEANUP_MAX) @IsString({ each: true }) @MaxLength(40, { each: true }) optInCodes?: string[];
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
   @IsArray()

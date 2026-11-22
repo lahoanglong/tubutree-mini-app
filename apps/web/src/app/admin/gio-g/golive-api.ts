@@ -44,6 +44,8 @@ export interface PilotOrderRow {
   phone: string | null;
   action: PilotAction;
   reason: string;
+  /** Đơn chỉ khớp SĐT người thử, bán lẻ, chưa trả tiền, chưa rời kho, không phải CTV đặt hộ: quản trị viên tick thì lượt dọn huỷ đơn này. */
+  optInEligible: boolean;
 }
 
 export interface PilotOrdersView {
@@ -76,7 +78,13 @@ export function listPilotOrders(phones: readonly string[]): Promise<PilotOrdersV
   return apiFetch<PilotOrdersView>(`/admin/golive/pilot-orders${q}`);
 }
 
-export function cleanupPilotOrders(body: { dryRun: boolean; codes: string[]; phones: string[]; confirmText?: string }): Promise<PilotCleanupResult> {
+export function cleanupPilotOrders(body: {
+  dryRun: boolean;
+  codes: string[];
+  phones: string[];
+  optInCodes?: string[];
+  confirmText?: string;
+}): Promise<PilotCleanupResult> {
   return apiFetch<PilotCleanupResult>('/admin/golive/pilot-orders/cleanup', { method: 'POST', body });
 }
 

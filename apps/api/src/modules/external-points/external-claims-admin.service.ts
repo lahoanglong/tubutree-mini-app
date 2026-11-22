@@ -62,6 +62,14 @@ interface MemberInfo {
   deliveredAppOrders: number;
 }
 
+/** Claim đã khoá (FOR UPDATE) kèm đơn, đúng bản `approve` đang xét. */
+export type LockedClaim = Prisma.ExternalPointsClaimGetPayload<{ include: { externalOrder: true } }>;
+
+export interface ApproveOptions {
+  /** Chạy trong transaction duyệt, sau khi đã khoá SĐT, đơn và claim: trả lý do thì không duyệt (409), null thì duyệt tiếp. */
+  guard?: (tx: Prisma.TransactionClient, c: LockedClaim) => Promise<string | null>;
+}
+
 export interface AdminClaimListQuery {
   page: number;
   limit: number;
@@ -270,7 +278,7 @@ export class ExternalClaimsAdminService {
    * REVIEW sang PENDING. Người duyệt không được là chủ claim, người gắn đơn hay người đã đưa claim vào REVIEW. Điểm tính lại theo tiền
    * hàng mới nhất và kiểm lại trần tháng; đơn hoàn một phần được duyệt thì đặt mốc cộng = bây giờ + hạn giữ để cron cộng được.
    */
-  async approve(id: string, actorId: string, now: Date = new Date(), note?: string): Promise<{ id: string; state: 'PENDING' }> {
+  async approve(id: string, actorId: string, now: Date = new Date(), note?: string, opts: ApproveOptions = {}): Promise<{ id: string; state: 'PENDING' }> {
     const cfg = await loadClaimConfig(this.config);
     const chatCfg = await loadChatConfig(this.config);
     const head = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: { userId: true, kind: true, orderPhone: true, externalOrder: { select: { phone: true } } } });
@@ -301,6 +309,11 @@ export class ExternalClaimsAdminService {
       const o = c.externalOrder;
       if (['RETURNED', 'CANCELLED', 'DELETED'].includes(o.status)) throw new BadRequestException('Đơn đã bị huỷ hoặc hoàn trên sàn nên không duyệt được.');
       if (c.kind === 'PHONE') await this.forbidPancakeCreator(tx, actorId, o.lastPayload);
+      // Duyệt nhanh hàng loạt: luật riêng của lượt đó xét lại dưới cùng các khoá (SĐT, đơn, claim) trước khi tính điểm.
+      if (opts.guard) {
+        const block = await opts.guard(tx, c);
+        if (block) throw new ConflictException({ code: 'APPROVE_GUARD', message: block });
+      }
       // Duyệt là một lần kiểm: điểm tính lại theo tiền hàng và hạng HIỆN TẠI, rồi lưu cả hai làm mốc đã kiểm để releaseClaim cộng đúng
       // số này (không tính lại lên). Claim chưa có chủ giữ hệ số cũ.
       let multiplier = Number(c.multiplier);

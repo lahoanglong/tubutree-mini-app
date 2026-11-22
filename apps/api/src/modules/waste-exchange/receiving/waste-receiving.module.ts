@@ -4,6 +4,7 @@ import { WasteCoreModule } from '../core/waste-core.module';
 import { WasteHomePickupModule } from '../home-pickup/waste-home-pickup.module';
 import { WasteAdminRequestsController } from './waste-admin-requests.controller';
 import { WasteAdminRequestsService } from './waste-admin-requests.service';
+import { WasteBulkActionService } from './waste-bulk-action.service';
 import { WasteConfirmService } from './waste-confirm.service';
 import { WasteDeskController } from './waste-desk.controller';
 import { WasteDeskService } from './waste-desk.service';
@@ -13,6 +14,6 @@ import { WasteReverseService } from './waste-reverse.service';
 @Module({
   imports: [WalletModule, WasteCoreModule, WasteHomePickupModule],
   controllers: [WasteDeskController, WasteAdminRequestsController],
-  providers: [WasteAdminRequestsService, WasteConfirmService, WasteDeskService, WasteReceiveService, WasteReverseService],
+  providers: [WasteAdminRequestsService, WasteBulkActionService, WasteConfirmService, WasteDeskService, WasteReceiveService, WasteReverseService],
 })
 export class WasteReceivingModule {}

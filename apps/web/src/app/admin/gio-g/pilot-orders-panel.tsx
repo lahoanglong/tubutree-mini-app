@@ -29,19 +29,23 @@ export function PilotOrdersPanel() {
   const { ask, dialog } = useConfirm();
   const [phonesInput, setPhonesInput] = useState('');
   const [phones, setPhones] = useState<string[]>([]);
-  const [preview, setPreview] = useState<PilotCleanupResult | null>(null);
+  const [preview, setPreview] = useState<{ res: PilotCleanupResult; optIn: readonly string[] } | null>(null);
   const [done, setDone] = useState<PilotCleanupResult | null>(null);
+  // Đơn chỉ khớp SĐT người thử mà quản trị viên tự tick để dọn; không tick thì vẫn là Làm tay.
+  const [optIn, setOptIn] = useState<ReadonlySet<string>>(() => new Set());
 
   const q = useQuery({ queryKey: [...PILOT_KEY, phones], queryFn: () => listPilotOrders(phones) });
   const dry = useMutation({
-    mutationFn: (codes: string[]) => cleanupPilotOrders({ dryRun: true, codes, phones }),
-    onSuccess: (r) => {
-      setPreview(r);
+    mutationFn: (v: { codes: string[]; optInCodes: string[] }) =>
+      cleanupPilotOrders({ dryRun: true, codes: v.codes, phones, ...(v.optInCodes.length > 0 ? { optInCodes: v.optInCodes } : {}) }),
+    onSuccess: (r, v) => {
+      setPreview({ res: r, optIn: v.optInCodes });
       setDone(null);
     },
   });
   const run = useMutation({
-    mutationFn: (v: { codes: string[]; confirmText: string }) => cleanupPilotOrders({ dryRun: false, codes: v.codes, phones, confirmText: v.confirmText }),
+    mutationFn: (v: { codes: string[]; optInCodes: string[]; confirmText: string }) =>
+      cleanupPilotOrders({ dryRun: false, codes: v.codes, phones, ...(v.optInCodes.length > 0 ? { optInCodes: v.optInCodes } : {}), confirmText: v.confirmText }),
     onSuccess: (r) => {
       setDone(r);
       setPreview(null);
@@ -52,6 +56,7 @@ export function PilotOrdersPanel() {
   const search = (e: FormEvent) => {
     e.preventDefault();
     setPhones(splitPhones(phonesInput));
+    setOptIn(new Set());
     setPreview(null);
     setDone(null);
     dry.reset();
@@ -59,18 +64,33 @@ export function PilotOrdersPanel() {
   };
 
   const rows = q.data?.orders ?? [];
-  const allActionable = rows.filter((r) => r.action === 'CANCEL' || r.action === 'ARCHIVE').map((r) => r.code);
+  const optInPicked = rows.filter((r) => r.optInEligible && optIn.has(r.code)).map((r) => r.code);
+  const allActionable = [...rows.filter((r) => r.action === 'CANCEL' || r.action === 'ARCHIVE').map((r) => r.code), ...optInPicked];
   const actionable = allActionable.slice(0, PILOT_CLEANUP_BATCH);
+  const actionableOptIn = optInPicked.filter((c) => actionable.includes(c));
   const leftover = allActionable.length - actionable.length;
+  const toggleOptIn = (code: string) => {
+    setOptIn((cur) => {
+      const next = new Set(cur);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+    setPreview(null);
+    dry.reset();
+  };
   const confirmText = q.data?.confirmText ?? '';
   const busy = dry.isPending || run.isPending;
 
   const confirmRun = async () => {
     if (!preview || busy) return;
-    const codes = [...preview.cancelled, ...preview.archived];
+    const codes = [...preview.res.cancelled, ...preview.res.archived];
+    const optInCodes = preview.optIn.filter((c) => codes.includes(c));
     const typed = await ask({
       title: 'Dọn đơn thử',
-      message: `Huỷ ${preview.affected.ordersCancelled} đơn (trả tồn, đảo điểm, huỷ bên Pancake/Gomdon) và ghi sổ ${preview.affected.ordersArchived} đơn đã xong. Không hoàn tác được.\nMã: ${codes.join(', ')}`,
+      message: `Huỷ ${preview.res.affected.ordersCancelled} đơn (trả tồn, đảo điểm, huỷ bên Pancake/Gomdon) và ghi sổ ${preview.res.affected.ordersArchived} đơn đã xong. Không hoàn tác được.${
+        optInCodes.length > 0 ? `\nTrong đó ${optInCodes.length} đơn chỉ khớp SĐT người thử do bạn tick: ${optInCodes.join(', ')}` : ''
+      }\nMã: ${codes.join(', ')}`,
       tone: 'danger',
       confirmLabel: 'Dọn đơn thử',
       input: {
@@ -82,7 +102,7 @@ export function PilotOrdersPanel() {
       },
     });
     if (typed === null) return;
-    run.mutate({ codes, confirmText: typed });
+    run.mutate({ codes, optInCodes, confirmText: typed });
   };
 
   return (
@@ -93,7 +113,8 @@ export function PilotOrdersPanel() {
       </h2>
       <p className="mt-1 text-xs text-stone-600">
         Chỉ hiện đơn có [PILOT] trong ghi chú, hoặc người mua đúng SĐT người thử bạn gõ, đặt trong {q.data?.windowDays ?? 45} ngày gần đây (đơn CTV đặt hộ khách
-        không khớp theo SĐT). Chỉ đơn có [PILOT] mới được dọn tự động; đơn chỉ khớp SĐT, đơn đã có tiền hoặc đã rời kho phải làm tay theo kịch bản.
+        không khớp theo SĐT). Chỉ đơn có [PILOT] mới được dọn tự động. Đơn chỉ khớp SĐT bán lẻ, chưa trả tiền, chưa rời kho thì tick ô &quot;Chọn dọn&quot; từng đơn
+        nếu chắc là đơn thử; đơn đã có tiền, đã rời kho, đơn đại lý hoặc CTV đặt hộ phải làm tay theo kịch bản.
       </p>
       <form onSubmit={search} className="mt-2 flex flex-wrap items-end gap-2">
         <Field label="SĐT người thử (tối đa 5, cách nhau bằng dấu phẩy)" className="min-w-0 flex-1">
@@ -127,12 +148,17 @@ export function PilotOrdersPanel() {
             ) : (
               <ul className="mt-2 divide-y divide-stone-200 rounded-card border border-stone-200 bg-stone-0">
                 {rows.map((r) => (
-                  <PilotRow key={r.code} row={r} />
+                  <PilotRow key={r.code} row={r} optedIn={optIn.has(r.code)} onToggle={busy ? undefined : () => toggleOptIn(r.code)} />
                 ))}
               </ul>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className={BTN_PRIMARY} disabled={busy || actionable.length === 0} onClick={() => dry.mutate(actionable)}>
+              <button
+                type="button"
+                className={BTN_PRIMARY}
+                disabled={busy || actionable.length === 0}
+                onClick={() => dry.mutate({ codes: actionable, optInCodes: actionableOptIn })}
+              >
                 {dry.isPending ? 'Đang xem trước…' : `Xem trước dọn ${actionable.length} đơn`}
               </button>
               {leftover > 0 ? <p className="w-full text-xs text-stone-600">Mỗi lượt tối đa {PILOT_CLEANUP_BATCH} đơn: còn {leftover} đơn cho lượt sau.</p> : null}
@@ -159,19 +185,24 @@ export function PilotOrdersPanel() {
           <p className="text-sm font-semibold text-stone-900">Xem trước (chưa ghi gì)</p>
           <ul className="mt-1 list-disc pl-5 text-xs text-stone-700">
             <li>
-              Huỷ {preview.affected.ordersCancelled} đơn, thêm {preview.affected.statusHistoryRows} dòng lịch sử đơn
+              Huỷ {preview.res.affected.ordersCancelled} đơn, thêm {preview.res.affected.statusHistoryRows} dòng lịch sử đơn
             </li>
-            <li>Ghi sổ {preview.affected.ordersArchived} đơn đã xong (không đổi đơn)</li>
-            <li>Bỏ qua {preview.skipped.length} đơn phải làm tay</li>
-            <li>Ghi {preview.affected.auditLogRows} dòng sổ thao tác quản trị</li>
+            {preview.optIn.length > 0 ? (
+              <li data-testid="pilot-preview-optin">
+                Trong đó {preview.optIn.filter((c) => preview.res.cancelled.includes(c)).length}/{preview.optIn.length} đơn chỉ khớp SĐT do bạn tick
+              </li>
+            ) : null}
+            <li>Ghi sổ {preview.res.affected.ordersArchived} đơn đã xong (không đổi đơn)</li>
+            <li>Bỏ qua {preview.res.skipped.length} đơn phải làm tay</li>
+            <li>Ghi {preview.res.affected.auditLogRows} dòng sổ thao tác quản trị</li>
           </ul>
-          {preview.cancelled.length + preview.archived.length > 0 ? (
-            <p className="mt-1 break-words font-mono text-xs text-stone-600">{[...preview.cancelled, ...preview.archived].join(', ')}</p>
+          {preview.res.cancelled.length + preview.res.archived.length > 0 ? (
+            <p className="mt-1 break-words font-mono text-xs text-stone-600">{[...preview.res.cancelled, ...preview.res.archived].join(', ')}</p>
           ) : null}
           <button
             type="button"
             className={`${BTN_DANGER_OUTLINE} mt-2`}
-            disabled={busy || preview.cancelled.length + preview.archived.length === 0}
+            disabled={busy || preview.res.cancelled.length + preview.res.archived.length === 0}
             onClick={() => void confirmRun()}
           >
             {run.isPending ? 'Đang dọn…' : 'Dọn thật…'}
@@ -206,12 +237,12 @@ export function PilotOrdersPanel() {
   );
 }
 
-function PilotRow({ row }: { row: PilotOrderRow }) {
+function PilotRow({ row, optedIn, onToggle }: { row: PilotOrderRow; optedIn: boolean; onToggle?: () => void }) {
   return (
     <li data-testid="pilot-row" data-code={row.code} className="px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-mono font-semibold text-stone-900">{row.code}</span>
-        <ToneBadge tone={ACTION_TONE[row.action]}>{ACTION_LABEL[row.action]}</ToneBadge>
+        <ToneBadge tone={optedIn ? 'danger' : ACTION_TONE[row.action]}>{optedIn ? ACTION_LABEL.CANCEL : ACTION_LABEL[row.action]}</ToneBadge>
         <span className="text-stone-700">{orderStatusLabel(row.status)}</span>
         <span className="ml-auto font-medium text-stone-900">{formatVnd(row.total)}</span>
       </div>
@@ -220,6 +251,12 @@ function PilotRow({ row }: { row: PilotOrderRow }) {
         {row.phone ? ` · ${row.phone}` : ''} · {row.matchedBy.map((m) => MATCH_LABEL[m]).join(', ')}
       </p>
       <p className="mt-0.5 break-words text-stone-700">{row.reason}</p>
+      {row.optInEligible ? (
+        <label className="mt-1 inline-flex min-h-[44px] cursor-pointer items-center gap-2 text-stone-800" data-testid="pilot-optin">
+          <input type="checkbox" className="h-5 w-5 accent-forest-600" checked={optedIn} disabled={!onToggle} onChange={() => onToggle?.()} />
+          <span>Chọn dọn đơn này (chắc chắn là đơn thử)</span>
+        </label>
+      ) : null}
     </li>
   );
 }

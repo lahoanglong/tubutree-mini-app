@@ -138,6 +138,36 @@ describe('GoLivePilotService.cleanup', () => {
     expect(admin.updateOrderStatus).not.toHaveBeenCalled();
   });
 
+  it('đơn chỉ khớp SĐT được quản trị viên tick (optInCodes): huỷ qua AdminService, sổ ghi optIn; đơn CTV đặt hộ vẫn bị từ chối', async () => {
+    const { svc, admin, prisma } = setup();
+    const dry = await svc.cleanup(actor, { dryRun: true, codes: ['TBPHONE4'], optInCodes: ['TBPHONE4'], phones: ['0901234567'] }, NOW);
+    expect(dry.cancelled).toEqual(['TBPHONE4']);
+    expect(admin.updateOrderStatus).not.toHaveBeenCalled();
+    await expect(
+      svc.cleanup(actor, { dryRun: false, confirmText: PILOT_CONFIRM_TEXT, codes: ['TBCTV001'], optInCodes: ['TBCTV001'], phones: ['0901234567'] }, NOW),
+    ).rejects.toThrow('TBCTV001');
+    const r = await svc.cleanup(actor, { dryRun: false, confirmText: PILOT_CONFIRM_TEXT, codes: ['TBPHONE4'], optInCodes: ['TBPHONE4'], phones: ['0901234567'] }, NOW);
+    expect(r.cancelled).toEqual(['TBPHONE4']);
+    expect(admin.updateOrderStatus).toHaveBeenCalledWith({ ...actor, id: 'admin-1' }, 'TBPHONE4', 'CANCELLED', PILOT_CANCEL_NOTE);
+    expect(prisma.adminAuditLog.create.mock.calls[0]![0].data.payload).toMatchObject({ optIn: ['TBPHONE4'] });
+  });
+
+  it('optInCodes có mã ngoài danh sách dọn: 400, không huỷ', async () => {
+    const { svc, admin } = setup();
+    await expect(
+      svc.cleanup(actor, { dryRun: false, confirmText: PILOT_CONFIRM_TEXT, codes: ['TBPILOT1'], optInCodes: ['TBPHONE4'], phones: ['0901234567'] }, NOW),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(admin.updateOrderStatus).not.toHaveBeenCalled();
+  });
+
+  it('đơn tick chọn được trả tiền giữa lúc xem trước và lúc dọn: đọc lại, bỏ qua, không huỷ', async () => {
+    const { svc, admin } = setup([T4], [], { TBPHONE4: { paymentStatus: 'PAID' } });
+    const r = await svc.cleanup(actor, { dryRun: false, confirmText: PILOT_CONFIRM_TEXT, codes: ['TBPHONE4'], optInCodes: ['TBPHONE4'], phones: ['0901234567'] }, NOW);
+    expect(r.cancelled).toEqual([]);
+    expect(r.skipped.map((s) => s.code)).toEqual(['TBPHONE4']);
+    expect(admin.updateOrderStatus).not.toHaveBeenCalled();
+  });
+
   it('đơn được trả tiền giữa lúc xem trước và lúc dọn: đọc lại trước khi huỷ, bỏ qua, không huỷ', async () => {
     const T3 = order({ code: 'TBPILOT3', note: '[PILOT] T3', paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT' });
     const { svc, admin } = setup([T1, T3], [], { TBPILOT3: { paymentStatus: 'PAID', status: 'CONFIRMED' } });

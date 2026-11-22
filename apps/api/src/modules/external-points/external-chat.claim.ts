@@ -130,7 +130,7 @@ export async function creatorMonthPoints(tx: Pick<Tx, 'externalPointsClaim'>, a:
 }
 
 /** Người tạo đơn trên Pancake (qua pancake.staff_map) là chính thành viên nhận điểm, hoặc có SĐT trùng SĐT đơn. */
-async function creatorIsReceiver(tx: Pick<Tx, 'user'>, staffUserId: string | null, memberId: string | null, phone: string | null): Promise<boolean> {
+export async function creatorIsReceiver(tx: Pick<Tx, 'user'>, staffUserId: string | null, memberId: string | null, phone: string | null): Promise<boolean> {
   if (!staffUserId) return false;
   if (memberId && memberId === staffUserId) return true;
   if (!phone) return false;

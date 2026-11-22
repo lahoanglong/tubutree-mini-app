@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerAsk, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { CockpitBoard } from './cockpit-board';
 import { PilotOrdersPanel } from './pilot-orders-panel';
 import { rowFixLink, splitPhones, type CockpitCard, type GoLiveCockpit, type PilotCleanupResult, type PilotOrderRow, type PilotOrdersView } from './golive-api';
@@ -130,6 +130,7 @@ const prow = (code: string, action: PilotOrderRow['action'], over: Partial<Pilot
   phone: '090***4567',
   action,
   reason: `lý do ${code}`,
+  optInEligible: false,
   ...over,
 });
 
@@ -183,6 +184,67 @@ describe('PilotOrdersPanel', () => {
     await flush(8);
     expect(posts()).toEqual([{ dryRun: true, codes: ['TB1', 'TB3'], phones: [] }]);
     expect(c.querySelector('[data-testid="pilot-preview"]')?.textContent).toContain('Huỷ 1 đơn');
+  });
+
+  it('đơn chỉ khớp SĐT đủ điều kiện có ô "Chọn dọn" 44px; tick thì đơn vào lượt xem trước kèm optInCodes, lượt thật gửi lại đúng mã đã tick', async () => {
+    const view: PilotOrdersView = {
+      ...VIEW,
+      orders: [
+        prow('TB1', 'CANCEL'),
+        prow('TB4', 'MANUAL', { matchedBy: ['TEST_PHONE'], optInEligible: true }),
+        prow('TB5', 'MANUAL', { matchedBy: ['TEST_PHONE'], paymentStatus: 'PAID' }),
+      ],
+    };
+    const res = (dryRun: boolean, codes: string[]): PilotCleanupResult => ({
+      ...result(dryRun),
+      cancelled: codes,
+      archived: [],
+      affected: { ordersCancelled: codes.length, statusHistoryRows: codes.length, ordersArchived: 0, auditLogRows: 1 },
+    });
+    const m = mockFetch({
+      '/admin/golive/pilot-orders/cleanup': (init) => {
+        const b = JSON.parse(String(init?.body));
+        return { body: res(b.dryRun, b.codes) };
+      },
+      '/admin/golive/pilot-orders': { body: view },
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<PilotOrdersPanel />);
+    mounted.push(r);
+    await flush(8);
+    const c = r.container;
+    const posts = () => m.calls.filter((x) => x.url.includes('/cleanup')).map((x) => JSON.parse(String(x.init?.body)));
+    expect(c.querySelector('[data-code="TB5"] [data-testid="pilot-optin"]')).toBeNull();
+    const opt = c.querySelector<HTMLElement>('[data-code="TB4"] [data-testid="pilot-optin"]')!;
+    expect(opt.className).toContain('min-h-[44px]');
+    click(opt.querySelector('input'));
+    await flush();
+    expect(c.querySelector('[data-code="TB4"]')!.textContent).toContain('Sẽ huỷ');
+    click(byText(c, 'button', 'Xem trước dọn 2 đơn'));
+    await flush(8);
+    expect(posts()).toEqual([{ dryRun: true, codes: ['TB1', 'TB4'], phones: [], optInCodes: ['TB4'] }]);
+    expect(c.querySelector('[data-testid="pilot-preview-optin"]')!.textContent).toContain('1/1 đơn chỉ khớp SĐT');
+    click(byText(c, 'button', 'Dọn thật…'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('TB4');
+    answerAsk('XOA DON THU');
+    await flush(8);
+    expect(posts()[1]).toEqual({ dryRun: false, codes: ['TB1', 'TB4'], phones: [], optInCodes: ['TB4'], confirmText: 'XOA DON THU' });
+  });
+
+  it('bỏ tick sau khi xem trước thì xoá bản xem trước (phải xem lại)', async () => {
+    const view: PilotOrdersView = { ...VIEW, orders: [prow('TB1', 'CANCEL'), prow('TB4', 'MANUAL', { matchedBy: ['TEST_PHONE'], optInEligible: true })] };
+    const m = mockFetch({ '/admin/golive/pilot-orders/cleanup': () => ({ body: result(true) }), '/admin/golive/pilot-orders': { body: view } });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<PilotOrdersPanel />);
+    mounted.push(r);
+    await flush(8);
+    click(byText(r.container, 'button', 'Xem trước dọn 1 đơn'));
+    await flush(8);
+    expect(r.container.querySelector('[data-testid="pilot-preview"]')).not.toBeNull();
+    click(r.container.querySelector('[data-code="TB4"] [data-testid="pilot-optin"] input'));
+    await flush();
+    expect(r.container.querySelector('[data-testid="pilot-preview"]')).toBeNull();
   });
 
   it('hơn 50 đơn dọn được: Xem trước chỉ gửi 50 mã đầu (trần mỗi lượt của API), phần còn lại để lượt sau', async () => {

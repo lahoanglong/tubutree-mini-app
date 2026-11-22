@@ -48,6 +48,7 @@ import { configValue } from '@/lib/admin-config-forms';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
+import { ExternalClaimsStaleBatch } from './external-claims-stale-batch';
 import { settleWithin } from '@/lib/settle-within';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useDebounced } from './search-picker';
@@ -176,6 +177,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
           className={`${FIELD_XS} w-full sm:w-96`}
         />
       </div>
+      {(isAdmin || canAct) && state === 'REVIEW' && <ExternalClaimsStaleBatch />}
       {claims.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {claims.isError && <LoadError onRetry={() => void claims.refetch()} retrying={claims.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
       {claims.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có yêu cầu nào khớp.</p>}
