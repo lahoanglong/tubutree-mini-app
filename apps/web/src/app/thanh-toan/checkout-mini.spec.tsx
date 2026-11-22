@@ -108,9 +108,17 @@ describe('/thanh-toan — thẻ địa chỉ như Mini App', () => {
     expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('tấm chọn: "Thêm địa chỉ mới" không có dấu + ở cuối, "Quản lý sổ địa chỉ" ẩn ở điện thoại; "Sửa" cạnh dòng chỉ từ md', async () => {
+  it('tấm chọn: "Thêm địa chỉ mới" không có dấu + ở cuối, "Quản lý sổ địa chỉ" ẩn ở điện thoại; "Sửa" cạnh dòng hiện ở mọi khổ, vùng chạm 44px', async () => {
     const c = await mount();
-    expect(c.querySelector('button[aria-label="Sửa địa chỉ của An"]')!.className).toMatch(/(?=.*\bhidden\b)(?=.*\bmd:inline-flex\b)/);
+    const edit = c.querySelector<HTMLButtonElement>('button[aria-label="Sửa địa chỉ của An"]')!;
+    expect(edit.className).not.toMatch(/(^|\s)(hidden|max-md:hidden)(\s|$)/);
+    expect(edit.className).toMatch(/\bmin-h-11\b/);
+    expect(edit.className).toMatch(/\bmin-w-11\b/);
+    click(edit);
+    await flush(2);
+    expect(c.querySelector('form')?.textContent ?? c.textContent).toContain('Sửa địa chỉ');
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Huỷ' || b.textContent?.trim() === 'Hủy')!);
+    await flush(2);
     click(c.querySelector<HTMLButtonElement>('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]')!);
     await flush(2);
     const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;

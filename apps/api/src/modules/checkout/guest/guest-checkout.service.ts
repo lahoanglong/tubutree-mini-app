@@ -14,7 +14,9 @@ import { BankTransferService } from '../../integrations/payment/bank-transfer.se
 import { CheckoutService, type GuestCheckoutContext } from '../checkout.service';
 import type { PlaceOrderDto, QuoteDto } from '../dto/checkout.dto';
 import { MAX_ITEM_QUANTITY } from '../../cart/dto/cart.dto';
-import type { GuestAddressDto, GuestLineDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
+import type { GuestOrderLookupDTO, GuestOrderTrackDTO } from '@tubutree/shared-types';
+import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
+import { signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
 import {
   GUEST_CLOSED_STATUSES,
   GUEST_DEVICE_DAILY_CAP,
@@ -43,10 +45,13 @@ export const GUEST_LOGIN_REQUIRED = 'GUEST_LOGIN_REQUIRED';
 export const GUEST_LIMIT_MESSAGE = 'Hiện chưa đặt thêm được đơn khi chưa đăng nhập. Bạn đăng nhập Zalo để đặt tiếp và theo dõi đơn ở một nơi nhé.';
 const LOGIN_REQUIRED_MESSAGE = 'Trình duyệt này đã gắn với một tài khoản. Bạn đăng nhập Zalo để đặt hàng nhé.';
 const NOT_FOUND_MESSAGE = 'Không tìm thấy đơn hàng.';
+const LOOKUP_NOT_FOUND_MESSAGE = 'Không tìm thấy đơn khớp mã đơn và số điện thoại này.';
 
 const sha256Hex = (s: string) => createHash('sha256').update(s).digest('hex');
 /** Băm giả để nhánh "không có đơn" vẫn so một lần như nhánh có đơn. */
 const DUMMY_HASH = sha256Hex('guest-order-key-missing');
+/** SĐT giả cho nhánh "không có đơn" của tra cứu: vẫn so một lần, không bao giờ khớp số thật (không đúng khuôn 0xxxxxxxxx). */
+const DUMMY_PHONE = 'no-guest-phone';
 
 /** 0912345678 → 091****678. */
 export function maskPhone(phone: string): string {
@@ -318,11 +323,30 @@ export class GuestCheckoutService {
     };
   }
 
-  /** Đơn theo mã + khoá; mọi trường hợp sai (không có mã, không phải đơn vãng lai, sai khoá, hết hạn) cùng một 404. */
+  private linkSecret(): string | undefined {
+    return this.env.get('JWT_ACCESS_SECRET', { infer: true });
+  }
+
+  /** Chỉ dòng đơn, không kèm món: mã có thật hay không phải tốn cùng một truy vấn trước khi khoá hay SĐT được so, món tải sau khi khớp. */
+  private findGuestOrder(code: string) {
+    return this.prisma.order.findUnique({ where: { code } });
+  }
+
+  /**
+   * Đơn theo mã + khoá; mọi trường hợp sai (không có mã, không phải đơn vãng lai, sai khoá, hết hạn) cùng một 404. Khoá là khoá trình duyệt
+   * tạo lúc đặt (so băm) hoặc khoá tạm do tra cứu mã + SĐT cấp (`guest-track-link`).
+   */
   private async orderByKey(code: string, key: string | undefined) {
-    const order = await this.prisma.order.findUnique({ where: { code }, include: { items: { orderBy: { id: 'asc' } } } });
-    const matches = safeEqualStrings(order?.guestTokenHash ?? DUMMY_HASH, sha256Hex(key ?? ''));
-    if (!order?.guestTokenHash || !key || !matches) throw new NotFoundException(NOT_FOUND_MESSAGE);
+    const order = await this.findGuestOrder(code);
+    const hash = order?.guestTokenHash ?? DUMMY_HASH;
+    const byOwnKey = safeEqualStrings(hash, sha256Hex(key ?? ''));
+    const byLookupKey = !!key && verifyGuestLookupKey(key, order?.code ?? code, hash, this.linkSecret());
+    if (!order?.guestTokenHash || !key || !(byOwnKey || byLookupKey)) throw new NotFoundException(NOT_FOUND_MESSAGE);
+    return this.trackable(order);
+  }
+
+  /** Đơn đã xong (giao, huỷ, hoàn) quá GUEST_TRACK_TTL_DAYS thì 404 như sai mã (cùng câu với nơi gọi). */
+  private async trackable(order: NonNullable<Awaited<ReturnType<GuestCheckoutService['findGuestOrder']>>>, notFoundMessage = NOT_FOUND_MESSAGE) {
     const statusTimes = await this.statusTimesOf(order.id);
     const closedStamp = order.status === 'CANCELLED' || order.status === 'RETURNED' ? statusTimes[order.status] : undefined;
     const closedAt =
@@ -331,7 +355,7 @@ export class GuestCheckoutService {
         : order.status === 'CANCELLED' || order.status === 'RETURNED'
           ? (closedStamp ? new Date(closedStamp) : order.updatedAt)
           : null;
-    if (closedAt && Date.now() - closedAt.getTime() > GUEST_TRACK_TTL_DAYS * DAY_MS) throw new NotFoundException(NOT_FOUND_MESSAGE);
+    if (closedAt && Date.now() - closedAt.getTime() > GUEST_TRACK_TTL_DAYS * DAY_MS) throw new NotFoundException(notFoundMessage);
     return { order, statusTimes, closedAt };
   }
 
@@ -351,16 +375,22 @@ export class GuestCheckoutService {
   }
 
   /** Trang theo dõi đơn: chỉ trạng thái, món, tiền, SĐT che 4 số giữa, phường/xã và tỉnh (không tên, không số nhà). */
-  async track(code: string, key: string | undefined) {
-    const { order, statusTimes, closedAt } = await this.orderByKey(code, key);
+  async track(code: string, key: string | undefined): Promise<GuestOrderTrackDTO> {
+    return this.viewOf(await this.orderByKey(code, key));
+  }
+
+  private async viewOf({ order, statusTimes, closedAt }: Awaited<ReturnType<GuestCheckoutService['trackable']>>): Promise<GuestOrderTrackDTO> {
     const address = (order.shippingAddress ?? {}) as { ward?: unknown; province?: unknown };
-    const siblings = order.checkoutGroup
-      ? await this.prisma.order.findMany({
-          where: { checkoutGroup: order.checkoutGroup, userId: order.userId, guestTokenHash: order.guestTokenHash },
-          orderBy: { code: 'asc' },
-          select: { code: true, status: true, total: true },
-        })
-      : [];
+    const [items, siblings] = await Promise.all([
+      this.prisma.orderItem.findMany({ where: { orderId: order.id }, orderBy: { id: 'asc' } }),
+      order.checkoutGroup
+        ? this.prisma.order.findMany({
+            where: { checkoutGroup: order.checkoutGroup, userId: order.userId, guestTokenHash: order.guestTokenHash },
+            orderBy: { code: 'asc' },
+            select: { code: true, status: true, total: true },
+          })
+        : Promise.resolve([]),
+    ]);
     return {
       code: order.code,
       status: order.status,
@@ -373,7 +403,7 @@ export class GuestCheckoutService {
       discount: order.discount,
       shippingFee: order.shippingFee,
       total: order.total,
-      items: order.items.map((it) => ({
+      items: items.map((it) => ({
         productName: it.productName,
         variationName: it.variationName,
         quantity: it.quantity,
@@ -388,6 +418,28 @@ export class GuestCheckoutService {
       },
       siblings,
       expiresAt: closedAt ? new Date(closedAt.getTime() + GUEST_TRACK_TTL_DAYS * DAY_MS).toISOString() : null,
+    };
+  }
+
+  /**
+   * Tra đơn đặt không đăng nhập bằng mã đơn + SĐT đặt hàng (khách mất đường dẫn, đổi máy, xoá dữ liệu trình duyệt). Mọi trường hợp không khớp
+   * (không có mã, không phải đơn vãng lai, sai SĐT, hết hạn theo dõi) cùng một 404 và cùng số lần so, để không dò được mã đơn nào có thật.
+   * Khớp thì cấp khoá theo dõi tạm (24 giờ) thay cho khoá gốc mà máy chủ không giữ.
+   */
+  async lookup(dto: GuestLookupDto): Promise<GuestOrderLookupDTO> {
+    const order = await this.findGuestOrder(dto.orderCode);
+    const phoneMatches = safeEqualStrings(order?.guestPhone ?? DUMMY_PHONE, dto.phone);
+    if (!order?.guestTokenHash || !order.guestPhone || !phoneMatches) throw new NotFoundException(LOOKUP_NOT_FOUND_MESSAGE);
+    const view = await this.viewOf(await this.trackable(order, LOOKUP_NOT_FOUND_MESSAGE));
+    const { key, expiresAt } = signGuestLookupKey(order.code, order.guestTokenHash, this.linkSecret());
+    const code = encodeURIComponent(order.code);
+    const awaitingTransfer = view.paymentMethod === 'BANK_TRANSFER' && view.status === 'PENDING_PAYMENT' && view.paymentStatus !== 'PAID';
+    return {
+      order: view,
+      trackingKey: key,
+      trackPath: `/don/${code}#k=${key}`,
+      bankPath: awaitingTransfer ? `/thanh-toan/chuyen-khoan/${code}#k=${key}` : null,
+      linkExpiresAt: expiresAt.toISOString(),
     };
   }
 

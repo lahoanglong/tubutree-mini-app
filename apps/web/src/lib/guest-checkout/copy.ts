@@ -1,7 +1,7 @@
 import { fillTemplate } from '@tubutree/app-core/copy-template';
 
 /**
- * Chữ của đặt hàng không đăng nhập trên web (biểu mẫu /thanh-toan, trang theo dõi /don/[mã], nút của giỏ khách). Tính năng chỉ có trên web
+ * Chữ của đặt hàng không đăng nhập trên web (biểu mẫu /thanh-toan, trang theo dõi /don/[mã], trang tra cứu /don, nút của giỏ khách). Tính năng chỉ có trên web
  * nên chữ không nằm trong SHOP_COPY: Mini App nhập SHOP_COPY nguyên khối, thêm khoá vào đó làm gói Mini lớn thêm dù Mini không dùng.
  */
 export const GUEST_CHECKOUT_COPY = {
@@ -38,6 +38,19 @@ export const GUEST_CHECKOUT_COPY = {
   expires: 'Đường dẫn dùng được tới {date}.',
   receiver: 'Người nhận',
   area: 'Giao tới',
+  lookupTitle: 'Tra cứu đơn hàng',
+  lookupIntro: 'Nhập mã đơn và số điện thoại đã dùng khi đặt hàng.',
+  lookupCode: 'Mã đơn hàng',
+  lookupCodeHint: 'Mã có trong tin xác nhận, bắt đầu bằng TUBU.',
+  lookupCodeInvalid: 'Mã đơn gồm chữ và số, ví dụ TUBU2026112212345.',
+  lookupPhoneHint: 'Số điện thoại đã dùng khi đặt đơn.',
+  lookupSubmit: 'Tra cứu đơn',
+  lookupBusy: 'Đang tra cứu…',
+  lookupNotFound: 'Không tìm thấy đơn khớp mã và số điện thoại này. Bạn kiểm tra lại nhé.',
+  lookupTooMany: 'Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.',
+  lookupAccount: 'Đơn đặt khi đã đăng nhập Zalo nằm trong',
+  lookupAccountLink: 'Đơn của tôi',
+  lookupFromNotFound: 'Tra cứu bằng mã đơn',
 } as const;
 
 export type GuestCopyKey = keyof typeof GUEST_CHECKOUT_COPY;
@@ -77,6 +90,19 @@ export const GUEST_CHECKOUT_COPY_BUDGET: Record<GuestCopyKey, number | null> = {
   expires: 44,
   receiver: 16,
   area: 12,
+  lookupTitle: 24,
+  lookupIntro: 60,
+  lookupCode: 16,
+  lookupCodeHint: 56,
+  lookupCodeInvalid: 56,
+  lookupPhoneHint: 40,
+  lookupSubmit: 16,
+  lookupBusy: 16,
+  lookupNotFound: null,
+  lookupTooMany: 56,
+  lookupAccount: null,
+  lookupAccountLink: 16,
+  lookupFromNotFound: 24,
 };
 
 export function guestCopy(key: GuestCopyKey, vars: Record<string, string | number> = {}): string {

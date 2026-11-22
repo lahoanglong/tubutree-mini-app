@@ -38,6 +38,9 @@ const isSessionExpired = (e: unknown) => e instanceof ApiError && (e.status === 
 const sessionExpiredText = (e: ApiError) =>
   e.code !== 'SESSION_EXPIRED' && isBusinessMessage(e.message) ? e.message : SESSION_EXPIRED_MESSAGE;
 
+/** Nút dò tay sau khi khách chuyển xong: nói rõ bấm là kiểm ngay, không phải chờ nhịp dò nền. */
+export const CHECK_LABEL = 'Tôi đã chuyển khoản — Kiểm tra ngay';
+
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
 // 503 kèm lý do (vd. chưa cấu hình tài khoản nhận tiền): lý do ấy là thứ khách cần đọc, như Mini App; lỗi khác theo loadErrorText.
 const errorMessage = (e: unknown) =>
@@ -359,7 +362,7 @@ export function BankTransferPanel({
         aria-disabled={checking || undefined}
         className={`${ui.btnPrimary} mt-4 w-full max-md:mx-2 max-md:mt-3 max-md:w-[calc(100%-16px)] ${stickyCheck ? 'max-md:hidden' : ''}`}
       >
-        {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
+        {checking ? 'Đang kiểm tra…' : CHECK_LABEL}
       </button>
       {checkResult && (
         <p
@@ -379,7 +382,7 @@ export function BankTransferPanel({
             </p>
           )}
           <button type="button" onClick={check.press} aria-busy={checking || undefined} aria-disabled={checking || undefined} className={`${ui.btnPrimary} w-full`}>
-            {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
+            {checking ? 'Đang kiểm tra…' : CHECK_LABEL}
           </button>
         </StickyActionBar>
       )}
@@ -401,6 +404,11 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
   const [failed, setFailed] = useState(false);
   // Khoá riêng từng dòng chép: hai cú chạm cùng nhịp vào một dòng chỉ ghi clipboard một lần, còn chạm sang dòng khác vẫn chạy.
   const copying = useRef(false);
+  // Chép lại trong 2 giây vẫn giữ dấu "đã chép" đủ 2 giây tính từ lần cuối; rời trang thì huỷ hẹn giờ.
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  }, []);
   const copy = async () => {
     if (copying.current) return;
     copying.current = true;
@@ -409,7 +417,8 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
       const ok = await copyText(text);
       setFailed(!ok);
       setCopied(ok);
-      if (ok) setTimeout(() => setCopied(false), 2000);
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+      if (ok) resetTimer.current = setTimeout(() => setCopied(false), 2000);
     } finally {
       copying.current = false;
     }
@@ -421,11 +430,15 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
           <CopyButton text={text} label="Sao chép" />
         </span>
       )}
+      {/* Điện thoại: chép xong nút đổi dấu tích trên nền xanh 2 giây, nhìn là biết đã vào clipboard, không thêm chữ làm xô dòng. */}
       <button
         type="button"
         onClick={() => void copy()}
         aria-label={`Sao chép ${name}`}
-        className="-my-1.5 -mr-2.5 inline-flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--color-text-primary)] md:hidden"
+        data-copied={copied || undefined}
+        className={`-my-1.5 -mr-2.5 inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors md:hidden ${
+          copied ? 'bg-success-bg text-success-fg' : 'text-[color:var(--color-text-primary)]'
+        }`}
       >
         {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
       </button>

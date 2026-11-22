@@ -13,6 +13,7 @@ import type { Request } from 'express';
  *   chung IP (CGNAT) không bị cộng dồn mọi màn hình vào một bộ đếm.
  * - `authIp`: chỉ bật trên route gắn @AuthThrottle, là trần theo IP nới rộng cho đăng nhập/refresh,
  *   còn giới hạn chặt nằm ở `default` với khoá theo thiết bị/token.
+ * - `lookupPhone`: chỉ bật trên route gắn @LookupThrottle, trần theo định danh thứ hai khách gõ (SĐT), đếm chung mọi mã và mọi IP.
  * - `ssr`: trần riêng 3000/phút cho mỗi handler (khoá của throttler 6.5 gồm class + handler + tên + tracker, nên `ssr:bypass` đếm riêng từng route) cho request web SSR mang `x-throttle-bypass` đúng token. Request đó
  *   bỏ qua `default` và `authIp` (mọi SSR đi ra từ một IP máy chủ web) nhưng không được miễn hoàn toàn: token lộ hay
  *   một trang SSR bị khuếch đại (vd `/san-pham?q=`) vẫn chạm trần này.
@@ -45,6 +46,7 @@ export function hasValidBypass(req: Request): boolean {
 const isBypass = (ctx: ExecutionContext): boolean => hasValidBypass(ctx.switchToHttp().getRequest<Request>());
 
 const AUTH_IP_THROTTLE = 'tubu:auth-ip-throttle';
+const LOOKUP_PHONE_THROTTLE = 'tubu:lookup-phone-throttle';
 const STAFF_LOOKUP_THROTTLE = 'tubu:staff-lookup-throttle';
 
 export type AuthIdentity = (req: Request) => string | undefined;
@@ -110,6 +112,13 @@ export const throttlerOptions: ThrottlerModuleOptions = {
       getTracker: (req) => `ip:${throttleIpTracker(req as unknown as Request)}`,
       skipIf: (ctx: ExecutionContext) => isBypass(ctx) || Reflect.getMetadata(AUTH_IP_THROTTLE, ctx.getHandler()) !== true,
     },
+    {
+      // ttl/limit thật nằm ở decorator LookupThrottle của từng route.
+      name: 'lookupPhone',
+      ttl: THROTTLE_TTL_MS,
+      limit: AUTH_IDENTITY_LIMIT,
+      skipIf: (ctx: ExecutionContext) => isBypass(ctx) || Reflect.getMetadata(LOOKUP_PHONE_THROTTLE, ctx.getHandler()) !== true,
+    },
   ],
 };
 
@@ -127,19 +136,43 @@ export function StaffLookupThrottle(limit: number = STAFF_LOOKUP_LIMIT) {
  * Request không có định danh (sai định dạng, sẽ bị ValidationPipe trả 400) rơi về đếm theo IP.
  */
 export function AuthThrottle(identify: AuthIdentity) {
+  return identityThrottle('auth', identify, AUTH_IDENTITY_LIMIT, AUTH_IP_LIMIT);
+}
+
+/** Trần thứ hai của route tra cứu: định danh khác (SĐT) đếm riêng, chung mọi giá trị của định danh chính và mọi IP. */
+export interface LookupSecondaryThrottle {
+  identify: AuthIdentity;
+  limit: number;
+  ttlMs: number;
+}
+
+/**
+ * Route công khai tra theo hai thứ khách gõ (mã đơn + SĐT): trần theo mã để nhiều IP không chia nhau dò một mã, trần theo SĐT để người biết SĐT
+ * không dò cạn mã (mã đơn chỉ có 10^5 giá trị mỗi ngày) dù đổi IP, cộng trần theo IP để một máy không quét nhiều mã.
+ */
+export function LookupThrottle(identify: AuthIdentity, identityLimit: number, ipLimit: number, secondary: LookupSecondaryThrottle) {
+  return applyDecorators(
+    identityThrottle('lookup', identify, identityLimit, ipLimit),
+    SetMetadata(LOOKUP_PHONE_THROTTLE, true),
+    Throttle({ lookupPhone: { ttl: secondary.ttlMs, limit: secondary.limit, getTracker: hashedTracker('lookup-phone', secondary.identify) } }),
+  );
+}
+
+/** Băm định danh để bộ nhớ throttler không giữ giá trị thô; không có định danh (sẽ bị ValidationPipe trả 400) thì đếm theo IP. */
+function hashedTracker(prefix: string, identify: AuthIdentity) {
+  return (raw: Record<string, unknown>): string => {
+    const req = raw as unknown as Request;
+    const id = identify(req);
+    return id ? `${prefix}:${createHash('sha256').update(id).digest('hex')}` : `ip:${throttleIpTracker(req)}`;
+  };
+}
+
+function identityThrottle(prefix: string, identify: AuthIdentity, identityLimit: number, ipLimit: number) {
   return applyDecorators(
     SetMetadata(AUTH_IP_THROTTLE, true),
     Throttle({
-      default: {
-        ttl: THROTTLE_TTL_MS,
-        limit: AUTH_IDENTITY_LIMIT,
-        getTracker: (raw) => {
-          const req = raw as unknown as Request;
-          const id = identify(req);
-          return id ? `auth:${createHash('sha256').update(id).digest('hex')}` : `ip:${throttleIpTracker(req)}`;
-        },
-      },
-      authIp: { ttl: THROTTLE_TTL_MS, limit: AUTH_IP_LIMIT },
+      default: { ttl: THROTTLE_TTL_MS, limit: identityLimit, getTracker: hashedTracker(prefix, identify) },
+      authIp: { ttl: THROTTLE_TTL_MS, limit: ipLimit },
     }),
   );
 }

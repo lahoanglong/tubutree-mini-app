@@ -101,7 +101,7 @@ export function AddressPicker({
             </span>
             <span className="sr-only">{fillCopy('checkout.addressChangeAria')}</span>
           </button>
-          {/* Từ md giữ lối sửa ngay tại thanh toán như trước (BUYERWEB-14); điện thoại theo Mini App: sửa qua cảnh báo hoặc Sổ địa chỉ. */}
+          {/* Sửa ngay tại thanh toán ở mọi khổ (BUYERWEB-14): khách điện thoại gõ sai số nhà không phải rời trang sang Sổ địa chỉ. */}
           <button
             type="button"
             onClick={() => {
@@ -109,7 +109,7 @@ export function AddressPicker({
               setEditingId(selected.id);
             }}
             aria-label={`Sửa địa chỉ của ${selected.recipient}`}
-            className={`${ui.btnText} hidden shrink-0 md:inline-flex`}
+            className={`${ui.btnText} shrink-0`}
           >
             Sửa
           </button>

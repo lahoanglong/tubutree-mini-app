@@ -57,10 +57,10 @@ describe('/thanh-toan/chuyen-khoan — chữ như Mini App', () => {
     expect(c.textContent!.match(/Quét QR để chuyển khoản/g)).toHaveLength(1);
   });
 
-  it('nút chính "Tôi đã chuyển khoản — Kiểm tra" và nút phụ "Để sau / Xem đơn hàng"', async () => {
+  it('nút chính "Tôi đã chuyển khoản — Kiểm tra ngay" và nút phụ "Để sau / Xem đơn hàng"', async () => {
     const c = await mount();
     const buttons = Array.from(c.querySelectorAll<HTMLElement>('button, a'));
-    expect(buttons.find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra')).toBeDefined();
+    expect(buttons.find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra ngay')).toBeDefined();
     expect(buttons.find((b) => b.textContent === 'Để sau / Xem đơn hàng')).toBeDefined();
   });
 });
@@ -72,7 +72,7 @@ describe('/thanh-toan/chuyen-khoan — bố cục như Mini App ở điện tho�
     expect(card.className).toMatch(/\bmax-md:rounded-card\b/);
     expect(card.querySelector('img[alt="VietQR"]')).not.toBeNull();
     const wait = c.querySelector<HTMLElement>('[data-testid="bank-poll-status"]')!;
-    const primary = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra')!;
+    const primary = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra ngay')!;
     expect(card.contains(wait)).toBe(false);
     expect(card.contains(primary)).toBe(false);
     expect(primary.className).toMatch(/\bw-full\b/);
@@ -181,8 +181,8 @@ describe('/thanh-toan/chuyen-khoan — bố cục điện thoại như Mini App 
     const save = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Lưu mã QR'))!;
     expect(save.className).toMatch(/\bmax-md:w-full\b/);
     const bar = c.querySelector('[data-testid="sticky-bar"]')!;
-    expect(bar.querySelector('button')!.textContent).toBe('Tôi đã chuyển khoản — Kiểm tra');
-    const inline = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra' && !bar.contains(b))!;
+    expect(bar.querySelector('button')!.textContent).toBe('Tôi đã chuyển khoản — Kiểm tra ngay');
+    const inline = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra ngay' && !bar.contains(b))!;
     expect(inline.className).toMatch(/\bmax-md:hidden\b/);
   });
 

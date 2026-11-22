@@ -90,6 +90,17 @@ describe('/don/[code] theo dõi đơn không đăng nhập', () => {
     expect(r2.container.querySelector('[data-testid="guest-order-not-found"]')?.textContent).toBe(nf);
   });
 
+  it('không tìm thấy (mất khoá, khoá hết hạn): lối chính là tra cứu bằng mã đơn, điền sẵn mã đang mở', async () => {
+    window.history.replaceState(null, '', '/don/TB777');
+    const r = await mount();
+    const nf = r.container.querySelector<HTMLElement>('[data-testid="guest-order-not-found"]')!;
+    const link = nf.querySelector<HTMLAnchorElement>('[data-testid="guest-order-lookup-link"]')!;
+    expect(link.getAttribute('href')).toBe('/don?ma=TB777');
+    expect(link.textContent).toBe('Tra cứu bằng mã đơn');
+    expect(link.className).toMatch(/\bmin-h-11\b/);
+    expect(nf.querySelectorAll('a')[1]?.getAttribute('href')).toBe('/');
+  });
+
   it('mở lại không có #k= (khoá lấy từ bộ nhớ trình duyệt, như khi quay về từ đăng nhập): nút chép vẫn chép đường dẫn có khoá', async () => {
     localStorage.setItem('tubu.guestCheckout.orders', JSON.stringify({ TB777: { k: KEY, at: Date.now() } }));
     window.history.replaceState(null, '', '/don/TB777');

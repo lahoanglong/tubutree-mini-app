@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -17,6 +17,7 @@ import {
 import { Trim } from '../../../../common/decorators/trim.decorator';
 import { NO_HTML } from '../../../users/dto/address.dto';
 import { MAX_ITEM_QUANTITY } from '../../../cart/dto/cart.dto';
+import { toLocalPhone } from '../../../../common/phone';
 
 /** Số di động Việt Nam dạng 0xxxxxxxxx (đầu 03, 05, 07, 08, 09): web chuẩn hoá +84, dấu cách trước khi gửi. */
 export const GUEST_MOBILE_RE = /^0[35789]\d{8}$/;
@@ -64,4 +65,30 @@ export class GuestPlaceOrderDto extends GuestQuoteDto {
   @IsOptional() @IsString() @MaxLength(200) website?: string;
   /** Số mili giây từ lúc mở biểu mẫu tới lúc bấm Đặt hàng. */
   @IsInt() @Min(0) @Max(86_400_000) fillMs!: number;
+}
+
+/** Mã đơn trên đơn hàng: chữ hoa, số, gạch nối (TUBU…, DLR…, TUBUSUB…). */
+export const GUEST_LOOKUP_CODE_RE = /^[A-Z0-9-]{4,40}$/;
+
+/** Mã đơn khách gõ hay dán: bỏ mọi khoảng trắng, dấu # ở đầu và viết hoa. */
+export function normalizeLookupCode(value: unknown): unknown {
+  return typeof value === 'string' ? value.replace(/\s+/g, '').replace(/^#+/, '').toUpperCase() : value;
+}
+
+/** SĐT khách gõ: bỏ ký tự không phải số, 84 + 9 số (kể cả "+84 0…" gõ thừa số 0) về 0 + 9 số (cùng dạng `orders.guestPhone`). */
+export function normalizeLookupPhone(value: unknown): unknown {
+  return typeof value === 'string' ? (toLocalPhone(value) ?? '').replace(/^840(\d{9})$/, '0$1') : value;
+}
+
+/** Tra đơn đặt không đăng nhập: mã đơn + đúng SĐT đặt hàng. Sai khuôn 400 (không lộ gì về đơn); đúng khuôn mà không khớp thì 404. */
+export class GuestLookupDto {
+  @Transform(({ value }: { value: unknown }) => normalizeLookupCode(value))
+  @IsString()
+  @Matches(GUEST_LOOKUP_CODE_RE, { message: 'Mã đơn chưa đúng. Mã đơn in trong tin xác nhận, bắt đầu bằng TUBU.' })
+  orderCode!: string;
+
+  @Transform(({ value }: { value: unknown }) => normalizeLookupPhone(value))
+  @IsString()
+  @Matches(GUEST_MOBILE_RE, MOBILE_MSG)
+  phone!: string;
 }

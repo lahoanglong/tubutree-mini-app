@@ -66,6 +66,23 @@ describe('SiteFooter', () => {
     for (const a of nav.match(/<a [^>]*>/g) ?? []) expect(a).toContain('min-h-11');
   });
 
+  it('cờ đặt không đăng nhập bật: lối "Tra cứu đơn hàng" (/don) ở cả chân trang đầy đủ và gọn, chỉ chữ, vùng chạm 44px; cờ tắt thì không có', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    expect(await html()).not.toContain('href="/don"');
+
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', guestOrderLookup: true });
+    const out = await html();
+    const links = out.match(/<a [^>]*href="\/don"[^>]*>[\s\S]*?<\/a>/g) ?? [];
+    expect(links).toHaveLength(2);
+    for (const a of links) {
+      expect(a).toContain('min-h-11');
+      expect(a).toContain('Tra cứu đơn hàng');
+      expect(a).not.toContain('<svg');
+    }
+    const compact = out.match(/<footer[^>]*data-compact-footer[^>]*>[\s\S]*?<\/footer>/)?.[0] ?? '';
+    expect(compact).toContain('href="/don"');
+  });
+
   it('hiện kênh cộng đồng nào đã có link (mở tab mới, rel an toàn); chưa có thì không vẽ khối', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     expect(await html()).not.toContain('Kênh cộng đồng');

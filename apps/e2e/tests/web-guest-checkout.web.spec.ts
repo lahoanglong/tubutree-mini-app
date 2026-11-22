@@ -30,6 +30,10 @@ const PROVINCE = { code: '84_VN79', name: 'TP. Hồ Chí Minh' };
 const WARD = { code: '84_VN7901', name: 'Phường Bến Thành' };
 const CODE = 'TUBU2026111800042';
 const GUEST_CART_KEY = 'tubu.guestCart.v1';
+const GUEST_DRAFT_KEY = 'tubu.guestCheckout.draft';
+const LOOKUP_PHONE = '0912345678';
+/** Khoá tạm máy chủ cấp khi tra đúng mã + SĐT: cùng khuôn 43 ký tự base64url với khoá trình duyệt tự sinh. */
+const LOOKUP_KEY = 'L'.repeat(43);
 
 interface Detail {
   slug: string;
@@ -93,10 +97,15 @@ function quoteFor(d: Detail, quantity: number, opts: QuoteOpts = {}) {
   };
 }
 
-/** Đơn đã đặt ghi khoá theo dõi gửi lên; GET theo dõi chỉ trả đơn khi header `x-order-key` đúng khoá đó, sai thì cùng 404 như mã không có. */
-function mockGuestOrders(api: MockApi, d: Detail, opts: QuoteOpts = {}): { key: () => string | null } {
+/**
+ * Đơn đã đặt ghi khoá theo dõi gửi lên; GET theo dõi chỉ trả đơn khi header `x-order-key` đúng khoá đó (hoặc khoá tạm đã cấp qua tra cứu mã + SĐT),
+ * sai thì cùng 404 như mã không có. `method` đặt sẵn phương thức của đơn khi spec tra cứu mà không đặt đơn trước.
+ */
+function mockGuestOrders(api: MockApi, d: Detail, opts: QuoteOpts & { method?: 'COD' | 'BANK_TRANSFER' } = {}): { key: () => string | null } {
   let key: string | null = null;
-  let method: 'COD' | 'BANK_TRANSFER' = 'COD';
+  let lookupIssued = false;
+  let method: 'COD' | 'BANK_TRANSFER' = opts.method ?? 'COD';
+  const keyOk = (header: string | undefined) => (!!key && header === key) || (lookupIssued && header === LOOKUP_KEY);
   api.post('/checkout/guest/quote', ({ call }) => {
     const body = call.body as { lines: { quantity: number }[] };
     return quoteFor(d, body.lines[0]!.quantity, opts);
@@ -109,8 +118,7 @@ function mockGuestOrders(api: MockApi, d: Detail, opts: QuoteOpts = {}): { key: 
     return { code: CODE, status: method === 'COD' ? 'CONFIRMED' : 'PENDING_PAYMENT', paymentMethod: method, total: q.total, codes: [CODE], keyAccepted: true };
   });
   const notFound = reply(404, { statusCode: 404, message: 'Không tìm thấy đơn hàng.' });
-  api.get('/checkout/guest/orders/:code', ({ call, params }) => {
-    if (params.code !== CODE || !key || call.headers['x-order-key'] !== key) return notFound;
+  const view = () => {
     const q = quoteFor(d, 1, opts);
     return {
       code: CODE,
@@ -130,9 +138,25 @@ function mockGuestOrders(api: MockApi, d: Detail, opts: QuoteOpts = {}): { key: 
       siblings: [],
       expiresAt: null,
     };
+  };
+  api.get('/checkout/guest/orders/:code', ({ call, params }) => {
+    if (params.code !== CODE || !keyOk(call.headers['x-order-key'])) return notFound;
+    return view();
+  });
+  api.post('/checkout/guest/lookup', ({ call }) => {
+    const body = call.body as { orderCode: string; phone: string };
+    if (body.orderCode !== CODE || body.phone !== LOOKUP_PHONE) return reply(404, { statusCode: 404, message: 'Không tìm thấy đơn khớp mã đơn và số điện thoại này.' });
+    lookupIssued = true;
+    return {
+      order: view(),
+      trackingKey: LOOKUP_KEY,
+      trackPath: `/don/${CODE}#k=${LOOKUP_KEY}`,
+      bankPath: method === 'BANK_TRANSFER' ? `/thanh-toan/chuyen-khoan/${CODE}#k=${LOOKUP_KEY}` : null,
+      linkExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    };
   });
   api.get('/checkout/guest/orders/:code/bank-qr', ({ call, params }) => {
-    if (params.code !== CODE || !key || call.headers['x-order-key'] !== key) return notFound;
+    if (params.code !== CODE || !keyOk(call.headers['x-order-key'])) return notFound;
     const q = quoteFor(d, 1, opts);
     return {
       orderCode: CODE,
@@ -338,6 +362,106 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
       texts.push((await nf.textContent()) ?? '');
     }
     expect(new Set(texts).size).toBe(1);
+  });
+
+  test('/don tra cứu: từ trang không tìm thấy sang /don?ma= điền sẵn mã; sai SĐT báo một câu chung; đúng SĐT mở trang theo dõi bằng khoá tạm', async ({ page, api, request }, testInfo) => {
+    const d = await inStockProduct(request);
+    test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
+    test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
+    const mobile = testInfo.project.name === 'Web Customer Mobile';
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+    await setServerGuestCheckout(request, true);
+    mockShop(api, d!, true);
+    mockGuestOrders(api, d!);
+
+    await page.goto(`/don/${CODE}`);
+    await expect(page.getByTestId('guest-order-not-found')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('guest-order-lookup-link').click();
+    await page.waitForURL(new RegExp(`/don\\?ma=${CODE}$`), { timeout: 15_000 });
+    const codeInput = page.getByTestId('guest-lookup-code');
+    await expect(codeInput).toHaveValue(CODE, { timeout: 15_000 });
+    expect(await page.locator('meta[name="robots"]').getAttribute('content')).toContain('noindex');
+    expect(await page.locator('meta[name="referrer"]').getAttribute('content')).toBe('no-referrer');
+    if (mobile) {
+      const p = await probeW182(page, { touch: true, capsule: false });
+      expect(p.overflowX, `/don 390px tràn ngang ${JSON.stringify(p.rightOverflow)}`).toBeLessThanOrEqual(0);
+      expect(p.small, `/don 390px vùng chạm nhỏ ${JSON.stringify(p.small)}`).toEqual([]);
+      expect(p.textOverlap, '/don 390px chữ đè nhau').toEqual([]);
+      await shoot(page, SHOTS_DIR, 'after-lookup-390');
+    }
+
+    const phone = page.getByTestId('guest-lookup-phone');
+    await phone.fill('0987654321');
+    await page.getByTestId('guest-lookup-submit').click();
+    await expect(page.getByTestId('guest-lookup-error')).toHaveText('Không tìm thấy đơn khớp mã và số điện thoại này. Bạn kiểm tra lại nhé.', { timeout: 15_000 });
+    expect(page.url()).toContain('/don?ma=');
+
+    await phone.fill('+84 912 345 678');
+    await expect(page.getByTestId('guest-lookup-error')).toHaveCount(0);
+    await page.getByTestId('guest-lookup-submit').click();
+    await page.waitForURL(new RegExp(`/don/${CODE}#k=${LOOKUP_KEY}$`), { timeout: 20_000 });
+    await expect(page.getByTestId('guest-order-phone')).toContainText('091****678', { timeout: 15_000 });
+    const lookups = api.callsTo('POST', '/checkout/guest/lookup');
+    expect(lookups.map((c) => c.body)).toEqual([
+      { orderCode: CODE, phone: '0987654321' },
+      { orderCode: CODE, phone: LOOKUP_PHONE },
+    ]);
+    expect(lookups[1]!.headers.authorization).toBeUndefined();
+    expect(await page.evaluate(() => localStorage.getItem('tubu.guestCheckout.orders'))).toBeNull();
+  });
+
+  test('/don tra cứu đơn chuyển khoản đang chờ tiền: sang thẳng trang QR bằng khoá tạm', async ({ page, api, request }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'một khổ là đủ, luồng như nhau');
+    const d = await inStockProduct(request);
+    test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
+    test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
+    await setServerGuestCheckout(request, true);
+    mockShop(api, d!, true);
+    mockGuestOrders(api, d!, { method: 'BANK_TRANSFER' });
+    await page.goto('/don');
+    await page.getByTestId('guest-lookup-code').fill(` #${CODE.toLowerCase()} `);
+    await page.getByTestId('guest-lookup-phone').fill(LOOKUP_PHONE);
+    await page.getByTestId('guest-lookup-submit').click();
+    await page.waitForURL(new RegExp(`/thanh-toan/chuyen-khoan/${CODE}#k=${LOOKUP_KEY}$`), { timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: 'Quét QR để chuyển khoản' })).toBeVisible({ timeout: 15_000 });
+    // Tiêu đề hiện trước khi QR về: chờ số tài khoản (chỉ có trong trả lời bank-qr) rồi mới đọc lời gọi.
+    await expect(page.getByText('9984606774').first()).toBeVisible({ timeout: 15_000 });
+    expect(api.callsTo('POST', '/checkout/guest/lookup')[0]!.body).toEqual({ orderCode: CODE, phone: LOOKUP_PHONE });
+    expect(api.callsTo('GET', '/checkout/guest/orders/:code/bank-qr')[0]!.headers['x-order-key']).toBe(LOOKUP_KEY);
+    await expect(page.locator('button:visible', { hasText: 'Tôi đã chuyển khoản — Kiểm tra ngay' }).first()).toBeVisible();
+  });
+
+  test('nháp biểu mẫu: tải lại trang vẫn còn tên, SĐT, tỉnh/phường, số nhà, ghi chú; đặt xong thì xoá', async ({ page, api, request }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'một khổ là đủ: nháp không phụ thuộc khổ màn hình');
+    const d = await inStockProduct(request);
+    test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockShop(api, d!, true);
+    mockGuestOrders(api, d!);
+    await seedGuestCart(page, d!, 1);
+
+    await page.goto('/thanh-toan');
+    const form = page.getByTestId('guest-checkout');
+    await expect(form).toBeVisible({ timeout: 15_000 });
+    await fillContactAndAddress(page, tapCounter(page));
+    await form.getByLabel('Ghi chú cho đơn (không bắt buộc)').fill('Gọi trước khi giao');
+    await expect.poll(() => page.evaluate((k) => sessionStorage.getItem(k), GUEST_DRAFT_KEY)).toContain('Gọi trước khi giao');
+    expect(await page.evaluate((k) => localStorage.getItem(k), GUEST_DRAFT_KEY)).toBeNull();
+
+    await page.reload();
+    await expect(form).toBeVisible({ timeout: 15_000 });
+    await expect(form.getByLabel('Họ tên người nhận')).toHaveValue('Nguyễn Văn An');
+    await expect(form.getByLabel('Số điện thoại', { exact: true })).toHaveValue(/0912\s?345\s?678/);
+    await expect(form.getByLabel('Phường/Xã')).toContainText(WARD.name);
+    await expect(form.getByLabel('Số nhà, tên đường')).toHaveValue('12 Lê Lợi');
+    await expect(form.getByLabel('Ghi chú cho đơn (không bắt buộc)')).toHaveValue('Gọi trước khi giao');
+
+    const place = visible(page, 'guest-place-order');
+    await expect(place).toBeEnabled({ timeout: 15_000 });
+    await place.click();
+    await page.waitForURL(new RegExp(`/don/${CODE}#k=`), { timeout: 20_000 });
+    expect((api.callsTo('POST', '/checkout/guest/orders')[0]!.body as { address: { street: string } }).address.street).toBe('12 Lê Lợi');
+    expect(await page.evaluate((k) => sessionStorage.getItem(k), GUEST_DRAFT_KEY)).toBeNull();
   });
 
   test('biểu mẫu và trang theo dõi 360/390/768/1440: không tràn ngang, vùng chạm 44px, chữ không đè', async ({ page, api, request }, testInfo) => {

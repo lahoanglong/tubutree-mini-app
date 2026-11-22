@@ -40,7 +40,7 @@ import {
   GUEST_DAILY_IP_CAP_KEY,
   WEB_GUEST_CHECKOUT_ENABLED_KEY,
 } from '../../src/modules/checkout/guest/guest-checkout.config';
-import type { GuestPlaceOrderDto } from '../../src/modules/checkout/guest/dto/guest-checkout.dto';
+import type { GuestLookupDto, GuestPlaceOrderDto } from '../../src/modules/checkout/guest/dto/guest-checkout.dto';
 import type { Env } from '../../src/config/env.validation';
 import { createOrder, createRealUser, createUser, pinConfig, randCode, setConfig, uniquePhone, warmPool } from './helpers';
 import { buyerFlashLimitKeys, flashLimitKeys, isLegacyFlashKey } from '../../src/modules/flash-sale/flash-buyer-keys';
@@ -495,6 +495,65 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
       const o = await guest.placeOrder({ deviceId: device(), ip: ip() }, dto, idem());
       await expect(guest.bankQr(o.code, dto.trackingKey)).resolves.toMatchObject({ code: o.code });
       await expect(guest.bankQr(o.code, trackingKey())).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('tra đơn bằng mã đơn + SĐT (tubu-w16-02)', () => {
+    const lookupOf = (orderCode: string, phone: string) => guest.lookup({ orderCode, phone } as GuestLookupDto);
+    const LOOKUP_404 = 'Không tìm thấy đơn khớp mã đơn và số điện thoại này.';
+
+    it('khớp: bản xem đã che + khoá tạm 43 ký tự mở được trang theo dõi; khoá gốc của trình duyệt vẫn dùng được; COD không có bankPath', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const dto = placeDto([{ variationId: v, quantity: 1 }], phone);
+      const o = await guest.placeOrder({ deviceId: device(), ip: ip() }, dto, idem());
+      const res = await lookupOf(o.code, phone);
+      expect(res.order).toMatchObject({ code: o.code, phoneMasked: `${phone.slice(0, 3)}****${phone.slice(-3)}`, area: { ward: 'Phuong IT', province: 'Ha Noi' } });
+      expect(JSON.stringify(res)).not.toContain(phone);
+      expect(JSON.stringify(res)).not.toContain('12 Ngo IT');
+      expect(JSON.stringify(res)).not.toContain('Khach Vang Lai');
+      expect(res.trackingKey).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(res.trackPath).toBe(`/don/${o.code}#k=${res.trackingKey}`);
+      expect(res.bankPath).toBeNull();
+      expect(new Date(res.linkExpiresAt).getTime() - Date.now()).toBeGreaterThan(23 * 3_600_000);
+      await expect(guest.track(o.code, res.trackingKey)).resolves.toMatchObject({ code: o.code });
+      await expect(guest.track(o.code, dto.trackingKey)).resolves.toMatchObject({ code: o.code });
+    });
+
+    it('chuyển khoản chờ tiền: bankPath mở lại QR bằng khoá tạm', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const o = await guest.placeOrder({ deviceId: device(), ip: ip() }, placeDto([{ variationId: v, quantity: 1 }], phone, { paymentMethod: 'BANK_TRANSFER' }), idem());
+      const res = await lookupOf(o.code, phone);
+      expect(res.order.status).toBe('PENDING_PAYMENT');
+      expect(res.bankPath).toBe(`/thanh-toan/chuyen-khoan/${o.code}#k=${res.trackingKey}`);
+      await expect(guest.bankQr(o.code, res.trackingKey)).resolves.toMatchObject({ code: o.code });
+    });
+
+    it('sai SĐT, mã không có, đơn của tài khoản thường (đúng SĐT): cùng một 404, cùng câu', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const o = await guest.placeOrder({ deviceId: device(), ip: ip() }, placeDto([{ variationId: v, quantity: 1 }], phone), idem());
+      const acc = await account(phone);
+      const accOrder = await createOrder(prisma, { userId: acc.userId });
+      const errs = await Promise.allSettled([lookupOf(o.code, uniquePhone()), lookupOf(`${o.code}9`, phone), lookupOf(accOrder.code, phone)]);
+      for (const r of errs) {
+        expect(r.status).toBe('rejected');
+        expect((r as PromiseRejectedResult).reason).toBeInstanceOf(NotFoundException);
+        expect(((r as PromiseRejectedResult).reason as NotFoundException).message).toBe(LOOKUP_404);
+      }
+    });
+
+    it('khoá tạm của đơn A không mở đơn B cùng SĐT; đơn giao quá 60 ngày: tra cứu 404', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const a = await guest.placeOrder({ deviceId: device(), ip: ip() }, placeDto([{ variationId: v, quantity: 1 }], phone), idem());
+      const b = await guest.placeOrder({ deviceId: device(), ip: ip() }, placeDto([{ variationId: v, quantity: 2 }], phone), idem());
+      const keyA = (await lookupOf(a.code, phone)).trackingKey;
+      await expect(guest.track(b.code, keyA)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(guest.bankQr(b.code, keyA)).rejects.toBeInstanceOf(NotFoundException);
+      await prisma.order.update({ where: { code: b.code }, data: { status: 'DELIVERED', deliveredAt: new Date(Date.now() - 61 * 86_400_000), deliveredEffectsAt: new Date() } });
+      await expect(lookupOf(b.code, phone)).rejects.toMatchObject({ message: LOOKUP_404 });
     });
   });
 

@@ -8,6 +8,7 @@ import { LEGAL_PAGES, LEGAL_SLUGS, companyLegalLine, isBctNoticeUrl, merchantIde
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { isWebRouteReady } from '@/lib/route-map';
 import { FooterProgramLinks } from '@/components/footer-program-links';
+import { guestCopy } from '@/lib/guest-checkout/copy';
 
 const LINK =
   'inline-flex min-h-11 min-w-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -21,6 +22,9 @@ function operatorLine(company: SupportContact['company']): string | null {
   const parts = [id.legalName, id.taxCode ? `MST ${id.taxCode}` : undefined, id.address].filter(Boolean);
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
 }
+
+/** Khách đặt không đăng nhập mất đường dẫn theo dõi: chỉ chữ, không icon (chân trang nằm trong HTML mọi trang, kể cả trang chủ). */
+const LOOKUP_LABEL = guestCopy('lookupTitle');
 
 type DiscoverLink = { to: string; label: string; external?: boolean };
 
@@ -91,7 +95,7 @@ function CompanyInfo({ company, className }: { company: SupportContact['company'
 
 /** Chân trang web khách: liên hệ hỗ trợ lấy từ cấu hình công khai (admin đổi được). */
 export default async function SiteFooter() {
-  const { hotline, email, community, company } = await getPublicSupport();
+  const { hotline, email, community, company, guestOrderLookup } = await getPublicSupport();
   // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0984 606 774".
   const tel = hotline.replace(/[^\d+]/g, '');
   const channels = [
@@ -129,6 +133,13 @@ export default async function SiteFooter() {
                 <span>{email}</span>
               </a>
             </li>
+            {guestOrderLookup && (
+              <li>
+                <Link href="/don" className={LINK}>
+                  {LOOKUP_LABEL}
+                </Link>
+              </li>
+            )}
           </ul>
         </div>
       </div>
@@ -174,6 +185,11 @@ export default async function SiteFooter() {
           <Mail className="h-4 w-4" aria-hidden="true" />
           <span>{email}</span>
         </a>
+        {guestOrderLookup && (
+          <Link href="/don" className={LINK}>
+            {LOOKUP_LABEL}
+          </Link>
+        )}
         <a href="https://blog.tubutree.com" target="_blank" rel="noopener noreferrer" className={LINK}>
           <span>Blog</span>
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
