@@ -2,6 +2,7 @@
 
 // Nguồn: apps/miniapp/src/components/home/home-combos.tsx
 import type { ComboView } from '@tubutree/app-core/commerce/bundle-view';
+import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useRouter } from 'next/navigation';
 import { ComboCard, RailShell, SectionHeader } from '@/components/mini';
@@ -17,8 +18,9 @@ export interface HomeCombosProps {
 }
 
 /**
- * Combo tiết kiệm (khối `combos` của Trang chủ, sau Bán chạy nhất): mỗi thẻ một combo toàn sàn, "Thêm cả combo" vào giỏ ngay tại Trang chủ.
- * Rỗng thì không dựng gì (cũng không gọi hook giỏ/định tuyến): phần lớn lượt xem chưa có combo nào.
+ * Combo tiết kiệm (khối `combos` của Trang chủ, sau Bán chạy nhất): mỗi thẻ một combo toàn sàn, "Thêm cả combo" vào giỏ ngay tại Trang chủ;
+ * "Xem tất cả" mở trang Bộ quà tặng `/bo-qua-tang` như Mini App. Rỗng thì không dựng gì (cũng không gọi hook giỏ/định tuyến): phần lớn lượt
+ * xem chưa có combo nào.
  */
 export function HomeCombos({ views }: HomeCombosProps) {
   return views.length === 0 ? null : <HomeCombosRail views={views} />;
@@ -28,9 +30,10 @@ function HomeCombosRail({ views }: HomeCombosProps) {
   const { add, busyId, result } = useBundleAdd([bundleKeys.homeCombos]);
   const router = useRouter();
   const title = fillCopy('combo.homeTitle');
+  const seeAll = seeAllHref('home.combos', 'web');
   return (
     <section aria-label={title} data-testid="home-combos">
-      <SectionHeader title={title} />
+      <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {views.map((v) => {
           // Ưu tiên món còn hàng: combo "tạm hết" vẫn dẫn được tới một món mua được, không thành ngõ cụt.

@@ -14,6 +14,7 @@ import { refillUnitSaving } from './refill-rail';
  */
 export const REFILL_SAVING_COPY = {
   badge: 'Rẻ hơn {pct}%/{per}',
+  cartSave: 'Tiết kiệm {amount}',
   offerTitle: 'Chọn {pack} Refill{size}',
   offerTitleSave: 'Chọn {pack} Refill{size} tiết kiệm {amount} (~{pct}%)',
   offerMeta: 'Thay thế {n} chai nhựa · {price}',
@@ -24,6 +25,7 @@ export type RefillSavingCopyKey = keyof typeof REFILL_SAVING_COPY;
 /** Trần độ dài sau khi điền số: huy hiệu một dòng cạnh nhãn ở khổ 360; tiêu đề thẻ tối đa hai dòng, dòng phụ một dòng cạnh nút "+ Thêm" ở khổ 320. */
 export const REFILL_SAVING_COPY_MAX: Record<RefillSavingCopyKey, number> = {
   badge: 18,
+  cartSave: 20,
   offerTitle: 28,
   offerTitleSave: 52,
   offerMeta: 36,
@@ -35,8 +37,16 @@ export function refillSavingCopy(key: RefillSavingCopyKey, vars: Record<string, 
 
 type Bottle = { name: string; price: number };
 
-/** "Rẻ hơn 34%/100ml": gói Refill rẻ hơn chai trên cùng lượng (làm tròn xuống); null khi không đọc được lượng hay không rẻ hơn. */
+/**
+ * Huy hiệu của liên kết đổi ở giỏ: "Tiết kiệm 470.000đ", số đồng gói Refill rẻ hơn mua chai cùng lượng (`computeRefillValueComparison`, cùng số
+ * với thẻ ở trang chi tiết chai). Gói nhỏ hơn một chai thì không có số đồng để so, còn "Rẻ hơn 34%/100ml". Null khi không đọc được lượng hay
+ * gói không rẻ hơn.
+ */
 export function refillSavingBadge(bottle: Bottle, offer: Pick<RefillOfferDTO, 'name' | 'sizeLabel' | 'price'>): string | null {
+  const b = parseNetAmount(bottle.name, '');
+  const r = parseNetAmount(offer.sizeLabel ?? '', offer.name);
+  const cmp = b && r && b.unit === r.unit ? computeRefillValueComparison(bottle.price, b.qty, offer.price, r.qty) : null;
+  if (cmp) return refillSavingCopy('cartSave', { amount: vnd(cmp.savedVnd) });
   const s = refillUnitSaving(bottle, offer);
   return s ? refillSavingCopy('badge', s) : null;
 }

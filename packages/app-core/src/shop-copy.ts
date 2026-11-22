@@ -771,6 +771,11 @@ export const SHOP_COPY: Record<string, string> = {
   'refill.confirmTitle': 'Đổi sang Refill?',
   'refill.confirmBody': '{name} · {price}, dùng lại chai bạn đang có.',
   'refill.confirmUp': 'Dòng này tăng {amount}.',
+  // Câu tiết kiệm ở tấm xác nhận: {saving} là huy hiệu của liên kết ("Tiết kiệm 470.000đ" hoặc "Rẻ hơn 34%/100ml").
+  'refill.confirmSaving': '{saving} so với mua chai cùng lượng.',
+  // Mốc giỏ đang thiếu mà đổi xong thì đạt (cùng số với thanh Miễn phí giao hàng / quà 0đ của giỏ).
+  'refill.gainFreeship': 'Giỏ sẽ đủ Miễn phí giao hàng',
+  'refill.gainGift': 'Giỏ sẽ đủ nhận quà 0đ',
   'refill.confirmCta': 'Đổi sang Refill',
   'refill.swapped': 'Đã đổi sang Refill',
   'refill.railBadge': 'Đổi sang túi Refill{size}',

@@ -1,4 +1,4 @@
-import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, RefreshCw, ScanLine, Sprout, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
+import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, RefreshCw, ScanLine, ShoppingBasket, Sprout, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
 import { liveRoute } from '@tubutree/app-core/merch/route-fallback';
 import type { HomePillarId, HomeShortcutId } from '@tubutree/app-core/home-layout';
 
@@ -9,6 +9,7 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
   recycle: Recycle,
   groupBuy: Users,
   coupons: Ticket,
+  gifts: ShoppingBasket,
   claim: ScanLine,
   earn: HeartHandshake,
   community: MessagesSquare,
@@ -34,6 +35,7 @@ export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   recycle: '/doi-rac',
   groupBuy: '/mua-chung',
   coupons: liveRoute('/vouchers', 'web'),
+  gifts: liveRoute('/gift-combos', 'web'),
   claim: '/points/scan',
   earn: null,
   community: '/cong-dong',

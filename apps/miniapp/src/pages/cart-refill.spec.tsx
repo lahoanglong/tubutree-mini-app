@@ -122,11 +122,14 @@ describe('Giỏ Mini: đổi dòng chai sang gói Refill (catalog.refill_first_e
     renderPage();
     await waitFor(() => expect(link()).not.toBeNull());
     expect(mocks.pairs).toHaveBeenCalledWith(['p-bottle']);
-    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Rẻ hơn 45%/100ml');
+    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ (+530.000đ) Tiết kiệm 550.000đ');
+    expect(screen.getByText('Tiết kiệm 550.000đ').style.fontVariantNumeric).toBe('tabular-nums');
     expect(trackEvent).toHaveBeenCalledWith('refill_swap_shown', 'miniapp', { surface: 'cart' });
 
     fireEvent.click(link()!);
     expect(await screen.findByText('Đổi sang Refill?')).toBeInTheDocument();
+    // Mốc lấy đúng ngưỡng giỏ máy chủ trả (freeshipThreshold 199.000đ của cấu hình), cùng số với thanh mốc của giỏ.
+    expect(document.body.textContent).toContain('Dòng này tăng 530.000đ. Tiết kiệm 550.000đ so với mua chai cùng lượng. Giỏ sẽ đủ Miễn phí giao hàng.');
     expect(mocks.addToCart).not.toHaveBeenCalled();
 
     const order: string[] = [];
@@ -172,7 +175,7 @@ describe('Giỏ Mini: đổi dòng chai sang gói Refill (catalog.refill_first_e
     mocks.removeCartItem.mockResolvedValue(summary([REFILL_LINE]));
     renderPage();
     await waitFor(() => expect(link()).not.toBeNull());
-    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Rẻ hơn 45%/100ml');
+    expect(link()!.textContent).toBe('Đã có chai? Đổi sang Refill 10L · 650.000đ Tiết kiệm 550.000đ');
     fireEvent.click(link()!);
     expect(await screen.findByText('Đã đổi sang Refill')).toBeInTheDocument();
     expect(screen.queryByText('Đổi sang Refill?')).toBeNull();

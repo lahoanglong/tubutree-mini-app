@@ -10,6 +10,7 @@ import {
   type HomeShortcutSpec,
 } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
+import { isRootPath, useSmartNavigate } from '../../lib/smart-nav';
 import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
@@ -65,9 +66,14 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
     return spec && to ? [{ spec, to }] : [];
   });
 
+  const goSmart = useSmartNavigate();
+  // Lối tắt tới trang con (Bộ quà tặng, Đơn hàng...) đi qua smartNavigate: đích chính là trang ngay trước thì lùi thật, không chồng bản sao
+  // vào lịch sử. Đích là tab gốc (Ưu đãi) giữ cách mở như cũ của Trang chủ.
+  const go = (to: string) => (isRootPath(to.split(/[?#]/)[0]!) ? navigate(to) : goSmart(to));
+
   const open = (s: HomeShortcutSpec) => {
     const to = SHORTCUT_ROUTES[s.id];
-    if (to) navigate(to);
+    if (to) go(to);
     else {
       setEarnUsed(true);
       setEarnOpen(true);
@@ -144,7 +150,7 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
             className="tubu-quick-pill tubu-press"
             onClick={() => {
               haptic('light');
-              navigate(to);
+              go(to);
             }}
           >
             <span aria-hidden="true">

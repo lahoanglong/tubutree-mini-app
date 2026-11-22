@@ -63,6 +63,14 @@ describe('HomeCombos (web)', () => {
     expect(section.querySelector('[aria-label="Combo tiết kiệm, vuốt ngang để xem thêm"]')).not.toBeNull();
   });
 
+  it('"Xem tất cả" ở đầu khối là liên kết thật tới /bo-qua-tang (như Mini App mở /gift-combos), chỉ một lối trong khối', async () => {
+    const c = await mount(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />);
+    const links = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="home-combos"] a[href="/bo-qua-tang"]'));
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toContain('Xem tất cả');
+    expect(links[0]!.getAttribute('aria-label')).toContain('Combo tiết kiệm');
+  });
+
   it('"Thêm cả combo" thêm đúng các món của combo đó và báo kết quả ở vùng role=status', async () => {
     const c = await mount(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />);
     click(addAllButtons(c)[1]!);

@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
   openRequests: false,
   recycleHook: vi.fn(),
 }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/' }),
+}));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('../../hooks/use-recycle-open-requests', () => ({
   useRecycleOpenRequests: (authed: boolean, paused: boolean) => {
@@ -19,6 +23,7 @@ vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string })
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('./earn-sheet', () => ({ EarnSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Kiếm tiền cùng Tubu" /> : null) }));
 
+import { recordVisit, resetNavTrail } from '../../lib/smart-nav';
 import { ShortcutGrid } from './shortcut-grid';
 
 const rows = (dialog: HTMLElement) => within(dialog).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'Đóng');
@@ -84,7 +89,7 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
-    expect(rows(dialog)).toHaveLength(9);
+    expect(rows(dialog)).toHaveLength(10);
     fireEvent.click(within(dialog).getByRole('button', { name: /Giờ vàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/flash-sale');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tất cả lối tắt' })).toBeNull());
@@ -92,6 +97,35 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Tất cả lối tắt' })).getByRole('button', { name: /Đơn hàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tất cả lối tắt' })).toBeNull());
+  });
+
+  it('"Bộ quà tặng" luôn có trong "Tất cả lối tắt" (không thêm ô nào trên Trang chủ) và mở /gift-combos qua smartNavigate', async () => {
+    window.history.replaceState({ idx: 0 }, '');
+    const { container } = render(<ShortcutGrid />);
+    // Mật độ Trang chủ giữ nguyên: 2 thẻ chính, 4 ô phụ, 2 lối tắt nhanh + "Thêm"; không có nút Bộ quà tặng nằm ngoài hộp thoại.
+    expect(screen.queryByRole('button', { name: /Bộ quà tặng/ })).toBeNull();
+    expect(container.querySelectorAll('.tubu-quick-pill')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
+    const gifts = within(dialog).getByRole('button', { name: /Bộ quà tặng và combo khởi đầu/ });
+    // Đứng sau Đơn hàng, trước Đơn sàn: không chen vào nhóm ưu đãi phía trên.
+    const names = rows(dialog).map((b) => b.textContent ?? '');
+    expect(names.findIndex((t) => t.startsWith('Bộ quà tặng'))).toBe(names.findIndex((t) => t.startsWith('Đơn hàng')) + 1);
+    fireEvent.click(gifts);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/gift-combos');
+  });
+
+  it('vừa từ Bộ quà tặng về Trang chủ: chạm lại thì lùi thật một mục, không chồng thêm bản sao /gift-combos', async () => {
+    resetNavTrail();
+    window.history.replaceState({ idx: 0 }, '');
+    recordVisit('/gift-combos');
+    window.history.replaceState({ idx: 1 }, '');
+    render(<ShortcutGrid />);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Tất cả lối tắt' })).getByRole('button', { name: /Bộ quà tặng/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith(-1);
+    resetNavTrail();
+    window.history.replaceState({ idx: 0 }, '');
   });
 
   it('"Kiếm tiền" trong hộp thoại mở bảng chọn thay vì điều hướng', async () => {

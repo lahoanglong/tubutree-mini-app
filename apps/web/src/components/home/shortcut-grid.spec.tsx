@@ -111,12 +111,25 @@ describe('ShortcutGrid web — 2 thẻ chính + 4 ô phụ + lối tắt nhanh (
 
     expect(allSheet()).toBeNull();
     openAll(c);
-    expect(sheetRows()).toHaveLength(8);
+    expect(sheetRows()).toHaveLength(9);
     expect(sheetRows().some((b) => /Giờ vàng/.test(b.textContent ?? ''))).toBe(true);
     expect(document.body.textContent).not.toContain('sàn khác');
     click(sheetRows().find((b) => /Đơn hàng/.test(b.textContent ?? '')) ?? null);
     expect(mocks.push).toHaveBeenLastCalledWith('/tai-khoan/don-hang');
     expect(allSheet()).toBeNull();
+  });
+
+  it('"Bộ quà tặng" chỉ nằm trong hộp thoại mọi lối tắt (Trang chủ không thêm ô nào) và mở /bo-qua-tang', () => {
+    const c = mount();
+    expect(c.textContent).not.toContain('Bộ quà tặng');
+    expect(c.querySelectorAll('[data-testid="shortcut-quick-pills"] a')).toHaveLength(2);
+    openAll(c);
+    const names = sheetRows().map((b) => b.textContent ?? '');
+    const at = names.findIndex((t) => t.startsWith('Bộ quà tặng'));
+    expect(names[at]).toContain('Bộ quà tặng và combo khởi đầu');
+    expect(at).toBe(names.findIndex((t) => t.startsWith('Đơn hàng')) + 1);
+    click(sheetRows()[at] ?? null);
+    expect(mocks.push).toHaveBeenLastCalledWith('/bo-qua-tang');
   });
 
   it('"Kiếm tiền" trong hộp thoại mở bảng chọn thay vì điều hướng', () => {
