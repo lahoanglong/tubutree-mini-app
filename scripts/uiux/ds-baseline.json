@@ -490,7 +490,7 @@
   "apps/web/src/components/catalog/recently-viewed-rail.tsx": 1,
   "apps/web/src/components/catalog/suggested-rail.tsx": 1,
   "apps/web/src/components/catalog/wishlist-heart.tsx": 4,
-  "apps/web/src/components/checkout/order-success.tsx": 24,
+  "apps/web/src/components/checkout/order-success.tsx": 5,
   "apps/web/src/components/community/post-card.tsx": 1,
   "apps/web/src/components/coupon-box.tsx": 1,
   "apps/web/src/components/dealer/dealer-apply.tsx": 2,

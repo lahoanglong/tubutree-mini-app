@@ -33,11 +33,10 @@ const t = {
   copyFailed: (code: string) => `Không sao chép được — mã đơn: ${code}`,
   total: 'Tổng thanh toán',
   pointsLabel: 'Điểm Xanh sẽ nhận',
-  pointsValue: (n: number) => `+${formatCount(n)} điểm`,
   pointsValueWhen: (n: number) => `+${formatCount(n)} điểm, về khi đơn giao xong`,
-  pointsComing: (n: number) => `${formatCount(n)} Điểm Xanh sẽ về tay khi đơn giao thành công`,
   etaLabel: 'Giao dự kiến',
   nextTitle: 'Tiếp theo',
+  extrasLabel: 'Thêm cho đơn này',
   steps: [
     { title: 'Xác nhận đơn', body: 'Tubu kiểm tra và xác nhận đơn của bạn.' },
     { title: 'Đóng gói', body: 'Sản phẩm được đóng gói cẩn thận.' },
@@ -47,7 +46,6 @@ const t = {
   keepShopping: 'Tiếp tục mua sắm',
   subscribeTitle: (name: string) => `Đặt định kỳ ${name}`,
   subscribeBody: (pct: number) => `Tự động giao lại theo chu kỳ, tiết kiệm ${pct}% mỗi đơn.`,
-  subscribeCta: 'Đặt định kỳ',
   splitTitle: (n: number) => `Hàng do ${n} nơi giao nên được tách thành ${n} đơn`,
   splitBody: 'Mỗi đơn có mã, phí giao và lộ trình riêng.',
 };
@@ -86,25 +84,27 @@ function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | null {
   return null;
 }
 
-function SubscribeCard({ candidate, onOpen }: { candidate: SubscribeCandidate; onOpen: () => void }) {
+// Gợi ý phụ sau khi đặt: MỘT dòng chạm mở sheet (cùng kiểu dòng mời bạn bên dưới), không thêm nút cỡ lớn tranh vai "Theo dõi đơn".
+function SubscribeRow({ candidate, onOpen }: { candidate: SubscribeCandidate; onOpen: () => void }) {
   const cfg = usePublicConfig();
   return (
-    <Card variant="flat" padding={12}>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <Icon icon={Repeat} tone="brand" />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-            {t.subscribeTitle(candidate.productName)}
-          </Text>
-          <Text variant="caption" tone="secondary" as="div">
-            {t.subscribeBody(Math.round(cfg.subscribeDiscountPct * 100))}
-          </Text>
-        </div>
-      </div>
-      <Button variant="secondary" fullWidth onPress={onOpen} style={{ marginTop: 10 }}>
-        {t.subscribeCta}
-      </Button>
-    </Card>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="tubu-press flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border-subtle)] bg-[var(--color-bg-surface)] text-left"
+      style={{ padding: 'var(--space-stack-sm) var(--space-inline-md)', fontFamily: 'inherit' }}
+    >
+      <Icon icon={Repeat} tone="brand" style={{ flex: 'none' }} />
+      <span className="min-w-0 flex-1">
+        <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 600 }}>
+          {t.subscribeTitle(candidate.productName)}
+        </Text>
+        <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
+          {t.subscribeBody(Math.round(cfg.subscribeDiscountPct * 100))}
+        </Text>
+      </span>
+      <Icon icon={ChevronRight} size="sm" tone="muted" style={{ flex: 'none' }} />
+    </button>
   );
 }
 
@@ -139,7 +139,7 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
   const invite = referralViralOn(cfg) && <OrderInviteNudge />;
   const subscribe = candidate && (
     <>
-      <SubscribeCard candidate={candidate} onOpen={() => setSubscribeOpen(true)} />
+      <SubscribeRow candidate={candidate} onOpen={() => setSubscribeOpen(true)} />
       {notice && (
         <Text variant="caption" tone="secondary" as="div">
           <span role="status">{notice}</span>
@@ -194,7 +194,7 @@ function useCopyCodes(codesText: string) {
   return { copyNote, copyCode };
 }
 
-// 3 bước tiếp theo: dùng chung cho khổ điện thoại và máy tính để hai khổ không lệch chữ.
+// 3 bước tiếp theo đủ câu ở khổ máy tính; điện thoại dùng `NextStepsCompact` với cùng chữ trong `t.steps`.
 function NextSteps() {
   return (
     <section aria-label={t.nextTitle}>
@@ -230,17 +230,50 @@ function NextSteps() {
   );
 }
 
+// Khổ điện thoại: 3 bước thành một hàng (số + tên bước) để nút chính và mã đơn nằm trong màn đầu; câu giải thích từng bước vẫn đọc được
+// bằng trình đọc màn hình, máy tính giữ danh sách đủ câu (NextSteps).
+function NextStepsCompact() {
+  return (
+    <section aria-label={t.nextTitle}>
+      <Heading variant="title-sm" as="h2" className="mb-2">
+        {t.nextTitle}
+      </Heading>
+      <ol className="m-0 grid list-none grid-cols-3 gap-2 p-0">
+        {t.steps.map((s, i) => (
+          <li key={s.title} className="flex flex-col items-center gap-1 text-center">
+            <span
+              aria-hidden
+              className="grid h-7 w-7 place-items-center rounded-[var(--radius-pill)] text-caption font-bold"
+              style={{
+                background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--color-bg-subtle)',
+                color: i === 0 ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
+              }}
+            >
+              {i + 1}
+            </span>
+            <Text variant="caption" as="span" style={{ fontWeight: 600 }}>
+              {s.title}
+              <span className="sr-only">: {s.body}</span>
+            </Text>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/**
+ * Khổ điện thoại (375×812): trạng thái đơn, thẻ mã đơn + tiền, rồi ngay hai nút "Theo dõi đơn" / "Tiếp tục mua sắm" để nút chính luôn trong
+ * màn đầu, kể cả đơn tách nhiều nơi giao. Danh sách đơn tách, 3 bước tiếp theo và nhóm gợi ý phụ (kết bạn Zalo, Đặt định kỳ, mời bạn) nằm dưới.
+ */
 function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend, invite }: View) {
   const router = useRouter();
   const codesText = codes.join(', ');
   const { copyNote, copyCode } = useCopyCodes(codesText);
   return (
-    <div data-testid="order-success-mobile" className="flex flex-col gap-4 md:hidden" style={{ padding: '32px 16px 24px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 }}>
-        <span
-          aria-hidden
-          style={{ width: 56, height: 56, borderRadius: 'var(--radius-pill)', background: 'var(--color-action-secondary-bg)', display: 'grid', placeItems: 'center' }}
-        >
+    <div data-testid="order-success-mobile" className="flex flex-col gap-3 px-4 pb-6 pt-2 md:hidden">
+      <div className="flex flex-col items-center gap-1 text-center">
+        <span aria-hidden className="grid h-12 w-12 place-items-center rounded-[var(--radius-pill)] bg-[var(--color-action-secondary-bg)]">
           <Icon icon={CheckCircle2} size="lg" tone="brand" />
         </span>
         <Heading variant="title-lg" as="h1">
@@ -251,14 +284,14 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
         </Text>
       </div>
 
-      <Card variant="outline" padding={16}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
+      <Card variant="outline" padding={12}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             <Text variant="caption" tone="tertiary" as="div">
               {t.orderCode}
             </Text>
             {codes.map((c) => (
-              <Text key={c} variant="body-lg" as="div" style={{ fontWeight: 700, letterSpacing: 1, wordBreak: 'break-all' }}>
+              <Text key={c} variant="body-lg" as="div" className="break-all" style={{ fontWeight: 700, letterSpacing: 1 }}>
                 {c}
               </Text>
             ))}
@@ -270,7 +303,7 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
             <span role="status">{copyNote}</span>
           </Text>
         )}
-        <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: 12, paddingTop: 8 }}>
+        <div className="mt-2 border-t border-[color:var(--color-border-subtle)] pt-1">
           <KeyValueRow label={split ? `Tổng ${split.length} đơn` : t.total} value={formatVnd(grandTotal)} emphasis style={NUMS} />
           {order.paymentMethod === 'COD' && (
             <Text variant="caption" tone="secondary" as="div">
@@ -280,33 +313,38 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
           {pointsEarned > 0 && (
             <KeyValueRow label={t.pointsLabel} value={t.pointsValueWhen(pointsEarned)} tone="success" style={NUMS} />
           )}
-          {etaLabel && <KeyValueRow label={t.etaLabel} value={etaLabel} />}
+          {etaLabel && <KeyValueRow label={t.etaLabel} value={etaLabel} style={NUMS} />}
         </div>
       </Card>
 
+      <div className="flex flex-col gap-2">
+        <Button fullWidth size="lg" onPress={() => router.replace(orderDetailHref(order.code))}>
+          {t.trackOrder}
+        </Button>
+        <Button fullWidth variant="ghost" onPress={() => router.replace(continueHref)}>
+          {t.keepShopping}
+        </Button>
+      </div>
+
       {split && (
         <section aria-label="Đơn cùng lần đặt">
-          <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>
+          <Heading variant="title-sm" as="h2" className="mb-1">
             {t.splitTitle(split.length)}
           </Heading>
-          <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>
+          <Text variant="caption" tone="secondary" as="p" className="mb-2 mt-0">
             {t.splitBody}
           </Text>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {split.map((o) => (
               <li key={o.code}>
                 <button
                   type="button"
-                  className="tubu-press"
+                  className="tubu-press flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border border-[color:var(--color-border-subtle)] bg-[var(--color-bg-surface)] text-left"
+                  style={{ padding: 'var(--space-stack-sm) var(--space-inline-md)' }}
                   aria-label={`Xem đơn ${o.code}, ${o.fulfillerName} giao, ${formatVnd(o.total)}`}
                   onClick={() => router.replace(orderDetailHref(o.code))}
-                  style={{
-                    width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                    border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-control)',
-                    background: 'var(--color-bg-surface)', textAlign: 'left', cursor: 'pointer',
-                  }}
                 >
-                  <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="min-w-0 flex-1">
                     <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 700 }}>
                       {o.code}
                     </Text>
@@ -314,7 +352,7 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
                       {o.fulfillerName} giao
                     </Text>
                   </span>
-                  <Text variant="body-sm" as="span" numeric style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <Text variant="body-sm" as="span" numeric className="whitespace-nowrap" style={{ fontWeight: 600 }}>
                     {formatVnd(o.total)}
                   </Text>
                   <Icon icon={ChevronRight} size="sm" tone="muted" />
@@ -325,19 +363,13 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
         </section>
       )}
 
-      <NextSteps />
+      <NextStepsCompact />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Button fullWidth size="lg" onPress={() => router.replace(orderDetailHref(order.code))}>
-          {t.trackOrder}
-        </Button>
-        <Button fullWidth variant="ghost" onPress={() => router.replace(continueHref)}>
-          {t.keepShopping}
-        </Button>
-      </div>
-      {friend}
-      {subscribe}
-      {invite}
+      <section aria-label={t.extrasLabel} className="flex flex-col gap-2 empty:hidden">
+        {friend}
+        {subscribe}
+        {invite}
+      </section>
     </div>
   );
 }
@@ -346,7 +378,7 @@ function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarne
   const codesText = codes.join(', ');
   const { copyNote, copyCode } = useCopyCodes(codesText);
   return (
-    <div data-testid="order-success-desktop" className="py-16 text-center max-md:hidden">
+    <div data-testid="order-success-desktop" className="py-10 text-center max-md:hidden">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
         <CheckCircle2 className="h-9 w-9" aria-hidden="true" />
       </div>
@@ -394,13 +426,10 @@ function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarne
         {order.paymentMethod === 'COD' && <p>{t.prepareCash}</p>}
         {pointsEarned > 0 && (
           <p className="text-success-fg" style={NUMS}>
-            {t.pointsLabel}: {t.pointsValue(pointsEarned)} — {t.pointsComing(pointsEarned)}
+            {t.pointsLabel}: {t.pointsValueWhen(pointsEarned)}
           </p>
         )}
         {etaLabel && <p>{t.etaLabel}: <span className="font-semibold text-stone-900">{etaLabel}</span></p>}
-      </div>
-      <div className="mx-auto mt-6 max-w-md text-left">
-        <NextSteps />
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link href={orderDetailHref(order.code)} replace className={ui.btnPrimary}>
@@ -412,6 +441,9 @@ function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarne
         <Link href={continueHref} replace className={ui.btnSecondary}>
           {t.keepShopping}
         </Link>
+      </div>
+      <div className="mx-auto mt-6 max-w-md text-left">
+        <NextSteps />
       </div>
       {friend && <div className="mx-auto mt-6 max-w-md text-left">{friend}</div>}
       <div className="mx-auto mt-6 flex max-w-md flex-col gap-2 text-left">

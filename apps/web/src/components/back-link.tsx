@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { ui } from '@/lib/guest-ui';
+import { GUEST_ONLY_WHILE_RESTORING, RESTORING_ONLY } from '@/lib/restoring-swap';
 
 export interface Crumb {
   label: string;
@@ -44,5 +45,28 @@ export default function BackLink({ href, children, crumbs }: { href: string; chi
     <Link href={href} data-back-link="" className={`${ui.backLink} max-md:hidden`}>
       {children}
     </Link>
+  );
+}
+
+export interface BackTarget {
+  href: string;
+  label: ReactNode;
+}
+
+/**
+ * Link lùi của trang dựng sẵn giao diện khách (`PrebuiltGuest`) cho tới khi hydrate. Máy còn cờ phiên (<html data-restoring>, đặt trước khi
+ * vẽ) thì CSS giấu link của khách và hiện link của người đã đăng nhập (cùng kiểu, cao 44px), nên từ md người đã đăng nhập không thấy link
+ * khách chớp qua rồi đổi. Khách vãng lai không có thuộc tính đó nên thấy ngay link khách. Sau hydrate trang vẽ một `BackLink` theo pha thật.
+ */
+export function RestoringBackLink({ guest, member }: { guest: BackTarget; member: BackTarget }) {
+  return (
+    <>
+      <div className={GUEST_ONLY_WHILE_RESTORING}>
+        <BackLink href={guest.href}>{guest.label}</BackLink>
+      </div>
+      <div className={RESTORING_ONLY}>
+        <BackLink href={member.href}>{member.label}</BackLink>
+      </div>
+    </>
   );
 }
