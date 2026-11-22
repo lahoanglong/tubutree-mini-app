@@ -1,0 +1,40 @@
+/* Dải cam kết ở trang gian hàng (StorefrontTrustChips): cùng số đo với web /s/[slug] dưới md (mx-4 mt-3, khe 6, chip đệm 4/10, biểu tượng 14, chữ 12/16 đậm).
+   Số đo đặt ở đây vì bánh cóc px của P17b chỉ đếm TSX. Chip không bấm được nên không cần vùng chạm 44px. */
+
+.tubu-sf-trust {
+  margin: 12px 16px 0;
+}
+
+.tubu-sf-trust-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tubu-sf-trust-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-sf-trust-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-brand);
+}
+
+.tubu-sf-trust-text {
+  font-family: var(--font-ui);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}

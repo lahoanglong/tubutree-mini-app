@@ -28,7 +28,13 @@ test.describe('Mini App theo dõi đơn 375', () => {
     const w = await mockWorld(api, page, 'miniapp', state, Date.now());
     await openState(page, 'miniapp', 375, w.order.code);
     await state.ready(page);
-    await page.getByTestId('order-shipping').getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }).click();
+    // Một nút chép mỗi trang: ở viên vận đơn ngay dưới thẻ trạng thái; khối Vận chuyển chỉ in hãng và mã.
+    await expect(page.getByTestId('order-shipping').getByRole('button')).toHaveCount(0);
+    const pill = page.getByTestId('order-tracking-pill');
+    const pillButton = pill.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' });
+    expect((await pillButton.boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await pillButton.click();
     await expect(page.getByText('Đã sao chép mã vận đơn')).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __copied?: string }).__copied)).toBe('GHN6789012345');
   });

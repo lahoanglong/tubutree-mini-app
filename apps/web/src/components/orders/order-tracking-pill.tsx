@@ -5,7 +5,13 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
  * Viên tra cứu hành trình trên trang hãng vận chuyển, đặt ngay dưới thẻ trạng thái của Chi tiết đơn để khách đang chờ hàng thấy ngay, không phải cuộn tới khối
  * Vận chuyển. Là lối tra cứu DUY NHẤT của trang: khối Vận chuyển chỉ còn hãng, mã vận đơn và nút chép. `href` đã lọc chỉ http/https.
  */
-export function OrderTrackingPill({ href, partner }: { href: string; partner?: string | null }) {
+export interface OrderTrackingPillProps {
+  /** Trang tra cứu của hãng, đã lọc chỉ http/https. */
+  href: string;
+  partner?: string | null;
+}
+
+export function OrderTrackingPill({ href, partner }: OrderTrackingPillProps) {
   return (
     <a
       href={href}

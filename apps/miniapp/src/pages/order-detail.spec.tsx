@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   fetchRefundBank: vi.fn(),
   getWasteRequestByOrder: vi.fn(),
   copyText: vi.fn(),
+  coreGet: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -63,6 +64,7 @@ vi.mock('../store/auth', () => {
 vi.mock('../components/image-upload', () => ({ MultiImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 
 import OrderDetailPage from './order-detail';
 import { STATUS_COLOR } from '../utils/order-status';
@@ -803,7 +805,7 @@ describe('OrderDetailPage — dòng yêu cầu thu rác (§12.2)', () => {
     await screen.findByText('TT001');
     expect(container.querySelector('#order-recycling')).toBeNull();
     expect(container.textContent).not.toMatch(/tài trợ 100% phí thu gom|Vật dụng gửi|tái chế/);
-    expect(screen.getByText('BE123456')).toBeInTheDocument();
+    expect(within(screen.getByTestId('order-shipping')).getByText('BE123456')).toBeInTheDocument();
   });
 });
 
@@ -828,13 +830,18 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     mocks.fetchOrder.mockResolvedValue(shipped());
     renderPage();
     expect(await screen.findByText('GHN')).toBeInTheDocument();
-    expect(screen.getByText('GHN001')).toBeInTheDocument();
+    expect(within(screen.getByTestId('order-shipping')).getByText('GHN001')).toBeInTheDocument();
     expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('button', { name: 'Tra cứu hành trình' })).toBeNull();
     expect(screen.queryAllByRole('link').filter((l) => !/^Xem sản phẩm/.test(l.getAttribute('aria-label') ?? ''))).toHaveLength(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN001' }));
+    // Một nút chép mỗi trang: ở viên vận đơn ngay dưới thẻ trạng thái; khối Vận chuyển chỉ in hãng và mã.
+    const pill = screen.getByTestId('order-tracking-pill');
+    expect(screen.getByTestId('status-hero').nextElementSibling).toBe(pill);
+    expect(within(screen.getByTestId('order-shipping')).queryByRole('button')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveLength(1);
+    fireEvent.click(within(pill).getByRole('button', { name: 'Sao chép mã vận đơn GHN001' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
-    await waitFor(() => expect(screen.getByTestId('order-shipping')).toHaveTextContent('Đã sao chép mã vận đơn'));
+    await waitFor(() => expect(screen.getByTestId('order-tracking-pill')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
   it('hoá đơn điện tử: chỉ chép đường dẫn, không mở ngoài', async () => {
@@ -1276,5 +1283,62 @@ describe('OrderDetailPage — Mua lại một chạm (đơn đã giao)', () => {
       addSource: 'repurchase',
     });
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Nước rửa chén (hết hàng)') }));
+  });
+});
+
+describe('OrderDetailPage — viên vận đơn và thẻ Refill như web (tubu-w18-02)', () => {
+  const landing = {
+    enabled: true,
+    pairs: [
+      {
+        bottle: { productId: 'b1', slug: 'xa-bong', name: 'Xà bông thảo mộc 500ml', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true },
+        refill: { productId: 'r1', slug: 'xa-bong-refill', name: 'Túi Refill xà bông 2L', thumbnail: null, variationId: 'v-r1', price: 200_000, compareAt: null, sizeLabel: '2L', inStock: true, tubu: true },
+        savingPct: 26,
+      },
+    ],
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.coreGet.mockImplementation(async (path: string) => {
+      if (path === '/catalog/refill-pairs/landing') return landing;
+      throw new Error(`đường dẫn lạ ${path}`);
+    });
+  });
+
+  it('đơn đã giao, cờ Refill bật: thẻ "Lần sau rót lại bằng Refill" ngay sau thẻ trạng thái, trước hành trình và Sản phẩm; đơn không có mã vận đơn thì không có viên', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, refillFirstEnabled: true });
+    mocks.fetchOrder.mockResolvedValue(ORDER);
+    renderPage();
+    const card = await screen.findByTestId('order-refill');
+    expect(card).toHaveTextContent('Lần sau rót lại bằng Refill');
+    expect(card).toHaveTextContent('Chọn túi Refill 2L tiết kiệm');
+    fireEvent.click(within(card).getByTestId('pdp-refill-open'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong-refill');
+    const hero = screen.getByTestId('status-hero');
+    expect(hero.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.nextElementSibling).toHaveTextContent('Đã tiếp nhận, đã qua');
+    expect(card.compareDocumentPosition(screen.getByText('Sản phẩm')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId('order-tracking-pill')).toBeNull();
+  });
+
+  it('cờ Refill tắt: không hỏi trang Refill, không có thẻ', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
+    mocks.fetchOrder.mockResolvedValue(ORDER);
+    renderPage();
+    await screen.findByText('Sản phẩm');
+    expect(screen.queryByTestId('order-refill')).toBeNull();
+    expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());
+  });
+
+  it('đơn đang giao: viên vận đơn ngay sau thẻ trạng thái, chưa có thẻ Refill (khách chưa có chai)', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, refillFirstEnabled: true });
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN001' });
+    renderPage();
+    const pill = await screen.findByTestId('order-tracking-pill');
+    expect(screen.getByTestId('status-hero').nextElementSibling).toBe(pill);
+    expect(within(pill).getByRole('button', { name: 'Sao chép mã vận đơn GHN001' })).toHaveTextContent('GHN001 · GHN');
+    expect(screen.queryByTestId('order-refill')).toBeNull();
+    expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());
   });
 });

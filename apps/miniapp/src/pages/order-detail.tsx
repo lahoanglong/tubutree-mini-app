@@ -50,6 +50,9 @@ import { OrderTrack } from '../components/orders/order-track';
 import { OrderTimelineTracker } from '../components/orders/order-timeline-tracker';
 import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '../components/orders/order-shipping';
+import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
+import { OrderRefillShortcut } from '../components/orders/order-refill-shortcut';
+import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { OrderActionBar } from '../components/orders/order-action-bar';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -383,6 +386,7 @@ export default function OrderDetailPage() {
       <PageHeader title="Chi tiết đơn hàng" subtitle={o.code} />
 
       <OrderStatusHero headline={headline} statusLabel={buyerStatusLabel(o)} stamp={stamp} tone={color} />
+      {o.shippingCode && <OrderTrackingPill code={o.shippingCode} partner={o.shippingPartner} />}
 
       {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
           Đúng lúc thiện chí cao nhất (vừa đặt xong đơn đầu), không hỏi lúc mở app nguội. ── */}
@@ -409,6 +413,12 @@ export default function OrderDetailPage() {
           </Box>
         </Box>
       )}
+
+      <OrderRefillShortcut
+        delivered={o.status === 'DELIVERED'}
+        refillOn={refillFirstOn(publicConfig)}
+        slugs={o.items.filter((it) => !it.isGift).map((it) => it.productSlug)}
+      />
 
       {journey ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }} data-testid="order-journey">
