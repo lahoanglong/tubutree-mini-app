@@ -205,7 +205,7 @@ describe('OrderBulkBar', () => {
         const body = JSON.parse(String(init?.body));
         if (!body.dryRun) real += 1;
         const blocked: Record<string, string> = body.dryRun ? {} : { 'id-1': 'Đơn TB0001 vừa chuyển sang Đang giao.' };
-        return { body: respond(body, blocked, (dryRun) => (dryRun ? { 'id-2': 'Đơn TB0002 đã ở «Đã đóng gói», không cần đổi.' } : {})) };
+        return { body: respond(body, blocked, (dryRun): Record<string, string> => (dryRun ? { 'id-2': 'Đơn TB0002 đã ở «Đã đóng gói», không cần đổi.' } : {})) };
       },
     });
     vi.stubGlobal('fetch', m.fn);
