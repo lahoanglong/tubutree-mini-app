@@ -163,6 +163,7 @@ export const FIELD_LABELS: Record<string, string> = {
   name: 'Tên',
   notes: 'Ghi chú',
   openingHours: 'Giờ mở cửa',
+  optInCodes: 'Đơn tự chọn dọn',
   options: 'Các lựa chọn',
   orderCode: 'Mã đơn hàng',
   orderTotal: 'Tổng giá trị đơn',
