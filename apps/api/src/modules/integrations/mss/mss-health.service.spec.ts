@@ -106,6 +106,11 @@ describe('MssHealthService', () => {
     await expect(svc.assertCapability('orderEvents')).resolves.toBe(false);
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_HEALTH_ALERT', expect.objectContaining({ title: 'Kết nối MSS', summary: expect.stringContaining('order_events') }));
+    // Tin ngắn cho admin: "{{title}}: {{summary}}" ≤ 200 ký tự, chỉ tới thẻ MSS ở Sức khoẻ hệ thống, không có đường dẫn API.
+    const { title, summary } = (notify.mock.calls[0] as unknown as [string, string, { title: string; summary: string }])[2];
+    expect(`${title}: ${summary}`.length).toBeLessThanOrEqual(200);
+    expect(summary).toMatch(/^\[Cảnh báo\] .* · Admin › Sức khoẻ hệ thống › MSS$/);
+    expect(summary).not.toContain('/health');
     now += MSS_CAPABILITY_WARN_MS - 1;
     await svc.poll();
     await svc.assertCapability('orderEvents');

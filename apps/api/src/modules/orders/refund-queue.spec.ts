@@ -231,3 +231,28 @@ describe('MONEY-1: huỷ đơn CTV lên hộ khi khách cuối đã chuyển thi
     expect(receivedRefundNote(0, true)).toBe('');
   });
 });
+
+describe('tin OPS_REFUND_ALERT cho admin: ngắn (≤ 200 ký tự sau khi điền mẫu), giữ SĐT che và chỗ xử lý', () => {
+  const BIG = 12_345_678;
+  const rendered = (message: string) => `💸 Hoàn tiền đơn TUBU2026101500001: ${message}`;
+  const big = (over: Record<string, unknown> = {}) => assistedOrder({ code: 'TUBU2026101500001', total: BIG, ...over });
+
+  it.each([
+    ['tiền về muộn', (ctx: never) => recordLatePaymentRefund(ctx, big() as never, { amount: BIG, source: 'ZALOPAY', refKey: 'zp:9' }), 'Admin › Hoàn tiền khách'],
+    ['trả dư ZaloPay', (ctx: never) => recordOverpaymentRefund(ctx, big({ status: 'CONFIRMED', paymentStatus: 'PAID' }) as never, { amount: BIG, source: 'ZALOPAY', refKey: 'zp2' }), 'Admin › Hoàn tiền khách'],
+    [
+      'trả dư Pancake chờ đối soát',
+      (ctx: never) => recordCumulativeOverpayment(ctx, big({ status: 'CONFIRMED', paymentStatus: 'PAID' }) as never, { reportedTotal: BIG * 2, source: 'PANCAKE' }),
+      'Admin › Hoàn tiền khách › Chờ đối soát',
+    ],
+  ])('%s, đơn CTV lên hộ, số tiền 8 chữ số', async (_name, run, where) => {
+    const { ctx, adminMessage } = setup();
+    await run(ctx);
+    const msg = adminMessage();
+    expect(rendered(msg).length).toBeLessThanOrEqual(200);
+    expect(msg).toContain('khách cuối 091****678');
+    expect(msg).not.toContain('0912345678');
+    expect(msg.endsWith(` · ${where}`)).toBe(true);
+    expect(msg).not.toContain('…');
+  });
+});

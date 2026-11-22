@@ -400,7 +400,15 @@ export function HomePickupFeeQrCard({ requestId }: { requestId: string }) {
       {qr && qr.paymentStatus === 'UNPAID' && (
         <>
           {qr.qrImageUrl && (
-            <img src={qr.qrImageUrl} alt={d.qrTitle} className="h-48 w-48 self-center rounded-control bg-stone-0 object-contain p-1.5" onError={hideBrokenImage} />
+            // eslint-disable-next-line @next/next/no-img-element -- ảnh VietQR do API sinh theo từng phiếu, next/image không tối ưu được và không cần
+            <img
+              src={qr.qrImageUrl}
+              alt={d.qrTitle}
+              width={192}
+              height={192}
+              className="h-48 w-48 self-center rounded-control bg-stone-0 object-contain p-1.5"
+              onError={hideBrokenImage}
+            />
           )}
           {remaining && (
             <p className={`text-xs ${remaining.expired ? 'text-danger-fg' : 'text-stone-600'}`}>

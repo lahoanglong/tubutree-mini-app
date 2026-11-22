@@ -2,6 +2,7 @@ import type { Logger } from '@nestjs/common';
 import type { CustomerRefundKind, CustomerRefundStatus, Order, Prisma, PrismaClient } from '@prisma/client';
 import { assertBankRefUnusedByOrder, noteHasBankRef } from '../../common/bank-ref';
 import { notifyAdmins } from '../../common/notify-admins';
+import { OPS_WHERE, opsAlertSlot } from '../ops/ops-alert-line';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
 import type { BankDetails } from './refund-destination';
@@ -204,7 +205,7 @@ export async function announceDeletedAccountRefund(
       subject: `khoản hoàn ${amount} đơn ${refund.orderCode} của tài khoản đã xoá`,
       data: () => ({
         order_code: refund.orderCode,
-        message: `Tài khoản đã xoá, không còn thông tin liên hệ. Chờ khách liên hệ CSKH; khi khách cung cấp tài khoản ngân hàng thì quản trị viên nhập và xác nhận chuyển khoản ${amount}.`,
+        message: opsAlertSlot(`tài khoản đã xoá, chờ khách liên hệ CSKH để chuyển khoản ${amount}`, OPS_WHERE.refunds),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin khoản hoàn đơn ${refund.orderCode}: ${err instanceof Error ? err.message : err}`));
@@ -264,9 +265,10 @@ export async function announceBankRefund(
       subject: `khoản hoàn ${amount} đơn ${refund.orderCode}`,
       data: () => ({
         order_code: refund.orderCode,
-        message: refund.bankAccountNo
-          ? `khách chọn nhận ${amount} về ${maskedBank(refund)} — ở mục Hoàn tiền bấm "Bắt đầu chuyển khoản" để khoá nơi nhận, chuyển khoản, rồi bấm "Đã chuyển khoản".`
-          : `cần hoàn ${amount}, đang chờ khách chọn nơi nhận.`,
+        message: opsAlertSlot(
+          refund.bankAccountNo ? `khách chọn nhận ${amount} về ${maskedBank(refund)}, cần chuyển khoản` : `cần hoàn ${amount}, chờ khách chọn nơi nhận`,
+          OPS_WHERE.refunds,
+        ),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin khoản hoàn đơn ${refund.orderCode}: ${err instanceof Error ? err.message : err}`));
@@ -516,9 +518,10 @@ async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: nu
       subject: `tiền trả dư đơn ${order.code}`,
       data: () => ({
         order_code: order.code,
-        message:
-          `ZaloPay xác nhận khách trả thêm ${amount} (một lệnh thanh toán khác) cho đơn đã nhận đủ ${formatVnd(order.total)} — đã tạo khoản hoàn "Tiền trả dư", ` +
-          (order.placedForCustomer ? endCustomerQueueNote(order) : 'chờ khách chọn nơi nhận.'),
+        message: opsAlertSlot(
+          `khách trả dư ${amount} qua ZaloPay, ${order.placedForCustomer ? endCustomerQueueNote(order) : 'chờ khách chọn nơi nhận'}`,
+          OPS_WHERE.refunds,
+        ),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
@@ -534,13 +537,13 @@ async function announceUnverifiedOverpayment(ctx: LateCtx, order: OverOrder, raw
       subject: `tiền trả dư chờ đối soát đơn ${order.code}`,
       data: () => ({
         order_code: order.code,
-        message:
-          `Pancake báo đã nhận ${formatVnd(reportedTotal)} cho đơn đã nhận đủ ${formatVnd(order.total)} — có thể khách chuyển dư ${amount}. ` +
-          'Khách CHƯA được báo. Đối chiếu sao kê: đúng là khách chuyển dư thì ở mục Hoàn tiền khách, bộ lọc "Chờ đối soát", bấm ' +
-          (order.placedForCustomer
-            ? `"Xác nhận tiền dư" (đơn CTV lên hộ: khoản là của khách cuối ${maskPhone(endCustomerPayee(order).phone)}, không ai được báo — admin chuyển khoản tay theo SĐT); `
-            : '"Xác nhận tiền dư" (khách được báo để chọn nhận về Ví hay ngân hàng); ') +
-          'cùng một lần chuyển hoặc nhân viên sửa đơn trên Pancake thì bấm "Không phải tiền dư".',
+        // Cách đối chiếu (nút "Xác nhận tiền dư" / "Không phải tiền dư") nằm ngay trên dòng ở bộ lọc Chờ đối soát.
+        message: opsAlertSlot(
+          (order.placedForCustomer ? `khách cuối ${maskPhone(endCustomerPayee(order).phone)}: ` : '') +
+            `có thể dư ${amount} (Pancake báo ${formatVnd(reportedTotal)}, đơn ${formatVnd(order.total)}), ` +
+            (order.placedForCustomer ? 'đối chiếu sao kê' : 'khách chưa được báo, đối chiếu sao kê'),
+          OPS_WHERE.refundsUnverified,
+        ),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền trả dư đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
@@ -571,7 +574,7 @@ function channelOf(source: LateSource): string {
 
 /** Lời cho admin: khoản của khách cuối đơn CTV lên hộ nằm ở hàng đợi chuyển khoản tay, không ai chọn nơi nhận. */
 function endCustomerQueueNote(order: RefundOwnerFacts): string {
-  return `khoản của khách cuối ${maskPhone(endCustomerPayee(order).phone)} (đơn CTV lên hộ, không phải của CTV) — liên hệ khách xin tài khoản, chuyển khoản tay rồi xác nhận ở mục Hoàn tiền khách.`;
+  return `khoản của khách cuối ${maskPhone(endCustomerPayee(order).phone)}, không phải của CTV, chuyển khoản tay`;
 }
 
 function adminRecordedReason(order: LateOrder, rawAmount: number, source: LateSource): string {
@@ -593,9 +596,10 @@ async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: nu
       subject: `tiền về muộn đơn ${order.code}`,
       data: () => ({
         order_code: order.code,
-        message:
-          `nhận ${amount} qua ${channelOf(source)} sau khi đơn đã huỷ — đã tạo yêu cầu hoàn tiền, ` +
-          (order.placedForCustomer ? endCustomerQueueNote(order) : 'chờ khách chọn nơi nhận.'),
+        message: opsAlertSlot(
+          `nhận ${amount} qua ${channelOf(source)} sau khi đơn đã huỷ, ${order.placedForCustomer ? endCustomerQueueNote(order) : 'chờ khách chọn nơi nhận'}`,
+          OPS_WHERE.refunds,
+        ),
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền về muộn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
@@ -616,6 +620,7 @@ export async function flagRefundAttention(
   ctx.logger.warn(`Đơn ${order.code}: ${reason}`);
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
-    { template: OPS_REFUND_TEMPLATE, subject, data: () => ({ order_code: order.code, message: reason }) },
+    // Lý do đủ (cách đối soát từng bước) nằm ở ô "Cần xử lý Pancake" của đơn; tin chỉ mang câu đầu và chỗ xử lý.
+    { template: OPS_REFUND_TEMPLATE, subject, data: () => ({ order_code: order.code, message: opsAlertSlot(reason, OPS_WHERE.pancakeQueue) }) },
   ).catch((err) => ctx.logger.warn(`Không báo được admin tiền về muộn đơn ${order.code}: ${err instanceof Error ? err.message : err}`));
 }

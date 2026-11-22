@@ -30,9 +30,11 @@ export function shouldTryFuzzy(folded: string, exactCount: number): boolean {
 }
 
 /**
- * Bước hai: `từ khoá <% "nameSearch"` (= word_similarity ≥ ngưỡng của phiên) đi được chỉ mục GIN `products_nameSearch_trgm_idx`. Ngưỡng
- * đặt bằng `fuzzySessionSql` trong cùng transaction đọc (xem `SearchMatchService.fuzzy`) nên không lọt sang phiên khác của pool.
- * Mọi giá trị là tham số ràng buộc.
+ * Bước hai: `từ khoá <% "nameSearch"` (= word_similarity ≥ ngưỡng của phiên) đi chỉ mục GIN một phần
+ * `products_active_approved_nameSearch_trgm_idx`. Điều kiện `isActive`/`approvalStatus` phải viết literal đúng như WHERE của chỉ mục đó
+ * (migration 20261122090000): đổi thành tham số thì planner không chứng minh được predicate và quay về chỉ mục btree. Ngưỡng đặt bằng
+ * `fuzzySessionSql` trong cùng transaction đọc (xem `SearchMatchService.fuzzy`) nên không lọt sang phiên khác của pool. Từ khoá và LIMIT
+ * là tham số ràng buộc.
  */
 export function fuzzyMatchSql(folded: string): Prisma.Sql {
   return Prisma.sql`

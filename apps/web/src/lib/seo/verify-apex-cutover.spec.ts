@@ -146,6 +146,15 @@ describe('analyzeSitemap — đủ sản phẩm, danh mục, chiến dịch; kh�
     expect(noCampaign.some((f) => f.level === 'WARN' && /chien-dich/.test(f.message))).toBe(true);
   });
 
+  it('--allow-no-campaigns: 0 chiến dịch không còn WARN, PASS ghi rõ cờ; thiếu sản phẩm/danh mục vẫn FAIL', () => {
+    const noCampaignLocs = locs.filter((l) => !l.includes('/chien-dich/'));
+    const allowed = analyzeSitemap(noCampaignLocs, APEX, { allowNoCampaigns: true }).findings;
+    expect(levels(allowed)).toEqual(['PASS']);
+    expect(allowed[0]!.message).toMatch(/0 chiến dịch \(--allow-no-campaigns\)/);
+    expect(fails(analyzeSitemap(noCampaignLocs.filter((l) => !l.includes('/san-pham/')), APEX, { allowNoCampaigns: true }).findings).join()).toMatch(/sản phẩm/);
+    expect(levels(analyzeSitemap(locs, APEX, { allowNoCampaigns: true }).findings)).toEqual(['PASS']);
+  });
+
   it('một URL localhost hay app.* trong sitemap là FAIL; URL trùng là WARN', () => {
     const bad = analyzeSitemap([...locs, 'http://localhost:3000/san-pham/b', 'https://app.tubutree.com/san-pham/c'], APEX);
     expect(fails(bad.findings).join()).toMatch(/2 URL/);
@@ -269,6 +278,10 @@ describe('parseArgs', () => {
     expect(parseArgs(['--dry-run'])).toMatchObject({ dryRun: true, canonical: APEX });
     expect(parseArgs(['--base', 'http://localhost:3122', '--canonical', 'https://app.tubutree.com'])).toMatchObject({ base: 'http://localhost:3122', canonical: 'https://app.tubutree.com' });
     expect(parseArgs(['--base', 'https://tubutree.com/'])).toMatchObject({ base: APEX, canonical: APEX });
+  });
+  it('--allow-no-campaigns mặc định tắt, bật được cùng --strict', () => {
+    expect(parseArgs([]).allowNoCampaigns).toBe(false);
+    expect(parseArgs(['--allow-no-campaigns', '--strict'])).toMatchObject({ allowNoCampaigns: true, strict: true });
   });
   it('tham số lạ hoặc URL hỏng thì ném lỗi', () => {
     expect(() => parseArgs(['--bogus'])).toThrow();

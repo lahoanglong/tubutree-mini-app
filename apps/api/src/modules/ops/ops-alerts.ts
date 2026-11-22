@@ -1,3 +1,5 @@
+import { clipText, OPS_ALERT_LINE_MAX, OPS_WHERE, opsAlertLine, opsText } from './ops-alert-line';
+
 /** Ngưỡng báo động sức khoẻ vận hành — SystemConfig `ops.*` (PLATFORM-5). */
 export interface OpsThresholds {
   /** Đơn còn ở kho quá số phút này mà chưa lên Pancake = đơn kẹt. */
@@ -93,9 +95,10 @@ export interface OpsProblem {
   items?: OpsWorkItems;
 }
 
-const REFS_SHOWN = 5;
+/** Số mã đơn nêu trong một dòng báo động: đủ để tra việc cũ nhất, mà dòng vẫn dưới OPS_ALERT_LINE_MAX ký tự. */
+const REFS_SHOWN = 3;
 
-/** ": TUBU1, TUBU2 và 3 việc khác" — rỗng khi không có mã nào. */
+/** ": TUBU1, TUBU2, TUBU3 và 3 việc khác" — rỗng khi không có mã nào. */
 export function refList(refs: string[], total: number): string {
   const shown = refs.slice(0, REFS_SHOWN);
   if (shown.length === 0) return '';
@@ -103,96 +106,136 @@ export function refList(refs: string[], total: number): string {
   return `: ${shown.join(', ')}${more > 0 ? ` và ${more} việc khác` : ''}`;
 }
 
-/** Danh sách sự cố đang có, theo thứ tự cố định để so được giữa hai lượt. */
+/**
+ * Danh sách sự cố đang có, theo thứ tự cố định để so được giữa hai lượt. Mỗi `message` là một dòng `opsAlertLine` (tên ngắn · số lượng và
+ * mã đơn · chỗ xử lý), đã che bí mật trong lỗi tự do: kênh nào (in-app, webhook, email) cũng gửi đúng dòng này.
+ */
 export function opsProblems(s: ProblemInput, t: OpsThresholds): OpsProblem[] {
   const out: OpsProblem[] = [];
   if (s.pancake.configured) {
     if (s.pancake.stuck >= t.stuckOrders) {
       out.push({
         key: 'pancake.stuck',
-        message: `${s.pancake.stuck} đơn quá ${t.unsyncedMinutes} phút chưa lên Pancake${refList(s.pancake.stuckRefs, s.pancake.stuck)}`,
+        message: opsAlertLine({
+          name: 'Đơn chưa lên Pancake',
+          detail: `${s.pancake.stuck} đơn quá ${t.unsyncedMinutes} phút${refList(s.pancake.stuckRefs, s.pancake.stuck)}`,
+          where: OPS_WHERE.health,
+        }),
       });
     }
-    if ((s.pancake.configBlocked ?? 0) > 0) {
+    const blocked = s.pancake.configBlocked ?? 0;
+    if (blocked > 0) {
       out.push({
         key: 'pancake.config',
-        message: `Pancake từ chối khoá API (401/403): ${s.pancake.configBlocked} đơn không đẩy được${refList(s.pancake.configRefs ?? [], s.pancake.configBlocked ?? 0)}. Báo kỹ thuật kiểm PANCAKE_API_KEY và PANCAKE_SHOP_ID; hệ thống chỉ dò lại bằng một đơn mỗi giờ, đơn khác giữ nguyên tới khi khoá đúng`,
+        message: opsAlertLine({
+          name: 'Pancake từ chối khoá API',
+          detail: `${blocked} đơn không đẩy được${refList(s.pancake.configRefs ?? [], blocked)}`,
+          where: `${OPS_WHERE.tech} kiểm khoá Pancake`,
+        }),
       });
     }
     const hooks = s.pancake.webhookFailedOpen + s.pancake.webhookStuck;
     if (hooks >= t.webhookFailed) {
       out.push({
         key: 'pancake.webhook',
-        message: `${hooks} webhook Pancake lỗi hoặc kẹt chưa xử lý${refList(s.pancake.webhookRefs, hooks)} — chạy lại hoặc đánh dấu đã xử lý ở Sức khoẻ hệ thống`,
+        message: opsAlertLine({
+          name: 'Webhook Pancake lỗi',
+          detail: `${hooks} chưa xử lý${refList(s.pancake.webhookRefs, hooks)}`,
+          where: OPS_WHERE.health,
+        }),
       });
     }
     if (s.pancake.attention > 0) {
       out.push({
         key: 'pancake.attention',
-        message: `${s.pancake.attention} đơn cần xử lý tay trên Pancake${refList(s.pancake.attentionRefs, s.pancake.attention)}`,
+        message: opsAlertLine({
+          name: 'Đơn cần xử lý tay trên Pancake',
+          detail: `${s.pancake.attention} đơn${refList(s.pancake.attentionRefs, s.pancake.attention)}`,
+          where: OPS_WHERE.pancakeQueue,
+        }),
         items: { count: s.pancake.attention, refs: s.pancake.attentionRefs },
       });
     }
     const c = s.pancake.catalog;
     if (c.lastErrorAt && (!c.lastOkAt || c.lastErrorAt > c.lastOkAt)) {
-      out.push({ key: 'pancake.catalog', message: `Đồng bộ danh mục Pancake lỗi: ${c.lastError ?? 'không rõ lỗi'}` });
+      out.push({
+        key: 'pancake.catalog',
+        message: opsAlertLine({ name: 'Đồng bộ danh mục Pancake lỗi', detail: c.lastError ?? 'không rõ lỗi', where: OPS_WHERE.health }),
+      });
     }
   }
   if (s.gomdon.configured) {
     if (s.gomdon.webhookFailedOpen >= t.webhookFailed) {
       out.push({
         key: 'gomdon.webhook',
-        message: `${s.gomdon.webhookFailedOpen} webhook Gomdon lỗi chưa xử lý${refList(s.gomdon.webhookRefs, s.gomdon.webhookFailedOpen)}`,
+        message: opsAlertLine({
+          name: 'Webhook Gomdon lỗi',
+          detail: `${s.gomdon.webhookFailedOpen} chưa xử lý${refList(s.gomdon.webhookRefs, s.gomdon.webhookFailedOpen)}`,
+          where: OPS_WHERE.health,
+        }),
       });
     }
     if (s.gomdon.credentialsRejected) {
-      out.push({ key: 'gomdon.credentials', message: 'Gomdon từ chối đăng nhập — khách không chọn được thu gom' });
+      out.push({
+        key: 'gomdon.credentials',
+        message: opsAlertLine({ name: 'Gomdon từ chối đăng nhập', detail: 'khách không chọn được thu gom', where: OPS_WHERE.tech }),
+      });
     }
     if (s.gomdon.backlog > 0) {
       out.push({
         key: 'gomdon.backlog',
-        message: `${s.gomdon.backlog} đơn thu gom quá ${t.gomdonBacklogMinutes} phút chưa tạo được vận đơn Gomdon${refList(s.gomdon.backlogRefs, s.gomdon.backlog)}`,
+        message: opsAlertLine({
+          name: 'Thu gom chưa có vận đơn Gomdon',
+          detail: `${s.gomdon.backlog} đơn quá ${t.gomdonBacklogMinutes} phút${refList(s.gomdon.backlogRefs, s.gomdon.backlog)}`,
+          where: OPS_WHERE.gomdonQueue,
+        }),
       });
     }
     if (s.gomdon.attention > 0) {
       out.push({
         key: 'gomdon.attention',
-        message:
-          `${s.gomdon.attention} đơn thu gom cần xử lý tay (tra vận đơn trên Gomdon, tạo vận đơn tay, báo động chưa đóng)` +
-          refList(s.gomdon.attentionRefs, s.gomdon.attention),
+        message: opsAlertLine({
+          name: 'Đơn thu gom cần xử lý tay',
+          detail: `${s.gomdon.attention} đơn${refList(s.gomdon.attentionRefs, s.gomdon.attention)}`,
+          where: OPS_WHERE.gomdonQueue,
+        }),
         items: { count: s.gomdon.attention, refs: s.gomdon.attentionRefs },
       });
     }
   }
   const o = s.orders;
   if (o.deliveredEffectsPending > 0) {
-    const recent = o.deliveredEffectsPending - o.deliveredEffectsStale;
-    const how = [
-      recent > 0 ? `${recent} đơn giao trong ${o.windowDays} ngày hệ thống tự chạy lại mỗi 10 phút, còn mãi thì xem log lỗi của đơn` : '',
-      o.deliveredEffectsStale > 0
-        ? `${o.deliveredEffectsStale} đơn giao quá ${o.windowDays} ngày hệ thống KHÔNG tự chạy lại nữa — chạy lại tay: POST /admin/orders/<mã>/resync-delivered-effects`
-        : '',
-    ].filter(Boolean);
+    // Đơn giao quá `windowDays` ngày cron không chạy lại nữa: người phải bấm "Chạy lại việc sau giao" ở chi tiết đơn.
+    const how = o.deliveredEffectsStale > 0 ? `, ${o.deliveredEffectsStale} đơn quá ${o.windowDays} ngày cần chạy lại tay` : ', hệ thống tự chạy lại';
     out.push({
       key: 'orders.delivered_effects',
-      message:
-        `${o.deliveredEffectsPending} đơn đã giao chưa xong việc sau giao (cộng Điểm Xanh, khoá hoa hồng CTV, thưởng giới thiệu) ` +
-        `quá ${o.graceMinutes} phút${refList(o.deliveredEffectsRefs, o.deliveredEffectsPending)} — ${how.join('; ')}`,
+      message: opsAlertLine({
+        name: 'Việc sau giao chưa xong (điểm, hoa hồng)',
+        detail: `${o.deliveredEffectsPending} đơn quá ${o.graceMinutes} phút${how}${refList(o.deliveredEffectsRefs, o.deliveredEffectsPending)}`,
+        where: o.deliveredEffectsStale > 0 ? OPS_WHERE.resync : OPS_WHERE.health,
+      }),
       items: { count: o.deliveredEffectsPending, refs: o.deliveredEffectsRefs },
     });
   }
   if (s.zns && s.zns.failed24h >= ZNS_FAILED_24H_ALERT) {
     out.push({
       key: 'zns.failed',
-      message: `${s.zns.failed24h} tin ZNS gửi hỏng trong 24 giờ qua${s.zns.topError ? ` — lỗi gặp nhiều nhất: ${s.zns.topError}` : ''}`,
+      message: opsAlertLine({
+        name: 'Tin ZNS gửi hỏng',
+        detail: `${s.zns.failed24h} tin trong 24 giờ${s.zns.topError ? `, lỗi chính: ${s.zns.topError}` : ''}`,
+        where: OPS_WHERE.health,
+      }),
     });
   }
   if (!s.queues.ok) {
-    out.push({ key: 'queues.down', message: `Hàng đợi không phản hồi: ${s.queues.error}` });
+    out.push({ key: 'queues.down', message: opsAlertLine({ name: 'Hàng đợi không phản hồi', detail: s.queues.error, where: OPS_WHERE.tech }) });
   } else {
     for (const q of s.queues.items) {
       if (q.failedLastHour >= t.queueFailed1h) {
-        out.push({ key: `queue.${q.name}`, message: `Hàng đợi ${q.name}: ${q.failedLastHour} job lỗi trong 1 giờ qua` });
+        out.push({
+          key: `queue.${q.name}`,
+          message: opsAlertLine({ name: `Hàng đợi ${q.name} lỗi`, detail: `${q.failedLastHour} job lỗi trong 1 giờ`, where: OPS_WHERE.health }),
+        });
       }
     }
   }
@@ -249,8 +292,11 @@ export interface AlertMessage {
 /** Chat hook chỉ nhận đúng định dạng tin nhắn của nó: Google Chat từ chối trường lạ, Slack đọc `text`. */
 const CHAT_HOSTS = ['hooks.slack.com', 'chat.googleapis.com'];
 
+/** Lưới an toàn cho kênh ra ngoài: sự cố nào không dựng bằng opsAlertLine (hay lỗi tự do lọt vào) vẫn bị che bí mật và cắt độ dài. */
+const safeLine = (text: string) => clipText(opsText(text), OPS_ALERT_LINE_MAX);
+
 export function alertText(m: AlertMessage): string {
-  const lines = m.status === 'ALERT' ? m.problems.map((p) => `• ${p.message}`) : [m.summary];
+  const lines = m.status === 'ALERT' ? m.problems.map((p) => `• ${safeLine(p.message)}`) : [safeLine(m.summary)];
   return [`*${m.title}*`, ...lines].join('\n');
 }
 
@@ -267,5 +313,5 @@ export function alertWebhookBody(url: string, m: AlertMessage): Record<string, u
     /* URL đã qua env.validation; sai thì gửi dạng chung */
   }
   if (CHAT_HOSTS.includes(host)) return { text };
-  return { text, ...m };
+  return { text, ...m, summary: opsText(m.summary), problems: m.problems.map((p) => ({ ...p, message: safeLine(p.message) })) };
 }

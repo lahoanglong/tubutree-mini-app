@@ -213,7 +213,7 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
       const out = await build(store).svc.zaloTokenProblems(NOW);
       expect(out).toHaveLength(1);
       expect(out[0]!.key).toBe('zalo.oa_token');
-      expect(out[0]!.message).toContain('chưa từng được làm mới');
+      expect(out[0]!.message).toContain('chưa được làm mới');
     }
     expect(await build({}, { ZALO_OA_ACCESS_TOKEN: 'env-acc' }).svc.zaloTokenProblems(NOW)).toHaveLength(1);
     expect(await build({}).svc.zaloTokenProblems(NOW)).toEqual([]);
@@ -238,7 +238,7 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
         for (const rows of [[], [cronRow('OK')], [cronRow('SKIPPED')]]) {
           const out = await withCron(rows).zaloTokenProblems(NOW);
           expect(out).toHaveLength(1);
-          expect(out[0]!.message).toContain('chưa từng được làm mới');
+          expect(out[0]!.message).toContain('chưa được làm mới');
         }
         uptime.mockReturnValue(5 * 3600);
         expect(await withCron([]).zaloTokenProblems(NOW)).toEqual([]);
@@ -268,7 +268,7 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
       for (const outcome of ['ERRORS', 'THREW']) {
         const out = await withCron([cronRow(outcome)]).zaloTokenProblems(NOW);
         expect(out).toHaveLength(1);
-        expect(out[0]!.message).toContain('chưa từng được làm mới');
+        expect(out[0]!.message).toContain('chưa được làm mới');
       }
     });
 

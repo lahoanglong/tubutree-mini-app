@@ -5,6 +5,7 @@ import { firstNonEmptyLine } from '../../common/cron-run/cron-aware-logger';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DAILY_WALLET_TRANSFER_JOB } from '../affiliate/affiliate-auto-transfer-config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { clipText, opsText } from './ops-alert-line';
 
 const ALERT_EVERY_MS = 6 * 3_600_000;
 const RECOVERY_QUIET_MS = 3_600_000;
@@ -29,6 +30,17 @@ export function describeCronError(err: unknown): string {
   const firstLine = firstNonEmptyLine(err.message);
   const name = err.constructor?.name && err.constructor.name !== 'Object' ? err.constructor.name : err.name;
   return `${name}: ${firstLine}`.slice(0, MAX_ERROR_LENGTH);
+}
+
+/**
+ * Lỗi trong tin in-app OPS_CRON_FAILED ("Tác vụ nền "{{job}}" lỗi {{count}} lần chạy liên tiếp. Lỗi gần nhất: {{error}}. Xem mục …"): phần
+ * chữ cố định của mẫu đã khoảng 100 ký tự nên lỗi chỉ giữ chừng này để cả tin không quá OPS_NOTICE_MAX. Bản đủ 300 ký tự vẫn nằm ở
+ * cron_runs.lastError cho màn Tác vụ nền. Lỗi Prisma/Redis có thể nhắc URL kèm mật khẩu hay số điện thoại khách: che trước khi gửi.
+ */
+export const CRON_ALERT_ERROR_MAX = 60;
+
+export function cronAlertError(lastError: string): string {
+  return clipText(opsText(lastError), CRON_ALERT_ERROR_MAX) || 'không rõ lỗi';
 }
 
 /** Dòng mốc do mã tự ghi vào cron_runs (không có @TrackCron nên không nằm trong danh sách job đăng ký) mà màn Sức khoẻ vẫn hiện. */
@@ -103,7 +115,7 @@ export class CronRunService implements OnModuleInit, CronRunSink {
     try {
       await notifyAdmins(
         { prisma: this.prisma, notifications: notifier, logger: this.logger },
-        { template: 'OPS_CRON_FAILED', subject: `tác vụ nền ${run.job} lỗi`, data: () => ({ job: run.job, count: String(row.consecutiveFailures), error: lastError }) },
+        { template: 'OPS_CRON_FAILED', subject: `tác vụ nền ${run.job} lỗi`, data: () => ({ job: run.job, count: String(row.consecutiveFailures), error: cronAlertError(lastError) }) },
       );
     } catch (err) {
       this.logger.error(`Không báo được admin về cron ${run.job}: ${err instanceof Error ? err.message : err}`);

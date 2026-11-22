@@ -232,7 +232,7 @@ describe('R5 tiền: trả hai lần, khoá người chuyển khoản, chuyển 
       expect(notify.mock.calls.filter(([uid]) => uid === user.id)).toEqual([]);
       const alerts = sent('OPS_REFUND_ALERT').map(([, , d]) => d as Record<string, string>);
       expect(alerts.length).toBeGreaterThan(0);
-      for (const d of alerts) expect(d).toMatchObject({ order_code: order.code, message: expect.stringContaining('Khách CHƯA được báo') });
+      for (const d of alerts) expect(d).toMatchObject({ order_code: order.code, message: expect.stringContaining('khách chưa được báo') });
     });
 
     it('Pancake báo prepaid = số Tubu tự ghi (transfer_money) cùng bank_payment nhân viên ghi → KHÔNG tạo gì (kể cả khoản chờ đối soát)', async () => {

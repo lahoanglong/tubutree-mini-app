@@ -7,6 +7,7 @@ import type { Env } from '../../config/env.validation';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDateTime } from '../../common/vn-time';
 import { notifyAdmins } from '../../common/notify-admins';
+import { OPS_WHERE, opsAlertLine } from './ops-alert-line';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -161,6 +162,9 @@ export const DISABLED_WEBHOOK_STATE: WebhookChannelState = {
   lastErrorKind: null,
   lastErrorHint: null,
 };
+
+/** Token Zalo OA chỉ cấp lại được ở developers.zalo.me (tài khoản của kỹ thuật); cách làm nằm ở log "Zalo OA refresh". */
+const ZALO_TOKEN_WHERE = `${OPS_WHERE.tech} cấp lại token`;
 
 const WEBHOOK_PERMANENT_HINT =
   'Hook báo động bị từ chối hẳn (hook có thể đã bị thu hồi hoặc URL sai) — kiểm tra OPS_ALERT_WEBHOOK_URL. Hệ thống không tự gửi lại liên tục: sửa URL rồi chờ sự cố kế tiếp để thử lại.';
@@ -321,23 +325,21 @@ export class OpsHealthService {
         return [
           {
             key: 'zalo.oa_token',
-            message:
-              'Token Zalo OA chưa từng được làm mới (thiếu refresh_token hoặc mốc hạn) — ZNS sẽ ngừng sau khoảng 25 giờ; xem log "Zalo OA refresh" hoặc cấp lại token ở developers.zalo.me',
+            message: opsAlertLine({ name: 'Token Zalo OA chưa được làm mới', detail: 'tin ZNS sẽ ngừng sau khoảng 25 giờ', where: ZALO_TOKEN_WHERE }),
           },
         ];
       }
       const left = expiresAt - now.getTime();
       if (left >= ZALO_TOKEN_WARN_MS) return [];
-      const state =
+      const message =
         left <= 0
-          ? `đã hết hạn lúc ${formatVnDateTime(new Date(expiresAt))}`
-          : `chỉ còn ${Math.floor(left / 3_600_000)} giờ ${Math.floor((left % 3_600_000) / 60_000)} phút mà chưa được làm mới`;
-      return [
-        {
-          key: 'zalo.oa_token',
-          message: `Token Zalo OA ${state} — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log "Zalo OA refresh" hoặc cấp lại token ở developers.zalo.me`,
-        },
-      ];
+          ? opsAlertLine({ name: 'Token Zalo OA đã hết hạn', detail: `từ ${formatVnDateTime(new Date(expiresAt))}, tin ZNS không gửi được`, where: ZALO_TOKEN_WHERE })
+          : opsAlertLine({
+              name: 'Token Zalo OA sắp hết hạn',
+              detail: `còn ${Math.floor(left / 3_600_000)} giờ ${Math.floor((left % 3_600_000) / 60_000)} phút, chưa được làm mới`,
+              where: ZALO_TOKEN_WHERE,
+            });
+      return [{ key: 'zalo.oa_token', message }];
     } catch (e) {
       this.logger.warn(`Không đọc được hạn token Zalo OA: ${e instanceof Error ? e.message : String(e)}`);
       return [];
@@ -760,7 +762,12 @@ export class OpsHealthService {
     const summary =
       kind === 'ALERT'
         ? problems.map((p) => p.message).join('; ')
-        : `Hết sự cố${since ? ` bắt đầu lúc ${formatVnDateTime(since)}` : ''} (kiểm lúc ${formatVnDateTime(now)}).`;
+        : opsAlertLine({
+            tone: 'OK',
+            name: 'Hết sự cố vận hành',
+            detail: `${since ? `bắt đầu lúc ${formatVnDateTime(since)}, ` : ''}kiểm lúc ${formatVnDateTime(now)}`,
+            where: OPS_WHERE.health,
+          });
     return { status: kind, title, summary, problems, generatedAt: now.toISOString() };
   }
 

@@ -33,12 +33,12 @@ describe('opsProblems: khoá API Pancake bị từ chối (hi)', () => {
     expect(opsProblems({ ...healthy, pancake: { ...healthy.pancake, configBlocked: 0, configRefs: [] } }, T)).toEqual([]);
   });
 
-  it('có đơn lỗi cấu hình → MỘT problem pancake.config gộp mọi đơn (không báo từng đơn), nêu mã đơn và việc cần làm', () => {
+  it('có đơn lỗi cấu hình → MỘT problem pancake.config gộp mọi đơn (không báo từng đơn), nêu mã đơn và chuyển kỹ thuật', () => {
     const p = opsProblems({ ...healthy, pancake: { ...healthy.pancake, configBlocked: 12, configRefs: ['TUBU1', 'TUBU2'] } }, T);
     expect(p.map((x) => x.key)).toEqual(['pancake.config']);
-    expect(p[0]!.message).toContain('12 đơn');
-    expect(p[0]!.message).toContain('TUBU1, TUBU2');
-    expect(p[0]!.message).toContain('PANCAKE_API_KEY');
+    expect(p[0]!.message).toBe('[Cảnh báo] Pancake từ chối khoá API · 12 đơn không đẩy được: TUBU1, TUBU2 và 10 việc khác · Báo đội kỹ thuật kiểm khoá Pancake');
+    // Tên biến môi trường là việc của kỹ thuật, không nằm trong tin cho admin.
+    expect(p[0]!.message).not.toMatch(/PANCAKE_API_KEY|PANCAKE_SHOP_ID/);
   });
 
   it('Pancake chưa cấu hình → không báo lỗi cấu hình khoá', () => {
@@ -51,8 +51,7 @@ describe('opsProblems: tin ZNS hỏng 24 giờ', () => {
     expect(opsProblems({ ...healthy, zns: { failed24h: 4, topError: 'x' } }, T)).toEqual([]);
     const [p] = opsProblems({ ...healthy, zns: { failed24h: 9, topError: 'ZNS lỗi -124: token hết hạn' } }, T);
     expect(p!.key).toBe('zns.failed');
-    expect(p!.message).toContain('9 tin ZNS');
-    expect(p!.message).toContain('-124');
+    expect(p!.message).toBe('[Cảnh báo] Tin ZNS gửi hỏng · 9 tin trong 24 giờ, lỗi chính: ZNS lỗi -124: token hết hạn · Admin › Sức khoẻ hệ thống');
   });
 
   it('số tin hỏng tăng giữa hai lượt không báo dồn: chỉ nhắc lại sau repeatHours', () => {
@@ -124,7 +123,7 @@ describe('opsProblems (PLATFORM-5)', () => {
 });
 
 describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)', () => {
-  it('webhook lỗi, đơn kẹt, đơn cần xử lý Pancake, đơn thu gom chờ vận đơn → kèm mã đơn, tối đa 5 mã', () => {
+  it('webhook lỗi, đơn kẹt, đơn cần xử lý Pancake, đơn thu gom chờ vận đơn → kèm mã đơn, tối đa 3 mã, chỉ chỗ xử lý', () => {
     const p = opsProblems(
       {
         ...healthy,
@@ -142,10 +141,10 @@ describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)
       T,
     );
     const msg = Object.fromEntries(p.map((x) => [x.key, x.message]));
-    expect(msg['pancake.stuck']).toBe('7 đơn quá 30 phút chưa lên Pancake: TUBU1, TUBU2, TUBU3, TUBU4, TUBU5 và 2 việc khác');
-    expect(msg['pancake.webhook']).toContain('TUBU9 (order.status_updated)');
-    expect(msg['pancake.attention']).toContain('TUBU8');
-    expect(msg['gomdon.backlog']).toBe('1 đơn thu gom quá 15 phút chưa tạo được vận đơn Gomdon: TUBU7');
+    expect(msg['pancake.stuck']).toBe('[Cảnh báo] Đơn chưa lên Pancake · 7 đơn quá 30 phút: TUBU1, TUBU2, TUBU3 và 4 việc khác · Admin › Sức khoẻ hệ thống');
+    expect(msg['pancake.webhook']).toBe('[Cảnh báo] Webhook Pancake lỗi · 1 chưa xử lý: TUBU9 (order.status_updated) · Admin › Sức khoẻ hệ thống');
+    expect(msg['pancake.attention']).toBe('[Cảnh báo] Đơn cần xử lý tay trên Pancake · 1 đơn: TUBU8 · Admin › Đơn hàng › Cần xử lý Pancake');
+    expect(msg['gomdon.backlog']).toBe('[Cảnh báo] Thu gom chưa có vận đơn Gomdon · 1 đơn quá 15 phút: TUBU7 · Admin › Đơn hàng › Cần xử lý thu gom');
   });
 
   it('đơn thu gom cần xử lý tay (NEEDS_MANUAL_CHECK, báo động Gomdon đang mở...) → sự cố gomdon.attention kèm mã đơn (R4-SYNC-3a)', () => {
@@ -153,7 +152,7 @@ describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)
     expect(p).toEqual([
       {
         key: 'gomdon.attention',
-        message: '2 đơn thu gom cần xử lý tay (tra vận đơn trên Gomdon, tạo vận đơn tay, báo động chưa đóng): TUBU2026101409209, TUBU5',
+        message: '[Cảnh báo] Đơn thu gom cần xử lý tay · 2 đơn: TUBU2026101409209, TUBU5 · Admin › Đơn hàng › Cần xử lý thu gom',
         items: { count: 2, refs: ['TUBU2026101409209', 'TUBU5'] },
       },
     ]);
@@ -175,16 +174,17 @@ describe('lời báo động nêu việc cụ thể (R2-PLATFORM-1, R2-GOMDON-4)
     expect(problems).toHaveLength(1);
     const [p] = problems;
     expect(p?.key).toBe('orders.delivered_effects');
-    expect(p?.message).toContain('2 đơn đã giao chưa xong việc sau giao');
-    expect(p?.message).toContain('quá 10 phút: TUBU7, TUBU8');
-    expect(p?.message).toContain('tự chạy lại mỗi 10 phút');
-    expect(p?.message).not.toContain('KHÔNG tự chạy lại');
+    expect(p?.message).toBe(
+      '[Cảnh báo] Việc sau giao chưa xong (điểm, hoa hồng) · 2 đơn quá 10 phút, hệ thống tự chạy lại: TUBU7, TUBU8 · Admin › Sức khoẻ hệ thống',
+    );
     expect(p?.items).toEqual({ count: 2, refs: ['TUBU7', 'TUBU8'] });
 
+    // Đơn quá cửa sổ cron: chỉ tới nút "Chạy lại việc sau giao" ở chi tiết đơn, không đưa đường dẫn API cho admin.
     const [old] = opsProblems(input(1, 1, ['TUBU1']), T);
-    expect(old?.message).not.toContain('tự chạy lại mỗi 10 phút');
-    expect(old?.message).toContain('quá 14 ngày hệ thống KHÔNG tự chạy lại nữa');
-    expect(old?.message).toContain('/resync-delivered-effects');
+    expect(old?.message).toBe(
+      '[Cảnh báo] Việc sau giao chưa xong (điểm, hoa hồng) · 1 đơn quá 10 phút, 1 đơn quá 14 ngày cần chạy lại tay: TUBU1 · Admin › chi tiết đơn › Chạy lại việc sau giao',
+    );
+    expect(old?.message).not.toMatch(/POST|\/admin\/|resync-delivered-effects/);
   });
 
   it('đơn mới kẹt việc sau giao trong lúc sự cố còn mở → báo lại ngay (hàng việc), không chờ giờ nhắc', () => {

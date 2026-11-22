@@ -4,6 +4,7 @@ import { setCronRunSink, type CronRunReport } from '../../common/cron-run/track-
 import { findPointsLotDrift, type LotBalanceRow } from '../loyalty/points-reconcile';
 import { findWalletLedgerDrift } from '../wallet/wallet-reconcile';
 import { LedgerDriftCron } from './ledger-drift.cron';
+import { OPS_NOTICE_MAX } from './ops-alert-line';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
@@ -71,7 +72,8 @@ describe('LedgerDriftCron: kiểm lệch sổ điểm/Ví mỗi đêm', () => {
     expect(adminId).toBe('admin-1');
     expect(template).toBe('OPS_HEALTH_ALERT');
     expect(data.title).toEqual(expect.any(String));
-    expect(data.summary).toContain('Điểm Xanh: 2 khách lệch');
+    expect(data.summary).toContain('Điểm Xanh 2 khách');
+    expect(`${data.title}: ${data.summary}`.length).toBeLessThanOrEqual(OPS_NOTICE_MAX);
     expect(data.summary).toContain('đội kỹ thuật');
     expect(data.summary).not.toMatch(/pnpm|reconcile/);
     expect(data.summary).not.toMatch(/u1|u2/);
