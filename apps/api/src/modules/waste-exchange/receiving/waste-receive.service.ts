@@ -283,7 +283,11 @@ export class WasteReceiveService {
     parcelRequestId?: string,
   ): Promise<WasteReceiveResultDTO> {
     return this.prisma.$transaction(async (tx): Promise<WasteReceiveResultDTO> => {
-      await tx.$queryRaw`SELECT "id" FROM "waste_requests" WHERE "id" = ${req.id} FOR UPDATE`;
+      // Kiện sắp ghi làm đóng thất lạc hàng loạt từ chối yêu cầu đã quét, yêu cầu chủ mã TR- (parcelRequestId) và yêu cầu còn chờ cùng mã vận đơn.
+      // Khoá cả nhóm theo id (cùng thứ tự với createUnmatched) để lượt đóng hàng loạt đang giữ một trong các dòng đó xếp hàng, không đọc trượt kiện này.
+      const relatedId = parcelRequestId ?? null;
+      const trackingNorm = req.trackingNorm ?? null;
+      await tx.$queryRaw`SELECT "id" FROM "waste_requests" WHERE "id" = ${req.id} OR "id" = ${relatedId} OR ("trackingNorm" = ${trackingNorm} AND "status" IN ('OPEN', 'IN_TRANSIT')) ORDER BY "id" FOR UPDATE`;
       const prev = await tx.wasteEvent.findFirst({
         where: {
           requestId: req.id,

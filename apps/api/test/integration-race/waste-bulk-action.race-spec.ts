@@ -234,6 +234,35 @@ describe('WasteBulkActionService (real Postgres)', () => {
     ]);
   });
 
+  it('tubu-w18-04: a scan that records a TR- conflict parcel waits while CLOSE_LOST holds the code owner\'s row lock', async () => {
+    const other = await newUser();
+    const [scannedAs, owner] = [await mailIn(cust.id, 40), await mailIn(other.id, 40)];
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let onLocked!: () => void;
+    const locked = new Promise<void>((r) => (onLocked = r));
+    // Lượt đóng hàng loạt giữ đúng khoá này (FOR UPDATE dòng yêu cầu) trong lúc tìm kiện đang mở.
+    const bulkTx = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "waste_requests" WHERE "id" = ${owner.id} FOR UPDATE`;
+        onLocked();
+        await held;
+      },
+      { timeout: 30_000 },
+    );
+    await locked;
+    let settled = false;
+    const scan = receive.receive(staffA.id, scannedAs.id, { match: { parcelCode: owner.code } }).finally(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 1500));
+    const whileLocked = { settled, parcels: await prisma.wasteUnmatchedParcel.count({ where: { relatedRequestId: scannedAs.id } }) };
+    release();
+    await bulkTx;
+    const res = await scan;
+    expect(whileLocked).toEqual({ settled: false, parcels: 0 });
+    expect(res).toMatchObject({ outcome: 'UNMATCHED', reason: 'TR_TRACKING_CONFLICT' });
+    await expect(prisma.wasteUnmatchedParcel.count({ where: { relatedRequestId: scannedAs.id, status: 'OPEN' } })).resolves.toBe(1);
+  });
+
   it('CLOSE_LOST × MARK_RECEIVED on the same overdue parcel: exactly one wins', async () => {
     const r = await mailIn(cust.id, 40);
     const s = summarize(
