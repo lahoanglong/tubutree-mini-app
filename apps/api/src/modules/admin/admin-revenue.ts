@@ -1,11 +1,24 @@
 import { Prisma } from '@prisma/client';
+import { PILOT_CLEANUP_ACTION } from './golive/golive-pilot';
+
+/**
+ * Đơn thử Giờ G đã dọn: mã nằm trong `targetIds` của một dòng sổ `admin_audit_logs` GOLIVE_PILOT_CLEANUP (đơn ARCHIVE đã giao/xong chỉ được
+ * ghi mã vào sổ, không đổi đơn; đơn bị huỷ ở lượt dọn đã CANCELLED). Đơn thử không phải tiền khách thật nên không vào doanh thu, GMV, khách mua
+ * hay file kế toán. Câu con không phụ thuộc dòng ngoài nên Postgres chạy một lần rồi so bằng bảng băm (hashed SubPlan), không quét lại mỗi đơn.
+ */
+export const NOT_PILOT_CLEANED_SQL = Prisma.sql`o.code NOT IN (
+  SELECT t.code FROM admin_audit_logs a CROSS JOIN LATERAL unnest(a."targetIds") AS t(code)
+  WHERE a.action = ${PILOT_CLEANUP_ACTION} AND t.code IS NOT NULL
+)`;
 
 /**
  * Định nghĩa DUY NHẤT của "Doanh thu" trong admin (KPI tổng quan, báo cáo theo ngày × kênh, báo cáo theo nguồn khách):
  * tiền đã thu thật, tức đơn không huỷ/trả, không bị lật hoàn tiền, và hoặc đã thanh toán, hoặc là COD đã giao do kho Tubu
- * giao. COD của đơn gian hàng tự giao do đối tác thu nên không phải tiền Tubu thu. Phần đã hoàn của lần trả hàng một
- * phần (return_requests APPROVED: refundAmount + shippingRefund) trừ riêng khỏi tổng.
- * Hai dạng cùng một luật: Prisma where (aggregate/count) và mảnh SQL (truy vấn thô, bảng `orders` đặt bí danh `o`).
+ * giao. COD của đơn gian hàng tự giao do đối tác thu nên không phải tiền Tubu thu. Đơn thử Giờ G đã dọn không tính
+ * (NOT_PILOT_CLEANED_SQL). Phần đã hoàn của lần trả hàng một phần (return_requests APPROVED: refundAmount + shippingRefund)
+ * trừ riêng khỏi tổng.
+ * Hai dạng: mảnh SQL (truy vấn thô, bảng `orders` đặt bí danh `o`) là luật đủ. Prisma where (aggregate/count) chỉ có phần trạng thái: luật
+ * đơn thử cần đọc sổ dọn đơn, người dùng where phải loại thêm các mã đó (xem `pilotCleanedCodesFor` ở accounting-export).
  */
 export const REVENUE_ORDER_WHERE: Prisma.OrderWhereInput = {
   status: { notIn: ['CANCELLED', 'RETURNED'] },
@@ -17,12 +30,13 @@ export const REVENUE_ORDER_SQL = Prisma.sql`(
   o.status NOT IN ('CANCELLED', 'RETURNED')
   AND o."paymentStatus" <> 'REFUNDED'
   AND (o."paymentStatus" = 'PAID' OR (o.status = 'DELIVERED' AND o."paymentMethod" = 'COD' AND o.fulfiller <> 'MERCHANT'))
+  AND ${NOT_PILOT_CLEANED_SQL}
 )`;
 
-/** Đơn đang chạy hoặc đã giao: giá trị đặt (GMV), chưa nhất thiết đã thu tiền. */
+/** Đơn đang chạy hoặc đã giao: giá trị đặt (GMV), chưa nhất thiết đã thu tiền. Đơn thử Giờ G đã dọn không tính (mảnh SQL). */
 export const GMV_STATUSES = ['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'] as const;
 export const GMV_ORDER_WHERE: Prisma.OrderWhereInput = { status: { in: [...GMV_STATUSES] } };
-export const GMV_ORDER_SQL = Prisma.sql`o.status IN ('CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED')`;
+export const GMV_ORDER_SQL = Prisma.sql`(o.status IN ('CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED') AND ${NOT_PILOT_CLEANED_SQL})`;
 
 /** Một nhóm (ngày giờ VN, kênh, nền tảng) do truy vấn trả về; kênh/nền tảng null đã đổi thành 'unknown'. */
 export interface RevenueRow {

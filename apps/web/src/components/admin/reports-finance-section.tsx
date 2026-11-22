@@ -77,7 +77,8 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
           <h4 className="text-sm font-medium text-stone-900">Đối soát doanh thu và hoàn tiền</h4>
           <p className="text-xs text-stone-500">
             Mỗi đơn đặt trong khoảng ngày (giờ Việt Nam) một dòng: tiền hàng, CK thương mại, giảm voucher, giảm Điểm Xanh, phí giao, khách trả, đã hoàn, hoàn đang chờ chi,
-            tiền chuyển thừa trả lại và doanh thu ghi nhận (cộng cột này ra đúng số Doanh thu ở trên; đã trừ phần trả hàng). Không có SĐT hay tên khách.
+            hoàn trả hàng chưa xác minh, tiền chuyển thừa trả lại và doanh thu ghi nhận (cộng cột này ra đúng số Doanh thu ở trên; đã trừ phần trả hàng; đơn thử Giờ G đã
+            dọn ghi 0). Không có SĐT hay tên khách.
           </p>
           <button type="button" disabled={disabled} onClick={() => void run('accounting')} className={BTN_SECONDARY}>
             {busy === 'accounting' ? 'Đang xuất…' : 'Xuất CSV đối soát kế toán'}

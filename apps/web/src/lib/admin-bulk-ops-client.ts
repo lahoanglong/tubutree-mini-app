@@ -4,12 +4,20 @@ import { apiFetch } from './client-api';
 export const BULK_STATUS_MAX = 50;
 export type BulkStatusTarget = 'PACKED' | 'CANCELLED';
 
+/**
+ * READY: xem trước, sẽ đổi. UPDATED: lượt này đã đổi. SKIPPED: đơn đã ở trạng thái đích (từ trước, hoặc người khác vừa đổi trước), không phải lỗi.
+ * FAILED: không đổi được. Cùng kiểu `BulkItemOutcome` ở `apps/api/src/modules/admin/bulk-ops/order-bulk-status.ts`.
+ */
+export type BulkItemOutcome = 'READY' | 'UPDATED' | 'SKIPPED' | 'FAILED';
+
 export interface BulkStatusResult {
   /** Đúng chuỗi đã gửi (id đơn). */
   id: string;
   code: string | null;
   from: string | null;
+  /** true khi READY/UPDATED. */
   ok: boolean;
+  outcome: BulkItemOutcome;
   reason: string | null;
 }
 
@@ -17,8 +25,10 @@ export interface BulkStatusResult {
 export interface BulkStatusResponse {
   dryRun: boolean;
   targetStatus: BulkStatusTarget;
+  /** total = okCount + skippedCount + failedCount. */
   total: number;
   okCount: number;
+  skippedCount: number;
   failedCount: number;
   results: BulkStatusResult[];
   auditLogId: string | null;

@@ -1434,6 +1434,15 @@ export class AdminService {
    * REFUNDED trở lại PAID.
    */
   async updateOrderStatus(actor: OrderActor & { id: string }, id: string, status: OrderStatus, note?: string) {
+    return (await this.changeOrderStatus(actor, id, status, note)).order;
+  }
+
+  /**
+   * Như updateOrderStatus, kèm `changed`: true chỉ khi câu đổi trạng thái có điều kiện của CHÍNH lần gọi này đổi dòng đơn. Đơn đã ở đích từ
+   * trước, hay một admin khác vừa đổi trước (lần gọi này thua cuộc đua, setStatus bỏ qua êm, không hoàn tiền/tồn hay báo khách lần hai), thì
+   * vẫn trả đơn như lần bấm lặp nhưng `changed` là false: người gọi hàng loạt ghi đơn đó là bỏ qua, không phải đã đổi.
+   */
+  async changeOrderStatus(actor: OrderActor & { id: string }, id: string, status: OrderStatus, note?: string) {
     const adminId = actor.id;
     const before = await this.prisma.order.findFirst({ where: { OR: [{ id }, { code: id }] } });
     if (!before) throw new NotFoundException('Không tìm thấy đơn hàng.');
@@ -1456,11 +1465,13 @@ export class AdminService {
     }
     await assertManualStatusChange(this.prisma, before, status, outcome);
 
-    this.logger.warn(`Admin ${adminId} cập nhật đơn ${before.code}: ${before.status} → ${status}`);
-    return this.prisma.order.findUniqueOrThrow({
+    const changed = outcome.changed === true;
+    this.logger.warn(`Admin ${adminId} cập nhật đơn ${before.code}: ${before.status} → ${status}${changed ? '' : ' (đơn đã ở trạng thái này, không đổi)'}`);
+    const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: updated.id },
       include: { items: true, user: { select: { id: true, phone: true, fullName: true } } },
     });
+    return { order, changed };
   }
 
   /**

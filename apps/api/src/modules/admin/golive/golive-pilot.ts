@@ -22,7 +22,7 @@ export const PILOT_CANCEL_NOTE = 'Dọn đơn thử sau buổi thử Giờ G';
 export type PilotMatch = 'NOTE_MARKER' | 'TEST_PHONE';
 /**
  * CANCEL: huỷ qua đúng đường nút "Huỷ" của admin (trả tồn, đảo điểm, huỷ đơn Pancake/Gomdon). ARCHIVE: đơn đã ở trạng thái cuối, chỉ ghi mã vào
- * sổ dọn đơn thử, không đổi đơn (báo cáo doanh thu chưa đọc sổ này). MANUAL: có tiền, đã rời kho hoặc chỉ khớp SĐT, phải làm tay theo kịch bản.
+ * sổ dọn đơn thử, không đổi đơn (báo cáo Doanh thu, GMV, Trung tâm tăng trưởng và file kế toán đọc sổ này để loại đơn: admin-revenue.ts). MANUAL: có tiền, đã rời kho hoặc chỉ khớp SĐT, phải làm tay theo kịch bản.
  * DONE: đã dọn ở lượt trước.
  */
 export type PilotAction = 'CANCEL' | 'ARCHIVE' | 'MANUAL' | 'DONE';
@@ -125,7 +125,7 @@ export function planFor(o: PilotOrderShape, matchedBy: readonly PilotMatch[], al
   }
   // Ghi chú do người đặt gõ: CTV đặt hộ khách thật có thể gõ trúng [PILOT], nên đơn đặt hộ không bao giờ tự huỷ hay ghi sổ.
   if (o.placedForCustomer) return { action: 'MANUAL', reason: `Đơn CTV đặt hộ khách có ${PILOT_NOTE_MARKER}: có thể là đơn thật của khách. Kiểm rồi xử lý tay ở Đơn hàng.` };
-  if (FINAL.has(o.status)) return { action: 'ARCHIVE', reason: 'Đơn đã xong: chỉ ghi mã vào sổ dọn đơn thử, không đổi đơn. Báo cáo doanh thu chưa tự loại các mã này.' };
+  if (FINAL.has(o.status)) return { action: 'ARCHIVE', reason: 'Đơn đã xong: chỉ ghi mã vào sổ dọn đơn thử, không đổi đơn. Báo cáo doanh thu và file kế toán tự loại các mã trong sổ.' };
   if (o.type === 'DEALER') return { action: 'MANUAL', reason: 'Đơn đại lý: xử lý tay ở mục đơn đại lý.' };
   if (!CANCELLABLE.has(o.status)) return { action: 'MANUAL', reason: 'Đơn đã đóng gói hoặc đã giao vận chuyển: xử lý tay theo kịch bản (mục 2.6), không tự huỷ.' };
   if (o.paymentStatus !== 'UNPAID') return { action: 'MANUAL', reason: 'Đơn đã có tiền: huỷ tay ở Đơn hàng để chọn hoàn về Ví Tubu hay ngân hàng (Phần 4).' };

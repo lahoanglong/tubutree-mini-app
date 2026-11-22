@@ -43,12 +43,21 @@ export const BULK_ORDER_SELECT = {
 
 export type BulkOrder = Prisma.OrderGetPayload<{ select: typeof BULK_ORDER_SELECT }>;
 
+/**
+ * Kết quả từng đơn. READY: xem trước, sẽ đổi. UPDATED: lượt thật này đổi (câu đổi có điều kiện của chính lượt này đổi dòng đơn).
+ * SKIPPED: đơn đã ở trạng thái đích, từ trước hoặc vì thao tác khác (admin khác, webhook) vừa đổi trước; không phải lỗi, không ghi gì.
+ * FAILED: không đổi được (luật chuyển trạng thái, nhóm việc, đơn vừa sang trạng thái khác, lỗi máy chủ).
+ */
+export type BulkItemOutcome = 'READY' | 'UPDATED' | 'SKIPPED' | 'FAILED';
+
 export interface BulkStatusResult {
   /** Đúng chuỗi người gửi (id hoặc mã đơn). */
   id: string;
   code: string | null;
   from: OrderStatus | null;
+  /** true khi READY/UPDATED. */
   ok: boolean;
+  outcome: BulkItemOutcome;
   /** Lý do không đổi (hoặc sẽ không đổi khi xem trước). null khi ok. */
   reason: string | null;
 }
