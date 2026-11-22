@@ -47,6 +47,16 @@ describe('opsText: lời tự do trước khi ra khỏi hệ thống', () => {
     expect(out).toContain('refresh_token');
   });
 
+  it('Authorization Basic (cả dạng JSON), khoá có dấu phẩy/dấu cách, SĐT viết "(+84) 912 345 678" cũng bị che', () => {
+    const basic = Buffer.from('ops:pw').toString('base64');
+    const out = opsText(
+      `lỗi Authorization: Basic ${basic} rồi {"Authorization":"Basic ${basic}"} password=ab,cd {"password":"p, w}"} gọi (+84) 912 345 678`,
+    );
+    for (const leak of [basic, ',cd', 'p, w', '912 345 678']) expect(out).not.toContain(leak);
+    expect(out).toContain('{"Authorization":"***"}');
+    expect(out).toContain('[số điện thoại đã ẩn]');
+  });
+
   it('giữ nguyên mã đơn, #id Pancake, tên hàng đợi, giờ, số tiền', () => {
     const t = 'Đơn TUBU2026101500001, TUBUSUB0000123007 (#4521), hàng đợi pancake-push, lúc 10:05 22/11/2026, 1.250.000đ';
     expect(opsText(t)).toBe(t);

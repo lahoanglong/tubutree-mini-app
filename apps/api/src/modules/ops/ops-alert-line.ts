@@ -37,8 +37,15 @@ const SEP = ' · ';
 const MIN_SECRET_LEN = 4;
 
 const PHONE_MASK = '[số điện thoại đã ẩn]';
-/** 0 hoặc 84/+84, rồi 8-10 chữ số (cho phép cách bằng dấu cách, chấm, gạch). Không bắt đầu giữa một dãy số dài hơn. */
-const PHONE_RE = /(?<!\d)(?:\+?84|0)(?:[ .-]?\d){8,10}(?!\d)/g;
+/** 0 hoặc 84/+84 (có thể trong ngoặc: "(+84) 912…"), rồi 8-10 chữ số (cho phép cách bằng dấu cách, chấm, gạch). Không bắt đầu giữa một dãy số dài hơn. */
+const PHONE_RE = /(?<!\d)(?:\(?\+?84\)?|0)(?:[ .-]?\d){8,10}(?!\d)/g;
+/**
+ * Giá trị sau tên khoá. Trong ngoặc kép (dạng JSON) thì che tới ngoặc đóng, nên khoá có dấu phẩy hay dấu cách vẫn bị che hết.
+ * Không ngoặc thì che cả cụm tới dấu cách, kèm từ đầu Basic/Bearer/Token/Digest: "Authorization: Basic <base64>" mà chỉ che
+ * chữ Basic thì base64 còn lại giải ra tài khoản:mật khẩu. Nhóm 3 là ngoặc mở, giữ lại để dạng JSON vẫn đọc được.
+ */
+const SECRET_KV_RE =
+  /((?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|token|secret|password|passwd|authorization))("?\s*[:=]\s*)(?:(")[^"\n]*|(?:(?:basic|bearer|token|digest)\s+)?\S+)/gi;
 /** Mã đơn sinh ra: TUBU + ngày + 5 số, TUBUSUB + 7 số epoch + 3 số — phần số của chúng có thể bắt đầu bằng 0. */
 const ORDER_CODE_PREFIX = /TUBU(?:SUB)?$/i;
 /** Đầu số quốc gia sau 0/84 của số Việt Nam hiện hành: 2 (bàn), 3, 5, 7, 8, 9 (di động). */
@@ -74,7 +81,7 @@ export function redactSensitive(text: string): string {
     text
       .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
       .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ***')
-      .replace(/((?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|token|secret|password|passwd|authorization))("?\s*[:=]\s*"?)[^\s",}]+/gi, '$1$2***')
+      .replace(SECRET_KV_RE, (_m, name: string, sep: string, quote: string | undefined) => `${name}${sep}${quote ?? ''}***`)
       .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '***'),
   );
 }
