@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
@@ -8,6 +9,7 @@ import { loadHomeTodo } from './home-todo';
 import { OrderCountsService } from './order-counts.service';
 import { OrderReturnsService } from './order-returns.service';
 import { CustomerRefundsService } from './customer-refunds.service';
+import { OrderCodSwitchService } from './order-cod-switch.service';
 
 export class MyRefundsQuery {
   @IsOptional() @IsString() @MaxLength(64) orderId?: string;
@@ -20,6 +22,7 @@ export class OrdersController {
     private readonly returns: OrderReturnsService,
     private readonly refunds: CustomerRefundsService,
     private readonly counts: OrderCountsService,
+    private readonly codSwitch: OrderCodSwitchService,
   ) {}
 
   @Get()
@@ -62,6 +65,14 @@ export class OrdersController {
   @Post(':code/cancel')
   cancel(@CurrentUser('sub') userId: string, @Param('code') code: string, @Body() dto: CancelOrderDto) {
     return this.orders.cancel(userId, code, dto ?? {});
+  }
+
+  /** Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận (COD). Không đổi được (đã trả, đã huỷ, đã đổi, quá trần…): 409 COD_SWITCH_REFUSED. */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post(':code/switch-to-cod')
+  @HttpCode(200)
+  switchToCod(@CurrentUser('sub') userId: string, @Param('code') code: string) {
+    return this.codSwitch.switchForOwner(userId, code);
   }
 
   @Post(':code/repurchase')

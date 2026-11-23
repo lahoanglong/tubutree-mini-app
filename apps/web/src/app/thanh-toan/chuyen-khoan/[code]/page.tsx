@@ -1,9 +1,9 @@
 'use client';
 
 import { BANK_QR_HINT } from '@tubutree/app-core/bank-payment-copy';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
@@ -13,7 +13,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 import { PAGE_NARROW } from '@/lib/page-frame';
-import { guestBankQr } from '@/lib/guest-checkout/api';
+import { guestBankQr, guestSwitchToCod } from '@/lib/guest-checkout/api';
+import { switchOrderToCod } from '@/lib/shop-client';
 import { guestTrackHref, hashTrackingKey, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
 
 const TITLE = 'Quét QR để chuyển khoản';
@@ -47,6 +48,7 @@ export default function BankPaymentPage() {
   const guestMode = phase === 'guest' && !!guestKey;
   const detail = guestMode ? guestTrackHref(code, guestKey!) : orderDetailHref(code);
   const fetchGuestQr = useCallback((c: string) => guestBankQr(c, guestKey!), [guestKey]);
+  const router = useRouter();
 
   // Không làm mới thì chi tiết/danh sách đơn đọc lại từ cache và còn hiện "Chờ thanh toán" ngay sau khi khách vừa thấy "Đã nhận thanh toán".
   const refreshOrders = useCallback(() => {
@@ -57,6 +59,20 @@ export default function BankPaymentPage() {
     setPaid(true);
     refreshOrders();
   }, [refreshOrders]);
+  // Đổi sang trả tiền khi nhận: đơn không còn chờ chuyển khoản nên rời trang mã QR về đơn (như Mini App); máy chủ từ chối vì đơn vừa đổi thì
+  // dò lại mã QR để khung hiện đúng trạng thái mới (đã trả, đã huỷ).
+  const codSwitch = useMemo(
+    () => ({
+      run: () => (guestMode ? guestSwitchToCod(code, guestKey!) : switchOrderToCod(code)),
+      onSettled: (result: 'switched' | 'stale') => {
+        refreshOrders();
+        void qc.invalidateQueries({ queryKey: ['guest-order', code] });
+        if (result === 'switched') router.replace(detail);
+        else void qc.invalidateQueries({ queryKey: ['bank-qr', code] });
+      },
+    }),
+    [guestMode, code, guestKey, refreshOrders, qc, router, detail],
+  );
 
   // Dải tiêu đề có `data-page-bleed` bỏ đệm 48px của nút lùi ở điện thoại: vẽ nó ngay khi còn chờ phiên hoặc chờ QR (trạng thái cuối thường gặp),
   // vẽ muộn lúc QR về thì cả trang nhảy lên 48px (CLS ~0,8 ở 390px).
@@ -83,6 +99,7 @@ export default function BankPaymentPage() {
           // Cùng khung chờ với lúc chờ phiên: hai bước chờ là một khối, cao gần bằng khung QR (CLS điện thoại).
           loadingFallback={<AuthLoading />}
           {...(guestMode ? { fetchQr: fetchGuestQr } : {})}
+          codSwitch={codSwitch}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>

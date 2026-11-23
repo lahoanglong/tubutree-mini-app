@@ -6,16 +6,19 @@ import { withQueueTimeout } from '../../../jobs/queue-timeout';
  * @InjectQueue(QUEUE_PANCAKE_PUSH) (QueueModule @Global), tránh vòng phụ thuộc module.
  *  - push: tạo đơn Pancake (có claim + tra theo mã đơn trước khi tạo lại, xem PancakeOrderService.pushOrder);
  *  - payment: đơn đã trả tiền sau khi lên Pancake → cập nhật "đã thanh toán, không thu COD";
- *  - cancel: đơn huỷ ở Tubu → huỷ đơn Pancake (chưa bàn giao vận chuyển).
+ *  - cancel: đơn huỷ ở Tubu → huỷ đơn Pancake (chưa bàn giao vận chuyển);
+ *  - cod-switch: khách đổi đơn chuyển khoản chưa trả sang COD → sửa ghi chú/thẻ đơn Pancake từ "chờ chuyển khoản" sang "thu COD".
  */
 export const PANCAKE_JOB_PUSH = 'push';
 export const PANCAKE_JOB_PAYMENT = 'payment';
 export const PANCAKE_JOB_CANCEL = 'cancel';
+export const PANCAKE_JOB_COD_SWITCH = 'cod-switch';
 
 /** jobId KHÔNG được chứa ':' (BullMQ 5). */
 export const pancakePushJobId = (orderId: string) => orderId;
 export const pancakePaymentJobId = (orderId: string) => `payment-${orderId}`;
 export const pancakeCancelJobId = (orderId: string) => `cancel-${orderId}`;
+export const pancakeCodSwitchJobId = (orderId: string) => `cod-switch-${orderId}`;
 
 /**
  * Xoá job cùng jobId đã KẾT THÚC (completed/failed) rồi add lại: BullMQ giữ hash job đã xong (removeOnComplete /
@@ -51,6 +54,10 @@ export function enqueuePancakePayment(queue: Queue, orderId: string): Promise<vo
 
 export function enqueuePancakeCancel(queue: Queue, orderId: string): Promise<void> {
   return addPancakeJob(queue, PANCAKE_JOB_CANCEL, orderId, pancakeCancelJobId(orderId));
+}
+
+export function enqueuePancakeCodSwitch(queue: Queue, orderId: string): Promise<void> {
+  return addPancakeJob(queue, PANCAKE_JOB_COD_SWITCH, orderId, pancakeCodSwitchJobId(orderId));
 }
 
 /**

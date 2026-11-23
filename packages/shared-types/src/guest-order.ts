@@ -32,6 +32,46 @@ export interface GuestOrderTrackDTO {
   siblings: { code: string; status: string; total: number }[];
   /** Đơn đã xong (giao, huỷ, hoàn): mốc đường dẫn theo dõi hết hạn. Đơn đang chạy: null. */
   expiresAt: string | null;
+  /** Đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (POST /checkout/guest/orders/:code/switch-to-cod). API cũ không trả. */
+  codSwitchable?: boolean;
+}
+
+/**
+ * Kết quả đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận (POST /orders/:code/switch-to-cod của khách đăng nhập, POST
+ * /checkout/guest/orders/:code/switch-to-cod của khách vãng lai). Không đổi được: 409, body `code` = `COD_SWITCH_REFUSED`, `reason` = `CodSwitchRefusalReason`.
+ */
+export interface CodSwitchResultDTO {
+  code: string;
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  total: number;
+}
+
+export type CodSwitchRefusalReason =
+  | 'ALREADY_PAID'
+  | 'CLOSED'
+  | 'ALREADY_COD'
+  | 'NOT_TRANSFER'
+  | 'NOT_PENDING'
+  | 'NOT_ELIGIBLE'
+  | 'OVER_MAX'
+  | 'PAYMENT_IN_PROGRESS';
+
+/** Một dòng bỏ qua khi mua lại: sản phẩm ngừng bán/gỡ (`INACTIVE`) hay hết hàng (`OUT_OF_STOCK`). */
+export interface GuestReorderSkippedDTO {
+  productName: string;
+  variationName: string | null;
+  reason: 'INACTIVE' | 'OUT_OF_STOCK';
+}
+
+/**
+ * GET /checkout/guest/orders/:code/reorder (header `x-order-key`), chỉ đơn đã giao hay đã huỷ: các món mua lại được để trình duyệt thêm vào giỏ
+ * khách. Bỏ quà tặng 0đ, món ngừng bán và món hết hàng; số lượng đã kẹp theo tồn kho lúc hỏi. `slug` là slug hiện tại của sản phẩm.
+ */
+export interface GuestReorderDTO {
+  lines: { variationId: string; slug: string; quantity: number; maxQty: number; productName: string; variationName: string | null }[];
+  skipped: GuestReorderSkippedDTO[];
 }
 
 /**

@@ -16,8 +16,8 @@ import {
   isPancakeCancelled,
   isPancakeHandedOver,
 } from './pancake-outbound';
-import { enqueuePancakeCancel, enqueuePancakePayment, removeFailedPancakePush } from './pancake-queue';
-import { ATTENTION_CANCEL_PENDING, flagPancakeAttention } from './pancake-attention';
+import { enqueuePancakeCancel, enqueuePancakeCodSwitch, enqueuePancakePayment, removeFailedPancakePush } from './pancake-queue';
+import { ATTENTION_CANCEL_PENDING, ATTENTION_COD_SWITCH_PENDING, flagPancakeAttention } from './pancake-attention';
 import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 
 /** Lời báo khách/admin khi Pancake đã bàn giao đơn cho đơn vị vận chuyển (D1). */
@@ -195,6 +195,31 @@ export class PancakeSyncHooks {
         `Xếp lệnh huỷ Pancake lỗi cho đơn ${orderId}: ${pancakeErrorText(err)} — ${queuedOrSettled ? 'cron cứu hộ thử lại' : 'chưa đặt được PENDING nên cron huỷ Pancake không thấy đơn, cần chạy lại phần đảo sau huỷ'}.`,
       );
       return queuedOrSettled;
+    }
+  }
+
+  /**
+   * Khách vừa đổi đơn chuyển khoản chưa trả sang COD: xếp lệnh sửa ghi chú/thẻ đơn Pancake ("chờ chuyển khoản, chưa giao" → "thu COD"). Không có
+   * cron nào quét lại việc này, nên xếp lệnh lỗi thì đưa đơn vào "Cần xử lý Pancake" để người sửa tay, kẻo kho giữ đơn mãi không giao.
+   */
+  async afterCodSwitch(orderId: string): Promise<void> {
+    const order = await this.prisma.order
+      .findUnique({ where: { id: orderId }, select: { id: true, code: true, fulfiller: true, pancakeOrderId: true } })
+      .catch(() => null);
+    if (!order || isMerchantFulfilledOrder(order)) return;
+    try {
+      await enqueuePancakeCodSwitch(this.queue, orderId);
+    } catch (err) {
+      this.logger.error(`Xếp lệnh sửa ghi chú COD Pancake lỗi cho đơn ${order.code}: ${pancakeErrorText(err)}.`);
+      // Chưa lên Pancake thì lần đẩy sau dựng thân mới (đã "thu COD"): không cần ai sửa tay.
+      if (!order.pancakeOrderId) return;
+      await flagPancakeAttention(
+        this.prisma,
+        this.alerts,
+        order,
+        `${ATTENTION_COD_SWITCH_PENDING} (#${order.pancakeOrderId}): sửa tay ghi chú thành thu COD rồi giao.`,
+        this.logger,
+      ).catch((e) => this.logger.error(`Không ghi được cờ cần xử lý cho đơn ${order.code}: ${pancakeErrorText(e)}`));
     }
   }
 

@@ -806,6 +806,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   statusTimes?: Partial<Record<string, string>>;
   /** Lý do huỷ viết sẵn cho khách đọc (API đã lọc); API cũ chưa trả. */
   cancelReason?: string | null;
+  /** Đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (chỉ chi tiết đơn). API cũ không trả. */
+  codSwitchable?: boolean;
 };
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
 export type PlacedOrder = OrderDTO & { splitOrders?: SplitOrderDTO[] };

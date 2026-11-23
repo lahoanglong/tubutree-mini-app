@@ -24,7 +24,7 @@ describe('GET /orders/home-todo', () => {
 
   it('chỉ đơn của người gọi: cả ba lời list nhận đúng userId, limit 1 trang 1', async () => {
     const list = jest.fn().mockResolvedValue(page([]));
-    const ctrl = new OrdersController({ list } as unknown as OrdersService, {} as never, {} as never, {} as never);
+    const ctrl = new OrdersController({ list } as unknown as OrdersService, {} as never, {} as never, {} as never, {} as never);
     await ctrl.homeTodo('u1');
     expect(list).toHaveBeenCalledTimes(3);
     expect(list).toHaveBeenCalledWith('u1', { status: 'PENDING_PAYMENT' }, 1, 1);

@@ -40,12 +40,14 @@ import {
   pancakeOrderIdOf,
 } from './pancake-outbound';
 import { CRON_TZ } from '../../../common/cron-tz';
-import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
+import { enqueuePancakeCancel, enqueuePancakeCodSwitch, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
+import { switchedFromTransfer } from '../../orders/cod-switch';
 import { classifyPushError, isPushFailureSettled, keepsPriorKind, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText, type PushErrorKind } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import { BULK_RETRY_WHERE, bulkRetryMessage, bulkRetryRefusal, type BulkRetryResult } from './pancake-bulk-retry';
 import {
   ATTENTION_CANCEL_PENDING,
+  ATTENTION_COD_SWITCH_PENDING,
   ATTENTION_PAYMENT_PENDING,
   ATTENTION_PUSH_FAILED,
   ATTENTION_PUSH_RETRYING,
@@ -773,6 +775,38 @@ export class PancakeOrderService {
   }
 
   /**
+   * Khách đã đổi đơn chuyển khoản chưa trả sang COD: PUT ghi chú + thẻ dựng lại từ đơn hiện tại ("[THU COD …]" thay cho "[CHỜ CHUYỂN KHOẢN … CHƯA GIAO]").
+   * Số thu hộ không cần gửi: đơn chờ chuyển khoản lên Pancake đã mang cod = tổng phải thu (không có phần trả trước). Đơn chưa lên Pancake thì lần đẩy
+   * sau dựng thân mới; lệnh tạo đang bay thì saveCreated xếp lại job này. Đã trả tiền (khách vẫn chuyển khoản sau khi đổi) thì job thanh toán ghi
+   * "không thu COD", ghi chú COD không còn đúng nên bỏ. Lần cuối vẫn lỗi: đưa đơn vào "Cần xử lý Pancake" để sửa tay, kẻo kho giữ đơn mãi không giao.
+   */
+  async syncCodSwitch(orderId: string, final = false): Promise<void> {
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED' || isMerchantFulfilledOrder(order)) return;
+    if (order.paymentMethod !== 'COD' || order.paymentStatus !== 'UNPAID' || !order.pancakeOrderId) return;
+    if (!this.client.isConfigured()) return;
+    const { payload } = await this.orderUpdate(order, false);
+    try {
+      await this.putOrder(order.pancakeOrderId, payload);
+    } catch (err) {
+      await this.setPushError(order.id, err);
+      if (final || classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) {
+        await flagPancakeAttention(
+          this.prisma,
+          this.alerts,
+          order,
+          `${ATTENTION_COD_SWITCH_PENDING} (#${order.pancakeOrderId}): ${pancakeErrorText(err)}. Sửa tay ghi chú thành thu COD ${order.total.toLocaleString('vi-VN')}đ rồi giao.`,
+          this.logger,
+        );
+      }
+      throw err;
+    }
+    await this.prisma.order.updateMany({ where: { id: order.id, pancakeSyncError: { not: null } }, data: { pancakeSyncError: null } });
+    await clearPancakeAttention(this.prisma, order.id, ATTENTION_COD_SWITCH_PENDING);
+    this.logger.log(`Đã báo Pancake đơn ${order.code} (#${order.pancakeOrderId}) đổi sang thu COD.`);
+  }
+
+  /**
    * Vận đơn Gomdon vừa gắn cho đơn đã có trên Pancake: PUT lại ghi chú + tag (mã vận đơn, "KHÔNG TẠO VẬN ĐƠN KHÁC",
    * tag GOMDON, lời dặn khách, dấu thanh toán) — cùng đường với job thanh toán. Đơn đã trả trước thì kèm luôn số đã
    * trả (cod 0). Ném lỗi khi Pancake từ chối để người gọi báo "ghi mã vào Pancake".
@@ -1002,11 +1036,12 @@ export class PancakeOrderService {
     if (!pancakeOrderId) throw new PancakeApiError(`Đơn Pancake tìm thấy cho ${order.code} không có mã đọc được.`, true);
     this.logger.warn(`Đơn ${order.code} đã có trên Pancake (#${pancakeOrderId}) từ lần đẩy trước — gắn lại, không tạo đơn mới.`);
     // Đơn tìm thấy được tạo bởi lần thử trước, có thể trước khi khách trả tiền: để job thanh toán tự kiểm.
-    await this.saveCreated(order, pancakeOrderId, false);
+    await this.saveCreated(order, pancakeOrderId, false, true);
     return pancakeOrderId;
   }
 
-  private async saveCreated(order: OrderWithItems, pancakeOrderId: string, paymentSynced: boolean): Promise<void> {
+  /** `adopted`: gắn lại đơn Pancake do lần thử trước tạo (không biết thân lúc đó), khác với đơn vừa tạo từ chính `order`. */
+  private async saveCreated(order: OrderWithItems, pancakeOrderId: string, paymentSynced: boolean, adopted = false): Promise<void> {
     const saved = await this.prisma.order.updateMany({
       where: { id: order.id, pancakeOrderId: null },
       data: {
@@ -1033,6 +1068,16 @@ export class PancakeOrderService {
       await this.requestCancel(now);
     } else if (now.paymentStatus === 'PAID' && !now.pancakePaymentSynced && isPrepaidMethod(now.paymentMethod)) {
       await this.enqueuePayment(now.id).catch((e) => this.logger.error(`Enqueue cập nhật thanh toán Pancake lỗi cho ${now.code}: ${pancakeErrorText(e)}`));
+    } else if (
+      now.paymentStatus === 'UNPAID' &&
+      now.paymentMethod === 'COD' &&
+      (order.paymentMethod === 'BANK_TRANSFER' || (adopted && (await switchedFromTransfer(this.prisma, now))))
+    ) {
+      // Khách đổi sang COD trong lúc lệnh tạo đơn đang bay (thân vừa gửi dựng khi còn chuyển khoản), hoặc đơn vừa gắn do lần thử trước tạo lúc còn
+      // chuyển khoản: ghi chú trên Pancake còn "chờ chuyển khoản". Sửa lại một lần (PUT cùng nội dung nếu thân đã đúng).
+      await enqueuePancakeCodSwitch(this.pushQueue, now.id).catch((e) =>
+        flagPancakeAttention(this.prisma, this.alerts, now, `${ATTENTION_COD_SWITCH_PENDING} (#${pancakeOrderId}): ${pancakeErrorText(e)}. Sửa tay ghi chú thành thu COD rồi giao.`, this.logger),
+      );
     }
   }
 

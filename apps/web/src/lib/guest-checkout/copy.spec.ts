@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FORBIDDEN_TERMS } from '@tubutree/app-core/shop-copy';
 import { GUEST_CHECKOUT_COPY, GUEST_CHECKOUT_COPY_BUDGET, guestCopy, type GuestCopyKey } from './copy';
 
-/** Giá trị dài nhất của từng biến: số tiền tới hàng trăm nghìn, ngày dạng dd/mm/yyyy. */
-const WORST = { amount: '500.000đ', date: '31/12/2026' };
+/** Giá trị dài nhất của từng biến: số tiền tới hàng trăm nghìn, ngày dạng dd/mm/yyyy, số món tới trần 30 dòng của giỏ khách. */
+const WORST = { amount: '500.000đ', date: '31/12/2026', n: 30 };
 
 describe('chữ đặt hàng không đăng nhập (web)', () => {
   it('chữ và ngân sách cùng tập khoá, không câu rỗng, không dấu chấm than', () => {

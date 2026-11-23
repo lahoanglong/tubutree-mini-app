@@ -15,6 +15,10 @@ const REVIEWED: Record<string, Review> = {
   'modules/checkout/checkout.service.ts': { kind: 'records', events: 'order.created (+ order.payment_confirmed khi trả trước đã PAID lúc tạo), trong tx tạo đơn' },
   'modules/orders/order-status.service.ts': { kind: 'records', events: 'setStatus: shipping/delivered/cancelled; markPaid: payment_confirmed' },
   'modules/orders/orders.service.ts': { kind: 'records', events: 'khách tự huỷ: order.cancelled' },
+  'modules/orders/order-cod-switch.service.ts': {
+    kind: 'records',
+    events: 'khách đổi chuyển khoản → COD (PENDING_PAYMENT → CONFIRMED): onStatusChanged, hợp đồng v1.2 chưa có sự kiện; cố ý không phát payment_confirmed',
+  },
   'modules/integrations/payment/zalopay.service.ts': { kind: 'records', events: 'callback ZaloPay lật PAID: order.payment_confirmed' },
   'modules/dealer/dealer.service.ts': { kind: 'exempt', reason: 'chỉ đơn DEALER (type = DEALER); hợp đồng không phát cho đại lý' },
   'modules/affiliate/affiliate.service.ts': { kind: 'exempt', reason: 'CTV đặt hộ (placedForCustomer): hợp đồng không phát' },

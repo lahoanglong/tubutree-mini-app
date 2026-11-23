@@ -8,7 +8,7 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 const NOW = '2026-11-05T05:00:00.000Z';
 const hoursFromNow = (h: number) => new Date(Date.parse(NOW) + h * 3_600_000).toISOString();
 
-const mocks = vi.hoisted(() => ({ order: null as unknown, returns: [] as unknown[], writeText: vi.fn() }));
+const mocks = vi.hoisted(() => ({ order: null as unknown, returns: [] as unknown[], writeText: vi.fn(), switchCod: vi.fn() }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getPublicSupport: async () => ({ hotline: '0984 606 774', email: 'tubutree@gmail.com' }),
@@ -20,6 +20,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   fetchOrder: async () => mocks.order,
   fetchMyReturns: async () => mocks.returns,
   fetchMyRefunds: async () => [],
+  switchOrderToCod: (...a: unknown[]) => mocks.switchCod(...a),
   getPublicConfig: async () => ({ returnWindowDays: 7, shippingEta: { minDays: 1, maxDays: 3 } }),
   getBankQr: async () => ({
     orderCode: 'TB-9', amount: 1, paymentStatus: 'UNPAID',
@@ -263,5 +264,37 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
       const { container } = await mount();
       expect(container.querySelector('[data-testid="status-hero"] [data-testid="order-cancel-reason"]')?.textContent).toBe(reason);
     }
+  });
+});
+
+describe('chi tiết đơn web — đổi chuyển khoản chưa trả sang COD (w23-02)', () => {
+  const AWAITING = { ...BASE, ...ROWS[0]!.order, codSwitchable: true };
+
+  it('máy chủ cho đổi: đúng một nút phụ ≥44px dưới dòng Thanh toán (khung QR nhúng không lặp nút), xác nhận thì gọi API và báo đã đổi', async () => {
+    mocks.order = AWAITING;
+    mocks.switchCod.mockReset().mockResolvedValue({ code: 'TB-9', status: 'CONFIRMED', paymentMethod: 'COD' });
+    const { container } = await mount();
+    const ctas = container.querySelectorAll<HTMLButtonElement>('[data-testid="cod-switch"] button');
+    expect(ctas).toHaveLength(1);
+    expect(ctas[0]!.textContent).toBe('Đổi sang trả tiền khi nhận (COD)');
+    expect(ctas[0]!.className).toMatch(/\bmin-h-11\b/);
+    expect(barLabels(container)).toEqual(['Thanh toán ngay']);
+    click(ctas[0]!);
+    const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === 'Đổi sang COD')!;
+    vi.useRealTimers();
+    click(confirm);
+    await flush(6);
+    expect(mocks.switchCod).toHaveBeenCalledWith('TB-9');
+    expect(container.querySelector('[data-testid="cod-switch-done"]')?.textContent).toBe('Đã đổi sang trả tiền khi nhận. Đơn đã được xác nhận.');
+    expect(container.querySelector('[data-testid="cod-switch"]')).toBeNull();
+  });
+
+  it('máy chủ không cho đổi (đơn COD, hay thiếu cờ): không có nút', async () => {
+    mocks.order = { ...BASE, ...ROWS[0]!.order };
+    const a = await mount();
+    expect(a.container.querySelector('[data-testid="cod-switch"]')).toBeNull();
+    mocks.order = BASE;
+    const b = await mount();
+    expect(b.container.querySelector('[data-testid="cod-switch"]')).toBeNull();
   });
 });

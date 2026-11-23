@@ -18,6 +18,7 @@ import {
   repurchaseOrder,
   requestReturn,
   SUBSCRIPTION_ORDER_NOTE,
+  switchOrderToCod,
 } from './orders';
 import type { CartSummary } from './cart';
 
@@ -77,6 +78,12 @@ describe('orders — hợp đồng gọi API', () => {
       { method: 'post', path: '/orders/T1/cancel', body: {} },
       { method: 'post', path: '/orders/T1/cancel', body: dest },
     ]);
+  });
+
+  it('switchOrderToCod: POST /orders/:code/switch-to-cod, body rỗng', async () => {
+    const { http, calls } = fakeHttp();
+    await switchOrderToCod(http, 'T1');
+    expect(calls).toEqual([{ method: 'post', path: '/orders/T1/switch-to-cod', body: {} }]);
   });
 
   it('repurchaseOrder: body mặc định rỗng, chuẩn hoá phản hồi v2 và legacy', async () => {

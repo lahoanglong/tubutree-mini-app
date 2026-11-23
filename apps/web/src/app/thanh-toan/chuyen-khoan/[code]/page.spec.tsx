@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 
@@ -8,10 +9,12 @@ import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 const mocks = vi.hoisted(() => ({
   auth: { user: { id: 'u' } as null | Record<string, unknown>, status: 'authenticated' as string, initialized: true, sessionUnavailable: false },
   params: { code: 'TB-9' } as Record<string, string>,
-  qr: { paymentStatus: 'UNPAID' as string, calls: [] as string[], fail: false },
+  qr: { paymentStatus: 'UNPAID' as string, calls: [] as string[], fail: false, cod: false },
+  replace: vi.fn(),
+  switchCod: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-vi.mock('next/navigation', () => ({ usePathname: () => '/', useParams: () => mocks.params, useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/', useParams: () => mocks.params, useRouter: () => ({ push: vi.fn(), replace: mocks.replace }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getBankQr: async (code: string) => {
@@ -20,9 +23,10 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     return {
       orderCode: code, amount: 330000, paymentStatus: mocks.qr.paymentStatus,
       bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
-      memo: code, qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
+      memo: code, qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png', codSwitchable: mocks.qr.cod,
     };
   },
+  switchOrderToCod: (...a: unknown[]) => mocks.switchCod(...a),
 }));
 
 import BankPaymentPage from './page';
@@ -39,7 +43,9 @@ beforeEach(() => {
   mocks.auth.initialized = true;
   mocks.auth.sessionUnavailable = false;
   mocks.params = { code: 'TB-9' };
-  mocks.qr = { paymentStatus: 'UNPAID', calls: [], fail: false };
+  mocks.qr = { paymentStatus: 'UNPAID', calls: [], fail: false, cod: false };
+  mocks.replace.mockReset();
+  mocks.switchCod.mockReset().mockResolvedValue({ code: 'TB-9', status: 'CONFIRMED', paymentMethod: 'COD' });
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -169,5 +175,26 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     await flush();
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
+  });
+});
+
+describe('trang chuyển khoản — đổi sang COD (w23-02)', () => {
+  it('máy chủ cho đổi: nút phụ dưới QR; xác nhận thì gọi API của khách đăng nhập rồi thay trang bằng chi tiết đơn', async () => {
+    mocks.qr.cod = true;
+    const c = mount();
+    await flush();
+    const cta = c.querySelector<HTMLButtonElement>('[data-testid="cod-switch"] button')!;
+    expect(cta.textContent).toBe('Đổi sang trả tiền khi nhận (COD)');
+    await act(async () => cta.click());
+    await act(async () => Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === 'Đổi sang COD')!.click());
+    await flush();
+    expect(mocks.switchCod).toHaveBeenCalledWith('TB-9');
+    expect(mocks.replace).toHaveBeenCalledWith('/tai-khoan/don-hang/TB-9');
+  });
+
+  it('máy chủ không cho đổi: không có nút', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('[data-testid="cod-switch"]')).toBeNull();
   });
 });

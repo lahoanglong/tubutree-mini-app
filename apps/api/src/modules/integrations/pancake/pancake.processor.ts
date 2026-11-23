@@ -49,6 +49,7 @@ import { OrderStatusService, InvalidOrderTransitionError, type SetStatusOutcome 
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
 import { hasDealerCreditDebit } from '../../orders/dealer-credit-debit';
+import { switchedFromTransfer } from '../../orders/cod-switch';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../../common/vat-invoice-url';
@@ -689,7 +690,15 @@ export class PancakeProcessor extends WorkerHost {
   private async onPaymentReconcile(data: Record<string, unknown>, opts: { deferGomdonPush?: boolean } = {}): Promise<Order | null> {
     const order = await this.findOrder(data);
     if (!order) return null;
-    if (order.paymentMethod !== 'BANK_TRANSFER') return null;
+    // Đơn khách đã đổi từ chuyển khoản sang COD vẫn nhận đối soát: tiền khách lỡ chuyển (QR cũ, chuyển trước khi đổi mà ngân hàng báo muộn) phải
+    // lật PAID để kho không thu COD lần nữa, hay thành khoản hoàn khi đơn đã huỷ. Chỉ khi hàng chưa rời kho: sau bàn giao, "đã trả" của Pancake có
+    // thể là tiền thu hộ COD của hãng, không phải chuyển khoản.
+    const codSwitched =
+      order.paymentMethod === 'COD' &&
+      order.shippedAt === null &&
+      !['SHIPPING', 'DELIVERED', 'RETURNED'].includes(order.status) &&
+      (await switchedFromTransfer(this.prisma, order));
+    if (order.paymentMethod !== 'BANK_TRANSFER' && !codSwitched) return null;
     this.warnUnreadableMoney(order, unreadablePaidFields(data), data);
     // Đơn chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó (hay nhân viên sửa
     // ghi chú) cũng khớp. Cờ is_paid của đơn như vậy chưa đủ để lật PAID, ghi khoản hoàn hay tính trả vượt: chốt ở đây, trước mọi nhánh tiền.
@@ -713,7 +722,7 @@ export class PancakeProcessor extends WorkerHost {
       return null;
     }
     if (!flaggedPaid) {
-      if (reported > 0) await this.flagUnderpaid(order, reported);
+      if (reported > 0) await (codSwitched ? this.flagCodSwitchedPartial(order, reported) : this.flagUnderpaid(order, reported));
       return null;
     }
 
@@ -811,6 +820,18 @@ export class PancakeProcessor extends WorkerHost {
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       order,
       { reportedTotal: reported, source: 'PANCAKE' },
+    );
+  }
+
+  /**
+   * Đơn đã đổi sang COD mà Pancake ghi nhận một phần chuyển khoản: không mời khách "chuyển thêm" (đơn đang thu COD), chỉ ghi số đã nhận và đưa vào
+   * hàng cần xử lý để trừ khi thu COD hoặc hoàn lại. Huỷ đơn thì khoản này thành yêu cầu hoàn như mọi đơn khác.
+   */
+  private async flagCodSwitchedPartial(order: Order, paid: number): Promise<void> {
+    await this.prisma.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID' }, data: { pancakePaidReported: paid } });
+    await this.flagAttention(
+      order,
+      `${ATTENTION_UNDERPAID}: đơn đã đổi sang COD nhưng Pancake ghi nhận chuyển khoản ${formatVnd(paid)}/${formatVnd(order.total)} — sửa số thu COD còn ${formatVnd(order.total - paid)}, hoặc hoàn số đã nhận.`,
     );
   }
 

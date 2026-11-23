@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Check, Copy } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { COD_SWITCH_DONE } from '@tubutree/app-core/bank-payment-copy';
 import { buildOrderTimelineSteps, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
+import { CodSwitchAction } from '@/components/orders/cod-switch-action';
+import { GuestReorderNoteBox } from '@/components/orders/guest-reorder-note';
 import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
 import { DesktopLines, MobileItems, NO_LINE_FIX, Row, type CheckoutLineView } from '@/components/checkout/checkout-lines';
 import { AuthLoading } from '@/components/login-required';
@@ -14,15 +17,18 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
 import { copyText } from '@/lib/copy-text';
+import { actionErrorText } from '@/lib/error-text';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { orderDetailHref, orderStatusLabel, paymentMethodLabel } from '@/lib/order-view';
 import { loginHref } from '@/lib/return-to';
-import { guestTrackOrder } from '@/lib/guest-checkout/api';
+import { guestReorder, guestSwitchToCod, guestTrackOrder } from '@/lib/guest-checkout/api';
 import { guestCopy } from '@/lib/guest-checkout/copy';
 import { useGuestOrderClaim } from '@/lib/guest-checkout/claim';
 import { guestBankHref, guestTrackHref, hashTrackingKey, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
+import { useGuestCartFlag } from '@/lib/guest-cart/flag';
+import { addReorderLines, saveGuestReorderNote, type GuestReorderNote } from '@/lib/guest-cart/reorder';
 
 function readCode(raw: string | undefined): string {
   try {
@@ -54,6 +60,9 @@ export default function GuestOrderPage() {
   const key = useTrackingKey(code);
   const phase = useAuthPhase();
   const claimed = useGuestOrderClaim(phase === 'authenticated');
+  const guestCart = useGuestCartFlag();
+  const qc = useQueryClient();
+  const [codSwitched, setCodSwitched] = useState(false);
   const q = useQuery({
     queryKey: ['guest-order', code, key],
     queryFn: () => guestTrackOrder(code, key!),
@@ -101,6 +110,8 @@ export default function GuestOrderPage() {
       thumbnail: null,
     }));
     const awaitingTransfer = o.paymentMethod === 'BANK_TRANSFER' && o.status === 'PENDING_PAYMENT' && o.paymentStatus !== 'PAID';
+    // Mua lại vào giỏ khách: chỉ khi chưa đăng nhập (đã đăng nhập thì Mua lại nằm ở Đơn của tôi) và giỏ khách đang bật.
+    const canReorder = (o.status === 'DELIVERED' || o.status === 'CANCELLED') && phase === 'guest' && guestCart.enabled;
     body = (
       <div className="space-y-2 md:space-y-3">
         {claimed !== null && claimed > 0 && (
@@ -126,6 +137,24 @@ export default function GuestOrderPage() {
               Mở mã QR chuyển khoản
             </Link>
           )}
+          {o.codSwitchable && !codSwitched && (
+            <CodSwitchAction
+              total={o.total}
+              switchToCod={() => guestSwitchToCod(o.code, key)}
+              onSettled={(result) => {
+                if (result === 'switched') setCodSwitched(true);
+                void q.refetch();
+                void qc.invalidateQueries({ queryKey: ['bank-qr', o.code] });
+              }}
+              className="mt-2"
+            />
+          )}
+          {codSwitched && (
+            <p role="status" data-testid="cod-switch-done" className="mt-3 rounded-control bg-success-bg px-3 py-2 text-sm text-success-fg">
+              {COD_SWITCH_DONE}
+            </p>
+          )}
+          {canReorder && <GuestReorderButton code={o.code} trackingKey={key} />}
         </section>
 
         <section className={`p-4 ${ui.card} ${mini.band}`} aria-label="Sản phẩm trong đơn">
@@ -169,6 +198,52 @@ export default function GuestOrderPage() {
       <PageHeader title={guestCopy('trackTitle')} />
       <div className="mt-2 pb-6 md:pb-0">{body}</div>
     </main>
+  );
+}
+
+/**
+ * "Mua lại đơn này": máy chủ trả các món còn bán (kẹp theo tồn kho), trình duyệt thêm vào giỏ khách rồi sang /gio-hang, nơi báo món bị bỏ.
+ * Không món nào vào giỏ thì ở lại trang và báo ngay dưới nút.
+ */
+function GuestReorderButton({ code, trackingKey }: { code: string; trackingKey: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ note: GuestReorderNote } | { error: string } | null>(null);
+  // Ref: hai cú chạm cùng khung hình chưa kịp vẽ lại thì state `busy` còn cũ, món sẽ bị cộng hai lần.
+  const pending = useRef(false);
+
+  const run = async () => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setResult(null);
+    try {
+      const out = addReorderLines(await guestReorder(code, trackingKey));
+      if (out.kind === 'added') {
+        if (out.note) saveGuestReorderNote(out.note);
+        router.push('/gio-hang');
+        return;
+      }
+      setResult(out.kind === 'none' ? { note: out.note } : { error: guestCopy('reorderFailed') });
+    } catch (e) {
+      setResult({ error: actionErrorText(e) });
+    }
+    pending.current = false;
+    setBusy(false);
+  };
+
+  return (
+    <div className="mt-3 space-y-2">
+      <button type="button" data-testid="guest-reorder" disabled={busy} onClick={() => void run()} className={`${ui.btnPrimary} w-full`}>
+        {guestCopy(busy ? 'reorderBusy' : 'reorderCta')}
+      </button>
+      {result && 'note' in result && <GuestReorderNoteBox note={result.note} title={guestCopy('reorderNone')} testId="guest-reorder-none" />}
+      {result && 'error' in result && (
+        <p role="alert" data-testid="guest-reorder-error" className={`text-center text-sm ${ui.error}`}>
+          {result.error}
+        </p>
+      )}
+    </div>
   );
 }
 

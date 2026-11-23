@@ -5,17 +5,31 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 
 const KEY = 'A'.repeat(43);
-const m = vi.hoisted(() => ({ track: vi.fn(), claim: vi.fn(), status: 'idle' as string, user: null as null | Record<string, unknown> }));
+const m = vi.hoisted(() => ({
+  track: vi.fn(),
+  claim: vi.fn(),
+  switchCod: vi.fn(),
+  reorder: vi.fn(),
+  push: vi.fn(),
+  cartOn: true,
+  status: 'idle' as string,
+  user: null as null | Record<string, unknown>,
+}));
 
-vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB777' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/don/TB777' }));
+vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB777' }), useRouter: () => ({ push: m.push, replace: vi.fn() }), usePathname: () => '/don/TB777' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: m.user, status: m.status, initialized: true }) }));
 vi.mock('@/lib/guest-checkout/api', () => ({
   guestTrackOrder: (...a: unknown[]) => m.track(...a),
   claimGuestOrdersRequest: (...a: unknown[]) => m.claim(...a),
+  guestSwitchToCod: (...a: unknown[]) => m.switchCod(...a),
+  guestReorder: (...a: unknown[]) => m.reorder(...a),
 }));
+vi.mock('@/lib/guest-cart/flag', () => ({ useGuestCartFlag: () => ({ enabled: m.cartOn, pending: false }) }));
 
 import GuestOrderPage from './page';
 import metadataLayout, { metadata } from './layout';
+import { GUEST_CART_KEY } from '@/lib/guest-cart/store';
+import { GUEST_REORDER_NOTE_KEY } from '@/lib/guest-cart/reorder';
 
 const ORDER = {
   code: 'TB777',
@@ -46,6 +60,11 @@ const mount = async () => {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
+  m.switchCod.mockReset().mockResolvedValue({ code: 'TB777', status: 'CONFIRMED', paymentMethod: 'COD' });
+  m.reorder.mockReset();
+  m.push.mockReset();
+  m.cartOn = true;
   window.history.replaceState(null, '', `/don/TB777#k=${KEY}`);
   m.track.mockReset().mockResolvedValue(ORDER);
   m.claim.mockReset().mockResolvedValue({ claimed: 1 });
@@ -124,5 +143,118 @@ describe('/don/[code] theo dõi đơn không đăng nhập', () => {
     expect(m.claim).toHaveBeenCalledWith('w_abcdefghijklmnopqrstuvwxyz012345');
     expect(r.container.querySelector('[data-testid="guest-order-claimed"]')?.textContent).toContain('Đơn đã về tài khoản của bạn.');
     expect(localStorage.getItem('tubu.guestCheckout.claimPending')).toBeNull();
+  });
+});
+
+const AWAITING = { ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', codSwitchable: true };
+const buttonByText = (label: string) => Array.from(document.body.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === label);
+
+describe('/don/[code] đổi chuyển khoản chưa trả sang COD', () => {
+  it('máy chủ cho đổi: nút phụ cao ≥44px dưới lối mở mã QR, xác nhận thì gọi bằng khoá theo dõi, tải lại đơn và báo đã đổi', async () => {
+    m.track.mockResolvedValueOnce(AWAITING).mockResolvedValue({ ...AWAITING, status: 'CONFIRMED', paymentMethod: 'COD', codSwitchable: false });
+    const r = await mount();
+    const cta = r.container.querySelector<HTMLButtonElement>('[data-testid="cod-switch"] button')!;
+    expect(cta.textContent).toBe('Đổi sang trả tiền khi nhận (COD)');
+    expect(cta.className).toMatch(/\bmin-h-11\b/);
+    await act(async () => cta.click());
+    expect(document.body.textContent).toContain('Bạn trả 240.000đ cho shipper khi nhận hàng');
+    expect(m.switchCod).not.toHaveBeenCalled();
+    await act(async () => buttonByText('Đổi sang COD')!.click());
+    await flush(8);
+    expect(m.switchCod).toHaveBeenCalledWith('TB777', KEY);
+    expect(m.track.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(r.container.querySelector('[data-testid="cod-switch-done"]')?.textContent).toBe('Đã đổi sang trả tiền khi nhận. Đơn đã được xác nhận.');
+    expect(r.container.querySelector('[data-testid="cod-switch"]')).toBeNull();
+  });
+
+  it('"Giữ chuyển khoản": đóng tấm, không gọi máy chủ', async () => {
+    m.track.mockResolvedValue(AWAITING);
+    const r = await mount();
+    await act(async () => r.container.querySelector<HTMLButtonElement>('[data-testid="cod-switch"] button')!.click());
+    await act(async () => buttonByText('Giữ chuyển khoản')!.click());
+    await flush(4);
+    expect(m.switchCod).not.toHaveBeenCalled();
+  });
+
+  it('máy chủ từ chối (409, tiền vừa về): hiện câu của máy chủ và tải lại đơn', async () => {
+    m.track.mockResolvedValueOnce(AWAITING).mockResolvedValue({ ...AWAITING, status: 'CONFIRMED', paymentStatus: 'PAID', codSwitchable: false });
+    m.switchCod.mockRejectedValue(new ApiError('Đơn đã được thanh toán, không cần đổi sang COD.', 409, 'COD_SWITCH_REFUSED'));
+    const r = await mount();
+    await act(async () => r.container.querySelector<HTMLButtonElement>('[data-testid="cod-switch"] button')!.click());
+    await act(async () => buttonByText('Đổi sang COD')!.click());
+    await flush(8);
+    expect(r.container.querySelector('[data-testid="cod-switch-done"]')).toBeNull();
+    expect(m.track.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('máy chủ không cho đổi (thiếu cờ): không có nút', async () => {
+    m.track.mockResolvedValue({ ...AWAITING, codSwitchable: false });
+    const r = await mount();
+    expect(r.container.querySelector('[data-testid="cod-switch"]')).toBeNull();
+  });
+});
+
+const DELIVERED = { ...ORDER, status: 'DELIVERED', deliveredAt: '2026-11-20T03:00:00.000Z' };
+const REORDER = {
+  lines: [{ variationId: 'v1', slug: 'dau-goi', quantity: 2, maxQty: 5, productName: 'Dầu gội', variationName: 'Chai 500ml' }],
+  skipped: [{ productName: 'Xà phòng', variationName: null, reason: 'OUT_OF_STOCK' }],
+};
+
+describe('/don/[code] "Mua lại đơn này" vào giỏ khách', () => {
+  it('đơn đã giao: thêm món còn bán vào giỏ khách, ghi lời báo món hết hàng cho trang giỏ, sang /gio-hang', async () => {
+    m.track.mockResolvedValue(DELIVERED);
+    m.reorder.mockResolvedValue(REORDER);
+    const r = await mount();
+    const btn = r.container.querySelector<HTMLButtonElement>('[data-testid="guest-reorder"]')!;
+    expect(btn.textContent).toBe('Mua lại đơn này');
+    expect(btn.className).toMatch(/\bmin-h-11\b/);
+    await act(async () => btn.click());
+    await flush(4);
+    expect(m.reorder).toHaveBeenCalledWith('TB777', KEY);
+    expect(JSON.parse(localStorage.getItem(GUEST_CART_KEY)!)).toEqual([expect.objectContaining({ variationId: 'v1', slug: 'dau-goi', quantity: 2 })]);
+    expect(JSON.parse(sessionStorage.getItem(GUEST_REORDER_NOTE_KEY)!).skipped).toEqual([{ name: 'Xà phòng', reason: 'OUT_OF_STOCK' }]);
+    expect(m.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('đơn đã huỷ cũng mua lại được; mọi món đều hết hàng: ở lại trang, báo ngay dưới nút, giỏ không đổi', async () => {
+    m.track.mockResolvedValue({ ...ORDER, status: 'CANCELLED' });
+    m.reorder.mockResolvedValue({ lines: [], skipped: REORDER.skipped });
+    const r = await mount();
+    await act(async () => r.container.querySelector<HTMLButtonElement>('[data-testid="guest-reorder"]')!.click());
+    await flush(4);
+    expect(m.push).not.toHaveBeenCalled();
+    expect(localStorage.getItem(GUEST_CART_KEY)).toBeNull();
+    const none = r.container.querySelector('[data-testid="guest-reorder-none"]')!;
+    expect(none.textContent).toContain('Các món trong đơn này đều đã hết hàng hoặc ngừng bán.');
+    expect(none.textContent).toContain('Xà phòng (hết hàng)');
+  });
+
+  it('lỗi mạng: báo dưới nút, bấm lại được', async () => {
+    m.track.mockResolvedValue(DELIVERED);
+    m.reorder.mockRejectedValueOnce(new ApiError('Lỗi máy chủ', 503)).mockResolvedValue(REORDER);
+    const r = await mount();
+    const btn = r.container.querySelector<HTMLButtonElement>('[data-testid="guest-reorder"]')!;
+    await act(async () => btn.click());
+    await flush(4);
+    expect(r.container.querySelector('[data-testid="guest-reorder-error"]')).not.toBeNull();
+    expect(btn.disabled).toBe(false);
+    await act(async () => btn.click());
+    await flush(4);
+    expect(m.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('không có nút khi đơn còn đang xử lý, khi giỏ khách tắt, hay khi đã đăng nhập', async () => {
+    const r1 = await mount();
+    expect(r1.container.querySelector('[data-testid="guest-reorder"]')).toBeNull();
+    m.track.mockResolvedValue(DELIVERED);
+    m.cartOn = false;
+    const r2 = await mount();
+    expect(r2.container.querySelector('[data-testid="guest-reorder"]')).toBeNull();
+    m.cartOn = true;
+    m.status = 'authenticated';
+    m.user = { id: 'u1' };
+    const r3 = await mount();
+    expect(r3.container.querySelector('[data-testid="guest-reorder"]')).toBeNull();
+    expect(m.reorder).not.toHaveBeenCalled();
   });
 });

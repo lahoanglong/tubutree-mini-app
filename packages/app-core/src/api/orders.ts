@@ -1,4 +1,4 @@
-import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import type { CodSwitchResultDTO, OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
 import type { CancelReasonBody } from '../cancel-reasons';
 import type { HttpClient } from '../http';
 import type { PageResponse } from './catalog';
@@ -104,6 +104,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
    * nút "Đánh giá (n SP)" khi > 0 (`orderReviewCta`). Đơn khác và API cũ không có trường này.
    */
   pendingReviewCount?: number;
+  /** Chỉ chi tiết đơn: đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (`switchOrderToCod`). API cũ không trả. */
+  codSwitchable?: boolean;
 };
 
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
@@ -181,6 +183,9 @@ export type RefundDestinationBody =
 
 export const cancelOrder = (http: HttpClient, code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody) =>
   http.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination, ...reason });
+/** Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận (COD). Không đổi được: 409 `COD_SWITCH_REFUSED`, `message` là câu cho khách. */
+export const switchOrderToCod = (http: HttpClient, code: string) => http.post<CodSwitchResultDTO>(`/orders/${code}/switch-to-cod`, {});
+
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {

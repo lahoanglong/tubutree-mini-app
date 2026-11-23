@@ -98,6 +98,8 @@ export function fakeOrderDb(initial: Row[], extra: Record<string, unknown> = {})
     wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([]) },
     address: { findFirst: jest.fn().mockResolvedValue(null) },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
+    // Không đơn nào từng đổi chuyển khoản → COD; spec của lần đổi ghi đè qua `extra`.
+    orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
     ...extra,
   };
   return { prisma, rows, row: (id = rows[0]!.id) => rows.find((r) => r.id === id)! };

@@ -51,6 +51,7 @@ import { OrderTrack } from '../components/orders/order-track';
 import { OrderTimelineTracker } from '../components/orders/order-timeline-tracker';
 import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '../components/orders/order-shipping';
+import { CodSwitchAction } from '../components/orders/cod-switch-action';
 import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
 import { OrderRefillShortcut } from '../components/orders/order-refill-shortcut';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
@@ -536,6 +537,11 @@ export default function OrderDetailPage() {
         />
         <KeyValueRow label={vi.checkout.total} value={formatVnd(o.total)} emphasis />
         <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
+        {o.codSwitchable && (
+          <Box mt={2} data-testid="cod-switch">
+            <CodSwitchAction code={o.code} total={o.total} />
+          </Box>
+        )}
         {pointsNote && (
           <Text
             variant="caption"

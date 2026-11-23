@@ -6,6 +6,7 @@ import { BANK_QR_LOAD_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { OrderDTO } from '@/lib/shop-client';
+import { ApiError } from '@/lib/client-api';
 import { markTransferOrderPlaced } from '@tubutree/app-core/commerce/checkout-display';
 
 // A2-02 = A6-01 (docs/audit-2026-09): web /thanh-toan cho chọn "Chuyển khoản ngân hàng" nhưng
@@ -695,5 +696,66 @@ describe('BankTransferPanel — sự kiện transfer_qr_shown (w2-06)', () => {
       (container.querySelector('img[alt="VietQR"]') as HTMLImageElement).dispatchEvent(new Event('load'));
     });
     expect(events.filter(([n]) => n === 'transfer_qr_shown')).toEqual([]);
+  });
+});
+
+describe('BankTransferPanel — đổi sang COD (w23-02)', () => {
+  const sheetButton = (label: string) => byText(document.body, 'button', label);
+
+  it('máy chủ cho đổi và trang chứa truyền codSwitch: nút phụ ≥44px, xác nhận thì gọi run rồi onSettled("switched")', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, codSwitchable: true } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const run = vi.fn().mockResolvedValue({ code: 'TB-777' });
+    const onSettled = vi.fn();
+    const { container } = mount(<BankTransferPanel order={order()} codSwitch={{ run, onSettled }} />);
+    await flush();
+    const cta = container.querySelector<HTMLButtonElement>('[data-testid="cod-switch"] button')!;
+    expect(cta.textContent).toBe('Đổi sang trả tiền khi nhận (COD)');
+    expect(cta.className).toMatch(/\bmin-h-11\b/);
+    click(cta);
+    expect(document.body.textContent).toContain('Bạn trả 250.000đ cho shipper khi nhận hàng');
+    await act(async () => sheetButton('Đổi sang COD')!.click());
+    await flush();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(onSettled).toHaveBeenCalledWith('switched');
+  });
+
+  it('máy chủ từ chối 409: hiện câu của máy chủ dưới nút và onSettled("stale")', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, codSwitchable: true } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const run = vi.fn().mockRejectedValue(new ApiError('Đơn đã được thanh toán, không cần đổi sang COD.', 409, 'COD_SWITCH_REFUSED'));
+    const onSettled = vi.fn();
+    const { container } = mount(<BankTransferPanel order={order()} codSwitch={{ run, onSettled }} />);
+    await flush();
+    click(container.querySelector('[data-testid="cod-switch"] button'));
+    await act(async () => sheetButton('Đổi sang COD')!.click());
+    await flush();
+    expect(container.querySelector('[data-testid="cod-switch-error"]')?.textContent).toBe('Đơn đã được thanh toán, không cần đổi sang COD.');
+    expect(onSettled).toHaveBeenCalledWith('stale');
+  });
+
+  it('"Giữ chuyển khoản": không gọi run', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, codSwitchable: true } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const run = vi.fn();
+    const { container } = mount(<BankTransferPanel order={order()} codSwitch={{ run, onSettled: vi.fn() }} />);
+    await flush();
+    click(container.querySelector('[data-testid="cod-switch"] button'));
+    await act(async () => sheetButton('Giữ chuyển khoản')!.click());
+    await flush();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('không có nút khi máy chủ không cho đổi, hay khi trang chứa không truyền codSwitch (khung QR nhúng ở chi tiết đơn)', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const a = mount(<BankTransferPanel order={order()} codSwitch={{ run: vi.fn(), onSettled: vi.fn() }} />);
+    await flush();
+    expect(a.container.querySelector('[data-testid="cod-switch"]')).toBeNull();
+    const api2 = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, codSwitchable: true } } });
+    vi.stubGlobal('fetch', vi.fn(api2.fn));
+    const b = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    expect(b.container.querySelector('[data-testid="cod-switch"]')).toBeNull();
   });
 });

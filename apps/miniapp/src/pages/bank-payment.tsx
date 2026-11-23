@@ -28,6 +28,7 @@ import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_LOAD_FAIL
 import type { SaveImageResult } from '@tubutree/app-core/bridge';
 import { takeTransferQrDelay } from '@tubutree/app-core/commerce/checkout-display';
 import { trackEvent } from '../services/analytics';
+import { CodSwitchAction } from '../components/orders/cod-switch-action';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
@@ -364,6 +365,12 @@ export default function BankPaymentPage() {
           <Clock size={15} />
           <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14 }}>Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
         </Box>
+
+        {data.codSwitchable && (
+          <Box mt={2} data-testid="cod-switch">
+            <CodSwitchAction code={data.orderCode} total={data.amount} onSwitched={() => navigate(`/order/${data.orderCode}`, { replace: true })} />
+          </Box>
+        )}
 
         <Button fullWidth variant="secondary" onPress={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>
           Để sau / Xem đơn hàng

@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { UnrecoverableError, type Job } from 'bullmq';
 import { PancakeOrderService } from './pancake-order.service';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
-import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_PAYMENT } from './pancake-queue';
+import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_COD_SWITCH, PANCAKE_JOB_PAYMENT } from './pancake-queue';
 import { PancakeCancelRefusedError, pancakeErrorText } from './pancake-outbound';
 import { classifyPushError, isPermanentPushError, PUSH_ERROR_KIND } from './pancake-push-error';
 
@@ -15,6 +15,7 @@ import { classifyPushError, isPermanentPushError, PUSH_ERROR_KIND } from './panc
  *    từ chối dứt khoát (4xx) thì dừng ngay (thử lại không giúp gì); cron cứu hộ vẫn thử lại thưa dần.
  *  - payment / cancel: cập nhật "đã thanh toán" / huỷ đơn Pancake; lần cuối báo admin xử lý tay (Pancake từ chối lệnh huỷ
  *    thì chốt và báo ngay lượt đầu).
+ *  - cod-switch: khách đổi đơn chuyển khoản sang COD → sửa ghi chú/thẻ đơn Pancake; lần cuối báo admin sửa tay.
  */
 @Processor(QUEUE_PANCAKE_PUSH)
 export class PancakePushProcessor extends WorkerHost {
@@ -35,6 +36,15 @@ export class PancakePushProcessor extends WorkerHost {
       } catch (err) {
         // Đã ghi FAILED + báo huỷ tay ngay lượt này: BullMQ thử lại 4 lần nữa cũng nhận cùng lời từ chối.
         if (err instanceof PancakeCancelRefusedError) throw new UnrecoverableError(pancakeErrorText(err));
+        throw err;
+      }
+      return;
+    }
+    if (job.name === PANCAKE_JOB_COD_SWITCH) {
+      try {
+        await this.pancakeOrder.syncCodSwitch(orderId, final);
+      } catch (err) {
+        if (classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) throw new UnrecoverableError(pancakeErrorText(err));
         throw err;
       }
       return;

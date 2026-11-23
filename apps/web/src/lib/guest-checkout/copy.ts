@@ -53,6 +53,14 @@ export const GUEST_CHECKOUT_COPY = {
   lookupAccount: 'Đơn đặt khi đã đăng nhập Zalo nằm trong',
   lookupAccountLink: 'Đơn của tôi',
   lookupFromNotFound: 'Tra cứu bằng mã đơn',
+  reorderCta: 'Mua lại đơn này',
+  reorderBusy: 'Đang thêm vào giỏ…',
+  reorderSkipped: '{n} món không thêm được vào giỏ:',
+  reorderOutOfStock: 'hết hàng',
+  reorderInactive: 'ngừng bán',
+  reorderNotAdded: 'chưa thêm được',
+  reorderNone: 'Các món trong đơn này đều đã hết hàng hoặc ngừng bán.',
+  reorderFailed: 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
 } as const;
 
 export type GuestCopyKey = keyof typeof GUEST_CHECKOUT_COPY;
@@ -107,6 +115,14 @@ export const GUEST_CHECKOUT_COPY_BUDGET: Record<GuestCopyKey, number | null> = {
   lookupAccount: null,
   lookupAccountLink: 16,
   lookupFromNotFound: 24,
+  reorderCta: 20,
+  reorderBusy: 20,
+  reorderSkipped: 40,
+  reorderOutOfStock: 12,
+  reorderInactive: 12,
+  reorderNotAdded: 16,
+  reorderNone: 64,
+  reorderFailed: 48,
 };
 
 export function guestCopy(key: GuestCopyKey, vars: Record<string, string | number> = {}): string {

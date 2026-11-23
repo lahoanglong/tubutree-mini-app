@@ -13,6 +13,7 @@ function mk(overrides: Record<string, jest.Mock> = {}) {
     markPushFailure: jest.fn().mockResolvedValue(undefined),
     syncPayment: jest.fn().mockResolvedValue(undefined),
     cancelOnPancake: jest.fn().mockResolvedValue(undefined),
+    syncCodSwitch: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
   return { svc, proc: new PancakePushProcessor(svc as unknown as PancakeOrderService) };
@@ -97,5 +98,25 @@ describe('PancakePushProcessor', () => {
     expect(svc.cancelOnPancake).toHaveBeenCalledWith('o1', true);
     expect(svc.syncPayment).toHaveBeenCalledWith('o2', false);
     expect(svc.pushOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('PancakePushProcessor — job cod-switch (khách đổi chuyển khoản sang COD)', () => {
+  it('gọi syncCodSwitch, cờ lượt cuối đúng theo số lần thử', async () => {
+    const { svc, proc } = mk({ syncCodSwitch: jest.fn().mockResolvedValue(undefined) });
+    await proc.process(makeJob('o1', 0, 5, 'cod-switch'));
+    await proc.process(makeJob('o1', 4, 5, 'cod-switch'));
+    expect(svc.syncCodSwitch).toHaveBeenNthCalledWith(1, 'o1', false);
+    expect(svc.syncCodSwitch).toHaveBeenNthCalledWith(2, 'o1', true);
+    expect(svc.pushOrder).not.toHaveBeenCalled();
+    expect(svc.syncPayment).not.toHaveBeenCalled();
+  });
+
+  it('lỗi tạm: ném tiếp cho BullMQ thử lại; khoá API sai (401): dừng hẳn', async () => {
+    const transient = mk({ syncCodSwitch: jest.fn().mockRejectedValue(new PancakeApiError('Pancake 503', true, false, 503)) });
+    await expect(transient.proc.process(makeJob('o1', 0, 5, 'cod-switch'))).rejects.toBeInstanceOf(PancakeApiError);
+    const config = mk({ syncCodSwitch: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 401', false, false, 401)) });
+    await expect(config.proc.process(makeJob('o1', 0, 5, 'cod-switch'))).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(config.svc.markPushFailure).not.toHaveBeenCalled();
   });
 });

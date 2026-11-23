@@ -14,7 +14,9 @@ import { BankTransferService } from '../../integrations/payment/bank-transfer.se
 import { CheckoutService, type GuestCheckoutContext } from '../checkout.service';
 import type { PlaceOrderDto, QuoteDto } from '../dto/checkout.dto';
 import { MAX_ITEM_QUANTITY } from '../../cart/dto/cart.dto';
-import { GUEST_ORDER_CLAIMED, type GuestOrderLookupDTO, type GuestOrderTrackDTO } from '@tubutree/shared-types';
+import { GUEST_ORDER_CLAIMED, type CodSwitchResultDTO, type GuestOrderLookupDTO, type GuestOrderTrackDTO, type GuestReorderDTO } from '@tubutree/shared-types';
+import { OrderCodSwitchService } from '../../orders/order-cod-switch.service';
+import { codSwitchEligible } from '../../orders/cod-switch';
 import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
 import { signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
 import {
@@ -101,6 +103,7 @@ export class GuestCheckoutService {
     private readonly config: SystemConfigService,
     private readonly analytics: AnalyticsEventsService,
     private readonly env: ConfigService<Env, true>,
+    private readonly codSwitch: OrderCodSwitchService,
   ) {}
 
   private ipHashOf(ip: string): string | null {
@@ -400,7 +403,7 @@ export class GuestCheckoutService {
 
   private async viewOf({ order, statusTimes, closedAt }: Awaited<ReturnType<GuestCheckoutService['trackable']>>): Promise<GuestOrderTrackDTO> {
     const address = (order.shippingAddress ?? {}) as { ward?: unknown; province?: unknown };
-    const [items, siblings] = await Promise.all([
+    const [items, siblings, codSwitchable] = await Promise.all([
       this.prisma.orderItem.findMany({ where: { orderId: order.id }, orderBy: { id: 'asc' } }),
       order.checkoutGroup
         ? this.prisma.order.findMany({
@@ -409,6 +412,7 @@ export class GuestCheckoutService {
             select: { code: true, status: true, total: true },
           })
         : Promise.resolve([]),
+      readGuestCheckoutSettings(this.config).then((settings) => codSwitchEligible(this.prisma, order, settings.codMax)),
     ]);
     return {
       code: order.code,
@@ -437,6 +441,7 @@ export class GuestCheckoutService {
       },
       siblings,
       expiresAt: closedAt ? new Date(closedAt.getTime() + GUEST_TRACK_TTL_DAYS * DAY_MS).toISOString() : null,
+      codSwitchable,
     };
   }
 
@@ -467,7 +472,61 @@ export class GuestCheckoutService {
 
   async bankQr(code: string, key: string | undefined) {
     const { order } = await this.orderByKey(code, key);
-    return this.bankTransfer.getBankQr(order.code, order.userId);
+    const settings = await readGuestCheckoutSettings(this.config);
+    return this.bankTransfer.getBankQr(order.code, order.userId, settings.codMax);
+  }
+
+  /**
+   * Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận bằng khoá theo dõi (khoá trình duyệt hay khoá tạm của tra cứu: cùng `orderByKey`, sai khoá
+   * cùng một 404). Trần thu hộ là trần COD của đặt hàng không đăng nhập, như lúc chọn cách trả ở thanh toán.
+   */
+  async switchToCod(code: string, key: string | undefined): Promise<CodSwitchResultDTO> {
+    const { order } = await this.orderByKey(code, key);
+    const settings = await readGuestCheckoutSettings(this.config);
+    return this.codSwitch.switchToCod(order.id, { actorType: 'CUSTOMER', actorId: null, codMax: settings.codMax });
+  }
+
+  /**
+   * "Mua lại đơn này" ở trang theo dõi: món của đơn đã giao hay đã huỷ còn mua được, để trình duyệt thêm vào giỏ khách. Cùng luật với Mua lại của
+   * khách đăng nhập (OrdersService.repurchase): bỏ quà 0đ, món ngừng bán/chưa duyệt, món hết hàng; số lượng kẹp theo tồn kho lúc hỏi. Không ghi gì.
+   */
+  async reorderLines(code: string, key: string | undefined): Promise<GuestReorderDTO> {
+    const { order } = await this.orderByKey(code, key);
+    if (order.status !== 'DELIVERED' && order.status !== 'CANCELLED') {
+      throw new ConflictException('Đơn còn đang xử lý, bạn mua lại sau khi đơn xong nhé.');
+    }
+    const items = await this.prisma.orderItem.findMany({
+      where: { orderId: order.id, isGift: false },
+      orderBy: { id: 'asc' },
+      select: { variationId: true, productName: true, variationName: true, quantity: true },
+    });
+    const variations = await this.prisma.variation.findMany({
+      where: { id: { in: [...new Set(items.map((i) => i.variationId))] } },
+      select: { id: true, stock: true, isActive: true, product: { select: { slug: true, isActive: true, approvalStatus: true } } },
+    });
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    const wanted = new Map<string, { quantity: number; productName: string; variationName: string | null }>();
+    const skipped: GuestReorderDTO['skipped'] = [];
+    for (const it of items) {
+      const v = byId.get(it.variationId);
+      if (!v || !v.isActive || !v.product.isActive || v.product.approvalStatus !== 'APPROVED') {
+        skipped.push({ productName: it.productName, variationName: it.variationName || null, reason: 'INACTIVE' });
+        continue;
+      }
+      if (v.stock <= 0) {
+        skipped.push({ productName: it.productName, variationName: it.variationName || null, reason: 'OUT_OF_STOCK' });
+        continue;
+      }
+      const prev = wanted.get(v.id);
+      wanted.set(v.id, { quantity: (prev?.quantity ?? 0) + it.quantity, productName: it.productName, variationName: it.variationName || null });
+    }
+    const lines: GuestReorderDTO['lines'] = [];
+    for (const [variationId, w] of wanted) {
+      const v = byId.get(variationId)!;
+      const maxQty = Math.min(MAX_ITEM_QUANTITY, v.stock);
+      lines.push({ variationId, slug: v.product.slug, quantity: Math.min(w.quantity, maxQty), maxQty, productName: w.productName, variationName: w.variationName });
+    }
+    return { lines, skipped };
   }
 
   /** Đưa đơn vãng lai của trình duyệt này về tài khoản Zalo đang đăng nhập (chạy được cả khi cờ đã tắt, cho đơn đã đặt). */
