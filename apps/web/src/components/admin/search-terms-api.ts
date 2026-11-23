@@ -21,6 +21,22 @@ export const POPULAR_TERM_MAX_CHARS = 40;
 const BASE = '/admin/search-synonyms';
 
 export const listSynonyms = () => apiFetch<{ items: SearchSynonym[] }>(BASE).then((r) => r.items);
+
+/** Một dòng của `GET /admin/search-synonyms/zero-results` (`ZeroResultTerm` ở `apps/api/src/modules/catalog/search-synonyms-zero-results.service.ts`). */
+export interface ZeroResultTerm {
+  term: string;
+  count: number;
+  people: number;
+  lastSeenAt: string;
+  synonym: { canonical: string; isActive: boolean } | null;
+}
+/** Khung ngày của thẻ "Từ khoá tìm chưa ra" (API nhận 1..90, mặc định cũng 14). */
+export const ZERO_RESULT_DAYS = 14;
+/** Dòng thiếu cụm thì bỏ, không vẽ dòng trống có nút tạo. */
+export const listZeroResultTerms = () =>
+  apiFetch<{ items?: unknown }>(`${BASE}/zero-results?days=${ZERO_RESULT_DAYS}`).then((r) =>
+    Array.isArray(r.items) ? r.items.filter((t): t is ZeroResultTerm => typeof (t as ZeroResultTerm | null)?.term === 'string' && (t as ZeroResultTerm).term !== '') : [],
+  );
 export const createSynonym = (body: { term: string; canonical: string }) => apiFetch<SearchSynonym>(BASE, { method: 'POST', body });
 export const updateSynonym = (id: string, body: { canonical?: string; isActive?: boolean }) =>
   apiFetch<SearchSynonym>(`${BASE}/${encodeURIComponent(id)}`, { method: 'PATCH', body });

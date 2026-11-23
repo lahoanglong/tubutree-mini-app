@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { AlertTriangle, Leaf } from 'lucide-react';
+import { AlertTriangle, Download, Leaf } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DEALER_PAY_AMOUNT_LABEL } from '@tubutree/app-core/client-copy';
 import { payCredit } from '@tubutree/app-core/api/dealer';
@@ -9,7 +9,8 @@ import { dealerCreditQuery, dealerMeQuery } from '@tubutree/app-core/queries/dea
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
-import { formatDate } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
+import { vnDateKey } from '@/lib/week';
 import { settleWithin } from '@/lib/settle-within';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
@@ -19,9 +20,14 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
+import { dealerCreditLedgerCsv, dealerCreditLedgerFileName, downloadCsv } from './dealer-order-tools';
+
+/** API trả tối đa chừng này dòng sổ gần nhất (`DealerService.creditLedger`); đủ số này thì màn ghi rõ sổ và tệp CSV chỉ là phần gần nhất. */
+const LEDGER_API_ROWS = 200;
 
 /**
  * Công nợ. "Báo đã chuyển khoản" KHÔNG tự trừ nợ: chỉ tạo thông báo cho admin, sổ chỉ giảm sau khi admin đối chiếu sao kê và xác nhận.
+ * "Xuất sổ công nợ (.csv)" tải đúng các dòng sổ đang hiện, kèm dư nợ sau từng giao dịch.
  */
 export function CreditTab() {
   const qc = useQueryClient();
@@ -76,6 +82,7 @@ export function CreditTab() {
 
   const balance = ledgerQ.data?.balance ?? 0;
   const entries = ledgerQ.data?.entries ?? [];
+  const exportLedger = () => downloadCsv(dealerCreditLedgerCsv(entries, balance, formatDateTime), dealerCreditLedgerFileName(vnDateKey(new Date())));
   const notWhole = amount.trim() !== '' && Number.isFinite(Number(amount)) && !Number.isInteger(Number(amount));
   const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance || notWhole;
 
@@ -129,7 +136,18 @@ export function CreditTab() {
       </section>
 
       <section aria-label="Sổ công nợ">
-        <h2 className={`mb-2 ${ui.sectionTitle}`}>Sổ công nợ</h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className={ui.sectionTitle}>Sổ công nợ</h2>
+          {entries.length > 0 && (
+            <button type="button" className={`${ui.btnText} flex-none gap-1 no-underline`} onClick={exportLedger}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Xuất sổ công nợ (.csv)
+            </button>
+          )}
+        </div>
+        {entries.length >= LEDGER_API_ROWS && (
+          <p className="mb-2 text-xs text-stone-600">Sổ và tệp CSV gồm {LEDGER_API_ROWS} giao dịch gần nhất; cần sổ đầy đủ hơn thì nhắn Tubu Tree.</p>
+        )}
         {entries.length > 0 ? (
           <ul className={`overflow-hidden ${skin.card}`}>
             {entries.map((e) => (

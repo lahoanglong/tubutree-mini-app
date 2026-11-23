@@ -106,7 +106,8 @@ beforeEach(() => {
   m.hold = new Set();
   m.release = [];
   m.post = {};
-  m.replace.mockClear();
+  // mockReset (không chỉ Clear): ca “Đặt lại đơn sỉ” gắn cách đổi ?tab= vào replace, không được rò sang ca sau dù ca đó đỏ giữa chừng.
+  m.replace.mockReset();
   m.push.mockClear();
   m.config = { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 24 } };
   setup();
@@ -601,6 +602,70 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     expect(card.textContent).toContain('Chờ thanh toán');
   });
 
+  const ORDERS = [
+    { code: 'TUBU1', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', total: 500_000, createdAt: '2026-09-03T00:00:00.000Z', items: [{ variationId: 'v1', quantity: 1, backorderedQty: 0 }] },
+    { code: 'TUBU2', status: 'SHIPPING', paymentMethod: 'BANK_TRANSFER', total: 300_000, createdAt: '2026-09-02T00:00:00.000Z', items: [] },
+    {
+      code: 'TUBU3', status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', total: 900_000, createdAt: '2026-09-01T00:00:00.000Z',
+      items: [
+        { variationId: 'v1', productName: 'Nước rửa chén', variationName: '500ml', quantity: 3, backorderedQty: 0 },
+        { variationId: 'v-gone', productName: 'Nước xả', variationName: '5L', quantity: 2, backorderedQty: 0 },
+      ],
+    },
+  ];
+  const shownCodes = () => Array.from(document.querySelectorAll('a[aria-label^="Xem đơn "]')).map((a) => a.getAttribute('aria-label')!.replace('Xem đơn ', ''));
+
+  it('chip lọc đơn: Tất cả / Chờ thanh toán / Đang giao / Đã giao; mục trống có lời báo', async () => {
+    setup({ '/dealer/orders': ORDERS.slice(0, 2) });
+    await open('Đơn hàng');
+    const chips = Array.from(document.querySelectorAll('[role="group"][aria-label="Lọc đơn theo trạng thái"] button')).map((b) => b.textContent);
+    expect(chips).toEqual(['Tất cả', 'Chờ thanh toán', 'Đang giao', 'Đã giao']);
+    expect(shownCodes()).toEqual(['TUBU1', 'TUBU2']);
+    click(button('Chờ thanh toán'));
+    await flush(2);
+    expect(shownCodes()).toEqual(['TUBU1']);
+    click(button('Đang giao'));
+    await flush(2);
+    expect(shownCodes()).toEqual(['TUBU2']);
+    click(button('Đã giao'));
+    await flush(2);
+    expect(shownCodes()).toEqual([]);
+    expect(document.body.textContent).toContain('Không có đơn nào ở mục này.');
+  });
+
+  it('Đặt lại đơn sỉ: nạp số lượng của đơn cũ vào Bảng giá theo giá hôm nay, bỏ mặt hàng ngừng bán sỉ kèm lời báo; đơn chờ thanh toán không có nút', async () => {
+    m.replace.mockImplementation((url: string) => {
+      m.search = new URLSearchParams(url.split('?')[1] ?? '');
+    });
+    setup({ '/dealer/orders': ORDERS, '/dealer/pricelist': [row({ stock: 9 })] });
+    await open('Đơn hàng');
+    expect(button('Đặt lại đơn sỉ TUBU1')).toBeUndefined();
+    click(button('Đặt lại đơn sỉ TUBU3'));
+    await flush(8);
+    const t = document.body.textContent ?? '';
+    expect(t).toContain('Đã nạp 1 mặt hàng của đơn #TUBU3 theo giá hôm nay');
+    expect(t).toContain('Bỏ qua 1 mặt hàng không còn bán sỉ: Nước xả – 5L.');
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Nước xả – 5L');
+    // 3 × 80.000đ giá sỉ hôm nay.
+    expect(t).toContain('240.000đ');
+    m.post['/dealer/orders'] = () => ({ code: 'TUBU4', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', items: [{ variationId: 'v1', quantity: 3, backorderedQty: 0 }] });
+    click(button('Ghi công nợ'));
+    await flush(8);
+    expect(posts('/dealer/orders')[0]?.body).toMatchObject({ items: [{ variationId: 'v1', quantity: 3 }], paymentMethod: 'CREDIT' });
+  });
+
+  it('Đặt lại đơn sỉ mà mọi mặt hàng đã ngừng bán sỉ: giỏ trống, báo rõ không nạp được gì', async () => {
+    m.replace.mockImplementation((url: string) => {
+      m.search = new URLSearchParams(url.split('?')[1] ?? '');
+    });
+    setup({ '/dealer/orders': [ORDERS[2]], '/dealer/pricelist': [row({ variationId: 'v-other', sku: 'KHAC-1' })] });
+    await open('Đơn hàng');
+    click(button('Đặt lại đơn sỉ TUBU3'));
+    await flush(8);
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Đơn #TUBU3 không còn mặt hàng nào đang bán sỉ, giỏ chưa đổi.');
+    expect(button('Ghi công nợ')).toBeUndefined();
+  });
+
   it('chưa có đơn: trạng thái rỗng; lỗi: báo lỗi', async () => {
     await open('Đơn hàng');
     expect(document.body.textContent).toContain('Chưa có đơn đại lý nào');
@@ -650,6 +715,57 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     const keys = posts('/dealer/credit-payment').map((p) => p.headers?.['Idempotency-Key']);
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('Xuất sổ công nợ (.csv): tải đúng một tệp có BOM, dư nợ sau từng giao dịch, ghi chú mở đầu bằng = được chặn công thức', async () => {
+    const blobs: Blob[] = [];
+    const anchors: string[] = [];
+    const savedCreate = URL.createObjectURL;
+    const savedRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn((b: Blob | MediaSource) => {
+      blobs.push(b as Blob);
+      return 'blob:ledger';
+    });
+    URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      anchors.push(this.download);
+    });
+    try {
+      setup({
+        '/dealer/credit-ledger': {
+          balance: 200_000,
+          entries: [
+            { id: 'e2', delta: -300_000, note: '=HYPERLINK("http://x")', refType: 'PAYMENT', createdAt: '2026-09-02T00:00:00.000Z' },
+            { id: 'e1', delta: 500_000, note: 'Đơn TUBU1', refType: 'ORDER', createdAt: '2026-09-01T00:00:00.000Z' },
+          ],
+        },
+      });
+      await open('Công nợ');
+      click(button('Xuất sổ công nợ (.csv)'));
+      expect(blobs).toHaveLength(1);
+      expect(anchors).toEqual([expect.stringMatching(/^so-cong-no-dai-ly-tubu-\d{4}-\d{2}-\d{2}\.csv$/)]);
+      const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(new Uint8Array(fr.result as ArrayBuffer));
+        fr.onerror = () => reject(fr.error);
+        fr.readAsArrayBuffer(blobs[0]!);
+      });
+      expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+      const rows = new TextDecoder().decode(bytes.slice(3)).trimEnd().split('\r\n');
+      expect(rows[0]).toBe('"Thời gian","Diễn giải","Loại","Phát sinh (đ)","Dư nợ sau giao dịch (đ)"');
+      expect(rows[1]).toBe(`"07:00 02/09/2026","'=HYPERLINK(""http://x"")","PAYMENT",-300000,200000`);
+      expect(rows[2]).toBe('"07:00 01/09/2026","Đơn TUBU1","ORDER",500000,500000');
+    } finally {
+      URL.createObjectURL = savedCreate;
+      URL.revokeObjectURL = typeof savedRevoke === 'function' ? savedRevoke : () => undefined;
+      clickSpy.mockRestore();
+    }
+  });
+
+  it('sổ công nợ trống: không có nút xuất CSV', async () => {
+    setup({ '/dealer/credit-ledger': { balance: 0, entries: [] } });
+    await open('Công nợ');
+    expect(button('Xuất sổ công nợ (.csv)')).toBeUndefined();
   });
 
   it('sổ công nợ giữ dấu +/- của từng dòng', async () => {

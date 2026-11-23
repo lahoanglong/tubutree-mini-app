@@ -3,7 +3,7 @@ import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { fetchRefillLanding, REFILL_LANDING_PATH, refillLandingRows } from '@tubutree/app-core/refill/refill-landing';
 import { NOINDEX_PUBLIC_PATHS, SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
-import { getBrands, getCategories, getLegalDoc, getProducts, getStorefrontList, type CategoryItem } from '@/lib/api';
+import { ApiUnavailableError, getBrands, getCategories, getLegalDoc, getProducts, getStorefrontList, type CategoryItem } from '@/lib/api';
 import { ApiNotFoundError, createServerHttp, getListOrEmptyAtBuild } from '@/lib/core-http-server';
 import { browseCanonicalPath } from '@/lib/home-seo';
 import { LEGAL_SLUGS } from '@/lib/legal';
@@ -88,6 +88,26 @@ async function refillLandingIndexed(): Promise<boolean> {
   }
 }
 
+/**
+ * Trang chính sách có nội dung đã duyệt (cùng quy tắc với generateMetadata của /chinh-sach/[loai]: `content === null` thì trang noindex nên không nộp).
+ * Lúc `next build` dùng đúng lối thoát của getProducts/getBrands: API trả lời thì nộp ngay cả 5 trang (sitemap đủ URL từ lúc deploy, không chờ
+ * `revalidate` 1 giờ); API chưa lên (ApiUnavailableError) thì bỏ riêng trang đó thay vì làm hỏng bản build. Lúc chạy lỗi vẫn nổi lên để Next giữ bản trước.
+ */
+async function indexedLegalSlugs(): Promise<string[]> {
+  const building = process.env.NEXT_PHASE === 'phase-production-build';
+  const docs = await Promise.all(
+    LEGAL_SLUGS.map(async (slug) => {
+      try {
+        return (await getLegalDoc(slug)).content !== null ? slug : null;
+      } catch (err) {
+        if (building && err instanceof ApiUnavailableError) return null;
+        throw err;
+      }
+    }),
+  );
+  return docs.filter((slug): slug is (typeof LEGAL_SLUGS)[number] => slug !== null);
+}
+
 function lastModified(iso: string | null | undefined, now = Date.now()): Date | undefined {
   if (!iso) return undefined;
   const at = new Date(iso);
@@ -128,14 +148,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const b of await getBrands()) {
     if (b.slug) base.push({ url: `${SITE_URL}/brand/${encodeURIComponent(b.slug)}`, changeFrequency: 'weekly', priority: 0.6 });
   }
-  // Cùng quy tắc với generateMetadata của /chinh-sach/[loai]: chưa có nội dung đã duyệt (content === null) thì trang noindex nên không nộp.
-  // getLegalDoc không có lối thoát lúc build như getProducts/getBrands (API chưa chạy thì ném và làm hỏng `next build`):
-  // lúc build bỏ qua, sitemap được dựng lại ở runtime theo revalidate. Runtime vẫn để lỗi nổi lên.
-  if (process.env.NEXT_PHASE !== 'phase-production-build') {
-    const legalDocs = await Promise.all(LEGAL_SLUGS.map(async (slug) => ({ slug, doc: await getLegalDoc(slug) })));
-    for (const { slug, doc } of legalDocs) {
-      if (doc.content !== null) base.push({ url: `${SITE_URL}/chinh-sach/${slug}`, changeFrequency: 'monthly', priority: 0.4 });
-    }
+  for (const slug of await indexedLegalSlugs()) {
+    base.push({ url: `${SITE_URL}/chinh-sach/${slug}`, changeFrequency: 'monthly', priority: 0.4 });
   }
   const storefronts = await getStorefrontList();
   for (const s of storefronts) {

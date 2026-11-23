@@ -3,7 +3,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { SearchTermsCard } from './search-terms-card';
-import { parsePopularTerms, popularTermsError, type SearchSynonym } from './search-terms-api';
+import { parsePopularTerms, popularTermsError, type SearchSynonym, type ZeroResultTerm } from './search-terms-api';
 
 const row = (over: Partial<SearchSynonym> = {}): SearchSynonym => ({
   id: 's1',
@@ -22,8 +22,23 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const mount = async (items: SearchSynonym[], popular: unknown = ['nước giặt', 'rửa tay']) => {
+const zeroRow = (over: Partial<ZeroResultTerm> = {}): ZeroResultTerm => ({
+  term: 'nước tẩy bồn cầu',
+  count: 12,
+  people: 7,
+  lastSeenAt: '2026-11-22T03:00:00.000Z',
+  synonym: null,
+  ...over,
+});
+
+const mount = async (
+  items: SearchSynonym[],
+  popular: unknown = ['nước giặt', 'rửa tay'],
+  zero: { status?: number; body: unknown } = { body: { days: 14, items: [] } },
+) => {
   const m = mockFetch({
+    // Trước '/admin/search-synonyms': mockFetch lấy khoá đầu tiên nằm trong URL.
+    '/admin/search-synonyms/zero-results': zero,
     '/admin/search-synonyms/s1': (init) => ({ body: init?.method === 'DELETE' ? { ok: true } : row({ isActive: false }) }),
     '/admin/search-synonyms': (init) => ({ body: init?.method === 'POST' ? row({ id: 's9', term: 'xa phong', canonical: 'xa bong' }) : { items } }),
     '/admin/config': (init) => ({ body: init?.method === 'PUT' ? { ok: true } : [{ key: 'catalog.search_popular_terms', value: popular }, { key: 'catalog.other', value: 1 }] }),
@@ -44,7 +59,7 @@ describe('SearchTermsCard', () => {
   it('liệt kê từ đồng nghĩa, dòng tắt có nhãn "Đang tắt"; ô cụm phổ biến điền sẵn mỗi dòng một cụm, nút Lưu khoá khi chưa sửa', async () => {
     const { c, calls } = await mount([row(), row({ id: 's2', term: 'bot giat', canonical: 'nuoc giat', isActive: false })]);
     expect(calls.some((x) => x.url.includes('/admin/config?category=catalog'))).toBe(true);
-    const items = c.querySelectorAll('li');
+    const items = c.querySelectorAll('ul[aria-label="Từ đồng nghĩa"] li');
     expect(items).toHaveLength(2);
     expect(items[0]!.textContent).toContain('nuoc rua bat → nuoc rua chen');
     expect(items[1]!.textContent).toContain('Đang tắt');
@@ -99,6 +114,47 @@ describe('SearchTermsCard', () => {
     const put = calls.find((x) => x.init?.method === 'PUT')!;
     expect(put.url).toContain('/admin/config');
     expect(bodyOf(put.init)).toEqual({ key: 'catalog.search_popular_terms', value: ['nước giặt', 'rửa tay', 'cho bé'] });
+  });
+
+  it('từ khoá tìm chưa ra: gọi đúng 14 ngày, bày lượt/người/ngày; cụm đã có từ đồng nghĩa ghi "Đã có" thay cho nút', async () => {
+    const { c, calls } = await mount([], undefined, {
+      body: { days: 14, items: [zeroRow(), zeroRow({ term: 'nuoc rua bat', count: 3, people: 2, synonym: { canonical: 'nuoc rua chen', isActive: false } }), { count: 1 }] },
+    });
+    expect(calls.some((x) => x.url.includes('/admin/search-synonyms/zero-results?days=14'))).toBe(true);
+    expect(c.textContent).toContain('Từ khoá tìm chưa ra (14 ngày)');
+    const rows = c.querySelectorAll('ul[aria-label="Từ khoá tìm chưa ra"] li');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toContain('nước tẩy bồn cầu · 12 lượt · 7 người · gần nhất 22/11/2026');
+    expect(rows[0]!.querySelector('button')!.textContent).toBe('Tạo từ đồng nghĩa');
+    expect(rows[1]!.querySelector('button')).toBeNull();
+    expect(rows[1]!.textContent).toContain('Đã có → nuoc rua chen (đang tắt)');
+  });
+
+  it('"Tạo từ đồng nghĩa" điền sẵn cụm khách gõ vào form, xoá vế thay cũ, đưa con trỏ vào ô Cụm tìm thay; Thêm gửi đúng cụm đó rồi tải lại bảng tìm chưa ra', async () => {
+    const { c, calls } = await mount([], undefined, { body: { days: 14, items: [zeroRow()] } });
+    typeInto(c.querySelector('input[name="canonical"]'), 'cụm cũ');
+    click(byText(c, 'button', 'Tạo từ đồng nghĩa'));
+    await flush(2);
+    const term = c.querySelector<HTMLInputElement>('input[name="term"]')!;
+    const canonical = c.querySelector<HTMLInputElement>('input[name="canonical"]')!;
+    expect(term.value).toBe('nước tẩy bồn cầu');
+    expect(canonical.value).toBe('');
+    expect(document.activeElement).toBe(canonical);
+    typeInto(canonical, 'tẩy rửa toilet');
+    submit(c.querySelector('form')!);
+    await flush(6);
+    const post = calls.find((x) => x.init?.method === 'POST')!;
+    expect(bodyOf(post.init)).toEqual({ term: 'nước tẩy bồn cầu', canonical: 'tẩy rửa toilet' });
+    expect(calls.filter((x) => x.url.includes('/zero-results'))).toHaveLength(2);
+  });
+
+  it('từ khoá tìm chưa ra lỗi hay rỗng: báo riêng ở khối đó, phần từ đồng nghĩa vẫn dùng được', async () => {
+    const failed = await mount([row()], undefined, { status: 503, body: { message: 'bận' } });
+    expect(failed.c.querySelector('[data-testid="zero-result-terms"]')!.textContent).toContain('Thử lại');
+    expect(failed.c.querySelectorAll('ul[aria-label="Từ đồng nghĩa"] li')).toHaveLength(1);
+    mounted.pop()!.unmount();
+    const empty = await mount([]);
+    expect(empty.c.textContent).toContain('14 ngày qua chưa có lượt tìm nào ra trống.');
   });
 
   it('cấu hình chưa có khoá hay không phải mảng: ô trống', async () => {
