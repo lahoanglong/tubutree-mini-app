@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { cohortRowView, funnelDailyView } from './analytics-snapshot-view';
+import { cohortRowView, funnelDailySince, funnelDailyView } from './analytics-snapshot-view';
 
 describe('cohortRowView', () => {
   it('tháng YYYY-MM, ba cửa sổ kèm cờ đủ ngày, trung vị Decimal thành số', () => {
@@ -62,5 +62,16 @@ describe('funnelDailyView', () => {
 
   it('không có dòng nào: mảng rỗng', () => {
     expect(funnelDailyView([])).toEqual([]);
+  });
+});
+
+describe('funnelDailySince', () => {
+  it('days=30 lúc 10:00 giờ VN ngày 24/11: mốc 25/10 (đủ 30 ngày 25/10..23/11, ngày mới nhất là hôm qua)', () => {
+    expect(funnelDailySince(30, new Date('2026-11-24T03:00:00Z'))).toEqual(new Date('2026-10-25'));
+  });
+
+  it('00:30 giờ VN (17:30Z hôm trước) đã sang ngày VN mới', () => {
+    expect(funnelDailySince(1, new Date('2026-11-23T17:30:00Z'))).toEqual(new Date('2026-11-23'));
+    expect(funnelDailySince(1, new Date('2026-11-23T16:30:00Z'))).toEqual(new Date('2026-11-22'));
   });
 });

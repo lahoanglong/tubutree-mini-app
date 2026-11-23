@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CohortRepeatRowDTO, FunnelDailyDTO } from '@tubutree/shared-types';
 import { flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
-import { CohortRepeatCard, FunnelDailyCard, cohortCell, funnelRecentTotals } from './analytics-snapshot-cards';
+import { CohortRepeatCard, FunnelDailyCard, cohortCell, funnelRecentTotals, medianCell } from './analytics-snapshot-cards';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -46,6 +46,12 @@ describe('cohortCell / funnelRecentTotals', () => {
     expect(cohortCell({ count: 0, complete: true }, 0)).toBe('— (0)');
   });
 
+  it('trung vị: dấu phẩy thập phân; nhóm chưa đủ 90 ngày có *; chưa ai có đơn 2 thì —', () => {
+    expect(medianCell({ medianDaysToSecondOrder: 12.5, d90: { count: 3, complete: true } })).toBe('12,5 ngày');
+    expect(medianCell({ medianDaysToSecondOrder: 9, d90: { count: 3, complete: false } })).toBe('9 ngày*');
+    expect(medianCell({ medianDaysToSecondOrder: null, d90: { count: 0, complete: false } })).toBe('—');
+  });
+
   it('tổng N ngày cuối: cộng phiên và đơn đặt thành công, % trên tổng phiên', () => {
     const rows = [funnelDay('2026-11-20', 1000, 50), funnelDay('2026-11-21', 100, 2), funnelDay('2026-11-22', 100, 3)];
     expect(funnelRecentTotals(rows, 2)).toEqual({ sessions: 200, placed: 5, pct: 2.5 });
@@ -65,7 +71,7 @@ describe('CohortRepeatCard', () => {
     const rows = Array.from(section.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.children).map((c) => c.textContent));
     expect(rows).toEqual([
       ['11/2026', '40', '15% (6)', '22,5% (9)', '25% (10)*', '—'],
-      ['10/2026', '40', '15% (6)', '22,5% (9)', '25% (10)*', '12,5 ngày'],
+      ['10/2026', '40', '15% (6)', '22,5% (9)', '25% (10)*', '12,5 ngày*'],
     ]);
     const pending = section.querySelector('tbody tr td[title]');
     expect(pending?.getAttribute('title')).toMatch(/chưa đủ ngày/);

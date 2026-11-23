@@ -488,6 +488,8 @@ describe('AnalyticsAggregationService funnel snapshot', () => {
     expect(sql).toContain('NOT EXISTS (SELECT 1 FROM funnel_daily_snapshot');
     expect(sql).toContain('ORDER BY r."date" ASC');
     expect(sql).toContain('min("receivedAt")');
+    // Ngày của sự kiện cũ nhất có thể đã bị dọn một phần: chỉ bù các ngày sau nó.
+    expect(sql).toContain(`r."date" > date_trunc('day', oldest.at + interval '7 hours')`);
   });
 
   it('runNightly: phễu lỗi không chặn cohort, retention lỗi không chặn phễu', async () => {

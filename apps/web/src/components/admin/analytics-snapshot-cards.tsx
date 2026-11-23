@@ -21,6 +21,12 @@ export function cohortCell(w: CohortRepeatWindowDTO, newBuyers: number): string 
   return `${formatPct(ratioPct(w.count, newBuyers))} (${formatCount(w.count)})${w.complete ? '' : '*'}`;
 }
 
+/** Trung vị số ngày tới đơn 2; nhóm chưa đủ 90 ngày theo dõi mới chỉ có khách quay lại sớm nên số còn tăng (dấu *). */
+export function medianCell(r: Pick<CohortRepeatRowDTO, 'medianDaysToSecondOrder' | 'd90'>): string {
+  if (r.medianDaysToSecondOrder === null) return '—';
+  return `${String(r.medianDaysToSecondOrder).replace('.', ',')} ngày${r.d90.complete ? '' : '*'}`;
+}
+
 function CohortCell({ w, newBuyers }: { w: CohortRepeatWindowDTO; newBuyers: number }) {
   return (
     <td className={`px-2 text-right ${w.complete ? 'text-stone-900' : 'text-stone-500'}`} title={w.complete ? undefined : 'Còn khách chưa đủ ngày theo dõi, số còn tăng'}>
@@ -67,8 +73,11 @@ export function CohortRepeatCard() {
                     <CohortCell w={r.d30} newBuyers={r.newBuyers} />
                     <CohortCell w={r.d60} newBuyers={r.newBuyers} />
                     <CohortCell w={r.d90} newBuyers={r.newBuyers} />
-                    <td className="pl-2 text-right text-stone-700">
-                      {r.medianDaysToSecondOrder === null ? '—' : `${String(r.medianDaysToSecondOrder).replace('.', ',')} ngày`}
+                    <td
+                      className={`pl-2 text-right ${r.d90.complete ? 'text-stone-700' : 'text-stone-500'}`}
+                      title={r.d90.complete || r.medianDaysToSecondOrder === null ? undefined : 'Chưa đủ 90 ngày theo dõi: mới tính khách quay lại sớm, số còn tăng'}
+                    >
+                      {medianCell(r)}
                     </td>
                   </tr>
                 ))}

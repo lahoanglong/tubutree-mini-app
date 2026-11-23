@@ -46,3 +46,12 @@ export function funnelDailyView(rows: Pick<FunnelDailySnapshot, 'date' | 'step' 
     };
   });
 }
+
+/**
+ * Mốc `date` nhỏ nhất của `days` ngày phễu đã chốt gần nhất. Dòng phễu lưu ngày VN ở 00:00 UTC và ngày mới nhất là hôm qua (giờ VN), nên
+ * mốc là hôm nay (giờ VN) − `days`: days=30 trả đủ 30 ngày, không mất ngày đầu vì so với giờ hiện tại.
+ */
+export function funnelDailySince(days: number, now: Date = new Date()): Date {
+  const todayVn = new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+  return new Date(Date.parse(`${todayVn}T00:00:00Z`) - days * 86_400_000);
+}
