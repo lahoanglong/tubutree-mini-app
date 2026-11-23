@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { homeCopy } from '@tubutree/app-core/home-copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { vi } from './vi';
 
 /**
@@ -58,13 +60,13 @@ describe('thuật ngữ Q-26 — một chữ cho một khái niệm', () => {
     expect(offenders(/điểm Xanh/)).toEqual([]);
   });
 
-  it('ô nhập mã ở giỏ/thanh toán nói "mã giảm giá"', () => {
-    expect(vi.cart.couponPlaceholder).toBe('Nhập mã giảm giá');
+  it('tấm chọn mã ở giỏ/thanh toán nói "mã giảm giá"', () => {
+    expect(fillCopy('coupon.pickManual')).toBe('Nhập mã giảm giá khác');
   });
 
   it('Q14: trang chủ không ghi con số vùng đất (dữ liệu có 8 nhãn, 7 tỉnh) mà nói "từ nhiều vùng đất Việt Nam"', () => {
-    expect(vi.home.brandStoryBody).not.toMatch(/\d+ vùng đất/);
-    expect(vi.home.brandStoryBody).toContain('từ nhiều vùng đất Việt Nam');
+    expect(homeCopy.journey.body(0)).not.toMatch(/\d+ vùng đất/);
+    expect(homeCopy.journey.body(0)).toContain('từ nhiều vùng đất Việt Nam');
     expect(offenders(/\d+ vùng đất/)).toEqual([]);
   });
 });

@@ -7,3 +7,10 @@ describe('vi.checkout không giữ câu điểm chết (D8-18)', () => {
     expect(Object.keys(vi.checkout)).not.toContain(key);
   });
 });
+
+/** Bỏ qua kỳ trên thẻ và trong sheet giữ chân báo bằng `skipDoneText` (ngày kỳ kế máy chủ trả), câu chung cũ không màn nào dùng. */
+describe('vi.subscriptions không giữ câu bỏ kỳ chết', () => {
+  it('skipOk đã xoá', () => {
+    expect(Object.keys(vi.subscriptions)).not.toContain('skipOk');
+  });
+});
