@@ -81,7 +81,8 @@ describe('Nhắc chuyển khoản trước hạn tự huỷ (real Postgres)', ()
     const due = await pendingOrder(new Date(NOW.getTime() - 23 * HOUR));
     const results = await Promise.all(Array.from({ length: 4 }, () => cron.remindBeforeExpiry(NOW)));
     expect(results.reduce((s, n) => s + n, 0)).toBeGreaterThanOrEqual(1);
-    await cron.remindBeforeExpiry(new Date(NOW.getTime() + 15 * 60_000));
+    // Lượt sau (đơn vẫn trong cửa sổ): đơn đã nhắc bị bỏ trước khi gửi nên lượt không đếm lại.
+    expect(await cron.remindBeforeExpiry(new Date(NOW.getTime() + 15 * 60_000))).toBe(0);
     const got = await notices(due.u.id);
     expect(got).toHaveLength(1);
     const payload = got[0]!.payload as { dedupeKey: string; data: Record<string, string>; body: string };

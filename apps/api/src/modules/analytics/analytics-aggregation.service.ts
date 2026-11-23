@@ -202,7 +202,9 @@ export class AnalyticsAggregationService {
 
   /**
    * Ngày đã có retention snapshot mà chưa có funnel snapshot (ngày trước khi có job này, hay đêm job phễu lỗi): tính bù tối đa `limit` ngày,
-   * cũ nhất trước. Chỉ xét từ ngày VN của sự kiện cũ nhất còn giữ: ngày đã bị dọn sự kiện mà ghi 0 thì là số sai, không phải lịch sử.
+   * cũ nhất trước. Chỉ xét các ngày SAU ngày VN của sự kiện cũ nhất còn giữ: job dọn cắt theo giờ (`now − N ngày`) nên ngày của sự kiện cũ nhất
+   * có thể đã mất một phần, ghi phễu cho ngày đó là số thiếu vĩnh viễn (có dòng rồi thì job dọn xoá nốt). Ngày đó không bao giờ có dòng phễu nên
+   * sự kiện còn lại của nó được giữ.
    */
   async backfillFunnelSnapshots(limit: number): Promise<string[]> {
     const rows = await this.prisma.$queryRawUnsafe<Array<{ day: string }>>(`
@@ -210,7 +212,7 @@ export class AnalyticsAggregationService {
       SELECT to_char(r."date", 'YYYY-MM-DD') AS day
         FROM retention_daily_snapshot r, oldest
        WHERE oldest.at IS NOT NULL
-         AND r."date" >= date_trunc('day', oldest.at + interval '7 hours')
+         AND r."date" > date_trunc('day', oldest.at + interval '7 hours')
          AND NOT EXISTS (SELECT 1 FROM funnel_daily_snapshot f WHERE f."date" = r."date")
        ORDER BY r."date" ASC
        LIMIT $1

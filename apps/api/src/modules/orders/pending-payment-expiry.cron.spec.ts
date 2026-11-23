@@ -204,12 +204,13 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
 });
 
 describe('PendingPaymentExpiryCron: nhắc chuyển khoản ~2 giờ trước hạn tự huỷ', () => {
-  function makeWithNotify(opts: { due?: unknown[]; template?: boolean; ttl?: number } = {}) {
+  function makeWithNotify(opts: { due?: unknown[]; template?: boolean; ttl?: number; remindedKeys?: string[] } = {}) {
     (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
     const findMany = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce(opts.due ?? []);
     const prisma = {
       order: { findMany },
       notificationTemplate: { findUnique: jest.fn().mockResolvedValue(opts.template === false ? null : { id: 'tpl' }) },
+      notificationLog: { findMany: jest.fn().mockResolvedValue((opts.remindedKeys ?? []).map((dedupeKey) => ({ payload: { dedupeKey } }))) },
     };
     const systemConfig = { get: jest.fn(async (_k: string, fallback: unknown) => opts.ttl ?? fallback) };
     const orderStatus = { setStatus: jest.fn() };
@@ -248,6 +249,24 @@ describe('PendingPaymentExpiryCron: nhắc chuyển khoản ~2 giờ trước h�
       'order=TB123',
     );
     expect(paymentReminderDedupeKey('TB123')).toBe('pay_remind:TB123');
+    expect(prisma.order.findMany.mock.calls[1][0].take).toBe(1000);
+  });
+
+  it('đơn đã có tin nhắc từ lượt trước: không gửi lại, không đếm; đơn mới trong cửa sổ vẫn được nhắc', async () => {
+    const createdAt = new Date(NOW.getTime() - 23 * HOUR);
+    const { cron, prisma, notifications } = makeWithNotify({
+      due: [{ userId: 'u1', code: 'OLD', total: 1, createdAt }, { userId: 'u2', code: 'NEW', total: 1, createdAt }],
+      remindedKeys: ['pay_remind:OLD', 'pay_remind:OTHER'],
+    });
+    await expect(cron.expireStale(NOW)).resolves.toMatchObject({ reminded: 1 });
+    expect(notifications.notifySafe).toHaveBeenCalledTimes(1);
+    expect(notifications.notifySafe.mock.calls[0][1]).toBe(ORDER_PAYMENT_REMINDER_TEMPLATE);
+    expect(notifications.notifySafe.mock.calls[0][3]).toEqual({ dedupeKey: 'pay_remind:NEW' });
+    expect(prisma.notificationLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { templateCode: ORDER_PAYMENT_REMINDER_TEMPLATE, userId: { in: ['u1', 'u2'] } },
+      }),
+    );
   });
 
   it('hạn huỷ ngắn (2 giờ): chỉ nhắc đơn đã tạo ít nhất 1 giờ, không nhắc ngay khi vừa đặt', async () => {

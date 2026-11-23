@@ -3,7 +3,7 @@ import type { CohortRepeatRowDTO, FunnelDailyDTO } from '@tubutree/shared-types'
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { COHORT_LOOKBACK_MONTHS } from './analytics-aggregation.service';
-import { cohortRowView, funnelDailyView } from './analytics-snapshot-view';
+import { cohortRowView, funnelDailySince, funnelDailyView } from './analytics-snapshot-view';
 import { LaunchWatchService } from './launch-watch.service';
 import { PurchaseFunnelService } from './purchase-funnel.service';
 
@@ -31,10 +31,8 @@ export class AnalyticsAdminController {
   @Get('retention-daily')
   async retentionDaily(@Query('days') days = '30') {
     const n = Math.min(90, Math.max(1, Number(days) || 30));
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - n);
     const rows = await this.prisma.retentionDailySnapshot.findMany({
-      where: { date: { gte: since } },
+      where: { date: { gte: funnelDailySince(n) } },
       orderBy: { date: 'asc' },
     });
     // Prisma Decimal (decimal.js) serialize qua JSON.stringify ra STRING (toJSON = valueOf trả

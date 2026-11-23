@@ -37,8 +37,10 @@ export const PAYMENT_REMINDER_MIN_AGE_HOURS = 1;
 export const ORDER_PAYMENT_REMINDER_TEMPLATE = 'ORDER_PAYMENT_REMINDER';
 /** Khoá chống trùng: mỗi đơn một tin nhắc, dù cron 10 phút chạy lại hay nhiều instance. */
 export const paymentReminderDedupeKey = (orderCode: string) => `pay_remind:${orderCode}`;
+/** Trần đơn xét nhắc mỗi lượt; riêng với BATCH_SIZE của lượt huỷ vì đơn đã nhắc vẫn nằm trong cửa sổ 2 giờ tới khi hết hạn. */
+const REMINDER_BATCH_SIZE = 1000;
 
-/** `reminded`: số tin nhắc trước hạn gửi không lỗi trong lượt (gồm cả tin đã gửi từ trước, trùng khoá); không có khi lượt không nhắc. */
+/** `reminded`: số đơn được nhắc lần đầu trong lượt (đơn đã có tin nhắc từ lượt trước không tính); không có khi lượt không nhắc. */
 export type ExpireResult = { skipped: 'RUNNING' | 'LOCKED' } | { scanned: number; cancelled: number; failed: number; reminded?: number };
 
 /**
@@ -183,7 +185,7 @@ export class PendingPaymentExpiryCron {
       },
       select: { userId: true, code: true, total: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
-      take: BATCH_SIZE,
+      take: REMINDER_BATCH_SIZE,
     });
     if (due.length === 0) return 0;
     const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: ORDER_PAYMENT_REMINDER_TEMPLATE }, select: { id: true } });
@@ -191,8 +193,12 @@ export class PendingPaymentExpiryCron {
       this.logger.warn(`Thiếu mẫu ${ORDER_PAYMENT_REMINDER_TEMPLATE} (chưa chạy prisma:seed:reference): bỏ lượt nhắc chuyển khoản.`);
       return 0;
     }
+    // Đơn đã nhắc ở lượt trước vẫn trong cửa sổ tới lúc huỷ: bỏ trước khi gửi để lượt chỉ đếm đơn mới nhắc. Khoá dedupeKey vẫn chặn
+    // trùng khi hai lượt chen nhau giữa lúc đọc và lúc gửi.
+    const reminded = await this.remindedKeys(due.map((o) => o.userId));
     let sent = 0;
     for (const o of due) {
+      if (reminded.has(paymentReminderDedupeKey(o.code))) continue;
       const ok = await this.notifications.notifySafe(
         o.userId,
         ORDER_PAYMENT_REMINDER_TEMPLATE,
@@ -207,6 +213,20 @@ export class PendingPaymentExpiryCron {
       if (ok) sent += 1;
     }
     return sent;
+  }
+
+  /** dedupeKey của các tin nhắc trước hạn đã ghi cho các khách này (khoá mang mã đơn nên tin của đơn cũ không lẫn; đi chỉ mục userId). */
+  private async remindedKeys(userIds: string[]): Promise<Set<string>> {
+    const logs = await this.prisma.notificationLog.findMany({
+      where: { templateCode: ORDER_PAYMENT_REMINDER_TEMPLATE, userId: { in: [...new Set(userIds)] } },
+      select: { payload: true },
+    });
+    const keys = new Set<string>();
+    for (const l of logs) {
+      const key = (l.payload as { dedupeKey?: unknown } | null)?.dedupeKey;
+      if (typeof key === 'string') keys.add(key);
+    }
+    return keys;
   }
 
   private ttlHours(): Promise<number> {
