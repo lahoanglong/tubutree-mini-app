@@ -68,6 +68,11 @@ jobs:
           MINIAPP_ENTRY_WARN_KB: ${{ vars.MINIAPP_ENTRY_WARN_KB || '700' }}
           MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2350' }}
 
+      - name: Chunk lười Mini App (chặn)
+        # Mô-đun cố ý nạp lười (bộ vẽ ảnh chia sẻ, game, khối dưới màn đầu…) phải còn chunk riêng và chỉ nạp bằng import(): experimentalMinChunkSize
+        # có thể gộp chúng vào chunk import tĩnh (tubu-w20-02). Danh sách ở scripts/ci/mini-lazy-chunks.cjs.
+        run: node scripts/ci/mini-lazy-chunks.cjs apps/miniapp/www
+
       - name: Ngân sách JS tải lần đầu của web (chặn / và /san-pham)
         # Ngưỡng ở scripts/ci/web-budget.json (số đo + 4%). Cả sáu route đỏ CI khi vượt.
         # HTML Trang chủ cần máy chủ có dữ liệu thật (--html-base) nên ở CI ghi "bỏ qua"; đo tay bằng lệnh trong scripts/ci/web-budget.cjs.

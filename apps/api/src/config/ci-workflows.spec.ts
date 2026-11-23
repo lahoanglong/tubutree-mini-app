@@ -104,6 +104,19 @@ describe('.github/workflows/ci.yml — báo cáo bundle miniapp (D6-08)', () => 
   });
 });
 
+describe('.github/workflows/ci.yml — rào chunk lười Mini App (tubu-w22-03)', () => {
+  const wf = read('.github/workflows/ci.yml');
+
+  it('chạy SAU bước Build trên thư mục www của miniapp, và chặn (không continue-on-error)', () => {
+    const build = wf.indexOf('run: pnpm build');
+    const step = wf.indexOf('run: node scripts/ci/mini-lazy-chunks.cjs apps/miniapp/www');
+    expect(build).toBeGreaterThan(-1);
+    expect(step).toBeGreaterThan(build);
+    const block = wf.slice(wf.lastIndexOf('- name:', step), wf.indexOf('- name:', step) === -1 ? undefined : wf.indexOf('- name:', step));
+    expect(code(block)).not.toContain('continue-on-error');
+  });
+});
+
 describe('scripts/ci/bundle-budget.cjs', () => {
   const SCRIPT = join(REPO, 'scripts/ci/bundle-budget.cjs');
 
