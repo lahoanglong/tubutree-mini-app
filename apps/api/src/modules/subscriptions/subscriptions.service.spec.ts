@@ -1006,11 +1006,18 @@ describe('SubscriptionsService.skipCycle', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it.each([undefined, 'không phải ngày'])('thiếu hoặc sai "Lần kế" đang hiện (%p) → 400, không chạm DB', async (bad) => {
+  it('"Lần kế" sai dạng → 400, không chạm DB', async () => {
     const { svc, $queryRaw, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: SHOWN });
-    await expect(svc.skipCycle('u1', 's1', bad)).rejects.toMatchObject({ status: 400 });
+    await expect(svc.skipCycle('u1', 's1', 'không phải ngày')).rejects.toMatchObject({ status: 400 });
     expect($queryRaw).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('client cũ không gửi "Lần kế" (ZMP đã cài): vẫn bỏ kỳ đang có dưới khoá dòng, như trước', async () => {
+    const { svc, $queryRaw, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: SHOWN });
+    await svc.skipCycle('u1', 's1', undefined);
+    expect(String(($queryRaw.mock.calls[0][0] as TemplateStringsArray).join('?'))).toMatch(/FOR UPDATE/);
+    expect((update.mock.calls[0][0].data.nextRunAt as Date).getTime()).toBe(SHOWN.getTime() + 4 * 7 * 864e5);
   });
 
   it('cùng thời điểm viết khác dạng (offset +07:00) vẫn khớp', async () => {

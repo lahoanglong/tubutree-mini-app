@@ -1354,6 +1354,35 @@ describe('SubscriptionsPanel web: phân loại không có tên', () => {
   });
 });
 
+describe('SubscriptionsPanel: sheet giữ chân bỏ kỳ theo "Lần kế" lúc mở sheet', () => {
+  const sheet = () => document.querySelector('[role="dialog"]') as HTMLElement;
+  it('danh sách tải lại nền lúc sheet mở (cron 03:00 đã sang kỳ sau): skip gửi ngày lúc mở; bị 409 thì lần bấm sau theo danh sách mới', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<SubscriptionsPanel />, qc);
+    mounted.push(r);
+    await flush(8);
+    click(btn('Huỷ', r.container));
+    await flush(6);
+    subs = [{ ...SUB, nextRunAt: '2026-11-11T17:00:00.000Z' }];
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    });
+    await flush(6);
+    expect(r.container.textContent).toContain('Lần kế: 12/11/2026');
+    failures['POST /me/subscriptions/s1/skip'] = { status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' };
+    click(btn('Bỏ qua kỳ này', sheet()));
+    await flush(10);
+    expect(sheet().textContent).toContain('Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.');
+    delete failures['POST /me/subscriptions/s1/skip'];
+    click(btn('Bỏ qua kỳ này', sheet()));
+    await flush(8);
+    expect(sent('POST', '/me/subscriptions/s1/skip').map((c) => c.body)).toEqual([
+      { expectedNextRunAt: SUB.nextRunAt },
+      { expectedNextRunAt: '2026-11-11T17:00:00.000Z' },
+    ]);
+  });
+});
+
 describe('SubscriptionsPanel: tự phục vụ trên thẻ (bỏ qua một chạm, đặt kỳ này ngay, bậc giảm kế)', () => {
   const actions = () => document.querySelector('[data-testid="subscription-cycle-actions"]') as HTMLElement | null;
   const status = () => document.body.querySelector('[role="status"]')?.textContent ?? '';

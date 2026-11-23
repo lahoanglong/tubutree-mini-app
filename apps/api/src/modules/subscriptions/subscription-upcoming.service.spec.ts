@@ -59,6 +59,15 @@ describe('SubscriptionUpcomingService (nhắc 09:00 hôm trước kỳ giao)', (
     expect(notifySafe).not.toHaveBeenCalled();
   });
 
+  it('hàng gian hàng đối tác: không nhắc (cron tạm dừng gói vì gói định kỳ chỉ nhận hàng Tubu)', async () => {
+    const { svc, notifySafe } = setup({
+      subs: [[{ id: 's1', userId: 'u1', variationId: 'v1', nextRunAt: tomorrowVn }]],
+      variations: [{ ...VARIATION, product: { ...VARIATION.product, storefrontId: 'sf1' } }],
+    });
+    await expect(svc.nudgeUpcoming(now)).resolves.toMatchObject({ due: 1, sent: 0, notSellable: 1 });
+    expect(notifySafe).not.toHaveBeenCalled();
+  });
+
   it('DB chưa có mẫu tin (chưa chạy seed:reference): không quét, không gửi câu trung tính', async () => {
     const { svc, findMany, notifySafe } = setup({ template: false });
     await expect(svc.nudgeUpcoming(now)).resolves.toEqual({ skipped: 'NO_TEMPLATE' });

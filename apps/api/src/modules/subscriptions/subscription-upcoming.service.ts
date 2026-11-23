@@ -7,6 +7,7 @@ import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isSellableVariation } from '../cart/sellable';
+import { isPartnerOwnedVariation } from '../cart/partner-goods';
 
 /** Mẫu tin "ngày mai Tubu tự đặt đơn định kỳ". Có trong prisma/seed.ts, lên PROD qua `prisma:seed:reference` lúc deploy (không migration). */
 export const SUBSCRIPTION_UPCOMING_TEMPLATE = 'SUBSCRIPTION_UPCOMING';
@@ -14,6 +15,7 @@ export const SUBSCRIPTION_UPCOMING_TEMPLATE = 'SUBSCRIPTION_UPCOMING';
 /** Khoá chống trùng của tin: một gói một tin cho mỗi ngày giao (YYYY-MM-DD giờ VN). Dời sang ngày khác thì ngày mới được nhắc lại. */
 export const subscriptionUpcomingDedupeKey = (subscriptionId: string, runAt: Date) => `sub_upcoming:${subscriptionId}:${vnDateKey(runAt)}`;
 
+/** `sent`: lượt notify() không lỗi, gồm cả tin đã gửi từ trước (trùng khoá) và khách tắt nhận tin, nên chạy lại trong ngày vẫn đếm. */
 export type SubscriptionUpcomingRun =
   | { skipped: 'RUNNING' | 'LOCKED' | 'NO_TEMPLATE' | 'ERROR' }
   | { due: number; sent: number; notSellable: number; failed: number };
@@ -23,7 +25,8 @@ export type SubscriptionUpcomingRun =
  * ngày hay bỏ qua kỳ. Nút của tin mở tab Định kỳ (app-core notification-route, nhánh SUBSCRIPTION*).
  * - Chống trùng bằng `dedupeKey` của notification_logs (`sub_upcoming:<gói>:<ngày giao>`): chạy lại hay nhiều instance cũng chỉ một tin mỗi kỳ.
  * - Bỏ gói đang thử lại kỳ vì hết hàng (retryCount > 0): khách đã nhận tin "Tubu sẽ tự thử lại vào ngày mai".
- * - Bỏ gói có sản phẩm đã ngừng bán: đêm đó cron tạm dừng gói và báo riêng, nói "sẽ tự đặt đơn" là sai.
+ * - Bỏ gói có sản phẩm đã ngừng bán hoặc là hàng gian hàng đối tác: đêm đó cron tạm dừng gói và báo riêng, nói "sẽ tự đặt đơn" là sai.
+ *   Ví thiếu tiền, hết hàng, địa chỉ hỏng thì không đoán trước (có thể đổi trước 03:00): vẫn nhắc, đêm đó cron báo riêng nếu không ra đơn.
  * - Chưa có mẫu tin (DB chưa chạy seed:reference) thì không gửi gì: thiếu mẫu, notify() rơi về câu trung tính.
  */
 @Injectable()
@@ -83,13 +86,13 @@ export class SubscriptionUpcomingService {
       if (subs.length === 0) break;
       const variations = await this.prisma.variation.findMany({
         where: { id: { in: [...new Set(subs.map((s) => s.variationId))] } },
-        select: { id: true, isActive: true, product: { select: { name: true, isActive: true, approvalStatus: true } } },
+        select: { id: true, isActive: true, product: { select: { name: true, isActive: true, approvalStatus: true, storefrontId: true } } },
       });
       const byId = new Map(variations.map((v) => [v.id, v]));
       for (const s of subs) {
         stats.due++;
         const v = byId.get(s.variationId);
-        if (!v || !isSellableVariation(v)) {
+        if (!v || !isSellableVariation(v) || isPartnerOwnedVariation(v)) {
           stats.notSellable++;
           continue;
         }

@@ -32,7 +32,7 @@ export class UpdateSubDto {
   @OptionalNotNull() @IsISO8601({ strict: true }) expectedNextRunAt?: string;
 }
 export class SkipSubDto {
-  /** `nextRunAt` của gói như thẻ đang hiện; bắt buộc (thiếu thì 400). Lệch bản trong DB (cron 03:00 vừa ra đơn kỳ đó) thì 409, không bỏ qua kỳ sau. */
+  /** `nextRunAt` của gói như thẻ đang hiện. Lệch bản trong DB (cron 03:00 vừa ra đơn kỳ đó) thì 409, không bỏ qua kỳ sau. Thiếu (ZMP cũ không gửi thân) thì bỏ kỳ đang có. */
   @OptionalNotNull() @IsISO8601({ strict: true }) expectedNextRunAt?: string;
 }
 class StatusDto {

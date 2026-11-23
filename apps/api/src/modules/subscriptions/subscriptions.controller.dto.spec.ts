@@ -60,7 +60,7 @@ describe('DTO bỏ qua kỳ: "Lần kế" đang hiện (expectedNextRunAt)', () 
     await expect(runSkip({ expectedNextRunAt: '2026-11-24T17:00:00.000Z' })).resolves.toMatchObject({ expectedNextRunAt: '2026-11-24T17:00:00.000Z' });
   });
 
-  it('bỏ trống thì DTO cho qua: service trả 400 tiếng Việt (bắt buộc)', async () => {
+  it('bỏ trống (ZMP cũ gửi skip không thân) thì DTO cho qua', async () => {
     await expect(runSkip({})).resolves.toMatchObject({});
   });
 

@@ -728,14 +728,16 @@ export class SubscriptionsService {
    * Save-flow: bỏ qua 1 kỳ giao kế tiếp mà KHÔNG hủy/tạm dừng lịch — đẩy nextRunAt thêm 1 chu kỳ tính từ nextRunAt hiện tại, giữ ACTIVE.
    * `expectedNextRunAt` là "Lần kế" khách đang thấy, so dưới khoá dòng như dời ngày: cron 03:00 vừa ra đơn kỳ đó (nextRunAt đã sang kỳ sau)
    * thì 409, không lặng lẽ bỏ qua kỳ SAU trong khi khách tưởng đã bỏ kỳ vừa giao.
+   * Thiếu trường thì bỏ kỳ đang có như trước: bản Mini App đã cài trên máy khách (ZMP cũ) và tab web mở trước lúc deploy gửi skip không thân,
+   * bắt buộc ngay thì nút "Bỏ qua kỳ này" của họ hỏng hẳn tới khi có ZMP mới. Hai client hiện tại luôn gửi.
    */
   async skipCycle(userId: string, id: string, expectedNextRunAt: string | undefined) {
-    const expected = this.parseExpectedNextRunAt(expectedNextRunAt, true)!;
+    const expected = this.parseExpectedNextRunAt(expectedNextRunAt, false);
     return this.prisma.$transaction(async (tx) => {
       const sub = await this.lockSubscription(tx, id);
       if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
       if (sub.status !== 'ACTIVE') throw new BadRequestException('Chỉ bỏ qua kỳ khi lịch đang chạy.');
-      if (sub.nextRunAt.getTime() !== expected.getTime()) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
+      if (expected && sub.nextRunAt.getTime() !== expected.getTime()) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
       return tx.subscription.update({ where: { id }, data: { nextRunAt: this.addWeeks(sub.nextRunAt, sub.intervalWeeks), retryCount: 0 } });
     });
   }

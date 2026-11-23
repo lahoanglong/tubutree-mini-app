@@ -57,6 +57,8 @@ export function SubscriptionsPanel() {
   // % thực tế đang áp (thang bậc) thắng % cấu hình chung khi đã có lịch.
   const subscribePct = Math.round((subs[0]?.effectiveDiscountPct ?? cfgQ.data?.subscribeDiscountPct ?? FALLBACK_DISCOUNT_PCT) * 100);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  // "Lần kế" của thẻ lúc mở sheet giữ chân: sheet không hiện ngày, danh sách tải lại nền qua 03:00 thì `targetSub` đã sang kỳ sau và skip sẽ bỏ nhầm kỳ đó.
+  const cancelShownRunAt = useRef<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [runNowTarget, setRunNowTarget] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -118,7 +120,11 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    onError: onActionError,
+    // Sheet giữ chân web không tự đóng khi bị từ chối: khách đã đọc "lịch vừa thay đổi", lần bấm sau theo danh sách vừa tải lại thay vì 409 mãi.
+    onError: (e) => {
+      if (isStaleSubscriptionError(e)) cancelShownRunAt.current = null;
+      return onActionError(e);
+    },
     onSettled: releaseActing,
   });
   // "Đặt kỳ này ngay" tạo đơn (Ví Tubu trừ tiền ngay) nên qua tấm xác nhận; tấm giữ nút bận tới khi danh sách gói mới về. Đơn mới vào tab Đơn hàng.
@@ -225,6 +231,7 @@ export function SubscriptionsPanel() {
                 if (acting.current) return;
                 statusMut.reset();
                 skipMut.reset();
+                cancelShownRunAt.current = s.nextRunAt;
                 setCancelTarget(s.id);
               }}
               onSkip={() => exclusive(() => skipMut.mutate({ id: s.id, expectedNextRunAt: s.nextRunAt }))}
@@ -309,7 +316,7 @@ export function SubscriptionsPanel() {
               aria-disabled={skipMut.isPending || undefined}
               onClick={() => {
                 if (!targetSub) return;
-                exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: targetSub.nextRunAt }));
+                exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: cancelShownRunAt.current ?? targetSub.nextRunAt }));
               }}
             >
               {skipMut.isPending ? 'Đang xử lý…' : 'Bỏ qua kỳ này'}

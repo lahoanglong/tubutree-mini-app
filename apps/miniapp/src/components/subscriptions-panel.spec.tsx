@@ -1333,3 +1333,27 @@ describe('SubscriptionsPanel: tự phục vụ trên thẻ (bỏ qua một chạ
     expect(screen.queryByTestId('subscription-next-tier')).not.toBeInTheDocument();
   });
 });
+
+describe('SubscriptionsPanel: sheet giữ chân bỏ kỳ theo "Lần kế" lúc mở sheet', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.skipSubscriptionCycle.mockResolvedValue(SUB);
+  });
+
+  it('danh sách tải lại nền lúc sheet mở (cron 03:00 đã sang kỳ sau): "Bỏ qua kỳ này" gửi ngày lúc mở để máy chủ trả 409, không bỏ nhầm kỳ sau', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={qc}><SubscriptionsPanel /></QueryClientProvider>);
+    await openRetention();
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, nextRunAt: '2026-11-11T17:00:00.000Z' }]);
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    });
+    await screen.findByText(/12\/11\/2026/);
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1', SUB.nextRunAt));
+  });
+});

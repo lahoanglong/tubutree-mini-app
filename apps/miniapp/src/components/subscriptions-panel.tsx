@@ -58,6 +58,8 @@ export function SubscriptionsPanel() {
   // % thực tế đang áp (thang bậc) thắng % cấu hình chung khi đã có lịch.
   const subscribePct = Math.round((subs[0]?.effectiveDiscountPct ?? cfg.subscribeDiscountPct) * 100);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  // "Lần kế" của thẻ lúc mở sheet giữ chân: sheet không hiện ngày, danh sách tải lại nền qua 03:00 thì `targetSub` đã sang kỳ sau và skip sẽ bỏ nhầm kỳ đó.
+  const cancelShownRunAt = useRef<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [runNowTarget, setRunNowTarget] = useState<string | null>(null);
   // Gợi ý định kỳ chỉ khi khách chưa có gói nào đang chạy hay tạm dừng.
@@ -191,7 +193,10 @@ export function SubscriptionsPanel() {
               setEditTarget(s.id);
             }}
             onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }))}
-            onCancel={() => setCancelTarget(s.id)}
+            onCancel={() => {
+              cancelShownRunAt.current = s.nextRunAt;
+              setCancelTarget(s.id);
+            }}
             onSkip={() => exclusive(() => skipMut.mutate({ id: s.id, expectedNextRunAt: s.nextRunAt }))}
             onRunNow={() => {
               if (acting.current || subsQ.isFetching) return;
@@ -254,7 +259,7 @@ export function SubscriptionsPanel() {
               disabled={statusMut.isPending}
               onPress={() => {
                 if (!targetSub) return;
-                exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: targetSub.nextRunAt }));
+                exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: cancelShownRunAt.current ?? targetSub.nextRunAt }));
               }}
             >
               {vi.subscriptions.skipCta}
