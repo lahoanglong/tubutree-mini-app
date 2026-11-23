@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerAsk, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { CockpitBoard } from './cockpit-board';
 import { PilotOrdersPanel } from './pilot-orders-panel';
-import { rowFixLink, splitPhones, type CockpitCard, type GoLiveCockpit, type PilotCleanupResult, type PilotOrderRow, type PilotOrdersView } from './golive-api';
+import { cardFixLinks, rowFixLink, splitPhones, type CockpitCard, type GoLiveCockpit, type PilotCleanupResult, type PilotOrderRow, type PilotOrdersView } from './golive-api';
 
 const auth = vi.hoisted(() => ({ value: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true } }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => auth.value }));
@@ -72,6 +72,14 @@ describe('golive-api: link sửa', () => {
     expect(href('db.ops_thresholds', 'infra')).toBe('/admin?tab=config');
     expect(href('cockpit.pancake.recent_sync', 'pancake')).toBe('/admin?tab=opsHealth');
     expect(href('cockpit.waste.lane_mailin', 'waste')).toBe('/admin?tab=waste');
+    // Biến thể chưa gắn Pancake: mở thẳng chip "Chưa gắn Pancake" ở bàn đối soát tồn, không phải trang Sức khoẻ chung.
+    expect(href('cockpit.pancake.unlinked_variants', 'pancake')).toBe('/admin/doi-soat-kho?flag=UNLINKED');
+  });
+
+  it('thẻ "Pancake và kho" có thêm link Đối soát tồn kho; thẻ catalog mở Kiểm tra catalog; thẻ khác một link', () => {
+    expect(cardFixLinks('pancake').map((l) => l.href)).toEqual(['/admin?tab=opsHealth', '/admin/doi-soat-kho']);
+    expect(cardFixLinks('catalog').map((l) => l.href)).toEqual(['/admin?tab=catalogQuality']);
+    expect(cardFixLinks('legal')).toHaveLength(1);
   });
 
   it('ô SĐT tách theo phẩy/chấm phẩy/xuống dòng, bỏ trùng và khoảng trắng', () => {
@@ -110,6 +118,11 @@ describe('CockpitBoard', () => {
     expect(hmac.textContent).toContain('Sửa trên máy chủ');
     const cardLink = c.querySelector('[data-testid="gio-g-card-legal"] a:last-of-type');
     expect(cardLink?.getAttribute('href')).toBe('/admin?tab=config');
+    const pancakeLinks = [...c.querySelectorAll('[data-testid="gio-g-card-pancake"] a')].map((a) => [a.getAttribute('href'), a.textContent]);
+    expect(pancakeLinks).toEqual([
+      ['/admin?tab=opsHealth', 'Mở Sức khoẻ hệ thống'],
+      ['/admin/doi-soat-kho', 'Mở Đối soát tồn kho'],
+    ]);
   });
 
   it('"Kiểm lại" gọi lại với fresh=1', async () => {

@@ -360,7 +360,7 @@ describe('OpsHealthService.pancakeHealth — danh sách đơn kẹt mang cờ "�
       ['TUBU5', 'NEVER', null],
     ]);
     for (const o of out.stuckOrders) {
-      for (const hidden of ['type', 'fulfiller', 'paymentMethod', 'paymentStatus', 'hasRecyclingPickup', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus', 'items']) {
+      for (const hidden of ['type', 'fulfiller', 'paymentMethod', 'paymentStatus', 'hasRecyclingPickup', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus', 'items', 'pancakePushClaimedAt']) {
         expect(o).not.toHaveProperty(hidden);
       }
       expect(o).toMatchObject({ pancakePushStatus: 'STALE', status: 'CONFIRMED' });
@@ -381,5 +381,103 @@ describe('OpsHealthService.pancakeHealth — danh sách đơn kẹt mang cờ "�
       gomdonStatus: true,
       items: { select: { backorderedQty: true } },
     });
+  });
+});
+
+describe('OpsHealthService.pancakeHealth — cờ "Đẩy lại đơn tạm lỗi" (bulkRetry) trên đơn kẹt (W22-02)', () => {
+  const row = (patch: Record<string, unknown>) => ({
+    id: 'o1',
+    code: 'TUBU1',
+    type: 'RETAIL',
+    fulfiller: 'TUBU',
+    status: 'CONFIRMED',
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+    pancakeOrderId: null,
+    pancakePushStatus: 'FAILED',
+    pancakePushAttempts: 5,
+    pancakeLastAttemptAt: null,
+    pancakeSyncError: 'Pancake trả 502',
+    pancakeErrorKind: 'TRANSIENT',
+    pancakePushClaimedAt: null,
+    hasRecyclingPickup: false,
+    gomdonOrderId: null,
+    gomdonPartnerCode: null,
+    gomdonStatus: null,
+    items: [{ backorderedQty: 0 }],
+    ...patch,
+  });
+  const run = async (rows: unknown[], configured = true) => {
+    const findMany = jest.fn(async (args: { select?: Record<string, unknown> }) => (args.select && 'pancakePushStatus' in args.select ? rows : []));
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ at: null }]),
+      pancakeWebhookEvent: { findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+      order: { count: jest.fn().mockResolvedValue(rows.length), findMany, groupBy: jest.fn().mockResolvedValue([]) },
+      opsHealthState: { findUnique: jest.fn().mockResolvedValue(null) },
+    };
+    const env = { get: (k: string) => (configured && (k === 'PANCAKE_API_KEY' || k === 'PANCAKE_SHOP_ID') ? 'x' : '') };
+    const svc = new OpsHealthService(prisma as never, env as never, []);
+    const out = await (svc as unknown as { pancakeHealth(now: Date, t: unknown): Promise<{ stuckOrders: Record<string, unknown>[] }> }).pancakeHealth(
+      new Date('2026-11-05T00:00:00Z'),
+      { unsyncedMinutes: 30 },
+    );
+    return out.stuckOrders.map((o) => [o.code, o.bulkRetry]);
+  };
+
+  it('chỉ TRANSIENT / CONFIG_RECHECK, cổng đẩy NOW, chưa quá hạn tự đẩy, Pancake đã cấu hình', async () => {
+    const rows = [
+      row({}),
+      row({ id: 'o2', code: 'RECHECK', pancakeErrorKind: 'CONFIG_RECHECK' }),
+      row({ id: 'o3', code: 'DATA', pancakeErrorKind: 'DATA' }),
+      row({ id: 'o4', code: 'CONFIG', pancakeErrorKind: 'CONFIG' }),
+      row({ id: 'o5', code: 'STALE', pancakePushStatus: 'STALE' }),
+      row({ id: 'o6', code: 'WAITPAY', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID' }),
+      row({ id: 'o7', code: 'NOKIND', pancakeErrorKind: null }),
+      // Lượt đẩy còn giữ quyền (PUSHING trong hạn thuê) / lệnh tạo vừa gửi trong cửa sổ chờ: nút bấm chỉ nhận 409, không hiện.
+      row({ id: 'o8', code: 'PUSHING', pancakePushStatus: 'PUSHING', pancakeLastAttemptAt: new Date('2026-11-04T23:59:30Z') }),
+      row({ id: 'o9', code: 'SETTLING', pancakePushClaimedAt: new Date('2026-11-04T23:58:00Z') }),
+      row({ id: 'o10', code: 'OLDCLAIM', pancakePushClaimedAt: new Date('2026-11-04T23:50:00Z') }),
+    ];
+    expect(await run(rows)).toEqual([
+      ['TUBU1', true],
+      ['RECHECK', true],
+      ['DATA', false],
+      ['CONFIG', false],
+      ['STALE', false],
+      ['WAITPAY', false],
+      ['NOKIND', false],
+      ['PUSHING', false],
+      ['SETTLING', false],
+      ['OLDCLAIM', true],
+    ]);
+    expect((await run(rows, false)).every(([, b]) => b === false)).toBe(true);
+  });
+});
+
+describe('OpsHealthService.orderHealth — đơn giao quá cửa sổ cron được gắn cờ stale để mở đúng đơn chạy tay (W22-02)', () => {
+  it('stale theo cùng mốc 14 ngày với deliveredEffectsStaleWhere; vẫn giữ id/code/deliveredAt', async () => {
+    const now = new Date('2026-11-20T00:00:00Z');
+    const old = new Date(now.getTime() - 15 * 86_400_000);
+    const edge = new Date(now.getTime() - 14 * 86_400_000);
+    const fresh = new Date(now.getTime() - 2 * 86_400_000);
+    const prisma = {
+      order: {
+        count: jest.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(1),
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'a', code: 'OLD', deliveredAt: old },
+          { id: 'b', code: 'EDGE', deliveredAt: edge },
+          { id: 'c', code: 'FRESH', deliveredAt: fresh },
+        ]),
+      },
+    };
+    const svc = new OpsHealthService(prisma as never, { get: () => '' } as never, []);
+    const out = await (svc as unknown as { orderHealth(now: Date): Promise<{ deliveredEffectsStale: number; deliveredEffectsOrders: Record<string, unknown>[] }> }).orderHealth(now);
+    expect(out.deliveredEffectsStale).toBe(1);
+    expect(out.deliveredEffectsOrders).toEqual([
+      { id: 'a', code: 'OLD', deliveredAt: old, stale: true },
+      { id: 'b', code: 'EDGE', deliveredAt: edge, stale: false },
+      { id: 'c', code: 'FRESH', deliveredAt: fresh, stale: false },
+    ]);
   });
 });

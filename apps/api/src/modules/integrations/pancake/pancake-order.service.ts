@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type { Order, OrderItem, PaymentMethod, Prisma } from '@prisma/client';
@@ -43,6 +43,7 @@ import { CRON_TZ } from '../../../common/cron-tz';
 import { enqueuePancakeCancel, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
 import { classifyPushError, isPushFailureSettled, keepsPriorKind, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText, type PushErrorKind } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
+import { BULK_RETRY_WHERE, bulkRetryMessage, bulkRetryRefusal, type BulkRetryResult } from './pancake-bulk-retry';
 import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_PAYMENT_PENDING,
@@ -649,8 +650,9 @@ export class PancakeOrderService {
   /**
    * "Đẩy lại Pancake" của admin: đơn còn trong kho (chưa rời kho, chưa huỷ) và chưa lên Pancake — kể cả quá cửa sổ
    * tự đẩy. Đơn ĐÃ rời kho/đã giao thì không đẩy (kho sẽ giao lần hai).
+   * `bulk`: lối "Đẩy lại đơn tạm lỗi" của Sức khoẻ hệ thống — chỉ thêm điều kiện (`bulkRetryRefusal`, cả ở câu ghi có điều kiện), không bớt.
    */
-  async retryPushByAdmin(adminId: string, idOrCode: string): Promise<{ ok: true; message: string }> {
+  async retryPushByAdmin(adminId: string, idOrCode: string, opts: { bulk?: boolean } = {}): Promise<{ ok: true; message: string }> {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
       include: { items: { select: { backorderedQty: true } } },
@@ -658,24 +660,63 @@ export class PancakeOrderService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     const decision = this.retryDecision(order);
     if (decision.kind !== 'NOW') throw new BadRequestException(decision.refusal);
+    const bulkRefusal = opts.bulk ? bulkRetryRefusal(order) : null;
+    if (bulkRefusal) throw new BadRequestException(bulkRefusal);
     // Lệnh tạo vừa gửi trong cửa sổ chờ (chưa rõ kết quả): đẩy lại lúc này chỉ để job gặp lỗi chờ. Nói rõ giờ thử lại thay vì xếp job vô ích.
     if (this.sendSettling(order.pancakePushClaimedAt)) throw new ConflictException(sendSettlingMessage(order.code, order.pancakePushClaimedAt!));
     // Quyết định ở trên đọc từ bản chụp: lượt đẩy khác có thể claim PUSHING hoặc đóng dấu gửi ngay sau đó. Đè PENDING lên claim ấy mở khoá cho lượt
     // thứ hai (job thanh toán, cron) tạo thêm một đơn kho. Nên ghi có điều kiện "chưa có trên Pancake, không lượt nào giữ quyền đẩy, cửa sổ chờ đã mở".
     const reset = await this.prisma.order.updateMany({
-      where: { id: order.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere(), sendWindowOpenWhere()] },
+      where: { id: order.id, pancakeOrderId: null, AND: [pushLeaseFreeWhere(), sendWindowOpenWhere(), ...(opts.bulk ? [BULK_RETRY_WHERE] : [])] },
       data: { pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 },
     });
     if (reset.count === 0) {
-      const current = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakeOrderId: true, pancakePushClaimedAt: true } });
+      const current = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        select: { pancakeOrderId: true, pancakePushClaimedAt: true, pancakePushStatus: true, pancakeErrorKind: true },
+      });
       if (current?.pancakeOrderId) throw new ConflictException(`Đơn ${order.code} vừa lên Pancake (#${current.pancakeOrderId}), tải lại danh sách.`);
       if (this.sendSettling(current?.pancakePushClaimedAt)) throw new ConflictException(sendSettlingMessage(order.code, current!.pancakePushClaimedAt!));
+      const nowRefused = opts.bulk && current ? bulkRetryRefusal({ code: order.code, ...current }) : null;
+      if (nowRefused) throw new ConflictException(nowRefused);
       throw new ConflictException(pushInFlightMessage(order.code));
     }
     // enqueuePush gỡ job push đã lỗi cùng jobId trước khi add: BullMQ bỏ qua `add` khi jobId còn nằm ở tập failed.
     await this.enqueuePush(order.id);
     this.logger.warn(`Admin ${adminId} đẩy lại đơn ${order.code} sang Pancake.`);
     return { ok: true, message: `Đã xếp lệnh đẩy đơn ${order.code} sang Pancake.` };
+  }
+
+  /**
+   * "Đẩy lại đơn tạm lỗi" (một chạm hoặc hàng loạt) ở Sức khoẻ hệ thống: lần lượt từng đơn qua `retryPushByAdmin(…, { bulk: true })`, nên mỗi
+   * đơn qua đủ cổng đẩy, cửa sổ chờ lệnh tạo và câu ghi có điều kiện như khi bấm ở chi tiết đơn. Đơn bị từ chối không chặn đơn sau.
+   */
+  async retryManyByAdmin(adminId: string, ids: readonly string[]): Promise<BulkRetryResult> {
+    const results: BulkRetryResult['results'] = [];
+    // Cùng một đơn gửi lên hai lần (id và mã đơn) chỉ xét một lần, để câu tổng không đếm "2/2".
+    const known = await this.prisma.order.findMany({ where: { OR: [{ id: { in: [...ids] } }, { code: { in: [...ids] } }] }, select: { id: true, code: true } });
+    const resolve = (ref: string) => known.find((o) => o.id === ref || o.code === ref)?.id ?? ref;
+    const seen = new Set<string>();
+    for (const id of ids) {
+      const key = resolve(id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        results.push({ id, ok: true, message: (await this.retryPushByAdmin(adminId, id, { bulk: true })).message });
+      } catch (err) {
+        if (err instanceof NotFoundException) {
+          results.push({ id, ok: false, message: `Không tìm thấy đơn ${id}.` });
+        } else if (err instanceof HttpException) {
+          results.push({ id, ok: false, message: err.message });
+        } else {
+          this.logger.error(`Đẩy lại hàng loạt: lỗi khi xếp lệnh đơn ${id}: ${err instanceof Error ? err.message : String(err)}`);
+          results.push({ id, ok: false, message: `Đơn ${id}: lỗi hệ thống khi xếp lệnh, thử lại sau ít phút.` });
+        }
+      }
+    }
+    const queued = results.filter((r) => r.ok).length;
+    this.logger.warn(`Admin ${adminId} đẩy lại hàng loạt ${queued}/${results.length} đơn tạm lỗi sang Pancake.`);
+    return { ok: true, queued, skipped: results.length - queued, results, message: bulkRetryMessage(results) };
   }
 
   /**

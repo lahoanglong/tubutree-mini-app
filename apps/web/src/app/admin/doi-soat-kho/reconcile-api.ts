@@ -1,4 +1,4 @@
-import { apiFetch } from '@/lib/client-api';
+import { apiDownload, apiFetch } from '@/lib/client-api';
 
 /** Cờ của một biến thể, xếp từ nặng tới nhẹ (`RECONCILE_FLAGS` ở `apps/api/src/modules/admin/pancake-reconcile/pancake-reconcile.ts`). */
 export type ReconcileFlag = 'NEGATIVE_LOCAL' | 'ZERO_LOCAL_PANCAKE_POSITIVE' | 'DRIFT' | 'UNLINKED' | 'NEVER_SYNCED';
@@ -28,10 +28,26 @@ export interface ReconcileRow {
 export interface ReconcileReport {
   generatedAt: string;
   minDrift: number;
+  /** Ô tìm đã áp (API cắt khoảng trắng); số đếm và bảng chỉ tính biến thể khớp. Thiếu = API cũ chưa có ô tìm. */
+  q?: string;
   lastSyncedAt: string | null;
   counts: { scanned: number; linked: number; withIssues: number } & Record<ReconcileFlag, number>;
   rows: ReconcileRow[];
   truncated: boolean;
 }
 
-export const getPancakeReconcile = (minDrift: number) => apiFetch<ReconcileReport>(`/admin/pancake-reconcile?minDrift=${encodeURIComponent(String(minDrift))}`);
+export const isReconcileFlag = (v: string | null | undefined): v is ReconcileFlag => RECONCILE_FLAGS.includes(v as ReconcileFlag);
+
+function reconcileParams(minDrift: number, q: string, flag?: ReconcileFlag | null): string {
+  const sp = new URLSearchParams({ minDrift: String(minDrift) });
+  const term = q.trim();
+  if (term) sp.set('q', term);
+  if (flag) sp.set('flag', flag);
+  return sp.toString();
+}
+
+export const getPancakeReconcile = (minDrift: number, q = '') => apiFetch<ReconcileReport>(`/admin/pancake-reconcile?${reconcileParams(minDrift, q)}`);
+
+/** `GET /admin/pancake-reconcile/export`: CSV (BOM UTF-8) MỌI dòng có cờ khớp bộ lọc, không cắt ở trần dòng của bảng, kèm cột "Cách xử lý". */
+export const downloadPancakeReconcileCsv = (minDrift: number, q: string, flag: ReconcileFlag | null) =>
+  apiDownload(`/admin/pancake-reconcile/export?${reconcileParams(minDrift, q, flag)}`, 'doi-soat-ton-pancake.csv');

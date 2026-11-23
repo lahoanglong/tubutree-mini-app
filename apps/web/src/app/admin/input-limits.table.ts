@@ -9,6 +9,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "app/admin/catalog-seo-bulk.tsx::value.desc": { dto: "apps/api/src/modules/catalog/catalog-quality.controller.ts:SeoApplyItemDto.metaDesc", max: 1000 },
   "components/admin/search-terms-card.tsx::form.term": { dto: "apps/api/src/modules/catalog/dto/search-synonym.dto.ts:CreateSearchSynonymDto.term", max: 60 },
   "components/admin/search-terms-card.tsx::form.canonical": { dto: "apps/api/src/modules/catalog/dto/search-synonym.dto.ts:CreateSearchSynonymDto.canonical", max: 60 },
+  "app/admin/doi-soat-kho/reconcile-board.tsx::search": { dto: "apps/api/src/modules/admin/pancake-reconcile/pancake-reconcile.controller.ts:PancakeReconcileQuery.q", max: 100 },
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
   "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },
   "app/admin/page.tsx::f.code": { dto: "apps/api/src/modules/admin/admin.controller.ts:CreateCouponDto.code", max: 64 },

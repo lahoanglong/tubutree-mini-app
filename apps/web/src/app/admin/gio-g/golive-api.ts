@@ -108,12 +108,21 @@ const CARD_FIX: Record<CockpitCardKey, FixLink> = {
 };
 
 const PRODUCTS: FixLink = { href: '/admin?tab=productCategories', label: 'Sản phẩm' };
+/** Bàn đối soát tồn Pancake (`/admin/doi-soat-kho`, đọc `flag`/`q` trên URL): việc tồn kho của thẻ "Pancake và kho". */
+const STOCK_RECONCILE: FixLink = { href: '/admin/doi-soat-kho', label: 'Đối soát tồn kho' };
+
+/** Link thứ hai của thẻ, ngoài trang chung: thẻ "Pancake và kho" có việc tồn kho ở trang riêng. */
+const CARD_EXTRA: Partial<Record<CockpitCardKey, readonly FixLink[]>> = {
+  pancake: [STOCK_RECONCILE],
+};
 
 /**
  * Dòng sửa ở trang khác trang chung của thẻ, xét theo thứ tự (prefix riêng trước `db.`). Mọi dòng `db.*` còn lại là khoá SystemConfig,
  * sửa ở tab Cấu hình như gợi ý của chính dòng đó.
  */
 const ROW_FIX: ReadonlyArray<readonly [prefix: string, link: FixLink]> = [
+  // Mở thẳng chip "Chưa gắn Pancake": từng biến thể đang bán chưa có mã Pancake, kèm nút Tải CSV để đi gắn mã.
+  ['cockpit.pancake.unlinked_variants', { href: '/admin/doi-soat-kho?flag=UNLINKED', label: 'Đối soát tồn kho' }],
   ['cockpit.catalog.refill_pairs', { href: '/admin?tab=refillPairs', label: 'Cặp Refill' }],
   // Mở thẳng bộ lọc "Thiếu thành phần" (`catalog-quality-tab.tsx` đọc `filter` và tự chạy lần kiểm), kèm chip thương hiệu và tin nhắn nhờ thương hiệu gửi INCI.
   ['cockpit.catalog.inci', { href: '/admin?tab=catalogQuality&filter=missing_ingredients', label: 'Kiểm tra catalog' }],
@@ -131,8 +140,9 @@ const ROW_FIX: ReadonlyArray<readonly [prefix: string, link: FixLink]> = [
 /** Dòng chỉ sửa được trên máy chủ (biến .env, Redis, backup, migration): không trang quản trị nào sửa được nên không gắn link. */
 const SERVER_ONLY = ['env.', 'redis.', 'backup.', 'db.migrations_', 'db.required_migrations', 'db.pending_scope', 'db.orders_lock'];
 
-export function cardFixLink(key: CockpitCardKey): FixLink {
-  return CARD_FIX[key];
+/** Trang sửa chung của thẻ trước, rồi link phụ (nếu có). */
+export function cardFixLinks(key: CockpitCardKey): FixLink[] {
+  return [CARD_FIX[key], ...(CARD_EXTRA[key] ?? [])];
 }
 
 /** Trang sửa của một dòng chưa đạt; null khi dòng đã đạt hoặc chỉ sửa được trên máy chủ. */

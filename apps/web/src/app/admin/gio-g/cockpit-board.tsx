@@ -6,7 +6,7 @@ import { loadErrorText } from '@/lib/admin-error-text';
 import { formatDateTime } from '@/lib/format-date';
 import { ADMIN_TABULAR } from '@/components/admin/tabular-nums';
 import { BTN_SECONDARY, ListSkeleton, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
-import { cardFixLink, getCockpit, rowFixLink, type CheckStatus, type CockpitCard, type CockpitRow, type GoLiveCockpit } from './golive-api';
+import { cardFixLinks, getCockpit, rowFixLink, type CheckStatus, type CockpitCard, type CockpitRow, type GoLiveCockpit } from './golive-api';
 
 export const COCKPIT_KEY = ['admin', 'golive', 'cockpit'] as const;
 
@@ -84,7 +84,7 @@ function Overall({ summary }: { summary: GoLiveCockpit['summary'] }) {
 }
 
 function Card({ card }: { card: CockpitCard }) {
-  const fix = cardFixLink(card.key);
+  const links = cardFixLinks(card.key);
   const open = card.rows.filter((r) => r.status !== 'PASS');
   const passed = card.rows.filter((r) => r.status === 'PASS');
   return (
@@ -126,9 +126,13 @@ function Card({ card }: { card: CockpitCard }) {
           </ul>
         </details>
       ) : null}
-      <Link href={fix.href} className="mt-2 inline-flex min-h-[44px] items-center text-xs font-medium text-forest-700 underline sm:min-h-0">
-        Mở {fix.label}
-      </Link>
+      <div className="mt-2 flex flex-wrap gap-x-4">
+        {links.map((l) => (
+          <Link key={l.href} href={l.href} className="inline-flex min-h-[44px] items-center text-xs font-medium text-forest-700 underline sm:min-h-0">
+            Mở {l.label}
+          </Link>
+        ))}
+      </div>
     </article>
   );
 }

@@ -73,6 +73,7 @@ export function fakeOrderDb(initial: Row[], extra: Record<string, unknown> = {})
       const r = find(where);
       return r ? { ...r } : null;
     }),
+    findMany: jest.fn(async ({ where }: { where: Where }) => rows.filter((r) => matchWhere(r, where)).map((r) => ({ ...r }))),
     update: jest.fn(async ({ where, data }: { where: Where; data: Row }) => {
       const r = find(where);
       if (!r) throw new Error('not found');
