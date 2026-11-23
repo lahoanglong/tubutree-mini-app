@@ -55,7 +55,7 @@ const SLIDE_MAX_WIDTH = 728;
 function SlideImage({ slide, eager, sizes }: { slide: BannerSlide; eager: boolean; sizes: string }) {
   const [failed, setFailed] = useState(false);
   const { img, fallBack } = useSizedImage(slide.image, SLIDE_MAX_WIDTH, sizes, true, true);
-  const frame: CSSProperties = { display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', borderRadius: 'var(--radius-media)', objectFit: 'cover' };
+  const frame: CSSProperties = { display: 'block', width: '100%', height: 'auto', aspectRatio: 'var(--banner-ratio)', borderRadius: 'var(--radius-media)', objectFit: 'cover' };
   if (failed) {
     return (
       <span
