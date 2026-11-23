@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Share2 } from 'lucide-react';
 import {
+  GROUP_LIVE_COUNTDOWN_MS,
   groupDeadline,
   groupMemberStatus,
   groupMissingLine,
@@ -54,6 +55,9 @@ function groupMayHaveChanged(e: unknown): boolean {
   const status = e.response?.status ?? 0;
   return status === 400 || status === 404 || status === 409;
 }
+
+/** Trần của setTimeout (2^31 − 1 ms). */
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /** Giảm chuyển động: đồng hồ đổi theo phút (chữ) thay cho ô số nhảy từng giây. */
 function prefersReducedMotion(): boolean {
@@ -229,9 +233,7 @@ export default function GroupBuyPage() {
           thumbnail: g.product.thumbnail ?? undefined,
           path: withReferral(`/group-buy/${g.id}`, referralCode),
         },
-        `Cùng mình mua chung ${g.product.name} giảm ${g.discountPct}% trên Tubu Tree nhé! Vào mục "Mua chung nhóm" để tham gia.${
-          referralCode ? ` Mã giới thiệu của mình: ${referralCode}` : ''
-        }`,
+        `${content.title}\n${content.text}${referralCode ? `\nMã giới thiệu của mình: ${referralCode}` : ''}`,
       ),
       SHARE_LOCK_MAX_MS,
     );
@@ -433,9 +435,18 @@ function GroupCard({
 }) {
   const pct = g.targetSize > 0 ? Math.min(100, Math.round((g.currentSize / g.targetSize) * 100)) : 0;
   // Đồng hồ tới giờ thì vẽ lại thẻ: hạn tính lại theo giờ máy chủ, nút Tham gia khoá và chữ đổi sang "đã hết hạn" ngay, không chờ lần tải sau.
-  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const [tick, rerender] = useReducer((n: number) => n + 1, 0);
   const now = serverNow();
   const deadline = groupDeadline(g, now);
+  // Thẻ dạng chữ ("còn N ngày") tự đổi sang đồng hồ sống đúng mốc còn 24 giờ, không chờ lần tải lại danh sách. `tick` hẹn lại khi hạn quá xa
+  // so với trần setTimeout (khoảng 24,8 ngày).
+  const textUntilLive = g.status === 'OPEN' && deadline.kind === 'text' && !deadline.expired;
+  useEffect(() => {
+    if (!textUntilLive) return;
+    const ms = Date.parse(g.expiresAt) - GROUP_LIVE_COUNTDOWN_MS - serverNow();
+    const t = setTimeout(rerender, Math.min(Math.max(ms, 0) + 50, MAX_TIMEOUT_MS));
+    return () => clearTimeout(t);
+  }, [textUntilLive, g.expiresAt, tick]);
   // Nhóm quá hạn nhưng cron 15 phút chưa đóng vẫn trả OPEN: máy chủ từ chối mọi lần tham gia, nên thẻ coi như đã hết hạn thay vì cho bấm mãi.
   const expired = g.status === 'OPEN' && deadline.kind === 'text' && deadline.expired;
   const isOpen = g.status === 'OPEN' && !expired;
