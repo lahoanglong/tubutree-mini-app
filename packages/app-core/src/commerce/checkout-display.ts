@@ -15,6 +15,21 @@ export function checkoutPlaceHint(i: { hasAddress: boolean; quoteFailed: boolean
   return null;
 }
 
+const PAY_CUE_KEYS: Readonly<Record<string, string>> = {
+  COD: 'checkout.payCueCod',
+  BANK_TRANSFER: 'checkout.payCueBank',
+  WALLET: 'checkout.payCueWallet',
+};
+
+/**
+ * Dòng phụ dưới tên một cách thanh toán (Mini App và web, cả thanh toán không đăng nhập): khi nào trả tiền và khi nào đơn được xác nhận.
+ * Cách đang bị khoá thì nơi gọi hiện lý do khoá thay cho dòng này. Cách lạ (máy chủ thêm sau) thì null: không đoán.
+ */
+export function paymentMethodCue(method: string): string | null {
+  const key = PAY_CUE_KEYS[method];
+  return key ? fillCopy(key) : null;
+}
+
 /**
  * Ô "Tổng cộng". Chỉ số máy chủ báo mới được đứng ở đây: chưa có địa chỉ thì chưa tính phí giao nên không số nào
  * được đóng vai tổng cuối; có địa chỉ mà báo giá chưa về thì "…" (không phải 0đ, trông như đơn không mất tiền).

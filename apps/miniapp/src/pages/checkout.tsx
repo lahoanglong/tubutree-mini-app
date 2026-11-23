@@ -35,7 +35,8 @@ import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/com
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
 import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { giftTrialPlaceField, isGiftTrialError } from '@tubutree/app-core/commerce/gift-trial';
-import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
+import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, paymentMethodCue, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
+import { draftAddressId, saveCheckoutDraft, takeCheckoutDraft, type CheckoutDraft } from '@tubutree/app-core/commerce/checkout-draft';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
 import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
@@ -100,6 +101,15 @@ type PlaceBody = Parameters<typeof placeOrder>[0];
 
 // Đang tính lại báo giá cho địa chỉ mới: giữ số cũ nhưng mờ đi, khoá Đặt hàng (placeLocked).
 const RECALC_DIM = { opacity: 0.5 } as const;
+
+/** Bộ nhớ theo phiên cho lựa chọn giữ qua một lần sang giỏ (như checkout-selection): bị chặn thì null, quay lại chọn lại. */
+function tabStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -194,15 +204,31 @@ export default function CheckoutPage() {
   const removedCoupon = useRemovedCoupon(cart.data, formatVnd);
   const addresses = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: authed });
 
+  // Khách vừa sang giỏ sửa món hết hàng hay giá đổi rồi quay lại: lấy lại địa chỉ và ghi chú đã chọn (đọc một lần khi biết tài khoản).
+  // Địa chỉ chỉ lấy lại khi còn trong sổ. Cách trả tiền không giữ (như nháp của khách chưa đăng nhập web): tổng đã đổi ở giỏ, Ví trừ tiền ngay.
+  const userId = user?.id;
+  const draftRef = useRef<CheckoutDraft | null | undefined>(undefined);
+  useEffect(() => {
+    if (!userId || draftRef.current !== undefined) return;
+    const draft = takeCheckoutDraft(tabStorage(), userId, Date.now());
+    draftRef.current = draft;
+    if (!draft) return;
+    if (draft.note) setNote(draft.note);
+    const restored = addresses.data ? draftAddressId(draft, addresses.data) : null;
+    if (restored) setAddressId(restored);
+  }, [userId]);
+
   useEffect(() => {
     if (!addresses.data || addresses.data.length === 0) return;
     // Chọn mặc định khi chưa chọn, HOẶC khi địa chỉ đang chọn đã bị xoá (tránh quote kẹt lỗi).
     const stillExists = addresses.data.some((a) => a.id === addressId);
     if (!addressId || !stillExists) {
-      const first = addresses.data.find((a) => a.isDefault)?.id ?? addresses.data[0]?.id;
+      const first = draftAddressId(draftRef.current, addresses.data) ?? addresses.data.find((a) => a.isDefault)?.id ?? addresses.data[0]?.id;
       if (first) setAddressId(first);
     }
   }, [addresses.data, addressId]);
+  // Mọi lối "về giỏ hàng" của màn này (sửa món, giá đổi) ghi lại lựa chọn đang có để lúc quay lại không phải chọn lại.
+  const keepChoices = () => saveCheckoutDraft(tabStorage(), userId, { addressId, note }, Date.now());
 
   // Checkout TẬP CON: itemIds do trang Giỏ / "Mua ngay" truyền qua navigation state.
   // Zalo Mini App có thể tải lại trang (back-forward, khôi phục phiên, deep link) — state mất
@@ -738,7 +764,7 @@ export default function CheckoutPage() {
     .filter((m) => m.value !== 'WALLET' || walletBalance !== 0)
     .map((m) => {
     const hint = quote.isSuccess ? paymentUnavailableReason(m.value, quote.data, walletBalance) : null;
-    return { ...m, hint, disabled: hint !== null };
+    return { ...m, hint, disabled: hint !== null, cue: paymentMethodCue(m.value) };
   });
   const paymentNote = quote.isSuccess && !zeroNote && payment === '' ? paymentMissingNote(quote.data, walletBalance) : null;
   // Mỗi nơi giao thành một đơn riêng (D4): chia danh sách món và phí giao theo kiện máy chủ báo.
@@ -799,7 +825,13 @@ export default function CheckoutPage() {
               {shownCartIssue}
             </Text>
             <Box mt={2}>
-              <Button variant="secondary" onPress={() => goSmart('/cart')}>
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  keepChoices();
+                  goSmart('/cart');
+                }}
+              >
                 {vi.checkout.backToCart}
               </Button>
             </Box>
@@ -884,8 +916,10 @@ export default function CheckoutPage() {
                         loading={lineFix.isPending && lineFix.variables?.id === it.id}
                         onPress={() => {
                           const fix = lineProblems[it.id]!.fix;
-                          if (fix.kind === 'cart') goSmart('/cart');
-                          else lineFix.mutate({ id: it.id, fix });
+                          if (fix.kind === 'cart') {
+                            keepChoices();
+                            goSmart('/cart');
+                          } else lineFix.mutate({ id: it.id, fix });
                         }}
                       >
                         {lineProblems[it.id]!.fixLabel}
@@ -1095,7 +1129,7 @@ export default function CheckoutPage() {
             {...rowKeyboardProps()}
             aria-checked={payment === m.value}
             aria-disabled={m.disabled}
-            aria-describedby={m.hint ? `pay-hint-${m.value}` : undefined}
+            aria-describedby={m.hint ? `pay-hint-${m.value}` : m.cue ? `pay-cue-${m.value}` : undefined}
             className={m.disabled ? undefined : 'tubu-press'}
             onClick={() => {
               if (m.disabled) return;
@@ -1129,6 +1163,14 @@ export default function CheckoutPage() {
                 <div id={`pay-hint-${m.value}`}>
                   <Text as="div" variant="caption" tone="secondary" style={{ lineHeight: 18 / 13 }}>
                     {m.hint}
+                  </Text>
+                </div>
+              )}
+              {/* Dòng phụ là mô tả của radio (aria-describedby), không gộp vào tên: tên giữ ngắn như web. Cách bị khoá thì lý do khoá thay chỗ. */}
+              {!m.hint && m.cue && (
+                <div id={`pay-cue-${m.value}`} aria-hidden="true">
+                  <Text as="div" variant="caption" tone="secondary" style={{ lineHeight: 18 / 13 }}>
+                    {m.cue}
                   </Text>
                 </div>
               )}
@@ -1538,6 +1580,7 @@ export default function CheckoutPage() {
                 setPriceChanged(false);
                 void queryClient.invalidateQueries({ queryKey: ['cart'] });
                 void queryClient.invalidateQueries({ queryKey: ['quote'] });
+                keepChoices();
                 goSmart('/cart');
               }}
             >

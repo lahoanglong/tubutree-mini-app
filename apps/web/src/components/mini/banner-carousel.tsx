@@ -45,6 +45,9 @@ const DOT_BTN: CSSProperties = {
 
 /** `sizes` của banner Ưu đãi: từ lg tràn cả khung nội dung (~1152px) thay vì chiếm 8/12 cột như Trang chủ. */
 export { BANNER_WIDE_SLIDE_SIZES as WIDE_SLIDE_SIZES };
+/** Cỡ gốc khai trên thẻ img, đúng tỉ lệ `--banner-ratio` (5:2): trình duyệt giữ chỗ đúng khung kể cả trước khi biến CSS có giá trị. CSS vẫn quyết cỡ hiển thị. */
+const BANNER_INTRINSIC_W = 1000;
+const BANNER_INTRINSIC_H = 400;
 /** Bề rộng thật của slide: điện thoại tràn khung trừ lề trang 16px hai bên; md chỉ lề 24px; lg banner chiếm 8/12 cột của khung 1200px (HubLayout) ~728px. */
 const SLIDE_SIZES = BANNER_SLIDE_SIZES;
 const SLIDE_MAX_WIDTH = 728;
@@ -81,6 +84,8 @@ function SlideImage({ slide, eager, sizes }: { slide: BannerSlide; eager: boolea
       srcSet={img?.srcSet}
       sizes={img?.sizes}
       alt={slide.alt}
+      width={BANNER_INTRINSIC_W}
+      height={BANNER_INTRINSIC_H}
       loading={eager ? 'eager' : 'lazy'}
       fetchPriority={eager ? 'high' : undefined}
       decoding="async"

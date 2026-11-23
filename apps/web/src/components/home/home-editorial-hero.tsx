@@ -21,6 +21,8 @@ const BTN = 'inline-flex min-h-11 items-center justify-center rounded-control px
  * Khối giới thiệu mặc định của Trang chủ web từ `md`, đứng ở chỗ banner chiến dịch khi DB không có chiến dịch nào (`HubLayout` `hero`): nền xanh rừng, tiêu đề, một câu mô tả và hai lối
  * (danh mục sản phẩm, Hành trình nguyên liệu). Chỉ có trên web (điện thoại ẩn hẳn nên Mini App không cần). Tỉ lệ khung bằng banner (`--banner-ratio`) để chiến dịch về muộn thay vào
  * không làm các khối dưới nhảy; nội dung dài hơn khung thì khung giãn ra (lớp trang trí tách riêng, `overflow` không đặt trên khung giữ tỉ lệ). Chữ ở `homeCopy.hero`.
+ * Khối không tải ảnh nào (hoạ tiết là SVG nội tuyến, có cỡ khai sẵn): phần tử LCP của nó là tiêu đề, vẽ được ngay từ HTML nên không có gì để đặt
+ * `fetchPriority`. Đừng thêm ảnh nền ở đây; cần ảnh thì dùng thẻ img có `fetchPriority="high"` và `width`/`height` như slide đầu của `BannerCarousel`.
  */
 export function HomeEditorialHero() {
   const c = homeCopy.hero;
@@ -34,7 +36,7 @@ export function HomeEditorialHero() {
       style={{ aspectRatio: 'var(--banner-ratio)' }}
     >
       <div aria-hidden className="absolute inset-0 overflow-hidden" style={{ background: 'var(--color-bg-cover)', borderRadius: 'var(--radius-media)' }}>
-        <svg viewBox="0 0 400 200" preserveAspectRatio="xMaxYMid slice" className="absolute inset-y-0 right-0 h-full w-3/5" fill="none">
+        <svg viewBox="0 0 400 200" width={400} height={200} preserveAspectRatio="xMaxYMid slice" className="absolute inset-y-0 right-0 h-full w-3/5" fill="none">
           {LEAVES.map((l) => (
             <path key={l.transform} d={SPRIG} transform={l.transform} style={{ fill: 'var(--color-text-inverse)', opacity: l.opacity }} />
           ))}

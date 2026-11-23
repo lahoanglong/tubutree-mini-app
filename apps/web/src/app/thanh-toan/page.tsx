@@ -37,7 +37,8 @@ import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
-import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
+import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, paymentMethodCue, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
+import { draftAddressId, saveCheckoutDraft, takeCheckoutDraft, type CheckoutDraft } from '@tubutree/app-core/commerce/checkout-draft';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
 import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
@@ -126,6 +127,15 @@ const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:roun
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
+/** Bộ nhớ theo tab (sessionStorage) cho lựa chọn giữ qua một lần sang giỏ: chặn (Safari riêng tư) thì null, quay lại chọn lại. */
+function tabStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
 export default function CheckoutPage() {
@@ -201,12 +211,29 @@ export default function CheckoutPage() {
     setInvoice(loadSavedInvoice(userId));
   }, [userId]);
 
+  // Khách vừa sang giỏ sửa món hết hàng hay giá đổi rồi quay lại: lấy lại địa chỉ và ghi chú đã chọn (đọc một lần khi biết tài khoản).
+  // Địa chỉ chỉ lấy lại khi còn trong sổ. Cách trả tiền không giữ (như nháp của khách chưa đăng nhập): tổng đã đổi ở giỏ, Ví trừ tiền ngay.
+  const draftRef = useRef<CheckoutDraft | null | undefined>(undefined);
+  useEffect(() => {
+    if (!userId || draftRef.current !== undefined) return;
+    const draft = takeCheckoutDraft(tabStorage(), userId, Date.now());
+    draftRef.current = draft;
+    if (!draft) return;
+    if (draft.note) setNote(draft.note);
+    const restored = addrQ.data ? draftAddressId(draft, addrQ.data) : null;
+    if (restored) setAddressId(restored);
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (addrQ.data && addressId === null) {
       const def = addrQ.data.find((a) => a.isDefault) ?? addrQ.data[0];
-      if (def) setAddressId(def.id);
+      const restored = draftAddressId(draftRef.current, addrQ.data);
+      if (restored) setAddressId(restored);
+      else if (def) setAddressId(def.id);
     }
   }, [addrQ.data, addressId]);
+  // Mọi lối "về giỏ hàng" của màn này (sửa món, giá đổi, đổi lựa chọn) ghi lại lựa chọn đang có để lúc quay lại không phải chọn lại.
+  const keepChoices = () => saveCheckoutDraft(tabStorage(), userId, { addressId, note }, Date.now());
 
   // Gian hàng đang mua qua — quyết định combo giảm giá và việc CTV có được ghi nhận đơn hay
   // không. Đọc một lần khi mount: sessionStorage không phải state phản ứng, và giá trị chỉ đổi
@@ -570,7 +597,10 @@ export default function CheckoutPage() {
     errorFor: lineFixError?.id ?? null,
     errorText: lineFixError ? actionErrorText(lineFixError.error) : null,
     onFix: (id, fix) => {
-      if (fix.kind === 'cart') pushOrBack(router, '/gio-hang');
+      if (fix.kind === 'cart') {
+        keepChoices();
+        pushOrBack(router, '/gio-hang');
+      }
       else lineFix.mutate({ id, fix });
     },
   };
@@ -769,7 +799,7 @@ export default function CheckoutPage() {
   ]
     // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này. Ví âm vẫn hiện (khoá, kèm lý do) để khách biết vì sao không dùng được.
     .filter((m) => m.k !== 'WALLET' || walletBalance !== 0)
-    .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
+    .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null, cue: paymentMethodCue(m.k) }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
   // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán) mới khoá hẳn, và đã có chữ nói lý do.
@@ -832,7 +862,7 @@ export default function CheckoutPage() {
             >
               {priceChangedActions().accept}
             </button>
-            <BackAwareLink href="/gio-hang" className={ui.btnSecondary}>
+            <BackAwareLink href="/gio-hang" onClick={keepChoices} className={ui.btnSecondary}>
               {priceChangedActions().viewCart}
             </BackAwareLink>
           </div>
@@ -859,7 +889,7 @@ export default function CheckoutPage() {
           className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
         >
           <p className="min-w-0 flex-1 break-words">{cartIssue}</p>
-          <BackAwareLink href="/gio-hang" className={ui.btnSecondary}>
+          <BackAwareLink href="/gio-hang" onClick={keepChoices} className={ui.btnSecondary}>
             Về giỏ hàng để sửa
           </BackAwareLink>
         </div>
@@ -934,7 +964,7 @@ export default function CheckoutPage() {
                             if (p.k === 'BANK_TRANSFER') warmBankPayment((href) => router.prefetch(href));
                           })}
                           disabled={!!reason || place.isPending}
-                          aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
+                          aria-describedby={reason ? `pay-blocked-${p.k}` : p.cue ? `pay-cue-${p.k}` : undefined}
                           className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-[0.45] md:opacity-60' : ''}`}
                         />
                         <span className="flex min-w-0 flex-col">
@@ -942,6 +972,12 @@ export default function CheckoutPage() {
                           {reason && (
                             <span id={`pay-blocked-${p.k}`} className="text-caption text-[color:var(--color-text-secondary)] md:hidden">
                               {reason}
+                            </span>
+                          )}
+                          {/* Dòng phụ là mô tả của radio (aria-describedby), không gộp vào tên: tên giữ ngắn "Chuyển khoản ngân hàng". Cách bị khoá thì lý do khoá thay chỗ. */}
+                          {!reason && p.cue && (
+                            <span id={`pay-cue-${p.k}`} aria-hidden="true" className="text-caption text-[color:var(--color-text-secondary)]">
+                              {p.cue}
                             </span>
                           )}
                         </span>
@@ -1023,7 +1059,7 @@ export default function CheckoutPage() {
           {itemIds && cart && (
             <p className="mt-2 text-caption text-[color:var(--color-text-secondary)]">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
-              <BackAwareLink href="/gio-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
+              <BackAwareLink href="/gio-hang" onClick={keepChoices} className="font-semibold text-[color:var(--color-text-brand)] underline">
                 Đổi lựa chọn
               </BackAwareLink>
             </p>
