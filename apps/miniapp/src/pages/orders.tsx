@@ -6,6 +6,7 @@ import { fetchOrders } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
 import { getNewCustomerOffer } from '../services/account-api';
 import { normalizeOrderSearchInput } from '@tubutree/app-core/phone-input';
+import { withReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { useAuthStore } from '../store/auth';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -214,7 +215,7 @@ export default function OrdersPage() {
                   }}
                   onReview={() => {
                     haptic('light');
-                    navigate(`/order/${o.code}`);
+                    navigate(withReviewFocus(`/order/${o.code}`));
                   }}
                 />
               ))}

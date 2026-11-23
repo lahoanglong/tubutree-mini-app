@@ -121,12 +121,12 @@ describe('OrderCard', () => {
 describe('tubu-w21-02: OrderCard nút "Đánh giá (n SP)"', () => {
   const reviewLink = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('[data-testid="order-card-review"]');
 
-  it('đơn đã nhận còn sản phẩm chờ đánh giá: liên kết tới chi tiết đơn, cùng hàng với "Mua lại", tên đọc rõ số sản phẩm và mã đơn', () => {
+  it('đơn đã nhận còn sản phẩm chờ đánh giá: liên kết tới chi tiết đơn (?review=1 cuộn tới món chờ đánh giá), cùng hàng với "Mua lại", tên đọc rõ số sản phẩm và mã đơn', () => {
     const c = mount(<OrderCard order={{ ...(ORDER as object), pendingReviewCount: 2 } as never} onReorder={() => {}} />);
     const link = reviewLink(c)!;
     expect(link.textContent).toBe('Đánh giá (2 SP)');
     expect(link.getAttribute('aria-label')).toBe('Đánh giá (2 SP) của đơn TUBU1');
-    expect(link.getAttribute('href')).toBe('/tai-khoan/don-hang/TUBU1');
+    expect(link.getAttribute('href')).toBe('/tai-khoan/don-hang/TUBU1?review=1');
     const actions = c.querySelectorAll('[data-testid="order-card-actions"]');
     expect(actions).toHaveLength(1);
     expect(actions[0]!.contains(link)).toBe(true);

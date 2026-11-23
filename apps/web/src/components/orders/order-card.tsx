@@ -4,7 +4,7 @@ import { useId } from 'react';
 import Link from 'next/link';
 import { Star } from 'lucide-react';
 import type { OrderView } from '@tubutree/app-core/api/orders';
-import { orderReviewCta } from '@tubutree/app-core/order-review-cta';
+import { orderReviewCta, withReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { bankPaymentHref, buyerOrderStatusLabel, isReorderable, orderDetailHref } from '@/lib/order-view';
 import { formatVnd } from '@/lib/format-vnd';
@@ -81,10 +81,10 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
       )}
       {(canReorder || review) && (
         <div data-testid="order-card-actions" className={`flex items-center gap-2 ${review ? 'justify-between' : 'justify-end'}`}>
-          {/* Mở chi tiết đơn: từng món ở đó có lối "Viết đánh giá" (cùng chỗ đến với Mini App). */}
+          {/* Mở chi tiết đơn cuộn sẵn tới món đầu tiên còn lối "Viết đánh giá" (cùng chỗ đến với Mini App). */}
           {review && (
             <Link
-              href={orderDetailHref(o.code)}
+              href={withReviewFocus(orderDetailHref(o.code))}
               aria-label={review.ariaLabel}
               data-testid="order-card-review"
               className="relative z-10 inline-flex min-h-11 items-center gap-1 rounded-control px-2 text-sm font-semibold text-[color:var(--color-text-brand)] transition hover:bg-forest-50 active:scale-[0.97] motion-reduce:active:scale-100"

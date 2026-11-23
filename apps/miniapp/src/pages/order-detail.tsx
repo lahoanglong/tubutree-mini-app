@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
-import { Page, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, Sheet, useLocation, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Heading, Text } from '../components/ui/text';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
@@ -62,6 +62,8 @@ import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView as CoreOrderView } from '@tubutree/app-core/api/orders';
+import { orderLineReviewSlot, revealReviewTarget, reviewFocusIndex } from '@tubutree/app-core/order-line-review';
+import { wantsReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
@@ -97,6 +99,7 @@ const OrderEcoImpactCard = lazy(() => import('../components/orders/eco-impact-ca
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
+  const { search } = useLocation();
   const navigate = useNavigate();
   const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
@@ -186,6 +189,17 @@ export default function OrderDetailPage() {
   const deadlineLeft = useCountdown(
     order.data?.status === 'PENDING_PAYMENT' && !order.data.manualHandling ? (order.data.paymentDeadline ?? null) : null,
   );
+
+  // Mở từ "Đánh giá (n SP)" của thẻ đơn (?review=1): lần đầu đơn hiện ra thì cuộn tới món đầu tiên còn lối "Viết đánh giá" và đặt focus vào nút đó.
+  // Chỉ một lần mỗi lần mở trang, để lần tải lại nền không kéo màn của khách đi chỗ khác.
+  const reviewFocusDone = useRef(false);
+  useEffect(() => {
+    if (phase !== 'authenticated' || !order.data || reviewFocusDone.current) return;
+    reviewFocusDone.current = true;
+    if (!wantsReviewFocus(search)) return;
+    const row = document.querySelector<HTMLElement>('[data-review-focus="row"]');
+    if (row) revealReviewTarget(row, row.querySelector<HTMLElement>('[data-review-focus="cta"]'));
+  }, [phase, order.data, search]);
 
   const ecoAsked = !!order.data && orderEcoImpactGate(order.data, referralViralOn(publicConfig));
   const ecoQ = useQuery({
@@ -309,7 +323,8 @@ export default function OrderDetailPage() {
   const etaLabel = publicConfig.isLoaded ? orderDeliveryEtaLabel(publicConfig.shippingEta, o) : null;
   const discounts = discountRows(o);
   // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
-  const itemLinks = o.items.map((it) => ({ it, slug: openProductSlug(it) }));
+  const itemLinks = o.items.map((it) => ({ it, slug: openProductSlug(it), review: orderLineReviewSlot(o.status, it) }));
+  const reviewTarget = reviewFocusIndex(o);
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const refundMode = cancelRefundMode(o);
   const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
@@ -464,8 +479,8 @@ export default function OrderDetailPage() {
         <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 8 }}>
           {vi.orders.products}
         </Text>
-        {itemLinks.map(({ it, slug }) => (
-          <Box key={it.id} style={{ padding: '6px 0' }}>
+        {itemLinks.map(({ it, slug, review }, i) => (
+          <Box key={it.id} data-review-focus={i === reviewTarget ? 'row' : undefined} style={{ padding: '6px 0' }}>
             <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 12 }}>
               {/* Chạm vào món để mở lại trang sản phẩm (xem hướng dẫn dùng, mua riêng món này). */}
               <Box
@@ -501,20 +516,28 @@ export default function OrderDetailPage() {
                 chữ "đánh giá" chỉ tồn tại ở trang sản phẩm, mà từ đơn không mở được trang đó
                 (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được.
                 Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó; API cũ chưa trả
-                reviewable/reviewId thì vẫn hiện nút viết như trước. */}
-            {o.status === 'DELIVERED' && slug && (it.reviewId || it.reviewable !== false) && (
-              <button
-                type="button"
-                className="tubu-press tubu-hit-44"
-                style={REVIEW_LINK}
-                onClick={() => {
-                  haptic('light');
-                  navigate(`/product/${slug}`, { state: { reviewOrderId: o.id } });
-                }}
-              >
-                <Icon icon={Star} size="sm" tone="brand" />
-                {it.reviewId ? vi.orders.editReviewItem : vi.orders.reviewItem}
-              </button>
+                reviewable/reviewId thì vẫn hiện nút viết như trước. Món đã hoàn tiền không mời viết (cùng luật "Đánh giá (n SP)"
+                ở thẻ đơn, PO A5), chỉ một dòng trạng thái mờ. */}
+            {review?.kind === 'refunded' ? (
+              <Text variant="caption" tone="tertiary" as="div" data-testid="order-line-refunded">
+                {review.label}
+              </Text>
+            ) : (
+              review && (
+                <button
+                  type="button"
+                  className="tubu-press tubu-hit-44"
+                  style={REVIEW_LINK}
+                  data-review-focus={i === reviewTarget ? 'cta' : undefined}
+                  onClick={() => {
+                    haptic('light');
+                    navigate(`/product/${review.slug}`, { state: { reviewOrderId: o.id } });
+                  }}
+                >
+                  <Icon icon={Star} size="sm" tone="brand" />
+                  {review.kind === 'edit' ? vi.orders.editReviewItem : vi.orders.reviewItem}
+                </button>
+              )
             )}
           </Box>
         ))}

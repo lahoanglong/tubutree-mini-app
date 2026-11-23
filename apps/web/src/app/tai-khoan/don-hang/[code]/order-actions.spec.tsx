@@ -1006,6 +1006,30 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(text).not.toContain('Đã duyệt trả 1/1');
   });
 
+  it('tubu-w25-02 (PO A5): món đã hoàn tiền một phần → một dòng "Đã hoàn tiền 1/2" mờ thay "Viết đánh giá", không lặp "Đã duyệt trả"; món khác vẫn viết được', async () => {
+    mocks.order = {
+      ...delivered,
+      items: [
+        { id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null, productSlug: 'dau-goi', reviewId: null, reviewable: false, refundedQty: 1 },
+        { id: 'i2', productName: 'Xà phòng', variationName: '', unitPrice: 50000, quantity: 1, total: 50000, thumbnail: null, productSlug: 'xa-phong', reviewId: null, reviewable: true },
+      ],
+    };
+    mocks.returns = [{
+      id: 'r1', orderId: 'o9', status: 'APPROVED', reason: 'x', refundAmount: 150000, refundMethod: 'WALLET',
+      items: [{ orderItemId: 'i1', quantity: 1, refundAmount: 150000 }], createdAt: '2026-10-06T00:00:00Z',
+    }];
+    const { container } = await mount();
+    const text = container.textContent ?? '';
+    const status = container.querySelectorAll('[data-testid="order-line-refunded"]');
+    expect(status).toHaveLength(1);
+    expect(status[0]!.textContent).toBe('Đã hoàn tiền 1/2');
+    expect(status[0]!.tagName).toBe('DIV');
+    expect(status[0]!.className).toContain('--color-text-tertiary');
+    expect(text).not.toContain('Đã duyệt trả');
+    const write = [...container.querySelectorAll('a')].filter((a) => a.textContent === 'Viết đánh giá');
+    expect(write.map((a) => a.getAttribute('href'))).toEqual(['/san-pham/xa-phong?danh-gia=o9#danh-gia']);
+  });
+
   it('R6-BUYER-9: khoản hoàn trả hàng còn chờ chọn nơi nhận vẫn chọn được ngay trên dòng yêu cầu', async () => {
     mocks.order = delivered;
     mocks.returns = [{

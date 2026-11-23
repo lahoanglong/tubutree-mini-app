@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -12,6 +12,8 @@ import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { serverNow } from '@tubutree/app-core/server-clock';
+import { orderLineReviewSlot, revealReviewTarget, reviewFocusIndex } from '@tubutree/app-core/order-line-review';
+import { wantsReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { useAuth } from '@/lib/auth-context';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { useCountdown } from '@/lib/use-countdown';
@@ -168,6 +170,17 @@ export default function OrderDetailPage() {
     orderQ.data?.status === 'PENDING_PAYMENT' && !orderQ.data.manualHandling ? (orderQ.data.paymentDeadline ?? null) : null,
   );
 
+  // Mở từ "Đánh giá (n SP)" của thẻ đơn (?review=1): lần đầu đơn hiện ra thì cuộn tới món đầu tiên còn lối "Viết đánh giá" và đặt focus vào nút đó.
+  // Chỉ một lần mỗi lần mở trang, để lần tải lại nền không kéo màn của khách đi chỗ khác.
+  const reviewFocusDone = useRef(false);
+  useEffect(() => {
+    if (phase !== 'authenticated' || !orderQ.data || reviewFocusDone.current) return;
+    reviewFocusDone.current = true;
+    if (!wantsReviewFocus(window.location.search)) return;
+    const row = document.querySelector<HTMLElement>('[data-review-focus="row"]');
+    if (row) revealReviewTarget(row, row.querySelector<HTMLElement>('[data-review-focus="cta"]'));
+  }, [phase, orderQ.data]);
+
   if (phase === 'loading') {
     return (
       <Shell title="Chi tiết đơn hàng">
@@ -265,6 +278,7 @@ export default function OrderDetailPage() {
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),
     orderReturns,
   );
+  const reviewTarget = reviewFocusIndex(o);
   return (
     <Shell title="Chi tiết đơn hàng" subtitle={o.code}>
       <div data-testid="order-layout" className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-x-6">
@@ -334,6 +348,8 @@ export default function OrderDetailPage() {
             // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
             const slug = openProductSlug(it);
             const lineVariation = variationLabel(it.variationName);
+            const reviewSlot = orderLineReviewSlot(o.status, it);
+            const focusTarget = i === reviewTarget;
             const rowBody = (
               <>
                 <span className="flex-none md:hidden">
@@ -357,7 +373,7 @@ export default function OrderDetailPage() {
               </>
             );
             return (
-              <li key={`${it.productName}-${it.variationName}-${i}`} className="py-3 max-md:py-1.5">
+              <li key={`${it.productName}-${it.variationName}-${i}`} data-review-focus={focusTarget ? 'row' : undefined} className="py-3 max-md:py-1.5">
                 <div className="flex items-center justify-between gap-3">
                   {/* Chạm vào món để mở lại trang sản phẩm. */}
                   {slug ? (
@@ -375,20 +391,29 @@ export default function OrderDetailPage() {
                       Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
                     </div>
                   )}
-                  {it.id && returnedQty.has(it.id) && (
+                  {/* Dòng đã hoàn tiền đã nói số đã trả trong trạng thái của nó: không lặp "Đã duyệt trả". */}
+                  {it.id && returnedQty.has(it.id) && reviewSlot?.kind !== 'refunded' && (
                     <div className="mt-0.5 text-xs font-medium text-promo-fg">
                       Đã duyệt trả {returnedQty.get(it.id)}/{it.quantity}
                     </div>
                   )}
-                  {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
-                  {o.status === 'DELIVERED' && slug && (it.reviewId || it.reviewable !== false) && (
-                    <Link
-                      href={reviewHref(slug, o.id)}
-                      className="tubu-hit-44 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
-                    >
-                      <Star className="h-4 w-4" aria-hidden="true" />
-                      {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
-                    </Link>
+                  {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. Món đã hoàn tiền không mời viết (cùng luật
+                      "Đánh giá (n SP)" ở thẻ đơn, PO A5), chỉ một dòng trạng thái mờ như Mini App. */}
+                  {reviewSlot?.kind === 'refunded' ? (
+                    <div data-testid="order-line-refunded" className="text-xs text-[color:var(--color-text-tertiary)]">
+                      {reviewSlot.label}
+                    </div>
+                  ) : (
+                    reviewSlot && (
+                      <Link
+                        href={reviewHref(reviewSlot.slug, o.id)}
+                        data-review-focus={focusTarget ? 'cta' : undefined}
+                        className="tubu-hit-44 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
+                      >
+                        <Star className="h-4 w-4" aria-hidden="true" />
+                        {reviewSlot.kind === 'edit' ? 'Sửa đánh giá' : 'Viết đánh giá'}
+                      </Link>
+                    )
                   )}
                 </div>
               </li>

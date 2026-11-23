@@ -33,16 +33,25 @@ export const reviewRewardLockKey = (userId: string, productId: string): string =
 export interface OrderLineReview {
   reviewId: string | null;
   reviewable: boolean;
+  /**
+   * Số đơn vị của chính dòng này đã có yêu cầu trả được duyệt (cộng mọi lần trả). Chỉ có khi lớn hơn 0 và dòng không phải quà
+   * tặng: chi tiết đơn thay lối "Viết đánh giá" bằng dòng trạng thái "Đã hoàn tiền".
+   */
+  refundedQty?: number;
 }
 
 const NO_REVIEW: OrderLineReview = { reviewId: null, reviewable: false };
 
-type ReviewDb = Pick<PrismaClient, 'variation' | 'review'>;
+type ReviewDb = Pick<PrismaClient, 'variation' | 'review' | 'returnRequestItem'>;
 
 /**
  * Trạng thái đánh giá từng dòng (theo id dòng) của một đơn, cùng luật với can-review: chỉ đơn REVIEWABLE_ORDER mới có, mỗi
  * sản phẩm của đơn một đánh giá nên hai biến thể cùng sản phẩm chung một trạng thái. Đơn khác thì mọi dòng NO_REVIEW, không
  * truy vấn gì.
+ *
+ * Sản phẩm đã có dòng trả được duyệt trên đơn (mọi số lượng) thì không viết mới được, cùng luật với `pendingReviewCounts`: thẻ
+ * đơn không đếm sản phẩm đó trong "Đánh giá (n SP)", nên chi tiết đơn cũng không mời viết. Đánh giá đã viết trước lần trả vẫn
+ * sửa được (`reviewId` giữ nguyên).
  */
 export async function orderLineReviews(
   db: ReviewDb,
@@ -51,12 +60,26 @@ export async function orderLineReviews(
   const eligible =
     order.status === REVIEWABLE_ORDER.status && order.type === REVIEWABLE_ORDER.type && order.placedForCustomer === REVIEWABLE_ORDER.placedForCustomer;
   if (!eligible || order.items.length === 0) return () => NO_REVIEW;
-  const variations = await db.variation.findMany({
-    where: { id: { in: [...new Set(order.items.map((it) => it.variationId))] } },
-    select: { id: true, productId: true },
-  });
+  const [variations, returnedLines] = await Promise.all([
+    db.variation.findMany({
+      where: { id: { in: [...new Set(order.items.map((it) => it.variationId))] } },
+      select: { id: true, productId: true },
+    }),
+    db.returnRequestItem.findMany({
+      where: { quantity: { gt: 0 }, returnRequest: { orderId: order.id, status: 'APPROVED' } },
+      select: { orderItemId: true, quantity: true },
+    }),
+  ]);
   const productOf = new Map(variations.map((v) => [v.id, v.productId]));
   const productIds = [...new Set(variations.map((v) => v.productId))];
+  const refundedQtyOf = new Map<string, number>();
+  for (const l of returnedLines) refundedQtyOf.set(l.orderItemId, (refundedQtyOf.get(l.orderItemId) ?? 0) + l.quantity);
+  const refundedProducts = new Set(
+    order.items.flatMap((it) => {
+      const productId = refundedQtyOf.has(it.id) ? productOf.get(it.variationId) : undefined;
+      return productId ? [productId] : [];
+    }),
+  );
   const reviews = productIds.length
     ? await db.review.findMany({
         where: { userId: order.userId, orderId: order.id, productId: { in: productIds } },
@@ -65,11 +88,14 @@ export async function orderLineReviews(
     : [];
   const reviewOf = new Map(reviews.map((r) => [r.productId, r.id]));
   const byItem = new Map(
-    order.items.map((it) => {
+    order.items.map((it): readonly [string, OrderLineReview] => {
+      if (it.isGift) return [it.id, NO_REVIEW];
+      const refundedQty = refundedQtyOf.get(it.id) ?? 0;
+      const refunded = refundedQty > 0 ? { refundedQty } : null;
       const productId = productOf.get(it.variationId);
-      if (!productId || it.isGift) return [it.id, NO_REVIEW] as const;
+      if (!productId) return [it.id, { ...NO_REVIEW, ...refunded }];
       const reviewId = reviewOf.get(productId) ?? null;
-      return [it.id, { reviewId, reviewable: reviewId === null }] as const;
+      return [it.id, { reviewId, reviewable: reviewId === null && !refundedProducts.has(productId), ...refunded }];
     }),
   );
   return (itemId) => byItem.get(itemId) ?? NO_REVIEW;
