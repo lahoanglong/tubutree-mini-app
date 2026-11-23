@@ -125,11 +125,12 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   }, [owner]);
 
   // Điền sẵn tên và SĐT đã có trong tài khoản để khách không gõ lại; ô nào khách đã gõ thì giữ nguyên. Phiên chưa có SĐT thì bỏ trống.
+  // Chạy lại khi đổi tài khoản: hiệu ứng nháp ở trên vừa xoá hai ô, mà tài khoản mới có thể trùng tên/SĐT tài khoản cũ.
   const accountName = user?.fullName?.trim() ?? '';
   const accountPhone = (user as { phone?: string | null } | null)?.phone?.trim() ?? '';
   useEffect(() => {
     setForm((f) => ({ ...f, ownerName: f.ownerName || accountName, phone: f.phone || accountPhone }));
-  }, [accountName, accountPhone]);
+  }, [owner, accountName, accountPhone]);
 
   // Chỉ ghi khi form đang là nháp của đúng tài khoản hiện tại, kẻo lần vẽ đầu (form trống) xoá mất nháp cũ hay chữ người trước ghi vào nháp người sau.
   useEffect(() => {

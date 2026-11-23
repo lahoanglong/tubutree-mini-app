@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
@@ -13,9 +14,10 @@ const h = vi.hoisted(() => ({
   calls: [] as string[],
   me: (() => Promise.resolve(null)) as () => Promise<unknown>,
   post: vi.fn(),
+  user: null as { id: string; fullName: string; phone: string } | null,
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: null }) }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: h.user }) }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 24 } }) }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }),
@@ -100,6 +102,7 @@ const statusText = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="sta
 beforeEach(() => {
   sessionStorage.clear();
   h.calls = [];
+  h.user = null;
   h.me = script(NOT_DEALER);
   h.post.mockReset().mockResolvedValue({ ok: true });
 });
@@ -378,6 +381,23 @@ describe('Đăng ký đại lý — nháp trong phiên và gợi ý MST/SĐT', (
     expect(field(c, 'Mã số thuế').value).toBe('0312345678');
     expect(field(c, 'Số điện thoại *').value).toBe('0912345678');
     expect(c.querySelector('img[src="data:x"]')).toBeNull();
+  });
+
+  it('đổi tài khoản trong cùng tab: chữ người trước bị xoá, tên/SĐT của tài khoản mới được điền lại kể cả khi trùng tài khoản cũ', async () => {
+    h.user = { id: 'u-a', fullName: 'Nguyễn An', phone: '0901234567' };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mounted = render(<DealerPage />, client);
+    await flush(8);
+    const c = mounted.container;
+    expect(field(c, 'Người đại diện *').value).toBe('Nguyễn An');
+    expect(field(c, 'Số điện thoại *').value).toBe('0901234567');
+    typeInto(field(c, 'Tên doanh nghiệp / cửa hàng *'), 'Cửa hàng An');
+    h.user = { id: 'u-b', fullName: 'Nguyễn An', phone: '0901234567' };
+    act(() => mounted!.root.render(<QueryClientProvider client={client}><DealerPage /></QueryClientProvider>));
+    await flush(8);
+    expect(field(c, 'Tên doanh nghiệp / cửa hàng *').value).toBe('');
+    expect(field(c, 'Người đại diện *').value).toBe('Nguyễn An');
+    expect(field(c, 'Số điện thoại *').value).toBe('0901234567');
   });
 
   it('gõ thì lưu nháp chữ; gửi thành công thì xoá nháp', async () => {
