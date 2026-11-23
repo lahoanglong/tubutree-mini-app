@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { formatDate } from '@/lib/format-date';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { useToastedMessage, type AdminMsg } from '@/components/admin/admin-toast';
 import { BTN_PRIMARY, BTN_XS_DANGER, BTN_XS_SECONDARY, Field, INPUT_CLASS, ListSkeleton, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
 import {
   POPULAR_TERMS_MAX,
   SYNONYM_FIELD_MAX,
+  ZERO_RESULT_DAYS,
   createSynonym,
   listSynonyms,
+  listZeroResultTerms,
   parsePopularTerms,
   popularTermsError,
   readPopularTerms,
@@ -22,6 +25,7 @@ import {
 
 const SYN_KEY = ['admin', 'search-synonyms'] as const;
 const POP_KEY = ['admin', 'search-popular-terms'] as const;
+const ZERO_KEY = ['admin', 'search-zero-results'] as const;
 
 /**
  * Thẻ "Từ khoá tìm kiếm": từ đồng nghĩa (khách gõ cụm bên trái thì tìm thêm theo cụm bên phải; máy chủ lưu dạng bỏ dấu) và các cụm dự
@@ -34,7 +38,9 @@ export function SearchTermsCard() {
   const shown = useToastedMessage(msg);
   const { confirm, ask, dialog } = useConfirm();
   const [form, setForm] = useState({ term: '', canonical: '' });
+  const canonicalRef = useRef<HTMLInputElement>(null);
   const syn = useQuery({ queryKey: SYN_KEY, queryFn: listSynonyms });
+  const zero = useQuery({ queryKey: ZERO_KEY, queryFn: listZeroResultTerms });
   const pop = useQuery({ queryKey: POP_KEY, queryFn: readPopularTerms });
   const [popText, setPopText] = useState<string | null>(null);
   const popValue = popText ?? (pop.data ?? []).join('\n');
@@ -44,6 +50,13 @@ export function SearchTermsCard() {
   const settle = (text: string, ok: boolean) => {
     setMsg({ ok, text });
     void qc.invalidateQueries({ queryKey: SYN_KEY });
+    // Dòng "Đã có" của bảng tìm chưa ra đọc từ đồng nghĩa ở máy chủ: tải lại cùng lúc.
+    void qc.invalidateQueries({ queryKey: ZERO_KEY });
+  };
+  /** Điền cụm khách gõ vào form thêm, xoá vế thay cũ (thuộc cụm khác) rồi đưa con trỏ vào ô "Cụm tìm thay". */
+  const prefill = (term: string) => {
+    setForm({ term, canonical: '' });
+    canonicalRef.current?.focus();
   };
   const fail = (e: unknown) => settle(actionErrorText(e), false);
 
@@ -91,6 +104,7 @@ export function SearchTermsCard() {
 
   const busy = add.isPending || patch.isPending || remove.isPending;
   const rows = syn.data ?? [];
+  const zeroRows = zero.data ?? [];
   return (
     <section data-testid="search-terms-card" className="space-y-6">
       {shown && (
@@ -98,6 +112,45 @@ export function SearchTermsCard() {
           {shown.text}
         </Notice>
       )}
+
+      <div className="space-y-3" data-testid="zero-result-terms">
+        <h2 className="text-base font-semibold">Từ khoá tìm chưa ra ({ZERO_RESULT_DAYS} ngày)</h2>
+        <p className="text-sm text-stone-600">
+          Cụm khách gõ mà ô tìm không ra món nào, nhiều lượt nhất trước (đã bỏ email, số điện thoại, chuỗi gõ bừa). &ldquo;Tạo từ đồng nghĩa&rdquo; điền
+          sẵn cụm vào ô bên dưới, bạn chỉ gõ thêm cụm tìm thay.
+        </p>
+        {zero.isLoading ? (
+          <ListSkeleton label="Đang tải từ khoá tìm chưa ra" rows={2} />
+        ) : zero.isError ? (
+          <LoadError message={loadErrorText(zero.error)} onRetry={() => zero.refetch()} retrying={zero.isFetching} />
+        ) : zeroRows.length === 0 ? (
+          <p className="text-sm text-stone-600">{ZERO_RESULT_DAYS} ngày qua chưa có lượt tìm nào ra trống.</p>
+        ) : (
+          <ul aria-label="Từ khoá tìm chưa ra" className="max-h-80 divide-y divide-stone-200 overflow-y-auto rounded-card border border-stone-200">
+            {zeroRows.map((z) => (
+              <li key={z.term} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                <span className="min-w-0 flex-1 break-words text-sm">
+                  <span className="font-medium">{z.term}</span>
+                  <span className="text-stone-600">
+                    {' '}
+                    · {z.count} lượt · {z.people} người · gần nhất {formatDate(z.lastSeenAt)}
+                  </span>
+                </span>
+                {z.synonym ? (
+                  <span className="break-words text-xs text-stone-600">
+                    Đã có → {z.synonym.canonical}
+                    {z.synonym.isActive ? '' : ' (đang tắt)'}
+                  </span>
+                ) : (
+                  <button type="button" disabled={busy} onClick={() => prefill(z.term)} className={BTN_XS_SECONDARY}>
+                    Tạo từ đồng nghĩa
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="space-y-3">
         <h2 className="text-base font-semibold">Từ đồng nghĩa</h2>
@@ -122,6 +175,7 @@ export function SearchTermsCard() {
           </Field>
           <Field label="Cụm tìm thay">
             <input
+              ref={canonicalRef}
               name="canonical"
               value={form.canonical}
               onChange={(e) => setForm({ ...form, canonical: e.target.value })}
@@ -143,7 +197,7 @@ export function SearchTermsCard() {
         ) : rows.length === 0 ? (
           <p className="text-sm text-stone-600">Chưa có từ đồng nghĩa nào.</p>
         ) : (
-          <ul className="divide-y divide-stone-200 rounded-card border border-stone-200">
+          <ul aria-label="Từ đồng nghĩa" className="divide-y divide-stone-200 rounded-card border border-stone-200">
             {rows.map((row) => (
               <li key={row.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                 <span className="min-w-0 flex-1 break-words text-sm">

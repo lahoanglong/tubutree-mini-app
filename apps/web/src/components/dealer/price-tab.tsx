@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEALER_PRICE_LOADING } from '@tubutree/app-core/client-copy';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, ClipboardList, Copy, Download, Save, Search, X } from 'lucide-react';
@@ -39,6 +39,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { errText } from './dealer-shell';
+import { downloadCsv, reorderNotice, reorderQuantities, type ReorderRequest } from './dealer-order-tools';
 
 const OUT_OF_STOCK_PREORDER = 'Hết hàng — được đặt trước';
 const preorderLine = (n: number) => `Đặt trước ${n}, giao khi hàng về`;
@@ -50,18 +51,6 @@ const ALL_BRANDS = 'Mọi thương hiệu';
 const itemCount = (n: number) => `${n} mặt hàng`;
 const quoteCopied = (n: number) => `Đã chép báo giá ${n} mặt hàng, dán vào Zalo hoặc tin nhắn để gửi.`;
 const QUOTE_COPY_FAIL = 'Chưa chép được báo giá, hãy thử lại hoặc tải file CSV.';
-
-/** Tải chuỗi CSV (đã có BOM) thành tệp; tự dựng ở đây vì `lib/export-csv.ts` kéo theo mã của trang quản trị. */
-function downloadCsv(csv: string, fileName: string) {
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
 
 type Notice = { text: string; error: boolean };
 type OrderLine = { variationId: string; quantity: number };
@@ -104,8 +93,23 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
   );
 }
 
-/** Bảng giá đại lý + đặt nhanh: số lượng theo biến thể, đặt trước khi vượt tồn, mẫu đơn, dán đơn từ bảng tính. */
-export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; debt: number; rules?: DealerOrderRules }) {
+/**
+ * Bảng giá đại lý + đặt nhanh: số lượng theo biến thể, đặt trước khi vượt tồn, mẫu đơn, dán đơn từ bảng tính. `reorder` (từ "Đặt lại đơn sỉ" ở tab
+ * Đơn hàng) được nạp một lần khi bảng giá có dữ liệu, rồi `onReorderApplied` báo cho hub xoá.
+ */
+export function PriceTab({
+  creditLimit,
+  debt,
+  rules,
+  reorder,
+  onReorderApplied,
+}: {
+  creditLimit: number;
+  debt: number;
+  rules?: DealerOrderRules;
+  reorder?: ReorderRequest | null;
+  onReorderApplied?: () => void;
+}) {
   const qc = useQueryClient();
   const router = useRouter();
   const priceQ = useQuery(dealerPricelistQuery(coreHttp));
@@ -123,6 +127,15 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   const [tplName, setTplName] = useState('');
 
   const cart = useMemo(() => Object.entries(qty).filter(([, n]) => n > 0), [qty]);
+
+  // Phân loại không còn trong bảng giá sỉ (ngừng bán, đổi bậc) bị bỏ và nêu tên trong lời báo; không nạp gì thì giữ giỏ như cũ.
+  useEffect(() => {
+    if (!reorder || !priceQ.data) return;
+    const res = reorderQuantities(reorder.lines, priceQ.data);
+    if (res.added > 0) setQty(res.qty);
+    setNotice(reorderNotice(reorder.code, res));
+    onReorderApplied?.();
+  }, [reorder, priceQ.data, onReorderApplied]);
 
   // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về, tối đa `settleWithin`.
   // Lời lỗi của lần lưu ở state riêng: `saveTpl.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.

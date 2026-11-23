@@ -28,6 +28,38 @@ describe('sitemap lúc build với API không chạm tới được', () => {
     expect(out.map((e) => e.url)).toEqual(['https://app.tubutree.com/']);
   });
 
+  it('NEXT_PHASE=phase-production-build, API trả lời: nộp ngay cả 5 trang /chinh-sach/* đã có nội dung, không đợi revalidate', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).includes('/config/legal/')) return new Response(JSON.stringify({ content: '# Chính sách', vars: {} }), { status: 200 });
+        if (String(url).includes('/products?')) return new Response(JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0 } }), { status: 200 });
+        return new Response('[]', { status: 200 });
+      }),
+    );
+    const legal = (await sitemap()).map((e) => e.url).filter((u) => u.includes('/chinh-sach/'));
+    expect(legal.sort()).toEqual(
+      ['bao-mat', 'dieu-khoan', 'doi-tra', 'thanh-toan', 'van-chuyen'].map((slug) => `https://app.tubutree.com/chinh-sach/${slug}`),
+    );
+  });
+
+  it('NEXT_PHASE=phase-production-build, một trang chính sách lỗi 503: bỏ riêng trang đó, bốn trang kia vẫn nộp, build không hỏng', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).includes('/config/legal/doi-tra')) return new Response('{}', { status: 503 });
+        if (String(url).includes('/config/legal/')) return new Response(JSON.stringify({ content: '# Chính sách', vars: {} }), { status: 200 });
+        if (String(url).includes('/products?')) return new Response(JSON.stringify({ data: [], meta: { page: 1, limit: 100, total: 0 } }), { status: 200 });
+        return new Response('[]', { status: 200 });
+      }),
+    );
+    const legal = (await sitemap()).map((e) => e.url).filter((u) => u.includes('/chinh-sach/'));
+    expect(legal).toHaveLength(4);
+    expect(legal).not.toContain('https://app.tubutree.com/chinh-sach/doi-tra');
+  });
+
   it('runtime: API cũ chưa có /campaigns/public-slugs (404) còn mọi danh sách khác rỗng: sitemap vẫn dựng, không có URL chiến dịch', async () => {
     vi.stubEnv('NEXT_PHASE', '');
     vi.stubGlobal(

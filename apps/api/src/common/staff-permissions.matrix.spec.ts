@@ -260,6 +260,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/catalog-wp-images/:productId/skip': ADMIN_ONLY,
   'POST /admin/catalog-wp-images/:productId/restore': ADMIN_ONLY,
   'GET /admin/search-synonyms': ADMIN_ONLY,
+  'GET /admin/search-synonyms/zero-results': ADMIN_ONLY,
   'POST /admin/search-synonyms': ADMIN_ONLY,
   'PATCH /admin/search-synonyms/:id': ADMIN_ONLY,
   'DELETE /admin/search-synonyms/:id': ADMIN_ONLY,

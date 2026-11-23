@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
@@ -12,6 +12,7 @@ import { PriceTab } from './price-tab';
 import { OrdersTab } from './orders-tab';
 import { CreditTab } from './credit-tab';
 import { ReportTab } from './report-tab';
+import type { ReorderRequest } from './dealer-order-tools';
 
 const TABS = [
   { key: 'price', label: 'Bảng giá' },
@@ -25,6 +26,16 @@ function HubBody() {
   const [tab, setTab] = useTabParam(TAB_KEYS, 'price');
   const meQ = useQuery(dealerMeQuery(coreHttp));
   const me = meQ.data;
+  // "Đặt lại đơn sỉ" ở tab Đơn hàng: giữ các dòng tới khi tab Bảng giá có bảng giá và nạp xong (`onReorderApplied` xoá), để đổi tab lần sau không nạp lại.
+  const [reorder, setReorder] = useState<ReorderRequest | null>(null);
+  const clearReorder = useCallback(() => setReorder(null), []);
+  const startReorder = useCallback(
+    (r: ReorderRequest) => {
+      setReorder(r);
+      setTab('price');
+    },
+    [setTab],
+  );
 
   return (
     <>
@@ -57,8 +68,10 @@ function HubBody() {
       </div>
 
       <div className="mt-3">
-        {tab === 'price' && <PriceTab creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} rules={me?.orderRules} />}
-        {tab === 'orders' && <OrdersTab onOrderFirst={() => setTab('price')} />}
+        {tab === 'price' && (
+          <PriceTab creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} rules={me?.orderRules} reorder={reorder} onReorderApplied={clearReorder} />
+        )}
+        {tab === 'orders' && <OrdersTab onOrderFirst={() => setTab('price')} onReorder={startReorder} />}
         {tab === 'credit' && <CreditTab />}
         {tab === 'report' && <ReportTab />}
       </div>

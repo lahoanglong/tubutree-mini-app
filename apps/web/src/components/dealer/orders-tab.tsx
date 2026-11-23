@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Package } from 'lucide-react';
+import { ChevronRight, Package, RotateCcw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { dealerOrdersQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
@@ -10,14 +11,20 @@ import { formatDate } from '@/lib/format-date';
 import { orderStatusLabel } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
+import { Chip } from '@/components/mini/chip';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
+import { DEALER_ORDER_FILTERS, canReorder, filterDealerOrders, reorderLinesOf, type DealerOrderFilter, type ReorderRequest } from './dealer-order-tools';
 
-/** Danh sách đơn đại lý. Đơn Trả trước chờ thanh toán dẫn thẳng tới trang chuyển khoản. */
-export function OrdersTab({ onOrderFirst }: { onOrderFirst: () => void }) {
+/**
+ * Danh sách đơn đại lý, lọc theo trạng thái bằng một hàng chip. Đơn Trả trước chờ thanh toán dẫn thẳng tới trang chuyển khoản.
+ * "Đặt lại đơn sỉ" đưa các dòng của đơn sang tab Bảng giá (`onReorder`), nơi số lượng được nạp theo bảng giá hôm nay.
+ */
+export function OrdersTab({ onOrderFirst, onReorder }: { onOrderFirst: () => void; onReorder?: (r: ReorderRequest) => void }) {
   const q = useQuery(dealerOrdersQuery(coreHttp));
+  const [filter, setFilter] = useState<DealerOrderFilter>('all');
   if (q.isLoading) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -39,41 +46,73 @@ export function OrdersTab({ onOrderFirst }: { onOrderFirst: () => void }) {
       </section>
     );
   }
+  const shown = filterDealerOrders(orders, filter);
   return (
-    <ul className="grid gap-2.5 md:grid-cols-2">
-      {orders.map((o) => {
-        const needsPayment = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
-        const backordered = o.items?.reduce((s, it) => s + (it.backorderedQty || 0), 0) ?? 0;
-        return (
-          <li key={o.code}>
-            <Link href={`/tai-khoan/don-hang/${encodeURIComponent(o.code)}`} aria-label={`Xem đơn ${o.code}`} className={`block min-h-11 p-3 hover:bg-stone-50 ${skin.card}`}>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-stone-900">#{o.code}</span>
-                <span className="flex items-center gap-0.5">
-                  <Badge tone={needsPayment ? 'warning' : 'info'} size="sm">
-                    {orderStatusLabel(o.status)}
-                  </Badge>
-                  <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
-                </span>
-              </div>
-              <div className="mt-0.5 text-xs text-stone-600">
-                {o.items?.length ?? 0} mặt hàng · {formatDate(o.createdAt)}
-              </div>
-              {backordered > 0 && (
-                <div className="mt-1">
-                  <Badge tone="warning" size="sm">
-                    Đặt trước {backordered} — chờ hàng về
-                  </Badge>
-                </div>
-              )}
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="text-base font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(o.total)}</span>
-                {needsPayment && <span className="text-xs font-semibold text-forest-700">Thanh toán ngay →</span>}
-              </div>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <div role="group" aria-label="Lọc đơn theo trạng thái" className="scroll-x mb-3 flex gap-2 overflow-x-auto py-1">
+        {DEALER_ORDER_FILTERS.map((f) => (
+          <Chip key={f.key} selected={filter === f.key} onPress={() => setFilter(f.key)}>
+            {f.label}
+          </Chip>
+        ))}
+      </div>
+      {shown.length === 0 ? (
+        <p className={`p-6 text-center text-sm text-stone-600 ${skin.card}`}>Không có đơn nào ở mục này.</p>
+      ) : (
+        <ul className="grid gap-2.5 md:grid-cols-2">
+          {shown.map((o) => {
+            const needsPayment = o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'BANK_TRANSFER';
+            const backordered = o.items?.reduce((s, it) => s + (it.backorderedQty || 0), 0) ?? 0;
+            const reorderable = !!onReorder && canReorder(o);
+            return (
+              <li key={o.code} className={reorderable ? `overflow-hidden ${skin.card}` : undefined}>
+                <Link
+                  href={`/tai-khoan/don-hang/${encodeURIComponent(o.code)}`}
+                  aria-label={`Xem đơn ${o.code}`}
+                  className={`block min-h-11 p-3 hover:bg-stone-50 ${reorderable ? 'pb-1' : skin.card}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-stone-900">#{o.code}</span>
+                    <span className="flex items-center gap-0.5">
+                      <Badge tone={needsPayment ? 'warning' : 'info'} size="sm">
+                        {orderStatusLabel(o.status)}
+                      </Badge>
+                      <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-stone-600">
+                    {o.items?.length ?? 0} mặt hàng · {formatDate(o.createdAt)}
+                  </div>
+                  {backordered > 0 && (
+                    <div className="mt-1">
+                      <Badge tone="warning" size="sm">
+                        Đặt trước {backordered} — chờ hàng về
+                      </Badge>
+                    </div>
+                  )}
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-base font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(o.total)}</span>
+                    {needsPayment && <span className="text-xs font-semibold text-forest-700">Thanh toán ngay →</span>}
+                  </div>
+                </Link>
+                {reorderable && (
+                  <div className="flex justify-end px-1.5">
+                    <button
+                      type="button"
+                      aria-label={`Đặt lại đơn sỉ ${o.code}`}
+                      onClick={() => onReorder?.({ code: o.code, lines: reorderLinesOf(o) })}
+                      className={`${ui.btnText} gap-1 no-underline`}
+                    >
+                      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                      Đặt lại đơn sỉ
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
   );
 }

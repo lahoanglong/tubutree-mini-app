@@ -3,6 +3,7 @@ import { CatalogService } from './catalog.service';
 import { ProductCompareService } from './product-compare.service';
 import { SearchMatchService } from './search-match.service';
 import { SearchPopularService } from './search-popular.service';
+import { SearchZeroResultsService } from './search-synonyms-zero-results.service';
 import { SearchSynonymsAdminController } from './search-synonyms-admin.controller';
 import { CatalogController } from './catalog.controller';
 import { HomeController } from './home.controller';
@@ -46,7 +47,7 @@ import { EcoImpactModule } from '../eco-impact/eco-impact.module';
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule, EcoImpactModule],
   controllers: [CatalogController, SearchSynonymsAdminController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController, FreeshipUpsellController, RefillPairsController, RefillPairsAdminController],
-  providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService, FreeshipUpsellService, RefillPairsService],
+  providers: [CatalogService, ProductCompareService, SearchMatchService, SearchPopularService, SearchZeroResultsService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService, FreeshipUpsellService, RefillPairsService],
   exports: [CatalogService, ImageResizeService, RefillPairsService],
 })
 export class CatalogModule {}

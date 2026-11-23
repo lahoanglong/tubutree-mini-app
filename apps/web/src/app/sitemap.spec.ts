@@ -185,6 +185,24 @@ describe('sitemap', () => {
     expect(urls.sort()).toEqual(['https://app.tubutree.com/chinh-sach/bao-mat', 'https://app.tubutree.com/chinh-sach/doi-tra']);
   });
 
+  it('lúc build: chính sách có nội dung vẫn nộp (không chờ revalidate); trang lỗi API thì bỏ riêng trang đó; lỗi khác vẫn ném', async () => {
+    const prev = process.env.NEXT_PHASE;
+    try {
+      process.env.NEXT_PHASE = 'phase-production-build';
+      mocks.getLegalDoc.mockImplementation(async (slug: string) => {
+        if (slug === 'van-chuyen') throw new ApiUnavailableError('/config/legal/van-chuyen', 503);
+        return { content: slug === 'thanh-toan' ? null : '# nội dung', vars: {} };
+      });
+      const urls = (await sitemap()).map((e) => e.url).filter((u) => u.includes('/chinh-sach/'));
+      expect(urls.sort()).toEqual(['bao-mat', 'dieu-khoan', 'doi-tra'].map((slug) => `https://app.tubutree.com/chinh-sach/${slug}`));
+      mocks.getLegalDoc.mockRejectedValueOnce(new Error('legal hỏng khuôn'));
+      await expect(sitemap()).rejects.toThrow('legal hỏng khuôn');
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PHASE;
+      else process.env.NEXT_PHASE = prev;
+    }
+  });
+
   it('nhãn hoặc chính sách lỗi thì ném lỗi, không nuốt', async () => {
     mocks.getBrands.mockRejectedValueOnce(new Error('brands lỗi'));
     await expect(sitemap()).rejects.toThrow('brands lỗi');
