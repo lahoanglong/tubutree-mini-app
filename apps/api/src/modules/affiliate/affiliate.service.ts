@@ -82,6 +82,7 @@ import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { APPROVE_COMMISSIONS_CRON, DAILY_WALLET_TRANSFER_HOUR_VN, DAILY_WALLET_TRANSFER_JOB, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
 import { isAffiliateBlocked } from './affiliate-revocation';
+import { attachLinkTargets, resolveLinkTargetForCreate } from './affiliate-link-target';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
@@ -376,22 +377,30 @@ export class AffiliateService {
     if (user?.role === 'CUSTOMER' && !(await this.commissionEligibleRoles()).has('CUSTOMER')) throw new ForbiddenException(AFFILIATE_NOT_CTV_MESSAGE);
   }
 
+  /** Link tới Trang chủ, Giờ vàng, một sản phẩm hoặc một danh mục; đích phải còn tồn tại (affiliate-link-target.ts). Trả kèm tên/slug đích như listLinks. */
   async createLink(userId: string, targetType: string, targetId?: string) {
     await this.assertAffiliateAccess(this.prisma, userId);
+    const target = await resolveLinkTargetForCreate(this.prisma, targetType, targetId);
     const shortCode = randomBytes(5).toString('base64url');
-    return this.prisma.affiliateLink.create({
-      data: { userId, shortCode, targetType, targetId },
+    const link = await this.prisma.affiliateLink.create({
+      data: { userId, shortCode, ...target },
     });
+    const [withTarget] = await attachLinkTargets(this.prisma, [link]);
+    return withTarget!;
   }
 
-  /** Mới nhất trước; mặc định 100 (tối đa 200) — CTV tạo link vô hạn nên không thể trả hết một lần. */
-  listLinks(userId: string, opts: { take?: number; cursor?: string } = {}) {
-    return this.prisma.affiliateLink.findMany({
+  /**
+   * Mới nhất trước; mặc định 100 (tối đa 200) — CTV tạo link vô hạn nên không thể trả hết một lần. Mỗi dòng kèm tên/slug đích để client dựng
+   * link sâu. `clicks` là lượt mở link; `conversions`/`revenue` của bảng không có chỗ tăng (đơn không lưu mã link), client không hiện.
+   */
+  async listLinks(userId: string, opts: { take?: number; cursor?: string } = {}) {
+    const links = await this.prisma.affiliateLink.findMany({
       where: { userId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: Math.min(Math.max(opts.take ?? 100, 1), 200),
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
+    return attachLinkTargets(this.prisma, links);
   }
 
   /** Track click (web redirect /r/:shortCode). Trả target để redirect. */
@@ -517,12 +526,15 @@ export class AffiliateService {
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       include: { order: { select: { code: true, status: true } } },
     });
+    // Ngày chốt dự kiến của khoản đang giữ = lúc đơn giao (lockedAt) + số ngày giữ thực (cùng mốc cron approveDue dùng). Chỉ đọc cấu hình khi trang có khoản LOCKED.
+    const holdDays = rows.some((r) => r.status === 'LOCKED' && r.lockedAt) ? await this.effectiveHoldDays() : 0;
     // SELLER-10: "Đang rút" = đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền (PAID chỉ khi admin xác nhận).
     return rows.map(({ order, ...c }) => ({
       ...c,
       orderCode: order?.code ?? null,
       orderStatus: order?.status ?? null,
       withdrawing: c.status === 'APPROVED' && c.payoutBatchId !== null,
+      unlockEstimateAt: c.status === 'LOCKED' && c.lockedAt ? new Date(c.lockedAt.getTime() + holdDays * 24 * 3600 * 1000) : null,
     }));
   }
 

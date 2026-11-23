@@ -81,10 +81,20 @@ export interface CtvTiersResponse {
 export interface AffiliateLink {
   id: string;
   shortCode: string;
+  /** HOMEPAGE | PRODUCT | CATEGORY | DEAL (`commerce/affiliate-deep-link.ts`). */
   targetType: string;
   targetId: string | null;
+  /** Slug sản phẩm/danh mục để dựng link sâu; thiếu khi API cũ hoặc đích đã bị xoá. */
+  targetSlug?: string | null;
+  /** Tên sản phẩm/danh mục; thiếu khi API cũ. */
+  targetLabel?: string | null;
+  /** false: đích không còn hiện, link mở Trang chủ. Thiếu khi API cũ. */
+  targetAvailable?: boolean;
+  /** Lượt mở link (mỗi IP một lần mỗi ngày). Số duy nhất đo theo từng link. */
   clicks: number;
+  /** Cột cũ luôn 0 (đơn không lưu mã link): không hiện. */
   conversions: number;
+  /** Cột cũ luôn 0: không hiện. */
   revenue: number;
   createdAt: string;
 }
@@ -102,6 +112,8 @@ export interface Commission {
   orderStatus?: string | null;
   /** APPROVED nhưng đã nằm trong một lệnh rút ngân hàng chưa chuyển tiền. */
   withdrawing?: boolean;
+  /** LOCKED: ngày dự kiến được chốt (lúc đơn giao + số ngày giữ); null với trạng thái khác, thiếu khi API cũ. */
+  unlockEstimateAt?: string | null;
 }
 
 export type PayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
@@ -144,8 +156,9 @@ export const getAffiliateDashboard = (http: HttpClient) =>
   http.get<AffiliateDashboard>('/affiliate/dashboard');
 export const getAffiliateLinks = (http: HttpClient) =>
   http.get<AffiliateLink[]>('/affiliate/links');
+/** `targetId`: id sản phẩm (PRODUCT) hoặc danh mục (CATEGORY); Trang chủ và Giờ vàng không cần. */
 export const createAffiliateLink = (http: HttpClient, targetType: string, targetId?: string) =>
-  http.post<AffiliateLink>('/affiliate/links', { targetType, targetId });
+  http.post<AffiliateLink>('/affiliate/links', targetId ? { targetType, targetId } : { targetType });
 /** Lật trang bằng `cursor` = id dòng cuối của trang trước. Không tham số: máy chủ trả mảng mặc định như client cũ. */
 export interface AffiliatePageOpts {
   take?: number;

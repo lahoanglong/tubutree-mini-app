@@ -98,6 +98,7 @@ const tapTogether = async (...els: HTMLElement[]) => {
 const statusText = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="status"]')).map((e) => e.textContent).join('|');
 
 beforeEach(() => {
+  sessionStorage.clear();
   h.calls = [];
   h.me = script(NOT_DEALER);
   h.post.mockReset().mockResolvedValue({ ok: true });
@@ -356,5 +357,68 @@ describe('Hồ sơ đại lý — số dùng chữ số đều (tabular-nums)', 
     const body = Array.from(c.querySelectorAll('p')).find((p) => p.textContent?.includes('24 giờ'));
     expect(body).toBeDefined();
     expect(body!.closest('.tabular-nums')).not.toBeNull();
+  });
+});
+
+describe('Đăng ký đại lý — nháp trong phiên và gợi ý MST/SĐT', () => {
+  const DRAFT_KEY = 'tubu_dealer_apply_draft';
+  const blurField = (el: HTMLElement) =>
+    act(() => {
+      el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+  const errorOf = (el: HTMLElement) => {
+    const id = el.getAttribute('aria-describedby');
+    return id ? (document.getElementById(id)?.textContent ?? '') : '';
+  };
+
+  it('nháp cũ trong phiên được điền lại; ảnh CCCD không nằm trong nháp', async () => {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ businessName: 'Tạp hoá Xanh', taxCode: '0312345678', phone: '0912345678', cccdFrontUrl: 'data:x' }));
+    const c = await mount();
+    expect(field(c, 'Tên doanh nghiệp / cửa hàng *').value).toBe('Tạp hoá Xanh');
+    expect(field(c, 'Mã số thuế').value).toBe('0312345678');
+    expect(field(c, 'Số điện thoại *').value).toBe('0912345678');
+    expect(c.querySelector('img[src="data:x"]')).toBeNull();
+  });
+
+  it('gõ thì lưu nháp chữ; gửi thành công thì xoá nháp', async () => {
+    const c = await mount();
+    await fill(c);
+    await flush(2);
+    const saved = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? '{}') as Record<string, string>;
+    expect(saved).toEqual({ businessName: 'Cửa hàng An', ownerName: 'Nguyễn An', phone: '0901234567', address: '1 Lê Lợi' });
+    expect(JSON.stringify(saved)).not.toContain('base64');
+    click(submitBtn(c));
+    await flush(6);
+    expect(posts()).toBe(1);
+    expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
+  it('MST sai dáng: gõ dở chưa báo, rời ô thì báo; SĐT sai thì chặn gửi và hiện gợi ý; MST 13 số gửi đi dạng 10-3', async () => {
+    const c = await mount();
+    await fill(c);
+    const tax = field(c, 'Mã số thuế');
+    typeInto(tax, '031234');
+    await flush(1);
+    expect(errorOf(tax)).toBe('');
+    blurField(tax);
+    await flush(1);
+    expect(errorOf(tax)).toContain('Mã số thuế gồm 10 số');
+    expect(tax.getAttribute('aria-invalid')).toBe('true');
+
+    typeInto(tax, '0312345678001');
+    typeInto(field(c, 'Số điện thoại *'), '0112345678');
+    await flush(1);
+    expect(errorOf(field(c, 'Số điện thoại *'))).toContain('Số điện thoại chưa đúng');
+    click(submitBtn(c));
+    await flush(3);
+    expect(posts()).toBe(0);
+
+    typeInto(field(c, 'Số điện thoại *'), '0912345678');
+    await flush(1);
+    expect(errorOf(field(c, 'Số điện thoại *'))).toBe('');
+    click(submitBtn(c));
+    await flush(6);
+    expect(posts()).toBe(1);
+    expect(h.post.mock.calls[0]![1]).toMatchObject({ taxCode: '0312345678-001', phone: '0912345678' });
   });
 });

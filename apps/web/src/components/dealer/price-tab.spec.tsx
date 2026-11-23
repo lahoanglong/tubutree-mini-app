@@ -89,3 +89,121 @@ describe('PriceTab: dòng phân loại của từng mặt hàng', () => {
     }
   });
 });
+
+describe('PriceTab: lọc thương hiệu, còn hàng, tải CSV và chép báo giá', () => {
+  const ROWS = [
+    { ...ROW, variationId: 'v1', sku: 'S1', product: 'Nước rửa chén', brand: 'Tubu', stock: 9 },
+    { ...ROW, variationId: 'v2', sku: 'S2', product: 'Nước giặt', brand: 'Fuwa', stock: 0 },
+    { ...ROW, variationId: 'v3', sku: 'S3', product: '=HYPERLINK("x")', brand: 'fuwa', stock: 3 },
+  ];
+  const names = () => Array.from(mounted!.container.querySelectorAll('li .line-clamp-2')).map((d) => d.textContent);
+  const chip = (label: string) => byText(mounted!.container, 'button[aria-pressed]', label);
+
+  async function show() {
+    const { fn } = mockFetch({ '/dealer/pricelist': { body: ROWS }, '/dealer/templates': { body: [] } });
+    vi.stubGlobal('fetch', fn);
+    mounted = render(<PriceTab creditLimit={50_000_000} debt={0} />);
+    await flush();
+  }
+
+  it('chip thương hiệu gộp hoa/thường, lọc đúng dòng; "Còn hàng sẵn" bỏ dòng hết hàng; chạm lại thì bỏ lọc', async () => {
+    await show();
+    expect(names()).toHaveLength(3);
+    expect(mounted!.container.textContent).toContain('3 mặt hàng');
+    click(chip('Fuwa'));
+    await flush();
+    expect(names()).toEqual(['Nước giặt', '=HYPERLINK("x")']);
+    expect(chip('Fuwa')?.getAttribute('aria-pressed')).toBe('true');
+    click(chip('Còn hàng sẵn'));
+    await flush();
+    expect(names()).toEqual(['=HYPERLINK("x")']);
+    click(chip('Fuwa'));
+    await flush();
+    expect(names()).toEqual(['Nước rửa chén', '=HYPERLINK("x")']);
+    expect(chip('Mọi thương hiệu')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('một thương hiệu thì không vẽ chip thương hiệu, vẫn có chip còn hàng', async () => {
+    const { fn } = mockFetch({ '/dealer/pricelist': { body: [ROW] }, '/dealer/templates': { body: [] } });
+    vi.stubGlobal('fetch', fn);
+    mounted = render(<PriceTab creditLimit={50_000_000} debt={0} />);
+    await flush();
+    expect(chip('Còn hàng sẵn')).not.toBeNull();
+    expect(chip('Mọi thương hiệu')).toBeNull();
+  });
+
+  it('lọc hết dòng: báo không tìm thấy, ẩn dòng Tải CSV / Chép báo giá', async () => {
+    const { fn } = mockFetch({ '/dealer/pricelist': { body: [ROWS[1]] }, '/dealer/templates': { body: [] } });
+    vi.stubGlobal('fetch', fn);
+    mounted = render(<PriceTab creditLimit={50_000_000} debt={0} />);
+    await flush();
+    const text = () => mounted!.container.textContent ?? '';
+    expect(text()).toContain('Tải CSV');
+    click(chip('Còn hàng sẵn'));
+    await flush();
+    expect(text()).toContain('Không tìm thấy sản phẩm');
+    expect(text()).not.toContain('Tải CSV');
+    expect(text()).not.toContain('Chép báo giá');
+  });
+
+  it('Tải CSV: tệp theo ngày, chỉ các dòng đang lọc, ô bắt đầu bằng "=" được chặn công thức', async () => {
+    const blobs: Blob[] = [];
+    const origCreate = URL.createObjectURL;
+    const origRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      blobs.push(b);
+      return 'blob:csv';
+    }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toMatch(/^bang-gia-dai-ly-tubu-\d{4}-\d{2}-\d{2}\.csv$/);
+    });
+    try {
+      await show();
+      click(chip('Fuwa'));
+      await flush();
+      click(byText(mounted!.container, 'button', 'Tải CSV'));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(blobs).toHaveLength(1);
+      const csv = await new Promise<string>((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.readAsText(blobs[0]!);
+      });
+      const lines = csv.replace(/^﻿/, '').trim().split('\r\n');
+      expect(lines).toHaveLength(3);
+      expect(lines[0]).toContain('"SKU"');
+      expect(lines[1]).toContain('"Nước giặt"');
+      expect(lines[2]).toContain(`"'=HYPERLINK(""x"")"`);
+      expect(csv).not.toContain('Nước rửa chén');
+    } finally {
+      clickSpy.mockRestore();
+      URL.createObjectURL = origCreate;
+      URL.revokeObjectURL = origRevoke;
+    }
+  });
+
+  it('Chép báo giá: chép đúng các dòng đang lọc và báo số mặt hàng; chép hỏng thì báo lỗi, gợi ý tải CSV', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    try {
+      await show();
+      click(chip('Tubu'));
+      await flush();
+      click(byText(mounted!.container, 'button', 'Chép báo giá'));
+      await flush();
+      expect(writeText).toHaveBeenCalledTimes(1);
+      const quote = writeText.mock.calls[0]![0] as string;
+      expect(quote).toMatch(/^Báo giá đại lý Tubu Tree \(\d{2}\/\d{2}\/\d{4}\)\n- Nước rửa chén · 1kg \(S1\): 80\.000/);
+      expect(quote).not.toContain('Nước giặt');
+      expect(mounted!.container.textContent).toContain('Đã chép báo giá 1 mặt hàng');
+      writeText.mockRejectedValueOnce(new Error('bị chặn'));
+      document.execCommand = vi.fn(() => false);
+      click(byText(mounted!.container, 'button', 'Chép báo giá'));
+      await flush();
+      expect(mounted!.container.querySelector('[role="alert"]')?.textContent).toBe('Chưa chép được báo giá, hãy thử lại hoặc tải file CSV.');
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+});

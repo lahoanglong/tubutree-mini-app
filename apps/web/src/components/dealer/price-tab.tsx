@@ -3,14 +3,26 @@
 import { useMemo, useRef, useState } from 'react';
 import { DEALER_PRICE_LOADING } from '@tubutree/app-core/client-copy';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Check, ClipboardList, Save, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, ClipboardList, Copy, Download, Save, Search, X } from 'lucide-react';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteTemplate, placeDealerOrder, saveTemplate, type DealerOrderRules, type PricelistRow } from '@tubutree/app-core/api/dealer';
 import { dealerPricelistQuery, dealerTemplatesQuery } from '@tubutree/app-core/queries/dealer';
-import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from '@tubutree/app-core/dealer-pricing';
+import {
+  DEALER_MAX_QTY,
+  dealerBrands,
+  dealerPricelistCsv,
+  dealerPricelistFileName,
+  dealerQuoteText,
+  filterDealerPricelist,
+  preorderQty,
+  realDiscountPct,
+} from '@tubutree/app-core/dealer-pricing';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
+import { copyText } from '@/lib/copy-text';
 import { coreHttp } from '@/lib/core-http';
+import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
+import { vnDateKey } from '@/lib/week';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { settleWithin } from '@/lib/settle-within';
 import { serverRejectedState } from '@/lib/server-rejected-state';
@@ -19,6 +31,7 @@ import { useDebounced } from '@/lib/use-debounced';
 import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
+import { Chip } from '@/components/mini/chip';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -31,6 +44,24 @@ const OUT_OF_STOCK_PREORDER = 'Hết hàng — được đặt trước';
 const preorderLine = (n: number) => `Đặt trước ${n}, giao khi hàng về`;
 const preorderNote = (lines: number) =>
   `${lines} mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay.`;
+
+const IN_STOCK_ONLY = 'Còn hàng sẵn';
+const ALL_BRANDS = 'Mọi thương hiệu';
+const itemCount = (n: number) => `${n} mặt hàng`;
+const quoteCopied = (n: number) => `Đã chép báo giá ${n} mặt hàng, dán vào Zalo hoặc tin nhắn để gửi.`;
+const QUOTE_COPY_FAIL = 'Chưa chép được báo giá, hãy thử lại hoặc tải file CSV.';
+
+/** Tải chuỗi CSV (đã có BOM) thành tệp; tự dựng ở đây vì `lib/export-csv.ts` kéo theo mã của trang quản trị. */
+function downloadCsv(csv: string, fileName: string) {
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 type Notice = { text: string; error: boolean };
 type OrderLine = { variationId: string; quantity: number };
@@ -81,6 +112,8 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   const templatesQ = useQuery(dealerTemplatesQuery(coreHttp));
   const [search, setSearch] = useState('');
   const debounced = useDebounced(search, 250);
+  const [brand, setBrand] = useState<string | null>(null);
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -153,12 +186,23 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
     setPasteResult({ matched, unmatched });
   };
 
-  const rows = useMemo(() => {
-    const list = priceQ.data ?? [];
-    const q = debounced.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((r) => r.product.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q) || r.brand.toLowerCase().includes(q));
-  }, [priceQ.data, debounced]);
+  const brands = useMemo(() => dealerBrands(priceQ.data ?? []), [priceQ.data]);
+  // Thương hiệu đã chọn mà bảng giá mới không còn thì coi như bỏ lọc, không để danh sách trống mà không có chip nào sáng.
+  const activeBrand = brand && brands.includes(brand) ? brand : null;
+  const rows = useMemo(
+    () => filterDealerPricelist(priceQ.data ?? [], { query: debounced, brand: activeBrand, inStockOnly }),
+    [priceQ.data, debounced, activeBrand, inStockOnly],
+  );
+  const filtered = !!search.trim() || !!activeBrand || inStockOnly;
+
+  /** CSV và lời báo giá lấy đúng các dòng đang hiện (theo ô tìm và bộ lọc). */
+  const downloadPricelist = () => {
+    downloadCsv(dealerPricelistCsv(rows, variationLabel), dealerPricelistFileName(vnDateKey(new Date())));
+  };
+  const copyQuote = async () => {
+    const ok = await copyText(dealerQuoteText(rows, { dateLabel: formatDate(new Date()), money: formatVnd, variationName: variationLabel }));
+    setNotice(ok ? { text: quoteCopied(rows.length), error: false } : { text: QUOTE_COPY_FAIL, error: true });
+  };
 
   const total = useMemo(() => {
     const price = new Map((priceQ.data ?? []).map((r) => [r.variationId, r.dealerPrice]));
@@ -327,6 +371,27 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
         </button>
       </div>
 
+      {/* Một hàng chip cuộn ngang: lọc còn hàng, rồi thương hiệu (chỉ khi bảng giá có từ hai thương hiệu). */}
+      {(priceQ.data?.length ?? 0) > 0 && (
+        <div role="group" aria-label="Lọc bảng giá" className="scroll-x mt-3 flex gap-2 overflow-x-auto py-1">
+          <Chip selected={inStockOnly} onPress={() => setInStockOnly((v) => !v)}>
+            {IN_STOCK_ONLY}
+          </Chip>
+          {brands.length > 1 && (
+            <>
+              <Chip selected={!activeBrand} onPress={() => setBrand(null)}>
+                {ALL_BRANDS}
+              </Chip>
+              {brands.map((b) => (
+                <Chip key={b} selected={activeBrand === b} onPress={() => setBrand(activeBrand === b ? null : b)}>
+                  {b}
+                </Chip>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Mẫu đơn lưu sẵn: chạm tên để đặt lại, nút X để xoá. */}
       {templates.length > 0 && (
         <ul aria-label="Mẫu đơn đã lưu" className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -355,7 +420,23 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
         </ul>
       )}
 
-      <div className={`mt-3 overflow-hidden ${skin.card}`}>
+      {rows.length > 0 && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-xs tabular-nums text-stone-600">{itemCount(rows.length)}</span>
+          <div className="flex items-center">
+            <button type="button" className={`${ui.btnText} gap-1 no-underline`} onClick={downloadPricelist}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Tải CSV
+            </button>
+            <button type="button" className={`${ui.btnText} gap-1 no-underline`} onClick={() => void copyQuote()}>
+              <Copy className="h-4 w-4" aria-hidden="true" />
+              Chép báo giá
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`mt-2 overflow-hidden ${skin.card}`}>
         {priceQ.isLoading ? (
           <div className="flex flex-col gap-2 p-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -371,7 +452,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
             ))}
           </ul>
         ) : (
-          <p className="p-6 text-center text-sm text-stone-600">{search.trim() ? 'Không tìm thấy sản phẩm' : 'Chưa có hàng giá sỉ cho bậc của bạn'}</p>
+          <p className="p-6 text-center text-sm text-stone-600">{filtered ? 'Không tìm thấy sản phẩm' : 'Chưa có hàng giá sỉ cho bậc của bạn'}</p>
         )}
       </div>
 

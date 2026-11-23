@@ -35,6 +35,7 @@ import { PdpRebuyRow } from '../product/pdp-rebuy';
 import { PdpRefillOffer } from '../product/pdp-refill-offer';
 import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { SubscriptionSuggestionRow } from '../reorder/subscription-suggestion';
+import { LinkBuilderSheet } from '../affiliate/link-builder-sheet';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -213,6 +214,19 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     render(<ProductStoryShowcase product={storyProduct} previewConfig={storyConfig} fullscreen reel addPrice="49.000đ" position="1/8" onNext={() => {}} />);
     const els = interactiveIn(document.body);
     expect(els.map((el) => el.getAttribute('data-testid'))).toEqual(expect.arrayContaining(['story-close', 'story-add-to-cart', 'story-next']));
+    for (const el of els) expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
+  });
+
+  it('LinkBuilderSheet (tab đích, ô tìm, dòng chọn sản phẩm, nút Tạo link)', () => {
+    const qc = new QueryClient();
+    qc.setQueryData(['affiliate-link-picker', ''], [{ id: 'p1', name: 'Nước rửa chén', brand: 'Tubu', maxAffiliateRate: 0.1 }]);
+    render(
+      <QueryClientProvider client={qc}>
+        <LinkBuilderSheet open onClose={() => {}} busy={false} error={null} onCreate={() => {}} />
+      </QueryClientProvider>,
+    );
+    const els = interactiveIn(document.body);
+    expect(els.filter((el) => el.getAttribute('role') === 'radio')).toHaveLength(1);
     for (const el of els) expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
   });
 

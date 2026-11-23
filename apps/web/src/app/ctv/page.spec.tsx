@@ -675,15 +675,50 @@ describe('/ctv — bảng điều khiển', () => {
     expect(state.copied[0]).toMatch(/\/\?ref=TUBU88&l=abc123$/);
   });
 
-  it('+ Tạo link: POST /affiliate/links {targetType: HOMEPAGE} đúng một lần dù bấm hai lần', async () => {
+  it('+ Tạo link mở bộ tạo link, chưa gửi gì; chọn Giờ vàng rồi Tạo link: POST {targetType: DEAL} đúng một lần dù bấm hai lần', async () => {
     state.tab = 'share';
     const { container } = mount();
     await flush();
-    const btn = byText(container, 'button', '+ Tạo link');
-    click(btn);
-    click(btn);
+    click(byText(container, 'button', '+ Tạo link'));
     await flush();
-    expect(posts()).toEqual([{ method: 'post', path: '/affiliate/links', body: { targetType: 'HOMEPAGE', targetId: undefined } }]);
+    expect(posts()).toEqual([]);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Tạo link chia sẻ');
+    click(byText(dialog, '[role="tab"]', 'Giờ vàng'));
+    await flush();
+    const submit = byText(dialog, 'button', 'Tạo link');
+    click(submit);
+    click(submit);
+    await flush();
+    expect(posts()).toEqual([{ method: 'post', path: '/affiliate/links', body: { targetType: 'DEAL' } }]);
+  });
+
+  it('link sâu: sản phẩm, danh mục, Giờ vàng chép đúng đường dẫn web kèm ref và l; phễu ghi rõ số chung, dòng link chỉ là lượt bấm', async () => {
+    state.tab = 'share';
+    state.links = [
+      { id: 'l1', shortCode: 'prod01', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, clicks: 7, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
+      { id: 'l2', shortCode: 'cate01', targetType: 'CATEGORY', targetId: 'c1', targetSlug: 'nha-bep', targetLabel: 'Nhà bếp', targetAvailable: true, clicks: 2, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
+      { id: 'l3', shortCode: 'deal01', targetType: 'DEAL', targetId: null, clicks: 1, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
+      { id: 'l4', shortCode: 'gone01', targetType: 'PRODUCT', targetId: 'p9', targetSlug: 'ngung-ban', targetLabel: 'Ngừng bán', targetAvailable: false, clicks: 0, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
+    ];
+    const { container } = mount();
+    await flush();
+    const t = container.textContent ?? '';
+    expect(t).toContain('Sản phẩm · Nước rửa chén');
+    expect(t).toContain('Danh mục · Nhà bếp');
+    expect(t).toContain('Giờ vàng');
+    expect(t).toContain('0 lượt bấm · Đích không còn, link mở Trang chủ');
+    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Tỉ lệ ra đơn 25% · 1 đơn / 4 lượt bấm');
+    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Số trên từng link là lượt bấm');
+    const copies = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Sao chép');
+    for (const b of copies) click(b);
+    await flush();
+    expect(state.copied.map((u) => u.replace(/^https?:\/\/[^/]+/, ''))).toEqual([
+      '/san-pham/nuoc-rua-chen?ref=TUBU88&l=prod01',
+      '/san-pham?category=c1&ref=TUBU88&l=cate01',
+      '/gio-vang?ref=TUBU88&l=deal01',
+      '/?ref=TUBU88&l=gone01',
+    ]);
   });
 
   it('lịch sử hoa hồng: số, mã đơn, trạng thái đơn và nhãn như Mini App; khoản trong lệnh rút cũ không bị ghi "Đã trả"', async () => {
@@ -691,11 +726,14 @@ describe('/ctv — bảng điều khiển', () => {
     state.commissions = [
       { id: 'c1', orderId: 'o1', orderCode: 'TB1', orderTotal: 500_000, rate: '0.1', amount: 50_000, status: 'APPROVED', createdAt: '2026-10-02T03:00:00Z', orderStatus: 'DELIVERED' },
       { id: 'c2', orderId: 'o2', orderTotal: 100_000, rate: '0.1', amount: 10_000, status: 'APPROVED', createdAt: '2026-10-03T03:00:00Z', withdrawing: true },
-      { id: 'c3', orderId: 'o3', orderTotal: 100_000, rate: '0.1', amount: 10_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00Z' },
+      { id: 'c3', orderId: 'o3', orderTotal: 100_000, rate: '0.1', amount: 10_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00Z', unlockEstimateAt: '2026-10-13T20:00:00Z' },
     ];
     const { container } = mount();
     await flush();
     const t = container.textContent ?? '';
+    // Ngày chốt dự kiến theo giờ VN (20:00 UTC = 03:00 hôm sau ở VN); chỉ khoản đang giữ có dòng này.
+    expect(t).toContain('Dự kiến chốt từ 14/10/2026 nếu không có đổi/trả');
+    expect(t.match(/Dự kiến chốt từ/g)).toHaveLength(1);
     expect(t).toContain('+50.000đ');
     expect(t).toContain('Đơn TB1 · 500.000đ');
     expect(t).toContain('Giao thành công');
@@ -1118,23 +1156,35 @@ describe('/ctv — khoá Đăng ký CTV (cùng một act)', () => {
 });
 
 describe('/ctv — khoá + Tạo link (cùng một act)', () => {
-  it('chạm đúp trong cùng một act chỉ một POST; khoá giữ tới khi danh sách link mới về rồi nhả', async () => {
+  // "+ Tạo link" mở bộ tạo link (sheet); khoá chống gửi đúp nằm ở nút "Tạo link" trong sheet. Tạo xong sheet đóng ngay, khoá giữ tới khi danh sách mới về.
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+  const sheetAlert = () => dialog()?.querySelector('[role="alert"]')?.textContent ?? '';
+  const openBuilder = async (container: HTMLElement, target = 'Trang chủ') => {
+    click(byText(container, 'button', '+ Tạo link'));
+    await flush();
+    click(byText(dialog()!, '[role="tab"]', target));
+    await flush();
+    // Đang bận thì nút đổi chữ thành "Đang tạo…".
+    return byText(dialog()!, 'button', /^(Tạo link|Đang tạo…)$/) as HTMLButtonElement;
+  };
+
+  it('chạm đúp trong cùng một act chỉ một POST; sheet đóng, khoá giữ tới khi danh sách link mới về rồi nhả', async () => {
     state.tab = 'share';
     const { container } = mount();
     await flush();
-    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
-    btn.focus();
+    let btn = await openBuilder(container);
     const linksGate = deferred();
     state.linksGate = linksGate.promise;
     await twice(btn);
     await flush();
     expect(posts()).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    expect(statusRegion(container)?.textContent).toContain('Đã tạo link');
+    // POST đã xong nhưng danh sách link chưa về: mở lại và bấm lúc này sẽ tạo thêm một link nữa trên số liệu cũ.
+    btn = await openBuilder(container);
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('aria-busy')).toBe('true');
     expect(btn.getAttribute('aria-disabled')).toBe('true');
-    expect(document.activeElement).toBe(btn);
-    expect(statusRegion(container)?.textContent).toContain('Đã tạo link chia sẻ mới');
-    // POST đã xong nhưng danh sách link chưa về: bấm lúc này sẽ tạo thêm một link nữa trên số liệu cũ.
     click(btn);
     await flush();
     expect(posts()).toHaveLength(1);
@@ -1154,7 +1204,7 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
       state.tab = 'share';
       const { container } = mount();
       await flush();
-      const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+      let btn = await openBuilder(container);
       state.linksGate = new Promise(() => undefined);
       click(btn);
       await flush();
@@ -1162,6 +1212,7 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3_000);
       });
+      btn = await openBuilder(container);
       expect(btn.getAttribute('aria-busy')).toBe('true');
       click(btn);
       await flush();
@@ -1179,18 +1230,19 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
     }
   });
 
-  it.each([400, 404, 409, 422])('HTTP %i (máy chủ từ chối vì trạng thái đã đổi): báo lỗi, tải lại danh sách link rồi mới nhả khoá (chạm lại không gửi lệnh)', async (status) => {
+  it.each([400, 404, 409, 422])('HTTP %i (máy chủ từ chối đích/trạng thái): báo lỗi trong sheet, tải lại danh sách link rồi mới nhả khoá (chạm lại không gửi lệnh)', async (status) => {
     state.tab = 'share';
     const { container } = mount();
     await flush();
-    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    const btn = await openBuilder(container);
     const gate = deferred();
     state.linksGate = gate.promise;
     state.postStatus.set('/affiliate/links', status);
     const before = linkGets();
     click(btn);
     await flush();
-    expect(alertRegion(container)?.textContent).not.toBe('');
+    expect(dialog()).not.toBeNull();
+    expect(sheetAlert()).toContain('Lời từ chối của máy chủ');
     expect(linkGets() - before).toBe(1);
     expect(btn.getAttribute('aria-busy')).toBe('true');
     click(btn);
@@ -1211,7 +1263,7 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
       state.tab = 'share';
       const { container } = mount();
       await flush();
-      const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+      const btn = await openBuilder(container);
       state.linksGate = new Promise(() => undefined);
       state.postStatus.set('/affiliate/links', 409);
       click(btn);
@@ -1233,38 +1285,58 @@ describe('/ctv — khoá + Tạo link (cùng một act)', () => {
     }
   });
 
-  it.each([401, 403, 500, 503])('HTTP %i (lỗi tạm): báo lỗi, không tải lại danh sách link, nhả khoá ngay', async (status) => {
+  it.each([401, 403, 500, 503])('HTTP %i (lỗi tạm): báo lỗi trong sheet, không tải lại danh sách link, nhả khoá ngay', async (status) => {
     state.tab = 'share';
     const { container } = mount();
     await flush();
-    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    const btn = await openBuilder(container);
     state.linksGate = new Promise(() => undefined);
     state.postStatus.set('/affiliate/links', status);
     const before = linkGets();
     click(btn);
     await flush();
-    expect(alertRegion(container)?.textContent).not.toBe('');
+    expect(sheetAlert()).not.toBe('');
     expect(linkGets() - before).toBe(0);
     expect(btn.hasAttribute('aria-busy')).toBe(false);
   });
 
-  it('lỗi: báo trong vùng role=alert (vùng status rỗng) và nhả khoá để thử lại', async () => {
+  it('mất mạng: báo trong sheet (vùng status đầu trang rỗng), nhả khoá; thử lại thành công thì sheet đóng, lời báo thành công ở đầu trang', async () => {
     state.tab = 'share';
     state.postFail.add('/affiliate/links');
     const { container } = mount();
     await flush();
-    const btn = byText(container, 'button', '+ Tạo link') as HTMLButtonElement;
+    const btn = await openBuilder(container);
     click(btn);
     await flush();
-    expect(alertRegion(container)?.textContent).not.toBe('');
+    expect(sheetAlert()).not.toBe('');
     expect(statusRegion(container)?.textContent).toBe('');
     expect(btn.hasAttribute('aria-busy')).toBe(false);
     state.postFail.clear();
     click(btn);
     await flush();
     expect(posts()).toHaveLength(2);
-    expect(statusRegion(container)?.textContent).toContain('Đã tạo link chia sẻ mới');
+    expect(dialog()).toBeNull();
+    expect(statusRegion(container)?.textContent).toContain('Đã tạo link');
     expect(alertRegion(container)?.textContent).toBe('');
+  });
+
+  it('Sản phẩm: phải chọn một sản phẩm có hoa hồng mới tạo được; gửi đúng id; sản phẩm 0% không hiện', async () => {
+    state.tab = 'share';
+    state.picker = [
+      { id: 'p1', name: 'Nước rửa chén', slug: 'nuoc-rua-chen', thumbnail: null, brand: 'Fuwa', basePrice: 59_000, salePrice: null, ratingAvg: 0, reviewCount: 0, maxAffiliateRate: 10 },
+      { id: 'p0', name: 'Không hoa hồng', slug: 'khong', thumbnail: null, brand: '', basePrice: 10_000, salePrice: null, ratingAvg: 0, reviewCount: 0, maxAffiliateRate: 0 },
+    ];
+    const { container } = mount();
+    await flush();
+    const btn = await openBuilder(container, 'Sản phẩm');
+    expect(btn.disabled).toBe(true);
+    expect(dialog()!.textContent).not.toContain('Không hoa hồng');
+    click(byText(dialog()!, '[role="radio"]', 'Nước rửa chén'));
+    await flush();
+    expect(btn.disabled).toBe(false);
+    click(btn);
+    await flush();
+    expect(posts()).toEqual([{ method: 'post', path: '/affiliate/links', body: { targetType: 'PRODUCT', targetId: 'p1' } }]);
   });
 });
 

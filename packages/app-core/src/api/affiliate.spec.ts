@@ -59,6 +59,11 @@ describe('affiliate — đúng route, query, body, Idempotency-Key', () => {
       { method: 'post', path: '/affiliate/links', body: { targetType: 'PRODUCT', targetId: 'p1' } },
     ],
     [
+      'createAffiliateLink (Giờ vàng, không đích)',
+      (h) => a.createAffiliateLink(h, 'DEAL'),
+      { method: 'post', path: '/affiliate/links', body: { targetType: 'DEAL' } },
+    ],
+    [
       'getCommissions',
       (h) => a.getCommissions(h),
       { method: 'get', path: '/affiliate/commissions', opts: { query: {} } },

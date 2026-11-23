@@ -83,8 +83,16 @@ export interface CtvTiersResponse {
 export interface AffiliateLink {
   id: string;
   shortCode: string;
+  /** HOMEPAGE | PRODUCT | CATEGORY | DEAL (`@tubutree/app-core/commerce/affiliate-deep-link`). */
   targetType: string;
   targetId: string | null;
+  /** Slug sản phẩm/danh mục để dựng link sâu; thiếu khi API cũ. */
+  targetSlug?: string | null;
+  /** Tên sản phẩm/danh mục; thiếu khi API cũ. */
+  targetLabel?: string | null;
+  /** false: đích không còn hiện, link mở Trang chủ. */
+  targetAvailable?: boolean;
+  /** Lượt mở link; `conversions`/`revenue` là cột cũ luôn 0, không hiện. */
   clicks: number;
   conversions: number;
   revenue: number;
@@ -104,6 +112,8 @@ export interface Commission {
   orderStatus?: string | null;
   /** APPROVED nhưng đã nằm trong một lệnh rút ngân hàng cũ chưa chuyển tiền. */
   withdrawing?: boolean;
+  /** LOCKED: ngày dự kiến được chốt (lúc đơn giao + số ngày giữ); thiếu khi API cũ. */
+  unlockEstimateAt?: string | null;
 }
 
 export type PayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
@@ -144,8 +154,9 @@ export const getAffiliateDashboard = () =>
   api.get<AffiliateDashboard>('/affiliate/dashboard').then((r) => r.data);
 export const getAffiliateLinks = () =>
   api.get<AffiliateLink[]>('/affiliate/links').then((r) => r.data);
+/** `targetId`: id sản phẩm (PRODUCT) hoặc danh mục (CATEGORY); Trang chủ và Giờ vàng không cần. */
 export const createAffiliateLink = (targetType: string, targetId?: string) =>
-  api.post<AffiliateLink>('/affiliate/links', { targetType, targetId }).then((r) => r.data);
+  api.post<AffiliateLink>('/affiliate/links', targetId ? { targetType, targetId } : { targetType }).then((r) => r.data);
 /** Lật trang bằng `cursor` = id dòng cuối của trang trước. Không tham số: máy chủ trả mảng mặc định như client cũ. */
 export interface AffiliatePageOpts {
   take?: number;

@@ -7,6 +7,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { applyDealer, type DealerApplyInput } from '@tubutree/app-core/api/dealer';
 import { errorCode } from '@tubutree/app-core/api/error-status';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
+import {
+  DEALER_APPLY_DRAFT_KEY,
+  dealerPhoneHint,
+  dealerTaxCodeForSubmit,
+  dealerTaxCodeHint,
+  isDealerTaxCodeOk,
+  parseDealerApplyDraft,
+  parseVnBusinessPhone,
+  serializeDealerApplyDraft,
+} from '@tubutree/app-core/dealer-apply-form';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { settleWithin } from '@/lib/settle-within';
@@ -28,6 +38,23 @@ import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { BrandImageField } from '@/components/brand-owner/brand-image-field';
 import { errText } from './dealer-shell';
+
+/** sessionStorage có thể bị chặn (chế độ riêng tư, webview): nháp chỉ là tiện ích, đọc/ghi hỏng thì bỏ qua. */
+function readDraft(): string | null {
+  try {
+    return window.sessionStorage.getItem(DEALER_APPLY_DRAFT_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeDraft(raw: string | null) {
+  try {
+    if (raw) window.sessionStorage.setItem(DEALER_APPLY_DRAFT_KEY, raw);
+    else window.sessionStorage.removeItem(DEALER_APPLY_DRAFT_KEY);
+  } catch {
+    /* bỏ qua */
+  }
+}
 
 /** Tiêu đề trang (h1 của `DealerShell` do `/dai-ly` dựng) khi hồ sơ đang chờ duyệt và khi đăng ký. */
 export const DEALER_PENDING_TITLE = 'Hồ sơ đại lý';
@@ -69,6 +96,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
     },
     onSuccess: () => {
       setDone(true);
+      writeDraft(null);
       return settleWithin(qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }));
     },
     // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
@@ -81,6 +109,17 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   const alreadyApplied = errorCode(mut.error) === 'DEALER_APPLICATION_PENDING';
 
   const set = (k: keyof DealerApplyInput) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [touched, setTouched] = useState<{ taxCode?: boolean; phone?: boolean }>({});
+  const blur = (k: 'taxCode' | 'phone') => () => setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
+
+  // Nháp chữ (không gồm ảnh CCCD) giữ trong phiên của tab: lỡ tải lại hay quay lại trang không phải gõ lại. Đọc sau khi gắn để HTML máy chủ và lần vẽ đầu
+  // khớp nhau; hiệu ứng này đứng TRƯỚC hiệu ứng điền sẵn từ tài khoản để nháp thắng, còn ô nháp trống mới lấy tên/SĐT tài khoản.
+  const [draftReady, setDraftReady] = useState(false);
+  useEffect(() => {
+    const draft = parseDealerApplyDraft(readDraft());
+    setForm((f) => ({ ...f, ...draft }));
+    setDraftReady(true);
+  }, []);
 
   // Điền sẵn tên và SĐT đã có trong tài khoản để khách không gõ lại; ô nào khách đã gõ thì giữ nguyên. Phiên chưa có SĐT thì bỏ trống.
   const { user } = useAuth();
@@ -89,9 +128,18 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   useEffect(() => {
     setForm((f) => ({ ...f, ownerName: f.ownerName || accountName, phone: f.phone || accountPhone }));
   }, [accountName, accountPhone]);
+
+  // Chỉ ghi sau khi đã đọc nháp, kẻo lần vẽ đầu (form trống) xoá mất nháp cũ.
+  useEffect(() => {
+    if (draftReady && !done) writeDraft(serializeDealerApplyDraft(form));
+  }, [form, draftReady, done]);
+
   const valid = Boolean(
     form.businessName.trim() && form.ownerName.trim() && form.phone.trim() && form.address.trim() && form.cccdFrontUrl.trim() && form.cccdBackUrl.trim(),
   );
+  const taxHint = dealerTaxCodeHint(form.taxCode ?? '', !!touched.taxCode);
+  const phoneHint = dealerPhoneHint(form.phone, !!touched.phone);
+  const formatOk = isDealerTaxCodeOk(form.taxCode ?? '') && parseVnBusinessPhone(form.phone) !== null;
 
   return (
     <div className="mx-auto max-w-xl">
@@ -128,20 +176,26 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
         className="mt-4 flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid && !imagesBusy) mut.mutate(form);
+          if (!valid || imagesBusy) return;
+          // Sai dáng MST/SĐT: hiện lời gợi ý ở đúng ô thay vì gửi đi nhận lỗi 400 chung chung.
+          if (!formatOk) {
+            setTouched({ taxCode: true, phone: true });
+            return;
+          }
+          mut.mutate({ ...form, taxCode: dealerTaxCodeForSubmit(form.taxCode ?? '') });
         }}
       >
         <Field label="Tên doanh nghiệp / cửa hàng *">
           <input className={ui.field} value={form.businessName} onChange={set('businessName')} />
         </Field>
-        <Field label="Mã số thuế">
-          <input className={`${ui.field} tabular-nums`} value={form.taxCode ?? ''} onChange={set('taxCode')} />
+        <Field label="Mã số thuế" error={taxHint ?? undefined}>
+          <input className={`${ui.field} tabular-nums`} inputMode="numeric" value={form.taxCode ?? ''} onChange={set('taxCode')} onBlur={blur('taxCode')} />
         </Field>
         <Field label="Người đại diện *">
           <input className={ui.field} value={form.ownerName} onChange={set('ownerName')} />
         </Field>
-        <Field label="Số điện thoại *">
-          <input className={`${ui.field} tabular-nums`} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} />
+        <Field label="Số điện thoại *" error={phoneHint ?? undefined}>
+          <input className={`${ui.field} tabular-nums`} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} onBlur={blur('phone')} />
         </Field>
         <Field label="Địa chỉ kinh doanh *">
           <input className={ui.field} value={form.address} onChange={set('address')} />

@@ -31,6 +31,8 @@ import { SITE_URL } from '@/lib/site';
 import { pickerQuery } from '@tubutree/app-core/queries/storefront';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
+import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { LinkBuilderSheet, type LinkBuilderTarget } from '@/components/affiliate/link-builder-sheet';
 import { AffiliateFeaturedProducts } from '@/components/affiliate/featured-products';
 import { invalidateBalances } from '@/lib/balances';
 import { formatDate } from '@/lib/format-date';
@@ -333,6 +335,7 @@ function PayoutRow({ p }: { p: AffiliatePayout }) {
 
 function CommissionRow({ c }: { c: Commission }) {
   const m = c.withdrawing ? WITHDRAWING_META : COMMISSION_META[c.status];
+  const unlock = commissionUnlockNote(c, formatDate);
   return (
     <li className="flex items-center justify-between gap-2 border-b border-stone-200 py-2">
       <div className="min-w-0">
@@ -342,6 +345,7 @@ function CommissionRow({ c }: { c: Commission }) {
           {formatVnd(c.orderTotal)} · {formatDate(c.createdAt)}
         </div>
         {c.orderStatus && <div className="text-xs text-stone-600">{COMMISSION_ORDER_STATUS[c.orderStatus] ?? c.orderStatus}</div>}
+        {unlock && <div className="text-xs text-stone-600">{unlock}</div>}
       </div>
       <Badge tone={m.tone}>{m.label}</Badge>
     </li>
@@ -386,15 +390,19 @@ function Dashboard() {
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderError, setBuilderError] = useState<string | null>(null);
   const createLink = useMutation({
-    mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
+    mutationFn: (t: LinkBuilderTarget) => createAffiliateLink(coreHttp, t.targetType, t.targetId),
     onSuccess: () => {
-      setNotice({ text: 'Đã tạo link chia sẻ mới', error: false });
+      setBuilderOpen(false);
+      setNotice({ text: LINK_BUILDER_COPY.created, error: false });
       // Khoá giữ tới khi danh sách link mới về (tối đa 4 giây): bấm lần hai khi danh sách còn cũ là tạo thêm một link nữa.
       return settleWithin(qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey }));
     },
+    // Lời lỗi hiện ngay trong bộ tạo link (sheet đang mở che lời báo đầu trang).
     onError: (e) => {
-      setNotice({ text: actErrText(e), error: true });
+      setBuilderError(actErrText(e));
       // Giữ khoá tới khi danh sách link mới về (tối đa 4 giây); lỗi mạng, 401, 403, 5xx nhả ngay.
       return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey })) : undefined;
     },
@@ -402,14 +410,20 @@ function Dashboard() {
       linkBusy.current = false;
     },
   });
-  const makeLink = () => {
+  const makeLink = (t: LinkBuilderTarget) => {
     if (linkBusy.current) return;
     linkBusy.current = true;
     setNotice(null);
-    createLink.mutate();
+    setBuilderError(null);
+    createLink.mutate(t);
+  };
+  const openBuilder = () => {
+    setBuilderError(null);
+    setBuilderOpen(true);
   };
 
   const d = dashQ.data;
+  const funnel = ctvFunnel(d);
   const me = meQ.data;
   const referral = me?.referralCode ?? '';
   const featuredQ = useQuery({ ...pickerQuery(coreHttp, ''), queryKey: ['affiliate-featured-products'], enabled: tab === 'share' && referral !== '', staleTime: 60_000 });
@@ -638,35 +652,34 @@ function Dashboard() {
           <Section
             title="Link chia sẻ"
             action={
-              <button
-                type="button"
-                onClick={makeLink}
-                aria-busy={createLink.isPending || undefined}
-                aria-disabled={createLink.isPending || undefined}
-                className={ui.btnText}
-              >
+              <button type="button" onClick={openBuilder} aria-haspopup="dialog" className={ui.btnText}>
                 + Tạo link
               </button>
             }
           >
+            {/* Phễu chung của CTV: đơn không lưu mã link nên tỉ lệ ra đơn là số chung, số trên từng dòng chỉ là lượt bấm. */}
+            {d && (
+              <div data-testid="ctv-funnel" className="mb-2">
+                <p className="text-sm font-semibold tabular-nums text-stone-900">{ctvFunnelLine(funnel)}</p>
+                <p className={`text-xs text-stone-600 ${phoneCaption}`}>{CTV_FUNNEL_NOTE}</p>
+              </div>
+            )}
             {linksQ.isError ? (
               <ErrorState variant="inline" message={errText(linksQ.error)} onRetry={() => linksQ.refetch()} />
             ) : linksQ.data && linksQ.data.length > 0 ? (
               <ul>
                 {linksQ.data.map((l) => (
                   <li key={l.id} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2">
-                    <div>
-                      <div className="text-sm font-semibold text-stone-900">{l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}</div>
-                      <div className="text-xs text-stone-600">{l.clicks} lượt bấm</div>
+                    <div className="min-w-0">
+                      <div className="line-clamp-2 break-words text-sm font-semibold text-stone-900">{affiliateLinkTitle(l)}</div>
+                      <div className="text-xs tabular-nums text-stone-600">{affiliateLinkCaption(l)}</div>
                     </div>
                     <button
                       type="button"
-                      onClick={() =>
-                        void copy(`${SITE_URL}/?ref=${referral}&l=${l.shortCode}`, 'Đã sao chép link', 'Không sao chép được — hãy chép link thủ công.')
-                      }
-                      className={ui.btnText}
+                      onClick={() => void copy(`${SITE_URL}${affiliateLinkPath(l, referral, 'web')}`, LINK_BUILDER_COPY.copied, LINK_BUILDER_COPY.copyFail)}
+                      className={`${ui.btnText} flex-none`}
                     >
-                      Sao chép
+                      {LINK_BUILDER_COPY.copy}
                     </button>
                   </li>
                 ))}
@@ -677,6 +690,7 @@ function Dashboard() {
               <EmptyState variant="inline" art="leaf" heading="Chưa có link" body="Tạo link đầu tiên để bắt đầu chia sẻ." />
             )}
           </Section>
+          <LinkBuilderSheet open={builderOpen} onClose={() => setBuilderOpen(false)} busy={createLink.isPending} error={builderError} onCreate={makeLink} />
 
           </>
         )}
