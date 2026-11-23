@@ -90,30 +90,22 @@ describe('golive-api: link sửa', () => {
 
 const HANDOVER: HandoverBoard = {
   title: 'Cấu hình bên thứ 3 chờ bàn giao Go-Live',
-  configured: 1,
+  configured: 3,
   total: 4,
   items: [
-    {
-      key: 'zns_templates',
-      title: 'Mã mẫu ZNS do Zalo duyệt',
-      owner: 'Chủ Zalo OA',
-      guide: 'Đăng ký mẫu ZNS trên Zalo rồi nhập mã số ở Quản trị › Mẫu thông báo.',
-      configured: false,
-      status: 'WARN',
-      vars: [],
-      checks: [{ id: 'db.zns_templates', title: 'Mẫu ZNS đã có mã Zalo duyệt', status: 'WARN', detail: '2/2 mẫu chưa có mã Zalo' }],
-    },
     {
       key: 'zalopay',
       title: 'Merchant ZaloPay',
       owner: 'Chủ shop (hợp đồng ZaloPay)',
       guide: 'Lấy App ID, Key1, Key2 bản production.',
+      state: 'pending',
+      required: true,
       configured: false,
       status: 'FAIL',
       vars: [
-        { name: 'ZALOPAY_APP_ID', configured: true },
-        { name: 'ZALOPAY_KEY1', configured: false },
-        { name: 'ZALOPAY_KEY2', configured: false },
+        { name: 'ZALOPAY_APP_ID', configured: true, optional: false },
+        { name: 'ZALOPAY_KEY1', configured: false, optional: false },
+        { name: 'ZALOPAY_KEY2', configured: false, optional: false },
       ],
       checks: [{ id: 'env.zalopay', title: 'Merchant ZaloPay', status: 'FAIL', detail: 'chỉ có ZALOPAY_APP_ID' }],
     },
@@ -122,20 +114,66 @@ const HANDOVER: HandoverBoard = {
       title: 'Khoá mã băm số điện thoại',
       owner: 'Kỹ thuật (máy chủ)',
       guide: 'Sinh bằng openssl rand -hex 32.',
+      state: 'configured',
+      required: true,
       configured: true,
       status: 'PASS',
-      vars: [{ name: 'PHONE_HMAC_SECRET', configured: true }],
+      vars: [{ name: 'PHONE_HMAC_SECRET', configured: true, optional: false }],
       checks: [{ id: 'env.phone_hmac', title: 'PHONE_HMAC_SECRET cho mã băm số điện thoại', status: 'PASS', detail: 'đã đặt, 64 ký tự' }],
+    },
+    {
+      key: 'ops_alerts',
+      title: 'Báo động ra ngoài app',
+      owner: 'Kỹ thuật và người trực',
+      guide: 'OPS_ALERT_ENV_LABEL tuỳ chọn: PROD để trống.',
+      state: 'configured',
+      required: true,
+      configured: true,
+      status: 'PASS',
+      vars: [
+        { name: 'OPS_ALERT_WEBHOOK_URL', configured: true, optional: false },
+        { name: 'OPS_ALERT_ENV_LABEL', configured: false, optional: true },
+      ],
+      checks: [
+        { id: 'env.ops.webhook', title: 'Webhook báo động', status: 'PASS', detail: 'host hooks.slack.com' },
+        { id: 'env.ops.label', title: 'Nhãn môi trường trong tiêu đề báo động', status: 'WARN', detail: 'OPS_ALERT_ENV_LABEL chưa đặt' },
+      ],
     },
     {
       key: 'demo_coupons',
       title: 'Mã giảm giá demo',
       owner: 'Chủ shop (PO)',
       guide: 'Chốt tắt hay giữ từng mã demo.',
+      state: 'configured',
+      required: true,
+      configured: true,
+      status: 'WARN',
+      vars: [],
+      checks: [{ id: 'db.demo_coupons', title: 'Mã giảm giá demo', status: 'WARN', detail: 'còn dùng được: đã chấp nhận giữ: WELCOME30' }],
+    },
+    {
+      key: 'backup_offsite',
+      title: 'Backup hằng đêm ra ngoài máy chủ',
+      owner: 'Kỹ thuật (VPS)',
+      guide: 'RCLONE_REMOTE phải là remote rclone kiểu crypt.',
+      state: 'host',
+      required: false,
       configured: false,
       status: 'WARN',
       vars: [],
-      checks: [{ id: 'db.demo_coupons', title: 'Mã giảm giá demo', status: 'WARN', detail: 'còn dùng được: WELCOME30' }],
+      checks: [{ id: 'backup.cron', title: 'Cron backup hằng ngày', status: 'WARN', detail: 'không kiểm được: không đọc được crontab' }],
+    },
+    {
+      key: 'zns_templates',
+      title: 'Mã mẫu ZNS do Zalo duyệt',
+      owner: 'Chủ shop (quyết) và chủ Zalo OA',
+      guide: 'Đợt này không nộp mẫu ORDER_CONFIRMED và ORDER_SHIPPING.',
+      state: 'optional',
+      required: false,
+      configured: false,
+      status: 'WARN',
+      vars: [],
+      checks: [{ id: 'db.zns_templates', title: 'Mẫu ZNS đã có mã Zalo duyệt', status: 'WARN', detail: '2/2 mẫu chưa có mã Zalo' }],
     },
   ],
 };
@@ -183,28 +221,56 @@ describe('CockpitBoard', () => {
     expect(c.querySelectorAll('[data-testid^="gio-g-card-"]')).toHaveLength(6);
   });
 
-  it('thẻ "Cấu hình bên thứ 3 chờ bàn giao Go-Live": đếm đã cấu hình, mỗi việc Đã cấu hình / Chờ điền kèm người phụ trách, nằm trên 6 thẻ', async () => {
+  it('thẻ "Cấu hình bên thứ 3 chờ bàn giao Go-Live": đếm việc bắt buộc, mỗi việc một trạng thái kèm người phụ trách, nằm trên 6 thẻ', async () => {
     const { c } = await mount({ ...COCKPIT, handover: HANDOVER });
     const card = c.querySelector('[data-testid="gio-g-handover"]')!;
     expect(card.querySelector('h3')?.textContent).toBe('Cấu hình bên thứ 3 chờ bàn giao Go-Live');
-    expect(card.querySelector('header')?.textContent).toContain('1/4 đã cấu hình');
+    expect(card.querySelector('header')?.textContent).toContain('3/4 việc bắt buộc đã cấu hình');
+    expect(card.textContent).toContain('1 việc kiểm tay trên máy chủ, 1 việc tuỳ chọn chủ quyết, không tính vào bộ đếm.');
+    // Còn việc đặt dở dang (đỏ) thì viền và nhãn đếm tô đỏ, không vàng.
+    expect(card.className).toContain('border-danger-fg');
+    expect(card.querySelector('header > span:last-child')?.className).toContain('bg-danger-bg');
     expect(card.compareDocumentPosition(c.querySelector('[data-testid="gio-g-card-infra"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const rows = [...card.querySelectorAll('[data-testid="gio-g-handover-item"]')];
-    expect(rows.map((r) => [r.getAttribute('data-key'), r.getAttribute('data-configured'), r.querySelector('summary')?.textContent])).toEqual([
-      ['zns_templates', 'false', 'Mã mẫu ZNS do Zalo duyệtChủ Zalo OAChờ điền'],
-      ['zalopay', 'false', 'Merchant ZaloPayChủ shop (hợp đồng ZaloPay)Chờ điền'],
-      ['phone_hmac', 'true', 'Khoá mã băm số điện thoạiKỹ thuật (máy chủ)Đã cấu hình'],
-      ['demo_coupons', 'false', 'Mã giảm giá demoChủ shop (PO)Chờ điền'],
+    expect(rows.map((r) => [r.getAttribute('data-key'), r.getAttribute('data-state'), r.querySelector('summary')?.textContent])).toEqual([
+      ['zalopay', 'pending', 'Merchant ZaloPayChủ shop (hợp đồng ZaloPay)Chờ điền'],
+      ['phone_hmac', 'configured', 'Khoá mã băm số điện thoạiKỹ thuật (máy chủ)Đã cấu hình'],
+      ['ops_alerts', 'configured', 'Báo động ra ngoài appKỹ thuật và người trựcĐã cấu hình'],
+      ['demo_coupons', 'configured', 'Mã giảm giá demoChủ shop (PO)Đã cấu hình'],
+      ['backup_offsite', 'host', 'Backup hằng đêm ra ngoài máy chủKỹ thuật (VPS)Kiểm tay'],
+      ['zns_templates', 'optional', 'Mã mẫu ZNS do Zalo duyệtChủ shop (quyết) và chủ Zalo OATuỳ chọn'],
     ]);
-    // Đặt dở dang (FAIL) tô đỏ, còn thiếu tô vàng, đủ tô xanh.
-    expect(rows.map((r) => r.querySelector('summary > span:last-child')?.className.match(/bg-(success|warning|danger)-bg/)?.[1])).toEqual(['warning', 'danger', 'success', 'warning']);
+    expect(rows.map((r) => r.querySelector('summary > span:last-of-type')?.className.match(/bg-(success|warning|danger|info)-bg|bg-stone-100/)?.[0])).toEqual([
+      'bg-danger-bg',
+      'bg-success-bg',
+      'bg-success-bg',
+      'bg-success-bg',
+      'bg-info-bg',
+      'bg-stone-100',
+    ]);
+    // Summary dạng flex mất tam giác mặc định: mũi tên lật khi mở cho biết bấm được.
+    for (const r of rows) expect(r.querySelector('summary > svg[aria-hidden="true"]')?.getAttribute('class')).toContain('group-open:rotate-180');
   });
 
-  it('mở một việc: biến cần điền chỉ có tên và Đã điền / Chờ điền, cách lấy, lời bộ kiểm; việc sửa được trong quản trị có link', async () => {
+  it('chỉ còn việc thiếu (không đỏ) thì viền vàng; đủ việc bắt buộc thì xanh dù còn việc kiểm tay và tuỳ chọn', async () => {
+    const zalopayDone = { ...HANDOVER.items[0]!, state: 'configured' as const, configured: true, status: 'PASS' as const };
+    const zalopayMissing = { ...HANDOVER.items[0]!, status: 'WARN' as const };
+    const withItems = (first: (typeof HANDOVER.items)[number], configured: number) => ({ ...HANDOVER, configured, items: [first, ...HANDOVER.items.slice(1)] });
+    const warn = await mount({ ...COCKPIT, handover: withItems(zalopayMissing, 3) });
+    expect(warn.c.querySelector('[data-testid="gio-g-handover"]')?.className).toContain('border-warning-fg');
+    const done = await mount({ ...COCKPIT, handover: withItems(zalopayDone, 4) });
+    const card = done.c.querySelector('[data-testid="gio-g-handover"]')!;
+    expect(card.className).toContain('border-success-fg');
+    expect(card.querySelector('header')?.textContent).toContain('4/4 việc bắt buộc đã cấu hình');
+  });
+
+  it('mở một việc: biến chỉ có tên và Đã điền / Chờ điền / Tuỳ chọn, cách lấy, lời bộ kiểm; việc sửa được trong quản trị có link', async () => {
     const { c } = await mount({ ...COCKPIT, handover: HANDOVER });
     const row = (key: string) => c.querySelector(`[data-testid="gio-g-handover-item"][data-key="${key}"]`)!;
-    const vars = [...row('zalopay').querySelectorAll('[aria-label="Biến cần điền"] li')].map((li) => li.textContent);
-    expect(vars).toEqual(['ZALOPAY_APP_IDĐã điền', 'ZALOPAY_KEY1Chờ điền', 'ZALOPAY_KEY2Chờ điền']);
+    const vars = (key: string) => [...row(key).querySelectorAll('[aria-label="Biến cần điền"] li')].map((li) => li.textContent);
+    expect(vars('zalopay')).toEqual(['ZALOPAY_APP_IDĐã điền', 'ZALOPAY_KEY1Chờ điền', 'ZALOPAY_KEY2Chờ điền']);
+    expect(vars('ops_alerts')).toEqual(['OPS_ALERT_WEBHOOK_URLĐã điền', 'OPS_ALERT_ENV_LABELTuỳ chọn']);
+    expect(row('ops_alerts').querySelector('[data-check="env.ops.label"]')?.textContent).toBe('Nhãn môi trường trong tiêu đề báo động: OPS_ALERT_ENV_LABEL chưa đặt');
     expect(row('zalopay').textContent).toContain('Lấy App ID, Key1, Key2 bản production.');
     expect(row('zalopay').querySelector('[data-check="env.zalopay"]')?.textContent).toBe('Merchant ZaloPay: chỉ có ZALOPAY_APP_ID');
     expect(row('zalopay').querySelector('a')).toBeNull();

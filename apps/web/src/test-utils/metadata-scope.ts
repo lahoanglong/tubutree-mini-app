@@ -9,7 +9,24 @@ interface Unit {
   exported: boolean;
 }
 
-const RETURNS_METADATA = /^(?:Promise\s*<\s*)?Metadata(?:\s*>)?$/;
+/** Tên cục bộ của kiểu `Metadata` nhập từ 'next' (kể cả `Metadata as M`). Kiểu cùng tên tự khai trong file không tính. */
+function metadataTypeNames(sf: ts.SourceFile): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier) || stmt.moduleSpecifier.text !== 'next') continue;
+    const bindings = stmt.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) if ((el.propertyName ?? el.name).text === 'Metadata') names.add(el.name.text);
+  }
+  return names;
+}
+
+/** `Metadata` hoặc `Promise<Metadata>`, với `Metadata` là kiểu của Next. */
+function isMetadataType(t: ts.TypeNode | undefined, names: ReadonlySet<string>, allowPromise = true): boolean {
+  if (!t || !ts.isTypeReferenceNode(t) || !ts.isIdentifier(t.typeName)) return false;
+  if (names.has(t.typeName.text)) return !t.typeArguments;
+  return allowPromise && t.typeName.text === 'Promise' && t.typeArguments?.length === 1 && isMetadataType(t.typeArguments[0], names, false);
+}
 
 function unitsOf(sf: ts.SourceFile): Unit[] {
   const out: Unit[] = [];
@@ -42,17 +59,19 @@ function isKeyPosition(node: ts.Identifier): boolean {
 
 /**
  * Hàm dựng thẻ meta SEO của một trang Next, tìm theo cây cú pháp (thứ tự khai báo trong file không quan trọng):
- * - `generateMetadata`, và mọi hàm cấp file có kiểu trả khai rõ `Metadata` hoặc `Promise<Metadata>`;
+ * - `generateMetadata`, và mọi hàm cấp file có kiểu trả khai rõ `Metadata` hoặc `Promise<Metadata>` (`Metadata` nhập từ 'next');
  * - cộng hàm cấp file không export mà MỌI chỗ dùng đều nằm trong các hàm trên (lặp tới khi không thêm được).
- * Hàm phụ mà phần giao diện cũng gọi, hoặc được export (file khác có thể nhập), vẫn bị quét.
+ * Hàm phụ không khai kiểu mà phần giao diện cũng gọi, hoặc được export (file khác có thể nhập), vẫn bị quét.
+ *
+ * Hàm trả `Metadata` được miễn theo kiểu, kể cả khi giao diện gọi nó: kiểu trả là lời hứa hàm chỉ dựng thẻ meta và JSON-LD. Giao diện mà vẽ
+ * chữ lấy từ kết quả của nó (vd `title`) thì ký hiệu trong đó lọt qua spec, nên lúc ấy phải tách chữ ra hàm không khai kiểu.
  */
 export function metadataScope(src: string, fileName = 'page.tsx'): { builders: string[]; text: string } {
   const sf = ts.createSourceFile(fileName, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const units = unitsOf(sf);
   const byName = new Map(units.map((u) => [u.name, u]));
-  const exempt = new Set(
-    units.filter((u) => u.name === 'generateMetadata' || (u.fn.type && RETURNS_METADATA.test(u.fn.type.getText(sf).trim()))).map((u) => u.name),
-  );
+  const metadataNames = metadataTypeNames(sf);
+  const exempt = new Set(units.filter((u) => u.name === 'generateMetadata' || isMetadataType(u.fn.type, metadataNames)).map((u) => u.name));
   if (!exempt.has('generateMetadata')) throw new Error(`${fileName} không có generateMetadata: bỏ khỏi danh sách miễn quét thẻ meta, quét cả file`);
 
   const container = (pos: number) => units.find((u) => pos >= u.stmt.getStart(sf) && pos < u.stmt.getEnd())?.name ?? null;

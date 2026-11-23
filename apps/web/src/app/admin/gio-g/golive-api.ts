@@ -23,19 +23,26 @@ export interface CockpitCard {
 }
 
 /** Một việc bàn giao (`HandoverItem` ở `apps/api/src/modules/admin/golive/golive-handover.ts`): chỉ tên biến và đã điền hay chưa, không có giá trị. */
+/** `configured` Đã cấu hình, `pending` Chờ điền, `host` Kiểm tay trên máy chủ (API trong container không kiểm được), `optional` Tuỳ chọn (chủ quyết). */
+export type HandoverState = 'configured' | 'pending' | 'host' | 'optional';
+
 export interface HandoverItem {
   key: string;
   title: string;
   owner: string;
   guide: string;
+  state: HandoverState;
+  /** Chỉ việc bắt buộc vào bộ đếm của thẻ. */
+  required: boolean;
   configured: boolean;
   status: CheckStatus;
-  vars: { name: string; configured: boolean }[];
+  vars: { name: string; configured: boolean; optional: boolean }[];
   checks: { id: string; title: string; status: CheckStatus; detail: string }[];
 }
 
 export interface HandoverBoard {
   title: string;
+  /** Số việc bắt buộc đã cấu hình trên `total` việc bắt buộc. */
   configured: number;
   total: number;
   items: HandoverItem[];
