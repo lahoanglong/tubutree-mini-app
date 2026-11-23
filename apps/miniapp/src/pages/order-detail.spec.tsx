@@ -203,12 +203,12 @@ describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', (
     renderPage();
     expect((await screen.findAllByText(/Xà bông thảo mộc/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Viết đánh giá|Sửa đánh giá/)).toBeNull();
-    expect(screen.queryByTestId('order-line-refunded')).toBeNull();
+    expect(screen.queryByTestId('order-line-returned')).toBeNull();
   });
 });
 
-// tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn — món đã hoàn tiền không còn lối "Viết đánh giá", chỉ một dòng trạng thái mờ.
-describe('OrderDetailPage — món đã hoàn tiền (tubu-w25-02)', () => {
+// tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn — món đã trả không còn lối "Viết đánh giá", chỉ một dòng trạng thái mờ.
+describe('OrderDetailPage — món đã trả (tubu-w25-02)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.search = '';
@@ -217,35 +217,42 @@ describe('OrderDetailPage — món đã hoàn tiền (tubu-w25-02)', () => {
 
   const order = (items: Record<string, unknown>[]) => ({ ...ORDER, items: items.map((it, i) => ({ ...ORDER.items[0], id: `oi${i + 1}`, ...it })) });
 
-  it('món trả hết → "Đã hoàn tiền" mờ, không có nút viết; món chưa trả cùng đơn vẫn "Viết đánh giá"', async () => {
+  it('trả hết, tiền đã về → "Đã hoàn tiền" mờ, không có nút viết; món chưa trả cùng đơn vẫn "Viết đánh giá" (tên truy cập kèm tên món)', async () => {
     mocks.fetchOrder.mockResolvedValue(
       order([
-        { productName: 'Xà bông thảo mộc', reviewId: null, reviewable: false, refundedQty: 2 },
+        { productName: 'Xà bông thảo mộc', reviewId: null, reviewable: false, returnedQty: 2, refundDone: true },
         { productName: 'Nước giặt', productSlug: 'nuoc-giat', reviewId: null, reviewable: true },
       ]),
     );
     renderPage();
-    const status = await screen.findByTestId('order-line-refunded');
+    const status = await screen.findByTestId('order-line-returned');
     expect(status).toHaveTextContent(/^Đã hoàn tiền$/);
     expect(status.tagName).not.toBe('BUTTON');
     expect(status.style.color).toBe('var(--color-text-tertiary)');
     expect(screen.getAllByText('Viết đánh giá')).toHaveLength(1);
-    fireEvent.click(screen.getByText('Viết đánh giá'));
+    fireEvent.click(screen.getByRole('button', { name: 'Viết đánh giá Nước giặt' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-giat', { state: { reviewOrderId: 'o1' } });
   });
 
-  it('trả một phần → "Đã hoàn tiền 1/2"', async () => {
-    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: null, reviewable: false, refundedQty: 1 }]));
+  it('trả một phần, tiền đã về → "Đã hoàn tiền 1/2"', async () => {
+    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: null, reviewable: false, returnedQty: 1, refundDone: true }]));
     renderPage();
-    expect(await screen.findByTestId('order-line-refunded')).toHaveTextContent('Đã hoàn tiền 1/2');
+    expect(await screen.findByTestId('order-line-returned')).toHaveTextContent('Đã hoàn tiền 1/2');
     expect(screen.queryByText(/Viết đánh giá/)).toBeNull();
   });
 
-  it('đã đánh giá trước khi trả → vẫn "Sửa đánh giá", không thêm dòng hoàn tiền', async () => {
-    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: 'r1', reviewable: false, refundedQty: 2 }]));
+  it('tiền chưa về (chuyển khoản còn chờ, lần trả 0đ) → "Đã duyệt trả 2/2", không nói "hoàn tiền"', async () => {
+    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: null, reviewable: false, returnedQty: 2, refundDone: false }]));
     renderPage();
-    expect(await screen.findByText('Sửa đánh giá')).toBeInTheDocument();
-    expect(screen.queryByTestId('order-line-refunded')).toBeNull();
+    expect(await screen.findByTestId('order-line-returned')).toHaveTextContent(/^Đã duyệt trả 2\/2$/);
+    expect(screen.queryByText(/Đã hoàn tiền|Viết đánh giá/)).toBeNull();
+  });
+
+  it('đã đánh giá trước khi trả → vẫn "Sửa đánh giá", không thêm dòng trạng thái', async () => {
+    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: 'r1', reviewable: false, returnedQty: 2, refundDone: true }]));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Sửa đánh giá Xà bông thảo mộc' })).toHaveTextContent('Sửa đánh giá');
+    expect(screen.queryByTestId('order-line-returned')).toBeNull();
   });
 });
 
@@ -269,7 +276,7 @@ describe('OrderDetailPage — mở từ "Đánh giá (n SP)" (?review=1, tubu-w2
   });
 
   const ITEMS = [
-    { ...ORDER.items[0], id: 'oi1', productName: 'Xà bông đã trả', reviewId: null, reviewable: false, refundedQty: 2 },
+    { ...ORDER.items[0], id: 'oi1', productName: 'Xà bông đã trả', reviewId: null, reviewable: false, returnedQty: 2, refundDone: true },
     { ...ORDER.items[0], id: 'oi2', productName: 'Dầu gội đã viết', productSlug: 'dau-goi', reviewId: 'r2', reviewable: false },
     { ...ORDER.items[0], id: 'oi3', productName: 'Nước giặt', productSlug: 'nuoc-giat', reviewId: null, reviewable: true },
     { ...ORDER.items[0], id: 'oi4', productName: 'Nước rửa chén', productSlug: 'nuoc-rua-chen', reviewId: null, reviewable: true },
@@ -278,7 +285,7 @@ describe('OrderDetailPage — mở từ "Đánh giá (n SP)" (?review=1, tubu-w2
     window.matchMedia = vi.fn().mockImplementation((q: string) => ({ matches: on && q === '(prefers-reduced-motion: reduce)', media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
   };
 
-  it('cuộn mượt tới món đầu tiên còn lối viết (bỏ món đã hoàn tiền, món đã đánh giá) và đặt focus vào nút "Viết đánh giá" của món đó', async () => {
+  it('cuộn mượt tới món đầu tiên còn lối viết (bỏ món đã trả, món đã đánh giá) và đặt focus vào nút "Viết đánh giá" của món đó', async () => {
     mocks.search = '?review=1';
     reduceMotion(false);
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS });
@@ -288,7 +295,7 @@ describe('OrderDetailPage — mở từ "Đánh giá (n SP)" (?review=1, tubu-w2
     expect(row.textContent).toContain('Nước giặt');
     expect(row.textContent).not.toContain('Nước rửa chén');
     expect(scrolled[0]!.opts).toEqual({ behavior: 'smooth', block: 'center' });
-    expect(document.activeElement?.textContent).toBe('Viết đánh giá');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Viết đánh giá Nước giặt');
     expect(row.contains(document.activeElement)).toBe(true);
   });
 
@@ -301,6 +308,34 @@ describe('OrderDetailPage — mở từ "Đánh giá (n SP)" (?review=1, tubu-w2
     expect(scrolled[0]!.opts).toEqual({ behavior: 'auto', block: 'center' });
   });
 
+  it('quay lại sau khi viết: bản đệm cũ còn mời món vừa viết → chờ đơn mới rồi mới cuộn, tới món kế tiếp còn chờ', async () => {
+    mocks.search = '?review=1';
+    reduceMotion(false);
+    const stale = { ...ORDER, items: ITEMS };
+    const fresh = { ...ORDER, items: ITEMS.map((it) => (it.id === 'oi3' ? { ...it, reviewId: 'r3', reviewable: false } : it)) };
+    let release: (v: unknown) => void = () => undefined;
+    mocks.fetchOrder.mockReturnValue(new Promise((r) => (release = r)));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(['order', 'TT001'], stale);
+    await qc.invalidateQueries({ queryKey: ['order'] });
+    render(
+      <QueryClientProvider client={qc}>
+        <OrderDetailPage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findAllByText('Viết đánh giá')).toHaveLength(2);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(scrolled).toEqual([]);
+    await act(async () => {
+      release(fresh);
+    });
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    expect((scrolled[0]!.el as HTMLElement).textContent).toContain('Nước rửa chén');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Viết đánh giá Nước rửa chén');
+  });
+
   it('không có ?review=1 → không cuộn, không cướp focus', async () => {
     reduceMotion(false);
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS });
@@ -310,7 +345,7 @@ describe('OrderDetailPage — mở từ "Đánh giá (n SP)" (?review=1, tubu-w2
     expect(document.activeElement?.textContent).not.toBe('Viết đánh giá');
   });
 
-  it('?review=1 mà mọi món đã đánh giá/đã hoàn tiền → không cuộn', async () => {
+  it('?review=1 mà mọi món đã đánh giá/đã trả → không cuộn', async () => {
     mocks.search = '?review=1';
     reduceMotion(false);
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS.slice(0, 2) });

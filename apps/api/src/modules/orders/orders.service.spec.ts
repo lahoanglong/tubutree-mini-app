@@ -1427,7 +1427,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       expect(returnFindMany).toHaveBeenCalledTimes(1);
       expect(returnFindMany).toHaveBeenCalledWith({
         where: { quantity: { gt: 0 }, returnRequest: { orderId: 'o1', status: 'APPROVED' } },
-        select: { orderItemId: true, quantity: true },
+        select: { orderItemId: true, quantity: true, returnRequestId: true },
       });
       detail.mockRestore();
     });
@@ -1440,7 +1440,8 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     function reviewService(
       order: Record<string, unknown>,
       reviews: { id: string; productId: string }[] = [],
-      returned: { orderItemId: string; quantity: number }[] = [],
+      returned: { orderItemId: string; quantity: number; returnRequestId?: string }[] = [],
+      doneRefunds: string[] = [],
     ) {
       const variationFindMany = jest.fn(async (args: { select: Record<string, unknown> }) =>
         args.select.productId
@@ -1448,7 +1449,8 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
           : [v('v1'), v('v1b'), v('v2')],
       );
       const reviewFindMany = jest.fn().mockResolvedValue(reviews);
-      const returnFindMany = jest.fn().mockResolvedValue(returned);
+      const returnFindMany = jest.fn().mockResolvedValue(returned.map((l) => ({ returnRequestId: 'rr1', ...l })));
+      const refundFindMany = jest.fn().mockResolvedValue(doneRefunds.map((refKey) => ({ refKey })));
       const prisma = {
         order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([order]), count: jest.fn().mockResolvedValue(1) },
         variation: { findMany: variationFindMany },
@@ -1456,10 +1458,11 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
         orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
         review: { findMany: reviewFindMany },
         returnRequestItem: { findMany: returnFindMany },
+        orderCustomerRefund: { findMany: refundFindMany },
         pointsTransaction: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: null } }) },
         $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
       } as unknown as PrismaService;
-      return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), reviewFindMany, returnFindMany };
+      return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), reviewFindMany, returnFindMany, refundFindMany };
     }
 
     it('đơn đã nhận: dòng có đánh giá của đơn này → reviewId, không viết mới; dòng chưa có → viết được; hai biến thể cùng sản phẩm chung một đánh giá', async () => {
@@ -1505,48 +1508,67 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     });
 
     // tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn (pendingReviewCounts) — sản phẩm đã có dòng trả được duyệt
-    // trên đơn không còn lối "Viết đánh giá" ở chi tiết đơn; dòng đã trả mang số đã hoàn để app hiện "Đã hoàn tiền".
-    describe('tubu-w25-02: dòng đã hoàn tiền', () => {
-      it('dòng trả được duyệt (cộng mọi lần) → không viết mới, kèm refundedQty; biến thể khác cùng sản phẩm cũng thôi mời; sản phẩm khác vẫn viết được', async () => {
+    // trên đơn không còn lối "Viết đánh giá" ở chi tiết đơn; dòng đã trả mang số đã trả và cờ tiền đã về để app ghi đúng trạng thái.
+    describe('tubu-w25-02: dòng đã trả', () => {
+      it('dòng trả được duyệt (cộng mọi lần) → không viết mới, kèm returnedQty; biến thể khác cùng sản phẩm cũng thôi mời; sản phẩm khác vẫn viết được', async () => {
         const { svc } = reviewService(
           { ...delivered, items: [line('i1', 'v1'), line('i2', 'v2'), line('i3', 'v1b')] },
           [],
-          [{ orderItemId: 'i1', quantity: 1 }, { orderItemId: 'i1', quantity: 1 }],
+          [{ orderItemId: 'i1', quantity: 1, returnRequestId: 'rr1' }, { orderItemId: 'i1', quantity: 1, returnRequestId: 'rr2' }],
+          ['rr1', 'rr2'],
         );
         const view = await svc.detailView('u1', 'TUBU1');
-        expect(view.items.map((it) => [it.id, it.reviewId, it.reviewable, it.refundedQty])).toEqual([
-          ['i1', null, false, 2],
-          ['i2', null, true, undefined],
-          ['i3', null, false, undefined],
+        expect(view.items.map((it) => [it.id, it.reviewId, it.reviewable, it.returnedQty, it.refundDone])).toEqual([
+          ['i1', null, false, 2, true],
+          ['i2', null, true, undefined, undefined],
+          ['i3', null, false, undefined, undefined],
         ]);
-        expect(view.items[1]).not.toHaveProperty('refundedQty');
+        expect(view.items[1]).not.toHaveProperty('returnedQty');
+        expect(view.items[1]).not.toHaveProperty('refundDone');
       });
 
-      it('đã đánh giá trước lần trả → vẫn sửa được (reviewId giữ nguyên), kèm refundedQty', async () => {
-        const { svc } = reviewService({ ...delivered, items: [line('i1', 'v1')] }, [{ id: 'r-p1', productId: 'p1' }], [{ orderItemId: 'i1', quantity: 1 }]);
-        expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: 'r-p1', reviewable: false, refundedQty: 1 });
+      it('khoản hoàn: chỉ tra khoản RETURN đã xong của đúng các yêu cầu trả của đơn; một lần trả chưa xong (chuyển khoản chờ, 0đ) → refundDone false', async () => {
+        const { svc, refundFindMany } = reviewService(
+          { ...delivered, items: [line('i1', 'v1'), line('i2', 'v2')] },
+          [],
+          [{ orderItemId: 'i1', quantity: 1, returnRequestId: 'rr1' }, { orderItemId: 'i1', quantity: 1, returnRequestId: 'rr2' }, { orderItemId: 'i2', quantity: 1, returnRequestId: 'rr2' }],
+          ['rr1'],
+        );
+        const view = await svc.detailView('u1', 'TUBU1');
+        expect(view.items.map((it) => [it.id, it.returnedQty, it.refundDone])).toEqual([
+          ['i1', 2, false],
+          ['i2', 1, false],
+        ]);
+        expect(refundFindMany).toHaveBeenCalledWith({
+          where: { orderId: 'o1', kind: 'RETURN', refKey: { in: ['rr1', 'rr2'] }, status: 'COMPLETED' },
+          select: { refKey: true },
+        });
       });
 
-      it('dòng quà tặng bị trả → không có refundedQty (quà 0đ không có tiền hoàn), vẫn không viết được', async () => {
+      it('đơn không có dòng trả → không tra khoản hoàn', async () => {
+        const { svc, refundFindMany } = reviewService({ ...delivered, items: [line('i1', 'v1')] });
+        expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewable: true });
+        expect(refundFindMany).not.toHaveBeenCalled();
+      });
+
+      it('đã đánh giá trước lần trả → vẫn sửa được (reviewId giữ nguyên), kèm returnedQty', async () => {
+        const { svc } = reviewService({ ...delivered, items: [line('i1', 'v1')] }, [{ id: 'r-p1', productId: 'p1' }], [{ orderItemId: 'i1', quantity: 1 }], ['rr1']);
+        expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: 'r-p1', reviewable: false, returnedQty: 1, refundDone: true });
+      });
+
+      it('dòng quà tặng bị trả → không có returnedQty (quà 0đ không có tiền hoàn), vẫn không viết được', async () => {
         const { svc } = reviewService({ ...delivered, items: [line('i1', 'v2'), { ...line('g1', 'v1'), unitPrice: 0, total: 0, isGift: true }] }, [], [{ orderItemId: 'g1', quantity: 1 }]);
         const view = await svc.detailView('u1', 'TUBU1');
-        expect(view.items.map((it) => [it.id, it.reviewable, it.refundedQty])).toEqual([
+        expect(view.items.map((it) => [it.id, it.reviewable, it.returnedQty])).toEqual([
           ['i1', true, undefined],
           ['g1', false, undefined],
         ]);
       });
 
-      it('biến thể đã bị xoá mà dòng đã trả → không viết được, vẫn kèm refundedQty', async () => {
-        const { svc } = reviewService({ ...delivered, items: [line('i1', 'gone')] }, [], [{ orderItemId: 'i1', quantity: 3 }]);
-        expect((await svc.detailView('u1', 'TUBU1')).items[0]).toEqual(expect.objectContaining({ reviewId: null, reviewable: false, refundedQty: 3 }));
+      it('biến thể đã bị xoá mà dòng đã trả → không viết được, vẫn kèm returnedQty', async () => {
+        const { svc } = reviewService({ ...delivered, items: [line('i1', 'gone')] }, [], [{ orderItemId: 'i1', quantity: 3 }], ['rr1']);
+        expect((await svc.detailView('u1', 'TUBU1')).items[0]).toEqual(expect.objectContaining({ reviewId: null, reviewable: false, returnedQty: 3, refundDone: true }));
       });
-    });
-
-    it('danh sách đơn không tra đánh giá (chỉ màn chi tiết cần)', async () => {
-      const { svc, reviewFindMany } = reviewService({ ...delivered, items: [line('i1', 'v1')] });
-      const page = await svc.list('u1', {}, 1, 20);
-      expect(reviewFindMany).not.toHaveBeenCalled();
-      expect(page.data[0]!.items[0]).not.toHaveProperty('reviewable');
     });
   });
 

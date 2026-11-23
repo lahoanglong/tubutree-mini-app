@@ -1006,11 +1006,14 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     expect(text).not.toContain('Đã duyệt trả 1/1');
   });
 
-  it('tubu-w25-02 (PO A5): món đã hoàn tiền một phần → một dòng "Đã hoàn tiền 1/2" mờ thay "Viết đánh giá", không lặp "Đã duyệt trả"; món khác vẫn viết được', async () => {
+  it.each([
+    ['tiền đã về', true, 'Đã hoàn tiền 1/2'],
+    ['chuyển khoản còn chờ', false, 'Đã duyệt trả 1/2'],
+  ])('tubu-w25-02 (PO A5): món trả một phần, %s → một dòng "%s" mờ thay "Viết đánh giá", không lặp "Đã duyệt trả"; món khác vẫn viết được', async (_n, refundDone, label) => {
     mocks.order = {
       ...delivered,
       items: [
-        { id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null, productSlug: 'dau-goi', reviewId: null, reviewable: false, refundedQty: 1 },
+        { id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null, productSlug: 'dau-goi', reviewId: null, reviewable: false, returnedQty: 1, refundDone },
         { id: 'i2', productName: 'Xà phòng', variationName: '', unitPrice: 50000, quantity: 1, total: 50000, thumbnail: null, productSlug: 'xa-phong', reviewId: null, reviewable: true },
       ],
     };
@@ -1020,14 +1023,14 @@ describe('chi tiết đơn — yêu cầu đổi/trả (BUYERWEB-13)', () => {
     }];
     const { container } = await mount();
     const text = container.textContent ?? '';
-    const status = container.querySelectorAll('[data-testid="order-line-refunded"]');
+    const status = container.querySelectorAll('[data-testid="order-line-returned"]');
     expect(status).toHaveLength(1);
-    expect(status[0]!.textContent).toBe('Đã hoàn tiền 1/2');
+    expect(status[0]!.textContent).toBe(label);
     expect(status[0]!.tagName).toBe('DIV');
     expect(status[0]!.className).toContain('--color-text-tertiary');
-    expect(text).not.toContain('Đã duyệt trả');
+    expect(text.match(/Đã duyệt trả/g)?.length ?? 0).toBe(refundDone ? 0 : 1);
     const write = [...container.querySelectorAll('a')].filter((a) => a.textContent === 'Viết đánh giá');
-    expect(write.map((a) => a.getAttribute('href'))).toEqual(['/san-pham/xa-phong?danh-gia=o9#danh-gia']);
+    expect(write.map((a) => [a.getAttribute('href'), a.getAttribute('aria-label')])).toEqual([['/san-pham/xa-phong?danh-gia=o9#danh-gia', 'Viết đánh giá Xà phòng']]);
   });
 
   it('R6-BUYER-9: khoản hoàn trả hàng còn chờ chọn nơi nhận vẫn chọn được ngay trên dòng yêu cầu', async () => {

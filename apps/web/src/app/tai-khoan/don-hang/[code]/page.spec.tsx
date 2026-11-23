@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -608,8 +609,8 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
   });
 });
 
-// tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn — món đã hoàn tiền không còn lối "Viết đánh giá".
-describe('/tai-khoan/don-hang/[code] — món đã hoàn tiền và mở từ "Đánh giá (n SP)" (tubu-w25-02)', () => {
+// tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn — món đã trả không còn lối "Viết đánh giá".
+describe('/tai-khoan/don-hang/[code] — món đã trả và mở từ "Đánh giá (n SP)" (tubu-w25-02)', () => {
   const delivered = (items: Record<string, unknown>[]) => ({
     ...structuredClone(ORDER),
     id: 'ord-1',
@@ -619,7 +620,7 @@ describe('/tai-khoan/don-hang/[code] — món đã hoàn tiền và mở từ "�
     items: items.map((it, i) => ({ ...ORDER.items[0], id: `i${i + 1}`, ...it })),
   });
   const ITEMS = [
-    { productName: 'Xà bông đã trả', productSlug: 'xa-bong', reviewId: null, reviewable: false, refundedQty: 2 },
+    { productName: 'Xà bông đã trả', productSlug: 'xa-bong', reviewId: null, reviewable: false, returnedQty: 2, refundDone: true },
     { productName: 'Dầu gội đã viết', productSlug: 'dau-goi', reviewId: 'rv-2', reviewable: false },
     { productName: 'Nước giặt', productSlug: 'nuoc-giat', reviewId: null, reviewable: true },
     { productName: 'Nước rửa chén', productSlug: 'nuoc-rua-chen', reviewId: null, reviewable: true },
@@ -645,22 +646,22 @@ describe('/tai-khoan/don-hang/[code] — món đã hoàn tiền và mở từ "�
     Element.prototype.scrollIntoView = scrollIntoView;
   });
 
-  it('món trả hết → "Đã hoàn tiền" mờ, không phải liên kết; món đã đánh giá vẫn "Sửa đánh giá"; món chưa trả vẫn "Viết đánh giá"', async () => {
+  it('món trả hết, tiền đã về → "Đã hoàn tiền" mờ, không phải liên kết; món đã đánh giá vẫn "Sửa đánh giá"; món chưa trả vẫn "Viết đánh giá"', async () => {
     mocks.order = delivered(ITEMS);
     const { container } = await mount();
-    const status = container.querySelectorAll('[data-testid="order-line-refunded"]');
+    const status = container.querySelectorAll('[data-testid="order-line-returned"]');
     expect([...status].map((el) => el.textContent)).toEqual(['Đã hoàn tiền']);
     expect(status[0]!.closest('a')).toBeNull();
     const links = [...container.querySelectorAll('a')].filter((a) => /^(Viết|Sửa) đánh giá$/.test(a.textContent ?? ''));
-    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['Sửa đánh giá', '/san-pham/dau-goi?danh-gia=ord-1#danh-gia'],
-      ['Viết đánh giá', '/san-pham/nuoc-giat?danh-gia=ord-1#danh-gia'],
-      ['Viết đánh giá', '/san-pham/nuoc-rua-chen?danh-gia=ord-1#danh-gia'],
+    expect(links.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-label')])).toEqual([
+      ['Sửa đánh giá', '/san-pham/dau-goi?danh-gia=ord-1#danh-gia', 'Sửa đánh giá Dầu gội đã viết'],
+      ['Viết đánh giá', '/san-pham/nuoc-giat?danh-gia=ord-1#danh-gia', 'Viết đánh giá Nước giặt'],
+      ['Viết đánh giá', '/san-pham/nuoc-rua-chen?danh-gia=ord-1#danh-gia', 'Viết đánh giá Nước rửa chén'],
     ]);
     expect(smallTouchTargets(container)).toEqual([]);
   });
 
-  it('?review=1 → cuộn mượt tới món đầu tiên còn lối viết (bỏ món đã hoàn tiền, đã đánh giá) và focus nút "Viết đánh giá" của món đó', async () => {
+  it('?review=1 → cuộn mượt tới món đầu tiên còn lối viết (bỏ món đã trả, đã đánh giá) và focus nút "Viết đánh giá" của món đó', async () => {
     window.history.replaceState(null, '', '/tai-khoan/don-hang/TB-9?review=1');
     mocks.order = delivered(ITEMS);
     await mount();
@@ -682,6 +683,29 @@ describe('/tai-khoan/don-hang/[code] — món đã hoàn tiền và mở từ "�
     expect(scrolled.map((s) => s.opts)).toEqual([{ behavior: 'auto', block: 'center' }]);
   });
 
+  it('quay lại sau khi viết: bản đệm cũ còn mời món vừa viết → chờ đơn mới rồi mới cuộn, tới món kế tiếp còn chờ', async () => {
+    window.history.replaceState(null, '', '/tai-khoan/don-hang/TB-9?review=1');
+    const stale = delivered(ITEMS);
+    const fresh = delivered(ITEMS.map((it) => (it.productSlug === 'nuoc-giat' ? { ...it, reviewId: 'rv-3', reviewable: false } : it)));
+    let release: (v: unknown) => void = () => undefined;
+    mocks.order = () => new Promise((r) => (release = r));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(['order', 'TB-9'], stale);
+    await qc.invalidateQueries({ queryKey: ['order'] });
+    const r = render(<OrderDetailPage />, qc);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Nước giặt');
+    expect(scrolled).toEqual([]);
+    await act(async () => {
+      release(fresh);
+    });
+    await flush(8);
+    expect(scrolled).toHaveLength(1);
+    expect((scrolled[0]!.el as HTMLElement).textContent).toContain('Nước rửa chén');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Viết đánh giá Nước rửa chén');
+  });
+
   it('không có ?review=1 → không cuộn, không cướp focus', async () => {
     mocks.order = delivered(ITEMS);
     await mount();
@@ -689,7 +713,7 @@ describe('/tai-khoan/don-hang/[code] — món đã hoàn tiền và mở từ "�
     expect(document.activeElement?.textContent).not.toBe('Viết đánh giá');
   });
 
-  it('?review=1 mà không còn món nào để viết (đã đánh giá hoặc đã hoàn tiền) → không cuộn', async () => {
+  it('?review=1 mà không còn món nào để viết (đã đánh giá hoặc đã trả) → không cuộn', async () => {
     window.history.replaceState(null, '', '/tai-khoan/don-hang/TB-9?review=1');
     mocks.order = delivered(ITEMS.slice(0, 2));
     const { container } = await mount();

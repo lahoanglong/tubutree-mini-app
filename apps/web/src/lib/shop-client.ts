@@ -527,7 +527,9 @@ export interface OrderDetailDTO extends OrderDTO {
     /** Dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá, sản phẩm chưa bị trả trên đơn). */
     reviewable?: boolean;
     /** Số đã trả được duyệt của chính dòng này; API chỉ gửi khi lớn hơn 0. */
-    refundedQty?: number;
+    returnedQty?: number;
+    /** Đi cùng `returnedQty`: mọi lần trả của dòng đã hoàn tiền xong. */
+    refundDone?: boolean;
     /** Trang sản phẩm còn mở công khai; false (đã gỡ) thì không dẫn tới trang sản phẩm. API cũ không trả: coi như còn. */
     productPublic?: boolean;
   })[];
