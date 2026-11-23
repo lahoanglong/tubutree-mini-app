@@ -450,7 +450,7 @@ describe('CheckoutPage — Ví bị mờ phải nói lý do, số điểm có d�
   it('chỉ còn ba cách thanh toán: COD, chuyển khoản, Ví Tubu — không có TubuXu (Q-26, PD-3)', async () => {
     renderPage();
     await screen.findByText('Ví Tubu (130.000đ)');
-    // Chữ nhìn thấy gồm cả dòng phụ dưới tên (tubu-w22-03); tên đọc của radio vẫn chỉ là tên cách thanh toán.
+    // Chữ nhìn thấy gồm cả dòng phụ dưới tên; tên đọc của radio vẫn chỉ là tên cách thanh toán.
     expect(within(paymentBox()).getAllByRole('radio').map((r) => r.textContent)).toEqual([
       `Thanh toán khi nhận hàng (COD)${fillCopy('checkout.payCueCod')}`,
       `Chuyển khoản ngân hàng${fillCopy('checkout.payCueBank')}`,
@@ -4137,8 +4137,11 @@ describe('CheckoutPage — giữ địa chỉ và ghi chú qua một lần sang 
     mocks.placeOrder.mockRejectedValue(
       Object.assign(new Error('x'), { isHttpError: true, response: { status: 400, data: { code: 'FLASH_LIMIT', limit: 2, message: 'Vượt giới hạn.' } } }),
     );
-    sessionStorage.setItem(DRAFT, JSON.stringify({ addressId: 'a2', note: '', at: Date.now() }));
     renderPage();
+    // Khách tự đổi sang địa chỉ phụ trên màn (không gieo nháp trước): bản ghi phải lấy đúng địa chỉ đang chọn lúc chạm.
+    fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Bình/ }));
+    await waitFor(() => expect(screen.getByTestId('checkout-address-row')).toHaveTextContent('Bình'));
     fireEvent.change(await screen.findByLabelText(viCopy.checkout.note), { target: { value: 'Để ở bảo vệ' } });
     fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
     await placeOrderClick();

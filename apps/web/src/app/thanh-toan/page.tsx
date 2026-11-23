@@ -232,8 +232,12 @@ export default function CheckoutPage() {
       else if (def) setAddressId(def.id);
     }
   }, [addrQ.data, addressId]);
-  // Mọi lối "về giỏ hàng" của màn này (sửa món, giá đổi, đổi lựa chọn) ghi lại lựa chọn đang có để lúc quay lại không phải chọn lại.
-  const keepChoices = () => saveCheckoutDraft(tabStorage(), userId, { addressId, note }, Date.now());
+  // Lối "về giỏ hàng để sửa" (món hết hàng, vượt suất, giá đổi) ghi lại lựa chọn đang có để lúc quay lại không phải chọn lại, như Mini App.
+  // Ctrl/Cmd/Shift-click mở tab khác: tab này vẫn ở Thanh toán nên không ghi, kẻo nháp nằm lại cho lần mở màn sau.
+  const keepChoices = (e?: React.MouseEvent) => {
+    if (e && (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return;
+    saveCheckoutDraft(tabStorage(), userId, { addressId, note }, Date.now());
+  };
 
   // Gian hàng đang mua qua — quyết định combo giảm giá và việc CTV có được ghi nhận đơn hay
   // không. Đọc một lần khi mount: sessionStorage không phải state phản ứng, và giá trị chỉ đổi
@@ -1059,7 +1063,7 @@ export default function CheckoutPage() {
           {itemIds && cart && (
             <p className="mt-2 text-caption text-[color:var(--color-text-secondary)]">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
-              <BackAwareLink href="/gio-hang" onClick={keepChoices} className="font-semibold text-[color:var(--color-text-brand)] underline">
+              <BackAwareLink href="/gio-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
                 Đổi lựa chọn
               </BackAwareLink>
             </p>

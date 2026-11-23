@@ -3,7 +3,16 @@ import { CHECKOUT_DRAFT_KEY, CHECKOUT_DRAFT_TTL_MS, draftAddressId, saveCheckout
 
 function memory(): DraftStorageLike & { map: Map<string, string> } {
   const map = new Map<string, string>();
-  return { map, getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v), removeItem: (k) => void map.delete(k) };
+  return {
+    map,
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, v),
+    removeItem: (k) => void map.delete(k),
+    get length() {
+      return map.size;
+    },
+    key: (i) => [...map.keys()][i] ?? null,
+  };
 }
 
 const T0 = 1_700_000_000_000;
@@ -18,11 +27,16 @@ describe('checkout-draft — giữ lựa chọn thanh toán qua một lần sang
     expect(s.map.size).toBe(0);
   });
 
-  it('theo tài khoản: tài khoản khác trên cùng máy không nhận lựa chọn của người trước', () => {
+  it('theo tài khoản: tài khoản khác trên cùng tab không nhận lựa chọn của người trước, và nháp sót đó bị xoá (máy dùng chung)', () => {
     const s = memory();
-    saveCheckoutDraft(s, 'u1', { addressId: 'a2', note: '' }, T0);
+    saveCheckoutDraft(s, 'u1', { addressId: 'a2', note: 'SĐT bảo vệ 0912345678' }, T0);
     expect(takeCheckoutDraft(s, 'u2', T0)).toBeNull();
-    expect(takeCheckoutDraft(s, 'u1', T0)).not.toBeNull();
+    expect(s.map.size).toBe(0);
+    saveCheckoutDraft(s, 'u1', { addressId: 'a2', note: '' }, T0);
+    s.map.set('tubu_other_key', 'giữ');
+    saveCheckoutDraft(s, 'u2', { addressId: 'b1', note: '' }, T0);
+    expect([...s.map.keys()].sort()).toEqual([`${CHECKOUT_DRAFT_KEY}:u2`, 'tubu_other_key']);
+    expect(takeCheckoutDraft(s, 'u2', T0)).toEqual({ addressId: 'b1', note: '' });
   });
 
   it('chưa có tài khoản hoặc không có bộ nhớ: không ghi, không đọc, không ném lỗi', () => {
@@ -34,7 +48,8 @@ describe('checkout-draft — giữ lựa chọn thanh toán qua một lần sang
     expect(takeCheckoutDraft(s, null, T0)).toBeNull();
   });
 
-  it('quá 30 phút (hoặc mốc giờ ở tương lai) thì bỏ, và vẫn xoá khỏi bộ nhớ', () => {
+  it('quá hạn 10 phút (hoặc mốc giờ ở tương lai) thì bỏ, và vẫn xoá khỏi bộ nhớ', () => {
+    expect(CHECKOUT_DRAFT_TTL_MS).toBe(10 * 60_000);
     const s = memory();
     saveCheckoutDraft(s, 'u1', { addressId: 'a1', note: 'x' }, T0);
     expect(takeCheckoutDraft(s, 'u1', T0 + CHECKOUT_DRAFT_TTL_MS + 1)).toBeNull();

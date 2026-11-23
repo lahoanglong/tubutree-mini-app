@@ -78,6 +78,7 @@ describe('scripts/ci/mini-lazy-chunks.cjs (chunk lười Mini App không bị k�
     ['import trần', (n: string) => `import"./${n}";`],
     ['import * as', (n: string) => `import*as d from"./${n}";`],
     ['export lại', (n: string) => `export{draw}from"./${n}";`],
+    ['import dính liền sau comment giấy phép', (n: string) => `/*! (c) x */import"./${n}";`],
   ])('chunk khác %s chunk lười: thoát 1, nêu chunk import', (_kind, stmt) => {
     const r = run((c) => c.set(file('share-sheet'), `${stmt(file('share-poster-png'))}const x=1;`));
     expect(r.status).toBe(1);

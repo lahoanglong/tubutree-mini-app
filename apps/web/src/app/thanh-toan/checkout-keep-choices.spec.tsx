@@ -57,6 +57,23 @@ const noteBox = (r: Rendered) => r.container.querySelector('textarea') as HTMLTe
 const sentBody = (call = 0) => m.placeOrder.mock.calls[call]![0] as { addressId: string; note?: string; paymentMethod: string };
 const seedDraft = (draft: Record<string, unknown>) => sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), ...draft }));
 const describedText = (el: Element) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? null;
+/** Khách tự đổi địa chỉ trên màn (nút Đổi ở dòng địa chỉ, rồi chọn trong tấm). */
+const pickAddress = async (r: Rendered, recipient: string) => {
+  const open = [...r.container.querySelectorAll('button')].find((b) => /Đổi địa chỉ giao hàng/.test(b.getAttribute('aria-label') ?? b.textContent ?? ''))!;
+  click(open);
+  await flush(4);
+  click([...document.querySelectorAll('[role="radio"]')].find((el) => el.textContent?.includes(recipient))!);
+  await flush(4);
+};
+/** jsdom không chuyển trang: chặn điều hướng mặc định ở pha bắt, onClick của lối vẫn chạy. */
+const clickWithoutNavigating = (el: Element, init: MouseEventInit = {}) => {
+  const stop = (e: Event) => e.preventDefault();
+  document.addEventListener('click', stop, { capture: true });
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init }));
+  document.removeEventListener('click', stop, { capture: true });
+};
+const failWithFlashLimit = () =>
+  m.placeOrder.mockRejectedValue(new ApiError('Giá Giờ vàng chỉ áp cho 2 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.', 400, 'FLASH_LIMIT'));
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -98,20 +115,17 @@ describe('/thanh-toan — giữ lựa chọn qua một lần sang giỏ sửa h�
   });
 
   it('đặt lỗi vì giỏ (FLASH_LIMIT) rồi bấm "Về giỏ hàng để sửa": địa chỉ và ghi chú được ghi; mở lại màn thì lấy lại, cách trả tiền về COD để khách tự chọn lại', async () => {
-    m.placeOrder.mockRejectedValue(new ApiError('Giá Giờ vàng chỉ áp cho 2 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.', 400, 'FLASH_LIMIT'));
-    seedDraft({ addressId: 'a2', note: '' });
+    failWithFlashLimit();
     const r = await mount();
+    await pickAddress(r, 'Bình');
+    expect(r.container.textContent).toContain('9 Hàng Bài');
     typeInto(noteBox(r), 'Để ở bảo vệ');
     click(radio(r, 'Chuyển khoản ngân hàng'));
     click(placeButton(r));
     await flush(8);
     const back = r.container.querySelector<HTMLAnchorElement>('[data-testid="checkout-cart-issue"] a')!;
     expect(back.getAttribute('href')).toBe('/gio-hang');
-    // jsdom không chuyển trang: chặn điều hướng mặc định ở pha bắt, onClick của lối vẫn chạy.
-    const stop = (e: Event) => e.preventDefault();
-    document.addEventListener('click', stop, { capture: true });
-    click(back);
-    document.removeEventListener('click', stop, { capture: true });
+    clickWithoutNavigating(back);
     const saved = JSON.parse(sessionStorage.getItem(KEY)!) as Record<string, unknown>;
     expect(saved).toMatchObject({ addressId: 'a2', note: 'Để ở bảo vệ' });
     expect(saved).not.toHaveProperty('payment');
@@ -124,6 +138,20 @@ describe('/thanh-toan — giữ lựa chọn qua một lần sang giỏ sửa h�
     click(placeButton(again));
     await flush(4);
     expect(sentBody()).toMatchObject({ addressId: 'a2', note: 'Để ở bảo vệ', paymentMethod: 'COD' });
+  });
+
+  it('Ctrl/Cmd-click "Về giỏ hàng để sửa" (mở tab khác): tab này vẫn ở Thanh toán nên không ghi nháp', async () => {
+    failWithFlashLimit();
+    const r = await mount();
+    typeInto(noteBox(r), 'Để ở bảo vệ');
+    click(placeButton(r));
+    await flush(8);
+    const back = r.container.querySelector<HTMLAnchorElement>('[data-testid="checkout-cart-issue"] a')!;
+    clickWithoutNavigating(back, { ctrlKey: true });
+    clickWithoutNavigating(back, { metaKey: true });
+    expect(sessionStorage.getItem(KEY)).toBeNull();
+    clickWithoutNavigating(back);
+    expect(sessionStorage.getItem(KEY)).not.toBeNull();
   });
 
   it('bản nháp của tài khoản khác trên cùng tab không được dùng', async () => {
