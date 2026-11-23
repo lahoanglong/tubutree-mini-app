@@ -597,8 +597,9 @@ test.describe('Web: mua chung', () => {
     api.get('/group-buy/g2', group('g2'));
     await page.goto('/mua-chung/g2');
     await expect(page.getByText('Bạn được mời vào nhóm này')).toBeVisible();
-    await expect(page.getByText('Sản phẩm g2')).toBeVisible();
-    await expect(page.getByText('Sản phẩm g1')).toBeVisible();
+    // exact: khung "Tin mời sẽ gửi" của nhóm được mời (w24-03) cũng chứa tên sản phẩm ("Mua chung Sản phẩm g2 giảm 20%").
+    await expect(page.getByText('Sản phẩm g2', { exact: true })).toBeVisible();
+    await expect(page.getByText('Sản phẩm g1', { exact: true })).toBeVisible();
   });
 
   test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {
