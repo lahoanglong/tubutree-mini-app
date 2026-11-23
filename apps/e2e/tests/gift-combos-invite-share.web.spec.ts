@@ -47,6 +47,13 @@ function member(api: MockApi) {
   api.allowUnmocked('POST /events');
 }
 
+// HTML /bo-qua-tang mang dữ liệu máy chủ (DB e2e thật) với initialDataUpdatedAt = lúc dựng; trình duyệt chỉ tải lại qua mock khi bản đó cũ hơn
+// staleTime 60 giây của giftLandingQuery. Bản dựng mới hơn 60 giây (lượt chạy ngắn ngay sau build, hoặc ISR vừa làm mới) thì mock bị bỏ qua.
+// Đẩy giờ trình duyệt lên 5 phút để lần dựng nào cũng đã "cũ": trang luôn tải lại và vẽ đúng dữ liệu mock, không phụ thuộc thứ tự chạy.
+async function pastServerFreshness(page: Page) {
+  await page.clock.install({ time: Date.now() + 5 * 60_000 });
+}
+
 async function signedIn(page: Page) {
   await page.context().addCookies([{ name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' }]);
   await page.addInitScript(() => {
@@ -66,6 +73,7 @@ for (const width of [320, 375]) {
     test('/bo-qua-tang: combo với giá cả bộ thật, hai mốc từ máy chủ, JSON-LD CollectionPage, nút 44px, không tràn ngang', async ({ page, api }) => {
       api.get('/bundles/gift-landing', LANDING);
       api.get('/config/public', publicConfig({}));
+      await pastServerFreshness(page);
       await page.goto('/bo-qua-tang');
       await expect(page.getByRole('heading', { level: 1, name: 'Bộ quà tặng & combo khởi đầu' })).toBeVisible({ timeout: 15_000 });
       const list = page.getByTestId('gift-combos-list');
@@ -105,6 +113,7 @@ for (const width of [320, 375]) {
     test('/bo-qua-tang 0 combo: trạng thái trống có lối sang Sản phẩm, mốc vẫn hiện', async ({ page, api }) => {
       api.get('/bundles/gift-landing', { ...LANDING, combos: [] });
       api.get('/config/public', publicConfig({}));
+      await pastServerFreshness(page);
       await page.goto('/bo-qua-tang');
       await expect(page.getByText('Chưa có combo nào đang mở bán')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('gift-combos-callout')).toHaveCount(2);

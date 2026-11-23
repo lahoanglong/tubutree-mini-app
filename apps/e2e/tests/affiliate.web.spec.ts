@@ -112,9 +112,18 @@ test.describe('Web khách: CTV', () => {
     await expect(page.getByText('Giao thành công')).toBeVisible();
     await page.getByRole('tab', { name: 'Chia sẻ' }).click();
     await expect(page.getByText('Chưa có link')).toBeVisible();
-    await page.getByRole('button', { name: '+ Tạo link' }).dblclick();
-    await expect(page.getByText('0 lượt bấm', { exact: true })).toBeVisible();
-    await expect(page.getByText(/\d+ đơn/)).toHaveCount(0);
+    // w21-03: "+ Tạo link" mở bộ tạo link (mặc định Sản phẩm); chọn "Trang chủ" rồi bấm đúp "Tạo link" vẫn chỉ tạo một link.
+    await page.getByRole('button', { name: '+ Tạo link' }).click();
+    const builder = page.getByRole('dialog', { name: 'Tạo link chia sẻ' });
+    await builder.getByRole('tab', { name: 'Trang chủ', exact: true }).click();
+    await builder.getByRole('button', { name: 'Tạo link', exact: true }).dblclick();
+    await expect(builder).toHaveCount(0);
+    const row = page.getByRole('listitem').filter({ hasText: '0 lượt bấm' });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('Trang chủ');
+    // Dòng link chỉ nói lượt bấm; số đơn là số chung của CTV, nằm ở dòng phễu.
+    await expect(row).not.toContainText(/\d+ đơn/);
+    await expect(page.getByTestId('ctv-funnel')).toContainText('1 đơn / 4 lượt bấm');
     const calls = api.callsTo('POST', '/affiliate/links');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ targetType: 'HOMEPAGE' });
