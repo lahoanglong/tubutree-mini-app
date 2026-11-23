@@ -22,6 +22,7 @@ import { isBusinessMessage, loadErrorText } from '@/lib/error-text';
 import { SupportHotline } from '@/components/support-hotline';
 import { takeTransferQrDelay } from '@tubutree/app-core/commerce/checkout-display';
 import { trackWebEvent } from '@/lib/analytics';
+import { CodSwitchAction } from '@/components/orders/cod-switch-action';
 
 export type BankPanelState = 'loading' | 'error' | 'ready' | 'paid' | 'closed';
 
@@ -67,6 +68,7 @@ export function BankTransferPanel({
   stickyCheck = false,
   loadingFallback,
   fetchQr,
+  codSwitch,
 }: {
   order: Pick<OrderDTO, 'code' | 'paymentMethod'>;
   onPaid?: () => void;
@@ -84,6 +86,11 @@ export function BankTransferPanel({
   loadingFallback?: ReactNode;
   /** Đơn đặt không đăng nhập: lấy QR bằng khoá theo dõi (GET /checkout/guest/orders/:code/bank-qr) thay cho phiên đăng nhập. */
   fetchQr?: (code: string) => Promise<BankQrDTO>;
+  /**
+   * Nút phụ đổi sang trả tiền khi nhận, hiện khi máy chủ báo `codSwitchable`: `run` là lời gọi đổi (khách đăng nhập hay khoá theo dõi), `onSettled`
+   * cho trang chứa chuyển trang hay tải lại đơn. Không truyền: không có nút.
+   */
+  codSwitch?: { run: () => Promise<unknown>; onSettled: (result: 'switched' | 'stale') => void };
 }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, refetch, isFetching, error } = useQuery({
@@ -372,6 +379,9 @@ export function BankTransferPanel({
         >
           {checkResultText}
         </p>
+      )}
+      {codSwitch && data.codSwitchable && (
+        <CodSwitchAction total={data.amount} switchToCod={codSwitch.run} onSettled={codSwitch.onSettled} className="mt-3 px-2 md:px-0" />
       )}
       {stickyCheck && (
         <StickyActionBar label="Kiểm tra thanh toán">

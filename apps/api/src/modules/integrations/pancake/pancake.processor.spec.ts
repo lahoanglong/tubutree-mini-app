@@ -4,6 +4,7 @@ import { PancakeProcessor } from './pancake.processor';
 import { OPS_WHERE, opsAlertSlot } from '../../ops/ops-alert-line';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
+import { COD_SWITCH_HISTORY_NOTE } from '../../orders/cod-switch';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 import type { LoyaltyService } from '../../loyalty/loyalty.service';
@@ -2255,5 +2256,53 @@ describe('PancakeProcessor — payload webhook thiếu trường hoặc kiểu l
       expect(t.prisma.pancakeWebhookEvent.updateMany).not.toHaveBeenCalled();
       expect(statusFlips(t.txUpdateMany)).toHaveLength(0);
     });
+  });
+});
+
+describe('PancakeProcessor.onPaymentReconcile — đơn khách đã đổi từ chuyển khoản sang COD', () => {
+  const switchedOrder = {
+    id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CONFIRMED',
+    paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 100000, shippedAt: null,
+  };
+  /** Dòng lịch sử của lần đổi: chỉ trả khi hỏi đúng dấu đổi, các câu hỏi lịch sử khác vẫn như đơn thường. */
+  const markSwitched = (prisma: PrismaService) =>
+    (prisma.orderStatusHistory.findFirst as jest.Mock).mockImplementation(async (args: { where?: { note?: string } }) =>
+      args?.where?.note === COD_SWITCH_HISTORY_NOTE ? { id: 'h1' } : null,
+    );
+
+  it('tiền chuyển khoản về trước khi giao → lật PAID, trạng thái giữ CONFIRMED (kho thôi thu COD)', async () => {
+    const { proc, prisma, orderUpdateMany } = setup(switchedOrder);
+    markSwitched(prisma);
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+    const flips = statusFlips(orderUpdateMany);
+    expect(flips).toHaveLength(1);
+    expect(flips[0]!.data).toMatchObject({ paymentStatus: 'PAID' });
+    expect(flips[0]!.data).not.toHaveProperty('status');
+  });
+
+  it('đơn COD từ đầu (không có dấu đổi) → bỏ qua như cũ', async () => {
+    const { proc, orderUpdateMany } = setup(switchedOrder);
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+    expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+  });
+
+  it.each([
+    ['đang giao', { status: 'SHIPPING' }],
+    ['đã rời kho', { shippedAt: new Date() }],
+  ])('đơn đã đổi nhưng %s → bỏ qua ("đã trả" có thể là tiền thu hộ của hãng)', async (_name, over) => {
+    const { proc, prisma, orderUpdateMany } = setup({ ...switchedOrder, ...over });
+    markSwitched(prisma);
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+    expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+  });
+
+  it('chuyển một phần sau khi đổi → ghi số đã nhận + "Cần xử lý" sửa số thu COD; không mời khách chuyển thêm', async () => {
+    const { proc, prisma, orderUpdateMany, notifications } = setup(switchedOrder);
+    markSwitched(prisma);
+    await proc.onPaymentReconcile({ id: 'p1', prepaid: 40000 });
+    expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+    expect(orderUpdateMany).toHaveBeenCalledWith({ where: { id: 'o1', paymentStatus: 'UNPAID' }, data: { pancakePaidReported: 40000 } });
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('đã đổi sang COD')]);
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_UNDERPAID', expect.anything());
   });
 });

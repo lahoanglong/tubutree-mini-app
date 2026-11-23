@@ -333,3 +333,29 @@ describe('PancakeSyncHooks — đơn gian hàng đối tác tự giao (D4) khôn
     expect(t.queue.added.map((j) => j.name)).toEqual(['payment']);
   });
 });
+
+describe('PancakeSyncHooks.afterCodSwitch', () => {
+  it('xếp job cod-switch cho đơn kho Tubu', async () => {
+    const t = setup({ pancakeOrderId: 'pk-1' });
+    await t.hooks.afterCodSwitch('o1');
+    expect(t.queue.added).toEqual([expect.objectContaining({ name: 'cod-switch', data: { orderId: 'o1' } })]);
+  });
+
+  it('gian hàng đối tác tự giao: không xếp gì', async () => {
+    const t = setup({ fulfiller: 'MERCHANT', pancakeOrderId: null });
+    await t.hooks.afterCodSwitch('o1');
+    expect(t.queue.added).toEqual([]);
+  });
+
+  it('xếp lỗi mà đơn đã lên Pancake → "Cần xử lý Pancake" để sửa tay ghi chú; chưa lên thì thôi (lần đẩy sau dựng thân COD)', async () => {
+    const onPancake = setup({ pancakeOrderId: 'pk-1' });
+    onPancake.queue.add.mockRejectedValue(new Error('redis down'));
+    await expect(onPancake.hooks.afterCodSwitch('o1')).resolves.toBeUndefined();
+    expect(onPancake.row().pancakeAttention).toEqual(expect.stringContaining('thu COD'));
+
+    const notYet = setup({ pancakeOrderId: null });
+    notYet.queue.add.mockRejectedValue(new Error('redis down'));
+    await expect(notYet.hooks.afterCodSwitch('o1')).resolves.toBeUndefined();
+    expect(notYet.row().pancakeAttention ?? null).toBeNull();
+  });
+});

@@ -765,3 +765,59 @@ describe('Thanh toán chuyển khoản: chạm đúp cùng nhịp không gọi l
     expect(await screen.findByText('Đã lưu ảnh QR vào máy.')).toBeInTheDocument();
   });
 });
+
+const cod = vi.hoisted(() => ({ post: vi.fn() }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: vi.fn(), post: cod.post, put: vi.fn(), patch: vi.fn(), delete: vi.fn() } }));
+
+describe('Thanh toán chuyển khoản: đổi sang trả tiền khi nhận (COD)', () => {
+  const CTA = 'Đổi sang trả tiền khi nhận (COD)';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cod.post.mockReset();
+    mocks.getBankQr.mockReset();
+  });
+
+  it('máy chủ không mời đổi (API cũ, đơn không đủ điều kiện): không có nút', async () => {
+    mocks.getBankQr.mockResolvedValue(QR);
+    renderPage();
+    await screen.findByAltText('VietQR');
+    expect(screen.queryByRole('button', { name: CTA })).toBeNull();
+  });
+
+  it('đổi được: nút cao tối thiểu 44px, mở tấm xác nhận nêu số tiền, xác nhận thì gọi API rồi mở chi tiết đơn', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, codSwitchable: true });
+    cod.post.mockResolvedValue({ code: 'TT001', status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 120_000 });
+    renderPage();
+    const cta = await screen.findByRole('button', { name: CTA });
+    expect(Number.parseInt(cta.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(cta);
+    expect(await screen.findByText(/Bạn trả 120\.000/)).toBeInTheDocument();
+    expect(cod.post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Đổi sang COD' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/order/TT001', { replace: true }));
+    expect(cod.post).toHaveBeenCalledTimes(1);
+    expect(cod.post).toHaveBeenCalledWith('/orders/TT001/switch-to-cod', {});
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+  });
+
+  it('"Giữ chuyển khoản": đóng tấm, không gọi API', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, codSwitchable: true });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: CTA }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Giữ chuyển khoản' }));
+    expect(cod.post).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('máy chủ từ chối (409: tiền vừa về): báo đúng câu của máy chủ, ở lại trang', async () => {
+    const PAID = 'Tubu đã nhận thanh toán của đơn này, bạn không cần đổi cách trả nữa.';
+    mocks.getBankQr.mockResolvedValue({ ...QR, codSwitchable: true });
+    cod.post.mockRejectedValue(new HttpError('Request failed', 'ERR_BAD_REQUEST', { status: 409, data: { message: PAID, code: 'COD_SWITCH_REFUSED' } }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: CTA }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi sang COD' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: PAID, type: 'error', position: 'top' }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});

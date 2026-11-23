@@ -83,6 +83,18 @@ describe('BankTransferService.getBankQr', () => {
     expect(r.qrImageUrl).toContain('img.vietqr.io');
   });
 
+  it('codSwitchable: đơn chuyển khoản chưa trả, chưa mở lệnh thanh toán, trong trần thu hộ của người xem', async () => {
+    const pending = { ...ORDER, status: 'PENDING_PAYMENT', createdAt: new Date(), fulfiller: 'TUBU', placedForCustomer: false, autoCancelBlockedAt: null, paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null, pancakePaidReported: null };
+    const prismaWith = (order: unknown, attempts: number) =>
+      ({ ...makePrisma(order), paymentAttempt: { count: jest.fn().mockResolvedValue(attempts) } }) as unknown as PrismaService;
+    const qr = (order: unknown, attempts = 0, codMax?: number) => new BankTransferService(prismaWith(order, attempts), makeConfig()).getBankQr('TUBU250625001', 'u1', codMax);
+    expect((await qr(pending)).codSwitchable).toBe(true);
+    expect((await qr(pending, 1)).codSwitchable).toBe(false);
+    expect((await qr(pending, 0, 200_000)).codSwitchable).toBe(false);
+    expect((await qr({ ...pending, paymentStatus: 'PAID', status: 'CONFIRMED' })).codSwitchable).toBe(false);
+    expect((await qr({ ...pending, pancakePaidReported: 100_000 })).codSwitchable).toBe(false);
+  });
+
   // U1-B04: khách chuyển thiếu 100k/199k rồi quét lại QR cũ chuyển đủ 199k → Pancake cộng dồn 299k → khoản chuyển dư.
   it('đơn đã nhận một phần → amount, trường 54 của VietQR và ảnh QR đều là phần còn thiếu, kèm paidSoFar', async () => {
     const order = { ...ORDER, total: 199000, pancakePaidReported: 100000 };
@@ -317,7 +329,7 @@ describe('BankTransferService.getTransferPreview (cờ checkout.transfer_preview
   it('cờ bật hay tắt thì câu trả lời của GET /payments/bank-qr/:code vẫn giữ nguyên bộ khoá cũ', async () => {
     const keys = async (o: Record<string, unknown>) =>
       Object.keys(await new BankTransferService(makePrisma(ORDER), makeConfig(o)).getBankQr('TUBU250625001', 'u1')).sort();
-    const expected = ['amount', 'bank', 'memo', 'orderCode', 'paidSoFar', 'paymentDeadline', 'paymentStatus', 'qrImageUrl', 'qrString', 'serverNow'];
+    const expected = ['amount', 'bank', 'codSwitchable', 'memo', 'orderCode', 'paidSoFar', 'paymentDeadline', 'paymentStatus', 'qrImageUrl', 'qrString', 'serverNow'];
     expect(await keys({})).toEqual(expected);
     expect(await keys(ON)).toEqual(expected);
   });

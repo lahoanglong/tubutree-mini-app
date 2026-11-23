@@ -95,6 +95,25 @@ export class GuestCheckoutController {
     return this.guest.bankQr(codeOf(code), key);
   }
 
+  /** Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận (COD). Không đổi được: 409 COD_SWITCH_REFUSED kèm `reason`. */
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Header('Cache-Control', 'no-store')
+  @Post('orders/:code/switch-to-cod')
+  @HttpCode(HttpStatus.OK)
+  switchToCod(@Param('code') code: string, @Headers('x-order-key') key: string | undefined) {
+    return this.guest.switchToCod(codeOf(code), key);
+  }
+
+  /** Món mua lại được của đơn đã giao/đã huỷ (không ghi gì): trình duyệt thêm vào giỏ khách. */
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  @Header('Cache-Control', 'no-store')
+  @Get('orders/:code/reorder')
+  reorder(@Param('code') code: string, @Headers('x-order-key') key: string | undefined) {
+    return this.guest.reorderLines(codeOf(code), key);
+  }
+
   /** Khách mất đường dẫn theo dõi (đổi máy, xoá dữ liệu trình duyệt): tra bằng mã đơn + SĐT đặt hàng, sai thì cùng một 404. */
   @Public()
   @LookupThrottle(lookupThrottleId, GUEST_LOOKUP_CODE_LIMIT, GUEST_LOOKUP_IP_LIMIT, {

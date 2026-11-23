@@ -5,7 +5,7 @@ import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
 import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, PancakePushBusyError, PancakePushSettlingError } from './pancake-outbound';
-import { ATTENTION_PUSH_FAILED } from './pancake-attention';
+import { ATTENTION_COD_SWITCH_PENDING, ATTENTION_PUSH_FAILED } from './pancake-attention';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
@@ -2225,5 +2225,61 @@ describe('PancakeOrderService — đơn Pancake khớp mã đơn Tubu nhưng mã
     t.client.searchOrders.mockResolvedValue([{ id: {}, status: 6, custom_id: 'TUBU1' }]);
     await t.svc.cancelOnPancake('o1');
     expect(t.row().pancakeCancelStatus).toBe(PANCAKE_CANCEL.NOT_FOUND);
+  });
+});
+
+describe('PancakeOrderService — khách đổi đơn chuyển khoản chưa trả sang COD', () => {
+  const switched = { status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', pancakeOrderId: 'pk-1' };
+
+  it('syncCodSwitch: PUT ghi chú "[THU COD …]" lên đơn Pancake, bỏ dấu "chờ chuyển khoản"', async () => {
+    const t = setup(switched);
+    await t.svc.syncCodSwitch('o1');
+    expect(t.client.updateOrder).toHaveBeenCalledTimes(1);
+    const [id, payload] = t.client.updateOrder.mock.calls[0]!;
+    expect(id).toBe('pk-1');
+    expect(JSON.stringify(payload)).toContain('[THU COD');
+    expect(JSON.stringify(payload)).not.toContain('CHỜ CHUYỂN KHOẢN');
+    expect(t.row().pancakeAttention ?? null).toBeNull();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['chưa lên Pancake (lần đẩy sau dựng thân COD)', { pancakeOrderId: null }],
+    ['khách vẫn chuyển khoản sau khi đổi (job thanh toán lo)', { paymentStatus: 'PAID' }],
+    ['đã huỷ', { status: 'CANCELLED' }],
+    ['không còn là COD', { paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT' }],
+  ])('syncCodSwitch: %s → không PUT', async (_name, over) => {
+    const t = setup({ ...switched, ...over });
+    await t.svc.syncCodSwitch('o1');
+    expect(t.client.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it('syncCodSwitch: lượt cuối vẫn lỗi → "Cần xử lý Pancake" bảo sửa tay; lượt chưa cuối chỉ ném lại', async () => {
+    const failing = { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 503', true, false, 503)) };
+    const early = setup(switched, { client: failing });
+    await expect(early.svc.syncCodSwitch('o1', false)).rejects.toBeInstanceOf(PancakeApiError);
+    expect(early.row().pancakeAttention ?? null).toBeNull();
+    const last = setup(switched, { client: failing });
+    await expect(last.svc.syncCodSwitch('o1', true)).rejects.toBeInstanceOf(PancakeApiError);
+    expect(last.row().pancakeAttention).toEqual(expect.stringContaining(ATTENTION_COD_SWITCH_PENDING));
+  });
+
+  it('khách đổi sang COD trong lúc lệnh tạo đơn đang bay → gắn mã xong thì xếp job cod-switch sửa ghi chú', async () => {
+    const t = setup({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' });
+    t.client.createOrder.mockImplementation(async () => {
+      Object.assign(t.row(), { paymentMethod: 'COD', status: 'CONFIRMED' });
+      return { id: 'pk-new' };
+    });
+    await t.svc.pushOrder('o1');
+    expect(JSON.stringify(t.body())).toContain('CHỜ CHUYỂN KHOẢN');
+    expect(t.row().pancakeOrderId).toBe('pk-new');
+    expect(t.queue.added).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'cod-switch', data: { orderId: 'o1' } })]));
+  });
+
+  it('đơn COD từ đầu, hay chuyển khoản vẫn chờ tiền: tạo xong không xếp cod-switch', async () => {
+    for (const order of [{}, { status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' }]) {
+      const t = setup(order);
+      await t.svc.pushOrder('o1');
+      expect(t.queue.added.filter((j) => j.name === 'cod-switch')).toEqual([]);
+    }
   });
 });

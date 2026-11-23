@@ -16,6 +16,8 @@ export interface BankQr {
   memo: string;
   qrString: string;
   qrImageUrl: string;
+  /** Đơn đổi được sang trả tiền khi nhận (nút phụ dưới mã QR). API cũ không trả. */
+  codSwitchable?: boolean;
 }
 
 export const getBankQr = (code: string) =>

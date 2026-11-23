@@ -10,3 +10,15 @@ export const BANK_QR_LOAD_FAILED = 'Chưa tải được mã QR. Bạn chép s�
 
 export const BANK_QR_SAVED = 'Đã lưu ảnh QR vào máy.';
 export const BANK_QR_SAVE_FAILED = 'Chưa lưu được. Bạn nhấn giữ vào ảnh QR để lưu, hoặc chụp màn hình nhé.';
+
+/**
+ * Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận (COD): nút phụ ở trang mã QR và chi tiết đơn (Mini App, web, trang theo dõi của khách
+ * vãng lai), luôn qua một tấm xác nhận. Câu xác nhận nhắc khách đã chuyển rồi thì không đổi, để không trả hai lần.
+ */
+export const COD_SWITCH_CTA = 'Đổi sang trả tiền khi nhận (COD)';
+export const COD_SWITCH_CONFIRM_TITLE = 'Đổi sang trả tiền khi nhận?';
+export const codSwitchConfirmBody = (total: string) =>
+  `Bạn trả ${total} cho shipper khi nhận hàng, không cần chuyển khoản nữa. Nếu bạn đã chuyển khoản rồi thì đừng đổi: Tubu tự xác nhận khi tiền về.`;
+export const COD_SWITCH_CONFIRM = 'Đổi sang COD';
+export const COD_SWITCH_KEEP = 'Giữ chuyển khoản';
+export const COD_SWITCH_DONE = 'Đã đổi sang trả tiền khi nhận. Đơn đã được xác nhận.';

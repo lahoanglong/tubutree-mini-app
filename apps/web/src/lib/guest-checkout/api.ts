@@ -1,5 +1,5 @@
 import { syncServerClock } from '@tubutree/app-core/server-clock';
-import type { GiftTrialSummaryDTO, GuestOrderLookupDTO, GuestOrderTrackDTO } from '@tubutree/shared-types';
+import type { CodSwitchResultDTO, GiftTrialSummaryDTO, GuestOrderLookupDTO, GuestOrderTrackDTO, GuestReorderDTO } from '@tubutree/shared-types';
 import { apiFetch } from '../client-api';
 import type { BankQrDTO, QuoteShipment } from '../shop-client';
 import { guestDeviceId } from './keys';
@@ -107,6 +107,23 @@ export const guestBankQr = async (code: string, key: string) => {
   syncServerClock(qr?.serverNow);
   return qr;
 };
+
+/** Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận bằng khoá theo dõi. Không đổi được: ApiError 409 kèm câu cho khách; sai khoá: 404. */
+export const guestSwitchToCod = (code: string, key: string) =>
+  apiFetch<CodSwitchResultDTO>(`/checkout/guest/orders/${encodeURIComponent(code)}/switch-to-cod`, {
+    method: 'POST',
+    auth: false,
+    cache: 'no-store',
+    headers: { 'x-order-key': key },
+  });
+
+/** Món mua lại được của đơn đã giao/đã huỷ (đã bỏ quà 0đ, món ngừng bán và hết hàng; số lượng kẹp theo tồn). */
+export const guestReorder = (code: string, key: string) =>
+  apiFetch<GuestReorderDTO>(`/checkout/guest/orders/${encodeURIComponent(code)}/reorder`, {
+    auth: false,
+    cache: 'no-store',
+    headers: { 'x-order-key': key },
+  });
 
 /** Tra đơn bằng mã đơn + SĐT đặt hàng (khách mất đường dẫn theo dõi). Sai mã hay sai SĐT: ApiError 404. */
 export const guestLookupOrder = (body: { orderCode: string; phone: string }) =>

@@ -19,6 +19,7 @@ import { cancelReasonNote } from './cancel-reasons';
 import { customerCancelReason } from './customer-cancel-reason';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
+import { codSwitchEligible } from './cod-switch';
 import { refundNote } from './order-returns.service';
 import { pendingPaymentDeadlines } from './pending-payment-ttl';
 import { cancelHandover } from './order-transition';
@@ -123,6 +124,8 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   paymentDeadline?: string | null;
   /** Người xem tự huỷ được đơn này không (customerCancelBlock) — app/web chỉ bày nút "Hủy đơn" khi true (R3-CANCEL-2). */
   canCancel: boolean;
+  /** Chỉ chi tiết đơn: đơn chuyển khoản chưa trả này đổi được sang trả tiền khi nhận (COD) bằng POST /orders/:code/switch-to-cod (`codSwitchEligible`). */
+  codSwitchable?: boolean;
   /**
    * Chỉ danh sách đơn, chỉ đơn đã nhận mua lẻ cho chính mình (REVIEWABLE_ORDER): số sản phẩm của đơn còn chờ khách đánh giá (`pendingReviewCounts`),
    * cho nút "Đánh giá (n SP)" ở thẻ đơn. Đơn khác không có trường này.
@@ -330,7 +333,7 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey, codSwitchable] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
@@ -338,6 +341,7 @@ export class OrdersService {
       this.statusTimesOf(order),
       this.cancelReasonOf(order),
       this.journeyOf(order),
+      codSwitchEligible(this.prisma, order),
     ]);
     return {
       ...view!,
@@ -347,6 +351,7 @@ export class OrdersService {
       ...fulfilment,
       pointsReturnReversed,
       ...journey,
+      codSwitchable,
     };
   }
 

@@ -61,6 +61,8 @@ import { RefillSwapLink } from '@/components/refill/refill-swap-link';
 import { useCartRefill } from '@/components/refill/use-cart-refill';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { runGuestMerge, takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
+import { takeGuestReorderNote, type GuestReorderNote } from '@/lib/guest-cart/reorder';
+import { GuestReorderNoteBox } from '@/components/orders/guest-reorder-note';
 import { readGuestCart } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 
@@ -141,6 +143,9 @@ export default function CartPage() {
   const guestLines = useGuestCartLines();
   // Món chọn lúc chưa đăng nhập vừa chuyển vào giỏ tài khoản mà có món không chuyển đủ: báo một lần ở đầu giỏ.
   const [mergeNote, setMergeNote] = useState<GuestMergeNote | null>(null);
+  // "Mua lại đơn này" ở /don/<mã> có món không thêm được: báo một lần ở đầu giỏ khách.
+  const [reorderNote, setReorderNote] = useState<GuestReorderNote | null>(null);
+  useEffect(() => setReorderNote(takeGuestReorderNote()), []);
   const queryClient = useQueryClient();
   useEffect(() => {
     if (phase === 'authenticated') setMergeNote(takeGuestMergeNote());
@@ -372,7 +377,14 @@ export default function CartPage() {
     return (
       <Shell>
         {guestCart.enabled ? (
-          <GuestCartView empty={<EmptyCart />} gridClassName={CART_GRID} />
+          <>
+            {reorderNote && (
+              <div className="mb-3">
+                <GuestReorderNoteBox note={reorderNote} testId="guest-reorder-note" />
+              </div>
+            )}
+            <GuestCartView empty={<EmptyCart />} gridClassName={CART_GRID} />
+          </>
         ) : (
           <LoginRequired message="Đăng nhập để xem giỏ hàng của bạn." returnTo="/gio-hang" />
         )}

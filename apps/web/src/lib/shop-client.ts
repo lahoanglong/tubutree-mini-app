@@ -6,6 +6,7 @@ import type {
   CartComboGroup,
   CheckoutPickupFields,
   CheckoutPickupQuote,
+  CodSwitchResultDTO,
   GiftTrialSummaryDTO,
   PendingGiftRedemptionDTO,
   QuotePendingGiftDTO,
@@ -465,6 +466,8 @@ export interface ShippingEvent {
 export interface OrderDetailDTO extends OrderDTO {
   /** Giờ đơn chạm từng trạng thái lần đầu (ISO). API cũ chưa trả. */
   statusTimes?: Partial<Record<string, string>>;
+  /** Đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (`switchOrderToCod`). API cũ không trả. */
+  codSwitchable?: boolean;
   /** Lý do huỷ viết sẵn cho khách đọc (API đã lọc); API cũ chưa trả. */
   cancelReason?: string | null;
   id?: string;
@@ -626,11 +629,17 @@ export interface BankQrDTO {
   paymentDeadline?: string | null;
   /** Giờ máy chủ lúc trả lời; thiếu thì dùng đồng hồ trình duyệt. */
   serverNow?: string;
+  /** Đơn đổi được sang trả tiền khi nhận (nút phụ dưới mã QR). API cũ không trả. */
+  codSwitchable?: boolean;
 }
 export const getBankQr = async (code: string) => {
   const qr = await apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
   syncServerClock(qr?.serverNow);
   return qr;
 };
+
+/** Đổi đơn chuyển khoản chưa trả sang trả tiền khi nhận (COD). Không đổi được: ApiError 409 kèm câu cho khách. */
+export const switchOrderToCod = (code: string) =>
+  apiFetch<CodSwitchResultDTO>(`/orders/${encodeURIComponent(code)}/switch-to-cod`, { method: 'POST', body: {} });
 
 export { formatVnd } from './format-vnd';

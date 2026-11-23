@@ -19,7 +19,9 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
 import { ApiError } from '@/lib/client-api';
-import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
+import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, switchOrderToCod, type OrderDetailDTO } from '@/lib/shop-client';
+import { CodSwitchAction } from '@/components/orders/cod-switch-action';
+import { COD_SWITCH_DONE } from '@tubutree/app-core/bank-payment-copy';
 import {
   addressLine,
   buyerOrderStatusLabel,
@@ -149,6 +151,17 @@ export default function OrderDetailPage() {
     void qc.invalidateQueries({ queryKey: ['order', code] });
     void qc.invalidateQueries({ queryKey: ['orders'] });
   }, [qc, code]);
+  // Đổi sang COD xong thì nút biến mất theo đơn tải lại: giữ câu báo ở chỗ nút tới khi rời trang.
+  const [codSwitched, setCodSwitched] = useState(false);
+  const onCodSettled = useCallback(
+    (result: 'switched' | 'stale') => {
+      if (result === 'switched') setCodSwitched(true);
+      void qc.invalidateQueries({ queryKey: ['order', code] });
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+      void qc.invalidateQueries({ queryKey: ['bank-qr', code] });
+    },
+    [qc, code],
+  );
 
   // Đếm ngược theo giờ máy chủ chỉ khi đơn còn chờ khách chuyển khoản; hook phải đứng trước các return sớm.
   const deadlineLeft = useCountdown(
@@ -403,6 +416,14 @@ export default function OrderDetailPage() {
             <span className="tabular-nums">{formatVnd(o.total)}</span>
           </div>
           <Row label="Thanh toán" value={PAYMENT_METHOD_NAME[o.paymentMethod] ?? o.paymentMethod} />
+          {o.codSwitchable && !codSwitched && (
+            <CodSwitchAction total={o.total} switchToCod={() => switchOrderToCod(o.code)} onSettled={onCodSettled} className="pt-1" />
+          )}
+          {codSwitched && (
+            <p role="status" data-testid="cod-switch-done" className="rounded-control bg-success-bg px-3 py-2 text-sm text-success-fg">
+              {COD_SWITCH_DONE}
+            </p>
+          )}
           {o.paymentStatus && (
             <div className="max-md:hidden">
               <PaymentStatusRow order={o} />

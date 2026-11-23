@@ -222,6 +222,21 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     }
   });
 
+  it('chờ chuyển khoản mà máy chủ mời đổi COD: nút phụ dưới dòng Thanh toán, không chen vào thanh nút đáy', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, ...STATES[0]!.order, createdAt: hoursFromNow(-1), updatedAt: hoursFromNow(-1), codSwitchable: true });
+    renderPage();
+    const cta = await screen.findByRole('button', { name: 'Đổi sang trả tiền khi nhận (COD)' });
+    expect(screen.getByTestId('cod-switch')).toContainElement(cta);
+    expect(within(bar()).queryByRole('button', { name: 'Đổi sang trả tiền khi nhận (COD)' })).toBeNull();
+  });
+
+  it('chờ chuyển khoản mà máy chủ không mời đổi (API cũ): không có nút đổi COD', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, ...STATES[0]!.order, createdAt: hoursFromNow(-1), updatedAt: hoursFromNow(-1) });
+    renderPage();
+    await screen.findByTestId('sticky-bar');
+    expect(screen.queryByTestId('cod-switch')).toBeNull();
+  });
+
   it('chờ chuyển khoản: hero ghi hạn trả kèm thời gian còn lại, nút chính nằm cạnh dòng còn bao lâu', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, ...STATES[0]!.order, createdAt: hoursFromNow(-1), updatedAt: hoursFromNow(-1) });
     renderPage();

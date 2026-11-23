@@ -104,7 +104,7 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
     const rbac = new RbacService(prisma, new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma)));
     auth = new AuthService(prisma, new JwtService(), env, {} as ZaloService, rbac);
     const bank = { getBankQr: jest.fn(async (code: string, userId: string) => ({ code, userId })) } as unknown as BankTransferService;
-    guest = new GuestCheckoutService(prisma, checkout, auth, bank, config, moduleRef.get(AnalyticsEventsService), env);
+    guest = new GuestCheckoutService(prisma, checkout, auth, bank, config, moduleRef.get(AnalyticsEventsService), env, {} as never);
 
     adminId = (await createRealUser(prisma, { role: 'ADMIN' })).id;
     giftVariationId = (await product(35_000, 500)).variationId;

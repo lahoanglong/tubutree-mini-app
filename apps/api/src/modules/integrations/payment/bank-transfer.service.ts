@@ -3,6 +3,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from './vietqr';
 import { pendingPaymentDeadline } from '../../orders/pending-payment-ttl';
+import { codSwitchEligible } from '../../orders/cod-switch';
+import { COD_MAX_PER_ORDER } from '../../checkout/checkout-split';
 
 /** Thẻ xem trước chuyển khoản ở màn thanh toán; mặc định tắt (seed createOnly + migration 20261118060137_checkout_transfer_preview_flag). */
 export const TRANSFER_PREVIEW_ENABLED_KEY = 'checkout.transfer_preview_enabled';
@@ -47,7 +49,8 @@ export class BankTransferService {
     return { enabled: true, bank: { name, accountName: holder } };
   }
 
-  async getBankQr(orderCode: string, userId: string) {
+  /** `codMax`: trần thu hộ của người xem cho cờ `codSwitchable` (khách vãng lai có trần riêng, thấp hơn). */
+  async getBankQr(orderCode: string, userId: string, codMax: number = COD_MAX_PER_ORDER) {
     const order = await this.prisma.order.findUnique({ where: { code: orderCode } });
     // Không lộ đơn người khác: sai chủ sở hữu coi như không tìm thấy.
     if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
@@ -116,7 +119,7 @@ export class BankTransferService {
       : '';
 
     // Hạn trùng với cron tự huỷ: trang QR nói rõ "chuyển trước HH:mm" để khách không chuyển sau khi đơn đã huỷ.
-    const paymentDeadline = await pendingPaymentDeadline(order, this.config);
+    const [paymentDeadline, codSwitchable] = await Promise.all([pendingPaymentDeadline(order, this.config), codSwitchEligible(this.prisma, order, codMax)]);
 
     return {
       orderCode: order.code,
@@ -130,6 +133,8 @@ export class BankTransferService {
       memo,
       qrString,
       qrImageUrl,
+      // Nút phụ "Đổi sang trả tiền khi nhận (COD)" dưới QR (POST …/switch-to-cod).
+      codSwitchable,
     };
   }
 }

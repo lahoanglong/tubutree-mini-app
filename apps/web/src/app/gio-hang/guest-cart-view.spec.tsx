@@ -45,6 +45,7 @@ import { resetFlashSales } from '@/lib/use-flash-sales';
 import { PUBLIC_CONFIG_FALLBACK } from '@/lib/use-public-config';
 import { GUEST_CART_KEY } from '@/lib/guest-cart/store';
 import { GUEST_MERGE_NOTE_KEY } from '@/lib/guest-cart/after-login';
+import { GUEST_REORDER_NOTE_KEY } from '@/lib/guest-cart/reorder';
 import { GUEST_MERGE_CLAIM_KEY, resetGuestMergeForTest } from '@/lib/guest-cart/merge';
 
 const PRODUCT = {
@@ -488,5 +489,28 @@ describe('bản dựng sẵn cho khách (/gio-hang/khach): HTML máy chủ', () 
     } finally {
       h.cleanup();
     }
+  });
+});
+
+describe('/gio-hang — khách chưa đăng nhập, lời báo "Mua lại đơn này"', () => {
+  it('có lời báo còn hạn: hiện một lần ở đầu giỏ khách (tên món và lý do), rồi xoá khỏi bộ nhớ', async () => {
+    putGuestLines([{ variationId: 'v1', slug: 'dau-goi', quantity: 1 }]);
+    sessionStorage.setItem(
+      GUEST_REORDER_NOTE_KEY,
+      JSON.stringify({ skipped: [{ name: 'Xà phòng thảo mộc (100g)', reason: 'OUT_OF_STOCK' }, { name: 'Nước lau sàn', reason: 'INACTIVE' }], at: Date.now() }),
+    );
+    const c = await mount(clientWith(true), (el) => !!el.querySelector('[data-testid="guest-reorder-note"]') && !!el.querySelector('[data-testid="guest-cart"]'));
+    const note = c.querySelector('[data-testid="guest-reorder-note"]')!;
+    expect(note.getAttribute('role')).toBe('status');
+    expect(note.textContent).toContain('2 món không thêm được vào giỏ:');
+    expect(note.textContent).toContain('Xà phòng thảo mộc (100g) (hết hàng)');
+    expect(note.textContent).toContain('Nước lau sàn (ngừng bán)');
+    expect(sessionStorage.getItem(GUEST_REORDER_NOTE_KEY)).toBeNull();
+  });
+
+  it('không có lời báo: không có khối báo', async () => {
+    putGuestLines([{ variationId: 'v1', slug: 'dau-goi', quantity: 1 }]);
+    const c = await mount(clientWith(true), (el) => !!el.querySelector('[data-testid="cart-line"][data-state="ok"]'));
+    expect(c.querySelector('[data-testid="guest-reorder-note"]')).toBeNull();
   });
 });
