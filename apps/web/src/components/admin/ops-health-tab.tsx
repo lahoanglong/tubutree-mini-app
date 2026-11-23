@@ -285,6 +285,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'PayrollJob.nightly': 'Tính lại lương tháng hiện tại lúc 0 giờ 30 mỗi đêm (cả tháng trước trong 3 ngày đầu tháng)',
   'StorefrontReminderService.remindTrendingProducts': 'Nhắc cộng tác viên thêm sản phẩm nổi bật vào gian hàng (9 giờ thứ Hai)',
   'SubscriptionsService.processDue': 'Tạo đơn kỳ cho gói định kỳ đến hạn',
+  'SubscriptionUpcomingService.nudgeUpcoming': 'Nhắc khách hôm trước kỳ giao gói định kỳ',
   'BridgeHealthCron.everyMinute': 'Kiểm tra cầu nối chat Zalo, báo khi mất kết nối, gửi lại tin chưa chuyển',
   'VouchersService.welcomeVouchers': 'Tặng mã chào mừng cho khách mới chưa có đơn',
   'VouchersService.birthdayVouchers': 'Tặng mã sinh nhật',
