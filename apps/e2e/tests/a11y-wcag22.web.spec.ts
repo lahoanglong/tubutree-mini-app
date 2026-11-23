@@ -283,7 +283,7 @@ test.describe('A11Y-24..26: thanh toán sau một lần bấm Đặt hàng hụt
     const group = page.getByRole('radiogroup', { name: 'Phương thức thanh toán' });
     await expect(group).toBeVisible({ timeout: 20_000 });
     await expect(group.getByRole('radio', { name: 'Thanh toán khi nhận hàng (COD)', exact: true })).toHaveAccessibleDescription('Không cần trả trước');
-    await expect(group.getByRole('radio', { name: 'Chuyển khoản ngân hàng', exact: true })).toHaveAccessibleDescription('Quét VietQR, đơn tự xác nhận khi nhận tiền');
+    await expect(group.getByRole('radio', { name: 'Chuyển khoản ngân hàng', exact: true })).toHaveAccessibleDescription('Quét mã QR, đơn xác nhận khi Tubu nhận tiền');
     // Ví 50.000đ không đủ đơn 130.000đ: radio khoá, mô tả là lý do khoá chứ không phải dòng phụ.
     const wallet = group.getByRole('radio', { name: /^Ví Tubu/ });
     await expect(wallet).toBeDisabled();

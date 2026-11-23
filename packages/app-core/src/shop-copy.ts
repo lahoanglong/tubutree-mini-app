@@ -524,9 +524,10 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.transferHolder': 'Chủ tài khoản',
   'checkout.transferAmount': 'Số tiền chuyển',
   'checkout.transferNote': 'Mã QR có đúng số tiền và nội dung sẽ hiện ngay sau khi bạn bấm Đặt hàng.',
-  // Một dòng dưới mỗi cách thanh toán: điều khách cần biết trước khi chọn (theo đúng xử lý của máy chủ: COD và Ví xác nhận ngay, chuyển khoản tự xác nhận khi đối soát xong)
+  // Một dòng dưới mỗi cách thanh toán: điều khách cần biết trước khi chọn (theo đúng xử lý của máy chủ: COD và Ví xác nhận ngay; chuyển khoản chờ tiền về,
+  // qua webhook ngân hàng hoặc ops bấm tay, nên câu không hứa "tự" hay "ngay")
   'checkout.payCueCod': 'Không cần trả trước',
-  'checkout.payCueBank': 'Quét VietQR, đơn tự xác nhận khi nhận tiền',
+  'checkout.payCueBank': 'Quét mã QR, đơn xác nhận khi Tubu nhận tiền',
   'checkout.payCueWallet': 'Trừ số dư Ví, đơn xác nhận ngay',
   // Đổi rác kèm đơn (thẻ thanh toán + tấm chọn món)
   'checkout.pickup.title': '♻️ Đổi rác kèm đơn',

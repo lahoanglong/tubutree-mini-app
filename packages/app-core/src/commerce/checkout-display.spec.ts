@@ -183,9 +183,12 @@ describe('thẻ xem trước chuyển khoản', () => {
 });
 
 describe('paymentMethodCue', () => {
-  it('mỗi cách thanh toán đang có một dòng phụ ngắn, đúng xử lý của máy chủ: COD không trả trước, chuyển khoản qua VietQR tự xác nhận, Ví xác nhận ngay', () => {
+  it('mỗi cách thanh toán đang có một dòng phụ ngắn, đúng xử lý của máy chủ: COD không trả trước, chuyển khoản xác nhận khi tiền về (không hứa "tự"/"ngay"), Ví xác nhận ngay', () => {
     expect(paymentMethodCue('COD')).toBe(fillCopy('checkout.payCueCod'));
-    expect(paymentMethodCue('BANK_TRANSFER')).toContain('VietQR');
+    const bank = paymentMethodCue('BANK_TRANSFER')!;
+    expect(bank).toBe(fillCopy('checkout.payCueBank'));
+    expect(bank).toContain('QR');
+    expect(bank).not.toMatch(/(?<!\p{L})(?:tự|ngay)(?!\p{L})/u);
     expect(paymentMethodCue('WALLET')).toBe(fillCopy('checkout.payCueWallet'));
   });
 

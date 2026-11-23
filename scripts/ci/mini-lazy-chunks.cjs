@@ -31,7 +31,7 @@ const LAZY_ONLY = [
 ];
 
 const CHUNK_RE = /^(.+)\.[A-Za-z0-9_-]{7}\.module\.js$/;
-const STATIC_RE = /(?:^|[;}\s])(?:import|export)\s*(?:[\w$*{}\s,]*?from\s*)?["']\.\/([^"']+\.js)["']/g;
+const STATIC_RE = /(?:^|[;}\s/])(?:import|export)\s*(?:[\w$*{}\s,]*?from\s*)?["']\.\/([^"']+\.js)["']/g;
 const DYNAMIC_RE = /\bimport\(\s*["']\.\/([^"']+\.js)["']\s*\)/g;
 
 const chunkName = (file) => {
