@@ -1448,7 +1448,7 @@ describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / c
     await flush(6);
   };
 
-  it('+7 / +14 tính từ ngày hẹn (07/11); chọn thì báo ngày mới, chạm lại thì bỏ; PATCH chỉ có nextRunDate', async () => {
+  it('+7 / +14 tính từ ngày hẹn (07/11); chọn thì báo ngày mới, chạm lại thì bỏ; PATCH chỉ có nextRunDate + ngày đang hiện', async () => {
     await openEdit();
     expect(Array.from(group()!.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['+7 ngày', '+14 ngày', 'Chọn ngày']);
     click(btn('+7 ngày', group()!));
@@ -1459,7 +1459,7 @@ describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / c
     click(btn('+14 ngày', group()!));
     click(btn('Lưu thay đổi'));
     await flush(8);
-    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-11-21' });
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-11-21', expectedNextRunAt: '2026-11-07T03:00:00.000Z' });
   });
 
   it('"Chọn ngày" mở ô ngày từ mai tới 90 ngày kèm câu gợi ý; ngày ngoài khoảng không vào PATCH, câu gợi ý ở lại, không lưu được', async () => {
@@ -1477,7 +1477,7 @@ describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / c
     expect(document.body.textContent).toContain('Kỳ tới giao ngày 01/12/2026');
     click(btn('Lưu thay đổi'));
     await flush(8);
-    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-12-01' });
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-12-01', expectedNextRunAt: '2026-11-07T03:00:00.000Z' });
   });
 
   it('đổi chu kỳ rồi dời: +7 tính từ ngày mới, dòng "Lần giao kế tiếp" nhường cho ngày đã chọn', async () => {
@@ -1488,7 +1488,7 @@ describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / c
     expect(document.body.textContent).not.toContain('Lần giao kế tiếp');
     click(btn('Lưu thay đổi'));
     await flush(8);
-    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 6, nextRunDate: '2026-11-28' });
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 6, nextRunDate: '2026-11-28', expectedNextRunAt: '2026-11-07T03:00:00.000Z' });
   });
 
   it('chọn +7 rồi đổi chu kỳ: bước đã chọn bị bỏ, PATCH chỉ có intervalWeeks (không gửi ngày cũ đè ngày của chu kỳ mới)', async () => {
@@ -1511,7 +1511,7 @@ describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / c
   it('subscriptionPatch: nextRunDate chỉ gửi khi trong khoảng API nhận và API mới', () => {
     const now = new Date('2026-10-20T05:00:00.000Z');
     const next = { quantity: 2, addressId: 'a1', paymentMethod: 'COD' as const, intervalWeeks: 4 };
-    expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-11-14' }, true, now)).toEqual({ nextRunDate: '2026-11-14' });
+    expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-11-14' }, true, now)).toEqual({ nextRunDate: '2026-11-14', expectedNextRunAt: '2026-11-07T03:00:00.000Z' });
     expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-10-20' }, true, now)).toEqual({});
     expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2027-01-19' }, true, now)).toEqual({});
     expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-11-14' }, false, now)).toEqual({});

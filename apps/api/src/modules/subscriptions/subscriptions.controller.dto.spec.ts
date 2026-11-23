@@ -39,3 +39,16 @@ describe('DTO sửa gói định kỳ: dời ngày giao kỳ tới', () => {
     expect(body).not.toMatch(/nextRunDate/);
   });
 });
+
+describe('DTO sửa gói định kỳ: ngày đang hiện (expectedNextRunAt)', () => {
+  it('nhận ISO đầy đủ như GET trả', async () => {
+    await expect(run({ nextRunDate: '2026-12-01', expectedNextRunAt: '2026-11-24T17:00:00.000Z' })).resolves.toMatchObject({
+      expectedNextRunAt: '2026-11-24T17:00:00.000Z',
+    });
+  });
+
+  it.each(['24/11/2026', 'hôm qua', 1764003600000, null])('từ chối %p bằng 400', async (bad) => {
+    const err = await run({ nextRunDate: '2026-12-01', expectedNextRunAt: bad }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+  });
+});

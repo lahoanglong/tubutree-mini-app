@@ -106,6 +106,8 @@ describe('SubscriptionsService.list: nextTier', () => {
 });
 
 describe('SubscriptionsService.update: dời ngày giao kỳ tới (nextRunDate)', () => {
+  /** `nextRunAt` của dòng mẫu, như màn hình khách đang hiện. */
+  const SEEN = new Date(NOW.getTime() + 2 * WEEK).toISOString();
   function makeUpdate(row: Record<string, unknown> = {}, lastOrderCreatedAt: Date | null = null) {
     const update = jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...row, ...args.data }));
     const tx = {
@@ -123,7 +125,7 @@ describe('SubscriptionsService.update: dời ngày giao kỳ tới (nextRunDate)
 
   it('ghi nextRunAt = 0h VN ngày đã chọn, đếm lại lượt thử từ đầu, giữ chu kỳ', async () => {
     const { svc, update } = makeUpdate({ retryCount: 2 });
-    await svc.update('u1', 's1', { nextRunDate: '2026-11-03' });
+    await svc.update('u1', 's1', { nextRunDate: '2026-11-03', expectedNextRunAt: SEEN });
     const data = update.mock.calls[0][0].data;
     expect((data.nextRunAt as Date).toISOString()).toBe('2026-11-02T17:00:00.000Z');
     expect(data.retryCount).toBe(0);
@@ -132,7 +134,7 @@ describe('SubscriptionsService.update: dời ngày giao kỳ tới (nextRunDate)
 
   it('ngày chọn thắng ngày do đổi chu kỳ tính ra khi gửi cả hai', async () => {
     const { svc, update } = makeUpdate({}, new Date('2026-10-10T03:00:00.000Z'));
-    await svc.update('u1', 's1', { intervalWeeks: 6, nextRunDate: '2026-12-01' });
+    await svc.update('u1', 's1', { intervalWeeks: 6, nextRunDate: '2026-12-01', expectedNextRunAt: SEEN });
     const data = update.mock.calls[0][0].data;
     expect(data.intervalWeeks).toBe(6);
     expect((data.nextRunAt as Date).toISOString()).toBe('2026-11-30T17:00:00.000Z');
@@ -140,7 +142,7 @@ describe('SubscriptionsService.update: dời ngày giao kỳ tới (nextRunDate)
 
   it('gói tạm dừng cũng dời được (bật lại giữ ngày mới)', async () => {
     const { svc, update } = makeUpdate({ status: 'PAUSED' });
-    await svc.update('u1', 's1', { nextRunDate: '2026-10-21' });
+    await svc.update('u1', 's1', { nextRunDate: '2026-10-21', expectedNextRunAt: SEEN });
     expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe('2026-10-20T17:00:00.000Z');
   });
 
@@ -149,7 +151,7 @@ describe('SubscriptionsService.update: dời ngày giao kỳ tới (nextRunDate)
     const after = new Date(NOW.getTime() + 7 * 3600e3 + (RESCHEDULE_MAX_DAYS_AHEAD + 1) * DAY).toISOString().slice(0, 10);
     for (const ok of ['2026-10-21', last]) {
       const { svc, update } = makeUpdate();
-      await svc.update('u1', 's1', { nextRunDate: ok });
+      await svc.update('u1', 's1', { nextRunDate: ok, expectedNextRunAt: SEEN });
       expect(update).toHaveBeenCalled();
     }
     const cases: [string, string][] = [
@@ -161,20 +163,40 @@ describe('SubscriptionsService.update: dời ngày giao kỳ tới (nextRunDate)
     ];
     for (const [date, msg] of cases) {
       const { svc, $transaction } = makeUpdate();
-      await expect(svc.update('u1', 's1', { nextRunDate: date })).rejects.toMatchObject({ status: 400, message: expect.stringContaining(msg) });
+      await expect(svc.update('u1', 's1', { nextRunDate: date, expectedNextRunAt: SEEN })).rejects.toMatchObject({ status: 400, message: expect.stringContaining(msg) });
       expect($transaction).not.toHaveBeenCalled();
     }
   });
 
   it('gói đã huỷ → 400, không ghi', async () => {
     const { svc, update } = makeUpdate({ status: 'CANCELLED' });
-    await expect(svc.update('u1', 's1', { nextRunDate: '2026-10-25' })).rejects.toThrow('đã huỷ');
+    await expect(svc.update('u1', 's1', { nextRunDate: '2026-10-25', expectedNextRunAt: SEEN })).rejects.toThrow('đã huỷ');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('thiếu ngày đang hiện (expectedNextRunAt) khi dời ngày → 400 trước khi mở transaction; sửa trường khác thì không cần', async () => {
+    const { svc, $transaction } = makeUpdate();
+    await expect(svc.update('u1', 's1', { nextRunDate: '2026-10-25' })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('tải lại') });
+    await expect(svc.update('u1', 's1', { nextRunDate: '2026-10-25', expectedNextRunAt: 'hôm qua' })).rejects.toMatchObject({ status: 400 });
+    expect($transaction).not.toHaveBeenCalled();
+    const ok = makeUpdate();
+    await ok.svc.update('u1', 's1', { quantity: 3 });
+    expect(ok.update.mock.calls[0][0].data).toEqual({ quantity: 3 });
+  });
+
+  it('cron đã ra đơn kỳ khách đang thấy (nextRunAt trong DB đã sang kỳ sau) → 409, không ghi ngày mới', async () => {
+    // Màn hình còn "Lần kế" = SEEN; cron 3h đã ra đơn và dời nextRunAt thêm một chu kỳ. Ghi ngày mới lúc này = đơn kỳ đó vẫn giao + thêm một đơn.
+    const { svc, update } = makeUpdate({ nextRunAt: new Date(NOW.getTime() + 6 * WEEK) });
+    await expect(svc.update('u1', 's1', { nextRunDate: '2026-10-25', expectedNextRunAt: SEEN })).rejects.toMatchObject({
+      status: 409,
+      message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.',
+    });
     expect(update).not.toHaveBeenCalled();
   });
 
   it('sự kiện updated ghi rescheduled', async () => {
     const { svc, analytics } = makeUpdate();
-    await svc.update('u1', 's1', { nextRunDate: '2026-10-25' });
+    await svc.update('u1', 's1', { nextRunDate: '2026-10-25', expectedNextRunAt: SEEN });
     expect(analytics.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ props: expect.objectContaining({ action: 'updated', rescheduled: true }) }));
   });
 });

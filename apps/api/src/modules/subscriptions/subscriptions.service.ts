@@ -82,6 +82,8 @@ interface UpdateSubInput {
   paymentMethod?: SubscriptionPaymentMethod;
   /** YYYY-MM-DD giờ Việt Nam: ngày giao kỳ tới mới, thắng ngày do đổi chu kỳ tính ra. */
   nextRunDate?: string;
+  /** ISO của `nextRunAt` khách đang thấy; bắt buộc khi có `nextRunDate`. */
+  expectedNextRunAt?: string;
 }
 
 /**
@@ -393,6 +395,7 @@ export class SubscriptionsService {
     if (dto.quantity !== undefined) this.assertQuantity(dto.quantity);
     if (dto.intervalWeeks !== undefined) this.assertIntervalWeeks(dto.intervalWeeks);
     const rescheduledAt = dto.nextRunDate === undefined ? undefined : this.parseRescheduleDate(dto.nextRunDate);
+    const expectedNextRunAt = this.parseExpectedNextRunAt(dto.expectedNextRunAt, rescheduledAt !== undefined);
     let productName = 'Sản phẩm';
     let variationId: string | null = null;
     try {
@@ -401,6 +404,11 @@ export class SubscriptionsService {
         if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
         if (!OPEN_STATUSES.includes(sub.status)) {
           throw new BadRequestException('Gói định kỳ đã huỷ, không sửa được nữa.');
+        }
+        // Ngày khách chọn tính từ "Lần kế" trên màn hình. Cron đã ra đơn kỳ đó (nextRunAt sang kỳ sau) mà vẫn ghi thì kỳ đó giao
+        // rồi lại thêm đơn ở ngày mới: hai đơn, gói trả Ví bị trừ hai lần. So dưới khoá dòng, cùng khoá tx sinh đơn kỳ giữ.
+        if (expectedNextRunAt && sub.nextRunAt.getTime() !== expectedNextRunAt.getTime()) {
+          throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
         }
         variationId = sub.variationId;
         const variation = await tx.variation.findUnique({
@@ -1166,6 +1174,16 @@ export class SubscriptionsService {
   }
 
   /** Ngày giao kỳ tới khách chọn (YYYY-MM-DD giờ VN) thành 0h VN ngày đó, để cron 3h sáng cùng ngày ra đơn. Từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày. */
+  private parseExpectedNextRunAt(raw: string | undefined, required: boolean): Date | undefined {
+    if (raw === undefined) {
+      if (required) throw new BadRequestException(SCHEDULE_CHANGED_MESSAGE);
+      return undefined;
+    }
+    const at = new Date(raw);
+    if (Number.isNaN(at.getTime())) throw new BadRequestException(SCHEDULE_CHANGED_MESSAGE);
+    return at;
+  }
+
   private parseRescheduleDate(date: string): Date {
     const invalid = () => new BadRequestException('Ngày giao kỳ tới không hợp lệ.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw invalid();

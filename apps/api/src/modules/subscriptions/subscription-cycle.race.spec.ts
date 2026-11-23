@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { RaceDb, tick } from '../../../test/fakes/race-db.fake';
+import { vnDateKey } from '../../common/vn-time';
 import { WalletLedgerService } from '../wallet/wallet-ledger.service';
 import { SubscriptionsService } from './subscriptions.service';
 
@@ -202,6 +203,38 @@ describe('SubscriptionsService cycle — race', () => {
       seen.add(`${n} đơn, bỏ qua ${skipped.status}`);
     }
     expect(seen).toEqual(new Set(['0 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua rejected']));
+  });
+
+  // Dời ngày giao kỳ tới (PATCH nextRunDate) gửi kèm "Lần kế" đang hiện. Cron đã claim kỳ đó (nextRunAt sang kỳ sau) thì dời là 409; nếu
+  // ghi được thì đơn kỳ đó vẫn ra và ngày mới lại ra thêm một đơn: hai đơn, Ví trừ hai lần.
+  it('khách dời ngày giao (theo "Lần kế" đang hiện) chen với cron claim: dời thắng thì kỳ đó KHÔNG ra đơn, thua thì 409; không bao giờ vừa ra đơn vừa nhận ngày mới', async () => {
+    const seen = new Set<string>();
+    for (let skew = -40; skew <= 40; skew++) {
+      const { db, svc, orders, wallet, ledger, variation } = setup();
+      const shown = (db.row('subscription', 's1')!.nextRunAt as Date).toISOString();
+      const tomorrow = vnDateKey(new Date(Date.now() + DAY));
+      const cron = async () => (await delay(Math.max(skew, 0)), svc.processDue());
+      const act = async () => (await delay(Math.max(-skew, 0)), svc.update('u1', 's1', { nextRunDate: tomorrow, expectedNextRunAt: shown }));
+      const [ranCron, moved] = await Promise.allSettled([cron(), act()]);
+      const label = `skew ${skew}`;
+      is(label, ranCron.status, 'fulfilled');
+      const n = orders().length;
+      const next = (db.row('subscription', 's1')!.nextRunAt as Date).getTime();
+      if (moved.status === 'fulfilled') {
+        is(label, n, 0);
+        is(label, next, new Date(`${tomorrow}T00:00:00+07:00`).getTime());
+      } else {
+        is(label, httpStatus(moved), 409);
+        is(label, n, 1);
+        is(label, next > Date.now() + 20 * DAY && next < Date.now() + 40 * DAY, true); // chỉ có dời của cron claim
+      }
+      is(label, wallet(), 500_000 - CYCLE_TOTAL * n);
+      is(label, ledger().length, n);
+      is(label, variation().stock, 10 - QTY * n);
+      is(label, variation().reservedStock, QTY * n);
+      seen.add(`${n} đơn, dời ${moved.status}`);
+    }
+    expect(seen).toEqual(new Set(['0 đơn, dời fulfilled', '1 đơn, dời rejected']));
   });
 
   // "Đặt kỳ này ngay" (POST /me/subscriptions/:id/run-now) chen với cron cùng gói đang đến hạn: luôn đúng MỘT đơn, Ví trừ một lần, kho giữ chỗ một lần.

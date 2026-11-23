@@ -57,13 +57,17 @@ export type CreatedSubscription = SubscriptionDTO & { firstOrder?: SubscriptionF
 /** Trả về của "Đặt kỳ này ngay": gói sau khi dời kỳ sau, kèm đơn vừa tạo. */
 export type RunNowSubscription = Pick<SubscriptionDTO, 'id' | 'status' | 'nextRunAt'> & { order: SubscriptionFirstOrder };
 
-/** Trường PATCH của gói: chỉ gửi trường đã đổi. `nextRunDate` là YYYY-MM-DD giờ Việt Nam, từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày. */
+/**
+ * Trường PATCH của gói: chỉ gửi trường đã đổi. `nextRunDate` là YYYY-MM-DD giờ Việt Nam, từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày.
+ * Gửi `nextRunDate` thì phải kèm `expectedNextRunAt` = `nextRunAt` đang hiện: cron đã ra đơn kỳ đó thì API trả 409 thay vì giao thêm một đơn.
+ */
 export interface SubscriptionPatch {
   quantity?: number;
   addressId?: string;
   paymentMethod?: SubscriptionPaymentMethod;
   intervalWeeks?: number;
   nextRunDate?: string;
+  expectedNextRunAt?: string;
 }
 
 export const getSubscriptions = (http: HttpClient) => http.get<SubscriptionDTO[]>('/me/subscriptions');

@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { clampTake } from '../../common/pagination';
@@ -28,6 +28,8 @@ export class UpdateSubDto {
   @OptionalNotNull() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
   /** Dời ngày giao kỳ tới: YYYY-MM-DD giờ Việt Nam, từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày tới. */
   @OptionalNotNull() @Matches(/^\d{4}-\d{2}-\d{2}$/) nextRunDate?: string;
+  /** `nextRunAt` của gói như màn hình đang hiện; bắt buộc khi gửi `nextRunDate`. Lệch bản trong DB (cron vừa ra đơn kỳ) thì 409. */
+  @OptionalNotNull() @IsISO8601({ strict: true }) expectedNextRunAt?: string;
 }
 class StatusDto {
   @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status!: 'ACTIVE' | 'PAUSED' | 'CANCELLED';

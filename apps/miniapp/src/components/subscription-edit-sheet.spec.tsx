@@ -830,7 +830,7 @@ describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn 
   afterEach(() => vi.useRealTimers());
   const dateInput = () => document.querySelector('input[type="date"]') as HTMLInputElement | null;
 
-  it('+7 ngày tính từ ngày hẹn (07/11), báo ngày mới rồi PATCH chỉ có nextRunDate; chạm lại thì bỏ chọn', async () => {
+  it('+7 ngày tính từ ngày hẹn (07/11), báo ngày mới rồi PATCH chỉ có nextRunDate + ngày đang hiện; chạm lại thì bỏ chọn', async () => {
     mocks.updateSubscription.mockResolvedValue({ ...SUB, nextRunAt: '2026-11-13T17:00:00.000Z' });
     renderSheet();
     const group = await screen.findByTestId('subscription-reschedule');
@@ -844,7 +844,7 @@ describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn 
     fireEvent.click(within(group).getByRole('button', { name: '+14 ngày' }));
     expect(screen.getByText('Kỳ tới giao ngày 21/11/2026')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-11-21' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-11-21', expectedNextRunAt: '2026-11-07T03:00:00.000Z' }));
   });
 
   it('"Chọn ngày" mở ô ngày giới hạn từ mai tới 90 ngày kèm câu gợi ý; ngày ngoài khoảng không vào PATCH, không gửi', async () => {
@@ -863,7 +863,7 @@ describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn 
     fireEvent.change(input, { target: { value: '2026-12-01' } });
     expect(screen.getByText('Kỳ tới giao ngày 01/12/2026')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-12-01' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-12-01', expectedNextRunAt: '2026-11-07T03:00:00.000Z' }));
   });
 
   it('đổi chu kỳ rồi dời: +7 tính từ ngày mới của chu kỳ, dòng "Lần giao kế tiếp" nhường cho ngày đã chọn', async () => {
@@ -875,7 +875,7 @@ describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn 
     expect(screen.queryByText(/Lần giao kế tiếp/)).toBeNull();
     expect(screen.getByText('Kỳ tới giao ngày 28/11/2026')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { intervalWeeks: 6, nextRunDate: '2026-11-28' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { intervalWeeks: 6, nextRunDate: '2026-11-28', expectedNextRunAt: '2026-11-07T03:00:00.000Z' }));
   });
 
   it('chọn +7 rồi đổi chu kỳ: bước đã chọn bị bỏ, PATCH chỉ có intervalWeeks', async () => {
@@ -891,7 +891,7 @@ describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn 
   it('subscriptionPatch: nextRunDate chỉ gửi khi trong khoảng API nhận', () => {
     const now = new Date('2026-10-20T05:00:00.000Z');
     const next = { quantity: 2, addressId: 'a1', paymentMethod: 'COD' as const, intervalWeeks: 4 };
-    expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2026-11-14' }, now)).toEqual({ nextRunDate: '2026-11-14' });
+    expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2026-11-14' }, now)).toEqual({ nextRunDate: '2026-11-14', expectedNextRunAt: '2026-11-07T03:00:00.000Z' });
     expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2026-10-20' }, now)).toEqual({});
     expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2027-01-19' }, now)).toEqual({});
     expect(subscriptionPatch(SUB, { ...next, nextRunDate: null }, now)).toEqual({});

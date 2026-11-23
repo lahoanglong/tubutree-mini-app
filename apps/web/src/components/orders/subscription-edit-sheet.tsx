@@ -24,7 +24,7 @@ const MAX_QTY = 99;
 
 /** Chỉ gửi trường đã đổi: PATCH trống không làm gì, và đổi địa chỉ là bước API kiểm trùng gói. Ngày giao kỳ tới chỉ gửi khi nằm trong khoảng API nhận. */
 export function subscriptionPatch(
-  sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod' | 'intervalWeeks'>,
+  sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod' | 'intervalWeeks'> & { nextRunAt?: string },
   next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number; nextRunDate?: string | null },
   canEditInterval = true,
   now: Date = new Date(),
@@ -34,7 +34,10 @@ export function subscriptionPatch(
   if (next.addressId && next.addressId !== sub.addressId) patch.addressId = next.addressId;
   if (next.paymentMethod !== (sub.paymentMethod ?? 'COD')) patch.paymentMethod = next.paymentMethod;
   if (canEditInterval && next.intervalWeeks !== sub.intervalWeeks) patch.intervalWeeks = next.intervalWeeks;
-  if (canEditInterval && next.nextRunDate && isRescheduleDateAllowed(next.nextRunDate, now)) patch.nextRunDate = next.nextRunDate;
+  if (canEditInterval && next.nextRunDate && isRescheduleDateAllowed(next.nextRunDate, now)) {
+    patch.nextRunDate = next.nextRunDate;
+    patch.expectedNextRunAt = sub.nextRunAt;
+  }
   return patch;
 }
 
