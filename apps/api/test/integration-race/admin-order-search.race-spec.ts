@@ -15,9 +15,11 @@ describe('Admin order search + query indexes (real Postgres)', () => {
   beforeAll(async () => {
     prisma = new PrismaService();
     await prisma.$connect();
+    // Chuỗi tìm 2 ký tự khớp cả đơn của spec khác trong DB dùng chung; đơn chuyển khoản đang chờ tiền làm listOrders đọc TTL hạn thanh toán.
+    const config = { get: async <T>(_key: string, fallback?: T) => fallback };
     admin = new AdminService(
       prisma,
-      {} as never,
+      config as never,
       {} as never,
       {} as never,
       {} as never,
