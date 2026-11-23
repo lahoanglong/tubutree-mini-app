@@ -42,6 +42,9 @@ export const SUBSCRIPTION_INTERVAL_WEEKS = [4, 6, 8, 10] as const;
 /** Khách chỉ được hẹn ngày bắt đầu trong khoảng này (tính theo ngày giờ Việt Nam). */
 export const MAX_START_DAYS_AHEAD = 60;
 
+/** Dời ngày giao kỳ tới (`nextRunDate` của PATCH): từ ngày mai tới chừng này ngày tới, giờ Việt Nam. */
+export const RESCHEDULE_MAX_DAYS_AHEAD = 90;
+
 /** Cùng trần số lượng một dòng giỏ hàng (cart.dto). */
 export const MAX_SUBSCRIPTION_QUANTITY = 999;
 
@@ -77,6 +80,8 @@ interface UpdateSubInput {
   intervalWeeks?: number;
   addressId?: string;
   paymentMethod?: SubscriptionPaymentMethod;
+  /** YYYY-MM-DD giờ Việt Nam: ngày giao kỳ tới mới, thắng ngày do đổi chu kỳ tính ra. */
+  nextRunDate?: string;
 }
 
 /**
@@ -103,6 +108,9 @@ const COD_LIMIT_TEXT = `${SUBSCRIPTION_COD_MAX.toLocaleString('vi-VN')}đ`;
 const WALLET_SHORT_MESSAGE = 'Số dư Ví Tubu không đủ để thanh toán đơn định kỳ.';
 
 const SCHEDULE_CHANGED_MESSAGE = 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.';
+
+const RUN_NOW_TODAY_MESSAGE = 'Gói này đã có đơn hôm nay, kỳ sau Tubu giao theo lịch nhé.';
+const RUN_NOW_INACTIVE_MESSAGE = 'Chỉ đặt kỳ này ngay khi lịch đang chạy.';
 
 /** Mã lỗi ổn định cho FE: đã có gói còn chạy cùng SP + địa chỉ (C-057, Q-13). */
 export const SUBSCRIPTION_DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
@@ -134,6 +142,29 @@ function subscriptionDuplicateError(open: { id: string; status: string }, produc
 
 function isUniqueViolation(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === 'P2002';
+}
+
+/** P2002 trên khoá idempotency của đơn (một kỳ một đơn), không phải trùng mã đơn hay khoá khác. */
+function isIdempotencyViolation(err: unknown): boolean {
+  return isUniqueViolation(err) && JSON.stringify((err as { meta?: { target?: unknown } }).meta?.target ?? '').includes('idempotencyKey');
+}
+
+type DiscountTier = { minActive: number; pct: number };
+
+/**
+ * Bậc giảm kế tiếp của thang `subscribe.discount_tiers`: bậc có ngưỡng gói nhỏ nhất vượt số gói đang tính và % cao hơn % đang áp.
+ * Cấu hình hỏng (không phải mảng, bậc thiếu số) thì bỏ qua bậc đó; không còn bậc nào cao hơn thì null.
+ */
+export function nextDiscountTier(tiers: unknown, activeCount: number, currentPct: number): { countNeeded: number; discountPct: number } | null {
+  if (!Array.isArray(tiers)) return null;
+  let best: DiscountTier | null = null;
+  for (const t of tiers as Partial<DiscountTier>[]) {
+    if (!t || !Number.isInteger(t.minActive) || typeof t.pct !== 'number' || !Number.isFinite(t.pct)) continue;
+    const tier = t as DiscountTier;
+    if (tier.minActive <= activeCount || tier.pct <= currentPct) continue;
+    if (!best || tier.minActive < best.minActive || (tier.minActive === best.minActive && tier.pct > best.pct)) best = tier;
+  }
+  return best ? { countNeeded: best.minActive - activeCount, discountPct: best.pct } : null;
 }
 
 function isAddressFkViolation(err: unknown): boolean {
@@ -270,19 +301,27 @@ export class SubscriptionsService {
       if (!placed) throw new BadRequestException('Không tạo được đơn đầu của gói định kỳ.');
       return { placed, subPatch: { lastOrderId: placed.order.id, nextRunAt: placed.nextRunAt } };
     } catch (err) {
-      if (err instanceof SubscriptionOutOfStockError) throw new BadRequestException(err.message);
-      if (err instanceof SubscriptionWalletShortError) {
-        throw new BadRequestException('Số dư Ví Tubu không đủ để thanh toán đơn đầu tiên, hãy nạp thêm hoặc chọn cách trả khác.');
-      }
-      if (err instanceof SubscriptionAddressError) throw new BadRequestException('Địa chỉ không hợp lệ.');
-      if (err instanceof SubscriptionPartnerGoodsError) throw partnerGoodsError('SUBSCRIPTION', err.productName);
-      if (err instanceof SubscriptionCodLimitError) {
-        throw new BadRequestException(
-          `Đơn vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), bạn giảm số lượng hoặc chọn Ví Tubu/chuyển khoản nhé.`,
-        );
-      }
-      throw err;
+      throw this.cycleRequestError(err, 'đơn đầu tiên');
     }
+  }
+
+  /**
+   * Lỗi ghi đơn kỳ khi khách đang chờ (đơn đầu giao ngay, "Đặt kỳ này ngay"): đổi thành 400 tiếng Việt, tx đã rollback. Cron (kỳ sau) xử lý
+   * cùng lỗi đó khác: tạm dừng gói hay thử lại đêm sau. `orderLabel` là đơn đang nói tới trong câu ví thiếu.
+   */
+  private cycleRequestError(err: unknown, orderLabel: string): unknown {
+    if (err instanceof SubscriptionOutOfStockError) return new BadRequestException(err.message);
+    if (err instanceof SubscriptionWalletShortError) {
+      return new BadRequestException(`Số dư Ví Tubu không đủ để thanh toán ${orderLabel}, hãy nạp thêm hoặc chọn cách trả khác.`);
+    }
+    if (err instanceof SubscriptionAddressError) return new BadRequestException('Địa chỉ không hợp lệ.');
+    if (err instanceof SubscriptionPartnerGoodsError) return partnerGoodsError('SUBSCRIPTION', err.productName);
+    if (err instanceof SubscriptionCodLimitError) {
+      return new BadRequestException(
+        `Đơn vượt hạn mức thanh toán khi nhận hàng (${COD_LIMIT_TEXT}), bạn giảm số lượng hoặc chọn Ví Tubu/chuyển khoản nhé.`,
+      );
+    }
+    return err;
   }
 
   /**
@@ -353,6 +392,7 @@ export class SubscriptionsService {
     const paymentMethod = dto.paymentMethod === undefined ? undefined : this.parsePaymentMethod(dto.paymentMethod);
     if (dto.quantity !== undefined) this.assertQuantity(dto.quantity);
     if (dto.intervalWeeks !== undefined) this.assertIntervalWeeks(dto.intervalWeeks);
+    const rescheduledAt = dto.nextRunDate === undefined ? undefined : this.parseRescheduleDate(dto.nextRunDate);
     let productName = 'Sản phẩm';
     let variationId: string | null = null;
     try {
@@ -389,6 +429,8 @@ export class SubscriptionsService {
             where: { id },
             data: {
               ...intervalPatch,
+              // Ngày khách chọn thắng ngày do đổi chu kỳ tính ra; kỳ đang thử lại vì hết hàng thì đếm lại từ đầu như mọi lần dời lịch.
+              ...(rescheduledAt ? { nextRunAt: rescheduledAt, retryCount: 0 } : {}),
               ...(dto.quantity !== undefined ? { quantity: dto.quantity } : {}),
               ...(dto.addressId !== undefined ? { addressId: dto.addressId } : {}),
               ...(paymentMethod !== undefined ? { paymentMethod } : {}),
@@ -410,6 +452,7 @@ export class SubscriptionsService {
             nextRunAt: updated.nextRunAt,
             addressChanged: updated.addressId !== sub.addressId,
             paymentMethod: updated.paymentMethod,
+            rescheduled: rescheduledAt !== undefined,
           },
         });
         return updated;
@@ -514,20 +557,22 @@ export class SubscriptionsService {
     });
     if (subs.length === 0) return [];
     const lastOrderIds = subs.flatMap((s) => (s.lastOrderId ? [s.lastOrderId] : []));
-    const [variations, effectiveDiscountPct, lastOrders] = await Promise.all([
+    const hasActive = subs.some((s) => s.status === 'ACTIVE');
+    const [variations, tier, lastOrders] = await Promise.all([
       this.prisma.variation.findMany({
         where: { id: { in: subs.map((s) => s.variationId) } },
         include: { product: { select: { name: true, thumbnail: true, slug: true } } },
       }),
-      this.effectiveDiscountPct(userId, this.prisma, {
-        floorCount: subs.some((s) => s.status === 'ACTIVE') ? 1 : 0,
-      }),
+      this.discountTierStatus(userId, this.prisma, { floorCount: hasActive ? 1 : 0 }),
       lastOrderIds.length > 0
         ? this.prisma.order.findMany({ where: { id: { in: lastOrderIds } }, select: { id: true, createdAt: true } })
         : Promise.resolve([]),
     ]);
     const vmap = new Map(variations.map((v) => [v.id, v]));
     const lastOrderAt = new Map(lastOrders.map((o) => [o.id, o.createdAt]));
+    const effectiveDiscountPct = tier.pct;
+    // Chỉ khi có gói đang chạy: khách chỉ còn gói tạm dừng thì bật lại một gói là có bậc, câu "thêm 1 gói" sẽ sai.
+    const nextTier = hasActive ? nextDiscountTier(tier.tiers, tier.activeCount, tier.pct) : null;
     return subs.map((s) => {
       const v = vmap.get(s.variationId);
       return {
@@ -549,6 +594,8 @@ export class SubscriptionsService {
         slug: v?.product.slug ?? null,
         unitPrice: v ? (v.salePrice ?? v.retailPrice) : 0,
         effectiveDiscountPct,
+        /** Bậc giảm kế tiếp (cùng một giá trị trên mọi gói của khách): còn thiếu bao nhiêu gói đang chạy và % của bậc đó. */
+        nextTier,
         ...cycleAmountsView(v ? (v.salePrice ?? v.retailPrice) : 0, s.quantity, effectiveDiscountPct),
       };
     });
@@ -568,10 +615,17 @@ export class SubscriptionsService {
     db: Pick<Prisma.TransactionClient, 'subscription'> = this.prisma,
     opts: { selfId?: string; floorCount?: number } = {},
   ): Promise<number> {
+    return (await this.discountTierStatus(userId, db, opts)).pct;
+  }
+
+  /** Như `effectiveDiscountPct`, kèm số gói đang tính và thang bậc đọc được, để danh sách nói bậc kế tiếp bằng đúng số đó. */
+  private async discountTierStatus(
+    userId: string,
+    db: Pick<Prisma.TransactionClient, 'subscription'>,
+    opts: { selfId?: string; floorCount?: number },
+  ): Promise<{ pct: number; activeCount: number; tiers: DiscountTier[] }> {
     const basePct = await this.config.get<number>('subscribe.discount_pct', 0.12);
-    const tiers = await this.config.get<{ minActive: number; pct: number }[]>('subscribe.discount_tiers', [
-      { minActive: 1, pct: basePct },
-    ]);
+    const tiers = await this.config.get<DiscountTier[]>('subscribe.discount_tiers', [{ minActive: 1, pct: basePct }]);
     const horizon = new Date(Date.now() + TIER_WINDOW_DAYS * 86_400_000);
     const counted = await db.subscription.count({
       where: {
@@ -586,7 +640,7 @@ export class SubscriptionsService {
     });
     const activeCount = Math.max(counted, opts.floorCount ?? 0);
     const applicable = tiers.filter((t) => activeCount >= t.minActive).sort((a, b) => b.pct - a.pct);
-    return applicable[0]?.pct ?? 0;
+    return { pct: applicable[0]?.pct ?? 0, activeCount, tiers };
   }
 
   async setStatus(userId: string, id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
@@ -682,6 +736,46 @@ export class SubscriptionsService {
   }
 
   /**
+   * "Đặt kỳ này ngay": ra đơn của kỳ tới ngay hôm nay rồi tính kỳ sau từ hôm nay, như đơn đầu giao ngay. Chỉ gói ACTIVE.
+   * Một ngày một đơn cho mỗi gói: khoá dòng gói (FOR UPDATE) nên chạm đúp xếp hàng, lượt sau thấy đơn hôm nay và nhận 409.
+   * Khoá idempotency của đơn là 0h VN hôm nay, trùng khoá cron dùng cho kỳ đến hạn hôm nay (nextRunAt neo 0h VN): cron vừa nhận kỳ
+   * mà chưa kịp ghi đơn thì chỉ một bên ghi được, bên kia gặp P2002 (cron coi là đã ghi, khách nhận 409).
+   */
+  async runNow(userId: string, id: string) {
+    const now = new Date();
+    const cycleAt = startOfVnDay(now);
+    const code = await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION');
+    let placed: PlacedCycleOrder & { nextRunAt: Date };
+    try {
+      placed = await this.prisma.$transaction(async (tx) => {
+        const sub = await this.lockSubscription(tx, id);
+        if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
+        if (sub.status !== 'ACTIVE') throw new BadRequestException(RUN_NOW_INACTIVE_MESSAGE);
+        const today = await tx.order.findFirst({ where: { subscriptionId: id, createdAt: { gte: cycleAt } }, select: { id: true } });
+        if (today) throw new ConflictException(RUN_NOW_TODAY_MESSAGE);
+        // nextRunAt không sau cycleAt thì placeCycleOrder tính kỳ kế = 0h VN hôm nay + chu kỳ (nhánh đơn đầu giao ngay).
+        await tx.subscription.update({ where: { id }, data: { nextRunAt: cycleAt, retryCount: 0 } });
+        const res = await this.placeCycleOrder(tx, id, cycleAt, code);
+        if (!res) throw new BadRequestException(RUN_NOW_INACTIVE_MESSAGE);
+        return res;
+      });
+    } catch (err) {
+      if (isIdempotencyViolation(err)) throw new ConflictException(RUN_NOW_TODAY_MESSAGE);
+      throw this.cycleRequestError(err, 'đơn kỳ này');
+    }
+    await this.afterOrderPlaced(placed);
+    await this.analytics.recordBestEffort({
+      eventName: 'subscription_changed',
+      userId,
+      platform: 'miniapp',
+      props: { subscriptionId: id, action: 'run_now', orderId: placed.order.id },
+    });
+    const sub = await this.prisma.subscription.findUniqueOrThrow({ where: { id } });
+    const o = placed.order;
+    return { ...sub, order: { id: o.id, code: o.code, status: o.status, paymentMethod: o.paymentMethod, total: o.total } };
+  }
+
+  /**
    * Cron 3h sáng: xử lý các subscription đến hạn → tạo đơn kỳ + dời chu kỳ.
    *
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany/updateMany lỗi (DB blip...) ném ra
@@ -715,7 +809,7 @@ export class SubscriptionsService {
           });
           if (claimed.count === 0) continue; // instance khác đã claim
           try {
-            if (await this.runCycle(sub, sub.nextRunAt, nextRunAt)) created++;
+            if (await this.runCycle(sub, sub.nextRunAt, nextRunAt, claimBase)) created++;
           } catch (err) {
             this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
           }
@@ -736,12 +830,13 @@ export class SubscriptionsService {
     sub: { id: string; userId: string; retryCount?: number; intervalWeeks?: number },
     cycleAt: Date,
     nextRunAt: Date,
+    orderedSince?: Date,
   ): Promise<boolean> {
     const code = await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION');
     let placed: PlacedCycleOrder | null;
     const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
     try {
-      placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code, sub.intervalWeeks));
+      placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code, sub.intervalWeeks, orderedSince));
     } catch (err) {
       if (isProductDiscontinuedError(err)) {
         await this.pauseSubscription(sub, 'Sản phẩm đã ngừng bán', 'inactive_product');
@@ -843,9 +938,13 @@ export class SubscriptionsService {
     cycleAt: Date,
     code: string,
     scannedIntervalWeeks?: number,
+    orderedSince?: Date,
   ): Promise<(PlacedCycleOrder & { nextRunAt: Date }) | null> {
     const sub = await this.lockSubscription(tx, subId);
     if (!sub || sub.status !== 'ACTIVE') return null;
+    // Cron đã claim (dời nextRunAt) nhưng chưa khoá dòng thì khách bấm "Đặt kỳ này ngay" chen vào và ra đơn với khoá idempotency của
+    // 0h hôm nay, khác khoá kỳ cron đang cầm: đơn của khách đã là đơn kỳ này, cron không ra đơn thứ hai (run-now cũng chặn chiều ngược lại).
+    if (orderedSince && (await tx.order.findFirst({ where: { subscriptionId: subId, createdAt: { gte: orderedSince } }, select: { id: true } }))) return null;
     const variation = await tx.variation.findUnique({
       where: { id: sub.variationId },
       include: { product: { select: { name: true, slug: true, isActive: true, approvalStatus: true, storefrontId: true } } },
@@ -1062,6 +1161,19 @@ export class SubscriptionsService {
     const last = vnDateKey(new Date(Date.now() + MAX_START_DAYS_AHEAD * 864e5));
     if (startDate > last) {
       throw new BadRequestException(`Chỉ chọn ngày bắt đầu giao trong vòng ${MAX_START_DAYS_AHEAD} ngày tới.`);
+    }
+    return at;
+  }
+
+  /** Ngày giao kỳ tới khách chọn (YYYY-MM-DD giờ VN) thành 0h VN ngày đó, để cron 3h sáng cùng ngày ra đơn. Từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày. */
+  private parseRescheduleDate(date: string): Date {
+    const invalid = () => new BadRequestException('Ngày giao kỳ tới không hợp lệ.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw invalid();
+    const at = new Date(`${date}T00:00:00+07:00`);
+    if (Number.isNaN(at.getTime()) || vnDateKey(at) !== date) throw invalid();
+    if (date <= vnDateKey()) throw new BadRequestException('Ngày giao kỳ tới phải từ ngày mai, muốn giao hôm nay thì chọn "Đặt kỳ này ngay".');
+    if (date > vnDateKey(new Date(Date.now() + RESCHEDULE_MAX_DAYS_AHEAD * 864e5))) {
+      throw new BadRequestException(`Chỉ dời ngày giao trong vòng ${RESCHEDULE_MAX_DAYS_AHEAD} ngày tới.`);
     }
     return at;
   }

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { RESCHEDULE_MAX_DAYS_AHEAD, type SubscriptionPatch } from '@tubutree/app-core/api/subscriptions';
+import { dayKeyText, isRescheduleDateAllowed, rescheduleOptions, rescheduleRange, selfServeCopy } from '@tubutree/app-core/subscription-self-serve';
 import { useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAddresses } from '../services/shop-api';
@@ -18,6 +20,7 @@ import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
+import { Chip } from './ui/chip';
 import { QuantitySelector } from './ui/quantity-selector';
 import { LineItemSkeleton } from './ui/skeleton';
 import { Text } from './ui/text';
@@ -34,16 +37,18 @@ import {
 /** Trần ở client chỉ để nút + không chạy vô hạn; còn hàng hay không do API kiểm khi sinh đơn kỳ. */
 const MAX_QTY = 99;
 
-/** Chỉ gửi trường đã đổi: PATCH trống không làm gì, và đổi địa chỉ là bước API kiểm trùng gói. */
+/** Chỉ gửi trường đã đổi: PATCH trống không làm gì, và đổi địa chỉ là bước API kiểm trùng gói. Ngày giao kỳ tới chỉ gửi khi nằm trong khoảng API nhận. */
 export function subscriptionPatch(
   sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod' | 'intervalWeeks'>,
-  next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number },
+  next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number; nextRunDate?: string | null },
+  now: Date = new Date(),
 ) {
-  const patch: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number } = {};
+  const patch: SubscriptionPatch = {};
   if (next.quantity !== sub.quantity) patch.quantity = next.quantity;
   if (next.addressId && next.addressId !== sub.addressId) patch.addressId = next.addressId;
   if (next.paymentMethod !== (sub.paymentMethod ?? 'COD')) patch.paymentMethod = next.paymentMethod;
   if (next.intervalWeeks !== sub.intervalWeeks) patch.intervalWeeks = next.intervalWeeks;
+  if (next.nextRunDate && isRescheduleDateAllowed(next.nextRunDate, now)) patch.nextRunDate = next.nextRunDate;
   return patch;
 }
 
@@ -71,10 +76,16 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
   const [addrRetrying, setAddrRetrying] = useState<string | null>(null);
   const addrFailed = addrQ.isError && !addrQ.data;
   const addrWaiting = addrRetrying !== null && addrQ.isPending;
+  // Ngày giao kỳ tới khách chọn ('yyyy-mm-dd' giờ VN), null = giữ lịch. `picking`: đang mở ô chọn ngày.
+  const [runDate, setRunDate] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
 
-  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks });
+  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks, nextRunDate: runDate });
   const nextRun = nextRunAfterIntervalChange(sub, weeks);
   const dirty = Object.keys(patch).length > 0;
+  // +7/+14 ngày tính từ ngày giao kỳ tới đang thấy (kể cả ngày mới do đổi chu kỳ); ngày chọn thắng ngày do đổi chu kỳ ở máy chủ.
+  const steps = rescheduleOptions(nextRun ? nextRun.toISOString() : sub.nextRunAt);
+  const range = rescheduleRange();
 
   const save = useLockedMutation({
     mutationFn: () => updateSubscription(sub.id, patch),
@@ -129,8 +140,16 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       </div>
 
       <SectionLabel>{t.intervalLabel}</SectionLabel>
-      <IntervalPicker value={weeks} onChange={(w) => draft.set('weeks', w)} disabled={save.isPending} />
-      {nextRun && (
+      <IntervalPicker
+        value={weeks}
+        onChange={(w) => {
+          draft.set('weeks', w);
+          // +7/+14 tính từ ngày của chu kỳ đang chọn: đổi chu kỳ thì bỏ bước đã chọn kẻo PATCH gửi ngày cũ đè ngày mới. Ngày tự chọn giữ nguyên.
+          if (!picking) setRunDate(null);
+        }}
+        disabled={save.isPending}
+      />
+      {nextRun && !patch.nextRunDate && (
         <Text variant="caption" tone="tertiary" as="div" numeric>
           {t.intervalNextRun(formatVnDate(vnDateOf(nextRun)))}
         </Text>
@@ -139,6 +158,56 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
         <Text variant="caption" tone="tertiary" as="div">
           {t.intervalPausedHint}
         </Text>
+      )}
+
+      {steps.length > 0 && (
+        <>
+          <SectionLabel>{selfServeCopy('rescheduleLabel')}</SectionLabel>
+          <div role="group" aria-label={selfServeCopy('rescheduleLabel')} data-testid="subscription-reschedule" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) 0' }}>
+            {steps.map((o) => (
+              <Chip
+                key={o.days}
+                selected={!picking && runDate === o.date}
+                disabled={save.isPending || !o.allowed}
+                onPress={() => {
+                  setPicking(false);
+                  setRunDate(!picking && runDate === o.date ? null : o.date);
+                }}
+              >
+                {selfServeCopy('plusDays', { n: o.days })}
+              </Chip>
+            ))}
+            <Chip
+              selected={picking}
+              disabled={save.isPending}
+              onPress={() => {
+                setPicking(!picking);
+                setRunDate(null);
+              }}
+            >
+              {selfServeCopy('pickDate')}
+            </Chip>
+          </div>
+          {/* Tiêu đề mục ngay trên đã là nhãn nhìn thấy: ô chỉ cần tên cho trình đọc màn hình, không lặp nhãn thứ hai. */}
+          {picking && (
+            <input
+              type="date"
+              aria-label={selfServeCopy('rescheduleLabel')}
+              className="tubu-input"
+              value={runDate ?? ''}
+              min={range.min}
+              max={range.max}
+              disabled={save.isPending}
+              onChange={(e) => setRunDate(e.target.value || null)}
+            />
+          )}
+          {/* Ô ngày giới hạn min/max; ngày ngoài khoảng không vào PATCH nên câu gợi ý ở lại tới khi chọn được ngày hợp lệ. */}
+          {(patch.nextRunDate || picking) && (
+            <Text variant="caption" tone="tertiary" as="div" numeric>
+              {patch.nextRunDate ? selfServeCopy('rescheduleNext', { date: dayKeyText(patch.nextRunDate) }) : selfServeCopy('rescheduleHint', { max: RESCHEDULE_MAX_DAYS_AHEAD })}
+            </Text>
+          )}
+        </>
       )}
 
       <SectionLabel>{t.paymentLabel}</SectionLabel>

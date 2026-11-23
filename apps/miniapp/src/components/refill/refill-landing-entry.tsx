@@ -18,19 +18,22 @@ export function RefillLandingEntry({ style }: { style?: CSSProperties }) {
   const on = refillFirstOn(usePublicConfig());
   const q = useQuery({ ...refillLandingQuery(coreHttp), enabled: on });
   if (!on || refillLandingRows(q.data).length === 0) return null;
-  return <EntryRow style={style} />;
+  return <RefillEntryRow title={refillLandingCopy('title')} subtitle={refillLandingCopy('entrySub')} testId="refill-landing-entry" style={style} />;
 }
 
-/** Hàng chỉ dựng khi có trang để mở: hook điều hướng cần router, nơi gọi không có router (spec hub) không phải dựng nó khi lối vào ẩn. */
-function EntryRow({ style }: { style?: CSSProperties }) {
+/**
+ * Một hàng mở trang Tiết kiệm với Refill (lối vào ở hub, lời mời "Đã có chai sẵn?" ở Giỏ). Chỉ dựng khi có trang để mở: hook điều hướng cần router,
+ * nơi gọi không có router (spec hub) không phải dựng nó khi lối vào ẩn.
+ */
+export function RefillEntryRow({ title, subtitle, testId, style }: { title: string; subtitle?: string; testId: string; style?: CSSProperties }) {
   const goSmart = useSmartNavigate();
   return (
-    <div data-testid="refill-landing-entry" style={style}>
+    <div data-testid={testId} style={style}>
       <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
         <ListRow
           icon={<Icon icon={Droplets} size="md" tone="brand" />}
-          title={refillLandingCopy('title')}
-          subtitle={refillLandingCopy('entrySub')}
+          title={title}
+          subtitle={subtitle}
           trailing="chevron"
           onPress={() => goSmart(REFILL_LANDING_PATH.miniapp)}
           style={{ padding: 'var(--space-inset-card)' }}

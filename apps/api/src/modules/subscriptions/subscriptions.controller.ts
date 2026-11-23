@@ -26,6 +26,8 @@ export class UpdateSubDto {
   @OptionalNotNull() @IsString() addressId?: string;
   @OptionalNotNull() @IsIn(SUBSCRIPTION_INTERVAL_WEEKS) intervalWeeks?: number;
   @OptionalNotNull() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
+  /** Dời ngày giao kỳ tới: YYYY-MM-DD giờ Việt Nam, từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày tới. */
+  @OptionalNotNull() @Matches(/^\d{4}-\d{2}-\d{2}$/) nextRunDate?: string;
 }
 class StatusDto {
   @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status!: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
@@ -64,5 +66,11 @@ export class SubscriptionsController {
   @Post(':id/skip')
   skipCycle(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.subs.skipCycle(userId, id);
+  }
+
+  /** "Đặt kỳ này ngay": ra đơn kỳ tới ngay hôm nay, kỳ sau tính lại từ hôm nay. */
+  @Post(':id/run-now')
+  runNow(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.subs.runNow(userId, id);
   }
 }

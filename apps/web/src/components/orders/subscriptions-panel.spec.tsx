@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { SubscriptionsPanel } from './subscriptions-panel';
 import { subscriptionPatch } from './subscription-edit-sheet';
@@ -52,6 +52,8 @@ function hold(key: string) {
   return release;
 }
 let patchGate: Promise<void> | null = null;
+/** Thân trả lời riêng theo `METHOD /path` (mặc định mọi lệnh ghi trả SUB). */
+let replies: Record<string, unknown> = {};
 let hangAddresses = false;
 let addrGate: Promise<void> | null = null;
 const ADDRESS_LOAD_ERROR_TEXT = 'Máy chủ đang bận, thử lại nhé.';
@@ -83,6 +85,7 @@ function stubApi() {
       if (method === 'GET' && path === '/me/addresses') return json([ADDR('a1', '1 Lê Lợi'), ADDR('a2', '9 Hai Bà Trưng')]);
       if (method === 'GET' && path === '/me/wallet') return json({ walletBalance: 50000 });
       if (method === 'GET' && path === '/config/public') return json({ subscribeDiscountPct: 0.12 });
+      if (`${method} ${path}` in replies) return json(replies[`${method} ${path}`]);
       return json(SUB);
     }),
   );
@@ -108,6 +111,7 @@ beforeEach(() => {
   sheetSpy.calls.length = 0;
   listFailsOnce = false;
   patchGate = null;
+  replies = {};
   hangAddresses = false;
   addrGate = null;
   stubApi();
@@ -407,7 +411,8 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
   const retentionSheet = () => sheetSpy.calls.filter((c) => c.title === RETENTION_TITLE).at(-1)!;
   const cards = (c: HTMLElement) => Array.from(c.querySelectorAll('li'));
   /** Ba nút của thẻ theo thứ tự hiển thị: Sửa, Tạm dừng/Tiếp tục, Huỷ. */
-  const cardBtns = (li: Element) => Array.from(li.querySelectorAll('button')) as HTMLButtonElement[];
+  // Chỉ hàng Sửa/Tạm dừng/Huỷ; hàng nút của kỳ tới (Bỏ qua kỳ này / Đặt kỳ này ngay) có spec riêng.
+  const cardBtns = (li: Element) => (Array.from(li.querySelectorAll('button')) as HTMLButtonElement[]).filter((b) => !b.closest('[data-testid="subscription-cycle-actions"]'));
   const tryClose = () => act(() => retentionSheet().onClose());
   const escape = () => act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   const aria = (b: HTMLElement, name: string) => b.getAttribute(name);
@@ -872,7 +877,8 @@ describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗ
   const sheetEl = () => document.querySelector('[role="dialog"]') as HTMLElement | null;
   const retentionSheet = () => sheetSpy.calls.filter((c) => c.title === RETENTION_TITLE).at(-1)!;
   const cards = (c: HTMLElement) => Array.from(c.querySelectorAll('li'));
-  const cardBtns = (li: Element) => Array.from(li.querySelectorAll('button')) as HTMLButtonElement[];
+  // Chỉ hàng Sửa/Tạm dừng/Huỷ; hàng nút của kỳ tới (Bỏ qua kỳ này / Đặt kỳ này ngay) có spec riêng.
+  const cardBtns = (li: Element) => (Array.from(li.querySelectorAll('button')) as HTMLButtonElement[]).filter((b) => !b.closest('[data-testid="subscription-cycle-actions"]'));
   const inSheet = (label: string) => btn(label, sheetEl()!);
   const listCalls = () => sent('GET', '/me/subscriptions');
   const aria = (b: HTMLElement, name: string) => b.getAttribute(name);
@@ -1157,7 +1163,7 @@ describe('SubscriptionsPanel: khoá giữ tới khi danh sách làm mới về, 
   const RETENTION_TITLE = 'Giữ lại lịch định kỳ?';
   const LIST = 'GET /me/subscriptions';
   const sheetEl = () => document.querySelector('[role="dialog"]') as HTMLElement | null;
-  const cardBtns = () => Array.from(document.querySelector('li')!.querySelectorAll('button')) as HTMLButtonElement[];
+  const cardBtns = () => (Array.from(document.querySelector('li')!.querySelectorAll('button')) as HTMLButtonElement[]).filter((b) => !b.closest('[data-testid="subscription-cycle-actions"]'));
   const together = (...els: HTMLElement[]) =>
     act(() => {
       for (const el of els) el.click();
@@ -1344,5 +1350,170 @@ describe('SubscriptionsPanel web: phân loại không có tên', () => {
       mounted = [];
       sheetSpy.calls.length = 0;
     }
+  });
+});
+
+describe('SubscriptionsPanel: tự phục vụ trên thẻ (bỏ qua một chạm, đặt kỳ này ngay, bậc giảm kế)', () => {
+  const actions = () => document.querySelector('[data-testid="subscription-cycle-actions"]') as HTMLElement | null;
+  const status = () => document.body.querySelector('[role="status"]')?.textContent ?? '';
+  const dialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]') as HTMLElement | null;
+
+  it('"Bỏ qua kỳ này" trên thẻ gói đang chạy gửi skip một chạm, không mở sheet, báo ngày kỳ kế máy chủ trả', async () => {
+    replies = { 'POST /me/subscriptions/s1/skip': { ...SUB, nextRunAt: '2026-11-11T17:00:00.000Z' } };
+    await mount();
+    click(btn('Bỏ qua kỳ này', actions()!));
+    await flush(8);
+    expect(sent('POST', '/me/subscriptions/s1/skip')).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    expect(status()).toBe('Đã bỏ qua kỳ này, lần kế 12/11/2026');
+  });
+
+  it('gói tạm dừng: không có hàng bỏ qua / đặt ngay', async () => {
+    subs = [{ ...SUB, status: 'PAUSED' }];
+    await mount();
+    expect(actions()).toBeNull();
+  });
+
+  it('"Đặt kỳ này ngay" hỏi lại trước; "Để sau" không gửi; "Đặt ngay" gửi run-now một lần và báo mã đơn, đơn chuyển khoản thì nhắc chuyển khoản', async () => {
+    replies = {
+      'POST /me/subscriptions/s1/run-now': { id: 's1', status: 'ACTIVE', nextRunAt: '2026-12-10T17:00:00.000Z', order: { id: 'o9', code: 'TB123', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', total: 137600 } },
+    };
+    await mount();
+    const open = btn('Đặt kỳ này ngay', actions()!);
+    expect(open.getAttribute('aria-haspopup')).toBe('dialog');
+    click(open);
+    await flush(4);
+    expect(dialog()?.textContent).toContain('Đặt đơn kỳ này ngay?');
+    click(btn('Để sau', dialog()!));
+    await flush(4);
+    expect(sent('POST', '/me/subscriptions/s1/run-now')).toHaveLength(0);
+    click(btn('Đặt kỳ này ngay', actions()!));
+    await flush(4);
+    const confirm = btn('Đặt ngay', dialog()!);
+    act(() => {
+      confirm.click();
+      confirm.click();
+    });
+    await flush(8);
+    expect(sent('POST', '/me/subscriptions/s1/run-now')).toHaveLength(1);
+    expect(status()).toBe('Đã tạo đơn TB123, bạn chuyển khoản để Tubu giao nhé');
+  });
+
+  it('run-now bị từ chối (đã có đơn hôm nay 409): báo câu máy chủ, không báo thành công', async () => {
+    failures = { 'POST /me/subscriptions/s1/run-now': { status: 409, message: 'Gói này đã có đơn hôm nay, kỳ sau Tubu giao theo lịch nhé.' } };
+    await mount();
+    click(btn('Đặt kỳ này ngay', actions()!));
+    await flush(4);
+    click(btn('Đặt ngay', dialog()!));
+    await flush(8);
+    expect(document.body.textContent).toContain('Gói này đã có đơn hôm nay, kỳ sau Tubu giao theo lịch nhé.');
+    expect(status()).not.toContain('Đã đặt đơn');
+  });
+
+  it('viên bậc giảm kế: hiện một lần trên danh sách khi API trả nextTier; API cũ không có thì không hiện', async () => {
+    subs = [
+      { ...SUB, id: 's1', nextTier: { countNeeded: 2, discountPct: 0.15 } },
+      { ...SUB, id: 's2', nextTier: { countNeeded: 2, discountPct: 0.15 } },
+    ];
+    await mount();
+    const pills = document.querySelectorAll('[data-testid="subscription-next-tier"]');
+    expect(pills).toHaveLength(1);
+    expect(pills[0]!.textContent).toBe('Thêm 2 gói định kỳ để được giảm 15%');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    subs = [SUB];
+    await mount();
+    expect(document.querySelector('[data-testid="subscription-next-tier"]')).toBeNull();
+  });
+
+  it('hai nút của kỳ có tên và đủ vùng chạm', async () => {
+    await mount();
+    expect(unnamedControls(actions()!)).toEqual([]);
+    expect(smallTouchTargets(actions()!)).toEqual([]);
+  });
+});
+
+describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / chọn ngày)', () => {
+  const SUB_R = { ...SUB, nextRunAt: '2026-11-07T03:00:00.000Z', lastOrderAt: '2026-10-10T03:00:00.000Z' };
+  const group = () => document.body.querySelector('[data-testid="subscription-reschedule"]') as HTMLElement | null;
+  const dateInput = () => document.body.querySelector('input[type="date"]') as HTMLInputElement | null;
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T05:00:00.000Z') });
+    subs = [SUB_R];
+  });
+  afterEach(() => vi.useRealTimers());
+  const openEdit = async () => {
+    const c = await mount();
+    click(btn('Sửa', c));
+    await flush(6);
+  };
+
+  it('+7 / +14 tính từ ngày hẹn (07/11); chọn thì báo ngày mới, chạm lại thì bỏ; PATCH chỉ có nextRunDate', async () => {
+    await openEdit();
+    expect(Array.from(group()!.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['+7 ngày', '+14 ngày', 'Chọn ngày']);
+    click(btn('+7 ngày', group()!));
+    expect(document.body.textContent).toContain('Kỳ tới giao ngày 14/11/2026');
+    click(btn('+7 ngày', group()!));
+    expect(document.body.textContent).not.toContain('Kỳ tới giao ngày');
+    expect(btn('Lưu thay đổi').disabled).toBe(true);
+    click(btn('+14 ngày', group()!));
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-11-21' });
+  });
+
+  it('"Chọn ngày" mở ô ngày từ mai tới 90 ngày kèm câu gợi ý; ngày ngoài khoảng không vào PATCH, câu gợi ý ở lại, không lưu được', async () => {
+    await openEdit();
+    click(btn('Chọn ngày', group()!));
+    const input = dateInput()!;
+    expect(input.min).toBe('2026-10-21');
+    expect(input.max).toBe('2027-01-18');
+    expect(document.body.textContent).toContain('Chọn một ngày từ mai tới 90 ngày tới.');
+    typeInto(input, '2027-03-01');
+    expect(document.body.textContent).toContain('Chọn một ngày từ mai tới 90 ngày tới.');
+    expect(document.body.textContent).not.toContain('Kỳ tới giao ngày');
+    expect(btn('Lưu thay đổi').disabled).toBe(true);
+    typeInto(input, '2026-12-01');
+    expect(document.body.textContent).toContain('Kỳ tới giao ngày 01/12/2026');
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-12-01' });
+  });
+
+  it('đổi chu kỳ rồi dời: +7 tính từ ngày mới, dòng "Lần giao kế tiếp" nhường cho ngày đã chọn', async () => {
+    await openEdit();
+    click(btn('6 tuần'));
+    expect(document.body.textContent).toContain('Lần giao kế tiếp: 21/11/2026');
+    click(btn('+7 ngày', group()!));
+    expect(document.body.textContent).not.toContain('Lần giao kế tiếp');
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 6, nextRunDate: '2026-11-28' });
+  });
+
+  it('chọn +7 rồi đổi chu kỳ: bước đã chọn bị bỏ, PATCH chỉ có intervalWeeks (không gửi ngày cũ đè ngày của chu kỳ mới)', async () => {
+    await openEdit();
+    click(btn('+7 ngày', group()!));
+    click(btn('8 tuần'));
+    expect(document.body.textContent).not.toContain('Kỳ tới giao ngày');
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 8 });
+  });
+
+  it('API cũ (không có lastOrderAt): không có hàng dời ngày', async () => {
+    const { lastOrderAt: _drop, ...old } = SUB_R;
+    subs = [old];
+    await openEdit();
+    expect(group()).toBeNull();
+  });
+
+  it('subscriptionPatch: nextRunDate chỉ gửi khi trong khoảng API nhận và API mới', () => {
+    const now = new Date('2026-10-20T05:00:00.000Z');
+    const next = { quantity: 2, addressId: 'a1', paymentMethod: 'COD' as const, intervalWeeks: 4 };
+    expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-11-14' }, true, now)).toEqual({ nextRunDate: '2026-11-14' });
+    expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-10-20' }, true, now)).toEqual({});
+    expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2027-01-19' }, true, now)).toEqual({});
+    expect(subscriptionPatch(SUB_R as never, { ...next, nextRunDate: '2026-11-14' }, false, now)).toEqual({});
   });
 });

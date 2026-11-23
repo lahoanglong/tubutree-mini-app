@@ -17,6 +17,8 @@ export interface FreeshipAddonsProps {
   exclude?: { slugs: ReadonlySet<string>; variationIds: ReadonlySet<string> };
   /** Dải có hiện không: true đủ món, false không (nguồn đã về hay lỗi, hoặc dải rời màn), null còn chờ nguồn. Giỏ dùng cho `aovGiftLockedRowShown`. */
   onShownChange?: (shown: boolean | null) => void;
+  /** Giỏ của khách chưa đăng nhập: "+ Thêm" ghi vào giỏ khách (`addGuestLine`) thay cho giỏ tài khoản. */
+  guest?: boolean;
 }
 
 // Chunk phần vẽ không tải được (mạng chập): Giỏ vẫn chạy, chỉ thiếu dải, và báo dải không hiện để ô quà khoá nói lại số còn thiếu.
@@ -75,6 +77,11 @@ const FreeshipAddonsView = dynamic(
   () => import('./freeship-addons-view').then((m) => m.FreeshipAddonsView, () => NoFreeshipAddonsView),
   { ssr: false, loading: LoadingFreeshipAddons },
 );
+// Giỏ khách: chunk riêng, không kéo khoá giỏ tài khoản (`useCartWrite`, lệnh giỏ máy chủ) vào máy khách chưa đăng nhập.
+const GuestFreeshipAddonsView = dynamic(
+  () => import('./guest-freeship-addons-view').then((m) => m.GuestFreeshipAddonsView, () => NoFreeshipAddonsView),
+  { ssr: false, loading: LoadingFreeshipAddons },
+);
 
 /**
  * Dải gợi ý mua thêm món nhỏ ở đầu Giỏ (tubu-w7-02): nhắm mốc kế tiếp (Miễn phí giao hàng, rồi quà dùng thử 0đ; dòng đầu theo `aovUpsellGoal().headline`), tối đa 2 món
@@ -88,9 +95,10 @@ export function FreeshipAddons(props: FreeshipAddonsProps) {
   // Món quà cũng gửi vào `exclude`: máy chủ không tốn chỗ trong danh sách cho món dải sẽ bỏ.
   const source = useFreeshipBoosterCards(goal.shortfall, [...lines, ...[...(exclude?.slugs ?? [])].map((slug) => ({ slug }))]);
   const pricing = useCardPricing();
+  const View = props.guest ? GuestFreeshipAddonsView : FreeshipAddonsView;
   return (
     <PendingTitle.Provider value={goal.headline}>
-      <FreeshipAddonsView {...props} source={source} pricing={pricing} />
+      <View {...props} source={source} pricing={pricing} />
     </PendingTitle.Provider>
   );
 }

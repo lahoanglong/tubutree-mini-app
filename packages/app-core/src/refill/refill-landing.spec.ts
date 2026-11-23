@@ -12,6 +12,7 @@ import {
   refillLandingIntro,
   refillLandingItems,
   refillLandingQuery,
+  refillCartEducation,
   refillLandingRows,
   refillOrderShortcut,
   type RefillLandingCopyKey,
@@ -153,5 +154,35 @@ describe('chữ', () => {
       const max = REFILL_LANDING_COPY_MAX[key];
       if (max !== null) expect(refillLandingCopy(key, vars).length, key).toBeLessThanOrEqual(max);
     }
+  });
+});
+
+describe('refillCartEducation (liên kết ở Giỏ cho khách mua chai lần đầu)', () => {
+  const dto: RefillLandingDTO = { enabled: true, pairs: [pair(SMALL, {}, 34), pair(SOAP, SOAP_REFILL, 33)] };
+  const soapPct = refillLandingRows(dto)[1]!.view.comparison!.savedPct;
+  const smallPct = refillLandingRows(dto)[0]!.view.comparison!.savedPct;
+
+  it('giỏ có chai đã ghép cặp: câu nêu mức rẻ hơn cao nhất của các chai khớp', () => {
+    expect(refillCartEducation(dto, [SOAP.slug])).toEqual({ pct: soapPct, text: `Đã có chai sẵn? Xem gói Refill tiết kiệm tới ${soapPct}%` });
+    expect(refillCartEducation(dto, [SOAP.slug, SMALL.slug, 'khac'])?.pct).toBe(Math.max(soapPct, smallPct));
+  });
+
+  it('chai đang có lối đổi một chạm (khách mua lại) không tính; gói đã trong giỏ cũng không mời', () => {
+    expect(refillCartEducation(dto, [SMALL.slug], new Set([SMALL.slug]))).toBeNull();
+    expect(refillCartEducation(dto, [SMALL.slug, SOAP.slug], new Set([SMALL.slug]))?.pct).toBe(soapPct);
+    expect(refillCartEducation(dto, [SOAP.slug, SOAP_REFILL.slug])).toBeNull();
+  });
+
+  it('giỏ không có chai ghép cặp, cờ tắt, chưa tải hay dữ liệu hỏng: null', () => {
+    expect(refillCartEducation(dto, ['khac', null, undefined, ''])).toBeNull();
+    expect(refillCartEducation(dto, [])).toBeNull();
+    expect(refillCartEducation({ enabled: false, pairs: dto.pairs }, [SOAP.slug])).toBeNull();
+    expect(refillCartEducation(undefined, [SOAP.slug])).toBeNull();
+    expect(refillCartEducation({ enabled: true, pairs: 'x' } as never, [SOAP.slug])).toBeNull();
+  });
+
+  it('gói không rẻ hơn chai cùng lượng thì không mời (trang chỉ liệt kê gói rẻ hơn)', () => {
+    const pricey: RefillLandingDTO = { enabled: true, pairs: [pair(SOAP, { ...SOAP_REFILL, price: 900_000 }, null)] };
+    expect(refillCartEducation(pricey, [SOAP.slug])).toBeNull();
   });
 });

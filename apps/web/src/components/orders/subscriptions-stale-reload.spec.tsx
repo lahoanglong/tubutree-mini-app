@@ -98,7 +98,9 @@ const mount = async () => {
   return r.container;
 };
 const sheetEl = () => document.querySelector('[role="dialog"]') as HTMLElement | null;
-const cardBtns = () => Array.from(document.querySelector('li')!.querySelectorAll('button')) as HTMLButtonElement[];
+// Hàng nút của kỳ tới (Bỏ qua kỳ này / Đặt kỳ này ngay) nằm trên hàng Sửa/Tạm dừng/Huỷ: chỉ số dưới đây là của hàng Sửa/Tạm dừng/Huỷ.
+const cardBtns = () =>
+  (Array.from(document.querySelector('li')!.querySelectorAll('button')) as HTMLButtonElement[]).filter((b) => !b.closest('[data-testid="subscription-cycle-actions"]'));
 const EDIT = 0;
 const TOGGLE = 1;
 const CANCEL = 2;

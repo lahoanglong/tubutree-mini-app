@@ -161,6 +161,7 @@ export const FIELD_LABELS: Record<string, string> = {
   monthlyQuotaPoints: 'Hạn mức điểm mỗi tháng',
   monthlyVolumeEstimate: 'Sản lượng ước tính mỗi tháng',
   name: 'Tên',
+  nextRunDate: 'Ngày giao kỳ tới',
   notes: 'Ghi chú',
   openingHours: 'Giờ mở cửa',
   optInCodes: 'Đơn tự chọn dọn',

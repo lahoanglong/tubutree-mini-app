@@ -4,11 +4,13 @@ import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSubscriptions,
+  runSubscriptionNow,
   setSubscriptionStatus,
   isStaleSubscriptionError,
   skipSubscriptionCycle,
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
+import { canActOnCycle, nextTierText, runNowConfirmBody, runNowDoneText, selfServeCopy, skipDoneText } from '@tubutree/app-core/subscription-self-serve';
 import { subscriptionCycleView } from '../utils/subscription-price';
 import { subscriptionPauseView, SUBSCRIPTION_PAUSED_GENERIC } from '@tubutree/app-core/subscription-pause-copy';
 import { getAddresses } from '../services/shop-api';
@@ -24,6 +26,7 @@ import { Badge, type BadgeTone } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { ConfirmSheet } from './ui/confirm-sheet';
 import { EmptyState, ErrorState } from './ui/empty-state';
 import { LineItemSkeleton } from './ui/skeleton';
 import { Text } from './ui/text';
@@ -40,7 +43,8 @@ const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: '
 
 /**
  * Nội dung "Đặt định kỳ" — nhúng làm tab "Định kỳ" của trang Đơn hàng (spec 4a.2): tạm dừng/tiếp tục,
- * sửa số lượng/địa chỉ/cách trả (C-015), huỷ qua sheet giữ chân (tạm dừng / bỏ qua kỳ / vẫn huỷ).
+ * sửa số lượng/chu kỳ/ngày giao kỳ tới/địa chỉ/cách trả (C-015), bỏ qua kỳ này và "Đặt kỳ này ngay" ngay trên thẻ gói đang chạy,
+ * viên bậc giảm kế tiếp, huỷ qua sheet giữ chân (tạm dừng / bỏ qua kỳ / vẫn huỷ). Cùng web `components/orders/subscriptions-panel.tsx`.
  */
 export function SubscriptionsPanel() {
   const goSmart = useSmartNavigate();
@@ -55,6 +59,7 @@ export function SubscriptionsPanel() {
   const subscribePct = Math.round((subs[0]?.effectiveDiscountPct ?? cfg.subscribeDiscountPct) * 100);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
+  const [runNowTarget, setRunNowTarget] = useState<string | null>(null);
   // Gợi ý định kỳ chỉ khi khách chưa có gói nào đang chạy hay tạm dừng.
   const { suggestion, discountFraction } = useSubscriptionSuggestion(subsQ.isSuccess && !hasLiveSubscription(subs));
   const [subscribeTo, setSubscribeTo] = useState<SubscriptionSuggestion | null>(null);
@@ -101,19 +106,40 @@ export function SubscriptionsPanel() {
   const skipMut = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: (id: string) => skipSubscriptionCycle(id),
-    onSuccess: () => {
+    onSuccess: (sub) => {
       haptic('light');
-      openSnackbar({ text: vi.subscriptions.skipOk, type: 'success' });
+      openSnackbar({ text: skipDoneText(sub?.nextRunAt), type: 'success' });
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
     onError: (e, id) => onActionError(e, id),
   });
 
+  // "Đặt kỳ này ngay" tạo đơn (Ví Tubu trừ tiền ngay) nên qua tấm xác nhận; tấm giữ nút bận tới khi danh sách gói mới về. Đơn mới vào tab Đơn hàng.
+  const runNowMut = useLockedMutation({
+    onSettled: releaseActing,
+    mutationFn: (id: string) => runSubscriptionNow(id),
+    onSuccess: (res) => {
+      haptic('light');
+      openSnackbar({ text: runNowDoneText(res?.order), type: 'success' });
+      setRunNowTarget(null);
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+      // Gói trả bằng Ví Tubu bị trừ tiền ngay khi ra đơn.
+      void qc.invalidateQueries({ queryKey: ['wallet'] });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
+    },
+    onError: (e, id) => {
+      setRunNowTarget(null);
+      return onActionError(e, id);
+    },
+  });
+
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;
   const editSub = subs.find((s) => s.id === editTarget) ?? null;
+  const runNowSub = subs.find((s) => s.id === runNowTarget) ?? null;
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
-  const sheetBusy = statusMut.isPending || skipMut.isPending;
+  const sheetBusy = statusMut.isPending || skipMut.isPending || runNowMut.isPending;
+  const tierText = nextTierText(subs);
   const changeFromSheet = (status: SubStatus) => {
     if (!cancelTarget) return;
     exclusive(() => statusMut.mutate({ id: cancelTarget, status }));
@@ -129,6 +155,13 @@ export function SubscriptionsPanel() {
           <Text variant="caption" tone="brand" as="p" numeric style={{ marginTop: 4 }}>
             {vi.subscriptions.discountLine(Math.round(subs[0].effectiveDiscountPct * 100))}
           </Text>
+        )}
+        {tierText && (
+          <div data-testid="subscription-next-tier" style={{ marginTop: 'var(--space-stack-xs)' }}>
+            <Badge tone="brand" size="sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {tierText}
+            </Badge>
+          </div>
         )}
       </div>
 
@@ -149,6 +182,7 @@ export function SubscriptionsPanel() {
             sub={s}
             busy={sheetBusy}
             toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.status !== 'CANCELLED' && cancelTarget === null}
+            skipping={skipMut.isPending && skipMut.variables === s.id && cancelTarget === null}
             refreshing={subsQ.isFetching}
             address={s.addressId ? addressById.get(s.addressId) : undefined}
             onEdit={() => {
@@ -157,6 +191,12 @@ export function SubscriptionsPanel() {
             }}
             onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }))}
             onCancel={() => setCancelTarget(s.id)}
+            onSkip={() => exclusive(() => skipMut.mutate(s.id))}
+            onRunNow={() => {
+              if (acting.current || subsQ.isFetching) return;
+              runNowMut.reset();
+              setRunNowTarget(s.id);
+            }}
           />
         ))
       ) : (
@@ -171,6 +211,21 @@ export function SubscriptionsPanel() {
       )}
 
       {editSub && <SubscriptionEditSheet key={editSub.id} sub={editSub} onClose={() => setEditTarget(null)} />}
+
+      {runNowSub && (
+        <ConfirmSheet
+          open
+          title={selfServeCopy('runNowTitle')}
+          message={runNowConfirmBody(runNowSub)}
+          confirmLabel={selfServeCopy('runNowConfirm')}
+          cancelLabel={selfServeCopy('runNowCancel')}
+          loading={runNowMut.isPending}
+          onConfirm={() => exclusive(() => runNowMut.mutate(runNowSub.id))}
+          onCancel={() => {
+            if (!runNowMut.isPending) setRunNowTarget(null);
+          }}
+        />
+      )}
 
       <BottomSheet
         open={cancelTarget !== null}
@@ -224,14 +279,21 @@ function SubscriptionCard({
   sub: s,
   busy,
   toggling,
+  skipping,
   refreshing,
   address,
   onEdit,
   onToggle,
   onCancel,
+  onSkip,
+  onRunNow,
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
+  /** Chính thẻ này đang bỏ qua kỳ bằng nút trên thẻ: nút hiện spinner. */
+  skipping: boolean;
+  onSkip: () => void;
+  onRunNow: () => void;
   /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục: nút đó hiện spinner, không khoá DOM để giữ focus. */
   toggling: boolean;
   /** Danh sách đang tải lại: "Sửa" chờ, kẻo mở sheet trên số liệu cũ (vừa lưu 3 mà form hiện 2, lần lưu sau ghi đè về 2). */
@@ -294,6 +356,17 @@ function SubscriptionCard({
         <Text variant="caption" tone="tertiary" as="div">
           {pause.hint}
         </Text>
+      )}
+      {canActOnCycle(s) && (
+        // Hai việc của kỳ tới, ngay dưới ngày "Lần kế": nút ghost gọn, không thêm nút chính.
+        <div data-testid="subscription-cycle-actions" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--space-inline-md)' }}>
+          <Button variant="ghost" loading={skipping} disabled={(busy || refreshing) && !skipping} onPress={onSkip}>
+            {selfServeCopy('skip')}
+          </Button>
+          <Button variant="ghost" aria-haspopup="dialog" disabled={busy || refreshing} onPress={onRunNow}>
+            {selfServeCopy('runNow')}
+          </Button>
+        </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         <Button variant="secondary" disabled={busy || refreshing} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>

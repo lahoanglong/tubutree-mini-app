@@ -257,7 +257,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         ),
       },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', tierId: null }) },
-      order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(opts.existingOrder ?? null) },
+      order: { create: orderCreate, findUnique: jest.fn().mockResolvedValue(opts.existingOrder ?? null), findFirst: jest.fn().mockResolvedValue(null) },
       // Tạo đơn định kỳ giờ chạy trong $transaction (trừ stock atomic + order.create) — mock
       // chạy callback với chính prisma mock (đủ variation.updateMany + order.create cho test).
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),

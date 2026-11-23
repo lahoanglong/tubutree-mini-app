@@ -2,9 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useMutationState, useQueryClient } from '@tanstack/react-query';
-import type { ProductCard } from '@tubutree/app-core/api/catalog';
-import { pickAovAddons } from '@tubutree/app-core/cart/aov-upsell';
-import { FREESHIP_BOOSTER_WINDOW } from '@tubutree/app-core/commerce/freeship-progress';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '@/components/mini';
 import { FREESHIP_UPSELL_QUERY_PREFIX, type useFreeshipBoosterCards } from '@/components/cart/freeship-booster/use-freeship-booster-cards';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
@@ -15,13 +12,9 @@ import { addToCart } from '@/lib/shop-client';
 import type { useCardPricing } from '@/lib/use-card-pricing';
 import { useCartWrite } from '@/lib/use-cart-write';
 import { FreeshipAddonsPending, type FreeshipAddonsProps } from './freeship-addons';
+import { pickFreeshipAddonItems } from './freeship-addons-pick';
 
 const ADD_KEY = ['freeship-add'] as const;
-
-interface Candidate extends FreeshipAddonItem {
-  inStock: boolean;
-  variationId: string;
-}
 
 export interface FreeshipAddonsViewProps extends FreeshipAddonsProps {
   /** Nguồn món (`useFreeshipBoosterCards`), gọi ở `FreeshipAddons` để tải song song với chunk này. */
@@ -63,24 +56,7 @@ export function FreeshipAddonsView({ goal, lines, exclude, onShownChange, source
   // Mọi món đang bay (không chỉ lệnh sau cùng): nút của đúng các món đó báo bận, vì khoá theo món nuốt cú chạm vào chúng.
   const busySlugs = useMutationState({ filters: { mutationKey: ADD_KEY, status: 'pending' }, select: (m) => (m.state.variables as FreeshipAddonItem).slug });
 
-  // Không bọc `useMemo`: giá và phân loại phụ thuộc kho Giờ vàng và đồng hồ (đọc trong `pricing`), nên Giờ vàng hết hạn phải tính lại ngay, không giữ giá cũ.
-  const picked = (() => {
-    const candidates: Candidate[] = source.cards
-      .filter((c: ProductCard) => (c.fulfiller?.kind ?? 'TUBU') === 'TUBU')
-      .flatMap((c: ProductCard) => {
-        const p = pricing(c);
-        if (!p.variationId) return [];
-        return [{ slug: c.slug, name: c.name, thumbnail: c.thumbnail, price: p.price, compareAt: p.compareAt, variationId: p.variationId, inStock: c.inStock }];
-      });
-    return pickAovAddons(candidates, {
-      shortfall: goal.shortfall,
-      inCartSlugs: new Set(lines.map((l) => l.slug)),
-      inCartVariationIds: new Set(lines.map((l) => l.variationId)),
-      excludeSlugs: exclude?.slugs,
-      excludeVariationIds: exclude?.variationIds,
-      ...(source.booster ? { window: FREESHIP_BOOSTER_WINDOW, ranked: true } : {}),
-    });
-  })();
+  const picked = pickFreeshipAddonItems({ goal, lines, exclude }, source, pricing);
 
   // Món bị từ chối vì hết hàng làm kệ tải lại loại món đó, dải có thể rơi dưới mức tối thiểu và biến mất: lời lỗi vẫn hiện một mình để khách đọc được lý do.
   // Dải hiện lại sau đó thì lời cũ bỏ đi, không cho nó sống lại cạnh một dải khác.

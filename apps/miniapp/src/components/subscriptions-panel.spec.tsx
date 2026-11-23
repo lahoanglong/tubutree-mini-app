@@ -7,7 +7,7 @@ import type { BottomSheetProps } from './ui/bottom-sheet';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), getSubscriptions: vi.fn(), setSubscriptionStatus: vi.fn(), skipSubscriptionCycle: vi.fn(),
   updateSubscription: vi.fn(), getAddresses: vi.fn(), getWallet: vi.fn(),
-  getSuggestions: vi.fn(), trackEvent: vi.fn(),
+  getSuggestions: vi.fn(), trackEvent: vi.fn(), runSubscriptionNow: vi.fn(),
 }));
 const NO_SUGGESTIONS = { enabled: false, items: [] };
 mocks.getSuggestions.mockResolvedValue(NO_SUGGESTIONS);
@@ -38,6 +38,7 @@ vi.mock('../services/subscriptions-api', async (importOriginal) => ({
   setSubscriptionStatus: mocks.setSubscriptionStatus,
   skipSubscriptionCycle: mocks.skipSubscriptionCycle,
   updateSubscription: mocks.updateSubscription,
+  runSubscriptionNow: mocks.runSubscriptionNow,
 }));
 vi.mock('../services/shop-api', () => ({
   getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
@@ -46,7 +47,7 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../services/account-api', () => ({ getWallet: mocks.getWallet }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('@tubutree/app-core/api/subscriptions', () => ({ getSubscriptionSuggestions: mocks.getSuggestions }));
+vi.mock('@tubutree/app-core/api/subscriptions', async (importOriginal) => ({ ...(await importOriginal<object>()), getSubscriptionSuggestions: mocks.getSuggestions }));
 vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
 vi.mock('./subscribe-sheet', () => ({
   SubscribeSheet: (p: { variationId: string; initialWeeks?: number }) => (
@@ -239,7 +240,7 @@ describe('SubscriptionsPanel', () => {
     renderPanel();
     fireEvent.click(await screen.findByRole('button', { name: 'Huỷ' }));
     expect(await screen.findByText('Giữ lại lịch định kỳ?')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Bỏ qua kỳ này' }));
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
     await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'), { timeout: 5000 });
     // Chờ sheet đầu ĐÓNG hẳn (đang trượt xuống + nút thẻ còn bị khoá) rồi mới mở sheet thứ hai — nếu không,
     // cú bấm "Hủy" thứ hai có thể rơi vào lúc sheet cũ chưa đóng và bị nuốt (flaky khi máy tải nặng).
@@ -1262,5 +1263,73 @@ describe('SubscriptionsPanel Mini: phân loại không có tên', () => {
       unmount();
       sheetSpy.calls.length = 0;
     }
+  });
+});
+
+describe('SubscriptionsPanel: tự phục vụ trên thẻ (bỏ qua một chạm, đặt kỳ này ngay, bậc giảm kế)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+
+  it('"Bỏ qua kỳ này" trên thẻ gói đang chạy gọi skip một chạm, báo ngày kỳ kế máy chủ trả', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.skipSubscriptionCycle.mockResolvedValue({ ...SUB, nextRunAt: '2026-11-11T17:00:00.000Z' });
+    renderPanel();
+    const actions = await screen.findByTestId('subscription-cycle-actions');
+    fireEvent.click(within(actions).getByRole('button', { name: 'Bỏ qua kỳ này' }));
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã bỏ qua kỳ này, lần kế 12/11/2026' })));
+    expect(screen.queryByText(RETENTION_TITLE)).not.toBeInTheDocument();
+  });
+
+  it('gói tạm dừng hay đã huỷ: không có hàng bỏ qua / đặt ngay', async () => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, status: 'PAUSED' as const }]);
+    renderPanel();
+    await screen.findByText('Đang tạm dừng');
+    expect(screen.queryByTestId('subscription-cycle-actions')).not.toBeInTheDocument();
+  });
+
+  it('"Đặt kỳ này ngay" hỏi lại trước; "Đặt ngay" gọi run-now và báo mã đơn; "Để sau" không gọi', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.runSubscriptionNow.mockResolvedValue({ id: 's1', status: 'ACTIVE', nextRunAt: '2026-12-10T17:00:00.000Z', order: { id: 'o9', code: 'TB123', status: 'PENDING', paymentMethod: 'COD', total: 137600 } });
+    renderPanel();
+    const actions = await screen.findByTestId('subscription-cycle-actions');
+    fireEvent.click(within(actions).getByRole('button', { name: 'Đặt kỳ này ngay' }));
+    expect(await screen.findByText('Đặt đơn kỳ này ngay?')).toBeInTheDocument();
+    fireEvent.click(inSheet('Để sau'));
+    expect(mocks.runSubscriptionNow).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('Đặt đơn kỳ này ngay?')).not.toBeInTheDocument(), { timeout: 5000 });
+    fireEvent.click(within(screen.getByTestId('subscription-cycle-actions')).getByRole('button', { name: 'Đặt kỳ này ngay' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đặt ngay' }));
+    await waitFor(() => expect(mocks.runSubscriptionNow).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã đặt đơn TB123, Tubu giao sớm nhé' })));
+  }, 15_000);
+
+  it('run-now lỗi (đã có đơn hôm nay 409): báo câu của máy chủ, không báo thành công', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.runSubscriptionNow.mockRejectedValue(new HttpError('Gói này đã có đơn hôm nay, kỳ sau Tubu giao theo lịch nhé.', undefined, { status: 409, data: { message: 'Gói này đã có đơn hôm nay, kỳ sau Tubu giao theo lịch nhé.' } } as never));
+    renderPanel();
+    fireEvent.click(within(await screen.findByTestId('subscription-cycle-actions')).getByRole('button', { name: 'Đặt kỳ này ngay' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đặt ngay' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('đã có đơn hôm nay') })));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Đã đặt đơn') }));
+  });
+
+  it('viên bậc giảm kế: có nextTier thì hiện một lần trên danh sách; API cũ không có thì không hiện', async () => {
+    mocks.getSubscriptions.mockResolvedValue([
+      { ...SUB, id: 's1', nextTier: { countNeeded: 2, discountPct: 0.15 } },
+      { ...SUB, id: 's2', nextTier: { countNeeded: 2, discountPct: 0.15 } },
+    ]);
+    const { unmount } = renderPanel();
+    expect(await screen.findByTestId('subscription-next-tier')).toHaveTextContent('Thêm 2 gói định kỳ để được giảm 15%');
+    expect(screen.getAllByTestId('subscription-next-tier')).toHaveLength(1);
+    unmount();
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    renderPanel();
+    await screen.findByTestId('subscription-cycle-actions');
+    expect(screen.queryByTestId('subscription-next-tier')).not.toBeInTheDocument();
   });
 });

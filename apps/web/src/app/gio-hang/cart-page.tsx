@@ -91,6 +91,9 @@ const EmptyCart = dynamic(() => import('./empty-cart'), {
   ),
 });
 
+// Liên kết Refill cho khách mua chai lần đầu và gợi ý giao định kỳ: chunk riêng, nằm dưới các dòng giỏ nên tải muộn không xô nội dung đang xem.
+const CartNudges = dynamic(() => import('./cart-nudges').then((m) => m.CartNudges), { ssr: false });
+
 // Lưới của giỏ có dòng và của khung chờ dùng chung một chuỗi lớp, nên khung chờ không nhảy khi giỏ về (một cột tới md, từ lg cột tóm tắt 360px).
 const CART_GRID = 'grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]';
 
@@ -474,6 +477,7 @@ export default function CartPage() {
     saving: refill.saving,
   });
   const refillConfirm = refill.confirm && refillConfirmText(refill.confirm);
+  const swapSlugs = new Set(allItems.filter((it) => refillViews.has(it.id)).map((it) => it.slug));
   // Một thanh Hoàn tác cho cả đổi Refill lẫn bỏ món (như Mini App): lệnh sau cùng thắng, thanh của lệnh trước đóng.
   const undoBar = refill.receipt
     ? { text: fillCopy('refill.swapped'), onUndo: refill.undo, hold: refill.hold }
@@ -765,6 +769,7 @@ export default function CartPage() {
                 );
               })}
             </div>
+            <CartNudges lines={allItems} swapSlugs={swapSlugs} account />
             {(cart.pendingGiftRedemptions?.length ?? 0) > 0 && <GiftNote />}
             <GiftTrialRow
               summary={giftTrialShown}

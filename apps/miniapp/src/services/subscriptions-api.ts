@@ -1,3 +1,4 @@
+import type { RunNowSubscription, SubscriptionNextTier, SubscriptionPatch } from '@tubutree/app-core/api/subscriptions';
 import { api, isHttpError } from './api';
 import { takeMeBlock } from './home-feed';
 
@@ -32,6 +33,8 @@ export interface SubscriptionDTO {
   cycleSubtotal?: number;
   cycleDiscount?: number;
   cycleGoods?: number;
+  /** Bậc giảm kế tiếp (cùng giá trị trên mọi gói); null khi đã ở bậc cao nhất hay không có gói đang chạy. Optional: API cũ chưa trả. */
+  nextTier?: SubscriptionNextTier | null;
 }
 
 export interface SubscriptionFirstOrder {
@@ -64,13 +67,13 @@ export const createSubscription = (data: {
   paymentMethod: SubscriptionPaymentMethod;
 }) => api.post<CreatedSubscription>('/me/subscriptions', data).then((r) => r.data);
 
-export const updateSubscription = (
-  id: string,
-  data: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number },
-) => api.patch<SubscriptionDTO>(`/me/subscriptions/${id}`, data).then((r) => r.data);
+export const updateSubscription = (id: string, data: SubscriptionPatch) => api.patch<SubscriptionDTO>(`/me/subscriptions/${id}`, data).then((r) => r.data);
 
 export const setSubscriptionStatus = (id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') =>
   api.post<SubscriptionDTO>(`/me/subscriptions/${id}/status`, { status }).then((r) => r.data);
 
 export const skipSubscriptionCycle = (id: string) =>
   api.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`).then((r) => r.data);
+
+/** "Đặt kỳ này ngay": ra đơn kỳ tới hôm nay; đã có đơn hôm nay thì 409. */
+export const runSubscriptionNow = (id: string) => api.post<RunNowSubscription>(`/me/subscriptions/${id}/run-now`).then((r) => r.data);

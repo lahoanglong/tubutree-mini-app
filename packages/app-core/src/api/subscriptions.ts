@@ -7,6 +7,15 @@ export type SubscriptionPaymentMethod = (typeof SUBSCRIPTION_PAYMENT_METHODS)[nu
 /** Khớp `MAX_START_DAYS_AHEAD` của API: ngày bắt đầu xa hơn bị trả 400. */
 export const MAX_START_DAYS_AHEAD = 60;
 
+/** Khớp `RESCHEDULE_MAX_DAYS_AHEAD` của API: dời ngày giao kỳ tới xa hơn bị trả 400. */
+export const RESCHEDULE_MAX_DAYS_AHEAD = 90;
+
+/** Bậc giảm kế tiếp của thang `subscribe.discount_tiers`: còn thiếu bao nhiêu gói đang chạy, % (0..1) của bậc đó. */
+export interface SubscriptionNextTier {
+  countNeeded: number;
+  discountPct: number;
+}
+
 export interface SubscriptionDTO {
   id: string;
   quantity: number;
@@ -31,6 +40,8 @@ export interface SubscriptionDTO {
   cycleSubtotal?: number;
   cycleDiscount?: number;
   cycleGoods?: number;
+  /** Cùng một giá trị trên mọi gói của khách; null khi đã ở bậc cao nhất hay không có gói đang chạy. Optional: API cũ chưa trả. */
+  nextTier?: SubscriptionNextTier | null;
 }
 
 export interface SubscriptionFirstOrder {
@@ -42,6 +53,18 @@ export interface SubscriptionFirstOrder {
 }
 
 export type CreatedSubscription = SubscriptionDTO & { firstOrder?: SubscriptionFirstOrder | null };
+
+/** Trả về của "Đặt kỳ này ngay": gói sau khi dời kỳ sau, kèm đơn vừa tạo. */
+export type RunNowSubscription = Pick<SubscriptionDTO, 'id' | 'status' | 'nextRunAt'> & { order: SubscriptionFirstOrder };
+
+/** Trường PATCH của gói: chỉ gửi trường đã đổi. `nextRunDate` là YYYY-MM-DD giờ Việt Nam, từ ngày mai tới `RESCHEDULE_MAX_DAYS_AHEAD` ngày. */
+export interface SubscriptionPatch {
+  quantity?: number;
+  addressId?: string;
+  paymentMethod?: SubscriptionPaymentMethod;
+  intervalWeeks?: number;
+  nextRunDate?: string;
+}
 
 export const getSubscriptions = (http: HttpClient) => http.get<SubscriptionDTO[]>('/me/subscriptions');
 
@@ -61,13 +84,12 @@ export const createSubscription = (
   },
 ) => http.post<CreatedSubscription>('/me/subscriptions', data);
 
-export const updateSubscription = (
-  http: HttpClient,
-  id: string,
-  data: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number },
-) => http.patch<SubscriptionDTO>(`/me/subscriptions/${id}`, data);
+export const updateSubscription = (http: HttpClient, id: string, data: SubscriptionPatch) => http.patch<SubscriptionDTO>(`/me/subscriptions/${id}`, data);
 
 export const setSubscriptionStatus = (http: HttpClient, id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') =>
   http.post<SubscriptionDTO>(`/me/subscriptions/${id}/status`, { status });
 
 export const skipSubscriptionCycle = (http: HttpClient, id: string) => http.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`);
+
+/** "Đặt kỳ này ngay": ra đơn kỳ tới hôm nay; đã có đơn hôm nay thì 409. */
+export const runSubscriptionNow = (http: HttpClient, id: string) => http.post<RunNowSubscription>(`/me/subscriptions/${id}/run-now`);

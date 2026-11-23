@@ -18,13 +18,18 @@ export function RefillLandingEntry({ className = '' }: { className?: string }) {
   const on = refillFirstOn(usePublicConfig());
   const q = useQuery({ ...refillLandingQuery(coreHttp), enabled: on });
   if (!on || refillLandingRows(q.data).length === 0) return null;
+  return <RefillEntryRow title={refillLandingCopy('title')} subtitle={refillLandingCopy('entrySub')} testId="refill-landing-entry" className={className} />;
+}
+
+/** Một hàng (liên kết thật) mở trang Tiết kiệm với Refill: lối vào ở hub, lời mời "Đã có chai sẵn?" ở Giỏ. */
+export function RefillEntryRow({ title, subtitle, testId, className = '' }: { title: string; subtitle?: string; testId: string; className?: string }) {
   return (
-    <Link href={REFILL_LANDING_PATH.web} data-testid="refill-landing-entry" className={`tubu-press block rounded-card ${className}`}>
+    <Link href={REFILL_LANDING_PATH.web} data-testid={testId} className={`tubu-press block rounded-card ${className}`}>
       <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
         <ListRow
           icon={<Icon icon={Droplets} size="md" tone="brand" />}
-          title={refillLandingCopy('title')}
-          subtitle={refillLandingCopy('entrySub')}
+          title={title}
+          subtitle={subtitle}
           trailing="chevron"
           style={{ padding: 'var(--space-inset-card)' }}
         />

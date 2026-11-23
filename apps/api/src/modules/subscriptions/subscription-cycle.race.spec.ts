@@ -27,7 +27,8 @@ function setup() {
     product: {},
     address: {},
     user: {},
-    order: { unique: [{ fields: ['idempotencyKey'] }, { fields: ['code'] }] },
+    // createdAt như default now() của Postgres: chốt "gói đã có đơn hôm nay" của run-now và cron đọc cột này.
+    order: { unique: [{ fields: ['idempotencyKey'] }, { fields: ['code'] }], defaults: { createdAt: new Date() } },
     walletTransaction: { unique: [{ fields: ['userId', 'type', 'refId'] }] },
     analyticsEvent: {},
   });
@@ -124,6 +125,8 @@ describe('SubscriptionsService cycle — race', () => {
     const due = db.row('subscription', 's1')!.nextRunAt as Date;
     await svc.processDue();
     expect(orders()).toHaveLength(1);
+    // Đơn kỳ đó ra từ hôm trước: chốt "gói đã có đơn hôm nay" của cron không bắt, nên khoá idempotencyKey là chốt cuối.
+    await db.client.order.update({ where: { id: orders()[0]!.id }, data: { createdAt: new Date(Date.now() - 2 * DAY) } });
     await db.client.subscription.update({ where: { id: 's1' }, data: { nextRunAt: due } });
     await Promise.all([svc.processDue(), svc.processDue()]);
     expect(orders()).toHaveLength(1);
@@ -199,5 +202,39 @@ describe('SubscriptionsService cycle — race', () => {
       seen.add(`${n} đơn, bỏ qua ${skipped.status}`);
     }
     expect(seen).toEqual(new Set(['0 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua rejected']));
+  });
+
+  // "Đặt kỳ này ngay" (POST /me/subscriptions/:id/run-now) chen với cron cùng gói đang đến hạn: luôn đúng MỘT đơn, Ví trừ một lần, kho giữ chỗ một lần.
+  // Khách thắng thì đơn là của run-now và kỳ kế = hôm nay + chu kỳ; cron thắng thì run-now nhận 409 (gói đã có đơn hôm nay), không ra đơn thứ hai.
+  it('khách bấm "Đặt kỳ này ngay" chen với cron quét gói đến hạn: một đơn duy nhất, thua thì 409', async () => {
+    const seen = new Set<string>();
+    for (let skew = -40; skew <= 40; skew += 2) {
+      const { db, svc, orders, wallet, ledger, variation } = setup();
+      const cron = async () => (await delay(Math.max(skew, 0)), svc.processDue());
+      const act = async () => (await delay(Math.max(-skew, 0)), svc.runNow('u1', 's1'));
+      const [ranCron, ran] = await Promise.allSettled([cron(), act()]);
+      const label = `skew ${skew}`;
+      is(label, ranCron.status, 'fulfilled');
+      is(label, orders().length, 1);
+      is(label, wallet(), 500_000 - CYCLE_TOTAL);
+      is(label, ledger().length, 1);
+      is(label, variation().stock, 10 - QTY);
+      is(label, variation().reservedStock, QTY);
+      const next = (db.row('subscription', 's1')!.nextRunAt as Date).getTime();
+      is(label, next > Date.now() + 20 * DAY && next < Date.now() + 40 * DAY, true);
+      if (ran.status === 'rejected') is(label, httpStatus(ran), 409);
+      seen.add(`run-now ${ran.status}`);
+    }
+    expect(seen).toEqual(new Set(['run-now fulfilled', 'run-now rejected']));
+  });
+
+  it('chạm đúp "Đặt kỳ này ngay" (hai request song song): một đơn, lần sau 409', async () => {
+    const { svc, orders, wallet, ledger } = setup();
+    const results = await Promise.allSettled([svc.runNow('u1', 's1'), svc.runNow('u1', 's1'), svc.runNow('u1', 's1')]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected').map(httpStatus)).toEqual([409, 409]);
+    expect(orders()).toHaveLength(1);
+    expect(wallet()).toBe(500_000 - CYCLE_TOTAL);
+    expect(ledger()).toHaveLength(1);
   });
 });

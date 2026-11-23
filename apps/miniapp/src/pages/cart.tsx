@@ -92,6 +92,7 @@ import { refillConfirmText, refillSwapOffers } from '@tubutree/app-core/refill/r
 import { refillSavingBadge } from '@tubutree/app-core/refill/refill-saving';
 import { RefillSwapLink } from '../components/refill/refill-swap-link';
 import { useCartRefill } from '../components/refill/use-cart-refill';
+import { CartNudges } from '../components/cart/cart-nudges';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 
 const UNDO_WINDOW_MS = 3500;
@@ -488,6 +489,7 @@ export default function CartPage() {
     saving: refillSavingBadge,
   });
   const refillConfirm = refill.confirm && refillConfirmText(refill.confirm);
+  const swapSlugs = new Set(summary.items.filter((l) => refillViews.has(l.id)).map((l) => l.slug));
   const undoBar = refill.receipt ? { text: fillCopy('refill.swapped'), onUndo: refill.undo } : removed ? { text: vi.cart.removed, onUndo: handleUndo } : null;
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
@@ -633,6 +635,11 @@ export default function CartPage() {
               </section>
             );
           })}
+          {summary.items.length > 0 && (
+            <Box px={3}>
+              <CartNudges lines={summary.items} swapSlugs={swapSlugs} />
+            </Box>
+          )}
           {(summary.pendingGiftRedemptions?.length ?? 0) > 0 && (
             <Box px={3}>
               <GiftNote />

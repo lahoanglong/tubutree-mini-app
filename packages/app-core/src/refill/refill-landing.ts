@@ -64,6 +64,8 @@ export const REFILL_LANDING_COPY = {
   faqSaveA: 'Mỗi gói ghi số tiền và phần trăm rẻ hơn so với mua chai cùng lượng, theo giá đang bán. Giá cuối do giỏ hàng tính lại khi bạn đặt.',
   faqBottleQ: 'Chưa có chai thì sao?',
   faqBottleA: 'Bạn mua chai trước, lần sau rót lại bằng Refill. Mỗi gói ghi rõ chai nó thay.',
+  cartEdu: 'Đã có chai sẵn? Xem gói Refill tiết kiệm',
+  cartEduUpTo: 'Đã có chai sẵn? Xem gói Refill tiết kiệm tới {pct}%',
 } as const;
 
 export type RefillLandingCopyKey = keyof typeof REFILL_LANDING_COPY;
@@ -86,6 +88,8 @@ export const REFILL_LANDING_COPY_MAX: Record<RefillLandingCopyKey, number | null
   faqSaveA: null,
   faqBottleQ: 40,
   faqBottleA: null,
+  cartEdu: 44,
+  cartEduUpTo: 52,
 };
 
 export function refillLandingCopy(key: RefillLandingCopyKey, vars: Record<string, string | number> = {}): string {
@@ -196,4 +200,29 @@ export function refillOrderShortcut(dto: RefillLandingDTO | null | undefined, sl
   if (inOrder.size === 0) return null;
   const row = savingPairRows(dto).find((r) => inOrder.has(r.bottle.slug) && !inOrder.has(r.view.slug));
   return row ? { ...row, bottles: [row.bottle] } : null;
+}
+
+/**
+ * Liên kết "Đã có chai sẵn? Xem gói Refill tiết kiệm tới X%" ở Giỏ cho khách mua chai lần đầu (hay khách chưa đăng nhập): giỏ có một chai đã ghép cặp mà
+ * gói Refill của nó chưa có trong giỏ. Chai khách đã từng nhận (đổi một chạm `RefillSwapLink` đang hiện cho dòng đó) truyền vào `skipBottleSlugs`: khách
+ * mua lại đã có lối đổi riêng, còn khách mua lần đầu chỉ được mời xem trang, không đổi thẳng (chưa có chai thì túi Refill không dùng được). X là mức rẻ
+ * hơn cao nhất trong các cặp khớp (cùng số trên thẻ của trang); cờ tắt, chưa tải hay không chai nào khớp: null.
+ */
+export function refillCartEducation(
+  dto: RefillLandingDTO | null | undefined,
+  cartSlugs: readonly (string | null | undefined)[],
+  skipBottleSlugs: ReadonlySet<string> = new Set(),
+): { pct: number | null; text: string } | null {
+  const inCart = new Set(cartSlugs.filter((s): s is string => typeof s === 'string' && s !== ''));
+  if (inCart.size === 0) return null;
+  let found = false;
+  let best: number | null = null;
+  for (const row of savingPairRows(dto)) {
+    if (!inCart.has(row.bottle.slug) || skipBottleSlugs.has(row.bottle.slug) || inCart.has(row.view.slug)) continue;
+    found = true;
+    const pct = row.view.comparison?.savedPct;
+    if (typeof pct === 'number' && (best === null || pct > best)) best = pct;
+  }
+  if (!found) return null;
+  return { pct: best, text: best === null ? refillLandingCopy('cartEdu') : refillLandingCopy('cartEduUpTo', { pct: best }) };
 }

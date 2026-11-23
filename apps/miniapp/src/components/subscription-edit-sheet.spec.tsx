@@ -819,3 +819,81 @@ describe('SubscriptionEditSheet: bám gói mới về, lựa chọn khách đã 
     expect(saveBtn()).toBeDisabled();
   });
 });
+
+describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn ngày)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T05:00:00.000Z') });
+    mocks.getAddresses.mockResolvedValue([]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+  });
+  afterEach(() => vi.useRealTimers());
+  const dateInput = () => document.querySelector('input[type="date"]') as HTMLInputElement | null;
+
+  it('+7 ngày tính từ ngày hẹn (07/11), báo ngày mới rồi PATCH chỉ có nextRunDate; chạm lại thì bỏ chọn', async () => {
+    mocks.updateSubscription.mockResolvedValue({ ...SUB, nextRunAt: '2026-11-13T17:00:00.000Z' });
+    renderSheet();
+    const group = await screen.findByTestId('subscription-reschedule');
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['+7 ngày', '+14 ngày', 'Chọn ngày']);
+    const plus7 = within(group).getByRole('button', { name: '+7 ngày' });
+    fireEvent.click(plus7);
+    expect(screen.getByText('Kỳ tới giao ngày 14/11/2026')).toBeInTheDocument();
+    fireEvent.click(plus7);
+    expect(screen.queryByText(/Kỳ tới giao ngày/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled();
+    fireEvent.click(within(group).getByRole('button', { name: '+14 ngày' }));
+    expect(screen.getByText('Kỳ tới giao ngày 21/11/2026')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-11-21' }));
+  });
+
+  it('"Chọn ngày" mở ô ngày giới hạn từ mai tới 90 ngày kèm câu gợi ý; ngày ngoài khoảng không vào PATCH, không gửi', async () => {
+    mocks.updateSubscription.mockResolvedValue(SUB);
+    renderSheet();
+    fireEvent.click(within(await screen.findByTestId('subscription-reschedule')).getByRole('button', { name: 'Chọn ngày' }));
+    const input = dateInput()!;
+    expect(input).not.toBeNull();
+    expect(input.min).toBe('2026-10-21');
+    expect(input.max).toBe('2027-01-18');
+    expect(screen.getByText('Chọn một ngày từ mai tới 90 ngày tới.')).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: '2027-03-01' } });
+    expect(screen.getByText('Chọn một ngày từ mai tới 90 ngày tới.')).toBeInTheDocument();
+    expect(screen.queryByText(/Kỳ tới giao ngày/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled();
+    fireEvent.change(input, { target: { value: '2026-12-01' } });
+    expect(screen.getByText('Kỳ tới giao ngày 01/12/2026')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-12-01' }));
+  });
+
+  it('đổi chu kỳ rồi dời: +7 tính từ ngày mới của chu kỳ, dòng "Lần giao kế tiếp" nhường cho ngày đã chọn', async () => {
+    mocks.updateSubscription.mockResolvedValue(SUB);
+    renderSheet();
+    fireEvent.click(await screen.findByRole('button', { name: '6 tuần' }));
+    expect(screen.getByText('Lần giao kế tiếp: 21/11/2026')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId('subscription-reschedule')).getByRole('button', { name: '+7 ngày' }));
+    expect(screen.queryByText(/Lần giao kế tiếp/)).toBeNull();
+    expect(screen.getByText('Kỳ tới giao ngày 28/11/2026')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { intervalWeeks: 6, nextRunDate: '2026-11-28' }));
+  });
+
+  it('chọn +7 rồi đổi chu kỳ: bước đã chọn bị bỏ, PATCH chỉ có intervalWeeks', async () => {
+    mocks.updateSubscription.mockResolvedValue(SUB);
+    renderSheet();
+    fireEvent.click(within(await screen.findByTestId('subscription-reschedule')).getByRole('button', { name: '+7 ngày' }));
+    fireEvent.click(screen.getByRole('button', { name: '8 tuần' }));
+    expect(screen.queryByText(/Kỳ tới giao ngày/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { intervalWeeks: 8 }));
+  });
+
+  it('subscriptionPatch: nextRunDate chỉ gửi khi trong khoảng API nhận', () => {
+    const now = new Date('2026-10-20T05:00:00.000Z');
+    const next = { quantity: 2, addressId: 'a1', paymentMethod: 'COD' as const, intervalWeeks: 4 };
+    expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2026-11-14' }, now)).toEqual({ nextRunDate: '2026-11-14' });
+    expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2026-10-20' }, now)).toEqual({});
+    expect(subscriptionPatch(SUB, { ...next, nextRunDate: '2027-01-19' }, now)).toEqual({});
+    expect(subscriptionPatch(SUB, { ...next, nextRunDate: null }, now)).toEqual({});
+  });
+});

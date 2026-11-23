@@ -25,3 +25,17 @@ describe('DTO sửa gói định kỳ: chu kỳ giao (Q22)', () => {
     await expect(run({ quantity: 3 })).resolves.toMatchObject({ quantity: 3 });
   });
 });
+
+describe('DTO sửa gói định kỳ: dời ngày giao kỳ tới', () => {
+  it('nhận YYYY-MM-DD', async () => {
+    await expect(run({ nextRunDate: '2026-12-01' })).resolves.toMatchObject({ nextRunDate: '2026-12-01' });
+  });
+
+  it.each(['01/12/2026', '2026-12-1', 20261201, null])('từ chối %p bằng 400 nêu nhãn tiếng Việt, không lộ tên trường', async (bad) => {
+    const err = await run({ nextRunDate: bad }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    const body = JSON.stringify((err as BadRequestException).getResponse());
+    expect(body).toMatch(/Ngày giao kỳ tới/);
+    expect(body).not.toMatch(/nextRunDate/);
+  });
+});

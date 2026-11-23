@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { updateSubscription, type SubscriptionDTO, type SubscriptionPaymentMethod } from '@tubutree/app-core/api/subscriptions';
+import { RESCHEDULE_MAX_DAYS_AHEAD, updateSubscription, type SubscriptionDTO, type SubscriptionPatch, type SubscriptionPaymentMethod } from '@tubutree/app-core/api/subscriptions';
+import { dayKeyText, isRescheduleDateAllowed, rescheduleOptions, rescheduleRange, selfServeCopy } from '@tubutree/app-core/subscription-self-serve';
 import { addressesQuery } from '@tubutree/app-core/queries/checkout';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
 import { Chip } from '@/components/catalog/chip';
@@ -21,17 +22,19 @@ import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 /** Trần ở client chỉ để nút + không chạy vô hạn; còn hàng hay không do API kiểm khi sinh đơn kỳ. */
 const MAX_QTY = 99;
 
-/** Chỉ gửi trường đã đổi: PATCH trống không làm gì, và đổi địa chỉ là bước API kiểm trùng gói. */
+/** Chỉ gửi trường đã đổi: PATCH trống không làm gì, và đổi địa chỉ là bước API kiểm trùng gói. Ngày giao kỳ tới chỉ gửi khi nằm trong khoảng API nhận. */
 export function subscriptionPatch(
   sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod' | 'intervalWeeks'>,
-  next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number },
+  next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number; nextRunDate?: string | null },
   canEditInterval = true,
+  now: Date = new Date(),
 ) {
-  const patch: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number } = {};
+  const patch: SubscriptionPatch = {};
   if (next.quantity !== sub.quantity) patch.quantity = next.quantity;
   if (next.addressId && next.addressId !== sub.addressId) patch.addressId = next.addressId;
   if (next.paymentMethod !== (sub.paymentMethod ?? 'COD')) patch.paymentMethod = next.paymentMethod;
   if (canEditInterval && next.intervalWeeks !== sub.intervalWeeks) patch.intervalWeeks = next.intervalWeeks;
+  if (canEditInterval && next.nextRunDate && isRescheduleDateAllowed(next.nextRunDate, now)) patch.nextRunDate = next.nextRunDate;
   return patch;
 }
 
@@ -52,6 +55,9 @@ export function SubscriptionEditSheet({
   const [weeks, setWeeks] = useState(sub.intervalWeeks);
   const [addressId, setAddressId] = useState(sub.addressId);
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>(sub.paymentMethod ?? 'COD');
+  // Ngày giao kỳ tới khách chọn ('yyyy-mm-dd' giờ VN), null = giữ lịch. `picking`: đang mở ô chọn ngày.
+  const [runDate, setRunDate] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
   const addrQ = useQuery(addressesQuery(coreHttp));
   const walletQ = useQuery(walletQuery(coreHttp));
   // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
@@ -62,9 +68,12 @@ export function SubscriptionEditSheet({
 
   // API cũ chưa nhận intervalWeeks (400); chỉ API mới mới trả khoá lastOrderAt (kể cả null), dùng làm dấu hiệu hỗ trợ.
   const canEditInterval = 'lastOrderAt' in sub;
-  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks }, canEditInterval);
+  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks, nextRunDate: runDate }, canEditInterval);
   const nextRun = canEditInterval ? nextRunAfterIntervalChange(sub, weeks) : null;
   const dirty = Object.keys(patch).length > 0;
+  // +7/+14 ngày tính từ ngày giao kỳ tới đang thấy (kể cả ngày mới do đổi chu kỳ); ngày chọn thắng ngày do đổi chu kỳ ở máy chủ.
+  const steps = canEditInterval && sub.status !== 'CANCELLED' ? rescheduleOptions(nextRun ? nextRun.toISOString() : sub.nextRunAt) : [];
+  const range = rescheduleRange();
 
   const save = useLockedMutation({
     mutationFn: () => updateSubscription(coreHttp, sub.id, patch),
@@ -124,15 +133,74 @@ export function SubscriptionEditSheet({
         <SectionLabel>Chu kỳ giao</SectionLabel>
         <div role="group" aria-label="Chu kỳ giao" className="flex flex-wrap gap-2 py-1">
           {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
-            <Chip key={w} selected={weeks === w} disabled={save.isPending} onPress={() => setWeeks(w)}>
+            <Chip
+              key={w}
+              selected={weeks === w}
+              disabled={save.isPending}
+              onPress={() => {
+                setWeeks(w);
+                // +7/+14 tính từ ngày của chu kỳ đang chọn: đổi chu kỳ thì bỏ bước đã chọn kẻo PATCH gửi ngày cũ đè ngày mới. Ngày tự chọn giữ nguyên.
+                if (!picking) setRunDate(null);
+              }}
+            >
               {w} tuần
             </Chip>
           ))}
         </div>
-        {nextRun && <p className="text-xs tabular-nums text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
+        {nextRun && !patch.nextRunDate && <p className="text-xs tabular-nums text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
         {sub.status === 'PAUSED' && weeks !== sub.intervalWeeks && (
           <p className="text-xs text-stone-600">Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.</p>
         )}
+        </>
+      )}
+
+      {steps.length > 0 && (
+        <>
+          <SectionLabel>{selfServeCopy('rescheduleLabel')}</SectionLabel>
+          <div role="group" aria-label={selfServeCopy('rescheduleLabel')} className="flex flex-wrap gap-2 py-1" data-testid="subscription-reschedule">
+            {steps.map((o) => (
+              <Chip
+                key={o.days}
+                selected={!picking && runDate === o.date}
+                disabled={save.isPending || !o.allowed}
+                onPress={() => {
+                  setPicking(false);
+                  setRunDate(!picking && runDate === o.date ? null : o.date);
+                }}
+              >
+                {selfServeCopy('plusDays', { n: o.days })}
+              </Chip>
+            ))}
+            <Chip
+              selected={picking}
+              disabled={save.isPending}
+              onPress={() => {
+                setPicking(!picking);
+                setRunDate(null);
+              }}
+            >
+              {selfServeCopy('pickDate')}
+            </Chip>
+          </div>
+          {/* Tiêu đề mục ngay trên đã là nhãn nhìn thấy: ô chỉ cần tên cho trình đọc màn hình, không lặp nhãn thứ hai. */}
+          {picking && (
+            <input
+              type="date"
+              aria-label={selfServeCopy('rescheduleLabel')}
+              value={runDate ?? ''}
+              min={range.min}
+              max={range.max}
+              disabled={save.isPending}
+              onChange={(e) => setRunDate(e.target.value || null)}
+              className={ui.field}
+            />
+          )}
+          {/* Ô ngày giới hạn min/max; ngày ngoài khoảng không vào PATCH nên câu gợi ý ở lại tới khi chọn được ngày hợp lệ. */}
+          {(patch.nextRunDate || picking) && (
+            <p className="text-xs tabular-nums text-stone-600">
+              {patch.nextRunDate ? selfServeCopy('rescheduleNext', { date: dayKeyText(patch.nextRunDate) }) : selfServeCopy('rescheduleHint', { max: RESCHEDULE_MAX_DAYS_AHEAD })}
+            </p>
+          )}
         </>
       )}
 

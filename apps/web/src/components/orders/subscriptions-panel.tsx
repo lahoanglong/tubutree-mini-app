@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { setSubscriptionStatus, skipSubscriptionCycle, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
+import { runSubscriptionNow, setSubscriptionStatus, skipSubscriptionCycle, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
+import { canActOnCycle, nextTierText, runNowConfirmBody, runNowDoneText, selfServeCopy, skipDoneText } from '@tubutree/app-core/subscription-self-serve';
 import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { subscriptionPauseView, SUBSCRIPTION_PAUSED_GENERIC } from '@tubutree/app-core/subscription-pause-copy';
 import { addressesQuery } from '@tubutree/app-core/queries/checkout';
@@ -12,6 +13,7 @@ import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -33,14 +35,17 @@ import { SubscriptionSuggestionRow, SuggestedSubscribe, useSubscriptionSuggestio
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
 const STATUS_LABEL: Record<SubStatus, string> = { ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng', CANCELLED: 'Đã huỷ' };
+/** Nút chữ của hai việc kỳ tới trên thẻ (Bỏ qua kỳ này, Đặt kỳ này ngay): chữ màu nút ghost, cao 44px, không nền như Button ghost của Mini App. */
+const CYCLE_BTN =
+  'inline-flex min-h-11 items-center rounded-control text-sm font-semibold text-[color:var(--color-action-ghost-fg)] hover:underline aria-disabled:opacity-50';
 /** Chỉ để hiện lời giới thiệu khi chưa có lịch nào; máy chủ vẫn là nơi quyết định % giảm khi tính tiền. */
 const FALLBACK_DISCOUNT_PCT = 0.12;
 
 const errText = loadErrorText;
 
 /**
- * Nội dung "Đặt định kỳ": tab "Định kỳ" của trang Đơn hàng. Tạm dừng/tiếp tục, sửa số lượng/địa chỉ/cách trả, huỷ qua sheet giữ chân
- * (tạm dừng / bỏ qua kỳ / vẫn huỷ), như Mini App.
+ * Nội dung "Đặt định kỳ": tab "Định kỳ" của trang Đơn hàng. Tạm dừng/tiếp tục, sửa số lượng/chu kỳ/ngày giao kỳ tới/địa chỉ/cách trả, bỏ qua kỳ này và
+ * "Đặt kỳ này ngay" ngay trên thẻ gói đang chạy, viên bậc giảm kế tiếp, huỷ qua sheet giữ chân (tạm dừng / bỏ qua kỳ / vẫn huỷ), như Mini App.
  */
 export function SubscriptionsPanel() {
   const qc = useQueryClient();
@@ -53,6 +58,7 @@ export function SubscriptionsPanel() {
   const subscribePct = Math.round((subs[0]?.effectiveDiscountPct ?? cfgQ.data?.subscribeDiscountPct ?? FALLBACK_DISCOUNT_PCT) * 100);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
+  const [runNowTarget, setRunNowTarget] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
   // Gợi ý định kỳ chỉ khi khách chưa có gói nào đang chạy hay tạm dừng.
@@ -106,24 +112,55 @@ export function SubscriptionsPanel() {
       setNotice(null);
       setRejected(null);
     },
-    onSuccess: () => {
-      setNotice('Đã bỏ qua kỳ này, hẹn kỳ sau nhé');
+    onSuccess: (sub) => {
+      setNotice(skipDoneText(sub?.nextRunAt));
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
     onError: onActionError,
     onSettled: releaseActing,
   });
+  // "Đặt kỳ này ngay" tạo đơn (Ví Tubu trừ tiền ngay) nên qua tấm xác nhận; tấm giữ nút bận tới khi danh sách gói mới về. Đơn mới vào tab Đơn hàng.
+  const runNowMut = useLockedMutation({
+    mutationFn: (id: string) => runSubscriptionNow(coreHttp, id),
+    onMutate: () => {
+      setNotice(null);
+      setRejected(null);
+    },
+    onSuccess: (res) => {
+      setNotice(runNowDoneText(res?.order));
+      setRunNowTarget(null);
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+      // Gói trả bằng Ví Tubu bị trừ tiền ngay khi ra đơn.
+      void qc.invalidateQueries({ queryKey: ['wallet'] });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
+    },
+    onError: (e) => {
+      setRunNowTarget(null);
+      return onActionError(e);
+    },
+    onSettled: releaseActing,
+  });
 
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;
   const editSub = subs.find((s) => s.id === editTarget) ?? null;
+  const runNowSub = subs.find((s) => s.id === runNowTarget) ?? null;
   const pending = statusMut.isPending ? statusMut.variables?.status : undefined;
-  const sheetBusy = statusMut.isPending || skipMut.isPending;
+  const sheetBusy = statusMut.isPending || skipMut.isPending || runNowMut.isPending;
+  const tierText = nextTierText(subs);
   const changeFromSheet = (status: SubStatus) => {
     if (!cancelTarget) return;
     exclusive(() => statusMut.mutate({ id: cancelTarget, status, from: 'sheet' }));
   };
-  const actionError = rejected ?? (statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null);
+  const actionError =
+    rejected ??
+    (statusMut.isError
+      ? actionErrorText(statusMut.error)
+      : skipMut.isError
+        ? actionErrorText(skipMut.error)
+        : runNowMut.isError
+          ? actionErrorText(runNowMut.error)
+          : null);
 
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
@@ -135,6 +172,13 @@ export function SubscriptionsPanel() {
         </p>
         {subs[0] && subs[0].effectiveDiscountPct > 0 && (
           <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>
+        )}
+        {tierText && (
+          <div data-testid="subscription-next-tier" className="mt-1.5">
+            <Badge tone="brand" size="sm" className="tabular-nums">
+              {tierText}
+            </Badge>
+          </div>
         )}
       </div>
 
@@ -168,6 +212,7 @@ export function SubscriptionsPanel() {
               sub={s}
               busy={sheetBusy}
               toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.from === 'card'}
+              skipping={skipMut.isPending && skipMut.variables === s.id && cancelTarget === null}
               refreshing={subsQ.isFetching}
               address={s.addressId ? addressById.get(s.addressId) : undefined}
               onEdit={() => {
@@ -180,6 +225,12 @@ export function SubscriptionsPanel() {
                 statusMut.reset();
                 skipMut.reset();
                 setCancelTarget(s.id);
+              }}
+              onSkip={() => exclusive(() => skipMut.mutate(s.id))}
+              onRunNow={() => {
+                if (acting.current || subsQ.isFetching) return;
+                runNowMut.reset();
+                setRunNowTarget(s.id);
               }}
             />
           ))}
@@ -204,6 +255,21 @@ export function SubscriptionsPanel() {
           }}
           onSaved={setNotice}
           onRejected={setRejected}
+        />
+      )}
+
+      {runNowSub && (
+        <ConfirmSheet
+          open
+          title={selfServeCopy('runNowTitle')}
+          message={runNowConfirmBody(runNowSub)}
+          confirmLabel={selfServeCopy('runNowConfirm')}
+          cancelLabel={selfServeCopy('runNowCancel')}
+          loading={runNowMut.isPending}
+          onConfirm={() => exclusive(() => runNowMut.mutate(runNowSub.id))}
+          onCancel={() => {
+            if (!runNowMut.isPending) setRunNowTarget(null);
+          }}
         />
       )}
 
@@ -268,14 +334,21 @@ function SubscriptionCard({
   sub: s,
   busy,
   toggling,
+  skipping,
   refreshing,
   address,
   onEdit,
   onToggle,
   onCancel,
+  onSkip,
+  onRunNow,
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
+  /** Chính thẻ này đang bỏ qua kỳ bằng nút trên thẻ: nút giữ aria-busy, không `disabled`, để không mất focus. */
+  skipping: boolean;
+  onSkip: () => void;
+  onRunNow: () => void;
   /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục bằng nút trên thẻ (không tính lệnh gửi từ sheet): nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
   toggling: boolean;
   /** Danh sách đang tải lại: "Sửa" chờ, kẻo mở sheet trên số liệu cũ (vừa lưu 3 mà form hiện 2, lần lưu sau ghi đè về 2). */
@@ -315,6 +388,33 @@ function SubscriptionCard({
         {pause ? pause.title : s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch'}
       </div>
       {pause?.hint && <p className="mt-0.5 text-xs text-stone-600">{pause.hint}</p>}
+      {canActOnCycle(s) && (
+        // Hai việc của kỳ tới, ngay dưới ngày "Lần kế": nút chữ gọn, không thêm nút chính. "Đặt kỳ này ngay" mở tấm xác nhận nên trả focus về đây.
+        <div className="mt-1 flex flex-wrap gap-x-3" data-testid="subscription-cycle-actions">
+          <button
+            type="button"
+            aria-busy={skipping || undefined}
+            aria-disabled={busy || refreshing || undefined}
+            onClick={() => {
+              if (!busy && !refreshing) onSkip();
+            }}
+            className={CYCLE_BTN}
+          >
+            {skipping ? 'Đang xử lý…' : selfServeCopy('skip')}
+          </button>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-disabled={busy || refreshing || undefined}
+            onClick={() => {
+              if (!busy && !refreshing) onRunNow();
+            }}
+            className={CYCLE_BTN}
+          >
+            {selfServeCopy('runNow')}
+          </button>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap gap-2">
         {/* "Sửa" và "Huỷ" mở sheet và sheet trả focus về đúng nút này khi đóng: lúc đó lệnh vừa gửi từ sheet còn chờ danh sách mới (busy vẫn true),
             nên khoá bằng aria-disabled (chặn ở onEdit/onCancel) chứ không `disabled`, nếu không focus rơi về body. */}

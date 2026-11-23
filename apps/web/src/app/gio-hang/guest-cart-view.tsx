@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { AlertTriangle, Trash2, Zap } from 'lucide-react';
 import { subtotalBucket } from '@tubutree/shared-types';
 import { CART_OUT_OF_STOCK } from '@tubutree/app-core/cart-copy';
 import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
 import { CartUnlockSlot } from '@/components/cart/freeship-booster/cart-unlock-slot';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
@@ -31,8 +33,12 @@ import { removeGuestLine, setGuestQuantity } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 import { useHydrated } from '@/lib/use-hydrated';
 import { guestCartView, type GuestCartRow } from '@/lib/guest-cart/view';
+import { FreeshipAddons } from './freeship-addons';
 
 const LOGIN_TO_ORDER = loginHref('/gio-hang');
+
+// Liên kết Refill cho khách mua chai lần đầu: chunk riêng dưới các dòng giỏ (cùng thành phần với giỏ tài khoản, không có gợi ý định kỳ vì cần đăng nhập).
+const CartNudges = dynamic(() => import('./cart-nudges').then((m) => m.CartNudges), { ssr: false });
 
 /**
  * Giỏ của khách chưa đăng nhập (cờ `web.guest_cart_enabled`): món, giá hiện tại lấy lại từ API công khai, số lượng, xoá, tạm tính và tiến độ
@@ -72,7 +78,10 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   const showFreeship = view.settled && threshold !== null && (!view.hasMerchant || freeshipBase > 0);
   const subtotalLabel = fillCopy('cart.subtotal');
   const cta = guestCheckout ? guestCopy('cartCta') : fillCopy('guestCart.loginCta');
-  const freeshipReached = threshold !== null && freeshipProgress({ base: freeshipBase, threshold }).reached;
+  const freeship = threshold !== null ? freeshipProgress({ base: freeshipBase, threshold }) : null;
+  const freeshipReached = freeship?.reached ?? false;
+  // Dải 2 món mua thêm như giỏ tài khoản, chỉ mốc Miễn phí giao hàng: giỏ khách chưa có khối quà dùng thử nên đạt mốc là hết dải.
+  const aovGoal = showFreeship && freeship && threshold !== null ? aovUpsellGoal({ base: freeshipBase, freeship: { ...freeship, threshold }, giftTrial: null, tubuOnly: view.hasMerchant }) : null;
   const ship = cartShippingView(shipQ.estimate, { goodsNet: view.subtotal, freeshipReached, stale: shipQ.stale });
   const totalLabel = ship?.totalLabel ?? subtotalLabel;
   const total = ship?.total ?? view.subtotal;
@@ -84,11 +93,13 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
           {showFreeship && (
             <CartUnlockSlot testId="cart-freeship" className="mb-3" level={cartUnlockLevel(freeshipReached)}>
               <FreeShippingProgressBar base={freeshipBase} threshold={threshold} tubuOnly={view.hasMerchant} />
+              {aovGoal && <FreeshipAddons goal={aovGoal} lines={lines} guest />}
             </CartUnlockSlot>
           )}
           <section aria-label="Sản phẩm trong giỏ" className="flex flex-col gap-2.5">
             {view.rows.map((row) => (row.state === 'loading' ? <LineItemSkeleton key={row.variationId} /> : <GuestLine key={row.variationId} row={row} retry={products.get(row.slug)} />))}
           </section>
+          <CartNudges lines={lines} />
         </div>
 
         <div data-testid="cart-summary" className={`hidden h-fit p-4 ${ui.card} lg:sticky lg:top-[calc(var(--header-h)+theme(spacing.4))] lg:block lg:self-start`}>
