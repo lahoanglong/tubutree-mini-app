@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fakeHttp } from './fake-http';
-import { fetchRestockStatus, restockStatusKey, subscribeRestock, unsubscribeRestock } from './restock-alerts';
+import { fetchMyRestockAlerts, fetchRestockStatus, myRestockAlertsKey, restockStatusKey, subscribeRestock, unsubscribeRestock } from './restock-alerts';
 
 describe('restock-alerts — hợp đồng gọi API', () => {
   it('trạng thái: khách đã đăng nhập gửi kèm phiên, khách chưa đăng nhập gọi ẩn danh', async () => {
@@ -26,5 +26,13 @@ describe('restock-alerts — hợp đồng gọi API', () => {
   it('khoá cache tách bản có phiên và bản khách', () => {
     expect(restockStatusKey('p1', true)).toEqual(['restock-alerts', 'p1', 'me']);
     expect(restockStatusKey('p1', false)).toEqual(['restock-alerts', 'p1', 'guest']);
+  });
+
+  it('danh sách của khách: GET /me/restock-alerts có phiên (không ẩn danh), khoá chung tiền tố nhưng không trùng khoá sản phẩm', async () => {
+    const { http, calls } = fakeHttp();
+    await fetchMyRestockAlerts(http);
+    expect(calls).toEqual([{ method: 'get', path: '/me/restock-alerts' }]);
+    expect(myRestockAlertsKey[0]).toBe(restockStatusKey('p1', true)[0]);
+    expect(myRestockAlertsKey).toEqual(['restock-alerts', '@me']);
   });
 });

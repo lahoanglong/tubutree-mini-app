@@ -3,7 +3,8 @@ import type { ProductCard } from '../api/catalog';
 import type { FlashPriceItem } from '../flash-price';
 import { FORBIDDEN_TERMS } from '../shop-copy';
 import { pickCardFlash, productCardView } from './product-card-view';
-import { isInStock, isOnSale, wishlistFilterView, type WishlistFilterItem } from './wishlist-filter';
+import type { MyRestockAlerts } from '../api/restock-alerts';
+import { applyRestockToggle, isInStock, isOnSale, restockWatchIndex, wishlistFilterView, wishlistRestockView, type WishlistFilterItem } from './wishlist-filter';
 
 const NOW = Date.parse('2026-11-08T05:00:00Z');
 const H = 3_600_000;
@@ -205,5 +206,81 @@ describe('Giờ vàng trong "Đang giảm"', () => {
         expect(isOnSale(c, list, NOW), JSON.stringify({ c, list })).toBe(view.isDeal);
       }
     }
+  });
+});
+
+describe('Chờ hàng về: chip, nhãn và chuông trên thẻ hết hàng', () => {
+  const alert = (productId: string, variationId: string) => ({ variationId, productId, productSlug: productId, productName: productId, variationName: 'Loại', stock: 0, createdAt: iso(NOW) });
+  const alerts = (...items: ReturnType<typeof alert>[]): MyRestockAlerts => ({ enabled: true, items });
+  const card = (id: string, inStock: boolean, rep?: string, pinned?: string) => ({ ...item(100_000, null, inStock, id), ...(rep ? { repVariationId: rep } : {}), ...(pinned ? { pinnedVariationId: pinned } : {}) });
+
+  it('không có đăng ký nào (hoặc cờ tắt, chưa tải): không có chip "Chờ hàng về", ba chip như cũ', () => {
+    for (const a of [undefined, alerts(), { enabled: false, items: [alert('full-out', 'v1')] }]) {
+      const v = wishlistFilterView(MIXED, 'all', [], NOW, restockWatchIndex(a));
+      expect(v.chips.map((c) => c.key)).toEqual(['all', 'sale', 'inStock']);
+    }
+  });
+
+  it('có món hết hàng đang chờ: chip thứ tư đếm đúng các thẻ mang nhãn, lọc ra đúng các thẻ đó', () => {
+    // sale-in còn hàng: đăng ký đang chờ (hàng vừa về, cron chưa gửi) không làm thẻ mang nhãn nên không đếm.
+    const watch = restockWatchIndex(alerts(alert('full-out', 'v1'), alert('full-out', 'v2'), alert('sale-out', 'v3'), alert('sale-in', 'v4'), alert('gone', 'v5')));
+    const v = wishlistFilterView(MIXED, 'restock', [], NOW, watch);
+    expect(v.active).toBe('restock');
+    expect(v.chips.map((c) => [c.key, c.label, c.count, c.selected])).toEqual([
+      ['all', 'Tất cả', 4, false],
+      ['sale', 'Đang giảm', 2, false],
+      ['inStock', 'Còn hàng', 2, false],
+      ['restock', 'Chờ hàng về', 2, true],
+    ]);
+    expect(v.items.map((p) => p.id)).toEqual(['sale-out', 'full-out']);
+    expect(v.empty).toBeNull();
+    const badged = MIXED.filter((p) => wishlistRestockView(p, alerts(alert('full-out', 'v1'), alert('sale-out', 'v3'), alert('sale-in', 'v4')), watch).kind === 'waiting');
+    expect(badged.map((p) => p.id)).toEqual(v.items.map((p) => p.id));
+  });
+
+  it('đang chọn "Chờ hàng về" mà huỷ món cuối: chip biến mất và lọc về Tất cả (nơi gọi đặt lại state theo `active`)', () => {
+    const before = alerts(alert('full-out', 'v1'));
+    const view = wishlistRestockView(card('full-out', false, 'v1'), before);
+    expect(view).toEqual({ kind: 'waiting', variationIds: ['v1'] });
+    const after = applyRestockToggle(before, 'full-out', view as Exclude<typeof view, { kind: 'none' }>);
+    expect(after.items).toEqual([]);
+    const v = wishlistFilterView(MIXED, 'restock', [], NOW, restockWatchIndex(after));
+    expect(v.active).toBe('all');
+    expect(v.chips.map((c) => c.key)).toEqual(['all', 'sale', 'inStock']);
+    expect(v.chips[0]!.selected).toBe(true);
+    expect(v.items).toHaveLength(4);
+  });
+
+  it('vòng đăng ký → nhãn → huỷ trên một thẻ: phân loại ghim trước phân loại đại diện; huỷ gỡ mọi phân loại đang chờ của sản phẩm', () => {
+    const p = card('full-out', false, 'vRep', 'vPin');
+    let state = alerts(alert('other', 'vX'));
+    const sub = wishlistRestockView(p, state);
+    expect(sub).toEqual({ kind: 'subscribe', variationId: 'vPin' });
+    state = applyRestockToggle(state, p.id, sub as Exclude<typeof sub, { kind: 'none' }>, NOW);
+    expect(state.items.map((a) => [a.productId, a.variationId])).toEqual([['other', 'vX'], ['full-out', 'vPin']]);
+    // Gọi lại khi đã có dòng (bấm đúp) không thêm dòng thứ hai.
+    expect(applyRestockToggle(state, p.id, sub as Exclude<typeof sub, { kind: 'none' }>, NOW)).toBe(state);
+    // Phân loại khác của cùng sản phẩm đăng ký ở trang chi tiết: một chạm trên thẻ huỷ cả hai.
+    state = { ...state, items: [...state.items, alert('full-out', 'vOther')] };
+    const waiting = wishlistRestockView(p, state);
+    expect(waiting).toEqual({ kind: 'waiting', variationIds: ['vPin', 'vOther'] });
+    state = applyRestockToggle(state, p.id, waiting as Exclude<typeof waiting, { kind: 'none' }>);
+    expect(state.items.map((a) => a.variationId)).toEqual(['vX']);
+    expect(wishlistRestockView(p, state)).toEqual({ kind: 'subscribe', variationId: 'vPin' });
+  });
+
+  it('không có chuông: thẻ còn hàng, cờ tắt, chưa tải, hoặc thẻ không mang phân loại nào', () => {
+    expect(wishlistRestockView(card('a', true, 'v1'), alerts())).toEqual({ kind: 'none' });
+    expect(wishlistRestockView(card('a', undefined as unknown as boolean, 'v1'), alerts())).toEqual({ kind: 'none' });
+    expect(wishlistRestockView(card('a', false, 'v1'), { enabled: false, items: [] })).toEqual({ kind: 'none' });
+    expect(wishlistRestockView(card('a', false, 'v1'), undefined)).toEqual({ kind: 'none' });
+    expect(wishlistRestockView(card('a', false), alerts())).toEqual({ kind: 'none' });
+    expect(wishlistRestockView(card('a', false, 'v1'), alerts())).toEqual({ kind: 'subscribe', variationId: 'v1' });
+  });
+
+  it('chữ mới không dính thuật ngữ cấm', () => {
+    const v = wishlistFilterView(MIXED, 'restock', [], NOW, restockWatchIndex(alerts(alert('full-out', 'v1'))));
+    const text = v.chips.map((c) => c.label).join(' | ');
+    expect(FORBIDDEN_TERMS.filter((t) => t.pattern.test(text))).toEqual([]);
   });
 });

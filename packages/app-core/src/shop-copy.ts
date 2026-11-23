@@ -880,6 +880,12 @@ export const SHOP_COPY: Record<string, string> = {
   'wishlist.empty.sale': 'Chưa có sản phẩm đang giảm giá trong danh sách yêu thích',
   'wishlist.empty.inStock': 'Chưa có sản phẩm còn hàng trong danh sách yêu thích',
   'wishlist.empty.cta': 'Xem tất cả sản phẩm đã lưu',
+  // Báo hàng về ngay trên trang Yêu thích (cờ catalog.restock_alert_enabled): chip lọc chỉ có khi đếm > 0, nhãn ở dòng ghi chú của thẻ hết hàng,
+  // chuông 44px ở góc dưới ảnh là công tắc (aria-pressed) nên tên đọc giữ nguyên ở cả hai trạng thái.
+  'wishlist.filter.restock': 'Chờ hàng về',
+  'wishlist.empty.restock': 'Chưa có sản phẩm nào đang chờ hàng về',
+  'wishlist.restock.waiting': 'Đang chờ hàng về',
+  'wishlist.restock.bell': 'Báo khi {name} có hàng',
   // Cộng đồng: khung hướng dẫn ở cột phụ bên phải trang web từ lg (`app/cong-dong/feed-shell.tsx`); điện thoại và Mini App không có cột này.
   'community.guideTitle': 'Cách dùng cộng đồng',
   'community.guideAsk': 'Hỏi rõ vấn đề, kèm ảnh nếu có, để mọi người dễ giúp.',
@@ -992,6 +998,19 @@ export const SHOP_COPY: Record<string, string> = {
   'restock.subscribedToast': 'Có hàng Tubu sẽ báo bạn ở mục Thông báo.',
   'restock.cancelledToast': 'Đã huỷ báo hàng về.',
   'restock.offline': 'Chưa kết nối được tới Tubu Tree nên chưa đăng ký được. Bạn kiểm tra mạng rồi bấm lại nhé.',
+  // Mua chung: hạn nhóm (dưới 24 giờ là đồng hồ sống `Countdown`), dòng suất còn lại ở trang mời /mua-chung/:id và tin chia sẻ (xem trước = tin gửi đi).
+  // Không dùng "Chỉ còn" (thuật ngữ cấm, trừ stock.few): "Còn {n} suất".
+  'groupBuy.done': 'đã đủ nhóm',
+  'groupBuy.expired': 'đã hết hạn',
+  'groupBuy.daysLeft': 'còn {d} ngày',
+  'groupBuy.left': 'còn',
+  'groupBuy.slotsLeft': 'Còn {n} suất',
+  'groupBuy.slotsLeftSave': 'Còn {n} suất · Tiết kiệm {save}',
+  'groupBuy.shareTitle': 'Mua chung {name} giảm {pct}%',
+  'groupBuy.shareBody': 'Còn thiếu {n} người nữa là đủ nhóm, vào tham gia cùng mình nhé',
+  'groupBuy.sharePreview': 'Tin mời sẽ gửi',
+  'groupBuy.shareCta': 'Chia sẻ',
+  'groupBuy.shareCtaLabel': 'Chia sẻ nhóm mua chung {name}',
   // Cài đặt thông báo: hai công tắc tách từ công tắc gộp cũ. Đổi chữ ở đây thì đổi cả NOTIFY_PREFS_TEXT_VERSION (api/account.ts).
   'settings.notifyGarden': 'Nhắc Vườn Xanh',
   'settings.notifySocial': 'Tương tác bài viết',

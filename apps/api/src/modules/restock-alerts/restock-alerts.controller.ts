@@ -29,6 +29,13 @@ export class RestockAlertsController {
     return this.restock.status(q.productId, userId);
   }
 
+  /** Trang Yêu thích: mọi phân loại khách đang chờ hàng về, kèm sản phẩm. Cần đăng nhập; chỉ đọc đăng ký của chính phiên. */
+  @Header('Cache-Control', 'private, no-store')
+  @Get('me/restock-alerts')
+  mine(@CurrentUser('sub') userId: string) {
+    return this.restock.mine(userId);
+  }
+
   @Post('me/restock-alerts')
   subscribe(@CurrentUser('sub') userId: string, @Body() dto: SubscribeRestockDto) {
     return this.restock.subscribe(userId, dto.variationId);

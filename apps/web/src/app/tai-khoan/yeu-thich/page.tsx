@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { wishlistFilterView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
+import { restockWatchIndex, wishlistFilterView, wishlistRestockView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
 import { Chip, EmptyState as FilterEmptyState, ProductGrid, ScrollRow } from '@/components/mini';
 import { EmptyState } from '@/components/empty-state';
@@ -18,6 +19,7 @@ import { useFlashNow } from '@/lib/flash-now';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useWishlistQuickAdd } from './quick-add';
+import { RestockBellButton, useMyRestockAlerts, useRestockToggle } from './restock-bell';
 
 const TITLE = 'Sản phẩm yêu thích';
 
@@ -34,7 +36,11 @@ export default function WishlistPage() {
   const phase = useAuthPhase();
   // Chờ đăng nhập xong mới gọi: khách chưa đăng nhập gọi /me/wishlist sẽ ra 401 và hiện lỗi thay vì trạng thái rỗng.
   const wishQ = useQuery({ ...wishlistQuery(coreHttp), enabled: phase === 'authenticated' });
-  const { buttonFor, feedback } = useWishlistQuickAdd();
+  const { buttonFor, feedback, notify } = useWishlistQuickAdd();
+  // Báo hàng về: chỉ hỏi khi có thẻ hết hàng (chuông và nhãn chỉ nằm trên thẻ hết hàng).
+  const restockQ = useMyRestockAlerts(phase === 'authenticated' && (wishQ.data?.some((p) => p.inStock === false) ?? false));
+  const watch = restockWatchIndex(restockQ.data);
+  const restock = useRestockToggle(notify);
   // Cùng kho và cùng đồng hồ với `ProductCard` (không thêm request): "Đang giảm" đếm đúng món mà thẻ đang gạch giá, kể cả giá Giờ vàng, và tự cập nhật khi suất hết giờ.
   const flash = useActiveFlashSales();
   const flashNow = useFlashNow();
@@ -66,7 +72,9 @@ export default function WishlistPage() {
   }
 
   // Bộ lọc chỉ có khi danh sách có món; chip đếm trên toàn danh sách, lưới và lời báo rỗng theo bộ lọc đang chọn.
-  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter, flash, flashNow) : null;
+  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter, flash, flashNow, watch) : null;
+  // Chip "Chờ hàng về" vừa mất (huỷ món cuối) thì bộ lọc thật đã về Tất cả: giữ state khớp để lần có món chờ sau không tự mở lại bộ lọc cũ.
+  if (filterView && filterView.active !== filter) setFilter(filterView.active);
 
   return (
     <Shell>
@@ -104,7 +112,17 @@ export default function WishlistPage() {
               variant="inline"
             />
           ) : (
-            <ProductGrid items={filterView.items} variant="grid" renderImageOverlay={(p) => buttonFor(p)} />
+            <ProductGrid
+              items={filterView.items}
+              variant="grid"
+              noteOf={(p) => (wishlistRestockView(p, restockQ.data, watch).kind === 'waiting' ? fillCopy('wishlist.restock.waiting') : undefined)}
+              renderImageOverlay={(p) => {
+                if (p.inStock !== false) return buttonFor(p);
+                const view = wishlistRestockView(p, restockQ.data, watch);
+                if (view.kind === 'none') return null;
+                return <RestockBellButton name={p.name} on={view.kind === 'waiting'} busy={restock.busy.has(p.id)} onPress={() => restock.press(p.id, view)} />;
+              }}
+            />
           )}
         </section>
       ) : (

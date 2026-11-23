@@ -4,7 +4,8 @@ import { useSmartNavigate } from '../lib/smart-nav';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
-import { wishlistFilterView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
+import { restockWatchIndex, wishlistFilterView, wishlistRestockView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { getWishlist } from '../services/wishlist-api';
 import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
@@ -24,6 +25,7 @@ import { Chip } from '../components/ui/chip';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { PageHeader } from '../components/ui/page-header';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { RestockBellButton, useMyRestockAlerts, useRestockToggle } from './wishlist-restock';
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ (ProductTile đặt vị trí): vùng chạm 44px bọc vòng trắng 32px, cùng kiểu với nút tim ở góc trên. */
 function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; onPress: (source: Element) => void }) {
@@ -67,10 +69,17 @@ export default function WishlistPage() {
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flashQ.data, picker?.variations.map((v) => v.id) ?? []);
 
+  // Báo hàng về: chỉ hỏi khi có thẻ hết hàng (chuông và nhãn chỉ nằm trên thẻ hết hàng).
+  const restockQ = useMyRestockAlerts(phase === 'authenticated' && (wishQ.data?.some((p) => p.inStock === false) ?? false));
+  const watch = restockWatchIndex(restockQ.data);
+  const restock = useRestockToggle((text, ok) => openSnackbar({ text, type: ok ? 'success' : 'error', ...(ok ? { duration: 2000 } : null) }));
+
   // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang trong ngăn xếp) trang không mở ở bộ lọc cũ.
   if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
   // Bộ lọc chỉ có khi danh sách có món; chip đếm trên toàn danh sách, lưới và lời báo rỗng theo bộ lọc đang chọn.
-  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter, flashQ.data ?? [], serverNow()) : null;
+  const filterView = wishQ.data && wishQ.data.length > 0 ? wishlistFilterView(wishQ.data, filter, flashQ.data ?? [], serverNow(), watch) : null;
+  // Chip "Chờ hàng về" vừa mất (huỷ món cuối) thì bộ lọc thật đã về Tất cả: giữ state khớp để lần có món chờ sau không tự mở lại bộ lọc cũ.
+  if (filterView && filterView.active !== filter) setFilter(filterView.active);
 
   const addLine = async (variationId: string, qty: number, source: Element | null = null) => {
     const cart = await addToCart(variationId, qty, 'wishlist');
@@ -184,7 +193,23 @@ export default function WishlistPage() {
                 <ProductGrid
                   items={filterView.items}
                   variant="grid"
-                  renderImageOverlay={(p) => (p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={(source) => void quickAdd(p, source)} /> : undefined)}
+                  noteOf={(p) => (wishlistRestockView(p, restockQ.data, watch).kind === 'waiting' ? fillCopy('wishlist.restock.waiting') : undefined)}
+                  renderImageOverlay={(p) => {
+                    if (p.inStock !== false) return <QuickAddButton name={p.name} busy={busyId === p.id} onPress={(source) => void quickAdd(p, source)} />;
+                    const view = wishlistRestockView(p, restockQ.data, watch);
+                    if (view.kind === 'none') return undefined;
+                    return (
+                      <RestockBellButton
+                        name={p.name}
+                        on={view.kind === 'waiting'}
+                        busy={restock.busy.has(p.id)}
+                        onPress={() => {
+                          haptic('light');
+                          restock.press(p.id, view);
+                        }}
+                      />
+                    );
+                  }}
                 />
               )}
             </>

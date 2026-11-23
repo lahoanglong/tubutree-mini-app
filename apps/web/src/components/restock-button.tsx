@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchRestockStatus,
+  myRestockAlertsKey,
   restockStatusKey,
   subscribeRestock,
   unsubscribeRestock,
@@ -85,7 +86,9 @@ export function useRestock({
         if (ctx?.prev) qc.setQueryData(restockStatusKey(productId ?? '', true), ctx.prev);
         onNotice(actionErrorText(e), false);
       },
-      onSettled: () => qc.invalidateQueries({ queryKey: restockStatusKey(productId ?? '', true) }),
+      // Trang Yêu thích đọc danh sách đăng ký riêng (`myRestockAlertsKey`): làm mới cùng lúc để quay lại trang đó thấy đúng chuông và nhãn.
+      onSettled: () =>
+        Promise.all([qc.invalidateQueries({ queryKey: restockStatusKey(productId ?? '', true) }), qc.invalidateQueries({ queryKey: myRestockAlertsKey })]),
     },
     ({ variationId }) => variationId,
   );
