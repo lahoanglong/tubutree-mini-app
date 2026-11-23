@@ -232,3 +232,13 @@ export function bundleExposure(
     return sum + perUnit * i.maxQty;
   }, 0);
 }
+
+/**
+ * Số tiền giỏ sẽ giảm khi khách mua ĐÚNG một bộ (THUẦN): cùng `allocateBundleDiscounts` và cùng trần nhân viên với giỏ, trên các dòng của chính bộ đó
+ * (mỗi món đúng số lượng "Thêm cả combo" gửi lên). `staffMaxAmount` null = bộ không chịu trần (ADMIN tạo). Đây là số "Tiết kiệm" công khai của thẻ
+ * combo, nên thẻ không hứa nhiều hơn giỏ trừ; giỏ có thêm bộ khác hay mã giảm giá thì giỏ vẫn là nguồn chính thức.
+ */
+export function bundleSetSaving(b: LiveBundle, lines: readonly BundleLine[], maxPct: number, staffMaxAmount: number | null): number {
+  const raw = allocateBundleDiscounts([b], lines, maxPct);
+  return staffMaxAmount === null ? raw.total : clampDiscountTotal(raw, staffMaxAmount).total;
+}

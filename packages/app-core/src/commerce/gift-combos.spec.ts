@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { BundleDTO, GiftLanding } from '../api/bundle';
+import type { CartLine, CartSummary } from '../api/cart';
 import type { ProductCard } from '../api/catalog';
-import { GIFT_COMBOS_MAX, giftCombosCallouts, giftCombosProducts, giftCombosViews } from './gift-combos';
+import { FORBIDDEN_TERMS } from '../shop-copy';
+import { claimsIn } from './copy-claims-guard';
+import {
+  GIFT_COMBOS_COPY,
+  GIFT_COMBOS_COPY_MAX,
+  GIFT_COMBOS_MAX,
+  comboAddedCue,
+  giftCombosCallouts,
+  giftCombosCopy,
+  giftCombosProducts,
+  giftCombosViews,
+  type GiftCombosCopyKey,
+} from './gift-combos';
 
 const NOW = Date.parse('2026-11-21T10:00:00Z');
 
@@ -57,6 +70,90 @@ describe('giftCombosViews', () => {
     const late = combo('late', { endAt: '2026-11-21T09:00:00Z' });
     expect(giftCombosViews(landing({ combos: [late] }), NOW)).toEqual([]);
     expect(giftCombosViews(landing({ combos: [late] }), NOW, -Infinity).map((v) => v.id)).toEqual(['late']);
+  });
+});
+
+describe('giftCombosViews: số "Tiết kiệm" theo máy chủ (cùng hàm giỏ trừ)', () => {
+  it('giá cả bộ = tổng lẻ trừ đúng số máy chủ; nhãn % giữ nguyên khi số khớp mức %', () => {
+    const [v] = giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 20_500 }] }), NOW);
+    expect(v!.comboTotal).toBe(184_500);
+    expect(v!.pct).toBe(10);
+  });
+
+  it('máy chủ kẹp thấp hơn mức % (trần tiền bộ nhân viên): thẻ hứa đúng số kẹp, nhãn % là mức thật làm tròn xuống', () => {
+    const [v] = giftCombosViews(landing({ combos: [{ ...combo('c1'), pct: 50, saving: 30_000 }] }), NOW);
+    expect(v!.total - v!.comboTotal).toBe(30_000);
+    // 30.000 / 205.000 = 14,6% → 14.
+    expect(v!.pct).toBe(14);
+  });
+
+  it('máy chủ báo 0đ: bỏ bộ (không quảng cáo "mua cả bộ" mà giỏ không giảm)', () => {
+    expect(giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 0 }, combo('c2')] }), NOW).map((v) => v.id)).toEqual(['c2']);
+  });
+
+  it('API cũ (thiếu số) hay số hỏng: giữ phép tính ở máy khách; số lớn hơn tổng thì kẹp ở tổng', () => {
+    expect(giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 12.5 }] }), NOW)[0]!.comboTotal).toBe(184_500);
+    expect(giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 999_999 }] }), NOW)[0]!.comboTotal).toBe(0);
+  });
+});
+
+const line = (o: Partial<CartLine>): CartLine => ({ id: 'l', variationId: 'v', slug: 's', stock: 5, total: 0, quantity: 1, ...o }) as CartLine;
+const cart = (o: Partial<CartSummary> & { lines?: Partial<CartLine>[] } = {}) => ({
+  items: (o.lines ?? [{ total: 150_000 }]).map(line),
+  freeship: o.freeship ?? false,
+  freeshipThreshold: o.freeshipThreshold ?? 199_000,
+  giftTrial: o.giftTrial,
+});
+const gift = (minOrder: number, o: Record<string, unknown> = {}) =>
+  ({ base: 0, minOrder, nextMinOrder: minOrder, shortfall: 0, options: [{ variationId: 'g1' }], selectedVariationId: null, declined: false, ...o }) as never;
+
+describe('comboAddedCue (câu mốc sau "Thêm cả combo")', () => {
+  it('chưa đủ Miễn phí giao hàng: số còn thiếu đọc từ giỏ vừa trả về', () => {
+    expect(comboAddedCue(cart())).toEqual({ kind: 'freeship', text: 'Mua thêm 49.000đ để được Miễn phí giao hàng 🚚' });
+  });
+
+  it('đủ Miễn phí giao hàng, còn mốc quà: số còn thiếu tới quà dùng thử 0đ', () => {
+    expect(comboAddedCue(cart({ lines: [{ total: 220_000 }], giftTrial: gift(299_000) }))).toEqual({ kind: 'gift', text: '🎁 Thêm 79.000đ để nhận quà dùng thử 0đ' });
+  });
+
+  it('đủ cả hai mốc, hay không có mốc quà (cờ tắt, khách không nhận quà): câu chúc mừng', () => {
+    expect(comboAddedCue(cart({ lines: [{ total: 320_000 }], giftTrial: gift(299_000) }))).toEqual({ kind: 'done', text: GIFT_COMBOS_COPY.cueAllReached });
+    expect(comboAddedCue(cart({ lines: [{ total: 220_000 }] }))).toEqual({ kind: 'done', text: '🎉 Đơn hàng đã được Miễn phí giao hàng' });
+    expect(comboAddedCue(cart({ lines: [{ total: 220_000 }], giftTrial: gift(299_000, { declined: true }) }))?.kind).toBe('done');
+  });
+
+  it('dòng hết hàng không tính; cờ freeship của máy chủ chỉ tin khi không có dòng hết hàng', () => {
+    const c = cart({ lines: [{ total: 150_000 }, { total: 100_000, stock: 0 }], freeship: true });
+    expect(comboAddedCue(c)).toEqual({ kind: 'freeship', text: 'Mua thêm 49.000đ để được Miễn phí giao hàng 🚚' });
+    expect(comboAddedCue(cart({ freeship: true }))?.kind).toBe('done');
+  });
+
+  it('giỏ có hàng gian hàng tự giao: chỉ tính phần Tubu Tree giao, câu nói rõ', () => {
+    const merchant = { kind: 'MERCHANT', storefrontId: 'sf', name: 'Shop' } as const;
+    const c = cart({ lines: [{ total: 120_000 }, { total: 200_000, fulfiller: merchant }], freeship: true });
+    expect(comboAddedCue(c)).toEqual({ kind: 'freeship', text: 'Mua thêm 79.000đ để được Miễn phí giao hàng cho phần hàng Tubu Tree giao 🚚' });
+  });
+
+  it('giỏ có hàng gian hàng tự giao, phần Tubu Tree đạt cả hai mốc: câu nói phần Tubu Tree giao, không nói cả đơn được miễn phí giao', () => {
+    const merchant = { kind: 'MERCHANT', storefrontId: 'sf', name: 'Shop' } as const;
+    const c = cart({ lines: [{ total: 320_000 }, { total: 200_000, fulfiller: merchant }], giftTrial: gift(299_000) });
+    expect(comboAddedCue(c)).toEqual({ kind: 'done', text: '🎉 Phần hàng Tubu Tree giao đã được Miễn phí giao hàng' });
+  });
+
+  it('giỏ hỏng hay thiếu ngưỡng: không nói gì', () => {
+    expect(comboAddedCue(undefined)).toBeNull();
+    expect(comboAddedCue({ items: [], freeship: false, freeshipThreshold: Number.NaN } as never)).toBeNull();
+  });
+});
+
+describe('GIFT_COMBOS_COPY', () => {
+  it('không thuật ngữ cấm, không tuyên bố, không vượt ngân sách', () => {
+    for (const key of Object.keys(GIFT_COMBOS_COPY) as GiftCombosCopyKey[]) {
+      const text = giftCombosCopy(key);
+      for (const { pattern, use } of FORBIDDEN_TERMS) expect(text, `${key}: dùng "${use}"`).not.toMatch(pattern);
+      expect(claimsIn(text), key).toEqual([]);
+      expect(text.length, key).toBeLessThanOrEqual(GIFT_COMBOS_COPY_MAX[key]);
+    }
   });
 });
 

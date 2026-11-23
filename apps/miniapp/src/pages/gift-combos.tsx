@@ -1,8 +1,8 @@
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, Truck } from 'lucide-react';
-import { giftCombosCallouts, giftCombosViews, type GiftCombosCallout } from '@tubutree/app-core/commerce/gift-combos';
+import { comboAddedCue, giftCombosCallouts, giftCombosViews, type CueCart, type GiftCombosCallout } from '@tubutree/app-core/commerce/gift-combos';
 import { giftLandingQuery } from '@tubutree/app-core/queries/bundle';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -47,14 +47,16 @@ function GiftCombosCallouts({ items }: { items: readonly GiftCombosCallout[] }) 
 }
 
 /**
- * Bộ quà tặng & combo khởi đầu (lối vào: "Xem tất cả" của Combo tiết kiệm ở Trang chủ). Combo thật đang bán được, tối đa 8, giá từ giá món;
- * hai mốc kèm đơn đọc từ máy chủ; "Thêm cả combo" một chạm. Cùng dữ liệu và luật với web `/bo-qua-tang`; giá cuối do giỏ tính lại.
+ * Bộ quà tặng & combo khởi đầu (lối vào: "Xem tất cả" của Combo tiết kiệm ở Trang chủ). Combo thật đang bán được, tối đa 8; "Tiết kiệm" của thẻ là số
+ * máy chủ tính bằng đúng hàm giỏ trừ; hai mốc kèm đơn đọc từ máy chủ; "Thêm cả combo" một chạm, xong thì ngay dưới thẻ vừa bấm có một dòng nói còn thiếu
+ * bao nhiêu tới Miễn phí giao hàng, rồi tới quà dùng thử 0đ (đọc từ giỏ máy chủ trả về). Cùng dữ liệu và luật với web `/bo-qua-tang`.
  */
 export default function GiftCombosPage() {
   const navigate = useNavigate();
   const goSmart = useSmartNavigate();
   const q = useQuery(giftLandingQuery(coreHttp));
   const { add, busyId } = useBundleAdd();
+  const [cue, setCue] = useState<{ id: string; text: string } | null>(null);
   const views = giftCombosViews(q.data, serverNow());
   const callouts = giftCombosCallouts(q.data);
 
@@ -87,18 +89,34 @@ export default function GiftCombosPage() {
               {views.map((v) => {
                 // Ưu tiên món còn hàng: "Xem từng món" luôn dẫn tới một món mua được.
                 const target = v.items.find((it) => it.stock !== 'out') ?? v.items[0];
+                const onDone = (cart: CueCart) => {
+                  const next = comboAddedCue(cart);
+                  setCue(next ? { id: v.id, text: next.text } : null);
+                };
                 return (
-                  <ComboCard
-                    key={v.id}
-                    title={v.title}
-                    items={v.items}
-                    pct={v.pct}
-                    total={v.total}
-                    comboTotal={v.comboTotal}
-                    busy={busyId === v.id}
-                    onAddAll={() => add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') })}
-                    onSeeItems={target?.slug ? () => navigate(`/product/${encodeURIComponent(target.slug)}`) : undefined}
-                  />
+                  <div key={v.id}>
+                    <ComboCard
+                      title={v.title}
+                      items={v.items}
+                      pct={v.pct}
+                      total={v.total}
+                      comboTotal={v.comboTotal}
+                      busy={busyId === v.id}
+                      onAddAll={() => {
+                        setCue(null);
+                        add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
+                      }}
+                      onSeeItems={target?.slug ? () => navigate(`/product/${encodeURIComponent(target.slug)}`) : undefined}
+                    />
+                    {/* Vùng đọc luôn có sẵn để câu mốc được đọc khi vừa hiện; báo "đã thêm" là thông báo nổi của hook. */}
+                    <div role="status" data-testid="gift-combos-cue">
+                      {cue?.id === v.id && (
+                        <Text variant="caption" tone="brand" as="p" numeric style={{ paddingTop: 'var(--space-stack-xs)', fontWeight: 600 }}>
+                          {cue.text}
+                        </Text>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </section>

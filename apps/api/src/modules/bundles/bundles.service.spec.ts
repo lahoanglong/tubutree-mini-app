@@ -346,6 +346,56 @@ describe('BundlesService.giftLanding (trang Bộ quà tặng)', () => {
     const out = await landingSetup({ rows: [] }).svc.giftLanding(NOW);
     expect(out).toEqual({ combos: [], freeshipThreshold: 199_000, giftTrialMinOrder: 299_000 });
   });
+
+  describe('saving: số "Tiết kiệm" của thẻ = số giỏ trừ khi mua đúng bộ (mỗi món một đơn vị)', () => {
+    const savingSetup = (o: { rows: unknown[]; cards: ReturnType<typeof card>[]; keys?: Record<string, unknown>; admins?: string[] }) => {
+      const base = setup({ rows: o.rows, cards: o.cards });
+      const keys = { ...GIFT_KEYS, ...(o.keys ?? {}) };
+      const config = { get: jest.fn().mockImplementation(async (k: string, fb: unknown) => (k in keys ? keys[k] : fb)) };
+      base.prisma.variation.findMany.mockResolvedValue([]);
+      const user = { findMany: jest.fn().mockImplementation(async (a: { where: { id: { in: string[] } } }) => a.where.id.in.filter((id) => (o.admins ?? []).includes(id)).map((id) => ({ id }))) };
+      const prisma = { ...base.prisma, user };
+      return { svc: new BundlesService(prisma as never, base.catalog as never, config as never), user };
+    };
+
+    it('floor từng món như giỏ (không làm tròn trên tổng), giá sale được dùng', async () => {
+      const { svc } = savingSetup({ rows: [row({ pct: 10 })], cards: [card('p1', { basePrice: 33_339 }), card('p2', { basePrice: 80_000, salePrice: 45_559 })] });
+      const [c] = (await svc.giftLanding(NOW)).combos;
+      expect(c!.saving).toBe(3_333 + 4_555);
+    });
+
+    it('% vượt trần bundle.max_pct: tính theo trần, như giỏ', async () => {
+      const { svc } = savingSetup({ rows: [row({ pct: 80 })], cards: [card('p1', { basePrice: 10_000 }), card('p2', { basePrice: 10_000 })], keys: { 'bundle.max_pct': 30 } });
+      const [c] = (await svc.giftLanding(NOW)).combos;
+      expect(c!.pct).toBe(30);
+      expect(c!.saving).toBe(6_000);
+    });
+
+    it('bộ nhân viên tạo vượt trần tiền nhân viên: thẻ hứa đúng số đã kẹp; bộ ADMIN tạo không bị kẹp', async () => {
+      const rows = [row({ id: 'staff', pct: 50, createdById: 'u-staff' }), row({ id: 'admin', pct: 50, createdById: 'u-admin' })];
+      const cards = [card('p1', { basePrice: 150_000 }), card('p2', { basePrice: 150_000 })];
+      const { svc, user } = savingSetup({ rows, cards, keys: { 'coupon.staff_max_amount_vnd': 100_000 }, admins: ['u-admin'] });
+      const out = (await svc.giftLanding(NOW)).combos;
+      expect(out.map((c) => [c.id, c.saving])).toEqual([
+        ['staff', 100_000],
+        ['admin', 150_000],
+      ]);
+      expect(user.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('chưa vượt trần: không tra vai trò người tạo', async () => {
+      const { svc, user } = savingSetup({ rows: [row({ createdById: 'u-staff' })], cards: [card('p1'), card('p2')], keys: { 'coupon.staff_max_amount_vnd': 100_000 } });
+      expect((await svc.giftLanding(NOW)).combos[0]!.saving).toBe(10_000);
+      expect(user.findMany).not.toHaveBeenCalled();
+    });
+
+    it('món chỉ hưởng maxQty đơn vị: maxQty 0 thì món đó không giảm; bộ không giảm được đồng nào bị bỏ khỏi trang', async () => {
+      const partial = savingSetup({ rows: [row({ items: [item('p1'), item('p2', { maxQty: 0 })] })], cards: [card('p1'), card('p2')] });
+      expect((await partial.svc.giftLanding(NOW)).combos[0]!.saving).toBe(5_000);
+      const none = savingSetup({ rows: [row({ pct: 1 })], cards: [card('p1', { basePrice: 99 }), card('p2', { basePrice: 99 })] });
+      expect((await none.svc.giftLanding(NOW)).combos).toEqual([]);
+    });
+  });
 });
 
 describe('BundlesService.greenBoxPage (trang ghép Hộp Xanh)', () => {

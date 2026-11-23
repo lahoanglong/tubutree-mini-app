@@ -23,7 +23,8 @@ export interface BundleAdd {
   errorKey: string;
   /** Có thì báo thành công bằng câu này (combo); mua kèm tự đổi nhãn nút nên không báo. */
   successText?: string;
-  onDone?: () => void;
+  /** Nhận giỏ máy chủ trả sau lệnh thêm (vd trang Bộ quà tặng nói còn thiếu bao nhiêu tới Miễn phí giao hàng). */
+  onDone?: (cart: Awaited<ReturnType<typeof addAllToCart>>) => void;
 }
 
 /** Lỗi 4xx có lời nghiệp vụ ("Sản phẩm X đã hết hàng") thì đọc thẳng; còn lại câu cố định, vì lời chung chung sai nghĩa với lệnh tất cả-hoặc-không. */
@@ -45,11 +46,11 @@ export function useBundleAdd() {
   const inflight = useRef(false);
   const mutation = useMutation({
     mutationFn: (v: BundleAdd) => addAllToCart(v.lines),
-    onSuccess: (_data, v) => {
+    onSuccess: (cart, v) => {
       void qc.invalidateQueries({ queryKey: ['cart'] });
       haptic('medium');
       if (v.successText) notify({ type: 'success', text: v.successText });
-      v.onDone?.();
+      v.onDone?.(cart);
     },
     // Trả Promise: ô giữ khoá tới khi tồn kho mới về (tối đa `settleWithin`) khi máy chủ từ chối (món hết hàng, ngừng bán, giá đổi), kẻo bấm lại trên số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx: nhả ngay.
     onError: (error, v) => {

@@ -48,10 +48,19 @@ export const fetchProductBundles = (http: HttpClient, slug: string) =>
 export const fetchHomeCombos = (http: HttpClient, limit?: number) =>
   http.get<BundleDTO[]>('/bundles/combos', { query: limit ? { limit } : {}, anonymous: true });
 
+/** Combo của trang Bộ quà tặng. */
+export interface GiftComboDTO extends BundleDTO {
+  /**
+   * Số giỏ trừ khi mua đúng bộ này, mỗi món một đơn vị: máy chủ tính bằng đúng hàm của giỏ (floor từng dòng, `maxQty`, trần tiền nhân viên).
+   * API cũ chưa trả thì máy khách tự tính như trước (`comboView`).
+   */
+  saving?: number;
+}
+
 /** `GET /bundles/gift-landing`: trang Bộ quà tặng & combo khởi đầu (web `/bo-qua-tang`, Mini App `/gift-combos`). */
 export interface GiftLanding {
   /** Combo đang chạy mà mọi món còn hàng (luật Combo Trang chủ), tối đa 8. */
-  combos: BundleDTO[];
+  combos: GiftComboDTO[];
   /** Ngưỡng Miễn phí giao hàng của cấu hình; null thì không nói. */
   freeshipThreshold: number | null;
   /** Mốc thấp nhất mở quà dùng thử 0đ còn quà thật; null khi cờ tắt hay hết quà. */

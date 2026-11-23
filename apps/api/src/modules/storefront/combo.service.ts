@@ -4,7 +4,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { loadPublicVisibility } from './public-visibility';
 import { publicStorefrontWhere } from './storefront-visibility';
-import { loadLiveBundles, readBundleMaxPct } from '../bundles/bundle-read';
+import { loadLiveBundles, readBundleMaxPct, staffBundlePredicate } from '../bundles/bundle-read';
 import {
   allocateBundleDiscountsCappedOwned,
   allocateBundleDiscountsOwned,
@@ -197,21 +197,10 @@ export class ComboService {
     const staffMax = (await loadStaffCouponCaps(this.config)).maxAmount;
     const raw = allocateBundleDiscountsOwned(bundles, bundleLines, maxPct);
     // `raw` là cận trên của mọi kết quả sau khi kẹp: chưa vượt trần thì không bộ nào bị kẹp, khỏi tra vai trò người tạo.
-    const bundle = raw.total <= staffMax ? raw : allocateBundleDiscountsCappedOwned(bundles, bundleLines, maxPct, { isStaff: await this.staffBundlePredicate(bundles), maxAmount: staffMax });
+    const bundle = raw.total <= staffMax ? raw : allocateBundleDiscountsCappedOwned(bundles, bundleLines, maxPct, { isStaff: await staffBundlePredicate(this.prisma, bundles), maxAmount: staffMax });
     const sources = new Map(store.sources);
     for (const b of bundles) sources.set(`bundle:${b.id}`, { kind: b.kind, title: b.title ?? 'Combo', keyVariationIds: bundleKeyVariationIds(b, bundleLines) });
     return matchOf(mergeMaxOwned(store.owned, bundle), sources);
-  }
-
-  /**
-   * Bộ do ADMIN tạo không bị trần nhân viên; mọi bộ khác bị kẹp, kể cả không rõ người tạo (`createdById` null, tài khoản không còn), cùng chiều với
-   * `isOwnStaffCoupon` (không rõ vai trò coi như nhân viên). Một truy vấn cho mọi người tạo của các bộ đang xét.
-   */
-  private async staffBundlePredicate(bundles: readonly LiveBundle[]): Promise<(b: LiveBundle) => boolean> {
-    const creatorIds = [...new Set(bundles.map((b) => b.createdById).filter((id): id is string => id !== null))];
-    const admins = creatorIds.length === 0 ? [] : await this.prisma.user.findMany({ where: { id: { in: creatorIds }, role: 'ADMIN' }, select: { id: true } });
-    const adminIds = new Set(admins.map((u) => u.id));
-    return (b) => b.createdById === null || !adminIds.has(b.createdById);
   }
 
   /**

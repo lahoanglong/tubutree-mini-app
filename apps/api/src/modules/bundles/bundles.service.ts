@@ -5,13 +5,14 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { CatalogService } from '../catalog/catalog.service';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { BUNDLE_MIN_PRODUCTS, addonPayPrice } from './bundle-rules';
-import { bundleLiveWhere, isTubuOnlyBundle, loadFlashFootprint, readBundleMaxPct, type FlashFootprint } from './bundle-read';
+import { BUNDLE_MIN_PRODUCTS, addonPayPrice, bundleSetSaving, type BundleLine, type LiveBundle } from './bundle-rules';
+import { bundleLiveWhere, isTubuOnlyBundle, loadFlashFootprint, readBundleMaxPct, staffBundlePredicate, type FlashFootprint } from './bundle-read';
 import { loadGreenBoxSettings, type GreenBoxTier } from './green-box';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from '../integrations/pancake/pancake-fulfilment';
 import { loadGiftTrialSettings } from '../gift-tiers/gift-trial';
 import { GIFT_TRIAL_VARIATION_WHERE } from '../gift-tiers/gift-trial.service';
 import { FREE_SHIP_THRESHOLD_DEFAULT } from '../pricing/pricing.service';
+import { loadStaffCouponCaps } from '../admin/coupon-input-rules';
 
 export const PDP_COMBO_MAX = 2;
 export const PDP_ADDON_MAX = 3;
@@ -53,10 +54,19 @@ export interface GreenBoxPageGroup {
   products: CardOf[];
 }
 
+/** Combo của trang Bộ quà tặng: kèm số tiền giỏ sẽ giảm khi mua đúng bộ đó. */
+export interface GiftComboDTO extends BundleDTO {
+  /**
+   * Số giỏ trừ khi giỏ có đúng các món của bộ, mỗi món một đơn vị (thứ "Thêm cả combo" gửi lên): cùng `allocateBundleDiscounts`, cùng phép floor
+   * từng dòng, cùng `maxQty` và trần tiền nhân viên với giỏ (`bundleSetSaving`). Luôn > 0: bộ không giảm được đồng nào bị bỏ khỏi trang.
+   */
+  saving: number;
+}
+
 /** Trang Bộ quà tặng & combo khởi đầu (`/bo-qua-tang` web, `/gift-combos` Mini App). */
 export interface GiftLandingDTO {
   /** Cùng luật Combo Trang chủ (đang chạy, mọi món còn hàng), tối đa `HOME_COMBOS_MAX`, theo thứ tự admin sắp. */
-  combos: BundleDTO[];
+  combos: GiftComboDTO[];
   /** Ngưỡng Miễn phí giao hàng: cùng khoá và mặc định với cấu hình công khai (`shipping.free_threshold`); số hỏng thì null, trang không hứa. */
   freeshipThreshold: number | null;
   /**
@@ -80,6 +90,7 @@ const PUBLIC_SELECT = {
   pct: true,
   endAt: true,
   anchorProductId: true,
+  createdById: true,
   anchorProduct: { select: { storefrontId: true } },
   items: {
     orderBy: { sortOrder: 'asc' },
@@ -88,6 +99,7 @@ const PUBLIC_SELECT = {
 } satisfies Prisma.BundleSelect;
 
 type Row = Prisma.BundleGetPayload<{ select: typeof PUBLIC_SELECT }>;
+type PublicPair = { row: Row; dto: BundleDTO };
 
 const BUNDLE_ORDER = [{ sortOrder: 'asc' }, { createdAt: 'desc' }] satisfies Prisma.BundleOrderByWithRelationInput[];
 const FETCH_CAP = 20;
@@ -141,6 +153,10 @@ export class BundlesService {
 
   /** Combo đang chạy mà MỌI món còn hàng (Trang chủ không quảng cáo combo không mua được). */
   async homeCombos(limit: number = HOME_COMBOS_DEFAULT, now: Date = new Date()): Promise<BundleDTO[]> {
+    return (await this.liveCombos(limit, now)).map((p) => p.dto);
+  }
+
+  private async liveCombos(limit: number, now: Date): Promise<PublicPair[]> {
     const take = Math.min(HOME_COMBOS_MAX, Math.max(1, Math.trunc(limit) || 1));
     const rows = await this.prisma.bundle.findMany({
       where: { ...bundleLiveWhere(now), kind: 'BUNDLE_PCT' },
@@ -148,8 +164,8 @@ export class BundlesService {
       orderBy: BUNDLE_ORDER,
       take: take * 3,
     });
-    const shown = await this.toPublic(rows, now);
-    return shown.filter((b) => b.items.every((i) => i.inStock)).slice(0, take);
+    const shown = await this.toPublicPairs(rows, now);
+    return shown.filter((p) => p.dto.items.every((i) => i.inStock)).slice(0, take);
   }
 
   /**
@@ -158,12 +174,43 @@ export class BundlesService {
    */
   async giftLanding(now: Date = new Date()): Promise<GiftLandingDTO> {
     const [combos, freeship, giftTrialMinOrder] = await Promise.all([
-      this.homeCombos(HOME_COMBOS_MAX, now),
+      this.liveCombos(HOME_COMBOS_MAX, now).then((pairs) => this.withSetSaving(pairs)),
       this.config.get<unknown>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
       this.giftTrialFloor(),
     ]);
     const freeshipThreshold = typeof freeship === 'number' && Number.isInteger(freeship) && freeship > 0 ? freeship : null;
     return { combos, freeshipThreshold, giftTrialMinOrder };
+  }
+
+  /**
+   * Gắn số "Tiết kiệm" thật của từng combo (`GiftComboDTO.saving`). Trần nhân viên chỉ tra vai trò người tạo khi số thô vượt trần, như giỏ: chưa vượt thì
+   * không bộ nào bị kẹp. Người mua là chính người tạo (nhân viên không hưởng bộ của mình) thì giỏ giảm ít hơn: API công khai không biết người mua.
+   */
+  private async withSetSaving(pairs: readonly PublicPair[]): Promise<GiftComboDTO[]> {
+    if (pairs.length === 0) return [];
+    const [maxPct, caps] = await Promise.all([readBundleMaxPct(this.config), loadStaffCouponCaps(this.config)]);
+    const sets = pairs.map(({ row, dto }) => {
+      const live: LiveBundle = {
+        id: row.id,
+        kind: row.kind,
+        title: row.title,
+        pct: row.pct,
+        anchorProductId: row.anchorProductId,
+        createdById: row.createdById ?? null,
+        items: row.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, refPrice: i.refPrice, maxQty: i.maxQty })),
+      };
+      // Đúng các dòng "Thêm cả combo" gửi lên: phân loại của thẻ (ghim hoặc đại diện), một đơn vị, giá đang bán.
+      const lines: BundleLine[] = dto.items.flatMap((it) =>
+        it.variationId ? [{ variationId: it.variationId, productId: it.productId, total: it.product.salePrice ?? it.product.basePrice, quantity: 1 }] : [],
+      );
+      return { dto, live, lines, raw: bundleSetSaving(live, lines, maxPct, null) };
+    });
+    const over = sets.filter((s) => s.raw > caps.maxAmount);
+    const isStaff = over.length > 0 ? await staffBundlePredicate(this.prisma, over.map((s) => s.live)) : () => false;
+    return sets.flatMap(({ dto, live, lines, raw }) => {
+      const saving = raw > caps.maxAmount && isStaff(live) ? bundleSetSaving(live, lines, maxPct, caps.maxAmount) : raw;
+      return saving > 0 ? [{ ...dto, saving }] : [];
+    });
   }
 
   private async giftTrialFloor(): Promise<number | null> {
@@ -228,6 +275,11 @@ export class BundlesService {
    * (không quảng cáo bộ không đủ, và giá hiện ra phải bằng giá giỏ tính).
    */
   private async toPublic(rows: readonly Row[], now: Date): Promise<BundleDTO[]> {
+    return (await this.toPublicPairs(rows, now)).map((p) => p.dto);
+  }
+
+  /** Như `toPublic`, giữ kèm dòng gốc (người tạo, món chưa ghim) cho nơi cần tính lại số tiền theo đúng luật giỏ. */
+  private async toPublicPairs(rows: readonly Row[], now: Date): Promise<PublicPair[]> {
     const candidates = rows.filter(isTubuOnlyBundle);
     if (candidates.length === 0) return [];
     const productIds = [...new Set(candidates.flatMap((b) => b.items.map((i) => i.productId)))];
@@ -246,10 +298,10 @@ export class BundlesService {
     ]);
     const cardById = new Map(cards.map((c) => [c.id, c]));
     const pinnedById = new Map(pinned.map((v) => [v.id, v]));
-    const out: BundleDTO[] = [];
+    const out: PublicPair[] = [];
     for (const b of candidates) {
       const dto = this.build(b, cardById, pinnedById, maxPct, flash);
-      if (dto) out.push(dto);
+      if (dto) out.push({ row: b, dto });
     }
     return out;
   }

@@ -1,6 +1,9 @@
-import type { GiftLanding } from '../api/bundle';
+import type { GiftComboDTO, GiftLanding } from '../api/bundle';
+import type { GiftTrialSummaryDTO } from '@tubutree/shared-types';
+import { fillTemplate } from '../copy-template';
 import { fillCopy } from '../shop-copy';
 import { comboView, type ComboView } from './bundle-view';
+import { cartGiftThreshold, computeCartThresholdProgress } from './cart-progress';
 import { vnd } from './money';
 
 /**
@@ -17,7 +20,22 @@ export const GIFT_COMBOS_MAX = 8;
  */
 export function giftCombosViews(landing: GiftLanding | null | undefined, now: number, liveAt: number = now): ComboView[] {
   if (!landing) return [];
-  return landing.combos.flatMap((b) => comboView(b, now, liveAt) ?? []).slice(0, GIFT_COMBOS_MAX);
+  return landing.combos.flatMap((b) => withServerSaving(comboView(b, now, liveAt), b.saving)).slice(0, GIFT_COMBOS_MAX);
+}
+
+/**
+ * Giá cả bộ theo số máy chủ (`GiftComboDTO.saving`, cùng hàm giỏ trừ) thay cho phép tính ở máy khách, nên "Tiết kiệm Xđ" của thẻ bằng đúng số giỏ
+ * trừ. Máy chủ báo 0 thì bỏ bộ (không quảng cáo "mua cả bộ" mà giỏ không giảm). Số bị kẹp thấp hơn mức % (trần tiền của bộ nhân viên tạo) thì nhãn
+ * "Combo -n%" đổi theo mức thật, làm tròn xuống. API cũ (thiếu số hay số hỏng) thì giữ phép tính ở máy khách.
+ */
+function withServerSaving(v: ComboView | null, saving: GiftComboDTO['saving']): ComboView[] {
+  if (!v) return [];
+  if (typeof saving !== 'number' || !Number.isInteger(saving)) return [v];
+  if (saving <= 0) return [];
+  const save = Math.min(saving, v.total);
+  const clientSave = v.total - v.comboTotal;
+  const pct = save < clientSave && v.total > 0 ? Math.floor((save * 100) / v.total) : v.pct;
+  return [{ ...v, pct, comboTotal: v.total - save }];
 }
 
 export interface GiftCombosCallout {
@@ -47,4 +65,55 @@ export function giftCombosProducts(views: readonly ComboView[]): { slug: string;
     }
   }
   return out;
+}
+
+/**
+ * Chữ riêng của trang Bộ quà tặng (như `CART_PROGRESS_COPY`): chỉ trang này nạp module, nên không vào gói khởi động. `gift-combos.spec.ts` chạy
+ * thuật ngữ cấm và `GIFT_COMBOS_COPY_MAX` trên từng khoá.
+ */
+export const GIFT_COMBOS_COPY = {
+  cueAllReached: '🎉 Đơn đã được Miễn phí giao hàng và đủ mốc quà dùng thử 0đ',
+} as const;
+
+export type GiftCombosCopyKey = keyof typeof GIFT_COMBOS_COPY;
+
+/** Số ký tự tối đa khi điền giá trị xấu nhất: câu nằm gọn hai dòng dưới thẻ combo ở khổ 375. */
+export const GIFT_COMBOS_COPY_MAX: Record<GiftCombosCopyKey, number> = {
+  cueAllReached: 64,
+};
+
+export function giftCombosCopy(key: GiftCombosCopyKey, vars: Record<string, string | number> = {}): string {
+  return fillTemplate(GIFT_COMBOS_COPY[key], vars, key);
+}
+
+export interface GiftCombosCue {
+  /** Mốc kế tiếp còn thiếu (`freeship`, `gift`), hay `done` khi giỏ đã đạt mọi mốc. */
+  kind: 'freeship' | 'gift' | 'done';
+  text: string;
+}
+
+/** Phần giỏ `comboAddedCue` đọc: dạng tối thiểu để giỏ của app-core và kiểu giỏ riêng của Mini App cùng truyền vào được. */
+export interface CueCart {
+  items: readonly { stock: number; total: number; fulfiller?: { kind: string } | null }[];
+  freeship: boolean;
+  freeshipThreshold: number;
+  giftTrial?: GiftTrialSummaryDTO | null;
+}
+
+/**
+ * Câu mốc ngay sau "Thêm cả combo" (THUẦN), đọc từ giỏ máy chủ trả về sau lệnh thêm: còn thiếu bao nhiêu tới Miễn phí giao hàng, rồi tới quà dùng thử
+ * 0đ. Cùng cách tính với dải mốc đầu Giỏ khi chọn cả giỏ (`computeCartThresholdProgress`): bỏ dòng hết hàng, giỏ có hàng gian hàng tự giao thì chỉ tính
+ * phần Tubu Tree giao, cờ `freeship` của máy chủ chỉ tin khi không có hai trường hợp đó. Giỏ hỏng hay thiếu ngưỡng thì null (không nói gì).
+ */
+export function comboAddedCue(cart: CueCart | null | undefined): GiftCombosCue | null {
+  if (!cart || !Array.isArray(cart.items) || typeof cart.freeshipThreshold !== 'number' || !Number.isFinite(cart.freeshipThreshold)) return null;
+  const hasMerchant = cart.items.some((l) => l.fulfiller?.kind === 'MERCHANT');
+  const buyable = cart.items.filter((l) => l.stock > 0);
+  const base = buyable.reduce((s, l) => s + (!hasMerchant || (l.fulfiller?.kind ?? 'TUBU') === 'TUBU' ? l.total : 0), 0);
+  const serverFreeship = !hasMerchant && cart.freeship === true && buyable.length === cart.items.length;
+  const p = computeCartThresholdProgress(base, { freeshipThreshold: cart.freeshipThreshold, giftThreshold: cartGiftThreshold(cart.giftTrial), serverFreeship, tubuOnly: hasMerchant });
+  if (p.next === 'freeship') return { kind: 'freeship', text: p.headline };
+  if (p.next === 'gift' && p.gift) return { kind: 'gift', text: fillCopy('giftTrial.locked', { amount: vnd(p.gift.remaining) }) };
+  // Câu chung hai mốc nói "Đơn": giỏ có hàng gian hàng tự giao thì phần đó không được miễn phí giao, nên dùng câu riêng phần Tubu Tree giao.
+  return { kind: 'done', text: p.gift && !hasMerchant ? giftCombosCopy('cueAllReached') : p.headline };
 }

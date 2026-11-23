@@ -150,16 +150,32 @@ test.describe('w2-03 Hộp Xanh web', () => {
     });
     await page.goto('/hop-xanh');
     await expect(page.getByRole('heading', { name: 'Hộp Xanh tự chọn' })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText('từ 3 món giảm 3%, từ 5 món giảm 5%, từ 7 món giảm 7%', { exact: false })).toBeVisible();
+    // Thanh nhiều bậc thay câu liệt kê bậc (tubu-w22-01): mỗi bậc máy chủ trả một đoạn, số món còn thiếu và mức giảm bậc kế.
+    const stepper = page.getByTestId('green-box-stepper');
+    await expect(stepper.getByTestId('green-box-step')).toHaveText(['3 món-3%', '5 món-5%', '7 món-7%']);
+    await expect(stepper.getByTestId('green-box-stepper-text')).toHaveText('Thêm 2 món nữa');
+    await expect(stepper).toContainText('Giảm 5%');
     await expect(page.getByRole('heading', { name: 'Nhà bếp' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Phòng tắm' })).toBeVisible();
     const bar = page.getByTestId('green-box-bar-text').filter({ visible: true });
     await expect(bar).toHaveText('Đã chọn 3 món · giảm 3%');
     await expect(page.getByRole('link', { name: 'Xem giỏ', exact: true }).filter({ visible: true })).toHaveCount(1);
+    const jump = page.getByRole('region', { name: 'Chọn nhanh danh mục' });
+    await expect(jump.getByRole('button')).toHaveText(['Nhà bếp(2)', 'Phòng tắm(2)']);
+    expect(await probeTapTargets(page, { scope: '[data-testid="green-box-jump"]' })).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await shoot(page, 'hop-xanh');
+    // Chạm chip: tiêu đề mục nằm ngay dưới khối dính, không bị che.
+    await jump.getByRole('button', { name: /^Phòng tắm/ }).click();
+    const heading = page.getByRole('heading', { name: 'Phòng tắm' });
+    await expect.poll(async () => {
+      const [h, j] = await Promise.all([heading.boundingBox(), jump.boundingBox()]);
+      return h && j ? Math.round(h.y - (j.y + j.height)) : -999;
+    }).toBeGreaterThanOrEqual(0);
+    await expect(heading).toBeInViewport();
     await page.getByRole('button', { name: /^Thêm Nước rửa chén vào giỏ/ }).click();
     await expect(bar).toHaveText('Đã chọn 4 món · giảm 3%');
+    await expect(stepper.getByTestId('green-box-stepper-text')).toHaveText('Thêm 1 món nữa');
     await page.getByRole('link', { name: 'Xem giỏ', exact: true }).filter({ visible: true }).click();
     await expect(page).toHaveURL(/\/gio-hang$/);
   });

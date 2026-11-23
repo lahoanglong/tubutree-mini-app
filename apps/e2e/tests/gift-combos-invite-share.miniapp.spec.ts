@@ -30,6 +30,18 @@ const LANDING = {
   freeshipThreshold: 199_000,
   giftTrialMinOrder: 299_000,
 };
+const BATCH_CART = {
+  items: [{ id: 'l-a', variationId: 'v-a', productId: 'a', slug: 'sp-a', name: 'Nước rửa chén bồ hòn 500ml', thumbnail: null, quantity: 1, unitPrice: 75_000, total: 75_000, stock: 9 }, { id: 'l-b', variationId: 'v-b', productId: 'b', slug: 'sp-b', name: 'Miếng rửa xơ mướp', thumbnail: null, quantity: 1, unitPrice: 75_000, total: 75_000, stock: 9 }],
+  couponCode: null,
+  subtotal: 150_000,
+  comboDiscount: 30_000,
+  discount: 0,
+  freeship: false,
+  freeshipThreshold: 199_000,
+  itemCount: 2,
+};
+// tubu-w22-01: combo 50% bị kẹp ở 30.000đ (bộ nhân viên tạo vượt trần tiền): thẻ hứa đúng số máy chủ trả, nhãn % là mức thật.
+const SAVING_LANDING = { ...LANDING, combos: [{ ...LANDING.combos[0]!, pct: 50, saving: 30_000 }, LANDING.combos[1]!] };
 const CARD = { referralCode: 'XANH42', album: { seen: 12, total: 40 }, wasteItems: 7, firstOrderReward: { points: 100, minOrderAmount: 199_000 }, earnsPoints: true };
 const REFERRAL = { referralCode: 'XANH42', invitedCount: 12, firstOrderCount: 4, successCount: 3, earnedPoints: 5_000, minOrderAmount: 200_000, windowDays: 30, referrerRewardPoints: 5_000 };
 
@@ -71,6 +83,25 @@ for (const width of [320, 375]) {
       await expectTargets44(list);
       await expectNoHorizontalOverflow(page);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-${width}-gift-combos.png`, fullPage: true });
+    });
+
+    test('tubu-w22-01 Thêm cả combo: "Tiết kiệm" là số máy chủ, câu mốc Miễn phí giao hàng ngay dưới thẻ vừa bấm, không tràn ngang', async ({ page, api }) => {
+      member(api);
+      api.get('/bundles/gift-landing', SAVING_LANDING);
+      api.post('/cart/items/batch', BATCH_CART);
+      api.get('/cart', BATCH_CART);
+      await page.goto('/gift-combos');
+      const list = page.getByTestId('gift-combos-list');
+      await expect(list).toContainText('Tiết kiệm 30.000đ', { timeout: 15_000 });
+      await expect(list).toContainText('175.000đ');
+      await expect(list).toContainText('Combo -14%');
+      await list.getByRole('button', { name: /^Thêm cả combo Combo khởi đầu bếp xanh/ }).click();
+      const cues = page.getByTestId('gift-combos-cue');
+      await expect(cues.first()).toHaveText('Mua thêm 49.000đ để được Miễn phí giao hàng 🚚');
+      await expect(cues.nth(1)).toHaveText('');
+      await expect(page.getByText('Đã thêm cả combo vào giỏ').first()).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-${width}-gift-combos-added.png` });
     });
 
     test('tubu-w15-02 Trang chủ: "Bộ quà tặng" nằm trong "Tất cả lối tắt" (hàng lối tắt nhanh vẫn 3 nút), chạm mở /gift-combos', async ({ page, api }) => {

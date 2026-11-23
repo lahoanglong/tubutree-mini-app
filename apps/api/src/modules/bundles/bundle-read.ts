@@ -98,3 +98,18 @@ export async function loadFlashFootprint(prisma: Pick<PrismaService, 'flashSaleI
   }
   return { variationIds, productIds: products };
 }
+
+/**
+ * Bộ nào chịu trần tiền của nhân viên (`coupon.staff_max_amount_vnd`): bộ do ADMIN tạo thì không; mọi bộ khác bị kẹp, kể cả không rõ người tạo
+ * (`createdById` null, tài khoản không còn), cùng chiều với `isOwnStaffCoupon` (không rõ vai trò coi như nhân viên). Một truy vấn cho mọi người tạo.
+ * Giỏ (`ComboService`) và giá cả bộ công khai (`BundlesService.giftLanding`) cùng gọi hàm này nên hai số không lệch luật.
+ */
+export async function staffBundlePredicate(
+  prisma: Pick<PrismaService, 'user'>,
+  bundles: readonly Pick<LiveBundle, 'createdById'>[],
+): Promise<(b: Pick<LiveBundle, 'createdById'>) => boolean> {
+  const creatorIds = [...new Set(bundles.map((b) => b.createdById).filter((id): id is string => typeof id === 'string'))];
+  const admins = creatorIds.length === 0 ? [] : await prisma.user.findMany({ where: { id: { in: creatorIds }, role: 'ADMIN' }, select: { id: true } });
+  const adminIds = new Set(admins.map((u) => u.id));
+  return (b) => typeof b.createdById !== 'string' || !adminIds.has(b.createdById);
+}

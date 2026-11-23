@@ -12,8 +12,10 @@ import {
   greenBoxPageIntro,
   greenBoxProgress,
   greenBoxTierRise,
+  greenBoxStepper,
   greenBoxWebCopy,
   pickSubscriptionSuggestion,
+  previewGreenBox,
   readGreenBox,
   readSubscriptionSuggestions,
   subscriptionSuggestionText,
@@ -160,6 +162,76 @@ describe('gợi ý định kỳ', () => {
 
   it('câu gợi ý đọc phần trăm từ cấu hình', () => {
     expect(subscriptionSuggestionText(s('a', 8), 0.05)).toBe('Bạn thường mua SP a khoảng 8 tuần một lần. Đặt giao định kỳ, giảm 5%');
+  });
+});
+
+describe('previewGreenBox (bậc xem trước của giỏ khách)', () => {
+  it('chọn bậc như máy chủ: mốc cao nhất đã đủ, bậc kế là mốc nhỏ nhất chưa đủ; không hứa số tiền', () => {
+    expect(previewGreenBox(TIERS, 0)).toEqual({ items: 0, tier: null, next: TIERS[0], tiers: TIERS, discount: 0 });
+    expect(previewGreenBox(TIERS, 4)).toEqual({ items: 4, tier: TIERS[0], next: TIERS[1], tiers: TIERS, discount: 0 });
+    expect(previewGreenBox(TIERS, 9)).toEqual({ items: 9, tier: TIERS[2], next: null, tiers: TIERS, discount: 0 });
+  });
+
+  it('bảng bậc do máy chủ trả (không ghi cứng 3/5/7): bậc lộn thứ tự được xếp lại, bậc hỏng bị bỏ', () => {
+    const tiers = [{ minItems: 6, pct: 8 }, { minItems: 2, pct: 2 }, { minItems: 0, pct: 5 }, { minItems: 4, pct: Number.NaN }];
+    expect(previewGreenBox(tiers, 3)).toEqual({ items: 3, tier: { minItems: 2, pct: 2 }, next: { minItems: 6, pct: 8 }, tiers: [{ minItems: 2, pct: 2 }, { minItems: 6, pct: 8 }], discount: 0 });
+    expect(previewGreenBox([], 3)).toBeNull();
+  });
+
+  it('số món âm, lẻ hay hỏng: về số nguyên không âm', () => {
+    expect(previewGreenBox(TIERS, -2)?.items).toBe(0);
+    expect(previewGreenBox(TIERS, 3.7)?.items).toBe(3);
+    expect(previewGreenBox(TIERS, Number.NaN)?.items).toBe(0);
+  });
+});
+
+describe('greenBoxStepper (thanh nhiều bậc)', () => {
+  it('mỗi bậc một đoạn, đầy dần từ mốc trước; số món còn thiếu và nhãn bậc kế', () => {
+    const v = greenBoxStepper(state(4))!;
+    expect(v.steps.map((s) => [s.itemsText, s.pctText, s.reached, s.fill])).toEqual([
+      ['3 món', '-3%', true, 100],
+      ['5 món', '-5%', false, 50],
+      ['7 món', '-7%', false, 0],
+    ]);
+    expect(v).toMatchObject({ missing: 1, done: false, text: 'Thêm 1 món nữa', badge: 'Giảm 5%' });
+    expect(v.steps[0]!.spoken).toBe('Mốc 3 món giảm 3%, đã đạt');
+    expect(v.steps[1]!.spoken).toBe('Mốc 5 món giảm 5%, chưa đạt');
+  });
+
+  it('0 món: đoạn đầu rỗng, thiếu đủ số món của bậc đầu', () => {
+    const v = greenBoxStepper(state(0))!;
+    expect(v.steps.map((s) => s.fill)).toEqual([0, 0, 0]);
+    expect(v).toMatchObject({ missing: 3, text: 'Thêm 3 món nữa', badge: 'Giảm 3%' });
+    expect(greenBoxStepper(state(1))!.steps[0]!.fill).toBe(33);
+  });
+
+  it('đã ở bậc cao nhất: mọi đoạn đầy, nhãn là bậc đang giữ', () => {
+    const v = greenBoxStepper(state(8))!;
+    expect(v.steps.every((s) => s.reached && s.fill === 100)).toBe(true);
+    expect(v).toMatchObject({ missing: 0, done: true, text: 'Đã đạt mức giảm cao nhất', badge: 'Giảm 7%' });
+  });
+
+  it('bậc đổi ở cấu hình thì thanh đổi theo (số bậc, mốc, %)', () => {
+    const tiers = [{ minItems: 2, pct: 4 }, { minItems: 10, pct: 9 }];
+    const v = greenBoxStepper(previewGreenBox(tiers, 6))!;
+    expect(v.steps.map((s) => [s.itemsText, s.pctText, s.fill])).toEqual([
+      ['2 món', '-4%', 100],
+      ['10 món', '-9%', 50],
+    ]);
+    expect(v).toMatchObject({ missing: 4, badge: 'Giảm 9%' });
+  });
+
+  it('không có trạng thái hay không có bậc: null', () => {
+    expect(greenBoxStepper(null)).toBeNull();
+    expect(greenBoxStepper({ items: 2, tier: null, next: null, tiers: [], discount: 0 })).toBeNull();
+  });
+});
+
+describe('greenBoxBarText (xem trước)', () => {
+  it('bậc tự tính ở máy khách nói "dự kiến giảm"; chưa đạt bậc thì chỉ đếm món', () => {
+    expect(greenBoxBarText(previewGreenBox(TIERS, 5), { preview: true })).toBe('Đã chọn 5 món · dự kiến giảm 5%');
+    expect(greenBoxBarText(previewGreenBox(TIERS, 2), { preview: true })).toBe('Đã chọn 2 món');
+    expect(greenBoxBarText(state(5))).toBe('Đã chọn 5 món · giảm 5%');
   });
 });
 

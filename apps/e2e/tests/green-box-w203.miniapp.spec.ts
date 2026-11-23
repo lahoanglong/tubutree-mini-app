@@ -112,8 +112,25 @@ for (const vp of [
       await expect(page.getByRole('heading', { name: 'Phòng tắm' })).toBeVisible();
       await expect(page.getByTestId('green-box-bar-text')).toHaveText('Đã chọn 4 món · giảm 3%');
       await expect(page.getByTestId('green-box-view-cart')).toHaveCount(1);
+      const stepper = page.getByTestId('green-box-stepper');
+      await expect(stepper.getByTestId('green-box-step')).toHaveText(['3 món-3%', '5 món-5%', '7 món-7%']);
+      await expect(stepper.getByTestId('green-box-stepper-text')).toHaveText('Thêm 1 món nữa');
+      await expect(stepper).toContainText('Giảm 5%');
+      const jump = page.getByRole('region', { name: 'Chọn nhanh danh mục' });
+      await expect(jump.getByRole('button')).toHaveText(['Nhà bếp(2)', 'Phòng tắm(2)']);
+      for (const chip of await jump.getByRole('button').all()) expect((await chip.boundingBox())!.height).toBeGreaterThanOrEqual(36);
       expect(await noHorizontalScroll(page)).toBe(true);
       await shoot(page, 'green-box-page');
+      // Chạm chip: tiêu đề mục nằm ngay dưới hàng chip dính, không bị che.
+      await jump.getByRole('button', { name: /^Phòng tắm/ }).click();
+      const heading = page.getByRole('heading', { name: 'Phòng tắm' });
+      await expect.poll(async () => {
+        const [h, j] = await Promise.all([heading.boundingBox(), jump.boundingBox()]);
+        return h && j ? Math.round(h.y - (j.y + j.height)) : -999;
+      }).toBeGreaterThanOrEqual(0);
+      await expect(heading).toBeInViewport();
+      // Hàng chip dính sát dưới thanh lùi đặc (56px khi có nút lùi), không hở thêm phần đệm đầu trang.
+      await expect.poll(async () => Math.round((await jump.boundingBox())?.y ?? -1)).toBeLessThanOrEqual(56);
       await page.getByTestId('green-box-view-cart').click();
       await expect(page).toHaveURL(/\/cart$/);
       await expect(page.getByTestId('green-box-progress')).toBeVisible({ timeout: 20_000 });

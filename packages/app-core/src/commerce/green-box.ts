@@ -88,10 +88,9 @@ export function cartProgressStrip(freeshipReached: boolean, state: GreenBoxState
 }
 
 /**
- * Chữ chỉ có ở web: trang ghép hộp `/hop-xanh`, nút "Ghép thêm" của dải giỏ và dòng gợi ý giao định kỳ (Mini không có hai phần này, xem `gaps` của
- * route-map). Tách khỏi
- * `SHOP_COPY` (nằm trong gói đầu Mini) để không tốn ngân sách gói Mini; `green-box.spec.ts` chạy thuật ngữ cấm, bộ chặn tuyên bố và
- * `GREEN_BOX_WEB_COPY_MAX` trên từng khoá.
+ * Chữ của trang ghép hộp (web `/hop-xanh`, Mini App `/green-box`), nút "Ghép thêm" của dải giỏ và dòng gợi ý giao định kỳ. Tách khỏi `SHOP_COPY`
+ * (nằm trong gói đầu Mini) để không tốn ngân sách gói Mini; `green-box.spec.ts` chạy thuật ngữ cấm, bộ chặn tuyên bố và `GREEN_BOX_WEB_COPY_MAX`
+ * trên từng khoá.
  */
 export const GREEN_BOX_WEB_COPY = {
   cta: 'Ghép thêm',
@@ -105,7 +104,17 @@ export const GREEN_BOX_WEB_COPY = {
   otherGroup: 'Món khác',
   barSelected: 'Đã chọn {n} món · giảm {pct}%',
   barSelectedNone: 'Đã chọn {n} món',
+  barPreview: 'Đã chọn {n} món · dự kiến giảm {pct}%',
   viewCart: 'Xem giỏ',
+  stepperLabel: 'Các mốc Hộp Xanh',
+  stepItems: '{n} món',
+  stepPct: '-{pct}%',
+  stepReached: 'Mốc {n} món giảm {pct}%, đã đạt',
+  stepPending: 'Mốc {n} món giảm {pct}%, chưa đạt',
+  stepMissing: 'Thêm {n} món nữa',
+  stepTop: 'Đã đạt mức giảm cao nhất',
+  stepBadge: 'Giảm {pct}%',
+  jumpLabel: 'Chọn nhanh danh mục',
   suggestLine: 'Bạn thường mua {name} khoảng {n} tuần một lần. Đặt giao định kỳ, giảm {pct}%',
 } as const;
 
@@ -124,7 +133,17 @@ export const GREEN_BOX_WEB_COPY_MAX: Record<GreenBoxWebCopyKey, number | null> =
   otherGroup: 10,
   barSelected: 30,
   barSelectedNone: 20,
+  barPreview: 38,
   viewCart: 8,
+  stepperLabel: 18,
+  stepItems: 6,
+  stepPct: 4,
+  stepReached: 34,
+  stepPending: 36,
+  stepMissing: 16,
+  stepTop: 24,
+  stepBadge: 9,
+  jumpLabel: 19,
   suggestLine: null,
 };
 
@@ -132,10 +151,94 @@ export function greenBoxWebCopy(key: GreenBoxWebCopyKey, vars: Record<string, st
   return fillTemplate(GREEN_BOX_WEB_COPY[key], vars, key);
 }
 
-/** Thanh đáy trang ghép hộp: "Đã chọn {n} món · giảm {pct}%" (chưa đạt bậc thì bỏ phần giảm). */
-export function greenBoxBarText(state: GreenBoxState | null): string {
+/**
+ * Thanh đáy trang ghép hộp: "Đã chọn {n} món · giảm {pct}%" (chưa đạt bậc thì bỏ phần giảm). `preview` (bậc tự tính ở máy khách, `previewGreenBox`)
+ * thì nói "dự kiến giảm": giỏ máy chủ mới chốt mức giảm.
+ */
+export function greenBoxBarText(state: GreenBoxState | null, opts: { preview?: boolean } = {}): string {
   const n = state?.items ?? 0;
-  return state?.tier ? greenBoxWebCopy('barSelected', { n, pct: state.tier.pct }) : greenBoxWebCopy('barSelectedNone', { n });
+  if (!state?.tier) return greenBoxWebCopy('barSelectedNone', { n });
+  return greenBoxWebCopy(opts.preview ? 'barPreview' : 'barSelected', { n, pct: state.tier.pct });
+}
+
+const validTier = (t: GreenBoxTier): boolean => Number.isInteger(t.minItems) && t.minItems > 0 && Number.isFinite(t.pct) && t.pct > 0;
+
+/**
+ * Bậc Hộp Xanh tự tính ở máy khách từ số món (THUẦN), cùng cách chọn bậc với `allocateGreenBox` ở API: bậc là mốc cao nhất đã đủ, bậc kế là mốc nhỏ nhất
+ * chưa đủ. Chỉ để XEM TRƯỚC khi máy chủ chưa tính giỏ (khách chưa đăng nhập dùng giỏ trên máy): `discount` luôn 0, không hứa số tiền. Bảng bậc lấy từ
+ * `GET /bundles/green-box`, không ghi cứng. Không có bậc hợp lệ thì null.
+ */
+export function previewGreenBox(tiers: readonly GreenBoxTier[], items: number): GreenBoxState | null {
+  const sorted = tiers.filter(validTier).sort((a, b) => a.minItems - b.minItems);
+  if (sorted.length === 0) return null;
+  const n = Number.isFinite(items) && items > 0 ? Math.floor(items) : 0;
+  let tier: GreenBoxTier | null = null;
+  let next: GreenBoxTier | null = null;
+  for (const t of sorted) {
+    if (t.minItems <= n) tier = t;
+    else if (!next) next = t;
+  }
+  return { items: n, tier, next, tiers: sorted, discount: 0 };
+}
+
+export interface GreenBoxStepView {
+  minItems: number;
+  pct: number;
+  reached: boolean;
+  /** Độ đầy của đoạn dẫn tới mốc này (0–100): từ mốc trước (hay 0 món) tới mốc này. */
+  fill: number;
+  /** "3 món". */
+  itemsText: string;
+  /** "-3%". */
+  pctText: string;
+  /** "Mốc 3 món giảm 3%, đã đạt": chữ đọc của mốc (phần nhìn thấy chỉ có số). */
+  spoken: string;
+}
+
+export interface GreenBoxStepperView {
+  steps: GreenBoxStepView[];
+  /** Số món còn thiếu tới bậc kế; 0 khi đã ở bậc cao nhất. */
+  missing: number;
+  /** Đã ở bậc cao nhất. */
+  done: boolean;
+  /** "Thêm 2 món nữa", hoặc "Đã đạt mức giảm cao nhất". */
+  text: string;
+  /** Nhãn mức giảm đi kèm `text`: bậc kế ("Giảm 5%"), đã ở bậc cao nhất thì bậc đang giữ. */
+  badge: string;
+}
+
+/**
+ * Thanh nhiều bậc ở đầu trang ghép hộp (THUẦN): mỗi bậc của bảng (máy chủ trả) là một đoạn, đoạn đầy dần theo số món từ mốc trước tới mốc đó, kèm số
+ * món còn thiếu và nhãn mức giảm của bậc kế. `state` là số máy chủ tính trên giỏ (đã đăng nhập) hay bậc xem trước (`previewGreenBox`).
+ */
+export function greenBoxStepper(state: GreenBoxState | null): GreenBoxStepperView | null {
+  const tiers = state ? state.tiers.filter(validTier).sort((a, b) => a.minItems - b.minItems) : [];
+  if (!state || tiers.length === 0) return null;
+  const items = state.items;
+  let prev = 0;
+  const steps = tiers.map((t) => {
+    const reached = items >= t.minItems;
+    const fill = reached ? 100 : items <= prev ? 0 : Math.floor(((items - prev) / (t.minItems - prev)) * 100);
+    prev = t.minItems;
+    const vars = { n: t.minItems, pct: t.pct };
+    return {
+      minItems: t.minItems,
+      pct: t.pct,
+      reached,
+      fill: Math.min(100, Math.max(0, fill)),
+      itemsText: greenBoxWebCopy('stepItems', vars),
+      pctText: greenBoxWebCopy('stepPct', vars),
+      spoken: greenBoxWebCopy(reached ? 'stepReached' : 'stepPending', vars),
+    };
+  });
+  // Bậc kế theo số món (cùng luật máy chủ); `state.next` của máy chủ chỉ là bản sao của phép này.
+  const next = tiers.find((t) => t.minItems > items) ?? null;
+  if (!next) {
+    const top = tiers[tiers.length - 1]!;
+    return { steps, missing: 0, done: true, text: greenBoxWebCopy('stepTop'), badge: greenBoxWebCopy('stepBadge', { pct: top.pct }) };
+  }
+  const missing = next.minItems - items;
+  return { steps, missing, done: false, text: greenBoxWebCopy('stepMissing', { n: missing }), badge: greenBoxWebCopy('stepBadge', { pct: next.pct }) };
 }
 
 /** Câu mở đầu trang ghép hộp từ bảng bậc của máy chủ: "Ghép nhiều món khác nhau vào giỏ: từ 3 món giảm 3%, từ 5 món giảm 5%…". */

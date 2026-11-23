@@ -20,7 +20,8 @@ export interface BundleAdd {
   /** Câu báo khi không có lời nghiệp vụ của máy chủ. */
   errorKey: string;
   successText: string;
-  onDone?: () => void;
+  /** Nhận giỏ máy chủ trả sau lệnh thêm (vd trang Bộ quà tặng nói còn thiếu bao nhiêu tới Miễn phí giao hàng). */
+  onDone?: (cart: Awaited<ReturnType<typeof addAllToCart>>) => void;
 }
 
 export interface BundleAddResult {
@@ -51,10 +52,10 @@ export function useBundleAdd(staleKeys: readonly (readonly unknown[])[]) {
   const [result, setResult] = useState<BundleAddResult | null>(null);
   const mutation = useMutation({
     mutationFn: (v: BundleAdd) => addAllToCart(v.lines),
-    onSuccess: (_data, v) => {
+    onSuccess: (cart, v) => {
       void qc.invalidateQueries({ queryKey: ['cart'] });
       setResult({ id: v.id, ok: true, text: v.successText });
-      v.onDone?.();
+      v.onDone?.(cart);
     },
     onError: (error, v) => {
       setResult({ id: v.id, ok: false, text: errorText(error, fillCopy(v.errorKey)) });

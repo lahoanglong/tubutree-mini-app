@@ -81,6 +81,41 @@ describe('GiftCombosPage (Mini App)', () => {
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text: 'Đã thêm cả combo vào giỏ' })));
   });
 
+  it('sau khi thêm: ngay dưới thẻ vừa bấm là câu còn thiếu tới Miễn phí giao hàng, đọc từ giỏ máy chủ trả về', async () => {
+    mocks.addAll.mockResolvedValue({ items: [{ stock: 5, total: 150_000 }], freeship: false, freeshipThreshold: 199_000 });
+    renderPage();
+    await screen.findByTestId('gift-combos-list');
+    fireEvent.click(addAllButtons()[1]!);
+    const cues = screen.getAllByTestId('gift-combos-cue');
+    await waitFor(() => expect(cues[1]!.textContent).toBe('Mua thêm 49.000đ để được Miễn phí giao hàng 🚚'));
+    expect(cues[0]!.textContent).toBe('');
+    expect(cues[1]!.getAttribute('role')).toBe('status');
+  });
+
+  it('đủ Miễn phí giao hàng, còn mốc quà: câu nói số còn thiếu tới quà dùng thử 0đ; lần thêm sau xoá câu cũ', async () => {
+    const giftTrial = { base: 220_000, minOrder: 299_000, nextMinOrder: 299_000, shortfall: 79_000, options: [{ variationId: 'g1' }], selectedVariationId: null, declined: false };
+    mocks.addAll.mockResolvedValueOnce({ items: [{ stock: 5, total: 220_000 }], freeship: true, freeshipThreshold: 199_000, giftTrial });
+    renderPage();
+    await screen.findByTestId('gift-combos-list');
+    fireEvent.click(addAllButtons()[0]!);
+    const cues = screen.getAllByTestId('gift-combos-cue');
+    await waitFor(() => expect(cues[0]!.textContent).toBe('🎁 Thêm 79.000đ để nhận quà dùng thử 0đ'));
+    mocks.addAll.mockResolvedValueOnce({});
+    fireEvent.click(addAllButtons()[1]!);
+    await waitFor(() => expect(mocks.addAll).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(cues[0]!.textContent).toBe(''));
+    expect(cues[1]!.textContent).toBe('');
+  });
+
+  it('"Tiết kiệm" là số máy chủ (cùng hàm giỏ trừ): bộ bị kẹp trần hứa đúng số kẹp, nhãn % là mức thật', async () => {
+    landing.combos = [{ ...combo('c1', ['a', 120_000], ['b', 85_000], 50), saving: 30_000 }];
+    renderPage();
+    const list = await screen.findByTestId('gift-combos-list');
+    expect(list.textContent).toContain('Tiết kiệm 30.000đ');
+    expect(list.textContent).toContain('175.000đ');
+    expect(list.textContent).toContain('Combo -14%');
+  });
+
   it('0 combo: trạng thái trống, nút sang trang Sản phẩm; hai mốc vẫn hiện', async () => {
     landing.combos = [];
     renderPage();

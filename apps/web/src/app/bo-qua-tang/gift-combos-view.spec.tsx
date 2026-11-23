@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BundleDTO, GiftLanding } from '@tubutree/app-core/api/bundle';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
+import { ApiError } from '@/lib/client-api';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -78,12 +79,61 @@ describe('GiftCombosView (/bo-qua-tang)', () => {
     expect(callouts).toEqual(['Miễn phí giao hàng cho đơn từ 250.000đ']);
   });
 
-  it('"Thêm cả combo" thêm đúng món của combo đó một chạm, báo ở role=status', async () => {
+  const cues = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[data-testid="gift-combos-cue"]'));
+
+  it('"Thêm cả combo" thêm đúng món của combo đó một chạm, báo ngay dưới thẻ vừa bấm (role=status)', async () => {
     const c = await mount(landing());
     click(addAllButtons(c)[1]!);
     await flush();
     expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-c', quantity: 1 }, { variationId: 'v-d', quantity: 1 }]);
-    expect(c.querySelector('[role="status"]')!.textContent).toBe('Đã thêm cả combo vào giỏ');
+    expect(cues(c).map((el) => [el.getAttribute('role'), el.textContent])).toEqual([
+      ['status', ''],
+      ['status', 'Đã thêm cả combo vào giỏ'],
+    ]);
+  });
+
+  it('sau khi thêm: câu còn thiếu tới Miễn phí giao hàng, rồi quà dùng thử 0đ, đọc từ giỏ máy chủ trả về', async () => {
+    mocks.addAll.mockResolvedValueOnce({ items: [{ stock: 5, total: 150_000 }], freeship: false, freeshipThreshold: 199_000 });
+    const c = await mount(landing());
+    click(addAllButtons(c)[0]!);
+    await flush();
+    expect(cues(c)[0]!.textContent).toBe('Đã thêm cả combo vào giỏMua thêm 49.000đ để được Miễn phí giao hàng 🚚');
+    const giftTrial = { base: 220_000, minOrder: 299_000, nextMinOrder: 299_000, shortfall: 79_000, options: [{ variationId: 'g1' }], selectedVariationId: null, declined: false };
+    mocks.addAll.mockResolvedValueOnce({ items: [{ stock: 5, total: 220_000 }], freeship: true, freeshipThreshold: 199_000, giftTrial });
+    click(addAllButtons(c)[1]!);
+    await flush();
+    expect(cues(c).map((el) => el.textContent)).toEqual(['', 'Đã thêm cả combo vào giỏ🎁 Thêm 79.000đ để nhận quà dùng thử 0đ']);
+  });
+
+  it('thêm lỗi: lời lỗi ngay dưới thẻ đó, không có câu mốc', async () => {
+    mocks.addAll.mockRejectedValueOnce(new Error('mạng'));
+    const c = await mount(landing());
+    click(addAllButtons(c)[0]!);
+    await flush();
+    expect(cues(c)[0]!.textContent).toBe('Chưa thêm được combo, giỏ của bạn không thay đổi. Bạn thử lại nhé.');
+    expect(cues(c)[0]!.querySelector('.text-danger-fg')).not.toBeNull();
+  });
+
+  it('máy chủ từ chối vì món hết hàng, danh sách tải lại không còn bộ đó: lời từ chối vẫn hiện ở vùng báo chung của trang', async () => {
+    mocks.addAll.mockRejectedValueOnce(new ApiError('Sản phẩm Sản phẩm a đã hết hàng', 409));
+    const c = await mount(landing());
+    const status = () => c.querySelector<HTMLElement>('[data-testid="gift-combos-status"]')!;
+    expect(status().textContent).toBe('');
+    mocks.get.mockResolvedValue(landing({ combos: [combo('c2', ['c', 300_000], ['d', 100_000], 15)] }));
+    click(addAllButtons(c)[0]!);
+    await flush(8);
+    expect(cues(c)).toHaveLength(1);
+    expect(status().getAttribute('role')).toBe('status');
+    expect(status().textContent).toBe('Sản phẩm Sản phẩm a đã hết hàng');
+    expect(status().querySelector('.text-danger-fg')).not.toBeNull();
+  });
+
+  it('"Tiết kiệm" là số máy chủ (cùng hàm giỏ trừ): bộ bị kẹp trần hứa đúng số kẹp, nhãn % là mức thật', async () => {
+    const c = await mount(landing({ combos: [{ ...combo('c1', ['a', 120_000], ['b', 85_000], 50), saving: 30_000 }] }));
+    const text = c.querySelector('[data-testid="gift-combos-list"]')!.textContent!;
+    expect(text).toContain('Tiết kiệm 30.000đ');
+    expect(text).toContain('175.000đ');
+    expect(text).toContain('Combo -14%');
   });
 
   it('khách chưa đăng nhập: chuyển sang đăng nhập kèm đường quay lại, không gọi giỏ', async () => {
