@@ -20,12 +20,22 @@ export interface CatalogAuditVariationDto {
   isActive: boolean;
 }
 
+/** Nhãn hàng của một sản phẩm, đủ để gom SKU thiếu thành phần theo nhãn và soạn tin nhờ nhãn gửi INCI. */
+export interface CatalogAuditBrandDto {
+  /** Tên trong bảng `brands` khi sản phẩm đã gắn nhãn, không thì chuỗi `products.brand` đồng bộ từ Pancake. */
+  name: string;
+  /** Chỉ có khi sản phẩm đã gắn bảng `brands`. */
+  slug: string | null;
+}
+
 export interface CatalogAuditProductDto {
   id: string;
   slug: string;
   name: string;
   pancakeId: string | null;
   isActive: boolean;
+  /** `null`: sản phẩm chưa có tên nhãn hàng nào. API cũ chưa trả thì thiếu. */
+  brand?: CatalogAuditBrandDto | null;
   thumbnail: string | null;
   /** Mô tả gốc trong DB (chưa bù chữ dự phòng). */
   description: string;

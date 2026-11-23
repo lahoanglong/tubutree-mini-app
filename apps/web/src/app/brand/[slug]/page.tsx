@@ -1,6 +1,9 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import { fetchRefillLanding } from '@tubutree/app-core/refill/refill-landing';
 import { getBrand } from '@/lib/api';
+import { createServerHttp } from '@/lib/core-http-server';
+import { refillEntryOf } from '@/lib/refill-entry';
 import { ogBase, withBrand } from '@/lib/og';
 import { brandMetaDescription, breadcrumbJsonLd, jsonLdScript } from '@/lib/product-seo';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -43,14 +46,16 @@ export default async function BrandPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const b = await getBrand(slug);
+  const [b, landing] = await Promise.all([getBrand(slug), fetchRefillLanding(createServerHttp()).catch(() => undefined)]);
   if (!b) notFound();
   const mapOrigin = brandPageOrigin({ slug: b.slug, name: b.name });
+  // Chỉ nhãn có chai hoặc gói nằm trên trang Refill (xét các sản phẩm trang nhận được) mới mang lối vào; API Refill lỗi thì bỏ lối vào, trang vẫn dựng.
+  const refillEntry = refillEntryOf(landing, new Set(b.products.map((p) => p.slug))) ?? null;
 
   // Thân trang là client (Theo dõi, tab, phân trang) nên chỉ nhận dữ liệu thuần; điện thoại bìa tràn mép nên main không đệm.
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
-      <BrandBody brand={b} mapOriginId={mapOrigin?.id ?? null} originFallback={mapOrigin?.text ?? null} />
+      <BrandBody brand={b} mapOriginId={mapOrigin?.id ?? null} originFallback={mapOrigin?.text ?? null} refillEntry={refillEntry} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

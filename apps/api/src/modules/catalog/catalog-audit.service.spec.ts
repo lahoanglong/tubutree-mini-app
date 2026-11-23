@@ -1,5 +1,5 @@
 import type { PrismaService } from '../../prisma/prisma.service';
-import { CATALOG_AUDIT_MAX, CatalogAuditService } from './catalog-audit.service';
+import { auditBrand, CATALOG_AUDIT_MAX, CatalogAuditService } from './catalog-audit.service';
 import { VARIATION_ORDER_BY } from './variation-order';
 
 const variation = (over: Record<string, unknown> = {}) => ({ id: 'v1', pancakeId: 'pv1', sku: 'SKU1', name: '100ml', stock: 5, retailPrice: 50_000, isActive: true, ...over });
@@ -9,6 +9,8 @@ const row = (over: Record<string, unknown> = {}) => ({
   name: 'Dầu gội',
   pancakeId: 'pk1',
   isActive: true,
+  brand: 'Fuwa3e',
+  brandRef: null,
   thumbnail: 'https://img/a.jpg',
   description: 'Mô tả',
   shortDesc: null,
@@ -35,6 +37,26 @@ describe('CatalogAuditService.audit', () => {
     expect(arg.select.variations.orderBy).toBe(VARIATION_ORDER_BY);
     expect(arg.select).not.toHaveProperty('images');
     expect(arg.select).not.toHaveProperty('storefrontId');
+  });
+
+  it('brand: select cả chuỗi Pancake lẫn tên/slug bảng brands (không kéo cả bản ghi nhãn); tên bảng brands thắng, trống cả hai là null', async () => {
+    const { svc, findMany } = make([
+      row({ id: 'ref', brand: 'po lang', brandRef: { name: 'PƠ LANG', slug: 'po-lang' } }),
+      row({ id: 'raw', brand: '  Visante ', brandRef: null }),
+      row({ id: 'none', brand: '   ', brandRef: null }),
+      row({ id: 'blank-ref', brand: 'Fuwa3e', brandRef: { name: ' ', slug: 'x' } }),
+    ]);
+    const { products } = await svc.audit();
+    const arg = (findMany.mock.calls[0] as unknown as [{ select: Record<string, unknown> }])[0];
+    expect(arg.select.brand).toBe(true);
+    expect(arg.select.brandRef).toEqual({ select: { name: true, slug: true } });
+    expect(products.map((p) => [p.id, p.brand])).toEqual([
+      ['ref', { name: 'PƠ LANG', slug: 'po-lang' }],
+      ['raw', { name: 'Visante', slug: null }],
+      ['none', null],
+      ['blank-ref', { name: 'Fuwa3e', slug: null }],
+    ]);
+    expect(auditBrand(null, null)).toBeNull();
   });
 
   it('SKU ẩn (isActive false, đang bị giữ) vẫn có mặt, biến thể tắt vẫn nằm trong danh sách và không tính còn hàng', async () => {
@@ -95,6 +117,7 @@ describe('CatalogAuditService.audit', () => {
       name: 'Dầu gội',
       pancakeId: 'pk1',
       isActive: true,
+      brand: { name: 'Fuwa3e', slug: null },
       thumbnail: 'https://img/a.jpg',
       description: '<p></p>',
       shortDesc: 'ngắn',

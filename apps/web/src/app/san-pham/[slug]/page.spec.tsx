@@ -825,6 +825,23 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(blocks).toEqual([...PDP_BLOCK_ORDER]);
   });
 
+  it('chai đã ghép gói Refill: ngay dưới thẻ Refill có link sang trang mọi gói Refill (chỉ hiện từ md, điện thoại giữ đúng thẻ như Mini App); chai chưa ghép thì không có', async () => {
+    api.refillPairs = { p1: REFILL_PAIR };
+    const c = await mount();
+    const card = c.querySelector('[data-testid="pdp-refill"]');
+    const a = c.querySelector<HTMLAnchorElement>('a[data-testid="pdp-refill-landing"]');
+    expect(card).not.toBeNull();
+    expect(a?.getAttribute('href')).toBe('/tiet-kiem-refill');
+    expect(a?.textContent).toBe('Tiết kiệm với Refill · Túi, can Refill rẻ hơn mua chai mới');
+    expect(a!.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'md:inline-flex', 'min-h-11']));
+    expect(card!.compareDocumentPosition(a!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    api.refillPairs = {};
+    const c2 = await mount();
+    expect(c2.querySelector('[data-testid="pdp-refill-landing"]')).toBeNull();
+  });
+
   it('khối không có dữ liệu thì không có phần tử (không dải trống): vẫn đúng thứ tự cho các khối còn lại', async () => {
     const c = await mount();
     await flush();

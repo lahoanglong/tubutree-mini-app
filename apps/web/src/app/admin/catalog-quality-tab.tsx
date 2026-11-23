@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { COPY_DRAFT_MAX_BATCH, type CatalogAuditResponse } from '@tubutree/shared-types';
 import { findProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
 import { buildPancakeFixCsv, pancakeFixCsvFilename } from '@tubutree/app-core/commerce/catalog-pancake-csv';
@@ -21,6 +21,7 @@ import { BTN_SECONDARY, LoadError, Notice } from '@/components/admin/ui';
 import { AdvisorStatsCard } from './advisor-stats-card';
 import { CatalogCategoryBulk } from './catalog-category-bulk';
 import { CatalogCopyReview, type CurrentCopy } from './catalog-copy-review';
+import { Count, FilterChip } from './catalog-filter-chip';
 import { CatalogIngredientsFill } from './catalog-ingredients-fill';
 import { CatalogIssueList } from './catalog-issue-list';
 import { CatalogSeoBulk } from './catalog-seo-bulk';
@@ -32,6 +33,17 @@ const hasFallbackCopy = (slug: string) => findProductCopyFallback(slug) !== unde
 /** `missing_ingredients` không phải loại lỗi của lần kiểm (app-core) mà là lọc nội dung: SKU đang bán chưa có thành phần (INCI). */
 type IssueFilter = CatalogIssueKind | 'all' | 'missing_ingredients';
 type CopyFilter = CopyStatus | 'any';
+
+/**
+ * Bộ lọc mang trên link (Giờ G mở `/admin?tab=catalogQuality&filter=missing_ingredients`). Chỉ nhận loại lỗi có thật hoặc `missing_ingredients`;
+ * giá trị lạ thì bỏ qua, như trang Admin bỏ qua tham số lạ của tab khác.
+ */
+function urlIssueFilter(): Exclude<IssueFilter, 'all'> | null {
+  if (typeof window === 'undefined') return null;
+  const f = new URLSearchParams(window.location.search).get('filter');
+  if (f === 'missing_ingredients') return f;
+  return f !== null && (CATALOG_ISSUE_KINDS as readonly string[]).includes(f) ? (f as CatalogIssueKind) : null;
+}
 
 const loadFailureText = (e: unknown): string =>
   e instanceof ApiError && e.status === 403
@@ -78,6 +90,14 @@ export function CatalogQualityTab() {
     }
   }, []);
 
+  // Link mang bộ lọc thì đi thẳng tới danh sách: đặt bộ lọc và tự chạy lần kiểm, khỏi phải tìm nút "Kiểm tra ngay".
+  useEffect(() => {
+    const f = urlIssueFilter();
+    if (f === null) return;
+    setFilter(f);
+    void run();
+  }, [run]);
+
   const result = useMemo(() => (data ? auditProductDtos(data.products, { hasFallbackCopy }) : null), [data]);
   const csv = useMemo(() => (data && result ? buildPancakeFixCsv(result, data.products) : null), [data, result]);
   // Dòng đầu là tiêu đề cột.
@@ -88,7 +108,7 @@ export function CatalogQualityTab() {
   );
 
   const activeProducts = (data?.products ?? []).filter((p) => p.isActive);
-  const missingIngredients = activeProducts.filter((p) => !p.hasIngredients).map((p) => ({ id: p.id, name: p.name }));
+  const missingIngredients = activeProducts.filter((p) => !p.hasIngredients).map((p) => ({ id: p.id, name: p.name, brand: p.brand }));
   const missingIds = new Set(missingIngredients.map((p) => p.id));
   const storyKnown = activeProducts.filter((p) => p.hasStoryConfig !== undefined);
   const storyCustom = storyKnown.filter((p) => p.hasStoryConfig).length;
@@ -260,20 +280,5 @@ export function CatalogQualityTab() {
       <PancakeZeroPriceCard />
       <AdvisorStatsCard />
     </div>
-  );
-}
-
-const Count = ({ n }: { n: number }) => <span className="tabular-nums">({n})</span>;
-
-function FilterChip({ active, onPress, children }: { active: boolean; onPress: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onPress}
-      className={`min-h-[44px] rounded-full border px-3 text-sm font-medium sm:min-h-[36px] ${active ? 'border-forest-600 bg-forest-600 text-stone-0' : 'border-stone-450 bg-stone-0 text-stone-700 hover:bg-stone-50'}`}
-    >
-      {children}
-    </button>
   );
 }

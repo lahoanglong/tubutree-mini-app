@@ -115,6 +115,8 @@ const PRODUCTS: FixLink = { href: '/admin?tab=productCategories', label: 'Sản 
  */
 const ROW_FIX: ReadonlyArray<readonly [prefix: string, link: FixLink]> = [
   ['cockpit.catalog.refill_pairs', { href: '/admin?tab=refillPairs', label: 'Cặp Refill' }],
+  // Mở thẳng bộ lọc "Thiếu thành phần" (`catalog-quality-tab.tsx` đọc `filter` và tự chạy lần kiểm), kèm chip thương hiệu và tin nhắn nhờ thương hiệu gửi INCI.
+  ['cockpit.catalog.inci', { href: '/admin?tab=catalogQuality&filter=missing_ingredients', label: 'Kiểm tra catalog' }],
   ['cockpit.catalog.active_skus', PRODUCTS],
   ['cockpit.catalog.story', PRODUCTS],
   ['db.demo_products', PRODUCTS],

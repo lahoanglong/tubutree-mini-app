@@ -152,6 +152,30 @@ describe('/dai-ly — khách, phiên và trạng thái hồ sơ, luôn đúng m�
     expect(c.textContent).toContain('Bạc');
   });
 
+  it('hồ sơ về khi người dùng bàn phím đang đứng ở link lùi hay thanh chương trình: cùng một khung trang, focus không rơi về <body>; tiêu đề đổi theo màn', async () => {
+    for (const [data, title] of [
+      [APPROVED, 'Kênh đại lý'],
+      [{ isDealer: false, status: 'PENDING' }, 'Hồ sơ đại lý'],
+      [{ isDealer: false, status: 'NONE' }, 'Đăng ký đại lý'],
+    ] as const) {
+      m.data['/dealer/me'] = data;
+      m.hold.add('/dealer/me');
+      const c = await mount();
+      const back = c.querySelector<HTMLAnchorElement>('a[href="/tai-khoan"]')!;
+      const main = c.querySelector('main')!;
+      back.focus();
+      expect(document.activeElement).toBe(back);
+      m.hold.delete('/dealer/me');
+      m.release.splice(0).forEach((r) => r());
+      await flush(10);
+      expect(c.querySelector('h1')!.textContent).toBe(title);
+      expect(c.querySelector('main')).toBe(main);
+      expect(back.isConnected).toBe(true);
+      expect(document.activeElement).toBe(back);
+      mounted.pop()!.unmount();
+    }
+  });
+
   it('đang tải hồ sơ: khung chờ, vẫn một h1', async () => {
     m.hold.add('/dealer/me');
     const c = await mount();

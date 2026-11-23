@@ -6,7 +6,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import BrandPage, { generateMetadata, revalidate } from './page';
 
-const mocks = vi.hoisted(() => ({ brand: null as unknown }));
+const mocks = vi.hoisted(() => ({ brand: null as unknown, landing: null as unknown }));
+vi.mock('@/lib/core-http-server', () => ({
+  createServerHttp: () => ({
+    get: async (path: string) => {
+      if (path !== '/catalog/refill-pairs/landing') throw new Error(`đường dẫn lạ ${path}`);
+      if (mocks.landing instanceof Error) throw mocks.landing;
+      return mocks.landing;
+    },
+  }),
+}));
 
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -68,12 +77,44 @@ const live = async () => {
 };
 const tabBtn = (c: HTMLElement, name: string) => Array.from(c.querySelectorAll<HTMLElement>('[role="tab"]')).find((t) => t.textContent === name)!;
 
+const refillPair = (bottleSlug: string, refillSlug: string) => ({
+  bottle: { productId: `b-${bottleSlug}`, slug: bottleSlug, name: `Chai ${bottleSlug} 500ml`, thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true },
+  refill: { productId: `r-${refillSlug}`, slug: refillSlug, name: `Túi ${refillSlug} 2L`, thumbnail: null, variationId: `v-${refillSlug}`, price: 200_000, compareAt: null, sizeLabel: '2L', inStock: true, tubu: true },
+  savingPct: 26,
+});
+
 beforeEach(() => {
   mocks.brand = BRAND;
+  mocks.landing = { enabled: false, pairs: [] };
 });
 afterEach(() => {
   mounted?.unmount();
   mounted = undefined;
+});
+
+describe('trang thương hiệu /brand/[slug] — lối vào Tiết kiệm với Refill', () => {
+  const link = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('a[data-testid="brand-refill-landing"]');
+
+  it('nhãn có chai (hoặc gói) trên trang Refill: link thật trong HTML máy chủ ở tab Shop, chỉ hiện từ md (điện thoại giữ đúng Mini App)', async () => {
+    mocks.landing = { enabled: true, pairs: [refillPair('nuoc-rua-chen', 'refill-nuoc-rua-chen-2l')] };
+    const a = link(await html());
+    expect(a?.getAttribute('href')).toBe('/tiet-kiem-refill');
+    expect(a?.textContent).toBe('Tiết kiệm với Refill · Túi, can Refill rẻ hơn mua chai mới');
+    expect(a!.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'md:inline-flex', 'min-h-11']));
+    mocks.landing = { enabled: true, pairs: [refillPair('chai-khac', 'nuoc-rua-chen')] };
+    expect(link(await html())).not.toBeNull();
+  });
+
+  it('nhãn không có hàng trên trang Refill, cờ tắt (rỗng) hay API Refill lỗi: không có link, trang vẫn dựng', async () => {
+    mocks.landing = { enabled: true, pairs: [refillPair('chai-nhan-khac', 'tui-nhan-khac')] };
+    expect(link(await html())).toBeNull();
+    mocks.landing = { enabled: false, pairs: [] };
+    expect(link(await html())).toBeNull();
+    mocks.landing = new Error('down');
+    const c = await html();
+    expect(link(c)).toBeNull();
+    expect(c.querySelector('h1')?.textContent).toContain('Bồ Hòn Xanh');
+  });
 });
 
 describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', () => {

@@ -9,6 +9,7 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 import { isWebRouteReady } from '@/lib/route-map';
 import { FooterProgramLinks } from '@/components/footer-program-links';
 import { guestCopy } from '@/lib/guest-checkout/copy';
+import { REFILL_LANDING_PATH, refillLandingCopy } from '@tubutree/app-core/refill/refill-landing';
 
 const LINK =
   'inline-flex min-h-11 min-w-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -31,6 +32,9 @@ type DiscoverLink = { to: string; label: string; external?: boolean };
 /** Lối vào chức năng ở chân trang máy tính: các chương trình trước đây không có link nào ngoài thanh đáy điện thoại. Route chưa làm xong thì ẩn. */
 const DISCOVER_LINKS: DiscoverLink[] = [
   { to: '/san-pham', label: 'Danh mục sản phẩm' },
+  { to: '/ban-chay', label: 'Bán chạy nhất' },
+  // Chỉ khi cờ Refill bật (xem `SiteFooter`): cờ tắt thì trang này chỉ còn lời trống.
+  { to: REFILL_LANDING_PATH.web, label: refillLandingCopy('title') },
   { to: '/uu-dai', label: 'Ưu đãi' },
   { to: '/gio-vang', label: 'Giờ vàng' },
   // Mã giảm giá nằm trong hub Ưu đãi; `?codes=all` mở sẵn cả danh sách mã nhận được (đích cũ /ma-giam-gia chỉ còn là chuyển hướng).
@@ -95,7 +99,8 @@ function CompanyInfo({ company, className }: { company: SupportContact['company'
 
 /** Chân trang web khách: liên hệ hỗ trợ lấy từ cấu hình công khai (admin đổi được). */
 export default async function SiteFooter() {
-  const { hotline, email, community, company, guestOrderLookup } = await getPublicSupport();
+  const { hotline, email, community, company, guestOrderLookup, refillLanding } = await getPublicSupport();
+  const discover = refillLanding ? DISCOVER_LINKS : DISCOVER_LINKS.filter((l) => l.to !== REFILL_LANDING_PATH.web);
   // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0984 606 774".
   const tel = hotline.replace(/[^\d+]/g, '');
   const channels = [
@@ -115,7 +120,7 @@ export default async function SiteFooter() {
           </p>
         </div>
 
-        <LinkColumn title="Khám phá" links={DISCOVER_LINKS} />
+        <LinkColumn title="Khám phá" links={discover} />
         <FooterProgramLinks />
 
         <div>

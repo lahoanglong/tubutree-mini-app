@@ -9,7 +9,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DealerApply, DealerPending } from '@/components/dealer/dealer-apply';
+import { DEALER_APPLY_TITLE, DEALER_PENDING_TITLE, DealerApply, DealerPending } from '@/components/dealer/dealer-apply';
 import { DealerHub } from '@/components/dealer/dealer-hub';
 import { DealerShell, errText } from '@/components/dealer/dealer-shell';
 import { DealerGuestLanding } from '@/components/dealer/dealer-guest-landing';
@@ -41,52 +41,47 @@ export default function DealerPage({ guestLanding }: { guestLanding?: ReactNode 
   const hydrated = useHydrated();
   const meQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: phase === 'authenticated' });
 
-  if (phase === 'loading') {
-    return (
-      <DealerShell title={TITLE}>
-        <AuthLoading />
-      </DealerShell>
-    );
-  }
-  if (phase === 'unavailable') {
-    return (
-      <DealerShell title={TITLE}>
-        <SessionUnavailable />
-      </DealerShell>
-    );
-  }
-  if (phase === 'guest') {
-    return (
-      <DealerShell title={TITLE} guest restoring={!hydrated}>
+  // Một <DealerShell> cho mọi pha: hồ sơ về (khung chờ → hub, màn chờ duyệt hay form) chỉ đổi tiêu đề và phần thân, nên link lùi hay thanh
+  // chương trình đang giữ focus bàn phím không bị gỡ khỏi cây và focus không rơi về <body>.
+  let title = TITLE;
+  let body: ReactNode;
+  if (phase === 'loading') body = <AuthLoading />;
+  else if (phase === 'unavailable') body = <SessionUnavailable />;
+  else if (phase === 'guest') {
+    body = (
+      <>
         <div className={hydrated ? undefined : GUEST_ONLY_WHILE_RESTORING}>{guestLanding ?? <DealerGuestLandingLive />}</div>
         {!hydrated && (
           <div className={RESTORING_ONLY} aria-hidden="true">
             <AuthLoading />
           </div>
         )}
-      </DealerShell>
+      </>
     );
-  }
-  if (meQ.isLoading) {
-    return (
-      <DealerShell title={TITLE}>
-        <div className="space-y-3">
-          <Skeleton height={100} />
-          <Skeleton height={60} />
-        </div>
-      </DealerShell>
+  } else if (meQ.isLoading) {
+    body = (
+      <div className="space-y-3">
+        <Skeleton height={100} />
+        <Skeleton height={60} />
+      </div>
     );
-  }
-  if (meQ.isError && !meQ.data) {
-    return (
-      <DealerShell title={TITLE}>
-        <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />
-      </DealerShell>
-    );
+  } else if (meQ.isError && !meQ.data) {
+    body = <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />;
+  } else {
+    const me = meQ.data!;
+    if (me.isDealer || me.status === 'APPROVED') body = <DealerHub />;
+    else if (me.status === 'PENDING') {
+      title = DEALER_PENDING_TITLE;
+      body = <DealerPending />;
+    } else {
+      title = DEALER_APPLY_TITLE;
+      body = <DealerApply rejected={me.status === 'REJECTED'} rejectionReason={me.rejectionReason ?? null} />;
+    }
   }
 
-  const me = meQ.data!;
-  if (me.isDealer || me.status === 'APPROVED') return <DealerHub />;
-  if (me.status === 'PENDING') return <DealerPending />;
-  return <DealerApply rejected={me.status === 'REJECTED'} rejectionReason={me.rejectionReason ?? null} />;
+  return (
+    <DealerShell title={title} guest={phase === 'guest'} restoring={phase === 'guest' && !hydrated}>
+      {body}
+    </DealerShell>
+  );
 }

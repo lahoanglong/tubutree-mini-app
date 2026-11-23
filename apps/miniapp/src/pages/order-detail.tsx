@@ -453,6 +453,7 @@ export default function OrderDetailPage() {
             code={o.shippingCode}
             status={o.shippingStatus ? shippingEventLabel(o.shippingStatus) : null}
             events={trackView || journey ? undefined : historyEvents}
+            copyable={!showTrackingPill(o)}
           />
         </Box>
       )}

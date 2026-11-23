@@ -125,64 +125,51 @@ export default function CtvPage({ guestLanding }: { guestLanding?: ReactNode }) 
   const hydrated = useHydrated();
   const meQ = useQuery({ ...affiliateMeQuery(coreHttp), enabled: phase === 'authenticated' });
 
-  if (phase === 'loading') {
-    return (
-      <Shell>
-        <CtvDashboardSkeleton />
-      </Shell>
-    );
-  }
-  if (phase === 'unavailable') {
-    return (
-      <Shell>
-        <SessionUnavailable />
-      </Shell>
-    );
-  }
-  if (phase === 'guest') {
-    return (
-      <Shell guest restoring={!hydrated}>
+  // Một <Shell> cho mọi pha: hồ sơ CTV về (khung chờ → bảng CTV hay màn đăng ký) chỉ đổi phần thân, nên link lùi hay thanh chương trình đang giữ
+  // focus bàn phím không bị gỡ khỏi cây và focus không rơi về <body>.
+  let narrow = false;
+  let body: ReactNode;
+  if (phase === 'loading') body = <CtvDashboardSkeleton />;
+  else if (phase === 'unavailable') body = <SessionUnavailable />;
+  else if (phase === 'guest') {
+    body = (
+      <>
         <div className={hydrated ? undefined : GUEST_ONLY_WHILE_RESTORING}>{guestLanding ?? <CtvGuestLanding />}</div>
         {!hydrated && (
           <div className={RESTORING_ONLY} aria-hidden="true">
             <CtvDashboardSkeleton />
           </div>
         )}
-      </Shell>
+      </>
     );
-  }
-  if (meQ.isLoading) {
-    return (
-      <Shell>
-        <CtvDashboardSkeleton />
-      </Shell>
-    );
-  }
-  if (meQ.isError && !meQ.data) {
-    return (
-      <Shell>
-        <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />
-      </Shell>
-    );
-  }
-  if (meQ.data?.isAffiliate) return <Dashboard />;
+  } else if (meQ.isLoading) body = <CtvDashboardSkeleton />;
+  else if (meQ.isError && !meQ.data) body = <ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />;
+  else if (meQ.data?.isAffiliate) body = <Dashboard />;
   // Đại lý/nhân viên không đăng ký CTV một chạm được (API từ chối): đưa form đăng ký là ngõ cụt.
-  return meQ.data?.canRegister === false ? <CannotRegister /> : <RegisterGate />;
+  else if (meQ.data?.canRegister === false) body = <CannotRegister />;
+  else {
+    narrow = true;
+    body = <RegisterGate />;
+  }
+
+  return (
+    <Shell narrow={narrow} guest={phase === 'guest'} restoring={phase === 'guest' && !hydrated}>
+      {body}
+    </Shell>
+  );
 }
 
 function CannotRegister() {
   return (
-    <Shell>
-      <div className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
-        <h2 className="font-display text-base font-semibold text-stone-900">Tài khoản này không đăng ký CTV được</h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">
-          Màn hoa hồng CTV hiện khi tài khoản đã có gian hàng CTV hoặc đã có hoa hồng.
-        </p>
-        <Link href="/tai-khoan" className={`${ui.btnPrimary} mt-4`}>
-          Về Hồ sơ
-        </Link>
-      </div>
-    </Shell>
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
+      <h2 className="font-display text-base font-semibold text-stone-900">Tài khoản này không đăng ký CTV được</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">
+        Màn hoa hồng CTV hiện khi tài khoản đã có gian hàng CTV hoặc đã có hoa hồng.
+      </p>
+      <Link href="/tai-khoan" className={`${ui.btnPrimary} mt-4`}>
+        Về Hồ sơ
+      </Link>
+    </div>
   );
 }
 
@@ -229,60 +216,58 @@ function RegisterGate() {
   ];
 
   return (
-    <Shell narrow>
-      <div>
-        <section className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-center text-stone-0 shadow-card">
-          <div className="mx-auto mb-3.5 grid h-16 w-16 place-items-center rounded-full bg-forest-700">
-            <Handshake className="h-8 w-8" aria-hidden="true" />
-          </div>
-          <h2 className="font-display text-xl font-semibold">Trở thành CTV Tubu</h2>
-          <p className="mt-1.5 text-sm">Chia sẻ sản phẩm sống xanh bạn yêu thích — nhận hoa hồng cho mỗi đơn thành công.</p>
-        </section>
+    <div>
+      <section className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-center text-stone-0 shadow-card">
+        <div className="mx-auto mb-3.5 grid h-16 w-16 place-items-center rounded-full bg-forest-700">
+          <Handshake className="h-8 w-8" aria-hidden="true" />
+        </div>
+        <h2 className="font-display text-xl font-semibold">Trở thành CTV Tubu</h2>
+        <p className="mt-1.5 text-sm">Chia sẻ sản phẩm sống xanh bạn yêu thích — nhận hoa hồng cho mỗi đơn thành công.</p>
+      </section>
 
-        <ul className="mt-4 space-y-3">
-          {benefits.map(({ Icon, text }) => (
-            <li key={text} className={`${ui.card} ${phoneFlatCard} flex items-center gap-3 p-4`}>
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-control bg-stone-100">
-                <Icon className="h-5 w-5 text-forest-600" aria-hidden="true" />
-              </span>
-              <span className="text-sm text-stone-700">{text}</span>
+      <ul className="mt-4 space-y-3">
+        {benefits.map(({ Icon, text }) => (
+          <li key={text} className={`${ui.card} ${phoneFlatCard} flex items-center gap-3 p-4`}>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-control bg-stone-100">
+              <Icon className="h-5 w-5 text-forest-600" aria-hidden="true" />
+            </span>
+            <span className="text-sm text-stone-700">{text}</span>
+          </li>
+        ))}
+      </ul>
+
+      <section aria-label={CTV_TERMS.heading} className={`${ui.card} ${phoneFlatCard} mt-4 p-4`}>
+        <h2 className="text-sm font-semibold text-stone-900">{CTV_TERMS.heading}</h2>
+        <ul className="mt-2 space-y-1.5 pl-[18px]">
+          {CTV_TERMS.items.map((item) => (
+            <li key={item} className="text-xs text-stone-700">
+              {item}
             </li>
           ))}
         </ul>
+        <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-2 text-sm text-stone-800">
+          <input type="checkbox" checked={agreed} onChange={() => setAgreed((v) => !v)} className="mt-1 h-5 w-5 shrink-0 accent-forest-600" />
+          <span>{CTV_TERMS.agree}</span>
+        </label>
+      </section>
 
-        <section aria-label={CTV_TERMS.heading} className={`${ui.card} ${phoneFlatCard} mt-4 p-4`}>
-          <h2 className="text-sm font-semibold text-stone-900">{CTV_TERMS.heading}</h2>
-          <ul className="mt-2 space-y-1.5 pl-[18px]">
-            {CTV_TERMS.items.map((item) => (
-              <li key={item} className="text-xs text-stone-700">
-                {item}
-              </li>
-            ))}
-          </ul>
-          <label className="mt-3 flex min-h-11 cursor-pointer items-start gap-2 text-sm text-stone-800">
-            <input type="checkbox" checked={agreed} onChange={() => setAgreed((v) => !v)} className="mt-1 h-5 w-5 shrink-0 accent-forest-600" />
-            <span>{CTV_TERMS.agree}</span>
-          </label>
-        </section>
-
-        {/* Hai vùng luôn có mặt trong cây, chỉ đổi phần con: lỗi đọc ngay (alert), thành công đọc nhẹ (status). */}
-        <div role="alert">{notice?.error && <p className="mt-3 text-sm text-danger-fg">{notice.text}</p>}</div>
-        <div role="status" aria-live="polite">
-          {notice && !notice.error && <p className="mt-3 text-sm font-medium text-success-fg">{notice.text}</p>}
-        </div>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!agreed}
-          aria-busy={reg.isPending || undefined}
-          aria-disabled={reg.isPending || undefined}
-          className={`${ui.btnPrimary} mt-4 w-full`}
-        >
-          {reg.isPending ? 'Đang đăng ký…' : 'Đăng ký miễn phí ngay'}
-        </button>
-        {!agreed && <p className="mt-1.5 text-center text-xs text-stone-600">{CTV_TERMS.mustAgree}</p>}
+      {/* Hai vùng luôn có mặt trong cây, chỉ đổi phần con: lỗi đọc ngay (alert), thành công đọc nhẹ (status). */}
+      <div role="alert">{notice?.error && <p className="mt-3 text-sm text-danger-fg">{notice.text}</p>}</div>
+      <div role="status" aria-live="polite">
+        {notice && !notice.error && <p className="mt-3 text-sm font-medium text-success-fg">{notice.text}</p>}
       </div>
-    </Shell>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!agreed}
+        aria-busy={reg.isPending || undefined}
+        aria-disabled={reg.isPending || undefined}
+        className={`${ui.btnPrimary} mt-4 w-full`}
+      >
+        {reg.isPending ? 'Đang đăng ký…' : 'Đăng ký miễn phí ngay'}
+      </button>
+      {!agreed && <p className="mt-1.5 text-center text-xs text-stone-600">{CTV_TERMS.mustAgree}</p>}
+    </div>
   );
 }
 
@@ -494,7 +479,7 @@ function Dashboard() {
   ];
 
   return (
-    <Shell>
+    <>
       <div role="alert">{notice?.error && <p className="mb-3 text-sm text-danger-fg">{notice.text}</p>}</div>
       <div role="status" aria-live="polite">
         {notice && !notice.error && <p className="mb-3 text-sm font-medium text-success-fg">{notice.text}</p>}
@@ -832,6 +817,6 @@ function Dashboard() {
         taxPreview={d?.withdrawTaxPreview}
         onDone={transferDone}
       />
-    </Shell>
+    </>
   );
 }

@@ -24,6 +24,7 @@ import { WishlistHeart } from '@/components/catalog/wishlist-heart';
 import { brandAccent } from '@/components/mini/brand-accent';
 import { pdpOriginLink } from '@/lib/brand-origins';
 import { createServerHttp } from '@/lib/core-http-server';
+import { refillEntryLink } from '@/lib/refill-entry';
 import { defaultVariationFor, runningFlash } from '@/lib/flash-price';
 import { FlashSalesSeed } from '@/lib/use-flash-sales';
 import { isRetailOnly } from '@/lib/pdp-logic';
@@ -43,7 +44,7 @@ import { PdpRails } from './pdp-rails';
 import { PdpRebuyRow } from './pdp-rebuy';
 import { PdpRefillOfferBlock } from './pdp-refill-offer';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
-import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
+import { PdpDescription, PdpIngredients, PdpPromises, PdpRating, PdpRefillLandingLink } from './pdp-sections';
 import { PdpStory } from './pdp-story';
 import { PdpEco } from '@/components/eco/pdp-eco';
 import BackLink from '@/components/back-link';
@@ -254,6 +255,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <div data-section="pdp-subscribe" className={`${phoneBandPad} max-md:pb-4 empty:hidden`}>
                 <PdpRebuyRow productId={product.id} slug={product.slug} productName={product.name} variations={product.variations} blocked={!!unavailableText} />
                 {refillOffer && !unavailableText && <PdpRefillOfferBlock view={refillOffer} />}
+                {refillOffer && !unavailableText && <PdpRefillLandingLink entry={refillEntryLink()} />}
                 {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} initialConfig={publicConfig} />}
               </div>
 

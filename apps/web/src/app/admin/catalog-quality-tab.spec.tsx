@@ -449,6 +449,43 @@ describe('CatalogQualityTab — phủ thành phần (INCI) và câu chuyện s�
     expect(compose().getAttribute('aria-disabled')).toBeNull();
   });
 
+  describe('link mang ?filter= (Giờ G mở thẳng "Thiếu thành phần")', () => {
+    const BRANDED = MIX.map((p) => ({ ...p, brand: p.id === 'p-sach' ? { name: 'PƠ LANG', slug: null } : p.id === 'p-anh' ? { name: 'Visante', slug: 'visante' } : null }));
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('filter=missing_ingredients: tự chạy MỘT lần kiểm, chip "Thiếu thành phần" đang bật, danh sách chỉ còn SKU thiếu; khối bổ sung có chip thương hiệu từ dữ liệu', async () => {
+      window.history.replaceState(null, '', '/admin?tab=catalogQuality&filter=missing_ingredients');
+      const m = mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(BRANDED) }));
+      vi.stubGlobal('fetch', m.fn);
+      const r = mount(<CatalogQualityTab />);
+      await flush(20);
+      expect(auditCalls(m)).toHaveLength(1);
+      expect(chip(r)!.getAttribute('aria-pressed')).toBe('true');
+      expect(listItems(r).map((li) => li.textContent ?? '').every((t) => t.includes('Thiếu thành phần'))).toBe(true);
+      expect(listItems(r)).toHaveLength(2);
+      const brands = Array.from(r.container.querySelectorAll('[role="group"][aria-label="Lọc theo thương hiệu"] button')).map((b) => b.textContent);
+      expect(brands).toEqual(['Mọi thương hiệu (2)', 'PƠ LANG (1)', 'Visante (1)']);
+      expect(byText(r.container, 'button', 'Chép checklist gửi thương hiệu')).not.toBeNull();
+    });
+
+    it('filter là loại lỗi có thật (missing_thumbnail) thì bật đúng chip đó; giá trị lạ thì bỏ qua và không tự kiểm', async () => {
+      window.history.replaceState(null, '', '/admin?tab=catalogQuality&filter=missing_thumbnail');
+      vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(MIX) })).fn);
+      const r = mount(<CatalogQualityTab />);
+      await flush(20);
+      expect(byText(r.container, 'button', 'Thiếu ảnh (1)')!.getAttribute('aria-pressed')).toBe('true');
+      expect(listItems(r).map((li) => li.textContent ?? '').every((t) => t.includes('Dầu gội Visante'))).toBe(true);
+
+      window.history.replaceState(null, '', '/admin?tab=catalogQuality&filter=bogus');
+      const m = mockFetch(routes());
+      vi.stubGlobal('fetch', m.fn);
+      const r2 = mount(<CatalogQualityTab />);
+      await flush(20);
+      expect(auditCalls(m)).toHaveLength(0);
+      expect(byText(r2.container, 'button', 'Kiểm tra ngay')).not.toBeNull();
+    });
+  });
+
   it('mọi SKU đang bán đã có thành phần: chip ghi (0), bấm vào thì báo không có sản phẩm nào', async () => {
     const full = MIX.map((p) => ({ ...p, hasIngredients: true }));
     vi.stubGlobal('fetch', mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(full) })).fn);

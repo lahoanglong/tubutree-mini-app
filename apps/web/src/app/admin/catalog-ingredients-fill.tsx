@@ -1,11 +1,14 @@
 'use client';
 
 import { useId, useRef, useState } from 'react';
-import { BTN_PRIMARY, INPUT_CLASS, Notice } from '@/components/admin/ui';
+import { brandIngredientsChecklist, groupMissingIngredientsByBrand, ingredientsBrandKey } from '@tubutree/app-core/commerce/catalog-quality-audit';
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice } from '@/components/admin/ui';
 import { useToastedMessage } from '@/components/admin/admin-toast';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { copyText } from '@/lib/copy-text';
 import { readImageForLabelOcr } from '@/lib/image-compress';
+import { Count, FilterChip } from './catalog-filter-chip';
 import { ImageDropZone } from './image-drop-zone';
 import { INGREDIENT_NAME_MAX, INGREDIENTS_MAX, ingredientsToText, parseIngredientDraft } from './ingredient-draft';
 import { postExtractIngredients, postSaveIngredients } from './catalog-quality-api';
@@ -18,11 +21,15 @@ const MSG = {
   tooMany: (n: number) => `Tối đa ${INGREDIENTS_MAX} thành phần mỗi lần lưu (đang có ${n}). Bớt đi rồi lưu.`,
   nameTooLong: `Mỗi thành phần tối đa ${INGREDIENT_NAME_MAX} ký tự.`,
   readingHint: 'Chụp rõ mặt sau bao bì, có mục "Thành phần". Kéo ảnh vào đây hoặc bấm vào ô này rồi nhấn Ctrl+V (⌘V trên Mac).',
+  copied: (n: number, who: string) => `Đã chép checklist ${n} sản phẩm của ${who}. Dán vào Zalo gửi thương hiệu.`,
+  copyBlocked: 'Trình duyệt chặn sao chép. Bấm lại, hoặc chép tay tên sản phẩm trong danh sách bên dưới.',
 } as const;
 
 export interface IngredientsFillProduct {
   id: string;
   name: string;
+  /** Thương hiệu để gom checklist; thiếu (API cũ) hoặc `null` thì vào nhóm "Chưa rõ thương hiệu". */
+  brand?: { name: string } | null;
 }
 
 interface RowState {
@@ -70,12 +77,35 @@ export function CatalogIngredientsFill({ products, total, onSaved }: Props) {
   const [saved, setSaved] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<{ id: string; phase: Phase } | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [brandKey, setBrandKey] = useState<string | null>(null);
   const inFlight = useRef(false);
   const inlineMsg = useToastedMessage(msg);
 
   const remaining = products.filter((p) => !saved.has(p.id));
   const done = Math.max(0, total - remaining.length);
   const locked = busy !== null;
+  // Nhóm theo SKU CÒN thiếu: thương hiệu vừa điền đủ thì rời chip và checklist; thương hiệu đang chọn biến mất thì về "Mọi thương hiệu".
+  const brands = groupMissingIngredientsByBrand(remaining);
+  // Chỉ lọc khi chip còn hiện (từ hai thương hiệu): còn một thì chip ẩn, lọc tiếp sẽ giấu dòng đã lưu mà không có cách bỏ lọc.
+  const activeBrand = brands.length > 1 ? (brands.find((b) => b.key === brandKey) ?? null) : null;
+  const shown = activeBrand ? products.filter((p) => ingredientsBrandKey(p.brand) === activeBrand.key) : products;
+
+  // Checklist cho đúng một nhóm khi đã chọn chip, hoặc khi mọi SKU còn thiếu cùng một thương hiệu (khi đó không có chip).
+  const target = activeBrand ?? (brands.length === 1 ? brands[0]! : null);
+  const targetLabel = target === null ? `${brands.length} thương hiệu` : target.key === '' ? 'nhóm chưa rõ thương hiệu' : target.name;
+  const copyHint =
+    target === null
+      ? 'Tin nhắn Zalo liệt kê sản phẩm thiếu thành phần theo từng thương hiệu.'
+      : target.key === ''
+        ? `Tin nhắn Zalo liệt kê ${target.products.length} sản phẩm chưa rõ thương hiệu.`
+        : `Tin nhắn Zalo nhờ ${target.name} gửi thành phần của ${target.products.length} sản phẩm.`;
+
+  const copyChecklist = async () => {
+    const groups = target ? [target] : brands;
+    const ok = await copyText(brandIngredientsChecklist(groups));
+    const n = groups.reduce((sum, g) => sum + g.products.length, 0);
+    setMsg(ok ? { ok: true, text: MSG.copied(n, targetLabel) } : { ok: false, text: MSG.copyBlocked });
+  };
 
   const patch = (id: string, next: Partial<RowState>) => setRows((prev) => ({ ...prev, [id]: { ...(prev[id] ?? EMPTY), ...next } }));
 
@@ -153,6 +183,26 @@ export function CatalogIngredientsFill({ products, total, onSaved }: Props) {
         </p>
         <ProgressBar value={done} max={total} ariaLabel="Tiến độ bổ sung thành phần" />
       </div>
+      {brands.length > 1 && (
+        <div role="group" aria-label="Lọc theo thương hiệu" className="flex flex-wrap gap-2">
+          <FilterChip active={activeBrand === null} onPress={() => setBrandKey(null)}>
+            Mọi thương hiệu <Count n={remaining.length} />
+          </FilterChip>
+          {brands.map((b) => (
+            <FilterChip key={b.key} active={activeBrand?.key === b.key} onPress={() => setBrandKey(b.key)}>
+              {b.name} <Count n={b.products.length} />
+            </FilterChip>
+          ))}
+        </div>
+      )}
+      {remaining.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={BTN_SECONDARY} onClick={() => void copyChecklist()}>
+            Chép checklist gửi thương hiệu
+          </button>
+          <span className="text-xs text-stone-600">{copyHint}</span>
+        </div>
+      )}
       {inlineMsg && (
         <Notice tone={inlineMsg.ok ? 'success' : 'danger'} role={inlineMsg.ok ? 'status' : 'alert'}>
           {inlineMsg.text}
@@ -162,7 +212,7 @@ export function CatalogIngredientsFill({ products, total, onSaved }: Props) {
         <p className="text-sm text-stone-600">Mọi sản phẩm đang bán đều đã có thành phần.</p>
       ) : (
         <ul className="m-0 list-none space-y-3 p-0">
-          {products.map((p) => (
+          {shown.map((p) => (
             <li key={p.id}>
               <IngredientRow
                 product={p}

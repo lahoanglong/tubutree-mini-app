@@ -302,3 +302,63 @@ export function auditProductDtos(products: readonly CatalogAuditProductDto[], op
     opts,
   );
 }
+
+/** Tên nhóm cho SKU chưa có tên thương hiệu; luôn xếp cuối. */
+export const UNKNOWN_BRAND_LABEL = 'Chưa rõ thương hiệu';
+
+export interface IngredientsBrandProduct {
+  id: string;
+  name: string;
+  /** Thiếu (API cũ) hoặc `null` thì vào nhóm `UNKNOWN_BRAND_LABEL`. */
+  brand?: { name: string } | null;
+}
+
+export interface IngredientsBrandGroup {
+  /** Khoá so sánh (không phân biệt hoa thường, gộp khoảng trắng); chuỗi rỗng là nhóm chưa rõ thương hiệu. */
+  key: string;
+  /** Tên hiển thị: cách viết của SKU đầu tiên gặp trong nhóm. */
+  name: string;
+  products: { id: string; name: string }[];
+}
+
+/** Khoá nhóm thương hiệu của một SKU: "Fuwa3e" và "fuwa3e " là một thương hiệu. Rỗng là chưa rõ thương hiệu. */
+export function ingredientsBrandKey(brand: IngredientsBrandProduct['brand']): string {
+  return (brand?.name ?? '').normalize('NFC').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi');
+}
+
+/**
+ * Gom SKU thiếu thành phần (INCI) theo thương hiệu để nhờ từng thương hiệu gửi bảng thành phần một lần. Nhóm nhiều SKU đứng trước, bằng nhau thì theo tên;
+ * nhóm chưa rõ thương hiệu luôn cuối. Trong nhóm giữ thứ tự đầu vào.
+ */
+export function groupMissingIngredientsByBrand(products: readonly IngredientsBrandProduct[]): IngredientsBrandGroup[] {
+  const groups = new Map<string, IngredientsBrandGroup>();
+  for (const p of products) {
+    const key = ingredientsBrandKey(p.brand);
+    const name = key === '' ? UNKNOWN_BRAND_LABEL : p.brand!.name.replace(/\s+/g, ' ').trim();
+    const g = groups.get(key) ?? { key, name, products: [] };
+    g.products.push({ id: p.id, name: p.name });
+    groups.set(key, g);
+  }
+  return [...groups.values()].sort((a, b) => {
+    if ((a.key === '') !== (b.key === '')) return a.key === '' ? 1 : -1;
+    return b.products.length - a.products.length || a.name.localeCompare(b.name, 'vi');
+  });
+}
+
+/**
+ * Tin nhắn Zalo nhờ thương hiệu gửi thành phần: một nhóm thì chào đích danh thương hiệu, nhiều nhóm thì liệt kê theo từng thương hiệu (để chuyển nội bộ hoặc
+ * gửi nhóm chung). Chữ thuần, không markdown, vì Zalo hiện nguyên ký tự. Không nhóm nào thì chuỗi rỗng.
+ */
+export function brandIngredientsChecklist(groups: readonly Pick<IngredientsBrandGroup, 'key' | 'name' | 'products'>[]): string {
+  const live = groups.filter((g) => g.products.length > 0);
+  if (live.length === 0) return '';
+  const total = live.reduce((n, g) => n + g.products.length, 0);
+  const list = (g: (typeof live)[number]) => g.products.map((p, i) => `${i + 1}. ${p.name}`);
+  const ask = `Tubu Tree đang bổ sung bảng thành phần (INCI) cho trang sản phẩm trước khi mở bán. Nhờ anh/chị gửi giúp danh sách thành phần đầy đủ, hoặc ảnh chụp rõ mặt sau bao bì có mục "Thành phần", của ${formatVnNumber(total)} sản phẩm sau:`;
+  const only = live.length === 1 ? live[0]! : null;
+  const lines =
+    only !== null
+      ? [only.key === '' ? 'Chào anh/chị,' : `Chào anh/chị bên ${only.name},`, ask, ...list(only)]
+      : ['Chào anh/chị,', ask, ...live.flatMap((g) => ['', `${g.name} (${formatVnNumber(g.products.length)} sản phẩm):`, ...list(g)])];
+  return [...lines, '', 'Cảm ơn anh/chị nhiều!'].join('\n');
+}

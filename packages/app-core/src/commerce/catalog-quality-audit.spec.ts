@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   auditCatalogProducts,
   auditProductDtos,
+  brandIngredientsChecklist,
   CATALOG_ISSUE_KINDS,
   CATALOG_ISSUE_LABELS,
   COPY_STATUS_LABELS,
+  groupMissingIngredientsByBrand,
+  ingredientsBrandKey,
   KNOWN_MEDIA_MISMATCHES,
   PLACEHOLDER_STOCK_MIN,
+  UNKNOWN_BRAND_LABEL,
   type AuditProduct,
   type AuditVariation,
 } from './catalog-quality-audit';
@@ -415,5 +419,59 @@ describe('auditProductDtos (dữ liệu máy chủ cho web)', () => {
   it('khớp auditCatalogProducts trên cùng dữ liệu', () => {
     const d = dto({ variations: [V({ retailPrice: -1 })] });
     expect(auditProductDtos([d])).toEqual(auditCatalogProducts([{ ...d }]));
+  });
+});
+
+describe('SKU thiếu thành phần theo thương hiệu', () => {
+  const sku = (id: string, name: string, brand?: string | null) => ({ id, name, brand: brand === undefined ? undefined : brand === null ? null : { name: brand } });
+  const MISSING = [
+    sku('a', 'Nước mùi già PƠ LANG 160ml', 'PƠ LANG'),
+    sku('b', 'Xịt thơm Fuwa3e 300ml', 'Fuwa3e'),
+    sku('c', 'Dầu gội Visante', 'Visante'),
+    sku('d', 'Lau ô tô Fuwa3e 300ml', ' fuwa3e  '),
+    sku('e', 'Không rõ nhãn', null),
+    sku('f', 'API cũ chưa trả nhãn'),
+    sku('g', 'Sữa tắm PƠ LANG', 'pơ lang'),
+    sku('h', 'Dầu xả Visante', 'Visante'),
+  ];
+
+  it('gộp nhãn không phân biệt hoa thường/khoảng trắng, nhóm nhiều SKU trước, bằng nhau theo tên, chưa rõ nhãn (null lẫn thiếu) luôn cuối, giữ thứ tự SKU', () => {
+    const groups = groupMissingIngredientsByBrand(MISSING);
+    expect(groups.map((g) => [g.key, g.name, g.products.map((p) => p.id)])).toEqual([
+      ['fuwa3e', 'Fuwa3e', ['b', 'd']],
+      ['pơ lang', 'PƠ LANG', ['a', 'g']],
+      ['visante', 'Visante', ['c', 'h']],
+      ['', UNKNOWN_BRAND_LABEL, ['e', 'f']],
+    ]);
+    expect(ingredientsBrandKey({ name: '  Fuwa3e ' })).toBe('fuwa3e');
+    expect(ingredientsBrandKey(null)).toBe('');
+    expect(groupMissingIngredientsByBrand([])).toEqual([]);
+  });
+
+  it('một nhãn: chào đích danh nhãn, đánh số từng SKU, chữ thuần để dán Zalo', () => {
+    const [fuwa] = groupMissingIngredientsByBrand(MISSING);
+    expect(brandIngredientsChecklist([fuwa!])).toBe(
+      [
+        'Chào anh/chị bên Fuwa3e,',
+        'Tubu Tree đang bổ sung bảng thành phần (INCI) cho trang sản phẩm trước khi mở bán. Nhờ anh/chị gửi giúp danh sách thành phần đầy đủ, hoặc ảnh chụp rõ mặt sau bao bì có mục "Thành phần", của 2 sản phẩm sau:',
+        '1. Xịt thơm Fuwa3e 300ml',
+        '2. Lau ô tô Fuwa3e 300ml',
+        '',
+        'Cảm ơn anh/chị nhiều!',
+      ].join('\n'),
+    );
+  });
+
+  it('nhiều nhãn: chào chung, mỗi nhãn một mục kèm số SKU; nhóm chưa rõ nhãn một mình thì không gọi tên nhãn; không có SKU thì chuỗi rỗng', () => {
+    const groups = groupMissingIngredientsByBrand(MISSING);
+    const all = brandIngredientsChecklist(groups);
+    expect(all.startsWith('Chào anh/chị,\nTubu Tree đang bổ sung')).toBe(true);
+    expect(all).toContain('của 8 sản phẩm sau:');
+    expect(all).toContain('\n\nPƠ LANG (2 sản phẩm):\n1. Nước mùi già PƠ LANG 160ml\n2. Sữa tắm PƠ LANG\n');
+    expect(all).toContain(`\n\n${UNKNOWN_BRAND_LABEL} (2 sản phẩm):\n1. Không rõ nhãn\n2. API cũ chưa trả nhãn\n`);
+    expect(all.endsWith('\n\nCảm ơn anh/chị nhiều!')).toBe(true);
+    expect(brandIngredientsChecklist([groups[3]!]).startsWith('Chào anh/chị,\n')).toBe(true);
+    expect(brandIngredientsChecklist([])).toBe('');
+    expect(brandIngredientsChecklist([{ key: 'x', name: 'X', products: [] }])).toBe('');
   });
 });
