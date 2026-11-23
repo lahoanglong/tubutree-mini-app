@@ -127,14 +127,17 @@ export function PriceTab({
   const [tplName, setTplName] = useState('');
 
   const cart = useMemo(() => Object.entries(qty).filter(([, n]) => n > 0), [qty]);
+  const noticeRef = useRef<HTMLDivElement>(null);
 
   // Phân loại không còn trong bảng giá sỉ (ngừng bán, đổi bậc) bị bỏ và nêu tên trong lời báo; không nạp gì thì giữ giỏ như cũ.
+  // Đổi tab giữ vị trí cuộn (`scroll: false`): bấm từ đơn thứ tám thì lời báo ở đầu tab nằm ngoài màn hình, nên cuộn nó vào giữa.
   useEffect(() => {
     if (!reorder || !priceQ.data) return;
     const res = reorderQuantities(reorder.lines, priceQ.data);
     if (res.added > 0) setQty(res.qty);
     setNotice(reorderNotice(reorder.code, res));
     onReorderApplied?.();
+    noticeRef.current?.scrollIntoView?.({ block: 'center' });
   }, [reorder, priceQ.data, onReorderApplied]);
 
   // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về, tối đa `settleWithin`.
@@ -352,7 +355,7 @@ export function PriceTab({
 
   return (
     <div className="pb-6">
-      <div role="status" aria-live="polite">
+      <div ref={noticeRef} role="status" aria-live="polite">
         {notice && (
           <p role={notice.error ? 'alert' : undefined} className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>
             {notice.text}

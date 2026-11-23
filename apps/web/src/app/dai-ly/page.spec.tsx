@@ -640,8 +640,15 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     setup({ '/dealer/orders': ORDERS, '/dealer/pricelist': [row({ stock: 9 })] });
     await open('Đơn hàng');
     expect(button('Đặt lại đơn sỉ TUBU1')).toBeUndefined();
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+      scrolled.push(this);
+    });
     click(button('Đặt lại đơn sỉ TUBU3'));
     await flush(8);
+    // Lời báo ở đầu tab Bảng giá được cuộn vào màn hình (đổi tab giữ vị trí cuộn của danh sách đơn).
+    expect(scrolled.some((el) => el.textContent?.includes('Nước xả – 5L'))).toBe(true);
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     const t = document.body.textContent ?? '';
     expect(t).toContain('Đã nạp 1 mặt hàng của đơn #TUBU3 theo giá hôm nay');
     expect(t).toContain('Bỏ qua 1 mặt hàng không còn bán sỉ: Nước xả – 5L.');
