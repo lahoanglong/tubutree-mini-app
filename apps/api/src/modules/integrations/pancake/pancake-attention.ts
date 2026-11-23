@@ -13,6 +13,11 @@ export const ATTENTION_PAYMENT_PENDING = 'Chưa báo được "đã thanh toán,
 export const ATTENTION_COD_SWITCH_PENDING = 'Khách đã đổi sang COD nhưng đơn Pancake còn ghi "chờ chuyển khoản"';
 /** Đơn đã đổi sang COD, hàng đã rời kho, rồi Pancake ghi nhận tiền chuyển khoản: có thể khách trả hai lần (chuyển khoản + COD). */
 export const ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER = 'Đơn đã đổi sang COD và đã giao vận chuyển nhưng khách vẫn chuyển khoản';
+/**
+ * Đơn đã đổi sang COD, đã lên kho Pancake (ghi chú "THU COD"), rồi tiền chuyển khoản về trước bàn giao: đơn trở lại trả trước, nhưng vận đơn hãng tạo
+ * trong lúc còn COD có thể vẫn thu hộ đủ tiền (cập nhật "đã trả" trên Pancake không chắc sửa được vận đơn đã in).
+ */
+export const ATTENTION_COD_SWITCH_REVERTED_CHECK_WAYBILL = 'Khách đổi sang COD rồi vẫn chuyển khoản đủ: kiểm vận đơn, sửa thu hộ về 0đ hoặc huỷ vận đơn tạo lúc còn COD';
 /** Pancake báo "Hoàn một phần" (15) cho đơn đã duyệt trả + hoàn tiền trên Tubu — chỉ còn chờ bấm "Đã nhận hàng về". */
 export const ATTENTION_PARTIAL_RETURN_ACK = 'Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu';
 /** Lệnh huỷ đã tới Pancake nhưng lần huỷ ở Tubu trượt/lỗi — kho không còn đơn, Tubu còn hiệu lực; xong việc khi đơn huỷ/trả. */

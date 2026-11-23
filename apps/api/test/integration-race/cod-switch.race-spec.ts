@@ -11,6 +11,7 @@ import { COD_SWITCH_HISTORY_NOTE, COD_SWITCH_REFUSED, COD_SWITCH_REVERTED_NOTE }
 import { refundReportedUnderpayment } from '../../src/modules/orders/refund-queue';
 import { AdminService } from '../../src/modules/admin/admin.service';
 import { GOMDON_STATE } from '../../src/modules/integrations/gomdon/gomdon-status';
+import { ATTENTION_COD_SWITCH_REVERTED_CHECK_WAYBILL } from '../../src/modules/integrations/pancake/pancake-attention';
 import { PENDING_PAYMENT_TTL_KEY, PendingPaymentExpiryCron } from '../../src/modules/orders/pending-payment-expiry.cron';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { GuestCheckoutService } from '../../src/modules/checkout/guest/guest-checkout.service';
@@ -352,6 +353,28 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
       const alerts = await prisma.gomdonAlert.findMany({ where: { orderId: order.id } });
       expect(alerts).toHaveLength(1);
       expect(alerts[0]!.message).toContain('Sửa tiền thu hộ về 0đ');
+    });
+
+    it('đơn đã lên kho Pancake (ghi chú THU COD) hay đã có mã vận đơn: lật xong vào "Cần xử lý Pancake" để kho kiểm thu hộ của vận đơn', async () => {
+      const onPancake = await switched();
+      await prisma.order.update({ where: { id: onPancake.order.id }, data: { pancakeOrderId: `PCIT${onPancake.order.code}` } });
+      expect((await orderStatus.markPaid(onPancake.order.id, { actorType: 'PANCAKE' })).outcome).toBe('PAID');
+      const a = await prisma.order.findUniqueOrThrow({ where: { id: onPancake.order.id } });
+      expect(a).toMatchObject({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+      expect(a.pancakeAttention).toContain(ATTENTION_COD_SWITCH_REVERTED_CHECK_WAYBILL);
+      expect(a.pancakeAttention).toContain(`đơn Pancake #PCIT${onPancake.order.code}`);
+      expect(a.pancakeAttentionAt).not.toBeNull();
+
+      const waybill = await switched();
+      await prisma.order.update({ where: { id: waybill.order.id }, data: { shippingCode: `GHNIT${waybill.order.code}` } });
+      expect((await orderStatus.markPaid(waybill.order.id, { actorType: 'PANCAKE' })).outcome).toBe('PAID');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: waybill.order.id } })).pancakeAttention).toContain(`vận đơn GHNIT${waybill.order.code}`);
+    });
+
+    it('đơn đổi COD chưa lên Pancake, chưa có vận đơn: lật xong không thêm nhắc kiểm vận đơn', async () => {
+      const { order } = await switched();
+      expect((await orderStatus.markPaid(order.id, { actorType: 'PANCAKE' })).outcome).toBe('PAID');
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention ?? '').not.toContain(ATTENTION_COD_SWITCH_REVERTED_CHECK_WAYBILL);
     });
 
     it('đơn thu gom đang chờ tiền ở Gomdon: đổi COD đưa về "chưa đặt bưu tá" để cron dò lại nếu lần xếp việc lỗi', async () => {

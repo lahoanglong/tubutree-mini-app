@@ -46,6 +46,7 @@ import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
   ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_COD_SWITCH_REVERTED_CHECK_WAYBILL,
   partialReturnHeldReason,
   ATTENTION_PARTIAL_RETURN_SETTLED,
   ATTENTION_SEPARATOR,
@@ -856,7 +857,10 @@ export class OrderStatusService {
       if (!won) continue;
 
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
-      if (revertCodSwitch) await this.alertGomdonCollectAfterRevert(order);
+      if (revertCodSwitch) {
+        await this.alertGomdonCollectAfterRevert(order);
+        await this.flagWaybillCollectAfterRevert(order);
+      }
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }), undefined, `order=${order.code}`);
@@ -970,6 +974,26 @@ export class OrderStatusService {
       order.code,
       `Khách đã đổi sang COD rồi vẫn chuyển khoản đủ ${order.total.toLocaleString('vi-VN')}đ: vận đơn Gomdon ${order.gomdonOrderId} còn thu hộ. Sửa tiền thu hộ về 0đ trên Gomdon.`,
     );
+  }
+
+  /**
+   * Đơn đã đổi sang COD và đã lên kho Pancake (hoặc đã có mã vận đơn) rồi tiền chuyển khoản về: kho có thể đã tạo vận đơn hãng thu hộ đủ tiền lúc còn COD,
+   * mà job thanh toán chỉ sửa đơn Pancake. Đưa vào "Cần xử lý Pancake" để kho kiểm vận đơn. Tiền đã ghi nhận nên lỗi ở đây không được ném.
+   */
+  private async flagWaybillCollectAfterRevert(order: Pick<Order, 'id' | 'code' | 'pancakeOrderId' | 'shippingCode' | 'total'>): Promise<void> {
+    if (!order.pancakeOrderId && !order.shippingCode) return;
+    const where = [order.pancakeOrderId ? `đơn Pancake #${order.pancakeOrderId}` : null, order.shippingCode ? `vận đơn ${order.shippingCode}` : null].filter(Boolean).join(', ');
+    try {
+      await flagPancakeAttention(
+        this.prisma,
+        this.opsAlerts(),
+        order,
+        `${ATTENTION_COD_SWITCH_REVERTED_CHECK_WAYBILL} (${where}, đã nhận ${order.total.toLocaleString('vi-VN')}đ).`,
+        this.logger,
+      );
+    } catch (err) {
+      this.logger.error(`Không ghi được nhắc kiểm vận đơn cho đơn ${order.code} vừa về lại chuyển khoản: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   /** Báo động in-app tới ADMIN/kho (cùng kênh webhook Pancake dùng) — chỉ cần Prisma + Notifications nên tự dựng, không vòng module. */
