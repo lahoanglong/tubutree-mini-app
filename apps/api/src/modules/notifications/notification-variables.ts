@@ -43,6 +43,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   SUBSCRIPTION_PAUSED: ['reason'],
   SUBSCRIPTION_ORDER_AWAITING_PAYMENT: ['order_code', 'amount', 'hours'],
   SUBSCRIPTION_ORDER_FAILED: ['reason', 'retry'],
+  SUBSCRIPTION_UPCOMING: ['product', 'date'],
   WELCOME_VOUCHER: ['code', 'value', 'min_order_note', 'expires'],
   BIRTHDAY_VOUCHER: ['code', 'value', 'min_order_note', 'expires'],
   WINBACK_VOUCHER: ['code', 'value', 'min_order_note', 'expires'],

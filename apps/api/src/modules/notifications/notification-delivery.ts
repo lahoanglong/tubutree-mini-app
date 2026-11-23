@@ -38,6 +38,8 @@ export const NOTIFICATION_DELIVERY: Readonly<Record<string, NotificationDelivery
   SUBSCRIPTION_PAUSED: T,
   SUBSCRIPTION_ORDER_AWAITING_PAYMENT: T,
   SUBSCRIPTION_ORDER_FAILED: T,
+  // Báo trước một ngày kỳ giao của gói khách đã đăng ký (để đổi/bỏ qua trước khi Ví bị trừ): việc của chính khách, không phải tin kéo khách.
+  SUBSCRIPTION_UPCOMING: T,
   GROUP_BUY_SUCCESS: T,
   GROUP_BUY_FAILED: T,
   // Đổi trả, hoàn tiền

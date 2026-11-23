@@ -904,6 +904,8 @@ export const NOTIFICATION_TEMPLATES = [
   // Thiếu mẫu này thì notify() rơi về fallback = in NGUYÊN VĂN mã code cho khách
   // ("SUBSCRIPTION_ORDER_FAILED"), và biến {{reason}} không bao giờ hiển thị.
   { id: 'nt-sub-order-failed', code: 'SUBSCRIPTION_ORDER_FAILED', channel: 'INAPP', bodyTemplate: 'Đơn định kỳ kỳ này chưa đặt được: {{reason}}. {{retry}} 🌿' },
+  // Nhắc 09:00 hôm trước kỳ giao (SubscriptionUpcomingService). Không có migration: PROD nhận mẫu qua prisma:seed:reference lúc deploy, cron bỏ lượt khi chưa có mẫu.
+  { id: 'nt-sub-upcoming', code: 'SUBSCRIPTION_UPCOMING', channel: 'INAPP', bodyTemplate: 'Ngày mai ({{date}}) Tubu sẽ tự đặt đơn định kỳ {{product}}. Muốn đổi số lượng, dời ngày hay bỏ qua kỳ này, bạn sửa gói trước 3 giờ sáng mai nhé 🌿', createOnly: true },
   { id: 'nt-welcome', code: 'WELCOME_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chào mừng bạn đến Tubu Tree! Tặng mã giảm giá {{code}} giảm {{value}}đ{{min_order_note}}, dùng trước {{expires}} 🎁' },
   { id: 'nt-birthday', code: 'BIRTHDAY_VOUCHER', channel: 'INAPP', bodyTemplate: 'Chúc mừng sinh nhật! 🎂 Tặng bạn voucher {{code}} giảm {{value}}đ, dùng trước {{expires}}.' },
   { id: 'nt-winback', code: 'WINBACK_VOUCHER', channel: 'INAPP', bodyTemplate: 'Tubu nhớ bạn! Quay lại với voucher {{code}} giảm {{value}}đ, dùng trước {{expires}} 💚' },
