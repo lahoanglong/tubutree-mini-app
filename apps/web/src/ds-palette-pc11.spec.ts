@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { withoutMetadataBuilders } from './test-utils/metadata-scope';
 
 // C-097 (Q-25): admin/merchant/brand sang Design System v2. Danh sách là "bánh cóc": file nào đã chuyển thì
 // không được quay lại palette v1/stock Tailwind, white/black thô, màu cứng hay emoji làm icon. Chuyển thêm
 // file nào thì THÊM vào đây TRƯỚC khi sửa (thấy đỏ), sửa xong thấy xanh, commit spec + file chung một lần.
 // Không kiểm cỡ chữ: admin tối ưu cho máy tính (Q-29) nên chữ 11px dày đặc của bảng được giữ nguyên.
 // Ngoại lệ có chủ ý, static-scan vẫn đếm nhưng không phải icon/màu giao diện: `merchant/theme-colors.ts` là dữ liệu
-// màu lưu ở Storefront.themeColor (không nằm trong MIGRATED); dấu ✓ trong <title> của generateMetadata brand (PARTIAL
+// màu lưu ở Storefront.themeColor (không nằm trong MIGRATED); dấu ✓ trong <title> của hàm dựng thẻ meta brand (METADATA_SCOPED
 // bên dưới); placeholder 🌿 của Content Kit ghi bằng escape \u{1F33F} vì là chữ mẫu cho CTV, không phải icon.
 const CORE: string[] = [
   'app/admin/layout.tsx',
@@ -115,23 +116,10 @@ const RAW_COLOR = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b|\b(?:rg
 // ghép trong chữ nút nên phải đi qua lucide-react như emoji.
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿■-◿⬀-⯿]/gu;
 
-// File lớn chuyển dần theo cụm tab: chỉ quét đoạn đã chuyển (từ đầu file tới dấu cắt), cộng phần đuôi dùng chung.
-// Cụm tab sau chuyển xong thì dời `end` xuống; chuyển hết thì đưa cả file vào MIGRATED và xoá mục ở đây.
-const PARTIAL: { file: string; end: string; tail?: string }[] = [
-  // `generateMetadata` ghép dấu ✓ vào chuỗi tiêu đề tab/OG của nhãn chính hãng: đó là chữ trong <title> (không
-  // chèn được SVG), không phải icon trong giao diện, nên chỉ phần giao diện từ BrandPage trở xuống bị quét.
-  { file: 'app/brand/[slug]/page.tsx', end: 'export async function generateMetadata', tail: 'export default async function BrandPage' },
-];
-
-function partialText({ file, end, tail }: { file: string; end: string; tail?: string }): string {
-  const src = read(file);
-  const cut = src.indexOf(end);
-  if (cut < 0) throw new Error(`không thấy dấu cắt "${end}" trong ${file}`);
-  if (!tail) return src.slice(0, cut);
-  const tailAt = src.indexOf(tail);
-  if (tailAt < 0) throw new Error(`không thấy phần đuôi "${tail}" trong ${file}`);
-  return src.slice(0, cut) + src.slice(tailAt);
-}
+// Trang có `generateMetadata`: hàm dựng thẻ meta SEO (generateMetadata, hàm trả `Metadata`, hàm phụ chỉ chúng gọi) ghép chữ vào <title>/og,
+// vd dấu ✓ của nhãn chính hãng: đó là chữ (không chèn được SVG), không phải icon trong giao diện. Cắt theo cây cú pháp
+// (test-utils/metadata-scope.ts), không theo vị trí dòng, nên dời hàm lên trên/xuống dưới không làm lọt hay làm đỏ (W21-04 §3.2).
+const METADATA_SCOPED: string[] = ['app/brand/[slug]/page.tsx'];
 
 function guard(getText: () => string) {
   it('không còn lớp palette v1/stock (primary/leaf/clay/sun/neutral/green/red/amber/blue...)', () => {
@@ -153,4 +141,4 @@ function guard(getText: () => string) {
 
 describe.each(MIGRATED)('admin DS v2 — %s', (file) => guard(() => read(file)));
 
-describe.each(PARTIAL)('admin DS v2 (phần đã chuyển) — $file', (p) => guard(() => partialText(p)));
+describe.each(METADATA_SCOPED)('admin DS v2 (trừ hàm dựng thẻ meta SEO) — %s', (file) => guard(() => withoutMetadataBuilders(read(file), file)));
