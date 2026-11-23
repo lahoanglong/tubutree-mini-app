@@ -441,19 +441,19 @@ describe('Gói định kỳ: đơn đầu, thanh toán, sửa gói (real Postgre
         startDate: vnDate(3),
       });
       await makeDue(sub.id);
-      const original = prisma.subscription.updateMany.bind(prisma.subscription);
+      type Claim = { claimDue(...args: unknown[]): Promise<unknown> };
+      const claimer = subs as unknown as Claim;
+      const original = claimer.claimDue.bind(subs);
       let edited = false;
-      // Bước nhận kỳ của cron (updateMany có điều kiện nextRunAt) xong thì khách sửa gói ngay.
-      const spy = jest.spyOn(prisma.subscription, 'updateMany').mockImplementation((async (
-        args: Parameters<typeof original>[0],
-      ) => {
-        const res = await original(args);
-        if (!edited && res.count === 1 && args.data && 'nextRunAt' in args.data) {
+      // Giao dịch nhận kỳ của cron (khoá dòng rồi updateMany có điều kiện nextRunAt) commit xong thì khách sửa gói ngay, trước giao dịch ghi đơn.
+      const spy = jest.spyOn(claimer, 'claimDue').mockImplementation(async (...args: unknown[]) => {
+        const res = await original(...args);
+        if (!edited && res) {
           edited = true;
           await subs.update(u.id, sub.id, { quantity: 3, addressId: a2.id });
         }
         return res;
-      }) as unknown as typeof original);
+      });
       await subs.processDue();
       spy.mockRestore();
 

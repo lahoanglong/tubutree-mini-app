@@ -200,6 +200,10 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       dueRows?: unknown[];
       lockedIntervalWeeks?: number;
       afterNextRunAt?: Date;
+      /** Chu kỳ trên dòng gói lúc khoá (khách vừa đổi sau lúc quét); mặc định bằng bản quét. */
+      claimIntervalWeeks?: number;
+      /** Trạng thái dòng gói ở lần khoá của bước claim; `lockedStatus` là của lần khoá trong tx sinh đơn. */
+      claimStatus?: string;
     } = {},
   ) {
     const due = opts.dueRows ?? [
@@ -215,6 +219,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const findMany = jest.fn().mockResolvedValue(due);
+    const lockCalls = new Map<string, number>();
     const prisma = {
       subscription: {
         findMany,
@@ -237,18 +242,27 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         findMany: jest.fn().mockResolvedValue(opts.discontinuedInTx ? [] : [{ id: 'v1' }]),
       },
       $executeRaw: stockExecuteRaw,
-      // Khoá dòng gói (SELECT ... FOR UPDATE) trong tx sinh đơn: số lượng/địa chỉ/cách trả đọc từ đây.
-      $queryRaw: jest.fn().mockResolvedValue([
-        {
-          id: 's1',
-          userId: 'u1',
-          variationId: 'v1',
-          quantity: opts.quantity ?? 1,
-          addressId: 'a1',
-          status: opts.lockedStatus ?? 'ACTIVE',
-          paymentMethod: opts.paymentMethod ?? 'COD',
-        },
-      ]),
+      // Khoá dòng gói (SELECT ... FOR UPDATE) ở bước claim và trong tx sinh đơn: chu kỳ/lượt thử lại và số lượng/địa chỉ/cách trả đọc từ đây.
+      $queryRaw: jest.fn((_sql: TemplateStringsArray, id: string) => {
+        const scanned = (due as Array<{ id: string; userId?: string; intervalWeeks?: number; nextRunAt?: Date }>).find((r) => r.id === id);
+        const nth = (lockCalls.get(id) ?? 0) + 1;
+        lockCalls.set(id, nth);
+        return Promise.resolve([
+          {
+            id,
+            userId: scanned?.userId ?? 'u1',
+            variationId: 'v1',
+            quantity: opts.quantity ?? 1,
+            addressId: 'a1',
+            status: (nth === 1 ? opts.claimStatus : opts.lockedStatus) ?? 'ACTIVE',
+            paymentMethod: opts.paymentMethod ?? 'COD',
+            intervalWeeks: opts.claimIntervalWeeks ?? scanned?.intervalWeeks ?? 4,
+            nextRunAt: scanned?.nextRunAt,
+            lastOrderId: null,
+            retryCount: opts.retryCount ?? 0,
+          },
+        ]);
+      }),
       address: {
         findUnique: jest.fn().mockResolvedValue(
           opts.addressInvalid
@@ -302,6 +316,39 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     // claim advance nextRunAt với điều kiện status ACTIVE + đến hạn
     expect(updateMany.mock.calls[0][0].where).toMatchObject({ id: 's1', status: 'ACTIVE' });
     expect(orderCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('khoá dòng gói (FOR UPDATE) TRƯỚC bước so-và-dời nextRunAt, trong cùng tx với bước claim', async () => {
+    const { svc, updateMany, prisma } = makeProcess(1);
+    await svc.processDue();
+    const lock = (prisma.$queryRaw as unknown as jest.Mock).mock;
+    expect(String((lock.calls[0][0] as TemplateStringsArray).join('?'))).toMatch(/FOR UPDATE/);
+    expect(lock.invocationCallOrder[0]).toBeLessThan(updateMany.mock.invocationCallOrder[0]!);
+    // Bước claim là tx riêng (đơn kỳ ghi ở tx sau): hai lần mở tx, lần đầu khoá rồi mới dời.
+    expect((prisma.$transaction as unknown as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(lock.invocationCallOrder[0]!);
+  });
+
+  it('khách đổi chu kỳ sau lúc quét, trước lúc tới lượt claim: kỳ kế tính theo chu kỳ trên dòng đang khoá, không theo bản quét', async () => {
+    const { svc, updateMany } = makeProcess(1, { claimIntervalWeeks: 8, lockedIntervalWeeks: 8 });
+    await svc.processDue();
+    expect((updateMany.mock.calls[0][0].data.nextRunAt as Date).getTime()).toBe(startOfVnDay().getTime() + 8 * 7 * 864e5);
+  });
+
+  it('gói đã thôi ACTIVE lúc khoá (khách vừa tạm dừng) → không dời lịch, không ra đơn', async () => {
+    const { svc, updateMany, orderCreate } = makeProcess(1, { claimStatus: 'PAUSED' });
+    await svc.processDue();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('claim của một gói lỗi (chờ khoá quá hạn) → bỏ gói đó, các gói sau vẫn ra đơn', async () => {
+    const dueRows = ['s1', 's2'].map((id) => ({ id, userId: 'u1', variationId: 'v1', quantity: 1, addressId: 'a1', intervalWeeks: 4, retryCount: 0, nextRunAt: new Date(Date.now() - 60_000) }));
+    const { svc, updateMany, orderCreate } = makeProcess(1, { dueRows });
+    updateMany.mockRejectedValueOnce(Object.assign(new Error('Transaction already closed'), { code: 'P2028' }));
+    await expect(svc.processDue()).resolves.toBeUndefined();
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    expect(orderCreate).toHaveBeenCalledTimes(1);
+    expect(orderCreate.mock.calls[0][0].data.subscriptionId).toBe('s2');
   });
 
   it('tạo đơn thành công → phát order_placed + subscription_changed action=order_created (cùng tx)', async () => {
@@ -925,56 +972,72 @@ describe('SubscriptionsService.effectiveDiscountPct: chỉ đếm gói thật (Q
 });
 
 describe('SubscriptionsService.skipCycle', () => {
-  function makeSkip(sub: unknown, count = 1) {
-    const updateMany = jest.fn().mockResolvedValue({ count });
+  const SHOWN = new Date('2026-07-10T00:00:00.000Z');
+  /** `sub` là dòng gói đọc dưới khoá FOR UPDATE (lockSubscription). */
+  function makeSkip(sub: unknown) {
     const row = { id: 's1', status: 'ACTIVE' };
+    const update = jest.fn().mockResolvedValue(row);
+    const updateMany = jest.fn();
+    const $queryRaw = jest.fn().mockResolvedValue(sub ? [sub] : []);
     const prisma = {
-      subscription: {
-        findUnique: jest.fn().mockResolvedValue(sub),
-        updateMany,
-        findUniqueOrThrow: jest.fn().mockResolvedValue(row),
-      },
+      subscription: { update, updateMany, findUnique: jest.fn() },
+      $queryRaw,
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     } as unknown as PrismaService;
     const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
-    return { svc, updateMany, row };
+    return { svc, update, updateMany, $queryRaw, row };
   }
 
-  it('sub ACTIVE → dời nextRunAt thêm 1 chu kỳ, giữ nguyên status', async () => {
-    const nextRunAt = new Date('2026-07-10T00:00:00.000Z');
-    const { svc, updateMany, row } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt });
-    await expect(svc.skipCycle('u1', 's1')).resolves.toBe(row);
-    const { where, data } = updateMany.mock.calls[0][0];
-    // Ghi theo đúng bản vừa đọc: cron claim đã dời nextRunAt thì không khớp, không ghi đè.
-    expect(where).toEqual({ id: 's1', userId: 'u1', status: 'ACTIVE', nextRunAt });
-    expect((data.nextRunAt as Date).getTime()).toBe(nextRunAt.getTime() + 4 * 7 * 864e5);
+  it('sub ACTIVE, "Lần kế" khớp bản đang khoá → dời nextRunAt thêm 1 chu kỳ, giữ nguyên status', async () => {
+    const { svc, update, $queryRaw, row } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: SHOWN });
+    await expect(svc.skipCycle('u1', 's1', SHOWN.toISOString())).resolves.toBe(row);
+    // Đọc dưới khoá dòng (cùng khoá tx sinh đơn kỳ giữ), không đọc rời rồi ghi có điều kiện.
+    expect(String(($queryRaw.mock.calls[0][0] as TemplateStringsArray).join('?'))).toMatch(/FOR UPDATE/);
+    const { where, data } = update.mock.calls[0][0];
+    expect(where).toEqual({ id: 's1' });
+    expect((data.nextRunAt as Date).getTime()).toBe(SHOWN.getTime() + 4 * 7 * 864e5);
     expect(data.status).toBeUndefined();
   });
 
-  it('cron claim đã dời nextRunAt giữa lúc đọc và ghi (count=0) → 409, không báo đã bỏ qua kỳ', async () => {
-    const { svc } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date('2026-07-10T00:00:00.000Z') }, 0);
-    await expect(svc.skipCycle('u1', 's1')).rejects.toMatchObject({ status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' });
+  it('cron 03:00 đã ra đơn kỳ đang hiện (nextRunAt sang kỳ sau) → 409, không bỏ qua kỳ sau', async () => {
+    const advanced = new Date(SHOWN.getTime() + 8 * 7 * 864e5);
+    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 8, nextRunAt: advanced });
+    await expect(svc.skipCycle('u1', 's1', SHOWN.toISOString())).rejects.toMatchObject({ status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 'không phải ngày'])('thiếu hoặc sai "Lần kế" đang hiện (%p) → 400, không chạm DB', async (bad) => {
+    const { svc, $queryRaw, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: SHOWN });
+    await expect(svc.skipCycle('u1', 's1', bad)).rejects.toMatchObject({ status: 400 });
+    expect($queryRaw).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('cùng thời điểm viết khác dạng (offset +07:00) vẫn khớp', async () => {
+    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: SHOWN });
+    await svc.skipCycle('u1', 's1', '2026-07-10T07:00:00+07:00');
+    expect(update).toHaveBeenCalledTimes(1);
   });
 
   it('bỏ kỳ giữa lúc đang thử lại vì hết hàng → xoá bộ đếm thử lại để kỳ sau đủ lượt (ENGAGE-14)', async () => {
-    const { svc, updateMany } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, retryCount: 2, nextRunAt: new Date('2026-07-10T00:00:00.000Z') });
-    await svc.skipCycle('u1', 's1');
-    expect(updateMany.mock.calls[0][0].data.retryCount).toBe(0);
+    const { svc, update } = makeSkip({ id: 's1', userId: 'u1', status: 'ACTIVE', intervalWeeks: 4, retryCount: 2, nextRunAt: SHOWN });
+    await svc.skipCycle('u1', 's1', SHOWN.toISOString());
+    expect(update.mock.calls[0][0].data.retryCount).toBe(0);
   });
 
   it('không tìm thấy lịch → NotFound', async () => {
     const { svc } = makeSkip(null);
-    await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
+    await expect(svc.skipCycle('u1', 's1', SHOWN.toISOString())).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
   });
 
   it('không phải chủ sở hữu → NotFound', async () => {
-    const { svc } = makeSkip({ id: 's1', userId: 'other', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: new Date() });
-    await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
+    const { svc } = makeSkip({ id: 's1', userId: 'other', status: 'ACTIVE', intervalWeeks: 4, nextRunAt: SHOWN });
+    await expect(svc.skipCycle('u1', 's1', SHOWN.toISOString())).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
   });
 
   it.each(['PAUSED', 'CANCELLED'])('lịch đang %s (không ACTIVE) → BadRequest', async (status) => {
-    const { svc } = makeSkip({ id: 's1', userId: 'u1', status, intervalWeeks: 4, nextRunAt: new Date() });
-    await expect(svc.skipCycle('u1', 's1')).rejects.toThrow('Chỉ bỏ qua kỳ khi lịch đang chạy.');
+    const { svc } = makeSkip({ id: 's1', userId: 'u1', status, intervalWeeks: 4, nextRunAt: SHOWN });
+    await expect(svc.skipCycle('u1', 's1', SHOWN.toISOString())).rejects.toThrow('Chỉ bỏ qua kỳ khi lịch đang chạy.');
   });
 });
 

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { UpdateSubDto } from './subscriptions.controller';
+import { SkipSubDto, UpdateSubDto } from './subscriptions.controller';
 
 const pipe = createValidationPipe();
 const run = (value: unknown) => pipe.transform(value, { type: 'body', metatype: UpdateSubDto }) as Promise<UpdateSubDto>;
@@ -49,6 +49,23 @@ describe('DTO sửa gói định kỳ: ngày đang hiện (expectedNextRunAt)', 
 
   it.each(['24/11/2026', 'hôm qua', 1764003600000, null])('từ chối %p bằng 400', async (bad) => {
     const err = await run({ nextRunDate: '2026-12-01', expectedNextRunAt: bad }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('DTO bỏ qua kỳ: "Lần kế" đang hiện (expectedNextRunAt)', () => {
+  const runSkip = (value: unknown) => pipe.transform(value, { type: 'body', metatype: SkipSubDto }) as Promise<SkipSubDto>;
+
+  it('nhận ISO đầy đủ như GET trả', async () => {
+    await expect(runSkip({ expectedNextRunAt: '2026-11-24T17:00:00.000Z' })).resolves.toMatchObject({ expectedNextRunAt: '2026-11-24T17:00:00.000Z' });
+  });
+
+  it('bỏ trống thì DTO cho qua: service trả 400 tiếng Việt (bắt buộc)', async () => {
+    await expect(runSkip({})).resolves.toMatchObject({});
+  });
+
+  it.each(['24/11/2026', 'hôm qua', 1764003600000, null])('từ chối %p bằng 400', async (bad) => {
+    const err = await runSkip({ expectedNextRunAt: bad }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
   });
 });

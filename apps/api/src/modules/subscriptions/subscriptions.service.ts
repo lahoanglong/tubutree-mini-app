@@ -186,6 +186,7 @@ interface LockedSubRow {
   intervalWeeks: number;
   nextRunAt: Date;
   lastOrderId: string | null;
+  retryCount: number;
 }
 
 /**
@@ -724,22 +725,18 @@ export class SubscriptionsService {
   }
 
   /**
-   * Save-flow: bỏ qua 1 kỳ giao kế tiếp mà KHÔNG hủy/tạm dừng lịch — đẩy
-   * nextRunAt thêm 1 chu kỳ tính từ nextRunAt hiện tại, giữ nguyên status ACTIVE.
+   * Save-flow: bỏ qua 1 kỳ giao kế tiếp mà KHÔNG hủy/tạm dừng lịch — đẩy nextRunAt thêm 1 chu kỳ tính từ nextRunAt hiện tại, giữ ACTIVE.
+   * `expectedNextRunAt` là "Lần kế" khách đang thấy, so dưới khoá dòng như dời ngày: cron 03:00 vừa ra đơn kỳ đó (nextRunAt đã sang kỳ sau)
+   * thì 409, không lặng lẽ bỏ qua kỳ SAU trong khi khách tưởng đã bỏ kỳ vừa giao.
    */
-  async skipCycle(userId: string, id: string) {
-    const sub = await this.prisma.subscription.findUnique({ where: { id } });
-    if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
-    if (sub.status !== 'ACTIVE') throw new BadRequestException('Chỉ bỏ qua kỳ khi lịch đang chạy.');
-    const nextRunAt = this.addWeeks(sub.nextRunAt, sub.intervalWeeks);
-    // Cron claim chen giữa (đã dời nextRunAt, kỳ này ra đơn) mà ghi theo id thì khách nhận "đã bỏ qua kỳ" nhưng đơn vẫn ra và lịch lệch.
+  async skipCycle(userId: string, id: string, expectedNextRunAt: string | undefined) {
+    const expected = this.parseExpectedNextRunAt(expectedNextRunAt, true)!;
     return this.prisma.$transaction(async (tx) => {
-      const written = await tx.subscription.updateMany({
-        where: { id, userId, status: 'ACTIVE', nextRunAt: sub.nextRunAt },
-        data: { nextRunAt, retryCount: 0 },
-      });
-      if (written.count === 0) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
-      return tx.subscription.findUniqueOrThrow({ where: { id } });
+      const sub = await this.lockSubscription(tx, id);
+      if (!sub || sub.userId !== userId) throw new NotFoundException('Không tìm thấy lịch đặt định kỳ.');
+      if (sub.status !== 'ACTIVE') throw new BadRequestException('Chỉ bỏ qua kỳ khi lịch đang chạy.');
+      if (sub.nextRunAt.getTime() !== expected.getTime()) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
+      return tx.subscription.update({ where: { id }, data: { nextRunAt: this.addWeeks(sub.nextRunAt, sub.intervalWeeks), retryCount: 0 } });
     });
   }
 
@@ -808,16 +805,17 @@ export class SubscriptionsService {
           take: DUE_PAGE_SIZE,
         });
         for (const sub of due) {
-          // CLAIM atomic: advance nextRunAt TRƯỚC khi tạo đơn. Chỉ instance đầu tiên
-          // (count=1) được xử lý → multi-instance cron không tạo đơn TRÙNG cho khách.
-          const nextRunAt = this.addWeeks(claimBase, sub.intervalWeeks);
-          const claimed = await this.prisma.subscription.updateMany({
-            where: { id: sub.id, status: 'ACTIVE', nextRunAt: sub.nextRunAt },
-            data: { nextRunAt },
-          });
-          if (claimed.count === 0) continue; // instance khác đã claim
+          let claim: Awaited<ReturnType<typeof this.claimDue>>;
           try {
-            if (await this.runCycle(sub, sub.nextRunAt, nextRunAt, claimBase)) created++;
+            claim = await this.claimDue(sub, claimBase);
+          } catch (err) {
+            // Chờ khoá quá hạn tx (khách đang giữ dòng gói), DB chập chờn: bỏ gói này đêm nay, các gói sau vẫn chạy.
+            this.logger.error(`Subscription ${sub.id} claim lỗi: ${err instanceof Error ? err.message : err}`);
+            continue;
+          }
+          if (!claim) continue; // instance khác đã claim, hoặc khách vừa đổi lịch/trạng thái
+          try {
+            if (await this.runCycle(claim.sub, sub.nextRunAt, claim.nextRunAt, claimBase)) created++;
           } catch (err) {
             this.logger.error(`Subscription ${sub.id} lỗi: ${err instanceof Error ? err.message : err}`);
           }
@@ -828,6 +826,28 @@ export class SubscriptionsService {
     } catch (err) {
       this.logger.error(`processDue lỗi: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  /**
+   * CLAIM một kỳ đến hạn: dời nextRunAt TRƯỚC khi tạo đơn, chỉ khi gói còn ACTIVE và nextRunAt vẫn là bản lúc quét, nên nhiều instance cron
+   * không ra đơn trùng. Khoá dòng gói (FOR UPDATE) trước bước so-và-dời, cùng thứ tự khoá với sửa/bỏ qua/đặt ngay: chu kỳ và lượt thử lại
+   * đọc từ bản đang khoá chứ không từ bản quét (trang 200 gói xử lý tuần tự, khách có thể đổi chu kỳ giữa lúc quét và lúc tới lượt).
+   */
+  private async claimDue(
+    scanned: { id: string; nextRunAt: Date },
+    claimBase: Date,
+  ): Promise<{ sub: { id: string; userId: string; retryCount: number; intervalWeeks: number }; nextRunAt: Date } | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await this.lockSubscription(tx, scanned.id);
+      if (!row || row.status !== 'ACTIVE') return null;
+      const nextRunAt = this.addWeeks(claimBase, row.intervalWeeks);
+      const claimed = await tx.subscription.updateMany({
+        where: { id: scanned.id, status: 'ACTIVE', nextRunAt: scanned.nextRunAt },
+        data: { nextRunAt },
+      });
+      if (claimed.count === 0) return null;
+      return { sub: { id: row.id, userId: row.userId, retryCount: row.retryCount, intervalWeeks: row.intervalWeeks }, nextRunAt };
+    });
   }
 
   /**
@@ -1130,7 +1150,7 @@ export class SubscriptionsService {
   private async lockSubscription(tx: Prisma.TransactionClient, id: string): Promise<LockedSubRow | null> {
     const rows = await tx.$queryRaw<LockedSubRow[]>`
       SELECT "id", "userId", "variationId", "quantity", "addressId", "status", "paymentMethod"::text AS "paymentMethod",
-             "intervalWeeks", "nextRunAt", "lastOrderId"
+             "intervalWeeks", "nextRunAt", "lastOrderId", "retryCount"
       FROM "subscriptions" WHERE "id" = ${id} FOR UPDATE`;
     return rows[0] ?? null;
   }

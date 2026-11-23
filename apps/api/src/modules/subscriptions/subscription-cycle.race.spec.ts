@@ -172,13 +172,16 @@ describe('SubscriptionsService cycle — race', () => {
     },
   );
 
-  it('khách bấm Bỏ qua kỳ chen với cron claim (quét thời điểm): bỏ qua thắng thì kỳ đó KHÔNG ra đơn, thua thì 409; không bao giờ báo đã bỏ qua mà đơn kỳ đó vẫn ra', async () => {
+  // Bỏ qua kỳ gửi kèm "Lần kế" thẻ đang hiện (W20-04 #3). Cron claim kỳ đó trước thì 409: trước đây máy chủ bỏ qua kỳ SAU (kỳ D+56) trong khi
+  // khách tưởng đã bỏ kỳ vừa ra đơn sáng nay.
+  it('khách bấm Bỏ qua kỳ (theo "Lần kế" đang hiện) chen với cron claim (quét thời điểm): bỏ qua thắng thì kỳ đó KHÔNG ra đơn, thua thì 409; không bao giờ bỏ qua kỳ sau khi kỳ đang hiện đã ra đơn', async () => {
     const seen = new Set<string>();
     for (let skew = -40; skew <= 40; skew++) {
       const { db, svc, orders, wallet, ledger, variation } = setup();
       const due = (db.row('subscription', 's1')!.nextRunAt as Date).getTime();
+      const shown = new Date(due).toISOString();
       const cron = async () => (await delay(Math.max(skew, 0)), svc.processDue());
-      const act = async () => (await delay(Math.max(-skew, 0)), svc.skipCycle('u1', 's1'));
+      const act = async () => (await delay(Math.max(-skew, 0)), svc.skipCycle('u1', 's1', shown));
       const [ranCron, skipped] = await Promise.allSettled([cron(), act()]);
       const label = `skew ${skew}`;
       is(label, ranCron.status, 'fulfilled');
@@ -187,22 +190,55 @@ describe('SubscriptionsService cycle — race', () => {
       const next = sub.nextRunAt.getTime();
       is(label, sub.status, 'ACTIVE');
       if (skipped.status === 'fulfilled') {
-        // Bỏ qua thắng cron: lịch dời một chu kỳ từ kỳ đến hạn và kỳ đó không ra đơn. Cron claim trước thì khách bỏ qua kỳ KẾ (một chu kỳ nữa).
-        if (n === 0) is(label, next, due + INTERVAL);
-        else is(label, next > Date.now() + 40 * DAY, true);
+        // Bỏ qua thắng cron: lịch dời một chu kỳ từ kỳ đến hạn và kỳ đó không ra đơn.
+        is(label, n, 0);
+        is(label, next, due + INTERVAL);
       } else {
         is(label, httpStatus(skipped), 409);
         is(label, n, 1);
         is(label, next > Date.now() + 20 * DAY && next < Date.now() + 40 * DAY, true); // chỉ có dời của cron claim
       }
-      is(label, n <= 1, true);
       is(label, wallet(), 500_000 - CYCLE_TOTAL * n);
       is(label, ledger().length, n);
       is(label, variation().stock, 10 - QTY * n);
       is(label, variation().reservedStock, QTY * n);
       seen.add(`${n} đơn, bỏ qua ${skipped.status}`);
     }
-    expect(seen).toEqual(new Set(['0 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua rejected']));
+    expect(seen).toEqual(new Set(['0 đơn, bỏ qua fulfilled', '1 đơn, bỏ qua rejected']));
+  });
+
+  it('chạm đúp "Bỏ qua kỳ này" cùng "Lần kế" (hai request song song): dời đúng MỘT chu kỳ, lần sau 409', async () => {
+    const { db, svc, orders } = setup();
+    const due = (db.row('subscription', 's1')!.nextRunAt as Date).getTime();
+    const shown = new Date(due).toISOString();
+    const results = await Promise.allSettled([svc.skipCycle('u1', 's1', shown), svc.skipCycle('u1', 's1', shown), svc.skipCycle('u1', 's1', shown)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected').map(httpStatus)).toEqual([409, 409]);
+    expect((db.row('subscription', 's1')!.nextRunAt as Date).getTime()).toBe(due + INTERVAL);
+    expect(orders()).toHaveLength(0);
+  });
+
+  // Bước claim khoá dòng gói rồi mới so-và-dời (W20-04 #4): chu kỳ của kỳ kế đọc dưới khoá, nên khách đổi chu kỳ chen giữa lúc quét và lúc claim
+  // thì kỳ kế luôn theo chu kỳ cuối cùng, và một kỳ vẫn chỉ ra MỘT đơn.
+  it('khách đổi chu kỳ (gói chưa ra đơn nào) chen với cron (quét thời điểm): một đơn, kỳ kế = 0h VN hôm nay + chu kỳ cuối cùng của gói', async () => {
+    const seen = new Set<number>();
+    for (let skew = -40; skew <= 40; skew++) {
+      const { db, svc, orders, wallet } = setup();
+      const cron = async () => (await delay(Math.max(skew, 0)), svc.processDue());
+      const act = async () => (await delay(Math.max(-skew, 0)), svc.update('u1', 's1', { intervalWeeks: 8 }));
+      const [ranCron, changed] = await Promise.allSettled([cron(), act()]);
+      const label = `skew ${skew}`;
+      is(label, ranCron.status, 'fulfilled');
+      is(label, changed.status, 'fulfilled');
+      is(label, orders().length, 1);
+      is(label, wallet(), 500_000 - CYCLE_TOTAL);
+      const sub = db.row('subscription', 's1')!;
+      is(label, sub.intervalWeeks, 8);
+      const dayStart = new Date(`${vnDateKey(new Date())}T00:00:00+07:00`).getTime();
+      is(label, (sub.nextRunAt as Date).getTime(), dayStart + 8 * 7 * DAY);
+      seen.add((sub.nextRunAt as Date).getTime());
+    }
+    expect(seen.size).toBe(1);
   });
 
   // Dời ngày giao kỳ tới (PATCH nextRunDate) gửi kèm "Lần kế" đang hiện. Cron đã claim kỳ đó (nextRunAt sang kỳ sau) thì dời là 409; nếu

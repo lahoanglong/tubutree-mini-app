@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -19,8 +19,9 @@ const STEP_MS = INTERVAL_WEEKS * 7 * 864e5;
 const ROUNDS = 10;
 
 /**
- * Khách bỏ qua kỳ / tạm dừng gói đúng lúc cron 03:00 đang bốc gói (Postgres thật). Cả hai bên ghi CÓ ĐIỀU KIỆN theo bản vừa đọc
- * (trạng thái + nextRunAt), nên bên đến sau luôn thấy bản đã đổi và dừng: hoặc cron thắng (đúng một đơn, khách nhận 409 "Lịch giao
+ * Khách bỏ qua kỳ / tạm dừng gói đúng lúc cron 03:00 đang bốc gói (Postgres thật). Tạm dừng ghi CÓ ĐIỀU KIỆN theo bản vừa đọc (trạng thái +
+ * nextRunAt); bỏ qua kỳ khoá dòng gói và so với "Lần kế" thẻ đang hiện (`expectedNextRunAt`), cron khoá dòng gói trước bước claim. Bên đến sau
+ * luôn thấy bản đã đổi và dừng: hoặc cron thắng (đúng một đơn, khách nhận 409 "Lịch giao
  * vừa thay đổi", lịch chỉ dời một chu kỳ do cron), hoặc khách thắng (không đơn, không trừ tồn, cron bỏ qua gói). Mini dựa vào mã 409
  * này để tải lại danh sách gói và giữ khoá tới khi lịch mới về; lệch một trong hai (hai đơn, dời hai chu kỳ, "đã bỏ qua" mà vẫn ra
  * đơn) là lỗi tiền thật. Thứ tự chen giữa được ép bằng cách giữ lời đọc đầu của một bên cho tới khi bên kia chạy xong.
@@ -125,15 +126,11 @@ describe('Gói định kỳ: bỏ qua kỳ / tạm dừng ‖ cron processDue (r
   }
 
   describe('cron thắng: khách đọc bản cũ rồi cron bốc gói và ra đơn trước khi khách ghi', () => {
-    it('bỏ qua kỳ: 409 SCHEDULE_CHANGED, đúng một đơn, lịch dời đúng một chu kỳ do cron (không dời thêm lần hai), tồn trừ một lần', async () => {
-      const { u, v, sub } = await dueSub();
+    it('bỏ qua kỳ theo "Lần kế" thẻ đang hiện sau khi cron đã ra đơn kỳ đó: 409 SCHEDULE_CHANGED, đúng một đơn, lịch dời đúng một chu kỳ do cron (không dời thêm lần hai), tồn trừ một lần', async () => {
+      const { u, v, sub, dueAt } = await dueSub();
       const cronBase = new Date(`${vnDate(0)}T00:00:00+07:00`).getTime();
-      const hold = holdFirstRead(prisma.subscription, 'findUnique');
-      const skipping = subs.skipCycle(u.id, sub.id).catch((e: unknown) => e);
-      await hold.readDone;
       await subs.processDue();
-      hold.release();
-      const err = await skipping;
+      const err = await subs.skipCycle(u.id, sub.id, dueAt.toISOString()).catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(ConflictException);
       expect((err as ConflictException).message).toBe(SCHEDULE_CHANGED);
@@ -144,34 +141,43 @@ describe('Gói định kỳ: bỏ qua kỳ / tạm dừng ‖ cron processDue (r
       expect(after.sub.nextRunAt.getTime()).toBe(cronBase + STEP_MS);
     });
 
-    it('tạm dừng: 409 SCHEDULE_CHANGED, đúng một đơn, gói vẫn ACTIVE (lịch do cron dời giữ nguyên)', async () => {
-      const { u, v, sub } = await dueSub();
-      const hold = holdFirstRead(prisma.subscription, 'findUnique');
-      const pausing = subs.setStatus(u.id, sub.id, 'PAUSED').catch((e: unknown) => e);
-      await hold.readDone;
-      await subs.processDue();
-      hold.release();
-      const err = await pausing;
+    it('khách đang giữ khoá dòng gói (lệnh sửa lịch chưa commit) lúc cron tới lượt: cron chờ khoá, thấy lịch đã dời thì không ra đơn, không dời thêm', async () => {
+      const { v, sub, dueAt } = await dueSub();
+      const moved = new Date(dueAt.getTime() + STEP_MS);
+      let locked!: () => void;
+      let release!: () => void;
+      const lockedP = new Promise<void>((r) => (locked = r));
+      const gate = new Promise<void>((r) => (release = r));
+      const userTx = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT 1 FROM "subscriptions" WHERE "id" = ${sub.id} FOR UPDATE`;
+          locked();
+          await gate;
+          await tx.subscription.update({ where: { id: sub.id }, data: { nextRunAt: moved } });
+        },
+        { timeout: 15_000 },
+      );
+      await lockedP;
+      const cron = subs.processDue();
+      await new Promise((r) => setTimeout(r, 300));
+      expect((await state(sub.id, v.id)).orders).toBe(0);
+      release();
+      await userTx;
+      await cron;
 
-      expect(err).toBeInstanceOf(ConflictException);
-      expect((err as ConflictException).message).toBe(SCHEDULE_CHANGED);
       const after = await state(sub.id, v.id);
-      expect(after.orders).toBe(1);
-      expect(after.stock).toBe(49);
-      expect(after.sub.status).toBe('ACTIVE');
+      expect(after.orders).toBe(0);
+      expect(after.stock).toBe(50);
+      expect(after.sub.nextRunAt.getTime()).toBe(moved.getTime());
     });
 
     it('sau 409, thử lại với bản mới tải về thì thành công: bỏ qua kỳ dời thêm đúng một chu kỳ từ lịch của cron', async () => {
-      const { u, v, sub } = await dueSub();
-      const hold = holdFirstRead(prisma.subscription, 'findUnique');
-      const first = subs.skipCycle(u.id, sub.id).catch((e: unknown) => e);
-      await hold.readDone;
+      const { u, v, sub, dueAt } = await dueSub();
       await subs.processDue();
-      hold.release();
-      expect(await first).toBeInstanceOf(ConflictException);
+      expect(await subs.skipCycle(u.id, sub.id, dueAt.toISOString()).catch((e: unknown) => e)).toBeInstanceOf(ConflictException);
       const afterCron = await state(sub.id, v.id);
 
-      await subs.skipCycle(u.id, sub.id);
+      await subs.skipCycle(u.id, sub.id, afterCron.sub.nextRunAt.toISOString());
       const afterRetry = await state(sub.id, v.id);
       expect(afterRetry.orders).toBe(1);
       expect(afterRetry.sub.nextRunAt.getTime()).toBe(afterCron.sub.nextRunAt.getTime() + STEP_MS);
@@ -184,7 +190,7 @@ describe('Gói định kỳ: bỏ qua kỳ / tạm dừng ‖ cron processDue (r
       const hold = holdFirstRead(prisma.subscription, 'findMany');
       const cron = subs.processDue();
       await hold.readDone;
-      await subs.skipCycle(u.id, sub.id);
+      await subs.skipCycle(u.id, sub.id, dueAt.toISOString());
       hold.release();
       await cron;
 
@@ -230,41 +236,39 @@ describe('Gói định kỳ: bỏ qua kỳ / tạm dừng ‖ cron processDue (r
       expect(after.orders).toBe(0);
     });
 
-    it('bỏ qua kỳ trên bản cũ sau khi thiết bị kia đã tạm dừng gói: 409 SCHEDULE_CHANGED, gói vẫn PAUSED và lịch không dời', async () => {
+    it('bỏ qua kỳ trên thẻ cũ sau khi thiết bị kia đã tạm dừng gói: 400 "chỉ bỏ qua khi lịch đang chạy", gói vẫn PAUSED và lịch không dời', async () => {
       const { u, v, sub, dueAt } = await dueSub();
-      const hold = holdFirstRead(prisma.subscription, 'findUnique');
-      const skipping = subs.skipCycle(u.id, sub.id).catch((e: unknown) => e);
-      await hold.readDone;
       await subs.setStatus(u.id, sub.id, 'PAUSED');
-      hold.release();
-      const err = await skipping;
+      const err = await subs.skipCycle(u.id, sub.id, dueAt.toISOString()).catch((e: unknown) => e);
 
-      expect(err).toBeInstanceOf(ConflictException);
-      expect((err as ConflictException).message).toBe(SCHEDULE_CHANGED);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toBe('Chỉ bỏ qua kỳ khi lịch đang chạy.');
       const after = await state(sub.id, v.id);
       expect(after.sub.status).toBe('PAUSED');
-      expect(after.sub.nextRunAt.getTime()).toBe(dueAt.getTime());
       expect(after.orders).toBe(0);
     });
   });
 
   describe(`song song thật (${ROUNDS} vòng mỗi loại): chỉ có hai kết cục nhất quán`, () => {
-    it('bỏ qua kỳ ‖ cron: ba kết cục nhất quán (cron thắng + 409, khách thắng, khách đọc sau claim), lịch luôn dời đúng bội số chu kỳ', async () => {
+    it('bỏ qua kỳ (theo "Lần kế" đang hiện) ‖ cron: chỉ hai kết cục (cron thắng + 409, khách thắng), không bao giờ bỏ qua kỳ sau khi kỳ đang hiện đã ra đơn', async () => {
       for (let round = 0; round < ROUNDS; round++) {
         const { u, v, sub, dueAt } = await dueSub();
         const cronBase = new Date(`${vnDate(0)}T00:00:00+07:00`).getTime();
-        const results = await Promise.allSettled([subs.processDue(), subs.skipCycle(u.id, sub.id)]);
+        const results = await Promise.allSettled([subs.processDue(), subs.skipCycle(u.id, sub.id, dueAt.toISOString())]);
         const ctx = `vòng ${round}: ${summarize(results).errors.join(' | ')}`;
         const after = await state(sub.id, v.id);
         const skip = results[1];
         const next = after.sub.nextRunAt.getTime();
         if (after.orders === 0) {
           expect({ ctx, skip: skip.status, stock: after.stock, next }).toEqual({ ctx, skip: 'fulfilled', stock: 50, next: dueAt.getTime() + STEP_MS });
-        } else if (skip.status === 'rejected') {
-          expect({ ctx, stock: after.stock, msg: ((skip as PromiseRejectedResult).reason as Error).message, next }).toEqual({ ctx, stock: 49, msg: SCHEDULE_CHANGED, next: cronBase + STEP_MS });
         } else {
-          // Lời đọc của khách tới sau claim của cron: máy chủ không biết khách định bỏ kỳ nào nên dời kỳ SAU (đơn kỳ này đã ra). Tồn đọng đã ghi ở PR: Mini cần gửi kèm ngày kỳ định bỏ.
-          expect({ ctx, stock: after.stock, next }).toEqual({ ctx, stock: 49, next: cronBase + 2 * STEP_MS });
+          expect({ ctx, skip: skip.status, stock: after.stock, msg: ((skip as PromiseRejectedResult).reason as Error | undefined)?.message, next }).toEqual({
+            ctx,
+            skip: 'rejected',
+            stock: 49,
+            msg: SCHEDULE_CHANGED,
+            next: cronBase + STEP_MS,
+          });
         }
         expect({ ctx, orders: after.orders <= 1, status: after.sub.status }).toEqual({ ctx, orders: true, status: 'ACTIVE' });
       }

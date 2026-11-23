@@ -31,6 +31,10 @@ export class UpdateSubDto {
   /** `nextRunAt` của gói như màn hình đang hiện; bắt buộc khi gửi `nextRunDate`. Lệch bản trong DB (cron vừa ra đơn kỳ) thì 409. */
   @OptionalNotNull() @IsISO8601({ strict: true }) expectedNextRunAt?: string;
 }
+export class SkipSubDto {
+  /** `nextRunAt` của gói như thẻ đang hiện; bắt buộc (thiếu thì 400). Lệch bản trong DB (cron 03:00 vừa ra đơn kỳ đó) thì 409, không bỏ qua kỳ sau. */
+  @OptionalNotNull() @IsISO8601({ strict: true }) expectedNextRunAt?: string;
+}
 class StatusDto {
   @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status!: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
 }
@@ -66,8 +70,8 @@ export class SubscriptionsController {
   }
 
   @Post(':id/skip')
-  skipCycle(@CurrentUser('sub') userId: string, @Param('id') id: string) {
-    return this.subs.skipCycle(userId, id);
+  skipCycle(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: SkipSubDto) {
+    return this.subs.skipCycle(userId, id, dto?.expectedNextRunAt);
   }
 
   /** "Đặt kỳ này ngay": ra đơn kỳ tới ngay hôm nay, kỳ sau tính lại từ hôm nay. */
