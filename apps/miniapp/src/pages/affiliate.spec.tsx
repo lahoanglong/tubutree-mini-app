@@ -182,7 +182,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     expect(screen.getByText('Danh mục · Bếp')).toBeInTheDocument();
     expect(screen.getByText('Giờ vàng')).toBeInTheDocument();
     expect(screen.getByText('0 lượt bấm · Đích không còn, link mở Trang chủ')).toBeInTheDocument();
-    expect(screen.getByTestId('ctv-funnel')).toHaveTextContent('Tỉ lệ ra đơn 25% · 1 đơn / 4 lượt bấm');
+    expect(screen.getByTestId('ctv-funnel')).toHaveTextContent('Tỉ lệ ra đơn chung 25% · 1 đơn / 4 lượt bấm');
     const copies = screen.getAllByRole('button', { name: 'Sao chép' });
     expect(copies).toHaveLength(4);
     for (const b of copies) fireEvent.click(b);

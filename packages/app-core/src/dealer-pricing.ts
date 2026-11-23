@@ -122,5 +122,5 @@ export function dealerQuoteText(
     return `- ${title} (${r.sku}): ${opts.money(r.dealerPrice)}${retail}${stock}`;
   });
   const rest = rows.length - body.length;
-  return [head, ...body, ...(rest > 0 ? [`… và ${rest} mặt hàng khác (tải file CSV để xem đủ).`] : [])].join('\n');
+  return [head, ...body, ...(rest > 0 ? [`Còn ${rest} mặt hàng khác (tải file CSV để xem đủ).`] : [])].join('\n');
 }

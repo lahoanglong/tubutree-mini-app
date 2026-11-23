@@ -78,14 +78,21 @@ describe('affiliateLinkTitle / affiliateLinkCaption', () => {
     );
     expect(affiliateLinkCaption({ ...link(), clicks: 12 })).not.toMatch(/đơn/);
   });
+
+  it('sản phẩm bị tắt hoa hồng sau khi tạo link: dòng phụ báo rõ; đích đã mất thì báo mở Trang chủ trước', () => {
+    const product = link({ targetType: 'PRODUCT', targetSlug: 'sp', targetCommissionBlocked: true });
+    expect(affiliateLinkCaption({ ...product, clicks: 2 })).toBe('2 lượt bấm · Sản phẩm không còn tính hoa hồng');
+    expect(affiliateLinkCaption({ ...product, targetAvailable: false, clicks: 2 })).toBe('2 lượt bấm · Đích không còn, link mở Trang chủ');
+    expect(affiliateLinkCaption({ ...link({ targetCommissionBlocked: true }), clicks: 2 })).toBe('2 lượt bấm');
+  });
 });
 
 describe('ctvFunnel / ctvFunnelLine', () => {
   it('tỉ lệ = đơn / lượt bấm, một chữ số thập phân, dấu phẩy thập phân', () => {
     const f = ctvFunnel({ totalClicks: 340, totalConversions: 12 });
     expect(f).toEqual({ clicks: 340, orders: 12, ratePct: 3.5 });
-    expect(ctvFunnelLine(f)).toBe('Tỉ lệ ra đơn 3,5% · 12 đơn / 340 lượt bấm');
-    expect(ctvFunnelLine(ctvFunnel({ totalClicks: 4, totalConversions: 4 }))).toBe('Tỉ lệ ra đơn 100% · 4 đơn / 4 lượt bấm');
+    expect(ctvFunnelLine(f)).toBe('Tỉ lệ ra đơn chung 3,5% · 12 đơn / 340 lượt bấm');
+    expect(ctvFunnelLine(ctvFunnel({ totalClicks: 4, totalConversions: 4 }))).toBe('Tỉ lệ ra đơn chung 100% · 4 đơn / 4 lượt bấm');
   });
 
   it('chưa có lượt bấm, hoặc đơn nhiều hơn lượt bấm (đơn từ gian hàng/mã): không nêu phần trăm', () => {

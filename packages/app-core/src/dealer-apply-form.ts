@@ -16,18 +16,22 @@ export type DealerApplyDraft = Partial<Record<DealerDraftField, string>>;
 /** Trần mỗi ô khi đọc lại nháp (cao hơn trần DTO): chuỗi lạ trong storage không làm phình ô nhập. */
 const DRAFT_FIELD_MAX = 300;
 
-/** Nháp để ghi; mọi ô trống thì null (nơi gọi xoá khoá thay vì lưu một nháp rỗng). */
-export function serializeDealerApplyDraft(form: Partial<Record<DealerDraftField, string | null | undefined>>): string | null {
+/**
+ * Nháp để ghi; mọi ô trống thì null (nơi gọi xoá khoá thay vì lưu một nháp rỗng). `owner` là id tài khoản đang gõ: người khác đăng nhập cùng tab
+ * thì không thấy tên doanh nghiệp, MST, SĐT của người trước.
+ */
+export function serializeDealerApplyDraft(form: Partial<Record<DealerDraftField, string | null | undefined>>, owner = ''): string | null {
   const draft: DealerApplyDraft = {};
   for (const k of DEALER_DRAFT_FIELDS) {
     const v = form[k];
     if (typeof v === 'string' && v.trim()) draft[k] = v.slice(0, DRAFT_FIELD_MAX);
   }
-  return Object.keys(draft).length > 0 ? JSON.stringify(draft) : null;
+  if (Object.keys(draft).length === 0) return null;
+  return JSON.stringify(owner ? { ...draft, owner } : draft);
 }
 
-/** Đọc nháp: JSON hỏng, sai kiểu hay ô lạ đều bị bỏ, không bao giờ ném lỗi. */
-export function parseDealerApplyDraft(raw: string | null | undefined): DealerApplyDraft {
+/** Đọc nháp của đúng `owner`: nháp của tài khoản khác, JSON hỏng, sai kiểu hay ô lạ đều bị bỏ, không bao giờ ném lỗi. */
+export function parseDealerApplyDraft(raw: string | null | undefined, owner = ''): DealerApplyDraft {
   if (!raw) return {};
   let data: unknown;
   try {
@@ -36,6 +40,8 @@ export function parseDealerApplyDraft(raw: string | null | undefined): DealerApp
     return {};
   }
   if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  const savedOwner = (data as Record<string, unknown>).owner;
+  if ((typeof savedOwner === 'string' ? savedOwner : '') !== owner) return {};
   const out: DealerApplyDraft = {};
   for (const k of DEALER_DRAFT_FIELDS) {
     const v = (data as Record<string, unknown>)[k];
@@ -70,7 +76,8 @@ export function dealerTaxCodeHint(raw: string, touched: boolean): string | null 
 /** Lời gợi ý dưới ô SĐT: báo sớm khi đã gõ từ 10 số hoặc có chữ cái; sau khi rời ô thì báo mọi giá trị sai. Ô trống để kiểm bắt buộc lo. */
 export function dealerPhoneHint(raw: string, touched: boolean): string | null {
   if (!raw.trim() || parseVnBusinessPhone(raw)) return null;
-  const early = raw.replace(/\D/g, '').length >= 10 || /[^\d\s.+()\-]/.test(raw);
+  // Đếm số sau khi đổi đầu 84 thành 0 (như máy chủ): "+84 912 345 67" mới 9 số nội địa, còn đang gõ dở.
+  const early = raw.replace(/\D/g, '').replace(/^84/, '0').length >= 10 || /[^\d\s.+()\-]/.test(raw);
   return touched || early ? DEALER_PHONE_HINT : null;
 }
 

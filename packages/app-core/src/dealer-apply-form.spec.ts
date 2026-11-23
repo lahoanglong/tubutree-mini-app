@@ -42,6 +42,14 @@ describe('nháp đăng ký đại lý', () => {
     });
   });
 
+  it('nháp gắn với tài khoản: tài khoản khác (hoặc phiên chưa đăng nhập) đọc ra rỗng', () => {
+    const raw = serializeDealerApplyDraft({ businessName: 'Tạp hoá Xanh', taxCode: '0312345678' }, 'u1');
+    expect(parseDealerApplyDraft(raw, 'u1')).toEqual({ businessName: 'Tạp hoá Xanh', taxCode: '0312345678' });
+    expect(parseDealerApplyDraft(raw, 'u2')).toEqual({});
+    expect(parseDealerApplyDraft(raw)).toEqual({});
+    expect(parseDealerApplyDraft(serializeDealerApplyDraft({ businessName: 'A' }), 'u1')).toEqual({});
+  });
+
   it('ghi rồi đọc lại ra đúng nháp', () => {
     const form = { businessName: 'A', taxCode: '0312345678', ownerName: 'B', phone: '0912 345 678', address: 'C' };
     expect(parseDealerApplyDraft(serializeDealerApplyDraft(form))).toEqual(form);
@@ -66,6 +74,8 @@ describe('SĐT doanh nghiệp (cùng luật API)', () => {
     expect(dealerPhoneHint('09123', true)).toBe(DEALER_PHONE_HINT);
     expect(dealerPhoneHint('0112345678', false)).toBe(DEALER_PHONE_HINT);
     expect(dealerPhoneHint('09a', false)).toBe(DEALER_PHONE_HINT);
+    expect(dealerPhoneHint('+84 912 345 67', false)).toBeNull();
+    expect(dealerPhoneHint('+84 112 345 678', false)).toBe(DEALER_PHONE_HINT);
   });
 });
 
