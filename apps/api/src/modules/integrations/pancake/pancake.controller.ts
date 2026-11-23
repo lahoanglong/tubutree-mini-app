@@ -1,10 +1,22 @@
-import { Controller, Get, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../../common/staff-permissions';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { PancakeSyncService } from './pancake-sync.service';
 import { PancakeOrderService } from './pancake-order.service';
 import { pancakeErrorText } from './pancake-outbound';
+import { BULK_RETRY_MAX } from './pancake-bulk-retry';
+
+export class BulkPushRetryDto {
+  @IsArray({ message: 'Danh sách đơn cần đẩy lại không hợp lệ.' })
+  @ArrayNotEmpty({ message: 'Chọn ít nhất một đơn để đẩy lại.' })
+  @ArrayMaxSize(BULK_RETRY_MAX, { message: `Mỗi lần đẩy lại tối đa ${BULK_RETRY_MAX} đơn.` })
+  @IsString({ each: true, message: 'Mã đơn cần đẩy lại không hợp lệ.' })
+  @MaxLength(64, { each: true, message: 'Mã đơn cần đẩy lại không hợp lệ.' })
+  ids!: string[];
+}
 
 @Controller('admin/pancake')
 export class PancakeController {
@@ -65,5 +77,17 @@ export class PancakeController {
   @Post('orders/:id/push')
   retryPush(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
     return this.orders.retryPushByAdmin(adminId, id);
+  }
+
+  /**
+   * "Đẩy lại đơn tạm lỗi" ở Sức khoẻ hệ thống (một đơn hoặc cả danh sách đơn kẹt đang hiện): chỉ đơn lỗi tạm (TRANSIENT/CONFIG_RECHECK),
+   * chưa quá hạn tự đẩy, và qua đủ cổng đẩy như nút ở chi tiết đơn. Trả kết quả từng đơn; đơn bị từ chối không chặn đơn khác.
+   */
+  @Roles('ADMIN')
+  @AllowStaff('KHO')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post('orders/push-retry')
+  retryPushMany(@CurrentUser('sub') adminId: string, @Body() body: BulkPushRetryDto) {
+    return this.orders.retryManyByAdmin(adminId, body.ids);
   }
 }

@@ -10,6 +10,7 @@ import {
   recomputeSoldCounts,
   resolveGomdonAlert,
   retryOpsWebhookEvent,
+  retryStuckPancakePushes,
   runPancakeSync,
   sendOpsTestEmail,
   type OpsCronJob,
@@ -24,7 +25,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
 import { PANCAKE_FORBIDDEN_GUIDE, pancakeStaleGuideText } from './pancake-sync';
-import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError, ToneBadge } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { failingCronJobs, recomputeSoldMessage } from './ops-health-crons';
 import {
@@ -302,7 +303,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
 export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
-  const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
   const q = useQuery({ queryKey: OPS_HEALTH_KEY, queryFn: getOpsHealth, refetchInterval: 60_000 });
   const done = (text: string) => {
     setMsg({ tone: 'success', text });
@@ -320,6 +321,29 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
     setMsg(null);
     run()
       .then((r) => done((r as { message?: string } | null)?.message ?? ok))
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+  /** "Đẩy lại đơn tạm lỗi": một đơn thì đẩy ngay (một chạm), nhiều đơn thì hỏi trước. API tự chặn đơn không đủ điều kiện và nói lý do. */
+  const askRetryPush = async (orders: OpsStuckOrder[]) => {
+    if (orders.length === 0) return;
+    if (orders.length > 1) {
+      const ok = await confirm({
+        title: `Đẩy lại ${orders.length} đơn tạm lỗi?`,
+        message:
+          'Chỉ đơn Pancake tạm lỗi, chưa quá hạn tự đẩy. Hệ thống tra mã đơn trên Pancake trước khi tạo nên không tạo trùng đơn kho; đơn không đủ điều kiện được bỏ qua kèm lý do.',
+        confirmLabel: 'Đẩy lại',
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    setMsg(null);
+    retryStuckPancakePushes(orders.map((o) => o.id))
+      .then((r) => {
+        // Có đơn bị từ chối thì không báo xanh: vàng khi còn đơn được xếp lệnh, đỏ khi không đơn nào.
+        setMsg({ tone: r.skipped === 0 ? 'success' : r.queued > 0 ? 'warning' : 'danger', text: r.message });
+        void qc.invalidateQueries({ queryKey: OPS_HEALTH_KEY });
+      })
       .catch(fail)
       .finally(() => setBusy(false));
   };
@@ -404,6 +428,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
           onRetry={(e) => act(() => retryOpsWebhookEvent(e.source, e.id), 'Đã đưa sự kiện vào hàng đợi xử lý lại.')}
           onDismiss={(e) => void askDismiss(e)}
           onCloseAlert={(id, code) => void askCloseAlert(id, code)}
+          onRetryPush={(orders) => void askRetryPush(orders)}
         />
       )}
 
@@ -624,6 +649,7 @@ function HealthBody({
   onRetry,
   onDismiss,
   onCloseAlert,
+  onRetryPush,
 }: {
   h: OpsHealth;
   onOpenOrder?: (code: string) => void;
@@ -632,6 +658,7 @@ function HealthBody({
   onRetry: (e: OpsWebhookEvent) => void;
   onDismiss: (e: OpsWebhookEvent) => void;
   onCloseAlert: (id: string, orderCode: string) => void;
+  onRetryPush: (orders: OpsStuckOrder[]) => void;
 }) {
   const t = h.thresholds;
   const events = [...h.pancake.failedEvents, ...h.gomdon.failedEvents];
@@ -645,6 +672,8 @@ function HealthBody({
   const gomdonLoginError = newer(h.gomdon.connection?.lastErrorAt, h.gomdon.connection?.lastOkAt);
   const failingCrons = failingCronJobs(h);
   const znsProblem = h.problems.some((p) => p.key === 'zns.failed');
+  const retryable = h.pancake.stuckOrders.filter((o) => o.bulkRetry === true);
+  const staleShown = h.orders?.deliveredEffectsOrders.filter((o) => o.stale === true).length ?? 0;
   return (
     <>
       {failingCrons.length > 0 && (
@@ -960,26 +989,42 @@ function HealthBody({
       {h.orders && h.orders.deliveredEffectsOrders.length > 0 && (
         <ListSection title={`Đơn đã giao chưa xong việc sau giao (${h.orders.deliveredEffectsPending})`}>
           {h.orders.deliveredEffectsOrders.map((o) => (
-            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-delivered-effects={o.code} data-stale={o.stale ? 'true' : undefined}>
               <span className="min-w-0">
                 <b className="text-stone-900">{o.code}</b>
                 {o.deliveredAt && <span className="text-xs text-stone-500"> · giao {formatDateTime(o.deliveredAt)}</span>}
+                {o.stale && (
+                  <span className="ml-1.5 inline-block align-middle">
+                    <ToneBadge tone="warning">Không tự chạy lại</ToneBadge>
+                  </span>
+                )}
               </span>
               {openOrder(o.code)}
             </li>
           ))}
-          <li className="py-2 text-xs text-stone-500">
-            Mở đơn rồi bấm “Chạy lại việc sau giao” (chỉ ADMIN). Đơn giao quá cửa sổ cron ({h.orders.deliveredEffectsStale} đơn) không tự chạy lại.
+          <li className="py-2 text-xs text-stone-500" data-delivered-effects-hint>
+            Mở đơn rồi bấm “Chạy lại việc sau giao” (chỉ ADMIN).
+            {h.orders.deliveredEffectsStale > 0
+              ? ` ${h.orders.deliveredEffectsStale} đơn giao quá cửa sổ cron không tự chạy lại${h.orders.deliveredEffectsStale > staleShown ? ` (hiện ${staleShown} cũ nhất)` : ''}: mở từng đơn có nhãn “Không tự chạy lại”.`
+              : ' Đơn còn trong cửa sổ cron được hệ thống tự chạy lại.'}
           </li>
         </ListSection>
       )}
 
       {h.pancake.stuckOrders.length > 0 && (
         <section aria-label="Đơn kẹt" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <h3 className="font-display text-sm font-semibold text-stone-900">
-            Đơn kẹt chưa lên Pancake ({h.pancake.stuck}
-            {h.pancake.stuck > h.pancake.stuckOrders.length ? `, hiện ${h.pancake.stuckOrders.length} cũ nhất` : ''})
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-display text-sm font-semibold text-stone-900">
+              Đơn kẹt chưa lên Pancake ({h.pancake.stuck}
+              {h.pancake.stuck > h.pancake.stuckOrders.length ? `, hiện ${h.pancake.stuckOrders.length} cũ nhất` : ''})
+            </h3>
+            {retryable.length > 1 && (
+              <button type="button" disabled={busy} onClick={() => onRetryPush(retryable)} className={`${BTN_XS_SECONDARY} inline-flex items-center gap-1`} data-retry-all>
+                <RefreshCw aria-hidden="true" className="h-3 w-3" />
+                Đẩy lại {retryable.length} đơn tạm lỗi
+              </button>
+            )}
+          </div>
           <ul className="mt-2 divide-y divide-stone-100 text-sm">
             {h.pancake.stuckOrders.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
@@ -989,7 +1034,21 @@ function HealthBody({
                   {stuckHint(o) && <span className="block text-xs font-medium text-stone-700">{stuckHint(o)}</span>}
                   {o.pancakeSyncError && <span className="block break-words text-xs text-danger-fg">{o.pancakeSyncError}</span>}
                 </span>
-                {openOrder(o.code)}
+                <span className="flex shrink-0 items-center gap-3">
+                  {o.bulkRetry === true && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onRetryPush([o])}
+                      className={BTN_XS_SECONDARY}
+                      aria-label={`Đẩy lại đơn ${o.code} sang Pancake`}
+                      data-retry-one={o.code}
+                    >
+                      Đẩy lại
+                    </button>
+                  )}
+                  {openOrder(o.code)}
+                </span>
               </li>
             ))}
           </ul>

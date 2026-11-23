@@ -1078,3 +1078,95 @@ describe('recomputeSoldMessage', () => {
     expect(recomputeSoldMessage({} as typeof old)).toBe('Số đã bán đã đúng, không sản phẩm nào cần đổi.');
   });
 });
+
+describe('OpsHealthTab — đẩy lại đơn tạm lỗi và đơn giao quá cửa sổ cron (W22-02)', () => {
+  const stuck = (id: string, code: string, over: Record<string, unknown> = {}) => ({
+    ...HEALTH.pancake.stuckOrders[0]!,
+    id,
+    code,
+    pancakeErrorKind: 'TRANSIENT',
+    pancakeRetry: 'NOW',
+    bulkRetry: true,
+    ...over,
+  });
+  const health = (stuckOrders: unknown[], orders?: unknown) => ({
+    ...HEALTH,
+    problems: [],
+    pancake: { ...HEALTH.pancake, stuck: stuckOrders.length, stuckOrders },
+    ...(orders ? { orders } : {}),
+  });
+  const bodyOf = (call: { init?: RequestInit }) => JSON.parse(String(call.init?.body)) as { ids: string[] };
+
+  it('chỉ đơn API đánh dấu bulkRetry có nút "Đẩy lại"; một chạm gọi API với đúng một id, không hỏi', async () => {
+    const api = mockFetch({
+      '/admin/ops/health': { body: health([stuck('o1', 'TB-1'), stuck('o2', 'TB-DATA', { pancakeErrorKind: 'DATA', bulkRetry: false })]) },
+      '/admin/pancake/orders/push-retry': { body: { ok: true, queued: 1, skipped: 0, results: [{ id: 'o1', ok: true, message: 'x' }], message: 'Đã xếp lệnh đẩy 1/1 đơn sang Pancake.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    expect([...c.querySelectorAll('[data-retry-one]')].map((b) => b.getAttribute('data-retry-one'))).toEqual(['TB-1']);
+    expect(c.querySelector('[data-retry-all]')).toBeNull();
+    click(c.querySelector('[data-retry-one="TB-1"]'));
+    await flush(6);
+    expect(confirmDialog()).toBeNull();
+    const call = api.calls.find((x) => x.url.includes('/admin/pancake/orders/push-retry'))!;
+    expect(call.init?.method).toBe('POST');
+    expect(bodyOf(call)).toEqual({ ids: ['o1'] });
+    expect(c.textContent).toContain('Đã xếp lệnh đẩy 1/1 đơn sang Pancake.');
+    expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+
+  it('từ 2 đơn đủ điều kiện: nút "Đẩy lại N đơn tạm lỗi" hỏi trước; huỷ thì không gọi; đồng ý thì gửi đúng các id đủ điều kiện', async () => {
+    const api = mockFetch({
+      '/admin/ops/health': { body: health([stuck('o1', 'TB-1'), stuck('o2', 'TB-STALE', { pancakePushStatus: 'STALE', bulkRetry: false }), stuck('o3', 'TB-3', { pancakeErrorKind: 'CONFIG_RECHECK' })]) },
+      '/admin/pancake/orders/push-retry': {
+        body: { ok: true, queued: 0, skipped: 2, results: [], message: 'Không đơn nào được xếp lệnh đẩy. Đơn TB-1 đang được đẩy sang Pancake.' },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    const all = c.querySelector('[data-retry-all]')!;
+    expect(all.textContent).toBe('Đẩy lại 2 đơn tạm lỗi');
+    click(all);
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Đẩy lại 2 đơn tạm lỗi?');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((x) => x.url.includes('push-retry'))).toBe(false);
+    click(all);
+    await flush();
+    answerConfirm(true);
+    await flush(6);
+    expect(bodyOf(api.calls.find((x) => x.url.includes('push-retry'))!)).toEqual({ ids: ['o1', 'o3'] });
+    // Không đơn nào được xếp lệnh: báo bằng vai lỗi để người bấm đọc lý do.
+    const alert = [...c.querySelectorAll('[role="alert"]')].find((e) => e.textContent?.includes('Không đơn nào được xếp lệnh đẩy'));
+    expect(alert?.textContent).toContain('Đơn TB-1 đang được đẩy sang Pancake.');
+  });
+
+  it('API cũ chưa trả bulkRetry: không hiện nút đẩy lại nào', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health([{ ...HEALTH.pancake.stuckOrders[0]! }]) } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    expect(c.querySelector('[data-retry-one], [data-retry-all]')).toBeNull();
+  });
+
+  it('đơn giao quá cửa sổ cron có nhãn "Không tự chạy lại" và nút mở đúng đơn; câu dưới nêu số đơn phải chạy tay', async () => {
+    const orders = {
+      deliveredEffectsPending: 3,
+      deliveredEffectsStale: 2,
+      deliveredEffectsOrders: [
+        { id: 'd1', code: 'TB-OLD', deliveredAt: '2026-09-20T03:00:00.000Z', stale: true },
+        { id: 'd2', code: 'TB-NEW', deliveredAt: '2026-10-13T03:00:00.000Z', stale: false },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: health([], orders) } }).fn));
+    const onOpenOrder = vi.fn();
+    const c = await mount(<OpsHealthTab onOpenOrder={onOpenOrder} />);
+    const old = c.querySelector('[data-delivered-effects="TB-OLD"]')!;
+    expect(old.getAttribute('data-stale')).toBe('true');
+    expect(old.textContent).toContain('Không tự chạy lại');
+    expect(c.querySelector('[data-delivered-effects="TB-NEW"]')!.textContent).not.toContain('Không tự chạy lại');
+    click(old.querySelector('button'));
+    expect(onOpenOrder).toHaveBeenCalledWith('TB-OLD');
+    expect(c.querySelector('[data-delivered-effects-hint]')!.textContent).toContain('2 đơn giao quá cửa sổ cron không tự chạy lại (hiện 1 cũ nhất)');
+  });
+});

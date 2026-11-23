@@ -16,7 +16,8 @@ import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { hasGomdonCredentials } from '../integrations/gomdon/gomdon-config';
 import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/pancake-webhook-dedupe';
 import { PUSH_ERROR_KIND } from '../integrations/pancake/pancake-push-error';
-import { pushRetryGateDecision } from '../integrations/pancake/pancake-order.service';
+import { PANCAKE_PUSH, PancakeOrderService, pushRetryGateDecision } from '../integrations/pancake/pancake-order.service';
+import { bulkRetryRefusal } from '../integrations/pancake/pancake-bulk-retry';
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { MssHealthService, type MssOpsCard } from '../integrations/mss/mss-health.service';
@@ -455,7 +456,8 @@ export class OpsHealthService {
             pancakeLastAttemptAt: true,
             pancakeSyncError: true,
             pancakeErrorKind: true,
-            // Chỉ để tính cờ "Đẩy lại Pancake" (pushRetryGateDecision cần đủ cột của cổng đẩy); không trả ra ngoài.
+            // Chỉ để tính cờ "Đẩy lại Pancake" (pushRetryGateDecision cần đủ cột của cổng đẩy; dấu gửi cho cửa sổ chờ lệnh tạo); không trả ra ngoài.
+            pancakePushClaimedAt: true,
             type: true,
             fulfiller: true,
             paymentMethod: true,
@@ -484,10 +486,24 @@ export class OpsHealthService {
         }),
       ]);
     // Cùng vị từ với retryPushByAdmin và danh sách đơn của admin: web chọn câu hướng dẫn STALE theo cờ, không tự suy lại từ cột.
-    const stuckOrders = stuckRows.map(({ type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items, ...shown }) => {
-      const retry = pushRetryGateDecision({ ...shown, pancakeOrderId: null, type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items });
-      return { ...shown, pancakeRetry: retry.kind, pancakeRetryWaitingFor: retry.kind === 'WAIT' ? retry.waitingFor : null };
-    });
+    // `bulkRetry`: nút "Đẩy lại đơn tạm lỗi" nhận đơn này (cổng đẩy NOW + lỗi tạm + chưa quá hạn tự đẩy, cùng `retryPushByAdmin(…, { bulk })`).
+    const configured = this.pancakeConfigured();
+    const nowMs = now.getTime();
+    const stuckOrders = stuckRows.map(
+      ({ type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items, pancakePushClaimedAt, ...shown }) => {
+        const retry = pushRetryGateDecision({ ...shown, pancakeOrderId: null, type, fulfiller, paymentMethod, paymentStatus, hasRecyclingPickup, gomdonOrderId, gomdonPartnerCode, gomdonStatus, items });
+        // Cùng hai điều kiện môi trường `retryPushByAdmin` xét: lượt đẩy còn giữ quyền, hoặc lệnh tạo vừa gửi còn trong cửa sổ chờ → nút bấm chỉ nhận 409.
+        const inFlight =
+          shown.pancakePushStatus === PANCAKE_PUSH.PUSHING && shown.pancakeLastAttemptAt != null && nowMs - shown.pancakeLastAttemptAt.getTime() < PancakeOrderService.PUSH_LEASE_MS;
+        const settling = pancakePushClaimedAt != null && nowMs - pancakePushClaimedAt.getTime() <= PancakeOrderService.SEND_SETTLE_MS;
+        return {
+          ...shown,
+          pancakeRetry: retry.kind,
+          pancakeRetryWaitingFor: retry.kind === 'WAIT' ? retry.waitingFor : null,
+          bulkRetry: configured && retry.kind === 'NOW' && !inFlight && !settling && bulkRetryRefusal(shown) === null,
+        };
+      },
+    );
     const pushErrors = tallyPushErrors(pushErrorGroups);
     const lastWebhook = lastByStatus.reduce<Date | null>((m, r) => (r && (!m || r.receivedAt > m) ? r.receivedAt : m), null);
     const failedRefs = await this.pancakeEventRefs(failedEvents.map((e) => e.id));
@@ -498,7 +514,7 @@ export class OpsHealthService {
       detail: catalog?.detail ?? null,
     };
     return {
-      configured: this.pancakeConfigured(),
+      configured,
       lastPushOkAt: lastPush[0]?.at?.toISOString() ?? null,
       lastWebhookAt: lastWebhook?.toISOString() ?? null,
       lastWebhookProcessedAt: (lastProcessed?.processedAt ?? lastProcessed?.receivedAt)?.toISOString() ?? null,
@@ -639,7 +655,7 @@ export class OpsHealthService {
 
   private async orderHealth(now: Date) {
     const where = deliveredEffectsPendingWhere(now);
-    const [deliveredEffectsPending, deliveredEffectsStale, deliveredEffectsOrders] = await Promise.all([
+    const [deliveredEffectsPending, deliveredEffectsStale, rows] = await Promise.all([
       this.prisma.order.count({ where }),
       this.prisma.order.count({ where: deliveredEffectsStaleWhere(now) }),
       this.prisma.order.findMany({
@@ -649,6 +665,10 @@ export class OpsHealthService {
         select: { id: true, code: true, deliveredAt: true },
       }),
     ]);
+    // `stale`: giao quá cửa sổ cron (cùng mốc với deliveredEffectsStaleWhere) nên không bao giờ tự chạy lại; web gắn nhãn để mở đúng đơn chạy tay.
+    // Danh sách xếp giao cũ nhất trước, nên các đơn quá cửa sổ luôn đứng đầu.
+    const staleBefore = now.getTime() - DELIVERED_EFFECTS_WINDOW_DAYS * 86_400_000;
+    const deliveredEffectsOrders = rows.map((o) => ({ ...o, stale: o.deliveredAt !== null && o.deliveredAt.getTime() < staleBefore }));
     return { deliveredEffectsPending, deliveredEffectsStale, deliveredEffectsOrders };
   }
 

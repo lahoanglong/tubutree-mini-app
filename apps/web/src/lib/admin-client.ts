@@ -680,6 +680,20 @@ export const resolvePaymentUnlinked = (orderId: string, note: string, seenAt: st
     body: { note: note.trim().slice(0, PANCAKE_RESOLVE_NOTE_MAX), seenAt },
   });
 
+/** Mỗi lần "Đẩy lại đơn tạm lỗi" nhận tối đa bấy nhiêu đơn (`BULK_RETRY_MAX` ở API, bằng số đơn kẹt màn Sức khoẻ hệ thống liệt kê). */
+export const PANCAKE_BULK_RETRY_MAX = 20;
+export interface PancakeBulkRetryResult {
+  ok: boolean;
+  queued: number;
+  skipped: number;
+  results: { id: string; ok: boolean; message: string }[];
+  /** Câu tổng đã gồm tối đa 3 lời từ chối đầu (mỗi lời nêu mã đơn). */
+  message: string;
+}
+/** POST /admin/pancake/orders/push-retry — "Đẩy lại đơn tạm lỗi" (ADMIN, KHO): API chỉ nhận đơn lỗi tạm qua đủ cổng đẩy, trả kết quả từng đơn. */
+export const retryStuckPancakePushes = (orderIds: readonly string[]) =>
+  apiFetch<PancakeBulkRetryResult>('/admin/pancake/orders/push-retry', { method: 'POST', body: { ids: orderIds.slice(0, PANCAKE_BULK_RETRY_MAX) } });
+
 /** POST /admin/pancake/orders/:id/push — "Đẩy lại Pancake" cho đơn chưa lên kho (API tự chặn đơn huỷ/đã rời kho). */
 export const retryPancakePush = (orderId: string) =>
   apiFetch<{ ok: boolean; message: string }>(`/admin/pancake/orders/${encodeURIComponent(orderId)}/push`, { method: 'POST' });
@@ -2123,6 +2137,8 @@ export interface OpsStuckOrder {
   pancakeRetry?: 'NOW' | 'WAIT' | 'NEVER' | null;
   /** Việc đơn đang chờ khi pancakeRetry = WAIT. */
   pancakeRetryWaitingFor?: string | null;
+  /** Nút "Đẩy lại" (một chạm, hàng loạt) nhận đơn này: lỗi tạm TRANSIENT/CONFIG_RECHECK, cổng đẩy NOW, chưa quá hạn tự đẩy. Thiếu = API cũ. */
+  bulkRetry?: boolean;
 }
 export interface OpsQueueRow {
   name: string;
@@ -2248,7 +2264,8 @@ export interface OpsHealth {
   orders?: {
     deliveredEffectsPending: number;
     deliveredEffectsStale: number;
-    deliveredEffectsOrders: { id: string; code: string; deliveredAt: string | null }[];
+    /** `stale`: giao quá cửa sổ cron nên không tự chạy lại, phải mở đơn chạy tay. Thiếu = API cũ. */
+    deliveredEffectsOrders: { id: string; code: string; deliveredAt: string | null; stale?: boolean }[];
   };
   /** Tin ZNS ghi FAILED trong 24 giờ qua. Tuỳ chọn: API cũ chưa trả trường này. */
   zns?: { failed24h: number; topError: string | null };

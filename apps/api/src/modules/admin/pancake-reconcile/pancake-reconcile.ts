@@ -5,6 +5,8 @@ export const RECONCILE_DRIFT_DEFAULT = 3;
 export const RECONCILE_DRIFT_MAX = 10_000;
 /** Bảng chỉ trả bấy nhiêu dòng lệch nặng nhất; số đếm ở đầu bảng vẫn tính trên mọi biến thể. */
 export const RECONCILE_ROWS_MAX = 300;
+/** Ô tìm SKU / tên sản phẩm: dài hơn thì API từ chối (không ai gõ mã dài vậy, chặn chuỗi rác). */
+export const RECONCILE_SEARCH_MAX = 100;
 
 /**
  * NEGATIVE_LOCAL: tồn cửa hàng âm (bán quá).
@@ -93,6 +95,26 @@ export function classifyVariation(v: ReconcileVariation, minDrift: number): Reco
   };
 }
 
+/** Chữ thường, bỏ dấu tiếng Việt (cả đ), gộp khoảng trắng: gõ "nuoc rua chen" vẫn ra "Nước rửa chén". */
+export function foldSearch(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Lọc theo SKU, tên sản phẩm hoặc tên biến thể; mọi từ gõ vào đều phải có mặt (thứ tự tuỳ ý). Chuỗi rỗng thì giữ hết. */
+export function matchesSearch(v: Pick<ReconcileVariation, 'sku' | 'name'> & { product: { name: string } }, q: string): boolean {
+  const words = foldSearch(q).split(' ').filter(Boolean);
+  if (words.length === 0) return true;
+  const hay = foldSearch(`${v.sku} ${v.product.name} ${v.name}`);
+  return words.every((w) => hay.includes(w));
+}
+
 const severity = (r: ReconcileRow): number => (r.flags.length === 0 ? RECONCILE_FLAGS.length : RECONCILE_FLAGS.indexOf(r.flags[0]!));
 
 /** Nặng trước (thứ tự RECONCILE_FLAGS), cùng mức thì lệch nhiều trước, rồi theo SKU cho ổn định. */
@@ -103,6 +125,8 @@ export function compareRows(a: ReconcileRow, b: ReconcileRow): number {
 export interface ReconcileReport {
   generatedAt: string;
   minDrift: number;
+  /** Chuỗi tìm đã áp (đã cắt khoảng trắng); rỗng = không lọc. Số đếm và bảng đều chỉ tính biến thể khớp. */
+  q: string;
   /** Lượt áp số Pancake gần nhất trên mọi biến thể đã xét (đồng bộ hoặc webhook). */
   lastSyncedAt: string | null;
   counts: { scanned: number; linked: number; withIssues: number } & Record<ReconcileFlag, number>;
@@ -110,9 +134,14 @@ export interface ReconcileReport {
   truncated: boolean;
 }
 
-export function buildReport(variations: readonly ReconcileVariation[], minDrift: number, now: Date, rowsMax = RECONCILE_ROWS_MAX): ReconcileReport {
-  const all = variations.map((v) => classifyVariation(v, minDrift));
-  const issues = all.filter((r) => r.flags.length > 0).sort(compareRows);
+/** Mọi biến thể có cờ (khớp ô tìm), nặng trước: nguồn chung của bảng (cắt ở trần dòng) và file CSV (không cắt). */
+export function flaggedRows(variations: readonly ReconcileVariation[], minDrift: number, q = ''): { all: ReconcileRow[]; issues: ReconcileRow[] } {
+  const all = variations.filter((v) => matchesSearch(v, q)).map((v) => classifyVariation(v, minDrift));
+  return { all, issues: all.filter((r) => r.flags.length > 0).sort(compareRows) };
+}
+
+export function buildReport(variations: readonly ReconcileVariation[], minDrift: number, now: Date, rowsMax = RECONCILE_ROWS_MAX, q = ''): ReconcileReport {
+  const { all, issues } = flaggedRows(variations, minDrift, q);
   const counts = { scanned: all.length, linked: 0, withIssues: issues.length } as ReconcileReport['counts'];
   for (const f of RECONCILE_FLAGS) counts[f] = 0;
   let last: number | null = null;
@@ -125,6 +154,7 @@ export function buildReport(variations: readonly ReconcileVariation[], minDrift:
   return {
     generatedAt: now.toISOString(),
     minDrift,
+    q: q.trim(),
     lastSyncedAt: last === null ? null : new Date(last).toISOString(),
     counts,
     rows: issues.slice(0, rowsMax),

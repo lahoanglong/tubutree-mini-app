@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, flush, mockFetch, render, selectValue, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import StockReconcilePage from './page';
 import type { ReconcileReport, ReconcileRow } from './reconcile-api';
 
@@ -23,7 +24,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
   auth.value = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+  window.history.replaceState(null, '', '/');
 });
+
+const wait = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
 
 const row = (sku: string, over: Partial<ReconcileRow>): ReconcileRow => ({
   variationId: `var-${sku}`,
@@ -157,5 +161,104 @@ describe('/admin/doi-soat-kho', () => {
     expect(r.container.textContent).toContain('Không tải được quyền của bạn.');
     expect(byText(r.container, 'button', 'Thử lại')).not.toBeNull();
     expect(r.container.textContent).not.toContain('Chỉ quản trị viên và nhân viên kho');
+  });
+});
+
+describe('/admin/doi-soat-kho — tìm SKU/tên và tải CSV (W22-02)', () => {
+  it('gõ tìm: chờ ngừng gõ rồi gọi API kèm q (lọc ở API để thấy cả dòng ngoài phần cắt), ghi bộ lọc lên URL', async () => {
+    const { c, calls } = await mount();
+    const input = c.querySelector<HTMLInputElement>('[data-reconcile-search]')!;
+    expect(input.maxLength).toBe(100);
+    typeInto(input, '  nuoc rua ');
+    await flush();
+    expect(calls.filter((x) => x.url.includes('q='))).toHaveLength(0);
+    await wait(350);
+    await flush(8);
+    expect(calls.at(-1)!.url).toMatch(/\/admin\/pancake-reconcile\?minDrift=3&q=nuoc\+rua$/);
+    expect(window.location.search).toBe('?q=nuoc+rua');
+  });
+
+  it('mở bằng link có ?flag=UNLINKED&q=: chip đã chọn sẵn, API nhận q, bảng chỉ còn dòng chưa gắn', async () => {
+    window.history.replaceState(null, '', '/admin/doi-soat-kho?flag=UNLINKED&q=unl');
+    const { c, calls } = await mount();
+    expect(calls[0]!.url).toMatch(/minDrift=3&q=unl$/);
+    expect(c.querySelector<HTMLInputElement>('[data-reconcile-search]')!.value).toBe('unl');
+    expect(byText(c, 'button', 'Chưa gắn Pancake (1)')!.getAttribute('aria-pressed')).toBe('true');
+    expect([...c.querySelectorAll('[data-sku]')].map((e) => e.getAttribute('data-sku'))).toEqual(['UNL']);
+  });
+
+  it('link có ?flag= mà cờ đó đang 0 dòng: chip vẫn hiện để bỏ chọn, câu rỗng nói đúng cờ, không nói "khớp Pancake"', async () => {
+    window.history.replaceState(null, '', '/admin/doi-soat-kho?flag=NEVER_SYNCED');
+    const { c } = await mount();
+    expect(byText(c, 'button', 'Chưa đồng bộ lần nào (0)')!.getAttribute('aria-pressed')).toBe('true');
+    expect(c.textContent).toContain('Không có dòng «Chưa đồng bộ lần nào».');
+    expect(c.textContent).not.toContain('Tồn cửa hàng khớp Pancake');
+  });
+
+  it('cờ lạ trên URL bị bỏ qua', async () => {
+    window.history.replaceState(null, '', '/admin/doi-soat-kho?flag=pancakeId');
+    const { c } = await mount();
+    expect(byText(c, 'button', 'Tất cả (3)')!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('"Tải CSV" gọi file xuất với đúng ngưỡng, ô tìm, chip đang chọn; bảng bị cắt thì chỉ người dùng tới nút này', async () => {
+    const savedCreate = URL.createObjectURL;
+    const savedRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:csv');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const cut: ReconcileReport = { ...REPORT, counts: { ...REPORT.counts, withIssues: 305, DRIFT: 50 }, truncated: true };
+      const m = mockFetch({
+        '/admin/pancake-reconcile/export': { body: 'SKU' },
+        '/admin/pancake-reconcile': { body: cut },
+      });
+      vi.stubGlobal('fetch', m.fn);
+      window.history.replaceState(null, '', '/admin/doi-soat-kho?flag=DRIFT&q=drf');
+      const r = render(<StockReconcilePage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain('Bấm «Tải CSV» để có đủ mọi dòng');
+      const btn = r.container.querySelector<HTMLButtonElement>('[data-reconcile-csv]')!;
+      expect(btn.className).toContain('min-h-[44px]');
+      click(btn);
+      await flush(8);
+      const call = m.calls.find((x) => x.url.includes('/export'))!;
+      expect(call.url).toMatch(/\/admin\/pancake-reconcile\/export\?minDrift=3&q=drf&flag=DRIFT$/);
+      expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    } finally {
+      URL.createObjectURL = savedCreate;
+      URL.revokeObjectURL = savedRevoke;
+    }
+  });
+
+  it('tải CSV lỗi: báo lỗi tiếng Việt, bảng vẫn còn', async () => {
+    const m = mockFetch({
+      '/admin/pancake-reconcile/export': { status: 403, body: { message: 'Bạn không có quyền.' } },
+      '/admin/pancake-reconcile': { body: REPORT },
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<StockReconcilePage />);
+    mounted.push(r);
+    await flush(8);
+    click(r.container.querySelector('[data-reconcile-csv]'));
+    await flush(8);
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('Không tải được file CSV');
+    expect(r.container.querySelector('[data-sku="NEG"]')).not.toBeNull();
+  });
+
+  it('tìm không ra gì: nói rõ không có SKU nào khớp, không nói "khớp Pancake"', async () => {
+    const none: ReconcileReport = {
+      ...REPORT,
+      q: 'zzz',
+      counts: { scanned: 0, linked: 0, withIssues: 0, NEGATIVE_LOCAL: 0, ZERO_LOCAL_PANCAKE_POSITIVE: 0, DRIFT: 0, UNLINKED: 0, NEVER_SYNCED: 0 },
+      rows: [],
+    };
+    vi.stubGlobal('fetch', mockFetch({ '/admin/pancake-reconcile': { body: none } }).fn);
+    window.history.replaceState(null, '', '/admin/doi-soat-kho?q=zzz');
+    const r = render(<StockReconcilePage />);
+    mounted.push(r);
+    await flush(8);
+    expect(r.container.textContent).toContain('Không có SKU hay sản phẩm kho Tubu nào khớp «zzz».');
+    expect(r.container.textContent).not.toContain('Tồn cửa hàng khớp Pancake');
   });
 });

@@ -858,6 +858,89 @@ describe('PancakeOrderService.retryPushByAdmin: lệnh tạo vừa gửi trong c
   });
 });
 
+describe('PancakeOrderService.retryManyByAdmin: "Đẩy lại đơn tạm lỗi" ở Sức khoẻ hệ thống (W22-02)', () => {
+  const TRANSIENT = { pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 5, pancakeErrorKind: 'TRANSIENT' };
+
+  it('TRANSIENT và CONFIG_RECHECK qua cổng đẩy: đặt PENDING, xếp job, câu tổng đếm đúng', async () => {
+    for (const kind of ['TRANSIENT', 'CONFIG_RECHECK']) {
+      const t = setup({ ...TRANSIENT, pancakeErrorKind: kind });
+      const res = await t.svc.retryManyByAdmin('admin1', ['o1', 'o1', 'TUBU1']);
+      expect(res).toMatchObject({ ok: true, queued: 1, skipped: 0, message: 'Đã xếp lệnh đẩy 1/1 đơn sang Pancake.' });
+      expect(res.results).toEqual([{ id: 'o1', ok: true, message: 'Đã xếp lệnh đẩy đơn TUBU1 sang Pancake.' }]);
+      expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.PENDING, pancakePushAttempts: 0 });
+      expect(t.queue.add).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it.each([
+    [{ pancakeErrorKind: 'DATA' }, 'sửa đơn'],
+    [{ pancakeErrorKind: 'REJECTED' }, 'sửa đơn'],
+    [{ pancakeErrorKind: 'CONFIG' }, 'báo kỹ thuật'],
+    [{ pancakeErrorKind: null }, 'chưa có lỗi tạm'],
+    [{ pancakePushStatus: PANCAKE_PUSH.STALE }, 'quá hạn tự đẩy'],
+  ] as [Record<string, unknown>, string][])('%j → không đẩy (%s), không đổi đơn, không xếp job', async (patch, msg) => {
+    const t = setup({ ...TRANSIENT, ...patch });
+    const res = await t.svc.retryManyByAdmin('admin1', ['o1']);
+    expect(res).toMatchObject({ queued: 0, skipped: 1 });
+    expect(res.results[0]!.message).toContain(msg);
+    expect(res.message).toMatch(/^Không đơn nào được xếp lệnh đẩy\. Đơn TUBU1/);
+    expect(t.row()).toMatchObject({ pancakePushStatus: patch.pancakePushStatus ?? PANCAKE_PUSH.FAILED, pancakePushAttempts: 5 });
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('cổng đẩy chung vẫn chặn trước: đơn đã huỷ / đã rời kho / chờ thanh toán trả lời từ chối của cổng', async () => {
+    for (const [patch, msg] of [
+      [{ status: 'CANCELLED' }, 'đã huỷ'],
+      [{ status: 'DELIVERED' }, 'giao lần hai'],
+      [{ paymentMethod: 'ZALOPAY', status: 'PENDING_PAYMENT' }, 'chưa thanh toán'],
+    ] as const) {
+      const t = setup({ ...TRANSIENT, ...patch });
+      const res = await t.svc.retryManyByAdmin('admin1', ['o1']);
+      expect(res.results[0]).toMatchObject({ ok: false });
+      expect(res.results[0]!.message).toContain(msg);
+      expect(t.queue.add).not.toHaveBeenCalled();
+    }
+  });
+
+  it('cron đổi loại lỗi thành DATA giữa lúc đọc và lúc ghi: câu ghi có điều kiện hụt → từ chối bằng lời của lối tạm lỗi, không đặt PENDING', async () => {
+    const t = setup(TRANSIENT);
+    t.prisma.order.findFirst.mockImplementationOnce(async () => {
+      const snapshot = { ...t.row() };
+      t.row().pancakeErrorKind = 'DATA';
+      return snapshot;
+    });
+    const res = await t.svc.retryManyByAdmin('admin1', ['o1']);
+    expect(res.results[0]).toMatchObject({ ok: false });
+    expect(res.results[0]!.message).toContain('thiếu dữ liệu');
+    expect(t.row()).toMatchObject({ pancakePushStatus: PANCAKE_PUSH.FAILED, pancakePushAttempts: 5 });
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('đơn lạ không chặn đơn sau; lỗi hệ thống khi xếp job ghi lời chung, không lộ chi tiết', async () => {
+    const t = setup(TRANSIENT);
+    const res = await t.svc.retryManyByAdmin('admin1', ['khong-co', 'o1']);
+    expect(res.results).toEqual([
+      { id: 'khong-co', ok: false, message: 'Không tìm thấy đơn khong-co.' },
+      { id: 'o1', ok: true, message: 'Đã xếp lệnh đẩy đơn TUBU1 sang Pancake.' },
+    ]);
+    expect(res.message).toBe('Đã xếp lệnh đẩy 1/2 đơn sang Pancake. Không đẩy lại: Không tìm thấy đơn khong-co.');
+    const broken = setup(TRANSIENT);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    broken.queue.add.mockRejectedValueOnce(new Error('redis ECONNREFUSED 10.0.0.5'));
+    const r2 = await broken.svc.retryManyByAdmin('admin1', ['o1']);
+    expect(r2.results[0]).toEqual({ id: 'o1', ok: false, message: 'Đơn o1: lỗi hệ thống khi xếp lệnh, thử lại sau ít phút.' });
+  });
+
+  it('nút một đơn ở chi tiết đơn (không bulk) vẫn đẩy đơn DATA/STALE như cũ', async () => {
+    const t = setup({ ...TRANSIENT, pancakeErrorKind: 'DATA' });
+    await t.svc.retryPushByAdmin('admin1', 'TUBU1');
+    expect(t.queue.add).toHaveBeenCalledTimes(1);
+    const stale = setup({ ...TRANSIENT, pancakePushStatus: PANCAKE_PUSH.STALE });
+    await stale.svc.retryPushByAdmin('admin1', 'TUBU1');
+    expect(stale.queue.add).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('PancakeOrderService.retryPushByAdmin: nhãn phương thức trả trước', () => {
   it.each([
     ['VNPAY', 'VNPAY'],
