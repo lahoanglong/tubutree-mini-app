@@ -113,7 +113,11 @@ describe('/mua-chung — danh sách nhóm', () => {
     expect(c.textContent).toContain(formatVnd(80_000));
     expect(c.textContent).toContain(formatVnd(100_000));
     expect(c.textContent).toContain('−20%');
-    expect(c.textContent).toContain('2/5 người · còn 2 giờ');
+    // Còn dưới 24 giờ: đồng hồ sống (role=timer), tên đọc theo phút.
+    const timers = Array.from(c.querySelectorAll('[role="timer"]'));
+    expect(timers).toHaveLength(2);
+    for (const t of timers) expect(t.getAttribute('aria-label')).toMatch(/^Kết thúc sau 2 giờ (29|30) phút$/);
+    expect(c.textContent).toContain('2/5 người · còn');
     expect(mocks.get).toHaveBeenCalledWith('/group-buy');
   });
 
@@ -171,14 +175,14 @@ describe('/mua-chung — danh sách nhóm', () => {
     expect(c.textContent).not.toContain('mã giảm 20%');
   });
 
-  it('thời hạn: dưới một giờ tính phút, quá hạn thì "đã hết hạn"', async () => {
+  it('thời hạn: dưới 24 giờ là đồng hồ sống, từ 24 giờ "còn N ngày", quá hạn thì "đã hết hạn"', async () => {
     mocks.list = [
       GROUP('m', { expiresAt: new Date(Date.now() + 30.5 * 60_000).toISOString() }),
       GROUP('d', { expiresAt: new Date(Date.now() + 49 * HOUR).toISOString() }),
       GROUP('x', { expiresAt: new Date(Date.now() - 1000).toISOString(), status: 'FAILED' }),
     ];
     const c = await mount();
-    expect(c.textContent).toContain('còn 30 phút');
+    expect(c.querySelector('[role="timer"]')?.getAttribute('aria-label')).toBe('Kết thúc sau 30 phút');
     expect(c.textContent).toContain('còn 2 ngày');
     expect(c.textContent).toContain('đã hết hạn');
   });
@@ -316,7 +320,7 @@ describe('/mua-chung — nhóm của mình và mời bạn', () => {
     expect(mocks.share).toHaveBeenCalledTimes(1);
     expect(mocks.share).toHaveBeenCalledWith({
       title: 'Mua chung Sản phẩm mine giảm 20%',
-      text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!',
+      text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé',
       path: '/mua-chung/mine',
     });
   });
@@ -327,7 +331,7 @@ describe('/mua-chung — nhóm của mình và mời bạn', () => {
     const c = await mount();
     click(btn(c, 'Mời bạn bè')!);
     await flush(2);
-    expect(mocks.share.mock.calls[0]![0].text).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!');
+    expect(mocks.share.mock.calls[0]![0].text).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé');
   });
 
   it('người chia sẻ có mã giới thiệu: đường dẫn mang ?ref=', async () => {
@@ -815,5 +819,100 @@ describe('/mua-chung — kệ Mở nhóm Mua chung mới (W173)', () => {
     await flush(5);
     expect(mocks.post).toHaveBeenCalledWith('/group-buy', { productId: 'p-fuwa' });
     expect(mocks.push).toHaveBeenCalledWith('/mua-chung/gb-99?moi=1');
+  });
+});
+
+describe('/mua-chung — đồng hồ sống dưới 24 giờ, dòng suất và khung tin mời ở trang mời (w24-03)', () => {
+  const original = window.matchMedia;
+  const setReducedMotion = (reduce: boolean) => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (q: string) => ({ matches: reduce && q.includes('prefers-reduced-motion'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    });
+  };
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: original });
+  });
+
+  it('dưới 24 giờ: ô số HH:MM:SS tabular-nums kèm chữ "còn"; giảm chuyển động: chữ đổi theo phút, không ô số', async () => {
+    setReducedMotion(false);
+    mocks.list = [GROUP('soon', { expiresAt: new Date(Date.now() + 5 * HOUR + 7 * 60_000 + 9_500).toISOString() })];
+    let c = await mount();
+    const timer = c.querySelector('[role="timer"]')!;
+    expect(Array.from(timer.querySelectorAll('[data-testid="countdown-cell"]')).map((x) => x.textContent)).toEqual(['05', '07', expect.stringMatching(/^(09|10)$/)]);
+    expect(timer.getAttribute('style')).toContain('tabular-nums');
+    expect(timer.parentElement!.textContent).toMatch(/^còn/);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    setReducedMotion(true);
+    mocks.list = [GROUP('soon', { expiresAt: new Date(Date.now() + 2 * HOUR + 5 * 60_000 + 30_000).toISOString() })];
+    c = await mount();
+    const calm = c.querySelector('[role="timer"]')!;
+    expect(calm.querySelectorAll('[data-testid="countdown-cell"]')).toHaveLength(0);
+    expect(calm.textContent).toBe('Kết thúc sau 2 giờ 05 phút');
+  });
+
+  it('ranh giới hết hạn: đồng hồ chạm 0 thì thẻ tự đổi sang "đã hết hạn" và khoá nút Tham gia, không tải lại', async () => {
+    mocks.list = [GROUP('edge', { expiresAt: new Date(Date.now() + 1_200).toISOString() })];
+    const c = await mount();
+    expect(btn(c, 'Tham gia mua chung (−20%)')!.disabled).toBe(false);
+    expect(c.querySelector('[role="timer"]')).not.toBeNull();
+    for (let i = 0; i < 40 && !c.textContent!.includes('đã hết hạn'); i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 100));
+      });
+    }
+    expect(c.textContent).toContain('2/5 người · đã hết hạn');
+    expect(btn(c, 'Nhóm đã hết hạn')!.disabled).toBe(true);
+    expect(c.querySelector('[role="timer"]')).toBeNull();
+    expect(mocks.get.mock.calls.filter(([p]) => p === '/group-buy')).toHaveLength(1);
+  });
+
+  it('trang mời (chưa vào nhóm): "Còn N suất · Tiết kiệm X" thay dòng "Còn thiếu", khung tin mời đúng tin sẽ gửi, Chia sẻ một chạm ≥ 44px', async () => {
+    mocks.list = [];
+    mocks.one = GROUP('inv', { currentSize: 3 });
+    const c = await mount('inv');
+    expect(c.textContent).toContain(`Còn 2 suất · Tiết kiệm ${formatVnd(20_000)}`);
+    const preview = c.querySelector('[data-testid="group-share-preview"]')!;
+    expect(c.textContent!.replace(preview.textContent!, '')).not.toContain('Còn thiếu 2 người');
+    expect(preview.textContent).toContain('Tin mời sẽ gửi');
+    expect(preview.textContent).toContain('Mua chung Sản phẩm inv giảm 20%');
+    const shareBtn = btn(c, 'Chia sẻ nhóm mua chung Sản phẩm inv')!;
+    expect(shareBtn.className).toContain('min-h-11');
+    await act(async () => {
+      click(shareBtn);
+    });
+    await flush(3);
+    expect(mocks.share).toHaveBeenCalledTimes(1);
+    const sent = mocks.share.mock.calls[0]![0] as { title: string; text: string; path: string };
+    expect(sent.path).toBe('/mua-chung/inv');
+    expect(preview.textContent).toContain(sent.title);
+    expect(preview.textContent).toContain(sent.text);
+    expect(btn(c, 'Tham gia mua chung (−20%)')).toBeTruthy();
+    expect(btn(c, /^Mời bạn bè/)).toBeUndefined();
+    expect(smallTouchTargets(c)).toEqual([]);
+  });
+
+  it('trang mời của thành viên: khung chỉ để xem, nút chia sẻ duy nhất là "Mời bạn bè"; danh sách thường không có khung hay dòng suất', async () => {
+    mocks.list = [GROUP('other')];
+    mocks.one = GROUP('own', { joined: true, isOwner: true });
+    const c = await mount('own');
+    expect(btn(c, /Mời bạn bè/)).toBeTruthy();
+    const previews = c.querySelectorAll('[data-testid="group-share-preview"]');
+    expect(previews).toHaveLength(1);
+    expect(btn(c, /^Chia sẻ nhóm mua chung/)).toBeUndefined();
+    expect(c.textContent).not.toMatch(/Còn \d+ suất/);
+    expect(c.textContent!.replace(previews[0]!.textContent!, '')).toContain('Còn thiếu 3 người');
+  });
+
+  it('trang mời: nhóm đã quá hạn thì không có dòng suất hay khung tin mời', async () => {
+    mocks.list = [];
+    mocks.one = GROUP('old', { expiresAt: new Date(Date.now() - HOUR).toISOString() });
+    const c = await mount('old');
+    expect(btn(c, 'Nhóm đã hết hạn')!.disabled).toBe(true);
+    expect(c.querySelector('[data-testid="group-share-preview"]')).toBeNull();
+    expect(c.textContent).not.toMatch(/Còn \d+ suất/);
   });
 });

@@ -38,7 +38,7 @@ export interface ProductCardProps {
   imageSizes?: string;
   /** Mặc định có tim ở thẻ đủ rộng (grid, rail-md, rank); gian hàng xem trước tắt vì khách chưa đăng nhập vào đó. */
   showWishlist?: boolean;
-  /** Nút nổi trên ảnh (giỏ nhanh); hết hàng thì không vẽ. */
+  /** Nút nổi trên ảnh (giỏ nhanh, chuông báo hàng về); nơi gọi tự quyết theo tồn kho, thẻ vẽ đúng thứ được đưa như Mini App. */
   imageOverlay?: ReactNode;
   /** Nút phụ cuối thẻ (Mua lại); thiếu thì thẻ không có nút. */
   onAdd?: () => void;
@@ -117,7 +117,7 @@ export function ProductCard({
 
   const overlay =
     imageOverlay ??
-    (quickAdd && !onAdd && QUICK_ADD_VARIANTS.has(variant) && product.inStock !== false ? (
+    (quickAdd && !onAdd && QUICK_ADD_VARIANTS.has(variant) && view.stock !== 'out' ? (
       <QuickAddButton name={product.name} busy={quickAdd.busyId === product.id} onPress={(origin) => quickAdd.add(product, origin)} />
     ) : undefined);
 
@@ -134,7 +134,7 @@ export function ProductCard({
       addLabel={addLabel}
       hidePrice={hidePrice}
       onOpen={open}
-      imageOverlay={view.stock === 'out' ? undefined : overlay}
+      imageOverlay={overlay}
       wishlist={showWishlist && HEART_VARIANTS.has(variant) ? <WishlistHeart productId={product.id} productName={product.name} floating /> : undefined}
     />
   );

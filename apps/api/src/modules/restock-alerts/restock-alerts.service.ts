@@ -20,6 +20,37 @@ export interface RestockToggleResult {
   subscribed: boolean;
 }
 
+/** Một đăng ký đang chờ hàng về của khách, kèm đủ thông tin sản phẩm để trang Yêu thích gắn vào thẻ mà không phải hỏi thêm. */
+export interface MyRestockAlert {
+  variationId: string;
+  productId: string;
+  productSlug: string;
+  productName: string;
+  variationName: string;
+  /** Tồn bán được của phân loại lúc đọc; > 0 nghĩa là hàng đã về và tin báo đang chờ lượt cron kế tiếp. */
+  stock: number;
+  createdAt: string;
+}
+
+export interface MyRestockAlerts {
+  /** Cờ catalog.restock_alert_enabled: tắt thì trang Yêu thích không có chuông, nhãn hay chip "Chờ hàng về". */
+  enabled: boolean;
+  items: MyRestockAlert[];
+}
+
+/** Trần dòng trả về: trần đăng ký đang chờ là 20 nên số này chỉ chặn dữ liệu cũ bất thường, không cắt khách bình thường. */
+const MY_RESTOCK_LIST_MAX = RESTOCK_MAX_PENDING_PER_USER * 2;
+
+interface MyRestockAlertRow {
+  variationId: string;
+  productId: string;
+  productSlug: string;
+  productName: string;
+  variationName: string;
+  stock: number;
+  createdAt: Date;
+}
+
 @Injectable()
 export class RestockAlertsService {
   constructor(
@@ -40,6 +71,37 @@ export class RestockAlertsService {
       orderBy: { createdAt: 'asc' },
     });
     return { enabled, variationIds: rows.map((r) => r.variationId) };
+  }
+
+  /**
+   * Mọi đăng ký đang chờ (`notifiedAt` NULL) của chính khách, cũ trước mới sau, cùng sản phẩm và phân loại trong MỘT câu SQL nối ba bảng.
+   * Chỉ lọc theo `userId` của phiên, không nhận tham số khách nào khác. Cờ tắt thì trả rỗng như `status`, vì khi đó không có nút nào để
+   * khách bấm; khách vẫn huỷ được ở `DELETE` (không phụ thuộc cờ).
+   */
+  async mine(userId: string): Promise<MyRestockAlerts> {
+    const enabled = await this.enabled();
+    if (!enabled) return { enabled, items: [] };
+    const rows = await this.prisma.$queryRaw<MyRestockAlertRow[]>`
+      SELECT ra."variationId", v."productId", p."slug" AS "productSlug", p."name" AS "productName", v."name" AS "variationName",
+             v."stock", ra."createdAt"
+      FROM "restock_alerts" ra
+      JOIN "variations" v ON v."id" = ra."variationId"
+      JOIN "products" p ON p."id" = v."productId"
+      WHERE ra."userId" = ${userId} AND ra."notifiedAt" IS NULL
+      ORDER BY ra."createdAt" ASC, ra."id" ASC
+      LIMIT ${MY_RESTOCK_LIST_MAX}`;
+    return {
+      enabled,
+      items: rows.map((r) => ({
+        variationId: r.variationId,
+        productId: r.productId,
+        productSlug: r.productSlug,
+        productName: r.productName,
+        variationName: r.variationName,
+        stock: Number(r.stock),
+        createdAt: r.createdAt.toISOString(),
+      })),
+    };
   }
 
   /**

@@ -167,8 +167,8 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
 }
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */
-export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode } {
-  const { quickAdd, busyId, feedback } = useQuickAdd('wishlist', wishlistQuery(coreHttp).queryKey);
+export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode; notify: QuickAdd['notify'] } {
+  const { quickAdd, busyId, feedback, notify } = useQuickAdd('wishlist', wishlistQuery(coreHttp).queryKey);
   // Khoá chung cả trang: một thẻ đang bay thì chạm giỏ ở thẻ khác bị nuốt, nên mọi nút báo aria-disabled (chỉ thẻ đang bay báo thêm aria-busy), không `disabled` kẻo rớt focus.
   const buttonFor = (p: ProductCard) =>
     p.inStock === false ? null : (
@@ -186,5 +186,6 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
       </button>
     );
 
-  return { buttonFor, feedback };
+  // `notify`: chuông báo hàng về của trang dùng chung chỗ thông báo nổi với giỏ nhanh.
+  return { buttonFor, feedback, notify };
 }

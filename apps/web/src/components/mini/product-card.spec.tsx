@@ -269,8 +269,8 @@ describe('ProductCard: nút nổi trên ảnh (imageOverlay)', () => {
     expect(frame.style.aspectRatio).toBe('1 / 1');
   });
 
-  it('hết hàng không vẽ nút nổi', async () => {
-    expect((await mount({ product: { ...PRODUCT, inStock: false }, imageOverlay: BTN })).querySelector('button[aria-label="Thêm vào giỏ"]')).toBeNull();
+  it('hết hàng: nút nơi gọi tự đưa vẫn vẽ (chuông báo hàng về ở Yêu thích), như Mini App; nơi gọi tự quyết theo tồn kho', async () => {
+    expect((await mount({ product: { ...PRODUCT, inStock: false }, imageOverlay: BTN })).querySelector('button[aria-label="Thêm vào giỏ"]')).not.toBeNull();
   });
 });
 

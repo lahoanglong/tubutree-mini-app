@@ -317,13 +317,13 @@ describe('/mua-chung — nhóm OPEN quá hạn mà cron 15 phút chưa đóng (A
     expect(c.textContent).toContain('2/5 người · đã hết hạn');
   });
 
-  it('điện thoại chạy nhanh hơn máy chủ 10 phút: đồng hồ máy báo quá hạn nhưng máy chủ còn 5 phút, vẫn cho tham gia và ghi "còn 5 phút"', async () => {
+  it('điện thoại chạy nhanh hơn máy chủ 10 phút: đồng hồ máy báo quá hạn nhưng máy chủ còn 5 phút, vẫn cho tham gia và đồng hồ đếm theo giờ máy chủ (5 phút)', async () => {
     const serverMs = Date.now() - 10 * 60_000;
     syncServerClock(new Date(serverMs).toISOString());
     h.list = script([GROUP('skew', { expiresAt: new Date(serverMs + 5.5 * 60_000).toISOString() })]);
     const c = await mount();
     expect(btn(c, JOIN)!.disabled).toBe(false);
-    expect(c.textContent).toContain('2/5 người · còn 5 phút');
+    expect(c.querySelector('[role="timer"]')?.getAttribute('aria-label')).toBe('Kết thúc sau 5 phút');
   });
 
   it('nhóm còn hạn một phút vẫn cho tham gia', async () => {

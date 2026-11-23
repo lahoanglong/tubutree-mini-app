@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Share2 } from 'lucide-react';
-import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
+import {
+  groupDeadline,
+  groupMemberStatus,
+  groupMissingLine,
+  groupPriceLabels,
+  groupRewardLine,
+  groupShareContent,
+  groupSlotsLine,
+} from '@tubutree/app-core/group-buy-copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { createGroupBuy, getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { fetchGroupBuyStarterProducts } from '../services/groupbuy-starters';
 import { getErrorMessage, getLoadErrorMessage, isHttpError } from '../services/api';
@@ -28,8 +37,9 @@ import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
 import { withReferral } from '../utils/share-link';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
+import { welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { ProductThumb } from '../components/ui/product-thumb';
+import { Countdown } from '../components/ui/countdown';
 
 /** Hộp chia sẻ của Zalo không có hạn: quá ngần này thì nhả khoá "Mời bạn bè" dù hộp chưa báo xong. */
 const SHARE_LOCK_MAX_MS = 30_000;
@@ -45,12 +55,9 @@ function groupMayHaveChanged(e: unknown): boolean {
   return status === 400 || status === 404 || status === 409;
 }
 
-function timeLeft(iso: string): string {
-  const diff = (new Date(iso).getTime() - serverNow()) / 1000;
-  if (diff <= 0) return 'đã hết hạn';
-  if (diff < 3600) return `còn ${Math.floor(diff / 60)} phút`;
-  if (diff < 86400) return `còn ${Math.floor(diff / 3600)} giờ`;
-  return `còn ${Math.floor(diff / 86400)} ngày`;
+/** Giảm chuyển động: đồng hồ đổi theo phút (chữ) thay cho ô số nhảy từng giây. */
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 export default function GroupBuyPage() {
@@ -212,12 +219,13 @@ export default function GroupBuyPage() {
   };
 
   // Trả Promise để Button giữ khoá tới khi hộp chia sẻ đóng: chạm đúp không mở hai hộp chia sẻ của Zalo. Có hạn: hộp chia sẻ treo thì nút không chết tới lúc rời trang.
-  const share = (g: GroupBuy) =>
-    settleWithin(
+  const share = (g: GroupBuy) => {
+    const content = groupShareContent(g, welcomeOffer);
+    return settleWithin(
       shareWithFallback(
         {
-          title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-          description: shareDescription(`Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`, welcomeOffer),
+          title: content.title,
+          description: content.text,
           thumbnail: g.product.thumbnail ?? undefined,
           path: withReferral(`/group-buy/${g.id}`, referralCode),
         },
@@ -227,13 +235,16 @@ export default function GroupBuyPage() {
       ),
       SHARE_LOCK_MAX_MS,
     );
+  };
 
-  const renderCard = (g: GroupBuy, invitedBanner = false) => (
+  const renderCard = (g: GroupBuy, invitedBanner = false, landing = false) => (
     <GroupCard
       key={g.id}
       g={g}
       authed={authed}
       invitedBanner={invitedBanner}
+      landing={landing}
+      shareContent={landing ? groupShareContent(g, welcomeOffer) : null}
       onOpen={() => navigate(`/product/${g.product.slug}`)}
       // Nhóm đủ người: trang sản phẩm áp mã của nhóm vào giỏ sau khi khách thêm giỏ hay mua ngay.
       onBuy={() => navigate(`/product/${g.product.slug}`, { state: { variationId: g.variationId, applyCoupon: g.couponCode } })}
@@ -264,7 +275,7 @@ export default function GroupBuyPage() {
         <ErrorState message={getLoadErrorMessage(error)} onRetry={() => refetch()} />
       ) : invited || others.length > 0 || done.length > 0 ? (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {invited && renderCard(invited, !invited.isOwner && !invited.joined)}
+          {invited && renderCard(invited, !invited.isOwner && !invited.joined, true)}
           {others.map((g) => renderCard(g))}
           {done.length > 0 && (
             <section aria-label="Nhóm đã đủ người của bạn" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -400,6 +411,8 @@ function GroupCard({
   g,
   authed,
   invitedBanner,
+  landing,
+  shareContent,
   onOpen,
   onBuy,
   onJoin,
@@ -409,6 +422,9 @@ function GroupCard({
   g: GroupBuy;
   authed: boolean;
   invitedBanner: boolean;
+  /** Thẻ nhóm của trang mời /group-buy/:id: dòng "Còn N suất · Tiết kiệm X" và khung xem trước tin mời. */
+  landing: boolean;
+  shareContent: { title: string; text: string } | null;
   onOpen: () => void;
   onBuy: () => void;
   onJoin: () => void;
@@ -416,17 +432,23 @@ function GroupCard({
   joining: boolean;
 }) {
   const pct = g.targetSize > 0 ? Math.min(100, Math.round((g.currentSize / g.targetSize) * 100)) : 0;
+  // Đồng hồ tới giờ thì vẽ lại thẻ: hạn tính lại theo giờ máy chủ, nút Tham gia khoá và chữ đổi sang "đã hết hạn" ngay, không chờ lần tải sau.
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const now = serverNow();
+  const deadline = groupDeadline(g, now);
   // Nhóm quá hạn nhưng cron 15 phút chưa đóng vẫn trả OPEN: máy chủ từ chối mọi lần tham gia, nên thẻ coi như đã hết hạn thay vì cho bấm mãi.
-  const expired = g.status === 'OPEN' && new Date(g.expiresAt).getTime() <= serverNow();
+  const expired = g.status === 'OPEN' && deadline.kind === 'text' && deadline.expired;
   const isOpen = g.status === 'OPEN' && !expired;
   const member = authed && g.joined;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
   const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;
   // Chỉ đọc cache Giờ vàng (nhịp tải lại do useFlashSalesPoller lo): "Mua một mình" theo giá hiện nay, không theo giá lưu lúc tạo nhóm.
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data;
-  const prices = groupPriceLabels(g, formatVnd, flash, serverNow());
+  const prices = groupPriceLabels(g, formatVnd, flash, now);
   const inOpenGroup = member && isOpen;
-  const missingLine = groupMissingLine(g);
+  // Trang mời: "Còn N suất · Tiết kiệm X" thay dòng "Còn thiếu N người" (cùng một ý). Thành viên đã có dòng trạng thái riêng.
+  const slotsLine = landing && isOpen && !inOpenGroup ? groupSlotsLine(g, formatVnd, now, flash) : null;
+  const missingLine = slotsLine ? null : groupMissingLine(g);
   return (
     <Card padding={12}>
       {invitedBanner && (
@@ -457,14 +479,21 @@ function GroupCard({
             <Badge tone="promo" size="sm">−{g.discountPct}%</Badge>
           </div>
           <Text variant="caption" tone="tertiary" as="div" numeric>{prices.solo}</Text>
-          <Text variant="caption" tone="tertiary" as="div">
-            {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
+          <Text variant="caption" tone="tertiary" as="div" numeric>
+            {g.currentSize}/{g.targetSize} người · {deadline.kind === 'live' ? <GroupCountdown endAt={deadline.endAt} onEnd={rerender} /> : deadline.text}
           </Text>
         </div>
       </div>
       <div style={{ marginTop: 8 }}>
         <ProgressBar value={pct} max={100} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
+      {slotsLine && (
+        <div style={{ marginTop: 'var(--space-stack-sm)' }}>
+          <Badge tone="promo" size="md">
+            {slotsLine}
+          </Badge>
+        </div>
+      )}
       {g.status !== 'SUCCESS' && (
         <div style={{ marginTop: 6 }}>
           {/* Người đã ở trong nhóm có dòng trạng thái riêng bên dưới ("cần thêm N người"), không lặp ý. */}
@@ -498,15 +527,73 @@ function GroupCard({
           <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 8, fontWeight: 600 }}>
             {groupMemberStatus(g)}
           </Text>
+          {/* Thành viên: nút "Mời bạn bè" ngay dưới là nút chia sẻ duy nhất, khung chỉ cho xem trước tin. */}
+          {landing && shareContent && <SharePreview content={shareContent} />}
           <Button fullWidth icon={Share2} onPress={onShare} style={{ marginTop: 8 }}>
             Mời bạn bè
           </Button>
         </>
       ) : (
-        <Button fullWidth disabled={!isOpen || member} loading={joining} onPress={onJoin} style={{ marginTop: 10 }}>
-          {label}
-        </Button>
+        <>
+          {landing && isOpen && shareContent && <SharePreview content={shareContent} productName={g.product.name} onShare={onShare} />}
+          <Button fullWidth disabled={!isOpen || member} loading={joining} onPress={onJoin} style={{ marginTop: 10 }}>
+            {label}
+          </Button>
+        </>
       )}
     </Card>
+  );
+}
+
+/**
+ * Hạn nhóm còn dưới 24 giờ: đồng hồ sống dùng chung (`Countdown`, số `tabular-nums`, tên đọc đổi theo phút). Ô số nhảy từng giây, trừ khi máy
+ * bật giảm chuyển động thì dùng dạng chữ đổi theo phút. Tông xanh để không lẫn với Giờ vàng.
+ */
+function GroupCountdown({ endAt, onEnd }: { endAt: string; onEnd: () => void }) {
+  const reduce = prefersReducedMotion();
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-stack-xs)', verticalAlign: 'middle' }}>
+      {!reduce && <span aria-hidden="true">{fillCopy('groupBuy.left')}</span>}
+      <Countdown endAt={endAt} mode={reduce ? 'text' : 'clock'} tone="green" onEnd={onEnd} />
+    </span>
+  );
+}
+
+/**
+ * Khung "Tin mời sẽ gửi" của trang mời: đúng tiêu đề và mô tả mà hộp chia sẻ gửi đi (`groupShareContent`). Có `onShare` (người chưa ở trong nhóm)
+ * thì kèm nút Chia sẻ một chạm; thành viên đã có nút "Mời bạn bè" nên khung chỉ để xem.
+ */
+function SharePreview({ content, productName, onShare }: { content: { title: string; text: string }; productName?: string; onShare?: () => unknown }) {
+  return (
+    <div
+      data-testid="group-share-preview"
+      style={{
+        marginTop: 'var(--space-stack-sm)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-inline-sm)',
+        padding: 'var(--space-inline-sm)',
+        borderRadius: 'var(--radius-control)',
+        border: '1px solid var(--color-border-subtle)',
+        background: 'var(--color-bg-canvas)',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="label" tone="tertiary" as="div">
+          {fillCopy('groupBuy.sharePreview')}
+        </Text>
+        <Text variant="caption" as="div" style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {content.title}
+        </Text>
+        <Text variant="caption" tone="secondary" as="div" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {content.text}
+        </Text>
+      </div>
+      {onShare && (
+        <Button size="md" variant="secondary" icon={Share2} onPress={onShare} aria-label={fillCopy('groupBuy.shareCtaLabel', { name: productName ?? '' })}>
+          {fillCopy('groupBuy.shareCta')}
+        </Button>
+      )}
+    </div>
   );
 }

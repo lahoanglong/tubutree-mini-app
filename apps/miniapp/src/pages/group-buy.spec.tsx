@@ -107,7 +107,10 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(screen.getAllByText(`Giá nhóm ${formatVnd(80_000)}`)).toHaveLength(2);
     expect(screen.getAllByText(`Mua một mình ${formatVnd(100_000)}`)).toHaveLength(2);
     expect(screen.getAllByText('−20%')).toHaveLength(2);
-    expect(screen.getAllByText('2/5 người · còn 2 giờ')).toHaveLength(2);
+    // Còn dưới 24 giờ: đồng hồ sống (role=timer), tên đọc theo phút.
+    const timers = screen.getAllByRole('timer');
+    expect(timers).toHaveLength(2);
+    for (const t of timers) expect(t.getAttribute('aria-label')).toMatch(/^Kết thúc sau 2 giờ (29|30) phút$/);
   });
 
   it('bấm ảnh sản phẩm mở trang sản phẩm', async () => {
@@ -985,5 +988,103 @@ describe('GroupBuyPage — kệ Mở nhóm Mua chung mới (W173)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mở nhóm ngay' }));
     await waitFor(() => expect(mocks.createGroupBuy).toHaveBeenCalledWith('p-fuwa'));
     expect(mocks.navigate).toHaveBeenCalledWith('/group-buy/gb-new-1');
+  });
+});
+
+describe('GroupBuyPage — đồng hồ sống dưới 24 giờ, dòng suất và khung tin mời ở trang mời (w24-03)', () => {
+  const setReducedMotion = (reduce: boolean) => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (q: string) => ({ matches: reduce && q.includes('prefers-reduced-motion'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() }),
+    });
+  };
+  const original = window.matchMedia;
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: original });
+  });
+
+  it('dưới 24 giờ: ô số HH:MM:SS (tabular-nums) kèm chữ "còn"; từ 24 giờ trở lên giữ chữ "còn N ngày"', async () => {
+    setReducedMotion(false);
+    mocks.listGroupBuys.mockResolvedValue([
+      GROUP('soon', { expiresAt: new Date(Date.now() + 5 * HOUR + 7 * 60_000 + 9_500).toISOString() }),
+      GROUP('far', { expiresAt: new Date(Date.now() + 50 * HOUR).toISOString() }),
+    ]);
+    renderPage();
+    expect(await screen.findByText('2/5 người · còn 2 ngày')).toBeInTheDocument();
+    const timer = screen.getByRole('timer');
+    const cells = Array.from(timer.querySelectorAll('[data-testid="countdown-cell"]')).map((c) => c.textContent);
+    expect(cells).toEqual(['05', '07', expect.stringMatching(/^(09|10)$/)]);
+    expect(timer.getAttribute('style')).toContain('tabular-nums');
+    expect(timer.parentElement!.textContent).toMatch(/^còn/);
+  });
+
+  it('giảm chuyển động: không ô số nhảy từng giây, chữ đổi theo phút', async () => {
+    setReducedMotion(true);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('soon', { expiresAt: new Date(Date.now() + 2 * HOUR + 5 * 60_000 + 30_000).toISOString() })]);
+    renderPage();
+    const timer = await screen.findByRole('timer');
+    expect(timer.querySelectorAll('[data-testid="countdown-cell"]')).toHaveLength(0);
+    expect(timer.textContent).toBe('Kết thúc sau 2 giờ 05 phút');
+  });
+
+  it('ranh giới hết hạn: đồng hồ chạm 0 thì thẻ tự đổi sang "đã hết hạn" và khoá nút Tham gia, không cần tải lại', async () => {
+    setReducedMotion(false);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('edge', { expiresAt: new Date(Date.now() + 1_200).toISOString() })]);
+    renderPage();
+    const join = await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' });
+    expect(join).not.toBeDisabled();
+    expect(screen.getByRole('timer')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('2/5 người · đã hết hạn')).toBeInTheDocument(), { timeout: 4_000 });
+    expect(screen.getByRole('button', { name: 'Nhóm đã hết hạn' })).toBeDisabled();
+    expect(screen.queryByRole('timer')).toBeNull();
+    expect(mocks.listGroupBuys).toHaveBeenCalledTimes(1);
+  });
+
+  it('trang mời (người chưa vào nhóm): "Còn N suất · Tiết kiệm X" thay dòng "Còn thiếu", khung tin mời đúng tin sẽ gửi, Chia sẻ một chạm', async () => {
+    mocks.params = { id: 'inv' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('inv', { currentSize: 3 }));
+    mocks.listGroupBuys.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText(`Còn 2 suất · Tiết kiệm ${formatVnd(20_000)}`)).toBeInTheDocument();
+    expect(screen.queryByText('Còn thiếu 2 người')).toBeNull();
+    const preview = screen.getByTestId('group-share-preview');
+    expect(preview.textContent).toContain('Tin mời sẽ gửi');
+    expect(preview.textContent).toContain('Mua chung Sản phẩm inv giảm 20%');
+    const shareBtn = screen.getByRole('button', { name: 'Chia sẻ nhóm mua chung Sản phẩm inv' });
+    expect(Number.parseInt(shareBtn.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(shareBtn);
+    await waitFor(() => expect(mocks.shareWithFallback).toHaveBeenCalledTimes(1));
+    const [params] = mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string];
+    expect(params.path).toBe('/group-buy/inv');
+    // Xem trước = tin gửi đi: cùng tiêu đề, cùng mô tả.
+    expect(preview.textContent).toContain(params.title!);
+    expect(preview.textContent).toContain(params.description!);
+    // Nút chính vẫn là Tham gia, đúng một nút chia sẻ.
+    expect(screen.getByRole('button', { name: 'Tham gia mua chung (−20%)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mời bạn bè' })).toBeNull();
+  });
+
+  it('trang mời của thành viên: khung chỉ để xem, nút chia sẻ duy nhất là "Mời bạn bè"; danh sách thường không có khung hay dòng suất', async () => {
+    mocks.params = { id: 'own' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('own', { joined: true, isOwner: true }));
+    mocks.listGroupBuys.mockResolvedValue([GROUP('other')]);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
+    expect(screen.getAllByTestId('group-share-preview')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /^Chia sẻ nhóm mua chung/ })).toBeNull();
+    expect(screen.queryByText(/^Còn \d+ suất/)).toBeNull();
+    // Thẻ nhóm khác trong danh sách vẫn có dòng "Còn thiếu" như cũ.
+    expect(screen.getByText('Còn thiếu 3 người')).toBeInTheDocument();
+  });
+
+  it('trang mời: nhóm đã quá hạn thì không có dòng suất hay khung tin mời', async () => {
+    mocks.params = { id: 'old' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('old', { expiresAt: new Date(Date.now() - HOUR).toISOString() }));
+    mocks.listGroupBuys.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhóm đã hết hạn' })).toBeDisabled();
+    expect(screen.queryByTestId('group-share-preview')).toBeNull();
+    expect(screen.queryByText(/^Còn \d+ suất/)).toBeNull();
   });
 });
