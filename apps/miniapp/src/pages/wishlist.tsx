@@ -20,6 +20,7 @@ import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { useFlashListExpiry } from '../hooks/use-flash-expiry';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useNotify } from '../hooks/use-notify';
 import { ProductGrid } from '../components/ui/product-grid';
 import { Chip } from '../components/ui/chip';
 import { ScrollRow } from '../components/ui/scroll-row';
@@ -72,7 +73,8 @@ export default function WishlistPage() {
   // Báo hàng về: chỉ hỏi khi có thẻ hết hàng (chuông và nhãn chỉ nằm trên thẻ hết hàng).
   const restockQ = useMyRestockAlerts(phase === 'authenticated' && (wishQ.data?.some((p) => p.inStock === false) ?? false));
   const watch = restockWatchIndex(restockQ.data);
-  const restock = useRestockToggle((text, ok) => openSnackbar({ text, type: ok ? 'success' : 'error', ...(ok ? { duration: 2000 } : null) }));
+  const { notify } = useNotify();
+  const restock = useRestockToggle((text, ok) => notify({ text, type: ok ? 'success' : 'error', ...(ok ? { duration: 2000 } : null) }));
 
   // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang trong ngăn xếp) trang không mở ở bộ lọc cũ.
   if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
