@@ -31,8 +31,10 @@ export class AnalyticsAdminController {
   @Get('retention-daily')
   async retentionDaily(@Query('days') days = '30') {
     const n = Math.min(90, Math.max(1, Number(days) || 30));
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - n);
     const rows = await this.prisma.retentionDailySnapshot.findMany({
-      where: { date: { gte: funnelDailySince(n) } },
+      where: { date: { gte: since } },
       orderBy: { date: 'asc' },
     });
     // Prisma Decimal (decimal.js) serialize qua JSON.stringify ra STRING (toJSON = valueOf trả
@@ -53,10 +55,8 @@ export class AnalyticsAdminController {
   @Get('funnel-daily')
   async funnelDaily(@Query('days') days = '30'): Promise<FunnelDailyDTO[]> {
     const n = Math.min(90, Math.max(1, Number(days) || 30));
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - n);
     const rows = await this.prisma.funnelDailySnapshot.findMany({
-      where: { date: { gte: since } },
+      where: { date: { gte: funnelDailySince(n) } },
       orderBy: { date: 'asc' },
       select: { date: true, step: true, entrySource: true, count: true },
     });

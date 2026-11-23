@@ -29,6 +29,26 @@ describe('AnalyticsAdminController.retentionDaily', () => {
   });
 });
 
+describe('AnalyticsAdminController.funnelDaily', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('days=30 lúc 10:00 giờ VN lấy từ ngày VN hôm nay − 30 (đủ 30 ngày đã chốt, không mất ngày đầu)', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-24T03:00:00Z') });
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { funnelDailySnapshot: { findMany } } as unknown as PrismaService;
+    await new AnalyticsAdminController(prisma, noLaunchWatch, noFunnel).funnelDaily('30');
+    expect(findMany.mock.calls[0][0].where.date.gte).toEqual(new Date('2026-10-25T00:00:00Z'));
+  });
+
+  it('days=200 bị clamp về 90', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-24T03:00:00Z') });
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { funnelDailySnapshot: { findMany } } as unknown as PrismaService;
+    await new AnalyticsAdminController(prisma, noLaunchWatch, noFunnel).funnelDaily('200');
+    expect(findMany.mock.calls[0][0].where.date.gte).toEqual(new Date('2026-08-26T00:00:00Z'));
+  });
+});
+
 describe('AnalyticsAdminController.launchWatchSnapshot', () => {
   it('trả nguyên kết quả của LaunchWatchService.getSnapshot', async () => {
     const dto = {
