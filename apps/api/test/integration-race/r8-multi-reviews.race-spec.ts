@@ -7,7 +7,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { ReviewsService } from '../../src/modules/reviews/reviews.service';
-import { orderLineReviews } from '../../src/modules/reviews/review-eligibility';
+import { orderLineReviews, pendingReviewCounts } from '../../src/modules/reviews/review-eligibility';
 import { barrierOnFirstCalls, createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
@@ -391,6 +391,57 @@ describe('Review: mỗi lần mua một đánh giá, thưởng một lần cho m
         [b.v.id, { reviewId: null, reviewable: true }],
       ]),
     );
+  });
+
+  // tubu-w25-02 (PO A5): chi tiết đơn và nút "Đánh giá (n SP)" của thẻ đơn cùng một luật trên DB thật — sản phẩm có dòng trả được
+  // duyệt không còn mời viết; dòng trả mang số đã trả, "tiền đã về" chỉ khi khoản hoàn RETURN của yêu cầu đã xong.
+  it('chi tiết đơn khớp số "Đánh giá (n SP)": món đã trả thôi mời viết, refundDone theo khoản hoàn đã xong', async () => {
+    const a = await product();
+    const b = await product();
+    const u = await createUser(prisma);
+    const order = await createOrder(prisma, {
+      userId: u.id,
+      status: 'DELIVERED',
+      items: { create: [{ ...line(a.v.id).create[0]!, quantity: 2, total: 200_000 }, ...line(b.v.id).create] },
+    });
+    const items = await prisma.orderItem.findMany({ where: { orderId: order.id }, orderBy: { id: 'asc' } });
+    const lineA = items.find((it) => it.variationId === a.v.id)!;
+    const lineB = items.find((it) => it.variationId === b.v.id)!;
+    const request = await prisma.returnRequest.create({
+      data: { orderId: order.id, userId: u.id, reason: 'IT', status: 'APPROVED', items: { create: [{ orderItemId: lineA.id, quantity: 1 }] } },
+    });
+    // Yêu cầu khác của đơn còn chờ duyệt: không tính.
+    await prisma.returnRequest.create({
+      data: { orderId: order.id, userId: u.id, reason: 'IT chờ', status: 'REQUESTED', items: { create: [{ orderItemId: lineB.id, quantity: 1 }] } },
+    });
+
+    const detail = async () => {
+      const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: { orderBy: { id: 'asc' } } } });
+      const reviewOf = await orderLineReviews(prisma, o);
+      return new Map(o.items.map((it) => [it.id, reviewOf(it.id)]));
+    };
+    const count = async () =>
+      (
+        await pendingReviewCounts(prisma, [
+          {
+            ...order,
+            items: items.map((it) => ({ id: it.id, productId: it.variationId === a.v.id ? a.p.id : b.p.id, isGift: false, open: true })),
+          },
+        ])
+      ).get(order.id);
+
+    let state = await detail();
+    expect(state.get(lineA.id)).toEqual({ reviewId: null, reviewable: false, returnedQty: 1, refundDone: false });
+    expect(state.get(lineB.id)).toEqual({ reviewId: null, reviewable: true });
+    expect(await count()).toBe([...state.values()].filter((r) => r.reviewable).length);
+    expect(await count()).toBe(1);
+
+    await prisma.orderCustomerRefund.create({
+      data: { orderId: order.id, orderCode: order.code, kind: 'RETURN', refKey: request.id, userId: u.id, amount: 100_000, method: 'WALLET', status: 'COMPLETED', reason: 'RETURNED', customerUserId: u.id },
+    });
+    state = await detail();
+    expect(state.get(lineA.id)).toEqual({ reviewId: null, reviewable: false, returnedQty: 1, refundDone: true });
+    expect(await count()).toBe(1);
   });
 
   it('đánh giá của chính mình đọc được nguyên nội dung để sửa; của người khác thì 404', async () => {

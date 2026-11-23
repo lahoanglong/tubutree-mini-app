@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Leaf, Star } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView } from '@tubutree/app-core/api/orders';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
@@ -56,6 +56,7 @@ import { OrderShipping } from '@/components/orders/order-shipping';
 import { OrderRefillShortcut } from '@/components/orders/order-refill-shortcut';
 import { OrderTrackingPill } from '@/components/orders/order-tracking-pill';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
+import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import { OrderZaloDetail } from '@/components/checkout/order-zalo';
 import { inviteLandingOn } from '@tubutree/app-core/commerce/invite-card';
 import { hasEcoImpact, orderEcoImpactBase, orderEcoImpactGate } from '@tubutree/app-core/eco/order-impact-gate';
@@ -170,16 +171,20 @@ export default function OrderDetailPage() {
     orderQ.data?.status === 'PENDING_PAYMENT' && !orderQ.data.manualHandling ? (orderQ.data.paymentDeadline ?? null) : null,
   );
 
-  // Mở từ "Đánh giá (n SP)" của thẻ đơn (?review=1): lần đầu đơn hiện ra thì cuộn tới món đầu tiên còn lối "Viết đánh giá" và đặt focus vào nút đó.
-  // Chỉ một lần mỗi lần mở trang, để lần tải lại nền không kéo màn của khách đi chỗ khác.
+  // Mở từ "Đánh giá (n SP)" của thẻ đơn (?review=1): cuộn tới món đầu tiên còn lối "Viết đánh giá" và đặt focus vào nút đó, một lần mỗi lần mở trang.
+  // Chờ đơn mới (quay lại từ trang sản phẩm sau khi viết, bản đệm cũ còn mời món vừa viết) và chờ các khối phía trên danh sách món (cấu hình,
+  // lối Refill) hiện xong, kẻo món đích bị đẩy lệch sau khi cuộn. Quay lại trang khi còn món chờ thì cuộn tới món kế tiếp.
+  const refillFetching = useIsFetching({ queryKey: refillLandingQuery(coreHttp).queryKey });
   const reviewFocusDone = useRef(false);
+  const orderFresh = !!orderQ.data && !orderQ.isFetching && (orderQ.isFetchedAfterMount || !orderQ.isStale);
+  const aboveSettled = cfgQ.isFetched && refillFetching === 0;
   useEffect(() => {
-    if (phase !== 'authenticated' || !orderQ.data || reviewFocusDone.current) return;
+    if (phase !== 'authenticated' || !orderFresh || !aboveSettled || reviewFocusDone.current) return;
     reviewFocusDone.current = true;
     if (!wantsReviewFocus(window.location.search)) return;
     const row = document.querySelector<HTMLElement>('[data-review-focus="row"]');
     if (row) revealReviewTarget(row, row.querySelector<HTMLElement>('[data-review-focus="cta"]'));
-  }, [phase, orderQ.data]);
+  }, [phase, orderFresh, aboveSettled]);
 
   if (phase === 'loading') {
     return (
@@ -391,22 +396,24 @@ export default function OrderDetailPage() {
                       Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
                     </div>
                   )}
-                  {/* Dòng đã hoàn tiền đã nói số đã trả trong trạng thái của nó: không lặp "Đã duyệt trả". */}
-                  {it.id && returnedQty.has(it.id) && reviewSlot?.kind !== 'refunded' && (
+                  {/* Món đã trả có trạng thái riêng ở ô đánh giá (đã ghi số đã trả): không lặp "Đã duyệt trả". */}
+                  {it.id && returnedQty.has(it.id) && reviewSlot?.kind !== 'returned' && (
                     <div className="mt-0.5 text-xs font-medium text-promo-fg">
                       Đã duyệt trả {returnedQty.get(it.id)}/{it.quantity}
                     </div>
                   )}
-                  {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. Món đã hoàn tiền không mời viết (cùng luật
-                      "Đánh giá (n SP)" ở thẻ đơn, PO A5), chỉ một dòng trạng thái mờ như Mini App. */}
-                  {reviewSlot?.kind === 'refunded' ? (
-                    <div data-testid="order-line-refunded" className="text-xs text-[color:var(--color-text-tertiary)]">
+                  {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. Món đã trả không mời viết (cùng luật
+                      "Đánh giá (n SP)" ở thẻ đơn, PO A5), chỉ một dòng trạng thái mờ như Mini App. Tên truy cập kèm tên món: nút có thể được
+                      focus tự động (?review=1), trình đọc màn hình phải nói của món nào. */}
+                  {reviewSlot?.kind === 'returned' ? (
+                    <div data-testid="order-line-returned" className="text-xs text-[color:var(--color-text-tertiary)]">
                       {reviewSlot.label}
                     </div>
                   ) : (
                     reviewSlot && (
                       <Link
                         href={reviewHref(reviewSlot.slug, o.id)}
+                        aria-label={`${reviewSlot.kind === 'edit' ? 'Sửa đánh giá' : 'Viết đánh giá'} ${it.productName}`}
                         data-review-focus={focusTarget ? 'cta' : undefined}
                         className="tubu-hit-44 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
                       >

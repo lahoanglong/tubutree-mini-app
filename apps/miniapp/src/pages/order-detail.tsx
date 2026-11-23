@@ -4,7 +4,7 @@ import { Page, Sheet, useLocation, useParams, useNavigate, useSnackbar } from 'z
 import { Heading, Text } from '../components/ui/text';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
@@ -55,6 +55,7 @@ import { CodSwitchAction } from '../components/orders/cod-switch-action';
 import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
 import { OrderRefillShortcut } from '../components/orders/order-refill-shortcut';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
+import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import { OrderActionBar } from '../components/orders/order-action-bar';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, showTrackingPill, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -190,16 +191,20 @@ export default function OrderDetailPage() {
     order.data?.status === 'PENDING_PAYMENT' && !order.data.manualHandling ? (order.data.paymentDeadline ?? null) : null,
   );
 
-  // Mở từ "Đánh giá (n SP)" của thẻ đơn (?review=1): lần đầu đơn hiện ra thì cuộn tới món đầu tiên còn lối "Viết đánh giá" và đặt focus vào nút đó.
-  // Chỉ một lần mỗi lần mở trang, để lần tải lại nền không kéo màn của khách đi chỗ khác.
+  // Mở từ "Đánh giá (n SP)" của thẻ đơn (?review=1): cuộn tới món đầu tiên còn lối "Viết đánh giá" và đặt focus vào nút đó, một lần mỗi lần mở trang.
+  // Chờ đơn mới (quay lại từ trang sản phẩm sau khi viết, bản đệm cũ còn mời món vừa viết) và chờ các khối phía trên danh sách món (cấu hình,
+  // lối Refill) hiện xong, kẻo món đích bị đẩy lệch sau khi cuộn. Quay lại trang khi còn món chờ thì cuộn tới món kế tiếp.
+  const refillFetching = useIsFetching({ queryKey: refillLandingQuery(coreHttp).queryKey });
   const reviewFocusDone = useRef(false);
+  const orderFresh = !!order.data && !order.isFetching && (order.isFetchedAfterMount || !order.isStale);
+  const aboveSettled = !publicConfig.isPending && refillFetching === 0;
   useEffect(() => {
-    if (phase !== 'authenticated' || !order.data || reviewFocusDone.current) return;
+    if (phase !== 'authenticated' || !orderFresh || !aboveSettled || reviewFocusDone.current) return;
     reviewFocusDone.current = true;
     if (!wantsReviewFocus(search)) return;
     const row = document.querySelector<HTMLElement>('[data-review-focus="row"]');
     if (row) revealReviewTarget(row, row.querySelector<HTMLElement>('[data-review-focus="cta"]'));
-  }, [phase, order.data, search]);
+  }, [phase, orderFresh, aboveSettled, search]);
 
   const ecoAsked = !!order.data && orderEcoImpactGate(order.data, referralViralOn(publicConfig));
   const ecoQ = useQuery({
@@ -516,10 +521,10 @@ export default function OrderDetailPage() {
                 chữ "đánh giá" chỉ tồn tại ở trang sản phẩm, mà từ đơn không mở được trang đó
                 (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được.
                 Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó; API cũ chưa trả
-                reviewable/reviewId thì vẫn hiện nút viết như trước. Món đã hoàn tiền không mời viết (cùng luật "Đánh giá (n SP)"
-                ở thẻ đơn, PO A5), chỉ một dòng trạng thái mờ. */}
-            {review?.kind === 'refunded' ? (
-              <Text variant="caption" tone="tertiary" as="div" data-testid="order-line-refunded">
+                reviewable/reviewId thì vẫn hiện nút viết như trước. Món đã trả không mời viết (cùng luật "Đánh giá (n SP)"
+                ở thẻ đơn, PO A5), chỉ một dòng trạng thái mờ. Tên truy cập kèm tên món: nút có thể được focus tự động (?review=1). */}
+            {review?.kind === 'returned' ? (
+              <Text variant="caption" tone="tertiary" as="div" data-testid="order-line-returned">
                 {review.label}
               </Text>
             ) : (
@@ -528,6 +533,7 @@ export default function OrderDetailPage() {
                   type="button"
                   className="tubu-press tubu-hit-44"
                   style={REVIEW_LINK}
+                  aria-label={`${review.kind === 'edit' ? vi.orders.editReviewItem : vi.orders.reviewItem} ${it.productName}`}
                   data-review-focus={i === reviewTarget ? 'cta' : undefined}
                   onClick={() => {
                     haptic('light');

@@ -23,8 +23,10 @@ export interface OrderItemDTO {
   reviewId?: string | null;
   /** Chỉ GET /orders/:code: dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
   reviewable?: boolean;
-  /** Chỉ GET /orders/:code: số đã trả được duyệt của chính dòng này, chỉ có khi lớn hơn 0 (chi tiết đơn hiện "Đã hoàn tiền" thay lối viết đánh giá). */
-  refundedQty?: number;
+  /** Chỉ GET /orders/:code: số đã trả được duyệt của chính dòng này, chỉ có khi lớn hơn 0 (chi tiết đơn hiện trạng thái trả thay lối viết đánh giá). */
+  returnedQty?: number;
+  /** Đi cùng `returnedQty`: mọi lần trả của dòng đã hoàn tiền xong (Ví đã cộng, chuyển khoản đã chuyển). */
+  refundDone?: boolean;
   /** Dòng quà tặng dùng thử 0đ: khách giữ quà, không mua lại, không trả, không đánh giá. API cũ không gửi. */
   isGift?: boolean;
 }

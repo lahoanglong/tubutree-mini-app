@@ -35,14 +35,20 @@ export interface OrderLineReview {
   reviewable: boolean;
   /**
    * Số đơn vị của chính dòng này đã có yêu cầu trả được duyệt (cộng mọi lần trả). Chỉ có khi lớn hơn 0 và dòng không phải quà
-   * tặng: chi tiết đơn thay lối "Viết đánh giá" bằng dòng trạng thái "Đã hoàn tiền".
+   * tặng: chi tiết đơn thay lối "Viết đánh giá" bằng một dòng trạng thái của lần trả.
    */
-  refundedQty?: number;
+  returnedQty?: number;
+  /**
+   * Đi cùng `returnedQty`: true khi mọi yêu cầu trả đã duyệt của dòng đều có khoản hoàn trả hàng đã xong (tiền đã vào Ví hoặc Tubu đã
+   * chuyển khoản). Khoản chuyển khoản còn chờ, hay lần trả không có tiền để hoàn (đơn XU, số hoàn 0đ), là false: app không được ghi
+   * "Đã hoàn tiền" khi ô Thanh toán cùng màn còn ghi "Đang hoàn tiền".
+   */
+  refundDone?: boolean;
 }
 
 const NO_REVIEW: OrderLineReview = { reviewId: null, reviewable: false };
 
-type ReviewDb = Pick<PrismaClient, 'variation' | 'review' | 'returnRequestItem'>;
+type ReviewDb = Pick<PrismaClient, 'variation' | 'review' | 'returnRequestItem' | 'orderCustomerRefund'>;
 
 /**
  * Trạng thái đánh giá từng dòng (theo id dòng) của một đơn, cùng luật với can-review: chỉ đơn REVIEWABLE_ORDER mới có, mỗi
@@ -51,7 +57,7 @@ type ReviewDb = Pick<PrismaClient, 'variation' | 'review' | 'returnRequestItem'>
  *
  * Sản phẩm đã có dòng trả được duyệt trên đơn (mọi số lượng) thì không viết mới được, cùng luật với `pendingReviewCounts`: thẻ
  * đơn không đếm sản phẩm đó trong "Đánh giá (n SP)", nên chi tiết đơn cũng không mời viết. Đánh giá đã viết trước lần trả vẫn
- * sửa được (`reviewId` giữ nguyên).
+ * sửa được (`reviewId` giữ nguyên). Khoản hoàn chỉ được tra khi đơn có dòng trả đã duyệt.
  */
 export async function orderLineReviews(
   db: ReviewDb,
@@ -67,35 +73,49 @@ export async function orderLineReviews(
     }),
     db.returnRequestItem.findMany({
       where: { quantity: { gt: 0 }, returnRequest: { orderId: order.id, status: 'APPROVED' } },
-      select: { orderItemId: true, quantity: true },
+      select: { orderItemId: true, quantity: true, returnRequestId: true },
     }),
   ]);
   const productOf = new Map(variations.map((v) => [v.id, v.productId]));
   const productIds = [...new Set(variations.map((v) => v.productId))];
-  const refundedQtyOf = new Map<string, number>();
-  for (const l of returnedLines) refundedQtyOf.set(l.orderItemId, (refundedQtyOf.get(l.orderItemId) ?? 0) + l.quantity);
-  const refundedProducts = new Set(
+  const returnedQtyOf = new Map<string, number>();
+  const requestsOf = new Map<string, Set<string>>();
+  for (const l of returnedLines) {
+    returnedQtyOf.set(l.orderItemId, (returnedQtyOf.get(l.orderItemId) ?? 0) + l.quantity);
+    requestsOf.set(l.orderItemId, (requestsOf.get(l.orderItemId) ?? new Set<string>()).add(l.returnRequestId));
+  }
+  const returnedProducts = new Set(
     order.items.flatMap((it) => {
-      const productId = refundedQtyOf.has(it.id) ? productOf.get(it.variationId) : undefined;
+      const productId = returnedQtyOf.has(it.id) ? productOf.get(it.variationId) : undefined;
       return productId ? [productId] : [];
     }),
   );
-  const reviews = productIds.length
-    ? await db.review.findMany({
-        where: { userId: order.userId, orderId: order.id, productId: { in: productIds } },
-        select: { id: true, productId: true },
-      })
-    : [];
+  const requestIds = [...new Set(returnedLines.map((l) => l.returnRequestId))];
+  const [reviews, doneRefunds] = await Promise.all([
+    productIds.length
+      ? db.review.findMany({
+          where: { userId: order.userId, orderId: order.id, productId: { in: productIds } },
+          select: { id: true, productId: true },
+        })
+      : [],
+    requestIds.length
+      ? db.orderCustomerRefund.findMany({
+          where: { orderId: order.id, kind: 'RETURN', refKey: { in: requestIds }, status: 'COMPLETED' },
+          select: { refKey: true },
+        })
+      : [],
+  ]);
   const reviewOf = new Map(reviews.map((r) => [r.productId, r.id]));
+  const refunded = new Set(doneRefunds.map((r) => r.refKey));
   const byItem = new Map(
     order.items.map((it): readonly [string, OrderLineReview] => {
       if (it.isGift) return [it.id, NO_REVIEW];
-      const refundedQty = refundedQtyOf.get(it.id) ?? 0;
-      const refunded = refundedQty > 0 ? { refundedQty } : null;
+      const returnedQty = returnedQtyOf.get(it.id) ?? 0;
+      const returned = returnedQty > 0 ? { returnedQty, refundDone: [...(requestsOf.get(it.id) ?? [])].every((id) => refunded.has(id)) } : null;
       const productId = productOf.get(it.variationId);
-      if (!productId) return [it.id, { ...NO_REVIEW, ...refunded }];
+      if (!productId) return [it.id, { ...NO_REVIEW, ...returned }];
       const reviewId = reviewOf.get(productId) ?? null;
-      return [it.id, { reviewId, reviewable: reviewId === null && !refundedProducts.has(productId), ...refunded }];
+      return [it.id, { reviewId, reviewable: reviewId === null && !returnedProducts.has(productId), ...returned }];
     }),
   );
   return (itemId) => byItem.get(itemId) ?? NO_REVIEW;
