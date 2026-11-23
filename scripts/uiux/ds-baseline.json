@@ -37,11 +37,7 @@
     "pages/post-detail.tsx": 1,
     "pages/product-detail.tsx": 3
    },
-   "zmp-text": {
-    "components/product/points-earn-line.tsx": 1,
-    "pages/cart.tsx": 1,
-    "pages/checkout.tsx": 1
-   }
+   "zmp-text": {}
   },
   "web": {
    "open-snackbar": {},
