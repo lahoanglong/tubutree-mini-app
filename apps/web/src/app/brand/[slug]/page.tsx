@@ -36,7 +36,8 @@ export async function generateMetadata({
   return withBrowseSocial(brandMeta(b), img);
 }
 
-// Nằm giữa generateMetadata và BrandPage: dấu tích trong <title> là chữ, không phải icon, nên ds-palette-pc11 không quét đoạn này.
+// Kiểu trả `Metadata` cho ds-palette-pc11 biết đây là hàm dựng thẻ meta (dấu tích trong <title> là chữ, không phải icon) nên không quét thân hàm,
+// đặt ở đâu trong file cũng được. BrandPage cũng gọi hàm này, nên bỏ kiểu trả thì spec quét thân hàm và đỏ.
 /** Tiêu đề, mô tả, canonical của trang: thẻ meta, og/twitter và CollectionPage của JSON-LD đọc cùng một nguồn. */
 function brandMeta(b: BrandForMeta): Metadata {
   // ✓ là chữ trong chuỗi <title>/og (huy hiệu trên trang là icon): nhãn chính hãng nhận dấu ngay ở kết quả tìm kiếm và khi chia sẻ.
