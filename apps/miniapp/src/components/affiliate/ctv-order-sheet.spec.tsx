@@ -65,7 +65,7 @@ function renderSheet() {
   );
 }
 
-/** zmp-ui Input vẽ nhãn là phần tử riêng (không htmlFor) nên tìm ô nhập đi kèm nhãn hiển thị. */
+/** Tìm ô nhập đi kèm nhãn hiển thị (nhãn `Input` gắn `<label htmlFor>`, nhãn của khối khác thì leo lên tới khung chứa ô). */
 function inputNear(labelText: string): HTMLInputElement {
   let node: HTMLElement | null = screen.getByText(labelText);
   while (node && !node.querySelector('input')) node = node.parentElement;

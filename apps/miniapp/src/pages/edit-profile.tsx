@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { AVATAR_READ_FAILED } from '@tubutree/app-core/client-copy';
-import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
+import { Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -23,6 +23,7 @@ import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
+import { Input } from '../components/ui/input';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

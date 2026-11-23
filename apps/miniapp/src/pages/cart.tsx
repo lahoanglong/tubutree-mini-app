@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
@@ -71,7 +71,7 @@ import { Button } from '../components/ui/button';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { PriceTag } from '../components/ui/price-tag';
-import { Heading, Text as DsText } from '../components/ui/text';
+import { Heading, Text } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { useNotify } from '../hooks/use-notify';
@@ -578,9 +578,9 @@ export default function CartPage() {
               data-testid="cart-selection-error"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) var(--space-gutter) 0' }}
             >
-              <DsText variant="body-sm" tone="danger">
+              <Text variant="body-sm" tone="danger">
                 {vi.cart.selectionPriceError}
-              </DsText>
+              </Text>
               {/* Tên riêng: nhiều nút "Thử lại" trên cùng màn làm nhiều việc khác nhau. */}
               <Button variant="ghost" loading={selectionQ.isFetching} aria-label={vi.home.retryLabel('báo giá phần đã chọn')} onPress={() => selectionQ.refetch()}>
                 {vi.common.retry}
@@ -589,7 +589,7 @@ export default function CartPage() {
           )}
           {withHeaders && (
             <Box px={3} pt={2}>
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+              <Text variant="caption" tone="secondary" as="div" style={{ lineHeight: 18 / 13 }}>
                 Giỏ có hàng do nhiều nơi giao: mỗi nơi giao thành một đơn riêng, có phí giao riêng.
               </Text>
             </Box>
@@ -672,20 +672,14 @@ export default function CartPage() {
             zIndex: 30,
           }}
         >
-          <Text size="small" style={{ color: 'white' }}>
+          <Text variant="body-sm" tone="inverse" as="div" style={{ lineHeight: 18 / 14 }}>
             {undoBar.text}
           </Text>
-          <Text
-            role="button"
-            {...rowKeyboardProps()}
-            size="small"
-            bold
-            onClick={undoBar.onUndo}
-            className="tubu-hit-44"
-            style={{ color: 'var(--forest-200)', padding: '8px 6px', display: 'inline-block' }}
-          >
-            {vi.common.undo}
-          </Text>
+          <div role="button" {...rowKeyboardProps()} onClick={undoBar.onUndo} className="tubu-hit-44" style={{ padding: '8px 6px', display: 'inline-block' }}>
+            <Text as="div" variant="body-sm" style={{ lineHeight: 18 / 14, fontWeight: 500, color: 'var(--forest-200)' }}>
+              {vi.common.undo}
+            </Text>
+          </div>
         </Box>
       )}
 
@@ -797,16 +791,16 @@ function DiscontinuedNotice({ lines, onRemove }: { lines: UnavailableCartLine[];
     >
       <Box flex alignItems="center" style={{ gap: 6 }}>
         <AlertTriangle size={16} color="var(--color-text-warning)" aria-hidden />
-        <Text size="small" bold style={{ color: 'var(--color-text-warning)' }}>
+        <Text variant="body-sm" tone="warning" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
           {vi.cart.discontinuedHeading(lines.length)}
         </Text>
       </Box>
-      <Text size="xSmall" style={{ marginTop: 4, color: 'var(--color-text-secondary)' }}>
+      <Text variant="caption" tone="secondary" as="div" style={{ lineHeight: 18 / 13, marginTop: 4 }}>
         {vi.cart.discontinuedBody}
       </Text>
       {lines.map((l) => (
         <Box key={l.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 8 }}>
-          <Text size="small" style={{ flex: 1, minWidth: 0, textDecoration: 'line-through' }}>
+          <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, flex: 1, minWidth: 0, textDecoration: 'line-through' }}>
             {joinVariationLine(l.productName, variationLabel(l.variationName))} × {l.quantity}
           </Text>
           <Button variant="ghost" onPress={() => onRemove(l.id)}>
@@ -924,20 +918,14 @@ function CartLineRow({
         {/* Chừa 36px bên phải cho thùng rác góc trên (vùng chạm 44 nhô ra khỏi lề thẻ). Tên 1-2 dòng chỉ cao 18-36px:
             tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
         <div style={{ paddingRight: 36 }}>
-          <Text
-            size="small"
-            bold
-            role="button"
-            {...rowKeyboardProps()}
-            onClick={onOpen}
-            className="tubu-hit-44"
-            style={{ cursor: 'pointer', display: 'block' }}
-          >
-            {line.productName}
-          </Text>
+          <div role="button" {...rowKeyboardProps()} onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
+            <Text as="div" variant="body-sm" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
+              {line.productName}
+            </Text>
+          </div>
         </div>
         {lineVariation && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+          <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13 }}>
             {lineVariation}
           </Text>
         )}
@@ -947,12 +935,12 @@ function CartLineRow({
               {vi.flashSale.badge}
             </Badge>
             {line.flashEndAt ? (
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+              <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13 }}>
                 <Countdown endAt={line.flashEndAt} mode="text" onEnd={onFlashEnd} />
               </Text>
             ) : (
               line.soldPct != null && Number.isFinite(line.soldPct) && clampPercent(line.soldPct) > 0 && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13 }}>
                   {vi.flashSale.soldPct(clampPercent(line.soldPct))}
                 </Text>
               )
@@ -962,7 +950,7 @@ function CartLineRow({
         {(stockNote || soldOut) && (
           <Box flex alignItems="center" style={{ gap: 4, marginTop: 2 }}>
             <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
-            <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+            <Text variant="caption" tone="warning" as="div" style={{ lineHeight: 18 / 13 }}>
               {stockNote ?? vi.cart.outOfStock}
             </Text>
           </Box>
@@ -970,7 +958,7 @@ function CartLineRow({
         {line.flashLimitNotice && (
           <Box flex alignItems="flex-start" style={{ gap: 4, marginTop: 2 }}>
             <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flex: '0 0 auto', marginTop: 2 }} />
-            <Text size="xSmall" data-testid="flash-limit-notice" style={{ color: 'var(--color-text-warning)' }}>
+            <Text variant="caption" tone="warning" as="div" data-testid="flash-limit-notice" style={{ lineHeight: 18 / 13 }}>
               {line.flashLimitNotice}
             </Text>
           </Box>
@@ -991,7 +979,7 @@ function CartLineRow({
         </Box>
         {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
         {line.quantity > 1 && localQty === line.quantity && !pending && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+          <Text variant="caption" tone="secondary" as="div" style={{ lineHeight: 18 / 13, display: 'block', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
             Thành tiền {formatVnd(line.total)}
           </Text>
         )}
@@ -1072,7 +1060,7 @@ function CouponRow({
             <Ticket size={20} color="var(--clay-700)" aria-hidden style={{ flex: '0 0 auto' }} />
             {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. Mã dài bất thường thì xuống dòng ngay trong pill (khách phải đọc đủ mã), hàng cao thêm. */}
             <Box style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-sm)', rowGap: 'var(--space-inline-xs)', minWidth: 0, flex: 1 }}>
-              <Text size="small" bold data-testid="coupon-label" style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
+              <Text variant="body-sm" as="div" data-testid="coupon-label" style={{ lineHeight: 18 / 14, fontWeight: 500, flex: '0 0 auto' }}>
                 Mã giảm giá
               </Text>
               {summary.couponCode ? (
@@ -1095,17 +1083,17 @@ function CouponRow({
                     {summary.couponCode}
                   </span>
                   {summary.discount > 0 && (
-                    <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <Text variant="caption" tone="success" as="div" data-testid="coupon-discount" style={{ lineHeight: 18 / 13, flexShrink: 0, whiteSpace: 'nowrap' }}>
                       -{formatVnd(summary.discount)}
                     </Text>
                   )}
                 </Box>
               ) : hint ? (
-                <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
+                <Text variant="caption" tone="brand" as="div" data-testid="coupon-hint" style={{ minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
                   {couponHintShort(hint)}
                 </Text>
               ) : (
-                <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
+                <Text variant="caption" tone="tertiary" as="div" data-testid="coupon-placeholder" style={{ minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
                   {fillCopy('coupon.rowInvite')}
                 </Text>
               )}
@@ -1114,7 +1102,7 @@ function CouponRow({
 
           {!quick && (
             <Box flex alignItems="center" style={{ gap: 2, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
-              <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
+              <Text variant="caption" tone="brand" as="div" data-testid="coupon-cta" style={{ lineHeight: 18 / 13, fontWeight: 500 }}>
                 {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
               </Text>
               <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />
@@ -1137,9 +1125,11 @@ function CouponRow({
         )}
       </Box>
       {quick && v.error && (
-        <Text id={errorId} size="xSmall" role="alert" data-testid="cart-voucher-error" style={{ color: 'var(--color-text-danger)', display: 'block' }}>
-          {v.error}
-        </Text>
+        <div id={errorId} role="alert" data-testid="cart-voucher-error">
+          <Text as="div" variant="caption" tone="danger" style={{ lineHeight: 18 / 13 }}>
+            {v.error}
+          </Text>
+        </div>
       )}
     </>
   );
@@ -1289,20 +1279,22 @@ function StickySummary({
           {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
           {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={COMPACT_ROW} dataDs="cart-ship-estimate" />}
           {couponLine && (
-            <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
-              {couponLine}
-            </Text>
+            <div role="status" data-testid="coupon-notice">
+              <Text as="div" variant="caption" tone="warning" style={{ lineHeight: 18 / 13 }}>
+                {couponLine}
+              </Text>
+            </div>
           )}
           {greenBoxHint && (
-            <DsText variant="caption" tone="success" as="p" data-testid="green-box-hint">
+            <Text variant="caption" tone="success" as="p" data-testid="green-box-hint">
               {greenBoxHint}
-            </DsText>
+            </Text>
           )}
           {removedNotice}
           {outOfStockNames.length > 0 && (
             <Box flex alignItems="flex-start" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
-              <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+              <Text variant="caption" tone="warning" as="div" style={{ lineHeight: 18 / 13 }}>
                 {vi.cart.outOfStockBlocked(outOfStockNames)}
               </Text>
             </Box>
@@ -1310,7 +1302,7 @@ function StickySummary({
           {overStock && outOfStockNames.length === 0 && (
             <Box flex alignItems="center" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
-              <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+              <Text variant="caption" tone="warning" as="div" style={{ lineHeight: 18 / 13 }}>
                 {vi.cart.overStockBlocked}
               </Text>
             </Box>
@@ -1333,7 +1325,7 @@ function StickySummary({
           {saving > 0 && (
             // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md). Được xuống dòng tại khoảng trắng
             // ("Tiết kiệm" / "12.345.000đ") khi khối tổng hẹp ở 320px; số tiền không có điểm ngắt nên không bao giờ bị cắt giữa số.
-            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block' }}>
+            <Text variant="caption" as="div" data-testid="cart-saving" style={{ lineHeight: 18 / 13, color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block' }}>
               {fillCopy('cart.saving', { x: formatVnd(saving) })}
             </Text>
           )}

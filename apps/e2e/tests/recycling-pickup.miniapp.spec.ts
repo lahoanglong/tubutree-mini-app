@@ -136,7 +136,7 @@ test.describe('Checkout — Đổi rác kèm đơn', () => {
     await expect(card.getByText(CARD_TITLE, { exact: true })).toBeVisible();
     await expect(card.getByText('Miễn 100% phí vận chuyển')).toBeVisible();
     await expect(card.getByText('-19.000đ phí giao')).toBeVisible();
-    await expect(card.getByRole('checkbox', { name: CARD_TITLE })).not.toBeChecked();
+    await expect(card.getByRole('switch', { name: CARD_TITLE })).not.toBeChecked();
     await expect(page.getByText(CARD_TITLE, { exact: true })).toHaveCount(1);
     await expect(page.getByText('Thu kèm rác', { exact: true })).toHaveCount(0);
     await expect(page.locator('#checkout-waste-pickup')).toHaveCount(0);
@@ -158,7 +158,7 @@ test.describe('Checkout — Đổi rác kèm đơn', () => {
     await page.getByRole('button', { name: 'Xong', exact: true }).click();
     await expect(page.getByTestId('checkout-pickup-sheet')).toHaveCount(0);
     await expect(page.getByText('Gửi lại ~1 kg · +3.000 điểm sau khi kho nhận')).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: CARD_TITLE })).toBeChecked();
+    await expect(page.getByRole('switch', { name: CARD_TITLE })).toBeChecked();
     const placeBtn = page.getByRole('button', { name: 'Đặt hàng · 130.000đ' });
     await expect(placeBtn).toBeEnabled();
 
@@ -206,7 +206,7 @@ test.describe('Checkout — Đổi rác kèm đơn', () => {
     await page.goto('/checkout');
     const placeBtn = page.getByRole('button', { name: PLACE_BTN });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
-    await expect(page.getByRole('checkbox', { name: CARD_TITLE })).toBeVisible();
+    await expect(page.getByRole('switch', { name: CARD_TITLE })).toBeVisible();
 
     const placed = api.waitForCall('POST', '/checkout/place-order');
     await placeBtn.click();
@@ -243,7 +243,7 @@ test.describe('Checkout — Đổi rác kèm đơn', () => {
 
     const card = page.getByTestId('checkout-pickup');
     await expect(card.getByText(reason)).toBeVisible();
-    await expect(card.getByRole('checkbox', { name: CARD_TITLE })).toBeDisabled();
+    await expect(card.getByRole('switch', { name: CARD_TITLE })).toBeDisabled();
     // Hàng chỉ đọc (aria-disabled) nên Playwright coi là không bấm được; ép bấm để chứng minh bấm không mở tấm.
     await card.getByRole('button', { name: `${CARD_TITLE} — ${reason}` }).click({ force: true });
     await expect(page.getByTestId('checkout-pickup-sheet')).toHaveCount(0);

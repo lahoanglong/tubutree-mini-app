@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ElementRef } from 'react';
-import { Input } from 'zmp-ui';
 import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '../../services/affiliate-api';
 import { getErrorMessage } from '../../services/api';
@@ -8,6 +7,7 @@ import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
+import { Input } from '../ui/input';
 
 /** Mã gửi kèm đơn: mã khách vừa nhập ở checkout thắng mã còn trong phiên từ link giới thiệu. */
 export function effectiveReferralCode(

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Input, Page, useLocation } from 'zmp-ui';
+import { Page, useLocation } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
@@ -36,6 +36,7 @@ import { vi } from '../i18n/vi';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { Input } from '../components/ui/input';
 
 const PAGE_SIZE = 10;
 const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];

@@ -3,7 +3,7 @@ import { WASTE_PENDING_POINTS_SUBNOTE, homePickupCopy, pausedNote, pendingPoints
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -42,6 +42,7 @@ import { formatDate, formatDateTime, formatNumber, formatPoints } from '../utils
 import { formatPhoneDisplay } from '../utils/phone';
 import { METHOD_LABELS, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { Input } from '../components/ui/input';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {

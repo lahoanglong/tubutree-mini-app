@@ -12,6 +12,9 @@ import { OrderTrackingPill } from '../orders/order-tracking-pill';
 import { Button } from './button';
 import { Chip } from './chip';
 import { Checkbox, Radio, Switch } from './form';
+import { Input } from './input';
+import SnackbarProvider, { useSnackbar } from '../../build-snackbar-shim';
+import { useEffect } from 'react';
 import { IconButton } from './icon-button';
 import { ListRow } from './list-row';
 import { CouponRemovedNotice } from '../checkout/coupon-removed-notice';
@@ -66,7 +69,8 @@ function declared(el: HTMLElement, axis: 'w' | 'h'): number {
 }
 
 function reaches44(el: HTMLElement): boolean {
-  if (/\btubu-hit-44(-square)?\b|\btouch-target\b/.test(el.className)) return true;
+  // `tubu-input`: ô nhập DS cao 48px, rộng theo khối (tokens.css, `input.spec.tsx` canh chiều cao).
+  if (/\btubu-hit-44(-square)?\b|\btouch-target\b|\btubu-input\b/.test(el.className)) return true;
   for (let node: HTMLElement | null = el; node && node.parentElement !== document.body; node = node.parentElement) {
     if (declared(node, 'w') >= 44 && declared(node, 'h') >= 44) return true;
     // Chiều rộng do bố cục quyết định: nút ZaUI (min-width 120px trong CSS) và hàng <div> block full-width.
@@ -79,6 +83,12 @@ const INTERACTIVE = 'button, [role="button"], [role="tab"], input';
 
 function interactiveIn(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(INTERACTIVE));
+}
+
+function OpenToast() {
+  const { openSnackbar } = useSnackbar();
+  useEffect(() => openSnackbar({ text: 'Đã thêm', action: { text: 'Xem giỏ', close: true } }), []);
+  return null;
 }
 
 describe('vùng chạm DS v2 >= 44x44', () => {
@@ -114,6 +124,8 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       />
     )],
     ['Switch có nhãn', () => <Switch label="A" checked={false} onChange={() => {}} />],
+    ['Input có nhãn', () => <Input label="A" />],
+    ['Hộp thông báo có nút hành động', () => <SnackbarProvider><OpenToast /></SnackbarProvider>],
     ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
     ['OrderTimelineTracker (nút Sao chép thông tin đơn)', () => <OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING')} shareText="Đơn hàng Tubu Tree A" />],
     ['OrderTrackingPill (viên vận đơn, chạm chép mã)', () => <OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />],

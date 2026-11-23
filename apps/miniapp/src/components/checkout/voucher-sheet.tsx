@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Input } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -25,6 +24,7 @@ import { autoCouponName } from '../../utils/coupon-name';
 import { cartKey } from '../../services/cart-key';
 import { COUPON_CHANGE_KEY, holdForCouponReload } from './use-coupon-hint';
 import { INPUT_LIMITS } from '../../utils/input-limits';
+import { Input } from '../ui/input';
 
 export interface VoucherSheetProps {
   visible: boolean;

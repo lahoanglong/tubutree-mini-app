@@ -1,6 +1,7 @@
 // apps/miniapp/src/css/zaui-bridge.spec.ts
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
+import { PRUNED_ZMP_UI_COMPONENTS } from '../build-zaui-prune';
 
 const css = readFileSync(new URL('./zaui-bridge.css', import.meta.url), 'utf-8');
 
@@ -14,20 +15,6 @@ const REQUIRED_VARS = [
   '--zaui-light-button-secondary-icon',
   '--zaui-light-button-tertiary-text',
   '--zaui-light-button-tertiary-icon',
-  '--zaui-light-input-border-color',
-  '--zaui-light-input-hover-border-color',
-  '--zaui-light-input-text-color',
-  '--zaui-light-checkbox-checked-background',
-  '--zaui-light-checkbox-checked-mark-color',
-  '--zaui-light-radio-checked-background',
-  '--zaui-light-radio-checked-mark-color',
-  '--zaui-light-switch-bg-color',
-  '--zaui-light-spinner-dot-color',
-  '--zaui-light-spinner-border-color',
-  '--zaui-light-tabbar-active-line',
-  '--zaui-light-tabbar-label-active',
-  '--zaui-light-progress-completed',
-  '--zaui-light-bottom-navigation-active-color',
 ];
 
 describe('zaui-bridge.css', () => {
@@ -38,6 +25,11 @@ describe('zaui-bridge.css', () => {
     for (const v of REQUIRED_VARS) {
       expect(css, `missing override for ${v}`).toMatch(new RegExp(`${v}\\s*:`));
     }
+  });
+  it('không ghi đè biến của thành phần zmp-ui mà bản build đã cắt (luật đọc biến đó không còn trong CSS)', () => {
+    const declared = [...css.matchAll(/(--zaui-light-[a-z0-9-]+)\s*:/g)].map((m) => m[1] ?? '');
+    const dead = declared.filter((v) => PRUNED_ZMP_UI_COMPONENTS.some((c) => v.startsWith(`--zaui-light-${c}-`)));
+    expect(dead).toEqual([]);
   });
   it('never hardcodes a raw hex — every override points at var(--color-* / --forest-* / --stone-*)', () => {
     const declarations = css.match(/--zaui-light-[a-z0-9-]+:\s*[^;]+;/g) ?? [];

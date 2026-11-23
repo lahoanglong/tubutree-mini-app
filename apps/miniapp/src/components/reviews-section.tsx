@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Input, useSnackbar } from 'zmp-ui';
+import { useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Play, Star, Video } from 'lucide-react';
 import { reviewMediaItems } from '@tubutree/app-core/commerce/review-media';
@@ -62,6 +62,7 @@ import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
 import { INPUT_LIMITS } from '../utils/input-limits';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
+import { Input } from './ui/input';
 
 
 /**

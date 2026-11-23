@@ -254,7 +254,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
   it('sản phẩm chưa có ảnh: dòng hàng hiện khung placeholder như giỏ hàng, không dựng img với src rỗng (BUYERMINI-13)', async () => {
     const { container } = renderPage();
     const name = await screen.findByText('Xà bông thảo mộc');
-    const row = name.closest('div')!.parentElement as HTMLElement;
+    const row = name.parentElement!.parentElement as HTMLElement;
     expect(row.querySelector('img')).toBeNull();
     expect(row.querySelector('svg')).not.toBeNull();
     expect(container.querySelector('img[alt="Xà bông thảo mộc"]')).toBeNull();
@@ -1740,7 +1740,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
     expect(within(card).getByText('Miễn 100% phí vận chuyển')).toBeInTheDocument();
     expect(within(card).getByText('-20.000đ phí giao')).toBeInTheDocument();
     expect(within(card).getByRole('button', { name: CHANGE_NAME })).toBeInTheDocument();
-    expect(within(card).getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).not.toBeChecked();
+    expect(within(card).getByRole('switch', { name: '♻️ Đổi rác kèm đơn' })).not.toBeChecked();
     expect(document.querySelector('#checkout-waste-pickup')).toBeNull();
     expect(screen.queryByText('Thu kèm rác')).toBeNull();
     // Chỉ một thẻ, không nhân đôi, và danh sách món chưa tải khi tấm còn đóng.
@@ -1778,7 +1778,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
     await waitFor(() => expect(pickupArg()).toEqual({ inlinePickup: { lines: [{ itemId: 'it-b', qty: 3 }] }, returnWeightGrams: 2000 }));
     expect(await screen.findByText('Gửi lại ~2 kg · +3.000 điểm sau khi kho nhận')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
     const ship = (await screen.findAllByTestId('ship-waived'))[0]!;
     expect(within(ship).getByText('Miễn phí vận chuyển (đổi rác kèm đơn)')).toBeInTheDocument();
     expect(ship.querySelector('[style*="line-through"]')?.textContent).toBe('20.000đ');
@@ -1797,7 +1797,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     await waitFor(() => expect(screen.queryByTestId('checkout-pickup-sheet')).toBeNull());
     expect(pickupArg()).toEqual({});
-    expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' })).not.toBeChecked();
   });
 
   it('phiếu thu kèm đang mở được chọn sẵn: một dòng tóm tắt + Đổi món; Xong gửi wasteRequestId, không gửi món', async () => {
@@ -1838,7 +1838,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
     await chooseThreeBottles();
     fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
     await screen.findByText(/Gửi lại ~0,5 kg/);
-    fireEvent.click(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' }));
+    fireEvent.click(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' }));
     await waitFor(() => expect(pickupArg()).toEqual({}));
     const body = await placeOrderClick();
     expect(body).not.toHaveProperty('inlinePickup');
@@ -1853,7 +1853,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
     expect(await screen.findByText('Cân nặng gói rác gửi lại không hợp lệ')).toBeInTheDocument();
     expect(screen.getByTestId('checkout-pickup')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
   });
 
   it('409 phiếu thu rác đổi giữa chừng → báo bằng câu của Tubu, tải lại báo giá và danh sách món', async () => {
@@ -1956,12 +1956,12 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       expect(within(nudge).getByText(ONE_TAP)).toBeInTheDocument();
       const card = screen.getByTestId('checkout-pickup');
       expect(card.querySelectorAll('button, [role="checkbox"]').length).toBeLessThanOrEqual(3);
-      fireEvent.click(within(card).getByRole('checkbox', { name: ONE_TAP }));
+      fireEvent.click(within(card).getByRole('switch', { name: ONE_TAP }));
       await waitFor(() => expect(pickupArg()).toMatchObject({ inlinePickup: { lines: [{ itemId: 'it-b', qty: 3 }] } }));
       expect(typeof pickupArg()?.returnWeightGrams).toBe('number');
       expect(screen.queryByTestId('checkout-pickup-sheet')).toBeNull();
       await waitFor(() => expect(screen.queryByTestId('checkout-pickup-nudge')).toBeNull());
-      expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
+      expect(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
       expect(funnel()).toEqual([
         expect.objectContaining({ step: 'return_nudge_shown', lane: 'PICKUP' }),
         expect.objectContaining({ step: 'return_nudge_applied', lane: 'PICKUP' }),
@@ -1975,7 +1975,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       renderPage();
       const nudge = await screen.findByTestId('checkout-pickup-nudge');
       expect(within(nudge).getByText('Còn thiếu 2.000 điểm để gửi kèm, chạm để thêm món')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' }));
+      fireEvent.click(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' }));
       const sheet = await screen.findByTestId('checkout-pickup-sheet');
       expect(await within(sheet).findByRole('progressbar', { name: 'Dự kiến 1.000 / 3.000 điểm' })).toBeInTheDocument();
       expect(pickupArg()).toEqual({});
@@ -1988,7 +1988,7 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       const nudge = await screen.findByTestId('checkout-pickup-nudge');
       expect(within(nudge).getByText('Chạm để xem lại món gửi kèm, +3.000 Điểm Xanh')).toBeInTheDocument();
       expect(nudge.textContent).not.toContain('miễn phí giao');
-      fireEvent.click(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' }));
+      fireEvent.click(screen.getByRole('switch', { name: '♻️ Đổi rác kèm đơn' }));
       await screen.findByTestId('checkout-pickup-sheet');
       expect(pickupArg()).toEqual({});
       expect(funnel().map((p) => p.step)).toEqual(['return_nudge_shown']);

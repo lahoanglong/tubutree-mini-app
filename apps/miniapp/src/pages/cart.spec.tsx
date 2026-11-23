@@ -162,7 +162,7 @@ describe('CartPage — vùng chạm >= 44px (C-021)', () => {
 
   it('tên sản phẩm bấm được mở trang sản phẩm và có vùng chạm 44px (tubu-hit-44, hiện block cho trọn bề ngang)', async () => {
     renderPage();
-    const name = await screen.findByText('Xà bông thảo mộc');
+    const name = (await screen.findByText('Xà bông thảo mộc')).closest('[role="button"]') as HTMLElement;
     expect(name.className).toContain('tubu-hit-44');
     expect(name.style.display).toBe('block');
     fireEvent.click(name);
@@ -710,10 +710,10 @@ describe('CartPage — thành tiền dòng khi SL > 1 (D6-10)', () => {
     );
     renderPage();
     await screen.findByText('Nước rửa chén');
-    const line = screen.getByText('Nước rửa chén').closest('[class*="zaui-box"], div')!.parentElement as HTMLElement;
+    const line = screen.getByText('Nước rửa chén').closest('[data-testid="cart-line"]') as HTMLElement;
     expect(line.textContent).toContain('Thành tiền');
     expect(line.textContent).toContain('285.000đ');
-    const single = screen.getByText('Xà bông lẻ').closest('[class*="zaui-box"], div')!.parentElement as HTMLElement;
+    const single = screen.getByText('Xà bông lẻ').closest('[data-testid="cart-line"]') as HTMLElement;
     expect(single.textContent).not.toContain('Thành tiền');
   });
 

@@ -13,21 +13,35 @@ export const PRUNED_ZMP_UI_COMPONENTS = [
   'box',
   'calendar',
   'center',
+  'checkbox',
   'cluster',
   'date-picker',
   'grid',
   'header',
+  'icon',
   'image-viewer',
+  'input',
   'list',
   'modal',
   'picker',
+  'progress',
+  'radio',
   'select',
   'slider',
+  'snackbar-provider',
+  'spinner',
   'stack',
   'swiper',
+  'switch',
   'tabs',
   'zbox',
 ] as const;
+
+/**
+ * Thư mục zmp-ui mà bản build thay cả mã bằng shim (`build-vendor-shims.ts`): app vẫn nhập `SnackbarProvider`/`useSnackbar` từ 'zmp-ui' nhưng
+ * Rollup nạp `build-snackbar-shim.ts`, nên bao đóng import trong `build-zaui-prune.spec.ts` dừng ở đây (Icon, Progress chỉ thư mục này kéo theo).
+ */
+export const SHIMMED_ZMP_UI_COMPONENTS = ['snackbar-provider'] as const;
 
 /**
  * Lớp mang token của thành phần bị cắt nhưng do hạ tầng dùng chung sinh ra: `common/modal-wrapper` (Sheet dựng nó) đặt tên `zaui-modal-wrapper`.
@@ -38,7 +52,7 @@ export const PRUNE_EXEMPT_CLASSES = ['zaui-modal-wrapper'] as const;
 /**
  * Lớp bổ nghĩa của Button (thành phần vẫn dùng) mà không đường dựng nào của Mini sinh ra. zmp-ui Button chỉ thêm chúng theo prop `type`
  * (highlight/danger), `size` (small/medium/large) và `suffixIcon`: nút của app (`ui/button.tsx`, `ui/empty-state.tsx`) không truyền các prop đó,
- * nút kính lúp của `Input.Search` truyền `type="neutral"` cùng `size` của ô tìm (app không đặt), còn `Sheet.Actions` app không dùng.
+ * `Input` của zmp-ui (nơi `Input.Search` dựng nút kính lúp) app không còn dùng, còn `Sheet.Actions` app không dùng.
  * `build-zaui-prune.spec.ts` canh cả ba điều kiện.
  */
 export const PRUNED_ZAUI_CLASSES = ['zaui-btn-highlight', 'zaui-btn-danger', 'zaui-btn-small', 'zaui-btn-medium', 'zaui-btn-large', 'zaui-btn-suffix-icon'] as const;

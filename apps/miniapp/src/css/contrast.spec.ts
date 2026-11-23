@@ -1,23 +1,24 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SRC, firstDecl, lerp, over, parseColor, ratio, readText, resolveColor, tokenRgb } from '../test-support/contrast';
+import { SRC, firstDecl, lerp, over, parseColor, ratio, readText, tokenRgb } from '../test-support/contrast';
 
-const BRIDGE = readText(path.join(SRC, 'css/zaui-bridge.css'));
+const TOKENS = readText(path.join(SRC, 'css/tokens.css'));
 const BRAND = readText(path.join(SRC, 'css/brand-theme.css'));
 
 describe('viền ô nhập, checkbox, radio và nền công tắc tắt đạt 3:1 (D8-2, WCAG 1.4.11)', () => {
   const surface = tokenRgb('--color-bg-surface');
   const canvas = tokenRgb('--color-bg-canvas');
+  // Ô nhập, ô chọn và công tắc tự vẽ trong tokens.css (w19-02, thay zmp-ui): lấy đúng token mà luật CSS dùng.
+  const block = (sel: string) => new RegExp(`(^|\\n)${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`).exec(TOKENS)?.[2] ?? '';
 
   it.each([
-    '--zaui-light-input-border-color',
-    '--zaui-light-checkbox-border-color',
-    '--zaui-light-radio-border-color',
-    '--zaui-light-switch-off-bg-color',
-  ])('%s ≥ 3:1 so với nền thẻ trắng và nền canvas', (name) => {
-    const raw = firstDecl(BRIDGE, name);
-    expect(raw, `thiếu ${name}`).not.toBeNull();
-    const rgb = parseColor(resolveColor(raw!)).rgb;
+    ['.tubu-input', /border: 1px solid var\((--color-[a-z-]+)\)/],
+    ['.tubu-check__mark', /border: 2px solid var\((--color-[a-z-]+)\)/],
+    ['.tubu-switch', /background: var\((--color-[a-z-]+)\)/],
+  ] as const)('%s ≥ 3:1 so với nền thẻ trắng và nền canvas', (sel, re) => {
+    const token = re.exec(block(sel))?.[1];
+    expect(token, `thiếu màu viền/nền của ${sel}`).toBeTruthy();
+    const rgb = tokenRgb(token!);
     expect(ratio(rgb, surface)).toBeGreaterThanOrEqual(3);
     expect(ratio(rgb, canvas)).toBeGreaterThanOrEqual(3);
   });
@@ -93,6 +94,12 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     // Thanh tiến trình đơn (OrderTimelineTracker): dấu ✓ trên chấm bước đã qua và dấu ✕ trên chấm bước huỷ.
     ['--color-text-inverse', '--color-action-primary-bg'],
     ['--color-text-inverse', '--color-status-danger-fg'],
+    // Hộp thông báo (build-snackbar-shim.ts, w19-02): chữ và nút hành động trên nền tối.
+    ['--color-text-inverse', '--color-bg-inverse'],
+    // Icon đặc của hộp thông báo theo loại: nét trắng trên hình tô màu trạng thái.
+    ['--color-text-inverse', '--color-status-success-fg'],
+    ['--color-text-inverse', '--color-status-warning-fg'],
+    ['--color-text-inverse', '--color-status-info-fg'],
     // Thanh Miễn phí giao hàng khi đã đạt (W42A): chữ xanh ngọc trên nền thành công; nhãn "Story" trên viền vòng.
     ['--color-text-success', '--color-status-success-bg'],
     // Gợi ý mã giảm giá ở Giỏ (W44B): lời báo áp mã không được nằm trên nền canvas của trang.

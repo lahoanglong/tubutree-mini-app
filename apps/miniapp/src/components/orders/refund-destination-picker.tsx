@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { Input } from 'zmp-ui';
 import { Landmark, Wallet } from 'lucide-react';
 import { Field, Radio } from '../ui/form';
 import { Icon } from '../ui/icon';
@@ -8,6 +7,7 @@ import { rowKeyboardProps } from '../ui/row-keyboard';
 import { haptic } from '../../utils/haptic';
 import { type RefundBankInput, type RefundMethodChoice } from '../../utils/refund-rules';
 import { bankFieldErrors } from '../../utils/refund-form-rules';
+import { Input } from '../ui/input';
 
 interface Props {
   method: RefundMethodChoice;

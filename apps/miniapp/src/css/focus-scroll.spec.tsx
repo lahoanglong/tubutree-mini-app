@@ -44,12 +44,12 @@ describe('css/tokens.css: vòng focus và scroll-padding (a11y A4, A7)', () => {
     expect(rule!.style.getPropertyValue('scroll-padding-bottom')).toBe('calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px)');
   });
 
-  it('ô nhập ZaUI focus không có vòng outline, nút vẫn có (tránh hai vòng viền)', () => {
+  it('ô nhập DS focus không có vòng outline (viền đổi màu thay), nút vẫn có (tránh hai vòng viền)', () => {
     const style = document.createElement('style');
-    style.textContent = `.zaui-input{outline:none}` + readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    style.textContent = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
     document.head.appendChild(style);
     const input = document.createElement('input');
-    input.className = 'zaui-input';
+    input.className = 'tubu-input';
     const ta = document.createElement('textarea');
     const btn = document.createElement('button');
     document.body.append(input, ta, btn);
