@@ -39,6 +39,9 @@ async function setup(page: Page, api: MockApi, vp: { width: number; height: numb
       // không có localStorage: trang vẫn dựng, chỉ không có phiên khôi phục
     }
   });
+  // Đăng nhập thật ghi cờ phiên ở cả localStorage lẫn cookie. Thiếu cookie thì /vuon-xanh là bản khách dựng sẵn: script của nó ghi cookie rồi
+  // tải lại trang một lần, và luồng RSC của tài liệu đầu bị cắt ném "Connection closed." vào pageerror.
+  await page.context().addCookies([{ name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' }]);
   await page.setViewportSize(vp);
   return { state, crashed };
 }

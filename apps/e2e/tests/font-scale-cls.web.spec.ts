@@ -11,6 +11,9 @@ const SCALES = [
   { scale: 'large', size: '112.5%' },
   { scale: 'small', size: '93.75%' },
 ] as const;
+const suggestCard = (n: number) => ({
+  id: `fs-${n}`, slug: `fs-sp-${n}`, brand: 'Tubu', name: `Gợi ý ${n}`, thumbnail: null, basePrice: 100_000 + n, salePrice: null, isFeatured: false, inStock: true,
+});
 
 for (const { scale, size } of SCALES) {
   test(`CLS Trang chủ với cỡ chữ ${scale}: font-size gốc đặt từ khung hình đầu`, async ({ page, api }) => {
@@ -27,6 +30,12 @@ for (const { scale, size } of SCALES) {
     api.get('/me/wishlist/ids', []);
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
     mockMergedHome(api);
+    // Lưới Gợi ý của khách tải `/products` ở trình duyệt; mặc định của mock-api là trang rỗng, và khối rỗng tự ẩn.
+    api.get('/products', ({ call }) => {
+      const n = Number(call.query.get('page') ?? '1');
+      const limit = Number(call.query.get('limit') ?? '20');
+      return { data: Array.from({ length: limit }, (_, i) => suggestCard((n - 1) * limit + i + 1)), meta: { page: n, limit, total: 40 }, filtersIgnored: false };
+    });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
