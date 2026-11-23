@@ -6,6 +6,7 @@ import { LIKE_ESCAPE } from './search-text';
 import { CARD_PRODUCT_SELECT } from './card-select';
 import { HAS_IMAGE_WHERE, MERCH_RANK_SELECT } from './merch-rank';
 import { toPublicProductDetail } from './catalog-public';
+import { markCardPricesChanged } from './card-price-signal';
 
 /** Câu xếp hạng chọn vài cột nhỏ; câu lấy thẻ chọn CARD_PRODUCT_SELECT (có `variations`). */
 // Câu xếp hạng chỉ đọc cột nhỏ (kể cả cột tầng trưng bày); câu lấy thẻ của trang đọc đủ thẻ, có `slug`.
@@ -932,10 +933,17 @@ describe('CatalogService.list — bộ lọc "Có bản Refill" và "Đang ưu �
   ];
   const v = (id: string, retailPrice: number, salePrice: number | null, stock = 5) => ({ id, sku: `${id}-sku`, retailPrice, salePrice, stock });
 
-  function setup(opts: { catalog?: unknown[]; priced?: unknown[]; flash?: unknown[] } = {}) {
+  /** `running`: giờ kết thúc sớm nhất của đợt Giờ vàng đang chạy; `upcoming`: giờ bắt đầu sớm nhất của đợt đã bật chưa chạy. */
+  function setup(opts: { catalog?: unknown[]; priced?: unknown[]; flash?: unknown[]; running?: Date; upcoming?: Date } = {}) {
     const listing = jest.fn().mockResolvedValue([card('p1')]);
     const catalogRows = jest.fn().mockResolvedValue(opts.catalog ?? CATALOG);
     const pricedRows = jest.fn().mockResolvedValue(opts.priced ?? []);
+    const boundaries: { running: Date | null; upcoming: Date | null } = { running: opts.running ?? null, upcoming: opts.upcoming ?? null };
+    const flashSale = {
+      aggregate: jest.fn(async (args: { _min: Record<string, true> }) =>
+        'endAt' in args._min ? { _min: { endAt: boundaries.running } } : { _min: { startAt: boundaries.upcoming } },
+      ),
+    };
     // Ba câu khác nhau trên cùng bảng: bảng cặp (cột nhận diện, không giá), quét giá thẻ (giá, không slug), câu lấy thẻ của trang.
     const findMany = jest.fn((args: { select?: Record<string, unknown> }) => {
       const sel = args.select ?? {};
@@ -947,9 +955,10 @@ describe('CatalogService.list — bộ lọc "Có bản Refill" và "Đang ưu �
     const prisma = {
       product: { findMany, count: jest.fn().mockResolvedValue(1) },
       flashSaleItem: flash,
+      flashSale,
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
-    return { svc: new CatalogService(prisma), listing, catalogRows, pricedRows, flash };
+    return { svc: new CatalogService(prisma), listing, catalogRows, pricedRows, flash, flashSale, boundaries };
   }
   const whereOf = (listing: jest.Mock) => listing.mock.calls[0][0].where;
 
@@ -1017,14 +1026,128 @@ describe('CatalogService.list — bộ lọc "Có bản Refill" và "Đang ưu �
     expect(whereOf(listing).AND).toEqual([{ id: { in: ['flash', 'sale'] } }]);
   });
 
-  it('onSale không nhớ: suất Giờ vàng vừa hết thì lượt sau không còn sản phẩm đó', async () => {
+  describe('onSale nhớ 30 giây (w25-01)', () => {
+    const T0 = Date.UTC(2026, 10, 24, 3, 0, 0);
     const priced = [{ id: 'flash', basePrice: 100_000, salePrice: null, variations: [v('flash-v', 100_000, null)] }];
     const live = [{ flashPrice: 70_000, soldCount: 0, quota: 10, variationId: 'flash-v', variation: { productId: 'flash', retailPrice: 100_000, salePrice: null } }];
-    const { svc, listing, flash } = setup({ priced, flash: live });
-    await svc.list({ page: 1, limit: 20, sort: 'newest', onSale: true });
-    flash.findMany.mockResolvedValue([]);
-    await svc.list({ page: 1, limit: 20, sort: 'newest', onSale: true });
-    expect(listing.mock.calls[1][0].where.AND).toEqual([{ id: { in: [] } }]);
+    const onSale = (svc: CatalogService) => svc.list({ page: 1, limit: 20, sort: 'newest', onSale: true });
+    const lastAnd = (listing: jest.Mock) => listing.mock.calls[listing.mock.calls.length - 1][0].where.AND;
+    let clock: jest.SpyInstance<number, []>;
+    beforeEach(() => (clock = jest.spyOn(Date, 'now').mockReturnValue(T0)));
+    afterEach(() => clock.mockRestore());
+
+    it('lượt lọc trong 30 giây dùng lại danh sách (không quét lại giá thẻ, không đọc lại Giờ vàng); đủ 30 giây thì quét lại', async () => {
+      const { svc, pricedRows, flash } = setup({ priced: [{ id: 'sale', basePrice: 100_000, salePrice: null, variations: [v('sale-v', 100_000, 80_000)] }] });
+      await onSale(svc);
+      clock.mockReturnValue(T0 + 29_999);
+      await svc.list({ page: 2, limit: 20, sort: 'newest', onSale: true });
+      expect(pricedRows).toHaveBeenCalledTimes(1);
+      expect(flash.findMany).toHaveBeenCalledTimes(1);
+      clock.mockReturnValue(T0 + 30_000);
+      await onSale(svc);
+      expect(pricedRows).toHaveBeenCalledTimes(2);
+    });
+
+    it('lượt quét đọc Giờ vàng theo cùng một mốc giờ: suất đang chạy, giờ kết thúc sớm nhất và giờ bắt đầu sớm nhất của đợt đã bật', async () => {
+      const { svc, flash, flashSale } = setup({ priced });
+      await onSale(svc);
+      const now = new Date(T0);
+      expect(flash.findMany.mock.calls[0][0].where.flashSale).toEqual({ isActive: true, startAt: { lte: now }, endAt: { gt: now } });
+      expect(flashSale.aggregate.mock.calls.map((c) => c[0])).toEqual([
+        { where: { isActive: true, startAt: { lte: now }, endAt: { gt: now } }, _min: { endAt: true } },
+        { where: { isActive: true, startAt: { gt: now } }, _min: { startAt: true } },
+      ]);
+    });
+
+    it('suất Giờ vàng hết giờ thì lượt sau tính lại ngay dù chưa đủ 30 giây (bản nhớ hết hạn ở giờ kết thúc của suất)', async () => {
+      const { svc, listing, flash, boundaries } = setup({ priced, flash: live, running: new Date(T0 + 5_000) });
+      await onSale(svc);
+      expect(lastAnd(listing)).toEqual([{ id: { in: ['flash'] } }]);
+      flash.findMany.mockResolvedValue([]);
+      boundaries.running = null;
+      clock.mockReturnValue(T0 + 4_999);
+      await onSale(svc);
+      expect(lastAnd(listing)).toEqual([{ id: { in: ['flash'] } }]);
+      clock.mockReturnValue(T0 + 5_000);
+      await onSale(svc);
+      expect(lastAnd(listing)).toEqual([{ id: { in: [] } }]);
+    });
+
+    it('đợt Giờ vàng đã bật bắt đầu thì lượt sau tính lại ngay (bản nhớ hết hạn ở giờ bắt đầu)', async () => {
+      const { svc, listing, flash, boundaries } = setup({ priced, flash: [], upcoming: new Date(T0 + 12_000) });
+      await onSale(svc);
+      expect(lastAnd(listing)).toEqual([{ id: { in: [] } }]);
+      flash.findMany.mockResolvedValue(live);
+      boundaries.upcoming = null;
+      clock.mockReturnValue(T0 + 12_000);
+      await onSale(svc);
+      expect(lastAnd(listing)).toEqual([{ id: { in: ['flash'] } }]);
+    });
+
+    it('markCardPricesChanged (admin lưu Giờ vàng, đồng bộ giá Pancake) bỏ bản nhớ ngay; lượt quét bắt đầu trước lần báo không ghi đè bộ nhớ', async () => {
+      const saleRow = { id: 'sale', basePrice: 100_000, salePrice: null, variations: [v('sale-v', 100_000, 80_000)] };
+      const { svc, listing, pricedRows } = setup({ priced: [saleRow] });
+      await onSale(svc);
+      markCardPricesChanged();
+      await onSale(svc);
+      expect(pricedRows).toHaveBeenCalledTimes(2);
+
+      // Lượt quét cũ đọc giá trước khi admin lưu (chưa có sản phẩm nào giảm giá) và chỉ trả về sau lần báo.
+      let release!: () => void;
+      let started!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const began = new Promise<void>((r) => (started = r));
+      pricedRows.mockImplementationOnce(async () => {
+        started();
+        await gate;
+        return [];
+      });
+      markCardPricesChanged();
+      const stale = onSale(svc);
+      await began;
+      markCardPricesChanged();
+      // Lượt lọc sau lần báo không dùng chung lượt quét cũ đang chạy dở.
+      await onSale(svc);
+      expect(pricedRows).toHaveBeenCalledTimes(4);
+      expect(lastAnd(listing)).toEqual([{ id: { in: ['sale'] } }]);
+      release();
+      await stale;
+      await onSale(svc);
+      expect(pricedRows).toHaveBeenCalledTimes(4);
+      expect(lastAnd(listing)).toEqual([{ id: { in: ['sale'] } }]);
+    });
+
+    it('hai lượt lọc cùng lúc dùng chung một lượt quét', async () => {
+      const { svc, pricedRows } = setup({ priced });
+      await Promise.all([onSale(svc), onSale(svc), svc.list({ page: 2, limit: 20, sort: 'newest', onSale: true })]);
+      expect(pricedRows).toHaveBeenCalledTimes(1);
+    });
+
+    it('lượt quét lỗi không được nhớ: lượt sau quét lại', async () => {
+      const { svc, pricedRows } = setup({ priced });
+      pricedRows.mockRejectedValueOnce(new Error('db down'));
+      await expect(onSale(svc)).rejects.toThrow('db down');
+      await onSale(svc);
+      expect(pricedRows).toHaveBeenCalledTimes(2);
+    });
+
+    it('rankCache vẫn nhớ khi bộ lọc có hơn 200 id (khoá dài được băm sha256:v1), nên "Bán chạy" + "Đang ưu đãi" không quét lại thứ hạng', async () => {
+      const many = Array.from({ length: 250 }, (_, i) => ({
+        id: `sale-product-${String(i).padStart(3, '0')}`,
+        basePrice: 100_000,
+        salePrice: null,
+        variations: [v(`sv-${i}`, 100_000, 80_000)],
+      }));
+      const { svc, listing } = setup({ priced: many });
+      await svc.list({ page: 1, limit: 20, sort: 'best_seller', onSale: true });
+      await svc.list({ page: 2, limit: 20, sort: 'best_seller', onSale: true });
+      const rankCalls = listing.mock.calls.filter(([a]) => isRank(a));
+      expect(rankCalls).toHaveLength(1);
+      expect(rankCalls[0][0].where.AND[0].id.in).toHaveLength(250);
+      const keys = [...(svc as unknown as { rankCache: Map<string, unknown> }).rankCache.keys()];
+      expect(keys).toHaveLength(1);
+      expect(keys[0]).toMatch(/^sha256:v1:[0-9a-f]{64}$/);
+    });
   });
 
   it('hai bộ lọc cùng bật thì cùng nằm trong AND (giao nhau); tắt thì không quét bảng cặp hay giá', async () => {

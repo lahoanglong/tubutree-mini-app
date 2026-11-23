@@ -24,6 +24,8 @@ import { exactMatch, type TextMatch } from './search-fuzzy';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
 import { loadRefillPairTable, refillPairProductIds } from './refill/refill-pair-table';
+import { cardPriceEpoch } from './card-price-signal';
+import { rankCacheKey } from './rank-cache-key';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableReason } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
@@ -621,9 +623,9 @@ export class CatalogService {
   ): Promise<string[]> {
     // Thứ hạng phụ thuộc giá (xếp giá, lọc giá) đổi ngay khi Giờ vàng bắt đầu/hết hoặc giá sửa nên không nhớ.
     const cacheable = allowCache && !needsPrice && !price;
-    const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag, merch }) : '';
+    const key = cacheable ? rankCacheKey(JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag, merch })) : '';
     const now = Date.now();
-    const hit = cacheable && key.length <= 2000 ? this.rankCache.get(key) : undefined;
+    const hit = cacheable ? this.rankCache.get(key) : undefined;
     if (hit && hit.expiresAt > now) return hit.ids;
     type Priced = T & PricedFields;
     const priced = needsPrice || price;
@@ -645,7 +647,7 @@ export class CatalogService {
     }
     if (arrange) ranked = arrange(ranked);
     const ids = ranked.map((r) => r.id);
-    if (cacheable && key.length <= 2000) {
+    if (cacheable) {
       if (this.rankCache.size >= this.RANK_MAX_KEYS) this.rankCache.delete(this.rankCache.keys().next().value as string);
       this.rankCache.set(key, { ids, expiresAt: now + this.RANK_TTL_MS });
     }
@@ -653,9 +655,9 @@ export class CatalogService {
   }
 
   /** Suất Giờ vàng đang chạy gom theo sản phẩm: một truy vấn, cùng điều kiện và cùng luật "còn rẻ hơn" với dải Giờ vàng. Dải bù đơn ở Giỏ (`FreeshipUpsellService`) cũng đọc. */
-  async activeFlashOffers(): Promise<Map<string, FlashOffer[]>> {
+  async activeFlashOffers(now: Date = new Date()): Promise<Map<string, FlashOffer[]>> {
     const rows = await this.prisma.flashSaleItem.findMany({
-      where: activeFlashWhere(new Date()),
+      where: activeFlashWhere(now),
       select: {
         flashPrice: true,
         soldCount: true,
@@ -764,22 +766,52 @@ export class CatalogService {
     return this.refillIdsLoading;
   }
 
+  private onSale: { ids: string[]; expiresAt: number; epoch: number } | null = null;
+  private onSaleLoading: { epoch: number; ids: Promise<string[]> } | null = null;
+  private readonly ON_SALE_TTL_MS = 30_000;
+
   /**
    * Bộ lọc "Đang ưu đãi": sản phẩm công khai có giá trên thẻ (gồm Giờ vàng, `cardPriceWithFlash`) thấp hơn giá niêm yết của thẻ, tức đúng
-   * những thẻ hiện giá gạch. Không nhớ, như mọi thứ hạng phụ thuộc giá: suất Giờ vàng mở hay hết là danh sách đổi ngay.
+   * những thẻ hiện giá gạch. Danh sách được nhớ tối đa ON_SALE_TTL_MS để mỗi lượt lọc không quét lại cả danh mục. Bản nhớ hết hạn sớm hơn ở
+   * mốc Giờ vàng kế tiếp (một suất đang chạy kết thúc, hoặc một đợt đã bật bắt đầu), nên suất mở hay hết vẫn đổi danh sách ngay. Admin lưu Giờ
+   * vàng và đồng bộ giá Pancake bỏ bản nhớ qua `markCardPricesChanged`. Lượt nạp bắt đầu trước lần lưu thì không được ghi vào bộ nhớ. Các
+   * thay đổi sau vẫn có thể hiện chậm tới ON_SALE_TTL_MS: suất vừa bán hết, phân loại vừa hết hàng, sản phẩm vừa duyệt hoặc vừa ẩn.
    */
   private async onSaleIds(): Promise<string[]> {
-    const [rows, offers] = await Promise.all([
+    const epoch = cardPriceEpoch();
+    const now = Date.now();
+    if (this.onSale && this.onSale.epoch === epoch && this.onSale.expiresAt > now) return this.onSale.ids;
+    if (this.onSaleLoading?.epoch !== epoch) {
+      const ids = this.loadOnSaleIds(new Date(now))
+        .then(({ ids, until }) => {
+          if (epoch === cardPriceEpoch()) this.onSale = { ids, epoch, expiresAt: Math.min(now + this.ON_SALE_TTL_MS, until) };
+          return ids;
+        })
+        .finally(() => {
+          if (this.onSaleLoading?.ids === ids) this.onSaleLoading = null;
+        });
+      this.onSaleLoading = { epoch, ids };
+    }
+    return this.onSaleLoading.ids;
+  }
+
+  /** Một lượt quét giá thẻ, kèm `until` là mốc Giờ vàng kế tiếp (ms; Infinity nếu không có đợt nào đang chạy hay sắp chạy). */
+  private async loadOnSaleIds(now: Date): Promise<{ ids: string[]; until: number }> {
+    const [rows, offers, running, upcoming] = await Promise.all([
       this.prisma.product.findMany({
         where: { ...PUBLIC_PRODUCT_WHERE },
         select: { id: true, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } },
       }),
-      this.activeFlashOffers(),
+      this.activeFlashOffers(now),
+      this.prisma.flashSale.aggregate({ where: { isActive: true, startAt: { lte: now }, endAt: { gt: now } }, _min: { endAt: true } }),
+      this.prisma.flashSale.aggregate({ where: { isActive: true, startAt: { gt: now } }, _min: { startAt: true } }),
     ]);
-    return rows
+    const ids = rows
       .filter((p) => cardPriceWithFlash(p, p.variations, offers.get(p.id)) < cardPrices(p, p.variations).basePrice)
       .map((p) => p.id)
       .sort();
+    const until = Math.min(running._min.endAt?.getTime() ?? Infinity, upcoming._min.startAt?.getTime() ?? Infinity);
+    return { ids, until };
   }
 
   /**

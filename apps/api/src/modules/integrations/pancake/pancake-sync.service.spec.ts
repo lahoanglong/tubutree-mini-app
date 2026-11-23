@@ -7,6 +7,7 @@ import { PancakeClient as RealPancakeClient } from './pancake.client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
 import type { LifecycleService } from '../../lifecycle/lifecycle.service';
+import { cardPriceEpoch } from '../../catalog/card-price-signal';
 
 const notifyPriceDrop = jest.fn().mockResolvedValue(undefined);
 const lifecycle = { notifyWishlistPriceDrop: notifyPriceDrop } as unknown as LifecycleService;
@@ -713,6 +714,18 @@ describe('PancakeSyncService — một lượt đồng bộ một lúc trên c�
     expect(holder).toContain(CATALOG_SYNC_LEASE);
 
     await expect(new PancakeSyncService(makePrisma(), makeClient([[prod('a')]]), lifecycle).syncProducts()).resolves.toBe(1);
+  });
+
+  it('w25-01: lượt đã giữ khoá (xong hay lỗi giữa chừng) báo bộ lọc "Đang ưu đãi" đọc lại; lượt không giành được khoá thì không báo', async () => {
+    const before = cardPriceEpoch();
+    await new PancakeSyncService(makePrisma(), makeClient([[prod('a')]]), lifecycle).syncProducts();
+    expect(cardPriceEpoch()).toBe(before + 1);
+    const failing = { isConfigured: () => true, fetchProducts: jest.fn().mockRejectedValue(new Error('timeout')) } as unknown as PancakeClient;
+    await expect(new PancakeSyncService(makePrisma(), failing, lifecycle).syncProducts()).rejects.toThrow('timeout');
+    expect(cardPriceEpoch()).toBe(before + 2);
+    const busy = makePrisma({ $queryRaw: jest.fn().mockResolvedValue([]) });
+    await expect(new PancakeSyncService(busy, makeClient([[prod('a')]]), lifecycle).syncProducts()).rejects.toBeInstanceOf(CatalogSyncBusyError);
+    expect(cardPriceEpoch()).toBe(before + 2);
   });
 
   it('gia hạn khoá mỗi trang; khoá đã sang lượt khác giữa chừng → dừng, không ghi tiếp trang sau', async () => {

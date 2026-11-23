@@ -14,6 +14,7 @@ import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { publicImage } from '../../common/public-image';
 import { ACTIVE_FLASH_ORDER_BY, activeFlashWhere, isStillDiscounted } from './flash-active';
+import { markCardPricesChanged } from '../catalog/card-price-signal';
 import {
   FLASH_ALREADY_STARTED_MSG,
   FLASH_ITEM_NOT_FOUND_MSG,
@@ -656,7 +657,7 @@ export class FlashSaleService {
       endAt: dto.endAt ? new Date(dto.endAt) : undefined,
       isActive: dto.isActive,
     };
-    if (!timeChanged) return this.prisma.flashSale.update({ where: { id }, data });
+    if (!timeChanged) return this.afterPriceWrite(this.prisma.flashSale.update({ where: { id }, data }));
 
     const current = await this.prisma.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
     const start = dto.startAt ? new Date(dto.startAt) : current.startAt;
@@ -668,7 +669,7 @@ export class FlashSaleService {
     const staffCreated = await this.isStaffCreator(current.createdBy);
     const maxAmount = staffCreated ? (await loadStaffCouponCaps(this.config)).maxAmount : 0;
     // Tra trùng biến thể và ghi giờ mới cùng giao dịch, dưới khoá của addItem: không thì addItem chen một dòng vào giữa lúc tra và lúc ghi.
-    return this.prisma.$transaction(async (tx) => {
+    const write = this.prisma.$transaction(async (tx) => {
       await this.lockItemClash(tx);
       const fresh = await tx.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
       await this.assertNoItemClash(tx, id, fresh.items?.map((it) => it.variationId) ?? [], start, end);
@@ -691,6 +692,18 @@ export class FlashSaleService {
       }
       return tx.flashSale.update({ where: { id }, data });
     });
+    return this.afterPriceWrite(write);
+  }
+
+  /**
+   * Đợt và món Giờ vàng vừa ghi xong: báo bộ lọc "Đang ưu đãi" (CatalogService) bỏ danh sách đã nhớ. Chỉ báo sau khi giao dịch commit, để
+   * lượt nạp chạy trước lúc commit không được nhớ thành bản mới. Đợt rỗng (`createSale`, `generateSlots`) và thứ tự món không đổi giá thẻ
+   * nên không báo.
+   */
+  private async afterPriceWrite<T>(write: Promise<T>): Promise<T> {
+    const result = await write;
+    markCardPricesChanged();
+    return result;
   }
 
   private async isStaffCreator(createdBy: string | null): Promise<boolean> {
@@ -742,7 +755,7 @@ export class FlashSaleService {
     if (sale.items.some((it) => it.soldCount > 0)) {
       throw new BadRequestException('Đợt flash sale đã phát sinh đơn, chỉ có thể tắt chứ không xoá.');
     }
-    await this.prisma.flashSale.delete({ where: { id } });
+    await this.afterPriceWrite(this.prisma.flashSale.delete({ where: { id } }));
     return { ok: true };
   }
 
@@ -851,7 +864,7 @@ export class FlashSaleService {
         throw deny(`Mỗi khách được giảm tối đa ${vnd(caps.maxAmount)} (giảm mỗi sản phẩm ${vnd(perUnit)} × ${perUserLimit} suất mỗi khách).`);
       }
     }
-    return this.prisma.$transaction(async (tx) => {
+    const write = this.prisma.$transaction(async (tx) => {
       await this.lockItemClash(tx);
       // Chỉ chặn đợt TRÙNG khung giờ (hai giá flash cùng lúc cho một SKU); đợt kế tiếp không trùng giờ thì xếp được. Tra dưới khoá và đọc
       // lại khung giờ của đợt: updateSale có thể vừa dời giờ giữa lúc đọc đợt ở trên và lúc giữ khoá.
@@ -870,6 +883,7 @@ export class FlashSaleService {
       }
       return tx.flashSaleItem.create({ data });
     });
+    return this.afterPriceWrite(write);
   }
 
   /**
@@ -928,7 +942,7 @@ export class FlashSaleService {
     if (actor?.staff) await this.assertStaffCreated(item.flashSale.createdBy);
     if (item.soldCount > 0) throw new BadRequestException(REMOVE_SOLD_ITEM_MSG);
     // soldCount đã đọc ở trên có thể cũ: khách đặt xong giữa hai câu thì DELETE theo id sẽ cuốn luôn dòng lượt mua (CASCADE). Điều kiện soldCount nằm trong chính câu DELETE.
-    const removed = await this.prisma.flashSaleItem.deleteMany({ where: { id: itemId, soldCount: 0 } });
+    const removed = await this.afterPriceWrite(this.prisma.flashSaleItem.deleteMany({ where: { id: itemId, soldCount: 0 } }));
     if (removed.count === 0) {
       const still = await this.prisma.flashSaleItem.findUnique({ where: { id: itemId }, select: { id: true } });
       throw new BadRequestException(still ? REMOVE_SOLD_ITEM_MSG : 'Không tìm thấy sản phẩm flash.');

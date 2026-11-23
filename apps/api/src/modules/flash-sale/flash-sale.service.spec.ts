@@ -8,6 +8,7 @@ import type { LifecycleService } from '../lifecycle/lifecycle.service';
 import { vnHorizonEnd } from './flash-slots';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { holdsLease } from '../../common/cron-leader/run-exclusive.fixtures';
+import { cardPriceEpoch } from '../catalog/card-price-signal';
 
 jest.mock('../../common/cron-leader/run-exclusive');
 beforeEach(() => (runExclusive as jest.Mock).mockImplementation(holdsLease(true)));
@@ -858,6 +859,84 @@ describe('FlashSaleService.addItem (validate)', () => {
     const r = await new FlashSaleService(prisma, config, notifications, lifecycle).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 });
     expect(r).toEqual({ id: 'fi1' });
     expect(prisma.flashSaleItem.create).toHaveBeenCalled();
+  });
+});
+
+describe('FlashSaleService — admin lưu Giờ vàng thì bộ lọc "Đang ưu đãi" đọc lại (w25-01)', () => {
+  const svc = (prisma: unknown) => new FlashSaleService(prisma as PrismaService, config, notifications, lifecycle);
+  const future = new Date(Date.now() + 3 * 864e5);
+  const itemPrisma = () => {
+    const prisma = {
+      flashSale: {
+        findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: future, endAt: new Date(future.getTime() + 3600e3), items: [] }),
+        create: jest.fn().mockResolvedValue({ id: 's2' }),
+        update: jest.fn().mockResolvedValue({ id: 's1' }),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, salePrice: null, stock: 10 }) },
+      flashSaleItem: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'fi1', soldCount: 0, flashSale: { createdBy: 'admin1' } }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'fi1' }),
+        update: jest.fn().mockResolvedValue({ id: 'fi1' }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $transaction: jest.fn(),
+    };
+    prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+    return prisma;
+  };
+
+  it('thêm món, bỏ món, sửa đợt, xoá đợt: mỗi lần ghi xong báo một lần', async () => {
+    const prisma = itemPrisma();
+    const before = cardPriceEpoch();
+    await svc(prisma).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 });
+    expect(cardPriceEpoch()).toBe(before + 1);
+    await svc(prisma).removeItem('fi1');
+    expect(cardPriceEpoch()).toBe(before + 2);
+    await svc(prisma).updateSale('s1', { isActive: false });
+    expect(cardPriceEpoch()).toBe(before + 3);
+    await svc(prisma).deleteSale('s1');
+    expect(cardPriceEpoch()).toBe(before + 4);
+  });
+
+  it('chỉ báo sau khi giao dịch commit, không báo khi bị từ chối hay ghi lỗi', async () => {
+    const prisma = itemPrisma();
+    let commit!: () => void;
+    const committed = new Promise<void>((r) => (commit = r));
+    prisma.$transaction.mockImplementationOnce(async (fn: (tx: unknown) => unknown) => {
+      const out = await fn(prisma);
+      await committed;
+      return out;
+    });
+    const before = cardPriceEpoch();
+    const pending = svc(prisma).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 });
+    await new Promise((r) => setImmediate(r));
+    expect(prisma.flashSaleItem.create).toHaveBeenCalled();
+    expect(cardPriceEpoch()).toBe(before);
+    commit();
+    await pending;
+    expect(cardPriceEpoch()).toBe(before + 1);
+
+    await expect(svc(prisma).addItem('s1', { variationId: 'v1', flashPrice: 120000, quota: 5 })).rejects.toThrow('Giá flash phải thấp hơn giá đang bán.');
+    prisma.flashSaleItem.findFirst.mockResolvedValueOnce({ id: 'other' });
+    await expect(svc(prisma).addItem('s1', { variationId: 'v1', flashPrice: 80000, quota: 5 })).rejects.toThrow('Sản phẩm đã có trong đợt flash khác.');
+    prisma.flashSaleItem.findUnique.mockResolvedValueOnce({ id: 'fi1', soldCount: 2, flashSale: { createdBy: 'admin1' } });
+    await expect(svc(prisma).removeItem('fi1')).rejects.toThrow('Không thể xoá sản phẩm đã phát sinh đơn giờ vàng.');
+    prisma.flashSale.update.mockRejectedValueOnce(new Error('db down'));
+    await expect(svc(prisma).updateSale('s1', { title: 'Mới' })).rejects.toThrow('db down');
+    expect(cardPriceEpoch()).toBe(before + 1);
+  });
+
+  it('tạo đợt rỗng và đổi thứ tự món không đổi giá thẻ nên không báo', async () => {
+    const prisma = itemPrisma();
+    const before = cardPriceEpoch();
+    await svc(prisma).createSale('admin1', { title: 'Giờ vàng', startAt: future.toISOString(), endAt: new Date(future.getTime() + 3600e3).toISOString() });
+    await svc(prisma).setItemSortOrder('fi1', 3);
+    expect(prisma.flashSale.create).toHaveBeenCalled();
+    expect(prisma.flashSaleItem.update).toHaveBeenCalled();
+    expect(cardPriceEpoch()).toBe(before);
   });
 });
 

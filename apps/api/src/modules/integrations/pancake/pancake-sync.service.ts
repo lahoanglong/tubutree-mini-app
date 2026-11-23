@@ -9,6 +9,7 @@ import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import { ImageRegistryStale } from '../../catalog/image-registry-stale';
 import { keepExistingDescription } from '../../catalog/catalog-copy-enrichment.core';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
+import { markCardPricesChanged } from '../../catalog/card-price-signal';
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
@@ -268,6 +269,8 @@ export class PancakeSyncService implements OnModuleInit {
       // Cờ và khoá phải được nhả kể cả khi fetch ném — nếu không, một lần Pancake timeout là mọi lượt
       // sync sau đều bị chặn cho tới lần restart (cờ) hoặc tới khi khoá hết hạn.
       this.running = false;
+      // Lượt quét (kể cả lượt lỗi giữa chừng) có thể đã ghi giá, ngừng bán hay mở bán lại: bộ lọc "Đang ưu đãi" phải đọc lại.
+      if (lease) markCardPricesChanged();
       await lease?.release();
     }
   }
