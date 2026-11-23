@@ -17,6 +17,7 @@ import { readCompanyIdentity } from '../../system-config/company-config';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildCards, type CockpitCard } from './golive-cards';
 import { cockpitMetrics, evaluateCockpitExtras, type CockpitExtrasSnapshot } from './golive-extras';
+import { buildHandover, type HandoverBoard } from './golive-handover';
 import { scrubSecrets, secretValues } from './golive-secret-scrub';
 
 export interface GoLiveCockpit {
@@ -25,6 +26,8 @@ export interface GoLiveCockpit {
   phase: 'post-deploy';
   summary: Summary;
   cards: CockpitCard[];
+  /** Khoá và quyết định bên thứ 3 còn chờ bàn giao: chỉ tên biến và đã/chưa điền, không có giá trị. */
+  handover: HandoverBoard;
 }
 
 /** Nhiều admin mở bảng cùng lúc (hoặc bấm tải lại liên tục) chỉ chạy bộ kiểm một lần trong khoảng này. */
@@ -80,6 +83,7 @@ export class GoLiveCockpitService {
       phase: 'post-deploy',
       summary: summarize(results),
       cards: buildCards(results, cockpitMetrics(extras, snaps, now)),
+      handover: buildHandover(results, env),
     };
     return scrubSecrets(value, secretValues(env));
   }

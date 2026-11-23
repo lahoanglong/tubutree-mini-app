@@ -134,6 +134,8 @@ describe('GET /admin/golive/cockpit không lộ bí mật', () => {
     const out = await new GoLiveController(svc, {} as never).cockpit('1');
     const json = JSON.stringify(out);
     expect(out.cards.map((c) => c.key)).toEqual(['infra', 'zalo', 'pancake', 'waste', 'catalog', 'legal']);
+    expect(out.handover.title).toBe('Cấu hình bên thứ 3 chờ bàn giao Go-Live');
+    expect(out.handover.items.flatMap((i) => i.vars).length).toBeGreaterThanOrEqual(12);
     const fromKeys = SECRET_ENV_KEYS.map((k) => env[k]).filter((v): v is string => typeof v === 'string');
     expect(fromKeys.length).toBeGreaterThanOrEqual(15);
     const secrets = [...fromKeys, env.DATABASE_URL, 'db-pass-zz91', 'slackTokenZZ9988', env.GOMDON_PHONE, env.THROTTLE_BYPASS_TOKEN];
