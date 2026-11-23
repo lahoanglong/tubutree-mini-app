@@ -2253,6 +2253,15 @@ describe('PancakeOrderService — khách đổi đơn chuyển khoản chưa tr�
     expect(t.client.updateOrder).not.toHaveBeenCalled();
   });
 
+  it('syncCodSwitch: chưa có mã Pancake mà lệnh tạo đơn vừa gửi (dấu gửi còn mới) → ném để BullMQ thử lại; lượt cuối hay dấu cũ thì thôi', async () => {
+    const inFlight = setup({ ...switched, pancakeOrderId: null, pancakePushClaimedAt: new Date() });
+    await expect(inFlight.svc.syncCodSwitch('o1', false)).rejects.toThrow('đang được tạo trên Pancake');
+    await expect(inFlight.svc.syncCodSwitch('o1', true)).resolves.toBeUndefined();
+    const stale = setup({ ...switched, pancakeOrderId: null, pancakePushClaimedAt: new Date(Date.now() - 6 * 60_000) });
+    await expect(stale.svc.syncCodSwitch('o1', false)).resolves.toBeUndefined();
+    expect(inFlight.client.updateOrder).not.toHaveBeenCalled();
+  });
+
   it('syncCodSwitch: lượt cuối vẫn lỗi → "Cần xử lý Pancake" bảo sửa tay; lượt chưa cuối chỉ ném lại', async () => {
     const failing = { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('Pancake trả 503', true, false, 503)) };
     const early = setup(switched, { client: failing });

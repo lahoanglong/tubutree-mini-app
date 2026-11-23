@@ -22,6 +22,7 @@ import { TtlMemo } from '../../common/ttl-memo';
 import { removeInvisible } from '../../common/text-trim';
 import { escapePrismaLike, foldVietnamese } from '../catalog/search-text';
 import { OrderReversalService } from '../orders/order-reversal.service';
+import { COD_SWITCH_HISTORY_NOTE, beforeHandover, switchedFromTransfer } from '../orders/cod-switch';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { assertManualStatusChange, manualOutcome } from '../orders/status-race';
 import { allowedNextStatuses } from '../orders/order-transition';
@@ -199,10 +200,19 @@ function maskOrderPhones<
   };
 }
 
-function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
+type PaymentFlagFacts = { type: string; paymentMethod: string; paymentStatus: string; status: OrderStatus; shippedAt: Date | null };
+
+/**
+ * Đơn chuyển khoản, hoặc đơn khách đã đổi chuyển khoản sang COD khi hàng chưa rời kho (`codSwitched`): khách vẫn chuyển khoản thì Kế toán xác nhận
+ * được, đơn trở lại chuyển khoản đã trả (OrderStatusService.markPaid) hay thành khoản hoàn khi đơn đã huỷ.
+ */
+const takesTransfer = (o: PaymentFlagFacts, codSwitched: boolean) =>
+  o.paymentMethod === 'BANK_TRANSFER' || (codSwitched && o.paymentMethod === 'COD' && beforeHandover(o));
+
+function canAdminConfirmRetailPayment(o: PaymentFlagFacts, codSwitched = false) {
   return (
     o.type !== 'DEALER' &&
-    o.paymentMethod === 'BANK_TRANSFER' &&
+    takesTransfer(o, codSwitched) &&
     o.paymentStatus === 'UNPAID' &&
     o.status !== 'CANCELLED' &&
     o.status !== 'RETURNED'
@@ -213,10 +223,10 @@ function canAdminConfirmRetailPayment(o: { type: string; paymentMethod: string; 
  * Nút "Ghi nhận tiền về muộn": đơn lẻ chuyển khoản đã huỷ/trả mà chưa từng ghi nhận tiền — admin đối soát sao kê thấy
  * khách chuyển sau khi huỷ thì ghi một khoản hoàn vào hàng đợi Hoàn tiền khách (D2).
  */
-function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; paymentStatus: string; status: string }) {
+function canAdminRecordLatePayment(o: PaymentFlagFacts, codSwitched = false) {
   return (
     o.type !== 'DEALER' &&
-    o.paymentMethod === 'BANK_TRANSFER' &&
+    takesTransfer(o, codSwitched) &&
     o.paymentStatus === 'UNPAID' &&
     (o.status === 'CANCELLED' || o.status === 'RETURNED')
   );
@@ -1371,7 +1381,13 @@ export class AdminService {
         })
       : [];
     const onCredit = new Set(debits.map((d) => d.refId));
-    const lateCandidates = items.filter((o) => canAdminRecordLatePayment(o)).map((o) => o.id);
+    const codUnpaid = items.filter((o) => o.type !== 'DEALER' && o.paymentMethod === 'COD' && o.paymentStatus === 'UNPAID' && beforeHandover(o)).map((o) => o.id);
+    const codSwitched = new Set(
+      codUnpaid.length
+        ? (await this.prisma.orderStatusHistory.findMany({ where: { orderId: { in: codUnpaid }, note: COD_SWITCH_HISTORY_NOTE }, select: { orderId: true } })).map((r) => r.orderId)
+        : [],
+    );
+    const lateCandidates = items.filter((o) => canAdminRecordLatePayment(o, codSwitched.has(o.id))).map((o) => o.id);
     const lateRecorded = new Set(
       lateCandidates.length
         ? (
@@ -1404,8 +1420,8 @@ export class AdminService {
         cancellation: cancellations.get(o.id) ?? null,
         ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
         allowedTransitions: actorAllowedTransitions(viewer, o, allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true })),
-        canConfirmPayment: canAdminConfirmRetailPayment(o),
-        canRecordLatePayment: canAdminRecordLatePayment(o) && !lateRecorded.has(o.id),
+        canConfirmPayment: canAdminConfirmRetailPayment(o, codSwitched.has(o.id)),
+        canRecordLatePayment: canAdminRecordLatePayment(o, codSwitched.has(o.id)) && !lateRecorded.has(o.id),
         // Lần cron tự đẩy lại kế tiếp (null = không còn): màn "Kho Pancake" nói cho admin biết có cần chờ hay phải tự bấm.
         pancakeNextRetryAt: nextPushRetryAt(o)?.toISOString() ?? null,
         // "Đẩy lại Pancake" có nhận đơn không (NOW/WAIT/NEVER) và đơn đang chờ gì: cùng vị từ với retryPushByAdmin, web không tự suy lại từ cột.
@@ -1488,7 +1504,7 @@ export class AdminService {
   ) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, userId: true, endCustomerKey: true, shippingAddress: true, type: true, paymentMethod: true, total: true, status: true },
+      select: { id: true, code: true, userId: true, endCustomerKey: true, shippingAddress: true, type: true, paymentMethod: true, total: true, status: true, shippedAt: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     // Nhân viên tự đặt hàng rồi tự bấm "Đã nhận tiền" là lấy hàng không trả tiền: đơn của chính mình nhờ quản trị viên.
@@ -1504,7 +1520,7 @@ export class AdminService {
         `Đơn ${order.code} là đơn đại lý — xác nhận thanh toán ở mục đơn đại lý (có kiểm tra đơn ghi công nợ).`,
       );
     }
-    if (order.paymentMethod !== 'BANK_TRANSFER') {
+    if (order.paymentMethod !== 'BANK_TRANSFER' && !(beforeHandover(order) && (await switchedFromTransfer(this.prisma, order)))) {
       throw new BadRequestException(`Đơn ${order.code} thanh toán ${order.paymentMethod}, không phải chuyển khoản.`);
     }
 

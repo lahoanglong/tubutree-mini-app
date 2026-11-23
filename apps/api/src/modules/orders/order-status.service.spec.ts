@@ -965,7 +965,7 @@ describe('OrderStatusService.markPaid', () => {
 
     expect(res.outcome).toBe('PAID');
     const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
-    expect(call[0].where).toEqual({ id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' });
+    expect(call[0].where).toEqual({ id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' });
     expect(call[0].data).toMatchObject({ paymentStatus: 'PAID', status: 'CONFIRMED' });
     expect(call[0].data.paidAt).toBeInstanceOf(Date);
     expect(tx.orderStatusHistory.create).toHaveBeenCalledWith({
@@ -1001,7 +1001,7 @@ describe('OrderStatusService.markPaid', () => {
     const res = await svc.markPaid('o1', { actorType: 'ADMIN', actorId: 'a' });
     expect(res.outcome).toBe('PAID');
     const call = tx.order.updateMany.mock.calls[0] as unknown as FlipCall;
-    expect(call[0].where).toEqual({ id: 'o1', paymentStatus: 'UNPAID', status: 'PACKED' });
+    expect(call[0].where).toEqual({ id: 'o1', paymentStatus: 'UNPAID', status: 'PACKED', paymentMethod: 'BANK_TRANSFER' });
     expect(call[0].data.status).toBeUndefined();
     expect(tx.orderStatusHistory.create.mock.calls[0][0].data).toMatchObject({ fromStatus: 'PACKED', toStatus: 'PACKED' });
   });

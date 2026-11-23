@@ -7,7 +7,10 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { OrderCodSwitchService } from '../../src/modules/orders/order-cod-switch.service';
-import { COD_SWITCH_HISTORY_NOTE, COD_SWITCH_REFUSED } from '../../src/modules/orders/cod-switch';
+import { COD_SWITCH_HISTORY_NOTE, COD_SWITCH_REFUSED, COD_SWITCH_REVERTED_NOTE } from '../../src/modules/orders/cod-switch';
+import { refundReportedUnderpayment } from '../../src/modules/orders/refund-queue';
+import { AdminService } from '../../src/modules/admin/admin.service';
+import { GOMDON_STATE } from '../../src/modules/integrations/gomdon/gomdon-status';
 import { PENDING_PAYMENT_TTL_KEY, PendingPaymentExpiryCron } from '../../src/modules/orders/pending-payment-expiry.cron';
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { GuestCheckoutService } from '../../src/modules/checkout/guest/guest-checkout.service';
@@ -36,6 +39,7 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
   let orderStatus: OrderStatusService;
   let codSwitch: OrderCodSwitchService;
   let guest: GuestCheckoutService;
+  let admin: AdminService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const afterCodSwitch = jest.fn().mockResolvedValue(undefined);
   const restores: (() => Promise<void>)[] = [];
@@ -61,6 +65,7 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
     codSwitch = new OrderCodSwitchService(prisma, orderStatus, notifications, analytics, { afterCodSwitch } as unknown as PancakeSyncHooks);
     const env = { get: (k: string) => ({ JWT_ACCESS_SECRET: 'it-secret-cod-switch' })[k] } as unknown as ConfigService<Env, true>;
     guest = new GuestCheckoutService(prisma, {} as never, {} as never, {} as never, new SystemConfigService(prisma), analytics, env, codSwitch);
+    admin = new AdminService(prisma, {} as never, loyalty, affiliate, notifications, reversal, orderStatus, {} as never, {} as never, {} as never);
   });
 
   afterAll(async () => {
@@ -71,6 +76,8 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
         prisma.paymentAttempt.deleteMany({ where: { orderId: { in: orderIds } } }),
         // Cron huỷ đơn "Pancake báo chuyển thiếu" còn sót thì tạo khoản hoàn cho số đã nhận.
         prisma.orderCustomerRefund.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.gomdonAlert.deleteMany({ where: { orderId: { in: orderIds } } }),
+        prisma.walletTransaction.deleteMany({ where: { userId: { in: userIds } } }),
         prisma.orderStatusHistory.deleteMany({ where: { orderId: { in: orderIds } } }),
         prisma.order.deleteMany({ where: { id: { in: orderIds } } }),
         prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } }),
@@ -265,7 +272,7 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
   });
 
   describe('chạy chồng với tiền về (markPaid của webhook VietQR/Pancake)', () => {
-    it('markPaid đọc đơn, khách đổi COD chen giữa → câu lật của markPaid trượt, đọc lại rồi ghi tiền: COD đã trả, rời PENDING_PAYMENT đúng 1 lần', async () => {
+    it('markPaid đọc đơn, khách đổi COD chen giữa → câu lật của markPaid trượt, đọc lại rồi ghi tiền: đơn về lại chuyển khoản đã trả, rời PENDING_PAYMENT đúng 1 lần', async () => {
       const { order, userId, variationId } = await transferOrder();
       const res = await withStaleFirstRead(
         () => codSwitch.switchForOwner(userId, order.code),
@@ -273,10 +280,11 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
       );
       expect(res.outcome).toBe('PAID');
       const s = await state(order.id, variationId);
-      // Tiền khách đã chuyển vẫn được ghi: kho nhận lệnh "đã thanh toán, không thu COD", khách không trả hai lần.
-      expect(s.order).toMatchObject({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'PAID' });
+      // Tiền khách đã chuyển vẫn được ghi: đơn trở lại chuyển khoản đã trả, kho nhận lệnh "không thu COD", khách không trả hai lần.
+      expect(s.order).toMatchObject({ status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
       expect(s.leftPending).toHaveLength(1);
       expect(s.leftPending[0]!.note).toBe(COD_SWITCH_HISTORY_NOTE);
+      expect(s.history.at(-1)!.note).toContain(COD_SWITCH_REVERTED_NOTE);
     });
 
     it('tiền về trước → đổi COD bị từ chối ALREADY_PAID, đơn giữ chuyển khoản', async () => {
@@ -301,14 +309,78 @@ describe('COD switch vs payment webhook / expiry cron (real Postgres)', () => {
         const s = await state(order.id, variationId);
         expect(s.order).toMatchObject({ status: 'CONFIRMED', paymentStatus: 'PAID' });
         expect(s.leftPending).toHaveLength(1);
-        if (sw.status === 'fulfilled') {
-          expect(s.order.paymentMethod).toBe('COD');
-          expect(s.leftPending[0]!.note).toBe(COD_SWITCH_HISTORY_NOTE);
-        } else {
-          expect(refusalOf(sw.reason)?.reason).toBe('ALREADY_PAID');
-          expect(s.order.paymentMethod).toBe('BANK_TRANSFER');
-        }
+        // Đổi trước hay tiền về trước thì đơn cũng kết thúc là chuyển khoản đã trả.
+        expect(s.order.paymentMethod).toBe('BANK_TRANSFER');
+        if (sw.status === 'fulfilled') expect(s.leftPending[0]!.note).toBe(COD_SWITCH_HISTORY_NOTE);
+        else expect(refusalOf(sw.reason)?.reason).toBe('ALREADY_PAID');
       }
+    });
+  });
+
+  describe('tiền chuyển khoản về sau khi đã đổi COD', () => {
+    async function switched(over: Partial<Prisma.OrderUncheckedCreateInput> = {}) {
+      const f = await transferOrder(over);
+      await codSwitch.switchForOwner(f.userId, f.order.code);
+      return f;
+    }
+
+    it('trước khi giao: về lại chuyển khoản đã trả; Tubu huỷ đơn sau đó thì hoàn Ví đủ tiền (không mất tiền khách)', async () => {
+      const { order, userId, variationId } = await switched();
+      expect((await orderStatus.markPaid(order.id, { actorType: 'PANCAKE' })).outcome).toBe('PAID');
+      expect((await state(order.id, variationId)).order).toMatchObject({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', status: 'CONFIRMED' });
+      await orderStatus.setStatus(order.id, 'CANCELLED', { actorType: 'ADMIN', pancakeGate: false });
+      const after = (await state(order.id, variationId)).order;
+      expect(after).toMatchObject({ status: 'CANCELLED', paymentStatus: 'REFUNDED' });
+      const credited = await prisma.walletTransaction.aggregate({ where: { userId, refId: order.id }, _sum: { delta: true } });
+      expect(credited._sum.delta).toBe(200_000);
+    });
+
+    it('hàng đã rời kho, hay đơn COD thường: markPaid không lật (NOT_PAYABLE), đơn giữ COD chưa trả', async () => {
+      const handed = await switched();
+      await prisma.order.update({ where: { id: handed.order.id }, data: { shippedAt: new Date() } });
+      expect((await orderStatus.markPaid(handed.order.id, { actorType: 'PANCAKE' })).outcome).toBe('NOT_PAYABLE');
+      expect((await state(handed.order.id, handed.variationId)).order).toMatchObject({ paymentMethod: 'COD', paymentStatus: 'UNPAID' });
+      const plain = await transferOrder({ paymentMethod: 'COD', status: 'CONFIRMED' });
+      expect((await orderStatus.markPaid(plain.order.id, { actorType: 'PANCAKE' })).outcome).toBe('NOT_PAYABLE');
+      expect((await state(plain.order.id, plain.variationId)).order).toMatchObject({ paymentMethod: 'COD', paymentStatus: 'UNPAID' });
+    });
+
+    it('đơn thu gom đã có vận đơn Gomdon (thu hộ bằng tổng đơn): lật xong mở báo động sửa thu hộ về 0đ', async () => {
+      const { order } = await switched({ hasRecyclingPickup: true });
+      await prisma.order.update({ where: { id: order.id }, data: { gomdonOrderId: `GDIT${order.code}` } });
+      expect((await orderStatus.markPaid(order.id, { actorType: 'PANCAKE' })).outcome).toBe('PAID');
+      const alerts = await prisma.gomdonAlert.findMany({ where: { orderId: order.id } });
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.message).toContain('Sửa tiền thu hộ về 0đ');
+    });
+
+    it('đơn thu gom đang chờ tiền ở Gomdon: đổi COD đưa về "chưa đặt bưu tá" để cron dò lại nếu lần xếp việc lỗi', async () => {
+      const { order } = await switched({ hasRecyclingPickup: true, gomdonStatus: GOMDON_STATE.AWAITING_PAYMENT });
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).gomdonStatus).toBeNull();
+    });
+
+    it('Pancake ghi chuyển thiếu sau khi đổi, rồi đơn huỷ: số đã nhận thành khoản hoàn', async () => {
+      const { order } = await switched();
+      await prisma.order.update({ where: { id: order.id }, data: { pancakePaidReported: 100_000, status: 'CANCELLED' } });
+      const logger = { warn: jest.fn(), log: jest.fn() };
+      expect(await refundReportedUnderpayment({ prisma, logger }, order.id)).toBe(100_000);
+      const rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+      expect(rows.map((r) => [r.kind, r.amount])).toEqual([['LATE_PAYMENT', 100_000]]);
+    });
+
+    it('Kế toán xác nhận đã nhận tiền cho đơn đã đổi: về lại chuyển khoản đã trả; đơn đã huỷ thì ghi tiền về muộn; đơn COD thường: 400', async () => {
+      const live = await switched();
+      await admin.confirmOrderPayment('admin-it', live.order.code, { bankRef: `FT${live.order.code}` });
+      expect((await state(live.order.id, live.variationId)).order).toMatchObject({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+
+      const closed = await switched();
+      await prisma.order.update({ where: { id: closed.order.id }, data: { status: 'CANCELLED' } });
+      await admin.confirmOrderPayment('admin-it', closed.order.code, { bankRef: `FT${closed.order.code}`, amount: 200_000 });
+      const refunds = await prisma.orderCustomerRefund.findMany({ where: { orderId: closed.order.id } });
+      expect(refunds.map((r) => [r.kind, r.amount])).toEqual([['LATE_PAYMENT', 200_000]]);
+
+      const plain = await transferOrder({ paymentMethod: 'COD', status: 'CONFIRMED' });
+      await expect(admin.confirmOrderPayment('admin-it', plain.order.code, {})).rejects.toThrow('không phải chuyển khoản');
     });
   });
 

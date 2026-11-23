@@ -783,7 +783,15 @@ export class PancakeOrderService {
   async syncCodSwitch(orderId: string, final = false): Promise<void> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
     if (order.status === 'CANCELLED' || order.status === 'RETURNED' || isMerchantFulfilledOrder(order)) return;
-    if (order.paymentMethod !== 'COD' || order.paymentStatus !== 'UNPAID' || !order.pancakeOrderId) return;
+    if (order.paymentMethod !== 'COD' || order.paymentStatus !== 'UNPAID') return;
+    if (!order.pancakeOrderId) {
+      // Lệnh tạo đơn có thể đang bay với thân "chờ chuyển khoản" (dấu gửi còn mới). Nó tạo xong thì saveCreated xếp lại job này, nhưng nếu chính job
+      // này còn đang chạy thì BullMQ bỏ lần thêm trùng: ném để BullMQ thử lại sau, khi đơn đã gắn mã Pancake.
+      if (!final && order.pancakePushClaimedAt && Date.now() - order.pancakePushClaimedAt.getTime() < PancakeOrderService.SEND_SETTLE_MS) {
+        throw new Error(`Đơn ${order.code} đang được tạo trên Pancake: chờ có mã đơn rồi mới sửa ghi chú COD.`);
+      }
+      return;
+    }
     if (!this.client.isConfigured()) return;
     const { payload } = await this.orderUpdate(order, false);
     try {

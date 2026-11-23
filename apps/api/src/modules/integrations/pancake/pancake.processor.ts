@@ -13,6 +13,7 @@ import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
 import { PANCAKE_PARTIAL_RETURN_PREFIX, PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
+  ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER,
   ATTENTION_PARTIAL_RETURN_ACK,
   ATTENTION_PARTIAL_RETURN_HELD_REASONS,
   ATTENTION_RETURN_APPROVED,
@@ -49,7 +50,7 @@ import { OrderStatusService, InvalidOrderTransitionError, type SetStatusOutcome 
 import { CancelAfterHandoverError, UnpaidPrepaidTransitionError } from '../../orders/order-transition';
 import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../orders/refund-queue';
 import { hasDealerCreditDebit } from '../../orders/dealer-credit-debit';
-import { switchedFromTransfer } from '../../orders/cod-switch';
+import { beforeHandover, switchedFromTransfer } from '../../orders/cod-switch';
 import { formatVnd } from '../../orders/refund-destination';
 import { applyPancakeStock } from '../../catalog/variation-stock';
 import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../../common/vat-invoice-url';
@@ -690,14 +691,24 @@ export class PancakeProcessor extends WorkerHost {
   private async onPaymentReconcile(data: Record<string, unknown>, opts: { deferGomdonPush?: boolean } = {}): Promise<Order | null> {
     const order = await this.findOrder(data);
     if (!order) return null;
-    // Đơn khách đã đổi từ chuyển khoản sang COD vẫn nhận đối soát: tiền khách lỡ chuyển (QR cũ, chuyển trước khi đổi mà ngân hàng báo muộn) phải
-    // lật PAID để kho không thu COD lần nữa, hay thành khoản hoàn khi đơn đã huỷ. Chỉ khi hàng chưa rời kho: sau bàn giao, "đã trả" của Pancake có
-    // thể là tiền thu hộ COD của hãng, không phải chuyển khoản.
-    const codSwitched =
-      order.paymentMethod === 'COD' &&
-      order.shippedAt === null &&
-      !['SHIPPING', 'DELIVERED', 'RETURNED'].includes(order.status) &&
-      (await switchedFromTransfer(this.prisma, order));
+    // Đơn khách đã đổi từ chuyển khoản sang COD vẫn nhận đối soát: tiền khách lỡ chuyển (QR cũ, chuyển trước khi đổi mà ngân hàng báo muộn) đưa đơn
+    // về lại chuyển khoản đã trả (markPaid) để kho không thu COD lần nữa, hay thành khoản hoàn khi đơn đã huỷ. Chỉ khi hàng chưa rời kho: sau bàn
+    // giao, "đã trả" của Pancake có thể là tiền thu hộ COD của hãng; khi đó chỉ ô tiền chuyển khoản (prepaid/bank_payment) mới đáng báo người xử lý.
+    let codSwitched = false;
+    if (order.paymentMethod === 'COD') {
+      const transferred = pancakePaidAmount(data);
+      if (!(transferred > 0 || isPancakeOrderPaid(data, order.total)) || !(await switchedFromTransfer(this.prisma, order))) return null;
+      if (!beforeHandover(order)) {
+        if (transferred > 0) {
+          await this.flagAttention(
+            order,
+            `${ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER}: Pancake ghi nhận ${transferred.toLocaleString('vi-VN')}đ chuyển khoản. Kiểm tra để khách không trả hai lần.`,
+          );
+        }
+        return null;
+      }
+      codSwitched = true;
+    }
     if (order.paymentMethod !== 'BANK_TRANSFER' && !codSwitched) return null;
     this.warnUnreadableMoney(order, unreadablePaidFields(data), data);
     // Đơn chưa gắn đơn Pancake nào mà khớp được chỉ nhờ mã trong note: ai tạo đơn trên Pancake mang đúng dòng mã đó (hay nhân viên sửa

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { switchOrderToCod } from '@tubutree/app-core/api/orders';
@@ -26,6 +26,8 @@ export function CodSwitchAction({ code, total, onSwitched }: { code: string; tot
   const { openSnackbar } = useSnackbar();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Ref: hai cú chạm cùng khung hình chưa kịp vẽ lại thì state `busy` còn cũ, sẽ gửi hai lệnh đổi.
+  const pending = useRef(false);
 
   const refresh = () =>
     Promise.all([
@@ -35,7 +37,8 @@ export function CodSwitchAction({ code, total, onSwitched }: { code: string; tot
     ]);
 
   const confirm = async () => {
-    if (busy) return;
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     try {
       await switchOrderToCod(coreHttp, code);
@@ -52,6 +55,7 @@ export function CodSwitchAction({ code, total, onSwitched }: { code: string; tot
         await refresh();
       }
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
