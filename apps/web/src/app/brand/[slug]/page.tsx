@@ -24,12 +24,6 @@ type BrandForMeta = NonNullable<Awaited<ReturnType<typeof getBrand>>>;
 /** Link chia sẻ của CTV thêm ?ref=: canonical bỏ tham số đó để cùng một trang không bị tính là bản trùng. */
 const brandPath = (b: BrandForMeta) => `/brand/${encodeURIComponent(b.slug)}`;
 
-/** Tiêu đề, mô tả, canonical của trang: thẻ meta, og/twitter và CollectionPage của JSON-LD đọc cùng một nguồn. */
-function brandMeta(b: BrandForMeta): Metadata {
-  // ✓ là chữ trong chuỗi <title>/og (huy hiệu trên trang là icon): nhãn chính hãng nhận dấu ngay ở kết quả tìm kiếm và khi chia sẻ.
-  return { title: `${b.name}${b.isVerified ? ' ✓' : ''}`, description: brandMetaDescription(b), alternates: { canonical: brandPath(b) } };
-}
-
 export async function generateMetadata({
   params,
 }: {
@@ -40,6 +34,13 @@ export async function generateMetadata({
   if (!b) return { title: 'Thương hiệu' };
   const img = b.coverUrl ?? b.logoUrl ?? b.products?.[0]?.thumbnail ?? undefined;
   return withBrowseSocial(brandMeta(b), img);
+}
+
+// Nằm giữa generateMetadata và BrandPage: dấu tích trong <title> là chữ, không phải icon, nên ds-palette-pc11 không quét đoạn này.
+/** Tiêu đề, mô tả, canonical của trang: thẻ meta, og/twitter và CollectionPage của JSON-LD đọc cùng một nguồn. */
+function brandMeta(b: BrandForMeta): Metadata {
+  // ✓ là chữ trong chuỗi <title>/og (huy hiệu trên trang là icon): nhãn chính hãng nhận dấu ngay ở kết quả tìm kiếm và khi chia sẻ.
+  return { title: `${b.name}${b.isVerified ? ' ✓' : ''}`, description: brandMetaDescription(b), alternates: { canonical: brandPath(b) } };
 }
 
 export default async function BrandPage({
@@ -56,7 +57,7 @@ export default async function BrandPage({
   // Refill rỗng; API Refill lỗi thì bỏ lối vào, trang vẫn dựng.
   const refillEntry =
     b.hasRefillProducts === false ? null : (refillEntryOf(landing, new Set(b.refillProductSlugs ?? b.products.map((p) => p.slug))) ?? null);
-  // CollectionPage + ItemList (đúng các thẻ nổi bật có trong HTML máy chủ) + BreadcrumbList. Tên trong JSON-LD là tên nhãn, không mang dấu ✓.
+  // CollectionPage + ItemList (đúng các thẻ nổi bật có trong HTML máy chủ) + BreadcrumbList. Tên trong JSON-LD là tên nhãn, không mang dấu tích chính hãng.
   const ld = browseCollectionJsonLd(
     { ...brandMeta(b), title: b.name },
     [{ name: 'Trang chủ', href: '/' }, { name: b.name, href: brandPath(b) }],
