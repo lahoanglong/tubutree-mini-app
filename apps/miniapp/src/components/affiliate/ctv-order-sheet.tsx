@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Input, useSnackbar, useNavigate } from 'zmp-ui';
+import { useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { Trash2, Plus, Minus, UserPlus, TriangleAlert, type LucideIcon } from 'lucide-react';
@@ -49,6 +49,8 @@ import { parseTypedVnPhone } from '../../utils/vn-phone';
 import { joinDetailParts, variationLabel } from '../../utils/variation-label';
 import { vi } from '../../i18n/vi';
 import { ProductThumb } from '../ui/product-thumb';
+import { Input } from '../ui/input';
+import { SearchField } from '../ui/search-field';
 
 interface OrderLine {
   variationId: string;
@@ -618,13 +620,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
   const results: ProductSuggestion[] = suggestQ.data ?? [];
   return (
     <div style={{ marginTop: 8 }}>
-      <Input.Search
-        aria-label={t.searchProduct}
-        placeholder={t.searchProduct}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        clearable
-      />
+      <SearchField label={t.searchProduct} placeholder={t.searchProduct} clearLabel={vi.browse.clearSearch} value={q} onChange={setQ} onSubmit={setQ} />
       {tooShort && (
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
           {vi.common.suggestMinChars}

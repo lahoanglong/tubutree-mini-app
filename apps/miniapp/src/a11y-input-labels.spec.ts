@@ -6,15 +6,25 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Ô nhập chỉ có placeholder thì mất tên khi gõ và trình đọc màn hình không đọc được (D8-9). Quét cây JSX của các
- * file đã sửa: mỗi Input/Input.Search/Input.TextArea/<input> phải có tên truy cập, hoặc nằm trong <Field label>
+ * file đã sửa (gồm mọi nơi dùng `ui/input.tsx`): mỗi Input/Input.Search/Input.TextArea/<input> phải có tên truy cập, hoặc nằm trong <Field label>
  * (Field gắn <label htmlFor>), hoặc tự có prop `label`.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FILES = [
+  'components/address-form.tsx',
   'components/affiliate/ctv-order-sheet.tsx',
-  'components/reviews-section.tsx',
   'components/avatar-crop-modal.tsx',
+  'components/checkout/referral-code-box.tsx',
+  'components/checkout/voucher-sheet.tsx',
+  'components/orders/refund-destination-picker.tsx',
+  'components/reviews-section.tsx',
+  'pages/affiliate.tsx',
+  'pages/ai-advisor.tsx',
   'pages/checkout.tsx',
+  'pages/edit-profile.tsx',
+  'pages/external-points.tsx',
+  'pages/post-detail.tsx',
+  'pages/recycle-request.tsx',
 ];
 
 const INPUT_TAGS = new Set(['Input', 'Input.Search', 'Input.TextArea', 'input', 'textarea']);
@@ -29,7 +39,8 @@ function unlabelled(file: string): string[] {
     const opening = ts.isJsxSelfClosingElement(node) ? node : ts.isJsxOpeningElement(node) ? node : null;
     if (opening && INPUT_TAGS.has(opening.tagName.getText(sf))) {
       const names = opening.attributes.properties.filter(ts.isJsxAttribute).map((a) => a.name.getText(sf));
-      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'label');
+      // `hidden` (ô chọn tệp do nút khác mở) không nằm trong cây truy cập nên không cần tên.
+      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'label' || n === 'hidden');
       if (!named && !inside) bad.push(`${file}:${sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1}`);
     }
     ts.forEachChild(node, (c) => visit(c, inside));

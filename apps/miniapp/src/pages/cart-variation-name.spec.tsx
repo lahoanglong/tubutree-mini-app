@@ -73,7 +73,7 @@ describe('CartPage Mini — phân loại không có tên', () => {
       mocks.getCart.mockResolvedValue(summary([line(name)]));
       const { unmount } = renderPage();
       const row = await screen.findByTestId('cart-line');
-      const column = within(row).getByText('Xà bông thảo mộc').parentElement!.parentElement!;
+      const column = within(row).getByText('Xà bông thảo mộc').closest('[role="button"]')!.parentElement!.parentElement!;
       const texts = Array.from(column.children).map((n) => n.textContent);
       unmount();
       return texts;

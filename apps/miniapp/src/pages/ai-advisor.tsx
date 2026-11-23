@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Page, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { aiChat, type AiChatTurn } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
-import { Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { AdvisorPaused } from '../components/advisor-paused';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -16,6 +16,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { useAiAdvisorStore, type AdvisorMessage } from '../store/ai-advisor';
+import { Input } from '../components/ui/input';
 
 const SUGGESTIONS = [
   'Nước rửa chén nào an toàn cho bé?',
@@ -197,7 +198,7 @@ export default function AiAdvisorPage() {
 
         {pending && (
           <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Spinner /> <Text variant="caption" tone="tertiary">Trợ lý đang soạn…</Text>
+            <Icon icon={Loader2} size="sm" tone="brand" className="animate-spin" /> <Text variant="caption" tone="tertiary">Trợ lý đang soạn…</Text>
           </div>
         )}
         <div ref={endRef} aria-hidden />

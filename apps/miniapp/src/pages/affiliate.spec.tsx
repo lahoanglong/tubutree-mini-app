@@ -511,7 +511,7 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
 });
 
 describe('Dashboard CTV — chuyển hoa hồng vào Ví', () => {
-  /** zmp-ui Input vẽ nhãn là phần tử riêng (không htmlFor) nên tìm ô nhập đi kèm nhãn hiển thị. */
+  /** Tìm ô nhập đi kèm nhãn hiển thị (nhãn `Input` gắn `<label htmlFor>`, nhãn của khối khác thì leo lên tới khung chứa ô). */
   const inputNear = (labelText: string): HTMLInputElement => {
     let node: HTMLElement | null = screen.getByText(labelText);
     while (node && !node.querySelector('input')) node = node.parentElement;

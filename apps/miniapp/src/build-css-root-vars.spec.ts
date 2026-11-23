@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dropOverriddenRootVars, dropOverriddenRootVarsPlugin, dropUnusedTailwindDefaults, tailwindVarUsage } from './build-css-root-vars';
+import {
+  dropOverriddenRootVars,
+  dropOverriddenRootVarsPlugin,
+  dropUnusedTailwindDefaults,
+  dropUnusedZauiVars,
+  tailwindVarUsage,
+  zauiVarUsage,
+} from './build-css-root-vars';
 
 describe('build-css-root-vars', () => {
   it('bỏ khai báo biến ở luật `:root` cấp ngoài bị luật `:root` sau ghi đè, giữ khai báo thắng và thuộc tính thường', () => {
@@ -71,5 +78,37 @@ describe('build-css-root-vars', () => {
     };
     hook.handler({}, bundle);
     expect(bundle['assets/index.css']?.source).toBe('*,:after,:before{--tw-pan-x: ;--tw-shadow:0 0 #0000}');
+  });
+
+  it('zaui: bỏ khai báo --zaui-* không ai đọc, lặp qua chuỗi biến chỉ tới biến, giữ biến đang đọc và biến không phải zaui', () => {
+    const css = ':root{--zaui-a:var(--zaui-b);--zaui-b:red;--zaui-c:blue;--zaui-d:green;--color-x:var(--zaui-c)}.btn{color:var(--zaui-d)}';
+    const out = dropUnusedZauiVars(css, new Set());
+    expect(out.removed).toBe(2);
+    expect(out.css).toBe(':root{--zaui-c:blue;--zaui-d:green;--color-x:var(--zaui-c)}.btn{color:var(--zaui-d)}');
+  });
+
+  it('zaui: giữ biến tệp khác hoặc JS dùng, bỏ luật rỗng, không đổi gì thì trả nguyên chuỗi', () => {
+    expect(dropUnusedZauiVars(':root{--zaui-w:1px}', new Set(['--zaui-w'])).css).toBe(':root{--zaui-w:1px}');
+    expect(dropUnusedZauiVars(':root{--zaui-w:1px}.a{color:red}', new Set()).css).toBe('.a{color:red}');
+    const same = ':root{--zaui-a:1}.x{width:var(--zaui-a)}';
+    expect(dropUnusedZauiVars(same, new Set()).css).toBe(same);
+    expect([...zauiVarUsage(['.x{width:var( --zaui-a )}'], ['s.setProperty("--zaui-tabbar-width",w)'])].sort()).toEqual(['--zaui-a', '--zaui-tabbar-width']);
+  });
+
+  it('plugin cắt biến --zaui-* theo CSS + JS cuối: biến tệp CSS khác đọc hay JS đặt tên vẫn giữ, giá trị bị ghi đè không giữ biến nào sống', () => {
+    const plugin = dropOverriddenRootVarsPlugin();
+    const hook = plugin.generateBundle as unknown as { handler: (o: unknown, b: Record<string, unknown>) => void };
+    const bundle: Record<string, { type: string; fileName: string; source?: string; code?: string }> = {
+      'assets/index.css': {
+        type: 'asset',
+        fileName: 'assets/index.css',
+        source: ':root{--zaui-old:red;--zaui-p:var(--zaui-old);--zaui-lazy:1px;--zaui-js:2px;--zaui-dead:3px}:root{--zaui-p:blue}.b{color:var(--zaui-p)}',
+      },
+      'assets/lazy.css': { type: 'asset', fileName: 'assets/lazy.css', source: '.s{margin:var(--zaui-lazy)}' },
+      'assets/app.js': { type: 'chunk', fileName: 'assets/app.js', code: 'el.style.setProperty("--zaui-js","1")' },
+    };
+    hook.handler({}, bundle);
+    expect(bundle['assets/index.css']?.source).toBe(':root{--zaui-lazy:1px;--zaui-js:2px}:root{--zaui-p:blue}.b{color:var(--zaui-p)}');
+    expect(bundle['assets/lazy.css']?.source).toBe('.s{margin:var(--zaui-lazy)}');
   });
 });

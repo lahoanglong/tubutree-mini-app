@@ -1,7 +1,7 @@
 import { ADDRESS_INPUT_LIMIT } from '../utils/input-limits';
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSnackbar, Input } from 'zmp-ui';
+import { useSnackbar } from 'zmp-ui';
 import { UserRound } from 'lucide-react';
 import { createAddress, type AddressDTO } from '../services/shop-api';
 import { updateAddress } from '../services/account-api';
@@ -28,6 +28,7 @@ import { GeoPicker, EMPTY_GEO, type GeoValue } from './geo-picker';
 import { Field } from './ui/form';
 import { Button } from './ui/button';
 import { useLockedMutation } from './game/use-locked-mutation';
+import { Input } from './ui/input';
 
 // Tỉnh/phường chọn qua GeoPicker (mã Pancake thật); chỉ 3 field text còn lại.
 type FormFields = 'recipient' | 'phone' | 'street';

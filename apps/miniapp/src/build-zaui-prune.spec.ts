@@ -5,7 +5,18 @@ import { describe, expect, it } from 'vitest';
 import postcss from 'postcss';
 import ts from 'typescript';
 import { dropUnusedZmpUiStatics } from './build-vendor-shims';
-import { PRUNED_ZAUI_CLASS_FAMILIES, PRUNED_ZAUI_CLASSES, PRUNED_ZMP_UI_COMPONENTS, ZAUI_JS_VARS, deadZauiClasses, isDarkThemeOnly, pruneUnusedZauiVars, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
+import {
+  PRUNED_ZAUI_CLASS_FAMILIES,
+  PRUNED_ZAUI_CLASSES,
+  PRUNED_ZMP_UI_COMPONENTS,
+  SHIMMED_ZMP_UI_COMPONENTS,
+  ZAUI_JS_VARS,
+  deadZauiClasses,
+  isDarkThemeOnly,
+  pruneUnusedZauiVars,
+  pruneZauiCss,
+  zauiClassToken,
+} from './build-zaui-prune';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ZMP_UI = fs.realpathSync(path.resolve(here, '../node_modules/zmp-ui'));
@@ -52,6 +63,10 @@ const builtSource = (file: string): string => {
   return dropUnusedZmpUiStatics(src, file) ?? src;
 };
 
+/** Thư mục zmp-ui mà bản build thay bằng shim: Rollup không nạp mã của nó nên bao đóng không đi vào. */
+const isShimmed = (file: string): boolean =>
+  (SHIMMED_ZMP_UI_COMPONENTS as readonly string[]).some((dir) => file.startsWith(path.join(ESM, 'components', dir) + path.sep));
+
 /** Bao đóng import tương đối trong esm của zmp-ui, bắt đầu từ các export app đang dùng; trả về tập thư mục `components/<tên>` và mọi tệp chạm tới. */
 function zmpUiClosure(exportNames: Set<string>): { components: Set<string>; files: Set<string> } {
   const indexSrc = fs.readFileSync(path.join(ESM, 'index.js'), 'utf8');
@@ -78,7 +93,7 @@ function zmpUiClosure(exportNames: Set<string>): { components: Set<string>; file
   const components = new Set<string>();
   while (queue.length) {
     const f = queue.pop()!;
-    if (files.has(f)) continue;
+    if (files.has(f) || isShimmed(f)) continue;
     files.add(f);
     const rel = path.relative(path.join(ESM, 'components'), f);
     if (!rel.startsWith('..')) components.add(rel.split(path.sep)[0] ?? rel);
@@ -197,10 +212,13 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
   it('thật sự cắt được một phần đáng kể (>10 KB) và vẫn giữ biến :root cùng lớp của thành phần đang dùng', () => {
     expect(raw.length - pruned.length).toBeGreaterThan(10_000);
     expect(removedSelectors.length).toBeGreaterThan(50);
-    for (const keep of [':root', '.zaui-sheet', '.zaui-btn', '.zaui-input', '.zaui-page', '.zaui-mask', '.zaui-switch', '.zaui-checkbox']) {
+    for (const keep of [':root', '.zaui-sheet', '.zaui-btn', '.zaui-page', '.zaui-mask', '.zaui-text']) {
       expect(pruned, keep).toContain(keep);
     }
-    for (const gone of ['.zaui-avatar', '.zaui-box']) expect(pruned, gone).not.toContain(gone);
+    // Ô nhập, ô chọn, công tắc, vòng chờ và Snackbar (kèm Icon, Progress) đã thay bằng thành phần DS / shim của bản build (w19-02).
+    for (const gone of ['.zaui-avatar', '.zaui-box', '.zaui-input', '.zaui-checkbox', '.zaui-radio', '.zaui-switch', '.zaui-spinner', '.zaui-snackbar', '.zaui-icon', '.zaui-progress']) {
+      expect(pruned, gone).not.toContain(gone);
+    }
   });
 
   it('thành phần app dùng (kể cả gián tiếp qua import của zmp-ui) không nằm trong danh sách bị cắt', () => {
@@ -257,7 +275,7 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
     expect(pruned).toContain('--zaui-light-color-primary');
   });
 
-  it('lớp bổ nghĩa Button bị cắt không đường dựng nào sinh ra: nút app không truyền type/size/suffixIcon, ô tìm không đặt size, không dùng Sheet.Actions', () => {
+  it('lớp bổ nghĩa Button bị cắt không đường dựng nào sinh ra: nút app không truyền type/size/suffixIcon, không dùng Sheet.Actions', () => {
     const buttonUsers: string[] = [];
     const offenders: string[] = [];
     const spreads: string[] = [];
@@ -273,7 +291,7 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
         if (ts.isPropertyAccessExpression(node) && node.getText(sf) === 'Sheet.Actions') offenders.push(`${rel}: Sheet.Actions`);
         if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
           const tag = node.tagName.getText(sf);
-          const watched = tag === 'Input.Search' ? ['size'] : aliases.has(tag) ? ['type', 'size', 'suffixIcon'] : [];
+          const watched = aliases.has(tag) ? ['type', 'size', 'suffixIcon'] : [];
           if (watched.length) {
             for (const attr of node.attributes.properties) {
               if (ts.isJsxSpreadAttribute(attr)) spreads.push(`${rel}: <${tag} {...${attr.expression.getText(sf)}}>`);
@@ -291,10 +309,10 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
     // `aria` là phần còn lại sau khi tách mọi prop đã biết của ButtonProps, kiểu AriaAttributes, nên không mang type/size/suffixIcon.
     expect(spreads).toEqual([`${path.join('components', 'ui', 'button.tsx')}: <ZButton {...aria}>`]);
 
-    // `sheet/action-sheet.js` cũng dựng Button nhưng bản build bỏ hẳn (`Sheet.Actions`, build-vendor-shims.ts) nên không còn trong bao đóng.
+    // `sheet/action-sheet.js` cũng dựng Button nhưng bản build bỏ hẳn (`Sheet.Actions`, build-vendor-shims.ts) nên không còn trong bao đóng;
+    // `input/Search.js` (nút kính lúp) cũng ra khỏi bao đóng từ khi app thôi dùng `Input` của zmp-ui. Không tệp zmp-ui nào còn lại tự dựng Button.
     const renderers = [...closure.files].filter((f) => /from "\.\.\/button"/.test(builtSource(f))).map((f) => path.relative(path.join(ESM, 'components'), f));
-    expect(renderers.sort()).toEqual([path.join('input', 'Search.js')]);
-    expect(fs.readFileSync(path.join(ESM, 'components', 'input', 'Search.js'), 'utf8')).toMatch(/createElement\(Button, \{[^}]*type: "neutral"[^}]*size: size/);
+    expect(renderers).toEqual([]);
 
     // Luật trộn (`.zaui-btn-primary, .zaui-btn-primary.zaui-btn-highlight`) còn vế sống nên giữ nguyên; chỉ luật mà mọi vế đều cần lớp bị cắt mới phải biến mất.
     const needsDead = (part: string) => PRUNED_ZAUI_CLASSES.some((cls) => new RegExp(`\\.${cls}(?![a-z0-9-])`).test(part));

@@ -70,6 +70,45 @@ export function dropUnusedTailwindDefaults(css: string, usage: { used: ReadonlyS
   return removed === 0 ? { css, removed } : { css: root.toString(), removed };
 }
 
+const ZAUI_VAR_REF = /var\(\s*(--zaui-[A-Za-z0-9_-]+)/g;
+const ZAUI_VAR_NAME = /--zaui-[A-Za-z0-9_-]+/g;
+
+/** Biến `--zaui-*` mà CSS đọc qua `var()` hoặc JS nhắc tên (style inline của zmp-ui như `--zaui-tabbar-width`), gom trên MỌI tệp của bản build. */
+export function zauiVarUsage(cssFiles: readonly string[], jsFiles: readonly string[]): Set<string> {
+  const used = new Set<string>();
+  for (const css of cssFiles) for (const m of css.matchAll(ZAUI_VAR_REF)) used.add(m[1] ?? '');
+  for (const js of jsFiles) for (const m of js.matchAll(ZAUI_VAR_NAME)) used.add(m[0]);
+  return used;
+}
+
+/**
+ * `pruneUnusedZauiVars` (build-zaui-prune.ts) chỉ thấy `zaui.css`, nên giá trị `zaui-bridge.css` ghi đè cho biến mà luật đọc nó đã bị cắt
+ * (vd biến nút cỡ medium/large, biến tông neutral) vẫn sống trong CSS cuối. Ở đây đối chiếu với CSS + JS cuối cùng của cả bản build: khai báo
+ * `--zaui-*` không ai đọc thì bỏ, lặp tới khi ổn định vì giá trị của biến này hay chỉ tới biến kia. Không đụng biến nào khác.
+ */
+export function dropUnusedZauiVars(css: string, usedElsewhere: ReadonlySet<string>): { css: string; removed: number } {
+  const root = postcss.parse(css);
+  let removed = 0;
+  for (;;) {
+    const used = new Set(usedElsewhere);
+    root.walkDecls((decl) => {
+      for (const m of decl.value.matchAll(ZAUI_VAR_REF)) used.add(m[1] ?? '');
+    });
+    let changed = false;
+    root.walkDecls(/^--zaui-/, (decl) => {
+      if (used.has(decl.prop)) return;
+      decl.remove();
+      removed++;
+      changed = true;
+    });
+    if (!changed) break;
+  }
+  root.walkRules((rule) => {
+    if (rule.nodes.length === 0) rule.remove();
+  });
+  return removed === 0 ? { css, removed } : { css: root.toString(), removed };
+}
+
 /**
  * Chạy trên CSS đã nén cuối cùng (`generateBundle` `order: 'post'`), từng tệp riêng: thứ tự giữa các tệp tải lười không đoán được lúc build.
  * Tên tệp CSS băm từ nội dung TRƯỚC bước này: đổi luật ở đây làm khác đầu ra thì phải đổi cả mẫu `assetFileNames`, không thì bản cũ còn trong
@@ -84,11 +123,14 @@ export function dropOverriddenRootVarsPlugin(): Plugin {
       handler(_options, bundle) {
         const items = Object.values(bundle);
         const css = items.filter((i): i is typeof i & { type: 'asset'; source: string } => i.type === 'asset' && i.fileName.endsWith('.css') && typeof i.source === 'string');
-        const usage = tailwindVarUsage(
-          css.map((i) => i.source),
-          items.flatMap((i) => (i.type === 'chunk' ? [i.code] : [])),
-        );
+        const js = items.flatMap((i) => (i.type === 'chunk' ? [i.code] : []));
+        const usage = tailwindVarUsage(css.map((i) => i.source), js);
         for (const item of css) item.source = dropUnusedTailwindDefaults(dropOverriddenRootVars(item.source).css, usage).css;
+        // Mỗi tệp tự lặp trên `var()` của chính nó; từ bên ngoài chỉ tính tệp CSS khác và JS (tính cả tệp này thì biến chỉ khai báo chết đọc sẽ sống mãi).
+        for (const item of css) {
+          const others = css.filter((o) => o !== item).map((o) => o.source);
+          item.source = dropUnusedZauiVars(item.source, zauiVarUsage(others, js)).css;
+        }
       },
     },
   };

@@ -1,11 +1,11 @@
 import { useRef } from 'react';
-import { Button as ZmpButton, Text } from 'zmp-ui';
+import { Button as ZmpButton } from 'zmp-ui';
 import { TriangleAlert, type LucideIcon } from 'lucide-react';
 import { GO_HOME_LABEL } from '@tubutree/app-core/client-copy';
 import { vi } from '../../i18n/vi';
 import { SupportHotline } from '../support-hotline';
 import { Button } from './button';
-import { Heading } from './text';
+import { Heading, Text } from './text';
 
 /**
  * Empty state theo spec §7.7: illustration + heading + body + CTA.
@@ -90,11 +90,11 @@ export function EmptyState({ art, heading, body, ctaLabel, onCta, ctaLoading, va
       }}
     >
       {ART[art]}
-      <Text bold style={{ fontSize: 17, marginTop: 10 }}>
+      <Text as="div" style={{ lineHeight: 20 / 17, fontWeight: 500, fontSize: 17, marginTop: 10 }}>
         {heading}
       </Text>
       {body && (
-        <Text size="small" style={{ color: 'var(--color-text-secondary)', maxWidth: 260 }}>
+        <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14, maxWidth: 260 }}>
           {body}
         </Text>
       )}
@@ -185,7 +185,7 @@ export function ErrorState({
       <Heading variant="title-md" as="p">
         {title ?? (onHome ? vi.errors.notFoundTitle : vi.errors.title)}
       </Heading>
-      <Text size="small" style={{ color: 'var(--color-text-secondary)', maxWidth: 260 }}>
+      <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14, maxWidth: 260 }}>
         {message}
       </Text>
       <ZmpButton

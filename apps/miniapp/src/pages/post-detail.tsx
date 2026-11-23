@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { CheckCircle2, Clock, Flag, MessageCircle, Pin } from 'lucide-react';
@@ -28,6 +28,7 @@ import { KIND_ICON, KIND_LABEL } from '../components/community/post-card';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { TagPrice } from '../components/community/tag-price';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
+import { Input } from '../components/ui/input';
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();

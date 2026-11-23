@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
-import { Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -87,7 +87,8 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
-import { Text as DsText } from '../components/ui/text';
+import { Text } from '../components/ui/text';
+import { Input } from '../components/ui/input';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { useCartKey } from '../services/cart-key';
 import { INPUT_LIMITS } from '../utils/input-limits';
@@ -794,7 +795,7 @@ export default function CheckoutPage() {
         >
           <AlertCircle size={18} color="var(--color-text-warning)" aria-hidden style={{ flex: '0 0 auto', marginTop: 2 }} />
           <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="small" style={{ color: 'var(--color-text-primary)' }}>
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14 }}>
               {shownCartIssue}
             </Text>
             <Box mt={2}>
@@ -828,10 +829,10 @@ export default function CheckoutPage() {
       </div>
       {placeAttempted && !addressId && (
         <Box id="checkout-address-error" role="alert" px={4} pt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <DsText variant="caption" tone="danger" as="div">
+          <Text variant="caption" tone="danger" as="div">
             <span aria-hidden="true">⚠ </span>
             {fillCopy('checkout.addressNeeded')}
-          </DsText>
+          </Text>
         </Box>
       )}
 
@@ -843,11 +844,11 @@ export default function CheckoutPage() {
         const shownCount = shownItems.reduce((s, it) => s + it.quantity, 0);
         return shownItems.length > 0 ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small" style={{ marginBottom: 10 }}>
+          <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, marginBottom: 10 }}>
             Sản phẩm ({shownCount})
           </Text>
           {splitNote && (
-            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+            <Text variant="caption" tone="secondary" as="div" style={{ lineHeight: 18 / 13, marginBottom: 10 }}>
               {splitNote}
             </Text>
           )}
@@ -861,7 +862,7 @@ export default function CheckoutPage() {
             style={{ marginBottom: grp.shipment ? 12 : 0 }}
           >
           {grp.shipment && (
-            <Text bold size="small" style={{ marginBottom: 8 }}>
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, marginBottom: 8 }}>
               {fulfillerLabel(grp.shipment.fulfiller)}
             </Text>
           )}
@@ -870,14 +871,14 @@ export default function CheckoutPage() {
               <Box key={it.id} flex alignItems="center" style={{ gap: 10 }}>
                 <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Text size="small" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{it.productName}</Text>
+                  <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{it.productName}</Text>
                   <LineVariationNote name={it.variationName} />
-                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', fontVariantNumeric: 'tabular-nums' }}>
+                  <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, fontVariantNumeric: 'tabular-nums' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </Text>
                   {lineProblems[it.id] && (
                     <Box data-testid="checkout-line-problem" role="alert" mt={1} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                      <DsText variant="caption" tone="danger">{lineProblems[it.id]!.text}</DsText>
+                      <Text variant="caption" tone="danger">{lineProblems[it.id]!.text}</Text>
                       <Button
                         variant="secondary"
                         loading={lineFix.isPending && lineFix.variables?.id === it.id}
@@ -892,7 +893,7 @@ export default function CheckoutPage() {
                     </Box>
                   )}
                 </Box>
-                <Text size="small" bold style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{formatVnd(it.total)}</Text>
+                <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{formatVnd(it.total)}</Text>
               </Box>
             ))}
           </Box>
@@ -982,7 +983,7 @@ export default function CheckoutPage() {
               <Ticket size={20} color="var(--color-promo-fg)" />
             </Box>
             <Box style={{ minWidth: 0 }}>
-              <Text bold size="small" data-testid="coupon-label" style={{ color: 'var(--color-text-primary)' }}>
+              <Text variant="body-sm" as="div" data-testid="coupon-label" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
                 Mã giảm giá
               </Text>
               {cart.data?.couponCode ? (
@@ -1005,17 +1006,17 @@ export default function CheckoutPage() {
                     {cart.data.couponCode}
                   </span>
                   {quote.data && quote.data.discount > 0 && (
-                    <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    <Text variant="caption" tone="success" as="div" data-testid="coupon-discount" style={{ lineHeight: 18 / 13, flexShrink: 0, whiteSpace: 'nowrap' }}>
                       -{formatVnd(quote.data.discount)}
                     </Text>
                   )}
                 </Box>
               ) : autoCoupon.hint ? (
-                <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
+                <Text variant="caption" tone="brand" as="div" data-testid="coupon-hint" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
                   {couponHintText(autoCoupon.hint, formatVnd)}
                 </Text>
               ) : (
-                <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" data-testid="coupon-placeholder" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
                   {fillCopy('coupon.rowInvite')}
                 </Text>
               )}
@@ -1023,7 +1024,7 @@ export default function CheckoutPage() {
           </Box>
 
           <Box flex alignItems="center" style={{ gap: 'var(--space-inline-xs)', flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
-            <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
+            <Text variant="caption" tone="brand" as="div" data-testid="coupon-cta" style={{ lineHeight: 18 / 13, fontWeight: 500 }}>
               {cart.data?.couponCode ? 'Thay đổi' : 'Chọn mã'}
             </Text>
             <ChevronRight size={16} color="var(--color-text-brand)" />
@@ -1031,7 +1032,7 @@ export default function CheckoutPage() {
         </Box>
         {autoCoupon.autoCode && (
           <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 4, paddingLeft: 46 }}>
-            <Text size="xSmall" data-testid="coupon-auto-label" style={{ color: 'var(--color-text-success)' }}>
+            <Text variant="caption" tone="success" as="div" data-testid="coupon-auto-label" style={{ lineHeight: 18 / 13 }}>
               {couponAutoCopy.applied}
             </Text>
             <button
@@ -1060,14 +1061,11 @@ export default function CheckoutPage() {
           </Box>
         )}
         {couponLine && (
-          <Text
-            size="xSmall"
-            role="status"
-            data-testid="coupon-notice"
-            style={{ color: 'var(--color-text-warning)', marginTop: 6 }}
-          >
-            {couponLine}
-          </Text>
+          <div role="status" data-testid="coupon-notice" style={{ marginTop: 6 }}>
+            <Text as="div" variant="caption" tone="warning" style={{ lineHeight: 18 / 13 }}>
+              {couponLine}
+            </Text>
+          </div>
         )}
         <CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />
       </Box>
@@ -1082,11 +1080,11 @@ export default function CheckoutPage() {
 
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>
+        <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, marginBottom: 8 }}>
           {vi.checkout.payment}
         </Text>
         {zeroNote && (
-          <Text size="small" style={{ color: 'var(--color-text-secondary)', minHeight: 44, display: 'block' }}>
+          <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14, minHeight: 44, display: 'block' }}>
             {zeroNote}
           </Text>
         )}
@@ -1123,14 +1121,16 @@ export default function CheckoutPage() {
               <Radio checked={payment === m.value} disabled={m.disabled} onChange={() => {}} />
             </Box>
             <Box style={{ flex: 1, minWidth: 0 }}>
-              <Text size="small" style={{ opacity: m.disabled ? 0.45 : 1 }}>
+              <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, opacity: m.disabled ? 0.45 : 1 }}>
                 {m.label}
               </Text>
               {/* Lý do KHÔNG mờ theo dòng: chữ giải thích mà mờ thì khách vẫn không đọc được. */}
               {m.hint && (
-                <Text id={`pay-hint-${m.value}`} size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                  {m.hint}
-                </Text>
+                <div id={`pay-hint-${m.value}`}>
+                  <Text as="div" variant="caption" tone="secondary" style={{ lineHeight: 18 / 13 }}>
+                    {m.hint}
+                  </Text>
+                </div>
               )}
             </Box>
           </Box>
@@ -1138,9 +1138,11 @@ export default function CheckoutPage() {
           </Fragment>
         ))}
         {paymentNote && (
-          <Text role="status" size="small" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
-            {paymentNote}
-          </Text>
+          <div role="status" style={{ marginTop: 4 }}>
+            <Text as="div" variant="body-sm" tone="warning" style={{ lineHeight: 18 / 14 }}>
+              {paymentNote}
+            </Text>
+          </div>
         )}
       </Box>
 
@@ -1165,10 +1167,10 @@ export default function CheckoutPage() {
             style={{ minHeight: 44 }}
           >
             <Box>
-              <Text bold size="small">
+              <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
                 {vi.checkout.points}
               </Text>
-              <Text size="xSmall" className="tubu-nums" style={{ color: 'var(--color-text-tertiary)' }}>
+              <Text variant="caption" tone="tertiary" as="div" className="tubu-nums" style={{ lineHeight: 18 / 13 }}>
                 {pointsUsable
                   ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
                   : partnerPoints.disabled && points.usable > 0
@@ -1176,22 +1178,22 @@ export default function CheckoutPage() {
                     : (points.label ?? fillCopy('checkout.pointsNone'))}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
                   {partnerPoints.capNote}
                 </Text>
               )}
               {points.usable > 0 && partnerPoints.partnerNote && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
                   {partnerPoints.partnerNote}
                 </Text>
               )}
               {points.convertedNote && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
                   {partnerPoints.capNote || partnerPoints.partnerNote ? convertedPointsNote(points.converted) : points.convertedNote}
                 </Text>
               )}
               {points.lockNote && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
                   {points.lockNote}
                 </Text>
               )}
@@ -1205,7 +1207,7 @@ export default function CheckoutPage() {
 
       {/* ── Ghi chú ── */}
       <Box p={4} mt={2} data-ds="checkout-note" style={{ background: 'var(--color-bg-surface)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>
+        <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
         <Input aria-label={vi.checkout.note} placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
@@ -1235,7 +1237,7 @@ export default function CheckoutPage() {
           justifyContent="space-between"
           style={{ minHeight: 44 }}
         >
-          <Text bold size="small">
+          <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
             Yêu cầu xuất hoá đơn VAT
           </Text>
           {/* Checkbox thị giác thuần tuý — logic bật/tắt yêu cầu hoá đơn vẫn ở onClick của Box cha. */}
@@ -1311,11 +1313,11 @@ export default function CheckoutPage() {
         style={{ background: 'var(--color-bg-surface)', cursor: 'pointer' }}
       >
         <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 10 }}>
-          <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
+          <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
             {vi.checkout.summary}
           </Text>
           <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
-            <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
+            <Text variant="caption" tone="brand" as="div" style={{ lineHeight: 18 / 13, fontWeight: 500 }}>
               Chi tiết
             </Text>
             <ChevronRight size={16} color="var(--color-text-brand)" />
@@ -1332,15 +1334,13 @@ export default function CheckoutPage() {
           <Box flex alignItems="center" justifyContent="space-between">
             <Box flex alignItems="center" style={{ gap: 4 }}>
               <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
-              <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
+              <Text variant="caption" tone="danger" as="div" style={{ lineHeight: 18 / 13 }}>
                 {getLoadErrorMessage(quote.error)}
               </Text>
             </Box>
-            <Text
+            <div
               role="button"
               {...rowKeyboardProps()}
-              size="xSmall"
-              bold
               className="tubu-hit-44"
               aria-busy={quote.isFetching || undefined}
               onClick={(e) => {
@@ -1352,10 +1352,12 @@ export default function CheckoutPage() {
                 };
                 void quote.refetch().then(release, release);
               }}
-              style={{ color: 'var(--color-text-brand)', padding: 8, display: 'inline-block', opacity: quote.isFetching ? 0.6 : 1 }}
+              style={{ padding: 8, display: 'inline-block', opacity: quote.isFetching ? 0.6 : 1 }}
             >
-              {vi.common.retry}
-            </Text>
+              <Text as="div" variant="caption" tone="brand" style={{ lineHeight: 18 / 13, fontWeight: 500 }}>
+                {vi.common.retry}
+              </Text>
+            </div>
           </Box>
         ) : quote.data ? (
           <>
@@ -1390,7 +1392,7 @@ export default function CheckoutPage() {
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
-                <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
+                <Text variant="caption" tone="success" as="div" style={{ lineHeight: 18 / 13 }}>
                   {pointsEarnLabel(quote.data.pointsEarned)}
                 </Text>
               </Box>
@@ -1409,7 +1411,7 @@ export default function CheckoutPage() {
               <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} tone="success" />
             )}
             {previewRecalcNote && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+              <Text variant="caption" tone="secondary" as="div" style={{ lineHeight: 18 / 13 }}>
                 {vi.cart.subsetRecalcNote}
               </Text>
             )}
@@ -1432,13 +1434,13 @@ export default function CheckoutPage() {
       {placeNotice && (
         <Box p={4} data-testid="place-notice" role="alert" style={{ background: 'var(--color-bg-surface)' }}>
           {placeNotice === 'unknown' && retryingPlace ? (
-            <Text size="small">
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14 }}>
               Đơn có thể đã được ghi nhận. Bấm Thử lại để gửi lại đúng đơn này — hệ thống nhận ra yêu cầu trùng nên không tạo thêm đơn. Hoặc xem Đơn của tôi.
             </Text>
           ) : placeNotice === 'unknown' ? (
-            <Text size="small">{PREVIOUS_MAYBE_PLACED}</Text>
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14 }}>{PREVIOUS_MAYBE_PLACED}</Text>
           ) : (
-            <Text size="small">
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14 }}>
               Nếu đơn trước chưa có trong Đơn của tôi, bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
             </Text>
           )}
@@ -1450,7 +1452,7 @@ export default function CheckoutPage() {
 
       {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
 
-      <Text size="xSmall" data-testid="order-consent" style={{ display: 'block', padding: '12px 16px 0', color: 'var(--color-text-secondary)' }}>
+      <Text variant="caption" tone="secondary" as="div" data-testid="order-consent" style={{ lineHeight: 18 / 13, display: 'block', padding: '12px 16px 0' }}>
         Bằng việc đặt hàng, bạn đồng ý với:{' '}
         <br />
         <span className="tubu-consent-links">
@@ -1471,9 +1473,9 @@ export default function CheckoutPage() {
           // Lúc rỗng đặt absolute để không chiếm khoảng cách (gap) của thanh.
           <div role="status" style={placeBarNote ? undefined : { position: 'absolute' }}>
             {placeBarNote && (
-              <DsText variant="caption" tone={placeHint ? 'secondary' : 'danger'}>
+              <Text variant="caption" tone={placeHint ? 'secondary' : 'danger'}>
                 {placeBarNote}
-              </DsText>
+              </Text>
             )}
           </div>
         }
@@ -1633,7 +1635,7 @@ export default function CheckoutPage() {
           {(quote.data?.pointsEarned ?? 0) > 0 && (
             <Box flex alignItems="center" justifyContent="flex-end" style={{ gap: 4, marginTop: 6 }}>
               <Sprout size={13} color="var(--color-text-success)" aria-hidden />
-              <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
+              <Text variant="caption" tone="success" as="div" style={{ lineHeight: 18 / 13 }}>
                 {pointsEarnLabel(quote.data!.pointsEarned)}
               </Text>
             </Box>
@@ -1648,7 +1650,7 @@ export default function CheckoutPage() {
 function LineVariationNote({ name }: { name: unknown }) {
   const label = variationLabel(typeof name === 'object' && name !== null ? (name as { name?: string }).name : (name as string | null | undefined));
   return label ? (
-    <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+    <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13 }}>
       {label}
     </Text>
   ) : null;

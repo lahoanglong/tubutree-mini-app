@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Text } from 'zmp-ui';
+import { Text } from '../ui/text';
 import { ChevronRight, Leaf } from 'lucide-react';
 import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-earn-popup';
 import { usePublicConfig } from '../../hooks/use-public-config';
@@ -50,7 +50,7 @@ export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; a
         style={{ display: 'flex', alignItems: 'flex-end', gap: 6, minHeight: 44, background: 'none', border: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
       >
         <Leaf size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
-        <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+        <Text variant="caption" tone="brand" style={{ lineHeight: 18 / 13, fontWeight: 600 }}>
           {text}
         </Text>
         <ChevronRight size={14} color="var(--color-text-brand)" aria-hidden style={{ flexShrink: 0 }} />

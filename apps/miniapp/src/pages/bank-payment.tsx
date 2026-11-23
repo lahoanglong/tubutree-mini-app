@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import type { ReactNode } from 'react';
-import { Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Text } from '../components/ui/text';
 import { Box } from '../components/ui/box';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -195,10 +196,10 @@ export default function BankPaymentPage() {
         <h1 style={SR_ONLY}>{PAGE_TITLE}</h1>
         <Box style={{ textAlign: 'center', padding: '56px 24px' }}>
           <Icon icon={TriangleAlert} tone="danger" style={{ margin: '0 auto' }} />
-          <Text bold size="large" style={{ marginTop: 12 }}>
+          <Text variant="body-lg" as="div" style={{ lineHeight: 22 / 16, fontWeight: 500, marginTop: 12 }}>
             Đơn không còn chờ chuyển khoản
           </Text>
-          <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
+          <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14, marginTop: 4 }}>
             {closedMessage}
           </Text>
           <Button fullWidth onPress={() => navigate(`/order/${code}`, { replace: true })} style={{ marginTop: 24 }}>
@@ -239,9 +240,9 @@ export default function BankPaymentPage() {
         <Box style={{ textAlign: 'center', padding: '56px 24px' }}>
           <CheckCircle2 size={64} color="var(--color-text-success)" style={{ margin: '0 auto' }} />
           <h1 style={H1_RESET_MT12}>
-            <Text bold size="large">Đã nhận thanh toán!</Text>
+            <Text variant="body-lg" style={{ lineHeight: 22 / 16, display: 'block', fontWeight: 500 }}>Đã nhận thanh toán!</Text>
           </h1>
-          <Text size="small" style={{ color: 'var(--color-text-tertiary)', marginTop: 4 }}>
+          <Text variant="body-sm" tone="tertiary" as="div" style={{ lineHeight: 18 / 14, marginTop: 4 }}>
             Đơn {data.orderCode} đã được xác nhận. Cảm ơn bạn
           </Text>
           <Button
@@ -275,7 +276,7 @@ export default function BankPaymentPage() {
         <Box p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'center' }}>
           {qrFailed ? (
             <Box mb={2} role="status" data-testid="bank-qr-failed">
-              <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+              <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14 }}>
                 {BANK_QR_LOAD_FAILED}
               </Text>
             </Box>
@@ -308,14 +309,14 @@ export default function BankPaymentPage() {
           )}
           {qrSaved && (
             <div role="status" data-testid="bank-qr-saved" style={{ marginTop: 6 }}>
-              <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+              <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14 }}>
                 {qrSaved === 'saved' ? BANK_QR_SAVED : BANK_QR_SAVE_FAILED}
               </Text>
             </div>
           )}
           {!!data.paidSoFar && data.paidSoFar > 0 && (
             <div data-testid="paid-so-far" style={{ marginTop: 4 }}>
-              <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+              <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, color: 'var(--color-status-warning-fg)' }}>
                 Đã nhận <Money amount={data.paidSoFar} />, còn thiếu <Money amount={data.amount} />. Mã QR đã trừ phần này.
               </Text>
             </div>
@@ -336,7 +337,7 @@ export default function BankPaymentPage() {
           </Box>
           {/* Hướng dẫn trước khi chuyển, chưa phải lỗi: khối lưu ý cùng màu với khung hạn thay cho chữ đỏ nhỏ. */}
           <Box mt={2} p={3} data-testid="memo-note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)', textAlign: 'left' }}>
-            <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, color: 'var(--color-status-warning-fg)' }}>
               <Icon icon={TriangleAlert} size="sm" tone="current" style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
               Giữ nguyên nội dung <b>{data.memo}</b> để hệ thống tự xác nhận.
             </Text>
@@ -345,13 +346,13 @@ export default function BankPaymentPage() {
 
         {data.paymentDeadline && (
           <Box mt={2} p={3} role="note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
-            <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+            <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, color: 'var(--color-status-warning-fg)' }}>
               {BANK_DEADLINE_LEAD} <b>{formatDateTime(data.paymentDeadline)}</b> {BANK_DEADLINE_TAIL}
             </Text>
             {/* Không phải vùng đọc tự động: đồng hồ đổi mỗi 15 giây, đọc lại liên tục sẽ làm phiền người dùng trình đọc màn hình. */}
             {remaining.text && (
               <div data-testid="payment-countdown" style={{ marginTop: 6 }}>
-                <Text size="small" bold style={{ color: 'var(--color-status-warning-fg)' }}>
+                <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, color: 'var(--color-status-warning-fg)' }}>
                   {`${remaining.text} để chuyển khoản`}
                 </Text>
               </div>
@@ -361,7 +362,7 @@ export default function BankPaymentPage() {
 
         <Box flex alignItems="center" justifyContent="center" style={{ gap: 6, marginTop: 14, color: 'var(--color-text-tertiary)' }}>
           <Clock size={15} />
-          <Text size="small">Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
+          <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14 }}>Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
         </Box>
 
         <Button fullWidth variant="secondary" onPress={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>
@@ -423,12 +424,12 @@ function Row({
       justifyContent={hero ? 'center' : 'space-between'}
       style={{ padding: '6px 0', borderTop: hero ? 'none' : '1px solid var(--color-border-subtle)', marginTop: hero ? 8 : 0 }}
     >
-      {!hero && <Text size="small" style={{ color: 'var(--color-text-tertiary)' }}>{label}</Text>}
+      {!hero && <Text variant="body-sm" tone="tertiary" as="div" style={{ lineHeight: 18 / 14 }}>{label}</Text>}
       <Box flex alignItems="center" style={{ gap: 6, minWidth: 0 }}>
         {hero ? (
-          <Text bold size="large" style={{ color: 'var(--color-text-success)' }}>{value}</Text>
+          <Text variant="body-lg" tone="success" as="div" style={{ lineHeight: 22 / 16, fontWeight: 500 }}>{value}</Text>
         ) : (
-          <Text size="small" bold style={highlight ? { color: 'var(--color-text-success)' } : undefined}>{value}</Text>
+          <Text variant="body-sm" tone={highlight ? 'success' : 'primary'} as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>{value}</Text>
         )}
         {onCopy && (
           <>

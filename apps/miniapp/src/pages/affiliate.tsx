@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
+import { Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -65,6 +65,7 @@ import { pickerProducts } from '../services/storefront-api';
 import { AffiliateFeaturedProducts } from '../components/affiliate/featured-products';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { Input } from '../components/ui/input';
 
 const PAGE_TITLE = 'Cộng tác viên';
 

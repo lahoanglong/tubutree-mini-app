@@ -1,6 +1,5 @@
 import { Children, cloneElement, Fragment, isValidElement, useId } from 'react';
-import type { ComponentProps, MouseEvent, ReactElement, ReactNode } from 'react';
-import { Checkbox as ZCheckbox, Radio as ZRadio, Switch as ZSwitch } from 'zmp-ui';
+import type { InputHTMLAttributes, MouseEvent, ReactElement, ReactNode } from 'react';
 import { Text } from './text';
 
 export interface FieldProps {
@@ -15,7 +14,7 @@ export interface FieldProps {
  * Nhãn phải GẮN với control thì trình đọc màn hình mới đọc được (axe `label`, A4-005): khi `children`
  * là đúng một phần tử, Field cấp cho nó `id` (nhãn là `<label htmlFor>`), và khi có lỗi thì thêm
  * `aria-invalid` + `aria-describedby` trỏ vào thông báo lỗi. `id` nằm trong props nên đi xuyên qua
- * Input của ZaUI xuống `<input>` thật. Nhiều con / không phải phần tử: bọc nhóm `role="group"` có tên. */
+ * `Input` (ui/input.tsx) xuống `<input>` thật. Nhiều con / không phải phần tử: bọc nhóm `role="group"` có tên. */
 export function Field({ label, error, children }: FieldProps) {
   const uid = useId();
   const labelId = `${uid}-label`;
@@ -127,35 +126,69 @@ function hasName(p: NameProps): boolean {
 // (`form-decorative-usage.spec.ts` canh các chỗ gọi bằng phân tích mã nguồn).
 const DECORATIVE_INPUT = { tabIndex: -1 } as const;
 
-// ZaUI's own CheckboxProps declares `value: string | number` as REQUIRED (it's only actually
-// needed inside a <Checkbox.Group>) — forwarding React.ComponentProps<typeof ZCheckbox> as-is
-// would force every standalone caller to pass a meaningless `value`. Make it optional here and
-// default it, since a standalone Checkbox never reads it.
-export type CheckboxProps = Omit<ComponentProps<typeof ZCheckbox>, 'value'> & {
+type ControlBase = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'size' | 'value'> & {
+  /** Nhãn hiện cạnh control; `<label>` bọc ngoài nên chạm nhãn cũng đổi trạng thái. */
+  label?: ReactNode;
   value?: string | number;
+};
+
+export type CheckboxProps = ControlBase & {
+  /** Hàng "Chọn tất cả" khi mới chọn một phần: `aria-checked="mixed"`. */
+  indeterminate?: boolean;
   /** Ô chọn đầu dòng: chiếm cột 24px, vùng chạm 44px nhô ra hai phía (lớp `.tubu-hit-flush`). Mặc định false: khung chiếm 44px như mọi chỗ khác. */
   flush?: boolean;
 };
 
-/** Checkbox đã theme sẵn qua ZaUI bridge (Task 4) — wrapper này CHỈ thêm vùng chạm tối thiểu
- * 44px, không tự vẽ lại hành vi check/uncheck (audit DS v2 44px touch target). */
-export function Checkbox({ value = '', flush = false, ...rest }: CheckboxProps) {
-  const decorative = !hasName(rest);
-  return hitArea('checkbox-hit-area', <ZCheckbox value={value} {...(decorative ? DECORATIVE_INPUT : null)} {...rest} />, decorative, flush);
+/**
+ * Ô 24px tự vẽ trên `<input>` gốc (thay `zmp-ui` Checkbox/Radio: bỏ mã thành phần và luật CSS của chúng). `<input>` trong suốt
+ * phủ kín ô nên cú chạm và bàn phím đi thẳng vào control thật; hình (`.tubu-check__mark`) đổi theo `:checked`/`:disabled` bằng CSS ở `tokens.css`.
+ */
+function choiceControl(kind: 'checkbox' | 'radio', { label, children, indeterminate, className, ...rest }: CheckboxProps) {
+  const text = children ?? label;
+  return (
+    <label className={['tubu-check', `tubu-check--${kind}`, className].filter(Boolean).join(' ')}>
+      <span className="tubu-check__box">
+        <input {...rest} type={kind} className="tubu-check__input" aria-checked={indeterminate ? 'mixed' : undefined} />
+        <span className="tubu-check__mark" aria-hidden="true">
+          {kind === 'checkbox' && (
+            <svg viewBox="0 0 14 11" fill="none">
+              <path d="M1.5 5.5L5 9L12.5 1.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+      </span>
+      {text !== undefined && text !== null && text !== false && text !== '' && <span className="tubu-check__label">{text}</span>}
+    </label>
+  );
 }
 
-export type RadioProps = ComponentProps<typeof ZRadio>;
+/** Checkbox DS: ô 24px trong khung chạm tối thiểu 44px (audit DS v2 44px touch target). */
+export function Checkbox({ flush = false, ...rest }: CheckboxProps) {
+  const decorative = !hasName(rest);
+  return hitArea('checkbox-hit-area', choiceControl('checkbox', { ...(decorative ? DECORATIVE_INPUT : null), ...rest }), decorative, flush);
+}
 
-/** Radio đã theme sẵn qua ZaUI bridge (Task 4) — wrapper này CHỈ thêm vùng chạm tối thiểu 44px. */
+export type RadioProps = ControlBase;
+
+/** Radio DS: chấm tròn 24px trong khung chạm 44px. */
 export function Radio(props: RadioProps) {
   const decorative = !hasName(props);
-  return hitArea('radio-hit-area', <ZRadio {...(decorative ? DECORATIVE_INPUT : null)} {...props} />, decorative);
+  return hitArea('radio-hit-area', choiceControl('radio', { ...(decorative ? DECORATIVE_INPUT : null), ...props }), decorative);
 }
 
-export type SwitchProps = ComponentProps<typeof ZSwitch>;
+export type SwitchProps = ControlBase;
 
-/** Switch đã theme sẵn qua ZaUI bridge (Task 4) — wrapper này CHỈ thêm vùng chạm tối thiểu 44px. */
-export function Switch(props: SwitchProps) {
-  const decorative = !hasName(props);
-  return hitArea('switch-hit-area', <ZSwitch {...(decorative ? DECORATIVE_INPUT : null)} {...props} />, decorative);
+/** Công tắc DS: `<input type="checkbox" role="switch">` 40×24 (trình đọc màn hình đọc "công tắc, bật/tắt") trong khung chạm 44px. */
+export function Switch({ label: ownLabel, children, className, ...rest }: SwitchProps) {
+  const label = ownLabel ?? children;
+  const decorative = !hasName({ label, ...rest });
+  const Wrapper = label ? 'label' : 'div';
+  return hitArea(
+    'switch-hit-area',
+    <Wrapper className="tubu-switch-wrap">
+      <input {...(decorative ? DECORATIVE_INPUT : null)} {...rest} type="checkbox" role="switch" className={['tubu-switch', className].filter(Boolean).join(' ')} />
+      {label && <span className="tubu-switch-wrap__label">{label}</span>}
+    </Wrapper>,
+    decorative,
+  );
 }

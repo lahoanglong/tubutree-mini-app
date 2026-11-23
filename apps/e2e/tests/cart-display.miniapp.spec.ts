@@ -47,9 +47,9 @@ test.describe('Giỏ Mini App: Tiết kiệm (P2 #12)', () => {
 test.describe('Giỏ Mini App: tên dòng đậm như web (P2 #14, G2 MINOR)', () => {
   test('tên dòng đậm 500: cùng độ đậm với web (cart-display.web.spec.ts)', async ({ page, api }) => {
     await openCart(page, api, { lines: 3, reached: true });
-    const name = page.getByTestId('cart-line').first().getByRole('button', { name: 'Sản phẩm thử 1', exact: true });
-    const weight = await name.evaluate((el) => getComputedStyle(el).fontWeight);
-    expect(weight, 'ZaUI `Text bold` phải ra 500 để khớp web').toBe('500');
+    const button = page.getByTestId('cart-line').first().getByRole('button', { name: 'Sản phẩm thử 1', exact: true });
+    const weight = await button.getByText('Sản phẩm thử 1', { exact: true }).evaluate((el) => getComputedStyle(el).fontWeight);
+    expect(weight, 'tên dòng phải ra 500 để khớp web').toBe('500');
   });
 });
 
@@ -123,7 +123,7 @@ test.describe('Giỏ Mini App: ô chọn cột 24 + khoảng 12 (P2 #15, PL-19)'
 
     const row = page.getByTestId('cart-line').first();
     const hit = row.getByTestId('checkbox-hit-area');
-    const box = row.locator('.zaui-checkbox-wrapper .zaui-checkbox, .zaui-checkbox-wrapper > span').first();
+    const box = row.locator('.tubu-check__box').first();
     const [hitBox, thumb, rowBox] = await Promise.all([hit.boundingBox(), row.getByTestId('cart-line-thumb').boundingBox(), row.boundingBox()]);
     expect(Math.round(hitBox!.width), 'vùng chạm rộng 44').toBe(44);
     expect(hitBox!.height).toBeGreaterThanOrEqual(44);

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { Input } from 'zmp-ui';
+import { Input } from './input';
 import { Field, Checkbox, Radio, Switch } from './form';
 import { describeNested, findNestedInteractive } from './nested-interactive';
 
@@ -107,7 +107,38 @@ describe('Radio', () => {
 describe('Switch', () => {
   it('has a 44px min touch target wrapper', () => {
     render(<Switch label="Bật thông báo" checked={false} onChange={() => {}} />);
-    expect(screen.getByRole('checkbox').closest('[data-testid="switch-hit-area"]')).toHaveStyle({ minHeight: '44px' });
+    expect(screen.getByRole('switch').closest('[data-testid="switch-hit-area"]')).toHaveStyle({ minHeight: '44px' });
+  });
+
+  it('là <input type="checkbox" role="switch"> gốc: nhãn là tên, bật/tắt theo checked, gọi onChange', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<Switch label="Bật thông báo" checked={false} onChange={onChange} />);
+    const sw = screen.getByRole('switch', { name: 'Bật thông báo' });
+    expect(sw).toHaveAttribute('type', 'checkbox');
+    expect(sw).not.toBeChecked();
+    fireEvent.click(sw);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    rerender(<Switch label="Bật thông báo" checked onChange={onChange} disabled />);
+    expect(screen.getByRole('switch')).toBeChecked();
+    expect(screen.getByRole('switch')).toBeDisabled();
+  });
+});
+
+describe('Checkbox/Radio tự vẽ trên input gốc', () => {
+  it('indeterminate đọc là "mixed"; ô thường không đặt aria-checked (trình duyệt tự báo checked)', () => {
+    const { rerender } = render(<Checkbox label="Chọn tất cả" indeterminate checked={false} onChange={() => {}} />);
+    expect(screen.getByRole('checkbox', { name: 'Chọn tất cả' })).toHaveAttribute('aria-checked', 'mixed');
+    rerender(<Checkbox label="Chọn tất cả" checked onChange={() => {}} />);
+    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-checked');
+    expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+
+  it('Radio giữ name/value cho nhóm, disabled chặn chọn', () => {
+    render(<Radio label="Tiền mặt" name="pay" value="cod" checked={false} onChange={() => {}} disabled />);
+    const r = screen.getByRole('radio', { name: 'Tiền mặt' });
+    expect(r).toHaveAttribute('name', 'pay');
+    expect(r).toHaveAttribute('value', 'cod');
+    expect(r).toBeDisabled();
   });
 });
 
@@ -121,7 +152,7 @@ describe('Field gắn nhãn với control (C-077, axe label)', () => {
     expect(screen.getByLabelText('Họ tên người nhận').tagName).toBe('INPUT');
   });
 
-  it('Input của ZaUI: nhãn trỏ đúng <input> thật và id không bị trùng', () => {
+  it('Input DS (ui/input.tsx): nhãn của Field trỏ đúng <input> thật và id không bị trùng', () => {
     const { container } = render(
       <Field label="Số điện thoại">
         <Input />
@@ -185,7 +216,7 @@ describe('control không có tên (C-077)', () => {
     );
     expect(screen.getByRole('checkbox', { name: 'Chọn tất cả' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Chuyển khoản' })).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Nhận thông báo' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Nhận thông báo' })).toBeInTheDocument();
   });
 
   it('Checkbox có children làm nhãn vẫn được tính là có tên', () => {
