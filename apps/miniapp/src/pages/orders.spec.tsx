@@ -138,7 +138,7 @@ describe('OrdersPage (tab gốc)', () => {
   it('tubu-w21-02: đơn đã nhận còn sản phẩm chờ đánh giá → nút "Đánh giá (n SP)" mở chi tiết đơn (từng món có lối viết đánh giá)', async () => {
     mocks.fetchOrders.mockResolvedValue({ data: [{ ...ORDER, pendingReviewCount: 1 }], meta: { page: 1, limit: 20, total: 1 } });
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Đánh giá 1 sản phẩm của đơn TUBU-777' });
+    const btn = await screen.findByRole('button', { name: 'Đánh giá (1 SP) của đơn TUBU-777' });
     expect(btn).toHaveTextContent('Đánh giá (1 SP)');
     fireEvent.click(btn);
     expect(mocks.navigate).toHaveBeenCalledWith('/order/TUBU-777');

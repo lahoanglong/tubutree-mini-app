@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { orderReviewCta } from './order-review-cta';
 
 describe('orderReviewCta (tubu-w21-02)', () => {
-  it('đơn đã nhận còn sản phẩm chờ đánh giá: nhãn gọn + tên truy cập đọc rõ "sản phẩm" và mã đơn', () => {
+  it('đơn đã nhận còn sản phẩm chờ đánh giá: nhãn gọn; tên truy cập bắt đầu bằng đúng nhãn hiện trên nút rồi thêm mã đơn', () => {
     expect(orderReviewCta({ code: 'TUBU12345', status: 'DELIVERED', pendingReviewCount: 2 })).toEqual({
       label: 'Đánh giá (2 SP)',
-      ariaLabel: 'Đánh giá 2 sản phẩm của đơn TUBU12345',
+      ariaLabel: 'Đánh giá (2 SP) của đơn TUBU12345',
     });
   });
 

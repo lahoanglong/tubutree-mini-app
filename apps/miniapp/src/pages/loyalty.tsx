@@ -59,7 +59,6 @@ const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TI
 
 /** Lề của các thẻ khối dưới thẻ hạng (dòng điểm danh, dòng sang Ưu đãi, mục gập luật). */
 const BLOCK_INSET: CSSProperties = { margin: '0 var(--space-gutter) var(--space-inset-card)' };
-const EXPIRING_CTA: CSSProperties = { marginTop: 'var(--space-stack-xs)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-inline-xs)' };
 const HINT_STACK: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-xs)' };
 // Trắng cố định (`--stone-0`, không phải `--color-bg-surface` đổi theo theme) + lề trắng 16px quanh lề 1 module của ảnh QR: đủ "vùng yên tĩnh" cho máy quét ở quầy.
 const MEMBER_SCAN_FRAME: CSSProperties = { background: 'var(--stone-0)', padding: 'var(--space-inline-lg)', borderRadius: 'var(--radius-card)', lineHeight: 0 };
@@ -101,7 +100,6 @@ export default function LoyaltyPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const offersRow = loyaltyOffersRow('/offers', couponsQ.data?.length);
   const data = loyaltyQ.data;
   const tierStyle = tierStyleAt(data ? tierRank(data.tiers, { id: data.tier?.id }) : 0);
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
@@ -117,7 +115,7 @@ export default function LoyaltyPage() {
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
   const expiringNote = expiringPointsNote(data?.expiringPoints);
-  const redeemCta = expiringRedeemCta('/offers', expiringNote, { redeemable: data?.redeemablePoints, total: lots?.total ?? 0 });
+  const offersRow = loyaltyOffersRow('/offers', couponsQ.data?.length, expiringRedeemCta(expiringNote, { redeemable: data?.redeemablePoints, total: lots?.total ?? 0 }));
   const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
   const graceLine = tierGraceLine(data?.tierGrace, tierName, { money: moneyShort, points: formatNumber, date: formatDate });
 
@@ -197,25 +195,6 @@ export default function LoyaltyPage() {
                 >
                   {expiringNote.text}
                 </Text>
-              )}
-              {redeemCta && (
-                <div data-testid="loyalty-expiring-cta" style={EXPIRING_CTA}>
-                  <Button
-                    variant="ghost"
-                    onPress={() => {
-                      haptic('light');
-                      goSmart(redeemCta.href);
-                    }}
-                    style={{ minWidth: 0 }}
-                  >
-                    {redeemCta.label}
-                  </Button>
-                  {redeemCta.note && (
-                    <Text variant="caption" tone="secondary" as="div">
-                      {redeemCta.note}
-                    </Text>
-                  )}
-                </div>
               )}
               {expiryPolicy && (
                 <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
@@ -303,9 +282,17 @@ export default function LoyaltyPage() {
           <Card style={BLOCK_INSET} padding={0}>
             <ListRow
               icon={<Icon icon={Gift} tone="brand" />}
-              title={offersRow.title}
+              title={
+                offersRow.urgent ? (
+                  <span data-testid="loyalty-expiring-cta" style={{ color: 'var(--color-text-brand)' }}>
+                    {offersRow.title}
+                  </span>
+                ) : (
+                  offersRow.title
+                )
+              }
               subtitle={offersRow.sub}
-              trailing="chevron"
+              trailing={offersRow.urgent ? undefined : 'chevron'}
               onPress={() => goSmart(offersRow.href)}
               style={{ padding: 'var(--space-inset-card)' }}
             />

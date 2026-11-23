@@ -8,12 +8,12 @@
 export interface OrderReviewCta {
   /** Chữ trên nút, gọn cho thẻ đơn. */
   label: string;
-  /** Tên truy cập đầy đủ: trình đọc màn hình đọc "SP" thành hai chữ cái, nên nói rõ "sản phẩm" và mã đơn. */
+  /** Tên truy cập: bắt đầu bằng đúng nhãn hiện trên nút (người dùng điều khiển bằng giọng nói gọi theo chữ họ thấy), thêm mã đơn để phân biệt các thẻ. */
   ariaLabel: string;
 }
 
 export function orderReviewCta(o: { code: string; status: string; pendingReviewCount?: number | null }): OrderReviewCta | null {
   const n = o.pendingReviewCount ?? 0;
   if (o.status !== 'DELIVERED' || !Number.isInteger(n) || n <= 0) return null;
-  return { label: `Đánh giá (${n} SP)`, ariaLabel: `Đánh giá ${n} sản phẩm của đơn ${o.code}` };
+  return { label: `Đánh giá (${n} SP)`, ariaLabel: `Đánh giá (${n} SP) của đơn ${o.code}` };
 }
