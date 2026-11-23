@@ -135,15 +135,18 @@ export class DataRetentionService {
     switch (target) {
       case 'analytics_events': {
         const vitalsCutoff = new Date(now.getTime() - PERF_VITALS_DAYS * 86_400_000);
-        // Chỉ xoá khi số tổng hợp của NGÀY (giờ VN) đó đã nằm trong retention_daily_snapshot: tổng hợp theo sự kiện
-        // (funnel/cohort từ analytics_events) hiện chưa có job ghi nên đây là snapshot duy nhất làm căn cứ.
-        // Mốc là receivedAt (giờ server) vì occurredAt do client tự khai.
+        // Chỉ xoá khi số tổng hợp của NGÀY (giờ VN) đó đã chốt: retention_daily_snapshot VÀ funnel_daily_snapshot (phễu mua theo
+        // phiên đọc từ chính analytics_events, AnalyticsAggregationService ghi và bù các ngày còn thiếu mỗi đêm). Cohort tháng chỉ đọc bảng
+        // orders nên không chặn ở đây. Mốc là receivedAt (giờ server) vì occurredAt do client tự khai.
         return [
           {
             table: 'analytics_events',
             where: Prisma.sql`"receivedAt" < ${cutoff} AND EXISTS (
               SELECT 1 FROM retention_daily_snapshot s
               WHERE s."date" = ((analytics_events."receivedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+            ) AND EXISTS (
+              SELECT 1 FROM funnel_daily_snapshot f
+              WHERE f."date" = ((analytics_events."receivedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
             )`,
           },
           {

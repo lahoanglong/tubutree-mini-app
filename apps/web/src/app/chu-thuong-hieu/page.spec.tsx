@@ -220,13 +220,14 @@ describe('khung trang /chu-thuong-hieu', () => {
 });
 
 describe('tab Hồ sơ & khuyến mãi', () => {
-  it('có hai tab, mặc định mở Hồ sơ & khuyến mãi và chưa gọi API doanh thu', async () => {
+  it('có ba tab, mặc định mở Hồ sơ & khuyến mãi và chưa gọi API doanh thu hay sức khoẻ catalog', async () => {
     await mount();
     const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
-    expect(tabs.map((t) => t.textContent)).toEqual(['Hồ sơ & khuyến mãi', 'Doanh thu']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Hồ sơ & khuyến mãi', 'Doanh thu', 'Sản phẩm & Chất lượng']);
     expect(tabs[0]!.getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('Thông tin thương hiệu');
     expect(calls('GET', '/brand/owner/me/sales')).toHaveLength(0);
+    expect(calls('GET', '/brand/owner/me/catalog-health')).toHaveLength(0);
   });
 
   it('Lưu thông tin gửi PATCH /brand/owner/me với đủ năm trường; ảnh mới lấy từ ô tải ảnh', async () => {
@@ -366,7 +367,7 @@ describe('tab Doanh thu', () => {
   it('đổi kỳ báo cáo gọi lại API với kỳ đó', async () => {
     await mount();
     expect(Array.from(document.querySelectorAll('[role="tab"]')).map((t) => t.textContent)).toEqual([
-      'Hồ sơ & khuyến mãi', 'Doanh thu', '7 ngày', '30 ngày', '90 ngày', 'Tháng này', 'Tháng trước',
+      'Hồ sơ & khuyến mãi', 'Doanh thu', 'Sản phẩm & Chất lượng', '7 ngày', '30 ngày', '90 ngày', 'Tháng này', 'Tháng trước',
     ]);
     await press('Tháng trước');
     expect(calls('GET', '/brand/owner/me/sales').map((c) => c.query)).toContainEqual({ period: 'prev_month' });
@@ -400,6 +401,92 @@ describe('tab Doanh thu', () => {
     m.fail.set('GET /brand/owner/me/sales', httpError(403, 'Forbidden resource'));
     await mount();
     expect(text()).toContain('Tài khoản này không có quyền quản lý thương hiệu.');
+  });
+});
+
+const HEALTH = {
+  totalProducts: 3,
+  totalSkus: 5,
+  outOfStockSkus: 2,
+  refillPairedSkus: 1,
+  missingInciProducts: 1,
+  missingInci: [{ productId: 'p2', name: 'Xà bông Sachi', skuCount: 2 }],
+  outOfStock: [
+    { productId: 'p1', productName: 'Nước rửa chén Sachi', sku: 'SACHI-NRC-1L', name: '1L' },
+    { productId: 'p2', productName: 'Xà bông Sachi', sku: 'SACHI-XB', name: 'Xà bông Sachi' },
+  ],
+  listMax: 50,
+};
+
+describe('tab Sản phẩm & Chất lượng', () => {
+  beforeEach(() => {
+    m.search = new URLSearchParams('tab=catalog');
+    m.data['/brand/owner/me/catalog-health'] = HEALTH;
+  });
+
+  it('4 ô số (SKU đang bán, hết hàng, có gói Refill, thiếu thành phần), danh sách thiếu INCI và SKU hết hàng; không gọi API doanh thu', async () => {
+    await mount();
+    expect(calls('GET', '/brand/owner/me/catalog-health')).toHaveLength(1);
+    expect(calls('GET', '/brand/owner/me/sales')).toHaveLength(0);
+    for (const label of ['SKU đang bán', 'SKU hết hàng', 'SKU có gói Refill', 'Sản phẩm thiếu thành phần']) {
+      expect(text()).toContain(label);
+    }
+    expect(Array.from(document.querySelectorAll('div')).some((d) => d.textContent === '5SKU đang bán')).toBe(true);
+    const inci = document.querySelector('section[aria-label="Sản phẩm thiếu thành phần"]')!;
+    expect(inci.querySelectorAll('li')).toHaveLength(1);
+    expect(inci.textContent).toContain('Xà bông Sachi');
+    expect(inci.textContent).toContain('2 SKU');
+    const oos = Array.from(document.querySelectorAll('section[aria-label="SKU hết hàng"] li')).map((li) => li.textContent);
+    expect(oos).toEqual(['Nước rửa chén Sachi · 1LSACHI-NRC-1L', 'Xà bông SachiSACHI-XB']);
+    expect(text()).not.toContain('Đang hiện');
+    expect(text()).not.toContain('Thông tin thương hiệu');
+  });
+
+  it('không có vấn đề: báo mọi sản phẩm ổn, không vẽ hai danh sách; Refill không đọc được thì ô hiện —', async () => {
+    m.data['/brand/owner/me/catalog-health'] = { ...HEALTH, outOfStockSkus: 0, missingInciProducts: 0, missingInci: [], outOfStock: [], refillPairedSkus: null };
+    await mount();
+    expect(text()).toContain('Mọi sản phẩm đã có thành phần và còn hàng.');
+    expect(document.querySelector('section[aria-label="SKU hết hàng"]')).toBeNull();
+    expect(document.querySelector('section[aria-label="Sản phẩm thiếu thành phần"]')).toBeNull();
+    expect(Array.from(document.querySelectorAll('div')).some((d) => d.textContent === '—SKU có gói Refill')).toBe(true);
+  });
+
+  it('danh sách bị cắt: ghi rõ đang hiện bao nhiêu dòng đầu', async () => {
+    m.data['/brand/owner/me/catalog-health'] = { ...HEALTH, outOfStockSkus: 80 };
+    await mount();
+    expect(text()).toContain('Đang hiện 2/80 dòng đầu.');
+  });
+
+  it('nhãn chưa có sản phẩm đang bán: trạng thái rỗng', async () => {
+    m.data['/brand/owner/me/catalog-health'] = { ...HEALTH, totalProducts: 0, totalSkus: 0, outOfStockSkus: 0, refillPairedSkus: 0, missingInciProducts: 0, missingInci: [], outOfStock: [] };
+    await mount();
+    expect(text()).toContain('Chưa có sản phẩm nào đang bán');
+  });
+
+  it('lỗi tải: thông báo và nút Thử lại; 403 thì báo không có quyền', async () => {
+    m.failOnce.add('GET /brand/owner/me/catalog-health');
+    await mount();
+    expect(text()).toContain('Mất kết nối');
+    await press('Thử lại');
+    expect(text()).toContain('SKU đang bán');
+    mounted.pop()!.unmount();
+    document.body.innerHTML = '';
+    m.fail.set('GET /brand/owner/me/catalog-health', httpError(403, 'Forbidden resource'));
+    await mount();
+    expect(text()).toContain('Tài khoản này không có quyền quản lý thương hiệu.');
+  });
+
+  it('ô bấm đủ lớn, có tên, tiêu đề đúng thứ bậc', async () => {
+    await mount();
+    expect(unnamedControls(document.body)).toEqual([]);
+    expect(headingProblems(document.body)).toEqual([]);
+  });
+
+  it('chọn tab Sản phẩm & Chất lượng đổi ?tab=catalog', async () => {
+    m.search = new URLSearchParams();
+    await mount();
+    await press('Sản phẩm & Chất lượng');
+    expect(m.replace).toHaveBeenCalledWith('/chu-thuong-hieu?tab=catalog', { scroll: false });
   });
 });
 

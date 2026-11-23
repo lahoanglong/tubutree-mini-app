@@ -250,6 +250,37 @@ export interface PurchaseFunnelDTO {
 }
 
 /**
+ * Phễu mua của MỘT ngày giờ VN, chốt lúc 03:00 hôm sau vào `funnel_daily_snapshot` (cùng cách đếm theo phiên của `PurchaseFunnelDTO`). Bảng
+ * snapshot giữ lại số này khi job dọn dữ liệu đã xoá `analytics_events` thô của ngày đó.
+ */
+export interface FunnelDailyDTO extends PurchaseFunnelWindowDTO {
+  /** 'YYYY-MM-DD' theo giờ VN. */
+  date: string;
+}
+
+/** Khách lặp lại trong N ngày kể từ đơn đầu. `complete` = mọi khách của tháng đã đủ N ngày để xét; chưa đủ thì `count` còn tăng. */
+export interface CohortRepeatWindowDTO {
+  count: number;
+  complete: boolean;
+}
+
+/**
+ * Nhóm khách có đơn hợp lệ ĐẦU TIÊN trong một tháng giờ VN, và bao nhiêu người đặt đơn thứ 2 trong 30/60/90 ngày kể từ đơn đầu. Chỉ số đếm,
+ * không có định danh khách.
+ */
+export interface CohortRepeatRowDTO {
+  /** 'YYYY-MM' theo giờ VN. */
+  cohortMonth: string;
+  newBuyers: number;
+  d30: CohortRepeatWindowDTO;
+  d60: CohortRepeatWindowDTO;
+  d90: CohortRepeatWindowDTO;
+  /** Trung vị số ngày từ đơn đầu tới đơn thứ 2 (trong 90 ngày); null khi chưa ai có đơn thứ 2. */
+  medianDaysToSecondOrder: number | null;
+  computedAt: string;
+}
+
+/**
  * Phễu Đổi rác phía khách (`recycle_funnel_step`, `props.step`). Chỉ đo hành vi trên màn hình; "đã nhận rác thật" là sự kiện server
  * `recycle_confirmed`, client không tự ghi được (xem SERVER_EVENT_NAMES).
  */

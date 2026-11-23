@@ -11,6 +11,7 @@ import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { RefillPairsService } from '../catalog/refill/refill-pairs.service';
 import { refillPairProductIds } from '../catalog/refill/refill-pair-table';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
+import { brandCatalogHealth, type BrandCatalogHealthView } from './brand-catalog-health';
 
 /** Trần slug Refill của một nhãn trả về trang thương hiệu: trang "Tiết kiệm với Refill" có tối đa 60 cặp (120 sản phẩm), dư cho mọi nhãn. */
 const BRAND_REFILL_SLUGS_MAX = 200;
@@ -656,6 +657,32 @@ export class BrandService {
   async deleteOwnedPromotion(userId: string, promoId: string) {
     await this.assertOwnedPromotion(userId, promoId);
     return this.deletePromotion(promoId);
+  }
+
+  /**
+   * Sức khoẻ catalog cho chính chủ nhãn tự rà: số SKU, SKU hết hàng, SKU có cặp Refill, sản phẩm thiếu thành phần (INCI). Nhãn lấy từ
+   * `Brand.ownerUserId` của người gọi, không nhận brandId từ client, nên không xem được SKU của nhãn khác. Chỉ sản phẩm đang bật (kể cả chưa
+   * duyệt: thiếu INCI cần bổ sung trước khi lên kệ); bảng cặp Refill đọc lỗi thì ô Refill là null, phần còn lại vẫn trả.
+   */
+  async getOwnedCatalogHealth(userId: string): Promise<BrandCatalogHealthView> {
+    const brand = await this.assertOwnedBrand(userId);
+    const [products, refillIds] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { brandId: brand.id, isActive: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          ingredients: true,
+          variations: { where: { isActive: true }, orderBy: { sku: 'asc' }, select: { sku: true, name: true, stock: true } },
+        },
+      }),
+      this.refillPairs.pairs().then(
+        (pairs) => new Set(refillPairProductIds(pairs)),
+        () => null,
+      ),
+    ]);
+    return brandCatalogHealth(products, refillIds);
   }
 
   /**

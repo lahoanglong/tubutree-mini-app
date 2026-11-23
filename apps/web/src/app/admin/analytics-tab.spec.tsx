@@ -85,3 +85,31 @@ describe('AnalyticsTab — DS v2', () => {
     expect(b.container.querySelector('p')?.className).toContain('text-danger-fg');
   });
 });
+
+describe('AnalyticsTab — cohort tháng và phễu theo ngày', () => {
+  it('có số liệu 30 ngày thì vẽ thêm thẻ Khách quay lại theo tháng và Phễu mua theo ngày, mỗi thẻ gọi đúng API của nó', async () => {
+    const api = mockFetch({
+      '/admin/analytics/retention-daily': { body: [row('2026-10-10')] },
+      '/admin/analytics/cohort-repeat': {
+        body: [{ cohortMonth: '2026-10', newBuyers: 4, d30: { count: 1, complete: true }, d60: { count: 2, complete: false }, d90: { count: 2, complete: false }, medianDaysToSecondOrder: 9, computedAt: '2026-11-24T20:00:00.000Z' }],
+      },
+      '/admin/analytics/funnel-daily': { body: [] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AnalyticsTab />);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/admin/analytics/cohort-repeat?months=12'))).toBe(true);
+    expect(api.calls.some((c) => c.url.includes('/admin/analytics/funnel-daily?days=30'))).toBe(true);
+    const cohort = container.querySelector('section[aria-label="Khách quay lại theo tháng mua đầu"]')!;
+    expect(cohort.querySelector('tbody tr')!.textContent).toContain('25% (1)');
+    expect(container.querySelector('section[aria-label="Phễu mua theo ngày"]')!.textContent).toContain('Chưa có ngày nào được chốt');
+  });
+
+  it('chưa có số liệu 30 ngày: không gọi hai API snapshot', async () => {
+    const api = mockFetch({ '/admin/analytics/retention-daily': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mount(<AnalyticsTab />);
+    await flush();
+    expect(api.calls.map((c) => c.url).filter((u) => u.includes('cohort-repeat') || u.includes('funnel-daily'))).toEqual([]);
+  });
+});

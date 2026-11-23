@@ -51,6 +51,11 @@ export class BrandController {
   ownedSales(@CurrentUser('sub') uid: string, @Query() q: BrandSalesQueryDto) {
     return this.svc.getOwnedSales(uid, q.period);
   }
+  // Sức khoẻ catalog (SKU, hết hàng, cặp Refill, thiếu INCI) — chỉ nhãn của chính người gọi.
+  @Get('owner/me/catalog-health')
+  ownedCatalogHealth(@CurrentUser('sub') uid: string) {
+    return this.svc.getOwnedCatalogHealth(uid);
+  }
   @Post('owner/me/promotions')
   addOwnedPromo(@CurrentUser('sub') uid: string, @Body() dto: PromotionDto) {
     return this.svc.createOwnedPromotion(uid, dto);

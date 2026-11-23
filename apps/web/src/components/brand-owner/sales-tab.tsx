@@ -15,7 +15,8 @@ import { ErrorState } from '@/components/ui/error-state';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 
-function Stat({ icon: Icon, label, value, wide }: { icon: LucideIcon; label: string; value: string; wide?: boolean }) {
+/** Ô số của cổng chủ thương hiệu (theo StatTile của Mini): biểu tượng, số, nhãn. */
+export function Stat({ icon: Icon, label, value, wide }: { icon: LucideIcon; label: string; value: string; wide?: boolean }) {
   return (
     <div className={`${skin.card} p-3 md:p-4 lg:flex lg:items-center lg:gap-3 ${wide ? 'col-span-2 lg:col-span-1' : ''}`}>
       <span className="flex h-5 w-5 flex-none items-center justify-center text-forest-600 lg:h-10 lg:w-10 lg:rounded-full lg:bg-forest-50">

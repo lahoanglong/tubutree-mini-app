@@ -7,7 +7,10 @@ import {
   PAYMENT_UNLINKED_HOLD_HOURS,
   PENDING_PAYMENT_TTL_KEY,
   PendingPaymentExpiryCron,
+  ORDER_PAYMENT_REMINDER_TEMPLATE,
+  paymentReminderDedupeKey,
 } from './pending-payment-expiry.cron';
+import type { NotificationsService } from '../notifications/notifications.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { OrderStatusService } from './order-status.service';
@@ -197,5 +200,83 @@ describe('PendingPaymentExpiryCron (C-024)', () => {
     const { cron } = make();
     (runExclusive as jest.Mock).mockRejectedValueOnce(new Error('pool exhausted'));
     await expect(cron.handleCron()).resolves.toBeUndefined();
+  });
+});
+
+describe('PendingPaymentExpiryCron: nhắc chuyển khoản ~2 giờ trước hạn tự huỷ', () => {
+  function makeWithNotify(opts: { due?: unknown[]; template?: boolean; ttl?: number } = {}) {
+    (runExclusive as jest.Mock).mockImplementation(holdsLease(true));
+    const findMany = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce(opts.due ?? []);
+    const prisma = {
+      order: { findMany },
+      notificationTemplate: { findUnique: jest.fn().mockResolvedValue(opts.template === false ? null : { id: 'tpl' }) },
+    };
+    const systemConfig = { get: jest.fn(async (_k: string, fallback: unknown) => opts.ttl ?? fallback) };
+    const orderStatus = { setStatus: jest.fn() };
+    const notifications = { notifySafe: jest.fn().mockResolvedValue(true) };
+    const cron = new PendingPaymentExpiryCron(
+      prisma as unknown as PrismaService,
+      systemConfig as unknown as SystemConfigService,
+      orderStatus as unknown as OrderStatusService,
+      notifications as unknown as NotificationsService,
+    );
+    return { cron, prisma, notifications, orderStatus };
+  }
+
+  it('chỉ đơn lẻ chuyển khoản còn UNPAID, chưa có dấu đã trả, tạo trong khoảng (hạn huỷ, hạn huỷ + 2 giờ]; khoá chống trùng pay_remind:<mã>', async () => {
+    const createdAt = new Date(NOW.getTime() - 24 * HOUR + 90 * 60_000);
+    const { cron, prisma, notifications } = makeWithNotify({ due: [{ userId: 'u1', code: 'TB123', total: 259000, createdAt }] });
+    const res = await cron.expireStale(NOW);
+    expect(res).toMatchObject({ reminded: 1 });
+    const where = prisma.order.findMany.mock.calls[1][0].where;
+    expect(where).toMatchObject({
+      type: 'RETAIL',
+      status: 'PENDING_PAYMENT',
+      paymentStatus: 'UNPAID',
+      paymentMethod: 'BANK_TRANSFER',
+      autoCancelBlockedAt: null,
+      paymentUnlinkedAt: null,
+      guestTokenHash: null,
+      createdAt: { gt: new Date(NOW.getTime() - 24 * HOUR), lte: new Date(NOW.getTime() - 22 * HOUR) },
+    });
+    expect(where.OR).toEqual([{ pancakePaidReported: null }, { pancakePaidReported: 0 }]);
+    expect(notifications.notifySafe).toHaveBeenCalledWith(
+      'u1',
+      ORDER_PAYMENT_REMINDER_TEMPLATE,
+      { order_code: 'TB123', amount: `${(259000).toLocaleString('vi-VN')}đ`, deadline: '13:30 10/10/2026' },
+      { dedupeKey: 'pay_remind:TB123' },
+      'order=TB123',
+    );
+    expect(paymentReminderDedupeKey('TB123')).toBe('pay_remind:TB123');
+  });
+
+  it('hạn huỷ ngắn (2 giờ): chỉ nhắc đơn đã tạo ít nhất 1 giờ, không nhắc ngay khi vừa đặt', async () => {
+    const { cron, prisma } = makeWithNotify({ ttl: 2 });
+    await cron.expireStale(NOW);
+    const where = prisma.order.findMany.mock.calls[1][0].where;
+    expect(where.createdAt).toEqual({ gt: new Date(NOW.getTime() - 2 * HOUR), lte: new Date(NOW.getTime() - HOUR) });
+  });
+
+  it('chưa seed mẫu ORDER_PAYMENT_REMINDER: bỏ lượt nhắc, không gọi notify, việc huỷ vẫn chạy', async () => {
+    const { cron, notifications } = makeWithNotify({ template: false, due: [{ userId: 'u1', code: 'A', total: 1, createdAt: NOW }] });
+    await expect(cron.expireStale(NOW)).resolves.toMatchObject({ reminded: 0, scanned: 0 });
+    expect(notifications.notifySafe).not.toHaveBeenCalled();
+  });
+
+  it('gửi lỗi (notifySafe trả false) không đếm; lỗi truy vấn nhắc không làm hỏng lượt huỷ', async () => {
+    const a = makeWithNotify({ due: [{ userId: 'u1', code: 'A', total: 1, createdAt: NOW }, { userId: 'u2', code: 'B', total: 1, createdAt: NOW }] });
+    a.notifications.notifySafe.mockResolvedValueOnce(false);
+    await expect(a.cron.expireStale(NOW)).resolves.toMatchObject({ reminded: 1 });
+
+    const b = makeWithNotify();
+    b.prisma.order.findMany.mockReset().mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('db down'));
+    jest.spyOn((b.cron as unknown as { logger: { error: (m: string) => void } }).logger, 'error').mockImplementation();
+    await expect(b.cron.expireStale(NOW)).resolves.toMatchObject({ scanned: 0, reminded: 0 });
+  });
+
+  it('không có NotificationsService (dựng 3 tham số): không truy vấn nhắc', async () => {
+    const { cron, prisma } = make();
+    await cron.expireStale(NOW);
+    expect(prisma.order.findMany).toHaveBeenCalledTimes(1);
   });
 });

@@ -50,3 +50,20 @@ export interface BrandSales {
 }
 export const getOwnedBrandSales = (http: HttpClient, period: BrandSalesPeriod) =>
   http.get<BrandSales>('/brand/owner/me/sales', { query: { period } });
+
+/**
+ * Sức khoẻ catalog của nhãn mình sở hữu (máy chủ lấy nhãn theo tài khoản, không nhận mã nhãn). SKU = biến thể đang bật của sản phẩm đang bật;
+ * thiếu thành phần (INCI) xét theo sản phẩm. Hai danh sách cắt ở `listMax` dòng, các con số tổng vẫn đếm đủ.
+ */
+export interface BrandCatalogHealth {
+  totalProducts: number;
+  totalSkus: number;
+  outOfStockSkus: number;
+  /** null: tạm không đọc được bảng cặp chai ↔ gói Refill. */
+  refillPairedSkus: number | null;
+  missingInciProducts: number;
+  missingInci: { productId: string; name: string; skuCount: number }[];
+  outOfStock: { productId: string; productName: string; sku: string; name: string }[];
+  listMax: number;
+}
+export const getOwnedBrandCatalogHealth = (http: HttpClient) => http.get<BrandCatalogHealth>('/brand/owner/me/catalog-health');

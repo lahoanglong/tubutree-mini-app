@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getRetentionDaily } from '@/lib/admin-client';
 import { Ns1Card } from '@/components/admin/ns1-card';
+import { CohortRepeatCard, FunnelDailyCard } from '@/components/admin/analytics-snapshot-cards';
 import { BTN_SECONDARY, ScrollRegion } from '@/components/admin/ui';
 import { formatDate } from '@/lib/format-date';
 
@@ -61,6 +62,8 @@ export function AnalyticsTab({ onOpenReports }: { onOpenReports?: () => void } =
           </tbody>
         </table>
       </ScrollRegion>
+      <CohortRepeatCard />
+      <FunnelDailyCard />
     </div>
   );
 }

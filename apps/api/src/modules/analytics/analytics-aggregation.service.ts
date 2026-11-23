@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { OrderStatus } from '@prisma/client';
+import { PURCHASE_FUNNEL_STEPS, type PurchaseFunnelWindowDTO } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { countPurchaseFunnel } from './purchase-funnel.service';
 
 interface RetentionResult {
   newBuyers: number;
@@ -25,14 +27,35 @@ interface DayCustomer {
   first_at: Date;
 }
 
-// TODO(dự án con 2, phase 2): CohortRepeatSnapshot (repeat 30/60/90 theo cohort tháng) và
-// FunnelDailySnapshot (phễu từng bước, join analytics_events) dùng CÙNG định nghĩa khách hàng
-// (CUSTOMER_KEY_SQL) nhưng là 2 job riêng, phức tạp hơn nhiều (cohort cần quét lại mọi cohort chưa
-// đủ tuổi; funnel cần join analytics_events). Ngoài phạm vi task 14 — xem task-14-brief.md.
-// NS-1 (đơn thứ 2 trong 30 ngày) đã nằm ngay trong RetentionDailySnapshot, tính theo cohort MỘT ngày.
-
 /** NS-1: khách có đơn thứ 2 trong vòng ngần ấy ngày kể từ đơn đầu. */
 const NS1_WINDOW_DAYS = 30;
+
+/** Cửa sổ lặp của cohort tháng (cohort_repeat_snapshot): đơn thứ 2 trong ngần ấy ngày kể từ đơn đầu. */
+export const COHORT_REPEAT_DAYS = [30, 60, 90] as const;
+const COHORT_MAX_DAYS = COHORT_REPEAT_DAYS[2];
+/** Số tháng cohort gần nhất được xét mỗi đêm; tháng đã chốt đủ 90 ngày (repeat90dComplete) thì không tính lại. */
+export const COHORT_LOOKBACK_MONTHS = 15;
+
+/**
+ * Dòng của funnel_daily_snapshot cho một ngày: `step` là 'sessions' (số phiên, mẫu số) hoặc một bước của PURCHASE_FUNNEL_STEPS; cột
+ * `entrySource` giữ NỀN TẢNG ('web' | 'miniapp'), luôn có giá trị để khoá unique (date, step, entrySource) chống ghi trùng khi chạy lại.
+ */
+export const FUNNEL_SESSIONS_STEP = 'sessions';
+export const FUNNEL_SNAPSHOT_PLATFORMS = ['web', 'miniapp'] as const;
+/** Mỗi đêm bù tối đa ngần này ngày đã có retention snapshot mà chưa có funnel snapshot (cũ nhất trước, trước khi job dọn tới hạn xoá). */
+export const FUNNEL_BACKFILL_PER_NIGHT = 14;
+
+export interface CohortRepeatResult {
+  cohortMonth: string;
+  newBuyersInCohort: number;
+  repeat30dCount: number;
+  repeat30dComplete: boolean;
+  repeat60dCount: number;
+  repeat60dComplete: boolean;
+  repeat90dCount: number;
+  repeat90dComplete: boolean;
+  medianDaysToSecondOrder: number | null;
+}
 
 /** Đơn tính vào retention: bán lẻ, chưa huỷ/trả. Lấy từ enum để trạng thái mới tự được tính và dùng được index (status, createdAt). */
 const COUNTED_STATUSES = Object.values(OrderStatus).filter(
@@ -60,8 +83,6 @@ const COUNTED_ORDER_SQL = `o.type = 'RETAIL' AND o.status = ANY($2::"OrderStatus
 const DAY_START_SQL = `($1::date)::timestamp - interval '7 hours'`;
 const DAY_END_SQL = `($1::date + 1)::timestamp - interval '7 hours'`;
 const MONTH_START_SQL = `date_trunc('month', $1::date)::timestamp - interval '7 hours'`;
-/** Cửa sổ quét đơn của cohort ngày VN $1: từ 00:00 VN tới +31 ngày (phủ đơn cuối ngày cohort cộng đủ 30 ngày). */
-const COHORT_WINDOW_SQL = `o."createdAt" >= ${DAY_START_SQL} AND o."createdAt" < (${DAY_START_SQL}) + interval '${NS1_WINDOW_DAYS + 1} days'`;
 
 /**
  * `customersOfDay` nhóm theo (khoá, loại) nên cùng một SĐT vừa tự mua (PHONE) vừa được CTV lên hộ (PROXY, khoá là
@@ -87,6 +108,40 @@ function shiftDayKey(dateKey: string, days: number): string {
   return new Date(Date.parse(`${dateKey}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
+/** 'YYYY-MM' cộng `months` tháng. */
+function shiftMonthKey(monthKey: string, months: number): string {
+  const d = new Date(Date.parse(`${monthKey}-01T00:00:00Z`));
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 7);
+}
+
+/** 00:00 giờ VN của ngày 'YYYY-MM-DD', theo UTC (createdAt/receivedAt lưu UTC). */
+function vnDayStart(dateKey: string): Date {
+  return new Date(Date.parse(`${dateKey}T00:00:00Z`) - 7 * 3_600_000);
+}
+
+const minKey = (a: string, b: string) => (a < b ? a : b);
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+/** Số đếm phễu của một ngày thành các dòng funnel_daily_snapshot (đủ mọi bước × nền tảng, kể cả số 0, để ngày đó luôn có dấu đã chốt). */
+export function funnelSnapshotRows(counts: PurchaseFunnelWindowDTO): Array<{ step: string; entrySource: string; count: number }> {
+  const out: Array<{ step: string; entrySource: string; count: number }> = [];
+  for (const platform of FUNNEL_SNAPSHOT_PLATFORMS) {
+    out.push({ step: FUNNEL_SESSIONS_STEP, entrySource: platform, count: counts.sessions[platform] });
+    for (const step of PURCHASE_FUNNEL_STEPS) {
+      const row = counts.rows.find((r) => r.step === step);
+      out.push({ step, entrySource: platform, count: row ? row[platform] : 0 });
+    }
+  }
+  return out;
+}
+
 @Injectable()
 export class AnalyticsAggregationService {
   private readonly logger = new Logger(AnalyticsAggregationService.name);
@@ -110,6 +165,136 @@ export class AnalyticsAggregationService {
     } catch (err) {
       this.logger.error(`Tính retention_daily_snapshot cho ${dateKey} thất bại: ${err instanceof Error ? err.stack : err}`);
     }
+    // Từng snapshot một try riêng: phễu hay cohort lỗi không làm mất phần còn lại.
+    try {
+      await this.computeFunnelSnapshot(dateKey);
+      const filled = await this.backfillFunnelSnapshots(FUNNEL_BACKFILL_PER_NIGHT);
+      if (filled.length > 0) this.logger.log(`Đã bù funnel_daily_snapshot cho ${filled.length} ngày: ${filled.join(', ')}`);
+    } catch (err) {
+      this.logger.error(`Tính funnel_daily_snapshot cho ${dateKey} thất bại: ${err instanceof Error ? err.stack : err}`);
+    }
+    try {
+      const months = await this.refreshCohortSnapshots(dateKey);
+      if (months.length > 0) this.logger.log(`Đã tính cohort_repeat_snapshot cho ${months.join(', ')}`);
+    } catch (err) {
+      this.logger.error(`Tính cohort_repeat_snapshot (tới ${dateKey}) thất bại: ${err instanceof Error ? err.stack : err}`);
+    }
+  }
+
+  /**
+   * Chốt phễu mua của ngày VN `dateKey` vào funnel_daily_snapshot (upsert theo khoá unique, chạy lại cùng ngày cho cùng số). Job dọn dữ liệu
+   * chỉ xoá analytics_events của ngày đã có dòng ở đây, nên lịch sử phễu còn sau khi sự kiện thô bị xoá.
+   */
+  async computeFunnelSnapshot(dateKey: string): Promise<PurchaseFunnelWindowDTO> {
+    const counts = await countPurchaseFunnel(this.prisma, vnDayStart(dateKey), vnDayStart(shiftDayKey(dateKey, 1)));
+    const date = new Date(dateKey);
+    await this.prisma.$transaction(
+      funnelSnapshotRows(counts).map((r) =>
+        this.prisma.funnelDailySnapshot.upsert({
+          where: { date_step_entrySource: { date, step: r.step, entrySource: r.entrySource } },
+          create: { date, ...r },
+          update: { count: r.count },
+        }),
+      ),
+    );
+    return counts;
+  }
+
+  /**
+   * Ngày đã có retention snapshot mà chưa có funnel snapshot (ngày trước khi có job này, hay đêm job phễu lỗi): tính bù tối đa `limit` ngày,
+   * cũ nhất trước. Chỉ xét từ ngày VN của sự kiện cũ nhất còn giữ: ngày đã bị dọn sự kiện mà ghi 0 thì là số sai, không phải lịch sử.
+   */
+  async backfillFunnelSnapshots(limit: number): Promise<string[]> {
+    const rows = await this.prisma.$queryRawUnsafe<Array<{ day: string }>>(`
+      WITH oldest AS (SELECT min("receivedAt") AS at FROM analytics_events)
+      SELECT to_char(r."date", 'YYYY-MM-DD') AS day
+        FROM retention_daily_snapshot r, oldest
+       WHERE oldest.at IS NOT NULL
+         AND r."date" >= date_trunc('day', oldest.at + interval '7 hours')
+         AND NOT EXISTS (SELECT 1 FROM funnel_daily_snapshot f WHERE f."date" = r."date")
+       ORDER BY r."date" ASC
+       LIMIT $1
+    `, limit);
+    const done: string[] = [];
+    for (const { day } of rows) {
+      await this.computeFunnelSnapshot(day);
+      done.push(day);
+    }
+    return done;
+  }
+
+  /**
+   * Tính lại các cohort tháng trong COHORT_LOOKBACK_MONTHS tháng gần nhất (tới tháng của `asOfKey`) chưa chốt đủ 90 ngày. Trả các tháng đã ghi.
+   */
+  async refreshCohortSnapshots(asOfKey: string): Promise<string[]> {
+    const lastMonth = asOfKey.slice(0, 7);
+    const months = Array.from({ length: COHORT_LOOKBACK_MONTHS }, (_, i) => shiftMonthKey(lastMonth, i - COHORT_LOOKBACK_MONTHS + 1));
+    const final = await this.prisma.cohortRepeatSnapshot.findMany({
+      where: { cohortMonth: { in: months.map((m) => new Date(`${m}-01`)) }, repeat90dComplete: true },
+      select: { cohortMonth: true },
+    });
+    const finalKeys = new Set(final.map((r) => r.cohortMonth.toISOString().slice(0, 7)));
+    const written: string[] = [];
+    for (const month of months) {
+      if (finalKeys.has(month)) continue;
+      if (await this.computeCohortSnapshot(month, asOfKey)) written.push(month);
+    }
+    return written;
+  }
+
+  /**
+   * Cohort tháng `cohortMonth` ('YYYY-MM' giờ VN): khách có đơn tính-retention ĐẦU TIÊN trong tháng đó (cùng không gian khoá khách của NS-1),
+   * và số khách có đơn thứ 2 trong 30/60/90 ngày kể từ đơn đầu. Dữ liệu tính tới hết ngày VN `asOfKey`: cửa sổ N ngày chỉ `complete` khi
+   * khách cuối tháng cũng đã đủ N ngày (đầu tháng sau + N ≤ hết asOfKey); chưa đủ thì số còn tăng ở các đêm sau.
+   * Tháng chưa có khách mới và chưa có dòng thì không ghi gì (khỏi dòng 0 cho các tháng trước khi mở bán). Trả null khi không ghi.
+   */
+  async computeCohortSnapshot(cohortMonth: string, asOfKey: string): Promise<CohortRepeatResult | null> {
+    const monthStart = `${cohortMonth}-01`;
+    const nextMonth = `${shiftMonthKey(cohortMonth, 1)}-01`;
+    const asOfEnd = shiftDayKey(asOfKey, 1);
+    const cohortEnd = minKey(nextMonth, asOfEnd);
+    if (cohortEnd <= monthStart) return null;
+
+    const cohort = mergeByCustomerKey(await this.customersOfRange(monthStart, cohortEnd));
+    const phoneUsers = await this.userIdsByPhoneKey(cohort.map((r) => r.customer_key));
+    const returning = cohort.length > 0 ? await this.keysWithEarlierOrder(monthStart, cohort, phoneUsers) : new Set<string>();
+    const newBuyers = cohort.filter((r) => !returning.has(r.customer_key));
+
+    const gaps: number[] = [];
+    if (newBuyers.length > 0) {
+      const times = await this.orderTimes(monthStart, minKey(shiftDayKey(nextMonth, COHORT_MAX_DAYS), asOfEnd), newBuyers, phoneUsers);
+      for (const buyer of newBuyers) {
+        const first = new Date(buyer.first_at).getTime();
+        const after = (times.get(buyer.customer_key) ?? []).filter((t) => t >= first).sort((a, b) => a - b);
+        const second = after[1];
+        if (second !== undefined && second - first <= COHORT_MAX_DAYS * 86_400_000) gaps.push((second - first) / 86_400_000);
+      }
+    }
+    const within = (days: number) => gaps.filter((g) => g <= days).length;
+    const complete = (days: number) => shiftDayKey(nextMonth, days) <= asOfEnd;
+    const med = median(gaps);
+    const columns: Omit<CohortRepeatResult, 'cohortMonth'> = {
+      newBuyersInCohort: newBuyers.length,
+      repeat30dCount: within(30),
+      repeat30dComplete: complete(30),
+      repeat60dCount: within(60),
+      repeat60dComplete: complete(60),
+      repeat90dCount: within(90),
+      repeat90dComplete: complete(90),
+      medianDaysToSecondOrder: med === null ? null : Math.round(med * 10) / 10,
+    };
+    const result: CohortRepeatResult = { cohortMonth, ...columns };
+    const key = new Date(monthStart);
+    if (newBuyers.length === 0) {
+      const res = await this.prisma.cohortRepeatSnapshot.updateMany({ where: { cohortMonth: key }, data: { ...columns, computedAt: new Date() } });
+      return res.count > 0 ? result : null;
+    }
+    await this.prisma.cohortRepeatSnapshot.upsert({
+      where: { cohortMonth: key },
+      create: { cohortMonth: key, ...columns },
+      update: { ...columns, computedAt: new Date() },
+    });
+    return result;
   }
 
   /**
@@ -195,6 +380,11 @@ export class AnalyticsAggregationService {
 
   /** Khách của một ngày VN (đơn tính-retention) kèm thời điểm đơn đầu tiên của khách trong ngày đó. */
   private customersOfDay(dateKey: string): Promise<DayCustomer[]> {
+    return this.customersOfRange(dateKey, shiftDayKey(dateKey, 1));
+  }
+
+  /** Như customersOfDay cho các ngày VN [fromKey, toKey): khách kèm thời điểm đơn đầu tiên của khách trong khoảng đó. */
+  private customersOfRange(fromKey: string, toKey: string): Promise<DayCustomer[]> {
     return this.prisma.$queryRawUnsafe<DayCustomer[]>(`
       SELECT ${CUSTOMER_KEY_SQL} AS customer_key,
              CASE WHEN ${IS_PROXY_ORDER_SQL} THEN 'PROXY'
@@ -204,9 +394,9 @@ export class AnalyticsAggregationService {
              MIN(o."createdAt") AS first_at
       FROM orders o JOIN users u ON u.id = o."userId"
       WHERE ${COUNTED_ORDER_SQL}
-        AND o."createdAt" >= ${DAY_START_SQL} AND o."createdAt" < ${DAY_END_SQL}
+        AND o."createdAt" >= ${DAY_START_SQL} AND o."createdAt" < ($3::date)::timestamp - interval '7 hours'
       GROUP BY 1, 2
-    `, dateKey, COUNTED_STATUSES);
+    `, fromKey, COUNTED_STATUSES, toKey);
   }
 
   /**
@@ -280,18 +470,40 @@ export class AnalyticsAggregationService {
 
   /**
    * Trong các khách mới của ngày cohort, đếm khách có ít nhất 2 đơn hợp lệ trong [đơn đầu, đơn đầu + 30 ngày].
-   * Cùng không gian khoá với keysWithEarlierOrder: đơn lên hộ theo endCustomerKey, đơn thường qua mọi tài khoản
-   * có cùng SĐT chuẩn hoá (hoặc theo userId khi khách không có SĐT).
    */
   private async countRepeatWithinWindow(
     cohortKey: string,
     newBuyers: DayCustomer[],
     phoneUsers: Map<string, string>,
   ): Promise<number> {
-    const allKeys = newBuyers.map((r) => r.customer_key);
+    // Cửa sổ quét từ 00:00 VN ngày cohort tới +31 ngày: phủ đơn cuối ngày cohort cộng đủ 30 ngày.
+    const times = await this.orderTimes(cohortKey, shiftDayKey(cohortKey, NS1_WINDOW_DAYS + 1), newBuyers, phoneUsers);
+    const windowMs = NS1_WINDOW_DAYS * 86_400_000;
+    let repeat = 0;
+    for (const buyer of newBuyers) {
+      const first = new Date(buyer.first_at).getTime();
+      const inWindow = (times.get(buyer.customer_key) ?? []).filter((t) => t >= first && t <= first + windowMs);
+      if (inWindow.length >= 2) repeat++;
+    }
+    return repeat;
+  }
+
+  /**
+   * Thời điểm các đơn hợp lệ của `buyers` trong các ngày VN [fromKey, toKey), gom theo khoá khách. Cùng không gian khoá với
+   * keysWithEarlierOrder: đơn lên hộ theo endCustomerKey, đơn thường qua mọi tài khoản có cùng SĐT chuẩn hoá (hoặc theo userId khi khách
+   * không có SĐT).
+   */
+  private async orderTimes(
+    fromKey: string,
+    toKey: string,
+    buyers: DayCustomer[],
+    phoneUsers: Map<string, string>,
+  ): Promise<Map<string, number[]>> {
+    const allKeys = buyers.map((r) => r.customer_key);
     const keySet = new Set(allKeys);
     const digitsByUserId = new Map([...phoneUsers].filter(([, key]) => keySet.has(key)));
-    const userIds = [...digitsByUserId.keys(), ...newBuyers.filter((r) => r.kind === 'USER').map((r) => r.customer_key)];
+    const userIds = [...digitsByUserId.keys(), ...buyers.filter((r) => r.kind === 'USER').map((r) => r.customer_key)];
+    const windowSql = `o."createdAt" >= ${DAY_START_SQL} AND o."createdAt" < ($4::date)::timestamp - interval '7 hours'`;
 
     const times = new Map<string, number[]>();
     const add = (key: string, at: Date) => {
@@ -302,25 +514,17 @@ export class AnalyticsAggregationService {
 
     const proxyRows = await this.prisma.$queryRawUnsafe<Array<{ customer_key: string; created_at: Date }>>(`
       SELECT o."endCustomerKey" AS customer_key, o."createdAt" AS created_at FROM orders o
-      WHERE ${IS_PROXY_ORDER_SQL} AND o."endCustomerKey" = ANY($3::text[]) AND ${COUNTED_ORDER_SQL} AND ${COHORT_WINDOW_SQL}
-    `, cohortKey, COUNTED_STATUSES, allKeys);
+      WHERE ${IS_PROXY_ORDER_SQL} AND o."endCustomerKey" = ANY($3::text[]) AND ${COUNTED_ORDER_SQL} AND ${windowSql}
+    `, fromKey, COUNTED_STATUSES, allKeys, toKey);
     for (const r of proxyRows) add(r.customer_key, r.created_at);
 
     if (userIds.length > 0) {
       const userRows = await this.prisma.$queryRawUnsafe<Array<{ user_id: string; created_at: Date }>>(`
         SELECT o."userId" AS user_id, o."createdAt" AS created_at FROM orders o
-        WHERE o."userId" = ANY($3::text[]) AND NOT ${IS_PROXY_ORDER_SQL} AND ${COUNTED_ORDER_SQL} AND ${COHORT_WINDOW_SQL}
-      `, cohortKey, COUNTED_STATUSES, userIds);
+        WHERE o."userId" = ANY($3::text[]) AND NOT ${IS_PROXY_ORDER_SQL} AND ${COUNTED_ORDER_SQL} AND ${windowSql}
+      `, fromKey, COUNTED_STATUSES, userIds, toKey);
       for (const r of userRows) add(digitsByUserId.get(r.user_id) ?? r.user_id, r.created_at);
     }
-
-    const windowMs = NS1_WINDOW_DAYS * 86_400_000;
-    let repeat = 0;
-    for (const buyer of newBuyers) {
-      const first = new Date(buyer.first_at).getTime();
-      const inWindow = (times.get(buyer.customer_key) ?? []).filter((t) => t >= first && t <= first + windowMs);
-      if (inWindow.length >= 2) repeat++;
-    }
-    return repeat;
+    return times;
   }
 }

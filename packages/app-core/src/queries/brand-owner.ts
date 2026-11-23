@@ -1,6 +1,6 @@
 import type { HttpClient } from '../http';
 import { errorStatus } from '../api/error-status';
-import { getOwnedBrand, getOwnedBrandSales, type BrandSalesPeriod } from '../api/brand-owner';
+import { getOwnedBrand, getOwnedBrandCatalogHealth, getOwnedBrandSales, type BrandSalesPeriod } from '../api/brand-owner';
 
 export const ownedBrandQuery = (http: HttpClient) => ({
   queryKey: ['owned-brand'] as const,
@@ -35,4 +35,8 @@ export const hasDeskPointQuery = (http: HttpClient) => ({ ...authMeFlagsQuery(ht
 export const ownedBrandSalesQuery = (http: HttpClient, period: BrandSalesPeriod) => ({
   queryKey: ['owned-brand-sales', period] as const,
   queryFn: () => getOwnedBrandSales(http, period),
+});
+export const ownedBrandCatalogHealthQuery = (http: HttpClient) => ({
+  queryKey: ['owned-brand-catalog-health'] as const,
+  queryFn: () => getOwnedBrandCatalogHealth(http),
 });

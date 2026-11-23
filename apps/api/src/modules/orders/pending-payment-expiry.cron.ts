@@ -1,7 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { formatVnDateTime } from '../../common/vn-time';
+import { formatVnd } from './refund-destination';
 import { OrderStatusService } from './order-status.service';
 import { PREPAID_METHODS } from './order-transition';
 import { CRON_TZ } from '../../common/cron-tz';
@@ -26,7 +29,17 @@ export { PAYMENT_UNLINKED_HOLD_HOURS } from './pending-payment-hold';
 const BATCH_SIZE = 200;
 const LOCK_KEY = 'cron:orders.pending_payment_expiry';
 
-export type ExpireResult = { skipped: 'RUNNING' | 'LOCKED' } | { scanned: number; cancelled: number; failed: number };
+/** Nhắc chuyển khoản khi đơn còn chừng này giờ trước hạn tự huỷ (một lần mỗi đơn). */
+export const PAYMENT_REMINDER_LEAD_HOURS = 2;
+/** Đơn đặt chưa tới chừng này giờ thì chưa nhắc: TTL ngắn (≤ 3 giờ) mà nhắc ngay thì trùng tin "đang chờ thanh toán" lúc đặt. */
+export const PAYMENT_REMINDER_MIN_AGE_HOURS = 1;
+/** Mẫu tin nhắc trước hạn. Có trong prisma/seed.ts, lên PROD qua `prisma:seed:reference` lúc deploy (không migration). */
+export const ORDER_PAYMENT_REMINDER_TEMPLATE = 'ORDER_PAYMENT_REMINDER';
+/** Khoá chống trùng: mỗi đơn một tin nhắc, dù cron 10 phút chạy lại hay nhiều instance. */
+export const paymentReminderDedupeKey = (orderCode: string) => `pay_remind:${orderCode}`;
+
+/** `reminded`: số tin nhắc trước hạn gửi không lỗi trong lượt (gồm cả tin đã gửi từ trước, trùng khoá); không có khi lượt không nhắc. */
+export type ExpireResult = { skipped: 'RUNNING' | 'LOCKED' } | { scanned: number; cancelled: number; failed: number; reminded?: number };
 
 /**
  * Tự huỷ đơn trả trước (khách lẻ + CTV lên đơn hộ) nằm ở PENDING_PAYMENT quá N giờ: không huỷ thì hàng
@@ -46,6 +59,8 @@ export class PendingPaymentExpiryCron {
     private readonly prisma: PrismaService,
     private readonly systemConfig: SystemConfigService,
     private readonly orderStatus: OrderStatusService,
+    // Không có (spec dựng tay) thì lượt chỉ huỷ, không nhắc.
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
@@ -57,6 +72,7 @@ export class PendingPaymentExpiryCron {
       if ('scanned' in res && res.scanned > 0) {
         this.logger.log(`Huỷ đơn quá hạn thanh toán: quét ${res.scanned}, huỷ ${res.cancelled}, lỗi ${res.failed}.`);
       }
+      if ('scanned' in res && res.reminded) this.logger.log(`Nhắc chuyển khoản trước hạn: ${res.reminded} đơn.`);
     } catch (err) {
       this.logger.error(`Cron huỷ đơn quá hạn thanh toán lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
     }
@@ -67,7 +83,16 @@ export class PendingPaymentExpiryCron {
     this.running = true;
     try {
       // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
-      const run = await runExclusive(this.prisma, LOCK_KEY, () => this.cancelExpired(now));
+      const run = await runExclusive(this.prisma, LOCK_KEY, async () => {
+        const res = await this.cancelExpired(now);
+        if (!this.notifications) return res;
+        // Nhắc là việc phụ: lỗi ở đây không được làm mất kết quả huỷ của lượt.
+        const reminded = await this.remindBeforeExpiry(now).catch((err: unknown) => {
+          this.logger.error(`Nhắc chuyển khoản trước hạn lỗi: ${err instanceof Error ? err.message : err}`);
+          return 0;
+        });
+        return { ...res, reminded };
+      });
       if (!run.acquired) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
       return run.value;
     } finally {
@@ -130,6 +155,58 @@ export class PendingPaymentExpiryCron {
       }
     }
     return { scanned: stale.length, cancelled, failed };
+  }
+
+  /**
+   * Nhắc MỘT lần đơn chuyển khoản của khách lẻ còn ≤ PAYMENT_REMINDER_LEAD_HOURS giờ trước khi tự huỷ: tin mở chi tiết đơn, nơi có mã VietQR
+   * và nút đổi sang trả tiền khi nhận (khi đơn đổi được). Chỉ BANK_TRANSFER: ví/cổng đã có màn thanh toán riêng. Bỏ đơn có dấu tiền đang về
+   * (Pancake báo trả, khoản chưa gắn đơn, đã bàn giao vận chuyển) để không giục khách trả hai lần, và đơn khách vãng lai (không có hộp tin
+   * trong app). Hạn ghi trong tin cùng mốc với cron huỷ (createdAt + TTL). Chưa có mẫu tin thì bỏ lượt, không gửi câu trung tính.
+   */
+  async remindBeforeExpiry(now: Date): Promise<number> {
+    if (!this.notifications) return 0;
+    const ttlHours = await this.ttlHours();
+    const hour = 3_600_000;
+    const expiredBefore = new Date(now.getTime() - ttlHours * hour);
+    const remindFrom = new Date(Math.min(expiredBefore.getTime() + PAYMENT_REMINDER_LEAD_HOURS * hour, now.getTime() - PAYMENT_REMINDER_MIN_AGE_HOURS * hour));
+    const due = await this.prisma.order.findMany({
+      where: {
+        type: 'RETAIL',
+        status: 'PENDING_PAYMENT',
+        paymentStatus: 'UNPAID',
+        paymentMethod: 'BANK_TRANSFER',
+        autoCancelBlockedAt: null,
+        paymentUnlinkedAt: null,
+        guestTokenHash: null,
+        OR: [{ pancakePaidReported: null }, { pancakePaidReported: 0 }],
+        createdAt: { gt: expiredBefore, lte: remindFrom },
+      },
+      select: { userId: true, code: true, total: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+      take: BATCH_SIZE,
+    });
+    if (due.length === 0) return 0;
+    const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: ORDER_PAYMENT_REMINDER_TEMPLATE }, select: { id: true } });
+    if (!tpl) {
+      this.logger.warn(`Thiếu mẫu ${ORDER_PAYMENT_REMINDER_TEMPLATE} (chưa chạy prisma:seed:reference): bỏ lượt nhắc chuyển khoản.`);
+      return 0;
+    }
+    let sent = 0;
+    for (const o of due) {
+      const ok = await this.notifications.notifySafe(
+        o.userId,
+        ORDER_PAYMENT_REMINDER_TEMPLATE,
+        {
+          order_code: o.code,
+          amount: formatVnd(o.total),
+          deadline: formatVnDateTime(new Date(o.createdAt.getTime() + ttlHours * hour)),
+        },
+        { dedupeKey: paymentReminderDedupeKey(o.code) },
+        `order=${o.code}`,
+      );
+      if (ok) sent += 1;
+    }
+    return sent;
   }
 
   private ttlHours(): Promise<number> {

@@ -1,6 +1,9 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import type { CohortRepeatRowDTO, FunnelDailyDTO } from '@tubutree/shared-types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { COHORT_LOOKBACK_MONTHS } from './analytics-aggregation.service';
+import { cohortRowView, funnelDailyView } from './analytics-snapshot-view';
 import { LaunchWatchService } from './launch-watch.service';
 import { PurchaseFunnelService } from './purchase-funnel.service';
 
@@ -38,5 +41,27 @@ export class AnalyticsAdminController {
     // string), không phải number — trả thẳng rows thì FE gọi `.toFixed()` trên chuỗi sẽ crash.
     // Ép về number ở đây để khớp interface RetentionDailyRow (ordersPerBuyerMtd: number) bên FE.
     return rows.map((r) => ({ ...r, ordersPerBuyerMtd: Number(r.ordersPerBuyerMtd) }));
+  }
+
+  /** Cohort tháng (khách mua lần đầu trong tháng) và % đặt đơn thứ 2 trong 30/60/90 ngày, tháng mới nhất trước. Job 03:00 ghi. */
+  @Get('cohort-repeat')
+  async cohortRepeat(@Query('months') months = '12'): Promise<CohortRepeatRowDTO[]> {
+    const n = Math.min(COHORT_LOOKBACK_MONTHS, Math.max(1, Number(months) || 12));
+    const rows = await this.prisma.cohortRepeatSnapshot.findMany({ orderBy: { cohortMonth: 'desc' }, take: n });
+    return rows.map(cohortRowView);
+  }
+
+  /** Phễu mua đã chốt theo từng ngày VN (giữ được sau khi sự kiện thô bị dọn), ngày tăng dần. */
+  @Get('funnel-daily')
+  async funnelDaily(@Query('days') days = '30'): Promise<FunnelDailyDTO[]> {
+    const n = Math.min(90, Math.max(1, Number(days) || 30));
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - n);
+    const rows = await this.prisma.funnelDailySnapshot.findMany({
+      where: { date: { gte: since } },
+      orderBy: { date: 'asc' },
+      select: { date: true, step: true, entrySource: true, count: true },
+    });
+    return funnelDailyView(rows);
   }
 }
