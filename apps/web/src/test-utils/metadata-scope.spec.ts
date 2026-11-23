@@ -26,13 +26,36 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export default function BrandPage() {
   // huy hiệu ✓ cạnh tên
-  return <main>{brandMeta({ name: 'A' }).title as string}</main>;
+  return <script type="application/ld+json">{JSON.stringify({ ...brandMeta({ name: 'A' }), title: 'A' })}</script>;
 }
 `;
     const { builders, text } = metadataScope(src);
     expect(builders).toEqual(['brandMeta', 'generateMetadata']);
     expect(text.match(/✓/g)).toEqual(['✓']);
     expect(text).toContain('// huy hiệu ✓ cạnh tên');
+  });
+
+  it('chỉ kiểu Metadata của Next mới miễn: kiểu cùng tên tự khai trong file thì hàm vẫn bị quét; nhập đổi tên (Metadata as M) vẫn nhận', () => {
+    const local = `type Metadata = { title: string };
+const badge = (): Metadata => ({ title: ' ✓' });
+export async function generateMetadata() { return { title: 'A' }; }
+export default function Page() { return <main>{badge().title}</main>; }
+`;
+    expect(metadataScope(local).builders).toEqual(['generateMetadata']);
+    expect(metadataScope(local).text).toContain('✓');
+    const aliased = `import type { Metadata as M } from 'next';
+function brandMeta(): M { return { title: 'A ✓' }; }
+export async function generateMetadata(): Promise<M> { return brandMeta(); }
+export default function Page() { return <main>A</main>; }
+`;
+    expect(metadataScope(aliased).builders).toEqual(['brandMeta', 'generateMetadata']);
+    expect(metadataScope(aliased).text).not.toContain('✓');
+    const wrapped = `${HEAD}
+function many(): Metadata[] { return [{ title: ' ✓' }]; }
+export async function generateMetadata(): Promise<Metadata> { return many()[0]!; }
+export default function Page() { return <main>{many().length}</main>; }
+`;
+    expect(metadataScope(wrapped).builders).toEqual(['generateMetadata']);
   });
 
   it('hàm phụ không khai kiểu chỉ hàm meta gọi (kể cả gọi gián tiếp) thì được miễn', () => {

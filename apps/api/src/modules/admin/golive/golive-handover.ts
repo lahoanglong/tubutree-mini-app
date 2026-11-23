@@ -14,20 +14,24 @@ interface HandoverDef {
   owner: string;
   /** Lấy ở đâu, đặt ở đâu. Chỉ tên biến và đường dẫn, không bao giờ có giá trị. */
   guide: string;
+  /** Dòng quyết định việc xong hay chưa. */
   checkIds: readonly string[];
+  /** Dòng chỉ để xem, không giữ việc ở "Chờ điền" (vd nhãn môi trường báo động: tài liệu ghi tuỳ chọn, PROD để trống). */
+  infoCheckIds?: readonly string[];
   /** Biến môi trường bắt buộc đủ cả: API chỉ trả đã điền hay chưa, không trả giá trị. Biến chọn một trong hai thì không liệt kê ở đây. */
   envVars?: readonly string[];
+  optionalEnvVars?: readonly string[];
+  /**
+   * `host`: API trong container không kiểm được (cron, rclone, biến build Mini App), dòng vàng "không kiểm được" là bình thường nên hiện
+   * "Kiểm tay" chứ không "Chờ điền". `optional`: chủ quyết có làm hay không (mẫu ZNS tính phí từng tin). Cả hai không vào bộ đếm bắt buộc.
+   */
+  kind?: 'required' | 'host' | 'optional';
+  /** Dòng vàng cũng tính là đã chốt: mã demo chủ dự án duyệt giữ (GO_LIVE_ACCEPT_DEMO_COUPONS) ra vàng, chưa duyệt ra đỏ. */
+  warnIsSettled?: boolean;
 }
 
-/** Đúng 15 dòng WARN còn lại trên PROD sau w24-04 (go-live 55/15/0), xếp theo việc lâu nhất trước: mẫu ZNS chờ Zalo duyệt 7–14 ngày. */
+/** Đúng 15 dòng WARN còn lại trên PROD sau w24-04 (go-live 55/15/0): việc bắt buộc trước, việc kiểm tay và việc tuỳ chọn sau. */
 export const HANDOVER_ITEMS: readonly HandoverDef[] = [
-  {
-    key: 'zns_templates',
-    title: 'Mã mẫu ZNS do Zalo duyệt',
-    owner: 'Chủ Zalo OA',
-    guide: 'Đăng ký mẫu ZNS trên Zalo (duyệt 7–14 ngày, docs/GO-LIVE-KEYS.md mục 2 bước D), rồi nhập mã số Zalo cấp ở Quản trị › Mẫu thông báo.',
-    checkIds: ['db.zns_templates'],
-  },
   {
     key: 'zalo_oa',
     title: 'Zalo OA gửi tin ZNS',
@@ -79,9 +83,12 @@ export const HANDOVER_ITEMS: readonly HandoverDef[] = [
     key: 'ops_alerts',
     title: 'Báo động ra ngoài app',
     owner: 'Kỹ thuật và người trực',
-    guide: 'Tạo webhook Slack, Google Chat hoặc n8n rồi đặt URL; đặt OPS_ALERT_ENV_LABEL=production để báo động PROD không lẫn staging (docs/GO-LIVE-KEYS.md mục 8).',
-    checkIds: ['env.ops.webhook', 'env.ops.label'],
-    envVars: ['OPS_ALERT_WEBHOOK_URL', 'OPS_ALERT_ENV_LABEL'],
+    guide:
+      'Tạo webhook Slack, Google Chat hoặc n8n rồi đặt OPS_ALERT_WEBHOOK_URL; chưa đặt thì báo động chỉ hiện ở màn Sức khoẻ hệ thống (và email nếu đã bật). OPS_ALERT_ENV_LABEL tuỳ chọn: PROD để trống (lấy theo NODE_ENV), chỉ staging chạy NODE_ENV=production mới cần đặt (docs/GO-LIVE-KEYS.md mục 8).',
+    checkIds: ['env.ops.webhook'],
+    infoCheckIds: ['env.ops.label'],
+    envVars: ['OPS_ALERT_WEBHOOK_URL'],
+    optionalEnvVars: ['OPS_ALERT_ENV_LABEL'],
   },
   {
     key: 'cloudinary',
@@ -89,20 +96,34 @@ export const HANDOVER_ITEMS: readonly HandoverDef[] = [
     owner: 'Kỹ thuật (build Mini App)',
     guide: 'API không đọc khoá này. Xác nhận file build Mini App có VITE_CLOUDINARY_CLOUD_NAME và VITE_CLOUDINARY_UPLOAD_PRESET (preset unsigned).',
     checkIds: ['env.cloudinary'],
+    kind: 'host',
   },
   {
     key: 'backup_offsite',
     title: 'Backup hằng đêm ra ngoài máy chủ',
     owner: 'Kỹ thuật (VPS)',
-    guide: 'Cài cron backup-db.sh với RCLONE_REMOTE và HEALTHCHECK_URL (tools/backup/README.md). API chạy trong container nên không đọc được cron: kiểm tay `crontab -l | grep backup-db` và `rclone lsd <remote>:` trên VPS.',
+    guide:
+      'Cài cron backup-db.sh với RCLONE_REMOTE và HEALTHCHECK_URL (tools/backup/README.md). RCLONE_REMOTE phải là remote rclone kiểu `crypt`: remote thường thì script không đẩy bản backup và thoát mã 3. API chạy trong container nên không đọc được cron: kiểm tay `crontab -l | grep backup-db` và `rclone lsd <remote>:` trên VPS.',
     checkIds: ['backup.script', 'backup.cron', 'backup.offsite', 'backup.healthcheck'],
+    kind: 'host',
   },
   {
     key: 'demo_coupons',
     title: 'Mã giảm giá demo',
     owner: 'Chủ shop (PO)',
-    guide: 'Chốt tắt hay giữ từng mã demo ở Quản trị › Mã giảm giá trước giờ mở bán.',
+    guide:
+      'Chốt từng mã demo trước giờ mở bán. Không giữ: kỹ thuật chạy dọn mã demo (lệnh trong dòng kiểm đỏ). Giữ: kỹ thuật thêm mã vào GO_LIVE_ACCEPT_DEMO_COUPONS (dòng thành vàng, coi là đã chốt), rồi xác nhận điều kiện mã ở Quản trị › Mã giảm giá.',
     checkIds: ['db.demo_coupons'],
+    warnIsSettled: true,
+  },
+  {
+    key: 'zns_templates',
+    title: 'Mã mẫu ZNS do Zalo duyệt',
+    owner: 'Chủ shop (quyết) và chủ Zalo OA',
+    guide:
+      'Đợt này không nộp mẫu ORDER_CONFIRMED và ORDER_SHIPPING: chưa có mã thì hai tin đó chỉ gửi trong app. Muốn gửi ZNS thì chủ shop quyết riêng (mỗi tin ZNS tính phí), đăng ký mẫu trên Zalo (duyệt 7–14 ngày, docs/GO-LIVE-KEYS.md mục 2 bước D), rồi nhập mã số Zalo cấp ở Quản trị › Mẫu thông báo.',
+    checkIds: ['db.zns_templates'],
+    kind: 'optional',
   },
 ];
 
@@ -113,43 +134,67 @@ export interface HandoverCheck {
   detail: string;
 }
 
+/** `configured` Đã cấu hình, `pending` Chờ điền, `host` Kiểm tay trên máy chủ, `optional` Tuỳ chọn (chủ quyết). */
+export type HandoverState = 'configured' | 'pending' | 'host' | 'optional';
+
 export interface HandoverItem {
   key: string;
   title: string;
   owner: string;
   guide: string;
-  /** "Đã cấu hình" khi mọi dòng kiểm của việc này đạt; thiếu dòng (bộ kiểm không chạy được) là "Chờ điền". */
+  state: HandoverState;
+  /** Chỉ việc bắt buộc mới vào bộ đếm của thẻ. */
+  required: boolean;
+  /** `state === 'configured'`. Thiếu dòng (bộ kiểm không chạy được) không bao giờ là đã cấu hình. */
   configured: boolean;
-  /** Mức nặng nhất của các dòng, để tô màu (đỏ là đặt dở dang hoặc sai). */
+  /** Mức nặng nhất của các dòng quyết định, để tô màu (đỏ là đặt dở dang hoặc sai). */
   status: CheckStatus;
-  vars: { name: string; configured: boolean }[];
+  vars: { name: string; configured: boolean; optional: boolean }[];
   checks: HandoverCheck[];
 }
 
 export interface HandoverBoard {
   title: string;
+  /** Số việc bắt buộc đã cấu hình. */
   configured: number;
+  /** Số việc bắt buộc; việc kiểm tay và việc tuỳ chọn không tính. */
   total: number;
   items: HandoverItem[];
 }
 
 const isSet = (env: Env, name: string) => Boolean(env[name]?.trim());
 
+function stateOf(def: HandoverDef, rows: readonly CheckResult[]): HandoverState {
+  const settled = rows.length > 0 && rows.every((r) => r.status === 'PASS' || (def.warnIsSettled === true && r.status === 'WARN'));
+  if (settled) return 'configured';
+  if (rows.some((r) => r.status === 'FAIL')) return 'pending';
+  if (def.kind === 'host') return 'host';
+  if (def.kind === 'optional') return 'optional';
+  return 'pending';
+}
+
 export function buildHandover(results: readonly CheckResult[], env: Env): HandoverBoard {
   const byId = new Map(results.map((r) => [r.id, r]));
+  const pick = (ids: readonly string[] | undefined) => (ids ?? []).map((id) => byId.get(id)).filter((r): r is CheckResult => r !== undefined);
   const items = HANDOVER_ITEMS.map((def): HandoverItem => {
-    const rows = def.checkIds.map((id) => byId.get(id)).filter((r): r is CheckResult => r !== undefined);
-    const configured = rows.length > 0 && rows.every((r) => r.status === 'PASS');
+    const rows = pick(def.checkIds);
+    const state = stateOf(def, rows);
     return {
       key: def.key,
       title: def.title,
       owner: def.owner,
       guide: def.guide,
-      configured,
+      state,
+      required: (def.kind ?? 'required') === 'required',
+      configured: state === 'configured',
       status: rows.length === 0 ? 'WARN' : worstStatus(rows),
-      vars: (def.envVars ?? []).map((name) => ({ name, configured: isSet(env, name) })),
-      checks: rows.map((r) => ({ id: r.id, title: r.title, status: r.status, detail: r.detail })),
+      vars: [
+        ...(def.envVars ?? []).map((name) => ({ name, configured: isSet(env, name), optional: false })),
+        ...(def.optionalEnvVars ?? []).map((name) => ({ name, configured: isSet(env, name), optional: true })),
+      ],
+      checks: [...rows, ...pick(def.infoCheckIds)].map((r) => ({ id: r.id, title: r.title, status: r.status, detail: r.detail })),
     };
   });
-  return { title: HANDOVER_TITLE, configured: items.filter((i) => i.configured).length, total: items.length, items };
+  const required = items.filter((i) => i.required);
+  return { title: HANDOVER_TITLE, configured: required.filter((i) => i.configured).length, total: required.length, items };
 }

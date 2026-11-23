@@ -2,7 +2,7 @@ import { evaluateBackup, type BackupSnapshot } from '../../../config/go-live/bac
 import { evaluateDb } from '../../../config/go-live/db-checks';
 import { evaluateEnv } from '../../../config/go-live/env-checks';
 import { GOOD_BACKUP, GOOD_ENV, SECRET_ENV_KEYS, dbWith, envWith } from '../../../config/go-live/go-live.fixtures';
-import { warn, type CheckResult } from '../../../config/go-live/types';
+import { fail, warn, type CheckResult } from '../../../config/go-live/types';
 import { HANDOVER_ITEMS, HANDOVER_TITLE, buildHandover } from './golive-handover';
 
 /** 15 dòng WARN của go-live trên PROD sau w24-04 (dep3 05:30 ngày 24/11/2026). */
@@ -68,65 +68,117 @@ const goodResults = () => [
   ...evaluateBackup(GOOD_BACKUP, GOOD_ENV),
 ];
 
+const REQUIRED = ['zalo_oa', 'zalo_oa_webhook', 'zalo_open_api', 'zalopay', 'accesstrade', 'phone_hmac', 'ops_alerts', 'demo_coupons'];
+const stateOf = (items: { key: string; state: string }[]) => Object.fromEntries(items.map((i) => [i.key, i.state]));
+
 describe('golive-handover: thẻ "Cấu hình bên thứ 3 chờ bàn giao Go-Live"', () => {
   it('gom đúng 15 dòng WARN của PROD, mỗi dòng vào đúng một việc', () => {
-    const ids = HANDOVER_ITEMS.flatMap((d) => d.checkIds);
+    const ids = HANDOVER_ITEMS.flatMap((d) => [...d.checkIds, ...(d.infoCheckIds ?? [])]);
     expect([...ids].sort()).toEqual(PROD_WARN_15);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('mọi mã dòng là mã thật của go-live:check: bộ kiểm đủ khoá ra đủ 11/11 "Đã cấu hình"', () => {
+  it('mọi mã dòng là mã thật của go-live:check: bộ kiểm đủ khoá ra 8/8 việc bắt buộc, mọi việc kể cả kiểm tay và tuỳ chọn đều Đã cấu hình', () => {
     const results = goodResults();
-    for (const id of HANDOVER_ITEMS.flatMap((d) => d.checkIds)) expect([id, results.some((r) => r.id === id)]).toEqual([id, true]);
+    for (const id of HANDOVER_ITEMS.flatMap((d) => [...d.checkIds, ...(d.infoCheckIds ?? [])])) expect([id, results.some((r) => r.id === id)]).toEqual([id, true]);
     const board = buildHandover(results, GOOD_ENV);
     expect(board.title).toBe(HANDOVER_TITLE);
-    expect([board.configured, board.total]).toEqual([11, 11]);
-    expect(board.items.filter((i) => !(i.configured && i.status === 'PASS' && i.vars.every((v) => v.configured))).map((i) => i.key)).toEqual([]);
+    expect([board.configured, board.total]).toEqual([8, 8]);
+    expect(board.items.filter((i) => i.required).map((i) => i.key)).toEqual(REQUIRED);
+    expect(board.items.filter((i) => !(i.state === 'configured' && i.configured && i.status === 'PASS' && i.vars.every((v) => v.configured))).map((i) => i.key)).toEqual([]);
   });
 
-  it('PROD hôm nay: 0/11, mọi biến bắt buộc báo chưa điền, các dòng kiểm đúng 15 dòng WARN', () => {
+  it('PROD hôm nay: 1/8 (mã demo đã chốt giữ), Cloudinary và backup Kiểm tay, mẫu ZNS Tuỳ chọn, còn lại Chờ điền; đúng 15 dòng WARN', () => {
     const board = buildHandover(prodResults(), PROD_ENV);
-    expect([board.configured, board.total]).toEqual([0, 11]);
+    expect([board.configured, board.total]).toEqual([1, 8]);
+    expect(stateOf(board.items)).toEqual({
+      zalo_oa: 'pending',
+      zalo_oa_webhook: 'pending',
+      zalo_open_api: 'pending',
+      zalopay: 'pending',
+      accesstrade: 'pending',
+      phone_hmac: 'pending',
+      ops_alerts: 'pending',
+      cloudinary: 'host',
+      backup_offsite: 'host',
+      demo_coupons: 'configured',
+      zns_templates: 'optional',
+    });
     expect(board.items.flatMap((i) => i.checks.map((c) => `${c.id}:${c.status}`)).sort()).toEqual(PROD_WARN_15.map((id) => `${id}:WARN`));
     expect(board.items.flatMap((i) => i.vars).filter((v) => v.configured)).toEqual([]);
     const zalopay = board.items.find((i) => i.key === 'zalopay')!;
-    expect(zalopay.vars.map((v) => v.name)).toEqual(['ZALOPAY_APP_ID', 'ZALOPAY_KEY1', 'ZALOPAY_KEY2']);
+    expect(zalopay.vars).toEqual([
+      { name: 'ZALOPAY_APP_ID', configured: false, optional: false },
+      { name: 'ZALOPAY_KEY1', configured: false, optional: false },
+      { name: 'ZALOPAY_KEY2', configured: false, optional: false },
+    ]);
     expect(zalopay.owner).toBe('Chủ shop (hợp đồng ZaloPay)');
   });
 
   it('đặt dở dang (chỉ ZALOPAY_APP_ID): Chờ điền, tô đỏ, biến nói đúng cái nào đã điền', () => {
     const env = envWith({ ZALOPAY_KEY1: undefined, ZALOPAY_KEY2: undefined });
     const item = buildHandover(evaluateEnv(env), env).items.find((i) => i.key === 'zalopay')!;
-    expect([item.configured, item.status]).toEqual([false, 'FAIL']);
-    expect(item.vars).toEqual([
-      { name: 'ZALOPAY_APP_ID', configured: true },
-      { name: 'ZALOPAY_KEY1', configured: false },
-      { name: 'ZALOPAY_KEY2', configured: false },
+    expect([item.state, item.configured, item.status]).toEqual(['pending', false, 'FAIL']);
+    expect(item.vars.map((v) => [v.name, v.configured])).toEqual([
+      ['ZALOPAY_APP_ID', true],
+      ['ZALOPAY_KEY1', false],
+      ['ZALOPAY_KEY2', false],
     ]);
+  });
+
+  it('việc kiểm tay mà dòng kiểm ra đỏ (Cloudinary chỉ đặt một biến) thì về Chờ điền, không nấp sau Kiểm tay', () => {
+    const env = envWith({ VITE_CLOUDINARY_UPLOAD_PRESET: undefined });
+    const item = buildHandover(evaluateEnv(env), env).items.find((i) => i.key === 'cloudinary')!;
+    expect([item.state, item.status, item.required]).toEqual(['pending', 'FAIL', false]);
   });
 
   it('biến chỉ có khoảng trắng tính là chưa điền', () => {
     const env = envWith({ PHONE_HMAC_SECRET: '   ' });
     const item = buildHandover(evaluateEnv(env), env).items.find((i) => i.key === 'phone_hmac')!;
-    expect(item.vars).toEqual([{ name: 'PHONE_HMAC_SECRET', configured: false }]);
+    expect(item.vars).toEqual([{ name: 'PHONE_HMAC_SECRET', configured: false, optional: false }]);
     expect(item.configured).toBe(false);
   });
 
-  it('bộ kiểm không ra dòng nào cho một việc (vd đọc backup lỗi): Chờ điền, vàng, không có dòng kiểm', () => {
+  it('bộ kiểm không ra dòng nào cho backup (đọc backup lỗi): Kiểm tay, vàng, không có dòng kiểm, không bao giờ Đã cấu hình', () => {
     const results = goodResults().filter((r) => !r.id.startsWith('backup.'));
     const item = buildHandover(results, GOOD_ENV).items.find((i) => i.key === 'backup_offsite')!;
-    expect(item).toMatchObject({ configured: false, status: 'WARN', checks: [] });
+    expect(item).toMatchObject({ state: 'host', configured: false, status: 'WARN', checks: [] });
   });
 
-  it('một dòng đạt, một dòng chưa (webhook có, thiếu nhãn môi trường): việc vẫn Chờ điền', () => {
+  it('việc bắt buộc không ra dòng nào: Chờ điền', () => {
+    const results = goodResults().filter((r) => r.id !== 'env.zalo.oa');
+    const item = buildHandover(results, GOOD_ENV).items.find((i) => i.key === 'zalo_oa')!;
+    expect(item).toMatchObject({ state: 'pending', configured: false, checks: [] });
+  });
+
+  it('webhook có, thiếu nhãn môi trường: Đã cấu hình (nhãn tuỳ chọn, PROD để trống), dòng nhãn vẫn hiện để xem', () => {
     const env = envWith({ OPS_ALERT_ENV_LABEL: undefined });
     const item = buildHandover(evaluateEnv(env), env).items.find((i) => i.key === 'ops_alerts')!;
     expect(item.checks.map((c) => `${c.id}:${c.status}`)).toEqual(['env.ops.webhook:PASS', 'env.ops.label:WARN']);
-    expect(item.configured).toBe(false);
+    expect([item.state, item.status]).toEqual(['configured', 'PASS']);
     expect(item.vars).toEqual([
-      { name: 'OPS_ALERT_WEBHOOK_URL', configured: true },
-      { name: 'OPS_ALERT_ENV_LABEL', configured: false },
+      { name: 'OPS_ALERT_WEBHOOK_URL', configured: true, optional: false },
+      { name: 'OPS_ALERT_ENV_LABEL', configured: false, optional: true },
     ]);
+  });
+
+  it('mã demo: chủ dự án duyệt giữ (vàng) là đã chốt; còn mã chưa duyệt (đỏ) là Chờ điền', () => {
+    const others = goodResults().filter((r) => r.id !== 'db.demo_coupons');
+    const kept = buildHandover([...others, warn('DB', 'db.demo_coupons', 'Mã giảm giá demo', 'còn dùng được: đã chấp nhận giữ: WELCOME30', 'Xác nhận.')], GOOD_ENV);
+    expect(kept.items.find((i) => i.key === 'demo_coupons')!.state).toBe('configured');
+    expect([kept.configured, kept.total]).toEqual([8, 8]);
+    const open = buildHandover([...others, fail('DB', 'db.demo_coupons', 'Mã giảm giá demo', 'còn dùng được, chủ dự án chưa duyệt: WELCOME30', 'Dọn.')], GOOD_ENV);
+    expect(open.items.find((i) => i.key === 'demo_coupons')).toMatchObject({ state: 'pending', status: 'FAIL' });
+    expect([open.configured, open.total]).toEqual([7, 8]);
+  });
+
+  it('mẫu ZNS chưa có mã: Tuỳ chọn, không vào bộ đếm; mã sai dạng (đỏ) thì Chờ điền', () => {
+    const others = goodResults().filter((r) => r.id !== 'db.zns_templates');
+    const unset = buildHandover([...others, warn('DB', 'db.zns_templates', 'Mẫu ZNS', '2/2 mẫu chưa có mã Zalo', 'Nhập mã.')], GOOD_ENV);
+    expect(unset.items.find((i) => i.key === 'zns_templates')).toMatchObject({ state: 'optional', required: false });
+    expect([unset.configured, unset.total]).toEqual([8, 8]);
+    const bad = buildHandover([...others, fail('DB', 'db.zns_templates', 'Mẫu ZNS', 'mã mẫu sai dạng', 'Nhập lại.')], GOOD_ENV);
+    expect(bad.items.find((i) => i.key === 'zns_templates')!.state).toBe('pending');
   });
 
   it('không trả giá trị bí mật nào: chỉ tên biến và true/false', () => {
