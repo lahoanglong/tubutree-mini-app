@@ -86,6 +86,15 @@ describe('BannerCarousel: ảnh slide (Pa3)', () => {
     expect(imgs.map((i) => i.getAttribute('fetchpriority'))).toEqual(['high', null, null]);
   });
 
+  it('cỡ gốc 1000×400 (tỉ lệ 5:2) khai trên thẻ img, còn chiều cao hiển thị theo `aspect-ratio`: thuộc tính height không được thành 400px cố định', () => {
+    mountPlain(<BannerCarousel slides={PANCAKE_SLIDES} />);
+    const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
+    expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['1000', '400']);
+    expect(img.style.width).toBe('100%');
+    expect(img.style.height).toBe('auto');
+    expect(img.style.aspectRatio).toBe('var(--banner-ratio)');
+  });
+
   it('srcset có bản đổi cỡ 1280/1920 (không phải ảnh gốc) cho màn 2x–3x; nơi gọi truyền `sizes` riêng thì ảnh dùng đúng giá trị đó', () => {
     mountPlain(<BannerCarousel slides={PANCAKE_SLIDES.slice(0, 1)} sizes="min(100vw - 48px, 1152px)" />);
     const img = document.querySelector<HTMLImageElement>('[aria-roledescription="slide"] img')!;
