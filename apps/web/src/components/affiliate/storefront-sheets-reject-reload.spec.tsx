@@ -528,6 +528,45 @@ describe('Thêm sản phẩm (PickerSheet)', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // affiliate.web.spec "gian hàng: tạo bộ sưu tập..." (W21-04 §3.3): Esc lắng ở document nên không phụ thuộc chỗ đang focus; tấm chỉ
+  // từ chối Esc khi lệnh thêm còn giữ khoá (tới lúc gian hàng tải lại xong), và nút Đóng ẩn đúng khoảng đó.
+  const pressEscape = async (target: Element) => {
+    act(() => {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await flush();
+  };
+  const closeButton = () => document.body.querySelector('[role="dialog"] [aria-label="Đóng"]');
+
+  it.each([
+    ['ô tìm', () => inputByLabel('Tìm sản phẩm')!],
+    ['nút Thêm của một món', () => btn('Thêm Xà phòng')],
+    ['khung tấm', () => document.body.querySelector<HTMLElement>('[role="dialog"]')!],
+    ['body (focus rơi ra ngoài tấm)', () => document.body],
+  ])('Esc đóng tấm khi focus ở %s', async (_where, target) => {
+    const onClose = vi.fn();
+    await mountUi(<PickerSheet open collectionId="c1" onClose={onClose} onAdded={refresh} />);
+    const el = target();
+    act(() => el.focus());
+    await pressEscape(document.activeElement ?? document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Esc lúc lệnh thêm còn chờ gian hàng tải lại: không đóng, nút Đóng ẩn; tải lại xong thì nút Đóng hiện lại và Esc đóng ngay', async () => {
+    const onClose = vi.fn();
+    await mountUi(<PickerSheet open collectionId="c1" onClose={onClose} onAdded={refresh} />);
+    const releaseReload = hold(ME);
+    await tap(btn('Thêm Xà phòng'));
+    expect(writes(ADD)).toBe(1);
+    expect(closeButton()).toBeNull();
+    await pressEscape(document.activeElement ?? document.body);
+    expect(onClose).not.toHaveBeenCalled();
+    await releaseReload();
+    expect(closeButton()).not.toBeNull();
+    await pressEscape(document.activeElement ?? document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('bị từ chối mà danh sách tải lại lỗi: danh sách cũ còn nguyên, lời lỗi của lệnh còn, không thay bằng màn lỗi', async () => {
     await mountUi(ui());
     state.status.set(ADD, 400);

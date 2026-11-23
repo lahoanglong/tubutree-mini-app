@@ -297,14 +297,16 @@ test.describe('Web khách: CTV', () => {
     let created = false;
     const SOAP = { id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 };
     api.get('/affiliate/tiers', { revenue: 0, tier: { name: 'Hạt Giống', emoji: '🌱' }, allTiers: [{ name: 'Hạt Giống', emoji: '🌱', min: 0, milestoneRewardPoints: null }] });
-    api.get('/storefront/me', () =>
-      SF({
+    // Lần tải lại gian hàng sau khi thêm món chậm 1,5 giây (như máy CI bận): khoá "Thêm" giữ suốt khoảng đó, nên Esc phải chờ khoá nhả.
+    api.get('/storefront/me', async () => {
+      if (added) await new Promise((r) => setTimeout(r, 1500));
+      return SF({
         collections: [
           { id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [] },
           ...(created ? [{ id: 'c2', title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: added ? [{ id: 'i2', productId: 'p2', note: null, isPinned: false, isHidden: false, sortOrder: 0, product: SOAP }] : [] }] : []),
         ],
-      }),
-    );
+      });
+    });
     api.get('/storefront/me/products', [{ id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 }]);
     api.get('/storefront/me/stats', EMPTY_STATS);
     api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
@@ -328,7 +330,12 @@ test.describe('Web khách: CTV', () => {
     await page.getByRole('button', { name: 'Thêm Xà phòng' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections/:id/items')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/collections/:id/items')[0]!.body).toEqual({ productId: 'p2' });
+    // Khoá "Thêm" giữ tới khi gian hàng tải lại xong; trong khoảng đó tấm bỏ qua Esc và ẩn nút Đóng. Esc ngay khi thấy POST từng rơi vào
+    // khoảng đó (tấm còn mở, nền mờ chặn nút lùi). Chờ nút Đóng hiện lại rồi mới Esc, và chờ tấm đóng hẳn.
+    const picker = page.getByRole('dialog', { name: 'Thêm sản phẩm' });
+    await expect(picker.getByRole('button', { name: 'Đóng', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(picker).toBeHidden();
     // Từ md có nút lùi trong trang; dưới md chỉ còn nút lùi nổi (một lối lùi như Mini App).
     const phone = (page.viewportSize()?.width ?? 0) < 768;
     await page.getByRole('button', { name: phone ? 'Quay lại' : 'Gian hàng của tôi', exact: true }).click();
