@@ -95,7 +95,7 @@ export const setSubscriptionStatus = (http: HttpClient, id: string, status: 'ACT
 
 /**
  * "Bỏ qua kỳ này": `expectedNextRunAt` = `nextRunAt` thẻ đang hiện. Cron 03:00 đã ra đơn kỳ đó (lịch sang kỳ sau) thì API trả 409 thay vì bỏ qua
- * kỳ sau; thiếu trường thì 400.
+ * kỳ sau. API vẫn nhận skip không có trường này (bản ZMP đã cài gửi thân rỗng) và bỏ kỳ đang có, nên client mới luôn phải gửi.
  */
 export const skipSubscriptionCycle = (http: HttpClient, id: string, expectedNextRunAt: string) =>
   http.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`, { expectedNextRunAt });
