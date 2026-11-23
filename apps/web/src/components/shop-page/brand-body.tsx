@@ -28,6 +28,7 @@ import { ShopTopBar } from '@/components/mini/shop-top-bar';
 import { Text } from '@/components/mini/text';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
 import { RefillLandingLink, type RefillEntryLink } from '@/components/refill/refill-landing-link';
+import { BRAND_FEATURED_MAX } from '@/lib/brand-featured';
 import { ShopProductsTab } from './shop-products-tab';
 
 export interface BrandBodyProps {
@@ -40,8 +41,6 @@ export interface BrandBodyProps {
   refillEntry?: RefillEntryLink | null;
 }
 
-/** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
-const FEATURED_MAX = 10;
 /** Ảnh câu chuyện rộng 240px (`w-60`) trong kệ cuộn ngang. */
 const STORY_IMAGE_WIDTH = 240;
 const STICKY_TOP = 'calc(var(--safe-top, 0px) + 56px)';
@@ -63,7 +62,7 @@ export function BrandBody({ brand: b, mapOriginId, originFallback = null, refill
   const originText = b.origin || originFallback;
   const hasStory = Boolean(b.story || originText || b.storyImages.length > 0);
   const productCount = b.productCount ?? b.products.length;
-  const featured = useMemo(() => b.products.slice(0, FEATURED_MAX).map((p) => ({ ...p, brand: b.name, isFeatured: false })) as unknown as ProductCardData[], [b]);
+  const featured = useMemo(() => b.products.slice(0, BRAND_FEATURED_MAX).map((p) => ({ ...p, brand: b.name, isFeatured: false })) as unknown as ProductCardData[], [b]);
   // Chỉ có nút khi tab Sản phẩm có nhiều hơn số đang hiện; số trong nhãn là tổng của tab đó.
   const featuredSeeAll = productCount > featured.length ? seeAllLabel(productCount) : null;
   const tabs = shopTabs({ productCount, hasStory, hasCategories: false }).map((t) => ({

@@ -18,6 +18,8 @@ describe('browseMode', () => {
     ['giá tối thiểu', { minPrice: 1 }],
     ['giá tối đa', { maxPrice: 1 }],
     ['còn hàng', { inStock: true }],
+    ['đang ưu đãi', { onSale: true }],
+    ['có bản Refill', { hasRefill: true }],
     ['từ 4 sao', { minRating: 4 }],
   ])('%s: danh sách', (_name, patch) => {
     expect(browseMode({ ...EMPTY, ...patch })).toBe('list');

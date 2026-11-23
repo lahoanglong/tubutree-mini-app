@@ -23,6 +23,7 @@ import { SearchMatchService } from './search-match.service';
 import { exactMatch, type TextMatch } from './search-fuzzy';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
+import { loadRefillPairTable, refillPairProductIds } from './refill/refill-pair-table';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableReason } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
@@ -720,8 +721,65 @@ export class CatalogService {
     if (inStock) where.variations = { some: { isActive: true, stock: { gt: 0 } } };
     // ratingAvg mặc định 0 → SP chưa có đánh giá không lọt "Từ 4★" (đúng ý bộ lọc).
     if (minRating != null) where.ratingAvg = { gte: minRating };
+    if (query.hasRefill) and.push({ id: { in: await this.refillPairIds() } });
+    if (query.onSale) and.push({ id: { in: await this.onSaleIds() } });
     if (and.length > 0) where.AND = and;
     return where;
+  }
+
+  private refillIds: { ids: string[]; expiresAt: number } | null = null;
+  private refillIdsLoading: Promise<string[]> | null = null;
+  private refillIdsGeneration = 0;
+  private readonly REFILL_IDS_TTL_MS = 60_000;
+
+  /** Admin vừa lưu bảng cặp (`RefillPairsService.adminSave`): bỏ bản nhớ để "Có bản Refill" đổi cùng lúc với trang Tiết kiệm với Refill. */
+  clearRefillPairIds(): void {
+    this.refillIdsGeneration += 1;
+    this.refillIds = null;
+    this.refillIdsLoading = null;
+  }
+
+  /**
+   * Bộ lọc "Có bản Refill": sản phẩm của bảng cặp hiện hành (`loadRefillPairTable`, cùng nguồn với trang Tiết kiệm với Refill), nhớ 60 giây như
+   * bảng cặp của `RefillPairsService` (dịch vụ đó cần CatalogService nên không tiêm ngược được; nó gọi `clearRefillPairIds` khi admin lưu).
+   * Lượt đọc bắt đầu trước lần lưu thì không ghi vào bộ nhớ. Không xét cờ `catalog.refill_first_enabled`: cặp là dữ kiện của danh mục; cờ chỉ
+   * quyết định app có mời chọn bộ lọc này hay không.
+   */
+  private async refillPairIds(): Promise<string[]> {
+    const now = Date.now();
+    if (this.refillIds && this.refillIds.expiresAt > now) return this.refillIds.ids;
+    if (!this.refillIdsLoading) {
+      const generation = this.refillIdsGeneration;
+      const loading = loadRefillPairTable(this.prisma, this.config)
+        .then((pairs) => {
+          const ids = refillPairProductIds(pairs);
+          if (generation === this.refillIdsGeneration) this.refillIds = { ids, expiresAt: Date.now() + this.REFILL_IDS_TTL_MS };
+          return ids;
+        })
+        .finally(() => {
+          if (this.refillIdsLoading === loading) this.refillIdsLoading = null;
+        });
+      this.refillIdsLoading = loading;
+    }
+    return this.refillIdsLoading;
+  }
+
+  /**
+   * Bộ lọc "Đang ưu đãi": sản phẩm công khai có giá trên thẻ (gồm Giờ vàng, `cardPriceWithFlash`) thấp hơn giá niêm yết của thẻ, tức đúng
+   * những thẻ hiện giá gạch. Không nhớ, như mọi thứ hạng phụ thuộc giá: suất Giờ vàng mở hay hết là danh sách đổi ngay.
+   */
+  private async onSaleIds(): Promise<string[]> {
+    const [rows, offers] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { ...PUBLIC_PRODUCT_WHERE },
+        select: { id: true, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } },
+      }),
+      this.activeFlashOffers(),
+    ]);
+    return rows
+      .filter((p) => cardPriceWithFlash(p, p.variations, offers.get(p.id)) < cardPrices(p, p.variations).basePrice)
+      .map((p) => p.id)
+      .sort();
   }
 
   /**

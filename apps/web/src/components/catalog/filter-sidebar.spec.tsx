@@ -61,6 +61,31 @@ describe('FilterSidebar (cột lọc từ lg)', () => {
     expect(onPatch).toHaveBeenCalledWith({ brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined });
   });
 
+  it('"Đang ưu đãi" luôn có, "Có bản Refill" khi cờ Refill bật hoặc đang chọn sẵn; chọn áp dụng ngay, "Xoá bộ lọc" tắt cả hai', () => {
+    const mountWith = (state = EMPTY_SEARCH_STATE, refillOn = false) => {
+      const onPatch = vi.fn();
+      const r = render(
+        <FilterSidebar state={state} entries={ENTRIES} brands={[]} refillOn={refillOn} onPickCategory={vi.fn()} onClearCategory={vi.fn()} onPatch={onPatch} />,
+      );
+      return { c: r.container, onPatch };
+    };
+    const off = mountWith();
+    expect(byText(off.c, 'label', 'Đang ưu đãi')).toBeTruthy();
+    expect(byText(off.c, 'label', 'Có bản Refill')).toBeUndefined();
+    const on = mountWith(EMPTY_SEARCH_STATE, true);
+    click(byText(on.c, 'label', 'Đang ưu đãi').querySelector('input')!);
+    expect(on.onPatch).toHaveBeenLastCalledWith({ onSale: true });
+    click(byText(on.c, 'label', 'Có bản Refill').querySelector('input')!);
+    expect(on.onPatch).toHaveBeenLastCalledWith({ hasRefill: true });
+    const picked = mountWith({ ...EMPTY_SEARCH_STATE, hasRefill: true });
+    const box = byText(picked.c, 'label', 'Có bản Refill').querySelector('input')!;
+    expect(box.checked).toBe(true);
+    click(box);
+    expect(picked.onPatch).toHaveBeenLastCalledWith({ hasRefill: undefined });
+    click(byText(picked.c, 'button', 'Xoá bộ lọc'));
+    expect(picked.onPatch).toHaveBeenLastCalledWith(expect.objectContaining({ onSale: undefined, hasRefill: undefined, inStock: false }));
+  });
+
   it('từ lg dính dưới thanh đầu, cao tối đa bằng khung nhìn và tự cuộn khi cây dài; dưới lg vẫn ẩn', () => {
     const { c } = setup();
     const aside = c.querySelector('aside')!;

@@ -19,3 +19,11 @@ export async function loadRefillPairTable(prisma: PrismaService, config: ConfigR
   ]);
   return pairRefills(products, { overrides: parseRefillOverrides(overrides), block: parseRefillBlock(block) });
 }
+
+/**
+ * Mọi sản phẩm của bảng cặp: chai có gói Refill và chính các gói Refill, id tăng dần (khoá nhớ ổn định). Một nguồn cho bộ lọc
+ * "Có bản Refill" của Danh mục và cờ `hasRefillProducts` của trang thương hiệu.
+ */
+export function refillPairProductIds(pairs: ReadonlyMap<string, string>): string[] {
+  return [...new Set([...pairs.keys(), ...pairs.values()])].sort();
+}

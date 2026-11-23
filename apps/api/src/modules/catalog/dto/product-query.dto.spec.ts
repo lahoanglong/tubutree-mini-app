@@ -29,6 +29,15 @@ describe('ProductQuery (dự án 4b)', () => {
     expect(q.maxPrice).toBeUndefined();
     expect(q.inStock).toBeUndefined();
     expect(q.minRating).toBeUndefined();
+    expect(q.hasRefill).toBeUndefined();
+    expect(q.onSale).toBeUndefined();
+  });
+
+  it('hasRefill/onSale ("Có bản Refill", "Đang ưu đãi") nhận "true"/"1"/"false"/"0", từ chối giá trị lạ', async () => {
+    await expect(asQuery({ hasRefill: 'true', onSale: '1' })).resolves.toMatchObject({ hasRefill: true, onSale: true });
+    await expect(asQuery({ hasRefill: '0', onSale: 'false' })).resolves.toMatchObject({ hasRefill: false, onSale: false });
+    await expect(asQuery({ hasRefill: 'yes' })).rejects.toThrow();
+    await expect(asQuery({ onSale: 'sale' })).rejects.toThrow();
   });
 
   it('từ chối giá âm / lẻ / chữ, minRating ngoài 0..5, inStock lạ', async () => {

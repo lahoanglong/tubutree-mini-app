@@ -8,7 +8,12 @@ import type { BrandSalesPeriod } from './dto/brand.dto';
 import { publicImage, publicImages } from '../../common/public-image';
 import { cardPrices } from '../catalog/variation-order';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
+import { RefillPairsService } from '../catalog/refill/refill-pairs.service';
+import { refillPairProductIds } from '../catalog/refill/refill-pair-table';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
+
+/** Trần slug Refill của một nhãn trả về trang thương hiệu: trang "Tiết kiệm với Refill" có tối đa 60 cặp (120 sản phẩm), dư cho mọi nhãn. */
+const BRAND_REFILL_SLUGS_MAX = 200;
 
 interface Cert {
   code: string;
@@ -95,6 +100,7 @@ export class BrandService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    private readonly refillPairs: RefillPairsService,
   ) {}
 
   /** Trang nhãn flagship cho khách. `now` truyền vào để test tất định. KHÔNG lộ % hoa hồng. */
@@ -109,7 +115,7 @@ export class BrandService {
 
     // Cùng điều kiện cho danh sách và đếm, và là điều kiện công khai của catalog (SP chưa duyệt không lộ ra trang nhãn).
     const productWhere = { brandId: brand.id, ...PUBLIC_PRODUCT_WHERE };
-    const [promotions, products, productCount, dealerRewards] = await Promise.all([
+    const [promotions, products, productCount, dealerRewards, refillProductSlugs] = await Promise.all([
       this.prisma.brandPromotion.findMany({
         where: { brandId: brand.id, isActive: true, startAt: { lte: now }, endAt: { gte: now } },
         orderBy: { sortOrder: 'asc' },
@@ -130,6 +136,7 @@ export class BrandService {
         orderBy: { sortOrder: 'asc' },
         select: { id: true, type: true, title: true, description: true, threshold: true, period: true },
       }),
+      this.refillProductSlugs(productWhere),
     ]);
 
     const publicPromotions = await this.hideUnusableCoupons(promotions, now);
@@ -149,6 +156,8 @@ export class BrandService {
       certifications: verifiedCerts,
       promotions: publicPromotions,
       productCount,
+      hasRefillProducts: refillProductSlugs.length > 0,
+      refillProductSlugs,
       products: products.map(({ soldExternal, soldApp, variations, ...p }) => ({
         ...p,
         ...cardPrices(p, variations),
@@ -159,6 +168,24 @@ export class BrandService {
       })),
       dealerRewards: dealerRewards.map(rewardView),
     };
+  }
+
+  /**
+   * Slug mọi sản phẩm công khai của nhãn nằm trong bảng cặp Refill (chai có gói Refill, hoặc chính gói Refill), xét MỌI sản phẩm của nhãn chứ
+   * không riêng 30 món của `products`. Trang thương hiệu khớp các slug này với trang "Tiết kiệm với Refill" (chỉ giữ gói rẻ hơn, tối đa
+   * `REFILL_LANDING_MAX` cặp) để chỉ mang lối vào khi trang đó thật sự có hàng của nhãn. Bảng cặp dùng chung bộ nhớ 60 giây của
+   * `RefillPairsService`; không xét cờ `catalog.refill_first_enabled` (cờ tắt thì trang Refill rỗng, không slug nào khớp).
+   */
+  private async refillProductSlugs(productWhere: Prisma.ProductWhereInput): Promise<string[]> {
+    const ids = refillPairProductIds(await this.refillPairs.pairs());
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { AND: [productWhere, { id: { in: ids } }] },
+      select: { slug: true },
+      orderBy: { slug: 'asc' },
+      take: BRAND_REFILL_SLUGS_MAX,
+    });
+    return rows.map((r) => r.slug);
   }
 
   /** Banner "Chia sẻ nhận HH" — chỉ vai trò hưởng hoa hồng (affiliate.commission_eligible_roles: CTV, đại lý) thấy %; khách thường eligible=false (guardrail server-side). */

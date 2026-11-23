@@ -923,6 +923,123 @@ describe('CatalogService.list — bộ lọc dự án 4b', () => {
   });
 });
 
+describe('CatalogService.list — bộ lọc "Có bản Refill" và "Đang ưu đãi" (w21-01)', () => {
+  // Cặp tự ghép theo tên (cùng công thức, gói Refill gấp 2,6 lần chai); "Xà phòng" không có gói nào.
+  const CATALOG = [
+    { id: 'bottle', slug: 'nuoc-rua-chen-fuwa3e', name: 'Nước rửa chén Fuwa3e 3,8L', brand: 'Fuwa3e', isCombo: false },
+    { id: 'refill', slug: 'refill-nuoc-rua-chen-fuwa3e', name: 'Refill Nước rửa chén Fuwa3e 10L', brand: 'Fuwa3e', isCombo: false },
+    { id: 'other', slug: 'xa-phong-sa-chanh', name: 'Xà phòng sả chanh 100g', brand: 'Khac', isCombo: false },
+  ];
+  const v = (id: string, retailPrice: number, salePrice: number | null, stock = 5) => ({ id, sku: `${id}-sku`, retailPrice, salePrice, stock });
+
+  function setup(opts: { catalog?: unknown[]; priced?: unknown[]; flash?: unknown[] } = {}) {
+    const listing = jest.fn().mockResolvedValue([card('p1')]);
+    const catalogRows = jest.fn().mockResolvedValue(opts.catalog ?? CATALOG);
+    const pricedRows = jest.fn().mockResolvedValue(opts.priced ?? []);
+    // Ba câu khác nhau trên cùng bảng: bảng cặp (cột nhận diện, không giá), quét giá thẻ (giá, không slug), câu lấy thẻ của trang.
+    const findMany = jest.fn((args: { select?: Record<string, unknown> }) => {
+      const sel = args.select ?? {};
+      if ('isCombo' in sel && !('basePrice' in sel)) return catalogRows(args);
+      if ('basePrice' in sel && !('slug' in sel)) return pricedRows(args);
+      return listing(args);
+    });
+    const flash = noFlash(opts.flash);
+    const prisma = {
+      product: { findMany, count: jest.fn().mockResolvedValue(1) },
+      flashSaleItem: flash,
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), listing, catalogRows, pricedRows, flash };
+  }
+  const whereOf = (listing: jest.Mock) => listing.mock.calls[0][0].where;
+
+  it('hasRefill: chỉ chai có gói Refill và chính gói đó (bảng cặp của danh mục công khai), giữ điều kiện công khai', async () => {
+    const { svc, listing, catalogRows } = setup();
+    await svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    expect(catalogRows.mock.calls[0][0].where).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+    expect(whereOf(listing)).toEqual({ isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['bottle', 'refill'] } }] });
+  });
+
+  it('hasRefill: bảng cặp nhớ 60 giây (lượt lọc sau không quét lại danh mục); không có cặp nào thì danh sách rỗng, không rơi về cả danh mục', async () => {
+    const { svc, catalogRows } = setup();
+    await svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    await svc.list({ page: 2, limit: 20, sort: 'newest', hasRefill: true });
+    expect(catalogRows).toHaveBeenCalledTimes(1);
+    const none = setup({ catalog: [CATALOG[2]] });
+    await none.svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    expect(whereOf(none.listing).AND).toEqual([{ id: { in: [] } }]);
+  });
+
+  it('hasRefill: admin lưu bảng cặp (clearRefillPairIds) thì lượt lọc sau đọc lại ngay; lượt đọc bắt đầu trước lần lưu không ghi đè bộ nhớ', async () => {
+    const { svc, catalogRows } = setup();
+    await svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    svc.clearRefillPairIds();
+    await svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    expect(catalogRows).toHaveBeenCalledTimes(2);
+
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const began = new Promise<void>((r) => (started = r));
+    catalogRows.mockImplementationOnce(async () => {
+      started();
+      await gate;
+      return CATALOG;
+    });
+    svc.clearRefillPairIds();
+    const stale = svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    await began;
+    svc.clearRefillPairIds();
+    release();
+    await stale;
+    await svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true });
+    expect(catalogRows).toHaveBeenCalledTimes(4);
+  });
+
+  it('onSale: đúng những thẻ hiện giá gạch — phân loại đại diện đang giảm giá, hoặc suất Giờ vàng còn rẻ hơn giá đang bán', async () => {
+    const priced = [
+      { id: 'sale', basePrice: 100_000, salePrice: null, variations: [v('sale-v', 100_000, 80_000)] },
+      { id: 'flash', basePrice: 100_000, salePrice: null, variations: [v('flash-v', 100_000, null)] },
+      { id: 'full', basePrice: 100_000, salePrice: null, variations: [v('full-v', 100_000, null)] },
+      // Giá "giảm" cao hơn giá niêm yết: thẻ không gạch giá.
+      { id: 'odd', basePrice: 100_000, salePrice: null, variations: [v('odd-v', 100_000, 120_000)] },
+      // Thẻ lấy phân loại rẻ nhất còn hàng (không giảm); phân loại lớn đang giảm không làm thẻ gạch giá.
+      { id: 'rep', basePrice: 50_000, salePrice: null, variations: [v('rep-small', 50_000, null), v('rep-big', 200_000, 150_000)] },
+    ];
+    const flash = [
+      { flashPrice: 70_000, soldCount: 0, quota: 10, variationId: 'flash-v', variation: { productId: 'flash', retailPrice: 100_000, salePrice: null } },
+      // Suất đã bán hết không tính.
+      { flashPrice: 60_000, soldCount: 10, quota: 10, variationId: 'full-v', variation: { productId: 'full', retailPrice: 100_000, salePrice: null } },
+    ];
+    const { svc, listing, pricedRows } = setup({ priced, flash });
+    await svc.list({ page: 1, limit: 20, sort: 'newest', onSale: true });
+    expect(pricedRows.mock.calls[0][0].where).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+    expect(whereOf(listing).AND).toEqual([{ id: { in: ['flash', 'sale'] } }]);
+  });
+
+  it('onSale không nhớ: suất Giờ vàng vừa hết thì lượt sau không còn sản phẩm đó', async () => {
+    const priced = [{ id: 'flash', basePrice: 100_000, salePrice: null, variations: [v('flash-v', 100_000, null)] }];
+    const live = [{ flashPrice: 70_000, soldCount: 0, quota: 10, variationId: 'flash-v', variation: { productId: 'flash', retailPrice: 100_000, salePrice: null } }];
+    const { svc, listing, flash } = setup({ priced, flash: live });
+    await svc.list({ page: 1, limit: 20, sort: 'newest', onSale: true });
+    flash.findMany.mockResolvedValue([]);
+    await svc.list({ page: 1, limit: 20, sort: 'newest', onSale: true });
+    expect(listing.mock.calls[1][0].where.AND).toEqual([{ id: { in: [] } }]);
+  });
+
+  it('hai bộ lọc cùng bật thì cùng nằm trong AND (giao nhau); tắt thì không quét bảng cặp hay giá', async () => {
+    const priced = [{ id: 'refill', basePrice: 100_000, salePrice: null, variations: [v('refill-v', 100_000, 90_000)] }];
+    const both = setup({ priced });
+    await both.svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: true, onSale: true });
+    expect(whereOf(both.listing).AND).toEqual([{ id: { in: ['bottle', 'refill'] } }, { id: { in: ['refill'] } }]);
+    const off = setup();
+    await off.svc.list({ page: 1, limit: 20, sort: 'newest', hasRefill: false, onSale: false });
+    expect(off.catalogRows).not.toHaveBeenCalled();
+    expect(off.pricedRows).not.toHaveBeenCalled();
+    expect(whereOf(off.listing).AND).toBeUndefined();
+  });
+});
+
 describe('CatalogService — tìm không dấu (dự án 4b)', () => {
   function setup(queryRaw: jest.Mock) {
     const findMany = jest.fn().mockResolvedValue([card('p1')]);

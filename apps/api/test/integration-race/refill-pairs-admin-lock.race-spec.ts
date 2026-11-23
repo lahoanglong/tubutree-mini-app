@@ -29,7 +29,7 @@ describe('Cặp Refill: ghép tay đồng thời không mất cặp (real Postgr
   ];
   const sortPairs = (xs: RefillPairOverride[]) => [...xs].sort((a, b) => a.bottleSlug.localeCompare(b.bottleSlug));
   const restores: Array<() => Promise<void>> = [];
-  const apiProcess = () => new RefillPairsService(prisma, null as never, new SystemConfigService(prisma));
+  const apiProcess = () => new RefillPairsService(prisma, { clearRefillPairIds: () => undefined } as never, new SystemConfigService(prisma));
 
   async function stored(): Promise<RefillPairOverride[]> {
     const row = await prisma.systemConfig.findUnique({ where: { key: REFILL_PAIRS_OVERRIDE_KEY } });

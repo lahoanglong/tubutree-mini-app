@@ -64,8 +64,8 @@ export class CatalogController {
     return this.productCompare.compare(slug);
   }
 
-  // Trang thương hiệu phân trang thật. Đặt ở đây (không ở BrandController) để dùng chung cách xếp và dựng thẻ của /products
-  // mà BrandModule không phải import CatalogModule; đường dẫn vẫn nằm dưới /brand.
+  // Trang thương hiệu phân trang thật. Đặt ở đây (không ở BrandController) để dùng chung cách xếp và dựng thẻ của /products;
+  // đường dẫn vẫn nằm dưới /brand.
   @Public()
   @PublicCache('CATALOG')
   @Get('brand/public/:slug/products')

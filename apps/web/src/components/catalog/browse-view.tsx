@@ -25,6 +25,7 @@ import { loginHref } from '@/lib/return-to';
 import { foldVietnamese } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches, RECENT_SEARCHES_CHANGED_EVENT } from '@/lib/recent-searches';
 import {
@@ -179,6 +180,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const suggest = useSuggest(editing ? draft : '');
   const popular = usePopularSearches(editing);
   const chatOn = usePublicConfig().chat?.enabled === true;
+  const refillOn = refillFirstOn(usePublicConfig());
   const guest = useAuthPhase() === 'guest';
 
   const seeded = initial !== null && initial.urlKey === urlKey && initial.startPage === page ? initial : null;
@@ -294,7 +296,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   };
   const applyFilters = (d: FilterDraft) => {
     setFiltersOpen(false);
-    updateList({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
+    updateList({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating, onSale: d.onSale, hasRefill: d.hasRefill });
   };
 
   const root = isBrowseRoot(state);
@@ -440,6 +442,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               entries={entries}
               tree={categoriesQ.data}
               brands={brandsQ.data ?? []}
+              refillOn={refillOn}
               onPickCategory={pickCategory}
               onClearCategory={() => {
                 leaveSearchField();
@@ -661,7 +664,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
         )}
       </ListingLayout>
 
-      <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brandsQ.data ?? []} onApply={applyFilters} />
+      <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brandsQ.data ?? []} onApply={applyFilters} refillOn={refillOn} />
     </div>
   );
 }

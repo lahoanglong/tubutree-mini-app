@@ -18,16 +18,17 @@ function canonicalOf(meta: Metadata): string | undefined {
 /**
  * og/twitter cho trang danh mục được lập chỉ mục, dựng từ chính metadata (tiêu đề, mô tả, canonical) để thẻ chia sẻ không lệch trang:
  * layout gốc chỉ khai type/siteName/locale nên thiếu khối này thì og:url, og:title của mọi biến thể danh mục trống. Trang noindex giữ nguyên.
+ * `image`: ảnh riêng của trang (bìa thương hiệu); vắng thì ảnh chung của site.
  */
-export function withBrowseSocial(meta: Metadata): Metadata {
+export function withBrowseSocial(meta: Metadata, image?: string): Metadata {
   const canonical = canonicalOf(meta);
   if (!canonical || typeof meta.title !== 'string') return meta;
   const title = withBrand(meta.title);
   const description = typeof meta.description === 'string' ? meta.description : undefined;
   return {
     ...meta,
-    openGraph: { ...ogBase, url: canonical, title, ...(description ? { description } : {}) },
-    twitter: { card: 'summary_large_image', title, ...(description ? { description } : {}), images: ogBase.images.map((i) => i.url) },
+    openGraph: { ...ogBase, url: canonical, title, ...(description ? { description } : {}), images: image ? [image] : ogBase.images },
+    twitter: { card: 'summary_large_image', title, ...(description ? { description } : {}), images: image ? [image] : ogBase.images.map((i) => i.url) },
   };
 }
 

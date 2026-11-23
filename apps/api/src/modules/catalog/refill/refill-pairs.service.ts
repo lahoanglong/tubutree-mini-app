@@ -314,6 +314,7 @@ export class RefillPairsService {
       this.generation += 1;
       this.table = null;
       this.loading = null;
+      this.catalog.clearRefillPairIds();
     }
     return this.adminOverview();
   }

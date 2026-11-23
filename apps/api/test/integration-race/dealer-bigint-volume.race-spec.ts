@@ -5,14 +5,19 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { BrandService } from '../../src/modules/brand/brand.service';
+import { RefillPairsService } from '../../src/modules/catalog/refill/refill-pairs.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { createDealer, createOrder, createUser, warmPool } from './helpers';
+
+/** Trang thương hiệu không phải đối tượng của bộ này: bảng cặp Refill rỗng. */
+const NO_REFILL_PAIRS = { provide: RefillPairsService, useValue: { pairs: async () => new Map<string, string>() } };
 
 /**
  * C-055: ngưỡng thưởng / doanh số kỳ của đại lý vượt Int 32-bit (2.147.483.647) trước đây ra
  * "value out of range for type integer" → 500. Chạy trên Postgres thật vì lỗi nằm ở kiểu cột.
  */
+
 describe('Dealer reward threshold / volume above Int32 (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -28,6 +33,7 @@ describe('Dealer reward threshold / volume above Int32 (real Postgres)', () => {
         SystemConfigService,
         DealerService,
         BrandService,
+        NO_REFILL_PAIRS,
         { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],

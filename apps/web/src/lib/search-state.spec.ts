@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PRICE_RANGES, activeFilterChips, activeFilterCount, changedFilterTypes,
+  CLEAR_SEARCH_PATCH, EMPTY_FILTER_DRAFT, EMPTY_SEARCH_STATE, PRICE_RANGES, activeFilterChips, activeFilterCount, changedFilterTypes,
   PAGE_LIMIT, SEARCH_PARAM_KEYS, browseHref, draftFromState, isBrowseHub, isBrowseRoot, parseSearchState, priceRangeLabel,
   serializeSearchState, toCatalogQuery, withListMode, type SearchState,
 } from './search-state';
@@ -200,5 +200,39 @@ describe('parseSearchState — KHAMPHA-07 và KHAMPHA-14', () => {
   it('minPrice > maxPrice qua URL: đổi chỗ như API', () => {
     const s = parseSearchState(new URLSearchParams('minPrice=500000&maxPrice=100000'));
     expect([s.minPrice, s.maxPrice]).toEqual([100000, 500000]);
+  });
+});
+
+describe('"Đang ưu đãi" và "Có bản Refill" (w21-01, chung tham số với Mini App)', () => {
+  const ON: SearchState = { ...EMPTY_SEARCH_STATE, onSale: true, hasRefill: true };
+
+  it('URL onSale=1&hasRefill=1 ↔ trạng thái, thứ tự cố định sau inStock; khoá thuộc trạng thái (không phải tham số lạ)', () => {
+    expect(parse('hasRefill=1&onSale=1')).toEqual(ON);
+    expect(serializeSearchState({ ...ON, inStock: true, minRating: 4 }).toString()).toBe('inStock=1&onSale=1&hasRefill=1&rating=4');
+    expect(parse('onSale=true&hasRefill=0')).toEqual(EMPTY_SEARCH_STATE);
+    expect(SEARCH_PARAM_KEYS).toEqual(expect.arrayContaining(['onSale', 'hasRefill']));
+  });
+
+  it('API nhận onSale/hasRefill khi bật; tắt thì không gửi', () => {
+    expect(toCatalogQuery(ON, 1, 20)).toMatchObject({ onSale: true, hasRefill: true });
+    expect(toCatalogQuery(EMPTY_SEARCH_STATE, 1, 20)).not.toHaveProperty('onSale');
+    expect(toCatalogQuery(EMPTY_SEARCH_STATE, 1, 20)).not.toHaveProperty('hasRefill');
+  });
+
+  it('nháp luôn mang hai khoá: trộn nháp đã bỏ chọn lên trạng thái đang bật thì tắt được (số đếm của sheet đúng bộ lọc)', () => {
+    const draft = { ...draftFromState(ON), onSale: undefined };
+    expect(serializeSearchState({ ...ON, ...draft }).toString()).toBe('hasRefill=1');
+    expect(serializeSearchState({ ...ON, ...EMPTY_FILTER_DRAFT }).toString()).toBe('');
+  });
+
+  it('đếm vào badge, liệt kê trong sự kiện filter_applied, chip gỡ đúng bộ lọc; không còn là hub', () => {
+    expect(activeFilterCount(ON)).toBe(2);
+    expect(isBrowseRoot(ON)).toBe(false);
+    expect(isBrowseHub({ ...EMPTY_SEARCH_STATE, onSale: true })).toBe(false);
+    expect(changedFilterTypes(EMPTY_SEARCH_STATE, draftFromState(ON))).toEqual(['on_sale', 'has_refill']);
+    const chips = activeFilterChips(ON, {});
+    expect(chips.map((c) => c.label)).toEqual(['Đang ưu đãi', 'Có bản Refill']);
+    expect(serializeSearchState({ ...ON, ...chips[0]!.patch }).toString()).toBe('hasRefill=1');
+    expect({ ...ON, ...CLEAR_SEARCH_PATCH }).toEqual(expect.objectContaining({ onSale: undefined, hasRefill: undefined }));
   });
 });

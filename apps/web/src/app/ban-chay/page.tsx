@@ -2,11 +2,15 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchBestSellersPage } from '@tubutree/app-core/api/browse';
 import { fetchCategories } from '@tubutree/app-core/api/catalog';
-import { BEST_SELLERS_PAGE_LIMIT, bestSellerScope, bestSellerTabs, bestSellersHref } from '@tubutree/app-core/browse/best-sellers';
+import {
+  BEST_SELLERS_PAGE_LIMIT, bestSellerScope, bestSellerTabs, bestSellersHref, curatedShelfItems, isCuratedShelf,
+} from '@tubutree/app-core/browse/best-sellers';
 import { firstParam, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
 import { ogBase, withBrand } from '@/lib/og';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { jsonLdScript } from '@/lib/product-seo';
+import { browseCollectionJsonLd, withBrowseSocial } from '@/lib/seo/browse-structured-data';
 import BestSellersView, { type BestSellersInitial } from './best-sellers-view';
 
 export const revalidate = 300;
@@ -18,17 +22,19 @@ const DESCRIPTION = 'Sản phẩm bán chạy nhất Tubu Tree theo lượt bán
 
 // Theo quy tắc của /san-pham: trang lọc theo danh mục là bản trùng của bảng xếp hạng gốc nên noindex (follow để crawler vẫn đi tới sản phẩm) và
 // KHÔNG có canonical, vì noindex kèm canonical sang URL khác là hai tín hiệu mâu thuẫn. Còn lại (kể cả ?page=N) được lập chỉ mục và canonical
-// tự trỏ về chính nó, nhưng ?page=1 hay số lạ chuẩn hoá về /ban-chay.
-export async function generateMetadata({ searchParams }: { searchParams: BestSellersSearchParams }): Promise<Metadata> {
-  const sp = await searchParams;
+// tự trỏ về chính nó, nhưng ?page=1 hay số lạ chuẩn hoá về /ban-chay. Trang và `generateMetadata` dùng chung `bestSellersMeta` để
+// CollectionPage của JSON-LD mang đúng tiêu đề, mô tả, canonical của thẻ meta.
+function bestSellersMeta(sp: Awaited<BestSellersSearchParams>): Metadata {
   const page = parsePage(sp.page);
   const title = page > 1 ? `${TITLE} — Trang ${page}` : TITLE;
   const base: Metadata = { title, description: DESCRIPTION };
-  const og = { ...ogBase, title: withBrand(title), description: DESCRIPTION };
   // Trang noindex không khai url/canonical: hai tín hiệu "đừng lập chỉ mục" và "trang này là bản chuẩn" mâu thuẫn nhau.
-  if (firstParam(sp.category)) return { ...base, openGraph: og, robots: { index: false, follow: true } };
-  const path = page > 1 ? `/ban-chay?page=${page}` : '/ban-chay';
-  return { ...base, openGraph: { ...og, url: path }, alternates: { canonical: path } };
+  if (firstParam(sp.category)) return { ...base, openGraph: { ...ogBase, title: withBrand(title), description: DESCRIPTION }, robots: { index: false, follow: true } };
+  return { ...base, alternates: { canonical: page > 1 ? `/ban-chay?page=${page}` : '/ban-chay' } };
+}
+
+export async function generateMetadata({ searchParams }: { searchParams: BestSellersSearchParams }): Promise<Metadata> {
+  return withBrowseSocial(bestSellersMeta(await searchParams));
 }
 
 /** Phần phụ của trang (cây danh mục, danh sách đầu): lỗi thì bỏ phần đó, để BestSellersView tự tải lại phía trình duyệt. */
@@ -54,8 +60,18 @@ export default async function BestSellersPage({ searchParams }: { searchParams: 
   }
 
   const initial: BestSellersInitial | null = first ? { category: scope.category, startPage, page: first } : null;
+  // CollectionPage + ItemList + BreadcrumbList; trang noindex thì không có. ItemList là đúng các thẻ BestSellersView vẽ trong HTML máy chủ: kệ
+  // "Tubu chọn cho bạn" chỉ vẽ món ghim và không xếp hạng nên vị trí đếm từ 1; bảng xếp hạng thì vị trí nối tiếp trang trước.
+  const rows = first?.data ?? [];
+  const ld = browseCollectionJsonLd(
+    bestSellersMeta(sp),
+    [{ name: 'Trang chủ', href: '/' }, { name: TITLE }],
+    curatedShelfItems(rows),
+    isCuratedShelf(rows) ? 0 : (startPage - 1) * (first?.meta.limit || BEST_SELLERS_PAGE_LIMIT),
+  );
   return (
     <main className={`${PAGE_WIDE} py-6`}>
+      {ld && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }} />}
       <BestSellersView initial={initial} categories={categories} />
     </main>
   );

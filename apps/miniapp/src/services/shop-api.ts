@@ -463,6 +463,9 @@ export interface CatalogQuery {
   maxPrice?: number;
   inStock?: boolean;
   minRating?: number;
+  /** "Đang ưu đãi" (thẻ đang gạch giá) và "Có bản Refill" (chai có gói Refill, và chính gói đó); API trước w21-01 không biết. */
+  onSale?: boolean;
+  hasRefill?: boolean;
   /** Ngày VN dạng YYYYMMDD: xoay thứ tự mặc định trong ngày (Gợi ý hôm nay). */
   seed?: string;
 }
@@ -472,7 +475,7 @@ export interface CatalogPage extends PageResponse<ProductCard> {
 }
 
 /** Tham số mà API trước 4b không biết — ValidationPipe `forbidNonWhitelisted` trả 400 nếu gửi. */
-const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating', 'seed'] as const;
+const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating', 'seed', 'onSale', 'hasRefill'] as const;
 
 /** Chỉ gửi tham số có giá trị — API cũ không bị 400 vì những bộ lọc khách không dùng. */
 export function catalogParams(query: CatalogQuery): Record<string, string | number> {
@@ -487,6 +490,8 @@ export function catalogParams(query: CatalogQuery): Record<string, string | numb
   if (query.maxPrice != null) params.maxPrice = query.maxPrice;
   if (query.inStock) params.inStock = 'true';
   if (query.minRating != null) params.minRating = query.minRating;
+  if (query.onSale) params.onSale = 'true';
+  if (query.hasRefill) params.hasRefill = 'true';
   if (query.seed) params.seed = query.seed;
   return params;
 }

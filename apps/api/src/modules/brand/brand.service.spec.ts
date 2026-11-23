@@ -2,8 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { Prisma } from '@prisma/client';
 import { BrandService, slugifyVi } from './brand.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { RefillPairsService } from '../catalog/refill/refill-pairs.service';
 
 const brandConfig = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+/** Bảng cặp Refill rỗng: các ca không xét cờ `hasRefillProducts` của trang thương hiệu. */
+const noPairs = { pairs: async () => new Map<string, string>() } as unknown as RefillPairsService;
 
 describe('slugifyVi', () => {
   it('xử lý nguyên âm có móc ư/ơ + dấu thanh + đ', () => {
@@ -43,7 +46,7 @@ describe('BrandService.getPublicBySlug', () => {
   it('ném NotFound khi brand chưa published', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue(null);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.getPublicBySlug('khong-co', NOW)).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -57,7 +60,7 @@ describe('BrandService.getPublicBySlug', () => {
         { code: 'FAKE', label: 'Giả', verified: false },
       ],
     });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(out.certifications).toHaveLength(1);
     expect(out.certifications[0]?.code).toBe('ORG');
@@ -69,7 +72,7 @@ describe('BrandService.getPublicBySlug', () => {
     prisma.brand.findFirst.mockResolvedValue({
       id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: ['https://x.test/a.jpg', PNG], isVerified: false, followerCount: 0,
     });
-    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    const out = await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW);
     expect(out.storyImages[0]).toBe('https://x.test/a.jpg');
     expect(out.storyImages[1]).toMatch(/^\/public-image\/brand\/b1\/1\?v=[0-9a-f]{16}$/);
   });
@@ -78,11 +81,37 @@ describe('BrandService.getPublicBySlug', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
     prisma.product.count.mockResolvedValue(57);
-    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    const out = await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW);
     expect(out.productCount).toBe(57);
     const where = { brandId: 'b1', isActive: true, approvalStatus: 'APPROVED' };
     expect(prisma.product.count).toHaveBeenCalledWith({ where });
     expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
+  });
+
+  it('refillProductSlugs/hasRefillProducts xét MỌI sản phẩm công khai của nhãn qua bảng cặp Refill (cả chai lẫn gói), không riêng 30 món của danh sách', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    // Danh sách 30 món không có món Refill nào; món thứ 45 của nhãn mới nằm trong bảng cặp.
+    prisma.product.findMany.mockImplementation(async (args: { where: { AND?: unknown[] } }) => (args.where.AND ? [{ slug: 'chai-45' }] : []));
+    const pairs = { pairs: jest.fn().mockResolvedValue(new Map([['chai-45', 'goi-refill'], ['chai-khac', 'goi-refill']])) } as unknown as RefillPairsService;
+    const out = await new BrandService(prisma, brandConfig, pairs).getPublicBySlug('sachi', NOW);
+    expect(out).toMatchObject({ hasRefillProducts: true, refillProductSlugs: ['chai-45'] });
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where: { AND: [{ brandId: 'b1', isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['chai-45', 'chai-khac', 'goi-refill'] } }] },
+      select: { slug: true },
+      orderBy: { slug: 'asc' },
+      take: 200,
+    });
+  });
+
+  it('hasRefillProducts=false, refillProductSlugs=[] khi không sản phẩm nào của nhãn nằm trong bảng cặp, hoặc bảng cặp rỗng (khi đó không hỏi DB)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    const pairs = { pairs: jest.fn().mockResolvedValue(new Map([['chai-nhan-khac', 'goi-nhan-khac']])) } as unknown as RefillPairsService;
+    expect(await new BrandService(prisma, brandConfig, pairs).getPublicBySlug('sachi', NOW)).toMatchObject({ hasRefillProducts: false, refillProductSlugs: [] });
+    prisma.product.findMany.mockClear();
+    expect(await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW)).toMatchObject({ hasRefillProducts: false, refillProductSlugs: [] });
+    expect(prisma.product.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('lọc promotions theo isActive + khoảng thời gian', async () => {
@@ -93,7 +122,7 @@ describe('BrandService.getPublicBySlug', () => {
     prisma.brandPromotion.findMany.mockResolvedValue([
       { id: 'p1', title: 'MUA 2 TẶNG 1', subtitle: null, themeColor: null, couponCode: null, startAt: new Date('2026-06-01'), endAt: new Date('2026-07-01') },
     ]);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(prisma.brandPromotion.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ brandId: 'b1', isActive: true, startAt: { lte: NOW }, endAt: { gte: NOW } }),
@@ -107,7 +136,7 @@ describe('BrandService.getPublicBySlug', () => {
     prisma.product.findMany.mockResolvedValue([
       { id: 'pr1', name: 'Dầu gội', slug: 'dau-goi', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 4.5, reviewCount: 3 },
     ]);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(JSON.stringify(out)).not.toMatch(/affiliateRate|commission/i);
   });
@@ -119,7 +148,7 @@ describe('BrandService.getPublicBySlug', () => {
       { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ id: 'a', sku: 'A', retailPrice: 100000, salePrice: null, stock: 0 }, { id: 'b', sku: 'B', retailPrice: 120000, salePrice: 99000, stock: 3 }] },
       { id: 'p2', name: 'Hết hàng', slug: 'p2', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ stock: 0 }] },
     ]);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(out.products.find((p) => p.id === 'p1')!.inStock).toBe(true);
     expect(out.products.find((p) => p.id === 'p2')!.inStock).toBe(false);
@@ -137,7 +166,7 @@ describe('BrandService.getPublicBySlug', () => {
     prisma.product.findMany.mockResolvedValue([
       { id: 'p1', name: 'Mới về', slug: 'p1', thumbnail: null, basePrice: 1, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, createdAt: new Date('2026-10-20T03:00:00.000Z'), variations: [] },
     ]);
-    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    const out = await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW);
     expect(out.products[0]!.createdAt).toBe('2026-10-20T03:00:00.000Z');
     expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ createdAt: true }) }));
   });
@@ -148,7 +177,7 @@ describe('BrandService.getPublicBySlug', () => {
     prisma.product.findMany.mockResolvedValue([
       { id: 'p3', name: 'Chỉ còn hàng ở bản ngừng bán', slug: 'p3', thumbnail: null, basePrice: 1, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [] },
     ]);
-    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    const out = await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW);
     expect(out.products[0]!.inStock).toBe(false);
   });
 
@@ -156,7 +185,7 @@ describe('BrandService.getPublicBySlug', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
     prisma.dealerReward.findMany.mockResolvedValue([{ id: 'd1', type: 'TOUR', title: 'Tour', description: null, threshold: 50000000, period: 'QUARTER' }]);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(prisma.dealerReward.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ OR: [{ brandId: 'b1' }, { brandId: null }], isActive: true }),
@@ -170,7 +199,7 @@ describe('BrandService: lỗi 404 gọi là "Thương hiệu"', () => {
   const missing = () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue(null);
-    return new BrandService(prisma, brandConfig);
+    return new BrandService(prisma, brandConfig, noPairs);
   };
 
   it('trang công khai chưa đăng: "Thương hiệu không tồn tại hoặc chưa đăng."', async () => {
@@ -192,7 +221,7 @@ describe('BrandService.getShareToEarn', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi' });
     prisma.user.findUniqueOrThrow.mockResolvedValue({ role: 'CUSTOMER', referralCode: 'X' });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getShareToEarn('sachi', 'u1');
     expect(out.eligible).toBe(false);
     expect((out as any).maxAffiliateRate).toBeUndefined();
@@ -203,7 +232,7 @@ describe('BrandService.getShareToEarn', () => {
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi' });
     prisma.user.findUniqueOrThrow.mockResolvedValue({ role: 'AFFILIATE', referralCode: 'LINH123' });
     prisma.variation.findMany.mockResolvedValue([{ affiliateRate: 8 }, { affiliateRate: 12 }, { affiliateRate: 0 }].map((v) => ({ ...v, product: { storefrontId: null } })));
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.getShareToEarn('sachi', 'u1');
     expect(out).toEqual({ eligible: true, maxAffiliateRate: 12, referralCode: 'LINH123', brandSlug: 'sachi' });
   });
@@ -218,10 +247,10 @@ describe('BrandService.getShareToEarn — theo luật hoa hồng thực', () => 
       { affiliateRate: null, product: { storefrontId: null } },
       { affiliateRate: null, product: { storefrontId: 'sf1' } },
     ]);
-    const out = await new BrandService(prisma, brandConfig).getShareToEarn('sachi', 'u1');
+    const out = await new BrandService(prisma, brandConfig, noPairs).getShareToEarn('sachi', 'u1');
     expect(out).toEqual({ eligible: true, maxAffiliateRate: 8, referralCode: 'D1', brandSlug: 'sachi' });
     prisma.variation.findMany.mockResolvedValue([{ affiliateRate: null, product: { storefrontId: 'sf1' } }]);
-    expect(await new BrandService(prisma, brandConfig).getShareToEarn('sachi', 'u1')).toMatchObject({ maxAffiliateRate: 0 });
+    expect(await new BrandService(prisma, brandConfig, noPairs).getShareToEarn('sachi', 'u1')).toMatchObject({ maxAffiliateRate: 0 });
   });
 });
 
@@ -229,20 +258,20 @@ describe('BrandService admin', () => {
   it('createBrand slugify tên tiếng Việt', async () => {
     const prisma = makePrisma();
     prisma.brand.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'b1', ...data }));
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.createBrand({ name: 'Dừa Bến Tre' });
     expect(out.slug).toBe('dua-ben-tre');
   });
 
   it('createBrand: tên toàn ký hiệu bị từ chối bằng lời tiếng Việt không nhắc "slug"', async () => {
-    const svc = new BrandService(makePrisma(), brandConfig);
+    const svc = new BrandService(makePrisma(), brandConfig, noPairs);
     const err = await svc.createBrand({ name: '!!!' }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err as BadRequestException).message).toBe('Tên nhãn cần có ít nhất một chữ cái hoặc chữ số.');
   });
 
   it('createBrand: link logo hay ảnh bìa sai thì lời báo gọi đúng tên ô, không lộ tên trường kỹ thuật', async () => {
-    const svc = new BrandService(makePrisma(), brandConfig);
+    const svc = new BrandService(makePrisma(), brandConfig, noPairs);
     const logo = await svc.createBrand({ name: 'Nhãn', logoUrl: 'http://x/a.png' }).catch((e: unknown) => e);
     const cover = await svc.createBrand({ name: 'Nhãn', coverUrl: 'http://x/b.png' }).catch((e: unknown) => e);
     expect((logo as BadRequestException).message).toBe('Logo chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).');
@@ -255,7 +284,7 @@ describe('BrandService admin', () => {
     prisma.brand.create.mockRejectedValue(dup());
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
     prisma.brand.update.mockRejectedValue(dup());
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const created = await svc.createBrand({ name: 'Dừa Bến Tre' }).catch((e: unknown) => e);
     const renamed = await svc.updateBrand('b1', { name: 'Dừa Bến Tre' }).catch((e: unknown) => e);
     for (const err of [created, renamed]) {
@@ -271,7 +300,7 @@ describe('BrandService admin', () => {
       prisma.brand.create.mockRejectedValue(dupOn(target));
       prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
       prisma.brand.update.mockRejectedValue(dupOn(target));
-      const err = await call(new BrandService(prisma, brandConfig)).catch((e: unknown) => e);
+      const err = await call(new BrandService(prisma, brandConfig, noPairs)).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ConflictException);
       return (err as ConflictException).message;
     };
@@ -300,14 +329,14 @@ describe('BrandService admin', () => {
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
     const dup = new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
     prisma.brand.update.mockRejectedValue(dup);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.updateBrand('b1', { tagline: 'Mới' })).rejects.toBe(dup);
   });
 
   it('updateBrand ném BadRequest nếu slug slugify ra rỗng (vd toàn ký tự đặc biệt)', async () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.updateBrand('b1', { slug: '!!!@@@' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.brand.update).not.toHaveBeenCalled();
   });
@@ -316,7 +345,7 @@ describe('BrandService admin', () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
     prisma.user.findUnique.mockResolvedValue(null); // userId gõ sai → không có user
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.updateBrand('b1', { ownerUserId: 'ghost' })).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.brand.update).not.toHaveBeenCalled();
   });
@@ -326,7 +355,7 @@ describe('BrandService admin', () => {
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
     prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
     prisma.brand.update.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await svc.updateBrand('b1', { ownerUserId: 'u1' });
     expect(prisma.brand.update.mock.calls[0][0].data.ownerUserId).toBe('u1');
   });
@@ -334,7 +363,7 @@ describe('BrandService admin', () => {
   it('verifyBrand set isVerified', async () => {
     const prisma = makePrisma();
     prisma.brand.update.mockResolvedValue({ id: 'b1', isVerified: true });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await svc.verifyBrand('b1', true);
     expect(prisma.brand.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { isVerified: true } });
   });
@@ -342,7 +371,7 @@ describe('BrandService admin', () => {
   it('listPromotions truy vấn theo brandId', async () => {
     const prisma = makePrisma();
     prisma.brandPromotion.findMany.mockResolvedValue([{ id: 'p1' }]);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.listPromotions('b1');
     expect(prisma.brandPromotion.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { brandId: 'b1' } }));
     expect(out).toHaveLength(1);
@@ -351,7 +380,7 @@ describe('BrandService admin', () => {
   it('createPromotion gắn brandId + ép Date', async () => {
     const prisma = makePrisma();
     prisma.brandPromotion.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.createPromotion('b1', { title: 'Sale', startAt: '2026-06-01', endAt: '2026-07-01' });
     expect(out.brandId).toBe('b1');
     expect(out.startAt).toBeInstanceOf(Date);
@@ -359,7 +388,7 @@ describe('BrandService admin', () => {
 
   it('SELLER-16: createPromotion ngày kết thúc không sau ngày bắt đầu → 400 tiếng Việt, không lưu', async () => {
     const prisma = makePrisma();
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     for (const [startAt, endAt] of [
       ['2026-10-14T00:00:00Z', '2026-10-10T00:00:00Z'],
       ['2026-10-14T00:00:00Z', '2026-10-14T00:00:00Z'],
@@ -379,7 +408,7 @@ describe('BrandService admin', () => {
       endAt: new Date('2026-10-20T00:00:00Z'),
       couponCode: null,
     });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.updatePromotion('p1', { endAt: '2026-10-10T00:00:00Z' })).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
     await expect(svc.updatePromotion('p1', { startAt: '2026-10-21T00:00:00Z' })).rejects.toThrow('Ngày kết thúc phải sau ngày bắt đầu.');
     expect(prisma.brandPromotion.update).not.toHaveBeenCalled();
@@ -390,7 +419,7 @@ describe('BrandService admin', () => {
   it('createDealerReward giữ type', async () => {
     const prisma = makePrisma();
     prisma.dealerReward.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'd1', ...data }));
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.createDealerReward({ type: 'TOUR', title: 'Tour Phú Quốc', threshold: 50000000 });
     expect(out.type).toBe('TOUR');
     expect(out.period).toBe('QUARTER');
@@ -402,7 +431,7 @@ describe('BrandService gán sản phẩm vào nhãn', () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
     prisma.product.updateMany.mockResolvedValue({ count: 2 });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.attachProducts('b1', ['p1', 'p2']);
     expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['p1', 'p2'] } }, data: { brandId: 'b1' } });
     expect(out).toEqual({ attached: 2 });
@@ -411,7 +440,7 @@ describe('BrandService gán sản phẩm vào nhãn', () => {
   it('attachProducts ném BadRequest nếu danh sách rỗng', async () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1' });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.attachProducts('b1', [])).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.product.updateMany).not.toHaveBeenCalled();
   });
@@ -419,7 +448,7 @@ describe('BrandService gán sản phẩm vào nhãn', () => {
   it('detachProducts chỉ gỡ SP đang thuộc đúng nhãn này (where brandId)', async () => {
     const prisma = makePrisma();
     prisma.product.updateMany.mockResolvedValue({ count: 1 });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.detachProducts('b1', ['p1']);
     expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['p1'] }, brandId: 'b1' }, data: { brandId: null } });
     expect(out).toEqual({ detached: 1 });
@@ -429,7 +458,7 @@ describe('BrandService gán sản phẩm vào nhãn', () => {
     const prisma = makePrisma();
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1', name: 'Sachi' });
     prisma.product.updateMany.mockResolvedValue({ count: 5 });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.linkProductsByName('b1');
     expect(prisma.product.updateMany).toHaveBeenCalledWith({ where: { brand: 'Sachi' }, data: { brandId: 'b1' } });
     expect(out).toEqual({ linked: 5 });
@@ -438,7 +467,7 @@ describe('BrandService gán sản phẩm vào nhãn', () => {
   it('listBrandProducts truy vấn theo brandId', async () => {
     const prisma = makePrisma();
     prisma.product.findMany.mockResolvedValue([{ id: 'p1', name: 'X' }]);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.listBrandProducts('b1');
     expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { brandId: 'b1' } }));
     expect(out).toHaveLength(1);
@@ -450,7 +479,7 @@ describe('BrandService follow nhãn', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 6 });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.followBrand('u1', 'sachi');
     expect(prisma.$transaction).toHaveBeenCalled();
     expect(out).toEqual({ following: true, followerCount: 6 });
@@ -461,7 +490,7 @@ describe('BrandService follow nhãn', () => {
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 6 });
     prisma.$transaction.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.followBrand('u1', 'sachi');
     expect(out.following).toBe(true);
   });
@@ -469,7 +498,7 @@ describe('BrandService follow nhãn', () => {
   it('followBrand NotFound nếu nhãn chưa publish', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue(null);
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await expect(svc.followBrand('u1', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -479,7 +508,7 @@ describe('BrandService follow nhãn', () => {
     prisma.brandFollow.deleteMany.mockResolvedValue({ count: 1 });
     prisma.brand.update.mockResolvedValue({});
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 5 });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.unfollowBrand('u1', 'sachi');
     expect(prisma.brand.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { followerCount: { decrement: 1 } } });
     expect(out).toEqual({ following: false, followerCount: 5 });
@@ -490,7 +519,7 @@ describe('BrandService follow nhãn', () => {
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
     prisma.brandFollow.deleteMany.mockResolvedValue({ count: 0 });
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ followerCount: 5 });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     await svc.unfollowBrand('u1', 'sachi');
     expect(prisma.brand.update).not.toHaveBeenCalled();
   });
@@ -499,7 +528,7 @@ describe('BrandService follow nhãn', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', followerCount: 9 });
     prisma.brandFollow.findUnique.mockResolvedValue({ id: 'f1' });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
     const out = await svc.followState('u1', 'sachi');
     expect(out).toEqual({ following: true, followerCount: 9 });
   });
@@ -509,14 +538,14 @@ describe('BrandService brand-owner tự quản', () => {
   it('getOwnedBrand: trả null (không 404) nếu user không sở hữu nhãn', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue(null);
-    await expect(new BrandService(prisma, brandConfig).getOwnedBrand('u1')).resolves.toBeNull();
+    await expect(new BrandService(prisma, brandConfig, noPairs).getOwnedBrand('u1')).resolves.toBeNull();
   });
 
   it('getOwnedBrand: trả nhãn + promotions (1 query include, orderBy tất định)', async () => {
     const prisma = makePrisma();
     // Refactor: promotions lấy qua include trên brand.findFirst (không còn findMany riêng).
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', name: 'N', ownerUserId: 'u1', promotions: [{ id: 'p1' }] });
-    const out = await new BrandService(prisma, brandConfig).getOwnedBrand('u1');
+    const out = await new BrandService(prisma, brandConfig, noPairs).getOwnedBrand('u1');
     expect(out?.id).toBe('b1');
     expect(out?.promotions).toHaveLength(1);
     // Tất định: orderBy createdAt asc (chống non-deterministic khi 1 user sở hữu >1 nhãn).
@@ -527,7 +556,7 @@ describe('BrandService brand-owner tự quản', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
     prisma.brand.update.mockResolvedValue({});
-    await new BrandService(prisma, brandConfig).updateOwnedBrand('u1', { logoUrl: 'https://cdn.x/L.png', story: 'S', name: 'HACK', isVerified: true, isPublished: true } as any);
+    await new BrandService(prisma, brandConfig, noPairs).updateOwnedBrand('u1', { logoUrl: 'https://cdn.x/L.png', story: 'S', name: 'HACK', isVerified: true, isPublished: true } as any);
     const data = prisma.brand.update.mock.calls[0][0].data;
     expect(data).toEqual({ logoUrl: 'https://cdn.x/L.png', story: 'S' });
     expect(data.name).toBeUndefined();
@@ -548,7 +577,7 @@ describe('BrandService brand-owner tự quản', () => {
       prisma.brand.findUniqueOrThrow.mockResolvedValue(row);
       prisma.brand.findFirst.mockResolvedValue(row);
       prisma.brand.update.mockResolvedValue({});
-      await run(new BrandService(prisma, brandConfig), { logoUrl: OLD_HTTP, coverUrl: OLD_SVG, tagline: 'Mới' });
+      await run(new BrandService(prisma, brandConfig, noPairs), { logoUrl: OLD_HTTP, coverUrl: OLD_SVG, tagline: 'Mới' });
       expect(prisma.brand.update.mock.calls[0][0].data).toMatchObject({ tagline: 'Mới' });
     });
 
@@ -560,7 +589,7 @@ describe('BrandService brand-owner tự quản', () => {
       const row = { id: 'b1', ownerUserId: 'u1', logoUrl: null, coverUrl: null };
       prisma.brand.findUniqueOrThrow.mockResolvedValue(row);
       prisma.brand.findFirst.mockResolvedValue(row);
-      const svc = new BrandService(prisma, brandConfig);
+      const svc = new BrandService(prisma, brandConfig, noPairs);
       for (const bad of ['http://x/a.png', OLD_SVG, 'javascript:alert(1)']) {
         await expect(run(svc, { logoUrl: bad })).rejects.toBeInstanceOf(BadRequestException);
         await expect(run(svc, { coverUrl: bad })).rejects.toBeInstanceOf(BadRequestException);
@@ -571,7 +600,7 @@ describe('BrandService brand-owner tự quản', () => {
     it('tạo nhãn mới: ảnh sai bị từ chối, https và ảnh tải lên được nhận', async () => {
       const prisma = makePrisma();
       prisma.brand.create.mockImplementation(({ data }: any) => Promise.resolve(data));
-      const svc = new BrandService(prisma, brandConfig);
+      const svc = new BrandService(prisma, brandConfig, noPairs);
       await expect(svc.createBrand({ name: 'Nhãn', logoUrl: 'http://x/a.png' })).rejects.toBeInstanceOf(BadRequestException);
       await svc.createBrand({ name: 'Nhãn', logoUrl: 'https://cdn.x/a.png', coverUrl: 'data:image/png;base64,iVBORw0KGgo=' });
       expect(prisma.brand.create).toHaveBeenCalledTimes(1);
@@ -582,7 +611,7 @@ describe('BrandService brand-owner tự quản', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
     prisma.brandPromotion.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));
-    const out = await new BrandService(prisma, brandConfig).createOwnedPromotion('u1', { title: 'Sale', startAt: '2026-06-01', endAt: '2026-07-01' });
+    const out = await new BrandService(prisma, brandConfig, noPairs).createOwnedPromotion('u1', { title: 'Sale', startAt: '2026-06-01', endAt: '2026-07-01' });
     expect(out.brandId).toBe('b1');
   });
 
@@ -590,7 +619,7 @@ describe('BrandService brand-owner tự quản', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
     prisma.brandPromotion.findUnique.mockResolvedValue({ id: 'p9', brandId: 'OTHER' });
-    await expect(new BrandService(prisma, brandConfig).updateOwnedPromotion('u1', 'p9', { title: 'x' })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(new BrandService(prisma, brandConfig, noPairs).updateOwnedPromotion('u1', 'p9', { title: 'x' })).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.brandPromotion.update).not.toHaveBeenCalled();
   });
 
@@ -599,7 +628,7 @@ describe('BrandService brand-owner tự quản', () => {
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
     prisma.brandPromotion.findUnique.mockResolvedValue({ id: 'p1', brandId: 'b1' });
     prisma.brandPromotion.delete.mockResolvedValue({});
-    const out = await new BrandService(prisma, brandConfig).deleteOwnedPromotion('u1', 'p1');
+    const out = await new BrandService(prisma, brandConfig, noPairs).deleteOwnedPromotion('u1', 'p1');
     expect(out).toEqual({ ok: true });
   });
 });
@@ -607,7 +636,7 @@ describe('BrandService brand-owner tự quản', () => {
 describe('BrandService.listBrands — select gọn (L3-17)', () => {
   it('không chọn storyImages (ảnh câu chuyện có thể là base64); vẫn đủ cột màn quản trị nhãn dùng', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    await new BrandService(makePrisma({ brand: { findMany } }), brandConfig).listBrands();
+    await new BrandService(makePrisma({ brand: { findMany } }), brandConfig, noPairs).listBrands();
     const arg = findMany.mock.calls[0]![0];
     expect(arg.orderBy).toEqual({ createdAt: 'desc' });
     expect(arg.select).toBeDefined();
@@ -632,7 +661,7 @@ describe('BrandService: chứng nhận lưu dạng object thuần', () => {
     prisma.brand.create.mockResolvedValue({ id: 'b1' });
     prisma.brand.findUniqueOrThrow.mockResolvedValue({ id: 'b1', logoUrl: null, coverUrl: null });
     prisma.brand.update.mockResolvedValue({ id: 'b1' });
-    const svc = new BrandService(prisma, brandConfig);
+    const svc = new BrandService(prisma, brandConfig, noPairs);
 
     await svc.createBrand({ name: 'Tubu', certifications: [new CertDto()] });
     const created = prisma.brand.create.mock.calls[0][0].data.certifications as unknown[];

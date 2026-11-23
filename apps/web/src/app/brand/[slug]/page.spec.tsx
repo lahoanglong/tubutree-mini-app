@@ -105,6 +105,32 @@ describe('trang thương hiệu /brand/[slug] — lối vào Tiết kiệm với
     expect(link(await html())).not.toBeNull();
   });
 
+  it('API trả refillProductSlugs (xét mọi sản phẩm của nhãn): có link dù cặp của nhãn nằm ngoài 30 món trang nhận; hasRefillProducts=false thì không', async () => {
+    mocks.landing = { enabled: true, pairs: [refillPair('chai-mon-45', 'tui-mon-45')] };
+    mocks.brand = { ...BRAND, hasRefillProducts: true, refillProductSlugs: ['chai-mon-45'] };
+    expect(link(await html())?.getAttribute('href')).toBe('/tiet-kiem-refill');
+    mocks.brand = { ...BRAND, hasRefillProducts: false, refillProductSlugs: [] };
+    mocks.landing = { enabled: true, pairs: [refillPair('nuoc-rua-chen', 'refill-nuoc-rua-chen-2l')] };
+    expect(link(await html())).toBeNull();
+  });
+
+  it('nhãn có cặp trong bảng nhưng trang Refill không hiện cặp đó (gói không rẻ hơn, ngoài 60 cặp đầu): không có link', async () => {
+    mocks.brand = { ...BRAND, hasRefillProducts: true, refillProductSlugs: ['chai-mon-45', 'tui-mon-45'] };
+    mocks.landing = { enabled: true, pairs: [refillPair('chai-nhan-khac', 'tui-nhan-khac')] };
+    expect(link(await html())).toBeNull();
+    const pricier = refillPair('chai-mon-45', 'tui-mon-45');
+    mocks.landing = { enabled: true, pairs: [{ ...pricier, refill: { ...pricier.refill, price: 400_000 }, savingPct: null }] };
+    expect(link(await html())).toBeNull();
+  });
+
+  it('hasRefillProducts=true nhưng trang Refill rỗng (cờ tắt) hay lỗi: không có link', async () => {
+    mocks.brand = { ...BRAND, hasRefillProducts: true, refillProductSlugs: ['chai-mon-45'] };
+    mocks.landing = { enabled: false, pairs: [] };
+    expect(link(await html())).toBeNull();
+    mocks.landing = new Error('down');
+    expect(link(await html())).toBeNull();
+  });
+
   it('nhãn không có hàng trên trang Refill, cờ tắt (rỗng) hay API Refill lỗi: không có link, trang vẫn dựng', async () => {
     mocks.landing = { enabled: true, pairs: [refillPair('chai-nhan-khac', 'tui-nhan-khac')] };
     expect(link(await html())).toBeNull();
@@ -172,12 +198,32 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect(wrap.getAttribute('style')).toContain('right:var(--space-inline-md)');
   });
 
-  it('có BreadcrumbList JSON-LD Trang chủ › nhãn', async () => {
+  it('JSON-LD là một @graph CollectionPage (tên nhãn không dấu ✓, ItemList các thẻ nổi bật trong HTML) + BreadcrumbList Trang chủ › nhãn', async () => {
     const box = await html();
     const ld = Array.from(box.querySelectorAll('script[type="application/ld+json"]')).map((s) => JSON.parse(s.textContent!));
-    const crumbs = ld.find((d) => d['@type'] === 'BreadcrumbList');
+    expect(ld).toHaveLength(1);
+    const [page, crumbs] = ld[0]['@graph'];
+    expect(page).toMatchObject({ '@type': 'CollectionPage', url: 'https://app.tubutree.com/brand/bo-hon', name: 'Bồ Hòn Xanh', inLanguage: 'vi' });
+    expect(page.mainEntity.itemListElement).toEqual([
+      { '@type': 'ListItem', position: 1, url: 'https://app.tubutree.com/san-pham/nuoc-rua-chen', name: 'Nước rửa chén' },
+    ]);
+    expect(crumbs['@type']).toBe('BreadcrumbList');
     expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Bồ Hòn Xanh']);
     expect(crumbs.itemListElement[1].item).toBe('https://app.tubutree.com/brand/bo-hon');
+  });
+
+  it('ItemList chỉ gồm 10 thẻ nổi bật của tab Shop (đúng các thẻ trong HTML máy chủ), không đủ 30 món của API', async () => {
+    mocks.brand = { ...BRAND, products: Array.from({ length: 30 }, (_, i) => ({ ...BRAND.products[0]!, id: `p${i}`, slug: `sp-${i}`, name: `SP ${i}` })) };
+    const box = await html();
+    const ld = JSON.parse(box.querySelector('script[type="application/ld+json"]')!.textContent!);
+    expect(ld['@graph'][0].mainEntity.numberOfItems).toBe(10);
+  });
+
+  it('metadata có thẻ twitter cùng tiêu đề với og; ảnh bìa nhãn đi vào cả og lẫn twitter', async () => {
+    mocks.brand = { ...BRAND, coverUrl: 'https://cdn.test/bia.jpg' };
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: 'bo-hon' }) });
+    expect(meta.twitter).toMatchObject({ card: 'summary_large_image', title: 'Bồ Hòn Xanh ✓ — Tubu Tree', images: ['https://cdn.test/bia.jpg'] });
+    expect((meta.openGraph as { images: unknown[] }).images).toEqual(['https://cdn.test/bia.jpg']);
   });
 
   it('bìa phẳng token, avatar là biểu tượng lá không chữ cái, không còn gradient', async () => {

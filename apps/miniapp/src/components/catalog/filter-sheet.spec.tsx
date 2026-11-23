@@ -11,12 +11,12 @@ import { FilterSheet, applyLabel } from './filter-sheet';
 const BRANDS = [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }];
 const page = (total: number, filtersIgnored = false) => ({ data: [], meta: { page: 1, limit: 1, total }, filtersIgnored });
 
-function renderSheet(props: { open: boolean; state?: SearchState; onApply?: () => void; onClose?: () => void }) {
+function renderSheet(props: { open: boolean; state?: SearchState; onApply?: () => void; onClose?: () => void; refillOn?: boolean }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const all = { state: EMPTY_SEARCH_STATE, onApply: vi.fn(), onClose: vi.fn(), brands: BRANDS, ...props };
   const ui = (p: typeof all) => (
     <QueryClientProvider client={qc}>
-      <FilterSheet open={p.open} onClose={p.onClose} state={p.state} brands={p.brands} onApply={p.onApply} />
+      <FilterSheet open={p.open} onClose={p.onClose} state={p.state} brands={p.brands} onApply={p.onApply} refillOn={p.refillOn} />
     </QueryClientProvider>
   );
   const r = render(ui(all));
@@ -225,5 +225,43 @@ describe('FilterSheet', () => {
     );
     await screen.findByRole('group', { name: 'Khoảng giá' });
     expect(screen.queryByRole('group', { name: 'Thương hiệu' })).not.toBeInTheDocument();
+  });
+});
+
+describe('FilterSheet — "Đang ưu đãi" và "Có bản Refill" (w21-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchCatalog.mockResolvedValue(page(7));
+  });
+
+  it('cờ Refill bật: hai ô ở nhóm Tình trạng; chọn cả hai thì số đếm và nháp áp dụng mang onSale/hasRefill', async () => {
+    const p = renderSheet({ open: true, refillOn: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Đang ưu đãi' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Có bản Refill' }));
+    expect(screen.getByRole('group', { name: 'Tình trạng' })).toHaveTextContent('Chỉ hiện còn hàngĐang ưu đãiCó bản Refill');
+    mocks.fetchCatalog.mockResolvedValue(page(4));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem 4 sản phẩm' }, { timeout: 2000 }));
+    expect(mocks.fetchCatalog).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 1, onSale: true, hasRefill: true }));
+    expect(p.onApply).toHaveBeenCalledWith(expect.objectContaining({ onSale: true, hasRefill: true }));
+  });
+
+  it('cờ Refill tắt: "Đang ưu đãi" vẫn mời, "Có bản Refill" thì không', async () => {
+    renderSheet({ open: true });
+    expect(await screen.findByRole('button', { name: 'Đang ưu đãi' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Có bản Refill' })).not.toBeInTheDocument();
+  });
+
+  it('link mang sẵn hai bộ lọc khi cờ tắt: ô vẫn hiện, đang chọn; "Xoá bộ lọc" bỏ cả hai khỏi số đếm và nháp', async () => {
+    const p = renderSheet({ open: true, state: { ...EMPTY_SEARCH_STATE, onSale: true, hasRefill: true } });
+    expect(await screen.findByRole('button', { name: 'Có bản Refill' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Đang ưu đãi' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá bộ lọc' }));
+    expect(screen.getByRole('button', { name: 'Có bản Refill' })).toHaveAttribute('aria-pressed', 'false');
+    mocks.fetchCatalog.mockResolvedValue(page(9));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem 9 sản phẩm' }, { timeout: 2000 }));
+    const last = mocks.fetchCatalog.mock.calls.at(-1)![0];
+    expect(last).not.toHaveProperty('onSale');
+    expect(last).not.toHaveProperty('hasRefill');
+    expect(p.onApply).toHaveBeenCalledWith(expect.objectContaining({ onSale: undefined, hasRefill: undefined }));
   });
 });

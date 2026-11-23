@@ -35,6 +35,7 @@ import { SearchField } from '../components/ui/search-field';
 import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
 import { useNavigationType } from '../hooks/use-navigation-type';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { useScrollRestoration } from '../hooks/use-scroll-restoration';
 import { useSearchState } from '../hooks/use-search-state';
 import { useAuthStore } from '../store/auth';
@@ -159,6 +160,7 @@ export default function BrowsePage() {
   const suggest = useSuggest(editing ? draft : '');
   const popular = usePopularSearches(editing);
   const chatOn = usePublicConfig().chat?.enabled === true;
+  const refillOn = refillFirstOn(usePublicConfig());
 
   // Hub không tải danh sách: `enabled` chặn cả lần tải đầu lẫn `refetch` tự động.
   const products = useInfiniteQuery({
@@ -266,7 +268,7 @@ export default function BrowsePage() {
   const applyFilters = (d: FilterDraft) => {
     for (const t of changedFilterTypes(state, d)) trackFilterApplied(t);
     setFiltersOpen(false);
-    updateList({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
+    updateList({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating, onSale: d.onSale, hasRefill: d.hasRefill });
   };
 
   const hub = hubState;
@@ -523,7 +525,7 @@ export default function BrowsePage() {
         </>
       )}
 
-      <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brands.data ?? []} onApply={applyFilters} />
+      <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brands.data ?? []} onApply={applyFilters} refillOn={refillOn} />
     </Page>
   );
 }

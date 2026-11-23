@@ -82,6 +82,51 @@ describe('generateMetadata', () => {
   });
 });
 
+describe('/ban-chay — og/twitter và JSON-LD CollectionPage (w21-01)', () => {
+  const ldOf = (html: string) => {
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    return Array.from(box.querySelectorAll('script[type="application/ld+json"]')).map((x) => JSON.parse(x.textContent!));
+  };
+
+  it('trang lập chỉ mục có thẻ twitter cùng tiêu đề và mô tả với og', async () => {
+    const m = await generateMetadata({ searchParams: sp({ page: '2' }) });
+    expect(m.openGraph).toMatchObject({ url: '/ban-chay?page=2', title: 'Bán chạy nhất — Trang 2 — Tubu Tree', description: m.description });
+    expect(m.twitter).toMatchObject({ card: 'summary_large_image', title: 'Bán chạy nhất — Trang 2 — Tubu Tree', description: m.description });
+  });
+
+  it('trang trơn: một @graph CollectionPage (ItemList đúng các món trong HTML) + BreadcrumbList Trang chủ › Bán chạy nhất', async () => {
+    catalog = () => pageOf([PRODUCT, { ...PRODUCT, id: 'p2', slug: 'sua-tam', name: 'Sữa tắm' }], 2);
+    const [ld] = ldOf(await render({}));
+    const [page, crumbs] = ld['@graph'];
+    expect(page).toMatchObject({ '@type': 'CollectionPage', url: 'https://app.tubutree.com/ban-chay', name: 'Bán chạy nhất' });
+    expect(page.mainEntity.itemListElement.map((i: { position: number; url: string }) => [i.position, i.url])).toEqual([
+      [1, 'https://app.tubutree.com/san-pham/dau-goi'],
+      [2, 'https://app.tubutree.com/san-pham/sua-tam'],
+    ]);
+    expect(crumbs.itemListElement.map((i: { name: string }) => i.name)).toEqual(['Trang chủ', 'Bán chạy nhất']);
+  });
+
+  it('?page=2: vị trí nối tiếp trang trước (21…); ?category= (noindex) không khai JSON-LD', async () => {
+    catalog = () => pageOf([PRODUCT], 21, 2);
+    const [ld] = ldOf(await render({ page: '2' }));
+    expect(ld['@graph'][0].mainEntity.itemListElement[0].position).toBe(21);
+    expect(ld['@graph'][0].url).toBe('https://app.tubutree.com/ban-chay?page=2');
+    catalog = () => pageOf([PRODUCT], 1);
+    expect(ldOf(await render({ category: 'c-goi' }))).toEqual([]);
+  });
+
+  it('kệ "Tubu chọn cho bạn": ItemList chỉ gồm món ghim mà view vẽ, vị trí từ 1, không kèm dòng xếp hạng phía sau', async () => {
+    const pin = (id: string) => ({ ...PRODUCT, id, slug: id, curated: true });
+    catalog = () => pageOf([pin('ghim-a'), pin('ghim-b'), { ...PRODUCT, id: 'p3', slug: 'xep-hang' }], 3);
+    const [ld] = ldOf(await render({}));
+    expect(ld['@graph'][0].mainEntity.itemListElement.map((i: { position: number; url: string }) => [i.position, i.url])).toEqual([
+      [1, 'https://app.tubutree.com/san-pham/ghim-a'],
+      [2, 'https://app.tubutree.com/san-pham/ghim-b'],
+    ]);
+  });
+});
+
 describe('BestSellersPage (server)', () => {
   it('không tham số: tải cây danh mục rồi trang 1 (sort 30 ngày, 20 món), không category', async () => {
     await render({});

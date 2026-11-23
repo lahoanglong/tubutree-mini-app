@@ -165,6 +165,15 @@ describe('shop-api — buy-flow 4b', () => {
     await expect(fetchCatalog({ page: 1, limit: 30, inStock: true })).rejects.toThrow('500');
   });
 
+  it('catalogParams gửi onSale/hasRefill ("Đang ưu đãi", "Có bản Refill") khi bật; API cũ trả 400 thì gọi lại không kèm chúng', async () => {
+    expect(catalogParams({ page: 1, limit: 20, onSale: true, hasRefill: true })).toEqual({ page: 1, limit: 20, onSale: 'true', hasRefill: 'true' });
+    expect(catalogParams({ page: 1, limit: 20, onSale: false, hasRefill: false })).toEqual({ page: 1, limit: 20 });
+    get.mockRejectedValueOnce(badRequest()).mockResolvedValueOnce({ data: PAGE });
+    const r = await fetchCatalog({ page: 1, limit: 20, onSale: true, hasRefill: true, brand: 'Tubu' });
+    expect(r.filtersIgnored).toBe(true);
+    expect(get).toHaveBeenLastCalledWith('/products', { params: { page: 1, limit: 20, brand: 'Tubu' } });
+  });
+
   it('catalogParams gửi seed (ngày VN) khi có; fetchCatalog gặp 400 thì gọi lại không kèm seed', async () => {
     expect(catalogParams({ page: 1, limit: 20, seed: '20261101' })).toEqual({ page: 1, limit: 20, seed: '20261101' });
     get.mockRejectedValueOnce(badRequest()).mockResolvedValueOnce({ data: PAGE });

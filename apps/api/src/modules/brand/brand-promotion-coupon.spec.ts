@@ -1,8 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { BrandService } from './brand.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import type { RefillPairsService } from '../catalog/refill/refill-pairs.service';
 
 const brandConfig = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+/** Bảng cặp Refill rỗng: các ca không xét cờ `hasRefillProducts` của trang thương hiệu. */
+const noPairs = { pairs: async () => new Map<string, string>() } as unknown as RefillPairsService;
 
 function makePrisma() {
   return {
@@ -27,7 +30,7 @@ describe('BrandService khuyến mãi gắn mã giảm giá (C-006)', () => {
     prisma.coupon.findFirst.mockResolvedValue(c);
     prisma.brandPromotion.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));
     prisma.brandPromotion.update.mockImplementation(({ data }: any) => Promise.resolve({ id: 'p1', ...data }));
-    return { prisma, svc: new BrandService(prisma, brandConfig) };
+    return { prisma, svc: new BrandService(prisma, brandConfig, noPairs) };
   };
 
   it('createPromotion: mã không tồn tại -> 400, không ghi DB', async () => {
@@ -127,7 +130,7 @@ describe('BrandService khuyến mãi gắn mã giảm giá (C-006)', () => {
         coupon({ code: 'RIENGTU', scope: 'USER_GROUP' }),
         coupon({ code: 'SAPTOI', startAt: new Date(NOW.getTime() + DAY) }),
       ]);
-      const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+      const out = await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW);
       const byId = Object.fromEntries(out.promotions.map((p) => [p.id, p.couponCode]));
       expect(byId).toEqual({ ok: 'TUBU20', ghost: null, old: null, full: null, priv: null, future: null, none: null, lower: 'TUBU20' });
       expect(out.promotions).toHaveLength(8);
@@ -137,7 +140,7 @@ describe('BrandService khuyến mãi gắn mã giảm giá (C-006)', () => {
       const prisma = makePrisma();
       prisma.brand.findFirst.mockResolvedValue(brand);
       prisma.brandPromotion.findMany.mockResolvedValue([promo('a', null)]);
-      await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+      await new BrandService(prisma, brandConfig, noPairs).getPublicBySlug('sachi', NOW);
       expect(prisma.coupon.findMany).not.toHaveBeenCalled();
     });
   });

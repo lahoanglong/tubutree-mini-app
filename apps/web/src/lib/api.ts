@@ -352,6 +352,13 @@ export interface BrandDetail {
   followerCount: number;
   /** Tổng sản phẩm công khai của thương hiệu; API cũ hoặc bản cache cũ không trả: dùng `products.length`. */
   productCount?: number;
+  /**
+   * Có sản phẩm công khai (xét mọi sản phẩm, không riêng 30 món của `products`) nằm trong bảng cặp Refill: chai có gói Refill, hoặc chính gói.
+   * API trước w21-01 không trả: trang dò theo `products`.
+   */
+  hasRefillProducts?: boolean;
+  /** Slug các sản phẩm đó (tối đa 200), để khớp với cặp trang "Tiết kiệm với Refill" thật sự hiện. API trước w21-01 không trả. */
+  refillProductSlugs?: string[];
   certifications: { code: string; label: string; proofUrl?: string | null }[];
   promotions: {
     id: string;

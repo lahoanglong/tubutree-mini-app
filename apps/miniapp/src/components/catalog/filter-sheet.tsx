@@ -1,10 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { offeredIntentFilters } from '@tubutree/app-core/browse/intent-filters';
 import { fetchCatalog, type CatalogPage } from '../../services/shop-api';
 import { vi } from '../../i18n/vi';
 import { useDebounced } from '../../utils/use-debounced';
 import {
-  MIN_RATING_OPTION, PRICE_RANGES, draftFromState, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery,
+  EMPTY_FILTER_DRAFT, MIN_RATING_OPTION, PRICE_RANGES, draftFromState, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery,
   type FilterDraft, type SearchState,
 } from '../../utils/search-state';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -28,17 +29,19 @@ export interface FilterSheetProps {
   state: SearchState;
   brands: { brand: string; count: number }[];
   onApply: (draft: FilterDraft) => void;
+  /** Cờ `catalog.refill_first_enabled`: tắt thì không mời "Có bản Refill" (link đang mang sẵn bộ lọc đó vẫn hiện để bỏ chọn). */
+  refillOn?: boolean;
 }
 
 /**
- * Bộ lọc trong BottomSheet (spec 5b.2): khoảng giá, chỉ còn hàng, đánh giá ≥4, thương hiệu; áp dụng
+ * Bộ lọc trong BottomSheet (spec 5b.2): khoảng giá, tình trạng (còn hàng, đang ưu đãi, có bản Refill), đánh giá ≥4, thương hiệu; áp dụng
  * bằng nút có số kết quả. Nháp khởi tạo NGAY trong lượt render mở sheet (bài học ReorderSheet 4a:
  * không lộ 1 khung hình nháp cũ) và GIỮ NGUYÊN khi đóng (nội dung không trống lúc trượt xuống).
  *
  * Sự kiện `filter_applied` do trang Browse bắn trong `onApply` (nó có `state` trước khi đổi);
  * sheet chỉ bảo đảm `onApply` được gọi đúng MỘT lần cho mỗi nháp (chạm đúp không gửi hai lần).
  */
-export function FilterSheet({ open, onClose, state, brands, onApply }: FilterSheetProps) {
+export function FilterSheet({ open, onClose, state, brands, onApply, refillOn = false }: FilterSheetProps) {
   const [draft, setDraft] = useState<FilterDraft>(() => draftFromState(state));
   // Chống chạm đúp ĐỒNG BỘ: cùng một nháp (cùng tham chiếu) chỉ áp dụng một lần; sửa nháp → tham chiếu mới.
   const appliedDraft = useRef<FilterDraft | null>(null);
@@ -89,7 +92,7 @@ export function FilterSheet({ open, onClose, state, brands, onApply }: FilterShe
       size="auto"
       footer={
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="ghost" onPress={() => setDraft({ brands: [], inStock: false })} style={{ minWidth: 0 }}>
+          <Button variant="ghost" onPress={() => setDraft(EMPTY_FILTER_DRAFT)} style={{ minWidth: 0 }}>
             {vi.browse.filter.reset}
           </Button>
           <Button onPress={apply} aria-busy={countBusy || undefined} style={{ minWidth: 0, flex: 1, fontVariantNumeric: 'tabular-nums' }}>
@@ -122,6 +125,11 @@ export function FilterSheet({ open, onClose, state, brands, onApply }: FilterShe
         <Chip selected={draft.inStock} onPress={() => setDraft((d) => ({ ...d, inStock: !d.inStock }))}>
           {vi.browse.filter.inStock}
         </Chip>
+        {offeredIntentFilters(refillOn, state).map((f) => (
+          <Chip key={f.key} selected={draft[f.key] === true} onPress={() => setDraft((d) => ({ ...d, [f.key]: d[f.key] ? undefined : true }))}>
+            {f.label}
+          </Chip>
+        ))}
       </FilterGroup>
       <FilterGroup title={vi.browse.filter.rating}>
         <Chip

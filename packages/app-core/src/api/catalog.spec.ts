@@ -132,6 +132,22 @@ describe('catalog — hợp đồng gọi API', () => {
     expect(catalogParams({ page: 1, limit: 1, inStock: false })).not.toHaveProperty('inStock');
   });
 
+  it('catalogParams: onSale/hasRefill gửi "true" khi bật, vắng khi tắt (API cũ không bị 400 vì bộ lọc khách không dùng)', () => {
+    expect(catalogParams({ page: 1, limit: 20, onSale: true, hasRefill: true })).toEqual({ page: 1, limit: 20, onSale: 'true', hasRefill: 'true' });
+    expect(catalogParams({ page: 1, limit: 20, onSale: false, hasRefill: false })).toEqual({ page: 1, limit: 20 });
+  });
+
+  it('fetchCatalog: API trước w21-01 trả 400 cho onSale/hasRefill → tải lại không kèm chúng, filtersIgnored=true', async () => {
+    let n = 0;
+    const { http, calls } = fakeHttp(() => {
+      if (n++ === 0) throw Object.assign(new Error('x'), { status: 400 });
+      return page(0, []);
+    });
+    const r = await fetchCatalog(http, { page: 1, limit: 5, onSale: true, hasRefill: true, brand: 'a' });
+    expect(r.filtersIgnored).toBe(true);
+    expect(calls[1]!.opts!.query).toEqual({ page: 1, limit: 5, brand: 'a' });
+  });
+
   it('catalogParams: gửi nguyên sort Bán chạy nhất 30 ngày (best_seller_30d) kèm danh mục cha', () => {
     expect(catalogParams({ page: 1, limit: 10, sort: 'best_seller_30d', category: 'cha' })).toEqual({ page: 1, limit: 10, sort: 'best_seller_30d', category: 'cha' });
   });

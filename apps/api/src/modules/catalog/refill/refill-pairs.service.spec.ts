@@ -26,7 +26,7 @@ function build(flag: unknown, cfg: Record<string, unknown> = {}, stored: Record<
     product: { findMany: jest.fn(async () => products) },
     $queryRaw: jest.fn(async (..._args: unknown[]) => [{ id: 'bottle' }] as { id: string }[]),
   };
-  const catalog = { cardsByIds: jest.fn(async (..._args: unknown[]) => [CARD] as (typeof CARD)[]) };
+  const catalog = { cardsByIds: jest.fn(async (..._args: unknown[]) => [CARD] as (typeof CARD)[]), clearRefillPairIds: jest.fn() };
   let on = flag;
   const config = {
     get: jest.fn(async (key: string, def: unknown) => (key === REFILL_FIRST_ENABLED_KEY ? on : key in cfg ? cfg[key] : def)),
@@ -214,11 +214,12 @@ describe('RefillPairsService: thẻ admin Cặp Refill (tubu-w6-01 P1-a)', () =>
     expect([...(await svc.pairs())]).toEqual([]);
   });
 
-  it('ghép tay đã ghi rồi bước ghi cờ lỗi: lần lưu báo lỗi nhưng bảng cặp trong bộ nhớ vẫn bỏ, lần hỏi sau thấy cặp vừa ghép', async () => {
-    const { svc, config } = build(true);
+  it('ghép tay đã ghi rồi bước ghi cờ lỗi: lần lưu báo lỗi nhưng bảng cặp trong bộ nhớ vẫn bỏ (cả bản của bộ lọc "Có bản Refill"), lần hỏi sau thấy cặp vừa ghép', async () => {
+    const { svc, config, catalog } = build(true);
     expect([...(await svc.pairs())]).toEqual([['bottle', 'refill']]);
     config.set.mockRejectedValueOnce(new Error('mất kết nối DB'));
     await expect(svc.adminSave({ enabled: true, add: { bottleSlug: 'nuoc-rua-chen-fuwa3e-500ml', refillSlug: 'refill-nuoc-rua-chen-fuwa3e-10l' } }, 'a')).rejects.toThrow('mất kết nối DB');
+    expect(catalog.clearRefillPairIds).toHaveBeenCalledTimes(1);
     expect([...(await svc.pairs())]).toEqual([
       ['bottle', 'refill'],
       ['small', 'refill'],

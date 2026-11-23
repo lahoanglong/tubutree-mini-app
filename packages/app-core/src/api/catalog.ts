@@ -97,6 +97,10 @@ export interface CatalogQuery {
   maxPrice?: number;
   inStock?: boolean;
   minRating?: number;
+  /** "Đang ưu đãi": thẻ đang gạch giá (giảm giá hoặc Giờ vàng). API trước w21-01 không biết tham số này. */
+  onSale?: boolean;
+  /** "Có bản Refill": chai có gói Refill và chính gói đó. API trước w21-01 không biết tham số này. */
+  hasRefill?: boolean;
   /** Ngày VN `YYYYMMDD` (`vnDateSeed`): xoay thứ tự mặc định ổn định trong ngày cho Gợi ý hôm nay. API cũ không biết tham số này. */
   seed?: string;
 }
@@ -216,7 +220,7 @@ export const suggestProducts = (http: HttpClient, q: string) =>
 export const fetchCategories = (http: HttpClient) => http.get<CategoryDTO[]>('/categories');
 
 /** Tham số mà API trước 4b không biết — ValidationPipe `forbidNonWhitelisted` trả 400 nếu gửi. */
-const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating', 'seed'] as const;
+const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating', 'seed', 'onSale', 'hasRefill'] as const;
 
 /** Chỉ gửi tham số có giá trị — API cũ không bị 400 vì những bộ lọc khách không dùng. */
 export function catalogParams(query: CatalogQuery): Record<string, string | number> {
@@ -231,6 +235,8 @@ export function catalogParams(query: CatalogQuery): Record<string, string | numb
   if (query.maxPrice != null) params.maxPrice = query.maxPrice;
   if (query.inStock) params.inStock = 'true';
   if (query.minRating != null) params.minRating = query.minRating;
+  if (query.onSale) params.onSale = 'true';
+  if (query.hasRefill) params.hasRefill = 'true';
   if (query.seed) params.seed = query.seed;
   return params;
 }

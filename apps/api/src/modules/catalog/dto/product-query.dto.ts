@@ -44,6 +44,14 @@ export class ProductQuery extends PaginationQuery {
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(5)
   minRating?: number;
 
+  /** "Có bản Refill": chai có gói Refill trong bảng cặp đang hiệu lực, và chính các gói Refill đó. */
+  @IsOptional() @Transform(toQueryBool) @IsBoolean()
+  hasRefill?: boolean;
+
+  /** "Đang ưu đãi": giá trên thẻ thấp hơn giá niêm yết (phân loại đại diện đang giảm giá, hoặc suất Giờ vàng còn rẻ hơn). */
+  @IsOptional() @Transform(toQueryBool) @IsBoolean()
+  onSale?: boolean;
+
   /** Ngày VN `YYYYMMDD`: xoay thứ tự mặc định (không `sort`, không `q`) ổn định trong ngày. Bỏ qua khi khách đã chọn cách sắp. */
   @IsOptional() @IsString() @Matches(SEED_PATTERN)
   seed?: string;

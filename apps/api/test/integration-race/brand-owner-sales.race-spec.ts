@@ -6,13 +6,18 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { BrandService } from '../../src/modules/brand/brand.service';
+import { RefillPairsService } from '../../src/modules/catalog/refill/refill-pairs.service';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
+
+/** Trang thương hiệu không phải đối tượng của bộ này: bảng cặp Refill rỗng. */
+const NO_REFILL_PAIRS = { provide: RefillPairsService, useValue: { pairs: async () => new Map<string, string>() } };
 
 /**
  * C-034 / Q-18: chủ nhãn tự xem số đơn, doanh thu, SP bán chạy của NHÃN MÌNH — chỉ số tổng hợp, ẩn PII
  * khách, đúng quyền sở hữu. Chạy trên Postgres thật vì kết quả dựa vào groupBy/count qua quan hệ
  * OrderItem -> Order và ranh giới giờ VN, mà Prisma giả không kiểm được.
  */
+
 describe('BrandService.getOwnedSales (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -21,7 +26,7 @@ describe('BrandService.getOwnedSales (real Postgres)', () => {
   const DAY = 864e5;
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [BrandService, SystemConfigService] }).compile();
+    moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [BrandService, SystemConfigService, NO_REFILL_PAIRS] }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);

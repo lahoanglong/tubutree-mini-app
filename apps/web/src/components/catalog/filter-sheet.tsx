@@ -4,11 +4,12 @@ import { useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { CatalogPage } from '@tubutree/app-core/api/catalog';
 import { catalogCountQuery } from '@tubutree/app-core/queries/catalog';
+import { offeredIntentFilters } from '@tubutree/app-core/browse/intent-filters';
 import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import {
-  MIN_RATING_OPTION, PRICE_RANGES, draftFromState, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery,
+  EMPTY_FILTER_DRAFT, MIN_RATING_OPTION, PRICE_RANGES, draftFromState, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery,
   type FilterDraft, type SearchState,
 } from '@/lib/search-state';
 import { useDebounced } from '@/lib/use-debounced';
@@ -26,9 +27,10 @@ export function applyLabel(p: { settled: boolean; data?: CatalogPage; isError: b
 }
 
 /**
- * Bộ lọc trong Sheet: khoảng giá, chỉ còn hàng, đánh giá từ 4 sao, thương hiệu; áp dụng bằng nút có số kết quả. Nháp khởi
- * tạo ngay trong lượt render mở sheet (không lộ một khung hình nháp cũ) và giữ nguyên khi đóng.
- * `onApply` được gọi đúng một lần cho mỗi nháp (bấm đúp không gửi hai lần).
+ * Bộ lọc trong Sheet: khoảng giá, tình trạng (còn hàng, đang ưu đãi, có bản Refill), đánh giá từ 4 sao, thương hiệu; áp dụng bằng nút
+ * có số kết quả. Nháp khởi tạo ngay trong lượt render mở sheet (không lộ một khung hình nháp cũ) và giữ nguyên khi đóng.
+ * `onApply` được gọi đúng một lần cho mỗi nháp (bấm đúp không gửi hai lần). `refillOn`: cờ `catalog.refill_first_enabled`, tắt thì không
+ * mời "Có bản Refill" (link đang mang sẵn bộ lọc đó vẫn hiện để bỏ chọn).
  */
 export function FilterSheet({
   open,
@@ -36,12 +38,14 @@ export function FilterSheet({
   state,
   brands,
   onApply,
+  refillOn = false,
 }: {
   open: boolean;
   onClose: () => void;
   state: SearchState;
   brands: { brand: string; count: number }[];
   onApply: (draft: FilterDraft) => void;
+  refillOn?: boolean;
 }) {
   const [draft, setDraft] = useState<FilterDraft>(() => draftFromState(state));
   const appliedDraft = useRef<FilterDraft | null>(null);
@@ -88,7 +92,7 @@ export function FilterSheet({
       title={browseText.filter.title}
       footer={
         <div className="flex gap-2">
-          <button type="button" onClick={() => setDraft({ brands: [], inStock: false })} className={ui.btnText}>
+          <button type="button" onClick={() => setDraft(EMPTY_FILTER_DRAFT)} className={ui.btnText}>
             {browseText.filter.reset}
           </button>
           <button type="button" onClick={apply} aria-busy={countBusy || undefined} className={`${ui.btnPrimary} min-w-0 flex-1 tabular-nums`}>
@@ -117,6 +121,11 @@ export function FilterSheet({
         <Chip selected={draft.inStock} onPress={() => setDraft((d) => ({ ...d, inStock: !d.inStock }))}>
           {browseText.filter.inStock}
         </Chip>
+        {offeredIntentFilters(refillOn, state).map((f) => (
+          <Chip key={f.key} selected={draft[f.key] === true} onPress={() => setDraft((d) => ({ ...d, [f.key]: d[f.key] ? undefined : true }))}>
+            {f.label}
+          </Chip>
+        ))}
       </FilterGroup>
       <FilterGroup title={browseText.filter.rating}>
         <Chip

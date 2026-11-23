@@ -3,9 +3,10 @@
 import { useState, type ReactNode } from 'react';
 import { LayoutGrid } from 'lucide-react';
 import { categoryTrail, type CategoryNode } from '@tubutree/app-core/browse/category-tree';
+import { offeredIntentFilters } from '@tubutree/app-core/browse/intent-filters';
 import { browseText } from '@/lib/browse-text';
 import type { CategoryEntry } from '@/lib/browse-categories';
-import { MIN_RATING_OPTION, PRICE_RANGES, activeFilterCount, priceRangeLabel, type SearchState } from '@/lib/search-state';
+import { EMPTY_FILTER_DRAFT, MIN_RATING_OPTION, PRICE_RANGES, activeFilterCount, priceRangeLabel, type SearchState } from '@/lib/search-state';
 
 const ROW =
   'flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition hover:bg-forest-50';
@@ -14,8 +15,8 @@ const ROW =
 const BRANDS_SHOWN = 6;
 
 /**
- * Cột lọc bên trái của trang Danh mục/Tìm kiếm từ lg: danh mục dạng cây (các gốc, con của gốc đang chọn), khoảng giá, còn hàng, đánh giá,
- * thương hiệu. Dùng đúng bộ lọc sẵn có (cùng `update` với hộp thoại Bộ lọc của điện thoại, cùng tham số URL), nhưng áp dụng ngay khi chọn
+ * Cột lọc bên trái của trang Danh mục/Tìm kiếm từ lg: danh mục dạng cây (các gốc, con của gốc đang chọn), khoảng giá, tình trạng (còn hàng,
+ * đang ưu đãi, có bản Refill khi cờ Refill bật), đánh giá, thương hiệu. Dùng đúng bộ lọc sẵn có (cùng `update` với hộp thoại Bộ lọc của điện thoại, cùng tham số URL), nhưng áp dụng ngay khi chọn
  * thay vì chờ nút "Xem kết quả". Dưới lg khung ẩn (display:none) và khách dùng hộp thoại như cũ. Cột là phần tử thường: không dính, không
  * giới hạn cao, không cuộn riêng (`ListingLayout` cho nó 200px, cả trang cuộn chung).
  */
@@ -27,6 +28,7 @@ export function FilterSidebar({
   onPickCategory,
   onClearCategory,
   onPatch,
+  refillOn = false,
 }: {
   state: SearchState;
   entries: CategoryEntry[];
@@ -36,6 +38,8 @@ export function FilterSidebar({
   onPickCategory: (e: CategoryEntry) => void;
   onClearCategory: () => void;
   onPatch: (patch: Partial<SearchState>) => void;
+  /** Cờ `catalog.refill_first_enabled`: tắt thì không mời "Có bản Refill" (trừ khi đang chọn sẵn). */
+  refillOn?: boolean;
 }) {
   const hasCategory = Boolean(state.category || state.segment);
   const toggleBrand = (b: string) =>
@@ -88,6 +92,11 @@ export function FilterSidebar({
         <Check checked={state.inStock} onChange={() => onPatch({ inStock: !state.inStock })}>
           {browseText.filter.inStock}
         </Check>
+        {offeredIntentFilters(refillOn, state).map((f) => (
+          <Check key={f.key} checked={state[f.key] === true} onChange={() => onPatch({ [f.key]: state[f.key] ? undefined : true })}>
+            {f.label}
+          </Check>
+        ))}
         <Check checked={state.minRating === MIN_RATING_OPTION} onChange={() => onPatch({ minRating: state.minRating === MIN_RATING_OPTION ? undefined : MIN_RATING_OPTION })}>
           {browseText.filter.rating4}
         </Check>
@@ -116,7 +125,7 @@ export function FilterSidebar({
       {filterCount > 0 && (
         <button
           type="button"
-          onClick={() => onPatch({ brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined })}
+          onClick={() => onPatch(EMPTY_FILTER_DRAFT)}
           className="mt-3 inline-flex min-h-11 items-center px-2 text-sm font-semibold text-forest-700 underline"
         >
           {browseText.filter.reset}

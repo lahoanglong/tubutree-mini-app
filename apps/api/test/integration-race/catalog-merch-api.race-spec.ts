@@ -3,6 +3,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
 import { BrandService } from '../../src/modules/brand/brand.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import { RefillPairsService } from '../../src/modules/catalog/refill/refill-pairs.service';
 import { NotFoundException } from '@nestjs/common';
 import { createOrder, createUser, deleteItData, randCode, warmPool } from './helpers';
 
@@ -134,9 +135,36 @@ describe('catalog merch API (real Postgres)', () => {
     expect(new Set(ids).size).toBe(5);
 
     await expect(catalog.listBrandProducts(draft.slug, { page: 1, limit: 2 })).rejects.toBeInstanceOf(NotFoundException);
-    const view = await new BrandService(prisma, new SystemConfigService(prisma)).getPublicBySlug(brand.slug);
+    const config = new SystemConfigService(prisma);
+    const view = await new BrandService(prisma, config, new RefillPairsService(prisma, catalog, config)).getPublicBySlug(brand.slug);
     expect(view.productCount).toBe(5);
     expect(view.products).toHaveLength(5);
+    expect(view).toMatchObject({ hasRefillProducts: false, refillProductSlugs: [] });
+  });
+
+  it('w21-01: "Có bản Refill" (chai + gói của bảng cặp), "Đang ưu đãi" (thẻ gạch giá) và hasRefillProducts của trang thương hiệu', async () => {
+    // Tag chỉ gồm chữ (không số, không "x"): số dính tên sản phẩm có thể thành dạng gói nhiều món và làm cặp không tự ghép.
+    const tag = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvw'[Math.floor(Math.random() * 20)]).join('');
+    const brand = await prisma.brand.create({ data: { slug: `cma-rf-${tag}`, name: `CMA Refill ${tag}`, isPublished: true } });
+    brandIds.push(brand.id);
+    const own = { brandId: brand.id };
+    const bottle = await product(brand.name, { ...own, name: `Nước rửa chén ${tag} 500ml` });
+    const refill = await product(brand.name, { ...own, name: `Refill Nước rửa chén ${tag} 1L` });
+    const plain = await product(brand.name, own);
+    const sale = await product(brand.name, own);
+    await prisma.variation.update({ where: { id: sale.v.id }, data: { salePrice: 80_000 } });
+
+    const fresh = new CatalogService(prisma);
+    const ids = async (q: { hasRefill?: boolean; onSale?: boolean }) =>
+      (await fresh.list({ page: 1, limit: 10, sort: 'newest', brand: brand.name, ...q })).data.map((c) => c.id).sort();
+    expect(await ids({ hasRefill: true })).toEqual([bottle.p.id, refill.p.id].sort());
+    expect(await ids({ onSale: true })).toEqual([sale.p.id]);
+    expect(await ids({ hasRefill: true, onSale: true })).toEqual([]);
+    expect(await ids({})).toEqual([bottle.p.id, refill.p.id, plain.p.id, sale.p.id].sort());
+
+    const config = new SystemConfigService(prisma);
+    const brandSvc = new BrandService(prisma, config, new RefillPairsService(prisma, fresh, config));
+    expect(await brandSvc.getPublicBySlug(brand.slug)).toMatchObject({ hasRefillProducts: true, refillProductSlugs: [bottle.p.slug, refill.p.slug].sort() });
   });
 
   it('related: cùng nhãn, loại chính nó, xếp theo tổng đã bán (gồm số nhập tay), tối đa 8', async () => {

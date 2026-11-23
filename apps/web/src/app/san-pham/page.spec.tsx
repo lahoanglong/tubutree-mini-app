@@ -186,6 +186,8 @@ describe('BrowsePage — dữ liệu ban đầu của danh sách', () => {
     expect(await ssr({ category: 'c-goi', page: '2' })).toBe(false);
     expect(await ssr({ all: '1', sort: 'newest' })).toBe(false);
     expect(await ssr({ sort: 'newest', inStock: '1', rating: '4' })).toBe(false);
+    expect(await ssr({ onSale: '1' })).toBe(false);
+    expect(await ssr({ hasRefill: '1' })).toBe(false);
     expect(await ssr({ segment: 'eco' })).toBe(false);
     expect(await ssr({ minPrice: '100000', maxPrice: '200000' })).toBe(false);
     expect(await ssr({ brand: 'khong-co' })).toBe(false);
@@ -429,7 +431,7 @@ describe('BrowsePage — SEO', () => {
   });
 
   it('kết quả tìm kiếm, phân khúc và lọc/sắp xếp không cho công cụ tìm kiếm lập chỉ mục (vô hạn biến thể URL)', async () => {
-    for (const o of [{ q: 'gội' }, { segment: 'eco' }, { minPrice: '1' }, { sort: 'newest' }, { inStock: '1' }, { rating: '4' }, { all: '1' }]) {
+    for (const o of [{ q: 'gội' }, { segment: 'eco' }, { minPrice: '1' }, { sort: 'newest' }, { inStock: '1' }, { onSale: '1' }, { hasRefill: '1' }, { rating: '4' }, { all: '1' }]) {
       expect(await generateMetadata({ searchParams: sp(o) })).toEqual({ robots: { index: false, follow: true } });
     }
   });

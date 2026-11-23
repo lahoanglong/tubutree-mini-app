@@ -21,17 +21,17 @@ const catalogPage = (total: number, filtersIgnored = false): CatalogPage => ({ .
 
 let mounted: Rendered | null = null;
 
-function Host({ initialOpen = true, state = EMPTY_SEARCH_STATE, brands = BRANDS, onApply }: { initialOpen?: boolean; state?: SearchState; brands?: typeof BRANDS; onApply: (d: FilterDraft) => void }) {
+function Host({ initialOpen = true, state = EMPTY_SEARCH_STATE, brands = BRANDS, onApply, refillOn }: { initialOpen?: boolean; state?: SearchState; brands?: typeof BRANDS; onApply: (d: FilterDraft) => void; refillOn?: boolean }) {
   const [open, setOpen] = useState(initialOpen);
   return (
     <>
       <button type="button" data-testid="toggle" onClick={() => setOpen((o) => !o)}>bật tắt</button>
-      <FilterSheet open={open} onClose={() => setOpen(false)} state={state} brands={brands} onApply={onApply} />
+      <FilterSheet open={open} onClose={() => setOpen(false)} state={state} brands={brands} onApply={onApply} refillOn={refillOn} />
     </>
   );
 }
 
-function mount(props: { initialOpen?: boolean; state?: SearchState; brands?: typeof BRANDS } = {}) {
+function mount(props: { initialOpen?: boolean; state?: SearchState; brands?: typeof BRANDS; refillOn?: boolean } = {}) {
   const onApply = vi.fn();
   mounted = render(<Host {...props} onApply={onApply} />);
   return { onApply, toggle: () => click(mounted!.container.querySelector('[data-testid="toggle"]')) };
@@ -279,5 +279,40 @@ describe('FilterSheet (web)', () => {
     await waitForLabel('Xem 7 sản phẩm');
     expect(document.body.querySelector('[role="group"][aria-label="Khoảng giá"]')).not.toBeNull();
     expect(document.body.querySelector('[role="group"][aria-label="Thương hiệu"]')).toBeNull();
+  });
+});
+
+describe('FilterSheet (web) — "Đang ưu đãi" và "Có bản Refill" (w21-01, như Mini App)', () => {
+  it('cờ Refill bật: chọn cả hai thì số đếm gửi onSale/hasRefill và nháp áp dụng mang hai khoá', async () => {
+    const p = mount({ refillOn: true });
+    await waitForLabel('Xem 7 sản phẩm');
+    click(must('Đang ưu đãi'));
+    click(must('Có bản Refill'));
+    mocks.get.mockResolvedValue(raw(4));
+    await waitForLabel('Xem 4 sản phẩm');
+    expect(mocks.get).toHaveBeenLastCalledWith('/products', { query: expect.objectContaining({ page: 1, limit: 1, onSale: 'true', hasRefill: 'true' }) });
+    click(applyBtn());
+    expect(p.onApply).toHaveBeenCalledWith(expect.objectContaining({ onSale: true, hasRefill: true }));
+  });
+
+  it('cờ Refill tắt: không mời "Có bản Refill"; link mang sẵn bộ lọc thì ô vẫn hiện, "Xoá bộ lọc" bỏ cả hai khỏi số đếm', async () => {
+    mount();
+    await waitForLabel('Xem 7 sản phẩm');
+    expect(btn('Đang ưu đãi')).not.toBeNull();
+    expect(btn('Có bản Refill')).toBeNull();
+    mounted!.unmount();
+    const p = mount({ state: { ...EMPTY_SEARCH_STATE, onSale: true, hasRefill: true } });
+    await waitForLabel('Xem 7 sản phẩm');
+    expect(pressed('Có bản Refill')).toBe('true');
+    click(must('Xoá bộ lọc'));
+    expect(pressed('Có bản Refill')).toBe('false');
+    expect(pressed('Đang ưu đãi')).toBe('false');
+    mocks.get.mockResolvedValue(raw(9));
+    await waitForLabel('Xem 9 sản phẩm');
+    const query = mocks.get.mock.calls.at(-1)![1].query;
+    expect(query).not.toHaveProperty('onSale');
+    expect(query).not.toHaveProperty('hasRefill');
+    click(applyBtn());
+    expect(p.onApply).toHaveBeenCalledWith(expect.objectContaining({ onSale: undefined, hasRefill: undefined }));
   });
 });

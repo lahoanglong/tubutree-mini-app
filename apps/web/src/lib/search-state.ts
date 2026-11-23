@@ -2,15 +2,20 @@ import type { CatalogQuery, CatalogSort } from '@tubutree/app-core/api/catalog';
 import { canonicalBrandName } from '@tubutree/app-core/brand-origins';
 import { BROWSE_PAGE_LIMIT, browseMode } from '@tubutree/app-core/browse/mode';
 import { MAX_QUERY_LENGTH as QUERY_LIMIT, clipQuery, orderedPriceBounds } from '@tubutree/app-core/browse/query';
+import {
+  INTENT_FILTER_PARAM_KEYS, changedIntentFilters, intentFilterChips, intentFilterCount, intentFilterQuery, parseIntentFilters, writeIntentFilters,
+  type IntentFilterState,
+} from '@tubutree/app-core/browse/intent-filters';
 import { browseText, formatVndShort } from './browse-text';
 
-export type FilterType = 'price' | 'in_stock' | 'brand' | 'rating';
+export type FilterType = 'price' | 'in_stock' | 'brand' | 'rating' | 'on_sale' | 'has_refill';
 
 /**
  * Trạng thái Browse sống trong URL (spec 5b.2, plan 4b Ruling 7) — quay lại từ trang sản phẩm thì
- * giữ nguyên. Tham số: q, sort, category, segment, brand (phẩy), minPrice, maxPrice, inStock=1, rating.
+ * giữ nguyên. Tham số: q, sort, category, segment, brand (phẩy), minPrice, maxPrice, inStock=1, onSale=1, hasRefill=1, rating.
+ * `onSale`/`hasRefill` ("Đang ưu đãi", "Có bản Refill") là `IntentFilterState` của app-core, chung với Mini App.
  */
-export interface SearchState {
+export interface SearchState extends IntentFilterState {
   q: string;
   sort?: CatalogSort;
   category?: string;
@@ -27,7 +32,7 @@ export interface SearchState {
 }
 
 /** Phần trạng thái mà FilterSheet chỉnh (nháp tới khi bấm "Xem n sản phẩm"). */
-export interface FilterDraft {
+export interface FilterDraft extends IntentFilterState {
   brands: string[];
   minPrice?: number;
   maxPrice?: number;
@@ -46,7 +51,11 @@ export const EMPTY_SEARCH_STATE: SearchState = { q: '', brands: [], inStock: fal
 /** "Xoá tìm kiếm & bộ lọc" — giữ cách sắp xếp khách đã chọn. */
 export const CLEAR_SEARCH_PATCH: Partial<SearchState> = {
   q: '', category: undefined, segment: undefined, brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined, filter: undefined,
+  onSale: undefined, hasRefill: undefined,
 };
+
+/** Nút "Đặt lại" của Bộ lọc (sheet và cột trái): mọi bộ lọc về tắt. Các khoá có mặt với giá trị rỗng để ghi đè cả trạng thái đang có khi trộn. */
+export const EMPTY_FILTER_DRAFT: FilterDraft = { brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined, onSale: undefined, hasRefill: undefined };
 
 export const CATALOG_SORTS: readonly CatalogSort[] = ['best_seller', 'newest', 'price_asc', 'price_desc'];
 
@@ -66,7 +75,7 @@ export const MAX_QUERY_LENGTH = QUERY_LIMIT;
  * Các khoá URL mà `parseSearchState`/`serializeSearchState` sở hữu. Mọi khoá khác (utm, ref…) là
  * "tham số lạ": `useSearchState` giữ nguyên khi ghi lại URL (trừ `focus`, tham số dùng một lần).
  */
-export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all', 'filter'];
+export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', ...INTENT_FILTER_PARAM_KEYS, 'rating', 'sort', 'all', 'filter'];
 
 /** Tham số dùng một lần hoặc chỉ có nghĩa với trạng thái cũ: `focus`, và `page`. */
 const TRANSIENT_KEYS = ['focus', 'page'];
@@ -100,6 +109,7 @@ export function parseSearchState(params: URLSearchParams): SearchState {
     brands: [...new Set((params.get('brand') ?? '').split(',').map((s) => canonicalBrandName(s.trim())).filter(Boolean))],
     ...orderedPriceBounds(intParam(params.get('minPrice')), intParam(params.get('maxPrice'))),
     inStock: params.get('inStock') === '1',
+    ...parseIntentFilters(params),
     minRating: rating != null && rating >= 1 && rating <= 5 ? rating : undefined,
     all: params.get('all') === '1' ? true : undefined,
     ...(params.get('filter') === 'subscription' ? { filter: 'subscription' as const } : {}),
@@ -117,6 +127,7 @@ export function serializeSearchState(s: SearchState): URLSearchParams {
   if (s.minPrice != null) p.set('minPrice', String(s.minPrice));
   if (s.maxPrice != null) p.set('maxPrice', String(s.maxPrice));
   if (s.inStock) p.set('inStock', '1');
+  writeIntentFilters(s, p);
   if (s.minRating != null) p.set('rating', String(s.minRating));
   if (s.sort) p.set('sort', s.sort);
   if (s.filter === 'subscription') p.set('filter', 'subscription');
@@ -148,20 +159,23 @@ export function toCatalogQuery(s: SearchState, page: number, limit: number): Cat
     maxPrice: s.maxPrice,
     inStock: s.inStock || undefined,
     minRating: s.minRating,
+    ...intentFilterQuery(s),
   };
 }
 
+/** Khoá `onSale`/`hasRefill` luôn có mặt (rỗng khi tắt): trộn nháp lên trạng thái (`{ ...state, ...draft }`) phải tắt được bộ lọc đang bật. */
 export function draftFromState(s: SearchState): FilterDraft {
-  return { brands: [...s.brands], minPrice: s.minPrice, maxPrice: s.maxPrice, inStock: s.inStock, minRating: s.minRating };
+  return { brands: [...s.brands], minPrice: s.minPrice, maxPrice: s.maxPrice, inStock: s.inStock, minRating: s.minRating, onSale: s.onSale || undefined, hasRefill: s.hasRefill || undefined };
 }
 
 /** Số LOẠI bộ lọc đang bật (badge nút "Bộ lọc"). */
-export function activeFilterCount(s: Pick<SearchState, 'brands' | 'minPrice' | 'maxPrice' | 'inStock' | 'minRating'>): number {
+export function activeFilterCount(s: Pick<SearchState, 'brands' | 'minPrice' | 'maxPrice' | 'inStock' | 'minRating' | 'onSale' | 'hasRefill'>): number {
   return (
     (s.minPrice != null || s.maxPrice != null ? 1 : 0) +
     (s.inStock ? 1 : 0) +
     (s.brands.length > 0 ? 1 : 0) +
-    (s.minRating != null ? 1 : 0)
+    (s.minRating != null ? 1 : 0) +
+    intentFilterCount(s)
   );
 }
 
@@ -194,6 +208,7 @@ export function changedFilterTypes(before: SearchState, after: FilterDraft): Fil
   if (before.inStock !== after.inStock) types.push('in_stock');
   if (!sameSet(before.brands, after.brands)) types.push('brand');
   if (before.minRating !== after.minRating) types.push('rating');
+  for (const f of changedIntentFilters(before, after)) types.push(f.event);
   return types;
 }
 
@@ -234,6 +249,7 @@ export function activeFilterChips(
     chips.push({ key: 'price', label: priceRangeLabel(s.minPrice, s.maxPrice), patch: { minPrice: undefined, maxPrice: undefined } });
   }
   if (s.inStock) chips.push({ key: 'inStock', label: browseText.inStockChip, patch: { inStock: false } });
+  chips.push(...intentFilterChips(s));
   if (s.minRating != null) chips.push({ key: 'rating', label: browseText.rating4Chip, patch: { minRating: undefined } });
   return chips;
 }

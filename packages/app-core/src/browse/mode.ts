@@ -15,6 +15,9 @@ export interface BrowseModeInput {
   maxPrice?: number;
   inStock: boolean;
   minRating?: number;
+  /** "Đang ưu đãi", "Có bản Refill" (`intent-filters`). */
+  onSale?: boolean;
+  hasRefill?: boolean;
 }
 
 export type BrowseMode = 'hub' | 'list';
@@ -35,6 +38,8 @@ export function browseMode(s: BrowseModeInput): BrowseMode {
     s.minPrice !== undefined ||
     s.maxPrice !== undefined ||
     s.inStock ||
-    s.minRating !== undefined;
+    s.minRating !== undefined ||
+    s.onSale === true ||
+    s.hasRefill === true;
   return filtered ? 'list' : 'hub';
 }
