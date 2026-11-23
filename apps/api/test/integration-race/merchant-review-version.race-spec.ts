@@ -7,6 +7,7 @@ import type { NotificationsService } from '../../src/modules/notifications/notif
 import { MERCHANT_PRODUCT_ALREADY_REVIEWED, MERCHANT_PRODUCT_CONTENT_CHANGED } from '../../src/modules/merchant/merchant-product-review';
 import { PANCAKE_TAKEOVER_UNCONFIRMED } from '../../src/modules/merchant/merchant-pancake-link';
 import { createUser, randCode, summarize, warmPool } from './helpers';
+import { cardPriceEpoch } from '../../src/modules/catalog/card-price-signal';
 
 /**
  * R5-PARTNER-1/4/5 trên Postgres THẬT: dòng sản phẩm chờ duyệt lần đầu chỉ duyệt/từ chối được khi vẫn đúng như admin đã xem
@@ -90,8 +91,11 @@ describe('Duyệt sản phẩm đối tác chờ duyệt lần đầu đúng phi
 
     const reloaded = await viewedRow(product.id);
     expect(reloaded.name).toBe('Khăn tre — CHỮA BÁCH BỆNH');
+    const epoch = cardPriceEpoch();
     await admin.reviewMerchantProduct('admin-a', product.id, true, undefined, false, undefined, { pancakeCode: '', updatedAt: reloaded.updatedAt });
     expect(await row(product.id)).toMatchObject({ approvalStatus: 'APPROVED', name: 'Khăn tre — CHỮA BÁCH BỆNH' });
+    // w25-01: sản phẩm vừa lên sàn thì bộ lọc "Đang ưu đãi" đọc lại ngay.
+    expect(cardPriceEpoch()).toBe(epoch + 1);
   });
 
   it('không gửi phiên bản (client khác màn duyệt): duyệt như trước và ghi cảnh báo nêu admin và sản phẩm', async () => {

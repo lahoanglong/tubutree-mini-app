@@ -34,6 +34,7 @@ import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/loc
 import { DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED, isStorefrontSubdomainEnabled, withSubdomainFlag } from '../storefront/storefront-config';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
+import { markCardPricesChanged } from '../catalog/card-price-signal';
 import { isFirstImageThumb, storedThumbnailOf } from '../../common/public-image';
 import { contentChangedPatch } from '../storefront/storefront-content-change';
 
@@ -833,6 +834,8 @@ export class MerchantService {
       }
     });
     // Sản phẩm đang bán chỉ đổi ảnh trong bản chờ duyệt (không vào danh sách ảnh); các trường hợp còn lại ảnh mới đã ghi vào sản phẩm.
+    // Giá tự giao, bật/tắt bán và gỡ liên kết vừa ghi thẳng lên sản phẩm đang bán: bộ lọc "Đang ưu đãi" đọc lại ngay.
+    markCardPricesChanged();
     if (!liveEdit && imagesChanged) this.imageStale?.markStale();
     if (reReview || startsDraft) {
       await notifyAdmins(

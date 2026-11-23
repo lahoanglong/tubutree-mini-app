@@ -773,9 +773,10 @@ export class CatalogService {
   /**
    * Bộ lọc "Đang ưu đãi": sản phẩm công khai có giá trên thẻ (gồm Giờ vàng, `cardPriceWithFlash`) thấp hơn giá niêm yết của thẻ, tức đúng
    * những thẻ hiện giá gạch. Danh sách được nhớ tối đa ON_SALE_TTL_MS để mỗi lượt lọc không quét lại cả danh mục. Bản nhớ hết hạn sớm hơn ở
-   * mốc Giờ vàng kế tiếp (một suất đang chạy kết thúc, hoặc một đợt đã bật bắt đầu), nên suất mở hay hết vẫn đổi danh sách ngay. Admin lưu Giờ
-   * vàng và đồng bộ giá Pancake bỏ bản nhớ qua `markCardPricesChanged`. Lượt nạp bắt đầu trước lần lưu thì không được ghi vào bộ nhớ. Các
-   * thay đổi sau vẫn có thể hiện chậm tới ON_SALE_TTL_MS: suất vừa bán hết, phân loại vừa hết hàng, sản phẩm vừa duyệt hoặc vừa ẩn.
+   * mốc Giờ vàng kế tiếp (một suất đang chạy kết thúc, hoặc một đợt đã bật bắt đầu), nên suất mở hay hết vẫn đổi danh sách ngay. Nơi ghi
+   * giá và Giờ vàng bỏ bản nhớ qua `markCardPricesChanged` (danh sách ở card-price-signal.ts). Lượt nạp bắt đầu trước lần lưu thì không được
+   * ghi vào bộ nhớ. Các thay đổi sau vẫn có thể hiện chậm tới ON_SALE_TTL_MS: suất vừa bán hết, phân loại vừa hết hàng, sản phẩm vừa bị
+   * admin ẩn hoặc đổi trạng thái duyệt ở màn Sản phẩm.
    */
   private async onSaleIds(): Promise<string[]> {
     const epoch = cardPriceEpoch();

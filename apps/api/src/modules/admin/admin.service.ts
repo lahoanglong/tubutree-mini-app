@@ -36,6 +36,7 @@ import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service'
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { ImageResizeService } from '../catalog/image-resize.service';
+import { markCardPricesChanged } from '../catalog/card-price-signal';
 import { losesPartnerStore } from '../merchant/partner-store';
 import { throwIfLockBusy } from '../../common/lock-busy';
 import { storedThumbnailOf } from '../../common/public-image';
@@ -2402,6 +2403,7 @@ export class AdminService {
       unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: why, deactivate: true, legacy: 'throw' }),
     );
     if (!link) throw new BadRequestException('Sản phẩm này không còn liên kết mã Pancake nào.');
+    markCardPricesChanged();
     this.logger.warn(`Admin ${adminId} gỡ liên kết Pancake của sản phẩm đối tác ${productId}: ${why}`);
     const ownerId = product.storefront?.ownerUserId;
     if (ownerId) {
@@ -2501,6 +2503,8 @@ export class AdminService {
       await unlinkTubuFulfilledVariation(tx, productId, { actorId: adminId, reason: reason ?? '', deactivate: false });
       return undefined;
     }, { maxWait: 15_000, timeout: 60_000 });
+    // Duyệt (lên sàn, nhận biến thể Pancake) hay từ chối (trả biến thể về sản phẩm gốc) đổi giá thẻ: bộ lọc "Đang ưu đãi" đọc lại ngay.
+    markCardPricesChanged();
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: productId } });
 
     if (approve && readCode) {

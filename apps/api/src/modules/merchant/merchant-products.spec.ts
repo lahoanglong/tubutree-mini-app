@@ -10,6 +10,7 @@ jest.mock('crypto', () => {
   return { ...actual, randomBytes: jest.fn((n: number) => actual.randomBytes(n)) };
 });
 import { CreateMerchantProductDto } from './merchant.controller';
+import { cardPriceEpoch } from '../catalog/card-price-signal';
 import { CTV_CANNOT_CREATE_PRODUCT, MerchantService } from './merchant.service';
 import {
   linkTubuFulfilledVariation,
@@ -658,9 +659,13 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     });
   });
 
-  it('đổi giá/tồn có hiệu lực ngay, không phải duyệt lại', async () => {
+  it('đổi giá/tồn có hiệu lực ngay, không phải duyệt lại; bộ lọc "Đang ưu đãi" đọc lại ngay (w25-01), lần sửa bị từ chối thì không', async () => {
     const { svc, productUpdate, variationUpdate, draftUpsert } = buildEdit(OWN);
+    const epoch = cardPriceEpoch();
+    await expect(svc.updateProduct('u1', 'prod-a', { salePrice: 250_000 })).rejects.toThrow('Giá khuyến mãi phải thấp hơn giá gốc');
+    expect(cardPriceEpoch()).toBe(epoch);
     await svc.updateProduct('u1', 'prod-a', { basePrice: 180_000, stock: 5 });
+    expect(cardPriceEpoch()).toBe(epoch + 1);
     expect(productUpdate.mock.calls[0][0].data.approvalStatus).toBeUndefined();
     expect(draftUpsert).not.toHaveBeenCalled();
     expect(variationUpdate).toHaveBeenCalledWith({
