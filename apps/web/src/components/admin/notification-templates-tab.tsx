@@ -9,16 +9,48 @@ import {
   type AdminNotificationTemplate,
   type NotificationDelivery,
 } from '@/lib/admin-client';
-import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError, ListSkeleton } from './ui';
+import { BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError, ListSkeleton, chipClass } from './ui';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { copyText } from '@/lib/copy-text';
 
 const DELIVERY: Record<NotificationDelivery, { tone: Tone; label: string }> = {
   ZNS: { tone: 'success', label: 'Gửi ZNS + trong app' },
   ZNS_MISSING_TEMPLATE_ID: { tone: 'warning', label: 'Thiếu mã mẫu ZNS' },
   INAPP: { tone: 'neutral', label: 'Chỉ trong app' },
 };
+
+export type ZnsFilter = 'all' | NotificationDelivery;
+export const ZNS_FILTERS: ReadonlyArray<{ key: ZnsFilter; label: string }> = [
+  { key: 'all', label: 'Tất cả' },
+  { key: 'ZNS_MISSING_TEMPLATE_ID', label: 'Thiếu mã ZNS' },
+  { key: 'ZNS', label: 'Đang gửi ZNS' },
+  { key: 'INAPP', label: 'Chỉ trong app' },
+];
+
+export const filterTemplates = (rows: readonly AdminNotificationTemplate[], f: ZnsFilter) => (f === 'all' ? [...rows] : rows.filter((t) => t.delivery === f));
+
+/**
+ * Bản tóm tắt dán vào form đăng ký mẫu ZNS (Zalo duyệt 7–14 ngày): các mẫu đang hiện mà chưa gửi được ZNS, lượt gửi 30 ngày nhiều trước. Biến
+ * `{{x}}` đổi sang cú pháp tham số `<x>` của ZNS, kèm nghĩa của từng tham số. Rỗng khi mọi mẫu đang hiện đã gửi ZNS.
+ */
+export function znsSubmissionSummary(rows: readonly AdminNotificationTemplate[]): string {
+  const need = rows
+    .filter((t) => t.delivery !== 'ZNS')
+    .sort((a, b) => b.sent30d.INAPP + b.sent30d.ZNS - (a.sent30d.INAPP + a.sent30d.ZNS) || a.code.localeCompare(b.code));
+  if (need.length === 0) return '';
+  const blocks = need.map((t, i) => {
+    const sent = t.sent30d.INAPP + t.sent30d.ZNS;
+    const params = t.variables?.length ? t.variables.map((v) => `<${v.key}> (${v.label})`).join(', ') : 'không có';
+    return [
+      `${i + 1}. ${t.code} (${sent} lượt / 30 ngày)`,
+      `Nội dung: ${t.bodyTemplate.replace(/\{\{\s*(\w+)\s*\}\}/g, '<$1>')}`,
+      `Tham số: ${params}`,
+    ].join('\n');
+  });
+  return [`Mẫu ZNS cần đăng ký: ${need.length} mẫu, lượt gửi 30 ngày nhiều trước.`, ...blocks].join('\n\n');
+}
 
 /**
  * Mẫu thông báo: kênh gửi, mã mẫu ZNS Zalo đã duyệt, nội dung trong app. Khách chỉ nhận ZNS khi mẫu
@@ -27,9 +59,18 @@ const DELIVERY: Record<NotificationDelivery, { tone: Tone; label: string }> = {
  */
 export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: boolean }) {
   const q = useQuery({ queryKey: ['admin-notification-templates'], queryFn: listNotificationTemplates });
-  const rows = canEditAll ? q.data : q.data?.filter((t) => t.staffEditable);
+  const [filter, setFilter] = useState<ZnsFilter>('all');
+  const [copyMsg, setCopyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const visible = canEditAll ? q.data : q.data?.filter((t) => t.staffEditable);
+  const rows = visible ? filterTemplates(visible, filter) : undefined;
   const missing = q.data?.filter((t) => t.delivery === 'ZNS_MISSING_TEMPLATE_ID').length ?? 0;
   const zns = q.data?.filter((t) => t.delivery === 'ZNS').length ?? 0;
+  const summary = rows ? znsSubmissionSummary(rows) : '';
+  const summaryCount = rows?.filter((t) => t.delivery !== 'ZNS').length ?? 0;
+  const copySummary = async () => {
+    const ok = await copyText(summary);
+    setCopyMsg(ok ? { ok: true, text: `Đã chép ${summaryCount} mẫu, dán vào form đăng ký ZNS.` } : { ok: false, text: 'Trình duyệt chặn chép. Thử lại hoặc dùng trình duyệt khác.' });
+  };
 
   return (
     <div className="space-y-3">
@@ -45,10 +86,41 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
           Mẫu đơn hàng, tiền, đối tác chỉ quản trị viên sửa. Đổi kênh gửi hay mã mẫu ZNS (tính phí mỗi tin) nhờ quản trị viên.
         </Notice>
       )}
+      {visible && (
+        <div className="space-y-2">
+          <div role="group" aria-label="Lọc theo kênh gửi" className="flex flex-wrap gap-2">
+            {ZNS_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                aria-pressed={filter === f.key}
+                onClick={() => {
+                  setFilter(f.key);
+                  setCopyMsg(null);
+                }}
+                className={chipClass(filter === f.key)}
+              >
+                {f.label} <span className="tabular-nums">({filterTemplates(visible, f.key).length})</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => void copySummary()} disabled={!summary} className={BTN_XS_SECONDARY}>
+              Chép bản xin duyệt ZNS ({summaryCount} mẫu)
+            </button>
+            {copyMsg && (
+              <span role={copyMsg.ok ? 'status' : 'alert'} className={`text-xs ${copyMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+                {copyMsg.text}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
       {q.isLoading && <ListSkeleton label="Đang tải mẫu thông báo" rows={4} className="h-16" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách mẫu thông báo.</LoadError>}
       <div className="space-y-2">
         {rows?.map((t) => <TemplateRow key={t.code} item={t} canEditDelivery={canEditAll} />)}
+        {rows && rows.length === 0 && <p className="text-sm text-stone-500">Không có mẫu nào ở mục này.</p>}
       </div>
     </div>
   );

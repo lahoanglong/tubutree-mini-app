@@ -13,10 +13,11 @@ const SCHEMA_PATH = join(__dirname, '../../prisma/schema.prisma');
  * - `word`: tên cột (duy nhất trong mã nguồn); chỉ cho phép đúng mẫu ghi null trong `allowed`.
  * - `manual`: tên cột trùng tên chỗ khác hoặc quá chung nên grep tự động không chứng minh được; bằng chứng
  *   nằm ở docs/2026-10-review/impl/PD-2.md, spec chỉ giữ dấu đánh dấu.
+ * - `revived`: bảng đã dùng lại nhưng dấu `/// @deprecated` còn trong schema vì đợt đó không được sửa schema.prisma; gỡ dấu thì xoá dòng.
  */
-const DEPRECATED: Record<string, { delegate?: string; writes?: string[]; word?: string; allowed?: RegExp; manual?: string }> = {
-  CohortRepeatSnapshot: { delegate: 'cohortRepeatSnapshot', writes: [] },
-  FunnelDailySnapshot: { delegate: 'funnelDailySnapshot', writes: [] },
+const DEPRECATED: Record<string, { delegate?: string; writes?: string[]; word?: string; allowed?: RegExp; manual?: string; revived?: string }> = {
+  CohortRepeatSnapshot: { revived: 'tubu-w24-02: AnalyticsAggregationService ghi, GET admin/analytics/cohort-repeat đọc; gỡ dấu ở lần sửa schema tới' },
+  FunnelDailySnapshot: { revived: 'tubu-w24-02: AnalyticsAggregationService ghi, GET admin/analytics/funnel-daily và job dọn analytics_events đọc; gỡ dấu ở lần sửa schema tới' },
   BetaTester: { delegate: 'betaTester', writes: [] },
   BetaFeedback: { delegate: 'betaFeedback', writes: [] },
   BottleReturn: { delegate: 'bottleReturn', writes: [] },
@@ -83,7 +84,7 @@ describe('schema.prisma /// @deprecated (C-108)', () => {
   });
 
   it('bảng chết không còn bị gọi bằng SQL thô', () => {
-    for (const table of ['cohort_repeat_snapshot', 'funnel_daily_snapshot', 'beta_feedbacks', 'beta_testers', 'affiliate_clicks', 'bottle_returns', 'refill_pickup_locations']) {
+    for (const table of ['beta_feedbacks', 'beta_testers', 'affiliate_clicks', 'bottle_returns', 'refill_pickup_locations']) {
       expect(source).not.toContain(table);
     }
   });

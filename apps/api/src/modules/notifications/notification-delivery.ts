@@ -31,6 +31,8 @@ export const NOTIFICATION_DELIVERY: Readonly<Record<string, NotificationDelivery
   ORDER_RETURNED: T,
   ORDER_AWAITING_PAYMENT: T,
   ORDER_PAYMENT_EXPIRED: T,
+  // Nhắc chuyển khoản ~2 giờ trước khi đơn của chính khách tự huỷ: việc của khách, không phải tin kéo khách.
+  ORDER_PAYMENT_REMINDER: T,
   ORDER_UNDERPAID: T,
   ORDER_MERCHANT_DELAYED: T,
   INVOICE_ISSUED: T,

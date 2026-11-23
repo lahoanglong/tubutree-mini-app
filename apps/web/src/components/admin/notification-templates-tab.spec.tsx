@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { NotificationTemplatesTab } from './notification-templates-tab';
+import { NotificationTemplatesTab, filterTemplates, znsSubmissionSummary } from './notification-templates-tab';
 import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
@@ -250,5 +250,72 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     click(save);
     await flush();
     expect(JSON.parse(String(api.patches()[0]!.init!.body)).bodyTemplate).toBe('Tặng mã {{code}}');
+  });
+});
+
+describe('NotificationTemplatesTab: chip lọc kênh gửi + bản xin duyệt ZNS', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window.navigator, 'clipboard');
+  });
+
+  const shown = (root: ParentNode) => Array.from(root.querySelectorAll('[data-template]')).map((e) => e.getAttribute('data-template'));
+  const chip = (root: ParentNode, label: string) => byText(root.querySelector('[role="group"][aria-label="Lọc theo kênh gửi"]')!, 'button', label)!;
+
+  it('bản tóm tắt: chỉ mẫu chưa gửi được ZNS, lượt gửi 30 ngày nhiều trước, {{x}} đổi thành <x>, tham số kèm nghĩa', () => {
+    expect(znsSubmissionSummary(TEMPLATES as never)).toBe(
+      [
+        'Mẫu ZNS cần đăng ký: 3 mẫu, lượt gửi 30 ngày nhiều trước.',
+        '1. GAME_STREAK_REMINDER (120 lượt / 30 ngày)\nNội dung: Giữ lửa chuỗi điểm danh nhé!\nTham số: không có',
+        '2. ORDER_CONFIRMED (40 lượt / 30 ngày)\nNội dung: Đơn <order_code> đã được xác nhận.\nTham số: <order_code> (mã đơn hàng)',
+        '3. WELCOME_VOUCHER (5 lượt / 30 ngày)\nNội dung: Tặng mã <code> giảm <value>đ\nTham số: <code> (mã), <value> (giá trị mã)',
+      ].join('\n\n'),
+    );
+    expect(znsSubmissionSummary(filterTemplates(TEMPLATES as never, 'ZNS'))).toBe('');
+    expect(filterTemplates(TEMPLATES as never, 'INAPP').map((t) => t.code)).toEqual(['GAME_STREAK_REMINDER', 'WELCOME_VOUCHER']);
+  });
+
+  it('chip kèm số đếm, aria-pressed; bấm chip chỉ còn mẫu của mục đó; mục không còn mẫu cần xin thì nút chép khoá', async () => {
+    stub();
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    const labels = Array.from(container.querySelectorAll('[role="group"][aria-label="Lọc theo kênh gửi"] button')).map((b) => b.textContent);
+    expect(labels).toEqual(['Tất cả (4)', 'Thiếu mã ZNS (1)', 'Đang gửi ZNS (1)', 'Chỉ trong app (2)']);
+    expect(chip(container, 'Tất cả').getAttribute('aria-pressed')).toBe('true');
+    expect(shown(container)).toHaveLength(4);
+
+    click(chip(container, 'Thiếu mã ZNS'));
+    await flush();
+    expect(chip(container, 'Thiếu mã ZNS').getAttribute('aria-pressed')).toBe('true');
+    expect(chip(container, 'Tất cả').getAttribute('aria-pressed')).toBe('false');
+    expect(shown(container)).toEqual(['ORDER_CONFIRMED']);
+    expect((byText(container, 'button', 'Chép bản xin duyệt ZNS') as HTMLButtonElement).textContent).toContain('(1 mẫu)');
+
+    click(chip(container, 'Đang gửi ZNS'));
+    await flush();
+    expect(shown(container)).toEqual(['ORDER_SHIPPED']);
+    expect((byText(container, 'button', 'Chép bản xin duyệt ZNS') as HTMLButtonElement).disabled).toBe(true);
+
+    click(chip(container, 'Chỉ trong app'));
+    await flush();
+    expect(shown(container)).toEqual(expect.arrayContaining(['GAME_STREAK_REMINDER', 'WELCOME_VOUCHER']));
+    expect(shown(container)).toHaveLength(2);
+  });
+
+  it('chép 1 chạm: ghi đúng bản tóm tắt của mục đang lọc vào clipboard và báo đã chép', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true });
+    stub();
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    click(chip(container, 'Thiếu mã ZNS'));
+    await flush();
+    click(byText(container, 'button', 'Chép bản xin duyệt ZNS'));
+    await flush();
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied).toBe(znsSubmissionSummary(filterTemplates(TEMPLATES as never, 'ZNS_MISSING_TEMPLATE_ID')));
+    expect(copied).toContain('ORDER_CONFIRMED');
+    expect(copied).not.toContain('GAME_STREAK_REMINDER');
+    expect(byText(container, '[role="status"]', 'Đã chép 1 mẫu, dán vào form đăng ký ZNS.')).not.toBeNull();
   });
 });

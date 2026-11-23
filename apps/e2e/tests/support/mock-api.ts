@@ -390,6 +390,9 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/config/public', {});
       // Ô KPI đầu tab Đơn hàng (admin) đọc số đếm vận hành ở mọi lần mở tab; spec kiểm ô KPI tự mock số khác 0.
       api.fallback('GET', '/admin/orders/ops-counts', { guestWeb: 0, guestWebUnmerged: 0, bankTransferPending: 0, bankTransferOverdue: 0, overdueCancelled: 0, ttlHours: 24 });
+      // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
+      api.fallback('GET', '/admin/analytics/cohort-repeat', []);
+      api.fallback('GET', '/admin/analytics/funnel-daily', []);
       // Thẻ xem trước chuyển khoản ở thanh toán hỏi cờ checkout.transfer_preview_enabled khi khách chọn Chuyển khoản: mặc định cờ tắt như PROD.
       api.fallback('GET', '/payments/bank-preview', { enabled: false, bank: null });
       // Banner chiến dịch (Trang chủ, Ưu đãi) là công khai và tự ẩn khi không có: mặc định không có chiến dịch nào.

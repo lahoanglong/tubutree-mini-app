@@ -39,6 +39,66 @@ const num = (v: Count | null | undefined): number => (v == null ? 0 : Number(v))
 const ts = (d: Date): string => d.toISOString();
 
 /**
+ * Đếm phễu của các sự kiện có `receivedAt` trong [since, until). Dùng chung cho bảng sống (72 giờ / 7 / 30 ngày) và snapshot từng ngày VN
+ * (`AnalyticsAggregationService`), nên hai nơi cùng một định nghĩa bước. `order_placed` khớp tới `ended_at` + ân hạn, có thể rơi sang ngày sau.
+ */
+export async function countPurchaseFunnel(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  since: Date,
+  until: Date,
+): Promise<PurchaseFunnelWindowDTO> {
+  const raw = await prisma.$queryRaw<FunnelQueryRow[]>`
+    WITH s AS (
+      SELECT e."sessionId" AS sid,
+             e.platform AS platform,
+             max(e."userId") AS user_id,
+             min(e."receivedAt") AS started_at,
+             max(e."receivedAt") AS ended_at,
+             bool_or(e."eventName" = 'product_viewed') AS pv,
+             bool_or(e."eventName" = 'pdp_action' AND e.props->>'action' IN ('add_to_cart', 'buy_now')) AS ab,
+             bool_or(e."eventName" = 'checkout_started') AS cs,
+             bool_or(e."eventName" = 'checkout_step' AND e.props->>'step' = 'place_order_click') AS poc
+        FROM "analytics_events" e
+       WHERE e."receivedAt" >= ${ts(since)}::timestamp
+         AND e."receivedAt" < ${ts(until)}::timestamp
+         AND e."sessionId" IS NOT NULL
+         AND e.platform IN ('web', 'miniapp')
+       GROUP BY e."sessionId", e.platform
+    )
+    SELECT s.platform AS platform,
+           count(*) AS sessions,
+           count(*) FILTER (WHERE s.pv) AS product_viewed,
+           count(*) FILTER (WHERE s.ab) AS add_or_buy,
+           count(*) FILTER (WHERE s.cs) AS checkout_started,
+           count(*) FILTER (WHERE s.poc) AS place_order_click,
+           count(*) FILTER (
+             WHERE s.poc
+               AND s.user_id IS NOT NULL
+               AND EXISTS (
+                 SELECT 1 FROM "analytics_events" o
+                  WHERE o."eventName" = 'order_placed'
+                    AND o."userId" = s.user_id
+                    AND o.platform = s.platform
+                    AND o."receivedAt" >= s.started_at
+                    AND o."receivedAt" <= s.ended_at + make_interval(mins => ${ORDER_MATCH_GRACE_MINUTES}::int)
+               )
+           ) AS order_placed
+      FROM s
+     GROUP BY s.platform`;
+  const by = new Map(raw.map((r) => [r.platform, r]));
+  const web = by.get('web');
+  const mini = by.get('miniapp');
+  const rows: PurchaseFunnelRow[] = PURCHASE_FUNNEL_STEPS.map((step: PurchaseFunnelStep) => {
+    const w = num(web?.[step]);
+    const m = num(mini?.[step]);
+    return { step, web: w, miniapp: m, total: w + m };
+  });
+  const sw = num(web?.sessions);
+  const sm = num(mini?.sessions);
+  return { rows, sessions: { web: sw, miniapp: sm, total: sw + sm } };
+}
+
+/**
  * Phễu mua theo PHIÊN (`sessionId`), tách web/Mini App: mỗi bước đếm số phiên có sự kiện của bước đó trong cửa sổ, không buộc phải qua
  * bước trước (Giờ vàng mua thẳng không qua trang sản phẩm). `order_placed` là sự kiện máy chủ không có `sessionId`, nên ghép theo tài khoản:
  * phiên có bấm Đặt hàng, có userId (từ bất kỳ sự kiện nào trong phiên) và có `order_placed` cùng tài khoản, cùng nền tảng, trong khoảng
@@ -70,55 +130,7 @@ export class PurchaseFunnelService {
     return { generatedAt: now.toISOString(), windows };
   }
 
-  private async windowSnapshot(since: Date, now: Date): Promise<PurchaseFunnelWindowDTO> {
-    const raw = await this.prisma.$queryRaw<FunnelQueryRow[]>`
-      WITH s AS (
-        SELECT e."sessionId" AS sid,
-               e.platform AS platform,
-               max(e."userId") AS user_id,
-               min(e."receivedAt") AS started_at,
-               max(e."receivedAt") AS ended_at,
-               bool_or(e."eventName" = 'product_viewed') AS pv,
-               bool_or(e."eventName" = 'pdp_action' AND e.props->>'action' IN ('add_to_cart', 'buy_now')) AS ab,
-               bool_or(e."eventName" = 'checkout_started') AS cs,
-               bool_or(e."eventName" = 'checkout_step' AND e.props->>'step' = 'place_order_click') AS poc
-          FROM "analytics_events" e
-         WHERE e."receivedAt" >= ${ts(since)}::timestamp
-           AND e."receivedAt" <= ${ts(now)}::timestamp
-           AND e."sessionId" IS NOT NULL
-           AND e.platform IN ('web', 'miniapp')
-         GROUP BY e."sessionId", e.platform
-      )
-      SELECT s.platform AS platform,
-             count(*) AS sessions,
-             count(*) FILTER (WHERE s.pv) AS product_viewed,
-             count(*) FILTER (WHERE s.ab) AS add_or_buy,
-             count(*) FILTER (WHERE s.cs) AS checkout_started,
-             count(*) FILTER (WHERE s.poc) AS place_order_click,
-             count(*) FILTER (
-               WHERE s.poc
-                 AND s.user_id IS NOT NULL
-                 AND EXISTS (
-                   SELECT 1 FROM "analytics_events" o
-                    WHERE o."eventName" = 'order_placed'
-                      AND o."userId" = s.user_id
-                      AND o.platform = s.platform
-                      AND o."receivedAt" >= s.started_at
-                      AND o."receivedAt" <= s.ended_at + make_interval(mins => ${ORDER_MATCH_GRACE_MINUTES}::int)
-                 )
-             ) AS order_placed
-        FROM s
-       GROUP BY s.platform`;
-    const by = new Map(raw.map((r) => [r.platform, r]));
-    const web = by.get('web');
-    const mini = by.get('miniapp');
-    const rows: PurchaseFunnelRow[] = PURCHASE_FUNNEL_STEPS.map((step: PurchaseFunnelStep) => {
-      const w = num(web?.[step]);
-      const m = num(mini?.[step]);
-      return { step, web: w, miniapp: m, total: w + m };
-    });
-    const sw = num(web?.sessions);
-    const sm = num(mini?.sessions);
-    return { rows, sessions: { web: sw, miniapp: sm, total: sw + sm } };
+  private windowSnapshot(since: Date, now: Date): Promise<PurchaseFunnelWindowDTO> {
+    return countPurchaseFunnel(this.prisma, since, now);
   }
 }

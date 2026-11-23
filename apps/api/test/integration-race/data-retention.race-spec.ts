@@ -5,7 +5,7 @@ import { createUser, randCode, setConfig, warmPool } from './helpers';
 
 /**
  * Job dọn log theo lô (C-046) trên Postgres THẬT: dòng quá hạn bị xoá hết qua nhiều lô, dòng còn hạn giữ nguyên,
- * analytics_events chỉ xoá khi ngày đó đã có retention_daily_snapshot, chạy lại không xoá thêm, 2 job chạy đồng
+ * analytics_events chỉ xoá khi ngày đó đã có retention_daily_snapshot và funnel_daily_snapshot, chạy lại không xoá thêm, 2 job chạy đồng
  * thời thì chỉ một job làm việc.
  */
 const DAY = 86_400_000;
@@ -83,18 +83,28 @@ describe('Data retention cleanup (real Postgres)', () => {
     const tExpiredNew = await tok('exp-new', { expiresAt: ago(29) });
     const tLive = await tok('live', { expiresAt: ago(-10) });
 
-    // analytics_events: 400 ngày trước CÓ snapshot (xoá), 401 ngày trước KHÔNG có snapshot (giữ),
-    // 300 ngày trước có snapshot nhưng còn hạn (giữ)
+    // analytics_events: 400 ngày trước CÓ cả hai snapshot (xoá), 401 ngày trước KHÔNG có snapshot (giữ), 402 ngày trước chỉ có
+    // retention snapshot, phễu ngày đó chưa chốt (giữ), 300 ngày trước có snapshot nhưng còn hạn (giữ)
     const withSnap = ago(400);
     const noSnap = ago(401);
+    const noFunnel = ago(402);
     const fresh = ago(300);
-    for (const d of [withSnap, fresh]) {
+    for (const d of [withSnap, noFunnel, fresh]) {
       await prisma.retentionDailySnapshot.upsert({
         where: { date: new Date(vnDay(d)) },
         create: { date: new Date(vnDay(d)), newBuyers: 0, activeBuyers: 0, ordersCount: 0, ordersPerBuyerMtd: 0, dauProxyRefreshToken: 0 },
         update: {},
       });
     }
+    for (const d of [withSnap, fresh]) {
+      const date = new Date(vnDay(d));
+      await prisma.funnelDailySnapshot.upsert({
+        where: { date_step_entrySource: { date, step: 'sessions', entrySource: 'web' } },
+        create: { date, step: 'sessions', entrySource: 'web', count: 0 },
+        update: {},
+      });
+    }
+    await prisma.funnelDailySnapshot.deleteMany({ where: { date: { in: [new Date(vnDay(noSnap)), new Date(vnDay(noFunnel))] } } });
     await prisma.retentionDailySnapshot.deleteMany({ where: { date: new Date(vnDay(noSnap)) } });
     const ev = (suffix: string, at: Date) =>
       prisma.analyticsEvent.create({
@@ -102,6 +112,7 @@ describe('Data retention cleanup (real Postgres)', () => {
       });
     const aSnap = await Promise.all(Array.from({ length: OLD }, (_, i) => ev(`snap-${i}`, withSnap)));
     const aNoSnap = await ev('nosnap', noSnap);
+    const aNoFunnel = await ev('nofunnel', noFunnel);
     const aFresh = await ev('fresh', fresh);
 
     const run = () => svc.runAll({ batchSize: 2, pauseMs: 0 });
@@ -126,7 +137,7 @@ describe('Data retention cleanup (real Postgres)', () => {
     expect(after.g).toEqual(new Set([gNew.id]));
     expect(after.o).toEqual(new Set([oNew.id]));
     expect(after.t).toEqual(new Set([tRevokedNew.id, tExpiredNew.id, tLive.id]));
-    expect(after.a).toEqual(new Set([aNoSnap.id, aFresh.id]));
+    expect(after.a).toEqual(new Set([aNoSnap.id, aNoFunnel.id, aFresh.id]));
     for (const row of [...nOld, ...pOld, ...aSnap, gOld, oOld, tRevokedOld, tExpiredOld]) {
       expect([after.n, after.p, after.g, after.o, after.t, after.a].some((s) => s.has(row.id))).toBe(false);
     }

@@ -244,7 +244,8 @@ describe('AnalyticsAggregationService.computeRetentionSnapshot — NS-1', () => 
     for (const [sql, ...args] of repeatCalls) {
       expect(args[0]).toBe('2026-08-27');
       expect(sql).toContain(`o."createdAt" >= ($1::date)::timestamp - interval '7 hours'`);
-      expect(sql).toContain(`interval '31 days'`);
+      expect(sql).toContain(`o."createdAt" < ($4::date)::timestamp - interval '7 hours'`);
+      expect(args[3]).toBe('2026-09-27');
       expect(sql).not.toMatch(/"createdAt"\s+AT TIME ZONE/);
       expect(sql).not.toMatch(/ROW_NUMBER|OVER\s*\(/);
     }
@@ -310,5 +311,192 @@ describe('AnalyticsAggregationService.runNightly', () => {
     const svc = new AnalyticsAggregationService(prisma);
 
     await expect(svc.runNightly()).resolves.toBeUndefined();
+  });
+});
+
+describe('AnalyticsAggregationService.computeCohortSnapshot (D30/D60/D90 theo tháng)', () => {
+  const DAY = 86_400_000;
+  const at = (iso: string, plusDays = 0) => new Date(Date.parse(iso) + plusDays * DAY);
+  function cohortPrisma(existingRows = 0) {
+    const base = fakePrisma(
+      {
+        day: [
+          { customer_key: 'u-a', kind: 'USER', orders: 1n, first_at: at('2026-09-05T03:00:00Z') },
+          { customer_key: 'u-b', kind: 'USER', orders: 1n, first_at: at('2026-09-10T03:00:00Z') },
+          { customer_key: 'u-c', kind: 'USER', orders: 1n, first_at: at('2026-09-20T03:00:00Z') },
+          { customer_key: 'u-d', kind: 'USER', orders: 1n, first_at: at('2026-09-25T03:00:00Z') },
+          { customer_key: 'u-e', kind: 'USER', orders: 1n, first_at: at('2026-09-28T03:00:00Z') },
+          { customer_key: 'u-old', kind: 'USER', orders: 1n, first_at: at('2026-09-02T03:00:00Z') },
+        ],
+        userPrior: [{ user_id: 'u-old' }],
+        userOrders: [
+          { user_id: 'u-a', created_at: at('2026-09-05T03:00:00Z') },
+          { user_id: 'u-a', created_at: at('2026-09-05T03:00:00Z', 10) },
+          { user_id: 'u-b', created_at: at('2026-09-10T03:00:00Z') },
+          { user_id: 'u-b', created_at: at('2026-09-10T03:00:00Z', 45) },
+          { user_id: 'u-b', created_at: at('2026-09-10T03:00:00Z', 50) },
+          { user_id: 'u-c', created_at: at('2026-09-20T03:00:00Z') },
+          { user_id: 'u-c', created_at: at('2026-09-20T03:00:00Z', 80) },
+          { user_id: 'u-d', created_at: at('2026-09-25T03:00:00Z') },
+          // Quá 90 ngày: không tính vào cửa sổ nào, cũng không vào trung vị.
+          { user_id: 'u-d', created_at: at('2026-09-25T03:00:00Z', 90.5) },
+          { user_id: 'u-e', created_at: at('2026-09-28T03:00:00Z') },
+        ],
+      },
+      '2026-09-01',
+    );
+    const upsert = jest.fn().mockResolvedValue(undefined);
+    const updateMany = jest.fn().mockResolvedValue({ count: existingRows });
+    const prisma = { ...(base.prisma as unknown as Record<string, unknown>), cohortRepeatSnapshot: { upsert, updateMany } } as unknown as PrismaService;
+    return { prisma, upsert, updateMany, queryRawUnsafe: base.queryRawUnsafe };
+  }
+
+  it('khách mới của tháng (bỏ khách đã có đơn trước tháng), đếm đơn 2 trong 30/60/90 ngày, trung vị ngày tới đơn 2; đủ ngày thì complete', async () => {
+    const { prisma, upsert, queryRawUnsafe } = cohortPrisma();
+    const res = await new AnalyticsAggregationService(prisma).computeCohortSnapshot('2026-09', '2026-12-31');
+    expect(res).toEqual({
+      cohortMonth: '2026-09',
+      newBuyersInCohort: 5,
+      repeat30dCount: 1,
+      repeat30dComplete: true,
+      repeat60dCount: 2,
+      repeat60dComplete: true,
+      repeat90dCount: 3,
+      repeat90dComplete: true,
+      medianDaysToSecondOrder: 45,
+    });
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { cohortMonth: new Date('2026-09-01') },
+        create: expect.objectContaining({ cohortMonth: new Date('2026-09-01'), newBuyersInCohort: 5, repeat90dCount: 3 }),
+        update: expect.objectContaining({ repeat30dCount: 1, computedAt: expect.any(Date) }),
+      }),
+    );
+    // Khách của tháng: [01/09, 01/10) giờ VN; đơn của khách mới: tới 01/10 + 90 ngày (chưa vượt mốc dữ liệu).
+    const range = queryRawUnsafe.mock.calls.find(([sql]) => String(sql).includes('GROUP BY 1, 2'))!;
+    expect([range[1], range[3]]).toEqual(['2026-09-01', '2026-10-01']);
+    const orders = queryRawUnsafe.mock.calls.find(([sql]) => String(sql).includes('AS user_id') && String(sql).includes('AS created_at'))!;
+    expect([orders[1], orders[4]]).toEqual(['2026-09-01', '2026-12-30']);
+    expect(orders[3]).toEqual(expect.arrayContaining(['u-a', 'u-b', 'u-c', 'u-d', 'u-e']));
+    expect(orders[3]).not.toContain('u-old');
+  });
+
+  it('chưa đủ ngày theo dõi: complete = false cho cửa sổ chưa qua, số vẫn ghi theo đơn đã có; cửa sổ đơn cắt ở mốc dữ liệu', async () => {
+    const { prisma, queryRawUnsafe } = cohortPrisma();
+    // Dữ liệu tới hết 15/11: 01/10 + 30 = 31/10 đã qua, 01/10 + 60 = 30/11 chưa.
+    const res = await new AnalyticsAggregationService(prisma).computeCohortSnapshot('2026-09', '2026-11-15');
+    expect(res).toMatchObject({ repeat30dComplete: true, repeat60dComplete: false, repeat90dComplete: false });
+    const orders = queryRawUnsafe.mock.calls.find(([sql]) => String(sql).includes('AS user_id') && String(sql).includes('AS created_at'))!;
+    expect(orders[4]).toBe('2026-11-16');
+  });
+
+  it('tháng đang chạy: khách chỉ tính tới hết ngày mốc', async () => {
+    const { prisma, queryRawUnsafe } = cohortPrisma();
+    const res = await new AnalyticsAggregationService(prisma).computeCohortSnapshot('2026-09', '2026-09-20');
+    expect(res).toMatchObject({ repeat30dComplete: false });
+    const range = queryRawUnsafe.mock.calls.find(([sql]) => String(sql).includes('GROUP BY 1, 2'))!;
+    expect(range[3]).toBe('2026-09-21');
+  });
+
+  it('tháng chưa tới (sau mốc dữ liệu): không truy vấn, không ghi', async () => {
+    const { prisma, upsert, updateMany, queryRawUnsafe } = cohortPrisma();
+    expect(await new AnalyticsAggregationService(prisma).computeCohortSnapshot('2026-12', '2026-11-30')).toBeNull();
+    expect(queryRawUnsafe).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('tháng không có khách mới và chưa có dòng: không tạo dòng 0', async () => {
+    const upsert = jest.fn();
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const base = fakePrisma({ day: [] }, '2026-05-01');
+    const prisma = { ...(base.prisma as unknown as Record<string, unknown>), cohortRepeatSnapshot: { upsert, updateMany } } as unknown as PrismaService;
+    expect(await new AnalyticsAggregationService(prisma).computeCohortSnapshot('2026-05', '2026-11-30')).toBeNull();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('AnalyticsAggregationService.refreshCohortSnapshots', () => {
+  it('xét 15 tháng tới tháng của mốc, bỏ tháng đã chốt đủ 90 ngày, trả các tháng đã ghi', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ cohortMonth: new Date('2026-06-01') }]);
+    const svc = new AnalyticsAggregationService({ cohortRepeatSnapshot: { findMany } } as unknown as PrismaService);
+    const compute = jest.spyOn(svc, 'computeCohortSnapshot').mockImplementation(async (m) => (m >= '2026-09' ? ({ cohortMonth: m } as never) : null));
+    const written = await svc.refreshCohortSnapshots('2026-11-23');
+    const months = compute.mock.calls.map(([m]) => m);
+    expect(months[0]).toBe('2025-09');
+    expect(months[months.length - 1]).toBe('2026-11');
+    expect(months).toHaveLength(14);
+    expect(months).not.toContain('2026-06');
+    expect(compute).toHaveBeenCalledWith('2026-11', '2026-11-23');
+    expect(written).toEqual(['2026-09', '2026-10', '2026-11']);
+    expect(findMany.mock.calls[0][0].where.repeat90dComplete).toBe(true);
+  });
+});
+
+describe('AnalyticsAggregationService funnel snapshot', () => {
+  const counts = [
+    { platform: 'web', sessions: 10n, product_viewed: 8n, add_or_buy: 4n, checkout_started: 3n, place_order_click: 2n, order_placed: 1n },
+    { platform: 'miniapp', sessions: 5, product_viewed: 4, add_or_buy: 2, checkout_started: 1, place_order_click: 1, order_placed: 1 },
+  ];
+  function funnelPrisma() {
+    const upsert = jest.fn((args: unknown) => args);
+    const $queryRaw = jest.fn().mockResolvedValue(counts);
+    const $transaction = jest.fn(async (ops: unknown[]) => ops);
+    return { prisma: { $queryRaw, $transaction, funnelDailySnapshot: { upsert } } as unknown as PrismaService, upsert, $queryRaw, $transaction };
+  }
+
+  it('đếm sự kiện của đúng ngày VN [00:00, 24:00) và ghi đủ bước × nền tảng (kể cả 0) bằng upsert theo khoá unique', async () => {
+    const { prisma, upsert, $queryRaw, $transaction } = funnelPrisma();
+    await new AnalyticsAggregationService(prisma).computeFunnelSnapshot('2026-11-23');
+    const values = $queryRaw.mock.calls[0].slice(1);
+    expect(values).toEqual(expect.arrayContaining(['2026-11-22T17:00:00.000Z', '2026-11-23T17:00:00.000Z']));
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(upsert).toHaveBeenCalledTimes(12);
+    const date = new Date('2026-11-23');
+    const keys = upsert.mock.calls.map(([a]) => (a as { where: { date_step_entrySource: { date: Date; step: string; entrySource: string } } }).where.date_step_entrySource);
+    expect(keys.every((k) => k.date.getTime() === date.getTime())).toBe(true);
+    expect(new Set(keys.map((k) => `${k.step}|${k.entrySource}`)).size).toBe(12);
+    expect(upsert).toHaveBeenCalledWith({
+      where: { date_step_entrySource: { date, step: 'sessions', entrySource: 'web' } },
+      create: { date, step: 'sessions', entrySource: 'web', count: 10 },
+      update: { count: 10 },
+    });
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { date, step: 'order_placed', entrySource: 'miniapp', count: 1 } }));
+  });
+
+  it('chạy lại cùng ngày cho đúng cùng các câu upsert (không tạo dòng mới, không cộng dồn)', async () => {
+    const a = funnelPrisma();
+    const b = funnelPrisma();
+    const svcA = new AnalyticsAggregationService(a.prisma);
+    await svcA.computeFunnelSnapshot('2026-11-23');
+    await svcA.computeFunnelSnapshot('2026-11-23');
+    await new AnalyticsAggregationService(b.prisma).computeFunnelSnapshot('2026-11-23');
+    const first = a.upsert.mock.calls.slice(0, 12);
+    const second = a.upsert.mock.calls.slice(12);
+    expect(second).toEqual(first);
+    expect(b.upsert.mock.calls).toEqual(first);
+  });
+
+  it('bù các ngày còn thiếu funnel snapshot, cũ nhất trước, giới hạn số ngày mỗi đêm', async () => {
+    const queryRawUnsafe = jest.fn().mockResolvedValue([{ day: '2026-10-01' }, { day: '2026-10-02' }]);
+    const svc = new AnalyticsAggregationService({ $queryRawUnsafe: queryRawUnsafe } as unknown as PrismaService);
+    const compute = jest.spyOn(svc, 'computeFunnelSnapshot').mockResolvedValue({} as never);
+    expect(await svc.backfillFunnelSnapshots(14)).toEqual(['2026-10-01', '2026-10-02']);
+    expect(compute.mock.calls.map(([d]) => d)).toEqual(['2026-10-01', '2026-10-02']);
+    const [sql, limit] = queryRawUnsafe.mock.calls[0];
+    expect(limit).toBe(14);
+    expect(sql).toContain('NOT EXISTS (SELECT 1 FROM funnel_daily_snapshot');
+    expect(sql).toContain('ORDER BY r."date" ASC');
+    expect(sql).toContain('min("receivedAt")');
+  });
+
+  it('runNightly: phễu lỗi không chặn cohort, retention lỗi không chặn phễu', async () => {
+    const svc = new AnalyticsAggregationService({} as unknown as PrismaService);
+    jest.spyOn(svc, 'computeRetentionSnapshot').mockRejectedValue(new Error('retention down'));
+    const funnel = jest.spyOn(svc, 'computeFunnelSnapshot').mockRejectedValue(new Error('funnel down'));
+    const cohort = jest.spyOn(svc, 'refreshCohortSnapshots').mockResolvedValue([]);
+    await expect(svc.runNightly()).resolves.toBeUndefined();
+    expect(funnel).toHaveBeenCalledTimes(1);
+    expect(cohort).toHaveBeenCalledTimes(1);
   });
 });

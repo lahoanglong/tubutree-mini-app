@@ -23,6 +23,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   RETURN_APPROVED_WALLET_POINTS: ['order_code', 'points'],
   ORDER_AWAITING_PAYMENT: ['order_code', 'amount', 'deadline'],
   ORDER_PAYMENT_EXPIRED: ['order_code'],
+  ORDER_PAYMENT_REMINDER: ['order_code', 'amount', 'deadline'],
   RETURN_APPROVED_DETAIL: ['order_code', 'refund_note'],
   RETURN_REJECTED: ['order_code', 'reason'],
   RETURN_RECEIVED: ['order_code'],

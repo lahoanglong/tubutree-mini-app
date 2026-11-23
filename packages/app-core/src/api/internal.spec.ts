@@ -82,6 +82,7 @@ describe('miền nội bộ — đúng route, query, body, Idempotency-Key', () 
     ['updateOwnedPromotion', (h) => bo.updateOwnedPromotion(h, 'p1', { isActive: false }), { method: 'patch', path: '/brand/owner/me/promotions/p1', body: { isActive: false } }],
     ['deleteOwnedPromotion', (h) => bo.deleteOwnedPromotion(h, 'p1'), { method: 'delete', path: '/brand/owner/me/promotions/p1' }],
     ['getOwnedBrandSales', (h) => bo.getOwnedBrandSales(h, '30d'), { method: 'get', path: '/brand/owner/me/sales', opts: { query: { period: '30d' } } }],
+    ['getOwnedBrandCatalogHealth', (h) => bo.getOwnedBrandCatalogHealth(h), { method: 'get', path: '/brand/owner/me/catalog-health' }],
   ])('%s', async (_name, call, expected) => {
     const { http, calls } = fakeHttp();
     await call(http);

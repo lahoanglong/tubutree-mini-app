@@ -20,12 +20,14 @@ import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { StaffShell } from '@/components/staff/staff-shell';
 import { ProfileTab } from './profile-tab';
 import { SalesTab } from './sales-tab';
+import { CatalogTab } from './catalog-tab';
 import { ViewBrandLink } from './view-brand-link';
 
 const TITLE = BRAND_OWNER_TITLE;
 const TABS = [
   { key: 'profile', label: 'Hồ sơ & khuyến mãi' },
   { key: 'sales', label: 'Doanh thu' },
+  { key: 'catalog', label: 'Sản phẩm & Chất lượng' },
 ] as const;
 const TAB_KEYS = TABS.map((t) => t.key);
 
@@ -78,8 +80,10 @@ function Editor() {
       </section>
 
       <div className="min-w-0">
-        <SegmentedTabs items={[...TABS]} value={tab} onChange={setTab} label="Mục quản lý thương hiệu" />
-        <div className="mt-3">{tab === 'sales' ? <SalesTab /> : <ProfileTab key={brand.id} brand={brand} />}</div>
+        <SegmentedTabs scroll items={[...TABS]} value={tab} onChange={setTab} label="Mục quản lý thương hiệu" />
+        <div className="mt-3">
+          {tab === 'sales' ? <SalesTab /> : tab === 'catalog' ? <CatalogTab /> : <ProfileTab key={brand.id} brand={brand} />}
+        </div>
       </div>
     </div>
   );
