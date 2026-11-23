@@ -645,6 +645,8 @@ export const placeOrder = (
     note?: string;
     invoiceRequest?: InvoiceRequest;
     referralCode?: string;
+    /** `?l=` của link CTV khách mở (store storefront-context). */
+    affiliateLinkCode?: string;
     storefrontSlug?: string;
     itemIds?: string[];
     /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */

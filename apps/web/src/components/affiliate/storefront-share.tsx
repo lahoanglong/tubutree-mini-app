@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Share2 } from 'lucide-react';
 import { fetchContentKit } from '@tubutree/app-core/api/affiliate';
+import type { PosterInput } from '@tubutree/app-core/commerce/share-poster-link';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { SITE_URL } from '@/lib/site';
@@ -166,6 +167,26 @@ export function StorefrontShareSheet({
 }
 
 /** "Bộ nội dung bán hàng" theo từng sản phẩm: bài mẫu đã chèn tên CTV + link giới thiệu, USP, FAQ, video tham khảo. */
+/** Ảnh QR của một link CTV (bảng Link chia sẻ ở /ctv): tải hoặc chia sẻ ảnh ngay trong bảng, QR kèm mã CTV và mã link. */
+export function LinkPosterSheet({ input, title, onClose }: { input: PosterInput | null; title: string; onClose: () => void }) {
+  const [note, setNote] = useState<Note>(null);
+  const lock = useActionLock();
+  const key = input ? JSON.stringify(input) : '';
+  useEffect(() => {
+    setNote(null);
+  }, [key]);
+  return (
+    <Sheet open={input !== null} onClose={onClose} title={title}>
+      {input && (
+        <div className="mb-3">
+          <SharePoster input={input} lock={lock} onNote={setNote} />
+        </div>
+      )}
+      <NoteLine note={note} />
+    </Sheet>
+  );
+}
+
 export function ContentKitSheet({ open, onClose, productSlug }: { open: boolean; onClose: () => void; productSlug: string }) {
   const [note, setNote] = useState<Note>(null);
   const lock = useActionLock();

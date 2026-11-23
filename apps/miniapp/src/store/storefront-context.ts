@@ -9,9 +9,10 @@ const CTV_TOUCHED_KEY = 'tubu_sf_ctv_touched';
  *  (không phải /brand/:slug, trang của thực thể khác). */
 /** `referralEligible`: mã giới thiệu có thật sự là của CTV (máy chủ ghi công được) hay chưa biết (null); chỉ mã đã xác nhận mới khoá ô nhập ở thanh toán. */
 /** `clickedAt`: epoch ms lúc khách bấm link nguồn; máy chủ tính hạn ghi công từ đây kể cả khi chạm gửi muộn. */
-type Ctx = { slug: string | null; referralCode: string | null; kind: 'ctv' | 'brand' | 'partner'; referralEligible: boolean | null; clickedAt: number | null };
+/** `linkCode`: `?l=` của link CTV (mã link), gửi kèm đơn; đi cùng mã giới thiệu của lượt mở đó, đổi mã thì mất. */
+type Ctx = { slug: string | null; referralCode: string | null; kind: 'ctv' | 'brand' | 'partner'; referralEligible: boolean | null; clickedAt: number | null; linkCode: string | null };
 
-const DEFAULT_CTX: Ctx = { slug: null, referralCode: null, kind: 'ctv', referralEligible: null, clickedAt: null };
+const DEFAULT_CTX: Ctx = { slug: null, referralCode: null, kind: 'ctv', referralEligible: null, clickedAt: null, linkCode: null };
 
 const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCase();
 
@@ -86,12 +87,15 @@ export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
     // Lượt đến từ link truyền clickedAt tường minh (luôn là lúc bấm mới, kể cả cùng mã). Điều hướng trong app: cùng mã giữ lúc bấm
     // đã ghi, mã mới là lượt bấm vừa xảy ra.
     const clickedAt = !referralCode ? null : ctx.clickedAt ?? (norm(referralCode) === norm(cur.referralCode) && cur.clickedAt ? cur.clickedAt : Date.now());
+    // Mã link thuộc về CTV của mã giới thiệu đã mở cùng nó: mở gian hàng khác mã thì bỏ (máy chủ cũng chỉ nhận link của đúng người giới thiệu).
+    const linkCode = !referralCode ? null : ctx.linkCode !== undefined ? ctx.linkCode : norm(referralCode) === norm(cur.referralCode) ? cur.linkCode : null;
     const next: Ctx = {
       slug: ctx.slug !== undefined ? ctx.slug : cur.slug,
       referralCode,
       kind: ctx.kind !== undefined ? ctx.kind : cur.kind,
       referralEligible,
       clickedAt,
+      linkCode,
     };
     persist(next);
     set(next);
@@ -99,12 +103,12 @@ export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
   confirmReferral: (code, ok) => {
     const cur = get();
     if (!cur.referralCode || norm(cur.referralCode) !== norm(code) || cur.referralEligible === ok) return;
-    persist({ slug: cur.slug, referralCode: cur.referralCode, kind: cur.kind, referralEligible: ok, clickedAt: cur.clickedAt });
+    persist({ slug: cur.slug, referralCode: cur.referralCode, kind: cur.kind, referralEligible: ok, clickedAt: cur.clickedAt, linkCode: cur.linkCode });
     set({ referralEligible: ok });
   },
   clear: () => {
     try { sessionStorage.removeItem(KEY); } catch { /* ignore */ }
     clearCtvTouched();
-    set({ slug: null, referralCode: null, kind: 'ctv', referralEligible: null, clickedAt: null });
+    set({ ...DEFAULT_CTX });
   },
 }));

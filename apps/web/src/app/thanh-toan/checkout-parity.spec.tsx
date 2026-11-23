@@ -27,7 +27,7 @@ const m = vi.hoisted(() => ({
   quote: vi.fn(),
   placeOrder: vi.fn(),
   touch: vi.fn(),
-  ctx: { slug: null as string | null, referralCode: null as string | null, kind: null as string | null, referralEligible: null as boolean | null },
+  ctx: { slug: null as string | null, referralCode: null as string | null, kind: null as string | null, referralEligible: null as boolean | null, linkCode: null as string | null },
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
@@ -74,7 +74,7 @@ beforeEach(() => {
   localStorage.clear();
   m.items = [line('i1', 'Dầu gội')];
   m.wallet = 50000;
-  m.ctx = { slug: null, referralCode: null, kind: null, referralEligible: null };
+  m.ctx = { slug: null, referralCode: null, kind: null, referralEligible: null, linkCode: null };
   m.quote.mockReset().mockResolvedValue(quote());
   m.placeOrder.mockReset().mockReturnValue(new Promise(() => undefined));
   m.touch.mockReset().mockResolvedValue({ ok: true });
@@ -274,19 +274,19 @@ describe('/thanh-toan — mã giới thiệu CTV (R2-BUYERWEB-6)', () => {
     expect(m.placeOrder.mock.calls[0]![0].referralCode).toBeUndefined();
   });
 
-  it('đang mua qua link của CTV thật (đã xác nhận): hiện mã gắn sẵn, không cho nhập đè và vẫn gửi kèm đơn', async () => {
-    m.ctx = { slug: 'ctv-an', referralCode: 'AN123', kind: 'CTV', referralEligible: true };
+  it('đang mua qua link của CTV thật (đã xác nhận): hiện mã gắn sẵn, không cho nhập đè và vẫn gửi kèm đơn cùng mã link', async () => {
+    m.ctx = { slug: 'ctv-an', referralCode: 'AN123', kind: 'CTV', referralEligible: true, linkCode: 'prod01' };
     const r = await mount();
     expect(r.container.textContent).toContain('AN123');
     expect(r.container.textContent).toContain('Bạn đang mua qua link giới thiệu');
     expect(byText(r.container, 'button', 'Nhập mã')).toBeNull();
     click(placeButton(r));
     await flush(4);
-    expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ referralCode: 'AN123' });
+    expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ referralCode: 'AN123', affiliateLinkCode: 'prod01' });
   });
 
   it('mã từ link là của khách thường (máy chủ bỏ qua, referralEligible=false): không khoá ô nhập, không nói "mua qua link giới thiệu", đơn không gửi mã đó', async () => {
-    m.ctx = { slug: null, referralCode: 'KHACH01', kind: null, referralEligible: false };
+    m.ctx = { slug: null, referralCode: 'KHACH01', kind: null, referralEligible: false, linkCode: null };
     const r = await mount();
     expect(r.container.textContent).not.toContain('KHACH01');
     expect(r.container.textContent).not.toContain('Bạn đang mua qua link giới thiệu');
@@ -297,7 +297,7 @@ describe('/thanh-toan — mã giới thiệu CTV (R2-BUYERWEB-6)', () => {
   });
 
   it('mã từ link chưa biết có phải của CTV không (null): ô nhập mở cho khách, đơn vẫn gửi mã để máy chủ quyết', async () => {
-    m.ctx = { slug: null, referralCode: 'LINK01', kind: null, referralEligible: null };
+    m.ctx = { slug: null, referralCode: 'LINK01', kind: null, referralEligible: null, linkCode: null };
     const r = await mount();
     expect(r.container.textContent).not.toContain('Bạn đang mua qua link giới thiệu');
     expect(byText(r.container, 'button', 'Nhập mã')).not.toBeNull();
@@ -307,7 +307,7 @@ describe('/thanh-toan — mã giới thiệu CTV (R2-BUYERWEB-6)', () => {
   });
 
   it('mã link của khách thường nhưng khách tự nhập mã CTV thật → gửi mã khách nhập', async () => {
-    m.ctx = { slug: null, referralCode: 'KHACH01', kind: null, referralEligible: false };
+    m.ctx = { slug: null, referralCode: 'KHACH01', kind: null, referralEligible: false, linkCode: null };
     const r = await mount();
     click(byText(r.container, 'button', 'Nhập mã'));
     typeInto(r.container.querySelector('input[aria-label="Mã người giới thiệu"]'), 'ctv0001');

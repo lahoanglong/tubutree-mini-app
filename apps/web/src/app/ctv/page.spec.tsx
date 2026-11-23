@@ -48,6 +48,9 @@ vi.mock('@/components/ui/segmented-tabs', async (importOriginal) => {
   };
 });
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
+vi.mock('@/components/affiliate/share-poster', () => ({
+  SharePoster: ({ input }: { input: unknown }) => <div data-testid="poster">{JSON.stringify(input)}</div>,
+}));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { id: 'ctv1' } }) }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
 vi.mock('@/lib/route-map', async (importOriginal) => ({
@@ -667,12 +670,34 @@ describe('/ctv — bảng điều khiển', () => {
     const full = mount();
     await flush();
     expect(full.container.textContent).toContain('Trang chủ');
-    expect(full.container.textContent).toContain('3 lượt bấm');
-    expect(full.container.textContent).not.toContain('3 lượt bấm ·');
+    expect(full.container.textContent).toContain('3 lượt bấm · 1 đơn (33,3%)');
     expect(full.container.textContent).toContain('Lượt bấm');
     click(Array.from(full.container.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
     await flush();
     expect(state.copied[0]).toMatch(/\/\?ref=TUBU88&l=abc123$/);
+  });
+
+  it('nút QR của từng link mở bảng ảnh QR: sản phẩm vẽ thẻ sản phẩm kèm mã CTV và mã link, đích khác vẽ ảnh kiểu gian hàng', async () => {
+    state.tab = 'share';
+    state.links = [
+      { id: 'l1', shortCode: 'prod01', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, clicks: 12, conversions: 3, revenue: 1_250_000, createdAt: '2026-10-01T00:00:00Z' },
+      { id: 'l2', shortCode: 'deal01', targetType: 'DEAL', targetId: null, clicks: 1, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
+    ];
+    const { container } = mount();
+    await flush();
+    expect(container.textContent).toContain('12 lượt bấm · 3 đơn (25%) · 1.250.000đ');
+    const qrs = Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Ảnh QR của link"]'));
+    expect(qrs).toHaveLength(2);
+    expect(qrs[0]!.getAttribute('aria-haspopup')).toBe('dialog');
+    click(qrs[0]!);
+    await flush();
+    await flush();
+    const poster = () => JSON.parse(document.querySelector('[data-testid="poster"]')?.textContent ?? '{}') as Record<string, unknown>;
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Ảnh QR của link');
+    expect(poster()).toMatchObject({ kind: 'product', slug: 'nuoc-rua-chen', referralCode: 'TUBU88', linkCode: 'prod01' });
+    click(qrs[1]!);
+    await flush();
+    expect(poster()).toMatchObject({ kind: 'store', title: 'Giờ vàng', path: '/gio-vang', referralCode: 'TUBU88', linkCode: 'deal01' });
   });
 
   it('+ Tạo link mở bộ tạo link, chưa gửi gì; chọn Giờ vàng rồi Tạo link: POST {targetType: DEAL} đúng một lần dù bấm hai lần', async () => {
@@ -693,7 +718,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(posts()).toEqual([{ method: 'post', path: '/affiliate/links', body: { targetType: 'DEAL' } }]);
   });
 
-  it('link sâu: sản phẩm, danh mục, Giờ vàng chép đúng đường dẫn web kèm ref và l; phễu ghi rõ số chung, dòng link chỉ là lượt bấm', async () => {
+  it('link sâu: sản phẩm, danh mục, Giờ vàng chép đúng đường dẫn web kèm ref và l; phễu ghi rõ số chung, dòng link có số riêng', async () => {
     state.tab = 'share';
     state.links = [
       { id: 'l1', shortCode: 'prod01', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, clicks: 7, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
@@ -707,9 +732,9 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Sản phẩm · Nước rửa chén');
     expect(t).toContain('Danh mục · Nhà bếp');
     expect(t).toContain('Giờ vàng');
-    expect(t).toContain('0 lượt bấm · Đích không còn, link mở Trang chủ');
+    expect(t).toContain('0 lượt bấm · 0 đơn · Đích không còn, link mở Trang chủ');
     expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Tỉ lệ ra đơn chung 25% · 1 đơn / 4 lượt bấm');
-    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Số trên từng link là lượt bấm');
+    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Số trên từng link chỉ tính đơn đến từ link đó');
     const copies = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Sao chép');
     for (const b of copies) click(b);
     await flush();

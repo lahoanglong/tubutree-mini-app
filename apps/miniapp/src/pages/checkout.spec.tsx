@@ -33,7 +33,7 @@ const mocks = vi.hoisted(() => ({
   getBankQr: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false }, orderZaloEnabled: false as boolean },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
-  sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand', referralEligible: null as boolean | null },
+  sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand', referralEligible: null as boolean | null, linkCode: null as string | null },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -172,6 +172,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     localStorage.clear();
     mocks.sfCtx.referralCode = null;
     mocks.sfCtx.referralEligible = null;
+    mocks.sfCtx.linkCode = null;
     mocks.getCouponPreviews.mockResolvedValue([]);
     mocks.getAddresses.mockResolvedValue([ADDRESS]);
     mocks.getCart.mockResolvedValue(CART);
@@ -295,6 +296,17 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(screen.queryByText('Nhập mã')).not.toBeInTheDocument();
     const body = await placeOrderClick();
     expect(body.referralCode).toBe('linkcode');
+    expect(body.affiliateLinkCode).toBeUndefined();
+  });
+
+  it('mở từ link CTV có mã link (?l=) → đơn gửi kèm affiliateLinkCode để máy chủ ghi đơn cho đúng link', async () => {
+    mocks.sfCtx.referralCode = 'linkcode';
+    mocks.sfCtx.referralEligible = true;
+    mocks.sfCtx.linkCode = 'prod01';
+    renderPage();
+    const body = await placeOrderClick();
+    expect(body.referralCode).toBe('linkcode');
+    expect(body.affiliateLinkCode).toBe('prod01');
   });
 
   it('mã từ link là của khách thường (máy chủ bỏ qua, referralEligible=false) → không khoá ô nhập, không nói "mua qua link giới thiệu", đơn không gửi mã đó', async () => {
@@ -3734,6 +3746,7 @@ describe('CheckoutPage — phân loại không có tên (86/154 phân loại tr�
     mocks.sfCtx.kind = 'ctv';
     mocks.sfCtx.referralCode = null;
     mocks.sfCtx.referralEligible = null;
+    mocks.sfCtx.linkCode = null;
     mocks.getCouponPreviews.mockResolvedValue([]);
     mocks.getAddresses.mockResolvedValue([ADDRESS]);
     mocks.checkoutQuote.mockResolvedValue(QUOTE);

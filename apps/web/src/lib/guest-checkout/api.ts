@@ -60,6 +60,10 @@ export interface GuestPlaceBody {
   note?: string;
   giftVariationId?: string | null;
   orderZaloConsent?: boolean;
+  /** Mã giới thiệu từ link khách mở (máy chủ chỉ ghi công mã CTV/đại lý, không trùng SĐT khách). */
+  referralCode?: string;
+  /** `?l=` mã link CTV đi cùng mã giới thiệu đó. */
+  affiliateLinkCode?: string;
   trackingKey: string;
   website?: string;
   fillMs: number;

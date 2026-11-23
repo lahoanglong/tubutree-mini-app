@@ -15,6 +15,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
+import { debitLinkForRejectedCommission } from '../affiliate/affiliate-link-stats';
 import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
@@ -871,8 +872,12 @@ export class AdminService {
     const out = await this.prisma
       .$transaction(
         async (tx) => {
-          const rows = await tx.$queryRaw<{ id: string; amount: number; approvedAt: Date | null }[]>`
-            SELECT "id", "amount", "approvedAt" FROM "commissions"
+          const rows = await tx.$queryRaw<
+            { id: string; orderId: string; amount: number; commissionableTotal: number; approvedAt: Date | null; affiliateLinkCode: string | null }[]
+          >`
+            SELECT "id", "orderId", "amount", "commissionableTotal", "approvedAt",
+                   (SELECT o."affiliateLinkCode" FROM "orders" o WHERE o."id" = "commissions"."orderId") AS "affiliateLinkCode"
+              FROM "commissions"
             WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
             ORDER BY "id" FOR NO KEY UPDATE`;
           const [user] = await tx.$queryRaw<{ affiliateRevokedAt: Date | null }[]>`
@@ -888,6 +893,8 @@ export class AdminService {
             data: { status: 'REJECTED' },
           });
           if (count !== ids.length) throw new ConflictException('Hoa hồng vừa đổi trạng thái, chưa huỷ gì cả. Tải lại trang rồi thử lại.');
+          // Mọi dòng đã khoá vừa đổi REJECTED: số đơn/doanh số của link đi theo dòng hoa hồng sống (affiliate-link-stats.ts).
+          for (const r of rows) await debitLinkForRejectedCommission(tx, { ...r, affiliateUserId: userId });
           const amount = rows.reduce((sum, r) => sum + r.amount, 0);
           // Như mọi đường đưa hoa hồng đã chốt về REJECTED (huỷ đơn, trả hàng, lệnh chuyển hỏng): hoa hồng rời doanh số tháng thì mốc thưởng
           // tháng đã nhận mà doanh số nay dưới ngưỡng phải bị thu hồi, kẻo CTV giữ điểm mốc của doanh số không còn. Mỗi tháng một lần.

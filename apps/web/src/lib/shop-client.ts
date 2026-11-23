@@ -419,6 +419,8 @@ export const placeOrder = (
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
+    /** `?l=` của link CTV khách mở (storefront-context): máy chủ chỉ lưu khi link thuộc đúng người giới thiệu của đơn. */
+    affiliateLinkCode?: string;
     /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */
     orderZaloConsent?: boolean;
     /** Quà tặng dùng thử khách thấy ở thanh toán; `null` = không kèm quà; bỏ trống khi báo giá không có khối quà. */

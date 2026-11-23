@@ -92,6 +92,18 @@ describe('Huỷ hoa hồng chờ rút của CTV bị thu hồi chạy song song 
     expect(ev.reason).toContain('Quyết định của quản lý');
   });
 
+  it('hai tab huỷ hoa hồng của đơn mang mã link (tubu-w24-01): link trừ đúng một đơn và nền doanh số của dòng, không âm', async () => {
+    const { user, commission } = await ctv(true);
+    const link = await prisma.affiliateLink.create({ data: { userId: user.id, shortCode: `w24f${randCode(6)}`, targetType: 'HOMEPAGE', conversions: 3, revenue: 2_500_000 } });
+    await prisma.order.update({ where: { id: commission.orderId }, data: { affiliateLinkCode: link.shortCode } });
+    const results = await Promise.allSettled([
+      admin.forfeitRevokedCommissions(boss.id, user.id, 'tab thứ nhất'),
+      admin.forfeitRevokedCommissions(boss.id, user.id, 'tab thứ hai'),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(await prisma.affiliateLink.findUniqueOrThrow({ where: { id: link.id } })).toMatchObject({ conversions: 2, revenue: 1_500_000 });
+  });
+
   it('người không có dấu: 409 và hoa hồng giữ nguyên APPROVED', async () => {
     const { user, commission } = await ctv(false);
     await expect(admin.forfeitRevokedCommissions(boss.id, user.id, 'thử huỷ')).rejects.toBeInstanceOf(ConflictException);

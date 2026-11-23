@@ -51,6 +51,8 @@ import { WasteHoldService } from '../waste-exchange/core/waste-hold.service';
 import { WASTE_MESSAGES } from '../waste-exchange/core/waste-messages';
 import { assertPickupItemsAllowedForProvince, isHcmProvince } from '../waste-exchange/core/waste-pickup-rules';
 import { AffiliateService } from '../affiliate/affiliate.service';
+import { LINK_CODE_RE } from '../affiliate/affiliate-link-stats';
+import { normalizeZaloPhone } from '../../common/phone';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
 import { applyGreenBox, comboKeyIds, greenBoxLineOf, loadGreenBoxSettings, yieldGreenBoxToCoupon, type GreenBoxResult } from '../bundles/green-box';
 import { resolveAttribution } from './attribution';
@@ -335,6 +337,32 @@ export class CheckoutService {
   }
 
   /**
+   * Người giới thiệu của đơn khách vãng lai web: chỉ theo mã giới thiệu gửi kèm. Khách chưa đăng nhập nên không có "chạm", và giá vãng lai không
+   * đi qua gian hàng (báo giá và đặt đơn cùng không có slug), nên chỉ bậc đầu của attribution.ts. Cùng điều kiện findEligibleReferrer (CTV/đại lý
+   * còn quyền). SĐT đặt hàng trùng SĐT tài khoản của người giới thiệu là tự mua qua link của chính mình: không ghi công, như đơn đăng nhập. Khách
+   * không qua xác minh danh tính nên người giới thiệu chưa có SĐT (không so được) cũng không ghi công cho đơn khách.
+   */
+  private async guestReferrer(userId: string, referralCode: string | undefined, phone: string): Promise<string | null> {
+    if (!referralCode) return null;
+    const referrerUserId = await this.affiliate.findEligibleReferrer(referralCode, userId);
+    if (!referrerUserId) return null;
+    const referrer = await this.prisma.user.findUnique({ where: { id: referrerUserId }, select: { phone: true } });
+    const referrerPhone = normalizeZaloPhone(referrer?.phone);
+    return referrerPhone && referrerPhone !== normalizeZaloPhone(phone) ? referrerUserId : null;
+  }
+
+  /**
+   * Mã link CTV (`?l=`) lưu lên đơn: đúng khuôn, link có thật và thuộc ĐÚNG người giới thiệu đã ghi công của đơn. Mã link của CTV khác (ghép
+   * `?l=` của người này với `?ref=` của người kia) bị bỏ im lặng: đơn vẫn đặt, chỉ không cộng vào link nào. Không có người giới thiệu thì không lưu.
+   */
+  private async linkCodeFor(code: string | undefined, referrerUserId: string | null): Promise<string | null> {
+    const c = code?.trim();
+    if (!c || !referrerUserId || !LINK_CODE_RE.test(c)) return null;
+    const link = await this.prisma.affiliateLink.findUnique({ where: { shortCode: c }, select: { userId: true } });
+    return link?.userId === referrerUserId ? c : null;
+  }
+
+  /**
    * Tính tạm đơn (ship + giảm + điểm) cho màn checkout. `buyerIpHash`: IP đã băm của lần gọi (flashIpHash), chỉ dùng làm khoá giới hạn Giờ
    * vàng khi người mua chưa xác thực; khách web vãng lai mang IP trong `guest`.
    */
@@ -498,8 +526,11 @@ export class CheckoutService {
 
     // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn "chạm" giới thiệu trong hạn (3 ngày) →
     // fallback. Resolve TRƯỚC compute() để combo + storefrontSlug dùng đúng slug hiệu lực.
-    const { referrerUserId, storefront } = guest ? { referrerUserId: null, storefront: null } : await this.resolveAttribution(userId, dto);
+    const { referrerUserId, storefront } = guest
+      ? { referrerUserId: await this.guestReferrer(userId, dto.referralCode, guest.phone), storefront: null }
+      : await this.resolveAttribution(userId, dto);
     const storefrontSlug = storefront?.slug ?? null;
+    const affiliateLinkCode = await this.linkCodeFor(dto.affiliateLinkCode, referrerUserId);
     // Chủ gian hàng đối tác không hưởng hoa hồng giới thiệu trên đơn con do chính gian hàng của mình giao (mua hàng của anh ta qua
     // slug CTV của anh ta); đơn con hàng của người bán khác vẫn ghi hoa hồng như cũ.
     const referrerFor = (fulfiller: { ownerUserId: string | null }) =>
@@ -681,6 +712,8 @@ export class CheckoutService {
                 paymentStatus: paid ? 'PAID' : 'UNPAID',
                 shippingAddress: this.addressSnapshot(address),
                 referrerUserId: referrerFor(shipment.fulfiller),
+                // Đơn con không ghi công (hàng của chính người giới thiệu) không mang mã link: link chỉ đếm đơn có hoa hồng.
+                affiliateLinkCode: referrerFor(shipment.fulfiller) ? affiliateLinkCode : null,
                 storefrontSlug,
                 storefrontId: storefront?.id ?? null,
                 fulfiller: shipment.fulfiller.kind === 'MERCHANT' ? 'MERCHANT' : 'TUBU',

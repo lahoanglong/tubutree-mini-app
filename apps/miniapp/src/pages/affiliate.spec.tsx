@@ -45,6 +45,9 @@ vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../components/qr-code', () => ({ QrCode: () => null }));
+vi.mock('../components/share-poster', () => ({
+  SharePoster: ({ input }: { input: unknown }) => <div data-testid="poster">{JSON.stringify(input)}</div>,
+}));
 vi.mock('../components/affiliate/ctv-order-sheet', () => ({
   CtvOrderSheet: () => <div data-testid="ctv-order-sheet" />,
 }));
@@ -181,7 +184,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     expect(await screen.findByText('Sản phẩm · Nước rửa chén')).toBeInTheDocument();
     expect(screen.getByText('Danh mục · Bếp')).toBeInTheDocument();
     expect(screen.getByText('Giờ vàng')).toBeInTheDocument();
-    expect(screen.getByText('0 lượt bấm · Đích không còn, link mở Trang chủ')).toBeInTheDocument();
+    expect(screen.getByText('0 lượt bấm · 0 đơn · Đích không còn, link mở Trang chủ')).toBeInTheDocument();
     expect(screen.getByTestId('ctv-funnel')).toHaveTextContent('Tỉ lệ ra đơn chung 25% · 1 đơn / 4 lượt bấm');
     const copies = screen.getAllByRole('button', { name: 'Sao chép' });
     expect(copies).toHaveLength(4);
@@ -1177,16 +1180,28 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(getCtvMilestones).toHaveBeenCalledTimes(2);
   });
 
-  it('dòng link chỉ ghi số lượt bấm, không ghi "0 đơn" (cột conversions của link không được cập nhật)', async () => {
+  it('dòng link ghi lượt bấm, đơn, tỉ lệ ra đơn và doanh số của riêng link; link chưa có đơn không ghi tỉ lệ', async () => {
     vi.mocked(getAffiliateLinks).mockResolvedValueOnce([
       { id: 'L1', shortCode: 'abc123', targetType: 'HOMEPAGE', targetId: null, clicks: 1, conversions: 0, revenue: 0, createdAt: '2026-10-20T00:00:00Z' },
+      { id: 'L2', shortCode: 'prod01', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, clicks: 12, conversions: 3, revenue: 1_250_000, createdAt: '2026-10-21T00:00:00Z' },
     ]);
     renderPage();
     await screen.findByRole('tab', { name: 'Chia sẻ' });
     openTab('Chia sẻ');
-    expect(await screen.findByText('1 lượt bấm')).toBeInTheDocument();
-    // Số đơn chỉ nằm ở dòng phễu chung của CTV, không gắn vào từng link.
-    expect(screen.queryAllByText(/\d+ đơn/).filter((el) => !el.closest('[data-testid="ctv-funnel"]'))).toHaveLength(0);
+    expect(await screen.findByText('1 lượt bấm · 0 đơn')).toBeInTheDocument();
+    expect(screen.getByText('12 lượt bấm · 3 đơn (25%) · 1.250.000đ')).toBeInTheDocument();
+  });
+
+  it('nút QR của từng link mở bảng ảnh QR trỏ web kèm mã CTV và mã link', async () => {
+    vi.mocked(getAffiliateLinks).mockResolvedValueOnce([
+      { id: 'L2', shortCode: 'prod01', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, clicks: 12, conversions: 3, revenue: 1_250_000, createdAt: '2026-10-21T00:00:00Z' },
+    ]);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Ảnh QR của link' }));
+    const poster = await screen.findByTestId('poster');
+    expect(JSON.parse(poster.textContent ?? '{}')).toMatchObject({ kind: 'product', slug: 'nuoc-rua-chen', name: 'Nước rửa chén', referralCode: 'TUBU88', linkCode: 'prod01' });
   });
 });
 

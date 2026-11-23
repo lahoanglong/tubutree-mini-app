@@ -434,6 +434,8 @@ export default function CheckoutPage() {
         pointsToUse: usePoints ? usablePoints : 0,
         storefrontSlug: ctvSlug,
         referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
+        // Máy chủ chỉ lưu mã link khi link thuộc đúng người giới thiệu của đơn (mã khách tự nhập của CTV khác thì bỏ).
+        affiliateLinkCode: getStorefrontContext().linkCode ?? undefined,
         ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
         // Quà dùng thử đúng như khách đang thấy: quà vừa đổi mốc hoặc hết thì BE trả 409 thay vì âm thầm đổi quà.
         ...giftTrialPlaceField(quote?.giftTrial),

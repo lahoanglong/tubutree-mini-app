@@ -11,6 +11,7 @@ import {
   rememberEntryLink,
   rememberStorefront,
   rememberReferral,
+  guestReferralFields,
   clearStorefrontContext,
   clearCtvTouched,
   markCtvTouched,
@@ -22,17 +23,17 @@ describe('ngữ cảnh gian hàng trên web', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('chưa vào gian hàng nào → rỗng', () => {
-    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null });
+    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null, linkCode: null });
   });
 
   it('gian hàng CTV → mã giới thiệu là của chủ gian hàng do API trả', () => {
     rememberStorefront('abc123', 'CTV', 'abc123');
-    expect(getStorefrontContext()).toEqual({ slug: 'abc123', referralCode: 'ABC123', kind: 'CTV', referralEligible: true, clickedAt: expect.any(Number) });
+    expect(getStorefrontContext()).toEqual({ slug: 'abc123', referralCode: 'ABC123', kind: 'CTV', referralEligible: true, clickedAt: expect.any(Number), linkCode: null });
   });
 
   it('SELLER-4: CTV đổi subdomain → mã giới thiệu vẫn là của chủ, không suy từ slug/subdomain', () => {
     rememberStorefront('ctvone1', 'CTV', 'CTVONE1');
-    expect(getStorefrontContext()).toEqual({ slug: 'ctvone1', referralCode: 'CTVONE1', kind: 'CTV', referralEligible: true, clickedAt: expect.any(Number) });
+    expect(getStorefrontContext()).toEqual({ slug: 'ctvone1', referralCode: 'CTVONE1', kind: 'CTV', referralEligible: true, clickedAt: expect.any(Number), linkCode: null });
     sessionStorage.clear();
     rememberStorefront('greenshop', 'CTV');
     expect(getStorefrontContext().referralCode).toBeNull();
@@ -40,7 +41,7 @@ describe('ngữ cảnh gian hàng trên web', () => {
 
   it('gian hàng nhãn hàng → giữ slug nhưng KHÔNG bịa mã giới thiệu', () => {
     rememberStorefront('visante', 'BRAND');
-    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: null, kind: 'BRAND', referralEligible: null, clickedAt: null });
+    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: null, kind: 'BRAND', referralEligible: null, clickedAt: null, linkCode: null });
   });
 
   it('?ref= trên link bất kỳ → nhớ mã, viết hoa', () => {
@@ -51,18 +52,18 @@ describe('ngữ cảnh gian hàng trên web', () => {
   it('mã đã nhớ không bị gian hàng nhãn hàng xoá mất', () => {
     rememberReferral('ABC123');
     rememberStorefront('visante', 'BRAND');
-    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: 'ABC123', kind: 'BRAND', referralEligible: null, clickedAt: expect.any(Number) });
+    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: 'ABC123', kind: 'BRAND', referralEligible: null, clickedAt: expect.any(Number), linkCode: null });
   });
 
   it('dữ liệu hỏng → rỗng chứ không ném lỗi', () => {
     sessionStorage.setItem('tubu_web_storefront', '{nope');
-    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null });
+    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null, linkCode: null });
   });
 
   it('xoá xong quay về rỗng', () => {
     rememberStorefront('abc123', 'CTV', 'ABC123');
     clearStorefrontContext();
-    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null });
+    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null, linkCode: null });
   });
 });
 
@@ -89,6 +90,52 @@ describe('ctvSlugFor — chỉ gian hàng CTV mới gắn vào đơn', () => {
     const ctx = getStorefrontContext();
     expect(ctvSlugFor(ctx)).toBeUndefined();
     expect(ctx.referralCode).toBe('ABC123');
+  });
+});
+
+describe('mã link CTV (?l=) đi cùng mã giới thiệu', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('mở link kèm ref và l thì nhớ mã link; l sai khuôn hoặc không kèm ref thì bỏ; mở lại link không có l thì xoá', () => {
+    rememberEntryLink(null, 'ctv0001', 'aB3_x-9');
+    expect(getStorefrontContext()).toMatchObject({ referralCode: 'CTV0001', linkCode: 'aB3_x-9' });
+    rememberEntryLink(null, 'ctv0001', '<x>');
+    expect(getStorefrontContext().linkCode).toBeNull();
+    rememberEntryLink('an', null, 'aB3_x-9');
+    expect(getStorefrontContext().linkCode).toBeNull();
+    rememberEntryLink(null, 'ctv0001', 'aB3_x-9');
+    rememberEntryLink(null, 'ctv0001');
+    expect(getStorefrontContext().linkCode).toBeNull();
+  });
+
+  it('điều hướng trong app cùng mã giữ mã link; đổi mã (gian hàng CTV khác, khách nhập mã) thì mất', () => {
+    rememberEntryLink(null, 'ctv0001', 'prod01');
+    rememberReferral('ctv0001');
+    rememberStorefront('ctv0001', 'CTV', 'ctv0001');
+    expect(getStorefrontContext().linkCode).toBe('prod01');
+    confirmReferralTouch('CTV0001', true);
+    expect(getStorefrontContext().linkCode).toBe('prod01');
+    rememberStorefront('khac01', 'CTV', 'khac01');
+    expect(getStorefrontContext().linkCode).toBeNull();
+    rememberEntryLink(null, 'ctv0001', 'prod01');
+    rememberReferral('moi0001');
+    expect(getStorefrontContext().linkCode).toBeNull();
+  });
+
+  it('bản lưu bị sửa tay sai khuôn thì đọc ra null', () => {
+    sessionStorage.setItem('tubu_web_storefront', JSON.stringify({ referralCode: 'CTV0001', linkCode: 'a b' }));
+    expect(getStorefrontContext().linkCode).toBeNull();
+  });
+
+  it('đơn khách: gửi mã giới thiệu và mã link; mã máy chủ đã nói không phải CTV thì không gửi gì; gian hàng CTV không kèm ref dùng slug', () => {
+    expect(guestReferralFields(getStorefrontContext())).toEqual({});
+    rememberEntryLink(null, 'ctv0001', 'prod01');
+    expect(guestReferralFields(getStorefrontContext())).toEqual({ referralCode: 'CTV0001', affiliateLinkCode: 'prod01' });
+    confirmReferralTouch('CTV0001', false);
+    expect(guestReferralFields(getStorefrontContext())).toEqual({});
+    sessionStorage.clear();
+    rememberEntryLink('an-ctv', null);
+    expect(guestReferralFields(getStorefrontContext())).toEqual({ referralCode: 'an-ctv' });
   });
 });
 

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { BackAwareLink } from '@/components/back-aware-link';
 import dynamic from 'next/dynamic';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
+import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, QrCode, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
 import { createAffiliateLink, registerAffiliate, type AffiliatePayout, type Commission } from '@tubutree/app-core/api/affiliate';
 import {
   affiliateCommissionsQuery,
@@ -31,7 +31,8 @@ import { SITE_URL } from '@/lib/site';
 import { pickerQuery } from '@tubutree/app-core/queries/storefront';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
-import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkPoster, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY, LINK_POSTER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import type { PosterInput } from '@tubutree/app-core/commerce/share-poster-link';
 import { LinkBuilderSheet, type LinkBuilderTarget } from '@/components/affiliate/link-builder-sheet';
 import { AffiliateFeaturedProducts } from '@/components/affiliate/featured-products';
 import { invalidateBalances } from '@/lib/balances';
@@ -117,6 +118,7 @@ function Shell({
 const CtvOrderSheet = dynamic(() => import('@/components/affiliate/ctv-order-sheet').then((m) => m.CtvOrderSheet), { ssr: false });
 const TransferSheet = dynamic(() => import('@/components/affiliate/transfer-sheet').then((m) => m.TransferSheet), { ssr: false });
 const StorefrontShareSheet = dynamic(() => import('@/components/affiliate/storefront-share').then((m) => m.StorefrontShareSheet), { ssr: false });
+const LinkPosterSheet = dynamic(() => import('@/components/affiliate/storefront-share').then((m) => m.LinkPosterSheet), { ssr: false });
 
 /**
  * `guestLanding`: màn khách do `page.tsx` dựng ở máy chủ (trong `PrebuiltGuest`, lượt vẽ đầu là 'guest'). Máy còn cờ phiên (`data-restoring` trên
@@ -392,6 +394,7 @@ function Dashboard() {
 
   const [builderOpen, setBuilderOpen] = useState(false);
   const [builderError, setBuilderError] = useState<string | null>(null);
+  const [poster, setPoster] = useState<PosterInput | null>(null);
   const createLink = useMutation({
     mutationFn: (t: LinkBuilderTarget) => createAffiliateLink(coreHttp, t.targetType, t.targetId),
     onSuccess: () => {
@@ -657,7 +660,7 @@ function Dashboard() {
               </button>
             }
           >
-            {/* Phễu chung của CTV: đơn không lưu mã link nên tỉ lệ ra đơn là số chung, số trên từng dòng chỉ là lượt bấm. */}
+            {/* Phễu chung của CTV (mọi kênh); từng dòng link có lượt bấm, đơn, tỉ lệ và doanh số riêng của link đó. */}
             {d && (
               <div data-testid="ctv-funnel" className="mb-2">
                 <p className="text-sm font-semibold tabular-nums text-stone-900">{ctvFunnelLine(funnel)}</p>
@@ -674,13 +677,25 @@ function Dashboard() {
                       <div className="line-clamp-2 break-words text-sm font-semibold text-stone-900">{affiliateLinkTitle(l)}</div>
                       <div className="text-xs tabular-nums text-stone-600">{affiliateLinkCaption(l)}</div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void copy(`${SITE_URL}${affiliateLinkPath(l, referral, 'web')}`, LINK_BUILDER_COPY.copied, LINK_BUILDER_COPY.copyFail)}
-                      className={`${ui.btnText} flex-none`}
-                    >
-                      {LINK_BUILDER_COPY.copy}
-                    </button>
+                    <div className="flex flex-none items-center">
+                      <button
+                        type="button"
+                        aria-label={LINK_POSTER_COPY.open}
+                        aria-haspopup="dialog"
+                        onClick={() => setPoster(affiliateLinkPoster(l, referral))}
+                        className={ui.btnText}
+                      >
+                        <QrCode className="mr-1 h-4 w-4" aria-hidden="true" />
+                        QR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void copy(`${SITE_URL}${affiliateLinkPath(l, referral, 'web')}`, LINK_BUILDER_COPY.copied, LINK_BUILDER_COPY.copyFail)}
+                        className={ui.btnText}
+                      >
+                        {LINK_BUILDER_COPY.copy}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -691,6 +706,7 @@ function Dashboard() {
             )}
           </Section>
           <LinkBuilderSheet open={builderOpen} onClose={() => setBuilderOpen(false)} busy={createLink.isPending} error={builderError} onCreate={makeLink} />
+          <LinkPosterSheet input={poster} title={LINK_POSTER_COPY.title} onClose={() => setPoster(null)} />
 
           </>
         )}

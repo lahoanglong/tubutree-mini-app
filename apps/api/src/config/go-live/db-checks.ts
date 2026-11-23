@@ -63,6 +63,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261121130000_w13_02_admin_audit_logs',
   // Chỉ thêm chỉ mục trigram một phần trên products (món đang bán + đã duyệt) cho bước chịu gõ sai; image cũ vẫn dùng chỉ mục đầy đủ.
   '20261122090000_w16_03_products_active_approved_trgm_idx',
+  // Một cột NULL mới trên orders (mã link CTV của đơn) mà image cũ không đọc, không ghi, kèm chỉ mục thường trên cột đó.
+  '20261124090000_w24_01_orders_affiliate_link_code',
 ];
 
 /**
@@ -109,6 +111,8 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261117090000_notify_cap_restock', ordersLock: false },
   // Chỉ mục duy nhất một phần trên points_transactions (thưởng REVIEW_PHOTO, mỗi dòng đơn một lần); không đụng orders.
   { name: '20261118142510_review_green_corner', ordersLock: false },
+  // Thêm cột NULL (chỉ sửa catalog) rồi dựng chỉ mục thường (không CONCURRENTLY) trên orders: chặn ghi orders trong lúc dựng.
+  { name: '20261124090000_w24_01_orders_affiliate_link_code', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

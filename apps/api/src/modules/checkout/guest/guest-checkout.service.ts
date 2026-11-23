@@ -301,6 +301,8 @@ export class GuestCheckoutService {
       note: dto.note,
       giftVariationId: dto.giftVariationId,
       orderZaloConsent: dto.orderZaloConsent === true,
+      referralCode: dto.referralCode,
+      affiliateLinkCode: dto.affiliateLinkCode,
     } as PlaceOrderDto;
     const placed = await this.checkout.placeOrder(user.id, placeDto, idempotencyKey, 'web', ctx);
     const primary = await this.prisma.order.findUniqueOrThrow({

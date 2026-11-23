@@ -19,6 +19,7 @@ import {
   getProductBreakdown,
   getCtvTiers,
   getCtvMilestones,
+  type AffiliateLink,
   type AffiliatePayout,
   type Commission,
   type CommissionStatus,
@@ -56,7 +57,7 @@ import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import { CtvShortcuts } from '../components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '../components/affiliate/milestone-rewards';
 import { progressPct, tierRewardLabel } from '../components/affiliate/milestone-copy';
-import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Wallet, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
+import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Wallet, ChevronDown, ChevronRight, ChevronUp, QrCode as QrCodeIcon } from 'lucide-react';
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
@@ -64,7 +65,8 @@ import { miniAppLink } from '../utils/miniapp-link';
 import { pickerProducts } from '../services/storefront-api';
 import { AffiliateFeaturedProducts } from '../components/affiliate/featured-products';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
-import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkPoster, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY, LINK_POSTER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { SharePoster } from '../components/share-poster';
 import { LinkBuilderSheet, type LinkBuilderTarget } from '../components/affiliate/link-builder-sheet';
 import { INPUT_LIMITS } from '../utils/input-limits';
 import { Input } from '../components/ui/input';
@@ -387,6 +389,7 @@ function Dashboard() {
   const [sharing, setSharing] = useState(false);
 
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [posterLink, setPosterLink] = useState<AffiliateLink | null>(null);
   const createLink = useLockedMutation({
     mutationFn: (t: LinkBuilderTarget) => createAffiliateLink(t.targetType, t.targetId),
     // Sheet đóng ngay; khoá giữ tới khi danh sách link mới về (tối đa LOCK_REFRESH_WAIT_MS) để mở lại bấm tiếp không tạo link trên danh sách cũ.
@@ -807,7 +810,7 @@ function Dashboard() {
           </Button>
         }
       >
-        {/* Phễu chung của CTV: đơn không lưu mã link nên tỉ lệ ra đơn là số chung, số trên từng dòng chỉ là lượt bấm. */}
+        {/* Phễu chung của CTV (mọi kênh); từng dòng link có lượt bấm, đơn, tỉ lệ và doanh số riêng của link đó. */}
         {d && (
           <div data-testid="ctv-funnel" style={{ marginBottom: 'var(--space-stack-sm)' }}>
             <Text variant="body-sm" as="p" numeric style={BOLD}>
@@ -842,14 +845,19 @@ function Dashboard() {
                     {affiliateLinkCaption(l)}
                   </Text>
                 </div>
-                <Button
-                  variant="ghost"
-                  onPress={() => {
-                    copyWithToast(miniAppLink(affiliateLinkPath(l, referral, 'miniapp')), LINK_BUILDER_COPY.copied, LINK_BUILDER_COPY.copyFail);
-                  }}
-                >
-                  {LINK_BUILDER_COPY.copy}
-                </Button>
+                <div style={{ display: 'flex', flexShrink: 0 }}>
+                  <Button variant="ghost" icon={QrCodeIcon} aria-label={LINK_POSTER_COPY.open} aria-haspopup="dialog" onPress={() => setPosterLink(l)}>
+                    QR
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onPress={() => {
+                      copyWithToast(miniAppLink(affiliateLinkPath(l, referral, 'miniapp')), LINK_BUILDER_COPY.copied, LINK_BUILDER_COPY.copyFail);
+                    }}
+                  >
+                    {LINK_BUILDER_COPY.copy}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -865,6 +873,9 @@ function Dashboard() {
         )}
       </Section>
       <LinkBuilderSheet open={builderOpen} onClose={() => setBuilderOpen(false)} busy={createLink.isPending} error={null} onCreate={(t) => createLink.mutate(t)} />
+      <BottomSheet open={posterLink !== null} onClose={() => setPosterLink(null)} title={LINK_POSTER_COPY.title}>
+        {posterLink && <SharePoster input={affiliateLinkPoster(posterLink, referral)} />}
+      </BottomSheet>
 
         </>
       )}

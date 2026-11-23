@@ -28,6 +28,7 @@ import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/a
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
+import { getSessionAttribution } from '../utils/entry-source';
 import { installPressFeedback } from '../utils/press-feedback';
 import { CASHBACK_ENABLED } from '../utils/features';
 import { LegacyRewardsRedirect, LegacyVouchersRedirect } from './offers/legacy-redirects';
@@ -201,8 +202,9 @@ export default function MyApp() {
       : new URLSearchParams();
     const slug = search.get('s') ?? hash.get('s');
     const ref = search.get('ref') ?? hash.get('ref');
-    // ?s= = link gian hàng CTV → kind 'ctv'. (Trang nhãn /brand tự set kind 'brand' khi mở.)
-    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null, clickedAt: Date.now(), ...(slug ? { kind: 'ctv' as const } : {}) });
+    // ?s= = link gian hàng CTV → kind 'ctv'. (Trang nhãn /brand tự set kind 'brand' khi mở.) ?l= (mã link CTV, đã lọc khuôn) đi kèm đơn.
+    const link = getSessionAttribution()?.linkCode ?? null;
+    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null, clickedAt: Date.now(), linkCode: link, ...(slug ? { kind: 'ctv' as const } : {}) });
   }, [setSfContext]);
 
   return (

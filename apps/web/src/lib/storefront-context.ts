@@ -46,9 +46,15 @@ export interface StorefrontContext {
   referralEligible: boolean | null;
   /** Epoch ms lúc khách bấm link nguồn: máy chủ tính hạn ghi công từ đây, kể cả khi chạm được gửi sau (đăng nhập muộn). */
   clickedAt: number | null;
+  /**
+   * `?l=` của link CTV (mã link) mở cùng `referralCode`, gửi kèm đơn để máy chủ cộng đơn cho đúng link. Thuộc về mã giới thiệu của lượt mở
+   * đó: đổi mã thì mất; máy chủ cũng chỉ nhận link của đúng người giới thiệu của đơn.
+   */
+  linkCode: string | null;
 }
 
-const EMPTY: StorefrontContext = { slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null };
+const EMPTY: StorefrontContext = { slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null, linkCode: null };
+const LINK_CODE_PATTERN = /^[A-Za-z0-9_-]{4,32}$/;
 
 const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCase();
 
@@ -66,6 +72,11 @@ function clickedAtFor(current: StorefrontContext, nextCode: string | null, fromL
   if (!nextCode) return null;
   if (fromLink) return Date.now();
   return norm(nextCode) === norm(current.referralCode) && current.clickedAt !== null ? current.clickedAt : Date.now();
+}
+
+/** Điều hướng trong app giữ mã link khi vẫn cùng mã giới thiệu; đổi hay bỏ mã thì mất. */
+function linkCodeFor(current: StorefrontContext, nextCode: string | null): string | null {
+  return nextCode && norm(nextCode) === norm(current.referralCode) ? current.linkCode : null;
 }
 
 /**
@@ -100,6 +111,7 @@ function read(): StorefrontContext {
       kind: typeof parsed.kind === 'string' ? parsed.kind : null,
       referralEligible: typeof parsed.referralEligible === 'boolean' ? parsed.referralEligible : null,
       clickedAt: typeof parsed.clickedAt === 'number' ? parsed.clickedAt : null,
+      linkCode: typeof parsed.linkCode === 'string' && LINK_CODE_PATTERN.test(parsed.linkCode) ? parsed.linkCode : null,
     };
   } catch {
     return EMPTY;
@@ -149,8 +161,19 @@ export function rememberStorefront(slug: string, type?: string, ownerReferralCod
     // Mã của chủ gian hàng CTV là mã CTV (API chỉ trả mã cho gian hàng CTV); các loại khác không đổi mã đang có.
     referralEligible: eligibilityFor(current, referralCode, code ? true : null),
     clickedAt: clickedAtFor(current, referralCode, fromLink),
+    linkCode: linkCodeFor(current, referralCode),
   });
   if (type === 'CTV') savePendingRef({ referralCode: code, slug, kind: 'CTV' }, fromLink);
+}
+
+/**
+ * Mã giới thiệu và mã link gửi kèm đơn khách chưa đăng nhập (chưa chạm giới thiệu được nên máy chủ tự kiểm mã: chỉ mã CTV/đại lý được ghi
+ * công). Mã máy chủ đã nói không phải của CTV thì không gửi. Link gian hàng CTV không kèm ref thì mã chính là slug (như ReferralCapture).
+ */
+export function guestReferralFields(ctx: StorefrontContext): { referralCode?: string; affiliateLinkCode?: string } {
+  const code = ctx.referralEligible === false ? null : (ctx.referralCode ?? (ctx.kind === 'CTV' ? ctx.slug : null));
+  if (!code) return {};
+  return ctx.linkCode ? { referralCode: code, affiliateLinkCode: ctx.linkCode } : { referralCode: code };
 }
 
 /** Slug chỉ được gắn vào đơn khi là gian hàng CTV — xem ghi chú ở `kind`. */
@@ -161,7 +184,13 @@ export function ctvSlugFor(ctx: StorefrontContext): string | undefined {
 export function rememberReferral(code: string): void {
   const current = read();
   const referralCode = code.trim().toUpperCase() || current.referralCode;
-  write({ ...current, referralCode, referralEligible: eligibilityFor(current, referralCode, null), clickedAt: clickedAtFor(current, referralCode) });
+  write({
+    ...current,
+    referralCode,
+    referralEligible: eligibilityFor(current, referralCode, null),
+    clickedAt: clickedAtFor(current, referralCode),
+    linkCode: linkCodeFor(current, referralCode),
+  });
 }
 
 /** Ghi kết quả "chạm giới thiệu" của máy chủ cho đúng mã đang nhớ; kết quả của mã đã đổi (đến muộn) bị bỏ. */
@@ -172,11 +201,12 @@ export function confirmReferralTouch(code: string, ok: boolean): void {
 }
 
 /**
- * Nguồn vào từ link (`?s=` gian hàng CTV, `?ref=` mã giới thiệu), cùng quy tắc `setContext` của Mini App:
+ * Nguồn vào từ link (`?s=` gian hàng CTV, `?ref=` mã giới thiệu, `?l=` mã link CTV), cùng quy tắc `setContext` của Mini App:
  * thiếu `s` thì xoá slug cũ (link `/?ref=` thuần không được thừa hưởng gian hàng của lần xem trước, kẻo gán nhầm
- * `storefrontSlug` vào đơn); có `s` thì là gian hàng CTV.
+ * `storefrontSlug` vào đơn); có `s` thì là gian hàng CTV. Mã link chỉ nhận khi đi cùng mã giới thiệu và đúng khuôn; lượt mở không có
+ * `l` là lượt bấm mới không qua link nào nên xoá mã link cũ.
  */
-export function rememberEntryLink(slug: string | null, ref: string | null): void {
+export function rememberEntryLink(slug: string | null, ref: string | null, link: string | null = null): void {
   if (!slug && !ref) return;
   const current = read();
   const referralCode = ref ? ref.trim().toUpperCase() || null : null;
@@ -188,6 +218,7 @@ export function rememberEntryLink(slug: string | null, ref: string | null): void
     referralEligible: eligibilityFor(current, referralCode, null),
     // Mở lại link là một lượt bấm mới, kể cả cùng mã: hạn ghi công được làm mới như trước. Tải lại trang thì không.
     clickedAt: clickedAtFor(current, referralCode, fresh),
+    linkCode: referralCode && link && LINK_CODE_PATTERN.test(link.trim()) ? link.trim() : null,
   });
   savePendingRef({ referralCode, slug: slug ?? null, kind: slug ? 'CTV' : null }, fresh);
 }

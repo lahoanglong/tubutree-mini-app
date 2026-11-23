@@ -165,6 +165,8 @@ export interface PlaceOrderBody {
   note?: string;
   invoiceRequest?: InvoiceRequest;
   referralCode?: string;
+  /** `?l=` của link CTV khách mở: máy chủ chỉ lưu khi link thuộc đúng người giới thiệu của đơn. */
+  affiliateLinkCode?: string;
   storefrontSlug?: string;
   itemIds?: string[];
   /** Phiếu thu kèm rác có sẵn (PICKUP, OPEN). Loại trừ với `inlinePickup`. */

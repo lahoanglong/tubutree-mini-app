@@ -121,6 +121,12 @@ export class PlaceOrderDto extends CheckoutPickupFieldsDto {
   /** Slug gian hàng CTV (attribution — lưu vào Order.storefrontSlug). */
   @IsOptional() @IsString() storefrontSlug?: string;
 
+  /**
+   * Mã link CTV (`?l=` của link sâu) khách mở trước khi đặt. Sai khuôn, không có thật hay của CTV khác người giới thiệu thì máy chủ bỏ qua
+   * (đơn vẫn đặt), không trả 400: dữ liệu ghi công lỗi không được chặn khách mua.
+   */
+  @IsOptional() @Trim() @IsString() @MaxLength(64) affiliateLinkCode?: string;
+
   /** ID các dòng giỏ được CHỌN để thanh toán. Rỗng/thiếu = toàn giỏ (tương thích ngược). */
   // Giới hạn để 1 request không ép server duyệt mảng vô hạn (giỏ thật tối đa vài chục dòng).
   @IsOptional() @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) itemIds?: string[];

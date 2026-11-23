@@ -92,11 +92,11 @@ export interface AffiliateLink {
   targetAvailable?: boolean;
   /** true: sản phẩm đã bị tắt hoa hồng CTV sau khi tạo link (link vẫn mở, đơn không tính hoa hồng). Thiếu khi API cũ. */
   targetCommissionBlocked?: boolean;
-  /** Lượt mở link (mỗi IP một lần mỗi ngày). Số duy nhất đo theo từng link. */
+  /** Lượt mở link (mỗi IP một lần mỗi ngày). */
   clicks: number;
-  /** Cột cũ luôn 0 (đơn không lưu mã link): không hiện. */
+  /** Số đơn có hoa hồng đến từ link (đơn mang mã link, từ 24/11/2026), trừ đơn huỷ/trả. */
   conversions: number;
-  /** Cột cũ luôn 0: không hiện. */
+  /** Doanh số (tiền hàng có hoa hồng) của các đơn đó, sau phần trả một phần. */
   revenue: number;
   createdAt: string;
 }

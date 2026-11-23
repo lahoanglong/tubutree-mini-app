@@ -48,7 +48,7 @@ const analytics = {
   recordBestEffort: jest.fn().mockResolvedValue(undefined),
 } as unknown as AnalyticsEventsService;
 
-function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn(), referrerRole: string | null = 'AFFILIATE') {
+function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn().mockResolvedValue({ count: 1 }), referrerRole: string | null = 'AFFILIATE') {
   return {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
     variation: { findMany: jest.fn().mockResolvedValue(variations) },
@@ -62,7 +62,7 @@ function prismaWith(order: unknown, variations: unknown[], createSpy = jest.fn()
 
 describe('AffiliateService.createCommissionForOrder', () => {
   it('người giới thiệu là chủ gian hàng mẫu → không tạo hoa hồng', async () => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = prismaWith({ id: 'o1', userId: 'u2', referrerUserId: 'sample1', placedForCustomer: false, items: [{ variationId: 'v1', quantity: 1, unitPrice: 100_000 }] }, [], create);
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'AFFILIATE', storefronts: [{ id: 'sf-sample' }] });
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
@@ -70,7 +70,7 @@ describe('AffiliateService.createCommissionForOrder', () => {
   });
 
   it('bỏ qua khi tự giới thiệu ORGANIC (referrer === buyer, placedForCustomer=false)', async () => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = prismaWith({ id: 'o1', userId: 'u1', referrerUserId: 'u1', placedForCustomer: false, items: [] }, [], create);
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
     expect(create).not.toHaveBeenCalled();
@@ -120,7 +120,7 @@ describe('AffiliateService.createCommissionForOrder', () => {
   });
 
   it('không tạo commission khi tổng rate = 0', async () => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const order = { id: 'o1', userId: 'b', referrerUserId: 'ctv', total: 100000, items: [{ variationId: 'v1', total: 100000 }] };
     const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: 0 }], create);
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
@@ -128,7 +128,7 @@ describe('AffiliateService.createCommissionForOrder', () => {
   });
 
   it('sản phẩm bị affiliateBlocked → KHÔNG tính hoa hồng cho dòng đó dù rate > 0 (chặn gian lận qua link chia sẻ trước khi bị chặn)', async () => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const order = {
       id: 'o1',
       userId: 'buyer',
@@ -296,7 +296,7 @@ describe('AffiliateService.createCommissionForOrder — tính trên giá khách 
   });
 
   it('đơn 0đ tiền hàng (điểm/mã phủ hết) → không có hoa hồng', async () => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const order = {
       id: 'o1', userId: 'buyer', referrerUserId: 'ctv', subtotal: 100000, discount: 100000, shippingFee: 0, total: 0,
       items: [{ variationId: 'v1', total: 100000 }],
@@ -1272,8 +1272,9 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
     return { svc: new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics), commissionAggregate, commissionCount };
   }
 
-  // U3-B01: affiliate_links.conversions không chỗ nào tăng, nên "Chuyển đổi" luôn 0 dù CTV có đơn ghi công. Đếm từ bảng
-  // hoa hồng: mỗi (đơn, CTV) tối đa một dòng (unique) nên webhook lặp không đếm đôi; đơn huỷ/trả (REJECTED) không tính.
+  // U3-B01: tổng "Chuyển đổi" đếm mọi đơn ghi công của CTV, kể cả đơn không đến từ link nào, nên không cộng cột links.conversions
+  // (cột đó chỉ tính đơn mang mã link). Đếm từ bảng hoa hồng: mỗi (đơn, CTV) tối đa một dòng (unique) nên webhook lặp không đếm
+  // đôi; đơn huỷ/trả (REJECTED) không tính.
   it('U3-B01: totalConversions = số đơn đã ghi công (hoa hồng khác REJECTED), không phải cột links.conversions', async () => {
     const { svc, commissionCount } = build();
     commissionCount.mockResolvedValue(15);
@@ -2691,7 +2692,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     // Khoá dòng hoa hồng trước khi đọc trạng thái đơn: lần thu hồi đang chạy xong rồi mới đọc.
     expect((queryRaw.mock.calls[0]![0] as unknown as string[]).join('?')).toContain('FOR NO KEY UPDATE');
     expect(queryRaw.mock.invocationCallOrder[0]).toBeLessThan(orderFindMany.mock.invocationCallOrder[0]!);
-    expect(orderFindMany).toHaveBeenCalledWith({ where: { id: { in: ['o1', 'o2'] }, status: { in: ['CANCELLED', 'RETURNED'] } }, select: { id: true } });
+    expect(orderFindMany).toHaveBeenCalledWith({ where: { id: { in: ['o1', 'o2'] }, status: { in: ['CANCELLED', 'RETURNED'] } }, select: { id: true, affiliateLinkCode: true } });
     expect(commissionUpdateMany).toHaveBeenCalledWith({
       where: { id: { in: ['c1'] }, payoutBatchId: 'p1', status: { in: ['APPROVED', 'PAID'] } },
       data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
@@ -3276,7 +3277,7 @@ describe('AffiliateService.createCommissionForOrder — mức mặc định affi
   const cfgWith = (pct: unknown) =>
     ({ get: async <T>(k: string, fb?: T) => (k === 'affiliate.default_rate_pct' ? pct : fb) }) as unknown as SystemConfigService;
   const runSpy = async (variations: unknown[], pct: unknown = 8) => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = prismaWith(order, variations, create);
     await new AffiliateService(prisma, cfgWith(pct), pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
     return create.mock.calls.length ? create.mock.calls[0][0].data : null;
@@ -3302,7 +3303,7 @@ describe('AffiliateService.createCommissionForOrder — mức mặc định affi
   });
 
   it('đại lý (DEALER) hưởng cùng mức mặc định như CTV, không theo bậc giá sỉ', async () => {
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }], create, 'DEALER');
     await new AffiliateService(prisma, cfgWith(8), pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
     expect(create.mock.calls[0][0].data.lineAmounts).toEqual({ i1: 8000 });
@@ -3310,7 +3311,7 @@ describe('AffiliateService.createCommissionForOrder — mức mặc định affi
 
   it('mặc định không vượt trần max_rate_pct hiện hành (trần hạ sau khi đặt mặc định)', async () => {
     const cfg = { get: async <T>(k: string, fb?: T) => (k === 'affiliate.default_rate_pct' ? 20 : k === 'affiliate.max_rate_pct' ? 10 : fb) } as unknown as SystemConfigService;
-    const create = jest.fn();
+    const create = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = prismaWith(order, [{ id: 'v1', affiliateRate: null, product: { affiliateBlocked: false, storefrontId: null } }], create);
     await new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
     expect(create.mock.calls[0][0].data.lineAmounts).toEqual({ i1: 10000 });
@@ -3533,5 +3534,75 @@ describe('AffiliateService.register: đánh dấu danh sách ảnh /img cũ', ()
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'CUSTOMER', zaloId: 'z1', phone: '0900000001', referralCode: 'R', affiliateRevokedAt: null, metadata: null }), update: jest.fn().mockResolvedValue({}) },
     });
     await expect(new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).register('u1')).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('Số đơn/doanh số theo link CTV (affiliate-link-stats)', () => {
+  const sqlOf = (m: jest.Mock, i = 0) => (m.mock.calls[i]![0] as unknown as string[]).join('?');
+  const linkedOrder = (code: string | null) => ({
+    id: 'o1',
+    userId: 'buyer',
+    referrerUserId: 'ctv',
+    placedForCustomer: false,
+    affiliateLinkCode: code,
+    total: 200_000,
+    items: [{ id: 'i1', variationId: 'v1', total: 200_000 }],
+  });
+  const variations = [{ id: 'v1', affiliateRate: 10, product: { affiliateBlocked: false, storefrontId: null } }];
+
+  it('dòng hoa hồng vừa chèn (count 1) của đơn mang mã link → một câu UPDATE affiliate_links +1 đơn và + nền doanh số', async () => {
+    const prisma = prismaWith(linkedOrder('abcDEF1'), variations);
+    const exec = jest.fn().mockResolvedValue(1);
+    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = exec;
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sqlOf(exec)).toContain('UPDATE "affiliate_links"');
+    expect(sqlOf(exec)).toContain('l."userId" = ?');
+    expect(exec.mock.calls[0]!.slice(1)).toEqual([1, 2_147_483_647, 200_000, 2_147_483_647, 'o1', 'ctv']);
+  });
+
+  it('chèn trùng (count 0: gọi lại / tx song song) hay đơn không mang mã link → không đụng link', async () => {
+    for (const [code, count] of [['abcDEF1', 0], [null, 1]] as const) {
+      const prisma = prismaWith(linkedOrder(code), variations, jest.fn().mockResolvedValue({ count }));
+      const exec = jest.fn().mockResolvedValue(1);
+      (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = exec;
+      await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
+      expect(exec).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rejectPayout: hoa hồng của đơn đã huỷ mang mã link vừa đổi REJECTED → trừ link một lần; đơn không mã link không trừ', async () => {
+    const exec = jest.fn().mockResolvedValue(1);
+    const commissionUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const payout = { id: 'p1', userId: 'u1', amount: 50_000, fee: 0, method: 'BANK', grossAmount: 50_000, requestedAt: new Date('2026-10-05T03:00:00Z') };
+    const prisma = {
+      payout: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(payout),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(payout),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      commission: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'c1', orderId: 'o1', affiliateUserId: 'u1', amount: 30_000, commissionableTotal: 300_000, approvedAt: null },
+          { id: 'c2', orderId: 'o2', affiliateUserId: 'u1', amount: 20_000, commissionableTotal: 200_000, approvedAt: null },
+        ]),
+        updateMany: commissionUpdateMany,
+      },
+      order: { findMany: jest.fn().mockResolvedValue([{ id: 'o1', affiliateLinkCode: 'abcDEF1' }, { id: 'o2', affiliateLinkCode: null }]) },
+      user: { update: jest.fn().mockResolvedValue({}) },
+      $executeRaw: exec,
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
+    expect(commissionUpdateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['c1'] }, payoutBatchId: 'p1', status: { in: ['APPROVED', 'PAID'] } },
+      data: { status: 'REJECTED', payoutBatchId: null, paidAt: null },
+    });
+    const linkCalls = exec.mock.calls.filter((c) => (c[0] as string[]).join('?').includes('UPDATE "affiliate_links"'));
+    expect(linkCalls).toHaveLength(1);
+    expect(linkCalls[0]!.slice(1)).toEqual([-1, 2_147_483_647, -300_000, 2_147_483_647, 'o1', 'u1']);
   });
 });

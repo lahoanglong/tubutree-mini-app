@@ -121,8 +121,9 @@ test.describe('Web khách: CTV', () => {
     const row = page.getByRole('listitem').filter({ hasText: '0 lượt bấm' });
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('Trang chủ');
-    // Dòng link chỉ nói lượt bấm; số đơn là số chung của CTV, nằm ở dòng phễu.
-    await expect(row).not.toContainText(/\d+ đơn/);
+    // Dòng link ghi số của riêng link (link mới: 0 đơn, chưa có tỉ lệ); dòng phễu là số chung của CTV.
+    await expect(row).toContainText('0 lượt bấm · 0 đơn');
+    await expect(row.getByRole('button', { name: 'Ảnh QR của link' })).toBeVisible();
     await expect(page.getByTestId('ctv-funnel')).toContainText('1 đơn / 4 lượt bấm');
     const calls = api.callsTo('POST', '/affiliate/links');
     expect(calls).toHaveLength(1);

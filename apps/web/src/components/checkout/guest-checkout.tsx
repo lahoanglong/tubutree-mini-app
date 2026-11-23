@@ -28,6 +28,7 @@ import { clearGuestCart } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 import { guestCartView } from '@/lib/guest-cart/view';
 import { useRunningFlash } from '@/lib/use-flash-sales';
+import { getStorefrontContext, guestReferralFields } from '@/lib/storefront-context';
 import { guestPlaceOrder, guestQuote, type GuestAddressInput, type GuestLineInput, type GuestPlaceBody } from '@/lib/guest-checkout/api';
 import { guestCopy } from '@/lib/guest-checkout/copy';
 import { clearGuestDraft, readGuestDraft, saveGuestDraft } from '@/lib/guest-checkout/draft';
@@ -200,6 +201,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
       expectedTotal: quote.total,
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(gift !== undefined ? { giftVariationId: gift } : {}),
+      ...guestReferralFields(getStorefrontContext()),
     };
     const idem = keyRing.current.keyFor(body);
     let trackingKey = trackingKeys.current.get(idem);

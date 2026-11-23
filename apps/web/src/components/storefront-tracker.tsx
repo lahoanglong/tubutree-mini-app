@@ -143,7 +143,7 @@ export function ReferralCapture() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    rememberEntryLink(params.get('s'), params.get('ref'));
+    rememberEntryLink(params.get('s'), params.get('ref'), params.get('l'));
   }, []);
 
   useEffect(() => {

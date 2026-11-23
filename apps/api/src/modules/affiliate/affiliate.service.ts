@@ -83,6 +83,7 @@ import type { PublicVisibilityOptions } from '../storefront/storefront-visibilit
 import { APPROVE_COMMISSIONS_CRON, DAILY_WALLET_TRANSFER_HOUR_VN, DAILY_WALLET_TRANSFER_JOB, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
 import { isAffiliateBlocked } from './affiliate-revocation';
 import { attachLinkTargets, resolveLinkTargetForCreate } from './affiliate-link-target';
+import { creditLinkForCommission, debitLinkForRejectedCommission } from './affiliate-link-stats';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
@@ -393,7 +394,8 @@ export class AffiliateService {
 
   /**
    * Mới nhất trước; mặc định 100 (tối đa 200) — CTV tạo link vô hạn nên không thể trả hết một lần. Mỗi dòng kèm tên/slug đích để client dựng
-   * link sâu. `clicks` là lượt mở link; `conversions`/`revenue` của bảng không có chỗ tăng (đơn không lưu mã link), client không hiện.
+   * link sâu. `clicks` là lượt mở link; `conversions`/`revenue` là số đơn có hoa hồng và doanh số (nền hoa hồng) của các đơn mang mã link
+   * (`orders.affiliateLinkCode`, từ 24/11/2026), trừ đơn huỷ/trả — xem affiliate-link-stats.ts.
    */
   async listLinks(userId: string, opts: { take?: number; cursor?: string } = {}) {
     const links = await this.prisma.affiliateLink.findMany({
@@ -453,7 +455,7 @@ export class AffiliateService {
         where: { userId },
         _sum: { clicks: true },
       }),
-      // Đơn và lượt chạm không lưu mã link nên cột affiliate_links.conversions không có chỗ tăng; "chuyển đổi" = số đơn đã ghi công.
+      // "Chuyển đổi" = mọi đơn đã ghi công của CTV (link, gian hàng, mã giới thiệu, đơn đặt hộ); affiliate_links.conversions chỉ đếm đơn mang mã link.
       // Mỗi (đơn, CTV) tối đa một dòng hoa hồng (unique) nên webhook lặp không đếm đôi; đơn huỷ/trả (REJECTED) không tính.
       this.prisma.commission.count({ where: { affiliateUserId: userId, status: { not: 'REJECTED' } } }),
       // Doanh số tháng = doanh số ĐÃ CHỐT (cùng định nghĩa với bậc/mốc — xem ctv-milestones.ts).
@@ -1186,7 +1188,7 @@ export class AffiliateService {
     });
     if (amount <= 0) return;
 
-    await db.commission.createMany({
+    const created = await db.commission.createMany({
       skipDuplicates: true,
       data: {
         affiliateUserId: order.referrerUserId,
@@ -1199,6 +1201,10 @@ export class AffiliateService {
         status: 'PENDING',
       },
     });
+    // Chỉ lần chèn thật (count 1) mới cộng số đơn/doanh số của link: gọi lại hay tx song song đụng khoá (orderId, affiliateUserId) ra count 0.
+    if (created.count === 1) {
+      await creditLinkForCommission(db, { orderId: order.id, affiliateUserId: order.referrerUserId, commissionableTotal, affiliateLinkCode: order.affiliateLinkCode });
+    }
   }
 
   /** Đơn DELIVERED → khóa commission, bắt đầu đếm hold. Trả số dòng vừa khoá (0 khi đã khoá/đã đảo từ trước). */
@@ -1338,9 +1344,22 @@ export class AffiliateService {
       // bên tuần tự: hoặc ta thấy APPROVED chưa chuyển (đổi REJECTED, requestPayout sau đó báo "dữ liệu đã thay đổi" và thử lại),
       // hoặc ta thấy PAID đã kèm dòng cộng Ví.
       const [row] = await tx.$queryRaw<
-        { affiliateUserId: string; amount: number; status: CommissionStatus; payoutBatchId: string | null; walletPayoutId: string | null; paidAt: Date | null; approvedAt: Date | null }[]
+        {
+          orderId: string;
+          affiliateUserId: string;
+          amount: number;
+          commissionableTotal: number;
+          status: CommissionStatus;
+          payoutBatchId: string | null;
+          walletPayoutId: string | null;
+          paidAt: Date | null;
+          approvedAt: Date | null;
+          affiliateLinkCode: string | null;
+        }[]
       >`
-        SELECT "affiliateUserId", "amount", "status", "payoutBatchId", "walletPayoutId", "paidAt", "approvedAt" FROM "commissions" WHERE "id" = ${commissionId} FOR NO KEY UPDATE`;
+        SELECT "orderId", "affiliateUserId", "amount", "commissionableTotal", "status", "payoutBatchId", "walletPayoutId", "paidAt", "approvedAt",
+               (SELECT o."affiliateLinkCode" FROM "orders" o WHERE o."id" = "commissions"."orderId") AS "affiliateLinkCode"
+          FROM "commissions" WHERE "id" = ${commissionId} FOR NO KEY UPDATE`;
       if (!row) return { kind: 'NONE' };
       const holding = commissionHolding(row);
       if (holding === 'REJECTED') return { kind: 'NONE' };
@@ -1354,10 +1373,13 @@ export class AffiliateService {
         });
         if (!debit.debited) return { kind: 'MANUAL', affiliateUserId: row.affiliateUserId, amount: row.amount, reason: debit.reason };
         await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
+        await debitLinkForRejectedCommission(tx, row);
         await revokeLostCtvMilestones(tx, row.affiliateUserId, row.approvedAt);
         return { kind: 'DEBITED', ...debit.note };
       }
       await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
+      // Dòng đã khoá và vừa rời trạng thái sống (REJECTED ở trên trả NONE trước khi tới đây): trừ link đúng một lần.
+      await debitLinkForRejectedCommission(tx, row);
       // Chỉ hoa hồng đã chốt (có approvedAt) nằm trong doanh số tháng; PENDING/LOCKED rời đi thì doanh số không đổi.
       await revokeLostCtvMilestones(tx, row.affiliateUserId, row.approvedAt);
       return { kind: 'REJECTED', affiliateUserId: row.affiliateUserId, amount: row.amount };
@@ -2323,7 +2345,7 @@ export class AffiliateService {
     const why = reason?.trim();
     if (!why) throw new BadRequestException('Nhập lý do từ chối.');
 
-    let revoked: { id: string; affiliateUserId: string; amount: number; approvedAt: Date | null }[] = [];
+    let revoked: { id: string; orderId: string; affiliateUserId: string; amount: number; commissionableTotal: number; approvedAt: Date | null }[] = [];
     const rejected = await this.prisma.$transaction(async (tx) => {
       // userId/requestedAt không đổi sau khi tạo lệnh nên đọc trước được. Lệnh rút hoa hồng lấy khoá (CTV, tháng) TRƯỚC khi ghi
       // gì, cùng thứ tự với requestPayout, để từ chối và rút mới cùng tháng không giành khoá ngược nhau.
@@ -2343,7 +2365,7 @@ export class AffiliateService {
 
       const linkedCommissions = await tx.commission.findMany({
         where: { payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
-        select: { id: true, orderId: true, affiliateUserId: true, amount: true, approvedAt: true },
+        select: { id: true, orderId: true, affiliateUserId: true, amount: true, commissionableTotal: true, approvedAt: true },
       });
       if (linkedCommissions.length > 0) {
         // Nguồn 2 (requestPayout nhánh BANK): trả các commission liên quan về APPROVED, gỡ batch
@@ -2355,9 +2377,9 @@ export class AffiliateService {
         await tx.$queryRaw`SELECT "id" FROM "commissions" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR NO KEY UPDATE`;
         const closedOrders = await tx.order.findMany({
           where: { id: { in: [...new Set(linkedCommissions.map((c) => c.orderId))] }, status: { in: ['CANCELLED', 'RETURNED'] } },
-          select: { id: true },
+          select: { id: true, affiliateLinkCode: true },
         });
-        const closed = new Set(closedOrders.map((o) => o.id));
+        const closed = new Map(closedOrders.map((o) => [o.id, o.affiliateLinkCode]));
         const reopened = linkedCommissions.filter((c) => !closed.has(c.orderId));
         revoked = linkedCommissions.filter((c) => closed.has(c.orderId));
         if (reopened.length > 0) {
@@ -2367,10 +2389,14 @@ export class AffiliateService {
           });
         }
         if (revoked.length > 0) {
-          await tx.commission.updateMany({
-            where: { id: { in: revoked.map((c) => c.id) }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
-            data: { status: 'REJECTED', payoutBatchId: null, paidAt: null },
-          });
+          for (const c of revoked) {
+            // Từng dòng (đã khoá ở trên): chỉ dòng thật sự vừa đổi REJECTED mới trừ số đơn/doanh số của link.
+            const res = await tx.commission.updateMany({
+              where: { id: { in: [c.id] }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
+              data: { status: 'REJECTED', payoutBatchId: null, paidAt: null },
+            });
+            if (res.count === 1) await debitLinkForRejectedCommission(tx, { ...c, affiliateLinkCode: closed.get(c.orderId) });
+          }
           // Hoa hồng đã chốt rời doanh số tháng: mốc đã nhận mà doanh số nay dưới ngưỡng bị thu (CTV-01).
           const months = new Map(revoked.filter((c) => c.approvedAt).map((c) => [`${c.affiliateUserId}:${vnMonthBounds(c.approvedAt!).key}`, c]));
           for (const c of months.values()) await revokeLostCtvMilestones(tx, c.affiliateUserId, c.approvedAt);

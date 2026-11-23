@@ -65,6 +65,10 @@ export class GuestPlaceOrderDto extends GuestQuoteDto {
   @IsOptional() @IsString() @MaxLength(200) website?: string;
   /** Số mili giây từ lúc mở biểu mẫu tới lúc bấm Đặt hàng. */
   @IsInt() @Min(0) @Max(86_400_000) fillMs!: number;
+  /** Mã giới thiệu của link khách mở (`?ref=`, gian hàng CTV): máy chủ chỉ ghi công CTV/đại lý (CheckoutService.guestReferrer). */
+  @IsOptional() @Trim() @IsString() @MaxLength(64) referralCode?: string;
+  /** Mã link CTV (`?l=`): như PlaceOrderDto.affiliateLinkCode, chỉ lưu khi thuộc đúng người giới thiệu của đơn. */
+  @IsOptional() @Trim() @IsString() @MaxLength(64) affiliateLinkCode?: string;
 }
 
 /** Mã đơn trên đơn hàng: chữ hoa, số, gạch nối (TUBU…, DLR…, TUBUSUB…). */

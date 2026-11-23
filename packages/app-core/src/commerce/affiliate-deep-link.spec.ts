@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { FORBIDDEN_TERMS } from '../shop-copy';
+import { posterContent } from './share-poster';
 import {
   affiliateLinkCaption,
   affiliateLinkPath,
+  affiliateLinkPoster,
+  affiliateLinkStats,
   affiliateLinkTitle,
   AFFILIATE_LINK_TARGETS,
   commissionUnlockNote,
@@ -10,6 +13,7 @@ import {
   ctvFunnel,
   ctvFunnelLine,
   LINK_BUILDER_COPY,
+  LINK_POSTER_COPY,
   linkCategoryOptions,
   linkOpensTarget,
 } from './affiliate-deep-link';
@@ -71,19 +75,50 @@ describe('affiliateLinkTitle / affiliateLinkCaption', () => {
     expect(affiliateLinkTitle({ targetType: 'STORE' })).toBe('Link');
   });
 
-  it('dòng phụ chỉ nói lượt bấm, không hứa số đơn theo link', () => {
-    expect(affiliateLinkCaption({ ...link(), clicks: 12 })).toBe('12 lượt bấm');
-    expect(affiliateLinkCaption({ ...link({ targetType: 'PRODUCT', targetSlug: 'sp', targetAvailable: false }), clicks: 3 })).toBe(
-      '3 lượt bấm · Đích không còn, link mở Trang chủ',
+  it('dòng phụ: lượt bấm, đơn (tỉ lệ của riêng link) và doanh số của link; chưa có doanh số thì không nêu tiền', () => {
+    expect(affiliateLinkCaption({ ...link(), clicks: 12, conversions: 3, revenue: 1_250_000 })).toBe('12 lượt bấm · 3 đơn (25%) · 1.250.000đ');
+    expect(affiliateLinkCaption({ ...link(), clicks: 340, conversions: 12, revenue: 99_000 })).toBe('340 lượt bấm · 12 đơn (3,5%) · 99.000đ');
+    expect(affiliateLinkCaption({ ...link(), clicks: 12, conversions: 0, revenue: 0 })).toBe('12 lượt bấm · 0 đơn');
+    // API cũ (chưa trả số đơn): như 0 đơn, không lỗi.
+    expect(affiliateLinkCaption({ ...link(), clicks: 0 })).toBe('0 lượt bấm · 0 đơn');
+    expect(affiliateLinkCaption({ ...link({ targetType: 'PRODUCT', targetSlug: 'sp', targetAvailable: false }), clicks: 3, conversions: 1, revenue: 50_000 })).toBe(
+      '3 lượt bấm · 1 đơn (33,3%) · 50.000đ · Đích không còn, link mở Trang chủ',
     );
-    expect(affiliateLinkCaption({ ...link(), clicks: 12 })).not.toMatch(/đơn/);
   });
 
   it('sản phẩm bị tắt hoa hồng sau khi tạo link: dòng phụ báo rõ; đích đã mất thì báo mở Trang chủ trước', () => {
     const product = link({ targetType: 'PRODUCT', targetSlug: 'sp', targetCommissionBlocked: true });
-    expect(affiliateLinkCaption({ ...product, clicks: 2 })).toBe('2 lượt bấm · Sản phẩm không còn tính hoa hồng');
-    expect(affiliateLinkCaption({ ...product, targetAvailable: false, clicks: 2 })).toBe('2 lượt bấm · Đích không còn, link mở Trang chủ');
-    expect(affiliateLinkCaption({ ...link({ targetCommissionBlocked: true }), clicks: 2 })).toBe('2 lượt bấm');
+    expect(affiliateLinkCaption({ ...product, clicks: 2 })).toBe('2 lượt bấm · 0 đơn · Sản phẩm không còn tính hoa hồng');
+    expect(affiliateLinkCaption({ ...product, targetAvailable: false, clicks: 2 })).toBe('2 lượt bấm · 0 đơn · Đích không còn, link mở Trang chủ');
+    expect(affiliateLinkCaption({ ...link({ targetCommissionBlocked: true }), clicks: 2 })).toBe('2 lượt bấm · 0 đơn');
+  });
+});
+
+describe('affiliateLinkStats', () => {
+  it('tỉ lệ = đơn / lượt bấm của riêng link; số bẩn (âm, NaN, thiếu) về 0; đơn nhiều hơn lượt bấm thì không nêu phần trăm', () => {
+    expect(affiliateLinkStats({ clicks: 8, conversions: 2, revenue: 400_000 })).toEqual({ clicks: 8, orders: 2, ratePct: 25, revenue: 400_000 });
+    expect(affiliateLinkStats({ clicks: -1, conversions: Number.NaN, revenue: -5 })).toEqual({ clicks: 0, orders: 0, ratePct: null, revenue: 0 });
+    expect(affiliateLinkStats({ clicks: 1, conversions: 3 })).toEqual({ clicks: 1, orders: 3, ratePct: null, revenue: 0 });
+  });
+});
+
+describe('affiliateLinkPoster', () => {
+  it('link sản phẩm còn mở: thẻ sản phẩm, QR trỏ trang sản phẩm web kèm ref và l của link', () => {
+    const p = link({ targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true });
+    const input = affiliateLinkPoster(p, 'LINH123');
+    expect(input).toEqual({ kind: 'product', name: 'Nước rửa chén', slug: 'nuoc-rua-chen', referralCode: 'LINH123', linkCode: 'Ab3_-xY' });
+    expect(posterContent(input).url).toBe('https://tubutree.com/san-pham/nuoc-rua-chen?ref=LINH123&l=Ab3_-xY');
+  });
+
+  it('Trang chủ, Giờ vàng, danh mục, sản phẩm đã ẩn: ảnh kiểu gian hàng, QR trỏ đúng đích web; mã sai khuôn bị bỏ', () => {
+    expect(posterContent(affiliateLinkPoster(link(), 'LINH123')).url).toBe('https://tubutree.com/?ref=LINH123&l=Ab3_-xY');
+    expect(posterContent(affiliateLinkPoster(link({ targetType: 'DEAL' }), 'LINH123')).url).toBe('https://tubutree.com/gio-vang?ref=LINH123&l=Ab3_-xY');
+    const cat = affiliateLinkPoster(link({ targetType: 'CATEGORY', targetId: 'c 1', targetLabel: 'Nhà bếp', targetAvailable: true }), 'LINH123');
+    expect(cat).toMatchObject({ kind: 'store', title: 'Danh mục · Nhà bếp' });
+    expect(posterContent(cat).url).toBe('https://tubutree.com/san-pham?category=c%201&ref=LINH123&l=Ab3_-xY');
+    const gone = affiliateLinkPoster(link({ targetType: 'PRODUCT', targetSlug: 'sp', targetAvailable: false }), 'LINH123');
+    expect(posterContent(gone).url).toBe('https://tubutree.com/?ref=LINH123&l=Ab3_-xY');
+    expect(posterContent(affiliateLinkPoster(link({ shortCode: 'x' }), 'bad code!')).url).toBe('https://tubutree.com/');
   });
 });
 
@@ -136,7 +171,7 @@ describe('linkCategoryOptions', () => {
 describe('chữ của bộ tạo link', () => {
   it('đủ 4 đích theo thứ tự API, không dùng thuật ngữ cấm', () => {
     expect(AFFILIATE_LINK_TARGETS.map((t) => t.key)).toEqual(['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL']);
-    const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), CTV_FUNNEL_NOTE];
+    const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), ...Object.values(LINK_POSTER_COPY), CTV_FUNNEL_NOTE];
     for (const text of texts) for (const { pattern } of FORBIDDEN_TERMS) expect(text).not.toMatch(pattern);
   });
 });

@@ -102,6 +102,24 @@ describe('storefront-context: lúc bấm link và dấu chạm theo người dù
     expect(ctx().clickedAt).toBeNull();
   });
 
+  it('mã link (?l=) đi cùng mã giới thiệu: điều hướng cùng mã giữ, đổi mã hoặc bỏ mã thì mất, link không kèm mã thì không nhận', () => {
+    ctx().setContext({ referralCode: 'AN123', linkCode: 'aB3_x-9', clickedAt: Date.now() });
+    expect(ctx().linkCode).toBe('aB3_x-9');
+    ctx().setContext({ slug: 'an', kind: 'ctv', referralCode: 'an123' });
+    expect(ctx().linkCode).toBe('aB3_x-9');
+    expect(JSON.parse(sessionStorage.getItem('tubu_sf_ctx') ?? '{}').linkCode).toBe('aB3_x-9');
+    ctx().setContext({ referralCode: 'BINH9' });
+    expect(ctx().linkCode).toBeNull();
+    ctx().setContext({ referralCode: 'AN123', linkCode: 'aB3_x-9' });
+    ctx().setContext({ referralCode: null });
+    expect(ctx().linkCode).toBeNull();
+    ctx().setContext({ slug: 'an', linkCode: 'aB3_x-9' });
+    expect(ctx().linkCode).toBeNull();
+    ctx().setContext({ referralCode: 'AN123', linkCode: 'aB3_x-9' });
+    ctx().clear();
+    expect(ctx().linkCode).toBeNull();
+  });
+
   it('dấu chạm gắn người dùng, dấu dạng cũ (chỉ mã) không còn tính', () => {
     updateCtvTouchMark('u1', 'AN123', 'ctv', true);
     expect(wasCtvTouched('u1', 'AN123')).toBe(true);

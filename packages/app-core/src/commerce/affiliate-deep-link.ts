@@ -1,10 +1,14 @@
 /**
  * Link CTV tới một đích cụ thể (Trang chủ, Giờ vàng, một sản phẩm, một danh mục), dùng chung Mini App và web: dựng đường dẫn có `?ref=` (mã CTV)
- * và `&l=` (mã link, để đếm lượt bấm), đặt tên dòng link, và câu phễu "lượt bấm → đơn" của CTV.
+ * và `&l=` (mã link), đặt tên dòng link, số liệu từng link, ảnh QR của link, và câu phễu "lượt bấm → đơn" của CTV.
  *
- * Thiết kế không thêm cột (PO A3): đơn không lưu mã link, nên số trên từng link CHỈ là lượt bấm. Số đơn và tỉ lệ ra đơn là số chung của CTV
- * (mọi link, gian hàng, mã giới thiệu), chữ trên màn phải nói rõ như vậy.
+ * Đơn lưu mã link (`orders.affiliateLinkCode`, PO A4 24/11/2026): mỗi link có lượt bấm, số đơn có hoa hồng và doanh số (nền hoa hồng) của riêng
+ * nó, trừ đơn huỷ/trả. Đơn đặt trước khi có cột này không mang mã nên không vào số của link nào. Câu phễu trên danh sách vẫn là số chung của CTV
+ * (mọi link, gian hàng, mã giới thiệu, đơn đặt hộ).
  */
+import type { PosterInput } from './share-poster-link';
+import { vnd } from './money';
+
 
 export type AffiliateLinkTarget = 'HOMEPAGE' | 'PRODUCT' | 'CATEGORY' | 'DEAL';
 export type AffiliateLinkPlatform = 'web' | 'miniapp';
@@ -52,24 +56,37 @@ export function linkOpensTarget(link: AffiliateLinkLike): boolean {
   return link.targetType === 'HOMEPAGE' || link.targetType === 'DEAL';
 }
 
+/** Đường dẫn tới đích của link (kèm `category=` nếu là danh mục), chưa có `ref`/`l`. */
+function targetPath(link: AffiliateLinkLike, platform: AffiliateLinkPlatform): { path: string; params: string[] } {
+  const p = PATHS[platform];
+  if (!linkOpensTarget(link)) return { path: p.home, params: [] };
+  if (link.targetType === 'PRODUCT') return { path: `${p.product}/${encodeURIComponent(link.targetSlug!.trim())}`, params: [] };
+  if (link.targetType === 'CATEGORY') return { path: p.browse, params: [`category=${encodeURIComponent(link.targetId!.trim())}`] };
+  return { path: link.targetType === 'DEAL' ? p.deal : p.home, params: [] };
+}
+
 /**
  * Đường dẫn (không gồm gốc) của một link CTV: web `/san-pham/<slug>?ref=…&l=…`, `/san-pham?category=<id>&ref=…&l=…`, `/gio-vang?ref=…&l=…`;
  * Mini App cùng dạng với `/product`, `/browse`, `/flash-sale`. Ghép với `SITE_URL` (web) hoặc `miniAppLink()` (Mini App).
  */
 export function affiliateLinkPath(link: AffiliateLinkLike, affiliateCode: string, platform: AffiliateLinkPlatform): string {
-  const p = PATHS[platform];
-  const params: string[] = [];
-  let path = p.home;
-  if (linkOpensTarget(link)) {
-    if (link.targetType === 'PRODUCT') path = `${p.product}/${encodeURIComponent(link.targetSlug!.trim())}`;
-    else if (link.targetType === 'CATEGORY') {
-      path = p.browse;
-      params.push(`category=${encodeURIComponent(link.targetId!.trim())}`);
-    } else if (link.targetType === 'DEAL') path = p.deal;
-  }
+  const { path, params } = targetPath(link, platform);
   if (REF_CODE_PATTERN.test(affiliateCode)) params.push(`ref=${affiliateCode}`);
   if (LINK_CODE_PATTERN.test(link.shortCode)) params.push(`l=${link.shortCode}`);
   return params.length > 0 ? `${path}?${params.join('&')}` : path;
+}
+
+/**
+ * Ảnh QR (bộ vẽ chung `share-poster.ts`) của một link: QR trỏ trang web công khai của đúng đích, kèm `ref` và `l` của link nên khách quét ảnh
+ * vẫn được tính vào link đó. Link sản phẩm còn mở thì vẽ thẻ sản phẩm, còn lại vẽ ảnh kiểu gian hàng với tên dòng link.
+ */
+export function affiliateLinkPoster(link: AffiliateLinkLike, affiliateCode: string | null | undefined): PosterInput {
+  const linkCode = LINK_CODE_PATTERN.test(link.shortCode) ? link.shortCode : null;
+  if (link.targetType === 'PRODUCT' && linkOpensTarget(link)) {
+    return { kind: 'product', name: link.targetLabel?.trim() || affiliateLinkTitle(link), slug: link.targetSlug!.trim(), referralCode: affiliateCode, linkCode };
+  }
+  const { path, params } = targetPath(link, 'web');
+  return { kind: 'store', title: affiliateLinkTitle(link), path: params.length > 0 ? `${path}?${params.join('&')}` : path, referralCode: affiliateCode, linkCode };
 }
 
 const TARGET_LABEL = Object.fromEntries(AFFILIATE_LINK_TARGETS.map((t) => [t.key, t.label])) as Record<AffiliateLinkTarget, string>;
@@ -82,15 +99,40 @@ export function affiliateLinkTitle(link: Pick<AffiliateLinkLike, 'targetType' | 
   return name && linkTargetNeedsPick(link.targetType) ? `${kind} · ${name}` : kind;
 }
 
+export interface AffiliateLinkStats {
+  clicks: number;
+  orders: number;
+  /** Phần trăm đơn trên lượt bấm của riêng link, một chữ số thập phân; null khi chưa có lượt bấm hoặc số đơn vượt số lượt bấm. */
+  ratePct: number | null;
+  /** Doanh số (tiền hàng có hoa hồng) của các đơn đến từ link, trừ đơn huỷ/trả. */
+  revenue: number;
+}
+
+const safeCount = (n: number | undefined) => (typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
+
+/** Số liệu một link từ dòng API (`clicks`, `conversions`, `revenue`); thiếu trường (API cũ) coi là 0. */
+export function affiliateLinkStats(link: { clicks: number; conversions?: number; revenue?: number }): AffiliateLinkStats {
+  const clicks = safeCount(link.clicks);
+  const orders = safeCount(link.conversions);
+  return { clicks, orders, ratePct: rateOf(orders, clicks), revenue: safeCount(link.revenue) };
+}
+
+function rateOf(orders: number, clicks: number): number | null {
+  return clicks > 0 && orders <= clicks ? Math.round((orders / clicks) * 1000) / 10 : null;
+}
+
 /**
- * Dòng phụ của một link: chỉ là lượt bấm (đơn không lưu mã link). Đích đã mất thì nói link đang mở Trang chủ; sản phẩm đã bị tắt hoa hồng thì nói
- * rõ để CTV ngừng gửi link không còn tính tiền.
+ * Dòng phụ của một link: "12 lượt bấm · 3 đơn (25%) · 1.250.000đ" (đơn và doanh số của riêng link). Đích đã mất thì nói link đang mở Trang chủ; sản
+ * phẩm đã bị tắt hoa hồng thì nói rõ để CTV ngừng gửi link không còn tính tiền. Chữ số đều bề rộng: nơi hiện đặt `tabular-nums`.
  */
-export function affiliateLinkCaption(link: AffiliateLinkLike & { clicks: number }): string {
-  const clicks = `${Math.max(0, link.clicks)} lượt bấm`;
-  if (!isAffiliateLinkTarget(link.targetType)) return clicks;
-  if (!linkOpensTarget(link)) return `${clicks} · Đích không còn, link mở Trang chủ`;
-  return link.targetType === 'PRODUCT' && link.targetCommissionBlocked ? `${clicks} · Sản phẩm không còn tính hoa hồng` : clicks;
+export function affiliateLinkCaption(link: AffiliateLinkLike & { clicks: number; conversions?: number; revenue?: number }): string {
+  const s = affiliateLinkStats(link);
+  // 0 đơn thì "(0%)" không nói thêm gì: bỏ cho dòng gọn.
+  const orders = `${s.orders} đơn${s.ratePct === null || s.orders === 0 ? '' : ` (${pctText(s.ratePct)})`}`;
+  const numbers = `${s.clicks} lượt bấm · ${orders}${s.revenue > 0 ? ` · ${vnd(s.revenue)}` : ''}`;
+  if (!isAffiliateLinkTarget(link.targetType)) return numbers;
+  if (!linkOpensTarget(link)) return `${numbers} · Đích không còn, link mở Trang chủ`;
+  return link.targetType === 'PRODUCT' && link.targetCommissionBlocked ? `${numbers} · Sản phẩm không còn tính hoa hồng` : numbers;
 }
 
 export interface CtvFunnel {
@@ -103,8 +145,7 @@ export interface CtvFunnel {
 export function ctvFunnel(d: { totalClicks?: number; totalConversions?: number } | undefined): CtvFunnel {
   const clicks = Math.max(0, d?.totalClicks ?? 0);
   const orders = Math.max(0, d?.totalConversions ?? 0);
-  const ratePct = clicks > 0 && orders <= clicks ? Math.round((orders / clicks) * 1000) / 10 : null;
-  return { clicks, orders, ratePct };
+  return { clicks, orders, ratePct: rateOf(orders, clicks) };
 }
 
 const pctText = (n: number) => `${String(n).replace('.', ',')}%`;
@@ -120,7 +161,13 @@ export function ctvFunnelLine(f: CtvFunnel): string {
 }
 
 /** Ghi chú dưới dòng phễu: nói rõ số nào tính chung, số nào theo link. */
-export const CTV_FUNNEL_NOTE = 'Số trên từng link là lượt bấm. Đơn tính chung cho mọi link, gian hàng, mã giới thiệu và đơn đặt hộ của bạn.';
+export const CTV_FUNNEL_NOTE = 'Dòng trên tính chung mọi kênh của bạn. Số trên từng link chỉ tính đơn đến từ link đó, trừ đơn huỷ/trả.';
+
+/** Nút mở ảnh QR của một link (nhãn cho trình đọc màn hình, nút chỉ có biểu tượng) và tiêu đề bảng ảnh. */
+export const LINK_POSTER_COPY = {
+  open: 'Ảnh QR của link',
+  title: 'Ảnh QR của link',
+} as const;
 
 /** Chữ của bộ tạo link (sheet "Tạo link"), dùng chung hai app. */
 export const LINK_BUILDER_COPY = {

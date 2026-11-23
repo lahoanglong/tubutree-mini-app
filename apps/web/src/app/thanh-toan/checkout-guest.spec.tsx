@@ -225,6 +225,17 @@ describe('/thanh-toan chưa đăng nhập, cờ bật', () => {
     expect(JSON.parse(localStorage.getItem('tubu.guestCheckout.orders')!)).toHaveProperty('TB123');
   });
 
+  it('khách mở từ link CTV (?ref=&l=): đơn gửi kèm mã giới thiệu và mã link để máy chủ ghi công đúng link', async () => {
+    sessionStorage.setItem('tubu_web_storefront', JSON.stringify({ slug: null, referralCode: 'CTV0001', kind: null, referralEligible: null, clickedAt: 1, linkCode: 'prod01' }));
+    m.place.mockResolvedValue({ code: 'TB124', status: 'PENDING', paymentMethod: 'COD', total: 240_000, codes: ['TB124'], keyAccepted: true });
+    const r = await mount();
+    await fillForm(r);
+    click(placeButtons(r)[0]!);
+    await flush(6);
+    const [body] = m.place.mock.calls[0]! as [Record<string, unknown>];
+    expect(body).toMatchObject({ referralCode: 'CTV0001', affiliateLinkCode: 'prod01' });
+  });
+
   it('tổng trên mức COD: COD khoá kèm một dòng lý do, tự chuyển sang chuyển khoản; đặt xong sang trang QR có khoá', async () => {
     const reason = 'Đơn trên 500.000đ khi chưa đăng nhập cần chuyển khoản trước. Bạn chọn Chuyển khoản nhé.';
     m.quote.mockResolvedValue({ ...QUOTE, total: 620_000, subtotal: 620_000, blockedPaymentMethods: { COD: reason } });

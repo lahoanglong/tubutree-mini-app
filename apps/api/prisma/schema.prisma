@@ -1204,6 +1204,9 @@ model Order {
   invoiceStatus          InvoiceStatus?        @default(NOT_REQUESTED)
   referrerUserId         String?
   storefrontSlug         String?
+  /// Mã link CTV (`AffiliateLink.shortCode`, `?l=` của link sâu) khách mở trước khi đặt. Chỉ lưu khi link có thật và thuộc đúng người
+  /// giới thiệu của đơn (checkout.service linkCodeFor); số đơn/doanh số của link đi theo dòng hoa hồng (affiliate-link-stats.ts).
+  affiliateLinkCode      String?
   /// Gian hàng được ghi công, resolve phía server lúc đặt (slug/subdomain/tên miền → id). Lọc đơn của gian hàng theo cột
   /// này, không theo chuỗi storefrontSlug (subdomain đổi chủ được).
   storefrontId           String?
@@ -1347,6 +1350,7 @@ model Order {
   @@index([userId, createdAt])
   @@index([referrerUserId])
   @@index([storefrontSlug])
+  @@index([affiliateLinkCode])
   // Admin order listing lọc theo status, sort createdAt desc (admin.service.ts listOrders) —
   // không trùng prefix với [userId, status] ở trên (userId không có trong where của admin).
   @@index([status, createdAt])

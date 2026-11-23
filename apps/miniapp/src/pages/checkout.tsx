@@ -449,6 +449,8 @@ export default function CheckoutPage() {
             }
           : undefined,
         referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
+        // Máy chủ chỉ lưu mã link khi link thuộc đúng người giới thiệu của đơn (mã tự nhập khác CTV thì bỏ).
+        affiliateLinkCode: sfCtx.linkCode ?? undefined,
         storefrontSlug: ctvSlug,
         itemIds,
         ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),

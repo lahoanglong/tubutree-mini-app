@@ -26,6 +26,7 @@ import { maskPhone } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { revokeLostCtvMilestones } from '../affiliate/ctv-milestone-revoke';
+import { debitLinkRevenue } from '../affiliate/affiliate-link-stats';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
 import { lockRewardedReviewsOfOrder, lockReviewRewardsOfProducts, revokeReviewRewardsForReturn } from '../reviews/review-reward-reversal';
 
@@ -444,6 +445,7 @@ export class OrderReversalService {
       commissionDebited: [],
       commissionManual: [],
     };
+    const linkDebits: { affiliateUserId: string; baseCut: number }[] = [];
 
     // Thưởng đánh giá của các sản phẩm bị trả: khoá trước mọi ghi lên dòng users (xem reverseFinancials).
     const reviewable = canHaveReviewReward(order);
@@ -618,6 +620,7 @@ export class OrderReversalService {
         data: { amount: { decrement: cut }, commissionableTotal: { decrement: baseCut } },
       });
       if (res.count === 1) {
+        if (baseCut > 0) linkDebits.push({ affiliateUserId: row.affiliateUserId, baseCut });
         result.commissionCut += cut;
         if (cut > 0) result.commissionCutBy.push({ affiliateUserId: row.affiliateUserId, amount: cut });
         if (debited) result.commissionDebited.push(debited);
@@ -651,6 +654,11 @@ export class OrderReversalService {
     }
     // Đánh giá của sản phẩm bị trả (dù trả một phần số lượng) mất thưởng; sản phẩm khác giữ nguyên.
     if (returnedProductIds.length > 0) await revokeReviewRewardsForReturn(tx, order.id, returnedProductIds);
+    // Đơn vẫn DELIVERED nên link giữ số đơn, chỉ bớt doanh số đúng phần nền vừa cắt (affiliate-link-stats.ts). Khoá dòng link sau cùng:
+    // checkout khoá users rồi mới tới link, nên khoá link trước khi thu hồi thưởng giới thiệu (khoá users) ở đây sẽ ngược thứ tự, dễ deadlock.
+    for (const d of linkDebits) {
+      await debitLinkRevenue(tx, { orderId: order.id, affiliateUserId: d.affiliateUserId, baseCut: d.baseCut, affiliateLinkCode: order.affiliateLinkCode });
+    }
     return result;
   }
 
