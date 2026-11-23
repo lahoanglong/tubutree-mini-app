@@ -34,6 +34,7 @@ export const PRUNED_ZMP_UI_COMPONENTS = [
   'swiper',
   'switch',
   'tabs',
+  'text',
   'zbox',
 ] as const;
 

@@ -212,11 +212,11 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
   it('thật sự cắt được một phần đáng kể (>10 KB) và vẫn giữ biến :root cùng lớp của thành phần đang dùng', () => {
     expect(raw.length - pruned.length).toBeGreaterThan(10_000);
     expect(removedSelectors.length).toBeGreaterThan(50);
-    for (const keep of [':root', '.zaui-sheet', '.zaui-btn', '.zaui-page', '.zaui-mask', '.zaui-text']) {
+    for (const keep of [':root', '.zaui-sheet', '.zaui-btn', '.zaui-page', '.zaui-mask']) {
       expect(pruned, keep).toContain(keep);
     }
-    // Ô nhập, ô chọn, công tắc, vòng chờ và Snackbar (kèm Icon, Progress) đã thay bằng thành phần DS / shim của bản build (w19-02).
-    for (const gone of ['.zaui-avatar', '.zaui-box', '.zaui-input', '.zaui-checkbox', '.zaui-radio', '.zaui-switch', '.zaui-spinner', '.zaui-snackbar', '.zaui-icon', '.zaui-progress']) {
+    // Ô nhập, ô chọn, công tắc, vòng chờ và Snackbar (kèm Icon, Progress) đã thay bằng thành phần DS / shim của bản build (w19-02); chữ dùng Text của DS.
+    for (const gone of ['.zaui-avatar', '.zaui-box', '.zaui-input', '.zaui-checkbox', '.zaui-radio', '.zaui-switch', '.zaui-spinner', '.zaui-snackbar', '.zaui-icon', '.zaui-progress', '.zaui-text']) {
       expect(pruned, gone).not.toContain(gone);
     }
   });
@@ -225,7 +225,8 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
     const cut = new Set<string>(PRUNED_ZMP_UI_COMPONENTS);
     const hit = [...closure.components].filter((c) => cut.has(c));
     expect(hit, `Đang dùng thành phần zmp-ui đã bị cắt CSS: ${hit.join(', ')}. Bỏ nó khỏi PRUNED_ZMP_UI_COMPONENTS trong build-zaui-prune.ts`).toEqual([]);
-    expect(closure.components.size).toBeGreaterThan(5);
+    // Kiểm tập lõi thay vì sàn số lượng: app càng bỏ được thành phần zmp-ui thì bao đóng càng nhỏ, nhưng bao đóng rỗng (phép tính hỏng) vẫn đỏ.
+    expect([...closure.components]).toEqual(expect.arrayContaining(['app', 'page', 'sheet', 'button']));
   });
 
   it('không lớp của thành phần bị cắt nào bị bỏ lại là lớp mà mã đang dùng sinh ra qua getPrefixCls(...)', () => {
