@@ -99,7 +99,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
                   >
                     {e.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={sizedImage(e.image, TILE).src} onError={fallBackToOriginal(e.image)} alt="" width={TILE} height={TILE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={sizedImage(e.image, TILE).src} onError={fallBackToOriginal(e.image)} alt="" width={TILE} height={TILE} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <Icon icon={e.icon} size="lg" tone="current" />
                     )}

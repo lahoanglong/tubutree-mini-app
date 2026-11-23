@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import { duplicateControlNames } from '@/test-utils/a11y';
 import { Sheet } from '@/components/ui/sheet';
@@ -14,6 +14,39 @@ import { StatTile } from '@/components/mini/tiles';
 import { ActiveFilters } from '@/components/catalog/active-filters';
 import { AvatarCropSheet } from '@/components/account/avatar-crop-sheet';
 import { useRovingGroup } from '@/lib/use-roving-group';
+import { GuestCheckout } from '@/components/checkout/guest-checkout';
+import { guestCopy } from '@/lib/guest-checkout/copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { accessibleName } from '@/test-utils/a11y';
+import { flush, typeInto } from '@/test-utils/dom';
+
+// A11Y-24/25: biểu mẫu thanh toán không đăng nhập dựng thẳng (không qua trang), chỉ thay phần mạng và giỏ trình duyệt.
+const guest = vi.hoisted(() => ({ quote: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/thanh-toan' }));
+vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [{ code: '84_VN01', name: 'Hà Nội' }], getCommunes: async () => [] }));
+vi.mock('@/lib/shop-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/shop-client')>()),
+  getPublicConfig: async () => ({ webGuestCheckoutEnabled: true }),
+}));
+vi.mock('@/lib/guest-cart/use-guest-cart', () => ({ useGuestCartLines: () => [{ variationId: 'v1', slug: 'dau-goi', quantity: 1, addedAt: 1 }] }));
+vi.mock('@/lib/guest-cart/products', () => ({ useGuestCartProducts: () => new Map() }));
+vi.mock('@/lib/use-flash-sales', () => ({ useRunningFlash: () => ({ flash: [], now: 0 }) }));
+vi.mock('@/lib/guest-cart/view', () => ({
+  guestCartView: () => ({
+    rows: [{ variationId: 'v1', slug: 'dau-goi', quantity: 1, state: 'ok', productName: 'Dầu gội', variationName: 'Chai 500ml', thumbnail: null, unitPrice: 120_000, compareAt: null, isFlash: false, total: 120_000, stock: 9, maxQty: 9, tubu: true, blockedText: null }],
+    subtotal: 120_000,
+    tubuSubtotal: 120_000,
+    hasMerchant: false,
+    settled: true,
+  }),
+}));
+vi.mock('@/lib/guest-checkout/api', () => ({
+  guestQuote: (...a: unknown[]) => guest.quote(...a),
+  guestPlaceOrder: vi.fn(),
+  guestTrackOrder: vi.fn(),
+  guestBankQr: vi.fn(),
+  claimGuestOrdersRequest: vi.fn(),
+}));
 
 // Gói U (WCAG 2.2 AA): các hành vi nhỏ không có spec riêng sẵn. Mỗi ca ghi mã A11Y tương ứng.
 
@@ -315,5 +348,71 @@ describe('A11Y-19 cắt ảnh bằng bàn phím', () => {
     key('ArrowLeft');
     key('ArrowLeft');
     expect(img.style.transform).toContain('translate(-10px, 40px)');
+  });
+});
+
+describe('A11Y-24 thanh toán: bấm Đặt hàng còn thiếu ô (3.3.1 nêu lỗi, 2.4.11 ô lỗi không bị thanh dính che)', () => {
+  const scrolled: { el: Element; opts: unknown }[] = [];
+  const original = Element.prototype.scrollIntoView;
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    scrolled.length = 0;
+    guest.quote.mockReset().mockReturnValue(new Promise(() => undefined));
+    Element.prototype.scrollIntoView = function (this: Element, opts?: unknown) {
+      scrolled.push({ el: this, opts });
+    } as typeof Element.prototype.scrollIntoView;
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = original;
+  });
+  const field = (label: string) => {
+    const l = Array.from(document.querySelectorAll('label')).find((x) => x.textContent?.trim() === label);
+    return document.getElementById(l!.htmlFor) as HTMLInputElement;
+  };
+  const place = () => click(document.querySelector('[data-testid="guest-place-order"]'));
+  const errorOf = (el: Element) => (el.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+
+  it('biểu mẫu trống: ô đầu (Họ tên) nhận con trỏ, được cuộn ra GIỮA màn (không sát mép dưới thanh Đặt hàng), aria-invalid + câu lỗi qua aria-describedby', async () => {
+    mount(<GuestCheckout welcomeAmount={null} />);
+    await flush(6);
+    place();
+    await flush(2);
+    const name = field(guestCopy('name'));
+    expect(document.activeElement).toBe(name);
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(errorOf(name)).toContain(guestCopy('nameMissing'));
+    expect(scrolled.at(-1)).toEqual({ el: name, opts: { block: 'center' } });
+  });
+
+  it('sửa ô đầu rồi bấm lại: con trỏ và lần cuộn sang ô lỗi kế tiếp theo thứ tự trên màn (Số điện thoại)', async () => {
+    mount(<GuestCheckout welcomeAmount={null} />);
+    await flush(6);
+    place();
+    await flush(2);
+    typeInto(field(guestCopy('name')), 'Lan');
+    place();
+    await flush(2);
+    const phone = field(guestCopy('phone'));
+    expect(document.activeElement).toBe(phone);
+    expect(errorOf(phone)).toContain(guestCopy('phoneInvalid'));
+    expect(scrolled.at(-1)?.el).toBe(phone);
+  });
+});
+
+describe('A11Y-25 cách thanh toán: tên ngắn, dòng phụ đọc như mô tả', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    guest.quote.mockReset().mockReturnValue(new Promise(() => undefined));
+  });
+  it('radio COD và chuyển khoản: tên chỉ là tên cách thanh toán, aria-describedby trỏ tới dòng phụ; không trùng tên trong nhóm', async () => {
+    mount(<GuestCheckout welcomeAmount={null} />);
+    await flush(6);
+    const radios = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="guest-pay"]'));
+    expect(radios.map(accessibleName)).toEqual([guestCopy('cod'), guestCopy('bank')]);
+    const desc = (el: Element) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(radios.map(desc)).toEqual([fillCopy('checkout.payCueCod'), fillCopy('checkout.payCueBank')]);
+    expect(duplicateControlNames(radios[0]!.closest('[role="radiogroup"]')!)).toEqual([]);
   });
 });

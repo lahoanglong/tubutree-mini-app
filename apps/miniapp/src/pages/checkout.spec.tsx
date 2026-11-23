@@ -120,6 +120,7 @@ import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
 import { ORDER_ZALO_KEY } from '../components/checkout/order-zalo';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { vi as viCopy } from '../i18n/vi';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { setCheckoutEntry, takeCheckoutEntry, trackEvent } from '../services/analytics';
 
 const ADDRESS = {
@@ -449,11 +450,13 @@ describe('CheckoutPage — Ví bị mờ phải nói lý do, số điểm có d�
   it('chỉ còn ba cách thanh toán: COD, chuyển khoản, Ví Tubu — không có TubuXu (Q-26, PD-3)', async () => {
     renderPage();
     await screen.findByText('Ví Tubu (130.000đ)');
+    // Chữ nhìn thấy gồm cả dòng phụ dưới tên (tubu-w22-03); tên đọc của radio vẫn chỉ là tên cách thanh toán.
     expect(within(paymentBox()).getAllByRole('radio').map((r) => r.textContent)).toEqual([
-      'Thanh toán khi nhận hàng (COD)',
-      'Chuyển khoản ngân hàng',
+      `Thanh toán khi nhận hàng (COD)${fillCopy('checkout.payCueCod')}`,
+      `Chuyển khoản ngân hàng${fillCopy('checkout.payCueBank')}`,
       expect.stringMatching(/^Ví Tubu \(130\.000đ\)/),
     ]);
+    expect(within(paymentBox()).getByRole('radio', { name: 'Thanh toán khi nhận hàng (COD)' })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /TubuXu/ })).toBeNull();
     expect(document.body.textContent ?? '').not.toMatch(/TubuXu|(?<![\p{L}_])xu(?![\p{L}_])/iu);
   });
@@ -4092,5 +4095,70 @@ describe('CheckoutPage — địa chỉ gọn, đổi trong 2 chạm, xem trư�
     await placeOrderClick();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TT009', { replace: true }));
     expect(mocks.getBankQr).toHaveBeenCalledWith('TT009');
+  });
+});
+
+describe('CheckoutPage — giữ địa chỉ và ghi chú qua một lần sang giỏ sửa hàng, dòng phụ cách thanh toán (tubu-w22-03)', () => {
+  const ADDRESS_B = { ...ADDRESS, id: 'a2', recipient: 'Bình', street: '9 Hàng Bài', isDefault: false };
+  const DRAFT = 'tubu_checkout_draft:u1';
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS, ADDRESS_B]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  it('quay lại từ giỏ: địa chỉ đã chọn (không phải mặc định) và ghi chú còn nguyên; cách trả tiền về COD; bản nháp xoá sau khi đọc', async () => {
+    sessionStorage.setItem(DRAFT, JSON.stringify({ addressId: 'a2', note: 'Giao giờ hành chính', at: Date.now() }));
+    renderPage();
+    expect(await screen.findByDisplayValue('Giao giờ hành chính')).toBeInTheDocument();
+    const body = await placeOrderClick();
+    expect(body).toMatchObject({ addressId: 'a2', note: 'Giao giờ hành chính', paymentMethod: 'COD' });
+    expect(sessionStorage.getItem(DRAFT)).toBeNull();
+  });
+
+  it('địa chỉ của bản nháp đã bị xoá: dùng địa chỉ mặc định', async () => {
+    sessionStorage.setItem(DRAFT, JSON.stringify({ addressId: 'gone', note: '', at: Date.now() }));
+    renderPage();
+    const body = await placeOrderClick();
+    expect(body.addressId).toBe('a1');
+  });
+
+  it('FLASH_LIMIT rồi chạm "Về giỏ hàng": ghi địa chỉ đang chọn và ghi chú đã gõ (không ghi cách trả tiền)', async () => {
+    mocks.placeOrder.mockRejectedValue(
+      Object.assign(new Error('x'), { isHttpError: true, response: { status: 400, data: { code: 'FLASH_LIMIT', limit: 2, message: 'Vượt giới hạn.' } } }),
+    );
+    sessionStorage.setItem(DRAFT, JSON.stringify({ addressId: 'a2', note: '', at: Date.now() }));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText(viCopy.checkout.note), { target: { value: 'Để ở bảo vệ' } });
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await placeOrderClick();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    fireEvent.click(within(banner).getByRole('button', { name: 'Về giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+    const saved = JSON.parse(sessionStorage.getItem(DRAFT)!) as Record<string, unknown>;
+    expect(saved).toMatchObject({ addressId: 'a2', note: 'Để ở bảo vệ' });
+    expect(saved).not.toHaveProperty('payment');
+  });
+
+  it('dòng phụ là mô tả của radio, tên giữ ngắn; cách bị khoá thì lý do khoá thay dòng phụ', async () => {
+    const reason = 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ.';
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, blockedPaymentMethods: { COD: reason } });
+    renderPage();
+    await screen.findByText('Phương thức thanh toán');
+    const bank = await within(paymentBox()).findByRole('radio', { name: 'Chuyển khoản ngân hàng' });
+    expect(bank).toHaveAccessibleDescription(fillCopy('checkout.payCueBank'));
+    const cod = within(paymentBox()).getByRole('radio', { name: /Thanh toán khi nhận hàng/ });
+    await waitFor(() => expect(cod).toHaveAccessibleDescription(reason));
+    expect(paymentBox()).not.toHaveTextContent(fillCopy('checkout.payCueCod'));
   });
 });

@@ -1,4 +1,4 @@
-import { expect, test } from './support/mock-api';
+import { expect, reply, test } from './support/mock-api';
 import { mockCollectable } from './support/voucher-mocks';
 import { BUYER_PUBLIC_CONFIG, mockBuyer, measureFocusRing, seedSession } from './support/a11y-buyer';
 
@@ -241,5 +241,81 @@ test.describe('A11Y-10: liên kết bỏ qua và nút Quay lại', () => {
     });
     expect(after.inMain).toBe(true);
     expect(after.followsLine).toBe(true);
+  });
+});
+
+test.describe('A11Y-24..26: thanh toán sau một lần bấm Đặt hàng hụt (tubu-w22-03)', () => {
+  const placeButton = (page: import('@playwright/test').Page) => page.getByRole('button', { name: /Đặt hàng · / }).last();
+  /** Phần tử đang focus nằm trọn trong khung, tâm không bị thanh dính đáy hay đầu trang đè (2.4.11). */
+  const focusedUnobscured = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return 'không có phần tử đang focus';
+      const b = el.getBoundingClientRect();
+      if (b.top < 0 || b.bottom > window.innerHeight) return `ra ngoài khung (top=${Math.round(b.top)}, bottom=${Math.round(b.bottom)})`;
+      const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      if (!top || !(el === top || el.contains(top) || top.contains(el))) return `bị ${top ? `${top.tagName.toLowerCase()}.${String(top.className).slice(0, 40)}` : 'không gì'} đè`;
+      const bar = document.querySelector('[data-sticky-bar]');
+      if (bar && b.bottom > bar.getBoundingClientRect().top) return 'mép dưới chui xuống thanh dính';
+      return 'ok';
+    });
+
+  test('A11Y-24 ô hoá đơn thiếu: con trỏ vào ô lỗi đầu tiên, ô được cuộn ra giữa, không bị thanh Đặt hàng che', async ({ page, api }) => {
+    mockBuyer(api);
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/thanh-toan');
+    await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
+    await page.getByText('Yêu cầu xuất hoá đơn VAT').click();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await placeButton(page).click();
+    const tax = page.getByLabel('Mã số thuế');
+    await expect(tax).toBeFocused();
+    await expect(tax).toHaveAttribute('aria-invalid', 'true');
+    await expect(tax).toHaveAccessibleDescription(/Nhập mã số thuế\./);
+    await expect.poll(() => focusedUnobscured(page)).toBe('ok');
+    expect(api.callsTo('POST', '/checkout/place-order')).toHaveLength(0);
+  });
+
+  test('A11Y-25 cách thanh toán: tên radio ngắn, dòng phụ là mô tả; cách bị khoá chỉ đọc lý do khoá', async ({ page, api }) => {
+    mockBuyer(api);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/thanh-toan');
+    const group = page.getByRole('radiogroup', { name: 'Phương thức thanh toán' });
+    await expect(group).toBeVisible({ timeout: 20_000 });
+    await expect(group.getByRole('radio', { name: 'Thanh toán khi nhận hàng (COD)', exact: true })).toHaveAccessibleDescription('Không cần trả trước');
+    await expect(group.getByRole('radio', { name: 'Chuyển khoản ngân hàng', exact: true })).toHaveAccessibleDescription('Quét VietQR, đơn tự xác nhận khi nhận tiền');
+    // Ví 50.000đ không đủ đơn 130.000đ: radio khoá, mô tả là lý do khoá chứ không phải dòng phụ.
+    const wallet = group.getByRole('radio', { name: /^Ví Tubu/ });
+    await expect(wallet).toBeDisabled();
+    await expect(wallet).not.toHaveAccessibleDescription('Trừ số dư Ví, đơn xác nhận ngay');
+    await expect(wallet).toHaveAccessibleDescription(/.+/);
+  });
+
+  test('A11Y-26 đặt hụt vì giỏ, sang giỏ rồi quay lại: địa chỉ đã đổi và ghi chú còn nguyên (3.3.7), cách trả tiền về mặc định', async ({ page, api }) => {
+    mockBuyer(api);
+    api.post('/checkout/place-order', reply(400, { message: 'Giá Giờ vàng chỉ áp cho 2 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.', code: 'FLASH_LIMIT' }));
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/thanh-toan');
+    await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
+    await page.getByTestId('checkout-address-row').getByRole('button', { name: /Đổi địa chỉ giao hàng/ }).click();
+    await page.getByRole('dialog').getByRole('radio', { name: /Trần Thị Bình/ }).click();
+    await expect(page.getByTestId('checkout-address-row')).toContainText('34 Hàng Bạc');
+    await page.locator('textarea').fill('Gửi bảo vệ toà B');
+    await page.getByRole('radio', { name: 'Chuyển khoản ngân hàng', exact: true }).check();
+    await expect(placeButton(page)).toBeEnabled();
+    await placeButton(page).click();
+    const issue = page.getByTestId('checkout-cart-issue');
+    await expect(issue).toBeVisible();
+    await issue.getByRole('link', { name: 'Về giỏ hàng để sửa' }).click();
+    await expect(page).toHaveURL(/\/gio-hang$/);
+
+    await page.goto('/thanh-toan');
+    await expect(page.getByTestId('checkout-address-row')).toContainText('34 Hàng Bạc', { timeout: 20_000 });
+    await expect(page.locator('textarea')).toHaveValue('Gửi bảo vệ toà B');
+    await expect(page.getByRole('radio', { name: 'Thanh toán khi nhận hàng (COD)', exact: true })).toBeChecked();
+    // Đọc một lần rồi xoá: tải lại lần nữa là màn mặc định.
+    await page.reload();
+    await expect(page.getByTestId('checkout-address-row')).toContainText('12 Phố Huế', { timeout: 20_000 });
+    await expect(page.locator('textarea')).toHaveValue('');
   });
 });

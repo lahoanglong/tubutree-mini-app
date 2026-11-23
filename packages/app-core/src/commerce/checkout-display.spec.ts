@@ -9,6 +9,7 @@ import {
   compactAddressView,
   markTransferOrderPlaced,
   maskPhone,
+  paymentMethodCue,
   pushRecentAddress,
   readRecentAddressIds,
   rememberRecentAddress,
@@ -178,5 +179,24 @@ describe('thẻ xem trước chuyển khoản', () => {
     expect(takeTransferQrDelay('KHAC', 2000)).toBeNull();
     markTransferOrderPlaced('TUBU2', 5000);
     expect(takeTransferQrDelay('TUBU2', 4000)).toBe(0);
+  });
+});
+
+describe('paymentMethodCue', () => {
+  it('mỗi cách thanh toán đang có một dòng phụ ngắn, đúng xử lý của máy chủ: COD không trả trước, chuyển khoản qua VietQR tự xác nhận, Ví xác nhận ngay', () => {
+    expect(paymentMethodCue('COD')).toBe(fillCopy('checkout.payCueCod'));
+    expect(paymentMethodCue('BANK_TRANSFER')).toContain('VietQR');
+    expect(paymentMethodCue('WALLET')).toBe(fillCopy('checkout.payCueWallet'));
+  });
+
+  it('dòng phụ vừa một dòng ở 375px (≤ 44 ký tự) và các dòng khác nhau', () => {
+    const cues = ['COD', 'BANK_TRANSFER', 'WALLET'].map((m) => paymentMethodCue(m)!);
+    for (const c of cues) expect(c.length).toBeLessThanOrEqual(44);
+    expect(new Set(cues).size).toBe(3);
+  });
+
+  it('cách lạ (máy chủ thêm sau, ZALOPAY đang ẩn) thì null: không đoán', () => {
+    expect(paymentMethodCue('ZALOPAY')).toBeNull();
+    expect(paymentMethodCue('')).toBeNull();
   });
 });

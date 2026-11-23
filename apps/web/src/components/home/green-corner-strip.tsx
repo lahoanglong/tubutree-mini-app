@@ -19,6 +19,8 @@ export interface GreenCornerStripProps {
   fallback?: ReactNode;
 }
 
+/** Cỡ ảnh thẻ (bằng `.tubu-green-card img` trong mini.css): khai trên thẻ img để khung có cỡ trước khi ảnh và CSS về. */
+const GREEN_CARD_MEDIA = 148;
 const mediaSrc = (src: string) => (src.startsWith('/') && !src.startsWith('//') ? apiMediaUrl(src) : src);
 
 /**
@@ -41,7 +43,7 @@ export function GreenCornerStrip({ fallback = null }: GreenCornerStripProps) {
         {cards.map((c) => (
           <Link key={c.id} href={productHref(c.productSlug)} className="tubu-green-card tubu-press" aria-label={c.label}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={mediaSrc(c.image)} alt="" loading="lazy" onError={hideBrokenImage} />
+            <img src={mediaSrc(c.image)} alt="" width={GREEN_CARD_MEDIA} height={GREEN_CARD_MEDIA} loading="lazy" decoding="async" onError={hideBrokenImage} />
             <span className="tubu-green-body" aria-hidden="true">
               <span style={{ display: 'inline-flex', color: 'var(--color-rating)' }}>
                 {[1, 2, 3, 4, 5].map((i) => (

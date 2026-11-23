@@ -8,6 +8,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { parseVnContactPhone, parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { comboOnlyDiscount } from '@tubutree/app-core/commerce/green-box';
+import { paymentMethodCue } from '@tubutree/app-core/commerce/checkout-display';
 import { GeoPicker, type GeoValue } from '@/components/geo-picker';
 import { GiftTrialRow } from '@/components/checkout/gift-rows';
 import { GuestField } from '@/components/checkout/guest-field';
@@ -175,8 +176,13 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
     },
   });
 
+  // Bấm Đặt hàng còn thiếu ô: con trỏ vào ô lỗi đầu tiên theo thứ tự trên màn và cuộn ô đó ra giữa màn, để thanh Đặt hàng dính đáy
+  // (điện thoại) hay header dính không che ô đang được báo lỗi (WCAG 2.2 2.4.11).
   useEffect(() => {
-    if (focusTick > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    if (focusTick === 0) return;
+    const target = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView?.({ block: 'center' });
   }, [focusTick]);
 
   const onPlace = () => {
@@ -381,7 +387,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
                         checked={payment === k}
                         onChange={() => setPayment(k)}
                         disabled={!!reason || busy}
-                        aria-describedby={reason ? `${ids.pay}-${k}` : undefined}
+                        aria-describedby={reason ? `${ids.pay}-${k}` : `${ids.pay}-${k}-cue`}
                         className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-[0.45] md:opacity-60' : ''}`}
                       />
                       <span className="flex min-w-0 flex-col">
@@ -391,6 +397,11 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
                         {reason && (
                           <span id={`${ids.pay}-${k}`} data-testid={`guest-pay-blocked-${k}`} className="text-caption text-[color:var(--color-text-secondary)]">
                             {reason}
+                          </span>
+                        )}
+                        {!reason && (
+                          <span id={`${ids.pay}-${k}-cue`} aria-hidden="true" className="text-caption text-[color:var(--color-text-secondary)]">
+                            {paymentMethodCue(k)}
                           </span>
                         )}
                       </span>

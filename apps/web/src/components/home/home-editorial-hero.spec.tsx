@@ -63,6 +63,20 @@ describe('HomeEditorialHero — khối giới thiệu mặc định của Trang 
     expect(mounted.container.querySelector('section[data-testid="home-editorial-hero"]')).not.toBeNull();
   });
 
+  it('CWV: khối không tải ảnh nào (LCP là tiêu đề trong HTML), hoạ tiết SVG có cỡ khai sẵn, khung giữ tỉ lệ banner nên CLS ≈ 0', () => {
+    mounted = render(<HomeEditorialHero />);
+    const c = mounted.container;
+    expect(c.querySelectorAll('img, picture, video, iframe')).toHaveLength(0);
+    expect(c.innerHTML).not.toMatch(/background-image|url\(/);
+    const svg = c.querySelector('svg')!;
+    expect([svg.getAttribute('width'), svg.getAttribute('height')]).toEqual(['400', '200']);
+    expect(svg.getAttribute('viewBox')).toBe('0 0 400 200');
+    const section = c.querySelector<HTMLElement>('section[data-testid="home-editorial-hero"]')!;
+    expect(section.style.aspectRatio).toBe('var(--banner-ratio)');
+    // Tiêu đề (phần tử LCP) không mờ dần: opacity 0 làm mốc vẽ LCP trễ tới hết lúc hiện.
+    expect(c.querySelector<HTMLElement>('h2')!.style.opacity).toBe('');
+  });
+
   it('chữ không chứa thuật ngữ cấm hay lời hứa chưa kiểm chứng', () => {
     const text = Object.values(homeCopy.hero).join(' ');
     expect(text).not.toMatch(/voucher|flash sale|freeship|vui lòng|chúng tôi|cửa hàng|hữu cơ|\.\.\./i);
