@@ -118,6 +118,41 @@ describe('OrderCard', () => {
   });
 });
 
+describe('tubu-w21-02: OrderCard nút "Đánh giá (n SP)"', () => {
+  const reviewLink = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('[data-testid="order-card-review"]');
+
+  it('đơn đã nhận còn sản phẩm chờ đánh giá: liên kết tới chi tiết đơn, cùng hàng với "Mua lại", tên đọc rõ số sản phẩm và mã đơn', () => {
+    const c = mount(<OrderCard order={{ ...(ORDER as object), pendingReviewCount: 2 } as never} onReorder={() => {}} />);
+    const link = reviewLink(c)!;
+    expect(link.textContent).toBe('Đánh giá (2 SP)');
+    expect(link.getAttribute('aria-label')).toBe('Đánh giá 2 sản phẩm của đơn TUBU1');
+    expect(link.getAttribute('href')).toBe('/tai-khoan/don-hang/TUBU1');
+    const actions = c.querySelectorAll('[data-testid="order-card-actions"]');
+    expect(actions).toHaveLength(1);
+    expect(actions[0]!.contains(link)).toBe(true);
+    expect([...actions[0]!.querySelectorAll('button')].some((b) => b.textContent === 'Mua lại')).toBe(true);
+    expect(link.className).toContain('z-10');
+    expect(link.className).toContain('min-h-11');
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+  });
+
+  it.each([
+    ['API cũ chưa trả số', { status: 'DELIVERED' }],
+    ['đã đánh giá hết', { status: 'DELIVERED', pendingReviewCount: 0 }],
+    ['đơn đang giao', { status: 'SHIPPING', pendingReviewCount: 1 }],
+  ])('%s: không có nút đánh giá', (_n, over) => {
+    const c = mount(<OrderCard order={{ ...(ORDER as object), ...over } as never} onReorder={() => {}} />);
+    expect(reviewLink(c)).toBeNull();
+  });
+
+  it('không truyền onReorder vẫn có nút đánh giá (hàng hành động chỉ còn một nút)', () => {
+    const c = mount(<OrderCard order={{ ...(ORDER as object), pendingReviewCount: 1 } as never} />);
+    expect(reviewLink(c)?.textContent).toBe('Đánh giá (1 SP)');
+    expect(c.querySelector('[data-testid="order-card-actions"]')?.querySelectorAll('button')).toHaveLength(0);
+  });
+});
+
 describe('order-rules', () => {
   it('orderUnitCount cộng số lượng, không đếm số dòng', () => {
     expect(orderUnitCount([{ quantity: 2 }, { quantity: 1 }])).toBe(3);

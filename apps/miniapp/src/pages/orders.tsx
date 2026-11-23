@@ -212,6 +212,10 @@ export default function OrdersPage() {
                     haptic('light');
                     navigate(`/bank-payment/${o.code}`);
                   }}
+                  onReview={() => {
+                    haptic('light');
+                    navigate(`/order/${o.code}`);
+                  }}
                 />
               ))}
             </div>

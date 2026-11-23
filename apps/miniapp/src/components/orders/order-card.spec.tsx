@@ -190,4 +190,39 @@ describe('OrderCard', () => {
       for (const decl of ['position: absolute', 'top: 0', 'right: 0', 'bottom: 0', 'left: 0']) expect(after![1]).toContain(decl);
     });
   });
+
+  describe('tubu-w21-02: nút "Đánh giá (n SP)" ở đơn đã nhận', () => {
+    const withPending = (n?: number, status = 'DELIVERED') => ({ ...ORDER, status, pendingReviewCount: n }) as OrderView & { pendingReviewCount?: number };
+
+    it('còn sản phẩm chờ đánh giá: nút nhẹ cùng hàng với "Mua lại", tên đọc rõ số sản phẩm và mã đơn; bấm gọi onReview, KHÔNG mở chi tiết qua lớp phủ', () => {
+      const onOpen = vi.fn();
+      const onReview = vi.fn();
+      render(<OrderCard order={withPending(2)} onOpen={onOpen} onReorder={() => {}} onReview={onReview} />);
+      const btn = screen.getByRole('button', { name: 'Đánh giá 2 sản phẩm của đơn TUBU-777' });
+      expect(btn).toHaveTextContent('Đánh giá (2 SP)');
+      const actions = screen.getAllByTestId('order-card-actions');
+      expect(actions).toHaveLength(1);
+      expect(actions[0]).toContainElement(btn);
+      expect(actions[0]).toContainElement(screen.getByRole('button', { name: 'Mua lại' }));
+      fireEvent.click(btn);
+      expect(onReview).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(screen.getByTestId('order-card-review').style.zIndex).toBe('1');
+      expect(findNestedInteractive(shell()).map(describeNested)).toEqual([]);
+    });
+
+    it.each([
+      ['API cũ chưa trả số', withPending(undefined)],
+      ['đã đánh giá hết', withPending(0)],
+      ['đơn đang giao', withPending(1, 'SHIPPING')],
+    ])('%s: không có nút đánh giá', (_n, order) => {
+      render(<OrderCard order={order} onOpen={() => {}} onReorder={() => {}} onReview={() => {}} />);
+      expect(screen.queryByTestId('order-card-review')).toBeNull();
+    });
+
+    it('không truyền onReview: không có nút dù còn sản phẩm chờ đánh giá', () => {
+      render(<OrderCard order={withPending(3)} onOpen={() => {}} onReorder={() => {}} />);
+      expect(screen.queryByTestId('order-card-review')).toBeNull();
+    });
+  });
 });

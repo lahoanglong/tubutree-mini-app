@@ -32,7 +32,7 @@ import { returnPointsTaken } from './return-ledger';
 import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
 import { isPublicProduct } from '../catalog/public-product';
-import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
+import { orderLineReviews, pendingReviewCounts, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
@@ -123,6 +123,11 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   paymentDeadline?: string | null;
   /** Người xem tự huỷ được đơn này không (customerCancelBlock) — app/web chỉ bày nút "Hủy đơn" khi true (R3-CANCEL-2). */
   canCancel: boolean;
+  /**
+   * Chỉ danh sách đơn, chỉ đơn đã nhận mua lẻ cho chính mình (REVIEWABLE_ORDER): số sản phẩm của đơn còn chờ khách đánh giá (`pendingReviewCounts`),
+   * cho nút "Đánh giá (n SP)" ở thẻ đơn. Đơn khác không có trường này.
+   */
+  pendingReviewCount?: number;
   /** Chỉ chi tiết đơn: Điểm Xanh tích của đơn thực sự đã thu lại do trả một phần (returnPointsTaken). */
   pointsReturnReversed?: number;
   /** Chỉ chi tiết đơn: lúc đơn chạm từng trạng thái (ISO), từ sổ lịch sử; chỉ trạng thái + giờ, không ghi chú hay người thao tác. */
@@ -276,7 +281,7 @@ export class OrdersService {
     const hasMore = cursor ? fetched.length > limit : page * limit < total;
     const items = cursor ? fetched.slice(0, limit) : fetched;
     const last = items[items.length - 1];
-    const result = paginated(await this.attachItemMedia(items, userId), page, limit, total);
+    const result = paginated(await this.attachItemMedia(items, userId, { pendingReviews: true }), page, limit, total);
     result.meta.nextCursor = hasMore && last ? encodeKeysetCursor(last) : null;
     return result;
   }
@@ -301,7 +306,7 @@ export class OrdersService {
     const found = await this.prisma.order.findMany({ where: { id: { in: pageIds } }, select: ORDER_LIST_SELECT });
     const byId = new Map(found.map((o) => [o.id, o]));
     const ordered = pageIds.flatMap((id) => byId.get(id) ?? []);
-    return paginated(await this.attachItemMedia(ordered, viewerId), page, limit, matched.length);
+    return paginated(await this.attachItemMedia(ordered, viewerId, { pendingReviews: true }), page, limit, matched.length);
   }
 
   /** Số đơn đang xử lý — endpoint nhẹ cho badge tab Đơn hàng. */
@@ -501,8 +506,9 @@ export class OrdersService {
   }
 
   /** Ảnh + tồn kho + còn bán được của từng dòng, join theo variationId (OrderItem không có FK/ảnh —
-   * spec §3.2 không thêm cột). Một truy vấn cho cả trang đơn. */
-  private async attachItemMedia(orders: OrderListRow[], viewerId: string): Promise<OrderView[]> {
+   * spec §3.2 không thêm cột). Một truy vấn cho cả trang đơn. `pendingReviews`: danh sách đơn kèm số sản phẩm còn chờ đánh giá (chi tiết đơn đã có
+   * trạng thái đánh giá từng dòng nên không cần). */
+  private async attachItemMedia(orders: OrderListRow[], viewerId: string, opts: { pendingReviews?: boolean } = {}): Promise<OrderView[]> {
     const ids = [...new Set(orders.flatMap((o) => o.items.map((it) => it.variationId)))];
     // Hạn thanh toán của đơn chờ chuyển khoản: danh sách đơn cũng cần để thẻ đơn ghi "Hạn …" (cùng luật với chi tiết đơn).
     const deadlines = await pendingPaymentDeadlines(orders, this.config);
@@ -533,15 +539,28 @@ export class OrdersService {
     const covered = await withCoverImages(this.prisma, variations.map((v) => v.product));
     const coverOf = new Map(covered.map((p) => [p.id, p.images]));
     const byId = new Map(variations.map((v) => [v.id, { ...v, product: { ...v.product, images: coverOf.get(v.product.id) ?? [] } }]));
+    const reviewCounts = opts.pendingReviews
+      ? pendingReviewCounts(
+          this.prisma,
+          orders.map((o) => ({
+            ...o,
+            items: o.items.map((it) => {
+              const v = byId.get(it.variationId);
+              return { id: it.id, productId: v?.product.id ?? null, isGift: it.isGift, open: !!v && !!it.productSlug && isPublicProduct(v.product) };
+            }),
+          })),
+        )
+      : Promise.resolve(new Map<string, number>());
     // Biến thể có thể bị xoá hẳn (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác) trong khi sản phẩm vẫn đang bán: dòng đơn chỉ còn
     // slug đã lưu, tra sản phẩm theo đó để khách không mất nút "Viết đánh giá" của một sản phẩm còn mở.
     const orphanSlugs = [...new Set(orders.flatMap((o) => o.items.flatMap((it) => (!byId.has(it.variationId) && it.productSlug ? [it.productSlug] : []))))];
-    const publicBySlug = new Map(
-      (orphanSlugs.length
-        ? await this.prisma.product.findMany({ where: { slug: { in: orphanSlugs } }, select: { slug: true, isActive: true, approvalStatus: true } })
-        : []
-      ).map((p) => [p.slug, isPublicProduct(p)]),
-    );
+    const [orphanProducts, pendingReview] = await Promise.all([
+      orphanSlugs.length
+        ? this.prisma.product.findMany({ where: { slug: { in: orphanSlugs } }, select: { slug: true, isActive: true, approvalStatus: true } })
+        : [],
+      reviewCounts,
+    ]);
+    const publicBySlug = new Map(orphanProducts.map((p) => [p.slug, isPublicProduct(p)]));
     const media = (variationId: string, productSlug: string | null): OrderItemMedia => {
       const v = byId.get(variationId);
       if (!v) return { ...MISSING_MEDIA, productPublic: productSlug ? (publicBySlug.get(productSlug) ?? false) : false };
@@ -565,6 +584,7 @@ export class OrdersService {
       canCancel: customerCancelBlock(o, viewerId) === null,
       manualHandling: isManualHandling(o),
       paymentDeadline: deadlines.get(o.id) ?? null,
+      ...(pendingReview.has(o.id) ? { pendingReviewCount: pendingReview.get(o.id) } : null),
     }));
   }
 

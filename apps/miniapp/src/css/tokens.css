@@ -1376,26 +1376,38 @@ video.review-lightbox__media {
 .tubu-check__input:checked + .tubu-check__mark svg {
   visibility: visible;
 }
-.tubu-check--radio .tubu-check__input:checked + .tubu-check__mark::after,
-.tubu-check__input[aria-checked='mixed']:not(:checked) + .tubu-check__mark::after {
+.tubu-check--radio .tubu-check__input:checked + .tubu-check__mark::after {
   content: '';
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--color-action-primary-fg);
 }
-.tubu-check__input[aria-checked='mixed']:not(:checked) + .tubu-check__mark::after {
-  width: 60%;
-  height: 60%;
-  border-radius: 2px;
+/* "Chọn một phần" (input.indeterminate): ô đặc như khi chọn, thay dấu tích bằng gạch ngang 12×3 cùng màu, cùng nét với dấu tích. */
+.tubu-check--checkbox .tubu-check__input:indeterminate + .tubu-check__mark {
+  border: none;
   background: var(--color-action-primary-bg);
+}
+.tubu-check--checkbox .tubu-check__input:indeterminate + .tubu-check__mark svg {
+  visibility: hidden;
+}
+.tubu-check--checkbox .tubu-check__input:indeterminate + .tubu-check__mark::after {
+  content: '';
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-action-primary-fg);
 }
 .tubu-check__input:disabled + .tubu-check__mark {
   background: var(--color-bg-canvas);
 }
-.tubu-check__input:disabled:checked + .tubu-check__mark {
+.tubu-check__input:disabled:checked + .tubu-check__mark,
+.tubu-check--checkbox .tubu-check__input:disabled:indeterminate + .tubu-check__mark {
   background: var(--color-action-primary-bg-disabled);
   color: var(--color-bg-surface);
+}
+.tubu-check--checkbox .tubu-check__input:disabled:indeterminate + .tubu-check__mark::after {
+  background: var(--color-bg-surface);
 }
 .tubu-check__input:disabled ~ * {
   cursor: default;

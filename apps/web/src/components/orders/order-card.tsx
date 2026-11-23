@@ -2,7 +2,9 @@
 
 import { useId } from 'react';
 import Link from 'next/link';
+import { Star } from 'lucide-react';
 import type { OrderView } from '@tubutree/app-core/api/orders';
+import { orderReviewCta } from '@tubutree/app-core/order-review-cta';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { bankPaymentHref, buyerOrderStatusLabel, isReorderable, orderDetailHref } from '@/lib/order-view';
 import { formatVnd } from '@/lib/format-vnd';
@@ -30,13 +32,14 @@ export interface OrderCardProps {
 
 /**
  * Thẻ đơn trong trang Đơn hàng: ảnh SP đầu, số món, tổng tiền, trạng thái, "Mua lại" ở đơn đã xong, "Thanh toán ngay" + hạn ở
- * đơn chuyển khoản còn chờ tiền. Mã đơn là liên kết phủ cả thẻ (`after:inset-0`), các nút hành động nổi lên trên bằng z-index nên
+ * đơn chuyển khoản còn chờ tiền, "Đánh giá (n SP)" cùng hàng với "Mua lại" ở đơn đã nhận còn sản phẩm chờ đánh giá. Mã đơn là liên kết phủ cả thẻ (`after:inset-0`), các nút hành động nổi lên trên bằng z-index nên
  * không có phần tử tương tác lồng nhau.
  */
 export function OrderCard({ order: o, onReorder }: OrderCardProps) {
   const first = o.items[0];
   const canReorder = onReorder !== undefined && isReorderable(o.status);
   const canPay = canPayNow(o);
+  const review = orderReviewCta(o);
   const summaryId = useId();
   return (
     <li data-testid="order-card" className={`tubu-press-card relative isolate flex flex-col gap-2.5 p-3 ${ui.card} ${mini.card}`}>
@@ -76,11 +79,25 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
           </Link>
         </div>
       )}
-      {canReorder && (
-        <div data-testid="order-card-actions" className="flex justify-end">
-          <button type="button" onClick={onReorder} className={`${ui.btnSecondary} ${mini.secondary} relative z-10 max-md:text-base`}>
-            Mua lại
-          </button>
+      {(canReorder || review) && (
+        <div data-testid="order-card-actions" className={`flex items-center gap-2 ${review ? 'justify-between' : 'justify-end'}`}>
+          {/* Mở chi tiết đơn: từng món ở đó có lối "Viết đánh giá" (cùng chỗ đến với Mini App). */}
+          {review && (
+            <Link
+              href={orderDetailHref(o.code)}
+              aria-label={review.ariaLabel}
+              data-testid="order-card-review"
+              className="relative z-10 inline-flex min-h-11 items-center gap-1 rounded-control px-2 text-sm font-semibold text-[color:var(--color-text-brand)] transition hover:bg-forest-50 active:scale-[0.97] motion-reduce:active:scale-100"
+            >
+              <Star className="h-4 w-4" aria-hidden="true" />
+              {review.label}
+            </Link>
+          )}
+          {canReorder && (
+            <button type="button" onClick={onReorder} className={`${ui.btnSecondary} ${mini.secondary} relative z-10 max-md:text-base`}>
+              Mua lại
+            </button>
+          )}
         </div>
       )}
     </li>

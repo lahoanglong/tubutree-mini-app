@@ -1045,6 +1045,12 @@ export const SHOP_COPY: Record<string, string> = {
   'loyalty.offersRowSub': 'Đổi Điểm Xanh lấy mã giảm giá và quà',
   'loyalty.offersRowCount': 'Bạn đang có {n} mã giảm giá',
   'loyalty.rulesTitle': 'Cách kiếm và dùng Điểm Xanh',
+  // Điểm thường còn ≤ 30 ngày là hết hạn (`expiringPointsNote().urgent`): một lối thẳng sang tab Đổi quà ngay dưới dòng báo hạn. Chỗ dùng: trang Điểm Xanh
+  // (Mini `pages/loyalty.tsx`, web `tai-khoan/diem-xanh/page.tsx`) qua `expiringRedeemCta` của loyalty-page.ts.
+  'loyalty.expiringCta': 'Đổi điểm ngay trước khi hết hạn →',
+  'loyalty.expiringRedeemable': 'Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay {n} điểm',
+  // Thẻ thành viên số (sheet mã QR): mã thành viên không đổi theo thời gian nên ảnh chụp màn hình quét được khi máy mất mạng ở quầy.
+  'loyalty.cardOfflineHint': 'Mất mạng ở quầy? Chụp màn hình thẻ này trước: mã không đổi nên vẫn quét được.',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

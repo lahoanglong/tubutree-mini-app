@@ -75,6 +75,77 @@ export async function orderLineReviews(
   return (itemId) => byItem.get(itemId) ?? NO_REVIEW;
 }
 
+/** Dòng đơn để đếm đánh giá còn chờ: `productId` null khi biến thể đã bị xoá; `open` = trang sản phẩm còn mở và dòng có slug (nút "Viết đánh giá" dẫn tới được). */
+export interface PendingReviewLine {
+  id: string;
+  productId: string | null;
+  isGift: boolean;
+  open: boolean;
+}
+
+export interface PendingReviewOrder {
+  id: string;
+  userId: string;
+  status: string;
+  type: string;
+  placedForCustomer: boolean;
+  items: PendingReviewLine[];
+}
+
+type PendingReviewDb = Pick<PrismaClient, 'review' | 'returnRequestItem'>;
+
+const isReviewableOrder = (o: Pick<PendingReviewOrder, 'status' | 'type' | 'placedForCustomer'>): boolean =>
+  o.status === REVIEWABLE_ORDER.status && o.type === REVIEWABLE_ORDER.type && o.placedForCustomer === REVIEWABLE_ORDER.placedForCustomer;
+
+/**
+ * Số sản phẩm còn chờ khách đánh giá trên từng đơn của một trang danh sách (orderId → số), cho nút "Đánh giá (n SP)" ở thẻ đơn. Cùng luật với nút
+ * "Viết đánh giá" ở chi tiết đơn (`orderLineReviews`): chỉ đơn REVIEWABLE_ORDER, mỗi sản phẩm của đơn một đánh giá, bỏ quà tặng và dòng không mở được
+ * trang sản phẩm. Bỏ thêm sản phẩm đã có dòng trả được duyệt trên đơn đó: khách đã trả hàng thì không mời đánh giá (đánh giá viết sau lần duyệt cũng
+ * không được thưởng, xem `returnedProductsByOrder`).
+ *
+ * Đơn không đủ điều kiện không có trong Map; đơn đủ điều kiện mà hết sản phẩm để mời thì là 0. Cả trang tốn đúng hai truy vấn theo lô chạy song song
+ * (đánh giá, dòng trả đã duyệt), không truy vấn nào khi trang không có đơn đã nhận còn sản phẩm để mời. Sản phẩm của dòng trả lấy từ dòng đơn đã có
+ * trong bộ nhớ, không tra lại `orderItem`/`variation`.
+ */
+export async function pendingReviewCounts(db: PendingReviewDb, orders: readonly PendingReviewOrder[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const invite = new Map<string, Set<string>>();
+  const productOfLine = new Map<string, { orderId: string; productId: string }>();
+  const ownerOf = new Map<string, string>();
+  for (const o of orders) {
+    if (!isReviewableOrder(o)) continue;
+    out.set(o.id, 0);
+    const products = new Set<string>();
+    for (const it of o.items) {
+      if (!it.productId) continue;
+      productOfLine.set(it.id, { orderId: o.id, productId: it.productId });
+      if (!it.isGift && it.open) products.add(it.productId);
+    }
+    if (products.size === 0) continue;
+    invite.set(o.id, products);
+    ownerOf.set(o.id, o.userId);
+  }
+  if (invite.size === 0) return out;
+  const orderIds = [...invite.keys()];
+  const [reviews, returnedLines] = await Promise.all([
+    db.review.findMany({
+      where: { orderId: { in: orderIds }, userId: { in: [...new Set(ownerOf.values())] } },
+      select: { orderId: true, productId: true, userId: true },
+    }),
+    db.returnRequestItem.findMany({
+      where: { quantity: { gt: 0 }, returnRequest: { orderId: { in: orderIds }, status: 'APPROVED' } },
+      select: { orderItemId: true },
+    }),
+  ]);
+  for (const r of reviews) if (ownerOf.get(r.orderId) === r.userId) invite.get(r.orderId)?.delete(r.productId);
+  for (const l of returnedLines) {
+    const line = productOfLine.get(l.orderItemId);
+    if (line) invite.get(line.orderId)?.delete(line.productId);
+  }
+  for (const [orderId, products] of invite) out.set(orderId, products.size);
+  return out;
+}
+
 type ReturnedLinesDb = Pick<Prisma.TransactionClient, 'returnRequestItem' | 'orderItem' | 'variation'>;
 
 /**

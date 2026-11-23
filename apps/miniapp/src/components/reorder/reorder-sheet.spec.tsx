@@ -541,14 +541,14 @@ describe('ReorderSheet: dấu "một phần", chạm chữ, câu giá có số t
 
   it('Chọn tất cả ở trạng thái một phần khi chỉ chọn một số dòng còn hàng; chọn đủ hay bỏ hết thì bỏ dấu', () => {
     renderSheet(<ReorderSheet target={MANY} source="order_card" onClose={() => {}} />);
-    expect(toggleAllBox()).not.toHaveAttribute('aria-checked', 'mixed');
+    expect(toggleAllBox()).not.toBePartiallyChecked();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Dầu gội' }));
-    expect(toggleAllBox()).toHaveAttribute('aria-checked', 'mixed');
+    expect(toggleAllBox()).toBePartiallyChecked();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Nước rửa chén' }));
-    expect(toggleAllBox()).not.toHaveAttribute('aria-checked', 'mixed');
+    expect(toggleAllBox()).not.toBePartiallyChecked();
     fireEvent.click(toggleAllBox()!);
     expect(toggleAllBox()).toBeChecked();
-    expect(toggleAllBox()).not.toHaveAttribute('aria-checked', 'mixed');
+    expect(toggleAllBox()).not.toBePartiallyChecked();
   });
 
   it('chạm vào chữ "Chọn tất cả" cũng bật tắt, chữ nhìn thấy ẩn khỏi trình đọc màn hình để tên chỉ đọc một lần', () => {

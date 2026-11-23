@@ -388,7 +388,7 @@ describe('AppThrottlerGuard (Q-22)', () => {
       expect(((await res.json()) as { message: string }).message).toContain('ThrottlerException');
     });
 
-    describe('tubu-w19-03: số phút 429 theo trần đang chặn lâu nhất, không theo trần chạm trước', () => {
+    describe('tubu-w19-03 + w21-02: số phút 429 theo trần đang chặn lâu nhất, nhưng khoá SĐT chỉ lộ khi chính nó chặn', () => {
       const tight = (ip: string, code: string, phone: string) =>
         fetch(`${base}/probe/lookup-tight`, {
           method: 'POST',
@@ -401,22 +401,24 @@ describe('AppThrottlerGuard (Q-22)', () => {
         body: (await res.json()) as { statusCode: number; error: string; code: string; message: string },
       });
 
-      it('SĐT đang bị chặn 15 phút mà trần mã (1 phút) chạm trước: vẫn báo 15 phút', async () => {
+      it('w21-02: trần mã (1 phút) chạm trước khi SĐT đang bị chặn 15 phút: chỉ báo 1 phút, y hệt khi SĐT không bị chặn', async () => {
         const phone = '0933000111';
         expect((await tight('10.6.0.1', 'T1', phone)).status).toBe(201);
         expect((await tight('10.6.0.2', 'T2', phone)).status).toBe(201);
         const phoneBlocked = await refusal(await tight('10.6.0.3', 'T3', phone));
         expect(phoneBlocked.body.message).toBe('Thử lại sau 15 phút.');
-        // Cùng mã T9 lần thứ 3: trần mã (`default`, xét trước `lookupPhone`) chặn trước và chỉ biết 60 giây của nó.
+        expect(phoneBlocked.retryAfter).toBeGreaterThan(890);
+        // Cùng mã T9 lần thứ 3: trần mã (`default`, xét trước `lookupPhone`) chặn trước; khoá SĐT không được đọc.
         for (let i = 0; i < 2; i++) expect((await tight(`10.6.1.${i}`, 'T9', phone)).status).toBe(429);
         const codeBlocked = await refusal(await tight('10.6.1.9', 'T9', phone));
         expect(codeBlocked.status).toBe(429);
-        expect(codeBlocked.body).toEqual({ statusCode: 429, error: 'Too Many Requests', code: 'PROBE_LIMIT', message: 'Thử lại sau 15 phút.' });
-        expect(codeBlocked.retryAfter).toBeGreaterThan(890);
-        expect(codeBlocked.retryAfter).toBeLessThanOrEqual(900);
+        expect(codeBlocked.body).toEqual({ statusCode: 429, error: 'Too Many Requests', code: 'PROBE_LIMIT', message: 'Thử lại sau 1 phút.' });
+        expect(codeBlocked.retryAfter).toBeLessThanOrEqual(60);
+        const otherPhone = await refusal(await tight('10.6.1.10', 'T9', '0933000888'));
+        expect(otherPhone.body).toEqual(codeBlocked.body);
       });
 
-      it('SĐT đang bị chặn mà trần IP chạm trước: vẫn báo 15 phút', async () => {
+      it('w21-02: trần IP chạm trước khi SĐT đang bị chặn: không đọc khoá SĐT (câu và Retry-After như SĐT lạ)', async () => {
         const phone = '0933000222';
         const ip = '10.7.0.1';
         expect((await tight(ip, 'U1', phone)).status).toBe(201);
@@ -426,7 +428,9 @@ describe('AppThrottlerGuard (Q-22)', () => {
         expect(ipBlocked.status).toBe(429);
         expect(ipBlocked.body.message).toBe('Thử lại sau 1 phút.');
         const both = await refusal(await tight(ip, 'U8', phone));
-        expect(both.body.message).toBe('Thử lại sau 15 phút.');
+        expect(both.status).toBe(429);
+        expect(both.body).toEqual(ipBlocked.body);
+        expect(both.retryAfter).toBeLessThanOrEqual(60);
       });
 
       it('chỉ trần mã chặn (SĐT chưa bị chặn): giữ 1 phút', async () => {

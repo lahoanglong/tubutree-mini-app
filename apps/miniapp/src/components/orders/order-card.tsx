@@ -1,4 +1,6 @@
 import { useId } from 'react';
+import { Star } from 'lucide-react';
+import { orderReviewCta } from '@tubutree/app-core/order-review-cta';
 import { vi } from '../../i18n/vi';
 import type { OrderView } from '../../services/shop-api';
 import { formatDate, formatDateTime } from '../../utils/format';
@@ -12,12 +14,15 @@ import { Text } from '../ui/text';
 import { ProductThumb } from '../ui/product-thumb';
 
 export interface OrderCardProps {
-  order: OrderView;
+  /** `pendingReviewCount` khai tại đây (không ở `shop-api.ts`): chỉ thẻ đơn đọc trường này của danh sách đơn. */
+  order: OrderView & { pendingReviewCount?: number };
   onOpen: () => void;
   /** Có = hiện nút "Mua lại" cho đơn đã xong. */
   onReorder?: () => void;
   /** Có = hiện nút "Thanh toán ngay" (+ hạn) cho đơn chuyển khoản đang chờ tiền; dẫn tới màn chuyển khoản của đơn. */
   onPay?: () => void;
+  /** Có = hiện nút "Đánh giá (n SP)" ở đơn đã nhận còn sản phẩm chờ đánh giá (`orderReviewCta`). */
+  onReview?: () => void;
 }
 
 /** Thẻ đơn trong tab Đơn hàng (spec 4a.2): ảnh SP đầu (join theo variationId), số món, tổng tiền,
@@ -26,9 +31,10 @@ export interface OrderCardProps {
  * Vỏ thẻ KHÔNG tương tác: nút mở đơn là nút mã đơn (`.tubu-tile-link`, `::after` phủ cả thẻ — cùng cách
  * ProductTile), "Mua lại" là anh em của nó nổi lên bằng z-index. Trước đây vỏ là `role="button"` chứa nút
  * "Mua lại" nên trình đọc màn hình không tới được nút con (axe nested-interactive). */
-export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps) {
+export function OrderCard({ order: o, onOpen, onReorder, onPay, onReview }: OrderCardProps) {
   const first = o.items[0];
   const canReorder = onReorder !== undefined && isReorderable(o.status);
+  const review = onReview !== undefined ? orderReviewCta(o) : null;
   const canPay = onPay !== undefined && canPayOrderNow(o);
   // Tên truy cập = "Đơn <mã>"; món, ngày và tổng tiền là mô tả truy cập của nút.
   const summaryId = useId();
@@ -96,14 +102,24 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps
           </div>
         </div>
       )}
-      {canReorder && (
-        <div data-testid="order-card-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {(canReorder || review) && (
+        <div data-testid="order-card-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: review ? 'space-between' : 'flex-end', gap: 'var(--space-inline-sm)' }}>
+          {/* Nút nhẹ cùng hàng với "Mua lại", không thêm hàng mới vào thẻ. Mở chi tiết đơn: từng món ở đó có lối "Viết đánh giá". */}
+          {review && (
+            <div data-testid="order-card-review" style={{ position: 'relative', zIndex: 1 }}>
+              <Button size="md" variant="ghost" icon={Star} aria-label={review.ariaLabel} onPress={onReview} style={{ minWidth: 0 }}>
+                {review.label}
+              </Button>
+            </div>
+          )}
           {/* Nổi trên lớp phủ của nút mở đơn; chỉ bọc đúng nút nên vùng trống cạnh nút vẫn mở chi tiết đơn. */}
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <Button size="md" variant="secondary" onPress={onReorder} style={{ minWidth: 0 }}>
-              {vi.reorder.cardCta}
-            </Button>
-          </div>
+          {canReorder && (
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <Button size="md" variant="secondary" onPress={onReorder} style={{ minWidth: 0 }}>
+                {vi.reorder.cardCta}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

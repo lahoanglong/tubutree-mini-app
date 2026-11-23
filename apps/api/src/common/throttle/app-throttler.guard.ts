@@ -20,6 +20,9 @@ import { throttleIpTracker, throttleRefusalOf } from './throttle.config';
 
 export { THROTTLE_BYPASS_HEADER } from './throttle.config';
 
+/** Trần đếm theo SĐT khách gõ vào: khoá của nó nói về chủ SĐT (có thể là người khác), không chỉ về người đang gọi. */
+const PHONE_KEYED_THROTTLERS: ReadonlySet<string> = new Set(['lookupPhone']);
+
 /**
  * Throttle toàn cục theo Q-22: khoá đếm là userId khi có JWT hợp lệ, IP khi chưa; request SSR
  * của web mang token nội bộ chỉ chịu trần riêng `ssr` (xem throttle.config.ts).
@@ -51,13 +54,13 @@ export class AppThrottlerGuard extends ThrottlerGuard {
 
   /**
    * Route gắn @ThrottleRefusalMessage trả 429 có `code` và câu tiếng Việt kèm số phút còn bị chặn; route khác giữ câu mặc định.
-   * Số phút lấy theo trần đang chặn LÂU NHẤT của route, không theo trần chạm trước: thư viện xét trần theo thứ tự `default` → `authIp` →
-   * `lookupPhone` và ném ở trần đầu tiên bị chặn, nên khi SĐT đang bị chặn 15 phút mà trần mã (1 phút) chạm trước, câu cũ báo sai "1 phút".
+   * Số phút lấy theo trần đang chặn LÂU NHẤT của route, không theo trần chạm trước (thư viện xét `default` → `authIp` → `lookupPhone` và ném ở
+   * trần đầu tiên bị chặn), trừ trần SĐT: xem `longestActiveBlockSeconds`.
    */
   protected override async throwThrottlingException(context: ExecutionContext, detail: ThrottlerLimitDetail): Promise<void> {
     const refusal = throttleRefusalOf(context.getHandler());
     if (!refusal) return super.throwThrottlingException(context, detail);
-    const seconds = Math.max(detail.timeToBlockExpire, await this.longestActiveBlockSeconds(context));
+    const seconds = Math.max(detail.timeToBlockExpire, await this.longestActiveBlockSeconds(context, detail));
     this.getRequestResponse(context).res.header('Retry-After', seconds);
     const minutes = Math.max(1, Math.ceil(seconds / 60));
     throw new HttpException(
@@ -69,8 +72,11 @@ export class AppThrottlerGuard extends ThrottlerGuard {
   /**
    * Số giây còn bị chặn dài nhất trong các trần áp cho request này, đọc thẳng bộ nhớ, không đếm thêm lượt. Khoá và điều kiện bỏ qua
    * dựng giống `ThrottlerGuard.canActivate` của 6.5.0 (decorator route/class trước, rồi cấu hình trần, rồi cấu hình chung).
+   *
+   * Trần theo SĐT khách gõ chỉ được đọc khi chính nó chặn request (khoá trùng `trigger.key`). Nếu trần mã hay trần IP chặn trước mà vẫn báo
+   * thời gian khoá của SĐT, người dò tự làm mình bị chặn rồi gửi kèm SĐT bất kỳ sẽ biết SĐT đó có đang bị khoá 15 phút hay không.
    */
-  private async longestActiveBlockSeconds(context: ExecutionContext): Promise<number> {
+  private async longestActiveBlockSeconds(context: ExecutionContext, trigger: ThrottlerLimitDetail): Promise<number> {
     const storage = this.storageService;
     if (!(storage instanceof PerKeyThrottlerStorage)) return 0;
     const targets = [context.getHandler(), context.getClass()];
@@ -89,6 +95,7 @@ export class AppThrottlerGuard extends ThrottlerGuard {
         throttler.generateKey ??
         this.commonOptions.generateKey!;
       const key = generateKey(context, await getTracker(req, context), name);
+      if (PHONE_KEYED_THROTTLERS.has(name) && key !== trigger.key) continue;
       longest = Math.max(longest, storage.blockedSeconds(key, name));
     }
     return longest;

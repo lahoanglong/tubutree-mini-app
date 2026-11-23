@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Input } from './input';
@@ -125,12 +127,39 @@ describe('Switch', () => {
 });
 
 describe('Checkbox/Radio tự vẽ trên input gốc', () => {
-  it('indeterminate đọc là "mixed"; ô thường không đặt aria-checked (trình duyệt tự báo checked)', () => {
+  it('w21-02: indeterminate gán input.indeterminate (đọc "chọn một phần"), không đặt aria-checked trên <input> gốc', () => {
     const { rerender } = render(<Checkbox label="Chọn tất cả" indeterminate checked={false} onChange={() => {}} />);
-    expect(screen.getByRole('checkbox', { name: 'Chọn tất cả' })).toHaveAttribute('aria-checked', 'mixed');
+    const box = screen.getByRole('checkbox', { name: 'Chọn tất cả' }) as HTMLInputElement;
+    expect(box.indeterminate).toBe(true);
+    expect(box).toBePartiallyChecked();
+    expect(box).not.toHaveAttribute('aria-checked');
     rerender(<Checkbox label="Chọn tất cả" checked onChange={() => {}} />);
-    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-checked');
-    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(box.indeterminate).toBe(false);
+    expect(box).not.toBePartiallyChecked();
+    expect(box).not.toHaveAttribute('aria-checked');
+    expect(box).toBeChecked();
+  });
+
+  it('w21-02: trình duyệt xoá indeterminate khi bấm; lần vẽ sau gán lại theo prop dù prop không đổi', () => {
+    const { rerender } = render(<Checkbox label="Chọn tất cả" indeterminate checked={false} onChange={() => {}} />);
+    const box = screen.getByRole('checkbox', { name: 'Chọn tất cả' }) as HTMLInputElement;
+    box.indeterminate = false;
+    rerender(<Checkbox label="Chọn tất cả" indeterminate checked={false} onChange={() => {}} />);
+    expect(box.indeterminate).toBe(true);
+  });
+
+  it('w21-02: Radio không bao giờ ở trạng thái indeterminate', () => {
+    render(<Radio label="Tiền mặt" name="pay" value="cod" checked={false} onChange={() => {}} />);
+    expect((screen.getByRole('radio', { name: 'Tiền mặt' }) as HTMLInputElement).indeterminate).toBe(false);
+  });
+
+  it('w21-02: CSS vẽ gạch ngang theo :indeterminate, không còn luật theo aria-checked', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+    expect(css).not.toMatch(/tubu-check__input\[aria-checked/);
+    const dash = /\.tubu-check--checkbox \.tubu-check__input:indeterminate \+ \.tubu-check__mark::after \{([^}]*)\}/.exec(css);
+    expect(dash?.[1]).toMatch(/width: 12px;/);
+    expect(dash?.[1]).toMatch(/height: 3px;/);
+    expect(css).toMatch(/\.tubu-check--checkbox \.tubu-check__input:indeterminate \+ \.tubu-check__mark svg \{\s*visibility: hidden;/);
   });
 
   it('Radio giữ name/value cho nhóm, disabled chặn chọn', () => {

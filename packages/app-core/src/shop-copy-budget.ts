@@ -984,4 +984,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'loyalty.offersRowSub': 40,
   'loyalty.offersRowCount': 32,
   'loyalty.rulesTitle': 30,
+  'loyalty.expiringCta': 34,
+  'loyalty.expiringRedeemable': 72,
+  'loyalty.cardOfflineHint': 90,
 };
