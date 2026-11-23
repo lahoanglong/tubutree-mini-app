@@ -1,5 +1,6 @@
 import { api } from './api';
 import { getSessionAttribution } from '../utils/entry-source';
+import type { ContentKit } from '@tubutree/app-core/api/affiliate';
 
 export interface AffiliateMe {
   /** CTV, admin, hoặc đại lý còn gian hàng CTV/hoa hồng (D3-03). */
@@ -290,20 +291,7 @@ export interface CtvOrderQuote {
 export const quoteCtvOrder = (items: CtvOrderItemInput[]) =>
   api.post<CtvOrderQuote>('/affiliate/orders/quote', { items }).then((r) => r.data);
 
-// ── Content Kit (bộ nội dung bán hàng theo từng sản phẩm) ──
-export interface ContentKitFaq {
-  q: string;
-  a: string;
-}
-export interface ContentKit {
-  productName: string;
-  images: string[];
-  /** Đã tự chèn tên CTV + link giới thiệu (thay {ten_ctv}/{link}) — copy là dùng luôn. */
-  captions: string[];
-  usps: string[];
-  faqs: ContentKitFaq[];
-  videoUrls: string[];
-  shareLink: string;
-}
+// ── Content Kit (bộ nội dung bán hàng theo từng sản phẩm): kiểu dùng chung với web ở app-core ──
+export type { ContentKit, ContentKitFaq } from '@tubutree/app-core/api/affiliate';
 export const fetchContentKit = (slug: string) =>
   api.get<ContentKit>(`/affiliate/content-kit/${slug}`).then((r) => r.data);

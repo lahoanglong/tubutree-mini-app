@@ -11,10 +11,11 @@ import { ui } from '@/lib/guest-ui';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
-import { QrCode } from '@/components/ui/qr-code';
+import { SharePoster } from './share-poster';
 import { absoluteKitLink, shareCaptions, shareFallbackText, storefrontShareUrl, withAbsoluteLink } from './storefront-rules';
 import { loadErrorText } from '@/lib/error-text';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 
 const errText = loadErrorText;
 const COPY_FAILED = 'Không sao chép được — hãy chọn và chép thủ công.';
@@ -131,8 +132,9 @@ export function StorefrontShareSheet({
 
   return (
     <Sheet open={open} onClose={onClose} title={heading ?? 'Chia sẻ gian hàng'}>
-      <div className="mb-3 flex justify-center">
-        <QrCode value={url} />
+      {/* Ảnh có QR trỏ trang web công khai (tubutree.com): quét bằng camera hay mở từ Facebook/TikTok không cần đăng nhập. */}
+      <div className="mb-3">
+        <SharePoster input={{ kind: 'store', title, path: home ? '/' : `/s/${slug ?? ''}`, referralCode }} lock={lock} onNote={setNote} />
       </div>
       <NoteLine note={note} />
       <div className="mb-3 flex flex-col gap-2">
@@ -240,6 +242,22 @@ export function ContentKitSheet({ open, onClose, productSlug }: { open: boolean;
               Sao chép link
             </button>
           </div>
+          <section aria-label={fillCopy('poster.cardHeading')} className="mb-3">
+            <h3 className="mb-1.5 text-sm font-semibold text-stone-900">{fillCopy('poster.cardHeading')}</h3>
+            <SharePoster
+              input={{
+                kind: 'product',
+                name: data.productName,
+                slug: productSlug,
+                brandName: data.brandName,
+                priceVnd: data.priceVnd,
+                referralCode: data.referralCode,
+                shareLink: data.shareLink,
+              }}
+              lock={lock}
+              onNote={setNote}
+            />
+          </section>
           {!hasContent && <p className="text-sm text-stone-600">Sản phẩm này chưa có nội dung mẫu.</p>}
           {captions.length > 0 && (
             <section aria-label="Bài mẫu (chạm để sao chép)" className="mb-3">

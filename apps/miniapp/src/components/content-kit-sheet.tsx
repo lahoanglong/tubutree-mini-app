@@ -14,6 +14,8 @@ import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { SharePoster } from './share-poster';
 
 /**
  * `app.miniapp_base_url` (URL gốc Mini App, vd https://zalo.me/s/<Mini App ID>) chưa cấu hình thì API trả đường dẫn tương
@@ -147,6 +149,20 @@ export function ContentKitSheet({
                 {vi.contentKit.copyLink}
               </Button>
             </div>
+
+            <Section title={fillCopy('poster.cardHeading')}>
+              <SharePoster
+                input={{
+                  kind: 'product',
+                  name: data.productName,
+                  slug: productSlug,
+                  brandName: data.brandName,
+                  priceVnd: data.priceVnd,
+                  referralCode: data.referralCode,
+                  shareLink: data.shareLink,
+                }}
+              />
+            </Section>
 
             {!hasContent && (
               <Text variant="body-sm" tone="tertiary" as="div">

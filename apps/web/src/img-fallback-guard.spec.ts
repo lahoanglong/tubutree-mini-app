@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 const EXEMPT: Record<string, string> = {
   'app/s/[slug]/og-card.tsx': 'ảnh OG dựng bằng ImageResponse, không có DOM để gắn sự kiện',
   'components/ui/qr-code.tsx': 'data URL sinh tại chỗ (không có URL để lỗi)',
+  'components/affiliate/share-poster.tsx': 'ảnh có QR vẽ bằng canvas tại máy (data URL, không có URL để lỗi)',
   'components/account/avatar-crop-sheet.tsx': 'xem trước ảnh cục bộ (blob) vừa chọn',
   'components/community/image-upload.tsx': 'xem trước ảnh cục bộ (blob) vừa chọn',
   'components/affiliate/storefront-image-upload.tsx': 'xem trước ảnh cục bộ (blob) vừa chọn',

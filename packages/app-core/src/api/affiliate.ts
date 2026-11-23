@@ -297,6 +297,12 @@ export interface ContentKitFaq {
 }
 export interface ContentKit {
   productName: string;
+  /** Thương hiệu hiện trên ảnh thẻ sản phẩm; null khi sản phẩm không ghi thương hiệu. API cũ không trả. */
+  brandName?: string | null;
+  /** Giá đang bán (giá giảm khi thấp hơn giá gốc), 0 khi không có giá hợp lệ. API cũ không trả. */
+  priceVnd?: number;
+  /** Mã giới thiệu của CTV đang xem, để ảnh QR trỏ trang web công khai kèm `?ref=`. API cũ không trả. */
+  referralCode?: string;
   images: string[];
   /** Đã tự chèn tên CTV + link giới thiệu (thay {ten_ctv}/{link}) — copy là dùng luôn. */
   captions: string[];

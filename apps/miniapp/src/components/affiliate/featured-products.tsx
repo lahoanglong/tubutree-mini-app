@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Check, Link2 } from 'lucide-react';
+import { Check, ImageIcon, Link2 } from 'lucide-react';
 import type { FeaturedAffiliateProduct } from '@tubutree/app-core/commerce/affiliate-share';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { copyText } from '../../utils/clipboard';
+import { ContentKitSheet } from '../content-kit-sheet';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
@@ -23,12 +24,15 @@ const COPIED_MS = 2000;
 const FAILED_MS = 4000;
 
 /**
- * Khối "Sản phẩm hoa hồng nổi bật" của CTV: mỗi sản phẩm kèm mức hoa hồng, số tiền dự kiến trên một đơn và nút "Chép link giới thiệu" chép lời giới thiệu
- * có link gắn mã CTV (`?ref=`). Số đo ở lớp `.ctv-featured*` (css/tokens.css). Dữ liệu và link dựng ở `commerce/affiliate-share.ts`.
+ * Khối "Sản phẩm hoa hồng nổi bật" của CTV: mỗi sản phẩm kèm mức hoa hồng, số tiền dự kiến trên một đơn, nút "Chép link" chép lời giới thiệu
+ * có link gắn mã CTV (`?ref=`) và nút "Ảnh + Bài mẫu" mở bảng nội dung bán hàng của sản phẩm đó (ảnh thẻ có QR, bài mẫu). Số đo ở lớp `.ctv-featured*` (css/tokens.css). Dữ liệu và link dựng ở `commerce/affiliate-share.ts`.
  */
 export function AffiliateFeaturedProducts({ products, error, onRetry }: AffiliateFeaturedProductsProps) {
   const headingId = useId();
   const [done, setDone] = useState<{ id: string; ok: boolean } | null>(null);
+  // Sản phẩm mở "Ảnh + Bài mẫu" gần nhất: bảng nội dung bán hàng có ảnh thẻ sản phẩm kèm QR và bài mẫu đã chèn link giới thiệu.
+  // Đóng chỉ tắt `open`, giữ slug để bảng không trắng trong lúc trượt xuống.
+  const [kit, setKit] = useState<{ slug: string; open: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -110,6 +114,14 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
                   >
                     {fillCopy(copied ? 'ctv.featured.copied' : 'ctv.featured.copy')}
                   </Button>
+                  <Button
+                    variant="secondary"
+                    icon={ImageIcon}
+                    aria-label={fillCopy('ctv.featured.kitAria', { name: p.name })}
+                    onPress={() => setKit({ slug: p.slug, open: true })}
+                  >
+                    {fillCopy('ctv.featured.kit')}
+                  </Button>
                 </div>
               </li>
             );
@@ -121,6 +133,7 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
           {fillCopy('ctv.featured.note')}
         </Text>
       )}
+      <ContentKitSheet visible={kit?.open ?? false} onClose={() => setKit((k) => k && { ...k, open: false })} productSlug={kit?.slug ?? ''} />
     </section>
   );
 }

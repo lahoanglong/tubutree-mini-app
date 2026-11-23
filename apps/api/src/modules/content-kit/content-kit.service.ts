@@ -1,6 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { CARD_VARIATION_SELECT } from '../catalog/card-select';
+import { cardPrices, VARIATION_ORDER_BY } from '../catalog/variation-order';
+import { fallbackKitCopy } from './content-kit-fallback-notice';
+
+/** Giá đang bán của thẻ sản phẩm (`cardPrices`): giá giảm khi có và thấp hơn giá gốc; giá lỗi thì 0. */
+function sellingPrice(base: number | null | undefined, sale: number | null | undefined): number {
+  const b = typeof base === 'number' && Number.isFinite(base) && base > 0 ? base : 0;
+  return typeof sale === 'number' && sale > 0 && (b === 0 || sale < b) ? sale : b;
+}
 
 export interface FaqEntryInput {
   q: string;
@@ -30,7 +39,19 @@ export class ContentKitService {
   async getForCtv(userId: string, productSlug: string) {
     const product = await this.prisma.product.findUnique({
       where: { slug: productSlug },
-      select: { id: true, name: true, images: true, isActive: true, affiliateBlocked: true },
+      select: {
+        id: true,
+        name: true,
+        images: true,
+        isActive: true,
+        affiliateBlocked: true,
+        basePrice: true,
+        salePrice: true,
+        brand: true,
+        brandRef: { select: { name: true } },
+        // Pancake ghi giá bán vào phân loại chứ không vào Product.salePrice: ảnh và câu mẫu ghi đúng giá thẻ/trang chi tiết.
+        variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: CARD_VARIATION_SELECT },
+      },
     });
     // Nhất quán với storefront/brand: SP ngừng bán hoặc bị chặn affiliate thì KHÔNG được tạo
     // nội dung quảng bá (kèm link giới thiệu) cho nó — coi như không tồn tại với CTV.
@@ -58,11 +79,22 @@ export class ContentKitService {
     const substitute = (text: string) =>
       text.replace(/\{ten_ctv\}|\{link\}/g, (m) => (m === '{ten_ctv}' ? ctvName : link));
 
+    const card = cardPrices(product, product.variations);
+    const priceVnd = sellingPrice(card.basePrice, card.salePrice);
+    const brandName = product.brandRef?.name?.trim() || product.brand?.trim() || null;
+    // Admin chưa soạn bài mẫu/điểm bán hàng thì dựng câu an toàn từ tên, thương hiệu, giá: CTV vẫn có câu kèm link giới thiệu để gửi ngay.
+    const fallback = fallbackKitCopy({ productName: product.name, brandName, priceVnd, ctvName: user.fullName?.trim() || null, link });
+    const captions = (kit?.captions ?? []).map(substitute);
+    const usps = kit?.usps ?? [];
+
     return {
       productName: product.name,
+      brandName,
+      priceVnd,
+      referralCode: user.referralCode,
       images: product.images,
-      captions: (kit?.captions ?? []).map(substitute),
-      usps: kit?.usps ?? [],
+      captions: captions.length > 0 ? captions : fallback.captions,
+      usps: usps.length > 0 ? usps : fallback.usps,
       faqs: (kit?.faqs as FaqEntryInput[] | null) ?? [],
       videoUrls: kit?.videoUrls ?? [],
       shareLink: link,

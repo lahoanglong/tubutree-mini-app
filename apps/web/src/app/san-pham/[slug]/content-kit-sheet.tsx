@@ -12,6 +12,8 @@ import { ui } from '@/lib/guest-ui';
 import { absoluteLink, shareFallbackText, withAbsoluteLink } from '@/lib/content-kit-link';
 import { loadErrorText } from '@/lib/error-text';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { SharePoster } from '@/components/affiliate/share-poster';
 
 type Note = { text: string; error: boolean } | null;
 
@@ -135,6 +137,22 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
               </p>
             )}
           </div>
+
+          <Section title={fillCopy('poster.cardHeading')}>
+            <SharePoster
+              input={{
+                kind: 'product',
+                name: data.productName,
+                slug: productSlug,
+                brandName: data.brandName,
+                priceVnd: data.priceVnd,
+                referralCode: data.referralCode,
+                shareLink: data.shareLink,
+              }}
+              lock={lock}
+              onNote={setNote}
+            />
+          </Section>
 
           {!hasContent && <p className="text-sm text-stone-600">Sản phẩm này chưa có nội dung mẫu.</p>}
 

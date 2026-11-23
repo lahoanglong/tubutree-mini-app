@@ -34,6 +34,9 @@ vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('./qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
+vi.mock('./share-poster', () => ({
+  SharePoster: ({ input }: { input: unknown }) => <div data-testid="poster">{JSON.stringify(input)}</div>,
+}));
 
 import { ShareSheet, useActionLock } from './share-sheet';
 
@@ -46,6 +49,23 @@ const STORE_LINK = 'https://zalo.me/s/2070857098114207963/s/an-lanh?ref=CTV123';
 function renderSheet() {
   return render(<ShareSheet visible onClose={() => {}} slug="an-lanh" title="Gian hàng An Lành" referralCode="CTV123" />);
 }
+
+describe('ShareSheet — ảnh có QR', () => {
+  const posterInput = () => JSON.parse(screen.getByTestId('poster').textContent ?? '') as Record<string, unknown>;
+
+  it('gian hàng: ảnh nhận tên, đường dẫn /s/<slug> (cùng route trên web) và mã giới thiệu; nút chia sẻ vẫn mở Mini App', () => {
+    renderSheet();
+    expect(posterInput()).toEqual({ kind: 'store', title: 'Gian hàng An Lành', path: '/s/an-lanh', referralCode: 'CTV123' });
+  });
+
+  it('trang chủ (basePath "/") và trang thương hiệu (/brand/<slug>) dùng đúng đường dẫn; không có mã thì ảnh không có mã', () => {
+    const { unmount } = render(<ShareSheet visible onClose={() => {}} basePath="/" title="Tubu Tree" referralCode="R1" />);
+    expect(posterInput()).toEqual({ kind: 'store', title: 'Tubu Tree', path: '/', referralCode: 'R1' });
+    unmount();
+    render(<ShareSheet visible onClose={() => {}} slug="eco" pathPrefix="brand" title="Eco" referralCode={null} />);
+    expect(posterInput()).toEqual({ kind: 'store', title: 'Eco', path: '/brand/eco', referralCode: null });
+  });
+});
 
 describe('ShareSheet — lỗi chia sẻ không bị nuốt (C-067)', () => {
   beforeEach(() => {

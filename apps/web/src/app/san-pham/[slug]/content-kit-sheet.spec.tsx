@@ -9,6 +9,10 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 const mocks = vi.hoisted(() => ({ http: { get: vi.fn() } }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
+// Ảnh có QR vẽ bằng canvas (nạp lười): ở đây chỉ kiểm dữ liệu bảng đưa vào ảnh; cách vẽ kiểm ở share-poster.spec.
+vi.mock('@/components/affiliate/share-poster', () => ({
+  SharePoster: ({ input }: { input: unknown }) => <div data-testid="poster">{JSON.stringify(input)}</div>,
+}));
 
 import { ContentKitSheet } from './content-kit-sheet';
 
@@ -194,7 +198,8 @@ describe('ContentKitSheet: vùng có tên, trạng thái chờ và điều kiệ
     expect(region('Điểm bán hàng').textContent).toContain('Không sulfate');
     expect(region('Câu hỏi thường gặp').textContent).toContain('Dùng bao lâu?');
     expect(region('Video tham khảo').textContent).toContain('https://youtu.be/abc');
-    expect(document.querySelectorAll('section[aria-label]')).toHaveLength(4);
+    expect(document.querySelector('section[aria-label="Ảnh giới thiệu sản phẩm"] [data-testid="poster"]')).not.toBeNull();
+    expect(document.querySelectorAll('section[aria-label]')).toHaveLength(5);
   });
 
   it('đang tải: khối chờ là vùng role="status" aria-busy="true"; tải xong thì biến mất', async () => {
@@ -428,5 +433,22 @@ describe('ContentKitSheet: dấu hiệu nhìn thấy khi khoá và thẻ thông 
     const alertNode = document.querySelector('[role="alert"]')!;
     expect(alertNode).not.toBe(okNode);
     expect(okNode.isConnected).toBe(false);
+  });
+});
+
+describe('ContentKitSheet: ảnh thẻ sản phẩm', () => {
+  it('ảnh nhận tên, slug, thương hiệu, giá, mã giới thiệu và shareLink của bộ nội dung (QR trỏ trang web công khai)', async () => {
+    mocks.http.get.mockResolvedValue({ ...KIT, brandName: 'Bồ Kết Xanh', priceVnd: 89000, referralCode: 'CTV1' });
+    mount();
+    await flush();
+    expect(JSON.parse(document.querySelector('[data-testid="poster"]')!.textContent ?? '')).toEqual({
+      kind: 'product',
+      name: 'Dầu gội bồ kết',
+      slug: 'dau-goi',
+      brandName: 'Bồ Kết Xanh',
+      priceVnd: 89000,
+      referralCode: 'CTV1',
+      shareLink: '/product/dau-goi?ref=CTV1',
+    });
   });
 });

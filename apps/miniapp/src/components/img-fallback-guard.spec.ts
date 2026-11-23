@@ -12,6 +12,7 @@ const EXEMPT: Record<string, string> = {
   'components/image-upload.tsx': 'xem trước ảnh cục bộ (blob) vừa chọn, không thể lỗi mạng',
   'components/home/home-header.tsx': 'logo đóng gói sẵn trong bundle',
   'components/qr-code.tsx': 'data URL sinh tại chỗ (không có URL để lỗi)',
+  'components/share-poster.tsx': 'ảnh có QR vẽ bằng canvas tại máy (data URL, không có URL để lỗi)',
 };
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));

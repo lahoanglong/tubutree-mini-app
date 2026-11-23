@@ -9,6 +9,22 @@ import { mount } from '@/components/mini/harness';
 
 const mocks = vi.hoisted(() => ({ copyText: vi.fn() }));
 vi.mock('@/lib/copy-text', () => ({ copyText: (t: string) => mocks.copyText(t) }));
+// Bảng nội dung bán hàng thật cần API: ở đây chỉ kiểm nút mở đúng sản phẩm và chỉ tải bảng khi bấm.
+const kit = vi.hoisted(() => ({ loaded: 0 }));
+vi.mock('./storefront-share', () => {
+  kit.loaded += 1;
+  return {
+    ContentKitSheet: ({ open, productSlug, onClose }: { open: boolean; productSlug: string; onClose: () => void }) =>
+      open ? (
+        <div role="dialog" aria-label="kit">
+          {productSlug}
+          <button type="button" onClick={onClose}>
+            đóng
+          </button>
+        </div>
+      ) : null,
+  };
+});
 
 import { AffiliateFeaturedProducts } from './featured-products';
 
@@ -140,5 +156,30 @@ describe('AffiliateFeaturedProducts (web)', () => {
     const { container } = mount(<AffiliateFeaturedProducts products={PRODUCTS} error={false} />);
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
+  });
+});
+
+describe('AffiliateFeaturedProducts (web): Ảnh + Bài mẫu', () => {
+  it('nút chép ngắn "Chép link" (tên đọc đủ) cạnh nút "Ảnh + Bài mẫu"; bảng chỉ tải khi bấm và mở đúng sản phẩm', async () => {
+    const { container } = mount(<AffiliateFeaturedProducts products={PRODUCTS} />);
+    await flush();
+    const [first, second] = rows(container);
+    const copyBtn = first!.querySelector<HTMLButtonElement>('button[aria-label="Chép link giới thiệu Bàn chải tre"]')!;
+    expect(copyBtn.textContent).toBe('Chép link');
+    const kitBtn = first!.querySelector<HTMLButtonElement>('button[aria-label="Ảnh và bài mẫu Bàn chải tre"]')!;
+    expect(kitBtn.textContent).toBe('Ảnh + Bài mẫu');
+    expect(kit.loaded).toBe(0);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    click(kitBtn);
+    await flush(10);
+    expect(kit.loaded).toBe(1);
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('ban-chai-tre');
+    click(second!.querySelector('button[aria-label="Ảnh và bài mẫu Ly tre"]'));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('ly-tre');
+    click(byText(document, 'button', 'đóng'));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(mocks.copyText).not.toHaveBeenCalled();
   });
 });
