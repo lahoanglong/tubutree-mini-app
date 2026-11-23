@@ -125,7 +125,7 @@ describe('tubu-w21-02: OrderCard nút "Đánh giá (n SP)"', () => {
     const c = mount(<OrderCard order={{ ...(ORDER as object), pendingReviewCount: 2 } as never} onReorder={() => {}} />);
     const link = reviewLink(c)!;
     expect(link.textContent).toBe('Đánh giá (2 SP)');
-    expect(link.getAttribute('aria-label')).toBe('Đánh giá 2 sản phẩm của đơn TUBU1');
+    expect(link.getAttribute('aria-label')).toBe('Đánh giá (2 SP) của đơn TUBU1');
     expect(link.getAttribute('href')).toBe('/tai-khoan/don-hang/TUBU1');
     const actions = c.querySelectorAll('[data-testid="order-card-actions"]');
     expect(actions).toHaveLength(1);

@@ -433,6 +433,20 @@ describe('AppThrottlerGuard (Q-22)', () => {
         expect(both.retryAfter).toBeLessThanOrEqual(60);
       });
 
+      it('w21-02: phản hồi không gửi header đếm theo SĐT (lượt còn lại, Retry-After riêng), cả khi qua lẫn khi SĐT chặn', async () => {
+        const phone = '0933000333';
+        const phoneHeaders = (res: Response) => [...res.headers.keys()].filter((k) => k.toLowerCase().includes('lookupphone'));
+        const ok = await tight('10.9.0.1', 'W1', phone);
+        expect(ok.status).toBe(201);
+        expect(phoneHeaders(ok)).toEqual([]);
+        expect(ok.headers.get('x-ratelimit-remaining-authip')).not.toBeNull();
+        expect((await tight('10.9.0.2', 'W2', phone)).status).toBe(201);
+        const blocked = await tight('10.9.0.3', 'W3', phone);
+        expect(blocked.status).toBe(429);
+        expect(phoneHeaders(blocked)).toEqual([]);
+        expect(Number(blocked.headers.get('retry-after'))).toBeGreaterThan(890);
+      });
+
       it('chỉ trần mã chặn (SĐT chưa bị chặn): giữ 1 phút', async () => {
         for (let i = 0; i < 2; i++) expect((await tight(`10.8.0.${i}`, 'V1', `09440001${i}0`)).status).toBe(201);
         const res = await refusal(await tight('10.8.0.9', 'V1', '0944000199'));

@@ -395,27 +395,38 @@ describe('LoyaltyPage — tubu-w21-02: đổi điểm trước khi hết hạn, 
   const soon = () => new Date(Date.now() + 10 * 864e5).toISOString();
   const CTA = 'Đổi điểm ngay trước khi hết hạn →';
 
-  it('điểm thường còn ≤ 30 ngày: một nút sang tab Đổi quà ngay dưới dòng báo hạn, kèm số đổi được ngay khi tổng có lô quy đổi', async () => {
+  const cta = () => screen.queryByRole('button', { name: /^Đổi điểm ngay trước khi hết hạn →/ });
+
+  it('điểm thường còn ≤ 30 ngày: dòng Đổi quà thành lời mời đổi ngay (vẫn một lối sang tab Đổi quà), dòng phụ nêu số đổi được ngay khi tổng có lô quy đổi', async () => {
     mocks.getLoyalty.mockResolvedValue({
       ...LOYALTY, pointsBalance: 1_250, pointsConvertedBalance: 300, redeemablePoints: 1_000, expiringPoints: { amount: 70, expiresAt: soon() },
     });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: CTA }));
+    await screen.findByText(/còn 10 ngày/);
+    const row = await waitFor(() => {
+      const el = cta();
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(screen.getByTestId('loyalty-expiring-cta')).toHaveTextContent(CTA);
+    expect(row).toHaveTextContent('Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 1.000 điểm');
+    expect(screen.queryByText('Đổi quà & mã giảm giá')).toBeNull();
+    fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
-    expect(screen.getByText('Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 1.000 điểm')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: CTA })).toHaveLength(1);
   });
 
-  it('còn hơn 30 ngày, hay không còn điểm đổi được ngay: không có nút', async () => {
+  it('còn hơn 30 ngày, hay không còn điểm đổi được ngay: dòng Đổi quà như cũ', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, redeemablePoints: 1_250, expiringPoints: { amount: 70, expiresAt: '2099-01-01T03:00:00.000Z' } });
     const first = renderPage();
     await screen.findByText(/^70 Điểm Xanh sẽ hết hạn ngày 01\/01\/2099$/);
-    expect(screen.queryByRole('button', { name: CTA })).toBeNull();
+    expect(await screen.findByText('Đổi quà & mã giảm giá')).toBeInTheDocument();
+    expect(cta()).toBeNull();
     first.unmount();
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, redeemablePoints: 0, expiringPoints: { amount: 70, expiresAt: soon() } });
     renderPage();
     await screen.findByText(/còn 10 ngày/);
-    expect(screen.queryByRole('button', { name: CTA })).toBeNull();
+    expect(await screen.findByText('Đổi quà & mã giảm giá')).toBeInTheDocument();
+    expect(cta()).toBeNull();
   });
 
   it('thẻ thành viên: mã QR nằm trong khung trắng cố định có lề; quầy tích điểm được thì dặn chụp màn hình khi mất mạng', async () => {

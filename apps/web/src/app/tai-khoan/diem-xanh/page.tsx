@@ -149,10 +149,9 @@ export default function LoyaltyPage() {
   const lots = pointsSummary(data);
   const pendingWasteLine = pendingPointsBalanceLine(wasteMeQ.data?.pendingPoints);
   const expiring = expiringPointsNote(data.expiringPoints);
-  const redeemCta = isWebRouteReady('/uu-dai') ? expiringRedeemCta('/uu-dai', expiring, { redeemable: data.redeemablePoints, total: lots.total }) : null;
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
   const history = txnQ.data?.pages.flat() ?? [];
-  const offersRow = loyaltyOffersRow('/uu-dai', couponsQ.data?.length);
+  const offersRow = loyaltyOffersRow('/uu-dai', couponsQ.data?.length, expiringRedeemCta(expiring, { redeemable: data.redeemablePoints, total: lots.total }));
   const ruleLines = rates ? [earnRuleLine(rates, data.tier?.multiplier ?? 1), redeemRuleLine(rates)] : [];
   const celebrateStyle = tierStyleAt(celebrate ? tierRank(data.tiers, { name: celebrate }) : 0);
 
@@ -171,14 +170,6 @@ export default function LoyaltyPage() {
             {lots.convertedNote && <p className="mt-0.5 text-caption text-stone-600">{lots.convertedNote}</p>}
             {pendingWasteLine && <p className="mt-0.5 text-caption tabular-nums text-stone-600">{pendingWasteLine}</p>}
             {expiring && <p className={`mt-1.5 text-caption ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
-            {redeemCta && (
-              <div data-testid="loyalty-expiring-cta" className="mt-1 flex flex-col items-center gap-0.5">
-                <Link href={redeemCta.href} className={`${ui.btnText} text-[color:var(--color-text-brand)] no-underline hover:underline`}>
-                  {redeemCta.label}
-                </Link>
-                {redeemCta.note && <p className="text-caption text-stone-600">{redeemCta.note}</p>}
-              </div>
-            )}
             {expiryPolicy && <p className="mt-0.5 text-caption text-stone-600">{expiryPolicy}</p>}
 
             {next ? (
@@ -229,10 +220,15 @@ export default function LoyaltyPage() {
             <Link href={offersRow.href} className={`flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50 lg:col-start-1 ${miniCard}`}>
               <OffersIconTile icon={Gift} />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-stone-900">{offersRow.title}</span>
+                <span
+                  data-testid={offersRow.urgent ? 'loyalty-expiring-cta' : undefined}
+                  className={`block text-sm font-semibold ${offersRow.urgent ? 'text-[color:var(--color-text-brand)]' : 'text-stone-900'}`}
+                >
+                  {offersRow.title}
+                </span>
                 <span className="block text-caption text-stone-600">{offersRow.sub}</span>
               </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
+              {!offersRow.urgent && <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />}
             </Link>
           )}
 

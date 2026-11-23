@@ -198,7 +198,7 @@ describe('OrderCard', () => {
       const onOpen = vi.fn();
       const onReview = vi.fn();
       render(<OrderCard order={withPending(2)} onOpen={onOpen} onReorder={() => {}} onReview={onReview} />);
-      const btn = screen.getByRole('button', { name: 'Đánh giá 2 sản phẩm của đơn TUBU-777' });
+      const btn = screen.getByRole('button', { name: 'Đánh giá (2 SP) của đơn TUBU-777' });
       expect(btn).toHaveTextContent('Đánh giá (2 SP)');
       const actions = screen.getAllByTestId('order-card-actions');
       expect(actions).toHaveLength(1);

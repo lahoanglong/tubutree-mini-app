@@ -115,10 +115,12 @@ export const throttlerOptions: ThrottlerModuleOptions = {
       skipIf: (ctx: ExecutionContext) => isBypass(ctx) || Reflect.getMetadata(AUTH_IP_THROTTLE, ctx.getHandler()) !== true,
     },
     {
-      // ttl/limit thật nằm ở decorator LookupThrottle của từng route.
+      // ttl/limit thật nằm ở decorator LookupThrottle của từng route. Không gửi header `X-RateLimit-*-lookupPhone`: số lượt còn lại đếm theo SĐT khách gõ,
+      // nên mã mới + IP mới vẫn đọc được một SĐT bất kỳ đã bị tra bao nhiêu lần. Số phút chặn đi qua `Retry-After` của AppThrottlerGuard.
       name: 'lookupPhone',
       ttl: THROTTLE_TTL_MS,
       limit: AUTH_IDENTITY_LIMIT,
+      setHeaders: false,
       skipIf: (ctx: ExecutionContext) => isBypass(ctx) || Reflect.getMetadata(LOOKUP_PHONE_THROTTLE, ctx.getHandler()) !== true,
     },
   ],

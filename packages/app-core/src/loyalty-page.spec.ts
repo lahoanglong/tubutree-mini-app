@@ -23,29 +23,43 @@ describe('loyaltyOffersRow — một dòng từ Điểm Xanh sang hub Ưu đãi'
 describe('expiringRedeemCta (tubu-w21-02) — đổi điểm trước khi hết hạn', () => {
   const urgent = { urgent: true };
 
-  it('lô điểm thường còn ≤ 30 ngày: một lối sang tab Đổi quà trên từng nền', () => {
-    expect(expiringRedeemCta('/offers', urgent, { redeemable: 5000, total: 5000 })).toEqual({
-      label: 'Đổi điểm ngay trước khi hết hạn →',
-      href: '/offers?tab=rewards',
-      note: null,
-    });
-    expect(expiringRedeemCta('/uu-dai', urgent, { redeemable: 5000, total: 5000 })?.href).toBe('/uu-dai?tab=rewards');
+  it('lô điểm thường còn ≤ 30 ngày: mời đổi ngay', () => {
+    expect(expiringRedeemCta(urgent, { redeemable: 5000, total: 5000 })).toEqual({ label: 'Đổi điểm ngay trước khi hết hạn →', note: null });
   });
 
   it('tổng có lô quy đổi không hết hạn (hay phần còn khoá): nói rõ lô sắp hết hạn là điểm thường và số dùng được ngay', () => {
-    expect(expiringRedeemCta('/offers', urgent, { redeemable: 12500, total: 15000 })?.note).toBe(
-      'Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 12.500 điểm',
-    );
+    expect(expiringRedeemCta(urgent, { redeemable: 12500, total: 15000 })?.note).toBe('Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 12.500 điểm');
   });
 
   it('chưa gấp, không có điểm sắp hết hạn, hay không còn điểm nào đổi được ngay: không mời', () => {
-    expect(expiringRedeemCta('/offers', { urgent: false }, { redeemable: 5000, total: 5000 })).toBeNull();
-    expect(expiringRedeemCta('/offers', null, { redeemable: 5000, total: 5000 })).toBeNull();
-    expect(expiringRedeemCta('/offers', urgent, { redeemable: 0, total: 9000 })).toBeNull();
+    expect(expiringRedeemCta({ urgent: false }, { redeemable: 5000, total: 5000 })).toBeNull();
+    expect(expiringRedeemCta(null, { redeemable: 5000, total: 5000 })).toBeNull();
+    expect(expiringRedeemCta(urgent, { redeemable: 0, total: 9000 })).toBeNull();
   });
 
   it('API cũ chưa trả redeemablePoints: vẫn mời, không đoán số dùng được', () => {
-    expect(expiringRedeemCta('/offers', urgent, { total: 9000 })).toMatchObject({ href: '/offers?tab=rewards', note: null });
+    expect(expiringRedeemCta(urgent, { total: 9000 })).toEqual({ label: 'Đổi điểm ngay trước khi hết hạn →', note: null });
+  });
+
+  it('gộp vào dòng Đổi quà: vẫn một lối, cùng đích trên từng nền, nhãn và dòng phụ là lời mời', () => {
+    const cta = expiringRedeemCta(urgent, { redeemable: 12500, total: 15000 });
+    expect(loyaltyOffersRow('/offers', 3, cta)).toEqual({
+      title: 'Đổi điểm ngay trước khi hết hạn →',
+      sub: 'Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 12.500 điểm',
+      href: '/offers?tab=rewards',
+      urgent: true,
+    });
+    expect(loyaltyOffersRow('/uu-dai', 0, cta).href).toBe('/uu-dai?tab=rewards');
+  });
+
+  it('lời mời không có dòng phụ riêng: giữ dòng phụ số mã', () => {
+    const cta = expiringRedeemCta(urgent, { redeemable: 5000, total: 5000 });
+    expect(loyaltyOffersRow('/offers', 3, cta)).toMatchObject({ title: 'Đổi điểm ngay trước khi hết hạn →', sub: 'Bạn đang có 3 mã giảm giá', urgent: true });
+  });
+
+  it('không gấp: dòng như cũ', () => {
+    expect(loyaltyOffersRow('/offers', 3, null)).toEqual(loyaltyOffersRow('/offers', 3));
+    expect(loyaltyOffersRow('/offers', 3).urgent).toBe(false);
   });
 });
 

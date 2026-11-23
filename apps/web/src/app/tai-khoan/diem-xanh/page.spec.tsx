@@ -524,36 +524,39 @@ describe('/tai-khoan/diem-xanh — thẻ thành viên số', () => {
 
 describe('/tai-khoan/diem-xanh — tubu-w21-02: đổi điểm trước khi hết hạn, thẻ quét ở quầy', () => {
   const CTA = 'Đổi điểm ngay trước khi hết hạn →';
-  const ctaLink = (c: HTMLElement) => Array.from(c.querySelectorAll('a')).find((a) => a.textContent === CTA);
+  const rewardsLinks = (c: HTMLElement) => Array.from(c.querySelectorAll('a')).filter((a) => a.getAttribute('href') === '/uu-dai?tab=rewards');
+  const ctaLink = (c: HTMLElement) => rewardsLinks(c).find((a) => a.querySelector('[data-testid="loyalty-expiring-cta"]'));
   const soon = () => new Date(Date.now() + 5 * 864e5).toISOString();
 
-  it('điểm thường còn ≤ 30 ngày: một liên kết tới tab Đổi quà ngay dưới dòng báo hạn, kèm số đổi được ngay (tổng có lô quy đổi)', async () => {
+  it('điểm thường còn ≤ 30 ngày: dòng Đổi quà thành lời mời đổi ngay (vẫn một lối sang tab Đổi quà), dòng phụ nêu số đổi được ngay', async () => {
     state.readyRoutes = new Set(['/uu-dai']);
     state.loyalty = { ...state.loyalty!, redeemablePoints: 1500, expiringPoints: { amount: 70, expiresAt: soon() } };
     const c = await mount();
+    expect(rewardsLinks(c)).toHaveLength(1);
     const link = ctaLink(c)!;
-    expect(link.getAttribute('href')).toBe('/uu-dai?tab=rewards');
+    expect(link.querySelector('[data-testid="loyalty-expiring-cta"]')!.textContent).toBe(CTA);
+    expect(link.textContent).toContain('Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 1.500 điểm');
     expect(link.className).toContain('min-h-11');
-    expect(c.querySelector('[data-testid="loyalty-expiring-cta"]')!.textContent).toContain(
-      'Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 1.500 điểm',
-    );
-    const tier = c.querySelector('section[aria-label="Hạng thành viên"]')!;
-    expect(tier.contains(link)).toBe(true);
+    expect(link.textContent).not.toContain('Đổi quà & mã giảm giá');
   });
 
-  it('chưa gấp, hết điểm đổi được ngay, hay hub Ưu đãi chưa mở trên web: không có liên kết', async () => {
+  it('chưa gấp, hết điểm đổi được ngay: dòng Đổi quà như cũ; hub Ưu đãi chưa mở trên web: không có dòng', async () => {
     state.readyRoutes = new Set(['/uu-dai']);
     state.loyalty = { ...state.loyalty!, redeemablePoints: 1500, expiringPoints: { amount: 70, expiresAt: '2099-01-01T03:00:00.000Z' } };
-    expect(ctaLink(await mount())).toBeUndefined();
+    let c = await mount();
+    expect(ctaLink(c)).toBeUndefined();
+    expect(rewardsLinks(c)[0]!.textContent).toContain('Đổi quà & mã giảm giá');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.loyalty = { ...state.loyalty!, redeemablePoints: 0, expiringPoints: { amount: 70, expiresAt: soon() } };
-    expect(ctaLink(await mount())).toBeUndefined();
+    c = await mount();
+    expect(ctaLink(c)).toBeUndefined();
+    expect(rewardsLinks(c)[0]!.textContent).toContain('Đổi quà & mã giảm giá');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.readyRoutes = new Set();
     state.loyalty = { ...state.loyalty!, redeemablePoints: 1500 };
-    expect(ctaLink(await mount())).toBeUndefined();
+    expect(rewardsLinks(await mount())).toHaveLength(0);
   });
 
   it('thẻ thành viên: mã QR trong khung trắng cố định có lề; quầy tích điểm được thì dặn chụp màn hình khi mất mạng', async () => {
