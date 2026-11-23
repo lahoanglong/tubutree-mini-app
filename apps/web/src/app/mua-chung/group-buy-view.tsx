@@ -8,6 +8,7 @@ import { Share2, Users } from 'lucide-react';
 import { fetchProducts, type ProductCard } from '@tubutree/app-core/api/catalog';
 import { createGroupBuy, joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import {
+  GROUP_LIVE_COUNTDOWN_MS,
   groupDeadline,
   groupMemberStatus,
   groupMissingLine,
@@ -59,6 +60,9 @@ const subscribeReduceMotion = (cb: () => void) => {
   return () => mq.removeEventListener?.('change', cb);
 };
 const readReduceMotion = () => typeof window.matchMedia === 'function' && window.matchMedia(REDUCE_MOTION).matches;
+
+/** Trần của setTimeout (2^31 − 1 ms). */
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /** Giảm chuyển động của máy. Máy chủ dựng trang và lúc hydrate coi như không (HTML khớp), đọc thật ngay sau đó. */
 function useReducedMotion(): boolean {
@@ -431,9 +435,18 @@ function GroupCard({
   sharing: boolean;
 }) {
   // Đồng hồ tới giờ thì vẽ lại thẻ: hạn tính lại theo giờ máy chủ, nút Tham gia khoá và chữ đổi sang "đã hết hạn" ngay, không chờ lần tải sau.
-  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const [tick, rerender] = useReducer((n: number) => n + 1, 0);
   const now = serverNow();
   const deadline = groupDeadline(g, now);
+  // Thẻ dạng chữ ("còn N ngày") tự đổi sang đồng hồ sống đúng mốc còn 24 giờ, không chờ lần tải lại danh sách. `tick` hẹn lại khi hạn quá xa
+  // so với trần setTimeout (khoảng 24,8 ngày).
+  const textUntilLive = g.status === 'OPEN' && deadline.kind === 'text' && !deadline.expired;
+  useEffect(() => {
+    if (!textUntilLive) return;
+    const ms = Date.parse(g.expiresAt) - GROUP_LIVE_COUNTDOWN_MS - serverNow();
+    const t = setTimeout(rerender, Math.min(Math.max(ms, 0) + 50, MAX_TIMEOUT_MS));
+    return () => clearTimeout(t);
+  }, [textUntilLive, g.expiresAt, tick]);
   // Nhóm quá hạn nhưng cron 15 phút chưa đóng vẫn trả OPEN: máy chủ từ chối mọi lần tham gia, nên thẻ coi như đã hết hạn thay vì cho bấm mãi.
   const expired = g.status === 'OPEN' && deadline.kind === 'text' && deadline.expired;
   const isOpen = g.status === 'OPEN' && !expired;

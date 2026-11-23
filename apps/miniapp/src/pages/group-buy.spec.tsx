@@ -1041,6 +1041,17 @@ describe('GroupBuyPage — đồng hồ sống dưới 24 giờ, dòng suất v�
     expect(mocks.listGroupBuys).toHaveBeenCalledTimes(1);
   });
 
+  it('thẻ mở lúc còn hơn 24 giờ tự đổi sang đồng hồ sống đúng mốc 24 giờ, không cần tải lại', async () => {
+    setReducedMotion(false);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('far', { expiresAt: new Date(Date.now() + 24 * HOUR + 1_200).toISOString() })]);
+    renderPage();
+    expect(await screen.findByText('2/5 người · còn 1 ngày')).toBeInTheDocument();
+    expect(screen.queryByRole('timer')).toBeNull();
+    await waitFor(() => expect(screen.getByRole('timer')).toBeInTheDocument(), { timeout: 4_000 });
+    expect(screen.queryByText('2/5 người · còn 1 ngày')).toBeNull();
+    expect(mocks.listGroupBuys).toHaveBeenCalledTimes(1);
+  });
+
   it('trang mời (người chưa vào nhóm): "Còn N suất · Tiết kiệm X" thay dòng "Còn thiếu", khung tin mời đúng tin sẽ gửi, Chia sẻ một chạm', async () => {
     mocks.params = { id: 'inv' };
     mocks.getGroupBuy.mockResolvedValue(GROUP('inv', { currentSize: 3 }));

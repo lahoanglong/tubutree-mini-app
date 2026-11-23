@@ -870,6 +870,21 @@ describe('/mua-chung — đồng hồ sống dưới 24 giờ, dòng suất và 
     expect(mocks.get.mock.calls.filter(([p]) => p === '/group-buy')).toHaveLength(1);
   });
 
+  it('thẻ mở lúc còn hơn 24 giờ tự đổi sang đồng hồ sống đúng mốc 24 giờ, không tải lại', async () => {
+    mocks.list = [GROUP('far', { expiresAt: new Date(Date.now() + 24 * HOUR + 1_200).toISOString() })];
+    const c = await mount();
+    expect(c.textContent).toContain('2/5 người · còn 1 ngày');
+    expect(c.querySelector('[role="timer"]')).toBeNull();
+    for (let i = 0; i < 40 && !c.querySelector('[role="timer"]'); i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 100));
+      });
+    }
+    expect(c.querySelector('[role="timer"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('còn 1 ngày');
+    expect(mocks.get.mock.calls.filter(([p]) => p === '/group-buy')).toHaveLength(1);
+  });
+
   it('trang mời (chưa vào nhóm): "Còn N suất · Tiết kiệm X" thay dòng "Còn thiếu", khung tin mời đúng tin sẽ gửi, Chia sẻ một chạm ≥ 44px', async () => {
     mocks.list = [];
     mocks.one = GROUP('inv', { currentSize: 3 });

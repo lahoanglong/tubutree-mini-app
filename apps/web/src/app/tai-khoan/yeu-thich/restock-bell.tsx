@@ -71,13 +71,12 @@ export function useRestockToggle(notify: (n: { ok: boolean; text: string }) => v
         notify({ ok: false, text: actionErrorText(e) });
         if (serverRejectedState(e)) void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
       },
-      onSettled: (_d, _e, { productId }) => {
-        mark(productId, false);
-        return Promise.all([
+      // Khoá chạm giữ tới khi tải lại xong: nhả trạng thái bận cùng lúc để chuông không trông bấm được mà chạm bị nuốt.
+      onSettled: (_d, _e, { productId }) =>
+        Promise.all([
           qc.invalidateQueries({ queryKey: myRestockAlertsKey }),
           qc.invalidateQueries({ queryKey: ['restock-alerts', productId] }),
-        ]);
-      },
+        ]).finally(() => mark(productId, false)),
     },
     ({ productId }) => productId,
   );
