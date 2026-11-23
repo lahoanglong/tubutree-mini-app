@@ -22,12 +22,14 @@ import { clampTake } from '../../common/pagination';
 import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN, WALLET_ONLY_MESSAGE } from './affiliate.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
+import { AFFILIATE_LINK_TARGETS } from './affiliate-link-target';
 import { Trim } from '../../common/decorators/trim.decorator';
 
 
-class CreateLinkDto {
-  @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;
-  @IsOptional() @IsString() targetId?: string;
+export class CreateLinkDto {
+  @IsIn([...AFFILIATE_LINK_TARGETS]) targetType!: string;
+  /** Id sản phẩm (PRODUCT) hoặc danh mục (CATEGORY); id cuid dài 25 ký tự, chừa dư. */
+  @IsOptional() @Trim() @IsString() @MaxLength(64) targetId?: string;
 }
 
 export class PayoutDto {

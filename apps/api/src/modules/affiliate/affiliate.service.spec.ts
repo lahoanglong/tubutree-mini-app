@@ -1669,12 +1669,26 @@ describe('AffiliateService.requestPayout (money safety)', () => {
 
     it('createLink: khách thường 403 và không tạo link; CTV qua', async () => {
       const create = jest.fn().mockResolvedValue({ id: 'l1' });
+      const product = {
+        findFirst: jest.fn().mockResolvedValue({ id: 'p1', affiliateBlocked: false }),
+        findMany: jest.fn().mockResolvedValue([{ id: 'p1', slug: 'sp-1', name: 'SP 1', isActive: true, approvalStatus: 'APPROVED' }]),
+      };
       const mk = (role: string) =>
-        ({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', role, affiliateRevokedAt: role === 'REVOKED' ? new Date() : null }) }, affiliateLink: { create } }) as unknown as PrismaService;
+        ({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', role, affiliateRevokedAt: role === 'REVOKED' ? new Date() : null }) }, affiliateLink: { create }, product }) as unknown as PrismaService;
       await expect(svcOf(mk('CUSTOMER')).createLink('u1', 'PRODUCT', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
       await expect(svcOf(mk('REVOKED')).createLink('u1', 'PRODUCT', 'p1')).rejects.toBeInstanceOf(ForbiddenException);
       expect(create).not.toHaveBeenCalled();
-      await expect(svcOf(mk('AFFILIATE')).createLink('u1', 'PRODUCT', 'p1')).resolves.toEqual({ id: 'l1' });
+      expect(product.findFirst).not.toHaveBeenCalled();
+      create.mockResolvedValueOnce({ id: 'l1', targetType: 'PRODUCT', targetId: 'p1' });
+      await expect(svcOf(mk('AFFILIATE')).createLink('u1', 'PRODUCT', 'p1')).resolves.toEqual({
+        id: 'l1',
+        targetType: 'PRODUCT',
+        targetId: 'p1',
+        targetSlug: 'sp-1',
+        targetLabel: 'SP 1',
+        targetAvailable: true,
+      });
+      expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', targetType: 'PRODUCT', targetId: 'p1' }) });
     });
   });
 
@@ -3095,6 +3109,26 @@ describe('AffiliateService.listCommissions / listMyPayouts: phân trang con tr�
     expect(seen).toHaveLength(7);
     expect(new Set(seen).size).toBe(7);
     expect(findMany.mock.calls[1]![0]).toEqual(expect.objectContaining({ cursor: { id: seen[2] }, skip: 1, take: 3 }));
+  });
+
+  it('listCommissions: khoản LOCKED kèm ngày chốt dự kiến = lockedAt + số ngày giữ thực (max hold_days, cửa sổ đổi/trả); khoản khác null', async () => {
+    const lockedAt = new Date('2026-11-20T03:00:00.000Z');
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'c1', status: 'LOCKED', lockedAt, payoutBatchId: null, order: { code: 'A1', status: 'DELIVERED' } },
+      { id: 'c2', status: 'PENDING', lockedAt: null, payoutBatchId: null, order: { code: 'A2', status: 'SHIPPING' } },
+      { id: 'c3', status: 'LOCKED', lockedAt: null, payoutBatchId: null, order: { code: 'A3', status: 'DELIVERED' } },
+    ]);
+    const cfg = { get: jest.fn(async (key: string, fallback: unknown) => (key === 'affiliate.hold_days' ? 10 : key === 'returns.window_days' ? 14 : fallback)) };
+    const rows = await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, cfg as never, pricing, pancakeOrder, coins, analytics).listCommissions('u1');
+    expect(rows.map((r) => r.unlockEstimateAt)).toEqual([new Date('2026-12-04T03:00:00.000Z'), null, null]);
+  });
+
+  it('listCommissions: không có khoản LOCKED thì không đọc cấu hình số ngày giữ', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'c1', status: 'APPROVED', lockedAt: new Date(), payoutBatchId: null, order: null }]);
+    const cfg = { get: jest.fn() };
+    const rows = await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, cfg as never, pricing, pancakeOrder, coins, analytics).listCommissions('u1');
+    expect(cfg.get).not.toHaveBeenCalled();
+    expect(rows[0]!.unlockEstimateAt).toBeNull();
   });
 
   it('listCommissions: take bị kẹp ở 200', async () => {

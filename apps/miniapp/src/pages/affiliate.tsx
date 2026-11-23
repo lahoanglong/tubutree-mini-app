@@ -64,6 +64,8 @@ import { miniAppLink } from '../utils/miniapp-link';
 import { pickerProducts } from '../services/storefront-api';
 import { AffiliateFeaturedProducts } from '../components/affiliate/featured-products';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
+import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { LinkBuilderSheet, type LinkBuilderTarget } from '../components/affiliate/link-builder-sheet';
 import { INPUT_LIMITS } from '../utils/input-limits';
 import { Input } from '../components/ui/input';
 
@@ -384,12 +386,15 @@ function Dashboard() {
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
+  const [builderOpen, setBuilderOpen] = useState(false);
   const createLink = useLockedMutation({
-    mutationFn: () => createAffiliateLink('HOMEPAGE'),
+    mutationFn: (t: LinkBuilderTarget) => createAffiliateLink(t.targetType, t.targetId),
+    // Sheet đóng ngay; khoá giữ tới khi danh sách link mới về (tối đa LOCK_REFRESH_WAIT_MS) để mở lại bấm tiếp không tạo link trên danh sách cũ.
     onSuccess: () => {
       haptic('medium');
-      openSnackbar({ text: 'Đã tạo link chia sẻ mới', type: 'success' });
-      void qc.invalidateQueries({ queryKey: ['affiliate-links'] });
+      setBuilderOpen(false);
+      openSnackbar({ text: LINK_BUILDER_COPY.created, type: 'success' });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['affiliate-links'] }));
     },
     // Trả Promise: nút giữ bận tới khi danh sách link tải lại xong (tối đa LOCK_REFRESH_WAIT_MS). Lỗi mạng/5xx/401 nhả ngay.
     onError: (e) => {
@@ -400,6 +405,7 @@ function Dashboard() {
   });
 
   const d = dashQ.data;
+  const funnel = ctvFunnel(d);
   const referral = meQ.data?.referralCode ?? '';
   const featuredQ = useQuery({ queryKey: ['affiliate-featured-products'], queryFn: () => pickerProducts(''), enabled: tab === 'share' && referral !== '', staleTime: 60_000 });
   const featured = useMemo(
@@ -796,15 +802,22 @@ function Dashboard() {
       <Section
         title="Link chia sẻ"
         action={
-          <Button
-            variant="ghost"
-            loading={createLink.isPending}
-            onPress={() => createLink.mutate()}
-          >
+          <Button variant="ghost" aria-haspopup="dialog" onPress={() => setBuilderOpen(true)}>
             + Tạo link
           </Button>
         }
       >
+        {/* Phễu chung của CTV: đơn không lưu mã link nên tỉ lệ ra đơn là số chung, số trên từng dòng chỉ là lượt bấm. */}
+        {d && (
+          <div data-testid="ctv-funnel" style={{ marginBottom: 'var(--space-stack-sm)' }}>
+            <Text variant="body-sm" as="p" numeric style={BOLD}>
+              {ctvFunnelLine(funnel)}
+            </Text>
+            <Text variant="caption" tone="tertiary" as="p">
+              {CTV_FUNNEL_NOTE}
+            </Text>
+          </div>
+        )}
         {linksQ.isError ? (
           // Phân biệt rõ "chưa có link" vs "lỗi tải" — tránh user tưởng rằng họ chưa tạo link.
           <ErrorState variant="inline" message={getLoadErrorMessage(linksQ.error)} onRetry={() => linksQ.refetch()} />
@@ -821,21 +834,21 @@ function Dashboard() {
                   borderBottom: '1px solid var(--color-border-subtle)',
                 }}
               >
-                <div>
-                  <Text variant="body-sm" as="div" style={BOLD}>
-                    {l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}
+                <div style={{ minWidth: 0 }}>
+                  <Text variant="body-sm" as="div" style={{ ...BOLD, overflowWrap: 'anywhere' }}>
+                    {affiliateLinkTitle(l)}
                   </Text>
-                  <Text variant="caption" tone="tertiary" as="div">
-                    {l.clicks} lượt bấm
+                  <Text variant="caption" tone="tertiary" as="div" numeric>
+                    {affiliateLinkCaption(l)}
                   </Text>
                 </div>
                 <Button
                   variant="ghost"
                   onPress={() => {
-                    copyWithToast(miniAppLink(`/?ref=${referral}&l=${l.shortCode}`), 'Đã sao chép link', 'Không sao chép được — hãy chép link thủ công.');
+                    copyWithToast(miniAppLink(affiliateLinkPath(l, referral, 'miniapp')), LINK_BUILDER_COPY.copied, LINK_BUILDER_COPY.copyFail);
                   }}
                 >
-                  Sao chép
+                  {LINK_BUILDER_COPY.copy}
                 </Button>
               </div>
             ))}
@@ -851,6 +864,7 @@ function Dashboard() {
           />
         )}
       </Section>
+      <LinkBuilderSheet open={builderOpen} onClose={() => setBuilderOpen(false)} busy={createLink.isPending} error={null} onCreate={(t) => createLink.mutate(t)} />
 
         </>
       )}
@@ -889,6 +903,11 @@ function Dashboard() {
                     {c.orderStatus && (
                       <Text variant="caption" tone="tertiary" as="div">
                         {copy.orderStatus[c.orderStatus] ?? c.orderStatus}
+                      </Text>
+                    )}
+                    {commissionUnlockNote(c, formatDate) && (
+                      <Text variant="caption" tone="tertiary" as="div">
+                        {commissionUnlockNote(c, formatDate)}
                       </Text>
                     )}
                   </div>

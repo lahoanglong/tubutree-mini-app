@@ -14,9 +14,19 @@ const mocks = vi.hoisted(() => ({
   registerAffiliate: vi.fn(),
   fetchCourses: vi.fn(),
   ensurePhone: vi.fn(),
+  pickerProducts: vi.fn(),
+  fetchCategories: vi.fn(),
   user: { id: 'u1', phone: '0901234567', zaloId: '8412345' } as { id: string; phone: string | null; zaloId: string | null },
 }));
 vi.mock('../services/academy-api', () => ({ fetchCourses: mocks.fetchCourses }));
+vi.mock('../services/storefront-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  pickerProducts: mocks.pickerProducts,
+}));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchCategories: mocks.fetchCategories,
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -86,7 +96,20 @@ import {
 /** Dữ liệu từng tab chỉ tải khi mở tab đó. */
 const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
 
-beforeEach(() => resetTransferLock());
+/** Mở bộ tạo link ở tab Chia sẻ, chọn đích, trả về nút "Tạo link" trong sheet. */
+async function openLinkBuilder(target = 'Trang chủ') {
+  await screen.findByRole('tab', { name: 'Chia sẻ' });
+  openTab('Chia sẻ');
+  fireEvent.click(await screen.findByRole('button', { name: '+ Tạo link' }));
+  fireEvent.click(await screen.findByRole('tab', { name: target }));
+  return screen.findByRole('button', { name: 'Tạo link' });
+}
+
+beforeEach(() => {
+  resetTransferLock();
+  mocks.pickerProducts.mockResolvedValue([]);
+  mocks.fetchCategories.mockResolvedValue([]);
+});
 
 function renderPage(qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return render(<QueryClientProvider client={qc}><AffiliatePage /></QueryClientProvider>);
@@ -137,12 +160,56 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
   });
 
   it('tab Chia sẻ: sao chép link đã tạo dùng link Mini App kèm mã và mã link', async () => {
-    vi.mocked(getAffiliateLinks).mockResolvedValue([{ id: 'l1', targetType: 'HOMEPAGE', shortCode: 'abc', clicks: 3 }] as Awaited<ReturnType<typeof getAffiliateLinks>>);
+    vi.mocked(getAffiliateLinks).mockResolvedValue([{ id: 'l1', targetType: 'HOMEPAGE', shortCode: 'abc123', clicks: 3 }] as Awaited<ReturnType<typeof getAffiliateLinks>>);
     renderPage();
     await screen.findByRole('tab', { name: 'Chia sẻ' });
     openTab('Chia sẻ');
     fireEvent.click(await screen.findByRole('button', { name: 'Sao chép' }));
-    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88&l=abc'));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88&l=abc123'));
+  });
+
+  it('link sâu: sản phẩm, danh mục, Giờ vàng mở đúng trang Mini App; đích mất thì mở Trang chủ; phễu ghi tỉ lệ ra đơn chung', async () => {
+    vi.mocked(getAffiliateLinks).mockResolvedValue([
+      { id: 'a', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, shortCode: 'prod01', clicks: 2 },
+      { id: 'b', targetType: 'CATEGORY', targetId: 'c1', targetSlug: 'bep', targetLabel: 'Bếp', targetAvailable: true, shortCode: 'cate01', clicks: 1 },
+      { id: 'c', targetType: 'DEAL', targetId: null, shortCode: 'deal01', clicks: 1 },
+      { id: 'd', targetType: 'PRODUCT', targetId: 'p9', targetSlug: 'da-an', targetLabel: 'Hàng đã ẩn', targetAvailable: false, shortCode: 'gone01', clicks: 0 },
+    ] as Awaited<ReturnType<typeof getAffiliateLinks>>);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    expect(await screen.findByText('Sản phẩm · Nước rửa chén')).toBeInTheDocument();
+    expect(screen.getByText('Danh mục · Bếp')).toBeInTheDocument();
+    expect(screen.getByText('Giờ vàng')).toBeInTheDocument();
+    expect(screen.getByText('0 lượt bấm · Đích không còn, link mở Trang chủ')).toBeInTheDocument();
+    expect(screen.getByTestId('ctv-funnel')).toHaveTextContent('Tỉ lệ ra đơn 25% · 1 đơn / 4 lượt bấm');
+    const copies = screen.getAllByRole('button', { name: 'Sao chép' });
+    expect(copies).toHaveLength(4);
+    for (const b of copies) fireEvent.click(b);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(4));
+    expect(mocks.copyText.mock.calls.map((c) => c[0])).toEqual([
+      'https://zalo.me/s/2070857098114207963/product/nuoc-rua-chen?ref=TUBU88&l=prod01',
+      'https://zalo.me/s/2070857098114207963/browse?category=c1&ref=TUBU88&l=cate01',
+      'https://zalo.me/s/2070857098114207963/flash-sale?ref=TUBU88&l=deal01',
+      'https://zalo.me/s/2070857098114207963/?ref=TUBU88&l=gone01',
+    ]);
+  });
+
+  it('bộ tạo link: sản phẩm chỉ liệt kê món có hoa hồng; chưa chọn thì nút tắt; chọn rồi gửi đúng id', async () => {
+    mocks.pickerProducts.mockResolvedValue([
+      { id: 'p1', name: 'Nước rửa chén', brand: 'Tubu', maxAffiliateRate: 0.1 },
+      { id: 'p2', name: 'Hàng không hoa hồng', brand: null, maxAffiliateRate: 0 },
+    ]);
+    vi.mocked(createAffiliateLink).mockResolvedValueOnce({ id: 'l9' } as Awaited<ReturnType<typeof createAffiliateLink>>);
+    renderPage();
+    const submit = await openLinkBuilder('Sản phẩm');
+    expect(submit).toBeDisabled();
+    fireEvent.click(await screen.findByRole('radio', { name: /Nước rửa chén/ }));
+    expect(screen.queryByRole('radio', { name: /Hàng không hoa hồng/ })).toBeNull();
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(createAffiliateLink).toHaveBeenCalledWith('PRODUCT', 'p1'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã tạo link, chạm Sao chép để gửi khách.', type: 'success' })));
   });
 });
 
@@ -384,10 +451,18 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     vi.mocked(getCommissions).mockResolvedValue([
       { id: 'c1', amount: 25_000, orderTotal: 500_000, status: 'APPROVED', createdAt: '2026-10-01T03:00:00.000Z' },
       { id: 'c2', amount: 9_000, orderTotal: 90_000, status: 'PENDING', createdAt: '2026-10-02T03:00:00.000Z' },
-      { id: 'c3', amount: 4_000, orderTotal: 40_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00.000Z' },
+      { id: 'c3', amount: 4_000, orderTotal: 40_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00.000Z', unlockEstimateAt: '2026-10-14T03:00:00.000Z' },
       { id: 'c4', amount: 2_000, orderTotal: 20_000, status: 'PAID', createdAt: '2026-10-04T03:00:00.000Z' },
       { id: 'c5', amount: 1_000, orderTotal: 10_000, status: 'REJECTED', createdAt: '2026-10-05T03:00:00.000Z' },
     ] as Awaited<ReturnType<typeof getCommissions>>);
+  });
+
+  it('khoản đang giữ ghi ngày dự kiến chốt; khoản khác không ghi', async () => {
+    renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
+    expect(await screen.findByText('Dự kiến chốt từ 14/10/2026 nếu không có đổi/trả')).toBeInTheDocument();
+    expect(screen.getAllByText(/Dự kiến chốt từ/)).toHaveLength(1);
   });
 
   it('thẻ đầu trang (số dùng được, đang chờ, tạm tính tháng) và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
@@ -1110,7 +1185,8 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     await screen.findByRole('tab', { name: 'Chia sẻ' });
     openTab('Chia sẻ');
     expect(await screen.findByText('1 lượt bấm')).toBeInTheDocument();
-    expect(screen.queryByText(/\d+ đơn/)).toBeNull();
+    // Số đơn chỉ nằm ở dòng phễu chung của CTV, không gắn vào từng link.
+    expect(screen.queryAllByText(/\d+ đơn/).filter((el) => !el.closest('[data-testid="ctv-funnel"]'))).toHaveLength(0);
   });
 });
 
@@ -1191,21 +1267,21 @@ describe('CTV: đăng ký, tạo link, chuyển vào Ví khoá chạm đúp tron
     await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(2));
   });
 
-  it('chạm đúp "+ Tạo link" chỉ tạo một link; đang tạo nút aria-busy', async () => {
+  it('chạm đúp "Tạo link" (đích Giờ vàng) chỉ tạo một link; đang tạo nút aria-busy; xong thì sheet đóng', async () => {
     const d = deferred();
     vi.mocked(createAffiliateLink).mockReturnValueOnce(d.promise as ReturnType<typeof createAffiliateLink>);
     renderPage();
-    await screen.findByRole('tab', { name: 'Chia sẻ' });
-    openTab('Chia sẻ');
-    const btn = await screen.findByRole('button', { name: '+ Tạo link' });
+    const btn = await openLinkBuilder('Giờ vàng');
     await act(async () => {
       fireEvent.click(btn);
       fireEvent.click(btn);
     });
     expect(createAffiliateLink).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByRole('button', { name: '+ Tạo link' })).toHaveAttribute('aria-busy', 'true'));
+    expect(createAffiliateLink).toHaveBeenCalledWith('DEAL', undefined);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tạo link' })).toHaveAttribute('aria-busy', 'true'));
     await act(async () => d.resolve({ id: 'l2' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã tạo link chia sẻ mới', type: 'success' })));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã tạo link, chạm Sao chép để gửi khách.', type: 'success' })));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Tạo link' })).toBeNull());
     expect(createAffiliateLink).toHaveBeenCalledTimes(1);
   });
 
@@ -1361,9 +1437,7 @@ describe('CTV: đăng ký, tạo link, chuyển vào Ví bị máy chủ từ ch
   describe('tạo link chia sẻ', () => {
     const createBtn = async (qc: QueryClient) => {
       renderPage(qc);
-      await screen.findByRole('tab', { name: 'Chia sẻ' });
-      openTab('Chia sẻ');
-      return screen.findByRole('button', { name: '+ Tạo link' });
+      return openLinkBuilder();
     };
 
     it.each([
