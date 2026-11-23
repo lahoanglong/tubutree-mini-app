@@ -9,9 +9,13 @@ import {
   type ThrottlerLimitDetail,
   type ThrottlerModuleOptions,
   type ThrottlerStorage,
+  type ThrottlerGenerateKeyFunction,
+  type ThrottlerGetTrackerFunction,
 } from '@nestjs/throttler';
+import { THROTTLER_KEY_GENERATOR, THROTTLER_SKIP, THROTTLER_TRACKER } from '@nestjs/throttler/dist/throttler.constants';
 import type { Request } from 'express';
 import type { Env } from '../../config/env.validation';
+import { PerKeyThrottlerStorage } from './per-key-throttler.storage';
 import { throttleIpTracker, throttleRefusalOf } from './throttle.config';
 
 export { THROTTLE_BYPASS_HEADER } from './throttle.config';
@@ -45,15 +49,49 @@ export class AppThrottlerGuard extends ThrottlerGuard {
     return sub ? `u:${sub}` : `ip:${throttleIpTracker(req)}`;
   }
 
-  /** Route gắn @ThrottleRefusalMessage trả 429 có `code` và câu tiếng Việt kèm số phút còn bị chặn; route khác giữ câu mặc định. */
+  /**
+   * Route gắn @ThrottleRefusalMessage trả 429 có `code` và câu tiếng Việt kèm số phút còn bị chặn; route khác giữ câu mặc định.
+   * Số phút lấy theo trần đang chặn LÂU NHẤT của route, không theo trần chạm trước: thư viện xét trần theo thứ tự `default` → `authIp` →
+   * `lookupPhone` và ném ở trần đầu tiên bị chặn, nên khi SĐT đang bị chặn 15 phút mà trần mã (1 phút) chạm trước, câu cũ báo sai "1 phút".
+   */
   protected override async throwThrottlingException(context: ExecutionContext, detail: ThrottlerLimitDetail): Promise<void> {
     const refusal = throttleRefusalOf(context.getHandler());
     if (!refusal) return super.throwThrottlingException(context, detail);
-    const minutes = Math.max(1, Math.ceil(detail.timeToBlockExpire / 60));
+    const seconds = Math.max(detail.timeToBlockExpire, await this.longestActiveBlockSeconds(context));
+    this.getRequestResponse(context).res.header('Retry-After', seconds);
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
     throw new HttpException(
       { statusCode: HttpStatus.TOO_MANY_REQUESTS, error: 'Too Many Requests', code: refusal.code, message: refusal.message(minutes) },
       HttpStatus.TOO_MANY_REQUESTS,
     );
+  }
+
+  /**
+   * Số giây còn bị chặn dài nhất trong các trần áp cho request này, đọc thẳng bộ nhớ, không đếm thêm lượt. Khoá và điều kiện bỏ qua
+   * dựng giống `ThrottlerGuard.canActivate` của 6.5.0 (decorator route/class trước, rồi cấu hình trần, rồi cấu hình chung).
+   */
+  private async longestActiveBlockSeconds(context: ExecutionContext): Promise<number> {
+    const storage = this.storageService;
+    if (!(storage instanceof PerKeyThrottlerStorage)) return 0;
+    const targets = [context.getHandler(), context.getClass()];
+    const { req } = this.getRequestResponse(context);
+    let longest = 0;
+    for (const throttler of this.throttlers) {
+      const name = throttler.name ?? 'default';
+      if (this.reflector.getAllAndOverride<boolean>(THROTTLER_SKIP + name, targets)) continue;
+      if ((throttler.skipIf ?? this.commonOptions.skipIf)?.(context)) continue;
+      const getTracker =
+        this.reflector.getAllAndOverride<ThrottlerGetTrackerFunction>(THROTTLER_TRACKER + name, targets) ??
+        throttler.getTracker ??
+        this.commonOptions.getTracker!;
+      const generateKey =
+        this.reflector.getAllAndOverride<ThrottlerGenerateKeyFunction>(THROTTLER_KEY_GENERATOR + name, targets) ??
+        throttler.generateKey ??
+        this.commonOptions.generateKey!;
+      const key = generateKey(context, await getTracker(req, context), name);
+      longest = Math.max(longest, storage.blockedSeconds(key, name));
+    }
+    return longest;
   }
 
   /** Route @Public không qua JwtAuthGuard, nên tự xác minh Bearer (nếu có) để đếm theo user. */

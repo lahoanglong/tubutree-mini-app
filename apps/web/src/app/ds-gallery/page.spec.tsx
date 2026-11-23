@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@/components/mini/harness';
+import { STOREFRONT_TRUST_TITLE } from '@tubutree/app-core/commerce/storefront-trust';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a>,
@@ -51,6 +52,17 @@ describe('/ds-gallery (web)', () => {
     const labels = Array.from(document.querySelectorAll('#ds-voucher-ticket [data-variant]')).map((e) => e.getAttribute('data-variant')!);
     for (const v of ['ticket', 'chip', 'row']) expect(labels.some((l) => l.startsWith(v)), v).toBe(true);
     for (const s of ['collectable', 'saved', 'used', 'expired', 'soldout', 'ineligible']) expect(labels.some((l) => l.endsWith(`· ${s}`)), s).toBe(true);
+  });
+
+  it('tubu-w19-03: không có id trùng (hai dải cam kết gian hàng dùng id riêng cho tiêu đề)', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    mount(<DsGalleryPage />);
+    const ids = Array.from(document.querySelectorAll('[id]')).map((e) => e.id);
+    expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+    const trust = Array.from(document.querySelectorAll<HTMLElement>('section[aria-labelledby]')).filter(
+      (s) => document.getElementById(s.getAttribute('aria-labelledby')!)?.textContent === STOREFRONT_TRUST_TITLE,
+    );
+    expect(trust).toHaveLength(2);
   });
 
   it('metadata: không cho công cụ tìm kiếm lập chỉ mục', async () => {

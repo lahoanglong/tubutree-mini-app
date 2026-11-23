@@ -5,7 +5,6 @@ import { JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from '../../modules/auth/auth.controller';
 import { AuthService } from '../../modules/auth/auth.service';
 import { JwtStrategy } from '../../modules/auth/strategies/jwt.strategy';
@@ -14,7 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Public } from '../decorators/public.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AppThrottlerGuard } from './app-throttler.guard';
-import { LookupThrottle, StaffLookupThrottle, ThrottleRefusalMessage, throttlerOptions } from './throttle.config';
+import { LookupThrottle, StaffLookupThrottle, ThrottleRefusalMessage, throttlerRootModule } from './throttle.config';
 
 /**
  * Chính sách Q-22 (C-005, C-033), chạy qua HTTP thật với đúng thứ tự guard toàn cục của
@@ -58,6 +57,18 @@ class ProbeController {
   }
 
   @Public()
+  @LookupThrottle((req) => (req.body as { code?: string } | undefined)?.code, 2, 6, {
+    identify: (req) => (req.body as { phone?: string } | undefined)?.phone,
+    limit: 2,
+    ttlMs: 900_000,
+  })
+  @ThrottleRefusalMessage({ code: 'PROBE_LIMIT', message: (m) => `Thử lại sau ${m} phút.` })
+  @Post('lookup-tight')
+  lookupTight() {
+    return { ok: true };
+  }
+
+  @Public()
   @LookupThrottle((req) => (req.body as { code?: string } | undefined)?.code, 2, 50, {
     identify: (req) => (req.body as { phone?: string } | undefined)?.phone,
     limit: 50,
@@ -87,7 +98,7 @@ async function bootApp(bypassToken: string): Promise<{ app: INestApplication; ba
     imports: [
       ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => ({ JWT_REFRESH_TTL_DAYS: 30 })] }),
       PassportModule,
-      ThrottlerModule.forRoot(throttlerOptions),
+      throttlerRootModule(),
     ],
     controllers: [AuthController, ProbeController],
     providers: [
@@ -375,6 +386,55 @@ describe('AppThrottlerGuard (Q-22)', () => {
       const res = await send();
       expect(res.status).toBe(429);
       expect(((await res.json()) as { message: string }).message).toContain('ThrottlerException');
+    });
+
+    describe('tubu-w19-03: số phút 429 theo trần đang chặn lâu nhất, không theo trần chạm trước', () => {
+      const tight = (ip: string, code: string, phone: string) =>
+        fetch(`${base}/probe/lookup-tight`, {
+          method: 'POST',
+          headers: { 'x-forwarded-for': ip, 'content-type': 'application/json' },
+          body: JSON.stringify({ code, phone }),
+        });
+      const refusal = async (res: Response) => ({
+        status: res.status,
+        retryAfter: Number(res.headers.get('retry-after')),
+        body: (await res.json()) as { statusCode: number; error: string; code: string; message: string },
+      });
+
+      it('SĐT đang bị chặn 15 phút mà trần mã (1 phút) chạm trước: vẫn báo 15 phút', async () => {
+        const phone = '0933000111';
+        expect((await tight('10.6.0.1', 'T1', phone)).status).toBe(201);
+        expect((await tight('10.6.0.2', 'T2', phone)).status).toBe(201);
+        const phoneBlocked = await refusal(await tight('10.6.0.3', 'T3', phone));
+        expect(phoneBlocked.body.message).toBe('Thử lại sau 15 phút.');
+        // Cùng mã T9 lần thứ 3: trần mã (`default`, xét trước `lookupPhone`) chặn trước và chỉ biết 60 giây của nó.
+        for (let i = 0; i < 2; i++) expect((await tight(`10.6.1.${i}`, 'T9', phone)).status).toBe(429);
+        const codeBlocked = await refusal(await tight('10.6.1.9', 'T9', phone));
+        expect(codeBlocked.status).toBe(429);
+        expect(codeBlocked.body).toEqual({ statusCode: 429, error: 'Too Many Requests', code: 'PROBE_LIMIT', message: 'Thử lại sau 15 phút.' });
+        expect(codeBlocked.retryAfter).toBeGreaterThan(890);
+        expect(codeBlocked.retryAfter).toBeLessThanOrEqual(900);
+      });
+
+      it('SĐT đang bị chặn mà trần IP chạm trước: vẫn báo 15 phút', async () => {
+        const phone = '0933000222';
+        const ip = '10.7.0.1';
+        expect((await tight(ip, 'U1', phone)).status).toBe(201);
+        expect((await tight(ip, 'U2', phone)).status).toBe(201);
+        for (let i = 3; i <= 6; i++) expect((await tight(ip, `U${i}`, phone)).status).toBe(429);
+        const ipBlocked = await refusal(await tight(ip, 'U7', '0933000999'));
+        expect(ipBlocked.status).toBe(429);
+        expect(ipBlocked.body.message).toBe('Thử lại sau 1 phút.');
+        const both = await refusal(await tight(ip, 'U8', phone));
+        expect(both.body.message).toBe('Thử lại sau 15 phút.');
+      });
+
+      it('chỉ trần mã chặn (SĐT chưa bị chặn): giữ 1 phút', async () => {
+        for (let i = 0; i < 2; i++) expect((await tight(`10.8.0.${i}`, 'V1', `09440001${i}0`)).status).toBe(201);
+        const res = await refusal(await tight('10.8.0.9', 'V1', '0944000199'));
+        expect(res.body.message).toBe('Thử lại sau 1 phút.');
+        expect(res.retryAfter).toBeLessThanOrEqual(60);
+      });
     });
 
     it('route không gắn LookupThrottle không chịu trần phụ', async () => {

@@ -355,6 +355,26 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(smallTouchTargets(container)).toEqual([]);
   });
 
+  it.each(['CANCELLED', 'RETURNED'])('tubu-w19-03: đơn %s có link tra cứu: KHÔNG có viên (PO A3, như Mini), mã vẫn in ở khối Vận chuyển', async (status) => {
+    mocks.order = {
+      ...ORDER, status, paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      shippingPartner: 'Best Express', shippingCode: 'BE123', trackingLink: 'https://tracking.example/BE123',
+    };
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
+    expect(container.querySelector('a[href="https://tracking.example/BE123"]')).toBeNull();
+    expect(container.querySelector('[data-testid="order-shipping"]')!.textContent).toContain('BE123');
+  });
+
+  it.each(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'])('đơn %s có link tra cứu: có viên', async (status) => {
+    mocks.order = {
+      ...ORDER, status, paymentMethod: 'COD', paymentStatus: 'UNPAID',
+      shippingPartner: 'Best Express', shippingCode: 'BE123', trackingLink: 'https://tracking.example/BE123',
+    };
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="order-tracking-pill"]')!.getAttribute('href')).toBe('https://tracking.example/BE123');
+  });
+
   it('không có link tra cứu: không có viên', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING', paymentMethod: 'COD', shippingPartner: 'GHN', shippingCode: 'G1', trackingLink: null };
     const { container } = await mount();
