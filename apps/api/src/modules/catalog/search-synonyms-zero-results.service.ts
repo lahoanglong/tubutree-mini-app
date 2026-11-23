@@ -39,10 +39,11 @@ export function zeroResultDays(raw: unknown): number {
 /**
  * Cụm được bày cho admin: qua `isShareableSearchTerm` (không email, không dãy từ 6 chữ số như SĐT), dài 2..60 ký tự sau khi gấp dấu,
  * có ít nhất một chữ cái, không phải link, không có chữ nào dài quá `ZERO_RESULT_WORD_MAX`. Sự kiện cũ ghi trước khi API lọc lúc nhận
- * vẫn qua lớp lọc này.
+ * vẫn qua lớp lọc này. Chữ số toàn khổ hay của hệ chữ khác (`０９１２…`) lọt `\d` của `isShareableSearchTerm` nên kiểm thêm theo NFKC và `\p{Nd}`.
  */
 export function isZeroResultCandidate(term: string): boolean {
   if (!isShareableSearchTerm(term) || term.trim().length > ZERO_RESULT_TERM_MAX) return false;
+  if (/\p{Nd}{6,}/u.test(term.normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, ''))) return false;
   const folded = foldVietnamese(term);
   if (folded.length < ZERO_RESULT_TERM_MIN || folded.length > ZERO_RESULT_TERM_MAX) return false;
   if (!/\p{L}/u.test(folded) || /https?:|www\.|:\/\//.test(folded)) return false;
@@ -51,7 +52,8 @@ export function isZeroResultCandidate(term: string): boolean {
 
 /**
  * Cụm khách tìm ra trống (`search_zero_result`) trong khung [since, until], gộp theo dạng gấp dấu (`vn_search_fold`, cùng bảng với
- * `foldVietnamese` và cột `search_synonyms.term`). Bỏ cụm có `@` hay dãy ≥ 6 chữ số ngay trong SQL như `popularSql`; mọi giá trị là tham số.
+ * `foldVietnamese` và cột `search_synonyms.term`). Bỏ cụm có `@` hay dãy ≥ 6 chữ số ngay trong SQL như `popularSql`, và lọc rác (không có chữ
+ * cái, link, chữ quá dài) trước LIMIT để ai đó bơm sự kiện rác không chiếm hết chỗ của cụm thật; mọi giá trị là tham số.
  */
 export function zeroResultSql(since: Date, until: Date, limit = SQL_LIMIT): Prisma.Sql {
   return Prisma.sql`
@@ -72,6 +74,9 @@ export function zeroResultSql(since: Date, until: Date, limit = SQL_LIMIT): Pris
       WHERE length(s.k) BETWEEN ${ZERO_RESULT_TERM_MIN} AND ${ZERO_RESULT_TERM_MAX}
         AND position('@' in s.q) = 0
         AND regexp_replace(s.q, '[^[:alnum:]]', '', 'g') !~ '[0-9]{6,}'
+        AND s.k ~ '[a-z]'
+        AND s.k !~ '(https?:|www[.]|://)'
+        AND s.k !~ ${`[^ ]{${ZERO_RESULT_WORD_MAX + 1},}`}
       GROUP BY s.k
     ) g
     ORDER BY g.hits DESC, g.people DESC, g.last_seen DESC, g.k ASC
@@ -96,8 +101,9 @@ export class SearchZeroResultsService {
     const until = new Date(now.getTime() + FUTURE_SKEW_MS);
     const rows = await this.prisma.$queryRaw<ZeroResultSqlRow[]>(zeroResultSql(since, until));
     // NFC: chữ gõ kiểu tổ hợp (dấu rời) dài hơn chữ dựng sẵn, mà cụm này được dán thẳng vào ô từ đồng nghĩa (tối đa 60 ký tự).
+    // `lower()` của Postgres theo collation C không hạ chữ hoa có dấu (`NƯỚC` thành `nƯỚc`): hạ lại ở đây.
     const kept = rows
-      .map((r) => ({ ...r, term: typeof r.term === 'string' ? r.term.normalize('NFC') : '' }))
+      .map((r) => ({ ...r, term: typeof r.term === 'string' ? r.term.normalize('NFC').toLocaleLowerCase('vi') : '' }))
       .filter((r) => isZeroResultCandidate(r.term))
       .slice(0, ZERO_RESULT_LIMIT);
     const synonyms = kept.length

@@ -33,6 +33,9 @@ describe('Từ khoá tìm chưa ra (search_zero_result)', () => {
     expect(isZeroResultCandidate('x'.repeat(61))).toBe(false);
     expect(isZeroResultCandidate('asdkjhaskjdhaksjdhaksjdhaksjd')).toBe(false);
     expect(isZeroResultCandidate('500 1000')).toBe(false);
+    // Chữ số toàn khổ (bàn phím IME) vẫn là số điện thoại.
+    expect(isZeroResultCandidate('mua ０９１２３４５６７８')).toBe(false);
+    expect(isZeroResultCandidate('mua ０９１２ ３４５ ６７８')).toBe(false);
     for (const t of ['nước rửa bát', 'xà bông 500ml', 'fuwa3e', 'kem 50ml', 'túi 3 lớp']) expect(isZeroResultCandidate(t)).toBe(true);
   });
 
@@ -56,13 +59,17 @@ describe('Từ khoá tìm chưa ra (search_zero_result)', () => {
     expect(sql.sql).toContain("!~ '[0-9]{6,}'");
     expect(sql.sql).toContain('GROUP BY s.k');
     expect(sql.sql).toContain('MAX(s.at) AS last_seen');
+    // Rác bị lọc trước LIMIT, không chiếm chỗ của cụm thật.
+    expect(sql.sql).toContain("s.k ~ '[a-z]'");
+    expect(sql.sql).toContain("s.k !~ '(https?:|www[.]|://)'");
+    expect(sql.values).toContain('[^ ]{26,}');
     expect(sql.values).toEqual(expect.arrayContaining([since, until]));
     expect(sql.sql).not.toContain('2026-');
   });
 
   it('report: khung 14 ngày tính từ bây giờ, lọc PII lần nữa ở TS, đánh dấu cụm đã có từ đồng nghĩa', async () => {
     const prisma = prismaWith(
-      [row('nước rửa bát', { count: 9, people: 5 }), row('0912 345 678'), row('chị lan@gmail'), row('xà bông cục', { lastSeenAt: new Date('2026-11-30T00:00:00Z') })],
+      [row('nước rửa bát', { count: 9, people: 5 }), row('0912 345 678'), row('chị lan@gmail'), row('xà bông cục', { term: 'xà bÔNG cỤC', lastSeenAt: new Date('2026-11-30T00:00:00Z') })],
       [{ term: 'nuoc rua bat', canonical: 'nuoc rua chen', isActive: false }],
     );
     const out = await new SearchZeroResultsService(prisma).report(14, NOW);
