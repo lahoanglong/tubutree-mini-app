@@ -127,7 +127,7 @@ describe('dealer-pricing: báo giá chép nhanh', () => {
     const many = Array.from({ length: DEALER_QUOTE_MAX_LINES + 4 }, (_, i) => row({ sku: `S${i}` }));
     const lines = dealerQuoteText(many, { dateLabel: 'x', money }).split('\n');
     expect(lines).toHaveLength(1 + DEALER_QUOTE_MAX_LINES + 1);
-    expect(lines.at(-1)).toBe('… và 4 mặt hàng khác (tải file CSV để xem đủ).');
+    expect(lines.at(-1)).toBe('Còn 4 mặt hàng khác (tải file CSV để xem đủ).');
     expect(dealerQuoteText(many, { dateLabel: 'x', money, maxLines: 2 }).split('\n')).toHaveLength(4);
   });
 });

@@ -50,6 +50,8 @@ export interface LinkTargetInfo {
   targetLabel: string | null;
   /** false khi sản phẩm đã ngừng hiện hoặc danh mục đã bị xoá: client mở Trang chủ thay vì trang lỗi. */
   targetAvailable: boolean;
+  /** true khi sản phẩm vẫn bán nhưng đã bị tắt hoa hồng CTV sau khi tạo link: link vẫn mở được nhưng đơn không tính hoa hồng. */
+  targetCommissionBlocked: boolean;
 }
 
 /** Gắn tên và slug đích cho cả trang link bằng hai truy vấn gom (không truy vấn từng dòng). */
@@ -59,7 +61,7 @@ export async function attachLinkTargets<T extends { targetType: string; targetId
   const categoryIds = idsOf('CATEGORY');
   const [products, categories] = await Promise.all([
     productIds.length > 0
-      ? db.product.findMany({ where: { id: { in: productIds } }, select: { id: true, slug: true, name: true, isActive: true, approvalStatus: true } })
+      ? db.product.findMany({ where: { id: { in: productIds } }, select: { id: true, slug: true, name: true, isActive: true, approvalStatus: true, affiliateBlocked: true } })
       : Promise.resolve([]),
     categoryIds.length > 0 ? db.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, slug: true, name: true } }) : Promise.resolve([]),
   ]);
@@ -68,12 +70,18 @@ export async function attachLinkTargets<T extends { targetType: string; targetId
   return links.map((l) => {
     if (l.targetType === 'PRODUCT') {
       const p = l.targetId ? productById.get(l.targetId) : undefined;
-      return { ...l, targetSlug: p?.slug ?? null, targetLabel: p?.name ?? null, targetAvailable: !!p && isPublicProduct(p) };
+      return {
+        ...l,
+        targetSlug: p?.slug ?? null,
+        targetLabel: p?.name ?? null,
+        targetAvailable: !!p && isPublicProduct(p),
+        targetCommissionBlocked: !!p?.affiliateBlocked,
+      };
     }
     if (l.targetType === 'CATEGORY') {
       const c = l.targetId ? categoryById.get(l.targetId) : undefined;
-      return { ...l, targetSlug: c?.slug ?? null, targetLabel: c?.name ?? null, targetAvailable: !!c };
+      return { ...l, targetSlug: c?.slug ?? null, targetLabel: c?.name ?? null, targetAvailable: !!c, targetCommissionBlocked: false };
     }
-    return { ...l, targetSlug: null, targetLabel: null, targetAvailable: true };
+    return { ...l, targetSlug: null, targetLabel: null, targetAvailable: true, targetCommissionBlocked: false };
   });
 }

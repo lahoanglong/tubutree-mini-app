@@ -114,25 +114,27 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
 
   // Nháp chữ (không gồm ảnh CCCD) giữ trong phiên của tab: lỡ tải lại hay quay lại trang không phải gõ lại. Đọc sau khi gắn để HTML máy chủ và lần vẽ đầu
   // khớp nhau; hiệu ứng này đứng TRƯỚC hiệu ứng điền sẵn từ tài khoản để nháp thắng, còn ô nháp trống mới lấy tên/SĐT tài khoản.
-  const [draftReady, setDraftReady] = useState(false);
+  // Nháp gắn id tài khoản: đổi tài khoản ngay trong tab thì xoá chữ của người trước rồi mới đọc nháp của người sau.
+  const { user } = useAuth();
+  const owner = user?.id ?? '';
+  const [draftOwner, setDraftOwner] = useState<string | null>(null);
   useEffect(() => {
-    const draft = parseDealerApplyDraft(readDraft());
-    setForm((f) => ({ ...f, ...draft }));
-    setDraftReady(true);
-  }, []);
+    const draft = parseDealerApplyDraft(readDraft(), owner);
+    setForm((f) => ({ ...f, businessName: '', taxCode: '', ownerName: '', phone: '', address: '', ...draft }));
+    setDraftOwner(owner);
+  }, [owner]);
 
   // Điền sẵn tên và SĐT đã có trong tài khoản để khách không gõ lại; ô nào khách đã gõ thì giữ nguyên. Phiên chưa có SĐT thì bỏ trống.
-  const { user } = useAuth();
   const accountName = user?.fullName?.trim() ?? '';
   const accountPhone = (user as { phone?: string | null } | null)?.phone?.trim() ?? '';
   useEffect(() => {
     setForm((f) => ({ ...f, ownerName: f.ownerName || accountName, phone: f.phone || accountPhone }));
   }, [accountName, accountPhone]);
 
-  // Chỉ ghi sau khi đã đọc nháp, kẻo lần vẽ đầu (form trống) xoá mất nháp cũ.
+  // Chỉ ghi khi form đang là nháp của đúng tài khoản hiện tại, kẻo lần vẽ đầu (form trống) xoá mất nháp cũ hay chữ người trước ghi vào nháp người sau.
   useEffect(() => {
-    if (draftReady && !done) writeDraft(serializeDealerApplyDraft(form));
-  }, [form, draftReady, done]);
+    if (draftOwner === owner && !done) writeDraft(serializeDealerApplyDraft(form, owner));
+  }, [form, draftOwner, owner, done]);
 
   const valid = Boolean(
     form.businessName.trim() && form.ownerName.trim() && form.phone.trim() && form.address.trim() && form.cccdFrontUrl.trim() && form.cccdBackUrl.trim(),

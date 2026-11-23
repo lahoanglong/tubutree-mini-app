@@ -708,7 +708,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Danh mục · Nhà bếp');
     expect(t).toContain('Giờ vàng');
     expect(t).toContain('0 lượt bấm · Đích không còn, link mở Trang chủ');
-    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Tỉ lệ ra đơn 25% · 1 đơn / 4 lượt bấm');
+    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Tỉ lệ ra đơn chung 25% · 1 đơn / 4 lượt bấm');
     expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Số trên từng link là lượt bấm');
     const copies = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Sao chép');
     for (const b of copies) click(b);

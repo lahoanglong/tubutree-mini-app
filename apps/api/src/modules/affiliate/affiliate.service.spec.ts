@@ -1687,6 +1687,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         targetSlug: 'sp-1',
         targetLabel: 'SP 1',
         targetAvailable: true,
+        targetCommissionBlocked: false,
       });
       expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', targetType: 'PRODUCT', targetId: 'p1' }) });
     });
@@ -3121,6 +3122,15 @@ describe('AffiliateService.listCommissions / listMyPayouts: phân trang con tr�
     const cfg = { get: jest.fn(async (key: string, fallback: unknown) => (key === 'affiliate.hold_days' ? 10 : key === 'returns.window_days' ? 14 : fallback)) };
     const rows = await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, cfg as never, pricing, pancakeOrder, coins, analytics).listCommissions('u1');
     expect(rows.map((r) => r.unlockEstimateAt)).toEqual([new Date('2026-12-04T03:00:00.000Z'), null, null]);
+  });
+
+  it('listCommissions: lockedAt lẻ phút thì ngày chốt dự kiến làm tròn lên giờ chẵn kế tiếp (cron duyệt chạy đầu mỗi giờ), không báo sớm một ngày', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'c1', status: 'LOCKED', lockedAt: new Date('2026-11-20T16:30:00.000Z'), payoutBatchId: null, order: { code: 'A1', status: 'DELIVERED' } },
+    ]);
+    const cfg = { get: jest.fn(async (key: string, fallback: unknown) => (key === 'affiliate.hold_days' ? 10 : key === 'returns.window_days' ? 7 : fallback)) };
+    const rows = await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, cfg as never, pricing, pancakeOrder, coins, analytics).listCommissions('u1');
+    expect(rows[0]!.unlockEstimateAt).toEqual(new Date('2026-11-30T17:00:00.000Z'));
   });
 
   it('listCommissions: không có khoản LOCKED thì không đọc cấu hình số ngày giữ', async () => {

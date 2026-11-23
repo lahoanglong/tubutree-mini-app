@@ -90,6 +90,8 @@ export interface AffiliateLink {
   targetLabel?: string | null;
   /** false: đích không còn hiện, link mở Trang chủ. Thiếu khi API cũ. */
   targetAvailable?: boolean;
+  /** true: sản phẩm đã bị tắt hoa hồng CTV sau khi tạo link (link vẫn mở, đơn không tính hoa hồng). Thiếu khi API cũ. */
+  targetCommissionBlocked?: boolean;
   /** Lượt mở link (mỗi IP một lần mỗi ngày). Số duy nhất đo theo từng link. */
   clicks: number;
   /** Cột cũ luôn 0 (đơn không lưu mã link): không hiện. */

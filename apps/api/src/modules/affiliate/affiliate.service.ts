@@ -134,6 +134,8 @@ export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
 const PIT_MONTH_LOCK = 'affiliate.pit_month';
 /** Tin thu hồi mốc chỉ quét các lần thu hồi trong khoảng này (dedupeKey chặn gửi lặp). */
 const MILESTONE_REVOKE_NOTICE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const HOUR_MS = 3600 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 /** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
@@ -534,7 +536,8 @@ export class AffiliateService {
       orderCode: order?.code ?? null,
       orderStatus: order?.status ?? null,
       withdrawing: c.status === 'APPROVED' && c.payoutBatchId !== null,
-      unlockEstimateAt: c.status === 'LOCKED' && c.lockedAt ? new Date(c.lockedAt.getTime() + holdDays * 24 * 3600 * 1000) : null,
+      // Cron duyệt chạy đầu mỗi giờ (APPROVE_COMMISSIONS_CRON): làm tròn lên giờ chẵn kế tiếp, kẻo khoản giữ lúc 23:30 báo sớm một ngày.
+      unlockEstimateAt: c.status === 'LOCKED' && c.lockedAt ? new Date(Math.ceil((c.lockedAt.getTime() + holdDays * DAY_MS) / HOUR_MS) * HOUR_MS) : null,
     }));
   }
 

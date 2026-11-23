@@ -40,6 +40,8 @@ export interface AffiliateLinkLike {
   targetLabel?: string | null;
   /** false: sản phẩm đã ngừng hiện hoặc danh mục đã bị xoá. Thiếu (API cũ) coi như còn. */
   targetAvailable?: boolean;
+  /** true: sản phẩm vẫn bán nhưng đã bị tắt hoa hồng CTV sau khi tạo link. */
+  targetCommissionBlocked?: boolean;
 }
 
 /** Link còn mở đúng đích không; đích mất (hoặc thiếu slug/id) thì link mở Trang chủ thay vì trang lỗi. */
@@ -80,10 +82,15 @@ export function affiliateLinkTitle(link: Pick<AffiliateLinkLike, 'targetType' | 
   return name && linkTargetNeedsPick(link.targetType) ? `${kind} · ${name}` : kind;
 }
 
-/** Dòng phụ của một link: chỉ là lượt bấm (đơn không lưu mã link); đích đã mất thì nói link đang mở Trang chủ. */
+/**
+ * Dòng phụ của một link: chỉ là lượt bấm (đơn không lưu mã link). Đích đã mất thì nói link đang mở Trang chủ; sản phẩm đã bị tắt hoa hồng thì nói
+ * rõ để CTV ngừng gửi link không còn tính tiền.
+ */
 export function affiliateLinkCaption(link: AffiliateLinkLike & { clicks: number }): string {
   const clicks = `${Math.max(0, link.clicks)} lượt bấm`;
-  return linkOpensTarget(link) || !isAffiliateLinkTarget(link.targetType) ? clicks : `${clicks} · Đích không còn, link mở Trang chủ`;
+  if (!isAffiliateLinkTarget(link.targetType)) return clicks;
+  if (!linkOpensTarget(link)) return `${clicks} · Đích không còn, link mở Trang chủ`;
+  return link.targetType === 'PRODUCT' && link.targetCommissionBlocked ? `${clicks} · Sản phẩm không còn tính hoa hồng` : clicks;
 }
 
 export interface CtvFunnel {
@@ -102,15 +109,18 @@ export function ctvFunnel(d: { totalClicks?: number; totalConversions?: number }
 
 const pctText = (n: number) => `${String(n).replace('.', ',')}%`;
 
-/** Một dòng tóm tắt phễu của CTV, đặt trên danh sách link. */
+/**
+ * Một dòng tóm tắt phễu của CTV, đặt trên danh sách link. Số đơn gồm cả đơn từ gian hàng, mã giới thiệu và đơn đặt hộ, còn lượt bấm chỉ đến từ link,
+ * nên nhãn ghi "chung" (không phải tỉ lệ của riêng link); `CTV_FUNNEL_NOTE` nói rõ bên dưới.
+ */
 export function ctvFunnelLine(f: CtvFunnel): string {
   if (f.clicks === 0 && f.orders === 0) return 'Chưa có lượt bấm nào. Gửi link đầu tiên để bắt đầu.';
   const ratio = `${f.orders} đơn / ${f.clicks} lượt bấm`;
-  return f.ratePct === null ? ratio : `Tỉ lệ ra đơn ${pctText(f.ratePct)} · ${ratio}`;
+  return f.ratePct === null ? ratio : `Tỉ lệ ra đơn chung ${pctText(f.ratePct)} · ${ratio}`;
 }
 
 /** Ghi chú dưới dòng phễu: nói rõ số nào tính chung, số nào theo link. */
-export const CTV_FUNNEL_NOTE = 'Số trên từng link là lượt bấm. Đơn tính chung cho mọi link, gian hàng và mã giới thiệu của bạn.';
+export const CTV_FUNNEL_NOTE = 'Số trên từng link là lượt bấm. Đơn tính chung cho mọi link, gian hàng, mã giới thiệu và đơn đặt hộ của bạn.';
 
 /** Chữ của bộ tạo link (sheet "Tạo link"), dùng chung hai app. */
 export const LINK_BUILDER_COPY = {

@@ -92,6 +92,8 @@ export interface AffiliateLink {
   targetLabel?: string | null;
   /** false: đích không còn hiện, link mở Trang chủ. */
   targetAvailable?: boolean;
+  /** true: sản phẩm đã bị tắt hoa hồng CTV sau khi tạo link. */
+  targetCommissionBlocked?: boolean;
   /** Lượt mở link; `conversions`/`revenue` là cột cũ luôn 0, không hiện. */
   clicks: number;
   conversions: number;
