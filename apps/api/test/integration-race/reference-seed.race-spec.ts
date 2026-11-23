@@ -139,7 +139,7 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
       const res = runCli(A);
 
       expect(res.status).toBe(0);
-      expect(res.stdout).toContain('[seed-reference] notification_templates: +28 mới');
+      expect(res.stdout).toContain('[seed-reference] notification_templates: +29 mới');
       expect(res.stdout).toContain(`chưa nạp: business_configs, membership_tiers, dealer_tiers, missions (thiếu --with-business-defaults`);
       expect(res.stdout).not.toContain('membership_tiers: +');
       await expectBaseReferencePresent(pa);
