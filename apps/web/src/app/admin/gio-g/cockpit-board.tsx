@@ -7,6 +7,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { ADMIN_TABULAR } from '@/components/admin/tabular-nums';
 import { BTN_SECONDARY, ListSkeleton, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
 import { cardFixLinks, getCockpit, rowFixLink, type CheckStatus, type CockpitCard, type CockpitRow, type GoLiveCockpit } from './golive-api';
+import { HandoverCard } from './handover-card';
 
 export const COCKPIT_KEY = ['admin', 'golive', 'cockpit'] as const;
 
@@ -49,6 +50,11 @@ export function CockpitBoard() {
           <Notice tone="danger" role="alert">
             Kiểm lại không chạy được: {loadErrorText(recheck.error)}
           </Notice>
+        </div>
+      ) : null}
+      {q.data.handover ? (
+        <div className="mt-3">
+          <HandoverCard board={q.data.handover} />
         </div>
       ) : null}
       <ul className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

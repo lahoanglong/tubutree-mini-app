@@ -22,12 +22,33 @@ export interface CockpitCard {
   rows: CockpitRow[];
 }
 
+/** Một việc bàn giao (`HandoverItem` ở `apps/api/src/modules/admin/golive/golive-handover.ts`): chỉ tên biến và đã điền hay chưa, không có giá trị. */
+export interface HandoverItem {
+  key: string;
+  title: string;
+  owner: string;
+  guide: string;
+  configured: boolean;
+  status: CheckStatus;
+  vars: { name: string; configured: boolean }[];
+  checks: { id: string; title: string; status: CheckStatus; detail: string }[];
+}
+
+export interface HandoverBoard {
+  title: string;
+  configured: number;
+  total: number;
+  items: HandoverItem[];
+}
+
 /** `GET /admin/golive/cockpit` (`GoLiveCockpit` ở `apps/api/src/modules/admin/golive/golive-cockpit.service.ts`). */
 export interface GoLiveCockpit {
   generatedAt: string;
   phase: 'post-deploy';
   summary: { pass: number; warn: number; fail: number };
   cards: CockpitCard[];
+  /** API trước w25-03 chưa trả khối này: không có thì không vẽ thẻ bàn giao. */
+  handover?: HandoverBoard;
 }
 
 export type PilotAction = 'CANCEL' | 'ARCHIVE' | 'MANUAL' | 'DONE';

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerAsk, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { CockpitBoard } from './cockpit-board';
 import { PilotOrdersPanel } from './pilot-orders-panel';
-import { cardFixLinks, rowFixLink, splitPhones, type CockpitCard, type GoLiveCockpit, type PilotCleanupResult, type PilotOrderRow, type PilotOrdersView } from './golive-api';
+import { cardFixLinks, rowFixLink, splitPhones, type CockpitCard, type GoLiveCockpit, type HandoverBoard, type PilotCleanupResult, type PilotOrderRow, type PilotOrdersView } from './golive-api';
 
 const auth = vi.hoisted(() => ({ value: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true } }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => auth.value }));
@@ -88,9 +88,61 @@ describe('golive-api: link sửa', () => {
   });
 });
 
+const HANDOVER: HandoverBoard = {
+  title: 'Cấu hình bên thứ 3 chờ bàn giao Go-Live',
+  configured: 1,
+  total: 4,
+  items: [
+    {
+      key: 'zns_templates',
+      title: 'Mã mẫu ZNS do Zalo duyệt',
+      owner: 'Chủ Zalo OA',
+      guide: 'Đăng ký mẫu ZNS trên Zalo rồi nhập mã số ở Quản trị › Mẫu thông báo.',
+      configured: false,
+      status: 'WARN',
+      vars: [],
+      checks: [{ id: 'db.zns_templates', title: 'Mẫu ZNS đã có mã Zalo duyệt', status: 'WARN', detail: '2/2 mẫu chưa có mã Zalo' }],
+    },
+    {
+      key: 'zalopay',
+      title: 'Merchant ZaloPay',
+      owner: 'Chủ shop (hợp đồng ZaloPay)',
+      guide: 'Lấy App ID, Key1, Key2 bản production.',
+      configured: false,
+      status: 'FAIL',
+      vars: [
+        { name: 'ZALOPAY_APP_ID', configured: true },
+        { name: 'ZALOPAY_KEY1', configured: false },
+        { name: 'ZALOPAY_KEY2', configured: false },
+      ],
+      checks: [{ id: 'env.zalopay', title: 'Merchant ZaloPay', status: 'FAIL', detail: 'chỉ có ZALOPAY_APP_ID' }],
+    },
+    {
+      key: 'phone_hmac',
+      title: 'Khoá mã băm số điện thoại',
+      owner: 'Kỹ thuật (máy chủ)',
+      guide: 'Sinh bằng openssl rand -hex 32.',
+      configured: true,
+      status: 'PASS',
+      vars: [{ name: 'PHONE_HMAC_SECRET', configured: true }],
+      checks: [{ id: 'env.phone_hmac', title: 'PHONE_HMAC_SECRET cho mã băm số điện thoại', status: 'PASS', detail: 'đã đặt, 64 ký tự' }],
+    },
+    {
+      key: 'demo_coupons',
+      title: 'Mã giảm giá demo',
+      owner: 'Chủ shop (PO)',
+      guide: 'Chốt tắt hay giữ từng mã demo.',
+      configured: false,
+      status: 'WARN',
+      vars: [],
+      checks: [{ id: 'db.demo_coupons', title: 'Mã giảm giá demo', status: 'WARN', detail: 'còn dùng được: WELCOME30' }],
+    },
+  ],
+};
+
 describe('CockpitBoard', () => {
-  const mount = async () => {
-    const m = mockFetch({ '/admin/golive/cockpit': { body: COCKPIT } });
+  const mount = async (body: GoLiveCockpit = COCKPIT) => {
+    const m = mockFetch({ '/admin/golive/cockpit': { body } });
     vi.stubGlobal('fetch', m.fn);
     const r = render(<CockpitBoard />);
     mounted.push(r);
@@ -123,6 +175,43 @@ describe('CockpitBoard', () => {
       ['/admin?tab=opsHealth', 'Mở Sức khoẻ hệ thống'],
       ['/admin/doi-soat-kho', 'Mở Đối soát tồn kho'],
     ]);
+  });
+
+  it('API chưa trả khối bàn giao (bản trước w25-03): không vẽ thẻ bàn giao, 6 thẻ vẫn đủ', async () => {
+    const { c } = await mount();
+    expect(c.querySelector('[data-testid="gio-g-handover"]')).toBeNull();
+    expect(c.querySelectorAll('[data-testid^="gio-g-card-"]')).toHaveLength(6);
+  });
+
+  it('thẻ "Cấu hình bên thứ 3 chờ bàn giao Go-Live": đếm đã cấu hình, mỗi việc Đã cấu hình / Chờ điền kèm người phụ trách, nằm trên 6 thẻ', async () => {
+    const { c } = await mount({ ...COCKPIT, handover: HANDOVER });
+    const card = c.querySelector('[data-testid="gio-g-handover"]')!;
+    expect(card.querySelector('h3')?.textContent).toBe('Cấu hình bên thứ 3 chờ bàn giao Go-Live');
+    expect(card.querySelector('header')?.textContent).toContain('1/4 đã cấu hình');
+    expect(card.compareDocumentPosition(c.querySelector('[data-testid="gio-g-card-infra"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const rows = [...card.querySelectorAll('[data-testid="gio-g-handover-item"]')];
+    expect(rows.map((r) => [r.getAttribute('data-key'), r.getAttribute('data-configured'), r.querySelector('summary')?.textContent])).toEqual([
+      ['zns_templates', 'false', 'Mã mẫu ZNS do Zalo duyệtChủ Zalo OAChờ điền'],
+      ['zalopay', 'false', 'Merchant ZaloPayChủ shop (hợp đồng ZaloPay)Chờ điền'],
+      ['phone_hmac', 'true', 'Khoá mã băm số điện thoạiKỹ thuật (máy chủ)Đã cấu hình'],
+      ['demo_coupons', 'false', 'Mã giảm giá demoChủ shop (PO)Chờ điền'],
+    ]);
+    // Đặt dở dang (FAIL) tô đỏ, còn thiếu tô vàng, đủ tô xanh.
+    expect(rows.map((r) => r.querySelector('summary > span:last-child')?.className.match(/bg-(success|warning|danger)-bg/)?.[1])).toEqual(['warning', 'danger', 'success', 'warning']);
+  });
+
+  it('mở một việc: biến cần điền chỉ có tên và Đã điền / Chờ điền, cách lấy, lời bộ kiểm; việc sửa được trong quản trị có link', async () => {
+    const { c } = await mount({ ...COCKPIT, handover: HANDOVER });
+    const row = (key: string) => c.querySelector(`[data-testid="gio-g-handover-item"][data-key="${key}"]`)!;
+    const vars = [...row('zalopay').querySelectorAll('[aria-label="Biến cần điền"] li')].map((li) => li.textContent);
+    expect(vars).toEqual(['ZALOPAY_APP_IDĐã điền', 'ZALOPAY_KEY1Chờ điền', 'ZALOPAY_KEY2Chờ điền']);
+    expect(row('zalopay').textContent).toContain('Lấy App ID, Key1, Key2 bản production.');
+    expect(row('zalopay').querySelector('[data-check="env.zalopay"]')?.textContent).toBe('Merchant ZaloPay: chỉ có ZALOPAY_APP_ID');
+    expect(row('zalopay').querySelector('a')).toBeNull();
+    expect(row('zns_templates').querySelector('a')?.getAttribute('href')).toBe('/admin?tab=notificationTemplates');
+    expect(row('demo_coupons').querySelector('a')?.getAttribute('href')).toBe('/admin?tab=coupons');
+    expect(row('phone_hmac').querySelector('[data-check]')).toBeNull();
+    expect(row('zns_templates').querySelector('[aria-label="Biến cần điền"]')).toBeNull();
   });
 
   it('"Kiểm lại" gọi lại với fresh=1', async () => {
