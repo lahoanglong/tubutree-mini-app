@@ -352,6 +352,7 @@ describe('SubscriptionsPanel', () => {
     click(btn('Bỏ qua kỳ này'));
     await flush(8);
     expect(sent('POST', '/me/subscriptions/s1/skip')).toHaveLength(1);
+    expect(sent('POST', '/me/subscriptions/s1/skip')[0]!.body).toEqual({ expectedNextRunAt: SUB.nextRunAt });
     expect(c.textContent).toContain('Đã bỏ qua kỳ này');
     expect(document.body.textContent).not.toContain('Giữ lại lịch định kỳ?');
 
@@ -1364,8 +1365,27 @@ describe('SubscriptionsPanel: tự phục vụ trên thẻ (bỏ qua một chạ
     click(btn('Bỏ qua kỳ này', actions()!));
     await flush(8);
     expect(sent('POST', '/me/subscriptions/s1/skip')).toHaveLength(1);
+    expect(sent('POST', '/me/subscriptions/s1/skip')[0]!.body).toEqual({ expectedNextRunAt: SUB.nextRunAt });
     expect(dialog()).toBeNull();
     expect(status()).toBe('Đã bỏ qua kỳ này, lần kế 12/11/2026');
+  });
+
+  it('cron 03:00 vừa ra đơn kỳ thẻ đang hiện (409 không mã): báo lỗi trên trang, tải lại danh sách; bấm lại gửi "Lần kế" mới', async () => {
+    failures['POST /me/subscriptions/s1/skip'] = { status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' };
+    await mount();
+    const lists = sent('GET', '/me/subscriptions').length;
+    subs = [{ ...SUB, nextRunAt: '2026-11-11T17:00:00.000Z' }];
+    click(btn('Bỏ qua kỳ này', actions()!));
+    await flush(10);
+    expect(document.body.textContent).toContain('Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.');
+    expect(sent('GET', '/me/subscriptions').length).toBeGreaterThan(lists);
+    delete failures['POST /me/subscriptions/s1/skip'];
+    click(btn('Bỏ qua kỳ này', actions()!));
+    await flush(8);
+    expect(sent('POST', '/me/subscriptions/s1/skip').map((c) => c.body)).toEqual([
+      { expectedNextRunAt: SUB.nextRunAt },
+      { expectedNextRunAt: '2026-11-11T17:00:00.000Z' },
+    ]);
   });
 
   it('gói tạm dừng: không có hàng bỏ qua / đặt ngay', async () => {
@@ -1499,6 +1519,38 @@ describe('SubscriptionEditSheet (web): dời ngày giao kỳ tới (+7 / +14 / c
     click(btn('Lưu thay đổi'));
     await flush(8);
     expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 8 });
+  });
+
+  it('danh sách tải lại nền trong lúc sheet mở ("Lần kế" đổi): +7 và expectedNextRunAt vẫn theo ngày lúc mở sheet', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mounted.push(render(<SubscriptionsPanel />, qc));
+    await flush(8);
+    click(btn('Sửa'));
+    await flush(6);
+    subs = [{ ...SUB_R, nextRunAt: '2026-12-05T03:00:00.000Z', lastOrderAt: '2026-11-07T03:00:00.000Z' }];
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    });
+    await flush(6);
+    expect(document.body.textContent).toContain('Lần kế: 05/12/2026');
+    click(btn('+7 ngày', group()!));
+    expect(document.body.textContent).toContain('Kỳ tới giao ngày 14/11/2026');
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ nextRunDate: '2026-11-14', expectedNextRunAt: '2026-11-07T03:00:00.000Z' });
+  });
+
+  it('dời ngày bị 409 không mã (lịch vừa đổi): đóng sheet, lời lỗi ở lại trên trang, tải lại danh sách', async () => {
+    failures['PATCH /me/subscriptions/s1'] = { status: 409, message: 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.' };
+    await openEdit();
+    const lists = sent('GET', '/me/subscriptions').length;
+    click(btn('+7 ngày', group()!));
+    click(btn('Lưu thay đổi'));
+    await flush(10);
+    expect(group()).toBeNull();
+    expect(document.body.textContent).not.toContain('Sửa gói định kỳ');
+    expect(document.body.textContent).toContain('Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.');
+    expect(sent('GET', '/me/subscriptions').length).toBeGreaterThan(lists);
   });
 
   it('API cũ (không có lastOrderAt): không có hàng dời ngày', async () => {

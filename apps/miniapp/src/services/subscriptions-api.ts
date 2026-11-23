@@ -72,8 +72,9 @@ export const updateSubscription = (id: string, data: SubscriptionPatch) => api.p
 export const setSubscriptionStatus = (id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') =>
   api.post<SubscriptionDTO>(`/me/subscriptions/${id}/status`, { status }).then((r) => r.data);
 
-export const skipSubscriptionCycle = (id: string) =>
-  api.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`).then((r) => r.data);
+/** `expectedNextRunAt` = `nextRunAt` thẻ đang hiện: cron vừa ra đơn kỳ đó thì 409 (tải lại), không bỏ qua kỳ sau. */
+export const skipSubscriptionCycle = (id: string, expectedNextRunAt: string) =>
+  api.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`, { expectedNextRunAt }).then((r) => r.data);
 
 /** "Đặt kỳ này ngay": ra đơn kỳ tới hôm nay; đã có đơn hôm nay thì 409. */
 export const runSubscriptionNow = (id: string) => api.post<RunNowSubscription>(`/me/subscriptions/${id}/run-now`).then((r) => r.data);

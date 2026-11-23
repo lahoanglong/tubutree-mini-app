@@ -82,12 +82,17 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
   // Ngày giao kỳ tới khách chọn ('yyyy-mm-dd' giờ VN), null = giữ lịch. `picking`: đang mở ô chọn ngày.
   const [runDate, setRunDate] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  // "Lần kế" lúc mở sheet: +7/+14 và ngày gửi kèm (`expectedNextRunAt`) tính từ đây, không theo `sub` sống. Danh sách tải lại nền qua 03:00
+  // (cron vừa ra đơn kỳ đó) mà lấy ngày mới thì máy chủ nhận ngày khách chọn theo lịch cũ thành ngày giao kỳ SAU, thêm một đơn. Lịch đã đổi thì
+  // máy chủ trả 409 không mã và sheet đóng sau khi danh sách mới về (isTargetGoneError bên dưới).
+  const [shownRunAt] = useState(sub.nextRunAt);
+  const shownSub = { ...sub, nextRunAt: shownRunAt };
 
-  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks, nextRunDate: runDate });
-  const nextRun = nextRunAfterIntervalChange(sub, weeks);
+  const patch = subscriptionPatch(shownSub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks, nextRunDate: runDate });
+  const nextRun = nextRunAfterIntervalChange(shownSub, weeks);
   const dirty = Object.keys(patch).length > 0;
   // +7/+14 ngày tính từ ngày giao kỳ tới đang thấy (kể cả ngày mới do đổi chu kỳ); ngày chọn thắng ngày do đổi chu kỳ ở máy chủ.
-  const steps = rescheduleOptions(nextRun ? nextRun.toISOString() : sub.nextRunAt);
+  const steps = rescheduleOptions(nextRun ? nextRun.toISOString() : shownRunAt);
   const range = rescheduleRange();
 
   const save = useLockedMutation({

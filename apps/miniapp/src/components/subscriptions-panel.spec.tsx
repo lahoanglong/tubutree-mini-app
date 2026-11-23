@@ -241,7 +241,7 @@ describe('SubscriptionsPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Huỷ' }));
     expect(await screen.findByText('Giữ lại lịch định kỳ?')).toBeInTheDocument();
     fireEvent.click(inSheet('Bỏ qua kỳ này'));
-    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'), { timeout: 5000 });
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1', SUB.nextRunAt), { timeout: 5000 });
     // Chờ sheet đầu ĐÓNG hẳn (đang trượt xuống + nút thẻ còn bị khoá) rồi mới mở sheet thứ hai — nếu không,
     // cú bấm "Hủy" thứ hai có thể rơi vào lúc sheet cũ chưa đóng và bị nuốt (flaky khi máy tải nặng).
     await waitFor(() => expect(screen.queryByText('Giữ lại lịch định kỳ?')).not.toBeInTheDocument(), { timeout: 5000 });
@@ -641,7 +641,7 @@ describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗ
       fireEvent.click(btn);
     });
     expect(mocks.skipSubscriptionCycle).toHaveBeenCalledTimes(1);
-    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1');
+    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1', SUB.nextRunAt);
     await waitFor(() => expect(inSheet('Bỏ qua kỳ này')).toHaveAttribute('aria-busy', 'true'));
     await act(async () => skip.resolve(SUB));
     await waitFor(() => expect(retentionSheet().open).toBe(false));
@@ -736,7 +736,7 @@ describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗ
     await waitFor(() => expect(inSheet('Bỏ qua kỳ này')).toBeEnabled());
     expect(retentionSheet().open).toBe(true);
     fireEvent.click(inSheet('Bỏ qua kỳ này'));
-    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1', SUB.nextRunAt));
     await waitFor(() => expect(retentionSheet().open).toBe(false));
   });
 });
@@ -1280,7 +1280,7 @@ describe('SubscriptionsPanel: tự phục vụ trên thẻ (bỏ qua một chạ
     renderPanel();
     const actions = await screen.findByTestId('subscription-cycle-actions');
     fireEvent.click(within(actions).getByRole('button', { name: 'Bỏ qua kỳ này' }));
-    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'));
+    await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1', SUB.nextRunAt));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã bỏ qua kỳ này, lần kế 12/11/2026' })));
     expect(screen.queryByText(RETENTION_TITLE)).not.toBeInTheDocument();
   });

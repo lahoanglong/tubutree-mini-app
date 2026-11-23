@@ -93,7 +93,12 @@ export const updateSubscription = (http: HttpClient, id: string, data: Subscript
 export const setSubscriptionStatus = (http: HttpClient, id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') =>
   http.post<SubscriptionDTO>(`/me/subscriptions/${id}/status`, { status });
 
-export const skipSubscriptionCycle = (http: HttpClient, id: string) => http.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`);
+/**
+ * "Bỏ qua kỳ này": `expectedNextRunAt` = `nextRunAt` thẻ đang hiện. Cron 03:00 đã ra đơn kỳ đó (lịch sang kỳ sau) thì API trả 409 thay vì bỏ qua
+ * kỳ sau; thiếu trường thì 400.
+ */
+export const skipSubscriptionCycle = (http: HttpClient, id: string, expectedNextRunAt: string) =>
+  http.post<SubscriptionDTO>(`/me/subscriptions/${id}/skip`, { expectedNextRunAt });
 
 /** "Đặt kỳ này ngay": ra đơn kỳ tới hôm nay; đã có đơn hôm nay thì 409. */
 export const runSubscriptionNow = (http: HttpClient, id: string) => http.post<RunNowSubscription>(`/me/subscriptions/${id}/run-now`);

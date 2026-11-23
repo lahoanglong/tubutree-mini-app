@@ -105,14 +105,15 @@ export function SubscriptionsPanel() {
 
   const skipMut = useLockedMutation({
     onSettled: releaseActing,
-    mutationFn: (id: string) => skipSubscriptionCycle(id),
+    // Gửi kèm "Lần kế" thẻ đang hiện: cron 03:00 vừa ra đơn kỳ đó thì máy chủ trả 409 và danh sách tải lại, không lặng lẽ bỏ qua kỳ sau.
+    mutationFn: ({ id, expectedNextRunAt }: { id: string; expectedNextRunAt: string }) => skipSubscriptionCycle(id, expectedNextRunAt),
     onSuccess: (sub) => {
       haptic('light');
       openSnackbar({ text: skipDoneText(sub?.nextRunAt), type: 'success' });
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    onError: (e, id) => onActionError(e, id),
+    onError: (e, { id }) => onActionError(e, id),
   });
 
   // "Đặt kỳ này ngay" tạo đơn (Ví Tubu trừ tiền ngay) nên qua tấm xác nhận; tấm giữ nút bận tới khi danh sách gói mới về. Đơn mới vào tab Đơn hàng.
@@ -182,7 +183,7 @@ export function SubscriptionsPanel() {
             sub={s}
             busy={sheetBusy}
             toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.status !== 'CANCELLED' && cancelTarget === null}
-            skipping={skipMut.isPending && skipMut.variables === s.id && cancelTarget === null}
+            skipping={skipMut.isPending && skipMut.variables?.id === s.id && cancelTarget === null}
             refreshing={subsQ.isFetching}
             address={s.addressId ? addressById.get(s.addressId) : undefined}
             onEdit={() => {
@@ -191,7 +192,7 @@ export function SubscriptionsPanel() {
             }}
             onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }))}
             onCancel={() => setCancelTarget(s.id)}
-            onSkip={() => exclusive(() => skipMut.mutate(s.id))}
+            onSkip={() => exclusive(() => skipMut.mutate({ id: s.id, expectedNextRunAt: s.nextRunAt }))}
             onRunNow={() => {
               if (acting.current || subsQ.isFetching) return;
               runNowMut.reset();
@@ -252,8 +253,8 @@ export function SubscriptionsPanel() {
               loading={skipMut.isPending}
               disabled={statusMut.isPending}
               onPress={() => {
-                if (!cancelTarget) return;
-                exclusive(() => skipMut.mutate(cancelTarget));
+                if (!targetSub) return;
+                exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: targetSub.nextRunAt }));
               }}
             >
               {vi.subscriptions.skipCta}

@@ -26,7 +26,7 @@ describe('subscriptions — hợp đồng gọi API', () => {
     await createSubscription(http, create);
     await updateSubscription(http, 's1', { quantity: 2 });
     await setSubscriptionStatus(http, 's1', 'PAUSED');
-    await skipSubscriptionCycle(http, 's1');
+    await skipSubscriptionCycle(http, 's1', '2026-11-24T17:00:00.000Z');
     await updateSubscription(http, 's1', { nextRunDate: '2026-12-01' });
     await runSubscriptionNow(http, 's1');
     expect(calls).toEqual([
@@ -34,7 +34,7 @@ describe('subscriptions — hợp đồng gọi API', () => {
       { method: 'post', path: '/me/subscriptions', body: create },
       { method: 'patch', path: '/me/subscriptions/s1', body: { quantity: 2 } },
       { method: 'post', path: '/me/subscriptions/s1/status', body: { status: 'PAUSED' } },
-      { method: 'post', path: '/me/subscriptions/s1/skip' },
+      { method: 'post', path: '/me/subscriptions/s1/skip', body: { expectedNextRunAt: '2026-11-24T17:00:00.000Z' } },
       { method: 'patch', path: '/me/subscriptions/s1', body: { nextRunDate: '2026-12-01' } },
       { method: 'post', path: '/me/subscriptions/s1/run-now' },
     ]);

@@ -13,6 +13,7 @@ import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
 import { isStaleSubscriptionError } from '@/lib/subscription-stale-error';
+import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { ui } from '@/lib/guest-ui';
 import { formatVnDate, nextRunAfterIntervalChange, SUBSCRIPTION_INTERVAL_WEEKS, vnDateOf } from '@/lib/subscription-options';
 import { AddressPicker, PaymentMethodPicker, SectionLabel } from './subscription-options';
@@ -61,6 +62,9 @@ export function SubscriptionEditSheet({
   // Ngày giao kỳ tới khách chọn ('yyyy-mm-dd' giờ VN), null = giữ lịch. `picking`: đang mở ô chọn ngày.
   const [runDate, setRunDate] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  // "Lần kế" lúc mở sheet: +7/+14 và ngày gửi kèm (`expectedNextRunAt`) tính từ đây. `sub` là gói SỐNG của danh sách: tải lại nền qua 03:00
+  // (cron vừa ra đơn kỳ đó) mà lấy ngày mới thì máy chủ nhận ngày khách chọn theo lịch cũ thành ngày giao kỳ SAU, thêm một đơn.
+  const [shownRunAt] = useState(sub.nextRunAt);
   const addrQ = useQuery(addressesQuery(coreHttp));
   const walletQ = useQuery(walletQuery(coreHttp));
   // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
@@ -71,11 +75,12 @@ export function SubscriptionEditSheet({
 
   // API cũ chưa nhận intervalWeeks (400); chỉ API mới mới trả khoá lastOrderAt (kể cả null), dùng làm dấu hiệu hỗ trợ.
   const canEditInterval = 'lastOrderAt' in sub;
-  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks, nextRunDate: runDate }, canEditInterval);
-  const nextRun = canEditInterval ? nextRunAfterIntervalChange(sub, weeks) : null;
+  const shownSub = { ...sub, nextRunAt: shownRunAt };
+  const patch = subscriptionPatch(shownSub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks, nextRunDate: runDate }, canEditInterval);
+  const nextRun = canEditInterval ? nextRunAfterIntervalChange(shownSub, weeks) : null;
   const dirty = Object.keys(patch).length > 0;
   // +7/+14 ngày tính từ ngày giao kỳ tới đang thấy (kể cả ngày mới do đổi chu kỳ); ngày chọn thắng ngày do đổi chu kỳ ở máy chủ.
-  const steps = canEditInterval && sub.status !== 'CANCELLED' ? rescheduleOptions(nextRun ? nextRun.toISOString() : sub.nextRunAt) : [];
+  const steps = canEditInterval && sub.status !== 'CANCELLED' ? rescheduleOptions(nextRun ? nextRun.toISOString() : shownRunAt) : [];
   const range = rescheduleRange();
 
   const save = useLockedMutation({
@@ -89,9 +94,12 @@ export function SubscriptionEditSheet({
     // để lời lỗi và nút bấm lại hiện ngay.
     onError: (e) => {
       if (!isStaleSubscriptionError(e)) return;
+      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      // Dời ngày bị 409 không mã (lịch vừa đổi, như Mini): "Lần kế" của sheet đã cũ nên lưu lại vẫn 409. Đóng để khách mở lại với lịch mới.
+      // 409 trùng gói (SUBSCRIPTION_DUPLICATE) là lỗi ở ô địa chỉ, giữ sheet để đổi. `onClose` xoá lời lỗi của trang nên gọi trước `onRejected`.
+      if (patch.expectedNextRunAt !== undefined && errorStatus(e) === 409 && errorCode(e) !== 'SUBSCRIPTION_DUPLICATE') onClose();
       // Gói rời danh sách thì sheet tự đóng và lời lỗi trong footer biến mất cùng nó: báo lên trang để khách còn thấy lý do.
       onRejected?.(actionErrorText(e));
-      void qc.invalidateQueries({ queryKey: ['subscriptions'] });
     },
   });
 

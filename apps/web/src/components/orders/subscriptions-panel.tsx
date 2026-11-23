@@ -107,7 +107,8 @@ export function SubscriptionsPanel() {
     onSettled: releaseActing,
   });
   const skipMut = useLockedMutation({
-    mutationFn: (id: string) => skipSubscriptionCycle(coreHttp, id),
+    // Gửi kèm "Lần kế" thẻ đang hiện: cron 03:00 vừa ra đơn kỳ đó thì máy chủ trả 409 và danh sách tải lại, không lặng lẽ bỏ qua kỳ sau.
+    mutationFn: ({ id, expectedNextRunAt }: { id: string; expectedNextRunAt: string }) => skipSubscriptionCycle(coreHttp, id, expectedNextRunAt),
     onMutate: () => {
       setNotice(null);
       setRejected(null);
@@ -212,7 +213,7 @@ export function SubscriptionsPanel() {
               sub={s}
               busy={sheetBusy}
               toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.from === 'card'}
-              skipping={skipMut.isPending && skipMut.variables === s.id && cancelTarget === null}
+              skipping={skipMut.isPending && skipMut.variables?.id === s.id && cancelTarget === null}
               refreshing={subsQ.isFetching}
               address={s.addressId ? addressById.get(s.addressId) : undefined}
               onEdit={() => {
@@ -226,7 +227,7 @@ export function SubscriptionsPanel() {
                 skipMut.reset();
                 setCancelTarget(s.id);
               }}
-              onSkip={() => exclusive(() => skipMut.mutate(s.id))}
+              onSkip={() => exclusive(() => skipMut.mutate({ id: s.id, expectedNextRunAt: s.nextRunAt }))}
               onRunNow={() => {
                 if (acting.current || subsQ.isFetching) return;
                 runNowMut.reset();
@@ -307,8 +308,8 @@ export function SubscriptionsPanel() {
               aria-busy={skipMut.isPending || undefined}
               aria-disabled={skipMut.isPending || undefined}
               onClick={() => {
-                if (!cancelTarget) return;
-                exclusive(() => skipMut.mutate(cancelTarget));
+                if (!targetSub) return;
+                exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: targetSub.nextRunAt }));
               }}
             >
               {skipMut.isPending ? 'Đang xử lý…' : 'Bỏ qua kỳ này'}

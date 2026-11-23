@@ -847,6 +847,19 @@ describe('SubscriptionEditSheet: dời ngày giao kỳ tới (+7 / +14 / chọn 
     await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-11-21', expectedNextRunAt: '2026-11-07T03:00:00.000Z' }));
   });
 
+  it('gói sống đổi "Lần kế" lúc sheet đang mở (danh sách tải lại qua 03:00): +7 và expectedNextRunAt vẫn theo ngày lúc mở sheet', async () => {
+    mocks.updateSubscription.mockResolvedValue(SUB);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const view = (sub: typeof SUB) => <QueryClientProvider client={qc}><SubscriptionEditSheet sub={sub} onClose={mocks.onClose} /></QueryClientProvider>;
+    const { rerender } = render(view(SUB));
+    await screen.findByTestId('subscription-reschedule');
+    rerender(view({ ...SUB, nextRunAt: '2026-12-05T03:00:00.000Z', lastOrderAt: '2026-11-07T03:00:00.000Z' }));
+    fireEvent.click(within(screen.getByTestId('subscription-reschedule')).getByRole('button', { name: '+7 ngày' }));
+    expect(screen.getByText('Kỳ tới giao ngày 14/11/2026')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-11-14', expectedNextRunAt: '2026-11-07T03:00:00.000Z' }));
+  });
+
   it('"Chọn ngày" mở ô ngày giới hạn từ mai tới 90 ngày kèm câu gợi ý; ngày ngoài khoảng không vào PATCH, không gửi', async () => {
     mocks.updateSubscription.mockResolvedValue(SUB);
     renderSheet();
