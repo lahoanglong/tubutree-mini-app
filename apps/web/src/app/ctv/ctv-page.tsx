@@ -60,7 +60,7 @@ import {
   PAYOUT_META,
   WITHDRAWING_META,
 } from '@/components/affiliate/ctv-copy';
-import BackLink, { RestoringBackLink } from '@/components/back-link';
+import { GuestMemberBackLink } from '@/components/back-link';
 import { PartnerEarnNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
@@ -86,7 +86,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 const GUEST_BACK = { href: '/', label: '← Trang chủ' } as const;
 const MEMBER_BACK = { href: '/tai-khoan', label: '← Tài khoản' } as const;
 
-/** `restoring`: màn khách chưa hydrate (HTML máy chủ); máy còn cờ phiên thì link lùi đã là của người đăng nhập (`RestoringBackLink`). */
+/** `restoring`: màn khách chưa hydrate (HTML máy chủ); máy còn cờ phiên thì link lùi đã là của người đăng nhập (`GuestMemberBackLink`). */
 function Shell({
   children,
   narrow = false,
@@ -98,11 +98,10 @@ function Shell({
   guest?: boolean;
   restoring?: boolean;
 }) {
-  const back = guest ? GUEST_BACK : MEMBER_BACK;
-  const backHref = back.href;
+  const backHref = guest ? GUEST_BACK.href : MEMBER_BACK.href;
   return (
     <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6 tabular-nums`}>
-      {guest && restoring ? <RestoringBackLink guest={GUEST_BACK} member={MEMBER_BACK} /> : <BackLink href={backHref}>{back.label}</BackLink>}
+      <GuestMemberBackLink guest={GUEST_BACK} member={MEMBER_BACK} phase={guest ? (restoring ? 'restoring' : 'guest') : 'member'} />
       <PageHeader title={TITLE} parentHref={backHref} className="md:mt-1" />
       <div className="mt-3">
         <PartnerEarnNavPills />

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { CreditCard, PackageSearch, RotateCcw, ShieldCheck } from 'lucide-react';
 import { STOREFRONT_TRUST_TITLE, storefrontTrustChips, type StorefrontTrustKey } from '@tubutree/app-core/commerce/storefront-trust';
 
@@ -10,12 +11,14 @@ const ICONS: Record<StorefrontTrustKey, typeof ShieldCheck> = { reviewed: Shield
 
 /**
  * Dải cam kết: điện thoại là hàng chip gọn (chữ ngắn, tối đa hai hàng ở 375px, cùng số đo với Mini) ngay dưới đầu gian hàng; từ md là bốn ô chữ đủ.
- * Một bộ thẻ cho mọi khổ, chữ ngắn/đủ đổi bằng CSS. Không có hook nên trang server vẽ thẳng.
+ * Một bộ thẻ cho mọi khổ, chữ ngắn/đủ đổi bằng CSS. Chỉ dùng `useId` (React cho phép ở server component) nên trang server vẽ thẳng;
+ * id tiêu đề sinh theo từng bản để hai dải trên cùng trang (vd /ds-gallery) không trùng id.
  */
 export function StorefrontTrustChips({ returnWindowDays }: StorefrontTrustChipsProps) {
+  const titleId = useId();
   return (
-    <section aria-labelledby="cam-ket-gian-hang" className="mx-4 mt-3 md:mx-0 md:mt-4">
-      <h2 id="cam-ket-gian-hang" className="sr-only">
+    <section aria-labelledby={titleId} className="mx-4 mt-3 md:mx-0 md:mt-4">
+      <h2 id={titleId} className="sr-only">
         {STOREFRONT_TRUST_TITLE}
       </h2>
       <ul role="list" className="flex flex-wrap gap-1.5 md:grid md:grid-cols-4 md:gap-3">

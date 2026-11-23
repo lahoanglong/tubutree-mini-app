@@ -245,7 +245,8 @@ export default function OrderDetailPage() {
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
-  const tracking = safeHttpUrl(o.trackingLink);
+  // Đơn đã huỷ hay đã hoàn không còn gì để theo dõi (PO A3, như Mini): không có viên tra cứu dù kho đã gắn link; mã vẫn in ở khối Vận chuyển.
+  const tracking = o.status === 'CANCELLED' || o.status === 'RETURNED' ? null : safeHttpUrl(o.trackingLink);
   const showPayPanel = !isPhone && (canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice);
   const returnedQty = returnedByLine(
     o.items.filter((it): it is typeof it & { id: string } => !!it.id),

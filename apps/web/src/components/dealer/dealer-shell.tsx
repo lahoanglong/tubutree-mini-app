@@ -1,4 +1,4 @@
-import BackLink, { RestoringBackLink } from '@/components/back-link';
+import { GuestMemberBackLink } from '@/components/back-link';
 import { PartnerEarnNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -16,7 +16,7 @@ export function DealerShell({
 }: {
   title: string;
   guest?: boolean;
-  /** Màn khách chưa hydrate (HTML máy chủ): máy còn cờ phiên thì link lùi đã là của người đăng nhập (`RestoringBackLink`). */
+  /** Màn khách chưa hydrate (HTML máy chủ): máy còn cờ phiên thì link lùi đã là của người đăng nhập (`GuestMemberBackLink`). */
   restoring?: boolean;
   children: React.ReactNode;
 }) {
@@ -26,11 +26,7 @@ export function DealerShell({
     <main className={`${PAGE_WIDE} py-6 max-md:-mb-8 max-md:min-h-dvh max-md:bg-[var(--color-dealer-bg)] max-md:pb-14`}
       data-dealer-theme
     >
-      {guest && restoring ? (
-        <RestoringBackLink guest={GUEST_BACK} member={MEMBER_BACK} />
-      ) : (
-        <BackLink href={backHref}>{guest ? GUEST_BACK.label : MEMBER_BACK.label}</BackLink>
-      )}
+      <GuestMemberBackLink guest={GUEST_BACK} member={MEMBER_BACK} phase={guest ? (restoring ? 'restoring' : 'guest') : 'member'} />
       <PageHeader title={title} parentHref={backHref} className="md:mt-1" />
       <div className="mt-3">
         <PartnerEarnNavPills />

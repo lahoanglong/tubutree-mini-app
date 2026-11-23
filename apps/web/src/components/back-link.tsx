@@ -53,19 +53,29 @@ export interface BackTarget {
   label: ReactNode;
 }
 
+/** Pha của link lùi khách/người đăng nhập: `restoring` là HTML máy chủ và lượt hydrate đầu của màn khách dựng sẵn (chưa biết pha thật). */
+export type GuestMemberBackPhase = 'restoring' | 'guest' | 'member';
+
 /**
- * Link lùi của trang dựng sẵn giao diện khách (`PrebuiltGuest`) cho tới khi hydrate. Máy còn cờ phiên (<html data-restoring>, đặt trước khi
- * vẽ) thì CSS giấu link của khách và hiện link của người đã đăng nhập (cùng kiểu, cao 44px), nên từ md người đã đăng nhập không thấy link
- * khách chớp qua rồi đổi. Khách vãng lai không có thuộc tính đó nên thấy ngay link khách. Sau hydrate trang vẽ một `BackLink` theo pha thật.
+ * Link lùi của trang có màn khách dựng sẵn (`PrebuiltGuest`): khách lùi về `guest`, người đã đăng nhập về `member`.
+ *
+ * Trước hydrate (`restoring`) có cả hai link: máy còn cờ phiên (<html data-restoring>, đặt trước khi vẽ) thì CSS giấu link khách và hiện link
+ * của người đã đăng nhập (cùng kiểu, cao 44px), nên từ md người đã đăng nhập không thấy link khách chớp qua rồi đổi. Khách vãng lai không có
+ * thuộc tính đó nên thấy ngay link khách. Sau hydrate chỉ còn link của pha thật.
+ *
+ * Hai ô bọc và link trong ô luôn ở đúng chỗ của nó qua mọi pha (không đổi qua lại giữa cặp link và một `BackLink` trần), nên React giữ nguyên
+ * nút `<a>` đang hiện khi hydrate xong: người dùng bàn phím đã Tab tới link trước hydrate không bị rơi focus về <body>. Chỉ giữ được khi
+ * pha mới vẫn vẽ cùng một khung trang; màn tự dựng khung riêng (vd bảng CTV `Dashboard`, `DealerHub`) thì React dựng lại link.
  */
-export function RestoringBackLink({ guest, member }: { guest: BackTarget; member: BackTarget }) {
+export function GuestMemberBackLink({ guest, member, phase }: { guest: BackTarget; member: BackTarget; phase: GuestMemberBackPhase }) {
+  const restoring = phase === 'restoring';
   return (
     <>
-      <div className={GUEST_ONLY_WHILE_RESTORING}>
-        <BackLink href={guest.href}>{guest.label}</BackLink>
+      <div className={restoring ? GUEST_ONLY_WHILE_RESTORING : undefined}>
+        {phase !== 'member' && <BackLink href={guest.href}>{guest.label}</BackLink>}
       </div>
-      <div className={RESTORING_ONLY}>
-        <BackLink href={member.href}>{member.label}</BackLink>
+      <div className={restoring ? RESTORING_ONLY : undefined}>
+        {phase !== 'guest' && <BackLink href={member.href}>{member.label}</BackLink>}
       </div>
     </>
   );

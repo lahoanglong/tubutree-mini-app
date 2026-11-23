@@ -1,7 +1,8 @@
-import { applyDecorators, type ExecutionContext, SetMetadata } from '@nestjs/common';
-import { Throttle, type ThrottlerModuleOptions } from '@nestjs/throttler';
+import { applyDecorators, type DynamicModule, type ExecutionContext, SetMetadata } from '@nestjs/common';
+import { Throttle, ThrottlerModule, type ThrottlerModuleOptions } from '@nestjs/throttler';
 import { createHash } from 'node:crypto';
 import { safeEqualStrings } from '../safe-equal';
+import { PerKeyThrottlerStorage } from './per-key-throttler.storage';
 import type { Request } from 'express';
 
 /**
@@ -122,6 +123,16 @@ export const throttlerOptions: ThrottlerModuleOptions = {
     },
   ],
 };
+
+/** Cấu hình throttle kèm bộ nhớ đếm riêng theo từng khoá (xem PerKeyThrottlerStorage), tạo mới cho mỗi app Nest. */
+export function createThrottlerOptions(): ThrottlerModuleOptions {
+  return { ...throttlerOptions, storage: new PerKeyThrottlerStorage() };
+}
+
+/** ThrottlerModule của app: factory nên mỗi app (kể cả app dựng trong test) có bộ nhớ riêng, đóng app thì huỷ hẹn giờ. */
+export function throttlerRootModule(): DynamicModule {
+  return ThrottlerModule.forRootAsync({ useFactory: createThrottlerOptions });
+}
 
 /**
  * Route tra cứu khách mà nhân viên CSKH không được quét hàng loạt: trần `limit` lượt mỗi phút cho mỗi tài khoản nhân viên (STAFF),

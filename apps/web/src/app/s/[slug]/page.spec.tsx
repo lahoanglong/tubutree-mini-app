@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { STOREFRONT_TRUST_TITLE } from '@tubutree/app-core/commerce/storefront-trust';
 import StorefrontPage from './page';
 
 const mocks = vi.hoisted(() => ({ sf: null as unknown }));
@@ -34,6 +35,12 @@ const SF = {
 };
 
 const TICK = '[role="img"][aria-label="Đã được Tubu Tree duyệt"]';
+
+/** Dải cam kết tìm qua tiêu đề mà `aria-labelledby` trỏ tới (id sinh bằng useId, không cố định). */
+const trustSection = (box: HTMLElement) =>
+  Array.from(box.querySelectorAll<HTMLElement>('section[aria-labelledby]')).find(
+    (s) => box.querySelector(`[id="${s.getAttribute('aria-labelledby')}"]`)?.textContent === STOREFRONT_TRUST_TITLE,
+  )!;
 
 const html = async () => {
   const el = (await StorefrontPage({ params: Promise.resolve({ slug: 'linh' }) })) as ReactElement;
@@ -83,7 +90,7 @@ describe('trang gian hàng /s/[slug] — tin cậy chỉ khi đúng sự thật 
   });
 
   it('dải cam kết nói điều luôn đúng: duyệt sản phẩm, thanh toán qua Tubu Tree, theo dõi đơn, đổi trả', async () => {
-    const text = (await html()).querySelector('section[aria-labelledby="cam-ket-gian-hang"]')!.textContent ?? '';
+    const text = trustSection(await html()).textContent ?? '';
     expect(text).toContain('Sản phẩm đã qua duyệt của Tubu Tree');
     expect(text).toContain('Thanh toán qua Tubu Tree');
     expect(text).toContain('Theo dõi đơn trên Tubu Tree');
@@ -199,7 +206,7 @@ describe('trang gian hàng — khung shop giống Mini App', () => {
 
   it('dải cam kết có cả ở điện thoại: hàng chip gọn chữ ngắn (dưới md), bốn ô chữ đủ từ md; một bộ thẻ cho mọi khổ', async () => {
     const box = await html();
-    const section = box.querySelector<HTMLElement>('section[aria-labelledby="cam-ket-gian-hang"]')!;
+    const section = trustSection(box);
     expect(section.className).not.toContain('hidden');
     const list = section.querySelector<HTMLElement>('ul')!;
     for (const cls of ['flex', 'flex-wrap', 'md:grid', 'md:grid-cols-4']) expect(list.className.split(' ')).toContain(cls);
