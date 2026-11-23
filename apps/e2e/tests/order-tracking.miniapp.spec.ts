@@ -41,7 +41,7 @@ test.describe('Mini App theo dõi đơn 375', () => {
   });
 
   for (const status of ['CANCELLED', 'RETURNED'] as const) {
-    test(`đơn ${status} mà kho đã gắn mã vận đơn: không có viên vận đơn (PO A3), mã vẫn in ở khối Vận chuyển`, async ({ page, api }) => {
+    test(`đơn ${status} mà kho đã gắn mã vận đơn: không có viên vận đơn (PO A3), mã in ở khối Vận chuyển kèm nút chép (W19-01 MINOR #2)`, async ({ page, api }) => {
       const shipping = stateOf('shipping');
       const state: OrderState = {
         ...shipping,
@@ -60,7 +60,11 @@ test.describe('Mini App theo dõi đơn 375', () => {
       await expect(card.getByText('GHN6789012345').first()).toBeVisible();
       await expect(card.getByText('Giao Hàng Nhanh').first()).toBeVisible();
       await expect(page.getByTestId('order-tracking-pill')).toHaveCount(0);
-      await expect(page.getByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveCount(0);
+      // Không có viên thì nút chép duy nhất của trang nằm ở khối Vận chuyển (W20-03), tên đọc nêu mã kèm hãng như viên.
+      await expect(page.getByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveCount(1);
+      const copy = card.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345 (Giao Hàng Nhanh)', exact: true });
+      expect((await copy.boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
   }
 

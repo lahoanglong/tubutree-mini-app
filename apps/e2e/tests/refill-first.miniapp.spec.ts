@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { CartLine, CartSummary, PurchasedItem } from '../../miniapp/src/services/shop-api';
-import { test, expect, makeUser, mockSession, publicConfig } from './support/mock-api';
+import { test, expect, makeUser, mockSession, publicConfig, type MockApi } from './support/mock-api';
 import { mockPilotCart, PILOT_CART } from './support/pilot-mocks';
 import { mockBuyFlowSession, PURCHASED, THUMB } from './support/buy-flow-mocks';
 import { mockWasteCustomer, wasteDetail, wastePoint } from './support/waste-mocks';
@@ -38,6 +38,8 @@ const OFFER = { productId: 'p-refill', slug: 'refill-nuoc-rua-chen-10l', name: '
 const cartOf = (items: CartLine[]): CartSummary => ({ ...PILOT_CART, items, subtotal: items.reduce((s, l) => s + l.total, 0), itemCount: items.reduce((s, l) => s + l.quantity, 0), freeshipThreshold: 199_000 });
 
 const link = (page: Page) => page.getByTestId('refill-swap-link');
+/** Cờ bật thì Giỏ hỏi thêm trang Tiết kiệm Refill cho dòng "Đã có chai sẵn?" (W20-01); không cặp nào để dòng đó không chen vào ca đổi một chạm. */
+const noLandingPairs = (api: MockApi) => api.get('/catalog/refill-pairs/landing', { enabled: true, pairs: [] });
 
 test.describe('Giỏ Mini: đổi dòng chai sang gói Refill', () => {
   test('cờ tắt: không hỏi cặp refill, không có liên kết', async ({ page, api }) => {
@@ -55,6 +57,7 @@ test.describe('Giỏ Mini: đổi dòng chai sang gói Refill', () => {
     test(`${vp.width}x${vp.height}: liên kết chữ dưới dòng chai, xác nhận khi giá tăng, thêm gói rồi mới bỏ chai, Hoàn tác trả đúng chai`, async ({ page, api }) => {
       mockPilotCart(api);
       api.get('/config/public', { ...publicConfig({ freeshipThreshold: 199_000 }), refillFirstEnabled: true });
+      noLandingPairs(api);
       let current = cartOf([BOTTLE]);
       const order: string[] = [];
       api.get('/cart', () => current);
@@ -102,6 +105,7 @@ test.describe('Giỏ Mini: đổi dòng chai sang gói Refill', () => {
   test('đổi làm giỏ tụt dưới mốc Miễn phí giao hàng: hộp xác nhận nói trước số còn thiếu', async ({ page, api }) => {
     mockPilotCart(api);
     api.get('/config/public', { ...publicConfig({ freeshipThreshold: 199_000 }), refillFirstEnabled: true });
+    noLandingPairs(api);
     api.get('/cart', { ...cartOf([{ ...BOTTLE, quantity: 5, total: 300_000 }]), freeship: true });
     api.get('/catalog/refill-pairs/mine', { 'p-bottle': { ...OFFER, price: 150_000 } });
     await page.setViewportSize(VIEWPORTS[0]);
@@ -114,6 +118,7 @@ test.describe('Giỏ Mini: đổi dòng chai sang gói Refill', () => {
   test('gói refill hết hàng: không mời đổi', async ({ page, api }) => {
     mockPilotCart(api);
     api.get('/config/public', { ...publicConfig(), refillFirstEnabled: true });
+    noLandingPairs(api);
     api.get('/cart', cartOf([BOTTLE]));
     api.get('/catalog/refill-pairs/mine', { 'p-bottle': { ...OFFER, inStock: false } });
     await page.goto('/cart');
