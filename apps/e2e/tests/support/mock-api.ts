@@ -417,6 +417,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/me/purchased-items', { items: [], nextCursor: null });
       // PDP có phân loại hết hàng hỏi trạng thái "Báo tôi khi có hàng": mặc định như PROD khi cờ catalog.restock_alert_enabled tắt (nút xám "Tạm hết hàng").
       api.fallback('GET', '/restock-alerts', { enabled: false, variationIds: [] });
+      // Trang Yêu thích (Mini và web) hỏi các đăng ký báo hàng về đang chờ khi danh sách có thẻ hết hàng: cùng mặc định cờ tắt (không chuông, không nhãn, không chip).
+      api.fallback('GET', '/me/restock-alerts', { enabled: false, items: [] });
       // Sheet Mua lại và tab Định kỳ trên web hỏi gợi ý giao định kỳ theo nhịp mua: mặc định cờ subscriptions.smart_interval_enabled tắt như PROD.
       api.fallback('GET', '/me/subscriptions/suggestions', { enabled: false, items: [] });
       // Sảnh mini game ở Vườn Xanh (Mini App và web) hỏi trạng thái kỷ lục và lượt thưởng khi đã đăng nhập; mặc định chưa chơi ván nào, ngoài khung giờ thưởng, chưa nhận quà Chẩn đoán.
