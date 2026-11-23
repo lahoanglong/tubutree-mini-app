@@ -165,4 +165,25 @@ describe('BrowseHub — lối vào Refill (tubu-w17-04)', () => {
     expect(all).not.toBeNull();
     expect(all!.compareDocumentPosition(entry!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  const ENTRY = { href: '/tiet-kiem-refill', title: 'Tiết kiệm với Refill', sub: 'Túi, can Refill rẻ hơn mua chai mới' };
+
+  it('máy chủ đã dựng lối vào: link thật có chữ của máy chủ ngay lượt vẽ đầu (không chờ cờ hay tải lười), vẫn DƯỚI nút "Xem tất cả sản phẩm"', () => {
+    refill.on = false;
+    http.get.mockResolvedValue(page(10));
+    const c = mount({ refillEntry: ENTRY });
+    const entry = c.querySelector<HTMLAnchorElement>('a[data-testid="refill-landing-entry"]');
+    expect(entry?.getAttribute('href')).toBe('/tiet-kiem-refill');
+    expect(entry?.textContent).toContain('Tiết kiệm với Refill');
+    expect(entry?.textContent).toContain('Túi, can Refill rẻ hơn mua chai mới');
+    expect(button(c, 'Xem tất cả sản phẩm')!.compareDocumentPosition(entry!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('máy chủ đã hỏi mà trang Refill trống (null): không vẽ lối vào, kể cả khi cờ bật', async () => {
+    refill.on = true;
+    http.get.mockResolvedValue(page(10));
+    const c = mount({ refillEntry: null });
+    await flush(10);
+    expect(c.querySelector('[data-testid="refill-landing-entry"]')).toBeNull();
+  });
 });

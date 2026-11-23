@@ -27,6 +27,7 @@ import { ShopStatsRow } from '@/components/mini/shop-stats-row';
 import { ShopTopBar } from '@/components/mini/shop-top-bar';
 import { Text } from '@/components/mini/text';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
+import { RefillLandingLink, type RefillEntryLink } from '@/components/refill/refill-landing-link';
 import { ShopProductsTab } from './shop-products-tab';
 
 export interface BrandBodyProps {
@@ -35,6 +36,8 @@ export interface BrandBodyProps {
   mapOriginId: string | null;
   /** Dòng xuất xứ từ bản đồ, dùng khi bản ghi Brand chưa nhập `origin` ("Thanh Hóa (nhà máy Fuwa3e)" cho Pineboo); null khi không có ghim. */
   originFallback?: string | null;
+  /** Lối vào trang Tiết kiệm với Refill khi nhãn có hàng trên trang đó (trang server quyết định); null/thiếu thì không có. */
+  refillEntry?: RefillEntryLink | null;
 }
 
 /** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
@@ -50,7 +53,7 @@ const LINK_BTN = 'inline-flex min-h-11 flex-none items-center justify-center rou
  * Thân trang `/brand/[slug]` (client): đầu shop có Theo dõi và Chia sẻ, số liệu (kèm người theo dõi), tab Shop | Sản phẩm | Câu chuyện
  * như Mini App. Sản phẩm phân trang thật qua API (trang server chỉ nhận 30 món đầu).
  */
-export function BrandBody({ brand: b, mapOriginId, originFallback = null }: BrandBodyProps) {
+export function BrandBody({ brand: b, mapOriginId, originFallback = null, refillEntry = null }: BrandBodyProps) {
   const router = useRouter();
   const [tab, setTab] = useState<ShopTabKey>('shop');
   const [promoNote, setPromoNote] = useState<string | null>(null);
@@ -195,6 +198,8 @@ export function BrandBody({ brand: b, mapOriginId, originFallback = null }: Bran
                       <ProductRail items={featured} variant="rail-md" label="Sản phẩm nổi bật" showBrand={false} shelf="brand" />
                     </div>
                   )}
+
+                  {refillEntry && <RefillLandingLink entry={refillEntry} testId="brand-refill-landing" className="mt-3" />}
 
                   {featured.length === 0 && productCount === 0 && (
                     <EmptyState art="basket" heading={fillCopy('shop.emptyProducts')} ctaLabel="Xem sản phẩm trên Tubu Tree" onCta={() => router.push('/')} />

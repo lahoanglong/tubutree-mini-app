@@ -1,7 +1,9 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { Droplets } from 'lucide-react';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { bestSellersHeading, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { hubBestSellers } from '@tubutree/app-core/browse/hub';
@@ -11,8 +13,9 @@ import { bestSellersQuery } from '@tubutree/app-core/queries/browse';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { CategoryEntry } from '@/lib/browse-categories';
+import type { RefillEntryLink } from '@/components/refill/refill-landing-link';
 import { coreHttp } from '@/lib/core-http';
-import { Button, ProductRail, Section, SectionHeader } from '@/components/mini';
+import { Button, Card, Icon, ListRow, ProductRail, Section, SectionHeader } from '@/components/mini';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { BrandGrid, type HubBrand } from './brand-grid';
 import { CategoryTiles } from './category-tiles';
@@ -27,6 +30,23 @@ function NoRefillLandingEntry() {
   return null;
 }
 
+/** Hàng lối vào ở hub điện thoại (cùng dáng `RefillLandingEntry`), vẽ ngay ở máy chủ. */
+function RefillEntryRow({ entry }: { entry: RefillEntryLink }) {
+  return (
+    <Link href={entry.href} data-testid="refill-landing-entry" className="tubu-press block rounded-card">
+      <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
+        <ListRow
+          icon={<Icon icon={Droplets} size="md" tone="brand" />}
+          title={entry.title}
+          subtitle={entry.sub}
+          trailing="chevron"
+          style={{ padding: 'var(--space-inset-card)' }}
+        />
+      </Card>
+    </Link>
+  );
+}
+
 export interface BrowseHubProps {
   entries: CategoryEntry[];
   categoriesLoading: boolean;
@@ -34,6 +54,11 @@ export interface BrowseHubProps {
   brands: HubBrand[] | undefined;
   /** Kệ Bán chạy nhất do server tải sẵn (HTML đầu có sản phẩm cho crawler); thiếu thì tải phía trình duyệt. */
   initialBestSellers?: ProductCard[];
+  /**
+   * Có: máy chủ thấy trang Refill có gói bán được, vẽ hàng lối vào ngay trong HTML. `null`: máy chủ đã hỏi và trang trống hoặc cờ tắt, không vẽ.
+   * Thiếu (máy chủ không hỏi được): tải lười phía trình duyệt như trước.
+   */
+  refillEntry?: RefillEntryLink | null;
   onPickCategory: (entry: CategoryEntry) => void;
   onPickAll: () => void;
   onPickBrand: (brand: string) => void;
@@ -44,7 +69,7 @@ export interface BrowseHubProps {
  * vào theo danh mục, món đã xem, Bán chạy nhất, thương hiệu, lối vào Tiết kiệm với Refill (khi có gói), rồi nút mở cả danh sách. KHÔNG tải danh sách sản phẩm; kệ Bán chạy nhất
  * lỗi hay dưới 3 món thì ẩn hẳn và hub vẫn đủ lối vào.
  */
-export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, brands, initialBestSellers, onPickCategory, onPickAll, onPickBrand }: BrowseHubProps) {
+export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, brands, initialBestSellers, refillEntry, onPickCategory, onPickAll, onPickBrand }: BrowseHubProps) {
   const max = shelf('browse.bestSellers').maxItems;
   const refillOn = refillFirstOn(usePublicConfig());
   const q = useQuery({
@@ -78,7 +103,7 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
             {fillCopy('browse.seeAllProducts')}
           </Button>
           {/* Dưới nút: lối vào hiện muộn (tải lười + chờ API) không được đẩy nút khách đang định chạm. */}
-          {refillOn && <RefillLandingEntry />}
+          {refillEntry ? <RefillEntryRow entry={refillEntry} /> : refillEntry === undefined && refillOn && <RefillLandingEntry />}
         </div>
       </Section>
     </div>

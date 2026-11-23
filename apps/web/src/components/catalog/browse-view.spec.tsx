@@ -239,6 +239,42 @@ describe('BrowseView — từ md không có hub', () => {
     expect(container.querySelector('form[role="search"]')!.className.split(/\s+/)).toContain('md:hidden');
   });
 
+  it('lối vào Tiết kiệm với Refill do máy chủ dựng: khổ md+ là dòng link dưới h1 (ẩn ở điện thoại), vẫn còn khi gốc đã thành danh sách; có từ khoá thì không có', async () => {
+    const entry = { href: '/tiet-kiem-refill', title: 'Tiết kiệm với Refill', sub: 'Túi, can Refill rẻ hơn mua chai mới' };
+    wideScreen();
+    const view = mount({ refillEntry: entry });
+    await flush();
+    const caption = view.container.querySelector<HTMLAnchorElement>('a[data-testid="refill-landing-caption"]')!;
+    expect(caption.getAttribute('href')).toBe('/tiet-kiem-refill');
+    expect(caption.textContent).toBe('Tiết kiệm với Refill · Túi, can Refill rẻ hơn mua chai mới');
+    expect(caption.className).toContain('min-h-11');
+    expect(caption.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'md:inline-flex']));
+    expect(caption.closest('p')!.className.split(/\s+/)).toContain('max-md:hidden');
+    expect(caption.closest('p')!.textContent).toBe('Tiết kiệm với Refill · Túi, can Refill rẻ hơn mua chai mới');
+    expect(view.container.querySelector('h1')!.compareDocumentPosition(caption) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    view.unmount();
+
+    nav.search = 'q=nuoc';
+    const search = mount({ refillEntry: entry });
+    await flush();
+    expect(search.container.querySelector('[data-testid="refill-landing-caption"]')).toBeNull();
+    search.unmount();
+
+    nav.search = '';
+    const none = mount({ refillEntry: null });
+    await flush();
+    expect(none.container.querySelector('[data-testid="refill-landing-caption"]')).toBeNull();
+  });
+
+  it('khổ điện thoại: hub vẽ hàng lối vào Refill của máy chủ ngay lượt đầu (link thật trong HTML), cùng dòng chữ ở caption cho md+', async () => {
+    const entry = { href: '/tiet-kiem-refill', title: 'Tiết kiệm với Refill', sub: 'Túi, can Refill rẻ hơn mua chai mới' };
+    const { container } = mount({ refillEntry: entry });
+    const row = container.querySelector<HTMLAnchorElement>('a[data-testid="refill-landing-entry"]');
+    expect(row?.getAttribute('href')).toBe('/tiet-kiem-refill');
+    expect(row!.closest('.md\\:hidden')).not.toBeNull();
+    expect(container.querySelector('a[data-testid="refill-landing-caption"]')).not.toBeNull();
+  });
+
   it('khổ điện thoại (không khớp md): vẫn là hub, không tải danh sách', async () => {
     const { container } = mount();
     await flush();

@@ -230,6 +230,23 @@ describe('SiteFooter', () => {
     expect(out.indexOf('href="/bo-qua-tang"')).toBeGreaterThan(out.indexOf('href="/uu-dai?codes=all"'));
   });
 
+  it('cột Khám phá có "Bán chạy nhất" (/ban-chay) ngay sau Danh mục; "Tiết kiệm với Refill" (/tiet-kiem-refill) chỉ khi cờ Refill bật; link thật trong HTML dựng ở máy chủ, vùng chạm 44px', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', refillLanding: true });
+    const on = await html();
+    const best = on.match(/<a [^>]*href="\/ban-chay"[^>]*>Bán chạy nhất<\/a>/)?.[0];
+    const refill = on.match(/<a [^>]*href="\/tiet-kiem-refill"[^>]*>Tiết kiệm với Refill<\/a>/)?.[0];
+    expect(best).toContain('min-h-11');
+    expect(refill).toContain('min-h-11');
+    expect(on.indexOf('href="/ban-chay"')).toBeGreaterThan(on.indexOf('href="/san-pham"'));
+    expect(on.indexOf('href="/tiet-kiem-refill"')).toBeGreaterThan(on.indexOf('href="/ban-chay"'));
+    expect(on.indexOf('href="/tiet-kiem-refill"')).toBeLessThan(on.indexOf('href="/uu-dai"'));
+
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    const off = await html();
+    expect(off).toContain('href="/ban-chay"');
+    expect(off).not.toContain('href="/tiet-kiem-refill"');
+  });
+
   it('Đổi rác tắt (và khách không có yêu cầu đang mở) thì chân trang không có lối vào Đổi rác', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     mocks.wasteVisible = false;

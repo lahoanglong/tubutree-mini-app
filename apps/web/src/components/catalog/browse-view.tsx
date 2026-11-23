@@ -45,6 +45,7 @@ import { PhoneCartButton } from '@/components/phone-cart-button';
 import { phoneBrandText } from '@/lib/phone-ui';
 import { MD_UP, useMediaQuery } from '@/lib/use-media-query';
 import { ActiveFilters } from './active-filters';
+import { RefillLandingLink, type RefillEntryLink } from '@/components/refill/refill-landing-link';
 import { BrowseHub } from './browse-hub';
 import { CategoryChipRow } from './category-chip-row';
 import { FilterSheet } from './filter-sheet';
@@ -70,6 +71,8 @@ export interface BrowseViewProps {
   categories?: CategoryDTO[];
   /** Kệ Bán chạy nhất của hub do server tải sẵn. */
   bestSellers?: ProductCardData[];
+  /** Lối vào trang Tiết kiệm với Refill do server quyết định (xem `BrowseHubProps.refillEntry`); có thì gốc Danh mục mang link này ở mọi khổ màn hình. */
+  refillEntry?: RefillEntryLink | null;
 }
 
 const uniqueById = (list: ProductCardData[]) => {
@@ -103,7 +106,7 @@ function SubscriptionPitch() {
   );
 }
 
-export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories, bestSellers }: BrowseViewProps) {
+export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories, bestSellers, refillEntry }: BrowseViewProps) {
   const router = useRouter();
   const { state, urlKey, focusSearch, page, update, consumeFocus } = useBrowseState();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -428,6 +431,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
       <ListingLayout
         breadcrumb={<ListingBreadcrumb trail={trail} />}
         title={h1Text}
+        caption={root && refillEntry ? <RefillLandingLink entry={refillEntry} testId="refill-landing-caption" /> : undefined}
         toolbar={searchForm}
         sidebar={
           showList ? (
@@ -475,6 +479,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                 categoriesLoading={categoriesQ.isLoading}
                 brands={brandsQ.data}
                 initialBestSellers={bestSellers}
+                refillEntry={refillEntry}
                 onPickCategory={pickHubCategory}
                 onPickAll={() => openFromHub({ all: true })}
                 onPickBrand={(brand) => openFromHub({ brands: [brand] })}

@@ -8,7 +8,6 @@ import { PARTNER_STOREFRONT_TITLE } from '@tubutree/app-core/dealer-apply-copy';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
-import { DealerShell } from './dealer-shell';
 import { PriceTab } from './price-tab';
 import { OrdersTab } from './orders-tab';
 import { CreditTab } from './credit-tab';
@@ -28,7 +27,7 @@ function HubBody() {
   const me = meQ.data;
 
   return (
-    <DealerShell title="Kênh đại lý">
+    <>
       <section aria-label="Tổng quan đại lý" className="rounded-card bg-stone-900 p-4 text-stone-0 max-md:bg-[var(--color-dealer-ink)]">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -63,11 +62,11 @@ function HubBody() {
         {tab === 'credit' && <CreditTab />}
         {tab === 'report' && <ReportTab />}
       </div>
-    </DealerShell>
+    </>
   );
 }
 
-/** Hub đại lý đã duyệt. Tab đang chọn lưu ở `?tab=`. */
+/** Hub đại lý đã duyệt (thân trang, khung `DealerShell` do `/dai-ly` dựng). Tab đang chọn lưu ở `?tab=`. */
 export function DealerHub() {
   return (
     <Suspense fallback={null}>

@@ -10,6 +10,7 @@ import { LEGAL_PAGES } from '@tubutree/app-core/legal';
 import { parseRichText, richTextPlain, type RichBlock, type RichInline } from '@tubutree/app-core/rich-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
+import { RefillLandingLink, type RefillEntryLink } from '@/components/refill/refill-landing-link';
 import type { ProductDetail } from '@/lib/api';
 import { ui } from '@/lib/guest-ui';
 import { phoneBand, phoneBrandText } from '@/lib/phone-ui';
@@ -23,6 +24,14 @@ export const pdpSectionTitle =
 export const pdpBand = `mt-8 ${phoneBand}`;
 
 const COLLAPSED_LINES_THRESHOLD = 220;
+
+/**
+ * Ngay dưới thẻ gói Refill của chai đã ghép cặp: lối sang trang mọi gói Refill (link nội bộ cho SEO). Chỉ hiện từ md (xem `RefillLandingLink`):
+ * thẻ Refill ở điện thoại giữ đúng một khối như Mini App.
+ */
+export function PdpRefillLandingLink({ entry }: { entry: RefillEntryLink }) {
+  return <RefillLandingLink entry={entry} testId="pdp-refill-landing" className="mt-1" />;
+}
 
 /** Sao và điểm trung bình ở đầu trang, chỉ khi đã có đánh giá. */
 export function PdpRating({ average, count }: { average: number | undefined; count: number | undefined }) {

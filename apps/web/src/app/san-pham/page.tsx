@@ -6,14 +6,16 @@ import { canonicalBrandName } from '@tubutree/app-core/brand-origins';
 import { categoryTrail } from '@tubutree/app-core/browse/category-tree';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shelf } from '@tubutree/app-core/merch/shelves';
+import { fetchRefillLanding } from '@tubutree/app-core/refill/refill-landing';
 import BrowseView, { type BrowseInitial } from '@/components/catalog/browse-view';
 import { firstParam, normalizeSearchQuery, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
+import { refillEntryOf } from '@/lib/refill-entry';
 import { BROWSE_INDEX_MAX_PAGE, browseBreadcrumb, browseMetadata, browseNoindex } from '@/lib/home-seo';
 import { browseText } from '@/lib/browse-text';
 import { jsonLdScript } from '@/lib/product-seo';
 import { browseCollectionJsonLd, withBrowseSocial } from '@/lib/seo/browse-structured-data';
-import { BROWSE_PATH, PAGE_LIMIT, appendForeignParams, isBrowseHub, parseSearchState, serializeSearchState, toCatalogQuery, type SearchState } from '@/lib/search-state';
+import { BROWSE_PATH, PAGE_LIMIT, appendForeignParams, isBrowseHub, isBrowseRoot, parseSearchState, serializeSearchState, toCatalogQuery, type SearchState } from '@/lib/search-state';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
@@ -144,11 +146,12 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   const loadList = () =>
     orUndefined(fetchCatalog(http, startPage <= SSR_MAX_PAGE ? toCatalogQuery(state, startPage, PAGE_LIMIT) : toCatalogQuery(state, 1, 1)));
   const plainList = !hub && isPlainListState(state);
-  const [bestSellers, brands, categories, early] = await Promise.all([
+  const [bestSellers, brands, categories, early, refillLanding] = await Promise.all([
     hub ? orUndefined(fetchBestSellers(http, shelf('browse.bestSellers').maxItems)) : undefined,
     orUndefined(fetchBrands(http)),
     orUndefined(fetchCategories(http)),
     plainList ? loadList() : undefined,
+    isBrowseRoot(state) ? orUndefined(fetchRefillLanding(http)) : undefined,
   ]);
   const listed = plainList ? early : !hub && isServerListState(state, startPage, brands, categories) ? await loadList() : undefined;
   const catalog = startPage <= SSR_MAX_PAGE ? listed : undefined;
@@ -169,7 +172,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
       : null;
   return (
     <main className={`${PAGE_WIDE} md:py-8`}>
-      <BrowseView initial={initial} bestSellers={bestSellers} brands={brands} categories={categories} />
+      <BrowseView initial={initial} bestSellers={bestSellers} brands={brands} categories={categories} refillEntry={refillEntryOf(refillLanding)} />
       {collection && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(collection) }} />}
     </main>
   );

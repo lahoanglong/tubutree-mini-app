@@ -2,11 +2,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { CatalogIngredientsFill } from './catalog-ingredients-fill';
+import { CatalogIngredientsFill, type IngredientsFillProduct } from './catalog-ingredients-fill';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 const compress = vi.hoisted(() => ({ readImageForLabelOcr: vi.fn() }));
 vi.mock('@/lib/image-compress', async (orig) => ({ ...(await orig<typeof import('@/lib/image-compress')>()), readImageForLabelOcr: compress.readImageForLabelOcr }));
+const clip = vi.hoisted(() => ({ copyText: vi.fn(async (_text: string) => true) }));
+vi.mock('@/lib/copy-text', () => ({ copyText: clip.copyText }));
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -14,6 +16,8 @@ afterEach(() => {
   mounted = [];
   vi.unstubAllGlobals();
   compress.readImageForLabelOcr.mockReset();
+  clip.copyText.mockReset();
+  clip.copyText.mockImplementation(async () => true);
 });
 
 const DATA_URL = 'data:image/jpeg;base64,QUJD';
@@ -23,7 +27,7 @@ const PRODUCTS = [
 ];
 
 interface Opts {
-  products?: { id: string; name: string }[];
+  products?: IngredientsFillProduct[];
   total?: number;
   extract?: { status?: number; body: unknown } | (() => { status?: number; body: unknown });
   save?: { status?: number; body: unknown } | (() => { status?: number; body: unknown });
@@ -44,14 +48,15 @@ function setup(opts: Opts = {}) {
     }),
   );
   const client = new QueryClient();
-  const tree = (products: { id: string; name: string }[]) => (
+  const tree = (products: IngredientsFillProduct[]) => (
     <QueryClientProvider client={client}>
       <CatalogIngredientsFill products={products} total={opts.total ?? 10} onSaved={onSaved} />
     </QueryClientProvider>
   );
   const r = render(tree(opts.products ?? PRODUCTS), client);
   mounted.push(r);
-  const rerender = (products: { id: string; name: string }[]) => act(() => r.root.render(tree(products)));
+  // `render` đã bọc một QueryClientProvider ngoài `tree`; giữ đúng lớp đó để React cập nhật props thay vì dựng lại component (mất state).
+  const rerender = (products: IngredientsFillProduct[]) => act(() => r.root.render(<QueryClientProvider client={client}>{tree(products)}</QueryClientProvider>));
   return { m, onSaved, container: r.container, rerender };
 }
 
@@ -261,5 +266,105 @@ describe('CatalogIngredientsFill — bổ sung thành phần cho sản phẩm c�
     rerender([PRODUCTS[1]!]);
     expect(container.querySelector('[data-testid="ingredients-progress"]')?.textContent).toBe('Đã đủ thành phần 9/10 sản phẩm.');
     expect(container.querySelectorAll('[data-testid^="ingredients-row-"]')).toHaveLength(1);
+  });
+});
+
+describe('CatalogIngredientsFill — gom theo thương hiệu và chép checklist gửi nhãn', () => {
+  const BRANDED: IngredientsFillProduct[] = [
+    { id: 'f1', name: 'Xịt thơm Fuwa3e 300ml', brand: { name: 'Fuwa3e' } },
+    { id: 'pl1', name: 'Nước mùi già PƠ LANG 160ml', brand: { name: 'PƠ LANG' } },
+    { id: 'v1', name: 'Dầu gội Visante', brand: { name: 'Visante' } },
+    { id: 'pl2', name: 'Sữa tắm PƠ LANG', brand: { name: 'pơ lang' } },
+    { id: 'x1', name: 'Hàng chưa rõ nhãn', brand: null },
+  ];
+  const chips = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Lọc theo thương hiệu"] button'));
+  const rowIds = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid^="ingredients-row-"]')).map((el) => el.getAttribute('data-testid')!.replace('ingredients-row-', ''));
+  const copyBtn = (c: HTMLElement) => byText(c, 'button', 'Chép checklist gửi thương hiệu');
+
+  it('chip theo nhãn (đếm SKU còn thiếu, nhiều trước, chưa rõ nhãn cuối); chọn nhãn thì chỉ còn dòng của nhãn đó; "Mọi thương hiệu" về đủ', () => {
+    const { container } = setup({ products: BRANDED });
+    expect(chips(container).map((b) => b.textContent)).toEqual(['Mọi thương hiệu (5)', 'PƠ LANG (2)', 'Fuwa3e (1)', 'Visante (1)', 'Chưa rõ thương hiệu (1)']);
+    expect(chips(container)[0]!.getAttribute('aria-pressed')).toBe('true');
+    click(byText(container, 'button', 'PƠ LANG (2)'));
+    expect(byText(container, 'button', 'PƠ LANG (2)')!.getAttribute('aria-pressed')).toBe('true');
+    expect(rowIds(container)).toEqual(['pl1', 'pl2']);
+    click(byText(container, 'button', 'Mọi thương hiệu'));
+    expect(rowIds(container)).toEqual(['f1', 'pl1', 'v1', 'pl2', 'x1']);
+    for (const b of [...chips(container), copyBtn(container)!]) expect(b.className).toContain('min-h-[44px]');
+  });
+
+  it('một chạm chép checklist: đã chọn nhãn thì tin chào đích danh nhãn đó; "Mọi thương hiệu" thì liệt kê theo từng nhãn; báo đã chép kèm số SKU', async () => {
+    const { container } = setup({ products: BRANDED });
+    click(byText(container, 'button', 'PƠ LANG (2)'));
+    expect(container.textContent).toContain('Tin nhắn Zalo nhờ PƠ LANG gửi thành phần của 2 sản phẩm.');
+    click(copyBtn(container));
+    await flush();
+    const one = clip.copyText.mock.calls[0]![0];
+    expect(one.startsWith('Chào anh/chị bên PƠ LANG,\n')).toBe(true);
+    expect(one).toContain('\n1. Nước mùi già PƠ LANG 160ml\n2. Sữa tắm PƠ LANG\n');
+    expect(one).not.toContain('Fuwa3e');
+    expect(container.textContent).toContain('Đã chép checklist 2 sản phẩm của PƠ LANG. Dán vào Zalo gửi thương hiệu.');
+
+    click(byText(container, 'button', 'Mọi thương hiệu'));
+    click(copyBtn(container));
+    await flush();
+    const all = clip.copyText.mock.calls[1]![0];
+    expect(all.startsWith('Chào anh/chị,\n')).toBe(true);
+    expect(all).toContain('của 5 sản phẩm sau:');
+    expect(all).toContain('\n\nFuwa3e (1 sản phẩm):\n1. Xịt thơm Fuwa3e 300ml\n');
+    expect(all).toContain('\n\nChưa rõ thương hiệu (1 sản phẩm):\n1. Hàng chưa rõ nhãn\n');
+    expect(container.textContent).toContain('Đã chép checklist 5 sản phẩm của 4 thương hiệu. Dán vào Zalo gửi thương hiệu.');
+  });
+
+  it('mọi SKU cùng một nhãn: không vẽ chip, nút vẫn chép tin chào đích danh nhãn đó', async () => {
+    const { container } = setup({ products: BRANDED.filter((p) => p.id.startsWith('pl')) });
+    expect(chips(container)).toHaveLength(0);
+    expect(container.textContent).toContain('Tin nhắn Zalo nhờ PƠ LANG gửi thành phần của 2 sản phẩm.');
+    click(copyBtn(container));
+    await flush();
+    expect(clip.copyText.mock.calls[0]![0].startsWith('Chào anh/chị bên PƠ LANG,\n')).toBe(true);
+  });
+
+  it('trình duyệt chặn sao chép: báo lỗi rõ (role alert), không nói là đã chép', async () => {
+    clip.copyText.mockImplementation(async () => false);
+    const { container } = setup({ products: BRANDED });
+    click(copyBtn(container));
+    await flush();
+    expect(byText(container, '[role="alert"]', 'Trình duyệt chặn sao chép.')).not.toBeNull();
+    expect(container.textContent).not.toContain('Đã chép checklist');
+  });
+
+  it('lưu xong SKU cuối của nhãn đang chọn: chip nhãn đó rời đi, về "Mọi thương hiệu"; checklist không còn SKU vừa lưu', async () => {
+    const { container } = setup({ products: BRANDED });
+    click(byText(container, 'button', 'Fuwa3e (1)'));
+    typeInto(areaOf(container, 'f1'), 'Nước');
+    click(saveBtn(container, 'f1'));
+    await flush();
+    expect(byText(container, 'button', 'Fuwa3e (')).toBeNull();
+    expect(chips(container)[0]!.textContent).toBe('Mọi thương hiệu (4)');
+    expect(chips(container)[0]!.getAttribute('aria-pressed')).toBe('true');
+    click(copyBtn(container));
+    await flush();
+    expect(clip.copyText.mock.calls[0]![0]).not.toContain('Xịt thơm Fuwa3e 300ml');
+  });
+
+  it('đang chọn một thương hiệu mà danh sách còn thiếu co về đúng thương hiệu đó: chip ẩn thì bỏ lọc, dòng đã lưu của thương hiệu khác vẫn hiện', async () => {
+    const { container, rerender } = setup({ products: BRANDED, save: { body: { id: 'f1', ingredients: ['Nước'], added: 1 } } });
+    typeInto(areaOf(container, 'f1'), 'Nước');
+    click(saveBtn(container, 'f1'));
+    await flush();
+    click(byText(container, 'button', 'PƠ LANG (2)'));
+    expect(rowIds(container)).toEqual(['pl1', 'pl2']);
+    rerender(BRANDED.filter((p) => p.id === 'f1' || p.id.startsWith('pl')));
+    expect(chips(container)).toEqual([]);
+    expect(rowIds(container)).toEqual(['f1', 'pl1', 'pl2']);
+  });
+
+  it('không còn SKU thiếu (hoặc API cũ chưa trả nhãn): không có nút chép khi danh sách trống; thiếu nhãn thì gom vào "Chưa rõ thương hiệu"', () => {
+    const empty = setup({ products: [] });
+    expect(copyBtn(empty.container)).toBeNull();
+    const old = setup({ products: PRODUCTS });
+    expect(chips(old.container)).toHaveLength(0);
+    expect(old.container.textContent).toContain('Tin nhắn Zalo liệt kê 2 sản phẩm chưa rõ thương hiệu.');
   });
 });

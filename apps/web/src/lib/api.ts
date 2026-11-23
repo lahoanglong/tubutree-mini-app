@@ -409,6 +409,8 @@ export interface SupportContact {
   };
   /** Có khi cờ `web.guest_checkout_enabled` bật: chân trang có lối tra đơn đặt không đăng nhập (`/don`). */
   guestOrderLookup?: true;
+  /** Có khi cờ `catalog.refill_first_enabled` bật: chân trang có lối vào "Tiết kiệm với Refill" (cờ tắt thì trang đó chỉ còn lời trống, noindex). */
+  refillLanding?: true;
 }
 
 const trimmed = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
@@ -429,7 +431,7 @@ export async function getPublicSupport(): Promise<SupportContact> {
   try {
     const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return DEFAULT_SUPPORT;
-    const json = (await res.json()) as { webGuestCheckoutEnabled?: unknown; support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown }; company?: { legalName?: unknown; taxCode?: unknown; address?: unknown; bctNoticeUrl?: unknown; representative?: unknown; registrationNumber?: unknown; registrationDate?: unknown; registrationPlace?: unknown } };
+    const json = (await res.json()) as { webGuestCheckoutEnabled?: unknown; refillFirstEnabled?: unknown; support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown }; company?: { legalName?: unknown; taxCode?: unknown; address?: unknown; bctNoticeUrl?: unknown; representative?: unknown; registrationNumber?: unknown; registrationDate?: unknown; registrationPlace?: unknown } };
     const community = Object.fromEntries(
       (['zaloGroupUrl', 'facebookUrl', 'tiktokUrl'] as const).flatMap((k) => {
         const u = httpsOnly(json.community?.[k]);
@@ -454,6 +456,7 @@ export async function getPublicSupport(): Promise<SupportContact> {
       ...(Object.keys(community).length ? { community } : {}),
       ...(Object.keys(company).length ? { company } : {}),
       ...(json.webGuestCheckoutEnabled === true ? { guestOrderLookup: true as const } : {}),
+      ...(json.refillFirstEnabled === true ? { refillLanding: true as const } : {}),
     };
   } catch {
     return DEFAULT_SUPPORT;

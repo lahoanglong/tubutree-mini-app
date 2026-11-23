@@ -960,7 +960,10 @@
         "webOnly": [
           "trackingHref"
         ],
-        "reason": "Mini App không mở trang ngoài (Zalo 4.1) nên không có liên kết tra cứu của hãng; web mở tab mới, chỉ http/https đã lọc"
+        "miniOnly": [
+          "copyable"
+        ],
+        "reason": "Mini App không mở trang ngoài (Zalo 4.1) nên không có liên kết tra cứu của hãng; web mở tab mới, chỉ http/https đã lọc. Mini giữ một nút chép mỗi trang ở viên vận đơn nên khối Vận chuyển chỉ bật nút (copyable) khi đơn huỷ/hoàn không có viên; web luôn có nút chép ở khối này"
       },
       "screens": [
         "/order/:code"

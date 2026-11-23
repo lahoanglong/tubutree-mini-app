@@ -61,7 +61,9 @@ describe('golive-api: link sửa', () => {
     }
     const href = (id: string, c: CockpitCard['key']) => rowFixLink({ id, status: 'WARN' }, c)?.href;
     expect(href('cockpit.catalog.refill_pairs', 'catalog')).toBe('/admin?tab=refillPairs');
-    expect(href('cockpit.catalog.inci', 'catalog')).toBe('/admin?tab=catalogQuality');
+    expect(href('cockpit.catalog.inci', 'catalog')).toBe('/admin?tab=catalogQuality&filter=missing_ingredients');
+    expect(rowFixLink({ id: 'cockpit.catalog.inci', status: 'PASS' }, 'catalog')).toBeNull();
+    expect(href('cockpit.catalog.story', 'catalog')).toBe('/admin?tab=productCategories');
     expect(href('db.demo_coupons', 'catalog')).toBe('/admin?tab=coupons');
     expect(href('db.admin_user', 'infra')).toBe('/admin?tab=users');
     expect(href('db.zns_templates', 'zalo')).toBe('/admin?tab=notificationTemplates');

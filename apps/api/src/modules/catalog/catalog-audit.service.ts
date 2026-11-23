@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { CatalogAuditProductDto, CatalogAuditResponse } from '@tubutree/shared-types';
+import type { CatalogAuditBrandDto, CatalogAuditProductDto, CatalogAuditResponse } from '@tubutree/shared-types';
 import { publicProductThumb } from '../../common/public-image';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ingredientNames } from './ingredient-names';
@@ -8,6 +8,14 @@ import { readZeroPrice, type ZeroPriceSummary } from '../integrations/pancake/pa
 
 /** Trần số sản phẩm một lần đọc; vượt thì `truncated`. Catalog Tubu hiện vài trăm SKU nên trần này chỉ để bảo vệ máy chủ. */
 export const CATALOG_AUDIT_MAX = 2000;
+
+/** Tên bảng `brands` thắng chuỗi Pancake (`products.brand` có thể lệch hoa thường hay viết tắt); cả hai trống thì không có nhãn. */
+export function auditBrand(raw: string | null, ref: { name: string; slug: string } | null): CatalogAuditBrandDto | null {
+  const refName = ref?.name.trim() ?? '';
+  if (ref && refName !== '') return { name: refName, slug: ref.slug };
+  const name = (raw ?? '').trim();
+  return name === '' ? null : { name, slug: null };
+}
 
 /**
  * Dữ liệu cho bàn làm việc chất lượng catalog của admin: mọi sản phẩm của Tubu (không phải của đối tác) kể cả đang ẩn hay bị Pancake giữ lại,
@@ -34,6 +42,8 @@ export class CatalogAuditService {
         name: true,
         pancakeId: true,
         isActive: true,
+        brand: true,
+        brandRef: { select: { name: true, slug: true } },
         thumbnail: true,
         description: true,
         shortDesc: true,
@@ -53,6 +63,7 @@ export class CatalogAuditService {
       name: p.name,
       pancakeId: p.pancakeId,
       isActive: p.isActive,
+      brand: auditBrand(p.brand, p.brandRef),
       thumbnail: publicProductThumb({ id: p.id, thumbnail: p.thumbnail }),
       description: p.description,
       shortDesc: p.shortDesc,

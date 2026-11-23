@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { orderActionPlan, orderHeadline, orderTrack, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { orderActionPlan, orderHeadline, orderTrack, showTrackingPill, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 
 const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), copyText: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -174,6 +174,49 @@ describe('OrderShipping', () => {
     const items = within(screen.getByRole('list', { name: 'Mốc vận chuyển' })).getAllByRole('listitem');
     expect(items.map((i) => i.querySelector('div')?.textContent)).toEqual(['Giao hàng thành công', 'Đã lấy hàng']);
   });
+});
+
+describe('OrderShipping copyable: nút chép mã khi trang không có viên vận đơn (đơn huỷ/hoàn, W19-01 MINOR #2)', () => {
+  const copyButtons = () => screen.queryAllByRole('button', { name: /^Sao chép mã vận đơn/ });
+
+  it('copyable: nút "Chép mã" 44px cạnh mã, tên đọc nêu mã kèm hãng; chép đúng mã và báo tại chỗ, lỗi thì nhắc chép tay', async () => {
+    mocks.copyText.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" copyable />);
+    const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123 (Giao Hàng Nhanh)' });
+    expect(button).toHaveTextContent('Chép mã');
+    expect(button.getAttribute('style')).toContain('min-height: 44px');
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    fireEvent.click(button);
+    expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.'));
+  });
+
+  it('copyable nhưng chưa có mã (chỉ có hãng hay mốc): không có nút; không copyable thì mã chỉ để đọc', () => {
+    const { unmount } = render(<OrderShipping partner="Giao Hàng Nhanh" copyable />);
+    expect(screen.queryByRole('button')).toBeNull();
+    unmount();
+    render(<OrderShipping code="GHN123" />);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it.each(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED'] as const)(
+    'đơn %s có mã: mỗi trang đúng MỘT nút chép (viên khi còn chờ hàng, khối Vận chuyển khi đã huỷ/hoàn), nối như order-detail',
+    (status) => {
+      const o = order({ status, shippingCode: 'GHN123' });
+      render(
+        <>
+          {showTrackingPill(o) && <OrderTrackingPill code="GHN123" />}
+          <OrderShipping code="GHN123" copyable={!showTrackingPill(o)} />
+        </>,
+      );
+      expect(copyButtons()).toHaveLength(1);
+      const inShipping = within(screen.getByTestId('order-shipping')).queryAllByRole('button').length === 1;
+      expect(inShipping).toBe(status === 'CANCELLED' || status === 'RETURNED');
+    },
+  );
 });
 
 describe('OrderTrackingPill: viên vận đơn chạm để chép mã (Mini không mở trang hãng)', () => {

@@ -208,6 +208,32 @@ describe('/ctv — cổng vào theo phiên', () => {
     expect(container.textContent).toContain('Có thể chuyển vào Ví');
   });
 
+  it('hồ sơ CTV về khi người dùng bàn phím đang đứng ở link lùi: cùng một khung trang (bảng CTV, đăng ký hay không đăng ký được), focus không rơi về <body>', async () => {
+    for (const me of [
+      { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 },
+      { isAffiliate: false, referralCode: '', walletBalance: 0 },
+      { isAffiliate: false, canRegister: false, referralCode: '', walletBalance: 0 },
+    ]) {
+      state.me = me;
+      const gate = deferred();
+      state.meGate = gate.promise;
+      const r = mount();
+      await flush();
+      const back = r.container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan"]')!;
+      const main = r.container.querySelector('main')!;
+      back.focus();
+      expect(document.activeElement).toBe(back);
+      gate.resolve();
+      await flush(10);
+      expect(r.container.querySelector('main')).toBe(main);
+      expect(back.isConnected).toBe(true);
+      expect(document.activeElement).toBe(back);
+      expect(r.container.querySelectorAll('h1')).toHaveLength(1);
+      state.meGate = null;
+      mounted.pop()!.unmount();
+    }
+  });
+
   it('đúng một h1 ở trạng thái đăng ký và bảng điều khiển', async () => {
     state.me = { isAffiliate: false, referralCode: '', walletBalance: 0 };
     const a = mount();

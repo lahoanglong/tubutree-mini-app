@@ -15,19 +15,21 @@ export interface OrderTrackingPillProps {
 const COPIED_MS = 2000;
 const FAILED_MS = 4000;
 
+/** Nhãn đọc của nút chép mã: viên in cả hãng cạnh mã nên nói hãng (khách biết dán mã vào ứng dụng nào); chưa có hãng thì chỉ đọc mã. */
+export const copyTrackingLabel = (code: string, partner?: string | null) =>
+  partner ? fillCopy('order.shipping.copyAriaPartner', { code, partner }) : fillCopy('order.shipping.copyAria', { code });
+
 /**
- * Viên vận đơn ngay dưới thẻ trạng thái của Chi tiết đơn, cùng chỗ và cùng hình với viên tra cứu của web, để khách đang chờ hàng lấy mã mà không phải cuộn.
- * Mini App không mở trang hãng (chính sách Zalo 4.1) nên chạm viên là chép mã để dán vào ứng dụng của hãng; đây là nút chép DUY NHẤT của trang (khối Vận chuyển
- * chỉ còn in hãng và mã). Báo chép được/không ngay dưới viên (role=status), không bắn thông báo nổi.
+ * Chép mã vận đơn, dùng chung cho viên vận đơn và nút chép ở khối Vận chuyển của đơn đã huỷ/hoàn (nơi viên bị ẩn): khoá chạm đúp trong cùng khung hình,
+ * kết quả tự tắt sau 2 giây (chép được) hoặc 4 giây (không chép được). `announce` đổi mỗi lần để vùng báo đọc lại cả khi kết quả giống lần trước.
  */
-export function OrderTrackingPill({ code, partner }: OrderTrackingPillProps) {
+export function useCopyTrackingCode(code: string) {
   const [result, setResult] = useState<'ok' | 'fail' | null>(null);
   const [announce, setAnnounce] = useState(0);
   const busy = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   const copy = async () => {
-    // Chạm đúp trong cùng một khung hình: lần sau bỏ qua tới khi lần chép đầu xong.
     if (busy.current) return;
     busy.current = true;
     haptic('light');
@@ -41,11 +43,32 @@ export function OrderTrackingPill({ code, partner }: OrderTrackingPillProps) {
       busy.current = false;
     }
   };
-  // Viên in cả hãng cạnh mã, nên nhãn đọc cũng nói hãng (khách biết dán mã vào ứng dụng nào); chưa có hãng thì chỉ đọc mã.
-  const label = partner ? fillCopy('order.shipping.copyAriaPartner', { code, partner }) : fillCopy('order.shipping.copyAria', { code });
+  return { copy, result, announce };
+}
+
+/** Vùng báo chép được/không ngay dưới nút (role=status luôn có mặt), không bắn thông báo nổi. */
+export function CopyTrackingStatus({ result, announce }: { result: 'ok' | 'fail' | null; announce: number }) {
+  return (
+    <div role="status">
+      {result && (
+        <Text key={announce} variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
+          {result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}
+        </Text>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Viên vận đơn ngay dưới thẻ trạng thái của Chi tiết đơn, cùng chỗ và cùng hình với viên tra cứu của web, để khách đang chờ hàng lấy mã mà không phải cuộn.
+ * Mini App không mở trang hãng (chính sách Zalo 4.1) nên chạm viên là chép mã để dán vào ứng dụng của hãng. Đơn còn chờ hàng thì đây là nút chép DUY NHẤT
+ * của trang; đơn đã huỷ/hoàn không có viên và nút chép nằm ở khối Vận chuyển (`OrderShipping` `copyable`).
+ */
+export function OrderTrackingPill({ code, partner }: OrderTrackingPillProps) {
+  const { copy, result, announce } = useCopyTrackingCode(code);
   return (
     <div className="tubu-order-track" data-testid="order-tracking-pill">
-      <button type="button" className="tubu-press touch-target tubu-order-track-pill" aria-label={label} onClick={() => void copy()}>
+      <button type="button" className="tubu-press touch-target tubu-order-track-pill" aria-label={copyTrackingLabel(code, partner)} onClick={() => void copy()}>
         <Truck className="tubu-order-track-icon" aria-hidden="true" />
         <span className="tubu-order-track-code" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {code}
@@ -54,13 +77,7 @@ export function OrderTrackingPill({ code, partner }: OrderTrackingPillProps) {
         <span className="tubu-order-track-action">{fillCopy('order.shipping.copy')}</span>
         <Copy className="tubu-order-track-icon" aria-hidden="true" />
       </button>
-      <div role="status">
-        {result && (
-          <Text key={announce} variant="caption" tone={result === 'ok' ? 'success' : 'danger'} as="div">
-            {result === 'ok' ? 'Đã sao chép mã vận đơn' : 'Không sao chép được — hãy chép mã thủ công.'}
-          </Text>
-        )}
-      </div>
+      <CopyTrackingStatus result={result} announce={announce} />
     </div>
   );
 }

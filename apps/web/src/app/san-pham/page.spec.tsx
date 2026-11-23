@@ -38,7 +38,50 @@ beforeEach(() => {
     if (path === '/products') return opts?.query?.sort === 'best_seller_30d' ? bestSellers() : catalog();
     if (path === '/brands') return BRANDS;
     if (path === '/categories') return CATEGORIES;
+    if (path === '/catalog/refill-pairs/landing') return refillLanding();
     throw new Error(`đường dẫn lạ ${path}`);
+  });
+});
+
+const REFILL_PAIR = {
+  bottle: { productId: 'b1', slug: 'chai-a', name: 'Chai A 500ml', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true },
+  refill: { productId: 'r1', slug: 'refill-a', name: 'Túi Refill A 2L', thumbnail: null, variationId: 'v-r1', price: 200_000, compareAt: null, sizeLabel: '2L', inStock: true, tubu: true },
+  savingPct: 26,
+};
+let refillLanding: () => unknown = () => ({ enabled: true, pairs: [REFILL_PAIR] });
+beforeEach(() => {
+  refillLanding = () => ({ enabled: true, pairs: [REFILL_PAIR] });
+});
+const refillEntryProp = () => (mocks.view.mock.calls[0]![0] as { refillEntry?: unknown }).refillEntry;
+
+describe('BrowsePage — lối vào Tiết kiệm với Refill (link trong HTML máy chủ)', () => {
+  it('gốc (hub) có gói Refill bán được: truyền đích /tiet-kiem-refill + chữ cho BrowseView', async () => {
+    await render({});
+    expect(refillEntryProp()).toEqual({ href: '/tiet-kiem-refill', title: 'Tiết kiệm với Refill', sub: 'Túi, can Refill rẻ hơn mua chai mới' });
+  });
+
+  it('gốc danh sách (?all=1, ?page=2) cũng có; có từ khoá, nhãn hay danh mục thì không hỏi API Refill', async () => {
+    await render({ all: '1' });
+    expect(refillEntryProp()).toMatchObject({ href: '/tiet-kiem-refill' });
+    for (const o of [{ q: 'dau goi' }, { brand: 'Tubu' }, { category: 'c-goi' }]) {
+      mocks.view.mockReset();
+      mocks.get.mockClear();
+      await render(o);
+      expect(refillEntryProp()).toBeUndefined();
+      expect(mocks.get.mock.calls.some(([p]) => p === '/catalog/refill-pairs/landing')).toBe(false);
+    }
+  });
+
+  it('cờ tắt (API trả rỗng) thì null, không vẽ; API Refill lỗi thì undefined để trình duyệt tự hỏi, trang vẫn dựng', async () => {
+    refillLanding = () => ({ enabled: false, pairs: [] });
+    await render({});
+    expect(refillEntryProp()).toBeNull();
+    mocks.view.mockReset();
+    refillLanding = () => {
+      throw new Error('down');
+    };
+    await render({});
+    expect(refillEntryProp()).toBeUndefined();
   });
 });
 

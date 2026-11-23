@@ -844,14 +844,19 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     await waitFor(() => expect(screen.getByTestId('order-tracking-pill')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
-  it.each(['CANCELLED', 'RETURNED'])('đơn %s có mã vận đơn: KHÔNG có viên vận đơn (PO A3), mã vẫn in ở khối Vận chuyển', async (status) => {
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s có mã vận đơn: KHÔNG có viên vận đơn (PO A3); mã in ở khối Vận chuyển kèm nút "Chép mã" duy nhất của trang', async (status) => {
     mocks.fetchOrder.mockResolvedValue(shipped({ status }));
     renderPage();
     const shipping = await screen.findByTestId('order-shipping');
     expect(within(shipping).getByText('GHN001')).toBeInTheDocument();
     expect(within(shipping).getByText('GHN')).toBeInTheDocument();
     expect(screen.queryByTestId('order-tracking-pill')).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Sao chép mã vận đơn/ })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveLength(1);
+    const copy = within(shipping).getByRole('button', { name: 'Sao chép mã vận đơn GHN001 (GHN)' });
+    expect(copy).toHaveTextContent('Chép mã');
+    fireEvent.click(copy);
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
+    await waitFor(() => expect(within(shipping).getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
   it('hoá đơn điện tử: chỉ chép đường dẫn, không mở ngoài', async () => {

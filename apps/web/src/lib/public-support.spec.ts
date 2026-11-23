@@ -33,6 +33,16 @@ describe('getPublicSupport', () => {
     }
   });
 
+  it('cờ catalog.refill_first_enabled: chỉ đúng boolean true mới bật lối "Tiết kiệm với Refill" ở chân trang', async () => {
+    const support = { hotline: '1900 1234', email: 'cskh@tubutree.com' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support, refillFirstEnabled: true })));
+    await expect(getPublicSupport()).resolves.toEqual({ ...support, refillLanding: true });
+    for (const v of [false, 'true', 1, null]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support, refillFirstEnabled: v })));
+      await expect(getPublicSupport()).resolves.toEqual(support);
+    }
+  });
+
   it('một trường admin để trống (API trả null) thì chỉ trường đó rơi về mặc định', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { support: { hotline: null, email: 'cskh@tubutree.com' } })));
     await expect(getPublicSupport()).resolves.toEqual({ hotline: DEFAULT_SUPPORT.hotline, email: 'cskh@tubutree.com' });

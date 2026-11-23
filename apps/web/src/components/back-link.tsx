@@ -65,7 +65,7 @@ export type GuestMemberBackPhase = 'restoring' | 'guest' | 'member';
  *
  * Hai ô bọc và link trong ô luôn ở đúng chỗ của nó qua mọi pha (không đổi qua lại giữa cặp link và một `BackLink` trần), nên React giữ nguyên
  * nút `<a>` đang hiện khi hydrate xong: người dùng bàn phím đã Tab tới link trước hydrate không bị rơi focus về <body>. Chỉ giữ được khi
- * pha mới vẫn vẽ cùng một khung trang; màn tự dựng khung riêng (vd bảng CTV `Dashboard`, `DealerHub`) thì React dựng lại link.
+ * pha mới vẫn vẽ cùng một khung trang: `/ctv` và `/dai-ly` dựng MỘT khung cho mọi pha (kể cả khi hồ sơ về), màn con chỉ là phần thân.
  */
 export function GuestMemberBackLink({ guest, member, phase }: { guest: BackTarget; member: BackTarget; phase: GuestMemberBackPhase }) {
   const restoring = phase === 'restoring';
