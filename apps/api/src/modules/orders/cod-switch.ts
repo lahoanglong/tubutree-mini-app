@@ -14,6 +14,9 @@ export const COD_SWITCH_HISTORY_NOTE = 'Khách đổi từ chuyển khoản sang
 /** `code` trong body 409 của hai route đổi; `reason` cho biết vì sao. */
 export const COD_SWITCH_REFUSED = 'COD_SWITCH_REFUSED';
 
+/** Ghi kèm dòng lịch sử lật PAID khi tiền chuyển khoản về sau lần đổi: đơn trở lại chuyển khoản đã trả. */
+export const COD_SWITCH_REVERTED_NOTE = 'Tiền chuyển khoản về sau khi khách đổi sang COD: đơn trở lại chuyển khoản đã trả, không thu COD';
+
 export type CodSwitchRefusal = CodSwitchRefusalReason;
 
 export type CodSwitchFacts = Pick<
@@ -90,6 +93,14 @@ export async function switchedFromTransfer(
   if (order.paymentMethod !== 'COD') return false;
   const row = await prisma.orderStatusHistory.findFirst({ where: { orderId: order.id, note: COD_SWITCH_HISTORY_NOTE }, select: { id: true } });
   return row !== null;
+}
+
+/**
+ * Hàng chưa rời kho. Đơn đã đổi sang COD mà tiền chuyển khoản vẫn về trong lúc này thì đơn trở lại chuyển khoản đã trả (kho không thu COD).
+ * Sau bàn giao, "đã trả" của Pancake có thể là tiền thu hộ COD của hãng, không tự lật được.
+ */
+export function beforeHandover(o: Pick<Order, 'status' | 'shippedAt'>): boolean {
+  return o.shippedAt === null && o.status !== 'SHIPPING' && o.status !== 'DELIVERED' && o.status !== 'RETURNED';
 }
 
 /** Nút đổi có hiện cho đơn này không (chi tiết đơn, trang QR, trang theo dõi của khách vãng lai): cùng luật với lần đổi thật, không khoá. */

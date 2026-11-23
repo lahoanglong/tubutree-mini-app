@@ -8,6 +8,7 @@ import { toLocalPhone } from '../../common/phone';
 import type { BankDetails } from './refund-destination';
 import { formatVnd, maskedBank } from './refund-destination';
 import { ATTENTION_UNDERPAID } from '../integrations/pancake/pancake-attention';
+import { beforeHandover, switchedFromTransfer } from './cod-switch';
 
 /** Phần của NotificationsService cần ở đây (khai báo cấu trúc: hàm tự do không kéo DI/vòng module). */
 export interface RefundNotifier {
@@ -275,7 +276,7 @@ export async function announceBankRefund(
 }
 
 type LateCtx = {
-  prisma: Pick<PrismaClient, 'user' | 'order' | '$transaction'>;
+  prisma: Pick<PrismaClient, 'user' | 'order' | 'orderStatusHistory' | '$transaction'>;
   notifications?: RefundNotifier;
   logger: Pick<Logger, 'warn' | 'log'>;
 };
@@ -408,7 +409,9 @@ export async function recordedPancakeUnderpayment(prisma: Pick<PrismaClient, 'or
  */
 export async function refundReportedUnderpayment(ctx: LateCtx, orderId: string, opts: { notifyCustomer?: boolean } = {}): Promise<number> {
   const order = await ctx.prisma.order.findUnique({ where: { id: orderId } });
-  if (!order || order.status !== 'CANCELLED' || order.paymentMethod !== 'BANK_TRANSFER' || order.paymentStatus !== 'UNPAID') return 0;
+  if (!order || order.status !== 'CANCELLED' || order.paymentStatus !== 'UNPAID') return 0;
+  // Đơn khách đã đổi sang COD mà Pancake đã ghi một phần chuyển khoản (trước khi hàng rời kho): khoản đó cũng phải hoàn khi đơn huỷ.
+  if (order.paymentMethod !== 'BANK_TRANSFER' && !(beforeHandover(order) && (await switchedFromTransfer(ctx.prisma, order)))) return 0;
   const reported = order.pancakePaidReported ?? 0;
   if (!(reported > 0)) return 0;
   return recordCumulativeLatePayment(ctx, order, { reportedTotal: reported, source: 'PANCAKE' }, { notifyCustomer: opts.notifyCustomer ?? false });

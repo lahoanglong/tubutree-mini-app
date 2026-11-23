@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { PancakeSyncHooks } from '../integrations/pancake/pancake-sync-hooks';
+import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 import { COD_MAX_PER_ORDER } from '../checkout/checkout-split';
 import { OrderStatusService } from './order-status.service';
@@ -71,7 +72,9 @@ export class OrderCodSwitchService {
       // Dưới khoá dòng điều kiện không đổi được nữa; vẫn giữ điều kiện trong câu ghi để một đường ghi không khoá (nếu có) cũng không chen được.
       const flip = await tx.order.updateMany({
         where: { id: orderId, status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER' },
-        data: { paymentMethod: 'COD', status: 'CONFIRMED' },
+        // Đơn thu gom đang chờ tiền ở Gomdon (AWAITING_PAYMENT): COD đặt bưu tá được ngay. Về lại "chưa đặt" như đơn COD thường để lần enqueue lỗi
+        // vẫn được cron dò lại (GomdonReconcileService chỉ dò AWAITING_PAYMENT khi đơn đã PAID).
+        data: { paymentMethod: 'COD', status: 'CONFIRMED', ...(order.gomdonStatus === GOMDON_STATE.AWAITING_PAYMENT ? { gomdonStatus: null } : {}) },
       });
       if (flip.count !== 1) return { reason: 'NOT_PENDING' as const, order };
       await tx.orderStatusHistory.create({

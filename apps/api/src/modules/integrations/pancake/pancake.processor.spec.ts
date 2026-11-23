@@ -355,7 +355,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     await proc.onPaymentReconcile(paidPayload);
     // Guard theo trạng thái HIỆN TẠI trong DB: chỉ lật CONFIRMED khi đơn còn PENDING_PAYMENT.
     expect(orderUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
+      where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' },
       data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null },
     });
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
@@ -576,7 +576,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     });
     await proc.onPaymentReconcile(paidPayload);
     expect(statusFlips(orderUpdateMany)).toEqual([
-      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null } },
+      { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date), paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null } },
     ]);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);
@@ -2270,13 +2270,14 @@ describe('PancakeProcessor.onPaymentReconcile — đơn khách đã đổi từ 
       args?.where?.note === COD_SWITCH_HISTORY_NOTE ? { id: 'h1' } : null,
     );
 
-  it('tiền chuyển khoản về trước khi giao → lật PAID, trạng thái giữ CONFIRMED (kho thôi thu COD)', async () => {
+  it('tiền chuyển khoản về trước khi giao → về lại chuyển khoản đã trả, trạng thái giữ CONFIRMED (kho thôi thu COD)', async () => {
     const { proc, prisma, orderUpdateMany } = setup(switchedOrder);
     markSwitched(prisma);
     await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
     const flips = statusFlips(orderUpdateMany);
     expect(flips).toHaveLength(1);
-    expect(flips[0]!.data).toMatchObject({ paymentStatus: 'PAID' });
+    expect(flips[0]!.where).toMatchObject({ paymentMethod: 'COD', shippedAt: null });
+    expect(flips[0]!.data).toMatchObject({ paymentStatus: 'PAID', paymentMethod: 'BANK_TRANSFER' });
     expect(flips[0]!.data).not.toHaveProperty('status');
   });
 
@@ -2289,11 +2290,20 @@ describe('PancakeProcessor.onPaymentReconcile — đơn khách đã đổi từ 
   it.each([
     ['đang giao', { status: 'SHIPPING' }],
     ['đã rời kho', { shippedAt: new Date() }],
-  ])('đơn đã đổi nhưng %s → bỏ qua ("đã trả" có thể là tiền thu hộ của hãng)', async (_name, over) => {
+  ])('đơn đã đổi nhưng %s → không lật ("đã trả" có thể là tiền thu hộ của hãng); chỉ cờ is_paid thì không báo', async (_name, over) => {
     const { proc, prisma, orderUpdateMany } = setup({ ...switchedOrder, ...over });
     markSwitched(prisma);
     await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
     expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+    expect(attentionFlags(orderUpdateMany)).toEqual([]);
+  });
+
+  it('đơn đã đổi, hàng đã rời kho, Pancake ghi tiền chuyển khoản → không lật, "Cần xử lý" kiểm tra khách trả hai lần', async () => {
+    const { proc, prisma, orderUpdateMany } = setup({ ...switchedOrder, status: 'SHIPPING', shippedAt: new Date() });
+    markSwitched(prisma);
+    await proc.onPaymentReconcile({ id: 'p1', bank_payment: 100000 });
+    expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('khách vẫn chuyển khoản')]);
   });
 
   it('chuyển một phần sau khi đổi → ghi số đã nhận + "Cần xử lý" sửa số thu COD; không mời khách chuyển thêm', async () => {

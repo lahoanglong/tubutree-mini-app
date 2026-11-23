@@ -59,6 +59,7 @@ import {
 } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
+import { COD_SWITCH_REVERTED_NOTE, beforeHandover, switchedFromTransfer } from './cod-switch';
 import { announceDeletedAccountRefund, receivedRefundNote, recordedPancakeUnderpayment, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
@@ -807,6 +808,10 @@ export class OrderStatusService {
       if (order.paymentStatus === 'PAID') return { outcome: 'ALREADY_PAID', order };
       if (order.paymentStatus !== 'UNPAID') return { outcome: 'NOT_PAYABLE', order };
       if (order.status === 'CANCELLED' || order.status === 'RETURNED') return { outcome: 'CLOSED', order };
+      // Khách đã đổi chuyển khoản sang COD mà tiền chuyển khoản vẫn về trước khi hàng rời kho: đơn trở lại chuyển khoản đã trả, để kho không thu COD
+      // và đường hoàn tiền/huỷ/trả hàng coi đây là khoản trả trước. Đơn COD khác (hay đã bàn giao) không lật được ở đây.
+      const revertCodSwitch = order.paymentMethod === 'COD' && beforeHandover(order) && (await switchedFromTransfer(this.prisma, order));
+      if (order.paymentMethod === 'COD' && !revertCodSwitch) return { outcome: 'NOT_PAYABLE', order };
 
       const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
       const won = await this.prisma.$transaction(async (tx) => {
@@ -814,9 +819,16 @@ export class OrderStatusService {
         // paidAt (cột) và occurredAt (event) dùng chung một mốc.
         const paidAt = new Date();
         const flip = await tx.order.updateMany({
-          where: { id: order.id, paymentStatus: 'UNPAID', status: order.status },
+          where: { id: order.id, paymentStatus: 'UNPAID', status: order.status, paymentMethod: order.paymentMethod, ...(revertCodSwitch ? { shippedAt: null } : {}) },
           // Đơn đã PAID thì khoản "Pancake báo đã thanh toán, chờ đối chiếu" xong: gỡ cờ cùng câu lật để không còn cờ mồ côi trên đơn đã thu tiền.
-          data: { paymentStatus: 'PAID', paidAt, paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null, ...(toStatus !== order.status ? { status: toStatus } : {}) },
+          data: {
+            paymentStatus: 'PAID',
+            paidAt,
+            paymentUnlinkedAt: null,
+            paymentUnlinkedFirstAt: null,
+            ...(toStatus !== order.status ? { status: toStatus } : {}),
+            ...(revertCodSwitch ? { paymentMethod: 'BANK_TRANSFER' as const } : {}),
+          },
         });
         if (flip.count === 0) return false;
         await tx.orderStatusHistory.create({
@@ -826,7 +838,7 @@ export class OrderStatusService {
             toStatus,
             actorType: opts.actorType,
             actorId: opts.actorId ?? null,
-            note: ['Đã nhận tiền (UNPAID → PAID)', opts.note].filter(Boolean).join(' · '),
+            note: ['Đã nhận tiền (UNPAID → PAID)', revertCodSwitch ? COD_SWITCH_REVERTED_NOTE : null, opts.note].filter(Boolean).join(' · '),
           },
         });
         await this.mssOrderEvents?.onPaid(tx, order.id);
@@ -836,7 +848,7 @@ export class OrderStatusService {
             userId: order.userId,
             platform: order.platform === 'web' ? 'web' : 'miniapp',
             occurredAt: paidAt,
-            props: { orderId: order.id, method: order.paymentMethod, amount: order.total },
+            props: { orderId: order.id, method: revertCodSwitch ? 'BANK_TRANSFER' : order.paymentMethod, amount: order.total },
           });
         }
         return true;
@@ -844,6 +856,7 @@ export class OrderStatusService {
       if (!won) continue;
 
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
+      if (revertCodSwitch) await this.alertGomdonCollectAfterRevert(order);
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
       await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }), undefined, `order=${order.code}`);
@@ -945,6 +958,18 @@ export class OrderStatusService {
     });
     if (first.count === 0) return;
     await flagPancakeAttention(this.prisma, this.opsAlerts(), order, reason, this.logger);
+  }
+
+  /**
+   * Đơn thu gom đã đặt bưu tá Gomdon lúc còn COD (thu hộ bằng tổng đơn) rồi tiền chuyển khoản về: vận đơn đã tạo không tự đổi tiền thu hộ, bưu tá sẽ thu
+   * lần hai. Báo ở hàng "Cần xử lý thu gom" để kho sửa thu hộ về 0đ trên Gomdon.
+   */
+  private async alertGomdonCollectAfterRevert(order: Pick<Order, 'id' | 'code' | 'hasRecyclingPickup' | 'gomdonOrderId' | 'total'>): Promise<void> {
+    if (!order.hasRecyclingPickup || !order.gomdonOrderId) return;
+    await this.opsAlerts().alert(
+      order.code,
+      `Khách đã đổi sang COD rồi vẫn chuyển khoản đủ ${order.total.toLocaleString('vi-VN')}đ: vận đơn Gomdon ${order.gomdonOrderId} còn thu hộ. Sửa tiền thu hộ về 0đ trên Gomdon.`,
+    );
   }
 
   /** Báo động in-app tới ADMIN/kho (cùng kênh webhook Pancake dùng) — chỉ cần Prisma + Notifications nên tự dựng, không vòng module. */
