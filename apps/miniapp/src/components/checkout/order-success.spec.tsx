@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { OrderDTO } from '@tubutree/shared-types';
@@ -160,7 +162,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
 
   it('gợi ý "Đặt định kỳ" khi variation còn hàng (cùng điều kiện PDP) → mở SubscribeSheet đúng variation', async () => {
     renderSuccess();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đặt định kỳ' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Đặt định kỳ/ }));
     expect(screen.getByText('subscribe-open:var-1')).toBeInTheDocument();
     expect(mocks.fetchProduct).toHaveBeenCalledWith('nrc');
   });
@@ -171,14 +173,14 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     // Chờ query sản phẩm THẬT SỰ có dữ liệu (không chỉ "đã gọi") — nếu bỏ kiểm tra stock thì nút
     // sẽ xuất hiện ngay sau bước này và assertion bên dưới fail.
     await waitFor(() => expect(qc.getQueryState(['product', 'nrc'])?.status).toBe('success'));
-    expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Đặt định kỳ/ })).toBeNull();
   });
 
   it('tải sản phẩm lỗi (404/mạng) → ẩn gợi ý định kỳ, màn vẫn dùng được', async () => {
     mocks.fetchProduct.mockRejectedValue(new Error('404'));
     const { qc } = renderSuccess();
     await waitFor(() => expect(qc.getQueryState(['product', 'nrc'])?.status).toBe('error'));
-    expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Đặt định kỳ/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Theo dõi đơn' })).toBeInTheDocument();
   });
 
@@ -187,7 +189,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     const { qc } = renderSuccess({ order: noSlug });
     await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
     expect(mocks.fetchProduct).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Đặt định kỳ/ })).toBeNull();
   });
 
   it('chỉ kiểm tra tối đa 3 slug khác nhau đầu tiên của đơn', async () => {
@@ -215,7 +217,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
       const order = { ...ORDER, items: [HONEY] } as unknown as OrderDTO;
       const { qc } = renderSuccess({ order });
       await waitFor(() => expect(qc.getQueryState(['product', 'mat-ong-ky-gui'])?.status).toBe('success'));
-      expect(screen.queryByRole('button', { name: 'Đặt định kỳ' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Đặt định kỳ/ })).toBeNull();
       expect(screen.queryByText(/Mật ong ký gửi/)).toBeNull();
     });
 
@@ -223,7 +225,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
       mocks.fetchProduct.mockImplementation(byslug({ 'mat-ong-ky-gui': { partnerOwned: true } }));
       const order = { ...ORDER, items: [HONEY, ORDER.items[0]] } as unknown as OrderDTO;
       renderSuccess({ order });
-      fireEvent.click(await screen.findByRole('button', { name: 'Đặt định kỳ' }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Đặt định kỳ/ }));
       expect(screen.getByText('subscribe-open:var-1')).toBeInTheDocument();
       expect(screen.getByText(/Nước rửa chén/)).toBeInTheDocument();
       expect(screen.queryByText(/Mật ong ký gửi/)).toBeNull();
@@ -234,7 +236,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     renderSuccess();
     const track = screen.getByRole('button', { name: 'Theo dõi đơn' });
     const keep = screen.getByRole('button', { name: 'Tiếp tục mua sắm' });
-    const offer = await screen.findByRole('button', { name: 'Đặt định kỳ' });
+    const offer = await screen.findByRole('button', { name: /^Đặt định kỳ/ });
     for (const cta of [track, keep]) {
       expect(cta.compareDocumentPosition(offer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
@@ -306,6 +308,87 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
   it('đơn không tách: không có danh sách đơn cùng lần đặt', () => {
     renderSuccess();
     expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
+  });
+});
+
+describe('OrderSuccess: bố cục 375 giống MobileSuccess của web (tubu-w19-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, shippingEta: { minDays: 2, maxDays: 4 } });
+    mocks.fetchProduct.mockResolvedValue(PRODUCT(10));
+  });
+
+  const follows = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it('thứ tự: tiêu đề, thẻ mã đơn + tiền, hai nút, đơn tách, Tiếp theo, rồi nhóm gợi ý phụ', async () => {
+    const order = {
+      ...ORDER,
+      code: 'TB1',
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+      ],
+    } as unknown as OrderDTO;
+    renderSuccess({ order });
+    const offer = await screen.findByRole('button', { name: /^Đặt định kỳ/ });
+    const chain = [
+      screen.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' }),
+      screen.getByText('Mã đơn hàng'),
+      screen.getByText('Tổng 2 đơn'),
+      screen.getByRole('button', { name: 'Theo dõi đơn' }),
+      screen.getByRole('button', { name: 'Tiếp tục mua sắm' }),
+      screen.getByRole('region', { name: 'Đơn cùng lần đặt' }),
+      screen.getByRole('region', { name: 'Tiếp theo' }),
+      screen.getByRole('region', { name: 'Thêm cho đơn này' }),
+    ];
+    for (let i = 1; i < chain.length; i += 1) expect(follows(chain[i - 1]!, chain[i]!), `khối ${i} phải nằm sau khối ${i - 1}`).toBe(true);
+    expect(screen.getByRole('region', { name: 'Thêm cho đơn này' })).toContainElement(offer);
+  });
+
+  it('Tiếp theo: 3 bước trên một hàng, số thứ tự ẩn với trình đọc, câu giải thích từng bước vẫn đọc được', () => {
+    renderSuccess();
+    const steps = screen.getByRole('region', { name: 'Tiếp theo' });
+    const list = steps.querySelector('ol')!;
+    expect(list).toHaveClass('tubu-order-success-steps');
+    const items = Array.from(list.querySelectorAll(':scope > li'));
+    expect(items).toHaveLength(3);
+    const bodies = ['Tubu kiểm tra và xác nhận đơn của bạn.', 'Sản phẩm được đóng gói cẩn thận.', 'Đơn vị vận chuyển giao tới địa chỉ của bạn.'];
+    items.forEach((li, i) => {
+      const num = li.querySelector('[aria-hidden]')!;
+      expect(num.textContent).toBe(String(i + 1));
+      expect(num.hasAttribute('data-current')).toBe(i === 0);
+      const body = Array.from(li.querySelectorAll('span')).find((s) => s.textContent === `: ${bodies[i]}`)!;
+      expect(body, `câu đọc ẩn của bước ${i + 1}`).toBeTruthy();
+      expect(body.style.position).toBe('absolute');
+      expect(body.style.width).toBe('1px');
+    });
+  });
+
+  it('Đặt định kỳ là MỘT dòng mang lớp touch-target (không phải nút cỡ lớn thứ ba; cao 44px đo ở e2e buy-flow-4a), tên đọc gồm món và mức tiết kiệm', async () => {
+    renderSuccess();
+    const row = await screen.findByRole('button', { name: /^Đặt định kỳ Nước rửa chén/ });
+    expect(row).toHaveClass('touch-target');
+    expect(row).toHaveTextContent('Tự động giao lại theo chu kỳ, tiết kiệm 12% mỗi đơn.');
+    expect(screen.getAllByRole('button', { name: /Đặt định kỳ/ })).toHaveLength(1);
+  });
+
+  it('không có gợi ý phụ nào (hết hàng, cờ Zalo và mời bạn tắt): nhóm phụ không có phần tử con và luật .tubu-order-success-extras:empty ẩn nó (không để lại khoảng 12px)', async () => {
+    mocks.fetchProduct.mockResolvedValue(PRODUCT(0));
+    const { qc, container } = renderSuccess();
+    await waitFor(() => expect(qc.getQueryState(['product', 'nrc'])?.status).toBe('success'));
+    const extras = container.querySelector('.tubu-order-success-extras')!;
+    expect(extras.childNodes).toHaveLength(0);
+    // jsdom không áp CSS nên đọc thẳng luật trong tệp: mất hay gõ sai lớp :empty thì nhóm rỗng vẫn chiếm một khoảng gap.
+    const css = readFileSync(resolve(__dirname, '../../css/order-success.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-order-success-extras:empty\s*\{\s*display:\s*none;?\s*\}/);
+  });
+
+  it('sao chép mã: báo qua useNotify (snackbar + vùng đọc), không gọi thẳng openSnackbar riêng', async () => {
+    mocks.copyText.mockResolvedValue(true);
+    renderSuccess();
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã đơn TUBU-COD-12345' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã đơn', type: 'success' }));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
   });
 });
 

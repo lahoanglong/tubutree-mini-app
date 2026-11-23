@@ -26,6 +26,9 @@ const FIXED: readonly StorefrontTrustChip[] = [
 /**
  * Các chip theo thứ tự hiển thị. Số ngày đổi trả bằng 0 thì bỏ chip đổi trả (API từ chối mọi yêu cầu); chưa biết số ngày thì hứa chung, không điền số mặc định
  * (cùng luật `returnsPromise` của trang sản phẩm).
+ *
+ * Lúc `/config/public` còn đang tải (PO A3, 23/11/2026): GIỮ chip đổi trả với lời hứa chung "Đổi trả nếu sản phẩm lỗi" thay vì ẩn rồi hiện lại. Gần như mọi cấu hình
+ * đều nhận đổi trả, nên dải đứng yên từ lần vẽ đầu (không nhảy bố cục); chỉ khi máy chủ báo 0 ngày thì chip mới rời đi.
  */
 export function storefrontTrustChips(returnWindowDays: unknown): StorefrontTrustChip[] {
   const returns = returnsPromise(returnWindowDays);

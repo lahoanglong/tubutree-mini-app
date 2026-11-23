@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
-import { Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Heading, Text } from '../components/ui/text';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -54,7 +55,7 @@ import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
 import { OrderRefillShortcut } from '../components/orders/order-refill-shortcut';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { OrderActionBar } from '../components/orders/order-action-bar';
-import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, showTrackingPill, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
@@ -342,7 +343,7 @@ export default function OrderDetailPage() {
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const timelineTitle = (
-    <Text bold size="small" style={{ marginBottom: 12 }}>
+    <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 12 }}>
       {vi.orders.timeline}
     </Text>
   );
@@ -386,7 +387,7 @@ export default function OrderDetailPage() {
       <PageHeader title="Chi tiết đơn hàng" subtitle={o.code} />
 
       <OrderStatusHero headline={headline} statusLabel={buyerStatusLabel(o)} stamp={stamp} tone={color} />
-      {o.shippingCode && <OrderTrackingPill code={o.shippingCode} partner={o.shippingPartner} />}
+      {o.shippingCode && showTrackingPill(o) && <OrderTrackingPill code={o.shippingCode} partner={o.shippingPartner} />}
 
       {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
           Đúng lúc thiện chí cao nhất (vừa đặt xong đơn đầu), không hỏi lúc mở app nguội. ── */}
@@ -397,10 +398,10 @@ export default function OrderDetailPage() {
           p={3}
           style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', border: '1px solid var(--forest-200)' }}
         >
-          <Text bold size="small" style={{ color: 'var(--forest-800)' }}>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600, color: 'var(--forest-800)' }}>
             Theo dõi Tubu Tree trên Zalo
           </Text>
-          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
             Nhận cập nhật đơn và tư vấn từ Tubu Tree qua Zalo — không bỏ lỡ tin quan trọng.
           </Text>
           <Box flex style={{ gap: 8, marginTop: 10 }}>
@@ -458,7 +459,7 @@ export default function OrderDetailPage() {
 
       {/* ── Sản phẩm ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <Text bold size="small" style={{ marginBottom: 8 }}>
+        <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 8 }}>
           {vi.orders.products}
         </Text>
         {itemLinks.map(({ it, slug }) => (
@@ -476,14 +477,14 @@ export default function OrderDetailPage() {
                 style={{ gap: 12, flex: 1, minWidth: 0, minHeight: 48, cursor: slug ? 'pointer' : undefined }}
               >
                 <ProductThumb src={it.thumbnail} alt="" size={48} />
-                <Text size="small" style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="body-sm" data-testid="order-line-name" style={{ display: 'block', flex: 1, minWidth: 0 }}>
                   {joinVariationLine(it.productName, variationLabel(it.variationName))}{' '}
-                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline', fontVariantNumeric: 'tabular-nums' }}>
+                  <Text variant="caption" tone="tertiary" numeric>
                     ×{it.quantity}
                   </Text>
                 </Text>
               </Box>
-              <Text size="small" style={{ flex: '0 0 auto', fontVariantNumeric: 'tabular-nums' }}>
+              <Text variant="body-sm" numeric style={{ display: 'block', flex: '0 0 auto' }}>
                 {formatVnd(it.total)}
               </Text>
             </Box>
@@ -500,13 +501,10 @@ export default function OrderDetailPage() {
                 Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó; API cũ chưa trả
                 reviewable/reviewId thì vẫn hiện nút viết như trước. */}
             {o.status === 'DELIVERED' && slug && (it.reviewId || it.reviewable !== false) && (
-              <Text
-                size="xSmall"
-                bold
+              <button
+                type="button"
                 className="tubu-press tubu-hit-44"
-                role="button"
-                {...rowKeyboardProps()}
-                style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                style={REVIEW_LINK}
                 onClick={() => {
                   haptic('light');
                   navigate(`/product/${slug}`, { state: { reviewOrderId: o.id } });
@@ -514,7 +512,7 @@ export default function OrderDetailPage() {
               >
                 <Icon icon={Star} size="sm" tone="brand" />
                 {it.reviewId ? vi.orders.editReviewItem : vi.orders.reviewItem}
-              </Text>
+              </button>
             )}
           </Box>
         ))}
@@ -539,14 +537,10 @@ export default function OrderDetailPage() {
         <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
         {pointsNote && (
           <Text
-            size="xSmall"
-            style={{
-              color: pointsNote.tone === 'success' ? 'var(--color-text-success)' : 'var(--color-text-secondary)',
-              marginTop: 4,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
+            variant="caption"
+            tone={pointsNote.tone === 'success' ? 'success' : 'secondary'}
+            as="div"
+            style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}
           >
             <Icon icon={Leaf} size="sm" tone={pointsNote.tone === 'success' ? 'brand' : 'muted'} />
             {pointsNote.text}
@@ -559,11 +553,11 @@ export default function OrderDetailPage() {
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           {o.fulfilment && (
             <>
-              <Text bold size="small">
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
                 Giao bởi {o.fulfilment.name}
               </Text>
               {o.fulfilment.kind === 'MERCHANT' && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                   Gian hàng tự đóng gói và giao đơn này.
                   {o.fulfilment.phone ? ` Liên hệ gian hàng: ${o.fulfilment.phone}` : ''}
                 </Text>
@@ -572,7 +566,7 @@ export default function OrderDetailPage() {
           )}
           {o.siblings && o.siblings.length > 0 && (
             <section aria-label="Đơn cùng lần đặt" style={{ marginTop: o.fulfilment ? 12 : 0 }}>
-              <Text bold size="small" style={{ marginBottom: 6 }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 6 }}>
                 Đơn cùng lần đặt
               </Text>
               {o.siblings.map((sb) => (
@@ -589,14 +583,14 @@ export default function OrderDetailPage() {
                   style={{ gap: 8, minHeight: 44, cursor: 'pointer', borderTop: '1px solid var(--color-border-subtle)' }}
                 >
                   <Box style={{ minWidth: 0 }}>
-                    <Text size="small" bold style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <Text variant="body-sm" as="div" numeric style={{ fontWeight: 600 }}>
                       {sb.code}
                     </Text>
-                    <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                    <Text variant="caption" tone="secondary" as="div">
                       {sb.fulfillerName} giao · {vi.orderStatus[sb.status] ?? sb.status}
                     </Text>
                   </Box>
-                  <Text size="small" style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                  <Text variant="body-sm" as="div" numeric style={{ whiteSpace: 'nowrap' }}>
                     {formatVnd(sb.total)}
                   </Text>
                 </Box>
@@ -611,11 +605,11 @@ export default function OrderDetailPage() {
       {/* ── Hoá đơn VAT (nếu có) ── */}
       {o.invoiceStatus && o.invoiceStatus !== 'NOT_REQUESTED' && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small" style={{ marginBottom: 4 }}>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
             Hoá đơn VAT
           </Text>
           <Box flex alignItems="center" justifyContent="space-between">
-            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+            <Text variant="caption" tone="secondary" as="div">
               {o.invoiceStatus === 'ISSUED'
                 ? 'Đã phát hành'
                 : o.invoiceStatus === 'REQUESTED'
@@ -669,7 +663,7 @@ export default function OrderDetailPage() {
         fallback={
           o.status === 'DELIVERED' && inviteLandingOn(publicConfig) && !eco && !(ecoAsked && ecoQ.isPending) ? (
             <Box mt={2} p={4} style={{ background: 'var(--color-bg-surface)' }}>
-              <Text size="small">
+              <Text variant="body-sm" as="div">
                 {fillCopy('order.journey.inviteLead')}{' '}
                 <button type="button" className="tubu-press tubu-hit-44" onClick={() => navigate(MISSION_PATHS.miniapp.invite)} style={INVITE_LINK}>
                   {fillCopy('invite.title')}
@@ -690,10 +684,10 @@ export default function OrderDetailPage() {
         if (!hasContact && !line) {
           return addr.note ? (
             <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-              <Text bold size="small" style={{ marginBottom: 4 }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
                 {vi.checkout.address}
               </Text>
-              <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+              <Text variant="body-sm" tone="secondary" as="div">
                 {addr.note}
               </Text>
             </Box>
@@ -701,12 +695,12 @@ export default function OrderDetailPage() {
         }
         return (
           <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-            <Text bold size="small" style={{ marginBottom: 4 }}>
+            <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
               {vi.checkout.address}
             </Text>
-            <Text size="small">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
+            <Text variant="body-sm" as="div">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
             {line && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+              <Text variant="caption" tone="secondary" as="div">
                 {line}
               </Text>
             )}
@@ -716,10 +710,10 @@ export default function OrderDetailPage() {
 
       {customerOrderNote(o) ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small" style={{ marginBottom: 4 }}>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
             {vi.orders.note}
           </Text>
-          <Text size="small" style={{ color: 'var(--color-text-secondary)', whiteSpace: 'pre-line' }}>
+          <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>
             {customerOrderNote(o)}
           </Text>
         </Box>
@@ -727,10 +721,10 @@ export default function OrderDetailPage() {
         // Ghi chú cố định của hệ thống không phải lời khách viết: thay bằng nhãn.
         isSubscriptionOrder(o) && (
           <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-            <Text bold size="small">
+            <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
               Đơn định kỳ
             </Text>
-            <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+            <Text variant="body-sm" tone="secondary" as="div">
               Đơn này tự đặt theo lịch bạn đã chọn.
             </Text>
           </Box>
@@ -746,26 +740,21 @@ export default function OrderDetailPage() {
               : ret.status === 'REJECTED'
                 ? { icon: XCircle, tone: 'danger' }
                 : { icon: Clock, tone: 'muted' };
-          const retColor =
-            ret.status === 'APPROVED'
-              ? 'var(--color-text-success)'
-              : ret.status === 'REJECTED'
-                ? 'var(--color-text-danger)'
-                : 'var(--color-text-secondary)';
+          const retTone = ret.status === 'APPROVED' ? 'success' : ret.status === 'REJECTED' ? 'danger' : 'secondary';
           const linesText = returnLinesText(ret, o.items);
           return (
             <Box key={ret.id ?? idx} mx={4} mt={2} p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-control)' }}>
-              <Text size="xSmall" style={{ color: retColor, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Text variant="caption" tone={retTone} as="div" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Icon icon={retIcon.icon} size="sm" tone={retIcon.tone} />
                 {returnStatusLabel(ret, refundOfReturn(myRefunds.data, ret.id), !!assisted.placedForCustomer)}
               </Text>
               {linesText && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
                   Trả: {linesText}
                 </Text>
               )}
               {ret.status === 'APPROVED' && !!ret.items?.length && (
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
                   {ret.receivedAt ? 'Tubu đã nhận lại hàng.' : 'Tubu sẽ liên hệ để nhận lại hàng.'}
                 </Text>
               )}
@@ -786,8 +775,10 @@ export default function OrderDetailPage() {
       <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
         <Box p={5}>
           <Box style={{ textAlign: 'center' }}>
-            <Text.Title size="small">{vi.orders.cancelConfirmTitle}</Text.Title>
-            <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 6 }}>
+            <Heading variant="title-sm" font="ui" as="h2">
+              {vi.orders.cancelConfirmTitle}
+            </Heading>
+            <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>
               {vi.orders.cancelConfirmBody}
             </Text>
           </Box>
@@ -813,13 +804,13 @@ export default function OrderDetailPage() {
             </Box>
           )}
           {refundMode === 'wallet' && (
-            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 12, textAlign: 'center' }}>
+            <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 12, textAlign: 'center' }}>
               {`${formatVnd(o.total)} được hoàn ngay vào Ví Tubu.`}
             </Text>
           )}
           {refundMode === 'unpaidTransfer' && (
             <Box mt={3} p={3} role="note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
-              <Text size="xSmall" style={{ color: 'var(--color-status-warning-fg)' }}>
+              <Text variant="caption" as="div" style={{ color: 'var(--color-status-warning-fg)' }}>
                 Nếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn
                 được hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.
               </Text>
@@ -868,6 +859,23 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 const INVITE_LINK = { padding: 0, border: 0, background: 'none', font: 'inherit', fontWeight: 600, color: 'var(--color-text-brand)', textDecoration: 'underline' } as const;
+
+// Lối "Viết đánh giá" / "Sửa đánh giá" dưới từng món: nút thật (Enter/Space sẵn có), chữ caption đậm màu thương hiệu, vùng chạm 44 nhờ `tubu-hit-44`.
+const REVIEW_LINK = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  marginTop: 2,
+  padding: 0,
+  border: 0,
+  background: 'none',
+  color: 'var(--color-text-brand)',
+  fontFamily: 'var(--font-ui)',
+  fontSize: 'var(--type-caption-size)',
+  lineHeight: 'var(--type-caption-lh)',
+  fontWeight: 600,
+  cursor: 'pointer',
+} as const;
 
 /** Dòng thời gian một khối (cờ orders.timeline_v2_enabled) thay thanh 4 bước và khối hành trình: báo `order_timeline_viewed` mỗi lần đơn đổi trạng thái. */
 function TimelineViewed({ status, hasCarrierEvents }: { status: string; hasCarrierEvents: boolean }) {

@@ -1,0 +1,125 @@
+/* Màn "Đặt hàng thành công" (OrderSuccess) ở khổ 375: cùng số đo với MobileSuccess của web (apps/web/src/components/checkout/order-success.tsx)
+   để trạng thái đơn, mã đơn và nút "Theo dõi đơn" nằm trong màn đầu 375×812. Số đo đặt ở đây vì bánh cóc px của P17b chỉ đếm TSX. */
+
+.tubu-order-success {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 16px 24px;
+}
+
+.tubu-order-success-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.tubu-order-success-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-secondary-bg);
+}
+
+.tubu-order-success-code {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tubu-order-success-facts {
+  margin-top: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.tubu-order-success-ctas,
+.tubu-order-success-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Không có khối phụ nào (cờ tắt, chưa tải, không đủ điều kiện): nhóm không chiếm khe 12px của cột. */
+.tubu-order-success-extras:empty {
+  display: none;
+}
+
+.tubu-order-success-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tubu-order-success-split {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-stack-sm) var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tubu-order-success-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tubu-order-success-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.tubu-order-success-step-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+}
+
+.tubu-order-success-step-num[data-current] {
+  background: var(--color-action-primary-bg);
+  color: var(--color-action-primary-fg);
+}
+
+.tubu-order-success-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: var(--space-stack-sm) var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}

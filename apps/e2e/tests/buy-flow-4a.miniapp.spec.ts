@@ -1,7 +1,11 @@
 import { test, expect, makeOrder, reply, type MockApi, type MockHandler } from './support/mock-api';
 import type { Page } from '@playwright/test';
 import { DELIVERED_CODE, HOME_PRODUCT, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockHomeBestSellers, mockOrdersTab } from './support/buy-flow-mocks';
-import { mockCheckout, publicConfig, ORDER_CODE_COD } from './support/checkout-mocks';
+import { mockCheckout, placedOrderFor, publicConfig, ORDER_CODE_COD } from './support/checkout-mocks';
+import { mockWorld as mockCheckoutWorld, openState as openCheckoutState } from './support/checkout-states';
+import { FLOW_PLAIN } from './support/checkout-flow-states';
+import { expectNoHorizontalOverflow } from './support/game-mini-mocks';
+import { ORDER_ZALO_STATUS } from './support/order-zalo-mocks';
 import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
 import { eventsNamed, flushEvents } from './support/events';
 
@@ -465,9 +469,14 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     await expect(page.getByText('149.000đ').first()).toBeVisible();
     await expect(page.getByText('+14 điểm, về khi đơn giao xong')).toBeVisible();
     await expect(page.getByText('Giao dự kiến')).toBeVisible();
+    // 3 bước một hàng (như web khổ điện thoại): tên bước hiện, câu giải thích chỉ cho trình đọc màn hình.
+    const steps = page.getByRole('region', { name: 'Tiếp theo' });
+    await expect(steps.getByRole('listitem')).toHaveCount(3);
     for (const s of ['Xác nhận đơn', 'Đóng gói', 'Giao hàng']) {
-      await expect(page.getByText(s, { exact: true })).toBeVisible();
+      await expect(steps.getByRole('listitem').filter({ hasText: s })).toBeVisible();
     }
+    const rowTops = await steps.getByRole('listitem').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+    expect(new Set(rowTops).size, `3 bước phải cùng một hàng: ${rowTops.join(', ')}`).toBe(1);
     // Cờ SUBSCRIPTIONS_IN_MINIAPP bật: sản phẩm của đơn (PILOT_PRODUCT, còn hàng, không phải hàng gian hàng) đủ điều kiện nên có gợi ý;
     // nó nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy "Theo dõi đơn" đi chỗ khác.
     const subscribe = page.getByRole('button', { name: 'Đặt định kỳ' });
@@ -662,5 +671,122 @@ test.describe('DS Button trên trình duyệt thật — nhãn hai dấu và vù
       '.tubu-btn .zaui-btn-container > span:not(.zaui-btn-icon){padding-block:0 !important;margin-block:0 !important}',
     );
     expect(an2!.inkTop, `không có đệm mà vẫn không bị cắt (mực ${an2!.inkTop}px, mép ${an2!.clipTop}px) — phép đo không nhạy`).toBeLessThan(an2!.clipTop - 0.5);
+  });
+});
+
+/**
+ * tubu-w19-01: màn Đặt hàng thành công của Mini App cùng bố cục MobileSuccess của web (order-success-fold.web.spec.ts). Khi mọi khối phụ cùng hiện
+ * (COD, điểm, Giao dự kiến, kết bạn Zalo, Đặt định kỳ, mời bạn), ở 375×812 trạng thái đơn, mã đơn và nút "Theo dõi đơn" nằm trọn trong màn đầu,
+ * không nút nào trùng tên, mọi chỗ chạm cao ≥ 44px, không tràn ngang. API mock toàn bộ.
+ */
+test.describe('tubu-w19-01 Mini: màn Đặt hàng thành công gọn ở 375×812 như web', () => {
+  const CARD = { referralCode: 'LAN2026', album: null, wasteItems: 0, firstOrderReward: { points: 100, minOrderAmount: 199_000 }, earnsPoints: true };
+  const SPLIT = [
+    { code: 'TUBU-SPLIT-1', total: 149_000, fulfillerName: 'Tubu Tree', pointsEarned: 14 },
+    { code: 'TUBU-SPLIT-2', total: 89_000, fulfillerName: 'Gian hàng Lan', pointsEarned: 8 },
+    { code: 'TUBU-SPLIT-3', total: 59_000, fulfillerName: 'Gian hàng Minh', pointsEarned: 5 },
+  ];
+
+  async function placeWithEverything(page: Page, api: MockApi, split = false) {
+    await mockCheckoutWorld(api, page, 'miniapp', FLOW_PLAIN, Promise.resolve());
+    api.get('/config/public', {
+      ...publicConfig({ shippingEta: { minDays: 1, maxDays: 3 } } as never),
+      orderZaloEnabled: true,
+      tubuZaloPhone: '0984606774',
+      referralViralEnabled: true,
+    });
+    api.get('/me/green-card', CARD);
+    api.post('/events', { accepted: 1 });
+    api.get('/config/order-zalo', ORDER_ZALO_STATUS);
+    api.allowUnmocked('GET /checkout/shipping-estimate');
+    api.post('/checkout/place-order', ({ call }) => ({
+      ...placedOrderFor((call.body ?? {}) as Record<string, unknown>),
+      orderZaloConsent: true,
+      pointsEarned: 120,
+      ...(split ? { code: SPLIT[0]!.code, splitOrders: SPLIT } : {}),
+    }));
+    await openCheckoutState(page, 'miniapp', 375);
+    const place = page.getByRole('button', { name: /Đặt hàng · / }).last();
+    await expect(place).toBeEnabled({ timeout: 15_000 });
+    await place.click();
+    await expect(page.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' })).toBeVisible({ timeout: 15_000 });
+  }
+
+  /** Đáy vùng nhìn thấy: chiều cao màn trừ thanh cố định dưới đáy (nếu có). */
+  async function foldBottom(page: Page): Promise<number> {
+    return page.evaluate(() => {
+      const h = window.innerHeight;
+      let bottom = h;
+      for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+        const cs = getComputedStyle(el);
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.width > window.innerWidth / 2 && r.bottom >= h - 1 && r.top > h / 2) bottom = Math.min(bottom, r.top);
+      }
+      return bottom;
+    });
+  }
+
+  test('đủ khối phụ: trạng thái, mã đơn và Theo dõi đơn nằm trong màn đầu; dữ kiện thanh toán còn nguyên; khối phụ nằm dưới nút', async ({ page, api }) => {
+    await placeWithEverything(page, api);
+    const view = page.getByTestId('order-success');
+    await expect(view.getByTestId('order-invite-nudge')).toBeVisible({ timeout: 10_000 });
+    const subscribe = view.getByRole('button', { name: /Đặt định kỳ/ });
+    await expect(subscribe).toBeVisible();
+
+    const fold = await foldBottom(page);
+    const heading = (await view.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' }).boundingBox())!;
+    const code = (await view.getByText(ORDER_CODE_COD, { exact: true }).boundingBox())!;
+    const track = (await view.getByRole('button', { name: 'Theo dõi đơn' }).boundingBox())!;
+    expect(heading.y).toBeGreaterThanOrEqual(0);
+    expect(code.y + code.height).toBeLessThanOrEqual(fold);
+    expect(track.y + track.height, `Theo dõi đơn phải nằm trong màn đầu (đáy ${fold}px), đang ở ${track.y + track.height}`).toBeLessThanOrEqual(fold);
+
+    await expect(view.getByText('Tổng thanh toán')).toBeVisible();
+    await expect(view.getByText('Chuẩn bị tiền mặt khi nhận hàng')).toBeVisible();
+    await expect(view.getByText('+120 điểm, về khi đơn giao xong')).toBeVisible();
+    await expect(view.getByText('Giao dự kiến')).toBeVisible();
+
+    const keep = (await view.getByRole('button', { name: 'Tiếp tục mua sắm' }).boundingBox())!;
+    const steps = (await view.getByRole('region', { name: 'Tiếp theo' }).boundingBox())!;
+    expect(steps.y, 'Tiếp theo nằm dưới hai nút chính').toBeGreaterThan(keep.y + keep.height - 1);
+    for (const extra of [view.getByRole('button', { name: 'Mở Zalo Tubu Tree', exact: true }), subscribe, view.getByTestId('order-invite-nudge')]) {
+      const box = (await extra.boundingBox())!;
+      expect(box.y).toBeGreaterThan(steps.y + steps.height - 1);
+    }
+
+    const controls = await view.locator('a, button').evaluateAll((els) =>
+      els
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+        })
+        .map((el) => ({ name: (el.getAttribute('aria-label') ?? el.textContent ?? '').replace(/\s+/g, ' ').trim(), height: el.getBoundingClientRect().height })),
+    );
+    const names = controls.map((c) => c.name);
+    expect(new Set(names).size, `nút trùng tên: ${JSON.stringify(names)}`).toBe(names.length);
+    for (const c of controls) expect(c.height, `"${c.name}" cao ${c.height}px`).toBeGreaterThanOrEqual(44);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: test.info().outputPath('order-success-375x812.png') });
+  });
+
+  test('đơn tách 3 nơi giao: đủ 3 mã và tổng của cả lần đặt, Theo dõi đơn vẫn trong màn đầu, mỗi đơn mở được', async ({ page, api }) => {
+    await placeWithEverything(page, api, true);
+    const view = page.getByTestId('order-success');
+    for (const o of SPLIT) await expect(view.getByText(o.code, { exact: true }).first()).toBeVisible();
+    await expect(view.getByText('Tổng 3 đơn')).toBeVisible();
+    await expect(view.getByText('297.000đ').first()).toBeVisible();
+    const track = (await view.getByRole('button', { name: 'Theo dõi đơn' }).boundingBox())!;
+    const fold = await foldBottom(page);
+    expect(track.y + track.height, `Theo dõi đơn phải nằm trong màn đầu (đáy ${fold}px)`).toBeLessThanOrEqual(fold);
+    for (const o of SPLIT) {
+      const row = view.getByRole('button', { name: new RegExp(`Xem đơn ${o.code}`) });
+      await expect(row).toBeVisible();
+      expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: test.info().outputPath('order-success-split-375x812.png'), fullPage: true });
+    await view.getByRole('button', { name: new RegExp(`Xem đơn ${SPLIT[1]!.code}`) }).click();
+    await expect(page).toHaveURL(new RegExp(`/order/${SPLIT[1]!.code}$`));
   });
 });

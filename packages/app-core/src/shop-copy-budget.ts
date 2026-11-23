@@ -207,6 +207,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'order.shipping.eventsMore': 28,
   'order.shipping.eventsLess': 24,
   'order.shipping.copyAria': null,
+  'order.shipping.copyAriaPartner': null,
 
   // Gợi ý hôm nay
   'suggest.title': 16,

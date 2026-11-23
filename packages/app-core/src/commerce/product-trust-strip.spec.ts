@@ -27,6 +27,10 @@ describe('productTrustStrip: hàng Tubu giao', () => {
     expect(productTrustStrip({ fulfillerKind: null, returnWindowDays: 7 })?.pillars).toHaveLength(3);
   });
 
+  it('PO A3: lúc cấu hình đang tải, dải giống hệt dải khi đã có số ngày (không nhảy bố cục lúc cấu hình về)', () => {
+    expect(productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: undefined })).toEqual(productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 7 }));
+  });
+
   it('số ngày đổi trả chưa biết (đang tải, API cũ, giá trị hỏng) vẫn giữ trụ đổi trả: không hứa số nào', () => {
     for (const bad of [undefined, null, NaN, -1, '7']) {
       expect(productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: bad })?.pillars.map((p) => p.key), String(bad)).toEqual(['origin', 'delivery', 'returns']);

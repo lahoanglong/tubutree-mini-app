@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
+import { Page, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { Box } from '../components/ui/box';
+import { Text } from '../components/ui/text';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -711,6 +712,7 @@ export default function ProductDetailPage() {
     writeCart(null, () => addMutation.mutate({ variation: { id: view.variationId }, qty: 1, source: 'refill' }));
   };
 
+  // PO A3 (23/11/2026): cấu hình chưa về thì trụ đổi trả vẫn đứng sẵn (hứa chung), dải không nhảy khi /config/public về; chỉ 0 ngày mới bỏ trụ.
   const trustView = productTrustStrip({ fulfillerKind: p.fulfiller?.kind, returnWindowDays: config.returnWindowDays });
 
   const handleShare = async () => {
@@ -887,7 +889,7 @@ export default function ProductDetailPage() {
               aria-hidden
               style={{ width: 8, height: 8, borderRadius: '50%', background: brandAccent(p.brand) }}
             />
-            <Text size="xSmall" bold style={{ color: 'var(--color-text-secondary)' }}>
+            <Text variant="caption" tone="secondary" style={{ fontWeight: 600 }}>
               {p.brand}
             </Text>
             <Icon icon={ChevronRight} size="sm" tone="muted" />
@@ -902,7 +904,7 @@ export default function ProductDetailPage() {
               style={{ ...LINK_BUTTON_STYLE, minWidth: 0, maxWidth: '100%' }}
             >
               <MapPin size={14} color="var(--color-text-brand)" aria-hidden style={{ flex: 'none' }} />
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text variant="caption" tone="secondary" style={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {originLink.label}
               </Text>
             </button>
@@ -939,13 +941,13 @@ export default function ProductDetailPage() {
             {ratingData && (
               <>
                 <Stars value={ratingData.average} size={14} />
-                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                <Text variant="caption" tone="secondary">
                   {formatRating(ratingData.average)} · {ratingData.count} đánh giá
                 </Text>
               </>
             )}
             {priceView.isFlash && soldText && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: ratingData ? 'auto' : 0 }}>
+              <Text variant="caption" tone="tertiary" style={{ marginLeft: ratingData ? 'auto' : 0 }}>
                 {soldText}
               </Text>
             )}
@@ -962,7 +964,7 @@ export default function ProductDetailPage() {
               </Badge>
             )}
             {soldText && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+              <Text variant="caption" tone="tertiary" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
                 {soldText}
               </Text>
             )}
@@ -974,7 +976,7 @@ export default function ProductDetailPage() {
         <PointsEarnLine goods={line.total} authStatus={status} tierId={user?.tierId} />
 
         {inStock && !unavailable && (
-          <Text size="xSmall" data-testid={lowStock ? 'pdp-low-stock' : 'pdp-stock-label'} style={{ color: lowStock ? 'var(--color-text-warning)' : 'var(--color-text-secondary)', marginTop: 4 }}>
+          <Text variant="caption" tone={lowStock ? 'warning' : 'secondary'} as="div" data-testid={lowStock ? 'pdp-low-stock' : 'pdp-stock-label'} style={{ marginTop: 4 }}>
             {vi.product.lowStock(selected!.stock)}
           </Text>
         )}
@@ -1006,7 +1008,7 @@ export default function ProductDetailPage() {
           </div>
         )}
         <Box p={4} flex alignItems="center" justifyContent="space-between">
-          <Text bold size="small">
+          <Text variant="body-sm" style={{ fontWeight: 600 }}>
             {vi.product.quantity}
           </Text>
           <QuantitySelector
@@ -1090,7 +1092,7 @@ export default function ProductDetailPage() {
             }}
           >
             <Repeat size={18} color="var(--color-text-brand)" strokeWidth={1.9} />
-            <Text size="small" bold style={{ color: 'var(--color-text-brand)', flex: 1 }}>
+            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600, flex: 1 }}>
               {subPct ? fillCopy('pdp.subscribeSave', { pct: subPct }) : fillCopy('pdp.subscribeSaveNoPct')}
             </Text>
             <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
@@ -1130,7 +1132,7 @@ export default function ProductDetailPage() {
       {(benefitText || p.certifications.length > 0) && (
         <Box data-pdp-block="benefits" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           {benefitText && (
-            <Text size="small" style={{ color: 'var(--color-text-secondary)', whiteSpace: 'pre-line' }}>
+            <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>
               {benefitText}
             </Text>
           )}
@@ -1139,10 +1141,10 @@ export default function ProductDetailPage() {
               {p.certifications.map((c) => (
                 <Text
                   key={c}
-                  size="xSmall"
+                  variant="caption"
+                  tone="brand"
                   style={{
                     background: 'var(--color-bg-subtle)',
-                    color: 'var(--color-text-brand)',
                     padding: '3px 10px',
                     borderRadius: 'var(--radius-pill)',
                     fontWeight: 500,
@@ -1272,10 +1274,10 @@ export default function ProductDetailPage() {
               <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
             </Box>
             <Box style={{ flex: 1 }}>
-              <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
+              <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>
                 {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+              <Text variant="caption" tone="tertiary" as="div">
                 {groupBuyPitch(config.groupBuy)}
               </Text>
             </Box>
@@ -1301,10 +1303,10 @@ export default function ProductDetailPage() {
               <Megaphone size={20} color="var(--color-text-brand)" strokeWidth={2} />
             </Box>
             <Box style={{ flex: 1 }}>
-              <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
+              <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>
                 {vi.contentKit.sheetTitle}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+              <Text variant="caption" tone="tertiary" as="div">
                 Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được
               </Text>
             </Box>

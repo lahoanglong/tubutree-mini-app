@@ -66,10 +66,10 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
-/** Dòng sản phẩm: ô chữ "tên · phân loại ×SL" (span zaui-text-small chứa span ×SL) nằm cạnh ảnh. */
+/** Dòng sản phẩm: ô chữ "tên · phân loại ×SL" (Text DS `order-line-name` chứa span ×SL) nằm cạnh ảnh. */
 const productLine = (name: string) => {
-  const found = Array.from(document.querySelectorAll<HTMLElement>('span.zaui-text-small')).find(
-    (el) => (el.textContent ?? '').startsWith(name) && el.querySelector(':scope > span.zaui-text-xSmall')?.textContent === '×2',
+  const found = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="order-line-name"]')).find(
+    (el) => (el.textContent ?? '').startsWith(name) && el.querySelector(':scope > span')?.textContent === '×2',
   );
   if (!found) throw new Error(`không thấy dòng sản phẩm ${name}`);
   return found;

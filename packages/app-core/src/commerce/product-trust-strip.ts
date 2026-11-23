@@ -34,7 +34,10 @@ export interface ProductTrustStripView {
 export interface ProductTrustInput {
   /** `fulfiller.kind` của sản phẩm; chưa biết (API cũ) coi như hàng Tubu, như khối "Cam kết Tubu" ở cuối trang. */
   fulfillerKind: string | null | undefined;
-  /** `returns.window_days` của cấu hình công khai; mọi giá trị khác 0 (kể cả chưa tải) vẫn giữ trụ đổi trả. */
+  /**
+   * `returns.window_days` của cấu hình công khai; mọi giá trị khác 0 (kể cả chưa tải) vẫn giữ trụ đổi trả. Giữ lạc quan lúc đang tải là lựa chọn của PO
+   * (A3, 23/11/2026): dải không nhảy bố cục khi cấu hình về, chỉ bỏ trụ khi máy chủ báo 0 ngày.
+   */
   returnWindowDays: unknown;
 }
 

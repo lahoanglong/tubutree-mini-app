@@ -307,7 +307,8 @@ export const vi = {
     ],
     subscribeTitle: (name: string) => `Đặt định kỳ ${name}`,
     subscribeBody: (pct: number) => `Tự động giao lại theo chu kỳ, tiết kiệm ${pct}% mỗi đơn.`,
-    subscribeCta: 'Đặt định kỳ',
+    /** Nhóm gợi ý phụ dưới hai nút chính (kết bạn Zalo, Đặt định kỳ, mời bạn), cùng tên vùng với web. */
+    extrasLabel: 'Thêm cho đơn này',
     trackOrder: 'Theo dõi đơn',
     keepShopping: 'Tiếp tục mua sắm',
   },

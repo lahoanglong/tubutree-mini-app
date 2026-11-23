@@ -147,6 +147,8 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
           <Text variant="caption" tone="tertiary" as="div" data-testid="sample-note">{SAMPLE_STOREFRONT_NOTE}</Text>
         </Box>
       )}
+      {/* PO A3 (23/11/2026): lúc /config/public chưa về, returnWindowDays chưa có nên chip đổi trả hứa chung "Đổi trả nếu sản phẩm lỗi" ngay từ lần vẽ đầu (dải không nhảy);
+          chỉ khi máy chủ báo 0 ngày thì chip mới rời đi. Luật ở storefrontTrustChips (app-core). */}
       <StorefrontTrustChips returnWindowDays={returnWindowDays} />
 
       {collections.length === 0 ? (

@@ -24,6 +24,13 @@ describe('storefrontTrustChips', () => {
     expect(returns?.full).toBe('Đổi trả nếu sản phẩm lỗi');
   });
 
+  it('PO A3: cấu hình đang tải (undefined) cho đúng bốn chip và chữ ngắn như khi máy chủ báo số ngày: dải không nhảy bố cục lúc cấu hình về', () => {
+    const loading = storefrontTrustChips(undefined);
+    const loaded = storefrontTrustChips(7);
+    expect(loading.map((c) => [c.key, c.short])).toEqual(loaded.map((c) => [c.key, c.short]));
+    expect(loading.at(-1)).toEqual({ key: 'returns', short: 'Đổi trả nếu lỗi', full: 'Đổi trả nếu sản phẩm lỗi' });
+  });
+
   it('chữ ngắn vừa hai chip mỗi hàng ở 375px, không dùng thuật ngữ cấm', () => {
     for (const c of storefrontTrustChips(30)) {
       expect(c.short.length, c.short).toBeLessThanOrEqual(STOREFRONT_TRUST_SHORT_MAX);

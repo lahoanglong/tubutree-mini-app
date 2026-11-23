@@ -73,6 +73,10 @@ describe('OrderSuccess: lời mời bạn sau khi đặt (cờ growth.referral_v
     const track = screen.getByRole('button', { name: 'Theo dõi đơn' });
     expect(track.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getAllByTestId('order-invite-nudge')).toHaveLength(1);
+    // Cùng nhóm gợi ý phụ với web (MobileSuccess), sau 3 bước "Tiếp theo".
+    expect(screen.getByRole('region', { name: 'Thêm cho đơn này' })).toContainElement(row);
+    const steps = screen.getByRole('region', { name: 'Tiếp theo' });
+    expect(steps.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('chạm: mở hộp chia sẻ Zalo với link mời ?ref= và lời mời thưởng, ghi green_card_shared (surface order); đang mở thì chạm lần hai bị bỏ', async () => {

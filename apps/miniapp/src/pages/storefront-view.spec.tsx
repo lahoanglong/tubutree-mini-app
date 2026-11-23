@@ -44,7 +44,7 @@ const storefront = (over: Record<string, unknown>) => ({
 
 function renderPage(slug: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[`/s/${slug}`]} future={FUTURE}>
         <Routes>
@@ -53,6 +53,7 @@ function renderPage(slug: string) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return Object.assign(view, { qc });
 }
 
 describe('StorefrontViewPage — mã giới thiệu lấy từ API, không suy từ slug (D3-17)', () => {
@@ -417,6 +418,21 @@ describe('StorefrontViewPage — dải cam kết như web /s/[slug] trên điệ
     const stats = screen.getAllByTestId('shop-stat')[0]!;
     expect(stats.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(section.compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('PO A3: /config/public chưa về thì chip đổi trả đã đứng sẵn (hứa chung), cấu hình về 7 ngày thì dải giữ nguyên: không nhảy bố cục', async () => {
+    let resolveConfig!: (v: unknown) => void;
+    mocks.getPublicConfig.mockReturnValue(new Promise((r) => (resolveConfig = r)));
+    mocks.getPublicStorefront.mockResolvedValue(storefront(withItems));
+    const { qc } = renderPage('abcd1234');
+    await title();
+    expect(qc.getQueryState(['public-config'])?.status).toBe('pending');
+    const section = screen.getByRole('region', { name: 'Cam kết của gian hàng' });
+    const before = chips(section);
+    expect(before).toEqual(['Hàng đã qua duyệt', 'Theo dõi đơn', 'Thanh toán qua Tubu', 'Đổi trả nếu lỗi']);
+    resolveConfig({ returnWindowDays: 7 });
+    await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
+    expect(chips(screen.getByRole('region', { name: 'Cam kết của gian hàng' }))).toEqual(before);
   });
 
   it('không nhận đổi trả (0 ngày): bỏ chip đổi trả, ba chip còn lại', async () => {

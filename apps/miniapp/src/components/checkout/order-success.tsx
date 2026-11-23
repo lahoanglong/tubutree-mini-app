@@ -1,9 +1,10 @@
 import { lazy, Suspense, useState } from 'react';
-import { useNavigate, useSnackbar } from 'zmp-ui';
+import { useNavigate } from 'zmp-ui';
 import { useQueries } from '@tanstack/react-query';
 import { CheckCircle2, ChevronRight, Copy, Repeat } from 'lucide-react';
 import type { OrderDTO } from '@tubutree/shared-types';
 import { fetchProduct, type PlacedOrder } from '../../services/shop-api';
+import { useNotify } from '../../hooks/use-notify';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { useStorefrontContext } from '../../store/storefront-context';
 import { copyText } from '../../utils/clipboard';
@@ -21,7 +22,9 @@ import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
 import { IconButton } from '../ui/icon-button';
 import { KeyValueRow } from '../ui/key-value-row';
+import { SR_ONLY } from '../ui/sr-only';
 import { Heading, Text } from '../ui/text';
+import '../../css/order-success.css';
 
 const MAX_SUBSCRIBE_CHECKS = 3;
 
@@ -63,10 +66,52 @@ export function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | nul
   return null;
 }
 
+/** Gợi ý phụ sau khi đặt: MỘT dòng chạm mở sheet (cùng kiểu dòng mời bạn bên dưới), không thêm nút cỡ lớn tranh vai "Theo dõi đơn". */
+export function SubscribeRow({ candidate, discountPct, onOpen }: { candidate: SubscribeCandidate; discountPct: number; onOpen: () => void }) {
+  return (
+    <button type="button" className="tubu-press touch-target tubu-order-success-row" onClick={onOpen}>
+      <Icon icon={Repeat} tone="brand" style={{ flex: 'none' }} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 600 }}>
+          {vi.success.subscribeTitle(candidate.productName)}
+        </Text>
+        <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
+          {vi.success.subscribeBody(discountPct)}
+        </Text>
+      </span>
+      <Icon icon={ChevronRight} size="sm" tone="muted" style={{ flex: 'none' }} />
+    </button>
+  );
+}
+
+// 3 bước thành một hàng (số + tên bước) để nút chính và mã đơn nằm trong màn đầu; câu giải thích từng bước vẫn đọc được bằng trình đọc màn hình.
+function NextStepsCompact() {
+  return (
+    <section aria-label={vi.success.nextTitle}>
+      <Heading variant="title-sm" as="h2" style={{ marginBottom: 'var(--space-stack-sm)' }}>
+        {vi.success.nextTitle}
+      </Heading>
+      <ol className="tubu-order-success-steps">
+        {vi.success.steps.map((s, i) => (
+          <li key={s.title} className="tubu-order-success-step">
+            <span aria-hidden className="tubu-order-success-step-num" data-current={i === 0 || undefined}>
+              {i + 1}
+            </span>
+            <Text variant="caption" as="span" style={{ fontWeight: 600 }}>
+              {s.title}
+              <span style={SR_ONLY}>: {s.body}</span>
+            </Text>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 /**
- * Màn "Đặt hàng thành công" (spec 4a.5, A2-45): mã đơn sao chép được, tổng tiền, điểm sẽ nhận,
- * ngày giao dự kiến (khi chủ shop đã cấu hình), 3 bước tiếp theo, CTA chính "Theo dõi đơn", gợi ý
- * "Đặt định kỳ". Bỏ lá rơi / emoji chức năng.
+ * Màn "Đặt hàng thành công" (spec 4a.5, A2-45), cùng bố cục MobileSuccess của web ở 375×812: trạng thái đơn, thẻ mã đơn + tiền, rồi ngay hai nút
+ * "Theo dõi đơn" / "Tiếp tục mua sắm" để nút chính luôn trong màn đầu, kể cả đơn tách nhiều nơi giao. Danh sách đơn tách, 3 bước tiếp theo (một hàng)
+ * và nhóm gợi ý phụ (kết bạn Zalo, Đặt định kỳ, mời bạn) nằm dưới. Bỏ lá rơi / emoji chức năng.
  */
 export function OrderSuccess({
   order,
@@ -78,7 +123,7 @@ export function OrderSuccess({
   onContinue: () => void;
 }) {
   const navigate = useNavigate();
-  const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const sfSlug = useStorefrontContext((s) => s.slug);
   const sfKind = useStorefrontContext((s) => s.kind);
   const cfg = usePublicConfig();
@@ -98,16 +143,12 @@ export function OrderSuccess({
 
   const copyCode = () => {
     void copyText(codesText).then((ok) =>
-      openSnackbar(
-        ok
-          ? { text: vi.success.copied, type: 'success' }
-          : { text: vi.success.copyFailed(codesText), type: 'info', duration: 4000 },
-      ),
+      notify(ok ? { text: vi.success.copied, type: 'success' } : { text: vi.success.copyFailed(codesText), type: 'info', duration: 4000 }),
     );
   };
 
-  // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ
-  // đầu; gợi ý định kỳ nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
+  // Cấu hình công khai đã được trang checkout tải sẵn (cùng queryKey) nên dòng ETA có ngay ở lần vẽ đầu; gợi ý phụ nằm DƯỚI hai CTA
+  // để lúc sản phẩm tải xong không đẩy nút "Theo dõi đơn" đi chỗ khác.
   // Gian hàng đối tác tự giao nên không hứa ngày thay họ: chỉ phần hàng Tubu giao mới có ngày (cùng luật với chi tiết đơn).
   const eta = cfg.isLoaded ? checkoutEtaLabel(cfg.shippingEta, placedOrderKinds(order), undefined, etaSchedule(cfg), order.shippingAddress?.province) : null;
   const grandTotal = split ? split.reduce((sum, o) => sum + o.total, 0) : order.total;
@@ -117,16 +158,9 @@ export function OrderSuccess({
     : order.pointsEarned;
 
   return (
-    <div style={{ padding: '32px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 }}>
-        <span
-          aria-hidden
-          className="tubu-pop"
-          style={{
-            width: 56, height: 56, borderRadius: 'var(--radius-pill)', background: 'var(--color-action-secondary-bg)',
-            display: 'grid', placeItems: 'center',
-          }}
-        >
+    <div data-testid="order-success" className="tubu-order-success">
+      <div className="tubu-order-success-head">
+        <span aria-hidden className="tubu-pop tubu-order-success-mark">
           <Icon icon={CheckCircle2} size="lg" tone="brand" />
         </span>
         <Heading variant="title-lg" as="h1">
@@ -137,8 +171,8 @@ export function OrderSuccess({
         </Text>
       </div>
 
-      <Card variant="outline" padding={16}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <Card variant="outline" padding={12}>
+        <div className="tubu-order-success-code">
           <div style={{ minWidth: 0 }}>
             <Text variant="caption" tone="tertiary" as="div">
               {vi.success.orderCode}
@@ -151,7 +185,7 @@ export function OrderSuccess({
           </div>
           <IconButton icon={Copy} label={vi.success.copyCodeLabel(codesText)} onPress={copyCode} />
         </div>
-        <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: 12, paddingTop: 8 }}>
+        <div className="tubu-order-success-facts">
           <KeyValueRow
             label={split ? `Tổng ${split.length} đơn` : vi.success.total}
             value={formatVnd(grandTotal)}
@@ -169,27 +203,31 @@ export function OrderSuccess({
         </div>
       </Card>
 
+      <div className="tubu-order-success-ctas">
+        <Button fullWidth size="lg" onPress={onTrack}>
+          {vi.success.trackOrder}
+        </Button>
+        <Button fullWidth variant="ghost" onPress={handleContinue}>
+          {vi.success.keepShopping}
+        </Button>
+      </div>
+
       {split && (
         <section aria-label="Đơn cùng lần đặt">
-          <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>
+          <Heading variant="title-sm" as="h2" style={{ marginBottom: 'var(--space-stack-xs)' }}>
             Hàng do {split.length} nơi giao nên được tách thành {split.length} đơn
           </Heading>
-          <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>
+          <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 var(--space-stack-sm)' }}>
             Mỗi đơn có mã, phí giao và lộ trình riêng.
           </Text>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <ul className="tubu-order-success-list">
             {split.map((o) => (
               <li key={o.code}>
                 <button
                   type="button"
-                  className="tubu-press"
+                  className="tubu-press tubu-order-success-split"
                   aria-label={`Xem đơn ${o.code}, ${o.fulfillerName} giao, ${formatVnd(o.total)}`}
                   onClick={() => navigate(`/order/${o.code}`, { replace: true })}
-                  style={{
-                    width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                    border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-control)',
-                    background: 'var(--color-bg-surface)', textAlign: 'left', cursor: 'pointer',
-                  }}
                 >
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 700 }}>
@@ -210,72 +248,19 @@ export function OrderSuccess({
         </section>
       )}
 
-      <section aria-label={vi.success.nextTitle}>
-        <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
-          {vi.success.nextTitle}
-        </Heading>
-        <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {vi.success.steps.map((s, i) => (
-            <li key={s.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <span
-                aria-hidden
-                style={{
-                  width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center', fontWeight: 700,
-                  borderRadius: 'var(--radius-pill)', fontSize: 'var(--type-caption-size)',
-                  background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--color-bg-subtle)',
-                  color: i === 0 ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
-                }}
-              >
-                {i + 1}
-              </span>
-              <div>
-                <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-                  {s.title}
-                </Text>
-                <Text variant="caption" tone="tertiary" as="div">
-                  {s.body}
-                </Text>
-              </div>
-            </li>
-          ))}
-        </ol>
+      <NextStepsCompact />
+
+      <section aria-label={vi.success.extrasLabel} className="tubu-order-success-extras">
+        {showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />}
+        {candidate && (
+          <SubscribeRow candidate={candidate} discountPct={Math.round(cfg.subscribeDiscountPct * 100)} onOpen={() => setSubscribeOpen(true)} />
+        )}
+        {referralViralOn(cfg) && (
+          <Suspense fallback={null}>
+            <OrderInviteNudge />
+          </Suspense>
+        )}
       </section>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Button fullWidth size="lg" onPress={onTrack}>
-          {vi.success.trackOrder}
-        </Button>
-        <Button fullWidth variant="ghost" onPress={handleContinue}>
-          {vi.success.keepShopping}
-        </Button>
-      </div>
-
-      {showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />}
-
-      {candidate && (
-        <Card variant="flat" padding={12}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <Icon icon={Repeat} tone="brand" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-                {vi.success.subscribeTitle(candidate.productName)}
-              </Text>
-              <Text variant="caption" tone="secondary" as="div">
-                {vi.success.subscribeBody(Math.round(cfg.subscribeDiscountPct * 100))}
-              </Text>
-            </div>
-          </div>
-          <Button variant="secondary" fullWidth onPress={() => setSubscribeOpen(true)} style={{ marginTop: 10 }}>
-            {vi.success.subscribeCta}
-          </Button>
-        </Card>
-      )}
-
-      {referralViralOn(cfg) && (
-        <Suspense fallback={null}>
-          <OrderInviteNudge />
-        </Suspense>
-      )}
 
       {candidate && (
         <SubscribeSheet

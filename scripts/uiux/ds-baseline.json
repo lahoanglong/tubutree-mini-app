@@ -3,7 +3,6 @@
  "guards": {
   "miniapp": {
    "open-snackbar": {
-    "components/checkout/order-success.tsx": 4,
     "components/checkout/use-coupon-hint.ts": 4,
     "pages/cart.tsx": 8,
     "pages/checkout.tsx": 6,
@@ -41,8 +40,7 @@
    "zmp-text": {
     "components/product/points-earn-line.tsx": 1,
     "pages/cart.tsx": 1,
-    "pages/checkout.tsx": 1,
-    "pages/product-detail.tsx": 1
+    "pages/checkout.tsx": 1
    }
   },
   "web": {
@@ -244,7 +242,6 @@
   "apps/miniapp/src/components/catalog/suggest-list.tsx": 12,
   "apps/miniapp/src/components/catalog/suggested-rail.tsx": 3,
   "apps/miniapp/src/components/checkout/address-section.tsx": 24,
-  "apps/miniapp/src/components/checkout/order-success.tsx": 25,
   "apps/miniapp/src/components/checkout/referral-code-box.tsx": 21,
   "apps/miniapp/src/components/checkout/voucher-sheet.tsx": 6,
   "apps/miniapp/src/components/community/author-line.tsx": 2,

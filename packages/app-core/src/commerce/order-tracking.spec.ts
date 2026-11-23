@@ -12,6 +12,7 @@ import {
   returnWindowOpen,
   shippingEvents,
   shortDateTime,
+  showTrackingPill,
   trackAddsDetail,
   type OrderStage,
   type TrackOrder,
@@ -511,6 +512,20 @@ describe('orderTrack', () => {
       const delivered = orderTrack(order({ status: 'DELIVERED', shippingHistory: [{ at: iso(-7 * HOUR), status: 'Đã lấy hàng' }] }))!;
       expect(trackAddsDetail(delivered)).toBe(true);
     });
+  });
+});
+
+describe('showTrackingPill (PO A3: viên vận đơn chỉ cho đơn còn chờ hàng)', () => {
+  it.each(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'])('%s có mã vận đơn: hiện viên', (status) => {
+    expect(showTrackingPill({ status, shippingCode: 'GHN123' })).toBe(true);
+  });
+
+  it.each(['CANCELLED', 'RETURNED'])('%s: ẩn viên dù kho đã gắn mã vận đơn', (status) => {
+    expect(showTrackingPill({ status, shippingCode: 'GHN123' })).toBe(false);
+  });
+
+  it.each([null, undefined, ''])('chưa có mã vận đơn (%s): không có viên', (shippingCode) => {
+    expect(showTrackingPill({ status: 'SHIPPING', shippingCode })).toBe(false);
   });
 });
 

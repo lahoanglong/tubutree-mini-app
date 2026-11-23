@@ -244,7 +244,7 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
     expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
     mocks.copyText.mockResolvedValue(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345 (Giao Hàng Nhanh)' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN6789012345');
     await waitFor(() => expect(screen.getByTestId('order-tracking-pill')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });

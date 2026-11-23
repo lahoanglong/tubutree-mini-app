@@ -41,9 +41,11 @@ export function OrderTrackingPill({ code, partner }: OrderTrackingPillProps) {
       busy.current = false;
     }
   };
+  // Viên in cả hãng cạnh mã, nên nhãn đọc cũng nói hãng (khách biết dán mã vào ứng dụng nào); chưa có hãng thì chỉ đọc mã.
+  const label = partner ? fillCopy('order.shipping.copyAriaPartner', { code, partner }) : fillCopy('order.shipping.copyAria', { code });
   return (
     <div className="tubu-order-track" data-testid="order-tracking-pill">
-      <button type="button" className="tubu-press touch-target tubu-order-track-pill" aria-label={fillCopy('order.shipping.copyAria', { code })} onClick={() => void copy()}>
+      <button type="button" className="tubu-press touch-target tubu-order-track-pill" aria-label={label} onClick={() => void copy()}>
         <Truck className="tubu-order-track-icon" aria-hidden="true" />
         <span className="tubu-order-track-code" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {code}

@@ -177,25 +177,25 @@ describe('OrderShipping', () => {
 });
 
 describe('OrderTrackingPill: viên vận đơn chạm để chép mã (Mini không mở trang hãng)', () => {
-  it('in mã và hãng, tên truy cập nêu mã, chữ hiện "Chép mã"; không có liên kết ra trang hãng', () => {
+  it('in mã và hãng, tên truy cập nêu mã kèm hãng (PO A3), chữ hiện "Chép mã"; không có liên kết ra trang hãng', () => {
     render(<OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />);
-    const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' });
+    const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123 (Giao Hàng Nhanh)' });
     expect(button).toHaveTextContent('GHN123 · Giao Hàng NhanhChép mã');
     expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it('không có hãng: chỉ mã', () => {
-    render(<OrderTrackingPill code="GHN123" />);
+  it.each([undefined, null, ''])('không có hãng (%s): in và đọc chỉ mã, không có cặp ngoặc rỗng', (partner) => {
+    render(<OrderTrackingPill code="GHN123" partner={partner} />);
     expect(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' })).toHaveTextContent('GHN123Chép mã');
   });
 
   it('chép đúng mã và báo thành công tại chỗ, lỗi thì nhắc chép tay', async () => {
     mocks.copyText.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     render(<OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123 (Giao Hàng Nhanh)' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123 (Giao Hàng Nhanh)' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.'));
   });
 });

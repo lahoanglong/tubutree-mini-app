@@ -349,6 +349,14 @@ export function trackAddsDetail(view: OrderTrackView): boolean {
   return view.current < view.steps.length || view.steps.some((s) => s.events.length > 0);
 }
 
+/**
+ * Viên vận đơn ngay dưới thẻ trạng thái chỉ dành cho đơn còn đang chờ hàng (PO A3, 23/11/2026). Đơn đã huỷ hay đã hoàn không còn gì để theo
+ * dõi nên ẩn viên dù kho đã gắn mã; mã vận đơn vẫn in ở khối Vận chuyển bên dưới để đối chiếu.
+ */
+export function showTrackingPill(o: Pick<TrackOrder, 'status' | 'shippingCode'>): boolean {
+  return !!o.shippingCode && o.status !== 'CANCELLED' && o.status !== 'RETURNED';
+}
+
 export type OrderActionKind = 'pay' | 'cancel' | 'contact' | 'review' | 'reorder' | 'return';
 
 export interface OrderActionPlan {
