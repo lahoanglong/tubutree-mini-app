@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getWasteRequestByOrder: vi.fn(),
   copyText: vi.fn(),
   coreGet: vi.fn(),
+  search: '',
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -26,7 +27,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useParams: () => ({ code: 'TT001' }),
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/orders/TT001', search: '', state: null }),
+  useLocation: () => ({ pathname: '/orders/TT001', search: mocks.search, state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/shop-api', () => ({
@@ -202,6 +203,120 @@ describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', (
     renderPage();
     expect((await screen.findAllByText(/Xà bông thảo mộc/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Viết đánh giá|Sửa đánh giá/)).toBeNull();
+    expect(screen.queryByTestId('order-line-refunded')).toBeNull();
+  });
+});
+
+// tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn — món đã hoàn tiền không còn lối "Viết đánh giá", chỉ một dòng trạng thái mờ.
+describe('OrderDetailPage — món đã hoàn tiền (tubu-w25-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search = '';
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  const order = (items: Record<string, unknown>[]) => ({ ...ORDER, items: items.map((it, i) => ({ ...ORDER.items[0], id: `oi${i + 1}`, ...it })) });
+
+  it('món trả hết → "Đã hoàn tiền" mờ, không có nút viết; món chưa trả cùng đơn vẫn "Viết đánh giá"', async () => {
+    mocks.fetchOrder.mockResolvedValue(
+      order([
+        { productName: 'Xà bông thảo mộc', reviewId: null, reviewable: false, refundedQty: 2 },
+        { productName: 'Nước giặt', productSlug: 'nuoc-giat', reviewId: null, reviewable: true },
+      ]),
+    );
+    renderPage();
+    const status = await screen.findByTestId('order-line-refunded');
+    expect(status).toHaveTextContent(/^Đã hoàn tiền$/);
+    expect(status.tagName).not.toBe('BUTTON');
+    expect(status.style.color).toBe('var(--color-text-tertiary)');
+    expect(screen.getAllByText('Viết đánh giá')).toHaveLength(1);
+    fireEvent.click(screen.getByText('Viết đánh giá'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-giat', { state: { reviewOrderId: 'o1' } });
+  });
+
+  it('trả một phần → "Đã hoàn tiền 1/2"', async () => {
+    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: null, reviewable: false, refundedQty: 1 }]));
+    renderPage();
+    expect(await screen.findByTestId('order-line-refunded')).toHaveTextContent('Đã hoàn tiền 1/2');
+    expect(screen.queryByText(/Viết đánh giá/)).toBeNull();
+  });
+
+  it('đã đánh giá trước khi trả → vẫn "Sửa đánh giá", không thêm dòng hoàn tiền', async () => {
+    mocks.fetchOrder.mockResolvedValue(order([{ reviewId: 'r1', reviewable: false, refundedQty: 2 }]));
+    renderPage();
+    expect(await screen.findByText('Sửa đánh giá')).toBeInTheDocument();
+    expect(screen.queryByTestId('order-line-refunded')).toBeNull();
+  });
+});
+
+describe('OrderDetailPage — mở từ "Đánh giá (n SP)" (?review=1, tubu-w25-02)', () => {
+  const matchMedia = window.matchMedia;
+  const scrollIntoView = Element.prototype.scrollIntoView;
+  let scrolled: { el: Element; opts: unknown }[] = [];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    scrolled = [];
+    Element.prototype.scrollIntoView = function (this: Element, opts?: unknown) {
+      scrolled.push({ el: this, opts });
+    };
+  });
+  afterEach(() => {
+    mocks.search = '';
+    window.matchMedia = matchMedia;
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  const ITEMS = [
+    { ...ORDER.items[0], id: 'oi1', productName: 'Xà bông đã trả', reviewId: null, reviewable: false, refundedQty: 2 },
+    { ...ORDER.items[0], id: 'oi2', productName: 'Dầu gội đã viết', productSlug: 'dau-goi', reviewId: 'r2', reviewable: false },
+    { ...ORDER.items[0], id: 'oi3', productName: 'Nước giặt', productSlug: 'nuoc-giat', reviewId: null, reviewable: true },
+    { ...ORDER.items[0], id: 'oi4', productName: 'Nước rửa chén', productSlug: 'nuoc-rua-chen', reviewId: null, reviewable: true },
+  ];
+  const reduceMotion = (on: boolean) => {
+    window.matchMedia = vi.fn().mockImplementation((q: string) => ({ matches: on && q === '(prefers-reduced-motion: reduce)', media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
+  };
+
+  it('cuộn mượt tới món đầu tiên còn lối viết (bỏ món đã hoàn tiền, món đã đánh giá) và đặt focus vào nút "Viết đánh giá" của món đó', async () => {
+    mocks.search = '?review=1';
+    reduceMotion(false);
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS });
+    renderPage();
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    const row = scrolled[0]!.el as HTMLElement;
+    expect(row.textContent).toContain('Nước giặt');
+    expect(row.textContent).not.toContain('Nước rửa chén');
+    expect(scrolled[0]!.opts).toEqual({ behavior: 'smooth', block: 'center' });
+    expect(document.activeElement?.textContent).toBe('Viết đánh giá');
+    expect(row.contains(document.activeElement)).toBe(true);
+  });
+
+  it('bật giảm chuyển động → nhảy thẳng (behavior auto)', async () => {
+    mocks.search = '?review=1';
+    reduceMotion(true);
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS });
+    renderPage();
+    await waitFor(() => expect(scrolled).toHaveLength(1));
+    expect(scrolled[0]!.opts).toEqual({ behavior: 'auto', block: 'center' });
+  });
+
+  it('không có ?review=1 → không cuộn, không cướp focus', async () => {
+    reduceMotion(false);
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS });
+    renderPage();
+    expect(await screen.findAllByText('Viết đánh giá')).toHaveLength(2);
+    expect(scrolled).toHaveLength(0);
+    expect(document.activeElement?.textContent).not.toBe('Viết đánh giá');
+  });
+
+  it('?review=1 mà mọi món đã đánh giá/đã hoàn tiền → không cuộn', async () => {
+    mocks.search = '?review=1';
+    reduceMotion(false);
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: ITEMS.slice(0, 2) });
+    renderPage();
+    expect(await screen.findByText('Sửa đánh giá')).toBeInTheDocument();
+    expect(scrolled).toHaveLength(0);
   });
 });
 

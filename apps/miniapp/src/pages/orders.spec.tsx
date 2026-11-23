@@ -141,7 +141,8 @@ describe('OrdersPage (tab gốc)', () => {
     const btn = await screen.findByRole('button', { name: 'Đánh giá (1 SP) của đơn TUBU-777' });
     expect(btn).toHaveTextContent('Đánh giá (1 SP)');
     fireEvent.click(btn);
-    expect(mocks.navigate).toHaveBeenCalledWith('/order/TUBU-777');
+    // tubu-w25-02: ?review=1 để chi tiết đơn cuộn tới món đầu tiên còn chờ đánh giá.
+    expect(mocks.navigate).toHaveBeenCalledWith('/order/TUBU-777?review=1');
   });
 
   it('chạm thẻ → chi tiết đơn', async () => {

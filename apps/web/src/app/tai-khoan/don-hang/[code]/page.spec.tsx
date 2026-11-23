@@ -608,6 +608,96 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
   });
 });
 
+// tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn — món đã hoàn tiền không còn lối "Viết đánh giá".
+describe('/tai-khoan/don-hang/[code] — món đã hoàn tiền và mở từ "Đánh giá (n SP)" (tubu-w25-02)', () => {
+  const delivered = (items: Record<string, unknown>[]) => ({
+    ...structuredClone(ORDER),
+    id: 'ord-1',
+    status: 'DELIVERED',
+    paymentMethod: 'COD',
+    paymentStatus: 'PAID',
+    items: items.map((it, i) => ({ ...ORDER.items[0], id: `i${i + 1}`, ...it })),
+  });
+  const ITEMS = [
+    { productName: 'Xà bông đã trả', productSlug: 'xa-bong', reviewId: null, reviewable: false, refundedQty: 2 },
+    { productName: 'Dầu gội đã viết', productSlug: 'dau-goi', reviewId: 'rv-2', reviewable: false },
+    { productName: 'Nước giặt', productSlug: 'nuoc-giat', reviewId: null, reviewable: true },
+    { productName: 'Nước rửa chén', productSlug: 'nuoc-rua-chen', reviewId: null, reviewable: true },
+  ];
+  const matchMedia = window.matchMedia;
+  const scrollIntoView = Element.prototype.scrollIntoView;
+  let scrolled: { el: Element; opts: unknown }[] = [];
+  const reduceMotion = (on: boolean) => {
+    window.matchMedia = vi.fn().mockImplementation((q: string) => ({
+      matches: on && q === '(prefers-reduced-motion: reduce)', media: q, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(),
+    })) as never;
+  };
+  beforeEach(() => {
+    scrolled = [];
+    Element.prototype.scrollIntoView = function (this: Element, opts?: unknown) {
+      scrolled.push({ el: this, opts });
+    };
+    reduceMotion(false);
+  });
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+    window.matchMedia = matchMedia;
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  it('món trả hết → "Đã hoàn tiền" mờ, không phải liên kết; món đã đánh giá vẫn "Sửa đánh giá"; món chưa trả vẫn "Viết đánh giá"', async () => {
+    mocks.order = delivered(ITEMS);
+    const { container } = await mount();
+    const status = container.querySelectorAll('[data-testid="order-line-refunded"]');
+    expect([...status].map((el) => el.textContent)).toEqual(['Đã hoàn tiền']);
+    expect(status[0]!.closest('a')).toBeNull();
+    const links = [...container.querySelectorAll('a')].filter((a) => /^(Viết|Sửa) đánh giá$/.test(a.textContent ?? ''));
+    expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Sửa đánh giá', '/san-pham/dau-goi?danh-gia=ord-1#danh-gia'],
+      ['Viết đánh giá', '/san-pham/nuoc-giat?danh-gia=ord-1#danh-gia'],
+      ['Viết đánh giá', '/san-pham/nuoc-rua-chen?danh-gia=ord-1#danh-gia'],
+    ]);
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+
+  it('?review=1 → cuộn mượt tới món đầu tiên còn lối viết (bỏ món đã hoàn tiền, đã đánh giá) và focus nút "Viết đánh giá" của món đó', async () => {
+    window.history.replaceState(null, '', '/tai-khoan/don-hang/TB-9?review=1');
+    mocks.order = delivered(ITEMS);
+    await mount();
+    expect(scrolled).toHaveLength(1);
+    const row = scrolled[0]!.el as HTMLElement;
+    expect(row.tagName).toBe('LI');
+    expect(row.textContent).toContain('Nước giặt');
+    expect(scrolled[0]!.opts).toEqual({ behavior: 'smooth', block: 'center' });
+    const active = document.activeElement as HTMLAnchorElement;
+    expect(active.textContent).toBe('Viết đánh giá');
+    expect(active.getAttribute('href')).toBe('/san-pham/nuoc-giat?danh-gia=ord-1#danh-gia');
+  });
+
+  it('?review=1 và bật giảm chuyển động → nhảy thẳng (behavior auto)', async () => {
+    window.history.replaceState(null, '', '/tai-khoan/don-hang/TB-9?review=1');
+    reduceMotion(true);
+    mocks.order = delivered(ITEMS);
+    await mount();
+    expect(scrolled.map((s) => s.opts)).toEqual([{ behavior: 'auto', block: 'center' }]);
+  });
+
+  it('không có ?review=1 → không cuộn, không cướp focus', async () => {
+    mocks.order = delivered(ITEMS);
+    await mount();
+    expect(scrolled).toEqual([]);
+    expect(document.activeElement?.textContent).not.toBe('Viết đánh giá');
+  });
+
+  it('?review=1 mà không còn món nào để viết (đã đánh giá hoặc đã hoàn tiền) → không cuộn', async () => {
+    window.history.replaceState(null, '', '/tai-khoan/don-hang/TB-9?review=1');
+    mocks.order = delivered(ITEMS.slice(0, 2));
+    const { container } = await mount();
+    expect(container.textContent).toContain('Sửa đánh giá');
+    expect(scrolled).toEqual([]);
+  });
+});
+
 describe('/tai-khoan/don-hang/[code] — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách', () => {
   const subscription = (over: Record<string, unknown> = {}) => ({
     ...structuredClone(ORDER),
