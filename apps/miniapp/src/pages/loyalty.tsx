@@ -16,7 +16,7 @@ import {
 import { getLoadErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { pointsTxnPagesQuery } from '@tubutree/app-core/queries/loyalty';
-import { loyaltyOffersRow } from '@tubutree/app-core/loyalty-page';
+import { expiringRedeemCta, loyaltyOffersRow, memberCardOfflineHint } from '@tubutree/app-core/loyalty-page';
 import { GuestTiers } from '../components/loyalty/guest-tiers';
 import { LoyaltyRulesCard } from '../components/loyalty/loyalty-rules-card';
 import { OffersCheckInStrip } from '../components/offers/offers-check-in-strip';
@@ -59,6 +59,10 @@ const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TI
 
 /** Lề của các thẻ khối dưới thẻ hạng (dòng điểm danh, dòng sang Ưu đãi, mục gập luật). */
 const BLOCK_INSET: CSSProperties = { margin: '0 var(--space-gutter) var(--space-inset-card)' };
+const EXPIRING_CTA: CSSProperties = { marginTop: 'var(--space-stack-xs)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-inline-xs)' };
+const HINT_STACK: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-xs)' };
+// Trắng cố định (`--stone-0`, không phải `--color-bg-surface` đổi theo theme) + lề trắng 16px quanh lề 1 module của ảnh QR: đủ "vùng yên tĩnh" cho máy quét ở quầy.
+const MEMBER_SCAN_FRAME: CSSProperties = { background: 'var(--stone-0)', padding: 'var(--space-inline-lg)', borderRadius: 'var(--radius-card)', lineHeight: 0 };
 
 /** Giữ giá trị khác null gần nhất: BottomSheet còn chạy hoạt ảnh đóng ~200ms sau khi state về null,
  * nội dung không được trống đi trong lúc trượt xuống. */
@@ -113,6 +117,7 @@ export default function LoyaltyPage() {
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
   const expiringNote = expiringPointsNote(data?.expiringPoints);
+  const redeemCta = expiringRedeemCta('/offers', expiringNote, { redeemable: data?.redeemablePoints, total: lots?.total ?? 0 });
   const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
   const graceLine = tierGraceLine(data?.tierGrace, tierName, { money: moneyShort, points: formatNumber, date: formatDate });
 
@@ -192,6 +197,25 @@ export default function LoyaltyPage() {
                 >
                   {expiringNote.text}
                 </Text>
+              )}
+              {redeemCta && (
+                <div data-testid="loyalty-expiring-cta" style={EXPIRING_CTA}>
+                  <Button
+                    variant="ghost"
+                    onPress={() => {
+                      haptic('light');
+                      goSmart(redeemCta.href);
+                    }}
+                    style={{ minWidth: 0 }}
+                  >
+                    {redeemCta.label}
+                  </Button>
+                  {redeemCta.note && (
+                    <Text variant="caption" tone="secondary" as="div">
+                      {redeemCta.note}
+                    </Text>
+                  )}
+                </div>
               )}
               {expiryPolicy && (
                 <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
@@ -437,8 +461,11 @@ export default function LoyaltyPage() {
             />
           ) : (
             <>
+              {/* Khung quét ở quầy: nền trắng cố định (không theo theme tối) và lề trắng rộng quanh mã, máy quét POS bắt mã nhanh hơn trên nền xám. */}
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <QrCode value={memberCardQ.data.memberCode} size={180} />
+                <div data-testid="member-card-scan" style={MEMBER_SCAN_FRAME}>
+                  <QrCode value={memberCardQ.data.memberCode} size={180} />
+                </div>
               </div>
 
               {/* Mã thành viên (gõ tay được nếu không quét) & nút chép */}
@@ -470,9 +497,16 @@ export default function LoyaltyPage() {
             }}
           >
             <Icon icon={Lightbulb} size="sm" tone="brand" style={{ flexShrink: 0, marginTop: 2 }} />
-            <Text variant="caption" tone="secondary">
-              {memberCardHint(memberCardQ.data)}
-            </Text>
+            <div style={HINT_STACK}>
+              <Text variant="caption" tone="secondary">
+                {memberCardHint(memberCardQ.data)}
+              </Text>
+              {memberCardOfflineHint(memberCardQ.data) && (
+                <Text variant="caption" tone="secondary" data-testid="member-card-offline-hint">
+                  {memberCardOfflineHint(memberCardQ.data)}
+                </Text>
+              )}
+            </div>
           </div>
         )}
       </BottomSheet>

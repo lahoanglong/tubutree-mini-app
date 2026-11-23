@@ -9,7 +9,7 @@ import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnPagesQuery } from
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
 import { pendingPointsBalanceLine } from '@tubutree/app-core/waste-copy';
-import { loyaltyOffersRow } from '@tubutree/app-core/loyalty-page';
+import { expiringRedeemCta, loyaltyOffersRow, memberCardOfflineHint } from '@tubutree/app-core/loyalty-page';
 import { ecoPassportQuery } from '@tubutree/app-core/eco/passport';
 import { passportCopy } from '@tubutree/app-core/eco/passport-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -149,6 +149,7 @@ export default function LoyaltyPage() {
   const lots = pointsSummary(data);
   const pendingWasteLine = pendingPointsBalanceLine(wasteMeQ.data?.pendingPoints);
   const expiring = expiringPointsNote(data.expiringPoints);
+  const redeemCta = isWebRouteReady('/uu-dai') ? expiringRedeemCta('/uu-dai', expiring, { redeemable: data.redeemablePoints, total: lots.total }) : null;
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
   const history = txnQ.data?.pages.flat() ?? [];
   const offersRow = loyaltyOffersRow('/uu-dai', couponsQ.data?.length);
@@ -170,6 +171,14 @@ export default function LoyaltyPage() {
             {lots.convertedNote && <p className="mt-0.5 text-caption text-stone-600">{lots.convertedNote}</p>}
             {pendingWasteLine && <p className="mt-0.5 text-caption tabular-nums text-stone-600">{pendingWasteLine}</p>}
             {expiring && <p className={`mt-1.5 text-caption ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
+            {redeemCta && (
+              <div data-testid="loyalty-expiring-cta" className="mt-1 flex flex-col items-center gap-0.5">
+                <Link href={redeemCta.href} className={`${ui.btnText} text-[color:var(--color-text-brand)] no-underline hover:underline`}>
+                  {redeemCta.label}
+                </Link>
+                {redeemCta.note && <p className="text-caption text-stone-600">{redeemCta.note}</p>}
+              </div>
+            )}
             {expiryPolicy && <p className="mt-0.5 text-caption text-stone-600">{expiryPolicy}</p>}
 
             {next ? (
@@ -426,8 +435,11 @@ function MemberCardSheet({
           <InlineError message={`Chưa tải được mã thành viên: ${error ?? ''}`} onRetry={onRetry} />
         ) : (
           <>
+            {/* Khung quét ở quầy: nền trắng cố định và lề trắng rộng quanh mã (vùng yên tĩnh), máy quét POS bắt mã nhanh hơn trên nền xám. */}
             <div className="flex justify-center">
-              <QrCode value={card.memberCode} size={180} />
+              <div data-testid="member-card-scan" className="rounded-card bg-stone-0 p-4 leading-none">
+                <QrCode value={card.memberCode} size={180} />
+              </div>
             </div>
             <div className="mt-3 flex items-center justify-center gap-2">
               <span className="font-mono text-lg font-bold tracking-widest text-stone-900">{card.memberCode}</span>
@@ -446,7 +458,14 @@ function MemberCardSheet({
       {card && (
         <div className="mt-3 flex items-start gap-2 rounded-control bg-stone-100 p-2">
           <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-          <p className="text-caption text-stone-700">{memberCardHint(card)}</p>
+          <div className="space-y-1">
+            <p className="text-caption text-stone-700">{memberCardHint(card)}</p>
+            {memberCardOfflineHint(card) && (
+              <p data-testid="member-card-offline-hint" className="text-caption text-stone-700">
+                {memberCardOfflineHint(card)}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </Sheet>

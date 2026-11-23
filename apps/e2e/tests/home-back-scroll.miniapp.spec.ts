@@ -69,7 +69,8 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     await page.getByRole('navigation').getByRole('button', { name: /^Trang chủ/ }).click();
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(1200);
-    expect(await scrollTop(page)).toBe(0);
+    // Máy tải nặng: trang cũ còn trượt ra hoặc lượt đưa về đầu trang tới muộn hơn 1,2 s (w16-04, w19-04 đọc 4897). Chờ hết hiệu ứng rồi chờ tới khi đạt.
+    await expect(page.locator('.zaui-page')).toHaveCount(1, { timeout: 5_000 });
+    await expect.poll(() => scrollTop(page), { timeout: 3_000 }).toBe(0);
   });
 });

@@ -522,6 +522,63 @@ describe('/tai-khoan/diem-xanh — thẻ thành viên số', () => {
   });
 });
 
+describe('/tai-khoan/diem-xanh — tubu-w21-02: đổi điểm trước khi hết hạn, thẻ quét ở quầy', () => {
+  const CTA = 'Đổi điểm ngay trước khi hết hạn →';
+  const ctaLink = (c: HTMLElement) => Array.from(c.querySelectorAll('a')).find((a) => a.textContent === CTA);
+  const soon = () => new Date(Date.now() + 5 * 864e5).toISOString();
+
+  it('điểm thường còn ≤ 30 ngày: một liên kết tới tab Đổi quà ngay dưới dòng báo hạn, kèm số đổi được ngay (tổng có lô quy đổi)', async () => {
+    state.readyRoutes = new Set(['/uu-dai']);
+    state.loyalty = { ...state.loyalty!, redeemablePoints: 1500, expiringPoints: { amount: 70, expiresAt: soon() } };
+    const c = await mount();
+    const link = ctaLink(c)!;
+    expect(link.getAttribute('href')).toBe('/uu-dai?tab=rewards');
+    expect(link.className).toContain('min-h-11');
+    expect(c.querySelector('[data-testid="loyalty-expiring-cta"]')!.textContent).toContain(
+      'Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 1.500 điểm',
+    );
+    const tier = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(tier.contains(link)).toBe(true);
+  });
+
+  it('chưa gấp, hết điểm đổi được ngay, hay hub Ưu đãi chưa mở trên web: không có liên kết', async () => {
+    state.readyRoutes = new Set(['/uu-dai']);
+    state.loyalty = { ...state.loyalty!, redeemablePoints: 1500, expiringPoints: { amount: 70, expiresAt: '2099-01-01T03:00:00.000Z' } };
+    expect(ctaLink(await mount())).toBeUndefined();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.loyalty = { ...state.loyalty!, redeemablePoints: 0, expiringPoints: { amount: 70, expiresAt: soon() } };
+    expect(ctaLink(await mount())).toBeUndefined();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.readyRoutes = new Set();
+    state.loyalty = { ...state.loyalty!, redeemablePoints: 1500 };
+    expect(ctaLink(await mount())).toBeUndefined();
+  });
+
+  it('thẻ thành viên: mã QR trong khung trắng cố định có lề; quầy tích điểm được thì dặn chụp màn hình khi mất mạng', async () => {
+    const c = await mount();
+    click(byText(c, 'button', 'Thẻ thành viên số'));
+    await flush();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const frame = dialog.querySelector('[data-testid="member-card-scan"]')!;
+    expect(frame.className).toContain('bg-stone-0');
+    expect(frame.className).toContain('p-4');
+    expect(frame.querySelector('img[alt="QR"], [data-qr-placeholder]')).not.toBeNull();
+    expect(dialog.querySelector('[data-testid="member-card-offline-hint"]')?.textContent).toBe(
+      'Mất mạng ở quầy? Chụp màn hình thẻ này trước: mã không đổi nên vẫn quét được.',
+    );
+  });
+
+  it('quầy chưa tích điểm: không dặn chụp màn hình', async () => {
+    state.card = { ...state.card!, posCreditEnabled: false };
+    const c = await mount();
+    click(byText(c, 'button', 'Thẻ thành viên số'));
+    await flush();
+    expect(document.querySelector('[data-testid="member-card-offline-hint"]')).toBeNull();
+  });
+});
+
 describe('/tai-khoan/diem-xanh — chúc mừng lên hạng', () => {
   const higher = () => {
     state.loyalty = { ...state.loyalty!, tier: { id: 't2', name: 'Lộc Biếc', multiplier: 1.2, perks: ['Quà sinh nhật'] } };

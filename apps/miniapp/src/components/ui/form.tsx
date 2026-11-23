@@ -1,4 +1,4 @@
-import { Children, cloneElement, Fragment, isValidElement, useId } from 'react';
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef } from 'react';
 import type { InputHTMLAttributes, MouseEvent, ReactElement, ReactNode } from 'react';
 import { Text } from './text';
 
@@ -133,7 +133,7 @@ type ControlBase = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'size' |
 };
 
 export type CheckboxProps = ControlBase & {
-  /** Hàng "Chọn tất cả" khi mới chọn một phần: `aria-checked="mixed"`. */
+  /** Hàng "Chọn tất cả" khi mới chọn một phần: gán `input.indeterminate` (trình đọc màn hình đọc "chọn một phần"), CSS vẽ gạch ngang qua `:indeterminate`. */
   indeterminate?: boolean;
   /** Ô chọn đầu dòng: chiếm cột 24px, vùng chạm 44px nhô ra hai phía (lớp `.tubu-hit-flush`). Mặc định false: khung chiếm 44px như mọi chỗ khác. */
   flush?: boolean;
@@ -143,12 +143,18 @@ export type CheckboxProps = ControlBase & {
  * Ô 24px tự vẽ trên `<input>` gốc (thay `zmp-ui` Checkbox/Radio: bỏ mã thành phần và luật CSS của chúng). `<input>` trong suốt
  * phủ kín ô nên cú chạm và bàn phím đi thẳng vào control thật; hình (`.tubu-check__mark`) đổi theo `:checked`/`:disabled` bằng CSS ở `tokens.css`.
  */
-function choiceControl(kind: 'checkbox' | 'radio', { label, children, indeterminate, className, ...rest }: CheckboxProps) {
+function ChoiceControl({ kind, label, children, indeterminate, className, ...rest }: CheckboxProps & { kind: 'checkbox' | 'radio' }) {
   const text = children ?? label;
+  const inputRef = useRef<HTMLInputElement>(null);
+  // `indeterminate` chỉ là thuộc tính DOM, không có thuộc tính HTML. Trình duyệt tự xoá nó khi người dùng bấm ô, nên gán lại sau mọi lần vẽ chứ không
+  // chỉ khi prop đổi. Không đặt `aria-checked` trên `<input>` gốc: ARIA cấm, và trình đọc màn hình có thể bỏ qua nó để đọc "chưa chọn".
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.indeterminate = kind === 'checkbox' && Boolean(indeterminate);
+  });
   return (
     <label className={['tubu-check', `tubu-check--${kind}`, className].filter(Boolean).join(' ')}>
       <span className="tubu-check__box">
-        <input {...rest} type={kind} className="tubu-check__input" aria-checked={indeterminate ? 'mixed' : undefined} />
+        <input {...rest} ref={inputRef} type={kind} className="tubu-check__input" />
         <span className="tubu-check__mark" aria-hidden="true">
           {kind === 'checkbox' && (
             <svg viewBox="0 0 14 11" fill="none">
@@ -165,7 +171,7 @@ function choiceControl(kind: 'checkbox' | 'radio', { label, children, indetermin
 /** Checkbox DS: ô 24px trong khung chạm tối thiểu 44px (audit DS v2 44px touch target). */
 export function Checkbox({ flush = false, ...rest }: CheckboxProps) {
   const decorative = !hasName(rest);
-  return hitArea('checkbox-hit-area', choiceControl('checkbox', { ...(decorative ? DECORATIVE_INPUT : null), ...rest }), decorative, flush);
+  return hitArea('checkbox-hit-area', <ChoiceControl kind="checkbox" {...(decorative ? DECORATIVE_INPUT : null)} {...rest} />, decorative, flush);
 }
 
 export type RadioProps = ControlBase;
@@ -173,7 +179,7 @@ export type RadioProps = ControlBase;
 /** Radio DS: chấm tròn 24px trong khung chạm 44px. */
 export function Radio(props: RadioProps) {
   const decorative = !hasName(props);
-  return hitArea('radio-hit-area', choiceControl('radio', { ...(decorative ? DECORATIVE_INPUT : null), ...props }), decorative);
+  return hitArea('radio-hit-area', <ChoiceControl kind="radio" {...(decorative ? DECORATIVE_INPUT : null)} {...props} />, decorative);
 }
 
 export type SwitchProps = ControlBase;

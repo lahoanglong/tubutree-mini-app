@@ -1377,6 +1377,58 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     });
   });
 
+  describe('tubu-w21-02: danh sách đơn kèm số sản phẩm chờ đánh giá (pendingReviewCount)', () => {
+    const delivered = { ...baseOrder, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false };
+    const pv = (id: string, productId: string) => ({
+      id, stock: 5, isActive: true, retailPrice: 60000, salePrice: null,
+      product: { id: productId, thumbnail: null, images: [], isActive: true, approvalStatus: 'APPROVED' },
+    });
+    const sl = (id: string, variationId: string) => ({ ...line(id, variationId), productSlug: `sp-${variationId}`, isGift: false });
+    function listWith(orders: Record<string, unknown>[], reviews: { orderId: string; productId: string; userId: string }[] = []) {
+      const reviewFindMany = jest.fn().mockResolvedValue(reviews);
+      const returnFindMany = jest.fn().mockResolvedValue([]);
+      const prisma = {
+        order: { findMany: jest.fn().mockResolvedValue(orders), count: jest.fn().mockResolvedValue(orders.length) },
+        variation: { findMany: jest.fn().mockResolvedValue([pv('v1', 'p1'), pv('v2', 'p2')]) },
+        product: { findMany: jest.fn().mockResolvedValue([]) },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
+        orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
+        review: { findMany: reviewFindMany },
+        returnRequestItem: { findMany: returnFindMany },
+        pointsTransaction: { aggregate: jest.fn().mockResolvedValue({ _sum: { delta: null } }) },
+        $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+      } as unknown as PrismaService;
+      return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), reviewFindMany, returnFindMany };
+    }
+
+    it('đơn đã nhận có số; đơn chưa giao không có trường; cả trang một lượt tra đánh giá', async () => {
+      const { svc, reviewFindMany, returnFindMany } = listWith(
+        [
+          { ...delivered, id: 'o1', items: [sl('i1', 'v1'), sl('i2', 'v2')] },
+          { ...delivered, id: 'o2', code: 'TUBU2', items: [sl('i3', 'v1')] },
+          { ...baseOrder, id: 'o3', code: 'TUBU3', status: 'SHIPPING', type: 'RETAIL', placedForCustomer: false, items: [sl('i4', 'v2')] },
+        ],
+        [{ orderId: 'o1', productId: 'p1', userId: 'u1' }],
+      );
+      const page = await svc.list('u1', {}, 1, 20);
+      const byId = new Map((page.data as { id: string; pendingReviewCount?: number }[]).map((o) => [o.id, o]));
+      expect(byId.get('o1')?.pendingReviewCount).toBe(1);
+      expect(byId.get('o2')?.pendingReviewCount).toBe(1);
+      expect(byId.get('o3')).not.toHaveProperty('pendingReviewCount');
+      expect(reviewFindMany).toHaveBeenCalledTimes(1);
+      expect(returnFindMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('chi tiết đơn không tính số này (đã có trạng thái từng dòng)', async () => {
+      const { svc, returnFindMany } = listWith([]);
+      const detail = jest.spyOn(svc, 'detail').mockResolvedValue({ ...delivered, items: [sl('i1', 'v1')] } as never);
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view).not.toHaveProperty('pendingReviewCount');
+      expect(returnFindMany).not.toHaveBeenCalled();
+      detail.mockRestore();
+    });
+  });
+
   // Mỗi lần mua một đánh giá: màn chi tiết đơn cần biết từng dòng đã có đánh giá của đơn này chưa để nói "Viết đánh giá"
   // hay "Sửa đánh giá", cùng luật với can-review (chỉ đơn đã nhận mua lẻ cho chính mình).
   describe('trạng thái đánh giá từng dòng ở chi tiết đơn', () => {

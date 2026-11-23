@@ -99,6 +99,11 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   orderZaloAvailable?: boolean;
   /** Chỉ chi tiết đơn: tin hành trình của đơn này đang thật sự được gửi qua Zalo (máy chủ áp đủ luật bỏ qua của bộ ghi sự kiện). */
   orderZaloOn?: boolean;
+  /**
+   * Chỉ danh sách đơn, chỉ đơn đã nhận mua lẻ cho chính mình: số sản phẩm còn chờ đánh giá (bỏ quà tặng và sản phẩm đã trả). Thẻ đơn vẽ
+   * nút "Đánh giá (n SP)" khi > 0 (`orderReviewCta`). Đơn khác và API cũ không có trường này.
+   */
+  pendingReviewCount?: number;
 };
 
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */

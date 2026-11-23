@@ -391,6 +391,52 @@ describe('LoyaltyPage — hạn dùng Điểm Xanh (R2-ENGAGE-8)', () => {
   });
 });
 
+describe('LoyaltyPage — tubu-w21-02: đổi điểm trước khi hết hạn, thẻ thành viên quét ở quầy', () => {
+  const soon = () => new Date(Date.now() + 10 * 864e5).toISOString();
+  const CTA = 'Đổi điểm ngay trước khi hết hạn →';
+
+  it('điểm thường còn ≤ 30 ngày: một nút sang tab Đổi quà ngay dưới dòng báo hạn, kèm số đổi được ngay khi tổng có lô quy đổi', async () => {
+    mocks.getLoyalty.mockResolvedValue({
+      ...LOYALTY, pointsBalance: 1_250, pointsConvertedBalance: 300, redeemablePoints: 1_000, expiringPoints: { amount: 70, expiresAt: soon() },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: CTA }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
+    expect(screen.getByText('Điểm sắp hết hạn là điểm thường: đổi quà dùng được ngay 1.000 điểm')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: CTA })).toHaveLength(1);
+  });
+
+  it('còn hơn 30 ngày, hay không còn điểm đổi được ngay: không có nút', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, redeemablePoints: 1_250, expiringPoints: { amount: 70, expiresAt: '2099-01-01T03:00:00.000Z' } });
+    const first = renderPage();
+    await screen.findByText(/^70 Điểm Xanh sẽ hết hạn ngày 01\/01\/2099$/);
+    expect(screen.queryByRole('button', { name: CTA })).toBeNull();
+    first.unmount();
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, redeemablePoints: 0, expiringPoints: { amount: 70, expiresAt: soon() } });
+    renderPage();
+    await screen.findByText(/còn 10 ngày/);
+    expect(screen.queryByRole('button', { name: CTA })).toBeNull();
+  });
+
+  it('thẻ thành viên: mã QR nằm trong khung trắng cố định có lề; quầy tích điểm được thì dặn chụp màn hình khi mất mạng', async () => {
+    mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: true });
+    renderPage();
+    fireEvent.click(await screen.findByText('Thẻ thành viên số (mã QR)'));
+    const frame = await screen.findByTestId('member-card-scan');
+    expect(frame).toContainElement(screen.getByTestId('qr'));
+    expect(frame.style.background).toBe('var(--stone-0)');
+    expect(frame.style.padding).toBe('var(--space-inline-lg)');
+    expect(screen.getByTestId('member-card-offline-hint')).toHaveTextContent('Mất mạng ở quầy? Chụp màn hình thẻ này trước: mã không đổi nên vẫn quét được.');
+  });
+
+  it('quầy chưa tích điểm: không dặn chụp màn hình', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByText('Thẻ thành viên số (mã QR)'));
+    await screen.findByTestId('member-card-scan');
+    expect(screen.queryByTestId('member-card-offline-hint')).toBeNull();
+  });
+});
+
 describe('LoyaltyPage — hạn giữ hạng, lịch sử, biểu tượng hạng, thẻ tải khi mở', () => {
   it('đang trong hạn giữ hạng: một dòng nói phải mua thêm bao nhiêu và đến ngày nào', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tierGrace: { until: '2026-11-07T10:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 0 } });
