@@ -65,7 +65,7 @@ for (const size of W43B_SIZES) {
       await page.getByRole('tab', { name: 'Chia sẻ', exact: true }).click();
       const block = await expectFeaturedBlock(page);
       expect(await probeTapTargets(page, { scope: '[data-testid="ctv-featured"]' })).toEqual([]);
-      await expectPressFeedback(page, block.getByTestId('ctv-featured-row').nth(0).getByRole('button'), 'nút Chép link giới thiệu');
+      await expectPressFeedback(page, block.getByTestId('ctv-featured-row').nth(0).getByRole('button', { name: /^Chép link giới thiệu / }), 'nút Chép link giới thiệu');
     });
 
     test('chạm Chép link giới thiệu: clipboard có link ?ref= của CTV, nhãn Đã chép link rồi tự trả về', async ({ page, api }) => {

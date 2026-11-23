@@ -5,6 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ copyText: vi.fn() }));
 vi.mock('../../utils/clipboard', () => ({ copyText: (t: string) => mocks.copyText(t) }));
+// Bảng nội dung bán hàng thật cần QueryClient và API: ở đây chỉ kiểm nút mở đúng sản phẩm.
+vi.mock('../content-kit-sheet', () => ({
+  ContentKitSheet: ({ visible, productSlug, onClose }: { visible: boolean; productSlug: string; onClose: () => void }) =>
+    visible ? (
+      <div role="dialog" aria-label="kit">
+        {productSlug}
+        <button type="button" onClick={onClose}>
+          đóng
+        </button>
+      </div>
+    ) : (
+      <span data-testid="kit-closed">{productSlug}</span>
+    ),
+}));
 
 import { AffiliateFeaturedProducts } from './featured-products';
 
@@ -73,6 +87,24 @@ describe('AffiliateFeaturedProducts', () => {
       vi.advanceTimersByTime(2);
     });
     expect(within(row(0)).getByRole('button', { name: 'Chép link giới thiệu Bàn chải tre' })).toBeInTheDocument();
+  });
+
+  it('nút chép ngắn gọn "Chép link" (tên đọc vẫn đủ), cạnh nút "Ảnh + Bài mẫu" mở bảng nội dung bán hàng của đúng sản phẩm', () => {
+    render(<AffiliateFeaturedProducts products={PRODUCTS} />);
+    const copyBtn = within(row(0)).getByRole('button', { name: 'Chép link giới thiệu Bàn chải tre' });
+    expect(copyBtn).toHaveTextContent(/^Chép link$/);
+    const kitBtn = within(row(0)).getByRole('button', { name: 'Ảnh và bài mẫu Bàn chải tre' });
+    expect(kitBtn).toHaveTextContent('Ảnh + Bài mẫu');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(kitBtn);
+    expect(screen.getByRole('dialog', { name: 'kit' })).toHaveTextContent('ban-chai-tre');
+    fireEvent.click(within(row(1)).getByRole('button', { name: 'Ảnh và bài mẫu Ly tre' }));
+    expect(screen.getByRole('dialog', { name: 'kit' })).toHaveTextContent('ly-tre');
+    fireEvent.click(screen.getByRole('button', { name: 'đóng' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // Đóng vẫn giữ sản phẩm cũ: bảng đang trượt xuống không trắng nội dung.
+    expect(screen.getByTestId('kit-closed')).toHaveTextContent('ly-tre');
+    expect(mocks.copyText).not.toHaveBeenCalled();
   });
 
   it('chép không được: giữ nhãn cũ và nói cách chép tay ở đúng dòng đó', async () => {

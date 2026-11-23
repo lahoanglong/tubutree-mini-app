@@ -5,6 +5,7 @@ import { buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timel
 import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
 import { Search } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type * as ZmpUi from 'zmp-ui';
 import { AffiliateFeaturedProducts } from '../affiliate/featured-products';
 import { OrderTimelineTracker } from '../orders/order-timeline-tracker';
@@ -129,8 +130,17 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
     ['OrderTimelineTracker (nút Sao chép thông tin đơn)', () => <OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING')} shareText="Đơn hàng Tubu Tree A" />],
     ['OrderTrackingPill (viên vận đơn, chạm chép mã)', () => <OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />],
-    ['AffiliateFeaturedProducts (nút Chép link giới thiệu)', () => <AffiliateFeaturedProducts products={featured} />],
-    ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />],
+    // Khối có bảng nội dung bán hàng (useQuery) nên cần QueryClient; bảng đóng thì không gọi API.
+    ['AffiliateFeaturedProducts (nút Chép link, Ảnh + Bài mẫu)', () => (
+      <QueryClientProvider client={new QueryClient()}>
+        <AffiliateFeaturedProducts products={featured} />
+      </QueryClientProvider>
+    )],
+    ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => (
+      <QueryClientProvider client={new QueryClient()}>
+        <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />
+      </QueryClientProvider>
+    )],
     ['LoyaltyRulesCard (nút gập Cách kiếm và dùng Điểm Xanh)', () => <LoyaltyRulesCard lines={['A']} />],
     ['PdpRebuyRow (nút Mua lại)', () => (
       <PdpRebuyRow

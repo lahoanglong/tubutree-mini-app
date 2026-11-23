@@ -104,6 +104,25 @@
       ]
     },
     {
+      "name": "SharePoster",
+      "miniapp": "apps/miniapp/src/components/share-poster.tsx",
+      "web": "apps/web/src/components/affiliate/share-poster.tsx",
+      "props": "SharePosterProps",
+      "propsDiff": {
+        "webOnly": [
+          "lock",
+          "onNote"
+        ],
+        "reason": "web có nút Lưu/Gửi ảnh (<a download>, navigator.share với tệp) dùng chung khoá thao tác và dòng báo của bảng; Mini lưu bằng nhấn giữ ảnh vì saveImage của Zalo từ chối ảnh data URL"
+      },
+      "screens": [
+        "/affiliate",
+        "/s/:slug",
+        "/brand/:slug",
+        "/product/:slug"
+      ]
+    },
+    {
       "name": "InviteShareCard",
       "miniapp": "apps/miniapp/src/components/referral/invite-share-card.tsx",
       "web": "apps/web/src/components/referral/invite-share-card.tsx",

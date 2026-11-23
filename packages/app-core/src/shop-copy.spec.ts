@@ -46,6 +46,8 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'support.hotline': { phone: '0984 606 774' },
   'support.orderContext': { code: 'TUBU20261015001' },
   'invite.copyFailed': { code: 'TUBU1234567890' },
+  'poster.badgeStore': { code: 'TUBU1234567890' },
+  'poster.badgeCtv': { code: 'TUBU1234567890' },
   'checkout.shipEstimateValue': { fee: '999.999đ–999.999đ' },
   'checkout.orderZalo.phone': { phone: '090•••4567' },
   'order.zaloFriend.body': { code: 'TUBU2026111557909' },

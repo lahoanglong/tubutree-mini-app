@@ -86,7 +86,7 @@ export const FEATURED_PICKER = [
   { id: 'p-c', name: 'Túi lưới tái sử dụng', slug: 'tui-luoi', thumbnail: null, basePrice: 40_000, salePrice: null, maxAffiliateRate: 0 },
 ];
 
-/** Khối hoa hồng nổi bật: hai dòng xếp theo tiền hoa hồng (30.000đ rồi 11.880đ), dòng không có hoa hồng bị bỏ, mọi nút Chép link ≥ 44px, không cuộn ngang. */
+/** Khối hoa hồng nổi bật: hai dòng xếp theo tiền hoa hồng (30.000đ rồi 11.880đ), dòng không có hoa hồng bị bỏ, mọi nút Chép link và Ảnh + Bài mẫu ≥ 44px, không cuộn ngang. */
 export async function expectFeaturedBlock(page: Page): Promise<Locator> {
   const block = page.getByTestId('ctv-featured');
   await expect(block).toBeVisible({ timeout: 20_000 });
@@ -100,7 +100,10 @@ export async function expectFeaturedBlock(page: Page): Promise<Locator> {
   await expect(rows.nth(1)).toContainText('Hoa hồng tới 12%');
   await expect(rows.nth(1)).toContainText('Dự kiến tới 11.880đ mỗi đơn');
   await expect(block).not.toContainText('Túi lưới');
-  for (let i = 0; i < 2; i += 1) await expectTapTarget(rows.nth(i).getByRole('button'));
+  for (let i = 0; i < 2; i += 1) {
+    await expectTapTarget(rows.nth(i).getByRole('button', { name: /^Chép link giới thiệu / }));
+    await expectTapTarget(rows.nth(i).getByRole('button', { name: /^Ảnh và bài mẫu / }));
+  }
   await expectNoHorizontalScroll(page);
   return block;
 }
@@ -110,7 +113,7 @@ export async function expectFeaturedCopy(page: Page, block: Locator): Promise<vo
   const row = block.getByTestId('ctv-featured-row').nth(0);
   await row.getByRole('button', { name: 'Chép link giới thiệu Dầu gội bồ kết', exact: true }).click();
   await expect(row.getByRole('button', { name: 'Đã chép link giới thiệu Dầu gội bồ kết', exact: true })).toBeVisible();
-  await expect(row.getByRole('button')).toContainText('Đã chép link');
+  await expect(row.getByRole('button', { name: /^Đã chép link giới thiệu / })).toContainText('Đã chép link');
   const text = (await copiedText(page)) ?? '';
   expect(text).toContain('Dầu gội bồ kết');
   expect(text).toMatch(new RegExp(`/(san-pham|product)/dau-goi\\?ref=${FEATURED_REF}\\b`));

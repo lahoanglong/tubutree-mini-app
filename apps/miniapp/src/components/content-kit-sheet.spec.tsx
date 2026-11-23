@@ -44,6 +44,10 @@ vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../services/affiliate-api', () => ({ fetchContentKit: mocks.fetchContentKit }));
+// Ảnh có QR vẽ bằng canvas (nạp lười): ở đây chỉ kiểm dữ liệu bảng đưa vào ảnh; cách vẽ kiểm ở share-poster.spec.
+vi.mock('./share-poster', () => ({
+  SharePoster: ({ input }: { input: unknown }) => <div data-testid="poster">{JSON.stringify(input)}</div>,
+}));
 
 import { ContentKitSheet } from './content-kit-sheet';
 import { miniAppLink } from '../utils/miniapp-link';
@@ -198,6 +202,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     await screen.findByRole('button', { name: /Chia sẻ Zalo/ });
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'Ảnh giới thiệu sản phẩm',
       'Bài mẫu (chạm để sao chép)',
       'Điểm bán hàng',
       'Câu hỏi thường gặp',
@@ -320,7 +325,24 @@ describe('ContentKitSheet — vùng có tên, trạng thái chờ và điều ki
     expect(within(faq).getByText('Dùng thế nào?')).toBeInTheDocument();
     const video = screen.getByRole('region', { name: 'Video tham khảo' });
     expect(within(video).getByRole('button', { name: 'https://video.example/v1' })).toBeInTheDocument();
-    expect(screen.getAllByRole('region')).toHaveLength(4);
+    const poster = screen.getByRole('region', { name: 'Ảnh giới thiệu sản phẩm' });
+    expect(within(poster).getByTestId('poster')).toBeInTheDocument();
+    expect(screen.getAllByRole('region')).toHaveLength(5);
+  });
+
+  it('ảnh thẻ sản phẩm nhận tên, slug, thương hiệu, giá, mã giới thiệu và shareLink của bộ nội dung', async () => {
+    mocks.fetchContentKit.mockResolvedValue({ ...KIT, brandName: 'Tubu Farm', priceVnd: 129000, referralCode: 'ABC123' });
+    mountKit();
+    const poster = await screen.findByTestId('poster');
+    expect(JSON.parse(poster.textContent ?? '')).toEqual({
+      kind: 'product',
+      name: KIT.productName,
+      slug: 'tra-xanh',
+      brandName: 'Tubu Farm',
+      priceVnd: 129000,
+      referralCode: 'ABC123',
+      shareLink: KIT.shareLink,
+    });
   });
 
   it('đang tải: khối chờ là vùng role="status" aria-busy="true"; tải xong thì biến mất', async () => {

@@ -487,7 +487,10 @@
   gap: var(--space-stack-xs) var(--space-stack-sm);
 }
 .ctv-featured__action {
+  display: flex;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-stack-xs);
 }
 /* Xem ảnh/video đánh giá toàn màn hình: nền đen 90% làm mờ phía sau, mở 220ms theo đường cong drawer (cùng tấm đáy); giảm chuyển động thì hiện ngay. */
 @keyframes review-lightbox-in {

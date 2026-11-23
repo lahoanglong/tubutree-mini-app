@@ -4,7 +4,7 @@ import { Share2, Copy } from 'lucide-react';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Text } from './ui/text';
-import { QrCode } from './qr-code';
+import { SharePoster } from './share-poster';
 import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -124,7 +124,10 @@ export function ShareSheet({
     });
   return (
     <BottomSheet open={visible} onClose={onClose} title={heading ?? vi.storefront.shareTitle}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><QrCode value={url} /></div>
+      {/* Ảnh có QR trỏ trang web công khai (tubutree.com): quét bằng camera hay mở từ Facebook/TikTok không cần đăng nhập Zalo. Nút chia sẻ và link chép vẫn mở Mini App. */}
+      <div style={{ marginBottom: 12 }}>
+        <SharePoster input={{ kind: 'store', title, path, referralCode }} />
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
         <Button
           fullWidth

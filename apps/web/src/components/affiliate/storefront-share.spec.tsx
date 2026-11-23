@@ -12,6 +12,15 @@ const mocks = vi.hoisted(() => ({ http: { get: vi.fn() }, share: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: mocks.share } }));
 vi.mock('@/components/ui/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
+// Ảnh có QR vẽ bằng canvas (nạp lười): ở đây chỉ kiểm dữ liệu bảng đưa vào ảnh và khoá dùng chung; cách vẽ kiểm ở share-poster.spec.
+const poster = vi.hoisted(() => ({ last: null as null | { lock: { busy: boolean }; onNote: (n: { text: string; error: boolean } | null) => void } }));
+vi.mock('./share-poster', () => ({
+  SharePoster: (p: { input: unknown; lock: { busy: boolean }; onNote: (n: { text: string; error: boolean } | null) => void }) => {
+    poster.last = p;
+    return <div data-testid="poster">{JSON.stringify(p.input)}</div>;
+  },
+}));
+const posterInput = () => JSON.parse(document.querySelector('[data-testid="poster"]')!.textContent ?? '') as Record<string, unknown>;
 
 import { ContentKitSheet, StorefrontShareSheet, useActionLock } from './storefront-share';
 
@@ -93,7 +102,8 @@ describe('StorefrontShareSheet: nội dung và chia sẻ', () => {
   it('mã QR và nút Sao chép link dùng link gian hàng kèm mã giới thiệu; tiêu đề mặc định hoặc tuỳ biến', async () => {
     const first = mountStore({ open: true });
     await flush();
-    expect(document.querySelector('[data-testid="qr"]')!.textContent).toBe(STORE_URL);
+    // Ảnh QR trỏ trang web công khai (tubutree.com, dựng ở app-core) theo đường dẫn gian hàng + mã; nút chép vẫn dùng link của web đang chạy.
+    expect(posterInput()).toEqual({ kind: 'store', title: 'An Lành', path: '/s/an-lanh', referralCode: 'CTV1' });
     expect(document.querySelector('h2')!.textContent).toBe('Chia sẻ gian hàng');
     click(linkBtn());
     await flush();
@@ -106,7 +116,7 @@ describe('StorefrontShareSheet: nội dung và chia sẻ', () => {
   it('chia sẻ trang chủ kèm mã: đường dẫn /?ref=...; chia sẻ gian hàng: /s/<slug>?ref=...', async () => {
     mountStore({ open: true, home: true });
     await flush();
-    expect(document.querySelector('[data-testid="qr"]')!.textContent).toBe(`${SITE_URL}/?ref=CTV1`);
+    expect(posterInput()).toEqual({ kind: 'store', title: 'An Lành', path: '/', referralCode: 'CTV1' });
     click(shareBtn());
     await flush();
     expect(mocks.share).toHaveBeenCalledWith(expect.objectContaining({ title: 'An Lành', path: '/?ref=CTV1' }));
@@ -327,7 +337,8 @@ describe('ContentKitSheet (affiliate): vùng có tên, trạng thái chờ và �
     expect(region('Điểm bán hàng')!.textContent).toContain('Không sulfate');
     expect(region('Câu hỏi thường gặp')!.textContent).toContain('Dùng bao lâu?');
     expect(region('Video tham khảo')!.textContent).toContain('https://youtu.be/abc');
-    expect(document.querySelectorAll('section[aria-label]')).toHaveLength(4);
+    expect(region('Ảnh giới thiệu sản phẩm')!.querySelector('[data-testid="poster"]')).not.toBeNull();
+    expect(document.querySelectorAll('section[aria-label]')).toHaveLength(5);
   });
 
   it('đang tải: khối chờ là vùng role="status" aria-busy="true"; tải xong thì biến mất', async () => {

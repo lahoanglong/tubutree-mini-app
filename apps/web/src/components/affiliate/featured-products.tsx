@@ -2,7 +2,8 @@
 
 // Nguồn: apps/miniapp/src/components/affiliate/featured-products.tsx
 import { useEffect, useId, useRef, useState } from 'react';
-import { Check, Link2 } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Check, ImageIcon, Link2 } from 'lucide-react';
 import type { FeaturedAffiliateProduct } from '@tubutree/app-core/commerce/affiliate-share';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -12,6 +13,9 @@ import { Button } from '@/components/mini/button';
 import { Skeleton } from '@/components/mini/skeleton';
 import { SR_ONLY } from '@/components/mini/sr-only';
 import { Heading, Text } from '@/components/mini/text';
+
+// Bảng nội dung bán hàng (ảnh thẻ có QR, bài mẫu) chỉ tải khi CTV bấm "Ảnh + Bài mẫu"; cùng gói với bảng chia sẻ mã của trang /ctv.
+const ContentKitSheet = dynamic(() => import('./storefront-share').then((m) => m.ContentKitSheet), { ssr: false });
 
 export interface AffiliateFeaturedProductsProps {
   /** Danh sách đã xếp sẵn (`featuredAffiliateProducts`); null khi đang tải. */
@@ -27,12 +31,15 @@ const COPIED_MS = 2000;
 const FAILED_MS = 4000;
 
 /**
- * Khối "Sản phẩm hoa hồng nổi bật" của CTV: mỗi sản phẩm kèm mức hoa hồng, số tiền dự kiến trên một đơn và nút "Chép link giới thiệu" chép lời giới thiệu
- * có link gắn mã CTV (`?ref=`). Số đo ở lớp `.ctv-featured*` (components/mini/mini.css). Dữ liệu và link dựng ở `commerce/affiliate-share.ts`.
+ * Khối "Sản phẩm hoa hồng nổi bật" của CTV: mỗi sản phẩm kèm mức hoa hồng, số tiền dự kiến trên một đơn, nút "Chép link" chép lời giới thiệu
+ * có link gắn mã CTV (`?ref=`) và nút "Ảnh + Bài mẫu" mở bảng nội dung bán hàng của sản phẩm đó (ảnh thẻ có QR, bài mẫu). Số đo ở lớp `.ctv-featured*` (components/mini/mini.css). Dữ liệu và link dựng ở `commerce/affiliate-share.ts`.
  */
 export function AffiliateFeaturedProducts({ products, error, onRetry }: AffiliateFeaturedProductsProps) {
   const headingId = useId();
   const [done, setDone] = useState<{ id: string; ok: boolean } | null>(null);
+  // Sản phẩm đang mở "Ảnh + Bài mẫu"; `kitEver` giữ bảng đã dựng để đóng vẫn chạy hết hiệu ứng.
+  const [kitSlug, setKitSlug] = useState<string | null>(null);
+  const [kitEver, setKitEver] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -114,6 +121,17 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
                   >
                     {fillCopy(copied ? 'ctv.featured.copied' : 'ctv.featured.copy')}
                   </Button>
+                  <Button
+                    variant="secondary"
+                    icon={ImageIcon}
+                    aria-label={fillCopy('ctv.featured.kitAria', { name: p.name })}
+                    onPress={() => {
+                      setKitEver(true);
+                      setKitSlug(p.slug);
+                    }}
+                  >
+                    {fillCopy('ctv.featured.kit')}
+                  </Button>
                 </div>
               </li>
             );
@@ -125,6 +143,7 @@ export function AffiliateFeaturedProducts({ products, error, onRetry }: Affiliat
           {fillCopy('ctv.featured.note')}
         </Text>
       )}
+      {kitEver && <ContentKitSheet open={kitSlug !== null} onClose={() => setKitSlug(null)} productSlug={kitSlug ?? ''} />}
     </section>
   );
 }
