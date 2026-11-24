@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const dl = vi.hoisted(() => ({ saveImage: vi.fn() }));
 vi.mock('./download-image', () => dl);
 
-import { createWebPlatformBridge } from './platform-bridge';
+import { createWebPlatformBridge, zaloOaChatUrl } from './platform-bridge';
 
 type G = Record<string, unknown>;
 const g = globalThis as unknown as G;
@@ -20,6 +20,14 @@ beforeEach(() => vi.unstubAllGlobals());
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+describe('zaloOaChatUrl', () => {
+  it('id hợp lệ thành trang chat OA; trống hay có ký tự lạ thì null', () => {
+    expect(zaloOaChatUrl(' 1234567890 ')).toBe('https://zalo.me/1234567890');
+    expect(zaloOaChatUrl('')).toBeNull();
+    expect(zaloOaChatUrl('a/b?x=1')).toBeNull();
+  });
 });
 
 describe('platform-bridge (web)', () => {

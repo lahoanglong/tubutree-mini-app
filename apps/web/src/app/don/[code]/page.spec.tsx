@@ -25,6 +25,7 @@ vi.mock('@/lib/guest-checkout/api', () => ({
   guestReorder: (...a: unknown[]) => m.reorder(...a),
 }));
 vi.mock('@/lib/guest-cart/flag', () => ({ useGuestCartFlag: () => ({ enabled: m.cartOn, pending: false }) }));
+vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ tubuZaloPhone: '0899149229', isLoaded: true, isPending: false }) }));
 
 import GuestOrderPage from './page';
 import metadataLayout, { metadata } from './layout';
@@ -95,6 +96,62 @@ describe('/don/[code] theo dõi đơn không đăng nhập', () => {
     expect(r.container.querySelector('[data-testid="guest-order-copy-link"]')?.textContent).toContain('Chép đường dẫn theo dõi');
     expect(r.container.querySelector('[data-testid="guest-order-claim-link"]')?.textContent).toBe('Đăng nhập Zalo trên trình duyệt này để đưa đơn về tài khoản');
     expect(m.claim).not.toHaveBeenCalled();
+  });
+
+  it('tubu-w28-02: các mốc có giờ Đã đặt, Đã xác nhận, Đang giao, Hoàn tất dạng dọc; mốc chưa tới không có giờ', async () => {
+    const r = await mount();
+    const steps = [...r.container.querySelectorAll<HTMLElement>('.order-timeline--journey .order-timeline__step')];
+    expect(steps.map((s) => [s.dataset.step, s.dataset.state])).toEqual([
+      ['received', 'completed'],
+      ['preparing', 'current'],
+      ['shipping', 'upcoming'],
+      ['delivered', 'upcoming'],
+    ]);
+    expect(steps.map((s) => s.textContent)).toEqual([
+      expect.stringMatching(/^Đã đặt, đã qua\d{2}:\d{2} 18\/11(\/2026)?$/),
+      expect.stringMatching(/^Đã xác nhận, hiện tại\d{2}:\d{2} 18\/11(\/2026)?$/),
+      'Đang giao',
+      'Hoàn tất',
+    ]);
+    expect(steps[1]!.getAttribute('aria-current')).toBe('step');
+  });
+
+  it('tubu-w28-02: nút Zalo một chạm mở chat ở thẻ mới không kèm Referer, chép "Hỗ trợ đơn <mã>" (không SĐT, không khoá) và báo đã chép', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const r = await mount();
+    const region = r.container.querySelector<HTMLElement>('[aria-labelledby="guest-order-support"]')!;
+    expect(region.querySelector('h2')?.textContent).toBe('Cần hỗ trợ?');
+    const link = region.querySelector<HTMLAnchorElement>('[data-testid="guest-support-zalo"]')!;
+    expect(link.textContent).toBe('Nhắn Zalo cho Tubu về đơn này');
+    expect(link.getAttribute('href')).toBe('https://zalo.me/0899149229');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.className).toMatch(/\bmin-h-11\b/);
+    const note = () => region.querySelector('[data-testid="guest-support-note"]')!;
+    expect(note().getAttribute('aria-live')).toBe('polite');
+    expect(note().textContent).toBe('');
+    link.addEventListener('click', (e) => e.preventDefault());
+    await act(async () => {
+      link.click();
+    });
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied).toBe('Hỗ trợ đơn TB777');
+    expect(copied).not.toContain(KEY);
+    expect(copied).not.toMatch(/091|678|\*/);
+    expect(note().textContent).toBe('Đã chép “Hỗ trợ đơn TB777”. Bạn dán vào khung chat Zalo nhé.');
+  });
+
+  it('tubu-w28-02: chép không được thì đọc mã đơn để khách gõ, liên kết vẫn mở chat', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true });
+    const r = await mount();
+    const link = r.container.querySelector<HTMLAnchorElement>('[data-testid="guest-support-zalo"]')!;
+    link.addEventListener('click', (e) => e.preventDefault());
+    await act(async () => {
+      link.click();
+    });
+    expect(r.container.querySelector('[data-testid="guest-support-note"]')?.textContent).toBe('Bạn nhắn kèm mã đơn TB777 để Tubu tra nhanh nhé.');
   });
 
   it('sai khoá hay sai mã (404) và thiếu khoá: cùng một câu, không lộ gì về đơn', async () => {

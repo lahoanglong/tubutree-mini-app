@@ -1,0 +1,135 @@
+import 'reflect-metadata';
+import { createHash } from 'node:crypto';
+import { GUEST_LOOKUP_LIMIT } from '@tubutree/shared-types';
+import { throttleRefusalOf } from '../../../common/throttle/throttle.config';
+import { GuestCheckoutController, GUEST_LOOKUP_CODE_LIMIT, GUEST_LOOKUP_IP_LIMIT, GUEST_LOOKUP_PHONE_LIMIT, GUEST_LOOKUP_PHONE_TTL_MS } from './guest-checkout.controller';
+import { GuestCheckoutService } from './guest-checkout.service';
+
+/**
+ * tubu-w28-02: trang /don hiện các mốc có giờ và nút nhắn Zalo kèm mã đơn, nên bản xem đơn khách là thứ duy nhất trình duyệt nhận được. Khoá danh sách
+ * trường của bản xem (thêm trường mới phải sửa spec này, tức là phải nghĩ lại về dữ liệu cá nhân) và trần tra cứu mã + SĐT không đổi.
+ */
+
+const KEY = 'K'.repeat(43);
+const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+const PHONE = '0912345678';
+const ORDER = {
+  id: 'o1',
+  code: 'TUBU2026112412345',
+  userId: 'u-guest',
+  status: 'SHIPPING',
+  paymentMethod: 'COD',
+  paymentStatus: 'UNPAID',
+  createdAt: new Date('2026-11-24T02:00:00.000Z'),
+  updatedAt: new Date('2026-11-25T01:00:00.000Z'),
+  deliveredAt: null,
+  subtotal: 240_000,
+  discount: 0,
+  shippingFee: 0,
+  total: 240_000,
+  checkoutGroup: null,
+  guestPhone: PHONE,
+  guestTokenHash: sha(KEY),
+  guestIpHash: 'ip-hash-secret',
+  note: 'Gọi trước khi giao, nhà số 12 ngõ 34',
+  shippingAddress: {
+    recipient: 'Nguyễn Văn An',
+    phone: PHONE,
+    street: '12 ngõ 34 Trần Duy Hưng',
+    ward: 'Trung Hoà',
+    district: 'Cầu Giấy',
+    province: 'Hà Nội',
+    wardCode: '00166',
+  },
+};
+
+function service() {
+  const prisma = {
+    order: { findUnique: jest.fn().mockResolvedValue(ORDER), findMany: jest.fn().mockResolvedValue([]) },
+    orderStatusHistory: {
+      findMany: jest.fn().mockResolvedValue([
+        { fromStatus: null, toStatus: 'CONFIRMED', createdAt: new Date('2026-11-24T02:00:00.000Z') },
+        { fromStatus: 'CONFIRMED', toStatus: 'SHIPPING', createdAt: new Date('2026-11-25T01:00:00.000Z') },
+      ]),
+    },
+    orderItem: {
+      findMany: jest.fn().mockResolvedValue([
+        { productName: 'Dầu gội', variationName: 'Chai 500ml', quantity: 2, unitPrice: 120_000, total: 240_000, isGift: false, note: 'x' },
+      ]),
+    },
+    user: { findUnique: jest.fn().mockResolvedValue({ phone: null, zaloId: 'guest_abc', mergedIntoId: null }) },
+    paymentAttempt: { count: jest.fn().mockResolvedValue(0) },
+  };
+  const config = { get: jest.fn(async (_key: string, fallback: unknown) => (_key === 'web.guest_checkout_enabled' ? true : fallback)) };
+  const env = { get: jest.fn(() => 'test-jwt-access-secret-test-jwt-access-secret') };
+  const none = {} as never;
+  return new GuestCheckoutService(prisma as never, none, none, none, config as never, none, env as never, none);
+}
+
+const TRACK_FIELDS = [
+  'area',
+  'codSwitchable',
+  'code',
+  'createdAt',
+  'deliveredAt',
+  'discount',
+  'expiresAt',
+  'items',
+  'paymentMethod',
+  'paymentStatus',
+  'phoneMasked',
+  'shippingFee',
+  'siblings',
+  'status',
+  'statusTimes',
+  'subtotal',
+  'total',
+];
+
+function expectNoPii(view: unknown) {
+  const json = JSON.stringify(view);
+  for (const secret of [PHONE, 'Nguyễn Văn An', '12 ngõ 34', 'Cầu Giấy', '00166', 'ip-hash-secret', ORDER.guestTokenHash, 'Gọi trước khi giao']) {
+    expect(json).not.toContain(secret);
+  }
+}
+
+describe('bản xem đơn khách (/don) không lộ dữ liệu cá nhân', () => {
+  it('theo dõi bằng khoá: đúng danh sách trường, SĐT che, chỉ phường và tỉnh; mốc giờ đủ cho Đã đặt, Đã xác nhận, Đang giao', async () => {
+    const view = await service().track(ORDER.code, KEY);
+    expect(Object.keys(view).sort()).toEqual(TRACK_FIELDS);
+    expect(Object.keys(view.items[0]!).sort()).toEqual(['isGift', 'productName', 'quantity', 'total', 'unitPrice', 'variationName']);
+    expect(view.phoneMasked).toBe('091****678');
+    expect(view.area).toEqual({ ward: 'Trung Hoà', province: 'Hà Nội' });
+    expect(view.createdAt).toBe('2026-11-24T02:00:00.000Z');
+    expect(view.statusTimes).toEqual({ CONFIRMED: '2026-11-24T02:00:00.000Z', SHIPPING: '2026-11-25T01:00:00.000Z' });
+    expectNoPii(view);
+  });
+
+  it('tra bằng mã + SĐT: bản xem cùng danh sách trường, đường dẫn chỉ mang mã và khoá tạm, không mang SĐT', async () => {
+    const res = await service().lookup({ orderCode: ORDER.code, phone: PHONE } as never);
+    expect(Object.keys(res).sort()).toEqual(['bankPath', 'linkExpiresAt', 'order', 'trackPath', 'trackingKey']);
+    expect(Object.keys(res.order).sort()).toEqual(TRACK_FIELDS);
+    expect(res.trackPath).toBe(`/don/${ORDER.code}#k=${res.trackingKey}`);
+    expect(res.trackingKey).not.toBe(KEY);
+    expectNoPii(res);
+  });
+});
+
+describe('trần tra cứu mã + SĐT giữ nguyên (GUEST_LOOKUP_LIMIT)', () => {
+  const handler = GuestCheckoutController.prototype.lookup;
+  const meta = (key: string) => Reflect.getMetadata(key, handler) as unknown;
+
+  it('10/phút/mã, 30/phút/IP, 10/15 phút/SĐT', () => {
+    expect([GUEST_LOOKUP_CODE_LIMIT, GUEST_LOOKUP_IP_LIMIT, GUEST_LOOKUP_PHONE_LIMIT, GUEST_LOOKUP_PHONE_TTL_MS]).toEqual([10, 30, 10, 15 * 60_000]);
+    expect(meta('THROTTLER:LIMITdefault')).toBe(GUEST_LOOKUP_CODE_LIMIT);
+    expect(meta('THROTTLER:LIMITauthIp')).toBe(GUEST_LOOKUP_IP_LIMIT);
+    expect(meta('THROTTLER:LIMITlookupPhone')).toBe(GUEST_LOOKUP_PHONE_LIMIT);
+    expect(meta('THROTTLER:TTLlookupPhone')).toBe(GUEST_LOOKUP_PHONE_TTL_MS);
+  });
+
+  it('chạm trần: 429 mang mã GUEST_LOOKUP_LIMIT và câu tiếng Việt có số phút', () => {
+    const refusal = throttleRefusalOf(handler);
+    expect(refusal?.code).toBe(GUEST_LOOKUP_LIMIT);
+    expect(refusal?.message(15)).toBe('Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.');
+  });
+});
