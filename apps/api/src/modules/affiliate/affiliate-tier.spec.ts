@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import { AffiliateService, CTV_MONTHLY_MILESTONES } from './affiliate.service';
 import { CTV_TIERS, milestoneProgressPct, vnMonthBounds } from './ctv-milestones';
+import { GUEST_ORDER_AWAITING_PAYMENT_WHERE } from './guest-commission-settlement';
 import { RewardPointsService } from '../wallet/reward-points.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -128,7 +129,7 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
     }
 
     it('achieved/claimed/canClaim theo doanh số đã chốt + bảng claim (không quét coin_transactions)', async () => {
-      const { prisma, findMany } = prismaFor({
+      const { prisma, findMany, aggregate } = prismaFor({
         current: 12_000_000,
         pending: 40_000_000,
         claims: [{ milestoneId: 'milestone-3m', monthKey: '2026-09' }],
@@ -140,6 +141,13 @@ describe('AffiliateService — CTV Tiers & Milestones', () => {
       // Doanh số chờ chốt hiển thị riêng, KHÔNG cộng vào điều kiện nhận thưởng.
       expect(res.pendingRevenue).toBe(40_000_000);
       expect(res.holdDays).toBe(10);
+      // Khoản LOCKED của đơn khách chưa thu tiền không chốt sau holdDays nên không nằm trong "Đang chờ chốt".
+      const pendingCall = aggregate.mock.calls.find(([a]) => (a.where.status as { in: string[] }).in.includes('PENDING'))![0];
+      expect(pendingCall.where).toEqual({
+        affiliateUserId: 'ctv-1',
+        status: { in: ['PENDING', 'LOCKED'] },
+        NOT: { status: 'LOCKED', order: GUEST_ORDER_AWAITING_PAYMENT_WHERE },
+      });
       expect(res.milestones).toHaveLength(CTV_MONTHLY_MILESTONES.length);
       expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'ctv-1', monthKey: { in: ['2026-09', '2026-08'] } });
 

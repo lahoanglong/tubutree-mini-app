@@ -38,6 +38,7 @@ const EXPECTED: Record<string, Access> = {
   'DELETE /admin/academy/lessons/:id': [MARKETING],
   'PATCH /admin/academy/lessons/:id': [MARKETING],
   'GET /admin/account-deletion-requests': ADMIN_ONLY,
+  'POST /admin/affiliate-links/recompute': ADMIN_ONLY,
   'POST /admin/account-deletion-requests/:id/process': ADMIN_ONLY,
   'GET /admin/analytics/cohort-repeat': ADMIN_ONLY,
   'GET /admin/analytics/funnel-daily': ADMIN_ONLY,

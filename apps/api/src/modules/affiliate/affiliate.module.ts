@@ -8,6 +8,8 @@ import { AffiliateController } from './affiliate.controller';
 import { PayoutAdminController } from './payout-admin.controller';
 import { CommissionAdminController } from './commission-admin.controller';
 import { CommissionAdminService } from './commission-admin.service';
+import { AffiliateLinkLedgerController } from './affiliate-link-ledger.controller';
+import { AffiliateLinkLedgerService } from './affiliate-link-ledger.service';
 
 @Global()
 @Module({
@@ -15,8 +17,8 @@ import { CommissionAdminService } from './commission-admin.service';
   // FlashSaleModule → FlashSaleService: đơn CTV lên hộ tính giờ vàng như khách tự đặt.
   // ImageRegistryModule → ImageRegistryStale: đăng ký CTV làm gian hàng CTV có sẵn hiện lại.
   imports: [PancakeModule, WalletModule, FlashSaleModule, ImageRegistryModule],
-  controllers: [AffiliateController, PayoutAdminController, CommissionAdminController],
-  providers: [AffiliateService, CommissionAdminService],
+  controllers: [AffiliateController, PayoutAdminController, CommissionAdminController, AffiliateLinkLedgerController],
+  providers: [AffiliateService, CommissionAdminService, AffiliateLinkLedgerService],
   exports: [AffiliateService],
 })
 export class AffiliateModule {}

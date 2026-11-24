@@ -767,6 +767,19 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Đang chờ · đang giữ');
   });
 
+  it('lịch sử hoa hồng: khoản đang giữ của đơn khách chưa thu tiền (PO A3) báo chốt sau khi đơn thanh toán xong, không hứa ngày', async () => {
+    state.tab = 'commission';
+    state.commissions = [
+      { id: 'g1', orderId: 'og1', orderCode: 'TBG1', orderTotal: 300_000, rate: '0.1', amount: 30_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00Z', orderStatus: 'DELIVERED', unlockEstimateAt: null, awaitingPayment: true },
+    ];
+    const { container } = mount();
+    await flush();
+    const t = container.textContent ?? '';
+    expect(t).toContain('Chốt sau khi đơn thanh toán xong');
+    expect(t).not.toContain('Dự kiến chốt từ');
+    expect(t).toContain('Đang chờ · đang giữ');
+  });
+
   it('lịch sử hoa hồng đầy một trang: "Tải thêm" gửi con trỏ id dòng cuối và nối dòng cũ hơn; hết thì nút biến mất', async () => {
     state.tab = 'commission';
     state.commissions = [

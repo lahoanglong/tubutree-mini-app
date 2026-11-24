@@ -8,6 +8,7 @@ import {
   affiliateLinkStats,
   affiliateLinkTitle,
   AFFILIATE_LINK_TARGETS,
+  COMMISSION_AWAITING_PAYMENT_NOTE,
   commissionUnlockNote,
   CTV_FUNNEL_NOTE,
   ctvFunnel,
@@ -148,6 +149,14 @@ describe('commissionUnlockNote', () => {
     expect(commissionUnlockNote({ status: 'LOCKED' }, fmt)).toBeNull();
     expect(commissionUnlockNote({ status: 'LOCKED', unlockEstimateAt: 'không phải ngày' }, fmt)).toBeNull();
   });
+
+  it('đơn khách vãng lai chưa thu tiền (PO A3): không hứa ngày, nói rõ chốt sau khi đơn thanh toán xong', () => {
+    expect(commissionUnlockNote({ status: 'LOCKED', unlockEstimateAt: null, awaitingPayment: true }, fmt)).toBe(COMMISSION_AWAITING_PAYMENT_NOTE);
+    expect(COMMISSION_AWAITING_PAYMENT_NOTE).toBe('Chốt sau khi đơn thanh toán xong');
+    expect(COMMISSION_AWAITING_PAYMENT_NOTE.length).toBeLessThanOrEqual(40);
+    expect(commissionUnlockNote({ status: 'PENDING', awaitingPayment: true }, fmt)).toBeNull();
+    expect(commissionUnlockNote({ status: 'LOCKED', unlockEstimateAt: '2026-12-04T03:00:00.000Z', awaitingPayment: false }, fmt)).toBe('Dự kiến chốt từ 2026-12-04 nếu không có đổi/trả');
+  });
 });
 
 describe('linkCategoryOptions', () => {
@@ -171,7 +180,7 @@ describe('linkCategoryOptions', () => {
 describe('chữ của bộ tạo link', () => {
   it('đủ 4 đích theo thứ tự API, không dùng thuật ngữ cấm', () => {
     expect(AFFILIATE_LINK_TARGETS.map((t) => t.key)).toEqual(['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL']);
-    const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), ...Object.values(LINK_POSTER_COPY), CTV_FUNNEL_NOTE];
+    const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), ...Object.values(LINK_POSTER_COPY), CTV_FUNNEL_NOTE, COMMISSION_AWAITING_PAYMENT_NOTE];
     for (const text of texts) for (const { pattern } of FORBIDDEN_TERMS) expect(text).not.toMatch(pattern);
   });
 });

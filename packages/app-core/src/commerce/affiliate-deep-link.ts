@@ -190,11 +190,16 @@ export const LINK_BUILDER_COPY = {
   copyFail: 'Không sao chép được, hãy chép link thủ công.',
 } as const;
 
+/** Dòng phụ của khoản hoa hồng LOCKED thuộc đơn khách vãng lai chưa thu tiền (≤ 40 ký tự, cùng cỡ dòng ngày chốt). */
+export const COMMISSION_AWAITING_PAYMENT_NOTE = 'Chốt sau khi đơn thanh toán xong';
+
 /**
  * Ngày khoản hoa hồng đang giữ (LOCKED) dự kiến được chốt: máy chủ tính `lockedAt` (lúc đơn giao) + số ngày giữ thực. Chỉ là dự kiến,
  * vì đơn còn yêu cầu đổi/trả chờ duyệt thì chưa chốt. `formatDate` là hàm ngày của từng app (web giờ VN, Mini theo máy).
+ * Đơn khách vãng lai chưa thu tiền (`awaitingPayment`, PO A3) không có ngày: hoa hồng chỉ chốt sau khi đơn thanh toán xong.
  */
-export function commissionUnlockNote(c: { status: string; unlockEstimateAt?: string | null }, formatDate: (iso: string) => string): string | null {
+export function commissionUnlockNote(c: { status: string; unlockEstimateAt?: string | null; awaitingPayment?: boolean }, formatDate: (iso: string) => string): string | null {
+  if (c.status === 'LOCKED' && c.awaitingPayment === true) return COMMISSION_AWAITING_PAYMENT_NOTE;
   if (c.status !== 'LOCKED' || !c.unlockEstimateAt || Number.isNaN(Date.parse(c.unlockEstimateAt))) return null;
   return `Dự kiến chốt từ ${formatDate(c.unlockEstimateAt)} nếu không có đổi/trả`;
 }
