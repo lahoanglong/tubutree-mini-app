@@ -155,6 +155,9 @@ const LABELS = new Map<string, Label>([
   ['phone', 'tel'],
   ['tel', 'tel'],
   ['zalo', 'tel'],
+  ['goi', 'tel'],
+  ['lien he', 'tel'],
+  ['lh', 'tel'],
   ['dia chi', 'addr'],
   ['d c', 'addr'],
   ['dc', 'addr'],
@@ -227,7 +230,7 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
   pushSegments(text.slice(last), segs);
 
   const nameText = (i: number): string => segs[i]?.text.replace(SHIP_TO, '') ?? '';
-  const isNameLike = (i: number, labelled: boolean): boolean => {
+  const isNameLike = (i: number, minWords: number): boolean => {
     const s = segs[i];
     const name = nameText(i);
     if (!s || s.label === 'addr' || !NAME_RE.test(name)) return false;
@@ -235,7 +238,7 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
     // "Phuong Anh" (không dấu) đứng đầu khối là tên, không phải phường.
     const maybeWard = wardFrom(t) && !(i === 0 && !hasMarks(t[0]!) && fold(t[0]!) === 'phuong');
     return (
-      t.length >= (labelled ? 1 : 2) &&
+      t.length >= minWords &&
       t.length <= 6 &&
       !isStreetHead(t[0]!) &&
       !maybeWard &&
@@ -243,14 +246,17 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
       provinceOf(name, provinces) === undefined
     );
   };
-  // Tên: ô có nhãn "Tên:", rồi chữ kề trước SĐT, kề sau SĐT, hay dòng đầu đứng riêng.
+  // Tên: ô có nhãn "Tên:", rồi chữ kề trước SĐT, kề sau SĐT (được một chữ: "Lan"), hay dòng đầu đứng riêng (từ hai chữ).
+  const labelledAt = segs.findIndex((s, i) => s.label === 'name' && isNameLike(i, 1));
   const nameAt = [
-    segs.findIndex((s, i) => s.label === 'name' && isNameLike(i, true)),
-    telAt > 0 && isNameLike(telAt - 1, false) ? telAt - 1 : -1,
-    telAt >= 0 && isNameLike(telAt, false) ? telAt : -1,
-    segs.length > 1 && segs[0]!.alone && isNameLike(0, false) ? 0 : -1,
+    labelledAt,
+    telAt > 0 && isNameLike(telAt - 1, 1) ? telAt - 1 : -1,
+    telAt >= 0 && isNameLike(telAt, 1) ? telAt : -1,
+    segs.length > 1 && segs[0]!.alone && isNameLike(0, 2) ? 0 : -1,
   ].find((i) => i >= 0);
   const recipient = nameAt === undefined ? '' : nameText(nameAt);
+  // Tên một chữ không nhãn chỉ đi kèm, không đủ làm nên một khối địa chỉ ("Ok 0912345678" vẫn dán như thường).
+  const weakName = nameAt !== labelledAt && tokens(recipient).length === 1;
   const addr = segs.filter((s, i) => i !== nameAt && s.label !== 'tel' && s.label !== 'name');
 
   // Đọc ngược từ cuối: tỉnh, quận (bỏ), phường, rồi số nhà/đường. Gặp phường (hay một đoạn có số đứng trước tỉnh/quận) thì mọi chữ
@@ -316,7 +322,7 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
   // Không có số nhà, không có tỉnh/phường ("Gọi 0912…") thì không phải địa chỉ.
   const street = province || ward || streetParts.some((p) => /\d/.test(p)) ? streetParts.join(', ') : '';
   if (districtSeen) ward = null;
-  const found = [recipient, phone, street, province, ward].filter(Boolean).length;
+  const found = [weakName ? '' : recipient, phone, street, province, ward].filter(Boolean).length;
   return found >= 2 ? { recipient, phone, street, province, ward } : null;
 }
 
