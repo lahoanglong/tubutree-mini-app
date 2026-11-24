@@ -121,6 +121,8 @@ export interface ProductDetail {
   sold?: number;
   /** Thành phần (niềm tin cho khách ngại hoá chất); null/thiếu thì không hiện mục. */
   ingredients?: { name: string; percentage?: string; benefit?: string }[] | null;
+  /** Id danh mục của sản phẩm (đã theo danh mục MSS khi bản bổ sung ghi đè); thiếu khi API cũ. Khối "Cùng danh mục" và vệt danh mục JSON-LD đọc trường này. */
+  categoryIds?: string[];
   fulfilment?: 'TUBU' | 'MERCHANT';
   /** Ai giao (D4): tên gian hàng lấy theo gian hàng hiện tại, phí giao riêng của gian hàng. API cũ chưa trả. */
   fulfiller?: ProductFulfiller;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProductDetail } from '../api';
 import type { FlashItem } from '../flash-price';
 import { jsonLdScript } from '../product-seo';
-import { pdpCrumbs, pdpJsonLd, vnDateOf } from './pdp-structured-data';
+import { pdpCategoryCrumbs, pdpCrumbs, pdpJsonLd, vnDateOf } from './pdp-structured-data';
 
 const URL = 'https://app.tubutree.com/san-pham/dau-goi';
 const NOW = Date.parse('2026-11-21T05:00:00Z');
@@ -131,6 +131,25 @@ describe('pdpJsonLd — BreadcrumbList', () => {
     expect(pdpCrumbs({ ...BASE, brand: '  ' }).map((c) => c.name)).toEqual(['Trang chủ', 'Dầu gội bồ kết']);
     expect(pdpCrumbs({ ...BASE, brand: 'Sokfram' })[1]).toEqual({ name: 'Sokfarm', href: '/san-pham?brand=Sokfarm' });
   });
+
+  it('có vệt danh mục: thêm BreadcrumbList thứ hai Trang chủ › Danh mục › cha › lá › sản phẩm, cùng URL với breadcrumb của trang danh mục', () => {
+    const trail = [{ id: 'c-nha', name: 'Nhà cửa' }, { id: 'c gội', name: 'Gội & xả' }];
+    const list = pdpJsonLd({ product: BASE, url: URL, now: NOW, categoryTrail: trail });
+    expect(list.map((b) => b['@type'])).toEqual(['Product', 'BreadcrumbList', 'BreadcrumbList']);
+    expect((list[2] as Record<string, any>).itemListElement.map((i: { position: number; name: string; item: string }) => [i.position, i.name, i.item])).toEqual([
+      [1, 'Trang chủ', 'https://app.tubutree.com/'],
+      [2, 'Danh mục', 'https://app.tubutree.com/san-pham'],
+      [3, 'Nhà cửa', 'https://app.tubutree.com/san-pham?category=c-nha'],
+      [4, 'Gội & xả', 'https://app.tubutree.com/san-pham?category=c%20g%E1%BB%99i'],
+      [5, 'Dầu gội bồ kết', 'https://app.tubutree.com/san-pham/dau-goi'],
+    ]);
+  });
+
+  it('không có danh mục (vệt rỗng hoặc không truyền): chỉ một BreadcrumbList theo nhãn', () => {
+    expect(pdpCategoryCrumbs(BASE, [])).toEqual([]);
+    expect(pdpCategoryCrumbs(BASE, undefined)).toEqual([]);
+    expect(pdpJsonLd({ product: BASE, url: URL, now: NOW, categoryTrail: [] }).filter((b) => b['@type'] === 'BreadcrumbList')).toHaveLength(1);
+  });
 });
 
 describe('pdpJsonLd — FAQPage', () => {
@@ -142,6 +161,30 @@ describe('pdpJsonLd — FAQPage', () => {
 
   it('mô tả không có câu hỏi: không có FAQPage', () => {
     expect(byType(blocks({ ...BASE, description: '<h3>Hướng dẫn sử dụng</h3><p>Thoa lên tóc ướt.</p>' }), 'FAQPage')).toBeUndefined();
+  });
+
+  it('hỏi–đáp của khối "Hỏi nhanh": MỘT FAQPage, câu của mô tả đứng trước, câu trùng (khác hoa thường, khoảng trắng) giữ câu của mô tả', () => {
+    const p = { ...BASE, description: '<h3>Dầu gội bồ kết có thành phần gì?</h3><p>Bồ kết, gừng và bưởi.</p>' };
+    const list = pdpJsonLd({
+      product: p,
+      url: URL,
+      now: NOW,
+      faq: [
+        { q: 'dầu gội  bồ kết có thành phần gì?', a: 'Thành phần: Bồ kết.' },
+        { q: 'Dùng Dầu gội bồ kết thế nào?', a: 'Thoa lên tóc ướt.\nXả sạch.' },
+        { q: 'Câu không có trả lời?', a: '  ' },
+      ],
+    });
+    expect(list.filter((b) => b['@type'] === 'FAQPage')).toHaveLength(1);
+    expect(byType(list, 'FAQPage')!.mainEntity).toEqual([
+      { '@type': 'Question', name: 'Dầu gội bồ kết có thành phần gì?', acceptedAnswer: { '@type': 'Answer', text: 'Bồ kết, gừng và bưởi.' } },
+      { '@type': 'Question', name: 'Dùng Dầu gội bồ kết thế nào?', acceptedAnswer: { '@type': 'Answer', text: 'Thoa lên tóc ướt.\nXả sạch.' } },
+    ]);
+  });
+
+  it('chỉ có hỏi–đáp của khối "Hỏi nhanh" (mô tả không có câu hỏi): vẫn có FAQPage', () => {
+    const faq = byType(pdpJsonLd({ product: BASE, url: URL, now: NOW, faq: [{ q: 'Dầu gội bồ kết có bản Refill không?', a: 'Có: Túi Refill 1L.' }] }), 'FAQPage')!;
+    expect(faq.mainEntity).toEqual([{ '@type': 'Question', name: 'Dầu gội bồ kết có bản Refill không?', acceptedAnswer: { '@type': 'Answer', text: 'Có: Túi Refill 1L.' } }]);
   });
 });
 

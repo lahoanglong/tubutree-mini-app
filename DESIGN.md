@@ -223,7 +223,7 @@ Logic ở `packages/app-core/src/engagement/` (`api.ts` đọc và kiểm dạng
 
 ### Khuôn trang web (chỉ web)
 
-`HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính. `HomeEditorialHero` (`apps/web/src/components/home/`, chỉ web): khối giới thiệu mặc định của Trang chủ từ md khi không có banner chiến dịch, đứng ở slot `hero` của `HubLayout` (cùng tỉ lệ `--banner-ratio` nên chiến dịch về muộn không làm trang nhảy; điện thoại ẩn hẳn, chữ ở `homeCopy.hero`).
+`HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính. `HomeEditorialHero` (`apps/web/src/components/home/`, chỉ web): khối giới thiệu mặc định của Trang chủ từ md khi không có banner chiến dịch, đứng ở slot `hero` của `HubLayout` (cùng tỉ lệ `--banner-ratio` nên chiến dịch về muộn không làm trang nhảy; điện thoại ẩn hẳn, chữ ở `homeCopy.hero`). `PdpLinkHub` (`apps/web/src/app/san-pham/[slug]/pdp-link-hub.tsx`, chỉ web, thành phần máy chủ): khối cuối trang sản phẩm từ md gồm "Hỏi nhanh về sản phẩm" (mỗi câu một `<details>` gập sẵn, câu trả lời là chữ đang có ở Thành phần, Nguồn gốc & cách dùng, thẻ gói Refill; cùng các câu đó khai trong JSON-LD FAQPage) và liên kết nội bộ "Cùng danh mục" (vệt danh mục + tối đa 6 món, bỏ món đã ở dải Cùng thương hiệu) / "Bản Refill tiết kiệm"; điện thoại ẩn bằng CSS, logic và chữ ở `app-core/commerce/pdp-link-hub.ts`.
 
 ## Sắp có (đợt 4b/4c)
 

@@ -1140,6 +1140,11 @@
       "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"
     },
     {
+      "name": "PdpLinkHub",
+      "web": "apps/web/src/app/san-pham/[slug]/pdp-link-hub.tsx",
+      "reason": "khối cuối trang sản phẩm web từ md (Hỏi nhanh về sản phẩm, Cùng danh mục, Bản Refill tiết kiệm): liên kết nội bộ và hỏi–đáp FAQPage dựng ở máy chủ cho công cụ tìm kiếm, điện thoại ẩn bằng CSS như RefillLandingLink; Mini App không được lập chỉ mục nên không có khối này"
+    },
+    {
       "name": "StoreLayout",
       "web": "apps/web/src/components/layouts/store-layout.tsx",
       "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"
