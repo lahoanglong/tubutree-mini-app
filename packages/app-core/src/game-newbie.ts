@@ -2,6 +2,7 @@
  * Nhịp chơi người mới của Vườn Xanh: luật chọn nút chính, thẻ 3 bước và chữ dùng chung. Mini App (import trực tiếp `gameNewbieCopy`)
  * và web cùng đọc file này nên chữ và luật không lệch nhau.
  */
+import { formatVnNumber as n } from './number-format';
 
 /** Lượng nước của một lần tưới lô phụ; nút chính "Tưới hết" gửi toàn bộ số giọt đang có. */
 export const WATER_STEP = 20;
@@ -46,10 +47,6 @@ export function extraPlotsVisible(treesPlanted: number | null | undefined, hasEx
 
 export const TUTORIAL_DISMISSED_KEY = 'tubu_game_tutorial_done';
 
-const n = (v: number | null | undefined) => {
-  const x = Number(v ?? 0);
-  return ((Number.isFinite(x) ? x : 0) + 0).toLocaleString('vi-VN');
-};
 const drops = (v: number) => `${n(v)}💧`;
 
 export const gameNewbieCopy = {

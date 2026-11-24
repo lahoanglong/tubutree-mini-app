@@ -57,7 +57,7 @@ Kết quả lần kiểm 2026-11-14 (đã chạy thật, một chuỗi liền, t
 
 So với 2026-11-13: thêm 4 tệp, tổng +25 KB raw (+1,1%) và +10 KB gzip, entry +13 KB raw (+3,2%) và +4 KB gzip. Mục tiêu entry của đợt hiệu năng là dưới 450 KB (`docs/2026-10-review/03-perf.md` A3-013): vẫn đạt.
 
-Ngưỡng 700 KB và 2380 KB (W177 hạ từ 2500 KB xuống 2350 KB, trước đó W176 hạ từ 2560 KB; bản dựng W177 2237 KB sau khi 8 màn quản trị, đối tác, nhân sự chuyển sang cổng web tubutree.com; w3-09 nâng lên 2380 KB khi bản dựng gộp đủ đợt 3, có cả 6 game chơi ngay trong Mini App, là 2357 KB) là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo. Giới hạn dung lượng gói hiện hành của Zalo: chưa kiểm. Script phát hành chạy `bundle-budget.cjs` ở chế độ `BUNDLE_BUDGET_STRICT=1`: vượt ngưỡng thì dừng, trừ khi chủ chấp nhận và đặt `MINIAPP_ENTRY_WARN_KB` / `MINIAPP_TOTAL_WARN_KB` lớn hơn.
+Ngưỡng 700 KB và 2380 KB (W177 hạ từ 2500 KB xuống 2350 KB, trước đó W176 hạ từ 2560 KB; bản dựng W177 2237 KB sau khi 8 màn quản trị, đối tác, nhân sự chuyển sang cổng web tubutree.com; w3-09 nâng lên 2380 KB khi bản dựng gộp đủ đợt 3, có cả 6 game chơi ngay trong Mini App, là 2357 KB) là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo. Giới hạn dung lượng gói hiện hành của Zalo: chưa kiểm. Từ w28-01 ngưỡng tổng mặc định là 2210 KB, đúng trần mà các lần phát hành đã chặn (bản dựng w28-01 2082 KB sau khi gom chuỗi lặp, xem `apps/miniapp/src/build-hoist-strings.ts`). Script phát hành chạy `bundle-budget.cjs` ở chế độ `BUNDLE_BUDGET_STRICT=1`: vượt ngưỡng thì dừng, trừ khi chủ chấp nhận và đặt `MINIAPP_ENTRY_WARN_KB` / `MINIAPP_TOTAL_WARN_KB` lớn hơn.
 
 ## 3. Phát hành lên Zalo: script 1 lệnh, CHƯA chạy thật, cần người có tài khoản Zalo dev
 

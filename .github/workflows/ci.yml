@@ -66,7 +66,7 @@ jobs:
         run: node scripts/ci/bundle-budget.cjs apps/miniapp/www
         env:
           MINIAPP_ENTRY_WARN_KB: ${{ vars.MINIAPP_ENTRY_WARN_KB || '700' }}
-          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2350' }}
+          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2210' }}
 
       - name: Chunk lười Mini App (chặn)
         # Mô-đun cố ý nạp lười (bộ vẽ ảnh chia sẻ, game, khối dưới màn đầu…) phải còn chunk riêng và chỉ nạp bằng import(): experimentalMinChunkSize

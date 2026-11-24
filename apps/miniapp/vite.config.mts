@@ -5,6 +5,7 @@ import zaloMiniApp from 'zmp-vite-plugin';
 import { dropOverriddenRootVarsPlugin } from './src/build-css-root-vars';
 import { dropDemoStoryPresetsPlugin } from './src/build-demo-story-presets';
 import { assertMiniappBuildEnv } from './src/build-env';
+import { hoistRepeatedStringsPlugin } from './src/build-hoist-strings';
 import { unaliasModuleNamesPlugin } from './src/build-import-names';
 import { preloadTrim } from './src/build-preload-trim';
 import { vendorShimsPlugin } from './src/build-vendor-shims';
@@ -50,8 +51,9 @@ export default defineConfig(({ command, mode }) => {
   return {
     root: '.',
     base: '',
-    // Hai bước cuối chỉ đổi byte đã nén, không đổi hành vi: bỏ ` as x` ở chỗ nối giữa các chunk (build-import-names.ts, ~24 KB) và bỏ khai báo
-    // `:root` bị ghi đè trong cùng tệp CSS (build-css-root-vars.ts, ~3 KB).
+    // Ba bước cuối chỉ đổi byte đã nén, không đổi hành vi: gom chuỗi lặp của từng chunk vào hằng đầu chunk (build-hoist-strings.ts, −86 KB thô,
+    // gzip +10 KB; phải chạy trước bước kế vì nó đặt lại tên biến), bỏ ` as x` ở chỗ nối giữa các chunk (build-import-names.ts, ~24 KB) và bỏ
+    // khai báo `:root` bị ghi đè trong cùng tệp CSS (build-css-root-vars.ts, ~3 KB).
     plugins: [
       zaloMiniApp(),
       react(),
@@ -60,6 +62,7 @@ export default defineConfig(({ command, mode }) => {
       dropDemoStoryPresetsPlugin(),
       trim.plugin,
       apiPreconnect(env.VITE_API_BASE_URL),
+      hoistRepeatedStringsPlugin(),
       unaliasModuleNamesPlugin(),
       dropOverriddenRootVarsPlugin(),
     ],
