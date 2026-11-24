@@ -1011,6 +1011,8 @@ export const SHOP_COPY: Record<string, string> = {
   'groupBuy.sharePreview': 'Tin mời sẽ gửi',
   'groupBuy.shareCta': 'Chia sẻ',
   'groupBuy.shareCtaLabel': 'Chia sẻ nhóm mua chung {name}',
+  // Web: trình duyệt không có hộp chia sẻ (Firefox/Chrome máy tính) thì link mời được chép, báo bằng thông báo nổi cạnh đáy màn hình.
+  'groupBuy.linkCopied': 'Đã sao chép link mời mua chung',
   // Cài đặt thông báo: hai công tắc tách từ công tắc gộp cũ. Đổi chữ ở đây thì đổi cả NOTIFY_PREFS_TEXT_VERSION (api/account.ts).
   'settings.notifyGarden': 'Nhắc Vườn Xanh',
   'settings.notifySocial': 'Tương tác bài viết',

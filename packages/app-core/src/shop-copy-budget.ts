@@ -949,6 +949,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'groupBuy.sharePreview': 16,
   'groupBuy.shareCta': 8,
   'groupBuy.shareCtaLabel': null,
+  'groupBuy.linkCopied': 32,
   'settings.notifyGarden': 20,
   'settings.notifySocial': 20,
   'daily.today': 10,
