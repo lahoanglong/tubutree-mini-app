@@ -86,6 +86,8 @@ function worthPinning(def: TerserDef, linkName: string): boolean {
 }
 
 const MANGLE_OPTIONS = { module: true, toplevel: true };
+/** Chunk là ES module nên chạy strict: `function` khai trong khối chỉ sống trong khối (xem build-hoist-strings.ts). */
+const SCOPE_OPTIONS = { module: true };
 
 /**
  * Ghim biến nhập (`import{j as e}`) rồi biến xuất cục bộ (`export{t as j}`, không tính `export … from`) về tên nối, trừ `default`, `*`, tên
@@ -96,7 +98,7 @@ const MANGLE_OPTIONS = { module: true, toplevel: true };
  */
 export function unaliasModuleNames(T: TerserAstApi, code: string): { code: string; pinned: number } {
   const ast = T.parse(code, { module: true });
-  ast.figure_out_scope({});
+  ast.figure_out_scope(SCOPE_OPTIONS);
   if (ast.uses_eval || ast.uses_with) return { code, pinned: 0 };
   const taken = new Set(ast.globals.keys());
   ast.walk(
@@ -130,7 +132,7 @@ export function unaliasModuleNames(T: TerserAstApi, code: string): { code: strin
  */
 export function bindingShape(T: TerserAstApi, code: string): string {
   const ast = T.parse(code, { module: true });
-  ast.figure_out_scope({});
+  ast.figure_out_scope(SCOPE_OPTIONS);
   const ids = new Map<TerserDef, number>();
   const seq: string[] = [];
   const is = (node: TerserNode, kind: NodeClass): boolean => node instanceof kind;
