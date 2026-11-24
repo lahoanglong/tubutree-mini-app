@@ -53,7 +53,7 @@ export function HandoverCard({ board }: { board: HandoverBoard }) {
           <h4 id="gio-g-handover-later-title" className="text-xs font-semibold text-stone-900">
             {board.laterTitle ?? 'Tuỳ chọn (Mở sau)'}
           </h4>
-          <p className="mt-0.5 text-xs text-stone-600">Ngày mở bán thu tiền bằng chuyển khoản VietQR và COD nên chưa cần; điền khi chủ shop quyết bật.</p>
+          <p className="mt-0.5 text-xs text-stone-600">Kênh chưa bật ngày mở bán nên không tính vào số việc phải xong; điền khi chủ shop quyết bật.</p>
           <ul className="mt-1 divide-y divide-stone-200">
             {later.map((it) => (
               <Row key={it.key} item={it} />
