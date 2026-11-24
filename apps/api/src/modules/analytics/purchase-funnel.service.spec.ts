@@ -1,6 +1,7 @@
 import { PURCHASE_FUNNEL_STEPS } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { countPurchaseFunnel, ORDER_MATCH_GRACE_MINUTES, PurchaseFunnelService, SESSION_LOOKAHEAD_HOURS, SESSION_LOOKBACK_HOURS } from './purchase-funnel.service';
+import { VITAL_EVENT_NAMES } from './vitals/vitals-rules';
 
 const row = (platform: string, n: [number, number, number, number, number, number]) => ({
   platform,
@@ -78,6 +79,9 @@ describe('PurchaseFunnelService', () => {
     expect(values.slice(0, 4)).toEqual([since.toISOString(), SESSION_LOOKBACK_HOURS, until.toISOString(), SESSION_LOOKAHEAD_HOURS]);
     // Snapshot ngày chạy 03:00 hôm sau phải đã thấy mọi sự kiện truy vấn dùng (bước sau nửa đêm + ân hạn đặt đơn), để tính lại ra cùng số.
     expect(SESSION_LOOKAHEAD_HOURS * 60 + ORDER_MATCH_GRACE_MINUTES).toBeLessThan(3 * 60);
-    expect(values.slice(4, 6)).toEqual([since.toISOString(), until.toISOString()]);
+    // Dòng số đo tốc độ bị loại ở WHERE (trước HAVING), nên phiên chỉ có số đo không thành phiên và "sự kiện đầu" là sự kiện mua sắm đầu.
+    expect(sql).toContain('AND e."eventName" NOT IN (?) GROUP BY');
+    expect((values[4] as { values: unknown[] }).values).toEqual([...VITAL_EVENT_NAMES]);
+    expect(values.slice(5, 7)).toEqual([since.toISOString(), until.toISOString()]);
   });
 });
