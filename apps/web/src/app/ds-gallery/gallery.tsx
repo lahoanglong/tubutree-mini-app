@@ -273,6 +273,9 @@ export function DsGallery() {
           <Variant label="3 món, giảm 10%">
             <ComboCard title="Combo giặt sạch" items={GALLERY_COMBO_ITEMS.slice(0, 3)} pct={10} total={three.total} comboTotal={three.comboTotal} onAddAll={noop} />
           </Variant>
+          <Variant label="giá từng món (itemPrices: trang sản phẩm, Bộ quà tặng)">
+            <ComboCard title="Combo giặt sạch" items={GALLERY_COMBO_ITEMS.slice(0, 3)} pct={10} total={three.total} comboTotal={three.comboTotal} onAddAll={noop} itemPrices />
+          </Variant>
           <Variant label="5 món (còn +2), có món hết hàng nên nút thành Combo tạm hết, có Xem từng món">
             <ComboCard title="Combo cả nhà" items={GALLERY_COMBO_ITEMS} pct={15} total={five.total} comboTotal={five.comboTotal} onAddAll={noop} onSeeItems={noop} />
           </Variant>

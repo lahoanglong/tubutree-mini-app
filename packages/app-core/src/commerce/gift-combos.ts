@@ -26,7 +26,8 @@ export function giftCombosViews(landing: GiftLanding | null | undefined, now: nu
 /**
  * Giá cả bộ theo số máy chủ (`GiftComboDTO.saving`, cùng hàm giỏ trừ) thay cho phép tính ở máy khách, nên "Tiết kiệm Xđ" của thẻ bằng đúng số giỏ
  * trừ. Máy chủ báo 0 thì bỏ bộ (không quảng cáo "mua cả bộ" mà giỏ không giảm). Số bị kẹp thấp hơn mức % (trần tiền của bộ nhân viên tạo) thì nhãn
- * "Combo -n%" đổi theo mức thật, làm tròn xuống. API cũ (thiếu số hay số hỏng) thì giữ phép tính ở máy khách.
+ * "Combo -n%" đổi theo mức thật, làm tròn xuống, và bộ mang `clamped` (không chia được giá từng món). API cũ (thiếu số hay số hỏng) thì giữ phép
+ * tính ở máy khách.
  */
 function withServerSaving(v: ComboView | null, saving: GiftComboDTO['saving']): ComboView[] {
   if (!v) return [];
@@ -35,7 +36,7 @@ function withServerSaving(v: ComboView | null, saving: GiftComboDTO['saving']): 
   const save = Math.min(saving, v.total);
   const clientSave = v.total - v.comboTotal;
   const pct = save < clientSave && v.total > 0 ? Math.floor((save * 100) / v.total) : v.pct;
-  return [{ ...v, pct, comboTotal: v.total - save }];
+  return [{ ...v, pct, comboTotal: v.total - save, ...(save !== clientSave ? { clamped: true as const } : {}) }];
 }
 
 export interface GiftCombosCallout {

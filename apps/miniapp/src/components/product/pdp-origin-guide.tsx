@@ -26,7 +26,7 @@ const TOGGLE: CSSProperties = {
   color: 'var(--color-text-primary)',
 };
 const TITLE: CSSProperties = {
-  flex: '1 1 auto',
+  flex: '1 1 0%',
   minWidth: 0,
   fontSize: 'var(--type-title-sm-size)',
   lineHeight: 'var(--type-title-sm-lh)',
@@ -34,9 +34,11 @@ const TITLE: CSSProperties = {
   letterSpacing: '-0.01em',
 };
 const HINT: CSSProperties = { flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+// Chỉ gắn khi đang mở: `display` viết tay đè lên thuộc tính `hidden` của trình duyệt, khối gập vẫn hiện.
 const LIST: CSSProperties = { margin: 0, padding: '0 0 var(--space-stack-sm)', display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' };
 const MAP_LINK: CSSProperties = {
-  display: 'inline-flex',
+  display: 'flex',
+  width: 'fit-content',
   alignItems: 'center',
   gap: 'var(--space-inline-xs)',
   padding: 0,
@@ -51,8 +53,8 @@ const MAP_LINK: CSSProperties = {
 };
 
 /**
- * Khối "Nguồn gốc & cách dùng" (`pdpOriginView` của app-core): gập sẵn thành một dòng tiêu đề kèm tỉnh vùng nguyên liệu để đọc lướt, mở ra là
- * các dòng Vùng nguyên liệu, Cách dùng, Bảo quản, Hạn dùng/số lô. Cùng số đo với khối web (`pdp-origin-guide.tsx`, thẻ `<details>`).
+ * Khối "Nguồn gốc & cách dùng" (`pdpOriginView` của app-core): gập sẵn thành một dòng tiêu đề kèm tỉnh của nhãn để đọc lướt, mở ra là các dòng
+ * Đến từ, Cách dùng, Bảo quản, Hạn dùng/số lô. Cùng số đo với khối web (`pdp-origin-guide.tsx`, thẻ `<details>`).
  * Lối bản đồ chỉ có khi đầu trang chưa có chip xuất xứ (`view.map`), để một hành động chỉ có một lối.
  */
 export function PdpOriginGuide({ view, onOpenMap }: { view: PdpOriginView | null; onOpenMap: (id: string) => void }) {
@@ -81,7 +83,7 @@ export function PdpOriginGuide({ view, onOpenMap }: { view: PdpOriginView | null
         )}
         <Icon icon={ChevronDown} size="sm" tone="muted" style={{ flex: 'none', transform: open ? 'rotate(180deg)' : undefined }} />
       </button>
-      <dl id={bodyId} hidden={!open} style={LIST}>
+      <dl id={bodyId} hidden={!open} style={open ? LIST : undefined}>
         {view.rows.map((row) => (
           <div key={row.key} data-testid={`pdp-origin-${row.key}`}>
             <Text variant="caption" tone="secondary" as="dt">
@@ -97,20 +99,20 @@ export function PdpOriginGuide({ view, onOpenMap }: { view: PdpOriginView | null
               ) : (
                 row.lines[0]
               )}
+              {row.key === 'origin' && view.map && (
+                <button
+                  type="button"
+                  className="tubu-press tubu-hit-44"
+                  data-testid="pdp-origin-map"
+                  aria-label={view.map.spoken}
+                  onClick={() => onOpenMap(view.map!.id)}
+                  style={MAP_LINK}
+                >
+                  <Icon icon={MapPin} size="sm" tone="brand" style={{ flex: 'none' }} />
+                  {pdpOriginCopy('map')}
+                </button>
+              )}
             </Text>
-            {row.key === 'origin' && view.map && (
-              <button
-                type="button"
-                className="tubu-press tubu-hit-44"
-                data-testid="pdp-origin-map"
-                aria-label={view.map.spoken}
-                onClick={() => onOpenMap(view.map!.id)}
-                style={MAP_LINK}
-              >
-                <Icon icon={MapPin} size="sm" tone="brand" style={{ flex: 'none' }} />
-                {pdpOriginCopy('map')}
-              </button>
-            )}
           </div>
         ))}
       </dl>

@@ -4,31 +4,33 @@ import { parseRichText, type RichBlock } from '../rich-text';
 
 /**
  * Khối "Nguồn gốc & cách dùng" của trang sản phẩm (web `/san-pham/[slug]`, Mini App `/product/:slug`): gập sẵn một dòng, mở ra là các dòng
- * Vùng nguyên liệu, Cách dùng, Bảo quản, Hạn dùng/số lô. Chỉ đọc dữ liệu đã có, không bịa:
- * - Vùng nguyên liệu: bảng nhãn hành trình (`productOrigin`), cùng nguồn với chip xuất xứ và bản đồ `/cau-chuyen`. Nhãn dòng không dùng chữ
- *   "Xuất xứ" (bộ chặn tuyên bố coi đó là điều cần giấy tờ); dữ liệu là vùng nguyên liệu của nhãn trên bản đồ hành trình.
+ * Đến từ, Cách dùng, Bảo quản, Hạn dùng/số lô. Chỉ đọc dữ liệu đã có, không bịa:
+ * - Đến từ: nhãn hàng (hay nhà máy làm ra nhãn mượn vùng) và tỉnh của nó trên bản đồ hành trình (`productOrigin`), cùng nguồn với chip xuất xứ
+ *   và `/cau-chuyen`. Đây là nơi của NHÃN, không phải nguồn nguyên liệu của từng mẻ hàng, nên chữ không nói "vùng nguyên liệu" hay "xuất xứ"
+ *   (bộ chặn tuyên bố coi "xuất xứ" là điều cần giấy tờ).
  * - Cách dùng, Bảo quản: câu chủ hàng đã viết trong mô tả ("Hướng dẫn sử dụng: …", "Bảo quản nơi khô ráo…"). Mô tả không có thì không có dòng.
  *   Chữ dự phòng của catalog (`product-copy-fallback`) cố ý không viết cách dùng hay bảo quản, nên ở đây cũng không tự viết.
  * - Hạn dùng, số lô: không có cột nào trong DB; dòng chỉ nói chỗ khách đọc được (bao bì), không nêu số.
- * Không có xuất xứ, cách dùng hay bảo quản thì không có khối (một dòng chỉ nói "xem bao bì" không đáng một khối).
+ * Không có nơi làm ra, cách dùng hay bảo quản thì không có khối (một dòng chỉ nói "xem bao bì" không đáng một khối).
  */
 
 /** Chữ riêng của khối (như `GIFT_COMBOS_COPY`): chỉ trang sản phẩm nạp module này, nên chữ không vào gói khởi động. */
 export const PDP_ORIGIN_COPY = {
   titleOriginUsage: 'Nguồn gốc & cách dùng',
-  titleOrigin: 'Nguồn gốc & bảo quản',
-  titleUsage: 'Cách dùng & bảo quản',
-  titleStorage: 'Bảo quản & hạn dùng',
-  origin: 'Vùng nguyên liệu',
-  originValue: '{province} · {brand}',
-  originFactory: '{province} · nhà máy {brand}',
+  titleOriginStorage: 'Nguồn gốc & bảo quản',
+  titleOriginLot: 'Nguồn gốc & hạn dùng',
+  titleUsageStorage: 'Cách dùng & bảo quản',
+  titleUsageLot: 'Cách dùng & hạn dùng',
+  titleStorageLot: 'Bảo quản & hạn dùng',
+  origin: 'Đến từ',
+  originValue: '{brand} · {province}',
+  originFactory: 'Nhà máy {brand} · {province}',
   usage: 'Cách dùng',
   storage: 'Bảo quản',
   lot: 'Hạn dùng, số lô',
-  lotStorage: 'Hạn dùng, số lô, bảo quản',
   lotValue: 'In trên bao bì sản phẩm',
   map: 'Xem trên bản đồ',
-  mapSpoken: 'Xem vùng nguyên liệu {province} trên bản đồ',
+  mapSpoken: 'Xem {brand} ở {province} trên bản đồ',
 } as const;
 
 export type PdpOriginCopyKey = keyof typeof PDP_ORIGIN_COPY;
@@ -36,16 +38,17 @@ export type PdpOriginCopyKey = keyof typeof PDP_ORIGIN_COPY;
 /** Số ký tự tối đa khi điền giá trị dài nhất của bảng nhãn ("Khánh Hòa (Nha Trang)", "Le Plateau"): tiêu đề và gợi ý tỉnh cùng nằm một dòng ở 360px. */
 export const PDP_ORIGIN_COPY_MAX: Record<PdpOriginCopyKey, number> = {
   titleOriginUsage: 24,
-  titleOrigin: 24,
-  titleUsage: 24,
-  titleStorage: 24,
-  origin: 16,
+  titleOriginStorage: 24,
+  titleOriginLot: 24,
+  titleUsageStorage: 24,
+  titleUsageLot: 24,
+  titleStorageLot: 24,
+  origin: 12,
   originValue: 40,
   originFactory: 48,
   usage: 12,
   storage: 12,
   lot: 24,
-  lotStorage: 28,
   lotValue: 28,
   map: 20,
   mapSpoken: 56,
@@ -68,10 +71,10 @@ export interface PdpOriginRow {
 
 export interface PdpOriginView {
   title: string;
-  /** Tỉnh xuất xứ ở dòng tiêu đề khi khối đang gập, để đọc lướt; null khi không biết xuất xứ. */
+  /** Tỉnh của nhãn ở dòng tiêu đề khi khối đang gập, để đọc lướt; null khi không biết nhãn đến từ đâu. */
   hint: string | null;
   rows: PdpOriginRow[];
-  /** Lối mở bản đồ câu chuyện ở dòng Vùng nguyên liệu. null khi không biết xuất xứ, hoặc chip xuất xứ đầu trang đã trỏ tới đúng điểm đó (một hành động một lối). */
+  /** Lối mở bản đồ câu chuyện ở dòng Đến từ. null khi không biết nhãn đến từ đâu, hoặc chip xuất xứ đầu trang đã trỏ tới đúng điểm đó (một hành động một lối). */
   map: { id: string; spoken: string } | null;
 }
 
@@ -102,9 +105,22 @@ const LABELS: { kind: Kind; re: RegExp }[] = [
 const SEPARATOR = /^\s*[:：\-–—]\s*/;
 /**
  * Không có dấu hai chấm thì "Bảo quản …" chỉ là câu bảo quản khi từ kế tiếp nói nơi hay cách giữ ("Bảo quản nơi khô ráo", "Bảo quản trong tủ
- * lạnh"); "Bảo quản tự nhiên…" hay "Cách dùng đơn giản…" là câu quảng cáo, không phải hướng dẫn.
+ * lạnh", "Bảo quản sản phẩm ở nơi thoáng mát"); "Bảo quản tự nhiên…", "Bảo quản sản phẩm lâu hơn…" hay "Cách dùng đơn giản…" là câu quảng cáo.
  */
-const STORAGE_INLINE = /^(?:noi|o|trong|tranh|tai|duoi|lanh|kin|san pham)(?![\p{L}\p{N}])/u;
+const PLACE = '(?:noi|o|trong|tranh|tai|duoi)';
+const STORAGE_INLINE = new RegExp(`^(?:${PLACE}|lanh|kin|san pham ${PLACE})(?![\\p{L}\\p{N}])`, 'u');
+/**
+ * Dòng mở đầu bằng tên một mục khác của mô tả ("Thành phần", "Công dụng", "Quy cách"…) là tiêu đề khi ngay sau tên là dấu hai chấm, hoặc dòng ngắn
+ * không dấu chấm câu, dù không in đậm hay in hoa: dừng phần Cách dùng/Bảo quản đang lấy, không nuốt sang mục sau.
+ */
+const SECTION = /^(?:thanh phan|cong dung|quy cach|thong so|thong tin|dac diem|uu diem|luu y|chu y|canh bao|xuat xu|nguon goc|han su dung|han dung|mo ta|dung tich|khoi luong|trong luong|san xuat|nha san xuat|phan phoi)(?![\p{L}\p{N}])/u;
+const SECTION_MAX_CHARS = 40;
+function isSection(text: string): boolean {
+  const folded = fold(text);
+  const m = SECTION.exec(folded);
+  if (!m) return false;
+  return /^\s*[:：]/.test(folded.slice(m[0].length)) || (text.length <= SECTION_MAX_CHARS && !/[.!?]$/.test(text));
+}
 
 function guideLines(blocks: readonly RichBlock[]): GuideLine[] {
   const out: GuideLine[] = [];
@@ -114,7 +130,7 @@ function guideLines(blocks: readonly RichBlock[]): GuideLine[] {
       if (!text) continue;
       const letters = text.replace(/[^\p{L}]/gu, '');
       const caps = letters.length >= 4 && letters === letters.toUpperCase() && letters !== letters.toLowerCase();
-      out.push({ text, heading: heading || caps || /[:：]$/.test(text) });
+      out.push({ text, heading: heading || caps || /[:：]$/.test(text) || isSection(text) });
     }
   };
   for (const b of blocks) {
@@ -178,9 +194,19 @@ export function descriptionGuide(description: string | null | undefined): Record
   return found;
 }
 
+// Tiêu đề nói hai dòng đầu của khối (dòng Hạn dùng luôn có ở cuối nên khối luôn có ít nhất hai dòng): không hứa phần khối không có.
+const TITLE: Record<string, PdpOriginCopyKey> = {
+  'origin-usage': 'titleOriginUsage',
+  'origin-storage': 'titleOriginStorage',
+  'origin-lot': 'titleOriginLot',
+  'usage-storage': 'titleUsageStorage',
+  'usage-lot': 'titleUsageLot',
+  'storage-lot': 'titleStorageLot',
+};
+
 /**
  * Dạng hiển thị của khối (THUẦN). `originChip`: trang đang có chip xuất xứ ở đầu trang (`pdpOriginLink(product.brand)` khác null); khi đó dòng
- * Vùng nguyên liệu không thêm lối bản đồ thứ hai. Không có xuất xứ, cách dùng hay bảo quản thì null.
+ * Đến từ không thêm lối bản đồ thứ hai. Không biết nhãn đến từ đâu, không cách dùng, không bảo quản thì null.
  */
 export function pdpOriginView(product: { brand: string; name: string; description?: string | null }, opts: { originChip: boolean }): PdpOriginView | null {
   const origin = productOrigin(product);
@@ -193,12 +219,11 @@ export function pdpOriginView(product: { brand: string; name: string; descriptio
   }
   if (guide.usage) rows.push({ key: 'usage', label: pdpOriginCopy('usage'), lines: guide.usage });
   if (guide.storage) rows.push({ key: 'storage', label: pdpOriginCopy('storage'), lines: guide.storage });
-  rows.push({ key: 'lot', label: pdpOriginCopy(guide.storage ? 'lot' : 'lotStorage'), lines: [pdpOriginCopy('lotValue')] });
-  const title = origin ? pdpOriginCopy(guide.usage ? 'titleOriginUsage' : 'titleOrigin') : pdpOriginCopy(guide.usage ? 'titleUsage' : 'titleStorage');
+  rows.push({ key: 'lot', label: pdpOriginCopy('lot'), lines: [pdpOriginCopy('lotValue')] });
   return {
-    title,
+    title: pdpOriginCopy(TITLE[`${rows[0]!.key}-${rows[1]!.key}`]!),
     hint: origin ? origin.province : null,
     rows,
-    map: origin && !opts.originChip ? { id: origin.id, spoken: pdpOriginCopy('mapSpoken', { province: origin.province }) } : null,
+    map: origin && !opts.originChip ? { id: origin.id, spoken: pdpOriginCopy('mapSpoken', { brand: origin.brand, province: origin.province }) } : null,
   };
 }

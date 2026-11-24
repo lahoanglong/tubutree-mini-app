@@ -26,6 +26,11 @@ export interface ComboView {
   total: number;
   /** Tổng sau giảm theo cùng phép floor từng món của `allocateBundleDiscounts` (giỏ vẫn là nguồn chính thức). */
   comboTotal: number;
+  /**
+   * Số tiết kiệm máy chủ (`GiftComboDTO.saving`) khác phép chia % từng món (trần tiền bộ nhân viên): giỏ cắt phần giảm theo dòng khác phép %, nên thẻ
+   * không được ghi giá trong bộ của từng món (`ComboCard itemPrices`).
+   */
+  clamped?: true;
 }
 
 /**
