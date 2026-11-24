@@ -23,6 +23,7 @@ export const PDP_LINK_HUB_COPY = {
   linksLabel: 'Sản phẩm liên quan',
   sameCategory: 'Cùng danh mục',
   refillTitle: 'Bản Refill tiết kiệm',
+  refillTitlePlain: 'Bản Refill',
   refillSave: '{pack} · tiết kiệm {amount}',
 } as const;
 
@@ -43,6 +44,7 @@ export const PDP_LINK_HUB_COPY_MAX: Record<PdpLinkHubCopyKey, number> = {
   linksLabel: 24,
   sameCategory: 16,
   refillTitle: 24,
+  refillTitlePlain: 16,
   refillSave: 36,
 };
 
@@ -132,8 +134,9 @@ export interface PdpLinkItem {
 }
 
 /**
- * Sản phẩm cùng danh mục cho khối liên kết: bỏ chính sản phẩm đang xem và các món đã có ở dải "Cùng thương hiệu" ngay phía trên (một món một
- * lối trên trang), bỏ trùng, tối đa `PDP_CATEGORY_LINKS_MAX`, giữ thứ tự của nguồn (bán chạy trước).
+ * Sản phẩm cùng danh mục cho khối liên kết: bỏ chính sản phẩm đang xem và các món đã có ở dải "Cùng thương hiệu" ngay phía trên (dải máy chủ dựng
+ * sẵn), bỏ trùng, tối đa `PDP_CATEGORY_LINKS_MAX`, giữ thứ tự của nguồn (bán chạy trước). Lưới "Có thể bạn cũng thích" chỉ tải ở trình duyệt nên
+ * máy chủ không biết trước; một món có thể có mặt ở cả lưới đó lẫn khối này.
  */
 export function pdpCategoryLinks(
   products: readonly { id: string; slug: string; name: string }[] | null | undefined,
@@ -151,8 +154,13 @@ export function pdpCategoryLinks(
   return out;
 }
 
-/** Chữ của liên kết sang gói Refill: tên gói, kèm số tiền tiết kiệm khi so được với chai cùng lượng (cùng số với thẻ gói Refill). */
-export function pdpRefillLinkText(refill: Pick<PdpRefillOfferView, 'name' | 'comparison'>): string {
+/**
+ * Mục "Bản Refill" của khối liên kết: chỉ nói "tiết kiệm" (tiêu đề và số tiền) khi thẻ gói Refill cũng nói, tức khi so được với chai cùng lượng
+ * (`comparison`); chai hay gói đang Giờ vàng, hoặc không đọc được lượng, thì tiêu đề trung tính và chữ chỉ là tên gói.
+ */
+export function pdpRefillLink(refill: Pick<PdpRefillOfferView, 'slug' | 'name' | 'comparison'>): { slug: string; title: string; text: string } {
   const pack = clean(refill.name);
-  return refill.comparison ? pdpLinkHubCopy('refillSave', { pack, amount: vnd(refill.comparison.savedVnd) }) : pack;
+  return refill.comparison
+    ? { slug: refill.slug, title: pdpLinkHubCopy('refillTitle'), text: pdpLinkHubCopy('refillSave', { pack, amount: vnd(refill.comparison.savedVnd) }) }
+    : { slug: refill.slug, title: pdpLinkHubCopy('refillTitlePlain'), text: pack };
 }

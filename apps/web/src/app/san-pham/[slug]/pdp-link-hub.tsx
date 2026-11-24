@@ -14,8 +14,8 @@ export interface PdpLinkHubProps {
   faq: PdpFaqItem[];
   /** Vệt danh mục (gốc → lá, mỗi mục một liên kết) và sản phẩm cùng danh mục; null khi sản phẩm không thuộc danh mục công khai nào. */
   category: { trail: { id: string; name: string }[]; products: PdpLinkItem[] } | null;
-  /** Gói Refill đã ghép với chai này; null khi chưa ghép hay gói hết hàng. */
-  refill: { slug: string; text: string } | null;
+  /** Gói Refill đã ghép với chai này (`pdpRefillLink`); null khi chưa ghép, gói hết hàng hay gian hàng chưa nhận đơn. */
+  refill: { slug: string; title: string; text: string } | null;
 }
 
 /**
@@ -85,7 +85,7 @@ export function PdpLinkHub({ faq, category, refill }: PdpLinkHubProps) {
           )}
           {refill && (
             <section data-testid="pdp-refill-link" className="min-w-0">
-              <h2 className={pdpSectionTitle}>{pdpLinkHubCopy('refillTitle')}</h2>
+              <h2 className={pdpSectionTitle}>{refill.title}</h2>
               <Link href={productHref(refill.slug)} className={`${LINK} max-w-full gap-1`}>
                 <span className="truncate">{refill.text}</span>
                 <ChevronRight aria-hidden="true" className="h-4 w-4 flex-none" />

@@ -11,7 +11,7 @@ import {
   pdpCategoryTrail,
   pdpGeneratedFaq,
   pdpLinkHubCopy,
-  pdpRefillLinkText,
+  pdpRefillLink,
   type PdpLinkHubCopyKey,
 } from './pdp-link-hub';
 
@@ -97,10 +97,19 @@ describe('pdpCategoryLinks', () => {
   });
 });
 
-describe('pdpRefillLinkText', () => {
-  it('kèm số tiền tiết kiệm khi so được, không thì chỉ tên gói', () => {
-    expect(pdpRefillLinkText({ name: 'Túi Refill 10L', comparison: CMP })).toBe('Túi Refill 10L · tiết kiệm 120.000đ');
-    expect(pdpRefillLinkText({ name: ' Túi Refill 10L ', comparison: null })).toBe('Túi Refill 10L');
+describe('pdpRefillLink', () => {
+  it('so được với chai: tiêu đề và chữ nói tiết kiệm kèm số tiền (cùng số với thẻ gói Refill)', () => {
+    expect(pdpRefillLink({ slug: 'tui-10l', name: 'Túi Refill 10L', comparison: CMP })).toEqual({
+      slug: 'tui-10l',
+      title: 'Bản Refill tiết kiệm',
+      text: 'Túi Refill 10L · tiết kiệm 120.000đ',
+    });
+  });
+
+  it('không so được (Giờ vàng, thiếu lượng): tiêu đề trung tính, chỉ tên gói, không có chữ "tiết kiệm"', () => {
+    const link = pdpRefillLink({ slug: 'tui-10l', name: ' Túi Refill 10L ', comparison: null });
+    expect(link).toEqual({ slug: 'tui-10l', title: 'Bản Refill', text: 'Túi Refill 10L' });
+    expect(`${link.title} ${link.text}`).not.toMatch(/tiết kiệm/i);
   });
 });
 

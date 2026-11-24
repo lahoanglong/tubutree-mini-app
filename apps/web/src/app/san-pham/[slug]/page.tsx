@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchCatalog, fetchCategories, fetchRelated } from '@tubutree/app-core/api/catalog';
-import { pdpCategoryLinks, pdpCategoryTrail, pdpGeneratedFaq, pdpRefillLinkText } from '@tubutree/app-core/commerce/pdp-link-hub';
+import { pdpCategoryLinks, pdpCategoryTrail, pdpGeneratedFaq, pdpRefillLink } from '@tubutree/app-core/commerce/pdp-link-hub';
 import { fetchProductCompare } from '@tubutree/app-core/api/product-compare';
 import { fetchRefillPair, pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { addonRows, comboView } from '@tubutree/app-core/commerce/bundle-view';
@@ -166,17 +166,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const hasIngredients = (product.ingredients ?? []).length > 0;
   const hasDescription = parseRichText(product.description).length > 0;
   const hasCompare = compareRows(compare) !== null;
-  // Hỏi–đáp chỉ từ chữ đang có trên trang: Thành phần, dòng Cách dùng của khối Nguồn gốc & cách dùng, thẻ gói Refill.
+  // Hỏi–đáp chỉ từ chữ đang có trên trang: Thành phần, dòng Cách dùng của khối Nguồn gốc & cách dùng, thẻ gói Refill. Gian hàng chưa nhận đơn thì
+  // thẻ gói Refill không vẽ, nên câu hỏi và liên kết Refill cũng không có (không nêu số tiết kiệm mà trang không hiện).
+  const shownRefill = unavailableText ? null : refillOffer;
   const linkFaq = pdpGeneratedFaq({
     name: product.name,
     ingredients: product.ingredients,
     usage: originView?.rows.find((r) => r.key === 'usage')?.lines,
-    refill: refillOffer,
+    refill: shownRefill,
   });
   const categoryTrail = sameCategory?.trail ?? [];
   const linkCategory =
     categoryTrail.length > 0 ? { trail: categoryTrail, products: pdpCategoryLinks(sameCategory?.products, { currentId: product.id, exclude: related }) } : null;
-  const linkRefill = refillOffer ? { slug: refillOffer.slug, text: pdpRefillLinkText(refillOffer) } : null;
+  const linkRefill = shownRefill ? pdpRefillLink(shownRefill) : null;
   const hasLinkHub = linkFaq.length > 0 || linkCategory !== null || linkRefill !== null;
 
   return (
