@@ -160,7 +160,7 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     label: 'Giữ tồn Tubu khi Pancake báo 0',
     description: 'Pancake báo tồn 0 cho một phân loại mà Tubu còn hàng thì Tubu giữ nguyên số tồn đang có, chỉ ghi số 0 của Pancake để màn đối chiếu tồn thấy chỗ lệch. Áp cho đồng bộ 15 phút, nút đồng bộ ghi đè tồn kho, webhook tồn kho của Pancake và tồn MSS đẩy sang. Pancake báo số lớn hơn 0 thì Tubu lấy số đó trừ phần đơn app đang giữ như thường; đơn app vẫn trừ tồn Tubu.',
     fallback: false,
-    onWarning: 'Chỉ bật khi kho Pancake chưa nhập đủ hàng mà hàng thật vẫn có ở kho. Khách đặt được tới hết số tồn Tubu đang ghi, kể cả khi Pancake báo hết: kiểm hàng thật trước khi bật. Áp từ lượt đồng bộ kế tiếp (tối đa khoảng 15 phút).',
+    onWarning: 'Chỉ bật khi kho Pancake chưa nhập đủ hàng mà hàng thật vẫn có ở kho. Khách đặt được tới hết số tồn Tubu đang ghi, kể cả khi Pancake báo hết: kiểm hàng thật trước khi bật. Đơn app đặt trong lúc Pancake báo 0 vẫn bị trừ khi Pancake báo lại số dương, nên tồn Tubu có thể thấp hơn hàng thật tới khi bấm đồng bộ ghi đè tồn kho. Áp từ lượt đồng bộ kế tiếp (tối đa khoảng 15 phút).',
     offWarning: 'Từ lượt đồng bộ kế tiếp, Pancake báo 0 là phân loại hết hàng trên Tubu như trước. Không dữ liệu nào bị xoá.',
   },
   {

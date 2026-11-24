@@ -549,6 +549,15 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }), undefined, 'sub=s1');
     });
 
+    it('lỗi lúc sinh mã đơn (DB bận, sau bước claim) → đi nhánh thử lại ngày mai, không mất kỳ', async () => {
+      const { svc, updateMany, notify, orderCreate, prisma } = makeProcess(1);
+      (prisma.order.findUnique as unknown as jest.Mock).mockRejectedValueOnce(new Error('Connection reset'));
+      await svc.processDue();
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(retryWrite(updateMany).data.nextRunAt).toEqual(tomorrowVn());
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }), undefined, 'sub=s1');
+    });
+
     it('lỗi sau khi đơn kỳ ĐÃ ghi (idempotencyKey có đơn) → không thử lại, không báo hỏng', async () => {
       const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('boom'), existingOrder: { id: 'o-existing' } });
       await svc.processDue();
