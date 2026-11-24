@@ -4,7 +4,8 @@ import { NOT_PILOT_CLEANED_SQL, REVENUE_ORDER_SQL } from '../admin/admin-revenue
 import { NOTIFICATION_DELIVERY } from '../notifications/notification-delivery';
 import { PROACTIVE_CAP_ENABLED_KEY, PROACTIVE_PER_DAY_KEY, PROACTIVE_PER_WEEK_KEY } from '../notifications/notification-proactive-cap';
 import { ORDER_PAYMENT_REMINDER_TEMPLATE } from '../orders/pending-payment-expiry.cron';
-import { NOTIFICATION_SUPPRESSED_EVENT, REMARKETING_TEMPLATES, remarketingAttribution } from './remarketing-attribution';
+import { COD_SWITCH_HISTORY_NOTE } from '../orders/cod-switch';
+import { NOTIFICATION_SUPPRESSED_EVENT, PROMO_MONTHLY_REASON, REMARKETING_TEMPLATES, remarketingAttribution } from './remarketing-attribution';
 
 const since = new Date('2026-11-11T17:00:00.000Z');
 const until = new Date('2026-11-18T15:00:00.000Z');
@@ -38,7 +39,7 @@ describe('remarketingAttribution', () => {
         { code: 'CART_ABANDONED', sent: 120n, zns_sent: 30n },
         { code: 'ORDER_PAYMENT_REMINDER', sent: 9n, zns_sent: 0n },
       ])
-      .mockResolvedValueOnce([{ code: 'CART_ABANDONED', n: 7n }])
+      .mockResolvedValueOnce([{ code: 'CART_ABANDONED', proactive: 7n, monthly: 3n }])
       .mockResolvedValueOnce([
         { code: 'CART_ABANDONED', orders: 6n, revenue: 1_800_000n },
         { code: 'ORDER_PAYMENT_REMINDER', orders: 4n, revenue: 960_000n },
@@ -47,11 +48,11 @@ describe('remarketingAttribution', () => {
     expect(dto.windowHours).toBe(72);
     expect(dto.proactiveCap).toBeNull();
     expect(dto.rows).toEqual([
-      { notice: 'abandoned_cart', sent: 120, znsSent: 30, znsCapped: 7, orders: 6, revenue: 1_800_000 },
-      { notice: 'winback', sent: 0, znsSent: 0, znsCapped: 0, orders: 0, revenue: 0 },
-      { notice: 'wishlist_price_drop', sent: 0, znsSent: 0, znsCapped: 0, orders: 0, revenue: 0 },
-      { notice: 'refill_21d', sent: 0, znsSent: 0, znsCapped: 0, orders: 0, revenue: 0 },
-      { notice: 'payment_reminder', sent: 9, znsSent: 0, znsCapped: 0, orders: 4, revenue: 960_000 },
+      { notice: 'abandoned_cart', sent: 120, znsSent: 30, znsCapped: 7, znsMonthlyCapped: 3, orders: 6, revenue: 1_800_000 },
+      { notice: 'winback', sent: 0, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 0, revenue: 0 },
+      { notice: 'wishlist_price_drop', sent: 0, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 0, revenue: 0 },
+      { notice: 'refill_21d', sent: 0, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 0, revenue: 0 },
+      { notice: 'payment_reminder', sent: 9, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 4, revenue: 960_000 },
     ]);
   });
 
@@ -75,7 +76,7 @@ describe('remarketingAttribution', () => {
     expect(paramsOf(sentCall!)).toEqual([...codes, since.toISOString(), until.toISOString()]);
 
     expect(sqlOf(cappedCall!)).toContain('e."occurredAt" >=');
-    expect(paramsOf(cappedCall!)).toEqual([NOTIFICATION_SUPPRESSED_EVENT, since.toISOString(), until.toISOString(), ...codes]);
+    expect(paramsOf(cappedCall!)).toEqual([PROMO_MONTHLY_REASON, PROMO_MONTHLY_REASON, NOTIFICATION_SUPPRESSED_EVENT, since.toISOString(), until.toISOString(), ...codes]);
 
     const orderSql = sqlOf(orderCall!);
     expect(orderCall).toContain(NOT_PILOT_CLEANED_SQL);
@@ -87,7 +88,8 @@ describe('remarketingAttribution', () => {
     expect(orderSql).toContain("l.channel = 'INAPP'");
     // Nhắc chuyển khoản gán theo mã đơn trong tin và lúc trả tiền; tin khác gán theo lúc đặt đơn, tin cuối thắng.
     expect(orderSql).toContain("l.payload->'data'->>'order_code'");
-    expect(orderSql).toContain('o.paid_at > t.sent_at');
+    expect(orderCall).toContain(COD_SWITCH_HISTORY_NOTE);
+    expect(orderSql).toContain('o.settled_at > t.sent_at');
     expect(orderSql).toContain('t.sent_at < g.created_at');
     expect(orderSql).toContain('ORDER BY g.user_id, g.grp, t.sent_at DESC');
     expect(orderSql).toContain('COALESCE(p.code, q.code)');

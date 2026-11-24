@@ -9,6 +9,7 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import { NOT_PILOT_CLEANED_SQL, REVENUE_ORDER_SQL } from '../admin/admin-revenue';
 import { readProactiveCap } from '../notifications/notification-proactive-cap';
 import { REFILL_REMINDER_TEMPLATE } from '../notifications/refill-reminder.rules';
+import { COD_SWITCH_HISTORY_NOTE } from '../orders/cod-switch';
 
 /**
  * Mẫu tin của từng dòng "Tin nào ra đơn". Nhắc chuyển khoản viết chữ thay vì nhập hằng của cron huỷ đơn (file đó kéo theo cả service đơn);
@@ -22,8 +23,10 @@ export const REMARKETING_TEMPLATES: Readonly<Record<RemarketingNotice, string>> 
   payment_reminder: 'ORDER_PAYMENT_REMINDER',
 };
 
-/** Sự kiện NotificationsService ghi khi trần tin chủ động bỏ bản ZNS của một tin (props.templateCode). */
+/** Sự kiện NotificationsService ghi khi một trần bỏ bản ZNS của tin (props.templateCode, props.reason). */
 export const NOTIFICATION_SUPPRESSED_EVENT = 'notification_suppressed';
+/** props.reason của trần tin khuyến mãi ZNS theo tháng; các lý do khác thuộc trần tin chủ động. */
+export const PROMO_MONTHLY_REASON = 'promo_monthly';
 
 type Count = number | bigint;
 const num = (v: Count | null | undefined): number => (v == null ? 0 : Number(v));
@@ -36,12 +39,14 @@ const PAY_CODE = REMARKETING_TEMPLATES.payment_reminder;
  * Gán đơn cho tin nhắc chủ động gửi trong [since, until] ("Tin nào ra đơn" ở Trung tâm tăng trưởng).
  *
  * - Tin: mỗi lần gửi có đúng một log trong app (`INAPP`), kể cả khi bản ZNS bị trần hay mẫu chưa có mã ZNS, nên đếm tin theo log INAPP.
- *   ZNS đã nhận là log `ZNS` trạng thái `SENT`. Bản ZNS bị trần đếm từ sự kiện `notification_suppressed`.
+ *   ZNS đã nhận là log `ZNS` trạng thái `SENT`. Bản ZNS bị trần đếm từ sự kiện `notification_suppressed`, tách trần tin chủ động với trần
+ *   tin khuyến mãi theo tháng.
  * - Đơn: đơn thành công như các số khác của trang (bán lẻ, khách tự đặt, bỏ huỷ/trả/chờ thanh toán, bỏ đơn thử Giờ G), gộp các đơn tách
  *   theo nhà bán của cùng một lần đặt. Tiền là Doanh thu đã thu theo REVENUE_ORDER_SQL, trừ phần hoàn của lần trả hàng một phần.
  * - Luật gán, tin cuối thắng, mỗi đơn chỉ gán một lần:
- *   1. Nhắc chuyển khoản nói về chính một đơn (mã đơn trong dữ liệu tin): đơn đó được trả tiền trong 72 giờ sau tin thì gán cho tin. Tin này
- *      luôn tới sau lúc đặt đơn nên là tin cuối.
+ *   1. Nhắc chuyển khoản nói về chính một đơn (mã đơn trong dữ liệu tin): đơn đó được trả tiền, hoặc khách bấm đổi sang trả tiền khi nhận
+ *      (dòng lịch sử COD_SWITCH_HISTORY_NOTE, đơn không có paidAt), trong 72 giờ sau tin thì gán cho tin. Tin này luôn tới sau lúc đặt đơn nên
+ *      là tin cuối.
  *   2. Còn lại: tin gần nhất của bốn loại kia gửi cho cùng khách trong 72 giờ trước lúc đặt đơn.
  *   Chỉ đọc tin gửi trong kỳ: đơn mà tin cuối gửi trước kỳ thì không tính, nên tỷ lệ ra đơn so trên cùng một nhóm tin. Tin của 3 ngày gần
  *   nhất chưa hết 72 giờ chờ.
@@ -65,8 +70,10 @@ export async function remarketingAttribution(
        AND l."sentAt" <= ${ts(until)}::timestamp
      GROUP BY 1`;
 
-  const cappedRows = await db.$queryRaw<Array<{ code: string; n: Count }>>`
-    SELECT e.props->>'templateCode' AS code, count(*) AS n
+  const cappedRows = await db.$queryRaw<Array<{ code: string; proactive: Count; monthly: Count }>>`
+    SELECT e.props->>'templateCode' AS code,
+           count(*) FILTER (WHERE e.props->>'reason' IS DISTINCT FROM ${PROMO_MONTHLY_REASON}) AS proactive,
+           count(*) FILTER (WHERE e.props->>'reason' = ${PROMO_MONTHLY_REASON}) AS monthly
       FROM "analytics_events" e
      WHERE e."eventName" = ${NOTIFICATION_SUPPRESSED_EVENT}
        AND e."occurredAt" >= ${ts(since)}::timestamp
@@ -91,7 +98,11 @@ export async function remarketingAttribution(
              o."userId" AS user_id,
              COALESCE(o."checkoutGroup", o.id) AS grp,
              o."createdAt" AS created_at,
-             o."paidAt" AS paid_at,
+             -- Lúc đơn được chốt: khách đổi sang COD (đơn vẫn chưa trả tiền) hoặc lúc trả tiền.
+             COALESCE(
+               (SELECT min(h."createdAt") FROM "order_status_history" h WHERE h."orderId" = o.id AND h.note = ${COD_SWITCH_HISTORY_NOTE}),
+               o."paidAt"
+             ) AS settled_at,
              CASE WHEN ${REVENUE_ORDER_SQL} THEN o.total - COALESCE(pr.refund, 0) ELSE 0 END AS revenue
         FROM "orders" o
         LEFT JOIN LATERAL (
@@ -115,8 +126,8 @@ export async function remarketingAttribution(
       SELECT DISTINCT ON (o.user_id, o.grp) o.user_id, o.grp, t.code
         FROM ords o
         JOIN touches t ON t.order_code = o.code AND t.user_id = o.user_id
-       WHERE o.paid_at > t.sent_at
-         AND o.paid_at <= t.sent_at + ${hours}::int * interval '1 hour'
+       WHERE o.settled_at > t.sent_at
+         AND o.settled_at <= t.sent_at + ${hours}::int * interval '1 hour'
        ORDER BY o.user_id, o.grp, t.sent_at DESC
     ),
     pre_hit AS (
@@ -137,7 +148,7 @@ export async function remarketingAttribution(
   const proactiveCap = await readProactiveCap(config);
 
   const sent = new Map(sentRows.map((r) => [r.code, r]));
-  const capped = new Map(cappedRows.map((r) => [r.code, num(r.n)]));
+  const capped = new Map(cappedRows.map((r) => [r.code, r]));
   const orders = new Map(orderRows.map((r) => [r.code, r]));
   return {
     windowHours: hours,
@@ -147,7 +158,8 @@ export async function remarketingAttribution(
         notice,
         sent: num(sent.get(code)?.sent),
         znsSent: num(sent.get(code)?.zns_sent),
-        znsCapped: capped.get(code) ?? 0,
+        znsCapped: num(capped.get(code)?.proactive),
+        znsMonthlyCapped: num(capped.get(code)?.monthly),
         orders: num(orders.get(code)?.orders),
         revenue: num(orders.get(code)?.revenue),
       };

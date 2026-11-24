@@ -147,7 +147,8 @@ interface ProactiveCtx {
   mark: ProactiveMark;
 }
 
-type SuppressReason = 'day_cap' | 'week_cap' | 'preempted';
+/** Lý do bản ZNS bị bỏ: ba lý do của trần tin chủ động, và `promo_monthly` của trần tin khuyến mãi ZNS theo tháng. */
+type SuppressReason = 'day_cap' | 'week_cap' | 'preempted' | 'promo_monthly';
 
 /** Kết quả ghi log ZNS dưới khoá trần: log mới, hoặc lý do không ghi; kèm log tin kém ưu tiên vừa nhường lượt (nếu có). */
 type GuardedZnsLog =
@@ -386,7 +387,7 @@ export class NotificationsService {
     const cap = MARKETING_TEMPLATE_CODES.has(templateCode) ? await this.promoCap(userId, deliverAt) : null;
     if (cap && (await this.promoZnsCount(this.prisma, cap)) >= cap.limit) {
       this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap.limit} tin khuyến mãi ZNS trong tháng.`);
-      return;
+      return this.recordPromoMonthlyCapped(userId, templateCode);
     }
     const proactive = await this.proactiveCtx(templateCode, deliverAt);
     // Không có hàng đợi thì ZNS gửi ngay bên dưới, trước khi có log: giành lượt trước khi gọi Zalo.
@@ -422,7 +423,7 @@ export class NotificationsService {
     if (!guarded.log) {
       if (guarded.reason === 'promo_monthly') {
         this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap?.limit} tin khuyến mãi ZNS trong tháng.`);
-        return;
+        return this.recordPromoMonthlyCapped(userId, templateCode);
       }
       return this.recordSuppressed(userId, templateCode, proactive!.mark.group, guarded.reason);
     }
@@ -532,9 +533,15 @@ export class NotificationsService {
     return limits ? { limits, mark: { dayKey: proactiveDayKey(deliverAt), group: delivery.group } } : null;
   }
 
+  /** Trần tin khuyến mãi ZNS theo tháng bỏ bản ZNS: ghi cùng sự kiện với trần tin chủ động để bảng "Tin nào ra đơn" đếm được. */
+  private recordPromoMonthlyCapped(userId: string, templateCode: string): Promise<void> {
+    const delivery = notificationDelivery(templateCode);
+    return this.recordSuppressed(userId, templateCode, delivery.kind === 'PROACTIVE' ? delivery.group : 'promo', 'promo_monthly');
+  }
+
   /** Tin trong app đã lưu; chỉ kênh ngoài app bị bỏ. Ghi sự kiện để đo số tin bị trần theo nhóm và lý do. */
   private async recordSuppressed(userId: string, templateCode: string, group: ProactiveGroup, reason: SuppressReason): Promise<void> {
-    this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: trần tin chủ động (${reason}).`);
+    if (reason !== 'promo_monthly') this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: trần tin chủ động (${reason}).`);
     await this.analytics.recordBestEffort({
       eventName: 'notification_suppressed',
       userId,

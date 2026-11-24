@@ -35,7 +35,9 @@ function setup(opts: { templateCode: string; promoCountThisMonth?: number; confi
     config,
   );
   const channels = () => create.mock.calls.map((c) => c[0].data.channel as string);
-  return { svc, add, create, count, channels };
+  const suppressed = () =>
+    (analytics.recordBestEffort as jest.Mock).mock.calls.map((c) => c[0]).filter((e: { eventName: string }) => e.eventName === 'notification_suppressed');
+  return { svc, add, create, count, channels, suppressed };
 }
 
 describe('NotificationsService: giờ yên tĩnh của ZNS (D5-02)', () => {
@@ -142,6 +144,22 @@ describe('NotificationsService: trần tin ZNS khuyến mãi/hậu mãi mỗi kh
     });
     await svc.notify('u1', 'WINBACK_VOUCHER', {});
     expect(channels()).toEqual(['INAPP']);
+  });
+
+  it('bản ZNS bị trần tháng bỏ: ghi notification_suppressed lý do promo_monthly để bảng "Tin nào ra đơn" đếm được', async () => {
+    const { svc, channels, suppressed } = setup({ templateCode: 'CART_ABANDONED', promoCountThisMonth: 2 });
+    await svc.notify('u1', 'CART_ABANDONED', { product: 'X' });
+    expect(channels()).toEqual(['INAPP']);
+    expect(suppressed()).toEqual([
+      expect.objectContaining({ userId: 'u1', props: { templateCode: 'CART_ABANDONED', category: 'cart', reason: 'promo_monthly', channel: 'ZNS' } }),
+    ]);
+  });
+
+  it('chưa tới trần tháng: không ghi sự kiện bỏ ZNS', async () => {
+    const { svc, channels, suppressed } = setup({ templateCode: 'CART_ABANDONED', promoCountThisMonth: 1 });
+    await svc.notify('u1', 'CART_ABANDONED', { product: 'X' });
+    expect(channels()).toEqual(['INAPP', 'ZNS']);
+    expect(suppressed()).toEqual([]);
   });
 });
 

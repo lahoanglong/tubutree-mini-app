@@ -52,7 +52,7 @@ describe('AdminGrowthService', () => {
       [{ reason: 'IP', n: 4n }, { reason: 'ADDRESS', n: 1n }],
       [{ method: 'share', n: 6n }, { method: 'copy', n: 2n }, { method: null, n: 9n }],
       [{ code: 'CART_ABANDONED', sent: 40n, zns_sent: 12n }],
-      [{ code: 'CART_ABANDONED', n: 3n }],
+      [{ code: 'CART_ABANDONED', proactive: 3n, monthly: 1n }],
       [{ code: 'CART_ABANDONED', orders: 5n, revenue: 1_250_000n }],
     ], 9);
     const dto = await svc.overview(7, now);
@@ -106,7 +106,7 @@ describe('AdminGrowthService', () => {
     // Tin nào ra đơn: cùng kỳ 00:00 VN ngày đầu tới lúc xem; trần tin chủ động mặc định tắt.
     expect($queryRaw.mock.calls[6]!).toEqual(expect.arrayContaining(['2026-11-11T17:00:00.000Z', now.toISOString()]));
     expect(dto.remarketing?.proactiveCap).toBeNull();
-    expect(dto.remarketing?.rows[0]).toEqual({ notice: 'abandoned_cart', sent: 40, znsSent: 12, znsCapped: 3, orders: 5, revenue: 1_250_000 });
+    expect(dto.remarketing?.rows[0]).toEqual({ notice: 'abandoned_cart', sent: 40, znsSent: 12, znsCapped: 3, znsMonthlyCapped: 1, orders: 5, revenue: 1_250_000 });
   });
 
   it('30 ngày: lấy cửa sổ d30 của phễu và 30 điểm theo ngày', async () => {

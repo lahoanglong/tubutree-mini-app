@@ -37,11 +37,11 @@ const overview = (days: 7 | 30): AdminGrowthOverviewDTO => ({
   remarketing: {
     windowHours: 72,
     rows: [
-      { notice: 'abandoned_cart', sent: 200, znsSent: 50, znsCapped: 12, orders: 10, revenue: 2_500_000 },
-      { notice: 'winback', sent: 40, znsSent: 0, znsCapped: 0, orders: 1, revenue: 180_000 },
-      { notice: 'wishlist_price_drop', sent: 0, znsSent: 0, znsCapped: 0, orders: 0, revenue: 0 },
-      { notice: 'refill_21d', sent: 30, znsSent: 30, znsCapped: 0, orders: 3, revenue: 540_000 },
-      { notice: 'payment_reminder', sent: 8, znsSent: 0, znsCapped: 0, orders: 5, revenue: 1_200_000 },
+      { notice: 'abandoned_cart', sent: 200, znsSent: 50, znsCapped: 12, znsMonthlyCapped: 7, orders: 10, revenue: 2_500_000 },
+      { notice: 'winback', sent: 40, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 1, revenue: 180_000 },
+      { notice: 'wishlist_price_drop', sent: 0, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 0, revenue: 0 },
+      { notice: 'refill_21d', sent: 30, znsSent: 30, znsCapped: 0, znsMonthlyCapped: 0, orders: 3, revenue: 540_000 },
+      { notice: 'payment_reminder', sent: 8, znsSent: 0, znsCapped: 0, znsMonthlyCapped: 0, orders: 5, revenue: 1_200_000 },
     ],
     proactiveCap: { perDay: 1, perWeek: 4 },
   },
@@ -143,20 +143,20 @@ describe('GrowthHubTab', () => {
     expect(box.querySelector('[data-referral-shares]')!.textContent).toContain('chia sẻ 1.234 · sao chép 56');
   });
 
-  it('Tin nào ra đơn: mỗi loại tin một dòng, tỷ lệ ra đơn, ZNS bị trần, doanh thu mỗi tin ZNS, dòng tổng và trần đang áp', async () => {
+  it('Tin nào ra đơn: mỗi loại tin một dòng, đơn trên 100 tin, ZNS bị trần theo từng trần, doanh thu mỗi tin ZNS, dòng tổng và trần đang áp', async () => {
     const { container } = setup([]);
     await flush(8);
     const box = container.querySelector<HTMLElement>('[data-remarketing]')!;
     expect(box.textContent).toContain('Tin nào ra đơn');
     const cells = (key: string) => [...box.querySelectorAll(`[data-remarketing-row="${key}"] > *`)].map((c) => c.textContent);
-    // 10 đơn / 200 tin = 5%; 2.500.000đ / 50 tin ZNS = 50.000đ.
-    expect(cells('abandoned_cart')).toEqual(['Nhắc giỏ bỏ quên', '200', '5012 bị trần', '10', '5%', '2.500.000đ', '50.000đ']);
-    // Không có tin ZNS thì không chia được; chưa gửi tin nào thì tỷ lệ là gạch.
-    expect(cells('winback')).toEqual(['Mã mời quay lại', '40', '0', '1', '2,5%', '180.000đ', '—']);
+    // 10 đơn / 200 tin = 5 đơn trên 100 tin; 2.500.000đ / 50 tin ZNS = 50.000đ.
+    expect(cells('abandoned_cart')).toEqual(['Nhắc giỏ bỏ quên', '200', '5012 trần ngày/tuần7 trần tháng', '10', '5', '2.500.000đ', '50.000đ']);
+    // Không có tin ZNS thì không chia được; chưa gửi tin nào thì là gạch.
+    expect(cells('winback')).toEqual(['Mã mời quay lại', '40', '0', '1', '2,5', '180.000đ', '—']);
     expect(cells('wishlist_price_drop')).toEqual(['Giá món Yêu thích giảm', '0', '0', '0', '—', '0đ', '—']);
-    expect(cells('payment_reminder')).toEqual(['Nhắc chuyển khoản', '8', '0', '5', '62,5%', '1.200.000đ', '—']);
-    // Tổng: 278 tin, 80 ZNS (12 bị trần), 19 đơn, 4.420.000đ → 4.420.000 / 80 = 55.250đ.
-    expect(cells('total')).toEqual(['Tổng', '278', '8012 bị trần', '19', '6,8%', '4.420.000đ', '55.250đ']);
+    expect(cells('payment_reminder')).toEqual(['Nhắc chuyển khoản', '8', '0', '5', '62,5', '1.200.000đ', '—']);
+    // Tổng: 278 tin, 80 ZNS, 19 đơn, 4.420.000đ. Doanh thu / tin ZNS chỉ chia doanh thu của loại tin có ZNS: (2.500.000 + 540.000) / 80 = 38.000đ.
+    expect(cells('total')).toEqual(['Tổng', '278', '8012 trần ngày/tuần7 trần tháng', '19', '6,8', '4.420.000đ', '38.000đ']);
     expect(box.querySelector('[data-remarketing-cap]')!.textContent).toContain('tối đa 1 tin/ngày và 4 tin/7 ngày mỗi khách');
     expect(box.querySelector('[data-remarketing-error]')).toBeNull();
   });
@@ -179,9 +179,9 @@ describe('GrowthHubTab', () => {
   });
 
   it('remarketingTable: loại API chưa trả là dòng 0 theo đúng thứ tự; trần tắt có câu riêng', () => {
-    const t = remarketingTable({ windowHours: 72, rows: [{ notice: 'refill_21d', sent: 4, znsSent: 2, znsCapped: 1, orders: 1, revenue: 99_999 }], proactiveCap: null });
+    const t = remarketingTable({ windowHours: 72, rows: [{ notice: 'refill_21d', sent: 4, znsSent: 2, znsCapped: 1, znsMonthlyCapped: 0, orders: 1, revenue: 99_999 }], proactiveCap: null });
     expect(t.rows.map((r) => r.key)).toEqual(['abandoned_cart', 'winback', 'wishlist_price_drop', 'refill_21d', 'payment_reminder']);
-    expect(t.rows[3]).toMatchObject({ ratePct: 25, revenuePerZns: 50_000 });
+    expect(t.rows[3]).toMatchObject({ ordersPer100: 25, revenuePerZns: 50_000 });
     expect(t.total).toMatchObject({ sent: 4, znsSent: 2, znsCapped: 1, orders: 1, revenue: 99_999 });
     expect(capLine(null)).toContain('đang tắt');
   });

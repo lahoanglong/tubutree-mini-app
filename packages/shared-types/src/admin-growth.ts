@@ -55,7 +55,7 @@ export interface ReferralShareStatsDTO {
 export const REMARKETING_NOTICES = ['abandoned_cart', 'winback', 'wishlist_price_drop', 'refill_21d', 'payment_reminder'] as const;
 export type RemarketingNotice = (typeof REMARKETING_NOTICES)[number];
 
-/** Đơn đặt trong ngần ấy giờ sau tin thì được gán cho tin (nhắc chuyển khoản: đơn được trả tiền trong ngần ấy giờ sau tin). */
+/** Đơn đặt trong ngần ấy giờ sau tin thì được gán cho tin (nhắc chuyển khoản: đơn được trả tiền hoặc đổi sang trả tiền khi nhận trong ngần ấy giờ sau tin). */
 export const REMARKETING_ATTRIBUTION_HOURS = 72;
 
 export interface RemarketingAttributionRow {
@@ -64,8 +64,10 @@ export interface RemarketingAttributionRow {
   sent: number;
   /** Trong số đó, tin Zalo đã nhận qua ZNS (tính phí). */
   znsSent: number;
-  /** Bản ZNS bị trần tin chủ động bỏ (khách vẫn có tin trong app). Nhắc chuyển khoản là tin giao dịch nên không bao giờ bị trần. */
+  /** Bản ZNS bị trần tin chủ động bỏ (ngày/tuần, hoặc nhường lượt); khách vẫn có tin trong app. Nhắc chuyển khoản là tin giao dịch nên không bị trần. */
   znsCapped: number;
+  /** Bản ZNS bị trần tin khuyến mãi ZNS theo tháng bỏ (`notifications.zns_promo_monthly_cap`). Chỉ có từ bản API ghi lý do này. */
+  znsMonthlyCapped: number;
   /** Đơn thành công gán cho tin gửi trong kỳ (gộp đơn tách theo nhà bán); mỗi đơn chỉ gán cho một tin. */
   orders: number;
   /** Doanh thu đã thu của các đơn đó, cùng luật báo cáo Doanh thu (COD chưa giao chưa tính). */
