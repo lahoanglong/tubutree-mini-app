@@ -41,7 +41,7 @@ export default function WebPortalRedirectPage({ screen, children }: { screen: We
         {children}
         <Text variant="body-md" as="p" style={{ margin: 0 }}>
           {browserOnly
-            ? `Đặt hàng sỉ và thanh toán đơn đại lý trên trình duyệt (Chrome, Safari) tại ${site.host}${site.pathname}. Mini App chỉ nhận đơn lẻ.`
+            ? `Đăng ký đại lý, đặt hàng sỉ và thanh toán đơn sỉ trên trình duyệt (Chrome, Safari) tại ${site.host}${site.pathname}. Mini App chỉ nhận đơn lẻ.`
             : `${audience} thao tác đầy đủ trên website. Mở trang bên dưới để làm việc với đủ công cụ.`}
         </Text>
         <div style={{ padding: 'var(--space-inset-card)', borderRadius: 'var(--radius-card)', background: 'var(--color-bg-surface)' }}>

@@ -17,7 +17,7 @@ const SCREENS = [
 ] as const;
 
 const WIDTHS = [375, 360, 320] as const;
-const DEALER_NOTE = 'Đặt hàng sỉ và thanh toán đơn đại lý trên trình duyệt (Chrome, Safari) tại tubutree.com/dai-ly. Mini App chỉ nhận đơn lẻ.';
+const DEALER_NOTE = 'Đăng ký đại lý, đặt hàng sỉ và thanh toán đơn sỉ trên trình duyệt (Chrome, Safari) tại tubutree.com/dai-ly. Mini App chỉ nhận đơn lẻ.';
 
 async function horizontalOverflow(page: Page) {
   return page.evaluate(() => {

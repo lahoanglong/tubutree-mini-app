@@ -21,7 +21,7 @@ import { WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreen, type WebPortalS
 const KEYS = Object.keys(WEB_PORTAL_SCREENS) as WebPortalScreenKey[];
 /** Màn mở được trong webview Zalo; màn `browserOnly` (chỉ /dealer) có khối kiểm riêng ở cuối tệp. */
 const OPENABLE = KEYS.filter((key) => !(WEB_PORTAL_SCREENS[key] as WebPortalScreen).browserOnly);
-const DEALER_NOTE = 'Đặt hàng sỉ và thanh toán đơn đại lý trên trình duyệt (Chrome, Safari) tại tubutree.com/dai-ly. Mini App chỉ nhận đơn lẻ.';
+const DEALER_NOTE = 'Đăng ký đại lý, đặt hàng sỉ và thanh toán đơn sỉ trên trình duyệt (Chrome, Safari) tại tubutree.com/dai-ly. Mini App chỉ nhận đơn lẻ.';
 
 beforeEach(() => {
   routerSearch.value = '';

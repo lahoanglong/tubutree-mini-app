@@ -338,7 +338,7 @@ export function navigationFindings(path, sf, webviewNames = new Set(['openWebvie
 }
 
 const coversPath = (paths, webPath) => {
-  const path = webPath.split('?')[0].replace(/\/+$/, '').toLowerCase();
+  const path = webPath.split('?')[0].replace(/\/{2,}/g, '/').replace(/\/+$/, '').toLowerCase();
   return paths.some((p) => path === p || path.startsWith(`${p}/`));
 };
 
@@ -350,29 +350,62 @@ const mentions = (node, names) => {
   return hit;
 };
 
-/** Mọi chỗ khai tên `browserOnly` trong tệp: hợp lệ khi chỉ có một, là phần tử destructuring từ `WEB_PORTAL_SCREENS[...]`. */
-function browserOnlyFromTable(sf) {
+/** Mọi chỗ khai một tên trong tệp (biến, phần tử destructuring, tham số). */
+function declarationsOf(sf, name) {
   const decls = [];
   walk(sf, (n) => {
-    if ((ts.isBindingElement(n) || ts.isVariableDeclaration(n) || ts.isParameter(n)) && ts.isIdentifier(n.name) && n.name.text === 'browserOnly') decls.push(n);
+    if ((ts.isBindingElement(n) || ts.isVariableDeclaration(n) || ts.isParameter(n)) && ts.isIdentifier(n.name) && n.name.text === name) decls.push(n);
   });
-  if (decls.length !== 1 || !ts.isBindingElement(decls[0])) return false;
+  return decls;
+}
+
+/** `WEB_PORTAL_SCREENS[screen]` với `screen` chỉ được khai là tham số của hàm (props của màn), không phải khoá viết sẵn hay biến tự đặt. */
+function isScreenLookup(sf, node) {
+  const n = unwrap(node);
+  if (!ts.isElementAccessExpression(n) || !ts.isIdentifier(n.expression) || n.expression.text !== 'WEB_PORTAL_SCREENS' || !ts.isIdentifier(n.argumentExpression)) return false;
+  const decls = declarationsOf(sf, n.argumentExpression.text);
+  const inParameter = (d) => {
+    for (let a = d; a; a = a.parent) {
+      if (ts.isParameter(a)) return true;
+      if (ts.isVariableDeclaration(a) || ts.isFunctionLike(a)) return false;
+    }
+    return false;
+  };
+  return decls.length > 0 && decls.every(inParameter);
+}
+
+/** Khoá được lấy ra của một phần tử destructuring: `{ a }` → a, `{ a: b }` → a, khoá tính toán → null. */
+function bindingKey(b) {
+  if (!b.propertyName) return ts.isIdentifier(b.name) ? b.name.text : null;
+  return ts.isIdentifier(b.propertyName) || ts.isStringLiteralLike(b.propertyName) ? b.propertyName.text : null;
+}
+
+/** Tên `browserOnly` trong tệp: hợp lệ khi chỉ khai một lần, `const { browserOnly } = WEB_PORTAL_SCREENS[screen]` (không đổi tên, không lồng). */
+function browserOnlyFromTable(sf) {
+  const decls = declarationsOf(sf, 'browserOnly');
+  if (decls.length !== 1 || !ts.isBindingElement(decls[0]) || bindingKey(decls[0]) !== 'browserOnly') return false;
   const decl = decls[0].parent.parent;
-  return ts.isVariableDeclaration(decl) && Boolean(decl.initializer) && mentions(decl.initializer, new Set(['WEB_PORTAL_SCREENS']));
+  return (
+    ts.isVariableDeclaration(decl) &&
+    ts.isVariableDeclarationList(decl.parent) &&
+    (decl.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    Boolean(decl.initializer) &&
+    isScreenLookup(sf, decl.initializer)
+  );
 }
 
 /**
  * Điều kiện là cờ của bảng màn: `browserOnly` (khi `fromTable`), `WEB_PORTAL_SCREENS[x].browserOnly`, có thể kèm `!` (bỏ ngoặc, `as`...).
  * Trả có phủ định hay không, null khi điều kiện là thứ khác.
  */
-function browserOnlyTest(node, fromTable) {
+function browserOnlyTest(node, fromTable, sf) {
   const n = unwrap(node);
   if (ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.ExclamationToken) {
-    const inner = browserOnlyTest(n.operand, fromTable);
+    const inner = browserOnlyTest(n.operand, fromTable, sf);
     return inner === null ? null : !inner;
   }
   if (ts.isIdentifier(n) && n.text === 'browserOnly' && fromTable) return false;
-  if (ts.isPropertyAccessExpression(n) && n.name.text === 'browserOnly' && mentions(n.expression, new Set(['WEB_PORTAL_SCREENS']))) return false;
+  if (ts.isPropertyAccessExpression(n) && n.name.text === 'browserOnly' && isScreenLookup(sf, n.expression)) return false;
   return null;
 }
 
@@ -388,8 +421,8 @@ function isBareReturn(st, value) {
  * đứng trước nó trong một khối bao ngoài. Hàm định nghĩa ngoài nhánh đó (vd `open` chỉ được nút trong `!browserOnly && ...` gọi) không tính:
  * chặn phải nằm quanh chính lời gọi.
  */
-function gatedOffBrowserOnly(node, fromTable) {
-  const test = (expr) => browserOnlyTest(expr, fromTable);
+function gatedOffBrowserOnly(node, fromTable, sf) {
+  const test = (expr) => browserOnlyTest(expr, fromTable, sf);
   for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (ts.isIfStatement(parent) && child !== parent.expression) {
       const neg = test(parent.expression);
@@ -414,7 +447,10 @@ function gatedOffBrowserOnly(node, fromTable) {
   return false;
 }
 
-/** Mọi chỗ dùng `openWebPortal` trong một tệp: tên import (kể cả đổi tên), `ns.openWebPortal`, re-export. Import kiểu không tính. */
+/**
+ * Mọi chỗ dùng `openWebPortal` trong một tệp: tên import (kể cả đổi tên), destructuring (vd từ `await import(...)`), `ns.openWebPortal`,
+ * `ns['openWebPortal']`, re-export. Import kiểu không tính.
+ */
 function portalOpenUses(sf) {
   const locals = new Set();
   const uses = [];
@@ -426,9 +462,12 @@ function portalOpenUses(sf) {
     if (ts.isImportSpecifier(n) && !n.isTypeOnly && !n.parent.parent.isTypeOnly && (n.propertyName ?? n.name).text === 'openWebPortal') locals.add(n.name.text);
     if (ts.isExportSpecifier(n) && !n.isTypeOnly && n.parent.parent.moduleSpecifier && (n.propertyName ?? n.name).text === 'openWebPortal') use(n, n);
     if (ts.isPropertyAccessExpression(n) && n.name.text === 'openWebPortal') use(n, n.name);
+    if (ts.isElementAccessExpression(n) && ts.isStringLiteralLike(n.argumentExpression) && n.argumentExpression.text === 'openWebPortal') use(n, n.argumentExpression);
+    if (ts.isBindingElement(n) && ts.isIdentifier(n.name) && bindingKey(n) === 'openWebPortal') locals.add(n.name.text);
   });
+  const declaresName = (n) => ts.isImportSpecifier(n.parent) || ts.isBindingElement(n.parent) || (ts.isPropertyAccessExpression(n.parent) && n.parent.name === n);
   walk(sf, (n) => {
-    if (ts.isIdentifier(n) && locals.has(n.text) && !(n.parent && (ts.isImportSpecifier(n.parent) || (ts.isPropertyAccessExpression(n.parent) && n.parent.name === n)))) use(n, n);
+    if (ts.isIdentifier(n) && locals.has(n.text) && !(n.parent && declaresName(n))) use(n, n);
   });
   return uses.sort((a, b) => a.pos - b.pos);
 }
@@ -449,7 +488,11 @@ function browserOnlyFindings(read, sources) {
       if (!ts.isPropertyAssignment(p) || !ts.isObjectLiteralExpression(unwrap(p.initializer))) continue;
       const props = unwrap(p.initializer).properties.filter(ts.isPropertyAssignment);
       const webPath = props.find((q) => propName(q) === 'webPath');
-      if (!webPath || !ts.isStringLiteralLike(webPath.initializer) || !coversPath(BROWSER_ONLY_WEB_PATHS, webPath.initializer.text)) continue;
+      if (!webPath || !ts.isStringLiteralLike(webPath.initializer)) {
+        found.push(`${short(FILES.webPortalScreens)}: màn ${propName(p)} phải có webPath là chuỗi viết sẵn (không kiểm được trang đích)`);
+        continue;
+      }
+      if (!coversPath(BROWSER_ONLY_WEB_PATHS, webPath.initializer.text)) continue;
       const flag = props.find((q) => propName(q) === 'browserOnly');
       if (flag && flag.initializer.kind === ts.SyntaxKind.TrueKeyword) guarded += 1;
       else found.push(`${short(FILES.webPortalScreens)}: màn ${propName(p)} trỏ tới ${webPath.initializer.text} (trang có thanh toán) phải có browserOnly: true`);
@@ -464,7 +507,7 @@ function browserOnlyFindings(read, sources) {
       const at = `${short(path)}:${use.line}`;
       if (path !== FILES.webPortalRedirect) found.push(`${at}: openWebPortal chỉ được gọi ở ${short(FILES.webPortalRedirect)} (nơi có cờ browserOnly)`);
       else if (!use.called) found.push(`${at}: openWebPortal phải được gọi thẳng, không truyền đi như giá trị`);
-      else if (!gatedOffBrowserOnly(use.node, fromTable)) {
+      else if (!gatedOffBrowserOnly(use.node, fromTable, sf)) {
         found.push(`${at}: openWebPortal(...) phải nằm sau if (browserOnly) return hoặc trong nhánh !browserOnly, với browserOnly lấy từ WEB_PORTAL_SCREENS`);
       } else redirectCalls += 1;
     }

@@ -385,6 +385,20 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
         'pages/web-portal-screens.ts: màn /dealer trỏ tới /dai-ly (trang có thanh toán) phải có browserOnly: true',
         'pages/web-portal-screens.ts: màn /dealer/orders trỏ tới /dai-ly/don?tab=1 (trang có thanh toán) phải có browserOnly: true',
       ]);
+
+      const hidden = withRepo((r) => {
+        r[FILES.webPortalScreens] = [
+          "const DEALER_WEB = '/dai-ly';",
+          'export const WEB_PORTAL_SCREENS = {',
+          "  '/dealer': { title: 'D', audience: 'A', webPath: DEALER_WEB },",
+          "  '/dealer2': { title: 'D', audience: 'A', webPath: '//dai-ly' },",
+          '} as const;',
+        ].join('\n');
+      });
+      expect(detail(hidden, 'pay.portal-browser-only').split('; ')).toEqual([
+        'pages/web-portal-screens.ts: màn /dealer phải có webPath là chuỗi viết sẵn (không kiểm được trang đích)',
+        'pages/web-portal-screens.ts: màn /dealer2 trỏ tới //dai-ly (trang có thanh toán) phải có browserOnly: true',
+      ]);
     });
 
     it('openWebPortal gọi không qua cờ (chặn chỉ ở nút, chặn trong chú thích, cờ tự đặt), gọi ở tệp khác hoặc truyền đi như giá trị: đỏ', () => {
@@ -396,10 +410,19 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
         'pages/web-portal-redirect.tsx:7: openWebPortal(...) phải nằm sau if (browserOnly) return hoặc trong nhánh !browserOnly, với browserOnly lấy từ WEB_PORTAL_SCREENS',
       );
 
-      const localFlag = withRepo((r) => {
-        r[FILES.webPortalRedirect] = PORTAL_REDIRECT.replace('const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[screen];', 'const browserOnly = false;');
-      });
-      expect(failing(localFlag)).toEqual(['pay.portal-browser-only']);
+      const flagLine = 'const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[screen];';
+      for (const fake of [
+        'const browserOnly = false;',
+        "const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS['/admin'];",
+        'let { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[screen]; browserOnly = undefined;',
+        'const { title: browserOnly } = WEB_PORTAL_SCREENS[screen];',
+        "const key = '/admin'; const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[key];",
+      ]) {
+        const checks = withRepo((r) => {
+          r[FILES.webPortalRedirect] = PORTAL_REDIRECT.replace(flagLine, fake);
+        });
+        expect(failing(checks), fake).toEqual(['pay.portal-browser-only']);
+      }
 
       const elsewhere = withRepo((r) => {
         r[`${MINI_SRC}/pages/dealer-hint.tsx`] = [
@@ -407,6 +430,8 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
           "import * as bridge from '../services/zmp-bridge';",
           "export const a = () => go('https://tubutree.com/dai-ly');",
           "export const b = () => bridge.openWebPortal('https://tubutree.com/dai-ly');",
+          "export const c = () => bridge['openWebPortal']('https://tubutree.com/dai-ly');",
+          "export const d = async () => { const { openWebPortal: open } = await import('../services/zmp-bridge'); return open('https://tubutree.com/dai-ly'); };",
         ].join('\n');
         r[FILES.webPortalRedirect] = PORTAL_REDIRECT.replace('<Button onPress={open}>', '<Button onPress={openWebPortal}>');
       });
@@ -414,6 +439,8 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
       expect(detail(elsewhere, 'pay.portal-browser-only').split('; ')).toEqual([
         'pages/dealer-hint.tsx:3: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
         'pages/dealer-hint.tsx:4: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
+        'pages/dealer-hint.tsx:5: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
+        'pages/dealer-hint.tsx:6: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
         'pages/web-portal-redirect.tsx:9: openWebPortal phải được gọi thẳng, không truyền đi như giá trị',
       ]);
     });
