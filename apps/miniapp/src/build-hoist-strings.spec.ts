@@ -98,6 +98,64 @@ describe('build-hoist-strings', () => {
     expect(literalBytes('đ')).toBe(4);
   });
 
+  it('`worthHoisting`: biên số lần dùng theo byte của chuỗi, không có sàn độ dài tối thiểu (giữ trọn dư địa w28-01)', () => {
+    // [chuỗi, số lần dùng ít nhất để gom]. Chuỗi ngắn vẫn được gom khi lặp đủ nhiều: thêm sàn (vd ≥ 6 byte) là đỏ ở đây.
+    const firstWorth: [string, number][] = [
+      ['a', 8],
+      ['đ', 5],
+      ['ab', 5],
+      ['div', 4],
+      ['span', 3],
+      ['abcdef', 3],
+      ['abcdefg', 2],
+      [S, 2],
+    ];
+    for (const [value, min] of firstWorth) {
+      expect([value, worthHoisting(literalBytes(value), min - 1)]).toEqual([value, false]);
+      expect([value, worthHoisting(literalBytes(value), min)]).toEqual([value, true]);
+    }
+    for (let count = 0; count <= 1000; count++) expect(worthHoisting(literalBytes(''), count)).toBe(false);
+    // Đã đáng gom ở n lần thì đáng gom ở mọi số lần lớn hơn; dưới 2 lần thì không bao giờ.
+    for (let bytes = 2; bytes <= 80; bytes++) {
+      expect(worthHoisting(bytes, 0) || worthHoisting(bytes, 1)).toBe(false);
+      let seen = false;
+      for (let count = 2; count <= 40; count++) {
+        const worth = worthHoisting(bytes, count);
+        if (seen) expect([bytes, count, worth]).toEqual([bytes, count, true]);
+        seen ||= worth;
+      }
+    }
+  });
+
+  it('chuỗi ngắn đúng ở biên: gom từ lần thứ 8 của "a", chunk nhỏ đi, chạy ra đúng kết quả cũ; dưới biên thì để nguyên', async () => {
+    const T = await loadTerserAst();
+    const chunk = (n: number) => `export const result=[${Array.from({ length: n }, () => '"a"').join(',')}];`;
+    expect(hoistRepeatedStrings(T, chunk(7))).toEqual({ code: chunk(7), hoisted: 0 });
+    const out = hoistRepeatedStrings(T, chunk(8));
+    expect(out.hoisted).toBe(1);
+    expect(Buffer.byteLength(out.code)).toBeLessThan(Buffer.byteLength(chunk(8)));
+    expect(out.code.split('"a"').length - 1).toBe(1);
+    expect(sameAfterInlining(T, chunk(8), out.code)).toBe(true);
+    expect(runApp({ 'app.js': out.code })).toBe(runApp({ 'app.js': chunk(8) }));
+  });
+
+  it('chunk nhiều chuỗi ngắn (1–6 byte) lặp quanh biên: 0 khác biệt sau khi thế ngược và khi chạy, `""` giữ nguyên chữ', async () => {
+    const T = await loadTerserAst();
+    const rep = (expr: string, n: number) => Array.from({ length: n }, () => expr).join(',');
+    const code =
+      `const t={a:"a",b:"div",c:"đ",d:"",e:"span"};` +
+      `function k(x="div"){switch(x){case"a":return"đ";case"div":return"";case"span":return"a";default:return x}}` +
+      `const f=typeof k=="function"&&typeof t=="object"&&"a" in t&&t["a"]==="a";` +
+      `export const result=[t,k(),k("a"),k("span"),k("đ"),f,${rep('"a"', 4)},${rep('"div"', 2)},${rep('"đ"', 3)},${rep('""', 9)},${rep('"span"', 1)}];`;
+    const out = hoistRepeatedStrings(T, code);
+    expect(out.hoisted).toBeGreaterThanOrEqual(4);
+    expect(Buffer.byteLength(out.code)).toBeLessThan(Buffer.byteLength(code));
+    for (const s of ['"a"', '"div"', '"đ"', '"span"']) expect([s, out.code.split(s).length - 1]).toEqual([s, 1]);
+    expect(out.code.split('""').length - 1).toBe(code.split('""').length - 1);
+    expect(sameAfterInlining(T, code, out.code)).toBe(true);
+    expect(runApp({ 'app.js': out.code })).toBe(runApp({ 'app.js': code }));
+  });
+
   it('hàm khai trong khối chỉ sống trong khối (chunk là module nên strict) và nhãn vòng lặp không làm bước tự kiểm báo lệch', async () => {
     const T = await loadTerserAst();
     const code =

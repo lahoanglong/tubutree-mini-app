@@ -121,19 +121,28 @@ describe('scripts/ci/bundle-budget.cjs', () => {
   const SCRIPT = join(REPO, 'scripts/ci/bundle-budget.cjs');
 
   /**
-   * Thư mục build giả: entry JS `entryKb` KB, một chunk nhỏ, một chunk game mini 2 KB (`noGameChunk` bỏ nó), một CSS. Nội dung ngẫu nhiên
-   * để gzip không nén mất. Bản build thật luôn có chunk `mini-*`, nên thiếu nó là một cảnh báo riêng.
+   * Thư mục build giả: entry JS `entryKb` KiB (hoặc đúng `entryBytes` byte), một chunk nhỏ, một chunk game mini 2 KiB (`noGameChunk` bỏ nó),
+   * một CSS. Nội dung ngẫu nhiên để gzip không nén mất. Bản build thật luôn có chunk `mini-*`, nên thiếu nó là một cảnh báo riêng.
+   * `totalBytes`: thêm một tệp đệm để tổng mọi tệp đúng bằng số byte này.
    */
-  function run(opts: { entryKb: number; chunkKb?: number; env?: Record<string, string>; noDir?: boolean; noGameChunk?: boolean }) {
+  function run(opts: { entryKb: number; entryBytes?: number; chunkKb?: number; totalBytes?: number; env?: Record<string, string>; noDir?: boolean; noGameChunk?: boolean }) {
     const dir = mkdtempSync(join(tmpdir(), 'tubu-bundle-'));
     const www = join(dir, 'www');
     if (!opts.noDir) {
       mkdirSync(join(www, 'assets'), { recursive: true });
-      const blob = (kb: number) => Buffer.from(Array.from({ length: kb * 1024 }, (_, i) => (i * 7919 + (i >> 3)) % 251));
-      writeFileSync(join(www, 'assets/index.abc.module.js'), blob(opts.entryKb));
-      writeFileSync(join(www, 'assets/product.def.js'), blob(opts.chunkKb ?? 10));
-      if (!opts.noGameChunk) writeFileSync(join(www, 'assets/mini-round-shell.ghi.js'), blob(2));
-      writeFileSync(join(www, 'assets/index.abc.css'), blob(5));
+      const blob = (bytes: number) => Buffer.from(Array.from({ length: bytes }, (_, i) => (i * 7919 + (i >> 3)) % 251));
+      const files: [string, Buffer][] = [
+        ['assets/index.abc.module.js', blob(opts.entryBytes ?? opts.entryKb * 1024)],
+        ['assets/product.def.js', blob((opts.chunkKb ?? 10) * 1024)],
+        ...(opts.noGameChunk ? [] : ([['assets/mini-round-shell.ghi.js', blob(2 * 1024)]] as [string, Buffer][])),
+        ['assets/index.abc.css', blob(5 * 1024)],
+      ];
+      if (opts.totalBytes !== undefined) {
+        const pad = opts.totalBytes - files.reduce((s, [, b]) => s + b.length, 0);
+        if (pad < 0) throw new Error(`totalBytes ${opts.totalBytes} nhỏ hơn các tệp sẵn có`);
+        files.push(['assets/pad.bin', Buffer.alloc(pad, 1)]);
+      }
+      for (const [name, buf] of files) writeFileSync(join(www, name), buf);
     }
     const summary = join(dir, 'summary.md');
     const res = spawnSync('node', [SCRIPT, www], {
@@ -165,13 +174,63 @@ describe('scripts/ci/bundle-budget.cjs', () => {
     expect(status).toBe(0);
     const w = warnings(out).join('\n');
     expect(w).toContain('index.abc.module.js');
-    expect(w).toMatch(/50 KB/);
+    expect(w).toMatch(/50 KiB = 51200 B/);
   });
 
   it('tổng vượt ngưỡng: cảnh báo riêng cho tổng', () => {
     const { status, out } = run({ entryKb: 100, chunkKb: 100, env: { MINIAPP_ENTRY_WARN_KB: '700', MINIAPP_TOTAL_WARN_KB: '150' } });
     expect(status).toBe(0);
-    expect(warnings(out).join('\n')).toMatch(/tổng.*150 KB/i);
+    expect(warnings(out).join('\n')).toMatch(/tổng.*150 KiB = 153600 B/i);
+  });
+
+  // Trước w33-03 script so Math.round(byte / 1024) với ngưỡng: bản dựng 2210 KiB + 511 B vẫn qua strict.
+  it('trần tổng mặc định 2210 KiB so từng byte: đúng 2 263 040 B qua strict, thêm 1 B thì strict thoát 1, chế độ CI chỉ cảnh báo', () => {
+    const atCap = run({ entryKb: 100, totalBytes: 2210 * 1024, env: { BUNDLE_BUDGET_STRICT: '1' } });
+    expect(atCap.status).toBe(0);
+    expect(warnings(atCap.out)).toEqual([]);
+    expect(atCap.out).toContain('KiB (1024 B)');
+    expect(atCap.out).toContain('Tổng: 2263040 B raw, ngưỡng 2210 KiB = 2263040 B (mặc định 2210): còn 0 B tới trần');
+
+    const overByOne = run({ entryKb: 100, totalBytes: 2210 * 1024 + 1, env: { BUNDLE_BUDGET_STRICT: '1' } });
+    expect(overByOne.status).toBe(1);
+    expect(overByOne.out).toContain('Tổng: 2263041 B raw, ngưỡng 2210 KiB = 2263040 B (mặc định 2210): vượt 1 B');
+    expect(warnings(overByOne.out)).toEqual([
+      expect.stringMatching(/^::warning title=Bundle miniapp::Tổng bản build là 2263041 B raw .*vượt ngưỡng cảnh báo 2210 KiB = 2263040 B \(mặc định 2210\): thừa 1 B\.$/),
+    ]);
+
+    const ci = run({ entryKb: 100, totalBytes: 2210 * 1024 + 1, env: { MINIAPP_ENTRY_WARN_KB: '312', MINIAPP_TOTAL_WARN_KB: '2210' } });
+    expect(ci.status).toBe(0);
+    expect(warnings(ci.out)).toHaveLength(1);
+    expect(ci.out).toContain('ngưỡng 2210 KiB = 2263040 B (MINIAPP_TOTAL_WARN_KB=2210): vượt 1 B');
+    expect(ci.md).toContain('vượt 1 B');
+
+    const headroom = run({ entryKb: 100, totalBytes: 2210 * 1024 - 511, env: { BUNDLE_BUDGET_STRICT: '1' } });
+    expect(headroom.status).toBe(0);
+    expect(headroom.out).toContain('còn 511 B tới trần');
+  });
+
+  it('ngưỡng entry cũng so từng byte: 312 KiB = 319 488 B qua strict, 319 489 B thì strict thoát 1', () => {
+    const env = { BUNDLE_BUDGET_STRICT: '1', MINIAPP_TOTAL_WARN_KB: '4096' };
+    expect(run({ entryKb: 0, entryBytes: 312 * 1024, env }).status).toBe(0);
+    const over = run({ entryKb: 0, entryBytes: 312 * 1024 + 1, env });
+    expect(over.status).toBe(1);
+    expect(warnings(over.out).join('\n')).toMatch(/Entry assets\/index\.abc\.module\.js là 319489 B raw .*vượt ngưỡng cảnh báo 312 KiB = 319488 B \(mặc định 312\): thừa 1 B\./);
+  });
+
+  it('ngưỡng sai dạng: log nói rõ đang dùng mặc định và giá trị bị bỏ', () => {
+    const { status, out } = run({ entryKb: 100, totalBytes: 2210 * 1024, env: { MINIAPP_TOTAL_WARN_KB: 'abc', BUNDLE_BUDGET_STRICT: '1' } });
+    expect(status).toBe(0);
+    expect(out).toContain('ngưỡng 2210 KiB = 2263040 B (mặc định 2210, MINIAPP_TOTAL_WARN_KB="abc" sai dạng): còn 0 B tới trần');
+  });
+
+  it('ci.yml và script cùng mặc định ngưỡng tổng/entry', () => {
+    const script = readFileSync(SCRIPT, 'utf8');
+    const wf = read('.github/workflows/ci.yml');
+    for (const name of ['MINIAPP_TOTAL_WARN_KB', 'MINIAPP_ENTRY_WARN_KB']) {
+      const def = new RegExp(`threshold\\('${name}', (\\d+)\\)`).exec(script)?.[1];
+      expect(def).toBeDefined();
+      expect(wf).toContain(`${name}: \${{ vars.${name} || '${def}' }}`);
+    }
   });
 
   it('BUNDLE_BUDGET_STRICT=1 mới thoát 1 khi vượt ngưỡng', () => {

@@ -85,7 +85,17 @@ const byteLength = (s: string) => Buffer.byteLength(s, 'utf8');
 /** Số byte của chuỗi khi in (UTF-8: chữ Việt có dấu 2–3 byte). */
 export const literalBytes = (value: string): number => byteLength(JSON.stringify(value));
 
-/** Gom khi phần bỏ được ở mọi chỗ dùng lớn hơn phần thêm vào khai báo (`a="…",`). */
+/**
+ * Gom khi phần bỏ được ở mọi chỗ dùng lớn hơn phần thêm vào khai báo. `bytes` là `literalBytes` của chuỗi (kể cả hai dấu nháy):
+ *   - mỗi chỗ dùng đổi chuỗi thành tên hằng: bớt `bytes - NAME_BYTES`;
+ *   - khai báo thêm `ab="…",`: `NAME_BYTES + bytes + 2` (dấu `=` và `,`).
+ * Gom khi `count * (bytes - NAME_BYTES) > bytes + NAME_BYTES + 2`, ít nhất 2 chỗ dùng. Biên: `"a"` (3 B) từ 8 lần, `"đ"` (4 B) từ 5 lần,
+ * `"div"` (5 B) từ 4 lần, chuỗi từ 9 B (7 ký tự ASCII) từ 2 lần; `""` không bao giờ gom.
+ *
+ * KHÔNG đặt sàn độ dài tối thiểu (vd chỉ gom chuỗi ≥ 6 byte): chuỗi ngắn (`"div"`, `"a"`, `"span"`) là phần lớn số lần lặp. Đo ở w28-01,
+ * sàn 6 byte chỉ bớt 76,8 KiB thay vì 86,0 KiB, tức bỏ 9,2 KiB dư địa dưới trần 2210 KiB để đổi lấy gzip nhỏ hơn. PO chọn giữ tối đa byte
+ * thô (Zalo cân byte thô của gói), nên muốn thêm sàn phải có quyết định mới của PO; `build-hoist-strings.spec.ts` khoá các biên trên.
+ */
 export function worthHoisting(bytes: number, count: number): boolean {
   return count >= 2 && count * (bytes - NAME_BYTES) > bytes + NAME_BYTES + 2;
 }
