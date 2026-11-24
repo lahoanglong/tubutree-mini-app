@@ -16,6 +16,7 @@ import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { vi } from '../i18n/vi';
+import { viSubscriptions } from '../i18n/vi-subscriptions';
 import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -66,7 +67,7 @@ const toEditForm = (sub: SubscriptionDTO): EditForm => ({
 
 /** Sửa số lượng / chu kỳ / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng (C-015). Mount khi mở để state lấy từ gói đang chọn. */
 export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; onClose: () => void }) {
-  const t = vi.subscriptions;
+  const t = viSubscriptions;
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   // `sub` là gói SỐNG của cha (danh sách `subscriptions`): danh sách tải lại lúc sheet còn mở thì lựa chọn chưa chạm đổi theo, lựa chọn khách đã đổi giữ nguyên.

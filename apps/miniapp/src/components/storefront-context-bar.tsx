@@ -1,7 +1,7 @@
 import { useSmartNavigate } from '../lib/smart-nav';
 import { Store } from 'lucide-react';
 import { useStorefrontContext } from '../store/storefront-context';
-import { vi } from '../i18n/vi';
+import { viStorefront } from '../i18n/vi-storefront';
 import { Button } from './ui/button';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
@@ -29,7 +29,7 @@ export function StorefrontContextBar() {
     >
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         <Icon icon={Store} size="sm" tone="muted" />
-        <Text variant="caption" tone="secondary">{vi.storefront.inStore}</Text>
+        <Text variant="caption" tone="secondary">{viStorefront.inStore}</Text>
       </span>
       <Button
         variant="ghost"
@@ -38,7 +38,7 @@ export function StorefrontContextBar() {
           goSmart('/');
         }}
       >
-        {vi.storefront.backToTubu}
+        {viStorefront.backToTubu}
       </Button>
     </div>
   );

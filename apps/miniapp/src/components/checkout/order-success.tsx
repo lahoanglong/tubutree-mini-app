@@ -14,7 +14,7 @@ import { checkoutEtaLabel, etaSchedule, placedOrderKinds } from '@tubutree/app-c
 import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
 import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { OrderZaloFriend } from './order-zalo';
-import { vi } from '../../i18n/vi';
+import { viSuccess } from '../../i18n/vi-checkout';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { Button } from '../ui/button';
@@ -73,10 +73,10 @@ export function SubscribeRow({ candidate, discountPct, onOpen }: { candidate: Su
       <Icon icon={Repeat} tone="brand" style={{ flex: 'none' }} />
       <span style={{ flex: 1, minWidth: 0 }}>
         <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 600 }}>
-          {vi.success.subscribeTitle(candidate.productName)}
+          {viSuccess.subscribeTitle(candidate.productName)}
         </Text>
         <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
-          {vi.success.subscribeBody(discountPct)}
+          {viSuccess.subscribeBody(discountPct)}
         </Text>
       </span>
       <Icon icon={ChevronRight} size="sm" tone="muted" style={{ flex: 'none' }} />
@@ -87,12 +87,12 @@ export function SubscribeRow({ candidate, discountPct, onOpen }: { candidate: Su
 // 3 bước thành một hàng (số + tên bước) để nút chính và mã đơn nằm trong màn đầu; câu giải thích từng bước vẫn đọc được bằng trình đọc màn hình.
 function NextStepsCompact() {
   return (
-    <section aria-label={vi.success.nextTitle}>
+    <section aria-label={viSuccess.nextTitle}>
       <Heading variant="title-sm" as="h2" style={{ marginBottom: 'var(--space-stack-sm)' }}>
-        {vi.success.nextTitle}
+        {viSuccess.nextTitle}
       </Heading>
       <ol className="tubu-order-success-steps">
-        {vi.success.steps.map((s, i) => (
+        {viSuccess.steps.map((s, i) => (
           <li key={s.title} className="tubu-order-success-step">
             <span aria-hidden className="tubu-order-success-step-num" data-current={i === 0 || undefined}>
               {i + 1}
@@ -143,7 +143,7 @@ export function OrderSuccess({
 
   const copyCode = () => {
     void copyText(codesText).then((ok) =>
-      notify(ok ? { text: vi.success.copied, type: 'success' } : { text: vi.success.copyFailed(codesText), type: 'info', duration: 4000 }),
+      notify(ok ? { text: viSuccess.copied, type: 'success' } : { text: viSuccess.copyFailed(codesText), type: 'info', duration: 4000 }),
     );
   };
 
@@ -164,10 +164,10 @@ export function OrderSuccess({
           <Icon icon={CheckCircle2} size="lg" tone="brand" />
         </span>
         <Heading variant="title-lg" as="h1">
-          {vi.success.heading}
+          {viSuccess.heading}
         </Heading>
         <Text variant="body-sm" tone="secondary">
-          {vi.success.subheading}
+          {viSuccess.subheading}
         </Text>
       </div>
 
@@ -175,7 +175,7 @@ export function OrderSuccess({
         <div className="tubu-order-success-code">
           <div style={{ minWidth: 0 }}>
             <Text variant="caption" tone="tertiary" as="div">
-              {vi.success.orderCode}
+              {viSuccess.orderCode}
             </Text>
             {codes.map((c) => (
               <Text key={c} variant="body-lg" as="div" style={{ fontWeight: 700, letterSpacing: 1, wordBreak: 'break-all' }}>
@@ -183,32 +183,32 @@ export function OrderSuccess({
               </Text>
             ))}
           </div>
-          <IconButton icon={Copy} label={vi.success.copyCodeLabel(codesText)} onPress={copyCode} />
+          <IconButton icon={Copy} label={viSuccess.copyCodeLabel(codesText)} onPress={copyCode} />
         </div>
         <div className="tubu-order-success-facts">
           <KeyValueRow
-            label={split ? `Tổng ${split.length} đơn` : vi.success.total}
+            label={split ? `Tổng ${split.length} đơn` : viSuccess.total}
             value={formatVnd(grandTotal)}
             emphasis
           />
           {order.paymentMethod === 'COD' && (
             <Text variant="caption" tone="secondary" as="div">
-              {vi.success.prepareCash}
+              {viSuccess.prepareCash}
             </Text>
           )}
           {pointsEarned > 0 && (
-            <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValueWhen(pointsEarned)} tone="success" />
+            <KeyValueRow label={viSuccess.pointsLabel} value={viSuccess.pointsValueWhen(pointsEarned)} tone="success" />
           )}
-          {eta && <KeyValueRow label={vi.success.etaLabel} value={eta} />}
+          {eta && <KeyValueRow label={viSuccess.etaLabel} value={eta} />}
         </div>
       </Card>
 
       <div className="tubu-order-success-ctas">
         <Button fullWidth size="lg" onPress={onTrack}>
-          {vi.success.trackOrder}
+          {viSuccess.trackOrder}
         </Button>
         <Button fullWidth variant="ghost" onPress={handleContinue}>
-          {vi.success.keepShopping}
+          {viSuccess.keepShopping}
         </Button>
       </div>
 
@@ -250,7 +250,7 @@ export function OrderSuccess({
 
       <NextStepsCompact />
 
-      <section aria-label={vi.success.extrasLabel} className="tubu-order-success-extras">
+      <section aria-label={viSuccess.extrasLabel} className="tubu-order-success-extras">
         {showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />}
         {candidate && (
           <SubscribeRow candidate={candidate} discountPct={Math.round(cfg.subscribeDiscountPct * 100)} onOpen={() => setSubscribeOpen(true)} />

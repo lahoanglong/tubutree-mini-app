@@ -3,7 +3,8 @@ import { join, relative, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { vi } from './vi';
+import { viAcademy } from './vi-affiliate';
+import { viGame } from './vi-game';
 
 /**
  * Thuật ngữ đã chốt (Q-26): "Mã giảm giá", "Điểm Xanh", "Ví Tubu", "giọt nước". Quét mã nguồn để một
@@ -106,7 +107,7 @@ describe('Q16 — Việt hoá chữ tiếng Anh ở game, nhân viên, CTV', () 
 
   it('game: không còn Season Pass, XP, Premium, Quiz, Top', () => {
     expect(offendersVisible(/Season Pass|\bXP\b|\bPremium\b|Quiz Sống Xanh|hoàn thành quiz|Top góp nước/)).toEqual([]);
-    expect(vi.game.seasonPass.title).toBe('Chặng Mùa');
+    expect(viGame.seasonPass.title).toBe('Chặng Mùa');
   });
 
   it('nhân viên: "Vào ca/Ra ca" thay Checkin/Checkout, "Chép" thay Copy', () => {
@@ -115,6 +116,6 @@ describe('Q16 — Việt hoá chữ tiếng Anh ở game, nhân viên, CTV', () 
 
   it('CTV: không còn Dashboard, Click, Caption, Academy', () => {
     expect(offendersVisible(/Dashboard hoa hồng|"Click"|\bclick\b ·|theo dõi click|[Cc]aption gợi ý|đã sao chép caption|Đã sao chép caption|CTV Academy|\brealtime\b/)).toEqual([]);
-    expect(vi.academy.title).toBe('Học viện CTV');
+    expect(viAcademy.title).toBe('Học viện CTV');
   });
 });

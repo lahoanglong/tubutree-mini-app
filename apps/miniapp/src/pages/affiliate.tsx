@@ -40,7 +40,7 @@ import { isGuestUser } from '../utils/guest-user';
 import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { PERSONAL_TAX_ID_PATTERN } from '../utils/tax-id';
-import { vi as copy } from '../i18n/vi';
+import { viOrderStatus } from '../i18n/vi-orders';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet, SheetLayer } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -58,7 +58,7 @@ import { CtvShortcuts } from '../components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '../components/affiliate/milestone-rewards';
 import { progressPct, tierRewardLabel } from '../components/affiliate/milestone-copy';
 import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Wallet, ChevronDown, ChevronRight, ChevronUp, QrCode as QrCodeIcon } from 'lucide-react';
-import { vi } from '../i18n/vi';
+import { viAcademy, viCtvOrder, viCtvTerms } from '../i18n/vi-affiliate';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
@@ -218,7 +218,7 @@ function RegisterGate() {
         const phone = await ensurePhone().catch(() => null);
         if (!phone) throw new GuestLinkRequired();
       }
-      return registerAffiliate(vi.ctvTerms.version);
+      return registerAffiliate(viCtvTerms.version);
     },
     onSuccess: () => {
       haptic('medium');
@@ -229,7 +229,7 @@ function RegisterGate() {
     },
     // Trả Promise: nút giữ bận tới khi vai trò và Học viện tải lại xong (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên màn đăng ký đã cũ (vd đã là CTV). Lỗi mạng/5xx/401 nhả ngay.
     onError: (e) => {
-      openSnackbar({ text: e instanceof GuestLinkRequired ? vi.ctvTerms.needZalo : getErrorMessage(e), type: 'error' });
+      openSnackbar({ text: e instanceof GuestLinkRequired ? viCtvTerms.needZalo : getErrorMessage(e), type: 'error' });
       if (!isStaleStateError(e)) return undefined;
       return settleWithin(
         Promise.all([qc.invalidateQueries({ queryKey: ['affiliate-me'] }), qc.invalidateQueries({ queryKey: ['academy-courses'] })]),
@@ -311,10 +311,10 @@ function RegisterGate() {
             chủ lưu lại (User.metadata.affiliateTerms). */}
         <Card padding={16} style={{ marginTop: 16 }}>
           <Text variant="body-sm" as="div" style={BOLD}>
-            {vi.ctvTerms.heading}
+            {viCtvTerms.heading}
           </Text>
           <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-            {vi.ctvTerms.items.map((item) => (
+            {viCtvTerms.items.map((item) => (
               <li key={item} style={{ marginBottom: 6 }}>
                 <Text variant="caption" tone="secondary">
                   {item}
@@ -322,7 +322,7 @@ function RegisterGate() {
               </li>
             ))}
           </ul>
-          <Checkbox checked={agreed} onChange={() => setAgreed((v) => !v)} label={vi.ctvTerms.agree} />
+          <Checkbox checked={agreed} onChange={() => setAgreed((v) => !v)} label={viCtvTerms.agree} />
         </Card>
 
         <Button
@@ -336,7 +336,7 @@ function RegisterGate() {
         </Button>
         {!agreed && (
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 6, textAlign: 'center' }}>
-            {vi.ctvTerms.mustAgree}
+            {viCtvTerms.mustAgree}
           </Text>
         )}
       </div>
@@ -516,7 +516,7 @@ function Dashboard() {
                   {
                     key: 'order',
                     label: 'Lên đơn hộ',
-                    ariaLabel: vi.ctvOrder.entry,
+                    ariaLabel: viCtvOrder.entry,
                     icon: Receipt,
                     onPress: () => {
                       haptic('light');
@@ -731,10 +731,10 @@ function Dashboard() {
       {hasCourses && (
         <div style={BLOCK_GAP}>
           <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => goSmart('/academy')}>
-            {vi.academy.entry}
+            {viAcademy.entry}
           </Button>
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
-            {vi.academy.entryHint}
+            {viAcademy.entryHint}
           </Text>
         </div>
       )}
@@ -913,7 +913,7 @@ function Dashboard() {
                     </Text>
                     {c.orderStatus && (
                       <Text variant="caption" tone="tertiary" as="div">
-                        {copy.orderStatus[c.orderStatus] ?? c.orderStatus}
+                        {viOrderStatus[c.orderStatus] ?? c.orderStatus}
                       </Text>
                     )}
                     {commissionUnlockNote(c, formatDate) && (

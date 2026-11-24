@@ -45,6 +45,7 @@ vi.mock('../services/zmp-bridge', () => ({
 }));
 
 import { vi as copy } from '../i18n/vi';
+import { viCommunity } from '../i18n/vi-community';
 import { useAuthStore } from '../store/auth';
 import * as shopApi from '../services/shop-api';
 import * as accountApi from '../services/account-api';
@@ -72,10 +73,10 @@ const PAGES: PageCase[] = [
   { name: 'Cộng tác viên', load: () => import('./affiliate'), forbidden: [/Đăng ký làm CTV|Đăng ký trở thành/i] },
   { name: 'Chi tiết đơn', load: () => import('./order-detail'), forbidden: [/Có chút trục trặc/] },
   { name: 'Hoàn tiền sàn ngoài', load: () => import('./cashback'), forbidden: [/Chưa có giao dịch hoàn tiền/] },
-  { name: 'Cộng đồng', load: () => import('./feed'), forbidden: [/Chưa có bài viết nào/, new RegExp(copy.community.loginToView)] },
-  { name: 'Sự kiện cộng đồng', load: () => import('./community-events'), forbidden: [new RegExp(copy.community.loginToView)] },
-  { name: 'Bài viết', load: () => import('./post-detail'), forbidden: [new RegExp(copy.community.loginToView)] },
-  { name: 'Vườn Xanh', load: () => import('./game'), forbidden: [new RegExp(copy.community.loginToView)] },
+  { name: 'Cộng đồng', load: () => import('./feed'), forbidden: [/Chưa có bài viết nào/, new RegExp(viCommunity.loginToView)] },
+  { name: 'Sự kiện cộng đồng', load: () => import('./community-events'), forbidden: [new RegExp(viCommunity.loginToView)] },
+  { name: 'Bài viết', load: () => import('./post-detail'), forbidden: [new RegExp(viCommunity.loginToView)] },
+  { name: 'Vườn Xanh', load: () => import('./game'), forbidden: [new RegExp(viCommunity.loginToView)] },
   { name: 'Cá nhân', load: () => import('./profile'), forbidden: [/Đã đăng xuất/, /network error/i] },
 ];
 

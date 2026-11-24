@@ -2,6 +2,7 @@ import { META_COPY } from './commerce/meta-copy';
 import { fillTemplate } from './copy-template';
 import { TILE_COPY } from './commerce/tile-copy';
 import { ECO_COPY } from './eco/copy';
+import { BOOT_COPY } from './shop-copy-boot';
 
 /**
  * Một nguồn chữ cho gian hàng (Mini App và web). Chữ của màn mua sắm chỉ thêm ở đây; số ký tự tối đa của từng khoá ở
@@ -16,9 +17,8 @@ import { ECO_COPY } from './eco/copy';
 export const SHOP_COPY: Record<string, string> = {
   ...TILE_COPY,
   ...ECO_COPY,
+  ...BOOT_COPY,
   // Giờ vàng
-  'flash.title': 'Giờ vàng',
-  'flash.todayTitle': 'Giờ vàng hôm nay',
   'flash.seeAll': 'Xem tất cả',
   'flash.tabsLabel': 'Khung giờ',
   'flash.chipsLabel': 'Danh mục',
@@ -26,42 +26,21 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.slotNext': 'Sắp diễn ra',
   'flash.slotTomorrow': 'Ngày mai',
   'flash.slotEnded': 'Đã kết thúc',
-  'flash.endsIn': 'Kết thúc sau {t}',
   'flash.endsLabel': 'Kết thúc sau',
-  'flash.startsIn': 'Bắt đầu sau {t}',
-  'flash.startsInTile': 'Sau {t}',
   'flash.startsAt': 'Mở lúc {time}',
   'flash.startsAtDay': 'Mở lúc {time} ngày {day}',
-  'flash.justOpened': 'Vừa mở bán',
-  'flash.soldPct': 'Đã bán {n}%',
-  'flash.almostGone': 'Sắp hết',
   'flash.left': 'Còn {n} suất',
-  'flash.soldOut': 'Đã bán hết',
   'flash.outOfStock': 'Hết hàng',
   'flash.limit': 'Mỗi khách tối đa {n}',
   // Dạng ngắn cho ghi chú một dòng nowrap của hàng thẻ trong danh sách Giờ vàng; thanh Giờ vàng ở PDP giữ 'flash.limit'.
   'flash.limitShort': 'Tối đa {n}/khách',
   // Bản đọc của 'flash.limitShort': trình đọc màn hình đọc dấu "/" thành "gạch chéo".
   'flash.limitSpoken': 'Tối đa {n} sản phẩm mỗi khách',
-  // Dòng ghi chú ở bảng chọn phân loại và dưới ô Số lượng khi số mua vượt giới hạn: máy chủ tính CẢ dòng giá thường (flash-line-price.ts).
-  'flash.sheetOverLimit': 'Giá Giờ vàng tối đa {n} sản phẩm mỗi khách. Mua {qty} thì cả dòng tính giá thường.',
-  // Cùng ghi chú khi giới hạn là số suất còn lại của đợt (ít hơn giới hạn mỗi khách), không phải giới hạn của riêng khách.
-  'flash.sheetOverQuota': 'Giờ vàng còn {n} suất. Mua {qty} thì cả dòng tính giá thường.',
-  // Giỏ đã có sẵn phân loại này: thêm giỏ cộng dồn và máy chủ giá cả dòng (n + qty = total), nên nói theo giỏ, không nêu nguyên nhân chặn.
-  'flash.sheetOverInCart': 'Giỏ đã có {n}. Thêm {qty} thì cả {total} sản phẩm tính giá thường.',
-  // Khách đã mua bớt suất ở các đơn trước (perUserLeft nhỏ hơn giới hạn mỗi khách): hết hẳn thì 'flash.sheetSpent', còn một phần thì câu này. Chữ "không còn suất" đúng cả khi khách là người tạo đợt (máy chủ cũng trả 0).
-  'flash.sheetSpent': 'Bạn không còn suất Giờ vàng của sản phẩm này nên tính giá thường.',
-  'flash.sheetOverLeft': 'Bạn còn {n} suất Giờ vàng. Mua {qty} thì cả dòng tính giá thường.',
-  // Giỏ đã vượt suất từ trước (n > allowance): dòng giỏ đang tính giá thường rồi, phần thêm không phải nguyên nhân mất giá.
-  'flash.sheetOverInCartAlready': 'Giỏ đã có {n}, quá {allowance} suất Giờ vàng nên cả dòng đang tính giá thường.',
   // "Mua ngay" thanh toán cả dòng giỏ của phân loại (số có sẵn + số thêm), nên nói trước khi bấm khi giỏ đã có sẵn mà chưa mất giá.
-  'flash.sheetBuyMerge': 'Giỏ đã có {n}: Mua ngay thanh toán cả {total} sản phẩm.',
   'flash.buy': 'Mua ngay',
-  'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',
   'flash.unremind': 'Bỏ nhắc',
   'flash.slotEndedNotice': 'Khung {time} đã kết thúc',
-  'flash.nextSlot': '{time} · {n} món sắp mở',
   'flash.remindedToast': 'Tubu sẽ nhắc bạn lúc {time}',
   'flash.unremindToast': 'Đã bỏ nhắc',
   'flash.emptyTitle': 'Chưa có Giờ vàng lúc này',
@@ -75,20 +54,13 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.soldOutError': 'Suất Giờ vàng vừa hết, sản phẩm về giá thường. Bạn xem lại giỏ nhé.',
   'flash.notifyStart': '{name} đang có giá Giờ vàng tới {time}.',
 
-  // Bán chạy nhất
-  'rank.title': 'Bán chạy nhất',
   // Kệ Bán chạy nhất khi chưa đủ số bán thật: chỉ món admin ghim ở tab Xếp kệ, không xếp hạng, không dòng thước đo.
-  'rank.curatedTitle': 'Tubu chọn cho bạn',
-  'rank.basis': 'Theo lượt bán 30 ngày qua',
-  'rank.basisAll': 'Theo tổng lượt bán',
-  'rank.tabAll': 'Tất cả',
   'rank.tabsLabel': 'Danh mục bán chạy',
   'rank.seeAll': 'Xem tất cả',
   'rank.emptyTitle': 'Chưa đủ lượt bán để xếp hạng',
   'rank.emptyCta': 'Xem sản phẩm trong danh mục',
 
   // Nhãn, tồn kho, giá đọc, dòng meta, số liệu shop
-  'stock.discontinued': 'Ngừng bán',
   'meta.rating': META_COPY.rating,
   'meta.sold': META_COPY.sold,
   'stats.products': 'Sản phẩm',
@@ -97,18 +69,8 @@ export const SHOP_COPY: Record<string, string> = {
   'stats.productsSpoken': '{n} sản phẩm',
   'stats.ratingSpoken': '{avg} sao',
   'stats.soldSpoken': 'Đã bán hơn {n}',
-  'stats.followers': 'Theo dõi',
-  'stats.followersSpoken': '{n} người theo dõi',
   'brand.title': 'Thương hiệu',
 
-  // Đồng hồ (countdown.ts)
-  'time.days': '{d} ngày',
-  'time.daysHours': '{d} ngày {h} giờ',
-  'time.hoursMinutes': '{h} giờ {m} phút',
-  'time.hours': '{h} giờ',
-  'time.minutes': '{m} phút',
-  'time.underMinute': 'dưới 1 phút',
-  'time.daysClock': '{d} ngày {clock}',
 
   // Chi tiết đơn (commerce/order-tracking.ts)
   'order.step.PENDING_PAYMENT': 'Chờ thanh toán',
@@ -236,7 +198,6 @@ export const SHOP_COPY: Record<string, string> = {
   'campaign.dot': 'Xem chương trình {i}',
   'campaign.pause': 'Dừng tự chuyển',
   'campaign.play': 'Tự chuyển tiếp',
-  'campaign.dateRange': 'Từ {a} đến {b}',
   'campaign.statusLive': 'Đang diễn ra',
   'campaign.statusNext': 'Sắp diễn ra',
   'campaign.statusEnded': 'Đã kết thúc',
@@ -257,26 +218,15 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.tabClaim': 'Nhận mã',
   'coupon.tabMine': 'Mã của tôi',
   'coupon.tabHistory': 'Đã dùng–hết hạn',
-  'coupon.freeship': 'Miễn phí giao hàng',
-  'coupon.amount': 'Giảm {amount}',
-  'coupon.percent': 'Giảm {pct}%',
-  'coupon.percentMax': 'Giảm {pct}% (tối đa {max})',
-  'coupon.titlePercentMax': 'Giảm {pct}%, tối đa {max}',
-  'coupon.minOrder': 'Đơn từ {min}',
   'coupon.scopeAll': 'Mọi sản phẩm',
   'coupon.scopeBrand': 'Cho sản phẩm {name}',
   'coupon.scopeCount': 'Cho {n} sản phẩm',
-  'coupon.expires': 'Dùng đến {date}',
-  'coupon.expiresToday': 'Hết hạn hôm nay',
-  'coupon.expiresInDays': 'Còn {n} ngày',
-  'coupon.usesLeft': 'Còn {n} lượt',
   'coupon.save': 'Lưu mã',
   'coupon.saved': 'Đã lưu',
   'coupon.use': 'Dùng ngay',
   'coupon.copy': 'Sao chép',
   'coupon.needMore': 'Mua thêm {x} để dùng',
   'coupon.outOfQuota': 'Đã hết lượt',
-  'coupon.expired': 'Đã hết hạn',
   'coupon.used': 'Đã dùng',
   'coupon.hintShort': '{n} mã · giảm đến {x}',
   'coupon.hintShortPlain': '{n} mã dùng được',
@@ -337,9 +287,6 @@ export const SHOP_COPY: Record<string, string> = {
   'offers.guestMineBody': 'Đăng nhập để xem mã bạn đã lưu và dùng ngay khi mua hàng.',
   // Trung tâm Ưu đãi: ba phân mục đổi tại chỗ (commerce/offers-hub.ts).
   'offers.tabsLabel': 'Các mục Ưu đãi',
-  'offers.tabDeals': 'Săn mã',
-  'offers.tabWallet': 'Mã của tôi',
-  'offers.tabRewards': 'Đổi quà',
   // Dải điểm danh mỏng ở Săn mã: điểm danh làm ở Vườn Xanh, đây chỉ báo trạng thái hôm nay.
   'offers.checkInDone': 'Hôm nay bạn đã điểm danh',
   'offers.checkInTodo': 'Hôm nay bạn chưa điểm danh',
@@ -353,24 +300,18 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.title': 'Combo tiết kiệm',
   'combo.rule': 'Mua {n} giảm {pct}%',
   'combo.total': 'Tổng {price} · Tiết kiệm {save}',
-  'combo.add': 'Thêm cả combo',
   'combo.cartHint': 'Thêm {n} sản phẩm nữa để giảm combo {pct}%',
   'combo.cartReached': 'Đã đủ combo, giảm {x}',
   'combo.cartLost': 'Combo chưa đủ món nên chưa giảm',
   'combo.cartLine': 'Giảm giá combo',
-  'combo.pdpTitle': 'Combo ưu đãi',
-  'combo.homeTitle': 'Combo tiết kiệm',
-  'addon.title': 'Mua kèm giá tốt',
   'addon.price': 'Giá mua kèm {price}',
   'addon.condition': 'Chỉ khi mua cùng {name}',
   'addon.add': 'Thêm {n} món vào giỏ',
   'addon.added': 'Đã thêm vào giỏ',
   'addon.pickHint': 'Chọn món muốn mua kèm',
   'addon.pickSpoken': 'Chọn mua kèm {name}, {price}, giảm {pct}%',
-  'addon.error': 'Chưa thêm được món mua kèm, bạn thử lại nhé',
   'addon.cartLine': 'Ưu đãi mua kèm',
   'addon.lost': 'Đã bỏ giá mua kèm vì {name} không còn trong giỏ',
-  'bundle.ended': 'Đã kết thúc',
   'pdp.boughtTogether': 'Khách thường mua cùng',
   // PDP và giỏ (P8)
   'pdp.offers': 'Ưu đãi',
@@ -378,8 +319,6 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.variation': 'Phân loại',
   // Quyết nhanh ở trang chi tiết (tubu-w4-02): giá theo đơn vị (cờ catalog.unit_price_enabled), ngày nhận và phần còn thiếu để miễn phí giao (cờ shipping.pdp_eta_enabled).
   // Câu còn thiếu phải vừa MỘT dòng của khối Vận chuyển ở 360px (khối chỉ được cao thêm 24px, đã dành cho dòng ngày nhận), nên ngắn hơn câu tĩnh cũ.
-  'pdp.unitPrice': '≈ {price} / {per}',
-  'pdp.unitBetter': 'Lợi hơn {pct}% mỗi {per}',
   'pdp.eta': 'Nhận dự kiến {range}',
   // Ngày nhận theo lịch kho (tubu-w6-02, cùng cờ shipping.pdp_eta_enabled): {range} kiểu "T6 20/11 – T3 24/11", {cutoff} là giờ cắt đơn "15:00".
   // Khoảng trắng không ngắt: khổ Mini xuống dòng ngay sau "·", giữ nguyên cụm giờ cắt thay vì cắt đôi "Đặt / trước".
@@ -475,15 +414,6 @@ export const SHOP_COPY: Record<string, string> = {
   'guestCart.mergeReduced': '{n} món chọn trước khi đăng nhập đã giảm số lượng cho khớp số hàng còn.',
   'guestCart.mergeKept': '{n} món chọn trước khi đăng nhập chưa chuyển được vào giỏ. Mở lại giỏ để thử lại.',
   'guestCart.itemFallback': 'Sản phẩm trong giỏ',
-  // Mua lại đơn cũ: câu dưới từng dòng và câu đầu sheet (web và Mini App)
-  'reorder.qtyReduced': 'Không đủ {old} như đơn trước, đã giảm số lượng',
-  'reorder.qtyCapped': 'Mua lại tối đa {n} mỗi món, đã giảm số lượng',
-  'reorder.priceUp': 'Giá tăng so với đơn trước ({old})',
-  'reorder.priceDown': 'Giá giảm so với đơn trước ({old})',
-  'reorder.someSkipped': '{n} món hết hàng hoặc ngừng bán sẽ không được thêm vào giỏ.',
-  'reorder.allSkipped': 'Các món trong đơn này đều đã hết hàng hoặc ngừng bán.',
-  'reorder.selectAll': 'Chọn tất cả ({n})',
-  'reorder.savedVsBefore': 'Tiết kiệm {x} so với lúc mua trước',
   // Thanh toán (K2): Mini App và web cùng một nguồn chữ
   'checkout.addressNeeded': 'Chọn địa chỉ giao hàng để đặt hàng.',
   'checkout.quoteFailed': 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.',
@@ -611,9 +541,6 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.comboRemoveKeep': 'Giữ lại',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
-  'section.seeAll': 'Xem tất cả',
-  'section.seeAllSpoken': 'Xem tất cả {title}',
-  'section.seeAllCount': 'Tất cả ({n})',
   'sort.groupLabel': 'Sắp xếp',
   'sort.filter': 'Lọc',
   'sort.filterCount': 'Lọc ({n})',
@@ -652,15 +579,6 @@ export const SHOP_COPY: Record<string, string> = {
   'search.bestInStock': 'Bán chạy còn hàng',
   'search.askTubu': 'Chưa thấy món cần tìm? Nhắn Tubu',
   'search.clearFilters': 'Xoá tất cả',
-  'combo.badge': 'Combo -{pct}%',
-  'combo.setLabel': 'Mua cả bộ',
-  'combo.save': 'Tiết kiệm {save}',
-  'combo.addSpoken': 'Thêm cả combo {title}, {n} món, {price}',
-  'combo.seeItems': 'Xem từng món',
-  'combo.soldOut': 'Combo tạm hết',
-  'combo.itemsLabel': 'Gồm {n} món',
-  'combo.more': '+{n}',
-  'combo.soldOutSpoken': 'Combo tạm hết: {title}',
   // Trang Bộ quà tặng & combo khởi đầu (web /bo-qua-tang, Mini App /gift-combos): số tiền đều do máy chủ trả.
   'giftCombos.title': 'Bộ quà tặng & combo khởi đầu',
   'giftCombos.intro': 'Combo sản phẩm xanh chọn sẵn, giá cả bộ đã giảm. Thêm cả bộ vào giỏ chỉ một chạm.',
@@ -672,20 +590,11 @@ export const SHOP_COPY: Record<string, string> = {
   'giftCombos.empty': 'Chưa có combo nào đang mở bán',
 
   // Trang shop (gian hàng CTV, thương hiệu)
-  'shop.tabShop': 'Shop',
-  'shop.tabProducts': 'Sản phẩm',
-  'shop.tabCategories': 'Danh mục',
-  'shop.tabStory': 'Câu chuyện',
   'shop.follow': 'Theo dõi',
   'shop.following': 'Đang theo dõi',
   'shop.share': 'Chia sẻ',
   'shop.vouchers': 'Mã giảm giá của shop',
   'shop.seeAllNSpoken': 'Xem tất cả {n} sản phẩm trong {title}',
-  'shop.sortPopular': 'Phổ biến',
-  'shop.sortNew': 'Mới',
-  'shop.sortSold': 'Bán chạy',
-  'shop.sortPrice': 'Giá ⇅',
-  'shop.sortPriceSpoken': 'Giá, đổi chiều sắp xếp',
   'shop.loadMore': 'Xem thêm',
   'shop.emptyProducts': 'Shop chưa có sản phẩm nào để hiện',
   'shop.categoryCount': '{n} món',
@@ -696,8 +605,6 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.noteMore': 'Xem thêm',
   'shop.noteLess': 'Thu gọn',
   'shop.readStory': 'Đọc câu chuyện',
-  'shop.comboAdded': 'Đã thêm cả combo vào giỏ',
-  'shop.comboError': 'Chưa thêm được combo, giỏ của bạn không thay đổi. Bạn thử lại nhé.',
   'shop.loginForCombo': 'Đăng nhập để thêm combo vào giỏ nhé',
   'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
   'shop.tierBadge': 'CTV {name}',
@@ -743,9 +650,6 @@ export const SHOP_COPY: Record<string, string> = {
   'reel.fbShipTitle': 'Giao đến tận nhà',
   'reel.fbShipBody': 'Đặt ngay, đơn của bạn được giao đến tận nhà.',
   // Lời mời kèm thẻ chia sẻ Zalo và khối "Mời bạn sống xanh" (W146B). Số tiền lấy từ cấu hình công khai (`newCustomer.welcomeVoucher`), thiếu thì nói chung, không hứa con số.
-  'share.offer': 'Tubu Tree tặng khách mới mã {amount} cho đơn đầu từ {min}',
-  'share.offerNoMin': 'Tubu Tree tặng khách mới mã {amount} cho đơn đầu',
-  'share.offerPlain': 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu',
   'invite.title': 'Mời bạn sống xanh',
   'invite.friendGift': 'Bạn mới nhận mã {amount} cho đơn đầu từ {min}.',
   'invite.friendGiftNoMin': 'Bạn mới nhận mã {amount} cho đơn đầu.',
@@ -802,19 +706,12 @@ export const SHOP_COPY: Record<string, string> = {
   'refill.gainGift': 'Giỏ sẽ đủ nhận quà 0đ',
   'refill.confirmCta': 'Đổi sang Refill',
   'refill.swapped': 'Đã đổi sang Refill',
-  'refill.railBadge': 'Đổi sang túi Refill{size}',
-  'refill.railAdd': '+ Thêm Refill',
-  'refill.railAddAria': 'Thêm Refill{size} thay cho {bottle} vào giỏ, {price}{save}',
-  'refill.railSave': '. Rẻ hơn {pct}% mỗi {per}',
-  'refill.railAllNote': ', gồm {n} túi Refill',
   'wasteRepeat.title': 'Gửi lại như lần trước',
   'wasteRepeat.sub': '{method}{point} · {n} loại',
   'wasteRepeat.cta': 'Gửi lại',
   'wasteRepeat.newRequest': 'Tạo yêu cầu mới',
   'wasteRepeat.droppedItems': 'Đã bỏ {n} loại rác nay không còn nhận',
   'wasteRepeat.pickAgain': 'Cách gửi hoặc điểm nhận lần trước nay tạm đóng, bạn chọn lại nhé',
-  // Khối Giờ vàng dạng Giờ Xanh (cờ flashsale.green_hour_enabled): cùng suất Giờ vàng, tông xanh, có nút thêm nhanh.
-  'greenHour.title': 'Giờ Xanh Ưu Đãi',
   // Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A)
   'freeship.progress': 'Mua thêm {price} để được Miễn phí giao hàng 🚚',
   'freeship.progressTubu': 'Mua thêm {price} để được Miễn phí giao hàng cho phần hàng Tubu Tree giao 🚚',
@@ -841,15 +738,6 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.voucherHint.barAria': 'Đã đạt {pct}% đơn tối thiểu của mã giảm giá',
   'cart.voucherHint.shopMoreCta': 'Mua thêm',
 
-  // Dải Mua lại món quen ở Trang chủ (W43A): thẻ ngang, "+ Thêm" một chạm và "Thêm lại tất cả".
-  'quickReorder.title': 'Mua lại món quen',
-  'quickReorder.addAll': 'Thêm lại tất cả',
-  'quickReorder.add': '+ Thêm',
-  'quickReorder.addAria': 'Thêm {name} vào giỏ, {price}',
-  'quickReorder.addAllAria': 'Thêm lại tất cả {n} món vào giỏ, tổng {total}',
-  'quickReorder.timesBought': 'Đã mua {n} lần',
-  'quickReorder.addedAll': 'Đã thêm {n} món vào giỏ',
-  'quickReorder.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
 
   // Khối Gợi ý mua kèm hợp vị ở trang chi tiết sản phẩm (W43A): tick chọn món xem + món bổ trợ, thêm cả bộ một chạm.
   'fbt.title': 'Gợi ý mua kèm hợp vị',
@@ -858,7 +746,6 @@ export const SHOP_COPY: Record<string, string> = {
   'fbt.add': 'Thêm {n} món vào giỏ · {total}',
   'fbt.pickHint': 'Chọn món muốn thêm',
   'fbt.added': 'Đã thêm {n} món vào giỏ',
-  'fbt.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
   'fbt.selectAll': 'Chọn tất cả',
   'fbt.selectAllSpoken': 'Chọn tất cả {title}',
 
@@ -987,14 +874,6 @@ export const SHOP_COPY: Record<string, string> = {
   'homeQuiz.result.browse': 'Xem sản phẩm',
   'homeQuiz.result.shop': 'Xem sản phẩm',
   'homeQuiz.result.cart': 'Xem giỏ hàng',
-  // Trang chủ gọn: thẻ Mua xoay vòng chỉ nêu con số tiết kiệm khi máy chủ đã gửi cấu hình; dải Việc cần làm một dòng; nút ＋ thêm nhanh trên thẻ sản phẩm.
-  'home.pillar.subscribe.subtitle': 'Đặt định kỳ, khỏi lo hết hàng',
-  'home.pillar.subscribe.badge': 'Định kỳ',
-  'home.pillar.subscribe.subtitlePct': 'Đặt định kỳ tiết kiệm tới {pct}%',
-  'home.pillar.subscribe.badgePct': 'Định kỳ -{pct}%',
-  'home.todo.more': '+{n} việc khác',
-  'home.todo.moreAria': 'Xem {n} việc khác trong Đơn hàng',
-  'card.quickAdd': 'Thêm {name} vào giỏ',
   // Báo hàng về: nút chính của thanh mua khi phân loại đang chọn hết hàng (cờ catalog.restock_alert_enabled). Đã đăng ký thì bấm lại là huỷ.
   'restock.notifyMe': 'Báo tôi khi có hàng',
   'restock.subscribed': 'Đã đăng ký báo hàng · Huỷ',
@@ -1021,24 +900,8 @@ export const SHOP_COPY: Record<string, string> = {
   'settings.notifySocial': 'Tương tác bài viết',
   // Nhiệm vụ hằng ngày (cờ engagement.daily_missions_enabled): phần "Hôm nay" ở đầu thẻ Nhiệm vụ của Vườn Xanh.
   'daily.today': 'Hôm nay',
-  'daily.progress': '{n}/{total}',
-  'daily.mission.DAILY_QUIZ': 'Chơi Đố Xanh',
-  'daily.mission.DAILY_PLAY': 'Chơi một trò trong Vườn Xanh',
-  'daily.mission.DAILY_STORY': 'Xem một sản phẩm',
-  'daily.mission.DAILY_WISHLIST': 'Thêm một sản phẩm vào Yêu thích',
-  'daily.mission.DAILY_WATER': 'Tưới cây',
-  'daily.water': '+{n} 💧',
-  'daily.bonus': 'Xong cả 3 nhiệm vụ: +{points} Điểm Xanh',
-  'daily.bonusDone': 'Đã nhận +{points} Điểm Xanh hôm nay',
   'daily.claim': 'Nhận',
-  'daily.claimAria': 'Nhận thưởng: {title}',
   'daily.go': 'Làm',
-  'daily.goAria': 'Làm nhiệm vụ: {title}',
-  'daily.claimedAria': '{title}, đã nhận thưởng',
-  'daily.doneAria': '{title}, đã xong',
-  'daily.toastWater': 'Đã nhận +{n} 💧',
-  'daily.toastBonus': 'Đã nhận +{n} 💧 và +{points} Điểm Xanh',
-  'daily.toastCapped': 'Hôm nay Vườn Xanh đã trao đủ phần thưởng, mai bạn quay lại nhé.',
   'daily.toastError': 'Chưa nhận được thưởng. Bạn thử lại nhé.',
   'daily.toastStale': 'Nhiệm vụ vừa đổi trạng thái, Tubu đã tải lại cho bạn.',
   'daily.toastTooNew': 'Tài khoản mới tạo chưa nhận được thưởng nhiệm vụ, bạn quay lại sau nhé.',
@@ -1046,29 +909,7 @@ export const SHOP_COPY: Record<string, string> = {
   'daily.oneTimeHide': 'Ẩn nhiệm vụ một lần',
   // Huy hiệu ghi nhận (cờ engagement.badges_enabled): một hàng cuộn ngang ở Cá nhân, không có điểm.
   'badges.title': 'Huy hiệu',
-  'badges.count': '{n}/{total}',
-  'badges.name.FIRST_ORDER': 'Đơn đầu tiên',
-  'badges.name.RECYCLE_3': 'Đổi rác 3 lần',
-  'badges.name.REFILL_5': '5 đơn refill',
-  'badges.name.STREAK_7': 'Chuỗi 7 ngày',
-  'badges.name.STREAK_30': 'Chuỗi 30 ngày',
-  'badges.name.QUIZ_PERFECT_10': 'Đố Xanh 10 ngày',
-  'badges.name.PHOTO_REVIEW': 'Đánh giá có ảnh',
-  'badges.name.INVITE_1': 'Mời được bạn',
-  'badges.how.FIRST_ORDER': 'Nhận đơn hàng đầu tiên.',
-  'badges.how.RECYCLE_3': 'Hoàn tất 3 lần Đổi rác lấy quà.',
-  'badges.how.REFILL_5': 'Nhận 5 đơn có sản phẩm refill.',
-  'badges.how.STREAK_7': 'Giữ chuỗi Vườn Xanh 7 ngày liền.',
-  'badges.how.STREAK_30': 'Giữ chuỗi Vườn Xanh 30 ngày liền.',
-  'badges.how.QUIZ_PERFECT_10': 'Trả lời đúng cả 3 câu Đố Xanh trong 10 ngày.',
-  'badges.how.PHOTO_REVIEW': 'Gửi một đánh giá kèm ảnh.',
-  'badges.how.INVITE_1': 'Mời một người bạn mua đơn thứ hai thành công.',
-  'badges.earnedAria': '{name}, đã đạt',
-  'badges.lockedAria': '{name}, chưa đạt. {how}',
   'badges.earnedToast': 'Bạn đã đạt huy hiệu {name}.',
-  // Chấm nhắc ở thanh đáy (cùng cờ nhiệm vụ hằng ngày): chữ đọc của tab có chấm.
-  'nav.gardenDot': '{name}, có việc hôm nay',
-  'nav.profileDot': '{name}, có thông báo chưa đọc',
   // Trang Điểm Xanh: đổi quà và mã nằm ở hub Ưu đãi nên chỉ còn một dòng dẫn sang; luật kiếm/tiêu nằm trong một mục gập.
   'loyalty.offersRowTitle': 'Đổi quà & mã giảm giá',
   'loyalty.offersRowSub': 'Đổi Điểm Xanh lấy mã giảm giá và quà',

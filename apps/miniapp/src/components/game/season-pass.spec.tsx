@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SeasonPassState } from '../../services/game-api';
-import { vi as viText } from '../../i18n/vi';
+import { viGame } from '../../i18n/vi-game';
 import { SeasonPass } from './season-pass';
 
 vi.mock('../../store/auth', () => ({
@@ -25,26 +25,26 @@ const renderPass = () => render(<SeasonPass pass={PASS} claimPending={false} cla
 describe('SeasonPass — icon nét thay emoji (D7-6)', () => {
   it('tiêu đề khối có icon, chữ không còn emoji', () => {
     renderPass();
-    const title = screen.getByRole('heading', { name: viText.game.seasonPass.title });
+    const title = screen.getByRole('heading', { name: viGame.seasonPass.title });
     expect(title.querySelector('svg')).not.toBeNull();
-    expect(title.textContent).toBe(viText.game.seasonPass.title);
+    expect(title.textContent).toBe(viGame.seasonPass.title);
   });
 
   it('"Đã nhận" và nút "Chưa mở" mang icon nét; chữ không kèm ký tự ✓ 🔒', () => {
     renderPass();
-    const claimed = screen.getByText(viText.game.seasonPass.claimed);
+    const claimed = screen.getByText(viGame.seasonPass.claimed);
     expect(claimed.textContent).toBe('Đã nhận');
     expect(claimed.querySelector('svg')).not.toBeNull();
-    const locked = screen.getAllByRole('button', { name: viText.game.seasonPass.locked });
+    const locked = screen.getAllByRole('button', { name: viGame.seasonPass.locked });
     expect(locked.length).toBeGreaterThan(0);
     for (const b of locked) expect(b.querySelector('svg')).not.toBeNull();
   });
 
   it('gợi ý Premium có icon khoá, chữ không kèm emoji', () => {
     renderPass();
-    const hint = screen.getByText(viText.game.seasonPass.premiumHint);
+    const hint = screen.getByText(viGame.seasonPass.premiumHint);
     expect(hint.querySelector('svg')).not.toBeNull();
-    expect(hint.textContent).toBe(viText.game.seasonPass.premiumHint);
+    expect(hint.textContent).toBe(viGame.seasonPass.premiumHint);
     expect(hint.textContent).toContain('đã giao ít nhất một đơn');
   });
 });
@@ -60,11 +60,11 @@ describe('StreakRepair — icon nét thay emoji (D7-6)', () => {
 describe('SeasonPass — bậc đang khoá vẫn đọc được (D8-6)', () => {
   it('hàng bậc khoá không bị làm mờ bằng opacity và không dùng nền stone-100 (chữ vàng chỉ 4,24:1 trên đó)', () => {
     renderPass();
-    const lockedRow = screen.getByText(viText.game.seasonPass.tier(2)).closest('div[style*="padding: 12px"]') as HTMLElement;
+    const lockedRow = screen.getByText(viGame.seasonPass.tier(2)).closest('div[style*="padding: 12px"]') as HTMLElement;
     expect(lockedRow).not.toBeNull();
     expect(lockedRow.style.opacity).toBe('');
     expect(lockedRow.style.background).not.toContain('--stone-100');
-    const unlockedRow = screen.getByText(viText.game.seasonPass.tier(1)).closest('div[style*="padding: 12px"]') as HTMLElement;
+    const unlockedRow = screen.getByText(viGame.seasonPass.tier(1)).closest('div[style*="padding: 12px"]') as HTMLElement;
     expect(unlockedRow.style.opacity).toBe('');
   });
 });
@@ -83,8 +83,8 @@ describe('SeasonPass — khách vãng lai không được hứa Điểm Xanh', (
   it('user thật: thấy số điểm và nút Nhận ở cả hai nhánh, không có câu mời đăng nhập', () => {
     const onClaim = vi.fn();
     show(OPEN_PASS, onClaim);
-    expect(screen.getByText(viText.game.seasonPass.reward({ type: 'POINTS', amount: 20 }))).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: viText.game.seasonPass.claim })).toHaveLength(2);
+    expect(screen.getByText(viGame.seasonPass.reward({ type: 'POINTS', amount: 20 }))).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: viGame.seasonPass.claim })).toHaveLength(2);
     expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
   });
 
@@ -93,18 +93,18 @@ describe('SeasonPass — khách vãng lai không được hứa Điểm Xanh', (
     show({ ...OPEN_PASS, pointsBlocked: 'GUEST' }, onClaim);
     expect(screen.getAllByTestId('guest-points-note')).toHaveLength(1);
     expect(screen.getByTestId('guest-points-note')).toHaveTextContent('Đăng nhập Zalo để nhận Điểm Xanh');
-    expect(screen.queryByText(viText.game.seasonPass.reward({ type: 'POINTS', amount: 20 }))).not.toBeInTheDocument();
-    const claims = screen.getAllByRole('button', { name: viText.game.seasonPass.claim });
+    expect(screen.queryByText(viGame.seasonPass.reward({ type: 'POINTS', amount: 20 }))).not.toBeInTheDocument();
+    const claims = screen.getAllByRole('button', { name: viGame.seasonPass.claim });
     expect(claims).toHaveLength(1);
     fireEvent.click(claims[0]!);
     expect(onClaim).toHaveBeenCalledWith(0, 'free');
-    expect(screen.getByText(viText.game.seasonPass.reward({ type: 'SEEDS', amount: 5 }))).toBeInTheDocument();
+    expect(screen.getByText(viGame.seasonPass.reward({ type: 'SEEDS', amount: 5 }))).toBeInTheDocument();
   });
 
   it('khách vãng lai mà mùa chỉ có bậc giọt nước: không có câu mời đăng nhập', () => {
     const seedsOnly = { ...OPEN_PASS, pointsBlocked: 'GUEST', tiers: [{ ...OPEN_PASS.tiers![0]!, premium: { type: 'SEEDS', amount: 9 } }] } as unknown as SeasonPassState;
     show(seedsOnly);
     expect(screen.queryByTestId('guest-points-note')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: viText.game.seasonPass.claim })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: viGame.seasonPass.claim })).toHaveLength(2);
   });
 });

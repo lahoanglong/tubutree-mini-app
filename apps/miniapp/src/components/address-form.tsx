@@ -14,6 +14,7 @@ import { normalizeVnPhoneInput, parseVnPhoneInput } from '@tubutree/app-core/pho
 import { validateAddressFields, type AddressField } from '@tubutree/app-core/commerce/checkout-form';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
+import { viCheckout } from '../i18n/vi-checkout';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import {
@@ -35,9 +36,9 @@ type FormFields = 'recipient' | 'phone' | 'street';
 type FormState = Record<FormFields, string>;
 const EMPTY_FORM: FormState = { recipient: '', phone: '', street: '' };
 const FIELD_LABEL: Record<FormFields, string> = {
-  recipient: vi.checkout.recipient,
-  phone: vi.checkout.phone,
-  street: vi.checkout.street,
+  recipient: viCheckout.recipient,
+  phone: viCheckout.phone,
+  street: viCheckout.street,
 };
 
 export interface AddressFormProps {

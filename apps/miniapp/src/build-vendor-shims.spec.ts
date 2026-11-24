@@ -49,6 +49,24 @@ describe('resolveVendorShim', () => {
     expect(resolveVendorShim('zod', setStorage)).toBeNull();
     expect(resolveVendorShim(ZOD_IMPORT, path.join(here, 'app.tsx'))).toBeNull();
   });
+
+  it('trỏ react/jsx-runtime về shim cho mọi bên nhập trừ chính shim (không thì shim tự nhập mình)', () => {
+    const shim = path.join(here, 'build-jsx-runtime.ts');
+    expect(resolveVendorShim('react/jsx-runtime', path.join(here, 'app.tsx'))).toBe(shim);
+    expect(resolveVendorShim('react/jsx-runtime', `${SHEET_CONTENT}?v=1`)).toBe(shim);
+    expect(resolveVendorShim('react/jsx-runtime', shim)).toBeNull();
+    expect(resolveVendorShim('react/jsx-runtime', `${shim}?v=1`)).toBeNull();
+    expect(resolveVendorShim('react/jsx-dev-runtime', path.join(here, 'app.tsx'))).toBeNull();
+  });
+
+  it('shim JSX xuất đúng ba hàm của runtime thật', async () => {
+    const runtime = await import('react/jsx-runtime');
+    const shim = await import('./build-jsx-runtime');
+    expect(Object.keys(shim).sort()).toEqual(['Fragment', 'jsx', 'jsxs']);
+    expect(shim.jsx).toBe(runtime.jsx);
+    expect(shim.jsxs).toBe(runtime.jsxs);
+    expect(shim.Fragment).toBe(runtime.Fragment);
+  });
 });
 
 describe('leakedReplacedVendors', () => {

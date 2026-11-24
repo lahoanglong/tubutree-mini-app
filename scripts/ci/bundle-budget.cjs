@@ -3,7 +3,8 @@
 //   node scripts/ci/bundle-budget.cjs apps/miniapp/www
 //
 // Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành của Zalo chưa kiểm).
-//   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 700. Mục tiêu trong docs/2026-10-review/03-perf.md A3-013: dưới 450.
+//   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 312 (= 320 000 B, w31-04 hạ từ 700 khi tách chữ và màn phụ khỏi gói đầu đưa entry từ 379 865 B về
+//                          ~309 000 B). Gọi `fillCopy` trong mô-đun gói đầu là kéo cả `SHOP_COPY` về entry: dùng `fillBootCopy` (packages/app-core/src/shop-copy-boot.ts).
 //   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2210 = trần gói mà các lần phát hành từ w24-04 đã chặn
 //                          (w28-01 hạ từ 2350 sau khi gom chuỗi lặp của từng chunk đưa bản dựng từ 2168 KB về 2082 KB; trước đó: W177 hạ từ 2500 xuống 2350 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB; w3-09 nâng lên 2380 khi gộp 9 tính năng đợt 3,
 //                          gồm cả 6 game chơi ngay trong Mini App, đưa bản dựng lên 2357 KB; w6-03 hạ lại 2350 sau khi cắt 4 tệp Inter
@@ -44,7 +45,7 @@ function collect(dir) {
 function main() {
   const dir = path.resolve(process.argv[2] || 'apps/miniapp/www');
   const strict = process.env.BUNDLE_BUDGET_STRICT === '1';
-  const entryWarnKb = threshold('MINIAPP_ENTRY_WARN_KB', 700);
+  const entryWarnKb = threshold('MINIAPP_ENTRY_WARN_KB', 312);
   const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2210);
   const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 40000);
 
@@ -72,7 +73,7 @@ function main() {
 
   const warnings = [];
   if (entry && kb(entry.raw) > entryWarnKb) {
-    warnings.push(`Entry ${entry.file} là ${kb(entry.raw)} KB raw / ${kb(entry.gz)} KB gzip, vượt ngưỡng cảnh báo ${entryWarnKb} KB (mục tiêu 450 KB).`);
+    warnings.push(`Entry ${entry.file} là ${kb(entry.raw)} KB raw / ${kb(entry.gz)} KB gzip, vượt ngưỡng cảnh báo ${entryWarnKb} KB.`);
   }
   if (kb(total.raw) > totalWarnKb) {
     warnings.push(`Tổng bản build là ${kb(total.raw)} KB raw / ${kb(total.gz)} KB gzip, vượt ngưỡng cảnh báo ${totalWarnKb} KB.`);

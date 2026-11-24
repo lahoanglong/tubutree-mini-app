@@ -2,7 +2,8 @@
 
 import { deliveredBaseAt } from '@tubutree/app-core/commerce/order-tracking';
 import type { BadgeTone } from '../components/ui/badge';
-import { vi } from '../i18n/vi';
+import { viCheckout } from '../i18n/vi-checkout';
+import { viOrderStatus, viOrders } from '../i18n/vi-orders';
 import { formatNumber, formatPoints } from './format';
 
 /** Cùng nguồn token với Badge's TONE_STYLE (audit A4-08: trước đây map này dùng hex chép tay
@@ -97,14 +98,14 @@ export function orderPointsNote(
   if (pointsEarned <= 0 || status === 'CANCELLED') return null;
   if (status === 'DELIVERED' && pointsTaken !== undefined) {
     if (pointsTaken > 0) {
-      return { text: vi.orders.pointsCreditedReturnTaken(formatNumber(pointsEarned), formatNumber(pointsTaken)), tone: 'muted' };
+      return { text: viOrders.pointsCreditedReturnTaken(formatNumber(pointsEarned), formatNumber(pointsTaken)), tone: 'muted' };
     }
   } else if (status === 'DELIVERED' && pointsReversed > 0) {
-    return { text: vi.orders.pointsCreditedPartlyReversed(formatNumber(pointsEarned), formatNumber(pointsReversed)), tone: 'muted' };
+    return { text: viOrders.pointsCreditedPartlyReversed(formatNumber(pointsEarned), formatNumber(pointsReversed)), tone: 'muted' };
   }
-  if (status === 'DELIVERED') return { text: vi.orders.pointsCredited(formatNumber(pointsEarned)), tone: 'success' };
-  if (status === 'RETURNED') return { text: vi.orders.pointsReversed, tone: 'muted' };
-  return { text: vi.checkout.pointsEarn(pointsEarned), tone: 'success' };
+  if (status === 'DELIVERED') return { text: viOrders.pointsCredited(formatNumber(pointsEarned)), tone: 'success' };
+  if (status === 'RETURNED') return { text: viOrders.pointsReversed, tone: 'muted' };
+  return { text: viCheckout.pointsEarn(pointsEarned), tone: 'success' };
 }
 
 /**
@@ -152,7 +153,7 @@ export function isHandedToCarrier(o: CarrierFacts): boolean {
 
 /** Nhãn trạng thái cho khách: đơn đã đặt hãng thì nói rõ, khỏi để chip "Đang đóng gói" mâu thuẫn lời "đã bàn giao". */
 export function buyerStatusLabel(o: CarrierFacts): string {
-  return isCarrierBooked(o) ? vi.orders.carrierBooked : (vi.orderStatus[o.status] ?? o.status);
+  return isCarrierBooked(o) ? viOrders.carrierBooked : (viOrderStatus[o.status] ?? o.status);
 }
 
 /** Bưu tá Gomdon đã cầm hàng (mã số khác 1/2/10): luật dự phòng khi API chưa trả `canCancel`. */

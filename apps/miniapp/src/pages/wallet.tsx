@@ -23,7 +23,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
-import { vi } from '../i18n/vi';
+import { viProfile } from '../i18n/vi-account';
 import { COMMISSION_PENDING_LABEL, COMMISSION_PENDING_NOTE } from '@tubutree/app-core/ctv-dashboard';
 
 const CARD: CSSProperties = {
@@ -74,7 +74,7 @@ export default function WalletPage() {
 
   return (
     <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title={vi.profile.wallet} />
+      <PageHeader title={viProfile.wallet} />
       {phase !== 'authenticated' ? (
         <AuthPhaseView phase={phase} loading={pageSkeleton} />
       ) : walletQ.isLoading ? (

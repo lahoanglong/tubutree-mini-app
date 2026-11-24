@@ -280,7 +280,7 @@ Thứ tự khối Trang chủ cho khách cũ: header dính → thẻ thành viê
 
 ## Chữ chuẩn và thuật ngữ cấm
 
-Chữ mua sắm dùng chung chỉ thêm vào `packages/app-core/src/shop-copy.ts` (khoá `SHOP_COPY`, kèm ngân sách độ dài ở `shop-copy-budget.ts`); màn gọi `fillCopy('<khoá>')`, không viết chữ thẳng trong mã. Chữ đã chốt: "Bán chạy nhất", "Miễn phí giao hàng", "Được yêu thích", "Tubu chọn", "Mã giảm giá", "Thương hiệu", "Gian hàng", "Giờ vàng" (hoa chữ G), "Tạm hết hàng", "Ngừng bán", "Kết thúc sau {t}". Giọng: "bạn" và "Tubu".
+Chữ mua sắm dùng chung chỉ thêm vào `packages/app-core/src/shop-copy.ts` (khoá `SHOP_COPY`, kèm ngân sách độ dài ở `shop-copy-budget.ts`); màn gọi `fillCopy('<khoá>')`, không viết chữ thẳng trong mã. Mô-đun nằm trong gói đầu Mini App gọi `fillBootCopy('<khoá>')`, khoá ở `shop-copy-boot.ts`. Chữ đã chốt: "Bán chạy nhất", "Miễn phí giao hàng", "Được yêu thích", "Tubu chọn", "Mã giảm giá", "Thương hiệu", "Gian hàng", "Giờ vàng" (hoa chữ G), "Tạm hết hàng", "Ngừng bán", "Kết thúc sau {t}". Giọng: "bạn" và "Tubu".
 
 Nhãn đặt trên ô nhập (`Field`, địa chỉ, hoá đơn VAT, hồ sơ, đổi trả, ô nhập mã giảm giá) dùng bậc riêng `--type-field-label-*`: 12px, dòng 1,33, độ đậm 500 (Mini: `<Text variant="field-label">`; web: lớp `text-field-label`, `apps/web/src/field-label-style.spec.ts` quét các file có nhãn ô nhập). Bậc `--type-label-*` (12px, 600) chỉ dành cho chip, huy hiệu và nhãn nhỏ trên thẻ, không dùng cho nhãn ô nhập.
 
@@ -329,7 +329,7 @@ Khung trang rộng: `PAGE_WIDE` ở `apps/web/src/lib/page-frame.ts`. Trang web 
 3. Logic giá, nhãn, chữ đếm ngược, tổng combo viết ở `packages/app-core/src/commerce/` kèm spec.
 4. Kệ hàng mới khai ở `shelves.ts`; route mới khai ở `packages/app-core/src/route-map.json` (Mini và web cùng nhánh).
 5. Dựng từ `Section` + `SectionHeader` + `ProductGrid` hoặc `ProductRail`; Mini ở 375px trước, rồi web theo khuôn.
-6. Chữ mới vào `shop-copy.ts` (và ngân sách độ dài).
+6. Chữ mới vào `shop-copy.ts` (hoặc `shop-copy-boot.ts` nếu mô-đun nằm trong gói đầu Mini App) và ngân sách độ dài.
 7. Chạy bộ kiểm ở mục dưới, chụp 375px Mini và web đặt cạnh nhau (`apps/e2e/tests/visual-tour.miniapp.spec.ts`, `apps/e2e/tests/visual-tour.web.spec.ts`, rồi `apps/e2e/scripts/visual-pairs.mjs` ghép cặp), kèm trạng thái chờ, rỗng, lỗi, hết hàng.
 
 ## Kiểm tự động

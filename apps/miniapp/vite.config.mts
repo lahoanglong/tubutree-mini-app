@@ -104,9 +104,11 @@ export default defineConfig(({ command, mode }) => {
           entryFileNames: 'assets/[name].[hash:7].module.js',
           chunkFileNames: 'assets/[name].[hash:7].module.js',
           assetFileNames: 'assets/[name]-[hash:7][extname]',
-          // Tách thư viện nền (React + Router, ZMP SDK, React Query + Zustand) khỏi entry để gói khởi động gọn dưới trần 450 KB/700 KB;
+          // Tách thư viện nền (React + Router, ZMP SDK, React Query + Zustand) khỏi entry để gói khởi động gọn dưới ngưỡng entry của scripts/ci/bundle-budget.cjs;
           // KHÔNG gộp zmp-ui hay lucide-react vào vendor chung để giữ nguyên các chunk lazy (Sheet, icon trang quản trị).
           manualChunks(id) {
+            // Shim JSX của bản build (build-jsx-runtime.ts) đi cùng React: mọi chunk vẫn nhập JSX từ vendor-react như trước.
+            if (/[\\/]src[\\/]build-jsx-runtime\.ts$/.test(id)) return 'vendor-react';
             if (!id.includes('node_modules')) return undefined;
             if (/\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run\/router)\//.test(id)) {
               return 'vendor-react';

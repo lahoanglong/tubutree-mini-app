@@ -14,6 +14,7 @@ import { useAuthStore } from '../store/auth';
 import { SessionUnavailable, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
+import { viCommunity } from '../i18n/vi-community';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { Badge } from '../components/ui/badge';
@@ -54,12 +55,12 @@ function EventMeta({ event }: { event: CommunityEvent }) {
     <div style={{ marginTop: 8 }}>
       {!ended && (
         <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
-          {vi.community.eventJoinOnWeb}
+          {viCommunity.eventJoinOnWeb}
         </Text>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: ended ? 0 : 4, flexWrap: 'wrap' }}>
         <Text variant="caption" tone="tertiary">
-          {vi.community.eventEnds}: {formatDate(event.endAt)}
+          {viCommunity.eventEnds}: {formatDate(event.endAt)}
         </Text>
         {event.rewardPoints > 0 && (
           <Text variant="caption" tone="tertiary" numeric style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -69,7 +70,7 @@ function EventMeta({ event }: { event: CommunityEvent }) {
         )}
         {ended && (
           <Badge tone="neutral" size="sm">
-            {vi.community.eventEnded}
+            {viCommunity.eventEnded}
           </Badge>
         )}
       </div>
@@ -97,7 +98,7 @@ export default function CommunityEventsPage() {
   if (phase === 'loading') {
     return (
       <Page style={PAGE_BG}>
-        <PageHeader title={vi.community.events} />
+        <PageHeader title={viCommunity.events} />
         <CardSkeletons height={140} gap={12} />
       </Page>
     );
@@ -108,7 +109,7 @@ export default function CommunityEventsPage() {
   if (phase === 'unavailable') {
     return (
       <Page style={PAGE_BG}>
-        <PageHeader title={vi.community.events} />
+        <PageHeader title={viCommunity.events} />
         <SessionUnavailable />
       </Page>
     );
@@ -117,15 +118,15 @@ export default function CommunityEventsPage() {
   if (!authed) {
     return (
       <Page style={PAGE_BG}>
-        <PageHeader title={vi.community.events} />
-        <EmptyState art="sprout" heading={vi.community.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
+        <PageHeader title={viCommunity.events} />
+        <EmptyState art="sprout" heading={viCommunity.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
 
   return (
     <Page style={{ ...PAGE_BG, paddingBottom: 40 }}>
-      <PageHeader title={vi.community.events} />
+      <PageHeader title={viCommunity.events} />
 
       {selected ? (
         <EventEntries
@@ -155,7 +156,7 @@ function EventsList({
     return <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => eventsQ.refetch()} />;
   }
   if (!eventsQ.data || eventsQ.data.length === 0) {
-    return <EmptyState art="leaf" heading={vi.community.noEvents} />;
+    return <EmptyState art="leaf" heading={viCommunity.noEvents} />;
   }
   return (
     <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -245,7 +246,7 @@ function EventEntries({
             onBack();
           }}
         >
-          {vi.community.events}
+          {viCommunity.events}
         </Button>
 
         <div
@@ -278,7 +279,7 @@ function EventEntries({
         </div>
 
         <Heading variant="title-sm" as="h2" style={{ marginTop: 16, marginBottom: 4 }}>
-          {vi.community.eventEntries}
+          {viCommunity.eventEntries}
         </Heading>
       </div>
 
@@ -291,7 +292,7 @@ function EventEntries({
       ) : entriesQ.isError ? (
         <ErrorState message={getLoadErrorMessage(entriesQ.error)} onRetry={() => entriesQ.refetch()} />
       ) : entries.length === 0 ? (
-        <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.eventNoEntries} />
+        <EmptyState art="leaf" heading={viCommunity.emptyHeading} body={viCommunity.eventNoEntries} />
       ) : (
         <>
           {entries.map((post) => (

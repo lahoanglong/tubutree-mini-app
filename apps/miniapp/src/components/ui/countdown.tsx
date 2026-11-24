@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { countdownClockParts, countdownDelay, countdownFrame } from '@tubutree/app-core/commerce/countdown-tick';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { serverNow } from '../../utils/server-clock';
 
 export interface CountdownProps {
@@ -76,7 +76,7 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends', tone = 'flash' }:
   return (
     <span
       role="timer"
-      aria-label={frame.ended ? undefined : fillCopy(key, { t: frame.spoken })}
+      aria-label={frame.ended ? undefined : fillBootCopy(key, { t: frame.spoken })}
       aria-hidden={frame.ended ? true : undefined}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 3, visibility: frame.ended ? 'hidden' : undefined, fontVariantNumeric: 'tabular-nums' }}
     >
@@ -96,7 +96,7 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends', tone = 'flash' }:
         </>
       ) : (
         <span aria-hidden="true" style={{ color: accent, fontSize: 'var(--type-caption-size)', fontWeight: 600 }}>
-          {fillCopy(key, { t: frame.text })}
+          {fillBootCopy(key, { t: frame.text })}
         </span>
       )}
     </span>

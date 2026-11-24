@@ -14,7 +14,7 @@ import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { flashCardProduct, soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
@@ -151,7 +151,7 @@ export const FlashSale = memo(function FlashSale({ items, loading, error, onRetr
 function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => void }) {
   const label = (
     <Text variant="body-sm" tone="secondary">
-      {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
+      {fillBootCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
     </Text>
   );
   const frame: CSSProperties = {
@@ -179,7 +179,7 @@ function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => vo
     >
       {label}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--color-text-brand)', fontSize: 'var(--type-label-size)', fontWeight: 600, flex: '0 0 auto' }}>
-        {fillCopy('flash.remind')}
+        {fillBootCopy('flash.remind')}
         <Icon icon={ChevronRight} size="sm" tone="current" />
       </span>
     </button>
@@ -230,7 +230,7 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
       variant="flash"
       href={`/product/${encodeURIComponent(item.productSlug)}`}
       // Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem.
-      note={startsIn ? fillCopy('flash.startsInTile', { t: startsIn }) : vi.flashSale.live}
+      note={startsIn ? fillBootCopy('flash.startsInTile', { t: startsIn }) : vi.flashSale.live}
       footerHeight={startsIn ? REMIND_FOOTER_HEIGHT : undefined}
       footer={
         startsIn ? (

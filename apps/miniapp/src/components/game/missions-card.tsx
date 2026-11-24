@@ -12,7 +12,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { MissionItem } from '../../services/game-api';
 import { coreHttp } from '../../services/core-http';
 import { useAuthStore } from '../../store/auth';
-import { vi } from '../../i18n/vi';
+import { viGame } from '../../i18n/vi-game';
 import { formatNumber } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { browserStorage } from '../../utils/recently-viewed';
@@ -131,7 +131,7 @@ export function MissionsCard({
               )}
               {canClaim && (
                 <Button fullWidth loading={claiming} disabled={claiming} onPress={() => onClaim(m.code)} style={{ marginTop: 8 }}>
-                  {vi.game.missions.claim}
+                  {viGame.missions.claim}
                 </Button>
               )}
             </div>

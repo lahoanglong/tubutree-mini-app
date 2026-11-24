@@ -10,7 +10,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE, sampleShareText } from '@tubutree/app-core/storefront-signup';
 import { getPublicStorefront, type Storefront } from '../services/storefront-api';
 import { apiMediaUrl, getLoadErrorMessage, isNotFoundError } from '../services/api';
-import { vi } from '../i18n/vi';
+import { viStorefront } from '../i18n/vi-storefront';
 import { trustBadgeLabel } from '../utils/storefront-badge';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -56,9 +56,9 @@ export default function StorefrontViewPage() {
     const gone = isNotFoundError(q.error);
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.storefront.publicTitle} />
+        <PageHeader title={viStorefront.publicTitle} />
         {gone ? (
-          <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => goSmart('/')} />
+          <ErrorState message={viStorefront.notFound} onRetry={() => undefined} onHome={() => goSmart('/')} />
         ) : (
           <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
         )}
@@ -128,7 +128,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
         note={sf.headerNote}
         action={
           isOwner ? (
-            <Button variant="secondary" icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
+            <Button variant="secondary" icon={Share2} aria-label={viStorefront.shareStore} onPress={() => setShareOpen(true)}>
               {fillCopy('shop.share')}
             </Button>
           ) : undefined
@@ -154,9 +154,9 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
       {collections.length === 0 ? (
         <EmptyState
           art="basket"
-          heading={vi.storefront.emptyHeading}
-          body={isOwner ? vi.storefront.emptyOwnerBody : vi.storefront.emptyBody}
-          ctaLabel={isOwner ? vi.storefront.addProduct : vi.storefront.viewProducts}
+          heading={viStorefront.emptyHeading}
+          body={isOwner ? viStorefront.emptyOwnerBody : viStorefront.emptyBody}
+          ctaLabel={isOwner ? viStorefront.addProduct : viStorefront.viewProducts}
           onCta={() => goSmart(isOwner ? '/storefront' : '/browse')}
         />
       ) : (
@@ -201,7 +201,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
       {/* Không có nút dính đáy kéo khách rời gian hàng: lối sang danh mục chung chỉ là link phụ ở cuối trang. */}
       {!isOwner && collections.length > 0 && (
         <Box mt={2} px={4} style={{ textAlign: 'center' }}>
-          <Button variant="ghost" onPress={() => goSmart('/browse')}>{vi.storefront.moreAtTubu}</Button>
+          <Button variant="ghost" onPress={() => goSmart('/browse')}>{viStorefront.moreAtTubu}</Button>
         </Box>
       )}
 

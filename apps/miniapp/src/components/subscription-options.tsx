@@ -9,7 +9,7 @@ import {
 } from '../services/subscriptions-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { vi } from '../i18n/vi';
+import { viSubscriptions } from '../i18n/vi-subscriptions';
 import { Chip } from './ui/chip';
 import { Radio } from './ui/form';
 import { rowKeyboardProps } from './ui/row-keyboard';
@@ -63,7 +63,7 @@ export function nextRunAfterIntervalChange(
 }
 
 export function IntervalPicker({ value, onChange, disabled = false }: { value: number; onChange: (weeks: number) => void; disabled?: boolean }) {
-  const t = vi.subscriptions;
+  const t = viSubscriptions;
   return (
     <div role="group" aria-label={t.intervalLabel} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
       {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
@@ -147,7 +147,7 @@ export function PaymentMethodPicker({
   walletBalance?: number;
   disabled?: boolean;
 }) {
-  const t = vi.subscriptions;
+  const t = viSubscriptions;
   const walletBlocked = subscriptionWalletBlockedReason(walletBalance);
   const label = (m: SubscriptionPaymentMethod) =>
     m === 'WALLET' && walletBalance !== undefined ? t.payWalletBalance(formatVnd(walletBalance)) : t.payLabel[m];
@@ -180,7 +180,7 @@ export function AddressPicker({
   disabled?: boolean;
 }) {
   return (
-    <div role="radiogroup" aria-label={vi.subscriptions.addressLabel}>
+    <div role="radiogroup" aria-label={viSubscriptions.addressLabel}>
       {addresses.map((a) => (
         <RadioRow
           key={a.id}

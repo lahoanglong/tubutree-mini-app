@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -20,7 +20,11 @@ const AMOUNT = new RegExp(
 const MARKER = /\/\/ hardcoded-amount-ok: (.+)$/;
 
 // Các file chứa chữ hiển thị cho khách. Thêm file mới vào đây khi có chữ có số tiền ngoài vi.ts.
-const FILES = ['i18n/vi.ts', 'pages/about-data.ts'];
+// vi.ts và các tệp chữ tách riêng cho màn tải lười (vi-*.ts) đọc theo thư mục, để tệp chữ mới tự vào diện quét.
+const VI_FILES = readdirSync(__dirname)
+  .filter((f) => /^vi(-[a-z-]+)?\.ts$/.test(f))
+  .map((f) => `i18n/${f}`);
+const FILES = [...VI_FILES, 'pages/about-data.ts'];
 
 const isCommentOnly = (line: string) => /^\s*(\/\/|\/\*|\*)/.test(line);
 const hits = FILES.flatMap((file) =>

@@ -10,6 +10,8 @@ import type { Plugin } from 'vite';
  *     thì build dừng: thêm thành phần đó thì phải kiểm lại shim, hoặc trả gói thật cho cả Sheet.
  *   - `zmp-ui/esm/components/snackbar-provider` (SnackbarProvider + useSnackbar, kéo theo Icon và Progress của zmp-ui) → `build-snackbar-shim.ts`,
  *     hộp thông báo cùng API mà app dùng. Hai lối vào của zmp-ui (barrel `esm/index.js` và `esm/hooks/useSnackbar`) đều nhập thư mục này.
+ *   - `react/jsx-runtime` → `build-jsx-runtime.ts`: cùng ba hàm của runtime thật, xuất thành binding ES module để chỗ gọi JSX không phải đọc thuộc tính
+ *     của object CommonJS (`j.jsx(…)` thành `a(…)`).
  * Chỉ áp cho build: dev gói sẵn zmp-ui/zmp-sdk bằng esbuild (optimizeDeps) nên vẫn chạy thư viện gốc; e2e chạy trên bản build thật.
  */
 export const SHEET_CONTENT_FILE = /[\\/]zmp-ui[\\/]esm[\\/]components[\\/]sheet[\\/]content\.js$/;
@@ -29,9 +31,13 @@ export const SHEET_SHIMS: Readonly<Record<string, string>> = {
 
 const shimPath = (file: string) => fileURLToPath(new URL(`./${file}`, import.meta.url));
 
+/** `react/jsx-runtime` xuất lại thành binding ES module (build-jsx-runtime.ts); chính tệp shim vẫn nhập runtime thật. */
+export const JSX_RUNTIME_SHIM_FILE = /[\\/]src[\\/]build-jsx-runtime\.ts$/;
+
 /** Đường dẫn shim cho một lệnh import, `null` nếu không thay. */
 export function resolveVendorShim(source: string, importer: string | undefined): string | null {
   const from = (importer ?? '').split('?')[0] ?? '';
+  if (source === 'react/jsx-runtime' && from && !JSX_RUNTIME_SHIM_FILE.test(from)) return shimPath('build-jsx-runtime.ts');
   const sheetShim = SHEET_SHIMS[source];
   if (sheetShim && SHEET_CONTENT_FILE.test(from)) return shimPath(sheetShim);
   if (ZMP_SDK_ZOD_IMPORT.test(source) && ZMP_SDK_FILE.test(from)) return shimPath('build-zod-passthrough.ts');

@@ -68,7 +68,7 @@ vi.mock('../services/account-api', () => ({
 
 import GamePage from './game';
 import { HttpError } from '../services/http';
-import { vi as viText } from '../i18n/vi';
+import { viGame } from '../i18n/vi-game';
 
 const PROFILE = {
   totalSeeds: 1_250,
@@ -184,7 +184,7 @@ const CASES: Case[] = [
     label: 'nhận thưởng nhiệm vụ',
     api: () => mocks.api.claimMission,
     setup: () => mocks.api.getMissions.mockResolvedValue([MISSION]),
-    targets: byName(viText.game.missions.claim),
+    targets: byName(viGame.missions.claim),
   },
   {
     label: 'trả lời quiz (cùng đáp án)',
@@ -223,7 +223,7 @@ const CASES: Case[] = [
       mocks.features.seasonPass = true;
       mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: TIERS });
     },
-    targets: byName(viText.game.seasonPass.claim),
+    targets: byName(viGame.seasonPass.claim),
   },
 ];
 

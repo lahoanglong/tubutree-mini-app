@@ -1,5 +1,5 @@
 import type { CouponDTO } from '../api/loyalty';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { vnd, vndShort } from './money';
 
 const DAY_MS = 86_400_000;
@@ -37,11 +37,11 @@ export interface VoucherFlags {
 
 /** Nhãn ngắn của mã giảm giá, một bản cho Mini App và web (gộp bốn bản cũ, giữ nguyên chữ). */
 export function couponLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
-  if (c.type === 'FREESHIP') return fillCopy('coupon.freeship');
+  if (c.type === 'FREESHIP') return fillBootCopy('coupon.freeship');
   if (c.type === 'PERCENT') {
-    return c.maxDiscount ? fillCopy('coupon.percentMax', { pct: c.value, max: vnd(c.maxDiscount) }) : fillCopy('coupon.percent', { pct: c.value });
+    return c.maxDiscount ? fillBootCopy('coupon.percentMax', { pct: c.value, max: vnd(c.maxDiscount) }) : fillBootCopy('coupon.percent', { pct: c.value });
   }
-  return fillCopy('coupon.amount', { amount: vnd(c.value) });
+  return fillBootCopy('coupon.amount', { amount: vnd(c.value) });
 }
 
 /**
@@ -50,11 +50,11 @@ export function couponLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>
  * ghi dạng rút gọn này; chỉ giỏ còn dùng `couponLabel` đầy đủ.
  */
 export function couponTitle(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
-  if (c.type === 'FREESHIP') return fillCopy('coupon.freeship');
+  if (c.type === 'FREESHIP') return fillBootCopy('coupon.freeship');
   if (c.type === 'PERCENT') {
-    return c.maxDiscount ? fillCopy('coupon.titlePercentMax', { pct: c.value, max: vndShort(c.maxDiscount) }) : fillCopy('coupon.percent', { pct: c.value });
+    return c.maxDiscount ? fillBootCopy('coupon.titlePercentMax', { pct: c.value, max: vndShort(c.maxDiscount) }) : fillBootCopy('coupon.percent', { pct: c.value });
   }
-  return fillCopy('coupon.amount', { amount: vndShort(c.value) });
+  return fillBootCopy('coupon.amount', { amount: vndShort(c.value) });
 }
 
 const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -180,17 +180,17 @@ function vnDay(ms: number): number {
  */
 export function expiryText(endMs: number | null, now: number): string {
   if (endMs === null) return '';
-  if (endMs - now <= 0) return fillCopy('coupon.expired');
+  if (endMs - now <= 0) return fillBootCopy('coupon.expired');
   const lastMs = endMs - 1;
   const days = vnDay(lastMs) - vnDay(now);
-  if (days <= 0) return fillCopy('coupon.expiresToday');
-  if (days <= EXPIRING_DAYS) return fillCopy('coupon.expiresInDays', { n: days });
+  if (days <= 0) return fillBootCopy('coupon.expiresToday');
+  if (days <= EXPIRING_DAYS) return fillBootCopy('coupon.expiresInDays', { n: days });
   const d = new Date(lastMs + VN_OFFSET_MS);
   const dd = String(d.getUTCDate()).padStart(2, '0');
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const year = d.getUTCFullYear();
   const sameYear = year === new Date(now + VN_OFFSET_MS).getUTCFullYear();
-  return fillCopy('coupon.expires', { date: sameYear ? `${dd}/${mm}` : `${dd}/${mm}/${year}` });
+  return fillBootCopy('coupon.expires', { date: sameYear ? `${dd}/${mm}` : `${dd}/${mm}/${year}` });
 }
 
 /**
@@ -215,7 +215,7 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
             ? 'collectable'
             : 'saved';
   const title = couponTitle(c);
-  const condition = c.minOrder ? fillCopy('coupon.minOrder', { min: vndShort(c.minOrder) }) : '';
+  const condition = c.minOrder ? fillBootCopy('coupon.minOrder', { min: vndShort(c.minOrder) }) : '';
   const named = c.title?.trim() || null;
   return {
     id: c.code,
@@ -227,7 +227,7 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
     name: named && !restatesCoupon(named, c, [title, condition]) ? trimRepeatedLead(unifyFigures(named, c), title) : null,
     quota:
       state === 'collectable' && typeof c.remaining === 'number' && c.remaining >= 1 && c.remaining <= QUOTA_SHOWN_MAX
-        ? fillCopy('coupon.usesLeft', { n: c.remaining })
+        ? fillBootCopy('coupon.usesLeft', { n: c.remaining })
         : null,
     state,
   };

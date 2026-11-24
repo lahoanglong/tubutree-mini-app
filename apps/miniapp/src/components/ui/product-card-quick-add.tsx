@@ -1,6 +1,6 @@
 import { createContext, type MouseEvent } from 'react';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 
 /**
  * Nơi cắm nút ＋ thêm nhanh trên thẻ sản phẩm: thẻ không có phân loại nên việc tải chi tiết, hỏi bảng chọn và ghi giỏ do nơi cung cấp context lo (Trang chủ:
@@ -28,7 +28,7 @@ export function QuickAddButton({ name, busy, onPress }: QuickAddButtonProps) {
     <button
       type="button"
       className="tubu-hit-44-square"
-      aria-label={fillCopy('card.quickAdd', { name })}
+      aria-label={fillBootCopy('card.quickAdd', { name })}
       aria-busy={busy}
       aria-disabled={busy || undefined}
       onClick={(e: MouseEvent<HTMLButtonElement>) => {

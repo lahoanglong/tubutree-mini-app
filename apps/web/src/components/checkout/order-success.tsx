@@ -1,6 +1,6 @@
 'use client';
 
-// Nguồn: apps/miniapp/src/components/checkout/order-success.tsx (chữ ở i18n/vi.ts nhóm success).
+// Nguồn: apps/miniapp/src/components/checkout/order-success.tsx (chữ ở i18n/vi-checkout.ts, viSuccess).
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';

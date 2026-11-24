@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchProducts } from '../../services/shop-api';
-import { vi } from '../../i18n/vi';
+import { viSuggested } from '../../i18n/vi-catalog';
 import { Heading } from '../ui/text';
 import { CatalogGrid } from './catalog-grid';
 
@@ -11,7 +11,7 @@ const SUGGESTED_LIMIT = 4;
  * CTV vào đúng ngõ cụt thì vẫn có chỗ đi tiếp. Là phần phụ — đang tải, lỗi hay hết hàng thì không vẽ gì, để màn bên trên
  * không nhảy và không thêm một khối lỗi thứ hai.
  */
-export function SuggestedRail({ listSource, title = vi.suggested.title, limit = SUGGESTED_LIMIT }: { listSource: string; title?: string; limit?: number }) {
+export function SuggestedRail({ listSource, title = viSuggested.title, limit = SUGGESTED_LIMIT }: { listSource: string; title?: string; limit?: number }) {
   const q = useQuery({
     queryKey: ['products', 'suggested-rail', limit],
     queryFn: () => fetchProducts({ limit, sort: 'best_seller' }),

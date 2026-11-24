@@ -6,7 +6,7 @@ import { serverNow } from '../server-clock';
 import { joinVariationLine, variationLabel } from '../variation-label';
 import { addOneCardPricing } from './add-one-pricing';
 import { variationLinePreview } from './flash-line';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 
 /**
  * Dải "Mua lại món quen" ở Trang chủ: món khách đã nhận hàng (hoặc, khi chưa có đơn nào, món vừa xem) dưới dạng thẻ thêm một chạm.
@@ -161,7 +161,7 @@ export function quickReorderTotal(items: readonly QuickReorderItem[]): number {
  * để khách dùng trình đọc màn hình không bị đổi món mà không biết.
  */
 export function quickReorderAddAllAria(items: readonly QuickReorderItem[], money: (n: number) => string): string {
-  const spoken = fillCopy('quickReorder.addAllAria', { n: items.length, total: money(quickReorderTotal(items)) });
+  const spoken = fillBootCopy('quickReorder.addAllAria', { n: items.length, total: money(quickReorderTotal(items)) });
   const refills = items.filter((i) => i.badge).length;
-  return refills > 0 ? `${spoken}${fillCopy('refill.railAllNote', { n: refills })}` : spoken;
+  return refills > 0 ? `${spoken}${fillBootCopy('refill.railAllNote', { n: refills })}` : spoken;
 }

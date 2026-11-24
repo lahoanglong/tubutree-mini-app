@@ -1,5 +1,5 @@
 import { variationPricing, type FlashPriceItem } from '../flash-price';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { vnd } from './money';
 
 /** Lượng tịnh quy về một chiều: `ml` (thể tích), `g` (khối lượng) hoặc tên món đếm được ("viên", "gói"...). */
@@ -110,7 +110,7 @@ export function unitPriceView(variations: readonly UnitPriceVariation[], product
   if (rows.some((r) => scan(r.v.name ?? '') === null) && rows.some((r) => r.v.price !== rows[0]!.v.price)) return null;
   const per = unit === 'ml' || unit === 'g' ? `100${unit}` : unit;
   const of = (r: (typeof rows)[number]) => (r.v.price / r.a!.qty) * (per === unit ? 1 : 100);
-  const text = (r: (typeof rows)[number]) => fillCopy('pdp.unitPrice', { price: vnd(roundUnitPrice(of(r))), per });
+  const text = (r: (typeof rows)[number]) => fillBootCopy('pdp.unitPrice', { price: vnd(roundUnitPrice(of(r))), per });
   const sel = rows.find((r) => r.v.id === selectedId) ?? rows[0]!;
   // Bằng giá theo đơn vị thì nhãn ưu tiên phân loại cùng loại với cái đang chọn ("Da khô 150ml" khi đang chọn "Da khô 30ml", không sang "Da dầu").
   const other = (r: (typeof rows)[number]) => (r.kind === sel.kind ? 0 : 1);
@@ -120,7 +120,7 @@ export function unitPriceView(variations: readonly UnitPriceVariation[], product
   return {
     line: text(sel),
     chips: rows.some((r) => r.a!.qty !== sel.a!.qty) ? Object.fromEntries(rows.map((r) => [r.v.id, text(r)])) : null,
-    better: pct >= 5 ? { id: best!.v.id, text: fillCopy('pdp.unitBetter', { pct, per }) } : null,
+    better: pct >= 5 ? { id: best!.v.id, text: fillBootCopy('pdp.unitBetter', { pct, per }) } : null,
   };
 }
 

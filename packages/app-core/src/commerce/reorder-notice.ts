@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { vnd } from './money';
 import { isLowStock } from './stock-text';
 
@@ -37,14 +37,14 @@ export interface ReorderLineNotice {
 export function reorderLineNotices(f: ReorderLineFacts): ReorderLineNotice[] {
   if (!f.available) {
     return f.discontinued
-      ? [{ kind: 'discontinued', tone: 'danger', text: fillCopy('stock.discontinued') }]
-      : [{ kind: 'out', tone: 'danger', text: fillCopy('stock.out') }];
+      ? [{ kind: 'discontinued', tone: 'danger', text: fillBootCopy('stock.discontinued') }]
+      : [{ kind: 'out', tone: 'danger', text: fillBootCopy('stock.out') }];
   }
   const notices: ReorderLineNotice[] = [];
   if (f.stock !== null && f.stock < f.orderedQuantity && f.stock <= f.cap && isLowStock(f.stock)) {
-    notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyReduced', { old: f.orderedQuantity }) });
+    notices.push({ kind: 'reduced', tone: 'warning', text: fillBootCopy('reorder.qtyReduced', { old: f.orderedQuantity }) });
   } else if (f.orderedQuantity > f.cap) {
-    notices.push({ kind: 'reduced', tone: 'warning', text: fillCopy('reorder.qtyCapped', { n: f.cap }) });
+    notices.push({ kind: 'reduced', tone: 'warning', text: fillBootCopy('reorder.qtyCapped', { n: f.cap }) });
   }
   const price = f.currentPrice === null ? null : priceNotice(f.paidPrice, f.currentPrice);
   if (price) notices.push(price);
@@ -53,8 +53,8 @@ export function reorderLineNotices(f: ReorderLineFacts): ReorderLineNotice[] {
 
 /** Tăng hay giảm so với đơn giá đã trả, kèm giá cũ; null khi bằng nhau. */
 function priceNotice(paid: number, now: number): ReorderLineNotice | null {
-  if (now > paid) return { kind: 'priceUp', tone: 'warning', text: fillCopy('reorder.priceUp', { old: vnd(paid) }) };
-  if (now < paid) return { kind: 'priceDown', tone: 'success', text: fillCopy('reorder.priceDown', { old: vnd(paid) }) };
+  if (now > paid) return { kind: 'priceUp', tone: 'warning', text: fillBootCopy('reorder.priceUp', { old: vnd(paid) }) };
+  if (now < paid) return { kind: 'priceDown', tone: 'success', text: fillBootCopy('reorder.priceDown', { old: vnd(paid) }) };
   return null;
 }
 
@@ -130,7 +130,7 @@ export function reorderSavings(
 
 /** Câu tiết kiệm dưới dòng Tạm tính của sheet; null khi không có gì tiết kiệm. */
 export function reorderSavingsNote(saved: number): string | null {
-  return saved > 0 ? fillCopy('reorder.savedVsBefore', { x: vnd(saved) }) : null;
+  return saved > 0 ? fillBootCopy('reorder.savedVsBefore', { x: vnd(saved) }) : null;
 }
 
 /** Số lượng từng biến thể đang có trong giỏ (giỏ mỗi biến thể một dòng; cộng dồn nếu API trả trùng). Chưa tải giỏ: bảng rỗng. */
@@ -157,7 +157,7 @@ export function cartUnitsReady(query: {
 export function reorderSkippedNote(lines: readonly { available: boolean }[]): string | null {
   const skipped = lines.filter((l) => !l.available).length;
   if (skipped === 0) return null;
-  return skipped === lines.length ? fillCopy('reorder.allSkipped') : fillCopy('reorder.someSkipped', { n: skipped });
+  return skipped === lines.length ? fillBootCopy('reorder.allSkipped') : fillBootCopy('reorder.someSkipped', { n: skipped });
 }
 
 /**

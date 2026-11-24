@@ -1,6 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
-import { fillCopy } from './shop-copy';
+import { fillBootCopy } from './shop-copy-boot';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -325,8 +325,8 @@ export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
     id: 'subscription',
     tier: 'chip',
     title: 'Mua xoay vòng',
-    subtitle: fillCopy('home.pillar.subscribe.subtitle'),
-    badge: fillCopy('home.pillar.subscribe.badge'),
+    subtitle: fillBootCopy('home.pillar.subscribe.subtitle'),
+    badge: fillBootCopy('home.pillar.subscribe.badge'),
     tone: 'botanical',
     webHref: '/san-pham?filter=subscription',
     miniRoute: '/subscriptions',
@@ -382,7 +382,7 @@ export function resolveHomeEcosystemPillars(opts: HomePillarOptions = {}): HomeE
       ];
     }
     if (p.id === 'subscription' && pct !== null) {
-      return [{ ...p, subtitle: fillCopy('home.pillar.subscribe.subtitlePct', { pct }), badge: fillCopy('home.pillar.subscribe.badgePct', { pct }) }];
+      return [{ ...p, subtitle: fillBootCopy('home.pillar.subscribe.subtitlePct', { pct }), badge: fillBootCopy('home.pillar.subscribe.badgePct', { pct }) }];
     }
     return [p];
   });

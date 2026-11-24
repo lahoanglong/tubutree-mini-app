@@ -3,11 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { COMMISSION_META, CTV_TERMS, PAYOUT_META, WITHDRAWING_META } from './ctv-copy';
 
-const miniappVi = readFileSync(fileURLToPath(new URL('../../../../miniapp/src/i18n/vi.ts', import.meta.url)), 'utf8');
+const miniappVi = readFileSync(fileURLToPath(new URL('../../../../miniapp/src/i18n/vi-affiliate.ts', import.meta.url)), 'utf8');
 const miniappPage = readFileSync(fileURLToPath(new URL('../../../../miniapp/src/pages/affiliate.tsx', import.meta.url)), 'utf8');
 
 describe('chữ CTV giữ khớp Mini App', () => {
-  it('điều khoản và phiên bản điều khoản trùng vi.ctvTerms của Mini App (máy chủ lưu phiên bản này)', () => {
+  it('điều khoản và phiên bản điều khoản trùng viCtvTerms (i18n/vi-affiliate.ts) của Mini App (máy chủ lưu phiên bản này)', () => {
     expect(miniappVi).toContain(`version: '${CTV_TERMS.version}'`);
     expect(miniappVi).toContain(`heading: '${CTV_TERMS.heading}'`);
     for (const item of [...CTV_TERMS.items, CTV_TERMS.agree, CTV_TERMS.mustAgree]) expect(miniappVi).toContain(`'${item}'`);

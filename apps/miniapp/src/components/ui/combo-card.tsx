@@ -2,7 +2,7 @@ import { Fragment, type CSSProperties } from 'react';
 import { comboItemPrices } from '@tubutree/app-core/commerce/combo-item-prices';
 import type { ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { vnd } from '@tubutree/app-core/commerce/money';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { Badge } from './badge';
 import { Button } from './button';
 import { Card } from './card';
@@ -78,7 +78,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         </h3>
         {pctShown > 0 && saving > 0 && !soldOut && (
           <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
-            <Badge tone="promo" size="sm">{fillCopy('combo.badge', { pct: pctShown })}</Badge>
+            <Badge tone="promo" size="sm">{fillBootCopy('combo.badge', { pct: pctShown })}</Badge>
           </span>
         )}
       </div>
@@ -99,13 +99,13 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
               data-testid="combo-more"
               style={{ flex: '0 0 auto', width: THUMB, height: THUMB, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-media)', background: 'var(--color-bg-chip)', color: 'var(--color-text-secondary)', fontWeight: 700, fontSize: 'var(--type-body-md-size)', fontVariantNumeric: 'tabular-nums' }}
             >
-              {fillCopy('combo.more', { n: extra })}
+              {fillBootCopy('combo.more', { n: extra })}
             </span>
           </>
         )}
       </div>
 
-      <ul aria-label={fillCopy('combo.itemsLabel', { n: items.length })} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <ul aria-label={fillBootCopy('combo.itemsLabel', { n: items.length })} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {items.map((it, i) => {
           const name = it.stockText ? `${it.name} · ${it.stockText}` : it.name;
           const color = it.stock === 'out' ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)';
@@ -133,25 +133,25 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
       </ul>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10, flexWrap: 'wrap', lineHeight: 'var(--type-caption-lh)' }}>
-        <span style={{ fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>{fillCopy('combo.setLabel')}</span>
+        <span style={{ fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>{fillBootCopy('combo.setLabel')}</span>
         {/* Tạm hết: khoản tiết kiệm không mua được nên không gạch giá cũ và không tô màu giảm. */}
         <PriceTag value={comboTotal} compareAt={soldOut ? undefined : total} size="md" tone={saving > 0 && !soldOut ? 'deal' : 'default'} />
       </div>
       {saving > 0 && !soldOut && (
         <div style={{ marginTop: 2, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)', fontVariantNumeric: 'tabular-nums' }}>
-          {fillCopy('combo.save', { save: vnd(saving) })}
+          {fillBootCopy('combo.save', { save: vnd(saving) })}
         </div>
       )}
 
       <div style={{ marginTop: 10 }}>
         {soldOut ? (
           // Tên nút kèm tên combo: hai combo cùng hết hàng trên một trang không trùng tên.
-          <Button fullWidth aria-disabled aria-label={fillCopy('combo.soldOutSpoken', { title })} style={SOLD_OUT_BUTTON}>
-            {fillCopy('combo.soldOut')}
+          <Button fullWidth aria-disabled aria-label={fillBootCopy('combo.soldOutSpoken', { title })} style={SOLD_OUT_BUTTON}>
+            {fillBootCopy('combo.soldOut')}
           </Button>
         ) : (
-          <Button fullWidth loading={busy} aria-label={fillCopy('combo.addSpoken', { title, n: items.length, price: vnd(comboTotal) })} onPress={onAddAll}>
-            {fillCopy('combo.add')}
+          <Button fullWidth loading={busy} aria-label={fillBootCopy('combo.addSpoken', { title, n: items.length, price: vnd(comboTotal) })} onPress={onAddAll}>
+            {fillBootCopy('combo.add')}
           </Button>
         )}
       </div>
@@ -162,7 +162,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
           onClick={onSeeItems}
           style={{ display: 'block', width: '100%', minHeight: 44, marginTop: 2, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--type-label-size)', fontWeight: 600, color: 'var(--color-text-brand)' }}
         >
-          {fillCopy('combo.seeItems')}
+          {fillBootCopy('combo.seeItems')}
         </button>
       )}
     </Card>

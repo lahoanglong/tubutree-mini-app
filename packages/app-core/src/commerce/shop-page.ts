@@ -1,6 +1,6 @@
 import type { CatalogSort } from '../api/catalog';
 import { formatVnNumber } from '../number-format';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { SHOP_MAX_SECTIONS } from './collection-view';
 import type { ShopStat } from './shop-stats';
 import { expiryText, type VoucherView } from './voucher';
@@ -18,11 +18,11 @@ export interface ShopTab {
 /** Tab của trang shop. Thương hiệu không có bộ sưu tập nên truyền `hasCategories: false` và thêm `hasStory`. */
 export function shopTabs(i: { productCount: number; hasStory?: boolean; hasCategories?: boolean }): ShopTab[] {
   const tabs: ShopTab[] = [
-    { key: 'shop', label: fillCopy('shop.tabShop') },
-    { key: 'products', label: fillCopy('shop.tabProducts'), count: i.productCount },
+    { key: 'shop', label: fillBootCopy('shop.tabShop') },
+    { key: 'products', label: fillBootCopy('shop.tabProducts'), count: i.productCount },
   ];
-  if (i.hasCategories !== false) tabs.push({ key: 'categories', label: fillCopy('shop.tabCategories') });
-  if (i.hasStory) tabs.push({ key: 'story', label: fillCopy('shop.tabStory') });
+  if (i.hasCategories !== false) tabs.push({ key: 'categories', label: fillBootCopy('shop.tabCategories') });
+  if (i.hasStory) tabs.push({ key: 'story', label: fillBootCopy('shop.tabStory') });
   return tabs;
 }
 
@@ -30,10 +30,10 @@ export type ShopSort = 'popular' | 'newest' | 'best_seller_30d' | 'price_asc' | 
 
 /** Bốn mục của SortBar; "Giá" là một mục tự đảo chiều (xem `nextShopSort`). */
 export const SHOP_SORT_OPTIONS: { value: string; label: string; spoken?: string }[] = [
-  { value: 'popular', label: fillCopy('shop.sortPopular') },
-  { value: 'newest', label: fillCopy('shop.sortNew') },
-  { value: 'best_seller_30d', label: fillCopy('shop.sortSold') },
-  { value: 'price', label: fillCopy('shop.sortPrice'), spoken: fillCopy('shop.sortPriceSpoken') },
+  { value: 'popular', label: fillBootCopy('shop.sortPopular') },
+  { value: 'newest', label: fillBootCopy('shop.sortNew') },
+  { value: 'best_seller_30d', label: fillBootCopy('shop.sortSold') },
+  { value: 'price', label: fillBootCopy('shop.sortPrice'), spoken: fillBootCopy('shop.sortPriceSpoken') },
 ];
 
 export function shopSortValue(s: ShopSort): string {
@@ -192,7 +192,7 @@ export function brandStatsInput(b: { productCount?: number; products: StatProduc
 export function followerStat(n: number | null | undefined): ShopStat | null {
   const v = Number(n ?? 0);
   if (!Number.isFinite(v) || v < 1) return null;
-  return { label: fillCopy('stats.followers'), value: formatVnNumber(v), spoken: fillCopy('stats.followersSpoken', { n: formatVnNumber(v) }) };
+  return { label: fillBootCopy('stats.followers'), value: formatVnNumber(v), spoken: fillBootCopy('stats.followersSpoken', { n: formatVnNumber(v) }) };
 }
 
 /** Khuyến mãi của thương hiệu thành phiếu `VoucherTicket variant="chip"`: có mã thì sao chép được, không mã chỉ là thông tin. */

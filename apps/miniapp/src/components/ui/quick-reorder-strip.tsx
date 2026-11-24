@@ -1,6 +1,6 @@
 import { QUICK_REORDER_CARD_HEIGHT } from '@tubutree/app-core/home-layout';
 import { quickReorderAddAllAria, type QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { formatVnd } from '../../utils/format';
 import { Badge } from './badge';
 import { Button } from './button';
@@ -39,7 +39,7 @@ export function QuickReorderStrip({
   onOpen,
 }: QuickReorderStripProps) {
   if (items.length === 0) return null;
-  const title = fillCopy('quickReorder.title');
+  const title = fillBootCopy('quickReorder.title');
   // Một lệnh bay mỗi lúc: nút khác khoá hẳn thay vì xếp hàng, vì lệnh sau có thể thành "đã có trong giỏ" ngoài ý khách.
   const locked = busyAll || busyKey !== null;
   return (
@@ -48,7 +48,7 @@ export function QuickReorderStrip({
         <SectionHeader
           title={title}
           action={{
-            label: fillCopy('quickReorder.addAll'),
+            label: fillBootCopy('quickReorder.addAll'),
             spoken: quickReorderAddAllAria(items, formatVnd),
             disabled: locked,
             busy: busyAll,
@@ -67,7 +67,7 @@ export function QuickReorderStrip({
               (item.savePct > 0
                 ? `-${item.savePct}%`
                 : item.timesBought > 1
-                  ? fillCopy('quickReorder.timesBought', { n: item.timesBought })
+                  ? fillBootCopy('quickReorder.timesBought', { n: item.timesBought })
                   : null);
             return (
               <div key={item.key} className="tubu-quick-cell">
@@ -110,7 +110,7 @@ export function QuickReorderStrip({
                     data-variation-id={item.variationId}
                     aria-label={
                       item.addAria ??
-                      fillCopy('quickReorder.addAria', {
+                      fillBootCopy('quickReorder.addAria', {
                         name: item.name,
                         price: formatVnd(item.price),
                       })
@@ -119,7 +119,7 @@ export function QuickReorderStrip({
                     disabled={locked && !busy}
                     onPress={() => onAdd(item)}
                   >
-                    {item.addLabel ?? fillCopy('quickReorder.add')}
+                    {item.addLabel ?? fillBootCopy('quickReorder.add')}
                   </Button>
                 </div>
               </div>

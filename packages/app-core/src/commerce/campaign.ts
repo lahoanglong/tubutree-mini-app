@@ -3,7 +3,7 @@ import type { PageResponse, ProductCard } from '../api/catalog';
 import type { HomeKindState } from '../home-layout';
 import { CAMPAIGN_ENTITY_SLUG_RE, CAMPAIGN_INTERNAL_TARGETS, CAMPAIGN_SLIDES_MAX, campaignLinkUsable } from '@tubutree/shared-types';
 import { liveRoute } from '../merch/route-fallback';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { sortVouchers, voucherView, type VoucherView } from './voucher';
 
 export { CAMPAIGN_SLIDES_MAX };
@@ -92,7 +92,7 @@ function vnDayMonth(iso: string): string | null {
 export function campaignDateRange(c: Pick<CampaignBanner, 'startAt' | 'endAt'>): string {
   const a = vnDayMonth(c.startAt);
   const b = vnDayMonth(c.endAt);
-  return a && b ? fillCopy('campaign.dateRange', { a, b }) : '';
+  return a && b ? fillBootCopy('campaign.dateRange', { a, b }) : '';
 }
 
 /** Mã của chiến dịch dạng thẻ voucher: sắp hết hạn trước. Là mã công khai nên trạng thái luôn "saved" (dùng được ngay), không có nút nhận. */

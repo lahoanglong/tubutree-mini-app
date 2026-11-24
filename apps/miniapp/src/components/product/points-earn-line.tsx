@@ -8,6 +8,7 @@ import { pointsEarnPreview } from '../../utils/points-earn';
 import { percentLabel, pointsBoostOf } from '../../utils/loyalty-copy';
 import { PointsEarnSheet } from './points-earn-sheet';
 import { vi } from '../../i18n/vi';
+import { viExternalPoints } from '../../i18n/vi-external-points';
 
 /**
  * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập và tài khoản chưa có hạng thì server tính hệ số 1
@@ -37,7 +38,7 @@ export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; a
     tier,
     guest: authStatus !== 'authenticated' && authStatus !== 'loading',
     generic: preview === 'generic',
-    marketplace: boost?.kind === 'compare' ? vi.externalPoints.boostSub(percentLabel(boost.marketplacePct), percentLabel(boost.appPct)) : null,
+    marketplace: boost?.kind === 'compare' ? viExternalPoints.boostSub(percentLabel(boost.marketplacePct), percentLabel(boost.appPct)) : null,
   });
   return (
     <>

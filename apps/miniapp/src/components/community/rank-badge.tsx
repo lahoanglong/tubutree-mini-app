@@ -1,4 +1,4 @@
-import { vi } from '../../i18n/vi';
+import { viCommunity } from '../../i18n/vi-community';
 import { Text } from '../ui/text';
 
 // Emoji + tên hạng theo authorLevel (1..4) trả về từ BE (FeedItem/FeedComment/LeaderboardEntry).
@@ -13,13 +13,13 @@ export function levelEmoji(level: number): string {
 export function levelName(level: number): string {
   switch (level) {
     case 2:
-      return vi.community.level2;
+      return viCommunity.level2;
     case 3:
-      return vi.community.level3;
+      return viCommunity.level3;
     case 4:
-      return vi.community.level4;
+      return viCommunity.level4;
     default:
-      return vi.community.level1;
+      return viCommunity.level1;
   }
 }
 

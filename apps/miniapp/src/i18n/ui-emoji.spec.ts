@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
@@ -13,13 +13,16 @@ const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿⌚⌛⏩-⏿⭐]/u;
 
 /** Lời nhắn/chúc hiện qua toast hoặc dòng giới thiệu — nội dung khích lệ, không phải nhãn điều khiển. */
 const ENCOURAGEMENT_KEYS = new Set([
-  'added', 'createdNow', 'createdScheduled', 'createdExisting', 'freeshipReached',
+  'added', 'createdNow', 'createdScheduled', 'createdExisting',
   'successTitle', 'subtitle', 'reported', 'ok', 'claimOk', 'markDoneOk',
 ]);
 /** Ký tự sao của điểm đánh giá ("Từ 4★"): chữ, không phải emoji; selector e2e đang dùng nguyên chuỗi này. */
 const RATING_KEYS = new Set(['rating4Chip', 'rating4']);
 
-const lines = readFileSync(join(process.cwd(), 'src/i18n/vi.ts'), 'utf8').split(/\r?\n/);
+// vi.ts và các tệp chữ tách riêng cho màn tải lười (vi-*.ts).
+const I18N = join(process.cwd(), 'src/i18n');
+const VI_FILES = readdirSync(I18N).filter((f) => /^vi(-[a-z-]+)?\.ts$/.test(f));
+const lines = VI_FILES.flatMap((f) => readFileSync(join(I18N, f), 'utf8').split(/\r?\n/));
 
 describe('i18n/vi.ts — emoji chỉ ở lời nhắn khích lệ', () => {
   it('mọi dòng có emoji thuộc danh sách lời nhắn đã duyệt', () => {

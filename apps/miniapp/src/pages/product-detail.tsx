@@ -50,6 +50,7 @@ import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
 import { formatVnd, formatSold } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
+import { viContentKit } from '../i18n/vi-catalog';
 import { haptic } from '../utils/haptic';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
@@ -1301,7 +1302,7 @@ export default function ProductDetailPage() {
             mt={2}
             role="button"
             {...rowKeyboardProps()}
-            aria-label={vi.contentKit.sheetTitle}
+            aria-label={viContentKit.sheetTitle}
             onClick={() => {
               haptic('light');
               setShowContentKit(true);
@@ -1313,7 +1314,7 @@ export default function ProductDetailPage() {
             </Box>
             <Box style={{ flex: 1 }}>
               <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>
-                {vi.contentKit.sheetTitle}
+                {viContentKit.sheetTitle}
               </Text>
               <Text variant="caption" tone="tertiary" as="div">
                 Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được

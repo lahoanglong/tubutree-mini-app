@@ -1,7 +1,7 @@
 import type { ElementType, ReactNode } from 'react';
 import { ChevronRight, Flame, Gift, Leaf, Loader2, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { haptic } from '../../utils/haptic';
 
 /** Bảng icon nhỏ cho tiêu đề khối: chỉ 7 icon để `SectionHeader` vào gói đầu (Trang chủ) không kéo cả thư viện; icon khác truyền thẳng `LucideIcon`. */
@@ -35,7 +35,7 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
   const navigate = useNavigate();
   const IconCmp = typeof icon === 'string' ? ICONS[icon] : icon;
   const promo = tone === 'promo';
-  const actionLabel = action?.label ?? fillCopy('section.seeAll');
+  const actionLabel = action?.label ?? fillBootCopy('section.seeAll');
   const H = Heading as ElementType;
   const actionLocked = Boolean(action?.onPress && (action.disabled || action.busy));
   // Đang chạy (vd "Thêm lại tất cả"): vòng xoay thay mũi tên và chữ giữ đậm, khách thấy lệnh đang bay chứ không tưởng nút bị khoá.
@@ -85,7 +85,7 @@ export function SectionHeader({ title, id, icon, tone = 'default', trailing, act
           className="tubu-press"
           disabled={actionLocked}
           aria-busy={action.onPress && action.busy ? true : undefined}
-          aria-label={action.spoken ?? (action.label ? `${action.label} ${title}` : fillCopy('section.seeAllSpoken', { title }))}
+          aria-label={action.spoken ?? (action.label ? `${action.label} ${title}` : fillBootCopy('section.seeAllSpoken', { title }))}
           onClick={() => {
             if (actionLocked) return;
             haptic('light');

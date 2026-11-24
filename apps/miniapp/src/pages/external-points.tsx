@@ -32,7 +32,7 @@ import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
-import { vi } from '../i18n/vi';
+import { viExternalPoints } from '../i18n/vi-external-points';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { INPUT_LIMITS } from '../utils/input-limits';
@@ -40,7 +40,7 @@ import { Input } from '../components/ui/input';
 
 const PAGE_SIZE = 10;
 const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];
-const t = vi.externalPoints;
+const t = viExternalPoints;
 
 // App đã có SĐT mà máy chủ vẫn không coi tài khoản đủ điều kiện (máy chủ thiếu SĐT hoặc tài khoản bị khoá): chia sẻ lại SĐT không giúp vì máy chủ giữ SĐT cũ, chỉ CSKH gỡ được.
 const ACCOUNT_NOT_ELIGIBLE = 'Tài khoản của bạn chưa đủ điều kiện tích điểm đơn sàn. Bạn liên hệ CSKH Tubu để được hỗ trợ nhé.';

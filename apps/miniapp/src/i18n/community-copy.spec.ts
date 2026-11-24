@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { vi } from './vi';
+import { viCommunity } from './vi-community';
 
 /**
  * C-073: Tubu bán mỹ phẩm, tẩy rửa, đồ cho mẹ & bé, cà phê, thực phẩm — không bán cây cảnh. Lời trong khối cộng đồng
@@ -16,12 +16,12 @@ function collectStrings(node: unknown, out: string[] = []): string[] {
 }
 
 describe('lời cộng đồng nói về hàng đang bán, không phải cây cảnh (C-073)', () => {
-  it('khối vi.community không còn ví dụ/nhãn về chăm cây', () => {
-    const offenders = collectStrings(vi.community).filter((s) => PLANT_COPY.test(s));
+  it('khối viCommunity không còn ví dụ/nhãn về chăm cây', () => {
+    const offenders = collectStrings(viCommunity).filter((s) => PLANT_COPY.test(s));
     expect(offenders).toEqual([]);
   });
 
   it('nút gắn sản phẩm trong bài không gọi sản phẩm là "cây"', () => {
-    expect(vi.community.buyThis).toBe('Mua sản phẩm này');
+    expect(viCommunity.buyThis).toBe('Mua sản phẩm này');
   });
 });

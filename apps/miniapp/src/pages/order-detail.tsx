@@ -31,6 +31,8 @@ import {
   shouldShowFollowOaPrompt,
 } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
+import { viCheckout } from '../i18n/vi-checkout';
+import { viOrderStatus, viOrders, viPaymentMethod } from '../i18n/vi-orders';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -272,7 +274,7 @@ export default function OrderDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       setConfirmCancel(false);
       haptic('medium');
-      openSnackbar({ text: vi.orders.cancelled, type: 'success' });
+      openSnackbar({ text: viOrders.cancelled, type: 'success' });
     },
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
@@ -366,7 +368,7 @@ export default function OrderDetailPage() {
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const timelineTitle = (
     <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 12 }}>
-      {vi.orders.timeline}
+      {viOrders.timeline}
     </Text>
   );
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
@@ -491,7 +493,7 @@ export default function OrderDetailPage() {
       {/* ── Sản phẩm ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 8 }}>
-          {vi.orders.products}
+          {viOrders.products}
         </Text>
         {itemLinks.map(({ it, slug, review }, i) => (
           <Box key={it.id} data-review-focus={i === reviewTarget ? 'row' : undefined} style={{ padding: '6px 0' }}>
@@ -542,7 +544,7 @@ export default function OrderDetailPage() {
                   type="button"
                   className="tubu-press tubu-hit-44"
                   style={REVIEW_LINK}
-                  aria-label={`${review.kind === 'edit' ? vi.orders.editReviewItem : vi.orders.reviewItem} ${it.productName}`}
+                  aria-label={`${review.kind === 'edit' ? viOrders.editReviewItem : viOrders.reviewItem} ${it.productName}`}
                   data-review-focus={i === reviewTarget ? 'cta' : undefined}
                   onClick={() => {
                     haptic('light');
@@ -550,7 +552,7 @@ export default function OrderDetailPage() {
                   }}
                 >
                   <Icon icon={Star} size="sm" tone="brand" />
-                  {review.kind === 'edit' ? vi.orders.editReviewItem : vi.orders.reviewItem}
+                  {review.kind === 'edit' ? viOrders.editReviewItem : viOrders.reviewItem}
                 </button>
               )
             )}
@@ -566,15 +568,15 @@ export default function OrderDetailPage() {
         ))}
         {/* Đơn cũ chỉ có tổng giảm giá: nói số điểm đã dùng nằm trong dòng trên, không phải một khoản trừ nữa. */}
         {o.pointsUsed > 0 && !o.pointsDiscount && (
-          <KeyValueRow label={vi.orders.pointsUsed} value={formatPoints(o.pointsUsed)} />
+          <KeyValueRow label={viOrders.pointsUsed} value={formatPoints(o.pointsUsed)} />
         )}
         <KeyValueRow
-          label={vi.checkout.shippingFee}
+          label={viCheckout.shippingFee}
           value={o.shippingFee === 0 ? vi.common.freeShip : formatVnd(o.shippingFee)}
           tone={o.shippingFee === 0 ? 'success' : 'primary'}
         />
-        <KeyValueRow label={vi.checkout.total} value={formatVnd(o.total)} emphasis />
-        <KeyValueRow label={vi.orders.paymentLabel} value={vi.paymentMethod[o.paymentMethod] ?? o.paymentMethod} />
+        <KeyValueRow label={viCheckout.total} value={formatVnd(o.total)} emphasis />
+        <KeyValueRow label={viOrders.paymentLabel} value={viPaymentMethod[o.paymentMethod] ?? o.paymentMethod} />
         {o.codSwitchable && (
           <Box mt={2} data-testid="cod-switch">
             <CodSwitchAction code={o.code} total={o.total} />
@@ -632,7 +634,7 @@ export default function OrderDetailPage() {
                       {sb.code}
                     </Text>
                     <Text variant="caption" tone="secondary" as="div">
-                      {sb.fulfillerName} giao · {vi.orderStatus[sb.status] ?? sb.status}
+                      {sb.fulfillerName} giao · {viOrderStatus[sb.status] ?? sb.status}
                     </Text>
                   </Box>
                   <Text variant="body-sm" as="div" numeric style={{ whiteSpace: 'nowrap' }}>
@@ -730,7 +732,7 @@ export default function OrderDetailPage() {
           return addr.note ? (
             <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
               <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
-                {vi.checkout.address}
+                {viCheckout.address}
               </Text>
               <Text variant="body-sm" tone="secondary" as="div">
                 {addr.note}
@@ -741,7 +743,7 @@ export default function OrderDetailPage() {
         return (
           <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
             <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
-              {vi.checkout.address}
+              {viCheckout.address}
             </Text>
             <Text variant="body-sm" as="div">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
             {line && (
@@ -756,7 +758,7 @@ export default function OrderDetailPage() {
       {customerOrderNote(o) ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
-            {vi.orders.note}
+            {viOrders.note}
           </Text>
           <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>
             {customerOrderNote(o)}
@@ -822,10 +824,10 @@ export default function OrderDetailPage() {
         <Box p={5}>
           <Box style={{ textAlign: 'center' }}>
             <Heading variant="title-sm" font="ui" as="h2">
-              {vi.orders.cancelConfirmTitle}
+              {viOrders.cancelConfirmTitle}
             </Heading>
             <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>
-              {vi.orders.cancelConfirmBody}
+              {viOrders.cancelConfirmBody}
             </Text>
           </Box>
           <Box mt={4}>
@@ -864,7 +866,7 @@ export default function OrderDetailPage() {
           )}
           <Box style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 20 }}>
             <Button fullWidth onPress={() => setConfirmCancel(false)}>
-              {vi.orders.cancelKeep}
+              {viOrders.cancelKeep}
             </Button>
             <Button
               fullWidth
@@ -877,7 +879,7 @@ export default function OrderDetailPage() {
               }}
               style={{ color: 'var(--color-text-danger)' }}
             >
-              {vi.orders.cancelYes}
+              {viOrders.cancelYes}
             </Button>
           </Box>
         </Box>

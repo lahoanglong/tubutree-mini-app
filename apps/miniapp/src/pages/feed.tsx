@@ -10,6 +10,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { POST_CARD_SKELETON, POST_CARD_SKELETON_COUNT } from '@tubutree/app-core/community-skeleton';
 import { vi } from '../i18n/vi';
+import { viCommunity } from '../i18n/vi-community';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { PostCardSkeleton } from '../components/ui/skeleton';
@@ -31,8 +32,8 @@ import { useDebounced } from '../utils/use-debounced';
 const PAGE_HEADER_GUTTER = 16;
 
 const SORTS: { key: FeedSort; label: string }[] = [
-  { key: 'new', label: vi.community.sortNew },
-  { key: 'popular', label: vi.community.sortPopular },
+  { key: 'new', label: viCommunity.sortNew },
+  { key: 'popular', label: viCommunity.sortPopular },
 ];
 
 /** Khung chờ danh sách bài: thẻ chờ cách nhau và cách đầu danh sách đúng khe 8px của thẻ thật (`marginTop` 8), nên bài về không làm trang nhảy. */
@@ -113,7 +114,7 @@ export default function FeedPage() {
   if (phase === 'loading') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.community.title} />
+        <PageHeader title={viCommunity.title} />
         <PostListSkeleton />
       </Page>
     );
@@ -124,7 +125,7 @@ export default function FeedPage() {
   if (phase === 'unavailable') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.community.title} />
+        <PageHeader title={viCommunity.title} />
         <SessionUnavailable />
       </Page>
     );
@@ -135,7 +136,7 @@ export default function FeedPage() {
     if (preview.isPending && preview.fetchStatus !== 'idle') {
       return (
         <Page style={{ background: 'var(--color-bg-canvas)' }}>
-          <PageHeader title={vi.community.title} />
+          <PageHeader title={viCommunity.title} />
           <PostListSkeleton testId="feed-preview-loading" />
         </Page>
       );
@@ -144,15 +145,15 @@ export default function FeedPage() {
     if (preview.data && preview.data.posts.length > 0) {
       return (
         <Page style={{ background: 'var(--color-bg-canvas)' }}>
-          <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
+          <PageHeader title={viCommunity.title} subtitle={viCommunity.subtitle} />
           <PublicPreviewList posts={preview.data.posts} onLogin={() => void loginWithNotice()} />
         </Page>
       );
     }
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.community.title} />
-        <EmptyState art="sprout" heading={vi.community.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
+        <PageHeader title={viCommunity.title} />
+        <EmptyState art="sprout" heading={viCommunity.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
@@ -162,21 +163,21 @@ export default function FeedPage() {
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
       <PageHeader
-        title={vi.community.title}
+        title={viCommunity.title}
         actions={
           // `PageHeader` đã có lề phải 16; bù phần còn lại để hai nút nằm bên trái viên thuốc của Zalo.
           <div style={{ display: 'flex', alignItems: 'center', marginRight: capsuleExtra(PAGE_HEADER_GUTTER) }}>
             {hasOA && (
               <IconButton
                 icon={MessageCircle}
-                label={vi.community.askTubu}
+                label={viCommunity.askTubu}
                 onPress={() => {
                   haptic('light');
-                  void openOAChat(vi.community.askTubuMessage);
+                  void openOAChat(viCommunity.askTubuMessage);
                 }}
               />
             )}
-            <IconButton icon={Search} label={vi.community.search} onPress={() => setSearchOpen((v) => !v)} />
+            <IconButton icon={Search} label={viCommunity.search} onPress={() => setSearchOpen((v) => !v)} />
           </div>
         }
       />
@@ -187,15 +188,15 @@ export default function FeedPage() {
             value={q}
             onChange={setQ}
             onSubmit={setQ}
-            label={vi.community.search}
+            label={viCommunity.search}
             clearLabel={vi.browse.clearSearch}
-            placeholder={vi.community.searchPlaceholder}
+            placeholder={viCommunity.searchPlaceholder}
           />
         </div>
       )}
 
       <ScrollRow
-        label={vi.community.pickCategory}
+        label={viCommunity.pickCategory}
         style={{ display: 'flex', gap: 8, padding: '4px 12px 6px', background: 'var(--color-bg-surface)', minWidth: 0, maxWidth: '100%' }}
       >
         <Chip
@@ -204,10 +205,10 @@ export default function FeedPage() {
             navigate('/feed/events');
           }}
         >
-          {vi.community.events}
+          {viCommunity.events}
         </Chip>
         <Chip selected={!category} onPress={() => setCategory(undefined)}>
-          {vi.community.tabAll}
+          {viCommunity.tabAll}
         </Chip>
         {cats.data?.map((c) => (
           <Chip key={c.id} selected={category === c.slug} onPress={() => setCategory(c.slug)}>
@@ -227,7 +228,7 @@ export default function FeedPage() {
             setUnanswered((v) => !v);
           }}
         >
-          {vi.community.unanswered}
+          {viCommunity.unanswered}
         </Chip>
       </ScrollRow>
 
@@ -237,7 +238,7 @@ export default function FeedPage() {
             selected
             size="sm"
             icon={Hash}
-            ariaLabel={vi.community.clearTag}
+            ariaLabel={viCommunity.clearTag}
             onPress={() => {
               haptic('light');
               setTag(undefined);
@@ -257,12 +258,12 @@ export default function FeedPage() {
         <ErrorState message={getLoadErrorMessage(feed.error)} onRetry={() => feed.refetch()} />
       ) : posts.length === 0 ? (
         filtering ? (
-          <EmptyState art="search" heading={vi.community.noResult} />
+          <EmptyState art="search" heading={viCommunity.noResult} />
         ) : (
           <EmptyState
             art="leaf"
-            heading={vi.community.emptyHeading}
-            body={vi.community.emptyBody}
+            heading={viCommunity.emptyHeading}
+            body={viCommunity.emptyBody}
           />
         )
       ) : (
@@ -278,7 +279,7 @@ export default function FeedPage() {
                 onPress={() => feed.fetchNextPage()}
                 style={{ minWidth: 160 }}
               >
-                {vi.community.loadMore}
+                {viCommunity.loadMore}
               </Button>
             </div>
           )}
