@@ -24,18 +24,26 @@ function constStrings(text) {
   return out;
 }
 
-/** Các dòng `{ name, ordersLock }` của HEAVY_MIGRATIONS; tên không đọc được ghi vào `unresolved`. */
+/**
+ * Các mục `{ name, ordersLock }` của HEAVY_MIGRATIONS, viết một dòng hay xuống dòng, thêm trường khác hay không. Mục không đọc được (tên là
+ * hằng lạ, thiếu `ordersLock`) ghi vào `unresolved` để luật báo đỏ thay vì đếm sai số migration khoá orders.
+ */
 export function parseHeavyMigrations(text) {
   const block = sliceBlock(text, 'export const HEAVY_MIGRATIONS', '\n];');
   if (!block) return null;
+  const body = block.slice(block.indexOf('= [') + 3).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, '');
   const consts = constStrings(text);
   const entries = [];
   const unresolved = [];
-  for (const m of block.matchAll(/\{\s*name:\s*(?:(['"`])([^'"`]+)\1|(\w+))\s*,\s*ordersLock:\s*(true|false)\s*\}/g)) {
-    const name = m[2] ?? consts.get(m[3]);
-    if (name === undefined) unresolved.push(m[3]);
-    else entries.push({ name, ordersLock: m[4] === 'true' });
+  for (const m of body.matchAll(/\{([^{}]*)\}/g)) {
+    const nm = /\bname\s*:\s*(?:(['"`])([^'"`]+)\1|(\w+))/.exec(m[1]);
+    const lock = /\bordersLock\s*:\s*(true|false)\b/.exec(m[1]);
+    const name = nm ? (nm[2] ?? consts.get(nm[3])) : undefined;
+    if (name === undefined || !lock) unresolved.push(m[1].trim().replace(/\s+/g, ' '));
+    else entries.push({ name, ordersLock: lock[1] === 'true' });
   }
+  const declared = (body.match(/\bname\s*:/g) ?? []).length;
+  if (declared !== entries.length + unresolved.length) unresolved.push(`${declared} mục có \`name:\` nhưng chỉ tách được ${entries.length + unresolved.length} khối { … }`);
   return { entries, unresolved };
 }
 
@@ -68,7 +76,7 @@ export function check(ctx) {
     res.errors.push(`không đọc được HEAVY_MIGRATIONS trong ${DB_CHECKS} (đổi cách khai thì sửa luật này)`);
     return res;
   }
-  for (const u of parsed.unresolved) res.errors.push(`HEAVY_MIGRATIONS dùng hằng ${u} mà luật không đọc ra tên; khai tên trực tiếp hoặc sửa luật`);
+  for (const u of parsed.unresolved) res.errors.push(`HEAVY_MIGRATIONS có mục luật không đọc được (${u}); khai \`name: '<tên>'\` và \`ordersLock: true|false\` trực tiếp hoặc sửa luật`);
 
   const table = runbookSection(runbook, '### 1.0 ');
   const s31 = runbookSection(runbook, '### 3.1 ');
