@@ -383,6 +383,8 @@ export const SHOP_COPY: Record<string, string> = {
   // Dải đánh giá ảnh đã duyệt ở Trang chủ (GreenCornerStrip); nhãn đọc của mỗi thẻ (thẻ là liên kết tới khối đánh giá của sản phẩm).
   'home.greenCorner.title': 'Khách hàng sống xanh cùng Tubu Tree',
   'home.greenCorner.cardLabel': '{product}, {author} đánh giá {rating} sao',
+  // Khối cuối Trang chủ (block `suggest`): mỗi thương hiệu một tiêu đề, câu giới thiệu, "Tất cả (n)" và 4 món bán chạy; thanh chip dưới Danh mục nhảy tới từng nhãn.
+  'home.brands.title': 'Khám phá theo Thương hiệu',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
   // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
   'pdp.brandShelf': 'Cùng thương hiệu',

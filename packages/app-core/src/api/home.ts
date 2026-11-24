@@ -1,7 +1,7 @@
 import type { HttpClient } from '../http';
 import type { BundleDTO } from './bundle';
 import type { CampaignBanner } from './campaign';
-import type { CategoryDTO, PageResponse, ProductCard } from './catalog';
+import type { BrandCount, CategoryDTO, PageResponse, ProductCard, ProductPage } from './catalog';
 import type { NotificationDTO } from './account';
 import type { PublicConfig } from './config';
 import type { FlashSaleActiveItem, UpcomingFlashItem } from './flash-sale';
@@ -16,12 +16,12 @@ import type { SubscriptionDTO } from './subscriptions';
 type Block<T> = T | null | undefined;
 
 export interface HomePublicDTO {
-  bestSellers: Block<PageResponse<ProductCard>>;
+  bestSellers: Block<ProductPage>;
   featured: Block<PageResponse<ProductCard>>;
   newest: Block<PageResponse<ProductCard>>;
   flashActive: Block<FlashSaleActiveItem[]>;
   categories: Block<CategoryDTO[]>;
-  brands: Block<{ brand: string; count: number; slug?: string | null }[]>;
+  brands: Block<BrandCount[]>;
   /** Cùng nội dung GET /config/public: khối "Quà khách mới" cần số công khai mà không tốn thêm request khi mở Trang chủ. */
   publicConfig: Block<PublicConfig>;
   /** Banner chiến dịch HOME_TOP đang chạy, chưa lọc theo loại khách (blob công khai dùng chung). API cũ không có trường này. */

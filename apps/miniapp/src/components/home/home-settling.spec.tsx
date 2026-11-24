@@ -25,17 +25,17 @@ describe('HomeSettlingSkeleton', () => {
     expect(heights()[3]).toBe('144px');
   });
 
-  it('danh mục luôn một hàng (148) dù số ô nhớ là bao nhiêu: số ô vượt 5 bị cắt về 5 như khối thật', () => {
+  it('danh mục luôn một hàng cộng thanh thương hiệu (192) dù số ô nhớ là bao nhiêu: số ô vượt 5 bị cắt về 5 như khối thật', () => {
     const categoriesHeight = (cells?: number) => {
       const { unmount } = render(<HomeSettlingSkeleton categoryCells={cells} />);
       const h = heights()[0];
       unmount();
       return h;
     };
-    expect(categoriesHeight(4)).toBe('148px');
-    expect(categoriesHeight(5)).toBe('148px');
-    expect(categoriesHeight(6)).toBe('148px');
-    expect(categoriesHeight(40)).toBe('148px');
+    expect(categoriesHeight(4)).toBe('192px');
+    expect(categoriesHeight(5)).toBe('192px');
+    expect(categoriesHeight(6)).toBe('192px');
+    expect(categoriesHeight(40)).toBe('192px');
     expect(categoriesHeight(undefined)).toBe(`${HOME_SETTLING_HEIGHTS.categories}px`);
   });
 });

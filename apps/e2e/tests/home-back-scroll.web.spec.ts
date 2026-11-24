@@ -1,5 +1,6 @@
 import { test, expect } from './support/mock-api';
 import { mockMergedHome } from './support/home-merged';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 const USER = {
   id: 'u-back', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
@@ -48,7 +49,7 @@ test.describe('Web khách: Trang chủ — Back giữ vị trí cuộn', () => {
       return { data: Array.from({ length: limit }, (_, i) => card((n - 1) * limit + i + 1, mode === 'mềm' ? realSlugs[(n - 1) * limit + i] : undefined)), meta: { page: n, limit, total: mode === 'mềm' ? Math.min(realSlugs.length, 40) : 100 }, filtersIgnored: false };
     });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 20_000 });
 
     // Cuộn từng bước để lưới nạp thêm trang (cuộn vô tận), tới độ sâu đủ lớn hoặc hết trang.
     for (let i = 0; i < 12; i++) {

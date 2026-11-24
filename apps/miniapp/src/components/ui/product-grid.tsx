@@ -2,7 +2,7 @@ import { memo, useCallback, useLayoutEffect, useRef, type CSSProperties, type Re
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import { ProductCard, type ProductCardProps } from './product-card';
-import { ProductTileSkeleton } from './skeleton';
+import { ProductTileReserve, ProductTileSkeleton } from './skeleton';
 
 const GRID_STYLE: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, listStyle: 'none', margin: 0, padding: 0 };
 
@@ -13,8 +13,12 @@ export interface ProductGridProps {
   variant: CardVariant;
   /** Hạng của thẻ đầu; thẻ sau tăng dần (biến thể `rank`). */
   rankFrom?: number;
+  /** Hạng của từng thẻ (cùng chỉ số với `items`), thắng `rankFrom`; null là thẻ không số (món ghim của Bán chạy nhất). */
+  ranks?: readonly (number | null)[];
   listSource?: string;
   loading?: boolean;
+  /** Cùng `loading`: lưới còn xa màn vẽ ô giữ chỗ một nút (`ProductTileReserve`) thay khung chờ đầy đủ, cùng cột và chiều cao. */
+  reserve?: boolean;
   skeletonCount?: number;
   showBrand?: boolean;
   showWishlist?: boolean;
@@ -27,13 +31,13 @@ export interface ProductGridProps {
   onOpen?: (product: ProductCardData, index: number) => void;
 }
 
-type GridCardProps = Omit<ProductCardProps, 'onOpen' | 'rank'> & { index: number; rankFrom?: number; onOpen?: (product: ProductCardData, index: number) => void };
+type GridCardProps = Omit<ProductCardProps, 'onOpen'> & { index: number; onOpen?: (product: ProductCardData, index: number) => void };
 
 /** `onOpen` của lưới đổi danh tính mỗi lần cha vẽ; ô tự bọc lại theo (sản phẩm, vị trí) để thẻ memo không phải vẽ lại. */
-const GridCard = memo(function GridCard({ index, rankFrom, onOpen, ...rest }: GridCardProps) {
+const GridCard = memo(function GridCard({ index, onOpen, ...rest }: GridCardProps) {
   const { product } = rest;
   const open = useCallback(() => onOpen?.(product, index), [onOpen, product, index]);
-  return <ProductCard {...rest} position={index + 1} rank={rankFrom === undefined ? undefined : rankFrom + index} onOpen={onOpen ? open : undefined} />;
+  return <ProductCard {...rest} position={index + 1} onOpen={onOpen ? open : undefined} />;
 });
 
 /** Lưới 2 cột; `loading` vẽ khung chờ cùng số đo với thẻ thật nên trang không nhảy khi dữ liệu về. */
@@ -42,8 +46,10 @@ export function ProductGrid({
   items,
   variant,
   rankFrom,
+  ranks,
   listSource,
   loading = false,
+  reserve = false,
   skeletonCount = 6,
   showBrand,
   showWishlist,
@@ -57,6 +63,15 @@ export function ProductGrid({
     onOpenRef.current = onOpen;
   });
   const stableOpen = useCallback((p: ProductCardData, i: number) => onOpenRef.current?.(p, i), []);
+  if (loading && reserve) {
+    return (
+      <div data-testid="catalog-grid-reserve" aria-hidden="true" style={columns === 1 ? { ...GRID_STYLE, gridTemplateColumns: '1fr' } : GRID_STYLE}>
+        {Array.from({ length: skeletonCount }, (_, i) => (
+          <ProductTileReserve key={i} variant={variant} brand={showBrand === false ? false : undefined} />
+        ))}
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div data-testid="catalog-grid-skeleton" aria-hidden="true" style={columns === 1 ? { ...GRID_STYLE, gridTemplateColumns: '1fr' } : GRID_STYLE}>
@@ -78,7 +93,7 @@ export function ProductGrid({
               product={p}
               index={i}
               variant={variant}
-              rankFrom={rankFrom}
+              rank={ranks ? (ranks[i] ?? undefined) : rankFrom === undefined ? undefined : rankFrom + i}
               listSource={listSource}
               showBrand={showBrand}
               showWishlist={showWishlist}

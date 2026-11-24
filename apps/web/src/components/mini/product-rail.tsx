@@ -48,8 +48,8 @@ export interface ProductRailProps {
   items: readonly ProductCardType[];
   variant: RailVariant;
   rankFrom?: number;
-  /** Hạng thật của từng thẻ (cùng chỉ số với `items`), thắng `rankFrom`: kệ đã bỏ món trùng kệ khác thì hạng không liền nhau, không được đánh số lại. */
-  ranks?: readonly number[];
+  /** Hạng thật của từng thẻ (cùng chỉ số với `items`), thắng `rankFrom`: kệ đã bỏ món trùng kệ khác thì hạng không liền nhau, không được đánh số lại; null là thẻ không số (món ghim). */
+  ranks?: readonly (number | null)[];
   /** Mọi thẻ ghi "Bán chạy" không số (hạng hụt vì kệ trên chiếm món). */
   rankPlain?: boolean;
   /** Tên vùng cuộn cho trình đọc màn hình. */
@@ -85,7 +85,7 @@ export function ProductRail({ items, variant, rankFrom, ranks, rankPlain, label,
               <ProductCard
                 product={p}
                 variant={variant}
-                rank={ranks?.[i] ?? (rankFrom === undefined ? undefined : rankFrom + i)}
+                rank={ranks ? (ranks[i] ?? undefined) : rankFrom === undefined ? undefined : rankFrom + i}
                 rankPlain={rankPlain}
                 showBrand={showBrand}
                 showWishlist={showWishlist}

@@ -7,18 +7,23 @@ const page = (ids: string[]) => ({ data: ids.map(card), meta: { page: 1, limit: 
 const clientOf = (get: (path: string, opts?: { query?: Record<string, string | number> }) => Promise<unknown>) => ({ get }) as unknown as HttpClient;
 
 describe('fetchBestSellers', () => {
+  it('giữ `pinnedIds` của trang để kệ bỏ số hạng của món ghim', async () => {
+    const get = vi.fn().mockResolvedValue({ ...page(['p', 'a']), pinnedIds: ['p'] });
+    expect((await fetchBestSellers(clientOf(get))).pinnedIds).toEqual(['p']);
+  });
+
   it('xin 10 món theo bán chạy 30 ngày', async () => {
     const get = vi.fn().mockResolvedValue(page(['a', 'b']));
     const out = await fetchBestSellers(clientOf(get));
     expect(get).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 10 } });
-    expect(out.map((p) => p.id)).toEqual(['a', 'b']);
+    expect(out.data.map((p) => p.id)).toEqual(['a', 'b']);
   });
 
   it('API cũ chưa biết best_seller_30d (400): lùi về best_seller', async () => {
     const get = vi.fn().mockRejectedValueOnce({ status: 400 }).mockResolvedValueOnce(page(['x']));
     const out = await fetchBestSellers(clientOf(get), 6);
     expect(get).toHaveBeenNthCalledWith(2, '/products', { query: { sort: 'best_seller', limit: 6 } });
-    expect(out.map((p) => p.id)).toEqual(['x']);
+    expect(out.data.map((p) => p.id)).toEqual(['x']);
   });
 
   it('lỗi khác 400 ném tiếp, không gọi lại', async () => {

@@ -10,8 +10,18 @@ const card = (n: number, name: string) => ({
 });
 const pageOf = <T>(data: T[], limit: number) => ({ data, meta: { page: 1, limit, total: data.length } });
 
-export const MERGED_FOR_YOU = 'Gợi ý từ request gộp';
+const MERGED_FOR_YOU = 'Gợi ý từ request gộp';
 export const MERGED_PURCHASED = 'Mua lại từ request gộp';
+/** Nhãn đứng đầu khối "Khám phá theo Thương hiệu" (nhiều sản phẩm nhất). */
+export const MERGED_BRAND = 'Tubu';
+/** Đủ nhiều nhãn để Trang chủ dài như khách thật (spec Back giữ vị trí cuộn cần cuộn sâu hơn 1.500px). */
+const MERGED_BRANDS = [
+  { brand: MERGED_BRAND, count: 12 },
+  { brand: 'Fuwa3e', count: 9 },
+  { brand: 'Pơ Lang', count: 7 },
+  { brand: 'Mộc An', count: 5 },
+  { brand: 'Visante', count: 4 },
+];
 
 export const HOME_PUBLIC: HomePublicDTO = {
   bestSellers: pageOf([card(1, 'Bán chạy từ request gộp')], 6),
@@ -21,7 +31,7 @@ export const HOME_PUBLIC: HomePublicDTO = {
   categories: [
     { id: 'hm-cat', parentId: null, name: 'Danh mục gộp', slug: 'danh-muc-gop', image: null, sortOrder: 1, productCount: 3, children: [] },
   ],
-  brands: [{ brand: 'Tubu', count: 3 }],
+  brands: MERGED_BRANDS,
   publicConfig: { freeshipThreshold: 350_000, subscribeDiscountPct: 0.12 } as HomePublicDTO['publicConfig'],
 };
 
@@ -53,6 +63,8 @@ export const MERGED_LONE_ENDPOINTS = [
 export function mockMergedHome(api: MockApi): void {
   api.get('/home', HOME_PUBLIC);
   api.get('/home/me', HOME_ME);
+  // Web không dựng thương hiệu từ /home: hàng chip và khối cuối Trang chủ hỏi /brands ở trình duyệt. Mini lấy từ khối gộp, không gọi.
+  api.get('/brands', MERGED_BRANDS);
 }
 
 export function lonePersonalCalls(api: MockApi): string[] {

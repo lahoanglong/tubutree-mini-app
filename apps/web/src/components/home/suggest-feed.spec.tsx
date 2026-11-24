@@ -4,249 +4,231 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'guest', desktop: false, wide: false, now: 0 }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => false }));
-vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
-vi.mock('@tubutree/app-core/server-clock', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), serverNow: () => mocks.now }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest', useAuthRestoring: () => false }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
-import { SUGGEST_FIRST_RENDER, SUGGEST_FIRST_RENDER_WIDE } from '@tubutree/app-core/home-layout';
+import { BRAND_ORIGINS } from '@tubutree/app-core/brand-origins';
+import { GRID_BRAND } from '@/lib/product-grid';
 import { SuggestFeed } from './suggest-feed';
 
-const card = (n: number) => ({
-  id: `p${n}`, slug: `sp-${n}`, brand: 'Tubu', name: `Sản phẩm ${n}`, thumbnail: null, basePrice: 100000, salePrice: null, isFeatured: false, inStock: true,
+type Query = { brand?: string; sort?: string; limit?: number };
+const card = (brand: string, n: number, inStock = true) => ({
+  id: `${brand}-${n}`, slug: `${brand.toLowerCase().replace(/\W+/g, '-')}-${n}`, brand, name: `${brand} ${n}`, thumbnail: null, basePrice: 100000, salePrice: null, isFeatured: false, inStock,
 });
-const cards = (from: number, n: number) => Array.from({ length: n }, (_, i) => card(from + i));
-const page = (data: unknown[], extra: Record<string, number> = {}) => ({ data, meta: { page: 1, limit: 20, total: data.length, ...extra } });
-const cat = (id: string, name: string, productCount: number, parentId: string | null = null) => ({ id, parentId, name, slug: id, image: null, sortOrder: 1, productCount, children: [] });
+const page = (data: unknown[]) => ({ data, meta: { page: 1, limit: 8, total: data.length } });
+const BRANDS = [
+  { brand: 'Tubu Tree', count: 9, slug: null },
+  { brand: 'Visante', count: 2, slug: null },
+  { brand: 'Fuwa3e', count: 44, slug: 'fuwa3e', tagline: null },
+  { brand: 'Pơ Lang', count: 14, slug: null, tagline: 'Câu của admin cho Pơ Lang' },
+];
+let products: Record<string, unknown[]> = {};
 
 let mounted: Rendered | null = null;
 const mount = async (props: Partial<React.ComponentProps<typeof SuggestFeed>> = {}) => {
   mounted = render(
     <QueryClientProvider client={newTestClient()}>
-      <SuggestFeed categories={[]} exclude={new Set()} {...props} />
+      <SuggestFeed exclude={new Set()} {...props} />
     </QueryClientProvider>,
   );
   await flush(8);
   return mounted.container;
 };
-const productCalls = () => mocks.get.mock.calls.filter(([path]) => path === '/products');
-const tiles = (c: HTMLElement) => Array.from(c.querySelectorAll('a.tubu-tile-link'));
-/** Lưới dựng dần: bấm "Xem thêm" tới khi đủ `n` thẻ đã tải (mỗi lần vẽ thêm phần đã có, không gọi mạng). */
-const revealTo = async (c: HTMLElement, n: number) => {
-  for (let i = 0; i < 10 && tiles(c).length < n; i += 1) {
-    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm') ?? null);
-    await flush(4);
-  }
+const productCalls = () => mocks.get.mock.calls.filter(([path]) => path === '/products').map(([, opts]) => (opts as { query: Query }).query);
+const sections = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[data-testid="home-brand-section"]'));
+const section = (c: HTMLElement, brand: string) => sections(c).find((s) => s.getAttribute('aria-label') === brand) ?? null;
+const tileNames = (el: HTMLElement) => Array.from(el.querySelectorAll('a.tubu-tile-link')).map((a) => a.getAttribute('href'));
+
+/** IntersectionObserver giả: nhãn sau hai nhãn đầu chỉ tải khi `reveal()` báo gần khung nhìn. */
+let observers: { cb: IntersectionObserverCallback; el: Element | null }[] = [];
+const reveal = async () => {
+  for (const o of observers) if (o.el) o.cb([{ isIntersecting: true, target: o.el } as IntersectionObserverEntry], {} as IntersectionObserver);
+  await flush(8);
 };
-const chipLabels = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="region"][aria-label="Lọc gợi ý theo danh mục"] button')).map((b) => b.textContent);
 
 beforeEach(() => {
-  mocks.phase = 'guest';
-  mocks.desktop = false;
-  mocks.wide = false;
-  // 08:00 ngày 01/11/2026 giờ Việt Nam.
-  mocks.now = Date.parse('2026-11-01T01:00:00.000Z');
-  mocks.get.mockReset().mockImplementation(async (path: string) => (path === '/products' ? page(cards(1, 4)) : []));
+  products = {
+    Fuwa3e: Array.from({ length: 8 }, (_, i) => card('Fuwa3e', i + 1)),
+    'Pơ Lang': [card('Pơ Lang', 1, false), card('Pơ Lang', 2), card('Pơ Lang', 3)],
+    Visante: [card('Visante', 1), card('Visante', 2)],
+    'Tubu Tree': [card('Tubu Tree', 1)],
+  };
+  mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Query }) => {
+    if (path === '/brands') return BRANDS;
+    if (path === '/products') return page(products[opts?.query?.brand ?? ''] ?? []);
+    return [];
+  });
   mocks.push.mockReset();
-  window.matchMedia = ((query: string) => ({
-    matches: query.includes('min-width: 1024px') ? mocks.desktop : query.includes('min-width: 768px') ? mocks.desktop || mocks.wide : false,
-    media: query,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    onchange: null,
-    dispatchEvent: () => false,
-  })) as typeof window.matchMedia;
+  observers = [];
 });
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  vi.unstubAllGlobals();
 });
 
-describe('SuggestFeed (web) — Gợi ý hôm nay (Q9)', () => {
-  it('tiêu đề "Gợi ý hôm nay" bằng SectionHeader; mọi lời gọi gửi seed là ngày Việt Nam YYYYMMDD; hai lần mở cùng ngày gửi cùng seed', async () => {
+describe('SuggestFeed (web) — Khám phá theo Thương hiệu (w34-02)', () => {
+  it('tiêu đề khối h2 "Khám phá theo Thương hiệu"; mỗi nhãn một mục h3 theo số sản phẩm giảm dần, "Tubu Tree" cuối', async () => {
     const c = await mount();
-    expect(c.querySelector('h2')?.textContent).toBe('Gợi ý hôm nay');
-    expect(c.querySelector('[data-testid="section-header"]')).not.toBeNull();
-    expect(productCalls()[0]).toEqual(['/products', { query: { page: 1, limit: 20, seed: '20261101' } }]);
-    mounted!.unmount();
-    mocks.get.mockClear();
+    expect(c.querySelector('section')?.getAttribute('aria-label')).toBe('Khám phá theo Thương hiệu');
+    expect(c.querySelector('h2')?.textContent).toBe('Khám phá theo Thương hiệu');
+    expect(sections(c).map((s) => s.querySelector('h3')?.textContent)).toEqual(['Fuwa3e', 'Pơ Lang', 'Visante', 'Tubu Tree']);
+  });
+
+  it('mỗi nhãn tải `GET /products?brand=&sort=best_seller_30d&limit=8` (không endpoint mới)', async () => {
     await mount();
-    expect(productCalls()[0]![1]).toEqual({ query: { page: 1, limit: 20, seed: '20261101' } });
+    expect(productCalls()).toEqual([
+      { brand: 'Fuwa3e', sort: 'best_seller_30d', limit: 8 },
+      { brand: 'Pơ Lang', sort: 'best_seller_30d', limit: 8 },
+      { brand: 'Visante', sort: 'best_seller_30d', limit: 8 },
+      { brand: 'Tubu Tree', sort: 'best_seller_30d', limit: 8 },
+    ]);
   });
 
-  it('dữ liệu dựng sẵn của máy chủ khớp hạt giống: có lưới ngay ở lần vẽ đầu, không gọi lại trang 1', async () => {
-    mounted = render(
-      <QueryClientProvider client={newTestClient()}>
-        <SuggestFeed categories={[]} exclude={new Set()} initial={page(cards(1, 4)) as never} seed="20261101" />
+  it('câu giới thiệu một dòng: của admin thắng, thiếu thì câu dự phòng ở brand-origins; "Tất cả (n)" tới danh sách lọc đúng nhãn', async () => {
+    const c = await mount();
+    const fuwa = section(c, 'Fuwa3e')!;
+    expect(fuwa.textContent).toContain(BRAND_ORIGINS.find((o) => o.id === 'fuwa3e')!.tagline);
+    expect(section(c, 'Pơ Lang')!.textContent).toContain('Câu của admin cho Pơ Lang');
+    const all = fuwa.querySelector<HTMLAnchorElement>('a[aria-label="Tất cả (44) Fuwa3e"]')!;
+    expect(all.textContent).toContain('Tất cả (44)');
+    expect(all.getAttribute('href')).toBe('/san-pham?brand=Fuwa3e');
+    expect(section(c, 'Pơ Lang')!.querySelector('a[aria-label^="Tất cả (14)"]')?.getAttribute('href')).toBe('/san-pham?brand=P%C6%A1+Lang');
+  });
+
+  it('lưới 4 món (2 cột điện thoại, 4 cột từ md); món hết hàng sau món còn hàng; món đã ở kệ trên chỉ để bù khi thiếu', async () => {
+    const c = await mount({ exclude: new Set(['fuwa3e-1', 'fuwa3e-2']) });
+    const fuwa = section(c, 'Fuwa3e')!;
+    expect(fuwa.querySelector('ul[data-testid="catalog-grid"]')?.className).toBe(GRID_BRAND);
+    expect(tileNames(fuwa)).toEqual(['/san-pham/fuwa3e-3', '/san-pham/fuwa3e-4', '/san-pham/fuwa3e-5', '/san-pham/fuwa3e-6']);
+    expect(tileNames(section(c, 'Pơ Lang')!)).toEqual(['/san-pham/p-lang-2', '/san-pham/p-lang-3', '/san-pham/p-lang-1']);
+  });
+
+  it('neo `home-brand-<slug>` cho chip của thanh nhảy nhanh; neo không tự đặt scroll-margin (scroll-padding-top của html đã chừa thanh đầu dính)', async () => {
+    const c = await mount();
+    expect(sections(c).map((s) => s.id)).toEqual(['home-brand-fuwa3e', 'home-brand-polang', 'home-brand-visante', 'home-brand-tubutree']);
+    expect(section(c, 'Fuwa3e')!.className).not.toMatch(/scroll-m/);
+  });
+
+  it('hai nhãn đầu tải món ngay, nhãn sau chờ gần khung nhìn; nhãn nào cũng chỉ vẽ ô thật khi gần khung nhìn, lúc đang tải thì khung chờ bằng số món sẽ vẽ', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        private o: { cb: IntersectionObserverCallback; el: Element | null };
+        constructor(cb: IntersectionObserverCallback) {
+          this.o = { cb, el: null };
+          observers.push(this.o);
+        }
+        observe(el: Element) {
+          this.o.el = el;
+        }
+        disconnect() {
+          this.o.el = null;
+        }
+      },
+    );
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((r) => (release = r));
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: Query }) => {
+      if (path === '/brands') return BRANDS;
+      const brand = opts?.query?.brand ?? '';
+      if (brand === 'Visante' || brand === 'Tubu Tree') await held;
+      return page(products[brand] ?? []);
+    });
+    const c = await mount();
+    expect(productCalls().map((q) => q.brand)).toEqual(['Fuwa3e', 'Pơ Lang']);
+    // Món của nhãn đầu đã về nhưng nhãn chưa gần khung nhìn: vẫn chỗ giữ một nút mỗi ô (Trang chủ mới mở không thêm vài chục nút DOM của thẻ thật).
+    expect(tileNames(section(c, 'Fuwa3e')!)).toHaveLength(0);
+    expect(section(c, 'Fuwa3e')!.querySelectorAll('[data-testid="catalog-grid-reserve"] > *')).toHaveLength(4);
+    const visante = section(c, 'Visante')!;
+    expect(visante.querySelector('h3')?.textContent).toBe('Visante');
+    // Chưa tải thì giữ chỗ đúng số món sẽ vẽ, mỗi ô một nút (không khung chờ đầy đủ): chip nhảy nhanh cuộn qua nhãn chưa tải mà đích không bị đẩy xuống.
+    expect(visante.querySelector('[data-testid="catalog-grid"], [data-testid="catalog-grid-skeleton"]')).toBeNull();
+    expect(visante.querySelectorAll('[data-testid="catalog-grid-reserve"] > *')).toHaveLength(2);
+    expect(visante.querySelector('[data-testid="catalog-grid-reserve"]')!.className).toBe(GRID_BRAND);
+    await reveal();
+    expect(productCalls().map((q) => q.brand)).toEqual(['Fuwa3e', 'Pơ Lang', 'Visante', 'Tubu Tree']);
+    expect(tileNames(section(c, 'Fuwa3e')!)).toHaveLength(4);
+    expect(section(c, 'Visante')!.querySelectorAll('[data-testid="catalog-grid-skeleton"] > *')).toHaveLength(2);
+    expect(section(c, 'Tubu Tree')!.querySelectorAll('[data-testid="catalog-grid-skeleton"] > *')).toHaveLength(4);
+    release();
+    await flush(8);
+    expect(tileNames(section(c, 'Visante')!)).toHaveLength(2);
+  });
+
+  it('Back về Trang chủ khi món nhãn còn trong cache: nhãn lười vẽ ngay, không chờ gần khung nhìn', async () => {
+    const client = newTestClient();
+    const first = render(
+      <QueryClientProvider client={client}>
+        <SuggestFeed exclude={new Set()} />
       </QueryClientProvider>,
     );
-    expect(tiles(mounted.container)).toHaveLength(4);
     await flush(8);
-    expect(productCalls()).toHaveLength(0);
-  });
-
-  it('hạt giống của máy chủ được giữ cho cả lần mở (HTML đầu và lưới sau hydrate cùng một thứ tự), khác hạt giống ngày của máy khách', async () => {
+    first.unmount();
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
     mounted = render(
-      <QueryClientProvider client={newTestClient()}>
-        <SuggestFeed categories={[cat('c1', 'Tẩy rửa', 9)]} exclude={new Set()} initial={page(cards(1, 4)) as never} seed="20261031" />
+      <QueryClientProvider client={client}>
+        <SuggestFeed exclude={new Set()} />
       </QueryClientProvider>,
     );
     await flush(8);
-    click(Array.from(mounted.container.querySelectorAll('button')).find((b) => b.textContent === 'Tẩy rửa') ?? null);
-    await flush(8);
-    expect(productCalls().at(-1)![1]).toEqual({ query: { page: 1, limit: 20, seed: '20261031', category: 'c1' } });
+    expect(tileNames(section(mounted.container, 'Visante')!)).toHaveLength(2);
+    expect(tileNames(section(mounted.container, 'Tubu Tree')!)).toHaveLength(1);
   });
 
-  it('chip: "Tất cả" rồi danh mục tầng 1 nhiều hàng nhất; danh mục con không thành chip; đổi chip lọc theo category kèm seed', async () => {
-    const c = await mount({ categories: [cat('c1', 'Mẹ và bé', 5), cat('c2', 'Tẩy rửa', 9), cat('c3', 'Con của mẹ bé', 50, 'c1')] as never });
-    expect(chipLabels(c)).toEqual(['Tất cả', 'Tẩy rửa', 'Mẹ và bé']);
-    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tẩy rửa') ?? null);
-    await flush(8);
-    expect(productCalls().at(-1)![1]).toEqual({ query: { page: 1, limit: 20, seed: '20261101', category: 'c2' } });
-  });
-
-  it('chưa có danh mục nào: chỉ chip "Tất cả"', async () => {
-    expect(chipLabels(await mount())).toEqual(['Tất cả']);
-  });
-
-  it('điện thoại: hàng chip dính ngay dưới header 56px (top-14) và tràn mép màn như Mini; từ md không dính', async () => {
+  it('nhãn không còn món nào: ẩn hẳn mục đó (chip của nó lùi về trang nhãn)', async () => {
+    products.Visante = [];
     const c = await mount();
-    const row = c.querySelector('[role="region"][aria-label="Lọc gợi ý theo danh mục"]') as HTMLElement;
-    for (const cls of ['max-md:sticky', 'max-md:top-14', 'max-md:z-10', 'tubu-bleed', 'max-md:px-4']) expect(row.className).toContain(cls);
-    expect(row.className).not.toMatch(/-mx-/);
+    expect(section(c, 'Visante')).toBeNull();
+    expect(c.querySelector('#home-brand-visante')).toBeNull();
   });
 
-  it('món có slug trong exclude (đã nằm ở kệ trên) không vẽ ở lưới', async () => {
-    const c = await mount({ exclude: new Set(['sp-2']) });
-    const names = tiles(c).map((t) => t.textContent);
-    expect(names).toEqual(['Sản phẩm 1', 'Sản phẩm 3', 'Sản phẩm 4'].map((n) => expect.stringContaining(n)));
+  it('thẻ chen đứng sau nhãn cuối (chiều cao về muộn của nó không đẩy lệch chip nhảy tới nhãn nào)', async () => {
+    const c = await mount({ interleave: <div data-testid="quiz">Chẩn đoán</div> });
+    const list = c.querySelector('[data-testid="suggest-interleave"]')!.parentElement!;
+    const order = Array.from(list.children).map((el) => el.getAttribute('aria-label') ?? el.getAttribute('data-testid'));
+    expect(order).toEqual(['Fuwa3e', 'Pơ Lang', 'Visante', 'Tubu Tree', 'suggest-interleave']);
   });
 
-  it('điện thoại dừng ở 100 món: không còn "Xem thêm", có dòng hết gợi ý và nút "Vào Danh mục" tới trang sản phẩm', async () => {
-    mocks.get.mockImplementation(async () => page(cards(1, 120), { limit: 120, total: 240 }));
+  it('cuối khối một nút "Vào Danh mục" tới trang sản phẩm', async () => {
     const c = await mount();
-    expect(tiles(c)).toHaveLength(SUGGEST_FIRST_RENDER);
-    await revealTo(c, 100);
-    expect(tiles(c)).toHaveLength(100);
-    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Xem thêm')).toBe(false);
-    expect(c.textContent).toContain('Bạn đã xem hết gợi ý hôm nay');
     click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Vào Danh mục') ?? null);
     expect(mocks.push).toHaveBeenCalledWith('/san-pham');
   });
 
-  it('máy tính dừng ở 48 món rồi "Xem thêm" dẫn tới trang sản phẩm (không tải tiếp), không có dòng hết gợi ý', async () => {
-    mocks.desktop = true;
-    mocks.get.mockImplementation(async () => page(cards(1, 60), { limit: 60, total: 240 }));
+  it('chưa có thương hiệu nào: ẩn cả khối, không tải sản phẩm', async () => {
+    mocks.get.mockImplementation(async () => []);
     const c = await mount();
-    await revealTo(c, 48);
-    expect(tiles(c)).toHaveLength(48);
-    expect(c.textContent).not.toContain('Bạn đã xem hết gợi ý hôm nay');
-    const more = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm');
-    click(more ?? null);
-    expect(mocks.push).toHaveBeenCalledWith('/san-pham');
-    expect(productCalls()).toHaveLength(1);
+    expect(c.innerHTML).toBe('');
+    expect(productCalls()).toEqual([]);
   });
 
-  it('còn trang sau và chưa tới trần: "Xem thêm" tải trang kế; chưa hết thì không báo hết', async () => {
-    mocks.get.mockImplementation(async (_path: string, opts?: { query?: { page?: number } }) =>
-      opts?.query?.page === 2 ? { data: cards(21, 20), meta: { page: 2, limit: 20, total: 60 } } : page(cards(1, 20), { total: 60 }),
-    );
+  it('lỗi tải thương hiệu: giữ tiêu đề và "Thử lại" tại chỗ; thử lại thành công thì hiện các nhãn', async () => {
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: Query }) => {
+      if (path === '/brands') throw Object.assign(new Error('x'), { status: 503 });
+      return page(products[opts?.query?.brand ?? ''] ?? []);
+    });
     const c = await mount();
-    expect(c.textContent).not.toContain('Bạn đã xem hết gợi ý hôm nay');
-    await revealTo(c, 20);
-    expect(tiles(c)).toHaveLength(20);
-    expect(productCalls()).toHaveLength(1);
-    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm') ?? null);
+    const retry = c.querySelector<HTMLButtonElement>('button[aria-label="Thử lại Khám phá theo Thương hiệu"]');
+    expect(retry).not.toBeNull();
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: Query }) => (path === '/brands' ? BRANDS : page(products[opts?.query?.brand ?? ''] ?? [])));
+    click(retry);
     await flush(8);
-    expect(tiles(c)).toHaveLength(40);
+    expect(sections(c)).toHaveLength(4);
   });
 
-  it('dựng dần: lần mở đầu chỉ vẽ SUGGEST_FIRST_RENDER thẻ, "Xem thêm" vẽ tiếp phần đã tải mà không gọi mạng', async () => {
-    mocks.get.mockImplementation(async () => page(cards(1, 20), { total: 20 }));
+  it('đang tải thương hiệu: giữ tiêu đề và khung chờ lưới (trang không nhảy)', async () => {
+    mocks.get.mockImplementation(() => new Promise(() => {}));
     const c = await mount();
-    expect(tiles(c)).toHaveLength(SUGGEST_FIRST_RENDER);
-    expect(c.textContent).not.toContain('Bạn đã xem hết gợi ý hôm nay');
-    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm') ?? null);
-    await flush(4);
-    expect(tiles(c)).toHaveLength(20);
-    expect(productCalls()).toHaveLength(1);
-    expect(c.textContent).toContain('Bạn đã xem hết gợi ý hôm nay');
-  });
-
-  it('từ md lần mở đầu vẽ SUGGEST_FIRST_RENDER_WIDE thẻ, điện thoại vẽ SUGGEST_FIRST_RENDER', async () => {
-    mocks.get.mockImplementation(async () => page(cards(1, 20), { total: 20 }));
-    mocks.wide = true;
-    const wide = await mount();
-    expect(tiles(wide)).toHaveLength(SUGGEST_FIRST_RENDER_WIDE);
-    mounted?.unmount();
-    mocks.wide = false;
-    const phone = await mount();
-    expect(tiles(phone)).toHaveLength(SUGGEST_FIRST_RENDER);
-    expect(SUGGEST_FIRST_RENDER).toBeLessThan(SUGGEST_FIRST_RENDER_WIDE);
-  });
-
-  it('đã tải hết mà chưa tới trần: báo hết và mời vào Danh mục', async () => {
-    const c = await mount();
-    expect(c.textContent).toContain('Bạn đã xem hết gợi ý hôm nay');
-    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Vào Danh mục')).toBe(true);
-  });
-
-  it('khách đã đăng nhập: gợi ý cá nhân kèm seed đứng đầu ở chip "Tất cả", không có ở chip danh mục', async () => {
-    mocks.phase = 'authenticated';
-    mocks.get.mockImplementation(async (path: string) => (path === '/products/for-you' ? [card(99)] : path === '/products' ? page(cards(1, 4)) : []));
-    const c = await mount({ categories: [cat('c1', 'Tẩy rửa', 9)] as never });
-    expect(mocks.get).toHaveBeenCalledWith('/products/for-you', { query: { seed: '20261101' } });
-    expect(tiles(c)[0]!.textContent).toContain('Sản phẩm 99');
-    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tẩy rửa') ?? null);
-    await flush(8);
-    expect(c.textContent).not.toContain('Sản phẩm 99');
-  });
-
-  it('trang 1 toàn món đã nằm ở kệ trên nhưng còn trang sau: tải tiếp và hiện món của trang 2, không ẩn khối', async () => {
-    mocks.get.mockImplementation(async (_path: string, opts?: { query?: { page?: number } }) =>
-      opts?.query?.page === 2 ? { data: cards(21, 3), meta: { page: 2, limit: 20, total: 23 } } : page(cards(1, 20), { total: 23 }),
-    );
-    const c = await mount({ exclude: new Set(cards(1, 20).map((x) => x.slug)) });
-    await flush(8);
-    expect(tiles(c).map((t) => t.textContent)).toEqual(['Sản phẩm 21', 'Sản phẩm 22', 'Sản phẩm 23'].map((n) => expect.stringContaining(n)));
-    expect(c.querySelector('h2')?.textContent).toBe('Gợi ý hôm nay');
-    expect(productCalls()).toHaveLength(2);
-  });
-
-  it('mọi trang đều là món đã nằm ở kệ trên và hết trang: ẩn khối sau khi tải hết', async () => {
-    const c = await mount({ exclude: new Set(cards(1, 4).map((x) => x.slug)) });
-    expect(c.textContent).toBe('');
-  });
-
-  it('đã tải xong, rỗng, không lỗi → ẩn cả khối: không tiêu đề, không chip', async () => {
-    mocks.get.mockImplementation(async () => page([]));
-    const c = await mount();
-    expect(c.textContent).toBe('');
-    expect(c.querySelector('h2')).toBeNull();
-  });
-
-  it('trang đầu rỗng do server dựng sẵn (catalog trống) cũng ẩn khối, không chờ tải', async () => {
-    const c = await mount({ initial: page([]) as never, seed: '20261101' });
-    expect(c.textContent).toBe('');
-    expect(productCalls()).toHaveLength(0);
-  });
-
-  it('đang tải → vẫn giữ tiêu đề, chip và khung chờ (trang không nhảy)', async () => {
-    mocks.get.mockReturnValue(new Promise(() => undefined));
-    const c = await mount();
-    expect(c.querySelector('h2')?.textContent).toBe('Gợi ý hôm nay');
-    expect(chipLabels(c)).toEqual(['Tất cả']);
+    expect(c.querySelector('h2')?.textContent).toBe('Khám phá theo Thương hiệu');
     expect(c.querySelector('[data-testid="catalog-grid-skeleton"]')).not.toBeNull();
-  });
-
-  it('lỗi tải (không phải rỗng) → vẫn hiện khối lỗi kèm "Thử lại", không mất khối im lặng', async () => {
-    mocks.get.mockRejectedValue(new Error('x'));
-    const c = await mount();
-    expect(c.querySelector('[data-testid="home-block-error"]')).not.toBeNull();
-    expect(c.querySelector('button[aria-label^="Thử lại"]')).not.toBeNull();
   });
 });

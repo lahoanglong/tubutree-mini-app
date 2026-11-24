@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
 import { CAMPAIGN_CODE, CAMPAIGN_SLUG, CAMPAIGN_TITLE, campaignBanner, campaignDetail, mockCampaigns } from './support/campaign-mocks';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — banner và trang chiến dịch (gói P11), 375×812. API mock toàn bộ (ảnh banner là data-URI, không qua mạng); không dùng waitForTimeout.
@@ -31,13 +32,13 @@ const carousel = (page: Page) => page.getByRole('region', { name: 'Chương trì
 const slides = (page: Page) => carousel(page).locator('[aria-roledescription="slide"]');
 
 test.describe('Banner chiến dịch ở Trang chủ', () => {
-  test('không có chiến dịch: khối banner không có chiều cao, không băng chuyền, Giờ vàng nằm ngay trên Gợi ý hôm nay', async ({ page, api }) => {
+  test('không có chiến dịch: khối banner không có chiều cao, không băng chuyền, Giờ vàng nằm trên khối Khám phá theo Thương hiệu', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockFlash(api);
     mockCampaigns(api);
     await page.goto('/');
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
-    const suggest = page.getByRole('region', { name: 'Gợi ý hôm nay' });
+    const suggest = page.getByRole('region', { name: BRAND_SHOWCASE });
     await expect(flash).toBeVisible({ timeout: 15_000 });
     await expect(suggest).toBeVisible({ timeout: 15_000 });
     expect((await blockHeights(page)).banner ?? 0).toBe(0);

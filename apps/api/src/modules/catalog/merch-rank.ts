@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 /**
  * Tầng trưng bày của danh sách mặc định (kệ Nổi bật) và Gợi ý theo ngày: hàng có ảnh và còn hàng lên trước, hàng chưa có ảnh xếp sau,
  * hàng mà mọi phân loại đang bán đều hết xếp cuối. Chỉ đổi thứ tự (trong cùng tầng giữ nguyên cách xếp cũ), không ẩn sản phẩm nào.
- * Không áp cho Bán chạy: thẻ ở đó mang số hạng theo vị trí (#1, #2…) nên thứ tự phải đúng lượt bán.
+ * Bán chạy chỉ dùng phần còn hàng (`stockTier`): hàng hết không chiếm đầu bảng, nhưng hàng chưa ảnh vẫn giữ đúng thứ hạng lượt bán.
  * Không chọn `images`/`thumbnail` (base64 tới ~1,5 triệu ký tự mỗi ảnh, luật D2 của đường khách): cờ có ảnh tính trong DB bằng `withImageFlags`.
  */
 export const MERCH_RANK_SELECT = {
@@ -17,9 +17,14 @@ export interface MerchRankFields {
 
 export type MerchTier = 0 | 1 | 2;
 
-/** Cùng luật "còn hàng" với thẻ (`cardInStock`); "có ảnh" là có ảnh đại diện hoặc ít nhất một ảnh trong `images` (thẻ lấy ảnh đầu khi thiếu ảnh đại diện). */
+/** Cùng luật "còn hàng" với thẻ (`cardInStock`): 0 khi còn ít nhất một phân loại đang bán có hàng, 1 khi hết sạch. */
+export function stockTier(p: MerchRankFields): 0 | 1 {
+  return (p.variations ?? []).some((v) => v.stock > 0) ? 0 : 1;
+}
+
+/** Còn hàng như `stockTier`; "có ảnh" là có ảnh đại diện hoặc ít nhất một ảnh trong `images` (thẻ lấy ảnh đầu khi thiếu ảnh đại diện). */
 export function merchTier(p: MerchRankFields): MerchTier {
-  if (!(p.variations ?? []).some((v) => v.stock > 0)) return 2;
+  if (stockTier(p) === 1) return 2;
   return p.hasImage ? 0 : 1;
 }
 

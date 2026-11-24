@@ -22,9 +22,10 @@ const CONFIG = { freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affilia
 const CATEGORIES = [{ id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4 }];
 const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true });
 const PAGE = { data: [card('f1', 'Món nổi bật')], meta: { page: 1, limit: 6, total: 1 } };
+const BRANDS = [{ brand: 'Tubu', count: 1, slug: null }];
 
 const routes: Record<string, unknown> = {
-  '/home': { publicConfig: CONFIG, categories: CATEGORIES, brands: [], flashActive: [], featured: PAGE, newest: PAGE, bestSellers: PAGE },
+  '/home': { publicConfig: CONFIG, categories: CATEGORIES, brands: BRANDS, flashActive: [], featured: PAGE, newest: PAGE, bestSellers: PAGE },
   '/home/me': {
     forYou: [card('f1', 'Món nổi bật')], flashUpcoming: [], wasteOpenRequestCount: 0,
     purchasedItems: { items: [], nextCursor: null }, newCustomerOffer: { isNewCustomer: true, welcomeVoucher: null }, purchasedLimit: 10,
@@ -32,7 +33,7 @@ const routes: Record<string, unknown> = {
   '/me/notifications/unread-count': { count: 0 },
   '/me/subscriptions': [], '/me/loyalty': { tier: { name: 'Mầm Xanh' }, pointsBalance: 0, pointsConvertedBalance: 0 }, '/me/coupons': [],
   '/me/daily-check-in': { checkedInToday: true, streakDays: 1, currentCycleDay: 1, rewards: [] }, '/feed': { posts: [] },
-  '/products': PAGE, '/products/for-you': [], '/categories': CATEGORIES, '/brands': [], '/config/public': CONFIG,
+  '/products': PAGE, '/products/for-you': [], '/categories': CATEGORIES, '/brands': BRANDS, '/config/public': CONFIG,
   '/flash-sales/active': [], '/flash-sales/upcoming': [],
 };
 const paths = () => net.apiFetch.mock.calls.map(([p]) => String(p).split('?')[0]);

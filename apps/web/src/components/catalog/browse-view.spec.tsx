@@ -150,7 +150,7 @@ describe('BrowseView — hub ở gốc', () => {
     expect(first.container.querySelectorAll('section[aria-label="Bán chạy nhất"] [data-ds-part="rank"]')).toHaveLength(10);
     first.unmount();
     http.get.mockClear();
-    const seeded = mount({ bestSellers: ten, brands: BRANDS, categories: CATEGORIES });
+    const seeded = mount({ bestSellers: { data: ten, meta: { page: 1, limit: 10, total: 10 } }, brands: BRANDS, categories: CATEGORIES });
     expect(seeded.container.querySelectorAll('section[aria-label="Bán chạy nhất"] [data-ds-part="rank"]')).toHaveLength(10);
     await flush();
     expect(productCalls()).toEqual([]);

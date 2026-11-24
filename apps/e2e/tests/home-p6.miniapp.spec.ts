@@ -3,6 +3,7 @@ import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
 import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — Trang chủ (gói P6, bố cục gọn): màn đầu 375×812 có thẻ sản phẩm đầu tiên (kệ Bán chạy nhất) và thứ tự khối đúng (Giờ vàng là ô khuyến mãi
@@ -61,7 +62,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(flash).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
     const blocks = await visibleBlocks(page);
     // Ô khuyến mãi chỉ có MỘT khối: Giờ vàng đang chạy thì không banner, không combo.
     expect(blocks).not.toContain('banner');
@@ -98,7 +99,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(welcome).toBeVisible({ timeout: 15_000 });
     await expect(flash).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
     const blocks = await visibleBlocks(page);
     expect(blocks).not.toContain('member');
     expect(blocks).not.toContain('purchased');

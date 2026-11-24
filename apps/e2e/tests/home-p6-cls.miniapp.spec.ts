@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
+import { BRAND_SHOWCASE, LOADING_GRID_OUTSIDE_BRANDS } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — độ ổn định bố cục Trang chủ (gói P6). Dự án Mini chạy WebKit (iPhone 12), không có PerformanceObserver 'layout-shift',
@@ -58,10 +59,10 @@ test.describe('Trang chủ Mini — CLS', () => {
     release();
     await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('flash-sale-loading')).toHaveCount(0);
     await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
-    await expect(page.getByTestId('catalog-grid-skeleton')).toHaveCount(0);
+    await expect(page.locator(LOADING_GRID_OUTSIDE_BRANDS)).toHaveCount(0);
     await page.waitForLoadState('networkidle');
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);

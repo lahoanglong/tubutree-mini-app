@@ -12,6 +12,7 @@ vi.mock('../../services/shop-api', async (orig) => ({
   getPublicConfig: vi.fn(() => new Promise(() => {})),
 }));
 
+import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
 import { ProductGrid } from './product-grid';
 import { ProductRail } from './product-rail';
 import { trackEvent } from '../../services/analytics';
@@ -44,6 +45,20 @@ describe('ProductGrid', () => {
     expect(screen.getByTestId('catalog-grid-skeleton')).toBeInTheDocument();
     expect(screen.getAllByTestId('catalog-tile-skeleton')).toHaveLength(4);
     expect(screen.queryByTestId('catalog-grid')).toBeNull();
+  });
+
+  it('loading + reserve: lưới 2 cột như thẻ thật, mỗi ô một nút ảnh 1:1 + thân tileBodyHeight (không vạch chờ bên trong)', () => {
+    wrap(<ProductGrid items={[]} variant="grid" loading reserve skeletonCount={3} />);
+    const grid = screen.getByTestId('catalog-grid-reserve');
+    expect(grid.getAttribute('aria-hidden')).toBe('true');
+    expect(grid.style.gridTemplateColumns).toBe('1fr 1fr');
+    const cells = Array.from(grid.children) as HTMLElement[];
+    expect(cells).toHaveLength(3);
+    expect(cells.every((el) => el.childElementCount === 0)).toBe(true);
+    expect(cells[0]!.style.aspectRatio).toBe('1 / 1');
+    expect(cells[0]!.style.paddingBottom).toBe(`${tileBodyHeight('grid')}px`);
+    expect(screen.queryByTestId('catalog-grid-skeleton')).toBeNull();
+    expect(screen.queryAllByTestId('catalog-tile-skeleton')).toHaveLength(0);
   });
 
   it('rankFrom đánh hạng tăng dần cho biến thể rank', () => {

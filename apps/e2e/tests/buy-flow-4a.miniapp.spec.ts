@@ -8,6 +8,7 @@ import { expectNoHorizontalOverflow } from './support/game-mini-mocks';
 import { ORDER_ZALO_STATUS } from './support/order-zalo-mocks';
 import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
 import { eventsNamed, flushEvents } from './support/events';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — Dự án 4a "Nhịp mua lại + tab bar + đặt hàng thành công"
@@ -27,11 +28,11 @@ async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
 }
 
 /**
- * Lưới "Gợi ý hôm nay" nằm cuối Trang chủ và chỉ tải khi khối cách màn hình chưa tới một màn (suggest-feed.tsx); sau khi màn đầu gọn lại
+ * Khối "Khám phá theo Thương hiệu" nằm cuối Trang chủ và chỉ tải món khi khối cách màn hình chưa tới một màn (suggest-feed.tsx); sau khi màn đầu gọn lại
  * (lối tắt, danh mục một hàng, hành trình, chẩn đoán) nó nằm xa hơn, nên khách phải cuộn tới thì mới có sản phẩm.
  */
 async function showSuggestFeed(page: Page): Promise<void> {
-  await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
+  await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
 }
 
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {

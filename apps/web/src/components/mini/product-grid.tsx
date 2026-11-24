@@ -6,16 +6,20 @@ import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view'
 import type { ProductCard as ProductCardType } from '@/lib/api';
 import { GRID_PRODUCTS, gridImageSizes } from '@/lib/product-grid';
 import { ProductCard } from './product-card';
-import { ProductTileSkeleton } from './skeleton';
+import { ProductTileReserve, ProductTileSkeleton } from './skeleton';
 
 export interface ProductGridProps {
   items: readonly ProductCardType[];
   variant: CardVariant;
   /** Hạng của thẻ đầu; thẻ sau tăng dần (biến thể `rank`). */
   rankFrom?: number;
+  /** Hạng của từng thẻ (cùng chỉ số với `items`), thắng `rankFrom`; null là thẻ không số (món ghim của Bán chạy nhất). */
+  ranks?: readonly (number | null)[];
   /** Lớp cột của lưới; mặc định `GRID_PRODUCTS`, trang có cột lọc dùng `GRID_PRODUCTS_WITH_FILTER`. */
   className?: string;
   loading?: boolean;
+  /** Cùng `loading`: lưới còn xa khung nhìn vẽ ô giữ chỗ một nút (`ProductTileReserve`) thay khung chờ đầy đủ, cùng cột và chiều cao. */
+  reserve?: boolean;
   skeletonCount?: number;
   showBrand?: boolean;
   showWishlist?: boolean;
@@ -37,8 +41,10 @@ export function ProductGrid({
   items,
   variant,
   rankFrom,
+  ranks,
   className = GRID_PRODUCTS,
   loading = false,
+  reserve = false,
   skeletonCount = 6,
   showBrand,
   showWishlist,
@@ -49,6 +55,15 @@ export function ProductGrid({
   onOpen,
   shelf,
 }: ProductGridProps) {
+  if (loading && reserve) {
+    return (
+      <div data-testid="catalog-grid-reserve" aria-hidden="true" className={className}>
+        {Array.from({ length: skeletonCount }, (_, i) => (
+          <ProductTileReserve key={i} variant={variant} brand={showBrand === false ? false : undefined} />
+        ))}
+      </div>
+    );
+  }
   if (loading) {
     return (
       <div data-testid="catalog-grid-skeleton" aria-hidden="true" className={className}>
@@ -70,7 +85,7 @@ export function ProductGrid({
             <ProductCard
               product={p}
               variant={variant}
-              rank={rankFrom === undefined ? undefined : rankFrom + i}
+              rank={ranks ? (ranks[i] ?? undefined) : rankFrom === undefined ? undefined : rankFrom + i}
               priority={i < priorityCount}
               imageSizes={sizes}
               showBrand={showBrand}

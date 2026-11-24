@@ -4,8 +4,8 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Droplets } from 'lucide-react';
-import type { ProductCard } from '@tubutree/app-core/api/catalog';
-import { bestSellersHeading, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
+import type { BestSellersPage } from '@tubutree/app-core/api/browse';
+import { bestSellersHeading, bestSellersPageRanks, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { hubBestSellers } from '@tubutree/app-core/browse/hub';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
@@ -53,7 +53,7 @@ export interface BrowseHubProps {
   placeholderCount?: number;
   brands: HubBrand[] | undefined;
   /** Kệ Bán chạy nhất do server tải sẵn (HTML đầu có sản phẩm cho crawler); thiếu thì tải phía trình duyệt. */
-  initialBestSellers?: ProductCard[];
+  initialBestSellers?: BestSellersPage;
   /**
    * Có: máy chủ thấy trang Refill có gói bán được, vẽ hàng lối vào ngay trong HTML. `null`: máy chủ đã hỏi và trang trống hoặc cờ tắt, không vẽ.
    * Thiếu (máy chủ không hỏi được): tải lười phía trình duyệt như trước.
@@ -78,7 +78,7 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
     retry: false,
     ...(initialBestSellers ? { initialData: initialBestSellers } : {}),
   });
-  const ranked = hubBestSellers(q.data);
+  const ranked = hubBestSellers(q.data?.data);
   // Chưa đủ số bán mà admin đã ghim kệ: "Tubu chọn cho bạn", chỉ món ghim, không số hạng (xem `bestSellersHeading`).
   const heading = bestSellersHeading(ranked);
   const items = curatedShelfItems(ranked, shelf('browse.bestSellers').minItems);
@@ -93,7 +93,7 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
       {showBestSellers && (
         <Section id="browse-best-sellers" label={title}>
           <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />
-          <ProductRail items={items} variant="rank" rankFrom={heading.ranked ? 1 : undefined} label={title} loading={q.isLoading} skeletonCount={max} priorityCount={2} shelf="browseHub" />
+          <ProductRail items={items} variant="rank" ranks={heading.ranked ? bestSellersPageRanks(items, q.data?.pinnedIds) : undefined} label={title} loading={q.isLoading} skeletonCount={max} priorityCount={2} shelf="browseHub" />
         </Section>
       )}
       <BrandGrid brands={brands} onSelect={onPickBrand} />

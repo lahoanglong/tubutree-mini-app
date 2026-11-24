@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOME_BEST_SELLER_LIMIT } from '../home-layout';
-import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
+import { bestSellerShelfItems, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, merchFirst, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
 const ids = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => e(`${prefix}${i}`, `${prefix}${i}`));
@@ -219,6 +219,12 @@ describe('ranksAreSequential (P2 #4)', () => {
     expect(ranksAreSequential([2, 3, 4])).toBe(false);
     expect(ranksAreSequential([2])).toBe(false);
   });
+
+  it('món ghim (null) không tính: hạng của phần còn lại vẫn phải liền từ 1', () => {
+    expect(ranksAreSequential([null, null, 1, 2, 3])).toBe(true);
+    expect(ranksAreSequential([null])).toBe(true);
+    expect(ranksAreSequential([null, 2, 3])).toBe(false);
+  });
 });
 
 describe('seeAllHref', () => {
@@ -250,30 +256,67 @@ describe('seeAllHref', () => {
   });
 });
 
-describe('imageFirst: món có ảnh lên trước (kệ Bán chạy nhất)', () => {
-  const p = (slug: string, thumbnail: string | null) => ({ slug, thumbnail, rank: 0 });
+describe('merchFirst: còn hàng trước, có ảnh trước trong từng phần (kệ Bán chạy nhất)', () => {
+  const p = (slug: string, thumbnail: string | null, inStock = true) => ({ slug, thumbnail, inStock, rank: 0 });
   const has = (x: { thumbnail: string | null }) => Boolean(x.thumbnail?.trim());
+  const stock = (x: { inStock: boolean }) => x.inStock;
 
-  it('giữ thứ tự tương đối trong từng nhóm, món không ảnh xuống cuối', () => {
+  it('giữ thứ tự tương đối trong từng nhóm, món không ảnh xuống sau món có ảnh cùng phần', () => {
     const list = [p('a', null), p('b', 'b.webp'), p('c', null), p('d', 'd.webp'), p('e', 'e.webp')];
-    expect(imageFirst(list, has).map((x) => x.slug)).toEqual(['b', 'd', 'e', 'a', 'c']);
+    expect(merchFirst(list, stock, has).map((x) => x.slug)).toEqual(['b', 'd', 'e', 'a', 'c']);
   });
 
-  it('không đổi gì khi mọi món đều có ảnh hoặc đều không có; không sửa mảng gốc', () => {
+  it('món hết hàng có ảnh KHÔNG BAO GIỜ vượt món còn hàng chưa ảnh', () => {
+    const list = [p('oos-img', 'o.webp', false), p('in-none', null), p('oos-none', null, false), p('in-img', 'i.webp')];
+    expect(merchFirst(list, stock, has).map((x) => x.slug)).toEqual(['in-img', 'in-none', 'oos-img', 'oos-none']);
+  });
+
+  it('không đổi gì khi mọi món cùng một nhóm; không sửa mảng gốc', () => {
     const all = [p('a', 'a.webp'), p('b', 'b.webp')];
     const none = [p('a', null), p('b', ' ')];
-    expect(imageFirst(all, has)).toEqual(all);
-    expect(imageFirst(none, has)).toEqual(none);
+    expect(merchFirst(all, stock, has)).toEqual(all);
+    expect(merchFirst(none, stock, has)).toEqual(none);
     const src = [p('x', null), p('y', 'y.webp')];
-    imageFirst(src, has);
+    merchFirst(src, stock, has);
     expect(src.map((s) => s.slug)).toEqual(['x', 'y']);
   });
 
   it('hạng thật đi theo món: xếp lại rồi chống trùng/cắt 10 vẫn ghi đúng hạng và hạng hụt thì kệ không đánh số', () => {
-    const source = Array.from({ length: 12 }, (_, i) => ({ slug: `s${i + 1}`, thumbnail: i === 1 || i === 2 ? null : `s${i + 1}.webp`, rank: i + 1 }));
-    const r = composeHomeShelves({ ...none, bestSellers: imageFirst(source, has).map((x) => e(x.slug, x)) });
+    const source = Array.from({ length: 12 }, (_, i) => ({ slug: `s${i + 1}`, thumbnail: i === 1 || i === 2 ? null : `s${i + 1}.webp`, inStock: true, rank: i + 1 }));
+    const r = composeHomeShelves({ ...none, bestSellers: merchFirst(source, stock, has).map((x) => e(x.slug, x)) });
     expect(r.bestSellers).toHaveLength(10);
     expect(r.bestSellers.map((x) => x.slug)).toEqual(['s1', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12']);
     expect(ranksAreSequential(r.bestSellers.map((x) => x.rank))).toBe(false);
+  });
+});
+
+describe('bestSellerShelfItems: món ghim không mang hạng, phần còn lại đánh hạng liền (w34-02)', () => {
+  const c = (id: string, opts: { thumbnail?: string | null; inStock?: boolean } = {}) => ({ id, thumbnail: opts.thumbnail === undefined ? `${id}.webp` : opts.thumbnail, inStock: opts.inStock ?? true });
+  const view = (xs: { product: { id: string }; rank: number | null }[]) => xs.map((x) => [x.product.id, x.rank]);
+
+  it('không có pinnedIds (API cũ, chưa ghim): mọi món mang hạng theo vị trí', () => {
+    expect(view(bestSellerShelfItems([c('a'), c('b'), c('c')]))).toEqual([['a', 1], ['b', 2], ['c', 3]]);
+    expect(view(bestSellerShelfItems([c('a'), c('b')], []))).toEqual([['a', 1], ['b', 2]]);
+  });
+
+  it('món ghim đứng đầu theo thứ tự máy chủ, không số; món sau đánh 1..n không đếm món ghim', () => {
+    const r = bestSellerShelfItems([c('p2'), c('p1'), c('a'), c('b')], ['p2', 'p1']);
+    expect(view(r)).toEqual([['p2', null], ['p1', null], ['a', 1], ['b', 2]]);
+    expect(ranksAreSequential(r.map((x) => x.rank))).toBe(true);
+  });
+
+  it('món hết hàng có ảnh không vượt món còn hàng chưa ảnh; món ghim không bị xếp lại; hạng gắn sau phần còn hàng, trước bước ảnh', () => {
+    const r = bestSellerShelfItems(
+      [c('p1', { thumbnail: null }), c('oos', { inStock: false }), c('none', { thumbnail: null }), c('img')],
+      ['p1'],
+    );
+    expect(view(r)).toEqual([['p1', null], ['img', 2], ['none', 1], ['oos', 3]]);
+    expect(ranksAreSequential(r.map((x) => x.rank))).toBe(false);
+  });
+
+  it('API cũ trả món hết hàng xen giữa (xếp theo lượt bán): món đó xuống cuối mà hạng vẫn liền, thẻ còn số', () => {
+    const r = bestSellerShelfItems([c('a'), c('b'), c('oos', { inStock: false }), c('d'), c('e')]);
+    expect(view(r)).toEqual([['a', 1], ['b', 2], ['d', 3], ['e', 4], ['oos', 5]]);
+    expect(ranksAreSequential(r.map((x) => x.rank))).toBe(true);
   });
 });

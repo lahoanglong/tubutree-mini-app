@@ -1,6 +1,7 @@
 import { test, expect } from './support/mock-api';
 import { observeCls, readClsTotal } from './support/cls-observer';
 import { mockMergedHome } from './support/home-merged';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Web, Trang chủ: khách đã chọn cỡ chữ "lớn"/"nhỏ" ở Cài đặt thì script ở <head> đặt font-size gốc trước khi vẽ,
@@ -37,7 +38,7 @@ for (const { scale, size } of SCALES) {
       return { data: Array.from({ length: limit }, (_, i) => suggestCard((n - 1) * limit + i + 1)), meta: { page: n, limit, total: 40 }, filtersIgnored: false };
     });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     await page.waitForTimeout(800);
     const { cls, sources } = await readClsTotal(page);

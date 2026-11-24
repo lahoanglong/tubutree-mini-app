@@ -441,6 +441,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'review.ecoPick': 34,
   'home.greenCorner.title': 36,
   'home.greenCorner.cardLabel': null,
+  'home.brands.title': 28,
   'pdp.alsoLike': 24,
   'pdp.brandShelf': 20,
   'pdp.brandShelfLabel': null,

@@ -168,7 +168,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
   // ItemList = đúng các món có trong HTML máy chủ: kệ Bán chạy ở hub, trang danh sách đầu ở trạng thái khác (vị trí nối tiếp các trang trước).
   const collection =
     meta && crumbs
-      ? browseCollectionJsonLd(meta, crumbs, hub ? (bestSellers ?? []) : (catalog?.data ?? []), hub ? 0 : (startPage - 1) * PAGE_LIMIT)
+      ? browseCollectionJsonLd(meta, crumbs, hub ? (bestSellers?.data ?? []) : (catalog?.data ?? []), hub ? 0 : (startPage - 1) * PAGE_LIMIT)
       : null;
   return (
     <main className={`${PAGE_WIDE} md:py-8`}>

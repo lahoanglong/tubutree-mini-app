@@ -8,6 +8,14 @@ export interface PageResponse<T> {
   meta: { page: number; limit: number; total: number };
 }
 
+/**
+ * Một trang `GET /products`. `pinnedIds`: id các món admin ghim (Xếp kệ) đang đứng liền ở đầu danh sách, theo thứ tự ghim; mọi trang của cùng danh sách
+ * đều gửi để nơi vẽ đánh hạng tiếp mà không đếm món ghim. Không có ghim hay API cũ thì thiếu.
+ */
+export interface ProductPage extends PageResponse<ProductCard> {
+  pinnedIds?: string[];
+}
+
 export interface ProductCard {
   id: string;
   slug: string;
@@ -137,15 +145,15 @@ export const fetchProductsBySlugs = async (http: HttpClient, slugs: string[]): P
   return res.data;
 };
 
-export const fetchProducts = async (http: HttpClient, params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
+export const fetchProducts = async (http: HttpClient, params: Record<string, string | number> = {}): Promise<ProductPage> => {
   const brandParam = params.brand ? String(params.brand) : '';
   const brandList = brandParam ? brandParam.split(',').map((b) => b.trim()).filter(Boolean) : [];
 
   if (brandList.length <= 1) {
-    return http.get<PageResponse<ProductCard>>('/products', { query: params });
+    return http.get<ProductPage>('/products', { query: params });
   }
 
-  const primaryRes = await http.get<PageResponse<ProductCard>>('/products', { query: params });
+  const primaryRes = await http.get<ProductPage>('/products', { query: params });
   if (primaryRes.data && primaryRes.data.length > 0) {
     return primaryRes;
   }
@@ -192,11 +200,15 @@ export const fetchProducts = async (http: HttpClient, params: Record<string, str
   };
 };
 export const fetchProduct = (http: HttpClient, slug: string) => http.get<ProductDetail>(`/products/${encodeURIComponent(slug)}`);
-/** `slug` có khi nhãn đã công khai trang /brand/:slug; API cũ chưa trả thì thiếu. */
+/**
+ * `slug` có khi nhãn đã công khai trang /brand/:slug; `tagline` là dòng giới thiệu admin nhập ở trang nhãn (trống thì null, nơi vẽ lấy câu dự phòng
+ * `brandTagline`). API cũ chưa trả thì thiếu.
+ */
 export interface BrandCount {
   brand: string;
   count: number;
   slug?: string | null;
+  tagline?: string | null;
 }
 export const fetchBrands = (http: HttpClient) => http.get<BrandCount[]>('/brands');
 export const fetchRelated = (http: HttpClient, slug: string) => http.get<ProductCard[]>(`/products/${slug}/related`);

@@ -93,9 +93,9 @@ describe('BrowsePage — hub ở gốc', () => {
   it('không có tham số: là hub, KHÔNG gọi danh sách; chỉ tải kệ Bán chạy nhất (10 món, sort=best_seller_30d) cùng nhãn + danh mục', async () => {
     await render({});
     expect(productCalls()).toEqual([['/products', { query: { sort: 'best_seller_30d', limit: 10 } }]]);
-    const props = mocks.view.mock.calls[0]![0] as { initial: unknown; bestSellers: unknown[]; brands: unknown; categories: unknown };
+    const props = mocks.view.mock.calls[0]![0] as { initial: unknown; bestSellers: { data: unknown[] }; brands: unknown; categories: unknown };
     expect(props.initial).toBeNull();
-    expect(props.bestSellers).toHaveLength(3);
+    expect(props.bestSellers.data).toHaveLength(3);
     expect(props.brands).toEqual(BRANDS);
     expect(props.categories).toEqual(CATEGORIES);
   });

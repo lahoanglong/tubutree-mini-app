@@ -1,5 +1,10 @@
 import { test, expect } from './support/mock-api';
-import { HOME_ME, MERGED_FOR_YOU, MERGED_PURCHASED, lonePersonalCalls, mockMergedHome } from './support/home-merged';
+import { HOME_ME, MERGED_BRAND, MERGED_PURCHASED, lonePersonalCalls, mockMergedHome } from './support/home-merged';
+import { BRAND_SHOWCASE } from './support/home-brands';
+
+const BRAND_ITEM = {
+  id: 'hm-brand-1', slug: 'hm-nhan-1', brand: 'Tubu', name: 'Món của nhãn từ /products', thumbnail: null, basePrice: 120_000, salePrice: null, isFeatured: false, inStock: true,
+};
 
 const USER = {
   id: 'u-merged', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
@@ -23,9 +28,14 @@ test.describe('Web khách: Trang chủ — request gộp', () => {
     api.get('/me/wishlist/ids', []);
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
     mockMergedHome(api);
+    // Món của từng nhãn ở khối cuối tải ở trình duyệt (`/products?brand=`); mặc định của mock-api là trang rỗng, khi đó nhãn tự ẩn.
+    api.get('/products', { data: [BRAND_ITEM], meta: { page: 1, limit: 8, total: 1 } });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' }).getByText(MERGED_PURCHASED)).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).getByText(MERGED_FOR_YOU)).toBeVisible();
+    const showcase = page.getByRole('region', { name: BRAND_SHOWCASE });
+    await showcase.scrollIntoViewIfNeeded();
+    await expect(showcase.getByRole('heading', { name: MERGED_BRAND, exact: true })).toBeVisible();
+    await expect(showcase.getByText(BRAND_ITEM.name).first()).toBeVisible();
     const me = api.callsTo('GET', '/home/me');
     expect(me).toHaveLength(1);
     expect(me[0]!.query.get('purchasedLimit')).toBe(String(HOME_ME.purchasedLimit));

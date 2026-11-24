@@ -50,7 +50,7 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
   it('nhãn đã công khai khớp theo tên nhãn hiệu lực để có slug; nhãn chưa công khai thì null', async () => {
     const { svc, brandFindMany } = brandsService([{ brand: 'Tubu Tree', _count: { _all: 111 } }], GENERIC_ROWS, [{ name: 'Hector', slug: 'hector' }]);
     const out = (await svc.brands()) as Out;
-    expect(out.find((b) => b.brand === 'Hector')).toEqual({ brand: 'Hector', count: 7, slug: 'hector' });
+    expect(out.find((b) => b.brand === 'Hector')).toEqual({ brand: 'Hector', count: 7, slug: 'hector', tagline: null });
     expect(out.find((b) => b.brand === 'Fuwa3e')?.slug).toBeNull();
     const asked = (brandFindMany.mock.calls[0]![0] as { where: { name: { in: string[] } } }).where.name.in;
     // Sokfarm hỏi cả chính tả cũ: bản ghi Brand tạo từ "Sokfram" vẫn gắn được slug.
@@ -75,11 +75,11 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
   it('slug của nhãn công khai: bản ghi Brand tên cũ "Sokfram" gắn vào "Sokfarm", tên chuẩn thắng khi có cả hai', async () => {
     const rows = [{ brand: 'Sokfram', _count: { _all: 3 } }];
     const legacyOnly = (await brandsService(rows, [], [{ name: 'Sokfram', slug: 'sokfram-cu' }]).svc.brands()) as Out;
-    expect(legacyOnly).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfram-cu' }]);
+    expect(legacyOnly).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfram-cu', tagline: null }]);
     const both = (await brandsService(rows, [], [{ name: 'Sokfarm', slug: 'sokfarm' }, { name: 'Sokfram', slug: 'sokfram-cu' }]).svc.brands()) as Out;
-    expect(both).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfarm' }]);
+    expect(both).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfarm', tagline: null }]);
     const bothReversed = (await brandsService(rows, [], [{ name: 'Sokfram', slug: 'sokfram-cu' }, { name: 'Sokfarm', slug: 'sokfarm' }]).svc.brands()) as Out;
-    expect(bothReversed).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfarm' }]);
+    expect(bothReversed).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfarm', tagline: null }]);
   });
 
   it('nhãn Admin đã gán cộng dồn với nhãn suy được, không bị đè', async () => {
@@ -101,7 +101,7 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
 
   it('brand rỗng cũng là chưa gán nhãn', async () => {
     const { svc, findMany } = brandsService([{ brand: '', _count: { _all: 1 } }], [{ id: 'a', name: 'Xịt tràm Pineboo 150ml', slug: 'a', brand: '' }]);
-    expect(await svc.brands()).toEqual([{ brand: 'Pineboo', count: 1, slug: null }]);
+    expect(await svc.brands()).toEqual([{ brand: 'Pineboo', count: 1, slug: null, tagline: null }]);
     expect(findMany).toHaveBeenCalledTimes(1);
   });
 
@@ -109,7 +109,7 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
     const groupBy = jest.fn().mockResolvedValue([{ brand: 'Fuwa3e', _count: { _all: 44 } }]);
     // Thiếu product.findMany: gọi tới là lỗi.
     const prisma = { product: { groupBy }, brand: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
-    expect(await new CatalogService(prisma).brands()).toEqual([{ brand: 'Fuwa3e', count: 44, slug: null }]);
+    expect(await new CatalogService(prisma).brands()).toEqual([{ brand: 'Fuwa3e', count: 44, slug: null, tagline: null }]);
   });
 
   it('chỉ "Tubu Tree" mà không tên nào nói nhãn thì vẫn một dòng "Tubu Tree"', async () => {
@@ -117,7 +117,7 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
       { id: 'a', name: 'Cà phê muối túi 50x16g', slug: 'a', brand: 'Tubu Tree' },
       { id: 'b', name: 'Socola CHOCO-OKE', slug: 'b', brand: 'Tubu Tree' },
     ]);
-    expect(await svc.brands()).toEqual([{ brand: 'Tubu Tree', count: 2, slug: null }]);
+    expect(await svc.brands()).toEqual([{ brand: 'Tubu Tree', count: 2, slug: null, tagline: null }]);
   });
 });
 

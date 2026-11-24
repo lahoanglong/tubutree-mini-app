@@ -198,7 +198,7 @@ describe('Xếp kệ (real Postgres)', () => {
     expect((await catalog.list({ page: 1, limit: 5 })).data.slice(0, 2).map((c) => c.id)).toEqual([b, a]);
   });
 
-  it('Bán chạy nhất: chưa đủ số bán và có ghim thì món ghim đứng đầu (đánh dấu curated) rồi tới xếp hạng thường; đủ số thì về xếp hạng thật', async () => {
+  it('Bán chạy nhất: có ghim thì món ghim luôn đứng đầu; chưa đủ số bán thì đánh dấu curated, đủ số thì không đánh dấu, phần sau là xếp hạng thật', async () => {
     const minSold = 3;
     const already = await prisma.product.count({ where: { isActive: true, approvalStatus: 'APPROVED', soldApp30d: { gte: minSold } } });
     onValues['merch.best_seller_min_products'] = already + 2;
@@ -229,13 +229,18 @@ describe('Xếp kệ (real Postgres)', () => {
     const scoped = await catalog.list({ page: 1, limit: 10, sort: 'best_seller_30d', category: root.id });
     expect(marked(scoped)).toEqual([p2!, p1!].filter((id) => slotOf(id) !== 2));
 
-    // Đạt ngưỡng: đúng mốc thì chuyển về xếp hạng thật, không còn dấu curated.
+    // Đạt ngưỡng: đúng mốc thì chuyển về xếp hạng thật, không còn dấu curated; món ghim vẫn đứng đầu (kèm `pinnedIds`), phần sau là bảng thường.
     await prisma.product.update({ where: { id: s2! }, data: { soldApp30d: 5 } });
     catalog.invalidateMerchShelves();
     expect(await catalog.merchStatus()).toEqual({ enabled: true, curated: false });
-    expect(await allIds(catalog, { sort: 'best_seller_30d' })).toEqual(await allIds(base(), { sort: 'best_seller_30d' }));
+    const real = await allIds(base(), { sort: 'best_seller_30d' });
+    expect(await allIds(catalog, { sort: 'best_seller_30d' })).toEqual({
+      ids: [p2!, p1!, ...real.ids.filter((id) => id !== p1 && id !== p2)],
+      total: real.total,
+    });
     const first = await catalog.list({ page: 1, limit: 10, sort: 'best_seller_30d' });
     expect(first.data.some((c) => 'curated' in c)).toBe(false);
+    expect((first as { pinnedIds?: string[] }).pinnedIds).toEqual([p2, p1]);
     await prisma.product.updateMany({ where: { id: { in: [s1!, s2!] } }, data: { soldApp30d: 0 } });
   });
 

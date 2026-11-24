@@ -13,6 +13,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/', search: '', hash: '', state: null, key: 'default' }),
 }));
 vi.mock('../services/shop-api', () => ({
+  fetchBrands: vi.fn().mockResolvedValue([]),
   fetchProducts: vi.fn().mockResolvedValue({ data: [], meta: { page: 1, limit: 6, total: 0 } }),
   fetchCategories: vi.fn().mockResolvedValue([]),
   fetchPurchasedItems: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
