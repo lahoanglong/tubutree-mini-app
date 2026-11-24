@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { VITAL_EVENT_NAMES } from '../analytics/vitals/vitals-rules';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { CHAT_RETENTION_KEY, RECALL_TOMBSTONE_TTL_MS } from '../support-chat/support-chat.config';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
@@ -153,7 +154,7 @@ export class DataRetentionService {
             table: 'analytics_events',
             label: 'analytics_events.perf_vitals',
             // Chỉ theo `receivedAt` (giờ server, có index riêng): `occurredAt` do máy khách tự khai, khai giờ tương lai thì dòng không bao giờ bị dọn.
-            where: Prisma.sql`"eventName" IN ('web_vital', 'mini_vital') AND "receivedAt" < ${vitalsCutoff}`,
+            where: Prisma.sql`"eventName" IN (${Prisma.join(VITAL_EVENT_NAMES)}) AND "receivedAt" < ${vitalsCutoff}`,
           },
         ];
       }

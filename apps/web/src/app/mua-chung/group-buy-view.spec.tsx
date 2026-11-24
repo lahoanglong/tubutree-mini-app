@@ -343,29 +343,41 @@ describe('/mua-chung — nhóm của mình và mời bạn', () => {
     expect(mocks.share.mock.calls[0]![0].path).toBe('/mua-chung/mine?ref=ABCD1234');
   });
 
-  it('kết quả chia sẻ báo bằng thông báo nổi: khách đóng hộp thì im; chép link (máy tính không có hộp chia sẻ) thì báo đã chép; thất bại thì nói chép tay', async () => {
+  it('kết quả chia sẻ: khách đóng hộp thì im; thất bại thì dòng lỗi cố định nói chép tay; chép link (máy tính không có hộp chia sẻ) thì thông báo nổi và gỡ dòng lỗi cũ', async () => {
     mocks.list = [GROUP('mine', { joined: true, isOwner: true })];
     const c = await mount();
     // Thông báo nổi đưa ra body (portal), không phải dòng chữ dưới đầu trang.
-    const toast = (role: 'status' | 'alert') =>
-      Array.from(document.body.querySelectorAll<HTMLElement>(`[role="${role}"]`)).find((el) => !c.contains(el) && el.textContent);
+    const toast = () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="status"]')).find((el) => !c.contains(el) && el.textContent);
     mocks.share.mockResolvedValueOnce('cancelled');
     click(btn(c, 'Mời bạn bè')!);
     await flush(3);
-    expect(toast('status')).toBeUndefined();
-    expect(toast('alert')).toBeUndefined();
-
-    mocks.share.mockResolvedValueOnce('copied');
-    click(btn(c, 'Mời bạn bè')!);
-    await flush(3);
-    expect(toast('status')?.textContent).toBe('Đã sao chép link mời mua chung');
-    expect(c.querySelector('p[role="status"]')).toBeNull();
+    expect(toast()).toBeUndefined();
+    expect(c.querySelector('[role="alert"]')).toBeNull();
 
     mocks.share.mockResolvedValueOnce('failed');
     click(btn(c, 'Mời bạn bè')!);
     await flush(3);
-    expect(toast('alert')?.textContent).toContain('Không sao chép được');
-    expect(toast('status')).toBeUndefined();
+    expect(c.querySelector('p[role="alert"]')?.textContent).toBe('Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.');
+    expect(toast()).toBeUndefined();
+
+    mocks.share.mockResolvedValueOnce('copied');
+    click(btn(c, 'Mời bạn bè')!);
+    await flush(3);
+    expect(toast()?.textContent).toBe('Đã sao chép link mời mua chung');
+    expect(c.querySelector('p[role="alert"]')).toBeNull();
+    expect(c.querySelector('p[role="status"]')).toBeNull();
+  });
+
+  it('bấm Mời không xoá lời báo khác đang hiện (vừa tham gia nhóm)', async () => {
+    mocks.list = [GROUP('a'), GROUP('mine', { joined: true, isOwner: true })];
+    const c = await mount();
+    click(btn(c, 'Tham gia mua chung (−20%)')!);
+    await flush(5);
+    expect(c.querySelector('p[role="status"]')?.textContent).toBe('Đã tham gia nhóm');
+    mocks.share.mockResolvedValueOnce('cancelled');
+    click(btn(c, 'Mời bạn bè')!);
+    await flush(3);
+    expect(c.querySelector('p[role="status"]')?.textContent).toBe('Đã tham gia nhóm');
   });
 
   it('thành viên (không phải người mở) cũng mời được; nhóm chưa tham gia thì không có nút mời; nhóm đã đóng không có nút mời', async () => {

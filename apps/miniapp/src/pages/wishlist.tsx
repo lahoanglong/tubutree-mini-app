@@ -230,7 +230,8 @@ export default function WishlistPage() {
                           haptic('light');
                           // Chỉ khi chuông đang giữ focus (bàn phím, trình đọc màn hình): chạm ngón tay không kéo focus đi đâu.
                           if (filterView.active === 'restock' && view.kind === 'waiting' && document.activeElement?.getAttribute('data-restock-bell') === p.id) {
-                            const ids = filterView.items.map((x) => x.id);
+                            // Thẻ đang huỷ dở cũng sắp rời lưới: không chọn làm đích.
+                            const ids = filterView.items.map((x) => x.id).filter((id) => id === p.id || !restock.busy.has(id));
                             const at = ids.indexOf(p.id);
                             focusAfterCancel.current = { goneId: p.id, nextId: ids[at + 1] ?? ids[at - 1] ?? null, groupAria: filterView.groupAria };
                           }
