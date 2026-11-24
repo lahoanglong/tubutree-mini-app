@@ -137,7 +137,7 @@ export function dailyDigestEmail(d: DailyDigest, ctx: AlertEmailContext): AlertE
 
   const s = d.stuckOrders;
   sections.push({
-    h: `Đơn kẹt quá ${DIGEST_STUCK_HOURS} giờ`,
+    h: `Đơn kho Tubu kẹt quá ${DIGEST_STUCK_HOURS} giờ`,
     lines: !s
       ? [DIGEST_NO_DATA]
       : s.count === 0

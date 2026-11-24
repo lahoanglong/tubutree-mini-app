@@ -122,15 +122,23 @@ export class ServerErrorCounterService implements OnModuleInit, OnModuleDestroy 
   }
 }
 
+/** `/api/health` trả 503 khi DB/Redis chập chờn để Docker healthcheck và monitor báo; đó không phải lượt khách gặp lỗi nên không đếm. */
+const HEALTH_PATH = /^\/(?:api\/)?health(?:[/?]|$)/;
+
 /**
  * Gắn cho mọi route (OpsModule.configure): khi phản hồi gửi xong mà mã >= 500 thì đếm một lần. Đọc mã lúc `finish` nên bắt được cả 5xx do
  * exception filter (Prisma, Sentry, BaseExceptionFilter) đặt sau controller. Request khách tự huỷ giữa chừng (`close` không `finish`) không đếm.
+ * 503 "hệ thống đang bận" (thua tranh khoá) vẫn đếm: khách thấy lỗi đó thật.
  */
 @Injectable()
 export class ServerErrorCountMiddleware implements NestMiddleware {
   constructor(private readonly counter: ServerErrorCounterService) {}
 
-  use(_req: Request, res: Response, next: NextFunction): void {
+  use(req: Request, res: Response, next: NextFunction): void {
+    if (HEALTH_PATH.test(req.originalUrl ?? req.url ?? '')) {
+      next();
+      return;
+    }
     res.once('finish', () => {
       if (res.statusCode >= 500) this.counter.record();
     });

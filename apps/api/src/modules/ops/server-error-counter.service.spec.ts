@@ -79,17 +79,17 @@ describe('ServerErrorCounterService', () => {
 });
 
 describe('ServerErrorCountMiddleware', () => {
-  async function serve(status: number) {
+  async function serve(status: number, path = '/x') {
     const record = jest.fn();
     const app = express();
     app.use((req, res, next) => new ServerErrorCountMiddleware({ record } as never).use(req, res, next));
-    app.get('/x', (_req, res) => {
+    app.get(/.*/, (_req, res) => {
       res.status(status).send('ok');
     });
     const server = app.listen(0);
     await new Promise((r) => server.once('listening', r));
     const { port } = server.address() as AddressInfo;
-    await fetch(`http://127.0.0.1:${port}/x`).then((r) => r.text());
+    await fetch(`http://127.0.0.1:${port}${path}`).then((r) => r.text());
     await new Promise((r) => setImmediate(r));
     await new Promise<void>((r) => server.close(() => r()));
     return record;
@@ -99,6 +99,13 @@ describe('ServerErrorCountMiddleware', () => {
     expect(await serve(500)).toHaveBeenCalledTimes(1);
     expect(await serve(503)).toHaveBeenCalledTimes(1);
     for (const s of [200, 404, 429]) expect(await serve(s)).not.toHaveBeenCalled();
+  });
+
+  it('503 của /api/health (healthcheck khi DB chập chờn) không đếm; route khác tên gần giống vẫn đếm', async () => {
+    expect(await serve(503, '/api/health')).not.toHaveBeenCalled();
+    expect(await serve(503, '/api/health?probe=1')).not.toHaveBeenCalled();
+    expect(await serve(500, '/api/healthy-tips')).toHaveBeenCalledTimes(1);
+    expect(await serve(500, '/api/orders/health')).toHaveBeenCalledTimes(1);
   });
 
   it('OpsModule gắn middleware cho mọi route', () => {

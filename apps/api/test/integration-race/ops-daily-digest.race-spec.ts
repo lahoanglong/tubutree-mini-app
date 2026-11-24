@@ -98,7 +98,8 @@ describe('DailyDigestService — Postgres thật', () => {
     await order('pendingZalo', { userId: u.id, total: 44_000, status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', createdAt: t('2001-01-01T00:00:01Z') });
 
     // Đơn kẹt: S1 chưa có lịch sử (tính từ lúc tạo); S2 vừa đóng gói 13 giờ trước nên không kẹt; S3 đóng gói từ 2001, dòng ghi chú
-    // cùng trạng thái hôm qua không làm mới mốc.
+    // cùng trạng thái hôm qua không làm mới mốc. Đơn gian hàng tự giao cũ hơn cả S1 không tính (đối tác đã có nhắc SLA riêng).
+    await order('merchantStuck', { userId: u.id, status: 'CONFIRMED', fulfiller: 'MERCHANT', createdAt: t('2001-01-01T12:00:00Z') });
     const s1 = await order('stuckNoHistory', { userId: u.id, status: 'CONFIRMED', createdAt: t('2001-01-02T00:00:00Z') });
     const s2 = await order('packedRecently', { userId: u.id, status: 'PACKED', createdAt: t('2001-01-03T00:00:00Z') });
     const s3 = await order('packedLongAgo', { userId: u.id, status: 'PACKED', createdAt: t('2001-01-04T00:00:00Z') });
@@ -147,6 +148,7 @@ describe('DailyDigestService — Postgres thật', () => {
       { code: codes.packedLongAgo, status: 'PACKED', since: '2001-01-05T00:00:00.000Z' },
     ]);
     expect(d.stuckOrders!.oldest.map((x) => x.code)).not.toContain(codes.packedRecently);
+    expect(d.stuckOrders!.oldest.map((x) => x.code)).not.toContain(codes.merchantStuck);
     expect(d.stuckOrders!.count).toBeGreaterThanOrEqual(2);
 
     expect(d.lowStock!.count - before.lowStock!.count).toBe(2);

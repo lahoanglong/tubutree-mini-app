@@ -41,7 +41,7 @@ describe('dailyDigestEmail', () => {
       expect(body).toContain('7 đơn chờ chuyển khoản, tổng 1.200.000đ.');
       expect(body).toContain('TB1001: 400.000đ, đặt lúc 14:05 23/11/2026.');
       expect(body).toContain('Và 6 đơn khác.');
-      expect(body).toContain('Đơn kẹt quá 48 giờ');
+      expect(body).toContain('Đơn kho Tubu kẹt quá 48 giờ');
       expect(body).toContain('TB0900: đã đóng gói từ 09:00 21/11/2026.');
       expect(body).toContain('3 mã hàng, trong đó 1 mã đã hết.');
       expect(body).toContain('dau goi bo ket');

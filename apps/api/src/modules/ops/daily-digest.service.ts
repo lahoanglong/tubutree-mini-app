@@ -94,7 +94,8 @@ export class DailyDigestService {
     this.running = true;
     try {
       const res = await this.run();
-      if (res === 'NOT_CONFIGURED' || res === 'LOCKED') markCronSkipped(res);
+      // BLOCKED cũng đánh dấu: kênh email bị chặn thì chủ shop không nhận thư, màn Tác vụ nền không được báo lượt chạy là OK.
+      if (res === 'NOT_CONFIGURED' || res === 'LOCKED' || res === 'BLOCKED') markCronSkipped(res);
       if (res === 'SENT') this.logger.log('Đã gửi bản tin sáng cho chủ shop.');
     } catch (err) {
       this.logger.error(`Bản tin sáng lỗi: ${err instanceof Error ? err.message : String(err)}`);
@@ -111,7 +112,10 @@ export class DailyDigestService {
     try {
       if ((await this.doneDay()) === day) return 'ALREADY_SENT';
       // Kênh đang bị chặn vì lỗi vĩnh viễn (sai mật khẩu…) mà cấu hình chưa đổi: không gom số liệu, không gõ cửa SMTP.
-      if (!(await this.email.blockLifted())) return 'BLOCKED';
+      if (!(await this.email.blockLifted())) {
+        this.logger.warn(`Bản tin sáng ngày ${day} chưa gửi: kênh email vận hành đang bị chặn vì lỗi vĩnh viễn, sửa cấu hình SMTP để gửi lại.`);
+        return 'BLOCKED';
+      }
 
       const digest = await this.collect(day, now);
       if (DIGEST_SECTIONS.every((k) => digest[k] === null)) {
@@ -214,7 +218,7 @@ export class DailyDigestService {
   /**
    * Đơn CONFIRMED/PACKED mà lần VÀO trạng thái hiện tại (dòng order_status_history đổi sang trạng thái đó; dòng ghi chú cùng trạng thái
    * không tính) hoặc, nếu không có dòng nào, lúc tạo đơn, đã quá 48 giờ. Đơn đã giao cho vận chuyển (SHIPPING) không tính: đường đi vài ngày
-   * là bình thường.
+   * là bình thường. Chỉ đơn kho Tubu giao (`fulfiller = TUBU`): đơn gian hàng tự giao chậm đã có cron `merchant.sla-reminder` nhắc đối tác.
    */
   private async stuckOrders(now: Date): Promise<DigestStuckOrders> {
     const cutoff = new Date(now.getTime() - DIGEST_STUCK_HOURS * 3_600_000);
@@ -228,7 +232,7 @@ export class DailyDigestService {
                 FROM order_status_history h
                WHERE h."orderId" = o.id AND h."toStatus" = o.status::text AND h."fromStatus" IS DISTINCT FROM h."toStatus"
             ) h ON true
-           WHERE o.status IN ('CONFIRMED', 'PACKED')
+           WHERE o.status IN ('CONFIRMED', 'PACKED') AND o.fulfiller = 'TUBU'
         ) s
        WHERE s.since < ${ts(cutoff)}::timestamp
        ORDER BY s.since ASC, s.code ASC
