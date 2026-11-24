@@ -7,6 +7,7 @@ import { catalogHandler, mockDiscovery } from './support/discovery-mocks';
 import { homeCombos, mockHomeCombos } from './support/bundle-mocks';
 import { liveItem, mockFlashSlots, SLOT_LIVE } from './support/flash-slot-mocks';
 import type { PageResponse, ProductCard } from '../../miniapp/src/services/shop-api';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Mini App 375px, gói F10a (P1 #1, #3, #4, #9 của review hình bước chốt): Trang chủ có khối cuộn chứa giá không tràn ngang, tên món thẻ Giờ vàng
@@ -35,13 +36,20 @@ const BEST: ProductCard[] = [
  * Ô khuyến mãi của Trang chủ chỉ có MỘT khối (Giờ vàng > banner > combo): `promo: 'flash'` (mặc định) mock Giờ vàng đang chạy, `promo: 'combos'` chỉ mock combo
  * (không Giờ vàng, không banner) để khối combo mới hiện.
  */
+/** Lưới "Khám phá theo Thương hiệu" (mỗi nhãn hỏi `/products?brand=`): món nào cũng có sao, để đo dòng meta đầy đủ ở thẻ 142px. */
+const BRAND_ROWS: ProductCard[] = BEST.filter((p) => p.ratingAvg !== undefined).map((p) => ({ ...p, id: `g${p.id}`, slug: `g-${p.slug}` }));
+
 function mockHome(api: MockApi, opts: { promo?: 'flash' | 'combos' } = {}): void {
   const promo = opts.promo ?? 'flash';
   mockDiscovery(api, { returning: true });
   // Đăng ký SAU mockDiscovery để thắng mặc định; lời gọi khác vẫn qua bộ lọc danh mục giả.
   const catalog = catalogHandler();
   api.get('/products', (ctx): PageResponse<ProductCard> | ReturnType<typeof catalog> =>
-    ctx.call.query.get('sort') === 'best_seller_30d' ? { data: BEST, meta: { page: 1, limit: 12, total: BEST.length } } : catalog(ctx));
+    ctx.call.query.get('brand')
+      ? { data: BRAND_ROWS, meta: { page: 1, limit: 8, total: BRAND_ROWS.length } }
+      : ctx.call.query.get('sort') === 'best_seller_30d'
+        ? { data: BEST, meta: { page: 1, limit: 12, total: BEST.length } }
+        : catalog(ctx));
   if (promo === 'flash') {
     api.get('/flash-sales/active', () => {
       const now = Date.now();
@@ -151,19 +159,19 @@ test.describe('Mini 375px: thẻ và hàng cuộn của Trang chủ', () => {
       const rank = await metaCells(best);
       expect(rank.map((c) => c.text)).toEqual(['Đã bán 8,2k+', 'Đã bán 99,9k+', 'Đã bán 12', 'Đã bán 999', 'Đã bán 1,2k+']);
       expect(rank.filter((c) => c.width <= 0 || c.clipped).map(describeCell)).toEqual([]);
-      await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
-      await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
+      await expect(page.getByRole('region', { name: BRAND_SHOWCASE }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
       const all = await metaCells(page.locator('body'));
       expect(all.length).toBeGreaterThan(rank.length);
       expect(all.filter((c) => c.width <= 0 || c.clipped).map(describeCell)).toEqual([]);
     });
   }
 
-  test('360px (điện thoại Android phổ biến nhất): lưới Gợi ý hôm nay rộng 142px vẫn giữ sao ở dòng meta, không rơi sang bản gọn', async ({ page, api }) => {
+  test('360px (điện thoại Android phổ biến nhất): lưới Khám phá theo Thương hiệu rộng 142px vẫn giữ sao ở dòng meta, không rơi sang bản gọn', async ({ page, api }) => {
     mockHome(api);
     await page.setViewportSize({ width: 360, height: 800 });
     await openHome(page);
-    const grid = page.getByRole('region', { name: 'Gợi ý hôm nay' });
+    const grid = page.getByRole('region', { name: BRAND_SHOWCASE });
     await grid.scrollIntoViewIfNeeded();
     await expect(grid.locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
     await shot(grid, 'home-grid-360');

@@ -3,9 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import type { CategoryDTO, PageResponse, ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
+import type { BestSellersPage } from '@tubutree/app-core/api/browse';
+import type { CategoryDTO, ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import {
-  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHeading, bestSellersHref, bestSellersRankFrom, curatedShelfItems,
+  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHeading, bestSellersHref, bestSellersPageRanks, curatedShelfItems,
 } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
@@ -27,7 +28,7 @@ import { useShellPathname } from '@/lib/shell-pathname';
 export interface BestSellersInitial {
   category: string | undefined;
   startPage: number;
-  page: PageResponse<ProductCardData>;
+  page: BestSellersPage;
 }
 
 export interface BestSellersViewProps {
@@ -135,7 +136,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
         ) : (
           <>
             <div ref={gridRef}>
-              <ProductGrid items={shown} variant="rank" rankFrom={heading.ranked ? bestSellersRankFrom(startPage) : undefined} className={GRID_RANK} priorityCount={PRIORITY_CARDS} shelf="bestSellersPage" />
+              <ProductGrid items={shown} variant="rank" ranks={heading.ranked ? bestSellersPageRanks(shown, products.data?.pages[0]?.pinnedIds, startPage) : undefined} className={GRID_RANK} priorityCount={PRIORITY_CARDS} shelf="bestSellersPage" />
             </div>
             {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
             {products.isError && (

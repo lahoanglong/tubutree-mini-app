@@ -38,7 +38,7 @@ describe('catalog tầng trưng bày (real Postgres)', () => {
     return p.id;
   }
 
-  it('mặc định: có ảnh còn hàng → chưa ảnh → hết sạch; ảnh đại diện rỗng hay mảng ảnh rỗng là chưa ảnh; không ẩn hàng nào; Bán chạy không đổi', async () => {
+  it('mặc định: có ảnh còn hàng → chưa ảnh → hết sạch; ảnh đại diện rỗng hay mảng ảnh rỗng là chưa ảnh; không ẩn hàng nào; Bán chạy chỉ đưa hàng hết sạch xuống cuối', async () => {
     const brand = `CMT${randCode(6)}`;
     const imgs = await product(brand, 'Có mảng ảnh', { images: ['https://img.example/a.jpg'], soldApp: 1 });
     const thumb = await product(brand, 'Chỉ ảnh đại diện', { thumbnail: 'https://img.example/t.jpg', soldApp: 2 });
@@ -55,9 +55,9 @@ describe('catalog tầng trưng bày (real Postgres)', () => {
     expect(new Set(ids.slice(2, 4))).toEqual(new Set([blankThumb, none]));
     expect(new Set(ids.slice(4))).toEqual(new Set([soldOut, noVariation]));
 
-    // Bán chạy giữ đúng lượt bán: thẻ ở đó mang số hạng theo vị trí.
+    // Bán chạy: hàng hết sạch (kể cả không còn phân loại đang bán) xuống cuối; phần còn hàng giữ đúng lượt bán, hàng chưa ảnh không bị đẩy xuống.
     const best = await catalog.list({ page: 1, limit: 10, sort: 'best_seller', brand });
-    expect(best.data.map((c) => c.id)).toEqual([soldOut, noVariation, blankThumb, none, thumb, imgs]);
+    expect(best.data.map((c) => c.id)).toEqual([blankThumb, none, thumb, imgs, soldOut, noVariation]);
     expect(best.meta.total).toBe(6);
   });
 });

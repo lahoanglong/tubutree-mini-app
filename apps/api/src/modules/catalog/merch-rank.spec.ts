@@ -1,4 +1,4 @@
-import { arrangeByMerchTier, HAS_IMAGE_WHERE, merchTier, MERCH_RANK_SELECT, withImageFlags } from './merch-rank';
+import { arrangeByMerchTier, HAS_IMAGE_WHERE, merchTier, MERCH_RANK_SELECT, stockTier, withImageFlags } from './merch-rank';
 
 describe('merchTier', () => {
   it('có ảnh và còn hàng = 0; chưa ảnh còn hàng = 1; mọi phân loại hết (hoặc không còn phân loại) = 2', () => {
@@ -8,6 +8,14 @@ describe('merchTier', () => {
     expect(merchTier({ hasImage: true, variations: [{ stock: 0 }] })).toBe(2);
     expect(merchTier({ hasImage: true, variations: [] })).toBe(2);
     expect(merchTier({ hasImage: false, variations: [{ stock: 0 }] })).toBe(2);
+  });
+
+  it('stockTier chỉ xét còn hàng: ảnh không đổi tầng, hết sạch hay không còn phân loại = 1', () => {
+    expect(stockTier({ hasImage: false, variations: [{ stock: 0 }, { stock: 1 }] })).toBe(0);
+    expect(stockTier({ hasImage: true, variations: [{ stock: 1 }] })).toBe(0);
+    expect(stockTier({ hasImage: true, variations: [{ stock: 0 }] })).toBe(1);
+    expect(stockTier({ variations: [] })).toBe(1);
+    expect(stockTier({})).toBe(1);
   });
 
   it('câu chọn của tầng trưng bày không đọc cột ảnh nặng (luật D2)', () => {

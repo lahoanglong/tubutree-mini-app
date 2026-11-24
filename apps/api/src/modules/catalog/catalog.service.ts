@@ -35,7 +35,7 @@ import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImages, publicProductThumb } from '../../common/public-image';
 import { publicImage } from '../../common/public-image';
 import { seedHash, seededOrder } from './catalog-seed';
-import { MERCH_RANK_SELECT, arrangeByMerchTier, merchTier, withImageFlags, type MerchRankFields } from './merch-rank';
+import { MERCH_RANK_SELECT, arrangeByMerchTier, merchTier, stockTier, withImageFlags, type MerchRankFields } from './merch-rank';
 import { childrenByParent, expandCategoryScope } from './category-scope';
 import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 import { MssFlagsService } from '../integrations/mss/mss-flags';
@@ -50,13 +50,14 @@ import {
   type MssEnrichmentPayload,
 } from './mss-enrichment';
 import { MerchShelfReader } from '../merch-shelves/merch-shelf-reader';
-import { BEST_SELLERS_SHELF, HOME_FEATURED_SHELF, categoryShelfKey, pinFirst } from '../merch-shelves/merch-shelf';
+import { BEST_SELLERS_SHELF, HOME_FEATURED_SHELF, categoryShelfKey, leadPins, pinFirst } from '../merch-shelves/merch-shelf';
 
 /**
- * Ghép món ghim của Xếp kệ vào một lần gọi `/products` (cờ `merch.shelves_enabled`): `lead` đặt món ghim lên đầu thứ tự mặc định, `curated` đặt các món ghim
- * của kệ `best_sellers` (đánh dấu) lên đầu bảng Bán chạy nhất khi chưa đủ số bán. Không có ghim thì không có kế hoạch, danh sách như cũ.
+ * Ghép món ghim của Xếp kệ vào một lần gọi `/products` (cờ `merch.shelves_enabled`): `lead` đặt món ghim lên đầu thứ tự mặc định; với bảng Bán chạy nhất
+ * (kệ `best_sellers`) món ghim luôn đứng đầu: `curated` khi chưa đủ số bán (thẻ đánh dấu, kệ chỉ vẽ món ghim), `ranked` khi đã có xếp hạng thật (thẻ không
+ * đánh dấu, phần sau là bảng thường). Không có ghim thì không có kế hoạch, danh sách như cũ.
  */
-type MerchPlan = { mode: 'lead' | 'curated'; pins: string[] };
+type MerchPlan = { mode: 'lead' | 'curated' | 'ranked'; pins: string[] };
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -313,16 +314,16 @@ export class CatalogService {
 
   /**
    * Kệ áp cho một lần gọi `/products`: chỉ thứ tự mặc định (không `sort`, không tìm chữ) không lọc nhãn/đối tượng/điểm/slug (`home_featured`, hay
-   * `category:<slug>` khi lọc danh mục), và `best_seller_30d` khi chưa đủ số bán (`best_sellers`). Bộ lọc giá và còn hàng vẫn áp lên món ghim ở bước ghép.
+   * `category:<slug>` khi lọc danh mục), và `best_seller_30d` (`best_sellers`, cả khi đã đủ số bán). Bộ lọc giá và còn hàng vẫn áp lên món ghim ở bước ghép.
    */
   private async merchPlan(query: ProductQuery): Promise<MerchPlan | null> {
     if (query.q?.trim() || query.slugs !== undefined || query.brand || query.segment || query.minRating != null) return null;
     if (query.sort !== undefined && query.sort !== 'best_seller_30d') return null;
     if (!(await this.merch.enabled())) return null;
     if (query.sort === 'best_seller_30d') {
-      if (!(await this.merch.isCurated())) return null;
       const pins = await this.merch.livePins(BEST_SELLERS_SHELF);
-      return pins.length > 0 ? { mode: 'curated', pins } : null;
+      if (pins.length === 0) return null;
+      return { mode: (await this.merch.isCurated()) ? 'curated' : 'ranked', pins };
     }
     let key: string = HOME_FEATURED_SHELF;
     if (query.category) {
@@ -403,7 +404,10 @@ export class CatalogService {
     // Seed ngày chỉ xoay thứ tự mặc định: khách đã chọn cách sắp hay đang tìm chữ thì giữ đúng thứ tự họ yêu cầu.
     if (query.seed && !sort && !query.q?.trim()) return this.listSeeded(where, page, limit, query.seed, price, pins);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
-    if (sort === 'best_seller_30d') return merch?.mode === 'curated' ? this.listCurated(where, page, limit, merch.pins, price) : this.listBestSellers30d(where, page, limit, price);
+    if (sort === 'best_seller_30d') {
+      if (merch?.mode === 'curated') return this.listCurated(where, page, limit, merch.pins, price);
+      return this.listBestSellers30d(where, page, limit, price, merch?.mode === 'ranked' ? merch.pins : []);
+    }
     if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
     if (!sort) return this.listFeatured(where, page, limit, price, pins);
     if (price) return this.listRanked<{ id: string }>(where, page, limit, { id: true }, null, price, [this.orderBy(sort), { id: 'asc' }]);
@@ -487,19 +491,19 @@ export class CatalogService {
   }
 
   /**
-   * "Bán chạy" = soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
+   * "Bán chạy" = còn hàng trước (`stockTier`), rồi soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
    * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy vài cột nhỏ của MỌI SP khớp, sắp,
    * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
-   * Không đọc phân loại, giá hay Giờ vàng (không cần cho thứ hạng) và danh sách id đã xếp được nhớ 60 giây (xem listRanked):
+   * Chỉ đọc tồn kho của phân loại (không giá, không Giờ vàng) và danh sách id đã xếp được nhớ 60 giây (xem listRanked):
    * một lần tải trang là 3 câu SQL, các lần sau trong 60 giây là 2. Vượt ~5k SP → chuyển sang cột soldTotal có index.
    */
   private listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
-    return this.listRanked<{ id: string; soldApp: number; soldExternal: number }>(
+    return this.listRanked<{ id: string; soldApp: number; soldExternal: number } & MerchRankFields>(
       where,
       page,
       limit,
-      { id: true, soldApp: true, soldExternal: true },
-      (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+      { id: true, soldApp: true, soldExternal: true, ...MERCH_RANK_SELECT },
+      (x, y) => stockTier(x) - stockTier(y) || y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
       price,
       undefined,
       false,
@@ -507,16 +511,17 @@ export class CatalogService {
   }
 
   /**
-   * "Bán chạy nhất" theo cửa sổ 30 ngày (Q18): `soldApp30d` giảm dần, hoà thì tổng đã bán (gồm số nhập tay) giảm dần, hoà nữa id tăng dần.
-   * Cùng đường xếp hạng và bộ nhớ 60 giây với `listBestSellers`; thứ hạng không phụ thuộc giá nên không đọc phân loại hay Giờ vàng.
+   * "Bán chạy nhất" theo cửa sổ 30 ngày (Q18): còn hàng trước (hàng hết sạch không chiếm đầu bảng dù bán nhiều), rồi `soldApp30d` giảm dần, hoà thì tổng
+   * đã bán (gồm số nhập tay) giảm dần, hoà nữa id tăng dần. Món ghim của kệ `best_sellers` (`pins`) đứng trước cả bảng.
+   * Cùng đường xếp hạng và bộ nhớ 60 giây với `listBestSellers`; thứ hạng không phụ thuộc giá nên chỉ đọc tồn kho, không đọc giá hay Giờ vàng.
    */
   private listBestSellers30d(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds, pins: readonly string[] = []) {
-    return this.listRanked<{ id: string; soldApp30d: number; soldApp: number; soldExternal: number }>(
+    return this.listRanked<{ id: string; soldApp30d: number; soldApp: number; soldExternal: number } & MerchRankFields>(
       where,
       page,
       limit,
-      { id: true, soldApp30d: true, soldApp: true, soldExternal: true },
-      (x, y) => y.soldApp30d - x.soldApp30d || y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+      { id: true, soldApp30d: true, soldApp: true, soldExternal: true, ...MERCH_RANK_SELECT },
+      (x, y) => stockTier(x) - stockTier(y) || y.soldApp30d - x.soldApp30d || y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
       price,
       undefined,
       false,
@@ -568,8 +573,11 @@ export class CatalogService {
   ) {
     const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag, cacheable, merch);
     // Món ghim (Xếp kệ) chỉ chiếm đầu trang 1; phần còn lại giữ nguyên thứ tự đã xếp và đã nhớ, tổng số món không đổi.
-    const ids = pins.length > 0 ? pinFirst(rankedIds, pins, limit) : rankedIds;
-    return paginated(await this.pageCards(where, ids, page, limit), page, limit, ids.length);
+    const lead = pins.length > 0 ? leadPins(rankedIds, pins, limit) : [];
+    const ids = lead.length > 0 ? pinFirst(rankedIds, lead, limit) : rankedIds;
+    const res = paginated(await this.pageCards(where, ids, page, limit), page, limit, ids.length);
+    // Mọi trang đều mang khối ghim: trang sau cần số món ghim để đánh hạng tiếp, không đếm món ghim là hạng.
+    return lead.length > 0 ? { ...res, pinnedIds: lead } : res;
   }
 
   /** Thẻ của trang `page` trong danh sách id đã xếp, giữ thứ tự; sản phẩm vừa ẩn/gỡ bị loại vì thẻ luôn đọc lại với `where`. */
@@ -1132,16 +1140,21 @@ export class CatalogService {
     const counts = await this.countByEffectiveBrand(rows);
     // Slug của nhãn đã công khai (khớp theo tên) để trang chủ dẫn tới /brand/:slug; nhãn chưa có trang thì null.
     // Bản ghi Brand tạo từ chính tả cũ ("Sokfram") vẫn gắn được vào nhãn chuẩn ("Sokfarm"): tên cũ đặt trước để bản ghi tên chuẩn ghi đè khi có cả hai.
+    // `tagline` là dòng giới thiệu admin nhập ở trang nhãn; trống thì null và client tự lấy câu dự phòng từ bản đồ xuất xứ (`brand-origins.ts`).
     const published = await this.prisma.brand.findMany({
       where: { isPublished: true, name: { in: [...new Set([...counts.keys()].flatMap(catalogBrandSpellings))] } },
-      select: { name: true, slug: true },
+      select: { name: true, slug: true, tagline: true },
     });
     const isLegacyName = (name: string) => canonicalCatalogBrand(name) !== name;
     const slugByName = new Map<string, string>();
+    const taglineByName = new Map<string, string>();
     for (const b of [...published].sort((x, y) => Number(isLegacyName(y.name)) - Number(isLegacyName(x.name)))) {
-      slugByName.set(canonicalCatalogBrand(b.name), b.slug);
+      const canonical = canonicalCatalogBrand(b.name);
+      slugByName.set(canonical, b.slug);
+      const tagline = b.tagline?.trim();
+      if (tagline) taglineByName.set(canonical, tagline);
     }
-    const value = [...counts].map(([brand, count]) => ({ brand, count, slug: slugByName.get(brand) ?? null }));
+    const value = [...counts].map(([brand, count]) => ({ brand, count, slug: slugByName.get(brand) ?? null, tagline: taglineByName.get(brand) ?? null }));
     this.brandsCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
   }

@@ -375,7 +375,7 @@ describe('CatalogService.brands cache 60s', () => {
     const b = await svc.brands();
 
     expect(groupBy).toHaveBeenCalledTimes(1);
-    expect(a).toEqual([{ brand: 'TuBu', count: 3, slug: null }]);
+    expect(a).toEqual([{ brand: 'TuBu', count: 3, slug: null, tagline: null }]);
     expect(b).toEqual(a);
   });
 
@@ -388,13 +388,36 @@ describe('CatalogService.brands cache 60s', () => {
     const prisma = { product: { groupBy }, brand: { findMany } } as unknown as PrismaService;
     const out = (await new CatalogService(prisma).brands()) as { brand: string; count: number; slug: string | null }[];
     expect(out).toEqual([
-      { brand: 'Hector', count: 2, slug: 'hector' },
-      { brand: 'Gốm Bát Tràng', count: 1, slug: null },
+      { brand: 'Hector', count: 2, slug: 'hector', tagline: null },
+      { brand: 'Gốm Bát Tràng', count: 1, slug: null, tagline: null },
     ]);
     expect(findMany).toHaveBeenCalledWith({
       where: { isPublished: true, name: { in: ['Hector', 'Gốm Bát Tràng'] } },
-      select: { name: true, slug: true },
+      select: { name: true, slug: true, tagline: true },
     });
+  });
+
+  it('GET /brands kèm `tagline` của nhãn đã công khai (đã cắt khoảng trắng); trống hay chưa công khai thì null, bản ghi tên chuẩn thắng chính tả cũ', async () => {
+    const groupBy = jest.fn().mockResolvedValue([
+      { brand: 'Hector', _count: { _all: 2 } },
+      { brand: 'Sokfarm', _count: { _all: 3 } },
+      { brand: 'Visante', _count: { _all: 1 } },
+      { brand: 'Gốm Bát Tràng', _count: { _all: 1 } },
+    ]);
+    const findMany = jest.fn().mockResolvedValue([
+      { name: 'Hector', slug: 'hector', tagline: '  Đông trùng hạ thảo Lâm Đồng  ' },
+      { name: 'Sokfarm', slug: 'sokfarm', tagline: 'Mật hoa dừa Trà Vinh' },
+      { name: 'Sokfram', slug: 'sokfram', tagline: 'Câu cũ' },
+      { name: 'Visante', slug: 'visante', tagline: '   ' },
+    ]);
+    const prisma = { product: { groupBy }, brand: { findMany } } as unknown as PrismaService;
+    const out = await new CatalogService(prisma).brands();
+    expect(out).toEqual([
+      { brand: 'Hector', count: 2, slug: 'hector', tagline: 'Đông trùng hạ thảo Lâm Đồng' },
+      { brand: 'Sokfarm', count: 3, slug: 'sokfarm', tagline: 'Mật hoa dừa Trà Vinh' },
+      { brand: 'Visante', count: 1, slug: 'visante', tagline: null },
+      { brand: 'Gốm Bát Tràng', count: 1, slug: null, tagline: null },
+    ]);
   });
 
   it('expire sau 60s → hit DB lần 2 (chứng minh TTL thực sự chạy)', async () => {
@@ -1375,7 +1398,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     expect(r.meta).toEqual({ page: 1, limit: 2, total: 4 });
     expect(findMany.mock.calls[0][0]).toEqual({
       where: { isActive: true, approvalStatus: 'APPROVED' },
-      select: { id: true, soldApp: true, soldExternal: true },
+      select: { id: true, soldApp: true, soldExternal: true, ...MERCH_RANK_SELECT },
     });
     expect(findMany.mock.calls[1][0]).toEqual({
       where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
@@ -1483,18 +1506,90 @@ describe('CatalogService.list — best_seller_30d (Bán chạy nhất theo 30 ng
     expect(r.meta).toEqual({ page: 1, limit: 3, total: 5 });
     expect(findMany.mock.calls[0][0]).toEqual({
       where: { isActive: true, approvalStatus: 'APPROVED' },
-      select: { id: true, soldApp30d: true, soldApp: true, soldExternal: true },
+      select: { id: true, soldApp30d: true, soldApp: true, soldExternal: true, ...MERCH_RANK_SELECT },
     });
     expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['c', 'b', 'a'] } });
   });
 
-  it('trang 2 nối tiếp đúng thứ tự và không đọc phân loại hay Giờ vàng ở bước xếp hạng', async () => {
+  it('trang 2 nối tiếp đúng thứ tự và không đọc giá hay Giờ vàng ở bước xếp hạng', async () => {
     const findMany = jest.fn().mockResolvedValueOnce(RANKED_30D).mockResolvedValueOnce([card('d'), card('e')]);
     const flash = noFlash();
     const prisma = { product: { findMany: imgAware(findMany), count: jest.fn() }, flashSaleItem: flash } as unknown as PrismaService;
     const r = await new CatalogService(prisma).list({ page: 2, limit: 3, sort: 'best_seller_30d' });
     expect(r.data.map((c) => c.id)).toEqual(['d', 'e']);
     expect(flash.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('CatalogService.list — Bán chạy nhất: còn hàng trước, món ghim kệ best_sellers luôn đứng đầu (w34-02)', () => {
+  const IN = [{ stock: 2 }];
+  const OUT = [{ stock: 0 }];
+  // hot: bán nhiều nhất nhưng hết sạch; p1, p2: món admin ghim (kệ best_sellers), bán ít.
+  const ROWS = [
+    { id: 'hot', soldApp30d: 50, soldApp: 50, soldExternal: 0, variations: OUT },
+    { id: 'a', soldApp30d: 9, soldApp: 9, soldExternal: 0, variations: IN },
+    { id: 'b', soldApp30d: 7, soldApp: 7, soldExternal: 0, variations: IN },
+    { id: 'p1', soldApp30d: 1, soldApp: 1, soldExternal: 0, variations: IN },
+    { id: 'p2', soldApp30d: 0, soldApp: 0, soldExternal: 0, variations: IN },
+  ];
+  const idsOf = (r: { data: { id: string }[] }) => r.data.map((c) => c.id);
+
+  /** `withSales`: số sản phẩm đủ lượt bán 30 ngày (ngưỡng mặc định 6 món): dưới ngưỡng là kệ chọn tay (`curated`), từ ngưỡng là xếp hạng thật. */
+  function svcWith({ withSales, pins = ['p2', 'p1'], enabled = true }: { withSales: number; pins?: string[]; enabled?: boolean }) {
+    const findMany = jest.fn().mockImplementation(async (args: { select?: unknown; where: { AND?: { id?: { in: string[] } }[] } }) =>
+      isRank(args) ? ROWS : (args.where.AND?.[1]?.id?.in ?? []).map((id) => card(id)),
+    );
+    const pinFind = jest.fn().mockResolvedValue(pins.map((productId) => ({ productId, startsAt: null, endsAt: null })));
+    const config = { get: jest.fn(async <T>(k: string, fb?: T) => (k === 'merch.shelves_enabled' ? (enabled as T) : (fb as T))) };
+    const prisma = {
+      product: { findMany: imgAware(findMany), count: jest.fn().mockResolvedValue(withSales) },
+      merchShelfPin: { findMany: pinFind },
+      flashSaleItem: noFlash(),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma, config as never), pinFind };
+  }
+
+  it('[hết hàng bán chạy, còn hàng] → còn hàng đứng trước; chưa ghim thì không có pinnedIds', async () => {
+    const { svc } = svcWith({ withSales: 10, pins: [] });
+    const r = await svc.list({ page: 1, limit: 10, sort: 'best_seller_30d' });
+    expect(idsOf(r)).toEqual(['a', 'b', 'p1', 'p2', 'hot']);
+    expect(r).not.toHaveProperty('pinnedIds');
+  });
+
+  it('đã đủ số bán (xếp hạng thật): món ghim theo thứ tự ghim đứng đầu, không đánh dấu curated, pinnedIds có ở mọi trang', async () => {
+    const { svc } = svcWith({ withSales: 10 });
+    const first = await svc.list({ page: 1, limit: 3, sort: 'best_seller_30d' });
+    expect(idsOf(first)).toEqual(['p2', 'p1', 'a']);
+    expect((first as { pinnedIds?: string[] }).pinnedIds).toEqual(['p2', 'p1']);
+    expect(first.data.some((c) => 'curated' in c)).toBe(false);
+    expect(first.meta.total).toBe(5);
+    const second = await svc.list({ page: 2, limit: 3, sort: 'best_seller_30d' });
+    expect(idsOf(second)).toEqual(['b', 'hot']);
+    expect((second as { pinnedIds?: string[] }).pinnedIds).toEqual(['p2', 'p1']);
+  });
+
+  it('chưa đủ số bán (kệ chọn tay): món ghim vẫn đứng đầu, mang dấu curated và pinnedIds; phần sau là bảng còn hàng trước', async () => {
+    const { svc } = svcWith({ withSales: 1 });
+    const r = await svc.list({ page: 1, limit: 10, sort: 'best_seller_30d' });
+    expect(idsOf(r)).toEqual(['p2', 'p1', 'a', 'b', 'hot']);
+    expect(r.data.filter((c) => (c as { curated?: boolean }).curated === true).map((c) => c.id)).toEqual(['p2', 'p1']);
+    expect((r as { pinnedIds?: string[] }).pinnedIds).toEqual(['p2', 'p1']);
+  });
+
+  it('cờ Xếp kệ tắt hay lọc theo nhãn (khối Khám phá theo Thương hiệu): không đọc bảng ghim, chỉ còn hàng trước', async () => {
+    const off = svcWith({ withSales: 10, enabled: false });
+    expect(idsOf(await off.svc.list({ page: 1, limit: 10, sort: 'best_seller_30d' }))).toEqual(['a', 'b', 'p1', 'p2', 'hot']);
+    expect(off.pinFind).not.toHaveBeenCalled();
+    const brand = svcWith({ withSales: 10 });
+    const r = await brand.svc.list({ page: 1, limit: 4, sort: 'best_seller_30d', brand: 'b' });
+    expect(r).not.toHaveProperty('pinnedIds');
+    expect(brand.pinFind).not.toHaveBeenCalled();
+  });
+
+  it('Bán chạy tổng (best_seller) cũng đưa hàng hết sạch xuống cuối, không ghép ghim', async () => {
+    const { svc, pinFind } = svcWith({ withSales: 10 });
+    expect(idsOf(await svc.list({ page: 1, limit: 10, sort: 'best_seller' }))).toEqual(['a', 'b', 'p1', 'p2', 'hot']);
+    expect(pinFind).not.toHaveBeenCalled();
   });
 });
 
@@ -2347,10 +2442,10 @@ describe('CatalogService.list — tầng trưng bày (hàng chưa ảnh sau, h�
     }
   });
 
-  it('Bán chạy (tổng và 30 ngày) giữ đúng thứ tự lượt bán: thẻ mang số hạng theo vị trí nên tầng trưng bày không chen vào', async () => {
+  it('Bán chạy (tổng và 30 ngày): hàng hết sạch xuống cuối dù bán nhiều nhất; phần còn hàng giữ đúng thứ tự lượt bán, hàng chưa ảnh không bị đẩy xuống', async () => {
     const { svc } = svcWith();
-    expect(idsOf(await svc.list({ page: 1, limit: 10, sort: 'best_seller' }))).toEqual(['c', 'a', 'd', 'b', 'e']);
-    expect(idsOf(await svc.list({ page: 1, limit: 10, sort: 'best_seller_30d' }))).toEqual(['c', 'a', 'd', 'b', 'e']);
+    expect(idsOf(await svc.list({ page: 1, limit: 10, sort: 'best_seller' }))).toEqual(['a', 'd', 'b', 'e', 'c']);
+    expect(idsOf(await svc.list({ page: 1, limit: 10, sort: 'best_seller_30d' }))).toEqual(['a', 'd', 'b', 'e', 'c']);
   });
 
   it('cách sắp khách chọn (mới nhất, giá) không bị tầng trưng bày chen vào', async () => {

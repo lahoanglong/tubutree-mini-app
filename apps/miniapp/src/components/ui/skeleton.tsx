@@ -32,6 +32,19 @@ export interface ProductTileSkeletonProps {
 }
 
 /**
+ * Ô giữ chỗ một nút của ProductTile cho lưới còn xa khung nhìn: cùng ngoại kích với `ProductTileSkeleton` (ảnh 1:1 theo bề ngang cột, thân `tileBodyHeight`)
+ * mà không có các vạch chờ bên trong, để lưới nằm sẵn trong trang không thêm vài nút DOM mỗi ô. Padding nằm ngoài tỉ lệ ảnh nhờ `content-box`.
+ */
+export function ProductTileReserve({ variant = 'grid', brand }: Pick<ProductTileSkeletonProps, 'variant' | 'brand'>) {
+  const body = tileBodyHeight(variant, { brand: brand ?? (variant === 'grid' || variant === 'rail-md') });
+  const style: React.CSSProperties =
+    variant === 'line'
+      ? { height: body, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }
+      : { aspectRatio: '1 / 1', boxSizing: 'content-box', paddingBottom: body, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' };
+  return <div data-testid="catalog-tile-reserve" style={style} />;
+}
+
+/**
  * Khung chờ của ProductTile: thân cao đúng `tileBodyHeight` (cùng số đo app-core với thẻ thật, bài học 4a: khung chờ lệch nội dung thật
  * làm trang nhảy) và ảnh giữ tỉ lệ 1:1. e2e buy-flow-4b kiểm lệch ≤ 16px nên số đo này là chỗ duy nhất để đổi.
  */

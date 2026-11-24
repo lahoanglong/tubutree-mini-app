@@ -862,6 +862,17 @@ export function categoriesBlockHeight(cells: number): number {
 }
 
 /**
+ * Thanh nhảy nhanh theo thương hiệu ngay dưới lưới Danh mục ở Trang chủ: một hàng chip 36 cuộn ngang, đệm trên dưới 4 (vùng chạm 44 của chip không bị
+ * cắt). Luôn giữ đúng chiều cao này kể cả khi thương hiệu chưa về, lỗi hay rỗng, để khối dưới không nhảy (web không tải thương hiệu ở máy chủ).
+ */
+export const BRAND_BAR_HEIGHT = 44;
+
+/** Chiều cao khối Danh mục của Trang chủ: lưới (`categoriesBlockHeight`) cộng thanh thương hiệu. Tab Danh mục không có thanh này. */
+export function homeCategoriesBlockHeight(cells: number): number {
+  return categoriesBlockHeight(cells) + BRAND_BAR_HEIGHT;
+}
+
+/**
  * Chiều cao các ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`), theo thứ tự khối dưới dải ngữ cảnh: danh mục một hàng 5 ô, kệ Bán chạy nhất, lối vào, dải Story.
  * Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây (số đo Mini 375px).
  */
@@ -873,6 +884,6 @@ export const HOME_SETTLING_HEIGHTS = {
   // Dải Story: tiêu đề 24 + 8, vòng 72 (ảnh 64 + viền 4 mỗi bên), 6, nhãn hai dòng 32 = 142, làm tròn 144. Khối thật đặt đúng chiều cao này.
   stories: 144,
   flash: FLASH_SKELETON_HEIGHT,
-  categories: categoriesBlockHeight(CATEGORY_GRID_MAX_CELLS),
+  categories: homeCategoriesBlockHeight(CATEGORY_GRID_MAX_CELLS),
   products: 298,
 } as const;

@@ -269,7 +269,7 @@ describe('Buy-flow 4b — tìm kiếm & bộ lọc catalog (real Postgres)', () 
     }
   }
 
-  it('best_seller KẾT HỢP từ khoá + bộ lọc giá/tồn: mọi SP khớp đúng một lần, (điểm giảm, id tăng), total = số khớp', async () => {
+  it('best_seller KẾT HỢP từ khoá + bộ lọc giá/tồn: mọi SP khớp đúng một lần, (còn hàng trước, điểm giảm, id tăng), total = số khớp', async () => {
     const brand = newBrand();
     const prefix = idPrefix();
     const tag = randCode(6).toLowerCase();
@@ -299,9 +299,10 @@ describe('Buy-flow 4b — tìm kiếm & bộ lọc catalog (real Postgres)', () 
       return shown >= 100_000 && shown <= 200_000;
     };
     const inStock = (s: Spec) => (s.stock ?? 5) > 0;
+    // Còn hàng trước (hàng hết sạch không chiếm đầu bảng dù bán nhiều), rồi điểm giảm, hoà thì id tăng.
     const rank = (list: Spec[]) =>
       [...list]
-        .sort((a, b) => b.sold + (b.ext ?? 0) - (a.sold + (a.ext ?? 0)) || (a.n < b.n ? -1 : 1))
+        .sort((a, b) => Number(!inStock(a)) - Number(!inStock(b)) || b.sold + (b.ext ?? 0) - (a.sold + (a.ext ?? 0)) || (a.n < b.n ? -1 : 1))
         .map((s) => `${prefix}${s.n}`);
 
     // 1) chỉ từ khoá

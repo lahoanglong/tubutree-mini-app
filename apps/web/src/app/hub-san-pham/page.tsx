@@ -38,7 +38,7 @@ export default async function BrowseHubPage() {
   const [bestSellers, brands, categories] = parts;
   // Cùng khối JSON-LD với nhánh hub của app/san-pham/page.tsx: ItemList là kệ Bán chạy có trong HTML này.
   const crumbs = browseBreadcrumb({ home: fillCopy('browse.crumbHome'), browse: browseText.title });
-  const collection = browseCollectionJsonLd(HUB_META, crumbs, valueOf(bestSellers) ?? []);
+  const collection = browseCollectionJsonLd(HUB_META, crumbs, valueOf(bestSellers)?.data ?? []);
   return (
     <main className={`${PAGE_WIDE} md:py-8`}>
       <BrowseView initial={null} bestSellers={valueOf(bestSellers)} brands={valueOf(brands)} categories={valueOf(categories)} />

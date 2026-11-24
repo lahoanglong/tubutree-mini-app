@@ -4,7 +4,7 @@ import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/b
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import { homePromoPick, type HomeKindState, type HomePromoKind } from '@tubutree/app-core/home-layout';
-import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
+import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, bestSellerShelfItems, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
 import { serverNow } from '../../utils/server-clock';
 import { PURCHASED_RAIL_LIMIT, usePurchasedItems } from '../../hooks/use-purchased-items';
@@ -31,8 +31,8 @@ export interface HomeShelves {
   combos: ComboView[];
   /** Bán chạy nhất đã bỏ món trùng các kệ trên (≤10; rỗng khi dưới 3). */
   bestSellers: ProductCard[];
-  /** Hạng thật của từng món ở `bestSellers` (cùng chỉ số): vị trí trong danh sách xếp theo lượt bán 30 ngày, tính trước khi bỏ món trùng kệ trên. */
-  bestSellerRanks: number[];
+  /** Hạng thật của từng món ở `bestSellers` (cùng chỉ số): vị trí trong danh sách xếp theo lượt bán 30 ngày, tính trước khi bỏ món trùng kệ trên; null là món admin ghim (không số hạng). */
+  bestSellerRanks: (number | null)[];
   /** Thước đo của bảng xếp hạng: `total` khi API cũ chưa có `best_seller_30d` và kệ lùi về tổng lượt bán (phụ đề không được ghi "30 ngày"). */
   bestSellerBasis: BestSellersBasis;
   /** Mọi phân loại còn hạn đang Giờ vàng của các sản phẩm mà kệ Giờ vàng đang vẽ (kể cả phân loại thứ hai của sản phẩm mà kệ chỉ vẽ một thẻ); sản phẩm bị cắt khỏi kệ (quá `maxItems`) và kệ ẩn không góp phân loại nào. Mua lại bỏ đúng những phân loại này, không bỏ phân loại khác của cùng sản phẩm. */
@@ -76,6 +76,7 @@ export function useHomeShelves(kind: HomeKindState, promoInput: HomePromoInput =
   const purchasedData = purchased.data?.items;
   const purchasedRestock = purchased.data?.restockAlertsEnabled === true;
   const bestData = bestSellerQuery.data?.data;
+  const bestPins = bestSellerQuery.data?.pinnedIds;
   const bestSellerBasis: BestSellersBasis = bestSellerQuery.data?.basis ?? 'days30';
   const combosData = combosQuery.data;
   // Chỉ phụ thuộc dữ liệu (không phải đối tượng query, đổi mỗi lần vẽ) để `seen` giữ nguyên danh tính khi dữ liệu chưa đổi; `expiredTick` chỉ để tính lại `serverNow()`.
@@ -91,14 +92,11 @@ export function useHomeShelves(kind: HomeKindState, promoInput: HomePromoInput =
           kind === 'returning' ? quickReorderShelfItems(purchasedData ?? [], { now, restock: purchasedRestock }).map(purchasedShelfEntry) : [],
         combos: (combosData ?? []).flatMap((b) => comboView(b, now) ?? []).map(comboShelfEntry),
         // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
-        // Hạng gắn TRƯỚC khi xếp món có ảnh lên đầu (ô lá thay thế không nằm giữa màn đầu): hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
-        bestSellers: imageFirst(
-          (bestData ?? []).map((item, i) => ({ product: item, rank: i + 1 })),
-          (x) => Boolean(x.product.thumbnail?.trim()),
-        ).map((x) => ({ id: x.product.slug, item: x })),
+        // Hạng gắn TRƯỚC khi xếp món còn hàng có ảnh lên đầu (`bestSellerShelfItems`): món ghim đứng đầu không số, món sau đánh số liền; hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
+        bestSellers: bestSellerShelfItems(bestData ?? [], bestPins).map((x) => ({ id: x.product.slug, item: x })),
       },
     };
-  }, [kind, flashData, purchasedData, purchasedRestock, bestData, combosData, expiredTick]);
+  }, [kind, flashData, purchasedData, purchasedRestock, bestData, bestPins, combosData, expiredTick]);
   // Giờ vàng đứng đầu thứ tự chống trùng nên số món của nó không phụ thuộc combo: chọn ô khuyến mãi trước, rồi combo chỉ chiếm món của Bán chạy nhất khi chính nó là ô được vẽ
   // (combo bị ẩn mà vẫn lấy món thì Bán chạy nhất và Gợi ý thiếu món vô cớ).
   const withCombos = useMemo(() => composeHomeShelves(base.entries), [base]);

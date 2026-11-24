@@ -9,7 +9,7 @@ import type { BundleDTO } from '@tubutree/app-core/api/bundle';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import { homePromoPick, readFlashHint, type HomeKindState, type HomePromoKind } from '@tubutree/app-core/home-layout';
-import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
+import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, bestSellerShelfItems, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { homeCombosQuery } from '@tubutree/app-core/queries/bundle';
 import { flashActiveQuery } from '@tubutree/app-core/queries/flash-sale';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
@@ -34,8 +34,8 @@ export interface HomeShelves {
   combos: ComboView[];
   /** Bán chạy nhất đã bỏ món trùng các kệ trên (≤10; rỗng khi dưới 3). */
   bestSellers: ProductCard[];
-  /** Hạng thật của từng món ở `bestSellers` (cùng chỉ số): vị trí trong danh sách xếp theo lượt bán 30 ngày, tính trước khi bỏ món trùng kệ trên. */
-  bestSellerRanks: number[];
+  /** Hạng thật của từng món ở `bestSellers` (cùng chỉ số): vị trí trong danh sách xếp theo lượt bán 30 ngày, tính trước khi bỏ món trùng kệ trên; null là món admin ghim (không số hạng). */
+  bestSellerRanks: (number | null)[];
   /** Thước đo của bảng xếp hạng: `total` khi API cũ chưa có `best_seller_30d` và kệ lùi về tổng lượt bán (phụ đề không được ghi "30 ngày"). */
   bestSellerBasis: BestSellersBasis;
   /** Mọi phân loại còn hạn đang Giờ vàng của các sản phẩm mà kệ Giờ vàng đang vẽ (kể cả phân loại thứ hai của sản phẩm mà kệ chỉ vẽ một thẻ); sản phẩm bị cắt khỏi kệ (quá `maxItems`) và kệ ẩn không góp phân loại nào. Mua lại bỏ đúng những phân loại này, không bỏ phân loại khác của cùng sản phẩm. */
@@ -105,6 +105,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
   const purchasedData = purchased.data?.items;
   const purchasedRestock = purchased.data?.restockAlertsEnabled === true;
   const bestData = bestSellerQuery.data?.data;
+  const bestPins = bestSellerQuery.data?.pinnedIds;
   const bestSellerBasis: BestSellersBasis = bestSellerQuery.data?.basis ?? 'days30';
   const combosData = combosQuery.data;
   // Chỉ phụ thuộc dữ liệu (không phải đối tượng query, đổi mỗi lần vẽ) để `seen` giữ nguyên danh tính khi dữ liệu chưa đổi.
@@ -117,11 +118,8 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
       purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? [], { now, restock: purchasedRestock }).map(purchasedShelfEntry) : [],
       combos: combos.map(comboShelfEntry),
       // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
-      // Hạng gắn TRƯỚC khi xếp món có ảnh lên đầu (ô lá thay thế không nằm giữa màn đầu): hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
-      bestSellers: imageFirst(
-        (bestData ?? []).map((item, i) => ({ product: item, rank: i + 1 })),
-        (x) => Boolean(x.product.thumbnail?.trim()),
-      ).map((x) => ({ id: x.product.slug, item: x })),
+      // Hạng gắn TRƯỚC khi xếp món còn hàng có ảnh lên đầu (`bestSellerShelfItems`): món ghim đứng đầu không số, món sau đánh số liền; hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
+      bestSellers: bestSellerShelfItems(bestData ?? [], bestPins).map((x) => ({ id: x.product.slug, item: x })),
     });
     // Trước hydrate không kiểm hạn combo (`liveAt` -∞): HTML dựng sẵn đã lọc theo giờ máy chủ lúc dựng, nên hydrate vẽ đúng các combo đó rồi mới kiểm hạn thật.
     const liveCombos = (combosData ?? []).flatMap((b) => comboView(b, now, hydrated ? now : Number.NEGATIVE_INFINITY) ?? []);
@@ -147,6 +145,6 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
       seen: composed.seen,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `expiredTick` chỉ để tính lại `serverNow()`.
-  }, [kind, flashData, purchasedData, purchasedRestock, bestData, combosData, hydrated, expiredTick, flashPending, flashRemembered, banner.slides, banner.pending, banner.remembered]);
+  }, [kind, flashData, purchasedData, purchasedRestock, bestData, bestPins, combosData, hydrated, expiredTick, flashPending, flashRemembered, banner.slides, banner.pending, banner.remembered]);
   return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery, onFlashEnd };
 }

@@ -20,6 +20,8 @@ export interface BrandOrigin {
   province: string;
   ingredient: string;
   story: string;
+  /** Một dòng giới thiệu ngắn (khối "Khám phá theo Thương hiệu" ở Trang chủ) khi bản ghi Brand chưa có `tagline`; chỉ nêu nguyên liệu và vùng đất đã có ở `story`. */
+  tagline: string;
   /** Vị trí tỉnh xuất xứ trên bản đồ sơ đồ hoá, theo hệ toạ độ gốc `MAP_GEO` (450 x 700) của `brand-map-data.ts`. */
   geo: { x: number; y: number };
 }
@@ -33,6 +35,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Thanh Hóa',
     ingredient: 'Enzyme vỏ dứa & bồ hòn',
     story: 'Fuwa3e tận dụng nguồn vỏ dứa hữu cơ Thanh Hóa lên men sinh học cùng quả bồ hòn, làm nên dòng sản phẩm nước rửa chén, nước giặt lành tính cho cả gia đình và dòng nước.',
+    tagline: 'Enzyme vỏ dứa & bồ hòn từ Thanh Hóa',
     geo: { x: 149, y: 148 },
   },
   {
@@ -43,6 +46,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Quảng Nam',
     ingredient: 'Mật ong rừng & trà thảo mộc',
     story: 'BH.Nong sinh ra từ núi rừng Quảng Nam, mang đến mật ong rừng nguyên chất và các dòng trà thảo mộc thanh nhiệt đậm vị thiên nhiên.',
+    tagline: 'Mật ong rừng & trà thảo mộc Quảng Nam',
     geo: { x: 213, y: 262 },
   },
   {
@@ -53,6 +57,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Đắk Lắk',
     ingredient: 'Bơ ca cao & dầu gừng bazan',
     story: 'Pơ Lang khai thác nông sản bazan Đắk Lắk — bơ ca cao ép lạnh, dầu gừng, bồ kết — làm nên sản phẩm chăm sóc da và tóc thuần thực vật.',
+    tagline: 'Bơ ca cao & dầu gừng bazan Đắk Lắk',
     geo: { x: 230, y: 345 },
   },
   {
@@ -63,6 +68,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Khánh Hòa (Nha Trang)',
     ingredient: 'Muối khoáng & rong biển',
     story: 'Visante tận dụng tinh chất muối khoáng & rong biển Nha Trang (Khánh Hòa) phục hồi dịu nhẹ cho làn da nhạy cảm.',
+    tagline: 'Muối khoáng & rong biển Nha Trang',
     geo: { x: 284, y: 408 },
   },
   {
@@ -73,6 +79,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Lâm Đồng',
     ingredient: 'Đông trùng hạ thảo',
     story: 'Hector nghiên cứu và nuôi trồng đông trùng hạ thảo tại khí hậu ôn hoà Lâm Đồng, cung cấp dòng nước uống bổ dưỡng và chăm sóc sức khoẻ toàn diện.',
+    tagline: 'Đông trùng hạ thảo Lâm Đồng',
     geo: { x: 214, y: 402 },
   },
   {
@@ -83,6 +90,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Lâm Đồng (Cầu Đất)',
     ingredient: 'Cà phê đặc sản Cầu Đất',
     story: 'Le Plateau Coffee tuyển chọn từng hạt cà phê Arabica Cầu Đất & Robusta Honey chưng cất hương vị đậm đà từ vùng cao nguyên mây phủ.',
+    tagline: 'Cà phê đặc sản Cầu Đất, Lâm Đồng',
     geo: { x: 254, y: 392 },
   },
   {
@@ -93,6 +101,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Bến Tre',
     ingredient: 'Dầu dừa hữu cơ Bến Tre',
     story: 'Cobote tận dụng vương quốc dừa Bến Tre cho dòng dầu dừa ép lạnh và sản phẩm dưỡng da, dưỡng tóc lành tính cho mẹ và bé.',
+    tagline: 'Dầu dừa ép lạnh Bến Tre',
     geo: { x: 212, y: 536 },
   },
   {
@@ -105,6 +114,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     province: 'Trà Vinh',
     ingredient: 'Mật hoa dừa hữu cơ',
     story: 'Sokfarm Trà Vinh tiên phong thu hoạch mật hoa dừa thủ công từ hoa dừa, cô đặc thành mật hoa dừa chỉ số đường huyết thấp, giàu khoáng chất.',
+    tagline: 'Mật hoa dừa thủ công Trà Vinh',
     geo: { x: 186, y: 560 },
   },
 ];
@@ -267,6 +277,19 @@ export function brandBrowseTarget(origin: BrandOrigin, base: '/san-pham' | '/bro
 
 /** Vỏ chung của PROD: mọi SKU mang brand này nên nó không phân biệt nhãn nào, không được hiện như một thương hiệu. */
 export const SHELL_BRAND_KEY = 'tubutree';
+
+/** Dòng giới thiệu của nhóm "Tubu Tree" (hàng chưa tách được nhãn riêng) ở khối "Khám phá theo Thương hiệu". */
+export const SHELL_BRAND_TAGLINE = 'Sản phẩm Tubu Tree chọn cho gia đình';
+
+/**
+ * Dòng giới thiệu dự phòng của một nhãn khi `GET /brands` chưa có `tagline`: nhãn có ghim (đúng tên của nhãn, kể cả chính tả cũ) lấy `tagline` của ghim; nhãn mượn
+ * vùng nhà máy (Pineboo) không mượn câu của nhãn khác; vỏ "Tubu Tree" lấy câu chung; nhãn khác null (khối chỉ ghi tên).
+ */
+export function brandTagline(name: string): string | null {
+  if (normalizeBrandKey(name) === SHELL_BRAND_KEY) return SHELL_BRAND_TAGLINE;
+  const origin = findBrandOrigin({ slug: '', name });
+  return origin && isOwnName(origin, name) ? origin.tagline : null;
+}
 
 export interface ApiBrandLike {
   brand: string;

@@ -1,6 +1,7 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
 import type { DeliverySchedule } from '@tubutree/app-core/api/config';
 import { flashAllowancePath } from '@tubutree/app-core/api/flash-allowance';
+import type { BrandCount } from '@tubutree/app-core/api/catalog';
 import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
@@ -359,7 +360,9 @@ export const fetchProductsBySlugs = async (slugs: string[]): Promise<ProductCard
   const res = await api.get<PageResponse<ProductCard>>('/products', { params: { slugs: unique.join(','), limit: unique.length } });
   return res.data.data;
 };
-export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<PageResponse<ProductCard>> => {
+/** Một trang sản phẩm; `pinnedIds` chỉ có ở `sort=best_seller_30d` khi món ghim kệ Bán chạy nhất đứng đầu (thẻ đó không mang số hạng). */
+export type ProductPage = PageResponse<ProductCard> & { pinnedIds?: string[] };
+export const fetchProducts = async (params: Record<string, string | number> = {}): Promise<ProductPage> => {
   const homeSlot = homeProductSlot(params);
   if (homeSlot) {
     const fromFeed = await takePublicBlock(homeSlot);
@@ -369,7 +372,7 @@ export const fetchProducts = async (params: Record<string, string | number> = {}
   const brandList = brandParam ? brandParam.split(',').map((b) => b.trim()).filter(Boolean) : [];
 
   if (brandList.length <= 1) {
-    return api.get<PageResponse<ProductCard>>('/products', { params }).then((r) => r.data);
+    return api.get<ProductPage>('/products', { params }).then((r) => r.data);
   }
 
   const primaryRes = await api.get<PageResponse<ProductCard>>('/products', { params }).then((r) => r.data);
@@ -422,7 +425,7 @@ export const fetchProducts = async (params: Record<string, string | number> = {}
 export const fetchProduct = (slug: string) =>
   api.get<ProductDetail>(`/products/${slug}`).then((r) => r.data);
 export const fetchBrands = async () =>
-  (await takePublicBlock('brands')) ?? api.get<{ brand: string; count: number; slug?: string | null }[]>('/brands').then((r) => r.data);
+  (await takePublicBlock('brands')) ?? api.get<BrandCount[]>('/brands').then((r) => r.data);
 export const fetchRelated = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/related`).then((r) => r.data);
 /** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập, xem home.tsx). */

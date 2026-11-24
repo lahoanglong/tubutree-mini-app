@@ -1,4 +1,4 @@
-import { CATEGORY_GRID_MAX_CELLS, categoriesBlockHeight, HOME_SETTLING_HEIGHTS as H } from '@tubutree/app-core/home-layout';
+import { CATEGORY_GRID_MAX_CELLS, homeCategoriesBlockHeight, HOME_SETTLING_HEIGHTS as H } from '@tubutree/app-core/home-layout';
 import { Skeleton } from '@/components/mini';
 
 /**
@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/mini';
 export function HomeSettlingSkeleton({ categoryCells = CATEGORY_GRID_MAX_CELLS }: { categoryCells?: number }) {
   return (
     <div data-testid="home-settling" aria-hidden="true" className="flex flex-col gap-4">
-      <Skeleton height={categoriesBlockHeight(Math.min(categoryCells, CATEGORY_GRID_MAX_CELLS))} radius="var(--radius-card)" />
+      <Skeleton height={homeCategoriesBlockHeight(Math.min(categoryCells, CATEGORY_GRID_MAX_CELLS))} radius="var(--radius-card)" />
       <Skeleton height={H.products} radius="var(--radius-card)" />
       <Skeleton height={H.shortcuts} radius="var(--radius-card)" />
       <Skeleton height={H.stories} radius="var(--radius-card)" />

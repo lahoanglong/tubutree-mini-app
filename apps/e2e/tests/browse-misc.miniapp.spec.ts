@@ -27,7 +27,7 @@ test.describe('Danh mục quá một màn', () => {
     await expect(cats.getByRole('button', { name: 'Gốc 4', exact: true })).toBeVisible();
     await expect(cats.getByRole('button', { name: 'Gốc 5', exact: true })).toHaveCount(0);
     await expect(cats.getByRole('button', { name: 'Xem tất cả Danh mục', exact: true })).toHaveCount(0);
-    await expect(cats.getByRole('button')).toHaveCount(5);
+    await expect(cats.getByTestId('category-grid').getByRole('button')).toHaveCount(5); // chip Thương hiệu dưới lưới không tính
     const all = cats.getByRole('button', { name: 'Tất cả danh mục', exact: true });
     const box = (await all.boundingBox())!;
     expect(box.x + box.width, 'ô "Tất cả" nằm gọn trong màn').toBeLessThanOrEqual(375);
@@ -44,7 +44,7 @@ test.describe('Danh mục quá một màn', () => {
     const cats = homeCategories(page);
     await expect(cats.getByRole('button', { name: 'Gốc 3', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(cats.getByRole('button', { name: 'Xem tất cả Danh mục', exact: true })).toHaveCount(0);
-    await expect(cats.getByRole('button')).toHaveCount(4);
+    await expect(cats.getByTestId('category-grid').getByRole('button')).toHaveCount(4); // chip Thương hiệu dưới lưới không tính
     const box = (await cats.getByRole('button', { name: 'Tất cả danh mục', exact: true }).boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(375);
   });

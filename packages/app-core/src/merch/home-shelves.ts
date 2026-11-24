@@ -45,10 +45,10 @@ export function flashExcludedVariations<T extends { productSlug: string; variati
 
 /**
  * Hạng thật liền từ 1 (1..k)? Kệ Bán chạy nhất chống trùng nên có thể mất hạng 1 hay hụt giữa dãy (hạng đang ở Giờ vàng, Mua lại, combo): khi đó thẻ
- * không ghi số (chỉ "Bán chạy") để khách không tưởng kệ lỗi; hạng liền thì giữ số.
+ * không ghi số (chỉ "Bán chạy") để khách không tưởng kệ lỗi; hạng liền thì giữ số. `null` là món ghim (không có hạng, xem `bestSellerShelfItems`): bỏ qua khi xét.
  */
-export function ranksAreSequential(ranks: readonly number[]): boolean {
-  return ranks.every((r, i) => r === i + 1);
+export function ranksAreSequential(ranks: readonly (number | null)[]): boolean {
+  return ranks.filter((r): r is number => r !== null).every((r, i) => r === i + 1);
 }
 
 /**
@@ -109,15 +109,39 @@ export function composeHomeShelves<F, P, C, B>(input: HomeShelvesInput<F, P, C, 
 }
 
 /**
- * Xếp món CÓ ẢNH lên trước món chưa có ảnh, giữ nguyên thứ tự tương đối trong mỗi nhóm (ổn định). Dùng cho kệ Bán chạy nhất ở Trang chủ: ô ảnh thay thế (lá) nằm giữa
- * màn đầu làm kệ trông hỏng, nên món có ảnh thật đứng trước; món không ảnh vẫn còn trong kệ nếu còn chỗ. Hạng thật của từng món phải được gắn TRƯỚC khi gọi hàm này
- * (xem `ranksAreSequential`: hạng hụt thì thẻ chỉ ghi "Bán chạy", không ghi số sai).
+ * Xếp còn hàng trước, rồi trong mỗi phần món CÓ ẢNH trước món chưa có ảnh; giữ nguyên thứ tự tương đối trong mỗi nhóm (ổn định). Thứ tự bốn nhóm: còn hàng có ảnh,
+ * còn hàng chưa ảnh, hết hàng có ảnh, hết hàng chưa ảnh: ô ảnh thay thế (lá) giữa màn đầu làm kệ trông hỏng nên món có ảnh lên trước, nhưng món hết hàng có ảnh
+ * không bao giờ vượt món còn hàng. Hạng thật của từng món phải được gắn TRƯỚC khi gọi hàm này (xem `ranksAreSequential`: hạng hụt thì thẻ chỉ ghi "Bán chạy").
  */
-export function imageFirst<T>(items: readonly T[], hasImage: (item: T) => boolean): T[] {
-  const withImage: T[] = [];
-  const without: T[] = [];
-  for (const it of items) (hasImage(it) ? withImage : without).push(it);
-  return withImage.length === 0 || without.length === 0 ? [...items] : [...withImage, ...without];
+export function merchFirst<T>(items: readonly T[], inStock: (item: T) => boolean, hasImage: (item: T) => boolean): T[] {
+  const groups: [T[], T[], T[], T[]] = [[], [], [], []];
+  for (const it of items) groups[(inStock(it) ? 0 : 2) + (hasImage(it) ? 0 : 1)]!.push(it);
+  return groups.flat();
+}
+
+/** Một món của kệ Bán chạy nhất kèm hạng: `rank` null là món admin ghim (kệ `best_sellers`), không phải thứ hạng lượt bán nên thẻ không ghi số. */
+export interface RankedShelfItem<T> {
+  product: T;
+  rank: number | null;
+}
+
+/**
+ * Món và hạng của kệ Bán chạy nhất theo trang 1 máy chủ trả (`pinnedIds` là khối món ghim ở đầu): món ghim đứng đầu theo thứ tự ghim, không mang hạng; món còn lại
+ * đánh 1..n liền nhau (không đếm món ghim) theo thứ tự còn hàng trước, rồi món có ảnh lên trước trong từng phần (`merchFirst`). Máy chủ đã xếp còn hàng trước nên
+ * bước này chỉ đổi thứ tự khi API cũ trả món hết hàng xen giữa: đánh số sau bước đó để món hết hàng bị đẩy xuống không làm hụt hạng (hụt thì cả kệ mất số). Không có
+ * `pinnedIds` (API cũ, chưa ghim) thì mọi món mang hạng.
+ */
+export function bestSellerShelfItems<T extends { id: string; inStock: boolean; thumbnail: string | null }>(
+  items: readonly T[],
+  pinnedIds?: readonly string[],
+): RankedShelfItem<T>[] {
+  const pinned = new Set(pinnedIds ?? []);
+  const rest = items.filter((p) => !pinned.has(p.id));
+  const ranked = [...rest.filter((p) => p.inStock), ...rest.filter((p) => !p.inStock)].map((product, i) => ({ product, rank: i + 1 }));
+  return [
+    ...items.filter((p) => pinned.has(p.id)).map((product) => ({ product, rank: null })),
+    ...merchFirst(ranked, (x) => x.product.inStock, (x) => Boolean(x.product.thumbnail?.trim())),
+  ];
 }
 
 /** Route nhận `?category=`: lối xem tất cả của kệ đang lọc theo danh mục giữ phạm vi đó, để hạng trên kệ và ở trang đích cùng một thước đo. */

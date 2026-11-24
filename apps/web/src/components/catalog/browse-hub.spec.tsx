@@ -86,7 +86,7 @@ describe('BrowseHub', () => {
   });
 
   it('dữ liệu do server đưa vào hiện ngay, không gọi lại /products', async () => {
-    const c = mount({ initialBestSellers: page(10).data });
+    const c = mount({ initialBestSellers: page(10) });
     expect(region(c, 'Bán chạy nhất')!.querySelectorAll('[data-ds-part="rank"]')).toHaveLength(10);
     await flush();
     expect(http.get.mock.calls.filter(([path]) => path === '/products')).toEqual([]);

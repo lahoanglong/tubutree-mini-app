@@ -13,6 +13,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined })
 
 import { PRIORITY_CARDS } from './product-card';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
+import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
 import { ProductGrid } from './product-grid';
 import { ProductRail } from './product-rail';
 
@@ -66,6 +67,20 @@ describe('ProductGrid', () => {
     expect(c.querySelector('[data-testid="catalog-grid-skeleton"]')!.getAttribute('aria-hidden')).toBe('true');
     expect(c.querySelectorAll('[data-testid="catalog-tile-skeleton"]').length).toBe(4);
     expect(c.querySelector('a')).toBeNull();
+  });
+
+  it('loading + reserve: cùng lớp cột, mỗi ô một nút ảnh 1:1 + thân tileBodyHeight (không vạch chờ bên trong), ẩn khỏi trình đọc màn hình', async () => {
+    const c = await mount(<ProductGrid items={[]} variant="grid" loading reserve skeletonCount={3} className={GRID_PRODUCTS_WITH_FILTER} />);
+    const grid = c.querySelector<HTMLElement>('[data-testid="catalog-grid-reserve"]')!;
+    expect(grid.getAttribute('aria-hidden')).toBe('true');
+    expect(grid.className).toBe(GRID_PRODUCTS_WITH_FILTER);
+    const cells = Array.from(grid.children) as HTMLElement[];
+    expect(cells).toHaveLength(3);
+    expect(cells.every((el) => el.childElementCount === 0)).toBe(true);
+    expect(cells[0]!.style.aspectRatio).toBe('1 / 1');
+    expect(cells[0]!.style.boxSizing).toBe('content-box');
+    expect(cells[0]!.style.paddingBottom).toBe(`${tileBodyHeight('grid')}px`);
+    expect(c.querySelector('[data-testid="catalog-grid-skeleton"], [data-testid="catalog-tile-skeleton"]')).toBeNull();
   });
 
   it('rankFrom đánh hạng liên tiếp; renderAfter và renderImageOverlay nhận đúng sản phẩm', async () => {

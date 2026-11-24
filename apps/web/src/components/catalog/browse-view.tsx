@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronRight, MessageCircle, Search, X } from 'lucide-react';
 import type { CatalogPage, CategoryDTO, ProductCard as ProductCardData, ProductSuggestion } from '@tubutree/app-core/api/catalog';
+import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import { categoryTrail, chipScope, findCategory } from '@tubutree/app-core/browse/category-tree';
 import { softBreakLongWords } from '@tubutree/app-core/browse/soft-break';
 import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
@@ -71,7 +72,7 @@ export interface BrowseViewProps {
   brands?: { brand: string; count: number; slug?: string | null }[];
   categories?: CategoryDTO[];
   /** Kệ Bán chạy nhất của hub do server tải sẵn. */
-  bestSellers?: ProductCardData[];
+  bestSellers?: BestSellersPage;
   /** Lối vào trang Tiết kiệm với Refill do server quyết định (xem `BrowseHubProps.refillEntry`); có thì gốc Danh mục mang link này ở mọi khổ màn hình. */
   refillEntry?: RefillEntryLink | null;
 }

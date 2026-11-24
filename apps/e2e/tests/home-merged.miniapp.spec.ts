@@ -1,6 +1,7 @@
 import { test, expect } from './support/mock-api';
 import { mockDiscovery } from './support/discovery-mocks';
-import { HOME_ME, MERGED_FOR_YOU, MERGED_PURCHASED, lonePersonalCalls, mockMergedHome } from './support/home-merged';
+import { HOME_ME, MERGED_BRAND, MERGED_PURCHASED, lonePersonalCalls, mockMergedHome } from './support/home-merged';
+import { BRAND_SHOWCASE } from './support/home-brands';
 
 /** Mini App: Trang chủ mở bằng GET /home + GET /home/me (mock đúng dạng API thật), hiện đủ khối và không gọi các endpoint lẻ đã gộp. */
 test.describe('Trang chủ — request gộp', () => {
@@ -12,9 +13,11 @@ test.describe('Trang chủ — request gộp', () => {
     await expect(page.getByRole('region', { name: 'Mua lại' }).getByText(MERGED_PURCHASED)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Danh mục', exact: true }).getByText('Danh mục gộp')).toBeVisible();
-    // Lưới Gợi ý hôm nay chỉ tải khi khối gần màn hình (suggest-feed.tsx): khách cuộn tới thì mới thấy.
-    await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).getByText(MERGED_FOR_YOU)).toBeVisible();
+    // Khối thương hiệu cuối trang lấy danh sách nhãn từ khối gộp /home (không gọi /brands), chỉ tải món khi khối gần màn hình: khách cuộn tới thì mới thấy.
+    await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE }).getByRole('heading', { name: MERGED_BRAND, exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE }).locator('[data-ds="product-tile"]').first()).toBeVisible();
+    expect(api.callsTo('GET', '/brands')).toHaveLength(0);
     expect(api.callsTo('GET', '/home')).toHaveLength(1);
     const me = api.callsTo('GET', '/home/me');
     expect(me).toHaveLength(1);

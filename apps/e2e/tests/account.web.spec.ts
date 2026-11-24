@@ -356,7 +356,7 @@ test.describe('Web khách: tài khoản', () => {
     // Trang chủ có thể gọi thêm vài API phụ không liên quan tới quiz.
     api.allowUnmocked('POST /events', 'GET /flash-sales/active', 'GET /me/coupons', 'POST /affiliate/touch',
       'GET /config/public', 'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/upcoming', 'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you',
-      'GET /me/wishlist/ids');
+      'GET /me/wishlist/ids', 'GET /brands');
     await page.goto('/');
 
     await expect(page.getByRole('heading', { level: 1 })).toBeAttached();

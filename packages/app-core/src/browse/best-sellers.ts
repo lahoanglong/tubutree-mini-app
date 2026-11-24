@@ -103,6 +103,18 @@ export function bestSellersRankFrom(startPage: number): number {
   return Number.isFinite(startPage) && startPage >= 1 ? (Math.floor(startPage) - 1) * BEST_SELLERS_PAGE_LIMIT + 1 : 1;
 }
 
+/**
+ * Hạng của từng thẻ ở trang Bán chạy nhất khi API đặt món ghim kệ `best_sellers` lên đầu trang 1 (`pinnedIds`, có ở mọi trang): món ghim không số, món sau
+ * đánh số liền. Danh sách mở thẳng trang N ≥ 2 thì không chứa món ghim nhưng chúng đã chiếm chỗ ở trang 1, nên hạng đầu lùi đúng số món ghim. Không có món
+ * ghim thì như `bestSellersRankFrom(startPage) + i`.
+ */
+export function bestSellersPageRanks(items: readonly { id: string }[], pinnedIds: readonly string[] | undefined, startPage = 1): (number | null)[] {
+  const pinned = new Set(pinnedIds ?? []);
+  const from = bestSellersRankFrom(startPage);
+  let rank = from > 1 ? from - 1 - pinned.size : 0;
+  return items.map((p) => (pinned.has(p.id) ? null : ++rank));
+}
+
 const PAGE_PATH = { mini: '/best-sellers', web: '/ban-chay' } as const;
 
 /**

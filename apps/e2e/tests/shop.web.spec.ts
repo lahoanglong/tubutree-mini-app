@@ -7,7 +7,7 @@ import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './suppo
 import { expectChipHitArea44 } from './support/hit-area';
 import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
-import { homeInterleaveCard } from '../../../packages/app-core/src/home-layout';
+import { BRAND_BAR, BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
@@ -205,7 +205,8 @@ const BEST_SELLERS = [
 function mockHome(api: MockApi) {
   mockCatalog(api);
   api.get('/products', ({ call }) => {
-    // Kệ Bán chạy nhất xếp theo lượt bán 30 ngày và chỉ hiện khi có từ 3 món; lưới Gợi ý hôm nay là mọi lời gọi còn lại.
+    // Khối "Khám phá theo Thương hiệu" hỏi món của từng nhãn (`?brand=`); kệ Bán chạy nhất xếp theo lượt bán 30 ngày và chỉ hiện khi có từ 3 món.
+    if (call.query.get('brand')) return pageOf([product(3, { name: 'Sản phẩm nổi bật' })], 1, 1, 8);
     if (call.query.get('sort') === 'best_seller_30d') return pageOf(BEST_SELLERS, BEST_SELLERS.length, 1, 12);
     return pageOf([product(3, { name: 'Sản phẩm nổi bật' })], 1, 1, 20);
   });
@@ -230,7 +231,7 @@ function mockCustomer(api: MockApi) {
 }
 
 test.describe('Web khách: Trang chủ /', () => {
-  test('khách vãng lai: kệ Bán chạy và lưới gợi ý công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
+  test('khách vãng lai: kệ Bán chạy và khối Khám phá theo Thương hiệu, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
     mockHome(api);
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
@@ -239,11 +240,13 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page.getByTestId('best-seller-grid')).toHaveCount(0);
     await expect(best.getByText('Sữa rửa mặt bán chạy')).toBeVisible();
     for (const rank of ['#1', '#2', '#3']) await expect(best.getByText(rank, { exact: true })).toBeVisible();
-    const suggest = page.getByRole('region', { name: 'Gợi ý hôm nay' });
-    await expect(suggest.getByText('Sản phẩm nổi bật')).toBeVisible();
-    // Một lưới đổi chủ đề bằng chip danh mục, không còn ba tab nguồn.
-    await expect(suggest.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button', { name: 'Tất cả', exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Nguồn gợi ý' })).toHaveCount(0);
+    // Mỗi thương hiệu một mục (nhiều sản phẩm trước); hàng chip Thương hiệu dưới Danh mục cùng thứ tự. Không còn lưới gợi ý lọc theo danh mục.
+    const suggest = page.getByRole('region', { name: BRAND_SHOWCASE });
+    await suggest.scrollIntoViewIfNeeded();
+    await expect(suggest.getByRole('heading', { level: 3 })).toHaveText(['Tubu', 'Mộc An']);
+    await expect(suggest.getByText('Sản phẩm nổi bật').first()).toBeVisible();
+    await expect(page.getByRole('region', { name: BRAND_BAR, exact: true }).getByRole('button')).toHaveText(['Tubu', 'Mộc An']);
+    await expect(page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' })).toHaveCount(0);
     // Điện thoại: chuông hiện cả với khách như Mini App (trang Thông báo tự đòi đăng nhập); máy tính không có chuông cho khách.
     const phone = (page.viewportSize()?.width ?? 1280) < 768;
     await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(phone ? 1 : 0);
@@ -278,7 +281,9 @@ test.describe('Web khách: Trang chủ /', () => {
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByRole('link', { name: 'Thông báo, 2 chưa đọc' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).getByText('Gợi ý riêng')).toBeVisible();
+    // Nhãn chỉ vẽ thẻ thật khi gần khung nhìn.
+    await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole('region', { name: BRAND_SHOWCASE }).getByText('Sản phẩm nổi bật').first()).toBeVisible();
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail.getByText('Nước rửa chén')).toBeVisible();
 
@@ -778,31 +783,16 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
   test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và đúng thẻ chen của ngày (lẻ khối Cộng đồng, chẵn Chẩn đoán tổ ấm); mở Ưu đãi rồi tab Mã của tôi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
-    // Lưới Gợi ý chỉ chen thẻ khi có từ HOME_INTERLEAVE_AFTER (8) thẻ: mock mặc định của mockHome chỉ có một món nên không thẻ chen nào hiện.
-    api.get('/products', ({ call }) => {
-      if (call.query.get('sort') === 'best_seller_30d') return pageOf(BEST_SELLERS, BEST_SELLERS.length, 1, 12);
-      const grid = Array.from({ length: 10 }, (_, i) => product(31 + i, { name: `Gợi ý lưới ${i + 1}` }));
-      return pageOf(grid, grid.length, 1, 20);
-    });
-    // Thẻ chen của lưới Gợi ý luân phiên theo hạt giống ngày VN của bản dựng trang (`homeInterleaveCard`), không theo đồng hồ của máy chạy test:
-    // đọc đúng hạt giống lưới đã gửi lên /products, nên ca này qua cả ngày chẵn lẫn ngày lẻ, kể cả khi trang dựng sẵn từ hôm trước.
-    const seeds: string[] = [];
-    page.on('request', (r) => {
-      const url = new URL(r.url());
-      const seed = url.searchParams.get('seed');
-      if (seed && url.pathname.endsWith('/products')) seeds.push(seed);
-    });
     await page.goto('/');
-    await expect.poll(() => seeds.length).toBeGreaterThan(0);
+    // Thẻ chen đứng sau nhãn cuối của khối "Khám phá theo Thương hiệu" và luân phiên theo hạt giống ngày VN của bản dựng trang
+    // (`homeInterleaveCard`). Khối thương hiệu không gửi hạt giống lên API nên ca này không đoán ngày: đòi đúng MỘT trong hai thẻ, qua cả ngày chẵn lẫn lẻ.
     const community = page.getByRole('region', { name: 'Cộng đồng' });
     const quiz = page.getByTestId('home-quiz-card');
-    if (homeInterleaveCard(seeds[0]!) === 'community') {
-      await expect(community).toBeVisible();
-      await expect(quiz).toHaveCount(0);
-    } else {
-      await expect(quiz).toBeVisible();
-      await expect(community).toHaveCount(0);
-    }
+    const showcase = page.getByRole('region', { name: BRAND_SHOWCASE });
+    await showcase.scrollIntoViewIfNeeded();
+    await expect(showcase.getByTestId('suggest-interleave')).toHaveCount(1);
+    await expect(community.or(quiz)).toBeVisible();
+    expect((await community.count()) + (await quiz.count()), 'đúng một thẻ chen').toBe(1);
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
     // Mã của tôi là một tab của Ưu đãi (mặc định mở Săn mã): phiếu sắp hết hạn chỉ hiện sau khi mở tab này.
@@ -860,7 +850,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 
-  test('chip danh mục của Gợi ý hôm nay nhìn cao 36px nhưng vùng chạm 44px: cách tâm ±21px vẫn trúng chip, hàng cuộn không cắt', async ({ page, api }) => {
+  test('chip Thương hiệu dưới Danh mục nhìn cao 36px nhưng vùng chạm 44px: cách tâm ±21px vẫn trúng chip, hàng cuộn không cắt', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
     await page.goto('/');
@@ -868,7 +858,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
     await expect(page.getByText('Chào An')).toBeVisible();
     await expect(page.getByTestId('home-settling')).toHaveCount(0);
-    await expectChipHitArea44(page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button', { name: 'Tất cả', exact: true }));
+    await expectChipHitArea44(page.getByRole('region', { name: BRAND_BAR, exact: true }).getByRole('button', { name: 'Tubu', exact: true }));
   });
 
   test('khách cũ đã nhớ "returning", /auth/refresh chậm 3s: Danh mục không xê dịch từ lúc đầu tới sau đăng nhập (≤ 2px)', async ({ page, api }) => {

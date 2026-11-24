@@ -23,6 +23,8 @@ export const GRID_IMAGE_SIZES = `${GRID_PHONE}, ${GRID_MD}, ${upTo(LG)} calc(${f
 /** Có cột lọc bên trái (200 + khe 24, listing-layout): lg 4 cột, xl ô cố định. */
 export const GRID_IMAGE_SIZES_WITH_FILTER = `${GRID_PHONE}, ${GRID_MD}, ${upTo(LG)} calc(${frameMinus(332)} / 4), ${px(170)}`;
 export const GRID_RANK_IMAGE_SIZES = `${GRID_PHONE}, ${GRID_MD}, calc(${frameMinus(112)} / 5)`;
+/** Lưới 4 món của mỗi thương hiệu ở Trang chủ: 2 cột tới dưới lg (md: lề 24 hai bên + một khe 16), từ lg 4 cột (lề 24 + 3 khe 16) trong khung tối đa 1200. */
+export const GRID_BRAND_IMAGE_SIZES = `${GRID_PHONE}, ${upTo(MD)} calc((${vwSub(64)}) / 2), calc(${frameMinus(96)} / 4)`;
 
 /** Kệ ngang và thẻ dòng: ô cố định. */
 export const TILE_IMAGE_SIZES = { rail: px(148), flash: px(128), line: px(64) } as const;

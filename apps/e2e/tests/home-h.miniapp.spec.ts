@@ -1,8 +1,9 @@
 import type { Page } from '@playwright/test';
 import { test, expect, E2E_TOKENS, makeUser } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
-import { BINH_SUA, mockDiscovery, mockHomeEngagement, toCard } from './support/discovery-mocks';
+import { mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
 import { expectChipHitArea44 } from './support/hit-area';
+import { BRAND_BAR } from './support/home-brands';
 import { hubTab, mockRewardsCatalog } from './support/offers-mocks';
 
 /**
@@ -189,11 +190,11 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi', () => {
 });
 
 test.describe('Trang chủ — vùng chạm 44px', () => {
-  test('chip danh mục của Gợi ý hôm nay có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
+  test('chip Thương hiệu dưới Danh mục có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 812 });
-    mockDiscovery(api, { returning: true, forYou: [toCard(BINH_SUA)] });
+    mockDiscovery(api, { returning: true });
     await page.goto('/');
-    const chips = page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' });
+    const chips = page.getByRole('region', { name: BRAND_BAR, exact: true });
     await expect(chips).toBeAttached({ timeout: 15_000 });
     const chip = chips.getByRole('button').first();
     await chip.scrollIntoViewIfNeeded();

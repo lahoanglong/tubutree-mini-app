@@ -1,9 +1,16 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'zmp-ui';
 import { LayoutGrid } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_SIZE, categorySkeletonCells, homeCategoryEntries, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { brandJumpHref, brandShowcase } from '@tubutree/app-core/merch/brand-showcase';
+import { BRAND_BAR_HEIGHT, CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_SIZE, categorySkeletonCells, homeCategoryEntries, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { fetchBrands } from '../../services/shop-api';
+import { haptic } from '../../utils/haptic';
+import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
+import { ScrollRow } from '../ui/scroll-row';
 import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
@@ -13,6 +20,9 @@ const TILE = CATEGORY_TILE_SIZE;
 const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
 const MAX_CELLS = CATEGORY_GRID_MAX_CELLS;
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
+/** Bề ngang khung chờ của chip thương hiệu (tên nhãn dài ngắn khác nhau). */
+const BRAND_SKELETON_WIDTHS = [76, 92, 68, 84, 72];
+const BRAND_ROW = { display: 'flex', gap: 'var(--space-inline-sm)', padding: 'var(--space-stack-xs) var(--space-inset-page)' } as const;
 
 export interface CategoryRowProps {
   entries: CategoryEntry[];
@@ -50,6 +60,54 @@ function Label({ children }: { children: string }) {
     >
       {children}
     </Text>
+  );
+}
+
+/**
+ * Chip của thanh nhảy nhanh: cuộn mượt tới nhãn trong khối "Khám phá theo Thương hiệu" (khách bật giảm chuyển động thì nhảy thẳng). Trả false khi khối chưa
+ * dựng nhãn đó (chunk dưới màn đầu chưa về, nhãn tải lỗi hay hết món): nơi gọi đi tới đích dự phòng `brandJumpHref`.
+ */
+function scrollToBrandAnchor(anchorId: string): boolean {
+  const el = document.getElementById(anchorId);
+  if (!el) return false;
+  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  return true;
+}
+
+/**
+ * Thanh nhảy nhanh theo thương hiệu dưới lưới Danh mục: chip theo số sản phẩm giảm dần, "Tubu Tree" cuối (`brandShowcase`). Chạm thì cuộn tới nhãn đó ở khối
+ * "Khám phá theo Thương hiệu"; khối chưa dựng nhãn đó thì mở trang của nhãn. Thương hiệu đến từ khối gộp `/home` (cùng khoá với tab Danh mục); hàng luôn cao
+ * `BRAND_BAR_HEIGHT` (khung chờ, chip, hay trống khi lỗi/rỗng) để khối dưới không nhảy.
+ */
+function BrandBar() {
+  const navigate = useNavigate();
+  const q = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000, retry: false });
+  const brands = useMemo(() => brandShowcase(q.data), [q.data]);
+  return (
+    <div data-testid="home-brand-bar" style={{ height: BRAND_BAR_HEIGHT }}>
+      {q.isLoading ? (
+        <div aria-hidden="true" style={{ ...BRAND_ROW, overflow: 'hidden' }}>
+          {BRAND_SKELETON_WIDTHS.map((w, i) => (
+            <Skeleton key={i} width={w} height={36} radius="var(--radius-pill)" style={{ flex: 'none' }} />
+          ))}
+        </div>
+      ) : brands.length > 0 ? (
+        <ScrollRow label={homeCopy.categories.brands} style={BRAND_ROW}>
+          {brands.map((b) => (
+            <Chip
+              key={b.key}
+              onPress={() => {
+                haptic('light');
+                if (!scrollToBrandAnchor(b.anchorId)) navigate(brandJumpHref(b, 'mini'));
+              }}
+            >
+              {b.brand}
+            </Chip>
+          ))}
+        </ScrollRow>
+      ) : null}
+    </div>
   );
 }
 
@@ -107,6 +165,7 @@ export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSel
             </>
           )}
       </div>
+      <BrandBar />
     </section>
   );
 });

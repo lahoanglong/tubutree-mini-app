@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersHref, bestSellersRankFrom } from './best-sellers';
+import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersHref, bestSellersPageRanks, bestSellersRankFrom } from './best-sellers';
 import type { CategoryNode } from './category-tree';
 
 const node = (id: string, over: Partial<CategoryNode> = {}): CategoryNode => ({
@@ -109,5 +109,22 @@ describe('bestSellersHref', () => {
     expect(bestSellersHref('mini', { page: 3 })).toBe('/best-sellers?page=3');
     expect(bestSellersHref('mini', { page: 1 })).toBe('/best-sellers');
     expect(bestSellersHref('mini', { category: '' , page: Number.NaN })).toBe('/best-sellers');
+  });
+});
+
+describe('bestSellersPageRanks: món ghim kệ best_sellers đứng đầu trang 1 không mang số hạng (w34-02)', () => {
+  const ids = (...xs: string[]) => xs.map((id) => ({ id }));
+
+  it('không có món ghim thì đánh số như cũ từ hạng đầu của trang', () => {
+    expect(bestSellersPageRanks(ids('a', 'b', 'c'), undefined)).toEqual([1, 2, 3]);
+    expect(bestSellersPageRanks(ids('a', 'b'), [], 2)).toEqual([21, 22]);
+  });
+
+  it('trang 1: món ghim null, món sau đánh số liền từ 1', () => {
+    expect(bestSellersPageRanks(ids('p1', 'p2', 'a', 'b'), ['p1', 'p2'])).toEqual([null, null, 1, 2]);
+  });
+
+  it('mở thẳng trang 2: hạng đầu lùi đúng số món ghim đã chiếm chỗ ở trang 1, nối liền với trang 1', () => {
+    expect(bestSellersPageRanks(ids('u', 'v'), ['p1', 'p2'], 2)).toEqual([19, 20]);
   });
 });

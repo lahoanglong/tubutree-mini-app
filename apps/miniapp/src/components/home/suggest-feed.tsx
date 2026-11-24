@@ -1,200 +1,135 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
+import { bestSellersWithBasis } from '@tubutree/app-core/api/browse';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_HEADER_HEIGHT, mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
-import { SUGGEST_MAX, suggestChips, vnDateSeed } from '@tubutree/app-core/home-suggest';
-import { useCategories } from '../../hooks/use-categories';
-import { useNavigationType } from '../../hooks/use-navigation-type';
-import { fetchCatalog, fetchForYou } from '../../services/shop-api';
-import { useAuthStore } from '../../store/auth';
+import {
+  BRAND_SHOWCASE_EAGER,
+  BRAND_SHOWCASE_FETCH,
+  brandShowcase,
+  brandShowcaseHref,
+  brandShowcaseItems,
+  brandShowcaseSkeletonCount,
+  type BrandShowcaseEntry,
+} from '@tubutree/app-core/merch/brand-showcase';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fetchBrands, fetchProducts } from '../../services/shop-api';
 import { haptic } from '../../utils/haptic';
-import { serverNow } from '../../utils/server-clock';
-import { CatalogGridSkeleton } from '../catalog/catalog-grid';
 import { Button } from '../ui/button';
-import { Chip } from '../ui/chip';
-import { ScrollRow } from '../ui/scroll-row';
+import { ProductGrid } from '../ui/product-grid';
 import { SectionHeader } from '../ui/section-header';
-import { Text } from '../ui/text';
 import { HomeBlockError } from './home-block-error';
-import { SuggestGrid } from './suggest-grid';
 
-// Hàng chip dính ngay dưới header dính của Trang chủ (cao `HOME_HEADER_HEIGHT`), dưới z-index của header (20). `top` đo từ mép nội dung của `.page`, mà `.page` đã
-// đệm sẵn `--safe-top` và header dính ở `top: 0`: chỉ cộng chiều cao header, không cộng thêm vùng an toàn.
-const CHIPS_STYLE = {
-  gap: 8,
-  padding: '8px 16px',
-  position: 'sticky',
-  top: `${HOME_HEADER_HEIGHT}px`,
-  zIndex: 10,
-  background: 'var(--color-bg-canvas)',
-} as const;
-
-const CHIP_KEY = 'tubu_home_chip';
-
-function loadChip(): string {
-  try {
-    return sessionStorage.getItem(CHIP_KEY) || 'all';
-  } catch {
-    return 'all';
-  }
-}
-
-function saveChip(key: string): void {
-  try {
-    sessionStorage.setItem(CHIP_KEY, key);
-  } catch {
-    /* storage bị chặn: chỉ mất việc nhớ chip */
-  }
-}
-
+/** Ô thẻ chen không là một mục của cột: thẻ chen không vẽ gì (Cộng đồng chưa có bài) thì không để lại một khoảng cách thừa cuối khối. */
+const INTERLEAVE_STYLE = { display: 'contents' } as const;
 export interface SuggestFeedProps {
-  /** Slug món đã nằm ở các kệ hàng phía trên: lưới không lặp lại chúng. */
+  /** Slug món đã nằm ở các kệ hàng phía trên: mỗi nhãn ưu tiên món chưa hiện (`brandShowcaseItems`). */
   exclude: ReadonlySet<string>;
-  /** Thẻ chen sau `HOME_INTERLEAVE_AFTER` thẻ đầu (Chẩn đoán tổ ấm hay Cộng đồng, trang chọn theo ngày). Lưới ngắn hơn thì không chen. */
+  /** Thẻ chen (Chẩn đoán tổ ấm hay Cộng đồng, trang chọn theo ngày) trải hết bề ngang, đứng sau nhãn cuối. */
   interleave?: ReactNode;
 }
 
+const brandProductsKey = (entry: BrandShowcaseEntry) => ['products', 'home-brand', entry.key, BRAND_SHOWCASE_FETCH] as const;
+
 /**
- * "Gợi ý hôm nay" (Q9): MỘT lưới cuộn vô tận ở cuối Trang chủ, đổi chủ đề bằng chip danh mục thay cho ba tab nguồn. Thứ tự xoay theo ngày Việt Nam
- * (`seed`): cuộn, quay lại, mở lại app trong ngày không xáo lưới, sang ngày khác thì đổi. Khách đã đăng nhập thấy gợi ý cá nhân lên đầu ở chip "Tất cả".
- * Dừng ở `SUGGEST_MAX` món rồi mời vào Danh mục: cuộn vô tận không có đáy làm khách mất đường tới chân trang và thanh đáy.
+ * Cờ "phần tử đã cách màn hình chưa tới một màn", một chiều (đã gần thì giữ). Trang Mini cuộn trong `.zaui-page`: lấy chính khung cuộn làm gốc để "một màn"
+ * đúng nghĩa (gốc khung nhìn không với tới phần bị khung cắt). Môi trường không có IntersectionObserver thì coi như đã gần.
+ */
+function useNearPage<T extends HTMLElement>(initial: boolean) {
+  const [el, ref] = useState<T | null>(null);
+  const [near, setNear] = useState(() => initial || typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (near || !el) return;
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), { root: el.closest('.zaui-page'), rootMargin: '100% 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near, el]);
+  return [ref, near] as const;
+}
+
+/**
+ * Một nhãn của khối: tiêu đề (tên nhãn), câu giới thiệu một dòng, "Tất cả (n)" tới danh sách lọc theo nhãn, rồi 4 món bán chạy 30 ngày (còn hàng trước).
+ * Nhãn trong `BRAND_SHOWCASE_EAGER` nhãn đầu tải ngay khi khối tới gần màn; nhãn sau chờ chính nó tới gần. Chưa có món thì giữ chỗ đúng số ô sẽ vẽ
+ * (ô giữ chỗ một nút `reserve` khi còn xa, khung chờ khi đang tải): chip của thanh nhảy nhanh cuộn qua các nhãn phía trên đích mà chúng không nở ra đẩy đích xuống
+ * (WebView iOS không có neo cuộn). Back từ PDP mà dữ liệu còn
+ * trong cache thì vẽ ngay để hook khôi phục cuộn có đủ chiều cao. Nhãn tải xong mà không còn món, hay lỗi, thì ẩn hẳn.
+ */
+function BrandSection({ entry, exclude, eager, blockNear }: { entry: BrandShowcaseEntry; exclude: ReadonlySet<string>; eager: boolean; blockNear: boolean }) {
+  const queryClient = useQueryClient();
+  const [ref, near] = useNearPage<HTMLElement>(eager || queryClient.getQueryData(brandProductsKey(entry)) !== undefined);
+  const q = useQuery({
+    queryKey: brandProductsKey(entry),
+    queryFn: () => bestSellersWithBasis((sort) => fetchProducts({ brand: entry.brand, sort, limit: BRAND_SHOWCASE_FETCH })),
+    enabled: blockNear && near,
+    staleTime: 60_000,
+    retry: 1,
+  });
+  const items = useMemo(() => brandShowcaseItems(q.data?.data ?? [], exclude), [q.data, exclude]);
+  if (q.isError || (q.isSuccess && items.length === 0)) return null;
+  return (
+    // Neo không tự đặt scroll-margin: `scroll-padding-top` của `.zaui-page` (tokens.css) đã chừa header dính, cộng thêm thì tiêu đề nhãn dừng thấp gấp đôi.
+    <section ref={ref} id={entry.anchorId} aria-label={entry.brand} data-testid="home-brand-section">
+      <SectionHeader
+        as="h3"
+        title={entry.brand}
+        subtitle={entry.tagline ?? undefined}
+        action={{ to: brandShowcaseHref(entry, 'mini'), label: fillCopy('section.seeAllCount', { n: entry.count }) }}
+      />
+      {q.isSuccess ? (
+        <ProductGrid items={items} variant="grid" listSource="home_brand" />
+      ) : (
+        // Khung chờ đầy đủ (~8 nút mỗi ô) chỉ khi nhãn đang tải thật; nhãn còn xa giữ chỗ một nút mỗi ô (Trang chủ 9 nhãn không thêm vài trăm nút DOM).
+        <ProductGrid items={[]} variant="grid" loading reserve={!(blockNear && near)} skeletonCount={brandShowcaseSkeletonCount(entry)} />
+      )}
+    </section>
+  );
+}
+
+/**
+ * "Khám phá theo Thương hiệu" (khối `suggest` cuối Trang chủ): mỗi thương hiệu một mục, theo số sản phẩm giảm dần và "Tubu Tree" cuối (`brandShowcase`), cùng
+ * thứ tự với thanh chip dưới Danh mục. Thương hiệu đến từ khối gộp `/home` (cùng khoá với thanh chip). Hai nhãn đầu tải ngay, nhãn sau tải lười; thẻ chen
+ * đứng sau nhãn cuối. Cuối khối là lối vào Danh mục.
  */
 export function SuggestFeed({ exclude, interleave }: SuggestFeedProps) {
   const navigate = useNavigate();
-  const navType = useNavigationType();
-  const authed = useAuthStore((s) => s.status === 'authenticated');
-  // Chốt một lần mỗi lần mở: qua nửa đêm giữa chừng không đổi thứ tự dưới chân khách.
-  const seed = useMemo(() => vnDateSeed(serverNow()), []);
-  const { categories } = useCategories();
-  const chips = useMemo(() => suggestChips(categories.filter((c) => !c.parentId)), [categories]);
-  // Chỉ lần mở bằng Back (POP) mới dựng lại như lúc rời đi: chip đã chọn cùng vị trí cuộn (vị trí cuộn là của lưới chip đó) và trang 1 từ cache.
-  // Mở mới bằng PUSH/tab thì bắt đầu ở chip "Tất cả" và chờ khối gần màn mới tải.
-  const [popped] = useState(() => navType === 'POP');
-  const [chipKey, setChipKey] = useState(() => {
-    // Lần mở mới xoá chip cũ: Back sau đó phải khôi phục chip của lần mở này, không phải chip của lần trước.
-    if (!popped) saveChip('all');
-    return popped ? loadChip() : 'all';
-  });
-  const active = chips.find((c) => c.key === chipKey) ?? chips[0]!;
-  const categoryId = active.categoryId;
-
-  // Lưới nằm cuối Trang chủ: chỉ tải khi khối cách màn hình chưa tới một màn. Lần mở Trang chủ bớt một request so với khi tải ngay; web không có
-  // request này vì trang 1 đã dựng sẵn ở server.
-  const section = useRef<HTMLElement>(null);
-  // Back từ PDP: trang 1 đã có trong cache thì dựng lưới ngay (không chờ IntersectionObserver) để trang đủ cao cho hook khôi phục cuộn.
   const queryClient = useQueryClient();
-  const [near, setNear] = useState(
-    () => typeof IntersectionObserver === 'undefined' || (popped && queryClient.getQueryData(['products', 'home-suggest', seed, categoryId ?? 'all']) !== undefined),
-  );
-  useEffect(() => {
-    const el = section.current;
-    if (near || !el) return;
-    // Trang Mini cuộn trong `.zaui-page` (khung cắt nội dung): với gốc mặc định là khung nhìn, lề 100% không với tới phần bị khung cuộn cắt, nên lưới chỉ tải khi đã
-    // lộ ra. Lấy chính khung cuộn làm gốc để "cách một màn hình" đúng nghĩa.
-    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), {
-      root: el.closest('.zaui-page'),
-      rootMargin: '100% 0px',
-    });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [near]);
-
-  const forYou = useQuery({ queryKey: ['for-you', seed], queryFn: () => fetchForYou({ seed }), enabled: near && authed && categoryId === null });
-  const pages = useInfiniteQuery({
-    queryKey: ['products', 'home-suggest', seed, categoryId ?? 'all'],
-    queryFn: ({ pageParam }) => fetchCatalog({ page: pageParam, limit: SUGGEST_PAGE_SIZE, seed, ...(categoryId ? { category: categoryId } : {}) }),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
-    enabled: near,
-  });
-  const personal = categoryId === null && authed ? (forYou.data ?? []) : [];
-  const fresh = mergeSuggestions(personal, (pages.data?.pages ?? []).map((p) => p.data)).filter((p) => !exclude.has(p.slug));
-  const capped = fresh.length >= SUGGEST_MAX;
-  const items = capped ? fresh.slice(0, SUGGEST_MAX) : fresh;
-  const loadingFirst = !near || pages.isLoading || (categoryId === null && authed && forYou.isPending && !pages.data);
-
-  const sentinel = useRef<HTMLDivElement>(null);
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = pages;
-  const canLoadMore = hasNextPage && !capped;
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !canLoadMore || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
-      },
-      { rootMargin: '400px 0px' },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [canLoadMore, isFetchingNextPage, fetchNextPage, items.length]);
-
-  // Cả trang đã tải đều là món nằm ở kệ trên: lưới rỗng nhưng còn trang sau, nên tải tiếp (không có gì trên màn để cuộn tới thì không có sentinel chạm) thay vì ẩn khối.
-  const draining = items.length === 0 && !!hasNextPage && !pages.isError;
-  useEffect(() => {
-    if (draining && !isFetchingNextPage) void fetchNextPage();
-  }, [draining, isFetchingNextPage, fetchNextPage]);
-
-  // "Tất cả" đã tải xong mà rỗng (không lỗi, hết trang): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
-  if (categoryId === null && !loadingFirst && !draining && !pages.isError && items.length === 0) return null;
-
+  // Cả khối nằm cuối trang: mở Trang chủ không bắn request của các nhãn (luật gộp request C-037), chỉ khi khối tới gần màn. Dữ liệu nhãn còn trong cache (Back) thì vẽ ngay.
+  const [ref, blockNear] = useNearPage<HTMLElement>(queryClient.getQueriesData({ queryKey: ['products', 'home-brand'] }).some(([, d]) => d !== undefined));
+  const q = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000, retry: false });
+  const brands = useMemo(() => brandShowcase(q.data), [q.data]);
+  const title = fillCopy('home.brands.title');
+  if (q.isSuccess && brands.length === 0) return null;
   return (
-    <section ref={section} aria-label={homeCopy.suggest.title}>
-      <div style={{ padding: '0 16px' }}>
-        <SectionHeader title={homeCopy.suggest.title} />
-      </div>
-      <ScrollRow label={homeCopy.suggest.chipsLabel} style={CHIPS_STYLE}>
-        {chips.map((c) => (
-          <Chip
-            key={c.key}
-            selected={active.key === c.key}
-            onPress={() => {
-              haptic('light');
-              setChipKey(c.key);
-              saveChip(c.key);
-            }}
-          >
-            {c.label}
-          </Chip>
-        ))}
-      </ScrollRow>
-      <div style={{ padding: '0 16px' }}>
-        {/* Chưa tới gần màn thì chưa phải "đang tải": không vẽ khung chờ (nó nằm dưới màn, khách không thấy). */}
-        {!near ? null : loadingFirst || draining ? (
-          <CatalogGridSkeleton count={6} />
-        ) : items.length === 0 ? (
-          pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
-        ) : (
-          <>
-            <SuggestGrid products={items} listSource="home_suggest" interleave={interleave} />
-            <div ref={sentinel} aria-hidden style={{ height: 1 }} />
-            {canLoadMore ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
-                <Button variant="secondary" loading={isFetchingNextPage} onPress={() => void fetchNextPage()} style={{ minWidth: 160 }}>
-                  {homeCopy.suggest.more}
-                </Button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '16px 0' }}>
-                <Text variant="caption" tone="tertiary" as="p" style={{ margin: 0, textAlign: 'center' }}>
-                  {homeCopy.suggest.end}
-                </Text>
-                <Button
-                  variant="secondary"
-                  onPress={() => {
-                    haptic('light');
-                    navigate('/browse');
-                  }}
-                  style={{ minWidth: 160 }}
-                >
-                  {homeCopy.suggest.enter}
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+    <section ref={ref} aria-label={title} style={{ padding: '0 var(--space-inset-page)' }}>
+      <SectionHeader title={title} />
+      {q.isLoading ? (
+        <ProductGrid items={[]} variant="grid" loading skeletonCount={4} />
+      ) : q.isError ? (
+        <HomeBlockError title={title} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-md)' }}>
+            {brands.map((entry, i) => (
+              <BrandSection key={entry.key} entry={entry} exclude={exclude} eager={i < BRAND_SHOWCASE_EAGER} blockNear={blockNear} />
+            ))}
+            {/* Thẻ chen cao theo dữ liệu về muộn (Cộng đồng): đứng giữa các nhãn thì đẩy lệch chip nhảy nhanh tới nhãn bên dưới. Dựng khi khối tới gần
+                màn như món của các nhãn: Cộng đồng tự gọi /feed, mở Trang chủ không thêm request (C-037). */}
+            {interleave && blockNear ? <div data-testid="suggest-interleave" style={INTERLEAVE_STYLE}>{interleave}</div> : null}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-stack-md) 0' }}>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                haptic('light');
+                navigate('/browse');
+              }}
+              style={{ minWidth: 160 }}
+            >
+              {homeCopy.suggest.enter}
+            </Button>
+          </div>
+        </>
+      )}
     </section>
   );
 }

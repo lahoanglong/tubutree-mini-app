@@ -1,19 +1,19 @@
 import type { HttpClient } from '../http';
 import { errorStatus } from './error-status';
-import type { PageResponse, ProductCard } from './catalog';
+import type { ProductPage } from './catalog';
 
 /**
  * Kệ Bán chạy nhất của hub Danh mục: theo lượt bán 30 ngày (`best_seller_30d`). API trước đợt shop 2026-10 từ chối giá trị này
- * (400, `forbidNonWhitelisted`) nên lùi về `best_seller` (tổng lượt bán) thay vì để kệ trống.
+ * (400, `forbidNonWhitelisted`) nên lùi về `best_seller` (tổng lượt bán) thay vì để kệ trống. Trả nguyên trang: kệ cần `pinnedIds` để thẻ món ghim không mang số hạng.
  */
-export async function fetchBestSellers(http: HttpClient, limit = 10): Promise<ProductCard[]> {
-  return (await bestSellersWithBasis((sort) => http.get<PageResponse<ProductCard>>('/products', { query: { sort, limit } }))).data;
+export async function fetchBestSellers(http: HttpClient, limit = 10): Promise<BestSellersPage> {
+  return bestSellersWithBasis((sort) => http.get<ProductPage>('/products', { query: { sort, limit } }));
 }
 
 /** Thước đo của một trang Bán chạy nhất: 30 ngày gần đây (`best_seller_30d`) hay tổng lượt bán (`best_seller`, khi API cũ từ chối thước đo mới). */
 export type BestSellersBasis = 'days30' | 'total';
 
-export interface BestSellersPage extends PageResponse<ProductCard> {
+export interface BestSellersPage extends ProductPage {
   /** Thiếu ở dữ liệu cũ (cache, trang dựng sẵn từ trước) thì coi như `days30`. */
   basis?: BestSellersBasis;
 }
@@ -23,7 +23,7 @@ export interface BestSellersPage extends PageResponse<ProductCard> {
  * để nơi vẽ nói đúng thước đo ("30 ngày qua" sai trên bảng xếp theo tổng lượt bán). Lỗi khác 400 ném tiếp. Dùng chung cho trang Bán chạy nhất và kệ Trang chủ
  * (mỗi nơi tự cấp cách gọi: web đi qua `HttpClient`, Mini App qua `fetchProducts` có đường tắt khối `/home`).
  */
-export async function bestSellersWithBasis(load: (sort: 'best_seller_30d' | 'best_seller') => Promise<PageResponse<ProductCard>>): Promise<BestSellersPage> {
+export async function bestSellersWithBasis(load: (sort: 'best_seller_30d' | 'best_seller') => Promise<ProductPage>): Promise<BestSellersPage> {
   try {
     return { ...(await load('best_seller_30d')), basis: 'days30' };
   } catch (err) {
@@ -40,5 +40,5 @@ export async function fetchBestSellersPage(
   http: HttpClient,
   { category, page, limit = 20 }: { category?: string; page: number; limit?: number },
 ): Promise<BestSellersPage> {
-  return bestSellersWithBasis((sort) => http.get<PageResponse<ProductCard>>('/products', { query: { sort, limit, page, ...(category ? { category } : {}) } }));
+  return bestSellersWithBasis((sort) => http.get<ProductPage>('/products', { query: { sort, limit, page, ...(category ? { category } : {}) } }));
 }

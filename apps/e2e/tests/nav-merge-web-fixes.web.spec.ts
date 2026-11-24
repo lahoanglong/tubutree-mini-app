@@ -252,15 +252,15 @@ test.describe('Trang chủ 390px (dữ liệu máy chủ từ DB e2e)', () => {
     });
   const hintSeen = (page: Page) => page.evaluate((key) => localStorage.getItem(key), HINT_KEY);
 
-  test('chip lọc gợi ý: vùng chạm thật ≥ 44×44px (hộp nhìn 36px, ::after của .tubu-hit-44 giãn dọc)', async ({ page, api, request }, testInfo) => {
+  test('chip Thương hiệu dưới Danh mục: vùng chạm thật ≥ 44×44px (hộp nhìn 36px, ::after của .tubu-hit-44 giãn dọc)', async ({ page, api, request }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ chạm điện thoại');
     await openHome(page, api, request, { width: 390, height: 844 }, false);
-    const row = page.locator('[role="region"][aria-label="Lọc gợi ý theo danh mục"]');
+    const row = page.locator('[role="region"][aria-label="Thương hiệu"]');
     await row.scrollIntoViewIfNeeded();
     await expect(row.locator('button').first()).toBeVisible();
     const box = await row.locator('button').first().boundingBox();
     console.log(`NAV_MERGE_CHIP visual ${box?.width}x${box?.height}`);
-    expect(await probeTapTargets(page, { scope: '[role="region"][aria-label="Lọc gợi ý theo danh mục"]' })).toEqual([]);
+    expect(await probeTapTargets(page, { scope: '[role="region"][aria-label="Thương hiệu"]' })).toEqual([]);
   });
 
   test('bóng gợi ý Vườn Xanh ở 390×844 không đè tiêu đề "Bán chạy nhất" (hay tiêu đề nào khác)', async ({ page, api, request }, testInfo) => {

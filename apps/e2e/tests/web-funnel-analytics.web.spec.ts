@@ -63,6 +63,8 @@ function isSubsequence(needle: string[], hay: string[]): boolean {
 }
 
 function mockGuestPages(api: MockApi, p: PdpProduct): void {
+  // Hàng chip Thương hiệu dưới lưới Danh mục hỏi /brands ở trình duyệt.
+  api.get('/brands', []);
   api.get('/flash-sales/active', []);
   api.get('/flash-sales/upcoming', []);
   api.get(`/products/${p.slug}`, { variations: p.variations });

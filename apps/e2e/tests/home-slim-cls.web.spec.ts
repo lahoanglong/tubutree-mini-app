@@ -1,5 +1,6 @@
 import { test } from './support/mock-api';
 import { expect, type Page } from '@playwright/test';
+import { BRAND_SHOWCASE_EAGER } from '../../../packages/app-core/src/merch/brand-showcase';
 import { assertSeededOnCi } from './support/a11y-db';
 import { observeCls, readClsTotal } from './support/cls-observer';
 import { solidPng } from './support/noise-png';
@@ -14,7 +15,11 @@ import { mockTourWorld, tourOrder, tourUser, ORDER_SHIPPING } from './support/to
 const MEASURE_ONLY = process.env.HOME_SLIM_MEASURE === '1';
 const SHOT_DIR = process.env.HOME_SLIM_SHOTS;
 const CLS_MAX = 0.1;
-/** Mục tiêu wave: trang chủ (trước khi cuộn vô tận nạp thêm) không dài quá 4,5 khung nhìn ở điện thoại, DOM ≤ 1.200 nút. */
+/**
+ * Mục tiêu wave: trang chủ (trước khi cuộn vô tận nạp thêm) không dài quá 4,5 khung nhìn ở điện thoại, DOM ≤ 1.200 nút. Khối cuối giờ là "Khám phá theo
+ * Thương hiệu" (w34-02): các nhãn sau `BRAND_SHOWCASE_EAGER` nhãn đầu chỉ tải khi khách cuộn tới, vai trò của phần "nạp thêm" ở lưới cũ, nên không tính
+ * vào chiều dài trang (vẫn tính vào số nút DOM).
+ */
 const HEIGHT_MAX_VIEWPORTS = 4.5;
 const DOM_MAX = 1200;
 /** Thẻ đầu phải lộ ít nhất chừng này (px) trên thanh đáy: một mép ảnh lấp ló không phải "thấy sản phẩm". */
@@ -56,10 +61,16 @@ interface HomeMetrics {
 }
 
 async function homeMetrics(page: Page): Promise<HomeMetrics> {
-  return page.evaluate(() => {
+  return page.evaluate((eager) => {
     const shown = (el: Element) => {
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    // Từ đáy nhãn tải ngay cuối cùng tới đáy nhãn cuối: các nhãn tải lười và khe giữa chúng.
+    const lazyBrandSpan = () => {
+      const brands = Array.from(document.querySelectorAll('[data-testid="home-brand-section"]'));
+      if (brands.length <= eager) return 0;
+      return brands[brands.length - 1]!.getBoundingClientRect().bottom - brands[eager - 1]!.getBoundingClientRect().bottom;
     };
     const card = Array.from(document.querySelectorAll('main [data-ds="product-tile"]')).find(shown);
     const nav = Array.from(document.querySelectorAll('nav')).find((n) => getComputedStyle(n).position === 'fixed' && n.getBoundingClientRect().bottom >= window.innerHeight - 1 && shown(n));
@@ -68,10 +79,10 @@ async function homeMetrics(page: Page): Promise<HomeMetrics> {
       firstCardTop: card ? Math.round(card.getBoundingClientRect().top + window.scrollY) : null,
       visibleBottom: Math.round(visibleBottom),
       dom: document.getElementsByTagName('*').length,
-      heightViewports: Math.round((document.documentElement.scrollHeight / window.innerHeight) * 100) / 100,
+      heightViewports: Math.round(((document.documentElement.scrollHeight - lazyBrandSpan()) / window.innerHeight) * 100) / 100,
       overflowX: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
     };
-  });
+  }, BRAND_SHOWCASE_EAGER);
 }
 
 for (const who of ['guest', 'session'] as const) {

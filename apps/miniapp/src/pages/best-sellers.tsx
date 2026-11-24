@@ -3,7 +3,7 @@ import { Page } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHeading, bestSellersRankFrom, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
+import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHeading, bestSellersPageRanks, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -95,7 +95,7 @@ export default function BestSellersPage() {
           />
         ) : (
           <>
-            <ProductGrid items={shown} variant="rank" rankFrom={heading.ranked ? bestSellersRankFrom(1) : undefined} listSource="best_seller_page" />
+            <ProductGrid items={shown} variant="rank" ranks={heading.ranked ? bestSellersPageRanks(shown, products.data?.pages[0]?.pinnedIds) : undefined} listSource="best_seller_page" />
             {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ danh sách, báo và thử lại tại chỗ. */}
             {products.isError && (
               <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 16 }}>

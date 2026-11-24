@@ -40,7 +40,7 @@ export const homeCopy = {
    */
   shortcuts: { title: 'Lối tắt', more: 'Thêm', moreAria: 'Thêm lối tắt', allAria: 'Tất cả lối tắt' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
-  categories: { title: 'Danh mục', all: 'Tất cả', allAria: 'Tất cả danh mục' },
+  categories: { title: 'Danh mục', all: 'Tất cả', allAria: 'Tất cả danh mục', brands: 'Thương hiệu' },
   journey: {
     title: 'Hành trình nguyên liệu',
     body: (brands: number) => (brands > 0 ? `${brands} thương hiệu Việt, từ nhiều vùng đất` : 'Sản phẩm Tubu từ nhiều vùng đất Việt Nam'),
@@ -61,11 +61,8 @@ export const homeCopy = {
     comments: (n: number) => `${n} bình luận`,
     noComments: 'Chưa có bình luận',
   },
+  /** Nút cuối khối "Khám phá theo Thương hiệu" (block `suggest`); tiêu đề khối ở `SHOP_COPY['home.brands.title']`. */
   suggest: {
-    title: 'Gợi ý hôm nay',
-    chipsLabel: 'Lọc gợi ý theo danh mục',
-    more: 'Xem thêm',
-    end: 'Bạn đã xem hết gợi ý hôm nay',
     enter: 'Vào Danh mục',
   },
   guestGift: {

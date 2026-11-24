@@ -5,7 +5,7 @@ import type { BestSellersBasis } from '@tubutree/app-core/api/browse';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { bestSellersHeading, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
-import { ranksAreSequential, seeAllHref } from '@tubutree/app-core/merch/home-shelves';
+import { bestSellerShelfItems, ranksAreSequential, seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { coreHttp } from '@/lib/core-http';
 import { ProductCard, ProductTileSkeleton, ScrollRow, SectionHeader } from '@/components/mini';
@@ -33,8 +33,8 @@ export const BEST_SELLER_LEAD_PRIORITY = 2;
 export interface BestSellerRailProps {
   /** Đã qua `composeHomeShelves` (bỏ món trùng kệ trên, 3–10 món); dưới 3 món thì rỗng và khối ẩn. */
   items: ProductCardData[];
-  /** Hạng thật của từng món (cùng chỉ số với `items`) khi kệ đã bỏ món trùng kệ trên; thiếu thì đánh #1..#n theo thứ tự. Hạng không liền từ 1 thì thẻ chỉ ghi "Bán chạy", không ghi số hụt. */
-  ranks?: readonly number[];
+  /** Hạng thật của từng món (cùng chỉ số với `items`) khi kệ đã bỏ món trùng kệ trên; thiếu thì đánh #1..#n theo thứ tự. null là món admin ghim: thẻ không số. Hạng không liền từ 1 thì thẻ chỉ ghi "Bán chạy", không ghi số hụt. */
+  ranks?: readonly (number | null)[];
   /** Thước đo xếp hạng; mặc định 30 ngày. `total` khi API cũ buộc kệ lùi về tổng lượt bán. */
   basis?: BestSellersBasis;
   loading: boolean;
@@ -83,7 +83,7 @@ export function BestSellerRail({ items: shelfItems, ranks, basis, loading, error
                     <ProductCard
                       product={p}
                       variant="rank"
-                      rank={heading.ranked ? (shownRanks?.[i] ?? i + 1) : undefined}
+                      rank={!heading.ranked ? undefined : shownRanks ? (shownRanks[i] ?? undefined) : i + 1}
                       rankPlain={plain}
                       priority={i < priorityCount}
                       imageSizes={RANK_SHELF_IMAGE_SIZES}
@@ -106,6 +106,17 @@ const SHELF = shelf('home.bestSellers');
 /** Bán chạy nhất tự tải, cho màn không có kệ nào ở trên để chống trùng (tab Đơn hàng trống). Cùng khoá query với Trang chủ nên dùng chung dữ liệu đã tải. */
 export function BestSellerRailQuery() {
   const q = useBlockQuery(useQuery(homeBestSellerQuery(coreHttp)));
-  const items = (q.data?.data ?? []).slice(0, SHELF.maxItems);
-  return <BestSellerRail items={items.length >= SHELF.minItems ? items : []} basis={q.data?.basis} loading={q.isLoading} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />;
+  const shelfItems = bestSellerShelfItems(q.data?.data ?? [], q.data?.pinnedIds).slice(0, SHELF.maxItems);
+  const full = shelfItems.length >= SHELF.minItems;
+  return (
+    <BestSellerRail
+      items={full ? shelfItems.map((x) => x.product) : []}
+      ranks={full ? shelfItems.map((x) => x.rank) : undefined}
+      basis={q.data?.basis}
+      loading={q.isLoading}
+      error={q.error}
+      onRetry={q.refetch}
+      retrying={q.isFetching}
+    />
+  );
 }

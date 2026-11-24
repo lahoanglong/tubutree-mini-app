@@ -1,13 +1,28 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Baby, LayoutGrid } from 'lucide-react';
-import { describe, it, expect, vi } from 'vitest';
+import type { ReactElement, ReactNode } from 'react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { CategoryEntry } from '../../hooks/use-categories';
 
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), fetchBrands: vi.fn() }));
+vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../../services/shop-api', () => ({ fetchBrands: mocks.fetchBrands }));
 
-import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_HEIGHT } from '@tubutree/app-core/home-layout';
+import { BRAND_BAR_HEIGHT, CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_HEIGHT } from '@tubutree/app-core/home-layout';
 import { CategoryRow } from './category-row';
+
+/** Thanh chip thương hiệu dưới lưới đọc danh sách nhãn qua React Query: mỗi lần vẽ một QueryClient mới để các ca không dùng chung cache. */
+function render(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return rtlRender(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+}
+
+beforeEach(() => {
+  mocks.navigate.mockReset();
+  mocks.fetchBrands.mockReset().mockResolvedValue([]);
+});
 
 const entries = (n: number): CategoryEntry[] =>
   Array.from({ length: n }, (_, i) => ({ kind: 'category', key: `c${i}`, label: `Danh mục ${i}`, icon: i % 2 ? Baby : LayoutGrid, image: null }));
@@ -230,5 +245,66 @@ describe('CategoryRow — một hàng 5 ô: 4 danh mục + "Tất cả"', () => 
     expect(tile).toHaveStyle({ height: '56px' });
     expect(labelSlot).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
     expect(CATEGORY_CELL_HEIGHT).toBe(56 + 4 + CATEGORY_LABEL_HEIGHT);
+  });
+});
+
+describe('CategoryRow — thanh nhảy nhanh theo thương hiệu', () => {
+  const BRANDS = [
+    { brand: 'Tubu Tree', count: 30 },
+    { brand: 'Fuwa3e', count: 20 },
+    { brand: 'Pơ Lang', count: 6 },
+  ];
+  const bar = () => screen.getByTestId('home-brand-bar');
+
+  afterEach(() => {
+    document.getElementById('home-brand-fuwa3e')?.remove();
+  });
+
+  it('chip theo số sản phẩm giảm dần, "Tubu Tree" luôn cuối; vùng cuộn ngang có tên "Thương hiệu"', async () => {
+    mocks.fetchBrands.mockResolvedValue(BRANDS);
+    renderRow(4);
+    const row = await screen.findByRole('region', { name: 'Thương hiệu' });
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fuwa3e', 'Pơ Lang', 'Tubu Tree']);
+  });
+
+  it('hàng luôn cao BRAND_BAR_HEIGHT: lúc tải (khung chờ), lúc có chip và lúc rỗng, nên khối dưới không nhảy', async () => {
+    let resolve: (v: typeof BRANDS) => void = () => undefined;
+    mocks.fetchBrands.mockReturnValue(new Promise((r) => (resolve = r)));
+    renderRow(4);
+    expect(bar()).toHaveStyle({ height: `${BRAND_BAR_HEIGHT}px` });
+    expect(bar().querySelector('[aria-hidden="true"]')).not.toBeNull();
+    resolve(BRANDS);
+    await screen.findByRole('button', { name: 'Fuwa3e' });
+    expect(bar()).toHaveStyle({ height: `${BRAND_BAR_HEIGHT}px` });
+  });
+
+  it('không có nhãn nào (hay lỗi): không vẽ chip, hàng vẫn giữ chỗ', async () => {
+    mocks.fetchBrands.mockRejectedValue(new Error('down'));
+    renderRow(4);
+    await waitFor(() => expect(mocks.fetchBrands).toHaveBeenCalled());
+    await waitFor(() => expect(bar().querySelector('[aria-hidden="true"]')).toBeNull());
+    expect(within(bar()).queryAllByRole('button')).toHaveLength(0);
+    expect(bar()).toHaveStyle({ height: `${BRAND_BAR_HEIGHT}px` });
+  });
+
+  it('chạm chip khi khối thương hiệu đã dựng nhãn: cuộn tới neo #home-brand-<slug>, không chuyển trang', async () => {
+    mocks.fetchBrands.mockResolvedValue(BRANDS);
+    const anchor = document.createElement('section');
+    anchor.id = 'home-brand-fuwa3e';
+    const scrollIntoView = vi.fn();
+    anchor.scrollIntoView = scrollIntoView;
+    document.body.appendChild(anchor);
+    renderRow(4);
+    fireEvent.click(await screen.findByRole('button', { name: 'Fuwa3e' }));
+    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('chạm chip khi nhãn chưa dựng (khối hoãn, lỗi hay hết món): mở danh sách lọc theo nhãn', async () => {
+    mocks.fetchBrands.mockResolvedValue(BRANDS);
+    renderRow(4);
+    fireEvent.click(await screen.findByRole('button', { name: 'Pơ Lang' }));
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate.mock.calls[0]![0]).toContain('brand=');
   });
 });

@@ -9,7 +9,7 @@ import {
   HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, HOME_MAX_BLOCKS, HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, homeContextVariant, homeContextBlockName, homeInterleaveCard, homePromoPick, homeTodoCount, homeTodoLead, resolveHomeEcosystemPillars, splitHomeEcosystemPillars,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
-  HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
+  HOME_SETTLING_HEIGHTS, BRAND_BAR_HEIGHT, categoriesBlockHeight, homeCategoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
   BANNER_HINT_KEY, OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint,
   COLLECT_HINT_KEY, COLLECT_HINT_MAX, collectSkeletonHeight, readCollectHint, writeCollectHint, HOME_BEST_SELLER_LIMIT,
 } from './home-layout';
@@ -311,10 +311,12 @@ describe('chiều cao khối Danh mục theo số ô', () => {
   it('ô danh mục cao 92 (56 + 4 + nhãn hai dòng 32)', () => {
     expect(CATEGORY_CELL_HEIGHT).toBe(92);
   });
-  it('tới 5 ô một hàng (148), từ 6 ô hai hàng (248) là phép đo chung; Trang chủ chỉ có một hàng nên khung chờ chung dùng số một hàng (148)', () => {
+  it('tới 5 ô một hàng (148), từ 6 ô hai hàng (248) là phép đo chung; Trang chủ một hàng cộng thanh thương hiệu 44 nên khung chờ chung là 192', () => {
     for (const n of [1, 4, 5]) expect(categoriesBlockHeight(n), `${n} ô`).toBe(148);
     for (const n of [6, 10, 14]) expect(categoriesBlockHeight(n), `${n} ô`).toBe(248);
-    expect(HOME_SETTLING_HEIGHTS.categories).toBe(148);
+    expect(BRAND_BAR_HEIGHT).toBe(44);
+    expect(homeCategoriesBlockHeight(5)).toBe(192);
+    expect(HOME_SETTLING_HEIGHTS.categories).toBe(192);
   });
   it('số ô khung chờ = số danh mục nhớ + "Tất cả", không quá một hàng (5)', () => {
     expect(categorySkeletonCells(3)).toBe(4);
@@ -333,7 +335,7 @@ describe('chiều cao khối Danh mục theo số ô', () => {
     // Số ô vẽ (kể cả "Tất cả") luôn vừa một hàng và cao đúng khung chờ chung: trang không nhảy khi danh mục về.
     for (const n of [0, 1, 4, 5, 10, 40]) {
       const cells = homeCategoryEntries(Array.from({ length: n }, (_, i) => i), true).length + 1;
-      expect(categoriesBlockHeight(cells), `${n} danh mục`).toBe(HOME_SETTLING_HEIGHTS.categories);
+      expect(homeCategoriesBlockHeight(cells), `${n} danh mục`).toBe(HOME_SETTLING_HEIGHTS.categories);
     }
   });
 });
