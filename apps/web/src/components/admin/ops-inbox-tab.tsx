@@ -10,6 +10,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { seedDealerClaimFilter, seedPayoutFilter } from './inbox-filter-seeds';
 import { failingCronJobs } from './ops-health-crons';
 import { useOpsInbox } from './use-ops-inbox';
+import { CommandCenterCard } from './command-center-card';
 import { LoadError } from './ui';
 
 export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
@@ -130,7 +131,7 @@ function HealthNotice({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-/** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
+/** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày và thẻ điều phối (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
 export function OpsInboxTab({ onOpen: openTab, onOpenStat, onOpenHealth, isAdmin = false }: { onOpen: (key: InboxKey) => void; onOpenStat?: (stat: TodayStatKey) => void; onOpenHealth?: () => void; isAdmin?: boolean }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
@@ -154,6 +155,7 @@ export function OpsInboxTab({ onOpen: openTab, onOpenStat, onOpenHealth, isAdmin
       </div>
       {isAdmin && onOpenHealth && <HealthNotice onOpen={onOpenHealth} />}
       {isAdmin && <TodayStats onOpenStat={onOpenStat} />}
+      {isAdmin && <CommandCenterCard />}
       <h3 className="text-sm font-semibold text-stone-900">Việc đang chờ{open.length > 0 ? ` (${open.length})` : ''}</h3>
       {open.length === 0 && (
         <p className="flex items-center gap-2 rounded-card border border-success-fg bg-success-bg px-4 py-3 text-sm text-success-fg">
