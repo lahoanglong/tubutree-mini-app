@@ -114,6 +114,25 @@ Bỏ nhóm bằng `--skip redirects,img`; `--sample 100` để kiểm nhanh 100 
 
 Đã chạy ngày 21/11/2026 trên nhánh `feat/tubu-w13-03` (mục 7.1).
 
+### 5.2. Kiểm MỌI URL của sitemap trước khi nộp cho Search Console (W28-03): `scripts/ci/sitemap-guard/index.mjs`
+
+Mục 5.1 chỉ kiểm canonical của trang chủ, `/san-pham` và 5 trang sản phẩm. Lệnh này tải từng URL trong `/sitemap.xml` (chỉ GET công khai) và FAIL khi một URL:
+không trả 200 thẳng (chuyển hướng, 404, 410), canonical không trùng chính URL đó, bị noindex (thẻ meta `robots`/`googlebot` hoặc header `X-Robots-Tag`, gồm
+cả header noindex mà middleware gắn cho host `app.tubutree.com`), hoặc bị `robots.txt` chặn. Sitemap phải có trang chủ và đủ 5 trang `/chinh-sach/*`:
+thiếu trang nào là trang đó chưa có nội dung đã duyệt ở admin (trang tự noindex nên sitemap bỏ).
+
+```bash
+# Sau lệnh D-Day ở 5.1, trước khi nộp https://tubutree.com/sitemap.xml ở Search Console. --max-per-kind 20: lấy mẫu 20 URL mỗi loại nhiều trang
+# (sản phẩm, danh mục, nhãn, gian hàng, chiến dịch); trang chủ, trang tĩnh và chính sách luôn kiểm hết. Bỏ cờ này để kiểm toàn bộ.
+node scripts/ci/sitemap-guard/index.mjs --base https://tubutree.com --max-per-kind 20
+# Diễn tập trên bản dựng chạy cục bộ (next start) mà canonical là host thật của bản dựng:
+node scripts/ci/sitemap-guard/index.mjs --base http://localhost:3122 --canonical https://tubutree.com
+```
+
+Không cần máy chủ: `apps/web/src/app/sitemap-integrity.spec.ts` chạy trong CI cùng Vitest. Nó gọi `sitemap()` thật trên route map thật (API giả), cho mỗi URL đi qua
+`redirects()` của `next.config.mjs`, `middleware.ts`, `robots.ts`, rồi đọc metadata thật của `page.tsx` và chuỗi `layout.tsx`. Thêm một route công khai vào
+`route-map.json` mà trang thiếu canonical, bị noindex hay bị chuyển hướng thì test đó đỏ.
+
 ## 6. Việc còn lại trước khi cutover thật (cần chủ)
 
 Preflight thật trên VPS (chỉ đọc) in đúng 4 FAIL này:
