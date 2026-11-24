@@ -154,4 +154,43 @@ describe('Cohort tháng + phễu theo ngày (real Postgres)', () => {
     expect(await prisma.funnelDailySnapshot.count({ where: { date: new Date(BACKFILL_DAY) } })).toBe(12);
     expect(await svc.backfillFunnelSnapshots(1000)).not.toContain(BACKFILL_DAY);
   });
+
+  it('phiên qua nửa đêm (23:59 → 00:01 giờ VN) chỉ tính cho ngày bắt đầu, kèm cả các bước làm sau 00:00', async () => {
+    const t = (iso: string) => new Date(iso);
+    const uid = `it-midnight-${randCode(6)}`;
+    const x = `x-${randCode(6)}`;
+    // 23:59 ngày 20/05 giờ VN, rồi thêm giỏ, thanh toán, đặt đơn sau 00:00 ngày 21/05.
+    await event('product_viewed', t('2033-05-20T16:59:00Z'), { sessionId: x, userId: uid });
+    await event('pdp_action', t('2033-05-20T17:00:30Z'), { sessionId: x, userId: uid, props: { action: 'add_to_cart' } });
+    await event('checkout_started', t('2033-05-20T17:01:00Z'), { sessionId: x, userId: uid });
+    await event('checkout_step', t('2033-05-20T17:01:30Z'), { sessionId: x, userId: uid, props: { step: 'place_order_click' } });
+    await event('order_placed', t('2033-05-20T17:03:00Z'), { userId: uid });
+    // Phiên thường của 21/05 và phiên Mini 23:30 ngày 21/05 kéo sang 00:30 ngày 22/05.
+    await event('product_viewed', t('2033-05-21T02:00:00Z'), { sessionId: `y-${randCode(6)}` });
+    const z = `z-${randCode(6)}`;
+    await event('screen_viewed', t('2033-05-21T16:30:00Z'), { sessionId: z, platform: 'miniapp' });
+    await event('product_viewed', t('2033-05-21T17:30:00Z'), { sessionId: z, platform: 'miniapp' });
+
+    const day20 = await svc.computeFunnelSnapshot('2033-05-20');
+    const day21 = await svc.computeFunnelSnapshot('2033-05-21');
+    const day22 = await svc.computeFunnelSnapshot('2033-05-22');
+    const step = (d: typeof day20, s: string) => d.rows.find((r) => r.step === s)!;
+
+    expect(day20.sessions).toEqual({ web: 1, miniapp: 0, total: 1 });
+    for (const s of ['product_viewed', 'add_or_buy', 'checkout_started', 'place_order_click', 'order_placed']) {
+      expect(step(day20, s)).toMatchObject({ web: 1, miniapp: 0 });
+    }
+    expect(day21.sessions).toEqual({ web: 1, miniapp: 1, total: 2 });
+    expect(step(day21, 'product_viewed')).toMatchObject({ web: 1, miniapp: 1 });
+    for (const s of ['add_or_buy', 'checkout_started', 'place_order_click', 'order_placed']) expect(step(day21, s).total).toBe(0);
+    expect(day22.sessions.total).toBe(0);
+
+    const snap = funnelDailyView(await prisma.funnelDailySnapshot.findMany({ where: { date: { in: [new Date('2033-05-20'), new Date('2033-05-21')] } } }));
+    expect(snap.map((d) => [d.date, d.sessions.total])).toEqual(
+      expect.arrayContaining([
+        ['2033-05-20', 1],
+        ['2033-05-21', 2],
+      ]),
+    );
+  });
 });
