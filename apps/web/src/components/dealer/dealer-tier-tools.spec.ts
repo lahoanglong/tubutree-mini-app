@@ -97,7 +97,7 @@ describe('hoá đơn VAT trên danh sách đơn', () => {
   const order = (code: string, over: Partial<OrderDTO> = {}) =>
     ({ code, status: 'DELIVERED', invoiceStatus: 'NOT_REQUESTED', createdAt: '2026-11-20T03:00:00.000Z', ...over }) as OrderDTO;
 
-  it('đơn đủ điều kiện: chưa huỷ/trả, chưa có yêu cầu (kể cả cột trống), trong 30 ngày', () => {
+  it('đơn đủ điều kiện: chưa huỷ/trả, chưa hoàn tiền, chưa có yêu cầu (kể cả cột trống), trong 30 ngày', () => {
     const eligible = invoiceEligibleOrders(
       [
         order('A'),
@@ -108,6 +108,7 @@ describe('hoá đơn VAT trên danh sách đơn', () => {
         order('F', { invoiceStatus: 'ISSUED' }),
         order('G', { createdAt: '2026-10-24T03:00:00.000Z' }),
         order('H', { createdAt: '2026-10-25T05:00:00.000Z' }),
+        order('I', { paymentStatus: 'REFUNDED' }),
       ],
       NOW,
     );

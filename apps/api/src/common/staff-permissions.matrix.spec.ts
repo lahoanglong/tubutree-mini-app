@@ -550,6 +550,10 @@ const NO_ROLES_ALLOWLIST: Record<string, string> = {
   'POST /dealer/rewards/:id/claim': dealerOnly('claimReward', 1117),
   'GET /dealer/templates': dealerOnly('listTemplates', 2027),
   'POST /dealer/templates': dealerOnly('saveTemplate', 2036),
+  'GET /dealer/tier-progress': dealerOnly('tierProgress', 1092),
+  'GET /dealer/invoice-profile': `chỉ đại lý: DealerInvoiceService.dealerUser ném 403 khi User.role !== DEALER (dealer-invoice.service.ts:83); chỉ đọc thông tin hoá đơn và hồ sơ đăng ký đại lý của chính người gọi`,
+  'PUT /dealer/invoice-profile': `chỉ đại lý: DealerInvoiceService.saveProfile khoá dòng users của người gọi rồi ném 403 khi role !== DEALER (dealer-invoice.service.ts:113); chỉ ghi metadata.dealerInvoice của chính người đó`,
+  'POST /dealer/orders/invoice-request': `chỉ đại lý: DealerInvoiceService.dealerUser ném 403 khi User.role !== DEALER (dealer-invoice.service.ts:83); chỉ đọc và ghi đơn type DEALER có userId của người gọi (dealer-invoice.service.ts:138, lệnh ghi có điều kiện), mã đơn của người khác báo không tìm thấy`,
   'DELETE /dealer/templates/:id': `${dealerOnly('deleteTemplate', 2047)}; xoá theo (id, userId) nên không chạm mẫu của người khác (dealer.service.ts:2049)`,
   'POST /affiliate/register':
     'cửa đăng ký CTV một chạm, khách thường phải vào được: AffiliateService.register (affiliate.service.ts:175) chỉ nhận CUSTOMER/AFFILIATE (canRegisterAsAffiliate :177), chặn tài khoản bị thu hồi (:180) và tài khoản không thật (isRealUser :182); chỉ đổi vai trò của chính người gọi',

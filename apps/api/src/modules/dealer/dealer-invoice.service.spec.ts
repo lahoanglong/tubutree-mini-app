@@ -134,11 +134,12 @@ describe('DealerInvoiceService.requestInvoices', () => {
         order('DL4', { invoiceStatus: 'REQUESTED' }),
         order('DL5', { invoiceStatus: 'ISSUED' }),
         order('DL6', { createdAt: new Date(NOW.getTime() - (DEALER_INVOICE_REQUEST_DAYS + 1) * DAY) }),
+        order('DL7', { paymentStatus: 'REFUNDED' }),
       ],
     });
     const r = await new DealerInvoiceService(prisma).requestInvoices(
       'd1',
-      { orderCodes: ['DL1', ' DL2 ', 'DL1', 'DL3', 'DL4', 'DL5', 'DL6', 'KHAC'], invoice: INVOICE as never },
+      { orderCodes: ['DL1', ' DL2 ', 'DL1', 'DL3', 'DL4', 'DL5', 'DL6', 'DL7', 'KHAC'], invoice: INVOICE as never },
       NOW,
     );
     expect(r.requested).toEqual(['DL1', 'DL2']);
@@ -147,6 +148,7 @@ describe('DealerInvoiceService.requestInvoices', () => {
       { code: 'DL4', reason: 'Đơn đã có yêu cầu hoá đơn.' },
       { code: 'DL5', reason: 'Đơn đã có hoá đơn.' },
       { code: 'DL6', reason: 'Đơn đặt quá 30 ngày, bạn liên hệ Tubu Tree để xuất hoá đơn.' },
+      { code: 'DL7', reason: 'Đơn đã hoàn tiền nên không xuất hoá đơn.' },
       { code: 'KHAC', reason: 'Không tìm thấy đơn đại lý này.' },
     ]);
     expect(r.profile).toBeNull();
@@ -159,6 +161,7 @@ describe('DealerInvoiceService.requestInvoices', () => {
         userId: 'd1',
         type: 'DEALER',
         status: { notIn: ['CANCELLED', 'RETURNED'] },
+        paymentStatus: { not: 'REFUNDED' },
         OR: [{ invoiceStatus: null }, { invoiceStatus: 'NOT_REQUESTED' }],
       },
       data: { invoiceRequest: INVOICE, invoiceStatus: 'REQUESTED' },
@@ -185,6 +188,14 @@ describe('DealerInvoiceService.requestInvoices', () => {
     const r = await new DealerInvoiceService(prisma).requestInvoices('d1', { orderCodes: ['DL1'], invoice: INVOICE as never, save: true }, NOW);
     expect(r.profile).toEqual({ ...INVOICE, saved: true });
     expect(userUpdate.mock.calls[0]![0].data.metadata.dealerInvoice).toMatchObject(INVOICE);
+  });
+
+  it('save=true mà lưu bị từ chối (dòng khoá không còn là đại lý) → Forbidden, không ghi đơn nào', async () => {
+    const { prisma, updateMany } = makePrisma({ orders: [order('DL1')], lockedRow: { role: 'CUSTOMER', metadata: null } });
+    await expect(
+      new DealerInvoiceService(prisma).requestInvoices('d1', { orderCodes: ['DL1'], invoice: INVOICE as never, save: true }, NOW),
+    ).rejects.toThrow('Tài khoản chưa được duyệt làm đại lý.');
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('không phải đại lý → Forbidden, không đọc/ghi đơn', async () => {

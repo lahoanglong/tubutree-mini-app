@@ -167,6 +167,7 @@ export const FIELD_LABELS: Record<string, string> = {
   optInCodes: 'Đơn tự chọn dọn',
   options: 'Các lựa chọn',
   orderCode: 'Mã đơn hàng',
+  orderCodes: 'Danh sách mã đơn',
   orderTotal: 'Tổng giá trị đơn',
   origin: 'Xuất xứ',
   ownerName: 'Tên chủ sở hữu',

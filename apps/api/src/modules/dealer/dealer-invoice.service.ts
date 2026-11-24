@@ -29,6 +29,7 @@ export interface DealerInvoiceRequestResult {
 const NOT_DEALER = 'Tài khoản chưa được duyệt làm đại lý.';
 const SKIP_NOT_FOUND = 'Không tìm thấy đơn đại lý này.';
 const SKIP_CLOSED = 'Đơn đã huỷ hoặc trả hàng.';
+const SKIP_REFUNDED = 'Đơn đã hoàn tiền nên không xuất hoá đơn.';
 const SKIP_ISSUED = 'Đơn đã có hoá đơn.';
 const SKIP_REQUESTED = 'Đơn đã có yêu cầu hoá đơn.';
 const SKIP_TOO_OLD = `Đơn đặt quá ${DEALER_INVOICE_REQUEST_DAYS} ngày, bạn liên hệ Tubu Tree để xuất hoá đơn.`;
@@ -122,7 +123,7 @@ export class DealerInvoiceService {
 
   /**
    * Gửi yêu cầu hoá đơn VAT cho các đơn đại lý (theo mã) chưa có yêu cầu. Mỗi đơn ghi bằng một lệnh có điều kiện (chưa có yêu cầu,
-   * chưa huỷ/trả), nên gửi lại hay hai lần bấm cùng lúc không ghi đè yêu cầu đã có; đơn không đủ điều kiện trả về `skipped` kèm lý do.
+   * chưa huỷ/trả, chưa hoàn tiền), nên gửi lại hay hai lần bấm cùng lúc không ghi đè yêu cầu đã có; đơn không đủ điều kiện trả về `skipped` kèm lý do.
    */
   async requestInvoices(
     userId: string,
@@ -131,12 +132,14 @@ export class DealerInvoiceService {
   ): Promise<DealerInvoiceRequestResult> {
     await this.dealerUser(userId);
     assertInvoiceComplete(dto.invoice);
+    // Lưu mặc định trước khi ghi đơn: lưu lỗi (vd vừa mất quyền đại lý) thì không đơn nào bị ghi dở.
+    const profile = dto.save ? await this.saveProfile(userId, dto.invoice) : null;
     const codes = [...new Set(dto.orderCodes.map((c) => c.trim()).filter(Boolean))];
     const info = infoOf(dto.invoice);
     const cutoff = new Date(now.getTime() - DEALER_INVOICE_REQUEST_DAYS * DAY_MS);
     const orders = await this.prisma.order.findMany({
       where: { userId, type: 'DEALER', code: { in: codes } },
-      select: { id: true, code: true, status: true, invoiceStatus: true, createdAt: true },
+      select: { id: true, code: true, status: true, paymentStatus: true, invoiceStatus: true, createdAt: true },
     });
     const byCode = new Map(orders.map((o) => [o.code, o]));
     const requested: string[] = [];
@@ -146,6 +149,7 @@ export class DealerInvoiceService {
       let reason: string | null = null;
       if (!o) reason = SKIP_NOT_FOUND;
       else if ((CLOSED_STATUSES as readonly string[]).includes(o.status)) reason = SKIP_CLOSED;
+      else if (o.paymentStatus === 'REFUNDED') reason = SKIP_REFUNDED;
       else if (o.invoiceStatus === 'ISSUED') reason = SKIP_ISSUED;
       else if (o.invoiceStatus && o.invoiceStatus !== 'NOT_REQUESTED') reason = SKIP_REQUESTED;
       else if (o.createdAt.getTime() < cutoff.getTime()) reason = SKIP_TOO_OLD;
@@ -154,13 +158,12 @@ export class DealerInvoiceService {
         continue;
       }
       const res = await this.prisma.order.updateMany({
-        where: { id: o.id, userId, type: 'DEALER', status: { notIn: [...CLOSED_STATUSES] }, ...NO_INVOICE_YET },
+        where: { id: o.id, userId, type: 'DEALER', status: { notIn: [...CLOSED_STATUSES] }, paymentStatus: { not: 'REFUNDED' }, ...NO_INVOICE_YET },
         data: { invoiceRequest: { ...info }, invoiceStatus: 'REQUESTED' },
       });
       if (res.count === 1) requested.push(code);
       else skipped.push({ code, reason: SKIP_CHANGED });
     }
-    const profile = dto.save ? await this.saveProfile(userId, dto.invoice) : null;
     if (requested.length > 0) this.logger.log(`Đại lý ${userId} gửi yêu cầu hoá đơn VAT cho ${requested.length} đơn: ${requested.join(', ')}.`);
     return { requested, skipped, profile };
   }

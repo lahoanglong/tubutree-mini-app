@@ -62,7 +62,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const INVOICE_BATCH_MAX = 50;
 
 /**
- * Đơn đại lý còn tự gửi yêu cầu hoá đơn VAT được: chưa huỷ/trả, chưa có yêu cầu, đặt trong 30 ngày. Lấy tối đa `INVOICE_BATCH_MAX`
+ * Đơn đại lý còn tự gửi yêu cầu hoá đơn VAT được: chưa huỷ/trả, chưa hoàn tiền, chưa có yêu cầu, đặt trong 30 ngày. Lấy tối đa `INVOICE_BATCH_MAX`
  * đơn đầu danh sách (mới nhất trước); gửi xong danh sách tải lại và các đơn còn lại hiện ở lần sau.
  */
 export function invoiceEligibleOrders(orders: OrderDTO[], now: Date): OrderDTO[] {
@@ -72,6 +72,7 @@ export function invoiceEligibleOrders(orders: OrderDTO[], now: Date): OrderDTO[]
       (o) =>
         o.status !== 'CANCELLED' &&
         o.status !== 'RETURNED' &&
+        o.paymentStatus !== 'REFUNDED' &&
         (!o.invoiceStatus || o.invoiceStatus === 'NOT_REQUESTED') &&
         new Date(o.createdAt).getTime() >= cutoff,
     )

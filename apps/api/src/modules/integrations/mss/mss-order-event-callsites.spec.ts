@@ -21,6 +21,10 @@ const REVIEWED: Record<string, Review> = {
   },
   'modules/integrations/payment/zalopay.service.ts': { kind: 'records', events: 'callback ZaloPay lật PAID: order.payment_confirmed' },
   'modules/dealer/dealer.service.ts': { kind: 'exempt', reason: 'chỉ đơn DEALER (type = DEALER); hợp đồng không phát cho đại lý' },
+  'modules/dealer/dealer-invoice.service.ts': {
+    kind: 'exempt',
+    reason: 'chỉ ghi invoiceRequest/invoiceStatus của đơn DEALER (khoá trải `...info` làm bộ quét nghi), không đổi status/paymentStatus',
+  },
   'modules/affiliate/affiliate.service.ts': { kind: 'exempt', reason: 'CTV đặt hộ (placedForCustomer): hợp đồng không phát' },
   'modules/subscriptions/subscriptions.service.ts': { kind: 'exempt', reason: 'đơn định kỳ tạo tự động, chưa có bước đồng ý của khách cho lần tạo này' },
   'modules/orders/customer-refunds.service.ts': { kind: 'exempt', reason: 'REFUNDED (hoàn tiền) không phải sự kiện của hợp đồng v1' },
