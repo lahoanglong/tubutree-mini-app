@@ -263,6 +263,7 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'notify.proactive_per_day': (k, v) => assertIntInRange(k, v, 1, 10, 'tin'),
   'notify.proactive_per_week': (k, v) => assertIntInRange(k, v, 1, 50, 'tin'),
   'catalog.restock_alert_enabled': assertBoolean,
+  'catalog.pancake_ignore_zero_stock': assertBoolean,
   [SEARCH_FUZZY_FLAG]: assertBoolean,
   [SEARCH_POPULAR_FLAG]: assertBoolean,
   [SEARCH_POPULAR_TERMS_KEY]: assertPopularTerms,

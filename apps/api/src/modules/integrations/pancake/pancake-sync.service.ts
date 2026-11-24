@@ -8,7 +8,7 @@ import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import { ImageRegistryStale } from '../../catalog/image-registry-stale';
 import { keepExistingDescription } from '../../catalog/catalog-copy-enrichment.core';
-import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
+import { PANCAKE_IGNORE_ZERO_STOCK_KEY, applyPancakeStock, forcePancakeStock, readKeepPositiveOnZero, type PancakeZeroStockOpts } from '../../catalog/variation-stock';
 import { markCardPricesChanged } from '../../catalog/card-price-signal';
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
@@ -296,6 +296,9 @@ export class PancakeSyncService implements OnModuleInit {
     const expected: SweepExpected = {};
     const seen: SweepSeen = { products: new Set(), variations: new Set() };
     const zero = new ZeroPriceCollector();
+    // Cờ giữ tồn khi Pancake báo 0: đọc một lần cho cả lượt (kể cả lượt ghi đè tồn kho của admin) để mọi trang áp cùng một luật.
+    let keptZero = 0;
+    const zeroStock: PancakeZeroStockOpts = { keepPositiveOnZero: await readKeepPositiveOnZero(this.systemConfig), onKept: () => keptZero++ };
     try {
       for (;;) {
       if (page > 1 && !(await lease.renew())) {
@@ -334,7 +337,7 @@ export class PancakeSyncService implements OnModuleInit {
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
           // Sản phẩm thiếu mã/tên (nháp trên Pancake) là "bỏ qua", không phải lỗi: không được làm màn sức khoẻ báo lỗi mỗi lượt.
-          if (await this.upsertProduct(p, { ...opts, stockReadAt, zero })) count++;
+          if (await this.upsertProduct(p, { ...opts, stockReadAt, zero, zeroStock })) count++;
           else skipped++;
         } catch (err) {
           failed++;
@@ -380,6 +383,9 @@ export class PancakeSyncService implements OnModuleInit {
       this.logger.log(
         `Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}${skipped ? ` (${skipped} sản phẩm thiếu mã/tên, bỏ qua)` : ''}.`,
       );
+      if (zeroStock.keepPositiveOnZero) {
+        this.logger.log(`${PANCAKE_IGNORE_ZERO_STOCK_KEY} bật: giữ tồn của ${keptZero} biến thể Pancake báo 0 mà Tubu còn hàng.`);
+      }
       await this.noteRun({ ok: true, count, failed, skipped, ...(zeroSummary.count ? { zeroPriceAnomalies: zeroSummary.count } : {}) });
       return count;
     } catch (err) {
@@ -507,7 +513,7 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   /** `false` = bỏ qua vì thiếu mã/tên đọc được (dữ liệu hỏng của Pancake), không ghi gì. */
-  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date; zero?: ZeroPriceCollector } = {}): Promise<boolean> {
+  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date; zero?: ZeroPriceCollector; zeroStock?: PancakeZeroStockOpts } = {}): Promise<boolean> {
     // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
     const pancakeId = payloadId(p.id) ?? payloadId(p.product_id);
     const name = payloadText(p.name);
@@ -691,7 +697,7 @@ export class PancakeSyncService implements OnModuleInit {
     vid: string,
     productId: string,
     productName: string,
-    opts: { forceStock?: boolean; stockReadAt?: Date; zero?: ZeroPriceCollector },
+    opts: { forceStock?: boolean; stockReadAt?: Date; zero?: ZeroPriceCollector; zeroStock?: PancakeZeroStockOpts },
   ): Promise<{ oldPrice: number; newPrice: number } | null> {
     let drop: { oldPrice: number; newPrice: number } | null = null;
     // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
@@ -767,8 +773,8 @@ export class PancakeSyncService implements OnModuleInit {
     // Kèm lúc đọc: webhook nhận sau lúc đọc đã áp trong lúc lượt này chạy thì số đọc trước đó không ghi đè (R5-SYNC-3).
     if (remain !== null) {
       const readAt = opts.stockReadAt;
-      if (opts.forceStock) await forcePancakeStock(this.prisma, vid, remain, { readAt });
-      else await applyPancakeStock(this.prisma, vid, remain, readAt && { kind: 'sync', readAt });
+      if (opts.forceStock) await forcePancakeStock(this.prisma, vid, remain, { readAt, ...opts.zeroStock });
+      else await applyPancakeStock(this.prisma, vid, remain, readAt && { kind: 'sync', readAt }, opts.zeroStock);
     }
     return drop;
   }

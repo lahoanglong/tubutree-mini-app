@@ -1,3 +1,4 @@
+import { ANY_TUBU_ORDER_CODE_RE } from '@tubutree/shared-types';
 import { parseTypedVnPhone } from '../../common/phone';
 import { foldVietnamese } from '../catalog/search-text';
 import { pancakeEventOrderCode } from '../integrations/pancake/pancake-webhook-dedupe';
@@ -19,8 +20,8 @@ export interface OrderClass {
   channel: string | null;
 }
 
-/** Mã đơn Tubu ở custom_id: TUBU/TUBUSUB/DLR + số (cùng tiền tố với common/order-code). */
-const TUBU_CUSTOM_ID = /^(TUBU|TUBUSUB|DLR)\d+$/;
+/** Mã đơn Tubu ở custom_id: mã ngắn TB/DL/TS hoặc mã dài cũ TUBU/TUBUSUB/DLR + số (cùng khuôn với common/order-code). */
+const TUBU_CUSTOM_ID = ANY_TUBU_ORDER_CODE_RE;
 const APP_TAGS: ReadonlySet<string> = new Set(['MINIAPP', 'WEB']);
 
 const asRecord = (v: unknown): Data | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Data) : null);

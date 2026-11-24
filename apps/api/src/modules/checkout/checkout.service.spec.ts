@@ -349,11 +349,11 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(ledger).not.toHaveBeenCalled();
   });
 
-  it('mã đơn có dạng TUBU<yyyymmdd><5 số> và đã được kiểm không trùng', async () => {
+  it('mã đơn là mã ngắn TB + 4 ký tự và đã được kiểm không trùng', async () => {
     const { svc, orderCreate, prisma } = build({ walletBalance: 1000, total: 100 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
     const code = orderCreate.mock.calls[0][0].data.code as string;
-    expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
+    expect(code).toMatch(/^TB[2-9A-HJ-NP-Z]{4}$/);
     expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
   });
 
@@ -1559,8 +1559,8 @@ describe('CheckoutService — PD-3 tiêu Điểm Xanh hai lô, bỏ XU, đơn 0�
     ]);
     const entries = (prisma.pointsTransaction.create as jest.Mock).mock.calls.map((c) => c[0].data);
     expect(entries).toEqual([
-      expect.objectContaining({ delta: -30, lot: 'STANDARD', reason: expect.stringMatching(/^ORDER_REDEEM:TUBU/), refType: 'ORDER', refId: 'o1' }),
-      expect.objectContaining({ delta: -120, lot: 'CONVERTED', reason: expect.stringMatching(/^ORDER_REDEEM_CONVERTED:TUBU/), refType: 'ORDER', refId: 'o1', expiresAt: null }),
+      expect.objectContaining({ delta: -30, lot: 'STANDARD', reason: expect.stringMatching(/^ORDER_REDEEM:TB[2-9A-HJ-NP-Z]{4}$/), refType: 'ORDER', refId: 'o1' }),
+      expect.objectContaining({ delta: -120, lot: 'CONVERTED', reason: expect.stringMatching(/^ORDER_REDEEM_CONVERTED:TB[2-9A-HJ-NP-Z]{4}$/), refType: 'ORDER', refId: 'o1', expiresAt: null }),
     ]);
   });
 

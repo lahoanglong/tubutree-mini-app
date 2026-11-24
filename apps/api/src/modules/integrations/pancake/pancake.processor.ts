@@ -59,7 +59,7 @@ import { recordCumulativeLatePayment, recordCumulativeOverpayment } from '../../
 import { hasDealerCreditDebit } from '../../orders/dealer-credit-debit';
 import { beforeHandover, switchedFromTransfer } from '../../orders/cod-switch';
 import { formatVnd } from '../../orders/refund-destination';
-import { applyPancakeStock } from '../../catalog/variation-stock';
+import { PANCAKE_IGNORE_ZERO_STOCK_KEY, applyPancakeStock, readKeepPositiveOnZero } from '../../catalog/variation-stock';
 import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../../common/vat-invoice-url';
 import { notifyAdmins } from '../../../common/notify-admins';
 import { safeHttpUrl } from '../../../common/safe-http-url';
@@ -1101,7 +1101,12 @@ export class PancakeProcessor extends WorkerHost {
     // hơn sự kiện đã áp (R4-SYNC-2). Nhận trước lúc lượt đồng bộ danh mục đã áp bắt đầu đọc Pancake thì số đồng bộ mới hơn
     // (R5-SYNC-3).
     const eventAt = pancakeTime(data['updated_at']) ?? undefined;
-    const applied = await applyPancakeStock(this.prisma, pancakeVariationId, n, { kind: 'webhook', eventAt, receivedAt });
+    // Cờ chỉ đổi kết quả khi Pancake báo 0, nên chỉ đọc lúc đó (SystemConfigService giữ bản đọc 60 giây).
+    const keepPositiveOnZero = n === 0 && (await readKeepPositiveOnZero(this.systemConfig));
+    const applied = await applyPancakeStock(this.prisma, pancakeVariationId, n, { kind: 'webhook', eventAt, receivedAt }, {
+      keepPositiveOnZero,
+      onKept: () => this.logger.log(`${PANCAKE_IGNORE_ZERO_STOCK_KEY} bật: giữ tồn biến thể Pancake ${pancakeVariationId}, Pancake báo 0 mà Tubu còn hàng.`),
+    });
     if (applied) return;
     const current = await this.prisma.variation.findUnique({
       where: { pancakeId: pancakeVariationId },

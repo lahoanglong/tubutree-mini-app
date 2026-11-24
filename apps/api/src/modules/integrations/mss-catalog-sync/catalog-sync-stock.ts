@@ -19,6 +19,8 @@ export interface MssStockResult {
   wentOut: string[];
   /** Id biến thể Tubu vừa từ hết hàng thành còn hàng. */
   backIn: string[];
+  /** Dòng báo 0 mà Tubu giữ nguyên tồn dương vì cờ `catalog.pancake_ignore_zero_stock` (đã tính trong `applied`). */
+  kept: number;
 }
 
 export type MssStockDb = StockExecutor & { variation: Pick<Prisma.TransactionClient['variation'], 'findMany'> };
@@ -41,8 +43,10 @@ export async function applyMssStock(
   db: MssStockDb,
   lines: readonly CatalogSyncStockLine[],
   clock: { signedAt: Date; now: Date },
+  opts: { keepPositiveOnZero?: boolean } = {},
 ): Promise<MssStockResult> {
-  const out: MssStockResult = { received: lines.length, applied: 0, skipped: {}, wentOut: [], backIn: [] };
+  const out: MssStockResult = { received: lines.length, applied: 0, skipped: {}, wentOut: [], backIn: [], kept: 0 };
+  const zeroStock = { keepPositiveOnZero: opts.keepPositiveOnZero, onKept: () => out.kept++ };
   const skip = (k: MssStockSkip) => {
     out.skipped[k] = (out.skipped[k] ?? 0) + 1;
   };
@@ -65,7 +69,7 @@ export async function applyMssStock(
       skip('unknown_variation');
       continue;
     }
-    if (await applyPancakeStock(db, line.pancakeVariationId, line.stock, { kind: 'sync', readAt })) out.applied += 1;
+    if (await applyPancakeStock(db, line.pancakeVariationId, line.stock, { kind: 'sync', readAt }, zeroStock)) out.applied += 1;
     else skip('stale');
   }
   if (out.applied === 0) return out;

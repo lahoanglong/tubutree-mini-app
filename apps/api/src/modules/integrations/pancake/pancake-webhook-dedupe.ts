@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { NOTE_ORDER_CODE_RE } from '@tubutree/shared-types';
 import { payloadId } from './pancake-payload';
 
 export const PANCAKE_EVENT_STATUS = {
@@ -47,10 +48,11 @@ export function pancakeDedupeKey(eventType: string, body: unknown): string {
 }
 
 /**
- * Mã đơn Tubu do pushOrder ghi vào note ("Order code: <mã>"), mọi tiền tố (TUBU, TUBUSUB, DLR). Khoan dung với ghi chú nhân viên sửa
- * (đứng giữa dòng, NBSP): phân loại sai về phía "đơn app" an toàn hơn. Quyền lật PAID không dựa vào regex này mà vào id đơn Pancake đã gắn.
+ * Mã đơn Tubu do pushOrder ghi vào note ("Order code: <mã>"): mã ngắn TB/DL/TS và mã dài cũ TUBU/TUBUSUB/DLR. Đọc trọn mã ngắn có chữ
+ * ở giữa (TB7K4M, không cắt còn TB7) nên tra đơn và kiểm trùng khi đẩy lại khớp đúng đơn. Khoan dung với ghi chú nhân viên sửa (đứng
+ * giữa dòng, NBSP): phân loại sai về phía "đơn app" an toàn hơn. Quyền lật PAID không dựa vào regex này mà vào id đơn Pancake đã gắn.
  */
-export const NOTE_ORDER_CODE = /Order code:\s*([A-Z]+\d+)/;
+export const NOTE_ORDER_CODE = NOTE_ORDER_CODE_RE;
 
 /** Pancake POS gửi nguyên object đơn ở top-level; luồng cũ bọc trong {event, data}. */
 export function pancakeEventData(rawPayload: unknown): Record<string, unknown> {

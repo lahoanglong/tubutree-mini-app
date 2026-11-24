@@ -32,3 +32,4 @@ export * from './freeship-upsell';
 export * from './admin-growth';
 export * from './gift-trial';
 export * from './guest-order';
+export * from './order-code';

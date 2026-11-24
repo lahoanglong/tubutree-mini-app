@@ -657,14 +657,14 @@ describe('DealerService.placeOrder — tồn kho', () => {
     expect(enqueuePush).toHaveBeenCalledWith('o1');
   });
 
-  it('mã đơn đại lý có dạng DLR<11 số>, khác dạng TUBU của khách lẻ', async () => {
+  it('mã đơn đại lý là mã ngắn DL + 4 ký tự, khác dạng TB của khách lẻ', async () => {
     const { prisma, orderCreate } = prismaForStock();
     await new DealerService(prisma, makeConfig()).placeOrder(
       'd1',
       { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
     );
     const call = orderCreate.mock.calls[0]![0] as { data: { code: string } };
-    expect(call.data.code).toMatch(/^DLR\d{11}$/);
+    expect(call.data.code).toMatch(/^DL[2-9A-HJ-NP-Z]{4}$/);
   });
 
   it('thiếu hàng một phần → vẫn tạo đơn, ghi backorderedQty đúng số còn thiếu, KHÔNG đẩy Pancake', async () => {

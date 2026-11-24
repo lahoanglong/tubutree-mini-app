@@ -378,7 +378,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.source).toBe('subscription');
     expect(data.platform).toBe('system');
     expect(data.subscriptionId).toBe('s1');
-    expect(data.code).toMatch(/^TUBUSUB\d{10}$/);
+    expect(data.code).toMatch(/^TS[2-9A-HJ-NP-Z]{4}$/);
   });
 
   it('khách đổi chu kỳ chen giữa claim và khoá dòng: đơn kỳ này đặt lại nextRunAt theo chu kỳ mới, không để ngày PATCH tính từ đơn cũ', async () => {

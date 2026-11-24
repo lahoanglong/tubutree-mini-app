@@ -156,6 +156,14 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Nút về lại "Tạm hết hàng" màu xám và không gửi tin hàng về nữa. Đăng ký khách đã bấm vẫn được giữ, bật lại thì gửi tiếp.',
   },
   {
+    key: 'catalog.pancake_ignore_zero_stock',
+    label: 'Giữ tồn Tubu khi Pancake báo 0',
+    description: 'Pancake báo tồn 0 cho một phân loại mà Tubu còn hàng thì Tubu giữ nguyên số tồn đang có, chỉ ghi số 0 của Pancake để màn đối chiếu tồn thấy chỗ lệch. Áp cho đồng bộ 15 phút, nút đồng bộ ghi đè tồn kho, webhook tồn kho của Pancake và tồn MSS đẩy sang. Pancake báo số lớn hơn 0 thì Tubu lấy số đó trừ phần đơn app đang giữ như thường; đơn app vẫn trừ tồn Tubu.',
+    fallback: false,
+    onWarning: 'Chỉ bật khi kho Pancake chưa nhập đủ hàng mà hàng thật vẫn có ở kho. Khách đặt được tới hết số tồn Tubu đang ghi, kể cả khi Pancake báo hết: kiểm hàng thật trước khi bật. Áp từ lượt đồng bộ kế tiếp (tối đa khoảng 15 phút).',
+    offWarning: 'Từ lượt đồng bộ kế tiếp, Pancake báo 0 là phân loại hết hàng trên Tubu như trước. Không dữ liệu nào bị xoá.',
+  },
+  {
     key: 'catalog.search_fuzzy_enabled',
     label: 'Ô tìm chịu gõ sai',
     description: 'Khách gõ sai chính tả hay gõ dính ("nuoc gait", "nuocgiat") vẫn ra hàng, kèm dòng "Đang hiện kết quả cho …". Từ đồng nghĩa ("nước rửa bát" ra "nước rửa chén") sửa ở /admin/tu-khoa-tim. Chỉ chạy khi tìm chính xác ra dưới 3 món.',

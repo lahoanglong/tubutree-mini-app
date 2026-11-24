@@ -1072,11 +1072,11 @@ describe('AffiliateService.placeOrderForCustomer (CTV lên đơn hộ — MONEY-
     expect(commissionCreate).not.toHaveBeenCalled();
   });
 
-  it('mã đơn lên hộ có dạng TUBU<yyyymmdd><5 số> như đơn checkout', async () => {
+  it('mã đơn lên hộ là mã ngắn TB + 4 ký tự như đơn checkout', async () => {
     const { svc, orderCreate, prisma } = build();
     await svc.placeOrderForCustomer('ctv', DTO() as never);
     const code = orderCreate.mock.calls[0][0].data.code as string;
-    expect(code).toMatch(/^TUBU\d{8}\d{5}$/);
+    expect(code).toMatch(/^TB[2-9A-HJ-NP-Z]{4}$/);
     expect(prisma.order.findUnique).toHaveBeenCalledWith({ where: { code } });
   });
 

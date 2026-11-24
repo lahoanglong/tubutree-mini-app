@@ -1,7 +1,9 @@
 import { Prisma } from '@prisma/client';
 import {
+  PANCAKE_IGNORE_ZERO_STOCK_KEY,
   applyPancakeStock,
   forcePancakeStock,
+  readKeepPositiveOnZero,
   releaseVariationStock,
   restockReturnedVariationStock,
   reserveAvailableVariationStock,
@@ -182,6 +184,73 @@ describe('variation-stock', () => {
         applyPancakeStock(tx, 'pv-1', 90, { kind: 'webhook', eventAt: new Date('2026-10-14T07:00:01.000Z'), receivedAt: new Date() }),
       ).resolves.toBe(false);
     });
+
+    describe('cờ giữ tồn khi Pancake báo 0 (catalog.pancake_ignore_zero_stock)', () => {
+      it('cờ tắt: đúng câu lệnh cũ, kể cả khi Pancake báo 0', async () => {
+        const off = mockTx();
+        const before = mockTx();
+        await applyPancakeStock(off.tx, 'pv-1', 0, { kind: 'sync', readAt: new Date(0) }, { keepPositiveOnZero: false });
+        await applyPancakeStock(before.tx, 'pv-1', 0, { kind: 'sync', readAt: new Date(0) });
+        expect(sqlOf(off.$executeRaw)).toBe(sqlOf(before.$executeRaw));
+        expect(sqlOf(off.$executeRaw)).not.toContain('"stock" > 0');
+        expect(off.$queryRaw).not.toHaveBeenCalled();
+      });
+
+      it('cờ bật mà Pancake báo số dương: áp bình thường, không có điều kiện giữ', async () => {
+        const { tx, $executeRaw, $queryRaw } = mockTx();
+        const onKept = jest.fn();
+        await expect(applyPancakeStock(tx, 'pv-1', 5, undefined, { keepPositiveOnZero: true, onKept })).resolves.toBe(true);
+        expect(sqlOf($executeRaw)).not.toContain('"stock" > 0');
+        expect($queryRaw).not.toHaveBeenCalled();
+        expect(onKept).not.toHaveBeenCalled();
+      });
+
+      it('cờ bật và Pancake báo 0: điều kiện "stock" > 0 nằm TRONG câu UPDATE (giữ cả stock lẫn giữ chỗ), vẫn ghi pancakeStock = 0 và mốc', async () => {
+        const { tx, $executeRaw, $queryRaw } = mockTx();
+        $queryRaw.mockResolvedValue([{ kept: true }]);
+        const onKept = jest.fn();
+        const readAt = new Date('2026-11-24T03:00:00.000Z');
+        await expect(applyPancakeStock(tx, 'pv-1', 0, { kind: 'sync', readAt }, { keepPositiveOnZero: true, onKept })).resolves.toBe(true);
+        expect($executeRaw).not.toHaveBeenCalled();
+        expect($queryRaw).toHaveBeenCalledTimes(1);
+        const sql = sqlOf($queryRaw);
+        expect(sql).toContain('WHEN "stock" > 0 OR "pancakeStock" IS NULL THEN "stock"');
+        expect(sql).toContain('WHEN "stock" > 0 OR "pancakeStock" IS NULL THEN "reservedStock"');
+        expect(sql).toContain('"pancakeStock" = ?');
+        expect(sql).toContain('"pancakeStockSyncReadAt" = ?');
+        expect(sql).toMatch(/RETURNING "stock" > 0 AS "kept"\s*$/);
+        expect(argsOf($queryRaw)).toContain('pv-1');
+        expect(onKept).toHaveBeenCalledTimes(1);
+      });
+
+      it('cờ bật, Pancake báo 0 mà tồn đã 0 (không giữ gì): áp, không đếm', async () => {
+        const { tx, $queryRaw } = mockTx();
+        $queryRaw.mockResolvedValue([{ kept: false }]);
+        const onKept = jest.fn();
+        await expect(applyPancakeStock(tx, 'pv-1', 0, undefined, { keepPositiveOnZero: true, onKept })).resolves.toBe(true);
+        expect(onKept).not.toHaveBeenCalled();
+      });
+
+      it('cờ bật, số cũ hơn số đã áp (0 dòng): false, không đếm', async () => {
+        const { tx, $queryRaw } = mockTx();
+        $queryRaw.mockResolvedValue([]);
+        const onKept = jest.fn();
+        await expect(
+          applyPancakeStock(tx, 'pv-1', 0, { kind: 'webhook', receivedAt: new Date() }, { keepPositiveOnZero: true, onKept }),
+        ).resolves.toBe(false);
+        expect(onKept).not.toHaveBeenCalled();
+      });
+
+      it('đọc cờ: chỉ đúng true là bật; thiếu cấu hình, giá trị lạ hay đọc lỗi là tắt', async () => {
+        const config = (v: unknown) => ({ get: jest.fn().mockResolvedValue(v) });
+        const on = config(true);
+        await expect(readKeepPositiveOnZero(on)).resolves.toBe(true);
+        expect(on.get).toHaveBeenCalledWith(PANCAKE_IGNORE_ZERO_STOCK_KEY, false);
+        for (const v of [false, 'true', 1, null, undefined, {}]) await expect(readKeepPositiveOnZero(config(v))).resolves.toBe(false);
+        await expect(readKeepPositiveOnZero(undefined)).resolves.toBe(false);
+        await expect(readKeepPositiveOnZero({ get: jest.fn().mockRejectedValue(new Error('db')) })).resolves.toBe(false);
+      });
+    });
   });
 
   describe('forcePancakeStock', () => {
@@ -202,6 +271,32 @@ describe('variation-stock', () => {
       expect(sql).toContain('"pancakeStockSyncReadAt" = GREATEST("pancakeStockSyncReadAt", ?)');
       expect(sql).not.toContain('pancakeStockEventAt');
       expect(argsOf($executeRaw)).toEqual([42, 42, readAt, 'pv-1']);
+    });
+
+    it('cờ giữ tồn bật và Pancake báo 0 (đồng bộ ?withStock=1): giữ stock + giữ chỗ khi còn hàng, vẫn ghi pancakeStock = 0 và mốc đọc', async () => {
+      const { tx, $executeRaw, $queryRaw } = mockTx();
+      $queryRaw.mockResolvedValue([{ kept: true }]);
+      const onKept = jest.fn();
+      const readAt = new Date('2026-10-15T03:00:00.000Z');
+      await forcePancakeStock(tx, 'pv-1', 0, { readAt, keepPositiveOnZero: true, onKept });
+      expect($executeRaw).not.toHaveBeenCalled();
+      const sql = sqlOf($queryRaw);
+      expect(sql).toContain('"stock" = CASE WHEN "stock" > 0 THEN "stock" ELSE 0 END');
+      expect(sql).toContain('"reservedStock" = CASE WHEN "stock" > 0 THEN "reservedStock" ELSE 0 END');
+      expect(sql).toContain('"pancakeStock" = 0');
+      expect(sql).toContain('"pancakeStockSyncReadAt" = GREATEST("pancakeStockSyncReadAt", ?)');
+      expect(argsOf($queryRaw)).toEqual([readAt, 'pv-1']);
+      expect(onKept).toHaveBeenCalledTimes(1);
+    });
+
+    it('cờ giữ tồn bật mà Pancake báo số dương, hoặc cờ tắt: ghi đè tuyệt đối như cũ', async () => {
+      for (const [n, keepPositiveOnZero] of [[7, true], [0, false]] as const) {
+        const { tx, $executeRaw, $queryRaw } = mockTx();
+        await forcePancakeStock(tx, 'pv-1', n, { keepPositiveOnZero });
+        expect($queryRaw).not.toHaveBeenCalled();
+        expect(sqlOf($executeRaw)).toContain('"reservedStock" = 0');
+        expect(argsOf($executeRaw)).toEqual([n, n, 'pv-1']);
+      }
     });
   });
 });
