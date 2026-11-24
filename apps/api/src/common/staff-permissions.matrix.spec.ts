@@ -227,6 +227,8 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/orders/bulk-status': [CSKH, KHO],
   'GET /admin/pancake-reconcile': [KHO],
   'GET /admin/pancake-reconcile/export': [KHO],
+  'GET /admin/restock-planner': [KHO],
+  'GET /admin/restock-planner/export': [KHO],
   'POST /admin/pancake/orders/:id/push': [KHO],
   'POST /admin/pancake/orders/push-retry': [KHO],
   'GET /admin/pancake/categories': ADMIN_ONLY,
