@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test';
 import { test, expect, makeUser, mockSession } from './support/mock-api';
 import { mockCheckout } from './support/checkout-mocks';
-import { mockFooterCart } from './support/cart-footer-mocks';
+import { footerCart, mockFooterCart } from './support/cart-footer-mocks';
+import { soldOutRecovery } from '../../../packages/app-core/src/cart/sold-out-recovery';
 
 /**
  * Chân dính của giỏ Mini App ở 375px (review hình bước chốt, P1 #7, sơ đồ CT-04): cao khoảng 140px thay vì 265px, tổng tiền và nút Thanh toán
@@ -21,10 +22,10 @@ async function setSafeBottom(page: Page, px: number): Promise<void> {
   }, px);
 }
 
-async function openCart(page: Page): Promise<void> {
+async function openCart(page: Page, button: string | RegExp = /^Thanh toán/): Promise<void> {
   await page.goto('/cart');
   await expect(bar(page)).toBeVisible({ timeout: 15_000 });
-  await expect(payButton(page)).toBeVisible();
+  await expect(bar(page).getByRole('button', { name: button })).toBeVisible();
 }
 
 test.beforeEach(({ api }) => {
@@ -70,8 +71,10 @@ test.describe('Giỏ Mini App: chân dính gọn', () => {
     test(`giỏ 8 dòng có dòng hết hàng (--safe-bottom ${safe}px): cuộn hết thì dòng cuối nằm trên chân dính, chân cao đúng cộng vùng an toàn`, async ({ page, api }) => {
       mockFooterCart(api, { lines: 8, reached: true, outOfStock: true });
       await setSafeBottom(page, safe);
-      await openCart(page);
-      await expect(bar(page).getByRole('status')).toBeVisible();
+      // Phần còn lại mua được nên nút chính là "Bỏ món hết & thanh toán tiếp" kèm lời báo, không khoá (w26-01).
+      const recovery = soldOutRecovery(footerCart({ lines: 8, reached: true, outOfStock: true }).items)!;
+      await openCart(page, recovery.cta);
+      await expect(bar(page).getByRole('status')).toContainText(recovery.note);
 
       const scroller = page.locator('.zaui-page', { has: page.getByTestId('cart-line').first() }).first();
       await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
