@@ -338,14 +338,21 @@ export default function CartPage() {
     ({ id }) => id,
   );
 
-  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache; chọn một phần thì đọc lại giỏ và phần đang chọn.
+  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache. Phần có giá riêng (`sig`): máy chủ trả giá của đúng phần đã gửi,
+  // đặt thẳng vào khoá giá phần đó rồi chỉ đọc lại giỏ; đọc lại cả giá phần đó thì ô quà biến mất lúc chờ và nút "Đổi" vừa nhận focus mất theo.
   const giftChoice = useMutation({
-    mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[] }) => setCartGift(variationId, itemIds),
+    mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[]; sig?: string | null }) => setCartGift(variationId, itemIds),
     // Lượt đọc giỏ đang bay (vd đọc lại khi quay lại app) gửi trước lúc máy chủ lưu quà: về muộn thì đè giỏ có quà mới.
     onMutate: () => queryClient.cancelQueries({ queryKey: cartKey() }),
-    onSuccess: (c, { itemIds }) => {
-      if (itemIds) void queryClient.invalidateQueries({ queryKey: cartKey() });
-      else queryClient.setQueryData(cartKey(), c);
+    onSuccess: (c, { itemIds, sig }) => {
+      const key = cartKey();
+      if (itemIds) {
+        if (sig) queryClient.setQueryData([...key, 'selection', sig], c);
+        void queryClient.invalidateQueries({
+          queryKey: key,
+          predicate: (q) => !sig || q.queryKey[key.length] !== 'selection' || q.queryKey[key.length + 1] !== sig,
+        });
+      } else queryClient.setQueryData(key, c);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
     },
     onError: (e: unknown) => {
@@ -690,7 +697,7 @@ export default function CartPage() {
                 onChoose={(variationId) => {
                   if (giftChoice.isPending) return;
                   // Cùng phần có giá với ô quà đang hiện: quà hiện theo phần chọn thì phải đọc lại phần chọn, không thì ô quà giữ lựa chọn cũ.
-                  giftChoice.mutate({ variationId, itemIds: pricingAll ? undefined : pricingLines.map((l) => l.id) });
+                  giftChoice.mutate({ variationId, itemIds: pricingAll ? undefined : pricingLines.map((l) => l.id), sig: settledSubsetSig });
                 }}
               />
             </Box>
@@ -1279,7 +1286,7 @@ function StickySummary({
   selectedCount: number;
   /** Số tiền lấy từ giỏ (true) hay từ `priced`: false khi chọn một phần, hoặc chọn cả giỏ mà nút chính là bỏ món hết một chạm. */
   pricingAll: boolean;
-  /** Giá của phần chọn từ máy chủ (chỉ khi chọn một phần và đã có số đúng); null = chưa có, không hiện giảm giá. */
+  /** Giá của phần có giá riêng từ máy chủ (khi `pricingAll` false và đã có số đúng); null = chưa có, không hiện giảm giá. */
   priced: CartSummary | null;
   overStock: boolean;
   /** Tên các dòng đang chọn mà tồn bằng 0: nói rõ dòng nào cần bỏ chọn hoặc xoá. */

@@ -208,6 +208,8 @@ export default function CartPage() {
   // Số chỉ đúng cho đúng phần đã hỏi: vừa đổi chọn/số lượng (chưa hỏi lại), đang tải lại hoặc lỗi thì không hiện số cũ.
   const priced =
     !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isSuccess && !selectionQ.isFetching ? selectionQ.data : null;
+  // Lỗi của đúng phần đang chọn (như Mini App): số giảm của phần đó không hiện, nên báo tại chỗ kèm Thử lại.
+  const selectionPriceFailed = !!subsetSig && settledSubsetSig === subsetSig && selectionQ.isError;
   // Cùng gian hàng thanh toán gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
   const [ctvSlug] = useState(() => ctvSlugFor(getStorefrontContext()));
   const toggleSelect = (id: string) =>
@@ -217,14 +219,20 @@ export default function CartPage() {
       return next;
     });
 
-  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache; chọn một phần thì đọc lại giỏ và phần đang chọn.
+  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache. Phần có giá riêng (`sig`): máy chủ trả giá của đúng phần đã gửi,
+  // đặt thẳng vào khoá giá phần đó rồi chỉ đọc lại giỏ; đọc lại cả giá phần đó thì ô quà biến mất lúc chờ và nút "Đổi" vừa nhận focus mất theo.
   const giftChoice = useMutation({
-    mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[] }) => setCartGift(variationId, itemIds),
+    mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[]; sig?: string | null }) => setCartGift(variationId, itemIds),
     // Lượt đọc giỏ đang bay (vd đọc lại khi quay lại tab) gửi trước lúc máy chủ lưu quà: về muộn thì đè giỏ có quà mới.
     onMutate: () => queryClient.cancelQueries({ queryKey: cartKeyNow }),
-    onSuccess: (c, { itemIds }) => {
-      if (itemIds) void queryClient.invalidateQueries({ queryKey: cartKeyNow });
-      else queryClient.setQueryData(cartKeyNow, c);
+    onSuccess: (c, { itemIds, sig }) => {
+      if (itemIds) {
+        if (sig) queryClient.setQueryData([...cartKeyNow, 'selection', sig], c);
+        void queryClient.invalidateQueries({
+          queryKey: cartKeyNow,
+          predicate: (q) => !sig || q.queryKey[cartKeyNow.length] !== 'selection' || q.queryKey[cartKeyNow.length + 1] !== sig,
+        });
+      } else queryClient.setQueryData(cartKeyNow, c);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
     },
     onError: () => void queryClient.invalidateQueries({ queryKey: cartKeyNow }),
@@ -779,6 +787,21 @@ export default function CartPage() {
               </span>
               Chọn tất cả
             </label>
+            {selectionPriceFailed && (
+              <div key={selectionQ.errorUpdateCount} role="alert" data-testid="cart-selection-error" className="mb-3 flex items-center justify-between gap-2 max-md:mb-1">
+                <p className={ui.error}>Chưa tính được giá phần đã chọn.</p>
+                {/* Tên riêng: nhiều nút "Thử lại" trên cùng màn làm nhiều việc khác nhau. */}
+                <button
+                  type="button"
+                  onClick={() => void selectionQ.refetch()}
+                  aria-busy={selectionQ.isFetching || undefined}
+                  aria-label="Thử lại báo giá phần đã chọn"
+                  className={`${ui.btnText} text-forest-700`}
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
             {withHeaders && (
               <p className="mb-3 text-caption text-stone-600 max-md:mb-1">
                 Giỏ có hàng do nhiều nơi giao: mỗi nơi giao thành một đơn riêng, có phí giao riêng.
@@ -820,7 +843,7 @@ export default function CartPage() {
               onChoose={(variationId) => {
                 if (giftChoice.isPending) return;
                 // Cùng phần có giá với ô quà đang hiện: quà hiện theo phần chọn thì phải đọc lại phần chọn, không thì ô quà giữ lựa chọn cũ.
-                giftChoice.mutate({ variationId, itemIds: pricingAll ? undefined : pricingLines.map((it) => it.id) });
+                giftChoice.mutate({ variationId, itemIds: pricingAll ? undefined : pricingLines.map((it) => it.id), sig: settledSubsetSig });
               }}
             />
             {giftChoice.isError && (
@@ -884,7 +907,9 @@ export default function CartPage() {
             </div>
             {!phoneCoupon && couponBox(false)}
             {!pricingAll && !priced && cart.couponCode && (
-              <p className="mt-2 text-caption text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
+              <p className="mt-2 text-caption text-stone-600 max-md:mt-0 max-md:px-1">
+                {allSelected ? 'Bỏ món hết' : 'Mua một phần giỏ'}: mã giảm giá được tính lại ở bước thanh toán.
+              </p>
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden lg:hidden">
               <span>{totalLabel}</span>

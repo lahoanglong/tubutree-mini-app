@@ -659,7 +659,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
       for (const [p] of state.previews.mock.calls) expect(p).toEqual({ itemIds: ['i1'] });
     });
 
-    it('đổi quà dùng thử đang hiện theo phần còn lại: lưu kèm đúng phần đó để ô quà đọc lại', async () => {
+    it('đổi quà dùng thử đang hiện theo phần còn lại: lưu kèm đúng phần đó, ô quà lấy giá máy chủ trả về và không biến mất lúc giỏ đọc lại', async () => {
       const gift = {
         base: 150000,
         minOrder: 100000,
@@ -676,10 +676,35 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
       await settle();
       click(container.querySelector<HTMLButtonElement>('[data-testid="gift-trial-change"]'));
       await flush(3);
+      const before = container.querySelector('[data-testid="gift-trial-row"]')?.getAttribute('data-state');
+      const cartReads = state.cartCalls;
+      const selectionReads = state.selection.mock.calls.length;
       const other = Array.from(document.querySelectorAll<HTMLInputElement>('[data-testid="gift-trial-option"] input[type="radio"]')).find((r) => !r.checked);
       click(other!);
       await flush(3);
       expect(state.gift).toHaveBeenCalledWith(null, ['i1']);
+      expect(state.cartCalls).toBeGreaterThan(cartReads);
+      expect(state.selection).toHaveBeenCalledTimes(selectionReads);
+      const row = container.querySelector('[data-testid="gift-trial-row"]');
+      expect(row).not.toBeNull();
+      expect(row?.getAttribute('data-state')).not.toBe(before);
+    });
+
+    it('lỗi giá phần còn lại: báo tại chỗ kèm Thử lại có tên riêng; dòng ghi chú nói "Bỏ món hết", không nói "Mua một phần giỏ"', async () => {
+      state.cart = withSoldOut();
+      state.selection.mockRejectedValueOnce(new Error('mạng')).mockResolvedValue(keepPriced());
+      const { container } = await mount();
+      await settle();
+      const alert = container.querySelector('[data-testid="cart-selection-error"]');
+      expect(alert?.getAttribute('role')).toBe('alert');
+      expect(alert?.textContent).toContain('Chưa tính được giá phần đã chọn.');
+      expect(container.textContent).toContain('Bỏ món hết: mã giảm giá được tính lại ở bước thanh toán.');
+      expect(container.textContent).not.toContain('Mua một phần giỏ');
+      click(container.querySelector<HTMLButtonElement>('button[aria-label="Thử lại báo giá phần đã chọn"]'));
+      await settle();
+      expect(state.selection).toHaveBeenCalledTimes(2);
+      expect(container.querySelector('[data-testid="cart-selection-error"]')).toBeNull();
+      expect(container.textContent).toContain('Tạm tính (đã giảm)145.000đ');
     });
   });
 

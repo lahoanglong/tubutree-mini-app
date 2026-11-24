@@ -380,7 +380,7 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
         expect(last.previewKey).toBe('ci-buy:1:75000');
       });
 
-      it('đổi quà dùng thử đang hiện theo phần còn lại: lưu kèm đúng phần đó để ô quà đọc lại', async () => {
+      it('đổi quà dùng thử đang hiện theo phần còn lại: lưu kèm đúng phần đó, ô quà lấy giá máy chủ trả về và không biến mất lúc giỏ đọc lại', async () => {
         const gift = {
           base: 75_000,
           minOrder: 50_000,
@@ -395,9 +395,15 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
         mocks.setCartGift.mockResolvedValue(keepPriced({ giftTrial: { ...gift, selectedVariationId: null, declined: true } }));
         renderPage();
         fireEvent.click(await screen.findByTestId('gift-trial-change', {}, { timeout: 2_000 }));
+        const before = screen.getByTestId('gift-trial-row').getAttribute('data-state');
+        const cartReads = mocks.getCart.mock.calls.length;
+        const selectionReads = mocks.getCartSelection.mock.calls.length;
         const options = await screen.findAllByTestId('gift-trial-option');
         fireEvent.click(options.find((o) => o.getAttribute('aria-checked') === 'false')!);
         await waitFor(() => expect(mocks.setCartGift).toHaveBeenCalledWith(null, ['ci-buy']));
+        await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(cartReads));
+        await waitFor(() => expect(screen.getByTestId('gift-trial-row').getAttribute('data-state')).not.toBe(before));
+        expect(mocks.getCartSelection).toHaveBeenCalledTimes(selectionReads);
       });
 
       it('bỏ chọn tay món hết: thành một phần giỏ thường, vẫn hỏi đúng phần còn lại', async () => {

@@ -1636,9 +1636,8 @@ export class AdminService {
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hoá đơn VAT.`);
     if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hoá đơn của đơn ${order.code} đã được phát hành.`);
-    if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hoá đơn VAT.`);
-    }
+    const closedMessage = `Đơn ${order.code} đã huỷ/trả — không xuất hoá đơn VAT.`;
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED') throw new BadRequestException(closedMessage);
     const refundedMessage = `Đơn ${order.code} đã hoàn tiền — không xuất hoá đơn VAT.`;
     if (order.paymentStatus === 'REFUNDED') throw new BadRequestException(refundedMessage);
     const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
@@ -1647,13 +1646,19 @@ export class AdminService {
       const urlError = vatInvoiceUrlError(invoiceUrl);
       if (urlError) throw new BadRequestException(urlError);
     }
-    // Hoàn tiền xong giữa lúc đọc và lúc ghi (vd hoàn tiền tự động) cũng không được thành ISSUED.
+    // Đơn huỷ/trả hay hoàn tiền xong giữa lúc đọc và lúc ghi (vd hoàn tiền tự động) cũng không được thành ISSUED.
     const res = await this.prisma.order.updateMany({
-      where: { id: order.id, paymentStatus: { not: 'REFUNDED' }, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
+      where: {
+        id: order.id,
+        status: { notIn: ['CANCELLED', 'RETURNED'] },
+        paymentStatus: { not: 'REFUNDED' },
+        OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }],
+      },
       data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
     });
     if (res.count === 0) {
-      const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { paymentStatus: true } });
+      const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { status: true, paymentStatus: true } });
+      if (now?.status === 'CANCELLED' || now?.status === 'RETURNED') throw new BadRequestException(closedMessage);
       if (now?.paymentStatus === 'REFUNDED') throw new BadRequestException(refundedMessage);
       throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — bạn tải lại nhé.`);
     }
