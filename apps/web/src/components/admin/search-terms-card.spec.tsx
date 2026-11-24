@@ -48,7 +48,7 @@ const mount = async (
   const r = render(<SearchTermsCard />);
   mounted.push(r);
   await flush(8);
-  return { c: r.container, calls: m.calls };
+  return { c: r.container, calls: m.calls, fetchFn: m.fn };
 };
 const bodyOf = (init?: RequestInit) => JSON.parse(String(init?.body ?? 'null'));
 const submit = (form: HTMLFormElement) =>
@@ -170,6 +170,27 @@ describe('SearchTermsCard', () => {
     click(li.querySelector('button')!);
     await flush(8);
     expect(calls.filter((x) => x.init?.method === 'POST')).toHaveLength(2);
+  });
+
+  it('gợi ý một chạm: nút còn khoá trong lúc bảng tìm chưa ra đang tải lại, nhả khi bảng về', async () => {
+    const { c, calls, fetchFn } = await mount([], undefined, { body: { days: 14, items: [zeroRow({ suggestions: ['nước tẩy rửa', 'tẩy toilet'] })] } });
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.includes('/zero-results')) await held;
+      return fetchFn(url, init);
+    });
+    const chips = () => Array.from(c.querySelectorAll<HTMLButtonElement>('ul[aria-label="Từ khoá tìm chưa ra"] li button'));
+    click(chips()[0]!);
+    await flush(8);
+    expect(calls.filter((x) => x.init?.method === 'POST')).toHaveLength(1);
+    expect(chips().every((b) => b.disabled)).toBe(true);
+    click(chips()[1]!);
+    await flush(4);
+    expect(calls.filter((x) => x.init?.method === 'POST')).toHaveLength(1);
+    release();
+    await flush(8);
+    expect(chips().every((b) => !b.disabled)).toBe(true);
   });
 
   it('"Tự gõ" của dòng có gợi ý vẫn điền sẵn form; API cũ thiếu hay gửi hỏng suggestions thì chỉ có nút "Tạo từ đồng nghĩa"', async () => {

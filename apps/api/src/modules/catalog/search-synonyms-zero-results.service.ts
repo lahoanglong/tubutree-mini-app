@@ -22,10 +22,14 @@ export const ZERO_RESULT_WORD_MAX = 25;
 const FUTURE_SKEW_MS = 86_400_000;
 /** Số cụm tìm thay gợi ý tối đa cho một dòng (mỗi cụm là một nút tạo từ đồng nghĩa một chạm). */
 export const SUGGESTION_MAX = 2;
-/** Điểm giống nhau tối thiểu (0..1, xem `suggestCanonicals`) để một cụm chuẩn được gợi ý. */
+/** Điểm giống nhau (0..1, xem `suggestCanonicals`): trên mốc này thì gợi ý; đúng bằng mốc thì phải có chữ khớp dài từ 4 ký tự. */
 export const SUGGESTION_MIN_SCORE = 0.5;
+/** Chữ khớp ngắn hơn chừng này ("cho", "bé") quá chung để một mình nó đủ gợi ý. */
+const STRONG_WORD_MIN = 4;
 /** Số cụm tìm phổ biến có hàng (`popularSql`) đọc thêm làm nguồn gợi ý, sau danh sách của admin. */
 export const SUGGESTION_POPULAR_LIMIT = 30;
+/** Đệm cụm tìm phổ biến cho gợi ý: mỗi lần tạo từ đồng nghĩa thẻ admin tải lại bảng, không quét lại `analytics_events` mỗi lần. */
+export const SUGGESTION_POPULAR_TTL_MS = 5 * 60_000;
 
 export interface ZeroResultTerm {
   /** Cách viết (chữ thường) hay gặp nhất của cụm. */
@@ -63,10 +67,11 @@ export function isZeroResultCandidate(term: string): boolean {
 /**
  * Cụm tìm thay gợi ý cho một cụm tìm chưa ra, lấy từ `keywords` (cụm chuẩn có dấu, ưu tiên theo thứ tự). So trên dạng gấp dấu nên "nuoc rua bat"
  * và "nước rửa bát" ra cùng gợi ý "nước rửa chén". Mỗi chữ khách gõ khớp đúng một chữ của cụm chuẩn được 1 điểm, lệch một ký tự (cả hai chữ từ
- * 4 ký tự: "granla") được 0,75; tổng chia số chữ của vế nhiều chữ hơn. Gõ dính chữ ("nuocgiat") so thêm hai vế bỏ dấu cách. Bỏ cụm chuẩn trùng
- * cụm khách gõ sau khi gấp dấu (máy chủ không nhận cặp giống nhau), cụm nằm trong `blocked` (chính nó cũng tìm chưa ra) và cụm ngoài biên 2..60.
+ * 4 ký tự: "granla") được 0,75; tổng chia số chữ của vế nhiều chữ hơn. Đúng nửa điểm chỉ đủ khi chữ khớp dài từ 4 ký tự ("bột giặt" → "nước
+ * giặt" được, "cho mèo" → "cho bé" không). Gõ dính hay tách chữ ("nuocgiat") so thêm hai vế bỏ dấu cách khi hai vế khác số chữ. Bỏ cụm chuẩn
+ * trùng cụm khách gõ sau khi gấp dấu (máy chủ không nhận cặp giống nhau) và cụm ngoài biên 2..60.
  */
-export function suggestCanonicals(term: string, keywords: readonly unknown[], blocked: ReadonlySet<string> = new Set(), max = SUGGESTION_MAX): string[] {
+export function suggestCanonicals(term: string, keywords: readonly unknown[], max = SUGGESTION_MAX): string[] {
   const folded = foldVietnamese(term);
   const words = folded.split(' ').filter(Boolean);
   if (words.length === 0) return [];
@@ -77,10 +82,10 @@ export function suggestCanonicals(term: string, keywords: readonly unknown[], bl
     // Cụm phổ biến lấy từ SQL `lower()` (collation C) còn giữ chữ hoa có dấu: hạ lại như cụm tìm chưa ra.
     const display = raw.normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('vi');
     const key = foldVietnamese(display);
-    if (key.length < ZERO_RESULT_TERM_MIN || key.length > ZERO_RESULT_TERM_MAX || seen.has(key) || blocked.has(key)) return;
+    if (key.length < ZERO_RESULT_TERM_MIN || key.length > ZERO_RESULT_TERM_MAX || seen.has(key)) return;
     seen.add(key);
-    const score = similarity(words, key);
-    if (score >= SUGGESTION_MIN_SCORE) scored.push({ display, score, order });
+    const { score, strong } = similarity(words, key);
+    if (score > SUGGESTION_MIN_SCORE || (score === SUGGESTION_MIN_SCORE && strong)) scored.push({ display, score, order });
   });
   return scored
     .sort((a, b) => b.score - a.score || a.order - b.order)
@@ -88,10 +93,11 @@ export function suggestCanonicals(term: string, keywords: readonly unknown[], bl
     .map((s) => s.display);
 }
 
-function similarity(words: readonly string[], key: string): number {
+function similarity(words: readonly string[], key: string): { score: number; strong: boolean } {
   const other = key.split(' ');
   const used = new Set<number>();
   let hit = 0;
+  let strong = false;
   for (const w of words) {
     let best = -1;
     let bestScore = 0;
@@ -106,11 +112,34 @@ function similarity(words: readonly string[], key: string): number {
     if (best >= 0) {
       used.add(best);
       hit += bestScore;
+      if (w.length >= STRONG_WORD_MIN) strong = true;
     }
   }
   const score = hit / Math.max(words.length, other.length);
   const joined = words.join('');
-  return joined.length >= 4 && editDistance(joined, other.join(''), 1) <= 1 ? Math.max(score, 0.9) : score;
+  if (words.length !== other.length && joined.length >= STRONG_WORD_MIN && editDistance(joined, other.join(''), 1) <= 1) {
+    return { score: Math.max(score, 0.9), strong: true };
+  }
+  return { score, strong };
+}
+
+/**
+ * Cụm chuẩn (đã gấp dấu) còn ra hàng: mọi chữ có trong `nameSearch` của một món đang bán, cùng điều kiện với `popularSql`. Lọc danh sách admin
+ * để không gợi ý một cụm mà tạo từ đồng nghĩa tới nó vẫn không ra món nào; mọi giá trị là tham số.
+ */
+export function liveKeywordsSql(keys: readonly string[]): Prisma.Sql {
+  return Prisma.sql`
+    SELECT c.k AS "key"
+    FROM unnest(${keys}::text[]) AS c(k)
+    WHERE EXISTS (
+      SELECT 1 FROM products p
+      WHERE p."isActive" = true
+        AND p."approvalStatus" = 'APPROVED'
+        AND NOT EXISTS (
+          SELECT 1 FROM unnest(string_to_array(c.k, ' ')) AS w(t)
+          WHERE w.t <> '' AND strpos(p."nameSearch", w.t) = 0
+        )
+    )`;
 }
 
 /**
@@ -157,6 +186,7 @@ interface ZeroResultSqlRow {
 @Injectable()
 export class SearchZeroResultsService {
   private readonly logger = new Logger(SearchZeroResultsService.name);
+  private popularCache: { terms: unknown[]; expiresAt: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -182,8 +212,6 @@ export class SearchZeroResultsService {
       : [];
     const byTerm = new Map(synonyms.map((s) => [s.term, { canonical: s.canonical, isActive: s.isActive }]));
     const keywords = kept.some((r) => !byTerm.has(r.key)) ? await this.canonicalKeywords(now) : [];
-    // Cụm chuẩn mà chính nó cũng tìm chưa ra thì tạo từ đồng nghĩa tới nó vẫn không ra món nào.
-    const blocked = new Set(rows.map((r) => r.key));
     return {
       days,
       items: kept.map((r) => {
@@ -194,7 +222,7 @@ export class SearchZeroResultsService {
           people: Number(r.people),
           lastSeenAt: new Date(Math.min(new Date(r.lastSeenAt).getTime(), now.getTime())).toISOString(),
           synonym,
-          suggestions: synonym ? [] : suggestCanonicals(r.term, keywords, blocked),
+          suggestions: synonym ? [] : suggestCanonicals(r.term, keywords),
         };
       }),
     };
@@ -202,19 +230,23 @@ export class SearchZeroResultsService {
 
   /**
    * Nguồn cụm chuẩn cho gợi ý: danh sách admin giữ ở `system_configs` (`catalog.search_popular_terms`, ô "Cụm tìm phổ biến dự phòng" cùng
-   * trang) trước, rồi cụm khách tìm ra hàng nhiều nhất (`popularSql`: từ 3 người, mọi chữ có trong tên một món đang bán). Đọc lỗi thì bỏ
-   * nguồn đó: bảng tìm chưa ra vẫn trả về, chỉ thiếu gợi ý.
+   * trang), chỉ giữ cụm còn ra hàng (`liveKeywordsSql`), rồi cụm khách tìm ra hàng nhiều nhất (`popularSql`: từ 3 người, mọi chữ có trong tên
+   * một món đang bán). Đọc lỗi thì bỏ nguồn đó: bảng tìm chưa ra vẫn trả về, chỉ thiếu gợi ý.
    */
   private async canonicalKeywords(now: Date): Promise<unknown[]> {
     const [curated, popular] = await Promise.all([this.curatedKeywords(), this.popularKeywords(now)]);
     return [...curated, ...popular];
   }
 
-  private async curatedKeywords(): Promise<unknown[]> {
+  private async curatedKeywords(): Promise<string[]> {
     if (!this.config) return [];
     try {
       const v = await this.config.get<unknown>(SEARCH_POPULAR_TERMS_KEY, []);
-      return Array.isArray(v) ? v : [];
+      const terms = Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : [];
+      const keys = [...new Set(terms.map((t) => foldVietnamese(t)).filter((k) => k.length >= ZERO_RESULT_TERM_MIN && k.length <= ZERO_RESULT_TERM_MAX))];
+      if (keys.length === 0) return [];
+      const live = new Set((await this.prisma.$queryRaw<{ key: string }[]>(liveKeywordsSql(keys))).map((r) => r.key));
+      return terms.filter((t) => live.has(foldVietnamese(t)));
     } catch (err) {
       this.logger.warn(`Không đọc được ${SEARCH_POPULAR_TERMS_KEY} cho gợi ý từ đồng nghĩa: ${err instanceof Error ? err.message : String(err)}`);
       return [];
@@ -222,10 +254,14 @@ export class SearchZeroResultsService {
   }
 
   private async popularKeywords(now: Date): Promise<unknown[]> {
+    const at = now.getTime();
+    if (this.popularCache && this.popularCache.expiresAt > at) return this.popularCache.terms;
     try {
-      const since = new Date(now.getTime() - POPULAR_WINDOW_DAYS * 86_400_000);
+      const since = new Date(at - POPULAR_WINDOW_DAYS * 86_400_000);
       const rows = await this.prisma.$queryRaw<{ display: unknown }[]>(popularSql(since, SUGGESTION_POPULAR_LIMIT));
-      return rows.map((r) => r.display);
+      const terms = rows.map((r) => r.display);
+      this.popularCache = { terms, expiresAt: at + SUGGESTION_POPULAR_TTL_MS };
+      return terms;
     } catch (err) {
       this.logger.warn(`Không đọc được cụm tìm phổ biến cho gợi ý từ đồng nghĩa: ${err instanceof Error ? err.message : String(err)}`);
       return [];
