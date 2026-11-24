@@ -49,7 +49,11 @@ beforeEach(() => {
   m.hooks.clear();
   root = createRoot(document.createElement('div'));
 });
-afterEach(() => act(() => root.unmount()));
+afterEach(async () => {
+  act(() => root.unmount());
+  // Gỡ màn hẹn checkout_abandoned sau một nhịp: chờ nhịp đó ngay trong ca này, để bản ghi không rơi sang ca sau (sau mockClear của ca sau).
+  await act(async () => new Promise((r) => setTimeout(r, 0)));
+});
 
 describe('useCheckoutFunnel', () => {
   it('checkout_started một lần ở báo giá thành công đầu tiên, entry lấy từ takeCheckoutEntry; báo giá tải lại không phát thêm', () => {
