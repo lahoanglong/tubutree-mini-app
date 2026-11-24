@@ -175,6 +175,17 @@ describe('parseAddressPaste: tên, SĐT và chữ thừa', () => {
     expect(parse('12 Lê Lợi, Phường Sài Gòn, TP HCM\nNguyễn An\n0912345678')?.recipient).toBe('Nguyễn An');
   });
 
+  it('tên một chữ kề SĐT là tên, không lọt vào số nhà', () => {
+    expect(parse('Lan\n0912345678\n12 Lê Lợi, P. Bến Thành, HCM')).toMatchObject({ recipient: 'Lan', street: '12 Lê Lợi' });
+    expect(parse('Lan 0912345678, 12 Lê Lợi, P. Bến Thành, HCM')).toMatchObject({ recipient: 'Lan', street: '12 Lê Lợi' });
+    expect(parse('12 Lê Lợi, P. Bến Thành, HCM\nAn 0912345678')).toMatchObject({ recipient: 'An', street: '12 Lê Lợi' });
+  });
+
+  it('"Gọi"/"Liên hệ" trước SĐT không phải tên; tên một chữ + SĐT chưa đủ dáng địa chỉ', () => {
+    expect(parse('Liên hệ 0912345678, 12 Lê Lợi, P. Bến Thành, HCM')).toMatchObject({ recipient: '', street: '12 Lê Lợi' });
+    expect(parse('Lan 0912345678')).toBeNull();
+  });
+
   it('tên dòng đầu đứng riêng, không có SĐT', () => {
     expect(parse('Nguyễn An\n12 Lê Lợi, Phường Sài Gòn, TP HCM')).toMatchObject({ recipient: 'Nguyễn An', phone: '', street: '12 Lê Lợi' });
   });
