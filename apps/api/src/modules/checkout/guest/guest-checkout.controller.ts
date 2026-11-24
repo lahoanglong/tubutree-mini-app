@@ -21,7 +21,7 @@ const ORDER_CODE_RE = /^[A-Za-z0-9-]{4,40}$/;
 export const GUEST_LOOKUP_CODE_LIMIT = 10;
 /** Mỗi IP tối đa chừng này lượt tra/phút trên mọi mã: bằng trần IP của đăng nhập vì nhiều thuê bao di động chung một IP (CGNAT). */
 export const GUEST_LOOKUP_IP_LIMIT = 30;
-/** Mỗi SĐT tối đa chừng này lượt tra mỗi 15 phút trên mọi mã và mọi IP: mã đơn chỉ có 10^5 giá trị mỗi ngày nên biết SĐT là dò được mã nếu không chặn. */
+/** Mỗi SĐT tối đa chừng này lượt tra mỗi 15 phút trên mọi mã và mọi IP: mã ngắn chỉ có ~10^6 giá trị mỗi tiền tố (mã dài cũ 10^5 mỗi ngày) nên biết SĐT là dò được mã nếu không chặn. */
 export const GUEST_LOOKUP_PHONE_LIMIT = 10;
 export const GUEST_LOOKUP_PHONE_TTL_MS = 15 * 60_000;
 /** Câu 429 của route tra cứu (mọi trần: mã, IP, SĐT), kèm số phút còn bị chặn của trần vừa chạm. */

@@ -36,6 +36,13 @@ describe('pancakeOrderHasCode', () => {
     expect(pancakeOrderHasCode({ note: 'Order code: TUBU1 | ghi chú' }, 'TUBU1')).toBe(true);
     expect(pancakeOrderHasCode({ note: 'Order code: TUBU12' }, 'TUBU1')).toBe(false);
   });
+  // Kiểm trùng trước khi đẩy lại đơn: mã ngắn bị cắt còn "TB7" thì không thấy đơn đã có trên Pancake và tạo đơn thứ hai.
+  it('mã ngắn: khớp đúng mã trong ghi chú, không khớp mã dài hơn hay ngắn hơn', () => {
+    expect(pancakeOrderHasCode({ note: 'Order code: TB7K4M | [THU COD 230.000đ]' }, 'TB7K4M')).toBe(true);
+    expect(pancakeOrderHasCode({ note: 'Order code: TB7K4MZ' }, 'TB7K4M')).toBe(false);
+    expect(pancakeOrderHasCode({ note: 'Order code: TB7K4M' }, 'TB7K4MZ')).toBe(false);
+    expect(pancakeOrderHasCode({ note: 'Order code: TB7K4M' }, 'TB7')).toBe(false);
+  });
   it.each([[{ custom_id: 5, extension: 'x', note: { a: 1 } }], [{ custom_id: null, extension: null, note: null }], [{}]])('trường kiểu lạ %j: false, không ném', (o) => {
     expect(pancakeOrderHasCode(o as never, 'TUBU1')).toBe(false);
   });

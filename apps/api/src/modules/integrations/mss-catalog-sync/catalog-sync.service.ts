@@ -4,7 +4,9 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CatalogService } from '../../catalog/catalog.service';
 import { HomeService } from '../../catalog/home.service';
+import { PANCAKE_IGNORE_ZERO_STOCK_KEY, readKeepPositiveOnZero } from '../../catalog/variation-stock';
 import { RestockAlertsDispatcher } from '../../restock-alerts/restock-alerts.dispatcher';
+import { SystemConfigService } from '../../system-config/system-config.service';
 import { MSS_PUSH_STATE_ID, MssCatalogService, type MssCatalogRunStats } from '../mss/catalog/mss-catalog.service';
 import { MssHealthService } from '../mss/mss-health.service';
 import type { CatalogSyncEnvelope } from './catalog-sync-body';
@@ -76,6 +78,7 @@ export class CatalogSyncService {
     private readonly catalog: MssCatalogService,
     private readonly health: MssHealthService,
     @Optional() private readonly moduleRef?: ModuleRef,
+    @Optional() private readonly systemConfig?: SystemConfigService,
   ) {}
 
   async receive(env: CatalogSyncEnvelope, now: Date = new Date()): Promise<CatalogSyncReply> {
@@ -130,7 +133,11 @@ export class CatalogSyncService {
       reply.stock.status = 'disabled';
       return;
     }
-    const res = await applyMssStock(this.prisma, env.stock, { signedAt: env.signedAt, now });
+    const keepPositiveOnZero = await readKeepPositiveOnZero(this.systemConfig);
+    const res = await applyMssStock(this.prisma, env.stock, { signedAt: env.signedAt, now }, { keepPositiveOnZero });
+    if (keepPositiveOnZero) {
+      this.logger.log(`${PANCAKE_IGNORE_ZERO_STOCK_KEY} bật: lần MSS đẩy ${env.syncId} giữ tồn của ${res.kept} biến thể Pancake báo 0 mà Tubu còn hàng.`);
+    }
     reply.stock = {
       ...reply.stock,
       status: 'applied',

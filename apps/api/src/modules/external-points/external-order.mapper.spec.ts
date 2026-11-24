@@ -62,7 +62,26 @@ describe('classifyPancakeOrder', () => {
   it('custom_id không theo mẫu Tubu thì không phải đơn app', () => {
     expect(classifyPancakeOrder({ custom_id: 'SHOP123' }, MAP).kind).toBe('UNKNOWN');
     expect(classifyPancakeOrder({ custom_id: 'TUBU' }, MAP).kind).toBe('UNKNOWN');
+    expect(classifyPancakeOrder({ custom_id: 'TB0K4M' }, MAP).kind).toBe('UNKNOWN');
+    expect(classifyPancakeOrder({ custom_id: 'TB7K4MZX' }, MAP).kind).toBe('UNKNOWN');
   });
+
+  // Đơn app mang mã ngắn mà bị coi là đơn sàn/chat thì khách được cộng điểm đơn ngoài lần nữa trên cùng một đơn đã tích điểm app.
+  it.each(['TB7K4M', 'DL2X9Q', 'TS4MNP', 'TB7K4MZ', 'TUBU2026112212345', 'TUBUSUB1234567890', 'DLR12345678901'])(
+    'mã đơn %s (ngắn hoặc dài cũ) ở custom_id, ghi chú hay extension: luôn là đơn app, không bao giờ là đơn sàn',
+    (code) => {
+      const asMarketplace = { marketplace_id: -3, is_from_ecommerce: true };
+      for (const app of [
+        { custom_id: code },
+        { custom_id: ` ${code} ` },
+        { note: `Order code: ${code} | [THU COD 230.000đ]` },
+        { note: `GẤP Order code:\u00a0${code} - đổi size` },
+        { extension: { external_order_id: code } },
+      ]) {
+        expect(classifyPancakeOrder({ ...asMarketplace, ...app }, MAP)).toEqual({ kind: 'APP', channel: null });
+      }
+    },
+  );
 
   it('đơn chat chỉ khi sourceKey nằm trong chatSources', () => {
     const chat = fixture('synthetic-chat.json');

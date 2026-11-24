@@ -183,6 +183,32 @@ function stockOriginSql(origin: PancakeStockOrigin | undefined): { set: Prisma.S
 }
 
 /**
+ * Cờ `catalog.pancake_ignore_zero_stock` (mặc định tắt): Pancake báo 0 trong khi Tubu còn tồn dương thì giữ nguyên `stock` và
+ * `reservedStock`, chỉ ghi `pancakeStock = 0`. Dùng khi kho Pancake chưa nhập đủ hàng mà Tubu vẫn bán từ tồn đã khai. Số dương
+ * từ Pancake luôn áp bình thường (`stock = số mới − giữ chỗ`); giữ/trả chỗ của đơn app không đổi.
+ */
+export const PANCAKE_IGNORE_ZERO_STOCK_KEY = 'catalog.pancake_ignore_zero_stock';
+
+export interface PancakeZeroStockOpts {
+  /** Giá trị cờ PANCAKE_IGNORE_ZERO_STOCK_KEY đã đọc (đọc một lần mỗi lượt đồng bộ, không đọc trong từng câu lệnh). */
+  keepPositiveOnZero?: boolean;
+  /** Gọi khi câu lệnh vừa giữ tồn dương của một biến thể, để lượt đồng bộ đếm và in một dòng tổng. */
+  onKept?: () => void;
+}
+
+const keepsPositive = (opts: PancakeZeroStockOpts, pancakeStock: number) => opts.keepPositiveOnZero === true && pancakeStock === 0;
+
+/** Đọc cờ PANCAKE_IGNORE_ZERO_STOCK_KEY: chỉ đúng `true` là bật; thiếu cấu hình hay đọc lỗi thì coi như tắt (hành vi cũ). */
+export async function readKeepPositiveOnZero(config: { get<T>(key: string, fallback?: T): Promise<T> } | undefined): Promise<boolean> {
+  if (!config) return false;
+  try {
+    return (await config.get<boolean>(PANCAKE_IGNORE_ZERO_STOCK_KEY, false)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Áp số tồn kho Pancake vừa đọc được cho variation (theo `pancakeId`).
  *
  * - Chưa có mốc (`pancakeStock IS NULL`): CHỈ ghi mốc, không đụng `stock`. Nhờ vậy lần deploy
@@ -205,24 +231,33 @@ export async function applyPancakeStock(
   pancakeVariationId: string,
   pancakeStock: number,
   origin?: PancakeStockOrigin,
+  opts: PancakeZeroStockOpts = {},
 ): Promise<boolean> {
   // Một câu duy nhất cho cả hai nhánh: mọi vế phải đọc giá trị CŨ của hàng nên phép tính nhất
   // quán, và không có khoảng hở giữa hai lệnh để một lượt checkout xen vào.
   const { set, guard } = stockOriginSql(origin);
-  const affected = await tx.$executeRaw`
+  const keep = keepsPositive(opts, pancakeStock);
+  // Giữ tồn dương khi Pancake báo 0: điều kiện đọc `stock` CŨ trong chính câu UPDATE, nên đơn app vừa giữ chỗ không bị lọt giữa
+  // lúc đọc và lúc ghi. `pancakeStock` vẫn ghi 0 để màn đối chiếu thấy chỗ lệch.
+  const kept = keep ? Prisma.sql`"stock" > 0 OR ` : Prisma.empty;
+  const update = Prisma.sql`
     UPDATE "variations"
        SET "reservedStock" = CASE
-             WHEN "pancakeStock" IS NULL THEN "reservedStock"
+             WHEN ${kept}"pancakeStock" IS NULL THEN "reservedStock"
              ELSE GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock}))
            END,
            "stock" = CASE
-             WHEN "pancakeStock" IS NULL THEN "stock"
+             WHEN ${kept}"pancakeStock" IS NULL THEN "stock"
              ELSE GREATEST(0, ${pancakeStock} - GREATEST(0, "reservedStock" - GREATEST(0, "pancakeStock" - ${pancakeStock})))
            END,
            "pancakeStock" = ${pancakeStock}${set}
-     WHERE "pancakeId" = ${pancakeVariationId}${guard}
-  `;
-  return affected > 0;
+     WHERE "pancakeId" = ${pancakeVariationId}${guard}`;
+  if (!keep) return (await tx.$executeRaw`${update}`) > 0;
+  // RETURNING đọc giá trị MỚI: nhánh không giữ với số 0 luôn ra `stock` = 0, nên `stock` > 0 sau câu lệnh nghĩa là đã giữ.
+  const rows = await tx.$queryRaw<{ kept: boolean }[]>`${update}
+    RETURNING "stock" > 0 AS "kept"`;
+  if (rows[0]?.kept) opts.onKept?.();
+  return rows.length > 0;
 }
 
 /**
@@ -235,9 +270,21 @@ export async function forcePancakeStock(
   tx: StockExecutor,
   pancakeVariationId: string,
   pancakeStock: number,
-  opts: { readAt?: Date } = {},
+  opts: { readAt?: Date } & PancakeZeroStockOpts = {},
 ): Promise<void> {
   const { readAt } = opts;
+  if (keepsPositive(opts, pancakeStock)) {
+    const readSet = readAt ? Prisma.sql`, "pancakeStockSyncReadAt" = GREATEST("pancakeStockSyncReadAt", ${readAt})` : Prisma.empty;
+    const rows = await tx.$queryRaw<{ kept: boolean }[]>`
+    UPDATE "variations"
+       SET "stock" = CASE WHEN "stock" > 0 THEN "stock" ELSE 0 END,
+           "reservedStock" = CASE WHEN "stock" > 0 THEN "reservedStock" ELSE 0 END,
+           "pancakeStock" = 0${readSet}
+     WHERE "pancakeId" = ${pancakeVariationId}
+    RETURNING "stock" > 0 AS "kept"`;
+    if (rows[0]?.kept) opts.onKept?.();
+    return;
+  }
   if (readAt) {
     await tx.$executeRaw`
     UPDATE "variations"

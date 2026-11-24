@@ -71,7 +71,7 @@ export class GuestPlaceOrderDto extends GuestQuoteDto {
   @IsOptional() @Trim() @IsString() @MaxLength(64) affiliateLinkCode?: string;
 }
 
-/** Mã đơn trên đơn hàng: chữ hoa, số, gạch nối (TUBU…, DLR…, TUBUSUB…). */
+/** Mã đơn trên đơn hàng: chữ hoa, số, gạch nối (mã ngắn TB…, DL…, TS…; mã dài cũ TUBU…, DLR…, TUBUSUB…). */
 export const GUEST_LOOKUP_CODE_RE = /^[A-Z0-9-]{4,40}$/;
 
 /** Mã đơn khách gõ hay dán: bỏ mọi khoảng trắng, dấu # ở đầu và viết hoa. */
@@ -88,7 +88,7 @@ export function normalizeLookupPhone(value: unknown): unknown {
 export class GuestLookupDto {
   @Transform(({ value }: { value: unknown }) => normalizeLookupCode(value))
   @IsString()
-  @Matches(GUEST_LOOKUP_CODE_RE, { message: 'Mã đơn chưa đúng. Mã đơn in trong tin xác nhận, bắt đầu bằng TUBU.' })
+  @Matches(GUEST_LOOKUP_CODE_RE, { message: 'Mã đơn chưa đúng. Mã đơn in trong tin xác nhận, bắt đầu bằng TB hoặc TUBU.' })
   orderCode!: string;
 
   @Transform(({ value }: { value: unknown }) => normalizeLookupPhone(value))

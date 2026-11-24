@@ -378,7 +378,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.source).toBe('subscription');
     expect(data.platform).toBe('system');
     expect(data.subscriptionId).toBe('s1');
-    expect(data.code).toMatch(/^TUBUSUB\d{10}$/);
+    expect(data.code).toMatch(/^TS[2-9A-HJ-NP-Z]{4}$/);
   });
 
   it('khách đổi chu kỳ chen giữa claim và khoá dòng: đơn kỳ này đặt lại nextRunAt theo chu kỳ mới, không để ngày PATCH tính từ đơn cũ', async () => {
@@ -545,6 +545,15 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     it('lỗi tạm thời khác (vd P2034) → trước đây chỉ log: giờ cũng hẹn thử lại ngày mai và báo khách', async () => {
       const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('P2034 write conflict') });
       await svc.processDue();
+      expect(retryWrite(updateMany).data.nextRunAt).toEqual(tomorrowVn());
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }), undefined, 'sub=s1');
+    });
+
+    it('lỗi lúc sinh mã đơn (DB bận, sau bước claim) → đi nhánh thử lại ngày mai, không mất kỳ', async () => {
+      const { svc, updateMany, notify, orderCreate, prisma } = makeProcess(1);
+      (prisma.order.findUnique as unknown as jest.Mock).mockRejectedValueOnce(new Error('Connection reset'));
+      await svc.processDue();
+      expect(orderCreate).not.toHaveBeenCalled();
       expect(retryWrite(updateMany).data.nextRunAt).toEqual(tomorrowVn());
       expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }), undefined, 'sub=s1');
     });

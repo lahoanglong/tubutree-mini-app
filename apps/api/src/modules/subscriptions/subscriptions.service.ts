@@ -862,10 +862,11 @@ export class SubscriptionsService {
     nextRunAt: Date,
     orderedSince?: Date,
   ): Promise<boolean> {
-    const code = await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION');
     let placed: PlacedCycleOrder | null;
     const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
     try {
+      // Sinh mã trong try: bước claim đã dời nextRunAt, nên lỗi ở đây (DB bận, hết lượt mã) phải đi nhánh thử lại bên dưới, không mất kỳ.
+      const code = await generateUniqueOrderCode(this.prisma, 'SUBSCRIPTION');
       placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code, sub.intervalWeeks, orderedSince));
     } catch (err) {
       if (isProductDiscontinuedError(err)) {

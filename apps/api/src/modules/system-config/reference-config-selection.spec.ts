@@ -47,6 +47,7 @@ const APPROVED_LOADED_KEYS = [
     'catalog.loved_min_rating',
     'catalog.loved_min_reviews',
     'catalog.loved_min_sold',
+    'catalog.pancake_ignore_zero_stock',
     'catalog.unit_price_enabled',
     'chat.enabled',
     'chat.hours',

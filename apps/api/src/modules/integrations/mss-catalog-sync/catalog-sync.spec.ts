@@ -131,7 +131,7 @@ describe('applyMssStock', () => {
   it('về 0: tồn Tubu về 0 ngay, báo biến thể vừa hết hàng; 0 → có hàng: báo vừa về hàng', async () => {
     const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 3 }), row({ id: 'tv2', pancakeId: 'v2', stock: 0, pancakeStock: 0 })];
     const res = await applyMssStock(stockDb(rows), [line('v1', 0), line('v2', 7)], CLOCK);
-    expect(res).toEqual({ received: 2, applied: 2, skipped: {}, wentOut: ['tv1'], backIn: ['tv2'] });
+    expect(res).toEqual({ received: 2, applied: 2, skipped: {}, wentOut: ['tv1'], backIn: ['tv2'], kept: 0 });
     expect(rows.map((r) => r.stock)).toEqual([0, 7]);
   });
 
@@ -168,7 +168,7 @@ describe('applyMssStock', () => {
       [line('nope', 1), line('v1', 1, MSS_STOCK_MAX_AGE_MS + 1), line('v1', 1, -(MSS_STOCK_MAX_SKEW_MS + 1))],
       CLOCK,
     );
-    expect(res).toEqual({ received: 3, applied: 0, skipped: { unknown_variation: 1, too_old: 1, clock_skew: 1 }, wentOut: [], backIn: [] });
+    expect(res).toEqual({ received: 3, applied: 0, skipped: { unknown_variation: 1, too_old: 1, clock_skew: 1 }, wentOut: [], backIn: [], kept: 0 });
     expect(db.exec).not.toHaveBeenCalled();
   });
 

@@ -64,6 +64,12 @@ describe('pancakeEventOrderCode', () => {
   it.each([[null], ['x'], [5], [[]]])('extension=%p: null, không ném', (extension) => {
     expect(pancakeEventOrderCode({ extension })).toBeNull();
   });
+  it('mã ngắn trong ghi chú được đọc trọn, không cắt còn phần trước chữ cái (TB7K4M, không phải TB7)', () => {
+    expect(pancakeEventOrderCode({ note: 'Order code: TB7K4M | [THU COD 230.000đ]' })).toBe('TB7K4M');
+    expect(pancakeEventOrderCode({ note: 'Order code: TBKM4XZ' })).toBe('TBKM4XZ');
+    expect(pancakeEventOrderCode({ note: 'GẤP Order code: DL2X9Q - đổi size' })).toBe('DL2X9Q');
+    expect(pancakeEventRef({ note: 'Order code: TS4MNP', id: 'p1' })).toBe('TS4MNP');
+  });
   it('note không phải chuỗi: null', () => {
     expect(pancakeEventOrderCode({ note: { a: 1 } })).toBeNull();
     expect(pancakeEventOrderCode({ note: 5 })).toBeNull();
