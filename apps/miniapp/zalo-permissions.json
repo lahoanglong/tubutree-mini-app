@@ -1,0 +1,42 @@
+{
+  "$comment": "Quyền Zalo Mini App cho lần gửi duyệt. app-config.json của ZMP không có trường quyền (zmp-vite-plugin chỉ chép khối `app` vào bản build), quyền xin ở mini.zalo.me › Quản lý ứng dụng. `purpose` và `trigger` là chữ dán vào ô mục đích sử dụng trên console. `node scripts/zalo-review/check-submission.mjs` đối chiếu tệp này với mọi lời gọi zmp-sdk thật trong apps/miniapp/src: thêm hay bỏ một API thì phải sửa tệp này.",
+  "scopes": {
+    "scope.userPhonenumber": {
+      "apis": ["getPhoneNumber"],
+      "purpose": "Điền sẵn số điện thoại nhận hàng và gắn đơn hàng, điểm, quà tặng, mã giảm giá của khách vào đúng một tài khoản.",
+      "trigger": "Chỉ khi khách mở biểu mẫu địa chỉ đầu tiên (hỏi một lần) hoặc bấm Điền nhanh từ Zalo, nhận quà khách mới, lưu mã giảm giá, liên kết đơn và điểm đã mua, gửi yêu cầu đổi rác. Không hỏi lúc mở Mini App."
+    },
+    "scope.userLocation": {
+      "apis": ["getLocation"],
+      "purpose": "Tìm điểm nhận rác tái chế gần khách nhất và xác nhận nhân sự chấm công đúng điểm làm việc.",
+      "trigger": "Chỉ khi khách bấm Gần tôi ở danh sách điểm đổi rác, chọn gửi rác tại điểm khi tạo yêu cầu đổi rác, hoặc nhân sự bấm chấm công. Không hỏi lúc mở Mini App."
+    },
+    "scope.userInfo": {
+      "apis": ["getUserInfo"],
+      "purpose": "Điền sẵn tên người nhận trong sổ địa chỉ khi tài khoản chưa có tên.",
+      "trigger": "Chỉ khi khách mở biểu mẫu địa chỉ đầu tiên (hỏi một lần) hoặc bấm Điền nhanh từ Zalo. Không hỏi lúc mở Mini App."
+    }
+  },
+  "noScopeApis": {
+    "login": "Đăng nhập ngầm bằng tài khoản Zalo, không mở hộp hỏi quyền.",
+    "getAccessToken": "Từ SDK 2.35.0 lấy access token không cần khách đồng ý, chỉ ra ID người dùng.",
+    "getStorage": "Lưu trạng thái trên máy (giỏ khách, cờ đã hỏi), không phải dữ liệu cá nhân của Zalo.",
+    "setStorage": "Như getStorage.",
+    "removeStorage": "Như getStorage.",
+    "events": "Nghe sự kiện mở lại Mini App từ link sâu.",
+    "EventName": "Hằng tên sự kiện đi kèm events.",
+    "openShareSheet": "Khách bấm Chia sẻ sản phẩm hoặc link mời.",
+    "openWebview": "Chỉ mở link Zalo (zalo.me, oa.zalo.me) và cổng web của shop cho quản trị, đối tác, nhân sự; không mở trang thanh toán.",
+    "openChat": "Khách bấm Nhắn hỗ trợ: mở chat với Zalo OA của shop.",
+    "openPhone": "Khách bấm số hotline.",
+    "followOA": "Khách bấm Theo dõi OA sau đơn đầu tiên.",
+    "requestSendNotification": "Khách bấm bật nhận thông báo đơn hàng qua OA.",
+    "saveImageToGallery": "Khách bấm Lưu ảnh mã QR chuyển khoản của đơn.",
+    "scanQRCode": "Khách bấm Quét mã ở màn tích điểm từ mã trên hàng mua ngoài; không thuộc bảng scope của authorize (SDK 2.51.4).",
+    "vibrate": "Rung nhẹ khi bấm nút."
+  },
+  "consoleLinks": {
+    "privacyPolicy": "bao-mat",
+    "terms": "dieu-khoan"
+  }
+}

@@ -12,6 +12,7 @@
     "lint": "turbo run lint",
     "lint:vars": "node scripts/check-undefined-css-vars.mjs",
     "lint:parity": "node scripts/check-platform-parity.mjs && node scripts/check-ds-parity.mjs && node scripts/uiux/ds-ratchet.mjs",
+    "check:zalo-review": "node scripts/zalo-review/check-submission.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:ci": "turbo run test --filter=!@tubutree/e2e",
