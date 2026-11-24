@@ -1,4 +1,5 @@
 import { Fragment, type CSSProperties } from 'react';
+import { comboItemPrices } from '@tubutree/app-core/commerce/combo-item-prices';
 import type { ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -24,6 +25,11 @@ export interface ComboCardProps {
   busy?: boolean;
   /** Có thì hiện nút phụ "Xem từng món". */
   onSeeItems?: () => void;
+  /**
+   * Mỗi dòng món kèm giá: giá trong bộ cạnh giá lẻ gạch (`comboItemPrices`), hay chỉ giá lẻ khi máy chủ kẹp mức giảm. Bật ở trang sản phẩm và
+   * Bộ quà tặng, nơi khách so từng món trước khi mua cả bộ; Trang chủ và gian hàng giữ danh sách tên. Bộ tạm hết hay không giảm thì như tắt.
+   */
+  itemPrices?: boolean;
 }
 
 /** Tối đa 3 ảnh trong dải; món thứ 4 trở đi gộp thành một ô "+n" (critique-store 3.1b). */
@@ -32,6 +38,9 @@ const PLUS: CSSProperties = { color: 'var(--color-text-tertiary)', fontWeight: 6
 const THUMB = 56;
 /** Nút "Combo tạm hết": nhìn như nút khoá nhưng vẫn là `aria-disabled` (Tab tới được, đọc được tên) thay vì `disabled`. */
 const SOLD_OUT_BUTTON: CSSProperties = { background: 'var(--color-action-primary-bg-disabled)', color: 'var(--color-text-secondary)', cursor: 'default' };
+const ITEM_LINE: CSSProperties = { fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+/** Dòng món có giá: tên co lại (cắt "…"), giá không co; cỡ giá sm cao đúng bằng dòng caption nên thẻ không cao thêm. */
+const PRICED_LINE: CSSProperties = { display: 'flex', alignItems: 'baseline', gap: 'var(--space-inline-sm)' };
 
 /**
  * Khối "mua cả bộ" của gian hàng và thương hiệu: dải ảnh nối bằng dấu "+", danh sách tên món, giá cả bộ kèm giá gạch, một nút chính.
@@ -40,13 +49,14 @@ const SOLD_OUT_BUTTON: CSSProperties = { background: 'var(--color-action-primary
  * Có món `stock==='out'` thì không thể thêm cả bộ (API từ chối cả lô nếu thiếu một món): nút thành "Combo tạm hết", không gọi
  * `onAddAll`, bỏ dòng "Tiết kiệm" (khoản tiết kiệm không mua được). "Xem từng món" vẫn có để khách chọn món còn hàng.
  */
-export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy = false, onSeeItems }: ComboCardProps) {
+export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy = false, onSeeItems, itemPrices = false }: ComboCardProps) {
   if (items.length === 0) return null;
   const shown = items.slice(0, MAX_THUMBS);
   const extra = items.length - shown.length;
   const saving = Number.isFinite(total) && Number.isFinite(comboTotal) && total > comboTotal ? total - comboTotal : 0;
   const pctShown = Number.isFinite(pct) ? Math.round(pct) : 0;
   const soldOut = items.some((it) => it.stock === 'out');
+  const prices = itemPrices && saving > 0 && !soldOut ? comboItemPrices(items.map((it) => it.price), pct, total, comboTotal) : null;
   return (
     <Card variant="outline" padding={12}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -96,14 +106,30 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
       </div>
 
       <ul aria-label={fillCopy('combo.itemsLabel', { n: items.length })} style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {items.map((it) => (
-          <li
-            key={it.id}
-            style={{ fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: it.stock === 'out' ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-          >
-            {it.stockText ? `${it.name} · ${it.stockText}` : it.name}
-          </li>
-        ))}
+        {items.map((it, i) => {
+          const name = it.stockText ? `${it.name} · ${it.stockText}` : it.name;
+          const color = it.stock === 'out' ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)';
+          const row = prices?.[i];
+          if (!row) {
+            return (
+              <li key={it.id} style={{ ...ITEM_LINE, color }}>
+                {name}
+              </li>
+            );
+          }
+          return (
+            <li key={it.id} data-testid="combo-item-price" style={{ ...PRICED_LINE, color }}>
+              <span style={{ ...ITEM_LINE, flex: '1 1 auto', minWidth: 0 }}>{name}</span>
+              <PriceTag
+                value={row.comboPrice ?? row.price}
+                compareAt={row.comboPrice === null ? undefined : row.price}
+                size="sm"
+                tone={row.comboPrice === null ? 'default' : 'deal'}
+                style={{ flex: '0 0 auto' }}
+              />
+            </li>
+          );
+        })}
       </ul>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10, flexWrap: 'wrap', lineHeight: 'var(--type-caption-lh)' }}>

@@ -173,6 +173,54 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
   });
 });
 
+describe('/san-pham/[slug] — khối Nguồn gốc & cách dùng (w27-03)', () => {
+  const guideOf = (c: HTMLElement) => c.querySelector<HTMLDetailsElement>('details[data-testid="pdp-origin"]');
+
+  it('nhãn vỏ "Tubu Tree": vùng nguyên liệu theo tên, câu chủ hàng viết trong mô tả; gập sẵn, chữ vẫn trong HTML; một lối bản đồ', async () => {
+    api.product = {
+      ...PRODUCT,
+      brand: 'Tubu Tree',
+      name: 'Nước giặt Fuwa3e 2L',
+      description: '<p>Nước giặt enzyme.</p><p><strong>Hướng dẫn sử dụng:</strong> 1 nắp cho 4kg đồ.</p><p>Bảo quản nơi khô ráo, tránh ánh nắng.</p>',
+    };
+    const c = await mount();
+    const guide = guideOf(c)!;
+    expect(guide).not.toBeNull();
+    expect(guide.open).toBe(false);
+    expect(guide.getAttribute('data-pdp-block')).toBe('origin');
+    const summary = guide.querySelector('summary')!;
+    expect(summary.textContent).toBe('Nguồn gốc & cách dùngThanh Hóa');
+    expect(summary.className).toContain('min-h-[var(--section-header-h)]');
+    const rowText = (key: string) => guide.querySelector(`[data-testid="pdp-origin-${key}"]`)?.textContent;
+    expect(rowText('origin')).toBe('Vùng nguyên liệuThanh Hóa · Fuwa3eXem trên bản đồ');
+    expect(rowText('usage')).toBe('Cách dùng1 nắp cho 4kg đồ.');
+    expect(rowText('storage')).toBe('Bảo quảnNơi khô ráo, tránh ánh nắng.');
+    expect(rowText('lot')).toBe('Hạn dùng, số lôIn trên bao bì sản phẩm');
+    const map = guide.querySelector<HTMLAnchorElement>('a[data-testid="pdp-origin-map"]')!;
+    expect(map.getAttribute('href')).toBe('/cau-chuyen?brand=fuwa3e');
+    expect(map.getAttribute('aria-label')).toBe('Xem vùng nguyên liệu Thanh Hóa trên bản đồ');
+    expect(map.className).toContain('tubu-hit-44');
+    expect(c.querySelector('[data-testid="pdp-origin-link"]')).toBeNull();
+  });
+
+  it('chip xuất xứ đầu trang đã có (Pineboo): khối không thêm lối bản đồ thứ hai, ghi "nhà máy Fuwa3e"', async () => {
+    api.product = { ...PRODUCT, brand: 'Pineboo', name: 'Xịt tràm cho bé Pineboo 150ml' };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-origin-link"]')).not.toBeNull();
+    const guide = guideOf(c)!;
+    expect(guide.querySelector('[data-testid="pdp-origin-origin"]')!.textContent).toBe('Vùng nguyên liệuThanh Hóa · nhà máy Fuwa3e');
+    expect(guide.querySelector('[data-testid="pdp-origin-map"]')).toBeNull();
+    expect(c.querySelectorAll('a[href="/cau-chuyen?brand=fuwa3e"]')).toHaveLength(1);
+  });
+
+  it('không rõ vùng nguyên liệu, mô tả không có cách dùng hay bảo quản: không có khối', async () => {
+    api.product = PRODUCT;
+    const c = await mount();
+    expect(guideOf(c)).toBeNull();
+    expect(c.querySelector('[data-pdp-block="origin"]')).toBeNull();
+  });
+});
+
 describe('/san-pham/[slug] — chip xuất xứ cạnh tên nhãn (PO B3)', () => {
   const originOf = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('[data-testid="pdp-origin-link"]');
 
@@ -813,6 +861,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
       fulfiller: { kind: 'TUBU' },
       fulfilment: 'TUBU',
       ingredients: [{ name: 'Bồ kết', percentage: null, benefit: null }],
+      description: `${PRODUCT.description}<p>Bảo quản: nơi khô ráo, thoáng mát.</p>`,
       storyConfig: { version: 1, enabled: true, scenes: [{ kind: 'hud_callouts', closing: 'An lành', points: [{ id: 'p1', xPct: 40, yPct: 40, label: 'Bồ kết', side: 'left' }] }] },
     };
     api.bundles = BUNDLES_FOR_ORDER;

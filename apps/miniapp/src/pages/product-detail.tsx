@@ -46,6 +46,7 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
 import { pdpOriginLink } from '../utils/brand-origins';
+import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
 import { formatVnd, formatSold } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
@@ -125,6 +126,7 @@ import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { pdpRefillOffer, refillPairQuery, type PdpRefillOfferView } from '@tubutree/app-core/refill/refill-saving';
 import { coreHttp } from '../services/core-http';
 import { PdpDescription, PdpIngredients } from '../components/product/pdp-info-blocks';
+import { PdpOriginGuide } from '../components/product/pdp-origin-guide';
 import { ListRow } from '../components/ui/list-row';
 
 // Cảnh câu chuyện kéo theo sprite, CSS và ảnh: nạp lười để gói đầu của trang không phải gánh khi khách không mở tới.
@@ -285,6 +287,11 @@ export default function ProductDetailPage() {
   const storyProduct = useMemo(() => {
     const d = product.data;
     return d && hasOwnStory(d) ? storyProductWithoutLead(d, resolveStoryConfig(d)) : null;
+  }, [product.data]);
+  // Khối Nguồn gốc & cách dùng đọc lại mô tả (parseRichText): ghi nhớ theo dữ liệu, không đọc lại mỗi lần chọn phân loại hay đổi số lượng.
+  const originView = useMemo(() => {
+    const d = product.data;
+    return d ? pdpOriginView(d, { originChip: pdpOriginLink(d.brand) !== null }) : null;
   }, [product.data]);
   // Cùng queryKey với FlashSale (trang chủ) → React Query dedupe nếu đã cache sẵn.
   const flashQ = useQuery({
@@ -1166,6 +1173,8 @@ export default function ProductDetailPage() {
 
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && <PdpIngredients items={p.ingredients} />}
+
+      <PdpOriginGuide view={originView} onOpenMap={(id) => navigate(`/brand-story?brand=${encodeURIComponent(id)}`)} />
 
       {/* Dải câu chuyện chỉ khi sản phẩm có câu chuyện riêng đang bật (kịch bản mẫu hay tự sinh lặp lại khối Thành phần). Nút mua nằm ở thanh dưới nên dải không có nút/khung toàn màn riêng. */}
       {storyProduct && (

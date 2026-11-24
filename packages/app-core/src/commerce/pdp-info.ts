@@ -15,6 +15,7 @@ export const PDP_BLOCK_ORDER = [
   'shipping', // Ưu đãi, Vận chuyển, lưu ý
   'benefits', // mô tả ngắn (lợi ích) + chứng nhận
   'ingredients',
+  'origin', // "Nguồn gốc & cách dùng" gập sẵn: xuất xứ, cách dùng/bảo quản chủ hàng viết trong mô tả, hạn dùng/số lô (`pdpOriginView`)
   'story', // chỉ khi sản phẩm có câu chuyện riêng được bật
   'description',
   'addons', // MỘT khối mua kèm: combo thật > FBT > khách thường mua cùng

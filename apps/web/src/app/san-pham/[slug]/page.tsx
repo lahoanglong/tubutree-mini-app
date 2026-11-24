@@ -46,6 +46,8 @@ import { PdpRefillOfferBlock } from './pdp-refill-offer';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating, PdpRefillLandingLink } from './pdp-sections';
 import { PdpStory } from './pdp-story';
+import { PdpOriginGuide } from './pdp-origin-guide';
+import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
 import { PdpEco } from '@/components/eco/pdp-eco';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -118,6 +120,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fulfillerText = pdpFulfillerText(product);
   const unavailableText = pdpUnavailableText(product);
   const originLink = pdpOriginLink(product.brand);
+  const originView = pdpOriginView(product, { originChip: originLink !== null });
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
   const fulfillerIsTubu = fulfillerText === 'Tubu Tree giao hàng';
   const retailOnly = isRetailOnly(product);
@@ -329,6 +332,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <div data-testid="pdp-below-cols" className="min-w-0 lg:grid lg:grid-flow-row-dense lg:grid-cols-2 lg:items-start lg:gap-x-8">
               <div className={`min-w-0 empty:hidden ${hasDescription ? '' : 'lg:col-span-2'}`}>
                 <PdpIngredients ingredients={product.ingredients} />
+              </div>
+              {/* Gập sẵn một dòng, cả hàng ở lg: lưới xếp dày nên Mô tả vẫn lấp ô cạnh Thành phần ở hàng trên. */}
+              <div className="min-w-0 empty:hidden lg:col-span-2">
+                <PdpOriginGuide view={originView} />
               </div>
               <div className="min-w-0 empty:hidden lg:col-span-2">
                 <PdpStory product={product} />
