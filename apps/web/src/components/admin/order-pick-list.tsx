@@ -115,8 +115,12 @@ function OrderSlip({ o, index, count }: { o: PickOrder; index: number; count: nu
   );
 }
 
-function PickListBody({ data }: { data: PickListResponse }) {
+/** Lý do bị loại hiện tối đa chừng này dòng, phần còn lại gộp một dòng: in cả bộ lọc chưa lọc trạng thái có thể loại hàng trăm đơn đã giao. */
+const EXCLUDED_SHOWN = 20;
+
+function PickListBody({ data, notice }: { data: PickListResponse; notice?: string }) {
   const n = data.orderCount;
+  const hidden = data.excluded.length - EXCLUDED_SHOWN;
   return (
     <>
       <header className="border-b border-stone-300 pb-2">
@@ -125,14 +129,22 @@ function PickListBody({ data }: { data: PickListResponse }) {
           {data.totalUnits} món bán{data.giftUnits > 0 ? ` + ${data.giftUnits} quà 0đ` : ''} · in lúc {formatDateTime(data.generatedAt)}
         </p>
       </header>
+      {notice && (
+        <div className="mt-3" data-pick-notice>
+          <Notice tone="warning" role="alert">
+            {notice}
+          </Notice>
+        </div>
+      )}
       {data.excluded.length > 0 && (
         <div className="mt-3" data-pick-excluded>
           <Notice tone="warning" role="alert">
             <p className="font-semibold">Không in {data.excluded.length} đơn:</p>
             <ul className="mt-1 list-disc pl-4">
-              {data.excluded.map((e) => (
+              {data.excluded.slice(0, EXCLUDED_SHOWN).map((e) => (
                 <li key={e.id}>{e.reason}</li>
               ))}
+              {hidden > 0 && <li>… và {hidden} đơn khác (đã huỷ, đã rời kho hoặc chưa trả tiền).</li>}
             </ul>
           </Notice>
         </div>
@@ -163,10 +175,12 @@ function PickListBody({ data }: { data: PickListResponse }) {
                     <td className="py-1.5 pr-2">
                       <span className="break-words">{lineName(r)}</span>
                       {r.isGift && <span className="ml-1 rounded-full border border-stone-450 px-1.5 text-[10px] font-semibold">Quà 0đ</span>}
-                      <div className="text-[11px] text-stone-500">
-                        {r.sku ?? 'Chưa có mã SKU'}
-                        <Backordered qty={r.backorderedQty} />
-                      </div>
+                      {!r.redeemed && (
+                        <div className="text-[11px] text-stone-500">
+                          {r.sku ?? 'Chưa có mã SKU'}
+                          <Backordered qty={r.backorderedQty} />
+                        </div>
+                      )}
                     </td>
                     <td className="py-1.5 text-right text-sm font-bold">{r.quantity}</td>
                     <td className="py-1.5 text-right">{r.orderCount}</td>
@@ -191,9 +205,9 @@ function PickListBody({ data }: { data: PickListResponse }) {
 
 /**
  * Lớp phủ toàn màn hình xem trước rồi in phiếu soạn hàng (A4) cho các đơn `ids`. Chỉ đọc: không đổi trạng thái đơn nào.
- * Đơn đã huỷ/đã hoàn/gian hàng tự giao không vào phiếu, lý do hiện ở đầu phiếu (cả bản in).
+ * Đơn kho không soạn được (đã huỷ/hoàn, đã rời kho, chờ tiền, gian hàng tự giao) không vào phiếu, lý do hiện ở đầu phiếu (cả bản in).
  */
-export function PickListSheet({ ids, onClose }: { ids: readonly string[]; onClose: () => void }) {
+export function PickListSheet({ ids, onClose, notice }: { ids: readonly string[]; onClose: () => void; notice?: string }) {
   const titleId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<PickListResponse | null>(null);
@@ -281,7 +295,7 @@ export function PickListSheet({ ids, onClose }: { ids: readonly string[]; onClos
             </button>
           </div>
         ) : data ? (
-          <PickListBody data={data} />
+          <PickListBody data={data} notice={notice} />
         ) : (
           <p role="status" className="text-sm text-stone-600">
             Đang soạn phiếu cho {ids.length} đơn…
@@ -295,22 +309,28 @@ export function PickListSheet({ ids, onClose }: { ids: readonly string[]; onClos
 
 /**
  * Nút "In phiếu soạn (N đơn)" ở thanh công cụ tab Đơn hàng: in MỌI đơn khớp bộ lọc đang xem (không chỉ trang này), tối đa
- * `PICK_LIST_MAX`. Bộ lọc nhiều hơn thì báo lọc hẹp lại, không in một phần.
+ * `PICK_LIST_MAX`. Bộ lọc nhiều hơn thì báo lọc hẹp lại, không in một phần. Đơn không soạn được (đã giao, chờ tiền…) máy chủ tự loại.
  */
 export function PickListFilterButton({ filter, total, disabled }: { filter: PickListFilter; total: number | undefined; disabled?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [ids, setIds] = useState<string[] | null>(null);
-  const close = useCallback(() => setIds(null), []);
+  const [open, setOpen] = useState<{ ids: string[]; notice?: string } | null>(null);
+  const close = useCallback(() => setOpen(null), []);
 
-  const open = async () => {
+  const start = async () => {
     setMsg(null);
     setBusy(true);
     try {
       const r = await collectFilterOrderIds(filter);
       if (r.tooMany) setMsg(`Bộ lọc đang có ${r.total} đơn, mỗi lượt in tối đa ${PICK_LIST_MAX} đơn. Lọc theo trạng thái hoặc ngày đặt rồi in lại.`);
       else if (r.ids.length === 0) setMsg('Không có đơn nào khớp bộ lọc để in.');
-      else setIds(r.ids);
+      else
+        setOpen({
+          ids: r.ids,
+          ...(r.complete
+            ? {}
+            : { notice: 'Danh sách đơn đổi ngay lúc gom (có đơn vừa đổi trạng thái hoặc đơn mới vào): phiếu này có thể thiếu đơn. Đóng phiếu rồi bấm in lại để chắc đủ đơn.' }),
+        });
     } catch (e) {
       setMsg(actionErrorText(e));
     } finally {
@@ -323,7 +343,7 @@ export function PickListFilterButton({ filter, total, disabled }: { filter: Pick
       <button
         type="button"
         data-pick-filter
-        onClick={() => void open()}
+        onClick={() => void start()}
         disabled={busy || disabled || !total}
         className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
         title={`In phiếu soạn hàng cho mọi đơn khớp bộ lọc (tối đa ${PICK_LIST_MAX} đơn)`}
@@ -336,7 +356,7 @@ export function PickListFilterButton({ filter, total, disabled }: { filter: Pick
           {msg}
         </p>
       )}
-      {ids && <PickListSheet ids={ids} onClose={close} />}
+      {open && <PickListSheet ids={open.ids} notice={open.notice} onClose={close} />}
     </>
   );
 }

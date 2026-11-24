@@ -1,5 +1,5 @@
 import { maskPhoneOrNull, maskVnPhonesInText } from '../../common/mask-pii';
-import { pancakePaymentState, type PancakePaymentState } from '../integrations/pancake/pancake-order-body';
+import { GIFT_NAME_MAX, pancakePaymentState, sanitizeCustomerText, type PancakePaymentState } from '../integrations/pancake/pancake-order-body';
 import { orderStatusLabelVi } from './order-transition';
 
 /** Trần một lượt in: 200 mã đơn vẫn nằm gọn trong giới hạn dòng yêu cầu 8 KB của Apache (mã đơn cuid ~25 ký tự). */
@@ -41,6 +41,8 @@ export interface PickLine {
   quantity: number;
   /** Phần chưa có hàng thật (đơn đại lý đặt vượt tồn), kho chưa nhặt được. */
   backorderedQty: number;
+  /** Quà đổi điểm gắn vào đơn: `sku` là mã QG của lượt đổi ở phiếu từng đơn, null ở Phần 1 (gộp theo tên quà). */
+  redeemed: boolean;
 }
 
 /** Một dòng của Phần 1: một biến thể, hàng bán và quà 0đ tách hai dòng để kho không lấy nhầm hàng tặng vào phần bán. */
@@ -101,11 +103,24 @@ export interface PickListResponse {
 /** Dòng quà: cờ `isGift` (quà mốc giỏ) hoặc đơn giá 0đ. Cả hai đều không tính tiền khách nên in tách khỏi hàng bán. */
 export const isGiftLine = (i: Pick<PickSourceItem, 'isGift' | 'unitPrice'>) => i.isGift || i.unitPrice === 0;
 
-/** Lý do không đưa đơn vào phiếu; null = in. Đơn đã huỷ/đã hoàn không còn hàng đi, đơn gian hàng tự giao không qua kho Tubu. */
-export function pickExclusionReason(o: Pick<PickSourceOrder, 'code' | 'status' | 'fulfiller'>): string | null {
+/** Quà hiện vật 0đ khách đổi bằng điểm rồi gắn vào đơn (`WasteGiftRedemption.attachedOrderId`): không phải dòng đơn, Pancake ghi ở ghi chú. */
+export interface PickRedeemedGift {
+  code: string | null;
+  giftName: string;
+}
+
+/**
+ * Lý do không đưa đơn vào phiếu; null = in. Phiếu chỉ gồm đơn kho soạn được ngay (Đã xác nhận, Đang đóng gói): đơn đã huỷ/đã hoàn
+ * không còn hàng đi, đơn đang giao/đã giao đã rời kho (in lại là nhặt hàng hai lần), đơn còn chờ khách trả tiền thì Pancake giữ lại
+ * chưa giao, đơn gian hàng tự giao không qua kho Tubu.
+ */
+export function pickExclusionReason(o: Pick<PickSourceOrder, 'code' | 'status' | 'fulfiller'>, state: PancakePaymentState): string | null {
   if (o.status === 'CANCELLED') return `Đơn ${o.code} đã huỷ: không soạn, không đóng gói.`;
   if (o.status === 'RETURNED') return `Đơn ${o.code} đã hoàn: không soạn, không đóng gói.`;
+  if (o.status === 'SHIPPING' || o.status === 'DELIVERED') return `Đơn ${o.code} ${o.status === 'SHIPPING' ? 'đang giao' : 'đã giao'}: hàng đã rời kho, không soạn lại.`;
   if (o.fulfiller === 'MERCHANT') return `Đơn ${o.code} do gian hàng đối tác tự giao, kho Tubu không đóng gói.`;
+  if (o.status === 'PENDING_PAYMENT' || state === 'AWAITING_TRANSFER' || state === 'AWAITING_GATEWAY')
+    return `Đơn ${o.code} chờ khách thanh toán: chưa soạn, chưa giao.`;
   return null;
 }
 
@@ -122,17 +137,20 @@ function addressOf(raw: unknown): { recipient: string; phone: string; line: stri
 
 const viCompare = (a: string, b: string) => a.localeCompare(b, 'vi');
 
+export interface PickListLookups {
+  skuByVariation: ReadonlyMap<string, string>;
+  /** Id đơn đại lý ghi công nợ (có dòng sổ công nợ `refType = ORDER`). */
+  onCredit: ReadonlySet<string>;
+  /** Quà đổi điểm theo id đơn, đúng thứ tự khách đổi. */
+  redeemedGifts: ReadonlyMap<string, readonly PickRedeemedGift[]>;
+  now: Date;
+}
+
 /**
  * Dựng phiếu soạn hàng từ các đơn đã đọc. Thứ tự phiếu từng đơn giữ đúng thứ tự `ids` người bấm gửi; mã gửi trùng (id và mã đơn
- * của cùng một đơn) chỉ in một lần. `onCredit` là id đơn đại lý ghi công nợ (có dòng sổ công nợ `refType = ORDER`).
+ * của cùng một đơn) chỉ in một lần.
  */
-export function buildPickList(
-  ids: readonly string[],
-  found: readonly PickSourceOrder[],
-  skuByVariation: ReadonlyMap<string, string>,
-  onCredit: ReadonlySet<string>,
-  now: Date,
-): PickListResponse {
+export function buildPickList(ids: readonly string[], found: readonly PickSourceOrder[], { skuByVariation, onCredit, redeemedGifts, now }: PickListLookups): PickListResponse {
   const byKey = new Map<string, PickSourceOrder>();
   for (const o of found) {
     byKey.set(o.id, o);
@@ -150,6 +168,7 @@ export function buildPickList(
     variationName: i.variationName,
     quantity: i.quantity,
     backorderedQty: i.backorderedQty,
+    redeemed: false,
   });
 
   for (const id of ids) {
@@ -160,7 +179,8 @@ export function buildPickList(
     }
     if (seen.has(o.id)) continue;
     seen.add(o.id);
-    const reason = pickExclusionReason(o);
+    const state = pancakePaymentState(o, onCredit.has(o.id));
+    const reason = pickExclusionReason(o, state);
     if (reason) {
       excluded.push({ id, code: o.code, status: o.status, reason });
       continue;
@@ -168,20 +188,32 @@ export function buildPickList(
 
     const items: PickLine[] = [];
     const gifts: PickLine[] = [];
-    for (const i of o.items) {
-      const gift = isGiftLine(i);
-      (gift ? gifts : items).push(line(i));
-      const key = `${i.variationId}|${gift ? 'gift' : 'sale'}`;
-      const row = rows.get(key) ?? { ...line(i), quantity: 0, backorderedQty: 0, isGift: gift, orderCount: 0, orders: new Set<string>() };
-      row.quantity += i.quantity;
-      row.backorderedQty += i.backorderedQty;
+    const add = (key: string, l: PickLine, gift: boolean) => {
+      (gift ? gifts : items).push(l);
+      const base = l.redeemed ? { ...l, variationId: key, sku: null } : l;
+      const row = rows.get(key) ?? { ...base, quantity: 0, backorderedQty: 0, isGift: gift, orderCount: 0, orders: new Set<string>() };
+      row.quantity += l.quantity;
+      row.backorderedQty += l.backorderedQty;
       row.orders.add(o.id);
       row.orderCount = row.orders.size;
       rows.set(key, row);
+    };
+    for (const i of o.items) {
+      const gift = isGiftLine(i);
+      add(`${i.variationId}|${gift ? 'gift' : 'sale'}`, line(i), gift);
+    }
+    // Quà đổi điểm không có biến thể: gộp Phần 1 theo tên quà (đã làm sạch như ghi chú Pancake), mã QG của từng lượt đổi in ở phiếu từng đơn.
+    for (const g of redeemedGifts.get(o.id) ?? []) {
+      const name = sanitizeCustomerText(g.giftName, GIFT_NAME_MAX) ?? 'Quà đổi điểm';
+      add(
+        `redeem|${name}`,
+        { variationId: `redeem:${g.code ?? name}`, sku: g.code, productName: name, variationName: 'Quà đổi điểm', quantity: 1, backorderedQty: 0, redeemed: true },
+        true,
+      );
     }
 
     const addr = addressOf(o.shippingAddress);
-    const state = pancakePaymentState(o, onCredit.has(o.id));
+    const note = sanitizeCustomerText(o.note);
     orders.push({
       id: o.id,
       code: o.code,
@@ -192,7 +224,7 @@ export function buildPickList(
       recipient: addr.recipient,
       phoneMasked: maskPhoneOrNull(addr.phone),
       address: addr.line,
-      note: o.note ? maskVnPhonesInText(o.note) : null,
+      note: note ? maskVnPhonesInText(note) : null,
       hasRecyclingPickup: o.hasRecyclingPickup,
       items,
       gifts,

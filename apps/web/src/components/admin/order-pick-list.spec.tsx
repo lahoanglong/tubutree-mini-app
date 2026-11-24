@@ -21,9 +21,9 @@ const PICK: PickListResponse = {
   totalUnits: 6,
   giftUnits: 1,
   summary: [
-    { variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 5, backorderedQty: 0, isGift: false, orderCount: 2 },
-    { variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, isGift: false, orderCount: 1 },
-    { variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, isGift: true, orderCount: 1 },
+    { variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 5, backorderedQty: 0, redeemed: false, isGift: false, orderCount: 2 },
+    { variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, redeemed: false, isGift: false, orderCount: 1 },
+    { variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, redeemed: false, isGift: true, orderCount: 1 },
   ],
   orders: [
     {
@@ -38,8 +38,8 @@ const PICK: PickListResponse = {
       address: '12 Lê Lợi, Phường Bến Thành, TP Hồ Chí Minh',
       note: 'Gọi trước khi giao',
       hasRecyclingPickup: false,
-      items: [{ variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 2, backorderedQty: 0 }],
-      gifts: [{ variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0 }],
+      items: [{ variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 2, backorderedQty: 0, redeemed: false }],
+      gifts: [{ variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, redeemed: false }],
       payment: { method: 'COD', state: 'COD', total: 245_000, collect: 245_000 },
     },
     {
@@ -55,8 +55,8 @@ const PICK: PickListResponse = {
       note: null,
       hasRecyclingPickup: true,
       items: [
-        { variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 3, backorderedQty: 0 },
-        { variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0 },
+        { variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 3, backorderedQty: 0, redeemed: false },
+        { variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, redeemed: false },
       ],
       gifts: [],
       payment: { method: 'WALLET', state: 'PAID', total: 410_000, collect: 0 },
@@ -125,6 +125,27 @@ describe('PickListSheet', () => {
     const warn = root.querySelector('[data-pick-excluded]')!;
     expect(warn.textContent).toContain('Không in 1 đơn:');
     expect(warn.textContent).toContain('Đơn TB0003 đã huỷ');
+  });
+
+  it('quá 20 đơn bị loại: hiện 20 lý do và gộp phần còn lại một dòng', async () => {
+    const excluded = Array.from({ length: 23 }, (_, i) => ({ id: `x${i}`, code: `TB9${i}`, status: 'DELIVERED', reason: `Đơn TB9${i} đã giao: hàng đã rời kho, không soạn lại.` }));
+    await open(['id-1'], { '/admin/orders/pick-list': { body: { ...PICK, excluded } } });
+    const items = [...sheet()!.querySelectorAll('[data-pick-excluded] li')].map((li) => li.textContent);
+    expect(items).toHaveLength(21);
+    expect(items[0]).toBe('Đơn TB90 đã giao: hàng đã rời kho, không soạn lại.');
+    expect(items[20]).toBe('… và 3 đơn khác (đã huỷ, đã rời kho hoặc chưa trả tiền).');
+    expect(sheet()!.textContent).toContain('Không in 23 đơn:');
+  });
+
+  it('quà đổi điểm: Phần 1 không in dòng mã SKU, phiếu từng đơn in mã QG', async () => {
+    const gift = { variationId: 'redeem|Bình tre', sku: null, productName: 'Bình tre', variationName: 'Quà đổi điểm', quantity: 2, backorderedQty: 0, redeemed: true, isGift: true, orderCount: 2 };
+    const slipGift = { variationId: 'redeem:QG123', sku: 'QG123', productName: 'Bình tre', variationName: 'Quà đổi điểm', quantity: 1, backorderedQty: 0, redeemed: true };
+    const body = { ...PICK, summary: [...PICK.summary, gift], orders: [{ ...PICK.orders[0]!, gifts: [slipGift] }, PICK.orders[1]!] };
+    await open(['id-1', 'id-2'], { '/admin/orders/pick-list': { body } });
+    const row = sheet()!.querySelector<HTMLElement>('[data-pick-row="redeem|Bình tre"]')!;
+    expect(row.textContent).toContain('Bình tre · Quà đổi điểm');
+    expect(row.textContent).not.toContain('Chưa có mã SKU');
+    expect(sheet()!.querySelector('[data-pick-order="TB0001"] [data-pick-gifts]')!.textContent).toContain('QG123');
   });
 
   it('khổ in A4: chỉ in lớp phủ, Phần 2 sang trang mới, phiếu từng đơn không bị cắt', async () => {
@@ -203,8 +224,39 @@ describe('collectFilterOrderIds', () => {
   it('bộ lọc quá 200 đơn: không trả mã nào, chỉ đọc một trang', async () => {
     const m = mockFetch({ 'page=1&': listPage(['id-1'], 201) });
     vi.stubGlobal('fetch', m.fn);
-    expect(await collectFilterOrderIds({})).toEqual({ ids: [], total: 201, tooMany: true });
+    expect(await collectFilterOrderIds({})).toEqual({ ids: [], total: 201, tooMany: true, complete: true });
     expect(m.calls).toHaveLength(1);
+  });
+
+  const first100 = Array.from({ length: 100 }, (_, i) => `id-${i}`);
+  // Đơn id-5 rời bộ lọc giữa hai lần đọc: trang 2 trượt một chỗ, id-100 không bao giờ được đọc; số mã gom (149) vẫn bằng tổng mới.
+  const shiftedPage2 = listPage(Array.from({ length: 49 }, (_, i) => `id-${101 + i}`), 149);
+
+  it('danh sách trượt giữa hai trang: gom lại một lần; lần sau đủ thì dùng lần sau', async () => {
+    let round = 0;
+    const m = mockFetch({
+      'page=1&': () => {
+        round++;
+        return round === 1 ? listPage(first100, 150) : listPage([...first100.filter((id) => id !== 'id-5'), 'id-100'], 149);
+      },
+      'page=2&': shiftedPage2,
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = await collectFilterOrderIds({ status: 'CONFIRMED' });
+    expect(m.calls).toHaveLength(4);
+    expect(r.complete).toBe(true);
+    expect(r.ids).toContain('id-100');
+    expect(r.ids).not.toContain('id-5');
+    expect(r.ids).toHaveLength(149);
+  });
+
+  it('vẫn trượt sau khi gom lại: báo chưa đủ', async () => {
+    const m = mockFetch({ 'page=1&': listPage(first100, 150), 'page=2&': shiftedPage2 });
+    vi.stubGlobal('fetch', m.fn);
+    const r = await collectFilterOrderIds({ status: 'CONFIRMED' });
+    expect(m.calls).toHaveLength(4);
+    expect(r.complete).toBe(false);
+    expect(r.ids).not.toContain('id-100');
   });
 });
 
@@ -222,6 +274,23 @@ describe('PickListFilterButton', () => {
     expect(sheet()).not.toBeNull();
     click(sheet()!.querySelector('[data-pick-close]'));
     expect(sheet()).toBeNull();
+  });
+
+  it('danh sách vẫn trượt: vẫn mở phiếu nhưng cảnh báo in lại (cả bản in)', async () => {
+    const first100 = Array.from({ length: 100 }, (_, i) => `id-${i}`);
+    const m = mockFetch({
+      'page=1&': listPage(first100, 150),
+      'page=2&': listPage(Array.from({ length: 49 }, (_, i) => `id-${101 + i}`), 149),
+      '/admin/orders/pick-list': { body: PICK },
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<PickListFilterButton filter={{}} total={150} />);
+    mounted.push(r);
+    click(r.container.querySelector('[data-pick-filter]'));
+    await flush();
+    expect(sheet()!.querySelector('[data-pick-notice]')!.textContent).toBe(
+      'Danh sách đơn đổi ngay lúc gom (có đơn vừa đổi trạng thái hoặc đơn mới vào): phiếu này có thể thiếu đơn. Đóng phiếu rồi bấm in lại để chắc đủ đơn.',
+    );
   });
 
   it('quá 200 đơn: báo lọc hẹp lại, không mở phiếu', async () => {
