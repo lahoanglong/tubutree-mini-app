@@ -1,4 +1,5 @@
 import { apiDownload, apiFetch } from './client-api';
+import { vnTodayKey } from './admin-reports';
 
 export interface RevenueTotals {
   orders: number;
@@ -68,6 +69,12 @@ export const downloadPayoutsCsv = (r: ReportRange, status?: PayoutExportStatus) 
 /** Chiết khấu thanh toán đã xoá nợ đại lý (Nợ TK 635 / Có TK 131) theo ngày ghi sổ. */
 export const downloadPaymentDiscountsCsv = (r: ReportRange) =>
   apiDownload(`/admin/reports/exports/payment-discounts?${rangeQuery(r)}`, `chiet-khau-thanh-toan-${r.from}-${r.to}.csv`);
+
+/**
+ * Hoa hồng CTV theo link: mỗi link một dòng (lượt bấm, đơn, doanh số, hoa hồng theo trạng thái) và dòng "Không qua link" của từng người. Số lũy kế
+ * tới lúc tải, không theo khoảng ngày. Tên file theo ngày tải (giờ VN) như máy chủ đặt.
+ */
+export const downloadCtvLinksCsv = () => apiDownload('/admin/reports/exports/ctv-links', `hoa-hong-ctv-theo-link-${vnTodayKey()}.csv`);
 
 /** Khoản hoàn tiền khách theo ngày tạo khoản hoàn. */
 export const downloadRefundsCsv = (r: ReportRange, status?: RefundExportStatus) =>

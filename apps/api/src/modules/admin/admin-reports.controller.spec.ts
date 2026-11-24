@@ -20,6 +20,7 @@ describe('AdminReportsController', () => {
     exportPayouts: ['KE_TOAN'],
     exportRefunds: ['KE_TOAN'],
     exportPaymentDiscounts: ['KE_TOAN'],
+    exportCtvLinks: ['KE_TOAN'],
   };
 
   it('@Roles ADMIN ở lớp; mỗi route mở đúng một nhóm việc (@AllowStaff) theo bảng', () => {
@@ -109,7 +110,9 @@ describe('AdminReportsController', () => {
     expect(recordExport).toHaveBeenLastCalledWith('u3', 'exports/payouts', { ...q, status: 'PAID' }, expect.any(Number));
     await ctrl.exportRefunds({ ...q, kind: 'RETURN' } as never, mkRes(), { sub: 'u4', role: 'ADMIN' } as never);
     expect(recordExport).toHaveBeenLastCalledWith('u4', 'exports/refunds', { ...q, status: undefined, kind: 'RETURN' }, expect.any(Number));
-    expect(recordExport).toHaveBeenCalledTimes(4);
+    await ctrl.exportCtvLinks(mkRes(), { sub: 'u5', role: 'STAFF', staffPermissions: ['KE_TOAN'] } as never);
+    expect(recordExport).toHaveBeenLastCalledWith('u5', 'exports/ctv-links', {}, 0);
+    expect(recordExport).toHaveBeenCalledTimes(5);
   });
 
   it('GET revenue chuyển khoảng ngày cho báo cáo', async () => {
