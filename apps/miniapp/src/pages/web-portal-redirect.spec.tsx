@@ -16,9 +16,12 @@ const copyText = vi.hoisted(() => vi.fn());
 vi.mock('../utils/clipboard', () => ({ copyText }));
 
 import WebPortalRedirectPage from './web-portal-redirect';
-import { WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreenKey } from './web-portal-screens';
+import { WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreen, type WebPortalScreenKey } from './web-portal-screens';
 
 const KEYS = Object.keys(WEB_PORTAL_SCREENS) as WebPortalScreenKey[];
+/** Màn mở được trong webview Zalo; màn `browserOnly` (chỉ /dealer) có khối kiểm riêng ở cuối tệp. */
+const OPENABLE = KEYS.filter((key) => !(WEB_PORTAL_SCREENS[key] as WebPortalScreen).browserOnly);
+const DEALER_NOTE = 'Đặt hàng sỉ và thanh toán đơn đại lý trên trình duyệt (Chrome, Safari) tại tubutree.com/dai-ly. Mini App chỉ nhận đơn lẻ.';
 
 beforeEach(() => {
   routerSearch.value = '';
@@ -28,7 +31,12 @@ beforeEach(() => {
 });
 
 describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
-  it.each(KEYS)('%s: một h1 là tiêu đề màn, nói rõ làm đầy đủ trên website và hiện link', (key) => {
+  it('bảy màn mở được trong Zalo, chỉ /dealer là màn chỉ mở bằng trình duyệt', () => {
+    expect(KEYS.filter((key) => !OPENABLE.includes(key))).toEqual(['/dealer']);
+    expect(OPENABLE).toHaveLength(7);
+  });
+
+  it.each(OPENABLE)('%s: một h1 là tiêu đề màn, nói rõ làm đầy đủ trên website và hiện link', (key) => {
     const { title, audience } = WEB_PORTAL_SCREENS[key];
     render(<WebPortalRedirectPage screen={key} />);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
@@ -42,7 +50,7 @@ describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Mở trên website', 'Sao chép liên kết']);
   });
 
-  it.each(KEYS)('%s: nút chính cao tối thiểu 48px khai báo và mở đúng link web', async (key) => {
+  it.each(OPENABLE)('%s: nút chính cao tối thiểu 48px khai báo và mở đúng link web', async (key) => {
     render(<WebPortalRedirectPage screen={key} />);
     const open = screen.getByRole('button', { name: 'Mở trên website' });
     expect(parseInt(open.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
@@ -113,5 +121,45 @@ describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
     routerSearch.value = '?tab=orders&khoi=x';
     render(<WebPortalRedirectPage screen="/admin/community" />);
     expect(screen.getByText('https://tubutree.com/admin?tab=community&khoi=x')).toBeInTheDocument();
+  });
+});
+
+// PO A3: web /dai-ly có thanh toán đơn sỉ, nên Mini App không mở nó trong webview Zalo (hồ sơ duyệt Zalo không có lối tới trang trả tiền ngoài).
+describe('WebPortalRedirectPage — /dealer chỉ mở bằng trình duyệt', () => {
+  it('một h1 Kênh đại lý, câu hướng dẫn mở bằng trình duyệt, hiện link; không có câu "thao tác đầy đủ trên website"', () => {
+    render(<WebPortalRedirectPage screen="/dealer" />);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Kênh đại lý');
+    expect(screen.getByText(DEALER_NOTE)).toBeInTheDocument();
+    expect(screen.getByText('https://tubutree.com/dai-ly')).toBeInTheDocument();
+    expect(screen.queryByText(/thao tác đầy đủ trên website/)).toBeNull();
+  });
+
+  it('chỉ một nút: Sao chép liên kết là nút chính (primary, cao ≥ 44px); không có nút Mở trên website', () => {
+    render(<WebPortalRedirectPage screen="/dealer" />);
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sao chép liên kết']);
+    expect(screen.queryByRole('button', { name: 'Mở trên website' })).toBeNull();
+    const copy = screen.getByRole('button', { name: 'Sao chép liên kết' });
+    expect(copy.className).toContain('zaui-btn-primary');
+    expect(parseInt(copy.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+  });
+
+  it('Sao chép liên kết chép đúng link /dai-ly, báo thành công, không bao giờ gọi openWebPortal', async () => {
+    render(<WebPortalRedirectPage screen="/dealer" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép liên kết' }));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/dai-ly'));
+    await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép liên kết', type: 'success' }));
+    expect(openWebPortal).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Chưa mở được website/)).toBeNull();
+  });
+
+  it('link cũ có query vô hại: link hiện và chép giữ query, câu hướng dẫn chỉ nêu tubutree.com/dai-ly', async () => {
+    routerSearch.value = '?tab=bang-gia&token=abc';
+    render(<WebPortalRedirectPage screen="/dealer" />);
+    expect(screen.getByText('https://tubutree.com/dai-ly?tab=bang-gia')).toBeInTheDocument();
+    expect(screen.getByText(DEALER_NOTE)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép liên kết' }));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/dai-ly?tab=bang-gia'));
+    expect(openWebPortal).not.toHaveBeenCalled();
   });
 });

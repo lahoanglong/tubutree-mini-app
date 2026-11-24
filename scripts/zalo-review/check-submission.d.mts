@@ -30,7 +30,8 @@ export const FILES: Record<
   | 'usersController'
   | 'consentWebhook'
   | 'checkoutRules'
-  | 'webPortalScreens',
+  | 'webPortalScreens'
+  | 'webPortalRedirect',
   string
 >;
 export const SCOPES_OF_API: Record<string, string[]>;
@@ -39,6 +40,7 @@ export const ALLOWED_HOSTS: Record<string, string>;
 export const PAYMENT_HOSTS: string[];
 export const ALLOWED_PAYMENT_METHODS: string[];
 export const WEB_SHOPPING_PATHS: string[];
+export const BROWSER_ONLY_WEB_PATHS: string[];
 export function isShippedSource(path: string): boolean;
 export function diskFiles(root: string): SubmissionFiles;
 export function checkSubmission(files: SubmissionFiles): { checks: SubmissionCheck[]; failed: number };

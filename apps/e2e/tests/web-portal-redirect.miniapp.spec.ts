@@ -1,15 +1,15 @@
+import type { Page } from '@playwright/test';
 import { test, expect, makeUser, mockSession } from './support/mock-api';
 
 /**
  * Zalo Mini App (W177): tám màn quản trị, đối tác và nhân sự đã rời gói Mini App. Mỗi đường dẫn giữ nguyên và hiện cùng một thẻ chuyển sang website
- * (apps/miniapp/src/pages/web-portal-redirect.tsx). Spec không mock API nào của tám màn cũ: nếu thẻ còn gọi API quản trị/đối tác, fixture `api`
+ * (apps/miniapp/src/pages/web-portal-redirect.tsx); riêng /dealer chỉ cho chép link sang trình duyệt (PO A3). Spec không mock API nào của tám màn cũ: nếu thẻ còn gọi API quản trị/đối tác, fixture `api`
  * báo lời gọi chưa mock và spec đỏ.
  */
 const SCREENS = [
   { route: '/admin', title: 'Quản trị Tubu Tree', url: 'https://tubutree.com/admin' },
   { route: '/admin/community', title: 'Kiểm duyệt cộng đồng', url: 'https://tubutree.com/admin?tab=community' },
   { route: '/storefront', title: 'Gian hàng của tôi', url: 'https://tubutree.com/ctv/gian-hang' },
-  { route: '/dealer', title: 'Kênh đại lý', url: 'https://tubutree.com/dai-ly' },
   { route: '/recycle/desk', title: 'Nhận hàng tại điểm', url: 'https://tubutree.com/doi-rac/quay' },
   { route: '/staff', title: 'Ca làm của tôi', url: 'https://tubutree.com/nhan-vien' },
   { route: '/brand-owner', title: 'Quản lý thương hiệu', url: 'https://tubutree.com/chu-thuong-hieu' },
@@ -17,6 +17,14 @@ const SCREENS = [
 ] as const;
 
 const WIDTHS = [375, 360, 320] as const;
+const DEALER_NOTE = 'Đặt hàng sỉ và thanh toán đơn đại lý trên trình duyệt (Chrome, Safari) tại tubutree.com/dai-ly. Mini App chỉ nhận đơn lẻ.';
+
+async function horizontalOverflow(page: Page) {
+  return page.evaluate(() => {
+    const scroller = document.querySelector('.zaui-page') as HTMLElement | null;
+    return Math.max(document.documentElement.scrollWidth - document.documentElement.clientWidth, scroller ? scroller.scrollWidth - scroller.clientWidth : 0);
+  });
+}
 
 for (const width of WIDTHS) {
   test.describe(`Thẻ chuyển sang website — ${width}px`, () => {
@@ -49,13 +57,35 @@ for (const width of WIDTHS) {
         expect(backBox.width).toBeGreaterThanOrEqual(44);
         expect(backBox.height).toBeGreaterThanOrEqual(44);
 
-        const overflow = await page.evaluate(() => {
-          const scroller = document.querySelector('.zaui-page') as HTMLElement | null;
-          return Math.max(document.documentElement.scrollWidth - document.documentElement.clientWidth, scroller ? scroller.scrollWidth - scroller.clientWidth : 0);
-        });
-        expect(overflow, `${route} tràn ngang ở ${width}px`).toBeLessThanOrEqual(0);
+        expect(await horizontalOverflow(page), `${route} tràn ngang ở ${width}px`).toBeLessThanOrEqual(0);
       });
     }
+
+    // PO A3: web /dai-ly có thanh toán đơn sỉ, Mini App chỉ cho chép link sang trình duyệt (không mở webview Zalo).
+    test('/dealer: chỉ mở bằng trình duyệt, không có nút Mở trên website, Sao chép liên kết là nút chính ≥44px, không tràn ngang', async ({ page, api }) => {
+      mockSession(api, makeUser({ id: 'u-portal', fullName: 'Đại lý thử' }));
+      await page.goto('/dealer');
+
+      await expect(page.getByRole('heading', { level: 1, name: 'Kênh đại lý' })).toBeVisible({ timeout: 15_000 });
+      const note = page.getByText(DEALER_NOTE, { exact: true });
+      await expect(note).toBeVisible();
+      await expect(page.getByText('https://tubutree.com/dai-ly', { exact: true })).toBeVisible();
+      await expect(page.getByText(/thao tác đầy đủ trên website/)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Mở trên website' })).toHaveCount(0);
+
+      const copy = page.getByRole('button', { name: 'Sao chép liên kết' });
+      await expect(copy).toBeVisible();
+      await expect(copy).toHaveClass(/zaui-btn-primary/);
+      const box = (await copy.boundingBox())!;
+      expect(box.height, `nút cao ${box.height}px`).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, 'nút tràn phải').toBeLessThanOrEqual(width);
+      const noteBox = (await note.boundingBox())!;
+      expect(noteBox.x + noteBox.width, 'câu hướng dẫn tràn phải').toBeLessThanOrEqual(width);
+
+      await expect(page.getByRole('button', { name: 'Quay lại' })).toHaveCount(1);
+      expect(await horizontalOverflow(page), `/dealer tràn ngang ở ${width}px`).toBeLessThanOrEqual(0);
+    });
   });
 }
 
@@ -76,6 +106,19 @@ test.describe('Thẻ chuyển sang website — hành vi nút', () => {
     await expect(page.getByText('https://tubutree.com/admin?tab=community&khoi=x', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
+  test('/dealer Sao chép liên kết: chép link /dai-ly, báo đã chép, ở nguyên trang Mini App', async ({ page, api, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
+    mockSession(api, makeUser({ id: 'u-portal' }));
+    await page.goto('/dealer');
+    await expect(page.getByRole('heading', { level: 1, name: 'Kênh đại lý' })).toBeVisible({ timeout: 15_000 });
+    const before = page.url();
+    await page.getByRole('button', { name: 'Sao chép liên kết' }).click();
+    await expect(page.getByText('Đã sao chép liên kết')).toBeVisible();
+    expect(page.url()).toBe(before);
+    const copied = await page.evaluate(() => navigator.clipboard.readText().catch(() => null));
+    if (copied !== null) expect(copied).toBe('https://tubutree.com/dai-ly');
+  });
+
   test('Sao chép liên kết: chép đúng link vào clipboard và báo "Đã sao chép liên kết"', async ({ page, api, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
     mockSession(api, makeUser({ id: 'u-portal' }));
@@ -90,8 +133,8 @@ test.describe('Thẻ chuyển sang website — hành vi nút', () => {
   // Lời báo "Chưa mở được website" khi SDK từ chối được kiểm ở web-portal-redirect.spec.tsx; ở đây SDK của dev server (mpWeb) nhận lệnh.
   test('Mở trên website: giao lệnh cho SDK, không đổi location của app và không hiện lời báo lỗi', async ({ page, api }) => {
     mockSession(api, makeUser({ id: 'u-portal' }));
-    await page.goto('/dealer');
-    await expect(page.getByRole('heading', { level: 1, name: 'Kênh đại lý' })).toBeVisible({ timeout: 15_000 });
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { level: 1, name: 'Quản trị Tubu Tree' })).toBeVisible({ timeout: 15_000 });
     const before = page.url();
     await page.getByRole('button', { name: 'Mở trên website' }).click();
     await expect(page.getByRole('button', { name: 'Mở trên website' })).toBeEnabled();

@@ -194,12 +194,30 @@ export function isWebPortalUrl(url: string): boolean {
 }
 
 /**
+ * Trang của cổng web có thanh toán (đơn sỉ đại lý): không bao giờ mở trong webview Zalo, kể cả khi màn gọi quên
+ * cờ `browserOnly` của `web-portal-screens.ts` (PO A3, duyệt Zalo). Gồm cả trang con (`/dai-ly/...`).
+ */
+export const BROWSER_ONLY_WEB_PATHS: readonly string[] = ['/dai-ly'];
+
+/** Đường dẫn so theo một dạng: giải mã `%xx`, gộp `//`, chữ thường, bỏ `/` cuối; link hỏng coi là trang chặn. */
+export function isBrowserOnlyWebUrl(url: string): boolean {
+  let path: string;
+  try {
+    path = decodeURIComponent(new URL(url).pathname);
+  } catch {
+    return true;
+  }
+  path = path.replace(/\/{2,}/g, '/').replace(/\/+$/, '').toLowerCase();
+  return BROWSER_ONLY_WEB_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
+/**
  * Mở màn quản trị / đối tác / nhân sự trên website trong webview Zalo. Trả `false` khi không mở được
- * (URL ngoài cổng web, chạy ngoài Zalo, SDK từ chối): không đổi `location` và không ném lỗi, để màn gọi
- * hiện lời hướng dẫn "Sao chép liên kết" thay vì đưa khách ra trang ngoài.
+ * (URL ngoài cổng web, trang chỉ mở bằng trình duyệt, chạy ngoài Zalo, SDK từ chối): không đổi `location`
+ * và không ném lỗi, để màn gọi hiện lời hướng dẫn "Sao chép liên kết" thay vì đưa khách ra trang ngoài.
  */
 export async function openWebPortal(url: string): Promise<boolean> {
-  if (!isWebPortalUrl(url)) return false;
+  if (!isWebPortalUrl(url) || isBrowserOnlyWebUrl(url)) return false;
   try {
     await openWebview({ url });
     return true;

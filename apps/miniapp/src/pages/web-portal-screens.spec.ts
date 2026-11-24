@@ -1,8 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import routeMap from '@tubutree/app-core/route-map.json';
-import { describe, expect, it } from 'vitest';
-import { WEB_PORTAL_BASE_URL, WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreenKey } from './web-portal-screens';
+import { describe, expect, it, vi } from 'vitest';
+import { BROWSER_ONLY_WEB_PATHS, isBrowserOnlyWebUrl } from '../services/zmp-bridge';
+import { WEB_PORTAL_BASE_URL, WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreen, type WebPortalScreenKey } from './web-portal-screens';
+
+// zmp-sdk đọc `window` lúc nạp; spec này chạy môi trường node và chỉ dùng hàm thuần của zmp-bridge.
+vi.mock('zmp-sdk/apis', () => ({}));
 
 const KEYS = Object.keys(WEB_PORTAL_SCREENS) as WebPortalScreenKey[];
 const APP_TSX = readFileSync(resolve(__dirname, '../components/app.tsx'), 'utf8');
@@ -39,6 +43,16 @@ describe('8 màn rời gói Mini App sang cổng web (W177)', () => {
     expect(audience.trim()).not.toBe('');
     expect(webPath.startsWith('/')).toBe(true);
     expect(webPortalUrl(key)).toBe(`https://tubutree.com${webPath}`);
+  });
+
+  it('chỉ /dealer có browserOnly: true, và mọi màn browserOnly là đúng các đường dẫn zmp-bridge chặn (PO A3)', () => {
+    const browserOnly = KEYS.filter((key) => (WEB_PORTAL_SCREENS[key] as WebPortalScreen).browserOnly === true);
+    expect(browserOnly).toEqual(['/dealer']);
+    expect(browserOnly.map((key) => WEB_PORTAL_SCREENS[key].webPath)).toEqual([...BROWSER_ONLY_WEB_PATHS]);
+  });
+
+  it.each(KEYS)('%s: link web bị zmp-bridge chặn khi và chỉ khi màn có browserOnly', (key) => {
+    expect(isBrowserOnlyWebUrl(webPortalUrl(key))).toBe((WEB_PORTAL_SCREENS[key] as WebPortalScreen).browserOnly === true);
   });
 
   it('cổng web là https://tubutree.com, không có dấu / ở cuối', () => {
