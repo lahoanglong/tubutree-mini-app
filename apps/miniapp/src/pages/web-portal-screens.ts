@@ -12,6 +12,12 @@ export interface WebPortalScreen {
   audience: string;
   /** Đường dẫn trên website, khớp dòng `miniapp → web` của `packages/app-core/src/route-map.json`. */
   webPath: string;
+  /**
+   * Trang web này có thanh toán (đơn sỉ đại lý trả bằng chuyển khoản trên web): Mini App không mở nó trong webview Zalo, chỉ cho chép link
+   * sang trình duyệt, để hồ sơ duyệt Zalo không có lối dẫn tới trang trả tiền ngoài Mini App (PO A3). `zmp-bridge.ts` cũng chặn đường dẫn
+   * này (`BROWSER_ONLY_WEB_PATHS`), `scripts/zalo-review/check-submission.mjs` kiểm cả hai chỗ.
+   */
+  browserOnly?: true;
 }
 
 /**
@@ -22,7 +28,7 @@ export const WEB_PORTAL_SCREENS = {
   '/admin': { title: 'Quản trị Tubu Tree', audience: 'Quản trị viên', webPath: '/admin' },
   '/admin/community': { title: viCommunity.moderation, audience: 'Quản trị viên', webPath: '/admin?tab=community' },
   '/storefront': { title: viStorefront.title, audience: 'Cộng tác viên', webPath: '/ctv/gian-hang' },
-  '/dealer': { title: 'Kênh đại lý', audience: 'Đại lý và người muốn đăng ký đại lý', webPath: '/dai-ly' },
+  '/dealer': { title: 'Kênh đại lý', audience: 'Đại lý và người muốn đăng ký đại lý', webPath: '/dai-ly', browserOnly: true },
   '/recycle/desk': { title: 'Nhận hàng tại điểm', audience: 'Nhân sự điểm nhận', webPath: '/doi-rac/quay' },
   '/staff': { title: 'Ca làm của tôi', audience: 'Nhân sự', webPath: '/nhan-vien' },
   '/brand-owner': { title: BRAND_OWNER_TITLE, audience: 'Chủ thương hiệu', webPath: '/chu-thuong-hieu' },

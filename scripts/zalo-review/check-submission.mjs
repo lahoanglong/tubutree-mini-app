@@ -10,7 +10,8 @@
  *   Điều khoản và Bảo mật, link chính sách điền trên console có trang web thật.
  * - Xoá tài khoản: đi được từ tab Cá nhân tới nút gửi yêu cầu xoá, và API có route nhận yêu cầu cùng webhook rút đồng ý của Zalo.
  * - Thanh toán: không có tên miền cổng thanh toán, đường dẫn mở app ngoài, link dựng tên miền lúc chạy, window.open hay đổi location ngoài
- *   zmp-bridge.ts, API zmp-sdk mở sang app khác; Mini App chỉ cho COD, chuyển khoản, Ví; cổng web không trỏ thẳng tới trang thanh toán web.
+ *   zmp-bridge.ts, API zmp-sdk mở sang app khác; Mini App chỉ cho COD, chuyển khoản, Ví; cổng web không trỏ thẳng tới trang thanh toán web;
+ *   trang web có thanh toán đơn đại lý (BROWSER_ONLY_WEB_PATHS) chỉ chép link sang trình duyệt, không mở trong webview Zalo.
  *
  * Quét mọi tệp của apps/miniapp/src cùng các tệp packages/app-core/src mà Mini App nạp (lần theo import). Đọc bằng bộ phân tích của
  * TypeScript nên chữ trong chú thích không tính. Không gọi mạng, không ghi tệp.
@@ -43,6 +44,7 @@ export const FILES = {
   consentWebhook: 'apps/api/src/modules/users/zalo-consent-webhook.controller.ts',
   checkoutRules: 'apps/miniapp/src/utils/checkout-rules.ts',
   webPortalScreens: 'apps/miniapp/src/pages/web-portal-screens.ts',
+  webPortalRedirect: 'apps/miniapp/src/pages/web-portal-redirect.tsx',
 };
 
 /** Bảng scope trong zmp-sdk 2.51.4 (apis/index.d.ts, bảng Scopes của authorize/getSetting): gọi API nào thì Zalo hỏi khách scope nào. */
@@ -100,6 +102,8 @@ export const PAYMENT_HOSTS = [
 export const ALLOWED_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET'];
 /** Trang mua hàng của web: cổng web trong Mini App không được trỏ thẳng tới đây. */
 export const WEB_SHOPPING_PATHS = ['/thanh-toan', '/gio-hang'];
+/** Trang web có thanh toán đơn sỉ đại lý (PO A3): Mini App chỉ cho chép link sang trình duyệt, không mở trong webview Zalo. */
+export const BROWSER_ONLY_WEB_PATHS = ['/dai-ly'];
 /** Host `openWebview` được gọi thẳng ngoài zmp-bridge.ts (link viết sẵn trong mã). */
 const DIRECT_WEBVIEW_HOSTS = new Set(['zalo.me', 'oa.zalo.me']);
 const short = (path) => path.replace(`${MINI_SRC}/`, '').replace(`${APP_CORE_SRC}/`, 'app-core/');
@@ -331,6 +335,224 @@ export function navigationFindings(path, sf, webviewNames = new Set(['openWebvie
     }
   });
   return found;
+}
+
+const coversPath = (paths, webPath) => {
+  const path = webPath.split('?')[0].replace(/\/{2,}/g, '/').replace(/\/+$/, '').toLowerCase();
+  return paths.some((p) => path === p || path.startsWith(`${p}/`));
+};
+
+const mentions = (node, names) => {
+  let hit = false;
+  walk(node, (n) => {
+    if (ts.isIdentifier(n) && names.has(n.text)) hit = true;
+  });
+  return hit;
+};
+
+/** Mọi chỗ khai một tên trong tệp (biến, phần tử destructuring, tham số). */
+function declarationsOf(sf, name) {
+  const decls = [];
+  walk(sf, (n) => {
+    if ((ts.isBindingElement(n) || ts.isVariableDeclaration(n) || ts.isParameter(n)) && ts.isIdentifier(n.name) && n.name.text === name) decls.push(n);
+  });
+  return decls;
+}
+
+/** `WEB_PORTAL_SCREENS[screen]` với `screen` chỉ được khai là tham số của hàm (props của màn), không phải khoá viết sẵn hay biến tự đặt. */
+function isScreenLookup(sf, node) {
+  const n = unwrap(node);
+  if (!ts.isElementAccessExpression(n) || !ts.isIdentifier(n.expression) || n.expression.text !== 'WEB_PORTAL_SCREENS' || !ts.isIdentifier(n.argumentExpression)) return false;
+  const decls = declarationsOf(sf, n.argumentExpression.text);
+  const inParameter = (d) => {
+    for (let a = d; a; a = a.parent) {
+      if (ts.isParameter(a)) return true;
+      if (ts.isVariableDeclaration(a) || ts.isFunctionLike(a)) return false;
+    }
+    return false;
+  };
+  return decls.length > 0 && decls.every(inParameter);
+}
+
+/** Khoá được lấy ra của một phần tử destructuring: `{ a }` → a, `{ a: b }` → a, khoá tính toán → null. */
+function bindingKey(b) {
+  if (!b.propertyName) return ts.isIdentifier(b.name) ? b.name.text : null;
+  return ts.isIdentifier(b.propertyName) || ts.isStringLiteralLike(b.propertyName) ? b.propertyName.text : null;
+}
+
+/** Tên `browserOnly` trong tệp: hợp lệ khi chỉ khai một lần, `const { browserOnly } = WEB_PORTAL_SCREENS[screen]` (không đổi tên, không lồng). */
+function browserOnlyFromTable(sf) {
+  const decls = declarationsOf(sf, 'browserOnly');
+  if (decls.length !== 1 || !ts.isBindingElement(decls[0]) || bindingKey(decls[0]) !== 'browserOnly') return false;
+  const decl = decls[0].parent.parent;
+  return (
+    ts.isVariableDeclaration(decl) &&
+    ts.isVariableDeclarationList(decl.parent) &&
+    (decl.parent.flags & ts.NodeFlags.Const) !== 0 &&
+    Boolean(decl.initializer) &&
+    isScreenLookup(sf, decl.initializer)
+  );
+}
+
+/**
+ * Điều kiện là cờ của bảng màn: `browserOnly` (khi `fromTable`), `WEB_PORTAL_SCREENS[x].browserOnly`, có thể kèm `!` (bỏ ngoặc, `as`...).
+ * Trả có phủ định hay không, null khi điều kiện là thứ khác.
+ */
+function browserOnlyTest(node, fromTable, sf) {
+  const n = unwrap(node);
+  if (ts.isPrefixUnaryExpression(n) && n.operator === ts.SyntaxKind.ExclamationToken) {
+    const inner = browserOnlyTest(n.operand, fromTable, sf);
+    return inner === null ? null : !inner;
+  }
+  if (ts.isIdentifier(n) && n.text === 'browserOnly' && fromTable) return false;
+  if (ts.isPropertyAccessExpression(n) && n.name.text === 'browserOnly' && isScreenLookup(sf, n.expression)) return false;
+  return null;
+}
+
+/** Câu lệnh chỉ là một `return` (hoặc `{ return ...; }`); `value` = 'false' thì phải là `return false`. */
+function isBareReturn(st, value) {
+  const ret = ts.isReturnStatement(st) ? st : ts.isBlock(st) && st.statements.length === 1 && ts.isReturnStatement(st.statements[0]) ? st.statements[0] : null;
+  if (!ret) return false;
+  return value !== 'false' || (ret.expression !== undefined && ret.expression.kind === ts.SyntaxKind.FalseKeyword);
+}
+
+/**
+ * `node` chỉ chạy khi cờ `browserOnly` tắt: có một tổ tiên là nhánh `!browserOnly` của if, `&&`, `? :`, hoặc có `if (browserOnly) return`
+ * đứng trước nó trong một khối bao ngoài. Hàm định nghĩa ngoài nhánh đó (vd `open` chỉ được nút trong `!browserOnly && ...` gọi) không tính:
+ * chặn phải nằm quanh chính lời gọi.
+ */
+function gatedOffBrowserOnly(node, fromTable, sf) {
+  const test = (expr) => browserOnlyTest(expr, fromTable, sf);
+  for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (ts.isIfStatement(parent) && child !== parent.expression) {
+      const neg = test(parent.expression);
+      if (neg === true && child === parent.thenStatement) return true;
+      if (neg === false && child === parent.elseStatement) return true;
+    }
+    if (ts.isConditionalExpression(parent) && child !== parent.condition) {
+      const neg = test(parent.condition);
+      if (neg === true && child === parent.whenTrue) return true;
+      if (neg === false && child === parent.whenFalse) return true;
+    }
+    if (ts.isBinaryExpression(parent) && child === parent.right) {
+      const neg = test(parent.left);
+      if (parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken && neg === true) return true;
+      if (parent.operatorToken.kind === ts.SyntaxKind.BarBarToken && neg === false) return true;
+    }
+    if (ts.isBlock(parent) || ts.isSourceFile(parent)) {
+      const before = parent.statements.slice(0, parent.statements.indexOf(child));
+      if (before.some((st) => ts.isIfStatement(st) && !st.elseStatement && test(st.expression) === false && isBareReturn(st.thenStatement))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Mọi chỗ dùng `openWebPortal` trong một tệp: tên import (kể cả đổi tên), destructuring (vd từ `await import(...)`), `ns.openWebPortal`,
+ * `ns['openWebPortal']`, re-export. Import kiểu không tính.
+ */
+function portalOpenUses(sf) {
+  const locals = new Set();
+  const uses = [];
+  const use = (n, at) => {
+    const called = ts.isCallExpression(n.parent) && n.parent.expression === n;
+    uses.push({ node: called ? n.parent : n, called, line: lineOf(sf, at), pos: at.getStart(sf) });
+  };
+  walk(sf, (n) => {
+    if (ts.isImportSpecifier(n) && !n.isTypeOnly && !n.parent.parent.isTypeOnly && (n.propertyName ?? n.name).text === 'openWebPortal') locals.add(n.name.text);
+    if (ts.isExportSpecifier(n) && !n.isTypeOnly && n.parent.parent.moduleSpecifier && (n.propertyName ?? n.name).text === 'openWebPortal') use(n, n);
+    if (ts.isPropertyAccessExpression(n) && n.name.text === 'openWebPortal') use(n, n.name);
+    if (ts.isElementAccessExpression(n) && ts.isStringLiteralLike(n.argumentExpression) && n.argumentExpression.text === 'openWebPortal') use(n, n.argumentExpression);
+    if (ts.isBindingElement(n) && ts.isIdentifier(n.name) && bindingKey(n) === 'openWebPortal') locals.add(n.name.text);
+  });
+  const declaresName = (n) => ts.isImportSpecifier(n.parent) || ts.isBindingElement(n.parent) || (ts.isPropertyAccessExpression(n.parent) && n.parent.name === n);
+  walk(sf, (n) => {
+    if (ts.isIdentifier(n) && locals.has(n.text) && !(n.parent && declaresName(n))) use(n, n);
+  });
+  return uses.sort((a, b) => a.pos - b.pos);
+}
+
+/**
+ * Trang web có thanh toán (BROWSER_ONLY_WEB_PATHS) không mở được trong webview Zalo, ba lớp (chú thích không tính):
+ * màn cổng web trỏ tới đó có `browserOnly: true`; `openWebPortal` chỉ gọi ở web-portal-redirect.tsx và chỉ khi cờ tắt;
+ * `openWebPortal` của zmp-bridge.ts trả về trước `openWebview` khi link thuộc BROWSER_ONLY_WEB_PATHS của chính nó.
+ */
+function browserOnlyFindings(read, sources) {
+  const found = [];
+  const screensSrc = read(FILES.webPortalScreens);
+  const screens = screensSrc ? findConst(parse(FILES.webPortalScreens, screensSrc), 'WEB_PORTAL_SCREENS') : null;
+  let guarded = 0;
+  if (!screens || !ts.isObjectLiteralExpression(screens)) found.push(`không đọc được WEB_PORTAL_SCREENS ở ${short(FILES.webPortalScreens)}`);
+  else {
+    for (const p of screens.properties) {
+      if (!ts.isPropertyAssignment(p) || !ts.isObjectLiteralExpression(unwrap(p.initializer))) continue;
+      const props = unwrap(p.initializer).properties.filter(ts.isPropertyAssignment);
+      const webPath = props.find((q) => propName(q) === 'webPath');
+      if (!webPath || !ts.isStringLiteralLike(webPath.initializer)) {
+        found.push(`${short(FILES.webPortalScreens)}: màn ${propName(p)} phải có webPath là chuỗi viết sẵn (không kiểm được trang đích)`);
+        continue;
+      }
+      if (!coversPath(BROWSER_ONLY_WEB_PATHS, webPath.initializer.text)) continue;
+      const flag = props.find((q) => propName(q) === 'browserOnly');
+      if (flag && flag.initializer.kind === ts.SyntaxKind.TrueKeyword) guarded += 1;
+      else found.push(`${short(FILES.webPortalScreens)}: màn ${propName(p)} trỏ tới ${webPath.initializer.text} (trang có thanh toán) phải có browserOnly: true`);
+    }
+  }
+
+  let redirectCalls = 0;
+  for (const { path, sf } of sources) {
+    if (path === FILES.bridge) continue;
+    const fromTable = path === FILES.webPortalRedirect && browserOnlyFromTable(sf);
+    for (const use of portalOpenUses(sf)) {
+      const at = `${short(path)}:${use.line}`;
+      if (path !== FILES.webPortalRedirect) found.push(`${at}: openWebPortal chỉ được gọi ở ${short(FILES.webPortalRedirect)} (nơi có cờ browserOnly)`);
+      else if (!use.called) found.push(`${at}: openWebPortal phải được gọi thẳng, không truyền đi như giá trị`);
+      else if (!gatedOffBrowserOnly(use.node, fromTable, sf)) {
+        found.push(`${at}: openWebPortal(...) phải nằm sau if (browserOnly) return hoặc trong nhánh !browserOnly, với browserOnly lấy từ WEB_PORTAL_SCREENS`);
+      } else redirectCalls += 1;
+    }
+  }
+
+  const bridgeSrc = read(FILES.bridge);
+  const bridgeSf = bridgeSrc ? parse(FILES.bridge, bridgeSrc) : null;
+  const blocked = bridgeSf ? stringItems(findConst(bridgeSf, 'BROWSER_ONLY_WEB_PATHS')) : null;
+  const missing = blocked ? BROWSER_ONLY_WEB_PATHS.filter((p) => !blocked.includes(p)) : BROWSER_ONLY_WEB_PATHS;
+  if (missing.length > 0) found.push(`${short(FILES.bridge)}: BROWSER_ONLY_WEB_PATHS phải có ${missing.join(', ')}`);
+  let bridgeGate = false;
+  if (bridgeSf) {
+    const helpers = new Set(['BROWSER_ONLY_WEB_PATHS']);
+    const mentionsList = (node) => mentions(node, helpers);
+    const fns = [];
+    walk(bridgeSf, (n) => {
+      if (ts.isFunctionDeclaration(n) && n.name && n.body) fns.push({ name: n.name.text, body: n.body });
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && (ts.isArrowFunction(unwrap(n.initializer)) || ts.isFunctionExpression(unwrap(n.initializer)))) {
+        fns.push({ name: n.name.text, body: unwrap(n.initializer).body });
+      }
+    });
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const f of fns) if (f.name !== 'openWebPortal' && !helpers.has(f.name) && mentionsList(f.body)) {
+        helpers.add(f.name);
+        grew = true;
+      }
+    }
+    const portal = fns.find((f) => f.name === 'openWebPortal');
+    if (portal && ts.isBlock(portal.body)) {
+      const statements = portal.body.statements;
+      const callsWebview = (st) => {
+        let hit = false;
+        walk(st, (n) => {
+          if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'openWebview') hit = true;
+        });
+        return hit;
+      };
+      const firstOpen = statements.findIndex(callsWebview);
+      const guards = statements.slice(0, firstOpen === -1 ? statements.length : firstOpen);
+      bridgeGate = guards.some((st) => ts.isIfStatement(st) && !st.elseStatement && isBareReturn(st.thenStatement, 'false') && mentionsList(st.expression));
+    }
+  }
+  if (!bridgeGate) found.push(`${short(FILES.bridge)}: openWebPortal phải trả false trước openWebview khi link thuộc BROWSER_ONLY_WEB_PATHS`);
+  return { found, guarded, redirectCalls };
 }
 
 /** Slug chính sách mở bằng chuỗi viết sẵn: `setPolicy('x')`, `setPolicySlug('x')`, `openPolicy('x')`, `<PolicySheet slug="x">`. */
@@ -663,6 +885,16 @@ export function checkSubmission(files) {
     portalOk
       ? `cổng web mở ${portalPaths.length} màn quản trị, đối tác, nhân sự (${portalPaths.join(', ')}); không màn nào trỏ thẳng tới ${WEB_SHOPPING_PATHS.join(', ')}`
       : `cổng web không được trỏ thẳng tới ${WEB_SHOPPING_PATHS.join(', ')} (đang: ${shopping.join(', ') || 'không đọc được WEB_PORTAL_SCREENS'})`,
+  );
+
+  const browserOnly = browserOnlyFindings(read, sources);
+  add(
+    G4,
+    'pay.portal-browser-only',
+    browserOnly.found.length === 0,
+    browserOnly.found.length === 0
+      ? `${BROWSER_ONLY_WEB_PATHS.join(', ')} chỉ mở bằng trình duyệt: ${browserOnly.guarded} màn cổng web có browserOnly: true, ${browserOnly.redirectCalls} lời gọi openWebPortal ở ${short(FILES.webPortalRedirect)} đều nằm sau cờ, zmp-bridge.ts chặn trước openWebview`
+      : browserOnly.found.join('; '),
   );
 
   return { checks, failed: checks.filter((c) => !c.ok).length };

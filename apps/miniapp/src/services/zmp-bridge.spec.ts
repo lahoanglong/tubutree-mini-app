@@ -44,6 +44,8 @@ import {
   openExternal,
   openAffiliateLink,
   isAllowedExternalUrl,
+  BROWSER_ONLY_WEB_PATHS,
+  isBrowserOnlyWebUrl,
   isWebPortalUrl,
   openWebPortal,
 } from './zmp-bridge';
@@ -309,9 +311,45 @@ describe('openWebPortal — chỉ mở cổng web Tubu Tree (W177), không bao g
 
   it('URL hợp lệ: gọi openWebview đúng một lần với url đó và trả true', async () => {
     vi.mocked(openWebview).mockResolvedValue(undefined as never);
-    await expect(openWebPortal('https://tubutree.com/dai-ly')).resolves.toBe(true);
+    await expect(openWebPortal('https://tubutree.com/ctv/gian-hang')).resolves.toBe(true);
     expect(openWebview).toHaveBeenCalledTimes(1);
-    expect(openWebview).toHaveBeenCalledWith({ url: 'https://tubutree.com/dai-ly' });
+    expect(openWebview).toHaveBeenCalledWith({ url: 'https://tubutree.com/ctv/gian-hang' });
+  });
+
+  // PO A3: web /dai-ly có thanh toán đơn sỉ; dù màn gọi quên cờ browserOnly, bridge vẫn không mở nó trong webview Zalo.
+  it('trang chỉ mở bằng trình duyệt (/dai-ly, trang con, viết khác kiểu): trả false, không gọi SDK, không đổi location', async () => {
+    vi.mocked(openWebview).mockResolvedValue(undefined as never);
+    const location = { href: 'https://app.tubutree.com/' };
+    vi.stubGlobal('window', { location });
+    try {
+      for (const url of [
+        'https://tubutree.com/dai-ly',
+        'https://tubutree.com/dai-ly/',
+        'https://tubutree.com/dai-ly?tab=bang-gia',
+        'https://tubutree.com/dai-ly/don/TB123',
+        'https://tubutree.com/DAI-LY',
+        'https://tubutree.com//dai-ly',
+        'https://tubutree.com/dai%2Dly',
+        'https://tubutree.com/x/../dai-ly',
+        'https://tubutree.com/dai-ly#thanh-toan',
+      ]) {
+        expect(isBrowserOnlyWebUrl(url), url).toBe(true);
+        await expect(openWebPortal(url), url).resolves.toBe(false);
+      }
+      expect(openWebview).not.toHaveBeenCalled();
+      expect(location.href).toBe('https://app.tubutree.com/');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('isBrowserOnlyWebUrl: đường dẫn khác không bị chặn, link hỏng coi là bị chặn', () => {
+    for (const url of ['https://tubutree.com/', 'https://tubutree.com/admin', 'https://tubutree.com/dai-ly-moi', 'https://tubutree.com/ctv?ref=dai-ly']) {
+      expect(isBrowserOnlyWebUrl(url), url).toBe(false);
+    }
+    expect(BROWSER_ONLY_WEB_PATHS).toEqual(['/dai-ly']);
+    expect(isBrowserOnlyWebUrl('not a url')).toBe(true);
+    expect(isBrowserOnlyWebUrl('https://tubutree.com/%E0%A4%A')).toBe(true);
   });
 
   it('URL ngoài cổng web: không gọi SDK, trả false', async () => {

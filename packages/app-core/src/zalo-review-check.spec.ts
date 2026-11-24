@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { FILES, MINI_SRC, checkSubmission, diskFiles, isShippedSource, type SubmissionCheck } from '../../../scripts/zalo-review/check-submission.mjs';
+import { BROWSER_ONLY_WEB_PATHS, FILES, MINI_SRC, checkSubmission, diskFiles, isShippedSource, type SubmissionCheck } from '../../../scripts/zalo-review/check-submission.mjs';
 
 const MANIFEST = {
   scopes: {
@@ -15,6 +15,20 @@ const MANIFEST = {
   consoleLinks: { privacyPolicy: 'bao-mat', terms: 'dieu-khoan' },
 };
 
+/** Màn chuyển web: nút mở chỉ hiện khi cờ tắt, và chính lời gọi openWebPortal nằm sau `if (browserOnly) return`. */
+const PORTAL_REDIRECT = [
+  "import { openWebPortal } from '../services/zmp-bridge';",
+  "import { WEB_PORTAL_SCREENS, type WebPortalScreen } from './web-portal-screens';",
+  'export function Portal({ screen, url }: { screen: keyof typeof WEB_PORTAL_SCREENS; url: string }) {',
+  '  const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[screen];',
+  '  const open = async () => {',
+  '    if (browserOnly) return;',
+  '    await openWebPortal(url);',
+  '  };',
+  '  return <>{!browserOnly && <Button onPress={open}>Mở trên website</Button>}</>;',
+  '}',
+].join('\n');
+
 /** Một repo nhỏ đạt mọi mục; từng ca sửa đúng một tệp để chỉ một mục đỏ. */
 function goodRepo(): Record<string, string> {
   return {
@@ -25,6 +39,12 @@ function goodRepo(): Record<string, string> {
       "const ALLOWED_EXTERNAL_HOSTS = new Set(['zalo.me', 'oa.zalo.me']);",
       'export async function phone() { await login({}); return getPhoneNumber({}); }',
       'export function fallback(url: string) { window.location.href = url; }',
+      "const BROWSER_ONLY_WEB_PATHS = ['/dai-ly'];",
+      'const isBrowserOnly = (url: string) => BROWSER_ONLY_WEB_PATHS.some((p) => new URL(url).pathname.startsWith(p));',
+      'export async function openWebPortal(url: string) {',
+      '  if (isBrowserOnly(url)) return false;',
+      '  return fallback(url);',
+      '}',
     ].join('\n'),
     [FILES.legalCore]: [
       "export const LEGAL_SLUGS = ['dieu-khoan', 'bao-mat'] as const;",
@@ -50,7 +70,13 @@ function goodRepo(): Record<string, string> {
     [FILES.usersController]: "export class UsersController { @Post('me/deletion-request') request() {} }",
     [FILES.consentWebhook]: "export const ZALO_REVOKE_CONSENT_EVENT = 'user.revoke.consent';",
     [FILES.checkoutRules]: "export const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET'] as const;",
-    [FILES.webPortalScreens]: "export const WEB_PORTAL_SCREENS = { '/admin': { title: 'Q', audience: 'A', webPath: '/admin' } } as const;",
+    [FILES.webPortalScreens]: [
+      'export const WEB_PORTAL_SCREENS = {',
+      "  '/admin': { title: 'Q', audience: 'A', webPath: '/admin' },",
+      "  '/dealer': { title: 'D', audience: 'A', webPath: '/dai-ly', browserOnly: true },",
+      '} as const;',
+    ].join('\n'),
+    [FILES.webPortalRedirect]: PORTAL_REDIRECT,
     [`${MINI_SRC}/components/checkout/transfer-preview.tsx`]: "export function warm() { const link = document.createElement('link'); link.href = 'https://img.vietqr.io'; }",
   };
 }
@@ -339,6 +365,121 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
     });
   });
 
+  describe('Thanh toán: /dai-ly chỉ mở bằng trình duyệt (PO A3)', () => {
+    it('BROWSER_ONLY_WEB_PATHS là trang đại lý của web', () => {
+      expect(BROWSER_ONLY_WEB_PATHS).toEqual(['/dai-ly']);
+    });
+
+    it('màn cổng web trỏ tới /dai-ly (kể cả trang con, query) thiếu browserOnly: true, hoặc cờ chỉ nằm trong chú thích: đỏ', () => {
+      const checks = withRepo((r) => {
+        r[FILES.webPortalScreens] = [
+          'export const WEB_PORTAL_SCREENS = {',
+          "  '/dealer': { title: 'D', audience: 'A', webPath: '/dai-ly' /* browserOnly: true */ },",
+          "  '/dealer/orders': { title: 'O', audience: 'A', webPath: '/dai-ly/don?tab=1', browserOnly: false },",
+          "  '/admin': { title: 'Q', audience: 'A', webPath: '/admin' },",
+          '} as const;',
+        ].join('\n');
+      });
+      expect(failing(checks)).toEqual(['pay.portal-browser-only']);
+      expect(detail(checks, 'pay.portal-browser-only').split('; ')).toEqual([
+        'pages/web-portal-screens.ts: màn /dealer trỏ tới /dai-ly (trang có thanh toán) phải có browserOnly: true',
+        'pages/web-portal-screens.ts: màn /dealer/orders trỏ tới /dai-ly/don?tab=1 (trang có thanh toán) phải có browserOnly: true',
+      ]);
+
+      const hidden = withRepo((r) => {
+        r[FILES.webPortalScreens] = [
+          "const DEALER_WEB = '/dai-ly';",
+          'export const WEB_PORTAL_SCREENS = {',
+          "  '/dealer': { title: 'D', audience: 'A', webPath: DEALER_WEB },",
+          "  '/dealer2': { title: 'D', audience: 'A', webPath: '//dai-ly' },",
+          '} as const;',
+        ].join('\n');
+      });
+      expect(detail(hidden, 'pay.portal-browser-only').split('; ')).toEqual([
+        'pages/web-portal-screens.ts: màn /dealer phải có webPath là chuỗi viết sẵn (không kiểm được trang đích)',
+        'pages/web-portal-screens.ts: màn /dealer2 trỏ tới //dai-ly (trang có thanh toán) phải có browserOnly: true',
+      ]);
+    });
+
+    it('openWebPortal gọi không qua cờ (chặn chỉ ở nút, chặn trong chú thích, cờ tự đặt), gọi ở tệp khác hoặc truyền đi như giá trị: đỏ', () => {
+      const ungated = withRepo((r) => {
+        r[FILES.webPortalRedirect] = PORTAL_REDIRECT.replace('    if (browserOnly) return;\n', '    // if (browserOnly) return;\n');
+      });
+      expect(failing(ungated)).toEqual(['pay.portal-browser-only']);
+      expect(detail(ungated, 'pay.portal-browser-only')).toBe(
+        'pages/web-portal-redirect.tsx:7: openWebPortal(...) phải nằm sau if (browserOnly) return hoặc trong nhánh !browserOnly, với browserOnly lấy từ WEB_PORTAL_SCREENS',
+      );
+
+      const flagLine = 'const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[screen];';
+      for (const fake of [
+        'const browserOnly = false;',
+        "const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS['/admin'];",
+        'let { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[screen]; browserOnly = undefined;',
+        'const { title: browserOnly } = WEB_PORTAL_SCREENS[screen];',
+        "const key = '/admin'; const { browserOnly }: WebPortalScreen = WEB_PORTAL_SCREENS[key];",
+      ]) {
+        const checks = withRepo((r) => {
+          r[FILES.webPortalRedirect] = PORTAL_REDIRECT.replace(flagLine, fake);
+        });
+        expect(failing(checks), fake).toEqual(['pay.portal-browser-only']);
+      }
+
+      const elsewhere = withRepo((r) => {
+        r[`${MINI_SRC}/pages/dealer-hint.tsx`] = [
+          "import { openWebPortal as go } from '../services/zmp-bridge';",
+          "import * as bridge from '../services/zmp-bridge';",
+          "export const a = () => go('https://tubutree.com/dai-ly');",
+          "export const b = () => bridge.openWebPortal('https://tubutree.com/dai-ly');",
+          "export const c = () => bridge['openWebPortal']('https://tubutree.com/dai-ly');",
+          "export const d = async () => { const { openWebPortal: open } = await import('../services/zmp-bridge'); return open('https://tubutree.com/dai-ly'); };",
+        ].join('\n');
+        r[FILES.webPortalRedirect] = PORTAL_REDIRECT.replace('<Button onPress={open}>', '<Button onPress={openWebPortal}>');
+      });
+      expect(failing(elsewhere)).toEqual(['pay.portal-browser-only']);
+      expect(detail(elsewhere, 'pay.portal-browser-only').split('; ')).toEqual([
+        'pages/dealer-hint.tsx:3: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
+        'pages/dealer-hint.tsx:4: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
+        'pages/dealer-hint.tsx:5: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
+        'pages/dealer-hint.tsx:6: openWebPortal chỉ được gọi ở pages/web-portal-redirect.tsx (nơi có cờ browserOnly)',
+        'pages/web-portal-redirect.tsx:9: openWebPortal phải được gọi thẳng, không truyền đi như giá trị',
+      ]);
+    });
+
+    it('cách chặn khác ở màn chuyển web vẫn đạt: if (!cờ) { ... }, cờ && gọi, cờ ? null : gọi, đọc thẳng WEB_PORTAL_SCREENS[x].browserOnly', () => {
+      const variants = [
+        PORTAL_REDIRECT.replace('    if (browserOnly) return;\n    await openWebPortal(url);', '    if (!browserOnly) { await openWebPortal(url); }'),
+        PORTAL_REDIRECT.replace('    if (browserOnly) return;\n    await openWebPortal(url);', '    return !browserOnly && openWebPortal(url);'),
+        PORTAL_REDIRECT.replace('    if (browserOnly) return;\n    await openWebPortal(url);', '    return browserOnly ? null : openWebPortal(url);'),
+        PORTAL_REDIRECT.replace('    if (browserOnly) return;\n', '    if (WEB_PORTAL_SCREENS[screen].browserOnly) return;\n'),
+      ];
+      for (const source of variants) {
+        expect(source).not.toBe(PORTAL_REDIRECT);
+        expect(failing(withRepo((r) => (r[FILES.webPortalRedirect] = source)))).toEqual([]);
+      }
+    });
+
+    it('zmp-bridge.ts không chặn /dai-ly (thiếu trong BROWSER_ONLY_WEB_PATHS, chặn sau openWebview, chặn trả true, chặn trong chú thích): đỏ', () => {
+      const notListed = withRepo((r) => {
+        r[FILES.bridge] = r[FILES.bridge]!.replace("const BROWSER_ONLY_WEB_PATHS = ['/dai-ly'];", "const BROWSER_ONLY_WEB_PATHS = ['/ctv'];");
+      });
+      expect(failing(notListed)).toEqual(['pay.portal-browser-only']);
+      expect(detail(notListed, 'pay.portal-browser-only')).toBe('services/zmp-bridge.ts: BROWSER_ONLY_WEB_PATHS phải có /dai-ly');
+
+      const broken = [
+        (b: string) => b.replace('  if (isBrowserOnly(url)) return false;\n  return fallback(url);', '  await openWebview({ url });\n  if (isBrowserOnly(url)) return false;\n  return true;'),
+        (b: string) => b.replace('if (isBrowserOnly(url)) return false;', 'if (isBrowserOnly(url)) return true;'),
+        (b: string) => b.replace('if (isBrowserOnly(url)) return false;', '// if (isBrowserOnly(url)) return false;'),
+      ];
+      for (const edit of broken) {
+        const checks = withRepo((r) => {
+          r[FILES.bridge] = edit(r[FILES.bridge]!);
+        });
+        expect(failing(checks)).toEqual(['pay.portal-browser-only']);
+        expect(detail(checks, 'pay.portal-browser-only')).toBe('services/zmp-bridge.ts: openWebPortal phải trả false trước openWebview khi link thuộc BROWSER_ONLY_WEB_PATHS');
+      }
+    });
+  });
+
   it('isShippedSource: chỉ mã đi vào gói, bỏ spec, tệp hỗ trợ test, dữ liệu giả', () => {
     const shipped = ['src/a.ts', 'src/pages/b.tsx'];
     const notShipped = ['src/a.spec.ts', 'src/a.test.tsx', 'src/test/fetch-stub.ts', 'src/test-support/contrast.ts', 'src/vitest-setup.ts', 'src/services/waste-test-fixtures.ts', 'src/types.d.ts', 'src/a.css'];
@@ -350,6 +491,7 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
     const root = join(dirname(fileURLToPath(import.meta.url)), '../../..');
     const { checks } = checkSubmission(diskFiles(root));
     expect(checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.detail}`)).toEqual([]);
-    expect(checks.length).toBeGreaterThanOrEqual(20);
+    expect(checks.length).toBeGreaterThanOrEqual(27);
+    expect(checks.find((c) => c.id === 'pay.portal-browser-only')?.detail).toMatch(/^\/dai-ly chỉ mở bằng trình duyệt: 1 màn cổng web có browserOnly: true, 1 lời gọi openWebPortal/);
   });
 });
