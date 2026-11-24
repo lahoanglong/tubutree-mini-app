@@ -4,7 +4,7 @@ import { useNavigate } from 'zmp-ui';
 import { AlertTriangle, ChevronRight, PackageCheck, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_CONTEXT_HEIGHT, homeTodoCount, homeTodoLead, readLastTodoRows, readTodoRows, writeTodoRows } from '@tubutree/app-core/home-layout';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { useMeSummary } from '../../hooks/use-me-summary';
 import { useRemaining } from '../../hooks/use-remaining';
 import { fetchHomeTodo, type HomeTodo, type OrderView } from '../../services/shop-api';
@@ -97,7 +97,7 @@ export function TodoStrip({ data }: { data: HomeTodo | undefined }) {
   const navigate = useNavigate();
   const lead = homeTodoLead(data);
   if (!data || !lead) return null;
-  const note = lead.more > 0 ? fillCopy('home.todo.more', { n: lead.more }) : undefined;
+  const note = lead.more > 0 ? fillBootCopy('home.todo.more', { n: lead.more }) : undefined;
   // Dòng chờ chuyển khoản đã có nút "Thanh toán": thêm mũi tên thì tên dòng bị cắt ở 360px; "+N việc khác" vẫn ghi ở chữ phụ, danh sách đơn ở thanh đáy.
   const payNow = lead.kind === 'pending' && data.pending ? canPayOrderNow(data.pending.order) : false;
   const hasMore = lead.more > 0 && !payNow;
@@ -134,7 +134,7 @@ export function TodoStrip({ data }: { data: HomeTodo | undefined }) {
           {hasMore && (
             <button
               type="button"
-              aria-label={fillCopy('home.todo.moreAria', { n: lead.more })}
+              aria-label={fillBootCopy('home.todo.moreAria', { n: lead.more })}
               className="tubu-press tubu-hit-44-square"
               onClick={() => {
                 haptic('light');

@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 import { Text } from './ui/text';
 import { SharePoster } from './share-poster';
 import { shareLink } from '../services/zmp-bridge';
-import { vi } from '../i18n/vi';
+import { viShareFallback, viStorefront } from '../i18n/vi-storefront';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
@@ -35,8 +35,8 @@ export function useShareWithFallback() {
         const copied = await copyText(fallbackText);
         openSnackbar(
           copied
-            ? { text: vi.shareFallback.failedCopied, type: 'warning' }
-            : { text: vi.shareFallback.failedManual, type: 'error' },
+            ? { text: viShareFallback.failedCopied, type: 'warning' }
+            : { text: viShareFallback.failedManual, type: 'error' },
         );
       }
     },
@@ -118,12 +118,12 @@ export function ShareSheet({
       const ok = await copyText(t);
       openSnackbar(
         ok
-          ? { text: vi.storefront.copied, type: 'success' }
+          ? { text: viStorefront.copied, type: 'success' }
           : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
       );
     });
   return (
-    <BottomSheet open={visible} onClose={onClose} title={heading ?? vi.storefront.shareTitle}>
+    <BottomSheet open={visible} onClose={onClose} title={heading ?? viStorefront.shareTitle}>
       {/* Ảnh có QR trỏ trang web công khai (tubutree.com): quét bằng camera hay mở từ Facebook/TikTok không cần đăng nhập Zalo. Nút chia sẻ và link chép vẫn mở Mini App. */}
       <div style={{ marginBottom: 12 }}>
         <SharePoster input={{ kind: 'store', title, path, referralCode }} />
@@ -141,14 +141,14 @@ export function ShareSheet({
             });
           }}
         >
-          {vi.storefront.shareZalo}
+          {viStorefront.shareZalo}
         </Button>
         <Button fullWidth variant="secondary" icon={Copy} aria-disabled={lock.busy || undefined} onPress={() => copy(url)}>
-          {vi.storefront.copyLink}
+          {viStorefront.copyLink}
         </Button>
       </div>
-      <section aria-label={vi.storefront.captionHint}>
-        <Text variant="label" as="div" style={{ marginBottom: 6 }}>{vi.storefront.captionHint}</Text>
+      <section aria-label={viStorefront.captionHint}>
+        <Text variant="label" as="div" style={{ marginBottom: 6 }}>{viStorefront.captionHint}</Text>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {captions.map((c, i) => (
             <button

@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { variationPricing, type FlashPriceItem, type VariationPricingResult } from '../flash-price';
 
 export interface FlashLinePreview {
@@ -129,11 +129,11 @@ export function overLimitNote(
   quantity: number,
 ): string | null {
   if (!line.overLimit || line.allowance === null) return null;
-  if (line.allowance === 0) return fillCopy('flash.sheetSpent');
-  if (line.inCart > line.allowance) return fillCopy('flash.sheetOverInCartAlready', { n: line.inCart, allowance: line.allowance });
-  if (line.inCart > 0) return fillCopy('flash.sheetOverInCart', { n: line.inCart, qty: quantity, total: line.lineQuantity });
+  if (line.allowance === 0) return fillBootCopy('flash.sheetSpent');
+  if (line.inCart > line.allowance) return fillBootCopy('flash.sheetOverInCartAlready', { n: line.inCart, allowance: line.allowance });
+  if (line.inCart > 0) return fillBootCopy('flash.sheetOverInCart', { n: line.inCart, qty: quantity, total: line.lineQuantity });
   const key = line.allowanceBy === 'quota' ? 'flash.sheetOverQuota' : line.allowanceBy === 'bought' ? 'flash.sheetOverLeft' : 'flash.sheetOverLimit';
-  return fillCopy(key, { n: line.allowance, qty: quantity });
+  return fillBootCopy(key, { n: line.allowance, qty: quantity });
 }
 
 /**
@@ -141,7 +141,7 @@ export function overLimitNote(
  * khách vừa chọn, nên khách thấy số lớn hơn `qty × đơn giá` cần một câu giải thích. Giỏ chưa có phân loại này thì null.
  */
 export function buyNowMergeNote(line: Pick<FlashLinePreview, 'inCart' | 'lineQuantity'>): string | null {
-  return line.inCart > 0 ? fillCopy('flash.sheetBuyMerge', { n: line.inCart, total: line.lineQuantity }) : null;
+  return line.inCart > 0 ? fillBootCopy('flash.sheetBuyMerge', { n: line.inCart, total: line.lineQuantity }) : null;
 }
 
 /**

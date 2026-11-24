@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { vi } from './vi';
+import { viCheckout } from './vi-checkout';
+import { viPaymentMethod } from './vi-orders';
+import { viGame } from './vi-game';
 
 /**
  * T19 (PD-3, Q-26): TubuXu đã gộp vào Điểm Xanh. Khách không còn thấy chữ "xu"/"TubuXu" ở màn nào;
@@ -41,11 +43,11 @@ describe('không còn chữ xu / TubuXu trong mã nguồn miniapp (T19, PD-3)', 
   });
 
   it('nhãn cho khách: thưởng Season Pass dạng điểm hiện "điểm", đơn cũ trả bằng xu hiện "xu cũ"', () => {
-    expect(vi.game.seasonPass.reward({ type: 'POINTS', amount: 5 })).toBe('5 điểm');
-    expect(vi.paymentMethod.XU).toBe('Điểm Xanh (xu cũ)');
+    expect(viGame.seasonPass.reward({ type: 'POINTS', amount: 5 })).toBe('5 điểm');
+    expect(viPaymentMethod.XU).toBe('Điểm Xanh (xu cũ)');
   });
 
   it('i18n không còn nhãn chọn phương thức thanh toán TubuXu', () => {
-    expect('paymentXu' in (vi.checkout as Record<string, unknown>)).toBe(false);
+    expect('paymentXu' in (viCheckout as Record<string, unknown>)).toBe(false);
   });
 });

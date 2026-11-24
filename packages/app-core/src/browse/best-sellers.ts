@@ -1,5 +1,5 @@
 import type { BestSellersPage } from '../api/browse';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { HUB_CATEGORY_MAX } from './hub';
 import type { CategoryNode } from './category-tree';
 
@@ -23,7 +23,7 @@ export function bestSellerTabs(tree: CategoryNode[] | undefined): BestSellerTab[
     .filter((n) => !n.parentId && (n.productCount === undefined || n.productCount > 0))
     .slice(0, HUB_CATEGORY_MAX)
     .map((n) => ({ key: n.id, label: n.name }));
-  return [{ key: BEST_SELLERS_ALL_KEY, label: fillCopy('rank.tabAll') }, ...roots];
+  return [{ key: BEST_SELLERS_ALL_KEY, label: fillBootCopy('rank.tabAll') }, ...roots];
 }
 
 /**
@@ -41,10 +41,10 @@ export function bestSellerScope(tabs: BestSellerTab[] | null, category: string |
  * Tên của vùng danh sách theo tab đang chọn. Đang lọc một danh mục mà cây chưa về (`tabs = null`) thì chưa biết tên danh mục: dùng tên trang
  * thay vì "Tất cả", vì vùng này đang chỉ chứa món của danh mục đó. Cây đã về thì tên tab (id không có trong cây đã được `bestSellerScope` đưa về "Tất cả").
  */
-export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string, title: string = fillCopy('rank.title')): string {
-  if (tab === BEST_SELLERS_ALL_KEY) return fillCopy('rank.tabAll');
+export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string, title: string = fillBootCopy('rank.title')): string {
+  if (tab === BEST_SELLERS_ALL_KEY) return fillBootCopy('rank.tabAll');
   if (tabs === null) return title;
-  return tabs.find((t) => t.key === tab)?.label ?? fillCopy('rank.tabAll');
+  return tabs.find((t) => t.key === tab)?.label ?? fillBootCopy('rank.tabAll');
 }
 
 /**
@@ -52,7 +52,7 @@ export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string, 
  * `best_seller_30d`) thì bảng đang trộn hoặc hoàn toàn theo tổng, và câu "30 ngày" sẽ sai. Thiếu dữ liệu hay thiếu `basis` (cache cũ) coi như 30 ngày.
  */
 export function bestSellersBasisCopy(pages: readonly Partial<BestSellersPage>[] | undefined): string {
-  return pages?.some((p) => p.basis === 'total') ? fillCopy('rank.basisAll') : fillCopy('rank.basis');
+  return pages?.some((p) => p.basis === 'total') ? fillBootCopy('rank.basisAll') : fillBootCopy('rank.basis');
 }
 
 const isCuratedCard = (p: object): boolean => (p as { curated?: unknown }).curated === true;
@@ -93,9 +93,9 @@ export interface BestSellersHeading {
  * `items` là các thẻ đang hiện; `pages` là các trang đã tải (có `basis`) khi nơi gọi có, để chọn đúng câu thước đo như `bestSellersBasisCopy`.
  */
 export function bestSellersHeading(items: readonly object[] | undefined, pages?: readonly Partial<BestSellersPage>[]): BestSellersHeading {
-  if (isCuratedShelf(items)) return { basis: 'curated', title: fillCopy('rank.curatedTitle'), subtitle: undefined, ranked: false };
+  if (isCuratedShelf(items)) return { basis: 'curated', title: fillBootCopy('rank.curatedTitle'), subtitle: undefined, ranked: false };
   const total = pages?.some((p) => p.basis === 'total') ?? false;
-  return { basis: total ? 'total' : 'days30', title: fillCopy('rank.title'), subtitle: bestSellersBasisCopy(pages), ranked: true };
+  return { basis: total ? 'total' : 'days30', title: fillBootCopy('rank.title'), subtitle: bestSellersBasisCopy(pages), ranked: true };
 }
 
 /** Hạng của thẻ đầu khi danh sách bắt đầu từ `startPage` (web mở thẳng `?page=N`); số trang hỏng thì về hạng 1. */

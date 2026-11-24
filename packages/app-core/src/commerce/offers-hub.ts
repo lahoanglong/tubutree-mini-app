@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 
 /**
  * Trung tâm Ưu đãi: một trang (`/offers` ở Mini App, `/uu-dai` ở web) chia ba phân mục đổi ngay tại chỗ bằng `?tab=`.
@@ -9,9 +9,9 @@ export type OffersTab = 'deals' | 'wallet' | 'rewards';
 export const DEFAULT_OFFERS_TAB: OffersTab = 'deals';
 
 export const OFFERS_TABS: readonly { key: OffersTab; label: string }[] = [
-  { key: 'deals', label: fillCopy('offers.tabDeals') },
-  { key: 'wallet', label: fillCopy('offers.tabWallet') },
-  { key: 'rewards', label: fillCopy('offers.tabRewards') },
+  { key: 'deals', label: fillBootCopy('offers.tabDeals') },
+  { key: 'wallet', label: fillBootCopy('offers.tabWallet') },
+  { key: 'rewards', label: fillBootCopy('offers.tabRewards') },
 ];
 
 const KEYS: readonly string[] = OFFERS_TABS.map((t) => t.key);

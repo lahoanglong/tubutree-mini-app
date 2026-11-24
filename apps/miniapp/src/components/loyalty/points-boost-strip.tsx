@@ -1,6 +1,6 @@
 import { Leaf } from 'lucide-react';
 import { usePublicConfig } from '../../hooks/use-public-config';
-import { vi } from '../../i18n/vi';
+import { viExternalPoints } from '../../i18n/vi-external-points';
 import { percentLabel, pointsBoostOf } from '../../utils/loyalty-copy';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
@@ -24,7 +24,7 @@ export function PointsBoostStrip({ placement, omitPlain = false }: { placement: 
       <div style={{ padding: '4px 16px 8px' }}>
         <Text variant="body-sm" tone="brand" as="div" data-testid="points-boost" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
           <Icon icon={Leaf} size="sm" tone="brand" />
-          {vi.externalPoints.boostPlain(percentLabel(boost.appPct))}
+          {viExternalPoints.boostPlain(percentLabel(boost.appPct))}
         </Text>
       </div>
     );
@@ -47,10 +47,10 @@ export function PointsBoostStrip({ placement, omitPlain = false }: { placement: 
         <Icon icon={Leaf} size="sm" tone="brand" />
         <div style={{ minWidth: 0 }}>
           <Text variant="label" tone="brand" as="div">
-            {boost.double ? vi.externalPoints.boostTitleDouble : vi.externalPoints.boostTitleMore}
+            {boost.double ? viExternalPoints.boostTitleDouble : viExternalPoints.boostTitleMore}
           </Text>
           <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-            {vi.externalPoints.boostSub(percentLabel(boost.marketplacePct), percentLabel(boost.appPct))}
+            {viExternalPoints.boostSub(percentLabel(boost.marketplacePct), percentLabel(boost.appPct))}
           </Text>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { compactAddressView, readRecentAddressIds, sortAddressesForPicker } from
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { AddressDTO } from '../../services/shop-api';
 import { trackEvent } from '../../services/analytics';
-import { vi } from '../../i18n/vi';
+import { viCheckout } from '../../i18n/vi-checkout';
 import { haptic } from '../../utils/haptic';
 import { addressLine } from '../../utils/format';
 import { isLegacyGeo } from '../../utils/address-memory';
@@ -81,12 +81,12 @@ export function AddressSection({ addresses, selectedId, onSelect, onSaved, quote
   return (
     <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
       <Text variant="body-sm" as="div" data-ds="checkout-block-title" style={{ fontWeight: 600, marginBottom: 8 }}>
-        {vi.checkout.address}
+        {viCheckout.address}
       </Text>
 
       {addresses.length === 0 && !adding && (
         <Text variant="body-sm" tone="tertiary" as="div">
-          {vi.checkout.addressEmpty}
+          {viCheckout.addressEmpty}
         </Text>
       )}
 
@@ -137,8 +137,8 @@ export function AddressSection({ addresses, selectedId, onSelect, onSaved, quote
           </button>
           {(legacy || quoteOutdated) && editing === null && (
             <GeoFixNotice
-              text={legacy ? vi.checkout.addressLegacy : vi.checkout.addressMismatch}
-              cta={legacy ? vi.checkout.addressLegacyCta : vi.checkout.addressFixCta}
+              text={legacy ? viCheckout.addressLegacy : viCheckout.addressMismatch}
+              cta={legacy ? viCheckout.addressLegacyCta : viCheckout.addressFixCta}
               onFix={() => {
                 haptic('light');
                 setAdding(false);
@@ -310,7 +310,7 @@ function AddressCard({
           <Text variant="body-sm" style={{ fontWeight: 600 }}>
             {address.recipient} · {address.phone}
           </Text>
-          {address.isDefault && <Badge tone="brand">{vi.checkout.addressDefault}</Badge>}
+          {address.isDefault && <Badge tone="brand">{viCheckout.addressDefault}</Badge>}
         </span>
         <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', marginTop: 2 }}>
           {addressLine(address)}

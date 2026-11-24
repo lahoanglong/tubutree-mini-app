@@ -3,6 +3,7 @@ import { apiMediaUrl } from '../../services/api';
 import type { FeedPreviewItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { vi } from '../../i18n/vi';
+import { viCommunity } from '../../i18n/vi-community';
 import { useBlockedMessage } from '../ui/auth-gate';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
@@ -21,7 +22,7 @@ export function PublicPreviewList({ posts, onLogin }: { posts: FeedPreviewItem[]
   return (
     <div style={{ padding: '12px 12px 24px' }}>
       <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
-        {blocked ?? vi.community.previewLead}
+        {blocked ?? viCommunity.previewLead}
       </Text>
       <div style={{ marginTop: 12 }}>
         <Button fullWidth onPress={onLogin}>

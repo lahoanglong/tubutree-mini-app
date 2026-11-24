@@ -17,7 +17,7 @@ Khách dùng cùng một cửa hàng qua Mini App và qua website. Hai bên ph�
 ## Giao diện
 
 - Trước khi làm hay sửa màn mua sắm (Mini App hoặc web), đọc `.claude/skills/tubu-ui/SKILL.md` và `DESIGN.md`: thành phần nào dùng cho nhu cầu nào, khai kệ, khuôn trang web, lệnh kiểm. Không dựng thẻ sản phẩm, tiêu đề khối, nhãn, giá hay phiếu mới khi `docs/design/ds-map.json` đã có thành phần.
-- Chữ của màn gian hàng chỉ thêm vào `packages/app-core/src/shop-copy.ts`, kèm chỗ dùng và độ dài tối đa. Chạy `terminology.spec` và `shop-copy.spec` trước khi mở PR.
+- Chữ của màn gian hàng chỉ thêm vào `packages/app-core/src/shop-copy.ts`, kèm chỗ dùng và độ dài tối đa. Mô-đun nằm trong gói đầu Mini App (Trang chủ, thanh đáy, thẻ sản phẩm, giỏ…) dùng `fillBootCopy` và khoá ở `packages/app-core/src/shop-copy-boot.ts`: gọi `fillCopy` ở đó kéo cả bảng về entry (`mini-lazy-chunks.cjs` chặn). Chạy `terminology.spec` và `shop-copy.spec` trước khi mở PR.
 
 ## Trước khi đẩy nhánh wave hoặc release
 

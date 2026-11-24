@@ -95,6 +95,7 @@ vi.mock('../services/account-api', () => ({
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
+import { viGame } from '../i18n/vi-game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 const HOUR = 3600 * 1000;
@@ -517,12 +518,12 @@ describe('GamePage — hồi sinh chuỗi và cảnh báo cây', () => {
   it('trong cửa sổ hồi sinh: hiện chuỗi đã mất và giá; bấm gọi API, báo + haptic, chỉ làm mới hồ sơ', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, streakRepairable: true, brokenStreakDays: 5, streakRepairCost: 300 });
     const { invalidated } = renderPage();
-    expect(await screen.findByText(viText.game.streakRepair.title(5))).toBeInTheDocument();
-    expect(screen.getByText(viText.game.streakRepair.body)).toBeInTheDocument();
+    expect(await screen.findByText(viGame.streakRepair.title(5))).toBeInTheDocument();
+    expect(screen.getByText(viGame.streakRepair.body)).toBeInTheDocument();
     const btn = screen.getByRole('button', { name: 'Hồi sinh (300💧)' });
     fireEvent.click(btn);
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viText.game.streakRepair.ok, type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viGame.streakRepair.ok, type: 'success' }),
     );
     expect(mocks.api.repairStreak).toHaveBeenCalledTimes(1);
     expect(mocks.haptic).toHaveBeenCalledWith('medium');
@@ -844,7 +845,7 @@ describe('GamePage — Chặng Mùa (Season Pass) đã ẩn (C-044, Q-16)', () =
     await openTab('Vườn');
     await screen.findByText('Sồi');
     expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
-    expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
+    expect(screen.queryByText(viGame.seasonPass.title)).not.toBeInTheDocument();
     expect(screen.queryByText(/Season Pass|Chặng Mùa/)).not.toBeInTheDocument();
   });
 
@@ -871,18 +872,18 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     renderPage();
     await openTab('Vườn');
     await screen.findByText('Sồi');
-    expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
+    expect(screen.queryByText(viGame.seasonPass.title)).not.toBeInTheDocument();
   });
 
   it('hiện tiêu đề, XP hiện có / mốc cuối, gợi ý Premium khi chưa đủ điều kiện', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { container } = renderPage();
     await openTab('Vườn');
-    expect(await screen.findByText(viText.game.seasonPass.title)).toBeInTheDocument();
-    expect(screen.getByText(viText.game.seasonPass.subtitle('Xuân'))).toBeInTheDocument();
+    expect(await screen.findByText(viGame.seasonPass.title)).toBeInTheDocument();
+    expect(screen.getByText(viGame.seasonPass.subtitle('Xuân'))).toBeInTheDocument();
     expect(screen.getByText('150 điểm kinh nghiệm')).toBeInTheDocument();
     expect(screen.getAllByText('300 điểm kinh nghiệm').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(viText.game.seasonPass.premiumHint)).toBeInTheDocument();
+    expect(screen.getByText(viGame.seasonPass.premiumHint)).toBeInTheDocument();
     // 150/300 = 50%
     expect(container.querySelector('[style*="width: 50%"]')).not.toBeNull();
   });
@@ -891,9 +892,9 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     renderPage();
     await openTab('Vườn');
-    await screen.findByText(viText.game.seasonPass.title);
-    expect(screen.getByRole('button', { name: viText.game.seasonPass.claim })).toBeEnabled();
-    const locked = screen.getAllByRole('button', { name: viText.game.seasonPass.locked });
+    await screen.findByText(viGame.seasonPass.title);
+    expect(screen.getByRole('button', { name: viGame.seasonPass.claim })).toBeEnabled();
+    const locked = screen.getAllByRole('button', { name: viGame.seasonPass.locked });
     // premium bậc 0 (chưa đủ điều kiện) + free và premium bậc 1 (chưa mở)
     expect(locked).toHaveLength(3);
     for (const b of locked) expect(b).toBeDisabled();
@@ -903,10 +904,10 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { invalidated } = renderPage();
     await openTab('Vườn');
-    const btn = await screen.findByRole('button', { name: viText.game.seasonPass.claim });
+    const btn = await screen.findByRole('button', { name: viGame.seasonPass.claim });
     fireEvent.click(btn);
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viText.game.seasonPass.claimOk, type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viGame.seasonPass.claimOk, type: 'success' }),
     );
     expect(mocks.api.claimSeasonPass).toHaveBeenCalledTimes(1);
     expect(mocks.api.claimSeasonPass).toHaveBeenCalledWith(0, 'free');
@@ -922,9 +923,9 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: true, tiers: tiers() });
     renderPage();
     await openTab('Vườn');
-    await screen.findByText(viText.game.seasonPass.title);
-    expect(screen.queryByText(viText.game.seasonPass.premiumHint)).not.toBeInTheDocument();
-    const claims = screen.getAllByRole('button', { name: viText.game.seasonPass.claim });
+    await screen.findByText(viGame.seasonPass.title);
+    expect(screen.queryByText(viGame.seasonPass.premiumHint)).not.toBeInTheDocument();
+    const claims = screen.getAllByRole('button', { name: viGame.seasonPass.claim });
     expect(claims).toHaveLength(2);
     fireEvent.click(claims[1]!);
     await waitFor(() => expect(mocks.api.claimSeasonPass).toHaveBeenCalledWith(0, 'premium'));
@@ -934,9 +935,9 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: true, tiers: tiers({ claimedFree: true }) });
     renderPage();
     await openTab('Vườn');
-    await screen.findByText(viText.game.seasonPass.title);
-    expect(screen.getByText(viText.game.seasonPass.claimed)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: viText.game.seasonPass.claim })).toHaveLength(1);
+    await screen.findByText(viGame.seasonPass.title);
+    expect(screen.getByText(viGame.seasonPass.claimed)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: viGame.seasonPass.claim })).toHaveLength(1);
   });
 });
 
@@ -1191,12 +1192,12 @@ describe('GamePage — nhiệm vụ', () => {
   it('đạt điều kiện chưa nhận: có nút "Nhận thưởng" gọi claimMission(code), báo + haptic, làm mới nhiệm vụ + me + loyalty', async () => {
     mocks.api.getMissions.mockResolvedValue([mission({ code: 'REVIEW_3', title: 'Viết 3 đánh giá', progress: 3, goal: 3, completed: true })]);
     const { invalidated } = renderPage();
-    const btn = await screen.findByRole('button', { name: viText.game.missions.claim });
+    const btn = await screen.findByRole('button', { name: viGame.missions.claim });
     expect(screen.getByText('+50 Điểm Xanh')).toBeInTheDocument();
     expect(screen.getByText('3/3')).toBeInTheDocument();
     fireEvent.click(btn);
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viText.game.missions.claimOk(50), type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viGame.missions.claimOk(50), type: 'success' }),
     );
     expect(mocks.api.claimMission).toHaveBeenCalledTimes(1);
     expect(mocks.api.claimMission).toHaveBeenCalledWith('REVIEW_3');
@@ -1218,7 +1219,7 @@ describe('GamePage — nhiệm vụ', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả (2)' }));
     expect(screen.getByText('Đã xong')).toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: viText.game.missions.claim })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: viGame.missions.claim })).not.toBeInTheDocument();
   });
 
   it('nhiệm vụ chưa xong có nút "Làm ngay" dẫn đúng chỗ; mã lạ và nhiệm vụ đã xong không có nút', async () => {
@@ -1275,7 +1276,7 @@ describe('GamePage — nhiệm vụ', () => {
   it('đạt theo tiến độ dù server chưa đánh dấu completed vẫn cho nhận', async () => {
     mocks.api.getMissions.mockResolvedValue([mission({ code: 'FIRST_ORDER', title: 'Đơn đầu tiên', progress: 1, goal: 1, completed: false })]);
     renderPage();
-    expect(await screen.findByRole('button', { name: viText.game.missions.claim })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: viGame.missions.claim })).toBeEnabled();
   });
 });
 

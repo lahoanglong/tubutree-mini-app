@@ -14,6 +14,7 @@ import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
+import { viSubscriptions } from '../i18n/vi-subscriptions';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -46,7 +47,7 @@ export function SubscribeSheet({
   /** Chu kỳ chọn sẵn khi sheet dựng (gợi ý theo nhịp mua chọn sẵn nhịp đó). */
   initialWeeks?: number;
 }) {
-  const t = vi.subscriptions;
+  const t = viSubscriptions;
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const qc = useQueryClient();

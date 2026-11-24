@@ -16,7 +16,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../../services/analytics', () => ({ trackEvent: mocks.track }));
 
 import { AddressSection } from './address-section';
-import { vi as viCopy } from '../../i18n/vi';
+import { viCheckout } from '../../i18n/vi-checkout';
 
 const ADDR: AddressDTO = {
   id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 X', province: 'HCM', provinceCode: '84_VN79',
@@ -61,7 +61,7 @@ describe('AddressSection — sổ trống thì mở sẵn form (bớt một ch�
     render(mount([], true));
     expect(screen.getByTestId('address-form')).toBeInTheDocument();
     expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: false }));
-    expect(screen.queryByText(viCopy.checkout.addressEmpty)).toBeNull();
+    expect(screen.queryByText(viCheckout.addressEmpty)).toBeNull();
   });
 
   it('khách tự bấm "Thêm địa chỉ mới" sau khi đóng form tự mở → lúc đó mới xin Zalo', () => {
@@ -159,7 +159,7 @@ describe('AddressSection — cảnh báo địa giới cũ nằm ngay dưới d�
     renderSection([LEGACY, OK], () => {}, 'a1');
     const row = screen.getByTestId('checkout-address-row');
     expect(within(row).getAllByRole('alert')).toHaveLength(1);
-    fireEvent.click(within(row).getByRole('button', { name: viCopy.checkout.addressLegacyCta }));
+    fireEvent.click(within(row).getByRole('button', { name: viCheckout.addressLegacyCta }));
     expect(screen.getByTestId('address-form')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
   });
@@ -178,11 +178,11 @@ describe('AddressSection — cảnh báo địa giới cũ nằm ngay dưới d�
       </QueryClientProvider>
     );
     const { rerender } = render(ui([LEGACY, LEGACY2], 'a1'));
-    fireEvent.click(screen.getByRole('button', { name: viCopy.checkout.addressLegacyCta }));
+    fireEvent.click(screen.getByRole('button', { name: viCheckout.addressLegacyCta }));
     expect(screen.getByTestId('address-form')).toBeInTheDocument();
     rerender(ui([LEGACY2], 'a3'));
     expect(screen.queryByTestId('address-form')).toBeNull();
-    expect(within(screen.getByTestId('checkout-address-row')).getByRole('button', { name: viCopy.checkout.addressLegacyCta })).toBeInTheDocument();
+    expect(within(screen.getByTestId('checkout-address-row')).getByRole('button', { name: viCheckout.addressLegacyCta })).toBeInTheDocument();
   });
 
   it('đang sửa địa chỉ cũ rồi đổi sang địa chỉ khác qua tấm chọn → form sửa đóng', () => {
@@ -195,7 +195,7 @@ describe('AddressSection — cảnh báo địa giới cũ nằm ngay dưới d�
       );
     }
     render(<Harness />);
-    fireEvent.click(screen.getByRole('button', { name: viCopy.checkout.addressLegacyCta }));
+    fireEvent.click(screen.getByRole('button', { name: viCheckout.addressLegacyCta }));
     expect(screen.getByTestId('address-form')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
     fireEvent.click(screen.getByRole('radio', { name: /Bình/ }));
@@ -215,8 +215,8 @@ describe('AddressSection — máy chủ báo địa chỉ hệ mới không giao
   it('quoteOutdated → cảnh báo phường không khớp + nút Sửa địa chỉ dưới dòng đang chọn, mở form sửa', () => {
     render(ui(true));
     const alert = within(screen.getByTestId('checkout-address-row')).getByRole('alert');
-    expect(alert).toHaveTextContent(viCopy.checkout.addressMismatch);
-    fireEvent.click(within(alert).getByRole('button', { name: viCopy.checkout.addressFixCta }));
+    expect(alert).toHaveTextContent(viCheckout.addressMismatch);
+    fireEvent.click(within(alert).getByRole('button', { name: viCheckout.addressFixCta }));
     expect(screen.getByTestId('address-form')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
   });

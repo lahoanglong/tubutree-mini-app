@@ -1,6 +1,6 @@
 import type { ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { useNavigate } from 'zmp-ui';
 import { ComboCard } from '../ui/combo-card';
 import { RailShell } from '../ui/product-rail';
@@ -20,7 +20,7 @@ export function HomeCombos({ views }: HomeCombosProps) {
   const { add, busyId } = useBundleAdd();
   const navigate = useNavigate();
   if (views.length === 0) return null;
-  const title = fillCopy('combo.homeTitle');
+  const title = fillBootCopy('combo.homeTitle');
   const seeAll = seeAllHref('home.combos');
   return (
     <section aria-label={title} data-testid="home-combos">
@@ -41,7 +41,7 @@ export function HomeCombos({ views }: HomeCombosProps) {
                   total={v.total}
                   comboTotal={v.comboTotal}
                   busy={busyId === v.id}
-                  onAddAll={() => add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') })}
+                  onAddAll={() => add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillBootCopy('shop.comboAdded') })}
                   onSeeItems={target?.slug ? () => navigate(`/product/${encodeURIComponent(target.slug)}`) : undefined}
                 />
               </div>

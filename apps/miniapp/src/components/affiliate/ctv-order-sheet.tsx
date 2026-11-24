@@ -48,6 +48,7 @@ import { createOrderKeyRing } from '../../utils/idempotency';
 import { parseTypedVnPhone } from '../../utils/vn-phone';
 import { joinDetailParts, variationLabel } from '../../utils/variation-label';
 import { vi } from '../../i18n/vi';
+import { viCtvOrder } from '../../i18n/vi-affiliate';
 import { ProductThumb } from '../ui/product-thumb';
 import { Input } from '../ui/input';
 import { SearchField } from '../ui/search-field';
@@ -62,7 +63,7 @@ interface OrderLine {
   stock: number;
 }
 
-const t = vi.ctvOrder;
+const t = viCtvOrder;
 
 /** Giá hoặc tổng lúc tạo đơn đã khác báo giá CTV đang xem (giờ vàng hết giờ/hết suất, phí giao đổi). */
 const PRICE_MOVED = new Set(['TOTAL_CHANGED', 'PRICE_CHANGED']);

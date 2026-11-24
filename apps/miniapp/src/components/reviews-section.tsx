@@ -53,6 +53,7 @@ import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-u
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { viReviews } from '../i18n/vi-catalog';
 import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -313,7 +314,7 @@ export function ReviewsSection({
       {status === 'authenticated' && eligQ.isError && !eligQ.data && (
         <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="caption" tone="danger">
-            {vi.reviews.eligibilityFailed}
+            {viReviews.eligibilityFailed}
           </Text>
           <Button variant="ghost" loading={eligQ.isFetching} onPress={() => void eligQ.refetch()}>
             {vi.common.retry}
@@ -324,7 +325,7 @@ export function ReviewsSection({
         hiddenMine.map((r) => (
           <div key={r.id} role="status" style={{ marginTop: 4 }}>
             <Text variant="caption" tone="warning" as="p">
-              {vi.reviews.hiddenNotice(r.orderCode)}
+              {viReviews.hiddenNotice(r.orderCode)}
             </Text>
           </div>
         ))}
@@ -641,7 +642,7 @@ function WriteReview({
       if (res.awaitingApproval === true) {
         openSnackbar({ text: REVIEW_PENDING_SAVED, type: 'info' });
       } else if (hidden || res.isVisible === false) {
-        openSnackbar({ text: vi.reviews.savedHidden, type: 'info' });
+        openSnackbar({ text: viReviews.savedHidden, type: 'info' });
       } else {
         openSnackbar({
           text: res.updated
@@ -826,7 +827,7 @@ function WriteReview({
       )}
       {isEdit && hidden && (
         <Text variant="caption" tone="warning" as="p" style={{ marginTop: 8 }}>
-          {vi.reviews.editHiddenNote}
+          {viReviews.editHiddenNote}
         </Text>
       )}
       {(isEdit || showReward) && (

@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { vnd, vndShort } from './money';
 
 /**
@@ -34,9 +34,9 @@ export function welcomeOfferOf(cfg: WelcomeOfferSource | null | undefined): Welc
 
 /** "Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k"; không có số thì "Tubu Tree tặng khách mới mã giảm giá cho đơn đầu". */
 export function shareOfferLine(offer: WelcomeOffer | null | undefined): string {
-  if (!offer) return fillCopy('share.offerPlain');
+  if (!offer) return fillBootCopy('share.offerPlain');
   const amount = vnd(offer.amount);
-  return offer.minOrder > 0 ? fillCopy('share.offer', { amount, min: vndShort(offer.minOrder) }) : fillCopy('share.offerNoMin', { amount });
+  return offer.minOrder > 0 ? fillBootCopy('share.offer', { amount, min: vndShort(offer.minOrder) }) : fillBootCopy('share.offerNoMin', { amount });
 }
 
 const collapse = (s: string): string => s.replace(/\s+/g, ' ').trim();

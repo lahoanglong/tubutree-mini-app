@@ -10,7 +10,7 @@ import { withReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { useAuthStore } from '../store/auth';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { vi } from '../i18n/vi';
+import { viOrders } from '../i18n/vi-orders';
 import { haptic } from '../utils/haptic';
 import { formatVnd } from '../utils/format';
 import { uniqueById } from '../utils/unique-by-id';
@@ -110,13 +110,13 @@ export default function OrdersPage() {
   const emptyBody =
     welcome && welcome.type === 'AMOUNT' && welcome.value > 0
       ? welcome.minOrder
-        ? vi.orders.emptyBody(formatVnd(welcome.minOrder), formatVnd(welcome.value))
-        : vi.orders.emptyBodyNoMin(formatVnd(welcome.value))
+        ? viOrders.emptyBody(formatVnd(welcome.minOrder), formatVnd(welcome.value))
+        : viOrders.emptyBodyNoMin(formatVnd(welcome.value))
       : undefined;
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
-      <PageHeader title={vi.orders.tabTitle} />
+      <PageHeader title={viOrders.tabTitle} />
 
       <AuthGate>
         <div style={{ padding: '8px 12px' }}>
@@ -143,9 +143,9 @@ export default function OrdersPage() {
               }}
               onSubmit={(v) => setQuery(normalizeOrderSearchInput(v))}
               onClear={clearSearch}
-              label={vi.orders.searchLabel}
-              clearLabel={vi.orders.searchClear}
-              placeholder={vi.orders.searchPlaceholder}
+              label={viOrders.searchLabel}
+              clearLabel={viOrders.searchClear}
+              placeholder={viOrders.searchPlaceholder}
               maxLength={SEARCH_MAX_LENGTH}
             />
           </div>
@@ -181,8 +181,8 @@ export default function OrdersPage() {
               <EmptyState
                 variant="inline"
                 art="search"
-                heading={vi.orders.searchNoMatch(query, tab !== 'all')}
-                ctaLabel={vi.orders.searchClear}
+                heading={viOrders.searchNoMatch(query, tab !== 'all')}
+                ctaLabel={viOrders.searchClear}
                 onCta={clearSearchAndFocus}
               />
             </div>
@@ -190,15 +190,15 @@ export default function OrdersPage() {
             <>
               <EmptyState
                 art="box"
-                heading={vi.orders.emptyHeading}
+                heading={viOrders.emptyHeading}
                 body={emptyBody}
-                ctaLabel={vi.orders.emptyCta}
+                ctaLabel={viOrders.emptyCta}
                 onCta={() => goSmart('/browse')}
               />
               <BestSellerRailQuery />
             </>
           ) : (
-            <EmptyState variant="inline" art="box" heading={vi.orders.emptyTabHeading} />
+            <EmptyState variant="inline" art="box" heading={viOrders.emptyTabHeading} />
           )
         ) : (
           <>
@@ -228,7 +228,7 @@ export default function OrdersPage() {
                   onPress={() => void orders.fetchNextPage()}
                   style={{ minWidth: 160 }}
                 >
-                  {vi.orders.loadMore}
+                  {viOrders.loadMore}
                 </Button>
               </div>
             )}

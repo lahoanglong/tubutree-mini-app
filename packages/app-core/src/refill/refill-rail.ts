@@ -1,7 +1,7 @@
 import type { QuickReorderItem } from '../commerce/quick-reorder';
 import { parseNetAmount } from '../commerce/unit-price';
 import { vnd } from '../commerce/money';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import type { RefillOfferDTO, RefillPairsDTO } from './refill-api';
 
 /** Ô của dải "Mua lại món quen" đã đổi sang gói Refill; `bottle` là ô chai gốc (để mở "Mua lại đúng món cũ" và để báo sự kiện). */
@@ -47,13 +47,13 @@ export function refillQuickItems(items: readonly QuickReorderItem[], pairs: Refi
       savePct: 0,
       isFlash: false,
       timesBought: 0,
-      badge: fillCopy('refill.railBadge', { size }),
-      addLabel: fillCopy('refill.railAdd'),
-      addAria: fillCopy('refill.railAddAria', {
+      badge: fillBootCopy('refill.railBadge', { size }),
+      addLabel: fillBootCopy('refill.railAdd'),
+      addAria: fillBootCopy('refill.railAddAria', {
         size,
         bottle: item.name,
         price: vnd(o.price),
-        save: saving ? fillCopy('refill.railSave', { pct: saving.pct, per: saving.per }) : '',
+        save: saving ? fillBootCopy('refill.railSave', { pct: saving.pct, per: saving.per }) : '',
       }),
       bottle: item,
     };

@@ -7,11 +7,12 @@
 // tubu-w20-02: một mô-đun app-core dùng chung cho phần nạp sẵn và bộ vẽ lười đã kéo cả bộ vẽ `share-poster-png` vào chunk `share-sheet`,
 // mà 10 trang import tĩnh chunk đó. bundle-budget.cjs chỉ cân tổng và entry nên không thấy lỗi kiểu này.
 //
-// Ba luật, đo trên bản build (tên tệp `assets/<tên>.<băm 7>.module.js`):
+// Bốn luật, đo trên bản build (tên tệp `assets/<tên>.<băm 7>.module.js`):
 //   1. Mỗi tên trong LAZY_ONLY còn đúng một chunk riêng. Mất tệp nghĩa là Rollup đã gộp mô-đun đó vào chunk khác.
 //   2. Không chunk nào import TĨNH chunk đó (`import … from"./x.js"`, `import"./x.js"`, `export … from"./x.js"`), chỉ `import("./x.js")`.
 //   3. Không chunk nào trong bao đóng import tĩnh của entry (script module + modulepreload của index.html) bị chính bao đóng đó import động:
 //      import động tới một chunk đã nạp sẵn là dấu hiệu mô-đun lười bị kéo về đường nạp đầu.
+//   4. Mỗi tên trong NOT_EAGER còn đúng một chunk riêng và chunk đó nằm ngoài bao đóng import tĩnh của entry. Chunk trang con được import tĩnh nó.
 // Đổi tên hay bỏ hẳn một mô-đun trong LAZY_ONLY thì sửa danh sách trong cùng PR (thông báo lỗi nêu tên).
 const fs = require('fs');
 const path = require('path');
@@ -28,6 +29,13 @@ const LAZY_ONLY = [
   'product-story-showcase', // câu chuyện sản phẩm ở trang chi tiết
   'ai-advisor', // trợ lý chọn sản phẩm
   'support-chat', // trò chuyện hỗ trợ
+];
+
+/** Chunk mà trang con import tĩnh nhưng gói đầu không được kéo theo. */
+const NOT_EAGER = [
+  // Toàn bảng chữ gian hàng SHOP_COPY (~52 KB). Mô-đun gói đầu dùng `fillBootCopy` (packages/app-core/src/shop-copy-boot.ts); một lệnh `fillCopy`
+  // trong mô-đun gói đầu đưa cả bảng về entry (tubu-w31-04).
+  'shop-copy',
 ];
 
 const CHUNK_RE = /^(.+)\.[A-Za-z0-9_-]{7}\.module\.js$/;
@@ -106,6 +114,24 @@ function check(dir) {
     if (dynamicFrom.length === 0) errors.push(`Chunk lười "${name}" không có import() động nào trỏ tới: không còn được nạp lười (hoặc cách nạp đã đổi).`);
     lines.push(`  ${name.padEnd(24)} ${String(size).padStart(7)} byte  import() từ ${dynamicFrom.length} chunk, import tĩnh từ ${importers.length}`);
   }
+  for (const name of NOT_EAGER) {
+    const files = [...graph.keys()].filter((f) => chunkName(f) === name);
+    if (files.length !== 1) {
+      errors.push(
+        files.length === 0
+          ? `Không còn chunk riêng "${name}": Rollup đã gộp mô-đun này vào chunk khác, hoặc mô-đun đã đổi tên (khi đó sửa NOT_EAGER trong scripts/ci/mini-lazy-chunks.cjs).`
+          : `Có ${files.length} chunk tên "${name}" (${files.join(', ')}).`,
+      );
+      continue;
+    }
+    const file = files[0];
+    const size = fs.statSync(path.join(assets, file)).size;
+    if (eager.has(file)) {
+      const from = [...eager].filter((f) => graph.get(f).statics.has(file));
+      errors.push(`Chunk "${name}" nằm trong đường nạp đầu của entry (import tĩnh từ ${from.join(', ') || 'index.html'}): gói đầu kéo cả chunk này.`);
+    }
+    lines.push(`  ${name.padEnd(24)} ${String(size).padStart(7)} byte  ngoài đường nạp đầu: ${eager.has(file) ? 'không' : 'có'}`);
+  }
   for (const file of eager) {
     for (const target of graph.get(file).dynamics) {
       if (eager.has(target)) errors.push(`${file} import() động ${target} nhưng ${target} đã nằm trong đường nạp đầu: mô-đun lười đã bị kéo về chunk tĩnh.`);
@@ -123,9 +149,9 @@ function main() {
     const md = ['### Chunk lười Mini App', '', ...lines.slice(1).map((l) => `- ${l.trim()}`), ...errors.map((e) => `\n> **Lỗi:** ${e}`), ''].join('\n');
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
   }
-  console.log(errors.length === 0 ? `Đạt: ${LAZY_ONLY.length} chunk lười đều riêng và chỉ nạp bằng import().` : `Không đạt: ${errors.length} lỗi.`);
+  console.log(errors.length === 0 ? `Đạt: ${LAZY_ONLY.length} chunk lười đều riêng và chỉ nạp bằng import(); ${NOT_EAGER.length} chunk ngoài đường nạp đầu.` : `Không đạt: ${errors.length} lỗi.`);
   process.exit(errors.length === 0 ? 0 : 1);
 }
 
 if (require.main === module) main();
-module.exports = { LAZY_ONLY, check };
+module.exports = { LAZY_ONLY, NOT_EAGER, check };

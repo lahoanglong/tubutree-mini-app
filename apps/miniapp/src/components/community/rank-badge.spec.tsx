@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { RankBadge, levelEmoji, levelName } from './rank-badge';
-import { vi } from '../../i18n/vi';
+import { viCommunity } from '../../i18n/vi-community';
 
 /**
  * Đặc tả badge hạng cộng đồng (C-076, PC-10a). Emoji hạng là NỘI DUNG nên giữ qua đợt di cư DS v2;
@@ -9,10 +9,10 @@ import { vi } from '../../i18n/vi';
  */
 describe('levelEmoji / levelName', () => {
   it.each([
-    [1, '🌱', vi.community.level1],
-    [2, '🌿', vi.community.level2],
-    [3, '🌳', vi.community.level3],
-    [4, '🏆', vi.community.level4],
+    [1, '🌱', viCommunity.level1],
+    [2, '🌿', viCommunity.level2],
+    [3, '🌳', viCommunity.level3],
+    [4, '🏆', viCommunity.level4],
   ])('hạng %i → %s %s', (level, emoji, name) => {
     expect(levelEmoji(level)).toBe(emoji);
     expect(levelName(level)).toBe(name);
@@ -21,8 +21,8 @@ describe('levelEmoji / levelName', () => {
   it('hạng ngoài 1..4 rơi về Mầm', () => {
     expect(levelEmoji(0)).toBe('🌱');
     expect(levelEmoji(9)).toBe('🌱');
-    expect(levelName(0)).toBe(vi.community.level1);
-    expect(levelName(9)).toBe(vi.community.level1);
+    expect(levelName(0)).toBe(viCommunity.level1);
+    expect(levelName(9)).toBe(viCommunity.level1);
   });
 });
 

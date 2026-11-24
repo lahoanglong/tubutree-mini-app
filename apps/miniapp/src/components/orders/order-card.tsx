@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Star } from 'lucide-react';
 import { orderReviewCta } from '@tubutree/app-core/order-review-cta';
 import { vi } from '../../i18n/vi';
+import { viOrders } from '../../i18n/vi-orders';
 import type { OrderView } from '../../services/shop-api';
 import { formatDate, formatDateTime } from '../../utils/format';
 import { canPayOrderNow, showsPaymentDeadline } from '../../utils/refund-rules';
@@ -80,7 +81,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay, onReview }: Orde
             </Text>
           )}
           <Text variant="caption" tone="tertiary" as="div" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {vi.orders.itemCount(orderUnitCount(o.items))} · {formatDate(o.createdAt)}
+            {viOrders.itemCount(orderUnitCount(o.items))} · {formatDate(o.createdAt)}
           </Text>
         </div>
         <PriceTag value={o.total} size="sm" />
@@ -89,7 +90,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay, onReview }: Orde
         <div data-testid="order-card-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           {showsPaymentDeadline(o) ? (
             <Text variant="caption" tone="tertiary" as="span" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {vi.orders.payBy(formatDateTime(o.paymentDeadline))}
+              {viOrders.payBy(formatDateTime(o.paymentDeadline))}
             </Text>
           ) : (
             <span />
@@ -97,7 +98,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay, onReview }: Orde
           {/* Như "Mua lại": nổi trên lớp phủ của nút mở đơn, vùng trống cạnh nút vẫn mở chi tiết đơn. */}
           <div style={{ position: 'relative', zIndex: 1 }}>
             <Button size="md" onPress={onPay} style={{ minWidth: 0 }}>
-              {vi.orders.payNow}
+              {viOrders.payNow}
             </Button>
           </div>
         </div>

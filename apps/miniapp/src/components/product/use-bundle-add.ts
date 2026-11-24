@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy, type BootCopyKey } from '@tubutree/app-core/shop-copy-boot';
 import { useNotify } from '../../hooks/use-notify';
 import { addAllToCart } from '../../services/cart-batch';
 import { getErrorMessage, isBusinessMessage, isStaleStateError } from '../../services/api';
@@ -19,8 +19,8 @@ export interface BundleAdd {
   /** Khoá riêng của lần thêm (id combo hay 'addons'): `busyId` trả lại để chỉ nút đó quay. */
   id: string;
   lines: { variationId: string; quantity: number }[];
-  /** Câu báo khi không có lời nghiệp vụ của máy chủ. */
-  errorKey: string;
+  /** Câu báo khi không có lời nghiệp vụ của máy chủ (khoá của bảng gói đầu: hook này nằm trong gói đầu qua Combo Trang chủ). */
+  errorKey: BootCopyKey;
   /** Có thì báo thành công bằng câu này (combo); mua kèm tự đổi nhãn nút nên không báo. */
   successText?: string;
   /** Nhận giỏ máy chủ trả sau lệnh thêm (vd trang Bộ quà tặng nói còn thiếu bao nhiêu tới Miễn phí giao hàng). */
@@ -54,7 +54,7 @@ export function useBundleAdd() {
     },
     // Trả Promise: ô giữ khoá tới khi tồn kho mới về (tối đa `settleWithin`) khi máy chủ từ chối (món hết hàng, ngừng bán, giá đổi), kẻo bấm lại trên số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx: nhả ngay.
     onError: (error, v) => {
-      notify({ type: 'error', text: errorText(error, fillCopy(v.errorKey)) });
+      notify({ type: 'error', text: errorText(error, fillBootCopy(v.errorKey)) });
       if (!isStaleStateError(error)) return undefined;
       return settleWithin(Promise.all(BUNDLE_STOCK_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));
     },

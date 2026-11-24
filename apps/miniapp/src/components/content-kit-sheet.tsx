@@ -5,7 +5,7 @@ import { fetchContentKit } from '../services/affiliate-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useActionLock, useShareWithFallback } from './share-sheet';
 import { haptic } from '../utils/haptic';
-import { vi } from '../i18n/vi';
+import { viContentKit } from '../i18n/vi-catalog';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Heading, Text } from './ui/text';
@@ -75,7 +75,7 @@ export function ContentKitSheet({
       if (ok) haptic('light');
       openSnackbar(
         ok
-          ? { text: vi.contentKit.copied, type: 'success' }
+          ? { text: viContentKit.copied, type: 'success' }
           : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
       );
     });
@@ -88,7 +88,7 @@ export function ContentKitSheet({
     data && (captions.length > 0 || data.usps.length > 0 || data.faqs.length > 0 || data.videoUrls.length > 0);
 
   return (
-    <BottomSheet open={visible} onClose={onClose} title={vi.contentKit.sheetTitle}>
+    <BottomSheet open={visible} onClose={onClose} title={viContentKit.sheetTitle}>
       <div style={{ maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {q.isLoading && (
           <div role="status" aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -143,10 +143,10 @@ export function ContentKitSheet({
                   });
                 }}
               >
-                {vi.contentKit.shareZalo}
+                {viContentKit.shareZalo}
               </Button>
               <Button fullWidth variant="secondary" icon={Copy} aria-disabled={lock.busy || undefined} onPress={() => copy(link)}>
-                {vi.contentKit.copyLink}
+                {viContentKit.copyLink}
               </Button>
             </div>
 
@@ -166,12 +166,12 @@ export function ContentKitSheet({
 
             {!hasContent && (
               <Text variant="body-sm" tone="tertiary" as="div">
-                {vi.contentKit.empty}
+                {viContentKit.empty}
               </Text>
             )}
 
             {captions.length > 0 && (
-              <Section title={vi.contentKit.captionsHeading}>
+              <Section title={viContentKit.captionsHeading}>
                 {captions.map((c, i) => (
                   <CopyRow key={i} busy={lock.busy} onPress={() => void copy(c)}>
                     <Text variant="caption" tone="secondary">{c}</Text>
@@ -181,7 +181,7 @@ export function ContentKitSheet({
             )}
 
             {data.usps.length > 0 && (
-              <Section title={vi.contentKit.uspsHeading}>
+              <Section title={viContentKit.uspsHeading}>
                 <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {data.usps.map((u, i) => (
                     <li key={i}>
@@ -193,7 +193,7 @@ export function ContentKitSheet({
             )}
 
             {data.faqs.length > 0 && (
-              <Section title={vi.contentKit.faqHeading}>
+              <Section title={viContentKit.faqHeading}>
                 {data.faqs.map((f, i) => (
                   <div key={i} style={{ marginBottom: 8 }}>
                     <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{f.q}</Text>
@@ -204,7 +204,7 @@ export function ContentKitSheet({
             )}
 
             {data.videoUrls.length > 0 && (
-              <Section title={vi.contentKit.videosHeading}>
+              <Section title={viContentKit.videosHeading}>
                 {data.videoUrls.map((url, i) => (
                   <CopyRow key={i} busy={lock.busy} onPress={() => void copy(url)}>
                     <Text variant="caption" tone="brand" style={{ wordBreak: 'break-all' }}>{url}</Text>

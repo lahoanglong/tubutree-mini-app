@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AcademyCourseDetail, AcademyCourseSummary } from '../services/academy-api';
-import { vi as viText } from '../i18n/vi';
+import { viAcademy } from '../i18n/vi-affiliate';
 import { HttpError } from '../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
@@ -97,9 +97,9 @@ describe('AcademyPage — khách thường', () => {
   it('không gọi API, hiện cổng dành cho CTV với nút sang đăng ký', async () => {
     mocks.role = 'CUSTOMER';
     renderPage();
-    expect(await screen.findByText(viText.academy.ctvOnlyTitle)).toBeInTheDocument();
+    expect(await screen.findByText(viAcademy.ctvOnlyTitle)).toBeInTheDocument();
     expect(mocks.fetchCourses).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: viText.academy.ctvOnlyCta }));
+    fireEvent.click(screen.getByRole('button', { name: viAcademy.ctvOnlyCta }));
     expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
   });
 
@@ -116,11 +116,11 @@ describe('AcademyPage — danh sách khoá học, hành vi giữ nguyên khi chu
   it('hiện tiêu đề, phụ đề, tên + mô tả + tiến độ từng khoá', async () => {
     renderPage();
     expect(await screen.findByText('Khoá a')).toBeInTheDocument();
-    expect(screen.getByText(viText.academy.title)).toBeInTheDocument();
-    expect(screen.getByText(viText.academy.subtitle)).toBeInTheDocument();
+    expect(screen.getByText(viAcademy.title)).toBeInTheDocument();
+    expect(screen.getByText(viAcademy.subtitle)).toBeInTheDocument();
     expect(screen.getByText('Mô tả khoá a')).toBeInTheDocument();
     expect(screen.getByText('1/3 bài đã học')).toBeInTheDocument();
-    const completed = screen.getByText(viText.academy.completed);
+    const completed = screen.getByText(viAcademy.completed);
     expect(completed.textContent).toBe('Đã hoàn thành');
     expect(completed.querySelector('svg')).not.toBeNull();
   });
@@ -155,9 +155,9 @@ describe('AcademyPage — danh sách khoá học, hành vi giữ nguyên khi chu
   it('chưa có khoá nào: hiện trạng thái trống', async () => {
     mocks.fetchCourses.mockResolvedValue([]);
     renderPage();
-    expect(await screen.findByText(viText.academy.empty)).toBeInTheDocument();
-    expect(screen.getByText(viText.academy.emptyBody)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: viText.academy.backToCtv }));
+    expect(await screen.findByText(viAcademy.empty)).toBeInTheDocument();
+    expect(screen.getByText(viAcademy.emptyBody)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: viAcademy.backToCtv }));
     expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
   });
 
@@ -193,14 +193,14 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     expect(video).toHaveAttribute('src', 'https://video.test/1.mp4');
     expect(screen.getByText(/Bước 1/).textContent).toBe('Bước 1\nBước 2');
     expect(screen.queryAllByRole('link')).toHaveLength(0);
-    expect(screen.queryByText(viText.academy.videoOnWeb)).toBeNull();
+    expect(screen.queryByText(viAcademy.videoOnWeb)).toBeNull();
   });
 
   it('video không phải file trực tiếp: chỉ ghi chữ xem trên web, không link', async () => {
     const d = DETAIL();
     mocks.fetchCourse.mockResolvedValue({ ...d, lessons: [{ ...d.lessons[0]!, videoUrl: 'https://youtube.com/watch?v=x' }] });
     renderPage();
-    expect(await screen.findByText(viText.academy.videoOnWeb)).toBeInTheDocument();
+    expect(await screen.findByText(viAcademy.videoOnWeb)).toBeInTheDocument();
     expect(screen.queryAllByRole('link')).toHaveLength(0);
     expect(document.querySelector('video')).toBeNull();
   });
@@ -208,20 +208,20 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
   it('bài đã học: nút "✓ Đã học xong" bị khoá; bài chưa học: "Đánh dấu đã học" bấm được', async () => {
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    const doneBtn = screen.getByRole('button', { name: viText.academy.alreadyDone });
+    const doneBtn = screen.getByRole('button', { name: viAcademy.alreadyDone });
     expect(doneBtn).toBeDisabled();
     expect(doneBtn.querySelector('svg')).not.toBeNull();
-    expect(screen.getAllByRole('button', { name: viText.academy.markDone })).toHaveLength(2);
-    for (const b of screen.getAllByRole('button', { name: viText.academy.markDone })) expect(b).not.toBeDisabled();
+    expect(screen.getAllByRole('button', { name: viAcademy.markDone })).toHaveLength(2);
+    for (const b of screen.getAllByRole('button', { name: viAcademy.markDone })) expect(b).not.toBeDisabled();
   });
 
   it('đánh dấu đã học: gửi đúng bài, rung, báo thành công, tải lại khoá và danh sách', async () => {
     const { invalidate } = renderPage();
     await screen.findByText('Khoá bán hàng');
-    fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: viAcademy.markDone })[0]!);
     await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledWith('l1'));
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viText.academy.markDoneOk, type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: viAcademy.markDoneOk, type: 'success' }),
     );
     expect(mocks.haptic).toHaveBeenCalledWith('medium');
     const keys = invalidate.mock.calls.map((c) => (c[0] as { queryKey: string[] }).queryKey);
@@ -234,7 +234,7 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     mocks.completeLesson.mockRejectedValue(new Error('Không có quyền'));
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: viAcademy.markDone })[0]!);
     expect(await screen.findByRole('alert')).toHaveTextContent('Không có quyền');
     expect(mocks.haptic).not.toHaveBeenCalled();
     expect(mocks.fetchCourse).toHaveBeenCalledTimes(1);
@@ -244,7 +244,7 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     mocks.completeLesson.mockRejectedValue(new Error('Không có quyền'));
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    const [first, second] = screen.getAllByRole('button', { name: viText.academy.markDone });
+    const [first, second] = screen.getAllByRole('button', { name: viAcademy.markDone });
     fireEvent.click(second!);
     const alert = await screen.findByRole('alert');
     expect(alert.parentElement).toContainElement(second!);
@@ -255,7 +255,7 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     mocks.completeLesson.mockReturnValue(new Promise(() => {}));
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    const [first, second] = screen.getAllByRole('button', { name: viText.academy.markDone });
+    const [first, second] = screen.getAllByRole('button', { name: viAcademy.markDone });
     await act(async () => {
       fireEvent.click(first!);
       fireEvent.click(second!);
@@ -268,7 +268,7 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     mocks.completeLesson.mockReturnValue(new Promise(() => {}));
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    const [first, second] = screen.getAllByRole('button', { name: viText.academy.markDone });
+    const [first, second] = screen.getAllByRole('button', { name: viAcademy.markDone });
     fireEvent.click(first!);
     await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(1));
     fireEvent.click(first!);
@@ -306,7 +306,7 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
 
     mocks.fetchCourses.mockResolvedValue([]);
     const empty = renderPage();
-    await screen.findByText(viText.academy.empty);
+    await screen.findByText(viAcademy.empty);
     expect(empty.container.querySelectorAll('h1')).toHaveLength(1);
     empty.unmount();
 
@@ -314,7 +314,7 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
     const loaded = renderPage();
     await screen.findByText('Khoá a');
     expect(loaded.container.querySelectorAll('h1')).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(viText.academy.title);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(viAcademy.title);
   });
 
   it('chi tiết có đúng một h1 ở đang tải, lỗi và đã tải; tên khoá là h2', async () => {
@@ -364,8 +364,8 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
     renderPage();
     await screen.findByText('Khoá bán hàng');
     const targets = [
-      ...screen.getAllByRole('button', { name: viText.academy.markDone }),
-      screen.getByRole('button', { name: viText.academy.alreadyDone }),
+      ...screen.getAllByRole('button', { name: viAcademy.markDone }),
+      screen.getByRole('button', { name: viAcademy.alreadyDone }),
     ];
     for (const t of targets) {
       expect(Number.parseFloat(t.style.minHeight), t.outerHTML.slice(0, 80)).toBeGreaterThanOrEqual(44);
@@ -424,7 +424,7 @@ describe('AcademyPage: đánh dấu hoàn thành khoá chạm đúp (W74A)', () 
     mocks.completeLesson.mockReturnValueOnce(d.promise);
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    const btn = screen.getAllByRole('button', { name: viText.academy.markDone })[0]!;
+    const btn = screen.getAllByRole('button', { name: viAcademy.markDone })[0]!;
     await act(async () => {
       fireEvent.click(btn);
       fireEvent.click(btn);
@@ -439,9 +439,9 @@ describe('AcademyPage: đánh dấu hoàn thành khoá chạm đúp (W74A)', () 
     mocks.completeLesson.mockRejectedValueOnce(new Error('Không có quyền')).mockResolvedValue({ ok: true });
     renderPage();
     await screen.findByText('Khoá bán hàng');
-    fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: viAcademy.markDone })[0]!);
     expect(await screen.findByRole('alert')).toHaveTextContent('Không có quyền');
-    fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: viAcademy.markDone })[0]!);
     await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
@@ -509,7 +509,7 @@ describe('AcademyPage: bài học bị từ chối thì giữ khoá tới khi d�
     render(<QueryClientProvider client={qc}><AcademyPage /></QueryClientProvider>);
     return invalidate;
   };
-  const markDone = () => screen.getAllByRole('button', { name: viText.academy.markDone })[0]!;
+  const markDone = () => screen.getAllByRole('button', { name: viAcademy.markDone })[0]!;
 
   beforeEach(() => {
     mocks.params = { courseId: 'c1' };
@@ -533,7 +533,7 @@ describe('AcademyPage: bài học bị từ chối thì giữ khoá tới khi d�
     // Dữ liệu chưa về: còn giữ khoá, chưa hiện lỗi, chạm thêm không gửi lần hai.
     expect(screen.queryByRole('alert')).toBeNull();
     await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+      fireEvent.click(screen.getAllByRole('button', { name: viAcademy.markDone })[0]!);
     });
     expect(mocks.completeLesson).toHaveBeenCalledTimes(1);
     await act(async () => refresh.resolve());

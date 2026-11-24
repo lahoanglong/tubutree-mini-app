@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'zmp-ui';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { useActiveOrderCount } from '../hooks/use-active-order-count';
@@ -76,7 +76,7 @@ export default function BottomNav() {
             : dot
               ? vi.nav.tabWithOffersDot(t.label)
               : remind
-                ? fillCopy(t.center ? 'nav.gardenDot' : 'nav.profileDot', { name: t.label })
+                ? fillBootCopy(t.center ? 'nav.gardenDot' : 'nav.profileDot', { name: t.label })
                 : t.label;
         return (
           <button

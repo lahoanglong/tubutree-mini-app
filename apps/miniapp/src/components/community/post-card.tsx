@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { apiMediaUrl } from '../../services/api';
 import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
-import { vi } from '../../i18n/vi';
+import { viCommunity } from '../../i18n/vi-community';
 import { Chip } from '../ui/chip';
 import { InitialsAvatar } from '../ui/initials-avatar';
 import { Icon } from '../ui/icon';
@@ -20,13 +20,13 @@ import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 // Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
 export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
-  QUESTION: vi.community.kindQuestion,
-  SHOWCASE: vi.community.kindShowcase,
-  TIP: vi.community.kindTip,
-  HARVEST: vi.community.kindHarvest,
-  SPECIES: vi.community.kindSpecies,
-  MILESTONE: vi.community.kindMilestone,
-  MANUAL: vi.community.kindManual,
+  QUESTION: viCommunity.kindQuestion,
+  SHOWCASE: viCommunity.kindShowcase,
+  TIP: viCommunity.kindTip,
+  HARVEST: viCommunity.kindHarvest,
+  SPECIES: viCommunity.kindSpecies,
+  MILESTONE: viCommunity.kindMilestone,
+  MANUAL: viCommunity.kindManual,
 };
 
 export const KIND_ICON: Partial<Record<FeedItem['kind'], LucideIcon>> = {
@@ -176,7 +176,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
         {post.kind === 'QUESTION' && post.bestCommentId && (
           <Text variant="body-sm" tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Icon icon={CheckCircle2} size="sm" tone="brand" />
-            {vi.community.hasBestAnswer}
+            {viCommunity.hasBestAnswer}
           </Text>
         )}
       </div>

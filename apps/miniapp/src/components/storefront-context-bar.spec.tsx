@@ -10,7 +10,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 
 import { StorefrontContextBar } from './storefront-context-bar';
 import { useStorefrontContext } from '../store/storefront-context';
-import { vi as t } from '../i18n/vi';
+import { viStorefront } from '../i18n/vi-storefront';
 
 describe('StorefrontContextBar', () => {
   beforeEach(() => {
@@ -27,13 +27,13 @@ describe('StorefrontContextBar', () => {
     useStorefrontContext.getState().setContext({ slug: 'an-lanh', referralCode: 'CTV1' });
     render(<StorefrontContextBar />);
     expect(screen.getByText('Đang xem gian hàng')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: t.storefront.backToTubu })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: viStorefront.backToTubu })).toBeInTheDocument();
   });
 
   it('bấm "Về Tubu Tree": xoá ngữ cảnh gian hàng rồi về trang chủ', () => {
     useStorefrontContext.getState().setContext({ slug: 'an-lanh', referralCode: 'CTV1' });
     render(<StorefrontContextBar />);
-    fireEvent.click(screen.getByRole('button', { name: t.storefront.backToTubu }));
+    fireEvent.click(screen.getByRole('button', { name: viStorefront.backToTubu }));
     expect(useStorefrontContext.getState().slug).toBeNull();
     expect(mocks.navigate).toHaveBeenCalledWith('/');
   });
@@ -41,7 +41,7 @@ describe('StorefrontContextBar', () => {
   it('nút về Tubu Tree cao >= 44px (vùng chạm)', () => {
     useStorefrontContext.getState().setContext({ slug: 'an-lanh' });
     render(<StorefrontContextBar />);
-    const btn = screen.getByRole('button', { name: t.storefront.backToTubu });
+    const btn = screen.getByRole('button', { name: viStorefront.backToTubu });
     expect(parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 });

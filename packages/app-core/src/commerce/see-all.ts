@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 
 /**
  * Nhãn nút "xem tất cả" của một khối: "Tất cả (n)" với n là số mục trang đích sẽ vẽ (Mã của tôi, Nhận mã, tổng sản phẩm của thương hiệu), không phải số đang hiện ở khối.
@@ -6,5 +6,5 @@ import { fillCopy } from '../shop-copy';
  */
 export function seeAllLabel(total: number | null | undefined): string | null {
   if (typeof total !== 'number' || !Number.isFinite(total) || total < 1) return null;
-  return fillCopy('section.seeAllCount', { n: total });
+  return fillBootCopy('section.seeAllCount', { n: total });
 }

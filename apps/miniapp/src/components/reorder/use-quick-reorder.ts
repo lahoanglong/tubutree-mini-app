@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { quickReorderLines, type QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import { useNotify } from '../../hooks/use-notify';
 import { vi } from '../../i18n/vi';
 import { getErrorMessage, isStaleStateError } from '../../services/api';
@@ -65,7 +65,7 @@ export function useQuickReorder() {
       id: ADD_ALL_ID,
       lines: quickReorderLines(items),
       errorKey: 'quickReorder.error',
-      successText: fillCopy('quickReorder.addedAll', { n: items.length }),
+      successText: fillBootCopy('quickReorder.addedAll', { n: items.length }),
       onDone: () => playCartFeedback(document.querySelector(ADD_ALL_BUTTON)),
     });
   };

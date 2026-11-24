@@ -21,7 +21,7 @@ import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { joinDetailParts, variationLabel } from '../utils/variation-label';
-import { vi } from '../i18n/vi';
+import { viSubscriptions } from '../i18n/vi-subscriptions';
 import { Badge, type BadgeTone } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -152,11 +152,11 @@ export function SubscriptionsPanel() {
     <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
         <Text variant="body-sm" tone="secondary" as="p" numeric>
-          {vi.subscriptions.intro(subscribePct)}
+          {viSubscriptions.intro(subscribePct)}
         </Text>
         {subs[0] && (
           <Text variant="caption" tone="brand" as="p" numeric style={{ marginTop: 4 }}>
-            {vi.subscriptions.discountLine(Math.round(subs[0].effectiveDiscountPct * 100))}
+            {viSubscriptions.discountLine(Math.round(subs[0].effectiveDiscountPct * 100))}
           </Text>
         )}
         {tierText && (
@@ -209,9 +209,9 @@ export function SubscriptionsPanel() {
         <EmptyState
           variant="inline"
           art="box"
-          heading={vi.subscriptions.emptyHeading}
-          body={vi.subscriptions.emptyBody}
-          ctaLabel={vi.subscriptions.emptyCta}
+          heading={viSubscriptions.emptyHeading}
+          body={viSubscriptions.emptyBody}
+          ctaLabel={viSubscriptions.emptyCta}
           onCta={() => goSmart('/browse')}
         />
       )}
@@ -239,8 +239,8 @@ export function SubscriptionsPanel() {
           if (!sheetBusy) setCancelTarget(null);
         }}
         dismissible={!sheetBusy}
-        title={vi.subscriptions.saveTitle}
-        description={vi.subscriptions.saveBody}
+        title={viSubscriptions.saveTitle}
+        description={viSubscriptions.saveBody}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Button
@@ -249,7 +249,7 @@ export function SubscriptionsPanel() {
             disabled={skipMut.isPending || (statusMut.isPending && pending !== 'PAUSED')}
             onPress={() => changeFromSheet('PAUSED')}
           >
-            {vi.subscriptions.pauseCta}
+            {viSubscriptions.pauseCta}
           </Button>
           {targetSub?.status === 'ACTIVE' && (
             <Button
@@ -262,7 +262,7 @@ export function SubscriptionsPanel() {
                 exclusive(() => skipMut.mutate({ id: targetSub.id, expectedNextRunAt: cancelShownRunAt.current ?? targetSub.nextRunAt }));
               }}
             >
-              {vi.subscriptions.skipCta}
+              {viSubscriptions.skipCta}
             </Button>
           )}
           <Button
@@ -273,7 +273,7 @@ export function SubscriptionsPanel() {
             onPress={() => changeFromSheet('CANCELLED')}
             style={{ color: 'var(--color-text-danger)' }}
           >
-            {vi.subscriptions.confirmCancelCta}
+            {viSubscriptions.confirmCancelCta}
           </Button>
         </div>
       </BottomSheet>
@@ -324,7 +324,7 @@ function SubscriptionCard({
             {joinDetailParts([variationLabel(s.variationName), `SL ${s.quantity}`])}
           </Text>
           <Text variant="caption" tone="brand" as="div" numeric style={{ fontWeight: 600 }}>
-            {vi.subscriptions.perCycle(s.intervalWeeks, formatVnd(cycle.goods))}
+            {viSubscriptions.perCycle(s.intervalWeeks, formatVnd(cycle.goods))}
           </Text>
           {cycle.discount > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -332,21 +332,21 @@ function SubscriptionCard({
                 {formatVnd(cycle.subtotal)}
               </Text>
               <Badge tone="success" size="sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {vi.subscriptions.savePill(cycle.savePct)}
+                {viSubscriptions.savePill(cycle.savePct)}
               </Badge>
             </div>
           )}
           <Text variant="caption" tone="tertiary" as="div">
-            {vi.subscriptions.payLine(vi.subscriptions.payShort[s.paymentMethod ?? 'COD'])}
+            {viSubscriptions.payLine(viSubscriptions.payShort[s.paymentMethod ?? 'COD'])}
           </Text>
           {address && (
             <Text variant="caption" tone="tertiary" as="div" style={{ overflowWrap: 'anywhere' }}>
-              {vi.subscriptions.addressLine(addressText(address))}
+              {viSubscriptions.addressLine(addressText(address))}
             </Text>
           )}
         </div>
         <Badge tone={STATUS_TONE[s.status]} size="sm" style={{ alignSelf: 'flex-start' }}>
-          {vi.subscriptions.statusLabel[s.status]}
+          {viSubscriptions.statusLabel[s.status]}
         </Badge>
       </div>
       <Text
@@ -356,7 +356,7 @@ function SubscriptionCard({
         numeric
         style={{ marginTop: 10, fontWeight: pause && pause.title !== SUBSCRIPTION_PAUSED_GENERIC ? 600 : undefined }}
       >
-        {pause ? pause.title : s.nextRunAt ? vi.subscriptions.nextRun(formatDate(s.nextRunAt)) : vi.subscriptions.scheduling}
+        {pause ? pause.title : s.nextRunAt ? viSubscriptions.nextRun(formatDate(s.nextRunAt)) : viSubscriptions.scheduling}
       </Text>
       {pause?.hint && (
         <Text variant="caption" tone="tertiary" as="div">
@@ -376,13 +376,13 @@ function SubscriptionCard({
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         <Button variant="secondary" disabled={busy || refreshing} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
-          {vi.subscriptions.edit}
+          {viSubscriptions.edit}
         </Button>
         <Button variant="secondary" loading={toggling} disabled={busy && !toggling} onPress={onToggle} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
-          {s.status === 'ACTIVE' ? vi.subscriptions.pause : vi.subscriptions.resume}
+          {s.status === 'ACTIVE' ? viSubscriptions.pause : viSubscriptions.resume}
         </Button>
         <Button variant="ghost" disabled={busy} onPress={onCancel} style={{ flex: '1 1 auto', minWidth: 'max-content', color: 'var(--color-text-danger)' }}>
-          {vi.subscriptions.cancel}
+          {viSubscriptions.cancel}
         </Button>
       </div>
     </Card>

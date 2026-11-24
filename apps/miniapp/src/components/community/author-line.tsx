@@ -1,5 +1,5 @@
 import { Leaf } from 'lucide-react';
-import { vi } from '../../i18n/vi';
+import { viCommunity } from '../../i18n/vi-community';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 import { RankBadge } from './rank-badge';
@@ -8,7 +8,7 @@ export function ExpertBadge() {
   return (
     <Text variant="label" tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
       <Icon icon={Leaf} size="sm" tone="brand" />
-      {vi.community.expert}
+      {viCommunity.expert}
     </Text>
   );
 }

@@ -23,6 +23,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { viCommunity } from '../i18n/vi-community';
 import { AuthorLine } from '../components/community/author-line';
 import { KIND_ICON, KIND_LABEL } from '../components/community/post-card';
 import { ProductThumb } from '../components/ui/product-thumb';
@@ -69,7 +70,7 @@ export default function PostDetailPage() {
         setReportTarget(null);
         setReportReason('');
       }
-      openSnackbar({ text: vi.community.reported, type: 'success' });
+      openSnackbar({ text: viCommunity.reported, type: 'success' });
     },
     onError: (e, target, sentSeq) => {
       // Máy chủ từ chối hẳn (bài/bình luận không còn, đã báo cáo): bấm lại nhận đúng lỗi đó nên đóng tấm và báo bằng snackbar vì tấm đã đóng. Lý do báo cáo là ô tuỳ chọn tối đa 500 ký tự (khớp DTO), 400 không do người dùng sửa được. Mất mạng, quá hạn, 401, 5xx giữ tấm kèm lỗi tại chỗ.
@@ -98,7 +99,7 @@ export default function PostDetailPage() {
   if (phase === 'unavailable') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.community.title} />
+        <PageHeader title={viCommunity.title} />
         <SessionUnavailable />
       </Page>
     );
@@ -108,8 +109,8 @@ export default function PostDetailPage() {
   if (!authed) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.community.title} />
-        <EmptyState art="sprout" heading={vi.community.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
+        <PageHeader title={viCommunity.title} />
+        <EmptyState art="sprout" heading={viCommunity.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }
@@ -121,7 +122,7 @@ export default function PostDetailPage() {
   if (!post.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
-        <PageHeader title={vi.community.title} />
+        <PageHeader title={viCommunity.title} />
         <ErrorState message={getLoadErrorMessage(post.error)} onRetry={() => post.refetch()} />
       </Page>
     );
@@ -140,7 +141,7 @@ export default function PostDetailPage() {
   ];
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 24 }}>
-      <PageHeader title={vi.community.title} />
+      <PageHeader title={viCommunity.title} />
 
       <div style={{ padding: 16, background: 'var(--color-bg-surface)' }}>
         {p.status === 'PENDING' && p.isOwner && (
@@ -158,7 +159,7 @@ export default function PostDetailPage() {
               style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <Icon icon={Clock} size="sm" tone="current" />
-              {vi.community.pendingBadge}
+              {viCommunity.pendingBadge}
             </Text>
           </div>
         )}
@@ -176,7 +177,7 @@ export default function PostDetailPage() {
           >
             <Icon icon={Pin} size="sm" tone="brand" />
             <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>
-              {vi.community.pinned}
+              {viCommunity.pinned}
             </Text>
           </div>
         )}
@@ -194,7 +195,7 @@ export default function PostDetailPage() {
           {!p.isOwner && (
             <IconButton
               icon={Flag}
-              label={vi.community.report}
+              label={viCommunity.report}
               onPress={() => {
                 haptic('light');
                 setReportTarget({ targetType: 'POST' });
@@ -272,7 +273,7 @@ export default function PostDetailPage() {
                 onPress={() => navigate(`/product/${p.productTags[0]!.slug}`)}
                 style={{ marginTop: 4 }}
               >
-                {p.kind === 'SHOWCASE' ? vi.community.buyThis : vi.community.viewSolution}
+                {p.kind === 'SHOWCASE' ? viCommunity.buyThis : viCommunity.viewSolution}
               </Button>
             )}
           </div>
@@ -288,7 +289,7 @@ export default function PostDetailPage() {
 
       <div style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
         <Heading variant="title-sm" as="h2" style={{ marginBottom: 10 }}>
-          {vi.community.answers} ({sortedComments.length})
+          {viCommunity.answers} ({sortedComments.length})
         </Heading>
 
         {comments.isLoading ? (
@@ -311,7 +312,7 @@ export default function PostDetailPage() {
           <ErrorState message={getLoadErrorMessage(comments.error)} onRetry={() => comments.refetch()} />
         ) : sortedComments.length === 0 ? (
           <Text variant="body-sm" tone="tertiary" as="div">
-            {vi.community.noAnswers}
+            {viCommunity.noAnswers}
           </Text>
         ) : (
           sortedComments.map((c) => (
@@ -345,7 +346,7 @@ export default function PostDetailPage() {
           setReportReason('');
           if (!reportMut.isPending) reportMut.reset();
         }}
-        title={vi.community.report}
+        title={viCommunity.report}
         footer={
           <Button
             fullWidth
@@ -353,13 +354,13 @@ export default function PostDetailPage() {
             loading={reportMut.isPending}
             onPress={() => reportTarget && reportMut.mutate(reportTarget)}
           >
-            {vi.community.report}
+            {viCommunity.report}
           </Button>
         }
       >
         <Input.TextArea
-          aria-label={vi.community.reportReason}
-          placeholder={vi.community.reportReason}
+          aria-label={viCommunity.reportReason}
+          placeholder={viCommunity.reportReason}
           value={reportReason}
           maxLength={500}
           rows={3}
@@ -379,7 +380,7 @@ export default function PostDetailPage() {
 function PostSkeleton() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title={vi.community.title} />
+      <PageHeader title={viCommunity.title} />
       <div style={{ padding: 16, background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Skeleton width={40} height={40} radius="50%" />
@@ -411,7 +412,7 @@ function CommentRow({ comment, onReport }: { comment: FeedComment; onReport: () 
       {comment.isAccepted && (
         <Text variant="label" tone="brand" as="div" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
           <Icon icon={CheckCircle2} size="sm" tone="brand" />
-          {vi.community.bestAnswer}
+          {viCommunity.bestAnswer}
         </Text>
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -419,7 +420,7 @@ function CommentRow({ comment, onReport }: { comment: FeedComment; onReport: () 
           <InitialsAvatar name={comment.author} size={28} />
           <AuthorLine name={comment.author} badge={comment.badge} level={comment.authorLevel} meta={timeAgo(comment.createdAt)} />
         </div>
-        {!comment.isOwner && <IconButton icon={Flag} size="sm" label={vi.community.report} onPress={onReport} />}
+        {!comment.isOwner && <IconButton icon={Flag} size="sm" label={viCommunity.report} onPress={onReport} />}
       </div>
       <Text variant="body-sm" as="div" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
         {comment.body}

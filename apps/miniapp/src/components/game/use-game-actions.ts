@@ -22,7 +22,7 @@ import { haptic } from '../../utils/haptic';
 import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { isHttpError } from '../../services/http';
 import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
-import { vi } from '../../i18n/vi';
+import { viGame } from '../../i18n/vi-game';
 import { formatDrops, formatPoints } from '../../utils/format';
 import { settleWithin } from '../../utils/settle-within';
 import { useLockedMutation } from './use-locked-mutation';
@@ -144,7 +144,7 @@ export function useGameActions({
     mutationFn: repairStreak,
     onSuccess: () => {
       haptic('medium');
-      openSnackbar({ text: vi.game.streakRepair.ok, type: 'success' });
+      openSnackbar({ text: viGame.streakRepair.ok, type: 'success' });
       return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }));
     },
     onError: onRejectedOnce,
@@ -207,7 +207,7 @@ export function useGameActions({
     mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
     onSuccess: () => {
       haptic('medium');
-      openSnackbar({ text: vi.game.seasonPass.claimOk, type: 'success' });
+      openSnackbar({ text: viGame.seasonPass.claimOk, type: 'success' });
       return settleWithin(
         Promise.all([
           queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] }),
@@ -223,7 +223,7 @@ export function useGameActions({
     mutationFn: (code: string) => claimMission(code),
     onSuccess: (r) => {
       haptic('medium');
-      openSnackbar({ text: vi.game.missions.claimOk(r.rewardPoints), type: 'success' });
+      openSnackbar({ text: viGame.missions.claimOk(r.rewardPoints), type: 'success' });
       return settleWithin(
         Promise.all([
           queryClient.invalidateQueries({ queryKey: ['game', 'missions'] }),

@@ -1,5 +1,5 @@
 import type { BundleDTO, ProductBundles } from '../api/bundle';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 import { productCardView, type ProductCardView } from './product-card-view';
 import { comboTotals } from './shop-page';
 
@@ -153,6 +153,6 @@ export function latchBundleSide<T>(live: T[], last: T[] | null, why: (held: T[])
 
 /** Tiêu đề khối, kèm lý do khi đang giữ ("Mua kèm giá tốt · Tạm hết hàng"; chữ hết hàng dùng chung `stock.out` của thẻ sản phẩm). */
 export function bundleHoldTitle(titleKey: 'combo.pdpTitle' | 'addon.title', hold: BundleHold | null): string {
-  return hold ? `${fillCopy(titleKey)} · ${fillCopy(hold === 'soldOut' ? 'stock.out' : 'bundle.ended')}` : fillCopy(titleKey);
+  return hold ? `${fillBootCopy(titleKey)} · ${fillBootCopy(hold === 'soldOut' ? 'stock.out' : 'bundle.ended')}` : fillBootCopy(titleKey);
 }
 

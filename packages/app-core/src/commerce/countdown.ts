@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const DAY_SEC = 86_400;
@@ -12,7 +12,7 @@ export function countdownClock(ms: number): string {
   const sec = Math.ceil(ms / 1000);
   const h = Math.floor((sec % DAY_SEC) / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  if (sec >= DAY_SEC) return fillCopy('time.daysClock', { d: Math.floor(sec / DAY_SEC), clock: `${pad2(h)}:${pad2(m)}` });
+  if (sec >= DAY_SEC) return fillBootCopy('time.daysClock', { d: Math.floor(sec / DAY_SEC), clock: `${pad2(h)}:${pad2(m)}` });
   const s = sec % 60;
   return h > 0 ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
 }
@@ -28,16 +28,16 @@ function parts(ms: number): { d: number; h: number; m: number; totalMin: number 
 export function countdownText(ms: number): string {
   const p = parts(ms);
   if (!p) return '';
-  if (p.d > 0) return p.h > 0 ? fillCopy('time.daysHours', { d: p.d, h: p.h }) : fillCopy('time.days', { d: p.d });
-  if (p.h > 0) return fillCopy('time.hoursMinutes', { h: p.h, m: pad2(p.m) });
-  return p.totalMin > 0 ? fillCopy('time.minutes', { m: p.m }) : fillCopy('time.underMinute');
+  if (p.d > 0) return p.h > 0 ? fillBootCopy('time.daysHours', { d: p.d, h: p.h }) : fillBootCopy('time.days', { d: p.d });
+  if (p.h > 0) return fillBootCopy('time.hoursMinutes', { h: p.h, m: pad2(p.m) });
+  return p.totalMin > 0 ? fillBootCopy('time.minutes', { m: p.m }) : fillBootCopy('time.underMinute');
 }
 
 /** Bản cho trình đọc màn hình (aria-label của role=timer): không đệm số 0, bỏ phần bằng 0: "2 giờ 5 phút". */
 export function countdownSpoken(ms: number): string {
   const p = parts(ms);
   if (!p) return '';
-  if (p.d > 0) return p.h > 0 ? fillCopy('time.daysHours', { d: p.d, h: p.h }) : fillCopy('time.days', { d: p.d });
-  if (p.h > 0) return p.m > 0 ? fillCopy('time.hoursMinutes', { h: p.h, m: p.m }) : fillCopy('time.hours', { h: p.h });
-  return p.totalMin > 0 ? fillCopy('time.minutes', { m: p.m }) : fillCopy('time.underMinute');
+  if (p.d > 0) return p.h > 0 ? fillBootCopy('time.daysHours', { d: p.d, h: p.h }) : fillBootCopy('time.days', { d: p.d });
+  if (p.h > 0) return p.m > 0 ? fillBootCopy('time.hoursMinutes', { h: p.h, m: p.m }) : fillBootCopy('time.hours', { h: p.h });
+  return p.totalMin > 0 ? fillBootCopy('time.minutes', { m: p.m }) : fillBootCopy('time.underMinute');
 }

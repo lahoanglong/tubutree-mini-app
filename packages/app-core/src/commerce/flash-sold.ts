@@ -1,4 +1,4 @@
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 
 /** Ngưỡng "Sắp hết": từ đây chữ đổi thành lời báo, không còn in phần trăm. */
 const ALMOST_GONE_PCT = 90;
@@ -8,9 +8,9 @@ const ALMOST_GONE_PCT = 90;
  * chưa bán "Vừa mở bán". Phần trăm làm tròn trước khi chia khoảng; số rác coi như chưa bán.
  */
 export function flashSoldText(pct: number, soldOut: boolean): string {
-  if (soldOut) return fillCopy('flash.soldOut');
+  if (soldOut) return fillBootCopy('flash.soldOut');
   const n = Number.isFinite(pct) ? Math.round(pct) : 0;
-  if (n >= ALMOST_GONE_PCT) return fillCopy('flash.almostGone');
-  if (n >= 1) return fillCopy('flash.soldPct', { n });
-  return fillCopy('flash.justOpened');
+  if (n >= ALMOST_GONE_PCT) return fillBootCopy('flash.almostGone');
+  if (n >= 1) return fillBootCopy('flash.soldPct', { n });
+  return fillBootCopy('flash.justOpened');
 }

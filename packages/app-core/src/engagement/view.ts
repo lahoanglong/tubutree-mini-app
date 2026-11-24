@@ -1,6 +1,6 @@
 import type { BadgesResponse, DailyMissionClaimResponse, DailyMissionId, DailyMissionsResponse } from '@tubutree/shared-types';
 import type { MissionTarget } from '../game-newbie';
-import { fillCopy } from '../shop-copy';
+import { fillBootCopy } from '../shop-copy-boot';
 
 /** Đích của nút "Làm": việc trong Vườn Xanh cuộn về khối điểm danh và tưới; việc ở gian hàng mở danh mục. */
 const DAILY_TARGETS: Record<DailyMissionId, MissionTarget> = {
@@ -27,37 +27,37 @@ export interface DailyRowView {
 export function dailyRows(res: DailyMissionsResponse | undefined): DailyRowView[] {
   if (!res?.enabled) return [];
   return res.missions.map((m) => {
-    const title = fillCopy(`daily.mission.${m.id}`);
+    const title = fillBootCopy(`daily.mission.${m.id}`);
     const state: DailyRowState = m.claimed ? 'claimed' : !m.done ? 'todo' : res.pointsBlocked ? 'done' : 'claimable';
     const aria =
       state === 'claimed'
-        ? fillCopy('daily.claimedAria', { title })
+        ? fillBootCopy('daily.claimedAria', { title })
         : state === 'claimable'
-          ? fillCopy('daily.claimAria', { title })
+          ? fillBootCopy('daily.claimAria', { title })
           : state === 'done'
-            ? fillCopy('daily.doneAria', { title })
-            : fillCopy('daily.goAria', { title });
-    return { id: m.id, title, reward: res.pointsBlocked ? '' : fillCopy('daily.water', { n: res.water }), state, target: DAILY_TARGETS[m.id], aria };
+            ? fillBootCopy('daily.doneAria', { title })
+            : fillBootCopy('daily.goAria', { title });
+    return { id: m.id, title, reward: res.pointsBlocked ? '' : fillBootCopy('daily.water', { n: res.water }), state, target: DAILY_TARGETS[m.id], aria };
   });
 }
 
 /** "2/3" của phần Hôm nay: số nhiệm vụ đã làm (đã nhận hoặc chưa). */
 export function dailyProgress(res: DailyMissionsResponse | undefined): string {
   if (!res?.enabled) return '';
-  return fillCopy('daily.progress', { n: res.missions.filter((m) => m.done || m.claimed).length, total: res.missions.length });
+  return fillBootCopy('daily.progress', { n: res.missions.filter((m) => m.done || m.claimed).length, total: res.missions.length });
 }
 
 /** Dòng thưởng ngày dưới 3 nhiệm vụ. Khách vãng lai không được hứa Điểm Xanh nên không có dòng. */
 export function dailyBonusLine(res: DailyMissionsResponse | undefined): string | null {
   if (!res?.enabled || res.pointsBlocked || res.bonusPoints <= 0) return null;
-  return fillCopy(res.bonusClaimed ? 'daily.bonusDone' : 'daily.bonus', { points: res.bonusPoints });
+  return fillBootCopy(res.bonusClaimed ? 'daily.bonusDone' : 'daily.bonus', { points: res.bonusPoints });
 }
 
 /** Chữ báo sau khi nhận: thưởng thật sau trần (có thể 0 khi Vườn Xanh đã trao đủ hôm nay). */
 export function dailyClaimToast(r: Pick<DailyMissionClaimResponse, 'water' | 'points'>): string {
-  if (r.water <= 0 && r.points <= 0) return fillCopy('daily.toastCapped');
-  if (r.points > 0) return fillCopy('daily.toastBonus', { n: r.water, points: r.points });
-  return fillCopy('daily.toastWater', { n: r.water });
+  if (r.water <= 0 && r.points <= 0) return fillBootCopy('daily.toastCapped');
+  if (r.points > 0) return fillBootCopy('daily.toastBonus', { n: r.water, points: r.points });
+  return fillBootCopy('daily.toastWater', { n: r.water });
 }
 
 /**
@@ -90,14 +90,14 @@ export interface BadgeChipView {
 export function badgeChips(res: BadgesResponse | undefined): BadgeChipView[] {
   if (!res?.enabled) return [];
   const views = res.badges.map((b) => {
-    const name = fillCopy(`badges.name.${b.id}`);
-    const how = fillCopy(`badges.how.${b.id}`);
-    return { id: b.id, name, earned: b.earned, how, aria: b.earned ? fillCopy('badges.earnedAria', { name }) : fillCopy('badges.lockedAria', { name, how }) };
+    const name = fillBootCopy(`badges.name.${b.id}`);
+    const how = fillBootCopy(`badges.how.${b.id}`);
+    return { id: b.id, name, earned: b.earned, how, aria: b.earned ? fillBootCopy('badges.earnedAria', { name }) : fillBootCopy('badges.lockedAria', { name, how }) };
   });
   return [...views.filter((v) => v.earned), ...views.filter((v) => !v.earned)];
 }
 
 export function badgeCount(res: BadgesResponse | undefined): string {
   if (!res?.enabled) return '';
-  return fillCopy('badges.count', { n: res.badges.filter((b) => b.earned).length, total: res.badges.length });
+  return fillBootCopy('badges.count', { n: res.badges.filter((b) => b.earned).length, total: res.badges.length });
 }

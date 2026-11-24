@@ -77,6 +77,7 @@ import {
 } from '../utils/checkout-selection';
 import { convertedPointsNote } from '../utils/points-lots';
 import { vi } from '../i18n/vi';
+import { viCheckout, viSuccess } from '../i18n/vi-checkout';
 import { haptic } from '../utils/haptic';
 import { PolicySheet } from '../components/policy-sheet';
 import type { WebPolicySlug } from '../utils/web-policy';
@@ -756,11 +757,11 @@ export default function CheckoutPage() {
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
-    { value: 'COD', label: vi.checkout.paymentCod },
+    { value: 'COD', label: viCheckout.paymentCod },
     // ZALOPAY tạm ẨN: chưa nối cổng thanh toán thật → nếu hiện, bấm đặt sẽ ra "thành công"
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
-    { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank },
-    { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)) },
+    { value: 'BANK_TRANSFER', label: viCheckout.paymentBank },
+    { value: 'WALLET', label: viCheckout.paymentWallet(formatVnd(walletBalance)) },
   ]
     // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này. Ví âm vẫn hiện (khoá, kèm lý do) để khách biết vì sao không dùng được.
     .filter((m) => m.value !== 'WALLET' || walletBalance !== 0)
@@ -834,7 +835,7 @@ export default function CheckoutPage() {
                   goSmart('/cart');
                 }}
               >
-                {vi.checkout.backToCart}
+                {viCheckout.backToCart}
               </Button>
             </Box>
           </Box>
@@ -845,7 +846,7 @@ export default function CheckoutPage() {
         ref={addressRef}
         data-testid="checkout-address-block"
         role="group"
-        aria-label={vi.checkout.address}
+        aria-label={viCheckout.address}
         tabIndex={-1}
         aria-describedby={placeAttempted && !addressId ? 'checkout-address-error' : undefined}
         style={{ outline: 'none' }}
@@ -1117,7 +1118,7 @@ export default function CheckoutPage() {
       {/* ── Thanh toán ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, marginBottom: 8 }}>
-          {vi.checkout.payment}
+          {viCheckout.payment}
         </Text>
         {zeroNote && (
           <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 18 / 14, minHeight: 44, display: 'block' }}>
@@ -1212,7 +1213,7 @@ export default function CheckoutPage() {
           >
             <Box>
               <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
-                {vi.checkout.points}
+                {viCheckout.points}
               </Text>
               <Text variant="caption" tone="tertiary" as="div" className="tubu-nums" style={{ lineHeight: 18 / 13 }}>
                 {pointsUsable
@@ -1252,9 +1253,9 @@ export default function CheckoutPage() {
       {/* ── Ghi chú ── */}
       <Box p={4} mt={2} data-ds="checkout-note" style={{ background: 'var(--color-bg-surface)' }}>
         <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500, marginBottom: 8 }}>
-          {vi.checkout.note}
+          {viCheckout.note}
         </Text>
-        <Input aria-label={vi.checkout.note} placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
+        <Input aria-label={viCheckout.note} placeholder={viCheckout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
           bumpChoice();
           setNote(e.target.value);
         }} />
@@ -1358,7 +1359,7 @@ export default function CheckoutPage() {
       >
         <Box flex alignItems="center" justifyContent="space-between" style={{ marginBottom: 10 }}>
           <Text variant="body-sm" as="div" style={{ lineHeight: 18 / 14, fontWeight: 500 }}>
-            {vi.checkout.summary}
+            {viCheckout.summary}
           </Text>
           <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
             <Text variant="caption" tone="brand" as="div" style={{ lineHeight: 18 / 13, fontWeight: 500 }}>
@@ -1415,10 +1416,10 @@ export default function CheckoutPage() {
               <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data.tierDiscount ?? 0)}`} tone="success" />
             )}
             {quote.data.pointsDiscount > 0 && (
-              <KeyValueRow label={vi.checkout.points} value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
+              <KeyValueRow label={viCheckout.points} value={`-${formatVnd(quote.data.pointsDiscount)}`} tone="success" />
             )}
             <KeyValueRow
-              label={vi.checkout.shippingFee}
+              label={viCheckout.shippingFee}
               value={
                 shipRow?.waived ? (
                   <WaivedShippingValue originalFee={shipRow.originalFee} note={shipRow.note ?? ''} />
@@ -1431,8 +1432,8 @@ export default function CheckoutPage() {
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
               style={recalculating ? RECALC_DIM : undefined}
             />
-            {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
-            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis style={recalculating ? RECALC_DIM : undefined} />
+            {etaLabel && <KeyValueRow label={viSuccess.etaLabel} value={etaLabel} />}
+            <KeyValueRow dataDs="checkout-summary-total" label={viCheckout.total} value={formatVnd(quote.data.total)} emphasis style={recalculating ? RECALC_DIM : undefined} />
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
@@ -1460,10 +1461,10 @@ export default function CheckoutPage() {
               </Text>
             )}
             <KeyValueRow
-              label={vi.checkout.shippingFee}
+              label={viCheckout.shippingFee}
               value={addressId ? fillCopy('checkout.calculating') : noAddressShipText}
             />
-            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
+            <KeyValueRow dataDs="checkout-summary-total" label={viCheckout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
           </>
         )}
       </Box>
@@ -1543,12 +1544,12 @@ export default function CheckoutPage() {
             }}
           >
             {order.isPending
-              ? vi.checkout.placing
+              ? viCheckout.placing
               : quote.data
                 ? retryingPlace
                   ? fillCopy('checkout.retryWith', { price: formatVnd(quote.data.total) })
-                  : vi.checkout.placeOrderWith(formatVnd(quote.data.total))
-                : vi.checkout.placeOrder}
+                  : viCheckout.placeOrderWith(formatVnd(quote.data.total))
+                : viCheckout.placeOrder}
           </Button>
         }
       />
@@ -1597,11 +1598,11 @@ export default function CheckoutPage() {
       <BottomSheet
         open={totalChanged !== null}
         onClose={() => setTotalChanged(null)}
-        title={vi.checkout.totalChangedTitle}
+        title={viCheckout.totalChangedTitle}
         description={totalChanged ?? undefined}
         footer={
           <Button fullWidth onPress={() => setTotalChanged(null)}>
-            {vi.checkout.totalChangedCta}
+            {viCheckout.totalChangedCta}
           </Button>
         }
       >

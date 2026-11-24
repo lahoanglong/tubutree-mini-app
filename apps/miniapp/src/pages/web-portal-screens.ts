@@ -1,5 +1,6 @@
 import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
-import { vi } from '../i18n/vi';
+import { viStorefront } from '../i18n/vi-storefront';
+import { viCommunity } from '../i18n/vi-community';
 import { safePortalParams } from './web-portal-query';
 
 /** Cổng web nhận các màn quản trị, đối tác và nhân sự đã rời khỏi gói Mini App (W177). */
@@ -19,8 +20,8 @@ export interface WebPortalScreen {
  */
 export const WEB_PORTAL_SCREENS = {
   '/admin': { title: 'Quản trị Tubu Tree', audience: 'Quản trị viên', webPath: '/admin' },
-  '/admin/community': { title: vi.community.moderation, audience: 'Quản trị viên', webPath: '/admin?tab=community' },
-  '/storefront': { title: vi.storefront.title, audience: 'Cộng tác viên', webPath: '/ctv/gian-hang' },
+  '/admin/community': { title: viCommunity.moderation, audience: 'Quản trị viên', webPath: '/admin?tab=community' },
+  '/storefront': { title: viStorefront.title, audience: 'Cộng tác viên', webPath: '/ctv/gian-hang' },
   '/dealer': { title: 'Kênh đại lý', audience: 'Đại lý và người muốn đăng ký đại lý', webPath: '/dai-ly' },
   '/recycle/desk': { title: 'Nhận hàng tại điểm', audience: 'Nhân sự điểm nhận', webPath: '/doi-rac/quay' },
   '/staff': { title: 'Ca làm của tôi', audience: 'Nhân sự', webPath: '/nhan-vien' },

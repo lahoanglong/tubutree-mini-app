@@ -120,6 +120,7 @@ import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
 import { ORDER_ZALO_KEY } from '../components/checkout/order-zalo';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { vi as viCopy } from '../i18n/vi';
+import { viCheckout, viSuccess } from '../i18n/vi-checkout';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { setCheckoutEntry, takeCheckoutEntry, trackEvent } from '../services/analytics';
 
@@ -2214,10 +2215,10 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
     cfg.shippingEta = { minDays: 2, maxDays: 4 };
     withShipments('TUBU');
     renderPage();
-    const label = await screen.findByText(viCopy.success.etaLabel);
+    const label = await screen.findByText(viSuccess.etaLabel);
     const row = label.parentElement as HTMLElement;
     expect(row.textContent).toMatch(/\d{2}\/\d{2} – \d{2}\/\d{2}/);
-    const shipRow = screen.getByText(viCopy.checkout.shippingFee).parentElement as HTMLElement;
+    const shipRow = screen.getByText(viCheckout.shippingFee).parentElement as HTMLElement;
     expect(shipRow.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -2228,22 +2229,22 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
     // Dòng ngày chỉ nằm trong khối có báo giá: đợi báo giá xong (nút Đặt hàng mở) rồi mới khẳng định không có.
     const btn = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
-    expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
+    expect(screen.queryByText(viSuccess.etaLabel)).toBeNull();
   });
 
   it('giỏ trộn hàng Tubu và hàng gian hàng tự giao → ngày kèm "(hàng Tubu Tree)"', async () => {
     cfg.shippingEta = { minDays: 2, maxDays: 4 };
     withShipments('TUBU', 'MERCHANT');
     renderPage();
-    const row = (await screen.findByText(viCopy.success.etaLabel)).parentElement as HTMLElement;
+    const row = (await screen.findByText(viSuccess.etaLabel)).parentElement as HTMLElement;
     expect(row.textContent).toMatch(/\d{2}\/\d{2} – \d{2}\/\d{2} \(hàng Tubu Tree\)/);
   });
 
   it('shippingEta null hoặc thiếu → không có dòng giao dự kiến', async () => {
     cfg.shippingEta = null;
     renderPage();
-    await screen.findByText(viCopy.checkout.shippingFee);
-    expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
+    await screen.findByText(viCheckout.shippingFee);
+    expect(screen.queryByText(viSuccess.etaLabel)).toBeNull();
     delete cfg.shippingEta;
   });
 });
@@ -2327,7 +2328,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'XANH10' });
     renderPage();
     expect(await screen.findByText('XANH10')).toBeInTheDocument();
-    await screen.findByText(viCopy.checkout.shippingFee);
+    await screen.findByText(viCheckout.shippingFee);
     await act(async () => {
       await new Promise((r) => setTimeout(r, 450));
     });
@@ -3246,7 +3247,7 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
       await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
       cartData = CART;
       await qc.invalidateQueries({ queryKey: ['cart'] });
-      await screen.findByText(viCopy.checkout.placing);
+      await screen.findByText(viCheckout.placing);
       await waitFor(() => expect(voucherBusy()).toBe(true));
       await act(async () => replay.resolve({ id: 'o1', code: 'TT001' }));
     });
@@ -4155,7 +4156,7 @@ describe('CheckoutPage — giữ địa chỉ và ghi chú qua một lần sang 
     fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
     fireEvent.click(await screen.findByRole('radio', { name: /Bình/ }));
     await waitFor(() => expect(screen.getByTestId('checkout-address-row')).toHaveTextContent('Bình'));
-    fireEvent.change(await screen.findByLabelText(viCopy.checkout.note), { target: { value: 'Để ở bảo vệ' } });
+    fireEvent.change(await screen.findByLabelText(viCheckout.note), { target: { value: 'Để ở bảo vệ' } });
     fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
     await placeOrderClick();
     const banner = await screen.findByTestId('checkout-cart-issue');

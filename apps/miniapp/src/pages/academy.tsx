@@ -24,7 +24,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
-import { vi } from '../i18n/vi';
+import { viAcademy } from '../i18n/vi-affiliate';
 import { canUseAcademy } from '@tubutree/app-core/academy-access';
 import { useAuthStore } from '../store/auth';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -41,9 +41,9 @@ function CtvOnlyNotice() {
   return (
     <EmptyState
       art="leaf"
-      heading={vi.academy.ctvOnlyTitle}
-      body={vi.academy.ctvOnlyBody}
-      ctaLabel={vi.academy.ctvOnlyCta}
+      heading={viAcademy.ctvOnlyTitle}
+      body={viAcademy.ctvOnlyBody}
+      ctaLabel={viAcademy.ctvOnlyCta}
       onCta={() => goSmart('/affiliate')}
     />
   );
@@ -58,7 +58,7 @@ export default function AcademyPage() {
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title={vi.academy.title} subtitle={courseId ? undefined : vi.academy.subtitle} />
+      <PageHeader title={viAcademy.title} subtitle={courseId ? undefined : viAcademy.subtitle} />
       {courseId ? (
         <CourseDetail courseId={courseId} />
       ) : (
@@ -95,7 +95,7 @@ function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onB
           ))}
         </div>
       ) : (
-        <EmptyState art="sprout" heading={vi.academy.empty} body={vi.academy.emptyBody} ctaLabel={vi.academy.backToCtv} onCta={onBackToCtv} />
+        <EmptyState art="sprout" heading={viAcademy.empty} body={viAcademy.emptyBody} ctaLabel={viAcademy.backToCtv} onCta={onBackToCtv} />
       )}
     </div>
   );
@@ -142,10 +142,10 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
             {course.isCompleted ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon icon={CheckCircle2} size="sm" tone="brand" />
-                {vi.academy.completed}
+                {viAcademy.completed}
               </span>
             ) : (
-              <span>{vi.academy.progress(course.completedCount, course.lessonCount)}</span>
+              <span>{viAcademy.progress(course.completedCount, course.lessonCount)}</span>
             )}
           </>
         }
@@ -166,7 +166,7 @@ function CourseDetail({ courseId }: { courseId: string }) {
       mutationFn: (lessonId: string) => completeLesson(lessonId),
       onSuccess: () => {
         haptic('medium');
-        openSnackbar({ text: vi.academy.markDoneOk, type: 'success' });
+        openSnackbar({ text: viAcademy.markDoneOk, type: 'success' });
         void qc.invalidateQueries({ queryKey: ['academy-course', courseId] });
         void qc.invalidateQueries({ queryKey: ['academy-courses'] });
       },
@@ -249,7 +249,7 @@ function CourseDetailBody({
                     />
                   ) : (
                     <Text variant="body-sm" tone="secondary" as="div">
-                      {vi.academy.videoOnWeb}
+                      {viAcademy.videoOnWeb}
                     </Text>
                   )}
                 </div>
@@ -269,7 +269,7 @@ function CourseDetailBody({
                 onPress={() => onComplete(lesson.id)}
                 style={{ marginTop: 10 }}
               >
-                {done ? vi.academy.alreadyDone : vi.academy.markDone}
+                {done ? viAcademy.alreadyDone : viAcademy.markDone}
               </Button>
               {failure?.lessonId === lesson.id && (
                 <div key={failure.key} role="alert" style={{ marginTop: 'var(--space-stack-xs)' }}>

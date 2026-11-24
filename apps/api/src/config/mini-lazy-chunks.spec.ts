@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 const REPO = join(__dirname, '../../../..');
 const SCRIPT = join(REPO, 'scripts/ci/mini-lazy-chunks.cjs');
-const { LAZY_ONLY } = require(SCRIPT) as { LAZY_ONLY: string[] };
+const { LAZY_ONLY, NOT_EAGER } = require(SCRIPT) as { LAZY_ONLY: string[]; NOT_EAGER: string[] };
 
 const file = (name: string) => `${name}.Ab3_x-9.module.js`;
 const INDEX = file('index');
@@ -26,10 +26,12 @@ function run(mutate?: (chunks: Map<string, string>, html: { value: string }) => 
   chunks.set(
     file('page'),
     `import{a as e}from"./${file('vendor-react')}";` +
+      NOT_EAGER.map((n, i) => `import{c as c${i}}from"./${file(n)}";`).join('') +
       LAZY_ONLY.map((n, i) => `const l${i}=()=>import("./${file(n)}");`).join('') +
       `const s="./${file('share-poster-png')}";export{e};`,
   );
   for (const n of LAZY_ONLY) chunks.set(file(n), `import{a as e}from"./${file('vendor-react')}";export const draw=()=>e;`);
+  for (const n of NOT_EAGER) chunks.set(file(n), 'const c={};export{c};');
   mutate?.(chunks, html);
   if (!opts.noDir) {
     mkdirSync(join(www, 'assets'), { recursive: true });
@@ -53,6 +55,7 @@ describe('scripts/ci/mini-lazy-chunks.cjs (chunk lười Mini App không bị k�
   it('danh sách có share-poster-png (sự cố tubu-w20-02) và các chunk lười lớn', () => {
     expect(LAZY_ONLY).toEqual(expect.arrayContaining(['share-poster-png', 'home-below', 'mini-round-shell']));
     expect(new Set(LAZY_ONLY).size).toBe(LAZY_ONLY.length);
+    expect(NOT_EAGER).toContain('shop-copy');
   });
 
   it('bản build đúng: thoát 0, in từng chunk lười, chuỗi tên tệp trong bản đồ preload không bị coi là import tĩnh, ghi bảng vào step summary', () => {
@@ -61,6 +64,7 @@ describe('scripts/ci/mini-lazy-chunks.cjs (chunk lười Mini App không bị k�
     expect(r.status).toBe(0);
     expect(r.out).toContain(`Đạt: ${LAZY_ONLY.length} chunk lười`);
     expect(r.out).toMatch(/share-poster-png\s+\d+ byte\s+import\(\) từ 1 chunk, import tĩnh từ 0/);
+    expect(r.out).toMatch(/shop-copy\s+\d+ byte\s+ngoài đường nạp đầu: có/);
     expect(r.md).toContain('### Chunk lười Mini App');
   });
 
@@ -101,6 +105,21 @@ describe('scripts/ci/mini-lazy-chunks.cjs (chunk lười Mini App không bị k�
     });
     expect(r.status).toBe(1);
     expect(r.errors.join('\n')).toContain('Chunk lười "support-chat" nằm trong đường nạp đầu của entry.');
+  });
+
+  it('entry import tĩnh bảng chữ shop-copy (mô-đun gói đầu gọi fillCopy): thoát 1, nêu chunk import', () => {
+    const r = run((c) => c.set(INDEX, `import{c as s}from"./${file('shop-copy')}";${c.get(INDEX)!}`));
+    expect(r.status).toBe(1);
+    expect(r.errors.join('\n')).toContain(`Chunk "shop-copy" nằm trong đường nạp đầu của entry (import tĩnh từ ${INDEX})`);
+  });
+
+  it('shop-copy bị gộp vào chunk khác (không còn tệp riêng): thoát 1, nêu tên', () => {
+    const r = run((c) => {
+      c.delete(file('shop-copy'));
+      c.set(file('page'), c.get(file('page'))!.replace(`import{c as c0}from"./${file('shop-copy')}";`, ''));
+    });
+    expect(r.status).toBe(1);
+    expect(r.errors.join('\n')).toContain('Không còn chunk riêng "shop-copy"');
   });
 
   it('chunk lười không còn ai import() động (cách nạp đã đổi): thoát 1', () => {

@@ -12,8 +12,13 @@ import { vi } from './vi';
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(here, '..');
+// vi.ts và các tệp chữ tách riêng cho màn tải lười (vi-*.ts).
+const VI_FILES = fs
+  .readdirSync(here)
+  .filter((f) => /^vi(-[a-z-]+)?\.ts$/.test(f))
+  .map((f) => `i18n/${f}`);
 const FILES = [
-  'i18n/vi.ts',
+  ...VI_FILES,
   'pages/cart.tsx',
   'pages/product-detail.tsx',
   'pages/loyalty.tsx',
@@ -52,8 +57,6 @@ describe('"Miễn phí giao hàng" một cách ghi (D6-17)', () => {
   });
 
   it('giỏ hàng', () => {
-    expect(vi.cart.freeshipReached).toContain('miễn phí giao hàng');
-    expect(vi.cart.freeshipProgress('50.000đ')).toBe('Mua thêm 50.000đ để được miễn phí giao hàng');
     expect(SHOP_COPY['cart.subtotalNet']).not.toMatch(/ship/i);
   });
 

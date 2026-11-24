@@ -1,7 +1,7 @@
 import { Check, Lock, Star, Ticket } from 'lucide-react';
 import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import type { SeasonPassReward, SeasonPassState, SeasonPassTier } from '../../services/game-api';
-import { vi } from '../../i18n/vi';
+import { viGame } from '../../i18n/vi-game';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { ProgressBar } from '../ui/progress-bar';
@@ -15,7 +15,7 @@ function ClaimedMark() {
   return (
     <Text variant="caption" tone="tertiary" as="div" style={INLINE_ICON_STYLE}>
       <Icon icon={Check} size="sm" tone="current" />
-      {vi.game.seasonPass.claimed}
+      {viGame.seasonPass.claimed}
     </Text>
   );
 }
@@ -39,18 +39,18 @@ export function SeasonPass({
   // Khách vãng lai chưa nhận được Điểm Xanh: bậc thưởng điểm không hứa số điểm, không có nút nhận; bậc giọt nước giữ nguyên.
   const pointsHidden = (r: SeasonPassReward) => !!pass.pointsBlocked && r.type === 'POINTS';
   const showGuestNote = tiers.some((t) => pointsHidden(t.free) || pointsHidden(t.premium));
-  const rewardLabel = (r: SeasonPassReward) => (pointsHidden(r) ? guestCheckInCopy.seasonPoints : vi.game.seasonPass.reward(r));
+  const rewardLabel = (r: SeasonPassReward) => (pointsHidden(r) ? guestCheckInCopy.seasonPoints : viGame.seasonPass.reward(r));
   return (
-    <GameCard title={vi.game.seasonPass.title} icon={Ticket}>
+    <GameCard title={viGame.seasonPass.title} icon={Ticket}>
       <Text variant="caption" tone="secondary" as="div">
-        {vi.game.seasonPass.subtitle(pass.seasonTitle ?? '')}
+        {viGame.seasonPass.subtitle(pass.seasonTitle ?? '')}
       </Text>
       <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 4px' }}>
         <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
-          {vi.game.seasonPass.xp(xp)}
+          {viGame.seasonPass.xp(xp)}
         </Text>
         <Text variant="caption" tone="tertiary">
-          {vi.game.seasonPass.xp(maxXp)}
+          {viGame.seasonPass.xp(maxXp)}
         </Text>
       </div>
       <ProgressBar value={ppct} max={100} ariaLabel="Tiến độ bậc mùa" />
@@ -58,7 +58,7 @@ export function SeasonPass({
       {!pass.premiumEligible && (
         <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon icon={Lock} size="sm" tone="current" />
-          {vi.game.seasonPass.premiumHint}
+          {viGame.seasonPass.premiumHint}
         </Text>
       )}
 
@@ -82,17 +82,17 @@ export function SeasonPass({
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <Text variant="caption" style={{ fontWeight: 600 }}>
-                  {vi.game.seasonPass.tier(t.tier + 1)}
+                  {viGame.seasonPass.tier(t.tier + 1)}
                 </Text>
                 <Text variant="caption" tone="tertiary">
-                  {vi.game.seasonPass.xp(t.xpRequired)}
+                  {viGame.seasonPass.xp(t.xpRequired)}
                 </Text>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {/* Nhánh miễn phí */}
                 <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
                   <Text variant="caption" tone="secondary" as="div">
-                    {vi.game.seasonPass.free}
+                    {viGame.seasonPass.free}
                   </Text>
                   <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
                     {rewardLabel(t.free)}
@@ -108,7 +108,7 @@ export function SeasonPass({
                       onPress={() => onClaim(t.tier, 'free')}
                       style={{ marginTop: 4 }}
                     >
-                      {t.unlocked ? vi.game.seasonPass.claim : vi.game.seasonPass.locked}
+                      {t.unlocked ? viGame.seasonPass.claim : viGame.seasonPass.locked}
                     </Button>
                   )}
                 </div>
@@ -120,7 +120,7 @@ export function SeasonPass({
                     style={{ color: 'var(--honey-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                   >
                     <Icon icon={Star} size="sm" style={{ stroke: 'var(--honey-600)' }} />
-                    {vi.game.seasonPass.premium}
+                    {viGame.seasonPass.premium}
                   </Text>
                   <Text variant="caption" as="div" style={{ color: 'var(--honey-600)', fontWeight: 600 }}>
                     {rewardLabel(t.premium)}
@@ -137,7 +137,7 @@ export function SeasonPass({
                       onPress={() => onClaim(t.tier, 'premium')}
                       style={{ marginTop: 4 }}
                     >
-                      {premiumLocked ? vi.game.seasonPass.locked : vi.game.seasonPass.claim}
+                      {premiumLocked ? viGame.seasonPass.locked : viGame.seasonPass.claim}
                     </Button>
                   )}
                 </div>
