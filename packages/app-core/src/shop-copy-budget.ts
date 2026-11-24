@@ -942,6 +942,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'restock.subscribedToast': null,
   'restock.cancelledToast': null,
   'restock.offline': null,
+  'quickReorder.notify': 12,
+  'quickReorder.notifyOn': 14,
   'groupBuy.done': 12,
   'groupBuy.expired': 12,
   'groupBuy.daysLeft': 12,

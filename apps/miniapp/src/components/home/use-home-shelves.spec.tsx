@@ -16,9 +16,12 @@ import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import { COMBO_HOLD_MS } from '@tubutree/app-core/merch/home-shelves';
 import { useHomeShelves, type HomePromoInput } from './use-home-shelves';
 
+// Kệ Mua lại của Trang chủ chỉ lấy đơn trong 90 ngày: ngày mua tính theo đồng hồ lúc chạy (hôm qua), không ghim ngày cố định sẽ trôi ra ngoài cửa sổ.
+const RECENT_PURCHASE = new Date(Date.now() - 86_400_000).toISOString();
+
 const flashEnding = (slug: string, endAt: string) => ({ itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt });
 const flash = (slug: string) => flashEnding(slug, '2099-01-01T00:00:00.000Z');
-const bought = (slug: string, variationId = `v-${slug}`) => ({ variationId, productId: slug, slug, productName: slug, variationName: null, brand: '', thumbnail: null, price: 1, salePrice: null, stock: 3, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: '2026-01-01' });
+const bought = (slug: string, variationId = `v-${slug}`) => ({ variationId, productId: slug, slug, productName: slug, variationName: null, brand: '', thumbnail: null, price: 1, salePrice: null, stock: 3, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: RECENT_PURCHASE });
 const card = (slug: string) => ({ id: `id-${slug}`, slug, brand: '', name: slug, thumbnail: null, basePrice: 1, salePrice: null, isFeatured: false, inStock: true });
 const page = (slugs: string[]) => ({ data: slugs.map(card), meta: { page: 1, limit: 12, total: slugs.length } });
 const slugsOf = (xs: { slug: string }[]) => xs.map((x) => x.slug);

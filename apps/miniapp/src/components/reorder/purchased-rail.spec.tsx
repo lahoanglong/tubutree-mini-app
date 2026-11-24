@@ -6,6 +6,12 @@ import type * as ZmpUi from 'zmp-ui';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchProducts: vi.fn(), fetchCombos: vi.fn(), addAllToCart: vi.fn(), getCart: vi.fn().mockResolvedValue({ items: [] }),
   status: 'authenticated', subs: true,
+  subscribeRestock: vi.fn(), unsubscribeRestock: vi.fn(),
+}));
+vi.mock('@tubutree/app-core/api/restock-alerts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  subscribeRestock: (_http: unknown, id: string) => mocks.subscribeRestock(id),
+  unsubscribeRestock: (_http: unknown, id: string) => mocks.unsubscribeRestock(id),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<typeof ZmpUi>()),
@@ -31,9 +37,12 @@ import { PurchasedRail, toCardProduct } from './purchased-rail';
 import { HomeBlockErrorSuppressed } from '../home/home-block-error';
 import { useHomeShelves } from '../home/use-home-shelves';
 
+// Kệ Mua lại của Trang chủ chỉ lấy đơn trong 90 ngày: ngày mua tính theo đồng hồ lúc chạy (hôm qua), không ghim ngày cố định sẽ trôi ra ngoài cửa sổ.
+const RECENT_PURCHASE = new Date(Date.now() - 86_400_000).toISOString();
+
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: RECENT_PURCHASE,
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 
@@ -533,11 +542,11 @@ describe('Dải "Mua lại món quen" ở Trang chủ (W43A)', () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
   });
 
-  it('tối đa 6 thẻ dù khách đã mua nhiều hơn, theo thứ tự mới nhất trước', async () => {
-    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(8), nextCursor: null });
+  it('tối đa 8 thẻ dù khách đã mua nhiều hơn, theo thứ tự mới nhất trước', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: many(10), nextCursor: null });
     renderRail();
     const strip = await screen.findByTestId('quick-reorder');
-    expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v0', 'v1', 'v2', 'v3', 'v4', 'v5']);
+    expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7']);
   });
 
   it('tab Đơn hàng không đổi: 2 món vẫn là kệ "Mua lại" cũ, không dải', async () => {
@@ -786,3 +795,98 @@ describe('PurchasedRail Mini: phân loại không có tên', () => {
     }
   });
 });
+
+describe('Kệ Mua lại ở Trang chủ: đơn trong 90 ngày và "Báo khi có" cho món hết hàng (w32-02)', () => {
+  const OLD = new Date(Date.now() - 120 * 86_400_000).toISOString();
+  const item = (n: number, over: Record<string, unknown> = {}) => ({ ...ITEM, variationId: `v${n}`, slug: `sp-${n}`, productName: `SP ${n}`, timesBought: 1, ...over });
+  const soldOut = { stock: 0, inStock: false };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.status = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.getCart.mockResolvedValue({ items: [] });
+    mocks.subscribeRestock.mockImplementation((id: string) => Promise.resolve({ variationId: id, subscribed: true }));
+    mocks.unsubscribeRestock.mockImplementation((id: string) => Promise.resolve({ variationId: id, subscribed: false }));
+  });
+
+  it('món của đơn cũ hơn 90 ngày không lên Trang chủ; tab Đơn hàng vẫn hiện', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1), item(2, { lastPurchasedAt: OLD }), item(3, { lastPurchasedAt: OLD })], nextCursor: null });
+    renderRail();
+    const line = await screen.findByTestId('rebuy-line');
+    expect(line).toHaveTextContent('SP 1');
+    expect(screen.queryByText('SP 2')).toBeNull();
+    const orders = renderRail('orders_tab');
+    expect(await within(orders.container).findByText(/SP 3/)).toBeTruthy();
+  });
+
+  it('cờ báo hàng về bật: ô hết hàng đứng cuối dải, nhãn "Tạm hết hàng", nút "Báo khi có"; "Thêm lại tất cả" chỉ đọc món còn hàng', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v2', 'v3', 'v1']);
+    const notify = within(strip).getByTestId('quick-reorder-notify');
+    expect(notify).toHaveTextContent('Báo khi có');
+    expect(notify).toHaveAttribute('aria-label', 'Báo khi SP 1 · Chanh có hàng');
+    expect(notify).toHaveAttribute('aria-pressed', 'false');
+    expect(within(strip).getByText('Tạm hết hàng')).toBeTruthy();
+    expect(within(strip).getAllByTestId('quick-reorder-add')).toHaveLength(2);
+    expect(within(strip).getByRole('button', { name: /Thêm lại tất cả 2 món/ })).toBeTruthy();
+  });
+
+  it('chạm "Báo khi có": đăng ký đúng phân loại, nút đổi ngay sang "Đang chờ hàng" (aria-pressed), chạm lại thì huỷ', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, { ...soldOut, restockWaiting: true }), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+    fireEvent.click(within(strip).getByTestId('quick-reorder-notify'));
+    await waitFor(() => expect(within(strip).getByTestId('quick-reorder-notify')).toHaveAttribute('aria-pressed', 'true'));
+    expect(within(strip).getByTestId('quick-reorder-notify')).toHaveTextContent('Đang chờ hàng');
+    expect(mocks.subscribeRestock).toHaveBeenCalledWith('v1');
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Có hàng Tubu sẽ báo bạn ở mục Thông báo.' })));
+    await waitFor(() => expect(within(strip).getByTestId('quick-reorder-notify')).not.toHaveAttribute('aria-busy', 'true'));
+    fireEvent.click(within(strip).getByTestId('quick-reorder-notify'));
+    await waitFor(() => expect(mocks.unsubscribeRestock).toHaveBeenCalledWith('v1'));
+  });
+
+  it('đăng ký lỗi: nút về lại "Báo khi có" và báo lỗi', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+    mocks.subscribeRestock.mockRejectedValue(Object.assign(new Error('x'), { isHttpError: true, response: { status: 500, data: { message: 'Hệ thống đang bận' } } }));
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    fireEvent.click(within(strip).getByTestId('quick-reorder-notify'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(within(strip).getByTestId('quick-reorder-notify')).toHaveAttribute('aria-pressed', 'false'));
+  });
+
+  it('cờ tắt (hay API cũ không trả cờ): dải như cũ, không có ô hết hàng', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null });
+    renderRail();
+    const strip = await screen.findByTestId('quick-reorder');
+    expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v2', 'v3']);
+    expect(within(strip).queryByTestId('quick-reorder-notify')).toBeNull();
+  });
+
+  it('một món hết hàng ở dòng Mua lại: cờ bật thì nút "Báo khi có" và dòng phụ "Tạm hết hàng"; cờ tắt thì chữ như cũ', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut)], nextCursor: null, restockAlertsEnabled: true });
+    const on = renderRail();
+    const line = await within(on.container).findByTestId('rebuy-line');
+    expect(within(line).getByTestId('rebuy-line-notify')).toHaveTextContent('Báo khi có');
+    expect(line).toHaveTextContent('Tạm hết hàng');
+    on.unmount();
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut)], nextCursor: null, restockAlertsEnabled: false });
+    const off = renderRail();
+    const plain = await within(off.container).findByTestId('rebuy-line');
+    expect(within(plain).queryByTestId('rebuy-line-notify')).toBeNull();
+  });
+
+  it('kệ thẻ (dưới 2 món còn hàng): thẻ hết hàng có chuông báo hàng về khi cờ bật', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1), item(2, soldOut)], nextCursor: null, restockAlertsEnabled: true });
+    renderRail();
+    const bell = await screen.findByRole('button', { name: 'Báo khi SP 2 có hàng' });
+    expect(bell).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(bell);
+    await waitFor(() => expect(mocks.subscribeRestock).toHaveBeenCalledWith('v2'));
+  });
+});
+

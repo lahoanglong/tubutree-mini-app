@@ -30,7 +30,7 @@ async function openHome(page: Page, api: MockApi, baseURL: string): Promise<() =
     return { accessToken: 'e2e-token', user: me() };
   });
   api.get('/me', () => me());
-  const item = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' };
+  const item = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() };
   api.get('/me/purchased-items', async () => {
     await new Promise((r) => setTimeout(r, 300));
     return { items: [item], nextCursor: null };

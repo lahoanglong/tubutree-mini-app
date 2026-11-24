@@ -8,9 +8,9 @@ import { ApiError } from '@/lib/client-api';
 import { formatVnd } from '@/lib/format-vnd';
 
 // Chép ý nghĩa purchased-rail.spec của Mini App: kệ "Mua lại" cho khách cũ, ẩn khi rỗng/404/khách, sheet → thêm giỏ → sang giỏ, lỗi làm mới.
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated', flash: [] as unknown[] }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), del: vi.fn(), push: vi.fn(), phase: 'authenticated', flash: [] as unknown[] }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash, useRunningFlash: () => ({ flash: mocks.flash, now: Date.now() }) }));
-vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post, delete: mocks.del } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null], cartKey: () => ['cart', null] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/shop-client')>()), getCart: async () => ({ items: [] }) }));
@@ -19,9 +19,12 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), use
 import { PurchasedRail, toCardProduct } from './purchased-rail';
 import { HomeBlockErrorSuppressed } from '@/components/home/home-block-error';
 
+// Kệ Mua lại của Trang chủ chỉ lấy đơn trong 90 ngày: ngày mua tính theo đồng hồ lúc chạy (hôm qua), không ghim ngày cố định sẽ trôi ra ngoài cửa sổ.
+const RECENT_PURCHASE = new Date(Date.now() - 86_400_000).toISOString();
+
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: RECENT_PURCHASE,
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 1 };
 
@@ -40,6 +43,7 @@ beforeEach(() => {
   // Giỏ không đi chung đường với kệ: trả nhầm danh sách đã mua cho GET /cart làm số trong giỏ hỏng và giá Giờ vàng của dải sai.
   mocks.get.mockReset().mockImplementation((path: string) => (String(path).startsWith('/cart') ? Promise.resolve({ items: [] }) : rail()));
   mocks.post.mockReset().mockResolvedValue(CART);
+  mocks.del.mockReset();
   mocks.push.mockReset();
 });
 afterEach(() => {
@@ -348,10 +352,96 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
     expect(c.querySelectorAll('.tubu-tile-link')).toHaveLength(0);
   });
 
-  it('dải có tối đa 6 thẻ dù khách có nhiều món hơn', async () => {
-    rail = async () => ({ items: Array.from({ length: 9 }, (_, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `Sản phẩm ${i}` })), nextCursor: null });
+  it('dải có tối đa 8 thẻ dù khách có nhiều món hơn', async () => {
+    rail = async () => ({ items: Array.from({ length: 10 }, (_, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `Sản phẩm ${i}` })), nextCursor: null });
     const c = await home();
-    expect(c.querySelectorAll('[data-testid="quick-reorder-card"]')).toHaveLength(6);
+    expect(c.querySelectorAll('[data-testid="quick-reorder-card"]')).toHaveLength(8);
+  });
+
+  describe('đơn trong 90 ngày và "Báo khi có" cho món hết hàng (w32-02)', () => {
+    const OLD = new Date(Date.now() - 120 * 86_400_000).toISOString();
+    const item = (n: number, over: Record<string, unknown> = {}) => ({ ...ITEM, variationId: `v${n}`, slug: `sp-${n}`, productName: `SP ${n}`, timesBought: 1, ...over });
+    const soldOut = { stock: 0, inStock: false };
+    const notifyBtn = (c: HTMLElement) => c.querySelector('[data-testid="quick-reorder-notify"]') as HTMLElement;
+    const ids = (c: HTMLElement) => [...c.querySelectorAll('[data-testid="quick-reorder-card"]')].map((el) => el.getAttribute('data-variation-id'));
+
+    it('món của đơn cũ hơn 90 ngày không lên Trang chủ; tab Đơn hàng vẫn hiện', async () => {
+      rail = async () => ({ items: [item(1), item(2, { lastPurchasedAt: OLD })], nextCursor: null });
+      const c = await home();
+      expect(c.querySelector('[data-testid="rebuy-line"]')?.textContent).toContain('SP 1');
+      expect(c.textContent).not.toContain('SP 2');
+      mounted?.unmount();
+      const o = await mount({ source: 'orders_tab' });
+      expect(o.textContent).toContain('SP 2');
+    });
+
+    it('cờ bật: ô hết hàng cuối dải với "Tạm hết hàng" và "Báo khi có"; "Thêm lại tất cả" chỉ đọc món còn hàng', async () => {
+      rail = async () => ({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+      const c = await home();
+      expect(ids(c)).toEqual(['v2', 'v3', 'v1']);
+      expect(notifyBtn(c).textContent).toBe('Báo khi có');
+      expect(notifyBtn(c).getAttribute('aria-pressed')).toBe('false');
+      expect(notifyBtn(c).getAttribute('aria-label')).toBe('Báo khi SP 1 · Chanh có hàng');
+      expect(c.textContent).toContain('Tạm hết hàng');
+      expect(c.querySelectorAll('[data-testid="quick-reorder-add"]')).toHaveLength(2);
+      expect([...c.querySelectorAll('button')].some((b) => /Thêm lại tất cả 2 món/.test(b.getAttribute('aria-label') ?? ''))).toBe(true);
+    });
+
+    it('chạm "Báo khi có": POST /me/restock-alerts đúng phân loại, nút đổi ngay sang "Đang chờ hàng"; chạm lại thì DELETE', async () => {
+      rail = async () => ({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+      let release!: () => void;
+      mocks.post.mockImplementation((path: string) => (path === '/me/restock-alerts' ? new Promise((r) => (release = () => r({ variationId: 'v1', subscribed: true }))) : Promise.resolve(CART)));
+      const c = await home();
+      click(notifyBtn(c));
+      await flush(4);
+      expect(mocks.post).toHaveBeenCalledWith('/me/restock-alerts', { variationId: 'v1' });
+      expect(notifyBtn(c).getAttribute('aria-pressed')).toBe('true');
+      rail = async () => ({ items: [item(1, { ...soldOut, restockWaiting: true }), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+      await act(async () => release());
+      await flush(8);
+      expect(notifyBtn(c).textContent).toBe('Đang chờ hàng');
+      expect(document.body.textContent).toContain('Có hàng Tubu sẽ báo bạn ở mục Thông báo.');
+      mocks.del.mockResolvedValue({ variationId: 'v1', subscribed: false });
+      click(notifyBtn(c));
+      await flush(4);
+      expect(mocks.del).toHaveBeenCalledWith('/me/restock-alerts/v1');
+    });
+
+    it('đăng ký lỗi: nút về "Báo khi có"', async () => {
+      rail = async () => ({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null, restockAlertsEnabled: true });
+      mocks.post.mockImplementation((path: string) => (path === '/me/restock-alerts' ? Promise.reject(new ApiError('Hệ thống đang bận', 500)) : Promise.resolve(CART)));
+      const c = await home();
+      click(notifyBtn(c));
+      await flush(8);
+      expect(notifyBtn(c).getAttribute('aria-pressed')).toBe('false');
+      expect(notifyBtn(c).textContent).toBe('Báo khi có');
+    });
+
+    it('cờ tắt (hay API cũ không trả cờ): dải như cũ, không ô hết hàng', async () => {
+      rail = async () => ({ items: [item(1, soldOut), item(2), item(3)], nextCursor: null });
+      const c = await home();
+      expect(ids(c)).toEqual(['v2', 'v3']);
+      expect(notifyBtn(c)).toBeNull();
+    });
+
+    it('một món hết hàng ở dòng Mua lại: cờ bật thì nút "Báo khi có" và "Tạm hết hàng" ở dòng phụ', async () => {
+      rail = async () => ({ items: [item(1, soldOut)], nextCursor: null, restockAlertsEnabled: true });
+      const c = await home();
+      const line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
+      expect(line.querySelector('[data-testid="rebuy-line-notify"]')?.textContent).toBe('Báo khi có');
+      expect(line.textContent).toContain('Tạm hết hàng');
+    });
+
+    it('kệ thẻ (dưới 2 món còn hàng): thẻ hết hàng có chuông báo hàng về khi cờ bật', async () => {
+      rail = async () => ({ items: [item(1), item(2, soldOut)], nextCursor: null, restockAlertsEnabled: true });
+      mocks.post.mockResolvedValue({ variationId: 'v2', subscribed: true });
+      const c = await home();
+      const bell = c.querySelector('[data-restock-bell="v2"]') as HTMLElement;
+      expect(bell.getAttribute('aria-label')).toBe('Báo khi SP 2 có hàng');
+      click(bell);
+      await flush(4);
+      expect(mocks.post).toHaveBeenCalledWith('/me/restock-alerts', { variationId: 'v2' });
+    });
   });
 
   it('hai món nhưng một món hết hàng: dưới sàn 2 món dùng được nên không có dải, giữ kệ thẻ cũ', async () => {

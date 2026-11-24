@@ -61,11 +61,13 @@ export function useQuickReorder() {
 
   const addAll = (items: readonly QuickReorderItem[]) => {
     if (inflight.current || busyKey !== null || bundle.inFlight()) return;
+    // Ô hết hàng ("Báo khi có") không vào lệnh lô: số món báo lại là số dòng thật sự gửi đi.
+    const lines = quickReorderLines(items);
     bundle.add({
       id: ADD_ALL_ID,
-      lines: quickReorderLines(items),
+      lines,
       errorKey: 'quickReorder.error',
-      successText: fillBootCopy('quickReorder.addedAll', { n: items.length }),
+      successText: fillBootCopy('quickReorder.addedAll', { n: lines.length }),
       onDone: () => playCartFeedback(document.querySelector(ADD_ALL_BUTTON)),
     });
   };

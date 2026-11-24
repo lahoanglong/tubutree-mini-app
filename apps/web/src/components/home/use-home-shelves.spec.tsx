@@ -19,9 +19,10 @@ const flashEnding = (slug: string, i: number, endAt: string) => ({
 });
 const flashItem = (slug: string, i: number) => flashEnding(slug, i, new Date(Date.now() + HOUR).toISOString());
 const card = (slug: string) => ({ id: `p-${slug}`, slug, name: slug, brand: 'B', thumbnail: null, basePrice: 1000, salePrice: null, repVariationId: `rv-${slug}`, isFeatured: false, inStock: true });
+const RECENT_PURCHASE = new Date(Date.now() - 86_400_000).toISOString();
 const purchased = (slug: string) => ({
   productId: `p-${slug}`, variationId: `pv-${slug}`, slug, productName: slug, variationName: null, brand: 'B', thumbnail: null,
-  price: 1000, salePrice: null, stock: 5, inStock: true, timesBought: 1,
+  price: 1000, salePrice: null, stock: 5, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE,
 });
 
 let latest: HomeShelves | null = null;

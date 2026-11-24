@@ -210,7 +210,7 @@ export class HomeService {
     const [forYou, flashUpcoming, purchasedItems, hasOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
       withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders, seed }) : this.catalog.getForYou(userId, { seed }))),
       own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
-      withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
+      withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null, restockAlertsEnabled: false } : this.purchased.list(userId, { limit: purchasedLimit }))),
       // Từ cùng câu đếm số đơn: tài khoản khách của Mini App hỏi "đã có đơn nào chưa" ở Trang chủ mà khỏi gọi /orders. Câu đếm hỏng thì null để client tự hỏi.
       withFacts('hasOrders', async (f) => (f ? f.hasOrders : null)),
       own('subscriptions', () => this.subscriptions.list(userId)),

@@ -25,7 +25,7 @@ export interface ShelfSpec {
 // dedupeRank: flash 1 > purchased 2 > combos 3 > bestSellers 4 > (5 để dành cho kệ "Mới về", chưa có) > suggest/related 6.
 export const SHELVES: readonly ShelfSpec[] = [
   { id: 'home.flash', screen: 'home', intent: 'deal có hạn', layout: 'rail', maxItems: 8, minItems: 3, dedupeRank: 1, seeAllRoute: '/flash-sale' },
-  // Dải "Mua lại món quen" (QuickReorderStrip): kệ ngang tối đa 6 thẻ thêm một chạm. Một món thì trang vẫn vẽ dòng Mua lại cũ, nên sàn vẫn là 1 (để món đó còn chiếm chỗ chống trùng).
+  // Dải "Mua lại món quen" (QuickReorderStrip): kệ ngang tối đa 8 thẻ thêm một chạm (đơn đã giao trong 90 ngày). Một món thì trang vẫn vẽ dòng Mua lại cũ, nên sàn vẫn là 1 (để món đó còn chiếm chỗ chống trùng).
   { id: 'home.purchased', screen: 'home', intent: 'mua lại', layout: 'rail', maxItems: QUICK_REORDER_MAX, minItems: 1, dedupeRank: 2, seeAllRoute: '/orders' },
   // "Xem tất cả" của Combo tiết kiệm mở trang Bộ quà tặng (đủ 8 combo); Trang chủ web chưa đọc lối này (khối Trang chủ web giữ nguyên HTML).
   { id: 'home.combos', screen: 'home', intent: 'mua nhiều tiết kiệm', layout: 'rail', maxItems: 4, minItems: 2, dedupeRank: 3, seeAllRoute: '/gift-combos' },

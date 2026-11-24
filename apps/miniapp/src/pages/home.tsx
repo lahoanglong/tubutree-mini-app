@@ -8,10 +8,9 @@ import { useCategories } from '../hooks/use-categories';
 import { useHomeBanners } from '../hooks/use-home-banners';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { useMeSummary } from '../hooks/use-me-summary';
-import { usePurchasedItems } from '../hooks/use-purchased-items';
+import { PURCHASED_RAIL_LIMIT, usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale, type FlashSaleProps } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
-import { PURCHASED_RAIL_LIMIT } from '../components/reorder/purchased-rail';
 import {
   HomeBestSellerRail,
   HomeCommunityPreview,

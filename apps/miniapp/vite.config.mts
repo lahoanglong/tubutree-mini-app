@@ -38,6 +38,7 @@ function apiPreconnect(apiBase: string | undefined): Plugin {
 // chúng ở chỗ barrel `index.ts` được nạp (entry), dù entry không dùng export nào. Khai báo không tác dụng phụ để chúng chỉ nằm ở chunk thật sự dùng chúng.
 // Chỉ thêm tệp mà cấp cao nhất chỉ khai báo hằng/bảng (không ghi biến toàn cục, không đăng ký gì).
 const PURE_LAZY_MODULES = /\/packages\/shared-types\/src\/product-copy-fallback\.ts$/;
+const SHOP_COPY_MODULE = /[\\/]packages[\\/]app-core[\\/]src[\\/]shop-copy\.ts$/;
 
 // Cấu hình Vite cho Zalo Mini App.
 // Layout chuẩn zmp: index.html ở gốc project (zmp-cli/extension yêu cầu), entry src/app.tsx.
@@ -102,7 +103,10 @@ export default defineConfig(({ command, mode }) => {
           // Giữ mẫu tên của zmp-vite-plugin (đuôi `.module.js`), chỉ rút mã băm từ 8 xuống 7 ký tự base64url (42 bit, vẫn hơn 8 ký tự hex = 32 bit):
           // tên chunk lặp lại ở mọi lệnh import và bản đồ preload (~1 600 lần), mỗi lần ngắn 1 byte.
           entryFileNames: 'assets/[name].[hash:7].module.js',
-          chunkFileNames: 'assets/[name].[hash:7].module.js',
+          // Chunk chứa bảng chữ gian hàng luôn mang tên `shop-copy` để scripts/ci/mini-lazy-chunks.cjs dò được nó: Rollup đặt tên chunk theo một
+          // mô-đun trong đó, và khi gộp mô-đun nhỏ dùng chung (vd. app-core/api/subscriptions) vào cùng chunk thì tên đổi theo mô-đun kia.
+          // `manualChunks` không dùng được ở đây: nó kéo cả bảng chữ gói đầu (phụ thuộc của shop-copy) vào chunk, và entry phải import tĩnh chunk đó.
+          chunkFileNames: (chunk) => `assets/${chunk.moduleIds.some((id) => SHOP_COPY_MODULE.test(id)) ? 'shop-copy' : '[name]'}.[hash:7].module.js`,
           assetFileNames: 'assets/[name]-[hash:7][extname]',
           // Tách thư viện nền (React + Router, ZMP SDK, React Query + Zustand) khỏi entry để gói khởi động gọn dưới ngưỡng entry của scripts/ci/bundle-budget.cjs;
           // KHÔNG gộp zmp-ui hay lucide-react vào vendor chung để giữ nguyên các chunk lazy (Sheet, icon trang quản trị).

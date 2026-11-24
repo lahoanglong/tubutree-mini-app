@@ -347,7 +347,7 @@ describe('HomeService.getForUser', () => {
     expect(purchased.list).not.toHaveBeenCalled();
     expect(orders.list).not.toHaveBeenCalled();
     expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: false, seed: expect.stringMatching(/^\d{8}$/) });
-    expect(r.purchasedItems).toEqual({ items: [], nextCursor: null });
+    expect(r.purchasedItems).toEqual({ items: [], nextCursor: null, restockAlertsEnabled: false });
     expect(r).not.toHaveProperty('shippingOrders');
     expect(r).not.toHaveProperty('activeOrderCount');
     expect(r.purchasedLimit).toBe(10);

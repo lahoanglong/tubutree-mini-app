@@ -1,7 +1,9 @@
-import { useEffect, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
-import { HOME_SETTLING_HEIGHTS } from '@tubutree/app-core/home-layout';
+import { useEffect, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
+import { HOME_SETTLING_HEIGHTS, purchasedSkeletonHeight, readPurchasedHint } from '@tubutree/app-core/home-layout';
+import { PURCHASED_RAIL_LIMIT, usePurchasedItems } from '../../hooks/use-purchased-items';
 import { isChunkError } from '../../utils/chunk-error';
-import { PurchasedRail } from '../reorder/purchased-rail';
+import { browserStorage } from '../../utils/recently-viewed';
+import { PurchasedRailSkeleton } from '../reorder/purchased-rail-skeleton';
 import { BestSellerRail } from './best-seller-rail';
 import type * as BelowModule from './home-below';
 
@@ -77,7 +79,25 @@ function Block({ children, fallback = null }: { children: (m: Below) => ReactNod
 // Hai kệ sản phẩm và Giờ vàng (FlashSale ở home.tsx, nạp thẳng từ ../flash-sale) nằm trong gói đầu: thẻ sản phẩm đầu không đợi thêm một request chunk; Giờ vàng
 // không hiện muộn hơn dữ liệu của nó (đo: nạp lười làm CLS khách mở lại tăng 0,0087 → 0,0211). Dải ngữ cảnh (Quà khách mới, thẻ thành viên) cũng ở gói đầu vì là hero trong màn đầu.
 // Bán chạy nhất ở lại gói đầu: khách mới không có Giờ vàng thì đó là kệ sản phẩm duy nhất, chunk hỏng/chậm không được làm nó biến mất hay bật ra dưới Danh mục.
-export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
+/**
+ * Chỗ giữ của kệ Mua lại khi chunk chưa về: cùng khung chờ kệ tự vẽ lúc dữ liệu chưa về (chiều cao theo lần mở trước), nên kệ thật thế chỗ mà trang không nhảy.
+ * Dữ liệu đã về mà lần trước không có kệ thì không giữ gì; chunk hỏng thì không giữ gì (Trang chủ đã hiện dải lỗi có "Thử lại"). Cùng khoá query với kệ, không thêm request.
+ */
+function PurchasedRailWait({ restoring = false }: { restoring?: boolean }) {
+  const q = usePurchasedItems(PURCHASED_RAIL_LIMIT);
+  const [hint] = useState(() => readPurchasedHint(browserStorage()));
+  const { failed } = useSyncExternalStore(subscribe, getState, getState);
+  if (failed) return null;
+  if (restoring || q.isLoading) return <PurchasedRailSkeleton height={purchasedSkeletonHeight(hint === 'none' ? 'one' : hint)} />;
+  return hint === 'none' ? null : <PurchasedRailSkeleton height={purchasedSkeletonHeight(hint)} />;
+}
+
+// Kệ Mua lại nằm trong chunk này (không trong gói đầu): chỉ khách cũ đã đăng nhập mới thấy kệ, chunk đã được tải song song từ lúc mã Trang chủ chạy, còn dữ liệu của kệ
+// phải chờ phiên khôi phục rồi mới gọi API, nên kệ hầu như không bao giờ phải đợi chunk.
+type PurchasedRailProps = ComponentProps<Below['PurchasedRail']>;
+export const HomePurchasedRail = (p: PurchasedRailProps) => (
+  <Block fallback={<PurchasedRailWait restoring={p.restoring} />}>{(m) => <m.PurchasedRail {...p} />}</Block>
+);
 export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => <BestSellerRail {...p} />;
 // Ngày của thẻ Cộng đồng: Góc Sống Xanh bật và đủ đánh giá ảnh đã duyệt thì dải ảnh khách đứng chỗ đó, không thì thẻ Cộng đồng như cũ.
 export const HomeCommunityPreview = () => <Block>{(m) => <m.GreenCornerStrip fallback={<m.CommunityPreview />} />}</Block>;

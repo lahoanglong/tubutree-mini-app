@@ -2,7 +2,21 @@ import { describe, expect, it } from 'vitest';
 import type { ProductCard } from '../api/catalog';
 import type { PurchasedItem } from '../api/orders';
 import type { FlashPriceItem } from '../flash-price';
-import { QUICK_REORDER_MAX, QUICK_REORDER_MIN, buildQuickReorderItems, quickReorderAddAllAria, quickReorderAvailable, quickReorderLines, quickReorderShelfItems, quickReorderTotal } from './quick-reorder';
+import {
+  BUY_AGAIN_WINDOW_DAYS,
+  QUICK_REORDER_MAX,
+  QUICK_REORDER_MIN,
+  buildQuickReorderItems,
+  buyAgainCutoff,
+  inBuyAgainWindow,
+  quickReorderAddAllAria,
+  quickReorderAvailable,
+  quickReorderLines,
+  quickReorderShelfItems,
+  quickReorderSoldOut,
+  quickReorderTotal,
+  withPurchasedRestock,
+} from './quick-reorder';
 
 const NOW = Date.parse('2026-11-08T03:00:00Z');
 
@@ -61,7 +75,7 @@ describe('buildQuickReorderItems: món đã mua', () => {
     expect(items.map((i) => i.name)).toEqual(['Sản phẩm 1', 'Sản phẩm 2', 'Sản phẩm 3 · Chai 500ml']);
   });
 
-  it('trần 6 món, kể cả khi truyền limit lớn hơn', () => {
+  it('trần 8 món, kể cả khi truyền limit lớn hơn', () => {
     const many = Array.from({ length: 9 }, (_, i) => bought(i + 1));
     expect(buildQuickReorderItems({ now: NOW, purchased: many })).toHaveLength(QUICK_REORDER_MAX);
     expect(buildQuickReorderItems({ now: NOW, purchased: many, limit: 20 })).toHaveLength(QUICK_REORDER_MAX);
@@ -238,21 +252,104 @@ describe('quickReorderAvailable', () => {
 describe('quickReorderShelfItems', () => {
   it('đủ 2 món dùng được: kệ chỉ giữ món dùng được (đúng tập dải vẽ)', () => {
     const list = [bought(1, { inStock: false }), bought(2), bought(3, { stock: 0 }), bought(4)];
-    expect(quickReorderShelfItems(list).map((p) => p.variationId)).toEqual(['v2', 'v4']);
+    expect(quickReorderShelfItems(list, { now: NOW }).map((p) => p.variationId)).toEqual(['v2', 'v4']);
   });
 
   it('dưới 2 món dùng được: dải ẩn nên kệ cũ vẽ đủ, kể cả món hết hàng', () => {
     const one = [bought(1, { stock: 0 })];
-    expect(quickReorderShelfItems(one)).toEqual(one);
+    expect(quickReorderShelfItems(one, { now: NOW })).toEqual(one);
     const mixed = [bought(1), bought(2, { inStock: false })];
-    expect(quickReorderShelfItems(mixed).map((p) => p.variationId)).toEqual(['v1', 'v2']);
-    expect(quickReorderShelfItems([])).toEqual([]);
+    expect(quickReorderShelfItems(mixed, { now: NOW }).map((p) => p.variationId)).toEqual(['v1', 'v2']);
+    expect(quickReorderShelfItems([], { now: NOW })).toEqual([]);
   });
 
   it('không đổi thứ tự nguồn và trả bản sao (không sửa mảng vào)', () => {
     const list = [bought(2), bought(1)];
-    const out = quickReorderShelfItems(list);
+    const out = quickReorderShelfItems(list, { now: NOW });
     expect(out.map((p) => p.variationId)).toEqual(['v2', 'v1']);
     expect(out).not.toBe(list);
+  });
+});
+
+describe('cửa sổ Mua lại 90 ngày', () => {
+  it('mốc là nửa đêm giờ Việt Nam của ngày cách hôm nay 90 ngày, không đổi trong cùng một ngày', () => {
+    expect(BUY_AGAIN_WINDOW_DAYS).toBe(90);
+    // 08/11 10:00 VN → nửa đêm VN 10/08 = 09/08 17:00Z.
+    expect(new Date(buyAgainCutoff(NOW)).toISOString()).toBe('2026-08-09T17:00:00.000Z');
+    expect(buyAgainCutoff(Date.parse('2026-11-07T17:00:00Z'))).toBe(buyAgainCutoff(Date.parse('2026-11-08T16:59:59Z')));
+    expect(buyAgainCutoff(Date.parse('2026-11-08T17:00:00Z'))).toBeGreaterThan(buyAgainCutoff(NOW));
+  });
+
+  it('đúng mốc vẫn trong cửa sổ, trước mốc một mili giây hay mốc hỏng thì ngoài', () => {
+    expect(inBuyAgainWindow({ lastPurchasedAt: '2026-08-09T17:00:00.000Z' }, NOW)).toBe(true);
+    expect(inBuyAgainWindow({ lastPurchasedAt: '2026-08-09T16:59:59.999Z' }, NOW)).toBe(false);
+    expect(inBuyAgainWindow({ lastPurchasedAt: 'không-phải-ngày' }, NOW)).toBe(false);
+  });
+
+  it('kệ Trang chủ bỏ món của đơn cũ hơn 90 ngày trước khi đếm sàn: còn 1 món mới thì về dòng một món', () => {
+    const list = [bought(1), bought(2, { lastPurchasedAt: '2026-07-01T00:00:00Z' }), bought(3, { lastPurchasedAt: '2026-05-01T00:00:00Z' })];
+    expect(quickReorderShelfItems(list, { now: NOW }).map((p) => p.variationId)).toEqual(['v1']);
+    expect(quickReorderShelfItems([bought(2, { lastPurchasedAt: '2026-07-01T00:00:00Z' })], { now: NOW })).toEqual([]);
+  });
+});
+
+describe('món hết hàng trên dải (cờ báo hàng về)', () => {
+  const list = [bought(1, { stock: 0, inStock: false }), bought(2), bought(3, { stock: 0, inStock: false, restockWaiting: true }), bought(4)];
+
+  it('quickReorderSoldOut: hết hàng mà có giá', () => {
+    expect(quickReorderSoldOut(bought(1, { stock: 0 }))).toBe(true);
+    expect(quickReorderSoldOut(bought(1, { inStock: false }))).toBe(true);
+    expect(quickReorderSoldOut(bought(1))).toBe(false);
+    expect(quickReorderSoldOut(bought(1, { stock: 0, price: 0 }))).toBe(false);
+  });
+
+  it('kệ giữ món còn hàng trước rồi món hết hàng khi cờ bật; cờ tắt thì như cũ', () => {
+    expect(quickReorderShelfItems(list, { now: NOW, restock: true }).map((p) => p.variationId)).toEqual(['v2', 'v4', 'v1', 'v3']);
+    expect(quickReorderShelfItems(list, { now: NOW, restock: false }).map((p) => p.variationId)).toEqual(['v2', 'v4']);
+  });
+
+  it('dải vẽ đúng tập kệ giữ: món hết hàng sau cùng, mang soldOut và restockWaiting, giá thường', () => {
+    const flash = [flashOn(3, 50_000)];
+    const out = buildQuickReorderItems({ now: NOW, purchased: list, includeSoldOut: true, flash });
+    expect(out.map((i) => [i.variationId, i.soldOut === true, i.restockWaiting === true])).toEqual([
+      ['v2', false, false],
+      ['v4', false, false],
+      ['v1', true, false],
+      ['v3', true, true],
+    ]);
+    expect(out[3]).toMatchObject({ price: 100_000, isFlash: false });
+  });
+
+  it('không có includeSoldOut thì không có ô hết hàng; dưới 2 món còn hàng thì rỗng dù có món hết hàng', () => {
+    expect(buildQuickReorderItems({ now: NOW, purchased: list }).every((i) => !i.soldOut)).toBe(true);
+    expect(buildQuickReorderItems({ now: NOW, purchased: [bought(1), bought(2, { stock: 0 }), bought(3, { stock: 0 })], includeSoldOut: true })).toEqual([]);
+  });
+
+  it('trần 8 tính cả món hết hàng, món còn hàng được giữ trước', () => {
+    const many = [...Array.from({ length: 7 }, (_, i) => bought(i + 1)), bought(20, { stock: 0 }), bought(21, { stock: 0 })];
+    const out = buildQuickReorderItems({ now: NOW, purchased: many, includeSoldOut: true });
+    expect(QUICK_REORDER_MAX).toBe(8);
+    expect(out).toHaveLength(8);
+    expect(out.filter((i) => i.soldOut).map((i) => i.variationId)).toEqual(['v20']);
+  });
+
+  it('"Thêm lại tất cả" chỉ thêm, chỉ cộng và chỉ đọc món còn hàng', () => {
+    const out = buildQuickReorderItems({ now: NOW, purchased: list, includeSoldOut: true });
+    expect(quickReorderLines(out)).toEqual([
+      { variationId: 'v2', quantity: 1 },
+      { variationId: 'v4', quantity: 1 },
+    ]);
+    expect(quickReorderTotal(out)).toBe(200_000);
+    expect(quickReorderAddAllAria(out, (n) => `${n}đ`)).toContain('2 món');
+  });
+
+  it('withPurchasedRestock đổi đúng phân loại, trả trang cũ khi không có gì đổi', () => {
+    const page = { items: list, nextCursor: null, restockAlertsEnabled: true };
+    const on = withPurchasedRestock(page, 'v1', true);
+    expect(on.items.map((p) => p.restockWaiting === true)).toEqual([true, false, true, false]);
+    expect(on.restockAlertsEnabled).toBe(true);
+    expect(withPurchasedRestock(page, 'v3', true)).toBe(page);
+    expect(withPurchasedRestock(page, 'v9', true)).toBe(page);
+    expect(withPurchasedRestock(on, 'v1', false).items[0]!.restockWaiting).toBe(false);
   });
 });

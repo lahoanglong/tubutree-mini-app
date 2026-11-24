@@ -2,7 +2,7 @@ import { render, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOME_KIND_KEY, FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
+import { HOME_KIND_KEY, FLASH_HINT_KEY, PURCHASED_HINT_KEY, purchasedSkeletonHeight } from '@tubutree/app-core/home-layout';
 
 // Khung chờ chung của Trang chủ ở cấp trang: Giờ vàng thật (khối hiện lỗi + "Thử lại"), giờ giả, StrictMode. home.spec.tsx mock Giờ vàng nên không thấy được.
 const chunk = vi.hoisted(() => {
@@ -54,7 +54,13 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { CommunityPreview: () => null, SuggestFeed: () => null, HomeStoryReel: () => null, HomeScrollRestoration: () => null };
+  return {
+    CommunityPreview: () => null,
+    SuggestFeed: () => null,
+    HomeStoryReel: () => null,
+    HomeScrollRestoration: () => null,
+    PurchasedRail: () => <div data-testid="purchased-rail-real" />,
+  };
 });
 
 import HomePage from './home';
@@ -96,19 +102,23 @@ afterEach(() => vi.useRealTimers());
 
 // Máy đã nhớ loại khách: không giữ khung chờ chung. Khối chưa có chunk (lưới Gợi ý) không vẽ gì; nó là khối cuối trang nên chunk về không đẩy khối nào đang hiện.
 describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khối dưới chưa về', () => {
-  it('không có khung chờ chung; chưa nhớ Giờ vàng thì ô khuyến mãi không có vỏ khối (không giữ chỗ cho thứ có thể không có); Mua lại chỉ có kệ thật', async () => {
+  it('không có khung chờ chung; chưa nhớ Giờ vàng thì ô khuyến mãi không có vỏ khối (không giữ chỗ cho thứ có thể không có); Mua lại chỉ giữ khung chờ của chính kệ', async () => {
     renderHome();
     await settle(100);
     expect(document.querySelector('[data-testid="home-settling"]')).toBeNull();
     expect(blockEl('flash')).toBeNull();
     expect(blockEl('community')).toBeNull();
-    expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
+    expect(testIdsIn('purchased')[0]).toBe('purchased-rail-loading');
+    expect(document.querySelector('[data-testid="purchased-rail-real"]')).toBeNull();
   });
 
-  it('kệ Mua lại nằm trong gói đầu nên hiện ngay, không có ô giữ chỗ', async () => {
+  it('kệ Mua lại nằm trong chunk khối dưới: chunk chưa về thì giữ đúng khung chờ kệ tự vẽ lúc chờ dữ liệu (cao theo lần trước), không ô giữ chỗ nào khác', async () => {
+    localStorage.setItem(PURCHASED_HINT_KEY, 'many');
     renderHome();
     await settle(100);
-    expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
+    const wait = blockEl('purchased')?.querySelector<HTMLElement>('[data-testid="purchased-rail-loading"]');
+    expect(wait?.style.height).toBe(`${purchasedSkeletonHeight('many')}px`);
+    expect(blockEl('purchased')?.querySelectorAll('[data-testid="purchased-rail-loading"]')).toHaveLength(1);
   });
 
   it('lần trước có Giờ vàng thì Giờ vàng vẫn nằm trong gói đầu: không có ô giữ chỗ của chunk, khung chờ là của chính FlashSale', async () => {
@@ -136,5 +146,16 @@ describe('HomePage — khách mới và khách vãng lai mở lại, chunk khố
     await settle(100);
     expect(testIdsIn('bestSellers')).toEqual(['best-seller-rail-real']);
     expect(document.querySelector('[data-testid="purchased-rail-real"]')).toBeNull();
+  });
+});
+
+// Chạy cuối tệp: nhả chunk thì mô-đun khối dưới ở lại cho mọi ca sau trong tệp.
+describe('HomePage — chunk khối dưới về', () => {
+  it('kệ Mua lại thật thế chỗ khung chờ, không còn khung chờ nào', async () => {
+    renderHome();
+    await settle(100);
+    chunk.release();
+    await settle(100);
+    expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
   });
 });

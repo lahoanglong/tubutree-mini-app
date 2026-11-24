@@ -8,6 +8,9 @@ import { VARIATION_ID_RE } from './variation-id';
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
 import { FlashSaleService, type EffectivePrice } from '../flash-sale/flash-sale.service';
+import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
+import { RESTOCK_ALERT_ENABLED_KEY } from '../restock-alerts/restock-alerts.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 export interface PurchasedItem {
   variationId: string;
@@ -32,10 +35,14 @@ export interface PurchasedItem {
   flashPrice: number | null;
   /** Số suất Giờ vàng khách này còn mua được (0 = đã dùng hết, giỏ tính giá thường); null khi không có suất mở. */
   flashAllowance: number | null;
+  /** Khách đang chờ báo hàng về cho phân loại này (đăng ký "Báo khi có" chưa gửi). Chỉ có thể true khi phân loại hết hàng và cờ báo hàng về bật. */
+  restockWaiting: boolean;
 }
 export interface PurchasedItemsPage {
   items: PurchasedItem[];
   nextCursor: string | null;
+  /** Cờ catalog.restock_alert_enabled: bật thì món hết hàng trên kệ Mua lại có nút "Báo khi có" (khỏi hỏi thêm một đường nữa). */
+  restockAlertsEnabled: boolean;
 }
 export interface PurchasedItemsOptions {
   cursor?: string;
@@ -71,10 +78,11 @@ export function decodePurchasedCursor(cursor: string): { ms: number; variationId
 }
 
 /**
- * Sản phẩm khách đã mua THÀNH CÔNG (đơn DELIVERED), nhóm theo variation — nguồn cho kệ "Mua lại"
- * (spec §3.1). Chỉ dữ liệu của chính user (userId từ JWT). Loại variation/SP ngừng bán hoặc chưa
- * duyệt; SP chỉ hết hàng vẫn trả kèm inStock:false. lastPurchasedAt = createdAt của đơn giao gần
- * nhất (cùng định nghĩa với LifecycleService.sendReorderReminders).
+ * Sản phẩm khách đã mua THÀNH CÔNG, nhóm theo variation — nguồn cho kệ "Mua lại"
+ * (spec §3.1). Chỉ dữ liệu của chính user (userId từ JWT). Mua thành công = đơn DELIVERED chưa bị lật hoàn tiền
+ * (`paymentStatus` REFUNDED), không phải đơn thử Giờ G đã dọn, và dòng chưa bị trả hết qua yêu cầu trả hàng đã duyệt.
+ * Loại variation/SP ngừng bán hoặc chưa duyệt; SP chỉ hết hàng vẫn trả kèm inStock:false. lastPurchasedAt = createdAt của
+ * đơn giao gần nhất (cùng định nghĩa với LifecycleService.sendReorderReminders).
  */
 @Injectable()
 export class PurchasedItemsService {
@@ -82,6 +90,8 @@ export class PurchasedItemsService {
     private readonly prisma: PrismaService,
     // Optional: không có thì sản phẩm không mang giá Giờ vàng (sheet Mua lại dùng giá đang bán).
     @Optional() private readonly flashSale?: FlashSaleService,
+    // Optional: không có thì coi cờ báo hàng về là tắt (món hết hàng giữ chữ "Tạm hết hàng").
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
 
   async list(userId: string, opts: PurchasedItemsOptions = {}): Promise<PurchasedItemsPage> {
@@ -97,7 +107,14 @@ export class PurchasedItemsService {
       JOIN products p ON p.id = v."productId"
       WHERE o."userId" = ${userId}
         AND o.status::text = 'DELIVERED'
+        AND o."paymentStatus"::text <> 'REFUNDED'
+        AND ${NOT_PILOT_CLEANED_SQL}
         AND oi."isGift" = false
+        AND oi.quantity > COALESCE((
+          SELECT SUM(ri.quantity) FROM return_request_items ri
+          JOIN return_requests rr ON rr.id = ri."returnRequestId"
+          WHERE ri."orderItemId" = oi.id AND rr.status::text = 'APPROVED'
+        ), 0)
         AND v."isActive" = true
         AND p."isActive" = true
         AND p."approvalStatus"::text = 'APPROVED'
@@ -112,7 +129,8 @@ export class PurchasedItemsService {
       LIMIT ${limit + 1}`);
 
     const page = rows.slice(0, limit);
-    if (page.length === 0) return { items: [], nextCursor: null };
+    const restockAlertsEnabled = (await this.config?.get<unknown>(RESTOCK_ALERT_ENABLED_KEY, false)) === true;
+    if (page.length === 0) return { items: [], nextCursor: null, restockAlertsEnabled };
 
     const variations = await this.prisma.variation.findMany({
       where: { id: { in: page.map((r) => r.variationId) } },
@@ -134,6 +152,7 @@ export class PurchasedItemsService {
     ]);
     const coverOf = new Map(covered.map((p) => [p.id, p.images]));
     const byId = new Map(variations.map((v) => [v.id, v]));
+    const waiting = await this.waitingRestock(userId, restockAlertsEnabled ? variations.filter((v) => v.stock <= 0).map((v) => v.id) : []);
     const items: PurchasedItem[] = [];
     for (const r of page) {
       const v = byId.get(r.variationId);
@@ -156,12 +175,24 @@ export class PurchasedItemsService {
         retailOnly: !isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product.fulfilment }) || isPartnerOwnedProduct(v.product),
         flashPrice: offer ? Math.min(offer.flashPrice, v.salePrice ?? v.retailPrice) : null,
         flashAllowance: offer?.allowance ?? null,
+        restockWaiting: waiting.has(v.id),
       });
     }
     const last = page[page.length - 1]!;
     return {
       items,
       nextCursor: rows.length > limit ? encodePurchasedCursor(new Date(last.lastPurchasedAt).getTime(), last.variationId) : null,
+      restockAlertsEnabled,
     };
+  }
+
+  /** Phân loại hết hàng mà khách đang chờ báo hàng về (đăng ký chưa gửi), một câu cho cả trang; không có phân loại nào thì không hỏi. */
+  private async waitingRestock(userId: string, variationIds: string[]): Promise<Set<string>> {
+    if (variationIds.length === 0) return new Set();
+    const rows = await this.prisma.restockAlert.findMany({
+      where: { userId, notifiedAt: null, variationId: { in: variationIds } },
+      select: { variationId: true },
+    });
+    return new Set(rows.map((r) => r.variationId));
   }
 }

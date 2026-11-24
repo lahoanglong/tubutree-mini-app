@@ -10,11 +10,19 @@ const variation = (id: string, over: Record<string, unknown> = {}, product: Reco
   product: { id: `p-${id}`, slug: `sp-${id}`, name: `Sản phẩm ${id}`, brand: 'Tubu', thumbnail: `https://img.test/${id}.jpg`, images: [], fulfilment: 'TUBU', storefrontId: null, ...product },
 });
 
-function setup(rows: ReturnType<typeof row>[], variations: ReturnType<typeof variation>[], flashSale?: { resolveEffective: jest.Mock }) {
+function setup(
+  rows: ReturnType<typeof row>[],
+  variations: ReturnType<typeof variation>[],
+  flashSale?: { resolveEffective: jest.Mock },
+  restock?: { enabled: unknown; waiting?: string[] },
+) {
   const queryRaw = jest.fn().mockResolvedValue(rows);
   const findMany = jest.fn().mockResolvedValue(variations);
-  const prisma = { $queryRaw: queryRaw, variation: { findMany } } as unknown as PrismaService;
-  return { svc: new PurchasedItemsService(prisma, flashSale as never), queryRaw, findMany };
+  const restockFindMany = jest.fn().mockResolvedValue((restock?.waiting ?? []).map((variationId) => ({ variationId })));
+  const configGet = jest.fn().mockResolvedValue(restock?.enabled ?? false);
+  const prisma = { $queryRaw: queryRaw, variation: { findMany }, restockAlert: { findMany: restockFindMany } } as unknown as PrismaService;
+  const config = restock ? { get: configGet } : undefined;
+  return { svc: new PurchasedItemsService(prisma, flashSale as never, config as never), queryRaw, findMany, restockFindMany, configGet };
 }
 const sqlOf = (m: jest.Mock) => m.mock.calls[0]![0] as Prisma.Sql;
 
@@ -35,7 +43,9 @@ describe('PurchasedItemsService.list', () => {
       variationId: 'v2', productId: 'p-v2', slug: 'sp-v2', productName: 'Sản phẩm v2', variationName: 'Loại v2',
       brand: 'Tubu', thumbnail: 'https://img.test/v2.jpg', price: 65000, salePrice: 59000, stock: 0, inStock: false,
       timesBought: 3, lastPurchasedAt: '2026-09-10T03:00:00.123Z', retailOnly: false, flashPrice: null, flashAllowance: null,
+      restockWaiting: false,
     });
+    expect(page.restockAlertsEnabled).toBe(false);
     expect(page.nextCursor).toBeNull();
   });
 
@@ -102,9 +112,21 @@ describe('PurchasedItemsService.list', () => {
     expect(sql.sql).toContain(`p."approvalStatus"::text = 'APPROVED'`);
   });
 
+  // Kệ Mua lại chỉ mời mua lại món khách đã mua thật: đơn bị lật hoàn tiền, đơn thử Giờ G đã dọn, dòng đã trả hết không phải lần mua thành công.
+  it('SQL loại đơn đã hoàn tiền, đơn thử Giờ G đã dọn và dòng đã trả hết qua yêu cầu trả hàng đã duyệt', async () => {
+    const { svc, queryRaw } = setup([], []);
+    await svc.list('u1');
+    const sql = sqlOf(queryRaw);
+    expect(sql.sql).toContain(`o."paymentStatus"::text <> 'REFUNDED'`);
+    expect(sql.sql).toContain('admin_audit_logs');
+    expect(sql.values).toContain('GOLIVE_PILOT_CLEANUP');
+    expect(sql.sql).toMatch(/oi\.quantity > COALESCE\(\(\s*SELECT SUM\(ri\.quantity\) FROM return_request_items ri/);
+    expect(sql.sql).toContain(`rr.status::text = 'APPROVED'`);
+  });
+
   it('không có dòng nào → không truy vấn variation', async () => {
     const { svc, findMany } = setup([], []);
-    await expect(svc.list('u1')).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(svc.list('u1')).resolves.toEqual({ items: [], nextCursor: null, restockAlertsEnabled: false });
     expect(findMany).not.toHaveBeenCalled();
   });
 
@@ -162,6 +184,42 @@ describe('PurchasedItemsService.list', () => {
     const page = await svc.list('u1');
     expect(page.items).toHaveLength(1);
     expect(page.items[0]!.thumbnail).toBe('https://img.test/a.jpg');
+  });
+});
+
+describe('PurchasedItemsService.list: báo hàng về cho món hết hàng', () => {
+  it('cờ bật: trang mang restockAlertsEnabled, chỉ hỏi đăng ký của CHÍNH khách cho phân loại hết hàng, một câu cho cả trang', async () => {
+    const { svc, restockFindMany, configGet } = setup(
+      [row('v1'), row('v2'), row('v3')],
+      [variation('v1', { stock: 0 }), variation('v2', { stock: 5 }), variation('v3', { stock: -2 })],
+      undefined,
+      { enabled: true, waiting: ['v3'] },
+    );
+    const page = await svc.list('u1');
+    expect(configGet).toHaveBeenCalledWith('catalog.restock_alert_enabled', false);
+    expect(page.restockAlertsEnabled).toBe(true);
+    expect(restockFindMany).toHaveBeenCalledTimes(1);
+    expect(restockFindMany.mock.calls[0]![0].where).toEqual({ userId: 'u1', notifiedAt: null, variationId: { in: ['v1', 'v3'] } });
+    expect(page.items.map((i) => [i.variationId, i.restockWaiting])).toEqual([['v1', false], ['v2', false], ['v3', true]]);
+  });
+
+  it('cờ tắt (hay giá trị không phải true): không hỏi đăng ký, mọi món restockWaiting false', async () => {
+    const { svc, restockFindMany } = setup([row('v1')], [variation('v1', { stock: 0 })], undefined, { enabled: 'true' });
+    const page = await svc.list('u1');
+    expect(page.restockAlertsEnabled).toBe(false);
+    expect(restockFindMany).not.toHaveBeenCalled();
+    expect(page.items[0]!.restockWaiting).toBe(false);
+  });
+
+  it('cờ bật mà trang không có món hết hàng: không hỏi đăng ký', async () => {
+    const { svc, restockFindMany } = setup([row('v1')], [variation('v1')], undefined, { enabled: true });
+    expect((await svc.list('u1')).restockAlertsEnabled).toBe(true);
+    expect(restockFindMany).not.toHaveBeenCalled();
+  });
+
+  it('trang rỗng vẫn mang cờ (Trang chủ biết trước khi có món)', async () => {
+    const { svc } = setup([], [], undefined, { enabled: true });
+    await expect(svc.list('u1')).resolves.toEqual({ items: [], nextCursor: null, restockAlertsEnabled: true });
   });
 });
 

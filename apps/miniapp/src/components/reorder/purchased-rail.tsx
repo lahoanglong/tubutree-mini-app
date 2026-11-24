@@ -9,10 +9,12 @@ import { refillQuickItems } from '@tubutree/app-core/refill/refill-rail';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { PURCHASED_LINE_HEIGHT, SECTION_HEADER_HEIGHT, purchasedSkeletonHeight, readPurchasedHint, writePurchasedHint } from '@tubutree/app-core/home-layout';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { vi } from '../../i18n/vi';
 import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { usePublicConfig } from '../../hooks/use-public-config';
-import { usePurchasedItems } from '../../hooks/use-purchased-items';
+import { PURCHASED_RAIL_LIMIT, usePurchasedItems } from '../../hooks/use-purchased-items';
+import { RestockBellButton } from '../../pages/wishlist-restock';
 import { trackEvent } from '../../services/analytics';
 import { getLoadErrorMessage } from '../../services/api';
 import { coreHttp } from '../../services/core-http';
@@ -38,6 +40,8 @@ import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
+import { PurchasedRailSkeleton } from './purchased-rail-skeleton';
+import { useBuyAgainRestock } from './use-buy-again-restock';
 import { useQuickReorder } from './use-quick-reorder';
 
 /** Tab Đơn hàng: từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
@@ -45,12 +49,15 @@ export const COMPACT_MAX_ITEMS = 2;
 const COMPACT_CARD_HEIGHT = 168;
 const RAIL_PADDING_BOTTOM = 12;
 /** Export để Trang chủ dùng CHUNG query key ['purchased-items', 10] khi quyết định thứ tự khối (plan 4b). */
+/** Nút cuối dòng Mua lại ("Mua lại" hay "Báo khi có"): giữ bề rộng nhãn, đệm ngang hẹp. */
+const LINE_BUTTON = { flex: '0 0 auto', minWidth: 0, paddingInline: 14 } as const;
+
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
 /** Tên luôn chiếm đủ 2 dòng (14px x 1.57) để thẻ cao như nhau với tên ngắn hay dài và khung chờ khớp thẻ thật. */
 const NAME_MIN_HEIGHT = 44;
 const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
 
-export const PURCHASED_RAIL_LIMIT = 10;
+export { PURCHASED_RAIL_LIMIT };
 
 /**
  * Món đã mua dưới dạng thẻ sản phẩm: giá của đúng phân loại đã mua. Ghim phân loại để `ProductCard` chỉ xét Giờ vàng của chính phân loại đó
@@ -122,9 +129,15 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
   const cfg = usePublicConfig();
   const discountPct = Math.round(cfg.subscribeDiscountPct * 100);
   const onHome = source === 'home_rail';
-  // Trang chủ vẽ đúng tập mà chống trùng Trang chủ (`use-home-shelves`) chiếm, tối đa `QUICK_REORDER_MAX` (như trần của kệ): không món nào vừa bị chiếm mà không ai vẽ
-  // (biến khỏi các kệ dưới), hay được vẽ mà không ai chiếm (lặp ở kệ dưới). Tab Đơn hàng vẽ đủ như cũ.
-  const shown = useMemo(() => (onHome ? quickReorderShelfItems(items).slice(0, QUICK_REORDER_MAX) : items), [onHome, items]);
+  // Cờ báo hàng về (đi cùng trang món đã mua): món hết hàng ở Trang chủ có nút "Báo khi có". Tab Đơn hàng giữ chữ "Tạm hết hàng" như cũ.
+  const restockOn = onHome && q.data?.restockAlertsEnabled === true;
+  const restock = useBuyAgainRestock();
+  // Trang chủ vẽ đúng tập mà chống trùng Trang chủ (`use-home-shelves`) chiếm (món của đơn trong 90 ngày, còn hàng trước), tối đa `QUICK_REORDER_MAX` (như trần
+  // của kệ): không món nào vừa bị chiếm mà không ai vẽ (biến khỏi các kệ dưới), hay được vẽ mà không ai chiếm (lặp ở kệ dưới). Tab Đơn hàng vẽ đủ như cũ.
+  const shown = useMemo(
+    () => (onHome ? quickReorderShelfItems(items, { now: serverNow(), restock: restockOn }).slice(0, QUICK_REORDER_MAX) : items),
+    [onHome, items, restockOn],
+  );
   // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món, cỡ nhỏ nhất.
   const [hint] = useState(() => (onHome ? readPurchasedHint(browserStorage()) : 'none'));
   const settledCount = !restoring && !q.isLoading && !q.isError && q.data ? shown.length : null;
@@ -139,11 +152,11 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: onHome && phase === 'authenticated' });
   const cartUnits = useMemo(() => cartUnitsByVariation(cartQ.data?.items), [cartQ.data]);
   // Dải "Mua lại món quen" thay kệ thẻ ở Trang chủ từ 2 món còn hàng; một món thì giữ dòng Mua lại. Tab Đơn hàng không đổi.
-  const baseQuick = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now: serverNow() }) : [];
+  const baseQuick = onHome ? buildQuickReorderItems({ purchased: shown, flash, cartUnits, now: serverNow(), includeSoldOut: restockOn }) : [];
   // Cờ catalog.refill_first_enabled: ô chai khách đã có thành gói Refill (chạm "+ Thêm" thêm gói refill, mở ô vẫn mua lại đúng chai cũ).
   // Khai với Trang chủ vẫn bằng món gốc (`use-home-shelves` đọc thẳng danh sách đã mua), nên chống trùng các kệ dưới không đổi.
   const refillOn = refillFirstOn(cfg) && phase === 'authenticated';
-  const refillIds = refillQueryIds(baseQuick.map((i) => i.productId));
+  const refillIds = refillQueryIds(baseQuick.filter((i) => !i.soldOut).map((i) => i.productId));
   const refillPairs = useQuery({ ...myRefillPairsQuery(coreHttp, refillIds), enabled: refillOn && refillIds.length > 0 }).data;
   const quickItems = refillQuickItems(baseQuick, refillOn ? refillPairs : undefined);
   const refillShown = quickItems.some((i) => i.bottle);
@@ -155,17 +168,7 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
   }, [refillShown]);
 
   if ((restoring || q.isLoading) && onHome) {
-    const height = purchasedSkeletonHeight(hint === 'none' ? 'one' : hint);
-    return (
-      <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ height }}>
-        <div style={{ height: SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', padding: '0 16px', boxSizing: 'border-box' }}>
-          <Skeleton width={96} height={20} />
-        </div>
-        <div style={{ padding: '0 16px' }}>
-          <Skeleton height={height - SECTION_HEADER_HEIGHT} radius="var(--radius-card)" />
-        </div>
-      </div>
-    );
+    return <PurchasedRailSkeleton height={purchasedSkeletonHeight(hint === 'none' ? 'one' : hint)} />;
   }
   if (restoring || q.isLoading) {
     // Khớp đúng khung kệ thật (tiêu đề + hàng tile + đệm dưới) để dữ liệu về không đẩy nội dung bên dưới.
@@ -222,6 +225,8 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
             void quick.addOne(item).then((ok) => ok && refill && trackEvent('refill_swap_applied', 'miniapp', { surface: 'reorder' }));
           }}
           onAddAll={() => quick.addAll(quickItems)}
+          onNotify={(item) => restock.press(item.variationId, item.restockWaiting === true)}
+          notifyBusyKey={restock.busyKey}
           onOpen={(item) => {
             // Ô đã đổi sang Refill: mở tấm Mua lại của đúng chai cũ (khách vẫn chọn được món cũ).
             const bottle = (item as (typeof quickItems)[number]).bottle;
@@ -248,6 +253,8 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
           pricing={rebuyPricing(shown[0]!, flash, serverNow(), cartUnits.get(shown[0]!.variationId) ?? 0)}
           onRebuy={() => openReorder(shown[0]!)}
           onOpen={() => navigate(`/product/${encodeURIComponent(shown[0]!.slug)}`, openVariation(shown[0]!))}
+          onNotify={restockOn ? () => restock.press(shown[0]!.variationId, shown[0]!.restockWaiting === true) : undefined}
+          notifyBusy={restock.busyKey === shown[0]!.variationId}
         />
       ) : !onHome && shown.length <= COMPACT_MAX_ITEMS ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
@@ -275,6 +282,17 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
                 note={p.timesBought > 1 ? vi.reorder.timesBought(p.timesBought) : shown.some((x) => x.timesBought > 1) ? '' : undefined}
                 addLabel={homeCopy.reorder.buy}
                 onAdd={p.inStock !== false && p.stock > 0 ? () => openReorder(p) : undefined}
+                imageOverlay={
+                  restockOn && !(p.inStock !== false && p.stock > 0) ? (
+                    <RestockBellButton
+                      productId={p.variationId}
+                      name={p.productName}
+                      on={p.restockWaiting === true}
+                      busy={restock.busyKey === p.variationId}
+                      onPress={() => restock.press(p.variationId, p.restockWaiting === true)}
+                    />
+                  ) : undefined
+                }
               />
             </RailCell>
           ))}
@@ -292,21 +310,31 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
 
 /**
  * Một món Mua lại ở Trang chủ (Q6): MỘT dòng cao 88px thay thẻ ngang 168px. Ảnh 64, tên một dòng, phân loại (kèm "Đã mua n lần"), giá; nút "Mua lại" ở phải.
- * Không mời "Định kỳ" ở đây (còn ở tab Đơn hàng): dòng này chỉ là lối mua lại nhanh. Hết hàng thì thay nút bằng chữ, không hứa món không mua được.
+ * Không mời "Định kỳ" ở đây (còn ở tab Đơn hàng): dòng này chỉ là lối mua lại nhanh. Hết hàng thì không hứa món không mua được: cờ báo hàng về bật
+ * (`onNotify`) thì nút "Báo khi có" (bấm lại để huỷ) và dòng phụ ghi "Tạm hết hàng", tắt thì thay nút bằng chữ như cũ.
  */
 function RebuyLine({
   item,
   pricing,
   onRebuy,
   onOpen,
+  onNotify,
+  notifyBusy = false,
 }: {
   item: PurchasedItem;
   pricing: { price: number; compareAt: number | null };
   onRebuy: () => void;
   onOpen: () => void;
+  onNotify?: () => void;
+  notifyBusy?: boolean;
 }) {
   const available = item.inStock !== false && item.stock > 0;
-  const caption = joinDetailParts([variationLabel(item.variationName), item.timesBought > 1 ? vi.reorder.timesBought(item.timesBought) : null]);
+  const notifiable = !available && onNotify !== undefined;
+  const waiting = item.restockWaiting === true;
+  const caption = joinDetailParts([
+    variationLabel(item.variationName),
+    notifiable ? fillCopy('stock.out') : item.timesBought > 1 ? vi.reorder.timesBought(item.timesBought) : null,
+  ]);
   return (
     <div data-testid="rebuy-line" style={{ height: PURCHASED_LINE_HEIGHT, padding: '0 16px', boxSizing: 'border-box' }}>
       {/* Card bọc nội dung trong một div riêng nên hàng ngang (flex) phải nằm trong div đó, không đặt ở style của Card. */}
@@ -334,8 +362,20 @@ function RebuyLine({
             </span>
           </button>
           {available ? (
-            <Button variant="secondary" onPress={onRebuy} style={{ flex: '0 0 auto', minWidth: 0, paddingInline: 14 }}>
+            <Button variant="secondary" onPress={onRebuy} style={LINE_BUTTON}>
               {homeCopy.reorder.buy}
+            </Button>
+          ) : notifiable ? (
+            <Button
+              variant={waiting ? 'ghost' : 'secondary'}
+              data-testid="rebuy-line-notify"
+              aria-label={fillCopy('wishlist.restock.bell', { name: item.productName })}
+              aria-pressed={waiting}
+              loading={notifyBusy}
+              onPress={onNotify}
+              style={LINE_BUTTON}
+            >
+              {fillCopy(waiting ? 'quickReorder.notifyOn' : 'quickReorder.notify')}
             </Button>
           ) : (
             <Text variant="caption" tone="secondary" style={{ flex: '0 0 auto', maxWidth: 88, textAlign: 'right' }}>

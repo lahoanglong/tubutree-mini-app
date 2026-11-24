@@ -103,6 +103,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
   const flashPending = flashQuery.isLoading;
   const flashData = flashQuery.data;
   const purchasedData = purchased.data?.items;
+  const purchasedRestock = purchased.data?.restockAlertsEnabled === true;
   const bestData = bestSellerQuery.data?.data;
   const bestSellerBasis: BestSellersBasis = bestSellerQuery.data?.basis ?? 'days30';
   const combosData = combosQuery.data;
@@ -113,7 +114,7 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
     const liveFlash = (flashData ?? []).filter((item) => !hydrated || Date.parse(item.endAt) > now);
     const build = (combos: ComboView[]) => ({
       flash: liveFlash.map(flashShelfEntry),
-      purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? []).map(purchasedShelfEntry) : [],
+      purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? [], { now, restock: purchasedRestock }).map(purchasedShelfEntry) : [],
       combos: combos.map(comboShelfEntry),
       // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
       // Hạng gắn TRƯỚC khi xếp món có ảnh lên đầu (ô lá thay thế không nằm giữa màn đầu): hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
@@ -146,6 +147,6 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
       seen: composed.seen,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `expiredTick` chỉ để tính lại `serverNow()`.
-  }, [kind, flashData, purchasedData, bestData, combosData, hydrated, expiredTick, flashPending, flashRemembered, banner.slides, banner.pending, banner.remembered]);
+  }, [kind, flashData, purchasedData, purchasedRestock, bestData, combosData, hydrated, expiredTick, flashPending, flashRemembered, banner.slides, banner.pending, banner.remembered]);
   return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery, onFlashEnd };
 }

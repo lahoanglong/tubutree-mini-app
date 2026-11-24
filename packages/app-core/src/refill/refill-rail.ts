@@ -30,7 +30,8 @@ export function refillQuickItems(items: readonly QuickReorderItem[], pairs: Refi
   const taken = new Set(items.map((i) => i.productId));
   return items.map((item) => {
     const o = pairs[item.productId];
-    if (!o || !o.inStock || taken.has(o.productId)) return item;
+    // Ô hết hàng giữ nút "Báo khi có" của đúng món đã mua: không đổi thành gói Refill.
+    if (item.soldOut || !o || !o.inStock || taken.has(o.productId)) return item;
     taken.add(o.productId);
     const size = o.sizeLabel ? ` ${o.sizeLabel}` : '';
     const saving = refillUnitSaving(item, o);

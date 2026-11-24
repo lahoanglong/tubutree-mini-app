@@ -229,7 +229,7 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
     expect(p3.nextCursor).toBeNull();
 
     // c chỉ nằm trong đơn chưa giao + đơn của người khác.
-    await expect(purchased.list(me.id, { variationId: c.id })).resolves.toEqual({ items: [], nextCursor: null });
+    await expect(purchased.list(me.id, { variationId: c.id })).resolves.toEqual({ items: [], nextCursor: null, restockAlertsEnabled: false });
     await expect(purchased.list(me.id, { variationId: a.id })).resolves.toMatchObject({ items: [{ variationId: a.id }] });
   });
 
@@ -325,5 +325,85 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
       '2026-09-15T10:00:00.001Z',
       '2026-09-15T10:00:00.001Z',
     ]);
+  });
+
+  it('(e) purchased-items chỉ tính lần mua thật: loại đơn đã hoàn tiền, đơn thử Giờ G đã dọn, quà tặng và dòng đã trả hết; trả một phần hay yêu cầu chưa duyệt thì giữ', async () => {
+    const me = await createUser(prisma);
+    const vid = idSet();
+    const kept = await createVariation({ stock: 4, id: vid('a') });
+    const partial = await createVariation({ stock: 4, id: vid('b') });
+    const pendingReturn = await createVariation({ stock: 4, id: vid('c') });
+    const fullyReturned = await createVariation({ stock: 4 });
+    const gift = await createVariation({ stock: 4 });
+    const refunded = await createVariation({ stock: 4 });
+    const pilot = await createVariation({ stock: 4 });
+
+    const order = await createOrder(prisma, { userId: me.id, status: 'DELIVERED' });
+    await addLine(order.id, kept, 1);
+    const lPartial = await addLine(order.id, partial, 3);
+    const lPending = await addLine(order.id, pendingReturn, 1);
+    const lReturned = await addLine(order.id, fullyReturned, 2);
+    await prisma.orderItem.create({
+      data: { orderId: order.id, variationId: gift.id, productName: 'Quà IT', variationName: gift.name, unitPrice: 0, quantity: 1, total: 0, isGift: true },
+    });
+    // Hai phiếu trả đã duyệt cộng dồn đủ 2 món của dòng → dòng coi như trả hết.
+    for (const qty of [1, 1]) {
+      await prisma.returnRequest.create({
+        data: { orderId: order.id, userId: me.id, reason: 'IT', status: 'APPROVED', items: { create: [{ orderItemId: lReturned.id, quantity: qty }] } },
+      });
+    }
+    await prisma.returnRequest.create({
+      data: { orderId: order.id, userId: me.id, reason: 'IT', status: 'APPROVED', items: { create: [{ orderItemId: lPartial.id, quantity: 2 }] } },
+    });
+    await prisma.returnRequest.create({
+      data: { orderId: order.id, userId: me.id, reason: 'IT', status: 'REQUESTED', items: { create: [{ orderItemId: lPending.id, quantity: 1 }] } },
+    });
+
+    const refundedOrder = await createOrder(prisma, { userId: me.id, status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'REFUNDED' });
+    await addLine(refundedOrder.id, refunded, 1);
+    const pilotOrder = await createOrder(prisma, { userId: me.id, status: 'DELIVERED' });
+    await addLine(pilotOrder.id, pilot, 1);
+    await prisma.adminAuditLog.create({
+      data: { actorId: me.id, action: 'GOLIVE_PILOT_CLEANUP', targetType: 'ORDER', targetIds: [pilotOrder.code], payload: {} },
+    });
+
+    const page = await purchased.list(me.id, { limit: 20 });
+    expect(page.items.map((i) => i.variationId).sort()).toEqual([kept.id, partial.id, pendingReturn.id].sort());
+    expect(page.restockAlertsEnabled).toBe(false);
+  });
+
+  it('(f) purchased-items: cờ báo hàng về bật thì món hết hàng mang restockWaiting theo đăng ký chưa báo của chính khách', async () => {
+    const config = moduleRef.get(SystemConfigService);
+    const before = await config.get<unknown>('catalog.restock_alert_enabled', false);
+    const me = await createUser(prisma);
+    const other = await createUser(prisma);
+    const waiting = await createVariation({ stock: 0 });
+    const notified = await createVariation({ stock: 0 });
+    const othersOnly = await createVariation({ stock: 0 });
+    const inStock = await createVariation({ stock: 3 });
+    const order = await createOrder(prisma, { userId: me.id, status: 'DELIVERED' });
+    for (const v of [waiting, notified, othersOnly, inStock]) await addLine(order.id, v, 1);
+    await prisma.restockAlert.create({ data: { userId: me.id, variationId: waiting.id } });
+    await prisma.restockAlert.create({ data: { userId: me.id, variationId: notified.id, notifiedAt: new Date() } });
+    await prisma.restockAlert.create({ data: { userId: other.id, variationId: othersOnly.id } });
+    await prisma.restockAlert.create({ data: { userId: me.id, variationId: inStock.id } });
+    try {
+      const off = await purchased.list(me.id, { limit: 20 });
+      if (before !== true) {
+        expect(off.restockAlertsEnabled).toBe(false);
+        expect(off.items.every((i) => i.restockWaiting === false)).toBe(true);
+      }
+      await config.set('catalog.restock_alert_enabled', true, 'it-w32-02');
+      const on = await purchased.list(me.id, { limit: 20 });
+      expect(on.restockAlertsEnabled).toBe(true);
+      const byId = new Map(on.items.map((i) => [i.variationId, i.restockWaiting]));
+      expect(byId.get(waiting.id)).toBe(true);
+      expect(byId.get(notified.id)).toBe(false);
+      expect(byId.get(othersOnly.id)).toBe(false);
+      // Món còn hàng không mang trạng thái chờ (nút "Báo khi có" chỉ ở ô hết hàng).
+      expect(byId.get(inStock.id)).toBe(false);
+    } finally {
+      await config.set('catalog.restock_alert_enabled', before === true, 'it-w32-02');
+    }
   });
 });

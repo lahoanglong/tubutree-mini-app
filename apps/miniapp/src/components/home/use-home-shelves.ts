@@ -6,9 +6,8 @@ import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorde
 import { homePromoPick, type HomeKindState, type HomePromoKind } from '@tubutree/app-core/home-layout';
 import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
-import { PURCHASED_RAIL_LIMIT } from '../reorder/purchased-rail';
 import { serverNow } from '../../utils/server-clock';
-import { usePurchasedItems } from '../../hooks/use-purchased-items';
+import { PURCHASED_RAIL_LIMIT, usePurchasedItems } from '../../hooks/use-purchased-items';
 import { getHomeCombos } from '../../services/bundle-api';
 import { fetchActiveFlashSales, type FlashSaleActiveItem, type ProductCard } from '../../services/shop-api';
 import { homeBestSellerQuery } from './home-best-seller-query';
@@ -75,6 +74,7 @@ export function useHomeShelves(kind: HomeKindState, promoInput: HomePromoInput =
 
   const flashData = flashQuery.data;
   const purchasedData = purchased.data?.items;
+  const purchasedRestock = purchased.data?.restockAlertsEnabled === true;
   const bestData = bestSellerQuery.data?.data;
   const bestSellerBasis: BestSellersBasis = bestSellerQuery.data?.basis ?? 'days30';
   const combosData = combosQuery.data;
@@ -87,7 +87,8 @@ export function useHomeShelves(kind: HomeKindState, promoInput: HomePromoInput =
       liveFlash,
       entries: {
         flash: liveFlash.map(flashShelfEntry),
-        purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? []).map(purchasedShelfEntry) : [],
+        purchased:
+          kind === 'returning' ? quickReorderShelfItems(purchasedData ?? [], { now, restock: purchasedRestock }).map(purchasedShelfEntry) : [],
         combos: (combosData ?? []).flatMap((b) => comboView(b, now) ?? []).map(comboShelfEntry),
         // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
         // Hạng gắn TRƯỚC khi xếp món có ảnh lên đầu (ô lá thay thế không nằm giữa màn đầu): hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
@@ -97,7 +98,7 @@ export function useHomeShelves(kind: HomeKindState, promoInput: HomePromoInput =
         ).map((x) => ({ id: x.product.slug, item: x })),
       },
     };
-  }, [kind, flashData, purchasedData, bestData, combosData, expiredTick]);
+  }, [kind, flashData, purchasedData, purchasedRestock, bestData, combosData, expiredTick]);
   // Giờ vàng đứng đầu thứ tự chống trùng nên số món của nó không phụ thuộc combo: chọn ô khuyến mãi trước, rồi combo chỉ chiếm món của Bán chạy nhất khi chính nó là ô được vẽ
   // (combo bị ẩn mà vẫn lấy món thì Bán chạy nhất và Gợi ý thiếu món vô cớ).
   const withCombos = useMemo(() => composeHomeShelves(base.entries), [base]);

@@ -67,7 +67,7 @@ test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển b�
         return { accessToken: 'e2e-token', user: me() };
       });
       api.get('/me', () => me());
-      const item = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' };
+      const item = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: new Date(Date.now() - 2 * 86_400_000).toISOString() };
       api.get('/me/purchased-items', async () => {
         await new Promise((r) => setTimeout(r, 300));
         return { items: returning ? [item] : [], nextCursor: null };

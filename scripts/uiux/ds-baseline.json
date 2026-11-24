@@ -313,7 +313,7 @@
   "apps/miniapp/src/components/product/points-earn-sheet.tsx": 8,
   "apps/miniapp/src/components/qr-code.tsx": 2,
   "apps/miniapp/src/components/recycle-page-skeleton.tsx": 2,
-  "apps/miniapp/src/components/reorder/purchased-rail.tsx": 26,
+  "apps/miniapp/src/components/reorder/purchased-rail.tsx": 24,
   "apps/miniapp/src/components/reorder/reorder-sheet.tsx": 3,
   "apps/miniapp/src/components/reviews-section.tsx": 41,
   "apps/miniapp/src/components/route-shell.tsx": 11,

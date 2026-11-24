@@ -13,6 +13,7 @@ import { trackWebEvent } from '@/lib/analytics';
 import { playCartFeedback } from '@/lib/cart-feedback';
 import { productHref } from '@/lib/product-href';
 import { useBundleAdd } from '@/lib/use-bundle-add';
+import { useBuyAgainRestock } from './use-buy-again-restock';
 
 /** Tiền tố khoá danh sách món đã mua (`purchasedItemsQuery` thêm giới hạn ở cuối): dải vẽ từ đúng danh sách này, nên bị từ chối vì trạng thái đã đổi thì tải lại nó. */
 const PURCHASED_ITEMS_KEY = ['purchased-items'] as const;
@@ -33,6 +34,8 @@ function addButtonOf(variationId: string): Element | null {
 export function QuickReorderBlock({ items, onOpenBottle }: { items: readonly RefillQuickItem[]; onOpenBottle?: (bottle: QuickReorderItem) => void }) {
   const router = useRouter();
   const quick = useQuickAdd('repurchase', PURCHASED_ITEMS_KEY);
+  // "Báo khi có" của ô hết hàng báo kết quả ở cùng thông báo nổi với "+ Thêm".
+  const restock = useBuyAgainRestock(quick.notify);
   const bundle = useBundleAdd([PURCHASED_ITEMS_KEY]);
   const busyAll = bundle.busyId === ADD_ALL_ID;
   // Khoá chéo đồng bộ giữa hai đường thêm: `quick.busyId` và `busyAll` chỉ đúng sau lần vẽ kế nên hai cú bấm khác nút trong cùng khung hình sẽ bay hai lệnh.
@@ -54,6 +57,8 @@ export function QuickReorderBlock({ items, onOpenBottle }: { items: readonly Ref
         items={items}
         busyKey={quick.busyId}
         busyAll={busyAll}
+        onNotify={(item) => restock.press(item.variationId, item.restockWaiting === true)}
+        notifyBusyKey={restock.busyKey}
         onAdd={(item) => {
           if (bundle.isBusy() || oneInFlight.current) return;
           oneInFlight.current = true;
@@ -64,11 +69,13 @@ export function QuickReorderBlock({ items, onOpenBottle }: { items: readonly Ref
         }}
         onAddAll={() => {
           if (oneInFlight.current) return;
+          // Ô hết hàng ("Báo khi có") không vào lệnh lô: số món báo lại là số dòng thật sự gửi đi.
+          const lines = quickReorderLines(items);
           bundle.add({
             id: ADD_ALL_ID,
-            lines: quickReorderLines(items),
+            lines,
             errorKey: 'quickReorder.error',
-            successText: fillCopy('quickReorder.addedAll', { n: items.length }),
+            successText: fillCopy('quickReorder.addedAll', { n: lines.length }),
             onDone: () => playCartFeedback(document.querySelector(ADD_ALL_BUTTON)),
           });
         }}

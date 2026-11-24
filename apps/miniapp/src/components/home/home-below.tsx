@@ -5,6 +5,8 @@ export { SuggestFeed } from './suggest-feed';
 export { HomeQuiz } from './home-quiz';
 // Dải Story kéo theo cả bộ dựng câu chuyện sản phẩm (preset, sprite, câu chuyện thương hiệu) mà trang chi tiết cũng dùng: để ở đây thì entry không gánh nó.
 export { HomeStoryReel } from './home-story-reel';
+// Kệ Mua lại (dải "Mua lại món quen", dòng một món, nút "Báo khi có") chỉ vẽ cho khách cũ đã đăng nhập: khách mới và khách chưa đăng nhập không tải mã của nó.
+export { PurchasedRail } from '../reorder/purchased-rail';
 
 import { useScrollRestoration } from '../../hooks/use-scroll-restoration';
 

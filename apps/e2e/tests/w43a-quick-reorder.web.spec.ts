@@ -19,7 +19,7 @@ const USER = {
 const bought = (n: number, over: Record<string, unknown> = {}) => ({
   variationId: `var-q${n}`, productId: `prod-q${n}`, slug: `san-pham-q${n}`, productName: `Món quen ${n}`, variationName: '', brand: 'Tubu',
   thumbnail: null, price: 40_000 + n * 10_000, salePrice: null, stock: 9, inStock: true, timesBought: n === 1 ? 5 : 1, retailOnly: false,
-  lastPurchasedAt: '2026-09-10T00:00:00.000Z', ...over,
+  lastPurchasedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(), ...over,
 });
 const ITEMS = [bought(1), bought(2), bought(3, { stock: 0, inStock: false }), bought(4), bought(5)];
 const IN_STOCK = ITEMS.filter((i) => i.inStock !== false);

@@ -38,9 +38,12 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { PurchasedRail } from './purchased-rail';
 
+// Kệ Mua lại của Trang chủ chỉ lấy đơn trong 90 ngày: ngày mua tính theo đồng hồ lúc chạy (hôm qua), không ghim ngày cố định sẽ trôi ra ngoài cửa sổ.
+const RECENT_PURCHASE = new Date(Date.now() - 86_400_000).toISOString();
+
 const bought = (i: number) => ({
   variationId: `v${i}`, productId: `p${i}`, slug: `sp-${i}`, productName: `Chai ${i}`, variationName: null, brand: 'Fuwa3e', thumbnail: null,
-  price: 60_000, salePrice: null, stock: 8, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: '2026-10-10T00:00:00.000Z',
+  price: 60_000, salePrice: null, stock: 8, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: RECENT_PURCHASE,
 });
 const OFFER = { productId: 'p-r', slug: 'refill-10l', name: 'Nước rửa chén Fuwa3e 10L', thumbnail: null, variationId: 'v-r', price: 650_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true };
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199_000, itemCount: 0 };

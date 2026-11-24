@@ -31,7 +31,7 @@ export const HOME_ME: HomeMeDTO = {
   purchasedItems: {
     items: [{
       variationId: 'hm-v1', productId: 'hm-p1', slug: 'hm-mua-lai', productName: MERGED_PURCHASED, variationName: 'Chanh', brand: 'Tubu',
-      thumbnail: null, price: 65_000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+      thumbnail: null, price: 65_000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
     }],
     nextCursor: null,
   },

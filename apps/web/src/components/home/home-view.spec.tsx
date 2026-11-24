@@ -30,6 +30,9 @@ import { HOME_KIND_KEY } from './use-home-customer-kind';
 import { BANNER_HINT_KEY, HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 
+// Kệ Mua lại của Trang chủ chỉ lấy đơn trong 90 ngày: ngày mua tính theo đồng hồ lúc chạy (hôm qua), không ghim ngày cố định sẽ trôi ra ngoài cửa sổ.
+const RECENT_PURCHASE = new Date(Date.now() - 86_400_000).toISOString();
+
 const CONFIG = {
   freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30,
   loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
@@ -109,7 +112,7 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
   });
 
   it('khách cũ: thứ tự "returning" sau khi purchased-items có hàng; thẻ thành viên có mặt, Quà khách mới không', async () => {
-    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE }], nextCursor: null });
     const c = await mount();
     expect(blockOrder(c)).toEqual(named(homeBlockOrder('returning'), 'member'));
     expect(region(c, 'Thẻ thành viên')).not.toBeNull();
@@ -122,7 +125,7 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
       itemId: `i-${variationId}`, variationId, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: null,
       retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),
     });
-    const bought = (slug: string, variationId: string, productName: string) => ({ variationId, productId: `p-${slug}`, slug, productName, variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' });
+    const bought = (slug: string, variationId: string, productName: string) => ({ variationId, productId: `p-${slug}`, slug, productName, variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE });
     routes['/flash-sales/active'] = () => [flashItem('a', 'v-a-1l'), flashItem('b', 'v-b'), flashItem('c', 'v-c'), flashItem('a', 'v-a-5l')];
     routes['/me/purchased-items'] = () => ({ items: [bought('a', 'v-a-5l', 'Đã mua Can 5L'), bought('x', 'v-x', 'Đã mua món khác')], nextCursor: null });
     const c = await mount();
@@ -245,7 +248,7 @@ describe('HomeView — nội dung các khối', () => {
   });
 
   it('tối đa 9 khối ở tổ hợp đông nhất (khách cũ + Giờ vàng đang chạy), và dải ngữ cảnh luôn cao tối thiểu HOME_CONTEXT_HEIGHT', async () => {
-    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE }], nextCursor: null });
     const flash = ['fa', 'fb', 'fc'].map((slug) => ({
       itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: null,
       retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),
@@ -420,7 +423,7 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     const c = await mount(<HomeView initial={{ campaigns: list }} />);
     expect(bannerLinks(c).map((a) => a.getAttribute('href'))).toEqual(['/chien-dich/chien-dich-all', '/chien-dich/chien-dich-moi']);
     mounted?.unmount();
-    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE }], nextCursor: null });
     const c2 = await mount(<HomeView initial={{ campaigns: list }} />);
     expect(bannerLinks(c2).map((a) => a.getAttribute('href'))).toEqual(['/chien-dich/chien-dich-all', '/chien-dich/chien-dich-cu']);
   });
@@ -700,7 +703,7 @@ describe('HomeView — khung chờ chung khi khôi phục phiên (web: khung hì
     mocks.restoring = true;
     live.again();
     await flush(10);
-    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE }], nextCursor: null });
     mocks.phase = 'authenticated';
     mocks.restoring = false;
     live.again();
@@ -784,7 +787,7 @@ describe('HomeView — khung chờ chung ở cấp trang: truy vấn quyết đ�
     await flush(10);
     expect(blockOrder(live.container)).toEqual(named(homeRenderOrder('unknown', true), 'member'));
 
-    purchased.resolve({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    purchased.resolve({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE }], nextCursor: null });
     await flush(10);
     expect(blockOrder(live.container)).toEqual(named(homeRenderOrder('returning', true), 'member'));
 
@@ -888,7 +891,7 @@ describe('HomeView — ảnh ưu tiên: Bán chạy nhất luôn là khối ản
     itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: thumb(slug),
     retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),
   });
-  const bought = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' };
+  const bought = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: RECENT_PURCHASE };
   let live: ReturnType<typeof mountLive> | null = null;
 
   beforeEach(() => {

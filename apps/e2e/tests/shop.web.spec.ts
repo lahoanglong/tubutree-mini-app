@@ -193,7 +193,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
 
 const PURCHASED = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
 };
 
 const BEST_SELLERS = [

@@ -59,7 +59,7 @@ describe('SHELVES: luật của sổ kệ', () => {
       return [s.layout, s.maxItems, s.minItems, s.dedupeRank, s.seeAllRoute];
     };
     expect(row('home.flash')).toEqual(['rail', 8, 3, 1, '/flash-sale']);
-    expect(row('home.purchased')).toEqual(['rail', 6, 1, 2, '/orders']);
+    expect(row('home.purchased')).toEqual(['rail', 8, 1, 2, '/orders']);
     expect(row('home.combos')).toEqual(['rail', 4, 2, 3, '/gift-combos']);
     expect(row('home.bestSellers')).toEqual(['rail', 10, 3, 4, '/best-sellers']);
     expect(row('home.suggest')).toEqual(['feed', 100, 4, 6, '/browse']);

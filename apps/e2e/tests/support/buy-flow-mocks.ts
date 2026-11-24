@@ -29,7 +29,7 @@ export const PURCHASED: PurchasedItem = {
   inStock: true,
   timesBought: 2,
   retailOnly: false,
-  lastPurchasedAt: '2026-09-20T08:00:00.000Z',
+  lastPurchasedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
 };
 export const PURCHASED_PAGE: PurchasedItemsPage = { items: [PURCHASED], nextCursor: null };
 

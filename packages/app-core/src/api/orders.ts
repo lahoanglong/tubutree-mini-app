@@ -169,10 +169,14 @@ export interface PurchasedItem {
   flashPrice?: number | null;
   /** Số suất Giờ vàng khách còn mua được (0 = hết, giỏ tính giá thường). */
   flashAllowance?: number | null;
+  /** Khách đang chờ báo hàng về cho phân loại hết hàng này. API cũ không trả: coi là chưa đăng ký. */
+  restockWaiting?: boolean;
 }
 export interface PurchasedItemsPage {
   items: PurchasedItem[];
   nextCursor: string | null;
+  /** Cờ catalog.restock_alert_enabled: bật thì món hết hàng trên kệ Mua lại có nút "Báo khi có". API cũ không trả: coi là tắt. */
+  restockAlertsEnabled?: boolean;
 }
 export const fetchPurchasedItems = (http: HttpClient, params: { cursor?: string; limit?: number; variationId?: string } = {}) =>
   http.get<PurchasedItemsPage>('/me/purchased-items', { query: params });

@@ -880,6 +880,9 @@ export const SHOP_COPY: Record<string, string> = {
   'restock.subscribedToast': 'Có hàng Tubu sẽ báo bạn ở mục Thông báo.',
   'restock.cancelledToast': 'Đã huỷ báo hàng về.',
   'restock.offline': 'Chưa kết nối được tới Tubu Tree nên chưa đăng ký được. Bạn kiểm tra mạng rồi bấm lại nhé.',
+  // Ô hết hàng của kệ "Mua lại món quen" ở Trang chủ: nút ở chỗ "+ Thêm" (ô rộng 128px), bấm lại để huỷ; câu đọc dùng 'wishlist.restock.bell'.
+  'quickReorder.notify': 'Báo khi có',
+  'quickReorder.notifyOn': 'Đang chờ hàng',
   // Mua chung: hạn nhóm (dưới 24 giờ là đồng hồ sống `Countdown`), dòng suất còn lại ở trang mời /mua-chung/:id và tin chia sẻ (xem trước = tin gửi đi).
   // Không dùng "Chỉ còn" (thuật ngữ cấm, trừ stock.few): "Còn {n} suất".
   'groupBuy.done': 'đã đủ nhóm',
