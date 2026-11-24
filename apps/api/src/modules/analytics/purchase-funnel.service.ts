@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import {
   PURCHASE_FUNNEL_STEPS,
   type PurchaseFunnelDTO,
@@ -39,8 +40,15 @@ const num = (v: Count | null | undefined): number => (v == null ? 0 : Number(v))
 const ts = (d: Date): string => d.toISOString();
 
 /**
+ * Số đo tốc độ trên máy khách. Không phải hành vi mua sắm, và bị dọn sau `PERF_VITALS_DAYS` ngày trong khi các sự kiện khác giữ tới khi
+ * snapshot ngày đã chốt. Nếu tính chúng vào phiên thì một ngày cũ được bù sau khi dọn sẽ ra số phiên (và khoảng ghép đơn) khác bảng sống.
+ */
+const TELEMETRY_ONLY_EVENTS = ['web_vital', 'mini_vital'] as const;
+
+/**
  * Đếm phễu của các sự kiện có `receivedAt` trong [since, until). Dùng chung cho bảng sống (72 giờ / 7 / 30 ngày) và snapshot từng ngày VN
  * (`AnalyticsAggregationService`), nên hai nơi cùng một định nghĩa bước. `order_placed` khớp tới `ended_at` + ân hạn, có thể rơi sang ngày sau.
+ * Bỏ hẳn dòng số đo tốc độ (không chỉ phiên chỉ có số đo): một `web_vital` gửi lúc rời trang còn kéo dài `ended_at`, tức khoảng ghép đơn.
  */
 export async function countPurchaseFunnel(
   prisma: Pick<PrismaService, '$queryRaw'>,
@@ -63,6 +71,7 @@ export async function countPurchaseFunnel(
          AND e."receivedAt" < ${ts(until)}::timestamp
          AND e."sessionId" IS NOT NULL
          AND e.platform IN ('web', 'miniapp')
+         AND e."eventName" NOT IN (${Prisma.join(TELEMETRY_ONLY_EVENTS)})
        GROUP BY e."sessionId", e.platform
     )
     SELECT s.platform AS platform,
