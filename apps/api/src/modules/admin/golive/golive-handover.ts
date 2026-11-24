@@ -23,14 +23,15 @@ interface HandoverDef {
   optionalEnvVars?: readonly string[];
   /**
    * `host`: API trong container không kiểm được (cron, rclone, biến build Mini App), dòng vàng "không kiểm được" là bình thường nên hiện
-   * "Kiểm tay" chứ không "Chờ điền". `optional`: chủ quyết có làm hay không (mẫu ZNS tính phí từng tin). Cả hai không vào bộ đếm bắt buộc.
+   * "Kiểm tay" chứ không "Chờ điền". `optional`: chủ quyết có làm hay không (mẫu ZNS tính phí từng tin). `later`: kênh ngày mở bán không dùng
+   * (bán bằng chuyển khoản VietQR và COD), nằm ở nhóm "Tuỳ chọn (Mở sau)". Cả ba không vào bộ đếm bắt buộc.
    */
-  kind?: 'required' | 'host' | 'optional';
+  kind?: 'required' | 'host' | 'optional' | 'later';
   /** Dòng vàng cũng tính là đã chốt: mã demo chủ dự án duyệt giữ (GO_LIVE_ACCEPT_DEMO_COUPONS) ra vàng, chưa duyệt ra đỏ. */
   warnIsSettled?: boolean;
 }
 
-/** Đúng 15 dòng WARN còn lại trên PROD sau w24-04 (go-live 55/15/0): việc bắt buộc trước, việc kiểm tay và việc tuỳ chọn sau. */
+/** Đúng 15 dòng WARN còn lại trên PROD sau w24-04 (go-live 55/15/0): việc bắt buộc trước, rồi việc kiểm tay và tuỳ chọn, cuối cùng nhóm mở sau. */
 export const HANDOVER_ITEMS: readonly HandoverDef[] = [
   {
     key: 'zalo_oa',
@@ -54,22 +55,6 @@ export const HANDOVER_ITEMS: readonly HandoverDef[] = [
     guide: 'Lấy ở mini.zalo.me/developers › Open APIs. Đặt và deploy TRƯỚC khi lưu Webhook URL trên console; Zalo đòi có Webhook URL trước khi gửi duyệt Mini App.',
     checkIds: ['env.zalo.open_api_key'],
     envVars: ['ZALO_OPEN_API_KEY'],
-  },
-  {
-    key: 'zalopay',
-    title: 'Merchant ZaloPay',
-    owner: 'Chủ shop (hợp đồng ZaloPay)',
-    guide: 'Chỉ cần khi chủ shop quyết định bật ZaloPay (hai app đang ẩn ZaloPay). Lấy App ID, Key1, Key2 bản production (docs/GO-LIVE-KEYS.md mục 1).',
-    checkIds: ['env.zalopay'],
-    envVars: ['ZALOPAY_APP_ID', 'ZALOPAY_KEY1', 'ZALOPAY_KEY2'],
-  },
-  {
-    key: 'accesstrade',
-    title: 'Accesstrade (hoàn tiền mua sàn ngoài)',
-    owner: 'Chủ shop (tài khoản Accesstrade)',
-    guide: 'Lấy token API và publisher ID trong trang publisher Accesstrade (docs/GO-LIVE-KEYS.md mục 3). Chưa chạy hoàn tiền thì để sau.',
-    checkIds: ['env.accesstrade.api'],
-    envVars: ['ACCESSTRADE_TOKEN', 'ACCESSTRADE_PUBLISHER_ID'],
   },
   {
     key: 'phone_hmac',
@@ -125,6 +110,24 @@ export const HANDOVER_ITEMS: readonly HandoverDef[] = [
     checkIds: ['db.zns_templates'],
     kind: 'optional',
   },
+  {
+    key: 'zalopay',
+    title: 'Merchant ZaloPay',
+    owner: 'Chủ shop (hợp đồng ZaloPay)',
+    guide: 'Chỉ cần khi chủ shop quyết định bật ZaloPay (hai app đang ẩn ZaloPay). Lấy App ID, Key1, Key2 bản production (docs/GO-LIVE-KEYS.md mục 1).',
+    checkIds: ['env.zalopay'],
+    envVars: ['ZALOPAY_APP_ID', 'ZALOPAY_KEY1', 'ZALOPAY_KEY2'],
+    kind: 'later',
+  },
+  {
+    key: 'accesstrade',
+    title: 'Accesstrade (hoàn tiền mua sàn ngoài)',
+    owner: 'Chủ shop (tài khoản Accesstrade)',
+    guide: 'Lấy token API và publisher ID trong trang publisher Accesstrade (docs/GO-LIVE-KEYS.md mục 3). Chưa chạy hoàn tiền thì để sau.',
+    checkIds: ['env.accesstrade.api'],
+    envVars: ['ACCESSTRADE_TOKEN', 'ACCESSTRADE_PUBLISHER_ID'],
+    kind: 'later',
+  },
 ];
 
 export interface HandoverCheck {
@@ -134,8 +137,11 @@ export interface HandoverCheck {
   detail: string;
 }
 
-/** `configured` Đã cấu hình, `pending` Chờ điền, `host` Kiểm tay trên máy chủ, `optional` Tuỳ chọn (chủ quyết). */
-export type HandoverState = 'configured' | 'pending' | 'host' | 'optional';
+/** `configured` Đã cấu hình, `pending` Chờ điền, `host` Kiểm tay trên máy chủ, `optional` Tuỳ chọn (chủ quyết), `later` Mở sau. */
+export type HandoverState = 'configured' | 'pending' | 'host' | 'optional' | 'later';
+
+/** Tên nhóm việc ngày mở bán không cần (PO A2.2, 24/11/2026): ngày đầu bán bằng chuyển khoản VietQR và COD. */
+export const HANDOVER_LATER_TITLE = 'Tuỳ chọn (Mở sau)';
 
 export interface HandoverItem {
   key: string;
@@ -145,6 +151,8 @@ export interface HandoverItem {
   state: HandoverState;
   /** Chỉ việc bắt buộc mới vào bộ đếm của thẻ. */
   required: boolean;
+  /** `later`: hiện ở nhóm "Tuỳ chọn (Mở sau)" dưới danh sách chính, dù đã cấu hình hay đặt dở. */
+  group: 'launch' | 'later';
   /** `state === 'configured'`. Thiếu dòng (bộ kiểm không chạy được) không bao giờ là đã cấu hình. */
   configured: boolean;
   /** Mức nặng nhất của các dòng quyết định, để tô màu (đỏ là đặt dở dang hoặc sai). */
@@ -157,8 +165,10 @@ export interface HandoverBoard {
   title: string;
   /** Số việc bắt buộc đã cấu hình. */
   configured: number;
-  /** Số việc bắt buộc; việc kiểm tay và việc tuỳ chọn không tính. */
+  /** Số việc bắt buộc; việc kiểm tay, tuỳ chọn và mở sau không tính. */
   total: number;
+  /** Tên nhóm của các việc `group === 'later'`. */
+  laterTitle: string;
   items: HandoverItem[];
 }
 
@@ -170,6 +180,7 @@ function stateOf(def: HandoverDef, rows: readonly CheckResult[]): HandoverState 
   if (rows.some((r) => r.status === 'FAIL')) return 'pending';
   if (def.kind === 'host') return 'host';
   if (def.kind === 'optional') return 'optional';
+  if (def.kind === 'later') return 'later';
   return 'pending';
 }
 
@@ -186,6 +197,7 @@ export function buildHandover(results: readonly CheckResult[], env: Env): Handov
       guide: def.guide,
       state,
       required: (def.kind ?? 'required') === 'required',
+      group: def.kind === 'later' ? 'later' : 'launch',
       configured: state === 'configured',
       status: rows.length === 0 ? 'WARN' : worstStatus(rows),
       vars: [
@@ -196,5 +208,5 @@ export function buildHandover(results: readonly CheckResult[], env: Env): Handov
     };
   });
   const required = items.filter((i) => i.required);
-  return { title: HANDOVER_TITLE, configured: required.filter((i) => i.configured).length, total: required.length, items };
+  return { title: HANDOVER_TITLE, configured: required.filter((i) => i.configured).length, total: required.length, laterTitle: HANDOVER_LATER_TITLE, items };
 }
