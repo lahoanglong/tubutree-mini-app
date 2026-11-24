@@ -16,12 +16,16 @@
 // Kiểm tĩnh không cần máy chủ (chạy trong CI cùng Vitest): apps/web/src/app/sitemap-integrity.spec.ts.
 // Mã thoát: 0 không có FAIL (WARN vẫn 0, trừ --strict), 1 có FAIL, 2 sai tham số.
 import { pathToFileURL } from 'node:url';
-import { checkSitemapXml, evenSample, extractCanonical, extractMeta, hostProblem } from '../../cutover/verify-apex-cutover.mjs';
+import { checkSitemapXml, evenSample, hostProblem } from '../../cutover/verify-apex-cutover.mjs';
 
 /** Phải trùng `LEGAL_SLUGS` của packages/app-core/src/legal-core.ts (spec của script giữ hai danh sách khớp nhau). */
 export const LEGAL_SLUGS = ['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan'];
 
-const UA = 'tubutree-sitemap-guard/1';
+/**
+ * Có chữ "Googlebot" để khớp `htmlLimitedBots` của next.config.mjs: Next chỉ in canonical/robots trong <head> cho các UA đó, UA khác nhận metadata
+ * theo luồng (có thể rơi vào <body>). Kiểm bằng UA khác thì thấy HTML khác HTML Googlebot đọc.
+ */
+export const DEFAULT_UA = 'tubutree-sitemap-guard/1 (Googlebot-compatible)';
 const MAX_CHILD_SITEMAPS = 50;
 const MAX_FAIL_LINES = 60;
 
@@ -32,14 +36,13 @@ const sample = (list) => (list.length > 3 ? `${list.slice(0, 3).join(', ')} … 
 // robots.txt
 
 /**
- * Luật của nhóm `User-agent: *` (nhiều nhóm `*` thì gộp). Dòng `User-agent` liền nhau mở chung một nhóm; dòng luật đầu tiên đóng phần
- * khai user-agent của nhóm đó. Trả `{ allow, disallow }` (đã bỏ chú thích, bỏ luật rỗng: `Disallow:` trống nghĩa là không chặn gì).
+ * Luật áp cho `agent` (mặc định googlebot) như Google đọc: có nhóm khai đúng tên đó thì chỉ dùng các nhóm ấy (bỏ qua `*`), không thì dùng các nhóm `*`.
+ * Dòng `User-agent` liền nhau mở chung một nhóm; dòng luật đầu tiên đóng phần khai user-agent của nhóm đó. Trả `{ allow, disallow }` (đã bỏ chú thích,
+ * bỏ luật rỗng: `Disallow:` trống nghĩa là không chặn gì).
  */
-export function parseRobots(text) {
-  const allow = [];
-  const disallow = [];
-  let agents = [];
-  let inRules = false;
+export function parseRobots(text, agent = 'googlebot') {
+  const groups = [];
+  let current = null;
   for (const raw of String(text ?? '').split(/\r?\n/)) {
     const line = raw.replace(/#.*$/, '').trim();
     const m = /^([A-Za-z-]+)\s*:\s*(.*)$/.exec(line);
@@ -47,19 +50,20 @@ export function parseRobots(text) {
     const key = m[1].toLowerCase();
     const value = m[2].trim();
     if (key === 'user-agent') {
-      if (inRules) {
-        agents = [];
-        inRules = false;
+      if (!current || current.closed) {
+        current = { agents: [], allow: [], disallow: [], closed: false };
+        groups.push(current);
       }
-      agents.push(value.toLowerCase());
+      current.agents.push(value.toLowerCase());
       continue;
     }
-    if (key !== 'allow' && key !== 'disallow') continue;
-    inRules = true;
-    if (!agents.includes('*') || value === '') continue;
-    (key === 'allow' ? allow : disallow).push(value);
+    if ((key !== 'allow' && key !== 'disallow') || !current) continue;
+    current.closed = true;
+    if (value !== '') current[key].push(value);
   }
-  return { allow, disallow };
+  const own = groups.filter((g) => g.agents.includes(agent.toLowerCase()));
+  const picked = own.length ? own : groups.filter((g) => g.agents.includes('*'));
+  return { allow: picked.flatMap((g) => g.allow), disallow: picked.flatMap((g) => g.disallow) };
 }
 
 /** Luật robots (có `*` và `$` cuối như Google) thành RegExp neo ở đầu đường dẫn. */
@@ -95,23 +99,63 @@ export function robotsVerdict(path, rules) {
 
 const trimSlash = (p) => (p.length > 1 ? p.replace(/\/+$/, '') : p);
 
-/** Hai URL tuyệt đối cùng host, cùng đường dẫn (bỏ qua `/` cuối) và cùng query. */
+/**
+ * Hai URL tuyệt đối trùng hẳn: cùng host, cùng đường dẫn, cùng query. `/` cuối KHÔNG được bỏ qua: middleware 308 `/x/` về `/x`, nên canonical có `/` cuối
+ * trỏ vào một chuyển hướng.
+ */
 export function sameUrl(a, b) {
   try {
     const x = new URL(a);
     const y = new URL(b);
-    return x.origin === y.origin && trimSlash(x.pathname) === trimSlash(y.pathname) && x.search === y.search;
+    return x.origin === y.origin && x.pathname === y.pathname && x.search === y.search;
   } catch {
     return false;
   }
 }
 
-/** Nội dung thẻ meta robots hoặc header X-Robots-Tag có chặn lập chỉ mục không (`noindex` hay `none`, kể cả dạng `googlebot: noindex`). */
-export const isNoindex = (value) =>
-  String(value ?? '')
-    .toLowerCase()
-    .split(/[,\s]+/)
-    .some((token) => token === 'noindex' || token === 'none' || token.endsWith(':noindex') || token.endsWith(':none'));
+// Chỉ thị robots có dấu `:` trong chính nó (không phải tên bot đứng trước).
+const COLON_DIRECTIVES = new Set(['max-snippet', 'max-image-preview', 'max-video-preview', 'unavailable_after']);
+
+/**
+ * Nội dung thẻ meta robots hoặc header X-Robots-Tag có chặn Googlebot lập chỉ mục không (`noindex` hay `none`). Chỉ thị có tên bot đứng trước
+ * (`bingbot: noindex`) chỉ áp cho bot đó, và áp cho các chỉ thị sau nó tới tên bot kế tiếp (fetch nối nhiều dòng header bằng ", ").
+ */
+export function isNoindex(value, agent = 'googlebot') {
+  let scope = '*';
+  for (const raw of String(value ?? '').toLowerCase().split(',')) {
+    let token = raw.trim();
+    const m = /^([a-z][\w-]*)\s*:\s*(.*)$/.exec(token);
+    if (m && !COLON_DIRECTIVES.has(m[1])) {
+      scope = m[1];
+      token = m[2].trim();
+    }
+    if ((scope === '*' || scope === agent) && (token === 'noindex' || token === 'none')) return true;
+  }
+  return false;
+}
+
+const decodeHtmlAttr = (s) => s.replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const attrsOf = (tag) =>
+  Object.fromEntries([...tag.matchAll(/([A-Za-z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].map((m) => [m[1].toLowerCase(), decodeHtmlAttr(m[2] ?? m[3] ?? '')]));
+
+/** Phần trong <head>…</head> đầu tiên, hoặc null. Google chỉ nhận canonical/robots trong <head>: thẻ nằm ở <body> coi như không có. */
+export function headOf(html) {
+  const m = /<head\b[^>]*>([\s\S]*?)<\/head\s*>/i.exec(String(html ?? ''));
+  return m ? m[1] : null;
+}
+
+/** Mọi href của `<link rel="canonical">` và mọi content của `<meta name="robots|googlebot">` trong đoạn HTML (thường là <head>). */
+export function headSignals(head) {
+  const canonicals = [];
+  const robots = [];
+  for (const m of String(head ?? '').matchAll(/<(link|meta)\b[^>]*>/gi)) {
+    const a = attrsOf(m[0]);
+    if (m[1].toLowerCase() === 'link' && (a.rel ?? '').toLowerCase().split(/\s+/).includes('canonical') && a.href) canonicals.push(a.href);
+    const name = (a.name ?? '').toLowerCase();
+    if (m[1].toLowerCase() === 'meta' && (name === 'robots' || name === 'googlebot') && a.content !== undefined) robots.push({ name, content: a.content });
+  }
+  return { canonicals, robots };
+}
 
 const PATH_KINDS = [
   ['legal', /^\/chinh-sach\/[^/]+$/],
@@ -190,32 +234,56 @@ export function pageProblems(loc, res, robots) {
   if (res.status !== 200) return [...problems, `HTTP ${res.status}`];
   const header = res.headers?.['x-robots-tag'];
   if (isNoindex(Array.isArray(header) ? header.join(', ') : header)) problems.push(`X-Robots-Tag: ${header}`);
-  const html = typeof res.body === 'string' ? res.body : String(res.body ?? '');
-  for (const key of ['robots', 'googlebot']) {
-    const meta = extractMeta(html, key);
-    if (isNoindex(meta)) problems.push(`<meta name="${key}" content="${meta}">`);
+  const head = headOf(typeof res.body === 'string' ? res.body : String(res.body ?? ''));
+  if (head === null) return [...problems, 'không có <head> (Google không đọc canonical/robots ngoài <head>)'];
+  const signals = headSignals(head);
+  for (const meta of signals.robots) {
+    if (isNoindex(meta.content)) problems.push(`<meta name="${meta.name}" content="${meta.content}">`);
   }
-  const canonical = extractCanonical(html);
-  if (!canonical) problems.push('không có <link rel="canonical">');
-  else {
-    let absolute = canonical;
-    try {
-      absolute = new URL(canonical, loc).href;
-    } catch {
-      // giữ nguyên để báo bên dưới
-    }
-    if (!sameUrl(absolute, loc)) problems.push(`canonical ${canonical} khác URL của sitemap`);
-  }
+  const absolute = [
+    ...new Set(
+      signals.canonicals.map((href) => {
+        try {
+          return new URL(href, loc).href;
+        } catch {
+          return href;
+        }
+      }),
+    ),
+  ];
+  if (absolute.length === 0) problems.push('không có <link rel="canonical"> trong <head>');
+  // Google bỏ qua mọi canonical khi một trang khai nhiều canonical khác nhau.
+  else if (absolute.length > 1) problems.push(`${absolute.length} canonical khác nhau: ${absolute.join(', ')}`);
+  else if (!sameUrl(absolute[0], loc)) problems.push(`canonical ${signals.canonicals[0]} khác URL của sitemap`);
   return problems;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Chạy thật
 
-function makeRequester({ timeout = 20_000 } = {}) {
+/** Lỗi tạm đáng thử lại: lỗi mạng, hết giờ, 429, 5xx. */
+const transient = (res) => res.status === 0 || res.status === 429 || res.status >= 500;
+
+/**
+ * Bọc `request` để thử lại lỗi tạm (mặc định 2 lần, chờ 1 giây rồi 3 giây): một lần 502 hay hết giờ giữa ~1000 URL không được làm đỏ cả lượt kiểm.
+ * `sleep` tiêm được để test.
+ */
+export function withRetry(request, { delays = [1000, 3000], sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  return async (url) => {
+    let res = await request(url);
+    for (const ms of delays) {
+      if (!transient(res)) break;
+      await sleep(ms);
+      res = await request(url);
+    }
+    return res;
+  };
+}
+
+function makeRequester({ timeout = 20_000, ua = DEFAULT_UA } = {}) {
   return async (url) => {
     try {
-      const res = await fetch(url, { redirect: 'manual', headers: { 'user-agent': UA, accept: 'text/html,application/xml;q=0.9,*/*;q=0.8' }, signal: AbortSignal.timeout(timeout) });
+      const res = await fetch(url, { redirect: 'manual', headers: { 'user-agent': ua, accept: 'text/html,application/xml;q=0.9,*/*;q=0.8' }, signal: AbortSignal.timeout(timeout) });
       const headers = Object.fromEntries([...res.headers].map(([k, v]) => [k.toLowerCase(), v]));
       const body = res.status >= 300 && res.status < 400 ? '' : await res.text();
       return { status: res.status, headers, location: res.headers.get('location'), body };
@@ -267,12 +335,14 @@ export function pickLocs(locs, maxPerKind = 0) {
 export async function runGuard(opts) {
   const base = new URL(opts.base).origin;
   const canonical = new URL(opts.canonical ?? base).origin;
-  const request = opts.request ?? makeRequester(opts);
+  const request = opts.request ?? withRetry(makeRequester(opts));
   const findings = [];
 
   const robotsRes = await request(new URL('/robots.txt', base).href);
   let robots = { allow: [], disallow: [] };
   if (robotsRes.status === 200) robots = parseRobots(robotsRes.body);
+  // Google coi robots.txt lỗi máy chủ (5xx, 429) hay không tới được là "chặn cả site" và ngừng cào; 4xx thì coi như không chặn gì.
+  else if (transient(robotsRes)) findings.push(finding('robots', 'FAIL', `/robots.txt: ${statusText(robotsRes)} (Google ngừng cào cả site khi robots.txt lỗi máy chủ)`));
   else findings.push(finding('robots', 'WARN', `/robots.txt: ${statusText(robotsRes)} (coi như không chặn gì)`));
 
   const sitemapRes = await request(new URL('/sitemap.xml', base).href);
@@ -285,6 +355,9 @@ export async function runGuard(opts) {
   let locs = parsed.locs;
   if (parsed.root === 'sitemapindex') {
     locs = [];
+    if (parsed.locs.length > MAX_CHILD_SITEMAPS) {
+      findings.push(finding('sitemap', 'WARN', `sitemapindex có ${parsed.locs.length} sitemap con, chỉ kiểm ${MAX_CHILD_SITEMAPS} cái đầu`));
+    }
     for (const child of parsed.locs.slice(0, MAX_CHILD_SITEMAPS)) {
       const sub = await request(onBase(child, base));
       const subParsed = sub.status === 200 ? checkSitemapXml(String(sub.body)) : { errors: [statusText(sub)], locs: [] };
@@ -335,7 +408,8 @@ const HELP = `Dùng: node scripts/ci/sitemap-guard/index.mjs --base <url> [tuỳ
   --canonical <origin>   Host canonical mong đợi trong sitemap/canonical (mặc định = --base). Dùng khi chạy bản dựng cục bộ.
   --max-per-kind <n>     Lấy mẫu n URL mỗi loại nhiều trang (sản phẩm, danh mục, nhãn, gian hàng, chiến dịch). 0 = tất cả (mặc định).
   --concurrency <n>      Số yêu cầu song song (mặc định 4).
-  --timeout <ms>         Hết giờ mỗi yêu cầu (mặc định 20000).
+  --timeout <ms>         Hết giờ mỗi yêu cầu (mặc định 20000). Lỗi mạng, 429, 5xx được thử lại 2 lần (chờ 1 giây, 3 giây).
+  --ua <chuỗi>           User-Agent gửi đi (mặc định có chữ "Googlebot" để Next trả đúng HTML Googlebot nhận: metadata trong <head>).
   --json                 In báo cáo JSON.
   --strict               WARN cũng làm mã thoát 1.
   --help                 In hướng dẫn này.`;
@@ -377,6 +451,7 @@ export function parseArgs(argv) {
     else if (flag === '--max-per-kind') opts.maxPerKind = intOf(value(), flag, 0);
     else if (flag === '--concurrency') opts.concurrency = intOf(value(), flag, 1);
     else if (flag === '--timeout') opts.timeout = intOf(value(), flag, 1);
+    else if (flag === '--ua') opts.ua = value();
     else if (flag === '--json') opts.json = true;
     else if (flag === '--strict') opts.strict = true;
     else if (flag === '--help' || flag === '-h') opts.help = true;

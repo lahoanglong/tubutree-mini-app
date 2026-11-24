@@ -93,11 +93,12 @@ async function refillLandingIndexed(): Promise<boolean> {
 /**
  * "Chọn Chuẩn Xanh" chỉ được lập chỉ mục khi cờ `game.matcher_enabled` bật (cùng luật noindex trong generateMetadata của trang): nộp một URL noindex là lỗi
  * "Submitted URL marked noindex" ở Search Console. Lúc build API chưa chạy, và 404 là API bản cũ chưa có endpoint: không nộp. Lỗi tạm lúc chạy thì ném như mọi
- * danh sách khác để Next giữ bản đầy đủ lần trước.
+ * danh sách khác để Next giữ bản đầy đủ lần trước. Đọc cờ với cùng hạn 60 giây như trang: tắt cờ thì trang noindex sau tối đa 60 giây, sitemap không được
+ * giữ URL đó thêm cả giờ (revalidate của sitemap).
  */
 async function matcherIndexed(): Promise<boolean> {
   try {
-    return matcherOn(await getMatcherStatus(createServerHttp({ revalidate })));
+    return matcherOn(await getMatcherStatus(createServerHttp({ revalidate: 60 })));
   } catch (err) {
     if (err instanceof ApiNotFoundError || process.env.NEXT_PHASE === 'phase-production-build') return false;
     throw err;
