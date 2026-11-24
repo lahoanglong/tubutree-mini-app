@@ -17,6 +17,8 @@ import { ReturnImagesController } from './return-images.controller';
 import { MssOrderStatusController } from './mss-order-status.controller';
 import { MssPaymentRescueService } from './mss-payment-rescue.service';
 import { OrderCodSwitchService } from './order-cod-switch.service';
+import { PickListController } from './pick-list.controller';
+import { PickListService } from './pick-list.service';
 import { CartModule } from '../cart/cart.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { PancakeSyncHooksModule } from '../integrations/pancake/pancake-sync-hooks.module';
@@ -25,7 +27,7 @@ import { WastePickupModule } from '../waste-exchange/pickup/waste-pickup.module'
 
 @Module({
   imports: [CartModule, FlashSaleModule, PancakeSyncHooksModule, WastePickupModule, GameModule],
-  controllers: [OrdersController, PurchasedItemsController, CustomerRefundsAdminController, ReturnsAdminController, ReturnImagesController, MssOrderStatusController],
+  controllers: [OrdersController, PurchasedItemsController, CustomerRefundsAdminController, ReturnsAdminController, ReturnImagesController, MssOrderStatusController, PickListController],
   providers: [
     OrdersService,
     OrderReversalService,
@@ -39,6 +41,7 @@ import { WastePickupModule } from '../waste-exchange/pickup/waste-pickup.module'
     ReversalEffectsResyncCron,
     MssPaymentRescueService,
     OrderCodSwitchService,
+    PickListService,
   ],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
   // dùng chung để không lặp lại khối restock/refund + guard chuyển trạng thái.

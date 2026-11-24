@@ -15,6 +15,7 @@ import {
 } from '@/lib/admin-bulk-ops-client';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { safeAreaPadX } from '@/lib/safe-area';
+import { PickListSheet } from './order-pick-list';
 import { ADMIN_TABULAR } from './tabular-nums';
 import { INPUT_CLASS, Notice } from './ui';
 
@@ -85,6 +86,7 @@ export function OrderSelectBox({ order, selection }: { order: BulkPick; selectio
 /**
  * Thanh dưới cùng khi đã chọn ít nhất một đơn: đổi trạng thái hàng loạt theo đúng luật của từng đơn. Luôn xem trước (dryRun) rồi mới đổi;
  * đơn bị giữ lại hiện lý do và không chặn đơn hợp lệ. `targets` là các trạng thái người đang đăng nhập được phép đặt (KHO: đóng gói, CSKH: huỷ).
+ * Ai được đánh dấu «Đã đóng gói» (ADMIN, KHO) thì có thêm nút in phiếu soạn hàng cho các đơn đang chọn, cùng quyền với `GET /admin/orders/pick-list`.
  */
 export function OrderBulkBar({ selection, targets, pageOrders }: { selection: OrderBulkSelection; targets: readonly BulkStatusTarget[]; pageOrders: readonly BulkPick[] }) {
   const qc = useQueryClient();
@@ -92,6 +94,9 @@ export function OrderBulkBar({ selection, targets, pageOrders }: { selection: Or
   const [preview, setPreview] = useState<{ target: BulkStatusTarget; res: BulkStatusResponse } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [printIds, setPrintIds] = useState<string[] | null>(null);
+  const closePrint = useCallback(() => setPrintIds(null), []);
+  const canPrint = targets.includes('PACKED');
   const unpickedOnPage = pageOrders.filter((o) => !selection.has(o.id)).length;
   const active = targets.includes(target) ? target : targets[0];
 
@@ -129,6 +134,11 @@ export function OrderBulkBar({ selection, targets, pageOrders }: { selection: Or
         <button type="button" onClick={selection.clear} className={BAR_BTN}>
           Bỏ chọn
         </button>
+        {canPrint && (
+          <button type="button" data-bulk-print onClick={() => setPrintIds([...selection.picked.keys()])} className={BAR_BTN}>
+            In phiếu soạn
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {targets.length > 1 ? (
             <label className="text-xs text-stone-600">
@@ -160,6 +170,7 @@ export function OrderBulkBar({ selection, targets, pageOrders }: { selection: Or
           </div>
         )}
       </div>
+      {printIds && <PickListSheet ids={printIds} onClose={closePrint} />}
       {preview && (
         <BulkPreviewDialog
           target={preview.target}

@@ -224,6 +224,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/orders/:id/status-history': [CSKH, KHO, KE_TOAN],
   'GET /admin/orders/export': [KE_TOAN],
   'POST /admin/orders/bulk-status': [CSKH, KHO],
+  'GET /admin/orders/pick-list': [KHO],
   'GET /admin/pancake-reconcile': [KHO],
   'GET /admin/pancake-reconcile/export': [KHO],
   'POST /admin/pancake/orders/:id/push': [KHO],
