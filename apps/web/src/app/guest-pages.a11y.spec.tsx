@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, selectByLabel, typeInto, type Rendered } from '@/test-utils/dom';
 import { accessibleName, headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -107,6 +107,11 @@ import ProductPage from './san-pham/[slug]/page';
 import StorefrontPage from './s/[slug]/page';
 import NotFound from './not-found';
 import ErrorPage from './error';
+
+import { loadCheckoutPanels } from '@/components/checkout/checkout-panels-load';
+
+// Form địa chỉ, ô VAT, thẻ chuyển khoản và màn đặt xong của /thanh-toan tải lười (`checkout-panels-lazy`): nạp sẵn như trình duyệt đã tải lúc rảnh.
+beforeAll(() => loadCheckoutPanels());
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {

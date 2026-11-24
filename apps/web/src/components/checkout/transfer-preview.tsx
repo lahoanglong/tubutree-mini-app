@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { preconnect } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getTransferPreview } from '@tubutree/app-core/api/payment';
 import { transferPreviewView } from '@tubutree/app-core/commerce/checkout-display';
@@ -11,19 +10,6 @@ import { trackWebEvent } from '@/lib/analytics';
 import { formatVnd } from '@/lib/format-vnd';
 
 export const TRANSFER_PREVIEW_KEY = ['transfer-preview'] as const;
-
-/**
- * Làm nóng trang QR khi khách chọn Chuyển khoản: tải sẵn mã của trang `/thanh-toan/chuyen-khoan/[code]` (mọi mã đơn dùng chung một bộ mã trang)
- * và mở sẵn kết nối tới máy chủ ảnh VietQR, để sau khi bấm Đặt hàng chỉ còn chờ đúng một lời gọi `/payments/bank-qr/:code`.
- */
-export function warmBankPayment(prefetch: (href: string) => void): void {
-  try {
-    prefetch('/thanh-toan/chuyen-khoan/_');
-  } catch {
-    // Tải sẵn chỉ để nhanh hơn; hỏng thì trang vẫn tải lúc chuyển.
-  }
-  preconnect('https://img.vietqr.io', { crossOrigin: 'anonymous' });
-}
 
 /**
  * Thẻ ngay dưới lựa chọn "Chuyển khoản" (cờ `checkout.transfer_preview_enabled`): ngân hàng, chủ tài khoản, số tiền theo báo giá.

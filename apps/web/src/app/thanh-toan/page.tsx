@@ -16,7 +16,8 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { OrderConsent } from '@/components/order-consent';
 import { OrderZaloConsentRow, useOrderZaloConsent } from '@/components/checkout/order-zalo';
 import { AddressPicker } from '@/components/checkout/address-picker';
-import { TransferPreview, warmBankPayment } from '@/components/checkout/transfer-preview';
+import { OrderSuccessLazy, TransferPreviewLazy, preloadCheckoutPanels, warmBankPayment } from '@/components/checkout/checkout-panels-lazy';
+import { loadCheckoutPanels } from '@/components/checkout/checkout-panels-load';
 import {
   getCart,
   getAddresses,
@@ -73,7 +74,6 @@ import { guestCheckoutOn, welcomeAmountOf } from '@/lib/guest-checkout/flag';
 import { useServerGuestConfig } from '@/components/checkout/server-guest-config';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
-import { OrderSuccess } from '@/components/checkout/order-success';
 import { GiftRows, GiftTrialRow } from '@/components/checkout/gift-rows';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
@@ -186,6 +186,8 @@ export default function CheckoutPage() {
   // Mã bị máy chủ gỡ lúc đọc giỏ (giỏ rơi dưới đơn tối thiểu, hết hạn, bị tắt) chỉ được báo một lần: nhớ để khách thấy vì sao tổng tăng.
   const removedCoupon = useRemovedCoupon(cartQ.data, formatVnd);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: phase === 'authenticated' });
+  // Ô hoá đơn VAT, thẻ chuyển khoản, form địa chỉ và màn đặt thành công nằm ở chunk tải lười: tải sẵn lúc rảnh để lần bấm đầu không phải chờ.
+  useEffect(() => (phase === 'authenticated' ? preloadCheckoutPanels() : undefined), [phase]);
   // Số dư Ví Tubu lấy từ máy chủ (không từ ảnh chụp lúc đăng nhập): khách vừa được hoàn tiền về ví hoặc vừa tiêu ví
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
@@ -560,6 +562,8 @@ export default function CheckoutPage() {
   const startPlace = () => {
     if (placingRef.current) return;
     placingRef.current = true;
+    // Màn đặt xong nằm ở chunk tải lười: nếu lúc rảnh chưa kịp tải sẵn thì tải song song với lệnh đặt.
+    void loadCheckoutPanels();
     place.mutate();
   };
 
@@ -697,7 +701,7 @@ export default function CheckoutPage() {
   if (placed) {
     return (
       <Shell bare>
-        <OrderSuccess
+        <OrderSuccessLazy
           order={placed}
           etaLabel={checkoutEtaLabel(shippingEta, placedOrderKinds(placed), undefined, schedule, addressProvince)}
           continueHref={continueHref}
@@ -993,7 +997,7 @@ export default function CheckoutPage() {
                           {reason}
                         </p>
                       )}
-                      {p.k === 'BANK_TRANSFER' && payment === 'BANK_TRANSFER' && !reason && <TransferPreview total={quote?.total ?? null} dim={recalculating} />}
+                      {p.k === 'BANK_TRANSFER' && payment === 'BANK_TRANSFER' && !reason && <TransferPreviewLazy total={quote?.total ?? null} dim={recalculating} />}
                     </div>
                   );
                 })}

@@ -24,6 +24,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/shop-api', () => ({
+  getAddresses: vi.fn().mockResolvedValue([]),
   getCart: mocks.getCart,
   getCartSelection: mocks.getCartSelection,
   removeCartItem: mocks.removeCartItem,

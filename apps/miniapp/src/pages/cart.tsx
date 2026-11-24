@@ -27,6 +27,7 @@ import {
 } from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
+  getAddresses,
   getCart,
   getCartSelection,
   updateCartItem,
@@ -1300,6 +1301,13 @@ function StickySummary({
   const couponLine = allSelected ? (heldCouponNotice(couponSrc, formatVnd) ?? couponCapNoteText(couponSrc)) : couponNoticeText(couponSrc, formatVnd);
   const goodsNet = Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount);
   const { estimate, stale } = useShippingEstimate(selectedCount > 0 ? shipBase : null);
+  // Nút Thanh toán của chân dính luôn trong khung nhìn: giỏ đặt được thì đọc sẵn sổ địa chỉ, thứ màn Thanh toán chờ mới hỏi được báo giá. Mã màn
+  // Thanh toán đã tải sẵn lúc app rảnh (`prefetchShoppingRoutes`), phí giao ước tính dùng chung khoá với dòng phí ngay trên.
+  const queryClient = useQueryClient();
+  const payable = selectedCount > 0 && (!overStock || !!recovery);
+  useEffect(() => {
+    if (payable) void queryClient.prefetchQuery({ queryKey: ['addresses'], queryFn: getAddresses });
+  }, [payable, queryClient]);
   const ship = cartShippingView(estimate, { goodsNet, freeshipReached, stale });
   const total = (
     <>

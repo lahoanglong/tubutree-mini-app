@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 
@@ -51,6 +51,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 }));
 
 import CheckoutPage from './page';
+
+import { loadCheckoutPanels } from '@/components/checkout/checkout-panels-load';
+
+// Ô VAT, thẻ chuyển khoản, form địa chỉ và màn đặt xong tải lười (`checkout-panels-lazy`): nạp sẵn như trình duyệt đã tải lúc rảnh, để các khối dựng ngay ở lần vẽ đầu.
+beforeAll(() => loadCheckoutPanels());
 
 let mounted: Rendered[] = [];
 const mount = async () => {

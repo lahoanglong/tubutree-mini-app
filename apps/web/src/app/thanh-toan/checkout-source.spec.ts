@@ -13,7 +13,7 @@ describe('/thanh-toan: nguồn trang thanh toán', () => {
     expect(src).not.toContain('khung tóm tắt cuộn được');
   });
 
-  it.each(['./page.tsx', './invoice-section.tsx'])('%s không dùng lớp primitive stone/forest/clay/sage (accent-, text-, bg-, border-, ring-...)', (file) => {
+  it.each(['./page.tsx', './invoice-section.tsx', './invoice-fields.tsx'])('%s không dùng lớp primitive stone/forest/clay/sage (accent-, text-, bg-, border-, ring-...)', (file) => {
     expect(read(file)).not.toMatch(/\b(?:accent|text|bg|border|ring|fill|stroke|caret|shadow|from|to|via)-(?:stone|forest|clay|sage)-\d/);
   });
 });
