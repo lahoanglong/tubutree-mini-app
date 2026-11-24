@@ -6,6 +6,7 @@ import { AddressForm } from './address-form';
 import { BottomSheet } from './ui/bottom-sheet';
 import * as shopApi from '../services/shop-api';
 import * as accountApi from '../services/account-api';
+import * as geoApi from '../services/geo-api';
 import { LAST_GEO_KEY, ZALO_PREFILL_ASKED_KEY } from '../utils/address-memory';
 import { HttpError } from '../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
@@ -761,5 +762,109 @@ describe('AddressForm trong sheet sửa địa chỉ — tấm Tỉnh/Phường 
     const editSheet = screen.getByRole('dialog', { name: 'Sửa địa chỉ' }).closest('.zaui-sheet-content')!;
     expect(editSheet.contains(list)).toBe(false);
     expect(list.closest('.zaui-sheet')!.parentElement).toBe(app);
+  });
+});
+
+// Khách dán cả khối "tên, SĐT, địa chỉ" chép từ Zalo vào một ô: tách ra từng ô, tự chọn tỉnh và phường khi khớp đúng một mục, không tự lưu. Cùng kịch bản với web.
+describe('AddressForm — dán cả khối địa chỉ', () => {
+  const NOTE = 'Đã điền từ nội dung dán — kiểm lại Phường';
+  const BLOCK = 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, Quận 1, TP.HCM';
+  const PROVINCES = [
+    { code: '84_VN01', name: 'Thành phố Hà Nội' },
+    { code: '84_VN79', name: 'Thành phố Hồ Chí Minh' },
+  ];
+  const COMMUNES = [
+    { code: '84_VN79_1', name: 'Phường Bến Thành' },
+    { code: '84_VN79_2', name: 'Phường Sài Gòn' },
+    { code: '84_VN79_3', name: 'Phường Tân Thạnh' },
+    { code: '84_VN79_4', name: 'Xã Tân Thạnh' },
+  ];
+  const paste = (el: Element, text: string) => !fireEvent.paste(el, { clipboardData: { getData: () => text } });
+  const geoButton = (label: string) => screen.getByRole('button', { name: new RegExp(`^${label}:`) });
+  const note = (c: HTMLElement) => c.querySelector('[aria-live="polite"]')!;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.user.current = { id: 'u1', fullName: null, phone: null };
+    vi.mocked(geoApi.getProvinces).mockResolvedValue(PROVINCES);
+    vi.mocked(geoApi.getCommunes).mockImplementation(async (code: string) => (code === '84_VN79' ? COMMUNES : []));
+  });
+  afterEach(() => {
+    vi.mocked(geoApi.getProvinces).mockResolvedValue([{ code: '84_VN79', name: 'TP. Hồ Chí Minh' }]);
+    vi.mocked(geoApi.getCommunes).mockReset().mockResolvedValue([{ code: '84_VN79_001', name: 'Phường Bến Nghé' }]);
+  });
+
+  it('dán vào ô Người nhận trống: điền đủ ô và tỉnh/phường, báo qua aria-live, chỉ lưu khi khách bấm Lưu', async () => {
+    (shopApi.createAddress as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'new' });
+    const { container } = renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    expect(note(container).textContent).toBe('');
+    expect(paste(inputNear('Người nhận'), BLOCK)).toBe(true);
+    await waitFor(() => expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Phường Bến Thành'));
+    expect(inputNear('Người nhận')).toHaveValue('Nguyễn Văn An');
+    expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
+    expect(inputNear('Số nhà, tên đường')).toHaveValue('123 Lê Lợi');
+    expect(geoButton('Tỉnh/Thành phố')).toHaveAccessibleName('Tỉnh/Thành phố: Thành phố Hồ Chí Minh');
+    expect(note(container).textContent).toBe(NOTE);
+    expect(shopApi.createAddress).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Lưu'));
+    await waitFor(() =>
+      expect(shopApi.createAddress).toHaveBeenCalledWith(
+        expect.objectContaining({ recipient: 'Nguyễn Văn An', phone: '0912345678', street: '123 Lê Lợi', provinceCode: '84_VN79', wardCode: '84_VN79_1' }),
+      ),
+    );
+  });
+
+  it('tên và SĐT điền sẵn từ Zalo được thay bằng người nhận trong khối dán', async () => {
+    mocks.user.current = { id: 'u1', fullName: 'Long', phone: '0900000000' };
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    paste(inputNear('Số nhà, tên đường'), BLOCK);
+    await waitFor(() => expect(inputNear('Người nhận')).toHaveValue('Nguyễn Văn An'));
+    expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
+  });
+
+  it('ô khách đã tự gõ không bị đè; ô trống vẫn được điền', async () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    fireEvent.change(inputNear('Người nhận'), { target: { value: 'Tôi tự gõ' } });
+    paste(inputNear('Số nhà, tên đường'), BLOCK);
+    await waitFor(() => expect(inputNear('Số nhà, tên đường')).toHaveValue('123 Lê Lợi'));
+    expect(inputNear('Người nhận')).toHaveValue('Tôi tự gõ');
+    expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
+  });
+
+  it('sửa địa chỉ cũ: chỉ ô đang nhận cú dán (bôi hết) được thay', async () => {
+    const initial = {
+      id: 'a1', recipient: 'Cũ', phone: '0911111111', street: '9 Đường Cũ', province: 'Thành phố Hà Nội', provinceCode: '84_VN01',
+      ward: 'Phường Cũ', wardCode: '84_VN01_9', district: '', districtCode: '', isDefault: false,
+    } as never;
+    renderForm(<AddressForm initial={initial} onCancel={() => {}} onSaved={() => {}} />);
+    const street = inputNear('Số nhà, tên đường');
+    street.setSelectionRange(0, street.value.length);
+    paste(street, BLOCK);
+    await waitFor(() => expect(street).toHaveValue('123 Lê Lợi'));
+    expect(inputNear('Người nhận')).toHaveValue('Cũ');
+    expect(inputNear('Số điện thoại')).toHaveValue('0911111111');
+    expect(geoApi.getCommunes).not.toHaveBeenCalledWith('84_VN79');
+  });
+
+  it('phường trùng tên phường/xã mà khối dán không ghi tiền tố: để trống cho khách chọn', async () => {
+    const { container } = renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    paste(inputNear('Người nhận'), 'Lê Hoa, 0987654321, 12 Lê Lợi, Tân Thạnh, TP HCM');
+    await waitFor(() => expect(geoApi.getCommunes).toHaveBeenCalledWith('84_VN79'));
+    await act(async () => {});
+    expect(geoButton('Tỉnh/Thành phố')).toHaveAccessibleName('Tỉnh/Thành phố: Thành phố Hồ Chí Minh');
+    expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Chọn phường/xã');
+    expect(note(container).textContent).toBe(NOTE);
+  });
+
+  it('dán khối vào ô SĐT cũng tách cả khối; chữ không có dáng địa chỉ thì dán như thường', async () => {
+    const { container } = renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    for (const text of ['123 Lê Lợi', 'giao giờ hành chính', 'Số: 0912 345 678']) {
+      expect(paste(inputNear('Số nhà, tên đường'), text), text).toBe(false);
+    }
+    expect(note(container).textContent).toBe('');
+    expect(paste(inputNear('Số điện thoại'), BLOCK)).toBe(true);
+    await waitFor(() => expect(inputNear('Người nhận')).toHaveValue('Nguyễn Văn An'));
+    expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
   });
 });

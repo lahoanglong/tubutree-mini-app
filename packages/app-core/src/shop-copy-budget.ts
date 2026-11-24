@@ -575,6 +575,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.gift.blockedPhone': 40,
   'checkout.gift.verifyPhone': 14,
   'checkout.useZaloPhone': 22,
+  'checkout.addressPasteFilled': 44,
   'cart.giftNote': 56,
   'coupon.autoApplied': 28,
   'cart.comboTitle': null,
