@@ -6,7 +6,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { OPS_EMAIL_KEYS, resolveOpsEmailConfig, type OpsEmailConfig } from '../../config/ops-email-config';
 import type { AlertMessage } from './ops-alerts';
-import { alertEmail, emailEnvLabel, OPS_EMAIL_APP_NAME, scrubSecrets, testEmail, type AlertEmail } from './ops-email';
+import type { DailyDigest } from './daily-digest';
+import { alertEmail, dailyDigestEmail, emailEnvLabel, OPS_EMAIL_APP_NAME, scrubSecrets, testEmail, type AlertEmail } from './ops-email';
 import { classifySmtpError, isSmtpFailureKind, smtpFailureHint, type SmtpFailureKind } from './ops-email-error';
 import { EMAIL_BLOCK_KEY, EMAIL_STATE_KEY, recordEmailDelivery, type EmailDeliveryResult } from './ops-state';
 
@@ -75,6 +76,9 @@ type DeliveryResult = { ok: true } | { ok: false; error: string; kind: SmtpFailu
  *  - BLOCKED: lỗi vĩnh viễn (sai xác thực, 5xx) — KHÔNG tự gửi lại; xem `blockLifted()`.
  */
 export type EmailAlertOutcome = 'DONE' | 'RETRY' | 'BLOCKED';
+
+/** Kết quả gửi bản tin sáng: NOT_READY = kênh email chưa cấu hình đủ; RETRY = lỗi tạm thời; BLOCKED = lỗi vĩnh viễn (sai tài khoản, bị từ chối). */
+export type DigestSendOutcome = 'SENT' | 'NOT_READY' | 'RETRY' | 'BLOCKED';
 
 export const DISABLED_EMAIL_STATE: EmailChannelState = {
   state: 'DISABLED',
@@ -186,6 +190,34 @@ export class OpsEmailService {
     } catch (e) {
       this.logger.warn(`Không đọc được trạng thái gửi email báo động: ${e instanceof Error ? e.message : String(e)}`);
       return false;
+    }
+  }
+
+  /** Kênh email đủ cấu hình để gửi (không đọc DB). Cấu hình đọc lỗi thì coi như chưa sẵn sàng. */
+  isReady(): boolean {
+    try {
+      return this.resolve().state === 'ready';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Gửi bản tin sáng cho chủ shop (DailyDigestService) qua đúng kênh SMTP và người nhận của báo động. Lần gửi được ghi như mọi lần gửi
+   * khác: gửi được thì chứng minh kênh đang chạy, lỗi vĩnh viễn thì chặn cả báo động gửi lại vô ích với cùng cấu hình. Không bao giờ ném.
+   */
+  async sendDigest(d: DailyDigest): Promise<DigestSendOutcome> {
+    try {
+      const cfg = this.resolve();
+      if (cfg.state !== 'ready') return 'NOT_READY';
+      const res = await this.deliver(cfg, dailyDigestEmail(d, this.context()));
+      await this.record(res);
+      if (res.ok) return 'SENT';
+      this.logger.warn(`Bản tin sáng không gửi được (${res.kind}): ${res.error}`);
+      return res.kind === 'TRANSIENT' ? 'RETRY' : 'BLOCKED';
+    } catch (e) {
+      this.logger.warn(`Bản tin sáng lỗi không lường trước: ${e instanceof Error ? e.message : String(e)}`);
+      return 'RETRY';
     }
   }
 

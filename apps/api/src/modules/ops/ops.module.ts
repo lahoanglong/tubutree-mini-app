@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { type MiddlewareConsumer, Module, type NestModule, RequestMethod } from '@nestjs/common';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import {
@@ -16,12 +16,14 @@ import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 import { MssModule } from '../integrations/mss/mss.module';
 import { MerchantModule } from '../merchant/merchant.module';
 import { CronRunService } from './cron-run.service';
+import { DailyDigestService } from './daily-digest.service';
 import { LedgerDriftCron } from './ledger-drift.cron';
 import { OpsController } from './ops.controller';
 import { OpsEmailService } from './ops-email.service';
 import { OPS_QUEUES, OpsHealthService } from './ops-health.service';
 import { OpsInboxService } from './ops-inbox.service';
 import { OpsWebhookEventsService } from './ops-webhook-events.service';
+import { ServerErrorCounterService, ServerErrorCountMiddleware } from './server-error-counter.service';
 
 const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY, QUEUE_ZALO_OA_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD, QUEUE_SUPPORT_CHAT_NOTIFY];
 
@@ -31,12 +33,18 @@ const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUE
   providers: [
     { provide: OPS_QUEUES, inject: QUEUES.map((q) => getQueueToken(q)), useFactory: (...queues: Queue[]) => queues },
     CronRunService,
+    DailyDigestService,
     LedgerDriftCron,
     OpsEmailService,
     OpsHealthService,
     OpsInboxService,
     OpsWebhookEventsService,
+    ServerErrorCounterService,
   ],
   exports: [OpsHealthService],
 })
-export class OpsModule {}
+export class OpsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ServerErrorCountMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}
