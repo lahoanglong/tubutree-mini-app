@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Package, RotateCcw } from 'lucide-react';
+import { ChevronRight, FileText, Package, RotateCcw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import type { OrderDTO } from '@tubutree/shared-types';
 import { dealerOrdersQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
@@ -17,6 +18,8 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
 import { DEALER_ORDER_FILTERS, canReorder, filterDealerOrders, reorderLinesOf, type DealerOrderFilter, type ReorderRequest } from './dealer-order-tools';
+import { DealerInvoiceSheet, type DealerNotice } from './dealer-invoice-sheet';
+import { invoiceEligibleOrders, invoiceTag } from './dealer-tier-tools';
 
 /**
  * Danh sách đơn đại lý, lọc theo trạng thái bằng một hàng chip. Đơn Trả trước chờ thanh toán dẫn thẳng tới trang chuyển khoản.
@@ -25,6 +28,9 @@ import { DEALER_ORDER_FILTERS, canReorder, filterDealerOrders, reorderLinesOf, t
 export function OrdersTab({ onOrderFirst, onReorder }: { onOrderFirst: () => void; onReorder?: (r: ReorderRequest) => void }) {
   const q = useQuery(dealerOrdersQuery(coreHttp));
   const [filter, setFilter] = useState<DealerOrderFilter>('all');
+  // Danh sách đơn được xin hoá đơn chụp lúc mở sheet: danh sách tải lại khi sheet đang mở không làm đổi các dòng đại lý đang chọn.
+  const [invoiceOrders, setInvoiceOrders] = useState<OrderDTO[] | null>(null);
+  const [notice, setNotice] = useState<DealerNotice | null>(null);
   if (q.isLoading) {
     return (
       <div className="flex flex-col gap-2.5">
@@ -47,8 +53,16 @@ export function OrdersTab({ onOrderFirst, onReorder }: { onOrderFirst: () => voi
     );
   }
   const shown = filterDealerOrders(orders, filter);
+  const invoiceable = invoiceEligibleOrders(orders, new Date());
   return (
     <>
+      <div role="status" aria-live="polite">
+        {notice && (
+          <p role={notice.error ? 'alert' : undefined} className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>
+            {notice.text}
+          </p>
+        )}
+      </div>
       <div role="group" aria-label="Lọc đơn theo trạng thái" className="scroll-x mb-3 flex gap-2 overflow-x-auto py-1">
         {DEALER_ORDER_FILTERS.map((f) => (
           <Chip key={f.key} selected={filter === f.key} onPress={() => setFilter(f.key)}>
@@ -56,6 +70,21 @@ export function OrdersTab({ onOrderFirst, onReorder }: { onOrderFirst: () => voi
           </Chip>
         ))}
       </div>
+      {invoiceable.length > 0 && (
+        <div className="mb-2 flex justify-end">
+          <button
+            type="button"
+            className={`${ui.btnText} gap-1 no-underline`}
+            onClick={() => {
+              setNotice(null);
+              setInvoiceOrders(invoiceable);
+            }}
+          >
+            <FileText className="h-4 w-4" aria-hidden="true" />
+            Yêu cầu hoá đơn VAT ({invoiceable.length} đơn)
+          </button>
+        </div>
+      )}
       {shown.length === 0 ? (
         <p className={`p-6 text-center text-sm text-stone-600 ${skin.card}`}>Không có đơn nào ở mục này.</p>
       ) : (
@@ -82,6 +111,7 @@ export function OrdersTab({ onOrderFirst, onReorder }: { onOrderFirst: () => voi
                   </div>
                   <div className="mt-0.5 text-xs text-stone-600">
                     {o.items?.length ?? 0} mặt hàng · {formatDate(o.createdAt)}
+                    {invoiceTag(o) ? ` · ${invoiceTag(o)}` : ''}
                   </div>
                   {backordered > 0 && (
                     <div className="mt-1">
@@ -113,6 +143,15 @@ export function OrdersTab({ onOrderFirst, onReorder }: { onOrderFirst: () => voi
           })}
         </ul>
       )}
+      <DealerInvoiceSheet
+        open={invoiceOrders !== null}
+        orders={invoiceOrders ?? []}
+        onClose={() => setInvoiceOrders(null)}
+        onDone={(n) => {
+          setInvoiceOrders(null);
+          setNotice(n);
+        }}
+      />
     </>
   );
 }

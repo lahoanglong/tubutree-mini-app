@@ -1,9 +1,11 @@
 import type { HttpClient } from '../http';
 import {
   getCreditLedger,
+  getDealerInvoiceProfile,
   getDealerMe,
   getDealerOrders,
   getDealerRewards,
+  getDealerTierProgress,
   getPricelist,
   getQuarterlyReport,
   getTemplates,
@@ -32,6 +34,14 @@ export const dealerCreditQuery = (http: HttpClient) => ({
 export const dealerReportQuery = (http: HttpClient) => ({
   queryKey: ['dealer-report'] as const,
   queryFn: () => getQuarterlyReport(http),
+});
+export const dealerTierProgressQuery = (http: HttpClient) => ({
+  queryKey: ['dealer-tier-progress'] as const,
+  queryFn: () => getDealerTierProgress(http),
+});
+export const dealerInvoiceProfileQuery = (http: HttpClient) => ({
+  queryKey: ['dealer-invoice-profile'] as const,
+  queryFn: () => getDealerInvoiceProfile(http),
 });
 export const dealerRewardsQuery = (http: HttpClient) => ({
   queryKey: ['dealer-rewards'] as const,
