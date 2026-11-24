@@ -9,6 +9,7 @@ import { fillTemplate } from './copy-template';
  * về entry: `mini-lazy-chunks.cjs` chặn (chunk `shop-copy` nằm trong đường nạp đầu) và `bundle-budget.cjs` báo entry vượt ngưỡng.
  */
 export const BOOT_COPY = {
+  // Giờ vàng
   'flash.title': 'Giờ vàng',
   'flash.todayTitle': 'Giờ vàng hôm nay',
   'flash.endsIn': 'Kết thúc sau {t}',
@@ -29,15 +30,18 @@ export const BOOT_COPY = {
   'flash.sheetOverLeft': 'Bạn còn {n} suất Giờ vàng. Mua {qty} thì cả dòng tính giá thường.',
   // Giỏ đã vượt suất từ trước (n > allowance): dòng giỏ đang tính giá thường rồi, phần thêm không phải nguyên nhân mất giá.
   'flash.sheetOverInCartAlready': 'Giỏ đã có {n}, quá {allowance} suất Giờ vàng nên cả dòng đang tính giá thường.',
+  // "Mua ngay" thanh toán cả dòng giỏ của phân loại (số có sẵn + số thêm), nên nói trước khi bấm khi giỏ đã có sẵn mà chưa mất giá.
   'flash.sheetBuyMerge': 'Giỏ đã có {n}: Mua ngay thanh toán cả {total} sản phẩm.',
   'flash.remind': 'Nhắc tôi',
   'flash.nextSlot': '{time} · {n} món sắp mở',
   // Bán chạy nhất
   'rank.title': 'Bán chạy nhất',
+  // Kệ Bán chạy nhất khi chưa đủ số bán thật: chỉ món admin ghim ở tab Xếp kệ, không xếp hạng, không dòng thước đo.
   'rank.curatedTitle': 'Tubu chọn cho bạn',
   'rank.basis': 'Theo lượt bán 30 ngày qua',
   'rank.basisAll': 'Theo tổng lượt bán',
   'rank.tabAll': 'Tất cả',
+  // Nhãn, tồn kho, số liệu shop
   'stock.discontinued': 'Ngừng bán',
   'stats.followers': 'Theo dõi',
   'stats.followersSpoken': '{n} người theo dõi',
@@ -70,6 +74,7 @@ export const BOOT_COPY = {
   'addon.title': 'Mua kèm giá tốt',
   'addon.error': 'Chưa thêm được món mua kèm, bạn thử lại nhé',
   'bundle.ended': 'Đã kết thúc',
+  // Giá theo đơn vị ở trang chi tiết và thẻ sản phẩm (tubu-w4-02, cờ catalog.unit_price_enabled).
   'pdp.unitPrice': '≈ {price} / {per}',
   'pdp.unitBetter': 'Lợi hơn {pct}% mỗi {per}',
   // Mua lại đơn cũ: câu dưới từng dòng và câu đầu sheet (web và Mini App)
@@ -81,6 +86,7 @@ export const BOOT_COPY = {
   'reorder.allSkipped': 'Các món trong đơn này đều đã hết hàng hoặc ngừng bán.',
   'reorder.selectAll': 'Chọn tất cả ({n})',
   'reorder.savedVsBefore': 'Tiết kiệm {x} so với lúc mua trước',
+  // Bộ thành phần section-kit (SectionHeader, ComboCard)
   'section.seeAll': 'Xem tất cả',
   'section.seeAllSpoken': 'Xem tất cả {title}',
   'section.seeAllCount': 'Tất cả ({n})',
@@ -93,6 +99,7 @@ export const BOOT_COPY = {
   'combo.itemsLabel': 'Gồm {n} món',
   'combo.more': '+{n}',
   'combo.soldOutSpoken': 'Combo tạm hết: {title}',
+  // Trang shop (gian hàng CTV, thương hiệu)
   'shop.tabShop': 'Shop',
   'shop.tabProducts': 'Sản phẩm',
   'shop.tabCategories': 'Danh mục',
@@ -104,6 +111,7 @@ export const BOOT_COPY = {
   'shop.sortPriceSpoken': 'Giá, đổi chiều sắp xếp',
   'shop.comboAdded': 'Đã thêm cả combo vào giỏ',
   'shop.comboError': 'Chưa thêm được combo, giỏ của bạn không thay đổi. Bạn thử lại nhé.',
+  // Lời mời kèm thẻ chia sẻ Zalo (W146B). Số tiền lấy từ cấu hình công khai (`newCustomer.welcomeVoucher`), thiếu thì nói chung, không hứa con số.
   'share.offer': 'Tubu Tree tặng khách mới mã {amount} cho đơn đầu từ {min}',
   'share.offerNoMin': 'Tubu Tree tặng khách mới mã {amount} cho đơn đầu',
   'share.offerPlain': 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu',
@@ -178,5 +186,7 @@ export type BootCopyKey = keyof typeof BOOT_TABLE;
 
 /** Điền mẫu của bảng gói đầu (gồm chữ thẻ `TILE_COPY`); thiếu biến thì ném lỗi như `fillCopy`. */
 export function fillBootCopy(key: BootCopyKey, vars: Record<string, string | number> = {}): string {
+  // Khoá ghép lúc chạy (`badges.name.${id}`, `daily.mission.${id}`) có thể là id máy chủ mới mà bản Mini cũ chưa có chữ.
+  if (!Object.prototype.hasOwnProperty.call(BOOT_TABLE, key)) throw new Error(`shop-copy: không có khoá "${key}"`);
   return fillTemplate(BOOT_TABLE[key], vars, key);
 }

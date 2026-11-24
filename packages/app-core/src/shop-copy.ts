@@ -36,7 +36,6 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.limitShort': 'Tối đa {n}/khách',
   // Bản đọc của 'flash.limitShort': trình đọc màn hình đọc dấu "/" thành "gạch chéo".
   'flash.limitSpoken': 'Tối đa {n} sản phẩm mỗi khách',
-  // "Mua ngay" thanh toán cả dòng giỏ của phân loại (số có sẵn + số thêm), nên nói trước khi bấm khi giỏ đã có sẵn mà chưa mất giá.
   'flash.buy': 'Mua ngay',
   'flash.reminded': 'Đã đặt nhắc',
   'flash.unremind': 'Bỏ nhắc',
@@ -54,7 +53,6 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.soldOutError': 'Suất Giờ vàng vừa hết, sản phẩm về giá thường. Bạn xem lại giỏ nhé.',
   'flash.notifyStart': '{name} đang có giá Giờ vàng tới {time}.',
 
-  // Kệ Bán chạy nhất khi chưa đủ số bán thật: chỉ món admin ghim ở tab Xếp kệ, không xếp hạng, không dòng thước đo.
   'rank.tabsLabel': 'Danh mục bán chạy',
   'rank.seeAll': 'Xem tất cả',
   'rank.emptyTitle': 'Chưa đủ lượt bán để xếp hạng',
@@ -317,7 +315,7 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.offers': 'Ưu đãi',
   'pdp.shipping': 'Vận chuyển',
   'pdp.variation': 'Phân loại',
-  // Quyết nhanh ở trang chi tiết (tubu-w4-02): giá theo đơn vị (cờ catalog.unit_price_enabled), ngày nhận và phần còn thiếu để miễn phí giao (cờ shipping.pdp_eta_enabled).
+  // Quyết nhanh ở trang chi tiết (tubu-w4-02): ngày nhận và phần còn thiếu để miễn phí giao (cờ shipping.pdp_eta_enabled); giá theo đơn vị ở shop-copy-boot.ts.
   // Câu còn thiếu phải vừa MỘT dòng của khối Vận chuyển ở 360px (khối chỉ được cao thêm 24px, đã dành cho dòng ngày nhận), nên ngắn hơn câu tĩnh cũ.
   'pdp.eta': 'Nhận dự kiến {range}',
   // Ngày nhận theo lịch kho (tubu-w6-02, cùng cờ shipping.pdp_eta_enabled): {range} kiểu "T6 20/11 – T3 24/11", {cutoff} là giờ cắt đơn "15:00".

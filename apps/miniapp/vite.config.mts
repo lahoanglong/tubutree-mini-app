@@ -107,7 +107,7 @@ export default defineConfig(({ command, mode }) => {
           // Tách thư viện nền (React + Router, ZMP SDK, React Query + Zustand) khỏi entry để gói khởi động gọn dưới ngưỡng entry của scripts/ci/bundle-budget.cjs;
           // KHÔNG gộp zmp-ui hay lucide-react vào vendor chung để giữ nguyên các chunk lazy (Sheet, icon trang quản trị).
           manualChunks(id) {
-            // Shim JSX của bản build (build-jsx-runtime.ts) đi cùng React: mọi chunk vẫn nhập JSX từ vendor-react như trước.
+            // Shim JSX của bản build (build-jsx-runtime.ts) nằm cùng chunk với React: chunk nhập JSX cùng chỗ với React, không sinh chunk mới.
             if (/[\\/]src[\\/]build-jsx-runtime\.ts$/.test(id)) return 'vendor-react';
             if (!id.includes('node_modules')) return undefined;
             if (/\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run\/router)\//.test(id)) {

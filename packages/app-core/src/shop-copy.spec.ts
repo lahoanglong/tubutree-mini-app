@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { homeCopy } from './home-copy';
 import { FORBIDDEN_TERMS, SHOP_COPY, fillCopy } from './shop-copy';
 import { SHOP_COPY_MAX } from './shop-copy-budget';
+import { BOOT_COPY, fillBootCopy, type BootCopyKey } from './shop-copy-boot';
+import { TILE_COPY } from './commerce/tile-copy';
 
 // Giá trị xấu nhất của từng biến để đo độ dài. Biến mang chữ tự do (name, title, a, b, when) không có ở đây:
 // khoá dùng chúng phải có max null.
@@ -204,5 +206,18 @@ describe('fillCopy', () => {
 
   it('ném lỗi khi thiếu biến, không để lộ "{t}" ra cho khách', () => {
     expect(() => fillCopy('flash.endsIn', {})).toThrow(/\{t\}|\bt\b/);
+  });
+});
+
+describe('fillBootCopy (chữ của gói đầu Mini App)', () => {
+  it('mọi khoá của bảng gói đầu nằm trong SHOP_COPY và cho cùng chữ với fillCopy', () => {
+    for (const key of [...Object.keys(TILE_COPY), ...Object.keys(BOOT_COPY)] as BootCopyKey[]) {
+      expect(SHOP_COPY[key], key).toBe((BOOT_COPY as Record<string, string>)[key] ?? (TILE_COPY as Record<string, string>)[key]);
+    }
+    expect(fillBootCopy('flash.endsIn', { t: '1' })).toBe(fillCopy('flash.endsIn', { t: '1' }));
+  });
+
+  it('khoá ghép lúc chạy mà bảng chưa có thì ném lỗi nêu khoá', () => {
+    expect(() => fillBootCopy('badges.name.khong-co' as BootCopyKey)).toThrow(/badges\.name\.khong-co/);
   });
 });
