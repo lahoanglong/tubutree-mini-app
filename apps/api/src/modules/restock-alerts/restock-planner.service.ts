@@ -2,16 +2,17 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
+import { TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 import { RESTOCK_NO_SUPPLIER, RESTOCK_VELOCITY_WINDOW_DAYS, type RestockPlanInput } from './restock-planner';
 
 /**
- * Biến thể lập kế hoạch nhập: bán được (SELLABLE_VARIATION_WHERE) và hàng kho Tubu giao (gồm "Tubu giao hộ" đối tác). Hàng gian hàng tự giao do
- * đối tác tự giữ tồn nên không nhập qua kho Tubu.
+ * Biến thể lập kế hoạch nhập: bán được (SELLABLE_VARIATION_WHERE), kho Tubu giao và là hàng của Tubu (TUBU_OWNED_VARIATION_WHERE). Hàng của gian
+ * hàng đối tác, kể cả loại "Tubu giao hộ", là tồn của đối tác: Tubu không đặt nhà cung cấp cho hàng đó.
  */
 export const RESTOCK_PLAN_VARIATION_WHERE = {
   ...SELLABLE_VARIATION_WHERE,
-  product: { ...SELLABLE_VARIATION_WHERE.product, fulfilment: 'TUBU' },
+  product: { ...SELLABLE_VARIATION_WHERE.product, ...TUBU_OWNED_VARIATION_WHERE.product, fulfilment: 'TUBU' },
 } as const satisfies Prisma.VariationWhereInput;
 
 /** Cột đọc: không có mã Pancake, giá vốn hay cấu hình tích hợp nào. */
@@ -38,12 +39,14 @@ export class RestockPlannerService {
     const [variations, sold, waiting, backordered] = await Promise.all([
       this.prisma.variation.findMany({ where: RESTOCK_PLAN_VARIATION_WHERE, select: RESTOCK_PLAN_VARIATION_SELECT, orderBy: { sku: 'asc' } }),
       // Đơn đặt trong cửa sổ (theo lúc đặt, không theo lúc giao): cầu thật của khách. Cùng tập đơn của GMV (admin-revenue.ts): đã xác nhận
-      // trở đi, chưa huỷ/trả, không phải đơn thử Giờ G đã dọn. Dòng quà 0đ không phải hàng khách mua.
+      // trở đi, chưa huỷ/trả, không phải đơn thử Giờ G đã dọn. Dòng quà 0đ không phải hàng khách mua. Đơn đại lý đặt theo lô nên không quy ra
+      // tốc độ bán mỗi ngày (một lô 200 thành 429 khi quy ra 30 ngày); phần đại lý còn thiếu vào kế hoạch qua số đặt trước ở câu thứ tư.
       this.prisma.$queryRaw<CountRow[]>`
         SELECT oi."variationId", COALESCE(SUM(oi."quantity"), 0)::int AS n
           FROM "order_items" oi
           JOIN "orders" o ON o."id" = oi."orderId"
          WHERE oi."isGift" = false
+           AND o."type" <> 'DEALER'
            AND o."createdAt" >= ${since}
            AND o."createdAt" <= ${now}
            AND o."status" IN ('CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED')

@@ -12,7 +12,7 @@ export const RESTOCK_PO_CSV_HEADERS = [
   'Phân loại',
   'Số lượng đặt',
   'Tồn bán được',
-  `Bán ${RESTOCK_VELOCITY_WINDOW_DAYS} ngày`,
+  `Bán ${RESTOCK_VELOCITY_WINDOW_DAYS} ngày (trừ đại lý)`,
   'Đủ bán (ngày)',
   'Khách chờ hàng về',
   'Đại lý đặt trước chưa có hàng',

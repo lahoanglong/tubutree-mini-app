@@ -14,6 +14,7 @@ describe('restock planner: số liệu đọc từ DB (real Postgres)', () => {
   const userIds: string[] = [];
   const productIds: string[] = [];
   const auditIds: string[] = [];
+  const storefrontIds: string[] = [];
 
   // Tag chỉ gồm chữ (không số, không "x"): tên sản phẩm có "8x 3" khớp PACK_RE và làm lệch các spec ghép Refill.
   const letters = () => Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwyz'[Math.floor(Math.random() * 22)]).join('');
@@ -24,7 +25,7 @@ describe('restock planner: số liệu đọc từ DB (real Postgres)', () => {
     return u;
   }
 
-  async function product(over: { fulfilment?: 'TUBU' | 'MERCHANT'; isActive?: boolean; stock?: number[] } = {}) {
+  async function product(over: { fulfilment?: 'TUBU' | 'MERCHANT'; isActive?: boolean; stock?: number[]; storefrontId?: string } = {}) {
     const tag = letters();
     const p = await prisma.product.create({
       data: {
@@ -35,6 +36,7 @@ describe('restock planner: số liệu đọc từ DB (real Postgres)', () => {
         basePrice: 100_000,
         fulfilment: over.fulfilment ?? 'TUBU',
         isActive: over.isActive ?? true,
+        storefrontId: over.storefrontId ?? null,
         variations: {
           create: (over.stock ?? [0, 0]).map((stock, i) => ({ sku: `ITRP-${tag}-${'abc'[i]}`, name: `Loại ${'abc'[i]}`, attributes: {}, retailPrice: 100_000, stock })),
         },
@@ -65,10 +67,11 @@ describe('restock planner: số liệu đọc từ DB (real Postgres)', () => {
   afterAll(async () => {
     await prisma.adminAuditLog.deleteMany({ where: { id: { in: auditIds } } });
     await deleteItData(prisma, { userIds, productIds });
+    await prisma.storefront.deleteMany({ where: { id: { in: storefrontIds } } });
     await prisma.$disconnect();
   });
 
-  it('bán 14 ngày chỉ đếm đơn thật đã xác nhận trong cửa sổ; khách chờ chỉ đếm đăng ký chưa báo; đặt trước chỉ đơn chưa huỷ/trả', async () => {
+  it('bán 14 ngày chỉ đếm đơn khách thật đã xác nhận trong cửa sổ (không đơn đại lý); khách chờ chỉ đếm đăng ký chưa báo; đặt trước chỉ đơn chưa huỷ/trả', async () => {
     const now = new Date();
     const day = 86_400_000;
     const buyer = await customer();
@@ -88,7 +91,7 @@ describe('restock planner: số liệu đọc từ DB (real Postgres)', () => {
     auditIds.push(
       (await prisma.adminAuditLog.create({ data: { actorId: buyer.id, action: PILOT_CLEANUP_ACTION, targetType: 'ORDER', targetIds: [pilot.code], payload: {} } })).id,
     );
-    await order('CONFIRMED', 2, [line(b.id, 6, { backorderedQty: 4 })], 'DEALER'); // đại lý: +6 b bán, 4 đặt trước
+    await order('CONFIRMED', 2, [line(b.id, 6, { backorderedQty: 4 })], 'DEALER'); // đại lý: không vào tốc độ bán, 4 đặt trước
 
     const [w1, w2, w3] = [await customer(), await customer(), await customer()];
     await prisma.restockAlert.createMany({
@@ -99,26 +102,31 @@ describe('restock planner: số liệu đọc từ DB (real Postgres)', () => {
       ],
     });
 
-    // Hàng gian hàng tự giao và sản phẩm đang ẩn không vào kế hoạch dù có đơn.
+    // Hàng gian hàng tự giao, hàng đối tác "Tubu giao hộ" (tồn của đối tác) và sản phẩm đang ẩn không vào kế hoạch dù có đơn.
     const merchant = await product({ fulfilment: 'MERCHANT' });
     const hidden = await product({ isActive: false });
-    await order('CONFIRMED', 1, [line(merchant.variations[0]!.id, 5), line(hidden.variations[0]!.id, 5)]);
+    const store = await prisma.storefront.create({
+      data: { type: 'CTV', isPartner: true, slug: `itrp-${letters()}`, ownerUserId: buyer.id, title: 'Đối tác IT', isPublished: true },
+    });
+    storefrontIds.push(store.id);
+    const partner = await product({ storefrontId: store.id });
+    await order('CONFIRMED', 1, [line(merchant.variations[0]!.id, 5), line(hidden.variations[0]!.id, 5), line(partner.variations[0]!.id, 5)]);
 
     const inputs = await planner.inputs(now);
     const ours = inputs.filter((i) => i.productId === p.id);
     expect(ours.map((i) => [i.sku, i.supplier, i.stock, i.sold, i.waiting, i.backordered])).toEqual([
       [a.sku, p.brand, 2, 4, 0, 0],
-      [b.sku, p.brand, 0, 8, 2, 4],
+      [b.sku, p.brand, 0, 2, 2, 4],
     ]);
-    expect(inputs.some((i) => i.productId === merchant.id || i.productId === hidden.id)).toBe(false);
+    expect(inputs.some((i) => [merchant.id, hidden.id, partner.id].includes(i.productId))).toBe(false);
 
-    // Từ số thật tới đề xuất: b = ⌈8 × 30 ÷ 14⌉ = 18, + 2 khách chờ + 4 đại lý chờ − 0 tồn = 24 (hết hàng);
+    // Từ số thật tới đề xuất: b = ⌈2 × 30 ÷ 14⌉ = 5, + 2 khách chờ + 4 đại lý chờ − 0 tồn = 11 (hết hàng);
     // a = ⌈4 × 30 ÷ 14⌉ = 9 − 2 tồn = 7, còn đủ bán ⌊2 × 14 ÷ 4⌋ = 7 ngày.
     const plan = buildRestockPlan(ours, { targetDays: 30 }, now);
     expect(plan.rows.map((r) => [r.sku, r.suggestedQty, r.urgency, r.coverDays])).toEqual([
-      [b.sku, 24, 'OUT', 0],
+      [b.sku, 11, 'OUT', 0],
       [a.sku, 7, 'OK', 7],
     ]);
-    expect(plan.suppliers).toEqual([{ name: p.brand, rows: 2, units: 31 }]);
+    expect(plan.suppliers).toEqual([{ name: p.brand, rows: 2, units: 18 }]);
   });
 });

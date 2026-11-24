@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { LoadError, chipClass } from '@/components/admin/ui';
@@ -28,7 +28,6 @@ const TABS: { key: StockTab; label: string; title: string; intro: string }[] = [
 ];
 
 function readTab(): StockTab {
-  if (typeof window === 'undefined') return 'reconcile';
   return new URLSearchParams(window.location.search).get('tab') === RESTOCK_PLAN_TAB ? 'plan' : 'reconcile';
 }
 
@@ -42,12 +41,18 @@ export default function StockReconcilePage() {
   const { user, status, initialized } = useAuth();
   const role = user?.role;
   const accessQ = useQuery({ queryKey: ['admin-ops-access'], queryFn: getOpsAccess, enabled: status === 'authenticated' && role === 'STAFF' });
-  const [tab, setTab] = useState<StockTab>(readTab);
-  // Bàn đối soát tự ghi `flag`/`q` lên URL khi đang mở; đổi tab thì URL chỉ còn đúng tab đang xem.
+  // Đọc tab (và để bàn đối soát đọc `flag`/`q`) SAU khi mount: bấm Link từ menu thì Next chỉ đổi URL ở pha commit, lúc render đầu
+  // `window.location` còn là trang cũ. Chưa biết tab thì chưa dựng bảng nào, nên bàn đối soát không ghi đè URL trước khi tab được đọc.
+  const [tab, setTab] = useState<StockTab | null>(null);
+  useEffect(() => setTab(readTab()), []);
+  // Bộ lọc bàn đối soát đang có trên URL khi sang tab nhập hàng: quay lại thì trả đúng `flag`/`q` cũ.
+  const reconcileSearch = useRef('');
   const selectTab = (next: StockTab) => {
-    setTab(next);
+    if (next === tab) return;
     const path = window.location.pathname;
-    window.history.replaceState(window.history.state, '', next === 'plan' ? `${path}?tab=${RESTOCK_PLAN_TAB}` : path);
+    if (next === 'plan') reconcileSearch.current = window.location.search;
+    window.history.replaceState(window.history.state, '', next === 'plan' ? `${path}?tab=${RESTOCK_PLAN_TAB}` : `${path}${reconcileSearch.current}`);
+    setTab(next);
   };
 
   if (!initialized || status === 'loading') return <Center>Đang tải…</Center>;
@@ -71,6 +76,7 @@ export default function StockReconcilePage() {
   const isKho = role === 'STAFF' && (accessQ.data?.staffPermissions ?? []).includes('KHO');
   if (!isAdmin && !isKho) return <Center>Chỉ quản trị viên và nhân viên kho xem được trang đối soát tồn.</Center>;
 
+  if (tab === null) return <Center>Đang tải…</Center>;
   const current = TABS.find((t) => t.key === tab)!;
   return (
     <main id="admin-main" className="mx-auto w-full max-w-2xl px-4 py-6 text-stone-900 md:max-w-5xl">
