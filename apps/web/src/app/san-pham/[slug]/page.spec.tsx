@@ -1219,6 +1219,56 @@ describe('/san-pham/[slug] — khối Hỏi nhanh · Cùng danh mục · Bản R
     expect(hub.querySelector('[data-testid="pdp-refill-link"]')).toBeNull();
   });
 
+  // Chai 500ml 150.000đ, gói 5L 1.000.000đ: mua 10 chai tốn 1.500.000đ, nên thẻ gói Refill nói "tiết kiệm 500.000đ".
+  const BOTTLE = { ...PRODUCT, name: 'Dầu gội bồ kết 500ml' };
+  const CHEAP_PACK = { ...REFILL_PAIR, price: 1_000_000 };
+  const refillTexts = (c: Element) => {
+    const hub = c.querySelector('[data-testid="pdp-link-hub"]');
+    const faq = lds(c).find((d) => d['@type'] === 'FAQPage');
+    return {
+      heading: hub?.querySelector('[data-testid="pdp-refill-link"] h2')?.textContent ?? null,
+      link: hub?.querySelector('[data-testid="pdp-refill-link"] a')?.textContent ?? null,
+      faq: (faq?.mainEntity ?? []).find((q: { name: string }) => /bản Refill/.test(q.name))?.acceptedAnswer.text ?? null,
+    };
+  };
+
+  it('so được với chai: tiêu đề "Bản Refill tiết kiệm" và số tiền khớp thẻ gói Refill', async () => {
+    api.product = BOTTLE;
+    api.refillPairs = { p1: CHEAP_PACK };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-refill"]')!.textContent).toContain('tiết kiệm 500.000đ');
+    expect(refillTexts(c)).toEqual({
+      heading: 'Bản Refill tiết kiệm',
+      link: 'Túi Refill dầu gội bồ kết 5L · tiết kiệm 500.000đ',
+      faq: 'Có: Túi Refill dầu gội bồ kết 5L, tiết kiệm 500.000đ so với mua chai cùng lượng.',
+    });
+  });
+
+  it('chai đang Giờ vàng: thẻ gói Refill không nêu số tiết kiệm, nên khối và FAQPage cũng không (tiêu đề "Bản Refill")', async () => {
+    api.product = BOTTLE;
+    api.refillPairs = { p1: CHEAP_PACK };
+    api.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'dau-goi-bo-ket', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z' }];
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-refill"]')!.textContent).not.toMatch(/tiết kiệm/);
+    expect(refillTexts(c)).toEqual({ heading: 'Bản Refill', link: 'Túi Refill dầu gội bồ kết 5L', faq: 'Có: Túi Refill dầu gội bồ kết 5L.' });
+  });
+
+  it('gian hàng tạm nghỉ: thẻ gói Refill không vẽ, nên không có câu hỏi Refill, liên kết Refill hay số tiết kiệm trong JSON-LD', async () => {
+    api.product = {
+      ...BOTTLE,
+      ingredients: [{ name: 'Bồ kết' }],
+      fulfilment: 'MERCHANT',
+      fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null },
+    };
+    api.refillPairs = { p1: CHEAP_PACK };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-refill"]')).toBeNull();
+    expect(c.querySelector('[data-testid="pdp-faq-refill"]')).toBeNull();
+    expect(refillTexts(c)).toEqual({ heading: null, link: null, faq: null });
+    expect(JSON.stringify(lds(c))).not.toMatch(/tiết kiệm/);
+    expect(c.querySelector('[data-testid="pdp-faq-ingredients"]')).not.toBeNull();
+  });
+
   it('API danh mục lỗi: trang vẫn dựng, khối chỉ còn phần có dữ liệu', async () => {
     api.product = { ...PRODUCT, categoryIds: ['c-nha'], ingredients: [{ name: 'Bồ kết' }] };
     api.categories = Promise.reject(new Error('API tạm lỗi'));
