@@ -90,6 +90,18 @@ describe('checkEventProps', () => {
     expect(checkEventProps('screen_viewed', { route: '/0912345678' })).toBe('pii');
   });
 
+  it('chữ số và ＠ toàn khổ (bàn phím IME) vẫn bị coi là SĐT/email; số đo ngắn toàn khổ vẫn qua', () => {
+    expect(looksLikePii('sdt ０９１２ ３４５ ６７８')).toBe(true);
+    expect(looksLikePii('an＠gmail．com')).toBe(true);
+    expect(checkEventProps('search_performed', { q: 'sdt ０９１２３４５６７８', resultsCount: 0 })).toBe('pii');
+    // `search_zero_result.q` có luật riêng (isShareableSearchTerm): dãy từ 6 chữ số hay `＠` là giá trị sai.
+    expect(checkEventProps('search_zero_result', { q: 'mã ９１２３４５', hadSuggestion: false })).toBe('bad_value');
+    expect(checkEventProps('search_zero_result', { q: 'chị lan＠gmail', hadSuggestion: false })).toBe('bad_value');
+    expect(checkEventProps('search_zero_result', { q: 'mã ٩١٢٣٤٥', hadSuggestion: false })).toBe('bad_value');
+    expect(checkEventProps('search_zero_result', { q: 'kem ５０ml', hadSuggestion: false })).toBe('ok');
+    expect(checkEventProps('search_zero_result', { q: 'mã 91234', hadSuggestion: false })).toBe('ok');
+  });
+
   it('green_card_shared: thẻ nhựa đã giảm của đơn gửi kèm nơi gửi; nơi lạ hay mã đơn thì bỏ', () => {
     expect(checkEventProps('green_card_shared', { method: 'share' })).toBe('ok');
     expect(checkEventProps('green_card_shared', { method: 'copy', surface: 'order' })).toBe('ok');

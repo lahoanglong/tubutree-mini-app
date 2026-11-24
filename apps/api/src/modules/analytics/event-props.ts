@@ -139,7 +139,7 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   },
   matcher_add_all: { props: { itemCount: int(1, 4) }, required: ['itemCount'] },
   matcher_item_opened: { props: { productSlug: SLUG }, required: ['productSlug'] },
-  // Tìm không ra gì: `q` đã lọc ở app (isShareableSearchTerm), máy chủ kiểm lại để cụm có email/dãy số không vào bảng.
+  // Tìm không ra gì: app gửi nguyên cụm khách gõ, máy chủ lọc (isShareableSearchTerm) để cụm có email/dãy số không vào bảng.
   search_zero_result: {
     props: { q: (v) => text(100)(v) && isShareableSearchTerm(v as string), hadSuggestion: bool },
     required: ['q', 'hadSuggestion'],
@@ -175,7 +175,9 @@ const DIGIT_RUN = /(?<![\p{L}\p{N}])\+?\d(?:[ .()-]?\d){8,11}(?![\p{L}\p{N}])/gu
 const VN_PHONE_DIGITS = /^(?:84|0)\d{9,10}$/;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
-export function looksLikePii(s: string): boolean {
+export function looksLikePii(raw: string): boolean {
+  // `\d` không bắt chữ số toàn khổ của bàn phím IME (`０９１２…`): NFKC đưa chúng và `＠` về ASCII trước khi so.
+  const s = raw.normalize('NFKC');
   if (s.includes('@') && EMAIL.test(s)) return true;
   for (const m of s.matchAll(DIGIT_RUN)) {
     if (VN_PHONE_DIGITS.test(m[0].replace(/\D/g, ''))) return true;

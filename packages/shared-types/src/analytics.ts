@@ -130,10 +130,13 @@ export type MatcherEntry = (typeof MATCHER_ENTRIES)[number];
 /**
  * Từ khoá khách gõ được phép đi tiếp (sự kiện `search_zero_result`, danh sách "Tìm phổ biến"): bỏ cụm có `@` hay dãy từ 6 chữ số (bỏ qua
  * mọi ký tự không phải chữ hay số giữa các số, vd. `0912_345_678`) để không lộ email, số điện thoại khách gõ nhầm vào ô tìm.
+ * Bàn phím IME gõ được chữ số và `＠` toàn khổ (`０９１２…`) mà `\d` không bắt: NFKC đưa chúng về ASCII, `\p{Nd}` bắt thêm chữ số của
+ * hệ chữ khác.
  */
 export function isShareableSearchTerm(term: string): boolean {
-  if (term.includes('@')) return false;
-  return !/\d{6,}/.test(term.replace(/[^\p{L}\p{N}]/gu, ''));
+  const s = term.normalize('NFKC');
+  if (s.includes('@')) return false;
+  return !/\p{Nd}{6,}/u.test(s.replace(/[^\p{L}\p{N}]/gu, ''));
 }
 
 /** Nơi khách bấm "Mở Zalo Tubu Tree" (`order_zalo_friend_click.from`). */
