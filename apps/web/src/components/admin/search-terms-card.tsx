@@ -6,7 +6,7 @@ import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { useToastedMessage, type AdminMsg } from '@/components/admin/admin-toast';
-import { BTN_PRIMARY, BTN_XS_DANGER, BTN_XS_SECONDARY, Field, INPUT_CLASS, ListSkeleton, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
+import { BTN_PRIMARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, ListSkeleton, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
 import {
   POPULAR_TERMS_MAX,
   SYNONYM_FIELD_MAX,
@@ -47,11 +47,11 @@ export function SearchTermsCard() {
   const popTerms = parsePopularTerms(popValue);
   const popError = popularTermsError(popTerms);
 
+  // Dòng "Đã có" của bảng tìm chưa ra đọc từ đồng nghĩa ở máy chủ: tải lại cùng lúc với danh sách.
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: SYN_KEY }), qc.invalidateQueries({ queryKey: ZERO_KEY })]);
   const settle = (text: string, ok: boolean) => {
     setMsg({ ok, text });
-    void qc.invalidateQueries({ queryKey: SYN_KEY });
-    // Dòng "Đã có" của bảng tìm chưa ra đọc từ đồng nghĩa ở máy chủ: tải lại cùng lúc.
-    void qc.invalidateQueries({ queryKey: ZERO_KEY });
+    void refresh();
   };
   /** Điền cụm khách gõ vào form thêm, xoá vế thay cũ (thuộc cụm khác) rồi đưa con trỏ vào ô "Cụm tìm thay". */
   const prefill = (term: string) => {
@@ -78,6 +78,29 @@ export function SearchTermsCard() {
     onSuccess: () => settle('Đã xoá từ đồng nghĩa.', true),
     onError: fail,
   });
+  /** Chạm một cụm gợi ý: tạo từ đồng nghĩa ngay, không đụng form đang gõ dở. */
+  const quick = useMutation({
+    mutationFn: (pair: { term: string; canonical: string }) => createSynonym(pair),
+    onSuccess: (row) => {
+      setMsg({ ok: true, text: `Đã thêm: "${row.term}" → "${row.canonical}".` });
+      // Trả promise để nút còn khoá tới khi bảng tải lại có dòng "Đã có": chạm tiếp gợi ý khác của cùng cụm sẽ báo trùng.
+      return refresh();
+    },
+    onError: fail,
+  });
+  const quickLock = useRef(false);
+  const quickAdd = (term: string, canonical: string) => {
+    if (quickLock.current) return;
+    quickLock.current = true;
+    quick.mutate(
+      { term, canonical },
+      {
+        onSettled: () => {
+          quickLock.current = false;
+        },
+      },
+    );
+  };
   const savePop = useMutation({
     mutationFn: () => savePopularTerms(popTerms),
     onSuccess: () => {
@@ -102,7 +125,7 @@ export function SearchTermsCard() {
     if (ok) remove.mutate(row);
   };
 
-  const busy = add.isPending || patch.isPending || remove.isPending;
+  const busy = add.isPending || patch.isPending || remove.isPending || quick.isPending;
   const rows = syn.data ?? [];
   const zeroRows = zero.data ?? [];
   return (
@@ -116,8 +139,9 @@ export function SearchTermsCard() {
       <div className="space-y-3" data-testid="zero-result-terms">
         <h2 className="text-base font-semibold">Từ khoá tìm chưa ra ({ZERO_RESULT_DAYS} ngày)</h2>
         <p className="text-sm text-stone-600">
-          Cụm khách gõ mà ô tìm không ra món nào, nhiều lượt nhất trước (đã bỏ email, số điện thoại, chuỗi gõ bừa). &ldquo;Tạo từ đồng nghĩa&rdquo; điền
-          sẵn cụm vào ô bên dưới, bạn chỉ gõ thêm cụm tìm thay.
+          Cụm khách gõ mà ô tìm không ra món nào, nhiều lượt nhất trước (đã bỏ email, số điện thoại, chuỗi gõ bừa). Chạm cụm gợi ý &ldquo;→ …&rdquo; là
+          tạo từ đồng nghĩa ngay (gợi ý lấy từ cụm tìm phổ biến dự phòng bên dưới và cụm khách hay tìm ra hàng, khớp cả có dấu lẫn không dấu).
+          &ldquo;Tự gõ&rdquo; điền sẵn cụm vào ô bên dưới để bạn gõ cụm tìm thay khác.
         </p>
         {zero.isLoading ? (
           <ListSkeleton label="Đang tải từ khoá tìm chưa ra" rows={2} />
@@ -142,9 +166,23 @@ export function SearchTermsCard() {
                     {z.synonym.isActive ? '' : ' (đang tắt)'}
                   </span>
                 ) : (
-                  <button type="button" disabled={busy} onClick={() => prefill(z.term)} className={BTN_XS_SECONDARY}>
-                    Tạo từ đồng nghĩa
-                  </button>
+                  <span className="flex flex-wrap gap-2">
+                    {z.suggestions.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => quickAdd(z.term, s)}
+                        aria-label={`Tạo từ đồng nghĩa: "${z.term}" tìm thêm "${s}"`}
+                        className={BTN_XS_PRIMARY}
+                      >
+                        → {s}
+                      </button>
+                    ))}
+                    <button type="button" disabled={busy} onClick={() => prefill(z.term)} className={BTN_XS_SECONDARY}>
+                      {z.suggestions.length > 0 ? 'Tự gõ' : 'Tạo từ đồng nghĩa'}
+                    </button>
+                  </span>
                 )}
               </li>
             ))}

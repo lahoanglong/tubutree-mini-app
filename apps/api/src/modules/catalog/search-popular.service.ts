@@ -50,7 +50,7 @@ export function mergePopular(fromData: readonly string[], fallback: readonly unk
  * Mã ẩn danh và `resultsCount` do app gửi lên nên tự chúng không chặn được ai bơm cụm tuỳ ý: cụm chỉ được giữ khi mọi từ của nó có trong
  * tên một sản phẩm đang bán (cùng điều kiện công khai với `textMatchSql`).
  */
-export function popularSql(since: Date): Prisma.Sql {
+export function popularSql(since: Date, limit = POPULAR_MAX): Prisma.Sql {
   return Prisma.sql`
     SELECT g.k, g.display, g.people
     FROM (
@@ -82,7 +82,7 @@ export function popularSql(since: Date): Prisma.Sql {
         )
     )
     ORDER BY g.people DESC, g.hits DESC, g.k ASC
-    LIMIT ${POPULAR_MAX}`;
+    LIMIT ${limit}`;
 }
 
 @Injectable()
