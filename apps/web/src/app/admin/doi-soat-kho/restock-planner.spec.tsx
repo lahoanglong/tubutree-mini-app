@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useInsertionEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import StockReconcilePage from './page';
@@ -84,6 +84,35 @@ async function mount(opts: { url?: string; plan?: RestockPlanReport; access?: st
   return { c: r.container, calls: m.calls };
 }
 
+/**
+ * Bấm Link trong menu: Next dựng trang mới khi URL còn là trang cũ, rồi mới `pushState` ở `useInsertionEffect` của HistoryUpdater (pha commit).
+ * Thành phần này đứng cạnh trang để lặp lại đúng thứ tự đó trong jsdom.
+ */
+function NextHistoryUpdater({ url }: { url: string }) {
+  useInsertionEffect(() => {
+    window.history.pushState(null, '', url);
+  }, [url]);
+  return null;
+}
+
+async function navigateFromMenu(from: string, to: string) {
+  const m = mockFetch({
+    '/admin/restock-planner': { body: PLAN },
+    '/admin/pancake-reconcile': { body: RECONCILE },
+  });
+  vi.stubGlobal('fetch', m.fn);
+  window.history.replaceState(null, '', from);
+  const r = render(
+    <>
+      <NextHistoryUpdater url={to} />
+      <StockReconcilePage />
+    </>,
+  );
+  mounted.push(r);
+  await flush(8);
+  return { c: r.container, calls: m.calls };
+}
+
 const planCalls = (calls: { url: string }[]) => calls.filter((x) => x.url.includes('/admin/restock-planner?')).map((x) => x.url.split('?')[1]);
 
 describe('/admin/doi-soat-kho?tab=nhap-hang: Kế hoạch nhập hàng', () => {
@@ -108,10 +137,26 @@ describe('/admin/doi-soat-kho?tab=nhap-hang: Kế hoạch nhập hàng', () => {
     expect(low.textContent).toContain('Đại lý chờ 2');
     expect(low.querySelector('[data-restock-waiting]')).toBeNull();
     expect(c.querySelector('[data-sku="SLOW"]')!.textContent).toContain('Chưa bán trong 14 ngày');
-    expect(c.querySelector('[data-restock-formula]')!.textContent).toContain('khách chờ báo hàng về + đại lý đặt trước chưa có hàng − tồn bán được');
+    expect(c.querySelector('[data-restock-formula]')!.textContent).toContain('(trừ đơn đại lý)');
+    expect(c.querySelector('[data-restock-formula]')!.textContent).toContain('khách chờ báo hàng về + đại lý đặt trước chưa có hàng −');
   });
 
-  it('đổi tab: URL chỉ còn tab đang xem, mỗi bảng gọi đúng API của nó', async () => {
+  it('bấm "Kế hoạch nhập hàng" trong menu (Next đổi URL ở pha commit): mở đúng tab nhập hàng, URL giữ ?tab=nhap-hang', async () => {
+    const { c, calls } = await navigateFromMenu('/admin?tab=orders', '/admin/doi-soat-kho?tab=nhap-hang');
+    expect(c.querySelector('h1')!.textContent).toBe('Kế hoạch nhập hàng');
+    expect(window.location.search).toBe('?tab=nhap-hang');
+    expect(planCalls(calls)).toEqual(['days=30']);
+    expect(calls.some((x) => x.url.includes('/admin/pancake-reconcile'))).toBe(false);
+  });
+
+  it('link Giờ G "?flag=UNLINKED" bấm từ trang khác: bàn đối soát bật đúng chip, URL không bị xoá bộ lọc', async () => {
+    const { c } = await navigateFromMenu('/admin/gio-g', '/admin/doi-soat-kho?flag=UNLINKED');
+    expect(c.querySelector('h1')!.textContent).toBe('Đối soát tồn Pancake');
+    expect(byText(c, 'button', 'Chưa gắn Pancake')!.getAttribute('aria-pressed')).toBe('true');
+    expect(window.location.search).toBe('?flag=UNLINKED');
+  });
+
+  it('đổi tab: URL chỉ còn tab đang xem, mỗi bảng gọi đúng API của nó; quay lại đối soát thì bộ lọc cũ còn nguyên', async () => {
     const { c, calls } = await mount({ url: '/admin/doi-soat-kho?flag=DRIFT' });
     expect(c.querySelector('h1')!.textContent).toBe('Đối soát tồn Pancake');
     expect(planCalls(calls)).toEqual([]);
@@ -122,7 +167,8 @@ describe('/admin/doi-soat-kho?tab=nhap-hang: Kế hoạch nhập hàng', () => {
     expect(planCalls(calls)).toEqual(['days=30']);
     click(byText(c, 'button', 'Đối soát tồn'));
     await flush(8);
-    expect(window.location.search).toBe('');
+    expect(window.location.search).toBe('?flag=DRIFT');
+    expect(byText(c, 'button', 'Lệch tồn')!.getAttribute('aria-pressed')).toBe('true');
     expect(c.querySelector('h1')!.textContent).toBe('Đối soát tồn Pancake');
     expect(c.querySelector('[data-restock-plan]')).toBeNull();
   });

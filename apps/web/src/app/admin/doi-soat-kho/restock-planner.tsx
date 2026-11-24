@@ -113,8 +113,8 @@ export function RestockPlanner() {
         </Notice>
       )}
       <p className="text-xs text-stone-500" data-restock-formula>
-        Đề xuất = số bán {report?.windowDays ?? 14} ngày qua quy ra {days} ngày + khách chờ báo hàng về + đại lý đặt trước chưa có hàng − tồn bán được. Nhà
-        cung cấp lấy theo thương hiệu sản phẩm.
+        Đề xuất = số bán {report?.windowDays ?? 14} ngày qua (trừ đơn đại lý) quy ra {days} ngày + khách chờ báo hàng về + đại lý đặt trước chưa có hàng −
+        tồn bán được. Nhà cung cấp lấy theo thương hiệu sản phẩm; hàng của gian hàng đối tác không có ở đây.
       </p>
 
       {q.isLoading && <ListSkeleton label="Đang tải kế hoạch nhập hàng" rows={4} className="h-16" />}

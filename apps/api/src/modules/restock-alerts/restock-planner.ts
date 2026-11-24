@@ -31,7 +31,7 @@ export interface RestockPlanInput {
   supplier: string;
   /** Tồn bán được (`variations.stock`): đã trừ phần giữ chỗ cho đơn chưa đẩy Pancake. Có thể âm khi đã bán quá. */
   stock: number;
-  /** Số đơn vị đã bán trong cửa sổ tốc độ bán (đơn thật đã xác nhận trở đi, không tính quà tặng). */
+  /** Số đơn vị đã bán trong cửa sổ tốc độ bán (đơn thật đã xác nhận trở đi, không tính quà tặng và đơn đại lý). */
   sold: number;
   /** Số khách đang chờ chuông "Báo tôi khi có hàng" của biến thể (đăng ký chưa được báo). */
   waiting: number;

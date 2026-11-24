@@ -121,7 +121,7 @@ describe('plannedRows / buildRestockPlan', () => {
 describe('CSV đặt hàng nhà cung cấp', () => {
   it('năm cột đầu là phần gửi nhà cung cấp; số là số, SKU toàn số giữ số 0 đầu, ghi chú theo nhãn màn', () => {
     expect(RESTOCK_PO_CSV_HEADERS.slice(0, 5)).toEqual(['Nhà cung cấp', 'SKU', 'Sản phẩm', 'Phân loại', 'Số lượng đặt']);
-    expect(RESTOCK_PO_CSV_HEADERS).toContain('Bán 14 ngày');
+    expect(RESTOCK_PO_CSV_HEADERS).toContain('Bán 14 ngày (trừ đại lý)');
     const r = planRow(v('00123', { sold: 0, stock: 0, waiting: 3, backordered: 2 }), 30);
     expect(restockPoCsvRow(r)).toBe('Tubu Tree,"=""00123""",Nước giặt 00123,1L,5,0,0,0,3,2,Hết hàng · 3 khách chờ hàng về · Đại lý chờ 2\r\n');
     expect(restockReason(planRow(v('L', { sold: 28, stock: 10 }), 30))).toBe('Còn đủ bán 5 ngày');
@@ -167,7 +167,7 @@ describe('RestockPlannerService', () => {
     const svc = new RestockPlannerService({ variation: { findMany }, $queryRaw: queryRaw } as never);
     const out = await svc.inputs(NOW);
     expect(findMany).toHaveBeenCalledWith({ where: RESTOCK_PLAN_VARIATION_WHERE, select: RESTOCK_PLAN_VARIATION_SELECT, orderBy: { sku: 'asc' } });
-    expect(RESTOCK_PLAN_VARIATION_WHERE).toEqual({ isActive: true, product: { isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU' } });
+    expect(RESTOCK_PLAN_VARIATION_WHERE).toEqual({ isActive: true, product: { isActive: true, approvalStatus: 'APPROVED', storefrontId: null, fulfilment: 'TUBU' } });
     expect(JSON.stringify(RESTOCK_PLAN_VARIATION_SELECT)).not.toMatch(/pancake/i);
     expect(out).toEqual([
       { variationId: 'v1', productId: 'p1', productName: 'Nước giặt', variationName: '1L', sku: 'A', supplier: 'Tubu Tree', stock: 3, sold: 9, waiting: 0, backordered: 2 },
@@ -177,6 +177,7 @@ describe('RestockPlannerService', () => {
     const soldSql = queryRaw.mock.calls[0]!;
     const text = (soldSql[0] as TemplateStringsArray).join('?');
     expect(text).toMatch(/"isGift" = false/);
+    expect(text).toMatch(/o\."type" <> 'DEALER'/);
     expect(text).toMatch(/IN \('CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'\)/);
     const params = soldSql.slice(1);
     expect(params[0]).toEqual(new Date(NOW.getTime() - 14 * 86_400_000));
