@@ -72,6 +72,8 @@ function hoistApi(T: TerserAstApi): HoistApi {
 }
 
 const MANGLE_OPTIONS = { module: true, toplevel: true };
+/** Chunk là ES module nên chạy strict: `function` khai trong khối chỉ sống trong khối. Thiếu `module` thì terser gắn nó vào phạm vi cả hàm và đặt tên sai. */
+const SCOPE_OPTIONS = { module: true };
 const PRINT_OPTIONS = { ecma: 2020, comments: false };
 /** Chuỗi tên tệp: bản đồ preload của Vite và rào chunk lười (`scripts/ci/mini-lazy-chunks.cjs`) đọc nguyên chữ. */
 const FILE_NAME = /\.module\.js$|\.css$/;
@@ -102,7 +104,7 @@ export function hoistRepeatedStrings(T: TerserAstApi, code: string): { code: str
   const H = hoistApi(T);
   if (code.includes(PLACEHOLDER)) return { code, hoisted: 0 };
   const ast = H.parse(code);
-  ast.figure_out_scope({});
+  ast.figure_out_scope(SCOPE_OPTIONS);
   if (ast.uses_eval || ast.uses_with) return { code, hoisted: 0 };
 
   const uses = new Map<string, Node[]>();
@@ -137,7 +139,7 @@ export function hoistRepeatedStrings(T: TerserAstApi, code: string): { code: str
   ) as Toplevel;
   const first = out.body[leadingImports(out.body)] ?? out;
   out.body.splice(leadingImports(out.body), 0, H.make('AST_Const', { definitions: decls, start: first.start, end: first.start }));
-  out.figure_out_scope({});
+  out.figure_out_scope(SCOPE_OPTIONS);
   out.compute_char_frequency({});
   out.mangle_names(MANGLE_OPTIONS);
   const printed = out.print_to_string(PRINT_OPTIONS);
@@ -149,7 +151,7 @@ export function hoistRepeatedStrings(T: TerserAstApi, code: string): { code: str
 export function inlineHoisted(T: TerserAstApi, code: string): string {
   const H = hoistApi(T);
   const ast = H.parse(code);
-  ast.figure_out_scope({});
+  ast.figure_out_scope(SCOPE_OPTIONS);
   const at = leadingImports(ast.body);
   const decl = ast.body[at];
   if (!decl || decl.TYPE !== 'Const') throw new Error('không thấy khai báo hằng gom sau các import');
@@ -171,15 +173,16 @@ export function inlineHoisted(T: TerserAstApi, code: string): string {
   return out.print_to_string(PRINT_OPTIONS);
 }
 
-/** Mã in lại với mọi biến khai báo đổi thành số thứ tự xuất hiện (biến toàn cục giữ tên): hai chunk chỉ khác tên biến cục bộ cho cùng chuỗi. */
+/** Mã in lại với mọi biến khai báo và nhãn đổi thành số thứ tự xuất hiện (biến toàn cục giữ tên): hai chunk chỉ khác tên biến cục bộ cho cùng chuỗi. */
 export function canonicalCode(T: TerserAstApi, code: string): string {
   const H = hoistApi(T);
   const ast = H.parse(code);
-  ast.figure_out_scope({});
+  ast.figure_out_scope(SCOPE_OPTIONS);
   const ids = new Map<Def, number>();
   ast.walk(
     H.walker((node) => {
-      if (!H.is(node, 'AST_Symbol') || H.is(node, 'AST_Label') || H.is(node, 'AST_LabelRef')) return;
+      // Nhãn cũng đổi tên khi terser đặt lại tên (`thedef` của nhãn là chính nó, của chỗ nhảy tới là nhãn đó) nên chuẩn hoá luôn.
+      if (!H.is(node, 'AST_Symbol')) return;
       const def = node.thedef;
       if (!def || (def.global && def.undeclared) || ids.has(def)) return;
       ids.set(def, ids.size);

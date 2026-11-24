@@ -98,6 +98,18 @@ describe('build-hoist-strings', () => {
     expect(literalBytes('đ')).toBe(4);
   });
 
+  it('hàm khai trong khối chỉ sống trong khối (chunk là module nên strict) và nhãn vòng lặp không làm bước tự kiểm báo lệch', async () => {
+    const T = await loadTerserAst();
+    const code =
+      `const t=()=>"outer ${S}";function f(x){if(x){function t(){return"${S}"}return t()}return t()}` +
+      `function g(){l:for(const k of["${S}","${S}"]){for(;;){if(k)break l}}return"${S}"}` +
+      `export const result=[f(0),f(1),g(),"${S}"];`;
+    const out = hoistRepeatedStrings(T, code);
+    expect(out.hoisted).toBeGreaterThan(0);
+    expect(sameAfterInlining(T, code, out.code)).toBe(true);
+    expect(runApp({ 'app.js': out.code })).toBe(runApp({ 'app.js': code }));
+  });
+
   it('`sameAfterInlining` bắt được hằng gom bị biến cục bộ che (tham chiếu trỏ sang biến khác)', async () => {
     const T = await loadTerserAst();
     const before = `function f(a){return["${S}",a]}export{f};`;
