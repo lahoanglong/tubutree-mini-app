@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 import { createHmac } from 'crypto';
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page, type Route } from '@playwright/test';
+import { TUBU_TREE_MERCHANT } from '../../../packages/app-core/src/legal';
 
 /**
  * UAT quản trị vòng 2 ở hai khung 1440x900 và 768x1024, API và DB thật (chạy qua scripts/web-gate.sh, E2E_SCOPE=web).
@@ -375,8 +376,46 @@ const vnClock = (d: Date): string => {
 
 const CRON_REAL = ['PancakeSyncService.scheduledSync', 'ZnsStuckLogCron.sweepStuckZnsLogs', 'AffiliateService.dailyWalletTransfer', 'LoyaltyCron.recalcTiers'];
 
-/** Giá trị `company.legal_name` trước khi spec chạy (đọc một lần), để afterAll trả lại. */
-const LEGAL_NAME = { read: false, value: undefined as unknown };
+/** seedAll đã mở được DB: afterAll mới dọn (DB không tới được thì không thêm một lỗi thứ hai). */
+const SEEDED = { db: false };
+
+/**
+ * Ca 7 không ghi `company.*` vào DB gate dùng chung. Các khoá này đổi chân trang và trang chính sách mà spec khách chạy song song đang dựng
+ * (Next giữ bản dựng tới 1 giờ), và admin-all-tabs ghi tạm rồi trả lại chính chúng. Lưu thật qua API đã có ca "Thông tin cửa hàng" của
+ * admin-all-tabs kiểm. Ở đây, mọi PUT /admin/config của trang có khoá `company.*` được trả như API ({ ok, key, value }) và ghi vào một
+ * kho trong bộ nhớ, bắt đầu bằng chuỗi rỗng cho tên, mã số thuế và địa chỉ. GET /admin/config vẫn tới API thật, chỉ thay giá trị các khoá
+ * có trong kho, nên màn đọc lại đúng giá trị vừa "lưu" mà không phụ thuộc DB đang có gì. Route giữ tới hết ca (không gỡ giữa chừng), để một
+ * PUT đến muộn cũng không lọt tới API.
+ */
+async function fakeCompanyConfig(page: Page): Promise<{ key: string; value: unknown }[]> {
+  const saved: { key: string; value: unknown }[] = [];
+  const store = new Map<string, unknown>([
+    ['company.legal_name', ''],
+    ['company.tax_code', ''],
+    ['company.address', ''],
+  ]);
+  await page.route((url) => url.pathname.endsWith('/api/admin/config'), async (route: Route) => {
+    const req = route.request();
+    if (req.method() === 'PUT') {
+      const body = req.postDataJSON() as { key: string; value: unknown };
+      if (!body?.key?.startsWith('company.')) return route.fallback();
+      saved.push(body);
+      store.set(body.key, body.value);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': req.headers()['origin'] ?? '', 'access-control-allow-credentials': 'true' },
+        body: JSON.stringify({ ok: true, key: body.key, value: body.value }),
+      });
+    }
+    if (req.method() !== 'GET') return route.fallback();
+    const res = await route.fetch();
+    const rows: unknown = await res.json();
+    if (!Array.isArray(rows)) return route.fulfill({ response: res });
+    await route.fulfill({ response: res, json: rows.map((r: { key: string }) => (store.has(r.key) ? { ...r, value: store.get(r.key) } : r)) });
+  });
+  return saved;
+}
 
 /** Xoá mọi dòng spec tạo. Gọi cả ở afterAll: chiến dịch HOME_TOP còn chạy sẽ thành banner Trang chủ của các spec web khách chạy sau (lcp-priority-db đòi trang chủ không banner). */
 async function purgeW11(prisma: any): Promise<void> {
@@ -397,12 +436,8 @@ async function seedAll(): Promise<void> {
   CLOCK.at = Date.now();
   SEED.now = new Date(CLOCK.at);
   await withDb(async (prisma) => {
-    if (!LEGAL_NAME.read) {
-      LEGAL_NAME.value = (await prisma.systemConfig.findUnique({ where: { key: 'company.legal_name' } }))?.value;
-      LEGAL_NAME.read = true;
-    }
     await purgeW11(prisma);
-    await prisma.systemConfig.updateMany({ where: { key: 'company.legal_name' }, data: { value: '' } });
+    SEEDED.db = true;
 
     const user = (id: string, zalo: string, fullName: string, phone: string | null, refCode: string, role = 'CUSTOMER') =>
       prisma.user.upsert({
@@ -520,12 +555,8 @@ for (const frame of FRAMES) {
     });
 
     test.afterAll(async () => {
-      if (!LEGAL_NAME.read) return;
-      await withDb(async (prisma) => {
-        await purgeW11(prisma);
-        if (LEGAL_NAME.value === undefined) await prisma.systemConfig.deleteMany({ where: { key: 'company.legal_name' } });
-        else await prisma.systemConfig.updateMany({ where: { key: 'company.legal_name' }, data: { value: LEGAL_NAME.value } });
-      });
+      if (!SEEDED.db) return;
+      await withDb(purgeW11);
     });
 
     test('1. Tổng quan chỉ số: doanh thu, đơn mới nhất, mốc 00:30 và 23:30', async ({ page }) => {
@@ -981,6 +1012,7 @@ for (const frame of FRAMES) {
     test('7. Cấu hình: thẻ tính năng, thông tin cửa hàng, điểm danh, tìm khoá, JSON', async ({ page }) => {
       test.setTimeout(150_000);
       const w = watch(page);
+      const saved = await fakeCompanyConfig(page);
       await openAdmin(page);
       await gotoNav(page, 'Cấu hình');
       await expect(page.getByRole('heading', { name: 'Bật/tắt tính năng' })).toBeVisible();
@@ -988,7 +1020,7 @@ for (const frame of FRAMES) {
       await expectCleanScreen(page, 'cau-hinh');
       await shot(page, 'cau-hinh', 'tong-the');
 
-      // Thông tin cửa hàng.
+      // Thông tin cửa hàng (company.* đi qua kho giả của fakeCompanyConfig, không ghi DB gate).
       const shop = page.locator('[data-shop-info]');
       const legalName = shop.getByRole('textbox', { name: /Tên công ty/ });
       const saveShop = shop.getByRole('button', { name: 'Lưu thông tin cửa hàng' });
@@ -998,35 +1030,36 @@ for (const frame of FRAMES) {
       await expect(shop.getByText('Link phải bắt đầu bằng https:// và không có khoảng trắng.')).toBeVisible();
       await expect(saveShop).toBeDisabled();
       await paste(bct, '');
-      const savedLegalName = (value: string) =>
-        page.waitForResponse((r) => r.request().method() === 'PUT' && /\/admin\/config$/.test(new URL(r.url()).pathname)
-          && r.request().postDataJSON()?.key === 'company.legal_name' && r.request().postDataJSON()?.value === value);
-      // admin-all-tabs chạy song song ở worker khác có thể vừa lưu tên công ty, nên không giả định tên đang lưu là rỗng:
-      // chuỗi chỉ ký tự vô hình phải cư xử y như ô trống, và nếu lưu thì ghi chuỗi rỗng.
+      // Kho giả bắt đầu bằng chuỗi rỗng: ô trống không đổi gì nên nút Lưu khoá, và chuỗi chỉ ký tự vô hình phải y như ô trống.
       await paste(legalName, '');
-      const lockedWhenEmpty = await saveShop.isDisabled();
+      await expect(saveShop, 'tên công ty trống, đang lưu chuỗi rỗng: nút Lưu khoá').toBeDisabled();
       await paste(legalName, INVISIBLE_MIX);
-      if (lockedWhenEmpty) {
-        await expect(saveShop, 'tên công ty chỉ có ký tự vô hình: nút Lưu khoá như khi ô trống').toBeDisabled();
-      } else {
-        await expect(saveShop, 'tên công ty chỉ có ký tự vô hình: nút Lưu mở như khi ô trống').toBeEnabled();
-        const cleared = savedLegalName('');
-        await saveShop.click();
-        expect((await cleared).status(), 'tên công ty chỉ có ký tự vô hình: ghi chuỗi rỗng, không ghi ký tự vô hình').toBe(200);
-      }
-      await paste(legalName, 'Công ty TNHH W11 Thử Nghiệm');
-      const named = savedLegalName('Công ty TNHH W11 Thử Nghiệm');
+      await expect(saveShop, 'tên công ty chỉ có ký tự vô hình: nút Lưu khoá như khi ô trống').toBeDisabled();
+
+      const identity: [label: string, key: string, value: string][] = [
+        ['Tên công ty', 'company.legal_name', TUBU_TREE_MERCHANT.legalName],
+        ['Mã số thuế', 'company.tax_code', TUBU_TREE_MERCHANT.taxCode],
+        ['Địa chỉ trụ sở', 'company.address', TUBU_TREE_MERCHANT.address],
+      ];
+      for (const [label, , value] of identity) await paste(shop.getByRole('textbox', { name: new RegExp(`^${label}`) }), value);
       await saveShop.click();
-      expect((await named).status()).toBe(200);
+      await expect.poll(() => saved, { message: 'lưu định danh: ba PUT company.* đúng giá trị đã gõ' }).toEqual(identity.map(([, key, value]) => ({ key, value })));
       await expect(shop.getByRole('status').filter({ hasText: 'Đã lưu.' })).toBeVisible();
+      // Chờ màn đọc lại giá trị vừa lưu rồi mới dán tiếp: GET về giữa lúc dán (sau Ctrl+A, trước khi chèn chữ) đặt lại giá trị ô và bỏ vùng chọn,
+      // nên chữ dán bị nối vào sau tên cũ.
+      await expect(legalName, 'sau khi lưu, ô đọc lại tên vừa lưu').toHaveValue(TUBU_TREE_MERCHANT.legalName);
+      await paste(legalName, INVISIBLE_MIX);
+      await expect(saveShop, 'tên công ty đang có chữ, ô chỉ còn ký tự vô hình: nút Lưu mở như khi xoá trống').toBeEnabled();
+      await saveShop.click();
+      await expect.poll(() => saved.slice(identity.length), { message: 'chỉ ký tự vô hình: gửi chuỗi rỗng, không gửi ký tự vô hình' }).toEqual([{ key: 'company.legal_name', value: '' }]);
+      await expect(legalName, 'sau khi lưu chuỗi rỗng, ô đọc lại chuỗi rỗng').toHaveValue('');
       await paste(legalName, 'x'.repeat(2000));
       await saveShop.click();
-      const longRes = await Promise.race([
-        page.waitForResponse((r) => /\/admin\/config$/.test(new URL(r.url()).pathname) && r.request().method() === 'PUT').then((r) => r.status()),
-        shop.getByRole('alert').first().waitFor().then(() => -1),
-      ]);
-      note('cau-hinh', `tên công ty 2000 ký tự: ${longRes}`);
-      await paste(legalName, 'Công ty TNHH W11 Thử Nghiệm');
+      const sentBefore = identity.length + 1;
+      const alert = shop.getByRole('alert');
+      await expect.poll(async () => saved.length > sentBefore || (await alert.count()) > 0, { message: 'tên công ty 2000 ký tự: gửi đi hoặc báo lỗi' }).toBe(true);
+      const longValue = saved[sentBefore]?.value;
+      note('cau-hinh', `tên công ty 2000 ký tự: ${typeof longValue === 'string' ? `gửi ${longValue.length} ký tự (kho giả, không tới DB)` : `màn báo lỗi "${(await alert.first().innerText()).trim()}"`}`);
       await shot(page, 'cau-hinh', 'thong-tin-cua-hang');
 
       // Điểm Xanh: số điểm danh và trần tích điểm.
@@ -1054,7 +1087,7 @@ for (const frame of FRAMES) {
       await expect(page.getByText('JSON không hợp lệ')).toBeVisible();
       await expectCleanScreen(page, 'cau-hinh-json');
       await shot(page, 'cau-hinh', 'json-loi');
-      expectCleanWatch('cau-hinh', w, [{ status: 0, path: /\/admin\/config/, why: 'thử giá trị vô hình và quá dài' }]);
+      expectCleanWatch('cau-hinh', w);
     });
 
     test('8. Sức khoẻ hệ thống: việc nền, đồng bộ Pancake, ZNS, tin báo lỗi, đơn kẹt', async ({ page }) => {
