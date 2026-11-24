@@ -6,25 +6,28 @@ import { ToneBadge } from '@/components/admin/ui';
 import type { Tone } from '@/lib/recycling';
 import { rowFixLink, type HandoverBoard, type HandoverItem } from './golive-api';
 
-const STATE_LABEL: Record<HandoverItem['state'], string> = { configured: 'Đã cấu hình', pending: 'Chờ điền', host: 'Kiểm tay', optional: 'Tuỳ chọn' };
+const STATE_LABEL: Record<HandoverItem['state'], string> = { configured: 'Đã cấu hình', pending: 'Chờ điền', host: 'Kiểm tay', optional: 'Tuỳ chọn', later: 'Mở sau' };
 
 function stateTone(item: HandoverItem): Tone {
   if (item.state === 'configured') return 'success';
   if (item.state === 'host') return 'info';
-  if (item.state === 'optional') return 'neutral';
+  if (item.state === 'optional' || item.state === 'later') return 'neutral';
   return item.status === 'FAIL' ? 'danger' : 'warning';
 }
 
 /**
  * "Cấu hình bên thứ 3 chờ bàn giao Go-Live": khoá và quyết định người ngoài đội kỹ thuật phải đưa (chủ OA, chủ shop, Accesstrade, người trực
  * VPS), gom từ đúng các dòng vàng của bảng kiểm. Bộ đếm chỉ tính việc bắt buộc; việc API không kiểm được từ container hiện "Kiểm tay", việc chủ
- * quyết có làm hay không hiện "Tuỳ chọn". Chỉ có tên biến và đã điền hay chưa: API không trả giá trị khoá.
+ * quyết có làm hay không hiện "Tuỳ chọn", kênh ngày mở bán không dùng (ZaloPay, Accesstrade) nằm riêng ở nhóm "Tuỳ chọn (Mở sau)" cuối thẻ.
+ * Chỉ có tên biến và đã điền hay chưa: API không trả giá trị khoá.
  */
 export function HandoverCard({ board }: { board: HandoverBoard }) {
   const done = board.configured === board.total;
   const failed = board.items.some((i) => i.state === 'pending' && i.status === 'FAIL');
-  const host = board.items.filter((i) => i.state === 'host').length;
-  const optional = board.items.filter((i) => i.state === 'optional').length;
+  const launch = board.items.filter((i) => i.group !== 'later');
+  const later = board.items.filter((i) => i.group === 'later');
+  const host = launch.filter((i) => i.state === 'host').length;
+  const optional = launch.filter((i) => i.state === 'optional').length;
   const border = failed ? 'border-danger-fg' : done ? 'border-success-fg' : 'border-warning-fg';
   return (
     <article data-testid="gio-g-handover" className={`rounded-card border-l-4 bg-stone-0 p-3 shadow-card ${border}`}>
@@ -37,13 +40,27 @@ export function HandoverCard({ board }: { board: HandoverBoard }) {
       <p className="mt-1 text-xs text-stone-600">
         {host > 0 ? `${host} việc kiểm tay trên máy chủ, ` : ''}
         {optional > 0 ? `${optional} việc tuỳ chọn chủ quyết, ` : ''}
+        {later.length > 0 ? `${later.length} việc mở sau, ` : ''}
         không tính vào bộ đếm. Bấm từng việc để xem biến cần điền và cách lấy. Bảng chỉ hiện tên biến và đã điền hay chưa, không hiện giá trị khoá.
       </p>
       <ul className="mt-2 divide-y divide-stone-200">
-        {board.items.map((it) => (
+        {launch.map((it) => (
           <Row key={it.key} item={it} />
         ))}
       </ul>
+      {later.length > 0 ? (
+        <section data-testid="gio-g-handover-later" aria-labelledby="gio-g-handover-later-title" className="mt-3 border-t border-stone-200 pt-2">
+          <h4 id="gio-g-handover-later-title" className="text-xs font-semibold text-stone-900">
+            {board.laterTitle ?? 'Tuỳ chọn (Mở sau)'}
+          </h4>
+          <p className="mt-0.5 text-xs text-stone-600">Ngày mở bán thu tiền bằng chuyển khoản VietQR và COD nên chưa cần; điền khi chủ shop quyết bật.</p>
+          <ul className="mt-1 divide-y divide-stone-200">
+            {later.map((it) => (
+              <Row key={it.key} item={it} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </article>
   );
 }
