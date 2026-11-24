@@ -18,6 +18,7 @@ const cases: Case[] = [
   ['dealerTemplates', (h) => dealer.dealerTemplatesQuery(h), ['dealer-templates'], '/dealer/templates'],
   ['dealerOrders', (h) => dealer.dealerOrdersQuery(h), ['dealer-orders'], '/dealer/orders'],
   ['dealerCredit', (h) => dealer.dealerCreditQuery(h), ['dealer-credit'], '/dealer/credit-ledger'],
+  ['dealerLastMonthReorder', (h) => dealer.dealerLastMonthReorderQuery(h), ['dealer-last-month-reorder'], '/dealer/reorder-last-month'],
   ['dealerReport', (h) => dealer.dealerReportQuery(h), ['dealer-report'], '/dealer/quarterly-report'],
   ['dealerRewards', (h) => dealer.dealerRewardsQuery(h), ['dealer-rewards'], '/dealer/rewards'],
   ['adminStaff', (h) => staff.adminStaffQuery(h), ['admin-staff'], '/admin/staff'],

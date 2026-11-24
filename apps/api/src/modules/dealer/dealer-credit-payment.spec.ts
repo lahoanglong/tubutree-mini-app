@@ -183,7 +183,9 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
 
     await svc.adminRecordCreditPayment('kt1', 'd1', 200_000, { reportId: 'rp1', byStaff: true });
 
-    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).toHaveBeenCalledTimes(1);
+    // Một transaction Serializable ghi sổ; sổ trả về đọc trong một transaction REPEATABLE READ riêng.
+    const txCalls = (prisma as unknown as { $transaction: jest.Mock }).$transaction.mock.calls as [unknown, { isolationLevel?: string }?][];
+    expect(txCalls.map(([, o]) => o?.isolationLevel)).toEqual(['Serializable', 'RepeatableRead']);
     expect(reportUpdateMany).toHaveBeenCalledWith({
       where: { id: 'rp1', userId: 'd1', status: 'REPORTED' },
       data: expect.objectContaining({ status: 'RECORDED', resolvedBy: 'kt1', resolvedAt: expect.any(Date) }),
@@ -423,9 +425,11 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
 
   it('race P2002 khi CÓ Idempotency-Key (2 request cùng key qua pre-check, request thua ăn unique) → trả lại sổ công nợ hiện tại', async () => {
     const { svc, prisma } = build({ debt: 500_000, existingClaim: null });
+    // Transaction ghi sổ thua unique; lần đọc sổ công nợ sau đó (REPEATABLE READ) chạy bình thường.
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
-      .mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+      .mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }))
+      .mockImplementation((cb: (tx: unknown) => unknown) => cb(prisma));
     await expect(svc.adminRecordCreditPayment('admin1', 'd1', 100_000, { idempotencyKey: 'key-2' })).resolves.toMatchObject(
       { balance: expect.any(Number) },
     );

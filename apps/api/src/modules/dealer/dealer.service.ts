@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -49,6 +50,15 @@ import {
 } from '@tubutree/shared-types';
 import { DEALER_APPLICATION_LIST_SELECT } from './dealer-application-select';
 import { nextTierOf, tierView, vnMonthBounds } from './dealer-tier-progress';
+import {
+  aggregateReorderLines,
+  creditAfterOrder,
+  LAST_MONTH_REORDER_MAX_LINES,
+  LAST_MONTH_REORDER_MAX_ORDERS,
+  LAST_MONTH_REORDER_STATUSES,
+  vnPreviousMonthBounds,
+  type LastMonthReorderBlock,
+} from './dealer-last-month-reorder';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
@@ -270,7 +280,7 @@ export class DealerService {
     });
   }
 
-  async placeOrder(userId: string, dto: DealerOrderDto, idempotencyKey?: string) {
+  async placeOrder(userId: string, dto: DealerOrderDto, idempotencyKey?: string, expected?: { total: number; month: string }) {
     const { discountPct, tier } = await this.dealerContext(userId);
     if (dto.invoiceRequest) assertInvoiceComplete(dto.invoiceRequest);
     // Chuẩn hoá key rỗng/khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder):
@@ -339,6 +349,8 @@ export class DealerService {
     }
     const shippingFee = goodsNet >= rules.freeShipFrom ? 0 : rules.feeBelow;
     const total = goodsNet + shippingFee;
+    // Đặt lại đơn tháng trước: giá, bậc hoặc phí giao đổi giữa lúc khớp dấu bản xem trước và lúc đọc lại ở đây thì không ghi nợ số khác.
+    if (expected && total !== expected.total) throw DealerService.reorderChanged(expected.month, total);
 
     // Kho Pancake cần tên, SĐT, địa chỉ người nhận — trước đây đơn đại lý chỉ có ghi chú "giao theo hợp đồng".
     const shippingAddress = await resolveDealerRecipient(this.prisma, userId, dto.addressId);
@@ -548,6 +560,183 @@ export class DealerService {
     }
   }
 
+  /**
+   * "Đặt lại đơn tháng trước": gộp các đơn sỉ đã nhận của tháng liền trước (giờ VN) thành một đơn theo bảng giá hôm nay, rồi kiểm trước
+   * hạn mức công nợ còn lại. Chỉ là bản xem trước: đơn chỉ tạo ở `placeLastMonthReorder`, và `placeOrder` vẫn kiểm lại hạn mức trong
+   * transaction Serializable. `quote` là dấu của các dòng và tiền: lệnh đặt phải gửi lại đúng dấu này, nên giá hay tồn đổi giữa lúc xem và
+   * lúc bấm không tạo đơn công nợ có số tiền khác số đại lý đã thấy (`placeOrder` so lại tổng). Tồn đổi chỉ dời phần giao sau, không đổi tiền.
+   */
+  async lastMonthReorder(userId: string, now: Date = new Date()) {
+    const { discountPct, tier } = await this.dealerContext(userId);
+    const month = vnPreviousMonthBounds(now);
+    const orders = await this.prisma.order.findMany({
+      where: { userId, type: 'DEALER', status: { in: [...LAST_MONTH_REORDER_STATUSES] }, createdAt: { gte: month.start, lt: month.end } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: LAST_MONTH_REORDER_MAX_ORDERS,
+      select: {
+        code: true,
+        items: { select: { id: true, variationId: true, quantity: true, isGift: true, productName: true, variationName: true } },
+      },
+    });
+    const itemIds = orders.flatMap((o) => o.items.map((it) => it.id));
+    const returned = itemIds.length
+      ? await this.prisma.returnRequestItem.findMany({
+          where: { orderItemId: { in: itemIds }, quantity: { gt: 0 }, returnRequest: { status: 'APPROVED' } },
+          select: { orderItemId: true, quantity: true },
+        })
+      : [];
+    const returnedQty = new Map<string, number>();
+    for (const r of returned) returnedQty.set(r.orderItemId, (returnedQty.get(r.orderItemId) ?? 0) + r.quantity);
+    const source = aggregateReorderLines(orders, returnedQty);
+
+    // Cùng điều kiện với bảng giá: món ngừng bán, hàng đối tác hay không còn giao qua kho Tubu thì bỏ và nêu tên.
+    const variations = source.length
+      ? await this.prisma.variation.findMany({
+          where: { AND: [{ id: { in: source.map((l) => l.variationId) } }, SELLABLE_PANCAKE_VARIATION_WHERE, TUBU_OWNED_VARIATION_WHERE] },
+          select: { id: true, sku: true, retailPrice: true, dealerPrices: true, stock: true },
+        })
+      : [];
+    const vmap = new Map(variations.map((v) => [v.id, v]));
+    const skipped: string[] = [];
+    const lines: { variationId: string; sku: string; name: string; quantity: number; unitPrice: number; lineTotal: number; stock: number }[] = [];
+    for (const l of source) {
+      const v = vmap.get(l.variationId);
+      if (!v) {
+        if (!skipped.includes(l.name)) skipped.push(l.name);
+        continue;
+      }
+      // Cùng số `placeOrder` tính: tiền hàng phải trả = giá đại lý × số lượng (dòng giảm của bậc tách riêng trên đơn).
+      const unitPrice = this.unitPrice(v, tier?.id, discountPct);
+      lines.push({ variationId: v.id, sku: v.sku, name: l.name, quantity: l.quantity, unitPrice, lineTotal: unitPrice * l.quantity, stock: v.stock });
+    }
+
+    const rules = await this.orderRules();
+    const goodsTotal = lines.reduce((s, l) => s + l.lineTotal, 0);
+    const shippingFee = lines.length === 0 || goodsTotal >= rules.freeShipFrom ? 0 : rules.feeBelow;
+    const total = goodsTotal + shippingFee;
+    const creditLimit = tier?.creditLimit ?? 0;
+    const quote = createHash('sha256')
+      .update(JSON.stringify([month.label, lines.map((l) => [l.variationId, l.quantity, l.unitPrice]), shippingFee, total]))
+      .digest('hex')
+      .slice(0, 32);
+
+    // Dư nợ và khoản quá hạn đọc chung một snapshot, như sổ công nợ.
+    const termDays = DealerService.netDaysOf(tier?.paymentTerms);
+    const { debt, overdue } = await this.prisma.$transaction(
+      async (tx) => {
+        const agg = await tx.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
+        let late: string | null = null;
+        if (rules.blockWhenOverdue && lines.length > 0) {
+          try {
+            await this.assertNoOverdueCredit(tx, userId, termDays, tier?.paymentTerms, now);
+          } catch (e) {
+            if (!(e instanceof BadRequestException)) throw e;
+            late = (e.getResponse() as { message?: string }).message ?? e.message;
+          }
+        }
+        return { debt: agg._sum.delta ?? 0, overdue: late };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+    const credit = creditAfterOrder(creditLimit, debt, total);
+
+    const label = month.label;
+    const block = ((): { code: LastMonthReorderBlock; message: string } | null => {
+      if (orders.length === 0) return { code: 'NO_ORDERS', message: `Tháng ${label} bạn chưa có đơn sỉ nào đã nhận để đặt lại.` };
+      if (lines.length === 0) return { code: 'NOTHING_SELLABLE', message: `Các mặt hàng của đơn tháng ${label} không còn bán sỉ.` };
+      if (lines.length > LAST_MONTH_REORDER_MAX_LINES) {
+        return {
+          code: 'TOO_MANY_LINES',
+          message: `Đơn tháng ${label} có ${lines.length} mặt hàng, một đơn đại lý tối đa ${LAST_MONTH_REORDER_MAX_LINES} mặt hàng. Bạn tách thành nhiều đơn ở bảng giá nhé.`,
+        };
+      }
+      if (goodsTotal > DEALER_ORDER_TOTAL_MAX) {
+        return {
+          code: 'OVER_MAX',
+          message: `Tổng đơn ${vnd(goodsTotal)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — bạn tách thành nhiều đơn nhé.`,
+        };
+      }
+      if (rules.minOrder > 0 && goodsTotal < rules.minOrder) {
+        return {
+          code: 'BELOW_MIN',
+          message: `Đơn đại lý tối thiểu ${vnd(rules.minOrder)} tiền hàng, đơn tháng ${label} còn ${vnd(goodsTotal)}. Bạn thêm hàng ở bảng giá nhé.`,
+        };
+      }
+      if (!tier) {
+        return {
+          code: 'NO_TIER',
+          message: 'Tài khoản đại lý chưa được gán bậc nên chưa có hạn mức công nợ. Bạn chọn thanh toán trả trước hoặc liên hệ Tubu Tree để được gán bậc nhé.',
+        };
+      }
+      if (overdue) return { code: 'OVERDUE', message: overdue };
+      if (credit.after < 0) {
+        return {
+          code: 'OVER_LIMIT',
+          message: `Đơn ${vnd(total)} vượt hạn mức công nợ còn lại ${vnd(credit.available)}. Bạn giảm số lượng hoặc chọn Trả trước trong giỏ nhé.`,
+        };
+      }
+      return null;
+    })();
+
+    return {
+      month: label,
+      orderCodes: orders.map((o) => o.code),
+      lines,
+      skipped,
+      goodsTotal,
+      shippingFee,
+      total,
+      credit,
+      quote,
+      block,
+    };
+  }
+
+  /**
+   * Đặt lại đơn tháng trước bằng một chạm, ghi công nợ. Bắt buộc Idempotency-Key: bấm đúp hay mạng thử lại trả đơn đã tạo, không ghi nợ hai
+   * lần. Dấu `quote` khác bản xem trước (giá, bậc, phí giao đã đổi) thì 409 để đại lý xem số mới; bị chặn (hạn mức, quá hạn, tối thiểu) thì
+   * 400 `DEALER_REORDER_<mã>`. Đơn tạo qua `placeOrder`, nơi hạn mức được kiểm lại trong transaction Serializable.
+   */
+  async placeLastMonthReorder(userId: string, quote: string, idempotencyKey: string | undefined, now: Date = new Date()) {
+    const key = idempotencyKey?.trim() || undefined;
+    if (!key) throw new BadRequestException('Thiếu Idempotency-Key, bạn tải lại trang rồi thử lại nhé.');
+    const replay = async () => {
+      const existing = await this.prisma.order.findUnique({ where: { idempotencyKey: key } });
+      if (existing && existing.userId === userId) return this.orderForDealer(existing.id);
+      if (existing) throw new BadRequestException(KEY_IN_USE_MESSAGE);
+      return null;
+    };
+    // Lần trước đã tạo đơn (mạng báo lỗi): trả lại đơn đó trước khi xem lại, vì đơn vừa ghi nợ sẽ làm bản xem mới báo vượt hạn mức.
+    const earlier = await replay();
+    if (earlier) return earlier;
+
+    try {
+      const preview = await this.lastMonthReorder(userId, now);
+      if (preview.block) throw new BadRequestException({ code: `DEALER_REORDER_${preview.block.code}`, message: preview.block.message });
+      if (preview.quote !== quote) throw DealerService.reorderChanged(preview.month, preview.total);
+      return await this.placeOrder(
+        userId,
+        { items: preview.lines.map((l) => ({ variationId: l.variationId, quantity: l.quantity })), paymentMethod: 'CREDIT' },
+        key,
+        { total: preview.total, month: preview.month },
+      );
+    } catch (e) {
+      // Lần gửi lại cùng khoá chạy song song với lần đầu: lần đầu commit giữa chừng thì lần này thấy nợ mới và bị chặn, nhưng đơn đã có.
+      if (e instanceof BadRequestException || e instanceof ConflictException) {
+        const late = await replay();
+        if (late) return late;
+      }
+      throw e;
+    }
+  }
+
+  private static reorderChanged(month: string, total: number) {
+    return new ConflictException({
+      code: 'DEALER_REORDER_CHANGED',
+      message: `Giá hoặc phí giao của đơn tháng ${month} vừa đổi, tổng mới là ${vnd(total)}. Bạn xem lại rồi đặt nhé.`,
+    });
+  }
+
   private async orderForDealer(id: string) {
     return forBuyer(await this.prisma.order.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
@@ -564,11 +753,16 @@ export class DealerService {
 
   async creditLedger(userId: string) {
     // `balance` là tổng cả sổ; `entries` chỉ 200 dòng gần nhất — cộng từ entries thì đại lý quá 200 dòng hiện sai dư nợ.
-    const [entries, agg] = await Promise.all([
-      this.prisma.dealerCreditLedger.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200 }),
-      this.prisma.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } }),
-    ]);
-    return { balance: agg._sum.delta ?? 0, entries };
+    // Hai câu đọc chung một snapshot REPEATABLE READ: đọc rời nhau thì một khoản admin ghi giữa hai câu chỉ có trong `balance`, và cột
+    // "Dư nợ sau giao dịch" (web tính lùi từ `balance` qua `entries`) lệch đúng khoản đó. Giao dịch chỉ đọc nên không bao giờ lỗi tuần tự hoá.
+    return this.prisma.$transaction(
+      async (tx) => {
+        const entries = await tx.dealerCreditLedger.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 200 });
+        const agg = await tx.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
+        return { balance: agg._sum.delta ?? 0, entries };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
   }
 
   /**
@@ -587,7 +781,8 @@ export class DealerService {
     // thật được admin re-check tại lúc duyệt (adminRecordCreditPayment), vì dư nợ có thể đổi giữa
     // lúc báo và lúc admin xử lý (đại lý vừa đặt đơn ghi nợ mới, hoặc một khoản báo khác vừa được
     // admin duyệt trước).
-    const { balance } = await this.creditLedger(userId);
+    const agg = await this.prisma.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
+    const balance = agg._sum.delta ?? 0;
     if (amount > balance) {
       throw new BadRequestException(`Số tiền báo (${vnd(amount)}) vượt dư nợ hiện tại của bạn (${vnd(balance)}).`);
     }

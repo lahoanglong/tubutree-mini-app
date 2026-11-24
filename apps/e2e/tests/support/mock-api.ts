@@ -485,6 +485,19 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       });
       // Bảng giá đại lý có món trong giỏ hỏi thông tin xuất hoá đơn VAT đã lưu; mặc định chưa lưu và hồ sơ đăng ký trống.
       api.fallback('GET', '/dealer/invoice-profile', { taxCode: '', companyName: '', address: '', email: '', saved: false });
+      // Tab Bảng giá của /dai-ly hỏi bản xem trước "Đặt lại đơn tháng trước"; mặc định tháng trước không có đơn nào nên không có nút đặt lại.
+      api.fallback('GET', '/dealer/reorder-last-month', {
+        month: '10/2026',
+        orderCodes: [],
+        lines: [],
+        skipped: [],
+        goodsTotal: 0,
+        shippingFee: 0,
+        total: 0,
+        credit: { limit: 0, debt: 0, available: 0, after: 0 },
+        quote: '00000000000000000000000000000000',
+        block: { code: 'NO_ORDERS', message: 'Tháng 10/2026 bạn chưa có đơn sỉ nào đã nhận để đặt lại.' },
+      });
       // Lối vào Chọn Chuẩn Xanh (Chơi hôm nay, Tư vấn, Trợ lý đang nghỉ, giỏ trống) hỏi cờ game.matcher_enabled; mặc định tắt như PROD nên màn vẽ như trước.
       api.fallback('GET', '/game/matcher/status', { enabled: false });
       // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.

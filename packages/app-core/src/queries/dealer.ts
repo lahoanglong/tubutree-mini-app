@@ -2,6 +2,7 @@ import type { HttpClient } from '../http';
 import {
   getCreditLedger,
   getDealerInvoiceProfile,
+  getDealerLastMonthReorder,
   getDealerMe,
   getDealerOrders,
   getDealerRewards,
@@ -46,4 +47,8 @@ export const dealerInvoiceProfileQuery = (http: HttpClient) => ({
 export const dealerRewardsQuery = (http: HttpClient) => ({
   queryKey: ['dealer-rewards'] as const,
   queryFn: () => getDealerRewards(http),
+});
+export const dealerLastMonthReorderQuery = (http: HttpClient) => ({
+  queryKey: ['dealer-last-month-reorder'] as const,
+  queryFn: () => getDealerLastMonthReorder(http),
 });

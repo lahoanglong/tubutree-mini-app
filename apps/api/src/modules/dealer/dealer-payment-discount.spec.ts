@@ -202,8 +202,9 @@ describe('DealerService.adminRecordCreditPayment — chiết khấu thanh toán 
         findMany: jest.fn().mockResolvedValue([]),
       },
     };
-    const transaction = jest.fn((cb: (t: unknown) => unknown, o?: unknown) => {
-      txOptions = o;
+    // Sổ công nợ trả về sau khi ghi đọc trong một transaction REPEATABLE READ riêng: chỉ ghi lại tuỳ chọn của transaction ghi sổ.
+    const transaction = jest.fn((cb: (t: unknown) => unknown, o?: { isolationLevel?: string }) => {
+      if (o?.isolationLevel !== 'RepeatableRead') txOptions = o;
       return cb(prisma);
     });
     prisma.$transaction = transaction;
@@ -223,7 +224,7 @@ describe('DealerService.adminRecordCreditPayment — chiết khấu thanh toán 
     expect(discount!.note).toContain('Chi phí tài chính (TK 635)');
     expect(discount!.note).toContain('Trả sớm 10 ngày theo hợp đồng');
     expect(100_000 + payment!.delta + discount!.delta).toBe(0);
-    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(transaction.mock.calls.filter(([, o]) => o?.isolationLevel === 'Serializable')).toHaveLength(1);
     expect(txOptions()).toEqual({ isolationLevel: 'Serializable' });
   });
 
