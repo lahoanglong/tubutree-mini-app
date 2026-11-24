@@ -116,6 +116,11 @@ test.describe('Web 390: phễu mua gửi đủ sự kiện', () => {
     const posted = api.waitForCall('POST', '/cart/items');
     await add.click();
     await posted;
+    // Xả hàng đợi trước khi rời trang sản phẩm: beacon gửi lúc pagehide của page.goto có thể bị Playwright huỷ (net::ERR_ABORTED)
+    // trước khi route của mock nhận, làm mất product_viewed + pdp_action của lần đã đăng nhập (đỏ khi chạy cả project, máy tải cao).
+    const pdpFlushed = api.waitForCall('POST', '/events/web/beacon');
+    await flushEvents(page);
+    await pdpFlushed;
 
     // Giỏ → Thanh toán (từ giỏ, đủ món) → Đặt hàng.
     await page.goto('/gio-hang');
