@@ -14,11 +14,11 @@ import { actionErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
 import { guestLookupOrder } from '@/lib/guest-checkout/api';
 import { guestCopy } from '@/lib/guest-checkout/copy';
+import { GUEST_ORDER_CODE_RE } from '@/lib/guest-checkout/support';
 import { orderDetailHref } from '@/lib/order-view';
 import { loginHref } from '@/lib/return-to';
+import { GuestSupportLink } from './guest-support-link';
 
-/** Cùng khuôn với `GUEST_LOOKUP_CODE_RE` của API: mã đơn in trên đơn hàng. */
-const ORDER_CODE_RE = /^[A-Z0-9-]{4,40}$/;
 const CODE_MAX = 40;
 
 /** Mã đơn khách gõ hay dán từ tin nhắn: bỏ mọi khoảng trắng, dấu # ở đầu và viết hoa (API chuẩn hoá y hệt). */
@@ -38,6 +38,9 @@ function lookupErrorText(error: unknown): string {
 /** Mã + SĐT khớp nhưng đơn đã về một tài khoản Zalo: máy chủ không trả bản xem, khách đăng nhập để xem trong Đơn của tôi. */
 const isClaimed = (error: unknown): boolean => error instanceof ApiError && error.status === 403 && error.code === GUEST_ORDER_CLAIMED;
 
+/** Không tìm thấy hay chạm trần tra cứu: khách kẹt lại ở đây, nên có lối nhắn Zalo cho Tubu kèm mã vừa gõ (không kèm SĐT). */
+const needsSupport = (error: unknown): boolean => error instanceof ApiError && (error.status === 404 || error.status === 429);
+
 /**
  * Biểu mẫu tra đơn đặt không đăng nhập: mã đơn + SĐT đặt hàng, một nút. Khớp thì sang trang theo dõi bằng khoá tạm máy chủ cấp (đơn chuyển
  * khoản đang chờ tiền thì sang thẳng trang QR); bản xem trả về được đặt sẵn vào bộ đệm nên trang theo dõi hiện ngay, không gọi lại lần hai.
@@ -55,7 +58,7 @@ export function GuestOrderLookup({ initialCode }: { initialCode: string }) {
 
   const orderCode = normalizeOrderCode(code);
   const normalizedPhone = parseVnContactPhone(phone);
-  const codeError = attempted && !ORDER_CODE_RE.test(orderCode) ? guestCopy('lookupCodeInvalid') : undefined;
+  const codeError = attempted && !GUEST_ORDER_CODE_RE.test(orderCode) ? guestCopy('lookupCodeInvalid') : undefined;
   const phoneError = attempted && !normalizedPhone ? guestCopy('phoneInvalid') : undefined;
 
   const lookup = useMutation({
@@ -76,7 +79,7 @@ export function GuestOrderLookup({ initialCode }: { initialCode: string }) {
     e.preventDefault();
     if (busy) return;
     setAttempted(true);
-    if (!ORDER_CODE_RE.test(orderCode)) codeRef.current?.focus();
+    if (!GUEST_ORDER_CODE_RE.test(orderCode)) codeRef.current?.focus();
     else if (!normalizedPhone) phoneRef.current?.focus();
     else lookup.mutate({ orderCode, phone: normalizedPhone });
   };
@@ -145,9 +148,12 @@ export function GuestOrderLookup({ initialCode }: { initialCode: string }) {
                 </Link>
               </div>
             ) : (
-              <p role="alert" data-testid="guest-lookup-error" className={ui.error}>
-                {lookupErrorText(lookup.error)}
-              </p>
+              <div>
+                <p role="alert" data-testid="guest-lookup-error" className={ui.error}>
+                  {lookupErrorText(lookup.error)}
+                </p>
+                {needsSupport(lookup.error) && lookup.variables && <GuestSupportLink code={lookup.variables.orderCode} className="mt-2" />}
+              </div>
             ))}
           {/* Bận thì aria-disabled + ô chỉ đọc, không `disabled`: Chromium thả focus về body, tra lỗi xong khách phải chạm lại vào ô. */}
           <button type="submit" aria-busy={lookup.isPending || undefined} aria-disabled={busy || undefined} data-testid="guest-lookup-submit" className={`${ui.btnPrimary} w-full`}>

@@ -61,6 +61,13 @@ export const GUEST_CHECKOUT_COPY = {
   reorderNotAdded: 'chưa thêm được',
   reorderNone: 'Các món trong đơn này đều đã hết hàng hoặc ngừng bán.',
   reorderFailed: 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
+  milestonePlaced: 'Đã đặt',
+  milestoneConfirmed: 'Đã xác nhận',
+  milestoneShipping: 'Đang giao',
+  milestoneDone: 'Hoàn tất',
+  supportZalo: 'Nhắn Zalo cho Tubu về đơn này',
+  supportCopied: 'Đã chép “{text}”. Bạn dán vào khung chat Zalo nhé.',
+  supportCopyFailed: 'Bạn nhắn kèm mã đơn {code} để Tubu tra nhanh nhé.',
 } as const;
 
 export type GuestCopyKey = keyof typeof GUEST_CHECKOUT_COPY;
@@ -123,6 +130,13 @@ export const GUEST_CHECKOUT_COPY_BUDGET: Record<GuestCopyKey, number | null> = {
   reorderNotAdded: 16,
   reorderNone: 64,
   reorderFailed: 48,
+  milestonePlaced: 14,
+  milestoneConfirmed: 14,
+  milestoneShipping: 14,
+  milestoneDone: 10,
+  supportZalo: 32,
+  supportCopied: null,
+  supportCopyFailed: null,
 };
 
 export function guestCopy(key: GuestCopyKey, vars: Record<string, string | number> = {}): string {

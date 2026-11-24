@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Check, Copy } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { COD_SWITCH_DONE } from '@tubutree/app-core/bank-payment-copy';
-import { buildOrderTimelineSteps, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { CodSwitchAction } from '@/components/orders/cod-switch-action';
 import { GuestReorderNoteBox } from '@/components/orders/guest-reorder-note';
 import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
@@ -26,9 +26,11 @@ import { loginHref } from '@/lib/return-to';
 import { guestReorder, guestSwitchToCod, guestTrackOrder } from '@/lib/guest-checkout/api';
 import { guestCopy } from '@/lib/guest-checkout/copy';
 import { useGuestOrderClaim } from '@/lib/guest-checkout/claim';
+import { guestOrderMilestones } from '@/lib/guest-checkout/milestones';
 import { guestBankHref, guestTrackHref, hashTrackingKey, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { addReorderLines, saveGuestReorderNote, type GuestReorderNote } from '@/lib/guest-cart/reorder';
+import { GuestSupportLink } from '../guest-support-link';
 
 function readCode(raw: string | undefined): string {
   try {
@@ -51,7 +53,8 @@ function useTrackingKey(code: string): string | null | undefined {
 }
 
 /**
- * Theo dõi đơn đặt không đăng nhập (`/don/<mã>#k=<khoá>`): trạng thái, món, tiền, SĐT che 4 số giữa, chỉ phường và tỉnh. Sai mã, sai khoá
+ * Theo dõi đơn đặt không đăng nhập (`/don/<mã>#k=<khoá>`): trạng thái kèm các mốc có giờ (Đã đặt, Đã xác nhận, Đang giao, Hoàn tất), món, tiền,
+ * SĐT che 4 số giữa, chỉ phường và tỉnh, nút nhắn Zalo cho Tubu chép sẵn mã đơn (không SĐT, không khoá). Sai mã, sai khoá
  * hay đường dẫn hết hạn đều ra cùng một câu. Khách đăng nhập Zalo trên trình duyệt này thì đơn về tài khoản và trang dẫn sang Đơn của tôi.
  */
 export default function GuestOrderPage() {
@@ -99,7 +102,7 @@ export default function GuestOrderPage() {
       </p>
     );
   } else {
-    const steps = buildOrderTimelineSteps(o.status, orderTimelineStamps(o));
+    const steps = guestOrderMilestones(o);
     const items: CheckoutLineView[] = o.items.map((it, i) => ({
       id: `${i}`,
       productName: it.isGift ? `${it.productName} (quà 0đ)` : it.productName,
@@ -130,7 +133,7 @@ export default function GuestOrderPage() {
             <span className="text-caption tabular-nums text-[color:var(--color-text-tertiary)]">{o.code}</span>
           </div>
           <div className="mt-3">
-            <OrderTimelineTracker steps={steps} />
+            <OrderTimelineTracker steps={steps} layout="journey" />
           </div>
           {awaitingTransfer && key && (
             <Link href={guestBankHref(o.code, key)} className={`mt-3 w-full ${ui.btnPrimary}`}>
@@ -188,6 +191,13 @@ export default function GuestOrderPage() {
             </p>
           )}
           <p className="text-caption text-[color:var(--color-text-secondary)]">{guestCopy('placedNote')}</p>
+        </section>
+
+        <section className={`p-4 ${ui.card} ${mini.band}`} aria-labelledby="guest-order-support">
+          <h2 id="guest-order-support" className={`${ui.sectionTitle} ${mini.sectionLabel}`}>
+            {fillCopy('support.title')}
+          </h2>
+          <GuestSupportLink code={o.code} className="mt-3" />
         </section>
       </div>
     );

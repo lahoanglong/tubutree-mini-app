@@ -18,13 +18,17 @@ async function copyLink(url: string): Promise<boolean> {
 }
 
 /**
- * Cầu nối nền tảng cho web. `oaId` mặc định lấy từ NEXT_PUBLIC_ZALO_OA_ID (phải đọc dạng literal để Next nhúng lúc build);
- * trống hoặc có ký tự lạ thì OA coi như chưa cấu hình, để id không dựng ra URL sai.
+ * Trang chat Zalo OA của Tubu (`https://zalo.me/<id>`). `oaId` mặc định lấy từ NEXT_PUBLIC_ZALO_OA_ID (phải đọc dạng literal để Next nhúng lúc build);
+ * trống hoặc có ký tự lạ thì OA coi như chưa cấu hình (null), để id không dựng ra URL sai.
  */
+export function zaloOaChatUrl(oaId: string = process.env.NEXT_PUBLIC_ZALO_OA_ID ?? ''): string | null {
+  const id = oaId.trim();
+  return OA_ID_PATTERN.test(id) ? `https://zalo.me/${id}` : null;
+}
+
+/** Cầu nối nền tảng cho web; OA theo `zaloOaChatUrl`. */
 export function createWebPlatformBridge(opts: { oaId?: string } = {}): PlatformBridge {
-  const rawOaId = opts.oaId ?? process.env.NEXT_PUBLIC_ZALO_OA_ID ?? '';
-  const oaId = rawOaId.trim();
-  const oaUrl = OA_ID_PATTERN.test(oaId) ? `https://zalo.me/${oaId}` : null;
+  const oaUrl = zaloOaChatUrl(opts.oaId);
 
   return {
     platform: 'web',

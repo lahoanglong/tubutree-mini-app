@@ -8,6 +8,7 @@ import { ApiError } from '@/lib/client-api';
 const m = vi.hoisted(() => ({ lookup: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: m.push, replace: vi.fn(), prefetch: vi.fn() }), usePathname: () => '/don' }));
 vi.mock('@/lib/guest-checkout/api', () => ({ guestLookupOrder: (...a: unknown[]) => m.lookup(...a) }));
+vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ tubuZaloPhone: '0899149229', isLoaded: true, isPending: false }) }));
 
 import { GuestOrderLookup, normalizeOrderCode } from './lookup-form';
 
@@ -123,6 +124,47 @@ describe('/don tra cứu đơn đặt không đăng nhập', () => {
     typeInto(phoneInput(r), '0912345678');
     await submit(r);
     expect(r.container.querySelector('[data-testid="guest-lookup-error"]')?.textContent).toBe('Bạn tra hơi nhiều lần. Thử lại sau 1 phút nhé.');
+  });
+
+  it('tubu-w28-02: không tìm thấy (404) hay chạm trần (429 GUEST_LOOKUP_LIMIT): nút Zalo một chạm chép mã vừa gõ, không kèm SĐT; sửa ô thì nút tắt cùng câu lỗi', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    m.lookup.mockRejectedValueOnce(new ApiError('Không tìm thấy đơn khớp mã đơn và số điện thoại này.', 404));
+    const r = await mount();
+    typeInto(codeInput(r), 'tubu 2026112212345');
+    typeInto(phoneInput(r), '0912345678');
+    await submit(r);
+    const support = () => r.container.querySelector<HTMLAnchorElement>('[data-testid="guest-support-zalo"]');
+    expect(support()?.getAttribute('href')).toBe('https://zalo.me/0899149229');
+    expect(support()?.getAttribute('rel')).toBe('noopener noreferrer');
+    support()!.addEventListener('click', (e) => e.preventDefault());
+    await act(async () => {
+      support()!.click();
+    });
+    expect(writeText).toHaveBeenCalledWith('Hỗ trợ đơn TUBU2026112212345');
+    expect(JSON.stringify(writeText.mock.calls)).not.toContain('0912345678');
+    typeInto(phoneInput(r), '0912345679');
+    await flush(2);
+    expect(support()).toBeNull();
+    m.lookup.mockRejectedValueOnce(new ApiError('Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.', 429, 'GUEST_LOOKUP_LIMIT'));
+    await submit(r);
+    expect(r.container.querySelector('[data-testid="guest-lookup-error"]')?.textContent).toBe('Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.');
+    expect(support()).not.toBeNull();
+  });
+
+  it('tubu-w28-02: đơn đã về tài khoản (403) và lỗi mạng không có nút Zalo (đã có lối đăng nhập / thử lại)', async () => {
+    m.lookup.mockRejectedValueOnce(new ApiError('Đơn này đã được lưu vào tài khoản Zalo.', 403, 'GUEST_ORDER_CLAIMED'));
+    const r = await mount();
+    typeInto(codeInput(r), 'TUBU2026112212345');
+    typeInto(phoneInput(r), '0912345678');
+    await submit(r);
+    expect(r.container.querySelector('[data-testid="guest-lookup-claimed"]')).not.toBeNull();
+    expect(r.container.querySelector('[data-testid="guest-support-zalo"]')).toBeNull();
+    m.lookup.mockRejectedValueOnce(new ApiError('Lỗi máy chủ', 500));
+    typeInto(phoneInput(r), '0912345679');
+    await submit(r);
+    expect(r.container.querySelector('[data-testid="guest-lookup-error"]')).not.toBeNull();
+    expect(r.container.querySelector('[data-testid="guest-support-zalo"]')).toBeNull();
   });
 
   it('tubu-w18-01: đơn đã về tài khoản Zalo (403 GUEST_ORDER_CLAIMED): không sang trang theo dõi, mời đăng nhập Zalo rồi quay về chi tiết đơn', async () => {
