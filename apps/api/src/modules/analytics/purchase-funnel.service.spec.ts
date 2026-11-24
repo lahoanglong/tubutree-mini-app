@@ -1,6 +1,6 @@
 import { PURCHASE_FUNNEL_STEPS } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { countPurchaseFunnel, PurchaseFunnelService, SESSION_SPAN_MAX_HOURS } from './purchase-funnel.service';
+import { countPurchaseFunnel, ORDER_MATCH_GRACE_MINUTES, PurchaseFunnelService, SESSION_LOOKAHEAD_HOURS, SESSION_LOOKBACK_HOURS } from './purchase-funnel.service';
 
 const row = (platform: string, n: [number, number, number, number, number, number]) => ({
   platform,
@@ -66,7 +66,7 @@ describe('PurchaseFunnelService', () => {
     expect(json).not.toMatch(/userId|sessionId|anonymousId|eventId/);
   });
 
-  it('phiên thuộc cửa sổ chứa sự kiện đầu: đọc thêm SESSION_SPAN_MAX_HOURS hai đầu, lọc theo min(receivedAt)', async () => {
+  it('phiên thuộc cửa sổ chứa sự kiện đầu: đọc lùi 12 giờ, đọc tới 2 giờ, lọc theo min(receivedAt)', async () => {
     const $queryRaw = jest.fn().mockResolvedValue([]);
     const since = new Date('2026-11-22T17:00:00.000Z');
     const until = new Date('2026-11-23T17:00:00.000Z');
@@ -75,7 +75,9 @@ describe('PurchaseFunnelService', () => {
     const sql = strings.join('?').replace(/\s+/g, ' ');
     expect(sql).toContain('HAVING min(e."receivedAt") >= ?::timestamp AND min(e."receivedAt") < ?::timestamp');
     expect(sql).toContain('e."receivedAt" >= ?::timestamp - make_interval(hours => ?::int)');
-    expect(values.slice(0, 4)).toEqual([since.toISOString(), SESSION_SPAN_MAX_HOURS, until.toISOString(), SESSION_SPAN_MAX_HOURS]);
+    expect(values.slice(0, 4)).toEqual([since.toISOString(), SESSION_LOOKBACK_HOURS, until.toISOString(), SESSION_LOOKAHEAD_HOURS]);
+    // Snapshot ngày chạy 03:00 hôm sau phải đã thấy mọi sự kiện truy vấn dùng (bước sau nửa đêm + ân hạn đặt đơn), để tính lại ra cùng số.
+    expect(SESSION_LOOKAHEAD_HOURS * 60 + ORDER_MATCH_GRACE_MINUTES).toBeLessThan(3 * 60);
     expect(values.slice(4, 6)).toEqual([since.toISOString(), until.toISOString()]);
   });
 });

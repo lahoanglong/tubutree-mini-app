@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { RunLease } from '../../common/cron-leader/run-lease';
+import * as trackCron from '../../common/cron-run/track-cron';
 import type { DailyDigest } from './daily-digest';
 import { DailyDigestService, DIGEST_STATE_KEY } from './daily-digest.service';
 import type { DigestSendOutcome } from './ops-email.service';
@@ -81,6 +82,15 @@ describe('DailyDigestService.run', () => {
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
     expect(email.sendDigest).not.toHaveBeenCalled();
     expect(rows.has(DIGEST_STATE_KEY)).toBe(false);
+  });
+
+  it('lượt cron gặp kênh bị chặn: ghi warn và đánh dấu lượt chạy là bỏ qua BLOCKED, không phải OK', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const skipped = jest.spyOn(trackCron, 'markCronSkipped').mockImplementation(() => undefined);
+    const { svc } = setup({ blockLifted: false });
+    await svc.handleCron();
+    expect(skipped).toHaveBeenCalledWith('BLOCKED');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('kênh email vận hành đang bị chặn'));
   });
 
   it('SMTP lỗi tạm thời: RETRY và không chốt ngày, lượt sau gửi lại; lỗi vĩnh viễn: chốt ngày là BLOCKED', async () => {
