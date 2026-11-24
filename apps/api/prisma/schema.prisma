@@ -1240,7 +1240,7 @@ model Order {
   /// Ảnh chụp lựa chọn "nhận hành trình đơn qua Zalo" lúc đặt đơn này: null = không hỏi (cờ tắt, đơn cũ, đơn không qua bước đặt hàng).
   orderZaloConsent       Boolean?
   orderZaloConsentAt     DateTime?
-  /// Nguồn đồng ý của đơn: 'order_detail' khi khách bật ở chi tiết đơn; null = lúc đặt hàng hoặc đơn cũ.
+  /// Nguồn đồng ý của đơn: 'order_detail' khi khách bật ở chi tiết đơn; 'gate_closed' khi cổng MSS đóng lúc đặt (không hỏi, orderZaloConsent null); null = lúc đặt hàng hoặc đơn cũ.
   orderZaloConsentSource String?
   mssOrderEvents         MssOrderEventOutbox[]
   paidAt              DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái

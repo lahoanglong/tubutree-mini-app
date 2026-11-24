@@ -260,7 +260,7 @@ describe('MSS order events (real Postgres)', () => {
     expect(await prisma.$transaction((tx) => recorder.record(tx, unpaid.id, 'order.cancelled', { cancelReason: 'PAYMENT_TIMEOUT' }))).toBe('payment_timeout_unnotified');
   });
 
-  it('(10) cờ tắt: không ghi lựa chọn đồng ý, không dòng outbox', async () => {
+  it('(10) cờ tắt: không ghi lựa chọn đồng ý, không dòng outbox; đơn mang nguồn gate_closed cho Ops', async () => {
     const { user, order } = await consentedOrder({ orderZaloConsent: null });
     await prisma.user.update({ where: { id: user.id }, data: { notifyOrderZalo: false, notifyOrderZaloAt: null, notifyOrderZaloSource: null } });
     await prisma.$transaction((tx) => recorderOff.onOrdersPlaced(tx, [{ id: order.id, userId: user.id, paymentStatus: 'UNPAID', paymentMethod: 'COD' }], true));
@@ -268,13 +268,39 @@ describe('MSS order events (real Postgres)', () => {
     expect(await rowsOf(order.id)).toHaveLength(0);
     const u = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
-    expect({ notifyOrderZalo: u.notifyOrderZalo, source: u.notifyOrderZaloSource, consent: o.orderZaloConsent, seq: o.mssEventSeq }).toEqual({
+    expect({
+      notifyOrderZalo: u.notifyOrderZalo,
+      source: u.notifyOrderZaloSource,
+      consent: o.orderZaloConsent,
+      orderSource: o.orderZaloConsentSource,
+      seq: o.mssEventSeq,
+    }).toEqual({
       notifyOrderZalo: false,
       source: null,
       consent: null,
+      orderSource: 'gate_closed',
       seq: 0,
     });
     expect(enqueued).toHaveLength(0);
+  });
+
+  it('khởi động lạnh: cổng chưa nạp xong (at = 0) thì đơn đầu tiên chờ lần nạp rồi phát created, không bị bỏ qua', async () => {
+    const slowFlags = {
+      ...(flagsOn as unknown as Record<string, unknown>),
+      isEnabled: async () => {
+        await new Promise((r) => setTimeout(r, 80));
+        return true;
+      },
+    } as unknown as MssFlagsService;
+    const { user, order } = await consentedOrder({ orderZaloConsent: null });
+    const cold = new MssOrderEventRecorder(slowFlags, health, { circuit: { isTripped: () => false } } as unknown as MssClient, dispatcher);
+    cold.onModuleInit();
+    expect(cold.gate()).toMatchObject({ enabled: false, open: false, at: 0 });
+    await prisma.$transaction((tx) => cold.onOrdersPlaced(tx, [{ id: order.id, userId: user.id, paymentStatus: 'UNPAID', paymentMethod: 'COD' }], true));
+    const o = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect({ consent: o.orderZaloConsent, orderSource: o.orderZaloConsentSource }).toEqual({ consent: true, orderSource: null });
+    expect((await rowsOf(order.id)).map((r) => r.eventType)).toEqual(['order.created']);
+    expect(enqueued).toHaveLength(1);
   });
 
   it('cờ bật: ô đồng ý ở checkout được nhớ cho khách và chụp vào đơn, phát created', async () => {

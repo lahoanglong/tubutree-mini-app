@@ -12,10 +12,17 @@ import {
   ORDER_ZALO_CONSENT_TEXT_VERSION,
   type MssCancelReason,
   type MssOrderEventType,
+  type OrderZaloConsentSource,
 } from './mss-order-event-types';
 
-/** Cổng cờ được làm mới nền: transaction nghiệp vụ không bao giờ chờ cấu hình, Redis hay MSS. */
+/**
+ * Cổng cờ được làm mới nền: transaction nghiệp vụ không chờ cấu hình, Redis hay MSS. Ngoại lệ duy nhất là lúc cổng chưa từng nạp (vừa
+ * khởi động API): chờ lần nạp đầu tối đa MSS_COLD_GATE_WAIT_MS.
+ */
 export const MSS_GATE_REFRESH_MS = 15_000;
+
+/** Đủ ngắn so với hạn 5 giây của transaction checkout; MSS treo thì quá hạn này coi cổng là đóng như trước. */
+export const MSS_COLD_GATE_WAIT_MS = 1_500;
 
 /** Gốc link theo dõi đơn đã đăng ký với MSS (`tubu_order_events_link_hosts`, hợp đồng mục 3.3). */
 export const MSS_ORDER_LINK_ORIGIN = 'https://tubutree.com';
@@ -101,18 +108,34 @@ export class MssOrderEventRecorder implements OnModuleInit {
   }
 
   private async loadGate(): Promise<MssOrderEventGate> {
-    const enabled = await this.flags.isEnabled('orderEvents');
+    // assertCapability gọi cả khi cờ coi như tắt: nó là chỗ báo Ops khi admin bật cờ mà thiếu biến MSS_* hay MSS thiếu năng lực.
+    const [enabled, capable, snap] = await Promise.all([this.flags.isEnabled('orderEvents'), this.health.assertCapability('orderEvents'), this.flags.snapshot()]);
     if (!enabled) return { ...CLOSED_GATE, at: Date.now() };
-    const [capable, snap] = await Promise.all([this.health.assertCapability('orderEvents'), this.flags.snapshot()]);
     return { enabled, open: capable, rolloutPct: snap.orderEventsRolloutPct, at: Date.now() };
   }
 
   /**
+   * Cổng cho một quyết định trong transaction. Cổng chưa từng nạp (`at === 0`: API vừa khởi động, lần nạp ở onModuleInit chưa xong) thì
+   * chờ lần nạp đó tối đa MSS_COLD_GATE_WAIT_MS thay vì coi ngay là đóng; đã nạp thì như `gate()`, không I/O.
+   */
+  private async readyGate(): Promise<MssOrderEventGate> {
+    if (this.gateState.at === 0) await settleWithin(this.refreshGate(), MSS_COLD_GATE_WAIT_MS);
+    return this.gate();
+  }
+
+  /**
    * Đặt hàng (checkout, trong tx tạo đơn). `consent` là ô đồng ý của lần đặt này: true/false được nhớ cho khách (`users.notifyOrderZalo`),
-   * bỏ trống thì dùng lựa chọn đã nhớ. Cờ tắt thì không ghi gì, kể cả lựa chọn đồng ý.
+   * bỏ trống thì dùng lựa chọn đã nhớ. Cổng đóng thì không ghi lựa chọn đồng ý, chỉ đánh dấu nguồn `gate_closed` lên đơn.
    */
   async onOrdersPlaced(tx: Prisma.TransactionClient, orders: readonly PlacedOrderLike[], consent: boolean | undefined): Promise<void> {
-    if (orders.length === 0 || !this.gate().enabled) return;
+    if (orders.length === 0) return;
+    if (!(await this.readyGate()).enabled) {
+      // Không hỏi khách nên `orderZaloConsent` để null (bật muộn ở chi tiết đơn vẫn được). Nguồn `gate_closed` cho Ops tách "cổng MSS đóng"
+      // khỏi "khách không đồng ý" (false).
+      const source: OrderZaloConsentSource = 'gate_closed';
+      await tx.order.updateMany({ where: { id: { in: orders.map((o) => o.id) } }, data: { orderZaloConsentSource: source } });
+      return;
+    }
     const userId = orders[0]!.userId;
     const now = new Date();
     let granted: boolean;
@@ -139,7 +162,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
 
   /** `paymentStatus` vừa lật sang PAID trong `tx` (ZaloPay, admin xác nhận chuyển khoản, đại lý). */
   async onPaid(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
-    if (!this.gate().open) return;
+    if (!(await this.readyGate()).open) return;
     await this.record(tx, orderId, 'order.payment_confirmed');
   }
 
@@ -153,7 +176,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
     to: string,
     ctx: { from: string; actorType?: string | null; paidBefore?: boolean },
   ): Promise<void> {
-    if (!this.gate().open) return;
+    if (!(await this.readyGate()).open) return;
     if (to === 'SHIPPING') await this.record(tx, orderId, 'order.shipping');
     else if (to === 'DELIVERED') await this.record(tx, orderId, 'order.delivered');
     else if (to === 'CANCELLED') {
@@ -163,7 +186,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
 
   /** Ghi một dòng outbox. Trả lý do bỏ qua, hoặc null khi đã ghi. */
   async record(tx: Prisma.TransactionClient, orderId: string, eventType: MssOrderEventType, extra: MssRecordExtra = {}): Promise<MssRecordSkip | null> {
-    const gate = this.gate();
+    const gate = await this.readyGate();
     if (!gate.open) return 'gate_closed';
     if (this.client.circuit.isTripped()) return 'circuit_open';
     const order = await tx.order.findUnique({
@@ -283,6 +306,20 @@ export function cancelReasonOf(from: string, actorType: string | null | undefine
   if (actorType === 'CUSTOMER') return 'CUSTOMER';
   if (from === 'PENDING_PAYMENT' && (!actorType || actorType === 'SYSTEM')) return 'PAYMENT_TIMEOUT';
   return 'OTHER';
+}
+
+/** Chờ `p` xong hoặc hết `ms`, tuỳ cái nào tới trước. Không ném, không giữ tiến trình sống. */
+async function settleWithin(p: Promise<unknown>, ms: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+  try {
+    await Promise.race([p.then(() => undefined, () => undefined), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function recipientPhoneOf(address: Prisma.JsonValue): string | null {

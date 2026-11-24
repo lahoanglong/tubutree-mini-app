@@ -23,6 +23,12 @@ export type MssOutboxStatus = (typeof MSS_OUTBOX_STATUSES)[number];
 /** MSS đang giữ (hoặc sắp nhận) sự kiện: chưa có kết quả cuối, kênh ZNS của tin tương ứng phải chờ. */
 export const MSS_HOLDING_STATUSES: readonly MssOutboxStatus[] = ['PENDING', 'SENDING', 'DELIVERED'];
 
+/**
+ * `order.created` ở các trạng thái này: MSS đang giữ hoặc đã gửi tin đặt đơn, và luồng nhắc chuyển khoản của MSS lo phần nhắc, nên
+ * Tubu không gửi tin nhắc chuyển khoản riêng. RESULT_FAILED hay chưa có dòng thì Tubu nhắc như thường.
+ */
+export const MSS_CREATED_COVERS_PAYMENT_REMINDER: readonly MssOutboxStatus[] = [...MSS_HOLDING_STATUSES, 'RESULT_SENT'];
+
 /** Kết quả cuối mà khách chắc chắn hoặc có thể đã nhận tin Zalo: không gửi ZNS cho sự kiện này (tránh tin đôi). */
 export const MSS_NO_ZNS_STATUSES: readonly MssOutboxStatus[] = ['RESULT_SENT', 'RESULT_UNKNOWN'];
 
@@ -60,7 +66,11 @@ export const MSS_ORDER_EVENT_JOB = 'deliver';
 
 /** Phiên bản câu chữ đồng ý (mục 7 hợp đồng, quyết định PO số 3) lưu kèm lựa chọn của khách làm bằng chứng. */
 export const ORDER_ZALO_CONSENT_TEXT_VERSION = 'order-zalo-v1-2026-11-17';
-export type OrderZaloConsentSource = 'checkout' | 'account_settings' | 'mss_opt_out' | 'order_detail';
+/**
+ * `gate_closed` chỉ có ở `orders.orderZaloConsentSource`: cổng MSS đóng lúc đặt nên không hỏi khách (`orderZaloConsent` để null). Ops nhờ
+ * nó tách "cổng đóng" khỏi "khách không đồng ý" (`false`); khách bật muộn ở chi tiết đơn thì ghi đè bằng `order_detail`.
+ */
+export type OrderZaloConsentSource = 'checkout' | 'account_settings' | 'mss_opt_out' | 'order_detail' | 'gate_closed';
 
 /** Đơn còn hành trình để báo: chưa giao, chưa huỷ, chưa trả. */
 export const ORDER_ZALO_ACTIVE_STATUSES: readonly string[] = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'];

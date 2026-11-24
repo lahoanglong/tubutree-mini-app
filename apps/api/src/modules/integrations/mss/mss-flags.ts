@@ -66,10 +66,15 @@ export class MssFlagsService {
     };
   }
 
+  /** Giá trị admin đặt cho một cờ, chưa xét biến môi trường hay năng lực MSS. */
+  async requested(flag: MssFlag): Promise<boolean> {
+    return isOn(await this.config.get<unknown>(MSS_FLAG_KEYS[flag], false));
+  }
+
   /** Cờ bật VÀ đủ biến môi trường. Chưa xét năng lực MSS: đường chạy thật dùng MssHealthService.assertCapability. */
   async isEnabled(flag: MssFlag): Promise<boolean> {
     if (!this.configured()) return false;
-    return isOn(await this.config.get<unknown>(MSS_FLAG_KEYS[flag], false));
+    return this.requested(flag);
   }
 
   /** Ít nhất một tính năng MSS đang được yêu cầu (cờ bật hoặc nguồn danh mục là MSS) và đủ biến: khi đó mới hỏi sức khoẻ MSS. */

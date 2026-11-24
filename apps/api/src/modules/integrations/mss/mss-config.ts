@@ -83,6 +83,9 @@ export function readMssEnv(env: NodeJS.ProcessEnv = process.env): MssEnv {
   };
 }
 
+/** Biến bắt buộc: thiếu hoặc sai một biến là `isMssConfigured` false. */
+export const MSS_REQUIRED_ENV_KEYS = ['MSS_BASE_URL', 'MSS_KEY_ID', 'MSS_OUTBOUND_SECRET', 'MSS_INBOUND_SECRET'] as const;
+
 /** Đủ biến bắt buộc (gốc URL, key id, hai bí mật). Thiếu một biến là mọi cờ MSS coi như tắt. */
 export function isMssConfigured(env: MssEnv): boolean {
   return Boolean(env.baseUrl && env.keyId && env.outboundSecret && env.inboundSecret);

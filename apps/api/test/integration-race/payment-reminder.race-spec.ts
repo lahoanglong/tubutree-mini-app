@@ -10,7 +10,7 @@ import {
   PendingPaymentExpiryCron,
   paymentReminderDedupeKey,
 } from '../../src/modules/orders/pending-payment-expiry.cron';
-import { createOrder, createUser, deleteItData, pinConfig, warmPool } from './helpers';
+import { createOrder, createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
 
 const HOUR = 3_600_000;
 
@@ -91,6 +91,45 @@ describe('Nhắc chuyển khoản trước hạn tự huỷ (real Postgres)', ()
     // Tạo 04:00Z 01/03 → hạn 04:00Z 02/03 = 11:00 giờ VN.
     expect(payload.data.deadline).toBe('11:00 02/03/2034');
     expect(payload.body).toContain(due.o.code);
+  });
+
+  it('MSS đang giữ hoặc đã gửi order.created: không nhắc; MSS báo hỏng, chưa có sự kiện, hay chỉ có sự kiện loại khác: nhắc đúng một tin', async () => {
+    const createdAt = new Date(NOW.getTime() - 23 * HOUR);
+    const withEvent = async (eventType: string | null, status: string) => {
+      const c = await pendingOrder(createdAt);
+      if (eventType) {
+        await prisma.mssOrderEventOutbox.create({
+          data: {
+            eventId: `it-remind-${randCode(12)}`,
+            orderId: c.o.id,
+            orderCode: c.o.code,
+            eventType,
+            sequence: 1,
+            occurredAt: createdAt,
+            body: '{}',
+            bodySha256: 'it',
+            status,
+            expiresAt: new Date(createdAt.getTime() + 6 * HOUR),
+          },
+        });
+      }
+      return c;
+    };
+    const skipped = await Promise.all(['PENDING', 'SENDING', 'DELIVERED', 'RESULT_SENT'].map((s) => withEvent('order.created', s)));
+    const reminded = await Promise.all([
+      withEvent('order.created', 'RESULT_FAILED'),
+      withEvent(null, ''),
+      withEvent('order.payment_confirmed', 'RESULT_SENT'),
+    ]);
+    await cron.remindBeforeExpiry(NOW);
+    for (const c of skipped) expect(await notices(c.u.id)).toHaveLength(0);
+    for (const c of reminded) expect(await notices(c.u.id)).toHaveLength(1);
+
+    // Dòng còn PENDING ở lượt trước rồi MSS báo hỏng (RESULT_FAILED): lượt sau nhắc nốt đơn đó, đơn đã nhắc không nhận thêm.
+    await prisma.mssOrderEventOutbox.updateMany({ where: { orderId: skipped[0]!.o.id }, data: { status: 'RESULT_FAILED' } });
+    await cron.remindBeforeExpiry(new Date(NOW.getTime() + 10 * 60_000));
+    expect(await notices(skipped[0]!.u.id)).toHaveLength(1);
+    for (const c of reminded) expect(await notices(c.u.id)).toHaveLength(1);
   });
 
   it('không nhắc: đơn còn xa hạn, đã quá hạn, đã trả, COD, đơn khách vãng lai, đơn có dấu Pancake đã trả', async () => {

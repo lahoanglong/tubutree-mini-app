@@ -12,6 +12,7 @@ import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { pendingPaymentCancelOpts } from './pending-payment-cancel';
 import { paymentUnlinkedHoldOverWhere } from './pending-payment-hold';
+import { MSS_CREATED_COVERS_PAYMENT_REMINDER } from '../integrations/mss/mss-order-event-types';
 
 export {
   DEALER_PENDING_PAYMENT_TTL_KEY,
@@ -162,8 +163,9 @@ export class PendingPaymentExpiryCron {
   /**
    * Nhắc MỘT lần đơn chuyển khoản của khách lẻ còn ≤ PAYMENT_REMINDER_LEAD_HOURS giờ trước khi tự huỷ: tin mở chi tiết đơn, nơi có mã VietQR
    * và nút đổi sang trả tiền khi nhận (khi đơn đổi được). Chỉ BANK_TRANSFER: ví/cổng đã có màn thanh toán riêng. Bỏ đơn có dấu tiền đang về
-   * (Pancake báo trả, khoản chưa gắn đơn, đã bàn giao vận chuyển) để không giục khách trả hai lần, và đơn khách vãng lai (không có hộp tin
-   * trong app). Hạn ghi trong tin cùng mốc với cron huỷ (createdAt + TTL). Chưa có mẫu tin thì bỏ lượt, không gửi câu trung tính.
+   * (Pancake báo trả, khoản chưa gắn đơn, đã bàn giao vận chuyển) để không giục khách trả hai lần, đơn khách vãng lai (không có hộp tin
+   * trong app), và đơn mà MSS đang giữ hoặc đã gửi `order.created` (MSS_CREATED_COVERS_PAYMENT_REMINDER; MSS báo hỏng thì lượt sau nhắc
+   * như thường). Hạn ghi trong tin cùng mốc với cron huỷ (createdAt + TTL). Chưa có mẫu tin thì bỏ lượt, không gửi câu trung tính.
    */
   async remindBeforeExpiry(now: Date): Promise<number> {
     if (!this.notifications) return 0;
@@ -182,6 +184,8 @@ export class PendingPaymentExpiryCron {
         guestTokenHash: null,
         OR: [{ pancakePaidReported: null }, { pancakePaidReported: 0 }],
         createdAt: { gt: expiredBefore, lte: remindFrom },
+        // MSS đang giữ hoặc đã gửi tin đặt đơn: luồng nhắc của MSS lo phần nhắc, Tubu không gửi tin thứ hai cho cùng đơn.
+        mssOrderEvents: { none: { eventType: 'order.created', status: { in: [...MSS_CREATED_COVERS_PAYMENT_REMINDER] } } },
       },
       select: { userId: true, code: true, total: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
