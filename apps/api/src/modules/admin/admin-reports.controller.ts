@@ -17,6 +17,7 @@ import { AdminReportsService } from './admin-reports.service';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { EXPORT_MAX_DAYS, resolveReportRange } from './report-range';
 import { paymentDiscountCsvChunks, payoutCsvChunks, payoutExportWhere, pitCsvChunks, refundCsvChunks, refundExportWhere } from './admin-finance-export';
+import { ctvLinkCsvChunks } from './ctv-link-export';
 
 /** Khoảng ngày giờ VN, tính cả hai đầu. Thiếu thì lấy 30 ngày gần nhất (resolveReportRange). */
 export class ReportRangeQuery {
@@ -109,6 +110,18 @@ export class AdminReportsController {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
     await streamCsv(res, `chiet-khau-thanh-toan-${range.from}-${range.to}.csv`, paymentDiscountCsvChunks(this.prisma, range, { maskPhones: !seesFullOrderPhones(viewer) }), (n) =>
       this.admin.recordExport(viewer.sub, 'exports/payment-discounts', { from: range.from, to: range.to }, n),
+    );
+  }
+
+  /**
+   * Hoa hồng CTV theo link (ctv-link-export.ts): mỗi link một dòng lượt bấm, đơn, doanh số, hoa hồng theo trạng thái, cộng dòng "Không qua link"
+   * của từng người. Số lũy kế tới lúc xuất nên không nhận khoảng ngày.
+   */
+  @AllowStaff('KE_TOAN')
+  @Get('exports/ctv-links')
+  async exportCtvLinks(@Res() res: Response, @CurrentUser() viewer: JwtPayload) {
+    await streamCsv(res, `hoa-hong-ctv-theo-link-${vnDateKey()}.csv`, ctvLinkCsvChunks(this.prisma, { maskPhones: !seesFullOrderPhones(viewer) }), (n) =>
+      this.admin.recordExport(viewer.sub, 'exports/ctv-links', {}, n),
     );
   }
 

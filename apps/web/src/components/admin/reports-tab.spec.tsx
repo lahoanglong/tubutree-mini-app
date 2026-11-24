@@ -13,8 +13,9 @@ const mocks = vi.hoisted(() => ({
   downloadRefundsCsv: vi.fn(),
   downloadPaymentDiscountsCsv: vi.fn(),
   downloadAccountingCsv: vi.fn(),
+  downloadCtvLinksCsv: vi.fn(),
 }));
-vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv, downloadPaymentDiscountsCsv: mocks.downloadPaymentDiscountsCsv, downloadAccountingCsv: mocks.downloadAccountingCsv }));
+vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv, downloadPaymentDiscountsCsv: mocks.downloadPaymentDiscountsCsv, downloadAccountingCsv: mocks.downloadAccountingCsv, downloadCtvLinksCsv: mocks.downloadCtvLinksCsv }));
 vi.mock('@/lib/admin-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-client')>()), downloadOrdersCsv: mocks.downloadOrdersCsv }));
 
 let mounted: Rendered[] = [];
@@ -337,6 +338,23 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]'), '01012024');
       await flush();
       expect(btn(container, 'Xuất CSV đối soát kế toán').disabled).toBe(true);
+    });
+
+    it('hoa hồng CTV theo link: một bấm tải file lũy kế, không gửi khoảng ngày; khoảng ngày sai không khoá nút này', async () => {
+      mocks.downloadCtvLinksCsv.mockResolvedValue({ filename: 'hoa-hong-ctv-theo-link-2026-10-18.csv', bytes: 1 });
+      const { container } = mount(<ReportsTab />);
+      await flush();
+      expect(container.textContent).toContain('Hoa hồng CTV theo link');
+      expect(container.textContent).toContain('không theo khoảng ngày ở trên');
+      click(btn(container, 'Xuất CSV hoa hồng theo link'));
+      await flush();
+      expect(mocks.downloadCtvLinksCsv).toHaveBeenCalledTimes(1);
+      expect(mocks.downloadCtvLinksCsv.mock.calls[0]).toEqual([]);
+      expect(container.textContent).toContain('Đã tải hoa-hong-ctv-theo-link-2026-10-18.csv');
+      typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]'), '01012024');
+      await flush();
+      expect(btn(container, 'Xuất CSV thuế TNCN').disabled).toBe(true);
+      expect(btn(container, 'Xuất CSV hoa hồng theo link').disabled).toBe(false);
     });
 
     it('câu chỉ sang tab thuế dùng đúng tên mục trên thanh bên ("Thuế TNCN hoa hồng")', async () => {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   downloadAccountingCsv,
+  downloadCtvLinksCsv,
   downloadPaymentDiscountsCsv,
   downloadPayoutsCsv,
   downloadPitCsv,
@@ -33,7 +34,7 @@ const REFUND_STATUS_OPTIONS: { value: '' | RefundExportStatus; label: string }[]
   { value: 'DISMISSED', label: 'Không phải tiền dư' },
 ];
 
-type Kind = 'accounting' | 'tax' | 'payouts' | 'refunds' | 'paymentDiscounts';
+type Kind = 'accounting' | 'tax' | 'payouts' | 'refunds' | 'paymentDiscounts' | 'ctvLinks';
 
 /** File CSV cho kế toán: đối soát doanh thu và hoàn tiền theo đơn, khấu trừ TNCN của CTV, lệnh chuyển hoa hồng, hoàn tiền khách, chiết khấu thanh toán. Dùng khoảng ngày chung của tab Báo cáo. */
 export function ReportsFinanceSection({ range }: { range: ReportRange }) {
@@ -56,7 +57,9 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
             ? await downloadPayoutsCsv(range, payoutStatus || undefined)
             : kind === 'paymentDiscounts'
               ? await downloadPaymentDiscountsCsv(range)
-              : await downloadRefundsCsv(range, refundStatus || undefined);
+              : kind === 'ctvLinks'
+                ? await downloadCtvLinksCsv()
+                : await downloadRefundsCsv(range, refundStatus || undefined);
       setMsg({ ok: true, text: `Đã tải ${r.filename}.` });
     } catch (e) {
       setMsg({ ok: false, text: actionErrorText(e) });
@@ -133,6 +136,16 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
           </p>
           <button type="button" disabled={disabled} onClick={() => void run('paymentDiscounts')} className={BTN_SECONDARY}>
             {busy === 'paymentDiscounts' ? 'Đang xuất…' : 'Xuất CSV chiết khấu thanh toán'}
+          </button>
+        </div>
+        <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+          <h4 className="text-sm font-medium text-stone-900">Hoa hồng CTV theo link</h4>
+          <p className="text-xs text-stone-500">
+            Mỗi link của CTV (và đại lý từng là CTV) một dòng: lượt bấm, số đơn, doanh số tính hoa hồng, hoa hồng chưa giao, đang giữ, chờ chi, đã chi. Đơn qua gian hàng, mã
+            giới thiệu hay đặt hộ gom một dòng &quot;Không qua link&quot; của từng người. Đơn huỷ/trả không tính. Số cộng dồn tới lúc tải, không theo khoảng ngày ở trên.
+          </p>
+          <button type="button" disabled={busy !== null} onClick={() => void run('ctvLinks')} className={BTN_SECONDARY}>
+            {busy === 'ctvLinks' ? 'Đang xuất…' : 'Xuất CSV hoa hồng theo link'}
           </button>
         </div>
       </div>

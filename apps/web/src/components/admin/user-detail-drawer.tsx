@@ -71,6 +71,7 @@ const EXPORT_LABEL: Record<string, string> = {
   'exports/tax': 'Xuất thuế TNCN CTV',
   'exports/payouts': 'Xuất lệnh rút tiền',
   'exports/refunds': 'Xuất hoàn tiền khách',
+  'exports/ctv-links': 'Xuất hoa hồng CTV theo link',
 };
 
 function EventLine({ e }: { e: AdminUserEvent }) {
