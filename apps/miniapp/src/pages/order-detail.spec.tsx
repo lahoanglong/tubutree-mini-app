@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getWasteRequestByOrder: vi.fn(),
   copyText: vi.fn(),
   coreGet: vi.fn(),
+  supportContact: vi.fn(),
   search: '',
 }));
 
@@ -65,9 +66,15 @@ vi.mock('../store/auth', () => {
 vi.mock('../components/image-upload', () => ({ MultiImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
-vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet, post: vi.fn().mockResolvedValue({ recorded: true }) } }));
+vi.mock('./about-data', async (orig) => {
+  const real = await orig<{ fetchSupportContact: () => Promise<unknown> }>();
+  mocks.supportContact.mockImplementation(real.fetchSupportContact);
+  return { ...real, fetchSupportContact: () => mocks.supportContact() };
+});
 
 import OrderDetailPage from './order-detail';
+import { ORDER_CSAT_COPY } from '@tubutree/app-core/order-csat';
 import { STATUS_COLOR } from '../utils/order-status';
 import { makeRequestDetail } from '../services/waste-test-fixtures';
 
@@ -1505,5 +1512,34 @@ describe('OrderDetailPage — viên vận đơn và thẻ Refill như web (tubu-
     expect(within(pill).getByRole('button', { name: 'Sao chép mã vận đơn GHN001 (GHN)' })).toHaveTextContent('GHN001 · GHN');
     expect(screen.queryByTestId('order-refill')).toBeNull();
     expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());
+  });
+});
+
+describe('OrderDetailPage — 👎 ở thẻ "Đơn này thế nào?" khi chat chưa mở (tubu-w33-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, csatAsk: true });
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('khối liên hệ có kênh: đưa focus tới khối đó, lời xin lỗi chỉ chỗ nhắn', async () => {
+    mocks.supportContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    renderPage();
+    const down = await screen.findByRole('button', { name: ORDER_CSAT_COPY.down });
+    await waitFor(() => expect(document.getElementById('order-support')?.firstElementChild).not.toBeNull());
+    await act(async () => fireEvent.click(down));
+    expect(within(screen.getByTestId('order-csat')).getByRole('status').textContent).toBe(ORDER_CSAT_COPY.thanksDown);
+    expect(document.activeElement?.id).toBe('order-support');
+  });
+
+  it('khối liên hệ còn rỗng (số liên hệ đang tải): không nhắc "mục Liên hệ", focus ở dòng xin lỗi', async () => {
+    mocks.supportContact.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    const down = await screen.findByRole('button', { name: ORDER_CSAT_COPY.down });
+    expect(document.getElementById('order-support')?.firstElementChild).toBeNull();
+    await act(async () => fireEvent.click(down));
+    const status = within(screen.getByTestId('order-csat')).getByRole('status');
+    expect(status.textContent).toBe(ORDER_CSAT_COPY.thanksDownNoContact);
+    expect(document.activeElement).toBe(status);
   });
 });

@@ -33,7 +33,7 @@ const order = (over: Partial<OrderCsatCardProps['order']> = {}): OrderCsatCardPr
   ...over,
 });
 
-function renderCard(o = order(), onSupport = vi.fn()) {
+function renderCard(o = order(), onSupport = vi.fn(() => true)) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['order', o.code], { ...o });
   const view = render(
@@ -96,12 +96,23 @@ describe('OrderCsatCard (Mini App)', () => {
     expect(onSupport).not.toHaveBeenCalled();
   });
 
-  it('👎 khi chat chưa mở: đưa khách tới khối liên hệ, dòng xin lỗi chỉ chỗ nhắn', async () => {
+  it('👎 khi chat chưa mở: đưa khách tới khối liên hệ, dòng xin lỗi chỉ chỗ nhắn, focus để khối liên hệ nhận', async () => {
     const { onSupport } = renderCard();
     await act(async () => fireEvent.click(screen.getByRole('button', { name: ORDER_CSAT_COPY.down })));
     expect(onSupport).toHaveBeenCalledTimes(1);
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect(screen.getByRole('status').textContent).toBe(ORDER_CSAT_COPY.thanksDown);
+    expect(document.activeElement).not.toBe(screen.getByRole('status'));
+  });
+
+  it('tubu-w33-02: 👎 khi khối liên hệ còn rỗng (trang báo false): không nhắc "mục Liên hệ", focus vào dòng xin lỗi', async () => {
+    const { onSupport } = renderCard(order(), vi.fn(() => false));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: ORDER_CSAT_COPY.down })));
+    expect(onSupport).toHaveBeenCalledTimes(1);
+    expect(mocks.post).toHaveBeenCalledWith('/orders/TB-1/csat', { answer: 'down', platform: 'miniapp' });
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe(ORDER_CSAT_COPY.thanksDownNoContact);
+    expect(document.activeElement).toBe(status);
   });
 
   it('chạm đúp cùng nhịp chỉ ghi và đi một lần; lỗi mạng không chặn lối đi tiếp', async () => {

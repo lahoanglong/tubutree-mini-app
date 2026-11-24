@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CART_RETURN_REFETCH_MS, cartRefetchOnReturn, soldOutRecovery, type RecoveryLine } from './sold-out-recovery';
+import { CART_RETURN_REFETCH_MS, cartPricingLines, cartRefetchOnReturn, soldOutRecovery, type RecoveryLine } from './sold-out-recovery';
 
 const line = (id: string, over: Partial<RecoveryLine> = {}): RecoveryLine => ({ id, productName: `Món ${id}`, quantity: 1, stock: 10, ...over });
 
@@ -57,5 +57,34 @@ describe('cartRefetchOnReturn', () => {
   });
   it('chưa có dữ liệu: đọc', () => {
     expect(cartRefetchOnReturn(0, 0, NOW)).toBe(true);
+  });
+});
+
+describe('cartPricingLines', () => {
+  it('đang có nút bỏ món hết một chạm: chỉ phần còn lại, đúng `keepIds`, giữ nguyên dòng (kể cả trường riêng của app)', () => {
+    const lines = [{ ...line('a'), total: 10 }, { ...line('b', { stock: 0 }), total: 20 }, { ...line('c', { quantity: 2, stock: 2 }), total: 30 }];
+    const out = cartPricingLines(lines);
+    expect(out.map((l) => l.id)).toEqual(soldOutRecovery(lines)?.keepIds);
+    expect(out).toEqual([lines[0], lines[2]]);
+  });
+
+  it('không có món hết: đúng các dòng đang chọn, theo thứ tự', () => {
+    const lines = [line('a'), line('b')];
+    expect(cartPricingLines(lines)).toEqual(lines);
+    expect(cartPricingLines([])).toEqual([]);
+  });
+
+  it('không có nút một chạm (mọi món hết, hoặc còn dòng vượt tồn): giữ đúng các dòng đang chọn như cũ', () => {
+    const allOut = [line('a', { stock: 0 }), line('b', { stock: 0 })];
+    expect(cartPricingLines(allOut)).toEqual(allOut);
+    const overStock = [line('a', { stock: 0 }), line('b', { quantity: 5, stock: 2 })];
+    expect(cartPricingLines(overStock)).toEqual(overStock);
+  });
+
+  it('không sửa mảng đầu vào', () => {
+    const lines = [line('a'), line('b', { stock: 0 })];
+    const out = cartPricingLines(lines);
+    out.push(line('z'));
+    expect(lines.map((l) => l.id)).toEqual(['a', 'b']);
   });
 });

@@ -39,6 +39,7 @@ type FakeOrder = {
   code: string;
   userId: string;
   status: string;
+  paymentStatus: string;
   invoiceRequest: unknown;
   invoiceStatus: string | null;
   invoiceUrl: string | null;
@@ -48,29 +49,42 @@ const baseOrder = (over: Partial<FakeOrder> = {}): FakeOrder => ({
   code: 'TB-900',
   userId: 'u1',
   status: 'DELIVERED',
+  paymentStatus: 'PAID',
   invoiceRequest: REQUEST,
   invoiceStatus: 'REQUESTED',
   invoiceUrl: null,
   ...over,
 });
 
-/** Fake order.findFirst/updateMany bám đúng guard `invoiceStatus` như DB thật. */
-function fakePrisma(order: FakeOrder | null, opts: { updateCount?: number } = {}) {
+/** Fake order.findFirst/updateMany bám đúng guard `invoiceStatus`, `status` và `paymentStatus` như DB thật; `beforeWrite` đổi đơn giữa lúc đọc và lúc ghi. */
+function fakePrisma(order: FakeOrder | null, opts: { updateCount?: number; beforeWrite?: (o: FakeOrder) => void } = {}) {
   const findFirst = jest.fn(async (_args: unknown) => (order ? { ...order } : null));
-  const updateMany = jest.fn(async ({ where, data }: { where: { id: string; OR?: { invoiceStatus: unknown }[] }; data: Partial<FakeOrder> }) => {
-    if (!order || where.id !== order.id) return { count: 0 };
-    if (opts.updateCount !== undefined) return { count: opts.updateCount };
-    if (order.invoiceStatus === 'ISSUED') return { count: 0 };
-    Object.assign(order, data);
-    return { count: 1 };
-  });
-  return { prisma: { order: { findFirst, updateMany } }, findFirst, updateMany };
+  const findUnique = jest.fn(async (_args: unknown) => (order ? { ...order } : null));
+  const updateMany = jest.fn(
+    async ({
+      where,
+      data,
+    }: {
+      where: { id: string; status?: { notIn: string[] }; paymentStatus?: { not: string }; OR?: { invoiceStatus: unknown }[] };
+      data: Partial<FakeOrder>;
+    }) => {
+      if (!order || where.id !== order.id) return { count: 0 };
+      opts.beforeWrite?.(order);
+      if (opts.updateCount !== undefined) return { count: opts.updateCount };
+      if (order.invoiceStatus === 'ISSUED') return { count: 0 };
+      if (where.status && where.status.notIn.includes(order.status)) return { count: 0 };
+      if (where.paymentStatus && order.paymentStatus === where.paymentStatus.not) return { count: 0 };
+      Object.assign(order, data);
+      return { count: 1 };
+    },
+  );
+  return { prisma: { order: { findFirst, findUnique, updateMany } }, findFirst, updateMany };
 }
 
 describe('buildAdminOrderWhere — lọc đơn yêu cầu hoá đơn VAT', () => {
-  const OPEN = { invoiceStatus: { in: ['REQUESTED', 'FAILED'] }, status: { notIn: ['CANCELLED', 'RETURNED'] } };
+  const OPEN = { invoiceStatus: { in: ['REQUESTED', 'FAILED'] }, status: { notIn: ['CANCELLED', 'RETURNED'] }, paymentStatus: { not: 'REFUNDED' } };
 
-  it('pending = REQUESTED + FAILED của đơn còn sống; issued = ISSUED; all = hai nhóm đó', () => {
+  it('pending = REQUESTED + FAILED của đơn còn sống, chưa hoàn tiền; issued = ISSUED; all = hai nhóm đó', () => {
     expect(buildAdminOrderWhere({ invoice: 'pending' })).toEqual(OPEN);
     expect(buildAdminOrderWhere({ invoice: 'issued' })).toEqual({ invoiceStatus: 'ISSUED' });
     expect(buildAdminOrderWhere({ invoice: 'all' })).toEqual({ OR: [OPEN, { invoiceStatus: 'ISSUED' }] });
@@ -91,7 +105,7 @@ describe('AdminService.listOrders — tham số invoice', () => {
     const prisma = { order: { findMany, count }, $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)) };
     const { svc } = mkAdmin(prisma);
     await svc.listOrders(1, 20, undefined, undefined, undefined, 'pending');
-    const open = { invoiceStatus: { in: ['REQUESTED', 'FAILED'] }, status: { notIn: ['CANCELLED', 'RETURNED'] } };
+    const open = { invoiceStatus: { in: ['REQUESTED', 'FAILED'] }, status: { notIn: ['CANCELLED', 'RETURNED'] }, paymentStatus: { not: 'REFUNDED' } };
     expect(findMany.mock.calls[0][0].where).toEqual(open);
     expect(count.mock.calls[0][0].where).toEqual(open);
   });
@@ -123,6 +137,38 @@ describe('AdminService.issueOrderInvoice', () => {
       await expect(mkAdmin(prisma).svc.issueOrderInvoice('a1', 'o1', {})).rejects.toThrow(/huỷ|trả/);
       expect(updateMany).not.toHaveBeenCalled();
     }
+  });
+
+  it('tubu-w33-02: đơn đã hoàn tiền → 400 nêu mã đơn, không ghi, không báo khách', async () => {
+    for (const status of ['DELIVERED', 'CONFIRMED']) {
+      const { prisma, updateMany } = fakePrisma(baseOrder({ status, paymentStatus: 'REFUNDED' }));
+      const { svc, notify } = mkAdmin(prisma);
+      const err = await svc.issueOrderInvoice('a1', 'o1', {}).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as Error).message).toBe('Đơn TB-900 đã hoàn tiền — không xuất hoá đơn VAT.');
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+    }
+  });
+
+  it('tubu-w33-02: hoàn tiền xong giữa lúc đọc và lúc ghi → updateMany có guard paymentStatus không ghi, báo đúng lý do hoàn tiền', async () => {
+    const order = baseOrder();
+    const { prisma, updateMany } = fakePrisma(order, { beforeWrite: (o) => (o.paymentStatus = 'REFUNDED') });
+    const { svc, notify } = mkAdmin(prisma);
+    await expect(svc.issueOrderInvoice('a1', 'o1', {})).rejects.toThrow('Đơn TB-900 đã hoàn tiền — không xuất hoá đơn VAT.');
+    expect(updateMany.mock.calls[0]![0].where).toMatchObject({ id: 'o1', paymentStatus: { not: 'REFUNDED' } });
+    expect(order.invoiceStatus).toBe('REQUESTED');
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it.each(['CANCELLED', 'RETURNED'])('tubu-w33-02: đơn sang %s giữa lúc đọc và lúc ghi → updateMany có guard status không ghi, báo đơn đã huỷ/trả', async (status) => {
+    const order = baseOrder();
+    const { prisma, updateMany } = fakePrisma(order, { beforeWrite: (o) => (o.status = status) });
+    const { svc, notify } = mkAdmin(prisma);
+    await expect(svc.issueOrderInvoice('a1', 'o1', {})).rejects.toThrow('Đơn TB-900 đã huỷ/trả — không xuất hoá đơn VAT.');
+    expect(updateMany.mock.calls[0]![0].where).toMatchObject({ id: 'o1', status: { notIn: ['CANCELLED', 'RETURNED'] } });
+    expect(order.invoiceStatus).toBe('REQUESTED');
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('xuất kèm link: REQUESTED → ISSUED bằng updateMany có guard, lưu invoiceUrl, báo khách INVOICE_ISSUED', async () => {
@@ -181,7 +227,7 @@ describe('AdminService.issueOrderInvoice', () => {
   it('race: hai admin cùng bấm — updateMany count=0 → BadRequest, không báo khách lần hai', async () => {
     const { prisma } = fakePrisma(baseOrder(), { updateCount: 0 });
     const { svc, notify } = mkAdmin(prisma);
-    await expect(svc.issueOrderInvoice('a1', 'o1', {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.issueOrderInvoice('a1', 'o1', {})).rejects.toThrow(/vừa được phát hành bởi người khác/);
     expect(notify).not.toHaveBeenCalled();
   });
 

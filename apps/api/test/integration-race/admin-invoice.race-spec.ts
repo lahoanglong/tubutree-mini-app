@@ -206,4 +206,60 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
     expect(mine(issued)).toEqual(new Set([issuedCancelled.code]));
     for (const o of [cancelled, returned, failedCancelled]) expect(mine(pending)).not.toContain(o.code);
   });
+
+  it('tubu-w33-02: đơn ĐÃ HOÀN TIỀN chưa xuất: không nằm trong hàng đợi pending; bấm xuất -> 400, không ghi, không báo khách', async () => {
+    const phone = uniquePhone();
+    const u = await createUser(prisma, { phone });
+    const [open, refunded, refundedIssued] = await Promise.all([
+      createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentStatus: 'PAID', invoiceStatus: 'REQUESTED', invoiceRequest: REQUEST }),
+      createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentStatus: 'REFUNDED', invoiceStatus: 'REQUESTED', invoiceRequest: REQUEST }),
+      createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentStatus: 'REFUNDED', invoiceStatus: 'ISSUED', invoiceRequest: REQUEST }),
+    ]);
+    const mine = async (filter: 'pending' | 'issued' | 'all') => {
+      const page = await admin.listOrders(1, 200, undefined, phone, undefined, filter);
+      return { codes: new Set(page.data.filter((o) => o.userId === u.id).map((o) => o.code)), total: page.meta.total };
+    };
+    const pending = await mine('pending');
+    expect(pending.codes).toEqual(new Set([open.code]));
+    expect(pending.total).toBe(1);
+    // Hoá đơn đã phát hành của đơn hoàn tiền vẫn tra được: kế toán còn phải điều chỉnh/huỷ.
+    expect((await mine('issued')).codes).toEqual(new Set([refundedIssued.code]));
+
+    await expect(admin.issueOrderInvoice('admin1', refunded.code, {})).rejects.toThrow(`Đơn ${refunded.code} đã hoàn tiền — không xuất hoá đơn VAT.`);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: refunded.id } })).invoiceStatus).toBe('REQUESTED');
+    expect(await notices(u.id)).toBe(0);
+  });
+
+  it('tubu-w33-02: hoàn tiền ghi xong giữa lúc admin đọc đơn và lúc ghi ISSUED -> guard của câu UPDATE chặn, báo đúng lý do, khách không nhận tin', async () => {
+    const u = await createUser(prisma, {});
+    const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentStatus: 'PAID', invoiceStatus: 'REQUESTED', invoiceRequest: REQUEST });
+    const read = prisma.order.findFirst.bind(prisma.order);
+    jest.spyOn(prisma.order, 'findFirst').mockImplementationOnce((async (args: Parameters<typeof read>[0]) => {
+      const snapshot = await read(args);
+      await prisma.order.update({ where: { id: o.id }, data: { paymentStatus: 'REFUNDED' } });
+      return snapshot;
+    }) as never);
+    await expect(admin.issueOrderInvoice('admin1', o.code, { invoiceUrl: 'https://hd.meinvoice.vn/x' })).rejects.toThrow(
+      `Đơn ${o.code} đã hoàn tiền — không xuất hoá đơn VAT.`,
+    );
+    const row = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
+    expect(row.invoiceStatus).toBe('REQUESTED');
+    expect(row.invoiceUrl).toBeNull();
+    expect(await notices(u.id)).toBe(0);
+  });
+
+  it('tubu-w33-02: đơn bị huỷ giữa lúc admin đọc đơn và lúc ghi ISSUED -> guard status của câu UPDATE chặn, báo đơn đã huỷ/trả, khách không nhận tin', async () => {
+    const u = await createUser(prisma, {});
+    const o = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', paymentStatus: 'PAID', invoiceStatus: 'REQUESTED', invoiceRequest: REQUEST });
+    const read = prisma.order.findFirst.bind(prisma.order);
+    jest.spyOn(prisma.order, 'findFirst').mockImplementationOnce((async (args: Parameters<typeof read>[0]) => {
+      const snapshot = await read(args);
+      await prisma.order.update({ where: { id: o.id }, data: { status: 'RETURNED' } });
+      return snapshot;
+    }) as never);
+    await expect(admin.issueOrderInvoice('admin1', o.code, {})).rejects.toThrow(`Đơn ${o.code} đã huỷ/trả — không xuất hoá đơn VAT.`);
+    const row = await prisma.order.findUniqueOrThrow({ where: { id: o.id } });
+    expect(row.invoiceStatus).toBe('REQUESTED');
+    expect(await notices(u.id)).toBe(0);
+  });
 });

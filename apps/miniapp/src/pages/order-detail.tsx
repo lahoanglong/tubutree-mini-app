@@ -443,7 +443,10 @@ export default function OrderDetailPage() {
         order={o}
         onSupport={() => {
           const support = document.getElementById('order-support');
-          if (support) revealReviewTarget(support, null);
+          // `SupportContact` không vẽ gì khi số liên hệ đang tải hay không có kênh nào: không cuộn tới khối rỗng.
+          if (!support?.firstElementChild) return false;
+          revealReviewTarget(support, null);
+          return true;
         }}
       />
 

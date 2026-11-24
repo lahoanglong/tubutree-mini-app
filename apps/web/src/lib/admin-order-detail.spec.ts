@@ -68,6 +68,12 @@ describe('canIssueInvoice — cùng luật với AdminService.issueOrderInvoice'
     expect(canIssueInvoice({ invoiceRequest: req, invoiceStatus: 'REQUESTED', status: 'CANCELLED' })).toBe(false);
     expect(canIssueInvoice({ invoiceRequest: req, invoiceStatus: 'REQUESTED', status: 'RETURNED' })).toBe(false);
   });
+  it('tubu-w33-02: đơn đã hoàn tiền → không (máy chủ từ chối); thanh toán khác vẫn bấm được', () => {
+    expect(canIssueInvoice({ invoiceRequest: req, invoiceStatus: 'REQUESTED', status: 'DELIVERED', paymentStatus: 'REFUNDED' })).toBe(false);
+    expect(canIssueInvoice({ invoiceRequest: req, invoiceStatus: 'FAILED', status: 'CONFIRMED', paymentStatus: 'REFUNDED' })).toBe(false);
+    expect(canIssueInvoice({ invoiceRequest: req, invoiceStatus: 'REQUESTED', status: 'DELIVERED', paymentStatus: 'PAID' })).toBe(true);
+    expect(canIssueInvoice({ invoiceRequest: req, invoiceStatus: 'REQUESTED', status: 'CONFIRMED', paymentStatus: 'UNPAID' })).toBe(true);
+  });
 });
 
 describe('invoiceUrlError — khớp IssueInvoiceDto (https, ≤ 500)', () => {

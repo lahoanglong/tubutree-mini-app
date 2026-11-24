@@ -100,6 +100,14 @@ export function DealerInvoiceSheet({
     onMutate: () => setFailure(null),
     onSuccess: (r) => {
       if (r.profile) qc.setQueryData(dealerInvoiceProfileQuery(coreHttp).queryKey, r.profile);
+      // Đơn vừa gửi yêu cầu ghi ngay vào danh sách đơn trước khi đóng sheet: danh sách chưa tải lại xong thì nút "Yêu cầu hoá đơn VAT" không
+      // được mở lại sheet với chính các đơn đó. Đơn máy chủ bỏ qua (`skipped`) giữ nguyên.
+      const requested = new Set(r.requested);
+      if (requested.size > 0) {
+        qc.setQueryData<OrderDTO[]>(dealerOrdersQuery(coreHttp).queryKey, (old) =>
+          old?.map((o) => (requested.has(o.code) ? { ...o, invoiceStatus: 'REQUESTED' } : o)),
+        );
+      }
       onDone(invoiceResultNotice(r), r.profile);
       return settleWithin(qc.invalidateQueries({ queryKey: dealerOrdersQuery(coreHttp).queryKey }));
     },

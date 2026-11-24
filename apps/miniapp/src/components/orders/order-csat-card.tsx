@@ -13,8 +13,11 @@ import { haptic } from '../../utils/haptic';
 export interface OrderCsatCardProps {
   /** `id` để ô viết đánh giá mở đúng lần mua; web có thể thiếu (OrderDetailDTO), khi đó ô chọn đơn nhận sớm nhất. */
   order: { id?: string; code: string; status: string; csatAsk?: boolean; items: readonly ReviewLine[] };
-  /** 👎 khi chat chưa mở: trang đưa khách tới khối liên hệ (hotline, Zalo OA). */
-  onSupport: () => void;
+  /**
+   * 👎 khi chat chưa mở: trang đưa khách tới khối liên hệ (hotline, Zalo OA). Trả false khi khối đó chưa có gì (đang tải, không có kênh): thẻ
+   * thôi nhắc "mục Liên hệ" và giữ focus ở dòng cảm ơn.
+   */
+  onSupport: () => boolean;
 }
 
 /**
@@ -43,12 +46,15 @@ export function OrderCsatCard({ order, onSupport }: OrderCsatCardProps) {
     void submitOrderCsat(coreHttp, order.code, a, 'miniapp').catch(() => undefined);
     qc.setQueryData<{ csatAsk?: boolean }>(['order', order.code], (old) => (old ? { ...old, csatAsk: false } : old));
     const next = orderCsatNext(a, order, chatReady);
+    // Khối liên hệ rỗng thì không cuộn tới đâu: lời cảm ơn không nhắc kênh nào và nhận focus thay cho khối đó.
+    const contactShown = next.kind === 'support' ? onSupport() : false;
     // Nút vừa chạm biến mất: chỉ dời focus vào dòng cảm ơn khi khách ở lại trang và không có khối nào khác nhận focus.
-    focusThanks.current = next.kind === 'thanks';
-    setThanks(next.kind === 'support' ? ORDER_CSAT_COPY.thanksDown : ORDER_CSAT_COPY.thanksUp);
+    focusThanks.current = next.kind === 'thanks' || (next.kind === 'support' && !contactShown);
+    setThanks(
+      next.kind === 'support' ? (contactShown ? ORDER_CSAT_COPY.thanksDown : ORDER_CSAT_COPY.thanksDownNoContact) : ORDER_CSAT_COPY.thanksUp,
+    );
     if (next.kind === 'review') navigate(`/product/${next.slug}`, { state: { reviewOrderId: order.id } });
     else if (next.kind === 'chat') navigate(orderCsatChatPath('miniapp', order.code));
-    else if (next.kind === 'support') onSupport();
   };
 
   return (
