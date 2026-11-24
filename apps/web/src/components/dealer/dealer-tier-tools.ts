@@ -58,16 +58,24 @@ export function marginLine(m: { margin: number; pct: number }, money: Money): st
 export const INVOICE_REQUEST_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Đơn đại lý còn tự gửi yêu cầu hoá đơn VAT được: chưa huỷ/trả, chưa có yêu cầu, đặt trong 30 ngày. */
+/** Trần số mã đơn một lần gửi, cùng số với máy chủ (dealer.dto DEALER_INVOICE_BATCH_MAX): quá trần thì máy chủ từ chối cả lô. */
+export const INVOICE_BATCH_MAX = 50;
+
+/**
+ * Đơn đại lý còn tự gửi yêu cầu hoá đơn VAT được: chưa huỷ/trả, chưa có yêu cầu, đặt trong 30 ngày. Lấy tối đa `INVOICE_BATCH_MAX`
+ * đơn đầu danh sách (mới nhất trước); gửi xong danh sách tải lại và các đơn còn lại hiện ở lần sau.
+ */
 export function invoiceEligibleOrders(orders: OrderDTO[], now: Date): OrderDTO[] {
   const cutoff = now.getTime() - INVOICE_REQUEST_DAYS * DAY_MS;
-  return orders.filter(
-    (o) =>
-      o.status !== 'CANCELLED' &&
-      o.status !== 'RETURNED' &&
-      (!o.invoiceStatus || o.invoiceStatus === 'NOT_REQUESTED') &&
-      new Date(o.createdAt).getTime() >= cutoff,
-  );
+  return orders
+    .filter(
+      (o) =>
+        o.status !== 'CANCELLED' &&
+        o.status !== 'RETURNED' &&
+        (!o.invoiceStatus || o.invoiceStatus === 'NOT_REQUESTED') &&
+        new Date(o.createdAt).getTime() >= cutoff,
+    )
+    .slice(0, INVOICE_BATCH_MAX);
 }
 
 /** Ghi chú hoá đơn trên dòng đơn (cùng dòng số mặt hàng · ngày), không thêm dòng mới. */

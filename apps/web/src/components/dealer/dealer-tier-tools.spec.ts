@@ -4,6 +4,7 @@ import type { OrderDTO } from '@tubutree/shared-types';
 import {
   basketMargin,
   basketTierLine,
+  INVOICE_BATCH_MAX,
   invoiceEligibleOrders,
   invoiceResultNotice,
   invoiceTag,
@@ -111,6 +112,15 @@ describe('hoá đơn VAT trên danh sách đơn', () => {
       NOW,
     );
     expect(eligible.map((o) => o.code)).toEqual(['A', 'B', 'H']);
+  });
+
+  it('quá trần một lần gửi của máy chủ: chỉ lấy các đơn đầu danh sách (mới nhất)', () => {
+    const many = Array.from({ length: INVOICE_BATCH_MAX + 5 }, (_, i) => order(`N${i}`));
+    const eligible = invoiceEligibleOrders(many, NOW);
+    expect(INVOICE_BATCH_MAX).toBe(50);
+    expect(eligible).toHaveLength(50);
+    expect(eligible[0]!.code).toBe('N0');
+    expect(eligible[49]!.code).toBe('N49');
   });
 
   it('ghi chú trên dòng đơn', () => {

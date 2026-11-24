@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TAX_CODE_RE } from '../checkout/dto/checkout.dto';
@@ -50,6 +50,16 @@ export function savedInvoiceOf(metadata: unknown): DealerInvoiceInfo | null {
   return info;
 }
 
+const INCOMPLETE = 'Nhập tên công ty và địa chỉ xuất hoá đơn.';
+
+/**
+ * DTO hoá đơn dùng chung với thanh toán lẻ chỉ cắt khoảng trắng, không bắt tên công ty và địa chỉ khác rỗng. Chặn ở đây để thông tin
+ * đại lý lưu và mọi yêu cầu vào hàng chờ "Hoá đơn VAT" của admin luôn đủ ô, kể cả khi gọi thẳng API.
+ */
+export function assertInvoiceComplete(dto: Pick<InvoiceRequestDto, 'companyName' | 'address'>): void {
+  if (!dto.companyName?.trim() || !dto.address?.trim()) throw new BadRequestException(INCOMPLETE);
+}
+
 const infoOf = (dto: InvoiceRequestDto): DealerInvoiceInfo => ({
   taxCode: dto.taxCode,
   companyName: dto.companyName,
@@ -95,6 +105,7 @@ export class DealerInvoiceService {
 
   /** Lưu thông tin xuất hoá đơn. Khoá dòng users rồi mới gộp metadata: duyệt/gán bậc đại lý ghi `dealerTierId` vào cùng cột. */
   async saveProfile(userId: string, dto: InvoiceRequestDto): Promise<DealerInvoiceProfile> {
+    assertInvoiceComplete(dto);
     const info = infoOf(dto);
     await this.prisma.$transaction(async (tx) => {
       const [row] = await tx.$queryRaw<{ role: string; metadata: unknown }[]>`
@@ -119,6 +130,7 @@ export class DealerInvoiceService {
     now: Date = new Date(),
   ): Promise<DealerInvoiceRequestResult> {
     await this.dealerUser(userId);
+    assertInvoiceComplete(dto.invoice);
     const codes = [...new Set(dto.orderCodes.map((c) => c.trim()).filter(Boolean))];
     const info = infoOf(dto.invoice);
     const cutoff = new Date(now.getTime() - DEALER_INVOICE_REQUEST_DAYS * DAY_MS);

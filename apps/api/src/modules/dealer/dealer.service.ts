@@ -20,6 +20,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { resolveDealerRecipient } from './dealer-recipient';
+import { assertInvoiceComplete } from './dealer-invoice.service';
 import {
   DEALER_BLOCK_CREDIT_WHEN_OVERDUE_KEY,
   DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT,
@@ -271,6 +272,7 @@ export class DealerService {
 
   async placeOrder(userId: string, dto: DealerOrderDto, idempotencyKey?: string) {
     const { discountPct, tier } = await this.dealerContext(userId);
+    if (dto.invoiceRequest) assertInvoiceComplete(dto.invoiceRequest);
     // Chuẩn hoá key rỗng/khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder):
     // tránh ghi '' vào Order.idempotencyKey (unique) rồi request tiếp theo cũng '' đụng P2002.
     const key = idempotencyKey?.trim() || undefined;
