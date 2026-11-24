@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
-import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
+import { fetchBoughtTogether, fetchCatalog, fetchCategories, fetchRelated } from '@tubutree/app-core/api/catalog';
+import { pdpCategoryLinks, pdpCategoryTrail, pdpGeneratedFaq, pdpRefillLinkText } from '@tubutree/app-core/commerce/pdp-link-hub';
 import { fetchProductCompare } from '@tubutree/app-core/api/product-compare';
 import { fetchRefillPair, pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { addonRows, comboView } from '@tubutree/app-core/commerce/bundle-view';
@@ -44,6 +45,7 @@ import { PdpRails } from './pdp-rails';
 import { PdpRebuyRow } from './pdp-rebuy';
 import { PdpRefillOfferBlock } from './pdp-refill-offer';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
+import { PdpLinkHub } from './pdp-link-hub';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating, PdpRefillLandingLink } from './pdp-sections';
 import { PdpStory } from './pdp-story';
 import { PdpOriginGuide } from './pdp-origin-guide';
@@ -86,13 +88,16 @@ export async function generateMetadata({
 /** Dải gợi ý chỉ là phần phụ: lỗi thì bỏ, để trình duyệt tự tải lại; không được làm hỏng cả trang sản phẩm. */
 const orUndefined = <T,>(p: Promise<T>): Promise<T | undefined> => p.catch(() => undefined);
 
+/** Nguồn lấy dư so với số món hiện ở khối "Cùng danh mục": còn đủ món sau khi bỏ món đang xem và các món đã ở dải "Cùng thương hiệu". */
+const CATEGORY_LINKS_SOURCE_LIMIT = 12;
+
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const product = await getProduct(slug);
   if (!product) notFound();
   const http = createServerHttp();
   const bundlesFetchedAt = Date.now();
-  const [related, boughtTogether, bundles, flashAll, publicConfig, compare, refillPairs] = await Promise.all([
+  const [related, boughtTogether, bundles, flashAll, publicConfig, compare, refillPairs, sameCategory] = await Promise.all([
     orUndefined(fetchRelated(http, product.slug)),
     orUndefined(fetchBoughtTogether(http, product.slug)),
     orUndefined(fetchProductBundles(http, product.slug)),
@@ -103,6 +108,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     orUndefined(fetchProductCompare(http, product.slug)),
     // Gói Refill đã ghép với chai này (cờ tắt thì `{}`): thẻ "Chọn túi Refill … tiết kiệm …" cho mọi khách, dựng sẵn ở đây, trình duyệt không gọi thêm.
     orUndefined(fetchRefillPair(http, product.id)),
+    // Khối "Cùng danh mục" cuối trang (liên kết nội bộ dựng ở máy chủ): vệt danh mục sâu nhất của sản phẩm rồi các món bán chạy của danh mục lá.
+    // Lỗi ở bước nào thì khối bỏ phần đó, trang vẫn dựng: cây lỗi (hay hỏng) thì không có danh mục, danh sách lỗi thì còn vệt danh mục.
+    orUndefined(
+      fetchCategories(http).then(async (tree) => {
+        const trail = pdpCategoryTrail(tree, product.categoryIds);
+        const leaf = trail.at(-1);
+        const list = leaf ? await orUndefined(fetchCatalog(http, { page: 1, limit: CATEGORY_LINKS_SOURCE_LIMIT, category: leaf.id, sort: 'best_seller' })) : undefined;
+        return { trail: trail.map((c) => ({ id: c.id, name: c.name })), products: list?.data };
+      }),
+    ),
   ]);
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.
   const generatedAt = Date.now();
@@ -151,6 +166,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const hasIngredients = (product.ingredients ?? []).length > 0;
   const hasDescription = parseRichText(product.description).length > 0;
   const hasCompare = compareRows(compare) !== null;
+  // Hỏi–đáp chỉ từ chữ đang có trên trang: Thành phần, dòng Cách dùng của khối Nguồn gốc & cách dùng, thẻ gói Refill.
+  const linkFaq = pdpGeneratedFaq({
+    name: product.name,
+    ingredients: product.ingredients,
+    usage: originView?.rows.find((r) => r.key === 'usage')?.lines,
+    refill: refillOffer,
+  });
+  const categoryTrail = sameCategory?.trail ?? [];
+  const linkCategory =
+    categoryTrail.length > 0 ? { trail: categoryTrail, products: pdpCategoryLinks(sameCategory?.products, { currentId: product.id, exclude: related }) } : null;
+  const linkRefill = refillOffer ? { slug: refillOffer.slug, text: pdpRefillLinkText(refillOffer) } : null;
+  const hasLinkHub = linkFaq.length > 0 || linkCategory !== null || linkRefill !== null;
 
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
@@ -383,6 +410,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <div className="min-w-0 empty:hidden max-md:px-4 max-md:pb-6 lg:col-span-2">
                 <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} />
               </div>
+              {hasLinkHub && (
+                <div className="min-w-0 lg:col-span-2">
+                  <PdpLinkHub faq={linkFaq} category={linkCategory} refill={linkRefill} />
+                </div>
+              )}
             </div>
           }
         />
@@ -390,7 +422,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </PdpSelectionProvider>
       </FlashSalesSeed>
 
-      {pdpJsonLd({ product, url: productUrl, policy: productPolicy, flash, now: generatedAt }).map((ld, i) => (
+      {pdpJsonLd({ product, url: productUrl, policy: productPolicy, flash, now: generatedAt, faq: linkFaq, categoryTrail }).map((ld, i) => (
         <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(ld) }} />
       ))}
     </main>

@@ -19,6 +19,9 @@ const api = vi.hoisted(() => ({
   compare: null as unknown,
   purchased: [] as unknown[],
   refillPairs: {} as unknown,
+  categories: [] as unknown,
+  categoryProducts: [] as unknown[],
+  catalogCalls: [] as Record<string, unknown>[],
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
@@ -37,12 +40,17 @@ vi.mock('@/lib/core-http', () => ({
 }));
 vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: () => ({
-    get: async (path: string) => {
+    get: async (path: string, opts?: { query?: Record<string, unknown> }) => {
       if (api.serverFails) throw new Error('API tạm lỗi');
       if (path.endsWith('/bundles')) return api.bundles;
       if (path === '/flash-sales/active') return api.flash;
       if (path === '/config/public') return api.config;
       if (path === '/catalog/refill-pairs') return api.refillPairs;
+      if (path === '/categories') return api.categories;
+      if (path === '/products') {
+        api.catalogCalls.push(opts?.query ?? {});
+        return { data: api.categoryProducts, meta: { page: 1, limit: 12, total: api.categoryProducts.length } };
+      }
       // Cờ so sánh tắt: máy chủ trả 404.
       if (path.endsWith('/compare')) {
         if (!api.compare) throw new Error('404');
@@ -137,6 +145,9 @@ beforeEach(() => {
   api.purchased = [];
   api.refillPairs = {};
   api.config = { freeshipThreshold: 199000, subscribeDiscountPct: 0.12 };
+  api.categories = [];
+  api.categoryProducts = [];
+  api.catalogCalls = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -1122,5 +1133,100 @@ describe('/san-pham/[slug] — So với món tương tự', () => {
     ]);
     expect(smallTouchTargets(block)).toEqual([]);
     expect(unnamedControls(block)).toEqual([]);
+  });
+});
+
+describe('/san-pham/[slug] — khối Hỏi nhanh · Cùng danh mục · Bản Refill tiết kiệm (w30-04)', () => {
+  const card = (id: string, name: string) => ({ id, slug: `sp-${id}`, brand: 'Khác', name, thumbnail: null, basePrice: 90000, salePrice: null, isFeatured: false, inStock: true });
+  const TREE = [
+    { id: 'c-nha', parentId: null, name: 'Nhà cửa', slug: 'nha-cua', image: null, sortOrder: 0, children: [
+      { id: 'c-goi', parentId: 'c-nha', name: 'Gội & xả', slug: 'goi-xa', image: null, sortOrder: 0, children: [] },
+    ] },
+  ];
+  const lds = (c: Element) => Array.from(c.querySelectorAll('script[type="application/ld+json"]')).map((el) => JSON.parse(el.textContent!));
+
+  it('đủ dữ liệu: hỏi–đáp gập sẵn, vệt danh mục và món cùng danh mục, gói Refill — tất cả là liên kết thật trong HTML máy chủ, chỉ hiện từ md', async () => {
+    api.product = {
+      ...PRODUCT,
+      categoryIds: ['c-nha', 'c-goi'],
+      ingredients: [{ name: 'Bồ kết', percentage: '5%' }, { name: 'Gừng' }],
+      description: `${PRODUCT.description}<p>Hướng dẫn sử dụng: thoa lên tóc ướt, xả sạch.</p>`,
+    };
+    api.refillPairs = { p1: REFILL_PAIR };
+    api.categories = TREE;
+    api.related = [card('r1', 'Cùng nhãn 1')];
+    api.categoryProducts = [card('p1', 'Chính nó'), card('r1', 'Cùng nhãn 1'), card('k1', 'Dầu xả bưởi'), card('k2', 'Sữa tắm sả')];
+    const c = await mount();
+    const hub = c.querySelector('[data-testid="pdp-link-hub"]')!;
+    expect(hub.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'md:block']));
+    expect(hub.closest('[data-testid="pdp-below-cols"] > *')!.className).toContain('min-w-0');
+    expect(hub.querySelector('[data-pdp-block]')).toBeNull();
+    // Hỏi–đáp: <details> gập sẵn, câu hỏi nêu tên sản phẩm, câu trả lời là chữ đang có trên trang.
+    const qs = Array.from(hub.querySelectorAll('[data-testid="pdp-faq"] details'));
+    expect(qs.every((d) => !d.hasAttribute('open'))).toBe(true);
+    expect(qs.map((d) => d.querySelector('summary')!.textContent)).toEqual([
+      'Dầu gội bồ kết có thành phần gì?',
+      'Dùng Dầu gội bồ kết thế nào?',
+      'Dầu gội bồ kết có bản Refill không?',
+    ]);
+    expect(hub.querySelector('[data-testid="pdp-faq-ingredients"] p')!.textContent).toBe('Thành phần: Bồ kết (5%), Gừng.');
+    // Câu trả lời Cách dùng là đúng chữ dòng Cách dùng của khối Nguồn gốc & cách dùng.
+    expect(hub.querySelector('[data-testid="pdp-faq-usage"] p')!.textContent).toBe('Thoa lên tóc ướt, xả sạch.');
+    expect(c.querySelector('[data-testid="pdp-origin-usage"] dd')!.textContent).toBe('Thoa lên tóc ướt, xả sạch.');
+    // Cùng danh mục: danh mục sâu nhất, mỗi mục của vệt một liên kết; bỏ món đang xem và món đã ở dải Cùng thương hiệu.
+    const trail = Array.from(hub.querySelectorAll<HTMLAnchorElement>('[data-testid="pdp-category-trail"] a')).map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(trail).toEqual([['Nhà cửa', '/san-pham?category=c-nha'], ['Gội & xả', '/san-pham?category=c-goi']]);
+    expect(api.catalogCalls).toEqual([expect.objectContaining({ category: 'c-goi', sort: 'best_seller', page: 1 })]);
+    const same = Array.from(hub.querySelectorAll<HTMLAnchorElement>('[data-testid="pdp-same-category"] ul a')).map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(same).toEqual([['Dầu xả bưởi', '/san-pham/sp-k1'], ['Sữa tắm sả', '/san-pham/sp-k2']]);
+    const refill = hub.querySelector<HTMLAnchorElement>('[data-testid="pdp-refill-link"] a')!;
+    expect(refill.getAttribute('href')).toBe('/san-pham/refill-dau-goi-bo-ket-5l');
+    expect(refill.textContent).toContain('Túi Refill dầu gội bồ kết 5L');
+    expect(hub.querySelector('nav')!.getAttribute('aria-label')).toBe('Sản phẩm liên quan');
+    expect(smallTouchTargets(hub)).toEqual([]);
+    expect(headingProblems(c)).toEqual([]);
+    // JSON-LD: MỘT FAQPage đúng các câu đang vẽ, thêm vệt danh mục thứ hai sau vệt theo nhãn.
+    const ld = lds(c);
+    const faq = ld.filter((d) => d['@type'] === 'FAQPage');
+    expect(faq).toHaveLength(1);
+    expect(faq[0].mainEntity.map((q: { name: string }) => q.name)).toEqual(qs.map((d) => d.querySelector('summary')!.textContent));
+    const crumbs = ld.filter((d) => d['@type'] === 'BreadcrumbList');
+    expect(crumbs.map((b) => b.itemListElement.map((i: { name: string }) => i.name))).toEqual([
+      ['Trang chủ', 'Xanh Việt', 'Dầu gội bồ kết'],
+      ['Trang chủ', 'Danh mục', 'Nhà cửa', 'Gội & xả', 'Dầu gội bồ kết'],
+    ]);
+  });
+
+  it('không danh mục, không thành phần, không cách dùng, chưa ghép Refill: không có khối, không FAQPage, một BreadcrumbList', async () => {
+    api.product = { ...PRODUCT, categoryIds: ['da-xoa'] };
+    api.categories = TREE;
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-link-hub"]')).toBeNull();
+    expect(api.catalogCalls).toEqual([]);
+    const types = lds(c).map((d) => d['@type']);
+    expect(types).toEqual(['Product', 'BreadcrumbList']);
+  });
+
+  it('có danh mục mà chưa có món nào khác: vẫn có vệt danh mục (liên kết sang trang danh mục), không có danh sách món', async () => {
+    api.product = { ...PRODUCT, categoryIds: ['c-nha'] };
+    api.categories = TREE;
+    api.categoryProducts = [card('p1', 'Chính nó')];
+    const c = await mount();
+    const hub = c.querySelector('[data-testid="pdp-link-hub"]')!;
+    expect(hub.querySelector('[data-testid="pdp-faq"]')).toBeNull();
+    expect(Array.from(hub.querySelectorAll('[data-testid="pdp-category-trail"] a')).map((a) => a.textContent)).toEqual(['Nhà cửa']);
+    expect(hub.querySelector('[data-testid="pdp-same-category"] ul')).toBeNull();
+    expect(hub.querySelector('[data-testid="pdp-refill-link"]')).toBeNull();
+  });
+
+  it('API danh mục lỗi: trang vẫn dựng, khối chỉ còn phần có dữ liệu', async () => {
+    api.product = { ...PRODUCT, categoryIds: ['c-nha'], ingredients: [{ name: 'Bồ kết' }] };
+    api.categories = Promise.reject(new Error('API tạm lỗi'));
+    (api.categories as Promise<unknown>).catch(() => undefined);
+    const c = await mount();
+    expect(c.querySelector('h1')!.textContent).toBe('Dầu gội bồ kết');
+    const hub = c.querySelector('[data-testid="pdp-link-hub"]')!;
+    expect(hub.querySelector('[data-testid="pdp-faq-ingredients"]')).not.toBeNull();
+    expect(hub.querySelector('[data-testid="pdp-same-category"]')).toBeNull();
   });
 });
