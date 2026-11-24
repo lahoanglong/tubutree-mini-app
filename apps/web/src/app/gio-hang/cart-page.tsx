@@ -168,11 +168,13 @@ export default function CartPage() {
   const router = useRouter();
   const cartKeyNow = useCartKey();
   // Quay lại tab sau một lúc vắng: đọc lại giỏ để tồn kho và giá Giờ vàng là số mới (QueryClient của web tắt focus mặc định). Cùng luật với Mini App.
+  // Giỏ đang lỗi thì giữ mặc định của web (không tự đọc lại); còn lệnh ghi nào bay (sổ `useCartWrite` hay mutation khác như quà 0đ) thì không đọc.
   const cartQ = useQuery({
     queryKey: cartKeyNow,
     queryFn: getCart,
     enabled: phase === 'authenticated',
-    refetchOnWindowFocus: (q) => cartRefetchOnReturn(q.state.dataUpdatedAt, cartWritesInFlight(queryClient)),
+    refetchOnWindowFocus: (q) =>
+      q.state.status !== 'error' && cartRefetchOnReturn(q.state.dataUpdatedAt, cartWritesInFlight(queryClient) + queryClient.isMutating()),
   });
   // `cart_viewed` một lần mỗi lần mở giỏ, khi dữ liệu giỏ có lần đầu (kể cả bản trong bộ nhớ đệm); tải lại giỏ sau đó không phát thêm.
   const cartViewed = useRef(false);
@@ -216,6 +218,8 @@ export default function CartPage() {
   // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache; chọn một phần thì đọc lại giỏ và phần đang chọn.
   const giftChoice = useMutation({
     mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[] }) => setCartGift(variationId, itemIds),
+    // Lượt đọc giỏ đang bay (vd đọc lại khi quay lại tab) gửi trước lúc máy chủ lưu quà: về muộn thì đè giỏ có quà mới.
+    onMutate: () => queryClient.cancelQueries({ queryKey: cartKeyNow }),
     onSuccess: (c, { itemIds }) => {
       if (itemIds) void queryClient.invalidateQueries({ queryKey: cartKeyNow });
       else queryClient.setQueryData(cartKeyNow, c);
@@ -476,7 +480,8 @@ export default function CartPage() {
   };
   // Món hết chỉ bỏ chọn, không xoá: quay lại giỏ vẫn thấy chúng (bỏ chọn) để mua khi có hàng lại. Phần còn lại luôn là một phần giỏ.
   const onDropSoldOut = () => {
-    if (!recovery) return;
+    // Lệnh ghi giỏ còn bay (vd vừa thêm món bù, Hoàn tác): danh sách dòng trong cache chưa có dòng đó, gửi `keepIds` lúc này là bỏ sót món (như Mini App).
+    if (!recovery || cartWritesInFlight(queryClient) > 0 || queryClient.isMutating() > 0) return;
     setDeselected((prev) => new Set([...prev, ...recovery.soldOutIds]));
     rememberCheckoutSelection(recovery.keepIds);
     markCheckoutEntry('cart_subset');

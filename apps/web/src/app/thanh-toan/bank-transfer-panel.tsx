@@ -307,7 +307,7 @@ export function BankTransferPanel({
           <PanelRow label="Ngân hàng" value={data.bank.name} stacked />
           <div data-bank-row className={ROW}>
             <span className={LABEL}>Số tài khoản</span>
-            <span className="flex items-center gap-2 font-mono font-semibold text-stone-900 max-md:gap-1.5 max-md:font-ui">
+            <span className="flex flex-wrap items-center justify-end gap-2 font-mono font-semibold text-stone-900 max-md:gap-1.5 max-md:font-ui">
               {data.bank.accountNo}
               <CopyControls text={data.bank.accountNo} name="số tài khoản" onCopied={copyToast.show} />
             </span>
@@ -316,14 +316,14 @@ export function BankTransferPanel({
           {/* Điện thoại: số tiền đã ở giữa thẻ kèm nút chép (như Mini App) nên bỏ dòng lặp. */}
           <div data-bank-row className={`${ROW} max-md:hidden`}>
             <span className={LABEL}>Số tiền</span>
-            <span className="flex items-center gap-2 font-semibold text-stone-900 max-md:gap-1.5">
+            <span className="flex flex-wrap items-center justify-end gap-2 font-semibold text-stone-900 max-md:gap-1.5">
               {formatVnd(data.amount)}
               <CopyControls text={String(data.amount)} name="số tiền" onCopied={copyToast.show} />
             </span>
           </div>
           <div data-bank-row className={ROW}>
             <span className={LABEL}>Nội dung CK</span>
-            <span className="flex items-center gap-2 font-semibold text-forest-700 max-md:gap-1.5 max-md:text-success-fg">
+            <span className="flex flex-wrap items-center justify-end gap-2 font-semibold text-forest-700 max-md:gap-1.5 max-md:text-success-fg">
               {data.memo}
               <CopyControls text={data.memo} name="nội dung chuyển khoản" onCopied={copyToast.show} />
             </span>

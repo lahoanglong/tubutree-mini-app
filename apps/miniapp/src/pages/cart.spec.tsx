@@ -347,6 +347,26 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
       expect(await screen.findByRole('button', { name: 'Thanh toán (1)' })).toBeEnabled();
     });
 
+    it('tubu-w26-01: lệnh sửa giỏ còn bay: bấm nút một chạm chưa đi (danh sách dòng chưa chắc đúng), lệnh xong thì đi đúng phần còn lại', async () => {
+      let finish!: (v: unknown) => void;
+      mocks.removeCartItem.mockReturnValue(new Promise((res) => (finish = res)));
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE, OK_LINE], subtotal: 383_000, itemCount: 4 }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá Xà bông thảo mộc' }));
+      await waitFor(() => expect(mocks.removeCartItem).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' }));
+      expect(mocks.navigate).not.toHaveBeenCalledWith('/checkout', expect.anything());
+      const after = summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 });
+      mocks.getCart.mockResolvedValue(after);
+      await act(async () => finish(after));
+      await waitFor(() => expect(screen.queryByText('Xà bông thảo mộc')).toBeNull());
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/checkout', { state: { itemIds: ['ci-buy'] } });
+    });
+
     it('tubu-w26-01: dòng hết hàng mà còn dòng vượt tồn: vẫn khoá, không có nút một chạm (khách tự chọn số lượng)', async () => {
       const OVER = { ...BUYABLE, quantity: 6, stock: 5, total: 450_000 };
       mocks.getCart.mockResolvedValue(summary({ items: [OOS, OVER], subtotal: 608_000, itemCount: 8 }));

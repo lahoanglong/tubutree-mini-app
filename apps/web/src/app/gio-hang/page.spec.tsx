@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   selection: vi.fn<(ids: string[]) => Promise<unknown>>(),
   push: vi.fn<(href: string) => void>(),
   cartCalls: 0,
+  hold: null as Promise<void> | null,
 }));
 // Giỏ trống vẽ EmptyCart (dùng useRouter); không có app router trong jsdom nên thiếu mock này thì giỏ trống làm vỡ cả cây khi test.
 vi.mock('next/navigation', async (importOriginal) => ({
@@ -37,6 +38,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   removeCoupon: async () => state.cart,
   updateCartItem: async (id: string, q: number) => {
     state.updates.push({ id, q });
+    if (state.hold) await state.hold;
     return state.cart;
   },
   removeCartItem: async (id: string) => {
@@ -218,6 +220,32 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.removed).toEqual([]);
     expect(container.querySelector<HTMLInputElement>('input[aria-label="Chọn Xà phòng để thanh toán"]')!.checked).toBe(false);
     expect(container.querySelector<HTMLInputElement>('input[aria-label="Chọn Nước rửa chén để thanh toán"]')!.checked).toBe(true);
+  });
+
+  it('tubu-w26-01: lệnh ghi giỏ còn bay: bấm nút một chạm chưa đi (cache chưa có kết quả lệnh), lệnh xong thì đi đúng phần còn lại', async () => {
+    let release!: () => void;
+    state.hold = new Promise<void>((r) => (release = r));
+    state.push.mockClear();
+    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' }), line({ id: 'i3', productName: 'Nước rửa chén' })]);
+    try {
+      const { container } = await mount();
+      const cta = () => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Bỏ món hết & thanh toán tiếp')!;
+      click(button(container, 'Tăng số lượng Nước rửa chén'));
+      await flush();
+      expect(state.updates).toEqual([{ id: 'i3', q: 3 }]);
+      click(cta());
+      await flush();
+      expect(state.push).not.toHaveBeenCalled();
+      expect(recallCheckoutSelection()).toBeUndefined();
+      release();
+      await flush(8);
+      click(cta());
+      await flush();
+      expect(state.push).toHaveBeenCalledWith('/thanh-toan');
+      expect(recallCheckoutSelection()).toEqual(['i1', 'i3']);
+    } finally {
+      state.hold = null;
+    }
   });
 
   it('tubu-w26-01: dòng hết hàng mà còn dòng vượt tồn: vẫn khoá (khách tự chọn số lượng), không có nút một chạm', async () => {

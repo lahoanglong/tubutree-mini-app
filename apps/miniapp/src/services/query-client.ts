@@ -4,7 +4,7 @@ import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
 import { isHttpError } from './http';
 
 /** Lỗi tạm (mất mạng, timeout, 5xx, 429, 408): tải lại sau có thể khỏi. 4xx còn lại là nghiệp vụ, tải lại vẫn y vậy. */
-function isTransientError(error: unknown): boolean {
+export function isTransientError(error: unknown): boolean {
   if (!isHttpError(error)) return false;
   const status = error.response?.status;
   return !status || status >= 500 || status === 408 || status === 429;

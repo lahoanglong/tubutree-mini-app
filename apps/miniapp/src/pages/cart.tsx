@@ -61,6 +61,7 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { subtotalBucket } from '@tubutree/shared-types';
 import { setCheckoutEntry, trackEvent } from '../services/analytics';
+import { isTransientError } from '../services/query-client';
 import { PageHeader } from '../components/ui/page-header';
 import { Checkbox } from '../components/ui/form';
 import { SR_ONLY } from '../components/ui/sr-only';
@@ -211,12 +212,16 @@ export default function CartPage() {
 
   const cartKeyNow = useCartKey();
   // Khách quay lại app (visibilitychange) sau một lúc vắng: đọc lại giỏ để tồn kho và giá Giờ vàng là số mới, nút "Bỏ món hết & thanh toán tiếp"
-  // hiện ngay thay vì để khách bấm Thanh toán rồi mới gặp dòng hết hàng. Không đọc khi lệnh sửa giỏ đang bay (cùng luật với web, `cartRefetchOnReturn`).
+  // hiện ngay thay vì để khách bấm Thanh toán rồi mới gặp dòng hết hàng. Không đọc khi lệnh sửa giỏ hay mutation khác (quà 0đ) đang bay (cùng luật với web,
+  // `cartRefetchOnReturn`). Giỏ đang lỗi thì giữ luật chung của query-client.ts (chỉ đọc lại khi lỗi tạm).
   const cart = useQuery({
     queryKey: cartKeyNow,
     queryFn: getCart,
     enabled: phase === 'authenticated',
-    refetchOnWindowFocus: (q) => cartRefetchOnReturn(q.state.dataUpdatedAt, countEdits(queryClient, 0)),
+    refetchOnWindowFocus: (q) =>
+      q.state.status === 'error'
+        ? isTransientError(q.state.error)
+        : cartRefetchOnReturn(q.state.dataUpdatedAt, countEdits(queryClient, 0) + queryClient.isMutating()),
   });
   // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
   const removedCoupon = useRemovedCoupon(cart.data, formatVnd);
@@ -334,6 +339,8 @@ export default function CartPage() {
   // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache; chọn một phần thì đọc lại giỏ và phần đang chọn.
   const giftChoice = useMutation({
     mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[] }) => setCartGift(variationId, itemIds),
+    // Lượt đọc giỏ đang bay (vd đọc lại khi quay lại app) gửi trước lúc máy chủ lưu quà: về muộn thì đè giỏ có quà mới.
+    onMutate: () => queryClient.cancelQueries({ queryKey: cartKey() }),
     onSuccess: (c, { itemIds }) => {
       if (itemIds) void queryClient.invalidateQueries({ queryKey: cartKey() });
       else queryClient.setQueryData(cartKey(), c);
@@ -526,6 +533,8 @@ export default function CartPage() {
   const goCheckout = () => {
     if (selectedItems.length === 0 || addon.isPending) return;
     if (recovery) {
+      // Lệnh sửa giỏ còn bay (món bù chưa có id thật `pending-…`, Hoàn tác): danh sách dòng chưa chắc đúng, gửi id lúc này là sai món (như web).
+      if (countEdits(queryClient, 0) > 0 || queryClient.isMutating() > 0) return;
       // Món hết chỉ bỏ chọn, không xoá: quay lại giỏ vẫn thấy chúng (bỏ chọn) để mua khi có hàng lại.
       const drop = new Set(recovery.soldOutIds);
       setDeselected((prev) => new Set([...prev, ...drop]));
