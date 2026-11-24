@@ -26,10 +26,9 @@ export interface SoldOutRecovery {
  * khách tự chọn số lượng, tự giảm hộ là đổi đơn sau lưng khách.
  */
 export function soldOutRecovery(selected: readonly RecoveryLine[]): SoldOutRecovery | null {
-  const soldOut = selected.filter((l) => l.stock <= 0);
-  const keep = selected.filter((l) => l.stock > 0);
-  if (soldOut.length === 0 || keep.length === 0) return null;
-  if (keep.some((l) => l.quantity > l.stock)) return null;
+  const split = recoverySplit(selected);
+  if (!split) return null;
+  const { soldOut, keep } = split;
   const names = soldOut.map((l) => `"${l.productName}"`).join(', ');
   return {
     soldOutIds: soldOut.map((l) => l.id),
@@ -37,6 +36,24 @@ export function soldOutRecovery(selected: readonly RecoveryLine[]): SoldOutRecov
     cta: fillCopy('cart.dropSoldOutCta'),
     note: fillCopy('cart.dropSoldOutNote', { names }),
   };
+}
+
+function recoverySplit<T extends RecoveryLine>(selected: readonly T[]): { soldOut: T[]; keep: T[] } | null {
+  const soldOut = selected.filter((l) => l.stock <= 0);
+  const keep = selected.filter((l) => l.stock > 0);
+  if (soldOut.length === 0 || keep.length === 0) return null;
+  if (keep.some((l) => l.quantity > l.stock)) return null;
+  return { soldOut, keep };
+}
+
+/**
+ * Dòng để hỏi và hiện giá cạnh nút Thanh toán (tổng tiền, các dòng giảm, quà dùng thử, xem trước mã): khi nút chính là "Bỏ món hết & thanh toán
+ * tiếp" thì chỉ phần còn lại (`keepIds`, đúng phần một chạm gửi sang Thanh toán), không thì đúng các dòng đang chọn. Máy chủ tính giá cả giỏ trên
+ * mọi dòng, kể cả dòng hết: giỏ chọn hết mà dùng số đó thì tổng và số giảm cạnh nút gồm món sẽ không mua.
+ * Không dùng cho trạng thái ô chọn hay danh sách gửi Thanh toán: món hết vẫn đang được chọn tới lúc khách bấm.
+ */
+export function cartPricingLines<T extends RecoveryLine>(selected: readonly T[]): T[] {
+  return recoverySplit(selected)?.keep ?? [...selected];
 }
 
 /** Vắng ít hơn ngần này thì quay lại không đọc lại giỏ: đổi cửa sổ qua lại trên máy tính không gọi mạng mỗi lần. */

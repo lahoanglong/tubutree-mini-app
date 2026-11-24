@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
   selection: vi.fn<(ids: string[]) => Promise<unknown>>(),
+  gift: vi.fn<(variationId: string | null, ids?: string[]) => Promise<unknown>>(),
   push: vi.fn<(href: string) => void>(),
   cartCalls: 0,
   hold: null as Promise<void> | null,
@@ -34,6 +35,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMyCoupons: async () => state.coupons,
   getCouponPreviews: (p: unknown) => state.previews(p),
   getCartSelection: (ids: string[]) => state.selection(ids),
+  setCartGift: (variationId: string | null, ids?: string[]) => state.gift(variationId, ids),
   applyCoupon: async () => state.cart,
   removeCoupon: async () => state.cart,
   updateCartItem: async (id: string, q: number) => {
@@ -76,6 +78,8 @@ beforeEach(() => {
   state.previews.mockResolvedValue([]);
   state.selection.mockReset();
   state.selection.mockRejectedValue(new Error('chưa mock'));
+  state.gift.mockReset();
+  state.gift.mockRejectedValue(new Error('chưa mock'));
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -594,6 +598,89 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     expect(container.textContent).toContain('-1.000đ');
     expect(container.textContent).toContain('Tạm tính (đã giảm)91.000đ');
     expect(container.textContent).not.toContain('tính lại ở bước thanh toán');
+  });
+
+  describe('tubu-w33-02: chọn cả giỏ mà có nút bỏ món hết một chạm: số tiền là của phần còn lại, không phải cả giỏ', () => {
+    // Máy chủ tính giá cả giỏ trên mọi dòng, kể cả dòng hết: số giảm 20.000đ, combo 12.000đ gồm món sẽ không mua.
+    const withSoldOut = () => ({
+      ...cartOf([
+        line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 150000 }),
+        line({ id: 'i2', productName: 'Xà phòng', quantity: 2, unitPrice: 50000, total: 100000, stock: 0 }),
+      ]),
+      couponCode: 'WELCOME',
+      comboDiscount: 12000,
+      discount: 20000,
+      tierDiscount: 0,
+      subtotal: 250000,
+      itemCount: 3,
+    });
+    const keepPriced = (over: Record<string, unknown> = {}) => ({
+      ...cartOf([line({ id: 'i1', productName: 'Dầu gội', quantity: 1, total: 150000 })]),
+      couponCode: 'WELCOME',
+      subtotal: 150000,
+      comboDiscount: 0,
+      discount: 5000,
+      tierDiscount: 0,
+      ...over,
+    });
+
+    it('hỏi giá đúng phần còn lại; tổng, dòng giảm và số cạnh mã theo số đó; ô "Chọn tất cả" vẫn đánh dấu', async () => {
+      state.cart = withSoldOut();
+      state.selection.mockResolvedValue(keepPriced());
+      const { container } = await mount();
+      await settle();
+      expect(state.selection).toHaveBeenLastCalledWith(['i1']);
+      expect(container.textContent).toContain('Tạm tính (đã giảm)145.000đ');
+      expect(container.textContent).toContain('-5.000đ');
+      expect(container.textContent).not.toContain('-20.000đ');
+      expect(container.textContent).not.toContain('Giảm giá combo');
+      expect(selectAll(container).checked).toBe(true);
+      expect(pick(container, 'Xà phòng').checked).toBe(true);
+    });
+
+    it('chưa có giá phần còn lại: không mượn số giảm của cả giỏ', async () => {
+      state.cart = withSoldOut();
+      state.selection.mockReturnValue(new Promise(() => {}));
+      const { container } = await mount();
+      await settle();
+      expect(state.selection).toHaveBeenCalledWith(['i1']);
+      expect(container.textContent).not.toContain('-20.000đ');
+      expect(container.textContent).not.toContain('-12.000đ');
+      expect(container.textContent).not.toContain('250.000đ');
+    });
+
+    it('xem trước mã theo đúng phần còn lại', async () => {
+      state.coupons = [{ code: 'MIN100', type: 'PERCENT', value: 10, minOrder: 100000, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' }];
+      state.cart = { ...withSoldOut(), couponCode: null, discount: 0 };
+      state.selection.mockResolvedValue(keepPriced({ couponCode: null, discount: 0 }));
+      await mount();
+      await settle();
+      expect(state.previews).toHaveBeenCalled();
+      for (const [p] of state.previews.mock.calls) expect(p).toEqual({ itemIds: ['i1'] });
+    });
+
+    it('đổi quà dùng thử đang hiện theo phần còn lại: lưu kèm đúng phần đó để ô quà đọc lại', async () => {
+      const gift = {
+        base: 150000,
+        minOrder: 100000,
+        nextMinOrder: null,
+        shortfall: 0,
+        options: [{ variationId: 'v-fuwa', productName: 'Fuwa3e', variationName: '100ml', slug: 'fuwa', thumbnail: null, minOrder: 100000, unlocked: true }],
+        selectedVariationId: 'v-fuwa',
+        declined: false,
+      };
+      state.cart = withSoldOut();
+      state.selection.mockResolvedValue(keepPriced({ giftTrial: gift }));
+      state.gift.mockResolvedValue(keepPriced({ giftTrial: { ...gift, selectedVariationId: null, declined: true } }));
+      const { container } = await mount();
+      await settle();
+      click(container.querySelector<HTMLButtonElement>('[data-testid="gift-trial-change"]'));
+      await flush(3);
+      const other = Array.from(document.querySelectorAll<HTMLInputElement>('[data-testid="gift-trial-option"] input[type="radio"]')).find((r) => !r.checked);
+      click(other!);
+      await flush(3);
+      expect(state.gift).toHaveBeenCalledWith(null, ['i1']);
+    });
   });
 
   it('chọn lại tất cả: về giỏ thường đã có trong bộ nhớ, không hỏi thêm máy chủ', async () => {

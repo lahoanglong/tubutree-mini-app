@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getAddresses: vi.fn(),
   getCart: vi.fn(),
   getCartSelection: vi.fn(),
+  setCartGift: vi.fn(),
   removeCartItem: vi.fn(),
   updateCartItem: vi.fn(),
   voucherProps: [] as Record<string, unknown>[],
@@ -31,6 +32,7 @@ vi.mock('../services/shop-api', () => ({
   getAddresses: mocks.getAddresses,
   getCart: mocks.getCart,
   getCartSelection: mocks.getCartSelection,
+  setCartGift: mocks.setCartGift,
   removeCartItem: mocks.removeCartItem,
   updateCartItem: mocks.updateCartItem,
   addToCart: mocks.addToCart,
@@ -337,6 +339,78 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
       expect(screen.getByTestId('cart-total-row')).toHaveTextContent('75.000đ');
     });
 
+    describe('tubu-w33-02: chọn cả giỏ mà có nút một chạm: số tiền cạnh nút là của phần còn lại, không phải cả giỏ', () => {
+      // Máy chủ tính giá cả giỏ trên mọi dòng, kể cả dòng hết: số giảm 20.000đ gồm món sẽ không mua.
+      const whole = () => summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3, couponCode: 'XANH10', discount: 20_000, comboDiscount: 12_000 });
+      const keepPriced = (over: object = {}) =>
+        summary({ items: [BUYABLE], subtotal: 75_000, itemCount: 1, couponCode: 'XANH10', discount: 5_000, comboDiscount: 0, ...over });
+
+      it('hỏi giá đúng phần còn lại, tổng và dòng giảm theo số đó; ô "Chọn tất cả" vẫn đánh dấu', async () => {
+        mocks.getCart.mockResolvedValue(whole());
+        mocks.getCartSelection.mockResolvedValue(keepPriced());
+        renderPage();
+        await waitFor(() => expect(screen.getByTestId('cart-total-row')).toHaveTextContent('70.000đ'), { timeout: 2_000 });
+        expect(mocks.getCartSelection).toHaveBeenLastCalledWith(['ci-buy']);
+        expect(screen.getByTestId('coupon-discount').textContent).toBe('-5.000đ');
+        expect(screen.queryByText('-20.000đ')).toBeNull();
+        expect(screen.queryByText('Giảm giá combo')).toBeNull();
+        expect(screen.getByRole('checkbox', { name: 'Chọn tất cả' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Chọn Cobote bột giặt' })).toBeChecked();
+      });
+
+      it('chưa có giá phần còn lại: không mượn số giảm của cả giỏ (tạm tính phần mua được, không giảm)', async () => {
+        mocks.getCart.mockResolvedValue(whole());
+        mocks.getCartSelection.mockReturnValue(new Promise(() => undefined));
+        renderPage();
+        await screen.findByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' });
+        await waitFor(() => expect(mocks.getCartSelection).toHaveBeenCalledWith(['ci-buy']), { timeout: 2_000 });
+        expect(screen.getByTestId('cart-total-row')).toHaveTextContent('75.000đ');
+        expect(screen.queryByText('-20.000đ')).toBeNull();
+        expect(screen.queryByText('-12.000đ')).toBeNull();
+      });
+
+      it('xem trước mã của tấm chọn mã theo đúng phần còn lại', async () => {
+        mocks.voucherProps = [];
+        mocks.getCart.mockResolvedValue(whole());
+        mocks.getCartSelection.mockResolvedValue(keepPriced());
+        renderPage();
+        await screen.findByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' });
+        const last = mocks.voucherProps[mocks.voucherProps.length - 1]!;
+        expect(last.previewParams).toEqual({ storefrontSlug: undefined, itemIds: ['ci-buy'] });
+        expect(last.previewKey).toBe('ci-buy:1:75000');
+      });
+
+      it('đổi quà dùng thử đang hiện theo phần còn lại: lưu kèm đúng phần đó để ô quà đọc lại', async () => {
+        const gift = {
+          base: 75_000,
+          minOrder: 50_000,
+          nextMinOrder: null,
+          shortfall: 0,
+          options: [{ variationId: 'v-fuwa', productName: 'Fuwa3e', variationName: '100ml', slug: 'fuwa', thumbnail: null, minOrder: 50_000, unlocked: true }],
+          selectedVariationId: 'v-fuwa',
+          declined: false,
+        };
+        mocks.getCart.mockResolvedValue(whole());
+        mocks.getCartSelection.mockResolvedValue(keepPriced({ giftTrial: gift }));
+        mocks.setCartGift.mockResolvedValue(keepPriced({ giftTrial: { ...gift, selectedVariationId: null, declined: true } }));
+        renderPage();
+        fireEvent.click(await screen.findByTestId('gift-trial-change', {}, { timeout: 2_000 }));
+        const options = await screen.findAllByTestId('gift-trial-option');
+        fireEvent.click(options.find((o) => o.getAttribute('aria-checked') === 'false')!);
+        await waitFor(() => expect(mocks.setCartGift).toHaveBeenCalledWith(null, ['ci-buy']));
+      });
+
+      it('bỏ chọn tay món hết: thành một phần giỏ thường, vẫn hỏi đúng phần còn lại', async () => {
+        mocks.getCart.mockResolvedValue(whole());
+        mocks.getCartSelection.mockResolvedValue(keepPriced());
+        renderPage();
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Cobote bột giặt' }));
+        expect(await screen.findByRole('button', { name: 'Thanh toán (1)' })).toBeEnabled();
+        await waitFor(() => expect(screen.getByTestId('coupon-discount').textContent).toBe('-5.000đ'), { timeout: 2_000 });
+        expect(mocks.getCartSelection).toHaveBeenLastCalledWith(['ci-buy']);
+      });
+    });
+
     it('tubu-w26-01: bấm nút một chạm: bỏ chọn dòng hết (không xoá), sang Thanh toán chỉ với phần còn lại, dấu cart_subset', async () => {
       mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
       renderPage();
@@ -631,7 +705,8 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     expect(mocks.getCartSelection).toHaveBeenLastCalledWith(['ci-b']);
     expect(screen.getByText('Giảm giá combo')).toBeInTheDocument();
     expect(screen.getByText('Ưu đãi hạng thành viên')).toBeInTheDocument();
-    expect(screen.getByText('-3.000đ')).toBeInTheDocument();
+    // Số cạnh mã cùng nguồn với dòng giảm (giá phần chọn), không phải -9.000đ của cả giỏ.
+    expect(screen.getByTestId('coupon-discount').textContent).toBe('-3.000đ');
     expect(screen.getByText('-1.000đ')).toBeInTheDocument();
     expect(screen.getByText('91.000đ')).toBeInTheDocument();
   });
@@ -695,7 +770,7 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     );
     const qc = renderWithClient();
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
-    await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+    await screen.findAllByText('-3.000đ', {}, { timeout: 2_000 });
     expect(screen.getByText('97.000đ')).toBeInTheDocument();
     mocks.getCartSelection.mockResolvedValueOnce(
       summary({ items: [LINE_B], subtotal: 100_000, couponCode: null, comboDiscount: 0, discount: 0, tierDiscount: 0 }),
@@ -722,7 +797,7 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     act(() => {
       qc.setQueryData(['cart', null], two({ couponCode: 'XANH10', comboDiscount: 0, discount: 0, tierDiscount: 0 }));
     });
-    expect(await screen.findByText('-3.000đ', {}, { timeout: 2_000 })).toBeInTheDocument();
+    expect((await screen.findAllByText('-3.000đ', {}, { timeout: 2_000 })).length).toBeGreaterThan(0);
     expect(mocks.getCartSelection).toHaveBeenCalledTimes(2);
   });
 
@@ -733,7 +808,7 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     );
     renderPage();
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
-    await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+    await screen.findAllByText('-3.000đ', {}, { timeout: 2_000 });
     expect(screen.getByText('87.000đ')).toBeInTheDocument();
     expect(screen.queryByText('97.000đ')).toBeNull();
   });
@@ -760,7 +835,7 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
       mocks.getCartSelection.mockReturnValue(new Promise(() => {}));
       renderPage();
       fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
-      await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+      await screen.findAllByText('-3.000đ', {}, { timeout: 2_000 });
       expect(screen.getByText('197.000đ')).toBeInTheDocument();
       toggle('Nước rửa');
       await new Promise((r) => setTimeout(r, 50));
@@ -774,7 +849,7 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
       mocks.getCartSelection.mockResolvedValueOnce(P1());
       renderPage();
       fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
-      await screen.findByText('-3.000đ', {}, { timeout: 2_000 });
+      await screen.findAllByText('-3.000đ', {}, { timeout: 2_000 });
       toggle('Xà bông thảo mộc');
       await new Promise((r) => setTimeout(r, 450));
       expect(screen.queryByText('-3.000đ')).toBeNull();

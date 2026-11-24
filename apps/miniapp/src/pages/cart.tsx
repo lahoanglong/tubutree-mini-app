@@ -10,7 +10,7 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
-import { cartRefetchOnReturn, soldOutRecovery, type SoldOutRecovery } from '@tubutree/app-core/cart/sold-out-recovery';
+import { cartPricingLines, cartRefetchOnReturn, soldOutRecovery, type SoldOutRecovery } from '@tubutree/app-core/cart/sold-out-recovery';
 import { cartGiftThreshold } from '@tubutree/app-core/commerce/cart-progress';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import {
@@ -290,11 +290,12 @@ export default function CartPage() {
 
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã của VoucherSheet.
   // Chọn cả giỏ dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá này.
-  const subsetLines = (cart.data?.items ?? []).filter((l) => !deselected.has(l.id));
+  // Nút chính đang là "Bỏ món hết & thanh toán tiếp": giá là của phần còn lại (`cartPricingLines`), kể cả khi đang chọn cả giỏ.
+  const pricingLines = cartPricingLines((cart.data?.items ?? []).filter((l) => !deselected.has(l.id)));
   // Mã đang áp nằm trong dấu vân tay: áp/bỏ mã đổi giá phần chọn dù id, số lượng, thành tiền không đổi.
   const subsetSig =
-    cart.data && subsetLines.length > 0 && subsetLines.length < cart.data.items.length
-      ? JSON.stringify([subsetLines.map((l) => l.id), cartPreviewKey(subsetLines), cart.data.couponCode])
+    cart.data && pricingLines.length > 0 && pricingLines.length < cart.data.items.length
+      ? JSON.stringify([pricingLines.map((l) => l.id), cartPreviewKey(pricingLines), cart.data.couponCode])
       : null;
   const settledSubsetSig = useDebounced(subsetSig, PREVIEW_DEBOUNCE_MS);
   const selectionQ = useQuery({
@@ -462,8 +463,10 @@ export default function CartPage() {
   // Món đang chọn (không nằm trong deselected). Toàn-chọn → checkout gửi itemIds=undefined (toàn giỏ).
   const selectedItems = summary.items.filter((l) => !deselected.has(l.id));
   const allSelected = selectedItems.length === summary.items.length;
+  // Số tiền lấy từ giỏ (cả giỏ) hay từ giá phần chọn của máy chủ: chọn cả giỏ mà có nút bỏ món hết thì vẫn là phần chọn (`pricingLines`).
+  const pricingAll = pricingLines.length === summary.items.length;
   // Quà dùng thử theo đúng phần đang chọn: chọn một phần mà giá phần đó chưa về thì ẩn, không hiện mốc của cả giỏ.
-  const giftTrialShown = allSelected ? summary.giftTrial : priced?.giftTrial;
+  const giftTrialShown = pricingAll ? summary.giftTrial : priced?.giftTrial;
   // Dòng hết hàng (tồn 0) không mua được: không cộng vào tạm tính hay tiến độ miễn phí giao, để khách không thấy số mà đặt không nổi.
   const buyableSelected = selectedItems.filter((l) => l.stock > 0);
   const outOfStockSelected = selectedItems.filter((l) => l.stock <= 0);
@@ -476,7 +479,9 @@ export default function CartPage() {
   const freeshipServerReached = !hasMerchant && allSelected && summary.freeship && outOfStockSelected.length === 0;
   const freeship = freeshipProgress({ base: freeshipBase, threshold: summary.freeshipThreshold, serverReached: freeshipServerReached });
   // Hộp Xanh đọc cùng nguồn số với chân dính (cả giỏ, hoặc giá phần chọn của máy chủ): chưa có số đúng của phần chọn thì không nói gì.
-  const greenBox = showFreeship ? readGreenBox(allSelected ? summary : priced) : null;
+  const greenBox = showFreeship ? readGreenBox(pricingAll ? summary : priced) : null;
+  // Số giảm cạnh mã cùng nguồn với dòng "Giảm giá" của chân dính (như web): phần chọn chưa có giá thì không ghi số của cả giỏ.
+  const couponDiscount = (pricingAll ? summary : priced)?.discount ?? 0;
   const strip = cartProgressStrip(freeship.reached, greenBox);
   const greenBoxView = strip === 'greenBox' ? greenBoxProgress(greenBox) : null;
   const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
@@ -513,11 +518,11 @@ export default function CartPage() {
   const recovery = soldOutRecovery(selectedItems);
   // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
   const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
-  // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
+  // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ. Xem trước mã theo đúng phần có giá (bỏ món hết).
   const previewSelection =
-    selectedItems.length === 0
+    pricingLines.length === 0
       ? null
-      : { itemIds: allSelected ? undefined : selectedItems.map((l) => l.id), key: cartPreviewKey(selectedItems) };
+      : { itemIds: pricingAll ? undefined : pricingLines.map((l) => l.id), key: cartPreviewKey(pricingLines) };
   const previewParams = previewSelection ? { storefrontSlug: ctvSlug, itemIds: previewSelection.itemIds } : undefined;
   const toggleAll = () => {
     haptic('light');
@@ -596,7 +601,7 @@ export default function CartPage() {
           <CartVoucherHintSection
             currentCode={summary.couponCode}
             subtotal={selectedSubtotal}
-            productIds={cartProductIds(selectedItems)}
+            productIds={cartProductIds(pricingLines)}
             previewParams={previewParams}
             previewKey={previewSelection?.key ?? ''}
           />
@@ -684,7 +689,8 @@ export default function CartPage() {
                 busy={giftChoice.isPending}
                 onChoose={(variationId) => {
                   if (giftChoice.isPending) return;
-                  giftChoice.mutate({ variationId, itemIds: allSelected ? undefined : selectedItems.map((l) => l.id) });
+                  // Cùng phần có giá với ô quà đang hiện: quà hiện theo phần chọn thì phải đọc lại phần chọn, không thì ô quà giữ lựa chọn cũ.
+                  giftChoice.mutate({ variationId, itemIds: pricingAll ? undefined : pricingLines.map((l) => l.id) });
                 }}
               />
             </Box>
@@ -726,7 +732,7 @@ export default function CartPage() {
           summary={summary}
           selectedSubtotal={selectedSubtotal}
           selectedCount={selectedCount}
-          allSelected={allSelected}
+          pricingAll={pricingAll}
           priced={priced}
           overStock={overStockSelected}
           outOfStockNames={outOfStockSelected.map((l) => l.productName)}
@@ -740,8 +746,9 @@ export default function CartPage() {
           coupon={
             <CouponRow
               summary={summary}
+              discount={couponDiscount}
               subtotal={selectedSubtotal}
-              productIds={cartProductIds(selectedItems)}
+              productIds={cartProductIds(pricingLines)}
               previewParams={previewParams}
               previewKey={previewSelection?.key ?? ''}
               onOpen={() => setVoucherOpen(true)}
@@ -783,7 +790,7 @@ export default function CartPage() {
           // summary.subtotal (toàn giỏ) ở đây từng khiến voucher hiện "đủ điều kiện" sai khi user
           // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
           subtotal={selectedSubtotal}
-          productIds={cartProductIds(selectedItems)}
+          productIds={cartProductIds(pricingLines)}
           previewParams={previewParams}
           previewKey={previewSelection?.key}
         />
@@ -1037,6 +1044,7 @@ function CartLineRow({
 
 function CouponRow({
   summary,
+  discount,
   subtotal,
   productIds,
   previewParams,
@@ -1044,6 +1052,8 @@ function CouponRow({
   onOpen,
 }: {
   summary: CartSummary;
+  /** Số giảm của mã trên phần đang hiện giá (cả giỏ, hoặc giá phần chọn của máy chủ); 0 khi chưa có số đúng. */
+  discount: number;
   /** Tiền hàng đang chọn, đúng số tấm chọn mã dùng để xét đủ điều kiện. */
   subtotal: number;
   productIds?: string[];
@@ -1121,9 +1131,9 @@ function CouponRow({
                   >
                     {summary.couponCode}
                   </span>
-                  {summary.discount > 0 && (
+                  {discount > 0 && (
                     <Text variant="caption" tone="success" as="div" data-testid="coupon-discount" style={{ lineHeight: 18 / 13, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      -{formatVnd(summary.discount)}
+                      -{formatVnd(discount)}
                     </Text>
                   )}
                 </Box>
@@ -1243,7 +1253,7 @@ function StickySummary({
   summary,
   selectedSubtotal,
   selectedCount,
-  allSelected,
+  pricingAll,
   priced,
   overStock,
   outOfStockNames,
@@ -1267,7 +1277,8 @@ function StickySummary({
   summary: CartSummary;
   selectedSubtotal: number;
   selectedCount: number;
-  allSelected: boolean;
+  /** Số tiền lấy từ giỏ (true) hay từ `priced`: false khi chọn một phần, hoặc chọn cả giỏ mà nút chính là bỏ món hết một chạm. */
+  pricingAll: boolean;
   /** Giá của phần chọn từ máy chủ (chỉ khi chọn một phần và đã có số đúng); null = chưa có, không hiện giảm giá. */
   priced: CartSummary | null;
   overStock: boolean;
@@ -1283,7 +1294,7 @@ function StickySummary({
 }) {
   // Cả giỏ lấy số giảm từ giỏ; một phần giỏ lấy từ giá phần chọn của máy chủ (combo cần đủ bộ trong phần chọn); chưa có thì không
   // hiện số nào (thanh toán tính lại) — tránh số sai.
-  const shown = allSelected ? summary : priced;
+  const shown = pricingAll ? summary : priced;
   const discount = shown?.discount ?? 0;
   const comboDiscount = shown?.comboDiscount ?? 0;
   const tierDiscount = shown?.tierDiscount ?? 0;
@@ -1293,12 +1304,12 @@ function StickySummary({
   // Cùng số `comboDiscount` đang hiện ở dòng "Giảm giá combo" (0 khi chưa có giá phần chọn). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
   const saving = cartSaving(savingLines, comboDiscount);
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
-  const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
+  const shownSubtotal = !pricingAll && priced ? priced.subtotal : selectedSubtotal;
   // Lời báo của mã đang giữ trên phần đang hiển thị, kèm số cần mua thêm khi mã chỉ thiếu đơn tối thiểu. Cả giỏ chỉ nói khi mã giữ chưa áp (thêm dòng cho chân dính vốn chật
   // ở 320px); phần chọn nói cả câu của máy chủ về mã đã áp (vd Giờ vàng không giảm thêm) như trước.
   const couponSrc = shown?.couponCode ? shown : null;
   // Mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh thì cả giỏ cũng nói, vì dòng mã ghi ít hơn mệnh giá.
-  const couponLine = allSelected ? (heldCouponNotice(couponSrc, formatVnd) ?? couponCapNoteText(couponSrc)) : couponNoticeText(couponSrc, formatVnd);
+  const couponLine = pricingAll ? (heldCouponNotice(couponSrc, formatVnd) ?? couponCapNoteText(couponSrc)) : couponNoticeText(couponSrc, formatVnd);
   const goodsNet = Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount);
   const { estimate, stale } = useShippingEstimate(selectedCount > 0 ? shipBase : null);
   // Nút Thanh toán của chân dính luôn trong khung nhìn: giỏ đặt được thì đọc sẵn sổ địa chỉ, thứ màn Thanh toán chờ mới hỏi được báo giá. Mã màn
