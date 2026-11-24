@@ -526,6 +526,22 @@ export interface TodaySummary {
   newUsers: { today: number; yesterday: number; week: number };
 }
 export const getTodaySummary = () => apiFetch<TodaySummary>('/admin/dashboard/today');
+/** Một nhóm đơn của thẻ điều phối: số đơn và tổng tiền đơn (VNĐ). */
+export interface CommandCenterBucket {
+  count: number;
+  amount: number;
+}
+/**
+ * Thẻ "Điều phối hôm nay" (chỉ ADMIN, `GET /admin/dashboard/command-center`): đơn hôm nay chia theo tiền (mỗi đơn đúng một nhóm, cùng tập với
+ * "Đơn hôm nay"), phân loại kho Tubu đang bán có tồn ≤ ngưỡng, hoa hồng CTV chưa chi (trước thuế TNCN).
+ */
+export interface CommandCenterSummary {
+  generatedAt: string;
+  ordersToday: { total: number; paid: CommandCenterBucket; bankTransferUnpaid: CommandCenterBucket; cod: CommandCenterBucket; cancelled: CommandCenterBucket; other: CommandCenterBucket };
+  lowStock: { threshold: number; count: number; outOfStock: number; items: { sku: string; productName: string; variationName: string; stock: number }[] };
+  ctvPayouts: { approvedAmount: number; approvedCtvs: number; holdingAmount: number; pendingAmount: number; autoWalletTransfer: boolean };
+}
+export const getCommandCenter = () => apiFetch<CommandCenterSummary>('/admin/dashboard/command-center');
 export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
 /** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */

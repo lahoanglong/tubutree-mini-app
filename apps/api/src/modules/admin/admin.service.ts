@@ -96,6 +96,7 @@ import {
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
 import { startOfVnDay } from '../../common/vn-time';
+import { loadCommandCenter } from './command-center';
 import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../common/vat-invoice-url';
@@ -1202,6 +1203,11 @@ export class AdminService {
       gmv: { today: Number(r?.gmv_today ?? 0), yesterday: Number(r?.gmv_yesterday ?? 0), week: Number(r?.gmv_week ?? 0) },
       newUsers: { today: u?.today ?? 0, yesterday: u?.yesterday ?? 0, week: u?.week ?? 0 },
     };
+  }
+
+  /** Thẻ điều phối ở trang "Hôm nay": tiền của đơn hôm nay theo cách trả, hàng kho sắp hết, hoa hồng CTV chưa chi (command-center.ts). */
+  getCommandCenter(now = new Date()) {
+    return loadCommandCenter(this.prisma, this.config, now);
   }
 
   /** Đơn có SĐT người nhận khớp đúng số (index orders_shippingAddress_phone_idx trên đúng biểu thức này). */

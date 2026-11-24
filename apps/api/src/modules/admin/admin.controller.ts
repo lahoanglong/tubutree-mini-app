@@ -528,6 +528,12 @@ export class AdminController {
     return this.admin.getTodaySummary();
   }
 
+  /** Thẻ điều phối ở trang "Hôm nay": đơn hôm nay theo cách trả tiền, biến thể kho Tubu tồn ≤ 5, hoa hồng CTV chưa chi. */
+  @Get('dashboard/command-center')
+  dashboardCommandCenter() {
+    return this.admin.getCommandCenter();
+  }
+
   @Get('dealer-applications')
   dealerApps(@Query() q: DealerAppsQuery) {
     return this.admin.listDealerApplications(q.status, q.page, q.limit, q.order);
