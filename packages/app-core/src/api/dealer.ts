@@ -119,6 +119,53 @@ export const saveDealerInvoiceProfile = (http: HttpClient, invoice: InvoiceReque
 export const requestDealerInvoices = (http: HttpClient, orderCodes: string[], invoice: InvoiceRequest, save: boolean) =>
   http.post<DealerInvoiceRequestResult>('/dealer/orders/invoice-request', { orderCodes, invoice, save });
 export const getDealerOrders = (http: HttpClient) => http.get<OrderDTO[]>('/dealer/orders');
+
+// ── Đặt lại đơn tháng trước (một chạm, ghi công nợ) ──
+export interface DealerLastMonthReorderLine {
+  variationId: string;
+  sku: string;
+  /** "Sản phẩm – Phân loại" như trên đơn cũ. */
+  name: string;
+  quantity: number;
+  /** Giá đại lý hôm nay. */
+  unitPrice: number;
+  lineTotal: number;
+  stock: number;
+}
+export type DealerLastMonthReorderBlockCode =
+  | 'NO_ORDERS'
+  | 'NOTHING_SELLABLE'
+  | 'TOO_MANY_LINES'
+  | 'BELOW_MIN'
+  | 'OVER_MAX'
+  | 'NO_TIER'
+  | 'OVERDUE'
+  | 'OVER_LIMIT';
+export interface DealerLastMonthReorder {
+  /** Tháng nguồn theo giờ VN, "10/2026". */
+  month: string;
+  /** Mã các đơn đã nhận của tháng đó (mới nhất trước); rỗng thì không có gì để đặt lại. */
+  orderCodes: string[];
+  lines: DealerLastMonthReorderLine[];
+  /** Tên mặt hàng không còn bán sỉ, đã bỏ khỏi đơn mới. */
+  skipped: string[];
+  goodsTotal: number;
+  shippingFee: number;
+  total: number;
+  /** Hạn mức đọc cùng một lần với dư nợ: `available` không âm, `after` âm là phần vượt. */
+  credit: { limit: number; debt: number; available: number; after: number };
+  /** Dấu của bản xem trước, gửi lại khi đặt để máy chủ từ chối nếu giá hay tồn đã đổi. */
+  quote: string;
+  /** Lý do không ghi công nợ được bằng một chạm; null là đặt được. */
+  block: { code: DealerLastMonthReorderBlockCode; message: string } | null;
+}
+export const getDealerLastMonthReorder = (http: HttpClient) => http.get<DealerLastMonthReorder>('/dealer/reorder-last-month');
+/**
+ * Tạo đơn ghi công nợ từ bản xem trước `quote`. Idempotency-Key bắt buộc: giữ nguyên qua mọi lần bấm lại tới khi đặt xong, máy chủ trả lại
+ * đơn đã tạo cho cùng khoá. 409 `DEALER_REORDER_CHANGED` khi giá, tồn hay phí giao đã đổi so với bản xem trước.
+ */
+export const placeDealerLastMonthReorder = (http: HttpClient, quote: string, idempotencyKey: string) =>
+  http.post<OrderDTO>('/dealer/reorder-last-month', { quote }, { headers: { 'Idempotency-Key': idempotencyKey } });
 export const getCreditLedger = (http: HttpClient) =>
   http.get<{ balance: number; entries: CreditEntry[] }>('/dealer/credit-ledger');
 /** Báo đã chuyển khoản trả nợ, kèm Idempotency-Key BẮT BUỘC (mirror placeDealerOrder/wallet.withdraw)

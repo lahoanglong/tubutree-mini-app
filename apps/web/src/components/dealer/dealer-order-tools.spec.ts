@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { OrderStatus } from '@tubutree/shared-types';
 import {
   CREDIT_LEDGER_CSV_HEADERS,
+  DEALER_ORDER_PLACED_KEYS,
+  DEALER_ORDER_REFRESH_KEYS,
+  applyReorderRequest,
   canReorder,
+  creditAfterText,
   dealerCreditLedgerCsv,
   dealerCreditLedgerFileName,
   filterDealerOrders,
+  lastMonthReorderLabel,
   reorderLinesOf,
   reorderNotice,
   reorderQuantities,
@@ -108,5 +113,54 @@ describe('dealerCreditLedgerCsv', () => {
 
   it('tên tệp theo ngày', () => {
     expect(dealerCreditLedgerFileName('2026-11-23')).toBe('so-cong-no-dai-ly-tubu-2026-11-23.csv');
+  });
+});
+
+describe('Đặt lại đơn tháng trước', () => {
+  it('nhãn nút lấy số tháng của bản xem trước', () => {
+    expect(lastMonthReorderLabel('10/2026')).toBe('Đặt lại đơn tháng 10');
+    expect(lastMonthReorderLabel('12/2026')).toBe('Đặt lại đơn tháng 12');
+  });
+
+  it('reorderNotice nhận nhãn thay "đơn #mã"; viết hoa chữ đầu khi đứng đầu câu', () => {
+    expect(reorderNotice('DL-2', { added: 2, skipped: [] }, 'đơn tháng 10/2026').text).toBe(
+      'Đã nạp 2 mặt hàng của đơn tháng 10/2026 theo giá hôm nay, kiểm tra số lượng rồi đặt.',
+    );
+    expect(reorderNotice('DL-2', { added: 0, skipped: ['A'] }, 'đơn tháng 10/2026').text).toBe(
+      'Đơn tháng 10/2026 không còn mặt hàng nào đang bán sỉ, giỏ chưa đổi. Bỏ qua 1 mặt hàng không còn bán sỉ: A.',
+    );
+  });
+
+  it('applyReorderRequest gộp tên máy chủ đã bỏ với tên bảng giá không còn, mỗi tên một lần', () => {
+    const res = applyReorderRequest(
+      {
+        code: 'DL-2',
+        label: 'đơn tháng 10/2026',
+        lines: [
+          { variationId: 'v1', quantity: 3, name: 'A' },
+          { variationId: 'gone', quantity: 1, name: 'B' },
+        ],
+        skipped: ['C', 'B'],
+      },
+      [{ variationId: 'v1' }],
+    );
+    expect(res.qty).toEqual({ v1: 3 });
+    expect(res.notice).toEqual({
+      text: 'Đã nạp 1 mặt hàng của đơn tháng 10/2026 theo giá hôm nay, kiểm tra số lượng rồi đặt. Bỏ qua 2 mặt hàng không còn bán sỉ: C, B.',
+      error: true,
+    });
+  });
+
+  it('hạn mức sau đơn: âm thì ghi phần vượt', () => {
+    const money = (n: number) => `${n}đ`;
+    expect(creditAfterText(6_080_000, money)).toBe('6080000đ');
+    expect(creditAfterText(0, money)).toBe('0đ');
+    expect(creditAfterText(-920_000, money)).toBe('Vượt 920000đ');
+  });
+
+  it('đặt đơn (thường hay đặt lại) xong và bị từ chối đều tải lại bản xem trước của đơn tháng trước', () => {
+    expect(DEALER_ORDER_PLACED_KEYS).toContain('dealer-last-month-reorder');
+    expect(DEALER_ORDER_REFRESH_KEYS).toContain('dealer-last-month-reorder');
+    expect(DEALER_ORDER_REFRESH_KEYS).toContain('dealer-pricelist');
   });
 });

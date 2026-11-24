@@ -547,6 +547,8 @@ const NO_ROLES_ALLOWLIST: Record<string, string> = {
   'POST /dealer/orders': dealerOnly('placeOrder', 263),
   'GET /dealer/orders': dealerOwnRows('listOrders', 525),
   'GET /dealer/credit-ledger': dealerOwnRows('creditLedger', 535),
+  'GET /dealer/reorder-last-month': dealerOnly('lastMonthReorder', 568),
+  'POST /dealer/reorder-last-month': `chỉ đại lý: DealerService.placeLastMonthReorder (dealer.service.ts:702) gọi lastMonthReorder, nó gọi dealerContext (dealer.service.ts:568) ném 403 khi User.role !== DEALER; chỉ trả lại đơn có Idempotency-Key của chính người gọi, tạo đơn qua placeOrder (hạn mức kiểm lại trong transaction Serializable) với các dòng máy chủ tự gộp từ đơn của chính người gọi`,
   'POST /dealer/credit-payment': `${dealerOnly('reportCreditPayment', 554)}; chỉ ghi lời báo, không đụng sổ công nợ (giảm nợ chỉ qua admin xác nhận)`,
   'GET /dealer/quarterly-report': dealerOnly('quarterlyReport', 979),
   'GET /dealer/rewards': dealerOnly('rewardsProgress', 1016),

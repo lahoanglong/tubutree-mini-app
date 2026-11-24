@@ -1,13 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEALER_PRICE_LOADING } from '@tubutree/app-core/client-copy';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Check, ClipboardList, Copy, Download, Save, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, ClipboardList, Copy, Download, RotateCcw, Save, Search, X } from 'lucide-react';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteTemplate, placeDealerOrder, saveTemplate, type DealerOrderRules, type PricelistRow } from '@tubutree/app-core/api/dealer';
 import type { InvoiceRequest } from '@tubutree/app-core/api/checkout';
-import { dealerInvoiceProfileQuery, dealerPricelistQuery, dealerTemplatesQuery, dealerTierProgressQuery } from '@tubutree/app-core/queries/dealer';
+import {
+  dealerInvoiceProfileQuery,
+  dealerLastMonthReorderQuery,
+  dealerPricelistQuery,
+  dealerTemplatesQuery,
+  dealerTierProgressQuery,
+} from '@tubutree/app-core/queries/dealer';
 import {
   DEALER_MAX_QTY,
   dealerBrands,
@@ -40,7 +46,15 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { errText } from './dealer-shell';
-import { downloadCsv, reorderNotice, reorderQuantities, type ReorderRequest } from './dealer-order-tools';
+import {
+  DEALER_ORDER_PLACED_KEYS,
+  DEALER_ORDER_REFRESH_KEYS,
+  applyReorderRequest,
+  downloadCsv,
+  lastMonthReorderLabel,
+  type ReorderRequest,
+} from './dealer-order-tools';
+import { LastMonthReorderSheet } from './last-month-reorder-sheet';
 import { basketMargin, basketTierLine, marginLine } from './dealer-tier-tools';
 import { DealerInvoiceSheet } from './dealer-invoice-sheet';
 import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
@@ -61,9 +75,9 @@ type OrderLine = { variationId: string; quantity: number };
 const DEL_TEMPLATE_KEY = ['dealer-del-template'] as const;
 // Giới hạn của SaveTemplateDto.name (apps/api/src/modules/dealer/dealer.controller.ts:34): ô chặn gõ quá để không tới 400 nhập liệu của DTO.
 const TEMPLATE_NAME_MAX = 120;
-// Mọi số liệu đơn đại lý đổi theo (hạn mức, giá, tồn, tối thiểu): đơn bị từ chối thì tải lại hết, như Mini App (apps/miniapp/src/pages/dealer.tsx:536).
-const ORDER_REFRESH_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-tier-progress', 'dealer-pricelist'] as const;
-const ORDER_PLACED_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-tier-progress'] as const;
+// Viên của hàng nút đặt nhanh (đặt lại đơn tháng trước, mẫu đơn): viền và chữ màu mực đại lý ở khổ điện thoại.
+const PILL = 'flex flex-none items-center rounded-full border border-stone-900 bg-stone-0 max-md:border-[color:var(--color-dealer-ink)]';
+const PILL_BUTTON = 'flex min-h-11 items-center gap-1.5 text-xs font-semibold text-stone-900 max-md:text-[var(--color-dealer-ink)]';
 const INVOICE_MISSED = 'Đơn chưa kèm yêu cầu hoá đơn VAT (đã tạo ở lần đặt trước), bạn gửi yêu cầu ở tab Đơn hàng.';
 const invoiceOf = (p: InvoiceRequest): InvoiceRequest => ({ taxCode: p.taxCode, companyName: p.companyName, address: p.address, email: p.email });
 
@@ -150,14 +164,29 @@ export function PriceTab({
 
   // Phân loại không còn trong bảng giá sỉ (ngừng bán, đổi bậc) bị bỏ và nêu tên trong lời báo; không nạp gì thì giữ giỏ như cũ.
   // Đổi tab giữ vị trí cuộn (`scroll: false`): bấm từ đơn thứ tám thì lời báo ở đầu tab nằm ngoài màn hình, nên cuộn nó vào giữa.
+  const loadReorder = useCallback((r: ReorderRequest, pricelist: readonly PricelistRow[]) => {
+    const res = applyReorderRequest(r, pricelist);
+    if (res.added > 0) setQty(res.qty);
+    setNotice(res.notice);
+    noticeRef.current?.scrollIntoView?.({ block: 'center' });
+  }, []);
   useEffect(() => {
     if (!reorder || !priceQ.data) return;
-    const res = reorderQuantities(reorder.lines, priceQ.data);
-    if (res.added > 0) setQty(res.qty);
-    setNotice(reorderNotice(reorder.code, res));
+    loadReorder(reorder, priceQ.data);
     onReorderApplied?.();
-    noticeRef.current?.scrollIntoView?.({ block: 'center' });
-  }, [reorder, priceQ.data, onReorderApplied]);
+  }, [reorder, priceQ.data, onReorderApplied, loadReorder]);
+  // "Sửa trong giỏ" của sheet đặt lại đơn tháng trước: cùng đường nạp, chờ bảng giá về nếu chưa có.
+  const [sheetReorder, setSheetReorder] = useState<ReorderRequest | null>(null);
+  useEffect(() => {
+    if (!sheetReorder || !priceQ.data) return;
+    loadReorder(sheetReorder, priceQ.data);
+    setSheetReorder(null);
+  }, [sheetReorder, priceQ.data, loadReorder]);
+
+  // "Đặt lại đơn tháng trước": nút chỉ hiện khi tháng trước có đơn đã nhận; sheet tự đọc lại hạn mức mỗi lần mở rồi mới cho ghi công nợ.
+  const lastMonthQ = useQuery(dealerLastMonthReorderQuery(coreHttp));
+  const lastMonth = lastMonthQ.data && lastMonthQ.data.orderCodes.length > 0 ? lastMonthQ.data : null;
+  const [lastMonthOpen, setLastMonthOpen] = useState(false);
 
   // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về, tối đa `settleWithin`.
   // Lời lỗi của lần lưu ở state riêng: `saveTpl.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
@@ -263,7 +292,7 @@ export function PriceTab({
       const sent = lineKey(items.map((it): [string, number] => [it.variationId, it.quantity]));
       const lines = order.items ?? [];
       const got = lines.every((it) => it.variationId) ? lineKey(lines.map((it): [string, number] => [it.variationId, it.quantity])) : '';
-      const refreshed = settleWithin(Promise.all(ORDER_PLACED_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] }))));
+      const refreshed = settleWithin(Promise.all(DEALER_ORDER_PLACED_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] }))));
       // Lần đặt trước đã tạo đơn dù mạng báo lỗi: máy chủ trả đơn đó (giỏ cũ), giỏ hiện tại chưa được đặt nên giữ nguyên.
       if (got !== '' && sent !== got) {
         orderKey.current = newIdempotencyKey();
@@ -303,7 +332,7 @@ export function PriceTab({
     onError: (e) => {
       setNotice({ text: errText(e), error: true });
       if (!serverRejectedState(e)) return undefined;
-      return settleWithin(Promise.all(ORDER_REFRESH_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] }))));
+      return settleWithin(Promise.all(DEALER_ORDER_REFRESH_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] }))));
     },
   });
   const submit = (method: 'CREDIT' | 'PREPAID') => {
@@ -455,32 +484,44 @@ export function PriceTab({
         </div>
       )}
 
-      {/* Mẫu đơn lưu sẵn: chạm tên để đặt lại, nút X để xoá. */}
-      {templates.length > 0 && (
-        <ul aria-label="Mẫu đơn đã lưu" className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {templates.map((t) => (
-            <li key={t.id} className="flex flex-none items-center rounded-full border border-stone-900 bg-stone-0 max-md:border-[color:var(--color-dealer-ink)]">
-              <button
-                type="button"
-                className="flex min-h-11 items-center gap-1.5 pl-3 pr-1 text-xs font-semibold text-stone-900 max-md:text-[var(--color-dealer-ink)]"
-                onClick={() => setQty(Object.fromEntries(t.items.map((i) => [i.variationId, i.quantity])))}
-              >
-                <ClipboardList className="h-4 w-4 flex-none" aria-hidden="true" />
-                {t.name} ({t.items.length})
+      {/* Một hàng nút đặt nhanh cuộn ngang: đặt lại đơn tháng trước (mở sheet kiểm hạn mức), rồi mẫu đơn lưu sẵn (chạm tên để nạp, X để xoá). */}
+      {(lastMonth || templates.length > 0) && (
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {lastMonth && (
+            <div className={PILL}>
+              <button type="button" aria-haspopup="dialog" className={`${PILL_BUTTON} px-3`} onClick={() => setLastMonthOpen(true)}>
+                <RotateCcw className="h-4 w-4 flex-none" aria-hidden="true" />
+                {lastMonthReorderLabel(lastMonth.month)}
               </button>
-              <button
-                type="button"
-                aria-label="Xoá mẫu đơn"
-                aria-busy={deletingTemplates.has(t.id) || undefined}
-                aria-disabled={deletingTemplates.has(t.id) || undefined}
-                className={`flex min-h-11 min-w-11 items-center justify-center ${deletingTemplates.has(t.id) ? 'opacity-50' : ''}`}
-                onClick={() => delTpl.mutate(t.id)}
-              >
-                <X className="h-4 w-4 text-danger-fg" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+          {templates.length > 0 && (
+            <ul aria-label="Mẫu đơn đã lưu" className="flex gap-2">
+              {templates.map((t) => (
+                <li key={t.id} className={PILL}>
+                  <button
+                    type="button"
+                    className={`${PILL_BUTTON} pl-3 pr-1`}
+                    onClick={() => setQty(Object.fromEntries(t.items.map((i) => [i.variationId, i.quantity])))}
+                  >
+                    <ClipboardList className="h-4 w-4 flex-none" aria-hidden="true" />
+                    {t.name} ({t.items.length})
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Xoá mẫu đơn"
+                    aria-busy={deletingTemplates.has(t.id) || undefined}
+                    aria-disabled={deletingTemplates.has(t.id) || undefined}
+                    className={`flex min-h-11 min-w-11 items-center justify-center ${deletingTemplates.has(t.id) ? 'opacity-50' : ''}`}
+                    onClick={() => delTpl.mutate(t.id)}
+                  >
+                    <X className="h-4 w-4 text-danger-fg" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {rows.length > 0 && (
@@ -556,6 +597,20 @@ export function PriceTab({
           </p>
         )}
       </Sheet>
+
+      <LastMonthReorderSheet
+        open={lastMonthOpen}
+        onClose={() => setLastMonthOpen(false)}
+        onEditInCart={(r) => {
+          setLastMonthOpen(false);
+          setSheetReorder(r);
+        }}
+        onPlaced={(n) => {
+          setLastMonthOpen(false);
+          setNotice(n);
+          noticeRef.current?.scrollIntoView?.({ block: 'center' });
+        }}
+      />
 
       <DealerInvoiceSheet
         open={invoiceOpen}

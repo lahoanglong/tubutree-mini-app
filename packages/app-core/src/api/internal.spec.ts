@@ -26,6 +26,12 @@ describe('miền nội bộ — đúng route, query, body, Idempotency-Key', () 
       { method: 'post', path: '/dealer/orders', body: { items: [], paymentMethod: 'PREPAID', note: undefined } },
     ],
     ['getDealerOrders', (h) => d.getDealerOrders(h), { method: 'get', path: '/dealer/orders' }],
+    ['getDealerLastMonthReorder', (h) => d.getDealerLastMonthReorder(h), { method: 'get', path: '/dealer/reorder-last-month' }],
+    [
+      'placeDealerLastMonthReorder',
+      (h) => d.placeDealerLastMonthReorder(h, 'q'.repeat(32), 'key-1'),
+      { method: 'post', path: '/dealer/reorder-last-month', body: { quote: 'q'.repeat(32) }, opts: key },
+    ],
     ['getCreditLedger', (h) => d.getCreditLedger(h), { method: 'get', path: '/dealer/credit-ledger' }],
     ['payCredit', (h) => d.payCredit(h, 500, 'key-1', 'ck'), { method: 'post', path: '/dealer/credit-payment', body: { amount: 500, note: 'ck' }, opts: key }],
     ['getQuarterlyReport', (h) => d.getQuarterlyReport(h), { method: 'get', path: '/dealer/quarterly-report' }],

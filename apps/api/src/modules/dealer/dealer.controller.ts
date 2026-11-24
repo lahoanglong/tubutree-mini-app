@@ -33,6 +33,11 @@ class TemplateItemDto {
   @IsString() variationId!: string;
   @IsInt() @Min(1) quantity!: number;
 }
+/** Đặt lại đơn tháng trước: `quote` là dấu của bản xem trước (GET reorder-last-month) mà đại lý vừa thấy. */
+export class LastMonthReorderDto {
+  @IsString() @Matches(/^[0-9a-f]{32}$/, { message: 'Bản xem trước không hợp lệ, bạn tải lại trang nhé.' }) quote!: string;
+}
+
 export class SaveTemplateDto {
   @Trim() @IsString() @MaxLength(120) name!: string;
   @IsArray() @ArrayNotEmpty() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => TemplateItemDto)
@@ -70,6 +75,21 @@ export class DealerController {
   @Get('orders')
   orders(@CurrentUser('sub') userId: string) {
     return this.dealer.listOrders(userId);
+  }
+
+  // Gộp đơn sỉ đã nhận của tháng trước theo bảng giá hôm nay, kèm kiểm trước hạn mức công nợ còn lại. Chỉ xem, không ghi gì.
+  @Get('reorder-last-month')
+  lastMonthReorder(@CurrentUser('sub') userId: string) {
+    return this.dealer.lastMonthReorder(userId);
+  }
+
+  @Post('reorder-last-month')
+  placeLastMonthReorder(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: LastMonthReorderDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.dealer.placeLastMonthReorder(userId, dto.quote, idempotencyKey);
   }
 
   @Get('credit-ledger')
