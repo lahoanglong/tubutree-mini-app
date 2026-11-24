@@ -59,6 +59,27 @@ So với 2026-11-13: thêm 4 tệp, tổng +25 KB raw (+1,1%) và +10 KB gzip, e
 
 Ngưỡng 700 KB và 2380 KB (W177 hạ từ 2500 KB xuống 2350 KB, trước đó W176 hạ từ 2560 KB; bản dựng W177 2237 KB sau khi 8 màn quản trị, đối tác, nhân sự chuyển sang cổng web tubutree.com; w3-09 nâng lên 2380 KB khi bản dựng gộp đủ đợt 3, có cả 6 game chơi ngay trong Mini App, là 2357 KB) là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo. Giới hạn dung lượng gói hiện hành của Zalo: chưa kiểm. Script phát hành chạy `bundle-budget.cjs` ở chế độ `BUNDLE_BUDGET_STRICT=1`: vượt ngưỡng thì dừng, trừ khi chủ chấp nhận và đặt `MINIAPP_ENTRY_WARN_KB` / `MINIAPP_TOTAL_WARN_KB` lớn hơn.
 
+## 2b. Kiểm hồ sơ gửi duyệt (tubu-w29-03)
+
+Chạy trước mỗi lần tải bản lên Testing hoặc gửi duyệt Live, từ gốc repo, Node 22, dưới 1 giây, không cần mạng:
+
+```bash
+pnpm check:zalo-review          # = node scripts/zalo-review/check-submission.mjs (thêm --json để lấy kết quả máy đọc)
+```
+
+Bốn nhóm mục, thoát 1 khi có mục lỗi và in đúng tệp:dòng:
+
+| Nhóm | Kiểm gì |
+| --- | --- |
+| Quyền | `apps/miniapp/zalo-permissions.json` khai đúng các scope mà mã gọi thật (`getPhoneNumber` → `scope.userPhonenumber`, `getLocation` và `navigator.geolocation` → `scope.userLocation`, `getUserInfo` → `scope.userInfo`): không thiếu, không thừa; mọi API zmp-sdk khác có lý do trong `noScopeApis`; API cần quyền chỉ gọi trong `services/zmp-bridge.ts`; zmp-sdk chỉ import theo tên; `app-config.json` có appId, tiêu đề, không nạp CSS/JS từ ngoài. |
+| Pháp lý | Mọi chính sách Mini App mở là slug của `packages/app-core/src/legal-core.ts`; trang Về Tubu Tree mở đủ năm chính sách đúng tên `LEGAL_PAGES`; câu đồng ý ở thanh toán có Điều khoản và Bảo mật; link điền trên console (`consoleLinks`) là `/chinh-sach/bao-mat` và `/chinh-sach/dieu-khoan` của website, trang web dựng theo `LEGAL_SLUGS`. |
+| Xoá tài khoản | Cá nhân › Cài đặt › Xoá tài khoản › `POST /me/deletion-request` nối liền; API có webhook `user.revoke.consent`. |
+| Thanh toán | Không có link cổng thanh toán (MoMo, VNPay, ZaloPay, PayOS, `dl.vietqr.io`...), đường dẫn mở app ngoài (`momo://`...), tên miền chưa duyệt, `window.open`, ghi `location` ngoài zmp-bridge.ts; `openWebview` gọi thẳng chỉ tới `https://zalo.me/`; màn thanh toán chỉ cho COD, chuyển khoản, Ví; cổng web không dẫn tới `/thanh-toan`, `/gio-hang`. |
+
+`app-config.json` của ZMP không có trường quyền (zmp-vite-plugin chỉ chép khối `app` vào bản build), nên quyền khai ở `apps/miniapp/zalo-permissions.json`. Khi gửi duyệt, chép `purpose` và `trigger` của từng scope vào ô mục đích sử dụng trên mini.zalo.me. Thêm hay bỏ một API zmp-sdk, hay thêm một tên miền mới vào mã Mini App, thì sửa tệp khai hoặc `ALLOWED_HOSTS` trong script, nếu không spec `packages/app-core/src/zalo-review-check.spec.ts` đỏ.
+
+Kết quả lần đầu (24/11/2026, `feat/tubu-w29-03` từ `5133369e2`): 26/26 mục đạt sau khi sửa một lỗ hổng là `apps/miniapp/src/utils/web-policy.ts` tự liệt kê slug chính sách thay vì lấy từ legal-core.
+
 ## 3. Phát hành lên Zalo: script 1 lệnh, CHƯA chạy thật, cần người có tài khoản Zalo dev
 
 ```bash
