@@ -21,6 +21,39 @@ describe('guestOrderMilestones: mốc có giờ của /don/<mã>', () => {
     ]);
   });
 
+  it('COD và ví qua đóng gói (sổ chỉ có PACKED, SHIPPING): Đã xác nhận là giờ đặt, không phải giờ đóng gói', () => {
+    const statusTimes = { PACKED: '2026-11-24T08:00:00.000Z', SHIPPING: '2026-11-25T01:00:00.000Z' };
+    for (const paymentMethod of ['COD', 'WALLET']) {
+      for (const status of ['PACKED', 'SHIPPING']) {
+        const confirmed = guestOrderMilestones({ ...base, status, paymentMethod, statusTimes }).find((s) => s.key === 'preparing');
+        expect(confirmed?.at, `${paymentMethod} ${status}`).toBe('2026-11-24T02:00:00.000Z');
+      }
+    }
+  });
+
+  it('chuyển khoản đã trả: Đã xác nhận là giờ trong sổ; COD đổi từ chuyển khoản (có dòng CONFIRMED) cũng theo sổ', () => {
+    const statusTimes = { CONFIRMED: '2026-11-24T02:40:00.000Z', PACKED: '2026-11-24T08:00:00.000Z' };
+    for (const paymentMethod of ['BANK_TRANSFER', 'COD']) {
+      expect(guestOrderMilestones({ ...base, status: 'PACKED', paymentMethod, statusTimes }).find((s) => s.key === 'preparing')?.at).toBe('2026-11-24T02:40:00.000Z');
+    }
+  });
+
+  it('COD huỷ: huỷ ngay thì không thêm mốc Đã xác nhận; huỷ sau khi đóng gói thì mốc mang giờ đặt', () => {
+    const now = guestOrderMilestones({ ...base, status: 'CANCELLED', paymentMethod: 'COD', statusTimes: { CANCELLED: '2026-11-24T02:10:00.000Z' } });
+    expect(now.map((s) => s.key)).toEqual(['received', 'cancelled']);
+    const packed = guestOrderMilestones({
+      ...base,
+      status: 'CANCELLED',
+      paymentMethod: 'COD',
+      statusTimes: { PACKED: '2026-11-24T08:00:00.000Z', CANCELLED: '2026-11-24T09:00:00.000Z' },
+    });
+    expect(packed.map((s) => [s.key, s.at])).toEqual([
+      ['received', '2026-11-24T02:00:00.000Z'],
+      ['preparing', '2026-11-24T02:00:00.000Z'],
+      ['cancelled', '2026-11-24T09:00:00.000Z'],
+    ]);
+  });
+
   it('đã giao: đủ 4 mốc đã qua, mỗi mốc một giờ từ sổ trạng thái và deliveredAt', () => {
     const o = {
       ...base,
