@@ -12,6 +12,7 @@ import { applyRestockToggle, type WishlistRestockView } from '@tubutree/app-core
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { coreHttp } from '../services/core-http';
+import { PURCHASED_ITEMS_KEY } from '../hooks/use-purchased-items';
 import { getErrorMessage, isStaleStateError } from '../services/api';
 import { serverNow } from '../utils/server-clock';
 
@@ -77,6 +78,7 @@ export function useRestockToggle(notify: (text: string, ok: boolean) => void) {
         return Promise.all([
           unanswered.current === 0 ? qc.invalidateQueries({ queryKey: myRestockAlertsKey }) : undefined,
           qc.invalidateQueries({ queryKey: ['restock-alerts', productId] }),
+          qc.invalidateQueries({ queryKey: [PURCHASED_ITEMS_KEY] }),
         ]).finally(() => mark(productId, false));
       },
     },

@@ -83,6 +83,7 @@ export function useRestockToggle(notify: (n: { ok: boolean; text: string }) => v
         return Promise.all([
           unanswered.current === 0 ? qc.invalidateQueries({ queryKey: myRestockAlertsKey }) : undefined,
           qc.invalidateQueries({ queryKey: ['restock-alerts', productId] }),
+          qc.invalidateQueries({ queryKey: ['purchased-items'] }),
         ]).finally(() => mark(productId, false));
       },
     },

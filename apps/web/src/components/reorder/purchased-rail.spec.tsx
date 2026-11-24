@@ -381,7 +381,7 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
       expect(ids(c)).toEqual(['v2', 'v3', 'v1']);
       expect(notifyBtn(c).textContent).toBe('Báo khi có');
       expect(notifyBtn(c).getAttribute('aria-pressed')).toBe('false');
-      expect(notifyBtn(c).getAttribute('aria-label')).toBe('Báo khi SP 1 · Chanh có hàng');
+      expect(notifyBtn(c).getAttribute('aria-label')).toBe('Báo khi có: SP 1 · Chanh');
       expect(c.textContent).toContain('Tạm hết hàng');
       expect(c.querySelectorAll('[data-testid="quick-reorder-add"]')).toHaveLength(2);
       expect([...c.querySelectorAll('button')].some((b) => /Thêm lại tất cả 2 món/.test(b.getAttribute('aria-label') ?? ''))).toBe(true);
@@ -429,6 +429,7 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
       const c = await home();
       const line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
       expect(line.querySelector('[data-testid="rebuy-line-notify"]')?.textContent).toBe('Báo khi có');
+      expect(line.querySelector('[data-testid="rebuy-line-notify"]')?.getAttribute('aria-label')).toBe('Báo khi có: SP 1');
       expect(line.textContent).toContain('Tạm hết hàng');
     });
 

@@ -51,6 +51,8 @@ export function QuickReorderStrip({
   const title = fillBootCopy('quickReorder.title');
   // Một lệnh bay mỗi lúc: nút khác khoá hẳn thay vì xếp hàng, vì lệnh sau có thể thành "đã có trong giỏ" ngoài ý khách.
   const locked = busyAll || busyKey !== null;
+  const notifyLabel = (item: QuickReorderItem) =>
+    fillCopy(!onNotify ? 'stock.out' : item.restockWaiting ? 'quickReorder.notifyOn' : 'quickReorder.notify');
   return (
     <section data-testid="quick-reorder" aria-label={title} aria-busy={locked || undefined}>
       <div className="tubu-quick-head">
@@ -119,13 +121,13 @@ export function QuickReorderStrip({
                       className="tubu-quick-add"
                       data-testid="quick-reorder-notify"
                       data-variation-id={item.variationId}
-                      aria-label={fillCopy('wishlist.restock.bell', { name: item.name })}
+                      aria-label={fillCopy('quickReorder.notifyAria', { label: notifyLabel(item), name: item.name })}
                       aria-pressed={item.restockWaiting === true}
                       loading={notifyBusyKey === item.variationId}
                       disabled={!onNotify}
                       onPress={() => onNotify?.(item)}
                     >
-                      {fillCopy(!onNotify ? 'stock.out' : item.restockWaiting ? 'quickReorder.notifyOn' : 'quickReorder.notify')}
+                      {notifyLabel(item)}
                     </Button>
                   ) : (
                     <Button

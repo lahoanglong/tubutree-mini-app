@@ -8,6 +8,7 @@ import {
   QUICK_REORDER_MIN,
   buildQuickReorderItems,
   buyAgainCutoff,
+  buyAgainDay,
   inBuyAgainWindow,
   quickReorderAddAllAria,
   quickReorderAvailable,
@@ -278,6 +279,13 @@ describe('cửa sổ Mua lại 90 ngày', () => {
     expect(new Date(buyAgainCutoff(NOW)).toISOString()).toBe('2026-08-09T17:00:00.000Z');
     expect(buyAgainCutoff(Date.parse('2026-11-07T17:00:00Z'))).toBe(buyAgainCutoff(Date.parse('2026-11-08T16:59:59Z')));
     expect(buyAgainCutoff(Date.parse('2026-11-08T17:00:00Z'))).toBeGreaterThan(buyAgainCutoff(NOW));
+  });
+
+  it('buyAgainDay là nửa đêm VN hôm nay; lấy nó làm now thì cửa sổ y như giờ thật trong ngày', () => {
+    expect(new Date(buyAgainDay(NOW)).toISOString()).toBe('2026-11-07T17:00:00.000Z');
+    expect(buyAgainCutoff(buyAgainDay(NOW))).toBe(buyAgainCutoff(NOW));
+    const items = [bought(1, { lastPurchasedAt: '2026-08-09T17:00:00.000Z' }), bought(2, { lastPurchasedAt: '2026-08-09T16:59:59.999Z' }), bought(3)];
+    expect(quickReorderShelfItems(items, { now: buyAgainDay(NOW) })).toEqual(quickReorderShelfItems(items, { now: NOW }));
   });
 
   it('đúng mốc vẫn trong cửa sổ, trước mốc một mili giây hay mốc hỏng thì ngoài', () => {

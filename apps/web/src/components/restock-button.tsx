@@ -86,9 +86,14 @@ export function useRestock({
         if (ctx?.prev) qc.setQueryData(restockStatusKey(productId ?? '', true), ctx.prev);
         onNotice(actionErrorText(e), false);
       },
-      // Trang Yêu thích đọc danh sách đăng ký riêng (`myRestockAlertsKey`): làm mới cùng lúc để quay lại trang đó thấy đúng chuông và nhãn.
+      // Trang Yêu thích đọc danh sách đăng ký riêng (`myRestockAlertsKey`), kệ Mua lại đọc trạng thái chờ trong danh sách đã mua: làm mới cùng lúc
+      // để quay lại hai nơi đó thấy đúng chuông và nhãn.
       onSettled: () =>
-        Promise.all([qc.invalidateQueries({ queryKey: restockStatusKey(productId ?? '', true) }), qc.invalidateQueries({ queryKey: myRestockAlertsKey })]),
+        Promise.all([
+          qc.invalidateQueries({ queryKey: restockStatusKey(productId ?? '', true) }),
+          qc.invalidateQueries({ queryKey: myRestockAlertsKey }),
+          qc.invalidateQueries({ queryKey: ['purchased-items'] }),
+        ]),
     },
     ({ variationId }) => variationId,
   );

@@ -27,8 +27,12 @@ const VN_OFFSET_MS = 7 * 3_600_000;
  * từng mili giây để chống trùng Trang chủ và kệ, tính ở hai lượt vẽ khác nhau, luôn ra cùng một tập món (chỉ đổi lúc nửa đêm).
  */
 export function buyAgainCutoff(now: number): number {
-  const vnDayStart = Math.floor((now + VN_OFFSET_MS) / DAY_MS) * DAY_MS - VN_OFFSET_MS;
-  return vnDayStart - BUY_AGAIN_WINDOW_DAYS * DAY_MS;
+  return buyAgainDay(now) - BUY_AGAIN_WINDOW_DAYS * DAY_MS;
+}
+
+/** Nửa đêm giờ Việt Nam của hôm nay (epoch ms). Dùng làm `now` cho `quickReorderShelfItems` khi cần một khoá chỉ đổi theo ngày (deps của useMemo). */
+export function buyAgainDay(now: number): number {
+  return Math.floor((now + VN_OFFSET_MS) / DAY_MS) * DAY_MS - VN_OFFSET_MS;
 }
 
 /** Lần mua gần nhất của món nằm trong cửa sổ Mua lại. Mốc hỏng thì không mời (không đoán). */

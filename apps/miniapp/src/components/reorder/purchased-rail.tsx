@@ -2,7 +2,7 @@ import { lazy, Suspense, useContext, useEffect, useMemo, useRef, useState } from
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { cartUnitsByVariation } from '@tubutree/app-core/commerce/reorder-notice';
-import { QUICK_REORDER_MAX, buildQuickReorderItems, quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
+import { QUICK_REORDER_MAX, buildQuickReorderItems, buyAgainDay, quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { myRefillPairsQuery, refillFirstOn, refillQueryIds } from '@tubutree/app-core/refill/refill-api';
 import { refillQuickItems } from '@tubutree/app-core/refill/refill-rail';
@@ -134,9 +134,11 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
   const restock = useBuyAgainRestock();
   // Trang chủ vẽ đúng tập mà chống trùng Trang chủ (`use-home-shelves`) chiếm (món của đơn trong 90 ngày, còn hàng trước), tối đa `QUICK_REORDER_MAX` (như trần
   // của kệ): không món nào vừa bị chiếm mà không ai vẽ (biến khỏi các kệ dưới), hay được vẽ mà không ai chiếm (lặp ở kệ dưới). Tab Đơn hàng vẽ đủ như cũ.
+  // Cửa sổ 90 ngày tính theo ngày: lần vẽ đầu sau nửa đêm tính lại tập món như chống trùng Trang chủ, không giữ tập của hôm trước.
+  const today = buyAgainDay(serverNow());
   const shown = useMemo(
-    () => (onHome ? quickReorderShelfItems(items, { now: serverNow(), restock: restockOn }).slice(0, QUICK_REORDER_MAX) : items),
-    [onHome, items, restockOn],
+    () => (onHome ? quickReorderShelfItems(items, { now: today, restock: restockOn }).slice(0, QUICK_REORDER_MAX) : items),
+    [onHome, items, restockOn, today],
   );
   // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món, cỡ nhỏ nhất.
   const [hint] = useState(() => (onHome ? readPurchasedHint(browserStorage()) : 'none'));
@@ -369,7 +371,7 @@ function RebuyLine({
             <Button
               variant={waiting ? 'ghost' : 'secondary'}
               data-testid="rebuy-line-notify"
-              aria-label={fillCopy('wishlist.restock.bell', { name: item.productName })}
+              aria-label={fillCopy('quickReorder.notifyAria', { label: fillCopy(waiting ? 'quickReorder.notifyOn' : 'quickReorder.notify'), name: item.productName })}
               aria-pressed={waiting}
               loading={notifyBusy}
               onPress={onNotify}

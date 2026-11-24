@@ -827,7 +827,7 @@ describe('Kệ Mua lại ở Trang chủ: đơn trong 90 ngày và "Báo khi có
     expect(within(strip).getAllByTestId('quick-reorder-card').map((c) => c.getAttribute('data-variation-id'))).toEqual(['v2', 'v3', 'v1']);
     const notify = within(strip).getByTestId('quick-reorder-notify');
     expect(notify).toHaveTextContent('Báo khi có');
-    expect(notify).toHaveAttribute('aria-label', 'Báo khi SP 1 · Chanh có hàng');
+    expect(notify).toHaveAttribute('aria-label', 'Báo khi có: SP 1 · Chanh');
     expect(notify).toHaveAttribute('aria-pressed', 'false');
     expect(within(strip).getByText('Tạm hết hàng')).toBeTruthy();
     expect(within(strip).getAllByTestId('quick-reorder-add')).toHaveLength(2);
@@ -872,6 +872,7 @@ describe('Kệ Mua lại ở Trang chủ: đơn trong 90 ngày và "Báo khi có
     const on = renderRail();
     const line = await within(on.container).findByTestId('rebuy-line');
     expect(within(line).getByTestId('rebuy-line-notify')).toHaveTextContent('Báo khi có');
+    expect(within(line).getByTestId('rebuy-line-notify')).toHaveAttribute('aria-label', 'Báo khi có: SP 1');
     expect(line).toHaveTextContent('Tạm hết hàng');
     on.unmount();
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [item(1, soldOut)], nextCursor: null, restockAlertsEnabled: false });

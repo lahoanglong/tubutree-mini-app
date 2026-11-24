@@ -45,8 +45,9 @@ const alert = (productId: string, variationId: string) => ({ variationId, produc
 
 let server: { enabled: boolean; items: ReturnType<typeof alert>[] };
 
+let qc: QueryClient;
 function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <WishlistPage />
@@ -119,6 +120,16 @@ describe('Yêu thích Mini: báo hàng về trên thẻ hết hàng (w24-03)', (
     expect(within(card('c')).getByTestId('note')).toHaveTextContent('Đang chờ hàng về');
     expect(chip('Chờ hàng về')!.textContent).toBe('Chờ hàng về(1)');
     expect(mocks.snackbar).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'Có hàng Tubu sẽ báo bạn ở mục Thông báo.', type: 'success' }));
+  });
+
+  it('chạm chuông làm cũ danh sách đã mua: ô "Báo khi có" của kệ Mua lại ở Trang chủ không giữ trạng thái cũ', async () => {
+    renderPage();
+    await screen.findByTestId('note');
+    qc.setQueryData(['purchased-items', 10], { items: [], nextCursor: null, restockAlertsEnabled: true });
+    expect(qc.getQueryState(['purchased-items', 10])?.isInvalidated).toBe(false);
+    fireEvent.click(bell('Dầu gội'));
+    await waitFor(() => expect(mocks.del).toHaveBeenCalledWith('/me/restock-alerts/vC'));
+    await waitFor(() => expect(qc.getQueryState(['purchased-items', 10])?.isInvalidated).toBe(true));
   });
 
   it('chip "Chờ hàng về" lọc đúng thẻ mang nhãn; huỷ món cuối thì chip mất và trang về Tất cả', async () => {

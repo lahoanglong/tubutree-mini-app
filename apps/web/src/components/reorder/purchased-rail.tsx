@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { cartUnitsByVariation } from '@tubutree/app-core/commerce/reorder-notice';
-import { QUICK_REORDER_MAX, buildQuickReorderItems, quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
+import { QUICK_REORDER_MAX, buildQuickReorderItems, buyAgainDay, quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { PURCHASED_LINE_HEIGHT, SECTION_HEADER_HEIGHT, purchasedSkeletonHeight, readPurchasedHint, writePurchasedHint, type PurchasedHint } from '@tubutree/app-core/home-layout';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
@@ -217,7 +217,7 @@ function RebuyLine({
             <Button
               variant={waiting ? 'ghost' : 'secondary'}
               data-testid="rebuy-line-notify"
-              aria-label={fillCopy('wishlist.restock.bell', { name: item.productName })}
+              aria-label={fillCopy('quickReorder.notifyAria', { label: fillCopy(waiting ? 'quickReorder.notifyOn' : 'quickReorder.notify'), name: item.productName })}
               aria-pressed={waiting}
               loading={notifyBusy}
               onPress={onNotify}
@@ -262,9 +262,11 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
   const restock = useBuyAgainRestock((n) => setNotice(n.text));
   // Trang chủ vẽ đúng tập mà chống trùng Trang chủ (`use-home-shelves`) chiếm (món của đơn trong 90 ngày, còn hàng trước), tối đa `QUICK_REORDER_MAX` (như trần
   // của kệ): không món nào vừa bị chiếm mà không ai vẽ (biến khỏi các kệ dưới), hay được vẽ mà không ai chiếm (lặp ở kệ dưới). Tab Đơn hàng vẽ đủ như cũ.
+  // Cửa sổ 90 ngày tính theo ngày: lần vẽ đầu sau nửa đêm tính lại tập món như chống trùng Trang chủ, không giữ tập của hôm trước.
+  const today = buyAgainDay(serverNow());
   const shown = useMemo(
-    () => (onHome ? quickReorderShelfItems(items, { now: serverNow(), restock: restockOn }).slice(0, QUICK_REORDER_MAX) : items),
-    [onHome, items, restockOn],
+    () => (onHome ? quickReorderShelfItems(items, { now: today, restock: restockOn }).slice(0, QUICK_REORDER_MAX) : items),
+    [onHome, items, restockOn, today],
   );
   // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món. HTML server không có kho nên bản server là 'none'.
   const hint = useSyncExternalStore(subscribeNothing, () => (onHome ? readPurchasedHint(browserStorage()) : 'none'), (): PurchasedHint => 'none');

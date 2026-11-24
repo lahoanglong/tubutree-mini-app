@@ -13,6 +13,7 @@ import { Button } from '../ui/button';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
 import { useNotify } from '../../hooks/use-notify';
+import { PURCHASED_ITEMS_KEY } from '../../hooks/use-purchased-items';
 import { coreHttp } from '../../services/core-http';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
@@ -71,9 +72,14 @@ export function PdpRestockButton({ productId, variationId }: { productId: string
         if (ctx?.prev) qc.setQueryData(restockStatusKey(productId, true), ctx.prev);
         notify({ text: getErrorMessage(e), type: 'error' });
       },
-      // Trang Yêu thích đọc danh sách đăng ký riêng (`myRestockAlertsKey`): làm mới cùng lúc để quay lại trang đó thấy đúng chuông và nhãn.
+      // Trang Yêu thích đọc danh sách đăng ký riêng (`myRestockAlertsKey`), kệ Mua lại đọc trạng thái chờ trong danh sách đã mua: làm mới cùng lúc
+      // để quay lại hai nơi đó thấy đúng chuông và nhãn.
       onSettled: () =>
-        Promise.all([qc.invalidateQueries({ queryKey: restockStatusKey(productId, true) }), qc.invalidateQueries({ queryKey: myRestockAlertsKey })]),
+        Promise.all([
+          qc.invalidateQueries({ queryKey: restockStatusKey(productId, true) }),
+          qc.invalidateQueries({ queryKey: myRestockAlertsKey }),
+          qc.invalidateQueries({ queryKey: [PURCHASED_ITEMS_KEY] }),
+        ]),
     },
     ({ variationId: id }) => id,
   );
