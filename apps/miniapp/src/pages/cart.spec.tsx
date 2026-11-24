@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest'
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
+  getAddresses: vi.fn(),
   getCart: vi.fn(),
   getCartSelection: vi.fn(),
   removeCartItem: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/shop-api', () => ({
+  getAddresses: mocks.getAddresses,
   getCart: mocks.getCart,
   getCartSelection: mocks.getCartSelection,
   removeCartItem: mocks.removeCartItem,
@@ -2597,5 +2599,29 @@ describe('CartPage — sự kiện phễu mua', () => {
     expect(setCheckoutEntry).toHaveBeenLastCalledWith('cart_subset');
     expect(mocks.navigate).toHaveBeenLastCalledWith('/checkout', { state: { itemIds: ['ci-b'] } });
     expect(vi.mocked(setCheckoutEntry).mock.invocationCallOrder[1]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder.at(-1)!);
+  });
+});
+
+describe('CartPage — đọc sẵn sổ địa chỉ cho Thanh toán (w32-04)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAddresses.mockResolvedValue([]);
+  });
+
+  it('giỏ đặt được (nút Thanh toán bấm được): đọc sẵn sổ địa chỉ đúng một lần', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Thanh toán (1)' })).toBeEnabled();
+    await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(1));
+  });
+
+  it('nút Thanh toán bị khoá (vượt tồn): không đọc sổ địa chỉ', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 3, stock: 1, total: 150_000 }] }));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Thanh toán (3)' })).toBeDisabled();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(mocks.getAddresses).not.toHaveBeenCalled();
   });
 });

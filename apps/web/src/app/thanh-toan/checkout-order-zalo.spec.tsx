@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Ô "Nhận hành trình đơn hàng qua Zalo" ngay trên Đặt hàng và lời mời kết bạn ở màn đặt xong (wave tubu-mss-consent-ui).
@@ -60,6 +60,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 import { QueryClient } from '@tanstack/react-query';
 import { ORDER_ZALO_KEY } from '@/components/checkout/order-zalo';
 import CheckoutPage from './page';
+
+import { loadCheckoutPanels } from '@/components/checkout/checkout-panels-load';
+
+// Ô VAT, thẻ chuyển khoản, form địa chỉ và màn đặt xong tải lười (`checkout-panels-lazy`): nạp sẵn như trình duyệt đã tải lúc rảnh, để các khối dựng ngay ở lần vẽ đầu.
+beforeAll(() => loadCheckoutPanels());
 
 const ADDR = {
   id: 'a1', recipient: 'Nguyễn An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ',

@@ -11,6 +11,7 @@ import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } fro
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
+import { useCheckoutWarmup } from '@/lib/use-checkout-warmup';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
 import { cartRefetchOnReturn, soldOutRecovery } from '@tubutree/app-core/cart/sold-out-recovery';
@@ -356,6 +357,8 @@ export default function CartPage() {
       ? estSelected.filter((it) => it.stock > 0).reduce((sum, it) => sum + it.total, 0)
       : null;
   const shipQ = useShippingEstimate(estBase);
+  // Nút đi tới Thanh toán (Thanh toán, hoặc bỏ món hết rồi thanh toán) vào khung nhìn: lúc rảnh tải sẵn mã trang Thanh toán, sổ địa chỉ và khoá phí giao Thanh toán đọc.
+  const warmCheckoutRef = useCheckoutWarmup(estBase);
   // Dải mua thêm ở đầu Giỏ có đang hiện không (`onShownChange`); gọi trước các `return` theo phiên đăng nhập.
   const [aovRailShown, setAovRailShown] = useState<boolean | null>(null);
 
@@ -900,7 +903,7 @@ export default function CartPage() {
                 </>
               ) : recovery ? (
                 <>
-                  <button type="button" onClick={onDropSoldOut} aria-describedby="cart-pay-hint-lg" className={`${ui.btnPrimary} w-full`}>
+                  <button type="button" ref={warmCheckoutRef} onClick={onDropSoldOut} aria-describedby="cart-pay-hint-lg" className={`${ui.btnPrimary} w-full`}>
                     {recovery.cta}
                   </button>
                   <p id="cart-pay-hint-lg" role="status" className="mt-2 text-caption text-warning-fg">
@@ -917,7 +920,7 @@ export default function CartPage() {
                   </p>
                 </>
               ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} w-full`}>
+                <Link href="/thanh-toan" ref={warmCheckoutRef} onClick={onPay} className={`${ui.btnPrimary} w-full`}>
                   Thanh toán ({selectedCount})
                 </Link>
               )}
@@ -1020,7 +1023,7 @@ export default function CartPage() {
                 </div>
                 {recovery ? (
                   // Nhãn một chạm dài hơn "Thanh toán (n)": nút xuống hàng riêng dưới tổng và giãn hết bề ngang (như Mini App), không bị cắt chữ.
-                  <button type="button" onClick={onDropSoldOut} aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_100%]`}>
+                  <button type="button" ref={warmCheckoutRef} onClick={onDropSoldOut} aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_100%]`}>
                     {recovery.cta}
                   </button>
                 ) : payHint ? (
@@ -1028,7 +1031,7 @@ export default function CartPage() {
                     Thanh toán ({selectedCount})
                   </button>
                 ) : (
-                  <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
+                  <Link href="/thanh-toan" ref={warmCheckoutRef} onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
                     Thanh toán ({selectedCount})
                   </Link>
                 )}

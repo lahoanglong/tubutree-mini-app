@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, Plus } from 'lucide-react';
 import { compactAddressView, readRecentAddressIds, sortAddressesForPicker } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { AddressForm } from '@/components/address-form';
+import { AddressFormLazy } from '@/components/checkout/checkout-panels-lazy';
 import { Badge } from '@/components/mini/badge';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
@@ -136,7 +136,7 @@ export function AddressPicker({
       )}
 
       {editing && (
-        <AddressForm
+        <AddressFormLazy
           key={editing.id}
           title="Sửa địa chỉ"
           submitLabel="Lưu"
@@ -152,7 +152,7 @@ export function AddressPicker({
       )}
 
       {adding ? (
-        <AddressForm
+        <AddressFormLazy
           title="Thêm địa chỉ"
           userId={userId}
           submitLabel="Lưu"

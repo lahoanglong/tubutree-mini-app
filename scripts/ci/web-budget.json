@@ -1,5 +1,5 @@
 {
-  "$comment": "Ngưỡng gzip (mức 9) của JS tải lần đầu = số đo sau tubu-w10-01 (bản dựng worktree, sau phần giảm 21–37 KB của tubu-w9-02) + 4%, làm tròn lên. Cả sáu route đều chặn CI: thêm hơn 4% JS vào một route phải nâng ngưỡng có chủ đích trong cùng PR. HTML / là byte chưa nén, chỉ kiểm khi có --html-base: trần 215.000 B từ tubu-w17-02 (kệ Bán chạy một danh sách, bỏ dữ liệu SSR thừa; đo bản dựng worktree với API PROD: 174.686 B). /gio-hang và /vuon-xanh là route `[[...variant]]` (bản thường và bản dựng sẵn cho khách `/khach` chung một trang, cùng JS).",
+  "$comment": "Ngưỡng gzip (mức 9) của JS tải lần đầu = số đo sau tubu-w10-01 (bản dựng worktree, sau phần giảm 21–37 KB của tubu-w9-02) + 4%, làm tròn lên; /thanh-toan siết lại sau tubu-w32-04 (ô VAT, thẻ chuyển khoản, form địa chỉ và màn đặt xong tải lười: 339.834 → 318.568 B) + 4%. Cả sáu route đều chặn CI: thêm hơn 4% JS vào một route phải nâng ngưỡng có chủ đích trong cùng PR. HTML / là byte chưa nén, chỉ kiểm khi có --html-base: trần 215.000 B từ tubu-w17-02 (kệ Bán chạy một danh sách, bỏ dữ liệu SSR thừa; đo bản dựng worktree với API PROD: 174.686 B). /gio-hang và /vuon-xanh là route `[[...variant]]` (bản thường và bản dựng sẵn cho khách `/khach` chung một trang, cùng JS).",
   "routes": {
     "/": {
       "maxGzipBytes": 365699
@@ -14,7 +14,7 @@
       "maxGzipBytes": 327018
     },
     "/thanh-toan": {
-      "maxGzipBytes": 346932
+      "maxGzipBytes": 331311
     },
     "/vuon-xanh/[[...variant]]": {
       "maxGzipBytes": 313564

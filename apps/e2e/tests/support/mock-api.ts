@@ -384,6 +384,9 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Phí giao ước tính (giỏ, Thanh toán chưa có địa chỉ) chỉ là dòng thêm: không trả lời được thì màn giữ cách hiện cũ. Spec kiểm dòng phí tự mock
       // (support/shipping-estimate-mocks.ts).
       api.allowUnmocked('GET /checkout/shipping-estimate');
+      // Giỏ (web và Mini App) đọc sẵn sổ địa chỉ khi nút Thanh toán bấm được, để Thanh toán mở là hỏi báo giá ngay (tubu-w32-04). Đọc sẵn hỏng
+      // thì Thanh toán tự đọc lại như cũ, nên spec giỏ không cần mock; spec Thanh toán vẫn tự mock sổ địa chỉ.
+      api.allowUnmocked('GET /me/addresses');
       // Mọi khách đăng nhập hỏi số yêu cầu đổi rác đang mở khi chương trình tạm dừng (mặc định của publicConfig); mặc định không còn yêu cầu nào.
       api.fallback('GET', '/waste/me/open-count', { count: 0 });
       // Đầu và chân trang web đọc cờ Đổi rác ở MỌI trang; spec nào cần cờ bật thì tự mock /config/public.

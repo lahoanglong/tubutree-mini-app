@@ -17,6 +17,7 @@ const FILES = [
   'components/geo-picker.tsx',
   'components/coupon-box.tsx',
   'app/thanh-toan/invoice-section.tsx',
+  'app/thanh-toan/invoice-fields.tsx',
   'app/thanh-toan/page.tsx',
   'app/tai-khoan/don-hang/[code]/return-request-form.tsx',
   'app/tai-khoan/don-hang/[code]/refund-destination-picker.tsx',

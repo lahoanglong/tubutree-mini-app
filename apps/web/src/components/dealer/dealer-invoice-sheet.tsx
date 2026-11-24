@@ -7,7 +7,7 @@ import { requestDealerInvoices, saveDealerInvoiceProfile, type DealerInvoiceProf
 import { dealerInvoiceProfileQuery, dealerOrdersQuery } from '@tubutree/app-core/queries/dealer';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
-import { InvoiceFields } from '@/app/thanh-toan/invoice-section';
+import { InvoiceFields } from '@/app/thanh-toan/invoice-fields';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import { skin } from '@/components/pro-shared/mini-skin';

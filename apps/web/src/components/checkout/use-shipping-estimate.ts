@@ -1,21 +1,18 @@
 'use client';
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { getShippingEstimate, SHIPPING_ESTIMATE_STALE_MS } from '@tubutree/app-core/api/shipping-estimate';
-import { coreHttp } from '@/lib/core-http';
+import { shippingEstimateAmount, shippingEstimateQuery, type ShippingEstimateOpts } from './shipping-estimate-query';
 
 /**
  * Phí giao ước tính cho tiền hàng kiện Tubu `subtotal` (trước giảm giá, như thanh Miễn phí giao hàng). null hoặc 0 = không hỏi: giỏ có hàng
  * gian hàng tự giao (phí riêng từng gian hàng) hay chưa chọn món. `anonymous`: giỏ khách chưa đăng nhập. Lỗi thì không hiện dòng phí.
  * `pending`: đang hỏi lần đầu (chưa có số nào, kể cả số cũ), để nơi vẽ giữ chỗ dòng phí thay vì chèn nó vào sau.
  */
-export function useShippingEstimate(subtotal: number | null, opts: { provinceCode?: string | null; anonymous?: boolean } = {}) {
-  const amount = subtotal != null && subtotal > 0 ? Math.round(subtotal) : 0;
+export function useShippingEstimate(subtotal: number | null, opts: ShippingEstimateOpts = {}) {
+  const amount = shippingEstimateAmount(subtotal);
   const q = useQuery({
-    queryKey: ['shipping-estimate', amount, opts.provinceCode ?? null, opts.anonymous ? 'anon' : 'me'],
-    queryFn: () => getShippingEstimate(coreHttp, { subtotal: amount, provinceCode: opts.provinceCode }, { anonymous: opts.anonymous }),
+    ...shippingEstimateQuery(amount, opts),
     enabled: amount > 0,
-    staleTime: SHIPPING_ESTIMATE_STALE_MS,
     placeholderData: keepPreviousData,
     retry: false,
   });

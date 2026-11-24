@@ -1,0 +1,60 @@
+'use client';
+
+import { useId } from 'react';
+import type { InvoiceField, InvoiceFieldErrors } from '@tubutree/app-core/commerce/checkout-form';
+import { ui } from '@/lib/guest-ui';
+import type { InvoiceInfo } from '@/lib/checkout-rules';
+
+const INVOICE_FIELDS: { key: keyof InvoiceInfo; label: string; type?: string; autoComplete: string }[] = [
+  { key: 'taxCode', label: 'Mã số thuế', autoComplete: 'off' },
+  { key: 'companyName', label: 'Tên công ty', autoComplete: 'organization' },
+  { key: 'address', label: 'Địa chỉ xuất hoá đơn', autoComplete: 'street-address' },
+  { key: 'email', label: 'Email nhận hoá đơn', type: 'email', autoComplete: 'email' },
+];
+
+/** Bốn ô thông tin xuất hoá đơn VAT (MST, tên công ty, địa chỉ, email), mỗi ô báo lỗi riêng ngay dưới ô. Dùng ở thanh toán và kênh đại lý. */
+export function InvoiceFields({
+  invoice,
+  onInvoice,
+  errors,
+  onTouch,
+  disabled,
+  className = '',
+}: {
+  invoice: InvoiceInfo;
+  onInvoice: (v: InvoiceInfo) => void;
+  errors: InvoiceFieldErrors;
+  onTouch: (field: InvoiceField) => void;
+  disabled: boolean;
+  className?: string;
+}) {
+  const id = useId();
+  const set = (patch: Partial<InvoiceInfo>) => onInvoice({ ...invoice, ...patch });
+  return (
+    <div className={`grid gap-3 sm:grid-cols-2 ${className}`}>
+      {INVOICE_FIELDS.map((f) => (
+        <label key={f.key} htmlFor={`${id}-${f.key}`} className={f.key === 'address' ? 'block sm:col-span-2' : 'block'}>
+          <span className="text-field-label text-[color:var(--color-text-secondary)]">{f.label}</span>
+          <input
+            id={`${id}-${f.key}`}
+            type={f.type ?? 'text'}
+            value={invoice[f.key]}
+            onChange={(e) => set({ [f.key]: e.target.value })}
+            onBlur={() => onTouch(f.key)}
+            autoComplete={f.autoComplete}
+            disabled={disabled}
+            aria-invalid={errors[f.key] ? true : undefined}
+            aria-describedby={errors[f.key] ? `${id}-${f.key}-err` : undefined}
+            className={`${ui.field} mt-1`}
+          />
+          {errors[f.key] && (
+            <span id={`${id}-${f.key}-err`} className="mt-1 block text-caption text-danger-fg">
+              <span aria-hidden="true">⚠ </span>
+              {errors[f.key]}
+            </span>
+          )}
+        </label>
+      ))}
+    </div>
+  );
+}
