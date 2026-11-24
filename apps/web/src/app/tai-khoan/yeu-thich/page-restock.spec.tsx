@@ -143,6 +143,100 @@ describe('/tai-khoan/yeu-thich — báo hàng về trên thẻ hết hàng (w24-
     expect(mocks.get.mock.calls.filter(([p]) => p === '/me/wishlist').length).toBeGreaterThan(before);
   });
 
+  // Lệnh xong trước không được tải lại danh sách khi lệnh kia chưa có trả lời: bản tải về chưa có thay đổi của thẻ kia và vẽ đè nó về trạng thái cũ.
+  it.each([
+    ['huỷ (Dầu gội) trả lời trước', 'del'],
+    ['đăng ký (Nước giặt) trả lời trước', 'post'],
+  ] as const)('chạm hai chuông sát nhau, %s: thẻ kia không nhấp nháy; tải lại một lần sau lệnh cuối', async (_label, first) => {
+    const pending: Record<'del' | 'post', () => void> = { del: () => undefined, post: () => undefined };
+    mocks.del.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          pending.del = () => {
+            server.items = server.items.filter((a) => a.variationId !== 'vC');
+            r({ variationId: 'vC', subscribed: false });
+          };
+        }),
+    );
+    mocks.post.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          pending.post = () => {
+            server.items.push(alert('d', 'vD'));
+            r({ variationId: 'vD', subscribed: true });
+          };
+        }),
+    );
+    const c = await mount();
+    click(bell(c, 'Dầu gội'));
+    click(bell(c, 'Nước giặt'));
+    await flush(3);
+    expect(bell(c, 'Dầu gội')!.getAttribute('aria-pressed')).toBe('false');
+    expect(bell(c, 'Nước giặt')!.getAttribute('aria-pressed')).toBe('true');
+    const getsBefore = restockGets();
+
+    await act(async () => pending[first]());
+    await flush(5);
+    expect(bell(c, 'Dầu gội')!.getAttribute('aria-pressed')).toBe('false');
+    expect(bell(c, 'Nước giặt')!.getAttribute('aria-pressed')).toBe('true');
+    expect(restockGets()).toBe(getsBefore);
+
+    await act(async () => pending[first === 'del' ? 'post' : 'del']());
+    await flush(5);
+    expect(restockGets()).toBe(getsBefore + 1);
+    expect(bell(c, 'Dầu gội')!.getAttribute('aria-pressed')).toBe('false');
+    expect(bell(c, 'Nước giặt')!.getAttribute('aria-pressed')).toBe('true');
+    expect(waitingBadges(c)).toBe(1);
+  });
+
+  describe('focus bàn phím khi huỷ trong chip "Chờ hàng về"', () => {
+    it('huỷ món không phải cuối: thẻ rời lưới, focus sang chuông của thẻ kế', async () => {
+      server.items = [alert('c', 'vC'), alert('d', 'vD')];
+      const c = await mount();
+      click(chip(c, 'Chờ hàng về')!);
+      expect(shown(c)).toEqual(['/san-pham/sp-c', '/san-pham/sp-d']);
+      bell(c, 'Dầu gội')!.focus();
+      click(bell(c, 'Dầu gội'));
+      await flush(5);
+      expect(shown(c)).toEqual(['/san-pham/sp-d']);
+      expect(document.activeElement).toBe(bell(c, 'Nước giặt'));
+    });
+
+    it('huỷ món cuối của danh sách lọc: focus sang chuông của thẻ trước', async () => {
+      server.items = [alert('c', 'vC'), alert('d', 'vD')];
+      const c = await mount();
+      click(chip(c, 'Chờ hàng về')!);
+      bell(c, 'Nước giặt')!.focus();
+      click(bell(c, 'Nước giặt'));
+      await flush(5);
+      expect(shown(c)).toEqual(['/san-pham/sp-c']);
+      expect(document.activeElement).toBe(bell(c, 'Dầu gội'));
+    });
+
+    it('huỷ món chờ cuối cùng: chip mất, bộ lọc về Tất cả và focus nằm ở chip Tất cả của thanh lọc', async () => {
+      const c = await mount();
+      click(chip(c, 'Chờ hàng về')!);
+      bell(c, 'Dầu gội')!.focus();
+      click(bell(c, 'Dầu gội'));
+      await flush(5);
+      expect(chip(c, 'Chờ hàng về')).toBeUndefined();
+      expect(document.activeElement).toBe(chip(c, 'Tất cả'));
+      expect(chip(c, 'Tất cả')!.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('chuông không giữ focus lúc bấm (bấm chuột ở Safari): không kéo focus khỏi chỗ người dùng đang đứng', async () => {
+      server.items = [alert('c', 'vC'), alert('d', 'vD')];
+      const c = await mount();
+      click(chip(c, 'Chờ hàng về')!);
+      const all = chip(c, 'Tất cả')!;
+      all.focus();
+      click(bell(c, 'Dầu gội'));
+      await flush(5);
+      expect(shown(c)).toEqual(['/san-pham/sp-d']);
+      expect(document.activeElement).toBe(all);
+    });
+  });
+
   it('cờ tắt: không chuông, không nhãn, không chip; danh sách không có món hết hàng thì không gọi API báo hàng về', async () => {
     server = { enabled: false, items: [] };
     const c = await mount();
