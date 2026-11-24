@@ -47,7 +47,7 @@ function goodRepo(): Record<string, string> {
     [FILES.settings]: "import { AccountDeletionSection } from '../components/account-deletion-section';\nexport const S = () => <AccountDeletionSection />;",
     [FILES.deletionSection]: 'export const go = () => requestAccountDeletion(undefined, consent);',
     [FILES.accountApiCore]: "export const r = (http) => http.post('/me/deletion-request', {});",
-    [FILES.usersController]: "@Post('me/deletion-request')",
+    [FILES.usersController]: "export class UsersController { @Post('me/deletion-request') request() {} }",
     [FILES.consentWebhook]: "export const ZALO_REVOKE_CONSENT_EVENT = 'user.revoke.consent';",
     [FILES.checkoutRules]: "export const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET'] as const;",
     [FILES.webPortalScreens]: "export const WEB_PORTAL_SCREENS = { '/admin': { title: 'Q', audience: 'A', webPath: '/admin' } } as const;",
@@ -82,11 +82,37 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
   describe('Quyền', () => {
     it('gọi API cần quyền chưa khai: đỏ, nói rõ API và chỗ gọi', () => {
       const checks = withRepo((r) => {
-        r[FILES.bridge] = r[FILES.bridge]!.replace('getPhoneNumber, login', 'getPhoneNumber, getLocation, login');
+        r[FILES.bridge] = `${r[FILES.bridge]!.replace('getPhoneNumber, login', 'getPhoneNumber, getLocation, login')}\nexport const loc = () => getLocation({});`;
       });
       expect(failing(checks)).toContain('perm.declared:scope.userLocation');
       expect(detail(checks, 'perm.declared:scope.userLocation')).toContain('getLocation ở services/zmp-bridge.ts:1');
       expect(detail(checks, 'perm.api-listed')).toContain('getLocation');
+    });
+
+    it('import API cần quyền mà không dùng tới: không tính là xin quyền, chỉ đỏ ở mục API chưa có lý do', () => {
+      const checks = withRepo((r) => {
+        r[FILES.bridge] = r[FILES.bridge]!.replace('getPhoneNumber, login', 'getPhoneNumber, getLocation, login');
+      });
+      expect(failing(checks)).toEqual(['perm.api-listed']);
+      expect(checks.some((c) => c.id === 'perm.declared:scope.userLocation')).toBe(false);
+    });
+
+    it('createCameraContext cần cả camera lẫn micro; authorize thì mọi chuỗi scope.x trong mã Mini App đều tính', () => {
+      const camera = withRepo((r) => {
+        r[FILES.bridge] = `${r[FILES.bridge]!.replace('getPhoneNumber, login', 'createCameraContext, getPhoneNumber, login')}\nexport const cam = () => createCameraContext({});`;
+      });
+      expect(failing(camera)).toEqual(['perm.declared:scope.camera', 'perm.declared:scope.micro', 'perm.api-listed']);
+      const listed = withRepo((r) => {
+        const m = structuredClone(MANIFEST);
+        m.scopes['scope.userPhonenumber'].apis = ['getPhoneNumber', 'authorize'];
+        r[FILES.permissions] = JSON.stringify(m);
+        r[FILES.bridge] = `${r[FILES.bridge]!.replace('getPhoneNumber, login', 'authorize, getPhoneNumber, login')}\nexport const ask = (scopes: string[]) => authorize({ scopes });`;
+        r[`${MINI_SRC}/utils/scopes.ts`] = "export const SCOPES = ['scope.userPhonenumber', 'scope.camera'];";
+      });
+      expect(failing(listed)).toEqual(['perm.declared:scope.camera']);
+      expect(detail(listed, 'perm.declared:scope.camera')).toBe(
+        'scope.camera được gọi (scope.camera ở utils/scopes.ts) nhưng chưa khai trong apps/miniapp/zalo-permissions.json',
+      );
     });
 
     it('khai scope không còn lời gọi: đỏ (Zalo trả hồ sơ xin quyền không dùng)', () => {
@@ -182,6 +208,24 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
       });
       expect(failing(checks)).toEqual(['legal.web-policy', 'legal.checkout-consent', 'legal.console-links']);
     });
+
+    it('web-policy: re-export nằm trong chú thích thì đỏ; bí danh kiểu trỏ tới LegalSlug import từ legal-core thì đạt', () => {
+      const commented = withRepo((r) => {
+        r[FILES.webPolicy] = "// export type { LegalSlug as WebPolicySlug } from '@tubutree/app-core/legal-core';\nexport type WebPolicySlug = 'dieu-khoan';";
+      });
+      expect(failing(commented)).toEqual(['legal.web-policy']);
+      const alias = withRepo((r) => {
+        r[FILES.webPolicy] = "import type { LegalSlug } from '@tubutree/app-core/legal-core';\nexport type WebPolicySlug = LegalSlug;";
+      });
+      expect(failing(alias)).toEqual([]);
+    });
+
+    it('link Điều khoản trên console không phải dieu-khoan: đỏ', () => {
+      const checks = withRepo((r) => {
+        r[FILES.permissions] = JSON.stringify({ ...MANIFEST, consoleLinks: { privacyPolicy: 'bao-mat', terms: 'bao-mat' } });
+      });
+      expect(failing(checks)).toEqual(['legal.console-links']);
+    });
   });
 
   it('Xoá tài khoản: Cài đặt không còn khối xoá hoặc API mất route: đỏ, nói chỗ đứt', () => {
@@ -193,8 +237,15 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
     expect(detail(checks, 'delete.reachable')).toBe('đứt ở: khối Xoá tài khoản ở Cài đặt, API nhận yêu cầu');
   });
 
+  it('Xoá tài khoản: khối xoá chỉ còn trong chú thích: đỏ', () => {
+    const checks = withRepo((r) => {
+      r[FILES.settings] = "// import { AccountDeletionSection } from '../components/account-deletion-section';\nexport const S = () => <div>{/* <AccountDeletionSection /> */}</div>;";
+    });
+    expect(detail(checks, 'delete.reachable')).toBe('đứt ở: khối Xoá tài khoản ở Cài đặt');
+  });
+
   describe('Thanh toán', () => {
-    it('link cổng thanh toán, đường dẫn mở app ví, tên miền lạ, trang thanh toán web: đỏ kèm tệp:dòng; chữ trong chú thích và host dựng động không tính', () => {
+    it('link cổng thanh toán (cả trong tham số), mở app ví, tên miền lạ (cả //host), trang thanh toán web, host dựng động: đỏ kèm tệp:dòng; chú thích và new URL(...) không tính', () => {
       const checks = withRepo((r) => {
         r[`${MINI_SRC}/pages/pay.tsx`] = [
           '// xem https://payment.momo.vn/docs (chỉ là chú thích)',
@@ -204,6 +255,9 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
           "export const d = 'https://tubutree.com/thanh-toan/chuyen-khoan/X';",
           'export const e = (host: string) => `https://${host}/x`;',
           "export const f = 'https://dl.vietqr.io/pay?app=vcb';",
+          'export const g = (h: string) => new URL(`https://${h}/x`).searchParams;',
+          "export const h = '//evil.example.com/x';",
+          "export const i = 'https://zalo.me/r?u=pay.zalopay.vn';",
         ].join('\n');
       });
       expect(failing(checks)).toEqual(['pay.links']);
@@ -212,7 +266,25 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
         'pages/pay.tsx:3: đường dẫn mở app ngoài "momo://"',
         'pages/pay.tsx:4: tên miền chưa duyệt example.com (không phải trang thanh toán thì thêm vào ALLOWED_HOSTS kèm lý do)',
         'pages/pay.tsx:5: link tới trang mua hàng của web tubutree.com/thanh-toan/chuyen-khoan/X',
+        'pages/pay.tsx:6: link dựng tên miền lúc chạy, không kiểm được (mở link ngoài qua zmp-bridge.ts)',
         'pages/pay.tsx:7: link cổng thanh toán ngoài dl.vietqr.io',
+        'pages/pay.tsx:9: tên miền chưa duyệt evil.example.com (không phải trang thanh toán thì thêm vào ALLOWED_HOSTS kèm lý do)',
+        'pages/pay.tsx:10: link cổng thanh toán ngoài pay.zalopay.vn',
+      ]);
+    });
+
+    it('quét cả tệp app-core mà Mini App nạp (lần theo import, bỏ import kiểu và tệp không ai nạp)', () => {
+      const checks = withRepo((r) => {
+        r[`${MINI_SRC}/pages/p.tsx`] = "import { PAY } from '@tubutree/app-core/pay-links';\nimport type { T } from '@tubutree/app-core/types-only';\nexport const p: T = PAY;";
+        r['packages/app-core/src/pay-links.ts'] = "export { DEEP } from './deep';\nexport const PAY = 'https://pay.vnpay.vn/x';";
+        r['packages/app-core/src/deep/index.ts'] = "export const DEEP = 'momo://pay';";
+        r['packages/app-core/src/types-only.ts'] = "export type T = string;\nexport const X = 'https://evil.example.com';";
+        r['packages/app-core/src/unused.ts'] = "export const U = 'https://evil.example.com';";
+      });
+      expect(failing(checks)).toEqual(['pay.links']);
+      expect(detail(checks, 'pay.links').split('; ')).toEqual([
+        'app-core/deep/index.ts:1: đường dẫn mở app ngoài "momo://"',
+        'app-core/pay-links.ts:2: link cổng thanh toán ngoài pay.vnpay.vn',
       ]);
     });
 
@@ -223,6 +295,9 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
           "export const a = () => window.open('/x');",
           'export const b = (u: string) => { window.location.href = u; };',
           'export const c = (url: string) => openWebview({ url });',
+          "export const d = () => globalThis.open('/y');",
+          "export const e = () => window['open']('/z');",
+          'export const f = (u: string) => location.assign(u);',
         ].join('\n');
       });
       expect(failing(checks)).toEqual(['pay.navigation']);
@@ -230,6 +305,26 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
         'pages/bad.tsx:1: window.open mở trang ngoài Mini App',
         'pages/bad.tsx:2: ghi window.location.href ngoài zmp-bridge.ts',
         'pages/bad.tsx:3: openWebview ngoài zmp-bridge.ts phải là link https://zalo.me/ hoặc https://oa.zalo.me/ viết sẵn',
+        'pages/bad.tsx:4: globalThis.open mở trang ngoài Mini App',
+        'pages/bad.tsx:5: window.open mở trang ngoài Mini App',
+        'pages/bad.tsx:6: gọi location.assign ngoài zmp-bridge.ts',
+      ]);
+    });
+
+    it('openWebview gán sang tên khác vẫn bị kiểm; openMiniApp đỏ dù đã ghi lý do', () => {
+      const checks = withRepo((r) => {
+        r[FILES.permissions] = JSON.stringify({ ...MANIFEST, noScopeApis: { ...MANIFEST.noScopeApis, openWebview: 'Mở OA.', openMiniApp: 'Mở app khác.' } });
+        r[`${MINI_SRC}/pages/alias.ts`] = [
+          "import { openWebview, openMiniApp } from 'zmp-sdk/apis';",
+          'const go = openWebview;',
+          'export const a = (url: string) => go({ url });',
+          "export const b = () => openMiniApp({ appId: '1' });",
+        ].join('\n');
+      });
+      expect(failing(checks)).toEqual(['pay.navigation']);
+      expect(detail(checks, 'pay.navigation').split('; ')).toEqual([
+        'pages/alias.ts:1: openMiniApp: API mở sang app hoặc Mini App khác, không dùng trong Mini App bán hàng',
+        'pages/alias.ts:3: openWebview ngoài zmp-bridge.ts phải là link https://zalo.me/ hoặc https://oa.zalo.me/ viết sẵn',
       ]);
     });
 

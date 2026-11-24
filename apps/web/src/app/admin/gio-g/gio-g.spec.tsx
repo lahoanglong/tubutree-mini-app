@@ -310,7 +310,7 @@ describe('CockpitBoard', () => {
     const later = card.querySelector('[data-testid="gio-g-handover-later"]')!;
     expect(later.querySelector('h4')?.textContent).toBe('Tuỳ chọn (Mở sau)');
     expect(later.getAttribute('aria-labelledby')).toBe(later.querySelector('h4')?.id);
-    expect(later.textContent).toContain('Ngày mở bán thu tiền bằng chuyển khoản VietQR và COD nên chưa cần; điền khi chủ shop quyết bật.');
+    expect(later.textContent).toContain('Kênh chưa bật ngày mở bán nên không tính vào số việc phải xong; điền khi chủ shop quyết bật.');
     expect([...later.querySelectorAll('[data-testid="gio-g-handover-item"]')].map((r) => r.getAttribute('data-key'))).toEqual(['zalopay', 'accesstrade']);
     expect(card.querySelector(':scope > ul')!.querySelector('[data-key="zalopay"]')).toBeNull();
     expect(later.querySelector('[data-key="accesstrade"] [aria-label="Biến cần điền"]')?.textContent).toBe('ACCESSTRADE_TOKENChờ điềnACCESSTRADE_PUBLISHER_IDChờ điền');

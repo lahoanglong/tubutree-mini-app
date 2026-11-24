@@ -4,22 +4,25 @@
  *   node scripts/zalo-review/check-submission.mjs [--json]
  *
  * Bốn nhóm, đúng những lý do Zalo hay trả hồ sơ:
- * - Quyền: scope khai trong apps/miniapp/zalo-permissions.json khớp đúng các API zmp-sdk cần quyền mà mã nguồn gọi (không thiếu, không thừa),
- *   mọi API zmp-sdk khác có lý do, và API cần quyền chỉ được gọi trong services/zmp-bridge.ts.
+ * - Quyền: scope khai trong apps/miniapp/zalo-permissions.json khớp đúng các API zmp-sdk cần quyền mà mã nguồn gọi thật (không thiếu, không
+ *   thừa), mọi API zmp-sdk khác có lý do, API cần quyền chỉ được gọi trong services/zmp-bridge.ts.
  * - Pháp lý: mọi chính sách Mini App mở được là một slug của legal-core.ts, trang Về Tubu Tree mở đủ năm chính sách đúng tên, thanh toán có
  *   Điều khoản và Bảo mật, link chính sách điền trên console có trang web thật.
  * - Xoá tài khoản: đi được từ tab Cá nhân tới nút gửi yêu cầu xoá, và API có route nhận yêu cầu cùng webhook rút đồng ý của Zalo.
- * - Thanh toán: không có link cổng thanh toán ngoài, đường dẫn mở app ngoài, window.open hay đổi location ngoài zmp-bridge.ts; Mini App chỉ cho
- *   COD, chuyển khoản, Ví; cổng web không dẫn tới trang thanh toán web.
+ * - Thanh toán: không có tên miền cổng thanh toán, đường dẫn mở app ngoài, link dựng tên miền lúc chạy, window.open hay đổi location ngoài
+ *   zmp-bridge.ts, API zmp-sdk mở sang app khác; Mini App chỉ cho COD, chuyển khoản, Ví; cổng web không trỏ thẳng tới trang thanh toán web.
  *
- * Đọc mã nguồn bằng bộ phân tích của TypeScript nên chữ trong chú thích không tính. Không gọi mạng, không ghi tệp.
+ * Quét mọi tệp của apps/miniapp/src cùng các tệp packages/app-core/src mà Mini App nạp (lần theo import). Đọc bằng bộ phân tích của
+ * TypeScript nên chữ trong chú thích không tính. Không gọi mạng, không ghi tệp.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 export const MINI_SRC = 'apps/miniapp/src';
+export const APP_CORE_SRC = 'packages/app-core/src';
+const APP_CORE_PKG = '@tubutree/app-core';
 
 export const FILES = {
   appConfig: 'apps/miniapp/app-config.json',
@@ -42,15 +45,18 @@ export const FILES = {
   webPortalScreens: 'apps/miniapp/src/pages/web-portal-screens.ts',
 };
 
-/** Bảng scope của `authorize` trong zmp-sdk 2.51.4 (apis/index.d.ts): gọi API nào thì Zalo hỏi khách scope nào. */
-export const SCOPE_OF_API = {
-  getPhoneNumber: 'scope.userPhonenumber',
-  getLocation: 'scope.userLocation',
-  getUserInfo: 'scope.userInfo',
-  createCameraContext: 'scope.camera',
+/** Bảng scope trong zmp-sdk 2.51.4 (apis/index.d.ts, bảng Scopes của authorize/getSetting): gọi API nào thì Zalo hỏi khách scope nào. */
+export const SCOPES_OF_API = {
+  getPhoneNumber: ['scope.userPhonenumber'],
+  getLocation: ['scope.userLocation'],
+  getUserInfo: ['scope.userInfo'],
+  createCameraContext: ['scope.camera', 'scope.micro'],
+  requestCameraPermission: ['scope.camera'],
 };
-/** Hai API nhận danh sách scope dạng chuỗi: scope nào viết trong tệp gọi chúng thì tính là có dùng. */
+/** Hai API nhận danh sách scope dạng chuỗi: có import một trong hai thì mọi chuỗi `scope.x` trong mã được quét đều tính là có dùng. */
 const SCOPE_LIST_APIS = new Set(['authorize', 'getSetting']);
+/** API zmp-sdk chuyển khách sang app hoặc Mini App khác: không được dùng dù có ghi lý do (có thể dẫn tới trang trả tiền ngoài). */
+export const FORBIDDEN_SDK_APIS = ['openMiniApp', 'openOutApp'];
 
 /** Tên miền được phép xuất hiện trong mã Mini App, kèm lý do. Tên miền mới phải thêm vào đây sau khi chắc nó không phải trang thanh toán. */
 export const ALLOWED_HOSTS = {
@@ -92,11 +98,11 @@ export const PAYMENT_HOSTS = [
 
 /** Cách thanh toán Mini App được cho chọn ngày mở bán: đều trả trong app hoặc khi nhận hàng, không chuyển sang trang ngoài. */
 export const ALLOWED_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET'];
-/** Trang mua hàng của web: cổng web trong Mini App không được dẫn khách tới đây. */
+/** Trang mua hàng của web: cổng web trong Mini App không được trỏ thẳng tới đây. */
 export const WEB_SHOPPING_PATHS = ['/thanh-toan', '/gio-hang'];
 /** Host `openWebview` được gọi thẳng ngoài zmp-bridge.ts (link viết sẵn trong mã). */
 const DIRECT_WEBVIEW_HOSTS = new Set(['zalo.me', 'oa.zalo.me']);
-const short = (path) => path.replace(`${MINI_SRC}/`, '');
+const short = (path) => path.replace(`${MINI_SRC}/`, '').replace(`${APP_CORE_SRC}/`, 'app-core/');
 
 /** Tệp đi vào gói Mini App: bỏ spec, tệp hỗ trợ test, dữ liệu giả. */
 export function isShippedSource(path) {
@@ -118,6 +124,14 @@ function walk(node, visit) {
 
 const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
 const isZmpSdk = (spec) => /^zmp-sdk(\/|$)/.test(spec);
+/** `window['location'].href` → `window.location.href`, bỏ khoảng trắng: so tên theo một dạng. */
+const normalizeAccess = (text) => text.replace(/\s+/g, '').replace(/\[(['"`])([\w$]+)\1\]/g, '.$2');
+
+/** Mã nguồn bỏ chú thích (máy in của TypeScript), cho các mục so bằng biểu thức chính quy. */
+function codeOnly(path, source) {
+  if (source === null) return null;
+  return ts.createPrinter({ removeComments: true }).printFile(parse(path, source));
+}
 
 function unwrap(node) {
   let n = node;
@@ -136,15 +150,38 @@ function findConst(sf, name) {
 const stringItems = (node) => (node && ts.isArrayLiteralExpression(node) ? node.elements.filter(ts.isStringLiteralLike).map((e) => e.text) : null);
 const propName = (p) => (p.name && (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name)) ? p.name.text : null);
 
-/** Mọi API zmp-sdk một tệp import (bỏ import kiểu), và các kiểu import không kiểm được (`* as`, mặc định, động, require). */
+/** Module một tệp nạp khi chạy: import (bỏ import kiểu), export ... from, import() với chuỗi viết sẵn. */
+export function moduleRefs(sf) {
+  const refs = [];
+  walk(sf, (n) => {
+    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier) && !n.importClause?.isTypeOnly) refs.push(n.moduleSpecifier.text);
+    else if (ts.isExportDeclaration(n) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier) && !n.isTypeOnly) refs.push(n.moduleSpecifier.text);
+    else if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword && n.arguments[0] && ts.isStringLiteralLike(n.arguments[0])) refs.push(n.arguments[0].text);
+  });
+  return refs;
+}
+
+/** Tệp app-core ứng với một module (`@tubutree/app-core/x` theo exports `./*` → `./src/*.ts`, hoặc đường dẫn tương đối từ một tệp app-core). */
+function resolveAppCore(spec, fromPath, exists) {
+  let base = null;
+  if (spec.startsWith(`${APP_CORE_PKG}/`)) base = `${APP_CORE_SRC}/${spec.slice(APP_CORE_PKG.length + 1)}`;
+  else if (spec.startsWith('.') && fromPath.startsWith(`${APP_CORE_SRC}/`)) base = posix.normalize(posix.join(posix.dirname(fromPath), spec));
+  if (!base || !base.startsWith(`${APP_CORE_SRC}/`)) return null;
+  const stem = base.replace(/\.(js|ts|tsx)$/, '');
+  return [`${stem}.ts`, `${stem}.tsx`, `${stem}/index.ts`].find(exists) ?? null;
+}
+
+/** Mọi API zmp-sdk một tệp import (bỏ import kiểu), có được dùng tới không, và các kiểu import không kiểm được (`* as`, mặc định, động, require). */
 export function sdkImports(path, source) {
   const sf = parse(path, source);
   const named = [];
   const opaque = [];
-  const addNamed = (elements) => {
+  const specifierNames = new Set();
+  const addNamed = (elements, reexport) => {
     for (const el of elements) {
       if (el.isTypeOnly) continue;
-      named.push({ api: (el.propertyName ?? el.name).text, line: lineOf(sf, el) });
+      specifierNames.add(el.name);
+      named.push({ api: (el.propertyName ?? el.name).text, local: el.name.text, line: lineOf(sf, el), used: reexport });
     }
   };
   walk(sf, (n) => {
@@ -153,35 +190,48 @@ export function sdkImports(path, source) {
       if (!clause || clause.isTypeOnly) return;
       if (clause.name) opaque.push({ kind: 'import mặc định', line: lineOf(sf, n) });
       if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) opaque.push({ kind: 'import * as', line: lineOf(sf, n) });
-      if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) addNamed(clause.namedBindings.elements);
+      if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) addNamed(clause.namedBindings.elements, false);
     } else if (ts.isExportDeclaration(n) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier) && isZmpSdk(n.moduleSpecifier.text)) {
       if (n.isTypeOnly) return;
       if (!n.exportClause || ts.isNamespaceExport(n.exportClause)) opaque.push({ kind: 'export *', line: lineOf(sf, n) });
-      else addNamed(n.exportClause.elements);
+      else addNamed(n.exportClause.elements, true);
     } else if (ts.isCallExpression(n) && n.arguments.length > 0 && ts.isStringLiteralLike(n.arguments[0]) && isZmpSdk(n.arguments[0].text)) {
       const dynamic = n.expression.kind === ts.SyntaxKind.ImportKeyword;
       const required = ts.isIdentifier(n.expression) && n.expression.text === 'require';
       if (dynamic || required) opaque.push({ kind: dynamic ? 'import()' : 'require', line: lineOf(sf, n) });
     }
   });
+  const referenced = new Set();
+  walk(sf, (n) => {
+    if (ts.isIdentifier(n) && !specifierNames.has(n) && !(n.parent && ts.isImportSpecifier(n.parent))) referenced.add(n.text);
+  });
+  for (const imp of named) if (referenced.has(imp.local)) imp.used = true;
   return { named, opaque, sf };
 }
 
-/** Chuỗi `scope.x` viết trong tệp (cho authorize/getSetting) và chỗ đọc `navigator.geolocation`. */
+/** Chuỗi `scope.x` viết trong tệp và chỗ đọc `navigator.geolocation`. */
 function scopeHints(sf) {
   const literals = [];
   let geolocation = null;
   walk(sf, (n) => {
     if (ts.isStringLiteralLike(n) && /^scope\.\w+$/.test(n.text)) literals.push(n.text);
-    if (!geolocation && ts.isPropertyAccessExpression(n) && n.name.text === 'geolocation' && ts.isIdentifier(n.expression) && n.expression.text === 'navigator') {
+    if (!geolocation && ts.isPropertyAccessExpression(n) && n.name.text === 'geolocation' && normalizeAccess(n.expression.getText(sf)).match(/(^|\.)navigator$/)) {
       geolocation = lineOf(sf, n);
     }
   });
   return { literals, geolocation };
 }
 
-function hostIsPayment(host) {
-  return PAYMENT_HOSTS.some((p) => host === p || host.endsWith(`.${p}`));
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const PAYMENT_RE = new RegExp(`(?:^|[^a-z0-9.-])((?:[a-z0-9-]+\\.)*(?:${PAYMENT_HOSTS.map(escapeRe).join('|')}))(?![a-z0-9-])`, 'gi');
+
+/** Chuỗi nằm trong đối số của `new URL(...)`: dựng URL để đọc tham số, không phải để mở. */
+function insideUrlParse(node) {
+  let n = node;
+  while (n.parent && (ts.isTemplateExpression(n.parent) || ts.isTemplateSpan(n.parent) || ts.isConditionalExpression(n.parent) || ts.isParenthesizedExpression(n.parent) || ts.isBinaryExpression(n.parent))) {
+    n = n.parent;
+  }
+  return Boolean(n.parent && ts.isNewExpression(n.parent) && ts.isIdentifier(n.parent.expression) && n.parent.expression.text === 'URL' && n.parent.arguments?.[0] === n);
 }
 
 /** Đoạn chữ của mọi chuỗi và template trong tệp (chú thích, chữ JSX và regex không tính). */
@@ -189,50 +239,86 @@ function stringPieces(sf) {
   const out = [];
   walk(sf, (n) => {
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) {
-      out.push({ text: n.text, line: lineOf(sf, n) });
+      out.push({ text: n.text, line: lineOf(sf, n), parseOnly: insideUrlParse(ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n) ? n.parent : n) });
     }
   });
   return out;
 }
 
 const URL_RE = /\b([a-z][a-z0-9+.-]*):\/\/([^\s'"`/?#:)\\]*)([^\s'"`?#)\\]*)/gi;
+const PROTOCOL_RELATIVE_RE = /(?:^|[\s'"`(=])\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})(?![a-z0-9-])/gi;
 
-/** Link ngoài trong một tệp Mini App: cổng thanh toán, tên miền chưa duyệt, đường dẫn mở app ngoài, trang mua hàng của web. */
+/**
+ * Link ngoài trong một tệp: tên miền cổng thanh toán (ở bất cứ đâu trong chuỗi), đường dẫn mở app ngoài, tên miền chưa duyệt (kể cả `//host`),
+ * link dựng tên miền lúc chạy ngoài zmp-bridge.ts, trang mua hàng của web.
+ */
 export function linkFindings(path, sf) {
   const found = [];
-  for (const { text, line } of stringPieces(sf)) {
+  const isBridge = path === FILES.bridge;
+  const checkHost = (at, host, rest) => {
+    if (!Object.hasOwn(ALLOWED_HOSTS, host)) found.push(`${at}: tên miền chưa duyệt ${host} (không phải trang thanh toán thì thêm vào ALLOWED_HOSTS kèm lý do)`);
+    else if ((host === 'tubutree.com' || host === 'app.tubutree.com') && WEB_SHOPPING_PATHS.some((p) => rest === p || rest.startsWith(`${p}/`))) {
+      found.push(`${at}: link tới trang mua hàng của web ${host}${rest}`);
+    }
+  };
+  for (const { text, line, parseOnly } of stringPieces(sf)) {
+    const at = `${short(path)}:${line}`;
+    for (const m of text.matchAll(PAYMENT_RE)) found.push(`${at}: link cổng thanh toán ngoài ${m[1].toLowerCase()}`);
     for (const m of text.matchAll(URL_RE)) {
       const scheme = m[1].toLowerCase();
       const host = m[2].toLowerCase();
-      const at = `${short(path)}:${line}`;
       if (scheme !== 'http' && scheme !== 'https') {
         found.push(`${at}: đường dẫn mở app ngoài "${scheme}://"`);
         continue;
       }
-      if (!host) continue;
-      if (hostIsPayment(host)) found.push(`${at}: link cổng thanh toán ngoài ${host}`);
-      else if (!Object.hasOwn(ALLOWED_HOSTS, host)) found.push(`${at}: tên miền chưa duyệt ${host} (không phải trang thanh toán thì thêm vào ALLOWED_HOSTS kèm lý do)`);
-      else if ((host === 'tubutree.com' || host === 'app.tubutree.com') && WEB_SHOPPING_PATHS.some((p) => m[3] === p || m[3].startsWith(`${p}/`))) {
-        found.push(`${at}: link tới trang mua hàng của web ${host}${m[3]}`);
+      if (!host) {
+        if (!isBridge && !parseOnly) found.push(`${at}: link dựng tên miền lúc chạy, không kiểm được (mở link ngoài qua zmp-bridge.ts)`);
+        continue;
       }
+      if (hostIsPayment(host)) continue;
+      checkHost(at, host, m[3]);
+    }
+    for (const m of text.matchAll(PROTOCOL_RELATIVE_RE)) {
+      const host = m[1].toLowerCase();
+      if (!hostIsPayment(host)) checkHost(at, host, '');
     }
   }
   return found;
 }
 
-/** `window.open`, ghi `location`/`location.href`, và `openWebview` gọi thẳng với link không phải Zalo viết sẵn. */
-export function navigationFindings(path, sf) {
+function hostIsPayment(host) {
+  return PAYMENT_HOSTS.some((p) => host === p || host.endsWith(`.${p}`));
+}
+
+/**
+ * Điều hướng ra ngoài: `window.open` (cả `globalThis`, `self`, `top`, `window['open']`), ghi hoặc gọi `location.assign/replace` ngoài
+ * zmp-bridge.ts, và `openWebview` (kể cả tên đặt lại hay gán sang biến khác) gọi ngoài zmp-bridge.ts với link không phải Zalo viết sẵn.
+ */
+export function navigationFindings(path, sf, webviewNames = new Set(['openWebview'])) {
   const found = [];
   const isBridge = path === FILES.bridge;
+  const names = new Set(webviewNames);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    walk(sf, (n) => {
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isIdentifier(unwrap(n.initializer)) && names.has(unwrap(n.initializer).text) && !names.has(n.name.text)) {
+        names.add(n.name.text);
+        grew = true;
+      }
+    });
+  }
   walk(sf, (n) => {
-    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'open' && ts.isIdentifier(n.expression.expression) && n.expression.expression.text === 'window') {
-      found.push(`${short(path)}:${lineOf(sf, n)}: window.open mở trang ngoài Mini App`);
+    if (ts.isCallExpression(n) && (ts.isPropertyAccessExpression(n.expression) || ts.isElementAccessExpression(n.expression))) {
+      const callee = normalizeAccess(n.expression.getText(sf));
+      if (/(^|\.)(window|globalThis|self|top|parent)\.open$/.test(callee)) found.push(`${short(path)}:${lineOf(sf, n)}: ${callee} mở trang ngoài Mini App`);
+      else if (!isBridge && /(^|\.)location\.(assign|replace)$/.test(callee)) found.push(`${short(path)}:${lineOf(sf, n)}: gọi ${callee} ngoài zmp-bridge.ts`);
     }
     if (!isBridge && ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-      const left = n.left.getText(sf).replace(/\s+/g, '');
+      const left = normalizeAccess(n.left.getText(sf));
       if (/(^|\.)location(\.href)?$/.test(left)) found.push(`${short(path)}:${lineOf(sf, n)}: ghi ${left} ngoài zmp-bridge.ts`);
     }
-    if (!isBridge && ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'openWebview') {
+    if (!isBridge && ts.isCallExpression(n) && ts.isIdentifier(n.expression) && names.has(n.expression.text)) {
       const arg = n.arguments[0];
       const urlProp = arg && ts.isObjectLiteralExpression(arg) ? arg.properties.find((p) => ts.isPropertyAssignment(p) && propName(p) === 'url') : undefined;
       const value = urlProp ? urlProp.initializer : undefined;
@@ -290,12 +376,52 @@ function legalCore(source) {
   return { slugs, titles };
 }
 
+/** `WebPolicySlug` phải là `LegalSlug` của legal-core: re-export, hoặc bí danh kiểu trỏ tới tên import từ legal-core. Chú thích không tính. */
+function webPolicyDerived(source) {
+  if (source === null) return false;
+  const sf = parse(FILES.webPolicy, source);
+  const fromLegal = (spec) => ts.isStringLiteral(spec) && /^@tubutree\/app-core\/legal(-core)?$/.test(spec.text);
+  const imported = new Set();
+  let ok = false;
+  walk(sf, (n) => {
+    if (ts.isExportDeclaration(n) && n.moduleSpecifier && fromLegal(n.moduleSpecifier) && n.exportClause && ts.isNamedExports(n.exportClause)) {
+      if (n.exportClause.elements.some((e) => e.name.text === 'WebPolicySlug' && (e.propertyName ?? e.name).text === 'LegalSlug')) ok = true;
+    }
+    if (ts.isImportDeclaration(n) && fromLegal(n.moduleSpecifier) && n.importClause?.namedBindings && ts.isNamedImports(n.importClause.namedBindings)) {
+      for (const e of n.importClause.namedBindings.elements) if ((e.propertyName ?? e.name).text === 'LegalSlug') imported.add(e.name.text);
+    }
+  });
+  walk(sf, (n) => {
+    if (ts.isTypeAliasDeclaration(n) && n.name.text === 'WebPolicySlug' && ts.isTypeReferenceNode(n.type) && ts.isIdentifier(n.type.typeName) && imported.has(n.type.typeName.text)) ok = true;
+  });
+  return ok;
+}
+
 function readJson(text) {
   try {
     return JSON.parse(text ?? 'null');
   } catch {
     return null;
   }
+}
+
+/** Tệp Mini App cùng các tệp app-core mà chúng nạp (lần theo import, bỏ spec và dữ liệu giả). */
+function collectSources(files) {
+  const exists = (p) => files.read(p) !== null;
+  const out = new Map();
+  const queue = files.list(MINI_SRC).filter(isShippedSource).sort();
+  while (queue.length > 0) {
+    const path = queue.shift();
+    if (out.has(path)) continue;
+    const source = files.read(path) ?? '';
+    const sf = parse(path, source);
+    out.set(path, { path, source, sf });
+    for (const spec of moduleRefs(sf)) {
+      const target = resolveAppCore(spec, path, exists);
+      if (target && isShippedSource(target) && !out.has(target)) queue.push(target);
+    }
+  }
+  return [...out.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /**
@@ -306,14 +432,8 @@ export function checkSubmission(files) {
   const checks = [];
   const add = (group, id, ok, detail) => checks.push({ group, id, ok: Boolean(ok), detail });
   const read = (p) => files.read(p);
-  const sources = files
-    .list(MINI_SRC)
-    .filter(isShippedSource)
-    .sort()
-    .map((path) => {
-      const source = read(path) ?? '';
-      return { path, source, sf: parse(path, source) };
-    });
+  const sources = collectSources(files);
+  const coreCount = sources.filter((s) => s.path.startsWith(`${APP_CORE_SRC}/`)).length;
 
   // ---------- Quyền ----------
   const G1 = 'Quyền';
@@ -350,23 +470,31 @@ export function checkSubmission(files) {
   const imported = new Map();
   const opaque = [];
   const outsideBridge = [];
+  const forbidden = [];
+  const webviewNames = new Map();
+  let listsScopes = false;
+  const scopeLiterals = [];
   for (const { path, source } of sources) {
     const { named, opaque: odd, sf } = sdkImports(path, source);
     for (const o of odd) opaque.push(`${short(path)}:${o.line}: ${o.kind} từ zmp-sdk`);
-    let listsScopes = false;
-    for (const { api, line } of named) {
+    const localWebview = new Set();
+    for (const { api, local, line, used } of named) {
       const where = `${short(path)}:${line}`;
       if (!imported.has(api)) imported.set(api, []);
       imported.get(api).push(where);
-      const scope = SCOPE_OF_API[api];
-      if (scope) markScope(scope, `${api} ở ${where}`);
+      const scopes = SCOPES_OF_API[api];
+      if (scopes && used) for (const s of scopes) markScope(s, `${api} ở ${where}`);
       if (SCOPE_LIST_APIS.has(api)) listsScopes = true;
-      if ((scope || SCOPE_LIST_APIS.has(api)) && path !== FILES.bridge) outsideBridge.push(`${where}: ${api}`);
+      if ((scopes || SCOPE_LIST_APIS.has(api)) && path !== FILES.bridge) outsideBridge.push(`${where}: ${api}`);
+      if (FORBIDDEN_SDK_APIS.includes(api)) forbidden.push(`${where}: ${api}`);
+      if (api === 'openWebview') localWebview.add(local);
     }
+    webviewNames.set(path, localWebview);
     const hints = scopeHints(sf);
-    if (listsScopes) for (const s of hints.literals) markScope(s, `${s} ở ${short(path)}`);
+    for (const s of hints.literals) scopeLiterals.push(`${s} ở ${short(path)}`);
     if (hints.geolocation) markScope('scope.userLocation', `navigator.geolocation ở ${short(path)}:${hints.geolocation}`);
   }
+  if (listsScopes) for (const hit of scopeLiterals) markScope(hit.split(' ')[0], hit);
   add(G1, 'perm.import-form', opaque.length === 0, opaque.length === 0 ? 'zmp-sdk chỉ được import theo tên, nên đếm được từng API' : `import không kiểm được, đổi sang import theo tên: ${opaque.join('; ')}`);
 
   if (declared) {
@@ -380,7 +508,7 @@ export function checkSubmission(files) {
       add(G1, `perm.used:${scope}`, used, used ? `${scope} có lời gọi thật` : `${scope} khai nhưng không còn lời gọi nào: Zalo từ chối hồ sơ xin quyền không dùng, xoá khỏi ${FILES.permissions}`);
       const purpose = typeof entry.purpose === 'string' ? entry.purpose.trim() : '';
       const trigger = typeof entry.trigger === 'string' ? entry.trigger.trim() : '';
-      const apisOk = Array.isArray(entry.apis) && entry.apis.length > 0 && entry.apis.every((a) => SCOPE_OF_API[a] === scope || SCOPE_LIST_APIS.has(a));
+      const apisOk = Array.isArray(entry.apis) && entry.apis.length > 0 && entry.apis.every((a) => SCOPES_OF_API[a]?.includes(scope) || SCOPE_LIST_APIS.has(a));
       const okEntry = purpose.length >= 30 && trigger.length >= 20 && apisOk;
       add(
         G1,
@@ -394,7 +522,7 @@ export function checkSubmission(files) {
   if (declared && noScope) {
     const scoped = new Set(Object.values(declared).flatMap((e) => (Array.isArray(e?.apis) ? e.apis : [])));
     const unlisted = [...imported.keys()].filter((api) => !scoped.has(api) && !(Object.hasOwn(noScope, api) && String(noScope[api]).trim() !== '')).sort();
-    const misfiled = Object.keys(noScope).filter((api) => SCOPE_OF_API[api] || SCOPE_LIST_APIS.has(api)).sort();
+    const misfiled = Object.keys(noScope).filter((api) => SCOPES_OF_API[api] || SCOPE_LIST_APIS.has(api)).sort();
     const stale = Object.keys(noScope).filter((api) => !imported.has(api)).sort();
     const ok = unlisted.length === 0 && misfiled.length === 0 && stale.length === 0;
     const parts = [
@@ -418,9 +546,8 @@ export function checkSubmission(files) {
   const coreOk = core.slugs.length > 0 && core.slugs.every((s) => core.titles[s]);
   add(G2, 'legal.slugs', coreOk, coreOk ? `legal-core.ts: ${core.slugs.join(', ')}` : `không đọc được LEGAL_SLUGS/LEGAL_PAGES ở ${FILES.legalCore}`);
 
-  const webPolicy = read(FILES.webPolicy);
-  const derived = webPolicy !== null && /from\s+['"]@tubutree\/app-core\/legal(-core)?['"]/.test(webPolicy);
-  add(G2, 'legal.web-policy', derived, derived ? `${short(FILES.webPolicy)} lấy kiểu slug từ legal-core` : `${short(FILES.webPolicy)} phải lấy kiểu slug từ @tubutree/app-core/legal-core, không tự liệt kê`);
+  const derived = webPolicyDerived(read(FILES.webPolicy));
+  add(G2, 'legal.web-policy', derived, derived ? `${short(FILES.webPolicy)} lấy kiểu slug từ legal-core` : `${short(FILES.webPolicy)}: WebPolicySlug phải là LegalSlug của @tubutree/app-core/legal-core, không tự liệt kê`);
 
   const unknown = [];
   for (const { path, sf } of sources) {
@@ -442,31 +569,31 @@ export function checkSubmission(files) {
   add(G2, 'legal.checkout-consent', consentOk, consentOk ? 'màn thanh toán có link Điều khoản và Chính sách bảo mật ở câu đồng ý' : 'màn thanh toán phải mở được cả "dieu-khoan" và "bao-mat"');
 
   const links = manifest && typeof manifest.consoleLinks === 'object' && manifest.consoleLinks ? manifest.consoleLinks : {};
-  const webPage = read(FILES.webLegalPage);
+  const webPage = codeOnly(FILES.webLegalPage, read(FILES.webLegalPage));
   const webServes = webPage !== null && /\bLEGAL_SLUGS\b/.test(webPage) && /\bisLegalSlug\b/.test(webPage);
-  const linkOk = links.privacyPolicy === 'bao-mat' && slugSet.has(links.privacyPolicy) && slugSet.has(links.terms) && webServes;
+  const linkOk = links.privacyPolicy === 'bao-mat' && links.terms === 'dieu-khoan' && slugSet.has(links.privacyPolicy) && slugSet.has(links.terms) && webServes;
   add(
     G2,
     'legal.console-links',
     linkOk,
     linkOk
       ? `link điền trên console: /chinh-sach/${links.privacyPolicy} và /chinh-sach/${links.terms} của website (${FILES.webLegalPage} dựng đủ LEGAL_SLUGS)`
-      : `"consoleLinks" cần privacyPolicy = "bao-mat" và terms là slug của legal-core, và ${FILES.webLegalPage} phải dựng trang theo LEGAL_SLUGS`,
+      : `"consoleLinks" cần privacyPolicy = "bao-mat", terms = "dieu-khoan" (đều có trong legal-core), và ${FILES.webLegalPage} phải dựng trang theo LEGAL_SLUGS`,
   );
 
   // ---------- Xoá tài khoản ----------
   const G3 = 'Xoá tài khoản';
   const has = (path, re) => {
-    const s = read(path);
+    const s = codeOnly(path, read(path));
     return s !== null && re.test(s);
   };
   const steps = [
-    ['tab Cá nhân', has(FILES.navConfig, /profile:\s*\{\s*path:\s*'\/profile'/) && has(FILES.appRoutes, /<Route\s+path="\/profile"/)],
-    ['dòng Cài đặt ở trang Cá nhân', has(FILES.profileMenu, /key:\s*'settings'[^}]*mini:\s*'\/settings'/) && has(FILES.appRoutes, /<Route\s+path="\/settings"/)],
+    ['tab Cá nhân', has(FILES.navConfig, /profile:\s*\{\s*path:\s*['"]\/profile['"]/) && has(FILES.appRoutes, /<Route\s+path="\/profile"/)],
+    ['dòng Cài đặt ở trang Cá nhân', has(FILES.profileMenu, /key:\s*['"]settings['"][^}]*mini:\s*['"]\/settings['"]/) && has(FILES.appRoutes, /<Route\s+path="\/settings"/)],
     ['khối Xoá tài khoản ở Cài đặt', has(FILES.settings, /import\s*\{[^}]*\bAccountDeletionSection\b[^}]*\}/) && has(FILES.settings, /<AccountDeletionSection\b/)],
-    ['nút gửi yêu cầu xoá', has(FILES.deletionSection, /\brequestAccountDeletion\(/) && has(FILES.accountApiCore, /'\/me\/deletion-request'/)],
-    ['API nhận yêu cầu', has(FILES.usersController, /@Post\('me\/deletion-request'\)/)],
-    ['webhook rút đồng ý của Zalo', has(FILES.consentWebhook, /'user\.revoke\.consent'/)],
+    ['nút gửi yêu cầu xoá', has(FILES.deletionSection, /\brequestAccountDeletion\(/) && has(FILES.accountApiCore, /['"]\/me\/deletion-request['"]/)],
+    ['API nhận yêu cầu', has(FILES.usersController, /@Post\(['"]me\/deletion-request['"]\)/)],
+    ['webhook rút đồng ý của Zalo', has(FILES.consentWebhook, /['"]user\.revoke\.consent['"]/)],
   ];
   const broken = steps.filter(([, ok]) => !ok).map(([label]) => label);
   add(
@@ -479,9 +606,24 @@ export function checkSubmission(files) {
   // ---------- Thanh toán ----------
   const G4 = 'Thanh toán';
   const linkHits = sources.flatMap(({ path, sf }) => linkFindings(path, sf));
-  const navHits = sources.flatMap(({ path, sf }) => navigationFindings(path, sf));
-  add(G4, 'pay.links', linkHits.length === 0, linkHits.length === 0 ? `${sources.length} tệp Mini App: không có link cổng thanh toán, đường dẫn mở app ngoài hay tên miền chưa duyệt` : linkHits.join('; '));
-  add(G4, 'pay.navigation', navHits.length === 0, navHits.length === 0 ? 'không có window.open; chỉ zmp-bridge.ts đổi location; openWebview gọi thẳng chỉ tới link Zalo' : navHits.join('; '));
+  const navHits = [
+    ...forbidden.map((f) => `${f}: API mở sang app hoặc Mini App khác, không dùng trong Mini App bán hàng`),
+    ...sources.flatMap(({ path, sf }) => navigationFindings(path, sf, new Set(['openWebview', ...(webviewNames.get(path) ?? [])]))),
+  ];
+  add(
+    G4,
+    'pay.links',
+    linkHits.length === 0,
+    linkHits.length === 0
+      ? `${sources.length} tệp (${sources.length - coreCount} của Mini App, ${coreCount} app-core Mini App nạp): không có tên miền cổng thanh toán, đường dẫn mở app ngoài, tên miền chưa duyệt hay link dựng tên miền lúc chạy`
+      : linkHits.join('; '),
+  );
+  add(
+    G4,
+    'pay.navigation',
+    navHits.length === 0,
+    navHits.length === 0 ? 'không có window.open hay API mở app khác; chỉ zmp-bridge.ts đổi location; openWebview gọi thẳng chỉ tới link Zalo' : navHits.join('; '),
+  );
 
   const bridgeSrc = read(FILES.bridge);
   const hostsInit = bridgeSrc ? findConst(parse(FILES.bridge, bridgeSrc), 'ALLOWED_EXTERNAL_HOSTS') : null;
@@ -518,7 +660,9 @@ export function checkSubmission(files) {
     G4,
     'pay.portal',
     portalOk,
-    portalOk ? `cổng web mở ${portalPaths.length} màn quản trị, đối tác, nhân sự; không có trang mua hàng` : `cổng web không được dẫn tới ${WEB_SHOPPING_PATHS.join(', ')} (đang: ${shopping.join(', ') || 'không đọc được WEB_PORTAL_SCREENS'})`,
+    portalOk
+      ? `cổng web mở ${portalPaths.length} màn quản trị, đối tác, nhân sự (${portalPaths.join(', ')}); không màn nào trỏ thẳng tới ${WEB_SHOPPING_PATHS.join(', ')}`
+      : `cổng web không được trỏ thẳng tới ${WEB_SHOPPING_PATHS.join(', ')} (đang: ${shopping.join(', ') || 'không đọc được WEB_PORTAL_SCREENS'})`,
   );
 
   return { checks, failed: checks.filter((c) => !c.ok).length };

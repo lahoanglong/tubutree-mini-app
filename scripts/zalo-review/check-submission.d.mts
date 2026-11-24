@@ -11,6 +11,7 @@ export interface SubmissionCheck {
   detail: string;
 }
 export const MINI_SRC: string;
+export const APP_CORE_SRC: string;
 export const FILES: Record<
   | 'appConfig'
   | 'permissions'
@@ -32,7 +33,8 @@ export const FILES: Record<
   | 'webPortalScreens',
   string
 >;
-export const SCOPE_OF_API: Record<string, string>;
+export const SCOPES_OF_API: Record<string, string[]>;
+export const FORBIDDEN_SDK_APIS: string[];
 export const ALLOWED_HOSTS: Record<string, string>;
 export const PAYMENT_HOSTS: string[];
 export const ALLOWED_PAYMENT_METHODS: string[];
