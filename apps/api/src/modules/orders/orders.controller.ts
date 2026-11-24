@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/com
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
+import { OrderCsatDto, OrderListQuery, RepurchaseDto } from './dto/orders.dto';
 import { CancelOrderDto, ChooseRefundDestinationDto, ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { OrdersService } from './orders.service';
 import { loadHomeTodo } from './home-todo';
@@ -59,6 +59,14 @@ export class OrdersController {
   @HttpCode(200)
   enableOrderZalo(@CurrentUser('sub') userId: string, @Param('code') code: string) {
     return this.orders.enableOrderZalo(userId, code);
+  }
+
+  /** Thẻ "Đơn này thế nào?" ở chi tiết đơn đã giao: ghi 👍/👎 một lần mỗi đơn (gửi lại giữ lần đầu, `recorded: false`). */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post(':code/csat')
+  @HttpCode(200)
+  csat(@CurrentUser('sub') userId: string, @Param('code') code: string, @Body() dto: OrderCsatDto) {
+    return this.orders.submitCsat(userId, code, dto);
   }
 
   /** Body tuỳ chọn: nơi nhận tiền hoàn của đơn trả trước đã thanh toán (D2). Không gửi = Ví Tubu. */

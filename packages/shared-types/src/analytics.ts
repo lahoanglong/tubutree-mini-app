@@ -308,6 +308,7 @@ export const SERVER_EVENT_NAMES = [
   'guest_order_placed',
   'notification_sent',
   'notification_suppressed',
+  'order_csat',
   'order_paid',
   'order_place_failed',
   'order_placed',

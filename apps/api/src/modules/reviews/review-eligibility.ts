@@ -52,12 +52,14 @@ type ReviewDb = Pick<PrismaClient, 'variation' | 'review' | 'returnRequestItem' 
 
 /**
  * Trạng thái đánh giá từng dòng (theo id dòng) của một đơn, cùng luật với can-review: chỉ đơn REVIEWABLE_ORDER mới có, mỗi
- * sản phẩm của đơn một đánh giá nên hai biến thể cùng sản phẩm chung một trạng thái. Đơn khác thì mọi dòng NO_REVIEW, không
- * truy vấn gì.
+ * sản phẩm của đơn một đánh giá nên hai biến thể cùng sản phẩm chung một đánh giá (`reviewId`). Đơn khác thì mọi dòng NO_REVIEW,
+ * không truy vấn gì.
  *
- * Sản phẩm đã có dòng trả được duyệt trên đơn (mọi số lượng) thì không viết mới được, cùng luật với `pendingReviewCounts`: thẻ
- * đơn không đếm sản phẩm đó trong "Đánh giá (n SP)", nên chi tiết đơn cũng không mời viết. Đánh giá đã viết trước lần trả vẫn
- * sửa được (`reviewId` giữ nguyên). Khoản hoàn chỉ được tra khi đơn có dòng trả đã duyệt.
+ * Dòng đã có yêu cầu trả được duyệt (mọi số lượng) thì không viết mới được. Luật xét theo DÒNG, không theo sản phẩm (PO A2.1,
+ * 24/11): đơn có hai biến thể của cùng sản phẩm mà khách chỉ trả một thì biến thể còn lại vẫn mời viết. Cùng luật với
+ * `pendingReviewCounts` để "Đánh giá (n SP)" ở thẻ đơn khớp chi tiết đơn. Đánh giá viết như thế không được thưởng (createFirst
+ * xét `returnedProductsByOrder` theo sản phẩm) và can-review báo `returned` cho đơn đó để ô soạn không hứa điểm. Đánh giá đã viết
+ * trước lần trả vẫn sửa được (`reviewId` giữ nguyên). Khoản hoàn chỉ được tra khi đơn có dòng trả đã duyệt.
  */
 export async function orderLineReviews(
   db: ReviewDb,
@@ -84,12 +86,6 @@ export async function orderLineReviews(
     returnedQtyOf.set(l.orderItemId, (returnedQtyOf.get(l.orderItemId) ?? 0) + l.quantity);
     requestsOf.set(l.orderItemId, (requestsOf.get(l.orderItemId) ?? new Set<string>()).add(l.returnRequestId));
   }
-  const returnedProducts = new Set(
-    order.items.flatMap((it) => {
-      const productId = returnedQtyOf.has(it.id) ? productOf.get(it.variationId) : undefined;
-      return productId ? [productId] : [];
-    }),
-  );
   const requestIds = [...new Set(returnedLines.map((l) => l.returnRequestId))];
   const [reviews, doneRefunds] = await Promise.all([
     productIds.length
@@ -115,7 +111,7 @@ export async function orderLineReviews(
       const productId = productOf.get(it.variationId);
       if (!productId) return [it.id, { ...NO_REVIEW, ...returned }];
       const reviewId = reviewOf.get(productId) ?? null;
-      return [it.id, { reviewId, reviewable: reviewId === null && !returnedProducts.has(productId), ...returned }];
+      return [it.id, { reviewId, reviewable: reviewId === null && returned === null, ...returned }];
     }),
   );
   return (itemId) => byItem.get(itemId) ?? NO_REVIEW;
@@ -146,8 +142,8 @@ const isReviewableOrder = (o: Pick<PendingReviewOrder, 'status' | 'type' | 'plac
 /**
  * Số sản phẩm còn chờ khách đánh giá trên từng đơn của một trang danh sách (orderId → số), cho nút "Đánh giá (n SP)" ở thẻ đơn. Cùng luật với nút
  * "Viết đánh giá" ở chi tiết đơn (`orderLineReviews`): chỉ đơn REVIEWABLE_ORDER, mỗi sản phẩm của đơn một đánh giá, bỏ quà tặng và dòng không mở được
- * trang sản phẩm. Bỏ thêm sản phẩm đã có dòng trả được duyệt trên đơn đó: khách đã trả hàng thì không mời đánh giá (đánh giá viết sau lần duyệt cũng
- * không được thưởng, xem `returnedProductsByOrder`).
+ * trang sản phẩm. Dòng đã có yêu cầu trả được duyệt không mời: sản phẩm chỉ bị bỏ khi MỌI dòng mời được của nó trên đơn đều đã trả (PO A2.1: hai biến
+ * thể cùng sản phẩm, trả một thì biến thể kia vẫn được đếm, cùng luật với nút "Viết đánh giá" của từng dòng).
  *
  * Đơn không đủ điều kiện không có trong Map; đơn đủ điều kiện mà hết sản phẩm để mời thì là 0. Cả trang tốn đúng hai truy vấn theo lô chạy song song
  * (đánh giá, dòng trả đã duyệt), không truy vấn nào khi trang không có đơn đã nhận còn sản phẩm để mời. Sản phẩm của dòng trả lấy từ dòng đơn đã có
@@ -155,17 +151,18 @@ const isReviewableOrder = (o: Pick<PendingReviewOrder, 'status' | 'type' | 'plac
  */
 export async function pendingReviewCounts(db: PendingReviewDb, orders: readonly PendingReviewOrder[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
-  const invite = new Map<string, Set<string>>();
+  // orderId → productId → các dòng còn mời viết của sản phẩm đó; sản phẩm hết dòng (đã trả hết) thì không đếm.
+  const invite = new Map<string, Map<string, Set<string>>>();
   const productOfLine = new Map<string, { orderId: string; productId: string }>();
   const ownerOf = new Map<string, string>();
   for (const o of orders) {
     if (!isReviewableOrder(o)) continue;
     out.set(o.id, 0);
-    const products = new Set<string>();
+    const products = new Map<string, Set<string>>();
     for (const it of o.items) {
-      if (!it.productId) continue;
+      if (!it.productId || it.isGift || !it.open) continue;
       productOfLine.set(it.id, { orderId: o.id, productId: it.productId });
-      if (!it.isGift && it.open) products.add(it.productId);
+      products.set(it.productId, (products.get(it.productId) ?? new Set<string>()).add(it.id));
     }
     if (products.size === 0) continue;
     invite.set(o.id, products);
@@ -186,9 +183,9 @@ export async function pendingReviewCounts(db: PendingReviewDb, orders: readonly 
   for (const r of reviews) if (ownerOf.get(r.orderId) === r.userId) invite.get(r.orderId)?.delete(r.productId);
   for (const l of returnedLines) {
     const line = productOfLine.get(l.orderItemId);
-    if (line) invite.get(line.orderId)?.delete(line.productId);
+    if (line) invite.get(line.orderId)?.get(line.productId)?.delete(l.orderItemId);
   }
-  for (const [orderId, products] of invite) out.set(orderId, products.size);
+  for (const [orderId, products] of invite) out.set(orderId, [...products.values()].filter((lines) => lines.size > 0).length);
   return out;
 }
 

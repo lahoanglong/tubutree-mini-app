@@ -104,9 +104,23 @@ describe('pendingReviewCounts (tubu-w21-02: nút "Đánh giá (n SP)" ở thẻ 
     expect(db.returnRequestItem.findMany).not.toHaveBeenCalled();
   });
 
-  it('bỏ sản phẩm đã có dòng trả được duyệt trên đơn đó, kể cả khi dòng trả là biến thể khác của cùng sản phẩm', async () => {
+  it('bỏ sản phẩm khi mọi dòng mời được của nó trên đơn đã có dòng trả được duyệt', async () => {
+    const db = dbWith([], [{ orderItemId: 'i1' }, { orderItemId: 'i2' }]);
+    const counts = await pendingReviewCounts(db as never, [order('o1', [ln('i1', 'p1'), ln('i2', 'p1'), ln('i3', 'p3')])]);
+    expect(counts.get('o1')).toBe(1);
+  });
+
+  it('PO A2.1: trả một trong hai biến thể cùng sản phẩm → biến thể còn lại vẫn mời, sản phẩm vẫn được đếm (khớp nút "Viết đánh giá" của từng dòng)', async () => {
     const db = dbWith([], [{ orderItemId: 'i2' }]);
-    const counts = await pendingReviewCounts(db as never, [order('o1', [ln('i1', 'p1'), ln('i2', 'p1', { open: false }), ln('i3', 'p3')])]);
+    const counts = await pendingReviewCounts(db as never, [order('o1', [ln('i1', 'p1'), ln('i2', 'p1'), ln('i3', 'p3')])]);
+    expect(counts.get('o1')).toBe(2);
+  });
+
+  it('dòng trả là quà tặng hay dòng không mở được trang sản phẩm thì không làm mất lời mời của dòng mua cùng sản phẩm', async () => {
+    const db = dbWith([], [{ orderItemId: 'g1' }, { orderItemId: 'i2' }]);
+    const counts = await pendingReviewCounts(db as never, [
+      order('o1', [ln('i1', 'p1'), ln('g1', 'p1', { isGift: true }), ln('i2', 'p1', { open: false })]),
+    ]);
     expect(counts.get('o1')).toBe(1);
   });
 

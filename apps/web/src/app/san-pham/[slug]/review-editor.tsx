@@ -55,6 +55,8 @@ export function ReviewEditor({
   target: FormTarget;
   purchaseCount: number;
   rewardAvailable: boolean;
+  /** Sản phẩm đã có phần được trả ở đơn đang viết (`reviewOrderReturned`): không hứa điểm và nói đúng lý do. */
+  rewardReturned?: boolean;
   rules: GreenCornerRules | null;
   hidden: boolean;
   onCancel: () => void;
@@ -119,6 +121,7 @@ function ReviewForm({
   deliveredAt,
   purchaseCount,
   rewardAvailable,
+  rewardReturned = false,
   rules,
   hidden,
   onCancel,
@@ -133,6 +136,7 @@ function ReviewForm({
   deliveredAt: string | null;
   purchaseCount: number;
   rewardAvailable: boolean;
+  rewardReturned?: boolean;
   /** Luật Góc Sống Xanh khi cờ bật (thẻ cảm nhận, tối đa ảnh, thưởng sau duyệt); null thì form như cũ. */
   rules: GreenCornerRules | null;
   /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
@@ -224,11 +228,13 @@ function ReviewForm({
   };
 
   const hasMedia = images.length > 0 || videoUrl !== null;
+  const rewardOn = rewardAvailable && !rewardReturned;
   const hint = rules
-    ? greenCornerHint({ isEdit, rewardAvailable, hasMedia, rules })
+    ? greenCornerHint({ isEdit, rewardAvailable: rewardOn, hasMedia, rules })
     : rewardHint({
         isEdit,
         rewardAvailable,
+        returned: rewardReturned,
         hasImages: images.length > 0,
         hasVideo: videoUrl !== null,
         canUploadVideo: reviewVideoConfig() !== null,
@@ -341,7 +347,7 @@ function ReviewForm({
         />
       </div>
       <ReviewVideoUpload value={videoUrl} onChange={setVideoUrl} onBusyChange={setVideoBusy} disabled={save.isPending} />
-      <p className={`mt-3 text-sm ${!isEdit && rewardAvailable && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
+      <p className={`mt-3 text-sm ${!isEdit && rewardOn && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
       {saveError && (
         <p ref={saveAlert} tabIndex={-1} role="alert" className={`mt-2 ${ui.error}`}>
           {saveError.message}

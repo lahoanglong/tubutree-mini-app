@@ -4,9 +4,11 @@ import {
   FIRST_REVIEW_ONLY,
   REVIEW_PENDING_SAVED,
   REWARD_ALREADY_GIVEN,
+  REWARD_RETURNED,
   greenCornerHint,
   greenCornerRules,
   pendingNotice,
+  reviewOrderReturned,
   rewardHint,
 } from './review-copy';
 
@@ -90,5 +92,26 @@ describe('Góc Sống Xanh: câu thưởng và lời báo chờ duyệt', () => 
     expect(pendingNotice('TB-9')).toBe('Đánh giá cho đơn TB-9 của bạn đang chờ Tubu duyệt ảnh nên chưa hiện công khai.');
     expect(pendingNotice(null)).toBe('Đánh giá của bạn đang chờ Tubu duyệt ảnh nên chưa hiện công khai.');
     expect(REVIEW_PENDING_SAVED).toContain('chờ Tubu duyệt');
+  });
+});
+
+describe('PO A2.1: đánh giá cho đơn đã trả một phần sản phẩm (biến thể còn lại vẫn mời viết)', () => {
+  const elig = { reviewableOrders: [{ orderId: 'o1', returned: false }, { orderId: 'o2', returned: true }, { orderId: 'o3' }] };
+
+  it('reviewOrderReturned: chỉ đúng đơn mang returned: true; API cũ không trả cờ, đơn lạ, không có đơn → false', () => {
+    expect(reviewOrderReturned(elig, 'o2')).toBe(true);
+    expect(reviewOrderReturned(elig, 'o1')).toBe(false);
+    expect(reviewOrderReturned(elig, 'o3')).toBe(false);
+    expect(reviewOrderReturned(elig, 'o9')).toBe(false);
+    expect(reviewOrderReturned(elig, null)).toBe(false);
+    expect(reviewOrderReturned(undefined, 'o2')).toBe(false);
+  });
+
+  it('rewardHint: đơn đã trả nói đúng lý do không cộng điểm (không phải "đã nhận thưởng"), kể cả khi đơn khác còn thưởng', () => {
+    expect(rewardHint({ ...base, returned: true })).toBe(REWARD_RETURNED);
+    expect(rewardHint({ ...base, rewardAvailable: false, returned: true })).toBe(REWARD_RETURNED);
+    expect(rewardHint({ ...base, rewardAvailable: false })).toBe(REWARD_ALREADY_GIVEN);
+    expect(rewardHint({ ...base, isEdit: true, returned: true })).toBe(EDIT_HINT);
+    expect(REWARD_RETURNED).not.toMatch(/\+\d/);
   });
 });

@@ -77,3 +77,12 @@ describe('OrdersController POST :code/order-zalo-consent', () => {
     expect(enableOrderZalo).toHaveBeenCalledWith('u1', 'TUBU1');
   });
 });
+
+describe('OrdersController POST :code/csat', () => {
+  it('gọi submitCsat với người đang đăng nhập, mã đơn và body đã kiểm (thẻ "Đơn này thế nào?")', async () => {
+    const submitCsat = jest.fn().mockResolvedValue({ recorded: true });
+    const ctrl = new OrdersController({ submitCsat } as unknown as OrdersService, {} as never, {} as never, {} as never, {} as never);
+    await expect(ctrl.csat('u1', 'TUBU1', { answer: 'up', platform: 'web' })).resolves.toEqual({ recorded: true });
+    expect(submitCsat).toHaveBeenCalledWith('u1', 'TUBU1', { answer: 'up', platform: 'web' });
+  });
+});

@@ -37,10 +37,12 @@ import {
   REVIEW_NEEDS_PURCHASE,
   REVIEW_PENDING_SAVED,
   REWARD_ALREADY_GIVEN,
+  REWARD_RETURNED,
   VIDEO_UPLOADING,
   greenCornerHint,
   greenCornerRules,
   pendingNotice,
+  reviewOrderReturned,
   rewardHint,
   type GreenCornerRules,
 } from '@tubutree/app-core/review-copy';
@@ -225,6 +227,7 @@ export function ReviewsSection({
   }, [openForOrderId, elig]);
 
   const key = target ? targetKey(target) : '';
+  const targetReturned = target?.kind === 'new' && reviewOrderReturned(elig, target.orderId);
   const base = editingId && myReviewQ.data ? draftFromReview(myReviewQ.data) : EMPTY_DRAFT;
   const draft = edited && edited.key === key ? edited.draft : base;
   const latestMine = myReviews[0];
@@ -540,7 +543,8 @@ export function ReviewsSection({
             orderId={target.orderId}
             orderCode={target.orderCode ?? undefined}
             purchaseCount={elig?.purchaseCount ?? 0}
-            showReward={elig?.rewardAvailable !== false}
+            showReward={elig?.rewardAvailable !== false && !targetReturned}
+            returned={targetReturned}
             rules={rules}
             hidden={target.kind === 'edit' && hiddenIds.has(target.reviewId)}
             onSubmittingChange={setSubmitting}
@@ -568,6 +572,7 @@ function WriteReview({
   orderCode,
   purchaseCount,
   showReward,
+  returned,
   rules,
   hidden,
   onSubmittingChange,
@@ -588,6 +593,8 @@ function WriteReview({
   purchaseCount: number;
   /** false chỉ khi API báo hết thưởng; thiếu trường (API cũ) vẫn hiện câu gợi ý. Máy chủ mới quyết định thưởng thật. */
   showReward: boolean;
+  /** Sản phẩm đã có phần được trả ở đơn đang viết: nói đúng lý do không cộng điểm. */
+  returned: boolean;
   /** Luật Góc Sống Xanh khi cờ bật (thẻ cảm nhận, tối đa ảnh, thưởng sau duyệt); null thì form như cũ. */
   rules: GreenCornerRules | null;
   /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
@@ -842,7 +849,7 @@ function WriteReview({
       )}
       {!isEdit && !showReward && (
         <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
-          {rules ? greenCornerHint({ isEdit, rewardAvailable: false, hasMedia: false, rules }) : REWARD_ALREADY_GIVEN}
+          {rules ? greenCornerHint({ isEdit, rewardAvailable: false, hasMedia: false, rules }) : returned ? REWARD_RETURNED : REWARD_ALREADY_GIVEN}
         </Text>
       )}
       {issue?.field === 'submit' && (

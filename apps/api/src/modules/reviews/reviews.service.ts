@@ -127,7 +127,11 @@ export type CanReviewResult =
       rewardUnavailableReason: 'ALREADY_KEPT' | 'RETURNED' | 'NO_ORDER' | null;
       /** Số lần mua đã nhận có sản phẩm này. */
       purchaseCount: number;
-      reviewableOrders: { orderId: string; code: string; deliveredAt: Date | null }[];
+      /**
+       * `returned`: sản phẩm đã có dòng trả được duyệt trên đơn đó (vd trả một trong hai biến thể), nên đánh giá viết cho đơn đó không được
+       * thưởng dù `rewardAvailable` là true nhờ đơn khác. FE mở ô soạn cho đúng đơn (từ chi tiết đơn) phải xét cờ này trước khi hứa điểm.
+       */
+      reviewableOrders: { orderId: string; code: string; deliveredAt: Date | null; returned: boolean }[];
       myReviews: MyReviewRef[];
     };
 
@@ -189,6 +193,7 @@ export class ReviewsService {
       orderId: o.id,
       code: o.code,
       deliveredAt: o.deliveredAt,
+      returned: returned(o.id),
     }));
     // Chỉ để FE nói đúng về điểm: máy chủ vẫn quyết định thưởng lúc tạo (createFirst, cùng rewardAlreadyKept). Hết đơn để
     // viết mới, hay mọi đơn còn lại đều đã bị trả sản phẩm này, thì không có đánh giá mới nào để thưởng.

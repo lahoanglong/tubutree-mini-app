@@ -470,6 +470,8 @@ export interface OrderDetailDTO extends OrderDTO {
   statusTimes?: Partial<Record<string, string>>;
   /** Đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (`switchOrderToCod`). API cũ không trả. */
   codSwitchable?: boolean;
+  /** Hiện thẻ "Đơn này thế nào?" (`showOrderCsat`). API cũ không trả: không hỏi. */
+  csatAsk?: boolean;
   /** Lý do huỷ viết sẵn cho khách đọc (API đã lọc); API cũ chưa trả. */
   cancelReason?: string | null;
   id?: string;

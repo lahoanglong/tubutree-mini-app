@@ -147,6 +147,7 @@ Khung Reel là `ProductStoryShowcase` với `fullscreen` và `reel`: thanh đáy
 | hãng vận chuyển, mã vận đơn (web có nút "Chép mã" ở đây; Mini chép ở viên vận đơn, một nút chép mỗi trang) | `OrderShipping` |
 | viên vận đơn ngay dưới thẻ trạng thái, cao 44px: web "Tra cứu hành trình · hãng" mở trang hãng ở tab mới; Mini (không mở trang ngoài, Zalo 4.1) in mã vận đơn · hãng và chạm để chép mã, báo tại chỗ | `OrderTrackingPill` |
 | đơn đã giao có chai ghép được gói Refill rẻ hơn: khối "Lần sau rót lại bằng Refill" với thẻ `PdpRefillOffer` (surface `order`), "+ Thêm" một chạm | `OrderRefillShortcut` (cặp từ `refillOrderShortcut` ở `packages/app-core/src/refill/refill-landing.ts`; chỉ hỏi khi đơn đã giao và cờ `catalog.refill_first_enabled` bật) |
+| đơn đã giao (trong 30 ngày, chưa trả lời, chưa có yêu cầu trả; máy chủ báo bằng `csatAsk`): một dòng "Đơn này thế nào?" với hai nút 👍/👎 cao 44px; 👍 mở ô viết đánh giá của món đầu còn viết được, 👎 mở chat kèm mã đơn (chat tắt thì cuộn tới khối liên hệ); chạm xong còn một dòng cảm ơn | `OrderCsatCard` (luật và chữ ở `packages/app-core/src/order-csat.ts`) |
 | thanh nút của đơn: đúng một nút chính theo trạng thái, việc còn lại vào "Thêm thao tác" | `OrderActionBar` (kế hoạch từ `orderActionPlan`; điều kiện từng nút lấy từ cờ API, không đoán) |
 
 Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái trạng thái + hành trình + vận chuyển + sản phẩm, phải tiền + địa chỉ + nút.

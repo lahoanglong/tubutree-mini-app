@@ -54,6 +54,7 @@ import { OrderShipping } from '../components/orders/order-shipping';
 import { CodSwitchAction } from '../components/orders/cod-switch-action';
 import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
 import { OrderRefillShortcut } from '../components/orders/order-refill-shortcut';
+import { OrderCsatCard } from '../components/orders/order-csat-card';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import { OrderActionBar } from '../components/orders/order-action-bar';
@@ -436,6 +437,14 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
+      <OrderCsatCard
+        order={o}
+        onSupport={() => {
+          const support = document.getElementById('order-support');
+          if (support) revealReviewTarget(support, null);
+        }}
+      />
+
       <OrderRefillShortcut
         delivered={o.status === 'DELIVERED'}
         refillOn={refillFirstOn(publicConfig)}
@@ -797,7 +806,8 @@ export default function OrderDetailPage() {
             </Box>
           );
         })}
-      <Box p={4}>
+      {/* Đích cuộn của 👎 ở thẻ "Đơn này thế nào?" khi chat chưa mở. */}
+      <Box p={4} id="order-support" tabIndex={-1} style={{ outline: 'none' }}>
         <SupportContact orderCode={o.code} />
       </Box>
 

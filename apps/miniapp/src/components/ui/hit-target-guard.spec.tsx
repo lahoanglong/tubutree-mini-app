@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type * as ZmpUi from 'zmp-ui';
 import { AffiliateFeaturedProducts } from '../affiliate/featured-products';
+import { OrderCsatCard } from '../orders/order-csat-card';
 import { OrderTimelineTracker } from '../orders/order-timeline-tracker';
 import { OrderTrackingPill } from '../orders/order-tracking-pill';
 import { Button } from './button';
@@ -135,6 +136,15 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['Hộp thông báo có nút hành động', () => <SnackbarProvider><OpenToast /></SnackbarProvider>],
     ['CouponRemovedNotice (nút Đóng lời báo mã đã gỡ)', () => <CouponRemovedNotice notice={{ code: 'A', text: 'B' }} onDismiss={() => {}} />],
     ['OrderTimelineTracker (nút Sao chép thông tin đơn)', () => <OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING')} shareText="Đơn hàng Tubu Tree A" />],
+    ['OrderCsatCard (👍 Hài lòng, 👎 Chưa hài lòng)', () => {
+      const qc = new QueryClient();
+      qc.setQueryData(['public-config'], {});
+      return (
+        <QueryClientProvider client={qc}>
+          <OrderCsatCard order={{ id: 'o', code: 'A', status: 'DELIVERED', csatAsk: true, items: [] }} onSupport={() => {}} />
+        </QueryClientProvider>
+      );
+    }],
     ['OrderTrackingPill (viên vận đơn, chạm chép mã)', () => <OrderTrackingPill code="GHN123" partner="Giao Hàng Nhanh" />],
     // Khối có bảng nội dung bán hàng (useQuery) nên cần QueryClient; bảng đóng thì không gọi API.
     ['AffiliateFeaturedProducts (nút Chép link, Ảnh + Bài mẫu)', () => (

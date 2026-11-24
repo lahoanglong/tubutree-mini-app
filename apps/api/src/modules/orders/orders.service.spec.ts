@@ -133,6 +133,9 @@ const baseOrder = {
   paymentStatus: 'UNPAID',
   total: 300000,
   items: [],
+  // Giao từ lâu: thẻ "Đơn này thế nào?" (order-csat.spec) không hỏi nên detailView không đọc analyticsEvent/returnRequest.
+  deliveredAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
 };
 
 /** Dòng đơn (OrderItem) dùng chung cho các describe ảnh/tồn kho và mua lại. */
@@ -1510,7 +1513,7 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     // tubu-w25-02 (PO A5): cùng luật với "Đánh giá (n SP)" ở thẻ đơn (pendingReviewCounts) — sản phẩm đã có dòng trả được duyệt
     // trên đơn không còn lối "Viết đánh giá" ở chi tiết đơn; dòng đã trả mang số đã trả và cờ tiền đã về để app ghi đúng trạng thái.
     describe('tubu-w25-02: dòng đã trả', () => {
-      it('dòng trả được duyệt (cộng mọi lần) → không viết mới, kèm returnedQty; biến thể khác cùng sản phẩm cũng thôi mời; sản phẩm khác vẫn viết được', async () => {
+      it('dòng trả được duyệt (cộng mọi lần) → không viết mới, kèm returnedQty; biến thể khác cùng sản phẩm chưa trả vẫn viết được (PO A2.1); sản phẩm khác vẫn viết được', async () => {
         const { svc } = reviewService(
           { ...delivered, items: [line('i1', 'v1'), line('i2', 'v2'), line('i3', 'v1b')] },
           [],
@@ -1521,10 +1524,25 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
         expect(view.items.map((it) => [it.id, it.reviewId, it.reviewable, it.returnedQty, it.refundDone])).toEqual([
           ['i1', null, false, 2, true],
           ['i2', null, true, undefined, undefined],
-          ['i3', null, false, undefined, undefined],
+          ['i3', null, true, undefined, undefined],
         ]);
         expect(view.items[1]).not.toHaveProperty('returnedQty');
         expect(view.items[1]).not.toHaveProperty('refundDone');
+        expect(view.items[2]).not.toHaveProperty('returnedQty');
+      });
+
+      it('PO A2.1: hai biến thể cùng sản phẩm đều đã trả → cả hai không viết mới, mỗi dòng mang số đã trả của chính nó', async () => {
+        const { svc } = reviewService(
+          { ...delivered, items: [line('i1', 'v1'), line('i3', 'v1b')] },
+          [],
+          [{ orderItemId: 'i1', quantity: 1, returnRequestId: 'rr1' }, { orderItemId: 'i3', quantity: 1, returnRequestId: 'rr1' }],
+          ['rr1'],
+        );
+        const view = await svc.detailView('u1', 'TUBU1');
+        expect(view.items.map((it) => [it.id, it.reviewable, it.returnedQty])).toEqual([
+          ['i1', false, 1],
+          ['i3', false, 1],
+        ]);
       });
 
       it('khoản hoàn: chỉ tra khoản RETURN đã xong của đúng các yêu cầu trả của đơn; một lần trả chưa xong (chuyển khoản chờ, 0đ) → refundDone false', async () => {
