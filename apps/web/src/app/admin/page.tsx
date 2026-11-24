@@ -174,6 +174,7 @@ import { useToastedMessage } from '@/components/admin/admin-toast';
 import { reportSectionsFor } from '@/components/admin/report-sections';
 import { AdminNav, type NavGroup, type NavItem } from '@/components/admin/admin-nav';
 import { OrderBulkBar, OrderSelectBox, useOrderBulkSelection } from '@/components/admin/order-bulk-bar';
+import { PickListFilterButton } from '@/components/admin/order-pick-list';
 import type { BulkStatusTarget } from '@/lib/admin-bulk-ops-client';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
 import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbox-filter-seeds';
@@ -1972,6 +1973,14 @@ function OrdersTab({
               <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
               {exporting ? 'Đang xuất…' : 'Xuất CSV (Excel)'}
             </button>
+          )}
+          {/* Đang chọn đơn thì thanh dưới có nút in các đơn đã chọn: chỉ một nút in hiện ra mỗi lúc. */}
+          {bulkTargets.includes('PACKED') && bulk.size === 0 && (
+            <PickListFilterButton
+              filter={{ status: status || undefined, search: search || undefined, recycling: recycling || undefined, invoice: invoice || undefined, pancake: pancake || undefined, from: from || undefined, to: to || undefined, extra }}
+              total={q.data?.meta.total}
+              disabled={badRange}
+            />
           )}
         </div>
         {!narrow && dateRow}
