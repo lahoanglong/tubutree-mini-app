@@ -183,6 +183,7 @@ describe('OpsInboxService — cộng đồng và hoá đơn VAT (launch review D
     expect(buildAdminOrderWhere({ invoice: 'pending' })).toEqual({
       invoiceStatus: { in: ['REQUESTED', 'FAILED'] },
       status: { notIn: ['CANCELLED', 'RETURNED'] },
+      paymentStatus: { not: 'REFUNDED' },
     });
   });
 

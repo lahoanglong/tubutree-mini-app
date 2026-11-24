@@ -273,6 +273,7 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
   if (!req) return null;
   const status = invoiceStatusLabel(order.invoiceStatus) ?? { label: 'Chưa xử lý', tone: 'neutral' as const };
   const closed = order.status === 'CANCELLED' || order.status === 'RETURNED';
+  const refunded = order.paymentStatus === 'REFUNDED';
   const issuable = canIssueInvoice(order);
   const safeInvoiceUrl = safeHttpsLink(order.invoiceUrl);
 
@@ -336,9 +337,9 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
         )}
       </dl>
 
-      {closed && order.invoiceStatus !== 'ISSUED' && (
+      {(closed || refunded) && order.invoiceStatus !== 'ISSUED' && (
         <div className="mt-2">
-          <Notice tone="warning">Đơn đã huỷ/trả — không xuất hoá đơn VAT.</Notice>
+          <Notice tone="warning">{closed ? 'Đơn đã huỷ/trả — không xuất hoá đơn VAT.' : 'Đơn đã hoàn tiền — không xuất hoá đơn VAT.'}</Notice>
         </div>
       )}
 

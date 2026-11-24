@@ -86,8 +86,8 @@ export function pancakeUnsyncedWhere(now: Date = new Date()): Prisma.OrderWhereI
 
 /**
  * Đơn có yêu cầu hoá đơn VAT: pending = chưa xuất xong (REQUESTED, FAILED) mà đơn còn sống; issued = đã phát hành;
- * all = cả hai. Đơn HUỶ/TRẢ không bao giờ vào hàng chờ xuất — không code nào đổi `invoiceStatus` khi huỷ/trả, nên
- * nếu không loại ở đây chúng nằm đó mãi và CSKH không làm rỗng được hàng đợi (UI cũng không cho xuất cho các đơn này).
+ * all = cả hai. Đơn HUỶ/TRẢ hay ĐÃ HOÀN TIỀN không bao giờ vào hàng chờ xuất — không code nào đổi `invoiceStatus` khi huỷ/trả/hoàn
+ * tiền, nên nếu không loại ở đây chúng nằm đó mãi và CSKH không làm rỗng được hàng đợi (`issueOrderInvoice` từ chối các đơn này).
  * Hoá đơn ĐÃ phát hành của đơn huỷ/trả vẫn tra được ở issued/all vì kế toán còn phải điều chỉnh/huỷ hoá đơn.
  * Mọi nhánh đều có vị từ `invoiceStatus IN (...)` nên khớp partial index `orders_invoice_open_idx`.
  */
@@ -95,6 +95,7 @@ export type InvoiceFilter = 'pending' | 'issued' | 'all';
 const INVOICE_OPEN_WHERE: Prisma.OrderWhereInput = {
   invoiceStatus: { in: ['REQUESTED', 'FAILED'] },
   status: { notIn: ['CANCELLED', 'RETURNED'] },
+  paymentStatus: { not: 'REFUNDED' },
 };
 const INVOICE_ISSUED_WHERE: Prisma.OrderWhereInput = { invoiceStatus: 'ISSUED' };
 const INVOICE_STATUS_WHERE: Record<InvoiceFilter, Prisma.OrderWhereInput> = {

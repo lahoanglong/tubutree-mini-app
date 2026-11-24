@@ -46,8 +46,11 @@ export function canIssueInvoice(o: {
   invoiceRequest?: AdminInvoiceRequest | null;
   invoiceStatus?: AdminInvoiceStatus | null;
   status: string;
+  paymentStatus?: string | null;
 }): boolean {
-  return !!o.invoiceRequest && o.invoiceStatus !== 'ISSUED' && o.status !== 'CANCELLED' && o.status !== 'RETURNED';
+  return (
+    !!o.invoiceRequest && o.invoiceStatus !== 'ISSUED' && o.status !== 'CANCELLED' && o.status !== 'RETURNED' && o.paymentStatus !== 'REFUNDED'
+  );
 }
 
 function isInternalHost(host: string): boolean {

@@ -135,6 +135,28 @@ describe('OrdersTab: yêu cầu hoá đơn VAT nhiều đơn', () => {
     await flush();
     expect(bodyOf(onRequest.mock.calls[0]![0])).toMatchObject({ orderCodes: ['DL2'], save: false });
   });
+
+  it('tubu-w33-02: gửi xong mà danh sách đơn chưa tải lại: đơn vừa yêu cầu thôi đủ điều kiện ngay, đơn bị bỏ qua vẫn còn', async () => {
+    const onRequest = vi.fn((_init?: RequestInit) => ({ body: { requested: ['DL1'], skipped: [{ code: 'DL2', reason: 'Đơn đã quá hạn' }], profile: null } }));
+    const { fn } = mockFetch({ '/dealer/orders/invoice-request': onRequest, '/dealer/orders': { body: ORDERS }, '/dealer/invoice-profile': { body: { ...INVOICE, saved: true } } });
+    let listLoads = 0;
+    // Lần đọc danh sách đơn sau khi gửi không bao giờ về: màn chỉ còn dữ liệu trong bộ nhớ.
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      if (/\/dealer\/orders(\?|$)/.test(url) && ++listLoads > 1) return new Promise(() => undefined);
+      return fn(url, init);
+    });
+    mounted = render(<OrdersTab onOrderFirst={() => {}} />);
+    await flush();
+    const c = mounted.container;
+    click(byText(c, 'button', 'Yêu cầu hoá đơn VAT'));
+    await flush();
+    click(byText(dialog()!, 'button', 'Gửi yêu cầu (2 đơn)'));
+    await flush();
+    expect(onRequest).toHaveBeenCalledTimes(1);
+    expect(dialog()).toBeNull();
+    expect(listLoads).toBe(2);
+    expect(byText(c, 'button', 'Yêu cầu hoá đơn VAT')?.textContent).toBe('Yêu cầu hoá đơn VAT (1 đơn)');
+  });
 });
 
 describe('PriceTab: lãi bán lẻ, mốc bậc khi cộng đơn, xuất hoá đơn VAT một chạm', () => {
