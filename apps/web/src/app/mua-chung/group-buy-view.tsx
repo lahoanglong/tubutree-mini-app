@@ -22,6 +22,7 @@ import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { EmptyState } from '@/components/empty-state';
 import { PhoneCartButton } from '@/components/phone-cart-button';
+import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +82,9 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const offer = useWelcomeOffer(Boolean(user));
   const authed = phase === 'authenticated';
   const [note, setNote] = useState<Note>(null);
+  // Kết quả chép link mời hiện ở thông báo nổi gần đáy màn hình (như snackbar của Mini App), không ở dòng chữ dưới đầu trang: máy tính
+  // không có hộp chia sẻ, nút Mời nằm dưới thẻ nhóm nên dòng chữ đầu trang thường đã cuộn khỏi màn hình.
+  const { notice: shareNotice, notify: notifyShare } = useGameNotice();
 
   // `?moi=1` do trang sản phẩm đặt khi vừa mở nhóm: báo một lần như Mini App rồi gỡ cờ để tải lại không báo nữa.
   useEffect(() => {
@@ -193,8 +197,8 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
         text: content.text,
         path: withReferral(`/mua-chung/${encodeURIComponent(g.id)}`, user?.referralCode),
       });
-      if (result === 'copied') setNote({ text: 'Đã sao chép liên kết nhóm.', error: false });
-      else if (result === 'failed') setNote({ text: 'Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.', error: true });
+      if (result === 'copied') notifyShare(fillCopy('groupBuy.linkCopied'), 'success');
+      else if (result === 'failed') notifyShare('Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.', 'error');
     } finally {
       sharingRef.current = false;
       setSharingId(null);
@@ -249,6 +253,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
           {note.text}
         </p>
       )}
+      <GameNoticeBar notice={shareNotice} />
 
       <div className="mt-4">
         {listQ.isLoading ? (
