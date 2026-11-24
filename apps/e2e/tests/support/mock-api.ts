@@ -473,6 +473,18 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         quizPending: false,
       });
       api.fallback('GET', '/game/badges', { enabled: false, badges: [] });
+      // Hub /dai-ly hỏi doanh số tháng tới mốc bậc kế; mặc định đại lý chưa được gán bậc nên thẻ tổng quan không có thanh bậc.
+      api.fallback('GET', '/dealer/tier-progress', {
+        month: '11/2026',
+        monthStart: '2026-10-31T17:00:00.000Z',
+        monthEnd: '2026-11-30T17:00:00.000Z',
+        volume: 0,
+        pendingVolume: 0,
+        currentTier: null,
+        nextTier: null,
+      });
+      // Bảng giá đại lý có món trong giỏ hỏi thông tin xuất hoá đơn VAT đã lưu; mặc định chưa lưu và hồ sơ đăng ký trống.
+      api.fallback('GET', '/dealer/invoice-profile', { taxCode: '', companyName: '', address: '', email: '', saved: false });
       // Lối vào Chọn Chuẩn Xanh (Chơi hôm nay, Tư vấn, Trợ lý đang nghỉ, giỏ trống) hỏi cờ game.matcher_enabled; mặc định tắt như PROD nên màn vẽ như trước.
       api.fallback('GET', '/game/matcher/status', { enabled: false });
       // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.

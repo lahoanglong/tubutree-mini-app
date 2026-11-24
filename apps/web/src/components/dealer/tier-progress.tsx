@@ -35,7 +35,7 @@ export function TierProgress() {
             aria-valuenow={pct}
             className="mt-1.5 h-2 overflow-hidden rounded-full bg-stone-0/20"
           >
-            <div className="h-full rounded-full bg-promo-solid max-md:bg-[var(--color-dealer-accent)]" style={{ width: `${pct}%` }} />
+            <div className="h-full rounded-full bg-promo-solid" style={{ width: `${pct}%` }} />
           </div>
         </>
       )}

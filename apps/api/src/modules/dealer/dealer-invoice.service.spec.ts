@@ -106,6 +106,17 @@ describe('DealerInvoiceService.saveProfile', () => {
     }
   });
 
+  it('tên công ty hoặc địa chỉ chỉ có khoảng trắng (DTO cắt thành rỗng) → 400, không khoá, không ghi', async () => {
+    for (const blank of [{ companyName: '' }, { address: '  ' }]) {
+      const { prisma, userUpdate, queryRaw } = makePrisma();
+      await expect(new DealerInvoiceService(prisma).saveProfile('d1', { ...INVOICE, ...blank } as never)).rejects.toThrow(
+        'Nhập tên công ty và địa chỉ xuất hoá đơn.',
+      );
+      expect(queryRaw).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
+    }
+  });
+
   it('dòng đã khoá không còn là đại lý → Forbidden, không ghi', async () => {
     const { prisma, userUpdate } = makePrisma({ lockedRow: { role: 'CUSTOMER', metadata: null } });
     await expect(new DealerInvoiceService(prisma).saveProfile('d1', INVOICE as never)).rejects.toThrow('Tài khoản chưa được duyệt làm đại lý.');
@@ -159,6 +170,14 @@ describe('DealerInvoiceService.requestInvoices', () => {
     const r = await new DealerInvoiceService(prisma).requestInvoices('d1', { orderCodes: ['DL1', 'DL2'], invoice: INVOICE as never }, NOW);
     expect(r.requested).toEqual(['DL1']);
     expect(r.skipped).toEqual([{ code: 'DL2', reason: 'Đơn vừa đổi trạng thái, bạn tải lại để xem.' }]);
+  });
+
+  it('thông tin thiếu tên công ty → 400, không ghi đơn nào', async () => {
+    const { prisma, updateMany } = makePrisma({ orders: [order('DL1')] });
+    await expect(
+      new DealerInvoiceService(prisma).requestInvoices('d1', { orderCodes: ['DL1'], invoice: { ...INVOICE, companyName: '' } as never }, NOW),
+    ).rejects.toThrow('Nhập tên công ty và địa chỉ xuất hoá đơn.');
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('save=true → lưu thông tin làm mặc định và trả hồ sơ mới', async () => {
@@ -238,6 +257,18 @@ describe('DealerService.placeOrder — yêu cầu hoá đơn VAT', () => {
       invoiceRequest: INVOICE,
     } as never);
     expect(orderCreate.mock.calls[0]![0].data).toMatchObject({ invoiceRequest: INVOICE, invoiceStatus: 'REQUESTED' });
+  });
+
+  it('invoiceRequest thiếu địa chỉ → 400, không tạo đơn', async () => {
+    const { prisma, orderCreate } = prismaForOrder();
+    await expect(
+      new DealerService(prisma, config).placeOrder('d1', {
+        items: [{ variationId: 'v1', quantity: 1 }],
+        paymentMethod: 'PREPAID',
+        invoiceRequest: { ...INVOICE, address: '' },
+      } as never),
+    ).rejects.toThrow('Nhập tên công ty và địa chỉ xuất hoá đơn.');
+    expect(orderCreate).not.toHaveBeenCalled();
   });
 
   it('không có invoiceRequest → không ghi hai cột hoá đơn (giữ mặc định NOT_REQUESTED)', async () => {

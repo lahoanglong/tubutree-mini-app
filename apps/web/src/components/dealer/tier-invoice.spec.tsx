@@ -141,8 +141,10 @@ describe('PriceTab: lãi bán lẻ, mốc bậc khi cộng đơn, xuất hoá đ
   const ROW = { variationId: 'v1', sku: 'S1', product: 'Phân A', brand: 'Tubu', variation: '1kg', retailPrice: 100_000, dealerPrice: 80_000, discountPct: 20, stock: 9 };
   const ORDER = { code: 'DL9', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', items: [{ variationId: 'v1', quantity: 1, backorderedQty: 0 }] };
 
-  function mount(profile: unknown) {
-    const placed = vi.fn((_init?: RequestInit) => ({ body: ORDER }));
+  function mount(profile: unknown, earlierOrder?: Record<string, unknown>) {
+    const placed = vi.fn((init?: RequestInit) => ({
+      body: earlierOrder ?? { ...ORDER, invoiceStatus: bodyOf(init).invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED' },
+    }));
     const saved = vi.fn((init?: RequestInit) => ({ body: { ...bodyOf(init), saved: true } }));
     const { fn } = mockFetch({
       '/dealer/pricelist': { body: [ROW] },
@@ -189,6 +191,18 @@ describe('PriceTab: lãi bán lẻ, mốc bậc khi cộng đơn, xuất hoá đ
     click(byText(mounted!.container, 'button', 'Ghi công nợ'));
     await flush();
     expect(bodyOf(placed.mock.calls[0]![0]).invoiceRequest).toEqual(INVOICE);
+    expect(mounted!.container.textContent).toContain('Đã tạo đơn đại lý!');
+  });
+
+  it('bật ô nhưng máy chủ trả đơn của lần đặt trước (cùng khoá) chưa có yêu cầu hoá đơn: báo lỗi, chỉ đường sang tab Đơn hàng', async () => {
+    mount({ ...INVOICE, saved: true }, { ...ORDER, invoiceStatus: 'NOT_REQUESTED' });
+    await addOne();
+    click(invoiceBox());
+    await flush();
+    click(byText(mounted!.container, 'button', 'Ghi công nợ'));
+    await flush();
+    const alert = mounted!.container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toBe('Đã tạo đơn đại lý! Đơn chưa kèm yêu cầu hoá đơn VAT (đã tạo ở lần đặt trước), bạn gửi yêu cầu ở tab Đơn hàng.');
   });
 
   it('chưa lưu: bấm ô mở sheet điền sẵn từ hồ sơ, lưu xong ô bật và đơn kèm thông tin vừa lưu', async () => {

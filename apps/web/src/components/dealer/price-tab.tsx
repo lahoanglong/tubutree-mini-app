@@ -64,6 +64,7 @@ const TEMPLATE_NAME_MAX = 120;
 // Mọi số liệu đơn đại lý đổi theo (hạn mức, giá, tồn, tối thiểu): đơn bị từ chối thì tải lại hết, như Mini App (apps/miniapp/src/pages/dealer.tsx:536).
 const ORDER_REFRESH_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-tier-progress', 'dealer-pricelist'] as const;
 const ORDER_PLACED_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-tier-progress'] as const;
+const INVOICE_MISSED = 'Đơn chưa kèm yêu cầu hoá đơn VAT (đã tạo ở lần đặt trước), bạn gửi yêu cầu ở tab Đơn hàng.';
 const invoiceOf = (p: InvoiceRequest): InvoiceRequest => ({ taxCode: p.taxCode, companyName: p.companyName, address: p.address, email: p.email });
 
 function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: (n: number) => void }) {
@@ -257,7 +258,7 @@ export function PriceTab({
       placeDealerOrder(coreHttp, v.items, v.method, undefined, orderKey.current, v.invoice),
     // Xoá cảnh báo cũ ở đây chứ không ở nơi gọi: cú bấm bị khoá nuốt không chạy onMutate, nên không xoá nhầm lời báo vừa hiện.
     onMutate: () => setNotice(null),
-    onSuccess: (order, { method, items }) => {
+    onSuccess: (order, { method, items, invoice }) => {
       const lineKey = (rows: Array<[string, number]>) => rows.map(([id, n]) => `${id}:${n}`).sort().join(',');
       const sent = lineKey(items.map((it): [string, number] => [it.variationId, it.quantity]));
       const lines = order.items ?? [];
@@ -277,20 +278,21 @@ export function PriceTab({
       const earlier: 'CREDIT' | 'PREPAID' | null =
         method === 'PREPAID' && order.status && !waitingTransfer ? 'CREDIT' : method === 'CREDIT' && waitingTransfer ? 'PREPAID' : null;
       const hasPreorder = order.items?.some((it) => (it.backorderedQty ?? 0) > 0) ?? false;
-      setNotice(
-        earlier
-          ? {
-              text:
-                earlier === 'CREDIT'
-                  ? `Đơn ${order.code} đã tạo ở lần trước theo hình thức Ghi công nợ, không cần chuyển khoản.`
-                  : `Đơn ${order.code} đã tạo ở lần trước theo hình thức Trả trước, cần chuyển khoản để đơn được giao.`,
-              error: true,
-            }
-          : {
-              text: hasPreorder ? 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.' : 'Đã tạo đơn đại lý!',
-              error: false,
-            },
-      );
+      const placedNotice: Notice = earlier
+        ? {
+            text:
+              earlier === 'CREDIT'
+                ? `Đơn ${order.code} đã tạo ở lần trước theo hình thức Ghi công nợ, không cần chuyển khoản.`
+                : `Đơn ${order.code} đã tạo ở lần trước theo hình thức Trả trước, cần chuyển khoản để đơn được giao.`,
+            error: true,
+          }
+        : {
+            text: hasPreorder ? 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.' : 'Đã tạo đơn đại lý!',
+            error: false,
+          };
+      // Cùng khoá nên máy chủ trả đơn của lần trước, đơn đó tạo khi chưa bật "Xuất hoá đơn VAT": nói rõ để đại lý gửi yêu cầu sau.
+      const invoiceMissed = !!invoice && (!order.invoiceStatus || order.invoiceStatus === 'NOT_REQUESTED');
+      setNotice(invoiceMissed ? { text: `${placedNotice.text} ${INVOICE_MISSED}`, error: true } : placedNotice);
       orderKey.current = newIdempotencyKey();
       setQty({});
       // Chỉ đơn máy chủ trả về còn chờ chuyển khoản mới có trang để chuyển; đơn công nợ (CONFIRMED) cũng ghi BANK_TRANSFER nên phải xét cả trạng thái.
@@ -355,7 +357,13 @@ export function PriceTab({
       <div className="flex items-center justify-between gap-2">
         <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-stone-900">
           <span className={miniCheckboxWrap}>
-            <input type="checkbox" checked={wantInvoice} disabled={placing} onChange={(e) => toggleInvoice(e.target.checked)} className={miniCheckbox} />
+            <input
+              type="checkbox"
+              checked={wantInvoice}
+              disabled={placing || invoiceQ.isLoading}
+              onChange={(e) => toggleInvoice(e.target.checked)}
+              className={miniCheckbox}
+            />
             <CheckMark />
           </span>
           Xuất hoá đơn VAT
