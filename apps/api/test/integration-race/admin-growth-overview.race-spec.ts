@@ -3,6 +3,7 @@ import type { AdminGrowthOverviewDTO } from '@tubutree/shared-types';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PurchaseFunnelService } from '../../src/modules/analytics/purchase-funnel.service';
 import { AdminGrowthService } from '../../src/modules/admin-growth/admin-growth.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { MATCHER_GAME } from '../../src/modules/game/mini/matcher/matcher.rules';
 import { createOrder, createUser, deleteItData } from './helpers';
 import './setup-env';
@@ -73,7 +74,7 @@ describe('AdminGrowthService — SQL trên Postgres thật', () => {
     await play(f, 'origin', '2050-06-10', '2050-06-10T03:00:00Z', false);
     await play(g, 'sort', '2050-06-08', '2050-06-08T03:00:00Z', true);
 
-    const svc = new AdminGrowthService(prisma, new PurchaseFunnelService(prisma));
+    const svc = new AdminGrowthService(prisma, new PurchaseFunnelService(prisma), new SystemConfigService(prisma));
     week = await svc.overview(7, NOW);
     month = await svc.overview(30, NOW);
   });

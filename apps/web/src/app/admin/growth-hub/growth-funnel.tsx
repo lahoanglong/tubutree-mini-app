@@ -16,6 +16,7 @@ import {
 import { apiFetch } from '@/lib/client-api';
 import { formatCount, formatPct, ratioPct } from '@/components/admin/launch-watch-format';
 import { chipClass, ListSkeleton, LoadError, ScrollRegion, StatCardsSkeleton } from '@/components/admin/ui';
+import { RemarketingAttribution } from './growth-remarketing';
 
 export const getGrowthOverview = (days: GrowthWindowDays) => apiFetch<AdminGrowthOverviewDTO>(`/admin/growth/overview?days=${days}`);
 
@@ -243,6 +244,7 @@ function Overview({ data }: { data: AdminGrowthOverviewDTO }) {
       </div>
 
       {data.referralFirstOrder && <ReferralGuard stats={data.referralFirstOrder} shares={data.referralShares} />}
+      {data.remarketing !== undefined && <RemarketingAttribution data={data.remarketing} />}
 
       <div className="grid gap-4 md:grid-cols-2">
         <DailyBars title="Đơn thành công mỗi ngày" points={data.daily} field="orders" unit="đơn" />

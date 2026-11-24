@@ -48,6 +48,38 @@ export interface ReferralShareStatsDTO {
   copy: number;
 }
 
+/**
+ * Tin nhắc chủ động được gán đơn ("Tin nào ra đơn"), theo thứ tự hiện trên bảng. Mỗi khoá ứng với một mẫu tin của API
+ * (apps/api lifecycle/remarketing-attribution.ts): giỏ bỏ quên, mã quay lại, giá món Yêu thích giảm, nhắc Refill 21 ngày, nhắc chuyển khoản.
+ */
+export const REMARKETING_NOTICES = ['abandoned_cart', 'winback', 'wishlist_price_drop', 'refill_21d', 'payment_reminder'] as const;
+export type RemarketingNotice = (typeof REMARKETING_NOTICES)[number];
+
+/** Đơn đặt trong ngần ấy giờ sau tin thì được gán cho tin (nhắc chuyển khoản: đơn được trả tiền trong ngần ấy giờ sau tin). */
+export const REMARKETING_ATTRIBUTION_HOURS = 72;
+
+export interface RemarketingAttributionRow {
+  notice: RemarketingNotice;
+  /** Tin đã gửi trong kỳ: mỗi lần gửi là một tin trong app (ZNS là bản ngoài app của cùng tin, không đếm thêm). */
+  sent: number;
+  /** Trong số đó, tin Zalo đã nhận qua ZNS (tính phí). */
+  znsSent: number;
+  /** Bản ZNS bị trần tin chủ động bỏ (khách vẫn có tin trong app). Nhắc chuyển khoản là tin giao dịch nên không bao giờ bị trần. */
+  znsCapped: number;
+  /** Đơn thành công gán cho tin gửi trong kỳ (gộp đơn tách theo nhà bán); mỗi đơn chỉ gán cho một tin. */
+  orders: number;
+  /** Doanh thu đã thu của các đơn đó, cùng luật báo cáo Doanh thu (COD chưa giao chưa tính). */
+  revenue: number;
+}
+
+export interface RemarketingAttributionDTO {
+  windowHours: number;
+  /** Đủ mọi khoá của REMARKETING_NOTICES theo đúng thứ tự, kể cả dòng 0. */
+  rows: RemarketingAttributionRow[];
+  /** Trần tin chủ động ngoài app (`notify.proactive_cap_enabled`); null khi trần đang tắt. */
+  proactiveCap: { perDay: number; perWeek: number } | null;
+}
+
 export interface AdminGrowthOverviewDTO {
   generatedAt: string;
   days: GrowthWindowDays;
@@ -70,4 +102,6 @@ export interface AdminGrowthOverviewDTO {
   referralFirstOrder: ReferralFirstOrderGuardDTO;
   /** Optional: API cũ chưa trả, khi đó khối không có dòng lượt gửi. */
   referralShares?: ReferralShareStatsDTO;
+  /** Bảng "Tin nào ra đơn". Không có khi API cũ chưa trả; null khi lần tính này không đọc được số liệu (phần còn lại vẫn hiện). */
+  remarketing?: RemarketingAttributionDTO | null;
 }

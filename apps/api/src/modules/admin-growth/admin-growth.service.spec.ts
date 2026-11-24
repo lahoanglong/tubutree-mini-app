@@ -1,6 +1,7 @@
 import { PURCHASE_FUNNEL_STEPS, toGrowthWindowDays, type PurchaseFunnelDTO, type PurchaseFunnelWindowDTO } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { PurchaseFunnelService } from '../analytics/purchase-funnel.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
 import { FIRST_ORDER_REFERRER_PREFIX } from '../referral/first-order-reasons';
 import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
 import { AdminGrowthService, vnDayRange } from './admin-growth.service';
@@ -11,14 +12,22 @@ const win = (n: number): PurchaseFunnelWindowDTO => ({
 });
 const funnel: PurchaseFunnelDTO = { generatedAt: 'x', windows: { h72: win(1), d7: win(7), d30: win(30) } };
 
-/** Thứ tự truy vấn của compute: mua lần 2, game, đơn theo ngày, người chơi theo ngày, chặn thưởng đơn đầu, lượt gửi link mời. */
+/**
+ * Thứ tự truy vấn của compute: mua lần 2, game, đơn theo ngày, người chơi theo ngày, chặn thưởng đơn đầu, lượt gửi link mời, rồi ba truy vấn của
+ * "Tin nào ra đơn" (tin đã gửi, ZNS bị trần, đơn được gán).
+ */
 function makeService(answers: unknown[][], rewarded = 0) {
   const $queryRaw = jest.fn();
   for (const a of answers) $queryRaw.mockResolvedValueOnce(a);
   const getSnapshot = jest.fn().mockResolvedValue(funnel);
   const findMany = jest.fn().mockResolvedValue(Array.from({ length: rewarded }, (_, i) => ({ reason: `${FIRST_ORDER_REFERRER_PREFIX}u${i}` })));
   const count = jest.fn().mockResolvedValue(0);
-  const svc = new AdminGrowthService({ $queryRaw, pointsTransaction: { findMany, count } } as unknown as PrismaService, { getSnapshot } as unknown as PurchaseFunnelService);
+  const config = { get: jest.fn(async (_key: string, fallback: unknown) => fallback) } as unknown as SystemConfigService;
+  const svc = new AdminGrowthService(
+    { $queryRaw, pointsTransaction: { findMany, count } } as unknown as PrismaService,
+    { getSnapshot } as unknown as PurchaseFunnelService,
+    config,
+  );
   return { svc, $queryRaw, getSnapshot, findMany };
 }
 
@@ -42,6 +51,9 @@ describe('AdminGrowthService', () => {
       [{ day: '2026-11-17', n: 3n }],
       [{ reason: 'IP', n: 4n }, { reason: 'ADDRESS', n: 1n }],
       [{ method: 'share', n: 6n }, { method: 'copy', n: 2n }, { method: null, n: 9n }],
+      [{ code: 'CART_ABANDONED', sent: 40n, zns_sent: 12n }],
+      [{ code: 'CART_ABANDONED', n: 3n }],
+      [{ code: 'CART_ABANDONED', orders: 5n, revenue: 1_250_000n }],
     ], 9);
     const dto = await svc.overview(7, now);
     expect(dto.days).toBe(7);
@@ -65,7 +77,8 @@ describe('AdminGrowthService', () => {
     expect(repeatCall).toContain('2026-11-11T17:00:00.000Z');
     // Cùng bộ lọc đơn với bảng đơn thứ hai: bán lẻ, khách tự đặt, bỏ huỷ/trả/chờ thanh toán, bỏ đơn thử Giờ G đã dọn, gộp theo checkoutGroup.
     const orderCalls = $queryRaw.mock.calls.filter((c) => sqlOf(c).includes('"orders"'));
-    expect(orderCalls).toHaveLength(3);
+    // Ba số đơn của trang và đơn được gán cho tin nhắc: cùng một bộ lọc.
+    expect(orderCalls).toHaveLength(4);
     for (const call of orderCalls) {
       expect(call).toContain(NOT_PILOT_CLEANED_SQL);
       const sql = sqlOf(call);
@@ -90,10 +103,14 @@ describe('AdminGrowthService', () => {
     const shareSql = ($queryRaw.mock.calls[5]![0] as TemplateStringsArray).join('?');
     expect(shareSql).toContain('e."receivedAt" >=');
     expect(shareSql).not.toContain('occurredAt');
+    // Tin nào ra đơn: cùng kỳ 00:00 VN ngày đầu tới lúc xem; trần tin chủ động mặc định tắt.
+    expect($queryRaw.mock.calls[6]!).toEqual(expect.arrayContaining(['2026-11-11T17:00:00.000Z', now.toISOString()]));
+    expect(dto.remarketing?.proactiveCap).toBeNull();
+    expect(dto.remarketing?.rows[0]).toEqual({ notice: 'abandoned_cart', sent: 40, znsSent: 12, znsCapped: 3, orders: 5, revenue: 1_250_000 });
   });
 
   it('30 ngày: lấy cửa sổ d30 của phễu và 30 điểm theo ngày', async () => {
-    const { svc } = makeService([[], [], [], [], [], []]);
+    const { svc } = makeService([[], [], [], [], [], [], [], [], []]);
     const dto = await svc.overview(30, now);
     expect(dto.sinceDay).toBe('2026-10-20');
     expect(dto.funnel).toEqual(funnel.windows.d30);
@@ -102,19 +119,29 @@ describe('AdminGrowthService', () => {
     expect(dto.games).toEqual({ players: 0, buyers: 0, byGame: [] });
     expect(dto.referralFirstOrder).toEqual({ rewarded: 0, blocked: NO_BLOCKS });
     expect(dto.referralShares).toEqual({ share: 0, copy: 0 });
+    expect(dto.remarketing?.rows.map((r) => r.orders)).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it('bảng Tin nào ra đơn lỗi: trả null, phễu và các số khác vẫn trả về', async () => {
+    const { svc, $queryRaw } = makeService([[], [], [], [], [], [{ method: 'share', n: 1n }]]);
+    $queryRaw.mockRejectedValueOnce(new Error('statement timeout'));
+    const dto = await svc.overview(7, now);
+    expect(dto.remarketing).toBeNull();
+    expect(dto.referralShares).toEqual({ share: 1, copy: 0 });
+    expect(dto.funnel).toEqual(funnel.windows.d7);
   });
 
   it('đệm 60 giây theo từng kỳ; lỗi thì lần sau tính lại', async () => {
-    const { svc, $queryRaw } = makeService([[], [], [], [], [], []]);
+    const { svc, $queryRaw } = makeService([[], [], [], [], [], [], [], [], []]);
     await svc.overview(7, now);
     await svc.overview(7, new Date(now.getTime() + 59_000));
-    expect($queryRaw).toHaveBeenCalledTimes(6);
+    expect($queryRaw).toHaveBeenCalledTimes(9);
     $queryRaw.mockRejectedValueOnce(new Error('db down'));
     await expect(svc.overview(30, now)).rejects.toThrow('db down');
     $queryRaw.mockResolvedValue([]);
     await expect(svc.overview(30, now)).resolves.toMatchObject({ days: 30 });
     await svc.overview(7, new Date(now.getTime() + 61_000));
-    expect($queryRaw.mock.calls.length).toBe(6 + 1 + 6 + 6);
+    expect($queryRaw.mock.calls.length).toBe(9 + 1 + 9 + 9);
   });
 });
 

@@ -39,6 +39,17 @@ const overview = (days: 7 | 30): AdminGrowthOverviewDTO => {
       players: 18 + ((i * 5) % 13),
     })),
     referralFirstOrder: { rewarded: 14, blocked: { SELF: 0, PHONE: 1, ZALO: 1, ADDRESS: 0, IP: 4 } },
+    remarketing: {
+      windowHours: 72,
+      rows: [
+        { notice: 'abandoned_cart', sent: 1240, znsSent: 310, znsCapped: 96, orders: 52, revenue: 14_820_000 },
+        { notice: 'winback', sent: 180, znsSent: 0, znsCapped: 0, orders: 6, revenue: 1_340_000 },
+        { notice: 'wishlist_price_drop', sent: 95, znsSent: 40, znsCapped: 8, orders: 11, revenue: 2_905_000 },
+        { notice: 'refill_21d', sent: 320, znsSent: 320, znsCapped: 0, orders: 41, revenue: 9_225_000 },
+        { notice: 'payment_reminder', sent: 64, znsSent: 0, znsCapped: 0, orders: 38, revenue: 11_400_000 },
+      ],
+      proactiveCap: { perDay: 1, perWeek: 4 },
+    },
   };
 };
 
@@ -114,6 +125,7 @@ test.describe('Admin — Trung tâm tăng trưởng', () => {
       await expect(page.getByText('Quay lại mua lần 2').first()).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole('switch', { name: 'Ghép Cặp' })).toBeVisible();
       await expect(page.getByText('Tuần lễ sống xanh')).toBeVisible();
+      await expect(page.locator('[data-remarketing-row="total"]')).toContainText('Tổng');
       await page.waitForTimeout(300);
       const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(over, `tràn ngang ${over}px`).toBeLessThanOrEqual(1);

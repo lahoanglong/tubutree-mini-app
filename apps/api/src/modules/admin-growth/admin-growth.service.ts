@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import type { AdminGrowthOverviewDTO, GrowthDailyPoint, GrowthGameRow, GrowthWindowDays } from '@tubutree/shared-types';
+import { Injectable, Logger } from '@nestjs/common';
+import type { AdminGrowthOverviewDTO, GrowthDailyPoint, GrowthGameRow, GrowthWindowDays, RemarketingAttributionDTO } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { vnDateKey } from '../../common/vn-time';
 import { PurchaseFunnelService } from '../analytics/purchase-funnel.service';
@@ -7,6 +7,8 @@ import { MATCHER_GAME } from '../game/mini/matcher/matcher.rules';
 import { firstOrderGuardStats } from '../referral/first-order-guard-stats';
 import { referralShareStats } from '../referral/share-stats';
 import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { remarketingAttribution } from '../lifecycle/remarketing-attribution';
 
 const DAY_MS = 86_400_000;
 /** Cùng mức của Phễu mua: ADMIN bấm qua lại 7/30 ngày không dồn truy vấn quét bảng đơn vào DB. */
@@ -39,15 +41,17 @@ export function vnDayRange(sinceDay: string, today: string): string[] {
  * gộp các đơn tách theo nhà bán của cùng một lần đặt (`checkoutGroup`). Người chơi là tài khoản đã nộp một ván game mini, hoặc có một lượt
  * Chọn Chuẩn Xanh (game đó chỉ ghi lượt có thưởng và để `submittedAt` trống). Kỳ là `days` ngày VN gần nhất, gồm cả hôm nay. Thưởng mời bạn
  * đơn đầu: số cặp đã thưởng và số đơn bị luật chống tự giới thiệu chặn trong kỳ (referral/first-order-guard-stats.ts), kèm số lượt khách bấm gửi
- * link mời (referral/share-stats.ts).
+ * link mời (referral/share-stats.ts). "Tin nào ra đơn": đơn gán cho tin nhắc chủ động gửi trong kỳ (lifecycle/remarketing-attribution.ts).
  */
 @Injectable()
 export class AdminGrowthService {
+  private readonly logger = new Logger(AdminGrowthService.name);
   private readonly cache = new Map<GrowthWindowDays, { at: number; value: Promise<AdminGrowthOverviewDTO> }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly purchaseFunnel: PurchaseFunnelService,
+    private readonly config: SystemConfigService,
   ) {}
 
   overview(days: GrowthWindowDays, now: Date = new Date()): Promise<AdminGrowthOverviewDTO> {
@@ -74,6 +78,7 @@ export class AdminGrowthService {
     const daily = await this.daily(sinceDay, today, since, now);
     const referralFirstOrder = await firstOrderGuardStats(this.prisma, since, now);
     const referralShares = await referralShareStats(this.prisma, since, now);
+    const remarketing = await this.remarketing(since, now);
     return {
       generatedAt: now.toISOString(),
       days,
@@ -84,7 +89,18 @@ export class AdminGrowthService {
       daily,
       referralFirstOrder,
       referralShares,
+      remarketing,
     };
+  }
+
+  /** Bảng "Tin nào ra đơn": lỗi truy vấn của nó trả null (trang ghi "chưa đọc được") thay vì làm hỏng cả phễu và công tắc phía trên. */
+  private async remarketing(since: Date, now: Date): Promise<RemarketingAttributionDTO | null> {
+    try {
+      return await remarketingAttribution(this.prisma, this.config, since, now);
+    } catch (err) {
+      this.logger.error(`Không tính được bảng Tin nào ra đơn: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   private async repeat(since: Date, now: Date): Promise<AdminGrowthOverviewDTO['repeat']> {

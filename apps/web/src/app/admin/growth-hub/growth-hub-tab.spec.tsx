@@ -5,6 +5,7 @@ import { answerConfirm, click, confirmDialog, flush, mockFetch, render, typeInto
 import type { ConfigRow } from '@/lib/admin-client';
 import type { AdminCampaignRow } from '@/lib/admin-campaigns-client';
 import { GrowthHubTab } from './growth-hub-tab';
+import { capLine, remarketingTable } from './growth-remarketing';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -33,6 +34,17 @@ const overview = (days: 7 | 30): AdminGrowthOverviewDTO => ({
   })),
   referralFirstOrder: { rewarded: 12, blocked: { SELF: 0, PHONE: 1, ZALO: 0, ADDRESS: 1, IP: 3 } },
   referralShares: { share: 1234, copy: 56 },
+  remarketing: {
+    windowHours: 72,
+    rows: [
+      { notice: 'abandoned_cart', sent: 200, znsSent: 50, znsCapped: 12, orders: 10, revenue: 2_500_000 },
+      { notice: 'winback', sent: 40, znsSent: 0, znsCapped: 0, orders: 1, revenue: 180_000 },
+      { notice: 'wishlist_price_drop', sent: 0, znsSent: 0, znsCapped: 0, orders: 0, revenue: 0 },
+      { notice: 'refill_21d', sent: 30, znsSent: 30, znsCapped: 0, orders: 3, revenue: 540_000 },
+      { notice: 'payment_reminder', sent: 8, znsSent: 0, znsCapped: 0, orders: 5, revenue: 1_200_000 },
+    ],
+    proactiveCap: { perDay: 1, perWeek: 4 },
+  },
 });
 
 const campaign = (o: Partial<AdminCampaignRow>): AdminCampaignRow => ({
@@ -56,7 +68,7 @@ const campaign = (o: Partial<AdminCampaignRow>): AdminCampaignRow => ({
   ...o,
 });
 
-function setup(configRows: ConfigRow[], campaigns: AdminCampaignRow[] = []) {
+function setup(configRows: ConfigRow[], campaigns: AdminCampaignRow[] = [], week: AdminGrowthOverviewDTO = overview(7)) {
   const puts: { key: string; value: unknown }[] = [];
   const patches: unknown[] = [];
   const api = mockFetch({
@@ -68,7 +80,7 @@ function setup(configRows: ConfigRow[], campaigns: AdminCampaignRow[] = []) {
       return { body: configRows };
     },
     '/admin/growth/overview?days=30': { body: overview(30) },
-    '/admin/growth/overview': { body: overview(7) },
+    '/admin/growth/overview': { body: week },
     '/admin/campaigns': (init) => {
       if (init?.method === 'PATCH') {
         patches.push(JSON.parse(String(init.body)));
@@ -129,6 +141,49 @@ describe('GrowthHubTab', () => {
     // Lượt bấm gửi link mời (sự kiện green_card_shared) cùng khối với thưởng đơn đầu.
     expect(box.querySelector('[data-guard="shares"]')!.textContent).toBe('1.290');
     expect(box.querySelector('[data-referral-shares]')!.textContent).toContain('chia sẻ 1.234 · sao chép 56');
+  });
+
+  it('Tin nào ra đơn: mỗi loại tin một dòng, tỷ lệ ra đơn, ZNS bị trần, doanh thu mỗi tin ZNS, dòng tổng và trần đang áp', async () => {
+    const { container } = setup([]);
+    await flush(8);
+    const box = container.querySelector<HTMLElement>('[data-remarketing]')!;
+    expect(box.textContent).toContain('Tin nào ra đơn');
+    const cells = (key: string) => [...box.querySelectorAll(`[data-remarketing-row="${key}"] > *`)].map((c) => c.textContent);
+    // 10 đơn / 200 tin = 5%; 2.500.000đ / 50 tin ZNS = 50.000đ.
+    expect(cells('abandoned_cart')).toEqual(['Nhắc giỏ bỏ quên', '200', '5012 bị trần', '10', '5%', '2.500.000đ', '50.000đ']);
+    // Không có tin ZNS thì không chia được; chưa gửi tin nào thì tỷ lệ là gạch.
+    expect(cells('winback')).toEqual(['Mã mời quay lại', '40', '0', '1', '2,5%', '180.000đ', '—']);
+    expect(cells('wishlist_price_drop')).toEqual(['Giá món Yêu thích giảm', '0', '0', '0', '—', '0đ', '—']);
+    expect(cells('payment_reminder')).toEqual(['Nhắc chuyển khoản', '8', '0', '5', '62,5%', '1.200.000đ', '—']);
+    // Tổng: 278 tin, 80 ZNS (12 bị trần), 19 đơn, 4.420.000đ → 4.420.000 / 80 = 55.250đ.
+    expect(cells('total')).toEqual(['Tổng', '278', '8012 bị trần', '19', '6,8%', '4.420.000đ', '55.250đ']);
+    expect(box.querySelector('[data-remarketing-cap]')!.textContent).toContain('tối đa 1 tin/ngày và 4 tin/7 ngày mỗi khách');
+    expect(box.querySelector('[data-remarketing-error]')).toBeNull();
+  });
+
+  it('Tin nào ra đơn: API báo null thì ghi chưa đọc được, phễu vẫn hiện; API cũ không trả khối thì không có bảng', async () => {
+    const failed = setup([], [], { ...overview(7), remarketing: null });
+    await flush(8);
+    expect(failed.container.querySelector('[data-remarketing-error]')!.textContent).toContain('Chưa đọc được số liệu tin nhắc');
+    expect(failed.container.querySelector('[data-remarketing-row]')).toBeNull();
+    expect(failed.container.textContent).toContain('Quay lại mua lần 2');
+    failed.unmount();
+    mounted = [];
+    vi.unstubAllGlobals();
+
+    const { remarketing: _omit, ...old } = overview(7);
+    const legacy = setup([], [], old);
+    await flush(8);
+    expect(legacy.container.textContent).toContain('Quay lại mua lần 2');
+    expect(legacy.container.querySelector('[data-remarketing]')).toBeNull();
+  });
+
+  it('remarketingTable: loại API chưa trả là dòng 0 theo đúng thứ tự; trần tắt có câu riêng', () => {
+    const t = remarketingTable({ windowHours: 72, rows: [{ notice: 'refill_21d', sent: 4, znsSent: 2, znsCapped: 1, orders: 1, revenue: 99_999 }], proactiveCap: null });
+    expect(t.rows.map((r) => r.key)).toEqual(['abandoned_cart', 'winback', 'wishlist_price_drop', 'refill_21d', 'payment_reminder']);
+    expect(t.rows[3]).toMatchObject({ ratePct: 25, revenuePerZns: 50_000 });
+    expect(t.total).toMatchObject({ sent: 4, znsSent: 2, znsCapped: 1, orders: 1, revenue: 99_999 });
+    expect(capLine(null)).toContain('đang tắt');
   });
 
   it('chọn 30 ngày thì gọi lại với days=30 và vẽ 30 cột mỗi biểu đồ', async () => {
