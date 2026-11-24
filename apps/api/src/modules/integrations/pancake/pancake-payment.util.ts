@@ -43,8 +43,44 @@ export function pancakePaidAmountAfterPaid(data: Record<string, unknown>): numbe
  * Hàm thuần để test & dễ chỉnh khi xác nhận field thật từ webhook đầu tiên.
  */
 export function isPancakeOrderPaid(data: Record<string, unknown>, orderTotal: number): boolean {
-  const ps = data['payment_status'];
-  if (data['is_paid'] === true || ps === 'paid' || ps === 'PAID' || ps === 1 || ps === '1') return true;
+  if (hasPancakePaidFlag(data)) return true;
   // prepaid = đã thanh toán trước; bank_payment = tiền chuyển khoản ghi nhận.
   return orderTotal > 0 && pancakePaidAmount(data) >= orderTotal;
+}
+
+/** Cờ "đã thanh toán" tường minh (is_paid/payment_status), không xét ô số tiền. */
+function hasPancakePaidFlag(data: Record<string, unknown>): boolean {
+  const ps = data['payment_status'];
+  return data['is_paid'] === true || ps === 'paid' || ps === 'PAID' || ps === 1 || ps === '1';
+}
+
+/** Trạng thái đơn Pancake cho biết hãng đã giao tới khách: 3 "Đã nhận", 16 "Đã thu tiền" (cùng bảng mã với pancake-status.map). */
+const DELIVERED_STATUSES: ReadonlySet<string> = new Set(['3', '16', 'delivered', 'completed']);
+
+export function pancakeShowsDelivered(data: Record<string, unknown>): boolean {
+  const raw = data['status'] ?? data['status_name'];
+  if (typeof raw !== 'string' && typeof raw !== 'number') return false;
+  return DELIVERED_STATUSES.has(String(raw).trim().toLowerCase());
+}
+
+/**
+ * Đơn khách đã đổi từ chuyển khoản sang COD, hàng đã rời kho: phần nào của "đã trả" Pancake báo là tiền khách chuyển khoản (có thể trả hai lần), phần
+ * nào là tiền thu hộ COD của hãng. `amount` = số chuyển khoản đọc được; 0 = chỉ có cờ "đã thanh toán", không kèm số. null = không có gì phải báo.
+ *  - Hàng đang trên đường (chưa giao tới khách): hãng chưa thu COD, nên mọi dấu "đã trả" (cả cờ trơn) là chuyển khoản.
+ *  - Hãng đã giao (đơn Tubu DELIVERED, hay chính webhook mang trạng thái 3/16): cờ "đã trả" và ô `prepaid` tới bằng tổng đơn có thể là tiền thu hộ COD
+ *    Pancake ghi lại, không báo. Còn ô `bank_payment` và phần `prepaid` vượt tổng đơn vẫn là chuyển khoản.
+ */
+export function codSwitchedTransferAfterHandover(
+  data: Record<string, unknown>,
+  orderTotal: number,
+  delivered: boolean,
+): { amount: number } | null {
+  const prepaid = Math.max(0, Math.round(num(data['prepaid'])));
+  const bank = Math.max(0, Math.round(num(data['bank_payment'])));
+  if (delivered || pancakeShowsDelivered(data)) {
+    const transfer = bank + Math.max(0, prepaid - Math.max(0, orderTotal));
+    return transfer > 0 ? { amount: transfer } : null;
+  }
+  if (prepaid + bank > 0) return { amount: prepaid + bank };
+  return hasPancakePaidFlag(data) ? { amount: 0 } : null;
 }

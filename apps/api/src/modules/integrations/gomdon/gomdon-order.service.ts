@@ -19,6 +19,7 @@ import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './
 import { GomdonDuplicateOrderError, GomdonRejectedError, isTransientGomdonRejection } from './gomdon.errors';
 import { enqueueGomdonCancel, enqueueGomdonPush } from './gomdon-queue';
 import { recyclingParcel, recyclingWeight } from './gomdon-weight';
+import { codCollectAfterRevertMessage, lockCodCollect } from '../../orders/cod-switch';
 import {
   GOMDON_CANCEL,
   GOMDON_CANCEL_NEEDS_ATTENTION,
@@ -128,7 +129,7 @@ export class GomdonOrderService {
    * Tạo vận đơn Gomdon cho đơn rồi đẩy tiếp Pancake. Chỉ ném lỗi khi RETRY AN TOÀN (Gomdon chắc chắn
    * chưa tạo, hoặc lỗi đọc DB trước khi claim); UnrecoverableError khi đã tạo mà không ghi được DB.
    */
-  async pushOrder(orderId: string): Promise<string | null> {
+  async pushOrder(orderId: string, rereadAfterPaymentChange = false): Promise<string | null> {
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
       include: { items: true },
@@ -221,12 +222,15 @@ export class GomdonOrderService {
     const body = await this.buildBody(order);
 
     // CLAIM nguyên tử: chỉ một worker được gọi API tạo đơn cho mỗi đơn. Hàng đã rời kho / kho vừa đặt hãng khác
-    // giữa lúc đọc và lúc claim → không claim (lần chạy sau thấy và chốt như nhánh trên).
+    // giữa lúc đọc và lúc claim → không claim (lần chạy sau thấy và chốt như nhánh trên). Cách trả tiền cũng phải còn
+    // như lúc dựng body: đơn đổi COD vừa lật về chuyển khoản đã trả thì `collect_amount` của body đã sai.
     const claim = await this.prisma.order.updateMany({
       where: {
         id: order.id,
         gomdonOrderId: null,
         gomdonPartnerCode: null,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
         status: { notIn: [...DEAD_STATUSES, ...SHIPPED_STATUSES] },
         AND: [
           { OR: [{ gomdonStatus: null }, { gomdonStatus: GOMDON_STATE.AWAITING_PAYMENT }] },
@@ -236,6 +240,15 @@ export class GomdonOrderService {
       data: { gomdonStatus: GOMDON_STATE.CREATING },
     });
     if (claim.count === 0) {
+      if (!rereadAfterPaymentChange) {
+        const now = await this.prisma.order.findUnique({ where: { id: order.id }, select: { paymentMethod: true, paymentStatus: true } });
+        if (now && (now.paymentMethod !== order.paymentMethod || now.paymentStatus !== order.paymentStatus)) {
+          // Chưa gọi Gomdon gì nên làm lại từ đầu với đơn mới là an toàn. Không trông vào job xếp sau lần lật PAID: job này đang chạy
+          // nên BullMQ bỏ qua lệnh thêm cùng jobId.
+          this.logger.warn(`Đơn ${order.code}: cách trả tiền vừa đổi lúc chuẩn bị tạo vận đơn Gomdon — dựng lại từ đơn mới.`);
+          return this.pushOrder(orderId, true);
+        }
+      }
       this.logger.warn(`Đơn ${order.code}: trạng thái Gomdon/đơn vừa đổi bởi tiến trình khác — bỏ qua lần tạo này.`);
       return null;
     }
@@ -281,7 +294,7 @@ export class GomdonOrderService {
       return null;
     }
 
-    await this.persistCreated(order, gomdonId, partnerCode, res);
+    const paidWhenPersisted = await this.persistCreated(order, gomdonId, partnerCode, res);
     this.logger.log(`Tạo đơn Gomdon thành công cho ${order.code} (Mã VĐ: ${partnerCode}).`);
 
     // Đơn bị huỷ TRONG LÚC đang tạo vận đơn → huỷ luôn vận đơn vừa tạo.
@@ -296,6 +309,11 @@ export class GomdonOrderService {
     }
     // Hệ thống đã tự gắn được vận đơn: các việc "tạo/kiểm tra vận đơn tay" cũ hết hiệu lực.
     await this.alerts.resolveKinds(order.id, [GOMDON_ALERT_KIND.WAYBILL_NEEDED]);
+    // Vận đơn vừa tạo thu hộ theo đơn COD lúc claim, mà tiền chuyển khoản đã về (markPaid lật đơn đổi COD) trước lúc ghi mã: markPaid chưa thấy mã để
+    // báo, nên bên này báo kho sửa thu hộ về 0đ.
+    if (paidWhenPersisted && body.collect_amount > 0) {
+      await this.alerts.alert(order.code, codCollectAfterRevertMessage(order.total, partnerCode), GOMDON_ALERT_TEMPLATE);
+    }
     if (!fresh.pancakeOrderId) {
       // Thành công → đẩy tiếp sang Pancake với mã Gomdon trong note.
       await this.pancakeOrder.enqueuePush(order.id);
@@ -881,13 +899,14 @@ export class GomdonOrderService {
    * Ghi mã vận đơn — thử lại tại chỗ khi DB chập chờn: lỗi ở đây mà để BullMQ retry thì lần sau sẽ
    * thấy CREATING (không tạo trùng) nhưng MẤT mã vận đơn vừa tạo. Hết lượt → log đủ mã để vận hành
    * tự ghi tay + UnrecoverableError; webhook Gomdon tới sau vẫn tự điền lại mã (khớp theo mã đơn).
+   * Trả true khi lúc ghi mã đơn đã PAID: ghi và đọc dưới khoá chung với markPaid (lockCodCollect).
    */
   private async persistCreated(
     order: OrderWithItems,
     gomdonId: string | null,
     partnerCode: string,
     res: GomdonCreateOrderResponse,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const statusNum = Number(res.data?.status ?? 1) || 1;
     const history = Array.isArray(order.shippingHistory) ? order.shippingHistory : [];
     const now = new Date();
@@ -908,31 +927,35 @@ export class GomdonOrderService {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const r = await this.prisma.order.updateMany({
-          where: { id: order.id, gomdonStatus: GOMDON_STATE.CREATING },
-          data,
-        });
-        if (r.count === 0) {
-          // Claim bị lần chạy chồng/cron chuyển NEEDS_MANUAL_CHECK trong lúc đang tạo → giờ đã biết chắc
-          // vận đơn → ghi đủ trạng thái thật (CSKH thấy "đã đặt lịch" thay vì "cần kiểm tra").
-          const recovered = await this.prisma.order.updateMany({
-            where: {
-              id: order.id,
-              gomdonOrderId: null,
-              gomdonPartnerCode: null,
-              gomdonStatus: GOMDON_STATE.NEEDS_MANUAL_CHECK,
-            },
+        return await this.prisma.$transaction(async (tx) => {
+          await lockCodCollect(tx, order.id);
+          const r = await tx.order.updateMany({
+            where: { id: order.id, gomdonStatus: GOMDON_STATE.CREATING },
             data,
           });
-          if (recovered.count === 0) {
-            // Claim đã bị đổi khác (webhook tới trước) — vẫn KHÔNG được làm mất mã vận đơn.
-            await this.prisma.order.updateMany({
-              where: { id: order.id, gomdonOrderId: null, gomdonPartnerCode: null },
-              data: { gomdonOrderId: gomdonId, gomdonPartnerCode: partnerCode },
+          if (r.count === 0) {
+            // Claim bị lần chạy chồng/cron chuyển NEEDS_MANUAL_CHECK trong lúc đang tạo → giờ đã biết chắc
+            // vận đơn → ghi đủ trạng thái thật (CSKH thấy "đã đặt lịch" thay vì "cần kiểm tra").
+            const recovered = await tx.order.updateMany({
+              where: {
+                id: order.id,
+                gomdonOrderId: null,
+                gomdonPartnerCode: null,
+                gomdonStatus: GOMDON_STATE.NEEDS_MANUAL_CHECK,
+              },
+              data,
             });
+            if (recovered.count === 0) {
+              // Claim đã bị đổi khác (webhook tới trước) — vẫn KHÔNG được làm mất mã vận đơn.
+              await tx.order.updateMany({
+                where: { id: order.id, gomdonOrderId: null, gomdonPartnerCode: null },
+                data: { gomdonOrderId: gomdonId, gomdonPartnerCode: partnerCode },
+              });
+            }
           }
-        }
-        return;
+          const now = await tx.order.findUnique({ where: { id: order.id }, select: { paymentStatus: true } });
+          return now?.paymentStatus === 'PAID';
+        });
       } catch (err) {
         lastErr = err;
         if (attempt < 3 && this.persistRetryDelayMs > 0) {

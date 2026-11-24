@@ -19,12 +19,19 @@ import {
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
   ATTENTION_UNDERPAID,
+  PANCAKE_COD_SWITCH_PAID_NOTE,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
   clearPancakeAttention,
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
 } from './pancake-attention';
-import { isPancakeOrderPaid, pancakePaidAmount, pancakePaidAmountAfterPaid, unreadablePaidFields } from './pancake-payment.util';
+import {
+  codSwitchedTransferAfterHandover,
+  isPancakeOrderPaid,
+  pancakePaidAmount,
+  pancakePaidAmountAfterPaid,
+  unreadablePaidFields,
+} from './pancake-payment.util';
 import {
   PANCAKE_CLAIM_STALE_MINUTES,
   PANCAKE_EVENT_DONE,
@@ -693,18 +700,14 @@ export class PancakeProcessor extends WorkerHost {
     if (!order) return null;
     // Đơn khách đã đổi từ chuyển khoản sang COD vẫn nhận đối soát: tiền khách lỡ chuyển (QR cũ, chuyển trước khi đổi mà ngân hàng báo muộn) đưa đơn
     // về lại chuyển khoản đã trả (markPaid) để kho không thu COD lần nữa, hay thành khoản hoàn khi đơn đã huỷ. Chỉ khi hàng chưa rời kho: sau bàn
-    // giao, "đã trả" của Pancake có thể là tiền thu hộ COD của hãng; khi đó chỉ ô tiền chuyển khoản (prepaid/bank_payment) mới đáng báo người xử lý.
+    // giao không tự lật, chỉ báo người xử lý phần đúng là chuyển khoản (codSwitchedTransferAfterHandover tách tiền thu hộ COD của hãng ra).
     let codSwitched = false;
     if (order.paymentMethod === 'COD') {
       const transferred = pancakePaidAmount(data);
       if (!(transferred > 0 || isPancakeOrderPaid(data, order.total)) || !(await switchedFromTransfer(this.prisma, order))) return null;
       if (!beforeHandover(order)) {
-        if (transferred > 0) {
-          await this.flagAttention(
-            order,
-            `${ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER}: Pancake ghi nhận ${transferred.toLocaleString('vi-VN')}đ chuyển khoản. Kiểm tra để khách không trả hai lần.`,
-          );
-        }
+        const transfer = codSwitchedTransferAfterHandover(data, order.total, order.status === 'DELIVERED');
+        if (transfer) await this.flagCodSwitchedPaidAfterHandover(order, transfer.amount);
         return null;
       }
       codSwitched = true;
@@ -838,6 +841,32 @@ export class PancakeProcessor extends WorkerHost {
    * Đơn đã đổi sang COD mà Pancake ghi nhận một phần chuyển khoản: không mời khách "chuyển thêm" (đơn đang thu COD), chỉ ghi số đã nhận và đưa vào
    * hàng cần xử lý để trừ khi thu COD hoặc hoàn lại. Huỷ đơn thì khoản này thành yêu cầu hoàn như mọi đơn khác.
    */
+  /**
+   * Đơn đã đổi sang COD, hàng đã rời kho, rồi Pancake báo phần chuyển khoản `amount` (0 = chỉ có cờ "đã thanh toán", không kèm số): không tự lật vì hãng
+   * có thể vẫn thu COD; vào "Cần xử lý" để kho sửa thu hộ hay Kế toán hoàn. Mỗi số tiền chỉ nhắc một lần, kể cả khi ô nhắc đã bị bấm "Đã xử lý": dấu nằm
+   * trong lịch sử đơn, ghi dưới khoá dòng đơn để hai worker của cùng webhook không nhắc đôi.
+   */
+  private async flagCodSwitchedPaidAfterHandover(order: Order, amount: number): Promise<void> {
+    const note = `${PANCAKE_COD_SWITCH_PAID_NOTE} (${amount > 0 ? formatVnd(amount) : 'chỉ có cờ đã thanh toán'})`;
+    const reason =
+      amount > 0
+        ? `${ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER}: Pancake ghi nhận ${amount.toLocaleString('vi-VN')}đ chuyển khoản. Kiểm tra để khách không trả hai lần.`
+        : `${ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER}: Pancake báo đơn đã thanh toán (không kèm số tiền) khi hàng còn trên đường giao. ` +
+          'Đối chiếu sao kê; khách đã chuyển khoản thì báo hãng sửa thu hộ về 0đ để khách không trả hai lần.';
+    const written = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${order.id} FOR UPDATE`;
+      const now = await tx.order.findUnique({ where: { id: order.id }, select: { status: true } });
+      if (!now) return null;
+      const logged = await tx.orderStatusHistory.findFirst({ where: { orderId: order.id, actorType: 'PANCAKE', note }, select: { id: true } });
+      if (logged) return null;
+      await tx.orderStatusHistory.create({ data: { orderId: order.id, fromStatus: now.status, toStatus: now.status, actorType: 'PANCAKE', note } });
+      return writePancakeAttention(tx, order.id, reason);
+    });
+    if (!written) return;
+    this.logger.warn(`Đơn ${order.code} cần xử lý (Pancake): ${written}`);
+    await this.alerts.alert(order.code, reason, PANCAKE_ALERT_TEMPLATE);
+  }
+
   private async flagCodSwitchedPartial(order: Order, paid: number): Promise<void> {
     await this.prisma.order.updateMany({ where: { id: order.id, paymentStatus: 'UNPAID' }, data: { pancakePaidReported: paid } });
     await this.flagAttention(

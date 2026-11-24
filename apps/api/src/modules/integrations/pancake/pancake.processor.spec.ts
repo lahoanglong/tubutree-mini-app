@@ -5,6 +5,7 @@ import { OPS_WHERE, opsAlertSlot } from '../../ops/ops-alert-line';
 import { OrderReversalService } from '../../orders/order-reversal.service';
 import { OrderStatusService } from '../../orders/order-status.service';
 import { COD_SWITCH_HISTORY_NOTE } from '../../orders/cod-switch';
+import { PANCAKE_COD_SWITCH_PAID_NOTE } from './pancake-attention';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 import type { LoyaltyService } from '../../loyalty/loyalty.service';
@@ -2290,12 +2291,51 @@ describe('PancakeProcessor.onPaymentReconcile — đơn khách đã đổi từ 
   it.each([
     ['đang giao', { status: 'SHIPPING' }],
     ['đã rời kho', { shippedAt: new Date() }],
-  ])('đơn đã đổi nhưng %s → không lật ("đã trả" có thể là tiền thu hộ của hãng); chỉ cờ is_paid thì không báo', async (_name, over) => {
-    const { proc, prisma, orderUpdateMany } = setup({ ...switchedOrder, ...over });
+  ])('đơn đã đổi nhưng %s, Pancake chỉ gửi cờ is_paid → không lật, nhưng vào "Cần xử lý" (hãng chưa giao nên cờ đó là chuyển khoản)', async (_name, over) => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, prisma, orderUpdateMany, historyCreate } = setup({ ...switchedOrder, ...over }, undefined, alerts);
     markSwitched(prisma);
-    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true, status: 2 });
     expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('không kèm số tiền')]);
+    expect(historyCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ actorType: 'PANCAKE', note: `${PANCAKE_COD_SWITCH_PAID_NOTE} (chỉ có cờ đã thanh toán)` }),
+    });
+    expect(alerts.alert).toHaveBeenCalledTimes(1);
+  });
+
+  it('cùng cờ đã nhắc một lần (dấu trong lịch sử đơn) → webhook sau không nhắc lại dù ô "Cần xử lý" đã được gỡ', async () => {
+    const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+    const { proc, prisma, orderUpdateMany, historyCreate } = setup({ ...switchedOrder, status: 'SHIPPING', shippedAt: new Date() }, undefined, alerts);
+    (prisma.orderStatusHistory.findFirst as jest.Mock).mockImplementation(async (args: { where?: { note?: string } }) =>
+      args?.where?.note === COD_SWITCH_HISTORY_NOTE || args?.where?.note?.startsWith(PANCAKE_COD_SWITCH_PAID_NOTE) ? { id: 'h' } : null,
+    );
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true });
     expect(attentionFlags(orderUpdateMany)).toEqual([]);
+    expect(historyCreate).not.toHaveBeenCalled();
+    expect(alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['đơn Tubu đã giao', { status: 'DELIVERED', shippedAt: new Date() }, {}],
+    ['webhook "Đã thu tiền" (16) tới trước trạng thái', { status: 'SHIPPING', shippedAt: new Date() }, { status: 16 }],
+  ] as [string, Record<string, unknown>, Record<string, unknown>][])(
+    '%s: cờ is_paid + prepaid bằng tổng đơn là tiền thu hộ COD → không nhắc nhầm',
+    async (_name, over, extra) => {
+      const { proc, prisma, orderUpdateMany, historyCreate } = setup({ ...switchedOrder, ...over });
+      markSwitched(prisma);
+      await proc.onPaymentReconcile({ id: 'p1', is_paid: true, prepaid: 100000, ...extra });
+      expect(statusFlips(orderUpdateMany)).toHaveLength(0);
+      expect(attentionFlags(orderUpdateMany)).toEqual([]);
+      expect(historyCreate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('đơn đã giao mà Pancake ghi thêm bank_payment → vẫn nhắc phần chuyển khoản', async () => {
+    const { proc, prisma, orderUpdateMany } = setup({ ...switchedOrder, status: 'DELIVERED', shippedAt: new Date() });
+    markSwitched(prisma);
+    await proc.onPaymentReconcile({ id: 'p1', is_paid: true, prepaid: 100000, bank_payment: 100000, status: 3 });
+    expect(attentionFlags(orderUpdateMany)).toEqual([expect.stringContaining('100.000đ chuyển khoản')]);
   });
 
   it('đơn đã đổi, hàng đã rời kho, Pancake ghi tiền chuyển khoản → không lật, "Cần xử lý" kiểm tra khách trả hai lần', async () => {

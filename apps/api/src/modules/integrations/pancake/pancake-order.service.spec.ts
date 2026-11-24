@@ -6,6 +6,7 @@ import type { PancakeClient } from './pancake.client';
 import type { PancakeCreateOrderBody } from './pancake.types';
 import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError, PancakePushBusyError, PancakePushSettlingError } from './pancake-outbound';
 import { ATTENTION_COD_SWITCH_PENDING, ATTENTION_PUSH_FAILED } from './pancake-attention';
+import { BULK_RETRY_BUDGET_MS } from './pancake-bulk-retry';
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
@@ -929,6 +930,42 @@ describe('PancakeOrderService.retryManyByAdmin: "Đẩy lại đơn tạm lỗi"
     broken.queue.add.mockRejectedValueOnce(new Error('redis ECONNREFUSED 10.0.0.5'));
     const r2 = await broken.svc.retryManyByAdmin('admin1', ['o1']);
     expect(r2.results[0]).toEqual({ id: 'o1', ok: false, message: 'Đơn o1: lỗi hệ thống khi xếp lệnh, thử lại sau ít phút.' });
+  });
+
+  describe('trần thời gian tổng của một lần bấm (w29-01)', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('đơn đầu ngốn hết 15 giây → các đơn sau trả "chưa xét", không đụng đơn, câu tổng bảo bấm lại', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-24T03:00:00Z') });
+      const t = setup(TRANSIENT);
+      t.queue.add.mockImplementation(async () => {
+        jest.setSystemTime(Date.now() + BULK_RETRY_BUDGET_MS);
+        return {};
+      });
+      const res = await t.svc.retryManyByAdmin('admin1', ['o1', 'khong-co', 'cung-khong-co']);
+      expect(res).toMatchObject({ queued: 1, skipped: 2 });
+      expect(res.results).toEqual([
+        { id: 'o1', ok: true, message: 'Đã xếp lệnh đẩy đơn TUBU1 sang Pancake.' },
+        { id: 'khong-co', ok: false, unchecked: true, message: 'Đơn khong-co chưa xét: lượt bấm đã chạy hết 15 giây.' },
+        { id: 'cung-khong-co', ok: false, unchecked: true, message: 'Đơn cung-khong-co chưa xét: lượt bấm đã chạy hết 15 giây.' },
+      ]);
+      expect(res.message).toBe(
+        'Đã xếp lệnh đẩy 1/3 đơn sang Pancake. Hết 15 giây của lượt bấm: còn 2 đơn chưa xét, bấm "Đẩy lại" lần nữa để xét tiếp.',
+      );
+      expect(t.prisma.order.findFirst).toHaveBeenCalledTimes(1);
+    });
+
+    it('còn trong trần: xét đủ mọi đơn như cũ, không có câu "chưa xét"', async () => {
+      jest.useFakeTimers({ now: new Date('2026-11-24T03:00:00Z') });
+      const t = setup(TRANSIENT);
+      t.queue.add.mockImplementation(async () => {
+        jest.setSystemTime(Date.now() + BULK_RETRY_BUDGET_MS - 1);
+        return {};
+      });
+      const res = await t.svc.retryManyByAdmin('admin1', ['o1', 'khong-co']);
+      expect(res.results.map((r) => r.unchecked)).toEqual([undefined, undefined]);
+      expect(res.message).not.toContain('chưa xét');
+    });
   });
 
   it('nút một đơn ở chi tiết đơn (không bulk) vẫn đẩy đơn DATA/STALE như cũ', async () => {
