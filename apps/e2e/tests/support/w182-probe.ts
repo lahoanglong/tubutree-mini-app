@@ -75,7 +75,12 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
         }
         return false;
       };
-      const hidden = (el: Element): boolean => !!el.closest('[aria-hidden="true"], [hidden], [inert], script, style, noscript, [data-probe-ignore]');
+      // Thân của <details> đang gập không được vẽ, nhưng Chrome vẫn trả hộp bao thật (dàn trang ép buộc) nằm đè lên khối phía sau: coi như ẩn, trừ <summary>.
+      const collapsed = (el: Element): boolean => {
+        const d = el.closest('details:not([open])');
+        return !!d && !el.closest('summary');
+      };
+      const hidden = (el: Element): boolean => !!el.closest('[aria-hidden="true"], [hidden], [inert], script, style, noscript, [data-probe-ignore]') || collapsed(el);
       const all = Array.from(document.body.querySelectorAll('*'));
 
       const scrollers = [document.documentElement, ...Array.from(document.querySelectorAll<HTMLElement>('.zaui-page'))];
