@@ -12,6 +12,7 @@ import { PriceTab } from './price-tab';
 import { OrdersTab } from './orders-tab';
 import { CreditTab } from './credit-tab';
 import { ReportTab } from './report-tab';
+import { TierProgress } from './tier-progress';
 import type { ReorderRequest } from './dealer-order-tools';
 
 const TABS = [
@@ -51,6 +52,7 @@ function HubBody() {
           </div>
         </div>
         {me?.tier && <div className="mt-2 text-xs text-stone-100">Hạn mức: {formatVnd(me.tier.creditLimit)}</div>}
+        <TierProgress />
       </section>
 
       {me?.hasPartnerStorefront && (

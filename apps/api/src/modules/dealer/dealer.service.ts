@@ -47,6 +47,7 @@ import {
   settlePayment,
 } from '@tubutree/shared-types';
 import { DEALER_APPLICATION_LIST_SELECT } from './dealer-application-select';
+import { nextTierOf, tierView, vnMonthBounds } from './dealer-tier-progress';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
   UNPAID: 'Chưa thanh toán',
@@ -411,6 +412,10 @@ export class DealerService {
               paymentStatus: 'UNPAID',
               shippingAddress: { ...shippingAddress },
               note: dto.note,
+              // Đi cùng đơn sang Pancake (pancake-order-body đọc invoiceRequest) và vào hàng chờ xuất hoá đơn của admin.
+              ...(dto.invoiceRequest
+                ? { invoiceRequest: { ...dto.invoiceRequest }, invoiceStatus: 'REQUESTED' as const }
+                : {}),
               idempotencyKey: key ?? null,
               items: { create: itemsWithBackorder },
             },
@@ -1073,6 +1078,32 @@ export class DealerService {
       bonusAmount,
       nextTier: next ? { min: next.min, pct: next.pct, toNext: next.min - revenue } : null,
       tiers: sorted,
+    };
+  }
+
+  /**
+   * Doanh số tháng này (giờ VN) so với mốc doanh số tháng của bậc chiết khấu kế tiếp. Cùng nền `dealerVolume` với báo cáo quý:
+   * `volume` là phần đã chốt, `pendingVolume` là đơn còn chờ thanh toán/đóng gói. Lên bậc do Tubu Tree xét và gán, không tự động,
+   * nên đây chỉ là số để đại lý biết còn cách mốc bao xa.
+   */
+  async tierProgress(userId: string, now: Date = new Date()) {
+    const { tier } = await this.dealerContext(userId);
+    const month = vnMonthBounds(now);
+    const [vol, tiers, maxRaw] = await Promise.all([
+      this.dealerVolume(userId, month.start, month.end),
+      tier ? this.prisma.dealerTier.findMany({ select: { id: true, name: true, minOrderVolume: true, discountRules: true } }) : [],
+      this.config.get<number>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
+    ]);
+    const maxDiscount = Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : DEALER_MAX_DISCOUNT_PCT_DEFAULT;
+    const next = nextTierOf(tiers, tier, maxDiscount);
+    return {
+      month: month.label,
+      monthStart: month.start.toISOString(),
+      monthEnd: month.end.toISOString(),
+      volume: vol.settled,
+      pendingVolume: vol.pending,
+      currentTier: tier ? tierView(tier, maxDiscount) : null,
+      nextTier: next ? { ...next, toGo: Math.max(0, next.minOrderVolume - vol.settled) } : null,
     };
   }
 

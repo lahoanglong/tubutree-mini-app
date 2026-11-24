@@ -85,6 +85,12 @@ export class DealerController {
     return this.dealer.reportCreditPayment(userId, dto.amount, dto.note);
   }
 
+  // Doanh số tháng này so với mốc doanh số tháng của bậc chiết khấu kế tiếp.
+  @Get('tier-progress')
+  tierProgress(@CurrentUser('sub') userId: string) {
+    return this.dealer.tierProgress(userId);
+  }
+
   @Get('quarterly-report')
   quarterlyReport(@CurrentUser('sub') userId: string) {
     return this.dealer.quarterlyReport(userId);

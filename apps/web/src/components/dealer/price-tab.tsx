@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, ClipboardList, Copy, Download, Save, Search, X } from 'lucide-react';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteTemplate, placeDealerOrder, saveTemplate, type DealerOrderRules, type PricelistRow } from '@tubutree/app-core/api/dealer';
-import { dealerPricelistQuery, dealerTemplatesQuery } from '@tubutree/app-core/queries/dealer';
+import type { InvoiceRequest } from '@tubutree/app-core/api/checkout';
+import { dealerInvoiceProfileQuery, dealerPricelistQuery, dealerTemplatesQuery, dealerTierProgressQuery } from '@tubutree/app-core/queries/dealer';
 import {
   DEALER_MAX_QTY,
   dealerBrands,
@@ -40,6 +41,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { errText } from './dealer-shell';
 import { downloadCsv, reorderNotice, reorderQuantities, type ReorderRequest } from './dealer-order-tools';
+import { basketMargin, basketTierLine, marginLine } from './dealer-tier-tools';
+import { DealerInvoiceSheet } from './dealer-invoice-sheet';
+import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 
 const OUT_OF_STOCK_PREORDER = 'Hết hàng — được đặt trước';
 const preorderLine = (n: number) => `Đặt trước ${n}, giao khi hàng về`;
@@ -58,7 +62,9 @@ const DEL_TEMPLATE_KEY = ['dealer-del-template'] as const;
 // Giới hạn của SaveTemplateDto.name (apps/api/src/modules/dealer/dealer.controller.ts:34): ô chặn gõ quá để không tới 400 nhập liệu của DTO.
 const TEMPLATE_NAME_MAX = 120;
 // Mọi số liệu đơn đại lý đổi theo (hạn mức, giá, tồn, tối thiểu): đơn bị từ chối thì tải lại hết, như Mini App (apps/miniapp/src/pages/dealer.tsx:536).
-const ORDER_REFRESH_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-pricelist'] as const;
+const ORDER_REFRESH_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-tier-progress', 'dealer-pricelist'] as const;
+const ORDER_PLACED_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-tier-progress'] as const;
+const invoiceOf = (p: InvoiceRequest): InvoiceRequest => ({ taxCode: p.taxCode, companyName: p.companyName, address: p.address, email: p.email });
 
 function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: (n: number) => void }) {
   const preorder = preorderQty(qty, row.stock);
@@ -125,8 +131,20 @@ export function PriceTab({
   const [pasteResult, setPasteResult] = useState<{ matched: number; unmatched: string[] } | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [tplName, setTplName] = useState('');
+  const [wantInvoice, setWantInvoice] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   const cart = useMemo(() => Object.entries(qty).filter(([, n]) => n > 0), [qty]);
+  const tierQ = useQuery(dealerTierProgressQuery(coreHttp));
+  // Thông tin hoá đơn chỉ cần khi đã có hàng trong đơn (ô "Xuất hoá đơn VAT" nằm ở thanh đặt hàng).
+  const invoiceQ = useQuery({ ...dealerInvoiceProfileQuery(coreHttp), enabled: cart.length > 0 });
+  const savedInvoice = invoiceQ.data?.saved ? invoiceQ.data : null;
+  // Bật ô khi đã lưu thông tin: một chạm. Chưa lưu: mở sheet điền sẵn từ hồ sơ đại lý, lưu xong mới bật.
+  const toggleInvoice = (on: boolean) => {
+    if (!on) setWantInvoice(false);
+    else if (savedInvoice) setWantInvoice(true);
+    else setInvoiceOpen(true);
+  };
   const noticeRef = useRef<HTMLDivElement>(null);
 
   // Phân loại không còn trong bảng giá sỉ (ngừng bán, đổi bậc) bị bỏ và nêu tên trong lời báo; không nạp gì thì giữ giỏ như cũ.
@@ -235,7 +253,8 @@ export function PriceTab({
   // Trả trước và Ghi công nợ chung MỘT khoá (đơn thứ hai cùng key sẽ trả lại đơn thứ nhất): `useLockedMutation` chặn cú bấm thứ hai ngay trong khung hình,
   // và giữ tới khi công nợ, đơn, thưởng mới về (tối đa `settleWithin`). Giỏ gửi đi là biến mutate chụp lúc bấm, không phải giỏ hiện tại lúc máy chủ trả lời.
   const place = useLockedMutation({
-    mutationFn: (v: { method: 'CREDIT' | 'PREPAID'; items: OrderLine[] }) => placeDealerOrder(coreHttp, v.items, v.method, undefined, orderKey.current),
+    mutationFn: (v: { method: 'CREDIT' | 'PREPAID'; items: OrderLine[]; invoice?: InvoiceRequest }) =>
+      placeDealerOrder(coreHttp, v.items, v.method, undefined, orderKey.current, v.invoice),
     // Xoá cảnh báo cũ ở đây chứ không ở nơi gọi: cú bấm bị khoá nuốt không chạy onMutate, nên không xoá nhầm lời báo vừa hiện.
     onMutate: () => setNotice(null),
     onSuccess: (order, { method, items }) => {
@@ -243,9 +262,7 @@ export function PriceTab({
       const sent = lineKey(items.map((it): [string, number] => [it.variationId, it.quantity]));
       const lines = order.items ?? [];
       const got = lines.every((it) => it.variationId) ? lineKey(lines.map((it): [string, number] => [it.variationId, it.quantity])) : '';
-      const refreshed = settleWithin(
-        Promise.all(['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report'].map((key) => qc.invalidateQueries({ queryKey: [key] }))),
-      );
+      const refreshed = settleWithin(Promise.all(ORDER_PLACED_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] }))));
       // Lần đặt trước đã tạo đơn dù mạng báo lỗi: máy chủ trả đơn đó (giỏ cũ), giỏ hiện tại chưa được đặt nên giữ nguyên.
       if (got !== '' && sent !== got) {
         orderKey.current = newIdempotencyKey();
@@ -288,7 +305,11 @@ export function PriceTab({
     },
   });
   const submit = (method: 'CREDIT' | 'PREPAID') => {
-    place.mutate({ method, items: cart.map(([variationId, quantity]) => ({ variationId, quantity })) });
+    place.mutate({
+      method,
+      items: cart.map(([variationId, quantity]) => ({ variationId, quantity })),
+      invoice: wantInvoice && savedInvoice ? invoiceOf(savedInvoice) : undefined,
+    });
   };
 
   const belowMin = !!rules && rules.minOrderValue > 0 && total < rules.minOrderValue;
@@ -297,6 +318,9 @@ export function PriceTab({
   const overLimit = debt + grandTotal > creditLimit;
   const placing = place.isPending;
   const templates = templatesQ.data ?? [];
+  const margin = useMemo(() => basketMargin(cart, priceQ.data ?? []), [cart, priceQ.data]);
+  // Một dòng thông tin: lãi bán lẻ của giỏ và giỏ đưa doanh số tháng tới đâu so với mốc bậc kế (tiền hàng, không gồm phí giao).
+  const insight = [marginLine(margin, formatVnd), basketTierLine(tierQ.data, total, formatVnd)].filter(Boolean).join(' · ');
 
   const orderControls = (
     <>
@@ -320,6 +344,7 @@ export function PriceTab({
             : `Miễn phí giao (đơn từ ${formatVnd(rules.freeShipThreshold)})`}
         </p>
       )}
+      {insight && <p data-testid="dealer-basket-insight" className="text-xs text-stone-600">{insight}</p>}
       {preorderLines > 0 && <p className="text-xs text-warning-fg">{preorderNote(preorderLines)}</p>}
       {overLimit && (
         <p className="flex items-center gap-1 text-xs text-danger-fg">
@@ -327,7 +352,21 @@ export function PriceTab({
           Vượt hạn mức công nợ — chọn Trả trước hoặc giảm số lượng.
         </p>
       )}
-      <div className="mt-2 flex gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-stone-900">
+          <span className={miniCheckboxWrap}>
+            <input type="checkbox" checked={wantInvoice} disabled={placing} onChange={(e) => toggleInvoice(e.target.checked)} className={miniCheckbox} />
+            <CheckMark />
+          </span>
+          Xuất hoá đơn VAT
+        </label>
+        {wantInvoice && savedInvoice && (
+          <button type="button" className={`${ui.btnText} min-w-0 no-underline`} aria-label="Sửa thông tin hoá đơn VAT" onClick={() => setInvoiceOpen(true)}>
+            <span className="truncate">MST {savedInvoice.taxCode} · Sửa</span>
+          </button>
+        )}
+      </div>
+      <div className="mt-1 flex gap-2">
         {/* Đang đặt giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. */}
         <button
           type="button"
@@ -509,6 +548,16 @@ export function PriceTab({
           </p>
         )}
       </Sheet>
+
+      <DealerInvoiceSheet
+        open={invoiceOpen}
+        onClose={() => setInvoiceOpen(false)}
+        onDone={(n, profile) => {
+          setInvoiceOpen(false);
+          if (profile?.saved) setWantInvoice(true);
+          setNotice(n);
+        }}
+      />
 
       <Sheet
         open={pasteOpen}

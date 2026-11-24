@@ -6,6 +6,8 @@ import { DealerAccountsAdminController, DealerTierAdminController } from './deal
 import { DealerAccountsAdminService } from './dealer-accounts-admin.service';
 import { DealerCron } from './dealer.cron';
 import { DealerBackorderService } from './dealer-backorder.service';
+import { DealerInvoiceController } from './dealer-invoice.controller';
+import { DealerInvoiceService } from './dealer-invoice.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PancakeModule } from '../integrations/pancake/pancake.module';
 
@@ -13,6 +15,7 @@ import { PancakeModule } from '../integrations/pancake/pancake.module';
   imports: [NotificationsModule, PancakeModule],
   controllers: [
     DealerController,
+    DealerInvoiceController,
     DealerAdminController,
     DealerOrderAdminController,
     DealerCreditAdminController,
@@ -20,7 +23,7 @@ import { PancakeModule } from '../integrations/pancake/pancake.module';
     DealerAccountsAdminController,
     DealerTierAdminController,
   ],
-  providers: [DealerService, DealerCron, DealerBackorderService, DealerAccountsAdminService],
+  providers: [DealerService, DealerCron, DealerBackorderService, DealerAccountsAdminService, DealerInvoiceService],
   exports: [DealerService],
 })
 export class DealerModule {}

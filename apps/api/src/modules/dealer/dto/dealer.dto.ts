@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -16,7 +17,7 @@ import {
 } from 'class-validator';
 import { DEFAULT_MAX_DATA_URL_LENGTH, IsUploadedImage } from '../../../common/uploaded-image';
 import type { UploadedImageOptions } from '../../../common/uploaded-image';
-import { TAX_CODE_RE } from '../../checkout/dto/checkout.dto';
+import { InvoiceRequestDto, TAX_CODE_RE } from '../../checkout/dto/checkout.dto';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { trimInvisible } from '../../../common/text-trim';
 
@@ -87,4 +88,23 @@ export class DealerOrderDto {
   @IsOptional() @Trim() @IsString() note?: string;
   /** Địa chỉ nhận trong sổ địa chỉ của đại lý. Bỏ trống → địa chỉ mặc định, rồi tới địa chỉ trong hồ sơ đại lý. */
   @IsOptional() @IsString() addressId?: string;
+  /** Yêu cầu xuất hoá đơn VAT cho đơn này, cùng luật với thanh toán lẻ. */
+  @IsOptional() @ValidateNested() @Type(() => InvoiceRequestDto) invoiceRequest?: InvoiceRequestDto;
+}
+
+/** Số đơn tối đa trong một lần gửi yêu cầu hoá đơn VAT (mỗi đơn là một lệnh ghi có điều kiện). */
+export const DEALER_INVOICE_BATCH_MAX = 50;
+
+/** Gửi yêu cầu hoá đơn VAT cho nhiều đơn đại lý đã đặt, cùng một thông tin xuất hoá đơn. */
+export class DealerInvoiceRequestDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(DEALER_INVOICE_BATCH_MAX)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  orderCodes!: string[];
+
+  @ValidateNested() @Type(() => InvoiceRequestDto) invoice!: InvoiceRequestDto;
+  /** Lưu thông tin này làm mặc định cho lần sau. */
+  @IsOptional() @IsBoolean() save?: boolean;
 }

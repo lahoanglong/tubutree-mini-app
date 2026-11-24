@@ -1,5 +1,6 @@
 import type { OrderDTO } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
+import type { InvoiceRequest } from './checkout';
 
 export type DealerStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
 
@@ -59,19 +60,64 @@ export const getDealerMe = (http: HttpClient) => http.get<DealerMe>('/dealer/me'
 export const applyDealer = (http: HttpClient, data: DealerApplyInput) =>
   http.post('/dealer/apply', data);
 export const getPricelist = (http: HttpClient) => http.get<PricelistRow[]>('/dealer/pricelist');
-/** Đặt đơn đại lý kèm Idempotency-Key (mirror checkout.placeOrder/wallet.withdraw) — double-tap/retry mạng không tạo đơn công nợ đôi. */
+/**
+ * Đặt đơn đại lý kèm Idempotency-Key (mirror checkout.placeOrder/wallet.withdraw) — double-tap/retry mạng không tạo đơn công nợ đôi.
+ * `invoiceRequest` có thì đơn kèm yêu cầu xuất hoá đơn VAT; không có thì thân yêu cầu không có trường này (máy chủ cũ cùng hợp đồng).
+ */
 export const placeDealerOrder = (
   http: HttpClient,
   items: { variationId: string; quantity: number }[],
   paymentMethod: 'CREDIT' | 'PREPAID',
   note?: string,
   idempotencyKey?: string,
+  invoiceRequest?: InvoiceRequest,
 ) =>
     http.post<OrderDTO>(
       '/dealer/orders',
-      { items, paymentMethod, note },
+      { items, paymentMethod, note, ...(invoiceRequest ? { invoiceRequest } : {}) },
       idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
     );
+
+// ── Tiến tới bậc chiết khấu kế tiếp (doanh số tháng) ──
+export interface DealerTierView {
+  id: string;
+  name: string;
+  /** Doanh số tiền hàng một tháng để được xét vào bậc. */
+  minOrderVolume: number;
+  /** Chiết khấu chung của bậc, phần trăm nguyên. */
+  discountPct: number;
+}
+export interface DealerTierProgress {
+  /** Tháng theo giờ VN, "11/2026". */
+  month: string;
+  monthStart: string;
+  monthEnd: string;
+  /** Doanh số tháng ĐÃ CHỐT (đã thanh toán/ghi công nợ + đã đóng gói trở đi), tiền hàng không gồm phí giao. */
+  volume: number;
+  /** Đơn trong tháng còn chờ thanh toán/đóng gói. */
+  pendingVolume: number;
+  currentTier: DealerTierView | null;
+  /** Bậc chiết khấu kế tiếp; null khi đã ở bậc cao nhất hoặc chưa được gán bậc. */
+  nextTier: (DealerTierView & { toGo: number }) | null;
+}
+export const getDealerTierProgress = (http: HttpClient) => http.get<DealerTierProgress>('/dealer/tier-progress');
+
+// ── Hoá đơn VAT của đại lý ──
+/** Thông tin xuất hoá đơn điền sẵn. `saved` = đại lý đã lưu; false = lấy từ hồ sơ đăng ký đại lý (ô có thể trống). */
+export interface DealerInvoiceProfile extends InvoiceRequest {
+  saved: boolean;
+}
+export interface DealerInvoiceRequestResult {
+  requested: string[];
+  skipped: { code: string; reason: string }[];
+  profile: DealerInvoiceProfile | null;
+}
+export const getDealerInvoiceProfile = (http: HttpClient) => http.get<DealerInvoiceProfile>('/dealer/invoice-profile');
+export const saveDealerInvoiceProfile = (http: HttpClient, invoice: InvoiceRequest) =>
+  http.put<DealerInvoiceProfile>('/dealer/invoice-profile', invoice);
+/** Gửi yêu cầu hoá đơn VAT cho nhiều đơn đã đặt; `save` lưu thông tin làm mặc định cho lần sau. */
+export const requestDealerInvoices = (http: HttpClient, orderCodes: string[], invoice: InvoiceRequest, save: boolean) =>
+  http.post<DealerInvoiceRequestResult>('/dealer/orders/invoice-request', { orderCodes, invoice, save });
 export const getDealerOrders = (http: HttpClient) => http.get<OrderDTO[]>('/dealer/orders');
 export const getCreditLedger = (http: HttpClient) =>
   http.get<{ balance: number; entries: CreditEntry[] }>('/dealer/credit-ledger');
