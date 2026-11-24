@@ -43,7 +43,11 @@ function build(order: Record<string, unknown> = {}, opts: { configured?: boolean
       updateMany,
     },
     variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', weight: 1200 }]) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn(),
   };
+  // Ghi mã vận đơn chạy trong transaction có khoá chung với markPaid: tx là chính prisma giả, nên updateMany vẫn là một mock.
+  prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma));
   const client = {
     isConfigured: jest.fn().mockResolvedValue(opts.configured ?? true),
     isRecyclingEnabled: jest.fn().mockResolvedValue(true),
@@ -165,6 +169,52 @@ describe('GomdonOrderService.pushOrder', () => {
     });
     expect(persist.data.shippingHistory).toHaveLength(1);
     expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  describe('đơn đổi COD lật về chuyển khoản đã trả chen giữa lúc tạo vận đơn (w29-01)', () => {
+    it('claim chỉ trúng khi cách trả tiền còn như lúc dựng body', async () => {
+      const { svc, updateMany } = build();
+      await svc.pushOrder('o1');
+      expect(updateMany.mock.calls[0][0].where).toMatchObject({ paymentMethod: 'COD', paymentStatus: 'UNPAID' });
+    });
+
+    it('tiền vừa về trước lúc claim: claim hụt → dựng lại từ đơn mới, vận đơn thu hộ 0đ, không báo', async () => {
+      const { svc, prisma, client, alerts, updateMany } = build();
+      const paid = { ...baseOrder, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' };
+      prisma.order.findUniqueOrThrow.mockResolvedValueOnce({ ...baseOrder }).mockResolvedValue(paid);
+      prisma.order.findUnique.mockResolvedValue(paid);
+      updateMany.mockResolvedValueOnce({ count: 0 });
+      expect(await svc.pushOrder('o1')).toBe('BE77');
+      expect(client.createOrder).toHaveBeenCalledTimes(1);
+      expect(client.createOrder.mock.calls[0][0].collect_amount).toBe(0);
+      expect(updateMany.mock.calls[1][0].where).toMatchObject({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+      expect(alerts.alert).not.toHaveBeenCalled();
+    });
+
+    it('claim hụt vì lý do khác (cách trả tiền không đổi) → bỏ qua như cũ, không dựng lại', async () => {
+      const { svc, prisma, client, updateMany } = build();
+      updateMany.mockResolvedValueOnce({ count: 0 });
+      expect(await svc.pushOrder('o1')).toBeNull();
+      expect(prisma.order.findUniqueOrThrow).toHaveBeenCalledTimes(1);
+      expect(client.createOrder).not.toHaveBeenCalled();
+    });
+
+    it('tiền về sau claim, trước lúc ghi mã: ghi mã dưới khoá chung thấy đơn đã PAID → báo sửa thu hộ về 0đ kèm mã vận đơn', async () => {
+      const { svc, prisma, alerts } = build();
+      prisma.order.findUnique.mockImplementation(async (args: { select?: Record<string, boolean> }) =>
+        args?.select?.paymentStatus && !args.select.status ? { paymentStatus: 'PAID' } : { ...baseOrder, paymentStatus: 'PAID' },
+      );
+      expect(await svc.pushOrder('o1')).toBe('BE77');
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+      expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('vận đơn Gomdon BE77 còn thu hộ. Sửa tiền thu hộ về 0đ'), 'OPS_GOMDON_ALERT');
+    });
+
+    it('đơn đã trả từ đầu (thu hộ 0đ) mà lúc ghi mã đơn PAID → không báo gì', async () => {
+      const { svc, prisma, alerts } = build({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+      prisma.order.findUnique.mockResolvedValue({ ...baseOrder, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+      expect(await svc.pushOrder('o1')).toBe('BE77');
+      expect(alerts.alert).not.toHaveBeenCalled();
+    });
   });
 
   it('body tạo đơn đúng hợp đồng tài liệu: đủ và chỉ các trường đã mô tả, đơn vị gram/mm/VND', async () => {
@@ -466,7 +516,8 @@ describe('GomdonOrderService.pushOrder', () => {
 
   it('đơn bị huỷ TRONG LÚC tạo vận đơn → vẫn lưu mã + enqueue huỷ vận đơn, không đẩy Pancake', async () => {
     const { svc, prisma, queue, pancake } = build();
-    prisma.order.findUnique.mockResolvedValueOnce({ status: 'CANCELLED', pancakeOrderId: null });
+    // Lần đọc đầu là cách trả tiền lúc ghi mã (dưới khoá chung với markPaid), lần sau là trạng thái đơn sau khi ghi.
+    prisma.order.findUnique.mockResolvedValueOnce({ paymentStatus: 'UNPAID' }).mockResolvedValueOnce({ status: 'CANCELLED', pancakeOrderId: null });
     expect(await svc.pushOrder('o1')).toBe('BE77');
     expect(queue.add).toHaveBeenCalledWith('cancel', { orderId: 'o1' }, expect.objectContaining({ jobId: 'cancel-o1' }));
     expect(pancake.enqueuePush).not.toHaveBeenCalled();

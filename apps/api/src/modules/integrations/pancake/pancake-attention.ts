@@ -14,6 +14,11 @@ export const ATTENTION_COD_SWITCH_PENDING = 'Khách đã đổi sang COD nhưng 
 /** Đơn đã đổi sang COD, hàng đã rời kho, rồi Pancake ghi nhận tiền chuyển khoản: có thể khách trả hai lần (chuyển khoản + COD). */
 export const ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER = 'Đơn đã đổi sang COD và đã giao vận chuyển nhưng khách vẫn chuyển khoản';
 /**
+ * Dấu bền trong lịch sử đơn cho lời nhắc trên, mỗi số tiền một lần: Pancake gửi lại cờ "đã trả" ở mọi webhook sau đó, mà ô "Cần xử lý" bị bấm "Đã xử lý"
+ * xoá thì không còn gì chặn nhắc lại.
+ */
+export const PANCAKE_COD_SWITCH_PAID_NOTE = 'Pancake báo đã trả sau bàn giao cho đơn đã đổi sang COD';
+/**
  * Đơn đã đổi sang COD, đã lên kho Pancake (ghi chú "THU COD"), rồi tiền chuyển khoản về trước bàn giao: đơn trở lại trả trước, nhưng vận đơn hãng tạo
  * trong lúc còn COD có thể vẫn thu hộ đủ tiền (cập nhật "đã trả" trên Pancake không chắc sửa được vận đơn đã in).
  */

@@ -60,7 +60,7 @@ import {
 } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
-import { COD_SWITCH_REVERTED_NOTE, beforeHandover, switchedFromTransfer } from './cod-switch';
+import { COD_SWITCH_REVERTED_NOTE, beforeHandover, codCollectAfterRevertMessage, lockCodCollect, switchedFromTransfer } from './cod-switch';
 import { announceDeletedAccountRefund, receivedRefundNote, recordedPancakeUnderpayment, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
@@ -816,6 +816,7 @@ export class OrderStatusService {
 
       const toStatus = order.status === 'PENDING_PAYMENT' ? 'CONFIRMED' : order.status;
       const won = await this.prisma.$transaction(async (tx) => {
+        if (revertCodSwitch) await lockCodCollect(tx, order.id);
         if (opts.bankRef) await assertBankRefUnusedByOrder(tx, opts.bankRef, order.id);
         // paidAt (cột) và occurredAt (event) dùng chung một mốc.
         const paidAt = new Date();
@@ -852,14 +853,23 @@ export class OrderStatusService {
             props: { orderId: order.id, method: revertCodSwitch ? 'BANK_TRANSFER' : order.paymentMethod, amount: order.total },
           });
         }
-        return true;
+        // Lật về chuyển khoản đã trả: đọc vận đơn SAU câu lật, dưới khoá chung với lần ghi vận đơn Gomdon (lockCodCollect). Ảnh chụp `order` đọc trước
+        // transaction có thể chưa thấy vận đơn job Gomdon vừa ghi. Vận đơn ghi trước thì bên này báo; ghi sau thì job Gomdon thấy đơn đã trả và tự báo.
+        const waybill = revertCodSwitch
+          ? await tx.order.findUnique({
+              where: { id: order.id },
+              select: { gomdonOrderId: true, gomdonPartnerCode: true, pancakeOrderId: true, shippingCode: true },
+            })
+          : null;
+        return { waybill };
       });
       if (!won) continue;
 
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
       if (revertCodSwitch) {
-        await this.alertGomdonCollectAfterRevert(order);
-        await this.flagWaybillCollectAfterRevert(order);
+        const fresh = { ...order, ...(won.waybill ?? {}) };
+        await this.alertGomdonCollectAfterRevert(fresh);
+        await this.flagWaybillCollectAfterRevert(fresh);
       }
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
@@ -968,12 +978,12 @@ export class OrderStatusService {
    * Đơn thu gom đã đặt bưu tá Gomdon lúc còn COD (thu hộ bằng tổng đơn) rồi tiền chuyển khoản về: vận đơn đã tạo không tự đổi tiền thu hộ, bưu tá sẽ thu
    * lần hai. Báo ở hàng "Cần xử lý thu gom" để kho sửa thu hộ về 0đ trên Gomdon.
    */
-  private async alertGomdonCollectAfterRevert(order: Pick<Order, 'id' | 'code' | 'hasRecyclingPickup' | 'gomdonOrderId' | 'total'>): Promise<void> {
-    if (!order.hasRecyclingPickup || !order.gomdonOrderId) return;
-    await this.opsAlerts().alert(
-      order.code,
-      `Khách đã đổi sang COD rồi vẫn chuyển khoản đủ ${order.total.toLocaleString('vi-VN')}đ: vận đơn Gomdon ${order.gomdonOrderId} còn thu hộ. Sửa tiền thu hộ về 0đ trên Gomdon.`,
-    );
+  private async alertGomdonCollectAfterRevert(
+    order: Pick<Order, 'id' | 'code' | 'hasRecyclingPickup' | 'gomdonOrderId' | 'gomdonPartnerCode' | 'total'>,
+  ): Promise<void> {
+    const waybill = order.gomdonPartnerCode ?? order.gomdonOrderId;
+    if (!order.hasRecyclingPickup || !waybill) return;
+    await this.opsAlerts().alert(order.code, codCollectAfterRevertMessage(order.total, waybill));
   }
 
   /**

@@ -85,6 +85,20 @@ export function codSwitchRefusalMessage(reason: CodSwitchRefusal, codMax: number
   }
 }
 
+/**
+ * Khoá advisory theo đơn, giữ tới hết transaction của `tx`, dùng chung giữa hai bên của một cuộc đua hẹp: lần lật đơn đã đổi COD về lại chuyển khoản đã trả
+ * (OrderStatusService.markPaid) và lần ghi vận đơn Gomdon vừa tạo (GomdonOrderService). Mỗi bên ghi phần của mình rồi đọc phần của bên kia dưới khoá, nên
+ * đúng một bên thấy "đơn đã trả mà vận đơn còn thu hộ" và báo kho sửa thu hộ về 0đ: không bên nào bỏ sót, không báo đôi.
+ */
+export async function lockCodCollect(tx: Pick<Prisma.TransactionClient, '$executeRaw'>, orderId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'order-cod-collect'}), hashtext(${orderId}))`;
+}
+
+/** Lời báo "Cần xử lý thu gom" khi vận đơn Gomdon thu hộ của đơn đã đổi COD mà tiền chuyển khoản về đủ (cùng chữ cho hai bên, báo động chống trùng theo chữ). */
+export function codCollectAfterRevertMessage(total: number, waybill: string): string {
+  return `Khách đã đổi sang COD rồi vẫn chuyển khoản đủ ${total.toLocaleString('vi-VN')}đ: vận đơn Gomdon ${waybill} còn thu hộ. Sửa tiền thu hộ về 0đ trên Gomdon.`;
+}
+
 /** Đơn COD này có từng là chuyển khoản rồi khách đổi không (dấu là dòng lịch sử của lần đổi). */
 export async function switchedFromTransfer(
   prisma: { orderStatusHistory: Pick<Prisma.OrderStatusHistoryDelegate, 'findFirst'> },

@@ -44,7 +44,14 @@ import { enqueuePancakeCancel, enqueuePancakeCodSwitch, enqueuePancakePayment, e
 import { switchedFromTransfer } from '../../orders/cod-switch';
 import { classifyPushError, isPushFailureSettled, keepsPriorKind, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText, type PushErrorKind } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
-import { BULK_RETRY_WHERE, bulkRetryMessage, bulkRetryRefusal, type BulkRetryResult } from './pancake-bulk-retry';
+import {
+  BULK_RETRY_BUDGET_MS,
+  BULK_RETRY_WHERE,
+  bulkRetryMessage,
+  bulkRetryRefusal,
+  bulkRetryUncheckedMessage,
+  type BulkRetryResult,
+} from './pancake-bulk-retry';
 import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_COD_SWITCH_PENDING,
@@ -699,10 +706,16 @@ export class PancakeOrderService {
     const known = await this.prisma.order.findMany({ where: { OR: [{ id: { in: [...ids] } }, { code: { in: [...ids] } }] }, select: { id: true, code: true } });
     const resolve = (ref: string) => known.find((o) => o.id === ref || o.code === ref)?.id ?? ref;
     const seen = new Set<string>();
+    const startedAt = Date.now();
     for (const id of ids) {
       const key = resolve(id);
       if (seen.has(key)) continue;
       seen.add(key);
+      // Trần xét giữa hai đơn (BULK_RETRY_BUDGET_MS): đơn đang xét dở không bị cắt ngang.
+      if (Date.now() - startedAt >= BULK_RETRY_BUDGET_MS) {
+        results.push({ id, ok: false, unchecked: true, message: bulkRetryUncheckedMessage(known.find((o) => o.id === key)?.code ?? id) });
+        continue;
+      }
       try {
         results.push({ id, ok: true, message: (await this.retryPushByAdmin(adminId, id, { bulk: true })).message });
       } catch (err) {

@@ -1,4 +1,5 @@
 import { Controller, Get, Optional, Query, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Transform, Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import type { Response } from 'express';
@@ -21,6 +22,9 @@ import {
   type ReconcileReport,
 } from './pancake-reconcile';
 import { reconcileCsvChunks } from './pancake-reconcile-csv';
+
+/** Số lần xuất CSV đối soát mỗi phút cho một người (đếm theo tài khoản đăng nhập). */
+export const RECONCILE_EXPORT_PER_MINUTE = 6;
 
 export class PancakeReconcileQuery {
   /** Báo lệch khi |tồn cửa hàng − tồn tính từ Pancake| lớn hơn số này. Màn chọn từ vài mốc có sẵn. */
@@ -83,8 +87,10 @@ export class PancakeReconcileController {
   /**
    * File CSV (BOM UTF-8) của MỌI dòng có cờ khớp bộ lọc, không cắt ở trần dòng của bảng, kèm cột "Cách xử lý" theo cờ để đi đếm kho.
    * Cùng quyền với bảng (ADMIN, KHO); không có cột mã Pancake hay cấu hình tích hợp nào. Mỗi lần xuất ghi nhật ký xuất file.
+   * Trần riêng theo người bấm: mỗi lần xuất quét mọi biến thể kho Tubu và không cắt dòng, nặng hơn GET bảng nhiều.
    */
   @AllowStaff('KHO')
+  @Throttle({ default: { ttl: 60_000, limit: RECONCILE_EXPORT_PER_MINUTE } })
   @Get('export')
   async export(@Query() q: PancakeReconcileExportQuery, @Res() res: Response, @CurrentUser('sub') actorId?: string) {
     const minDrift = q.minDrift ?? RECONCILE_DRIFT_DEFAULT;

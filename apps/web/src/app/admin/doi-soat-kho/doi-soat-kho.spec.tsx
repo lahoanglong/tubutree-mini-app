@@ -231,6 +231,24 @@ describe('/admin/doi-soat-kho — tìm SKU/tên và tải CSV (W22-02)', () => {
     }
   });
 
+  it('bấm tải CSV quá trần của API (429): câu tiếng Việt bảo đợi rồi thử lại, không lộ chữ tiếng Anh của throttler', async () => {
+    const m = mockFetch({
+      '/admin/pancake-reconcile/export': { status: 429, body: { statusCode: 429, message: 'ThrottlerException: Too Many Requests' } },
+      '/admin/pancake-reconcile': { body: REPORT },
+    });
+    vi.stubGlobal('fetch', m.fn);
+    const r = render(<StockReconcilePage />);
+    mounted.push(r);
+    await flush(8);
+    click(r.container.querySelector('[data-reconcile-csv]'));
+    await flush(8);
+    const alert = r.container.querySelector('[role="alert"]')!.textContent ?? '';
+    expect(alert).toContain('Không tải được file CSV');
+    expect(alert).toContain('đợi vài giây rồi thử lại');
+    expect(alert).not.toContain('Throttler');
+    expect(r.container.querySelector('[data-sku="NEG"]')).not.toBeNull();
+  });
+
   it('tải CSV lỗi: báo lỗi tiếng Việt, bảng vẫn còn', async () => {
     const m = mockFetch({
       '/admin/pancake-reconcile/export': { status: 403, body: { message: 'Bạn không có quyền.' } },

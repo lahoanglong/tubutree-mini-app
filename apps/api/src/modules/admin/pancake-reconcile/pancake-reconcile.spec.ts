@@ -7,7 +7,13 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { PassThrough } from 'stream';
 import { RECONCILE_VARIATION_SELECT, buildReport, classifyVariation, expectedLocalStock, foldSearch, matchesSearch, type ReconcileVariation } from './pancake-reconcile';
 import { RECONCILE_CSV_HEADERS, RECONCILE_FLAG_LABELS, RECONCILE_TRIAGE, reconcileCsvRow } from './pancake-reconcile-csv';
-import { PancakeReconcileController, PancakeReconcileExportQuery, PancakeReconcileQuery, reconcileFileStamp } from './pancake-reconcile.controller';
+import {
+  PancakeReconcileController,
+  PancakeReconcileExportQuery,
+  PancakeReconcileQuery,
+  RECONCILE_EXPORT_PER_MINUTE,
+  reconcileFileStamp,
+} from './pancake-reconcile.controller';
 
 const SYNC = new Date('2026-11-21T03:00:00Z');
 const HOOK = new Date('2026-11-21T04:30:00Z');
@@ -229,6 +235,14 @@ describe('PancakeReconcileController', () => {
     const found = fakeRes();
     await ctrl.export({ q: 'd30' }, found.res as never, 'admin-1');
     expect(found.body().trim().split('\r\n').slice(1).map((l) => l.split(',')[0])).toEqual(['D300', 'D301', 'D302', 'D303', 'D304']);
+  });
+
+  it('xuất CSV có trần riêng 6 lượt/phút mỗi người (w22-04 MINOR 4); GET bảng không gắn trần riêng', () => {
+    const proto = PancakeReconcileController.prototype;
+    expect(RECONCILE_EXPORT_PER_MINUTE).toBe(6);
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', proto.export)).toBe(RECONCILE_EXPORT_PER_MINUTE);
+    expect(Reflect.getMetadata('THROTTLER:TTLdefault', proto.export)).toBe(60_000);
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', proto.report)).toBeUndefined();
   });
 
   it('từ khoá tối đa 100 ký tự và được cắt khoảng trắng; loại lệch thuộc danh sách', () => {
