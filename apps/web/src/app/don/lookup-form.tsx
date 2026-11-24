@@ -148,17 +148,15 @@ export function GuestOrderLookup({ initialCode }: { initialCode: string }) {
                 </Link>
               </div>
             ) : (
-              <div>
-                <p role="alert" data-testid="guest-lookup-error" className={ui.error}>
-                  {lookupErrorText(lookup.error)}
-                </p>
-                {needsSupport(lookup.error) && lookup.variables && <GuestSupportLink code={lookup.variables.orderCode} className="mt-2" />}
-              </div>
+              <p role="alert" data-testid="guest-lookup-error" className={ui.error}>
+                {lookupErrorText(lookup.error)}
+              </p>
             ))}
           {/* Bận thì aria-disabled + ô chỉ đọc, không `disabled`: Chromium thả focus về body, tra lỗi xong khách phải chạm lại vào ô. */}
           <button type="submit" aria-busy={lookup.isPending || undefined} aria-disabled={busy || undefined} data-testid="guest-lookup-submit" className={`${ui.btnPrimary} w-full`}>
             {busy ? guestCopy('lookupBusy') : guestCopy('lookupSubmit')}
           </button>
+          {lookup.isError && needsSupport(lookup.error) && lookup.variables && <GuestSupportLink code={lookup.variables.orderCode} />}
           <p className="text-caption text-[color:var(--color-text-secondary)]">
             {guestCopy('lookupAccount')}{' '}
             <Link href="/tai-khoan/don-hang" className="inline-flex min-h-11 items-center font-semibold text-[color:var(--color-text-brand)] underline">

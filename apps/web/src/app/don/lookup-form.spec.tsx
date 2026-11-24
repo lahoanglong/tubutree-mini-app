@@ -137,6 +137,8 @@ describe('/don tra cứu đơn đặt không đăng nhập', () => {
     const support = () => r.container.querySelector<HTMLAnchorElement>('[data-testid="guest-support-zalo"]');
     expect(support()?.getAttribute('href')).toBe('https://zalo.me/0899149229');
     expect(support()?.getAttribute('rel')).toBe('noopener noreferrer');
+    const submitBtn = r.container.querySelector('[data-testid="guest-lookup-submit"]')!;
+    expect(submitBtn.compareDocumentPosition(support()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     support()!.addEventListener('click', (e) => e.preventDefault());
     await act(async () => {
       support()!.click();

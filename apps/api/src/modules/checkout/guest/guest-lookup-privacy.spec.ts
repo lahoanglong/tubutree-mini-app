@@ -18,8 +18,8 @@ const ORDER = {
   code: 'TUBU2026112412345',
   userId: 'u-guest',
   status: 'SHIPPING',
-  paymentMethod: 'COD',
-  paymentStatus: 'UNPAID',
+  paymentMethod: 'BANK_TRANSFER',
+  paymentStatus: 'PAID',
   createdAt: new Date('2026-11-24T02:00:00.000Z'),
   updatedAt: new Date('2026-11-25T01:00:00.000Z'),
   deliveredAt: null,
@@ -27,7 +27,7 @@ const ORDER = {
   discount: 0,
   shippingFee: 0,
   total: 240_000,
-  checkoutGroup: null,
+  checkoutGroup: 'grp-1',
   guestPhone: PHONE,
   guestTokenHash: sha(KEY),
   guestIpHash: 'ip-hash-secret',
@@ -43,12 +43,14 @@ const ORDER = {
   },
 };
 
+const SIBLING_ROW = { code: 'TUBU2026112412346', status: 'CONFIRMED', total: 99_000 };
+
 function service() {
   const prisma = {
-    order: { findUnique: jest.fn().mockResolvedValue(ORDER), findMany: jest.fn().mockResolvedValue([]) },
+    order: { findUnique: jest.fn().mockResolvedValue(ORDER), findMany: jest.fn().mockResolvedValue([SIBLING_ROW]) },
     orderStatusHistory: {
       findMany: jest.fn().mockResolvedValue([
-        { fromStatus: null, toStatus: 'CONFIRMED', createdAt: new Date('2026-11-24T02:00:00.000Z') },
+        { fromStatus: 'PENDING_PAYMENT', toStatus: 'CONFIRMED', createdAt: new Date('2026-11-24T02:00:00.000Z') },
         { fromStatus: 'CONFIRMED', toStatus: 'SHIPPING', createdAt: new Date('2026-11-25T01:00:00.000Z') },
       ]),
     },
@@ -63,7 +65,7 @@ function service() {
   const config = { get: jest.fn(async (_key: string, fallback: unknown) => (_key === 'web.guest_checkout_enabled' ? true : fallback)) };
   const env = { get: jest.fn(() => 'test-jwt-access-secret-test-jwt-access-secret') };
   const none = {} as never;
-  return new GuestCheckoutService(prisma as never, none, none, none, config as never, none, env as never, none);
+  return { svc: new GuestCheckoutService(prisma as never, none, none, none, config as never, none, env as never, none), prisma };
 }
 
 const TRACK_FIELDS = [
@@ -95,8 +97,11 @@ function expectNoPii(view: unknown) {
 
 describe('bản xem đơn khách (/don) không lộ dữ liệu cá nhân', () => {
   it('theo dõi bằng khoá: đúng danh sách trường, SĐT che, chỉ phường và tỉnh; mốc giờ đủ cho Đã đặt, Đã xác nhận, Đang giao', async () => {
-    const view = await service().track(ORDER.code, KEY);
+    const { svc, prisma } = service();
+    const view = await svc.track(ORDER.code, KEY);
     expect(Object.keys(view).sort()).toEqual(TRACK_FIELDS);
+    expect(view.siblings).toEqual([SIBLING_ROW]);
+    expect(prisma.order.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: { code: true, status: true, total: true } }));
     expect(Object.keys(view.items[0]!).sort()).toEqual(['isGift', 'productName', 'quantity', 'total', 'unitPrice', 'variationName']);
     expect(view.phoneMasked).toBe('091****678');
     expect(view.area).toEqual({ ward: 'Trung Hoà', province: 'Hà Nội' });
@@ -106,7 +111,7 @@ describe('bản xem đơn khách (/don) không lộ dữ liệu cá nhân', () =
   });
 
   it('tra bằng mã + SĐT: bản xem cùng danh sách trường, đường dẫn chỉ mang mã và khoá tạm, không mang SĐT', async () => {
-    const res = await service().lookup({ orderCode: ORDER.code, phone: PHONE } as never);
+    const res = await service().svc.lookup({ orderCode: ORDER.code, phone: PHONE } as never);
     expect(Object.keys(res).sort()).toEqual(['bankPath', 'linkExpiresAt', 'order', 'trackPath', 'trackingKey']);
     expect(Object.keys(res.order).sort()).toEqual(TRACK_FIELDS);
     expect(res.trackPath).toBe(`/don/${ORDER.code}#k=${res.trackingKey}`);
@@ -121,10 +126,24 @@ describe('trần tra cứu mã + SĐT giữ nguyên (GUEST_LOOKUP_LIMIT)', () =>
 
   it('10/phút/mã, 30/phút/IP, 10/15 phút/SĐT', () => {
     expect([GUEST_LOOKUP_CODE_LIMIT, GUEST_LOOKUP_IP_LIMIT, GUEST_LOOKUP_PHONE_LIMIT, GUEST_LOOKUP_PHONE_TTL_MS]).toEqual([10, 30, 10, 15 * 60_000]);
-    expect(meta('THROTTLER:LIMITdefault')).toBe(GUEST_LOOKUP_CODE_LIMIT);
-    expect(meta('THROTTLER:LIMITauthIp')).toBe(GUEST_LOOKUP_IP_LIMIT);
-    expect(meta('THROTTLER:LIMITlookupPhone')).toBe(GUEST_LOOKUP_PHONE_LIMIT);
-    expect(meta('THROTTLER:TTLlookupPhone')).toBe(GUEST_LOOKUP_PHONE_TTL_MS);
+    expect([meta('THROTTLER:LIMITdefault'), meta('THROTTLER:TTLdefault')]).toEqual([10, 60_000]);
+    expect([meta('THROTTLER:LIMITauthIp'), meta('THROTTLER:TTLauthIp')]).toEqual([30, 60_000]);
+    expect([meta('THROTTLER:LIMITlookupPhone'), meta('THROTTLER:TTLlookupPhone')]).toEqual([10, 15 * 60_000]);
+  });
+
+  it('trần mã đếm theo mã đã chuẩn hoá (mọi IP chung một bộ đếm), trần SĐT đếm theo SĐT (mọi mã chung một bộ đếm), khoá đã băm', () => {
+    const req = (orderCode: string, phone: string, ip: string) => ({ body: { orderCode, phone }, ip, headers: {}, socket: { remoteAddress: ip } });
+    const byCode = meta('THROTTLER:TRACKERdefault') as (r: unknown) => string;
+    const byPhone = meta('THROTTLER:TRACKERlookupPhone') as (r: unknown) => string;
+    const a = req('TUBU2026112412345', PHONE, '1.1.1.1');
+    const sameCodeOtherIp = req(' tubu2026112412345 ', '0987654321', '2.2.2.2');
+    const otherCodeSamePhone = req('TUBU2026112499999', PHONE, '3.3.3.3');
+    expect(byCode(sameCodeOtherIp)).toBe(byCode(a));
+    expect(byCode(otherCodeSamePhone)).not.toBe(byCode(a));
+    expect(byPhone(otherCodeSamePhone)).toBe(byPhone(a));
+    expect(byPhone(sameCodeOtherIp)).not.toBe(byPhone(a));
+    expect(byCode(a)).not.toContain('TUBU');
+    expect(byPhone(a)).not.toContain(PHONE);
   });
 
   it('chạm trần: 429 mang mã GUEST_LOOKUP_LIMIT và câu tiếng Việt có số phút', () => {
