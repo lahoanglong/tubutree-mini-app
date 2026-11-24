@@ -537,9 +537,9 @@ export interface CommandCenterBucket {
  */
 export interface CommandCenterSummary {
   generatedAt: string;
-  ordersToday: { total: number; paid: CommandCenterBucket; bankTransferUnpaid: CommandCenterBucket; cod: CommandCenterBucket; cancelled: CommandCenterBucket; other: CommandCenterBucket };
+  ordersToday: { total: number } & Record<'paid' | 'bankTransferUnpaid' | 'cod' | 'merchantCod' | 'cancelled' | 'pilot' | 'other', CommandCenterBucket>;
   lowStock: { threshold: number; count: number; outOfStock: number; items: { sku: string; productName: string; variationName: string; stock: number }[] };
-  ctvPayouts: { approvedAmount: number; approvedCtvs: number; holdingAmount: number; pendingAmount: number; autoWalletTransfer: boolean };
+  ctvPayouts: { approvedAmount: number; approvedCtvs: number; holdingAmount: number; pendingAmount: number; withdrawingAmount: number; autoWalletTransfer: boolean };
 }
 export const getCommandCenter = () => apiFetch<CommandCenterSummary>('/admin/dashboard/command-center');
 export const getDashboardStats = () =>
