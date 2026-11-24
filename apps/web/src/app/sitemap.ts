@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { MATCHER_PATH } from '@tubutree/app-core/game-mini/matcher';
+import { getMatcherStatus, matcherOn } from '@tubutree/app-core/game-mini/matcher-status';
 import { fetchRefillLanding, REFILL_LANDING_PATH, refillLandingRows } from '@tubutree/app-core/refill/refill-landing';
 import { NOINDEX_PUBLIC_PATHS, SITE_URL } from '@/lib/site';
 import { publicStaticRoutes } from '@/lib/route-map';
@@ -89,6 +91,20 @@ async function refillLandingIndexed(): Promise<boolean> {
 }
 
 /**
+ * "Chọn Chuẩn Xanh" chỉ được lập chỉ mục khi cờ `game.matcher_enabled` bật (cùng luật noindex trong generateMetadata của trang): nộp một URL noindex là lỗi
+ * "Submitted URL marked noindex" ở Search Console. Lúc build API chưa chạy, và 404 là API bản cũ chưa có endpoint: không nộp. Lỗi tạm lúc chạy thì ném như mọi
+ * danh sách khác để Next giữ bản đầy đủ lần trước.
+ */
+async function matcherIndexed(): Promise<boolean> {
+  try {
+    return matcherOn(await getMatcherStatus(createServerHttp({ revalidate })));
+  } catch (err) {
+    if (err instanceof ApiNotFoundError || process.env.NEXT_PHASE === 'phase-production-build') return false;
+    throw err;
+  }
+}
+
+/**
  * Trang chính sách có nội dung đã duyệt (cùng quy tắc với generateMetadata của /chinh-sach/[loai]: `content === null` thì trang noindex nên không nộp).
  * Lúc `next build` dùng đúng lối thoát của getProducts/getBrands: API trả lời thì nộp ngay cả 5 trang (sitemap đủ URL từ lúc deploy, không chờ
  * `revalidate` 1 giờ); API chưa lên (ApiUnavailableError) thì bỏ riêng trang đó thay vì làm hỏng bản build. Lúc chạy lỗi vẫn nổi lên để Next giữ bản trước.
@@ -121,11 +137,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
   const routes = publicStaticRoutes();
   const refillOn = routes.includes(REFILL_LANDING_PATH.web) && (await refillLandingIndexed());
+  const matcherIndexOn = routes.includes(MATCHER_PATH) && (await matcherIndexed());
   for (const route of routes) {
     if (route === '/' || NOINDEX_PUBLIC_PATHS.includes(route)) continue;
     // Cùng cờ với robots noindex của layout /hoan-tien: không nộp URL mà chính trang đánh dấu noindex.
     if (route === '/hoan-tien' && !CASHBACK_ENABLED) continue;
     if (route === REFILL_LANDING_PATH.web && !refillOn) continue;
+    if (route === MATCHER_PATH && !matcherIndexOn) continue;
     base.push({ url: `${SITE_URL}${route}`, changeFrequency: 'weekly', priority: 0.6 });
   }
   // Không bắt lỗi: nếu nuốt lỗi rồi trả sitemap rút gọn thì ISR sẽ giữ bản thiếu cả giờ; để lỗi nổi lên

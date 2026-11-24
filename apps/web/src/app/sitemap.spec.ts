@@ -160,6 +160,46 @@ describe('sitemap', () => {
     }
   });
 
+  it('/vuon-xanh/chon-chuan-xanh chỉ vào sitemap khi cờ game.matcher_enabled bật (cùng luật noindex của trang)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    const routes = actual.publicStaticRoutes();
+    expect(routes).toContain('/vuon-xanh/chon-chuan-xanh');
+    const status = (body: unknown) => (path: string) => Promise.resolve(path === '/game/matcher/status' ? body : []);
+
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(routes);
+    http.get.mockImplementation(status({ enabled: true }));
+    expect(entryOf(await sitemap(), '/vuon-xanh/chon-chuan-xanh')).toMatchObject({ url: 'https://app.tubutree.com/vuon-xanh/chon-chuan-xanh', changeFrequency: 'weekly', priority: 0.6 });
+    expect(http.get).toHaveBeenCalledWith('/game/matcher/status');
+
+    for (const body of [{ enabled: false }, {}, null]) {
+      routeMocks.publicStaticRoutes.mockReturnValueOnce(routes);
+      http.get.mockImplementation(status(body));
+      expect(entryOf(await sitemap(), '/vuon-xanh/chon-chuan-xanh')).toBeUndefined();
+    }
+  });
+
+  it('/vuon-xanh/chon-chuan-xanh: lỗi lúc build hay 404 (API cũ) thì không nộp, lỗi tạm lúc chạy thì ném (Next giữ bản trước)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    const PATH = '/game/matcher/status';
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+    http.get.mockImplementation((path: string) => (path === PATH ? Promise.reject(new ApiNotFoundError(PATH)) : Promise.resolve([])));
+    expect(entryOf(await sitemap(), '/vuon-xanh/chon-chuan-xanh')).toBeUndefined();
+    const fail = (path: string) => (path === PATH ? Promise.reject(new ApiUnavailableError(PATH, 503)) : Promise.resolve([]));
+    const prev = process.env.NEXT_PHASE;
+    try {
+      process.env.NEXT_PHASE = 'phase-production-build';
+      routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+      http.get.mockImplementation(fail);
+      expect(entryOf(await sitemap(), '/vuon-xanh/chon-chuan-xanh')).toBeUndefined();
+      delete process.env.NEXT_PHASE;
+      routeMocks.publicStaticRoutes.mockReturnValueOnce(actual.publicStaticRoutes());
+      await expect(sitemap()).rejects.toThrow('không sẵn sàng');
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PHASE;
+      else process.env.NEXT_PHASE = prev;
+    }
+  });
+
   it('/hoan-tien chỉ vào sitemap khi CASHBACK_ENABLED bật, vì trang đang noindex khi cờ tắt', async () => {
     routeMocks.publicStaticRoutes.mockReturnValue(['/', '/hoan-tien']);
     try {
