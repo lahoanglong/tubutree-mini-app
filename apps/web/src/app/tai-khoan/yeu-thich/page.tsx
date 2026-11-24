@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { restockWatchIndex, wishlistFilterView, wishlistRestockView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -48,6 +48,26 @@ export default function WishlistPage() {
   const [filter, setFilter] = useState<WishlistFilterKey>('all');
   // Danh sách về rỗng thì bộ lọc về Tất cả: khi có món lại (quay lại trang) trang không mở ở bộ lọc cũ.
   if (wishQ.data && wishQ.data.length === 0 && filter !== 'all') setFilter('all');
+
+  // Huỷ chờ một món ở chip "Chờ hàng về" làm thẻ rời lưới ngay (vẽ lạc quan), kéo theo chuông đang giữ focus bàn phím (focus rơi về `body`).
+  // Ghi đích lúc chạm; sau lần vẽ mà thẻ đã rời lưới thì đưa focus sang chuông của thẻ kế (hoặc thẻ trước). Huỷ món cuối thì chip mất, bộ lọc
+  // về Tất cả: focus về chip đang chọn của thanh lọc.
+  const focusAfterCancel = useRef<{ goneId: string; nextId: string | null; groupAria: string } | null>(null);
+  useEffect(() => {
+    const want = focusAfterCancel.current;
+    if (!want) return;
+    const bellOf = (id: string) =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-restock-bell]')).find((b) => b.getAttribute('data-restock-bell') === id) ?? null;
+    const stillFiltered = filter === 'restock';
+    const goneBell = bellOf(want.goneId);
+    if (stillFiltered && goneBell) return;
+    focusAfterCancel.current = null;
+    // Chỉ cứu focus đã mất hoặc còn nằm trên chuông vừa huỷ: người dùng đã sang chỗ khác thì không kéo về.
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== goneBell) return;
+    const next = stillFiltered && want.nextId ? bellOf(want.nextId) : null;
+    (next ?? document.querySelector<HTMLElement>(`[role="region"][aria-label="${want.groupAria}"] button[aria-pressed="true"]`))?.focus();
+  });
 
   if (phase === 'loading') {
     return (
@@ -120,7 +140,23 @@ export default function WishlistPage() {
                 if (p.inStock !== false) return buttonFor(p);
                 const view = wishlistRestockView(p, restockQ.data, watch);
                 if (view.kind === 'none') return null;
-                return <RestockBellButton name={p.name} on={view.kind === 'waiting'} busy={restock.busy.has(p.id)} onPress={() => restock.press(p.id, view)} />;
+                return (
+                  <RestockBellButton
+                    productId={p.id}
+                    name={p.name}
+                    on={view.kind === 'waiting'}
+                    busy={restock.busy.has(p.id)}
+                    onPress={() => {
+                      // Chỉ khi chuông đang giữ focus (bàn phím, hoặc trình duyệt focus nút khi bấm): bấm chuột ở Safari không focus nút.
+                      if (filterView.active === 'restock' && view.kind === 'waiting' && document.activeElement?.getAttribute('data-restock-bell') === p.id) {
+                        const ids = filterView.items.map((x) => x.id);
+                        const at = ids.indexOf(p.id);
+                        focusAfterCancel.current = { goneId: p.id, nextId: ids[at + 1] ?? ids[at - 1] ?? null, groupAria: filterView.groupAria };
+                      }
+                      restock.press(p.id, view);
+                    }}
+                  />
+                );
               }}
             />
           )}

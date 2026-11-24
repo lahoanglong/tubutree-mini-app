@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -39,6 +39,9 @@ export function useMyRestockAlerts(enabled: boolean) {
 export function useRestockToggle(notify: (n: { ok: boolean; text: string }) => void) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  // Số lệnh chuông chưa có trả lời của máy chủ. Không dùng `isMutating`: lệnh đang chờ tải lại cũng được đếm, nên lệnh xong sau sẽ bỏ
+  // qua lần tải lại mà bản tải của lệnh kia đã gửi trước khi máy chủ ghi thay đổi của nó.
+  const unanswered = useRef(0);
   const mark = (productId: string, on: boolean) =>
     setBusy((cur) => {
       const next = new Set(cur);
@@ -54,6 +57,7 @@ export function useRestockToggle(notify: (n: { ok: boolean; text: string }) => v
         else await Promise.all(view.variationIds.map((id) => unsubscribeRestock(coreHttp, id)));
       },
       onMutate: async ({ productId, view }: Toggle) => {
+        unanswered.current += 1;
         mark(productId, true);
         await qc.cancelQueries({ queryKey: myRestockAlertsKey });
         const prev = qc.getQueryData<MyRestockAlerts>(myRestockAlertsKey);
@@ -72,11 +76,15 @@ export function useRestockToggle(notify: (n: { ok: boolean; text: string }) => v
         if (serverRejectedState(e)) void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
       },
       // Khoá chạm giữ tới khi tải lại xong: nhả trạng thái bận cùng lúc để chuông không trông bấm được mà chạm bị nuốt.
-      onSettled: (_d, _e, { productId }) =>
-        Promise.all([
-          qc.invalidateQueries({ queryKey: myRestockAlertsKey }),
+      // Danh sách đăng ký chỉ tải lại khi không còn lệnh chuông nào chờ máy chủ: bản tải về lúc thẻ khác còn đang bay chưa có thay đổi
+      // của thẻ đó và vẽ đè nó về trạng thái cũ (nhấp nháy). Lệnh trả lời sau cùng tải lại cho cả nhóm.
+      onSettled: (_d, _e, { productId }) => {
+        unanswered.current -= 1;
+        return Promise.all([
+          unanswered.current === 0 ? qc.invalidateQueries({ queryKey: myRestockAlertsKey }) : undefined,
           qc.invalidateQueries({ queryKey: ['restock-alerts', productId] }),
-        ]).finally(() => mark(productId, false)),
+        ]).finally(() => mark(productId, false));
+      },
     },
     ({ productId }) => productId,
   );
@@ -89,10 +97,23 @@ export function useRestockToggle(notify: (n: { ok: boolean; text: string }) => v
  * Công tắc `aria-pressed`, tên đọc giữ nguyên ở hai trạng thái; đang chờ thì vòng tô màu chính và chuông đặc. Bận thì `aria-disabled` (không
  * `disabled` kẻo rớt focus).
  */
-export function RestockBellButton({ name, on, busy, onPress }: { name: string; on: boolean; busy: boolean; onPress: () => void }) {
+export function RestockBellButton({
+  productId,
+  name,
+  on,
+  busy,
+  onPress,
+}: {
+  productId: string;
+  name: string;
+  on: boolean;
+  busy: boolean;
+  onPress: () => void;
+}) {
   return (
     <button
       type="button"
+      data-restock-bell={productId}
       aria-label={fillCopy('wishlist.restock.bell', { name })}
       aria-pressed={on}
       aria-busy={busy || undefined}

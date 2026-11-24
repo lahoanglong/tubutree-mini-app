@@ -133,6 +133,94 @@ describe('Yêu thích Mini: báo hàng về trên thẻ hết hàng (w24-03)', (
     expect(screen.getAllByTestId('product-card')).toHaveLength(3);
   });
 
+  // Lệnh xong trước không được tải lại danh sách khi lệnh kia chưa có trả lời: bản tải về chưa có thay đổi của thẻ kia và vẽ đè nó về trạng thái cũ.
+  it.each([
+    ['huỷ (Dầu gội) trả lời trước', 'del'],
+    ['đăng ký (Nước giặt) trả lời trước', 'post'],
+  ] as const)('chạm hai chuông sát nhau, %s: thẻ kia không nhấp nháy; tải lại một lần sau lệnh cuối', async (_label, first) => {
+    const pending: Record<'del' | 'post', () => void> = { del: () => undefined, post: () => undefined };
+    mocks.del.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          pending.del = () => {
+            server.items = server.items.filter((a) => a.variationId !== 'vC');
+            r({ variationId: 'vC', subscribed: false });
+          };
+        }),
+    );
+    mocks.post.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          pending.post = () => {
+            server.items.push(alert('d', 'vD'));
+            r({ variationId: 'vD', subscribed: true });
+          };
+        }),
+    );
+    renderPage();
+    await screen.findByTestId('note');
+    fireEvent.click(bell('Dầu gội'));
+    fireEvent.click(bell('Nước giặt'));
+    await waitFor(() => expect(bell('Nước giặt')).toHaveAttribute('aria-pressed', 'true'));
+    expect(bell('Dầu gội')).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() => expect(mocks.del).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+    const gets = mocks.get.mock.calls.length;
+
+    pending[first]();
+    await waitFor(() => expect(bell(first === 'del' ? 'Dầu gội' : 'Nước giặt')).not.toHaveAttribute('aria-busy'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(bell('Dầu gội')).toHaveAttribute('aria-pressed', 'false');
+    expect(bell('Nước giặt')).toHaveAttribute('aria-pressed', 'true');
+    expect(mocks.get.mock.calls.length).toBe(gets);
+
+    pending[first === 'del' ? 'post' : 'del']();
+    await waitFor(() => expect(mocks.get.mock.calls.length).toBe(gets + 1));
+    await waitFor(() => expect(bell('Nước giặt')).not.toHaveAttribute('aria-busy'));
+    expect(bell('Dầu gội')).toHaveAttribute('aria-pressed', 'false');
+    expect(bell('Nước giặt')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  describe('focus bàn phím khi huỷ trong chip "Chờ hàng về"', () => {
+    const shownIds = () => screen.getAllByTestId('product-card').map((n) => n.getAttribute('data-id'));
+
+    it('huỷ món không phải cuối: thẻ rời lưới, focus sang chuông của thẻ kế', async () => {
+      server.items = [alert('c', 'vC'), alert('d', 'vD')];
+      renderPage();
+      await screen.findAllByTestId('note');
+      fireEvent.click(chip('Chờ hàng về')!);
+      expect(shownIds()).toEqual(['c', 'd']);
+      bell('Dầu gội').focus();
+      fireEvent.click(bell('Dầu gội'));
+      await waitFor(() => expect(shownIds()).toEqual(['d']));
+      await waitFor(() => expect(document.activeElement).toBe(bell('Nước giặt')));
+    });
+
+    it('huỷ món chờ cuối cùng: chip mất, bộ lọc về Tất cả và focus nằm ở chip Tất cả của thanh lọc', async () => {
+      renderPage();
+      await screen.findByTestId('note');
+      fireEvent.click(chip('Chờ hàng về')!);
+      bell('Dầu gội').focus();
+      fireEvent.click(bell('Dầu gội'));
+      await waitFor(() => expect(chip('Chờ hàng về')).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(chip('Tất cả')));
+      expect(chip('Tất cả')).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('chuông không giữ focus lúc chạm: không kéo focus khỏi chỗ người dùng đang đứng', async () => {
+      server.items = [alert('c', 'vC'), alert('d', 'vD')];
+      renderPage();
+      await screen.findAllByTestId('note');
+      fireEvent.click(chip('Chờ hàng về')!);
+      const all = chip('Tất cả')!;
+      all.focus();
+      fireEvent.click(bell('Dầu gội'));
+      await waitFor(() => expect(shownIds()).toEqual(['d']));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(document.activeElement).toBe(all);
+    });
+  });
+
   it('chạm đúp cùng một chuông chỉ gửi một lệnh', async () => {
     let release!: () => void;
     mocks.post.mockImplementationOnce(() => new Promise((r) => (release = () => r({ variationId: 'vD', subscribed: true }))));
