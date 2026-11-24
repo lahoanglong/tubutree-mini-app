@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ClipboardEvent } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickLastGeo, recallLastGeo, rememberLastGeo } from '@tubutree/app-core/address-geo-memory';
+import { fillPastedText, matchPastedWard, parseAddressPaste, type PasteTextField } from '@tubutree/app-core/address-paste';
 import { parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
+import { getCommunes, getProvinces, type GeoOption } from '@/lib/geo-client';
 import {
   RECIPIENT_MAX,
   STREET_MAX,
@@ -71,6 +74,11 @@ export function AddressForm({
   const [focusTick, setFocusTick] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
+  // Ô khách đã tự gõ/chọn: khối địa chỉ dán vào không đè. Ô app điền sẵn (tên, SĐT hồ sơ, tỉnh/phường lần trước) thì đè được.
+  const edited = useRef(new Set<PasteTextField | 'geo'>(initial ? ['recipient', 'phone', 'street', 'geo'] : []));
+  const latest = useRef({ form, geo });
+  latest.current = { form, geo };
+  const [pasteNote, setPasteNote] = useState('');
 
   // Khoá đồng bộ: `save.isPending` chỉ đúng sau lần vẽ kế, hai cú gửi form sát nhau (bấm đúp, Enter giữ phím) sẽ tạo hai địa chỉ.
   const savingRef = useRef(false);
@@ -110,6 +118,51 @@ export function AddressForm({
     setGeo((g) => (g.provinceCode ? g : (pickLastGeo(queryClient.getQueryData<AddressDTO[]>(['addresses'])) ?? g)));
   }, [initial, meQ.data, queryClient]);
 
+  const editField = (k: PasteTextField, v: string) => {
+    edited.current.add(k);
+    setForm((f) => ({ ...f, [k]: v }));
+  };
+
+  // Điền sau khi có danh mục tỉnh (thường đã có sẵn trong cache của GeoPicker), rồi tải phường của tỉnh đó để khớp phường.
+  const applyPaste = async (text: string, target: PasteTextField | null) => {
+    const provinces = await queryClient
+      .fetchQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity })
+      .catch((): GeoOption[] => []);
+    const paste = parseAddressPaste(text, provinces);
+    if (!paste) return;
+    const canReplace = (k: PasteTextField | 'geo') => k === target || !edited.current.has(k);
+    const { form: curForm, geo: curGeo } = latest.current;
+    const nextForm = fillPastedText(curForm, paste, canReplace);
+    let geoNow = curGeo;
+    if (paste.province && paste.province.code !== curGeo.provinceCode && (!curGeo.provinceCode || canReplace('geo'))) {
+      geoNow = { province: paste.province.name, provinceCode: paste.province.code, ward: '', wardCode: '' };
+      setGeo(geoNow);
+    }
+    if (nextForm !== curForm) setForm(nextForm);
+    const filled = nextForm !== curForm || geoNow !== curGeo;
+    const note = () => setPasteNote(fillCopy('checkout.addressPasteFilled'));
+    if (filled) note();
+    const code = geoNow.provinceCode;
+    if (!paste.ward || !code || (geoNow.wardCode && !canReplace('geo'))) return;
+    const communes = await queryClient
+      .fetchQuery({ queryKey: ['geo-communes', code], queryFn: () => getCommunes(code), staleTime: Infinity })
+      .catch((): GeoOption[] => []);
+    const ward = matchPastedWard(communes, paste.ward);
+    if (!ward) return;
+    setGeo((g) => (g.provinceCode === code && (!g.wardCode || canReplace('geo')) ? { ...g, ward: ward.name, wardCode: ward.code } : g));
+    if (!filled) note();
+  };
+
+  // Chữ dán có dáng một khối địa chỉ (tên + SĐT + đường/tỉnh/phường) thì tách ra các ô; không thì để ô dán như thường. Không tự lưu.
+  const pasteAddress = (target: PasteTextField) => (e: ClipboardEvent<HTMLInputElement>): boolean => {
+    const text = e.clipboardData.getData('text');
+    if (!parseAddressPaste(text, queryClient.getQueryData<GeoOption[]>(['geo-provinces']) ?? [])) return false;
+    e.preventDefault();
+    const el = e.currentTarget;
+    void applyPaste(text, el.selectionStart === 0 && el.selectionEnd === el.value.length ? target : null);
+    return true;
+  };
+
   const all = validateAddress(form, geo);
   const shown = (f: AddressField) => (submitted || touched[f] ? all[f] : undefined);
   const touch = (f: AddressField) => setTouched((t) => (t[f] ? t : { ...t, [f]: true }));
@@ -144,7 +197,8 @@ export function AddressForm({
         maxLength={RECIPIENT_MAX}
         autoComplete="name"
         onBlur={() => touch('recipient')}
-        onChange={(v) => setForm((f) => ({ ...f, recipient: v }))}
+        onChange={(v) => editField('recipient', v)}
+        onPasteAddress={pasteAddress('recipient')}
       />
       <TextField
         label="Số điện thoại"
@@ -162,11 +216,24 @@ export function AddressForm({
             return phone === f.phone ? f : { ...f, phone };
           });
         }}
-        onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+        onChange={(v) => editField('phone', v)}
+        onPasteAddress={pasteAddress('phone')}
         onPasteText={parseVnPhoneInput}
       />
       <div className="space-y-2">
-        <GeoPicker value={geo} onChange={setGeo} errorProvince={shown('province')} errorWard={shown('ward')} />
+        <GeoPicker
+          value={geo}
+          onChange={(g) => {
+            edited.current.add('geo');
+            setGeo(g);
+          }}
+          errorProvince={shown('province')}
+          errorWard={shown('ward')}
+        />
+        {/* Vùng đọc luôn có mặt để trình đọc màn hình bắt được lần đổi chữ đầu tiên; rỗng thì ẩn. */}
+        <p aria-live="polite" className={pasteNote ? 'text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
+          {pasteNote}
+        </p>
       </div>
       <TextField
         label="Số nhà, tên đường"
@@ -175,7 +242,8 @@ export function AddressForm({
         maxLength={STREET_MAX}
         autoComplete="street-address"
         onBlur={() => touch('street')}
-        onChange={(v) => setForm((f) => ({ ...f, street: v }))}
+        onChange={(v) => editField('street', v)}
+        onPasteAddress={pasteAddress('street')}
       />
       {saveError && (
         <p role="alert" className={ui.error}>
@@ -211,6 +279,7 @@ function TextField({
   inputMode,
   tabular,
   onPasteText,
+  onPasteAddress,
 }: {
   label: string;
   value: string;
@@ -224,6 +293,8 @@ function TextField({
   tabular?: boolean;
   /** Chữ dán đổi được thành giá trị chuẩn thì thay cả ô bằng giá trị đó; trả null, hoặc khách đang bôi chọn một phần ô, thì để trình duyệt dán như thường. */
   onPasteText?: (text: string) => string | null;
+  /** Khối địa chỉ dán vào: trả true khi đã tự tách và điền (đã chặn dán mặc định). */
+  onPasteAddress?: (e: ClipboardEvent<HTMLInputElement>) => boolean;
 }) {
   const errorId = useId();
   return (
@@ -235,6 +306,7 @@ function TextField({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           onPaste={(e) => {
+            if (onPasteAddress?.(e)) return;
             // Chỉ khi khách bôi chọn MỘT PHẦN ô thì để trình duyệt chèn vào đúng đoạn chọn (không xoá phần còn lại); ô trống, bôi hết, hay con trỏ không bôi gì thì chữ dán là cả số mới nên thay cả ô.
     const el = e.currentTarget;
     if (el.selectionStart !== el.selectionEnd && !(el.selectionStart === 0 && el.selectionEnd === el.value.length)) return;

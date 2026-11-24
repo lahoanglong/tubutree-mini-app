@@ -527,6 +527,8 @@ export const SHOP_COPY: Record<string, string> = {
   // Mini App: lối xác minh SĐT nằm ngay trên dòng quà (không mở sheet lúc bấm Đặt hàng).
   'checkout.gift.verifyPhone': 'Xác minh ngay',
   'checkout.useZaloPhone': 'Dùng số Zalo của tôi',
+  // Form địa chỉ (Mini App + web): đọc qua aria-live và hiện dưới ô Phường/Xã sau khi dán một khối địa chỉ (address-paste.ts).
+  'checkout.addressPasteFilled': 'Đã điền từ nội dung dán — kiểm lại Phường',
   'cart.giftNote': '🎁 Quà đổi điểm sẽ tự thêm ở bước thanh toán · 0đ',
   'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
   // Giỏ gom món của combo (K5): đầu nhóm, nhắc chọn đủ món, hộp báo trước khi bỏ món làm bộ mất giảm. Nút xác nhận không ghi "Xoá" để khỏi lặp nhãn thùng rác.
