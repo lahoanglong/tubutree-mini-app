@@ -404,6 +404,9 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
       expect(byId.get(inStock.id)).toBe(false);
     } finally {
       await config.set('catalog.restock_alert_enabled', before === true, 'it-w32-02');
+      // Đăng ký chưa báo trên món còn hàng là trạng thái máy thật không tạo ra: để lại thì bộ gửi báo hàng về của spec khác cùng lô
+      // (mss-catalog-sync đếm số tin một lượt gửi) nhặt luôn nó.
+      await prisma.restockAlert.deleteMany({ where: { variationId: { in: [waiting.id, notified.id, othersOnly.id, inStock.id] } } });
     }
   });
 });
