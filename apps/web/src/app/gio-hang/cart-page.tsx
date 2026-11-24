@@ -788,7 +788,7 @@ export default function CartPage() {
               Chọn tất cả
             </label>
             {selectionPriceFailed && (
-              <div key={selectionQ.errorUpdateCount} role="alert" data-testid="cart-selection-error" className="mb-3 flex items-center justify-between gap-2 max-md:mb-1">
+              <div key={selectionQ.errorUpdateCount} role="alert" data-testid="cart-selection-error" className="mb-1 flex items-center justify-between gap-2 md:mb-3">
                 <p className={ui.error}>Chưa tính được giá phần đã chọn.</p>
                 {/* Tên riêng: nhiều nút "Thử lại" trên cùng màn làm nhiều việc khác nhau. */}
                 <button
@@ -796,7 +796,7 @@ export default function CartPage() {
                   onClick={() => void selectionQ.refetch()}
                   aria-busy={selectionQ.isFetching || undefined}
                   aria-label="Thử lại báo giá phần đã chọn"
-                  className={`${ui.btnText} text-forest-700`}
+                  className={`${ui.btnText} text-[var(--color-text-link)]`}
                 >
                   Thử lại
                 </button>
