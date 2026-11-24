@@ -13,6 +13,7 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
+import { cartRefetchOnReturn, soldOutRecovery } from '@tubutree/app-core/cart/sold-out-recovery';
 import { cartGiftThreshold } from '@tubutree/app-core/commerce/cart-progress';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import { cartProgressStrip, comboOnlyDiscount, greenBoxCartHint, greenBoxDiscountOf, greenBoxProgress, readGreenBox } from '@tubutree/app-core/commerce/green-box';
@@ -48,7 +49,7 @@ import { GiftNote, GiftTrialRow } from '@/components/checkout/gift-rows';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
-import { useCartWrite } from '@/lib/use-cart-write';
+import { cartWritesInFlight, useCartWrite } from '@/lib/use-cart-write';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { joinVariationLine, variationLabel } from '@/lib/variation-label';
@@ -166,7 +167,13 @@ export default function CartPage() {
   const phoneCoupon = useMediaQuery('(max-width: 767px)');
   const router = useRouter();
   const cartKeyNow = useCartKey();
-  const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
+  // Quay lại tab sau một lúc vắng: đọc lại giỏ để tồn kho và giá Giờ vàng là số mới (QueryClient của web tắt focus mặc định). Cùng luật với Mini App.
+  const cartQ = useQuery({
+    queryKey: cartKeyNow,
+    queryFn: getCart,
+    enabled: phase === 'authenticated',
+    refetchOnWindowFocus: (q) => cartRefetchOnReturn(q.state.dataUpdatedAt, cartWritesInFlight(queryClient)),
+  });
   // `cart_viewed` một lần mỗi lần mở giỏ, khi dữ liệu giỏ có lần đầu (kể cả bản trong bộ nhớ đệm); tải lại giỏ sau đó không phát thêm.
   const cartViewed = useRef(false);
   useEffect(() => {
@@ -417,6 +424,8 @@ export default function CartPage() {
   // Chỉ chặn theo các dòng đang chọn: bỏ chọn dòng hết hàng thì vẫn thanh toán được phần còn lại.
   const outOfStockSelected = selectedItems.filter((it) => it.stock <= 0);
   const stockBlocked = selectedItems.some((it) => it.stock <= 0 || it.quantity > it.stock);
+  // Món đang chọn hết hàng trong lúc khách vắng mà phần còn lại mua được: nút chính bỏ chọn món hết rồi đi Thanh toán, không khoá cả giỏ (như Mini App).
+  const recovery = soldOutRecovery(selectedItems);
   const toggleAll = () => setDeselected(allSelected ? new Set(allItems.map((it) => it.id)) : new Set());
   // Mỗi nơi giao thành một đơn riêng khi đặt (D4): chia giỏ theo nơi giao để khách thấy trước.
   const groups = groupByFulfiller(allItems);
@@ -465,15 +474,25 @@ export default function CartPage() {
     rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
     markCheckoutEntry(allSelected ? 'cart' : 'cart_subset');
   };
+  // Món hết chỉ bỏ chọn, không xoá: quay lại giỏ vẫn thấy chúng (bỏ chọn) để mua khi có hàng lại. Phần còn lại luôn là một phần giỏ.
+  const onDropSoldOut = () => {
+    if (!recovery) return;
+    setDeselected((prev) => new Set([...prev, ...recovery.soldOutIds]));
+    rememberCheckoutSelection(recovery.keepIds);
+    markCheckoutEntry('cart_subset');
+    router.push('/thanh-toan');
+  };
   // Lý do nút Thanh toán đang khoá (lời giải thích đầy đủ nằm ở khung tóm tắt; thanh dính đáy nhắc lại ngay cạnh nút).
   const payHint =
     selectedItems.length === 0
       ? 'Chọn ít nhất một sản phẩm để thanh toán.'
-      : stockBlocked
-        ? outOfStockSelected.length > 0
-          ? cartOutOfStockBlocked(outOfStockSelected.map((it) => it.productName))
-          : CART_OVER_STOCK_BLOCKED
-        : null;
+      : recovery
+        ? recovery.note
+        : stockBlocked
+          ? outOfStockSelected.length > 0
+            ? cartOutOfStockBlocked(outOfStockSelected.map((it) => it.productName))
+            : CART_OVER_STOCK_BLOCKED
+          : null;
   const showBar = !cartQ.isLoading && !!cart && cart.items.length > 0;
   // Liên kết "Đã có chai? Đổi sang Refill …" theo đúng mốc màn đang hiện (phần đang chọn): đổi làm tụt mốc thì hỏi lại trước.
   const refillViews = refillSwapOffers({
@@ -874,6 +893,15 @@ export default function CartPage() {
                     {payHint}
                   </p>
                 </>
+              ) : recovery ? (
+                <>
+                  <button type="button" onClick={onDropSoldOut} aria-describedby="cart-pay-hint-lg" className={`${ui.btnPrimary} w-full`}>
+                    {recovery.cta}
+                  </button>
+                  <p id="cart-pay-hint-lg" role="status" className="mt-2 text-caption text-warning-fg">
+                    {payHint}
+                  </p>
+                </>
               ) : stockBlocked ? (
                 <>
                   <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
@@ -985,7 +1013,12 @@ export default function CartPage() {
                     </div>
                   )}
                 </div>
-                {payHint ? (
+                {recovery ? (
+                  // Nhãn một chạm dài hơn "Thanh toán (n)": nút xuống hàng riêng dưới tổng và giãn hết bề ngang (như Mini App), không bị cắt chữ.
+                  <button type="button" onClick={onDropSoldOut} aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_100%]`}>
+                    {recovery.cta}
+                  </button>
+                ) : payHint ? (
                   <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
                     Thanh toán ({selectedCount})
                   </button>

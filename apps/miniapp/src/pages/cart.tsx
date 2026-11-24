@@ -10,6 +10,7 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { aovGiftExclusions, aovGiftLockedRowShown, aovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
+import { cartRefetchOnReturn, soldOutRecovery, type SoldOutRecovery } from '@tubutree/app-core/cart/sold-out-recovery';
 import { cartGiftThreshold } from '@tubutree/app-core/commerce/cart-progress';
 import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import {
@@ -209,7 +210,14 @@ export default function CartPage() {
   const phase = useAuthPhase();
 
   const cartKeyNow = useCartKey();
-  const cart = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
+  // Khách quay lại app (visibilitychange) sau một lúc vắng: đọc lại giỏ để tồn kho và giá Giờ vàng là số mới, nút "Bỏ món hết & thanh toán tiếp"
+  // hiện ngay thay vì để khách bấm Thanh toán rồi mới gặp dòng hết hàng. Không đọc khi lệnh sửa giỏ đang bay (cùng luật với web, `cartRefetchOnReturn`).
+  const cart = useQuery({
+    queryKey: cartKeyNow,
+    queryFn: getCart,
+    enabled: phase === 'authenticated',
+    refetchOnWindowFocus: (q) => cartRefetchOnReturn(q.state.dataUpdatedAt, countEdits(queryClient, 0)),
+  });
   // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
   const removedCoupon = useRemovedCoupon(cart.data, formatVnd);
   const [removed, setRemoved] = useState<CartLine | null>(null);
@@ -493,6 +501,8 @@ export default function CartPage() {
   const undoBar = refill.receipt ? { text: fillCopy('refill.swapped'), onUndo: refill.undo } : removed ? { text: vi.cart.removed, onUndo: handleUndo } : null;
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
+  // Món đang chọn hết hàng trong lúc khách vắng mà phần còn lại mua được: nút chính bỏ chọn món hết rồi đi Thanh toán, không khoá cả giỏ.
+  const recovery = soldOutRecovery(selectedItems);
   // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
   const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
   // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
@@ -505,14 +515,25 @@ export default function CartPage() {
     haptic('light');
     setDeselected(allSelected ? new Set(summary.items.map((l) => l.id)) : new Set());
   };
-  const goCheckout = () => {
-    if (selectedItems.length === 0 || overStockSelected || addon.isPending) return;
+  const startCheckout = (lines: readonly CartLine[]) => {
     // null = cố ý thanh toán toàn giỏ. Luôn ghi nhớ để lần tải lại trang thanh toán không
     // âm thầm chuyển từ "1 món đã chọn" sang "cả giỏ".
-    const itemIds = allSelected ? null : selectedItems.map((l) => l.id);
+    const itemIds = lines.length === summary.items.length ? null : lines.map((l) => l.id);
     rememberCheckoutSelection(itemIds);
     setCheckoutEntry(itemIds ? 'cart_subset' : 'cart');
     navigate('/checkout', { state: { itemIds } });
+  };
+  const goCheckout = () => {
+    if (selectedItems.length === 0 || addon.isPending) return;
+    if (recovery) {
+      // Món hết chỉ bỏ chọn, không xoá: quay lại giỏ vẫn thấy chúng (bỏ chọn) để mua khi có hàng lại.
+      const drop = new Set(recovery.soldOutIds);
+      setDeselected((prev) => new Set([...prev, ...drop]));
+      startCheckout(selectedItems.filter((l) => !drop.has(l.id)));
+      return;
+    }
+    if (overStockSelected) return;
+    startCheckout(selectedItems);
   };
 
   return (
@@ -699,6 +720,7 @@ export default function CartPage() {
           priced={priced}
           overStock={overStockSelected}
           outOfStockNames={outOfStockSelected.map((l) => l.productName)}
+          recovery={recovery}
           onCheckout={goCheckout}
           shipBase={selectedItems.some((l) => l.fulfiller?.kind === 'MERCHANT') ? null : tubuSubtotal(buyableSelected)}
           freeshipReached={freeship.reached}
@@ -1215,6 +1237,7 @@ function StickySummary({
   priced,
   overStock,
   outOfStockNames,
+  recovery,
   onCheckout,
   shipBase,
   freeshipReached,
@@ -1240,6 +1263,8 @@ function StickySummary({
   overStock: boolean;
   /** Tên các dòng đang chọn mà tồn bằng 0: nói rõ dòng nào cần bỏ chọn hoặc xoá. */
   outOfStockNames: string[];
+  /** Có thì nút chính là "Bỏ món hết & thanh toán tiếp" (một chạm) thay cho nút Thanh toán bị khoá. */
+  recovery: SoldOutRecovery | null;
   onCheckout: () => void;
   /** Các dòng mua được đang chọn: "Tiết kiệm" = giá gạch của chúng + giảm combo đang hiện (chỉ hiển thị, tiền thật do máy chủ tính). */
   savingLines: readonly CartLine[];
@@ -1267,6 +1292,28 @@ function StickySummary({
   const goodsNet = Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount);
   const { estimate, stale } = useShippingEstimate(selectedCount > 0 ? shipBase : null);
   const ship = cartShippingView(estimate, { goodsNet, freeshipReached, stale });
+  const total = (
+    <>
+      {/* Có phí giao ước tính: "Tổng tạm tính" = tiền hàng đã giảm + phí đó. Chưa có (đang hỏi, lỗi, có hàng gian hàng tự giao): số đã trừ giảm giá,
+          CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán là tiền hàng gộp chưa trừ gì — nên nhãn ghi "(đã giảm)" khi thật sự có giảm (P2-4). */}
+      <div style={{ fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+        {ship?.totalLabel ?? cartTotalLabel(comboDiscount + discount + tierDiscount)}
+      </div>
+      <div
+        data-testid="cart-total-value"
+        style={{ fontSize: 'var(--type-title-md-size)', lineHeight: 'var(--type-title-md-lh)', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+      >
+        {formatVnd(ship?.total ?? goodsNet)}
+      </div>
+      {saving > 0 && (
+        // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md). Được xuống dòng tại khoảng trắng
+        // ("Tiết kiệm" / "12.345.000đ") khi khối tổng hẹp ở 320px; số tiền không có điểm ngắt nên không bao giờ bị cắt giữa số.
+        <Text variant="caption" as="div" data-testid="cart-saving" style={{ lineHeight: 18 / 13, color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block' }}>
+          {fillCopy('cart.saving', { x: formatVnd(saving) })}
+        </Text>
+      )}
+    </>
+  );
 
   return (
     <StickyActionBar
@@ -1299,13 +1346,15 @@ function StickySummary({
           )}
           {removedNotice}
           {outOfStockNames.length > 0 && (
-            <Box flex alignItems="flex-start" role="status" style={{ gap: 4 }}>
+            <Box flex alignItems="flex-start" role="status" data-testid="cart-sold-out-note" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
               <Text variant="caption" tone="warning" as="div" style={{ lineHeight: 18 / 13 }}>
-                {vi.cart.outOfStockBlocked(outOfStockNames)}
+                {recovery ? recovery.note : vi.cart.outOfStockBlocked(outOfStockNames)}
               </Text>
             </Box>
           )}
+          {/* Nhãn một chạm dài hơn "Thanh toán (n)": tổng xuống cuối phần trên để nút chiếm trọn một hàng, không bị rút gọn "…". */}
+          {recovery && <div data-testid="cart-total-row">{total}</div>}
           {overStock && outOfStockNames.length === 0 && (
             <Box flex alignItems="center" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
@@ -1316,31 +1365,10 @@ function StickySummary({
           )}
         </>
       }
-      lead={
-        <>
-          {/* Có phí giao ước tính: "Tổng tạm tính" = tiền hàng đã giảm + phí đó. Chưa có (đang hỏi, lỗi, có hàng gian hàng tự giao): số đã trừ giảm giá,
-              CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán là tiền hàng gộp chưa trừ gì — nên nhãn ghi "(đã giảm)" khi thật sự có giảm (P2-4). */}
-          <div style={{ fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
-            {ship?.totalLabel ?? cartTotalLabel(comboDiscount + discount + tierDiscount)}
-          </div>
-          <div
-            data-testid="cart-total-value"
-            style={{ fontSize: 'var(--type-title-md-size)', lineHeight: 'var(--type-title-md-lh)', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
-          >
-            {formatVnd(ship?.total ?? goodsNet)}
-          </div>
-          {saving > 0 && (
-            // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md). Được xuống dòng tại khoảng trắng
-            // ("Tiết kiệm" / "12.345.000đ") khi khối tổng hẹp ở 320px; số tiền không có điểm ngắt nên không bao giờ bị cắt giữa số.
-            <Text variant="caption" as="div" data-testid="cart-saving" style={{ lineHeight: 18 / 13, color: 'var(--color-text-price-deal)', fontWeight: 600, display: 'block' }}>
-              {fillCopy('cart.saving', { x: formatVnd(saving) })}
-            </Text>
-          )}
-        </>
-      }
+      lead={recovery ? undefined : total}
       primary={
-        <Button fullWidth disabled={selectedCount === 0 || overStock} onPress={onCheckout}>
-          {vi.cart.checkout(selectedCount)}
+        <Button fullWidth disabled={selectedCount === 0 || (overStock && !recovery)} onPress={onCheckout}>
+          {recovery ? recovery.cta : vi.cart.checkout(selectedCount)}
         </Button>
       }
     />

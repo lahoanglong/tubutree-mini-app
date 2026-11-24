@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, focusManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
@@ -15,16 +15,21 @@ const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
   selection: vi.fn<(ids: string[]) => Promise<unknown>>(),
+  push: vi.fn<(href: string) => void>(),
+  cartCalls: 0,
 }));
 // Giỏ trống vẽ EmptyCart (dùng useRouter); không có app router trong jsdom nên thiếu mock này thì giỏ trống làm vỡ cả cây khi test.
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => ({ push: state.push, replace: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
-  getCart: async () => state.cart,
+  getCart: async () => {
+    state.cartCalls += 1;
+    return state.cart;
+  },
   getMyCoupons: async () => state.coupons,
   getCouponPreviews: (p: unknown) => state.previews(p),
   getCartSelection: (ids: string[]) => state.selection(ids),
@@ -186,18 +191,84 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([{ id: 'i1', q: 3 }]);
   });
 
-  it('có dòng hết hàng: nút Thanh toán bị khoá và giải thích phải xoá dòng đó', async () => {
-    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+  it('mọi dòng đang chọn đều hết hàng: nút Thanh toán bị khoá và giải thích phải xoá dòng đó', async () => {
+    state.cart = cartOf([line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const { container } = await mount();
     expect(container.querySelector('a[href="/thanh-toan"]')).toBeNull();
     const pay = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Thanh toán'))!;
     expect(pay.disabled).toBe(true);
     expect(container.textContent).toContain('"Xà phòng" đã hết hàng. Bỏ chọn hoặc xoá sản phẩm này để thanh toán.');
+    expect(container.textContent).not.toContain('Bỏ món hết & thanh toán tiếp');
+  });
+
+  it('tubu-w26-01: dòng hết hàng cạnh dòng mua được: nút một chạm thay nút khoá, bấm thì bỏ chọn dòng hết (không xoá), nhớ phần còn lại và sang /thanh-toan', async () => {
+    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' }), line({ id: 'i3', productName: 'Nước rửa chén' })]);
+    const { container } = await mount();
+    expect(container.querySelector('a[href="/thanh-toan"]')).toBeNull();
+    const ctas = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Bỏ món hết & thanh toán tiếp');
+    // Khung tóm tắt (lg) và thanh dính (dưới lg): CSS chọn một, cả hai đều bấm được.
+    expect(ctas.length).toBeGreaterThan(0);
+    for (const b of ctas) expect(b.disabled).toBe(false);
+    expect(container.textContent).toContain('"Xà phòng" đã hết hàng, được giữ lại trong giỏ.');
+    expect(container.textContent).not.toContain('Bỏ chọn hoặc xoá sản phẩm này để thanh toán.');
+    click(ctas[0]!);
+    await flush(3);
+    expect(recallCheckoutSelection()).toEqual(['i1', 'i3']);
+    expect(state.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(state.removed).toEqual([]);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Chọn Xà phòng để thanh toán"]')!.checked).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Chọn Nước rửa chén để thanh toán"]')!.checked).toBe(true);
+  });
+
+  it('tubu-w26-01: dòng hết hàng mà còn dòng vượt tồn: vẫn khoá (khách tự chọn số lượng), không có nút một chạm', async () => {
+    state.cart = cartOf([line({ quantity: 5, stock: 2 }), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+    const { container } = await mount();
+    expect(container.querySelector('a[href="/thanh-toan"]')).toBeNull();
+    expect(container.textContent).not.toContain('Bỏ món hết & thanh toán tiếp');
+    const pay = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.startsWith('Thanh toán'))!;
+    expect(pay.disabled).toBe(true);
   });
 
   it('giỏ hợp lệ: Thanh toán là liên kết sang /thanh-toan', async () => {
     const { container } = await mount();
     expect(container.querySelector('a[href="/thanh-toan"]')).not.toBeNull();
+  });
+});
+
+describe('/gio-hang — quay lại tab sau một lúc vắng (tubu-w26-01)', () => {
+  beforeEach(() => {
+    state.cart = cartOf([line({}), line({ id: 'i2', productName: 'Xà phòng' })]);
+  });
+
+  const returnAfter = async (ms: number) => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + ms);
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await flush(4);
+    } finally {
+      spy.mockRestore();
+      focusManager.setFocused(undefined);
+    }
+  };
+
+  it('vắng từ 30 giây: đọc lại giỏ, món vừa hết hàng hiện ngay nút "Bỏ món hết & thanh toán tiếp"', async () => {
+    const { container } = await mount();
+    const before = state.cartCalls;
+    expect(container.querySelector('a[href="/thanh-toan"]')).not.toBeNull();
+    state.cart = cartOf([line({}), line({ id: 'i2', productName: 'Xà phòng', stock: 0 })]);
+    await returnAfter(31_000);
+    expect(state.cartCalls).toBe(before + 1);
+    expect(Array.from(container.querySelectorAll('button')).some((b) => b.textContent === 'Bỏ món hết & thanh toán tiếp')).toBe(true);
+  });
+
+  it('vắng chưa tới 30 giây (đổi cửa sổ qua lại): không gọi lại máy chủ', async () => {
+    await mount();
+    const before = state.cartCalls;
+    await returnAfter(5_000);
+    expect(state.cartCalls).toBe(before);
   });
 });
 

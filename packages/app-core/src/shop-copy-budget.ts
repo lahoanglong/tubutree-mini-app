@@ -463,6 +463,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'cart.shipEstimateFree': 10,
   'cart.shipEstimateRange': 24,
   'cart.totalEstimate': 14,
+  'cart.dropSoldOutCta': 28,
+  // Liệt kê tên món hết hàng: dài theo tên.
+  'cart.dropSoldOutNote': null,
   'reorder.qtyReduced': 48,
   'reorder.qtyCapped': 48,
   'reorder.priceUp': 44,

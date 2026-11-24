@@ -65,6 +65,11 @@ function end(qc: QueryClient, cmd: CartCommand) {
 }
 
 /** Chờ mọi lệnh đang bay xong (tối đa `LOCK_REFRESH_WAIT_MS`, quá hạn thì tải luôn) rồi tải lại giỏ; nhiều bên cùng chờ thì dùng chung một lần tải. */
+/** Số lệnh ghi giỏ đang bay trên QueryClient này: quay lại tab không đọc lại giỏ khi còn lệnh bay (`cartRefetchOnReturn`). */
+export function cartWritesInFlight(qc: QueryClient): number {
+  return gates.get(qc)?.live.size ?? 0;
+}
+
 function reload(qc: QueryClient): Promise<void> {
   const gate = gateOf(qc);
   gate.reloading += 1;

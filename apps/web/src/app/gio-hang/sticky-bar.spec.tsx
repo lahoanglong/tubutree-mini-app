@@ -200,11 +200,26 @@ describe('/gio-hang — thanh dính đáy', () => {
   });
 
   it('có dòng hết hàng: nút khoá và thanh dính nói luôn lý do', async () => {
-    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+    state.cart = cartOf([line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const c = await mount();
     expect(bar(c)!.querySelector('a[href="/thanh-toan"]')).toBeNull();
     expect(bar(c)!.querySelector('button')!.disabled).toBe(true);
     expect(bar(c)!.textContent).toContain('hết hàng');
+  });
+
+  it('tubu-w26-01: dòng hết hàng cạnh dòng mua được: nút một chạm chiếm trọn một hàng dưới tổng, bấm được, mô tả bằng lời báo', async () => {
+    state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
+    const c = await mount();
+    const btn = bar(c)!.querySelector('button')!;
+    expect(btn.textContent).toBe('Bỏ món hết & thanh toán tiếp');
+    expect(btn.disabled).toBe(false);
+    expect(btn.className).toContain('flex-[1_0_100%]');
+    const hint = bar(c)!.querySelector<HTMLElement>('[role="status"]')!;
+    expect(hint.textContent).toBe('"Xà phòng" đã hết hàng, được giữ lại trong giỏ.');
+    expect(btn.getAttribute('aria-describedby')).toBe(hint.id);
+    click(btn);
+    await flush(3);
+    expect(recallCheckoutSelection()).toEqual(['i1']);
   });
 
   // Dưới md khung tóm tắt bị CSS ẩn (display:none, trình đọc màn hình cũng không thấy), nên lời báo vì sao nút khoá chỉ đến được

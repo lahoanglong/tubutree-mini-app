@@ -1,5 +1,5 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
@@ -313,13 +313,47 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
       expect(screen.getByText('Tạm tính').parentElement).not.toHaveTextContent('233.000đ');
     });
 
-    it('thanh dưới nêu đúng dòng hết hàng và cách gỡ (bỏ chọn hoặc xoá), không bảo giảm số lượng', async () => {
-      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
+    it('chỉ còn dòng hết hàng đang chọn: thanh dưới nêu đúng dòng và cách gỡ (bỏ chọn hoặc xoá), không bảo giảm số lượng, nút khoá', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS], subtotal: 158_000, itemCount: 2 }));
       renderPage();
       await screen.findByText('Cobote bột giặt');
       expect(screen.getByText('"Cobote bột giặt" đã hết hàng. Bỏ chọn hoặc xoá sản phẩm này để thanh toán.')).toBeInTheDocument();
       expect(screen.queryByText('Giảm số lượng sản phẩm vượt tồn kho để thanh toán.')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Thanh toán (3)' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Thanh toán (2)' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' })).toBeNull();
+    });
+
+    it('tubu-w26-01: dòng hết hàng cạnh dòng mua được: nút chính một chạm thay nút khoá, nói món hết được giữ lại trong giỏ', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
+      renderPage();
+      await screen.findByText('Cobote bột giặt');
+      expect(screen.getByTestId('cart-sold-out-note')).toHaveTextContent('"Cobote bột giặt" đã hết hàng, được giữ lại trong giỏ.');
+      expect(screen.queryByText(/Bỏ chọn hoặc xoá/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Thanh toán/ })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' })).toBeEnabled();
+      // Nhãn dài: tổng nằm trong phần trên, nút chiếm trọn hàng dưới (không bị rút gọn "…").
+      expect(screen.getByTestId('cart-total-row')).toHaveTextContent('75.000đ');
+    });
+
+    it('tubu-w26-01: bấm nút một chạm: bỏ chọn dòng hết (không xoá), sang Thanh toán chỉ với phần còn lại, dấu cart_subset', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/checkout', { state: { itemIds: ['ci-buy'] } });
+      expect(setCheckoutEntry).toHaveBeenLastCalledWith('cart_subset');
+      expect(mocks.removeCartItem).not.toHaveBeenCalled();
+      expect(screen.getByRole('checkbox', { name: 'Chọn Cobote bột giặt' })).not.toBeChecked();
+      expect(screen.getByRole('checkbox', { name: 'Chọn Cà phê hoà tan' })).toBeChecked();
+      expect(await screen.findByRole('button', { name: 'Thanh toán (1)' })).toBeEnabled();
+    });
+
+    it('tubu-w26-01: dòng hết hàng mà còn dòng vượt tồn: vẫn khoá, không có nút một chạm (khách tự chọn số lượng)', async () => {
+      const OVER = { ...BUYABLE, quantity: 6, stock: 5, total: 450_000 };
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, OVER], subtotal: 608_000, itemCount: 8 }));
+      renderPage();
+      await screen.findByText('Cobote bột giặt');
+      expect(screen.queryByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Thanh toán (8)' })).toBeDisabled();
     });
 
     it('bỏ chọn dòng hết hàng: hết lời nhắc, nút Thanh toán mở', async () => {
@@ -346,6 +380,47 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     renderPage();
     expect(await screen.findByText(notice)).toBeInTheDocument();
     expect(screen.getByTestId('flash-limit-notice')).toBeInTheDocument();
+  });
+});
+
+describe('CartPage — quay lại app sau một lúc vắng (tubu-w26-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const returnAfter = async (ms: number) => {
+    const now = Date.now() + ms;
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+    } finally {
+      spy.mockRestore();
+      focusManager.setFocused(undefined);
+    }
+  };
+
+  it('vắng từ 30 giây: đọc lại giỏ, món vừa hết hàng hiện ngay nút "Bỏ món hết & thanh toán tiếp"', async () => {
+    const A = { ...OK_LINE, id: 'ci-a', productName: 'Cobote bột giặt', stock: 5 };
+    const B = { ...OK_LINE, id: 'ci-b', productName: 'Cà phê hoà tan', stock: 5 };
+    mocks.getCart.mockResolvedValue(summary({ items: [A, B], itemCount: 2 }));
+    renderPage();
+    await screen.findByRole('button', { name: 'Thanh toán (2)' });
+    expect(mocks.getCart).toHaveBeenCalledTimes(1);
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...A, stock: 0 }, B], itemCount: 2 }));
+    await returnAfter(31_000);
+    expect(mocks.getCart).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('button', { name: 'Bỏ món hết & thanh toán tiếp' })).toBeEnabled();
+  });
+
+  it('vắng chưa tới 30 giây: không gọi lại máy chủ', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByRole('button', { name: 'Thanh toán (1)' });
+    await returnAfter(5_000);
+    expect(mocks.getCart).toHaveBeenCalledTimes(1);
   });
 });
 

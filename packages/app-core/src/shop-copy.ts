@@ -459,6 +459,9 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.shipEstimateFree': 'Miễn phí',
   'cart.shipEstimateRange': '{min}–{max}',
   'cart.totalEstimate': 'Tổng tạm tính',
+  // Món đang chọn hết hàng trong lúc khách vắng (cart/sold-out-recovery.ts): nút chính bỏ chọn món hết rồi sang Thanh toán, món hết vẫn ở giỏ.
+  'cart.dropSoldOutCta': 'Bỏ món hết & thanh toán tiếp',
+  'cart.dropSoldOutNote': '{names} đã hết hàng, được giữ lại trong giỏ.',
   // Giỏ khách trên web (cờ web.guest_cart_enabled): một nút chính, không mã giảm giá, không điểm (cần tài khoản).
   'guestCart.loginCta': 'Đăng nhập để đặt hàng',
   'guestCart.full': 'Giỏ chưa đăng nhập giữ tối đa {n} món. Đăng nhập để thêm tiếp.',
