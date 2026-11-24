@@ -2,18 +2,22 @@
 
 import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { copyText } from '@/lib/copy-text';
 
-export function CopyButton({ text, label = 'Sao chép' }: { text: string; label?: string }) {
+/**
+ * Nút chữ "Sao chép" có viền. Chỉ đổi sang "Đã chép" khi chữ thật sự vào clipboard (`copyText` có phương án hai cho webview chặn `navigator.clipboard`);
+ * `onResult` báo kết quả cho nơi dùng (vd khung chuyển khoản hiện hộp nổi "Đã sao chép …" hoặc lời báo chép tay).
+ */
+export function CopyButton({ text, label = 'Sao chép', onResult }: { text: string; label?: string; onResult?: (ok: boolean) => void }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyText(text);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore clipboard error
     }
+    onResult?.(ok);
   };
 
   return (

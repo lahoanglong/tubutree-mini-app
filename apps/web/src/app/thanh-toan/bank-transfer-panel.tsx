@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopied, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { CheckCircle2, Check, Clock, Copy, Download, Loader2, TriangleAlert } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -93,6 +93,7 @@ export function BankTransferPanel({
   codSwitch?: { run: () => Promise<unknown>; onSettled: (result: 'switched' | 'stale') => void };
 }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
+  const copyToast = useCopyToast();
   const { data, isLoading, refetch, isFetching, error } = useQuery({
     queryKey: fetchQr ? ['bank-qr', order.code, 'guest'] : ['bank-qr', order.code],
     queryFn: () => (fetchQr ?? getBankQr)(order.code),
@@ -273,7 +274,7 @@ export function BankTransferPanel({
           <div className="flex items-center justify-center gap-1.5 max-md:mt-2 max-md:py-1.5">
             <p className="text-xl font-bold text-stone-900 max-md:text-lg max-md:font-semibold max-md:text-success-fg">{formatVnd(data.amount)}</p>
             <span className="md:hidden">
-              <CopyControls text={String(data.amount)} name="số tiền" iconOnly />
+              <CopyControls text={String(data.amount)} name="số tiền" iconOnly onCopied={copyToast.show} />
             </span>
           </div>
           {!!data.paidSoFar && data.paidSoFar > 0 && (
@@ -308,7 +309,7 @@ export function BankTransferPanel({
             <span className={LABEL}>Số tài khoản</span>
             <span className="flex items-center gap-2 font-mono font-semibold text-stone-900 max-md:gap-1.5 max-md:font-ui">
               {data.bank.accountNo}
-              <CopyControls text={data.bank.accountNo} name="số tài khoản" />
+              <CopyControls text={data.bank.accountNo} name="số tài khoản" onCopied={copyToast.show} />
             </span>
           </div>
           <PanelRow label="Chủ tài khoản" value={data.bank.accountName} stacked />
@@ -317,14 +318,14 @@ export function BankTransferPanel({
             <span className={LABEL}>Số tiền</span>
             <span className="flex items-center gap-2 font-semibold text-stone-900 max-md:gap-1.5">
               {formatVnd(data.amount)}
-              <CopyControls text={String(data.amount)} name="số tiền" />
+              <CopyControls text={String(data.amount)} name="số tiền" onCopied={copyToast.show} />
             </span>
           </div>
           <div data-bank-row className={ROW}>
             <span className={LABEL}>Nội dung CK</span>
             <span className="flex items-center gap-2 font-semibold text-forest-700 max-md:gap-1.5 max-md:text-success-fg">
               {data.memo}
-              <CopyControls text={data.memo} name="nội dung chuyển khoản" />
+              <CopyControls text={data.memo} name="nội dung chuyển khoản" onCopied={copyToast.show} />
             </span>
           </div>
         </div>
@@ -396,8 +397,44 @@ export function BankTransferPanel({
           </button>
         </StickyActionBar>
       )}
+      {/* Chép xong: hộp nổi trên đầu màn như snackbar "Đã sao chép …" của Mini App (bank-payment.tsx), ở mọi khổ, gọi đúng tên dòng vừa chép. Vùng luôn có
+          mặt, chỉ đổi phần con: vùng gắn cùng lúc với chữ thì trình đọc màn hình thường không đọc. */}
+      <div role="status" data-testid="bank-copy-toast" className="pointer-events-none fixed inset-x-4 top-4 z-50 mx-auto flex max-w-sm justify-center">
+        {copyToast.text && (
+          <span
+            key={copyToast.seq}
+            data-surface="inverse"
+            className="rounded-control bg-[var(--color-bg-inverse)] px-4 py-2.5 text-center text-sm font-semibold text-[color:var(--color-text-inverse)]"
+          >
+            <Check className="mr-1.5 inline h-4 w-4 align-text-bottom" aria-hidden="true" />
+            {copyToast.text}
+          </span>
+        )}
+      </div>
     </section>
   );
+}
+
+const COPY_TOAST_MS = 2000;
+
+/**
+ * Hộp nổi "Đã sao chép {tên}" của khung chuyển khoản: hiện 2 giây tính từ lần chép cuối. Mỗi lần chép gắn lại phần con (`seq` làm `key`) nên chép lại đúng
+ * dòng vừa chép (cùng câu) trình đọc màn hình vẫn đọc lại.
+ */
+function useCopyToast(): { text: string | null; seq: number; show: (name: string) => void } {
+  const [toast, setToast] = useState<{ text: string; seq: number } | null>(null);
+  const seq = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const show = useCallback((name: string) => {
+    seq.current += 1;
+    setToast({ text: bankCopied(name), seq: seq.current });
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(null), COPY_TOAST_MS);
+  }, []);
+  return { text: toast?.text ?? null, seq: toast?.seq ?? 0, show };
 }
 
 const checkResultClass = (r: 'unpaid' | 'failed' | 'error') => (r === 'error' || r === 'failed' ? 'text-danger-fg' : 'text-stone-700');
@@ -408,8 +445,11 @@ const LABEL = 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]';
 // Mini App: hạn chuyển khoản là hộp nền cảnh báo ngoài thẻ QR.
 const DEADLINE_BOX = 'max-md:mx-2 max-md:mt-2 max-md:rounded-control max-md:bg-[var(--color-status-warning-bg)] max-md:p-3';
 
-/** Sao chép: nút chữ có viền từ md; ở điện thoại chỉ là icon không viền (IconButton sm của Mini App). */
-function CopyControls({ text, name, iconOnly = false }: { text: string; name: string; iconOnly?: boolean }) {
+/**
+ * Sao chép: nút chữ có viền từ md; ở điện thoại chỉ là icon không viền (IconButton sm của Mini App). Chép được thật thì báo `onCopied` (hộp nổi "Đã sao chép …"
+ * của khung); chép không được thì lời báo chép tay hiện ngay dưới dòng ở mọi khổ.
+ */
+function CopyControls({ text, name, iconOnly = false, onCopied }: { text: string; name: string; iconOnly?: boolean; onCopied: (name: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   // Khoá riêng từng dòng chép: hai cú chạm cùng nhịp vào một dòng chỉ ghi clipboard một lần, còn chạm sang dòng khác vẫn chạy.
@@ -419,16 +459,20 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
   useEffect(() => () => {
     if (resetTimer.current) clearTimeout(resetTimer.current);
   }, []);
+  const report = (ok: boolean) => {
+    setFailed(!ok);
+    setCopied(ok);
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    if (!ok) return;
+    resetTimer.current = setTimeout(() => setCopied(false), 2000);
+    onCopied(name);
+  };
   const copy = async () => {
     if (copying.current) return;
     copying.current = true;
     try {
       // Chỉ báo "Đã sao chép" khi thật sự vào clipboard: báo sai thì khách dán số tài khoản cũ vào app ngân hàng.
-      const ok = await copyText(text);
-      setFailed(!ok);
-      setCopied(ok);
-      if (resetTimer.current) clearTimeout(resetTimer.current);
-      if (ok) resetTimer.current = setTimeout(() => setCopied(false), 2000);
+      report(await copyText(text));
     } finally {
       copying.current = false;
     }
@@ -437,7 +481,7 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
     <>
       {!iconOnly && (
         <span className="max-md:hidden">
-          <CopyButton text={text} label="Sao chép" />
+          <CopyButton text={text} label="Sao chép" onResult={report} />
         </span>
       )}
       {/* Điện thoại: chép xong nút đổi dấu tích trên nền xanh 2 giây, nhìn là biết đã vào clipboard, không thêm chữ làm xô dòng. */}
@@ -452,13 +496,8 @@ function CopyControls({ text, name, iconOnly = false }: { text: string; name: st
       >
         {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
       </button>
-      {copied && (
-        <span role="status" className="sr-only md:hidden">
-          Đã sao chép {name}
-        </span>
-      )}
       {failed && (
-        <span role="alert" className="basis-full text-xs text-danger-fg md:hidden">
+        <span role="alert" className="basis-full text-xs text-danger-fg">
           {bankCopyFailed(name)}
         </span>
       )}

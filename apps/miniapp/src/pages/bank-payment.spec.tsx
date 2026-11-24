@@ -34,6 +34,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 
 import BankPaymentPage from './bank-payment';
+import { announce, useAnnouncements } from '../hooks/use-notify';
 import { platformBridge } from '../services/platform-bridge';
 
 const QR = {
@@ -49,11 +50,25 @@ const QR = {
 // Cùng dải với scripts/uiux/static-scan.mjs, thêm ⌛ ⏳ ⭐.
 const EMOJI = /[\u{1F300}-\u{1FAFF}☀-➿⌚⌛⏩-⏿⭐]/u;
 
-function renderPage() {
+// Bản sao vùng aria-live của NotifyRegion (app.tsx): span thường, không phải role="status", để các ca đếm vùng báo của trang không đếm nhầm.
+function Announced() {
+  const a = useAnnouncements();
+  return (
+    <>
+      <span data-testid="announced-status">{a.status}</span>
+      <span data-testid="announced-alert">{a.alert}</span>
+    </>
+  );
+}
+
+// `announced`: gắn bản sao vùng đọc. Chỉ các ca chép bật: vùng đọc là bộ nhớ cấp module, câu của ca trước (vd "đơn đã huỷ") còn trong đó và làm
+// `findByText` của ca khác khớp nhầm trong lúc trang còn khung chờ.
+function renderPage({ announced = false }: { announced?: boolean } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <BankPaymentPage />
+      {announced && <Announced />}
     </QueryClientProvider>,
   );
 }
@@ -233,6 +248,9 @@ describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => 
 describe('Thanh toán chuyển khoản: nút sao chép (D5-02)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Vùng đọc là bộ nhớ cấp module: xoá câu của ca trước.
+    announce('status', '');
+    announce('alert', '');
     mocks.getBankQr.mockResolvedValue(QR);
     mocks.copyText.mockResolvedValue(true);
   });
@@ -253,17 +271,19 @@ describe('Thanh toán chuyển khoản: nút sao chép (D5-02)', () => {
     }
   });
 
-  it.each(COPIES)('"%s" chép đúng giá trị, báo "Đã sao chép" bằng thông báo nhỏ và chữ đọc được', async (name, value, done) => {
-    renderPage();
+  it.each(COPIES)('"%s" chép đúng giá trị, báo "Đã sao chép" bằng hộp nổi trên đầu và đọc đúng một lần qua useNotify', async (name, value, done) => {
+    renderPage({ announced: true });
     fireEvent.click(await screen.findByRole('button', { name }));
     expect(mocks.copyText).toHaveBeenCalledWith(value);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: done, type: 'success', position: 'top' }));
-    expect(await screen.findByRole('status')).toHaveTextContent(done);
+    await waitFor(() => expect(screen.getByTestId('announced-status')).toHaveTextContent(done));
+    // Vùng đọc của useNotify là bản duy nhất: trang không tự gắn thêm vùng status cùng câu (đọc hai lần).
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('chép không được (webview chặn clipboard): báo lỗi bảo chép tay, không hiện "Đã sao chép"', async () => {
     mocks.copyText.mockResolvedValue(false);
-    renderPage();
+    renderPage({ announced: true });
     fireEvent.click(await screen.findByRole('button', { name: 'Sao chép số tài khoản' }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({
@@ -274,6 +294,7 @@ describe('Thanh toán chuyển khoản: nút sao chép (D5-02)', () => {
     );
     expect(screen.queryByText(/Đã sao chép/)).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('announced-alert')).toHaveTextContent('Không thể sao chép số tài khoản. Bạn chép thủ công nhé.'));
   });
 
   it('xác nhận "Đã sao chép" tự tắt sau vài giây để lần chép sau lại có phản hồi', async () => {
@@ -286,11 +307,12 @@ describe('Thanh toán chuyển khoản: nút sao chép (D5-02)', () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(screen.getByRole('status')).toHaveTextContent('Đã sao chép số tiền');
+      expect(btn.querySelector('.lucide-check')).not.toBeNull();
       act(() => {
         vi.advanceTimersByTime(2500);
       });
-      expect(screen.queryByRole('status')).toBeNull();
+      expect(btn.querySelector('.lucide-check')).toBeNull();
+      expect(btn.querySelector('.lucide-copy')).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -688,7 +710,9 @@ describe('Thanh toán chuyển khoản: chạm đúp cùng nhịp không gọi l
     expect(mocks.openSnackbar).toHaveBeenCalledTimes(2);
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số tài khoản', type: 'success', position: 'top' });
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép nội dung chuyển khoản', type: 'success', position: 'top' });
-    expect(screen.getAllByRole('status')).toHaveLength(2);
+    // Mỗi dòng tự đổi dấu tích của mình; lời đọc đi qua useNotify (không còn vùng status riêng từng dòng).
+    expect(account.querySelector('.lucide-check')).not.toBeNull();
+    expect(memo.querySelector('.lucide-check')).not.toBeNull();
   });
 
   it('chép không được (clipboard từ chối) thì nhả khoá: bấm lại gọi clipboard lần nữa', async () => {

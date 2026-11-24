@@ -398,6 +398,67 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     }
   });
 
+  describe('hộp nổi "Đã sao chép …" (tubu-w26-01)', () => {
+    const toast = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="bank-copy-toast"]')!;
+
+    it('vùng báo luôn có mặt (role=status) và rỗng khi chưa chép; chép ở điện thoại thì hiện đúng tên dòng, 2 giây sau tự tắt', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
+        const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+        vi.stubGlobal('fetch', vi.fn(api.fn));
+        const { container } = mount(<BankTransferPanel order={order()} />);
+        await flush();
+        expect(toast(container).getAttribute('role')).toBe('status');
+        expect(toast(container).textContent).toBe('');
+        click(container.querySelector('button[aria-label="Sao chép nội dung chuyển khoản"]'));
+        await flush(2);
+        expect(toast(container).textContent).toBe('Đã sao chép nội dung chuyển khoản');
+        expect(toast(container).className).not.toContain('sr-only');
+        // Một vùng đọc duy nhất cho lời "Đã sao chép": dòng không tự gắn thêm vùng status cùng câu (đọc hai lần).
+        const said = Array.from(container.querySelectorAll('[role="status"]')).filter((el) => el.textContent?.includes('Đã sao chép'));
+        expect(said).toHaveLength(1);
+        await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+        expect(toast(container).textContent).toBe('');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('chép lại đúng dòng vừa chép: phần con của vùng báo được gắn lại (trình đọc màn hình đọc lại cùng câu)', async () => {
+      vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
+      const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      const btn = container.querySelector('button[aria-label="Sao chép số tài khoản"]');
+      click(btn);
+      await flush(2);
+      const first = toast(container).firstElementChild;
+      click(btn);
+      await flush(2);
+      expect(toast(container).textContent).toBe('Đã sao chép số tài khoản');
+      expect(toast(container).firstElementChild).not.toBe(first);
+    });
+
+    it('nút chữ từ md (CopyButton) cũng báo hộp nổi; chép không được thì báo chép tay, không hiện "Đã sao chép"', async () => {
+      let ok = true;
+      vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => { if (!ok) throw new Error('denied'); }) } });
+      const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      click(container.querySelector('button[aria-label="Sao chép: 9984606774"]'));
+      await flush(2);
+      expect(toast(container).textContent).toBe('Đã sao chép số tài khoản');
+      ok = false;
+      click(container.querySelector('button[aria-label="Sao chép: TB-777"]'));
+      await flush(2);
+      expect(container.querySelector('[role="alert"]')!.textContent).toBe('Không thể sao chép nội dung chuyển khoản. Bạn chép thủ công nhé.');
+      expect(container.querySelector('[role="alert"]')!.className).not.toContain('md:hidden');
+    });
+  });
+
   describe('khoá đồng bộ chạm đúp (W78B)', () => {
     const twice = (...els: (Element | null)[]) =>
       act(() => {

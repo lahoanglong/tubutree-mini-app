@@ -19,6 +19,8 @@ export const BANK_TX_FAILED = 'Giao dịch không thành công hoặc đã đư�
 export const BANK_NOT_RECEIVED =
   'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển. Bạn kiểm tra lại sau ít phút nhé.';
 export const BANK_CHECK_NETWORK = 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
+/** Chép số tài khoản / số tiền / nội dung chuyển khoản vào clipboard được thật (Mini App và web cùng câu). */
+export const bankCopied = (label: string): string => `Đã sao chép ${label}`;
 export const bankCopyFailed = (label: string): string => `Không thể sao chép ${label}. Bạn chép thủ công nhé.`;
 
 export const INVOICE_ISSUE_FAILED = 'Phát hành lỗi. Liên hệ Tubu để được hỗ trợ.';

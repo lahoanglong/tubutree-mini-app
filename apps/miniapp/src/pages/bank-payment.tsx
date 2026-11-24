@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed } from '@tubutree/app-core/client-copy';
+import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopied, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import type { ReactNode } from 'react';
-import { Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useParams, useNavigate } from 'zmp-ui';
+import { useNotify } from '../hooks/use-notify';
 import { Text } from '../components/ui/text';
 import { Box } from '../components/ui/box';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
@@ -75,7 +76,8 @@ const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đ�
 export default function BankPaymentPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const { openSnackbar } = useSnackbar();
+  // Mọi lời báo của màn qua useNotify: hộp nổi trên đầu cho mắt, đồng thời ghi vùng aria-live cho trình đọc màn hình.
+  const { notify } = useNotify();
 
   const qc = useQueryClient();
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
@@ -103,9 +105,9 @@ export default function BankPaymentPage() {
       // Chỉ báo "Đã sao chép" SAU KHI ghi clipboard thật sự thành công — báo thành công giả ở đây là
       // khách dán nhầm số tài khoản cũ khi chuyển khoản.
       const ok = await copyText(text);
-      openSnackbar(
+      notify(
         ok
-          ? { text: `Đã sao chép ${label}`, type: 'success', position: 'top' }
+          ? { text: bankCopied(label), type: 'success', position: 'top' }
           : { text: bankCopyFailed(label), type: 'error', position: 'top' },
       );
       return ok;
@@ -126,32 +128,32 @@ export default function BankPaymentPage() {
       const res = await refetch({ throwOnError: true });
       const status = res.data?.paymentStatus;
       if (status === 'PAID') {
-        openSnackbar({
+        notify({
           text: 'Đã nhận được thanh toán thành công! Đơn hàng của bạn đã được xác nhận.',
           type: 'success',
           position: 'top',
         });
       } else if (status === 'UNPAID') {
-        openSnackbar({
+        notify({
           text: BANK_NOT_RECEIVED,
           type: 'warning',
           position: 'top',
         });
       } else if (status === 'FAILED' || status === 'REFUNDED') {
-        openSnackbar({
+        notify({
           text: BANK_TX_FAILED,
           type: 'error',
           position: 'top',
         });
       } else {
-        openSnackbar({
+        notify({
           text: 'Đã làm mới trạng thái. Đang chờ hệ thống ngân hàng xác nhận.',
           type: 'info',
           position: 'top',
         });
       }
     } catch (err) {
-      openSnackbar({
+      notify({
         text: isFinalRejection(err)
           ? getErrorMessage(err)
           : isSessionExpired(err)
@@ -448,11 +450,6 @@ function Row({
               onPress={press}
               style={{ margin: '-6px -10px -6px 0' }}
             />
-            {copied && (
-              <span role="status" style={SR_ONLY}>
-                Đã sao chép {copyName ?? label}
-              </span>
-            )}
           </>
         )}
       </Box>
