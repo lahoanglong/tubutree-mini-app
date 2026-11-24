@@ -149,7 +149,8 @@ export default function WishlistPage() {
                     onPress={() => {
                       // Chỉ khi chuông đang giữ focus (bàn phím, hoặc trình duyệt focus nút khi bấm): bấm chuột ở Safari không focus nút.
                       if (filterView.active === 'restock' && view.kind === 'waiting' && document.activeElement?.getAttribute('data-restock-bell') === p.id) {
-                        const ids = filterView.items.map((x) => x.id);
+                        // Thẻ đang huỷ dở cũng sắp rời lưới: không chọn làm đích.
+                        const ids = filterView.items.map((x) => x.id).filter((id) => id === p.id || !restock.busy.has(id));
                         const at = ids.indexOf(p.id);
                         focusAfterCancel.current = { goneId: p.id, nextId: ids[at + 1] ?? ids[at - 1] ?? null, groupAria: filterView.groupAria };
                       }

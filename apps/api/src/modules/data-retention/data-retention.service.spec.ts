@@ -173,9 +173,11 @@ describe('DataRetentionService (C-046)', () => {
     const res = await svc.runAll({ now: NOW, pauseMs: 0 });
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty(['analytics_events.perf_vitals'], 0);
     const c = call(prisma, 1);
-    const { sql } = Prisma.sql(c.strings, ...c.values);
+    const { sql, values } = Prisma.sql(c.strings, ...c.values);
     expect(sql).toMatch(/^\s*DELETE FROM "analytics_events"/);
-    expect(sql).toContain(`"eventName" IN ('web_vital', 'mini_vital')`);
+    // Cùng danh sách tên với phễu mua (VITAL_EVENT_NAMES), đi qua tham số.
+    expect(sql).toMatch(/"eventName" IN \((\?|\$\d+),\s*(\?|\$\d+)\)/);
+    expect(values.filter((v) => typeof v === 'string')).toEqual(['web_vital', 'mini_vital']);
     expect(sql).not.toContain('retention_daily_snapshot');
     // Mốc theo giờ server; `occurredAt` máy khách tự khai (khai giờ tương lai thì không bao giờ bị dọn).
     expect(sql).toContain('"receivedAt" <');

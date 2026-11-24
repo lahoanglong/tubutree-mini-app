@@ -50,6 +50,7 @@ type Note = { text: string; error: boolean } | null;
 
 const JUST_CREATED_PARAM = 'moi';
 const errorText = loadErrorText;
+const SHARE_COPY_FAILED = 'Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.';
 const JOIN_KEY = ['group-buy-join'] as const;
 const START_KEY = ['group-buy-start'] as const;
 
@@ -82,7 +83,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const offer = useWelcomeOffer(Boolean(user));
   const authed = phase === 'authenticated';
   const [note, setNote] = useState<Note>(null);
-  // Kết quả chép link mời hiện ở thông báo nổi gần đáy màn hình (như snackbar của Mini App), không ở dòng chữ dưới đầu trang: máy tính
+  // Chép link mời thành công báo ở thông báo nổi gần đáy màn hình (như snackbar của Mini App), không ở dòng chữ dưới đầu trang: máy tính
   // không có hộp chia sẻ, nút Mời nằm dưới thẻ nhóm nên dòng chữ đầu trang thường đã cuộn khỏi màn hình.
   const { notice: shareNotice, notify: notifyShare } = useGameNotice();
 
@@ -189,7 +190,8 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
     if (sharingRef.current) return;
     sharingRef.current = true;
     setSharingId(g.id);
-    setNote(null);
+    // Chỉ gỡ lời "Không sao chép được" của lần chia sẻ trước; lời báo khác (vừa tham gia, vừa mở nhóm) giữ nguyên.
+    setNote((n) => (n?.text === SHARE_COPY_FAILED ? null : n));
     try {
       const content = groupShareContent(g, offer);
       const result = await platformBridge.share({
@@ -198,7 +200,8 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
         path: withReferral(`/mua-chung/${encodeURIComponent(g.id)}`, user?.referralCode),
       });
       if (result === 'copied') notifyShare(fillCopy('groupBuy.linkCopied'), 'success');
-      else if (result === 'failed') notifyShare('Không sao chép được. Bạn chép liên kết trên thanh địa chỉ nhé.', 'error');
+      // Lời lỗi là chỉ dẫn phải làm theo: giữ ở dòng cố định trên trang, không để thông báo nổi tự tắt sau vài giây.
+      else if (result === 'failed') setNote({ text: SHARE_COPY_FAILED, error: true });
     } finally {
       sharingRef.current = false;
       setSharingId(null);

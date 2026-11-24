@@ -14,7 +14,14 @@ export function normalizeSamplePct(raw: unknown): number {
   return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 0;
 }
 
-export const isVitalEventName = (name: string): name is 'web_vital' | 'mini_vital' => name === 'web_vital' || name === 'mini_vital';
+/**
+ * Tên sự kiện số đo tốc độ. Dùng chung cho chỗ dọn sau `PERF_VITALS_DAYS` (data-retention) và chỗ phễu mua bỏ qua chúng: thêm loại số đo
+ * mà chỉ sửa một nơi thì ngày được bù sau khi dọn lại lệch số với bảng sống.
+ */
+export const VITAL_EVENT_NAMES = ['web_vital', 'mini_vital'] as const;
+
+export const isVitalEventName = (name: string): name is (typeof VITAL_EVENT_NAMES)[number] =>
+  (VITAL_EVENT_NAMES as readonly string[]).includes(name);
 
 /**
  * Mẫu route, không phải URL thật: tối đa 6 đoạn, mỗi đoạn là tham số (`:slug`) hoặc chữ thường/gạch nối không có dãy 4 chữ số hay đuôi mã
