@@ -708,6 +708,8 @@ export interface ReviewableOrder {
   orderId: string;
   code: string;
   deliveredAt: string | null;
+  /** Sản phẩm đã có phần được trả ở đơn này: đánh giá cho đơn này không được thưởng (`reviewOrderReturned`). API cũ không trả. */
+  returned?: boolean;
 }
 /**
  * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. Mỗi lần mua một đánh
@@ -810,6 +812,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   cancelReason?: string | null;
   /** Đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (chỉ chi tiết đơn). API cũ không trả. */
   codSwitchable?: boolean;
+  /** Chỉ chi tiết đơn: hiện thẻ "Đơn này thế nào?" (`showOrderCsat`). API cũ không trả: không hỏi. */
+  csatAsk?: boolean;
 };
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
 export type PlacedOrder = OrderDTO & { splitOrders?: SplitOrderDTO[] };

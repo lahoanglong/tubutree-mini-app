@@ -989,6 +989,21 @@
       ]
     },
     {
+      "name": "OrderCsatCard",
+      "miniapp": "apps/miniapp/src/components/orders/order-csat-card.tsx",
+      "web": "apps/web/src/components/orders/order-csat-card.tsx",
+      "props": "OrderCsatCardProps",
+      "propsDiff": {
+        "webOnly": [
+          "className"
+        ],
+        "reason": "web nhận lớp Tailwind thứ tự cột và dải thẻ của khuôn hai cột từ trang; Mini vẽ dải nền cố định như các khối khác của Chi tiết đơn"
+      },
+      "screens": [
+        "/order/:code"
+      ]
+    },
+    {
       "name": "OrderRefillShortcut",
       "miniapp": "apps/miniapp/src/components/orders/order-refill-shortcut.tsx",
       "web": "apps/web/src/components/orders/order-refill-shortcut.tsx",

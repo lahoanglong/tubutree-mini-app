@@ -1306,7 +1306,7 @@ describe('ReviewsService.canReview', () => {
       rewardAvailable: true,
       rewardUnavailableReason: null,
       purchaseCount: 1,
-      reviewableOrders: [{ orderId: 'o1', code: 'TB-1', deliveredAt: PURCHASE_O1.deliveredAt }],
+      reviewableOrders: [{ orderId: 'o1', code: 'TB-1', deliveredAt: PURCHASE_O1.deliveredAt, returned: false }],
       myReviews: [],
     });
   });
@@ -1334,7 +1334,7 @@ describe('ReviewsService.canReview', () => {
       rewardAvailable: false,
       rewardUnavailableReason: 'ALREADY_KEPT',
       purchaseCount: 2,
-      reviewableOrders: [{ orderId: 'o2', code: 'TB-2', deliveredAt: PURCHASE_O2.deliveredAt }],
+      reviewableOrders: [{ orderId: 'o2', code: 'TB-2', deliveredAt: PURCHASE_O2.deliveredAt, returned: false }],
       myReviews: [{ id: 'r-o1', orderId: 'o1', orderCode: 'TB-1', rating: 4, createdAt: new Date('2026-10-02T00:00:00.000Z'), isVisible: true }],
     });
   });
@@ -1385,6 +1385,18 @@ describe('ReviewsService.canReview', () => {
 
     it('còn thưởng → null', async () => {
       expect(reasonOf(await check(makePrisma()))).toBeNull();
+    });
+
+    it('PO A2.1: đơn đã trả sản phẩm này (vd một trong hai biến thể) mang returned: true, đứng sau đơn chưa trả; đơn khác vẫn được thưởng', async () => {
+      const prisma = withPurchases([PURCHASE_O1, PURCHASE_O2]);
+      returnedO1(prisma);
+      const r = await check(prisma);
+      expect(r).toMatchObject({ canReview: true, rewardAvailable: true });
+      if (!r.canReview) throw new Error('phải viết được');
+      expect(r.reviewableOrders.map((o) => [o.orderId, o.returned])).toEqual([
+        ['o2', false],
+        ['o1', true],
+      ]);
     });
   });
 

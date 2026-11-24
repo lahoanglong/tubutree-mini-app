@@ -20,6 +20,7 @@ import { customerCancelReason } from './customer-cancel-reason';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { codSwitchEligible } from './cod-switch';
+import { orderCsatAsk, recordOrderCsat, type OrderCsatAnswer, type OrderCsatPlatform } from './order-csat';
 import { refundNote } from './order-returns.service';
 import { pendingPaymentDeadlines } from './pending-payment-ttl';
 import { cancelHandover } from './order-transition';
@@ -126,6 +127,8 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   canCancel: boolean;
   /** Chỉ chi tiết đơn: đơn chuyển khoản chưa trả này đổi được sang trả tiền khi nhận (COD) bằng POST /orders/:code/switch-to-cod (`codSwitchEligible`). */
   codSwitchable?: boolean;
+  /** Chỉ chi tiết đơn: hiện thẻ "Đơn này thế nào?" (`orderCsatAsk`): đơn lẻ đã giao trong 30 ngày, chưa trả lời, chưa có yêu cầu trả. */
+  csatAsk?: boolean;
   /**
    * Chỉ danh sách đơn, chỉ đơn đã nhận mua lẻ cho chính mình (REVIEWABLE_ORDER): số sản phẩm của đơn còn chờ khách đánh giá (`pendingReviewCounts`),
    * cho nút "Đánh giá (n SP)" ở thẻ đơn. Đơn khác không có trường này.
@@ -333,7 +336,7 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey, codSwitchable] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey, codSwitchable, csatAsk] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
@@ -342,6 +345,7 @@ export class OrdersService {
       this.cancelReasonOf(order),
       this.journeyOf(order),
       codSwitchEligible(this.prisma, order),
+      orderCsatAsk(this.prisma, order),
     ]);
     return {
       ...view!,
@@ -352,7 +356,13 @@ export class OrdersService {
       pointsReturnReversed,
       ...journey,
       codSwitchable,
+      csatAsk,
     };
+  }
+
+  /** Thẻ "Đơn này thế nào?" (POST /orders/:code/csat): luật ở `order-csat.ts`. */
+  submitCsat(userId: string, code: string, input: { answer: OrderCsatAnswer; platform: OrderCsatPlatform }): Promise<{ recorded: boolean }> {
+    return recordOrderCsat(this.prisma, userId, code, input);
   }
 
   /**

@@ -54,6 +54,7 @@ import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker
 import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '@/components/orders/order-shipping';
 import { OrderRefillShortcut } from '@/components/orders/order-refill-shortcut';
+import { OrderCsatCard } from '@/components/orders/order-csat-card';
 import { OrderTrackingPill } from '@/components/orders/order-tracking-pill';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
@@ -308,6 +309,14 @@ export default function OrderDetailPage() {
       )}
 
           <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
+          <OrderCsatCard
+            order={o}
+            onSupport={() => {
+              const support = document.getElementById('order-support');
+              if (support) revealReviewTarget(support, null);
+            }}
+            className={`order-3 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}
+          />
           <OrderRefillShortcut
             delivered={o.status === 'DELIVERED'}
             refillOn={refillFirstOn(cfgQ.data)}
@@ -542,7 +551,8 @@ export default function OrderDetailPage() {
           <div className="order-[13] lg:order-first">
             <OrderActions order={o} plan={plan} note={payNote} />
           </div>
-          <div className="order-[14] mt-4 px-4 md:px-0">
+          {/* Đích cuộn của 👎 ở thẻ "Đơn này thế nào?" khi chat chưa mở. */}
+          <div id="order-support" tabIndex={-1} className="order-[14] mt-4 px-4 outline-none md:px-0">
             <SupportContact orderCode={o.code} />
           </div>
         </div>

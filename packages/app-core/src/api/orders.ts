@@ -106,6 +106,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   pendingReviewCount?: number;
   /** Chỉ chi tiết đơn: đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (`switchOrderToCod`). API cũ không trả. */
   codSwitchable?: boolean;
+  /** Chỉ chi tiết đơn: hiện thẻ "Đơn này thế nào?" (`showOrderCsat`, `packages/app-core/src/order-csat.ts`). API cũ không trả: không hỏi. */
+  csatAsk?: boolean;
 };
 
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */

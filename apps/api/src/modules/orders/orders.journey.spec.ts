@@ -23,6 +23,9 @@ const order = (over: Record<string, unknown> = {}) => ({
   paymentMethod: 'COD',
   shippingAddress: { recipient: 'An', phone: '0901 234 567' },
   items: [],
+  // Giao từ lâu: thẻ "Đơn này thế nào?" (order-csat.spec) không hỏi nên detailView không đọc analyticsEvent/returnRequest.
+  deliveredAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
   ...over,
 });
 

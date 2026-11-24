@@ -9,7 +9,7 @@ import { reviewMediaItems } from '@tubutree/app-core/commerce/review-media';
 import { canPdpQuickAdd, requestPdpQuickAdd } from '@/lib/pdp-quick-add';
 import { trackPurchase } from '@/lib/analytics';
 import { orderAgeDays } from '@/components/analytics/funnel';
-import { REVIEW_NEEDS_PURCHASE } from '@tubutree/app-core/review-copy';
+import { REVIEW_NEEDS_PURCHASE, reviewOrderReturned } from '@tubutree/app-core/review-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useHydrated } from '@/lib/use-hydrated';
 import { apiMediaUrl } from '@/lib/client-api';
@@ -408,6 +408,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           target={target}
           purchaseCount={elig?.purchaseCount ?? 0}
           rewardAvailable={elig?.rewardAvailable !== false}
+          rewardReturned={target.kind === 'new' && reviewOrderReturned(elig, target.orderId)}
           rules={rules}
           hidden={target.kind === 'edit' && isHidden(mineById.get(target.reviewId))}
           onCancel={() => setTarget(null)}

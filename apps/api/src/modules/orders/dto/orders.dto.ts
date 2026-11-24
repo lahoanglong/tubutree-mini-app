@@ -6,6 +6,7 @@ import { PaginationQuery } from '../../../common/pagination';
 import { ORDER_STATUS_GROUP_KEYS, type OrderStatusGroup } from '../order-status-groups';
 import { VARIATION_ID_RE } from '../variation-id';
 import { Trim } from '../../../common/decorators/trim.decorator';
+import { ORDER_CSAT_ANSWERS, ORDER_CSAT_PLATFORMS, type OrderCsatAnswer, type OrderCsatPlatform } from '../order-csat';
 
 export class OrderListQuery extends PaginationQuery {
   @IsOptional()
@@ -56,4 +57,10 @@ export class PurchasedItemsQuery {
 
   /** Chỉ ký tự id (cuid/slug) — chặn NUL/ký tự lạ trước khi tới SQL thô. */
   @IsOptional() @IsString() @MaxLength(64) @Matches(VARIATION_ID_RE, { message: 'variationId không hợp lệ.' }) variationId?: string;
+}
+
+/** Thẻ "Đơn này thế nào?" ở chi tiết đơn đã giao: một chạm 👍 (`up`) hay 👎 (`down`), kèm nền tảng gửi. */
+export class OrderCsatDto {
+  @IsIn(ORDER_CSAT_ANSWERS) answer!: OrderCsatAnswer;
+  @IsIn(ORDER_CSAT_PLATFORMS) platform!: OrderCsatPlatform;
 }

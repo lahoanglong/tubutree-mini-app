@@ -44,6 +44,8 @@ export interface ReviewableOrder {
   orderId: string;
   code: string;
   deliveredAt: string | null;
+  /** Sản phẩm đã có phần được trả ở đơn này: đánh giá cho đơn này không được thưởng (`reviewOrderReturned`). API cũ không trả. */
+  returned?: boolean;
 }
 /**
  * Hỏi TRƯỚC khi mở ô soạn đánh giá — tránh để khách chưa mua upload ảnh/video rồi mới bị từ chối. Mỗi lần mua một đánh

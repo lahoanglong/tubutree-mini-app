@@ -6,6 +6,8 @@ export const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
 // Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy thông báo không kèm điểm.
 export const REWARD_ALREADY_GIVEN =
   'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+// Đơn có một biến thể đã trả mà biến thể kia vẫn mời viết (PO A2.1): máy chủ không thưởng đánh giá cho sản phẩm đã trả ở đơn đó.
+export const REWARD_RETURNED = 'Sản phẩm này đã có phần được trả ở đơn này nên đánh giá không cộng Điểm Xanh.';
 export const REVIEW_NEEDS_PURCHASE = 'Mua và nhận hàng để đánh giá';
 export const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 
@@ -22,8 +24,11 @@ export function rewardHint(o: {
   hasImages: boolean;
   hasVideo: boolean;
   canUploadVideo?: boolean;
+  /** Sản phẩm đã có phần được trả ở đúng đơn đang viết (`reviewOrderReturned`). */
+  returned?: boolean;
 }): string {
   if (o.isEdit) return EDIT_HINT;
+  if (o.returned) return REWARD_RETURNED;
   if (!o.rewardAvailable) return REWARD_ALREADY_GIVEN;
   if (o.hasVideo) return `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`;
   const videoOffer = o.canUploadVideo !== false;
@@ -31,6 +36,17 @@ export function rewardHint(o: {
     return `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!${videoOffer ? ' Thêm video để được +15.000.' : ''}`;
   }
   return `${FIRST_REVIEW_ONLY}: thêm ${videoOffer ? 'video +15.000 / ' : ''}ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
+}
+
+/**
+ * Đánh giá MỚI cho đúng đơn `orderId` (mở từ chi tiết đơn) mà sản phẩm đã có phần được trả ở đơn đó (can-review `returned`): máy chủ thưởng 0 dù
+ * `rewardAvailable` là true nhờ một đơn khác, nên ô soạn không được hứa điểm. API cũ không trả cờ thì false.
+ */
+export function reviewOrderReturned(
+  elig: { reviewableOrders?: readonly { orderId: string; returned?: boolean }[] } | null | undefined,
+  orderId: string | null | undefined,
+): boolean {
+  return !!orderId && (elig?.reviewableOrders ?? []).some((o) => o.orderId === orderId && o.returned === true);
 }
 
 /** Luật Góc Sống Xanh đọc từ cấu hình công khai (`reviewGreenCorner`); null khi tắt hoặc API cũ: form và lời báo như cũ. */

@@ -216,7 +216,7 @@ describe('Review: một đánh giá/lần mua, gửi lại thì sửa, thưởng
       rewardAvailable: true,
       rewardUnavailableReason: null,
       purchaseCount: 1,
-      reviewableOrders: [{ orderId: o.id, code: o.code, deliveredAt: null }],
+      reviewableOrders: [{ orderId: o.id, code: o.code, deliveredAt: null, returned: false }],
       myReviews: [],
     });
     const first = await reviews.create(u.id, p.slug, { rating: 4, comment: 'Ổn', images: ['https://res.cloudinary.com/x/image/upload/v1/1.jpg'] });

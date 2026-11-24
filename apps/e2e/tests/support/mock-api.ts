@@ -579,6 +579,8 @@ function shellDefaults(api: MockApi): void {
   // Menu tài khoản của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
   api.fallback('GET', '/waste/desk/points', []);
   api.fallback('GET', '/me/subscriptions', []);
+  // Thẻ "Đơn này thế nào?" ở chi tiết đơn đã giao (chỉ hiện khi đơn mock có `csatAsk: true`): chạm 👍/👎 ghi câu trả lời.
+  api.fallback('POST', '/orders/:code/csat', { recorded: true });
   // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
   api.fallback('GET', '/me/notifications', []);
   // Web gửi sự kiện phễu mua ở mọi trang, kể cả khách chưa đăng nhập (lô thường mỗi 5 giây, beacon khi rời trang): mặc định nhận hết.
