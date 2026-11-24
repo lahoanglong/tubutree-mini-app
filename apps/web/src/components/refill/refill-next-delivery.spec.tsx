@@ -86,6 +86,7 @@ describe('RefillNextDelivery (web, tubu-w27-01)', () => {
     expect(mocks.patch).toHaveBeenCalledTimes(1);
     expect(mocks.patch).toHaveBeenCalledWith('/me/subscriptions/s1', { nextRunDate: '2026-11-10', expectedNextRunAt: '2026-11-02T17:00:00.000Z' });
     expect(button(c).getAttribute('aria-busy')).toBe('true');
+    expect(button(c).getAttribute('aria-disabled')).toBe('true');
     subs = [sub({ nextRunAt: '2026-11-09T17:00:00.000Z' })];
     await act(async () => resolve(sub({ nextRunAt: '2026-11-09T17:00:00.000Z' })));
     await flush(6);
@@ -105,14 +106,49 @@ describe('RefillNextDelivery (web, tubu-w27-01)', () => {
     mocks.patch.mockRejectedValueOnce(new ApiError('Hệ thống đang bận, bạn thử lại sau nhé.', 503));
     click(button(c));
     await flush(6);
-    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+    expect(c.querySelector('[role="alert"]')!.textContent).toBe('Máy chủ đang bận, thử lại nhé.');
+    expect(c.querySelector('[role="status"]')!.textContent).toBe('');
     expect(subsCalls()).toBe(2);
+  });
+
+  it('hai gói Refill: dời gói tới trước xong, thẻ giữ gói đó dù gói kia giờ tới trước, bấm lần hai vẫn dời gói đó', async () => {
+    subs = [sub(), sub({ id: 's2', productName: 'Túi Refill b 3L', nextRunAt: '2026-11-05T17:00:00.000Z' })];
+    mocks.patch.mockImplementation(async (path: string, body: { nextRunDate: string }) => {
+      const moved = `${body.nextRunDate.slice(0, 8)}${String(Number(body.nextRunDate.slice(8)) - 1).padStart(2, '0')}T17:00:00.000Z`;
+      subs = subs.map((x) => ((x as { id: string }).id === path.split('/').pop() ? { ...(x as object), nextRunAt: moved } : x));
+      return subs.find((x) => (x as { id: string }).id === path.split('/').pop());
+    });
+    const c = await mount();
+    expect(c.querySelector('[data-testid="refill-next-date"]')!.textContent).toBe('Thứ Ba, 03/11/2026');
+    click(button(c));
+    await flush(8);
+    expect(c.querySelector('[data-testid="refill-next-date"]')!.textContent).toBe('Thứ Ba, 10/11/2026');
+    expect(c.textContent).toContain('Túi Refill a 3L · SL 2');
+    expect(c.querySelector('[role="status"]')!.textContent).toBe('Đã dời kỳ tới sang Thứ Ba, 10/11/2026');
+    click(button(c));
+    await flush(8);
+    expect(mocks.patch.mock.calls.map((x) => x[0])).toEqual(['/me/subscriptions/s1', '/me/subscriptions/s1']);
+    expect(mocks.patch.mock.calls[1]![1]).toEqual({ nextRunDate: '2026-11-17', expectedNextRunAt: '2026-11-09T17:00:00.000Z' });
+  });
+
+  it('gói vừa huỷ ở máy khác (400): tải lại thì thẻ thôi vẽ nhưng lời báo ở lại', async () => {
+    mocks.patch.mockImplementationOnce(async () => {
+      subs = [sub({ status: 'CANCELLED' })];
+      throw new ApiError('Gói định kỳ đã huỷ.', 400);
+    });
+    const c = await mount();
+    click(button(c));
+    await flush(8);
+    expect(subsCalls()).toBe(2);
+    expect(c.querySelector('[data-testid="refill-next-delivery"]')).toBeNull();
+    expect(c.querySelector('[role="alert"]')!.textContent).toBe('Gói định kỳ đã huỷ.');
   });
 
   it('+7 ngày vượt 90 ngày tới: nút aria-disabled, nói ngày xa nhất, bấm không gửi gì', async () => {
     subs = [sub({ nextRunAt: '2027-01-14T17:00:00.000Z' })];
     const c = await mount();
     expect(button(c).getAttribute('aria-disabled')).toBe('true');
+    expect(button(c).disabled).toBe(true);
     expect(c.textContent).toContain('Chỉ dời được tới Thứ Hai, 18/01/2027');
     click(button(c));
     expect(mocks.patch).not.toHaveBeenCalled();

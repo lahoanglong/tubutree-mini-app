@@ -101,18 +101,20 @@ function refillPackSlugs(landing: RefillLandingDTO | null | undefined): Set<stri
 /**
  * Thẻ "Kỳ Refill tới": trong các gói định kỳ ĐANG CHẠY của khách mà sản phẩm là một gói Refill của trang, lấy gói có kỳ tới gần nhất. Gói tạm dừng hay đã
  * huỷ không có kỳ tới; gói không phải Refill thuộc tab Định kỳ. Không có gói nào, chưa tải hay dữ liệu hỏng: null (trang không vẽ thẻ).
+ * `pinId`: gói khách vừa bấm dời. Còn chạy thì thẻ giữ gói đó dù kỳ mới xa hơn gói khác, để lần bấm sau không dời nhầm sang gói kia.
  */
 export function refillNextDelivery(
   subs: readonly PreviewSub[] | null | undefined,
   landing: RefillLandingDTO | null | undefined,
   now: Date = new Date(),
+  pinId: string | null = null,
 ): RefillNextDeliveryView | null {
   if (!Array.isArray(subs) || subs.length === 0) return null;
   const packs = refillPackSlugs(landing);
   if (packs.size === 0) return null;
   const open = subs.filter((s) => s?.status === 'ACTIVE' && typeof s.slug === 'string' && packs.has(s.slug) && !Number.isNaN(Date.parse(s.nextRunAt)));
   if (open.length === 0) return null;
-  const sub = open.reduce((a, b) => (Date.parse(b.nextRunAt) < Date.parse(a.nextRunAt) ? b : a));
+  const sub = open.find((s) => s.id === pinId) ?? open.reduce((a, b) => (Date.parse(b.nextRunAt) < Date.parse(a.nextRunAt) ? b : a));
 
   const day = vnDay(Date.parse(sub.nextRunAt));
   const cycle = subscriptionCycleView(sub);

@@ -89,6 +89,7 @@ describe('RefillNextDelivery (Mini App, tubu-w27-01)', () => {
     });
     fireEvent.click(postponeButton());
     expect(mocks.updateSubscription).toHaveBeenCalledTimes(1);
+    expect(postponeButton().getAttribute('aria-disabled')).toBe('true');
     expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { nextRunDate: '2026-11-10', expectedNextRunAt: '2026-11-02T17:00:00.000Z' });
     mocks.getSubscriptions.mockResolvedValue([sub({ nextRunAt: '2026-11-09T17:00:00.000Z' })]);
     await act(async () => resolve(sub({ nextRunAt: '2026-11-09T17:00:00.000Z' })));
@@ -113,7 +114,47 @@ describe('RefillNextDelivery (Mini App, tubu-w27-01)', () => {
       fireEvent.click(postponeButton());
     });
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Mất kết nối mạng'));
+    expect(screen.getByRole('status').textContent).toBe('');
     expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2);
+  });
+
+  it('hai gói Refill: dời gói tới trước xong, thẻ giữ gói đó dù gói kia giờ tới trước, chạm lần hai vẫn dời gói đó', async () => {
+    let subs = [sub(), sub({ id: 's2', productName: 'Túi Refill b 3L', nextRunAt: '2026-11-05T17:00:00.000Z' })];
+    mocks.getSubscriptions.mockImplementation(async () => subs);
+    mocks.updateSubscription.mockImplementation(async (id: string, body: { nextRunDate: string }) => {
+      const moved = `${body.nextRunDate.slice(0, 8)}${String(Number(body.nextRunDate.slice(8)) - 1).padStart(2, '0')}T17:00:00.000Z`;
+      subs = subs.map((x) => (x.id === id ? { ...x, nextRunAt: moved } : x));
+      return subs.find((x) => x.id === id);
+    });
+    mount();
+    await screen.findByTestId('refill-next-delivery');
+    expect(screen.getByTestId('refill-next-date').textContent).toBe('Thứ Ba, 03/11/2026');
+    await act(async () => {
+      fireEvent.click(postponeButton());
+    });
+    await waitFor(() => expect(screen.getByTestId('refill-next-date').textContent).toBe('Thứ Ba, 10/11/2026'));
+    expect(screen.getByTestId('refill-next-delivery').textContent).toContain('Túi Refill a 3L · SL 2');
+    await waitFor(() => expect(postponeButton().getAttribute('aria-disabled')).toBeNull());
+    await act(async () => {
+      fireEvent.click(postponeButton());
+    });
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+    expect(mocks.updateSubscription.mock.calls.map((x) => x[0])).toEqual(['s1', 's1']);
+    expect(mocks.updateSubscription.mock.calls[1]![1]).toEqual({ nextRunDate: '2026-11-17', expectedNextRunAt: '2026-11-09T17:00:00.000Z' });
+  });
+
+  it('gói vừa huỷ ở máy khác (400): tải lại thì thẻ thôi vẽ nhưng lời báo ở lại', async () => {
+    mocks.updateSubscription.mockImplementationOnce(async () => {
+      mocks.getSubscriptions.mockResolvedValue([sub({ status: 'CANCELLED' })]);
+      throw Object.assign(new Error('Gói định kỳ đã huỷ.'), { stale: true });
+    });
+    mount();
+    await screen.findByTestId('refill-next-delivery');
+    await act(async () => {
+      fireEvent.click(postponeButton());
+    });
+    await waitFor(() => expect(screen.queryByTestId('refill-next-delivery')).toBeNull());
+    expect(screen.getByRole('alert').textContent).toBe('Gói định kỳ đã huỷ.');
   });
 
   it('+7 ngày vượt 90 ngày tới: nút aria-disabled, nói ngày xa nhất, chạm không gửi gì', async () => {
@@ -121,6 +162,7 @@ describe('RefillNextDelivery (Mini App, tubu-w27-01)', () => {
     mount();
     await screen.findByTestId('refill-next-delivery');
     expect(postponeButton().getAttribute('aria-disabled')).toBe('true');
+    expect((postponeButton() as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Chỉ dời được tới Thứ Hai, 18/01/2027')).toBeTruthy();
     fireEvent.click(postponeButton());
     expect(mocks.updateSubscription).not.toHaveBeenCalled();

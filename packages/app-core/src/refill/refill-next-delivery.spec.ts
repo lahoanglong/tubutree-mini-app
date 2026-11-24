@@ -97,6 +97,15 @@ describe('refillNextDelivery', () => {
     expect(view?.manageText).toBe('Xem cả 2 gói Refill định kỳ');
   });
 
+  it('gói vừa dời (pinId) còn chạy: thẻ giữ gói đó dù gói khác tới trước; gói đó hết chạy thì về kỳ gần nhất', () => {
+    const subs = [sub({ id: 'moved', nextRunAt: '2026-11-09T17:00:00.000Z' }), sub({ id: 'other', slug: 'sua-tam-refill', nextRunAt: '2026-11-05T17:00:00.000Z' })];
+    const pinned = refillNextDelivery(subs, LANDING, NOW, 'moved');
+    expect(pinned?.subscriptionId).toBe('moved');
+    expect(pinned?.postpone.date).toBe('2026-11-17');
+    expect(refillNextDelivery([{ ...subs[0]!, status: 'PAUSED' }, subs[1]!], LANDING, NOW, 'moved')?.subscriptionId).toBe('other');
+    expect(refillNextDelivery(subs, LANDING, NOW, 'gone')?.subscriptionId).toBe('other');
+  });
+
   it('không có gói Refill đang chạy, cờ tắt hay chưa tải: null', () => {
     expect(refillNextDelivery([], LANDING, NOW)).toBeNull();
     expect(refillNextDelivery(undefined, LANDING, NOW)).toBeNull();

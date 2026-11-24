@@ -22,6 +22,9 @@ export interface RefillNextDeliveryProps {
 }
 
 type Postpone = { id: string; patch: SubscriptionPatch; date: string };
+type Notice = { ok: boolean; text: string; id: string };
+
+const SECTION = { marginTop: 'var(--space-stack-md)' } as const;
 
 /**
  * Thẻ "Kỳ Refill tới" đầu trang Tiết kiệm với Refill, như Mini App: khách đã đăng nhập có gói định kỳ đang chạy của một gói Refill thì thấy ngày giao kỳ tới
@@ -33,24 +36,50 @@ export function RefillNextDelivery({ landing }: RefillNextDeliveryProps) {
   // /me/subscriptions cần đăng nhập: gọi trước khi khôi phục xong phiên sẽ 401. Cùng khoá với tab Định kỳ nên dời ở đây thì tab đó cũng mới.
   const authed = useAuthPhase() === 'authenticated';
   const subsQ = useQuery({ ...subscriptionsQuery(coreHttp), enabled: authed });
-  const view = authed ? refillNextDelivery(subsQ.data, landing) : null;
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // Gói vừa bấm dời: thẻ giữ gói đó tới khi rời trang, kể cả khi kỳ mới xa hơn gói Refill khác, để lần bấm sau không dời nhầm gói.
+  const [pinned, setPinned] = useState<string | null>(null);
+  const view = authed ? refillNextDelivery(subsQ.data, landing, new Date(), pinned) : null;
+  const [notice, setNotice] = useState<Notice | null>(null);
+  // Lời báo thuộc gói đã bấm: thẻ chuyển sang gói khác thì không treo lời báo cũ dưới gói mới.
+  const shown = notice && (!view || notice.id === view.subscriptionId) ? notice : null;
 
   const postponeMut = useLockedMutation({
     mutationFn: ({ id, patch }: Postpone) => updateSubscription(coreHttp, id, patch),
-    onMutate: () => setNotice(null),
-    onSuccess: (sub, { date }) => {
-      setNotice({ ok: true, text: refillPostponeDoneText(sub?.nextRunAt, date) });
+    onMutate: ({ id }) => {
+      setPinned(id);
+      setNotice(null);
+    },
+    onSuccess: (sub, { id, date }) => {
+      setNotice({ ok: true, text: refillPostponeDoneText(sub?.nextRunAt, date), id });
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    // Lịch đã khác thẻ (cron vừa ra đơn kỳ đó: 409, gói vừa tạm dừng ở máy khác: 400): tải lại để lần bấm sau theo số thật. Mất mạng, 5xx: để nguyên.
-    onError: (e) => {
-      setNotice({ ok: false, text: actionErrorText(e) });
+    // Lịch đã khác thẻ (cron vừa ra đơn kỳ đó: 409, gói vừa huỷ ở máy khác: 400): tải lại để lần bấm sau theo số thật. Mất mạng, 5xx: để nguyên.
+    onError: (e, { id }) => {
+      setNotice({ ok: false, text: actionErrorText(e), id });
       return isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
     },
   });
 
-  if (!view) return null;
+  const regions = (
+    <>
+      <div role="status">
+        {shown?.ok && (
+          <Text variant="body-sm" tone="success" as="p" style={{ fontWeight: 600 }}>
+            {shown.text}
+          </Text>
+        )}
+      </div>
+      <div role="alert">
+        {shown && !shown.ok && (
+          <Text variant="body-sm" tone="danger" as="p" style={{ fontWeight: 600 }}>
+            {shown.text}
+          </Text>
+        )}
+      </div>
+    </>
+  );
+  // Gói vừa bấm hết chạy (huỷ hay tạm dừng ở máy khác) và không còn gói Refill nào: thẻ thôi vẽ nhưng lời báo ở lại tới khi rời trang.
+  if (!view) return shown ? <section style={SECTION} className="md:max-w-md">{regions}</section> : null;
   const busy = postponeMut.isPending;
   const blocked = !view.postpone.allowed || subsQ.isFetching;
   const postpone = () => {
@@ -60,7 +89,7 @@ export function RefillNextDelivery({ landing }: RefillNextDeliveryProps) {
   };
 
   return (
-    <section aria-labelledby="refill-next-title" data-testid="refill-next-delivery" style={{ marginTop: 'var(--space-stack-md)' }} className="md:max-w-md">
+    <section aria-labelledby="refill-next-title" data-testid="refill-next-delivery" style={SECTION} className="md:max-w-md">
       <Card variant="outline" padding={12}>
         <div className="flex flex-col" style={{ gap: 'var(--space-stack-xs)' }}>
           <div className="flex items-center justify-between" style={{ gap: 'var(--space-inline-sm)' }}>
@@ -90,7 +119,8 @@ export function RefillNextDelivery({ landing }: RefillNextDeliveryProps) {
             fullWidth
             data-testid="refill-next-postpone"
             aria-label={view.postpone.aria}
-            aria-disabled={blocked || undefined}
+            disabled={!view.postpone.allowed}
+            aria-disabled={blocked || busy || undefined}
             loading={busy}
             onPress={postpone}
             style={{ marginTop: 'var(--space-stack-xs)' }}
@@ -102,15 +132,7 @@ export function RefillNextDelivery({ landing }: RefillNextDeliveryProps) {
               {view.postpone.limitText}
             </Text>
           )}
-          <div role="status">
-            {notice && (
-              <div role={notice.ok ? undefined : 'alert'}>
-                <Text variant="body-sm" tone={notice.ok ? 'success' : 'danger'} as="p" style={{ fontWeight: 600 }}>
-                  {notice.text}
-                </Text>
-              </div>
-            )}
-          </div>
+          {regions}
         </div>
       </Card>
     </section>
