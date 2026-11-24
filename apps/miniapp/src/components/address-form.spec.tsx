@@ -768,7 +768,7 @@ describe('AddressForm trong sheet sửa địa chỉ — tấm Tỉnh/Phường 
 // Khách dán cả khối "tên, SĐT, địa chỉ" chép từ Zalo vào một ô: tách ra từng ô, tự chọn tỉnh và phường khi khớp đúng một mục, không tự lưu. Cùng kịch bản với web.
 describe('AddressForm — dán cả khối địa chỉ', () => {
   const NOTE = 'Đã điền từ nội dung dán — kiểm lại Phường';
-  const BLOCK = 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, Quận 1, TP.HCM';
+  const BLOCK = 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, TP.HCM';
   const PROVINCES = [
     { code: '84_VN01', name: 'Thành phố Hà Nội' },
     { code: '84_VN79', name: 'Thành phố Hồ Chí Minh' },
@@ -847,11 +847,12 @@ describe('AddressForm — dán cả khối địa chỉ', () => {
     expect(geoApi.getCommunes).not.toHaveBeenCalledWith('84_VN79');
   });
 
-  it('phường trùng tên phường/xã mà khối dán không ghi tiền tố: để trống cho khách chọn', async () => {
+  it('phường viết trần không tiền tố: ở lại số nhà, để trống phường cho khách chọn', async () => {
     const { container } = renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
     paste(inputNear('Người nhận'), 'Lê Hoa, 0987654321, 12 Lê Lợi, Tân Thạnh, TP HCM');
     await waitFor(() => expect(geoApi.getCommunes).toHaveBeenCalledWith('84_VN79'));
     await act(async () => {});
+    expect(inputNear('Số nhà, tên đường')).toHaveValue('12 Lê Lợi, Tân Thạnh');
     expect(geoButton('Tỉnh/Thành phố')).toHaveAccessibleName('Tỉnh/Thành phố: Thành phố Hồ Chí Minh');
     expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Chọn phường/xã');
     expect(note(container).textContent).toBe(NOTE);
@@ -866,5 +867,39 @@ describe('AddressForm — dán cả khối địa chỉ', () => {
     expect(paste(inputNear('Số điện thoại'), BLOCK)).toBe(true);
     await waitFor(() => expect(inputNear('Người nhận')).toHaveValue('Nguyễn Văn An'));
     expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
+  });
+
+  it('địa chỉ cũ còn Quận: chọn tỉnh nhưng không đoán phường', async () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    paste(inputNear('Người nhận'), 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, Quận 1, TP.HCM');
+    await waitFor(() => expect(geoButton('Tỉnh/Thành phố')).toHaveAccessibleName('Tỉnh/Thành phố: Thành phố Hồ Chí Minh'));
+    await act(async () => {});
+    expect(inputNear('Số nhà, tên đường')).toHaveValue('123 Lê Lợi');
+    expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Chọn phường/xã');
+  });
+
+  it('SĐT khách tự dán trước đó không bị khối dán sau đè', async () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    expect(paste(inputNear('Số điện thoại'), '0912 345 678')).toBe(true);
+    expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
+    paste(inputNear('Số nhà, tên đường'), 'Lê Hoa 0987654321, 12 Lê Lợi, P. Bến Thành, HCM');
+    await waitFor(() => expect(inputNear('Số nhà, tên đường')).toHaveValue('12 Lê Lợi'));
+    expect(inputNear('Người nhận')).toHaveValue('Lê Hoa');
+    expect(inputNear('Số điện thoại')).toHaveValue('0912345678');
+  });
+
+  it('dán lần hai: dòng báo vẽ lại thành nút mới để được đọc lại; khách gõ thì dòng báo ẩn', async () => {
+    const { container } = renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    paste(inputNear('Người nhận'), BLOCK);
+    await waitFor(() => expect(note(container).textContent).toBe(NOTE));
+    const first = note(container).firstElementChild;
+    const name = inputNear('Người nhận');
+    name.setSelectionRange(0, name.value.length);
+    paste(name, 'Lê Hoa 0987654321, 12 Lê Lợi, P. Sài Gòn, HCM');
+    await waitFor(() => expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Phường Sài Gòn'));
+    expect(note(container).textContent).toBe(NOTE);
+    expect(note(container).firstElementChild).not.toBe(first);
+    fireEvent.change(inputNear('Số nhà, tên đường'), { target: { value: '12 Lê Lợi B' } });
+    expect(note(container).textContent).toBe('');
   });
 });
