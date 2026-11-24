@@ -468,6 +468,17 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     expect(screen.getAllByText(/Dự kiến chốt từ/)).toHaveLength(1);
   });
 
+  it('khoản đang giữ của đơn khách chưa thu tiền (PO A3): báo chốt sau khi đơn thanh toán xong, không hứa ngày (cùng chữ web)', async () => {
+    vi.mocked(getCommissions).mockResolvedValue([
+      { id: 'g1', amount: 4_000, orderTotal: 40_000, status: 'LOCKED', createdAt: '2026-10-03T03:00:00.000Z', unlockEstimateAt: null, awaitingPayment: true },
+    ] as Awaited<ReturnType<typeof getCommissions>>);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
+    expect(await screen.findByText('Chốt sau khi đơn thanh toán xong')).toBeInTheDocument();
+    expect(screen.queryByText(/Dự kiến chốt từ/)).toBeNull();
+  });
+
   it('thẻ đầu trang (số dùng được, đang chờ, tạm tính tháng) và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
     renderPage();
     // Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính là dòng phụ.

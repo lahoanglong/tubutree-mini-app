@@ -1488,6 +1488,20 @@ describe('AffiliateService.approveDueCommissions (chỉ chốt đơn KHÔNG còn
     expect(updateMany.mock.calls[0][0].where).toMatchObject({ status: 'LOCKED', order: { status: 'DELIVERED' } });
   });
 
+  // PO A3: đơn khách vãng lai chỉ chốt khi đã thu tiền; đơn đăng nhập (guestPhone null) giữ luật cũ.
+  it('đơn khách vãng lai chỉ chốt khi đã thu tiền (PAID, hoặc COD đã giao); đơn đăng nhập không đổi', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = lockable({
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      commission: { updateMany },
+    }) as unknown as PrismaService;
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).approveDueCommissions();
+    expect(updateMany.mock.calls[0][0].where.order).toEqual({
+      status: 'DELIVERED',
+      OR: [{ guestPhone: null }, { paymentStatus: 'PAID' }, { paymentMethod: 'COD', paymentStatus: 'UNPAID' }],
+    });
+  });
+
   it('không có yêu cầu đổi/trả treo → không thêm điều kiện orderId', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
     const prisma = lockable({
@@ -3125,6 +3139,30 @@ describe('AffiliateService.listCommissions / listMyPayouts: phân trang con tr�
     expect(rows.map((r) => r.unlockEstimateAt)).toEqual([new Date('2026-12-04T03:00:00.000Z'), null, null]);
   });
 
+  it('listCommissions: đơn khách vãng lai chưa thu tiền (PO A3) → awaitingPayment, không hứa ngày chốt; COD đã giao và đơn đăng nhập vẫn có ngày; không lộ SĐT khách', async () => {
+    const lockedAt = new Date('2026-11-20T03:00:00.000Z');
+    const order = (code: string, guestPhone: string | null, paymentMethod: string, paymentStatus: string) => ({ code, status: 'DELIVERED', guestPhone, paymentMethod, paymentStatus });
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'c1', status: 'LOCKED', lockedAt, payoutBatchId: null, order: order('G1', '0912345678', 'BANK_TRANSFER', 'UNPAID') },
+      { id: 'c2', status: 'LOCKED', lockedAt, payoutBatchId: null, order: order('G2', '0912345678', 'COD', 'UNPAID') },
+      { id: 'c3', status: 'LOCKED', lockedAt, payoutBatchId: null, order: order('G3', '0912345678', 'BANK_TRANSFER', 'REFUNDED') },
+      { id: 'c4', status: 'LOCKED', lockedAt, payoutBatchId: null, order: order('A4', null, 'BANK_TRANSFER', 'UNPAID') },
+      { id: 'c5', status: 'PENDING', lockedAt: null, payoutBatchId: null, order: order('G5', '0912345678', 'BANK_TRANSFER', 'UNPAID') },
+    ]);
+    const cfg = { get: jest.fn(async (key: string, fallback: unknown) => (key === 'affiliate.hold_days' ? 10 : key === 'returns.window_days' ? 7 : fallback)) };
+    const rows = await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, cfg as never, pricing, pancakeOrder, coins, analytics).listCommissions('u1');
+    expect(findMany.mock.calls[0][0].include).toEqual({ order: { select: { code: true, status: true, guestPhone: true, paymentStatus: true, paymentMethod: true } } });
+    const due = new Date('2026-11-30T03:00:00.000Z');
+    expect(rows.map((r) => [r.awaitingPayment, r.unlockEstimateAt])).toEqual([
+      [true, null],
+      [false, due],
+      [true, null],
+      [false, due],
+      [false, null],
+    ]);
+    expect(JSON.stringify(rows)).not.toContain('0912345678');
+  });
+
   it('listCommissions: lockedAt lẻ phút thì ngày chốt dự kiến làm tròn lên giờ chẵn kế tiếp (cron duyệt chạy đầu mỗi giờ), không báo sớm một ngày', async () => {
     const findMany = jest.fn().mockResolvedValue([
       { id: 'c1', status: 'LOCKED', lockedAt: new Date('2026-11-20T16:30:00.000Z'), payoutBatchId: null, order: { code: 'A1', status: 'DELIVERED' } },
@@ -3538,7 +3576,6 @@ describe('AffiliateService.register: đánh dấu danh sách ảnh /img cũ', ()
 });
 
 describe('Số đơn/doanh số theo link CTV (affiliate-link-stats)', () => {
-  const sqlOf = (m: jest.Mock, i = 0) => (m.mock.calls[i]![0] as unknown as string[]).join('?');
   const linkedOrder = (code: string | null) => ({
     id: 'o1',
     userId: 'buyer',
@@ -3550,29 +3587,30 @@ describe('Số đơn/doanh số theo link CTV (affiliate-link-stats)', () => {
   });
   const variations = [{ id: 'v1', affiliateRate: 10, product: { affiliateBlocked: false, storefrontId: null } }];
 
+  const linkCalls = (m: jest.Mock) => m.mock.calls.filter((c) => (c[0] as string[]).join('?').includes('UPDATE "affiliate_links"'));
+
   it('dòng hoa hồng vừa chèn (count 1) của đơn mang mã link → một câu UPDATE affiliate_links +1 đơn và + nền doanh số', async () => {
     const prisma = prismaWith(linkedOrder('abcDEF1'), variations);
-    const exec = jest.fn().mockResolvedValue(1);
-    (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = exec;
+    const query = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
-    expect(exec).toHaveBeenCalledTimes(1);
-    expect(sqlOf(exec)).toContain('UPDATE "affiliate_links"');
-    expect(sqlOf(exec)).toContain('l."userId" = ?');
-    expect(exec.mock.calls[0]!.slice(1)).toEqual([1, 2_147_483_647, 200_000, 2_147_483_647, 'o1', 'ctv']);
+    const calls = linkCalls(query);
+    expect(calls).toHaveLength(1);
+    expect((calls[0]![0] as string[]).join('?')).toContain('l."userId" = ?');
+    expect(calls[0]!.slice(1)).toEqual([1, 200_000, 'o1', 'ctv', 2_147_483_647, 2_147_483_647]);
   });
 
   it('chèn trùng (count 0: gọi lại / tx song song) hay đơn không mang mã link → không đụng link', async () => {
     for (const [code, count] of [['abcDEF1', 0], [null, 1]] as const) {
       const prisma = prismaWith(linkedOrder(code), variations, jest.fn().mockResolvedValue({ count }));
-      const exec = jest.fn().mockResolvedValue(1);
-      (prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw = exec;
+      const query = (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw;
       await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).createCommissionForOrder('o1');
-      expect(exec).not.toHaveBeenCalled();
+      expect(linkCalls(query)).toHaveLength(0);
     }
   });
 
   it('rejectPayout: hoa hồng của đơn đã huỷ mang mã link vừa đổi REJECTED → trừ link một lần; đơn không mã link không trừ', async () => {
     const exec = jest.fn().mockResolvedValue(1);
+    const query = jest.fn().mockResolvedValue([]);
     const commissionUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     const payout = { id: 'p1', userId: 'u1', amount: 50_000, fee: 0, method: 'BANK', grossAmount: 50_000, requestedAt: new Date('2026-10-05T03:00:00Z') };
     const prisma = {
@@ -3593,7 +3631,7 @@ describe('Số đơn/doanh số theo link CTV (affiliate-link-stats)', () => {
       order: { findMany: jest.fn().mockResolvedValue([{ id: 'o1', affiliateLinkCode: 'abcDEF1' }, { id: 'o2', affiliateLinkCode: null }]) },
       user: { update: jest.fn().mockResolvedValue({}) },
       $executeRaw: exec,
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: query,
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
@@ -3601,8 +3639,9 @@ describe('Số đơn/doanh số theo link CTV (affiliate-link-stats)', () => {
       where: { id: { in: ['c1'] }, payoutBatchId: 'p1', status: { in: ['APPROVED', 'PAID'] } },
       data: { status: 'REJECTED', payoutBatchId: null, paidAt: null },
     });
-    const linkCalls = exec.mock.calls.filter((c) => (c[0] as string[]).join('?').includes('UPDATE "affiliate_links"'));
-    expect(linkCalls).toHaveLength(1);
-    expect(linkCalls[0]!.slice(1)).toEqual([-1, 2_147_483_647, -300_000, 2_147_483_647, 'o1', 'u1']);
+    expect(linkCalls(exec)).toHaveLength(0);
+    const calls = linkCalls(query);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.slice(1)).toEqual([-1, -300_000, 'o1', 'u1', 2_147_483_647, 2_147_483_647]);
   });
 });

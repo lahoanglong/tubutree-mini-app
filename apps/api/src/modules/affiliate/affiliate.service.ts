@@ -84,6 +84,7 @@ import { APPROVE_COMMISSIONS_CRON, DAILY_WALLET_TRANSFER_HOUR_VN, DAILY_WALLET_T
 import { isAffiliateBlocked } from './affiliate-revocation';
 import { attachLinkTargets, resolveLinkTargetForCreate } from './affiliate-link-target';
 import { creditLinkForCommission, debitLinkForRejectedCommission } from './affiliate-link-stats';
+import { commissionHoldDays, GUEST_ORDER_AWAITING_PAYMENT_WHERE, guestOrderAwaitingPayment, SETTLEABLE_ORDER_WHERE } from './guest-commission-settlement';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
@@ -528,19 +529,26 @@ export class AffiliateService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: Math.min(Math.max(opts.take ?? 100, 1), 200),
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-      include: { order: { select: { code: true, status: true } } },
+      include: { order: { select: { code: true, status: true, guestPhone: true, paymentStatus: true, paymentMethod: true } } },
     });
     // Ngày chốt dự kiến của khoản đang giữ = lúc đơn giao (lockedAt) + số ngày giữ thực (cùng mốc cron approveDue dùng). Chỉ đọc cấu hình khi trang có khoản LOCKED.
     const holdDays = rows.some((r) => r.status === 'LOCKED' && r.lockedAt) ? await this.effectiveHoldDays() : 0;
     // SELLER-10: "Đang rút" = đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền (PAID chỉ khi admin xác nhận).
-    return rows.map(({ order, ...c }) => ({
-      ...c,
-      orderCode: order?.code ?? null,
-      orderStatus: order?.status ?? null,
-      withdrawing: c.status === 'APPROVED' && c.payoutBatchId !== null,
-      // Cron duyệt chạy đầu mỗi giờ (APPROVE_COMMISSIONS_CRON): làm tròn lên giờ chẵn kế tiếp, kẻo khoản giữ lúc 23:30 báo sớm một ngày.
-      unlockEstimateAt: c.status === 'LOCKED' && c.lockedAt ? new Date(Math.ceil((c.lockedAt.getTime() + holdDays * DAY_MS) / HOUR_MS) * HOUR_MS) : null,
-    }));
+    // SĐT khách và cách trả tiền của đơn chỉ dùng để tính cờ, không trả cho CTV.
+    return rows.map(({ order, ...c }) => {
+      // Đơn khách vãng lai chưa thu tiền (PO A3): khoản LOCKED không chốt theo ngày được, nên không hứa ngày.
+      const awaitingPayment = c.status === 'LOCKED' && !!order && guestOrderAwaitingPayment(order);
+      return {
+        ...c,
+        orderCode: order?.code ?? null,
+        orderStatus: order?.status ?? null,
+        withdrawing: c.status === 'APPROVED' && c.payoutBatchId !== null,
+        awaitingPayment,
+        // Cron duyệt chạy đầu mỗi giờ (APPROVE_COMMISSIONS_CRON): làm tròn lên giờ chẵn kế tiếp, kẻo khoản giữ lúc 23:30 báo sớm một ngày.
+        unlockEstimateAt:
+          c.status === 'LOCKED' && c.lockedAt && !awaitingPayment ? new Date(Math.ceil((c.lockedAt.getTime() + holdDays * DAY_MS) / HOUR_MS) * HOUR_MS) : null,
+      };
+    });
   }
 
   /**
@@ -1696,7 +1704,8 @@ export class AffiliateService {
         // Đơn phải CÒN DELIVERED ngay trong câu UPDATE: duyệt trả hàng lật đơn → RETURNED trước,
         // reverseCommissionsForOrder chạy sau (ngoài tx) — lượt cron rơi vào khe đó mà không có
         // điều kiện này sẽ chốt APPROVED hoa hồng của đơn đã trả hàng; cron chuyển nó vào Ví nên lần thu hồi phải trừ Ví CTV.
-        order: { status: 'DELIVERED' },
+        // Đơn khách vãng lai còn phải đã thu tiền (PO A3): xem guest-commission-settlement.ts.
+        order: SETTLEABLE_ORDER_WHERE,
         ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
       },
       data: { status: 'APPROVED', approvedAt: new Date() },
@@ -1919,12 +1928,8 @@ export class AffiliateService {
    * → không được chốt khi khách còn trong cửa sổ gửi đổi/trả
    * (key + mặc định mirror OrdersService.requestReturn), dù admin cấu hình hold ngắn hơn cửa sổ.
    */
-  private async effectiveHoldDays(): Promise<number> {
-    const [holdDays, returnWindowDays] = await Promise.all([
-      this.config.get<number>('affiliate.hold_days', 10),
-      this.config.get<number>('returns.window_days', 7),
-    ]);
-    return Math.max(Number(holdDays) || 0, Number(returnWindowDays) || 0);
+  private effectiveHoldDays(): Promise<number> {
+    return commissionHoldDays(this.config);
   }
 
   /**
@@ -2106,7 +2111,12 @@ export class AffiliateService {
       this.confirmedRevenue(this.prisma, userId, cur),
       this.confirmedRevenue(this.prisma, userId, prev),
       this.prisma.commission.aggregate({
-        where: { affiliateUserId: userId, status: { in: [...PENDING_COMMISSION_STATUSES] } },
+        // Khoản LOCKED của đơn khách chưa thu tiền không chốt sau holdDays như dòng "Đang chờ chốt" hứa, nên không cộng vào đây.
+        where: {
+          affiliateUserId: userId,
+          status: { in: [...PENDING_COMMISSION_STATUSES] },
+          NOT: { status: 'LOCKED', order: GUEST_ORDER_AWAITING_PAYMENT_WHERE },
+        },
         _sum: { commissionableTotal: true },
       }),
       this.prisma.ctvMilestoneClaim.findMany({

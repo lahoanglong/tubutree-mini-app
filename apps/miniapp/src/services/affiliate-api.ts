@@ -116,6 +116,8 @@ export interface Commission {
   withdrawing?: boolean;
   /** LOCKED: ngày dự kiến được chốt (lúc đơn giao + số ngày giữ); thiếu khi API cũ. */
   unlockEstimateAt?: string | null;
+  /** LOCKED của đơn khách vãng lai chưa thu tiền (PO A3): chưa có ngày chốt. Thiếu khi API cũ. */
+  awaitingPayment?: boolean;
 }
 
 export type PayoutStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
