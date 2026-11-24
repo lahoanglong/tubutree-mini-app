@@ -276,6 +276,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'MssCatalogCron.incremental': 'Kéo nội dung MSS theo mốc, 30 phút (chỉ khi cờ bật)',
   'MssCatalogCron.full': 'Kéo toàn bộ nội dung MSS lúc 02:40 (chỉ khi cờ bật)',
   'merchant.sla-reminder': 'Nhắc đối tác các đơn tự giao quá hạn (có báo khách)',
+  'ops.daily-digest': 'Gửi email bản tin sáng cho chủ shop (8:00, gửi bù tới 10:30 nếu lỗi)',
   'ops.health-alert': 'Kiểm tra sức khoẻ hệ thống và báo động',
   'ops.ledger-drift': 'Đối soát số dư Điểm Xanh và Ví Tubu với sổ cái mỗi đêm (chỉ báo lệch, không tự sửa)',
   'orders.delivered-effects-resync': 'Chạy lại việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) cho đơn bị sót',
