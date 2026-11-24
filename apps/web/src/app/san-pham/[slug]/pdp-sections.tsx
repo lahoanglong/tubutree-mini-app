@@ -13,15 +13,11 @@ import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
 import { RefillLandingLink, type RefillEntryLink } from '@/components/refill/refill-landing-link';
 import type { ProductDetail } from '@/lib/api';
 import { ui } from '@/lib/guest-ui';
-import { phoneBand, phoneBrandText } from '@/lib/phone-ui';
+import { phoneBrandText } from '@/lib/phone-ui';
 import { SHIPPING_POLICY_PATH, useTrustView } from './pdp-extras';
+import { pdpBand, pdpSectionTitle } from './pdp-ui';
 
-/** Tiêu đề khối trong luồng mua (Q1): Inter 16/700, -0.01em ở mọi khổ, cùng số đo với `SectionTitle block` của Mini App. Fraunces chỉ cho tiêu đề trang. */
-export const pdpSectionTitle =
-  'font-ui text-[length:var(--type-title-sm-size)] font-bold leading-[var(--type-title-sm-lh)] tracking-[-0.01em] text-[var(--color-text-primary)]';
-
-/** Dải trắng riêng của nửa dưới trang ở điện thoại: cách dải trên 8px, đệm 16px như Box p=4 mt=2 của Mini App. Máy tính giữ khoảng cách mt-8. */
-export const pdpBand = `mt-8 ${phoneBand}`;
+export { pdpBand, pdpSectionTitle };
 
 const COLLAPSED_LINES_THRESHOLD = 220;
 

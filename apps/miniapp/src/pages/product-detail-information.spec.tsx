@@ -142,10 +142,52 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
     mocks.fetchRefillPair.mockResolvedValue({
       p1: { productId: 'p-refill', slug: 'refill-xa-phong', name: 'Refill Xà phòng sả chanh 5L', thumbnail: null, variationId: 'v-refill', price: 390_000, compareAt: null, sizeLabel: '5L', inStock: true, tubu: true },
     });
+    mocks.fetchProduct.mockResolvedValue(product({ description: '<p>Nước <strong>rửa</strong> chén</p><p>Bảo quản: nơi khô ráo, thoáng mát.</p>' }));
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     await screen.findByTestId('product-story');
     await waitFor(() => expect(blockKeys()).toEqual([...PDP_BLOCK_ORDER]));
+  });
+
+  describe('Nguồn gốc & cách dùng (w27-03)', () => {
+    it('nhãn vỏ "Tubu Tree": vùng nguyên liệu theo tên, câu chủ hàng viết trong mô tả; gập sẵn, chạm dòng tiêu đề mở; lối bản đồ mở câu chuyện nhãn', async () => {
+      mocks.fetchProduct.mockResolvedValue(
+        product({ brand: 'Tubu Tree', name: 'Nước giặt Fuwa3e 2L', description: '<p><strong>Hướng dẫn sử dụng:</strong> 1 nắp cho 4kg đồ.</p><p>Bảo quản nơi khô ráo.</p>' }),
+      );
+      renderPdp();
+      const toggle = await screen.findByTestId('pdp-origin-toggle');
+      const guide = block('origin')!;
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(toggle.textContent).toBe('Nguồn gốc & cách dùngThanh Hóa');
+      expect(guide.querySelector('dl')!.hidden).toBe(true);
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(guide.querySelector('dl')!.hidden).toBe(false);
+      const rowText = (key: string) => guide.querySelector(`[data-testid="pdp-origin-${key}"]`)?.textContent;
+      expect(rowText('origin')).toBe('Vùng nguyên liệuThanh Hóa · Fuwa3eXem trên bản đồ');
+      expect(rowText('usage')).toBe('Cách dùng1 nắp cho 4kg đồ.');
+      expect(rowText('storage')).toBe('Bảo quảnNơi khô ráo.');
+      expect(rowText('lot')).toBe('Hạn dùng, số lôIn trên bao bì sản phẩm');
+      const map = screen.getByTestId('pdp-origin-map');
+      expect(map.getAttribute('aria-label')).toBe('Xem vùng nguyên liệu Thanh Hóa trên bản đồ');
+      fireEvent.click(map);
+      expect(mocks.navigate).toHaveBeenCalledWith('/brand-story?brand=fuwa3e');
+    });
+
+    it('chip xuất xứ đầu trang đã có (Pineboo): khối không thêm lối bản đồ thứ hai', async () => {
+      mocks.fetchProduct.mockResolvedValue(product({ brand: 'Pineboo', name: 'Xịt tràm cho bé Pineboo 150ml' }));
+      renderPdp();
+      await screen.findByTestId('pdp-origin-link');
+      const guide = await screen.findByTestId('pdp-origin');
+      expect(guide.querySelector('[data-testid="pdp-origin-origin"]')!.textContent).toBe('Vùng nguyên liệuThanh Hóa · nhà máy Fuwa3e');
+      expect(screen.queryByTestId('pdp-origin-map')).toBeNull();
+    });
+
+    it('không rõ vùng nguyên liệu, mô tả không có cách dùng hay bảo quản: không có khối', async () => {
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+      expect(block('origin')).toBeNull();
+    });
   });
 
   it('thiếu dữ liệu: khối trống không vẽ, các khối còn lại giữ đúng thứ tự', async () => {

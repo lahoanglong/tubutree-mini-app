@@ -14,6 +14,7 @@ const item = (i: number, patch: Partial<ComboCardItem> = {}): ComboCardItem => (
 });
 const items = (n: number) => Array.from({ length: n }, (_, i) => item(i + 1));
 const base = { title: 'Combo giặt sạch', pct: 10, total: 374000, comboTotal: 337300 };
+const MOUNT = (ui: Parameters<typeof render>[0]): ParentNode => render(ui).container;
 
 describe('ComboCard', () => {
   it('3 món: nhãn Combo -10%, Tiết kiệm 36.700đ, nút thêm cả combo có tên đọc đủ và gọi onAddAll một lần', () => {
@@ -195,5 +196,45 @@ describe('ComboCard', () => {
     const pure: ProductCardView = { ...item(1) };
     const asItem: ComboCardItem = pure;
     expect(asItem.id).toBe('p1');
+  });
+  describe('itemPrices (trang sản phẩm, Bộ quà tặng): giá từng món so với giá lẻ', () => {
+    const priced = [item(1, { name: 'Nước giặt', price: 89_000 }), item(2, { name: 'Nước rửa chén', price: 125_500 }), item(3, { name: 'Xịt lau', price: 45_999 })];
+    // 89.000 + 125.500 + 45.999 = 260.499; giảm 10% từng món làm tròn xuống: 80.100 + 112.950 + 41.400 = 234.450.
+    const exact = { title: 'Combo nhà sạch', pct: 10, total: 260_499, comboTotal: 234_450 };
+    const rows = (root: ParentNode) => Array.from(root.querySelectorAll<HTMLElement>('[data-testid="combo-item-price"]'));
+    const struck = (row: HTMLElement) => Array.from(row.querySelectorAll<HTMLElement>('span')).filter((s) => s.style.textDecoration === 'line-through').map((s) => s.textContent);
+
+    it('mỗi dòng: tên, giá trong bộ, giá lẻ gạch; tổng các giá trong bộ bằng giá cả bộ', () => {
+      const root = MOUNT(<ComboCard {...exact} items={priced} itemPrices onAddAll={() => {}} />);
+      const r = rows(root);
+      expect(r).toHaveLength(3);
+      expect(r[0]!.textContent).toContain('Nước giặt');
+      expect(r[0]!.textContent).toContain('80.100đ');
+      expect(struck(r[0]!)).toEqual(['89.000đ']);
+      expect(struck(r[1]!)).toEqual(['125.500đ']);
+      expect(r[2]!.textContent).toContain('41.400đ');
+      // Dòng có giá cao bằng dòng tên (price-sm 14/1.43 = caption 13/1.54 = 20px): thẻ không cao thêm.
+      expect(r[0]!.style.display).toBe('flex');
+      expect(r[0]!.style.gap).toBe('var(--space-inline-sm)');
+    });
+
+    it('mặc định tắt (Trang chủ, gian hàng): danh sách chỉ có tên', () => {
+      const root = MOUNT(<ComboCard {...exact} items={priced} onAddAll={() => {}} />);
+      expect(rows(root)).toHaveLength(0);
+    });
+
+    it('máy chủ kẹp mức giảm (giá cả bộ khác phép chia %): từng món chỉ có giá lẻ, không gạch, không bịa giá trong bộ', () => {
+      const root = MOUNT(<ComboCard {...exact} comboTotal={250_000} items={priced} itemPrices onAddAll={() => {}} />);
+      const r = rows(root);
+      expect(r).toHaveLength(3);
+      expect(r[0]!.textContent).toContain('89.000đ');
+      expect(r.flatMap(struck)).toEqual([]);
+    });
+
+    it('combo tạm hết hay dữ liệu lệch: không có giá từng món', () => {
+      const out = [priced[0]!, { ...priced[1]!, stock: 'out' as const, stockText: 'Hết hàng' }, priced[2]!];
+      expect(rows(MOUNT(<ComboCard {...exact} items={out} itemPrices onAddAll={() => {}} />))).toHaveLength(0);
+      expect(rows(MOUNT(<ComboCard {...exact} total={300_000} items={priced} itemPrices onAddAll={() => {}} />))).toHaveLength(0);
+    });
   });
 });

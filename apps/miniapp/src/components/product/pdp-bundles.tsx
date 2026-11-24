@@ -171,6 +171,7 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
                     total={v.total}
                     comboTotal={v.comboTotal}
                     busy={busyId === v.id}
+                    itemPrices
                     onAddAll={() => {
                       if (combosHeld === null) addCombo(v.id, v.lines);
                     }}

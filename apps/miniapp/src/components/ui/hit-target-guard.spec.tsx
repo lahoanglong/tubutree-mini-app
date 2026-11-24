@@ -33,6 +33,8 @@ import { LoyaltyRulesCard } from '../loyalty/loyalty-rules-card';
 import { GiftTrialRow } from '../checkout/gift-rows';
 import { PdpRebuyRow } from '../product/pdp-rebuy';
 import { PdpRefillOffer } from '../product/pdp-refill-offer';
+import { PdpOriginGuide } from '../product/pdp-origin-guide';
+import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
 import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { SubscriptionSuggestionRow } from '../reorder/subscription-suggestion';
 import { LinkBuilderSheet } from '../affiliate/link-builder-sheet';
@@ -151,6 +153,9 @@ describe('vùng chạm DS v2 >= 44x44', () => {
         blocked={false}
         onRebuy={() => {}}
       />
+    )],
+    ['PdpOriginGuide (dòng gập/mở Nguồn gốc & cách dùng, lối bản đồ)', () => (
+      <PdpOriginGuide view={pdpOriginView({ brand: 'Tubu Tree', name: 'Nước giặt Fuwa3e', description: 'Bảo quản: nơi khô ráo' }, { originChip: false })} onOpenMap={() => {}} />
     )],
     ['PdpRefillOffer (mở trang gói Refill, nút + Thêm)', () => (
       <PdpRefillOffer

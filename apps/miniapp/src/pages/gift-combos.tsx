@@ -102,6 +102,7 @@ export default function GiftCombosPage() {
                       total={v.total}
                       comboTotal={v.comboTotal}
                       busy={busyId === v.id}
+                      itemPrices
                       onAddAll={() => {
                         setCue(null);
                         add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });

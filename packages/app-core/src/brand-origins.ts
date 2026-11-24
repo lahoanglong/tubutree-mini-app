@@ -224,6 +224,42 @@ export function brandOriginOf(name: string): BrandOrigin | undefined {
   return best?.origin;
 }
 
+/** Mọi nhãn hành trình có cách viết xuất hiện trong tên, mỗi nhãn một lần, theo thứ tự của bảng. */
+export function brandOriginsIn(name: string): BrandOrigin[] {
+  const key = normalizeBrandKey(name);
+  if (!key) return [];
+  return BRAND_ORIGINS.filter((origin) => (BRAND_ALIASES[origin.id] ?? []).some((alias) => key.includes(alias)));
+}
+
+export interface ProductOrigin {
+  /** Id điểm trên bản đồ câu chuyện (`/cau-chuyen?brand=<id>` ở web, `/brand-story?brand=<id>` ở Mini). */
+  id: string;
+  province: string;
+  /** Tên hiển thị của nhãn có ghim. */
+  brand: string;
+  /** Nhãn của sản phẩm mượn vùng nhà máy của nhãn khác (Pineboo → Fuwa3e). */
+  viaFactory: boolean;
+}
+
+/**
+ * Xuất xứ của khối "Nguồn gốc" ở trang sản phẩm. Theo `product.brand` trước, như chip `pdpOriginLink`. Vỏ "Tubu Tree" (mọi SKU PROD) hay nhãn
+ * trống thì theo tên sản phẩm (nhãn mượn nhà máy như Pineboo cũng nhận theo tên), và chỉ khi tên trỏ về đúng MỘT vùng: combo nhiều nhãn không
+ * được gán một vùng. Nhãn thật chưa có ghim thì null, không đoán theo tên.
+ */
+export function productOrigin(p: { brand: string; name: string }): ProductOrigin | null {
+  const byBrand = findBrandOrigin({ slug: '', name: p.brand });
+  if (byBrand) return { id: byBrand.id, province: byBrand.province, brand: byBrand.brand, viaFactory: !isOwnName(byBrand, p.brand) };
+  const key = normalizeBrandKey(p.brand);
+  if (key && key !== SHELL_BRAND_KEY) return null;
+  const nameKey = normalizeBrandKey(p.name);
+  const own = brandOriginsIn(p.name);
+  const factories = Object.entries(SHARED_FACTORY_ORIGIN).flatMap(([alias, id]) => (nameKey.includes(alias) ? BRAND_ORIGINS.filter((o) => o.id === id) : []));
+  const regions = new Set([...own, ...factories].map((o) => o.id));
+  if (regions.size !== 1) return null;
+  const origin = own[0] ?? factories[0]!;
+  return { id: origin.id, province: origin.province, brand: origin.brand, viaFactory: own.length === 0 };
+}
+
 /** Đường dẫn danh sách sản phẩm của nhãn hành trình: tìm theo từ khoá trong tên (`?q=`), không lọc `?brand=` vì cột brand của PROD đều là "Tubu Tree". */
 export function brandBrowseTarget(origin: BrandOrigin, base: '/san-pham' | '/browse'): string {
   return `${base}?${new URLSearchParams({ q: origin.searchKeyword }).toString()}`;
