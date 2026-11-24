@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { PurchaseFunnelService } from '../../src/modules/analytics/purchase-funnel.service';
+import { countPurchaseFunnel, PurchaseFunnelService } from '../../src/modules/analytics/purchase-funnel.service';
 import './setup-env';
 
 /**
@@ -93,6 +93,22 @@ describe('PurchaseFunnelService — SQL trên Postgres thật', () => {
 
     // Sự kiện sau mốc now không được đếm.
     await ev({ name: 'product_viewed', platform: 'web', sid: randomUUID(), at: new Date(NOW.getTime() + H) });
+
+    // Phiên chỉ có số đo tốc độ (4 giờ trước): không phải phiên mua sắm, không tính.
+    const V = randomUUID();
+    await ev({ name: 'web_vital', platform: 'web', sid: V, at: ago(4 * H), props: { name: 'LCP', value: 1800 } });
+    await ev({ name: 'web_vital', platform: 'web', sid: V, at: ago(4 * H - 1000), props: { name: 'CLS', value: 0.02 } });
+
+    // Khung 40 ngày trước (ngoài 30 ngày), đọc thẳng bằng countPurchaseFunnel như snapshot ngày.
+    // Phiên R: bấm Đặt hàng, `web_vital` gửi lúc rời trang 40 phút sau, đơn 45 phút sau lần bấm. Số đo không được kéo dài khoảng ghép đơn.
+    const R = randomUUID();
+    const uLate = `u-late-${runTag}`;
+    await ev({ name: 'product_viewed', platform: 'web', sid: R, at: ago(40 * D), userId: uLate, props: { productSlug: 'r' } });
+    await ev({ name: 'checkout_step', platform: 'web', sid: R, at: ago(40 * D - 60_000), userId: uLate, props: { step: 'place_order_click' } });
+    await ev({ name: 'web_vital', platform: 'web', sid: R, at: ago(40 * D - 41 * 60_000), userId: uLate, props: { name: 'INP', value: 120 } });
+    await ev({ name: 'order_placed', platform: 'web', sid: null, at: ago(40 * D - 46 * 60_000), userId: uLate });
+    // Phiên Mini chỉ có `mini_vital` trong cùng khung.
+    await ev({ name: 'mini_vital', platform: 'miniapp', sid: randomUUID(), at: ago(40 * D - H), props: { name: 'TTI', value: 900 } });
   });
 
   afterAll(async () => {
@@ -125,5 +141,30 @@ describe('PurchaseFunnelService — SQL trên Postgres thật', () => {
     expect(counts(dto.windows.d30.rows).product_viewed).toEqual([4, 1, 5]);
     expect(counts(dto.windows.d30.rows).place_order_click).toEqual([3, 1, 4]);
     expect(counts(dto.windows.d30.rows).order_placed).toEqual([1, 1, 2]);
+  });
+
+  describe('số đo tốc độ (`web_vital`/`mini_vital`) không thuộc phiên mua sắm', () => {
+    const since = ago(41 * D);
+    const until = ago(39 * D);
+
+    it('phiên chỉ có số đo không tính; số đo gửi muộn không kéo dài khoảng ghép đơn', async () => {
+      const w = await countPurchaseFunnel(prisma, since, until);
+      expect(w.sessions).toEqual({ web: 1, miniapp: 0, total: 1 });
+      expect(counts(w.rows).place_order_click).toEqual([1, 0, 1]);
+      expect(counts(w.rows).order_placed).toEqual([0, 0, 0]);
+    });
+
+    it('dọn số đo (như sau PERF_VITALS_DAYS) không đổi số phễu của ngày đó', async () => {
+      const before = await countPurchaseFunnel(prisma, since, until);
+      const removed = await prisma.analyticsEvent.deleteMany({
+        where: {
+          eventId: { startsWith: `${EVENT_PREFIX}${runTag}-` },
+          eventName: { in: ['web_vital', 'mini_vital'] },
+          receivedAt: { gte: since, lt: until },
+        },
+      });
+      expect(removed.count).toBe(2);
+      expect(await countPurchaseFunnel(prisma, since, until)).toEqual(before);
+    });
   });
 });

@@ -240,7 +240,7 @@ export interface PurchaseFunnelRow {
 export interface PurchaseFunnelWindowDTO {
   /** Đủ mọi bước của `PURCHASE_FUNNEL_STEPS`, đúng thứ tự. */
   rows: PurchaseFunnelRow[];
-  /** Số phiên có ít nhất một sự kiện trong cửa sổ (mẫu số tham khảo). */
+  /** Số phiên có ít nhất một sự kiện trong cửa sổ, không tính số đo tốc độ `web_vital`/`mini_vital` (mẫu số tham khảo). */
   sessions: { web: number; miniapp: number; total: number };
 }
 
