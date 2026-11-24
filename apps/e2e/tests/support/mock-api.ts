@@ -406,6 +406,18 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         lowStock: { threshold: 5, count: 0, outOfStock: 0, items: [] },
         ctvPayouts: { approvedAmount: 0, approvedCtvs: 0, holdingAmount: 0, pendingAmount: 0, withdrawingAmount: 0, autoWalletTransfer: true },
       });
+      // Tab "Kế hoạch nhập hàng" ở /admin/doi-soat-kho?tab=nhap-hang đọc bảng đề xuất mỗi lần mở: mặc định chưa có biến thể nào cần nhập.
+      api.fallback('GET', '/admin/restock-planner', {
+        generatedAt: '2026-11-24T01:00:00.000Z',
+        windowDays: 14,
+        targetDays: 30,
+        q: '',
+        supplier: null,
+        counts: { scanned: 0, needReorder: 0, outOfStock: 0, waiting: 0, units: 0 },
+        suppliers: [],
+        rows: [],
+        truncated: false,
+      });
       // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
       api.fallback('GET', '/admin/analytics/cohort-repeat', []);
       api.fallback('GET', '/admin/analytics/funnel-daily', []);

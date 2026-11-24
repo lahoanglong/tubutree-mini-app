@@ -409,9 +409,9 @@ const TABS = NAV_GROUPS.flatMap((g) => g.items);
 const DEFAULT_TAB: Tab = 'inbox';
 
 /** Mục menu dẫn sang trang riêng, không phải tab: nên không nằm trong `Tab`, `NAV_GROUPS` hay `STAFF_TABS` mà chỉ gắn vào menu của ADMIN (xem `adminNavGroups`). */
-type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms' | 'goLive' | 'stockReconcile';
+type AdminPageKey = 'catalogWpImages' | 'ecoFacts' | 'searchTerms' | 'goLive' | 'stockReconcile' | 'restockPlan';
 type NavKey = Tab | AdminPageKey;
-const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms', 'goLive', 'stockReconcile']);
+const ADMIN_PAGE_KEYS: ReadonlySet<NavKey> = new Set<AdminPageKey>(['catalogWpImages', 'ecoFacts', 'searchTerms', 'goLive', 'stockReconcile', 'restockPlan']);
 /** Trang riêng có API mở thêm cho một nhóm nhân viên (`@AllowStaff`): nhân viên có nhóm đó cũng thấy lối vào, miễn mục neo nằm trong menu của họ. */
 type AdminPageLink = NavItem<NavKey> & { staff?: StaffPermission };
 const isTabKey = (k: NavKey): k is Tab => !ADMIN_PAGE_KEYS.has(k);
@@ -450,6 +450,13 @@ const ADMIN_PAGE_LINKS: Partial<Record<Tab, AdminPageLink[]>> = {
       href: '/admin/doi-soat-kho',
       staff: 'KHO',
       keywords: 'đối soát tồn kho pancake lệch tồn âm tồn chưa gắn pancake biến thể sku đồng bộ kho',
+    },
+    {
+      k: 'restockPlan',
+      label: 'Kế hoạch nhập hàng',
+      href: '/admin/doi-soat-kho?tab=nhap-hang',
+      staff: 'KHO',
+      keywords: 'kế hoạch nhập hàng đặt hàng nhà cung cấp ncc sắp hết hàng tốc độ bán đủ bán báo hàng về chuông khách chờ file csv',
     },
   ],
   opsHealth: [

@@ -5492,6 +5492,28 @@ describe('admin/page — đối soát tồn Pancake và đổi trạng thái hà
     expect(r.container.querySelector('nav[aria-label="Mục quản trị"]')!.textContent).not.toContain('Đối soát tồn Pancake');
   });
 
+  it('"Kế hoạch nhập hàng" nằm ngay dưới "Đối soát tồn Pancake", mở thẳng tab nhập hàng; nhân viên KHO thấy, nhóm khác thì không', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
+    let r = await mount();
+    const group = r.container.querySelector('nav[aria-label="Mục quản trị"] [role="group"][aria-label="Bán hàng"]')!;
+    const rows = [...group.querySelectorAll('li')].map((li) => navLabel(li));
+    expect(rows.slice(rows.indexOf('Đối soát tồn Pancake'), rows.indexOf('Đối soát tồn Pancake') + 2)).toEqual(['Đối soát tồn Pancake', 'Kế hoạch nhập hàng']);
+    const a = group.querySelector<HTMLAnchorElement>('a[data-nav-item="restockPlan"]')!;
+    expect(a.getAttribute('href')).toBe('/admin/doi-soat-kho?tab=nhap-hang');
+    expect(a.className).toContain('min-h-[44px]');
+    r.unmount();
+    mounted = mounted.filter((m) => m !== r);
+    asStaff(['KHO']);
+    r = await mount();
+    expect(r.container.querySelector('nav[aria-label="Mục quản trị"] a[data-nav-item="restockPlan"]')).not.toBeNull();
+    r.unmount();
+    mounted = mounted.filter((m) => m !== r);
+    asStaff(['CSKH', 'MARKETING', 'KE_TOAN']);
+    r = await mount();
+    expect(r.container.querySelector('nav[aria-label="Mục quản trị"] a[data-nav-item="restockPlan"]')).toBeNull();
+  });
+
   it('bảng Đơn hàng: ô chọn ở cột Mã đơn, bấm ô không mở chi tiết, thanh dưới hiện số đã chọn và cả hai đích với ADMIN', async () => {
     mocks.orders = [order];
     window.history.replaceState(null, '', '/admin?tab=orders');

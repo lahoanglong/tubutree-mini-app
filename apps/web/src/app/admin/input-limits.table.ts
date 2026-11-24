@@ -10,6 +10,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/search-terms-card.tsx::form.term": { dto: "apps/api/src/modules/catalog/dto/search-synonym.dto.ts:CreateSearchSynonymDto.term", max: 60 },
   "components/admin/search-terms-card.tsx::form.canonical": { dto: "apps/api/src/modules/catalog/dto/search-synonym.dto.ts:CreateSearchSynonymDto.canonical", max: 60 },
   "app/admin/doi-soat-kho/reconcile-board.tsx::search": { dto: "apps/api/src/modules/admin/pancake-reconcile/pancake-reconcile.controller.ts:PancakeReconcileQuery.q", max: 100 },
+  "app/admin/doi-soat-kho/restock-planner.tsx::search": { dto: "apps/api/src/modules/restock-alerts/restock-planner.controller.ts:RestockPlanQuery.q", max: 100 },
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
   "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },
   "app/admin/page.tsx::f.code": { dto: "apps/api/src/modules/admin/admin.controller.ts:CreateCouponDto.code", max: 64 },

@@ -128,6 +128,7 @@ const COMMON_LABEL_OK: Record<string, Record<string, string>> = {
   PancakeReconcileQuery: { q: 'ô tìm SKU hoặc tên sản phẩm ở /admin/doi-soat-kho, lỗi ghi "Từ khoá"' },
   ProductQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
   ProductSearchQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
+  RestockPlanQuery: { q: 'ô tìm SKU, tên sản phẩm hoặc nhà cung cấp ở tab Kế hoạch nhập hàng (/admin/doi-soat-kho), lỗi ghi "Từ khoá"' },
   ReturnRequestsQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
   StorefrontAdminListQueryDto: { q: 'ô tìm kiếm ghi "Từ khoá"' },
   SuggestQuery: { q: 'ô tìm kiếm ghi "Từ khoá"' },
