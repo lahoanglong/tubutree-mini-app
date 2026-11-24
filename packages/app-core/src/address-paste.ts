@@ -3,7 +3,7 @@ import { parseVnPhoneInput, stripInvisible } from './phone-input';
 
 /**
  * Tách một khối địa chỉ khách dán (thường chép từ tin nhắn Zalo) thành tên người nhận, SĐT, số nhà/đường và tỉnh/phường của hệ
- * địa giới 2 cấp. Chữ thuần, dùng chung Mini App và web.
+ * địa giới 2 cấp, rồi điền vào form địa chỉ. Chữ thuần, dùng chung Mini App và web.
  *
  * Nhận chữ có dấu hoặc không dấu, SĐT `+84`/có dấu cách, viết tắt `TP.`, `P.`, `Q.`, `HCM`, `HN`. Cấp Quận/Huyện (bỏ từ 07/2025) và
  * chữ đứng sau phường mà không phải tên tỉnh bị bỏ qua. Tỉnh và phường chỉ nhận khi khớp đúng MỘT mục của danh mục Pancake: đoán
@@ -15,7 +15,7 @@ export interface GeoOption {
   name: string;
 }
 
-/** `p` phường, `x` xã, `d` đặc khu, rỗng khi không rõ (thị trấn đã đổi thành xã/phường, hoặc chữ không có tiền tố). */
+/** `p` phường, `x` xã, `d` đặc khu, rỗng khi không rõ (thị trấn đã đổi thành xã/phường). */
 export type PastedWardKind = '' | 'p' | 'x' | 'd';
 
 export interface PastedWard {
@@ -29,7 +29,10 @@ export interface AddressPaste {
   phone: string;
   street: string;
   province: GeoOption | null;
-  /** Chữ phường/xã đã cắt; so với danh sách phường của tỉnh bằng `matchPastedWard`. */
+  /**
+   * Phường/xã viết kèm tiền tố (Phường, P., Xã…); so với danh sách phường của tỉnh bằng `matchPastedWard`. Null khi khối dán còn ghi
+   * cấp Quận/Huyện: đó là địa chỉ trước 07/2025, tên phường cũ có thể trùng tên một phường mới ở chỗ khác.
+   */
   ward: PastedWard | null;
 }
 
@@ -65,14 +68,15 @@ const provinceKey = (s: string): string => {
 
 /** Khớp đúng một tỉnh; `null` khi chữ có dáng tên tỉnh ("Tỉnh …", "TP …", tên viết tắt) mà không khớp; `undefined` khi không phải tên tỉnh. */
 function provinceOf(text: string, provinces: readonly GeoOption[]): GeoOption | null | undefined {
+  const f = fold(text);
+  // "Tỉnh lộ 10", "Quốc lộ 1A" là tên đường.
+  if (!f || /^(?:tinh|quoc) lo\b/.test(f)) return undefined;
   const key = provinceKey(text);
-  if (!key) return undefined;
   const hits = provinces.filter((p) => provinceKey(p.name) === key);
   if (hits.length === 1) return hits[0];
-  return PROVINCE_HEAD.test(fold(text)) || ALIAS_TARGET.has(key) || hits.length > 1 ? null : undefined;
+  return PROVINCE_HEAD.test(f) || ALIAS_TARGET.has(key) || hits.length > 1 ? null : undefined;
 }
 
-// Tiền tố viết có dấu; chữ dán không dấu thì so bản bỏ dấu. Chữ có dấu chỉ khớp đúng dấu: "Huyền" không phải "Huyện", "Xa lộ" không phải "Xã".
 const WARD_HEADS: ReadonlyArray<readonly [string, PastedWardKind]> = [
   ['phường', 'p'],
   ['xã', 'x'],
@@ -83,40 +87,49 @@ const WARD_HEADS: ReadonlyArray<readonly [string, PastedWardKind]> = [
   ['tt', ''],
 ];
 const DISTRICT_HEADS = ['quận', 'huyện', 'thị xã', 'thành phố', 'q', 'tx', 'tp', 'h'];
+// Giữa một đoạn (không đứng sau dấu phẩy) chỉ nhận tiền tố viết tắt: "Bà Huyện Thanh Quan", "Xã Đàn" là tên đường.
+const ABBR = new Set(['p', 'x', 'tt', 'q', 'tx', 'tp', 'h']);
 const STREET_HEADS = new Set(['số', 'đường', 'hẻm', 'ngõ', 'ngách', 'kiệt', 'tổ', 'ấp', 'thôn', 'xóm', 'khu', 'chung', 'tòa', 'toà', 'lô', 'lầu', 'tầng', 'phòng', 'căn', 'block', 'kp']);
 const STREET_HEADS_PLAIN = new Set(['hem', 'ngach', 'kiet', 'thon', 'xom', 'khu', 'chung', 'lau', 'tang', 'block', 'kp']);
+// Chữ đệm cuối tin nhắn ("…0912345678 nha").
+const FILLER = new Set(['nha', 'nhe', 'nhen', 'a', 'nha a', 'nhe a', 'ok', 'oke', 'cam on', 'thanks']);
+const SHIP_TO = /^(?:ship|gửi|gui|giao)(?: hàng| hang)? (?:cho|tới|toi|đến|den) /iu;
 
-const word = (tok: string, accented: boolean): string => {
-  const t = tok.toLowerCase().replace(/[.:]+$/, '');
-  return accented ? t : fold(t);
-};
+const low = (tok: string): string => tok.toLowerCase().replace(/[.:]+$/, '');
 
-function headLen(t: readonly string[], head: string, accented: boolean): number {
+// Chữ có dấu chỉ khớp đúng dấu ("Huyền" không phải "Huyện"); chữ không dấu khớp bản bỏ dấu, kể cả khi khối dán lẫn chữ có dấu.
+const isWord = (tok: string | undefined, w: string): boolean =>
+  tok !== undefined && (low(tok) === w || (!hasMarks(tok) && fold(tok) === fold(w)));
+
+function headLen(t: readonly string[], head: string): number {
   const ws = head.split(' ');
-  return ws.every((w, j) => t[j] !== undefined && word(t[j]!, accented) === (accented ? w : fold(w))) ? ws.length : 0;
+  return ws.every((w, j) => isWord(t[j], w)) ? ws.length : 0;
 }
 
-function wardFrom(t: readonly string[], accented: boolean): PastedWard | null {
-  const glued = /^p(\d+)$/.exec(word(t[0] ?? '', accented));
+function wardFrom(t: readonly string[], inside = false): PastedWard | null {
+  const glued = /^p(\d+)$/.exec(low(t[0] ?? ''));
   if (glued) return t.length === 1 ? { kind: 'p', name: glued[1]! } : null;
+  // "Xa lộ Hà Nội" là tên đường, không phải xã.
+  if (fold(t.slice(0, 2).join(' ')) === 'xa lo') return null;
   for (const [head, kind] of WARD_HEADS) {
-    const n = headLen(t, head, accented);
+    if (inside && !ABBR.has(head)) continue;
+    const n = headLen(t, head);
     if (n && t.length > n) return { kind, name: t.slice(n).join(' ') };
   }
   return null;
 }
 
-function isDistrict(t: readonly string[], accented: boolean): boolean {
-  if (/^q\d+$/.test(word(t[0] ?? '', accented))) return t.length === 1;
+function isDistrict(t: readonly string[], inside = false): boolean {
+  if (/^q\d+$/.test(low(t[0] ?? ''))) return t.length === 1;
   return DISTRICT_HEADS.some((head) => {
-    const n = headLen(t, head, accented);
+    if (inside && !ABBR.has(head)) return false;
+    const n = headLen(t, head);
     // "H. Củ Chi" là huyện; "H 12/3" là hẻm.
     return n > 0 && t.length > n && (head !== 'h' || /^\p{L}/u.test(t[n]!));
   });
 }
 
-const isStreetHead = (tok: string, accented: boolean): boolean =>
-  (accented ? STREET_HEADS : STREET_HEADS_PLAIN).has(word(tok, accented));
+const isStreetHead = (tok: string): boolean => STREET_HEADS.has(low(tok)) || (!hasMarks(tok) && STREET_HEADS_PLAIN.has(fold(tok)));
 
 const tokens = (s: string): string[] =>
   s
@@ -183,7 +196,7 @@ function pushSegments(chunk: string, out: Seg[]): void {
       if (labelled) carry = labelled === 'addr' || labelled === 'note' ? labelled : '';
       const label = labelled ?? carry;
       const text = labelled ? m![2]!.trim() : part;
-      if (text && label !== 'note') out.push({ text, label, alone: false });
+      if (text && label !== 'note' && !FILLER.has(fold(text))) out.push({ text, label, alone: false });
     }
     if (out.length === start + 1) out[start]!.alone = true;
   }
@@ -196,7 +209,6 @@ function pushSegments(chunk: string, out: Seg[]): void {
 export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]): AddressPaste | null {
   const text = stripInvisible(raw).normalize('NFC').replace(/\r/g, '');
   if (!text || text.length > 600) return null;
-  const accented = hasMarks(text);
 
   let phone = '';
   const segs: Seg[] = [];
@@ -214,19 +226,21 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
   }
   pushSegments(text.slice(last), segs);
 
+  const nameText = (i: number): string => segs[i]?.text.replace(SHIP_TO, '') ?? '';
   const isNameLike = (i: number, labelled: boolean): boolean => {
     const s = segs[i];
-    if (!s || s.label === 'addr' || !NAME_RE.test(s.text)) return false;
-    const t = tokens(s.text);
-    // Không dấu, "phuong anh" đứng đầu khối là tên (Phương Anh), không phải phường.
-    const maybeWard = wardFrom(t, accented) && !(i === 0 && !accented && word(t[0]!, false) === 'phuong');
+    const name = nameText(i);
+    if (!s || s.label === 'addr' || !NAME_RE.test(name)) return false;
+    const t = tokens(name);
+    // "Phuong Anh" (không dấu) đứng đầu khối là tên, không phải phường.
+    const maybeWard = wardFrom(t) && !(i === 0 && !hasMarks(t[0]!) && fold(t[0]!) === 'phuong');
     return (
       t.length >= (labelled ? 1 : 2) &&
       t.length <= 6 &&
-      !isStreetHead(t[0]!, accented) &&
+      !isStreetHead(t[0]!) &&
       !maybeWard &&
-      !isDistrict(t, accented) &&
-      provinceOf(s.text, provinces) === undefined
+      !isDistrict(t) &&
+      provinceOf(name, provinces) === undefined
     );
   };
   // Tên: ô có nhãn "Tên:", rồi chữ kề trước SĐT, kề sau SĐT, hay dòng đầu đứng riêng.
@@ -236,10 +250,11 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
     telAt >= 0 && isNameLike(telAt, false) ? telAt : -1,
     segs.length > 1 && segs[0]!.alone && isNameLike(0, false) ? 0 : -1,
   ].find((i) => i >= 0);
-  const recipient = nameAt === undefined ? '' : segs[nameAt]!.text;
+  const recipient = nameAt === undefined ? '' : nameText(nameAt);
   const addr = segs.filter((s, i) => i !== nameAt && s.label !== 'tel' && s.label !== 'name');
 
-  // Đọc ngược từ cuối: tỉnh, quận (bỏ), phường, rồi số nhà/đường. Gặp phường (hay một đoạn đường có số) thì mọi chữ trước đó là đường.
+  // Đọc ngược từ cuối: tỉnh, quận (bỏ), phường, rồi số nhà/đường. Gặp phường (hay một đoạn có số đứng trước tỉnh/quận) thì mọi chữ
+  // trước đó là đường.
   let province: GeoOption | null = null;
   let provinceSeen = false;
   let districtSeen = false;
@@ -257,14 +272,15 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
         for (let k = Math.min(4, t.length); k >= 1; k--) {
           const tail = t.slice(-k).join(' ');
           const p = provinceOf(tail, provinces);
-          if (p === undefined) continue;
+          // Chữ có dáng tên tỉnh mà không khớp danh mục chỉ bỏ khi đứng riêng một đoạn ("TP Thủ Đức"), không cắt giữa tên đường.
+          if (p === undefined || (p === null && k < t.length)) continue;
           const prev = k < t.length ? t[t.length - k - 1]! : '';
+          const f = fold(tail);
           // "123 Đồng Nai", "Xa lộ Hà Nội" là tên đường; "Q1 HCM", "Lê Lợi TP.HCM" thì là tỉnh.
-          const explicit = PROVINCE_HEAD.test(fold(tail)) || /^(?:tp)?(?:hcmc?|hn)$|^sg$/.test(fold(tail).replace(/ /g, ''));
+          const explicit = PROVINCE_HEAD.test(f) || /^(?:tp)?(?:hcmc?|hn)$|^sg$/.test(f.replace(/ /g, ''));
           if (prev && !explicit && (/^\d/.test(prev) || /^(?:lo|duong|pho)$/.test(fold(prev)))) break;
           // "Phường Bình Dương", "Xã Đồng Nai": tên tỉnh đứng sau tiền tố phường/quận là tên phường/quận.
-          const withPrev = t.slice(-k - 1);
-          if (prev && (wardFrom(withPrev, accented) || isDistrict(withPrev, accented))) break;
+          if (prev && (wardFrom(t.slice(-k - 1)) || isDistrict(t.slice(-k - 1)))) break;
           province = p;
           provinceSeen = true;
           t = t.slice(0, -k);
@@ -272,23 +288,23 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
         }
       }
       for (let j = t.length - 1; j >= 0; j--) {
-        if (isDistrict(t.slice(j), accented)) {
+        if (isDistrict(t.slice(j), j > 0)) {
           districtSeen = true;
           t = t.slice(0, j);
           break;
         }
       }
       for (let j = t.length - 1; j >= 0; j--) {
-        // "xa lo ha noi" (không dấu) là Xa lộ Hà Nội, không phải xã.
-        if (!wardFrom(t.slice(j), accented) || fold(t.slice(j, j + 2).join(' ')) === 'xa lo') continue;
-        // "phuong phuong liet": tiền tố đứng kề trước cũng là tiền tố thì tên phường bắt đầu từ chữ thứ hai.
-        if (j > 0 && wardFrom(t.slice(j - 1), accented)) j--;
-        ward = wardFrom(t.slice(j), accented);
-        t = t.slice(0, j);
-        break;
+        const w = wardFrom(t.slice(j), j > 0);
+        if (w) {
+          ward = w;
+          t = t.slice(0, j);
+          break;
+        }
       }
       if (t.length !== before) firstGeo = i;
-      else if (/\d/.test(addr[i]!.text)) streetSeen = true;
+      // Dòng ghi chú có số ở cuối khối ("Giao sau 17h") chưa chặn việc tìm tỉnh/phường ở các đoạn trước nó.
+      else if ((provinceSeen || districtSeen) && /\d/.test(addr[i]!.text)) streetSeen = true;
     }
     rest[i] = t;
   }
@@ -297,17 +313,9 @@ export function parseAddressPaste(raw: string, provinces: readonly GeoOption[]):
     .slice(0, firstGeo < 0 ? rest.length : firstGeo + 1)
     .map((t) => t.join(' '))
     .filter(Boolean);
-  // "12 Lê Lợi, Bến Thành, Q1, HCM": phường viết trần, không tiền tố, nằm ngay trước cấp quận/tỉnh.
-  if (!ward && firstGeo > 0 && !rest[firstGeo]!.length && streetParts.length >= 2) {
-    const bare = streetParts[streetParts.length - 1]!;
-    const t = tokens(bare);
-    if (!/\d/.test(bare) && t.length <= 4 && !isStreetHead(t[0]!, accented)) {
-      ward = { kind: '', name: bare };
-      streetParts.pop();
-    }
-  }
   // Không có số nhà, không có tỉnh/phường ("Gọi 0912…") thì không phải địa chỉ.
   const street = province || ward || streetParts.some((p) => /\d/.test(p)) ? streetParts.join(', ') : '';
+  if (districtSeen) ward = null;
   const found = [recipient, phone, street, province, ward].filter(Boolean).length;
   return found >= 2 ? { recipient, phone, street, province, ward } : null;
 }
@@ -319,7 +327,7 @@ function wardCore(name: string): { core: string; exact: string } {
 
 function wardKey(name: string): { kind: PastedWardKind; core: string; exact: string } {
   const t = tokens(name.normalize('NFC'));
-  const w = wardFrom(t, hasMarks(name)) ?? { kind: '' as const, name: t.join(' ') };
+  const w = wardFrom(t) ?? { kind: '' as const, name: t.join(' ') };
   return { kind: w.kind, ...wardCore(w.name) };
 }
 
@@ -336,6 +344,8 @@ export function matchPastedWard(communes: readonly GeoOption[], ward: PastedWard
   return exact.length === 1 ? exact[0]! : null;
 }
 
+const FIELD_MAX: Record<PasteTextField, number> = { recipient: ADDRESS_RECIPIENT_MAX, phone: 20, street: ADDRESS_STREET_MAX };
+
 /**
  * Điền chữ đã tách vào ô tên/SĐT/đường. Chỉ đè ô còn trống hoặc ô `canReplace` cho phép (ô app tự điền sẵn mà khách chưa sửa, ô
  * đang nhận cú dán). Không đổi gì thì trả lại đúng object cũ.
@@ -346,14 +356,81 @@ export function fillPastedText<T extends Record<PasteTextField, string>>(
   canReplace: (field: PasteTextField) => boolean,
 ): T {
   let next = form;
-  const values: Record<PasteTextField, string> = {
-    recipient: paste.recipient.slice(0, ADDRESS_RECIPIENT_MAX),
-    phone: paste.phone,
-    street: paste.street.slice(0, ADDRESS_STREET_MAX),
-  };
   for (const k of ['recipient', 'phone', 'street'] as const) {
-    const v = values[k];
+    const v = paste[k].slice(0, FIELD_MAX[k]);
     if (v && v !== next[k] && (!next[k].trim() || canReplace(k))) next = { ...next, [k]: v };
   }
   return next;
+}
+
+export interface PasteGeo {
+  province: string;
+  provinceCode: string;
+  ward: string;
+  wardCode: string;
+}
+
+/** Ô khách đã tự gõ (tên/SĐT/đường) hoặc tự chọn (`geo`: tỉnh/phường). */
+export type PasteSlot = PasteTextField | 'geo';
+
+/** Form địa chỉ cắm vào `applyAddressPaste`: mỗi app tự đưa trạng thái, cách tải danh mục và cách báo. */
+export interface AddressPasteHost<G extends PasteGeo> {
+  /** Trạng thái mới nhất của form. */
+  read: () => { form: Record<PasteTextField, string>; geo: G };
+  /** Đọc trực tiếp, kể cả khi khách sửa trong lúc chờ tải danh sách phường. */
+  edited: ReadonlySet<PasteSlot>;
+  provinces: () => Promise<readonly GeoOption[]>;
+  communes: (provinceCode: string) => Promise<readonly GeoOption[]>;
+  setForm: (form: Record<PasteTextField, string>) => void;
+  setGeo: (update: (g: G) => G) => void;
+  /** Báo "Đã điền từ nội dung dán — kiểm lại Phường" (vùng aria-live). */
+  announce: () => void;
+}
+
+/**
+ * Ô nhận cú dán có tách khối không: ô trống, khách bôi hết ô, hoặc ô còn giá trị app điền sẵn. Ô khách đã tự gõ mà con trỏ chỉ chèn
+ * vào giữa thì để trình duyệt dán như thường (khách đang ghép chữ). Gọi đồng bộ trong `onPaste` để kịp `preventDefault`.
+ */
+export function takesAddressPaste(
+  text: string,
+  cachedProvinces: readonly GeoOption[] | undefined,
+  el: { value: string; selectionStart: number | null; selectionEnd: number | null },
+  target: PasteTextField,
+  edited: ReadonlySet<PasteSlot>,
+): boolean {
+  const replacing = el.selectionStart === 0 && el.selectionEnd === el.value.length;
+  return (replacing || !edited.has(target)) && parseAddressPaste(text, cachedProvinces ?? []) !== null;
+}
+
+/**
+ * Điền form từ khối dán (sau khi `takesAddressPaste` đã nhận). Ô khách đã sửa giữ nguyên; tỉnh chỉ đổi khi khách chưa tự chọn; phường
+ * chỉ khớp trong tỉnh mà khối dán ghi. Phường điền sẵn từ lần trước bị xoá khi khối dán có địa chỉ mới, kể cả khi không khớp được
+ * phường mới. Không tự lưu.
+ */
+export async function applyAddressPaste<G extends PasteGeo>(text: string, target: PasteTextField, host: AddressPasteHost<G>): Promise<void> {
+  const provinces = await host.provinces().catch((): GeoOption[] => []);
+  const paste = parseAddressPaste(text, provinces);
+  if (!paste) return;
+  const free = (k: PasteSlot) => k === target || !host.edited.has(k);
+  const { form, geo } = host.read();
+  const p = paste.province;
+  const geoFree = !geo.provinceCode || free('geo');
+  const takeProvince = !!p && geoFree && geo.provinceCode !== p.code;
+  const clearWard = !takeProvince && !!(p || paste.ward) && !!geo.wardCode && free('geo') && (!p || p.code === geo.provinceCode);
+  const wardInto = p && paste.ward && (takeProvince || (geo.provinceCode === p.code && (!geo.wardCode || clearWard))) ? p.code : '';
+
+  let next = fillPastedText(form, paste, free);
+  const filled = next !== form || takeProvince || clearWard;
+  // Không ô nào nhận được gì (ô khác khách đã sửa hết): làm như trình duyệt, chữ dán thay ô đang nhận cú dán.
+  if (!filled && !wardInto) next = { ...form, [target]: text.replace(/\s+/g, ' ').trim().slice(0, FIELD_MAX[target]) };
+  if (next !== form) host.setForm(next);
+  if (takeProvince) host.setGeo((g) => ({ ...g, province: p!.name, provinceCode: p!.code, ward: '', wardCode: '' }));
+  else if (clearWard) host.setGeo((g) => ({ ...g, ward: '', wardCode: '' }));
+  if (filled) host.announce();
+  if (!wardInto || !paste.ward) return;
+
+  const w = matchPastedWard(await host.communes(wardInto).catch((): GeoOption[] => []), paste.ward);
+  if (!w) return;
+  host.setGeo((g) => (g.provinceCode === wardInto && (!g.wardCode || free('geo')) ? { ...g, ward: w.name, wardCode: w.code } : g));
+  if (!filled) host.announce();
 }

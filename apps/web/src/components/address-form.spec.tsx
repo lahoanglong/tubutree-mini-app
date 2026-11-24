@@ -553,7 +553,7 @@ describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
 // Khách dán cả khối "tên, SĐT, địa chỉ" chép từ Zalo vào một ô: tách ra từng ô, tự chọn tỉnh và phường khi khớp đúng một mục, không tự lưu.
 describe('AddressForm — dán cả khối địa chỉ', () => {
   const NOTE = 'Đã điền từ nội dung dán — kiểm lại Phường';
-  const BLOCK = 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, Quận 1, TP.HCM';
+  const BLOCK = 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, TP.HCM';
   const pasteText = (el: Element, text: string) => {
     const ev = new Event('paste', { bubbles: true, cancelable: true });
     Object.defineProperty(ev, 'clipboardData', { value: { getData: () => text } });
@@ -639,14 +639,76 @@ describe('AddressForm — dán cả khối địa chỉ', () => {
     expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('p1');
   });
 
-  it('phường trùng tên phường/xã mà khối dán không ghi tiền tố: để trống cho khách chọn', async () => {
+  it('phường viết trần không tiền tố: ở lại số nhà, để trống phường cho khách chọn', async () => {
     mocks.me = {};
     const c = await mount();
     pasteText(input(c, 'Người nhận'), 'Lê Hoa, 0987654321, 12 Lê Lợi, Tân Thạnh, TP HCM');
     await flush(6);
+    expect(input(c, 'Số nhà, tên đường').value).toBe('12 Lê Lợi, Tân Thạnh');
     expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('84_VN79');
     expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('');
     expect(note(c).textContent).toBe(NOTE);
+  });
+
+  it('địa chỉ cũ còn Quận: chọn tỉnh nhưng không đoán phường (tên phường cũ dễ trùng phường mới ở chỗ khác)', async () => {
+    mocks.me = {};
+    const c = await mount();
+    pasteText(input(c, 'Người nhận'), 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, Quận 1, TP.HCM');
+    await flush(6);
+    expect(input(c, 'Số nhà, tên đường').value).toBe('123 Lê Lợi');
+    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('84_VN79');
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('');
+  });
+
+  it('phường điền sẵn từ lần trước bị xoá khi khối dán cùng tỉnh mà phường không khớp', async () => {
+    mocks.me = {};
+    localStorage.setItem('tubu_last_geo:u1', JSON.stringify({ province: 'Thành phố Hồ Chí Minh', provinceCode: '84_VN79', ward: 'Phường Sài Gòn', wardCode: '84_VN79_2' }));
+    const c = await mount();
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('84_VN79_2');
+    pasteText(input(c, 'Người nhận'), 'Lê Hoa 0987654321, 12 Quang Trung, Phường Hạnh Thông, TP HCM');
+    await flush(6);
+    expect(selectByLabel(c, 'Tỉnh/Thành phố')!.getAttribute('data-value')).toBe('84_VN79');
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('');
+  });
+
+  it('khối dán không ghi tỉnh: không khớp phường trong tỉnh đang nhớ', async () => {
+    mocks.me = {};
+    localStorage.setItem('tubu_last_geo:u1', JSON.stringify({ province: 'Thành phố Hồ Chí Minh', provinceCode: '84_VN79', ward: 'Phường Sài Gòn', wardCode: '84_VN79_2' }));
+    const c = await mount();
+    pasteText(input(c, 'Người nhận'), 'Lê Hoa 0987654321, 12 Lê Lợi, Phường Bến Thành');
+    await flush(6);
+    expect(input(c, 'Số nhà, tên đường').value).toBe('12 Lê Lợi');
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('');
+  });
+
+  it('ô khách đã gõ, con trỏ chèn ở cuối: để trình duyệt dán, không tách', async () => {
+    mocks.me = {};
+    const c = await mount();
+    const street = input(c, 'Số nhà, tên đường');
+    typeInto(street, 'Chung cư A, ');
+    street.setSelectionRange(street.value.length, street.value.length);
+    expect(pasteText(street, BLOCK).defaultPrevented).toBe(false);
+    await flush(6);
+    expect(input(c, 'Người nhận').value).toBe('');
+  });
+
+  it('dán lần hai: dòng báo vẽ lại thành nút mới để được đọc lại; khách gõ thì dòng báo ẩn', async () => {
+    mocks.me = {};
+    const c = await mount();
+    pasteText(input(c, 'Người nhận'), BLOCK);
+    await flush(6);
+    const first = note(c).firstElementChild;
+    expect(first?.textContent).toBe(NOTE);
+    const name = input(c, 'Người nhận');
+    name.setSelectionRange(0, name.value.length);
+    pasteText(name, 'Lê Hoa 0987654321, 12 Lê Lợi, P. Sài Gòn, HCM');
+    await flush(6);
+    expect(note(c).firstElementChild?.textContent).toBe(NOTE);
+    expect(note(c).firstElementChild).not.toBe(first);
+    expect(selectByLabel(c, 'Phường/Xã')!.getAttribute('data-value')).toBe('84_VN79_2');
+    typeInto(input(c, 'Số nhà, tên đường'), '12 Lê Lợi B');
+    expect(note(c).textContent).toBe('');
+    expect(note(c).className).toContain('sr-only');
   });
 
   it('dán khối vào ô SĐT cũng tách cả khối', async () => {

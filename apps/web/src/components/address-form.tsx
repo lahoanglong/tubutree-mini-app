@@ -4,7 +4,13 @@ import { useEffect, useId, useRef, useState, type ClipboardEvent } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickLastGeo, recallLastGeo, rememberLastGeo } from '@tubutree/app-core/address-geo-memory';
-import { fillPastedText, matchPastedWard, parseAddressPaste, type PasteTextField } from '@tubutree/app-core/address-paste';
+import {
+  applyAddressPaste,
+  takesAddressPaste,
+  type AddressPasteHost,
+  type PasteSlot,
+  type PasteTextField,
+} from '@tubutree/app-core/address-paste';
 import { parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -75,10 +81,12 @@ export function AddressForm({
   const formRef = useRef<HTMLFormElement>(null);
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
   // Ô khách đã tự gõ/chọn: khối địa chỉ dán vào không đè. Ô app điền sẵn (tên, SĐT hồ sơ, tỉnh/phường lần trước) thì đè được.
-  const edited = useRef(new Set<PasteTextField | 'geo'>(initial ? ['recipient', 'phone', 'street', 'geo'] : []));
+  const edited = useRef(new Set<PasteSlot>(initial ? ['recipient', 'phone', 'street', 'geo'] : []));
   const latest = useRef({ form, geo });
   latest.current = { form, geo };
-  const [pasteNote, setPasteNote] = useState('');
+  // `n` đổi mỗi lần dán: dòng báo vẽ lại thành nút mới nên trình đọc màn hình đọc lại cả khi chữ giống lần trước.
+  const [pasteNote, setPasteNote] = useState({ shown: false, n: 0 });
+  const hidePasteNote = () => setPasteNote((s) => (s.shown ? { ...s, shown: false } : s));
 
   // Khoá đồng bộ: `save.isPending` chỉ đúng sau lần vẽ kế, hai cú gửi form sát nhau (bấm đúp, Enter giữ phím) sẽ tạo hai địa chỉ.
   const savingRef = useRef(false);
@@ -120,46 +128,26 @@ export function AddressForm({
 
   const editField = (k: PasteTextField, v: string) => {
     edited.current.add(k);
+    hidePasteNote();
     setForm((f) => ({ ...f, [k]: v }));
   };
 
-  // Điền sau khi có danh mục tỉnh (thường đã có sẵn trong cache của GeoPicker), rồi tải phường của tỉnh đó để khớp phường.
-  const applyPaste = async (text: string, target: PasteTextField | null) => {
-    const provinces = await queryClient
-      .fetchQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity })
-      .catch((): GeoOption[] => []);
-    const paste = parseAddressPaste(text, provinces);
-    if (!paste) return;
-    const canReplace = (k: PasteTextField | 'geo') => k === target || !edited.current.has(k);
-    const { form: curForm, geo: curGeo } = latest.current;
-    const nextForm = fillPastedText(curForm, paste, canReplace);
-    let geoNow = curGeo;
-    if (paste.province && paste.province.code !== curGeo.provinceCode && (!curGeo.provinceCode || canReplace('geo'))) {
-      geoNow = { province: paste.province.name, provinceCode: paste.province.code, ward: '', wardCode: '' };
-      setGeo(geoNow);
-    }
-    if (nextForm !== curForm) setForm(nextForm);
-    const filled = nextForm !== curForm || geoNow !== curGeo;
-    const note = () => setPasteNote(fillCopy('checkout.addressPasteFilled'));
-    if (filled) note();
-    const code = geoNow.provinceCode;
-    if (!paste.ward || !code || (geoNow.wardCode && !canReplace('geo'))) return;
-    const communes = await queryClient
-      .fetchQuery({ queryKey: ['geo-communes', code], queryFn: () => getCommunes(code), staleTime: Infinity })
-      .catch((): GeoOption[] => []);
-    const ward = matchPastedWard(communes, paste.ward);
-    if (!ward) return;
-    setGeo((g) => (g.provinceCode === code && (!g.wardCode || canReplace('geo')) ? { ...g, ward: ward.name, wardCode: ward.code } : g));
-    if (!filled) note();
+  const pasteHost: AddressPasteHost<GeoValue> = {
+    read: () => latest.current,
+    edited: edited.current,
+    provinces: () => queryClient.fetchQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity }),
+    communes: (code) => queryClient.fetchQuery({ queryKey: ['geo-communes', code], queryFn: () => getCommunes(code), staleTime: Infinity }),
+    setForm,
+    setGeo,
+    announce: () => setPasteNote((s) => ({ shown: true, n: s.n + 1 })),
   };
 
   // Chữ dán có dáng một khối địa chỉ (tên + SĐT + đường/tỉnh/phường) thì tách ra các ô; không thì để ô dán như thường. Không tự lưu.
   const pasteAddress = (target: PasteTextField) => (e: ClipboardEvent<HTMLInputElement>): boolean => {
     const text = e.clipboardData.getData('text');
-    if (!parseAddressPaste(text, queryClient.getQueryData<GeoOption[]>(['geo-provinces']) ?? [])) return false;
+    if (!takesAddressPaste(text, queryClient.getQueryData<GeoOption[]>(['geo-provinces']), e.currentTarget, target, edited.current)) return false;
     e.preventDefault();
-    const el = e.currentTarget;
-    void applyPaste(text, el.selectionStart === 0 && el.selectionEnd === el.value.length ? target : null);
+    void applyAddressPaste(text, target, pasteHost);
     return true;
   };
 
@@ -225,14 +213,15 @@ export function AddressForm({
           value={geo}
           onChange={(g) => {
             edited.current.add('geo');
+            hidePasteNote();
             setGeo(g);
           }}
           errorProvince={shown('province')}
           errorWard={shown('ward')}
         />
         {/* Vùng đọc luôn có mặt để trình đọc màn hình bắt được lần đổi chữ đầu tiên; rỗng thì ẩn. */}
-        <p aria-live="polite" className={pasteNote ? 'text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
-          {pasteNote}
+        <p aria-live="polite" className={pasteNote.shown ? 'text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
+          {pasteNote.shown && <span key={pasteNote.n}>{fillCopy('checkout.addressPasteFilled')}</span>}
         </p>
       </div>
       <TextField
