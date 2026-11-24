@@ -8,6 +8,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { EmptyState } from '@/components/empty-state';
 import { Skeleton, Text } from '@/components/mini';
 import { PdpRefillOffer } from '@/components/mini/pdp-refill-offer';
+import { RefillNextDelivery } from '@/components/refill/refill-next-delivery';
 import { useRefillOfferAdd } from '@/components/refill/use-refill-offer-add';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -22,6 +23,7 @@ const addButtonOf = (i: number) => document.querySelector(`[data-refill-row="${i
  * Trang "Tiết kiệm với Refill" của web: mỗi hàng là chai khách đang dùng (dòng phụ "Thay cho …") và thẻ gói Refill cùng số với trang chi tiết chai,
  * "+ Thêm" một chạm (khách chưa đăng nhập theo cùng đường giỏ khách/đăng nhập của trang chi tiết). HTML máy chủ (ISR 5 phút) vẽ sẵn; giá cuối do giỏ tính lại.
  * `refill_swap_shown` ghi một lần mỗi lượt xem có thẻ, `refill_swap_applied` mỗi lần thêm (surface `landing`).
+ * Khách có gói định kỳ đang chạy của một gói Refill thấy thẻ "Kỳ Refill tới" (ngày giao, giá định kỳ so giá lẻ, dời +7 ngày một chạm) trên danh sách.
  */
 export default function RefillLandingView({ initial, initialFetchedAt }: { initial?: RefillLandingDTO; initialFetchedAt?: number }) {
   const query = refillLandingQuery(coreHttp);
@@ -39,6 +41,7 @@ export default function RefillLandingView({ initial, initialFetchedAt }: { initi
   return (
     <>
       <PageHeader title={refillLandingCopy('title')} subtitle={rows.length > 0 ? refillLandingIntro(rows) : undefined} backHref="/san-pham" />
+      <RefillNextDelivery landing={q.data} />
       <div style={{ marginTop: 'var(--space-stack-md)' }}>
         {q.isLoading ? (
           <div className={GRID} aria-hidden="true">

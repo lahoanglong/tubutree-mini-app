@@ -1004,6 +1004,15 @@
       ]
     },
     {
+      "name": "RefillNextDelivery",
+      "miniapp": "apps/miniapp/src/components/refill/refill-next-delivery.tsx",
+      "web": "apps/web/src/components/refill/refill-next-delivery.tsx",
+      "props": "RefillNextDeliveryProps",
+      "screens": [
+        "/refill-deals"
+      ]
+    },
+    {
       "name": "OrderActionBar",
       "miniapp": "apps/miniapp/src/components/orders/order-action-bar.tsx",
       "web": "apps/web/src/components/orders/order-action-bar.tsx",

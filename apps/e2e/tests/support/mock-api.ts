@@ -437,6 +437,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/me/restock-alerts', { enabled: false, items: [] });
       // Sheet Mua lại và tab Định kỳ trên web hỏi gợi ý giao định kỳ theo nhịp mua: mặc định cờ subscriptions.smart_interval_enabled tắt như PROD.
       api.fallback('GET', '/me/subscriptions/suggestions', { enabled: false, items: [] });
+      // Trang Tiết kiệm với Refill (Mini /refill-deals, web /tiet-kiem-refill) hỏi gói định kỳ khi đã đăng nhập để vẽ thẻ "Kỳ Refill tới": mặc định chưa có gói nào.
+      api.fallback('GET', '/me/subscriptions', []);
       // Sảnh mini game ở Vườn Xanh (Mini App và web) hỏi trạng thái kỷ lục và lượt thưởng khi đã đăng nhập; mặc định chưa chơi ván nào, ngoài khung giờ thưởng, chưa nhận quà Chẩn đoán.
       api.fallback('GET', '/game/arcade/status', {
         games: {

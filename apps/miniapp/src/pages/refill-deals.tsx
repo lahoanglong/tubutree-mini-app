@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { refillLandingBottleCaption, refillLandingCopy, refillLandingFaq, refillLandingIntro, refillLandingQuery, refillLandingRows } from '@tubutree/app-core/refill/refill-landing';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PdpRefillOffer } from '../components/product/pdp-refill-offer';
+import { RefillNextDelivery } from '../components/refill/refill-next-delivery';
 import { useRefillOfferAdd } from '../components/refill/use-refill-offer-add';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
@@ -72,6 +73,7 @@ function RefillDealsFaq() {
 /**
  * Tiết kiệm với Refill (lối vào: hub Danh mục, Bộ quà tặng). Mỗi hàng là chai khách đang dùng ("Thay cho …") và thẻ gói Refill cùng số với trang chi tiết chai,
  * "+ Thêm" một chạm. Cùng dữ liệu và luật với web `/tiet-kiem-refill`; giá cuối do giỏ tính lại. `refill_swap_shown` một lần mỗi lượt xem có thẻ (surface `landing`).
+ * Khách có gói định kỳ đang chạy của một gói Refill thấy thẻ "Kỳ Refill tới" (ngày giao, giá định kỳ so giá lẻ, dời +7 ngày một chạm) trên danh sách.
  */
 export default function RefillDealsPage() {
   const navigate = useNavigate();
@@ -92,6 +94,7 @@ export default function RefillDealsPage() {
     <Page className="page" style={PAGE_STYLE}>
       <PageHeader title={refillLandingCopy('title')} subtitle={rows.length > 0 ? refillLandingIntro(rows) : undefined} />
       <div style={BODY}>
+        <RefillNextDelivery landing={q.data} />
         <div style={{ marginTop: 'var(--space-stack-md)' }}>
           {q.isLoading ? (
             <div style={STACK} aria-hidden="true">

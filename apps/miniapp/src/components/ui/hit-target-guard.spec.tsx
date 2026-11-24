@@ -35,6 +35,9 @@ import { PdpRebuyRow } from '../product/pdp-rebuy';
 import { PdpRefillOffer } from '../product/pdp-refill-offer';
 import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
 import { SubscriptionSuggestionRow } from '../reorder/subscription-suggestion';
+import { RefillNextDelivery } from '../refill/refill-next-delivery';
+import { useAuthStore } from '../../store/auth';
+import { MemoryRouter } from 'react-router-dom';
 import { LinkBuilderSheet } from '../affiliate/link-builder-sheet';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
@@ -185,10 +188,38 @@ describe('vùng chạm DS v2 >= 44x44', () => {
         onAccept={() => {}}
       />
     )],
+    ['RefillNextDelivery (Quản lý gói định kỳ, Dời lịch kỳ tới)', () => {
+      // Thẻ chỉ vẽ cho khách đã đăng nhập có gói Refill đang chạy: dựng sẵn danh sách gói, không tải lại (staleTime vô hạn).
+      useAuthStore.setState({ status: 'authenticated' });
+      const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+      qc.setQueryData(['subscriptions'], [
+        {
+          id: 's', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date(Date.now() + 10 * 864e5).toISOString(), productName: 'Túi Refill 3L',
+          variationName: 'Túi 3L', thumbnail: null, slug: 'refill-a', unitPrice: 189_000, effectiveDiscountPct: 0.12,
+        },
+      ]);
+      const landing = {
+        enabled: true,
+        pairs: [{
+          bottle: { productId: 'b', slug: 'chai-a', name: 'Chai', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true },
+          refill: { productId: 'r', slug: 'refill-a', name: 'Túi Refill 3L', thumbnail: null, variationId: 'v', price: 189_000, compareAt: null, sizeLabel: '3L', inStock: true, tubu: true },
+          savingPct: 20,
+        }],
+      };
+      return (
+        <MemoryRouter>
+          <QueryClientProvider client={qc}>
+            <RefillNextDelivery landing={landing} />
+          </QueryClientProvider>
+        </MemoryRouter>
+      );
+    }],
   ];
 
   it.each(cases)('%s', (_name, ui) => {
+    const status = useAuthStore.getState().status;
     const { container } = render(ui());
+    useAuthStore.setState({ status });
     const els = interactiveIn(container);
     expect(els.length).toBeGreaterThan(0);
     for (const el of els) {

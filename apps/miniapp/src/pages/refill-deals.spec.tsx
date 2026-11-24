@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
   track: vi.fn(),
   login: vi.fn(),
+  getSubscriptions: vi.fn(),
   status: 'authenticated' as string,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -26,7 +27,10 @@ vi.mock('../services/shop-api', () => ({ addToCart: mocks.addToCart }));
 vi.mock('../services/analytics', () => ({ trackEvent: mocks.track }));
 vi.mock('../hooks/use-notify', () => ({ useNotify: () => ({ notify: mocks.notify }) }));
 vi.mock('../hooks/use-login-notice', () => ({ useLoginWithNotice: () => mocks.login }));
-vi.mock('../store/auth', () => ({ useAuthStore: { getState: () => ({ status: mocks.status }) } }));
+vi.mock('../store/auth', () => ({
+  useAuthStore: Object.assign((pick: (s: { status: string }) => unknown) => pick({ status: mocks.status }), { getState: () => ({ status: mocks.status }) }),
+}));
+vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: mocks.getSubscriptions, updateSubscription: vi.fn(), isStaleSubscriptionError: () => false }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/cart-feedback', () => ({ playCartFeedback: vi.fn() }));
 
@@ -63,6 +67,7 @@ beforeEach(() => {
     throw new Error(`đường dẫn lạ ${path}`);
   });
   mocks.addToCart.mockResolvedValue({ items: [] });
+  mocks.getSubscriptions.mockResolvedValue([]);
 });
 
 describe('RefillDealsPage (Mini App, tubu-w17-01)', () => {
@@ -77,6 +82,26 @@ describe('RefillDealsPage (Mini App, tubu-w17-01)', () => {
     expect(mocks.track.mock.calls.filter((x) => x[0] === 'refill_swap_shown')).toEqual([['refill_swap_shown', 'miniapp', { surface: 'landing' }]]);
     fireEvent.click(screen.getAllByTestId('pdp-refill-open')[0]!);
     expect(mocks.navigate).toHaveBeenCalledWith('/product/refill-a');
+  });
+
+  it('khách có gói định kỳ đang chạy của một gói Refill trên trang: thẻ "Kỳ Refill tới" trên danh sách; không có gói như vậy thì không có thẻ', async () => {
+    mocks.getSubscriptions.mockResolvedValue([
+      {
+        id: 's1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date(Date.now() + 10 * 864e5).toISOString(), productName: 'Túi Refill a 2L',
+        variationName: 'Túi 2L', thumbnail: null, slug: 'refill-a', unitPrice: 200_000, effectiveDiscountPct: 0.1, cycleSubtotal: 200_000, cycleDiscount: 20_000, cycleGoods: 180_000,
+      },
+    ]);
+    const { unmount } = renderPage();
+    const card = await screen.findByTestId('refill-next-delivery');
+    expect(card.compareDocumentPosition(screen.getByTestId('refill-landing-list')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.textContent).toContain('Giá định kỳ −10%, rẻ hơn giá lẻ 20.000đ');
+    expect(screen.getByTestId('refill-next-postpone').textContent).toContain('Dời lịch kỳ tới (+7 ngày)');
+    unmount();
+
+    mocks.getSubscriptions.mockResolvedValue([]);
+    renderPage();
+    await screen.findAllByTestId('refill-landing-row');
+    expect(screen.queryByTestId('refill-next-delivery')).toBeNull();
   });
 
   it('Câu hỏi thường gặp: ba câu, chạm mở/đóng câu trả lời', async () => {
@@ -112,6 +137,7 @@ describe('RefillDealsPage (Mini App, tubu-w17-01)', () => {
     mocks.status = 'guest';
     renderPage();
     await screen.findAllByTestId('refill-landing-row');
+    expect(mocks.getSubscriptions).not.toHaveBeenCalled();
     await act(async () => {
       fireEvent.click(adds()[0]!);
     });
