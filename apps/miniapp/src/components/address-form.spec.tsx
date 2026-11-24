@@ -873,7 +873,10 @@ describe('AddressForm — dán cả khối địa chỉ', () => {
     renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
     paste(inputNear('Người nhận'), 'Nguyễn Văn An\n0912 345 678\n123 Lê Lợi, P. Bến Thành, Quận 1, TP.HCM');
     await waitFor(() => expect(geoButton('Tỉnh/Thành phố')).toHaveAccessibleName('Tỉnh/Thành phố: Thành phố Hồ Chí Minh'));
-    await act(async () => {});
+    // Chọn tỉnh làm picker tải danh sách phường ("Đang tải…"); máy tải nặng thì một nhịp microtask chưa đủ. Chờ tải xong,
+    // rồi qua thêm một nhịp macrotask để lần đoán phường muộn (nếu có) kịp hiện trước khi kiểm.
+    await waitFor(() => expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Chọn phường/xã'));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(inputNear('Số nhà, tên đường')).toHaveValue('123 Lê Lợi');
     expect(geoButton('Phường/Xã')).toHaveAccessibleName('Phường/Xã: Chọn phường/xã');
   });
