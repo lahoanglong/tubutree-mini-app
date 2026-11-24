@@ -24,10 +24,17 @@ function MoneyCell({ label, bucket }: { label: string; bucket: CommandCenterBuck
   );
 }
 
-/** Dòng phụ dưới ba nhóm: đơn huỷ/hoàn và đơn chờ cổng thanh toán chỉ hiện khi có, để tổng ba nhóm lệch số "Đơn hôm nay" vẫn giải thích được. */
+/** Nhóm đơn không phải tiền Tubu đang thu hoặc chờ thu: chỉ nêu số đơn khi có, để tổng ba nhóm lệch số "Đơn hôm nay" vẫn giải thích được. */
+const REST: { key: 'cancelled' | 'merchantCod' | 'pilot' | 'other'; label: string }[] = [
+  { key: 'cancelled', label: 'Huỷ hoặc hoàn tiền' },
+  { key: 'merchantCod', label: 'COD gian hàng tự thu' },
+  { key: 'pilot', label: 'Đơn thử Giờ G' },
+  { key: 'other', label: 'Chờ cổng thanh toán' },
+];
+
 export function restLine(o: CommandCenterSummary['ordersToday']): string {
-  return [o.cancelled.count > 0 ? `Huỷ hoặc hoàn tiền ${o.cancelled.count}` : '', o.other.count > 0 ? `Chờ cổng thanh toán ${o.other.count}` : '']
-    .filter(Boolean)
+  return REST.filter((r) => o[r.key].count > 0)
+    .map((r) => `${r.label} ${o[r.key].count}`)
     .join(' · ');
 }
 
@@ -100,8 +107,9 @@ export function CommandCenterCard() {
           {ctv.approvedCtvs > 0 && <span className="text-stone-600"> · {ctv.approvedCtvs} CTV</span>}
         </p>
         <p className="mt-0.5 text-[11px] text-stone-600">
-          {ctv.autoWalletTransfer ? 'Tự vào Ví lúc 8 giờ sáng mỗi ngày' : 'Đang tắt tự chuyển vào Ví, chờ CTV tự bấm'} · Đang giữ sau giao {formatVnd(ctv.holdingAmount)} · Đơn chưa
-          giao {formatVnd(ctv.pendingAmount)}
+          {ctv.autoWalletTransfer ? 'Tự vào Ví lúc 8 giờ sáng mỗi ngày, trừ CTV bị khoá' : 'Đang tắt tự chuyển vào Ví, chờ CTV tự bấm'} · Đang giữ sau giao{' '}
+          {formatVnd(ctv.holdingAmount)} · Đơn chưa giao {formatVnd(ctv.pendingAmount)}
+          {ctv.withdrawingAmount > 0 && ` · Trong lệnh rút cũ ${formatVnd(ctv.withdrawingAmount)}`}
         </p>
       </div>
     </section>

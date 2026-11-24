@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { CommissionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { loadCommandCenter } from '../../src/modules/admin/command-center';
+import { PILOT_CLEANUP_ACTION } from '../../src/modules/admin/golive/golive-pilot';
 import { CTV_LINK_CSV_HEADERS, NO_LINK_TARGET_LABEL, ctvLinkCsvChunks } from '../../src/modules/admin/ctv-link-export';
 import { createOrder, createUser, warmPool } from './helpers';
 
@@ -39,6 +40,7 @@ describe('Thẻ điều phối và CSV hoa hồng CTV theo link (real Postgres)'
   const tag = Array.from(randomBytes(8), (b) => 'abcdefghijklmnopqrstuvw'[b % 23]).join('');
   const userIds: string[] = [];
   const productIds: string[] = [];
+  const auditIds: string[] = [];
   const config = (value: unknown) => ({ get: async <T>() => value as T });
 
   beforeAll(async () => {
@@ -57,6 +59,7 @@ describe('Thẻ điều phối và CSV hoa hồng CTV theo link (real Postgres)'
         prisma.variation.deleteMany({ where: { productId: { in: productIds } } }),
         prisma.product.deleteMany({ where: { id: { in: productIds } } }),
         prisma.user.deleteMany({ where: { id: { in: userIds } } }),
+        prisma.adminAuditLog.deleteMany({ where: { id: { in: auditIds } } }),
       ]);
     }
     await prisma?.$disconnect();
@@ -108,6 +111,11 @@ describe('Thẻ điều phối và CSV hoa hồng CTV theo link (real Postgres)'
     await mk(T, { status: 'CANCELLED', paymentMethod: 'ZALOPAY', paymentStatus: 'REFUNDED', total: 50_000 });
     await mk(T, { status: 'CANCELLED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 60_000 });
     await mk(T, { status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', paymentStatus: 'UNPAID', total: 40_000 });
+    await mk(T, { status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', fulfiller: 'MERCHANT', total: 70_000 });
+    const pilot = await mk(T, { status: 'DELIVERED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 20_000 });
+    auditIds.push(
+      (await prisma.adminAuditLog.create({ data: { actorId: buyer.id, action: PILOT_CLEANUP_ACTION, targetType: 'ORDER', targetIds: [pilot.code], payload: {} } })).id,
+    );
     // Ngoài ngày: 23:59:59 hôm trước và đúng 00:00 hôm sau (giờ VN).
     await mk(new Date('2018-06-14T16:59:59Z'), { status: 'CONFIRMED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 7_000_000 });
     await mk(new Date('2018-06-15T17:00:00Z'), { status: 'CONFIRMED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 7_000_000 });
@@ -129,11 +137,13 @@ describe('Thẻ điều phối và CSV hoa hồng CTV theo link (real Postgres)'
 
     const after = await loadCommandCenter(prisma, config(true), now);
     expect(after.ordersToday).toEqual({
-      total: 9,
+      total: 11,
       paid: { count: 2, amount: 450_000 },
       bankTransferUnpaid: { count: 2, amount: 3_200_000 },
       cod: { count: 2, amount: 180_000 },
+      merchantCod: { count: 1, amount: 70_000 },
       cancelled: { count: 2, amount: 110_000 },
+      pilot: { count: 1, amount: 20_000 },
       other: { count: 1, amount: 40_000 },
     });
     expect(after.lowStock.threshold).toBe(5);
@@ -147,6 +157,7 @@ describe('Thẻ điều phối và CSV hoa hồng CTV theo link (real Postgres)'
     expect(after.ctvPayouts.approvedCtvs - before.ctvPayouts.approvedCtvs).toBe(1);
     expect(after.ctvPayouts.holdingAmount - before.ctvPayouts.holdingAmount).toBe(5_000);
     expect(after.ctvPayouts.pendingAmount - before.ctvPayouts.pendingAmount).toBe(3_000);
+    expect(after.ctvPayouts.withdrawingAmount - before.ctvPayouts.withdrawingAmount).toBe(9_000);
     expect(after.ctvPayouts.autoWalletTransfer).toBe(true);
   });
 

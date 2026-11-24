@@ -15,7 +15,16 @@ afterEach(() => {
 const b = (count: number, amount: number) => ({ count, amount });
 const SUMMARY: CommandCenterSummary = {
   generatedAt: '2026-11-24T01:00:00.000Z',
-  ordersToday: { total: 14, paid: b(3, 900_000), bankTransferUnpaid: b(2, 400_000), cod: b(5, 1_250_000), cancelled: b(1, 199_000), other: b(3, 100_000) },
+  ordersToday: {
+    total: 14,
+    paid: b(3, 900_000),
+    bankTransferUnpaid: b(2, 400_000),
+    cod: b(5, 1_250_000),
+    merchantCod: b(0, 0),
+    cancelled: b(1, 199_000),
+    pilot: b(0, 0),
+    other: b(3, 100_000),
+  },
   lowStock: {
     threshold: 5,
     count: 7,
@@ -25,7 +34,7 @@ const SUMMARY: CommandCenterSummary = {
       { sku: 'XP-H', productName: 'Xà phòng', variationName: 'Hộp', stock: 3 },
     ],
   },
-  ctvPayouts: { approvedAmount: 450_000, approvedCtvs: 3, holdingAmount: 120_000, pendingAmount: 80_000, autoWalletTransfer: true },
+  ctvPayouts: { approvedAmount: 450_000, approvedCtvs: 3, holdingAmount: 120_000, pendingAmount: 80_000, withdrawingAmount: 0, autoWalletTransfer: true },
 };
 
 const stub = (body: unknown, status = 200) => {
@@ -88,14 +97,16 @@ describe('CommandCenterCard (thẻ "Điều phối hôm nay")', () => {
     const ctv = group(c, 'Hoa hồng CTV chờ chi');
     expect(ctv.textContent).toContain('Hoa hồng CTV chờ chi 450.000');
     expect(ctv.textContent).toContain('3 CTV');
-    expect(ctv.textContent).toContain('Tự vào Ví lúc 8 giờ sáng mỗi ngày');
+    expect(ctv.textContent).toContain('Tự vào Ví lúc 8 giờ sáng mỗi ngày, trừ CTV bị khoá');
     expect(ctv.textContent).toContain('Đang giữ sau giao 120.000');
     expect(ctv.textContent).toContain('Đơn chưa giao 80.000');
+    expect(ctv.textContent).not.toContain('lệnh rút cũ');
     mounted.forEach((m) => m.unmount());
     mounted = [];
-    stub({ ...SUMMARY, ctvPayouts: { ...SUMMARY.ctvPayouts, approvedAmount: 0, approvedCtvs: 0, autoWalletTransfer: false } });
+    stub({ ...SUMMARY, ctvPayouts: { ...SUMMARY.ctvPayouts, approvedAmount: 0, approvedCtvs: 0, withdrawingAmount: 2_000_000, autoWalletTransfer: false } });
     const off = group(await mount(), 'Hoa hồng CTV chờ chi');
     expect(off.textContent).toContain('Đang tắt tự chuyển vào Ví, chờ CTV tự bấm');
+    expect(off.textContent).toContain('Trong lệnh rút cũ 2.000.000');
     expect(off.textContent).not.toContain(' CTV ·');
   });
 
@@ -120,6 +131,7 @@ describe('restLine', () => {
     expect(restLine({ ...o, cancelled: b(0, 0), other: b(0, 0) })).toBe('');
     expect(restLine({ ...o, cancelled: b(2, 1), other: b(0, 0) })).toBe('Huỷ hoặc hoàn tiền 2');
     expect(restLine({ ...o, cancelled: b(0, 0), other: b(1, 1) })).toBe('Chờ cổng thanh toán 1');
+    expect(restLine({ ...o, merchantCod: b(2, 1), pilot: b(4, 1) })).toBe('Huỷ hoặc hoàn tiền 1 · COD gian hàng tự thu 2 · Đơn thử Giờ G 4 · Chờ cổng thanh toán 3');
   });
 });
 

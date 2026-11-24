@@ -1,5 +1,6 @@
 import { COMMAND_CENTER_LOW_STOCK_LIST, COMMAND_CENTER_LOW_STOCK_MAX, loadCommandCenter } from './command-center';
 import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../affiliate/affiliate-auto-transfer-config';
+import { PILOT_CLEANUP_ACTION } from './golive/golive-pilot';
 
 type SqlArg = { strings: readonly string[]; values: unknown[] };
 const sqlText = (q: SqlArg) => q.strings.join('?');
@@ -51,7 +52,9 @@ describe('loadCommandCenter (thẻ điều phối trang Hôm nay)', () => {
         { bucket: 'paid', n: 3, amount: 900_000n },
         { bucket: 'bankTransferUnpaid', n: 2, amount: 400_000n },
         { bucket: 'cod', n: 5, amount: 1_250_000n },
+        { bucket: 'merchantCod', n: 2, amount: 300_000n },
         { bucket: 'cancelled', n: 1, amount: 199_000n },
+        { bucket: 'pilot', n: 4, amount: 40_000n },
         { bucket: 'other', n: 1, amount: 100_000n },
         { bucket: 'zzz', n: 2, amount: null },
       ],
@@ -59,22 +62,27 @@ describe('loadCommandCenter (thẻ điều phối trang Hôm nay)', () => {
     const r = await loadCommandCenter(db, config(true), NOW);
     expect(r.generatedAt).toBe(NOW.toISOString());
     expect(r.ordersToday).toEqual({
-      total: 14,
+      total: 20,
       paid: { count: 3, amount: 900_000 },
       bankTransferUnpaid: { count: 2, amount: 400_000 },
       cod: { count: 5, amount: 1_250_000 },
+      merchantCod: { count: 2, amount: 300_000 },
       cancelled: { count: 1, amount: 199_000 },
+      pilot: { count: 4, amount: 40_000 },
       other: { count: 3, amount: 100_000 },
     });
   });
 
-  it('khung ngày theo giờ VN: từ 00:00 hôm nay tới 00:00 hôm sau; luật nhóm xét huỷ/hoàn trước, rồi COD, rồi đã thanh toán, rồi chuyển khoản chưa nhận', async () => {
+  it('khung ngày theo giờ VN: từ 00:00 hôm nay tới 00:00 hôm sau; luật nhóm xét đơn thử đã dọn, huỷ/hoàn, COD gian hàng, COD, đã thanh toán, rồi chuyển khoản chưa nhận', async () => {
     const { db, queryRaw } = fakeDb({});
     await loadCommandCenter(db, config(true), NOW);
     const q = callOf(queryRaw, 'GROUP BY t.bucket');
-    expect(q.values).toEqual([new Date('2026-11-23T17:00:00Z'), new Date('2026-11-24T17:00:00Z')]);
-    const s = sqlText(q);
-    const order = ["'cancelled'", "'cod'", "'paid'", "'bankTransferUnpaid'", "'other'"].map((k) => s.indexOf(k));
+    expect(q.values.slice(-2)).toEqual([new Date('2026-11-23T17:00:00Z'), new Date('2026-11-24T17:00:00Z')]);
+    expect(nestedValues(q)).toContain(PILOT_CLEANUP_ACTION);
+    const s = fullSql(q);
+    expect(s).toContain(`WHEN NOT (o.code NOT IN (`);
+    expect(s).toContain(`o."paymentMethod" = 'COD' AND o.fulfiller = 'MERCHANT' THEN 'merchantCod'`);
+    const order = ["'pilot'", "'cancelled'", "'merchantCod'", "'cod'", "'paid'", "'bankTransferUnpaid'", "'other'"].map((k) => s.indexOf(k));
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(s).toContain(`o.status IN ('CANCELLED', 'RETURNED') OR o."paymentStatus" IN ('REFUNDED', 'FAILED')`);
@@ -112,19 +120,28 @@ describe('loadCommandCenter (thẻ điều phối trang Hôm nay)', () => {
     expect(callOf(queryRaw, 'ORDER BY v.stock ASC').values).toContain(COMMAND_CENTER_LOW_STOCK_LIST);
   });
 
-  it('hoa hồng CTV chưa chi: đã duyệt (đơn đã giao, ngoài lệnh rút cũ), đang giữ, chưa giao; cờ tự chuyển Ví chỉ bật khi đúng true', async () => {
+  it('hoa hồng CTV chưa chi: đã duyệt (đơn đã giao, ngoài lệnh rút cũ), đang giữ, chưa giao, nằm trong lệnh rút cũ; cờ tự chuyển Ví chỉ bật khi đúng true', async () => {
     const { db, queryRaw } = fakeDb({
       commissions: [
         { status: 'APPROVED', amount: 450_000n, ctvs: 3 },
         { status: 'LOCKED', amount: 120_000n, ctvs: 2 },
         { status: 'PENDING', amount: 80_000n, ctvs: 1 },
+        { status: 'WITHDRAWING', amount: 2_000_000n, ctvs: 1 },
       ],
     });
     const cfg = config('true');
     const r = await loadCommandCenter(db, cfg, NOW);
-    expect(r.ctvPayouts).toEqual({ approvedAmount: 450_000, approvedCtvs: 3, holdingAmount: 120_000, pendingAmount: 80_000, autoWalletTransfer: false });
+    expect(r.ctvPayouts).toEqual({
+      approvedAmount: 450_000,
+      approvedCtvs: 3,
+      holdingAmount: 120_000,
+      pendingAmount: 80_000,
+      withdrawingAmount: 2_000_000,
+      autoWalletTransfer: false,
+    });
     expect(cfg.mock).toHaveBeenCalledWith(AFFILIATE_AUTO_WALLET_TRANSFER_KEY, true);
     const s = sqlText(callOf(queryRaw, 'FROM commissions c'));
+    expect(s).toContain(`CASE WHEN c.status = 'APPROVED' AND c."payoutBatchId" IS NOT NULL THEN 'WITHDRAWING'`);
     expect(s).toContain(`c.status = 'APPROVED' AND c."payoutBatchId" IS NULL AND o.status = 'DELIVERED'`);
     expect(s).toContain(`c.status IN ('PENDING', 'LOCKED')`);
     expect((await loadCommandCenter(db, config(true), NOW)).ctvPayouts.autoWalletTransfer).toBe(true);
@@ -136,6 +153,6 @@ describe('loadCommandCenter (thẻ điều phối trang Hôm nay)', () => {
     expect(r.ordersToday.total).toBe(0);
     expect(r.ordersToday.cod).toEqual({ count: 0, amount: 0 });
     expect(r.lowStock).toEqual({ threshold: 5, count: 0, outOfStock: 0, items: [] });
-    expect(r.ctvPayouts).toEqual({ approvedAmount: 0, approvedCtvs: 0, holdingAmount: 0, pendingAmount: 0, autoWalletTransfer: false });
+    expect(r.ctvPayouts).toEqual({ approvedAmount: 0, approvedCtvs: 0, holdingAmount: 0, pendingAmount: 0, withdrawingAmount: 0, autoWalletTransfer: false });
   });
 });

@@ -398,11 +398,13 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
           paid: { count: 0, amount: 0 },
           bankTransferUnpaid: { count: 0, amount: 0 },
           cod: { count: 0, amount: 0 },
+          merchantCod: { count: 0, amount: 0 },
           cancelled: { count: 0, amount: 0 },
+          pilot: { count: 0, amount: 0 },
           other: { count: 0, amount: 0 },
         },
         lowStock: { threshold: 5, count: 0, outOfStock: 0, items: [] },
-        ctvPayouts: { approvedAmount: 0, approvedCtvs: 0, holdingAmount: 0, pendingAmount: 0, autoWalletTransfer: true },
+        ctvPayouts: { approvedAmount: 0, approvedCtvs: 0, holdingAmount: 0, pendingAmount: 0, withdrawingAmount: 0, autoWalletTransfer: true },
       });
       // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
       api.fallback('GET', '/admin/analytics/cohort-repeat', []);
