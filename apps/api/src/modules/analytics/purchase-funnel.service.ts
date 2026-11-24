@@ -23,6 +23,14 @@ const CACHE_TTL_MS = 60_000;
  */
 export const ORDER_MATCH_GRACE_MINUTES = 30;
 
+/**
+ * Một phiên chỉ thuộc cửa sổ (ngày VN, 72 giờ…) chứa sự kiện ĐẦU của nó: phiên 23:59 → 00:01 thuộc ngày bắt đầu, kể cả các bước làm sau 00:00,
+ * và ngày sau không đếm lại. Để biết sự kiện đầu và đủ các bước, truy vấn đọc thêm ngần này giờ trước và sau cửa sổ (phiên đổi mã sau 30 phút
+ * không thao tác, nên phiên dài hơn mốc này gần như không có). Phần của phiên nằm ngoài khoảng đọc thêm thì không thấy: phiên bắt đầu trước đó
+ * hơn 12 giờ bị coi như bắt đầu trong cửa sổ, và bước làm sau mốc cuối cộng 12 giờ không được tính.
+ */
+export const SESSION_SPAN_MAX_HOURS = 12;
+
 type Count = number | bigint;
 
 interface FunnelQueryRow {
@@ -39,8 +47,10 @@ const num = (v: Count | null | undefined): number => (v == null ? 0 : Number(v))
 const ts = (d: Date): string => d.toISOString();
 
 /**
- * Đếm phễu của các sự kiện có `receivedAt` trong [since, until). Dùng chung cho bảng sống (72 giờ / 7 / 30 ngày) và snapshot từng ngày VN
- * (`AnalyticsAggregationService`), nên hai nơi cùng một định nghĩa bước. `order_placed` khớp tới `ended_at` + ân hạn, có thể rơi sang ngày sau.
+ * Đếm phễu của các phiên có sự kiện đầu (`receivedAt` nhỏ nhất) trong [since, until), mỗi phiên tính mọi bước của nó kể cả bước sau `until`
+ * (xem `SESSION_SPAN_MAX_HOURS`). Dùng chung cho bảng sống (72 giờ / 7 / 30 ngày) và snapshot từng ngày VN (`AnalyticsAggregationService`),
+ * nên hai nơi cùng một định nghĩa bước và một phiên qua nửa đêm chỉ vào một ngày. `order_placed` khớp tới `ended_at` + ân hạn, có thể rơi
+ * sang ngày sau.
  */
 export async function countPurchaseFunnel(
   prisma: Pick<PrismaService, '$queryRaw'>,
@@ -59,11 +69,13 @@ export async function countPurchaseFunnel(
              bool_or(e."eventName" = 'checkout_started') AS cs,
              bool_or(e."eventName" = 'checkout_step' AND e.props->>'step' = 'place_order_click') AS poc
         FROM "analytics_events" e
-       WHERE e."receivedAt" >= ${ts(since)}::timestamp
-         AND e."receivedAt" < ${ts(until)}::timestamp
+       WHERE e."receivedAt" >= ${ts(since)}::timestamp - make_interval(hours => ${SESSION_SPAN_MAX_HOURS}::int)
+         AND e."receivedAt" < ${ts(until)}::timestamp + make_interval(hours => ${SESSION_SPAN_MAX_HOURS}::int)
          AND e."sessionId" IS NOT NULL
          AND e.platform IN ('web', 'miniapp')
        GROUP BY e."sessionId", e.platform
+      HAVING min(e."receivedAt") >= ${ts(since)}::timestamp
+         AND min(e."receivedAt") < ${ts(until)}::timestamp
     )
     SELECT s.platform AS platform,
            count(*) AS sessions,

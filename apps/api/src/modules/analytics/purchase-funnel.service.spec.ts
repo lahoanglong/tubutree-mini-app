@@ -1,6 +1,6 @@
 import { PURCHASE_FUNNEL_STEPS } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { PurchaseFunnelService } from './purchase-funnel.service';
+import { countPurchaseFunnel, PurchaseFunnelService, SESSION_SPAN_MAX_HOURS } from './purchase-funnel.service';
 
 const row = (platform: string, n: [number, number, number, number, number, number]) => ({
   platform,
@@ -64,5 +64,18 @@ describe('PurchaseFunnelService', () => {
     const dto = await new PurchaseFunnelService({ $queryRaw } as unknown as PrismaService).getSnapshot(now);
     const json = JSON.stringify(dto);
     expect(json).not.toMatch(/userId|sessionId|anonymousId|eventId/);
+  });
+
+  it('phiên thuộc cửa sổ chứa sự kiện đầu: đọc thêm SESSION_SPAN_MAX_HOURS hai đầu, lọc theo min(receivedAt)', async () => {
+    const $queryRaw = jest.fn().mockResolvedValue([]);
+    const since = new Date('2026-11-22T17:00:00.000Z');
+    const until = new Date('2026-11-23T17:00:00.000Z');
+    await countPurchaseFunnel({ $queryRaw } as unknown as PrismaService, since, until);
+    const [strings, ...values] = $queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    const sql = strings.join('?').replace(/\s+/g, ' ');
+    expect(sql).toContain('HAVING min(e."receivedAt") >= ?::timestamp AND min(e."receivedAt") < ?::timestamp');
+    expect(sql).toContain('e."receivedAt" >= ?::timestamp - make_interval(hours => ?::int)');
+    expect(values.slice(0, 4)).toEqual([since.toISOString(), SESSION_SPAN_MAX_HOURS, until.toISOString(), SESSION_SPAN_MAX_HOURS]);
+    expect(values.slice(4, 6)).toEqual([since.toISOString(), until.toISOString()]);
   });
 });
