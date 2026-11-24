@@ -104,6 +104,23 @@ describe('MssOrderEventRecorder: cổng lúc đặt hàng', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('nạp cổng treo: chỉ đợt đầu chờ; transaction sau không chờ thêm 1,5 giây nào (không cạn pool lúc MSS chậm sau deploy)', async () => {
+    jest.useFakeTimers();
+    const { recorder, tx, txc, isEnabled } = setup(() => new Promise<boolean>(() => undefined));
+    const first = recorder.onOrdersPlaced(txc, PLACED, true);
+    await jest.advanceTimersByTimeAsync(MSS_COLD_GATE_WAIT_MS);
+    await first;
+    let settled = false;
+    const second = recorder.onPaid(txc, 'o1').then(() => (settled = true));
+    const third = recorder.onOrdersPlaced(txc, PLACED, true);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(true);
+    await Promise.all([second, third]);
+    expect(tx.order.updateMany).toHaveBeenCalledTimes(2);
+    expect(isEnabled).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('onPaid và onStatusChanged lúc khởi động lạnh cũng chờ lần nạp đầu', async () => {
     const flag = deferred<boolean>();
     const { recorder, record, txc } = setup(() => flag.promise);

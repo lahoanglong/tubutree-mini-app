@@ -67,8 +67,10 @@ export const MSS_ORDER_EVENT_JOB = 'deliver';
 /** Phiên bản câu chữ đồng ý (mục 7 hợp đồng, quyết định PO số 3) lưu kèm lựa chọn của khách làm bằng chứng. */
 export const ORDER_ZALO_CONSENT_TEXT_VERSION = 'order-zalo-v1-2026-11-17';
 /**
- * `gate_closed` chỉ có ở `orders.orderZaloConsentSource`: cổng MSS đóng lúc đặt nên không hỏi khách (`orderZaloConsent` để null). Ops nhờ
- * nó tách "cổng đóng" khỏi "khách không đồng ý" (`false`); khách bật muộn ở chi tiết đơn thì ghi đè bằng `order_detail`.
+ * `gate_closed` chỉ có ở `orders.orderZaloConsentSource`: lúc đặt cờ order_events coi như tắt (admin tắt, thiếu biến MSS_*, hoặc cổng chưa
+ * nạp kịp sau khởi động) nên không hỏi khách (`orderZaloConsent` để null). Ops nhờ nó tách "cờ tắt" khỏi "khách không đồng ý" (`false`).
+ * Cờ bật mà MSS mất năng lực thì vẫn hỏi và chụp đồng ý (nguồn null), xem thẻ MSS ở Sức khoẻ hệ thống. Khách bật muộn ở chi tiết đơn thì
+ * ghi đè bằng `order_detail`.
  */
 export type OrderZaloConsentSource = 'checkout' | 'account_settings' | 'mss_opt_out' | 'order_detail' | 'gate_closed';
 

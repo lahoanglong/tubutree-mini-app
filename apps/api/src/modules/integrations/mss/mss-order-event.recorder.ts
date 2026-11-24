@@ -76,6 +76,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
   private readonly logger = new Logger(MssOrderEventRecorder.name);
   private gateState: MssOrderEventGate = CLOSED_GATE;
   private inflight: Promise<MssOrderEventGate> | null = null;
+  private coldWaitDone = false;
 
   constructor(
     private readonly flags: MssFlagsService,
@@ -117,9 +118,13 @@ export class MssOrderEventRecorder implements OnModuleInit {
   /**
    * Cổng cho một quyết định trong transaction. Cổng chưa từng nạp (`at === 0`: API vừa khởi động, lần nạp ở onModuleInit chưa xong) thì
    * chờ lần nạp đó tối đa MSS_COLD_GATE_WAIT_MS thay vì coi ngay là đóng; đã nạp thì như `gate()`, không I/O.
+   * Chỉ chờ một đợt: lần nạp đầu treo (MSS chậm lúc deploy có thể 8–9 giây) mà mọi transaction sau đều chờ thêm thì pool cạn, checkout hỏng.
    */
   private async readyGate(): Promise<MssOrderEventGate> {
-    if (this.gateState.at === 0) await settleWithin(this.refreshGate(), MSS_COLD_GATE_WAIT_MS);
+    if (this.gateState.at === 0 && !this.coldWaitDone) {
+      await settleWithin(this.refreshGate(), MSS_COLD_GATE_WAIT_MS);
+      this.coldWaitDone = true;
+    }
     return this.gate();
   }
 
