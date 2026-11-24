@@ -52,13 +52,15 @@ export interface TerserAstApi {
   AST_Symbol: NodeClass;
   AST_Label: NodeClass;
   AST_LabelRef: NodeClass;
+  /** Mọi lớp của `lib/ast.js` (cho bước khác dựng nút mới, xem build-hoist-strings.ts). */
+  nodes: Readonly<Record<string, unknown>>;
 }
 
 let terserAst: Promise<TerserAstApi> | null = null;
 
 /**
  * Terser chỉ xuất `minify`; cây cú pháp, bộ phân tích phạm vi và bộ in nằm ở `lib/` của đúng bản terser mà Vite dùng để nén (peer của vite).
- * Nạp `minify.js` trước: tệp đó gắn `figure_out_scope`, `mangle_names` và bộ in vào các lớp của cây.
+ * Nạp `minify.js` trước: tệp đó gắn `figure_out_scope`, `mangle_names` và bộ in vào các lớp của cây; `transform.js` gắn `transform` (build-hoist-strings.ts).
  */
 export function loadTerserAst(): Promise<TerserAstApi> {
   terserAst ??= (async () => {
@@ -66,8 +68,9 @@ export function loadTerserAst(): Promise<TerserAstApi> {
     const lib = path.join(path.dirname(fromVite.resolve('terser/package.json')), 'lib');
     const load = (file: string) => import(pathToFileURL(path.join(lib, file)).href);
     await load('minify.js');
+    await load('transform.js');
     const [{ parse }, ast] = await Promise.all([load('parse.js'), load('ast.js')]);
-    return { parse, TreeWalker: ast.TreeWalker, AST_Symbol: ast.AST_Symbol, AST_Label: ast.AST_Label, AST_LabelRef: ast.AST_LabelRef };
+    return { parse, TreeWalker: ast.TreeWalker, AST_Symbol: ast.AST_Symbol, AST_Label: ast.AST_Label, AST_LabelRef: ast.AST_LabelRef, nodes: ast };
   })();
   return terserAst;
 }

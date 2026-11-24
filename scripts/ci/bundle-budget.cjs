@@ -4,7 +4,8 @@
 //
 // Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành của Zalo chưa kiểm).
 //   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 700. Mục tiêu trong docs/2026-10-review/03-perf.md A3-013: dưới 450.
-//   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2350 (W177 hạ từ 2500 xuống 2350 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB; w3-09 nâng lên 2380 khi gộp 9 tính năng đợt 3,
+//   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2210 = trần gói mà các lần phát hành từ w24-04 đã chặn
+//                          (w28-01 hạ từ 2350 sau khi gom chuỗi lặp của từng chunk đưa bản dựng từ 2168 KB về 2082 KB; trước đó: W177 hạ từ 2500 xuống 2350 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB; w3-09 nâng lên 2380 khi gộp 9 tính năng đợt 3,
 //                          gồm cả 6 game chơi ngay trong Mini App, đưa bản dựng lên 2357 KB; w6-03 hạ lại 2350 sau khi cắt 4 tệp Inter
 //                          về bộ glyph trình duyệt dùng mặc định (−43 KB, chữ hiển thị trùng từng pixel, xem packages/design-tokens/src/fonts.css), bản dựng còn ~2335 KB).
 //   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk JS `mini-*` (khung ván, màn kết quả, bàn chơi game mini, tải lười), raw, mặc định 40000: khung ván,
@@ -44,7 +45,7 @@ function main() {
   const dir = path.resolve(process.argv[2] || 'apps/miniapp/www');
   const strict = process.env.BUNDLE_BUDGET_STRICT === '1';
   const entryWarnKb = threshold('MINIAPP_ENTRY_WARN_KB', 700);
-  const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2350);
+  const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2210);
   const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 40000);
 
   if (!fs.existsSync(dir)) {

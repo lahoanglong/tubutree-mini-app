@@ -1,4 +1,5 @@
 import type { RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WastePointContactDTO } from '@tubutree/shared-types';
+import { formatVnNumber as formatNumber } from './number-format';
 
 export const REWARD_TABS = [
   { key: 'coupon', label: 'Mã giảm giá', kinds: ['VOUCHER'] },
@@ -28,8 +29,6 @@ type PointAddress = Pick<WastePointContactDTO, 'addressLine' | 'communeName' | '
 export function pointAddress(p: PointAddress): string {
   return `${p.addressLine}, ${p.communeName}, ${p.provinceName}`;
 }
-
-const formatNumber = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleString('vi-VN');
 
 /** dd/mm/yyyy theo giờ Việt Nam (UTC+7) — cùng quy ước với thông báo lỗi của backend. */
 function vnDate(iso: string): string {

@@ -1,6 +1,5 @@
 import type { CheckInResult, CheckInStatusResponse } from './api/loyalty';
-
-const num = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleString('vi-VN');
+import { formatVnNumber as num } from './number-format';
 
 /** Chữ của khối điểm danh dùng chung cho Mini App và web (trang Điểm Xanh, Ưu đãi, Vườn Xanh). */
 export const checkInCopy = {
