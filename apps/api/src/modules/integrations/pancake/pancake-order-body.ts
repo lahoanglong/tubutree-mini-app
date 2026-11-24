@@ -216,7 +216,7 @@ function hidePaymentHints(text: string): string {
  * của các dấu hệ thống, không mạo được "Order code:" (webhook đọc mã đơn từ note), không chứa chỉ dẫn thu tiền, cắt
  * CUSTOMER_NOTE_MAX ký tự. Rỗng → null.
  */
-function sanitizeCustomerText(note: string | null | undefined, max = CUSTOMER_NOTE_MAX): string | null {
+export function sanitizeCustomerText(note: string | null | undefined, max = CUSTOMER_NOTE_MAX): string | null {
   const clean = hidePaymentHints(
     (note ?? '')
       .normalize('NFC')
@@ -253,7 +253,7 @@ export interface PancakeGiftRef {
   giftName: string;
 }
 
-const GIFT_NAME_MAX = 80;
+export const GIFT_NAME_MAX = 80;
 const GIFT_CODE_RE = /^[A-Za-z0-9-]{1,32}$/;
 
 /**
