@@ -706,7 +706,7 @@ export class PancakeProcessor extends WorkerHost {
       const transferred = pancakePaidAmount(data);
       if (!(transferred > 0 || isPancakeOrderPaid(data, order.total)) || !(await switchedFromTransfer(this.prisma, order))) return null;
       if (!beforeHandover(order)) {
-        const transfer = codSwitchedTransferAfterHandover(data, order.total, order.status === 'DELIVERED');
+        const transfer = codSwitchedTransferAfterHandover(data, order.total, order.status);
         if (transfer) await this.flagCodSwitchedPaidAfterHandover(order, transfer.amount);
         return null;
       }

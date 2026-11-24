@@ -106,39 +106,45 @@ describe('codSwitchedTransferAfterHandover: đơn đã đổi sang COD, hàng đ
   const TOTAL = 200000;
 
   it('hàng còn trên đường: cờ "đã trả" trơn cũng là chuyển khoản (hãng chưa thu COD), báo amount 0', () => {
-    expect(codSwitchedTransferAfterHandover({ is_paid: true }, TOTAL, false)).toEqual({ amount: 0 });
-    expect(codSwitchedTransferAfterHandover({ payment_status: 'paid', status: 2 }, TOTAL, false)).toEqual({ amount: 0 });
+    expect(codSwitchedTransferAfterHandover({ is_paid: true }, TOTAL, 'SHIPPING')).toEqual({ amount: 0 });
+    expect(codSwitchedTransferAfterHandover({ payment_status: 'paid', status: 2 }, TOTAL, 'SHIPPING')).toEqual({ amount: 0 });
   });
 
   it('hàng còn trên đường: prepaid + bank_payment là số chuyển khoản', () => {
-    expect(codSwitchedTransferAfterHandover({ prepaid: 50000, bank_payment: 150000, is_paid: true }, TOTAL, false)).toEqual({ amount: 200000 });
+    expect(codSwitchedTransferAfterHandover({ prepaid: 50000, bank_payment: 150000, is_paid: true }, TOTAL, 'SHIPPING')).toEqual({ amount: 200000 });
   });
 
   it('không có dấu "đã trả" nào → null', () => {
-    expect(codSwitchedTransferAfterHandover({ status: 2 }, TOTAL, false)).toBeNull();
-    expect(codSwitchedTransferAfterHandover({ prepaid: 0, bank_payment: '0' }, TOTAL, true)).toBeNull();
+    expect(codSwitchedTransferAfterHandover({ status: 2 }, TOTAL, 'SHIPPING')).toBeNull();
+    expect(codSwitchedTransferAfterHandover({ prepaid: 0, bank_payment: '0' }, TOTAL, 'DELIVERED')).toBeNull();
   });
 
   it.each([
-    ['đơn Tubu đã giao', {}, true],
-    ['webhook "Đã nhận" (3)', { status: 3 }, false],
-    ['webhook "Đã thu tiền" (16, chuỗi)', { status: '16' }, false],
-    ['webhook status_name delivered', { status_name: 'Delivered' }, false],
-  ] as [string, Record<string, unknown>, boolean][])('%s: cờ "đã trả" và prepaid tới bằng tổng đơn là tiền thu hộ COD → không báo', (_n, extra, delivered) => {
-    expect(codSwitchedTransferAfterHandover({ ...extra, is_paid: true }, TOTAL, delivered)).toBeNull();
-    expect(codSwitchedTransferAfterHandover({ ...extra, is_paid: true, prepaid: TOTAL }, TOTAL, delivered)).toBeNull();
-    expect(codSwitchedTransferAfterHandover({ ...extra, prepaid: 120000 }, TOTAL, delivered)).toBeNull();
+    ['đơn Tubu đã giao', {}, 'DELIVERED'],
+    ['webhook "Đã nhận" (3)', { status: 3 }, 'SHIPPING'],
+    ['webhook "Hoàn một phần" (15): hãng thu COD phần khách giữ', { status: 15 }, 'SHIPPING'],
+    ['webhook "Đã thu tiền" (16, chuỗi)', { status: '16' }, 'SHIPPING'],
+    ['webhook status_name delivered', { status_name: 'Delivered' }, 'SHIPPING'],
+  ] as [string, Record<string, unknown>, string][])('%s: cờ "đã trả" và prepaid tới bằng tổng đơn là tiền thu hộ COD → không báo', (_n, extra, status) => {
+    expect(codSwitchedTransferAfterHandover({ ...extra, is_paid: true }, TOTAL, status)).toBeNull();
+    expect(codSwitchedTransferAfterHandover({ ...extra, is_paid: true, prepaid: TOTAL }, TOTAL, status)).toBeNull();
+    expect(codSwitchedTransferAfterHandover({ ...extra, prepaid: 120000 }, TOTAL, status)).toBeNull();
   });
 
   it('hãng đã giao: bank_payment và phần prepaid vượt tổng đơn vẫn là chuyển khoản', () => {
-    expect(codSwitchedTransferAfterHandover({ status: 16, bank_payment: 80000 }, TOTAL, false)).toEqual({ amount: 80000 });
-    expect(codSwitchedTransferAfterHandover({ status: 16, prepaid: 400000 }, TOTAL, false)).toEqual({ amount: 200000 });
-    expect(codSwitchedTransferAfterHandover({ prepaid: TOTAL, bank_payment: TOTAL }, TOTAL, true)).toEqual({ amount: 200000 });
+    expect(codSwitchedTransferAfterHandover({ status: 16, bank_payment: 80000 }, TOTAL, 'SHIPPING')).toEqual({ amount: 80000 });
+    expect(codSwitchedTransferAfterHandover({ status: 16, prepaid: 400000 }, TOTAL, 'SHIPPING')).toEqual({ amount: 200000 });
+    expect(codSwitchedTransferAfterHandover({ prepaid: TOTAL, bank_payment: TOTAL }, TOTAL, 'DELIVERED')).toEqual({ amount: 200000 });
+  });
+
+  it.each(['RETURNED', 'CANCELLED'])('đơn Tubu đã đóng (%s): cờ trơn không báo; có số chuyển khoản thì vẫn báo', (status) => {
+    expect(codSwitchedTransferAfterHandover({ is_paid: true, status: 5 }, TOTAL, status)).toBeNull();
+    expect(codSwitchedTransferAfterHandover({ is_paid: true, prepaid: 150000 }, TOTAL, status)).toEqual({ amount: 150000 });
   });
 });
 
 describe('pancakeShowsDelivered', () => {
-  it.each([[3], ['3'], [16], [' 16 '], ['delivered'], ['COMPLETED']])('%j → đã giao', (status) => {
+  it.each([[3], ['3'], [15], [16], [' 16 '], ['delivered'], ['COMPLETED']])('%j → đã giao', (status) => {
     expect(pancakeShowsDelivered({ status })).toBe(true);
   });
   it.each([[2], ['2'], [4], [5], [null], [[3]], [{}]])('%j → chưa', (status) => {

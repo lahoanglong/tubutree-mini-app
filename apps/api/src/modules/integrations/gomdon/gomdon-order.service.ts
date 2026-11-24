@@ -296,6 +296,11 @@ export class GomdonOrderService {
 
     const paidWhenPersisted = await this.persistCreated(order, gomdonId, partnerCode, res);
     this.logger.log(`Tạo đơn Gomdon thành công cho ${order.code} (Mã VĐ: ${partnerCode}).`);
+    // Vận đơn vừa tạo thu hộ theo đơn COD lúc claim, mà tiền chuyển khoản đã về (markPaid lật đơn đổi COD) trước lúc ghi mã: markPaid chưa thấy mã để
+    // báo, nên bên này báo kho sửa thu hộ về 0đ. Báo trước mọi bước đọc/ghi khác: job hỏng sau đó thì lượt chạy lại thấy đã có mã và dừng sớm, không ai báo nữa.
+    if (paidWhenPersisted && body.collect_amount > 0) {
+      await this.alerts.alert(order.code, codCollectAfterRevertMessage(order.total, partnerCode), GOMDON_ALERT_TEMPLATE);
+    }
 
     // Đơn bị huỷ TRONG LÚC đang tạo vận đơn → huỷ luôn vận đơn vừa tạo.
     const fresh = await this.prisma.order.findUnique({
@@ -309,11 +314,6 @@ export class GomdonOrderService {
     }
     // Hệ thống đã tự gắn được vận đơn: các việc "tạo/kiểm tra vận đơn tay" cũ hết hiệu lực.
     await this.alerts.resolveKinds(order.id, [GOMDON_ALERT_KIND.WAYBILL_NEEDED]);
-    // Vận đơn vừa tạo thu hộ theo đơn COD lúc claim, mà tiền chuyển khoản đã về (markPaid lật đơn đổi COD) trước lúc ghi mã: markPaid chưa thấy mã để
-    // báo, nên bên này báo kho sửa thu hộ về 0đ.
-    if (paidWhenPersisted && body.collect_amount > 0) {
-      await this.alerts.alert(order.code, codCollectAfterRevertMessage(order.total, partnerCode), GOMDON_ALERT_TEMPLATE);
-    }
     if (!fresh.pancakeOrderId) {
       // Thành công → đẩy tiếp sang Pancake với mã Gomdon trong note.
       await this.pancakeOrder.enqueuePush(order.id);

@@ -54,8 +54,14 @@ function hasPancakePaidFlag(data: Record<string, unknown>): boolean {
   return data['is_paid'] === true || ps === 'paid' || ps === 'PAID' || ps === 1 || ps === '1';
 }
 
-/** Trạng thái đơn Pancake cho biết hãng đã giao tới khách: 3 "Đã nhận", 16 "Đã thu tiền" (cùng bảng mã với pancake-status.map). */
-const DELIVERED_STATUSES: ReadonlySet<string> = new Set(['3', '16', 'delivered', 'completed']);
+/**
+ * Trạng thái đơn Pancake cho biết hãng đã giao tới khách và thu COD: 3 "Đã nhận", 16 "Đã thu tiền", 15 "Hoàn một phần" (khách giữ một phần, hãng thu COD
+ * phần đó; đơn Tubu không đổi trạng thái theo mã này). Cùng bảng mã với pancake-status.map.
+ */
+const DELIVERED_STATUSES: ReadonlySet<string> = new Set(['3', '15', '16', 'delivered', 'completed']);
+
+/** Đơn Tubu đã đóng mà không giao: cờ "đã trả" trơn không phải dấu chuyển khoản lúc hàng đang đi. */
+const CLOSED_ORDER_STATUSES: ReadonlySet<string> = new Set(['RETURNED', 'CANCELLED']);
 
 export function pancakeShowsDelivered(data: Record<string, unknown>): boolean {
   const raw = data['status'] ?? data['status_name'];
@@ -67,20 +73,21 @@ export function pancakeShowsDelivered(data: Record<string, unknown>): boolean {
  * Đơn khách đã đổi từ chuyển khoản sang COD, hàng đã rời kho: phần nào của "đã trả" Pancake báo là tiền khách chuyển khoản (có thể trả hai lần), phần
  * nào là tiền thu hộ COD của hãng. `amount` = số chuyển khoản đọc được; 0 = chỉ có cờ "đã thanh toán", không kèm số. null = không có gì phải báo.
  *  - Hàng đang trên đường (chưa giao tới khách): hãng chưa thu COD, nên mọi dấu "đã trả" (cả cờ trơn) là chuyển khoản.
- *  - Hãng đã giao (đơn Tubu DELIVERED, hay chính webhook mang trạng thái 3/16): cờ "đã trả" và ô `prepaid` tới bằng tổng đơn có thể là tiền thu hộ COD
+ *  - Hãng đã giao (đơn Tubu DELIVERED, hay chính webhook mang trạng thái 3/15/16): cờ "đã trả" và ô `prepaid` tới bằng tổng đơn có thể là tiền thu hộ COD
  *    Pancake ghi lại, không báo. Còn ô `bank_payment` và phần `prepaid` vượt tổng đơn vẫn là chuyển khoản.
+ *  - Đơn Tubu đã hoàn/huỷ: chỉ báo khi có số tiền; cờ trơn không đủ để nói khách chuyển khoản.
  */
 export function codSwitchedTransferAfterHandover(
   data: Record<string, unknown>,
   orderTotal: number,
-  delivered: boolean,
+  orderStatus: string,
 ): { amount: number } | null {
   const prepaid = Math.max(0, Math.round(num(data['prepaid'])));
   const bank = Math.max(0, Math.round(num(data['bank_payment'])));
-  if (delivered || pancakeShowsDelivered(data)) {
+  if (orderStatus === 'DELIVERED' || pancakeShowsDelivered(data)) {
     const transfer = bank + Math.max(0, prepaid - Math.max(0, orderTotal));
     return transfer > 0 ? { amount: transfer } : null;
   }
   if (prepaid + bank > 0) return { amount: prepaid + bank };
-  return hasPancakePaidFlag(data) ? { amount: 0 } : null;
+  return hasPancakePaidFlag(data) && !CLOSED_ORDER_STATUSES.has(orderStatus) ? { amount: 0 } : null;
 }

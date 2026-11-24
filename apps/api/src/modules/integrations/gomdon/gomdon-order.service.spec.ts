@@ -209,6 +209,14 @@ describe('GomdonOrderService.pushOrder', () => {
       expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('vận đơn Gomdon BE77 còn thu hộ. Sửa tiền thu hộ về 0đ'), 'OPS_GOMDON_ALERT');
     });
 
+    it('đã ghi mã thấy đơn PAID rồi bước đọc lại đơn lỗi: lời báo sửa thu hộ đã gửi trước (lượt chạy lại thấy có mã và dừng sớm)', async () => {
+      const { svc, prisma, alerts } = build();
+      prisma.order.findUnique.mockResolvedValueOnce({ paymentStatus: 'PAID' }).mockRejectedValueOnce(new Error('DB chập chờn'));
+      await expect(svc.pushOrder('o1')).rejects.toThrow('DB chập chờn');
+      expect(alerts.alert).toHaveBeenCalledWith('TUBU1001', expect.stringContaining('vận đơn Gomdon BE77 còn thu hộ'), 'OPS_GOMDON_ALERT');
+      expect(alerts.resolveKinds).not.toHaveBeenCalled();
+    });
+
     it('đơn đã trả từ đầu (thu hộ 0đ) mà lúc ghi mã đơn PAID → không báo gì', async () => {
       const { svc, prisma, alerts } = build({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
       prisma.order.findUnique.mockResolvedValue({ ...baseOrder, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
