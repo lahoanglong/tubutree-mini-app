@@ -6,7 +6,7 @@ import { notifyAdmins } from '../../../common/notify-admins';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { OPS_NOTICE_MAX, OPS_WHERE, opsAlertLine } from '../../ops/ops-alert-line';
-import { isMssConfigured, type MssEnvStatus } from './mss-config';
+import { isMssConfigured, MSS_REQUIRED_ENV_KEYS, type MssEnvStatus } from './mss-config';
 import { MSS_SHARED_STORE, type MssCircuitSnapshot, type MssSharedStore } from './mss-circuit';
 import { MSS_FLAG_CAPABILITY, MSS_FLAG_KEYS, MSS_FLAGS, MssFlagsService, type MssCatalogSource, type MssFlag } from './mss-flags';
 import { MssClient, MssRequestError } from './mss.client';
@@ -23,6 +23,7 @@ const MSS_ALERT_TITLE = 'Kết nối MSS';
 
 const HEALTH_KEY = 'tubu:mss:health';
 const capWarnKey = (flag: MssFlag) => `tubu:mss:capwarn:${flag}`;
+const envWarnKey = (flag: MssFlag) => `tubu:mss:envwarn:${flag}`;
 
 export interface MssHealthState {
   checkedAt: string;
@@ -74,7 +75,7 @@ export class MssHealthService {
   private last: MssHealthState | null = null;
   private lastAttemptAt = 0;
   private inflight: Promise<MssHealthState> | null = null;
-  private readonly warnedAt = new Map<MssFlag, number>();
+  private readonly warnedAt = new Map<string, number>();
 
   constructor(
     private readonly flags: MssFlagsService,
@@ -142,26 +143,49 @@ export class MssHealthService {
    * trả lời) thì coi như tắt và báo Ops một lần mỗi giờ. Cờ tắt thì trả false ngay, không gọi MSS.
    */
   async assertCapability(flag: MssFlag): Promise<boolean> {
-    if (!(await this.flags.isEnabled(flag))) return false;
+    if (!(await this.flags.isEnabled(flag))) {
+      await this.warnIfEnvMissing(flag);
+      return false;
+    }
     let health = await this.current();
     if (!health && Date.now() - this.lastAttemptAt >= ON_DEMAND_REFRESH_MS) health = await this.refresh();
     const capability = MSS_FLAG_CAPABILITY[flag];
     if (health?.ok && health.capabilities.includes(capability)) return true;
-    await this.warnMissingCapability(flag, capability, health);
+    const why = !health ? 'chưa dò được trạng thái MSS' : !health.ok ? `MSS trả lời lỗi (${health.error ?? 'không rõ'})` : `MSS chưa có năng lực "${capability}"`;
+    await this.warnMissingCapability(flag, 'capability', why);
     return false;
   }
 
-  private async warnMissingCapability(flag: MssFlag, capability: string, health: MssHealthState | null): Promise<void> {
+  /**
+   * Admin bật cờ mà thiếu hoặc sai biến `MSS_*` bắt buộc: `isEnabled` trả false nên cờ lặng lẽ coi như tắt. Báo Ops tên biến hỏng (không bao
+   * giờ in giá trị), một lần mỗi giờ mỗi cờ. Cờ tắt hoặc đủ biến thì không làm gì. Không ném.
+   */
+  private async warnIfEnvMissing(flag: MssFlag): Promise<void> {
+    const env = this.flags.env();
+    if (isMssConfigured(env)) return;
+    try {
+      if (!(await this.flags.requested(flag))) return;
+    } catch {
+      return;
+    }
+    const missing = MSS_REQUIRED_ENV_KEYS.filter((k) => env.status[k] === 'missing');
+    const invalid = MSS_REQUIRED_ENV_KEYS.filter((k) => env.status[k] === 'invalid');
+    const why = [missing.length ? `thiếu biến ${missing.join(', ')}` : '', invalid.length ? `biến sai định dạng ${invalid.join(', ')}` : ''].filter(Boolean).join('; ');
+    await this.warnMissingCapability(flag, 'env', why);
+  }
+
+  private async warnMissingCapability(flag: MssFlag, kind: 'capability' | 'env', why: string): Promise<void> {
     try {
       const now = Date.now();
+      // Khoá riêng cho thiếu biến: lần báo thiếu biến không được nuốt lần báo thiếu năng lực ngay sau khi Ops sửa biến và khởi động lại.
+      const dedupeKey = kind === 'env' ? envWarnKey(flag) : capWarnKey(flag);
       let first: boolean;
       if (this.store) {
-        first = await this.store.setIfAbsent(capWarnKey(flag), String(now), MSS_CAPABILITY_WARN_MS).catch(() => this.memoryFirst(flag, now));
+        first = await this.store.setIfAbsent(dedupeKey, String(now), MSS_CAPABILITY_WARN_MS).catch(() => this.memoryFirst(dedupeKey, now));
       } else {
-        first = this.memoryFirst(flag, now);
+        first = this.memoryFirst(dedupeKey, now);
       }
       if (!first) return;
-      const why = !health ? 'chưa dò được trạng thái MSS' : !health.ok ? `MSS trả lời lỗi (${health.error ?? 'không rõ'})` : `MSS chưa có năng lực "${capability}"`;
       this.logger.warn(`Cờ ${MSS_FLAG_KEYS[flag]} đang bật nhưng ${why}. Tubu coi cờ này như tắt và đi đường cũ.`);
       const summary = opsAlertLine({
         name: 'Cờ MSS bật mà chưa dùng được',
@@ -171,17 +195,21 @@ export class MssHealthService {
       });
       await notifyAdmins(
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-        { template: 'OPS_HEALTH_ALERT', subject: `cờ MSS ${MSS_FLAG_KEYS[flag]} thiếu năng lực`, data: () => ({ title: MSS_ALERT_TITLE, summary }) },
+        {
+          template: 'OPS_HEALTH_ALERT',
+          subject: `cờ MSS ${MSS_FLAG_KEYS[flag]} ${kind === 'env' ? 'thiếu biến môi trường' : 'thiếu năng lực'}`,
+          data: () => ({ title: MSS_ALERT_TITLE, summary }),
+        },
       );
     } catch (err) {
       this.logger.warn(`Không báo được Ops về cờ MSS ${MSS_FLAG_KEYS[flag]}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  private memoryFirst(flag: MssFlag, now: number): boolean {
-    const at = this.warnedAt.get(flag);
+  private memoryFirst(dedupeKey: string, now: number): boolean {
+    const at = this.warnedAt.get(dedupeKey);
     if (at !== undefined && now - at < MSS_CAPABILITY_WARN_MS) return false;
-    this.warnedAt.set(flag, now);
+    this.warnedAt.set(dedupeKey, now);
     return true;
   }
 

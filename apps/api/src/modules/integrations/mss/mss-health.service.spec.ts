@@ -82,12 +82,82 @@ describe('MssHealthService', () => {
     });
   });
 
-  it('cờ bật nhưng thiếu biến môi trường: coi như tắt, không gọi MSS', async () => {
-    const { svc, fetchImpl, notify } = setup({ configs: { [MSS_FLAG_KEYS.orderEvents]: true }, env: readMssEnv({}) });
-    await svc.poll();
-    await expect(svc.assertCapability('orderEvents')).resolves.toBe(false);
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(notify).not.toHaveBeenCalled();
+  describe('cờ bật nhưng thiếu hoặc sai biến MSS_*', () => {
+    const summaryOf = (notify: jest.Mock, i = 0) => (notify.mock.calls[i] as unknown as [string, string, { title: string; summary: string }])[2];
+
+    it('coi như tắt, không gọi MSS; báo Ops một lần mỗi giờ, nêu tên biến thiếu, không lộ giá trị', async () => {
+      const env = readMssEnv({ NODE_ENV: 'test', MSS_BASE_URL: 'https://mss.example.test', MSS_OUTBOUND_SECRET: SECRETS.MSS_OUTBOUND_SECRET });
+      const { svc, fetchImpl, notify } = setup({ configs: { [MSS_FLAG_KEYS.orderEvents]: true }, env });
+      await svc.poll();
+      await expect(svc.assertCapability('orderEvents')).resolves.toBe(false);
+      await expect(svc.assertCapability('orderEvents')).resolves.toBe(false);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith('admin-1', 'OPS_HEALTH_ALERT', expect.objectContaining({ title: 'Kết nối MSS' }));
+      const { title, summary } = summaryOf(notify);
+      expect(summary).toContain('mss.order_events_enabled: thiếu biến MSS_KEY_ID, MSS_INBOUND_SECRET');
+      expect(summary).not.toContain('MSS_BASE_URL');
+      expect(summary).not.toContain('MSS_OUTBOUND_SECRET');
+      expect(summary).toMatch(/^\[Cảnh báo\] .* · Admin › Sức khoẻ hệ thống › MSS$/);
+      expect(`${title}: ${summary}`.length).toBeLessThanOrEqual(200);
+      for (const v of [SECRETS.MSS_OUTBOUND_SECRET, 'mss.example.test']) expect(summary).not.toContain(v);
+      now += MSS_CAPABILITY_WARN_MS - 1;
+      await svc.assertCapability('orderEvents');
+      expect(notify).toHaveBeenCalledTimes(1);
+      now += 2;
+      await svc.assertCapability('orderEvents');
+      expect(notify).toHaveBeenCalledTimes(2);
+    });
+
+    it('thiếu cả bốn biến: tin vẫn nêu đủ bốn tên trong 200 ký tự', async () => {
+      const { svc, notify } = setup({ configs: { [MSS_FLAG_KEYS.orderEvents]: true }, env: readMssEnv({}) });
+      await svc.assertCapability('orderEvents');
+      const { title, summary } = summaryOf(notify);
+      for (const k of ['MSS_BASE_URL', 'MSS_KEY_ID', 'MSS_OUTBOUND_SECRET', 'MSS_INBOUND_SECRET']) expect(summary).toContain(k);
+      expect(`${title}: ${summary}`.length).toBeLessThanOrEqual(200);
+    });
+
+    it('biến có mà sai định dạng: nêu riêng là sai định dạng', async () => {
+      const env = readMssEnv({
+        NODE_ENV: 'production',
+        MSS_BASE_URL: 'http://mss.example.test',
+        MSS_KEY_ID: 'tubu-test',
+        MSS_OUTBOUND_SECRET: 'short',
+        MSS_INBOUND_SECRET: SECRETS.MSS_INBOUND_SECRET,
+      });
+      const { svc, notify } = setup({ configs: { [MSS_FLAG_KEYS.orderPush]: true }, env });
+      await expect(svc.assertCapability('orderPush')).resolves.toBe(false);
+      const { summary } = summaryOf(notify);
+      expect(summary).toContain('biến sai định dạng MSS_BASE_URL, MSS_OUTBOUND_SECRET');
+      expect(summary).not.toContain('thiếu biến');
+      expect(summary).not.toContain('short');
+    });
+
+    it('cờ tắt mà thiếu biến (mặc định PROD): không báo ai', async () => {
+      const { svc, notify } = setup({ env: readMssEnv({}) });
+      for (const flag of MSS_FLAGS) await expect(svc.assertCapability(flag)).resolves.toBe(false);
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('khoá chống lặp riêng với báo thiếu năng lực: sửa biến xong mà MSS chưa có năng lực thì báo ngay, không chờ hết giờ', async () => {
+      const store = new MemoryStore();
+      const { svc, notify, setEnv } = setup({ configs: { [MSS_FLAG_KEYS.orderEvents]: true }, env: readMssEnv({}), health: fixture('health.ok.json'), store });
+      await svc.assertCapability('orderEvents');
+      setEnv(fullEnv());
+      await svc.assertCapability('orderEvents');
+      expect(notify).toHaveBeenCalledTimes(2);
+      expect(summaryOf(notify, 0).summary).toContain('thiếu biến');
+      expect(summaryOf(notify, 1).summary).toMatch(/MSS chưa có năng lực .*order_events/);
+    });
+
+    it('báo thiếu biến một lần mỗi giờ dùng chung qua kho Redis giữa các replica', async () => {
+      const store = new MemoryStore();
+      const a = setup({ configs: { [MSS_FLAG_KEYS.orderEvents]: true }, env: readMssEnv({}), store });
+      const b = setup({ configs: { [MSS_FLAG_KEYS.orderEvents]: true }, env: readMssEnv({}), store });
+      await a.svc.assertCapability('orderEvents');
+      await b.svc.assertCapability('orderEvents');
+      expect(a.notify.mock.calls.length + b.notify.mock.calls.length).toBe(1);
+    });
   });
 
   it('cờ bật, đủ biến, MSS công bố năng lực: true; poll dò /health', async () => {

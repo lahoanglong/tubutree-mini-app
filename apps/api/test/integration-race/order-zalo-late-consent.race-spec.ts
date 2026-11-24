@@ -29,6 +29,7 @@ describe('Đồng ý Zalo muộn ở chi tiết đơn (real Postgres)', () => {
   const config = { get: async (k: string, fb?: unknown) => (k === 'orders.timeline_v2_enabled' ? true : fb) } as unknown as SystemConfigService;
 
   let recorder: MssOrderEventRecorder;
+  let recorderOff: MssOrderEventRecorder;
   let orders: OrdersService;
   let ordersOff: OrdersService;
 
@@ -54,7 +55,7 @@ describe('Đồng ý Zalo muộn ở chi tiết đơn (real Postgres)', () => {
     productIds.push(product.id);
     variationId = product.variations[0]!.id;
     recorder = new MssOrderEventRecorder(flags(true), health, circuitClient, dispatcher);
-    const recorderOff = new MssOrderEventRecorder(flags(false), health, circuitClient, dispatcher);
+    recorderOff = new MssOrderEventRecorder(flags(false), health, circuitClient, dispatcher);
     await recorder.refreshGate();
     await recorderOff.refreshGate();
     orders = svc(recorder);
@@ -113,6 +114,21 @@ describe('Đồng ý Zalo muộn ở chi tiết đơn (real Postgres)', () => {
     const rows = await outbox(order.id);
     expect(rows.map((r) => r.eventType)).toEqual(['order.shipping']);
     expect(JSON.parse(rows[0]!.body).consent.source).toBe('checkout');
+  });
+
+  it('đơn đặt lúc cổng MSS đóng (nguồn gate_closed, đồng ý để trống): cổng mở rồi khách vẫn bật muộn được, nguồn thành order_detail, sự kiện sau đó ghi', async () => {
+    const { order, user } = await unconsentedOrder('CONFIRMED');
+    await prisma.order.update({ where: { id: order.id }, data: { orderZaloConsent: null } });
+    await prisma.$transaction((tx) => recorderOff.onOrdersPlaced(tx, [{ id: order.id, userId: user.id, paymentStatus: 'UNPAID', paymentMethod: 'COD' }], true));
+    const consentOf = () => prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { orderZaloConsent: true, orderZaloConsentSource: true } });
+    expect(await consentOf()).toEqual({ orderZaloConsent: null, orderZaloConsentSource: 'gate_closed' });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).notifyOrderZalo).toBe(false);
+
+    expect((await orders.detailView(user.id, order.code)).orderZaloAvailable).toBe(true);
+    await expect(orders.enableOrderZalo(user.id, order.code)).resolves.toEqual({ orderZaloConsent: true });
+    expect(await consentOf()).toEqual({ orderZaloConsent: true, orderZaloConsentSource: 'order_detail' });
+    expect(await recordIn(order.id, 'order.shipping')).toBeNull();
+    expect((await outbox(order.id)).map((r) => r.eventType)).toEqual(['order.shipping']);
   });
 
   it('bấm đúp và 6 yêu cầu đồng thời: mọi yêu cầu thành công, đồng ý ghi một lần (mốc giờ không bị ghi lại)', async () => {

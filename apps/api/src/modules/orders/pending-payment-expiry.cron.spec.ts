@@ -252,6 +252,14 @@ describe('PendingPaymentExpiryCron: nhắc chuyển khoản ~2 giờ trước h�
     expect(prisma.order.findMany.mock.calls[1][0].take).toBe(1000);
   });
 
+  it('bỏ đơn mà MSS đang giữ hoặc đã gửi order.created (PENDING/SENDING/DELIVERED/RESULT_SENT); RESULT_FAILED hay chưa có sự kiện vẫn nhắc', async () => {
+    const { cron, prisma } = makeWithNotify();
+    await cron.expireStale(NOW);
+    const where = prisma.order.findMany.mock.calls[1][0].where;
+    expect(where.mssOrderEvents).toEqual({ none: { eventType: 'order.created', status: { in: ['PENDING', 'SENDING', 'DELIVERED', 'RESULT_SENT'] } } });
+    expect(where.mssOrderEvents.none.status.in).not.toContain('RESULT_FAILED');
+  });
+
   it('đơn đã có tin nhắc từ lượt trước: không gửi lại, không đếm; đơn mới trong cửa sổ vẫn được nhắc', async () => {
     const createdAt = new Date(NOW.getTime() - 23 * HOUR);
     const { cron, prisma, notifications } = makeWithNotify({
