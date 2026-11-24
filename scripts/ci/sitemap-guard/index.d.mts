@@ -19,6 +19,7 @@ export interface GuardOptions {
   maxPerKind?: number;
   concurrency?: number;
   timeout?: number;
+  ua?: string;
   legalSlugs?: readonly string[];
   request?: (url: string) => Promise<GuardResponse>;
 }
@@ -39,11 +40,18 @@ export interface GuardReport {
 }
 
 export const LEGAL_SLUGS: readonly string[];
+export const DEFAULT_UA: string;
 export const SAMPLED_KINDS: readonly UrlKind[];
-export function parseRobots(text: string | null | undefined): RobotsRules;
+export function parseRobots(text: string | null | undefined, agent?: string): RobotsRules;
 export function robotsVerdict(path: string, rules: RobotsRules): { allowed: boolean; rule: string | null };
 export function sameUrl(a: string, b: string): boolean;
-export function isNoindex(value: string | null | undefined): boolean;
+export function isNoindex(value: string | null | undefined, agent?: string): boolean;
+export function headOf(html: string | null | undefined): string | null;
+export function headSignals(head: string | null | undefined): { canonicals: string[]; robots: { name: string; content: string }[] };
+export function withRetry(
+  request: (url: string) => Promise<GuardResponse>,
+  opts?: { delays?: readonly number[]; sleep?: (ms: number) => Promise<void> },
+): (url: string) => Promise<GuardResponse>;
 export function kindOf(loc: string): UrlKind;
 export function analyzeLocs(
   locs: readonly string[],

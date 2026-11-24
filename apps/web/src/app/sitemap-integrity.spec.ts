@@ -106,7 +106,8 @@ function resolvePage(pages: PageRoute[], pathname: string): { route: PageRoute; 
     for (const dir of dirs) {
       const kind = segKind(dir) as SegKind;
       rank.push(RANK[kind]);
-      if (kind === 'static') ok = segs[i++] === dir;
+      // Thư mục `%5Fx` là cách Next khai đoạn URL bắt đầu bằng `_` (thư mục `_x` là riêng tư).
+      if (kind === 'static') ok = segs[i++] === decodeURIComponent(dir);
       else if (kind === 'dynamic') {
         ok = i < segs.length;
         params[paramName(dir)] = segs[i++]!;
@@ -141,20 +142,41 @@ const layoutChain = (route: PageRoute): string[] =>
 interface RouteModule {
   metadata?: Metadata;
   generateMetadata?: (props: { params: Promise<unknown>; searchParams: Promise<unknown> }, parent: Promise<Metadata>) => Promise<Metadata>;
+  dynamicParams?: boolean;
+  generateStaticParams?: () => unknown[] | Promise<unknown[]>;
 }
 
-/** Metadata cuối của trang: layout từ gốc xuống rồi trang; khoá cấp trên cùng của tầng sau thay khoá cùng tên của tầng trước (như Next). */
-async function resolveMetadata(route: PageRoute, params: Record<string, string | string[]>, search: URLSearchParams): Promise<Metadata> {
+/** `dynamicParams = false`: Next trả 404 cho tham số không nằm trong generateStaticParams (catch-all tuỳ chọn không có đoạn nào = `[]`). */
+async function staticParamsProblem(mod: RouteModule, params: Record<string, string | string[]>, file: string): Promise<string | null> {
+  if (mod.dynamicParams !== false || !mod.generateStaticParams) return null;
+  const listed = (await mod.generateStaticParams()) as Record<string, string | string[] | undefined>[];
+  const norm = (v: string | string[] | undefined) => JSON.stringify(v ?? []);
+  const hit = listed.some((entry) => Object.keys(entry).every((k) => norm(entry[k]) === norm(params[k])));
+  return hit ? null : `${path.relative(APP_DIR, file)} có dynamicParams = false và generateStaticParams không có ${JSON.stringify(params)} (404)`;
+}
+
+/**
+ * Metadata cuối của trang: layout từ gốc xuống rồi trang. Như `mergeMetadata` của Next (`for (key in source)`): khoá có mặt ở tầng sau thay khoá cùng
+ * tên của tầng trước, kể cả khi giá trị là `undefined` (`alternates: undefined` xoá canonical kế thừa). Lỗi 404 do dynamicParams trả trong `notFound`.
+ */
+const mergeMetadata = (acc: Metadata, md: Metadata): Metadata => ({ ...acc, ...md });
+
+async function resolveMetadata(
+  route: PageRoute,
+  params: Record<string, string | string[]>,
+  search: URLSearchParams,
+): Promise<{ metadata: Metadata; notFound: string | null }> {
   let acc: Metadata = {};
   const props = { params: Promise.resolve(params), searchParams: Promise.resolve(Object.fromEntries(search)) };
   for (const file of [...layoutChain(route), route.file]) {
     // Đường dẫn tuyệt đối, không phải file:// (pathToFileURL mã hoá `[slug]` thành `%5Bslug%5D` và Vite không tìm thấy tệp).
     const mod = (await import(/* @vite-ignore */ file)) as RouteModule;
+    const notFound = await staticParamsProblem(mod, params, file);
+    if (notFound) return { metadata: acc, notFound };
     const md = mod.generateMetadata ? await mod.generateMetadata(props, Promise.resolve(acc)) : mod.metadata;
-    if (!md) continue;
-    acc = { ...acc, ...Object.fromEntries(Object.entries(md).filter(([, v]) => v !== undefined)) };
+    if (md) acc = mergeMetadata(acc, md);
   }
-  return acc;
+  return { metadata: acc, notFound: null };
 }
 
 const canonicalOf = (md: Metadata): string | null => {
@@ -171,9 +193,13 @@ const robotsNoindex = (md: Metadata): boolean => {
 };
 
 type Redirect = { source: string; destination: string; has?: unknown[]; missing?: unknown[] };
+type HeaderRule = { source: string; headers: { key: string; value: string }[]; has?: unknown[]; missing?: unknown[] };
 
 /** Đi một URL như crawler (không cookie): lỗi định tuyến, hoặc trang + metadata cuối. */
-async function audit(url: string, ctx: { pages: PageRoute[]; redirects: Redirect[]; robotsRules: { allow: string[]; disallow: string[] } }): Promise<string[]> {
+async function audit(
+  url: string,
+  ctx: { pages: PageRoute[]; redirects: Redirect[]; headers: HeaderRule[]; robotsRules: { allow: string[]; disallow: string[] } },
+): Promise<string[]> {
   const problems: string[] = [];
   const u = new URL(url);
   const host = new URL(SITE_URL).host;
@@ -184,6 +210,14 @@ async function audit(url: string, ctx: { pages: PageRoute[]; redirects: Redirect
     const params = getPathMatch(r.source)(u.pathname);
     if (params && matchHas({ headers: { host }, cookies: {} } as never, query, r.has as never, r.missing as never) !== false) {
       return [...problems, `next.config redirects() chuyển hướng ${r.source} → ${r.destination}`];
+    }
+  }
+
+  // headers() của next.config áp cho mọi phản hồi khớp `source` (kể cả trang 200): X-Robots-Tag noindex ở đây loại URL khỏi chỉ mục.
+  for (const r of ctx.headers) {
+    if (!getPathMatch(r.source)(u.pathname) || matchHas({ headers: { host }, cookies: {} } as never, query, r.has as never, r.missing as never) === false) continue;
+    for (const h of r.headers) {
+      if (h.key.toLowerCase() === 'x-robots-tag' && /noindex|none/i.test(h.value)) problems.push(`next.config headers() đặt X-Robots-Tag: ${h.value} (${r.source})`);
     }
   }
 
@@ -200,7 +234,9 @@ async function audit(url: string, ctx: { pages: PageRoute[]; redirects: Redirect
   if (!hit) return [...problems, `không có page.tsx cho ${target.pathname} (404)`];
   let md: Metadata;
   try {
-    md = await resolveMetadata(hit.route, hit.params, target.searchParams);
+    const resolved = await resolveMetadata(hit.route, hit.params, target.searchParams);
+    if (resolved.notFound) return [...problems, resolved.notFound];
+    md = resolved.metadata;
   } catch (err) {
     const digest = (err as { digest?: string }).digest ?? '';
     return [...problems, digest.startsWith('NEXT_') ? `generateMetadata gọi ${digest.split(';')[0]}` : `generateMetadata lỗi: ${(err as Error).message}`];
@@ -222,6 +258,7 @@ beforeAll(async () => {
   ctx = {
     pages: collectPages(APP_DIR),
     redirects: (await nextConfig.redirects!()) as Redirect[],
+    headers: (await nextConfig.headers!()) as HeaderRule[],
     robotsRules: { allow: rules.flatMap((r) => r.allow), disallow: rules.flatMap((r) => r.disallow) },
   };
   urls = (await sitemap()).map((e) => e.url);
@@ -249,7 +286,8 @@ describe('sitemap ↔ canonical ↔ robots (bản dựng NEXT_PUBLIC_SITE_URL=ht
     expect(new Set(urls).size).toBe(urls.length);
   });
 
-  it('mọi URL của sitemap: không bị chuyển hướng, có page.tsx (200), không noindex, robots.txt không chặn, canonical trùng đúng URL đó', async () => {
+  // Thân trang (notFound()/redirect() trong component) không được dựng ở đây: phần đó do scripts/ci/sitemap-guard kiểm trên máy chủ thật.
+  it('mọi URL của sitemap: không bị chuyển hướng, có page.tsx (không 404 do định tuyến), không noindex, robots.txt không chặn, canonical trùng đúng URL đó', async () => {
     const problems: string[] = [];
     for (const url of urls) {
       for (const p of await audit(url, ctx)) problems.push(`${new URL(url).pathname}${new URL(url).search}: ${p}`);
@@ -300,6 +338,8 @@ describe('bộ kiểm tự bắt lỗi (không phải kiểm cho có)', () => {
     ['/hop-xanh', /metadata robots noindex/],
     ['/hoan-tien', /metadata robots noindex/],
     ['/chinh-sach/khong-ton-tai', /middleware trả 404/],
+    ['/san-pham/_preview', /next\.config headers\(\) đặt X-Robots-Tag: noindex, nofollow/],
+    ['/vuon-xanh/khong-co', /dynamicParams = false và generateStaticParams không có/],
   ])('%s', async (p, expected) => {
     const problems = await audit(`${SITE}${p}`, ctx);
     expect(problems.some((m) => expected.test(m)), problems.join(' | ')).toBe(true);
@@ -308,6 +348,14 @@ describe('bộ kiểm tự bắt lỗi (không phải kiểm cho có)', () => {
   it('host cũ app.* gắn X-Robots-Tag noindex: bản dựng đặt sai NEXT_PUBLIC_SITE_URL thì mọi URL đều bị loại', async () => {
     const res = middleware(new NextRequest('https://app.tubutree.com/gioi-thieu', { headers: { host: 'app.tubutree.com' } }));
     expect(res.headers.get('x-robots-tag')).toMatch(/noindex/);
+  });
+
+  it('khoá `undefined` ở tầng sau xoá giá trị kế thừa (như mergeMetadata của Next): `alternates: undefined` mất canonical, `robots: undefined` hết noindex', () => {
+    const layout: Metadata = { alternates: { canonical: '/ctv' }, robots: { index: false, follow: true } };
+    expect(canonicalOf(mergeMetadata(layout, { title: 'x' }))).toBe(`${SITE}/ctv`);
+    expect(canonicalOf(mergeMetadata(layout, { alternates: undefined }))).toBeNull();
+    expect(robotsNoindex(mergeMetadata(layout, {}))).toBe(true);
+    expect(robotsNoindex(mergeMetadata(layout, { robots: undefined }))).toBe(false);
   });
 
   it('trang có canonical trỏ trang khác bị bắt: /san-pham?category=<id lạ> là noindex, không phải canonical của danh mục', async () => {

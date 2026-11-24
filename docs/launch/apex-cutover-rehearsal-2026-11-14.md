@@ -116,10 +116,12 @@ Bỏ nhóm bằng `--skip redirects,img`; `--sample 100` để kiểm nhanh 100 
 
 ### 5.2. Kiểm MỌI URL của sitemap trước khi nộp cho Search Console (W28-03): `scripts/ci/sitemap-guard/index.mjs`
 
-Mục 5.1 chỉ kiểm canonical của trang chủ, `/san-pham` và 5 trang sản phẩm. Lệnh này tải từng URL trong `/sitemap.xml` (chỉ GET công khai) và FAIL khi một URL:
-không trả 200 thẳng (chuyển hướng, 404, 410), canonical không trùng chính URL đó, bị noindex (thẻ meta `robots`/`googlebot` hoặc header `X-Robots-Tag`, gồm
-cả header noindex mà middleware gắn cho host `app.tubutree.com`), hoặc bị `robots.txt` chặn. Sitemap phải có trang chủ và đủ 5 trang `/chinh-sach/*`:
-thiếu trang nào là trang đó chưa có nội dung đã duyệt ở admin (trang tự noindex nên sitemap bỏ).
+Mục 5.1 chỉ kiểm canonical của trang chủ, `/san-pham` và 5 trang sản phẩm. Lệnh này tải từng URL trong `/sitemap.xml` (chỉ GET công khai, User-Agent có chữ
+`Googlebot` để Next in metadata trong `<head>` như Googlebot nhận) và FAIL khi một URL: không trả 200 thẳng (chuyển hướng, 404, 410), `<head>` không có đúng một
+canonical trùng hẳn URL đó (kể cả `/` cuối), bị noindex với Googlebot (thẻ meta `robots`/`googlebot` hoặc header `X-Robots-Tag`, gồm cả header noindex mà
+middleware gắn cho host `app.tubutree.com`), hoặc bị `robots.txt` chặn. `robots.txt` lỗi máy chủ (5xx, 429, không tới được) cũng FAIL vì Google ngừng cào cả
+site. Lỗi mạng, 429, 5xx của từng URL được thử lại 2 lần trước khi báo. Sitemap phải có trang chủ và đủ 5 trang `/chinh-sach/*`: thiếu trang nào là trang đó
+chưa có nội dung đã duyệt ở admin (trang tự noindex nên sitemap bỏ).
 
 ```bash
 # Sau lệnh D-Day ở 5.1, trước khi nộp https://tubutree.com/sitemap.xml ở Search Console. --max-per-kind 20: lấy mẫu 20 URL mỗi loại nhiều trang
@@ -130,8 +132,9 @@ node scripts/ci/sitemap-guard/index.mjs --base http://localhost:3122 --canonical
 ```
 
 Không cần máy chủ: `apps/web/src/app/sitemap-integrity.spec.ts` chạy trong CI cùng Vitest. Nó gọi `sitemap()` thật trên route map thật (API giả), cho mỗi URL đi qua
-`redirects()` của `next.config.mjs`, `middleware.ts`, `robots.ts`, rồi đọc metadata thật của `page.tsx` và chuỗi `layout.tsx`. Thêm một route công khai vào
-`route-map.json` mà trang thiếu canonical, bị noindex hay bị chuyển hướng thì test đó đỏ.
+`redirects()` và `headers()` của `next.config.mjs`, `middleware.ts`, `robots.ts`, tìm `page.tsx` (cả `dynamicParams = false`), rồi đọc metadata thật của trang và
+chuỗi `layout.tsx`. Thêm một route công khai vào `route-map.json` mà trang thiếu canonical, bị noindex, bị chuyển hướng hay không có trang thì test đó đỏ. Spec
+không dựng thân trang: `notFound()`/`redirect()` gọi trong component chỉ lệnh chạy thật ở trên bắt được.
 
 ## 6. Việc còn lại trước khi cutover thật (cần chủ)
 

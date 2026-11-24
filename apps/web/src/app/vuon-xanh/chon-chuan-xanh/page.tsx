@@ -10,7 +10,7 @@ import { staticPageMetadata } from '@/lib/page-seo';
 
 /**
  * Cờ `game.matcher_enabled` tắt (hay chưa đọc được) thì trang noindex: không lối vào nào dẫn tới, máy tìm kiếm không giữ một trang chỉ báo
- * "đang tạm nghỉ". Trang không nằm trong sitemap.
+ * "đang tạm nghỉ". Khi đó sitemap cũng không nộp trang (matcherIndexed trong app/sitemap.ts đọc cùng cờ).
  */
 export async function generateMetadata(): Promise<Metadata> {
   const base = staticPageMetadata({ path: MATCHER_PATH, title: gameCopy('game.matcher.title'), description: gameWebCopy('matcher.meta.description') });
