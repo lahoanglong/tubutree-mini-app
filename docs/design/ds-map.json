@@ -100,7 +100,8 @@
       "props": "ComboCardProps",
       "screens": [
         "/s/:slug",
-        "/gift-combos"
+        "/gift-combos",
+        "/product/:slug"
       ]
     },
     {

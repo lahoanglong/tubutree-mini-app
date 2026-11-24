@@ -64,6 +64,17 @@ describe('descriptionGuide', () => {
     expect(descriptionGuide('Bảo quản nơi khô ráo, tránh ánh nắng.').storage).toEqual(['Nơi khô ráo, tránh ánh nắng.']);
     expect(descriptionGuide('BẢO QUẢN TRONG TỦ LẠNH SAU KHI MỞ NẮP').storage).toEqual(['TRONG TỦ LẠNH SAU KHI MỞ NẮP']);
     expect(descriptionGuide('Không chứa chất bảo quản.\nBảo quản tự nhiên từ muối.\nCách dùng đơn giản cho cả nhà.')).toEqual({ usage: null, storage: null });
+    // "Bảo quản sản phẩm" chỉ là câu bảo quản khi theo sau là nơi hay cách giữ.
+    expect(descriptionGuide('Bảo quản sản phẩm ở nơi thoáng mát.').storage).toEqual(['Sản phẩm ở nơi thoáng mát.']);
+    expect(descriptionGuide('Bảo quản sản phẩm lâu hơn nhờ chiết xuất tự nhiên.').storage).toBeNull();
+  });
+
+  it('tiêu đề không in đậm: dừng ở tên mục khác ("Thành phần:", dòng ngắn "Công dụng"), không nuốt sang mục sau', () => {
+    const text = 'Cách dùng\nLắc đều trước khi dùng.\nThành phần: nước, muối biển, tinh dầu tràm.\nCông dụng\nLàm sạch dịu nhẹ.';
+    expect(descriptionGuide(text).usage).toEqual(['Lắc đều trước khi dùng.']);
+    expect(descriptionGuide('Bảo quản\nNơi khô ráo\nQuy cách 500ml').storage).toEqual(['Nơi khô ráo']);
+    // Câu dài có tên mục ở giữa câu vẫn là câu hướng dẫn.
+    expect(descriptionGuide('Cách dùng\nThông thoáng phòng sau khi xịt, rửa tay sạch.').usage).toEqual(['Thông thoáng phòng sau khi xịt, rửa tay sạch.']);
   });
 
   it('tiêu đề đứng riêng rồi các mục bên dưới, dừng ở tiêu đề kế tiếp; tối đa PDP_GUIDE_LINES_MAX câu', () => {
@@ -106,33 +117,37 @@ describe('pdpOriginView', () => {
       title: 'Nguồn gốc & cách dùng',
       hint: 'Thanh Hóa',
       rows: [
-        { key: 'origin', label: 'Vùng nguyên liệu', lines: ['Thanh Hóa · Fuwa3e'] },
+        { key: 'origin', label: 'Đến từ', lines: ['Fuwa3e · Thanh Hóa'] },
         { key: 'usage', label: 'Cách dùng', lines: ['1 nắp cho 4kg đồ.'] },
         { key: 'storage', label: 'Bảo quản', lines: ['Nơi khô ráo.'] },
         { key: 'lot', label: 'Hạn dùng, số lô', lines: ['In trên bao bì sản phẩm'] },
       ],
-      map: { id: 'fuwa3e', spoken: 'Xem vùng nguyên liệu Thanh Hóa trên bản đồ' },
+      map: { id: 'fuwa3e', spoken: 'Xem Fuwa3e ở Thanh Hóa trên bản đồ' },
     });
   });
 
-  it('chip xuất xứ đầu trang đã trỏ bản đồ: không thêm lối thứ hai; nhãn mượn nhà máy ghi "nhà máy"', () => {
+  it('chip xuất xứ đầu trang đã trỏ bản đồ: không thêm lối thứ hai; nhãn mượn nhà máy ghi "Nhà máy"; tiêu đề chỉ nói phần khối có', () => {
     const v = pdpOriginView({ brand: 'Pineboo', name: 'Bọt tắm Pineboo', description: '' }, { originChip: true })!;
     expect(v.map).toBeNull();
-    expect(v.title).toBe('Nguồn gốc & bảo quản');
+    expect(v.title).toBe('Nguồn gốc & hạn dùng');
     expect(v.rows).toEqual([
-      { key: 'origin', label: 'Vùng nguyên liệu', lines: ['Thanh Hóa · nhà máy Fuwa3e'] },
-      { key: 'lot', label: 'Hạn dùng, số lô, bảo quản', lines: ['In trên bao bì sản phẩm'] },
+      { key: 'origin', label: 'Đến từ', lines: ['Nhà máy Fuwa3e · Thanh Hóa'] },
+      { key: 'lot', label: 'Hạn dùng, số lô', lines: ['In trên bao bì sản phẩm'] },
     ]);
+    const stored = pdpOriginView({ brand: 'Pineboo', name: 'Bọt tắm Pineboo', description: 'Bảo quản nơi khô ráo.' }, { originChip: true })!;
+    expect(stored.title).toBe('Nguồn gốc & bảo quản');
   });
 
   it('không rõ xuất xứ: tiêu đề theo phần có, không gợi ý tỉnh, không lối bản đồ', () => {
     const usage = pdpOriginView({ brand: SHELL, name: 'Túi vải', description: 'HDSD: giặt tay.' }, { originChip: false })!;
-    expect(usage.title).toBe('Cách dùng & bảo quản');
+    expect(usage.title).toBe('Cách dùng & hạn dùng');
     expect(usage.hint).toBeNull();
     expect(usage.map).toBeNull();
     const storage = pdpOriginView({ brand: SHELL, name: 'Túi vải', description: 'Bảo quản nơi khô ráo' }, { originChip: false })!;
     expect(storage.title).toBe('Bảo quản & hạn dùng');
     expect(storage.rows.map((r) => r.key)).toEqual(['storage', 'lot']);
+    const both = pdpOriginView({ brand: SHELL, name: 'Túi vải', description: 'HDSD: giặt tay.\nBảo quản nơi khô ráo' }, { originChip: false })!;
+    expect(both.title).toBe('Cách dùng & bảo quản');
   });
 
   it('không xuất xứ, không cách dùng, không bảo quản: không có khối', () => {

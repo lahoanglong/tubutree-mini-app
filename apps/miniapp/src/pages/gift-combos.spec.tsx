@@ -114,6 +114,18 @@ describe('GiftCombosPage (Mini App)', () => {
     expect(list.textContent).toContain('Tiết kiệm 30.000đ');
     expect(list.textContent).toContain('175.000đ');
     expect(list.textContent).toContain('Combo -14%');
+    // Giỏ cắt phần giảm theo dòng, không theo %: thẻ không ghi giá trong bộ của từng món.
+    expect(screen.queryAllByTestId('combo-item-price')).toHaveLength(0);
+  });
+
+  it('số máy chủ khớp phép % từng món: thẻ ghi giá lẻ và giá trong bộ của từng món (cộng lại bằng giá cả bộ)', async () => {
+    landing.combos = [{ ...combo('c1', ['a', 120_000], ['b', 85_000], 10), saving: 20_500 }];
+    renderPage();
+    await screen.findByTestId('gift-combos-list');
+    const rows = screen.getAllByTestId('combo-item-price').map((r) => r.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('108.000đ');
+    expect(rows[1]).toContain('76.500đ');
   });
 
   it('0 combo: trạng thái trống, nút sang trang Sản phẩm; hai mốc vẫn hiện', async () => {

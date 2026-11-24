@@ -78,6 +78,7 @@ describe('giftCombosViews: số "Tiết kiệm" theo máy chủ (cùng hàm gi�
     const [v] = giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 20_500 }] }), NOW);
     expect(v!.comboTotal).toBe(184_500);
     expect(v!.pct).toBe(10);
+    expect(v!.clamped).toBeUndefined();
   });
 
   it('máy chủ kẹp thấp hơn mức % (trần tiền bộ nhân viên): thẻ hứa đúng số kẹp, nhãn % là mức thật làm tròn xuống', () => {
@@ -85,6 +86,8 @@ describe('giftCombosViews: số "Tiết kiệm" theo máy chủ (cùng hàm gi�
     expect(v!.total - v!.comboTotal).toBe(30_000);
     // 30.000 / 205.000 = 14,6% → 14.
     expect(v!.pct).toBe(14);
+    // Giỏ cắt phần giảm theo dòng, không theo % mới: thẻ không ghi giá trong bộ từng món.
+    expect(v!.clamped).toBe(true);
   });
 
   it('máy chủ báo 0đ: bỏ bộ (không quảng cáo "mua cả bộ" mà giỏ không giảm)', () => {
@@ -92,8 +95,10 @@ describe('giftCombosViews: số "Tiết kiệm" theo máy chủ (cùng hàm gi�
   });
 
   it('API cũ (thiếu số) hay số hỏng: giữ phép tính ở máy khách; số lớn hơn tổng thì kẹp ở tổng', () => {
-    expect(giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 12.5 }] }), NOW)[0]!.comboTotal).toBe(184_500);
-    expect(giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 999_999 }] }), NOW)[0]!.comboTotal).toBe(0);
+    const [legacy] = giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 12.5 }] }), NOW);
+    expect(legacy!.comboTotal).toBe(184_500);
+    expect(legacy!.clamped).toBeUndefined();
+    expect(giftCombosViews(landing({ combos: [{ ...combo('c1'), saving: 999_999 }] }), NOW)[0]).toMatchObject({ comboTotal: 0, clamped: true });
   });
 });
 

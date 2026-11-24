@@ -8,7 +8,7 @@ const BODY_SM = 'text-[length:var(--type-body-sm-size)] leading-[var(--type-body
 
 /**
  * Khối "Nguồn gốc & cách dùng" (`pdpOriginView` của app-core), cùng số đo với `PdpOriginGuide` của Mini App: gập sẵn thành một dòng tiêu đề kèm
- * tỉnh vùng nguyên liệu để đọc lướt, mở ra là các dòng Vùng nguyên liệu, Cách dùng, Bảo quản, Hạn dùng/số lô.
+ * tỉnh của nhãn để đọc lướt, mở ra là các dòng Đến từ, Cách dùng, Bảo quản, Hạn dùng/số lô.
  * Thành phần máy chủ dùng thẻ `<details>`: trình duyệt tự gập/mở nên trang không thêm byte JS nào, và chữ đang gập vẫn nằm trong HTML cho công cụ
  * tìm kiếm. Điện thoại là dải trắng riêng như Mini App; từ md là khối thường như Thành phần. Lối bản đồ chỉ có khi đầu trang chưa có chip xuất xứ.
  */
@@ -43,18 +43,18 @@ export function PdpOriginGuide({ view }: { view: PdpOriginView | null }) {
               ) : (
                 row.lines[0]
               )}
+              {row.key === 'origin' && view.map && (
+                <Link
+                  href={`/cau-chuyen?brand=${encodeURIComponent(view.map.id)}`}
+                  data-testid="pdp-origin-map"
+                  aria-label={view.map.spoken}
+                  className={`${CAPTION} tubu-hit-44 flex w-fit items-center gap-0.5 font-semibold text-[var(--color-text-brand)]`}
+                >
+                  <MapPin aria-hidden="true" strokeWidth={1.75} className="h-4 w-4 flex-none" />
+                  {pdpOriginCopy('map')}
+                </Link>
+              )}
             </dd>
-            {row.key === 'origin' && view.map && (
-              <Link
-                href={`/cau-chuyen?brand=${encodeURIComponent(view.map.id)}`}
-                data-testid="pdp-origin-map"
-                aria-label={view.map.spoken}
-                className={`${CAPTION} tubu-hit-44 inline-flex items-center gap-0.5 font-semibold text-[var(--color-text-brand)]`}
-              >
-                <MapPin aria-hidden="true" strokeWidth={1.75} className="h-4 w-4 flex-none" />
-                {pdpOriginCopy('map')}
-              </Link>
-            )}
           </div>
         ))}
       </dl>

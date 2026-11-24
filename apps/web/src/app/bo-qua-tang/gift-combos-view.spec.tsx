@@ -134,6 +134,16 @@ describe('GiftCombosView (/bo-qua-tang)', () => {
     expect(text).toContain('Tiết kiệm 30.000đ');
     expect(text).toContain('175.000đ');
     expect(text).toContain('Combo -14%');
+    // Giỏ cắt phần giảm theo dòng, không theo %: thẻ không ghi giá trong bộ của từng món.
+    expect(c.querySelectorAll('[data-testid="combo-item-price"]')).toHaveLength(0);
+  });
+
+  it('số máy chủ khớp phép % từng món: thẻ ghi giá lẻ và giá trong bộ của từng món (cộng lại bằng giá cả bộ)', async () => {
+    const c = await mount(landing({ combos: [{ ...combo('c1', ['a', 120_000], ['b', 85_000], 10), saving: 20_500 }] }));
+    const rows = [...c.querySelectorAll('[data-testid="combo-item-price"]')].map((r) => r.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('108.000đ');
+    expect(rows[1]).toContain('76.500đ');
   });
 
   it('khách chưa đăng nhập: chuyển sang đăng nhập kèm đường quay lại, không gọi giỏ', async () => {
