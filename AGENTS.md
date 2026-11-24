@@ -18,3 +18,7 @@ Khách dùng cùng một cửa hàng qua Mini App và qua website. Hai bên ph�
 
 - Trước khi làm hay sửa màn mua sắm (Mini App hoặc web), đọc `.claude/skills/tubu-ui/SKILL.md` và `DESIGN.md`: thành phần nào dùng cho nhu cầu nào, khai kệ, khuôn trang web, lệnh kiểm. Không dựng thẻ sản phẩm, tiêu đề khối, nhãn, giá hay phiếu mới khi `docs/design/ds-map.json` đã có thành phần.
 - Chữ của màn gian hàng chỉ thêm vào `packages/app-core/src/shop-copy.ts`, kèm chỗ dùng và độ dài tối đa. Chạy `terminology.spec` và `shop-copy.spec` trước khi mở PR.
+
+## Trước khi đẩy nhánh wave hoặc release
+
+- Chạy `node scripts/ci/wave-preflight/index.mjs` (vài giây, chỉ đọc tệp). Nó so nhánh với merge-base của `origin/main` và đỏ khi: GET mới phía client thiếu `api.fallback` trong `apps/e2e/tests/support/mock-api.ts`; `HEAVY_MIGRATIONS` lệch runbook deploy mục 1.0/3.1/3.2; `@Cron` thiếu nhãn `CRON_JOB_LABELS`; số "+N mới" của `reference-seed.race-spec.ts` lệch `NOTIFICATION_TEMPLATES`; tệp giao diện đổi làm tăng `ds-ratchet`/ds-shop-guard; route `/admin` thiếu dòng trong `staff-permissions.matrix.spec.ts`. Lỗi in kèm cách sửa. GET chỉ gọi khi bấm (spec của nó tự mock) thì đánh dấu `// wave-preflight-ignore mock-api-fallback: <lý do>` ngay trên lời gọi.
