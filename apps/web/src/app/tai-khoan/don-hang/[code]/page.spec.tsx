@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   orderCalls: [] as string[],
   qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined, error: null as unknown },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
+  configPending: false,
   eta: null as null | { minDays: number; maxDays: number },
   refillFirstEnabled: false,
   landing: { enabled: false, pairs: [] } as unknown,
@@ -27,9 +28,11 @@ vi.mock('@/lib/core-http', () => ({
       mocks.paths.push(path);
       if (path === '/catalog/refill-pairs/landing') return mocks.landing;
       if (path !== '/config/public') throw new Error(`chưa mock ${path}`);
+      if (mocks.configPending) return new Promise(() => undefined);
       if (mocks.support instanceof Error) throw mocks.support;
       return { support: mocks.support, shippingEta: mocks.eta, refillFirstEnabled: mocks.refillFirstEnabled };
     },
+    post: async () => ({ recorded: true }),
   },
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -53,6 +56,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
+import { ORDER_CSAT_COPY } from '@tubutree/app-core/order-csat';
 import { ApiError } from '@/lib/client-api';
 import OrderDetailPage from './page';
 
@@ -100,6 +104,7 @@ beforeEach(() => {
   mocks.orderCalls = [];
   mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined, error: null };
   mocks.support = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
+  mocks.configPending = false;
   mocks.eta = null;
   mocks.refillFirstEnabled = false;
   mocks.landing = { enabled: false, pairs: [] };
@@ -860,5 +865,37 @@ describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi
     expect(container.textContent).toContain('Không tìm thấy đơn hàng');
     expect(buttons(container).some((b) => b.textContent === 'Về trang chủ')).toBe(true);
     expect(buttons(container).some((b) => b.textContent === 'Thử lại')).toBe(false);
+  });
+});
+
+describe('/tai-khoan/don-hang/[code] — 👎 ở thẻ "Đơn này thế nào?" khi chat chưa mở (tubu-w33-02)', () => {
+  const delivered = () => ({
+    ...structuredClone(ORDER),
+    status: 'DELIVERED',
+    paymentStatus: 'PAID',
+    csatAsk: true,
+    items: [{ ...ORDER.items[0], productSlug: 'dau-goi', reviewId: 'r1' }],
+  });
+  const down = (c: HTMLElement) => c.querySelector<HTMLButtonElement>(`[data-testid="order-csat"] button[aria-label="${ORDER_CSAT_COPY.down}"]`)!;
+  const status = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="order-csat"] [role="status"]')!;
+
+  it('khối liên hệ có kênh: đưa focus tới khối đó, lời xin lỗi chỉ chỗ nhắn', async () => {
+    mocks.order = delivered();
+    const { container } = await mount();
+    act(() => down(container).click());
+    await flush(2);
+    expect(status(container).textContent).toBe(ORDER_CSAT_COPY.thanksDown);
+    expect(document.activeElement?.id).toBe('order-support');
+  });
+
+  it('khối liên hệ còn rỗng (số liên hệ đang tải): không nhắc "mục Liên hệ", focus ở dòng xin lỗi', async () => {
+    mocks.order = delivered();
+    mocks.configPending = true;
+    const { container } = await mount();
+    expect(container.querySelector('#order-support')?.firstElementChild).toBeNull();
+    act(() => down(container).click());
+    await flush(2);
+    expect(status(container).textContent).toBe(ORDER_CSAT_COPY.thanksDownNoContact);
+    expect(document.activeElement).toBe(status(container));
   });
 });

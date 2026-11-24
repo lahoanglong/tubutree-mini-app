@@ -22,6 +22,8 @@ export const ORDER_CSAT_COPY = {
   thanksUp: 'Cảm ơn bạn đã cho Tubu biết!',
   /** 👎 khi chat chưa mở: trang cuộn tới khối liên hệ ngay sau đó, ≤ 80 ký tự. */
   thanksDown: 'Tubu xin lỗi vì đơn chưa ổn. Nhắn Tubu ở mục Liên hệ để được hỗ trợ ngay.',
+  /** 👎 khi chat chưa mở và khối liên hệ chưa có kênh nào (đang tải, hoặc không cấu hình): không nhắc kênh nào, ≤ 80 ký tự. */
+  thanksDownNoContact: 'Tubu xin lỗi vì đơn chưa ổn. Cảm ơn bạn đã cho Tubu biết để làm tốt hơn.',
 } as const;
 
 /** Thẻ chỉ hiện khi máy chủ báo hỏi (`csatAsk`; API cũ không trả thì ẩn) và đơn đang ở trạng thái đã giao. */

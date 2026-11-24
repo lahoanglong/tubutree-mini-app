@@ -141,7 +141,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       qc.setQueryData(['public-config'], {});
       return (
         <QueryClientProvider client={qc}>
-          <OrderCsatCard order={{ id: 'o', code: 'A', status: 'DELIVERED', csatAsk: true, items: [] }} onSupport={() => {}} />
+          <OrderCsatCard order={{ id: 'o', code: 'A', status: 'DELIVERED', csatAsk: true, items: [] }} onSupport={() => true} />
         </QueryClientProvider>
       );
     }],

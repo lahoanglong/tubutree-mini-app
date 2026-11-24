@@ -61,6 +61,9 @@ describe('ORDER_CSAT_COPY', () => {
     expect(ORDER_CSAT_COPY.down.length).toBeLessThanOrEqual(16);
     expect(ORDER_CSAT_COPY.thanksUp.length).toBeLessThanOrEqual(40);
     expect(ORDER_CSAT_COPY.thanksDown.length).toBeLessThanOrEqual(80);
+    expect(ORDER_CSAT_COPY.thanksDownNoContact.length).toBeLessThanOrEqual(80);
+    // Khối liên hệ rỗng: không hứa kênh nào khách không thấy (Liên hệ, chat, hotline, Zalo).
+    expect(ORDER_CSAT_COPY.thanksDownNoContact).not.toMatch(/liên hệ|nhắn|chat|gọi|hotline|zalo|email/i);
   });
 
   it('không dùng thuật ngữ cấm', () => {
