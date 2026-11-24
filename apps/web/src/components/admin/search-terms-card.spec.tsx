@@ -28,6 +28,7 @@ const zeroRow = (over: Partial<ZeroResultTerm> = {}): ZeroResultTerm => ({
   people: 7,
   lastSeenAt: '2026-11-22T03:00:00.000Z',
   synonym: null,
+  suggestions: [],
   ...over,
 });
 
@@ -146,6 +147,45 @@ describe('SearchTermsCard', () => {
     const post = calls.find((x) => x.init?.method === 'POST')!;
     expect(bodyOf(post.init)).toEqual({ term: 'nước tẩy bồn cầu', canonical: 'tẩy rửa toilet' });
     expect(calls.filter((x) => x.url.includes('/zero-results'))).toHaveLength(2);
+  });
+
+  it('gợi ý một chạm: mỗi cụm gợi ý là một nút; chạm là POST đúng cặp, không đụng form đang gõ, tải lại bảng; chạm đúp chỉ gửi một lần', async () => {
+    const { c, calls } = await mount([], undefined, { body: { days: 14, items: [zeroRow({ suggestions: ['nước tẩy rửa', 'tẩy toilet'] })] } });
+    const li = c.querySelector('ul[aria-label="Từ khoá tìm chưa ra"] li')!;
+    expect(Array.from(li.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['→ nước tẩy rửa', '→ tẩy toilet', 'Tự gõ']);
+    const chip = li.querySelector<HTMLButtonElement>(`button[aria-label='Tạo từ đồng nghĩa: "nước tẩy bồn cầu" tìm thêm "nước tẩy rửa"']`)!;
+    expect(chip).not.toBeNull();
+    typeInto(c.querySelector('input[name="canonical"]'), 'đang gõ dở');
+    click(chip);
+    click(chip);
+    await flush(8);
+    const posts = calls.filter((x) => x.init?.method === 'POST');
+    expect(posts).toHaveLength(1);
+    expect(bodyOf(posts[0]!.init)).toEqual({ term: 'nước tẩy bồn cầu', canonical: 'nước tẩy rửa' });
+    expect(c.textContent).toContain('Đã thêm: "xa phong" → "xa bong".');
+    expect(c.querySelector<HTMLInputElement>('input[name="canonical"]')!.value).toBe('đang gõ dở');
+    expect(calls.filter((x) => x.url.includes('/zero-results'))).toHaveLength(2);
+    expect(calls.filter((x) => x.url.endsWith('/admin/search-synonyms') && (x.init?.method ?? 'GET') === 'GET')).toHaveLength(2);
+    // Khoá nhả sau khi bảng tải lại: chạm lần nữa vẫn gửi được.
+    click(li.querySelector('button')!);
+    await flush(8);
+    expect(calls.filter((x) => x.init?.method === 'POST')).toHaveLength(2);
+  });
+
+  it('"Tự gõ" của dòng có gợi ý vẫn điền sẵn form; API cũ thiếu hay gửi hỏng suggestions thì chỉ có nút "Tạo từ đồng nghĩa"', async () => {
+    const legacy = { term: 'xà bông cục', count: 2, people: 2, lastSeenAt: '2026-11-22T03:00:00.000Z', synonym: null };
+    const { c } = await mount([], undefined, {
+      body: { days: 14, items: [zeroRow({ suggestions: ['nước tẩy rửa'] }), legacy, { ...legacy, term: 'xà bông thơm', suggestions: 'hỏng' }, { ...legacy, term: 'bàn chải', suggestions: [1, ' ', null] }] },
+    });
+    const rows = c.querySelectorAll('ul[aria-label="Từ khoá tìm chưa ra"] li');
+    expect(rows).toHaveLength(4);
+    for (const r of Array.from(rows).slice(1)) {
+      expect(Array.from(r.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Tạo từ đồng nghĩa']);
+    }
+    click(byText(rows[0]!, 'button', 'Tự gõ'));
+    await flush(2);
+    expect(c.querySelector<HTMLInputElement>('input[name="term"]')!.value).toBe('nước tẩy bồn cầu');
+    expect(document.activeElement).toBe(c.querySelector('input[name="canonical"]'));
   });
 
   it('từ khoá tìm chưa ra lỗi hay rỗng: báo riêng ở khối đó, phần từ đồng nghĩa vẫn dùng được', async () => {

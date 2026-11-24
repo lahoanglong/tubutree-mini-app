@@ -29,13 +29,19 @@ export interface ZeroResultTerm {
   people: number;
   lastSeenAt: string;
   synonym: { canonical: string; isActive: boolean } | null;
+  /** Cụm tìm thay gợi ý: chạm một cụm là tạo từ đồng nghĩa ngay. */
+  suggestions: string[];
 }
 /** Khung ngày của thẻ "Từ khoá tìm chưa ra" (API nhận 1..90, mặc định cũng 14). */
 export const ZERO_RESULT_DAYS = 14;
-/** Dòng thiếu cụm thì bỏ, không vẽ dòng trống có nút tạo. */
+/** Dòng thiếu cụm thì bỏ, không vẽ dòng trống có nút tạo. API cũ chưa gửi `suggestions` thì coi như không có gợi ý. */
 export const listZeroResultTerms = () =>
   apiFetch<{ items?: unknown }>(`${BASE}/zero-results?days=${ZERO_RESULT_DAYS}`).then((r) =>
-    Array.isArray(r.items) ? r.items.filter((t): t is ZeroResultTerm => typeof (t as ZeroResultTerm | null)?.term === 'string' && (t as ZeroResultTerm).term !== '') : [],
+    Array.isArray(r.items)
+      ? r.items
+          .filter((t): t is ZeroResultTerm => typeof (t as ZeroResultTerm | null)?.term === 'string' && (t as ZeroResultTerm).term !== '')
+          .map((t) => ({ ...t, suggestions: Array.isArray(t.suggestions) ? t.suggestions.filter((s): s is string => typeof s === 'string' && s.trim() !== '') : [] }))
+      : [],
   );
 export const createSynonym = (body: { term: string; canonical: string }) => apiFetch<SearchSynonym>(BASE, { method: 'POST', body });
 export const updateSynonym = (id: string, body: { canonical?: string; isActive?: boolean }) =>
