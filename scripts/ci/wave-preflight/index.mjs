@@ -6,8 +6,10 @@
 //   node scripts/ci/wave-preflight/index.mjs --base <ref>     so với ref khác (vd SHA gốc của wave)
 //   node scripts/ci/wave-preflight/index.mjs --only cron-labels,admin-staff-matrix
 //   node scripts/ci/wave-preflight/index.mjs --json           in kết quả dạng JSON
+//   node scripts/ci/wave-preflight/index.mjs --allow-no-base  chạy dù không tìm được gốc (clone nông, thiếu origin/main): luật 1 và 5 bỏ qua
 //
-// Thoát 1 khi có lỗi. "nhắc" không làm đỏ. Luật 1 và 5 chỉ xét tệp đổi so với gốc; bốn luật còn lại kiểm cả repo.
+// Thoát 1 khi có lỗi. "nhắc" không làm đỏ. Luật 1 và 5 chỉ xét tệp đổi so với gốc; bốn luật còn lại kiểm cả repo. Không tìm được gốc thì đỏ
+// (xanh lúc đó nghĩa là chưa kiểm gì). Trên nhánh đã gộp vào main, merge-base trùng HEAD: truyền `--base <SHA gốc của wave>`.
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { changedFiles, fsTree, gitTree, resolveBase } from './lib.mjs';
@@ -33,6 +35,7 @@ export function buildContext({ root = REPO, base } = {}) {
     head: fsTree(root),
     base: sha ? gitTree(root, sha) : null,
     baseRef: sha,
+    headRef: resolveBase(root, 'HEAD'),
     changed: sha ? changedFiles(root, sha) : null,
   };
 }
@@ -72,6 +75,13 @@ export async function main(argv = process.argv.slice(2), io = { log: console.log
     return 2;
   }
   const results = await runPreflight(ctx, { only });
+  const general = { id: 'base', title: 'Gốc so sánh của wave', ms: 0, errors: [], warnings: [], notes: [] };
+  if (!ctx.baseRef && !argv.includes('--allow-no-base')) {
+    general.errors.push('không tìm được merge-base với origin/main (clone nông hoặc thiếu remote): `git fetch origin main`, truyền `--base <ref>`, hoặc `--allow-no-base` nếu chấp nhận bỏ luật 1 và 5');
+  } else if (ctx.baseRef && ctx.baseRef === ctx.headRef && ctx.changed.length === 0) {
+    general.warnings.push('gốc so sánh trùng HEAD và không có tệp đổi: luật 1 và 5 không có gì để xét (nhánh đã gộp thì truyền `--base <SHA gốc của wave>`)');
+  }
+  if (general.errors.length + general.warnings.length > 0) results.unshift(general);
   const errors = results.reduce((n, r) => n + r.errors.length, 0);
   const warnings = results.reduce((n, r) => n + r.warnings.length, 0);
   const seconds = ((performance.now() - started) / 1000).toFixed(2);

@@ -8,6 +8,7 @@ export interface PreflightContext {
   head: Tree;
   base: Tree | null;
   baseRef?: string | null;
+  headRef?: string | null;
   changed: string[] | null;
 }
 export interface RuleResult {
@@ -32,7 +33,11 @@ export function resolveBase(root: string, explicit?: string): string | null;
 export function changedFiles(root: string, base: string): string[];
 
 export function normalizePath(raw: string): string;
-export function extractGetCalls(ts: unknown, text: string, file: string): { path: string; line: number; ignored: boolean }[];
-export function mockedGetPaths(mockApiSource: string): Set<string>;
+export function extractGetCalls(
+  ts: unknown,
+  text: string,
+  file: string,
+): ({ path: string; unresolved?: undefined; line: number; ignored: boolean } | { path?: undefined; unresolved: string; line: number; ignored: boolean })[];
+export function mockedGetPaths(ts: unknown, mockApiSource: string): Map<string, Set<'miniapp' | 'web'>> | null;
 export function mockCovers(mockPattern: string, path: string): boolean;
 export function stripSqlComments(sql: string): string;

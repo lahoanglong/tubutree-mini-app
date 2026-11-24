@@ -31,8 +31,28 @@ async function run(id: string, ctx: PreflightContext) {
   return r!;
 }
 
+/** mock-api.ts giả cùng cấu trúc thật: mặc định của fixture `test` (mọi spec) và của shellDefaults (chỉ project web). */
+const mockFile = (fixture: string[], shell: string[] = [], extra = '') =>
+  [
+    'export const test = base.extend<{ api: MockApi }>({',
+    '  api: [',
+    '    async ({ page }, use) => {',
+    '      const api = new MockApi();',
+    ...fixture.map((l) => `      ${l}`),
+    '      await use(api);',
+    '    },',
+    '    { auto: true },',
+    '  ],',
+    '});',
+    'function shellDefaults(api: MockApi): void {',
+    ...shell.map((l) => `  ${l}`),
+    '}',
+    extra,
+  ].join('\n');
+
 describe('luật 1 mock-api-fallback: đọc đường dẫn GET từ mã client', () => {
-  const paths = (src: string) => [...new Set(extractGetCalls(ts, src, 'x.ts').map((c) => c.path))].sort();
+  const paths = (src: string) => [...new Set(extractGetCalls(ts, src, 'x.ts').flatMap((c) => (c.path === undefined ? [] : [c.path])))].sort();
+  const unresolved = (src: string) => extractGetCalls(ts, src, 'x.ts').flatMap((c) => (c.unresolved === undefined ? [] : [c.unresolved]));
 
   it.each([
     ["http.get('/a/' + id + '/b')", ['/a/:param/b']],
@@ -47,13 +67,42 @@ describe('luật 1 mock-api-fallback: đọc đường dẫn GET từ mã client
     ['http.get(`/orders${qs}`)', ['/orders']],
     ['http.get(`/v/${a}-${b}`)', ['/v/:param']],
     ["coreHttp.get(path ?? '/fallback')", ['/fallback']],
+    ["function g(http: HttpClient) {\n  const path = '/me/bar';\n  return http.get(path);\n}", ['/me/bar']],
+    ['const p = (id: string) => `/me/baz/${id}`;\nexport const f = (id: string) => apiFetch(p(id));', ['/me/baz/:param']],
+    ["function cartPath(p: string) {\n  return guest ? `/guest${p}` : p;\n}\nexport const c = () => apiFetch(cartPath('/cart'));", ['/cart', '/guest/cart']],
+    ["const OPTS = { cache: 'no-store' } as const;\nexport const o = () => apiFetch('/me/opts', OPTS);", ['/me/opts']],
   ])('%s', (src, want) => {
     expect(paths(src)).toEqual(want);
   });
 
+  it('đường dẫn hay method không đọc được thì trả lời gọi "unresolved" (để nhắc), không lặng lẽ bỏ', () => {
+    expect(unresolved("import { QUX } from './paths';\nexport const a = () => apiFetch(QUX);")).toEqual(['apiFetch(QUX)']);
+    expect(unresolved("export const b = (http: HttpClient) => http.get(`${BASE}/me/zzz`);")).toEqual(['http.get(`${BASE}/me/zzz`)']);
+    expect(unresolved("export const c = (opts: O) => apiFetch('/me/optsvar', opts);")).toEqual(["apiFetch('/me/optsvar', opts)"]);
+    expect(unresolved("export const d = () => apiFetch('/me/put', { method: 'PUT' });")).toEqual([]);
+  });
+
+  it('mặc định chỉ tính trong fixture `test`, shellDefaults (chỉ web), loyaltyDefaults, mockSession; bỏ comment và helper vài spec mới gọi', () => {
+    const text = mockFile(
+      ["api.fallback('GET', '/products/:slug/bundles', {});", "api.allowUnmocked('GET /home', 'GET /checkout/shipping-estimate');", "// api.fallback('GET', '/commented', {});"],
+      ["api.fallback('GET', '/cart', {});"],
+      [
+        "export function adminShellDefaults(api: MockApi): void {\n  api.fallback('GET', '/admin/ops/inbox', {});\n}",
+        "export function mockSession(api: MockApi, user: AuthUser): AuthUser {\n  api.get('/me', user);\n  return user;\n}",
+      ].join('\n'),
+    );
+    const mocks = mockedGetPaths(ts, text)!;
+    expect(Object.fromEntries([...mocks].map(([k, v]) => [k, [...v].sort()]))).toEqual({
+      '/products/:param/bundles': ['miniapp', 'web'],
+      '/home': ['miniapp', 'web'],
+      '/checkout/shipping-estimate': ['miniapp', 'web'],
+      '/cart': ['web'],
+      '/me': ['miniapp', 'web'],
+    });
+    expect(mockedGetPaths(ts, "api.fallback('GET', '/x', {});")).toBeNull();
+  });
+
   it('mẫu của mock: `:tên` khớp mọi đoạn, đoạn cố định phải bằng nhau, số đoạn phải bằng nhau', () => {
-    const mocks = mockedGetPaths("api.fallback('GET', '/products/:slug/bundles', {});\napi.allowUnmocked('GET /home', 'GET /checkout/shipping-estimate');");
-    expect([...mocks].sort()).toEqual(['/checkout/shipping-estimate', '/home', '/products/:param/bundles']);
     expect(mockCovers('/products/:param/bundles', '/products/:param/bundles')).toBe(true);
     expect(mockCovers('/products/:param', '/products/featured')).toBe(true);
     expect(mockCovers('/products/featured', '/products/:param')).toBe(false);
@@ -63,10 +112,12 @@ describe('luật 1 mock-api-fallback: đọc đường dẫn GET từ mã client
 
 describe('luật 1 mock-api-fallback: GET mới thiếu mặc định trong mock-api.ts thì đỏ', () => {
   const MOCK = 'apps/e2e/tests/support/mock-api.ts';
+  const OLD = "api.fallback('GET', '/me/old', {});";
+  const STATS = "api.fallback('GET', '/admin/x/:id/stats', {});";
   const base = {
     'packages/app-core/src/api/restock.ts': "export const old = (http: HttpClient) => http.get('/me/old');\n",
     'packages/app-core/src/api/legacy.ts': "export const legacy = (http: HttpClient) => http.get('/me/legacy');\n",
-    [MOCK]: "api.fallback('GET', '/me/old', {});\n",
+    [MOCK]: mockFile([OLD]),
   };
   const head = (mock: string, restockExtra = '') => ({
     ...base,
@@ -81,30 +132,53 @@ describe('luật 1 mock-api-fallback: GET mới thiếu mặc định trong mock
   const changed = ['packages/app-core/src/api/restock.ts', 'packages/app-core/src/api/restock.spec.ts', 'apps/web/src/lib/stats.ts', MOCK];
 
   it('ca vi phạm: /me/restock-alerts mới, chưa có api.fallback → đỏ, nêu đúng tệp:dòng; GET dời chỗ, POST, spec và GET đã có mặc định không bị nêu', async () => {
-    const mock = `${base[MOCK]}api.fallback('GET', '/admin/x/:id/stats', {});\n`;
-    const r = await run('mock-api-fallback', fakeCtx(head(mock), { base, changed }));
+    const r = await run('mock-api-fallback', fakeCtx(head(mockFile([OLD, STATS])), { base, changed }));
     expect(r.errors).toHaveLength(1);
-    expect(r.errors[0]).toContain('GET /me/restock-alerts (packages/app-core/src/api/restock.ts:2)');
+    expect(r.errors[0]).toContain('GET /me/restock-alerts (packages/app-core/src/api/restock.ts:2) là đường dẫn mới trên Mini App và web');
     expect(r.errors[0]).toContain("api.fallback('GET', '/me/restock-alerts'");
   });
 
-  it('thêm api.fallback cho đường dẫn đó thì xanh', async () => {
-    const mock = `${base[MOCK]}api.fallback('GET', '/admin/x/:id/stats', {});\napi.fallback('GET', '/me/restock-alerts', { enabled: false, items: [] });\n`;
-    const r = await run('mock-api-fallback', fakeCtx(head(mock), { base, changed }));
+  it('thêm api.fallback trong fixture thì xanh; dòng đã comment không tính', async () => {
+    const fixed = mockFile([OLD, STATS, "api.fallback('GET', '/me/restock-alerts', { enabled: false, items: [] });"]);
+    const r = await run('mock-api-fallback', fakeCtx(head(fixed), { base, changed }));
     expect(r.errors).toEqual([]);
     expect(r.notes.at(-1)).toContain('2 GET mới, 2 đã có mặc định');
+    const commented = mockFile([OLD, STATS, "// api.fallback('GET', '/me/restock-alerts', {});"]);
+    expect((await run('mock-api-fallback', fakeCtx(head(commented), { base, changed }))).errors).toHaveLength(1);
   });
 
   it('comment wave-preflight-ignore có lý do ngay trên lời gọi thì bỏ qua; thiếu lý do thì vẫn đỏ', async () => {
-    const mock = `${base[MOCK]}api.fallback('GET', '/admin/x/:id/stats', {});\n`;
+    const mock = mockFile([OLD, STATS]);
     const withReason = head(mock, '// wave-preflight-ignore mock-api-fallback: chỉ gọi khi bấm, spec của nút tự mock\n');
     expect((await run('mock-api-fallback', fakeCtx(withReason, { base, changed }))).errors).toEqual([]);
     const noReason = head(mock, '// wave-preflight-ignore mock-api-fallback:\n');
     expect((await run('mock-api-fallback', fakeCtx(noReason, { base, changed }))).errors).toHaveLength(1);
   });
 
+  it('chép GET có sẵn của web sang Mini là GET mới của Mini: mặc định chỉ ở shellDefaults (web) chưa đủ, ở fixture thì xanh', async () => {
+    const WEB = 'apps/web/src/lib/a.ts';
+    const MINI = 'apps/miniapp/src/pages/y.tsx';
+    const before = { [WEB]: "export const a = () => apiFetch('/me/foo');\n", [MOCK]: mockFile([], ["api.fallback('GET', '/me/foo', {});"]) };
+    const now = (mock: string) => ({ ...before, [MINI]: "export const y = () => api.get('/me/foo');\n", [MOCK]: mock });
+    const red = await run('mock-api-fallback', fakeCtx(now(before[MOCK]), { base: before, changed: [MINI] }));
+    expect(red.errors).toHaveLength(1);
+    expect(red.errors[0]).toContain(`GET /me/foo (${MINI}:1) là đường dẫn mới trên Mini App`);
+    const green = await run('mock-api-fallback', fakeCtx(now(mockFile(["api.fallback('GET', '/me/foo', {});"])), { base: before, changed: [MINI] }));
+    expect(green.errors).toEqual([]);
+  });
+
+  it('GET mới mà không đọc ra đường dẫn (hằng nhập từ tệp khác) thì nhắc kèm tệp:dòng, không đỏ; lời gọi cũ như vậy không nhắc lại', async () => {
+    const FILE = 'apps/web/src/lib/q.ts';
+    const before = { [FILE]: "import { OLD } from './p';\nexport const o = () => apiFetch(OLD);\n", [MOCK]: mockFile([]) };
+    const now = { ...before, [FILE]: `${before[FILE]}export const q = () => apiFetch(QUX);\n` };
+    const r = await run('mock-api-fallback', fakeCtx(now, { base: before, changed: [FILE] }));
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain(`\`apiFetch(QUX)\` (${FILE}:3)`);
+  });
+
   it('không có gốc so sánh thì chỉ nhắc, không đỏ', async () => {
-    const r = await run('mock-api-fallback', { root: '/fake', head: memTree(head(base[MOCK])), base: null, changed: null });
+    const r = await run('mock-api-fallback', { root: '/fake', head: memTree(head(mockFile([OLD]))), base: null, changed: null });
     expect(r.errors).toEqual([]);
     expect(r.warnings[0]).toContain('không có gốc so sánh');
   });
@@ -152,6 +226,19 @@ describe('luật 2 heavy-migrations-runbook: HEAVY_MIGRATIONS khớp runbook m�
     expect(r.errors[0]).toContain('20260103000000_c_orders_idx nằm trong HEAVY_MIGRATIONS nhưng bảng mục 1.0');
     expect(r.errors[1]).toContain('"tối đa 2"');
     expect(r.errors[2]).toContain('"2 × 10 giây = 20 giây"');
+  });
+
+  it('mục xuống dòng (prettier gói tên dài) hay có trường thêm vẫn được đếm; mục thiếu ordersLock thì đỏ thay vì đếm sai', async () => {
+    const wrapped = dbChecks.replace(
+      "  { name: '20260103000000_c_orders_idx', ordersLock: true },",
+      "  {\n    name: '20260103000000_c_orders_idx',\n    ordersLock: true,\n  },\n  // ghi chú\n  { name: '20260105000000_e', note: 'chỉ mục lớn', ordersLock: false },",
+    );
+    const r = await run('heavy-migrations-runbook', fakeCtx({ [DB]: wrapped, [RB]: runbook([...all, '20260105000000_e']) }));
+    expect(r.errors).toEqual([]);
+    expect(r.notes.at(-1)).toBe('4 migration nặng, 2 khoá orders');
+    const broken = dbChecks.replace("{ name: '20260102000000_b', ordersLock: false }", "{ name: '20260102000000_b' }");
+    const r2 = await run('heavy-migrations-runbook', fakeCtx({ [DB]: broken, [RB]: runbook(all) }));
+    expect(r2.errors.some((e) => e.includes("HEAVY_MIGRATIONS có mục luật không đọc được (name: '20260102000000_b')"))).toBe(true);
   });
 
   it('migration mới của wave dựng chỉ mục không CONCURRENTLY mà chưa vào danh sách thì nhắc (không đỏ)', async () => {
@@ -266,10 +353,13 @@ describe('luật 5 ds-ratchet-changed: tệp giao diện đổi không tăng bá
   const snack = (n: number) => `const { openSnackbar } = useSnackbar();\n${Array.from({ length: n }, (_, i) => `openSnackbar({ text: '${i}' });`).join('\n')}\n`;
   const home = (extra = '') => `export const H = () => <div style={{ padding: 8${extra} }} />;\n`;
 
-  it('giữ nguyên số đếm so với baseline thì xanh và nhắc chạy lint:parity khi đổi Mini', async () => {
+  it('giữ nguyên số đếm so với baseline thì xanh, nhắc chạy ds-shop-guard.spec của Mini (kiểm không baseline) và lint:parity', async () => {
     const r = await run('ds-ratchet-changed', fakeCtx({ [BASELINE]: baseline, [WISHLIST]: snack(1), [HOME]: home() }, { changed: [WISHLIST, HOME] }));
     expect(r.errors).toEqual([]);
-    expect(r.warnings[0]).toContain('pnpm lint:parity');
+    expect(r.warnings).toHaveLength(2);
+    expect(r.warnings[0]).toContain('chạy apps/miniapp/src/components/ds-shop-guard.spec.ts');
+    expect(r.warnings[0]).not.toContain('apps/web/');
+    expect(r.warnings[1]).toContain('pnpm lint:parity');
   });
 
   it('ca vi phạm (w24-04): thêm một openSnackbar vào trang Yêu thích Mini → đỏ open-snackbar', async () => {
@@ -294,45 +384,78 @@ describe('luật 5 ds-ratchet-changed: tệp giao diện đổi không tăng bá
   });
 });
 
-describe('luật 6 admin-staff-matrix: mọi route /admin có trong bảng quyền', () => {
+describe('luật 6 admin-staff-matrix: route quản trị khớp bảng quyền (cùng phạm vi và cách tính quyền với spec jest)', () => {
   const CTRL = 'apps/api/src/modules/a/a.controller.ts';
   const SPEC = 'apps/api/src/common/staff-permissions.matrix.spec.ts';
+  const PERMS_FILE = 'apps/api/src/common/staff-permissions.ts';
   const ctrl = [
     "@Controller('admin/widgets')",
+    "@Roles('ADMIN')",
     'export class AdminWidgetsController {',
     '  @Get()',
     '  list() {}',
+    '',
+    "  @AllowStaff('MARKETING')",
     "  @Post(':id/publish')",
     '  publish() {}',
+    '',
+    '  // cũ: @Get(\'archived\') đã bỏ',
     '}',
     "@Controller(['feed', 'internal/feed'])",
     'export class FeedController {',
+    "  @Roles('ADMIN', 'STAFF')",
     "  @Get('admin/queue')",
     '  queue() {}',
+    '',
+    "  @Roles('ADMIN')",
+    '  @AllowStaff(...MODS)',
+    "  @Post(':id/hide')",
+    '  hide() {}',
+    '',
     "  @Get('public')",
     '  pub() {}',
     '}',
   ].join('\n');
-  const matrix = (keys: string[]) => `const EXPECTED: Record<string, Access> = {\n${keys.map((k) => `  '${k}': ADMIN_ONLY,`).join('\n')}\n};\n`;
-  const all = ['GET /admin/widgets', 'POST /admin/widgets/:id/publish', 'GET /feed/admin/queue', 'GET /internal/feed/admin/queue'];
-  const ctx = (keys: string[], extra: Record<string, string> = {}) => fakeCtx({ [CTRL]: ctrl, [SPEC]: matrix(keys), ...extra });
+  type Access = string;
+  const matrix = (rows: Record<string, Access>) => `const EXPECTED: Record<string, Access> = {\n${Object.entries(rows).map(([k, v]) => `  '${k}': ${v},`).join('\n')}\n};\n`;
+  const all: Record<string, Access> = {
+    'GET /admin/widgets': 'ADMIN_ONLY',
+    'POST /admin/widgets/:id/publish': '[MARKETING]',
+    'GET /feed/admin/queue': 'STAFF',
+    'GET /internal/feed/admin/queue': 'STAFF',
+    'POST /feed/:id/hide': '[CSKH, MARKETING]',
+    'POST /internal/feed/:id/hide': '[CSKH, MARKETING]',
+  };
+  const ctx = (rows: Record<string, Access>, extra: Record<string, string> = {}) =>
+    fakeCtx({ [CTRL]: ctrl, [SPEC]: matrix(rows), [PERMS_FILE]: "export const MODS: readonly StaffPermission[] = ['CSKH', 'MARKETING'];\n", ...extra });
+  const without = (key: string) => Object.fromEntries(Object.entries(all).filter(([k]) => k !== key));
 
-  it('đủ dòng (kể cả /admin nằm giữa đường dẫn và controller nhiều tiền tố) thì xanh; route không có admin không cần dòng', async () => {
+  it('đủ dòng, đúng quyền (@Roles/@AllowStaff của hàm thắng của lớp, ...HẰNG ở tệp khác), route khách không cần dòng, comment và spec không tính → xanh', async () => {
     const r = await run('admin-staff-matrix', ctx(all, { 'apps/api/src/modules/a/a.controller.spec.ts': "@Controller('admin/spec-only')\nclass X { @Get() a() {} }" }));
     expect(r.errors).toEqual([]);
-    expect(r.notes.at(-1)).toBe('4 route quản trị, 4 dòng trong bảng');
+    expect(r.notes.at(-1)).toBe('6 route quản trị (4 có /admin), 6 dòng trong bảng');
   });
 
-  it('ca vi phạm (w24-02): route /admin mới chưa khai trong EXPECTED → đỏ, nêu khoá cần thêm', async () => {
-    const r = await run('admin-staff-matrix', ctx(all.filter((k) => !k.startsWith('POST'))));
+  it('ca vi phạm (w24-02): route /admin mới chưa khai trong EXPECTED → đỏ, gợi ý đúng dòng cần thêm', async () => {
+    const r = await run('admin-staff-matrix', ctx(without('POST /admin/widgets/:id/publish')));
+    expect(r.errors).toEqual([`route quản trị POST /admin/widgets/:id/publish (${CTRL}:7) chưa có trong EXPECTED của ${SPEC}: thêm \`'POST /admin/widgets/:id/publish': [MARKETING],\``]);
+  });
+
+  it('route ngoài /admin mang @Roles(ADMIN) chưa khai → đỏ; quyền trong bảng khác decorator → đỏ', async () => {
+    const r = await run('admin-staff-matrix', ctx(without('POST /feed/:id/hide')));
     expect(r.errors).toHaveLength(1);
-    expect(r.errors[0]).toContain(`route quản trị POST /admin/widgets/:id/publish (${CTRL}) chưa có trong EXPECTED`);
+    expect(r.errors[0]).toContain('route quản trị POST /feed/:id/hide');
+    const r2 = await run('admin-staff-matrix', ctx({ ...all, 'POST /admin/widgets/:id/publish': 'ADMIN_ONLY' }));
+    expect(r2.errors).toEqual([`route POST /admin/widgets/:id/publish (${CTRL}:7) mở cho [MARKETING] theo @Roles/@AllowStaff nhưng EXPECTED ghi ADMIN_ONLY: sửa một trong hai cho khớp`]);
   });
 
-  it('dòng của route đã xoá và đường dẫn không phải chuỗi trực tiếp đều đỏ', async () => {
-    expect((await run('admin-staff-matrix', ctx([...all, 'GET /admin/gone']))).errors[0]).toContain('còn route quản trị GET /admin/gone');
+  it('dòng của route đã xoá, route không còn quyền quản trị, và decorator không đọc được đều đỏ', async () => {
+    expect((await run('admin-staff-matrix', ctx({ ...all, 'GET /admin/gone': 'ADMIN_ONLY' }))).errors[0]).toContain('còn GET /admin/gone mà không controller nào khai');
+    expect((await run('admin-staff-matrix', ctx({ ...all, 'GET /feed/public': 'ADMIN_ONLY' }))).errors[0]).toContain('không còn là route quản trị');
     const dynamic = await run('admin-staff-matrix', ctx(all, { 'apps/api/src/modules/b/b.controller.ts': "@Controller('admin/b')\nclass B {\n  @Get(ROUTE)\n  x() {}\n}" }));
     expect(dynamic.errors.some((e) => e.includes('@Get(ROUTE) không phải chuỗi trực tiếp'))).toBe(true);
+    const spread = await run('admin-staff-matrix', ctx(all, { [PERMS_FILE]: '' }));
+    expect(spread.errors.some((e) => e.includes('@AllowStaff(...MODS) không đọc được'))).toBe(true);
   });
 });
 
@@ -387,5 +510,16 @@ describe('repo thật', () => {
     const code = await main(['--only', 'khong-co'], { log: (s) => lines.push(s), error: (s) => lines.push(s) });
     expect(code).toBe(2);
     expect(lines[0]).toContain('mock-api-fallback, heavy-migrations-runbook, cron-labels, notification-templates-count, ds-ratchet-changed, admin-staff-matrix');
+  });
+
+  it('CLI: không tìm được gốc so sánh thì đỏ (xanh lúc đó là chưa kiểm gì), trừ khi --allow-no-base', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'wave-preflight-nobase-'));
+    const lines: string[] = [];
+    const io = { log: (s: string) => lines.push(s), error: (s: string) => lines.push(s) };
+    expect(await main(['--root', root, '--only', 'ds-ratchet-changed'], io)).toBe(1);
+    expect(lines.join('\n')).toContain('lỗi: base: không tìm được merge-base với origin/main');
+    lines.length = 0;
+    expect(await main(['--root', root, '--only', 'ds-ratchet-changed', '--allow-no-base'], io)).toBe(0);
+    expect(lines.join('\n')).toContain('nhắc: ds-ratchet-changed: không có gốc so sánh');
   });
 });

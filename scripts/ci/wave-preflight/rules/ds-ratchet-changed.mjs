@@ -1,13 +1,15 @@
 // Luật 5: wave đổi tệp giao diện của Mini App (hoặc web) thì chạy ngay bánh cóc giao diện trên đúng các tệp đó: px viết tay / `max-md:` của
-// scripts/uiux/ds-ratchet.mjs và luật ds-shop-guard của scripts/uiux/ds-shop-rules.mjs (thẻ tự chế, giá gạch, primitive màu, `Text` zmp-ui,
-// gọi thẳng openSnackbar), so với scripts/uiux/ds-baseline.json. Luật guard chỉ chạy trong vitest (ds-shop-guard.spec.ts) nên trước đây chỉ lộ ở
-// lượt release (w24-04: toast báo hàng về của Yêu thích gọi thẳng openSnackbar). Không đụng tệp nào thì luật không làm gì.
+// scripts/uiux/ds-ratchet.mjs và các luật có baseline của scripts/uiux/ds-shop-rules.mjs (GUARD_RULES: thẻ tự chế, primitive màu, `Text`
+// zmp-ui, gọi thẳng openSnackbar…), so với scripts/uiux/ds-baseline.json. Các luật đó chỉ chạy trong vitest (ds-shop-guard.spec.ts) nên trước
+// đây chỉ lộ ở lượt release (w24-04: toast báo hàng về của Yêu thích gọi thẳng openSnackbar). Kiểm không baseline còn nằm riêng trong
+// ds-shop-guard.spec.ts của từng app (line-through ngoài PriceTag, Badge đổi màu, data-ds="product-tile", lề âm, tên thẻ cũ): luật không chạy
+// chúng, chỉ nhắc chạy spec đó. Không đụng tệp giao diện nào thì luật không làm gì.
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readMany } from '../lib.mjs';
 
 export const id = 'ds-ratchet-changed';
-export const title = 'Tệp giao diện Mini App/web đổi không tăng bánh cóc giao diện (ds-ratchet + ds-shop-guard)';
+export const title = 'Tệp giao diện Mini App/web đổi không tăng bánh cóc giao diện (ds-ratchet + luật có baseline của ds-shop-rules)';
 
 export const BASELINE = 'scripts/uiux/ds-baseline.json';
 const PLATFORMS = ['miniapp', 'web'];
@@ -79,8 +81,13 @@ export async function check(ctx) {
     res.notes.push(...notices.map((n) => `ds-shop-guard (${platform}): ${n}`));
   }
 
-  const perPlatform = PLATFORMS.map((p) => `${p} ${files.filter((f) => platformOf(f) === p).length}`).join(', ');
-  res.notes.push(`đã kiểm ${files.length} tệp giao diện đổi (${perPlatform})`);
+  const touched = PLATFORMS.filter((p) => files.some((f) => platformOf(f) === p));
+  res.notes.push(`đã kiểm ${files.length} tệp giao diện đổi (${PLATFORMS.map((p) => `${p} ${files.filter((f) => platformOf(f) === p).length}`).join(', ')})`);
+  res.warnings.push(
+    `kiểm không baseline (line-through ngoài PriceTag, Badge đổi màu, product-tile, lề âm, tên thẻ cũ) chỉ có trong vitest: chạy ${touched
+      .map((p) => `apps/${p}/src/components/ds-shop-guard.spec.ts`)
+      .join(' và ')}`,
+  );
   if (touchedMini) res.warnings.push('wave đổi apps/miniapp: trước khi báo xong vẫn chạy `pnpm lint:parity` (cả cây) và đo gói Mini (`node scripts/ci/bundle-budget.cjs apps/miniapp/www`)');
   return res;
 }
