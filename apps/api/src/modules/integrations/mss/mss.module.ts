@@ -12,6 +12,8 @@ import { MssHealthService } from './mss-health.service';
 import { MssInboundGuard } from './mss-inbound.guard';
 import { MssClient } from './mss.client';
 import { MSS_ORDER_EVENTS_QUEUE } from './mss-order-event-types';
+import { MssCartEventRecorder } from './mss-cart-event.recorder';
+import { MssCartEventSender } from './mss-cart-event.sender';
 import { MssOrderEventDispatcher } from './mss-order-event.dispatch';
 import { MssOrderEventFallback } from './mss-order-event.fallback';
 import { MssOrderEventRecorder } from './mss-order-event.recorder';
@@ -24,7 +26,7 @@ import { MSS_ZNS_HOLD, MssZnsHoldService } from './mss-zns-hold';
 
 /**
  * Kết nối MSS (quyết định PO số 5, kiểu strangler): cấu hình, cờ, ký/kiểm HMAC, client có cầu dao, dò sức khoẻ, bộ chọn đường đơn, và
- * luồng sự kiện đơn gửi MSS (outbox, worker, callback, đối soát, luật hoãn ZNS). Cờ tắt hay thiếu biến thì không có lời gọi MSS nào và
+ * luồng sự kiện đơn gửi MSS (outbox, worker, callback, đối soát, luật hoãn ZNS), và sự kiện giỏ bỏ quên (`/cart-events`, cron 5 phút). Cờ tắt hay thiếu biến thì không có lời gọi MSS nào và
  * hành vi Tubu không đổi; vẫn có hàng đợi `mss-order-events` (kết nối Redis của BullMQ như mọi hàng đợi khác, worker rảnh) và hai cron
  * quét bù/đối soát chạy một câu SELECT trên bảng outbox rỗng.
  *
@@ -54,7 +56,9 @@ import { MSS_ZNS_HOLD, MssZnsHoldService } from './mss-zns-hold';
     MssOrderEventsOpsService,
     MssZnsHoldService,
     { provide: MSS_ZNS_HOLD, useExisting: MssZnsHoldService },
+    MssCartEventRecorder,
+    MssCartEventSender,
   ],
-  exports: [MssFlagsService, MssClient, MssHealthService, MssInboundGuard, CommerceBackendResolver, MssOrderEventRecorder, MSS_ZNS_HOLD],
+  exports: [MssFlagsService, MssClient, MssHealthService, MssInboundGuard, CommerceBackendResolver, MssOrderEventRecorder, MSS_ZNS_HOLD, MssCartEventRecorder],
 })
 export class MssModule {}

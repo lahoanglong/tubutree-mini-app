@@ -64,6 +64,9 @@ export const CLIENT_EVENT_NAMES = [
   'refill_swap_applied',
   'refill_swap_undone',
   'green_card_shared',
+  'repurchase_due_view',
+  'repurchase_due_add',
+  'repurchase_due_dismiss',
 ] as const;
 
 /**

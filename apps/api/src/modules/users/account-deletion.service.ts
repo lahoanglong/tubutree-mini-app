@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { cartHeldByMssWhere, cartRecoveredRow } from '../integrations/mss/mss-cart-event-body';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
 
@@ -515,6 +516,13 @@ export class AccountDeletionService {
       UPDATE "orders" SET "invoiceRequest" = "invoiceRequest" - 'email'
       WHERE "userId" = ${userId} AND jsonb_typeof("invoiceRequest") = 'object'`;
     await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+    // MSS có thể đang giữ một lần nhắc giỏ chưa gửi tới SĐT này: ghi lệnh huỷ (`cart.recovered`, thân chỉ có mã giỏ) cho lượt gửi kế tiếp,
+    // rồi xoá hẳn các dòng `cart.abandoned` (thân chứa SĐT), không chờ lượt dọn 30 ngày.
+    const heldByMss = await tx.mssCartEvent.findMany({ where: cartHeldByMssWhere(userId, now), select: { cartRef: true, cartId: true, cartUpdatedAt: true } });
+    if (heldByMss.length > 0) {
+      await tx.mssCartEvent.createMany({ data: heldByMss.map((h) => cartRecoveredRow({ userId, ...h }, now)), skipDuplicates: true });
+    }
+    await tx.mssCartEvent.deleteMany({ where: { userId, type: 'cart.abandoned' } });
     await tx.dealerApplication.updateMany({
       where: { userId },
       data: { ownerName: ANONYMIZED_NAME, phone: '', address: '', cccdFrontUrl: '', cccdBackUrl: '', storeFrontUrl: null },

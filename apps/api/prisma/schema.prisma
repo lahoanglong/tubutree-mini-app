@@ -349,6 +349,7 @@ model User {
   betaTester             BetaTester?
   betaFeedbacks          BetaFeedback[]
   subscriptions          Subscription[]
+  mssCartEvents          MssCartEvent[]
   staffShifts            Shift[]                 @relation("StaffShifts")
   staffProfile           StaffProfile?
   communityReports       CommunityReport[]       @relation("CommunityReports")
@@ -1431,6 +1432,48 @@ model MssOrderEventOutbox {
   @@index([status, nextAttemptAt])
   @@index([createdAt])
   @@map("mss_order_event_outbox")
+}
+
+/// Sự kiện giỏ bỏ quên gửi MSS (hợp đồng cart-events v1, w36-01): MSS nhắc khách một lần qua Zalo. Chỉ có dòng khi cờ
+/// `mss.cart_abandoned_zalo_enabled` bật và MSS công bố năng lực `cart.abandoned_zalo`. Thân chứa SĐT nên dòng bị xoá sau 30 ngày.
+model MssCartEvent {
+  id             String    @id @default(cuid())
+  /// ULID, giữ nguyên qua mọi lần thử lại (cũng là Idempotency-Key).
+  eventId        String    @unique
+  /// cart.abandoned | cart.recovered
+  type           String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// `c_<cartId>_<giây epoch của lần bỏ quên>`: mỗi lần bỏ quên một mã, MSS coi mỗi mã là một giỏ.
+  cartRef        String
+  cartId         String
+  /// `updatedAt` của giỏ trước khi job nhắc nhận việc (lúc khách bỏ giỏ), gửi MSS là `cart.updated_at`.
+  cartUpdatedAt  DateTime
+  /// Mốc job nhắc trong app nhận việc (đặt cả `updatedAt` của giỏ): giỏ đổi sau mốc này thì khách đã quay lại, không gửi.
+  cartRemindedAt DateTime?
+  occurredAt     DateTime
+  /// JSON tuần tự hoá một lần lúc ghi; mọi lần gửi lại dùng đúng các byte này.
+  body           String
+  bodySha256     String
+  /// PENDING | SENDING | ACCEPTED | SKIPPED | REJECTED | EXPIRED | DEAD
+  status         String    @default("PENDING")
+  /// `status` MSS trả: queued | skipped | sent | unknown | failed | cancelled | nothing_open
+  resultStatus   String?
+  resultReason   String?
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  expiresAt      DateTime
+  claimedAt      DateTime?
+  lastHttpStatus Int?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([cartRef, type])
+  @@index([userId, type, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+  @@map("mss_cart_events")
 }
 
 model OrderItem {

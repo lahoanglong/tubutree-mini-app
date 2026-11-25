@@ -243,4 +243,13 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     onWarning: 'Mỗi tin qua Zalo tốn phí ZNS và tính vào trần 2 tin khuyến mãi mỗi tháng cùng trần tin chủ động mỗi ngày/tuần. Chỉ bật khi mẫu đã có mã ZNS được duyệt.',
     offWarning: 'Tin nhắc Refill chỉ còn trong app, không gửi qua Zalo.',
   },
+  {
+    key: 'retention.repurchase_due_card_enabled',
+    label: 'Thẻ Mua lại hàng tiêu hao (Tài khoản, giỏ trống)',
+    description:
+      'Khách đã nhận nước rửa chén hay nước rửa rau từ 25 tới 40 ngày trước thấy một thẻ gọn ở đầu Tài khoản và ở giỏ trống (Mini App và web): gói Refill ghép cặp (không có thì đúng món đã mua), thêm vào giỏ một chạm. Không gửi tin nào. Bỏ qua món đã đặt lại, đã trả hết, đang có gói định kỳ hay đã nằm trong giỏ.',
+    fallback: false,
+    onWarning: 'Thẻ hiện ngay ở lần mở Tài khoản hay giỏ trống kế tiếp (bộ đệm 5 phút). Khách bấm × thì món đó ẩn 14 ngày trên máy của họ.',
+    offWarning: 'Thẻ biến mất ở lần tải kế tiếp. Món khách đã thêm vào giỏ vẫn còn trong giỏ.',
+  },
 ];

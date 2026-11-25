@@ -15,6 +15,8 @@ export const MSS_FLAG_KEYS = {
   stockSync: 'mss.stock_sync_enabled',
   /** Thêm tin giao hàng không kèm giá cho số người nhận (PO A1). Chỉ có tác dụng khi `orderEvents` đang mở. */
   orderRecipient: 'mss.order_recipient_enabled',
+  /** Giỏ bỏ quên gửi MSS để nhắc một lần qua Zalo (hợp đồng cart-events v1, w36-01). Độc lập với `orderEvents`. */
+  cartAbandonedZalo: 'mss.cart_abandoned_zalo_enabled',
 } as const;
 
 export type MssFlag = keyof typeof MSS_FLAG_KEYS;
@@ -70,6 +72,8 @@ export const MSS_FLAG_CAPABILITY: Record<MssFlag, string> = {
   stockSync: 'catalog.source',
   // MSS cũ trả 422 `unexpected_field` cho `recipient.role`: chỉ ghi dòng người nhận khi MSS đã công bố năng lực này.
   orderRecipient: 'order_events.recipient_role',
+  // MSS chỉ công bố khi cả công tắc kênh Tubu và công tắc nhắc giỏ (CART_ABANDONED_ZALO_ENABLED) của nó cùng bật.
+  cartAbandonedZalo: 'cart.abandoned_zalo',
 };
 
 export function clampRolloutPct(v: unknown): number {

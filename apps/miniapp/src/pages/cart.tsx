@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { Box } from '../components/ui/box';
 import { useSmartNavigate } from '../lib/smart-nav';
@@ -97,6 +97,9 @@ import { RefillSwapLink } from '../components/refill/refill-swap-link';
 import { useCartRefill } from '../components/refill/use-cart-refill';
 import { CartNudges } from '../components/cart/cart-nudges';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
+import { SilentBoundary } from '../components/route-shell';
+
+const RepurchaseDueCard = lazy(() => import('../components/refill/repurchase-due-card'));
 
 const UNDO_WINDOW_MS = 3500;
 
@@ -572,6 +575,11 @@ export default function CartPage() {
             ctaLabel={vi.cart.emptyCta}
             onCta={() => goSmart('/browse')}
           />
+          <SilentBoundary>
+            <Suspense fallback={null}>
+              <RepurchaseDueCard surface="cart_empty" />
+            </Suspense>
+          </SilentBoundary>
           <SuggestedRail listSource="cart_empty" />
         </>
       ) : (

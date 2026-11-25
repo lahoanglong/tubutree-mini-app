@@ -1,0 +1,9 @@
+{
+  "event_id": "01JZX3K9Q2ABCDEFGHJKMNPQRS",
+  "type": "cart.abandoned",
+  "sender": "tubutree",
+  "occurred_at": "2026-11-25T10:00:00+07:00",
+  "cart": { "ref": "c_cm0000000000000000000000a_1795572000", "updated_at": "2026-11-25T09:00:00+07:00", "item_count": 2, "first_item_name": "Nước rửa chén hữu cơ" },
+  "customer": { "phone": "0907345678", "phone_source": "account_verified" },
+  "consent": { "zalo_reminders": true, "at": "2026-11-01T10:00:00+07:00", "source": "web_checkout" }
+}

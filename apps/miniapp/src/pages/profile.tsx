@@ -89,6 +89,7 @@ const DIVIDER = '1px solid var(--color-border-subtle)';
 
 // Dòng thành tích xanh trong khối mời (cờ growth.referral_viral_enabled): chunk riêng, chỉ nạp khi cờ bật và khối mời mở.
 const GreenCardBlock = lazy(() => import('../components/referral/green-card'));
+const RepurchaseDueCard = lazy(() => import('../components/refill/repurchase-due-card'));
 
 /** Mỗi lần khối mời mở và có dòng tiến độ (chỉ số đếm, không tên) thì báo `invite_progress_viewed`. */
 function InviteProgressViewed() {
@@ -358,6 +359,12 @@ export default function ProfilePage() {
         <Stat label={homeCopy.profile.statPoints} value={formatPoints(pointsTotal)} onClick={() => navigate('/loyalty')} />
         <Stat label={homeCopy.profile.statWallet} value={formatVnd(walletQ.data?.walletBalance ?? user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
       </div>
+
+      <SilentBoundary>
+        <Suspense fallback={null}>
+          <RepurchaseDueCard surface="account" />
+        </Suspense>
+      </SilentBoundary>
 
       <GuestLinkCard title={homeCopy.profile.guestTitle} body={homeCopy.profile.guestBody} cta={homeCopy.profile.guestCta} />
 

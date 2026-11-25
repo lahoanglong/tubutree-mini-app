@@ -5,7 +5,7 @@ import { Trim } from '../../../common/decorators/trim.decorator';
 /** Trần số lượng một món trong một lần thêm (DTO) và sau khi batch gộp các dòng trùng variationId. */
 export const MAX_ITEM_QUANTITY = 999;
 
-const ADD_SOURCES = ['pdp', 'buy_now', 'repurchase', 'wishlist', 'ctv_sheet', 'reorder_notification'] as const;
+const ADD_SOURCES = ['pdp', 'buy_now', 'repurchase', 'wishlist', 'ctv_sheet', 'reorder_notification', 'repurchase_due'] as const;
 
 export class AddItemDto {
   @IsString() variationId!: string;
