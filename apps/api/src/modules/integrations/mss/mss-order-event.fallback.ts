@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { OrderConfirmEmailService } from '../../notifications/order-email/order-confirm-email.service';
@@ -23,8 +23,9 @@ export const mssFallbackDedupeKey = (eventId: string) => `mss:${eventId}`;
  * xác nhận đơn (PO A3, cờ `notify.order_email_fallback_enabled`); ZNS đã đi mà lỗi hẳn thì cron quét gửi email sau.
  */
 @Injectable()
-export class MssOrderEventFallback {
+export class MssOrderEventFallback implements OnModuleDestroy {
   private readonly logger = new Logger(MssOrderEventFallback.name);
+  private readonly emails = new Set<Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -44,6 +45,7 @@ export class MssOrderEventFallback {
           orderCode: true,
           status: true,
           resultReason: true,
+          lastHttpStatus: true,
           expiresAt: true,
           fallbackAt: true,
           znsHeldTemplate: true,
@@ -67,12 +69,12 @@ export class MssOrderEventFallback {
       if (claimed.count === 0) continue;
       this.logger.log(`mss_order_event_fallback ${decision} order=${row.orderCode} event=${row.eventId} status=${status} reason=${row.resultReason ?? '-'}`);
       // Email chỉ cho sự kiện người mua mà khách chắc chắn chưa nhận tin Zalo nào, và còn trong hạn sống (cùng hạn với ZNS).
-      const emailable = row.recipientRole === 'buyer' && MSS_EMAIL_EVENT_TYPES.has(row.eventType) && mssEmailEligible(status, row.resultReason) && fresh;
-      if (decision === 'IN_APP_ONLY' && emailable) await this.sendEmail(row.id);
+      const emailable = row.recipientRole === 'buyer' && MSS_EMAIL_EVENT_TYPES.has(row.eventType) && mssEmailEligible(status, row.resultReason, row.lastHttpStatus) && fresh;
+      if (decision === 'IN_APP_ONLY' && emailable) this.sendEmail(row.id);
       if (decision === 'ZNS' && held && row.znsHeldTemplate) {
         try {
           const zns = await this.notifications.sendHeldZns(row.order.userId, row.znsHeldTemplate, held.data, held.znsTemplateId, mssFallbackDedupeKey(row.eventId));
-          if ((zns === 'NO_PHONE' || zns === 'PREFS') && emailable) await this.sendEmail(row.id);
+          if ((zns === 'NO_PHONE' || zns === 'PREFS') && emailable) this.sendEmail(row.id);
         } catch (err) {
           this.logger.error(`Gửi ZNS đường lui đơn ${row.orderCode} (sự kiện ${row.eventId}) lỗi, lượt quét sau thử lại: ${err instanceof Error ? err.message : String(err)}`);
           // Nhả phần việc để cron quét bù thử lại; khoá chống trùng mss:<eventId> của sendHeldZns giữ đúng một tin nếu lần này đã kịp gửi.
@@ -87,13 +89,28 @@ export class MssOrderEventFallback {
     return null;
   }
 
-  /** Không ném: lỗi email chỉ ghi log, phần việc đường lui (ZNS/trong app) đã chốt. */
-  private async sendEmail(outboxRowId: string): Promise<void> {
+  /**
+   * Gửi nền, không chờ: đường lui chạy cả trong callback MSS, SMTP chậm (tới 30 giây) không được giữ phản hồi cho MSS. Lỗi chỉ ghi log,
+   * phần việc đường lui (ZNS/trong app) đã chốt; khoá + log EMAIL của OrderConfirmEmailService giữ đúng một email dù cron quét chạy cùng lúc.
+   */
+  private sendEmail(outboxRowId: string): void {
     if (!this.orderEmail) return;
-    try {
-      await this.orderEmail.sendForEvent(outboxRowId);
-    } catch (err) {
-      this.logger.error(`Email xác nhận đơn (đường lui, dòng ${outboxRowId}) lỗi: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const job: Promise<void> = this.orderEmail
+      .sendForEvent(outboxRowId)
+      .then(
+        () => undefined,
+        (err: unknown) => this.logger.error(`Email xác nhận đơn (đường lui, dòng ${outboxRowId}) lỗi: ${err instanceof Error ? err.message : String(err)}`),
+      )
+      .finally(() => this.emails.delete(job));
+    this.emails.add(job);
+  }
+
+  /** Chờ các email đường lui đang gửi dở (tắt ứng dụng, test). */
+  async emailsSettled(): Promise<void> {
+    await Promise.all([...this.emails]);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.emailsSettled();
   }
 }

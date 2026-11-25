@@ -275,11 +275,14 @@ export const MSS_EMAIL_EVENT_TYPES: ReadonlySet<string> = new Set<MssOrderEventT
 /**
  * Kết quả cuối mà khách chắc chắn chưa nhận tin Zalo nào cho sự kiện: email dự phòng được gửi. Không bao giờ cho `RESULT_SENT` (kể cả
  * tin người lạ), `RESULT_UNKNOWN` (MSS có thể đã gửi), `CANCELLED` (khách rút đồng ý hoặc đơn đóng), sự kiện bị thay (`superseded`…) hay 409.
+ * `EXPIRED` chỉ khi chắc MSS không giữ sự kiện: MSS báo mất (`mss_lost`) hoặc lượt gửi cuối nhận mã lỗi HTTP. Lượt cuối hết giờ chờ, lỗi mạng
+ * hay cầu dao ngắt (`lastHttpStatus` null) thì một lượt POST trước có thể đã tới MSS và tin đã đi: không email.
  */
-export function mssEmailEligible(status: MssOutboxStatus, reason: string | null): boolean {
+export function mssEmailEligible(status: MssOutboxStatus, reason: string | null, lastHttpStatus: number | null): boolean {
   if (status === 'RESULT_SKIPPED') return !(reason && MSS_COVERED_SKIP_REASONS.has(reason));
   if (status === 'DEAD') return reason !== 'event_id_reused';
-  return status === 'RESULT_FAILED' || status === 'EXPIRED';
+  if (status === 'EXPIRED') return reason === 'mss_lost' || (lastHttpStatus !== null && lastHttpStatus >= 400);
+  return status === 'RESULT_FAILED';
 }
 
 /** Trạng thái cuối cần chạy đường lui (một lần, cột fallbackAt). */

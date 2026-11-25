@@ -8,7 +8,7 @@ import { MssOrderEventRecorder } from '../../src/modules/integrations/mss/mss-or
 import type { MssOrderEventSender } from '../../src/modules/integrations/mss/mss-order-event.sender';
 import { MssOrderEventReconcileService } from '../../src/modules/integrations/mss/mss-order-events.reconcile';
 import { MssZnsHoldService } from '../../src/modules/integrations/mss/mss-zns-hold';
-import type { MssOutboxStatus } from '../../src/modules/integrations/mss/mss-order-event-types';
+import { MSS_SENT_VIA_STRANGER, type MssOutboxStatus } from '../../src/modules/integrations/mss/mss-order-event-types';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ORDER_CONFIRM_EMAIL_TEMPLATE, orderEmailDedupeKey } from '../../src/modules/notifications/order-email/order-confirm-email';
 import { ORDER_EMAIL_FALLBACK_FLAG, OrderConfirmEmailService } from '../../src/modules/notifications/order-email/order-confirm-email.service';
@@ -153,8 +153,20 @@ describe('Order confirm email fallback (real Postgres)', () => {
     if (!row) throw new Error(`thiếu dòng outbox ${type}`);
     return row;
   }
-  const settle = (eventId: string, status: MssOutboxStatus, resultReason: string | null, extra: { expiresAt?: Date } = {}) =>
+  const settle = (eventId: string, status: MssOutboxStatus, resultReason: string | null, extra: { expiresAt?: Date; lastHttpStatus?: number | null } = {}) =>
     prisma.mssOrderEventOutbox.update({ where: { eventId }, data: { status, resultReason, resultAt: new Date(), ...extra } });
+  /** Sự kiện MSS bỏ qua vì quyền riêng tư (khách chắc chắn chưa nhận tin Zalo): diện email. */
+  async function failedEvent(orderId: string, type: Parameters<MssOrderEventRecorder['record']>[2]) {
+    const row = await eventOf(orderId, type);
+    await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
+    return row;
+  }
+  /** Đường lui gửi email nền (không giữ callback MSS): chờ xong rồi mới đếm thư. */
+  const runFallback = async (eventId: string) => {
+    const decision = await fallback.run(eventId);
+    await fallback.emailsSettled();
+    return decision;
+  };
   const emailLogs = (userId: string) =>
     prisma.notificationLog.findMany({ where: { userId, channel: 'EMAIL', templateCode: ORDER_CONFIRM_EMAIL_TEMPLATE }, orderBy: { sentAt: 'asc' } });
   const mailsFor = (code: string) => mails.filter((m) => m.subject.includes(code));
@@ -163,8 +175,8 @@ describe('Order confirm email fallback (real Postgres)', () => {
     const { user, order } = await buyerOrder();
     const row = await eventOf(order.id, 'order.created');
     await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
-    expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
-    expect(await fallback.run(row.eventId)).toBeNull();
+    expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
+    expect(await runFallback(row.eventId)).toBeNull();
     expect(sendHeldZns).not.toHaveBeenCalled();
     expect(mailsFor(order.code)).toHaveLength(1);
     expect(mailsFor(order.code)[0]!.to).toEqual([user.email]);
@@ -191,6 +203,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       email.sendForEvent(paid.id),
       reconcile.emailAfterZnsFailedOnce(),
     ]);
+    await fallback.emailsSettled();
     expect(outcomes.slice(0, 2)).toEqual(['IN_APP_ONLY', 'IN_APP_ONLY']);
     expect(mailsFor(order.code)).toHaveLength(1);
     expect((await emailLogs(user.id)).map((l) => l.status)).toEqual(['SENT']);
@@ -201,7 +214,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
     const row = await eventOf(order.id, 'order.created');
     expect(await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code }, 'zns-tpl')).toBe(true);
     await settle(row.eventId, 'RESULT_SKIPPED', 'no_zalo');
-    expect(await fallback.run(row.eventId)).toBe('ZNS');
+    expect(await runFallback(row.eventId)).toBe('ZNS');
     expect(sendHeldZns).toHaveBeenCalledTimes(1);
     expect(mailsFor(order.code)).toHaveLength(0);
 
@@ -227,7 +240,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
     const row = await eventOf(order.id, 'order.created');
     await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code }, 'zns-tpl');
     await settle(row.eventId, 'EXPIRED', 'mss_unavailable');
-    expect(await fallback.run(row.eventId)).toBe('ZNS');
+    expect(await runFallback(row.eventId)).toBe('ZNS');
     await prisma.notificationLog.createMany({
       data: [
         { userId: user.id, templateCode: 'ORDER_CONFIRMED', channel: 'ZNS', status: 'FAILED', payload: { dedupeKey: `mss:${row.eventId}:failed:old` } },
@@ -244,7 +257,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
     const row = await eventOf(order.id, 'order.created');
     await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code }, 'zns-tpl');
     await settle(row.eventId, 'DEAD', 'http_413');
-    expect(await fallback.run(row.eventId)).toBe('ZNS');
+    expect(await runFallback(row.eventId)).toBe('ZNS');
     expect(mailsFor(order.code)).toHaveLength(1);
   });
 
@@ -258,7 +271,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const { user, order } = await buyerOrder();
       const row = await eventOf(order.id, 'order.created');
       await settle(row.eventId, status, reason);
-      expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
+      expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
       await reconcile.emailAfterZnsFailedOnce();
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
@@ -268,7 +281,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const { user, order } = await buyerOrder();
       const row = await eventOf(order.id, 'order.created');
       await settle(row.eventId, 'RESULT_SENT', reason);
-      expect(await fallback.run(row.eventId)).toBeNull();
+      expect(await runFallback(row.eventId)).toBeNull();
       await reconcile.emailAfterZnsFailedOnce();
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
@@ -278,7 +291,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const { user, order } = await buyerOrder();
       const row = await eventOf(order.id, 'order.shipping');
       await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
-      expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
+      expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
       expect(await email.sendForEvent(row.id)).toBe('NOT_ELIGIBLE');
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
@@ -289,7 +302,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const { user, order } = await buyerOrder();
       const row = await eventOf(order.id, 'order.created');
       await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
-      expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
+      expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
       expect(await email.sendForEvent(row.id)).toBe('FLAG_OFF');
       expect(await reconcile.emailAfterZnsFailedOnce()).toBe(0);
       expect(mailsFor(order.code)).toHaveLength(0);
@@ -301,7 +314,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const { user, order } = await buyerOrder();
       const row = await eventOf(order.id, 'order.created');
       await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
-      expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
+      expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
       expect(await email.sendForEvent(row.id)).toBe('SMTP_NOT_READY');
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
@@ -310,8 +323,8 @@ describe('Order confirm email fallback (real Postgres)', () => {
     it('quá hạn sống + 15 phút: đường lui không email, gọi thẳng STALE', async () => {
       const { user, order } = await buyerOrder();
       const row = await eventOf(order.id, 'order.created');
-      await settle(row.eventId, 'EXPIRED', 'ttl', { expiresAt: new Date(Date.now() - 16 * 60_000) });
-      expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
+      await settle(row.eventId, 'EXPIRED', 'ttl', { expiresAt: new Date(Date.now() - 16 * 60_000), lastHttpStatus: 503 });
+      expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
       expect(await email.sendForEvent(row.id)).toBe('STALE');
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
@@ -320,8 +333,8 @@ describe('Order confirm email fallback (real Postgres)', () => {
 
   it('E5 không có email tài khoản lẫn email hoá đơn: log SKIPPED no_email đúng 1 dòng, không gửi', async () => {
     const { user, order } = await buyerOrder({ email: null, paymentMethod: 'BANK_TRANSFER' });
-    const created = await eventOf(order.id, 'order.created');
-    const paid = await eventOf(order.id, 'order.payment_confirmed');
+    const created = await failedEvent(order.id, 'order.created');
+    const paid = await failedEvent(order.id, 'order.payment_confirmed');
     await Promise.all([email.sendForEvent(created.id), email.sendForEvent(created.id), email.sendForEvent(paid.id)]);
     expect(mailsFor(order.code)).toHaveLength(0);
     const logs = await emailLogs(user.id);
@@ -331,15 +344,15 @@ describe('Order confirm email fallback (real Postgres)', () => {
 
   it('E5 không có email tài khoản: dùng email xuất hoá đơn VAT của đơn', async () => {
     const { order } = await buyerOrder({ email: null, invoiceEmail: 'ketoan@cty-it.vn' });
-    const row = await eventOf(order.id, 'order.created');
+    const row = await failedEvent(order.id, 'order.created');
     expect(await email.sendForEvent(row.id)).toBe('SENT');
     expect(mailsFor(order.code).map((m) => m.to)).toEqual([['ketoan@cty-it.vn']]);
   });
 
   it('SMTP lỗi: log FAILED (không lộ địa chỉ), sự kiện kế của đơn thử lại một lần; lần sau DUPLICATE', async () => {
     const { user, order } = await buyerOrder({ paymentMethod: 'BANK_TRANSFER' });
-    const created = await eventOf(order.id, 'order.created');
-    const paid = await eventOf(order.id, 'order.payment_confirmed');
+    const created = await failedEvent(order.id, 'order.created');
+    const paid = await failedEvent(order.id, 'order.payment_confirmed');
     mailFail = Object.assign(new Error(`550 mailbox ${user.email} unavailable`), { code: 'EENVELOPE' });
     expect(await email.sendForEvent(created.id)).toBe('FAILED');
     let logs = await emailLogs(user.id);
@@ -361,18 +374,140 @@ describe('Order confirm email fallback (real Postgres)', () => {
     it('khách vãng lai, cờ bill bật: /don/<mã>#k=<khoá đã ký>', async () => {
       cfg['mss.order_bill_enabled'] = true;
       const { order } = await buyerOrder({ guest: true });
-      const row = await eventOf(order.id, 'order.created');
+      const row = await failedEvent(order.id, 'order.created');
       expect(await email.sendForEvent(row.id)).toBe('SENT');
       expect(mailsFor(order.code)[0]!.text).toMatch(new RegExp(`Xem đơn: https://tubutree\\.com/don/${order.code}#k=\\S+`));
     });
 
     it('khách vãng lai, cờ bill tắt: trang tra cứu /don?ma=<mã> (khách tự nhập SĐT)', async () => {
       const { order } = await buyerOrder({ guest: true });
-      const row = await eventOf(order.id, 'order.created');
+      const row = await failedEvent(order.id, 'order.created');
       expect(await email.sendForEvent(row.id)).toBe('SENT');
       const text = mailsFor(order.code)[0]!.text;
       expect(text).toContain(`Xem đơn: https://tubutree.com/don?ma=${order.code}`);
       expect(text).not.toContain('#k=');
+    });
+  });
+
+  describe('review w38-01', () => {
+    const failZns = (userId: string, eventId: string) =>
+      prisma.notificationLog.create({
+        data: { userId, templateCode: 'ORDER_CONFIRMED', channel: 'ZNS', status: 'FAILED', error: 'zns_quota', payload: { dedupeKey: `mss:${eventId}:failed:it` } },
+      });
+
+    it('MAJOR 1 đơn đổi chủ sau email đầu (khách vãng lai đăng nhập): sự kiện kế DUPLICATE, cron không gửi lại; ZNS lỗi dưới chủ cũ vẫn được cron thấy', async () => {
+      const { user, order } = await buyerOrder({ paymentMethod: 'BANK_TRANSFER' });
+      const created = await failedEvent(order.id, 'order.created');
+      const paid = await failedEvent(order.id, 'order.payment_confirmed');
+      expect(await email.sendForEvent(created.id)).toBe('SENT');
+      const owner = await createUser(prisma, { phone: uniquePhone('09'), email: `owner.${randCode(6).toLowerCase()}@example.com` });
+      userIds.push(owner.id);
+      await prisma.order.update({ where: { id: order.id }, data: { userId: owner.id } });
+      expect(await email.sendForEvent(paid.id)).toBe('DUPLICATE');
+      await prisma.mssOrderEventOutbox.update({ where: { eventId: paid.eventId }, data: { fallbackAt: new Date(), fallbackChannel: 'ZNS' } });
+      await failZns(user.id, paid.eventId);
+      await reconcile.emailAfterZnsFailedOnce();
+      expect(mailsFor(order.code)).toHaveLength(1);
+
+      const second = await buyerOrder();
+      const row = await failedEvent(second.order.id, 'order.created');
+      await prisma.mssOrderEventOutbox.update({ where: { eventId: row.eventId }, data: { fallbackAt: new Date(), fallbackChannel: 'ZNS' } });
+      await failZns(second.user.id, row.eventId);
+      const owner2 = await createUser(prisma, { phone: uniquePhone('09'), email: `owner.${randCode(6).toLowerCase()}@example.com` });
+      userIds.push(owner2.id);
+      await prisma.order.update({ where: { id: second.order.id }, data: { userId: owner2.id } });
+      await reconcile.emailAfterZnsFailedOnce();
+      expect(mailsFor(second.order.code).map((m) => m.to)).toEqual([[owner2.email]]);
+    });
+
+    it('MAJOR 2 đơn đã huỷ khi ZNS lỗi hẳn: cron và gọi thẳng đều không gửi "đã nhận đơn"', async () => {
+      const { user, order } = await buyerOrder();
+      const row = await failedEvent(order.id, 'order.created');
+      await prisma.mssOrderEventOutbox.update({ where: { eventId: row.eventId }, data: { fallbackAt: new Date(), fallbackChannel: 'ZNS' } });
+      await failZns(user.id, row.eventId);
+      await prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED', reversalEffectsAt: new Date() } });
+      const spy = jest.spyOn(email, 'sendForEvent');
+      try {
+        await reconcile.emailAfterZnsFailedOnce();
+        expect(spy.mock.calls.map((c) => c[0])).not.toContain(row.id);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await email.sendForEvent(row.id)).toBe('NOT_ELIGIBLE');
+      expect(mailsFor(order.code)).toHaveLength(0);
+      expect(await emailLogs(user.id)).toHaveLength(0);
+    });
+
+    it('MINOR 3 dòng quá hạn sống không vào lô cron (không chiếm chỗ dòng còn gửi được)', async () => {
+      const { user, order } = await buyerOrder();
+      const row = await failedEvent(order.id, 'order.created');
+      await prisma.mssOrderEventOutbox.update({
+        where: { eventId: row.eventId },
+        data: { fallbackAt: new Date(), fallbackChannel: 'ZNS', expiresAt: new Date(Date.now() - 16 * 60_000) },
+      });
+      await failZns(user.id, row.eventId);
+      const spy = jest.spyOn(email, 'sendForEvent');
+      try {
+        await reconcile.emailAfterZnsFailedOnce();
+        expect(spy.mock.calls.map((c) => c[0])).not.toContain(row.id);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('MINOR 4 lần trước hết giờ chờ SMTP (có thể đã tới hộp thư): sự kiện kế không gửi lại', async () => {
+      const { user, order } = await buyerOrder({ paymentMethod: 'BANK_TRANSFER' });
+      const created = await failedEvent(order.id, 'order.created');
+      const paid = await failedEvent(order.id, 'order.payment_confirmed');
+      mailFail = new Error('quá 30 giây không gửi xong');
+      expect(await email.sendForEvent(created.id)).toBe('FAILED');
+      mailFail = null;
+      expect(await email.sendForEvent(paid.id)).toBe('DUPLICATE');
+      expect(mailsFor(order.code)).toHaveLength(0);
+      expect((await emailLogs(user.id)).map((l) => l.status)).toEqual(['FAILED']);
+    });
+
+    it('MINOR 5 đường lui trả kết quả trước khi SMTP xong (callback MSS không chờ thư)', async () => {
+      const { order } = await buyerOrder();
+      const row = await eventOf(order.id, 'order.created');
+      await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
+      mailDelayMs = 400;
+      const t0 = Date.now();
+      expect(await fallback.run(row.eventId)).toBe('IN_APP_ONLY');
+      expect(Date.now() - t0).toBeLessThan(350);
+      expect(mailsFor(order.code)).toHaveLength(0);
+      await fallback.emailsSettled();
+      expect(mailsFor(order.code)).toHaveLength(1);
+    });
+
+    it('MINOR 6 khách đã nhận tin Zalo của sự kiện khác cùng đơn (RESULT_SENT): không email ở cả đường lui lẫn cron', async () => {
+      const { user, order } = await buyerOrder({ paymentMethod: 'BANK_TRANSFER' });
+      const created = await eventOf(order.id, 'order.created');
+      const paid = await eventOf(order.id, 'order.payment_confirmed');
+      await settle(paid.eventId, 'RESULT_SENT', MSS_SENT_VIA_STRANGER);
+      await settle(created.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
+      expect(await runFallback(created.eventId)).toBe('IN_APP_ONLY');
+      await prisma.mssOrderEventOutbox.update({ where: { eventId: created.eventId }, data: { fallbackChannel: 'ZNS' } });
+      await failZns(user.id, created.eventId);
+      await reconcile.emailAfterZnsFailedOnce();
+      expect(await email.sendForEvent(created.id)).toBe('NOT_ELIGIBLE');
+      expect(mailsFor(order.code)).toHaveLength(0);
+      expect(await emailLogs(user.id)).toHaveLength(0);
+    });
+
+    it.each([
+      ['ttl', null, 0],
+      ['retries_exhausted', null, 0],
+      ['mss_unavailable', null, 0],
+      ['retries_exhausted', 503, 1],
+      ['ttl', 502, 1],
+      ['mss_lost', 202, 1],
+    ] as const)('MINOR 7 EXPIRED %s, HTTP lượt cuối %s: số email %i (lượt cuối hết giờ/lỗi mạng thì MSS có thể đã gửi)', async (reason, http, n) => {
+      const { order } = await buyerOrder();
+      const row = await eventOf(order.id, 'order.created');
+      await settle(row.eventId, 'EXPIRED', reason, { lastHttpStatus: http });
+      expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
+      expect(mailsFor(order.code)).toHaveLength(n);
     });
   });
 });

@@ -164,7 +164,7 @@ export default function GuestOrderPage() {
 
         {o.zaloFriendCard && (
           <section data-testid="guest-order-zalo-friend" className={`p-4 ${ui.card} ${mini.band}`} aria-label="Zalo Tubu Tree">
-            <OrderZaloFriend code={o.code} from="success" />
+            <OrderZaloFriend code={o.code} from="order_detail" />
           </section>
         )}
 
