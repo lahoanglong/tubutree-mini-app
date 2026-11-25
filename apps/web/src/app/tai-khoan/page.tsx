@@ -38,6 +38,7 @@ import { buildAccountMenu, IN_ACCOUNT_SHELL } from '@/components/account/account
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
 import { GreenCardBlock } from '@/components/referral/green-card-lazy';
+import { RepurchaseDueCard } from '@/components/refill/repurchase-due-card-lazy';
 import { InviteShareCard } from '@/components/referral/invite-share-card';
 import { BadgeRow, useBadges } from '@/components/game/badge-row';
 import BackLink from '@/components/back-link';
@@ -330,6 +331,8 @@ function AccountContent() {
           <Stat label={homeCopy.profile.statWallet} value={formatVnd(balances.walletBalance)} href="/tai-khoan/vi-tubu" />
         </div>
        </div>
+
+        <RepurchaseDueCard surface="account" />
 
         <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3 md:px-0 lg:col-span-full lg:pt-0 xl:col-span-2">
           <Card padding={12}>

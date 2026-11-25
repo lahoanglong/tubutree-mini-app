@@ -83,11 +83,11 @@ describe('khoá system_configs mss.*', () => {
     expect([parseCatalogSource('mss'), parseCatalogSource('pancake'), parseCatalogSource('MSS'), parseCatalogSource(undefined)]).toEqual(['mss', 'pancake', 'pancake', 'pancake']);
   });
 
-  it('seed createOnly và migration INSERT gieo đủ 12 khoá với giá trị TẮT/an toàn', () => {
+  it('seed createOnly và migration INSERT gieo đủ 13 khoá với giá trị TẮT/an toàn', () => {
     const seed = readFileSync(join(__dirname, '../../../../prisma/seed.ts'), 'utf8');
     const migDir = join(__dirname, '../../../../prisma/migrations');
     const mig = readdirSync(migDir)
-      .filter((d) => d.endsWith('_mss_foundation') || d.endsWith('_mss_stock_sync_flag') || d.endsWith('_w35_01_order_recipient_zalo'))
+      .filter((d) => d.endsWith('_mss_foundation') || d.endsWith('_mss_stock_sync_flag') || d.endsWith('_w35_01_order_recipient_zalo') || d.endsWith('_w36_01_mss_cart_events'))
       .map((d) => readFileSync(join(migDir, d, 'migration.sql'), 'utf8'))
       .join('\n');
     expect(mig).toContain('ON CONFLICT ("key") DO NOTHING');
@@ -101,6 +101,6 @@ describe('khoá system_configs mss.*', () => {
       expect(row).toContain('createOnly: true');
       expect(row).toContain(k === MSS_ORDER_EVENTS_ROLLOUT_PCT_KEY ? 'value: 0,' : k === MSS_CATALOG_SOURCE_KEY ? "value: 'pancake'," : 'value: false,');
     }
-    expect(ALL_KEYS).toHaveLength(12);
+    expect(ALL_KEYS).toHaveLength(13);
   });
 });

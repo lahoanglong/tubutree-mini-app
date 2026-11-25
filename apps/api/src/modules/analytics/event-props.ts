@@ -25,6 +25,8 @@ import { isVitalRoute } from './vitals/vitals-rules';
 const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
 // Nơi khách bấm gửi: không có trường là Sổ tay Xanh; `order` là thẻ nhựa đã giảm ở Chi tiết đơn; `account` là thẻ chia sẻ ở khối Mời bạn của Tài khoản.
 const GREEN_CARD_SHARE_SURFACES = ['order', 'account'] as const;
+// Nơi hiện thẻ "Mua lại" hàng tiêu hao (w36-01): khối đầu trang Tài khoản, hoặc giỏ trống. Không đặt ở shared-types, cùng lý do trên.
+const REPURCHASE_DUE_SURFACES = ['account', 'cart_empty'] as const;
 
 type Rule = (v: unknown) => boolean;
 
@@ -163,6 +165,9 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   refill_swap_shown: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
   refill_swap_applied: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
   refill_swap_undone: { props: { surface: oneOf(REFILL_SWAP_SURFACES) }, required: ['surface'] },
+  repurchase_due_view: { props: { surface: oneOf(REPURCHASE_DUE_SURFACES), variationId: ID }, required: ['surface'] },
+  repurchase_due_add: { props: { surface: oneOf(REPURCHASE_DUE_SURFACES), variationId: ID }, required: ['surface'] },
+  repurchase_due_dismiss: { props: { surface: oneOf(REPURCHASE_DUE_SURFACES), variationId: ID }, required: ['surface'] },
   // Thẻ thành tích ở Sổ tay Xanh và thẻ nhựa đã giảm của đơn: chỉ cách gửi và nơi gửi, không mang mã mời hay mã đơn.
   green_card_shared: { props: { method: oneOf(GREEN_CARD_SHARE_METHODS), surface: oneOf(GREEN_CARD_SHARE_SURFACES) }, required: ['method'] },
 };

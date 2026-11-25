@@ -5,6 +5,7 @@ import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { SuggestedRail } from '@/components/catalog/suggested-rail';
 import { EmptyState } from '@/components/mini/empty-state';
 import { MatcherEntryLink } from '@/components/game/matcher/matcher-entry-link';
+import { RepurchaseDueCard } from '@/components/refill/repurchase-due-card-lazy';
 
 /**
  * Giỏ trống như Mini App: minh hoạ + lời mời + nút, rồi kệ gợi ý (hàng ảnh đầu là phần tử LCP của trang ở 390px nên tải ưu tiên).
@@ -22,6 +23,7 @@ export default function EmptyCart() {
         ctaLabel={CART_EMPTY.cta}
         onCta={() => router.push('/san-pham')}
       />
+      <RepurchaseDueCard surface="cart_empty" />
       <div className="flex justify-center px-4">
         <MatcherEntryLink from="empty_cart" />
       </div>

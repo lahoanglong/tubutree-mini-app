@@ -1,0 +1,7 @@
+{
+  "event_id": "01JZX3KA77ABCDEFGHJKMNPQRS",
+  "type": "cart.recovered",
+  "sender": "tubutree",
+  "occurred_at": "2026-11-25T10:20:00+07:00",
+  "cart": { "ref": "c_cm0000000000000000000000a_1795572000" }
+}

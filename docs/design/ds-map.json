@@ -1029,6 +1029,16 @@
       ]
     },
     {
+      "name": "RepurchaseDueCard",
+      "miniapp": "apps/miniapp/src/components/refill/repurchase-due-card.tsx",
+      "web": "apps/web/src/components/refill/repurchase-due-card.tsx",
+      "props": "RepurchaseDueCardProps",
+      "screens": [
+        "/profile",
+        "/cart"
+      ]
+    },
+    {
       "name": "OrderActionBar",
       "miniapp": "apps/miniapp/src/components/orders/order-action-bar.tsx",
       "web": "apps/web/src/components/orders/order-action-bar.tsx",

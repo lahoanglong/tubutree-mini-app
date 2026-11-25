@@ -155,7 +155,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
       referralTouch: { updateMany: noop },
       address: { updateMany: noop },
       order: { updateMany: noop },
-      refreshToken: { updateMany: noop },
+      refreshToken: { updateMany: noop }, mssCartEvent: { findMany: jest.fn().mockResolvedValue([]), createMany: noop, deleteMany: noop },
       dealerApplication: { updateMany: noop },
       storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
@@ -178,7 +178,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     const noop = jest.fn().mockResolvedValue({ count: 0 });
     const tx: any = {
       user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop },
-      refreshToken: { updateMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
+      refreshToken: { updateMany: noop }, mssCartEvent: { findMany: jest.fn().mockResolvedValue([]), createMany: noop, deleteMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
       supportConversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', code: 'K7Q2' }), delete: jest.fn().mockImplementation(() => { order.push('conversation'); return Promise.resolve({}); }) },
       supportRetiredCode: { upsert: jest.fn().mockImplementation(() => { order.push('retired'); return Promise.resolve({}); }) },
@@ -192,7 +192,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     const noop = jest.fn().mockResolvedValue({ count: 0 });
     const tx: any = {
       user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop },
-      refreshToken: { updateMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
+      refreshToken: { updateMany: noop }, mssCartEvent: { findMany: jest.fn().mockResolvedValue([]), createMany: noop, deleteMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
       supportConversation: { findUnique: jest.fn().mockResolvedValue(null), delete: jest.fn() },
       supportRetiredCode: { upsert: jest.fn() },
