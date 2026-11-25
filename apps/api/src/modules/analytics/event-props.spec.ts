@@ -110,6 +110,14 @@ describe('checkEventProps', () => {
     expect(checkEventProps('green_card_shared', { method: 'copy', surface: 'order', orderCode: 'TUBU1' })).toBe('unknown_key');
   });
 
+  it('order_zalo_friend_click: nhận nơi bấm trang chuyển khoản (w39-02) cùng hai nơi cũ; nơi lạ thì bỏ', () => {
+    expect(checkEventProps('order_zalo_friend_click', { from: 'bank_transfer' })).toBe('ok');
+    expect(checkEventProps('order_zalo_friend_click', { from: 'success' })).toBe('ok');
+    expect(checkEventProps('order_zalo_friend_click', { from: 'order_detail' })).toBe('ok');
+    expect(checkEventProps('order_zalo_friend_click', { from: 'checkout' })).toBe('bad_value');
+    expect(checkEventProps('order_zalo_friend_click', {})).not.toBe('ok');
+  });
+
   it('tên không có luật → bỏ', () => {
     expect(checkEventProps('order_paid', {})).toBe('unknown_key');
   });

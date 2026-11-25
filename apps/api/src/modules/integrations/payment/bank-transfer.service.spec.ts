@@ -87,7 +87,7 @@ describe('BankTransferService.getBankQr', () => {
     const pending = { ...ORDER, status: 'PENDING_PAYMENT', createdAt: new Date(), fulfiller: 'TUBU', placedForCustomer: false, autoCancelBlockedAt: null, paymentUnlinkedAt: null, paymentUnlinkedFirstAt: null, pancakePaidReported: null };
     const prismaWith = (order: unknown, attempts: number) =>
       ({ ...makePrisma(order), paymentAttempt: { count: jest.fn().mockResolvedValue(attempts) } }) as unknown as PrismaService;
-    const qr = (order: unknown, attempts = 0, codMax?: number) => new BankTransferService(prismaWith(order, attempts), makeConfig()).getBankQr('TUBU250625001', 'u1', codMax);
+    const qr = (order: unknown, attempts = 0, codMax?: number) => new BankTransferService(prismaWith(order, attempts), makeConfig()).getBankQr('TUBU250625001', 'u1', { codMax });
     expect((await qr(pending)).codSwitchable).toBe(true);
     expect((await qr(pending, 1)).codSwitchable).toBe(false);
     expect((await qr(pending, 0, 200_000)).codSwitchable).toBe(false);
@@ -326,11 +326,64 @@ describe('BankTransferService.getTransferPreview (cờ checkout.transfer_preview
     expect(r).toEqual({ enabled: true, bank: null });
   });
 
-  it('cờ bật hay tắt thì câu trả lời của GET /payments/bank-qr/:code vẫn giữ nguyên bộ khoá cũ', async () => {
+  it('cờ bật hay tắt thì câu trả lời của GET /payments/bank-qr/:code giữ đúng một bộ khoá', async () => {
     const keys = async (o: Record<string, unknown>) =>
       Object.keys(await new BankTransferService(makePrisma(ORDER), makeConfig(o)).getBankQr('TUBU250625001', 'u1')).sort();
-    const expected = ['amount', 'bank', 'codSwitchable', 'memo', 'orderCode', 'paidSoFar', 'paymentDeadline', 'paymentStatus', 'qrImageUrl', 'qrString', 'serverNow'];
+    const expected = ['amount', 'bank', 'codSwitchable', 'memo', 'orderCode', 'paidSoFar', 'paymentDeadline', 'paymentStatus', 'qrImageUrl', 'qrString', 'serverNow', 'zaloFriendCard'];
     expect(await keys({})).toEqual(expected);
     expect(await keys(ON)).toEqual(expected);
+  });
+});
+
+describe('BankTransferService.getBankQr — thẻ kết bạn Zalo (zaloFriendCard, w39-02)', () => {
+  const ON = { enabled: true, open: true, rolloutPct: 100 };
+  const PENDING = { ...ORDER, status: 'PENDING_PAYMENT', orderZaloConsent: true, createdAt: new Date(), pancakePaidReported: null };
+  const mss = (gate: unknown) => ({ gate: () => gate }) as never;
+  const withOutbox = (order: unknown, friendRow: { id: string } | null = null) => {
+    const findFirst = jest.fn().mockResolvedValue(friendRow);
+    const prisma = { ...makePrisma(order), paymentAttempt: { count: jest.fn().mockResolvedValue(0) }, mssOrderEventOutbox: { findFirst } };
+    return { prisma: prisma as unknown as PrismaService, findFirst };
+  };
+
+  it('dựng bằng hai đối số (không có MssModule): false, không đụng outbox', async () => {
+    const { prisma, findFirst } = withOutbox(PENDING);
+    const r = await new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.zaloFriendCard).toBe(false);
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it('khách đăng nhập (mặc định account): chưa có tin bạn bè trong 90 ngày → true; hỏi outbox theo chủ đơn', async () => {
+    const { prisma, findFirst } = withOutbox(PENDING);
+    const r = await new BankTransferService(prisma, makeConfig(), mss(ON)).getBankQr('TUBU250625001', 'u1');
+    expect(r.zaloFriendCard).toBe(true);
+    expect(findFirst).toHaveBeenCalledTimes(1);
+    expect(findFirst.mock.calls[0][0].where).toMatchObject({ order: { userId: 'u1' }, recipientRole: 'buyer', status: 'RESULT_SENT', resultReason: null });
+  });
+
+  it('khách vãng lai (friendScope order): hỏi outbox theo đơn này, không theo tài khoản', async () => {
+    const { prisma, findFirst } = withOutbox(PENDING);
+    const r = await new BankTransferService(prisma, makeConfig(), mss(ON)).getBankQr('TUBU250625001', 'u1', { codMax: 1_000_000, friendScope: 'order' });
+    expect(r.zaloFriendCard).toBe(true);
+    expect(findFirst).toHaveBeenCalledWith({ where: { orderId: 'o1', recipientRole: 'buyer', status: 'RESULT_SENT', resultReason: null }, select: { id: true } });
+  });
+
+  it('đã có tin bạn bè → false', async () => {
+    const { prisma } = withOutbox(PENDING, { id: 'r1' });
+    expect((await new BankTransferService(prisma, makeConfig(), mss(ON)).getBankQr('TUBU250625001', 'u1')).zaloFriendCard).toBe(false);
+  });
+
+  it('đơn vừa nhận tiền (CONFIRMED, PAID) vẫn mời: màn "Đã nhận thanh toán" cũng có thẻ', async () => {
+    const { prisma } = withOutbox({ ...PENDING, status: 'CONFIRMED', paymentStatus: 'PAID' });
+    expect((await new BankTransferService(prisma, makeConfig(), mss(ON)).getBankQr('TUBU250625001', 'u1')).zaloFriendCard).toBe(true);
+  });
+
+  it.each<[string, unknown, Record<string, unknown>]>([
+    ['cổng đóng', { ...ON, open: false }, {}],
+    ['khách không đồng ý', ON, { orderZaloConsent: false }],
+    ['chưa hỏi đồng ý', ON, { orderZaloConsent: null }],
+  ])('%s → false, không truy vấn outbox', async (_n, gate, over) => {
+    const { prisma, findFirst } = withOutbox({ ...PENDING, ...over });
+    expect((await new BankTransferService(prisma, makeConfig(), mss(gate)).getBankQr('TUBU250625001', 'u1')).zaloFriendCard).toBe(false);
+    expect(findFirst).not.toHaveBeenCalled();
   });
 });
