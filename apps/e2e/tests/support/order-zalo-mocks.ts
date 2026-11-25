@@ -6,13 +6,16 @@ import { runAxe } from './axe';
 /** Trạng thái `GET /config/order-zalo` của khách có số đủ điều kiện, chưa từng chọn (ô không tick sẵn). */
 export const ORDER_ZALO_STATUS = { enabled: true, prechecked: false, choice: null, phoneMasked: '090•••4567', tubuZaloPhone: '0899149229' };
 
+/** Tài khoản có số đã xác minh, cờ người nhận bật (PO A1): địa chỉ có số khác số này thì có công tắc người nhận. */
+export const ORDER_ZALO_RECIPIENT_STATUS = { ...ORDER_ZALO_STATUS, buyerPhone: '0901234567', phoneSource: 'account_verified', recipientEnabled: true };
+
 /**
  * Bật/tắt cờ hành trình đơn qua Zalo ở cấu hình công khai và phản chiếu `orderZaloConsent` của body vào đơn trả về
  * (máy chủ ghi cột này trong giao dịch đặt hàng). Gọi SAU mockWorld: đăng ký sau thắng.
  */
-export function mockOrderZalo(api: MockApi, on: boolean): void {
+export function mockOrderZalo(api: MockApi, on: boolean, status: Record<string, unknown> = ORDER_ZALO_STATUS): void {
   api.get('/config/public', publicConfig({ orderZaloEnabled: on, tubuZaloPhone: '0899149229' }));
-  api.get('/config/order-zalo', ORDER_ZALO_STATUS);
+  api.get('/config/order-zalo', status);
   api.post('/checkout/place-order', ({ call }) => {
     const body = (call.body ?? {}) as Record<string, unknown>;
     return { ...placedOrderFor(body), orderZaloConsent: on && body.orderZaloConsent === true };

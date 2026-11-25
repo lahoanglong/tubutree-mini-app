@@ -52,6 +52,7 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'poster.badgeCtv': { code: 'TUBU1234567890' },
   'checkout.shipEstimateValue': { fee: '999.999đ–999.999đ' },
   'checkout.orderZalo.phone': { phone: '090•••4567' },
+  'checkout.orderZalo.recipientNote': { phone: '090•••4567' },
   'order.zaloFriend.body': { code: 'TUBU2026111557909' },
   'order.zaloFriend.blocked': { phone: '0899149229' },
   'eco.badgePlastic': { g: '1000,0kg' },

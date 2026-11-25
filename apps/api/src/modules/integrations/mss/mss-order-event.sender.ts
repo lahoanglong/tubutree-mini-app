@@ -32,6 +32,7 @@ interface ClaimedRow {
   orderId: string;
   orderCode: string;
   eventType: string;
+  recipientRole: string;
   body: string;
   attempts: number;
   occurredAt: Date;
@@ -87,7 +88,7 @@ export class MssOrderEventSender {
       WHERE "eventId" = ${eventId}
         AND (("status" = 'PENDING' AND "nextAttemptAt" <= ${now})
           OR ("status" = 'SENDING' AND "claimedAt" < ${staleBefore}))
-      RETURNING "id", "eventId", "orderId", "orderCode", "eventType", "body", "attempts", "occurredAt", "expiresAt"`;
+      RETURNING "id", "eventId", "orderId", "orderCode", "eventType", "recipientRole", "body", "attempts", "occurredAt", "expiresAt"`;
     const row = rows[0];
     if (!row) {
       const exists = await this.prisma.mssOrderEventOutbox.findUnique({ where: { eventId }, select: { id: true } });
@@ -95,6 +96,8 @@ export class MssOrderEventSender {
     }
     if (Date.now() >= row.expiresAt.getTime()) return this.finishClaimed(row, 'EXPIRED', 'ttl');
     if (!(await this.flags.isEnabled('orderEvents'))) return this.finishClaimed(row, 'CANCELLED', 'disabled');
+    // Admin tắt riêng tin người nhận (vd. sau một lời phàn nàn): dòng người nhận còn chờ thử lại cũng dừng, không chờ hết hạn sống.
+    if (row.recipientRole === 'recipient' && !(await this.flags.isEnabled('orderRecipient'))) return this.finishClaimed(row, 'CANCELLED', 'disabled');
     // Thân đã lưu ghi consent = true lúc ghi; khách có thể tắt sau đó (cài đặt, hay MSS báo opted_out ở đơn khác) trong lúc dòng chờ thử lại.
     const consent = await this.prisma.order.findUnique({ where: { id: row.orderId }, select: { orderZaloConsent: true, user: { select: { notifyOrderZalo: true } } } });
     if (consent?.orderZaloConsent !== true || consent.user.notifyOrderZalo !== true) return this.finishClaimed(row, 'CANCELLED', 'consent_withdrawn');
@@ -169,7 +172,7 @@ export class MssOrderEventSender {
     reason: string | null,
     extra: { lastHttpStatus?: number | null; lastError?: string; deliveredAt?: Date } = {},
   ): Promise<MssDeliverOutcome> {
-    const won = await this.settle(row.id, row.eventId, row.orderId, ['SENDING'], status, reason, {
+    const won = await this.settle(row, ['SENDING'], status, reason, {
       lastHttpStatus: extra.lastHttpStatus ?? null,
       lastError: extra.lastError?.slice(0, ERROR_MAX) ?? null,
       claimedAt: null,
@@ -192,14 +195,14 @@ export class MssOrderEventSender {
     reason: string | null,
     source: 'callback' | 'reconcile',
   ): Promise<MssApplyOutcome> {
-    const row = await this.prisma.mssOrderEventOutbox.findUnique({ where: { eventId }, select: { id: true, orderId: true, orderCode: true, eventType: true } });
+    const row = await this.prisma.mssOrderEventOutbox.findUnique({ where: { eventId }, select: { id: true, eventId: true, orderId: true, orderCode: true, eventType: true, recipientRole: true } });
     if (!row) return 'unknown_event';
     if ((expect.orderCode && expect.orderCode !== row.orderCode) || (expect.eventType && expect.eventType !== row.eventType)) {
       this.logger.warn(`Kết quả MSS (${source}) cho sự kiện ${eventId} lệch mã đơn hoặc loại: bỏ qua.`);
       return 'mismatch';
     }
     const final = resultStatusOf(status);
-    const won = await this.settle(row.id, eventId, row.orderId, ['PENDING', 'SENDING', 'DELIVERED'], final, reason, { claimedAt: null });
+    const won = await this.settle(row, ['PENDING', 'SENDING', 'DELIVERED'], final, reason, { claimedAt: null });
     if (!won) return 'noop';
     this.logger.log(`mss_order_event_result ${row.eventType} order=${row.orderCode} event=${eventId} status=${final} reason=${reason ?? '-'} via=${source}`);
     return 'applied';
@@ -241,21 +244,20 @@ export class MssOrderEventSender {
 
   /** Chuyển dòng từ một trong `from` sang trạng thái cuối, rồi chạy hệ quả đúng một lần (bên thắng câu UPDATE). */
   private async settle(
-    id: string,
-    eventId: string,
-    orderId: string,
+    row: { id: string; eventId: string; orderId: string; recipientRole: string },
     from: MssOutboxStatus[],
     status: MssOutboxStatus,
     reason: string | null,
     data: { lastHttpStatus?: number | null; lastError?: string | null; claimedAt?: null; deliveredAt?: Date },
   ): Promise<boolean> {
     const moved = await this.prisma.mssOrderEventOutbox.updateMany({
-      where: { id, status: { in: from } },
+      where: { id: row.id, status: { in: from } },
       data: { ...data, status, resultReason: reason, resultAt: new Date() },
     });
     if (moved.count === 0) return false;
-    if (status === 'RESULT_SKIPPED' && reason === 'opted_out') await this.recordOptOut(orderId);
-    if (MSS_FALLBACK_STATUSES.includes(status)) await this.fallback.run(eventId);
+    // Số người nhận từ chối tin là lựa chọn của người nhận, không phải của chủ tài khoản: chỉ dòng người mua mới tắt lựa chọn đã nhớ.
+    if (status === 'RESULT_SKIPPED' && reason === 'opted_out' && row.recipientRole === 'buyer') await this.recordOptOut(row.orderId);
+    if (MSS_FALLBACK_STATUSES.includes(status)) await this.fallback.run(row.eventId);
     return true;
   }
 

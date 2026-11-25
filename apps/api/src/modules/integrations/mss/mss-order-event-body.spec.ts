@@ -157,6 +157,47 @@ describe('buildMssEventBody: danh sách trắng theo hợp đồng v1.2 mục 3.
     expect(() => buildMssEventBody(input({ eventId: 'short' }))).toThrow(MssEventBodyError);
   });
 
+  // sha256 tính từ mss-order-event-body.ts của origin/main trước w35-01 (cùng đầu vào): thân người mua không đổi một byte.
+  it.each([
+    ['order.created', '7b61865e794351a4a9e37bb42f7b9a6183bb162e89c4fc4097033ce92e2ec719'],
+    ['order.payment_confirmed', '214d61ec5603e28199a1fcd20e596a082e4d5996fa040d3fea176a78b03c83cd'],
+    ['order.shipping', '6c1bc1865eb11edd4088acddbc6a3abf0b3660016b4d69d1c01c2bc6634ebb32'],
+    ['order.delivered', '093fd624cc1377b0244b40496438a5e2fda93faaa47dc7280b25b17379aa078e'],
+    ['order.cancelled', '63212d93d3fb05fe14adc2e9c22dcbd0a483f19ac9ae046f98470a660364be29'],
+  ] as const)('người mua %s: thân giống hệt v1.2 (sha256 cố định, không có khoá role)', (eventType, sha256) => {
+    const extra = { eventType, cancelReason: 'CUSTOMER' as const, refundExpected: true };
+    expect(buildMssEventBody(input(extra)).sha256).toBe(sha256);
+    const explicitBuyer = buildMssEventBody(input({ ...extra, recipient: { phone: '0901234567', phoneSource: 'account_verified', name: 'Lan', role: 'buyer' } }));
+    expect(explicitBuyer.sha256).toBe(sha256);
+    expect(explicitBuyer.json).not.toContain('"role"');
+  });
+
+  it('người nhận (PO A1): total_vnd 0, không tên món, không link, không tên gọi, có role và vận đơn; khớp schema', () => {
+    const recipient = { phone: '0987654321', phoneSource: 'checkout_contact' as const, name: 'Lan', role: 'recipient' as const };
+    for (const eventType of ['order.shipping', 'order.delivered'] as const) {
+      const json = buildMssEventBody(input({ eventType, recipient }, { total: 777555, itemNames: ['Nước giặt sinh học Fuwa3e 2L'] })).json;
+      const body = JSON.parse(json);
+      expect(validate(SCHEMA, body)).toEqual([]);
+      expect(body.order.total_vnd).toBe(0);
+      expect(body.order).not.toHaveProperty('first_item_name');
+      expect(body.order).not.toHaveProperty('tracking_url');
+      expect(body.recipient).toEqual({ phone: '0987654321', phone_source: 'checkout_contact', role: 'recipient' });
+      expect(json).not.toMatch(/777555|Fuwa|https?:|tubutree\.com|Lan/);
+      if (eventType === 'order.shipping') expect(body.order).toMatchObject({ carrier: 'GHN', tracking_code: 'GHN8X2K9' });
+    }
+    const sample = JSON.parse(readFileSync(join(FIXTURES, 'order-event.recipient.json'), 'utf8'));
+    expect(validate(SCHEMA, sample)).toEqual([]);
+    expect(validate(SCHEMA, { ...sample, recipient: { ...sample.recipient, role: 'gift' } })).toEqual(['$.recipient.role: ngoài enum']);
+  });
+
+  it('người nhận chỉ có tin giao hàng và chỉ nguồn checkout_contact: sai thì MssEventBodyError (bỏ dòng, không hỏng đơn)', () => {
+    const recipient = { phone: '0987654321', phoneSource: 'checkout_contact' as const, role: 'recipient' as const };
+    for (const eventType of ['order.created', 'order.payment_confirmed', 'order.cancelled'] as const) {
+      expect(() => buildMssEventBody(input({ eventType, recipient }))).toThrow(MssEventBodyError);
+    }
+    expect(() => buildMssEventBody(input({ recipient: { ...recipient, phoneSource: 'account_verified' } }))).toThrow(MssEventBodyError);
+  });
+
   it('newEventId là ULID 26 ký tự, tăng theo thời gian; vnIso qua nửa đêm', () => {
     const a = newEventId(1_700_000_000_000);
     const b = newEventId(1_700_000_000_001);

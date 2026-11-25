@@ -13,6 +13,8 @@ export const MSS_FLAG_KEYS = {
   invoice: 'mss.invoice_enabled',
   catalogShadow: 'mss.catalog_shadow_enabled',
   stockSync: 'mss.stock_sync_enabled',
+  /** Thêm tin giao hàng không kèm giá cho số người nhận (PO A1). Chỉ có tác dụng khi `orderEvents` đang mở. */
+  orderRecipient: 'mss.order_recipient_enabled',
 } as const;
 
 export type MssFlag = keyof typeof MSS_FLAG_KEYS;
@@ -66,6 +68,8 @@ export const MSS_FLAG_CAPABILITY: Record<MssFlag, string> = {
   catalogShadow: 'catalog.source',
   // MSS chỉ công bố `catalog.source` khi đã bật gương Pancake (có SKU, giá, tồn): không có gương thì không có số tồn để đẩy.
   stockSync: 'catalog.source',
+  // MSS cũ trả 422 `unexpected_field` cho `recipient.role`: chỉ ghi dòng người nhận khi MSS đã công bố năng lực này.
+  orderRecipient: 'order_events.recipient_role',
 };
 
 export function clampRolloutPct(v: unknown): number {

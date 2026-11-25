@@ -4,7 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OrderZaloFriendFrom } from '@tubutree/shared-types';
-import { enableOrderZaloForOrder, fetchOrderZaloStatus, orderZaloConsentView, orderZaloDetailView, showOrderZaloFriend, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
+import {
+  enableOrderZaloForOrder,
+  fetchOrderZaloStatus,
+  orderZaloConsentView,
+  orderZaloDetailView,
+  orderZaloRecipientView,
+  showOrderZaloFriend,
+  tubuZaloNumber,
+} from '@tubutree/app-core/order-zalo';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
@@ -30,17 +38,74 @@ export function useOrderZaloStatus() {
   return q.isFetchedAfterMount && !q.isError ? q.data : undefined;
 }
 
-/** `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). */
-export function useOrderZaloConsent() {
-  const view = orderZaloConsentView(useOrderZaloStatus());
-  const [picked, setPicked] = useState<boolean | null>(null);
-  return { view, checked: view ? picked ?? view.checked : undefined, setPicked };
+export type OrderZaloRecipientToggle = { buyerPhoneMasked: string; on: boolean; onChange: (v: boolean) => void };
+
+/**
+ * `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). `address` là địa chỉ đang chọn: tài khoản chưa có
+ * số thì ô dùng số nhận hàng (PO A2); số nhận hàng khác số tài khoản thì có thêm công tắc người nhận (PO A1), mặc định tắt, tự tắt lại khi khách
+ * đổi địa chỉ hoặc bỏ tick ô đồng ý. `notifyRecipientZalo` là giá trị gửi kèm đơn. Cùng luật với Mini App.
+ */
+export function useOrderZaloConsent(address?: { id: string; phone?: string | null } | null) {
+  const status = useOrderZaloStatus();
+  const view = orderZaloConsentView(status, address?.phone);
+  const [picked, setPickedState] = useState<boolean | null>(null);
+  const [toggleOn, setToggleOn] = useState(false);
+  const addressId = address?.id ?? null;
+  const [toggleAddress, setToggleAddress] = useState(addressId);
+  if (toggleAddress !== addressId) {
+    setToggleAddress(addressId);
+    setToggleOn(false);
+  }
+  const checked = view ? picked ?? view.checked : undefined;
+  const recipientView = orderZaloRecipientView(status, address?.phone, checked === true);
+  const notifyRecipientZalo = recipientView !== null && toggleOn;
+  const setPicked = (v: boolean) => {
+    setPickedState(v);
+    if (!v) setToggleOn(false);
+  };
+  const recipient: OrderZaloRecipientToggle | undefined = recipientView ? { buyerPhoneMasked: recipientView.buyerPhoneMasked, on: notifyRecipientZalo, onChange: setToggleOn } : undefined;
+  return { view, checked, setPicked, recipient, notifyRecipientZalo };
 }
 
-export function OrderZaloConsentRow({ phone, checked, onChange }: { phone: string; checked: boolean; onChange: (v: boolean) => void }) {
+export function OrderZaloConsentRow({
+  phone,
+  checked,
+  onChange,
+  recipient,
+}: {
+  phone: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  recipient?: OrderZaloRecipientToggle;
+}) {
   useEffect(() => {
     trackWebEvent('order_zalo_consent_shown', {});
   }, []);
+  return (
+    <>
+      <ConsentLabel phone={phone} checked={checked} onChange={onChange} />
+      {checked && recipient && <RecipientToggle recipient={recipient} />}
+    </>
+  );
+}
+
+/** Lời báo + công tắc người nhận: thụt theo chữ của ô đồng ý (ô 24px + khoảng 12px), công tắc là ô tick riêng đủ 44px. */
+function RecipientToggle({ recipient }: { recipient: OrderZaloRecipientToggle }) {
+  return (
+    <div data-testid="order-zalo-recipient" className="pl-9 lg:pb-3">
+      <p className="text-caption text-[color:var(--color-text-secondary)]">{fillCopy('checkout.orderZalo.recipientNote', { phone: recipient.buyerPhoneMasked })}</p>
+      <label className="flex min-h-11 cursor-pointer items-center gap-3">
+        <span className={miniCheckboxWrap}>
+          <input type="checkbox" checked={recipient.on} onChange={(e) => recipient.onChange(e.target.checked)} className={miniCheckbox} />
+          <CheckMark />
+        </span>
+        <span className="text-sm text-[color:var(--color-text-primary)]">{fillCopy('checkout.orderZalo.recipientToggle')}</span>
+      </label>
+    </div>
+  );
+}
+
+function ConsentLabel({ phone, checked, onChange }: { phone: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex min-h-11 cursor-pointer items-start gap-3 pt-3 lg:pb-3 lg:pt-0">
       <span className={miniCheckboxWrap}>

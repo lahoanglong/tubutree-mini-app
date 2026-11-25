@@ -1,7 +1,7 @@
 import { rolloutBucket } from '../integrations/mss/mss-order-event-types';
 import { buildPublicConfig } from './public-config';
 import { OrderZaloConfigController } from './order-zalo-config.controller';
-import { TUBU_ZALO_PHONE_DEFAULT, orderZaloGateOpen, orderZaloStatus, tubuZaloPhoneOf, verifiedPhoneMasked, type OrderZaloGate } from './order-zalo-config';
+import { TUBU_ZALO_PHONE_DEFAULT, maskOrderZaloPhone, orderZaloGateOpen, orderZaloStatus, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 const ON: OrderZaloGate = { enabled: true, open: true, rolloutPct: 100 };
 const verified = { phone: '0901234567', phoneVerifiedAt: new Date('2026-11-01T00:00:00Z') };
@@ -42,11 +42,21 @@ describe('orderZaloStatus: ma trận cờ × rollout × SĐT', () => {
     expect(orderZaloStatus(half, user({ id: outside }), false, undefined).enabled).toBe(false);
   });
 
-  it('chưa xác minh số hoặc số không đọc được: không có số nhận (client không hiện ô)', () => {
-    expect(orderZaloStatus(ON, user({ phoneVerifiedAt: null }), false, undefined).phoneMasked).toBeNull();
-    expect(orderZaloStatus(ON, user({ phone: null }), false, undefined).phoneMasked).toBeNull();
-    expect(orderZaloStatus(ON, user({ phone: '12345' }), false, undefined).phoneMasked).toBeNull();
-    expect(verifiedPhoneMasked({ phone: '+84901234567', phoneVerifiedAt: new Date() })).toBe('090•••4567');
+  it('PO A2: số chưa xác minh vẫn là số nhận (checkout_contact); không có số hoặc số hỏng thì null (client dùng số nhận hàng)', () => {
+    expect(orderZaloStatus(ON, user(), false, undefined)).toMatchObject({ phoneMasked: '090•••4567', buyerPhone: '0901234567', phoneSource: 'account_verified' });
+    expect(orderZaloStatus(ON, user({ phoneVerifiedAt: null }), false, undefined)).toMatchObject({ phoneMasked: '090•••4567', buyerPhone: '0901234567', phoneSource: 'checkout_contact' });
+    expect(orderZaloStatus(ON, user({ phone: '12345' }), false, undefined)).toMatchObject({ phoneMasked: null, buyerPhone: null, phoneSource: null });
+    expect(orderZaloStatus(ON, user({ phone: null }), false, undefined)).toMatchObject({ phoneMasked: null, buyerPhone: null, phoneSource: null });
+    expect(orderZaloStatus({ ...ON, rolloutPct: 0 }, user(), false, undefined)).toMatchObject({ phoneMasked: null, buyerPhone: null });
+    expect(maskOrderZaloPhone('0901234567')).toBe('090•••4567');
+    expect(maskOrderZaloPhone(null)).toBeNull();
+  });
+
+  it('recipientEnabled chỉ khi ô đồng ý hiện và cổng người nhận mở (cờ + năng lực MSS)', () => {
+    expect(orderZaloStatus({ ...ON, recipient: true }, user(), false, undefined).recipientEnabled).toBe(true);
+    expect(orderZaloStatus(ON, user(), false, undefined).recipientEnabled).toBe(false);
+    expect(orderZaloStatus({ ...ON, recipient: true, rolloutPct: 0 }, user(), false, undefined).recipientEnabled).toBe(false);
+    expect(orderZaloStatus({ ...ON, recipient: true, open: false }, user(), false, undefined).recipientEnabled).toBe(false);
   });
 
   it('lựa chọn đã nhớ: null khi chưa từng chọn, đúng giá trị khi đã chọn (kể cả đã tắt)', () => {
@@ -80,6 +90,13 @@ describe('/config/public: cờ chung của ô đồng ý', () => {
     expect(r).toMatchObject({ orderZaloEnabled: false, orderZaloPrechecked: false, tubuZaloPhone: '0899149229' });
   });
 
+  it('orderZaloGuest (PO A2, khách vãng lai): chỉ khi cổng mở cho 100% khách', async () => {
+    expect((await buildPublicConfig(cfg(), undefined, () => ON)).orderZaloGuest).toBe(true);
+    expect((await buildPublicConfig(cfg(), undefined, () => ({ ...ON, rolloutPct: 99 }))).orderZaloGuest).toBe(false);
+    expect((await buildPublicConfig(cfg(), undefined, () => ({ ...ON, open: false }))).orderZaloGuest).toBe(false);
+    expect((await buildPublicConfig(cfg())).orderZaloGuest).toBe(false);
+  });
+
   it('chỉ bật khi cờ bật, MSS nhận sự kiện và tỉ lệ > 0', async () => {
     expect((await buildPublicConfig(cfg(), undefined, () => ON)).orderZaloEnabled).toBe(true);
     expect((await buildPublicConfig(cfg(), undefined, () => ({ ...ON, rolloutPct: 0 }))).orderZaloEnabled).toBe(false);
@@ -101,8 +118,18 @@ describe('GET /config/order-zalo', () => {
     const ctrl = new OrderZaloConfigController(prisma, config, { gate: () => ON } as never);
     const res = await ctrl.orderZalo(inside);
     expect(findUniqueOrThrow).toHaveBeenCalledWith(expect.objectContaining({ where: { id: inside } }));
-    expect(res).toEqual({ enabled: true, prechecked: false, choice: null, phoneMasked: '090•••4567', tubuZaloPhone: '0899149229' });
-    expect(JSON.stringify(res)).not.toContain('0901234567');
+    expect(res).toEqual({
+      enabled: true,
+      prechecked: false,
+      choice: null,
+      phoneMasked: '090•••4567',
+      buyerPhone: '0901234567',
+      phoneSource: 'account_verified',
+      recipientEnabled: false,
+      tubuZaloPhone: '0899149229',
+    });
+    // Số đầy đủ chỉ là số của chính người gọi (để so với số nhận hàng ở thanh toán); che ở mọi chỗ hiển thị.
+    expect(JSON.stringify({ ...res, buyerPhone: null })).not.toContain('0901234567');
   });
 
   it('không có MssModule (cờ chưa từng nạp): tắt', async () => {

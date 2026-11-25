@@ -3,7 +3,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { openWebview } from 'zmp-sdk/apis';
 import type { OrderZaloFriendFrom } from '@tubutree/shared-types';
-import { enableOrderZaloForOrder, fetchOrderZaloStatus, orderZaloConsentView, orderZaloDetailView, showOrderZaloFriend, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
+import {
+  enableOrderZaloForOrder,
+  fetchOrderZaloStatus,
+  orderZaloConsentView,
+  orderZaloDetailView,
+  orderZaloRecipientView,
+  showOrderZaloFriend,
+  tubuZaloNumber,
+} from '@tubutree/app-core/order-zalo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '../../services/core-http';
 import { trackEvent } from '../../services/analytics';
@@ -28,28 +36,82 @@ export function useOrderZaloStatus() {
   return q.isFetchedAfterMount && !q.isError ? q.data : undefined;
 }
 
-/** `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). */
-export function useOrderZaloConsent() {
-  const view = orderZaloConsentView(useOrderZaloStatus());
-  const [picked, setPicked] = useState<boolean | null>(null);
-  return { view, checked: view ? picked ?? view.checked : undefined, setPicked };
+export type OrderZaloRecipientToggle = { buyerPhoneMasked: string; on: boolean; onChange: (v: boolean) => void };
+
+/**
+ * `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). `address` là địa chỉ đang chọn: tài khoản chưa có
+ * số thì ô dùng số nhận hàng (PO A2); số nhận hàng khác số tài khoản thì có thêm công tắc người nhận (PO A1), mặc định tắt, tự tắt lại khi khách
+ * đổi địa chỉ hoặc bỏ tick ô đồng ý. `notifyRecipientZalo` là giá trị gửi kèm đơn. Cùng luật với web.
+ */
+export function useOrderZaloConsent(address?: { id: string; phone?: string | null } | null) {
+  const status = useOrderZaloStatus();
+  const view = orderZaloConsentView(status, address?.phone);
+  const [picked, setPickedState] = useState<boolean | null>(null);
+  const [toggleOn, setToggleOn] = useState(false);
+  const addressId = address?.id ?? null;
+  const [toggleAddress, setToggleAddress] = useState(addressId);
+  if (toggleAddress !== addressId) {
+    setToggleAddress(addressId);
+    setToggleOn(false);
+  }
+  const checked = view ? picked ?? view.checked : undefined;
+  const recipientView = orderZaloRecipientView(status, address?.phone, checked === true);
+  const notifyRecipientZalo = recipientView !== null && toggleOn;
+  const setPicked = (v: boolean) => {
+    setPickedState(v);
+    if (!v) setToggleOn(false);
+  };
+  const recipient: OrderZaloRecipientToggle | undefined = recipientView ? { buyerPhoneMasked: recipientView.buyerPhoneMasked, on: notifyRecipientZalo, onChange: setToggleOn } : undefined;
+  return { view, checked, setPicked, recipient, notifyRecipientZalo };
 }
 
-export function OrderZaloConsentRow({ phone, checked, onChange }: { phone: string; checked: boolean; onChange: (v: boolean) => void }) {
+const ROW = { display: 'flex', gap: 'var(--space-inline-md)', alignItems: 'flex-start' } as const;
+
+export function OrderZaloConsentRow({
+  phone,
+  checked,
+  onChange,
+  recipient,
+}: {
+  phone: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  recipient?: OrderZaloRecipientToggle;
+}) {
   useEffect(() => void trackEvent('order_zalo_consent_shown', 'miniapp', {}), []);
   const toggle = () => {
     onChange(!checked);
     void trackEvent('order_zalo_consent_checked', 'miniapp', { checked: !checked });
   };
   return (
-    <div role="checkbox" aria-checked={checked} {...rowKeyboardProps()} onClick={toggle} style={{ display: 'flex', gap: 'var(--space-inline-md)', alignItems: 'flex-start', padding: 'var(--space-inset-card) var(--space-gutter) 0' }}>
-      <Checkbox checked={checked} onChange={() => {}} flush />
-      <div>
-        <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-          {fillCopy('checkout.orderZalo.label')}
-        </Text>
-        <Text variant="caption" tone="secondary" as="div">
-          {fillCopy('checkout.orderZalo.body')} {fillCopy('checkout.orderZalo.phone', { phone })}
+    <>
+      <div role="checkbox" aria-checked={checked} {...rowKeyboardProps()} onClick={toggle} style={{ ...ROW, padding: 'var(--space-inset-card) var(--space-gutter) 0' }}>
+        <Checkbox checked={checked} onChange={() => {}} flush />
+        <div>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+            {fillCopy('checkout.orderZalo.label')}
+          </Text>
+          <Text variant="caption" tone="secondary" as="div">
+            {fillCopy('checkout.orderZalo.body')} {fillCopy('checkout.orderZalo.phone', { phone })}
+          </Text>
+        </div>
+      </div>
+      {checked && recipient && <RecipientToggle recipient={recipient} />}
+    </>
+  );
+}
+
+/** Lời báo + công tắc người nhận dưới ô đồng ý, thụt theo chữ của ô (ô tick rộng bằng --space-stack-lg, cộng khoảng cách hàng); công tắc là một hàng chạm riêng. */
+function RecipientToggle({ recipient }: { recipient: OrderZaloRecipientToggle }) {
+  return (
+    <div data-testid="order-zalo-recipient" style={{ padding: '0 var(--space-gutter) 0 calc(var(--space-gutter) + var(--space-stack-lg) + var(--space-inline-md))' }}>
+      <Text variant="caption" tone="secondary" as="p">
+        {fillCopy('checkout.orderZalo.recipientNote', { phone: recipient.buyerPhoneMasked })}
+      </Text>
+      <div role="checkbox" aria-checked={recipient.on} {...rowKeyboardProps()} onClick={() => recipient.onChange(!recipient.on)} className="touch-target" style={{ ...ROW, alignItems: 'center', justifyContent: 'flex-start' }}>
+        <Checkbox checked={recipient.on} onChange={() => {}} flush />
+        <Text variant="body-sm" as="div">
+          {fillCopy('checkout.orderZalo.recipientToggle')}
         </Text>
       </div>
     </div>

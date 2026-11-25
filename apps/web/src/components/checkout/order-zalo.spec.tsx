@@ -100,7 +100,7 @@ describe('OrderZaloDetail (web)', () => {
     expect(root.innerHTML).toBe('');
   });
 
-  it('máy chủ không cho bật (đơn tặng, chưa xác minh SĐT...): không có nút', async () => {
+  it('máy chủ không cho bật (đơn đã giao, đại lý, không có số nào...): không có nút', async () => {
     const root = await mountDetail({ ...ORDER, orderZaloAvailable: false });
     expect(root.innerHTML).toBe('');
   });

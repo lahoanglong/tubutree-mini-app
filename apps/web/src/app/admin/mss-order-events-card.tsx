@@ -146,6 +146,12 @@ function EventRow({ row }: { row: MssOrderEventRow }) {
       <div className="min-w-0">
         <div className="break-all font-medium text-stone-800">
           {row.orderCode} <span className="font-normal text-stone-600">· {EVENT_LABEL[row.eventType] ?? row.eventType}</span>
+          {row.recipientRole === 'recipient' && (
+            <>
+              {' '}
+              <ToneBadge tone="neutral">Người nhận</ToneBadge>
+            </>
+          )}
         </div>
         <div className="text-xs text-stone-500">
           <span className="tabular-nums">{formatDateTime(row.updatedAt)}</span>

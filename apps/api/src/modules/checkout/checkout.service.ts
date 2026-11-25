@@ -130,6 +130,7 @@ import { totalChangedError, totalChangedMessage } from './total-changed';
 import { WALLET_SHORT_MESSAGE, walletNegativeMessage } from './wallet-notice';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 import { GUEST_COD_OVER_MAX, guestCodOverMaxMessage } from './guest/guest-checkout.config';
+import { notifyRecipientZaloOf } from './notify-recipient';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
@@ -722,6 +723,7 @@ export class CheckoutService {
                 checkoutGroup,
                 source: orderSource,
                 platform,
+                notifyRecipientZalo: notifyRecipientZaloOf(dto),
                 ...(guest ? { guestPhone: guest.phone, guestTokenHash: guest.tokenHash, guestIpHash: guest.ipHash } : {}),
                 // IP đã băm của mọi lần đặt (vãng lai lẫn đã đăng nhập): thưởng đơn đầu của chương trình giới thiệu so IP người mời và bạn được mời.
                 placedIpHash: guest ? guest.ipHash : buyerIpHash,

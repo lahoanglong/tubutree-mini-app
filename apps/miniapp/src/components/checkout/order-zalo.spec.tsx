@@ -125,7 +125,7 @@ describe('OrderZaloDetail (bật Zalo ở chi tiết đơn)', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('máy chủ không cho bật (đơn tặng, chưa xác minh SĐT...): không có nút', async () => {
+  it('máy chủ không cho bật (đơn đã giao, đại lý, không có số nào...): không có nút', async () => {
     const { container } = wrap(<OrderZaloDetail order={{ ...order, orderZaloAvailable: false }} />);
     await waitFor(() => expect(mocks.get).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();

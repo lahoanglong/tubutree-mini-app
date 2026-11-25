@@ -65,6 +65,9 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261122090000_w16_03_products_active_approved_trgm_idx',
   // Một cột NULL mới trên orders (mã link CTV của đơn) mà image cũ không đọc, không ghi, kèm chỉ mục thường trên cột đó.
   '20261124090000_w24_01_orders_affiliate_link_code',
+  // Cột boolean có mặc định trên orders và cột có mặc định 'buyer' trên outbox MSS; image cũ không đọc hai cột, câu tìm theo (orderId, eventType)
+  // và createMany skipDuplicates của nó vẫn chạy trên chỉ mục duy nhất mới; một dòng cờ tắt.
+  '20261125070000_w35_01_order_recipient_zalo',
 ];
 
 /**

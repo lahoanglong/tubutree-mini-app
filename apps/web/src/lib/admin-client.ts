@@ -2303,6 +2303,8 @@ export interface MssOrderEventRow {
   attempts: number;
   phone: string | null;
   fallbackChannel: string | null;
+  /** buyer | recipient (tin giao hàng không kèm giá cho số người nhận). Thiếu ở API cũ = buyer. */
+  recipientRole?: string;
   createdAt: string;
   updatedAt: string;
 }

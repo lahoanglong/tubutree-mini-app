@@ -24,9 +24,9 @@ const PLACED = [
 ];
 
 function setup(enabled: () => Promise<boolean>) {
-  const isEnabled = jest.fn(enabled);
+  const isEnabled = jest.fn((_flag?: string) => enabled());
   const flags = { isEnabled, snapshot: jest.fn(async () => ({ orderEventsRolloutPct: 100 })) } as unknown as MssFlagsService;
-  const assertCapability = jest.fn(async () => true);
+  const assertCapability = jest.fn(async (_flag?: string) => true);
   const health = { assertCapability } as unknown as MssHealthService;
   const client = { circuit: { isTripped: () => false } } as unknown as MssClient;
   const dispatcher = { enqueue: jest.fn() } as unknown as MssOrderEventDispatcher;
@@ -38,6 +38,9 @@ function setup(enabled: () => Promise<boolean>) {
   };
   return { recorder, record, tx, txc: tx as unknown as Prisma.TransactionClient, isEnabled, assertCapability };
 }
+
+/** Số lần nạp cổng: mỗi lần nạp hỏi cờ `orderEvents` đúng một lần (cờ người nhận hỏi kèm trong cùng lần nạp). */
+const loads = (isEnabled: jest.Mock) => isEnabled.mock.calls.filter((c) => c[0] === 'orderEvents').length;
 
 describe('MssOrderEventRecorder: cổng lúc đặt hàng', () => {
   beforeEach(() => {
@@ -85,7 +88,7 @@ describe('MssOrderEventRecorder: cổng lúc đặt hàng', () => {
     expect(settled).toBe(false);
     flag.resolve(true);
     await placing;
-    expect(isEnabled).toHaveBeenCalledTimes(1);
+    expect(loads(isEnabled)).toBe(1);
     expect(tx.order.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['o1', 'o2'] } }, data: { orderZaloConsent: true, orderZaloConsentAt: expect.any(Date) } });
     expect(record).toHaveBeenCalledTimes(2);
   });
@@ -117,7 +120,7 @@ describe('MssOrderEventRecorder: cổng lúc đặt hàng', () => {
     expect(settled).toBe(true);
     await Promise.all([second, third]);
     expect(tx.order.updateMany).toHaveBeenCalledTimes(2);
-    expect(isEnabled).toHaveBeenCalledTimes(1);
+    expect(loads(isEnabled)).toBe(1);
     expect(jest.getTimerCount()).toBe(0);
   });
 
@@ -139,12 +142,28 @@ describe('MssOrderEventRecorder: cổng lúc đặt hàng', () => {
     await recorder.refreshGate();
     await recorder.onOrdersPlaced(txc, PLACED, true);
     await recorder.onPaid(txc, 'o1');
-    expect(isEnabled).toHaveBeenCalledTimes(1);
+    expect(loads(isEnabled)).toBe(1);
+  });
+
+  it('cổng người nhận (PO A1): chỉ mở khi cổng order_events mở, cờ mss.order_recipient_enabled bật và MSS công bố order_events.recipient_role', async () => {
+    const gateOf = async (flags: Record<string, boolean>, caps: Record<string, boolean>) => {
+      const { recorder, isEnabled, assertCapability } = setup(async () => true);
+      isEnabled.mockImplementation(async (f?: string) => flags[f ?? ''] === true);
+      assertCapability.mockImplementation(async (f?: string) => caps[f ?? ''] === true);
+      return recorder.refreshGate();
+    };
+    const all = { orderEvents: true, orderRecipient: true };
+    await expect(gateOf(all, all)).resolves.toMatchObject({ open: true, recipient: true });
+    await expect(gateOf(all, { orderEvents: true })).resolves.toMatchObject({ open: true, recipient: false });
+    await expect(gateOf({ orderEvents: true }, all)).resolves.toMatchObject({ open: true, recipient: false });
+    await expect(gateOf(all, { orderRecipient: true })).resolves.toMatchObject({ open: false, recipient: false });
+    await expect(gateOf({ orderRecipient: true }, all)).resolves.toMatchObject({ enabled: false, recipient: false });
   });
 
   it('nạp cổng hỏi assertCapability cả khi cờ coi như tắt: đó là chỗ báo Ops khi admin bật cờ mà thiếu biến MSS_*', async () => {
     const { recorder, assertCapability } = setup(async () => false);
     await expect(recorder.refreshGate()).resolves.toMatchObject({ enabled: false, open: false });
     expect(assertCapability).toHaveBeenCalledWith('orderEvents');
+    expect(assertCapability).toHaveBeenCalledWith('orderRecipient');
   });
 });

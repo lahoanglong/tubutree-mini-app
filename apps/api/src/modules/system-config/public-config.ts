@@ -197,6 +197,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(WASTE_REPEAT_REQUEST_KEY, false).catch(() => false),
     config.get<unknown>(REFERRAL_VIRAL_ENABLED_KEY, false),
   ]);
+  const zaloGate = orderZaloGate?.();
   return {
     freeshipThreshold,
     // Phí giao cố định của phần hàng Tubu Tree giao chưa đạt ngưỡng miễn phí (cùng khoá và mặc định với pricing.service); JSON-LD sản phẩm của web đọc số này. Giá trị hỏng thì mặc định.
@@ -268,7 +269,9 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     webGuestCartEnabled: webGuestCart === true,
     // Ô đồng ý nhận hành trình đơn qua Zalo: cờ chung (cờ bật, MSS nhận sự kiện, tỉ lệ > 0). Tỉ lệ theo từng khách và số đã xác minh
     // ở GET /config/order-zalo, client chỉ gọi khi cờ chung bật.
-    orderZaloEnabled: orderZaloGateOpen(orderZaloGate?.()),
+    orderZaloEnabled: orderZaloGateOpen(zaloGate),
+    // Khách vãng lai: nhóm rollout theo người dùng riêng từng máy mà client không biết, nên chỉ hỏi khi đã mở cho mọi khách.
+    orderZaloGuest: orderZaloGateOpen(zaloGate) && zaloGate!.rolloutPct >= 100,
     orderZaloPrechecked: orderZaloPrechecked === true,
     tubuZaloPhone: tubuZaloPhoneOf(tubuZaloPhone),
     // Link mời trỏ trang đích /moi/<mã> (web dựng trang và ảnh xem trước; cờ tắt thì trang trả 404), khối mời hiện tiến độ.

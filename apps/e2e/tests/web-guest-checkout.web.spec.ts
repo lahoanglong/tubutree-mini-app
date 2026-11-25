@@ -52,17 +52,18 @@ async function inStockProduct(request: APIRequestContext): Promise<Detail | null
 
 const unitOf = (d: Detail) => d.variations[0]!.salePrice ?? d.variations[0]!.retailPrice;
 
-function config(flagOn: boolean) {
+function config(flagOn: boolean, extra: Record<string, unknown> = {}) {
   return {
     ...publicConfig(),
     freeshipThreshold: 199000,
     webGuestCartEnabled: true,
     ...(flagOn ? { webGuestCheckoutEnabled: true, newCustomer: { welcomeVoucher: { amount: 30000 } } } : {}),
+    ...extra,
   };
 }
 
-function mockShop(api: MockApi, d: Detail, flagOn: boolean): void {
-  api.get('/config/public', config(flagOn));
+function mockShop(api: MockApi, d: Detail, flagOn: boolean, extra: Record<string, unknown> = {}): void {
+  api.get('/config/public', config(flagOn, extra));
   api.get('/flash-sales/active', []);
   api.get('/flash-sales/upcoming', []);
   api.get(`/products/${d.slug}`, d);
@@ -345,6 +346,42 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     await expect(page.getByText('9984606774').first()).toBeVisible();
     expect(api.callsTo('GET', '/checkout/guest/orders/:code/bank-qr')[0]!.headers['x-order-key']).toBe(orders.key());
     expect(api.callsTo('GET', '/payments/bank-qr/:code')).toHaveLength(0);
+  });
+
+  test('ô nhận hành trình đơn qua Zalo (PO A2): cổng mở cho mọi khách thì hiện với số khách gõ, vùng chạm 44px, không công tắc người nhận; tick rồi đặt gửi orderZaloConsent: true', async ({ page, api, request }, testInfo) => {
+    const d = await inStockProduct(request);
+    test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
+    test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
+    const mobile = testInfo.project.name === 'Web Customer Mobile';
+    const width = mobile ? 390 : 1440;
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+    mockShop(api, d!, true, { orderZaloEnabled: true, orderZaloGuest: true, orderZaloPrechecked: false, tubuZaloPhone: '0899149229' });
+    mockGuestOrders(api, d!);
+    await seedGuestCart(page, d!, 1);
+
+    await page.goto('/thanh-toan');
+    await expect(page.getByTestId('guest-checkout')).toBeVisible({ timeout: 15_000 });
+    const box = page.getByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ });
+    await expect(box).toHaveCount(0);
+    await fillContactAndAddress(page, tapCounter(page));
+    const row = page.locator('label').filter({ has: box });
+    await expect(row).toContainText('Số nhận: 091•••5678');
+    await expect(box).not.toBeChecked();
+    expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await expect(page.getByTestId('order-zalo-recipient')).toHaveCount(0);
+    if (mobile) await shoot(page, SHOTS_DIR, 'after-order-zalo-390');
+    await row.click();
+    await expect(box).toBeChecked();
+
+    const place = visible(page, 'guest-place-order');
+    await expect(place).toBeEnabled({ timeout: 15_000 });
+    await setServerGuestCheckout(request, true);
+    await place.click();
+    await page.waitForURL(new RegExp(`/don/${CODE}#k=[A-Za-z0-9_-]{43}$`), { timeout: 20_000 });
+    const body = api.callsTo('POST', '/checkout/guest/orders')[0]!.body as Record<string, unknown>;
+    expect(body.orderZaloConsent).toBe(true);
+    expect(body).not.toHaveProperty('notifyRecipientZalo');
   });
 
   test('/don: sai khoá, thiếu khoá và sai mã cùng một câu không tìm thấy', async ({ page, api, request }, testInfo) => {

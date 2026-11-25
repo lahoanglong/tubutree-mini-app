@@ -1956,7 +1956,7 @@ describe('ORDER_LIST_SELECT', () => {
     // Cột đơn khách vãng lai trên web (SĐT chưa xác minh, băm khoá theo dõi, băm IP) chỉ luồng checkout/guest và chi tiết đơn admin đọc.
     // Số tin MSS đã nhắc chuyển khoản và lúc nhắc gần nhất là số liệu vận hành của admin, danh sách đơn của khách không đọc.
     // Mã link CTV của đơn chỉ phần ghi số đơn/doanh số theo link (affiliate-link-stats) đọc: không trả cho khách mã link của CTV.
-    const notListed = new Set(['shippingHistory', 'invoiceRequest', 'mssEventSeq', 'orderZaloConsent', 'orderZaloConsentAt', 'orderZaloConsentSource', 'guestPhone', 'guestTokenHash', 'guestIpHash', 'placedIpHash', 'flashLimitKeys', 'paymentRemindersSent', 'paymentLastRemindedAt', 'affiliateLinkCode']);
+    const notListed = new Set(['shippingHistory', 'invoiceRequest', 'mssEventSeq', 'orderZaloConsent', 'orderZaloConsentAt', 'orderZaloConsentSource', 'notifyRecipientZalo', 'guestPhone', 'guestTokenHash', 'guestIpHash', 'placedIpHash', 'flashLimitKeys', 'paymentRemindersSent', 'paymentLastRemindedAt', 'affiliateLinkCode']);
     const expected = Object.keys(Prisma.OrderScalarFieldEnum).filter((k) => !notListed.has(k));
     expect(Object.keys(ORDER_LIST_SELECT).sort()).toEqual([...expected, 'items'].sort());
   });

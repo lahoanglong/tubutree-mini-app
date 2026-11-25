@@ -58,7 +58,8 @@ export class MssZnsHoldService implements MssZnsHoldPort {
     const eventType = mssEventTypeForZns(templateCode, data);
     const code = data.order_code;
     if (!eventType || !code || !(await this.flags.isEnabled('orderEvents'))) return false;
-    const pick = await this.prisma.mssOrderEventOutbox.findFirst({ where: { order: { code, userId }, eventType }, select: HOLD_SELECT });
+    // ZNS chỉ gửi người mua: dòng người nhận (cùng đơn, cùng loại) không được giữ hay nuốt tin ZNS của người mua.
+    const pick = await this.prisma.mssOrderEventOutbox.findFirst({ where: { order: { code, userId }, eventType, recipientRole: 'buyer' }, select: HOLD_SELECT });
     if (!pick) return false;
 
     let row = pick;

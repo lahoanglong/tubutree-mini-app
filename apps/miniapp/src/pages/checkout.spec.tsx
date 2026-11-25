@@ -3967,14 +3967,27 @@ describe('CheckoutPage — ô nhận hành trình đơn qua Zalo (wave tubu-mss-
     expect(await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('không có số đã xác minh: không hiện ô, không gửi trường', async () => {
+  it('tài khoản chưa có số và địa chỉ không có số đọc được: không hiện ô, không gửi trường', async () => {
     mocks.publicConfig.orderZaloEnabled = true;
     mocks.coreGet.mockResolvedValue({ ...STATUS, phoneMasked: null });
+    mocks.getAddresses.mockResolvedValue([{ ...ADDRESS, phone: '12345' }]);
     renderPage();
     await waitFor(() => expect(mocks.coreGet).toHaveBeenCalled());
     const body = await placeOrderClick();
     expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
     expect('orderZaloConsent' in body).toBe(false);
+  });
+
+  it('tài khoản chưa có số (PO A2): ô dùng số nhận hàng của địa chỉ đang chọn, không có công tắc người nhận', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    mocks.coreGet.mockResolvedValue({ ...STATUS, phoneMasked: null, buyerPhone: null, recipientEnabled: true });
+    renderPage();
+    const row = await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ });
+    expect(row).toHaveTextContent('Số nhận: 091•••1111');
+    fireEvent.click(row);
+    expect(screen.queryByTestId('order-zalo-recipient')).toBeNull();
+    const body = await placeOrderClick();
+    expect(body.orderZaloConsent).toBe(true);
   });
 
   it('lỗi tải trạng thái Zalo: vẫn đặt được hàng, không gửi trường (máy chủ dùng lựa chọn đã nhớ)', async () => {
@@ -4002,6 +4015,102 @@ describe('CheckoutPage — ô nhận hành trình đơn qua Zalo (wave tubu-mss-
     expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
     await act(async () => answer({ ...STATUS, choice: false }));
     expect(await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toHaveAttribute('aria-checked', 'false');
+  });
+});
+
+describe('CheckoutPage — công tắc tin giao hàng cho người nhận (PO A1)', () => {
+  const STATUS = {
+    enabled: true, prechecked: false, choice: null, phoneMasked: '090•••4567', buyerPhone: '0901234567', phoneSource: 'account_verified',
+    recipientEnabled: true, tubuZaloPhone: '0899149229',
+  };
+  const GIFT2 = { ...ADDRESS, id: 'a2', recipient: 'Bình', phone: '0987654321', isDefault: false };
+  const SELF = { ...ADDRESS, id: 'a3', recipient: 'Chính tôi', phone: '+84 901 234 567', isDefault: false };
+  const consentRow = () => screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ });
+  const toggleRow = () => within(screen.getByTestId('order-zalo-recipient')).getByRole('checkbox');
+  const switchTo = async (name: RegExp) => {
+    fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
+    fireEvent.click(await screen.findByRole('radio', { name }));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.publicConfig.waste.pickup = false;
+    mocks.publicConfig.orderZaloEnabled = true;
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.user.phone = '0901234567';
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS, GIFT2, SELF]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.coreGet.mockResolvedValue(STATUS);
+  });
+  afterEach(() => {
+    mocks.publicConfig.orderZaloEnabled = false;
+  });
+
+  it('số nhận hàng khác số tài khoản: tick ô đồng ý mới hiện lời báo + công tắc, mặc định TẮT, hàng chạm 44px (touch-target); đặt luôn không gửi notifyRecipientZalo', async () => {
+    renderPage();
+    const row = await consentRow();
+    expect(screen.queryByTestId('order-zalo-recipient')).toBeNull();
+    fireEvent.click(row);
+    const block = screen.getByTestId('order-zalo-recipient');
+    expect(block).toHaveTextContent('Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.');
+    expect(block).toHaveTextContent('Gửi thêm thông báo giao hàng (không kèm giá) cho số người nhận');
+    expect(toggleRow()).toHaveAttribute('aria-checked', 'false');
+    expect(toggleRow()).toHaveClass('touch-target');
+    const body = await placeOrderClick();
+    expect(body.orderZaloConsent).toBe(true);
+    expect('notifyRecipientZalo' in body).toBe(false);
+  });
+
+  it('bật công tắc (chạm hoặc phím Space): thân đơn có notifyRecipientZalo: true', async () => {
+    renderPage();
+    fireEvent.click(await consentRow());
+    fireEvent.keyDown(toggleRow(), { key: ' ' });
+    expect(toggleRow()).toHaveAttribute('aria-checked', 'true');
+    const body = await placeOrderClick();
+    expect(body).toMatchObject({ orderZaloConsent: true, notifyRecipientZalo: true });
+  });
+
+  it('bỏ tick ô đồng ý: công tắc ẩn và tự tắt; tick lại vẫn TẮT', async () => {
+    renderPage();
+    const row = await consentRow();
+    fireEvent.click(row);
+    fireEvent.click(toggleRow());
+    fireEvent.click(row);
+    expect(screen.queryByTestId('order-zalo-recipient')).toBeNull();
+    fireEvent.click(row);
+    expect(toggleRow()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('đổi địa chỉ: công tắc về TẮT; địa chỉ trùng số tài khoản (dạng +84) thì không còn công tắc, không gửi notifyRecipientZalo', async () => {
+    renderPage();
+    fireEvent.click(await consentRow());
+    fireEvent.click(toggleRow());
+    await switchTo(/Bình/);
+    await waitFor(() => expect(screen.getByTestId('checkout-address-row')).toHaveTextContent('Bình'));
+    expect(toggleRow()).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggleRow());
+    await switchTo(/Chính tôi/);
+    await waitFor(() => expect(screen.getByTestId('checkout-address-row')).toHaveTextContent('Chính tôi'));
+    expect(screen.queryByTestId('order-zalo-recipient')).toBeNull();
+    const body = await placeOrderClick();
+    expect(body).toMatchObject({ addressId: 'a3', orderZaloConsent: true });
+    expect('notifyRecipientZalo' in body).toBe(false);
+  });
+
+  it('cờ người nhận tắt: không có công tắc', async () => {
+    mocks.coreGet.mockResolvedValue({ ...STATUS, recipientEnabled: false });
+    renderPage();
+    fireEvent.click(await consentRow());
+    expect(screen.queryByTestId('order-zalo-recipient')).toBeNull();
   });
 });
 

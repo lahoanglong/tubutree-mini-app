@@ -142,6 +142,12 @@ export class PlaceOrderDto extends CheckoutPickupFieldsDto {
    * khách; bỏ trống (client cũ) thì dùng lựa chọn đã nhớ. Chỉ có tác dụng khi cờ `mss.order_events_enabled` bật.
    */
   @IsOptional() @IsBoolean() orderZaloConsent?: boolean;
+
+  /**
+   * PO A1: số nhận hàng khác số người mua, khách bật "gửi thêm thông báo giao hàng (không kèm giá) cho số người nhận". Chỉ ghi lên đơn khi
+   * cùng lần đặt có `orderZaloConsent === true`; bộ ghi sự kiện còn xét cờ `mss.order_recipient_enabled` và số lúc từng sự kiện.
+   */
+  @IsOptional() @IsBoolean() notifyRecipientZalo?: boolean;
 }
 
 /** `GET /checkout/pickup-options?addressId=&itemIds=a,b`: cùng địa chỉ và phần giỏ đang thanh toán như báo giá. */

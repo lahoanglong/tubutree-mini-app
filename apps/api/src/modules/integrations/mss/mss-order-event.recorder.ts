@@ -1,17 +1,21 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { isRealUser } from '../../../common/real-user';
 import { MssFlagsService } from './mss-flags';
 import { MssHealthService } from './mss-health.service';
 import { MssClient } from './mss.client';
 import { buildMssEventBody, greetingName, MssEventBodyError, newEventId } from './mss-order-event-body';
 import { MSS_FIRST_JOB_DELAY_MS, MssOrderEventDispatcher } from './mss-order-event.dispatch';
 import {
+  buyerPhoneOf,
   inRollout,
   MSS_EVENT_TTL_MS,
-  normalizeVnPhone,
+  MSS_RECIPIENT_EVENT_TYPES,
   ORDER_ZALO_CONSENT_TEXT_VERSION,
+  recipientPhoneFor,
   type MssCancelReason,
   type MssOrderEventType,
+  type MssPhoneSource,
   type OrderZaloConsentSource,
 } from './mss-order-event-types';
 
@@ -33,10 +37,12 @@ export interface MssOrderEventGate {
   /** Thêm điều kiện MSS đã công bố năng lực `order_events`: được ghi sự kiện mới. */
   open: boolean;
   rolloutPct: number;
+  /** Thêm `open`, cờ `mss.order_recipient_enabled` bật và MSS công bố `order_events.recipient_role`: được ghi dòng người nhận (PO A1). */
+  recipient: boolean;
   at: number;
 }
 
-const CLOSED_GATE: MssOrderEventGate = { enabled: false, open: false, rolloutPct: 0, at: 0 };
+const CLOSED_GATE: MssOrderEventGate = { enabled: false, open: false, rolloutPct: 0, recipient: false, at: 0 };
 
 export type MssRecordSkip =
   | 'gate_closed'
@@ -47,8 +53,7 @@ export type MssRecordSkip =
   | 'dealer_order'
   | 'no_consent'
   | 'rollout'
-  | 'no_verified_phone'
-  | 'gift_recipient'
+  | 'no_phone'
   | 'cod_payment'
   | 'payment_timeout_unnotified'
   | 'duplicate'
@@ -58,6 +63,29 @@ export interface MssRecordExtra {
   cancelReason?: MssCancelReason;
   refundExpected?: boolean;
 }
+
+const RECORD_SELECT = {
+  id: true,
+  code: true,
+  type: true,
+  userId: true,
+  platform: true,
+  paymentMethod: true,
+  total: true,
+  placedForCustomer: true,
+  orderZaloConsent: true,
+  orderZaloConsentAt: true,
+  shippingPartner: true,
+  shippingCode: true,
+  checkoutGroup: true,
+  shippingAddress: true,
+  notifyRecipientZalo: true,
+  guestPhone: true,
+  createdAt: true,
+  items: { select: { productName: true }, orderBy: { id: 'asc' } },
+  user: { select: { phone: true, zaloId: true, phoneVerifiedAt: true, fullName: true, notifyOrderZalo: true, notifyOrderZaloSource: true } },
+} as const satisfies Prisma.OrderSelect;
+type RecordedOrder = Omit<Prisma.OrderGetPayload<{ select: typeof RECORD_SELECT }>, 'platform'> & { platform: 'web' | 'miniapp' };
 
 interface PlacedOrderLike {
   id: string;
@@ -110,9 +138,15 @@ export class MssOrderEventRecorder implements OnModuleInit {
 
   private async loadGate(): Promise<MssOrderEventGate> {
     // assertCapability gọi cả khi cờ coi như tắt: nó là chỗ báo Ops khi admin bật cờ mà thiếu biến MSS_* hay MSS thiếu năng lực.
-    const [enabled, capable, snap] = await Promise.all([this.flags.isEnabled('orderEvents'), this.health.assertCapability('orderEvents'), this.flags.snapshot()]);
+    const [enabled, capable, snap, recipientOn, recipientCapable] = await Promise.all([
+      this.flags.isEnabled('orderEvents'),
+      this.health.assertCapability('orderEvents'),
+      this.flags.snapshot(),
+      this.flags.isEnabled('orderRecipient'),
+      this.health.assertCapability('orderRecipient'),
+    ]);
     if (!enabled) return { ...CLOSED_GATE, at: Date.now() };
-    return { enabled, open: capable, rolloutPct: snap.orderEventsRolloutPct, at: Date.now() };
+    return { enabled, open: capable, rolloutPct: snap.orderEventsRolloutPct, recipient: capable && recipientOn && recipientCapable, at: Date.now() };
   }
 
   /**
@@ -189,32 +223,15 @@ export class MssOrderEventRecorder implements OnModuleInit {
     }
   }
 
-  /** Ghi một dòng outbox. Trả lý do bỏ qua, hoặc null khi đã ghi. */
+  /**
+   * Ghi dòng outbox của người mua, và với tin giao hàng thêm dòng người nhận khi khách đã bật (PO A1). Trả lý do bỏ qua của dòng người mua,
+   * hoặc null khi đã ghi; dòng người nhận bị bỏ (cờ tắt, cùng số, số hỏng) chỉ ghi log.
+   */
   async record(tx: Prisma.TransactionClient, orderId: string, eventType: MssOrderEventType, extra: MssRecordExtra = {}): Promise<MssRecordSkip | null> {
     const gate = await this.readyGate();
     if (!gate.open) return 'gate_closed';
     if (this.client.circuit.isTripped()) return 'circuit_open';
-    const order = await tx.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        code: true,
-        type: true,
-        userId: true,
-        platform: true,
-        paymentMethod: true,
-        total: true,
-        placedForCustomer: true,
-        orderZaloConsent: true,
-        orderZaloConsentAt: true,
-        shippingPartner: true,
-        shippingCode: true,
-        checkoutGroup: true,
-        shippingAddress: true,
-        items: { select: { productName: true }, orderBy: { id: 'asc' } },
-        user: { select: { phone: true, phoneVerifiedAt: true, fullName: true, notifyOrderZalo: true, notifyOrderZaloSource: true } },
-      },
-    });
+    const order = await tx.order.findUnique({ where: { id: orderId }, select: RECORD_SELECT });
     const skip = (why: MssRecordSkip): MssRecordSkip => {
       this.logger.debug(`mss_order_event_skipped ${eventType} order=${order?.code ?? orderId} reason=${why}`);
       return why;
@@ -225,17 +242,45 @@ export class MssOrderEventRecorder implements OnModuleInit {
     if (order.type !== 'RETAIL') return skip('dealer_order');
     if (order.orderZaloConsent !== true || order.user.notifyOrderZalo !== true) return skip('no_consent');
     if (!inRollout(order.userId, gate.rolloutPct)) return skip('rollout');
-    const phone = order.user.phoneVerifiedAt ? normalizeVnPhone(order.user.phone) : null;
-    if (!phone) return skip('no_verified_phone');
-    // Hợp đồng chỉ nhắn chủ tài khoản về đơn của chính họ: hàng giao cho số khác (đơn tặng, đặt cho người nhà) không phát.
-    if (normalizeVnPhone(recipientPhoneOf(order.shippingAddress)) !== phone) return skip('gift_recipient');
+    const buyer = buyerPhoneOf({ user: order.user, guestPhone: order.guestPhone, shippingAddress: order.shippingAddress });
+    if (!buyer) return skip('no_phone');
     if (eventType === 'order.payment_confirmed' && order.paymentMethod === 'COD') return skip('cod_payment');
 
-    const existing = await tx.mssOrderEventOutbox.findUnique({ where: { orderId_eventType: { orderId, eventType } }, select: { id: true } });
-    if (existing) return skip('duplicate');
-    if (eventType === 'order.cancelled' && extra.cancelReason === 'PAYMENT_TIMEOUT') {
-      const notified = await tx.mssOrderEventOutbox.count({ where: { orderId, status: 'RESULT_SENT' } });
-      if (notified === 0) return skip('payment_timeout_unnotified');
+    const placed: RecordedOrder = { ...order, platform: order.platform };
+    const bought = await this.writeRow(tx, placed, eventType, { role: 'buyer', phone: buyer.phone, source: buyer.source, name: greetingName(order.user.fullName) }, extra);
+    if (bought !== null && bought !== 'duplicate') return skip(bought);
+    if (MSS_RECIPIENT_EVENT_TYPES.includes(eventType)) await this.recordRecipient(tx, placed, eventType, buyer.phone, gate);
+    return bought === null ? null : skip(bought);
+  }
+
+  /** Dòng người nhận của tin giao hàng (PO A1): không kèm giá, nguồn số `checkout_contact`. Lý do bỏ qua chỉ ghi log. */
+  private async recordRecipient(tx: Prisma.TransactionClient, order: RecordedOrder, eventType: MssOrderEventType, buyerPhone: string, gate: MssOrderEventGate): Promise<void> {
+    const note = (why: string) => this.logger.debug(`mss_order_event_recipient_skipped ${eventType} order=${order.code} reason=${why}`);
+    if (!order.notifyRecipientZalo) return;
+    if (!gate.recipient) return note('recipient_off');
+    const to = recipientPhoneFor(order, buyerPhone);
+    if (!to) return note('same_or_invalid_phone');
+    const why = await this.writeRow(tx, order, eventType, { role: 'recipient', phone: to, source: 'checkout_contact', name: null }, {});
+    if (why) note(why);
+  }
+
+  private async writeRow(
+    tx: Prisma.TransactionClient,
+    order: RecordedOrder,
+    eventType: MssOrderEventType,
+    to: { role: 'buyer' | 'recipient'; phone: string; source: MssPhoneSource; name: string | null },
+    extra: MssRecordExtra,
+  ): Promise<'duplicate' | 'payment_timeout_unnotified' | 'not_found' | 'body_invalid' | null> {
+    const orderId = order.id;
+    const existing = await tx.mssOrderEventOutbox.findUnique({
+      where: { orderId_eventType_recipientRole: { orderId, eventType, recipientRole: to.role } },
+      select: { id: true },
+    });
+    if (existing) return 'duplicate';
+    if (to.role === 'buyer' && eventType === 'order.cancelled' && extra.cancelReason === 'PAYMENT_TIMEOUT') {
+      // Chỉ tin đã tới chính người mua mới tính "đã báo": tin giao hàng gửi người nhận không làm đơn hết hạn thanh toán thành có tin huỷ.
+      const notified = await tx.mssOrderEventOutbox.count({ where: { orderId, status: 'RESULT_SENT', recipientRole: 'buyer' } });
+      if (notified === 0) return 'payment_timeout_unnotified';
     }
 
     const groupSize =
@@ -246,7 +291,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
     const eventId = newEventId(occurredAt.getTime());
     const seqRows = await tx.$queryRaw<{ seq: number }[]>`UPDATE "orders" SET "mssEventSeq" = "mssEventSeq" + 1 WHERE "id" = ${orderId} RETURNING "mssEventSeq" AS seq`;
     const seq = seqRows[0]?.seq;
-    if (seq === undefined) return skip('not_found');
+    if (seq === undefined) return 'not_found';
 
     let body: { json: string; sha256: string };
     try {
@@ -268,17 +313,18 @@ export class MssOrderEventRecorder implements OnModuleInit {
         },
         cancelReason: extra.cancelReason,
         refundExpected: extra.refundExpected,
-        recipient: { phone, phoneSource: 'account_verified', name: greetingName(order.user.fullName) },
-        consent: {
-          capturedAt: order.orderZaloConsentAt ?? occurredAt,
-          source: order.user.notifyOrderZaloSource === 'account_settings' ? 'account_settings' : 'checkout',
-        },
-        linkOrigin: MSS_ORDER_LINK_ORIGIN,
+        recipient: to.role === 'recipient' ? { phone: to.phone, phoneSource: to.source, role: 'recipient' } : { phone: to.phone, phoneSource: to.source, name: to.name },
+        consent:
+          to.role === 'recipient'
+            ? { capturedAt: order.createdAt, source: 'checkout' }
+            : { capturedAt: order.orderZaloConsentAt ?? occurredAt, source: order.user.notifyOrderZaloSource === 'account_settings' ? 'account_settings' : 'checkout' },
+        // Link trỏ trang đơn trong tài khoản: khách vãng lai không có tài khoản để đăng nhập nên bỏ link (khoá theo dõi /don chỉ nằm ở máy khách).
+        linkOrigin: isRealUser(order.user) ? MSS_ORDER_LINK_ORIGIN : null,
       });
     } catch (err) {
       if (!(err instanceof MssEventBodyError)) throw err;
-      this.logger.warn(`Bỏ sự kiện MSS ${eventType} của đơn ${order.code}: ${err.message}`);
-      return skip('body_invalid');
+      this.logger.warn(`Bỏ sự kiện MSS ${eventType} (${to.role}) của đơn ${order.code}: ${err.message}`);
+      return 'body_invalid';
     }
 
     const inserted = await tx.mssOrderEventOutbox.createMany({
@@ -295,12 +341,13 @@ export class MssOrderEventRecorder implements OnModuleInit {
           status: 'PENDING',
           nextAttemptAt: occurredAt,
           expiresAt: new Date(occurredAt.getTime() + MSS_EVENT_TTL_MS[eventType]),
+          recipientRole: to.role,
         },
       ],
       skipDuplicates: true,
     });
-    if (inserted.count === 0) return skip('duplicate');
-    this.logger.log(`mss_order_event_recorded ${eventType} order=${order.code} event=${eventId} seq=${seq}`);
+    if (inserted.count === 0) return 'duplicate';
+    this.logger.log(`mss_order_event_recorded ${eventType} order=${order.code} event=${eventId} seq=${seq} role=${to.role}`);
     this.dispatcher.enqueue(eventId, 0, MSS_FIRST_JOB_DELAY_MS);
     return null;
   }
@@ -327,8 +374,3 @@ async function settleWithin(p: Promise<unknown>, ms: number): Promise<void> {
   }
 }
 
-function recipientPhoneOf(address: Prisma.JsonValue): string | null {
-  if (!address || typeof address !== 'object' || Array.isArray(address)) return null;
-  const phone = (address as Record<string, unknown>).phone;
-  return typeof phone === 'string' ? phone : null;
-}

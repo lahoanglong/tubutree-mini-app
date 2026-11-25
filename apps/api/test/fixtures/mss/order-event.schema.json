@@ -36,7 +36,8 @@
       "properties": {
         "phone": { "type": "string", "pattern": "^(0\\d{9}|\\+84\\d{9})$" },
         "phone_source": { "enum": ["account_verified", "checkout_contact"] },
-        "name": { "type": "string", "minLength": 1, "maxLength": 30 }
+        "name": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "role": { "enum": ["buyer", "recipient"] }
       }
     },
     "consent": {

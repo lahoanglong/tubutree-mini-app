@@ -1242,6 +1242,9 @@ model Order {
   orderZaloConsentAt     DateTime?
   /// Nguồn đồng ý của đơn: 'order_detail' khi khách bật ở chi tiết đơn; 'gate_closed' khi cổng MSS đóng lúc đặt (không hỏi, orderZaloConsent null); null = lúc đặt hàng hoặc đơn cũ.
   orderZaloConsentSource String?
+  /// A1 (w35-01): khách bật ở bước đặt hàng "gửi thêm thông báo giao hàng (không kèm giá) cho số người nhận". Chỉ true khi cùng lần đặt có
+  /// đồng ý nhận tin Zalo. Bộ ghi sự kiện xét lại lúc từng sự kiện (cờ `mss.order_recipient_enabled`, năng lực MSS, số nhận khác số người mua).
+  notifyRecipientZalo    Boolean               @default(false)
   mssOrderEvents         MssOrderEventOutbox[]
   paidAt              DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
@@ -1421,8 +1424,10 @@ model MssOrderEventOutbox {
   fallbackAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  /// buyer | recipient. `recipient` chỉ có ở order.shipping và order.delivered, gửi tới số nhận hàng, không kèm giá (w35-01, PO A1).
+  recipientRole   String    @default("buyer")
 
-  @@unique([orderId, eventType])
+  @@unique([orderId, eventType, recipientRole])
   @@index([status, nextAttemptAt])
   @@index([createdAt])
   @@map("mss_order_event_outbox")
