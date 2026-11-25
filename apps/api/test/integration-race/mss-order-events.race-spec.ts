@@ -10,6 +10,8 @@ import { MssOrderEventSender } from '../../src/modules/integrations/mss/mss-orde
 import { MssOrderEventReconcileService } from '../../src/modules/integrations/mss/mss-order-events.reconcile';
 import { MssZnsHoldService } from '../../src/modules/integrations/mss/mss-zns-hold';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
+import type { ConfigService } from '@nestjs/config';
+import type { Env } from '../../src/config/env.validation';
 import { createOrder, createUser, deleteItData, randCode, uniquePhone, warmPool } from './helpers';
 
 /**
@@ -41,6 +43,8 @@ describe('MSS order events (real Postgres)', () => {
     snapshot: async () => ({ orderEventsRolloutPct: 100 }),
   } as unknown as MssFlagsService;
   const health = { assertCapability: async () => true } as unknown as MssHealthService;
+  /** Bí mật ký link khách vãng lai (`JWT_ACCESS_SECRET`) của bộ ghi sự kiện. */
+  const ENV = { get: (k: string) => (k === 'JWT_ACCESS_SECRET' ? 'it-secret-mss-order-events' : undefined) } as unknown as ConfigService<Env, true>;
 
   type FetchReply = { status: number; body?: unknown; delayMs?: number };
   let replies: FetchReply[] = [];
@@ -86,8 +90,8 @@ describe('MSS order events (real Postgres)', () => {
 
     client = new MssClient(() => env, fetchFake as never);
     const circuitClient = { circuit: { isTripped: () => false } } as unknown as MssClient;
-    recorder = new MssOrderEventRecorder(flagsOn, health, circuitClient, dispatcher);
-    recorderOff = new MssOrderEventRecorder(flagsOff, health, circuitClient, dispatcher);
+    recorder = new MssOrderEventRecorder(flagsOn, health, circuitClient, dispatcher, ENV);
+    recorderOff = new MssOrderEventRecorder(flagsOff, health, circuitClient, dispatcher, ENV);
     await recorder.refreshGate();
     await recorderOff.refreshGate();
     fallback = new MssOrderEventFallback(prisma, notifications);
@@ -316,7 +320,7 @@ describe('MSS order events (real Postgres)', () => {
       },
     } as unknown as MssFlagsService;
     const { user, order } = await consentedOrder({ orderZaloConsent: null });
-    const cold = new MssOrderEventRecorder(slowFlags, health, { circuit: { isTripped: () => false } } as unknown as MssClient, dispatcher);
+    const cold = new MssOrderEventRecorder(slowFlags, health, { circuit: { isTripped: () => false } } as unknown as MssClient, dispatcher, ENV);
     cold.onModuleInit();
     expect(cold.gate()).toMatchObject({ enabled: false, open: false, at: 0 });
     await prisma.$transaction((tx) => cold.onOrdersPlaced(tx, [{ id: order.id, userId: user.id, paymentStatus: 'UNPAID', paymentMethod: 'COD' }], true));
@@ -385,8 +389,8 @@ describe('MSS order events (real Postgres)', () => {
     const hangingQueue = { add: () => new Promise(() => undefined) };
     const realDispatcher = new MssOrderEventDispatcher(hangingQueue as never);
     const hangingClient = new MssClient(() => env, (() => new Promise(() => undefined)) as never);
-    const on = new MssOrderEventRecorder(flagsOn, health, hangingClient, realDispatcher);
-    const off = new MssOrderEventRecorder(flagsOff, health, hangingClient, realDispatcher);
+    const on = new MssOrderEventRecorder(flagsOn, health, hangingClient, realDispatcher, ENV);
+    const off = new MssOrderEventRecorder(flagsOff, health, hangingClient, realDispatcher, ENV);
     await on.refreshGate();
     await off.refreshGate();
     const place = async (r: MssOrderEventRecorder) => {
@@ -545,8 +549,8 @@ describe('MSS order events (real Postgres)', () => {
     };
 
     beforeAll(async () => {
-      recorderFlagOff = new MssOrderEventRecorder(flagsNoRecipient, health, circuitClient, dispatcher);
-      recorderNoCap = new MssOrderEventRecorder(flagsOn, healthNoRecipientCap, circuitClient, dispatcher);
+      recorderFlagOff = new MssOrderEventRecorder(flagsNoRecipient, health, circuitClient, dispatcher, ENV);
+      recorderNoCap = new MssOrderEventRecorder(flagsOn, healthNoRecipientCap, circuitClient, dispatcher, ENV);
       await Promise.all([recorderFlagOff.refreshGate(), recorderNoCap.refreshGate()]);
       expect(recorder.gate().recipient).toBe(true);
       expect(recorderFlagOff.gate()).toMatchObject({ open: true, recipient: false });
@@ -692,6 +696,104 @@ describe('MSS order events (real Postgres)', () => {
       await prisma.mssOrderEventOutbox.updateMany({ where: { orderId: order.id, recipientRole: 'recipient' }, data: { status: 'RESULT_SENT', resultAt: new Date() } });
       await prisma.mssOrderEventOutbox.updateMany({ where: { orderId: order.id, recipientRole: 'buyer' }, data: { status: 'RESULT_FAILED', resultAt: new Date() } });
       expect(await prisma.$transaction((tx) => recorder.record(tx, order.id, 'order.cancelled', { cancelReason: 'PAYMENT_TIMEOUT' }))).toBe('payment_timeout_unnotified');
+    });
+  });
+
+  describe('(14) w37-01: bill + link xem đơn (năng lực order_events.bill_v1)', () => {
+    const flagsNoBill = { ...flagsOn, isEnabled: async (f: string) => f !== 'orderBill' } as unknown as MssFlagsService;
+    const healthNoBillCap = { assertCapability: async (f: string) => f !== 'orderBill' } as unknown as MssHealthService;
+    const circuitClient = { circuit: { isTripped: () => false } } as unknown as MssClient;
+    let recorderNoBill: MssOrderEventRecorder;
+    let recorderNoBillCap: MssOrderEventRecorder;
+    const BILL_KEYS = ['detail_url', 'items', 'items_more', 'subtotal_vnd', 'discount_vnd', 'shipping_fee_vnd'];
+    const bodyOf = (row: { body: string }) => JSON.parse(row.body) as { order: Record<string, unknown>; recipient: Record<string, unknown> };
+
+    beforeAll(async () => {
+      recorderNoBill = new MssOrderEventRecorder(flagsNoBill, health, circuitClient, dispatcher, ENV);
+      recorderNoBillCap = new MssOrderEventRecorder(flagsOn, healthNoBillCap, circuitClient, dispatcher, ENV);
+      await Promise.all([recorderNoBill.refreshGate(), recorderNoBillCap.refreshGate()]);
+      expect(recorder.gate().bill).toBe(true);
+      expect(recorderNoBill.gate()).toMatchObject({ open: true, bill: false });
+      expect(recorderNoBillCap.gate()).toMatchObject({ open: true, bill: false });
+    });
+
+    /** Đơn 16 món (tên tiếng Việt dài), tiền khớp tổng: 16 × 100.000 − 50.000 + 20.000. */
+    async function sixteenItems(over: Parameters<typeof consentedOrder>[0] = {}) {
+      const { user, order } = await consentedOrder(over);
+      await prisma.orderItem.createMany({
+        data: Array.from({ length: 15 }, (_, i) => ({
+          orderId: order.id,
+          variationId,
+          productName: `Nước giặt sinh học hương sả chanh dịu nhẹ số ${i + 2} Fuwa3e`,
+          variationName: i % 2 ? 'Can 3,8L' : '',
+          unitPrice: 100_000,
+          quantity: 1,
+          total: 100_000,
+          isGift: i === 14,
+        })),
+      });
+      const updated = await prisma.order.update({ where: { id: order.id }, data: { subtotal: 1_600_000, discount: 50_000, shippingFee: 20_000, total: 1_570_000 } });
+      return { user, order: updated };
+    }
+
+    it('cờ + năng lực bật: created/payment_confirmed của người mua có 15 món đầu (theo OrderItem.id), items_more 1, tiền, link; thân ≤ 6.144 B; dòng người nhận không có gì của bill', async () => {
+      const giftPhone = uniquePhone('08');
+      const { order } = await sixteenItems({ giftPhone, notifyRecipientZalo: true, paymentMethod: 'BANK_TRANSFER' });
+      for (const t of ['order.created', 'order.payment_confirmed', 'order.shipping', 'order.delivered'] as const) expect(await recordIn(order.id, t)).toBeNull();
+      const firstFifteen = (await prisma.orderItem.findMany({ where: { orderId: order.id }, orderBy: { id: 'asc' }, select: { productName: true } })).slice(0, 15);
+      const rows = await rowsOf(order.id);
+      for (const row of rows) {
+        const o = bodyOf(row).order;
+        expect(Buffer.byteLength(row.body, 'utf8')).toBeLessThanOrEqual(6_144);
+        const billed = row.recipientRole === 'buyer' && (row.eventType === 'order.created' || row.eventType === 'order.payment_confirmed');
+        if (!billed) {
+          for (const k of BILL_KEYS) expect(o).not.toHaveProperty(k);
+          continue;
+        }
+        expect(o).toMatchObject({
+          item_count: 16,
+          items_more: 1,
+          subtotal_vnd: 1_600_000,
+          discount_vnd: 50_000,
+          shipping_fee_vnd: 20_000,
+          total_vnd: 1_570_000,
+          detail_url: `https://tubutree.com/tai-khoan/don-hang/${order.code}`,
+        });
+        const items = o.items as { name: string; variant?: string; gift?: boolean }[];
+        expect(items.map((i) => i.name)).toEqual(firstFifteen.map((i) => i.productName));
+        expect(items.filter((i) => i.gift)).toHaveLength(items.some((i) => i.name.includes('số 16')) ? 1 : 0);
+      }
+      const recipient = rows.filter((r) => r.recipientRole === 'recipient');
+      expect(recipient.map((r) => r.eventType)).toEqual(['order.shipping', 'order.delivered']);
+      for (const r of recipient) {
+        expect(bodyOf(r).order.total_vnd).toBe(0);
+        expect(r.body).not.toMatch(/tubutree\.com|Fuwa|1570000|100000|"items"|detail_url|subtotal_vnd/);
+      }
+    });
+
+    it('cờ bill tắt hoặc MSS chưa công bố bill_v1: thân người mua không có khoá bill nào (như w36)', async () => {
+      for (const r of [recorderNoBill, recorderNoBillCap]) {
+        const { order } = await sixteenItems();
+        expect(await recordIn(order.id, 'order.created', r)).toBeNull();
+        const [row] = await rowsOf(order.id);
+        for (const k of BILL_KEYS) expect(bodyOf(row!).order).not.toHaveProperty(k);
+      }
+    });
+
+    it('khách vãng lai web (có khoá đơn, chủ còn là khách): cổng bill mở thì tracking_url là /don/<mã>#k= đã ký; cổng bill đóng thì không link (như w36)', async () => {
+      const { order } = await consentedOrder({ guest: true });
+      await prisma.order.update({ where: { id: order.id }, data: { guestTokenHash: 'd'.repeat(64), platform: 'web' } });
+      expect(await recordIn(order.id, 'order.shipping')).toBeNull();
+      const url = bodyOf((await rowsOf(order.id))[0]!).order.tracking_url as string;
+      expect(url).toMatch(new RegExp(`^https://tubutree\\.com/don/${order.code}#k=[A-Za-z0-9_-]{43}$`));
+      expect(url).not.toContain(order.guestPhone!.slice(3));
+
+      const off = await consentedOrder({ guest: true });
+      await prisma.order.update({ where: { id: off.order.id }, data: { guestTokenHash: 'e'.repeat(64), platform: 'web' } });
+      expect(await recordIn(off.order.id, 'order.shipping', recorderNoBill)).toBeNull();
+      const [row] = await rowsOf(off.order.id);
+      expect(bodyOf(row!).order).not.toHaveProperty('tracking_url');
+      expect(row!.body).not.toContain('#k=');
     });
   });
 });

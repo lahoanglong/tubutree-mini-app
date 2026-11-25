@@ -17,7 +17,7 @@ const mount = () => {
 };
 
 const URL_PART = '/admin/ops/health';
-const FLAGS = ['catalogEnrichment', 'orderEvents', 'customerSync', 'orderPush', 'orderStatus', 'invoice', 'catalogShadow', 'stockSync', 'orderRecipient', 'cartAbandonedZalo'] as const;
+const FLAGS = ['catalogEnrichment', 'orderEvents', 'customerSync', 'orderPush', 'orderStatus', 'invoice', 'catalogShadow', 'stockSync', 'orderRecipient', 'cartAbandonedZalo', 'orderBill'] as const;
 const KEYS: Record<(typeof FLAGS)[number], string> = {
   catalogEnrichment: 'mss.catalog_enrichment_enabled',
   orderEvents: 'mss.order_events_enabled',
@@ -29,6 +29,7 @@ const KEYS: Record<(typeof FLAGS)[number], string> = {
   stockSync: 'mss.stock_sync_enabled',
   orderRecipient: 'mss.order_recipient_enabled',
   cartAbandonedZalo: 'mss.cart_abandoned_zalo_enabled',
+  orderBill: 'mss.order_bill_enabled',
 };
 const CAP: Record<(typeof FLAGS)[number], string> = {
   catalogEnrichment: 'catalog.enrichment',
@@ -41,6 +42,7 @@ const CAP: Record<(typeof FLAGS)[number], string> = {
   stockSync: 'catalog.source',
   orderRecipient: 'order_events.recipient_role',
   cartAbandonedZalo: 'cart.abandoned_zalo',
+  orderBill: 'order_events.bill_v1',
 };
 
 const offCard = (): MssOpsCard => ({
@@ -72,7 +74,7 @@ describe('MssConnectionCard', () => {
     expect(r.container.textContent).toBe('');
   });
 
-  it('mặc định PROD (thiếu biến, mọi cờ tắt): Chưa cấu hình, 4 biến Thiếu, khoá trước Không đặt, 10 cờ Tắt, cầu dao Đóng, không dò', async () => {
+  it('mặc định PROD (thiếu biến, mọi cờ tắt): Chưa cấu hình, 4 biến Thiếu, khoá trước Không đặt, 11 cờ Tắt, cầu dao Đóng, không dò', async () => {
     const m = stub(offCard());
     const r = mount();
     await flush(10);
@@ -89,7 +91,8 @@ describe('MssConnectionCard', () => {
       'MSS_INBOUND_SECRET_PREVKhông đặt',
     ]);
     const rows = flagRows(r);
-    expect(rows).toHaveLength(10);
+    expect(rows).toHaveLength(11);
+    expect(rows[10]!.textContent).toContain('Ảnh hoá đơn + link xem đơn (tin Zalo)');
     expect(rows.every((li) => li.textContent!.includes('Tắt'))).toBe(true);
     expect(text).toContain('Không dò (không cờ nào bật)');
     expect(text).toContain('Đóng');

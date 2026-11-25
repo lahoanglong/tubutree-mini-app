@@ -18,7 +18,7 @@ import { GUEST_ORDER_CLAIMED, type CodSwitchResultDTO, type GuestOrderLookupDTO,
 import { OrderCodSwitchService } from '../../orders/order-cod-switch.service';
 import { codSwitchEligible } from '../../orders/cod-switch';
 import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
-import { signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
+import { isLiveGuestOwner, signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
 import {
   GUEST_CLOSED_STATUSES,
   GUEST_DEVICE_DAILY_CAP,
@@ -357,16 +357,10 @@ export class GuestCheckoutService {
     return this.trackable(order);
   }
 
-  /**
-   * Đơn vãng lai đã rời tay khách vãng lai: về một tài khoản Zalo (nhận đơn ở `claim`, gộp hay nâng dòng khách khi đăng nhập trên trình duyệt đã
-   * đặt), kể cả tài khoản đó về sau bị xoá (xoá tài khoản đặt `zaloId`/`phone` về null nhưng không xoá `guestPhone`/`guestTokenHash` của đơn).
-   * Nên kiểm theo chiều ngược: chỉ dòng khách vãng lai còn sống (zaloId `guest_`, chưa gộp, chưa có SĐT xác minh) mới còn tra được bằng mã + SĐT.
-   */
+  /** Đơn vãng lai đã rời tay khách vãng lai (kiểm theo chiều ngược, xem `isLiveGuestOwner`): chỉ chủ còn sống mới tra được bằng mã + SĐT. */
   private async claimedByAccount(userId: string): Promise<boolean> {
     const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true, mergedIntoId: true } });
-    const liveGuest =
-      !!owner?.zaloId && owner.zaloId.startsWith('guest_') && !owner.zaloId.includes('_merged_') && owner.phone === null && owner.mergedIntoId === null;
-    return !liveGuest;
+    return !isLiveGuestOwner(owner);
   }
 
   /** Đơn đã xong (giao, huỷ, hoàn) quá GUEST_TRACK_TTL_DAYS thì 404 như sai mã (cùng câu với nơi gọi). */

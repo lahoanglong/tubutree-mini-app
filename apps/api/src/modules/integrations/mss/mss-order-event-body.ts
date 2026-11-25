@@ -16,6 +16,19 @@ const GROUP_CODE_MAX = 40;
 const CARRIER_MAX = 40;
 const TRACKING_CODE_MAX = 64;
 
+/** Bill (năng lực `order_events.bill_v1`): tối đa 15 món theo `OrderItem.id` tăng dần, phần còn lại báo bằng `items_more`. MSS nhận tới 30. */
+export const BILL_MAX_ITEMS = 15;
+export const BILL_ITEM_NAME_MAX = 60;
+export const BILL_VARIANT_MAX = 30;
+const BILL_QTY_MAX = 9_999;
+/** Link xem đơn tối đa (khớp `MSS_DETAIL_URL_MAX` của mss-order-link.ts; khai lại ở đây để file này không import gì của checkout). */
+const BILL_LINK_MAX = 120;
+/**
+ * Thân có bill phải nằm dưới ngưỡng này, còn dư 2 KB dưới trần 8 KB của cả hai bên: vượt thì bỏ món từ cuối (tăng `items_more`), hết món mà
+ * vẫn vượt thì bỏ hết khoá bill. Bill không bao giờ làm mất sự kiện.
+ */
+export const MSS_BILL_BODY_BUDGET_BYTES = 6_144;
+
 export class MssEventBodyError extends Error {
   constructor(message: string) {
     super(message);
@@ -38,7 +51,17 @@ export interface MssEventBodyInput {
     shippingCode?: string | null;
     checkoutGroup?: string | null;
     groupSize?: number | null;
+    /**
+     * Link xem đơn đã dựng sẵn (`orderDetailUrl`). Có thì `tracking_url` (và `detail_url` khi có bill) dùng đúng chuỗi này, sai gốc hoặc dài quá
+     * thì bỏ khoá link; vắng (undefined/null) thì `tracking_url` dựng đường dẫn tài khoản như v1.2.
+     */
+    linkUrl?: string | null;
   };
+  /**
+   * Hoá đơn cho MSS vẽ ảnh (năng lực `order_events.bill_v1`): chỉ có tác dụng ở `order.created`/`order.payment_confirmed` của người mua, loại khác
+   * bỏ qua. Dòng người nhận mà có bill là lỗi lập trình: ném MssEventBodyError.
+   */
+  bill?: MssBillInput | null;
   cancelReason?: MssCancelReason;
   refundExpected?: boolean;
   /**
@@ -51,9 +74,51 @@ export interface MssEventBodyInput {
   linkOrigin: string | null;
 }
 
+export interface MssBillItemInput {
+  name: string;
+  variant: string | null;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+  gift: boolean;
+}
+
+export interface MssBillInput {
+  subtotal: number;
+  discount: number;
+  shippingFee: number;
+  items: readonly MssBillItemInput[];
+}
+
 export interface MssEventBody {
   json: string;
   sha256: string;
+}
+
+const isMoney = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 0;
+
+/** Tiền bill khớp tổng đơn: tạm tính − giảm + phí ship = tổng. Lệch thì không gửi ba khoá tiền (MSS vẽ tổng sai còn tệ hơn không vẽ). */
+export function billMoneyConsistent(total: number, bill: Pick<MssBillInput, 'subtotal' | 'discount' | 'shippingFee'>): boolean {
+  return isMoney(bill.subtotal) && isMoney(bill.discount) && isMoney(bill.shippingFee) && bill.subtotal - bill.discount + bill.shippingFee === total;
+}
+
+/** Một món của bill theo hợp đồng bill_v1, hoặc null khi món không hợp lệ (cả danh sách món bị bỏ: MSS trả 422 cho cả sự kiện nếu gửi món sai). */
+function billItem(it: MssBillItemInput): Record<string, string | number | boolean> | null {
+  const name = clip(it.name ?? '', BILL_ITEM_NAME_MAX);
+  if (!name || !Number.isInteger(it.qty) || it.qty < 1 || it.qty > BILL_QTY_MAX || !isMoney(it.unitPrice) || !isMoney(it.lineTotal)) return null;
+  const out: Record<string, string | number | boolean> = { name };
+  const variant = it.variant ? clip(it.variant, BILL_VARIANT_MAX) : '';
+  if (variant) out.variant = variant;
+  out.qty = it.qty;
+  out.unit_vnd = it.unitPrice;
+  out.line_vnd = it.lineTotal;
+  if (it.gift === true) out.gift = true;
+  return out;
+}
+
+/** Link nhận được: cùng gốc web đã đăng ký với MSS, không quá trần. Không thì null (bỏ khoá link, không bỏ tin). */
+function linkOf(linkUrl: string, origin: string): string | null {
+  return linkUrl.startsWith(`${origin}/`) && linkUrl.length <= BILL_LINK_MAX && !/\s/.test(linkUrl) ? linkUrl : null;
 }
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -107,8 +172,17 @@ export function buildMssEventBody(input: MssEventBodyInput): MssEventBody {
   const forRecipient = input.recipient.role === 'recipient';
   if (forRecipient && !MSS_RECIPIENT_EVENT_TYPES.includes(input.eventType)) throw new MssEventBodyError(`Người nhận không có tin ${input.eventType}`);
   if (forRecipient && input.recipient.phoneSource !== 'checkout_contact') throw new MssEventBodyError('Tin người nhận phải có phone_source checkout_contact');
+  if (forRecipient && input.bill) throw new MssEventBodyError('Tin người nhận không được kèm bill (giá của người mua)');
 
-  const orderPart: Record<string, string | number | boolean> = {
+  // Link của người mua: gốc chưa đăng ký thì không link; có link dựng sẵn thì dùng đúng nó (sai thì bỏ), không thì đường dẫn tài khoản như v1.2.
+  const link =
+    !input.linkOrigin || forRecipient
+      ? null
+      : order.linkUrl
+        ? linkOf(order.linkUrl, input.linkOrigin)
+        : `${input.linkOrigin}/tai-khoan/don-hang/${encodeURIComponent(code)}`;
+
+  const orderPart: Record<string, string | number | boolean | Record<string, string | number | boolean>[]> = {
     code,
     total_vnd: forRecipient ? 0 : order.total,
     payment_method: contractPaymentMethod(order.paymentMethod),
@@ -122,7 +196,7 @@ export function buildMssEventBody(input: MssEventBodyInput): MssEventBody {
     const trackingCode = order.shippingCode ? clip(order.shippingCode, TRACKING_CODE_MAX) : '';
     if (carrier) orderPart.carrier = carrier;
     if (trackingCode) orderPart.tracking_code = trackingCode;
-    if (input.linkOrigin && !forRecipient) orderPart.tracking_url = `${input.linkOrigin}/tai-khoan/don-hang/${encodeURIComponent(code)}`;
+    if (link) orderPart.tracking_url = link;
   }
   if (input.eventType === 'order.cancelled') {
     orderPart.cancel_reason = input.cancelReason ?? 'OTHER';
@@ -151,7 +225,49 @@ export function buildMssEventBody(input: MssEventBodyInput): MssEventBody {
     recipient,
     consent: { order_updates_zalo: true, captured_at: vnIso(input.consent.capturedAt), source: input.consent.source },
   };
-  const json = JSON.stringify(body);
+  const withBill = input.bill && (input.eventType === 'order.created' || input.eventType === 'order.payment_confirmed') ? input.bill : null;
+  const json = withBill ? fitBill(body, orderPart, withBill, order, link) : JSON.stringify(body);
   if (Buffer.byteLength(json, 'utf8') > MSS_EVENT_BODY_MAX_BYTES) throw new MssEventBodyError('Thân sự kiện vượt 8 KB');
   return { json, sha256: createHash('sha256').update(json, 'utf8').digest('hex') };
+}
+
+/**
+ * Nối khoá bill vào SAU các khoá v1.2 của `order` (thứ tự cũ giữ nguyên byte) và trả JSON không quá MSS_BILL_BODY_BUDGET_BYTES: bỏ món từ cuối,
+ * tăng `items_more`; hết món mà vẫn vượt thì trả thân không bill. `orderPart` bị sửa tại chỗ (nó là của riêng lần dựng này).
+ */
+function fitBill(
+  body: { order: Record<string, unknown> },
+  orderPart: Record<string, unknown>,
+  bill: MssBillInput,
+  order: MssEventBodyInput['order'],
+  link: string | null,
+): string {
+  const billKeys = ['detail_url', 'subtotal_vnd', 'discount_vnd', 'shipping_fee_vnd', 'items', 'items_more'] as const;
+  const drop = () => {
+    for (const k of billKeys) delete orderPart[k];
+  };
+  if (link) orderPart.detail_url = link;
+  if (billMoneyConsistent(order.total, bill)) {
+    orderPart.subtotal_vnd = bill.subtotal;
+    orderPart.discount_vnd = bill.discount;
+    orderPart.shipping_fee_vnd = bill.shippingFee;
+  }
+  const all = bill.items.slice(0, BILL_MAX_ITEMS).map(billItem);
+  const items = all.every((it) => it !== null) ? (all as Record<string, string | number | boolean>[]) : [];
+  const itemCount = order.itemNames.length;
+  for (;;) {
+    delete orderPart.items;
+    delete orderPart.items_more;
+    if (items.length > 0) {
+      orderPart.items = items;
+      const more = itemCount - items.length;
+      if (more >= 1) orderPart.items_more = more;
+    }
+    const json = JSON.stringify(body);
+    if (Buffer.byteLength(json, 'utf8') <= MSS_BILL_BODY_BUDGET_BYTES) return json;
+    if (items.length === 0) break;
+    items.pop();
+  }
+  drop();
+  return JSON.stringify(body);
 }

@@ -1,0 +1,34 @@
+{
+  "event_id": "01JCX9Z7Q4M8T2K5V6W3Y0BILL",
+  "event_type": "order.created",
+  "occurred_at": "2026-11-25T09:15:02+07:00",
+  "sequence": 1,
+  "sender": "tubutree",
+  "order": {
+    "code": "TB7K4M",
+    "total_vnd": 245000,
+    "payment_method": "COD",
+    "channel": "web",
+    "item_count": 3,
+    "first_item_name": "Nước giặt sinh học Fuwa3e 2L",
+    "detail_url": "https://tubutree.com/tai-khoan/don-hang/TB7K4M",
+    "subtotal_vnd": 270000,
+    "discount_vnd": 45000,
+    "shipping_fee_vnd": 20000,
+    "items": [
+      { "name": "Nước giặt sinh học Fuwa3e 2L", "variant": "Can 2L", "qty": 2, "unit_vnd": 120000, "line_vnd": 240000 },
+      { "name": "Nước rửa chén sinh học", "qty": 1, "unit_vnd": 30000, "line_vnd": 30000 },
+      { "name": "Túi vải canvas", "qty": 1, "unit_vnd": 0, "line_vnd": 0, "gift": true }
+    ]
+  },
+  "recipient": {
+    "phone": "0901234567",
+    "phone_source": "account_verified",
+    "name": "Lan"
+  },
+  "consent": {
+    "order_updates_zalo": true,
+    "captured_at": "2026-11-25T09:14:40+07:00",
+    "source": "checkout"
+  }
+}

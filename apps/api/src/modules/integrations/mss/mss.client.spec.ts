@@ -292,7 +292,7 @@ describe('MssClient', () => {
       const f = jest.fn<ReturnType<MssFetch>, Parameters<MssFetch>>().mockResolvedValue(new Response(fixture('health.full.json'), { status: 200 }));
       const doc = await make(f).health();
       expect(doc.contract).toBe('0.9');
-      expect(doc.capabilities).toEqual(['catalog.enrichment', 'catalog.source', 'orders', 'invoice', 'customers', 'order_events']);
+      expect(doc.capabilities).toEqual(['catalog.enrichment', 'catalog.source', 'orders', 'invoice', 'customers', 'order_events', 'order_events.bill_v1']);
     });
 
     it('MSS tắt kết nối (503 disabled): unavailable', async () => {

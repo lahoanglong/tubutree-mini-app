@@ -42,6 +42,11 @@ import {
 } from '../../src/modules/checkout/guest/guest-checkout.config';
 import type { GuestLookupDto, GuestPlaceOrderDto } from '../../src/modules/checkout/guest/dto/guest-checkout.dto';
 import type { Env } from '../../src/config/env.validation';
+import { MssOrderEventRecorder } from '../../src/modules/integrations/mss/mss-order-event.recorder';
+import type { MssFlagsService } from '../../src/modules/integrations/mss/mss-flags';
+import type { MssHealthService } from '../../src/modules/integrations/mss/mss-health.service';
+import type { MssClient } from '../../src/modules/integrations/mss/mss.client';
+import type { MssOrderEventDispatcher } from '../../src/modules/integrations/mss/mss-order-event.dispatch';
 import { createOrder, createRealUser, createUser, pinConfig, randCode, setConfig, uniquePhone, warmPool } from './helpers';
 import { buyerFlashLimitKeys, flashLimitKeys, isLegacyFlashKey } from '../../src/modules/flash-sale/flash-buyer-keys';
 import { PHOTO_REWARD_POINTS_DEFAULT } from '../../src/modules/reviews/review-green-corner';
@@ -62,6 +67,8 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
   let auth: AuthService;
   let loyalty: LoyaltyService;
   let guest: GuestCheckoutService;
+  /** Cấu hình môi trường chung của GuestCheckoutService (bên kiểm khoá) và bộ ghi sự kiện MSS (bên ký link trong tin Zalo). */
+  let env: ConfigService<Env, true>;
   const restores: (() => Promise<void>)[] = [];
   let giftVariationId = '';
   let adminId = '';
@@ -100,7 +107,7 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
     config = moduleRef.get(SystemConfigService);
     loyalty = moduleRef.get(LoyaltyService);
     const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-guest-checkout', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30, JWT_REFRESH_REUSE_GRACE_SECONDS: 30 };
-    const env = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
+    env = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
     const rbac = new RbacService(prisma, new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma)));
     auth = new AuthService(prisma, new JwtService(), env, {} as ZaloService, rbac);
     const bank = { getBankQr: jest.fn(async (code: string, userId: string) => ({ code, userId })) } as unknown as BankTransferService;
@@ -487,6 +494,47 @@ describe('Đặt hàng không đăng nhập trên web (real Postgres)', () => {
       await expect(guest.track(o.code, dto.trackingKey)).resolves.toMatchObject({ status: 'DELIVERED' });
       await prisma.order.update({ where: { code: o.code }, data: { deliveredAt: new Date(Date.now() - 61 * 86_400_000) } });
       await expect(guest.track(o.code, dto.trackingKey)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('w37-01: link 60 ngày do bộ ghi sự kiện MSS ký mở đúng đơn (chỉ SĐT che + phường/tỉnh); đơn về tài khoản Zalo thì link chết, tin sau trỏ trang tài khoản', async () => {
+      const v = (await product(130_000)).variationId;
+      const phone = uniquePhone();
+      const d = device();
+      const dto = placeDto([{ variationId: v, quantity: 1 }], phone, { paymentMethod: 'BANK_TRANSFER' });
+      const o = await guest.placeOrder({ deviceId: d, ip: ip() }, dto, idem());
+      const placed = await prisma.order.findUniqueOrThrow({ where: { code: o.code } });
+      await prisma.order.update({ where: { id: placed.id }, data: { orderZaloConsent: true, orderZaloConsentAt: new Date() } });
+      await prisma.user.update({ where: { id: placed.userId }, data: { notifyOrderZalo: true, notifyOrderZaloAt: new Date(), notifyOrderZaloSource: 'checkout' } });
+      const flags = { isEnabled: async () => true, configured: () => true, snapshot: async () => ({ orderEventsRolloutPct: 100 }) } as unknown as MssFlagsService;
+      const health = { assertCapability: async () => true } as unknown as MssHealthService;
+      const circuit = { circuit: { isTripped: () => false } } as unknown as MssClient;
+      const recorder = new MssOrderEventRecorder(flags, health, circuit, { enqueue: () => undefined } as unknown as MssOrderEventDispatcher, env);
+      await recorder.refreshGate();
+      const linkOf = async (eventType: 'order.created' | 'order.shipping') => {
+        expect(await prisma.$transaction((tx) => recorder.record(tx, placed.id, eventType))).toBeNull();
+        const row = await prisma.mssOrderEventOutbox.findFirstOrThrow({ where: { orderId: placed.id, eventType, recipientRole: 'buyer' } });
+        const order = (JSON.parse(row.body) as { order: Record<string, unknown> }).order;
+        return String(eventType === 'order.created' ? order.detail_url : order.tracking_url);
+      };
+
+      const url = await linkOf('order.created');
+      expect(url).toMatch(new RegExp(`^https://tubutree\\.com/don/${o.code}#k=[A-Za-z0-9_-]{43}$`));
+      expect(url).not.toContain(phone.slice(3));
+      const key = url.split('#k=')[1]!;
+      const view = await guest.track(o.code, key);
+      expect(view).toMatchObject({ code: o.code, phoneMasked: `${phone.slice(0, 3)}****${phone.slice(-3)}`, area: { ward: 'Phuong IT', province: 'Ha Noi' } });
+      for (const pii of [phone, '12 Ngo IT', 'Khach Vang Lai']) expect(JSON.stringify(view)).not.toContain(pii);
+      await expect(guest.bankQr(o.code, key)).resolves.toMatchObject({ code: o.code });
+
+      const target = await createRealUser(prisma, { phone: uniquePhone() });
+      await expect(guest.claim(target.id, d)).resolves.toEqual({ claimed: 1 });
+      await expect(guest.track(o.code, key)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(guest.bankQr(o.code, key)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(guest.track(o.code, dto.trackingKey)).resolves.toMatchObject({ code: o.code });
+
+      await prisma.user.update({ where: { id: target.id }, data: { notifyOrderZalo: true, notifyOrderZaloAt: new Date(), notifyOrderZaloSource: 'checkout' } });
+      await prisma.order.update({ where: { id: placed.id }, data: { shippingPartner: 'GHN', shippingCode: 'GHNIT1' } });
+      expect(await linkOf('order.shipping')).toBe(`https://tubutree.com/tai-khoan/don-hang/${o.code}`);
     });
 
     it('chuyển khoản: QR mở bằng khoá đơn, sai khoá 404', async () => {

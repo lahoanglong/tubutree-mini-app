@@ -74,7 +74,10 @@ describe('Chuỗi đặt đơn chuyển khoản → QR → Pancake → outbox MS
   const health = { assertCapability: async () => true } as unknown as MssHealthService;
   const circuitClient = { circuit: { isTripped: () => false } } as unknown as MssClient;
   const dispatcher = { enqueue: () => undefined } as unknown as MssOrderEventDispatcher;
-  const recorder = new MssOrderEventRecorder(flags, health, circuitClient, dispatcher);
+  const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-pre-submit', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30, JWT_REFRESH_REUSE_GRACE_SECONDS: 30 };
+  /** Cùng một bí mật cho bên ký link trong tin Zalo (recorder) và bên kiểm khoá (GuestCheckoutService), như PROD. */
+  const env = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
+  const recorder = new MssOrderEventRecorder(flags, health, circuitClient, dispatcher, env);
   const notify = jest.fn().mockResolvedValue(true);
   const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
 
@@ -114,8 +117,6 @@ describe('Chuỗi đặt đơn chuyển khoản → QR → Pancake → outbox MS
     config = moduleRef.get(SystemConfigService);
     const analytics = moduleRef.get(AnalyticsEventsService);
     bank = new BankTransferService(prisma, config);
-    const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-pre-submit', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30, JWT_REFRESH_REUSE_GRACE_SECONDS: 30 };
-    const env = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
     const rbac = new RbacService(prisma, new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma)));
     const auth = new AuthService(prisma, new JwtService(), env, {} as ZaloService, rbac);
     guest = new GuestCheckoutService(prisma, checkout, auth, bank, config, analytics, env, {} as never);
@@ -345,8 +346,16 @@ describe('Chuỗi đặt đơn chuyển khoản → QR → Pancake → outbox MS
     expect(rows.map((r) => `${r.eventType}:${r.role}`)).toEqual(['order.created:buyer', 'order.payment_confirmed:buyer', 'order.shipping:buyer', 'order.delivered:buyer']);
     for (const r of rows) {
       expect(r.body.order).toMatchObject({ code: order.code, total_vnd: order.total, channel: 'web' });
-      expect(r.body.order).not.toHaveProperty('tracking_url');
       expect(r.body.recipient).toEqual({ phone, phone_source: 'checkout_contact' });
+      // w37-01: link của khách vãng lai là /don/<mã>#k=<khoá đã ký 60 ngày> (không phải trang tài khoản), chỉ ở tin giao hàng và (có bill) tin đặt/đã trả.
+      const link = (r.eventType === 'order.shipping' ? r.body.order.tracking_url : r.body.order.detail_url) as string | undefined;
+      if (r.eventType === 'order.delivered') {
+        expect(r.body.order).not.toHaveProperty('tracking_url');
+        continue;
+      }
+      expect(link).toMatch(new RegExp(`^https://tubutree\\.com/don/${order.code}#k=[A-Za-z0-9_-]{43}$`));
+      expect(link).not.toContain(phone.slice(3));
+      await expect(guest.track(order.code, link!.split('#k=')[1])).resolves.toMatchObject({ code: order.code, status: 'DELIVERED' });
     }
 
     const looked = await guest.lookup({ orderCode: order.code, phone });
