@@ -8,6 +8,8 @@ import { MssOrderEventRecorder } from '../../src/modules/integrations/mss/mss-or
 import { ORDER_ZALO_CONSENT_TEXT_VERSION } from '../../src/modules/integrations/mss/mss-order-event-types';
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import type { ConfigService } from '@nestjs/config';
+import type { Env } from '../../src/config/env.validation';
 import { createOrder, createUser, deleteItData, randCode, uniquePhone, warmPool } from './helpers';
 
 /**
@@ -25,6 +27,7 @@ describe('Đồng ý Zalo muộn ở chi tiết đơn (real Postgres)', () => {
     ({ isEnabled: async () => on, configured: () => true, snapshot: async () => ({ orderEventsRolloutPct: 100 }) }) as unknown as MssFlagsService;
   const health = { assertCapability: async () => true } as unknown as MssHealthService;
   const circuitClient = { circuit: { isTripped: () => false } } as unknown as MssClient;
+  const ENV = { get: () => undefined } as unknown as ConfigService<Env, true>;
   const dispatcher = { enqueue: () => undefined } as unknown as MssOrderEventDispatcher;
   const config = { get: async (k: string, fb?: unknown) => (k === 'orders.timeline_v2_enabled' ? true : fb) } as unknown as SystemConfigService;
 
@@ -54,8 +57,8 @@ describe('Đồng ý Zalo muộn ở chi tiết đơn (real Postgres)', () => {
     });
     productIds.push(product.id);
     variationId = product.variations[0]!.id;
-    recorder = new MssOrderEventRecorder(flags(true), health, circuitClient, dispatcher);
-    recorderOff = new MssOrderEventRecorder(flags(false), health, circuitClient, dispatcher);
+    recorder = new MssOrderEventRecorder(flags(true), health, circuitClient, dispatcher, ENV);
+    recorderOff = new MssOrderEventRecorder(flags(false), health, circuitClient, dispatcher, ENV);
     await recorder.refreshGate();
     await recorderOff.refreshGate();
     orders = svc(recorder);

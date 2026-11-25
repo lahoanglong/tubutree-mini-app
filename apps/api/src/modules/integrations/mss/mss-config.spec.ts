@@ -6,6 +6,7 @@ import {
   clampRolloutPct,
   MSS_CATALOG_SOURCE_KEY,
   MSS_CONFIG_RANGES,
+  MSS_FLAG_CAPABILITY,
   MSS_FLAG_KEYS,
   MSS_JSON_RULES,
   MSS_ORDER_CONSENT_PRECHECKED_KEY,
@@ -83,7 +84,13 @@ describe('khoá system_configs mss.*', () => {
     expect([parseCatalogSource('mss'), parseCatalogSource('pancake'), parseCatalogSource('MSS'), parseCatalogSource(undefined)]).toEqual(['mss', 'pancake', 'pancake', 'pancake']);
   });
 
-  it('seed createOnly và migration INSERT gieo đủ 13 khoá với giá trị TẮT/an toàn', () => {
+  it('cờ bill (w37-01): khoá mss.order_bill_enabled, chỉ hiệu lực khi MSS công bố order_events.bill_v1', () => {
+    expect(MSS_FLAG_KEYS.orderBill).toBe('mss.order_bill_enabled');
+    expect(MSS_FLAG_CAPABILITY.orderBill).toBe('order_events.bill_v1');
+    expect(MSS_FLAG_CAPABILITY.orderRecipient).toBe('order_events.recipient_role');
+  });
+
+  it('seed createOnly gieo đủ 14 khoá TẮT/an toàn; migration INSERT có 13 khoá trước w37 (cờ bill chỉ ở seed: chưa có dòng thì coi như tắt)', () => {
     const seed = readFileSync(join(__dirname, '../../../../prisma/seed.ts'), 'utf8');
     const migDir = join(__dirname, '../../../../prisma/migrations');
     const mig = readdirSync(migDir)
@@ -91,16 +98,18 @@ describe('khoá system_configs mss.*', () => {
       .map((d) => readFileSync(join(migDir, d, 'migration.sql'), 'utf8'))
       .join('\n');
     expect(mig).toContain('ON CONFLICT ("key") DO NOTHING');
+    const seedOnly: string[] = [MSS_FLAG_KEYS.orderBill];
     const expected: Record<string, string> = Object.fromEntries(ALL_KEYS.map((k) => [k, "'false'::jsonb"]));
     expected[MSS_ORDER_EVENTS_ROLLOUT_PCT_KEY] = "'0'::jsonb";
     expected[MSS_CATALOG_SOURCE_KEY] = `'"pancake"'::jsonb`;
     for (const [k, v] of Object.entries(expected)) {
-      expect(mig).toContain(`('${k}', ${v},`);
+      if (seedOnly.includes(k)) expect(mig).not.toContain(`'${k}'`);
+      else expect(mig).toContain(`('${k}', ${v},`);
       const row = seed.split('\n').find((l) => l.includes(`key: '${k}'`));
       expect(row).toBeDefined();
       expect(row).toContain('createOnly: true');
       expect(row).toContain(k === MSS_ORDER_EVENTS_ROLLOUT_PCT_KEY ? 'value: 0,' : k === MSS_CATALOG_SOURCE_KEY ? "value: 'pancake'," : 'value: false,');
     }
-    expect(ALL_KEYS).toHaveLength(13);
+    expect(ALL_KEYS).toHaveLength(14);
   });
 });

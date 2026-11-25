@@ -4,7 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import type { Request } from 'express';
 import { GUEST_TRACKING_KEY_RE, GuestLookupDto } from './dto/guest-checkout.dto';
-import { GUEST_LOOKUP_LINK_TTL_MS, signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
+import { GUEST_LOOKUP_LINK_TTL_MS, isLiveGuestOwner, signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
 import { createHash } from 'node:crypto';
 import {
   GUEST_LOOKUP_CODE_LIMIT,
@@ -126,5 +126,32 @@ describe('POST /checkout/guest/lookup: trần theo mã đơn, theo SĐT và theo
     expect(lookupThrottleId({ body: undefined } as unknown as Request)).toBeUndefined();
     expect(lookupPhoneThrottleId({ body: { phone: 912345678 } } as unknown as Request)).toBeUndefined();
     expect(lookupPhoneThrottleId({ body: { phone: '0212345678' } } as unknown as Request)).toBeUndefined();
+  });
+});
+
+describe('hạn khoá tạm theo tham số và chủ đơn khách vãng lai còn sống (w37-01)', () => {
+  const DAY = 86_400_000;
+
+  it('mặc định vẫn 24 giờ; ttlMs 60 ngày (link trong tin Zalo) ghi hạn vào khoá, hàm kiểm không cần biết khoá từ đâu', () => {
+    expect(signGuestLookupKey(CODE, HASH, SECRET, NOW).expiresAt.getTime()).toBe(NOW + 24 * 3_600_000);
+    expect(signGuestLookupKey(CODE, HASH, SECRET, NOW, undefined).expiresAt.getTime()).toBe(NOW + GUEST_LOOKUP_LINK_TTL_MS);
+    const { key, expiresAt } = signGuestLookupKey(CODE, HASH, SECRET, NOW, 60 * DAY);
+    expect(key).toMatch(GUEST_TRACKING_KEY_RE);
+    expect(expiresAt.getTime()).toBe(NOW + 60 * DAY);
+    expect(verifyGuestLookupKey(key, CODE, HASH, SECRET, NOW + 59 * DAY)).toBe(true);
+    expect(verifyGuestLookupKey(key, CODE, HASH, SECRET, NOW + 60 * DAY + 1_000)).toBe(false);
+    const short = signGuestLookupKey(CODE, HASH, SECRET, NOW).key;
+    expect(verifyGuestLookupKey(short, CODE, HASH, SECRET, NOW + 25 * 3_600_000)).toBe(false);
+  });
+
+  it('isLiveGuestOwner: chỉ zaloId guest_ chưa gộp, chưa có SĐT, chưa có mergedIntoId', () => {
+    const live = { zaloId: 'guest_w_abc', phone: null, mergedIntoId: null };
+    expect(isLiveGuestOwner(live)).toBe(true);
+    expect(isLiveGuestOwner({ ...live, phone: '0901234567' })).toBe(false);
+    expect(isLiveGuestOwner({ ...live, mergedIntoId: 'u2' })).toBe(false);
+    expect(isLiveGuestOwner({ ...live, zaloId: 'guest_w_abc_merged_1700000000000' })).toBe(false);
+    expect(isLiveGuestOwner({ ...live, zaloId: 'zalo_123' })).toBe(false);
+    expect(isLiveGuestOwner({ ...live, zaloId: null })).toBe(false);
+    expect(isLiveGuestOwner(null)).toBe(false);
   });
 });

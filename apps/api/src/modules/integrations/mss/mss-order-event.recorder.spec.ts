@@ -1,10 +1,14 @@
 import { Logger } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
+import type { Env } from '../../../config/env.validation';
+import { verifyGuestLookupKey } from '../../checkout/guest/guest-track-link';
 import type { MssFlagsService } from './mss-flags';
 import type { MssHealthService } from './mss-health.service';
 import type { MssClient } from './mss.client';
 import type { MssOrderEventDispatcher } from './mss-order-event.dispatch';
-import { MSS_COLD_GATE_WAIT_MS, MssOrderEventRecorder } from './mss-order-event.recorder';
+import { buildMssEventBody } from './mss-order-event-body';
+import { MSS_COLD_GATE_WAIT_MS, MSS_ORDER_LINK_ORIGIN, MssOrderEventRecorder } from './mss-order-event.recorder';
 
 /**
  * Cổng của bộ ghi sự kiện đơn MSS (wave tubu-w34-03): đơn đặt ngay sau khi API khởi động không bị bỏ qua vì cổng chưa nạp, và đơn đặt
@@ -30,7 +34,7 @@ function setup(enabled: () => Promise<boolean>) {
   const health = { assertCapability } as unknown as MssHealthService;
   const client = { circuit: { isTripped: () => false } } as unknown as MssClient;
   const dispatcher = { enqueue: jest.fn() } as unknown as MssOrderEventDispatcher;
-  const recorder = new MssOrderEventRecorder(flags, health, client, dispatcher);
+  const recorder = new MssOrderEventRecorder(flags, health, client, dispatcher, ENV);
   const record = jest.spyOn(recorder, 'record').mockResolvedValue(null);
   const tx = {
     order: { updateMany: jest.fn(async () => ({ count: PLACED.length })) },
@@ -38,6 +42,9 @@ function setup(enabled: () => Promise<boolean>) {
   };
   return { recorder, record, tx, txc: tx as unknown as Prisma.TransactionClient, isEnabled, assertCapability };
 }
+
+const SECRET = 'unit-secret-mss-order-link-0123456789';
+const ENV = { get: (k: string) => (k === 'JWT_ACCESS_SECRET' ? SECRET : undefined) } as unknown as ConfigService<Env, true>;
 
 /** Số lần nạp cổng: mỗi lần nạp hỏi cờ `orderEvents` đúng một lần (cờ người nhận hỏi kèm trong cùng lần nạp). */
 const loads = (isEnabled: jest.Mock) => isEnabled.mock.calls.filter((c) => c[0] === 'orderEvents').length;
@@ -162,8 +169,206 @@ describe('MssOrderEventRecorder: cổng lúc đặt hàng', () => {
 
   it('nạp cổng hỏi assertCapability cả khi cờ coi như tắt: đó là chỗ báo Ops khi admin bật cờ mà thiếu biến MSS_*', async () => {
     const { recorder, assertCapability } = setup(async () => false);
-    await expect(recorder.refreshGate()).resolves.toMatchObject({ enabled: false, open: false });
+    await expect(recorder.refreshGate()).resolves.toMatchObject({ enabled: false, open: false, bill: false });
     expect(assertCapability).toHaveBeenCalledWith('orderEvents');
     expect(assertCapability).toHaveBeenCalledWith('orderRecipient');
+    expect(assertCapability).toHaveBeenCalledWith('orderBill');
+  });
+
+  it('cổng bill (w37-01): chỉ mở khi cổng order_events mở, cờ mss.order_bill_enabled bật và MSS công bố order_events.bill_v1', async () => {
+    const gateOf = async (flags: Record<string, boolean>, caps: Record<string, boolean>) => {
+      const { recorder, isEnabled, assertCapability } = setup(async () => true);
+      isEnabled.mockImplementation(async (f?: string) => flags[f ?? ''] === true);
+      assertCapability.mockImplementation(async (f?: string) => caps[f ?? ''] === true);
+      return recorder.refreshGate();
+    };
+    const all = { orderEvents: true, orderBill: true };
+    await expect(gateOf(all, all)).resolves.toMatchObject({ open: true, bill: true, recipient: false });
+    await expect(gateOf(all, { orderEvents: true })).resolves.toMatchObject({ open: true, bill: false });
+    await expect(gateOf({ orderEvents: true }, all)).resolves.toMatchObject({ open: true, bill: false });
+    await expect(gateOf(all, { orderBill: true })).resolves.toMatchObject({ open: false, bill: false });
+    await expect(gateOf({ orderBill: true }, all)).resolves.toMatchObject({ enabled: false, bill: false });
+  });
+});
+
+/**
+ * Thân dòng outbox mà `record` ghi (w37-01), trên một tx giả đủ cho đường ghi: bill chỉ ở dòng người mua của created/payment_confirmed, cổng
+ * bill tắt thì thân giống từng byte cách gọi trước w37, link của khách vãng lai là link đã ký. Postgres thật ở mss-order-events.race-spec.
+ */
+describe('MssOrderEventRecorder.record: link xem đơn và bill (w37-01)', () => {
+  type Row = { eventType: string; recipientRole: string; body: string; sequence: number; eventId: string };
+  const HASH = 'c'.repeat(64);
+  const ITEMS = [
+    { productName: 'Nước giặt sinh học Fuwa3e 2L', variationName: 'Can 2L', quantity: 2, unitPrice: 120_000, total: 240_000, isGift: false },
+    { productName: 'Túi vải', variationName: '', quantity: 1, unitPrice: 0, total: 0, isGift: true },
+  ];
+
+  function orderRow(over: Record<string, unknown> = {}, user: Record<string, unknown> = {}) {
+    return {
+      id: 'o1',
+      code: 'TB7K4M',
+      type: 'RETAIL',
+      userId: 'u1',
+      platform: 'web',
+      paymentMethod: 'BANK_TRANSFER',
+      total: 245_000,
+      subtotal: 240_000,
+      discount: 15_000,
+      shippingFee: 20_000,
+      placedForCustomer: false,
+      orderZaloConsent: true,
+      orderZaloConsentAt: new Date('2026-11-25T02:00:00Z'),
+      shippingPartner: 'GHN',
+      shippingCode: 'GHN8X2K9',
+      checkoutGroup: null,
+      shippingAddress: { phone: '0987654321' },
+      notifyRecipientZalo: true,
+      guestPhone: null,
+      guestTokenHash: null,
+      createdAt: new Date('2026-11-25T02:00:00Z'),
+      items: ITEMS,
+      ...over,
+      user: {
+        phone: '0901234567',
+        zaloId: 'zalo_123',
+        mergedIntoId: null,
+        phoneVerifiedAt: new Date('2026-01-01T00:00:00Z'),
+        fullName: 'Nguyễn Thị Lan',
+        notifyOrderZalo: true,
+        notifyOrderZaloSource: 'checkout',
+        ...user,
+      },
+    };
+  }
+
+  async function run(gate: { bill: boolean; recipient?: boolean }, order: ReturnType<typeof orderRow>, types: string[]) {
+    const flags = {
+      isEnabled: jest.fn(async (f: string) => f === 'orderEvents' || (f === 'orderBill' && gate.bill) || (f === 'orderRecipient' && gate.recipient !== false)),
+      snapshot: jest.fn(async () => ({ orderEventsRolloutPct: 100 })),
+    } as unknown as MssFlagsService;
+    const health = { assertCapability: jest.fn(async () => true) } as unknown as MssHealthService;
+    const client = { circuit: { isTripped: () => false } } as unknown as MssClient;
+    const dispatcher = { enqueue: jest.fn() } as unknown as MssOrderEventDispatcher;
+    const recorder = new MssOrderEventRecorder(flags, health, client, dispatcher, ENV);
+    await recorder.refreshGate();
+    const rows: Row[] = [];
+    let seq = 0;
+    const tx = {
+      order: { findUnique: jest.fn(async () => order), count: jest.fn(async () => 1) },
+      mssOrderEventOutbox: {
+        findUnique: jest.fn(async () => null),
+        count: jest.fn(async () => 1),
+        createMany: jest.fn(async ({ data }: { data: Row[] }) => {
+          rows.push(...data);
+          return { count: data.length };
+        }),
+      },
+      $queryRaw: jest.fn(async () => [{ seq: ++seq }]),
+    } as unknown as Prisma.TransactionClient;
+    for (const t of types) await recorder.record(tx, 'o1', t as never);
+    return rows.map((r) => ({ ...r, json: JSON.parse(r.body) as { occurred_at: string; order: Record<string, unknown>; recipient: Record<string, unknown> } }));
+  }
+
+  const BILL_KEYS = ['detail_url', 'items', 'items_more', 'subtotal_vnd', 'discount_vnd', 'shipping_fee_vnd'];
+  const ALL = ['order.created', 'order.payment_confirmed', 'order.shipping', 'order.delivered', 'order.cancelled'];
+
+  beforeEach(() => {
+    for (const level of ['log', 'warn', 'error', 'debug'] as const) jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('cổng bill tắt: thân từng loại giống từng byte cách gọi bộ dựng trước w37 (link tài khoản, không bill)', async () => {
+    const order = orderRow();
+    const rows = await run({ bill: false }, order, ALL);
+    const buyer = rows.filter((r) => r.recipientRole === 'buyer');
+    expect(buyer.map((r) => r.eventType)).toEqual(ALL);
+    for (const r of buyer) {
+      const legacy = buildMssEventBody({
+        eventId: r.eventId,
+        eventType: r.eventType as never,
+        occurredAt: new Date(r.json.occurred_at),
+        sequence: r.sequence,
+        order: {
+          code: order.code,
+          total: order.total,
+          paymentMethod: order.paymentMethod,
+          platform: 'web',
+          itemNames: ITEMS.map((i) => i.productName),
+          shippingPartner: order.shippingPartner,
+          shippingCode: order.shippingCode,
+          checkoutGroup: null,
+          groupSize: null,
+        },
+        cancelReason: 'OTHER',
+        refundExpected: false,
+        recipient: { phone: '0901234567', phoneSource: 'account_verified', name: 'Lan' },
+        consent: { capturedAt: order.orderZaloConsentAt, source: 'checkout' },
+        linkOrigin: MSS_ORDER_LINK_ORIGIN,
+      });
+      expect(r.body).toBe(legacy.json);
+    }
+  });
+
+  it('cổng bill bật: chỉ dòng người mua của created/payment_confirmed có bill; dòng người nhận không có khoá bill, link, tên món, tên gọi, giá', async () => {
+    const rows = await run({ bill: true }, orderRow(), ALL);
+    for (const r of rows) {
+      const billed = r.recipientRole === 'buyer' && (r.eventType === 'order.created' || r.eventType === 'order.payment_confirmed');
+      for (const k of ['detail_url', 'items', 'subtotal_vnd', 'discount_vnd', 'shipping_fee_vnd']) expect(k in r.json.order).toBe(billed);
+      expect(r.json.order).not.toHaveProperty('items_more');
+    }
+    const created = rows.find((r) => r.eventType === 'order.created')!.json.order;
+    expect(created).toMatchObject({
+      detail_url: 'https://tubutree.com/tai-khoan/don-hang/TB7K4M',
+      subtotal_vnd: 240_000,
+      discount_vnd: 15_000,
+      shipping_fee_vnd: 20_000,
+      items: [
+        { name: 'Nước giặt sinh học Fuwa3e 2L', variant: 'Can 2L', qty: 2, unit_vnd: 120_000, line_vnd: 240_000 },
+        { name: 'Túi vải', qty: 1, unit_vnd: 0, line_vnd: 0, gift: true },
+      ],
+    });
+    const recipient = rows.filter((r) => r.recipientRole === 'recipient');
+    expect(recipient.map((r) => r.eventType)).toEqual(['order.shipping', 'order.delivered']);
+    for (const r of recipient) {
+      for (const k of [...BILL_KEYS, 'tracking_url', 'first_item_name']) expect(r.json.order).not.toHaveProperty(k);
+      expect(r.json.order.total_vnd).toBe(0);
+      expect(r.json.recipient).not.toHaveProperty('name');
+      expect(r.body).not.toMatch(/240000|245000|Fuwa|https?:|Lan/);
+    }
+  });
+
+  it('tiền lệch tổng đơn: ghi cảnh báo mss_bill_money_mismatch, không khoá tiền, món vẫn đi', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    const rows = await run({ bill: true }, orderRow({ discount: 14_000 }), ['order.created']);
+    expect(rows[0]!.json.order).not.toHaveProperty('subtotal_vnd');
+    expect(rows[0]!.json.order.items).toHaveLength(2);
+    expect(warn.mock.calls.some((c) => String(c[0]).startsWith('mss_bill_money_mismatch order=TB7K4M'))).toBe(true);
+  });
+
+  it('khách vãng lai web còn sống: tracking_url của tin giao hàng và detail_url là link /don đã ký 60 ngày, mở đúng đơn', async () => {
+    const guest = orderRow({ guestTokenHash: HASH, guestPhone: '0912345678' }, { phone: null, zaloId: 'guest_w_abcdef', phoneVerifiedAt: null, fullName: 'Khách' });
+    for (const bill of [false, true]) {
+      const rows = await run({ bill }, guest, ['order.created', 'order.shipping']);
+      const shipping = rows.find((r) => r.eventType === 'order.shipping' && r.recipientRole === 'buyer')!.json.order;
+      const url = shipping.tracking_url as string;
+      expect(url).toMatch(/^https:\/\/tubutree\.com\/don\/TB7K4M#k=[A-Za-z0-9_-]{43}$/);
+      const key = url.split('#k=')[1]!;
+      expect(verifyGuestLookupKey(key, 'TB7K4M', HASH, SECRET, Date.now() + 59 * 86_400_000)).toBe(true);
+      expect(verifyGuestLookupKey(key, 'TB7K4M', HASH, SECRET, Date.now() + 61 * 86_400_000)).toBe(false);
+      const created = rows.find((r) => r.eventType === 'order.created')!;
+      if (bill) expect(created.json.order.detail_url).toMatch(/^https:\/\/tubutree\.com\/don\/TB7K4M#k=/);
+      else expect(created.json.order).not.toHaveProperty('detail_url');
+      for (const r of rows) for (const k of ['tracking_url', 'detail_url']) expect(String(r.json.order[k] ?? '')).not.toContain('12345678');
+    }
+  });
+
+  it('khách vãng lai Mini (zaloId guest_ không có khoá đơn web): không link nào như trước w37, bill vẫn có món', async () => {
+    const mini = orderRow({ platform: 'miniapp', guestPhone: '0912345678' }, { phone: null, zaloId: 'guest_m_abcdef', phoneVerifiedAt: null, fullName: 'Khách' });
+    const rows = await run({ bill: true }, mini, ['order.created', 'order.shipping']);
+    for (const r of rows) {
+      expect(r.json.order).not.toHaveProperty('tracking_url');
+      expect(r.json.order).not.toHaveProperty('detail_url');
+    }
+    expect(rows.find((r) => r.eventType === 'order.created')!.json.order.items).toHaveLength(2);
   });
 });

@@ -1,10 +1,12 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
-import { isRealUser } from '../../../common/real-user';
+import type { Env } from '../../../config/env.validation';
 import { MssFlagsService } from './mss-flags';
 import { MssHealthService } from './mss-health.service';
 import { MssClient } from './mss.client';
-import { buildMssEventBody, greetingName, MssEventBodyError, newEventId } from './mss-order-event-body';
+import { billMoneyConsistent, buildMssEventBody, greetingName, MssEventBodyError, newEventId, type MssBillInput } from './mss-order-event-body';
+import { orderDetailUrl } from './mss-order-link';
 import { MSS_FIRST_JOB_DELAY_MS, MssOrderEventDispatcher } from './mss-order-event.dispatch';
 import {
   buyerPhoneOf,
@@ -39,10 +41,12 @@ export interface MssOrderEventGate {
   rolloutPct: number;
   /** Thêm `open`, cờ `mss.order_recipient_enabled` bật và MSS công bố `order_events.recipient_role`: được ghi dòng người nhận (PO A1). */
   recipient: boolean;
+  /** Thêm `open`, cờ `mss.order_bill_enabled` bật và MSS công bố `order_events.bill_v1`: tin đặt đơn/đã thanh toán của người mua kèm bill. */
+  bill: boolean;
   at: number;
 }
 
-const CLOSED_GATE: MssOrderEventGate = { enabled: false, open: false, rolloutPct: 0, recipient: false, at: 0 };
+const CLOSED_GATE: MssOrderEventGate = { enabled: false, open: false, rolloutPct: 0, recipient: false, bill: false, at: 0 };
 
 export type MssRecordSkip =
   | 'gate_closed'
@@ -81,9 +85,13 @@ const RECORD_SELECT = {
   shippingAddress: true,
   notifyRecipientZalo: true,
   guestPhone: true,
+  guestTokenHash: true,
+  subtotal: true,
+  discount: true,
+  shippingFee: true,
   createdAt: true,
-  items: { select: { productName: true }, orderBy: { id: 'asc' } },
-  user: { select: { phone: true, zaloId: true, phoneVerifiedAt: true, fullName: true, notifyOrderZalo: true, notifyOrderZaloSource: true } },
+  items: { select: { productName: true, variationName: true, quantity: true, unitPrice: true, total: true, isGift: true }, orderBy: { id: 'asc' } },
+  user: { select: { phone: true, zaloId: true, mergedIntoId: true, phoneVerifiedAt: true, fullName: true, notifyOrderZalo: true, notifyOrderZaloSource: true } },
 } as const satisfies Prisma.OrderSelect;
 type RecordedOrder = Omit<Prisma.OrderGetPayload<{ select: typeof RECORD_SELECT }>, 'platform'> & { platform: 'web' | 'miniapp' };
 
@@ -111,6 +119,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
     private readonly health: MssHealthService,
     private readonly client: MssClient,
     private readonly dispatcher: MssOrderEventDispatcher,
+    private readonly env: ConfigService<Env, true>,
   ) {}
 
   onModuleInit(): void {
@@ -138,15 +147,24 @@ export class MssOrderEventRecorder implements OnModuleInit {
 
   private async loadGate(): Promise<MssOrderEventGate> {
     // assertCapability gọi cả khi cờ coi như tắt: nó là chỗ báo Ops khi admin bật cờ mà thiếu biến MSS_* hay MSS thiếu năng lực.
-    const [enabled, capable, snap, recipientOn, recipientCapable] = await Promise.all([
+    const [enabled, capable, snap, recipientOn, recipientCapable, billOn, billCapable] = await Promise.all([
       this.flags.isEnabled('orderEvents'),
       this.health.assertCapability('orderEvents'),
       this.flags.snapshot(),
       this.flags.isEnabled('orderRecipient'),
       this.health.assertCapability('orderRecipient'),
+      this.flags.isEnabled('orderBill'),
+      this.health.assertCapability('orderBill'),
     ]);
     if (!enabled) return { ...CLOSED_GATE, at: Date.now() };
-    return { enabled, open: capable, rolloutPct: snap.orderEventsRolloutPct, recipient: capable && recipientOn && recipientCapable, at: Date.now() };
+    return {
+      enabled,
+      open: capable,
+      rolloutPct: snap.orderEventsRolloutPct,
+      recipient: capable && recipientOn && recipientCapable,
+      bill: capable && billOn && billCapable,
+      at: Date.now(),
+    };
   }
 
   /**
@@ -247,7 +265,14 @@ export class MssOrderEventRecorder implements OnModuleInit {
     if (eventType === 'order.payment_confirmed' && order.paymentMethod === 'COD') return skip('cod_payment');
 
     const placed: RecordedOrder = { ...order, platform: order.platform };
-    const bought = await this.writeRow(tx, placed, eventType, { role: 'buyer', phone: buyer.phone, source: buyer.source, name: greetingName(order.user.fullName) }, extra);
+    const bought = await this.writeRow(
+      tx,
+      placed,
+      eventType,
+      { role: 'buyer', phone: buyer.phone, source: buyer.source, name: greetingName(order.user.fullName) },
+      extra,
+      gate.bill,
+    );
     if (bought !== null && bought !== 'duplicate') return skip(bought);
     if (MSS_RECIPIENT_EVENT_TYPES.includes(eventType)) await this.recordRecipient(tx, placed, eventType, buyer.phone, gate);
     return bought === null ? null : skip(bought);
@@ -260,7 +285,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
     if (!gate.recipient) return note('recipient_off');
     const to = recipientPhoneFor(order, buyerPhone);
     if (!to) return note('same_or_invalid_phone');
-    const why = await this.writeRow(tx, order, eventType, { role: 'recipient', phone: to, source: 'checkout_contact', name: null }, {});
+    const why = await this.writeRow(tx, order, eventType, { role: 'recipient', phone: to, source: 'checkout_contact', name: null }, {}, false);
     if (why) note(why);
   }
 
@@ -270,6 +295,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
     eventType: MssOrderEventType,
     to: { role: 'buyer' | 'recipient'; phone: string; source: MssPhoneSource; name: string | null },
     extra: MssRecordExtra,
+    billOpen: boolean,
   ): Promise<'duplicate' | 'payment_timeout_unnotified' | 'not_found' | 'body_invalid' | null> {
     const orderId = order.id;
     const existing = await tx.mssOrderEventOutbox.findUnique({
@@ -293,6 +319,20 @@ export class MssOrderEventRecorder implements OnModuleInit {
     const seq = seqRows[0]?.seq;
     if (seq === undefined) return 'not_found';
 
+    // Chỉ dòng người mua có link và bill. Dòng người nhận (PO A1) không kèm giá, tên món hay link tới trang có giá của người mua.
+    const buyerRow = to.role === 'buyer';
+    const linkUrl = buyerRow
+      ? orderDetailUrl({
+          origin: MSS_ORDER_LINK_ORIGIN,
+          code: order.code,
+          guestTokenHash: order.guestTokenHash,
+          owner: order.user,
+          secret: this.env.get('JWT_ACCESS_SECRET', { infer: true }) || undefined,
+          now: occurredAt.getTime(),
+        })
+      : null;
+    const bill = buyerRow && billOpen && (eventType === 'order.created' || eventType === 'order.payment_confirmed') ? this.billOf(order) : null;
+
     let body: { json: string; sha256: string };
     try {
       body = buildMssEventBody({
@@ -310,7 +350,9 @@ export class MssOrderEventRecorder implements OnModuleInit {
           shippingCode: order.shippingCode,
           checkoutGroup: order.checkoutGroup,
           groupSize,
+          linkUrl,
         },
+        bill,
         cancelReason: extra.cancelReason,
         refundExpected: extra.refundExpected,
         recipient: to.role === 'recipient' ? { phone: to.phone, phoneSource: to.source, role: 'recipient' } : { phone: to.phone, phoneSource: to.source, name: to.name },
@@ -318,8 +360,8 @@ export class MssOrderEventRecorder implements OnModuleInit {
           to.role === 'recipient'
             ? { capturedAt: order.createdAt, source: 'checkout' }
             : { capturedAt: order.orderZaloConsentAt ?? occurredAt, source: order.user.notifyOrderZaloSource === 'account_settings' ? 'account_settings' : 'checkout' },
-        // Link trỏ trang đơn trong tài khoản: khách vãng lai không có tài khoản để đăng nhập nên bỏ link (khoá theo dõi /don chỉ nằm ở máy khách).
-        linkOrigin: isRealUser(order.user) ? MSS_ORDER_LINK_ORIGIN : null,
+        // Không dựng được link (khách vãng lai Mini không có tài khoản web, dòng người nhận) thì không gửi link nào.
+        linkOrigin: linkUrl ? MSS_ORDER_LINK_ORIGIN : null,
       });
     } catch (err) {
       if (!(err instanceof MssEventBodyError)) throw err;
@@ -350,6 +392,22 @@ export class MssOrderEventRecorder implements OnModuleInit {
     this.logger.log(`mss_order_event_recorded ${eventType} order=${order.code} event=${eventId} seq=${seq} role=${to.role}`);
     this.dispatcher.enqueue(eventId, 0, MSS_FIRST_JOB_DELAY_MS);
     return null;
+  }
+
+  /** Bill theo dòng hàng (`OrderItem.id` tăng dần). Tiền lệch tổng đơn chỉ ghi cảnh báo: bộ dựng thân tự bỏ ba khoá tiền, món vẫn đi. */
+  private billOf(order: RecordedOrder): MssBillInput {
+    const bill: MssBillInput = {
+      subtotal: order.subtotal,
+      discount: order.discount,
+      shippingFee: order.shippingFee,
+      items: order.items.map((i) => ({ name: i.productName, variant: i.variationName, qty: i.quantity, unitPrice: i.unitPrice, lineTotal: i.total, gift: i.isGift })),
+    };
+    if (!billMoneyConsistent(order.total, bill)) {
+      this.logger.warn(
+        `mss_bill_money_mismatch order=${order.code} subtotal=${order.subtotal} discount=${order.discount} shippingFee=${order.shippingFee} total=${order.total}`,
+      );
+    }
+    return bill;
   }
 }
 

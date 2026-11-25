@@ -1,1 +1,1 @@
-{"ok":true,"capabilities":["catalog.enrichment","catalog.source","orders","invoice","customers","order_events"],"contract":"0.9"}
+{"ok":true,"capabilities":["catalog.enrichment","catalog.source","orders","invoice","customers","order_events","order_events.bill_v1"],"contract":"0.9"}
