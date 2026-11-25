@@ -125,22 +125,21 @@ export default function BankPaymentPage() {
             </div>
           }
         />
-        {!paid && panelState !== 'closed' && panelState !== 'error' && (
-          <div className="mt-3 text-center max-md:mx-2 max-md:mt-2">
-            <Link href={detail} className={`${ui.btnSecondary} ${mini.secondary} max-md:w-full`}>
-              Để sau / Xem đơn hàng
-            </Link>
-          </div>
-        )}
-        {zaloCard && (
-          <section
-            data-testid="bank-zalo-friend"
-            className={`mt-3 p-4 ${ui.card} ${mini.card} max-md:mx-2 max-md:p-3`}
-            aria-label="Zalo Tubu Tree"
-          >
-            <OrderZaloFriend code={code} from="bank_transfer" />
-          </section>
-        )}
+        {/* Lề điện thoại chung cho lối "Để sau" và thẻ kết bạn Zalo bên dưới (thẻ ưu tiên thấp nhất, không tranh nút Kiểm tra). */}
+        <div className="max-md:mx-2">
+          {!paid && panelState !== 'closed' && panelState !== 'error' && (
+            <div className="mt-3 text-center max-md:mt-2">
+              <Link href={detail} className={`${ui.btnSecondary} ${mini.secondary} max-md:w-full`}>
+                Để sau / Xem đơn hàng
+              </Link>
+            </div>
+          )}
+          {zaloCard && (
+            <section data-testid="bank-zalo-friend" className={`mt-3 p-4 ${ui.card} ${mini.card}`} aria-label="Zalo Tubu Tree">
+              <OrderZaloFriend code={code} from="bank_transfer" />
+            </section>
+          )}
+        </div>
       </div>
     );
   }

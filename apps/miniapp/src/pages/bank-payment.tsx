@@ -405,7 +405,7 @@ function ZaloFriendCard({ code }: { code: string }) {
   return (
     <Box
       mt={3}
-      p={3}
+      p={4}
       role="region"
       aria-label="Zalo Tubu Tree"
       data-testid="bank-zalo-friend"
