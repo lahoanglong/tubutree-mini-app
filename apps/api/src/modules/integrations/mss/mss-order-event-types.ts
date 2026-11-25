@@ -266,6 +266,22 @@ export function fallbackDecision(status: MssOutboxStatus, reason: string | null,
   return 'NONE';
 }
 
+/** `reason` của kết quả `sent`/`unknown` khi MSS nhắn khách chưa kết bạn (tin người lạ, không link, không bill). Vẫn là `RESULT_SENT`: không đường lui. */
+export const MSS_SENT_VIA_STRANGER = 'stranger';
+
+/** Sự kiện có email xác nhận đơn dự phòng (PO A3): chỉ tin đặt đơn và tin đã nhận tiền, tối đa một email mỗi đơn. */
+export const MSS_EMAIL_EVENT_TYPES: ReadonlySet<string> = new Set<MssOrderEventType>(['order.created', 'order.payment_confirmed']);
+
+/**
+ * Kết quả cuối mà khách chắc chắn chưa nhận tin Zalo nào cho sự kiện: email dự phòng được gửi. Không bao giờ cho `RESULT_SENT` (kể cả
+ * tin người lạ), `RESULT_UNKNOWN` (MSS có thể đã gửi), `CANCELLED` (khách rút đồng ý hoặc đơn đóng), sự kiện bị thay (`superseded`…) hay 409.
+ */
+export function mssEmailEligible(status: MssOutboxStatus, reason: string | null): boolean {
+  if (status === 'RESULT_SKIPPED') return !(reason && MSS_COVERED_SKIP_REASONS.has(reason));
+  if (status === 'DEAD') return reason !== 'event_id_reused';
+  return status === 'RESULT_FAILED' || status === 'EXPIRED';
+}
+
 /** Trạng thái cuối cần chạy đường lui (một lần, cột fallbackAt). */
 export const MSS_FALLBACK_STATUSES: readonly MssOutboxStatus[] = ['RESULT_SKIPPED', 'RESULT_FAILED', 'RESULT_UNKNOWN', 'DEAD', 'EXPIRED', 'CANCELLED'];
 

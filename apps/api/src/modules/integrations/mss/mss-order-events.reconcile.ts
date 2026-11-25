@@ -1,8 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { markCronSkipped, noteCronError, TrackCron } from '../../../common/cron-run/track-cron';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { OrderConfirmEmailService } from '../../notifications/order-email/order-confirm-email.service';
+import { ORDER_CONFIRM_EMAIL_TEMPLATE } from '../../notifications/order-email/order-confirm-email';
 import { MssFlagsService } from './mss-flags';
 import { MssOrderEventFallback } from './mss-order-event.fallback';
 import { MssOrderEventSender } from './mss-order-event.sender';
@@ -13,6 +15,8 @@ export const MSS_ORDER_EVENTS_RECONCILE_CRON = '45 */10 * * * *';
 /** Dòng PENDING tới hạn lâu hơn chừng này mà chưa ai nhận: job đã mất (Redis hỏng, API chết sau commit), cron tự gửi. */
 export const MSS_SWEEP_GRACE_MS = 60_000;
 const BATCH = 50;
+/** Cửa sổ tìm dòng đường lui ZNS để gửi email sau ZNS lỗi hẳn; email còn tự bỏ qua khi quá hạn sống của sự kiện (6 giờ + 15 phút). */
+export const MSS_EMAIL_AFTER_ZNS_WINDOW_MS = 24 * 3_600_000;
 /** Mỗi lần gọi MSS tối đa 5 giây: giới hạn thời gian một lượt cron để MSS treo không giữ cron quá lượt kế. */
 const RUN_BUDGET_MS = 120_000;
 
@@ -29,6 +33,7 @@ export class MssOrderEventReconcileService {
     private readonly flags: MssFlagsService,
     private readonly sender: MssOrderEventSender,
     private readonly fallback: MssOrderEventFallback,
+    @Optional() private readonly orderEmail?: OrderConfirmEmailService,
   ) {}
 
   @Cron(MSS_ORDER_EVENTS_SWEEP_CRON, { timeZone: CRON_TZ })
@@ -74,8 +79,48 @@ export class MssOrderEventReconcileService {
     for (const row of unsettled) {
       if ((await this.fallback.run(row.eventId)) !== null) fallbacks++;
     }
-    if (delivered > 0 || fallbacks > 0) this.logger.log(`Quét bù tin đơn MSS: gửi lại ${delivered}, đường lui ${fallbacks}.`);
+    const emails = await this.emailAfterZnsFailedOnce(now);
+    if (delivered > 0 || fallbacks > 0 || emails > 0) this.logger.log(`Quét bù tin đơn MSS: gửi lại ${delivered}, đường lui ${fallbacks}, email ${emails}.`);
     return { delivered, fallbacks };
+  }
+
+  /**
+   * Đường lui đã gửi ZNS cho tin đặt đơn / đã nhận tiền của người mua mà log ZNS của sự kiện kết thúc FAILED (hết lượt hoặc lỗi vĩnh viễn,
+   * khoá `mssFallbackDedupeKey` đã nhả thành `mss:<eventId>:failed:<id>`), không có log ZNS nào khác của sự kiện đang chờ hay đã gửi, và đơn chưa có email nào
+   * (khoá `orderEmailDedupeKey`, kể cả FAILED: lượt quét không gửi lại email lỗi): gửi email xác nhận đơn. Trả số email đã gửi.
+   */
+  async emailAfterZnsFailedOnce(now = Date.now()): Promise<number> {
+    if (!this.orderEmail || !(await this.orderEmail.enabled())) return 0;
+    // Cột timestamp(3) không múi giờ: so với mốc UTC tường minh, không theo TimeZone của phiên.
+    const since = new Date(now - MSS_EMAIL_AFTER_ZNS_WINDOW_MS);
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT o."id"
+        FROM "mss_order_event_outbox" o
+        JOIN "orders" ord ON ord."id" = o."orderId"
+       WHERE o."fallbackChannel" = 'ZNS'
+         AND o."recipientRole" = 'buyer'
+         AND o."eventType" IN ('order.created', 'order.payment_confirmed')
+         AND o."fallbackAt" >= (${since.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+         AND EXISTS (
+           SELECT 1 FROM "notification_logs" z
+            WHERE z."userId" = ord."userId" AND z."channel" = 'ZNS' AND z."status" = 'FAILED'
+              AND (z."payload" ->> 'dedupeKey' = 'mss:' || o."eventId"
+                   OR left(z."payload" ->> 'dedupeKey', length(o."eventId") + 12) = 'mss:' || o."eventId" || ':failed:'))
+         AND NOT EXISTS (
+           SELECT 1 FROM "notification_logs" z
+            WHERE z."userId" = ord."userId" AND z."channel" = 'ZNS' AND z."status" IN ('PENDING', 'RETRYING', 'SENT')
+              AND z."payload" ->> 'dedupeKey' = 'mss:' || o."eventId")
+         AND NOT EXISTS (
+           SELECT 1 FROM "notification_logs" e
+            WHERE e."userId" = ord."userId" AND e."channel" = 'EMAIL' AND e."templateCode" = ${ORDER_CONFIRM_EMAIL_TEMPLATE}
+              AND e."payload" ->> 'dedupeKey' = 'order-email:' || ord."code")
+       ORDER BY o."fallbackAt" ASC
+       LIMIT ${BATCH}`;
+    let sent = 0;
+    for (const row of rows) {
+      if ((await this.orderEmail.sendForEvent(row.id, now)) === 'SENT') sent++;
+    }
+    return sent;
   }
 
   @Cron(MSS_ORDER_EVENTS_RECONCILE_CRON, { timeZone: CRON_TZ })

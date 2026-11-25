@@ -18,6 +18,8 @@ export interface OrderZaloStatus {
   /** Được hỏi "gửi thêm thông báo giao hàng cho số người nhận" (cờ người nhận + năng lực MSS). Thiếu ở API cũ = không. */
   recipientEnabled?: boolean;
   tubuZaloPhone: string;
+  /** Khách đã là bạn Zalo của Tubu Tree (MSS gửi được tin đơn như bạn bè trong 90 ngày): ẩn lời mời kết bạn. Thiếu ở API cũ = chưa biết. */
+  friendKnown?: boolean;
 }
 
 export const fetchOrderZaloStatus = (http: HttpClient) => http.get<OrderZaloStatus>('/config/order-zalo');
@@ -76,11 +78,12 @@ export function tubuZaloUrl(phone: string | null | undefined): string {
 }
 
 /**
- * Lời mời kết bạn ở chi tiết đơn: cờ chung bật, đơn này có đồng ý và hành trình chưa xong. Đơn đã giao, huỷ, trả thì không còn tin
- * hành trình nào để nhận. `orderZaloConsent` có trong GET /orders/:code và place-order nhưng chưa khai ở kiểu đơn chung.
+ * Lời mời kết bạn ở màn đặt thành công và chi tiết đơn: cờ chung bật, đơn này có đồng ý, hành trình chưa xong và khách chưa được biết là bạn Zalo
+ * (`friendKnown` của GET /config/order-zalo). Đơn đã giao, huỷ, trả thì không còn tin hành trình nào để nhận. `orderZaloConsent` có trong
+ * GET /orders/:code và place-order nhưng chưa khai ở kiểu đơn chung.
  */
-export function showOrderZaloFriend(enabled: boolean | undefined, order: { status: string; orderZaloConsent?: unknown }): boolean {
-  return enabled === true && order.orderZaloConsent === true && ORDER_ZALO_ACTIVE.test(order.status);
+export function showOrderZaloFriend(enabled: boolean | undefined, order: { status: string; orderZaloConsent?: unknown }, friendKnown = false): boolean {
+  return enabled === true && order.orderZaloConsent === true && ORDER_ZALO_ACTIVE.test(order.status) && !friendKnown;
 }
 
 

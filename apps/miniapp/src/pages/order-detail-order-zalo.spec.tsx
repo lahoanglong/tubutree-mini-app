@@ -58,7 +58,7 @@ const ORDER = {
   shippingAddress: { recipient: 'Ánh', phone: '0911111111', street: '1 Lê Lợi', ward: 'Phường Bến Nghé', province: 'TP. Hồ Chí Minh' },
   items: [{ id: 'oi1', productName: 'Xà bông thảo mộc', variationName: 'Sả', productSlug: 'xa-bong', quantity: 2, total: 100_000, backorderedQty: 0 }],
 };
-const FRIEND = 'Kết bạn Zalo với Tubu Tree để nhận hành trình đơn TT001.';
+const FRIEND = 'Nhận Bill & theo dõi đơn TT001 miễn phí qua Zalo Tubu Tree';
 
 async function renderWith(order: Record<string, unknown>) {
   mocks.fetchOrder.mockResolvedValue(order);

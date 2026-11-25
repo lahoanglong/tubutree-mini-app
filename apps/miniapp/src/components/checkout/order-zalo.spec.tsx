@@ -41,7 +41,7 @@ describe('OrderZaloFriend', () => {
   it('câu mời có mã đơn; chạm "Mở Zalo Tubu Tree" mở zalo.me/<số> và đo nguồn bấm', async () => {
     mocks.openWebview.mockResolvedValue(undefined);
     wrap(<OrderZaloFriend code="TUBU2026111557909" from="success" />);
-    expect(screen.getByText('Kết bạn Zalo với Tubu Tree để nhận hành trình đơn TUBU2026111557909.')).toBeInTheDocument();
+    expect(screen.getByText('Nhận Bill & theo dõi đơn TUBU2026111557909 miễn phí qua Zalo Tubu Tree')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Mở Zalo Tubu Tree' }));
     await waitFor(() => expect(mocks.openWebview).toHaveBeenCalledWith({ url: 'https://zalo.me/0899149229' }));
     expect(mocks.trackEvent).toHaveBeenCalledWith('order_zalo_friend_click', 'miniapp', { from: 'success' });

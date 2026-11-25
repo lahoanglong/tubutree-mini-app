@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type User } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -16,6 +16,9 @@ import type { PlaceOrderDto, QuoteDto } from '../dto/checkout.dto';
 import { MAX_ITEM_QUANTITY } from '../../cart/dto/cart.dto';
 import { GUEST_ORDER_CLAIMED, type CodSwitchResultDTO, type GuestOrderLookupDTO, type GuestOrderTrackDTO, type GuestReorderDTO } from '@tubutree/shared-types';
 import { OrderCodSwitchService } from '../../orders/order-cod-switch.service';
+import { MssOrderEventRecorder } from '../../integrations/mss/mss-order-event.recorder';
+import { ORDER_ZALO_ACTIVE_STATUSES } from '../../integrations/mss/mss-order-event-types';
+import { orderZaloGateOpen } from '../../system-config/order-zalo-config';
 import { codSwitchEligible } from '../../orders/cod-switch';
 import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
 import { isLiveGuestOwner, signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
@@ -104,6 +107,7 @@ export class GuestCheckoutService {
     private readonly analytics: AnalyticsEventsService,
     private readonly env: ConfigService<Env, true>,
     private readonly codSwitch: OrderCodSwitchService,
+    @Optional() private readonly mssEvents?: MssOrderEventRecorder,
   ) {}
 
   private ipHashOf(ip: string): string | null {
@@ -399,7 +403,7 @@ export class GuestCheckoutService {
 
   private async viewOf({ order, statusTimes, closedAt }: Awaited<ReturnType<GuestCheckoutService['trackable']>>): Promise<GuestOrderTrackDTO> {
     const address = (order.shippingAddress ?? {}) as { ward?: unknown; province?: unknown };
-    const [items, siblings, codSwitchable] = await Promise.all([
+    const [items, siblings, codSwitchable, zaloFriendCard] = await Promise.all([
       this.prisma.orderItem.findMany({ where: { orderId: order.id }, orderBy: { id: 'asc' } }),
       order.checkoutGroup
         ? this.prisma.order.findMany({
@@ -409,6 +413,7 @@ export class GuestCheckoutService {
           })
         : Promise.resolve([]),
       readGuestCheckoutSettings(this.config).then((settings) => codSwitchEligible(this.prisma, order, settings.codMax)),
+      this.zaloFriendCard(order),
     ]);
     return {
       code: order.code,
@@ -438,7 +443,21 @@ export class GuestCheckoutService {
       siblings,
       expiresAt: closedAt ? new Date(closedAt.getTime() + GUEST_TRACK_TTL_DAYS * DAY_MS).toISOString() : null,
       codSwitchable,
+      zaloFriendCard,
     };
+  }
+
+  /**
+   * Thẻ kết bạn Zalo ở trang theo dõi (trang "đặt thành công" của khách vãng lai): cổng tin đơn mở, khách đồng ý ở đơn này, đơn còn đang đi,
+   * và MSS chưa gửi được tin nào của đơn tới người mua như bạn bè (`RESULT_SENT` lý do null). Tin người lạ (`stranger`) vẫn mời kết bạn.
+   */
+  private async zaloFriendCard(order: { id: string; status: string; orderZaloConsent: boolean | null }): Promise<boolean> {
+    if (!orderZaloGateOpen(this.mssEvents?.gate()) || order.orderZaloConsent !== true || !ORDER_ZALO_ACTIVE_STATUSES.includes(order.status)) return false;
+    const friend = await this.prisma.mssOrderEventOutbox.findFirst({
+      where: { orderId: order.id, recipientRole: 'buyer', status: 'RESULT_SENT', resultReason: null },
+      select: { id: true },
+    });
+    return friend === null;
   }
 
   /**

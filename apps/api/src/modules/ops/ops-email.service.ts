@@ -1,7 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createTransport } from 'nodemailer';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Env } from '../../config/env.validation';
 import { OPS_EMAIL_KEYS, resolveOpsEmailConfig, type OpsEmailConfig } from '../../config/ops-email-config';
@@ -10,42 +9,20 @@ import type { DailyDigest } from './daily-digest';
 import { alertEmail, dailyDigestEmail, emailEnvLabel, OPS_EMAIL_APP_NAME, scrubSecrets, testEmail, type AlertEmail } from './ops-email';
 import { classifySmtpError, isSmtpFailureKind, smtpFailureHint, type SmtpFailureKind } from './ops-email-error';
 import { EMAIL_BLOCK_KEY, EMAIL_STATE_KEY, recordEmailDelivery, type EmailDeliveryResult } from './ops-state';
+import {
+  AUTO_MAIL_HEADERS,
+  defaultMailTransportFactory,
+  EMAIL_SEND_TIMEOUT_MS,
+  OPS_MAIL_TRANSPORT,
+  smtpTransportOptions,
+  withTimeout,
+  type MailTransport,
+  type MailTransportFactory,
+} from './smtp-transport';
 
 type Ready = Extract<OpsEmailConfig, { state: 'ready' }>;
 
-/** Phần của nodemailer Transporter mà dịch vụ dùng — test thay bằng bản giả hoặc jsonTransport, không bao giờ nối SMTP thật. */
-export interface MailTransport {
-  sendMail(message: {
-    from: string | { name: string; address: string };
-    to: string[];
-    subject: string;
-    text: string;
-    html: string;
-    headers: Record<string, string>;
-  }): Promise<unknown>;
-  close(): void;
-}
-export type MailTransportFactory = (smtp: Ready['smtp']) => MailTransport;
-
-export const OPS_MAIL_TRANSPORT = Symbol('OPS_MAIL_TRANSPORT');
-
-/** Quá hạn này thì bỏ lượt gửi: ba hạn chờ của nodemailer cộng dồn vẫn có thể kéo dài, cron 5 phút không được kẹt theo. */
-export const EMAIL_SEND_TIMEOUT_MS = 30_000;
-
-export function smtpTransportOptions(smtp: Ready['smtp']) {
-  return {
-    host: smtp.host,
-    port: smtp.port,
-    secure: smtp.secure,
-    requireTLS: smtp.requireTLS,
-    ...(smtp.auth ? { auth: smtp.auth } : {}),
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 20_000,
-  };
-}
-
-const defaultFactory: MailTransportFactory = (smtp) => createTransport(smtpTransportOptions(smtp));
+export { EMAIL_SEND_TIMEOUT_MS, OPS_MAIL_TRANSPORT, smtpTransportOptions, type MailTransport, type MailTransportFactory };
 
 /** Trạng thái kênh email trong ảnh chụp sức khoẻ vận hành (admin xem ở màn Sức khoẻ hệ thống). */
 export interface EmailChannelState {
@@ -94,20 +71,6 @@ export const DISABLED_EMAIL_STATE: EmailChannelState = {
 const DISABLED_HINT = 'Chưa cấu hình email báo động: đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM (docs/GO-LIVE-KEYS.md mục 8).';
 const ERROR_MAX = 300;
 
-async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      p,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`quá ${Math.round(ms / 1000)} giây không gửi xong`)), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /**
  * Kênh email của báo động vận hành (SMTP qua nodemailer). Chỉ lo việc GỬI; quyết định gửi lúc nào (mở sự cố, việc mới,
  * nhắc lại, đã ổn) nằm ở OpsHealthService dùng chung với webhook. Mọi lỗi (cấu hình, mạng, SMTP, ghi DB) được nuốt tại đây:
@@ -123,7 +86,7 @@ export class OpsEmailService {
     private readonly prisma: PrismaService,
     @Optional() @Inject(OPS_MAIL_TRANSPORT) factory?: MailTransportFactory,
   ) {
-    this.factory = factory ?? defaultFactory;
+    this.factory = factory ?? defaultMailTransportFactory;
   }
 
   private resolve(): OpsEmailConfig {
@@ -270,8 +233,7 @@ export class OpsEmailService {
           subject: content.subject,
           text: content.text,
           html: content.html,
-          // Thư máy gửi: báo cho hộp thư nhận đừng trả lời tự động (tránh vòng lặp auto-reply).
-          headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' },
+          headers: { ...AUTO_MAIL_HEADERS },
         }),
         EMAIL_SEND_TIMEOUT_MS,
       );

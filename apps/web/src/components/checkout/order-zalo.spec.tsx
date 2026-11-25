@@ -15,6 +15,7 @@ vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }))
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 vi.mock('@/lib/analytics', () => ({ trackWebEvent: mocks.track }));
+vi.mock('@/components/ui/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr-img" data-value={value} /> }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
@@ -48,6 +49,7 @@ afterEach(() => {
   view?.unmount();
   view = null;
   vi.clearAllMocks();
+  delete (window as { matchMedia?: unknown }).matchMedia;
 });
 
 describe('OrderZaloDetail (web)', () => {
@@ -103,5 +105,31 @@ describe('OrderZaloDetail (web)', () => {
   it('máy chủ không cho bật (đơn đã giao, đại lý, không có số nào...): không có nút', async () => {
     const root = await mountDetail({ ...ORDER, orderZaloAvailable: false });
     expect(root.innerHTML).toBe('');
+  });
+
+  it('U4 lời mời kết bạn: câu "Nhận Bill…" có mã đơn, link zalo.me; khối QR chỉ hiện từ md (hidden md:flex), điện thoại không vẽ QR', async () => {
+    const root = await mountDetail({ ...ORDER, orderZaloConsent: true, orderZaloAvailable: false, orderZaloOn: true });
+    expect(root.textContent).toContain('Nhận Bill & theo dõi đơn TT001 miễn phí qua Zalo Tubu Tree');
+    expect(root.querySelector('a[href="https://zalo.me/0899149229"]')).not.toBeNull();
+    const qr = root.querySelector('[data-testid="order-zalo-friend-qr"]');
+    expect(qr).not.toBeNull();
+    expect(qr!.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'md:flex']));
+    expect(qr!.getAttribute('data-qr-value')).toBe('https://zalo.me/0899149229');
+    expect(qr!.textContent).toContain('Hoặc quét mã bằng Zalo trên điện thoại');
+    expect(root.querySelector('[data-testid="qr-img"]')).toBeNull();
+  });
+
+  it('U4 màn từ md: vẽ QR mã hoá đúng https://zalo.me/0899149229', async () => {
+    window.matchMedia = ((q: string) => ({ matches: q.includes('min-width'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as never;
+    const root = await mountDetail({ ...ORDER, orderZaloConsent: true, orderZaloAvailable: false, orderZaloOn: true });
+    expect(root.querySelector('[data-testid="order-zalo-friend-qr"] [data-testid="qr-img"]')?.getAttribute('data-value')).toBe('https://zalo.me/0899149229');
+  });
+
+  it('U2 máy chủ báo khách đã nhận tin Zalo đơn gần đây (friendKnown): không mời kết bạn, vẫn ghi số sẽ nhận tin', async () => {
+    mocks.get.mockImplementation(async (path: string) => (path === '/config/order-zalo' ? { ...STATUS, friendKnown: true } : { orderZaloEnabled: true }));
+    const root = await mountDetail({ ...ORDER, orderZaloConsent: true, orderZaloAvailable: false, orderZaloOn: true });
+    expect(root.querySelector('[data-testid="order-zalo-on"]')?.textContent).toContain('Sẽ báo qua Zalo số 090•••4567');
+    expect(root.querySelector('a[href="https://zalo.me/0899149229"]')).toBeNull();
+    expect(root.querySelector('[data-testid="order-zalo-friend-qr"]')).toBeNull();
   });
 });

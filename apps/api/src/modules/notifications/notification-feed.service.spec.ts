@@ -124,3 +124,15 @@ describe('NotificationFeedService.unreadCount', () => {
     expect(count).toHaveBeenCalledWith({ where: { userId: 'u1', channel: 'INAPP', status: { not: 'READ' } } });
   });
 });
+
+describe('E7 email xác nhận đơn (kênh EMAIL) không vào hộp tin trong app', () => {
+  it('dòng EMAIL của khách mới nhất vẫn không có trong danh sách, không đếm vào chưa đọc', async () => {
+    const email = (id: string, status: string): Row => ({ id, userId: 'u1', channel: 'EMAIL', status, sentAt: at('2027-02-01T00:00:00.000Z') });
+    const inapp: Row = { id: 'n1', userId: 'u1', channel: 'INAPP', status: 'SENT', sentAt: at('2026-10-01T00:00:00.000Z') };
+    const { prisma } = fakePrisma([email('e-sent', 'SENT'), email('e-pending', 'PENDING'), email('e-skip', 'SKIPPED'), inapp]);
+    const svc = new NotificationFeedService(prisma);
+    expect(((await svc.list('u1', {})) as Row[]).map((r) => r.id)).toEqual(['n1']);
+    expect(await svc.unreadCount('u1')).toEqual({ count: 1 });
+  });
+});
+

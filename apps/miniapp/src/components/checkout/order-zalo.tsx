@@ -36,6 +36,16 @@ export function useOrderZaloStatus() {
   return q.isFetchedAfterMount && !q.isError ? q.data : undefined;
 }
 
+/**
+ * Khách đã nhận tin Zalo đơn gần đây (`friendKnown` máy chủ tính): màn đặt xong ẩn lời mời kết bạn. Chỉ đọc bản ô Zalo ở thanh toán vừa tải
+ * (màn đặt xong chỉ có ngay sau thanh toán, và đặt đơn không đổi điều này), không gọi thêm request. Không có bản đó (cờ tắt) = false: thẻ hiện
+ * như trước. Cùng luật với web.
+ */
+export function useOrderZaloFriendKnown(): boolean {
+  const q = useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: false });
+  return q.data?.friendKnown === true;
+}
+
 export type OrderZaloRecipientToggle = { buyerPhoneMasked: string; on: boolean; onChange: (v: boolean) => void };
 
 /**
@@ -150,7 +160,9 @@ type OrderZaloDetailOrder = { code: string; status: string; orderZaloConsent?: u
  */
 export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
   const enabled = usePublicConfig().orderZaloEnabled;
-  const view = orderZaloDetailView(useOrderZaloStatus(), order);
+  const zalo = useOrderZaloStatus();
+  const view = orderZaloDetailView(zalo, order);
+  const friend = showOrderZaloFriend(enabled, order, zalo?.friendKnown);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { notify } = useNotify();
@@ -181,7 +193,7 @@ export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
       </div>
     );
   }
-  if (!view && !showOrderZaloFriend(enabled, order)) return null;
+  if (!view && !friend) return null;
   return (
     <div style={GAP_TOP}>
       {view && (
@@ -193,7 +205,7 @@ export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
           </button>
         </Text>
       )}
-      <OrderZaloFriend code={order.code} from="order_detail" />
+      {friend && <OrderZaloFriend code={order.code} from="order_detail" />}
     </div>
   );
 }

@@ -161,6 +161,9 @@ type GuardedZnsLog =
  */
 export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED' | 'SKIPPED';
 
+/** Kết quả gửi ZNS đã hoãn: NO_PHONE / PREFS = không có ZNS nào đi, đường lui chuyển sang email xác nhận đơn. */
+export type HeldZnsOutcome = 'DISPATCHED' | 'DUPLICATE' | 'NO_PHONE' | 'PREFS';
+
 /**
  * Gửi thông báo theo template code (Build Spec §4.10, §11).
  * Tra NotificationTemplate → gửi qua kênh tương ứng (ZNS/INAPP) → ghi NotificationLog.
@@ -275,12 +278,15 @@ export class NotificationsService {
   /**
    * Đường lui của luật hoãn ZNS (MSS không gửi được tin đơn): gửi nốt kênh ZNS của tin đã hoãn. Tin trong app đã lưu lúc hoãn nên ở
    * đây chỉ có ZNS; `dedupeKey` riêng của sự kiện MSS chặn gửi lần hai. Lỗi xếp hàng ZNS thì ném cho nơi gọi ghi log.
+   * Trả NO_PHONE (khách không có SĐT) hay PREFS (khách tắt nhóm tin) khi không có ZNS nào đi, để đường lui gửi email thay.
    */
-  async sendHeldZns(userId: string, templateCode: string, data: Record<string, string>, znsTemplateId: string, dedupeKey: string): Promise<void> {
-    if (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, null, 'ZNS'), select: { id: true } })) return;
+  async sendHeldZns(userId: string, templateCode: string, data: Record<string, string>, znsTemplateId: string, dedupeKey: string): Promise<HeldZnsOutcome> {
+    if (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, null, 'ZNS'), select: { id: true } })) return 'DUPLICATE';
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true, notifySocial: true } });
-    if (!user?.phone || !isAllowedByPrefs(templateCode, user)) return;
+    if (!user?.phone) return 'NO_PHONE';
+    if (!isAllowedByPrefs(templateCode, user)) return 'PREFS';
     await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, dedupeKey, null);
+    return 'DISPATCHED';
   }
 
   /**

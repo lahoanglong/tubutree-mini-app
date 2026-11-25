@@ -57,7 +57,7 @@ const ORDER = {
   trackingLink: null,
   items: [{ productName: 'Dầu gội bồ kết', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null }],
 };
-const FRIEND = 'Kết bạn Zalo với Tubu Tree để nhận hành trình đơn TB-9.';
+const FRIEND = 'Nhận Bill & theo dõi đơn TB-9 miễn phí qua Zalo Tubu Tree';
 
 let mounted: Rendered[] = [];
 const mount = async (order: Record<string, unknown>) => {

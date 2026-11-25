@@ -9,12 +9,13 @@ import { ZaloOaTokenService } from '../integrations/zns/zalo-oa-token.service';
 import { ZaloOaTokenCron } from '../integrations/zns/zalo-oa-token.cron';
 import { ZnsStuckLogCron } from './zns-stuck-log.cron';
 import { RefillReminderService } from './refill-reminder.service';
+import { OrderConfirmEmailService } from './order-email/order-confirm-email.service';
 
 @Global()
 @Module({
   controllers: [NotificationsController, NotificationTemplatesAdminController],
-  providers: [NotificationsService, NotificationFeedService, NotificationTemplatesAdminService, ZnsClient, ZaloOaTokenService, ZaloOaTokenCron, ZnsStuckLogCron, RefillReminderService],
-  // ZaloOaTokenService cũng cần cho ZaloOaMessageClient (module zalo-oa, CSKH quick-reply/auto-reply).
-  exports: [NotificationsService, ZaloOaTokenService],
+  providers: [NotificationsService, NotificationFeedService, NotificationTemplatesAdminService, ZnsClient, ZaloOaTokenService, ZaloOaTokenCron, ZnsStuckLogCron, RefillReminderService, OrderConfirmEmailService],
+  // ZaloOaTokenService cũng cần cho ZaloOaMessageClient (module zalo-oa, CSKH quick-reply/auto-reply). OrderConfirmEmailService: đường lui tin đơn MSS.
+  exports: [NotificationsService, ZaloOaTokenService, OrderConfirmEmailService],
 })
 export class NotificationsModule {}

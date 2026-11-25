@@ -503,9 +503,11 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.orderZalo.recipientNote': 'Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số {phone}.',
   'checkout.orderZalo.recipientToggle': 'Gửi thêm thông báo giao hàng (không kèm giá) cho số người nhận',
   'settings.orderZalo': 'Hành trình đơn hàng qua Zalo',
-  // Lời mời kết bạn Zalo Tubu Tree ở màn đặt xong và chi tiết đơn (chỉ đơn có đồng ý).
-  'order.zaloFriend.body': 'Kết bạn Zalo với Tubu Tree để nhận hành trình đơn {code}.',
+  // Lời mời kết bạn Zalo Tubu Tree ở màn đặt xong, chi tiết đơn và trang theo dõi đơn vãng lai /don (chỉ đơn có đồng ý, khách chưa là bạn Zalo).
+  'order.zaloFriend.body': 'Nhận Bill & theo dõi đơn {code} miễn phí qua Zalo Tubu Tree',
   'order.zaloFriend.cta': 'Mở Zalo Tubu Tree',
+  // Chỉ web từ md trở lên: mã QR cạnh nút, khách quét bằng Zalo trên điện thoại.
+  'order.zaloFriend.qr': 'Hoặc quét mã bằng Zalo trên điện thoại',
   'order.zaloFriend.blocked': 'Chưa mở được Zalo. Tìm số {phone} trên Zalo để kết bạn.',
   'order.zaloFriend.copy': 'Chép số',
   'order.zaloFriend.copied': 'Đã chép số',

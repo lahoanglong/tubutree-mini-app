@@ -109,6 +109,14 @@ describe('showOrderZaloFriend', () => {
       expect(showOrderZaloFriend(true, { status: s, orderZaloConsent: true })).toBe(false);
     }
   });
+
+  it('U2 khách đã nhận tin Zalo đơn gần đây (friendKnown): không mời kết bạn nữa', () => {
+    const open = { status: 'CONFIRMED', orderZaloConsent: true };
+    expect(showOrderZaloFriend(true, open, true)).toBe(false);
+    expect(showOrderZaloFriend(true, open, false)).toBe(true);
+    expect(showOrderZaloFriend(true, open, undefined)).toBe(true);
+    expect(showOrderZaloFriend(true, open)).toBe(true);
+  });
 });
 
 describe('gọi API', () => {

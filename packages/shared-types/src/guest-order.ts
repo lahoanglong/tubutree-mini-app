@@ -34,6 +34,11 @@ export interface GuestOrderTrackDTO {
   expiresAt: string | null;
   /** Đơn chuyển khoản chưa trả đổi được sang trả tiền khi nhận (POST /checkout/guest/orders/:code/switch-to-cod). API cũ không trả. */
   codSwitchable?: boolean;
+  /**
+   * Hiện thẻ "Kết bạn Zalo Tubu Tree": tin đơn qua Zalo đang bật, khách đồng ý ở đơn này, đơn còn đang đi và MSS chưa gửi được tin nào của đơn
+   * tới khách như bạn bè. API cũ không trả = không hiện.
+   */
+  zaloFriendCard?: boolean;
 }
 
 /**

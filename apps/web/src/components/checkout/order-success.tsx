@@ -19,7 +19,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
 import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
 import { OrderInviteNudge } from '@/components/referral/order-invite-nudge';
-import { OrderZaloFriend } from './order-zalo';
+import { OrderZaloFriend, useOrderZaloFriendKnown } from './order-zalo';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import type { ProductDetail } from '@/lib/api';
 
@@ -135,7 +135,8 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const cfg = usePublicConfig();
-  const friend = showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />;
+  const friendKnown = useOrderZaloFriendKnown();
+  const friend = showOrderZaloFriend(cfg.orderZaloEnabled, order, friendKnown) && <OrderZaloFriend code={order.code} from="success" />;
   const invite = referralViralOn(cfg) && <OrderInviteNudge />;
   const subscribe = candidate && (
     <>
