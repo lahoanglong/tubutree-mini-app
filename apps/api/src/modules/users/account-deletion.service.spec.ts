@@ -1,6 +1,7 @@
 import { ImageRegistryStale } from '../catalog/image-registry-stale';
 import { BadRequestException } from '@nestjs/common';
-import { ACCOUNT_DELETION_BLOCKED, AccountDeletionService, type DeletionBlocker, type PartnerStoreBlockersPort } from './account-deletion.service';
+import { ORDER_CODE_ALPHABET, SHORT_ORDER_CODE_RE } from '@tubutree/shared-types';
+import { ACCOUNT_DELETION_BLOCKED, AccountDeletionService, containsPhone, type DeletionBlocker, type PartnerStoreBlockersPort } from './account-deletion.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 function build(partnerBlockers: string[]) {
@@ -510,5 +511,53 @@ describe('AccountDeletionService.process — ghi chú admin không chứa số �
   it('ghi chú có mã đơn TUBUSUB7659607093 vẫn nhận', async () => {
     const { svc } = build([]);
     await expect(svc.process('req-1', 'admin-1', 'đơn TUBUSUB7659607093 đã huỷ, khách đồng ý')).resolves.toMatchObject({ alreadyProcessed: false });
+  });
+});
+
+/** Mọi mã ngắn (w34-01) chỉ gồm chữ số của bảng mã, độ dài 4 và 5, với cả ba tiền tố: trường hợp dễ giống số điện thoại nhất. */
+function* digitShortCodes(): Generator<string> {
+  const digits = [...ORDER_CODE_ALPHABET].filter((c) => /\d/.test(c));
+  for (const prefix of ['TB', 'DL', 'TS']) {
+    for (const len of [4, 5]) {
+      for (let n = 0; n < digits.length ** len; n++) {
+        let tail = '';
+        for (let k = 0, m = n; k < len; k++, m = Math.floor(m / digits.length)) tail += digits[m % digits.length];
+        yield prefix + tail;
+      }
+    }
+  }
+}
+
+describe('containsPhone: mã đơn ngắn (tubu-w36-02, trước gửi duyệt Zalo)', () => {
+  it('không mã ngắn nào bị coi là số điện thoại, kể cả mã toàn chữ số và đứng sát số khác', () => {
+    let checked = 0;
+    for (const code of digitShortCodes()) {
+      expect(code).toMatch(SHORT_ORDER_CODE_RE);
+      if (containsPhone(`đơn ${code} khách đổi ý`) || containsPhone(`${code}${code}`) || containsPhone(`#${code.toLowerCase()} 2 món`)) throw new Error(`${code} bị coi là số điện thoại`);
+      checked++;
+    }
+    expect(checked).toBe(3 * (8 ** 4 + 8 ** 5));
+    for (const code of ['TB7K4M', 'DLX9Q2', 'TS2B8H7']) expect(containsPhone(`đơn ${code} đã huỷ, khách đồng ý`)).toBe(false);
+  });
+
+  it('mã ngắn đứng sát số tiền, số lượng (sau dấu phẩy, dấu ·, hay số ngắn) không bị coi là số điện thoại', () => {
+    for (const text of ['đơn TB8495, 1.200.000đ', 'đơn TB8495 · 1.200.000đ', 'đơn TB8495 x2 120.000đ', 'đơn TB2384 3 món', 'đơn TB98765 1.200.000đ', 'đơn TB7K4M 1.200.000đ']) {
+      expect(containsPhone(text)).toBe(false);
+    }
+  });
+
+  // Lỗi đã biết, chờ sửa ở PHONE_LIKE: đuôi mã có "84" rồi chữ số đầu di động (3/5/7/8/9), cách một dấu cách tới một số đủ dài, khớp "+84 9xx xxx xxx".
+  // it.failing xanh khi lỗi còn; sửa xong ca này đỏ, đổi thành it.
+  it.failing('đã biết: "đơn TB8495 1.200.000đ" bị coi là số điện thoại', () => {
+    expect(containsPhone('đơn TB8495 1.200.000đ')).toBe(false);
+  });
+
+  it('số điện thoại đứng cạnh mã ngắn vẫn bị chặn', () => {
+    for (const text of ['đơn TB98765 gọi 0912345678', 'TB7K4M sdt0912345678', 'đơn DL2345, (+84) 912 345 678']) expect(containsPhone(text)).toBe(true);
+  });
+
+  it('lý do có mã ngắn: xoá tài khoản vẫn nhận', async () => {
+    const { svc } = build([]);
+    await expect(svc.process('req-1', 'admin-1', 'đơn TB98765 và TB7K4M đã huỷ, khách đồng ý')).resolves.toMatchObject({ alreadyProcessed: false });
   });
 });

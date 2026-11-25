@@ -1,5 +1,6 @@
 import { expect, reply, test, type MockApi } from './support/mock-api';
 import { PURCHASED } from './support/buy-flow-mocks';
+import { BANK_FIXTURE } from './support/bank-fixture';
 
 /**
  * Web khách, lane đơn hàng (việc giỏ và thanh toán): xoá có hoàn tác, Đổi rác kèm đơn, Idempotency-Key theo nội dung đơn,
@@ -174,7 +175,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     let paid = false;
     api.get(`/payments/bank-qr/${CODE}`, () => ({
       orderCode: CODE, amount: 330000, paymentStatus: paid ? 'PAID' : 'UNPAID', paymentDeadline: null,
-      bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
+      bank: { ...BANK_FIXTURE },
       memo: CODE, qrString: 'x', qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
     }));
 
@@ -183,7 +184,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
     await expect(page).toHaveURL(new RegExp(`/thanh-toan/chuyen-khoan/${CODE}$`));
     await expect(page.getByRole('heading', { name: 'Quét QR để chuyển khoản' })).toBeVisible();
-    await expect(page.getByText('9984606774').first()).toBeVisible();
+    await expect(page.getByText(BANK_FIXTURE.accountNo).first()).toBeVisible();
 
     paid = true;
     await page.getByRole('button', { name: /Tôi đã chuyển khoản/ }).click();
@@ -257,7 +258,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     api.get('/payments/bank-qr/TUBU2026101900004', {
       orderCode: 'TUBU2026101900004', amount: 330000, paymentStatus: 'UNPAID', paymentDeadline: null,
-      bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
+      bank: { ...BANK_FIXTURE },
       memo: 'TUBU2026101900004', qrString: 'x', qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
     });
     await bar.getByRole('button', { name: 'Thanh toán ngay' }).click();

@@ -18,5 +18,5 @@
       "@tubutree/shared-types": ["../../packages/shared-types/src/index.ts"]
     }
   },
-  "include": ["playwright.config.ts", "global-setup.ts", "tests/**/*.ts"]
+  "include": ["playwright.config.ts", "playwright.mini-www.config.ts", "global-setup.ts", "tests/**/*.ts"]
 }
