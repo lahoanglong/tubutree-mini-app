@@ -337,6 +337,21 @@ describe('MssOrderEventRecorder.record: link xem đơn và bill (w37-01)', () =>
     }
   });
 
+  it('đơn Hộp Xanh/combo: OrderItem.total đã trừ combo nhưng thành tiền gửi đơn giá × số lượng, tổng các dòng = tạm tính, đủ ba khoá tiền', async () => {
+    const combo = [{ ...ITEMS[0]!, total: 228_000 }, ITEMS[1]!];
+    const rows = await run({ bill: true }, orderRow({ items: combo, discount: 15_000 }), ['order.created']);
+    const order = rows[0]!.json.order as { items: { line_vnd: number }[]; subtotal_vnd?: number };
+    expect(order.items.map((i) => i.line_vnd)).toEqual([240_000, 0]);
+    expect(order.items.reduce((s, i) => s + i.line_vnd, 0)).toBe(order.subtotal_vnd);
+    expect(order).toMatchObject({ subtotal_vnd: 240_000, discount_vnd: 15_000, shipping_fee_vnd: 20_000 });
+  });
+
+  it('đơn giá × số lượng không cộng ra tạm tính: thành tiền giữ OrderItem.total', async () => {
+    const odd = [{ ...ITEMS[0]!, total: 230_000 }, ITEMS[1]!];
+    const rows = await run({ bill: true }, orderRow({ items: odd, subtotal: 250_000, total: 255_000 }), ['order.created']);
+    expect((rows[0]!.json.order as { items: { line_vnd: number }[] }).items.map((i) => i.line_vnd)).toEqual([230_000, 0]);
+  });
+
   it('tiền lệch tổng đơn: ghi cảnh báo mss_bill_money_mismatch, không khoá tiền, món vẫn đi', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn');
     const rows = await run({ bill: true }, orderRow({ discount: 14_000 }), ['order.created']);

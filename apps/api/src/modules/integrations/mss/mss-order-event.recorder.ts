@@ -320,7 +320,8 @@ export class MssOrderEventRecorder implements OnModuleInit {
     if (seq === undefined) return 'not_found';
 
     // Chỉ dòng người mua có link và bill. Dòng người nhận (PO A1) không kèm giá, tên món hay link tới trang có giá của người mua.
-    // Link khách vãng lai (khoá 60 ngày) đi theo cổng bill ở mọi loại tin, kể cả tracking_url của tin giao hàng: tắt cờ là thu hồi được.
+    // Link khách vãng lai (khoá 60 ngày) đi theo cổng bill ở mọi loại tin, kể cả tracking_url của tin giao hàng. Tắt cờ chỉ dừng cấp link
+    // mới: khoá đã gửi vẫn mở được tới hết hạn (verifyGuestLookupKey không xét cờ); thu hồi hết chỉ bằng cách đổi JWT_ACCESS_SECRET.
     const buyerRow = to.role === 'buyer';
     const linkUrl = buyerRow
       ? orderDetailUrl({
@@ -396,13 +397,27 @@ export class MssOrderEventRecorder implements OnModuleInit {
     return null;
   }
 
-  /** Bill theo dòng hàng (`OrderItem.id` tăng dần). Tiền lệch tổng đơn chỉ ghi cảnh báo: bộ dựng thân tự bỏ ba khoá tiền, món vẫn đi. */
+  /**
+   * Bill theo dòng hàng (`OrderItem.id` tăng dần). `OrderItem.total` đã trừ phần combo/Hộp Xanh phân bổ vào dòng, còn `subtotal` là tiền hàng
+   * trước mọi khoản giảm (combo nằm trong `discount`). MSS chỉ in Tạm tính/Giảm/Phí ship khi tổng thành tiền các dòng bằng tạm tính, nên thành tiền
+   * gửi `unitPrice × quantity` khi tổng các tích đó bằng `subtotal`; không khớp thì giữ `total`. Tiền lệch tổng đơn chỉ ghi cảnh báo: bộ dựng
+   * thân tự bỏ ba khoá tiền, món vẫn đi.
+   */
   private billOf(order: RecordedOrder): MssBillInput {
+    const gross = order.items.map((i) => i.unitPrice * i.quantity);
+    const grossMatchesSubtotal = gross.reduce((sum, v) => sum + v, 0) === order.subtotal;
     const bill: MssBillInput = {
       subtotal: order.subtotal,
       discount: order.discount,
       shippingFee: order.shippingFee,
-      items: order.items.map((i) => ({ name: i.productName, variant: i.variationName, qty: i.quantity, unitPrice: i.unitPrice, lineTotal: i.total, gift: i.isGift })),
+      items: order.items.map((i, k) => ({
+        name: i.productName,
+        variant: i.variationName,
+        qty: i.quantity,
+        unitPrice: i.unitPrice,
+        lineTotal: grossMatchesSubtotal ? gross[k]! : i.total,
+        gift: i.isGift,
+      })),
     };
     if (!billMoneyConsistent(order.total, bill)) {
       this.logger.warn(
