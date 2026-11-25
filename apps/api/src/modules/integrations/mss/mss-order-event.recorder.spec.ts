@@ -345,20 +345,26 @@ describe('MssOrderEventRecorder.record: link xem đơn và bill (w37-01)', () =>
     expect(warn.mock.calls.some((c) => String(c[0]).startsWith('mss_bill_money_mismatch order=TB7K4M'))).toBe(true);
   });
 
-  it('khách vãng lai web còn sống: tracking_url của tin giao hàng và detail_url là link /don đã ký 60 ngày, mở đúng đơn', async () => {
+  it('khách vãng lai web còn sống, cổng bill mở: tracking_url của tin giao hàng và detail_url là link /don đã ký 60 ngày, mở đúng đơn', async () => {
     const guest = orderRow({ guestTokenHash: HASH, guestPhone: '0912345678' }, { phone: null, zaloId: 'guest_w_abcdef', phoneVerifiedAt: null, fullName: 'Khách' });
-    for (const bill of [false, true]) {
-      const rows = await run({ bill }, guest, ['order.created', 'order.shipping']);
-      const shipping = rows.find((r) => r.eventType === 'order.shipping' && r.recipientRole === 'buyer')!.json.order;
-      const url = shipping.tracking_url as string;
-      expect(url).toMatch(/^https:\/\/tubutree\.com\/don\/TB7K4M#k=[A-Za-z0-9_-]{43}$/);
-      const key = url.split('#k=')[1]!;
-      expect(verifyGuestLookupKey(key, 'TB7K4M', HASH, SECRET, Date.now() + 59 * 86_400_000)).toBe(true);
-      expect(verifyGuestLookupKey(key, 'TB7K4M', HASH, SECRET, Date.now() + 61 * 86_400_000)).toBe(false);
-      const created = rows.find((r) => r.eventType === 'order.created')!;
-      if (bill) expect(created.json.order.detail_url).toMatch(/^https:\/\/tubutree\.com\/don\/TB7K4M#k=/);
-      else expect(created.json.order).not.toHaveProperty('detail_url');
-      for (const r of rows) for (const k of ['tracking_url', 'detail_url']) expect(String(r.json.order[k] ?? '')).not.toContain('12345678');
+    const rows = await run({ bill: true }, guest, ['order.created', 'order.shipping']);
+    const shipping = rows.find((r) => r.eventType === 'order.shipping' && r.recipientRole === 'buyer')!.json.order;
+    const url = shipping.tracking_url as string;
+    expect(url).toMatch(/^https:\/\/tubutree\.com\/don\/TB7K4M#k=[A-Za-z0-9_-]{43}$/);
+    const key = url.split('#k=')[1]!;
+    expect(verifyGuestLookupKey(key, 'TB7K4M', HASH, SECRET, Date.now() + 59 * 86_400_000)).toBe(true);
+    expect(verifyGuestLookupKey(key, 'TB7K4M', HASH, SECRET, Date.now() + 61 * 86_400_000)).toBe(false);
+    expect(rows.find((r) => r.eventType === 'order.created')!.json.order.detail_url).toMatch(/^https:\/\/tubutree\.com\/don\/TB7K4M#k=/);
+    for (const r of rows) for (const k of ['tracking_url', 'detail_url']) expect(String(r.json.order[k] ?? '')).not.toContain('12345678');
+  });
+
+  it('khách vãng lai web, cổng bill đóng: không link nào (giống w36), tắt cờ bill là thu hồi link khoá 60 ngày', async () => {
+    const guest = orderRow({ guestTokenHash: HASH, guestPhone: '0912345678' }, { phone: null, zaloId: 'guest_w_abcdef', phoneVerifiedAt: null, fullName: 'Khách' });
+    const rows = await run({ bill: false }, guest, ['order.created', 'order.shipping']);
+    for (const r of rows) {
+      expect(r.json.order).not.toHaveProperty('tracking_url');
+      expect(r.json.order).not.toHaveProperty('detail_url');
+      expect(r.body).not.toContain('#k=');
     }
   });
 

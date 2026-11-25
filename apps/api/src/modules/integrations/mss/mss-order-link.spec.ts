@@ -16,6 +16,7 @@ const make = (over: Partial<OrderDetailUrlInput> = {}): OrderDetailUrlInput => (
   owner: ACCOUNT,
   secret: SECRET,
   now: NOW,
+  guestLinks: true,
   ...over,
 });
 const keyOf = (url: string) => url.split('#k=')[1]!;
@@ -56,6 +57,13 @@ describe('orderDetailUrl: link xem đơn trong tin Zalo của người mua (w37-
     expect(orderDetailUrl(make({ guestTokenHash: HASH, owner: { ...GUEST, mergedIntoId: 'target-1' } }))).toBeNull();
     expect(orderDetailUrl(make({ guestTokenHash: null, owner: GUEST }))).toBeNull();
     expect(orderDetailUrl(make({ guestTokenHash: HASH, owner: { zaloId: null, phone: null, mergedIntoId: null } }))).toBeNull();
+  });
+
+  it('guestLinks tắt (cổng bill đóng): khách vãng lai không link nào; đơn tài khoản vẫn link tài khoản', () => {
+    expect(orderDetailUrl(make({ guestTokenHash: HASH, owner: GUEST, guestLinks: false }))).toBeNull();
+    expect(orderDetailUrl(make({ guestTokenHash: HASH, owner: GUEST, guestLinks: false, secret: undefined }))).toBeNull();
+    expect(orderDetailUrl(make({ guestLinks: false }))).toBe('https://tubutree.com/tai-khoan/don-hang/TB7K4M');
+    expect(orderDetailUrl(make({ guestTokenHash: HASH, guestLinks: false }))).toBe('https://tubutree.com/tai-khoan/don-hang/TB7K4M');
   });
 
   it('thiếu bí mật: khách vãng lai nhận trang tra cứu điền sẵn mã (/don?ma=), không ký bằng bí mật dev', () => {

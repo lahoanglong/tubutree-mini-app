@@ -320,6 +320,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
     if (seq === undefined) return 'not_found';
 
     // Chỉ dòng người mua có link và bill. Dòng người nhận (PO A1) không kèm giá, tên món hay link tới trang có giá của người mua.
+    // Link khách vãng lai (khoá 60 ngày) đi theo cổng bill ở mọi loại tin, kể cả tracking_url của tin giao hàng: tắt cờ là thu hồi được.
     const buyerRow = to.role === 'buyer';
     const linkUrl = buyerRow
       ? orderDetailUrl({
@@ -329,6 +330,7 @@ export class MssOrderEventRecorder implements OnModuleInit {
           owner: order.user,
           secret: this.env.get('JWT_ACCESS_SECRET', { infer: true }) || undefined,
           now: occurredAt.getTime(),
+          guestLinks: billOpen,
         })
       : null;
     const bill = buyerRow && billOpen && (eventType === 'order.created' || eventType === 'order.payment_confirmed') ? this.billOf(order) : null;

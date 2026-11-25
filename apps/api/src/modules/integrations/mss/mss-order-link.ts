@@ -17,6 +17,11 @@ export interface OrderDetailUrlInput {
   /** `JWT_ACCESS_SECRET`, cùng nguồn với `GuestCheckoutService.linkSecret` (bên kiểm khoá). */
   secret: string | undefined;
   now: number;
+  /**
+   * Cho link khách vãng lai (khoá đã ký 60 ngày). Bộ ghi sự kiện chỉ bật khi cổng bill mở (`mss.order_bill_enabled` + `order_events.bill_v1`):
+   * cờ đó là công tắc tắt link khoá dài hạn, và cổng đóng thì thân giống từng byte bản trước w37 (khách vãng lai không có link).
+   */
+  guestLinks: boolean;
 }
 
 /**
@@ -26,7 +31,7 @@ export interface OrderDetailUrlInput {
  *   khi đơn về một tài khoản (`orderByKey` chỉ nhận khoá gốc của trình duyệt cho đơn đã về tài khoản). Thiếu bí mật thì trỏ trang tra cứu
  *   điền sẵn mã (`/don?ma=`), khách tự nhập SĐT: không ký bằng bí mật dev công khai.
  * - Chủ là tài khoản thật: `/tai-khoan/don-hang/<mã>` (cần đăng nhập đúng chủ đơn; API lọc theo userId).
- * - Còn lại (khách vãng lai Mini theo deviceId, dòng khách đã gộp): null. Họ không có tài khoản web để mở trang đơn, như trước w37.
+ * - Còn lại (khách vãng lai Mini theo deviceId, dòng khách đã gộp), hay khách vãng lai web khi `guestLinks` tắt: null, như trước w37.
  *
  * Dài quá MSS_DETAIL_URL_MAX cũng trả null: thân sự kiện bỏ khoá link chứ không bỏ cả tin.
  */
@@ -34,6 +39,7 @@ export function orderDetailUrl(i: OrderDetailUrlInput): string | null {
   const code = encodeURIComponent(i.code);
   let url: string | null = null;
   if (i.guestTokenHash && isLiveGuestOwner(i.owner)) {
+    if (!i.guestLinks) return null;
     url = i.secret
       ? `${i.origin}/don/${code}#k=${signGuestLookupKey(i.code, i.guestTokenHash, i.secret, i.now, MSS_GUEST_LINK_TTL_MS).key}`
       : `${i.origin}/don?ma=${code}`;

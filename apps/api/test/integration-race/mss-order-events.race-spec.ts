@@ -780,13 +780,20 @@ describe('MSS order events (real Postgres)', () => {
       }
     });
 
-    it('khách vãng lai web (có khoá đơn, chủ còn là khách): tracking_url của tin giao hàng là /don/<mã>#k= đã ký, không phải trang tài khoản', async () => {
+    it('khách vãng lai web (có khoá đơn, chủ còn là khách): cổng bill mở thì tracking_url là /don/<mã>#k= đã ký; cổng bill đóng thì không link (như w36)', async () => {
       const { order } = await consentedOrder({ guest: true });
       await prisma.order.update({ where: { id: order.id }, data: { guestTokenHash: 'd'.repeat(64), platform: 'web' } });
       expect(await recordIn(order.id, 'order.shipping')).toBeNull();
       const url = bodyOf((await rowsOf(order.id))[0]!).order.tracking_url as string;
       expect(url).toMatch(new RegExp(`^https://tubutree\\.com/don/${order.code}#k=[A-Za-z0-9_-]{43}$`));
       expect(url).not.toContain(order.guestPhone!.slice(3));
+
+      const off = await consentedOrder({ guest: true });
+      await prisma.order.update({ where: { id: off.order.id }, data: { guestTokenHash: 'e'.repeat(64), platform: 'web' } });
+      expect(await recordIn(off.order.id, 'order.shipping', recorderNoBill)).toBeNull();
+      const [row] = await rowsOf(off.order.id);
+      expect(bodyOf(row!).order).not.toHaveProperty('tracking_url');
+      expect(row!.body).not.toContain('#k=');
     });
   });
 });
