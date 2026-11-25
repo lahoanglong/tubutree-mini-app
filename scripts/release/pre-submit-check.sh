@@ -55,7 +55,7 @@ step() {
   local t0; t0=$(date +%s)
   ( "$@" ) > "$OUT/$name.txt" 2>&1
   local rc=$?
-  local note; note=$(grep -E '^(ĐẠT|KHÔNG ĐẠT)  |Tests:|[0-9]+ passed|[0-9]+ failed|Tasks:|Tổng|tới trần|^lô [0-9]|xanh' "$OUT/$name.txt" | tail -3 | tr -s ' ' | tr '\n' ' ' | cut -c1-240)
+  local note; note=$(grep -E '^(ĐẠT|KHÔNG ĐẠT)  |^Tests:|^ *(Tests|Test Files) +[0-9]|^ +[0-9]+ (passed|failed|flaky|skipped|did not run)|Tasks:|^\s*Tổng:|còn [0-9]+ B tới trần|^lô [0-9]|xanh:|: xanh —' "$OUT/$name.txt" | tail -4 | tr -s ' ' | tr '\n' ' ' | cut -c1-300)
   if [ $rc -eq 0 ]; then record "$name" "ĐẠT" "$(( $(date +%s) - t0 ))s $note"; else record "$name" "KHÔNG ĐẠT" "rc=$rc $(( $(date +%s) - t0 ))s $note"; FAILED=$((FAILED + 1)); fi
 }
 
