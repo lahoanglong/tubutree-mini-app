@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopied, bankCopyFailed } from '@tubutree/app-core/client-copy';
 import type { ReactNode } from 'react';
 import { Page, useParams, useNavigate } from 'zmp-ui';
@@ -30,6 +30,9 @@ import type { SaveImageResult } from '@tubutree/app-core/bridge';
 import { takeTransferQrDelay } from '@tubutree/app-core/commerce/checkout-display';
 import { trackEvent } from '../services/analytics';
 import { CodSwitchAction } from '../components/orders/cod-switch-action';
+
+// Thẻ kết bạn Zalo chỉ hiện khi máy chủ bảo hiện: tải lười để màn chuyển khoản không kéo thẻ và câu chữ cửa hàng (`shop-copy`) theo khi thẻ ẩn.
+const OrderZaloFriend = lazy(() => import('../components/checkout/order-zalo').then((m) => ({ default: m.OrderZaloFriend })));
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
@@ -89,6 +92,11 @@ export default function BankPaymentPage() {
     // Tự dò trạng thái: Pancake/Bank đối soát chuyển khoản → webhook lật PAID; FE poll mỗi 4s.
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' || isFinalRejection(q.state.error) ? false : 4000),
   });
+
+  // Chốt lần đầu máy chủ bảo hiện thẻ kết bạn Zalo: lần dò sau trả false (MSS vừa nhắn được như bạn bè) thì thẻ vẫn ở yên, không nhảy bố cục.
+  const zaloCardFor = useRef<string | null>(null);
+  if (code && data?.zaloFriendCard === true) zaloCardFor.current = code;
+  const zaloCard = !!code && zaloCardFor.current === code;
 
   // Ghi URL ảnh đã lỗi (không phải cờ chung) để khi đơn đổi mã QR (trả thêm tiền) ảnh mới được thử lại.
   const qrFailed = failedQr !== null && failedQr === data?.qrImageUrl;
@@ -264,6 +272,7 @@ export default function BankPaymentPage() {
           <Button fullWidth variant="secondary" onPress={() => navigate('/', { replace: true })} style={{ marginTop: 8 }}>
             Về trang chủ
           </Button>
+          {zaloCard && <ZaloFriendCard code={data.orderCode} />}
         </Box>
       </Page>
     );
@@ -377,6 +386,7 @@ export default function BankPaymentPage() {
         <Button fullWidth variant="secondary" onPress={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>
           Để sau / Xem đơn hàng
         </Button>
+        {zaloCard && <ZaloFriendCard code={data.orderCode} />}
       </Box>
       <StickyActionBar
         primary={
@@ -387,6 +397,24 @@ export default function BankPaymentPage() {
         }
       />
     </Page>
+  );
+}
+
+/** Lời mời kết bạn Zalo dưới các nút của màn (ưu tiên thấp nhất, không tranh nút Kiểm tra): khối nền trắng như khung mã QR, chữ canh trái. */
+function ZaloFriendCard({ code }: { code: string }) {
+  return (
+    <Box
+      mt={3}
+      p={3}
+      role="region"
+      aria-label="Zalo Tubu Tree"
+      data-testid="bank-zalo-friend"
+      style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'left' }}
+    >
+      <Suspense fallback={null}>
+        <OrderZaloFriend code={code} from="bank_transfer" />
+      </Suspense>
+    </Box>
   );
 }
 

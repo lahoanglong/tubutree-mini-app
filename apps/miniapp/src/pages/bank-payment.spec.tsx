@@ -32,6 +32,10 @@ vi.mock('./about-data', async (importOriginal) => ({
 vi.mock('../services/payment-api', () => ({ getBankQr: mocks.getBankQr }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
+// Thẻ thật đọc cấu hình công khai, câu chữ cửa hàng và zmp-sdk; ở đây chỉ cần biết trang có vẽ nó không, với mã đơn và nơi bấm nào.
+vi.mock('../components/checkout/order-zalo', () => ({
+  OrderZaloFriend: ({ code, from }: { code: string; from: string }) => <div data-testid="zalo-friend-stub" data-code={code} data-from={from} />,
+}));
 
 import BankPaymentPage from './bank-payment';
 import { announce, useAnnouncements } from '../hooks/use-notify';
@@ -843,5 +847,65 @@ describe('Thanh toán chuyển khoản: đổi sang trả tiền khi nhận (COD
     fireEvent.click(await screen.findByRole('button', { name: 'Đổi sang COD' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: PAID, type: 'error', position: 'top' }));
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Thanh toán chuyển khoản: thẻ kết bạn Zalo (w39-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+  });
+  const card = () => document.querySelector('[data-testid="bank-zalo-friend"]');
+
+  it('máy chủ bảo hiện: thẻ nằm sau nút "Để sau / Xem đơn hàng", mang mã đơn và nơi bấm bank_transfer', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, zaloFriendCard: true });
+    renderPage();
+    const stub = await screen.findByTestId('zalo-friend-stub');
+    expect(stub.getAttribute('data-code')).toBe('TT001');
+    expect(stub.getAttribute('data-from')).toBe('bank_transfer');
+    const section = card()!;
+    expect(section.getAttribute('aria-label')).toBe('Zalo Tubu Tree');
+    expect(section.getAttribute('style')).toContain('--color-bg-surface');
+    const later = screen.getByRole('button', { name: 'Để sau / Xem đơn hàng' });
+    expect(later.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['máy chủ bảo ẩn', { zaloFriendCard: false }],
+    ['API cũ không trả trường', {}],
+  ])('%s: không có thẻ', async (_n, extra) => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, ...extra });
+    renderPage();
+    await screen.findByRole('button', { name: 'Để sau / Xem đơn hàng' });
+    await act(async () => {});
+    expect(card()).toBeNull();
+  });
+
+  it('chốt lần hiện đầu: bấm Kiểm tra ra false (MSS vừa nhắn được như bạn bè) thì thẻ vẫn ở yên', async () => {
+    mocks.getBankQr.mockResolvedValueOnce({ ...QR, zaloFriendCard: true }).mockResolvedValue({ ...QR, zaloFriendCard: false });
+    renderPage();
+    await screen.findByTestId('zalo-friend-stub');
+    fireEvent.click(screen.getByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(2);
+    expect(card()).not.toBeNull();
+  });
+
+  it('đã nhận tiền (PAID): thẻ vẫn hiện, sau nút "Về trang chủ"', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paymentStatus: 'PAID', zaloFriendCard: true });
+    renderPage();
+    await screen.findByText('Đã nhận thanh toán!');
+    await screen.findByTestId('zalo-friend-stub');
+    const home = screen.getByRole('button', { name: 'Về trang chủ' });
+    expect(home.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('lỗi tải: không có thẻ', async () => {
+    mocks.getBankQr.mockRejectedValue(new Error('Network Error'));
+    renderPage();
+    await screen.findByText('Chưa tải được thông tin thanh toán');
+    expect(card()).toBeNull();
   });
 });

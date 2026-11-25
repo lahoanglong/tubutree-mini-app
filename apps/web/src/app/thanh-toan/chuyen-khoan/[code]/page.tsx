@@ -135,7 +135,7 @@ export default function BankPaymentPage() {
         {zaloCard && (
           <section
             data-testid="bank-zalo-friend"
-            className={`mt-3 p-4 ${ui.card} ${mini.card} max-md:mx-2 max-md:mt-2 max-md:p-3`}
+            className={`mt-3 p-4 ${ui.card} ${mini.card} max-md:mx-2 max-md:p-3`}
             aria-label="Zalo Tubu Tree"
           >
             <OrderZaloFriend code={code} from="bank_transfer" />
