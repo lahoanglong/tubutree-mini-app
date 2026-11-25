@@ -1,4 +1,4 @@
-import { buyerOrderNotices, lateConsentBlock } from './mss-order-event-types';
+import { buyerOrderNotices, buyerPhoneOf, lateConsentBlock, lateConsentOrderBlock, normalizeVnPhone, recipientPhoneFor, shippingPhoneOf } from './mss-order-event-types';
 
 const gate = { enabled: true, open: true, rolloutPct: 100 };
 const order = {
@@ -36,15 +36,78 @@ describe('lateConsentBlock (bật Zalo từ chi tiết đơn)', () => {
     expect(lateConsentBlock({ gate, order: { ...order, orderZaloConsent: true }, user })).toBe('already');
   });
 
-  it('cùng luật bỏ qua của bộ ghi sự kiện: nền tảng lạ, đặt hộ, đơn đại lý, SĐT chưa xác minh, đơn tặng người khác', () => {
+  it('cùng luật bỏ qua của bộ ghi sự kiện: nền tảng lạ, đặt hộ, đơn đại lý', () => {
     expect(lateConsentBlock({ gate, order: { ...order, platform: null }, user })).toBe('platform_null');
     expect(lateConsentBlock({ gate, order: { ...order, placedForCustomer: true }, user })).toBe('placed_for_customer');
     expect(lateConsentBlock({ gate, order: { ...order, type: 'DEALER' }, user })).toBe('dealer_order');
-    expect(lateConsentBlock({ gate, order, user: { ...user, phoneVerifiedAt: null } })).toBe('no_verified_phone');
-    expect(lateConsentBlock({ gate, order, user: { ...user, phone: null } })).toBe('no_verified_phone');
-    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: { phone: '0911111111' } }, user })).toBe('gift_recipient');
-    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: null }, user })).toBe('gift_recipient');
-    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: ['0901234567'] }, user })).toBe('gift_recipient');
+  });
+
+  it('PO A2: số chưa xác minh, tài khoản chưa có số, đơn tặng, địa chỉ lạ đều bật được (người mua nhận tin ở số checkout_contact)', () => {
+    expect(lateConsentBlock({ gate, order, user: { ...user, phoneVerifiedAt: null } })).toBeNull();
+    expect(lateConsentBlock({ gate, order, user: { ...user, phone: null } })).toBeNull();
+    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: { phone: '0911111111' } }, user })).toBeNull();
+    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: null }, user })).toBeNull();
+    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: ['0901234567'] }, user })).toBeNull();
+  });
+
+  it('không có số nào nhắn được (tài khoản, khách vãng lai, địa chỉ giao): no_phone', () => {
+    const none = { phone: null, phoneVerifiedAt: null };
+    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: null }, user: none })).toBe('no_phone');
+    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: { phone: '12345' } }, user: { phone: 'abc', phoneVerifiedAt: null } })).toBe('no_phone');
+    expect(lateConsentBlock({ gate, order: { ...order, shippingAddress: null, guestPhone: '0912345678' }, user: none })).toBeNull();
+  });
+
+  it('lateConsentOrderBlock: chỉ các lý do không cần người dùng; lateConsentBlock = nó ?? no_phone', () => {
+    expect(lateConsentOrderBlock(gate, order)).toBeNull();
+    expect(lateConsentOrderBlock(gate, { ...order, status: 'DELIVERED' })).toBe('not_active');
+    expect(lateConsentOrderBlock(null, order)).toBe('gate_closed');
+    expect(lateConsentBlock({ gate: null, order, user: { phone: null, phoneVerifiedAt: null } })).toBe('gate_closed');
+  });
+});
+
+describe('buyerPhoneOf (PO A2) và recipientPhoneFor (PO A1)', () => {
+  const verifiedAt = new Date('2026-01-01T00:00:00Z');
+
+  it('số tài khoản đã xác minh: account_verified, kể cả khi địa chỉ giao số khác', () => {
+    expect(buyerPhoneOf({ user: { phone: '+84901234567', phoneVerifiedAt: verifiedAt }, shippingAddress: { phone: '0987654321' } })).toEqual({ phone: '0901234567', source: 'account_verified' });
+  });
+
+  it('chưa xác minh: số đầu tiên đọc được của tài khoản, khách vãng lai, địa chỉ giao, nguồn checkout_contact', () => {
+    const at = (user: { phone: string | null; phoneVerifiedAt: Date | null }, guestPhone: string | null, shippingAddress: unknown) => buyerPhoneOf({ user, guestPhone, shippingAddress });
+    expect(at({ phone: '0901234567', phoneVerifiedAt: null }, '0912345678', { phone: '0987654321' })).toEqual({ phone: '0901234567', source: 'checkout_contact' });
+    expect(at({ phone: null, phoneVerifiedAt: null }, '0912345678', { phone: '0987654321' })).toEqual({ phone: '0912345678', source: 'checkout_contact' });
+    expect(at({ phone: null, phoneVerifiedAt: null }, null, { phone: '0987 654 321' })).toEqual({ phone: '0987654321', source: 'checkout_contact' });
+    // Đã xác minh mà số lưu hỏng: không tin cờ xác minh, đi tiếp các số khác.
+    expect(at({ phone: '12345', phoneVerifiedAt: verifiedAt }, null, { phone: '0987654321' })).toEqual({ phone: '0987654321', source: 'checkout_contact' });
+    expect(at({ phone: null, phoneVerifiedAt: null }, 'x', { phone: '0201234567' })).toBeNull();
+    expect(at({ phone: null, phoneVerifiedAt: null }, null, null)).toBeNull();
+  });
+
+  it('recipientPhoneFor: chỉ khi khách đã bật và số nhận hàng đọc được, khác số người mua', () => {
+    const gift = { notifyRecipientZalo: true, shippingAddress: { phone: '+84 987 654 321' } };
+    expect(recipientPhoneFor(gift, '0901234567')).toBe('0987654321');
+    expect(recipientPhoneFor({ ...gift, notifyRecipientZalo: false }, '0901234567')).toBeNull();
+    expect(recipientPhoneFor(gift, '0987654321')).toBeNull();
+    expect(recipientPhoneFor({ ...gift, shippingAddress: { phone: '12345' } }, '0901234567')).toBeNull();
+    expect(recipientPhoneFor({ ...gift, shippingAddress: null }, '0901234567')).toBeNull();
+    expect(shippingPhoneOf(['0901234567'])).toBeNull();
+    expect(shippingPhoneOf({ phone: 901234567 })).toBeNull();
+  });
+
+  // Bảng chung với app-core (packages/app-core/src/order-zalo.spec.ts): client chỉ hiện ô người nhận khi máy chủ cũng ghi được dòng người nhận.
+  it.each([
+    ['0901234567', '0901234567'],
+    ['+84901234567', '0901234567'],
+    ['84901234567', '0901234567'],
+    ['090 123 4567', '0901234567'],
+    ['090.123.4567', '0901234567'],
+    ['(090) 123-4567', '0901234567'],
+    ['0201234567', null],
+    ['090123456', null],
+    ['12345', null],
+    ['', null],
+  ])('normalizeVnPhone(%j) = %j (bảng chung với app-core)', (raw, want) => {
+    expect(normalizeVnPhone(raw)).toBe(want);
   });
 });
 

@@ -22,6 +22,8 @@ export interface MssOrderEventRow {
   attempts: number;
   phone: string | null;
   fallbackChannel: string | null;
+  /** buyer | recipient (tin giao hàng không kèm giá cho số người nhận). */
+  recipientRole: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,7 +77,7 @@ export class MssOrderEventsOpsService {
       this.prisma.mssOrderEventOutbox.findMany({
         orderBy: { createdAt: 'desc' },
         take: RECENT_ROWS,
-        select: { eventId: true, orderCode: true, eventType: true, status: true, resultReason: true, attempts: true, body: true, fallbackChannel: true, createdAt: true, updatedAt: true },
+        select: { eventId: true, orderCode: true, eventType: true, status: true, resultReason: true, attempts: true, body: true, fallbackChannel: true, recipientRole: true, createdAt: true, updatedAt: true },
       }),
     ]);
     return {
@@ -97,6 +99,7 @@ export class MssOrderEventsOpsService {
         attempts: r.attempts,
         phone: maskedRecipient(r.body),
         fallbackChannel: r.fallbackChannel,
+        recipientRole: r.recipientRole,
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),
       })),

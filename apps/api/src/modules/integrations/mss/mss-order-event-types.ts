@@ -85,19 +85,57 @@ export type LateConsentBlock =
   | 'platform_null'
   | 'placed_for_customer'
   | 'dealer_order'
-  | 'no_verified_phone'
-  | 'gift_recipient';
+  | 'no_phone';
+
+/** Chỉ hai sự kiện này có bản gửi người nhận (PO A1): tin giao hàng, không kèm giá. */
+export const MSS_RECIPIENT_EVENT_TYPES: readonly MssOrderEventType[] = ['order.shipping', 'order.delivered'];
+
+/** Hợp đồng v1.2 `recipient.phone_source`: số đã xác minh của tài khoản, hoặc số khách tự gõ lúc đặt hàng (chưa xác minh). */
+export type MssPhoneSource = 'account_verified' | 'checkout_contact';
+
+/** SĐT nhận hàng trong ảnh chụp địa chỉ của đơn (chuỗi thô, chưa chuẩn hoá); null khi địa chỉ hỏng hoặc thiếu số. */
+export function shippingPhoneOf(address: unknown): string | null {
+  if (!address || typeof address !== 'object' || Array.isArray(address)) return null;
+  const phone = (address as Record<string, unknown>).phone;
+  return typeof phone === 'string' ? phone : null;
+}
 
 /**
- * Bật tin hành trình qua Zalo cho một đơn đang đi, từ chi tiết đơn. Cùng điều kiện mà `MssOrderEventRecorder.record` dùng để bỏ qua
- * sự kiện, để nút không hứa tin mà máy chủ sẽ không gửi. Trả lý do chặn, hoặc null khi bật được. `already` = đơn đã có đồng ý.
+ * Số người mua nhận tin hành trình (PO A2). Số tài khoản đã xác minh thì nguồn `account_verified`; chưa xác minh thì số đầu tiên đọc được
+ * trong số tài khoản, SĐT khách vãng lai gõ (`orders.guestPhone`), SĐT trong địa chỉ giao, nguồn `checkout_contact` (MSS ẩn tên ở lời mời).
  */
-export function lateConsentBlock(input: {
-  gate: { enabled: boolean; open: boolean; rolloutPct: number } | null | undefined;
-  order: { userId: string; status: string; type: string; platform: string | null; placedForCustomer: boolean; orderZaloConsent: boolean | null; shippingAddress: unknown };
+export function buyerPhoneOf(input: {
   user: { phone: string | null; phoneVerifiedAt: Date | null };
-}): LateConsentBlock | null {
-  const { gate, order, user } = input;
+  guestPhone?: string | null;
+  shippingAddress?: unknown;
+}): { phone: string; source: MssPhoneSource } | null {
+  const own = normalizeVnPhone(input.user.phone);
+  if (own && input.user.phoneVerifiedAt) return { phone: own, source: 'account_verified' };
+  const phone = own ?? normalizeVnPhone(input.guestPhone) ?? normalizeVnPhone(shippingPhoneOf(input.shippingAddress));
+  return phone ? { phone, source: 'checkout_contact' } : null;
+}
+
+/** Số người nhận cho tin giao hàng không kèm giá: khách đã bật lúc đặt và số nhận hàng đọc được, khác số người mua. Không thì null. */
+export function recipientPhoneFor(order: { notifyRecipientZalo: boolean; shippingAddress: unknown }, buyerPhone: string): string | null {
+  if (!order.notifyRecipientZalo) return null;
+  const to = normalizeVnPhone(shippingPhoneOf(order.shippingAddress));
+  return to && to !== buyerPhone ? to : null;
+}
+
+type LateConsentGate = { enabled: boolean; open: boolean; rolloutPct: number } | null | undefined;
+type LateConsentOrder = {
+  userId: string;
+  status: string;
+  type: string;
+  platform: string | null;
+  placedForCustomer: boolean;
+  orderZaloConsent: boolean | null;
+  shippingAddress: unknown;
+  guestPhone?: string | null;
+};
+
+/** Các lý do chặn không cần đọc người dùng (cổng, rollout, đơn đã đóng, đã đồng ý, nền tảng, CTV, đại lý). */
+export function lateConsentOrderBlock(gate: LateConsentGate, order: LateConsentOrder): LateConsentBlock | null {
   if (!gate?.enabled || !gate.open) return 'gate_closed';
   if (!inRollout(order.userId, gate.rolloutPct)) return 'rollout';
   if (!ORDER_ZALO_ACTIVE_STATUSES.includes(order.status)) return 'not_active';
@@ -105,12 +143,16 @@ export function lateConsentBlock(input: {
   if (order.platform !== 'web' && order.platform !== 'miniapp') return 'platform_null';
   if (order.placedForCustomer) return 'placed_for_customer';
   if (order.type !== 'RETAIL') return 'dealer_order';
-  const phone = user.phoneVerifiedAt ? normalizeVnPhone(user.phone) : null;
-  if (!phone) return 'no_verified_phone';
-  const address = order.shippingAddress;
-  const recipient = address && typeof address === 'object' && !Array.isArray(address) ? (address as Record<string, unknown>).phone : null;
-  if (normalizeVnPhone(typeof recipient === 'string' ? recipient : null) !== phone) return 'gift_recipient';
   return null;
+}
+
+/**
+ * Bật tin hành trình qua Zalo cho một đơn đang đi, từ chi tiết đơn. Cùng điều kiện mà `MssOrderEventRecorder.record` dùng để bỏ qua
+ * sự kiện, để nút không hứa tin mà máy chủ sẽ không gửi. Trả lý do chặn, hoặc null khi bật được. `already` = đơn đã có đồng ý.
+ */
+export function lateConsentBlock(input: { gate: LateConsentGate; order: LateConsentOrder; user: { phone: string | null; phoneVerifiedAt: Date | null } }): LateConsentBlock | null {
+  const { gate, order, user } = input;
+  return lateConsentOrderBlock(gate, order) ?? (buyerPhoneOf({ user, guestPhone: order.guestPhone, shippingAddress: order.shippingAddress }) ? null : 'no_phone');
 }
 
 export type MssCancelReason = 'CUSTOMER' | 'OUT_OF_STOCK' | 'PAYMENT_TIMEOUT' | 'OTHER';

@@ -2,8 +2,8 @@ import type { Page } from '@playwright/test';
 import { test, expect } from './support/mock-api';
 import { mockWorld } from './support/checkout-states';
 import { FLOW_PLAIN } from './support/checkout-flow-states';
-import { ORDER_CODE_COD } from './support/checkout-mocks';
-import { axeInside, mockOrderZalo, shot } from './support/order-zalo-mocks';
+import { CHECKOUT_ADDRESS, ORDER_CODE_COD } from './support/checkout-mocks';
+import { axeInside, mockOrderZalo, ORDER_ZALO_RECIPIENT_STATUS, ORDER_ZALO_STATUS, shot } from './support/order-zalo-mocks';
 
 /**
  * Web /thanh-toan: ô "Nhận hành trình đơn hàng qua Zalo" sát trên Đặt hàng, lời mời kết bạn ở màn đặt thành công.
@@ -14,6 +14,9 @@ const sizeOf = (project: string) => (project === 'Web Customer Mobile' ? { width
 const placeButton = (page: Page) => page.getByRole('button', { name: /Đặt hàng · / }).filter({ visible: true });
 const zaloBox = (page: Page) => page.getByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ });
 const zaloRow = (page: Page) => page.locator('label').filter({ has: zaloBox(page) });
+const recipientBlock = (page: Page) => page.getByTestId('order-zalo-recipient');
+const recipientBox = (page: Page) => page.getByRole('checkbox', { name: /Gửi thêm thông báo giao hàng \(không kèm giá\) cho số người nhận/ });
+const GIFT_ADDRESS = { ...CHECKOUT_ADDRESS, recipient: 'Bà Ngoại', phone: '0912345678' };
 
 test.describe('Web: ô đồng ý hành trình đơn qua Zalo', () => {
   let width = 0;
@@ -98,5 +101,75 @@ test.describe('Web: ô đồng ý hành trình đơn qua Zalo', () => {
     await page.goto('/thanh-toan');
     await expect(zaloBox(page)).toBeVisible({ timeout: 20_000 });
     expect(await axeInside(page, zaloRow(page))).toEqual([]);
+  });
+  test('đơn tặng (PO A1): tick ô mới hiện lời báo + công tắc người nhận mặc định tắt, 44px, không tràn; bật rồi đặt gửi notifyRecipientZalo: true', async ({ page, api }) => {
+    await mockWorld(api, page, 'web', FLOW_PLAIN, Promise.resolve());
+    api.get('/me/addresses', [GIFT_ADDRESS]);
+    mockOrderZalo(api, true, ORDER_ZALO_RECIPIENT_STATUS);
+    await page.goto('/thanh-toan');
+    await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
+    await expect(recipientBlock(page)).toHaveCount(0);
+
+    await zaloRow(page).click();
+    await expect(zaloBox(page)).toBeChecked();
+    const block = recipientBlock(page);
+    await expect(block).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.');
+    await expect(recipientBox(page)).not.toBeChecked();
+    const toggleRow = page.locator('label').filter({ has: recipientBox(page) });
+    expect((await toggleRow.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await expect(placeButton(page)).toBeInViewport();
+    expect(await axeInside(page, block)).toEqual([]);
+    await block.scrollIntoViewIfNeeded();
+    await shot(page, `web-${width}-checkout-recipient`);
+
+    await toggleRow.click();
+    await expect(recipientBox(page)).toBeChecked();
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await placeButton(page).click();
+    expect((await placed).body).toMatchObject({ orderZaloConsent: true, notifyRecipientZalo: true });
+  });
+
+  test('đơn tặng, không bật công tắc: thân đơn không có notifyRecipientZalo', async ({ page, api }) => {
+    await mockWorld(api, page, 'web', FLOW_PLAIN, Promise.resolve());
+    api.get('/me/addresses', [GIFT_ADDRESS]);
+    mockOrderZalo(api, true, ORDER_ZALO_RECIPIENT_STATUS);
+    await page.goto('/thanh-toan');
+    await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
+    await zaloRow(page).click();
+    await expect(recipientBox(page)).toBeVisible();
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await placeButton(page).click();
+    const body = (await placed).body as Record<string, unknown>;
+    expect(body.orderZaloConsent).toBe(true);
+    expect(body).not.toHaveProperty('notifyRecipientZalo');
+  });
+
+  test('tài khoản chưa xác minh SĐT (PO A2): ô hiện với số tài khoản máy chủ trả (checkout_contact), không phải số địa chỉ', async ({ page, api }) => {
+    await mockWorld(api, page, 'web', FLOW_PLAIN, Promise.resolve());
+    api.get('/me/addresses', [GIFT_ADDRESS]);
+    mockOrderZalo(api, true, { ...ORDER_ZALO_STATUS, buyerPhone: '0901234567', phoneSource: 'checkout_contact' });
+    await page.goto('/thanh-toan');
+    await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
+    await expect(zaloRow(page)).toContainText('Số nhận: 090•••4567');
+    await expect(zaloRow(page)).not.toContainText('091•••5678');
+    await zaloRow(page).click();
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await placeButton(page).click();
+    expect((await placed).body).toMatchObject({ orderZaloConsent: true });
+  });
+
+  test('tài khoản chưa có số (PO A2): ô dùng số nhận hàng của địa chỉ, không có công tắc người nhận; tick rồi đặt gửi orderZaloConsent: true', async ({ page, api }) => {
+    await mockWorld(api, page, 'web', FLOW_PLAIN, Promise.resolve());
+    api.get('/me/addresses', [GIFT_ADDRESS]);
+    mockOrderZalo(api, true, { ...ORDER_ZALO_STATUS, phoneMasked: null, recipientEnabled: true });
+    await page.goto('/thanh-toan');
+    await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
+    await expect(zaloRow(page)).toContainText('Số nhận: 091•••5678');
+    await zaloRow(page).click();
+    await expect(recipientBlock(page)).toHaveCount(0);
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await placeButton(page).click();
+    expect((await placed).body).toMatchObject({ orderZaloConsent: true });
   });
 });

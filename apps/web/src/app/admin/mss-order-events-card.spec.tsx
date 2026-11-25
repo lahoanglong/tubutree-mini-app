@@ -94,6 +94,16 @@ describe('MssOrderEventsCard', () => {
     expect(text).not.toMatch(/0912\d{6}/);
   });
 
+  it('dòng gửi người nhận (PO A1) có nhãn "Người nhận"; dòng người mua và API cũ (không có recipientRole) thì không', async () => {
+    stub({ ...offCard(), enabled: true, open: true, recent: [row({ recipientRole: 'recipient' }), row({ recipientRole: 'buyer' }), row()] });
+    const r = mount();
+    await flush(10);
+    const items = Array.from(r.container.querySelectorAll('ul[aria-label="Tin đơn gần nhất"] > li')).map((li) => li.textContent!);
+    expect(items[0]).toContain('Người nhận');
+    expect(items[1]).not.toContain('Người nhận');
+    expect(items[2]).not.toContain('Người nhận');
+  });
+
   it('cờ bật mà MSS chưa công bố năng lực: Chưa có hiệu lực; cầu dao ngắt: nhãn riêng', async () => {
     stub({ ...offCard(), enabled: true });
     const r = mount();

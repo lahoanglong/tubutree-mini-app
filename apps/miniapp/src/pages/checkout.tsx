@@ -132,7 +132,6 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
   const publicConfig = usePublicConfig();
-  const zalo = useOrderZaloConsent();
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
   // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
   // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
@@ -228,6 +227,8 @@ export default function CheckoutPage() {
       if (first) setAddressId(first);
     }
   }, [addresses.data, addressId]);
+  // Số nhận hàng của địa chỉ đang chọn: ô Zalo dùng nó khi tài khoản chưa có số, và hiện công tắc người nhận khi nó khác số tài khoản.
+  const zalo = useOrderZaloConsent(addresses.data?.find((a) => a.id === addressId) ?? null);
   // Mọi lối "về giỏ hàng" của màn này (sửa món, giá đổi) ghi lại lựa chọn đang có để lúc quay lại không phải chọn lại.
   const keepChoices = () => saveCheckoutDraft(tabStorage(), userId, { addressId, note }, Date.now());
 
@@ -455,6 +456,7 @@ export default function CheckoutPage() {
         storefrontSlug: ctvSlug,
         itemIds,
         ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
+        ...(zalo.notifyRecipientZalo ? { notifyRecipientZalo: true } : {}),
         // Quà dùng thử đúng như khách đang thấy: quà vừa đổi mốc hoặc hết thì BE trả 409 thay vì âm thầm đổi quà.
         ...giftTrialPlaceField(quote.data?.giftTrial),
       };
@@ -1495,7 +1497,7 @@ export default function CheckoutPage() {
         </Box>
       )}
 
-      {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
+      {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} recipient={zalo.recipient} />}
 
       <Text variant="caption" tone="secondary" as="div" data-testid="order-consent" style={{ lineHeight: 18 / 13, display: 'block', padding: '12px 16px 0' }}>
         Bằng việc đặt hàng, bạn đồng ý với:{' '}

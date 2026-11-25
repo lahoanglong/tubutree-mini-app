@@ -1,0 +1,26 @@
+{
+  "event_id": "01JCX9Z7Q4M8T2K5V6W3Y0ABCE",
+  "event_type": "order.shipping",
+  "occurred_at": "2026-11-16T14:05:09+07:00",
+  "sequence": 4,
+  "sender": "tubutree",
+  "order": {
+    "code": "TB-261116-0412",
+    "total_vnd": 0,
+    "payment_method": "COD",
+    "channel": "web",
+    "item_count": 3,
+    "carrier": "GHN",
+    "tracking_code": "GHN8X2K9"
+  },
+  "recipient": {
+    "phone": "0987654321",
+    "phone_source": "checkout_contact",
+    "role": "recipient"
+  },
+  "consent": {
+    "order_updates_zalo": true,
+    "captured_at": "2026-11-16T13:58:40+07:00",
+    "source": "checkout"
+  }
+}

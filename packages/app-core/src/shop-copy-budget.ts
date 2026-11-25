@@ -552,6 +552,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.orderZalo.label': 36,
   'checkout.orderZalo.body': 64,
   'checkout.orderZalo.phone': 20,
+  'checkout.orderZalo.recipientNote': 80,
+  'checkout.orderZalo.recipientToggle': 64,
   'settings.orderZalo': 30,
   'order.zaloFriend.body': 80,
   'order.zaloFriend.cta': 18,

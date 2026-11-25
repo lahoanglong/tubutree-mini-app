@@ -194,7 +194,6 @@ export default function CheckoutPage() {
   const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const serverGuestConfig = useServerGuestConfig();
-  const zalo = useOrderZaloConsent();
   const shippingEta = configQ.data?.shippingEta;
 
   // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
@@ -234,6 +233,8 @@ export default function CheckoutPage() {
       else if (def) setAddressId(def.id);
     }
   }, [addrQ.data, addressId]);
+  // Số nhận hàng của địa chỉ đang chọn: ô Zalo dùng nó khi tài khoản chưa có số, và hiện công tắc người nhận khi nó khác số tài khoản.
+  const zalo = useOrderZaloConsent(addrQ.data?.find((a) => a.id === addressId) ?? null);
   // Lối "về giỏ hàng để sửa" (món hết hàng, vượt suất, giá đổi) ghi lại lựa chọn đang có để lúc quay lại không phải chọn lại, như Mini App.
   // Ctrl/Cmd/Shift-click mở tab khác: tab này vẫn ở Thanh toán nên không ghi, kẻo nháp nằm lại cho lần mở màn sau.
   const keepChoices = (e?: React.MouseEvent) => {
@@ -439,6 +440,7 @@ export default function CheckoutPage() {
         // Máy chủ chỉ lưu mã link khi link thuộc đúng người giới thiệu của đơn (mã khách tự nhập của CTV khác thì bỏ).
         affiliateLinkCode: getStorefrontContext().linkCode ?? undefined,
         ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
+        ...(zalo.notifyRecipientZalo ? { notifyRecipientZalo: true } : {}),
         // Quà dùng thử đúng như khách đang thấy: quà vừa đổi mốc hoặc hết thì BE trả 409 thay vì âm thầm đổi quà.
         ...giftTrialPlaceField(quote?.giftTrial),
       };
@@ -1298,7 +1300,7 @@ export default function CheckoutPage() {
             <span>Tổng cộng</span>
             <span className={`tabular-nums ${recalculating ? RECALC_DIM : ''}`}>{totalText}</span>
           </div>
-          {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
+          {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} recipient={zalo.recipient} />}
           <OrderConsent className="hidden lg:block" />
           <button
             ref={placeButtonRef}

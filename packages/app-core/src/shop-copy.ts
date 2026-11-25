@@ -499,6 +499,9 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.orderZalo.label': 'Nhận hành trình đơn hàng qua Zalo',
   'checkout.orderZalo.body': 'Sẽ có tin nhắn nhắc xác nhận hành trình đơn hàng qua Zalo này.',
   'checkout.orderZalo.phone': 'Số nhận: {phone}',
+  // PO A1 (khoá chữ 24/11): số nhận hàng khác số tài khoản. Lời báo và công tắc chỉ hiện dưới ô đồng ý đang tick; công tắc mặc định tắt.
+  'checkout.orderZalo.recipientNote': 'Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số {phone}.',
+  'checkout.orderZalo.recipientToggle': 'Gửi thêm thông báo giao hàng (không kèm giá) cho số người nhận',
   'settings.orderZalo': 'Hành trình đơn hàng qua Zalo',
   // Lời mời kết bạn Zalo Tubu Tree ở màn đặt xong và chi tiết đơn (chỉ đơn có đồng ý).
   'order.zaloFriend.body': 'Kết bạn Zalo với Tubu Tree để nhận hành trình đơn {code}.',

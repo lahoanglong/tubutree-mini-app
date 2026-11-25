@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { MSS_SENDER, type MssCancelReason, type MssOrderEventType } from './mss-order-event-types';
+import { MSS_RECIPIENT_EVENT_TYPES, MSS_SENDER, type MssCancelReason, type MssOrderEventType, type MssPhoneSource } from './mss-order-event-types';
 
 /**
  * Dựng thân yêu cầu `POST /order-events` (hợp đồng tubu-mss-order-events v1.2 mục 3.3) bằng cách GHÉP từng trường cho phép, không
@@ -41,7 +41,11 @@ export interface MssEventBodyInput {
   };
   cancelReason?: MssCancelReason;
   refundExpected?: boolean;
-  recipient: { phone: string; phoneSource: 'account_verified'; name?: string | null };
+  /**
+   * `role` vắng hoặc `buyer`: thân y hệt v1.2 (không có khoá `role`). `recipient` (PO A1): tin giao hàng cho số nhận hàng, gửi `total_vnd: 0`
+   * và bỏ tên món, link theo dõi (trang có giá của người mua) và tên gọi.
+   */
+  recipient: { phone: string; phoneSource: MssPhoneSource; name?: string | null; role?: 'buyer' | 'recipient' };
   consent: { capturedAt: Date; source: 'checkout' | 'account_settings' };
   /** Gốc web Tubu đã đăng ký với MSS (`tubu_order_events_link_hosts`), null thì không gửi link. */
   linkOrigin: string | null;
@@ -100,22 +104,25 @@ export function buildMssEventBody(input: MssEventBodyInput): MssEventBody {
   if (!Number.isInteger(input.sequence) || input.sequence < 1) throw new MssEventBodyError('sequence phải là số nguyên ≥ 1');
   if (!Number.isInteger(order.total) || order.total < 0) throw new MssEventBodyError('Tổng tiền phải là số nguyên ≥ 0');
   if (order.itemNames.length < 1) throw new MssEventBodyError('Đơn không có dòng hàng');
+  const forRecipient = input.recipient.role === 'recipient';
+  if (forRecipient && !MSS_RECIPIENT_EVENT_TYPES.includes(input.eventType)) throw new MssEventBodyError(`Người nhận không có tin ${input.eventType}`);
+  if (forRecipient && input.recipient.phoneSource !== 'checkout_contact') throw new MssEventBodyError('Tin người nhận phải có phone_source checkout_contact');
 
   const orderPart: Record<string, string | number | boolean> = {
     code,
-    total_vnd: order.total,
+    total_vnd: forRecipient ? 0 : order.total,
     payment_method: contractPaymentMethod(order.paymentMethod),
     channel: order.platform,
     item_count: order.itemNames.length,
   };
-  const firstItem = clip(order.itemNames[0] ?? '', FIRST_ITEM_MAX);
+  const firstItem = forRecipient ? '' : clip(order.itemNames[0] ?? '', FIRST_ITEM_MAX);
   if (firstItem) orderPart.first_item_name = firstItem;
   if (input.eventType === 'order.shipping') {
     const carrier = order.shippingPartner ? clip(order.shippingPartner, CARRIER_MAX) : '';
     const trackingCode = order.shippingCode ? clip(order.shippingCode, TRACKING_CODE_MAX) : '';
     if (carrier) orderPart.carrier = carrier;
     if (trackingCode) orderPart.tracking_code = trackingCode;
-    if (input.linkOrigin) orderPart.tracking_url = `${input.linkOrigin}/tai-khoan/don-hang/${encodeURIComponent(code)}`;
+    if (input.linkOrigin && !forRecipient) orderPart.tracking_url = `${input.linkOrigin}/tai-khoan/don-hang/${encodeURIComponent(code)}`;
   }
   if (input.eventType === 'order.cancelled') {
     orderPart.cancel_reason = input.cancelReason ?? 'OTHER';
@@ -130,8 +137,9 @@ export function buildMssEventBody(input: MssEventBodyInput): MssEventBody {
   }
 
   const recipient: Record<string, string> = { phone: input.recipient.phone, phone_source: input.recipient.phoneSource };
-  const name = input.recipient.name ? clip(input.recipient.name, NAME_MAX) : '';
+  const name = input.recipient.name && !forRecipient ? clip(input.recipient.name, NAME_MAX) : '';
   if (name) recipient.name = name;
+  if (forRecipient) recipient.role = 'recipient';
 
   const body = {
     event_id: input.eventId,

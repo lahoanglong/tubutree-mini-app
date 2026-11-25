@@ -3,8 +3,11 @@ import type { HttpClient } from './http';
 import {
   enableOrderZaloForOrder,
   fetchOrderZaloStatus,
+  maskOrderZaloPhone,
   orderZaloConsentView,
   orderZaloDetailView,
+  orderZaloMobileOf,
+  orderZaloRecipientView,
   saveOrderZaloChoice,
   showOrderZaloFriend,
   tubuZaloUrl,
@@ -21,11 +24,17 @@ const status = (over: Partial<OrderZaloStatus> = {}): OrderZaloStatus => ({
 });
 
 describe('orderZaloConsentView', () => {
-  it('cờ tắt, chưa tải hoặc không có số đã xác minh: không hiện ô', () => {
+  it('cờ tắt, chưa tải, hoặc không có số nào (tài khoản lẫn địa chỉ giao): không hiện ô', () => {
     expect(orderZaloConsentView(undefined)).toBeNull();
     expect(orderZaloConsentView(null)).toBeNull();
-    expect(orderZaloConsentView(status({ enabled: false }))).toBeNull();
+    expect(orderZaloConsentView(status({ enabled: false }), '0987654321')).toBeNull();
     expect(orderZaloConsentView(status({ phoneMasked: null }))).toBeNull();
+    expect(orderZaloConsentView(status({ phoneMasked: null }), '12345')).toBeNull();
+  });
+
+  it('PO A2: tài khoản chưa có số thì hiện số nhận hàng của địa chỉ đang chọn (đã che); tài khoản có số thì luôn là số tài khoản', () => {
+    expect(orderZaloConsentView(status({ phoneMasked: null }), '+84 987 654 321')).toEqual({ checked: false, phone: '098•••4321' });
+    expect(orderZaloConsentView(status(), '0987654321')).toEqual({ checked: false, phone: '090•••4567' });
   });
 
   it('lần đầu không tick sẵn (mss.order_consent_prechecked=false), hiện số đã che', () => {
@@ -36,6 +45,47 @@ describe('orderZaloConsentView', () => {
     expect(orderZaloConsentView(status({ choice: true }))?.checked).toBe(true);
     expect(orderZaloConsentView(status({ choice: false, prechecked: true }))?.checked).toBe(false);
     expect(orderZaloConsentView(status({ prechecked: true }))?.checked).toBe(true);
+  });
+});
+
+describe('orderZaloRecipientView (PO A1)', () => {
+  const on = status({ buyerPhone: '0901234567', recipientEnabled: true });
+
+  it('số nhận hàng khác số tài khoản, ô đang tick, cờ người nhận bật: có lời báo kèm số tài khoản đã che', () => {
+    expect(orderZaloRecipientView(on, '0987654321', true)).toEqual({ buyerPhoneMasked: '090•••4567' });
+  });
+
+  it.each([
+    ['ô đồng ý không tick', on, '0987654321', false],
+    ['cờ người nhận tắt hoặc API cũ', status({ buyerPhone: '0901234567' }), '0987654321', true],
+    ['cổng tắt', { ...on, enabled: false }, '0987654321', true],
+    ['tài khoản chưa có số', { ...on, buyerPhone: null, phoneMasked: null }, '0987654321', true],
+    ['cùng số (khác cách viết)', on, '+84 90 123 4567', true],
+    ['số nhận hàng hỏng', on, '12345', true],
+    ['chưa chọn địa chỉ', on, undefined, true],
+  ] as const)('%s: không có', (_label, s, ship, checked) => {
+    expect(orderZaloRecipientView(s, ship, checked)).toBeNull();
+  });
+
+  it('maskOrderZaloPhone giống dạng máy chủ', () => {
+    expect(maskOrderZaloPhone('0901234567')).toBe('090•••4567');
+    expect(maskOrderZaloPhone(null)).toBeNull();
+  });
+
+  // Bảng chung với API (apps/api/src/modules/integrations/mss/mss-order-event-late-consent.spec.ts, normalizeVnPhone).
+  it.each([
+    ['0901234567', '0901234567'],
+    ['+84901234567', '0901234567'],
+    ['84901234567', '0901234567'],
+    ['090 123 4567', '0901234567'],
+    ['090.123.4567', '0901234567'],
+    ['(090) 123-4567', '0901234567'],
+    ['0201234567', null],
+    ['090123456', null],
+    ['12345', null],
+    ['', null],
+  ])('orderZaloMobileOf(%j) = %j (bảng chung với API)', (raw, want) => {
+    expect(orderZaloMobileOf(raw)).toBe(want);
   });
 });
 

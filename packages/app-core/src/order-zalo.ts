@@ -1,4 +1,5 @@
 import type { HttpClient } from './http';
+import { parseTypedVnPhone } from './affiliate-rules';
 
 /**
  * Ô "Nhận hành trình đơn hàng qua Zalo" ở thanh toán và nút kết bạn Zalo Tubu Tree (quyết định PO số 3, wave tubu-mss-consent-ui).
@@ -9,8 +10,13 @@ export interface OrderZaloStatus {
   prechecked: boolean;
   /** Lựa chọn gần nhất của khách; null khi chưa từng chọn. */
   choice: boolean | null;
-  /** Số đã xác minh dạng `090•••4567`; null thì MSS không nhắn được nên không hỏi. */
+  /** Số tài khoản (đã xác minh hay chưa) dạng `090•••4567`; null khi tài khoản chưa có số: ô ở thanh toán dùng số nhận hàng. */
   phoneMasked: string | null;
+  /** Số tài khoản `0xxxxxxxxx` của chính khách, để so với số nhận hàng. Thiếu ở API cũ. */
+  buyerPhone?: string | null;
+  phoneSource?: 'account_verified' | 'checkout_contact' | null;
+  /** Được hỏi "gửi thêm thông báo giao hàng cho số người nhận" (cờ người nhận + năng lực MSS). Thiếu ở API cũ = không. */
+  recipientEnabled?: boolean;
   tubuZaloPhone: string;
 }
 
@@ -25,10 +31,40 @@ export const TUBU_ZALO_PHONE = '0899149229';
 /** Đơn còn hành trình để báo: chưa giao, chưa huỷ, chưa trả. */
 const ORDER_ZALO_ACTIVE = /^(PENDING_PAYMENT|CONFIRMED|PACKED|SHIPPING)$/;
 
-/** Có hiện ô không (null = không) và trạng thái tick ban đầu: lần đầu theo cấu hình, sau đó theo lựa chọn gần nhất. */
-export function orderZaloConsentView(s: OrderZaloStatus | null | undefined): { checked: boolean; phone: string } | null {
-  if (!s?.enabled || !s.phoneMasked) return null;
-  return { checked: s.choice ?? s.prechecked, phone: s.phoneMasked };
+// Cùng tập số với `normalizeVnPhone` của API. Không lấy hàm SĐT liên hệ ở phone-input: mô-đun đó thành chunk dùng chung nhỏ và bị gộp vào entry Mini.
+export function orderZaloMobileOf(raw: string | null | undefined): string | null {
+  const parsed = parseTypedVnPhone(raw ?? '');
+  return parsed && /^0[35789]\d{8}$/.test(parsed) ? parsed : null;
+}
+
+/** Số `0xxxxxxxxx` → `090•••4567`, cùng dạng máy chủ trả ở `phoneMasked` (khác `maskPhone` của thanh toán). */
+export function maskOrderZaloPhone(phone: string | null | undefined): string | null {
+  return phone ? `${phone.slice(0, 3)}•••${phone.slice(-4)}` : null;
+}
+
+/**
+ * Có hiện ô không (null = không) và trạng thái tick ban đầu: lần đầu theo cấu hình, sau đó theo lựa chọn gần nhất. Số nhận tin là số tài khoản;
+ * tài khoản chưa có số thì số nhận hàng của địa chỉ đang chọn (PO A2, máy chủ gửi với nguồn `checkout_contact`).
+ */
+export function orderZaloConsentView(s: OrderZaloStatus | null | undefined, shippingPhone?: string | null): { checked: boolean; phone: string } | null {
+  if (!s?.enabled) return null;
+  const phone = s.phoneMasked ?? maskOrderZaloPhone(orderZaloMobileOf(shippingPhone));
+  return phone ? { checked: s.choice ?? s.prechecked, phone } : null;
+}
+
+/**
+ * Lời báo và công tắc người nhận dưới ô đồng ý (PO A1): chỉ khi ô đang tick, cờ người nhận bật, tài khoản có số và số nhận hàng đọc được, khác số đó.
+ * Máy chủ xét lại lúc từng tin giao hàng; hai bên đọc số lệch nhau thì chỉ ẩn công tắc hoặc bỏ dòng người nhận, không bao giờ gửi nhầm.
+ */
+export function orderZaloRecipientView(
+  s: OrderZaloStatus | null | undefined,
+  shippingPhone: string | null | undefined,
+  consentChecked: boolean,
+): { buyerPhoneMasked: string } | null {
+  if (!s?.enabled || !s.recipientEnabled || !consentChecked || !s.buyerPhone) return null;
+  const to = orderZaloMobileOf(shippingPhone);
+  if (!to || to === s.buyerPhone) return null;
+  return { buyerPhoneMasked: s.phoneMasked ?? maskOrderZaloPhone(s.buyerPhone)! };
 }
 
 export function tubuZaloNumber(phone: string | null | undefined): string {

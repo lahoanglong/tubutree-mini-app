@@ -38,7 +38,7 @@ import { orderLineReviews, pendingReviewCounts, type OrderLineReview } from '../
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
-import { buyerOrderNotices, lateConsentBlock, ORDER_ZALO_ACTIVE_STATUSES, ORDER_ZALO_CONSENT_TEXT_VERSION, type BuyerOrderNotice } from '../integrations/mss/mss-order-event-types';
+import { buyerOrderNotices, lateConsentBlock, lateConsentOrderBlock, ORDER_ZALO_ACTIVE_STATUSES, ORDER_ZALO_CONSENT_TEXT_VERSION, type BuyerOrderNotice } from '../integrations/mss/mss-order-event-types';
 
 export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
@@ -378,6 +378,7 @@ export class OrdersService {
     placedForCustomer: boolean;
     orderZaloConsent: boolean | null;
     shippingAddress: Prisma.JsonValue;
+    guestPhone: string | null;
   }): Promise<Pick<OrderView, 'timelineV2' | 'trackingStaleHours' | 'notices' | 'orderZaloAvailable' | 'orderZaloOn'>> {
     const [v2, staleRaw] = await Promise.all([this.config.get<unknown>(ORDER_TIMELINE_V2_KEY, false), this.config.get<unknown>(ORDER_TRACKING_STALE_HOURS_KEY, ORDER_TRACKING_STALE_HOURS_DEFAULT)]);
     const timelineV2 = v2 === true;
@@ -389,7 +390,8 @@ export class OrdersService {
 
   private async noticesOf(orderId: string): Promise<BuyerOrderNotice[]> {
     const rows = await this.prisma.mssOrderEventOutbox.findMany({
-      where: { orderId, OR: [{ status: 'RESULT_SENT' }, { fallbackChannel: 'ZNS', fallbackAt: { not: null } }] },
+      // Dòng chỉ của người mua: tin giao hàng gửi người nhận không phải "đã báo qua Zalo" cho chủ đơn.
+      where: { orderId, recipientRole: 'buyer', OR: [{ status: 'RESULT_SENT' }, { fallbackChannel: 'ZNS', fallbackAt: { not: null } }] },
       orderBy: { occurredAt: 'asc' },
       select: { eventType: true, status: true, resultAt: true, deliveredAt: true, occurredAt: true, fallbackChannel: true, fallbackAt: true },
     });
@@ -399,12 +401,12 @@ export class OrdersService {
   /**
    * Nút bật Zalo (`available`) và dòng "Sẽ báo qua Zalo" (`on`) theo đúng luật bỏ qua của bộ ghi sự kiện, để màn không hứa tin máy chủ sẽ không gửi:
    * `on` chỉ khi đơn có đồng ý VÀ lựa chọn gần nhất của khách còn bật (tắt ở Cài đặt hay nhắn dừng trên Zalo đều làm bộ ghi bỏ qua) VÀ không có lý do
-   * bỏ qua nào (đơn tặng người khác, SĐT chưa xác minh, ngoài tỉ lệ thử...).
+   * bỏ qua nào (không có số nào nhắn được, ngoài tỉ lệ thử...).
    */
   private async orderZaloStateOf(order: Parameters<typeof lateConsentBlock>[0]['order'], gate: Parameters<typeof lateConsentBlock>[0]['gate']): Promise<{ available: boolean; on: boolean }> {
     const asks = { ...order, orderZaloConsent: false };
     // Chặn sớm những lý do không cần đọc người dùng (đơn đã đóng, cổng đóng, đặt hộ...) để đơn cũ không tốn thêm truy vấn.
-    if (lateConsentBlock({ order: asks, gate, user: { phone: null, phoneVerifiedAt: null } }) !== 'no_verified_phone') return NO_ORDER_ZALO;
+    if (lateConsentOrderBlock(gate, asks) !== null) return NO_ORDER_ZALO;
     const user = await this.prisma.user.findUnique({ where: { id: order.userId }, select: { phone: true, phoneVerifiedAt: true, notifyOrderZalo: true } });
     if (!user || lateConsentBlock({ order: asks, gate, user }) !== null) return NO_ORDER_ZALO;
     return order.orderZaloConsent === true ? { available: false, on: user.notifyOrderZalo === true } : { available: true, on: false };
@@ -421,7 +423,7 @@ export class OrdersService {
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { code },
-        select: { id: true, userId: true, status: true, type: true, platform: true, placedForCustomer: true, orderZaloConsent: true, shippingAddress: true },
+        select: { id: true, userId: true, status: true, type: true, platform: true, placedForCustomer: true, orderZaloConsent: true, shippingAddress: true, guestPhone: true },
       });
       if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
       const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, phoneVerifiedAt: true } });

@@ -103,6 +103,8 @@ export interface PublicConfig {
    */
   orderZaloEnabled?: boolean;
   orderZaloPrechecked?: boolean;
+  /** Ô đồng ý ở thanh toán khách vãng lai (web): cổng mở cho 100% khách. Thiếu khi API cũ → không hiện. */
+  orderZaloGuest?: boolean;
   /** Số Zalo Tubu Tree cho nút kết bạn (`https://zalo.me/<số>`). */
   tubuZaloPhone?: string;
   /**

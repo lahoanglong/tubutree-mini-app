@@ -434,6 +434,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'mss.order_events_enabled', value: false, category: 'mss', description: 'Gửi sự kiện đơn sang MSS để MSS nhắn tin Zalo cho khách đã đồng ý. Tắt thì không gửi gì.', createOnly: true },
   { key: 'mss.order_events_rollout_pct', value: 0, category: 'mss', description: 'Phần trăm đơn mới (0 đến 100) được gửi sự kiện tin Zalo khi cờ gửi sự kiện đơn bật.', createOnly: true },
   { key: 'mss.order_consent_prechecked', value: false, category: 'mss', description: 'Ô đồng ý nhận tin đơn qua Zalo có được tick sẵn ở bước đặt hàng không.', createOnly: true },
+  { key: 'mss.order_recipient_enabled', value: false, category: 'mss', description: 'Gửi thêm tin giao hàng (không kèm giá) cho số người nhận khi khách bật ở bước đặt hàng.', createOnly: true },
   { key: 'mss.customer_sync_enabled', value: false, category: 'mss', description: 'Đồng bộ hồ sơ khách sang MSS. Tắt thì không gửi dữ liệu khách.', createOnly: true },
   { key: 'mss.order_push_enabled', value: false, category: 'mss', description: 'Đơn mới đi qua MSS thay vì đẩy thẳng Pancake. Chỉ ảnh hưởng đơn tạo sau khi bật.', createOnly: true },
   { key: 'mss.order_status_enabled', value: false, category: 'mss', description: 'Nhận trạng thái đơn từ MSS cho đơn đi đường MSS.', createOnly: true },

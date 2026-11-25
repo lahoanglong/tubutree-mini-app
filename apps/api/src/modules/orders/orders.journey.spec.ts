@@ -93,7 +93,7 @@ describe('OrdersService.detailView: phần dòng thời gian một khối', () =
       { event: 'order.shipping', channel: 'ZNS', at: at(4).toISOString() },
     ]);
     const q = outboxFindMany.mock.calls[0][0];
-    expect(q.where).toEqual({ orderId: 'o1', OR: [{ status: 'RESULT_SENT' }, { fallbackChannel: 'ZNS', fallbackAt: { not: null } }] });
+    expect(q.where).toEqual({ orderId: 'o1', recipientRole: 'buyer', OR: [{ status: 'RESULT_SENT' }, { fallbackChannel: 'ZNS', fallbackAt: { not: null } }] });
     expect(JSON.stringify(view.notices)).not.toMatch(/RESULT|reason|eventId|body|lastError/);
   });
 
@@ -113,14 +113,22 @@ describe('OrdersService.detailView: phần dòng thời gian một khối', () =
     ['đơn đã giao', { status: 'DELIVERED' }, undefined],
     ['đơn đã huỷ', { status: 'CANCELLED' }, undefined],
     ['đơn đã có đồng ý', { orderZaloConsent: true }, undefined],
-    ['đơn tặng (giao tới số khác)', { shippingAddress: { phone: '0987654321' } }, undefined],
     ['đơn CTV lên hộ', { placedForCustomer: true }, undefined],
     ['đơn đại lý', { type: 'DEALER' }, undefined],
     ['đơn không rõ nền tảng', { platform: null }, undefined],
-    ['số chưa xác minh', {}, { phone: '0901234567', phoneVerifiedAt: null }],
+    ['không có số nào nhắn được', { shippingAddress: { phone: '12345' } }, { phone: null, phoneVerifiedAt: null, notifyOrderZalo: false }],
   ])('nút Zalo: %s → không', async (_label, over, user) => {
     const { svc } = build({ gate: gateOn, order: over, user });
     expect((await svc.detailView('u1', 'TUBU1')).orderZaloAvailable).toBe(false);
+  });
+
+  it.each([
+    ['đơn tặng (giao tới số khác)', { shippingAddress: { phone: '0987654321' } }, undefined],
+    ['số chưa xác minh', {}, { phone: '0901234567', phoneVerifiedAt: null, notifyOrderZalo: false }],
+    ['tài khoản chưa có số, địa chỉ giao có số', {}, { phone: null, phoneVerifiedAt: null, notifyOrderZalo: false }],
+  ])('PO A2: nút Zalo: %s → có (người mua nhận tin ở số checkout_contact)', async (_label, over, user) => {
+    const { svc } = build({ gate: gateOn, order: over, user });
+    expect((await svc.detailView('u1', 'TUBU1')).orderZaloAvailable).toBe(true);
   });
 
   it('dòng "Sẽ báo qua Zalo": chỉ khi đơn có đồng ý VÀ khách chưa tắt lựa chọn VÀ bộ ghi sự kiện không bỏ qua đơn', async () => {
@@ -131,12 +139,26 @@ describe('OrdersService.detailView: phần dòng thời gian một khối', () =
 
   it.each([
     ['khách đã tắt ở Cài đặt hoặc nhắn dừng trên Zalo', {}, { ...VERIFIED, notifyOrderZalo: false }],
-    ['đơn tặng (giao tới số khác)', { shippingAddress: { phone: '0987654321' } }, { ...VERIFIED, notifyOrderZalo: true }],
-    ['số chưa xác minh', {}, { phone: '0901234567', phoneVerifiedAt: null, notifyOrderZalo: true }],
+    ['không có số nào nhắn được', { shippingAddress: null }, { phone: null, phoneVerifiedAt: null, notifyOrderZalo: true }],
     ['đơn đã giao', { status: 'DELIVERED' }, { ...VERIFIED, notifyOrderZalo: true }],
   ])('dòng "Sẽ báo qua Zalo": %s → không, và không có nút bật lại', async (_label, over, user) => {
     const { svc } = build({ gate: gateOn, order: { orderZaloConsent: true, ...over }, user });
     expect(await svc.detailView('u1', 'TUBU1')).toMatchObject({ orderZaloOn: false, orderZaloAvailable: false });
+  });
+
+  it.each([
+    ['đơn tặng (giao tới số khác)', { shippingAddress: { phone: '0987654321' } }, { ...VERIFIED, notifyOrderZalo: true }],
+    ['số chưa xác minh', {}, { phone: '0901234567', phoneVerifiedAt: null, notifyOrderZalo: true }],
+    ['đơn khách vãng lai (số ở guestPhone)', { guestPhone: '0912345678', shippingAddress: null }, { phone: null, phoneVerifiedAt: null, notifyOrderZalo: true }],
+  ])('PO A2: dòng "Sẽ báo qua Zalo": %s → có, theo đồng ý của đơn', async (_label, over, user) => {
+    const { svc } = build({ gate: gateOn, order: { orderZaloConsent: true, ...over }, user });
+    expect(await svc.detailView('u1', 'TUBU1')).toMatchObject({ orderZaloOn: true, orderZaloAvailable: false });
+  });
+
+  it('chỉ tin của người mua là "Đã báo qua Zalo": truy vấn outbox lọc recipientRole buyer', async () => {
+    const { svc, outboxFindMany } = build({ gate: gateOn, config: { 'orders.timeline_v2_enabled': true } });
+    await svc.detailView('u1', 'TUBU1');
+    expect(outboxFindMany.mock.calls[0][0].where).toMatchObject({ orderId: 'o1', recipientRole: 'buyer' });
   });
 
   it('dòng "Sẽ báo qua Zalo": cờ MSS tắt → không, không đọc người dùng', async () => {
@@ -229,12 +251,20 @@ describe('OrdersService.enableOrderZalo (POST /orders/:code/order-zalo-consent)'
     expect(t.orderUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('đơn tặng, số chưa xác minh: 409, không ghi gì', async () => {
+  it('PO A2: đơn tặng, số chưa xác minh: bật được (người mua nhận tin ở số checkout_contact)', async () => {
     const gift = tx(order({ shippingAddress: { phone: '0987654321' } }));
-    await expect(svcOf(gift.prisma).enableOrderZalo('u1', 'TUBU1')).rejects.toBeInstanceOf(ConflictException);
+    await expect(svcOf(gift.prisma).enableOrderZalo('u1', 'TUBU1')).resolves.toEqual({ orderZaloConsent: true });
     const unverified = tx(order(), { user: { phone: '0901234567', phoneVerifiedAt: null } });
-    await expect(svcOf(unverified.prisma).enableOrderZalo('u1', 'TUBU1')).rejects.toBeInstanceOf(ConflictException);
-    expect(gift.orderUpdateMany).not.toHaveBeenCalled();
-    expect(unverified.orderUpdateMany).not.toHaveBeenCalled();
+    await expect(svcOf(unverified.prisma).enableOrderZalo('u1', 'TUBU1')).resolves.toEqual({ orderZaloConsent: true });
+    expect(gift.orderUpdateMany).toHaveBeenCalledTimes(1);
+    expect(unverified.orderUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('tài khoản không có số và địa chỉ giao không có số đọc được: 409, không ghi gì', async () => {
+    const none = tx(order({ shippingAddress: { phone: 'abc' } }), { user: { phone: null, phoneVerifiedAt: null } });
+    await expect(svcOf(none.prisma).enableOrderZalo('u1', 'TUBU1')).rejects.toBeInstanceOf(ConflictException);
+    expect(none.orderUpdateMany).not.toHaveBeenCalled();
+    const lookup = (none.prisma as unknown as { $transaction: jest.Mock }).$transaction;
+    expect(lookup).toHaveBeenCalledTimes(1);
   });
 });

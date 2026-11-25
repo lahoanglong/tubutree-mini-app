@@ -146,6 +146,45 @@ describe('Đồng ý Zalo muộn ở chi tiết đơn (real Postgres)', () => {
     expect(await outbox(order.id)).toHaveLength(0);
   });
 
+  it('đơn tặng, tài khoản chưa xác minh SĐT (PO A2): bật muộn được; tin sau đó gửi về số tài khoản với nguồn checkout_contact, không gửi số người nhận', async () => {
+    const own = uniquePhone('09');
+    const giftee = uniquePhone('08');
+    const user = await createUser(prisma, { phone: own, phoneVerifiedAt: null, fullName: 'Trần Văn Bình', notifyOrderZalo: false, notifyOrderZaloSource: 'checkout' });
+    userIds.push(user.id);
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'CONFIRMED',
+      platform: 'web',
+      orderZaloConsent: false,
+      shippingAddress: { recipient: 'Bà Ngoại', phone: giftee, street: '1 IT', ward: 'P', district: '', province: 'Ha Noi', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' },
+    });
+    await prisma.orderItem.create({ data: { orderId: order.id, variationId, productName: 'Nước giặt Fuwa3e 2L', variationName: 'Hũ', unitPrice: 100_000, quantity: 1, total: 100_000 } });
+    await orders.enableOrderZalo(user.id, order.code);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).orderZaloConsent).toBe(true);
+    expect(await recordIn(order.id, 'order.shipping')).toBeNull();
+    const rows = await outbox(order.id);
+    expect(rows.map((r) => [r.eventType, r.recipientRole])).toEqual([['order.shipping', 'buyer']]);
+    const recipient = (JSON.parse(rows[0]!.body) as { recipient: Record<string, unknown> }).recipient;
+    expect(recipient).toMatchObject({ phone: own, phone_source: 'checkout_contact' });
+    expect(recipient).not.toHaveProperty('role');
+  });
+
+  it('tài khoản không có số và địa chỉ không có số đọc được: 409, không ghi gì', async () => {
+    const user = await createUser(prisma, { fullName: 'Trần Văn Bình', notifyOrderZalo: false, notifyOrderZaloSource: 'checkout' });
+    userIds.push(user.id);
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'CONFIRMED',
+      platform: 'web',
+      orderZaloConsent: false,
+      shippingAddress: { recipient: 'Bình', phone: '12345', street: '1 IT', ward: 'P', district: '', province: 'Ha Noi', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' },
+    });
+    const err = await orders.enableOrderZalo(user.id, order.code).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).orderZaloConsent).toBe(false);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).notifyOrderZalo).toBe(false);
+  });
+
   it('khách khác gọi: 404, không ghi gì', async () => {
     const { order } = await unconsentedOrder('CONFIRMED');
     const other = await createUser(prisma, { phone: uniquePhone('09') });

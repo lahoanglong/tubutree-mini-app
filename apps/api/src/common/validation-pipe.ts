@@ -273,6 +273,7 @@ export const FIELD_LABELS: Record<string, string> = {
   worry: 'Câu trả lời về nỗi lo',
   format: 'Câu trả lời về dạng sản phẩm',
   orderZaloConsent: 'Đồng ý nhận tin đơn hàng qua Zalo',
+  notifyRecipientZalo: 'Gửi thêm thông báo giao hàng cho số người nhận',
   roundId: 'Mã ván chơi',
   token: 'Mã ván chơi',
   answers: 'Bài làm',

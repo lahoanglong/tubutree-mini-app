@@ -654,6 +654,8 @@ export const placeOrder = (
     itemIds?: string[];
     /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */
     orderZaloConsent?: boolean;
+    /** PO A1: gửi thêm tin giao hàng (không kèm giá) cho số người nhận; máy chủ chỉ ghi khi có `orderZaloConsent: true`. */
+    notifyRecipientZalo?: boolean;
     /** Quà tặng dùng thử khách thấy ở thanh toán; `null` = không kèm quà; bỏ trống khi báo giá không có khối quà. */
     giftVariationId?: string | null;
   } & CheckoutPickupFields,

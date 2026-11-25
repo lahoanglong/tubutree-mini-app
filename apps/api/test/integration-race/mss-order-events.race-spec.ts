@@ -109,9 +109,30 @@ describe('MSS order events (real Postgres)', () => {
     await prisma.$disconnect();
   });
 
-  async function consentedOrder(over: { orderZaloConsent?: boolean | null; platform?: string | null; placedForCustomer?: boolean; giftPhone?: string; type?: 'RETAIL' | 'DEALER' } = {}) {
+  async function consentedOrder(
+    over: {
+      orderZaloConsent?: boolean | null;
+      platform?: string | null;
+      placedForCustomer?: boolean;
+      giftPhone?: string;
+      type?: 'RETAIL' | 'DEALER';
+      notifyRecipientZalo?: boolean;
+      unverified?: boolean;
+      /** Khách vãng lai: users.phone null, số nằm ở orders.guestPhone và địa chỉ giao. */
+      guest?: boolean;
+      paymentMethod?: string;
+    } = {},
+  ) {
     const phone = uniquePhone('09');
-    const user = await createUser(prisma, { phone, fullName: 'Nguyễn Thị Lan', notifyOrderZalo: true, notifyOrderZaloAt: new Date(), notifyOrderZaloSource: 'checkout' });
+    const user = await createUser(prisma, {
+      phone: over.guest ? null : phone,
+      fullName: over.guest ? 'Khách' : 'Nguyễn Thị Lan',
+      notifyOrderZalo: true,
+      notifyOrderZaloAt: new Date(),
+      notifyOrderZaloSource: 'checkout',
+      ...(over.unverified ? { phoneVerifiedAt: null } : {}),
+      ...(over.guest ? { zaloId: `guest_it_${randCode(8)}` } : {}),
+    });
     userIds.push(user.id);
     const order = await createOrder(prisma, {
       userId: user.id,
@@ -120,6 +141,9 @@ describe('MSS order events (real Postgres)', () => {
       orderZaloConsent: over.orderZaloConsent === undefined ? true : over.orderZaloConsent,
       orderZaloConsentAt: new Date(),
       placedForCustomer: over.placedForCustomer ?? false,
+      notifyRecipientZalo: over.notifyRecipientZalo ?? false,
+      ...(over.guest ? { guestPhone: phone } : {}),
+      ...(over.paymentMethod ? { paymentMethod: over.paymentMethod as never } : {}),
       shippingAddress: { recipient: 'Lan', phone: over.giftPhone ?? phone, street: '1 IT', ward: 'P', district: '', province: 'Ha Noi', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' },
     });
     await prisma.orderItem.create({ data: { orderId: order.id, variationId, productName: 'Nước giặt Fuwa3e 2L', variationName: 'Hũ', unitPrice: 100_000, quantity: 1, total: 100_000 } });
@@ -240,9 +264,8 @@ describe('MSS order events (real Postgres)', () => {
     }
   });
 
-  it('(9) đơn tặng, CTV đặt hộ, đơn đại lý, platform null, khách không đồng ý: 0 dòng outbox', async () => {
+  it('(9) CTV đặt hộ, đơn đại lý, platform null, khách không đồng ý: 0 dòng outbox', async () => {
     const cases = [
-      [{ giftPhone: '0911111111' }, 'gift_recipient'],
       [{ placedForCustomer: true }, 'placed_for_customer'],
       [{ type: 'DEALER' as const }, 'dealer_order'],
       [{ platform: null }, 'platform_null'],
@@ -508,5 +531,167 @@ describe('MSS order events (real Postgres)', () => {
     expect((await rowsOf(order.id))[0]!.fallbackChannel).toBe('ZNS');
     expect(await fallback.run(row!.eventId)).toBeNull();
     expect(mine()).toBe(2);
+  });
+  describe('(11) PO A1 + A2: dòng người nhận (tin giao hàng không kèm giá) và số người mua chưa xác minh', () => {
+    const flagsNoRecipient = { ...flagsOn, isEnabled: async (f: string) => f !== 'orderRecipient' } as unknown as MssFlagsService;
+    const healthNoRecipientCap = { assertCapability: async (f: string) => f !== 'orderRecipient' } as unknown as MssHealthService;
+    const circuitClient = { circuit: { isTripped: () => false } } as unknown as MssClient;
+    let recorderFlagOff: MssOrderEventRecorder;
+    let recorderNoCap: MssOrderEventRecorder;
+    const bodyOf = (row: { body: string }) => JSON.parse(row.body) as { order: Record<string, unknown>; recipient: Record<string, unknown>; consent: Record<string, unknown> };
+    const byRole = async (orderId: string, eventType: string) => {
+      const rows = (await rowsOf(orderId)).filter((r) => r.eventType === eventType);
+      return { buyer: rows.filter((r) => r.recipientRole === 'buyer'), recipient: rows.filter((r) => r.recipientRole === 'recipient') };
+    };
+
+    beforeAll(async () => {
+      recorderFlagOff = new MssOrderEventRecorder(flagsNoRecipient, health, circuitClient, dispatcher);
+      recorderNoCap = new MssOrderEventRecorder(flagsOn, healthNoRecipientCap, circuitClient, dispatcher);
+      await Promise.all([recorderFlagOff.refreshGate(), recorderNoCap.refreshGate()]);
+      expect(recorder.gate().recipient).toBe(true);
+      expect(recorderFlagOff.gate()).toMatchObject({ open: true, recipient: false });
+      expect(recorderNoCap.gate()).toMatchObject({ open: true, recipient: false });
+    });
+
+    it('đơn tặng, khách không bật công tắc: người mua nhận đủ tin như cũ, không dòng người nhận', async () => {
+      const { order } = await consentedOrder({ giftPhone: uniquePhone('08') });
+      for (const t of ['order.created', 'order.shipping', 'order.delivered'] as const) expect(await recordIn(order.id, t)).toBeNull();
+      const rows = await rowsOf(order.id);
+      expect(rows.map((r) => [r.eventType, r.recipientRole])).toEqual([
+        ['order.created', 'buyer'],
+        ['order.shipping', 'buyer'],
+        ['order.delivered', 'buyer'],
+      ]);
+    });
+
+    it('bật công tắc, cờ + năng lực MSS: shipping và delivered có thêm dòng người nhận không kèm giá; created/paid chỉ người mua', async () => {
+      const giftPhone = uniquePhone('08');
+      const { user, order } = await consentedOrder({ giftPhone, notifyRecipientZalo: true, paymentMethod: 'BANK_TRANSFER' });
+      for (const t of ['order.created', 'order.payment_confirmed', 'order.shipping', 'order.delivered'] as const) expect(await recordIn(order.id, t)).toBeNull();
+      for (const t of ['order.created', 'order.payment_confirmed']) expect((await byRole(order.id, t)).recipient).toHaveLength(0);
+      for (const t of ['order.shipping', 'order.delivered']) {
+        const { buyer, recipient } = await byRole(order.id, t);
+        expect([buyer.length, recipient.length]).toEqual([1, 1]);
+        expect(recipient[0]!.sequence).toBeGreaterThan(buyer[0]!.sequence);
+        const b = bodyOf(buyer[0]!);
+        expect(b.recipient).toEqual({ phone: user.phone, phone_source: 'account_verified', name: 'Lan' });
+        expect(b.order.total_vnd).toBe(100_000);
+        const r = bodyOf(recipient[0]!);
+        expect(r.recipient).toEqual({ phone: giftPhone, phone_source: 'checkout_contact', role: 'recipient' });
+        expect(r.order.total_vnd).toBe(0);
+        expect(r.order).not.toHaveProperty('first_item_name');
+        expect(r.order).not.toHaveProperty('tracking_url');
+        expect(r.consent).toMatchObject({ order_updates_zalo: true, source: 'checkout' });
+        expect(recipient[0]!.body).not.toMatch(/100000|Fuwa|https?:|Lan/);
+      }
+      // Ghi lại cùng sự kiện (worker chạy lại, trạng thái lặp): không thêm dòng nào của cả hai vai.
+      expect(await recordIn(order.id, 'order.shipping')).toBe('duplicate');
+      expect(await rowsOf(order.id)).toHaveLength(6);
+    });
+
+    it('bật công tắc mà MSS chưa công bố order_events.recipient_role, hoặc cờ người nhận tắt: chỉ dòng người mua', async () => {
+      for (const r of [recorderNoCap, recorderFlagOff]) {
+        const { order } = await consentedOrder({ giftPhone: uniquePhone('08'), notifyRecipientZalo: true });
+        expect(await recordIn(order.id, 'order.shipping', r)).toBeNull();
+        expect((await rowsOf(order.id)).map((x) => x.recipientRole)).toEqual(['buyer']);
+      }
+    });
+
+    it('số nhận hàng trùng số người mua (khác cách viết) hoặc sửa về số người mua sau khi đã giao: không dòng người nhận', async () => {
+      const { user, order } = await consentedOrder({ notifyRecipientZalo: true });
+      await prisma.order.update({ where: { id: order.id }, data: { shippingAddress: { phone: `+84${user.phone!.slice(1)}` } } });
+      expect(await recordIn(order.id, 'order.shipping')).toBeNull();
+      expect((await rowsOf(order.id)).map((x) => x.recipientRole)).toEqual(['buyer']);
+
+      const gift = await consentedOrder({ giftPhone: uniquePhone('08'), notifyRecipientZalo: true });
+      expect(await recordIn(gift.order.id, 'order.shipping')).toBeNull();
+      await prisma.order.update({ where: { id: gift.order.id }, data: { shippingAddress: { phone: gift.user.phone } } });
+      expect(await recordIn(gift.order.id, 'order.delivered')).toBeNull();
+      expect((await rowsOf(gift.order.id)).map((x) => [x.eventType, x.recipientRole])).toEqual([
+        ['order.shipping', 'buyer'],
+        ['order.shipping', 'recipient'],
+        ['order.delivered', 'buyer'],
+      ]);
+    });
+
+    it('PO A2: số tài khoản chưa xác minh: người mua nhận tin với phone_source checkout_contact', async () => {
+      const { user, order } = await consentedOrder({ unverified: true });
+      expect(await recordIn(order.id, 'order.created')).toBeNull();
+      const [row] = await rowsOf(order.id);
+      expect(bodyOf(row!).recipient).toEqual({ phone: user.phone, phone_source: 'checkout_contact', name: 'Lan' });
+    });
+
+    it('PO A2: đơn khách vãng lai: người mua nhận tin ở orders.guestPhone, không có tên gọi; tin giao hàng không có link trang tài khoản', async () => {
+      const { order } = await consentedOrder({ guest: true });
+      expect(await recordIn(order.id, 'order.created')).toBeNull();
+      const [row] = await rowsOf(order.id);
+      expect(bodyOf(row!).recipient).toEqual({ phone: order.guestPhone, phone_source: 'checkout_contact' });
+      expect(await recordIn(order.id, 'order.shipping')).toBeNull();
+      const { buyer } = await byRole(order.id, 'order.shipping');
+      expect(bodyOf(buyer[0]!).order).not.toHaveProperty('tracking_url');
+
+      const member = await consentedOrder();
+      expect(await recordIn(member.order.id, 'order.shipping')).toBeNull();
+      expect(bodyOf((await rowsOf(member.order.id))[0]!).order.tracking_url).toBe(`https://tubutree.com/tai-khoan/don-hang/${member.order.code}`);
+    });
+
+    it('không có số nào nhắn được: no_phone, không dòng', async () => {
+      const { order } = await consentedOrder({ guest: true });
+      await prisma.order.update({ where: { id: order.id }, data: { guestPhone: null, shippingAddress: { phone: '12345' } } });
+      expect(await recordIn(order.id, 'order.created')).toBe('no_phone');
+      expect(await rowsOf(order.id)).toHaveLength(0);
+    });
+
+    it('ZNS chỉ gắn dòng người mua; MSS bỏ qua dòng người nhận thì không gửi ZNS nào cho người nhận', async () => {
+      const { user, order } = await consentedOrder({ giftPhone: uniquePhone('08'), notifyRecipientZalo: true });
+      await recordIn(order.id, 'order.shipping');
+      expect(await hold.holdZns(user.id, 'ORDER_SHIPPING', { order_code: order.code }, 'zns-tpl')).toBe(true);
+      const { buyer, recipient } = await byRole(order.id, 'order.shipping');
+      expect(buyer[0]!.znsHeldTemplate).toBe('ORDER_SHIPPING');
+      expect(recipient[0]!.znsHeldTemplate).toBeNull();
+
+      expect(await sender.deliver(recipient[0]!.eventId)).toBe('DELIVERED');
+      expect(await sender.applyResult(recipient[0]!.eventId, { orderCode: order.code, eventType: 'order.shipping' }, 'skipped', 'not_friend', 'callback')).toBe('applied');
+      await fallback.run(recipient[0]!.eventId);
+      expect(sendHeldZns).not.toHaveBeenCalled();
+      const after = await byRole(order.id, 'order.shipping');
+      expect(after.recipient[0]).toMatchObject({ status: 'RESULT_SKIPPED', fallbackChannel: 'IN_APP_ONLY' });
+      // Dòng người mua vẫn giữ ZNS chờ của chính nó, chưa bị đường lui của dòng người nhận đụng tới.
+      expect(after.buyer[0]).toMatchObject({ status: 'PENDING', fallbackAt: null, znsHeldTemplate: 'ORDER_SHIPPING' });
+    });
+
+    it('số người nhận đã từ chối tin (skipped:opted_out): không tắt lựa chọn của người mua, tin sau của người mua vẫn ghi', async () => {
+      const { user, order } = await consentedOrder({ giftPhone: uniquePhone('08'), notifyRecipientZalo: true });
+      await recordIn(order.id, 'order.shipping');
+      const { recipient } = await byRole(order.id, 'order.shipping');
+      expect(await sender.deliver(recipient[0]!.eventId)).toBe('DELIVERED');
+      expect(await sender.applyResult(recipient[0]!.eventId, { orderCode: order.code, eventType: 'order.shipping' }, 'skipped', 'opted_out', 'callback')).toBe('applied');
+      const u = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect({ on: u.notifyOrderZalo, source: u.notifyOrderZaloSource }).toEqual({ on: true, source: 'checkout' });
+      expect(await recordIn(order.id, 'order.delivered')).toBeNull();
+      expect((await byRole(order.id, 'order.delivered')).buyer).toHaveLength(1);
+    });
+
+    it('admin tắt cờ người nhận khi dòng người nhận còn chờ: lượt gửi huỷ dòng đó (disabled), dòng người mua vẫn gửi', async () => {
+      const { order } = await consentedOrder({ giftPhone: uniquePhone('08'), notifyRecipientZalo: true });
+      await recordIn(order.id, 'order.shipping');
+      const { buyer, recipient } = await byRole(order.id, 'order.shipping');
+      const senderNoRecipient = new MssOrderEventSender(prisma, client, flagsNoRecipient, dispatcher, fallback);
+      replies = [{ status: 202, body: { status: 'queued', duplicate: false } }];
+      expect(await senderNoRecipient.deliver(recipient[0]!.eventId)).toBe('CANCELLED');
+      expect(calls).toHaveLength(0);
+      expect(await senderNoRecipient.deliver(buyer[0]!.eventId)).toBe('DELIVERED');
+      expect(calls).toHaveLength(1);
+      const after = await byRole(order.id, 'order.shipping');
+      expect(after.recipient[0]).toMatchObject({ status: 'CANCELLED', resultReason: 'disabled' });
+    });
+
+    it('huỷ hết hạn thanh toán: chỉ tin đã tới người mua mới tính "đã báo" (tin người nhận đã gửi không tính)', async () => {
+      const { order } = await consentedOrder({ giftPhone: uniquePhone('08'), notifyRecipientZalo: true });
+      await recordIn(order.id, 'order.shipping');
+      await prisma.mssOrderEventOutbox.updateMany({ where: { orderId: order.id, recipientRole: 'recipient' }, data: { status: 'RESULT_SENT', resultAt: new Date() } });
+      await prisma.mssOrderEventOutbox.updateMany({ where: { orderId: order.id, recipientRole: 'buyer' }, data: { status: 'RESULT_FAILED', resultAt: new Date() } });
+      expect(await prisma.$transaction((tx) => recorder.record(tx, order.id, 'order.cancelled', { cancelReason: 'PAYMENT_TIMEOUT' }))).toBe('payment_timeout_unnotified');
+    });
   });
 });

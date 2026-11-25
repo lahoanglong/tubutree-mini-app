@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, Zap } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { parseVnContactPhone, parseVnPhoneInput } from '@tubutree/app-core/phone-input';
+import { maskOrderZaloPhone } from '@tubutree/app-core/order-zalo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { comboOnlyDiscount } from '@tubutree/app-core/commerce/green-box';
 import { paymentMethodCue } from '@tubutree/app-core/commerce/checkout-display';
@@ -14,6 +15,8 @@ import { GiftTrialRow } from '@/components/checkout/gift-rows';
 import { GuestField } from '@/components/checkout/guest-field';
 import { DesktopLines, MobileItems, NO_LINE_FIX, RECALC_DIM, Row, type CheckoutLineView } from '@/components/checkout/checkout-lines';
 import { OrderConsent } from '@/components/order-consent';
+import { OrderZaloConsentRow } from '@/components/checkout/order-zalo';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { trackWebEvent } from '@/lib/analytics';
@@ -118,6 +121,12 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
   const touch = (f: Field) => setTouched((t) => (t[f] ? t : { ...t, [f]: true }));
   const formValid = Object.keys(errors).length === 0;
   const normalizedPhone = parseVnContactPhone(phone);
+  // PO A2: ô nhận tin Zalo cho khách vãng lai, số nhận là số khách vừa gõ (máy chủ gửi với nguồn checkout_contact). Chỉ khi cổng mở cho mọi
+  // khách: nhóm rollout theo người dùng riêng của máy này, client không biết. Một ô số điện thoại nên không có công tắc người nhận.
+  const publicConfig = usePublicConfig();
+  const [zaloPicked, setZaloPicked] = useState<boolean | null>(null);
+  const zaloPhone = publicConfig.orderZaloGuest === true ? maskOrderZaloPhone(normalizedPhone) : null;
+  const zaloChecked = zaloPhone ? (zaloPicked ?? publicConfig.orderZaloPrechecked === true) : undefined;
 
   const address: GuestAddressInput | null =
     formValid && normalizedPhone
@@ -201,6 +210,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
       expectedTotal: quote.total,
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(gift !== undefined ? { giftVariationId: gift } : {}),
+      ...(zaloChecked !== undefined ? { orderZaloConsent: zaloChecked } : {}),
       ...guestReferralFields(getStorefrontContext()),
     };
     const idem = keyRing.current.keyFor(body);
@@ -441,6 +451,7 @@ export function GuestCheckout({ welcomeAmount }: { welcomeAmount: number | null 
               </button>
             </p>
           )}
+          {zaloPhone && <OrderZaloConsentRow phone={zaloPhone} checked={zaloChecked === true} onChange={setZaloPicked} />}
           <div className="hidden lg:block">
             <OrderConsent className="mt-3" />
             {placeButton(`${ui.btnPrimary} mt-3 w-full tabular-nums`)}
