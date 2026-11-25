@@ -46,13 +46,22 @@ export interface OrderZaloStatus {
   /** Hiện được công tắc "gửi thêm thông báo giao hàng cho số người nhận" (cờ người nhận + năng lực MSS). */
   recipientEnabled: boolean;
   tubuZaloPhone: string;
+  /**
+   * Khách đã là bạn Zalo của Tubu Tree (hoặc đang có hội thoại mở): trong 90 ngày, MSS đã gửi xong một tin đơn của chính khách mà không phải
+   * tin người lạ (`RESULT_SENT`, lý do null, dòng người mua). Hai app ẩn lời mời kết bạn. Cờ tắt thì luôn false (không truy vấn).
+   */
+  friendKnown: boolean;
 }
+
+/** Cửa sổ của `friendKnown`: quá lâu không có tin Zalo nào tới được thì mời kết bạn lại (khách có thể đã huỷ kết bạn). */
+export const ORDER_ZALO_FRIEND_KNOWN_DAYS = 90;
 
 export function orderZaloStatus(
   gate: OrderZaloGate | null | undefined,
   user: { id: string; phone: string | null; phoneVerifiedAt: Date | null; notifyOrderZalo: boolean; notifyOrderZaloAt: Date | null },
   prechecked: unknown,
   tubuZaloPhone: unknown,
+  friendKnown = false,
 ): OrderZaloStatus {
   const enabled = orderZaloGateOpen(gate) && inRollout(user.id, gate!.rolloutPct);
   // Chỉ số của chính tài khoản (không lấy số nhận hàng): số nhận hàng đổi theo địa chỉ khách chọn ở màn thanh toán.
@@ -66,5 +75,6 @@ export function orderZaloStatus(
     phoneSource: buyer?.source ?? null,
     recipientEnabled: enabled && gate!.recipient === true,
     tubuZaloPhone: tubuZaloPhoneOf(tubuZaloPhone),
+    friendKnown: enabled && friendKnown,
   };
 }

@@ -182,7 +182,7 @@ describe('/thanh-toan — lời mời kết bạn Zalo ở màn đặt xong', ()
       expect(a.getAttribute('target')).toBe('_blank');
       expect(a.getAttribute('rel')).toContain('noopener');
     }
-    expect(c.textContent).toContain('Kết bạn Zalo với Tubu Tree để nhận hành trình đơn TUBU2026111557909.');
+    expect(c.textContent).toContain('Nhận Bill & theo dõi đơn TUBU2026111557909 miễn phí qua Zalo Tubu Tree');
     links[0]!.addEventListener('click', (e) => e.preventDefault());
     click(links[0]!);
     expect(mocks.events).toContainEqual(['order_zalo_friend_click', { from: 'success' }]);
@@ -194,5 +194,18 @@ describe('/thanh-toan — lời mời kết bạn Zalo ở màn đặt xong', ()
     await place(c);
     expect(c.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
     expect(friendLinks(c)).toHaveLength(0);
+  });
+
+  it('U2 máy chủ báo khách đã nhận tin Zalo đơn gần đây (friendKnown ở ô thanh toán): màn đặt xong không mời, không hỏi máy chủ thêm', async () => {
+    mocks.config = { ...mocks.config, orderZaloEnabled: true };
+    mocks.zalo = () => Promise.resolve({ ...STATUS, friendKnown: true });
+    mocks.placed = { ...ORDER, orderZaloConsent: true };
+    const c = await mount();
+    const calls = mocks.zaloCalls;
+    await place(c);
+    expect(c.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
+    expect(friendLinks(c)).toHaveLength(0);
+    expect(c.textContent).not.toContain('Nhận Bill & theo dõi đơn');
+    expect(mocks.zaloCalls).toBe(calls);
   });
 });

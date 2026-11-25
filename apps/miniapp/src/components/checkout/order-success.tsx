@@ -13,7 +13,7 @@ import { isRetailOnly } from '../../utils/retail-only';
 import { checkoutEtaLabel, etaSchedule, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
 import { referralViralOn } from '@tubutree/app-core/referral/viral-flag';
-import { OrderZaloFriend } from './order-zalo';
+import { OrderZaloFriend, useOrderZaloFriendKnown } from './order-zalo';
 import { viSuccess } from '../../i18n/vi-checkout';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
@@ -127,6 +127,7 @@ export function OrderSuccess({
   const sfSlug = useStorefrontContext((s) => s.slug);
   const sfKind = useStorefrontContext((s) => s.kind);
   const cfg = usePublicConfig();
+  const friendKnown = useOrderZaloFriendKnown();
   const candidate = useSubscribeCandidate(order);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
 
@@ -251,7 +252,7 @@ export function OrderSuccess({
       <NextStepsCompact />
 
       <section aria-label={viSuccess.extrasLabel} className="tubu-order-success-extras">
-        {showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />}
+        {showOrderZaloFriend(cfg.orderZaloEnabled, order, friendKnown) && <OrderZaloFriend code={order.code} from="success" />}
         {candidate && (
           <SubscribeRow candidate={candidate} discountPct={Math.round(cfg.subscribeDiscountPct * 100)} onOpen={() => setSubscribeOpen(true)} />
         )}

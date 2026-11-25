@@ -113,7 +113,7 @@ describe('/config/public: cờ chung của ô đồng ý', () => {
 describe('GET /config/order-zalo', () => {
   it('đọc khách theo token, trả trạng thái máy chủ tính sẵn, không lộ số đầy đủ', async () => {
     const findUniqueOrThrow = jest.fn(async () => ({ ...user({ id: inside }) }));
-    const prisma = { user: { findUniqueOrThrow } } as never;
+    const prisma = { user: { findUniqueOrThrow }, mssOrderEventOutbox: { findFirst: jest.fn(async () => null) } } as never;
     const config = { get: jest.fn(async (_k: string, fallback?: unknown) => fallback) } as never;
     const ctrl = new OrderZaloConfigController(prisma, config, { gate: () => ON } as never);
     const res = await ctrl.orderZalo(inside);
@@ -127,6 +127,7 @@ describe('GET /config/order-zalo', () => {
       phoneSource: 'account_verified',
       recipientEnabled: false,
       tubuZaloPhone: '0899149229',
+      friendKnown: false,
     });
     // Số đầy đủ chỉ là số của chính người gọi (để so với số nhận hàng ở thanh toán); che ở mọi chỗ hiển thị.
     expect(JSON.stringify({ ...res, buyerPhone: null })).not.toContain('0901234567');
@@ -136,5 +137,56 @@ describe('GET /config/order-zalo', () => {
     const prisma = { user: { findUniqueOrThrow: jest.fn(async () => user()) } } as never;
     const config = { get: jest.fn(async (_k: string, fallback?: unknown) => fallback) } as never;
     expect((await new OrderZaloConfigController(prisma, config).orderZalo(inside)).enabled).toBe(false);
+  });
+
+  describe('U1 friendKnown: MSS đã gửi xong tin đơn của chính khách, không phải tin người lạ, trong 90 ngày', () => {
+    type Where = { order: { userId: string }; recipientRole: string; status: string; resultReason: null; resultAt: { gte: Date } };
+    type Row = { userId: string; recipientRole: string; status: string; resultReason: string | null; resultAt: Date };
+    const DAY = 86_400_000;
+    /** Bộ giả áp đúng where mà controller gửi xuống. */
+    const setup = (rows: Row[], gate: OrderZaloGate | undefined = ON) => {
+      const findFirst = jest.fn(async ({ where }: { where: Where }) => {
+        const hit = rows.find(
+          (r) =>
+            r.userId === where.order.userId &&
+            r.recipientRole === where.recipientRole &&
+            r.status === where.status &&
+            r.resultReason === where.resultReason &&
+            r.resultAt >= where.resultAt.gte,
+        );
+        return hit ? { id: 'x' } : null;
+      });
+      const prisma = { user: { findUniqueOrThrow: jest.fn(async () => user({ id: inside })) }, mssOrderEventOutbox: { findFirst } } as never;
+      const config = { get: jest.fn(async (_k: string, fallback?: unknown) => fallback) } as never;
+      return { ctrl: new OrderZaloConfigController(prisma, config, (gate ? { gate: () => gate } : undefined) as never), findFirst };
+    };
+    const sent = (over: Partial<Row> = {}): Row => ({ userId: inside, recipientRole: 'buyer', status: 'RESULT_SENT', resultReason: null, resultAt: new Date(Date.now() - DAY), ...over });
+
+    it('RESULT_SENT lý do null trong 90 ngày: true', async () => {
+      expect((await setup([sent()]).ctrl.orderZalo(inside)).friendKnown).toBe(true);
+    });
+
+    it.each<[string, Partial<Row>]>([
+      ['tin người lạ (reason stranger)', { resultReason: 'stranger' }],
+      ['quá 90 ngày', { resultAt: new Date(Date.now() - 91 * DAY) }],
+      ['dòng người nhận (số khác)', { recipientRole: 'recipient' }],
+      ['bị bỏ qua (not_friend)', { status: 'RESULT_SKIPPED', resultReason: 'not_friend' }],
+      ['không rõ kết quả', { status: 'RESULT_UNKNOWN' }],
+      ['đơn của khách khác', { userId: outside }],
+    ])('%s: false', async (_n, over) => {
+      expect((await setup([sent(over)]).ctrl.orderZalo(inside)).friendKnown).toBe(false);
+    });
+
+    it('cờ tắt: false và không truy vấn outbox', async () => {
+      const { ctrl, findFirst } = setup([sent()], { enabled: false, open: false, rolloutPct: 0 });
+      expect((await ctrl.orderZalo(inside)).friendKnown).toBe(false);
+      expect(findFirst).not.toHaveBeenCalled();
+    });
+
+    it('hàm thuần: friendKnown chỉ đúng khi khách thấy được tính năng', () => {
+      expect(orderZaloStatus(ON, user(), false, undefined, true).friendKnown).toBe(true);
+      expect(orderZaloStatus({ ...ON, rolloutPct: 0 }, user(), false, undefined, true).friendKnown).toBe(false);
+      expect(orderZaloStatus(ON, user(), false, undefined).friendKnown).toBe(false);
+    });
   });
 });

@@ -18,10 +18,12 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { MD_UP, useMediaQuery } from '@/lib/use-media-query';
 import { trackWebEvent } from '@/lib/analytics';
 import { actionErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
 import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
+import { QrCode } from '@/components/ui/qr-code';
 
 export const ORDER_ZALO_KEY = ['order-zalo'];
 
@@ -36,6 +38,16 @@ export function useOrderZaloStatus() {
   const flag = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, enabled: authed }).data?.orderZaloEnabled === true;
   const q = useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: flag && authed, refetchOnMount: 'always', retry: false });
   return q.isFetchedAfterMount && !q.isError ? q.data : undefined;
+}
+
+/**
+ * Khách đã nhận tin Zalo đơn gần đây (`friendKnown` máy chủ tính): màn đặt xong ẩn lời mời kết bạn. Chỉ đọc bản ô Zalo ở thanh toán vừa tải
+ * (màn đặt xong chỉ có ngay sau thanh toán, và đặt đơn không đổi điều này), không gọi thêm request. Không có bản đó (khách chưa đăng nhập,
+ * cờ tắt) = false: thẻ hiện như trước.
+ */
+export function useOrderZaloFriendKnown(): boolean {
+  const q = useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: false });
+  return q.data?.friendKnown === true;
 }
 
 export type OrderZaloRecipientToggle = { buyerPhoneMasked: string; on: boolean; onChange: (v: boolean) => void };
@@ -130,21 +142,23 @@ function ConsentLabel({ phone, checked, onChange }: { phone: string; checked: bo
   );
 }
 
-/** Lời mời kết bạn Zalo Tubu Tree: liên kết phụ mở zalo.me ở thẻ mới, không tranh vai nút chính của màn. */
+/**
+ * Lời mời kết bạn Zalo Tubu Tree: liên kết phụ mở zalo.me ở thẻ mới, không tranh vai nút chính của màn. Từ md trở lên thêm mã QR cùng link để
+ * khách quét bằng Zalo trên điện thoại; thư viện QR chỉ tải khi màn đủ rộng (điện thoại không tải).
+ */
 export function OrderZaloFriend({ code, from }: { code: string; from: OrderZaloFriendFrom }) {
-  const phone = tubuZaloNumber(usePublicConfig().tubuZaloPhone);
+  const url = `https://zalo.me/${tubuZaloNumber(usePublicConfig().tubuZaloPhone)}`;
+  const desktop = useMediaQuery(MD_UP);
   return (
     <div className="flex flex-col items-start gap-2">
       <p className="text-sm text-[color:var(--color-text-primary)]">{fillCopy('order.zaloFriend.body', { code })}</p>
-      <a
-        href={`https://zalo.me/${phone}`}
-        target="_blank"
-        rel="noopener"
-        className={ui.btnSecondary}
-        onClick={() => trackWebEvent('order_zalo_friend_click', { from })}
-      >
+      <a href={url} target="_blank" rel="noopener" className={ui.btnSecondary} onClick={() => trackWebEvent('order_zalo_friend_click', { from })}>
         {fillCopy('order.zaloFriend.cta')}
       </a>
+      <div className="hidden items-center gap-3 md:flex" data-testid="order-zalo-friend-qr" data-qr-value={url}>
+        {desktop && <QrCode value={url} size={112} alt="QR Zalo Tubu Tree" />}
+        <p className="text-caption text-[color:var(--color-text-secondary)]">{fillCopy('order.zaloFriend.qr')}</p>
+      </div>
     </div>
   );
 }
@@ -159,7 +173,9 @@ type OrderZaloDetailOrder = { code: string; status: string; orderZaloConsent?: u
  */
 export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
   const enabled = usePublicConfig().orderZaloEnabled;
-  const view = orderZaloDetailView(useOrderZaloStatus(), order);
+  const zalo = useOrderZaloStatus();
+  const view = orderZaloDetailView(zalo, order);
+  const friend = showOrderZaloFriend(enabled, order, zalo?.friendKnown);
   const qc = useQueryClient();
   const lock = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -200,7 +216,7 @@ export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
       </div>
     );
   }
-  if (!view && !showOrderZaloFriend(enabled, order)) return null;
+  if (!view && !friend) return null;
   return (
     <div className="mt-3 flex flex-col items-start gap-2">
       {view && (
@@ -213,7 +229,7 @@ export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
         </p>
       )}
       {status}
-      <OrderZaloFriend code={order.code} from="order_detail" />
+      {friend && <OrderZaloFriend code={order.code} from="order_detail" />}
     </div>
   );
 }

@@ -45,9 +45,11 @@ const ORDER = {
 
 const SIBLING_ROW = { code: 'TUBU2026112412346', status: 'CONFIRMED', total: 99_000 };
 
-function service() {
+function service(opts: { order?: Partial<typeof ORDER> & { orderZaloConsent?: boolean | null }; gate?: { enabled: boolean; open: boolean; rolloutPct: number }; friendRow?: { id: string } | null } = {}) {
+  const order = { orderZaloConsent: null, ...ORDER, ...opts.order };
   const prisma = {
-    order: { findUnique: jest.fn().mockResolvedValue(ORDER), findMany: jest.fn().mockResolvedValue([SIBLING_ROW]) },
+    order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([SIBLING_ROW]) },
+    mssOrderEventOutbox: { findFirst: jest.fn().mockResolvedValue(opts.friendRow ?? null) },
     orderStatusHistory: {
       findMany: jest.fn().mockResolvedValue([
         { fromStatus: 'PENDING_PAYMENT', toStatus: 'CONFIRMED', createdAt: new Date('2026-11-24T02:00:00.000Z') },
@@ -65,7 +67,8 @@ function service() {
   const config = { get: jest.fn(async (_key: string, fallback: unknown) => (_key === 'web.guest_checkout_enabled' ? true : fallback)) };
   const env = { get: jest.fn(() => 'test-jwt-access-secret-test-jwt-access-secret') };
   const none = {} as never;
-  return { svc: new GuestCheckoutService(prisma as never, none, none, none, config as never, none, env as never, none), prisma };
+  const mss = opts.gate ? ({ gate: () => opts.gate } as never) : undefined;
+  return { svc: new GuestCheckoutService(prisma as never, none, none, none, config as never, none, env as never, none, mss), prisma };
 }
 
 const TRACK_FIELDS = [
@@ -86,6 +89,7 @@ const TRACK_FIELDS = [
   'statusTimes',
   'subtotal',
   'total',
+  'zaloFriendCard',
 ];
 
 function expectNoPii(view: unknown) {
@@ -150,5 +154,32 @@ describe('trần tra cứu mã + SĐT giữ nguyên (GUEST_LOOKUP_LIMIT)', () =>
     const refusal = throttleRefusalOf(handler);
     expect(refusal?.code).toBe(GUEST_LOOKUP_LIMIT);
     expect(refusal?.message(15)).toBe('Bạn tra hơi nhiều lần. Thử lại sau 15 phút nhé.');
+  });
+});
+
+describe('U3 zaloFriendCard: thẻ kết bạn Zalo ở /don', () => {
+  const ON = { enabled: true, open: true, rolloutPct: 100 };
+
+  it('cổng mở, khách đồng ý ở đơn này, đơn đang đi, MSS chưa nhắn được như bạn bè: hiện; truy vấn đúng dòng người mua của đơn', async () => {
+    const { svc, prisma } = service({ gate: ON, order: { orderZaloConsent: true } });
+    expect((await svc.track(ORDER.code, KEY)).zaloFriendCard).toBe(true);
+    expect(prisma.mssOrderEventOutbox.findFirst).toHaveBeenCalledWith({
+      where: { orderId: ORDER.id, recipientRole: 'buyer', status: 'RESULT_SENT', resultReason: null },
+      select: { id: true },
+    });
+  });
+
+  it.each<[string, Parameters<typeof service>[0]]>([
+    ['MSS đã gửi tin đơn này như bạn bè', { gate: ON, order: { orderZaloConsent: true }, friendRow: { id: 'r1' } }],
+    ['khách không đồng ý', { gate: ON, order: { orderZaloConsent: false } }],
+    ['chưa hỏi đồng ý (null)', { gate: ON, order: { orderZaloConsent: null } }],
+    ['đơn đã giao', { gate: ON, order: { orderZaloConsent: true, status: 'DELIVERED' } }],
+    ['đơn đã huỷ', { gate: ON, order: { orderZaloConsent: true, status: 'CANCELLED' } }],
+    ['cờ tắt', { gate: { enabled: false, open: false, rolloutPct: 0 }, order: { orderZaloConsent: true } }],
+    ['MSS chưa công bố order_events', { gate: { ...ON, open: false }, order: { orderZaloConsent: true } }],
+    ['tỉ lệ 0', { gate: { ...ON, rolloutPct: 0 }, order: { orderZaloConsent: true } }],
+    ['không có MssModule', { order: { orderZaloConsent: true } }],
+  ])('%s: không hiện', async (_n, opts) => {
+    expect((await service(opts).svc.track(ORDER.code, KEY)).zaloFriendCard).toBe(false);
   });
 });

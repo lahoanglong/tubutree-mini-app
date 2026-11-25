@@ -11,6 +11,7 @@ import { CodSwitchAction } from '@/components/orders/cod-switch-action';
 import { GuestReorderNoteBox } from '@/components/orders/guest-reorder-note';
 import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
 import { DesktopLines, MobileItems, NO_LINE_FIX, Row, type CheckoutLineView } from '@/components/checkout/checkout-lines';
+import { OrderZaloFriend } from '@/components/checkout/order-zalo';
 import { AuthLoading } from '@/components/login-required';
 import { PageHeader } from '@/components/ui/page-header';
 import { mini } from '@/components/order-mobile/mobile-ui';
@@ -54,7 +55,8 @@ function useTrackingKey(code: string): string | null | undefined {
 
 /**
  * Theo dõi đơn đặt không đăng nhập (`/don/<mã>#k=<khoá>`): trạng thái kèm các mốc có giờ (Đã đặt, Đã xác nhận, Đang giao, Hoàn tất), món, tiền,
- * SĐT che 4 số giữa, chỉ phường và tỉnh, nút nhắn Zalo cho Tubu chép sẵn mã đơn (không SĐT, không khoá). Sai mã, sai khoá
+ * SĐT che 4 số giữa, chỉ phường và tỉnh, nút nhắn Zalo cho Tubu chép sẵn mã đơn (không SĐT, không khoá), và lời mời kết bạn Zalo Tubu Tree khi
+ * máy chủ báo `zaloFriendCard` (khách đồng ý nhận tin ở đơn này mà MSS chưa nhắn được như bạn bè). Sai mã, sai khoá
  * hay đường dẫn hết hạn đều ra cùng một câu. Khách đăng nhập Zalo trên trình duyệt này thì đơn về tài khoản và trang dẫn sang Đơn của tôi.
  */
 export default function GuestOrderPage() {
@@ -159,6 +161,12 @@ export default function GuestOrderPage() {
           )}
           {canReorder && <GuestReorderButton code={o.code} trackingKey={key} />}
         </section>
+
+        {o.zaloFriendCard && (
+          <section data-testid="guest-order-zalo-friend" className={`p-4 ${ui.card} ${mini.band}`} aria-label="Zalo Tubu Tree">
+            <OrderZaloFriend code={o.code} from="order_detail" />
+          </section>
+        )}
 
         <section className={`p-4 ${ui.card} ${mini.band}`} aria-label="Sản phẩm trong đơn">
           <MobileItems items={items} shipments={null} splitNote={null} fix={NO_LINE_FIX} />

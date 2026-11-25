@@ -25,6 +25,7 @@ vi.mock('../subscribe-sheet', () => ({
 }));
 
 import { OrderSuccess } from './order-success';
+import { ORDER_ZALO_KEY } from './order-zalo';
 
 const ORDER = {
   id: 'o1', code: 'TUBU-COD-12345', status: 'CONFIRMED', total: 149000, pointsEarned: 14, paymentMethod: 'COD', fulfiller: 'TUBU',
@@ -402,7 +403,7 @@ describe('OrderSuccess — lời mời kết bạn Zalo (wave tubu-mss-consent-u
     mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, orderZaloEnabled: true, tubuZaloPhone: '0899149229' });
     renderSuccess({ order: { ...ORDER, orderZaloConsent: true } as unknown as OrderDTO });
     const open = await screen.findByRole('button', { name: 'Mở Zalo Tubu Tree' });
-    expect(screen.getByText('Kết bạn Zalo với Tubu Tree để nhận hành trình đơn TUBU-COD-12345.')).toBeInTheDocument();
+    expect(screen.getByText('Nhận Bill & theo dõi đơn TUBU-COD-12345 miễn phí qua Zalo Tubu Tree')).toBeInTheDocument();
     const track = screen.getByRole('button', { name: 'Theo dõi đơn' });
     expect(track.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -417,5 +418,24 @@ describe('OrderSuccess — lời mời kết bạn Zalo (wave tubu-mss-consent-u
     renderSuccess({ order: { ...ORDER, orderZaloConsent: false } as unknown as OrderDTO });
     await screen.findByText('TUBU-COD-12345');
     expect(screen.queryByRole('button', { name: 'Mở Zalo Tubu Tree' })).toBeNull();
+  });
+
+  it.each([
+    [true, 0],
+    [false, 1],
+  ])('U2 ô Zalo ở thanh toán báo friendKnown=%s: số lời mời %i (đọc bản thanh toán, không hỏi máy chủ thêm)', async (friendKnown, invites) => {
+    mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, orderZaloEnabled: true, tubuZaloPhone: '0899149229' });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(ORDER_ZALO_KEY, { enabled: true, prechecked: true, choice: true, phoneMasked: '090•••4567', tubuZaloPhone: '0899149229', friendKnown });
+    render(
+      <QueryClientProvider client={qc}>
+        <OrderSuccess order={{ ...ORDER, orderZaloConsent: true } as unknown as OrderDTO} onTrack={vi.fn()} onContinue={vi.fn()} />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('TUBU-COD-12345');
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    if (invites) await screen.findByRole('button', { name: 'Mở Zalo Tubu Tree' });
+    else await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryAllByRole('button', { name: 'Mở Zalo Tubu Tree' })).toHaveLength(invites);
   });
 });

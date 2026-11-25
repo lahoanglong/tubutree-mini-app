@@ -102,7 +102,11 @@ function quoteFor(d: Detail, quantity: number, opts: QuoteOpts = {}) {
  * Đơn đã đặt ghi khoá theo dõi gửi lên; GET theo dõi chỉ trả đơn khi header `x-order-key` đúng khoá đó (hoặc khoá tạm đã cấp qua tra cứu mã + SĐT),
  * sai thì cùng 404 như mã không có. `method` đặt sẵn phương thức của đơn khi spec tra cứu mà không đặt đơn trước.
  */
-function mockGuestOrders(api: MockApi, d: Detail, opts: QuoteOpts & { method?: 'COD' | 'BANK_TRANSFER' } = {}): { key: () => string | null } {
+function mockGuestOrders(
+  api: MockApi,
+  d: Detail,
+  opts: QuoteOpts & { method?: 'COD' | 'BANK_TRANSFER'; zaloFriendCard?: boolean } = {},
+): { key: () => string | null } {
   let key: string | null = null;
   let lookupIssued = false;
   let method: 'COD' | 'BANK_TRANSFER' = opts.method ?? 'COD';
@@ -138,6 +142,7 @@ function mockGuestOrders(api: MockApi, d: Detail, opts: QuoteOpts & { method?: '
       area: { ward: WARD.name, province: PROVINCE.name },
       siblings: [],
       expiresAt: null,
+      ...(opts.zaloFriendCard ? { zaloFriendCard: true } : {}),
     };
   };
   api.get('/checkout/guest/orders/:code', ({ call, params }) => {
@@ -300,6 +305,7 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     await expect(page.getByText('12 Lê Lợi')).toHaveCount(0);
     await expect(page.getByTestId('guest-order-copy-link')).toBeVisible();
     await expect(page.getByTestId('guest-order-claim-link')).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent(`/don/${CODE}`)}`);
+    await expect(page.getByTestId('guest-order-zalo-friend')).toHaveCount(0);
     const track = api.callsTo('GET', '/checkout/guest/orders/:code');
     expect(track.length).toBeGreaterThan(0);
     expect(track[0]!.headers['x-order-key']).toBe(orders.key());
@@ -356,7 +362,7 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     const width = mobile ? 390 : 1440;
     await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
     mockShop(api, d!, true, { orderZaloEnabled: true, orderZaloGuest: true, orderZaloPrechecked: false, tubuZaloPhone: '0899149229' });
-    mockGuestOrders(api, d!);
+    mockGuestOrders(api, d!, { zaloFriendCard: true });
     await seedGuestCart(page, d!, 1);
 
     await page.goto('/thanh-toan');
@@ -382,6 +388,15 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     const body = api.callsTo('POST', '/checkout/guest/orders')[0]!.body as Record<string, unknown>;
     expect(body.orderZaloConsent).toBe(true);
     expect(body).not.toHaveProperty('notifyRecipientZalo');
+
+    // Trang theo dõi: máy chủ báo zaloFriendCard thì có thẻ mời kết bạn Zalo Tubu Tree (link zalo.me, câu có mã đơn).
+    const friend = page.getByTestId('guest-order-zalo-friend');
+    await expect(friend).toBeVisible({ timeout: 15_000 });
+    await expect(friend).toContainText(`Nhận Bill & theo dõi đơn ${CODE} miễn phí qua Zalo Tubu Tree`);
+    await expect(friend.locator('a[href="https://zalo.me/0899149229"]')).toHaveCount(1);
+    await expect(friend.getByTestId('order-zalo-friend-qr')).toBeVisible({ visible: !mobile });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    if (mobile) await shoot(page, SHOTS_DIR, 'don-zalo-friend-390');
   });
 
   test('/don: sai khoá, thiếu khoá và sai mã cùng một câu không tìm thấy', async ({ page, api, request }, testInfo) => {

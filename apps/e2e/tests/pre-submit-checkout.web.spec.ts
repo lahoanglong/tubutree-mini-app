@@ -56,7 +56,7 @@ test.describe('Trước gửi duyệt: thanh toán web (COD, chuyển khoản, �
     expect(body).toMatchObject({ paymentMethod: 'COD', addressId: CHECKOUT_ADDRESS.id, orderZaloConsent: true });
     expect(body).not.toHaveProperty('notifyRecipientZalo');
     await expect(page.getByText(SHORT_COD).filter({ visible: true }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(`Kết bạn Zalo với Tubu Tree để nhận hành trình đơn ${SHORT_COD}.`).filter({ visible: true })).toBeVisible();
+    await expect(page.getByText(`Nhận Bill & theo dõi đơn ${SHORT_COD} miễn phí qua Zalo Tubu Tree`).filter({ visible: true })).toBeVisible();
   });
 
   test('chuyển khoản: đặt gửi BANK_TRANSFER + ô Zalo, sang trang QR mã ngắn với tài khoản fixture, ảnh QR đúng khuôn, chuỗi EMV đúng CRC', async ({ page, api }) => {

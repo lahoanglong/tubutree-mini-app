@@ -78,6 +78,21 @@ afterEach(() => {
 });
 
 describe('/don/[code] theo dõi đơn không đăng nhập', () => {
+  it('U3 máy chủ bật zaloFriendCard: thẻ mời kết bạn Zalo Tubu Tree có mã đơn và link https://zalo.me/0899149229; không có cờ thì không có thẻ', async () => {
+    m.track.mockResolvedValue({ ...ORDER, zaloFriendCard: true });
+    const on = (await mount()).container;
+    const card = on.querySelector('[data-testid="guest-order-zalo-friend"]');
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain('Nhận Bill & theo dõi đơn TB777 miễn phí qua Zalo Tubu Tree');
+    expect(card!.querySelector('a[href="https://zalo.me/0899149229"]')).not.toBeNull();
+    mounted.forEach((x) => x.unmount());
+    mounted = [];
+    m.track.mockResolvedValue(ORDER);
+    const off = (await mount()).container;
+    expect(off.querySelector('[data-testid="guest-order-zalo-friend"]')).toBeNull();
+    expect(off.textContent).not.toContain('Nhận Bill & theo dõi đơn');
+  });
+
   it('metadata: noindex và no-referrer ở chính layout của app/don', () => {
     expect(metadata.robots).toEqual({ index: false, follow: false });
     expect(metadata.referrer).toBe('no-referrer');

@@ -6,7 +6,7 @@ import { MssFlagsService } from './mss-flags';
 import { MssHealthService } from './mss-health.service';
 import { MssClient } from './mss.client';
 import { billMoneyConsistent, buildMssEventBody, greetingName, MssEventBodyError, newEventId, type MssBillInput } from './mss-order-event-body';
-import { orderDetailUrl } from './mss-order-link';
+import { MSS_ORDER_LINK_ORIGIN, orderDetailUrl } from './mss-order-link';
 import { MSS_FIRST_JOB_DELAY_MS, MssOrderEventDispatcher } from './mss-order-event.dispatch';
 import {
   buyerPhoneOf,
@@ -30,8 +30,7 @@ export const MSS_GATE_REFRESH_MS = 15_000;
 /** Đủ ngắn so với hạn 5 giây của transaction checkout; MSS treo thì quá hạn này coi cổng là đóng như trước. */
 export const MSS_COLD_GATE_WAIT_MS = 1_500;
 
-/** Gốc link theo dõi đơn đã đăng ký với MSS (`tubu_order_events_link_hosts`, hợp đồng mục 3.3). */
-export const MSS_ORDER_LINK_ORIGIN = 'https://tubutree.com';
+export { MSS_ORDER_LINK_ORIGIN };
 
 export interface MssOrderEventGate {
   /** Cờ bật và đủ biến môi trường: worker được gửi, notifications được hỏi luật hoãn ZNS. */

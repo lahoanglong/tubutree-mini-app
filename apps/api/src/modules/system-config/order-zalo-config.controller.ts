@@ -3,7 +3,15 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 import { SystemConfigService } from './system-config.service';
-import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloStatus, type OrderZaloStatus } from './order-zalo-config';
+import {
+  MSS_ORDER_CONSENT_PRECHECKED_KEY,
+  ORDER_ZALO_FRIEND_KNOWN_DAYS,
+  TUBU_ZALO_PHONE_DEFAULT,
+  TUBU_ZALO_PHONE_KEY,
+  orderZaloGateOpen,
+  orderZaloStatus,
+  type OrderZaloStatus,
+} from './order-zalo-config';
 
 /**
  * Trạng thái ô "Nhận hành trình đơn hàng qua Zalo" của khách đang đăng nhập (wave tubu-mss-consent-ui). Tách khỏi `/config/public`
@@ -27,6 +35,22 @@ export class OrderZaloConfigController {
       this.config.get<unknown>(MSS_ORDER_CONSENT_PRECHECKED_KEY, false),
       this.config.get<unknown>(TUBU_ZALO_PHONE_KEY, TUBU_ZALO_PHONE_DEFAULT),
     ]);
-    return orderZaloStatus(this.mssEvents?.gate(), user, prechecked, phone);
+    const gate = this.mssEvents?.gate();
+    return orderZaloStatus(gate, user, prechecked, phone, orderZaloGateOpen(gate) && (await this.friendKnown(userId)));
+  }
+
+  /** Tin đơn MSS gần nhất tới được chính khách qua bạn bè/hội thoại mở (không phải tin người lạ `stranger`): một truy vấn, không gọi MSS. */
+  private async friendKnown(userId: string): Promise<boolean> {
+    const row = await this.prisma.mssOrderEventOutbox.findFirst({
+      where: {
+        order: { userId },
+        recipientRole: 'buyer',
+        status: 'RESULT_SENT',
+        resultReason: null,
+        resultAt: { gte: new Date(Date.now() - ORDER_ZALO_FRIEND_KNOWN_DAYS * 86_400_000) },
+      },
+      select: { id: true },
+    });
+    return row !== null;
   }
 }

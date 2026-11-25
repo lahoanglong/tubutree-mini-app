@@ -70,7 +70,7 @@ test.describe('Web: ô đồng ý hành trình đơn qua Zalo', () => {
     await placeButton(page).click();
     expect((await placed).body).toMatchObject({ orderZaloConsent: true });
 
-    await expect(page.getByText(`Kết bạn Zalo với Tubu Tree để nhận hành trình đơn ${ORDER_CODE_COD}.`).filter({ visible: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(`Nhận Bill & theo dõi đơn ${ORDER_CODE_COD} miễn phí qua Zalo Tubu Tree`).filter({ visible: true })).toBeVisible({ timeout: 15_000 });
     const friend = page.getByRole('link', { name: 'Mở Zalo Tubu Tree' }).filter({ visible: true });
     await expect(friend).toBeVisible();
     await expect(friend).toHaveAttribute('href', 'https://zalo.me/0899149229');

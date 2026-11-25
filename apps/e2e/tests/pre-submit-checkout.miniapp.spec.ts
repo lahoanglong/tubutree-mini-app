@@ -52,7 +52,7 @@ test.describe('Trước gửi duyệt: thanh toán Mini App (COD, chuyển kho�
     expect(body).toMatchObject({ paymentMethod: 'COD', addressId: CHECKOUT_ADDRESS.id, orderZaloConsent: true });
     expect(body).not.toHaveProperty('notifyRecipientZalo');
     await expect(page.getByText(SHORT_COD).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(`Kết bạn Zalo với Tubu Tree để nhận hành trình đơn ${SHORT_COD}.`)).toBeVisible();
+    await expect(page.getByText(`Nhận Bill & theo dõi đơn ${SHORT_COD} miễn phí qua Zalo Tubu Tree`)).toBeVisible();
     expect(errors).toEqual([]);
   });
 

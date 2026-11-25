@@ -1,7 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { fallbackDecision, MSS_FALLBACK_STATUSES, MSS_FALLBACK_ZNS_GRACE_MS, type MssFallbackDecision, type MssOutboxStatus } from './mss-order-event-types';
+import { OrderConfirmEmailService } from '../../notifications/order-email/order-confirm-email.service';
+import {
+  fallbackDecision,
+  MSS_EMAIL_EVENT_TYPES,
+  MSS_FALLBACK_STATUSES,
+  MSS_FALLBACK_ZNS_GRACE_MS,
+  mssEmailEligible,
+  type MssFallbackDecision,
+  type MssOutboxStatus,
+} from './mss-order-event-types';
 import { parseHeldZns } from './mss-zns-hold';
 
 /** Khoá chống trùng của tin ZNS đường lui: một sự kiện MSS một tin ZNS, kể cả khi đường lui bị gọi lại. */
@@ -10,14 +19,18 @@ export const mssFallbackDedupeKey = (eventId: string) => `mss:${eventId}`;
 /**
  * Đường lui khi MSS không gửi được (hợp đồng mục 12): chạy đúng một lần mỗi sự kiện, nhận phần việc bằng `fallbackAt IS NULL`. Tin trong
  * app đã lưu lúc nghiệp vụ gọi notify (luật hoãn chỉ hoãn kênh ZNS), nên "chỉ trong app" là không gửi thêm gì; "ZNS" gửi tin đã hoãn.
+ * Tin đặt đơn / đã nhận tiền của người mua mà không có ZNS nào đi (chưa có mẫu ZNS, khách không có SĐT hay tắt nhóm tin) thì gửi email
+ * xác nhận đơn (PO A3, cờ `notify.order_email_fallback_enabled`); ZNS đã đi mà lỗi hẳn thì cron quét gửi email sau.
  */
 @Injectable()
-export class MssOrderEventFallback {
+export class MssOrderEventFallback implements OnModuleDestroy {
   private readonly logger = new Logger(MssOrderEventFallback.name);
+  private readonly emails = new Set<Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    @Optional() private readonly orderEmail?: OrderConfirmEmailService,
   ) {}
 
   async run(eventId: string): Promise<MssFallbackDecision | null> {
@@ -27,9 +40,12 @@ export class MssOrderEventFallback {
         select: {
           id: true,
           eventId: true,
+          eventType: true,
+          recipientRole: true,
           orderCode: true,
           status: true,
           resultReason: true,
+          lastHttpStatus: true,
           expiresAt: true,
           fallbackAt: true,
           znsHeldTemplate: true,
@@ -52,9 +68,13 @@ export class MssOrderEventFallback {
       });
       if (claimed.count === 0) continue;
       this.logger.log(`mss_order_event_fallback ${decision} order=${row.orderCode} event=${row.eventId} status=${status} reason=${row.resultReason ?? '-'}`);
+      // Email chỉ cho sự kiện người mua mà khách chắc chắn chưa nhận tin Zalo nào, và còn trong hạn sống (cùng hạn với ZNS).
+      const emailable = row.recipientRole === 'buyer' && MSS_EMAIL_EVENT_TYPES.has(row.eventType) && mssEmailEligible(status, row.resultReason, row.lastHttpStatus) && fresh;
+      if (decision === 'IN_APP_ONLY' && emailable) this.sendEmail(row.id);
       if (decision === 'ZNS' && held && row.znsHeldTemplate) {
         try {
-          await this.notifications.sendHeldZns(row.order.userId, row.znsHeldTemplate, held.data, held.znsTemplateId, mssFallbackDedupeKey(row.eventId));
+          const zns = await this.notifications.sendHeldZns(row.order.userId, row.znsHeldTemplate, held.data, held.znsTemplateId, mssFallbackDedupeKey(row.eventId));
+          if ((zns === 'NO_PHONE' || zns === 'PREFS') && emailable) this.sendEmail(row.id);
         } catch (err) {
           this.logger.error(`Gửi ZNS đường lui đơn ${row.orderCode} (sự kiện ${row.eventId}) lỗi, lượt quét sau thử lại: ${err instanceof Error ? err.message : String(err)}`);
           // Nhả phần việc để cron quét bù thử lại; khoá chống trùng mss:<eventId> của sendHeldZns giữ đúng một tin nếu lần này đã kịp gửi.
@@ -67,5 +87,30 @@ export class MssOrderEventFallback {
       return decision;
     }
     return null;
+  }
+
+  /**
+   * Gửi nền, không chờ: đường lui chạy cả trong callback MSS, SMTP chậm (tới 30 giây) không được giữ phản hồi cho MSS. Lỗi chỉ ghi log,
+   * phần việc đường lui (ZNS/trong app) đã chốt; khoá + log EMAIL của OrderConfirmEmailService giữ đúng một email dù cron quét chạy cùng lúc.
+   */
+  private sendEmail(outboxRowId: string): void {
+    if (!this.orderEmail) return;
+    const job: Promise<void> = this.orderEmail
+      .sendForEvent(outboxRowId)
+      .then(
+        () => undefined,
+        (err: unknown) => this.logger.error(`Email xác nhận đơn (đường lui, dòng ${outboxRowId}) lỗi: ${err instanceof Error ? err.message : String(err)}`),
+      )
+      .finally(() => this.emails.delete(job));
+    this.emails.add(job);
+  }
+
+  /** Chờ các email đường lui đang gửi dở (tắt ứng dụng, test). */
+  async emailsSettled(): Promise<void> {
+    await Promise.all([...this.emails]);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.emailsSettled();
   }
 }

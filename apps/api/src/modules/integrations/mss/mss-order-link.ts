@@ -2,6 +2,9 @@ import { isRealUser } from '../../../common/real-user';
 import { GUEST_TRACK_TTL_DAYS } from '../../checkout/guest/guest-checkout.config';
 import { isLiveGuestOwner, signGuestLookupKey } from '../../checkout/guest/guest-track-link';
 
+/** Gốc link theo dõi đơn đã đăng ký với MSS (`tubu_order_events_link_hosts`, hợp đồng mục 3.3); email xác nhận đơn dùng cùng gốc. */
+export const MSS_ORDER_LINK_ORIGIN = 'https://tubutree.com';
+
 /** Trần link trong thân sự kiện. `allowedLink` của MSS cho 150 ký tự; link dài nhất hôm nay (khách vãng lai, mã cũ 15 ký tự) là 86. */
 export const MSS_DETAIL_URL_MAX = 120;
 
