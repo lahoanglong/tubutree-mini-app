@@ -1,3 +1,4 @@
+import { ORDER_CODE_ALPHABET } from '@tubutree/shared-types';
 import { NOTIFICATION_TEMPLATES } from '../../../prisma/seed';
 import { cronAlertError } from './cron-run.service';
 import { clipText, OPS_ALERT_LINE_MAX, OPS_ALERT_SLOT_MAX, OPS_NOTICE_MAX, opsAlertLine, opsAlertSlot, opsText } from './ops-alert-line';
@@ -202,5 +203,44 @@ describe('tin in-app sau khi điền mẫu seed: ≤ 200 ký tự', () => {
     const body = render(code, { order_code: 'TUBU2026101500001', message });
     expect(body.length).toBeLessThanOrEqual(OPS_NOTICE_MAX);
     expectClean(body);
+  });
+});
+
+describe('opsText: mã đơn ngắn (tubu-w36-02, trước gửi duyệt Zalo) không bị che như số điện thoại', () => {
+  const digits = [...ORDER_CODE_ALPHABET].filter((c) => /\d/.test(c));
+
+  it('mọi mã ngắn toàn chữ số (TB/DL/TS, 4 và 5 ký tự) giữ nguyên trong dòng báo động, kể cả viết dính liền', () => {
+    let checked = 0;
+    for (const prefix of ['TB', 'DL', 'TS']) {
+      for (const len of [4, 5]) {
+        for (let n = 0; n < digits.length ** len; n++) {
+          let code = prefix;
+          for (let k = 0, m = n; k < len; k++, m = Math.floor(m / digits.length)) code += digits[m % digits.length];
+          const text = `Đơn ${code}, ${code}${code} chưa đẩy Pancake`;
+          if (opsText(text) !== text) throw new Error(`${code} bị đổi: ${opsText(text)}`);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBe(3 * (8 ** 4 + 8 ** 5));
+  });
+
+  it('mã ngắn đứng sát số tiền, số lượng (sau dấu phẩy, dấu ·, hay số ngắn) giữ nguyên', () => {
+    for (const text of ['Đơn TB8495, 1.200.000đ', 'Đơn TB8495 · 1.200.000đ', 'Đơn TB8495 x2 120.000đ', 'Đơn TB2384 3 món', 'Đơn TB98765 1.200.000đ']) {
+      expect(opsText(text)).toBe(text);
+    }
+  });
+
+  // Lỗi đã biết, chờ sửa ở PHONE_RE: đuôi mã có "84" rồi chữ số đầu di động, cách một dấu cách tới số tiền đủ dài, bị che thành "TB[số điện thoại đã ẩn]đ"
+  // nên người vận hành mất mã đơn. it.failing xanh khi lỗi còn; sửa xong ca này đỏ, đổi thành it.
+  it.failing('đã biết: "Đơn TB8495 1.200.000đ" bị che mất mã đơn', () => {
+    expect(opsText('Đơn TB8495 1.200.000đ')).toBe('Đơn TB8495 1.200.000đ');
+  });
+
+  it('mã ngắn có chữ và mã dài cũ giữ nguyên; số điện thoại ngay cạnh mã ngắn vẫn bị che', () => {
+    const t = 'Đơn TB7K4M, DLX9Q2, TS2B8H7 và TUBU2026112212345 (#4521)';
+    expect(opsText(t)).toBe(t);
+    const out = opsText('Đơn TB98765 khách 0912345678, đơn TB7K4M SĐT0987654321');
+    expect(out).toBe('Đơn TB98765 khách [số điện thoại đã ẩn], đơn TB7K4M SĐT[số điện thoại đã ẩn]');
   });
 });
