@@ -135,4 +135,3 @@ describe('E7 email xác nhận đơn (kênh EMAIL) không vào hộp tin trong a
     expect(await svc.unreadCount('u1')).toEqual({ count: 1 });
   });
 });
-
