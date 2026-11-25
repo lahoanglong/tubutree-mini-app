@@ -17,7 +17,7 @@ const mount = () => {
 };
 
 const URL_PART = '/admin/ops/health';
-const FLAGS = ['catalogEnrichment', 'orderEvents', 'customerSync', 'orderPush', 'orderStatus', 'invoice', 'catalogShadow', 'stockSync', 'orderRecipient'] as const;
+const FLAGS = ['catalogEnrichment', 'orderEvents', 'customerSync', 'orderPush', 'orderStatus', 'invoice', 'catalogShadow', 'stockSync', 'orderRecipient', 'cartAbandonedZalo'] as const;
 const KEYS: Record<(typeof FLAGS)[number], string> = {
   catalogEnrichment: 'mss.catalog_enrichment_enabled',
   orderEvents: 'mss.order_events_enabled',
@@ -28,6 +28,7 @@ const KEYS: Record<(typeof FLAGS)[number], string> = {
   catalogShadow: 'mss.catalog_shadow_enabled',
   stockSync: 'mss.stock_sync_enabled',
   orderRecipient: 'mss.order_recipient_enabled',
+  cartAbandonedZalo: 'mss.cart_abandoned_zalo_enabled',
 };
 const CAP: Record<(typeof FLAGS)[number], string> = {
   catalogEnrichment: 'catalog.enrichment',
@@ -39,6 +40,7 @@ const CAP: Record<(typeof FLAGS)[number], string> = {
   catalogShadow: 'catalog.source',
   stockSync: 'catalog.source',
   orderRecipient: 'order_events.recipient_role',
+  cartAbandonedZalo: 'cart.abandoned_zalo',
 };
 
 const offCard = (): MssOpsCard => ({
@@ -70,7 +72,7 @@ describe('MssConnectionCard', () => {
     expect(r.container.textContent).toBe('');
   });
 
-  it('mặc định PROD (thiếu biến, mọi cờ tắt): Chưa cấu hình, 4 biến Thiếu, khoá trước Không đặt, 9 cờ Tắt, cầu dao Đóng, không dò', async () => {
+  it('mặc định PROD (thiếu biến, mọi cờ tắt): Chưa cấu hình, 4 biến Thiếu, khoá trước Không đặt, 10 cờ Tắt, cầu dao Đóng, không dò', async () => {
     const m = stub(offCard());
     const r = mount();
     await flush(10);
@@ -87,7 +89,7 @@ describe('MssConnectionCard', () => {
       'MSS_INBOUND_SECRET_PREVKhông đặt',
     ]);
     const rows = flagRows(r);
-    expect(rows).toHaveLength(9);
+    expect(rows).toHaveLength(10);
     expect(rows.every((li) => li.textContent!.includes('Tắt'))).toBe(true);
     expect(text).toContain('Không dò (không cờ nào bật)');
     expect(text).toContain('Đóng');

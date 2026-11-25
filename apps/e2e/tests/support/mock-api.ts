@@ -446,6 +446,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Trang sản phẩm: bảng So sánh như trên PROD khi cờ catalog.pdp_compare_enabled tắt (404 → khối ẩn), và khách chưa mua món nào (không có dòng Mua lại).
       api.fallback('GET', '/products/:slug/compare', reply(404, { statusCode: 404, message: 'Not Found' }));
       api.fallback('GET', '/me/purchased-items', { items: [], nextCursor: null });
+      // Thẻ Mua lại hàng tiêu hao ở Cá nhân/Tài khoản và giỏ trống (Mini và web): mặc định như PROD khi cờ retention.repurchase_due_card_enabled tắt, không có thẻ.
+      api.fallback('GET', '/me/repurchase-due', { item: null });
       // PDP có phân loại hết hàng hỏi trạng thái "Báo tôi khi có hàng": mặc định như PROD khi cờ catalog.restock_alert_enabled tắt (nút xám "Tạm hết hàng").
       api.fallback('GET', '/restock-alerts', { enabled: false, variationIds: [] });
       // Trang Yêu thích (Mini và web) hỏi các đăng ký báo hàng về đang chờ khi danh sách có thẻ hết hàng: cùng mặc định cờ tắt (không chuông, không nhãn, không chip).

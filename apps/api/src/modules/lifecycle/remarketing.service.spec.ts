@@ -1,4 +1,5 @@
-import { RemarketingService } from './remarketing.service';
+import { MSS_CART_RECORD_TIMEOUT_MS, RemarketingService } from './remarketing.service';
+import type { MssCartEventRecorder } from '../integrations/mss/mss-cart-event.recorder';
 import { REAL_USER_WHERE } from '../../common/real-user';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -186,6 +187,104 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
     expect(updateMany).toHaveBeenCalledTimes(2); // claim rồi revert
     const revert = updateMany.mock.calls[1]![0];
     expect(revert.data.abandonRemindedAt).toBe(cart.abandonRemindedAt); // về giá trị CŨ (null)
+  });
+});
+
+// ============================================================
+// w36-01: ghi sự kiện giỏ MSS sau tin trong app
+// ============================================================
+
+function setupCartWithMss(rows: unknown[], record: jest.Mock) {
+  const findMany = jest.fn().mockResolvedValue(rows);
+  const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+  const prisma = { cart: { findMany, updateMany, fields: CART_FIELDS } } as unknown as PrismaService;
+  const notify = jest.fn().mockResolvedValue(undefined);
+  const mss = { onCartAbandonReminded: record } as unknown as MssCartEventRecorder;
+  const svc = new RemarketingService(prisma, makeConfig(), { notify } as unknown as NotificationsService, mss);
+  return { svc, updateMany, notify };
+}
+
+describe('RemarketingService.sendCartAbandonReminders + MSS (w36-01)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-05T00:00:00Z'));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('gửi tin trong app xong thì ghi sự kiện MSS với updatedAt TRƯỚC lần nhận việc và mốc nhận việc', async () => {
+    const record = jest.fn().mockResolvedValue('recorded');
+    const { svc, updateMany, notify } = setupCartWithMss([cartRow()], record);
+    await svc.sendCartAbandonReminders();
+    expect(notify).toHaveBeenCalledTimes(1);
+    const claimedAt = updateMany.mock.calls[0][0].data.abandonRemindedAt as Date;
+    expect(record).toHaveBeenCalledWith({
+      userId: 'u1',
+      cartId: 'cart1',
+      abandonedAt: new Date('2026-07-04T12:00:00Z'),
+      remindedAt: claimedAt,
+      lines: [
+        { name: 'Dầu gội Visante 500ml', quantity: 2 },
+        { name: 'Sữa tắm Fuwa3e', quantity: 1 },
+      ],
+    });
+  });
+
+  it('tin trong app không đổi: cùng mẫu, cùng biến, cùng câu nhận việc khi có bộ ghi MSS', async () => {
+    const record = jest.fn().mockResolvedValue('recorded');
+    const withMss = setupCartWithMss([cartRow()], record);
+    const without = setupCart([cartRow()]);
+    await withMss.svc.sendCartAbandonReminders();
+    await without.svc.sendCartAbandonReminders();
+    expect(withMss.notify.mock.calls).toEqual(without.notify.mock.calls);
+    expect(withMss.updateMany.mock.calls.map((c) => Object.keys(c[0].data))).toEqual(without.updateMany.mock.calls.map((c) => Object.keys(c[0].data)));
+  });
+
+  it('bộ ghi ném lỗi: lô vẫn đi tiếp, tin trong app giữ nguyên, không trả cờ nhắc', async () => {
+    const record = jest.fn().mockRejectedValue(new Error('mss down'));
+    const { svc, notify, updateMany } = setupCartWithMss([cartRow({ id: 'a' }), cartRow({ id: 'b', userId: 'u2' })], record);
+    const log = jest.spyOn(svc['logger'], 'log').mockImplementation(() => undefined);
+    jest.spyOn(svc['logger'], 'warn').mockImplementation(() => undefined);
+    await svc.sendCartAbandonReminders();
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledTimes(2);
+    // Chỉ hai câu nhận việc, không có câu trả cờ (revert) nào.
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith('Cart abandon reminders sent: 2');
+  });
+
+  it('bộ ghi treo: quá MSS_CART_RECORD_TIMEOUT_MS thì lô đi tiếp, số đã gửi không đổi', async () => {
+    const record = jest.fn(() => new Promise(() => undefined));
+    const { svc, notify } = setupCartWithMss([cartRow({ id: 'a' }), cartRow({ id: 'b', userId: 'u2' })], record);
+    const log = jest.spyOn(svc['logger'], 'log').mockImplementation(() => undefined);
+    const run = svc.sendCartAbandonReminders();
+    await jest.advanceTimersByTimeAsync(MSS_CART_RECORD_TIMEOUT_MS);
+    await jest.advanceTimersByTimeAsync(MSS_CART_RECORD_TIMEOUT_MS);
+    await run;
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith('Cart abandon reminders sent: 2');
+  });
+
+  it('tin trong app lỗi: trả cờ nhắc như cũ và KHÔNG ghi sự kiện MSS', async () => {
+    const record = jest.fn().mockResolvedValue('recorded');
+    const { svc, notify } = setupCartWithMss([cartRow()], record);
+    notify.mockRejectedValueOnce(new Error('notify down'));
+    jest.spyOn(svc['logger'], 'error').mockImplementation(() => undefined);
+    await svc.sendCartAbandonReminders();
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('nhận việc thua (instance khác đã nhắc): không tin, không sự kiện MSS', async () => {
+    const record = jest.fn();
+    const findMany = jest.fn().mockResolvedValue([cartRow()]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const prisma = { cart: { findMany, updateMany, fields: CART_FIELDS } } as unknown as PrismaService;
+    const notify = jest.fn();
+    const svc = new RemarketingService(prisma, makeConfig(), { notify } as unknown as NotificationsService, { onCartAbandonReminded: record } as unknown as MssCartEventRecorder);
+    await svc.sendCartAbandonReminders();
+    expect(notify).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
   });
 });
 

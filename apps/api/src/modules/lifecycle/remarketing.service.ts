@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,12 +9,15 @@ import { formatVnDate } from '../../common/vn-time';
 import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { REAL_USER_WHERE } from '../../common/real-user';
+import { MssCartEventRecorder } from '../integrations/mss/mss-cart-event.recorder';
 
 /** Khung giờ nhắc giỏ bỏ quên — admin-config-rules so chéo hai khoá này (và mặc định) lúc ghi. */
 export const CART_ABANDON_MIN_HOURS_KEY = 'remarketing.cart_abandon_min_hours';
 export const CART_ABANDON_MAX_HOURS_KEY = 'remarketing.cart_abandon_max_hours';
 export const CART_ABANDON_DEFAULT_MIN_HOURS = 6;
 export const CART_ABANDON_DEFAULT_MAX_HOURS = 72;
+/** Bộ ghi sự kiện giỏ MSS treo (DB chậm, dò /health MSS) quá chừng này thì lô nhắc đi tiếp, không chờ. */
+export const MSS_CART_RECORD_TIMEOUT_MS = 10_000;
 
 /**
  * Remarketing reminders: nhắc user quay lại app.
@@ -31,6 +34,8 @@ export class RemarketingService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly notifications: NotificationsService,
+    // Optional: không có (test, module không nạp MSS) thì chỉ có tin trong app như trước.
+    @Optional() private readonly mssCart?: MssCartEventRecorder,
   ) {}
 
   /**
@@ -115,6 +120,30 @@ export class RemarketingService {
               data: { abandonRemindedAt: cart.abandonRemindedAt, updatedAt: cart.updatedAt },
             })
             .catch(() => undefined);
+          continue;
+        }
+        // Tin trong app đã đi: ghi thêm sự kiện để MSS nhắc qua Zalo (cờ mss.cart_abandoned_zalo_enabled). abandonedAt là updatedAt
+        // đọc trước lần nhận việc (nhận việc đã đặt updatedAt = claimedAt). Bộ ghi không ném; try/catch chỉ để chắc lô không dừng.
+        if (!this.mssCart) continue;
+        let timer: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            this.mssCart.onCartAbandonReminded({
+              userId: cart.userId,
+              cartId: cart.id,
+              abandonedAt: cart.updatedAt,
+              remindedAt: claimedAt,
+              lines: cart.items.map((i) => ({ name: i.variation.product.name, quantity: i.quantity })),
+            }),
+            new Promise<void>((resolve) => {
+              timer = setTimeout(resolve, MSS_CART_RECORD_TIMEOUT_MS);
+              timer.unref?.();
+            }),
+          ]);
+        } catch (err) {
+          this.logger.warn(`Ghi sự kiện giỏ MSS lỗi (cart=${cart.id}): ${err instanceof Error ? err.message : err}`);
+        } finally {
+          clearTimeout(timer);
         }
       }
       if (sent) this.logger.log(`Cart abandon reminders sent: ${sent}`);

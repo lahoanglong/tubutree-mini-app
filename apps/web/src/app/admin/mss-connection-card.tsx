@@ -8,7 +8,7 @@ import { formatDateTime } from '@/lib/format-date';
 import type { Tone } from '@/lib/recycling';
 
 type EnvState = 'ok' | 'missing' | 'invalid';
-type MssFlag = 'catalogEnrichment' | 'orderEvents' | 'customerSync' | 'orderPush' | 'orderStatus' | 'invoice' | 'catalogShadow' | 'stockSync' | 'orderRecipient';
+type MssFlag = 'catalogEnrichment' | 'orderEvents' | 'customerSync' | 'orderPush' | 'orderStatus' | 'invoice' | 'catalogShadow' | 'stockSync' | 'orderRecipient' | 'cartAbandonedZalo';
 
 /** Khoá `mss` của GET /admin/ops/health (MssOpsCard ở apps/api/src/modules/integrations/mss/mss-health.service.ts). */
 export interface MssOpsCard {
@@ -33,6 +33,7 @@ const FLAG_LABEL: Record<MssFlag, string> = {
   catalogShadow: 'Đọc thử danh mục MSS',
   stockSync: 'Tồn kho MSS đẩy sang',
   orderRecipient: 'Tin giao hàng cho người nhận',
+  cartAbandonedZalo: 'Nhắc giỏ bỏ quên qua Zalo',
 };
 
 const ENV_ORDER = ['MSS_BASE_URL', 'MSS_KEY_ID', 'MSS_OUTBOUND_SECRET', 'MSS_INBOUND_SECRET', 'MSS_INBOUND_SECRET_PREV'] as const;

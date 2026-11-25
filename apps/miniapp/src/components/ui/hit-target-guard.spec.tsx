@@ -34,6 +34,7 @@ import { LoyaltyRulesCard } from '../loyalty/loyalty-rules-card';
 import { GiftTrialRow } from '../checkout/gift-rows';
 import { PdpRebuyRow } from '../product/pdp-rebuy';
 import { PdpRefillOffer } from '../product/pdp-refill-offer';
+import RepurchaseDueCard from '../refill/repurchase-due-card';
 import { PdpOriginGuide } from '../product/pdp-origin-guide';
 import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
 import { pdpRefillOffer } from '@tubutree/app-core/refill/refill-saving';
@@ -225,6 +226,24 @@ describe('vùng chạm DS v2 >= 44x44', () => {
         <MemoryRouter>
           <QueryClientProvider client={qc}>
             <RefillNextDelivery landing={landing} />
+          </QueryClientProvider>
+        </MemoryRouter>
+      );
+    }],
+    ['RepurchaseDueCard (Thêm vào giỏ kèm giá, × ẩn gợi ý)', () => {
+      // Thẻ chỉ vẽ cho khách đã đăng nhập có món tới hạn mua lại: dựng sẵn món, không tải lại (staleTime vô hạn).
+      useAuthStore.setState({ status: 'authenticated' });
+      const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+      qc.setQueryData(['repurchase-due'], {
+        item: {
+          key: 'o:v', days: 30, boughtName: 'Nước rửa chén 500ml', kind: 'refill', variationId: 'v', productId: 'p', slug: 'refill-a',
+          productName: 'Túi Refill 1L', variationName: '', thumbnail: null, price: 89_000, listPrice: 99_000,
+        },
+      });
+      return (
+        <MemoryRouter>
+          <QueryClientProvider client={qc}>
+            <RepurchaseDueCard surface="account" />
           </QueryClientProvider>
         </MemoryRouter>
       );

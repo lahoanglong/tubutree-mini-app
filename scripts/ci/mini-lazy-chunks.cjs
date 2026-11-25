@@ -29,6 +29,7 @@ const LAZY_ONLY = [
   'product-story-showcase', // câu chuyện sản phẩm ở trang chi tiết
   'ai-advisor', // trợ lý chọn sản phẩm
   'support-chat', // trò chuyện hỗ trợ
+  'repurchase-due-card', // thẻ Mua lại hàng tiêu hao ở Cá nhân và giỏ trống (w36-01)
 ];
 
 /** Chunk mà trang con import tĩnh nhưng gói đầu không được kéo theo. */

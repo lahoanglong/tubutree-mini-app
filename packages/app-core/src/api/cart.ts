@@ -86,7 +86,7 @@ export interface CartSummary {
   giftTrial?: GiftTrialSummaryDTO;
 }
 
-export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';
+export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification' | 'repurchase_due';
 
 /**
  * Gian hàng CTV đang ghi công (cùng slug màn thanh toán gửi cho báo giá): máy chủ trừ combo của gian hàng đó trong giỏ, để số giảm
