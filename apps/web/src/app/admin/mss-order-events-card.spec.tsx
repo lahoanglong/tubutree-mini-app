@@ -87,7 +87,7 @@ describe('MssOrderEventsCard', () => {
     expect(items[0]!.textContent).toContain('TB2611170001 · Đặt đơn');
     expect(items[0]!.textContent).toContain('Quá hạn');
     expect(items[0]!.textContent).toContain('Đã gửi ZNS');
-    expect(items[0]!.textContent).toContain('mss_unavailable');
+    expect(items[0]!.textContent).toContain('MSS không nhận');
     expect(items[0]!.textContent).toContain('6 lần gửi');
     expect(items[1]!.textContent).toContain('Đã tới Zalo');
     expect(text).toContain('0912***678');
@@ -137,6 +137,18 @@ describe('MssOrderEventsCard', () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]!.init?.method).toBe('POST');
     expect(r.container.querySelector('[role="status"]')!.textContent).toContain('Đã dừng 3 tin chờ gửi');
+  });
+
+  it('lý do MSS in tiếng Việt (stranger: tin người lạ), mã thô giữ ở title; khoá lạ in thô', async () => {
+    stub({ ...offCard(), enabled: true, open: true, recent: [row({ reason: 'stranger' }), row({ status: 'RESULT_SKIPPED', reason: 'stranger_cap' }), row({ reason: 'new_mss_reason' })] });
+    const r = mount();
+    await flush(10);
+    const items = Array.from(r.container.querySelectorAll('ul[aria-label="Tin đơn gần nhất"] > li'));
+    expect(items[0]!.textContent).toContain('tin người lạ (chưa kết bạn)');
+    expect(items[0]!.textContent).not.toContain('stranger');
+    expect(items[0]!.querySelector('[title="stranger"]')).not.toBeNull();
+    expect(items[1]!.textContent).toContain('hết lượt nhắn người lạ hôm nay');
+    expect(items[2]!.textContent).toContain('new_mss_reason');
   });
 
   it('API lỗi: báo riêng trong thẻ, không ném', async () => {

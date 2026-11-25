@@ -5,6 +5,8 @@ set -euo pipefail
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "$E2E_DIR/../.." && pwd)"
+# shellcheck source=../../../scripts/release/colima-forward.sh
+source "$ROOT/scripts/release/colima-forward.sh"
 NAME_SUFFIX="$$-$(date +%s)"
 PG_NAME="tubu-gate-pg-$NAME_SUFFIX"
 REDIS_NAME="tubu-gate-redis-$NAME_SUFFIX"
@@ -28,6 +30,7 @@ require_free() {
 API_PID=""
 cleanup() {
   if [[ -n "$API_PID" ]]; then kill "$API_PID" >/dev/null 2>&1 || true; fi
+  colima_forward_cleanup
   docker rm -f -v "$PG_NAME" "$REDIS_NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -60,6 +63,8 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [[ "$(docker exec "$REDIS_NAME" redis-cli ping 2>/dev/null)" == "PONG" ]] || { echo "Redis tạm không sẵn sàng" >&2; exit 1; }
+# Container sẵn sàng bên trong VM chưa chắc tới được từ máy (Colima mất chuyển tiếp cổng): chờ hostagent, không có thì mở đường hầm ssh.
+colima_forward_ports "$PG_PORT" "$REDIS_PORT" || exit 1
 
 export DATABASE_URL="postgresql://tubu:tubu@127.0.0.1:$PG_PORT/tubutree"
 export REDIS_URL="redis://127.0.0.1:$REDIS_PORT"

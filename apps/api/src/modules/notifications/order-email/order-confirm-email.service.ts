@@ -93,6 +93,11 @@ export class OrderConfirmEmailService {
     }
   }
 
+  /** SMTP đủ cấu hình để gửi (cùng điều kiện `run` dùng): cron quét bỏ cả câu chọn khi chưa sẵn sàng, vì lần gọi nào cũng ra SMTP_NOT_READY. */
+  ready(): boolean {
+    return this.smtp().state === 'ready';
+  }
+
   private smtp(): OpsEmailConfig {
     try {
       return resolveOpsEmailConfig(Object.fromEntries(OPS_EMAIL_KEYS.map((k) => [k, this.env.get(k, { infer: true })])));

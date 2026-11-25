@@ -69,6 +69,14 @@ describe('POST /api/integrations/mss/order-event-results (HTTP thật, chữ ký
     expect(applyResult).toHaveBeenCalledWith(RESULT.event_id, { orderCode: RESULT.order_code, eventType: 'order.shipping' }, 'sent', null, 'callback');
   });
 
+  it('MSS W37/W38 skipped/stranger_cap ký đúng: 200, applyResult nhận đúng lý do stranger_cap', async () => {
+    const body = { ...RESULT, event_type: 'order.created', status: 'skipped', reason: 'stranger_cap' };
+    const raw = JSON.stringify(body);
+    const res = await post(raw, sign(raw));
+    expect(res.status).toBe(200);
+    expect(applyResult).toHaveBeenCalledWith(RESULT.event_id, { orderCode: RESULT.order_code, eventType: 'order.created' }, 'skipped', 'stranger_cap', 'callback');
+  });
+
   it('(6) chữ ký sai: 401 thân chung, không đổi gì', async () => {
     const raw = JSON.stringify(RESULT);
     const res = await post(raw, sign(raw, undefined, 'wrong-secret-0123456789abcdef0123456789'));
@@ -107,6 +115,12 @@ describe('parseMssEventResult', () => {
     }
     const { reason: _r, ...noReason } = RESULT;
     expect(parseMssEventResult(noReason)?.reason).toBeNull();
+  });
+
+  it('MSS W37/W38: giữ nguyên lý do tin người lạ (sent/stranger, unknown/stranger, skipped/stranger_cap)', () => {
+    expect(parseMssEventResult({ ...RESULT, status: 'sent', reason: 'stranger' })).toMatchObject({ status: 'sent', reason: 'stranger' });
+    expect(parseMssEventResult({ ...RESULT, status: 'unknown', reason: 'stranger' })).toMatchObject({ status: 'unknown', reason: 'stranger' });
+    expect(parseMssEventResult({ ...RESULT, status: 'skipped', reason: 'stranger_cap' })).toMatchObject({ status: 'skipped', reason: 'stranger_cap' });
   });
 
   it('từ chối event_id sai dạng, event_type lạ, order_code rỗng, reason không phải chuỗi, thân không phải object', () => {

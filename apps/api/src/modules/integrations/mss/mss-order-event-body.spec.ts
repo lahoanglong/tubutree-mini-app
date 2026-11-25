@@ -14,6 +14,8 @@ import {
 import {
   fallbackDecision,
   inRollout,
+  mssDefinitelyRejected,
+  mssEmailEligible,
   mssEventTypeForZns,
   MSS_ORDER_EVENT_TYPES,
   MSS_RETRY_DELAYS_MS,
@@ -418,6 +420,40 @@ describe('hàm thuần của outbox', () => {
     expect(fallbackDecision('DEAD', 'unauthorized', true)).toBe('ZNS');
     expect(fallbackDecision('CANCELLED', 'admin_cancelled', true)).toBe('ZNS');
     expect(fallbackDecision('PENDING', null, true)).toBe('NONE');
+  });
+
+  it('MSS W37/W38 tin người lạ: sent/stranger không đường lui, unknown/stranger chỉ trong app, skipped/stranger_cap như privacy_blocked', () => {
+    expect(fallbackDecision('RESULT_SENT', 'stranger', true)).toBe('NONE');
+    expect(fallbackDecision('RESULT_UNKNOWN', 'stranger', true)).toBe('IN_APP_ONLY');
+    expect(fallbackDecision('RESULT_SKIPPED', 'stranger_cap', true)).toBe('ZNS');
+    expect(fallbackDecision('RESULT_SKIPPED', 'stranger_cap', false)).toBe('IN_APP_ONLY');
+    expect(mssEmailEligible('RESULT_SKIPPED', 'stranger_cap', null)).toBe(true);
+    expect(mssEmailEligible('RESULT_UNKNOWN', 'stranger', null)).toBe(false);
+    expect(mssEmailEligible('RESULT_SENT', 'stranger', null)).toBe(false);
+  });
+
+  it('mssDefinitelyRejected: chỉ 4xx khác 408/409/429 là MSS chắc chắn không nhận', () => {
+    for (const http of [400, 401, 413, 422, 499]) expect(mssDefinitelyRejected(http)).toBe(true);
+    for (const http of [null, 200, 202, 302, 408, 409, 429, 500, 502, 503]) expect(mssDefinitelyRejected(http)).toBe(false);
+  });
+
+  it('mssEmailEligible: DEAD/EXPIRED chỉ email khi MSS từ chối hẳn (hoặc báo mất); 5xx/429/408 thì có thể đã gửi, không email', () => {
+    expect(mssEmailEligible('DEAD', 'http_413', 413)).toBe(true);
+    expect(mssEmailEligible('DEAD', 'unauthorized', 401)).toBe(true);
+    expect(mssEmailEligible('DEAD', 'claim_broken', null)).toBe(true);
+    expect(mssEmailEligible('DEAD', 'http_408', 408)).toBe(false);
+    expect(mssEmailEligible('DEAD', 'event_id_reused', 409)).toBe(false);
+    expect(mssEmailEligible('DEAD', 'event_id_reused', null)).toBe(false);
+    expect(mssEmailEligible('EXPIRED', 'retries_exhausted', 503)).toBe(false);
+    expect(mssEmailEligible('EXPIRED', 'ttl', 502)).toBe(false);
+    expect(mssEmailEligible('EXPIRED', 'ttl', 429)).toBe(false);
+    expect(mssEmailEligible('EXPIRED', 'ttl', null)).toBe(false);
+    expect(mssEmailEligible('EXPIRED', 'mss_unavailable', 503)).toBe(false);
+    expect(mssEmailEligible('EXPIRED', 'mss_lost', 202)).toBe(true);
+    expect(mssEmailEligible('EXPIRED', 'mss_lost', null)).toBe(true);
+    expect(mssEmailEligible('RESULT_FAILED', 'zalo_error', null)).toBe(true);
+    expect(mssEmailEligible('RESULT_SKIPPED', 'superseded', null)).toBe(false);
+    expect(mssEmailEligible('CANCELLED', 'consent_withdrawn', null)).toBe(false);
   });
 
   it('normalizeVnPhone', () => {

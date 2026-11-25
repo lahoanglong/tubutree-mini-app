@@ -33,6 +33,21 @@ const STATUS_BADGE: Record<string, { tone: Tone; label: string }> = {
   CANCELLED: { tone: 'neutral', label: 'Đã dừng' },
 };
 
+/** Lý do MSS (hoặc Tubu) ghi kèm kết quả, đọc cho Ops. Khoá chưa có ở đây vẫn in thô: MSS có thể thêm lý do mới mà không báo trước. */
+export const MSS_REASON_LABEL: Record<string, string> = {
+  stranger: 'tin người lạ (chưa kết bạn)',
+  stranger_cap: 'hết lượt nhắn người lạ hôm nay',
+  privacy_blocked: 'khách chặn tin người lạ',
+  not_friend: 'chưa kết bạn',
+  opted_out: 'khách từ chối nhận tin',
+  superseded: 'bị tin mới hơn thay',
+  consent_withdrawn: 'khách rút đồng ý',
+  ttl: 'quá hạn sống',
+  mss_unavailable: 'MSS không nhận',
+  mss_lost: 'MSS mất sự kiện',
+  event_id_reused: 'trùng mã sự kiện',
+};
+
 function stateBadge(card: Card): { tone: Tone; label: string } {
   if (!card.enabled) return { tone: 'neutral', label: 'Tắt' };
   if (!card.open) return { tone: 'warning', label: 'Chưa có hiệu lực' };
@@ -162,7 +177,11 @@ function EventRow({ row }: { row: MssOrderEventRow }) {
       <div className="flex shrink-0 flex-wrap items-center gap-1">
         <ToneBadge tone={badge.tone}>{badge.label}</ToneBadge>
         {row.fallbackChannel === 'ZNS' && <ToneBadge tone="info">Đã gửi ZNS</ToneBadge>}
-        {row.reason && <span className="break-all text-xs text-stone-600">{row.reason}</span>}
+        {row.reason && (
+          <span className="break-all text-xs text-stone-600" title={row.reason}>
+            {MSS_REASON_LABEL[row.reason] ?? row.reason}
+          </span>
+        )}
       </div>
     </li>
   );

@@ -2,6 +2,7 @@
  * Hằng và hàm thuần của luồng sự kiện đơn gửi MSS (hợp đồng tubu-mss-order-events v1.2). File không import service: recorder,
  * worker, callback, notifications và spec cùng đọc từ đây.
  */
+import type { Prisma } from '@prisma/client';
 
 export const MSS_ORDER_EVENT_TYPES = ['order.created', 'order.payment_confirmed', 'order.shipping', 'order.delivered', 'order.cancelled'] as const;
 export type MssOrderEventType = (typeof MSS_ORDER_EVENT_TYPES)[number];
@@ -24,10 +25,15 @@ export type MssOutboxStatus = (typeof MSS_OUTBOX_STATUSES)[number];
 export const MSS_HOLDING_STATUSES: readonly MssOutboxStatus[] = ['PENDING', 'SENDING', 'DELIVERED'];
 
 /**
- * `order.created` ở các trạng thái này: MSS đang giữ hoặc đã gửi tin đặt đơn, và luồng nhắc chuyển khoản của MSS lo phần nhắc, nên
- * Tubu không gửi tin nhắc chuyển khoản riêng. RESULT_FAILED hay chưa có dòng thì Tubu nhắc như thường.
+ * Dòng `order.created` khớp điều kiện này: MSS đang giữ sự kiện, hoặc đã gửi như bạn bè / hội thoại đang mở, nên luồng nhắc chuyển khoản
+ * của MSS lo phần nhắc và Tubu không gửi tin nhắc riêng. Tin người lạ (`RESULT_SENT` + `resultReason = 'stranger'`) KHÔNG tính: MSS không
+ * nhắc chuyển khoản cho người lạ (MSS w37 `resolveRecipient`), nên Tubu vẫn nhắc. RESULT_FAILED, RESULT_UNKNOWN hay chưa có dòng thì Tubu
+ * nhắc như thường.
  */
-export const MSS_CREATED_COVERS_PAYMENT_REMINDER: readonly MssOutboxStatus[] = [...MSS_HOLDING_STATUSES, 'RESULT_SENT'];
+export const MSS_CREATED_COVERS_PAYMENT_REMINDER_WHERE: Prisma.MssOrderEventOutboxWhereInput = {
+  eventType: 'order.created',
+  OR: [{ status: { in: [...MSS_HOLDING_STATUSES] } }, { status: 'RESULT_SENT', resultReason: null }],
+};
 
 /** Kết quả cuối mà khách chắc chắn hoặc có thể đã nhận tin Zalo: không gửi ZNS cho sự kiện này (tránh tin đôi). */
 export const MSS_NO_ZNS_STATUSES: readonly MssOutboxStatus[] = ['RESULT_SENT', 'RESULT_UNKNOWN'];
@@ -272,16 +278,30 @@ export const MSS_SENT_VIA_STRANGER = 'stranger';
 /** Sự kiện có email xác nhận đơn dự phòng (PO A3): chỉ tin đặt đơn và tin đã nhận tiền, tối đa một email mỗi đơn. */
 export const MSS_EMAIL_EVENT_TYPES: ReadonlySet<string> = new Set<MssOrderEventType>(['order.created', 'order.payment_confirmed']);
 
+/** Mã 4xx mà MSS có thể đã nhận sự kiện ở một lượt trước (hết giờ chờ, trùng, quá tải): không phải "từ chối hẳn". Bản SQL dùng chung mảng này. */
+export const MSS_HTTP_4XX_MAYBE_ACCEPTED: readonly number[] = [408, 409, 429];
+
+/**
+ * Lượt gửi cuối nhận 4xx (trừ 408/409/429): MSS đã đọc thân và từ chối, các lượt trước cùng thân cùng `event_id` cũng bị từ chối.
+ * 5xx, 429, 408, hết giờ chờ, lỗi mạng: một lượt trước có thể đã tới MSS và tin đã đi, nên không coi là "chắc chắn không nhận".
+ * Bản SQL của luật này nằm trong câu quét email ở `mss-order-events.reconcile.ts` (race spec P1 giữ hai bản khớp nhau).
+ */
+export function mssDefinitelyRejected(http: number | null): boolean {
+  return http !== null && http >= 400 && http < 500 && !MSS_HTTP_4XX_MAYBE_ACCEPTED.includes(http);
+}
+
 /**
  * Kết quả cuối mà khách chắc chắn chưa nhận tin Zalo nào cho sự kiện: email dự phòng được gửi. Không bao giờ cho `RESULT_SENT` (kể cả
  * tin người lạ), `RESULT_UNKNOWN` (MSS có thể đã gửi), `CANCELLED` (khách rút đồng ý hoặc đơn đóng), sự kiện bị thay (`superseded`…) hay 409.
- * `EXPIRED` chỉ khi chắc MSS không giữ sự kiện: MSS báo mất (`mss_lost`) hoặc lượt gửi cuối nhận mã lỗi HTTP. Lượt cuối hết giờ chờ, lỗi mạng
- * hay cầu dao ngắt (`lastHttpStatus` null) thì một lượt POST trước có thể đã tới MSS và tin đã đi: không email.
+ * `DEAD` / `EXPIRED` chỉ khi chắc MSS không giữ sự kiện: MSS báo mất (`mss_lost`), hoặc lượt gửi cuối bị MSS từ chối hẳn
+ * (`mssDefinitelyRejected`). Lượt cuối 5xx/429/408, hết giờ chờ, lỗi mạng hay cầu dao ngắt thì một lượt POST trước có thể đã tới MSS và
+ * tin đã đi: không email (thà thiếu email còn hơn Zalo + email). `DEAD` không có mã HTTP (nhận việc hỏng, thân lỗi) vẫn email.
+ * Đổi luật này thì sửa cả bản SQL ở `MssOrderEventReconcileService.emailRescueOnce`.
  */
 export function mssEmailEligible(status: MssOutboxStatus, reason: string | null, lastHttpStatus: number | null): boolean {
   if (status === 'RESULT_SKIPPED') return !(reason && MSS_COVERED_SKIP_REASONS.has(reason));
-  if (status === 'DEAD') return reason !== 'event_id_reused';
-  if (status === 'EXPIRED') return reason === 'mss_lost' || (lastHttpStatus !== null && lastHttpStatus >= 400);
+  if (status === 'DEAD') return reason !== 'event_id_reused' && (lastHttpStatus === null || mssDefinitelyRejected(lastHttpStatus));
+  if (status === 'EXPIRED') return reason === 'mss_lost' || mssDefinitelyRejected(lastHttpStatus);
   return status === 'RESULT_FAILED';
 }
 

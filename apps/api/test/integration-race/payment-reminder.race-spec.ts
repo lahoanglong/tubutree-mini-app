@@ -93,9 +93,9 @@ describe('Nhắc chuyển khoản trước hạn tự huỷ (real Postgres)', ()
     expect(payload.body).toContain(due.o.code);
   });
 
-  it('MSS đang giữ hoặc đã gửi order.created: không nhắc; MSS báo hỏng, chưa có sự kiện, hay chỉ có sự kiện loại khác: nhắc đúng một tin', async () => {
+  it('MSS đang giữ hoặc đã gửi order.created như bạn bè: không nhắc; tin người lạ (stranger), MSS báo hỏng, chưa có sự kiện, hay chỉ có sự kiện loại khác: nhắc đúng một tin', async () => {
     const createdAt = new Date(NOW.getTime() - 23 * HOUR);
-    const withEvent = async (eventType: string | null, status: string) => {
+    const withEvent = async (eventType: string | null, status: string, extra: { resultReason?: string } = {}) => {
       const c = await pendingOrder(createdAt);
       if (eventType) {
         await prisma.mssOrderEventOutbox.create({
@@ -109,6 +109,7 @@ describe('Nhắc chuyển khoản trước hạn tự huỷ (real Postgres)', ()
             body: '{}',
             bodySha256: 'it',
             status,
+            resultReason: extra.resultReason ?? null,
             expiresAt: new Date(createdAt.getTime() + 6 * HOUR),
           },
         });
@@ -117,6 +118,9 @@ describe('Nhắc chuyển khoản trước hạn tự huỷ (real Postgres)', ()
     };
     const skipped = await Promise.all(['PENDING', 'SENDING', 'DELIVERED', 'RESULT_SENT'].map((s) => withEvent('order.created', s)));
     const reminded = await Promise.all([
+      // GAP-1: MSS gửi tin người lạ lúc đặt nhưng không nhắc chuyển khoản cho người lạ, nên Tubu phải nhắc.
+      withEvent('order.created', 'RESULT_SENT', { resultReason: 'stranger' }),
+      withEvent('order.created', 'RESULT_UNKNOWN', { resultReason: 'stranger' }),
       withEvent('order.created', 'RESULT_FAILED'),
       withEvent(null, ''),
       withEvent('order.payment_confirmed', 'RESULT_SENT'),
