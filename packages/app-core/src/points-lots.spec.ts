@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertedPointsNote, lockedPointsLabel, marketplacePointsNote, pointsSummary } from './points-lots';
+import { convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from './points-lots';
 
 describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một luật cho web và Mini)', () => {
   it('tổng = lô thường + lô quy đổi', () => {
@@ -25,6 +25,25 @@ describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một 
     expect(marketplacePointsNote(0)).toBeNull();
     expect(marketplacePointsNote(undefined)).toBeNull();
     expect(marketplacePointsNote(null)).toBeNull();
+  });
+  it('câu dưới vòng quay / quỹ trồng cây: số điểm sàn không dùng ở đó, có dấu nghìn; không có thì null', () => {
+    expect(marketplaceExcludedNote(1_250)).toBe('1.250 điểm từ đơn sàn chỉ dùng khi mua hàng');
+    expect(marketplaceExcludedNote(0)).toBeNull();
+    expect(marketplaceExcludedNote(-1)).toBeNull();
+    expect(marketplaceExcludedNote(undefined)).toBeNull();
+  });
+  it('gardenPoints: số máy chủ thắng; API cũ thì vòng quay = lô thường, quỹ = thường + quy đổi, không bao giờ gồm điểm sàn', () => {
+    expect(gardenPoints(null)).toEqual({ wheel: null, fund: null, marketplaceNote: null });
+    expect(gardenPoints({ pointsBalance: 500, pointsConvertedBalance: 100, pointsMarketplaceBalance: 1_250 })).toEqual({
+      wheel: 500,
+      fund: 600,
+      marketplaceNote: '1.250 điểm từ đơn sàn chỉ dùng khi mua hàng',
+    });
+    expect(gardenPoints({ pointsBalance: 500, redeemablePoints: 200, redeemableTotal: 300, pointsMarketplaceBalance: 0 })).toEqual({
+      wheel: 200,
+      fund: 300,
+      marketplaceNote: null,
+    });
   });
   it('ghi chú phần không hết hạn có dấu nghìn; không có điểm quy đổi thì null', () => {
     expect(convertedPointsNote(1_250)).toBe('trong đó 1.250 điểm không hết hạn');

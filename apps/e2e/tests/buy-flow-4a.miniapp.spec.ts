@@ -149,7 +149,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
 
     const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
     await expect(nav).toBeVisible({ timeout: 15_000 });
-    for (const label of ['Trang chủ', 'Danh mục', 'Vườn Xanh']) {
+    for (const label of ['Trang chủ', 'Danh mục', 'Quét mã']) {
       await expect(nav.getByRole('button', { name: label, exact: true })).toBeVisible();
     }
     await expect(nav.getByText('Ví & HH')).toHaveCount(0);

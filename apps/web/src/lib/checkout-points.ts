@@ -1,6 +1,11 @@
 import { heldPointsNote } from '@tubutree/app-core/cart-copy';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
-import { convertedPointsNote, lockedPointsLabel as coreLockedPointsLabel, pointsSummary as coreSummary } from '@tubutree/app-core/points-lots';
+import {
+  convertedPointsNote,
+  lockedPointsLabel as coreLockedPointsLabel,
+  marketplacePointsNote,
+  pointsSummary as coreSummary,
+} from '@tubutree/app-core/points-lots';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 
 const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
@@ -9,15 +14,22 @@ export const formatCount = (n: number) => formatVnNumber(n);
 const group = formatCount;
 const CONVERTED_FULL_VALUE = ', trả tới 100% giá trị hàng';
 
-/** Tổng hai lô Điểm Xanh (luật ở app-core, dùng chung với Mini) kèm câu nói rõ phần không hết hạn. */
-export function pointsSummary(u: { pointsBalance: number; pointsConvertedBalance?: number }): {
+type PointsLots = { pointsBalance: number; pointsConvertedBalance?: number; pointsMarketplaceBalance?: number };
+
+/**
+ * Tổng ba lô Điểm Xanh (luật ở app-core, dùng chung với Mini) kèm câu nói rõ phần không hết hạn và phần từ đơn sàn chỉ dùng khi mua
+ * hàng (không đổi quà, không góp quỹ).
+ */
+export function pointsSummary(u: PointsLots): {
   standard: number;
   converted: number;
+  marketplace: number;
   total: number;
   convertedNote: string | null;
+  marketplaceNote: string | null;
 } {
   const lots = coreSummary(u);
-  return { ...lots, convertedNote: convertedPointsNote(lots.converted) };
+  return { ...lots, convertedNote: convertedPointsNote(lots.converted), marketplaceNote: marketplacePointsNote(lots.marketplace) };
 }
 
 export interface CheckoutPointsOffer {
@@ -33,8 +45,10 @@ export interface CheckoutPointsOffer {
  *  - lô thường: `redeemablePoints` của báo giá (số dư − điểm của đơn còn trong hạn đổi/trả hoặc đang chờ xử lý
  *    đổi/trả), KHÔNG phải số dư — CheckoutService kẹp báo giá và đặt đơn đúng theo số này (cùng luật đổi quà
  *    Điểm Xanh) và áp trần % giá trị hàng. API cũ chưa trả field → số dư (backend tự kẹp);
- *  - lô quy đổi: không hết hạn, không bị khoá, trả tới 100% giá trị hàng → cộng nguyên vào `usable`.
- * `usable` được gửi làm `pointsToUse`; backend tự chia hai lô và trả `pointsUsed` thật trong báo giá.
+ *  - lô quy đổi: không hết hạn, không bị khoá, trả tới 100% giá trị hàng → cộng nguyên vào `usable`;
+ *  - lô điểm tích từ đơn sàn (W42): `redeemableMarketplacePoints` của báo giá (không khoá theo hạn đổi/trả, chung trần % với lô thường)
+ *    → cộng nguyên vào `usable`. API cũ chưa trả → 0.
+ * `usable` được gửi làm `pointsToUse`; backend tự chia ba lô, kẹp trần và trả `pointsUsed` thật trong báo giá.
  */
 export function checkoutPointsOffer(
   quote:
@@ -44,6 +58,8 @@ export function checkoutPointsOffer(
         lockedPoints?: number;
         pointsConvertedBalance?: number;
         redeemableConvertedPoints?: number;
+        pointsMarketplaceBalance?: number;
+        redeemableMarketplacePoints?: number;
       }
     | undefined,
 ): CheckoutPointsOffer {
@@ -52,8 +68,9 @@ export function checkoutPointsOffer(
   const standardUsable = Math.min(balance, clamp(quote.redeemablePoints ?? balance));
   const held = balance - standardUsable;
   const converted = clamp(quote.redeemableConvertedPoints ?? quote.pointsConvertedBalance);
+  const marketplace = clamp(quote.redeemableMarketplacePoints ?? quote.pointsMarketplaceBalance);
   return {
-    usable: standardUsable + converted,
+    usable: standardUsable + converted + marketplace,
     converted,
     lockNote: held > 0 ? heldPointsNote(held) : null,
     convertedNote: converted > 0 ? `${convertedPointsNote(converted)}${CONVERTED_FULL_VALUE}` : null,
@@ -64,7 +81,7 @@ export function checkoutPointsOffer(
  * Nhãn ô Điểm Xanh khi ô bị khoá (đơn không dùng được điểm): ghi số dư, không hứa "dùng được" ngay cạnh câu "chưa dùng được".
  * Cùng chữ với checkoutPoints().label của Mini App.
  */
-export function lockedPointsLabel(quote: { pointsBalance: number; pointsConvertedBalance?: number } | undefined, offer: Pick<CheckoutPointsOffer, 'usable'>): string {
+export function lockedPointsLabel(quote: PointsLots | undefined, offer: Pick<CheckoutPointsOffer, 'usable'>): string {
   return coreLockedPointsLabel(quote ? coreSummary(quote).total : offer.usable);
 }
 
@@ -74,8 +91,12 @@ export function lockedPointsLabel(quote: { pointsBalance: number; pointsConverte
  * "Bạn đang có n điểm" (phần bị giữ do `lockNote` nói), không bao giờ mời tích điểm cho người đã có điểm.
  * Nguồn số dư: báo giá khi đã có, không thì hồ sơ đăng nhập.
  */
-export function idlePointsLabel(source: { pointsBalance?: number; pointsConvertedBalance?: number } | null | undefined): string {
-  const total = coreSummary({ pointsBalance: source?.pointsBalance ?? 0, pointsConvertedBalance: source?.pointsConvertedBalance }).total;
+export function idlePointsLabel(source: Partial<PointsLots> | null | undefined): string {
+  const total = coreSummary({
+    pointsBalance: source?.pointsBalance ?? 0,
+    pointsConvertedBalance: source?.pointsConvertedBalance,
+    pointsMarketplaceBalance: source?.pointsMarketplaceBalance,
+  }).total;
   return total > 0 ? coreLockedPointsLabel(total) : fillCopy('checkout.pointsNone');
 }
 

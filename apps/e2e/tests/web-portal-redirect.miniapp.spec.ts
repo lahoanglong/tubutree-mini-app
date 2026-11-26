@@ -7,13 +7,13 @@ import { test, expect, makeUser, mockSession } from './support/mock-api';
  * báo lời gọi chưa mock và spec đỏ.
  */
 const SCREENS = [
-  { route: '/admin', title: 'Quản trị Tubu Tree', url: 'https://tubutree.com/admin' },
-  { route: '/admin/community', title: 'Kiểm duyệt cộng đồng', url: 'https://tubutree.com/admin?tab=community' },
-  { route: '/storefront', title: 'Gian hàng của tôi', url: 'https://tubutree.com/ctv/gian-hang' },
-  { route: '/recycle/desk', title: 'Nhận hàng tại điểm', url: 'https://tubutree.com/doi-rac/quay' },
-  { route: '/staff', title: 'Ca làm của tôi', url: 'https://tubutree.com/nhan-vien' },
-  { route: '/brand-owner', title: 'Quản lý thương hiệu', url: 'https://tubutree.com/chu-thuong-hieu' },
-  { route: '/my-payroll', title: 'Lương của tôi', url: 'https://tubutree.com/nhan-vien/bang-luong' },
+  { route: '/admin', title: 'Quản trị Tubu Tree', url: 'https://tubutree.com/admin?stay=web' },
+  { route: '/admin/community', title: 'Kiểm duyệt cộng đồng', url: 'https://tubutree.com/admin?tab=community&stay=web' },
+  { route: '/storefront', title: 'Gian hàng của tôi', url: 'https://tubutree.com/ctv/gian-hang?stay=web' },
+  { route: '/recycle/desk', title: 'Nhận hàng tại điểm', url: 'https://tubutree.com/doi-rac/quay?stay=web' },
+  { route: '/staff', title: 'Ca làm của tôi', url: 'https://tubutree.com/nhan-vien?stay=web' },
+  { route: '/brand-owner', title: 'Quản lý thương hiệu', url: 'https://tubutree.com/chu-thuong-hieu?stay=web' },
+  { route: '/my-payroll', title: 'Lương của tôi', url: 'https://tubutree.com/nhan-vien/bang-luong?stay=web' },
 ] as const;
 
 const WIDTHS = [375, 360, 320] as const;
@@ -69,7 +69,7 @@ for (const width of WIDTHS) {
       await expect(page.getByRole('heading', { level: 1, name: 'Kênh đại lý' })).toBeVisible({ timeout: 15_000 });
       const note = page.getByText(DEALER_NOTE, { exact: true });
       await expect(note).toBeVisible();
-      await expect(page.getByText('https://tubutree.com/dai-ly', { exact: true })).toBeVisible();
+      await expect(page.getByText('https://tubutree.com/dai-ly?stay=web', { exact: true })).toBeVisible();
       await expect(page.getByText(/thao tác đầy đủ trên website/)).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Mở trên website' })).toHaveCount(0);
 
@@ -97,13 +97,13 @@ test.describe('Thẻ chuyển sang website — hành vi nút', () => {
     mockSession(api, makeUser({ id: 'u-portal' }));
     await page.goto('/storefront?khoi=gian-hang-moi&token=abc123&code=zz&session=s1');
     await expect(page.getByRole('heading', { level: 1, name: 'Gian hàng của tôi' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi', { exact: true })).toBeVisible();
+    await expect(page.getByText('https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi&stay=web', { exact: true })).toBeVisible();
   });
 
   test('/admin/community giữ tab=community, tab ngoài không ghi đè', async ({ page, api }) => {
     mockSession(api, makeUser({ id: 'u-portal' }));
     await page.goto('/admin/community?tab=orders&khoi=x');
-    await expect(page.getByText('https://tubutree.com/admin?tab=community&khoi=x', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('https://tubutree.com/admin?tab=community&khoi=x&stay=web', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test('/dealer Sao chép liên kết: chép link /dai-ly, báo đã chép, ở nguyên trang Mini App', async ({ page, api, context }) => {
@@ -116,7 +116,7 @@ test.describe('Thẻ chuyển sang website — hành vi nút', () => {
     await expect(page.getByText('Đã sao chép liên kết')).toBeVisible();
     expect(page.url()).toBe(before);
     const copied = await page.evaluate(() => navigator.clipboard.readText().catch(() => null));
-    if (copied !== null) expect(copied).toBe('https://tubutree.com/dai-ly');
+    if (copied !== null) expect(copied).toBe('https://tubutree.com/dai-ly?stay=web');
   });
 
   test('Sao chép liên kết: chép đúng link vào clipboard và báo "Đã sao chép liên kết"', async ({ page, api, context }) => {
@@ -127,7 +127,7 @@ test.describe('Thẻ chuyển sang website — hành vi nút', () => {
     await page.getByRole('button', { name: 'Sao chép liên kết' }).click();
     await expect(page.getByText('Đã sao chép liên kết')).toBeVisible();
     const copied = await page.evaluate(() => navigator.clipboard.readText().catch(() => null));
-    if (copied !== null) expect(copied).toBe('https://tubutree.com/admin');
+    if (copied !== null) expect(copied).toBe('https://tubutree.com/admin?stay=web');
   });
 
   // Lời báo "Chưa mở được website" khi SDK từ chối được kiểm ở web-portal-redirect.spec.tsx; ở đây SDK của dev server (mpWeb) nhận lệnh.

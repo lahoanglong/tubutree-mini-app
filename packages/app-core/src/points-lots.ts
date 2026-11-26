@@ -26,6 +26,41 @@ export function marketplacePointsNote(marketplace: number | null | undefined): s
   return n > 0 ? `trong đó ${formatVnNumber(n)} điểm từ đơn sàn chỉ dùng khi mua hàng` : null;
 }
 
+/**
+ * "1.250 điểm từ đơn sàn chỉ dùng khi mua hàng" — dưới số điểm của vòng quay và quỹ trồng cây (những chỗ không tiêu lô sàn), để khách
+ * hiểu vì sao số dùng được ở đó thấp hơn tổng Điểm Xanh. null khi khách không có điểm sàn.
+ */
+export function marketplaceExcludedNote(marketplace: number | null | undefined): string | null {
+  const n = Number(marketplace ?? 0);
+  return n > 0 ? `${formatVnNumber(n)} điểm từ đơn sàn chỉ dùng khi mua hàng` : null;
+}
+
+/**
+ * Số điểm Vườn Xanh dùng được: vòng quay tiêu lô thường dùng được, quỹ trồng cây tiêu lô thường + lô quy đổi; điểm từ đơn sàn chỉ dùng khi
+ * mua hàng nên không tính ở cả hai (W42), kèm câu giải thích. Số máy chủ tính sẵn (`redeemablePoints`, `redeemableTotal`) thắng; API cũ chưa
+ * trả thì tự tính. Chưa có dữ liệu → null.
+ */
+export function gardenPoints(
+  ov:
+    | {
+        pointsBalance: number;
+        pointsConvertedBalance?: number;
+        pointsMarketplaceBalance?: number;
+        redeemablePoints?: number;
+        redeemableTotal?: number;
+      }
+    | null
+    | undefined,
+): { wheel: number | null; fund: number | null; marketplaceNote: string | null } {
+  if (!ov) return { wheel: null, fund: null, marketplaceNote: null };
+  const lots = pointsSummary(ov);
+  return {
+    wheel: ov.redeemablePoints ?? lots.standard,
+    fund: ov.redeemableTotal ?? lots.standard + lots.converted,
+    marketplaceNote: marketplaceExcludedNote(lots.marketplace),
+  };
+}
+
 /** "trong đó 1.250 điểm không hết hạn" — null khi khách không có điểm quy đổi. */
 export function convertedPointsNote(converted: number | null | undefined): string | null {
   const n = Number(converted ?? 0);

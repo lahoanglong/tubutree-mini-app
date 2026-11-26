@@ -148,17 +148,18 @@ describe('homeInterleaveCard', () => {
 });
 
 describe('visibleHomeShortcuts', () => {
-  it('khai 9 lối tắt; khi mọi cờ bật hiện đủ 9, mở đầu bằng Giờ vàng và không có Vườn Xanh (đã là tab giữa)', () => {
-    expect(HOME_SHORTCUTS).toHaveLength(10);
-    const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'gifts', 'claim', 'earn', 'community']);
+  it('khai 9 lối tắt; khi mọi cờ bật hiện đủ 9, mở đầu bằng Giờ vàng; không có Vườn Xanh (thẻ chính) và Đơn sàn (tab giữa Quét mã, W42)', () => {
+    expect(HOME_SHORTCUTS).toHaveLength(9);
+    const ids = visibleHomeShortcuts({ wasteEnabled: true }).map((s) => s.id);
+    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'gifts', 'earn', 'community']);
     expect(ids).not.toContain('garden');
+    expect(ids).not.toContain('claim');
   });
   it('ô Giờ vàng hiện khi chưa biết hay có suất, không phụ thuộc cờ nào; biết chắc không có suất nào thì bỏ', () => {
-    for (const wasteEnabled of [false, true]) for (const claimEnabled of [false, true]) {
-      expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled })[0]!.id).toBe('flash');
-      expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled, flashLive: true })[0]!.id).toBe('flash');
-      expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled, flashLive: false }).map((x) => x.id)).not.toContain('flash');
+    for (const wasteEnabled of [false, true]) {
+      expect(visibleHomeShortcuts({ wasteEnabled })[0]!.id).toBe('flash');
+      expect(visibleHomeShortcuts({ wasteEnabled, flashLive: true })[0]!.id).toBe('flash');
+      expect(visibleHomeShortcuts({ wasteEnabled, flashLive: false }).map((x) => x.id)).not.toContain('flash');
     }
   });
   it('nhãn mọi lối tắt vừa MỘT dòng ở ô 5 cột (≤11 ký tự): nhãn xuống dòng làm hàng cao hơn khung chờ và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
@@ -166,21 +167,19 @@ describe('visibleHomeShortcuts', () => {
   });
   it('mọi tổ hợp cờ và trạng thái: nhãn hiển thị (kể cả nhãn thay thế của Đổi rác) tối đa 11 ký tự và có câu đọc đầy đủ chứa nhãn', () => {
     const bools = [false, true];
-    for (const wasteEnabled of bools) for (const claimEnabled of bools) for (const recycleOpenRequests of [undefined, false, true]) {
-      for (const s of visibleHomeShortcuts({ wasteEnabled, claimEnabled, recycleOpenRequests })) {
-        expect(s.label.length, `${s.label} (${wasteEnabled}/${claimEnabled}/${recycleOpenRequests})`).toBeLessThanOrEqual(11);
+    for (const wasteEnabled of bools) for (const recycleOpenRequests of [undefined, false, true]) {
+      for (const s of visibleHomeShortcuts({ wasteEnabled, recycleOpenRequests })) {
+        expect(s.label.length, `${s.label} (${wasteEnabled}/${recycleOpenRequests})`).toBeLessThanOrEqual(11);
         expect(s.ariaLabel.toLowerCase()).toContain(s.label.toLowerCase());
       }
     }
   });
-  it('lối tắt đơn sàn ghi "Đơn sàn", câu đọc vẫn nói đầy đủ; Đổi rác tạm dừng mà còn yêu cầu mở ghi "Yêu cầu"', () => {
-    const on = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true });
-    expect(on.find((s) => s.id === 'claim')).toMatchObject({ label: 'Đơn sàn', ariaLabel: expect.stringContaining('Tích điểm đơn sàn') });
-    const paused = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: true, recycleOpenRequests: true }).find((s) => s.id === 'recycle');
+  it('Đổi rác tạm dừng mà còn yêu cầu mở ghi "Yêu cầu", câu đọc vẫn nói đầy đủ', () => {
+    const paused = visibleHomeShortcuts({ wasteEnabled: false, recycleOpenRequests: true }).find((s) => s.id === 'recycle');
     expect(paused).toMatchObject({ label: 'Yêu cầu', ariaLabel: expect.stringContaining('Yêu cầu của tôi') });
   });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
-    const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
+    const ids = visibleHomeShortcuts({ wasteEnabled: false }).map((s) => s.id);
     expect(ids).toEqual(['flash', 'coupons', 'groupBuy', 'rewards', 'orders', 'gifts', 'earn', 'community']);
   });
   it('Giờ vàng đi tới /flash-sale, Mã giảm giá ghi đúng chữ chốt', () => {
@@ -189,11 +188,9 @@ describe('visibleHomeShortcuts', () => {
   });
   it('Bộ quà tặng luôn có trong "Tất cả lối tắt" (không theo cờ) và không chiếm 4 ô cố định', () => {
     for (const wasteEnabled of [true, false]) {
-      for (const claimEnabled of [true, false]) {
-        const { pinned, all } = homeShortcutSlots({ wasteEnabled, claimEnabled, flashLive: false });
-        expect(all.find((s) => s.id === 'gifts')).toMatchObject({ label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu' });
-        expect(pinned.map((s) => s.id)).not.toContain('gifts');
-      }
+      const { pinned, all } = homeShortcutSlots({ wasteEnabled, flashLive: false });
+      expect(all.find((s) => s.id === 'gifts')).toMatchObject({ label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu' });
+      expect(pinned.map((s) => s.id)).not.toContain('gifts');
     }
   });
 });
@@ -201,49 +198,42 @@ describe('visibleHomeShortcuts', () => {
 describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
   it('4 ô cố định là Giờ vàng, Mã giảm giá, Đổi rác, Mua chung (Q7); "Tất cả" liệt kê đủ mục còn hiển thị', () => {
     expect(HOME_SHORTCUT_SLOTS).toBe(4);
-    const { pinned, all } = homeShortcutSlots({ wasteEnabled: true, claimEnabled: true });
+    const { pinned, all } = homeShortcutSlots({ wasteEnabled: true });
     expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'recycle', 'groupBuy']);
-    expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'claim', 'gifts']));
-    expect(all).toHaveLength(10);
+    expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'gifts']));
+    expect(all).toHaveLength(9);
   });
   it('Đổi rác tắt thì ô trống được mục kế lấp, vẫn đủ 4 ô', () => {
-    const { pinned } = homeShortcutSlots({ wasteEnabled: false, claimEnabled: false });
+    const { pinned } = homeShortcutSlots({ wasteEnabled: false });
     expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'groupBuy', 'rewards']);
   });
 });
 
 describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
-  it('đủ 6 lối vào theo thứ tự vẽ: hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác miễn ship đơn sau) rồi bốn ô phụ', () => {
+  it('đủ 6 lối vào theo thứ tự vẽ: hai thẻ chính (Mua lẻ · Giờ vàng, Vườn Xanh — W42 khi tab giữa thành Quét mã) rồi bốn ô phụ', () => {
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => [p.id, p.tier])).toEqual([
       ['retail', 'hero'],
-      ['recycle', 'hero'],
+      ['garden', 'hero'],
+      ['recycle', 'chip'],
       ['groupBuy', 'chip'],
       ['subscription', 'chip'],
-      ['garden', 'chip'],
       ['rewards', 'chip'],
     ]);
-    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.title)).toEqual([
-      'Mua lẻ · Giờ vàng',
-      'Đổi rác — Miễn ship đơn sau',
-      'Mua chung',
-      'Mua xoay vòng',
-      'Vườn Xanh',
-      'Kho quà 0đ',
-    ]);
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.title)).toEqual(['Mua lẻ · Giờ vàng', 'Vườn Xanh', 'Đổi rác', 'Mua chung', 'Mua xoay vòng', 'Kho quà 0đ']);
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.webHref)).toEqual([
       '/gio-vang',
+      '/vuon-xanh',
       '/doi-rac',
       '/mua-chung',
       '/san-pham?filter=subscription',
-      '/vuon-xanh',
       '/kho-qua',
     ]);
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.miniRoute)).toEqual([
       '/flash-sale',
+      '/game',
       '/recycle',
       '/group-buy',
       '/subscriptions',
-      '/game',
       '/offers?tab=rewards',
     ]);
   });
@@ -262,7 +252,7 @@ describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
     expect(HOME_QUICK_SHORTCUT_IDS).toEqual(['coupons', 'community']);
     expect(HOME_QUICK_SHORTCUT_IDS).not.toContain('flash');
     // Mọi lối tắt vẫn còn trong hộp thoại "Thêm".
-    expect(visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id)).toContain('flash');
+    expect(visibleHomeShortcuts({ wasteEnabled: true }).map((s) => s.id)).toContain('flash');
   });
 
   it('chiều cao khung chờ khối lối vào = hàng 1 (96) + khe 8 + hàng 2 (64) + khe 8 + hàng lối tắt nhanh (44)', () => {
@@ -271,8 +261,8 @@ describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
 
   it('splitHomeEcosystemPillars: 2 thẻ chính và 4 ô phụ, giữ thứ tự', () => {
     const { heroes, chips } = splitHomeEcosystemPillars(HOME_ECOSYSTEM_PILLARS);
-    expect(heroes.map((p) => p.id)).toEqual(['retail', 'recycle']);
-    expect(chips.map((p) => p.id)).toEqual(['groupBuy', 'subscription', 'garden', 'rewards']);
+    expect(heroes.map((p) => p.id)).toEqual(['retail', 'garden']);
+    expect(chips.map((p) => p.id)).toEqual(['recycle', 'groupBuy', 'subscription', 'rewards']);
   });
 
   it('Mua xoay vòng nói đúng % của cấu hình; chưa có cấu hình thì không nêu con số nào (không còn 17% viết cứng)', () => {
@@ -286,18 +276,18 @@ describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
     expect(JSON.stringify(HOME_ECOSYSTEM_PILLARS)).not.toContain('17%');
   });
 
-  it('biết chắc không có suất Giờ vàng: bỏ thẻ "Mua lẻ · Giờ vàng", còn một thẻ chính (Đổi rác giãn hết hàng); chưa biết thì giữ', () => {
+  it('biết chắc không có suất Giờ vàng: bỏ thẻ "Mua lẻ · Giờ vàng", còn một thẻ chính (Vườn Xanh giãn hết hàng); chưa biết thì giữ', () => {
     const off = splitHomeEcosystemPillars(resolveHomeEcosystemPillars({ flashLive: false }));
-    expect(off.heroes.map((p) => p.id)).toEqual(['recycle']);
+    expect(off.heroes.map((p) => p.id)).toEqual(['garden']);
     expect(off.chips).toHaveLength(4);
-    expect(splitHomeEcosystemPillars(resolveHomeEcosystemPillars({})).heroes.map((p) => p.id)).toEqual(['retail', 'recycle']);
+    expect(splitHomeEcosystemPillars(resolveHomeEcosystemPillars({})).heroes.map((p) => p.id)).toEqual(['retail', 'garden']);
   });
 
-  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ chính thứ hai đổi sang Yêu cầu của tôi', () => {
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, ô Đổi rác đổi sang Yêu cầu của tôi', () => {
     const paused = resolveHomeEcosystemPillars({ wastePausedWithOpenRequests: true });
     expect(paused).toHaveLength(6);
     expect(paused.filter((p) => p.tier === 'hero')).toHaveLength(2);
-    expect(paused[1]).toMatchObject({
+    expect(paused[2]).toMatchObject({
       id: 'recycle',
       title: 'Yêu cầu của tôi',
       badge: 'Yêu cầu',
@@ -466,9 +456,9 @@ describe('gợi ý nhớ số món Mua lại', () => {
 });
 
 describe('thanh đáy', () => {
-  it('Trang chủ, Danh mục, Vườn Xanh ở giữa, Ưu đãi, Cá nhân', () => {
-    expect(NAV_TAB_SPECS.map((t) => t.label)).toEqual(['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân']);
-    expect(NAV_TAB_SPECS.find((t) => t.center)?.id).toBe('garden');
+  it('Trang chủ, Danh mục, Quét mã ở giữa, Ưu đãi, Cá nhân (W42)', () => {
+    expect(NAV_TAB_SPECS.map((t) => t.label)).toEqual(['Trang chủ', 'Danh mục', 'Quét mã', 'Ưu đãi', 'Cá nhân']);
+    expect(NAV_TAB_SPECS.find((t) => t.center)?.id).toBe('scan');
   });
   it('số đơn đang xử lý nằm ở tab Cá nhân, chấm đỏ ở tab Ưu đãi', () => {
     expect(NAV_TAB_SPECS.find((t) => t.id === 'profile')?.badge).toBe('active-orders');

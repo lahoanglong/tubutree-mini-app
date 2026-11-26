@@ -79,8 +79,10 @@ describe('pointsSummary (tài khoản web)', () => {
     expect(pointsSummary({ pointsBalance: 30, pointsConvertedBalance: 124 })).toEqual({
       standard: 30,
       converted: 124,
+      marketplace: 0,
       total: 154,
       convertedNote: 'trong đó 124 điểm không hết hạn',
+      marketplaceNote: null,
     });
   });
 
@@ -89,7 +91,31 @@ describe('pointsSummary (tài khoản web)', () => {
   });
 
   it('không có điểm quy đổi (phiên cũ chưa có field) → tổng = lô thường, không ghi chú', () => {
-    expect(pointsSummary({ pointsBalance: 42 })).toEqual({ standard: 42, converted: 0, total: 42, convertedNote: null });
+    expect(pointsSummary({ pointsBalance: 42 })).toEqual({ standard: 42, converted: 0, marketplace: 0, total: 42, convertedNote: null, marketplaceNote: null });
+  });
+
+  it('điểm từ đơn sàn (W42): vào tổng, kèm câu chỉ dùng khi mua hàng', () => {
+    expect(pointsSummary({ pointsBalance: 100, pointsMarketplaceBalance: 1250 })).toMatchObject({
+      marketplace: 1250,
+      total: 1350,
+      marketplaceNote: 'trong đó 1.250 điểm từ đơn sàn chỉ dùng khi mua hàng',
+    });
+  });
+});
+
+describe('checkoutPointsOffer với điểm từ đơn sàn (W42)', () => {
+  it('điểm sàn dùng được ở thanh toán, cộng vào usable; lô thường bị khoá không kéo theo điểm sàn', () => {
+    expect(checkoutPointsOffer({ pointsBalance: 500, redeemablePoints: 200, pointsMarketplaceBalance: 80, redeemableMarketplacePoints: 80 }).usable).toBe(280);
+    expect(checkoutPointsOffer({ pointsBalance: 0, pointsMarketplaceBalance: 40 }).usable).toBe(40);
+  });
+
+  it('số âm hoặc rác ở lô sàn → 0', () => {
+    expect(checkoutPointsOffer({ pointsBalance: 10, pointsMarketplaceBalance: -3, redeemableMarketplacePoints: Number.NaN }).usable).toBe(10);
+  });
+
+  it('nhãn khi ô khoá và khi chưa có báo giá tính cả điểm sàn', () => {
+    expect(lockedPointsLabel({ pointsBalance: 10, pointsMarketplaceBalance: 1_000 }, { usable: 0 })).toBe('Bạn đang có 1.010 điểm');
+    expect(idlePointsLabel({ pointsBalance: 0, pointsMarketplaceBalance: 5 })).toBe('Bạn đang có 5 điểm');
   });
 });
 
@@ -193,7 +219,7 @@ const legacyGroup = (n: number) => n.toLocaleString('vi-VN');
 function legacyPointsSummary(u: { pointsBalance: number; pointsConvertedBalance?: number }) {
   const standard = legacyClamp(u.pointsBalance);
   const converted = legacyClamp(u.pointsConvertedBalance);
-  return { standard, converted, total: standard + converted, convertedNote: converted > 0 ? `trong đó ${legacyGroup(converted)} điểm không hết hạn` : null };
+  return { standard, converted, total: standard + converted, convertedNote: converted > 0 ? `trong đó ${legacyGroup(converted)} điểm không hết hạn` : null, marketplace: 0, marketplaceNote: null };
 }
 const CASES: { pointsBalance: number; pointsConvertedBalance?: number }[] = [
   { pointsBalance: 0 },

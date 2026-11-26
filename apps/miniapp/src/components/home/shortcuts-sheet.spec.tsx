@@ -8,7 +8,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 import { homeShortcutSlots } from '@tubutree/app-core/home-layout';
 import { ShortcutsSheet } from './shortcuts-sheet';
 
-const all = homeShortcutSlots({ wasteEnabled: true, claimEnabled: true }).all;
+const all = homeShortcutSlots({ wasteEnabled: true }).all;
 
 describe('ShortcutsSheet', () => {
   beforeEach(() => vi.clearAllMocks());

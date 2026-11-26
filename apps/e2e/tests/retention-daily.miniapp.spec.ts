@@ -48,6 +48,16 @@ async function openGarden(page: Page, api: MockApi): Promise<void> {
   await page.waitForTimeout(600);
 }
 
+/** Chấm "có việc hôm nay" của Vườn Xanh nằm trên thẻ chính Vườn Xanh ở Trang chủ từ W42 (tab giữa thanh đáy là Quét mã). */
+async function openHome(page: Page, api: MockApi): Promise<void> {
+  api.get('/flash-sales/upcoming', []);
+  await page.goto('/');
+  await expect(page.locator('[data-pillar="garden"]')).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => api.callsTo('GET', '/game/daily').length, { timeout: 10_000 }).toBeGreaterThan(0);
+  await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+  await page.waitForTimeout(600);
+}
+
 async function openProfile(page: Page, api: MockApi): Promise<void> {
   await page.goto('/profile');
   await expect(page.getByRole('heading', { name: 'Đơn của tôi' })).toBeVisible({ timeout: 20_000 });
@@ -73,10 +83,6 @@ test.describe('Mini App 360px: cờ tắt giữ nguyên màn như trước', () 
     await expect(page.getByTestId('daily-missions')).toHaveCount(0);
     await expect(page.locator('[data-testid^="daily-row-"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Xem nhiệm vụ một lần/ })).toHaveCount(0);
-    await expect(page.getByTestId('garden-dot')).toHaveCount(0);
-    await expect(page.getByTestId('profile-dot')).toHaveCount(0);
-    await expect(nav(page).getByRole('button', { name: 'Vườn Xanh', exact: true })).toBeVisible();
-    await expect(nav(page).getByRole('button', { name: 'Cá nhân', exact: true })).toBeVisible();
     expect((await horizontalOverflow(page)).ok).toBe(true);
     await shoot(page, 'mini-garden-before', page.getByRole('heading', { name: 'Nhiệm vụ' }));
 
@@ -84,10 +90,14 @@ test.describe('Mini App 360px: cờ tắt giữ nguyên màn như trước', () 
     await expect(page.getByTestId('badge-row')).toHaveCount(0);
     await openSupport(page);
     await expect(page.getByText('Câu chuyện thương hiệu', { exact: true })).toBeVisible();
-    await expect(page.getByTestId('garden-dot')).toHaveCount(0);
     await expect(page.getByTestId('profile-dot')).toHaveCount(0);
+    await expect(nav(page).getByRole('button', { name: 'Cá nhân', exact: true })).toBeVisible();
     expect((await horizontalOverflow(page)).ok).toBe(true);
     await shoot(page, 'mini-profile-before', page.getByRole('region', { name: 'Đơn của tôi' }));
+
+    await openHome(page, api);
+    await expect(page.getByTestId('garden-card-dot')).toHaveCount(0);
+    await expect(page.getByTestId('profile-dot')).toHaveCount(0);
 
     expect(crashed).toEqual([]);
   });
@@ -210,22 +220,23 @@ const DOT_CASES: { name: string; over: Partial<RetentionState>; garden: boolean;
   { name: 'có tin chưa đọc nhưng đang có đơn xử lý: số đơn thắng, không chấm Cá nhân', over: { checkedInToday: true, unread: 5, activeOrders: 2 }, garden: false, profile: false },
 ];
 
-test.describe('Mini App 360px: chấm nhắc thanh đáy khi cờ nhiệm vụ bật', () => {
+test.describe('Mini App 360px: chấm nhắc ở Trang chủ (thẻ Vườn Xanh, tab Cá nhân) khi cờ nhiệm vụ bật', () => {
   for (const c of DOT_CASES) {
     test(c.name, async ({ page, api }) => {
       const { crashed } = await setup(page, api, { dailyEnabled: true, ...c.over });
-      await openGarden(page, api);
+      await openHome(page, api);
       await expect.poll(() => api.callsTo('GET', '/me/summary').length, { timeout: 10_000 }).toBeGreaterThan(0);
       await page.waitForTimeout(400);
 
-      const gardenDot = page.getByTestId('garden-dot');
+      const gardenDot = page.getByTestId('garden-card-dot');
       const profileDot = page.getByTestId('profile-dot');
-      const gardenTab = nav(page).getByRole('button', { name: /^Vườn Xanh/ });
+      const gardenCard = page.locator('[data-pillar="garden"]');
       const profileTab = nav(page).getByRole('button', { name: /^Cá nhân/ });
 
       if (c.garden) {
         await expect(gardenDot).toBeVisible();
-        await expect(gardenTab).toHaveAccessibleName('Vườn Xanh, có việc hôm nay');
+        await expect(gardenCard).toHaveAccessibleName(/^Vườn Xanh, có việc hôm nay\. /);
+        await expect(page.getByTestId('garden-dot')).toHaveCount(0);
         const f = await dotFacts(gardenDot);
         console.log(`DOT_MINI garden ${f.width}x${f.height} animation=${f.animationName}`);
         expect(Math.abs(f.width - 8)).toBeLessThan(0.5);
@@ -233,7 +244,7 @@ test.describe('Mini App 360px: chấm nhắc thanh đáy khi cờ nhiệm vụ b
         expect(f.animationName).toBe('none');
       } else {
         await expect(gardenDot).toHaveCount(0);
-        await expect(gardenTab).toHaveAccessibleName('Vườn Xanh');
+        await expect(gardenCard).not.toHaveAccessibleName(/có việc hôm nay/);
       }
 
       if (c.profile) {
@@ -258,8 +269,13 @@ test.describe('Mini App 360px: không tràn ngang khi mọi cờ bật', () => {
   test('Vườn Xanh (mở cả nhiệm vụ một lần) và Cá nhân vừa khổ 360px, kèm chấm', async ({ page, api }) => {
     const { crashed } = await setup(page, api, { dailyEnabled: true, badgesEnabled: true, checkedInToday: false, unread: 4 });
 
+    await openHome(page, api);
+    await expect(page.getByTestId('garden-card-dot')).toBeVisible();
+    const home = await horizontalOverflow(page);
+    console.log(`OVERFLOW_MINI360 home ${JSON.stringify(home)}`);
+    expect(home.ok, JSON.stringify(home)).toBe(true);
+
     await openGarden(page, api);
-    await expect(page.getByTestId('garden-dot')).toBeVisible();
     await page.getByRole('button', { name: 'Xem nhiệm vụ một lần (2)' }).click();
     await expect(page.getByText('Mời 3 bạn bè')).toBeVisible();
     const garden = await horizontalOverflow(page);

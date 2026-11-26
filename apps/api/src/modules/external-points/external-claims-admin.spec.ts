@@ -12,7 +12,7 @@ import {
   ExternalClaimsAdminController,
 } from './external-claims-admin.controller';
 import { ExternalClaimsController, SubmitExternalClaimDto } from './external-claims.controller';
-import { ExternalClaimsAdminService } from './external-claims-admin.service';
+import { displayOrderPhoneMask, ExternalClaimsAdminService } from './external-claims-admin.service';
 import { closedCreditedWhere, partialRefundWhere } from './external-points-attention';
 
 const proto = ExternalClaimsAdminController.prototype as unknown as Record<string, object>;
@@ -130,7 +130,7 @@ describe('ExternalClaimsAdminService.list: chỉ đọc cột màn hình cần (
     expect(args.select.externalOrder.select).toBeDefined();
     const flat = JSON.stringify(args.select);
     for (const col of heavy) expect(flat).not.toContain(`"${col}"`);
-    expect(args.select.externalOrder.select).toMatchObject({ id: true, pancakeOrderId: true, channel: true, source: true, trackingCode: true, phone: true, goodsValue: true, status: true, deliveredAt: true });
+    expect(args.select.externalOrder.select).toMatchObject({ id: true, pancakeOrderId: true, channel: true, source: true, trackingCode: true, phone: true, phoneMask: true, goodsValue: true, status: true, deliveredAt: true });
   });
 
   it('chi tiết một claim cũng dùng cùng select; dòng trả về giữ nguyên các trường', async () => {
@@ -139,5 +139,69 @@ describe('ExternalClaimsAdminService.list: chỉ đọc cột màn hình cần (
     expect(findUnique.mock.calls[0]![0].include).toBeUndefined();
     expect(JSON.stringify(findUnique.mock.calls[0]![0].select)).not.toContain('lastPayload');
     expect(out).toMatchObject({ id: 'c1', externalOrderId: 'o1', pancakeOrderId: 'P1', maskedCode: expect.any(String), points: 10, state: 'REVIEW', kind: 'SCAN' });
+  });
+});
+
+describe('ExternalClaimsAdminService: SĐT che của sàn và kết luận khớp (W42)', () => {
+  const mkRow = (over: { userId?: string | null; kind?: 'SCAN' | 'PHONE'; phone?: string | null; phoneMask?: string | null }) => ({
+    id: 'c1', externalOrderId: 'o1', userId: over.userId === undefined ? 'u1' : over.userId, kind: over.kind ?? 'SCAN', state: 'REVIEW', points: 10, holdUntil: null,
+    reviewReason: null, voidReason: null, decidedById: null, creditedAt: null, createdAt: new Date('2026-11-01T00:00:00Z'),
+    externalOrder: { id: 'o1', pancakeOrderId: 'P1', channel: 'shopee', source: 'MARKETPLACE', trackingCode: 'SPX123456', phone: over.phone ?? null, phoneMask: over.phoneMask ?? null, goodsValue: 100000, status: 'OPEN', deliveredAt: null },
+  });
+  const detailOf = async (row: ReturnType<typeof mkRow>, userPhone: string | null) => {
+    const prisma = {
+      externalPointsClaim: { findUnique: jest.fn().mockResolvedValue(row) },
+      externalClaimEvent: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findMany: jest.fn().mockResolvedValue(row.userId ? [{ id: row.userId, fullName: 'Lan', phone: userPhone, phoneVerifiedAt: null, createdAt: new Date('2026-01-01T00:00:00Z') }] : []) },
+      order: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    const config = { get: jest.fn().mockResolvedValue(undefined), getMany: jest.fn().mockResolvedValue({}) };
+    return new ExternalClaimsAdminService(prisma as never, config as never, {} as never, {} as never).detail('c1');
+  };
+
+  it('chỉ có mẫu che của sàn: hiện mẫu đó (che lại phần giữa), so khớp theo mẫu', async () => {
+    expect(await detailOf(mkRow({ phoneMask: '098*****26' }), '0981234526')).toMatchObject({ orderPhoneMasked: '098*****26', phoneMatch: 'MATCH' });
+    expect(await detailOf(mkRow({ phoneMask: '098*****26' }), '0981234527')).toMatchObject({ phoneMatch: 'MISMATCH' });
+    expect(await detailOf(mkRow({ phoneMask: '09812345**' }), '0981234526')).toMatchObject({ orderPhoneMasked: '098****5**', phoneMatch: 'NO_DATA' });
+  });
+
+  it('claim PHONE hay chưa có khách: không có kết luận', async () => {
+    expect(await detailOf(mkRow({ kind: 'PHONE', phone: '0981234526' }), '0981234526')).toMatchObject({ phoneMatch: null });
+    expect(await detailOf(mkRow({ userId: null, phoneMask: '098*****26' }), null)).toMatchObject({ phoneMatch: null });
+  });
+});
+
+describe('displayOrderPhoneMask', () => {
+  it('lộ tối đa 3 ký tự đầu và 3 ký tự cuối; ký tự che giữ nguyên; rỗng → null', () => {
+    expect(displayOrderPhoneMask('098*****26')).toBe('098*****26');
+    expect(displayOrderPhoneMask('09812345**')).toBe('098****5**');
+    expect(displayOrderPhoneMask(' 098 •••• 526 ')).toBe('098••••526');
+    expect(displayOrderPhoneMask('')).toBeNull();
+    expect(displayOrderPhoneMask(null)).toBeNull();
+  });
+});
+
+describe('ExternalClaimsAdminService.listAttempts: người khác cùng mã bị từ chối vì SĐT lệch (W42)', () => {
+  it('lượt REJECTED_PHONE_MISMATCH của người khác hiện kèm kết quả để CSKH thấy trước khi gắn', async () => {
+    const now = new Date('2026-11-27T00:00:00Z');
+    const row = { id: 'a1', userId: 'u1', code: 'SPX123456789', result: 'UNMATCHED', externalOrderId: 'o1', note: null, createdAt: new Date('2026-11-20T00:00:00Z') };
+    const other = { code: 'SPX123456789', userId: 'u2', createdAt: new Date('2026-11-21T00:00:00Z'), result: 'REJECTED_PHONE_MISMATCH' };
+    const attemptFindMany = jest.fn().mockResolvedValueOnce([row]).mockResolvedValueOnce([other]);
+    const prisma = {
+      externalClaimAttempt: { findMany: attemptFindMany, count: jest.fn().mockResolvedValue(1) },
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'u1', fullName: 'Lan', phone: '0981234526', phoneVerifiedAt: null, createdAt: now },
+          { id: 'u2', fullName: 'Minh', phone: '0911222333', phoneVerifiedAt: null, createdAt: now },
+        ]),
+      },
+      order: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    const svc = new ExternalClaimsAdminService(prisma as never, {} as never, {} as never, {} as never);
+    const out = await svc.listAttempts(1, 20, now);
+    expect(attemptFindMany.mock.calls[1]![0].where.result).toEqual({ in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH'] });
+    expect(out.data[0]!.otherSubmitters).toEqual([
+      { userId: 'u2', userName: 'Minh', userPhoneMasked: '091****333', createdAt: '2026-11-21T00:00:00.000Z', result: 'REJECTED_PHONE_MISMATCH' },
+    ]);
   });
 });

@@ -7,8 +7,8 @@ import { click, render, type Rendered } from '@/test-utils/dom';
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   cfg: { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } } as Record<string, unknown>,
-  // Route map thật không có đích web cho /points/scan (chỉ Mini App).
-  pending: new Set<string>(['/points/scan']),
+  pending: new Set<string>(),
+  gardenDot: false,
   phase: 'authenticated' as string,
   recycleOpen: false,
   recycleArgs: [] as unknown[],
@@ -29,6 +29,7 @@ vi.mock('@/lib/use-public-config', () => ({
   },
 }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !mocks.pending.has(p) }));
+vi.mock('@/lib/use-engagement-dots', () => ({ useEngagementDots: () => ({ garden: mocks.gardenDot, profile: false, checkInElsewhere: false }) }));
 vi.mock('./earn-sheet', () => ({ EarnSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Kiếm tiền cùng Tubu" /> : null) }));
 
 import { ShortcutGrid } from './shortcut-grid';
@@ -44,7 +45,8 @@ const sheetRows = () => Array.from(allSheet()?.querySelectorAll<HTMLElement>('[r
 
 beforeEach(() => {
   mocks.push.mockReset();
-  mocks.pending = new Set(['/points/scan']);
+  mocks.pending = new Set();
+  mocks.gardenDot = false;
   mocks.phase = 'authenticated';
   mocks.recycleOpen = false;
   mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
@@ -65,26 +67,26 @@ describe('ShortcutGrid web — 2 thẻ chính + 4 ô phụ + lối tắt nhanh (
     expect(cards).toHaveLength(6);
     expect(cards.map((a) => [a.dataset.pillar, a.dataset.tier])).toEqual([
       ['retail', 'hero'],
-      ['recycle', 'hero'],
+      ['garden', 'hero'],
+      ['recycle', 'chip'],
       ['groupBuy', 'chip'],
       ['subscription', 'chip'],
-      ['garden', 'chip'],
       ['rewards', 'chip'],
     ]);
     expect(cards.map((a) => a.getAttribute('href'))).toEqual([
       '/gio-vang',
+      '/vuon-xanh',
       '/doi-rac',
       '/mua-chung',
       '/san-pham?filter=subscription',
-      '/vuon-xanh',
       '/kho-qua',
     ]);
     expect(cards.map((a) => a.querySelector('[data-pillar-title]')?.textContent)).toEqual([
       'Mua lẻ · Giờ vàng',
-      'Đổi rác — Miễn ship đơn sau',
+      'Vườn Xanh',
+      'Đổi rác',
       'Mua chung',
       'Mua xoay vòng',
-      'Vườn Xanh',
       'Kho quà 0đ',
     ]);
     expect(c.querySelectorAll('.tubu-bento-card--hero')).toHaveLength(2);
@@ -92,8 +94,22 @@ describe('ShortcutGrid web — 2 thẻ chính + 4 ô phụ + lối tắt nhanh (
     for (const chip of Array.from(c.querySelectorAll('.tubu-chip'))) {
       expect(chip.querySelector('[data-pillar-sub], [data-pillar-tag]')).toBeNull();
     }
-    expect(c.querySelector('[data-pillar="recycle"]')?.textContent).toContain('Nhận Điểm Xanh');
+    expect(c.querySelector('[data-pillar="garden"] [data-pillar-sub]')).not.toBeNull();
+    expect(c.querySelector('[data-pillar="recycle"]')?.textContent?.trim()).toBe('Đổi rác');
     expect(c.querySelector('[data-pillar="groupBuy"]')?.getAttribute('aria-label')).toBe('Mua chung. Rủ bạn đủ nhóm giảm sâu');
+  });
+
+  it('chấm "có việc hôm nay" của Vườn Xanh nằm trên thẻ chính (W42), nghĩa ở aria-label; không việc thì không chấm', () => {
+    let c = mount();
+    expect(c.querySelector('[data-testid="garden-card-dot"]')).toBeNull();
+    expect(c.querySelector('[data-pillar="garden"]')?.getAttribute('aria-label')).toBeNull();
+    mounted?.unmount();
+    mocks.gardenDot = true;
+    c = mount();
+    const card = c.querySelector('[data-pillar="garden"]')!;
+    expect(card.querySelector('[data-testid="garden-card-dot"]')?.className).toBe('tubu-remind-dot tubu-remind-dot--card');
+    expect(card.getAttribute('aria-label')).toMatch(/^Vườn Xanh, có việc hôm nay\. /);
+    expect(c.querySelectorAll('[data-testid="garden-card-dot"]')).toHaveLength(1);
   });
 
   it('hàng lối tắt nhanh chỉ còn Mã giảm giá, Cộng đồng và nút "Thêm" (Giờ vàng đã là thẻ chính); hộp thoại mọi lối tắt vẫn có Giờ vàng', () => {

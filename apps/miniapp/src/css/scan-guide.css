@@ -1,0 +1,48 @@
+/* Màn Quét mã (tab giữa thanh đáy, W42): hướng dẫn 3 bước gọn (≤ 120px) và đệm đáy chừa thanh đáy. Web có cùng lớp ở components/mini/mini.css.
+ * Toàn bộ màu/cỡ/khoảng cách đi qua token ngữ nghĩa, không hex, không primitive. */
+
+.tubu-scan-page {
+  padding-bottom: calc(76px + var(--safe-bottom));
+}
+
+.tubu-scan-guide {
+  list-style: none;
+  margin: var(--space-gutter) var(--space-gutter) 0;
+  padding: var(--space-inset-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inline-sm);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.tubu-scan-guide__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  min-width: 0;
+}
+
+.tubu-scan-guide__num {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: var(--type-label-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+.tubu-scan-guide__text {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-body-sm-weight);
+}

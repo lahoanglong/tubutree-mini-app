@@ -81,7 +81,7 @@ for (const safe of SAFE_TOPS) {
       expect(round(sortBox.y - (tabsBox.y + 62 - 12))).toBe(0);
     });
 
-    test(`Vườn Xanh: thanh tab dính dưới vùng an toàn, và dưới thanh lùi khi có nút lùi`, async ({ page, api }) => {
+    test(`Vườn Xanh (trang con từ W42, luôn có nút lùi): thanh tab dính ngay dưới thanh lùi`, async ({ page, api }) => {
       mockGame(api);
       await setSafeTop(page, safe);
       await page.goto('/game');
@@ -91,9 +91,7 @@ for (const safe of SAFE_TOPS) {
       await scroller.evaluate((el) => el.scrollTo(0, 5000));
       await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(300);
       const sticky = page.locator('.sticky-below-back');
-      await expect.poll(async () => round((await sticky.boundingBox())!.y), { timeout: 5_000 }).toBe(safe);
-      // Vào trang có `state.from` thì BackButton gắn lớp này lên <body>: thanh tab phải nằm dưới thanh lùi đặc.
-      await page.evaluate(() => document.body.classList.add('with-back-btn'));
+      expect(await page.evaluate(() => document.body.classList.contains('with-back-btn'))).toBe(true);
       await expect.poll(async () => round((await sticky.boundingBox())!.y), { timeout: 5_000 }).toBe(56 + safe);
     });
   });

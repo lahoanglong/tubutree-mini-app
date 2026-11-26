@@ -40,7 +40,8 @@
       { "miniapp": "/wallet", "web": "/tai-khoan/vi-tubu", "private": true },
       { "miniapp": "/rewards", "web": "/kho-qua", "private": false },
       { "miniapp": "/rewards/mine", "web": "/kho-qua/cua-toi", "private": true },
-      { "miniapp": "/cashback", "web": "/hoan-tien", "private": false }
+      { "miniapp": "/cashback", "web": "/hoan-tien", "private": false },
+      { "miniapp": "/points/scan", "web": "/quet-ma", "private": false }
     ]},
     { "lane": "game", "items": [
       { "miniapp": "/game", "web": "/vuon-xanh", "private": false },
@@ -84,9 +85,6 @@
     ]},
     { "lane": "ds", "items": [
       { "miniapp": "/ds-gallery", "web": "/ds-gallery", "private": false }
-    ]},
-    { "lane": "skip", "items": [
-      { "miniapp": "/points/scan", "skip": "Q2: tích điểm đơn sàn chạy trên quyền của Zalo (quét QR bằng camera Zalo, xin SĐT đã xác minh, mời quan tâm OA); ô nhập mã tay cũng đòi SĐT đã xác minh nên không phần nào làm riêng được trên web. Web /uu-dai hiện MiniAppOnlyNotice mở lại đúng màn này trên Zalo" }
     ]}
   ],
   "gaps": [

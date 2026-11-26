@@ -12,8 +12,8 @@ const readSeen = (userId: string | null | undefined) => readSeenCoupons(browserS
 /**
  * Lý do tab "Ưu đãi" có chấm đỏ: chưa điểm danh hôm nay (giữ đến khi điểm danh), hoặc có mã sắp hết hạn mà khách chưa thấy khi mở
  * trang Ưu đãi (`useMarkExpiringSeen`). Dùng chung khoá ['loyalty-checkin'] và ['coupons'] với trang Ưu đãi/Điểm Xanh nên mở trang đó
- * không tốn thêm request. Lỗi hay chưa tải → không chấm. `checkInElsewhere`: nhiệm vụ hằng ngày bật thì chấm Vườn Xanh nhắc điểm danh, tab
- * này chỉ còn lý do mã sắp hết hạn.
+ * không tốn thêm request. Lỗi hay chưa tải → không chấm. `checkInElsewhere`: nhiệm vụ hằng ngày bật và đang ở Trang chủ thì chấm thẻ Vườn
+ * Xanh nhắc điểm danh, tab này chỉ còn lý do mã sắp hết hạn.
  */
 export function useOffersDot(enabled: boolean, checkInElsewhere = false): OffersDotReason | null {
   const authed = useAuthStore((s) => s.status === 'authenticated');

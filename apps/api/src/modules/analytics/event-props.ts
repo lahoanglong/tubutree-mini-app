@@ -5,6 +5,8 @@ import {
   CHECKOUT_STEPS,
   ECO_FACT_KIND_NAMES,
   MATCHER_ENTRIES,
+  MINIAPP_AUTO_OPEN_RESULTS,
+  MINIAPP_SMARTBAR_ACTIONS,
   isShareableSearchTerm,
   ORDER_ZALO_FRIEND_FROM,
   PDP_ACTIONS,
@@ -170,6 +172,9 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   repurchase_due_dismiss: { props: { surface: oneOf(REPURCHASE_DUE_SURFACES), variationId: ID }, required: ['surface'] },
   // Thẻ thành tích ở Sổ tay Xanh và thẻ nhựa đã giảm của đơn: chỉ cách gửi và nơi gửi, không mang mã mời hay mã đơn.
   green_card_shared: { props: { method: oneOf(GREEN_CARD_SHARE_METHODS), surface: oneOf(GREEN_CARD_SHARE_SURFACES) }, required: ['method'] },
+  // Web điện thoại tự mở Zalo Mini App (W42): kết quả và mẫu route của trang khách đang xem, không URL thật, không tham số.
+  miniapp_auto_open: { props: { result: oneOf(MINIAPP_AUTO_OPEN_RESULTS), path: ROUTE }, required: ['result'] },
+  miniapp_smartbar_click: { props: { action: oneOf(MINIAPP_SMARTBAR_ACTIONS), path: ROUTE }, required: ['action'] },
 };
 
 /**

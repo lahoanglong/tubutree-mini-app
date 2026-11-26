@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { Ellipsis } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
 import {
   HOME_QUICK_SHORTCUT_IDS,
   resolveHomeEcosystemPillars,
@@ -12,6 +13,7 @@ import {
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { isRootPath, useSmartNavigate } from '../../lib/smart-nav';
 import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
+import { useEngagementDots } from '../../hooks/use-engagement-dots';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
@@ -28,9 +30,10 @@ export interface ShortcutGridProps {
 }
 
 /**
- * Hệ sinh thái 6 lối vào ở Trang chủ Mini App (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác), hàng 2 bốn ô phụ
- * (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ), rồi hàng lối tắt nhanh.
- * - Dựng tĩnh ngay từ khung hình đầu (CLS = 0, vùng chạm ≥ 44px). Không có Giờ vàng thì thẻ Đổi rác trải hết hàng 1, cùng chiều cao 96.
+ * Hệ sinh thái 6 lối vào ở Trang chủ Mini App (W177, W42): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Vườn Xanh), hàng 2 bốn ô phụ
+ * (Đổi rác, Mua chung, Mua xoay vòng, Kho quà 0đ), rồi hàng lối tắt nhanh.
+ * - Dựng tĩnh ngay từ khung hình đầu (CLS = 0, vùng chạm ≥ 44px). Không có Giờ vàng thì thẻ Vườn Xanh trải hết hàng 1, cùng chiều cao 96.
+ * - Thẻ Vườn Xanh mang chấm "có việc hôm nay" (chưa điểm danh hoặc chưa làm Đố Xanh), trước đây nằm ở tab giữa thanh đáy.
  * - Con số tiết kiệm của Mua xoay vòng chỉ nói khi cấu hình đã về từ máy chủ.
  * - Hàng dưới giữ nhanh Mã giảm giá · Cộng đồng và nút "Thêm" mở hộp thoại mọi lối tắt (Giờ vàng, Đơn hàng, Tích điểm đơn sàn...).
  */
@@ -44,6 +47,8 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
   const authed = useAuthStore((st) => st.status === 'authenticated');
   const wastePaused = cfg.isLoaded && !cfg.waste.enabled;
   const recycleOpenRequests = useRecycleOpenRequests(authed, wastePaused);
+  // Cùng khoá truy vấn với thanh đáy (đang hiện ở Trang chủ) nên không thêm lệnh gọi.
+  const gardenDot = useEngagementDots(true, 0).garden;
 
   const { heroes, chips } = splitHomeEcosystemPillars(
     resolveHomeEcosystemPillars({
@@ -56,7 +61,6 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
   const all = visibleHomeShortcuts({
     recycleOpenRequests,
     wasteEnabled: !cfg.isLoaded || cfg.waste.enabled,
-    claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
     flashLive,
   });
 
@@ -84,12 +88,15 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
     <section aria-label={homeCopy.shortcuts.title} data-testid="shortcut-grid" className="tubu-bento-section">
       <div data-testid="ecosystem-bento-hub" className="tubu-bento-hub">
         <div className="tubu-bento-grid">
-          {heroes.map((p) => (
+          {heroes.map((p) => {
+            const dot = p.id === 'garden' && gardenDot;
+            return (
             <button
               key={p.id}
               type="button"
               data-pillar={p.id}
               data-tier="hero"
+              aria-label={dot ? `${fillBootCopy('home.pillar.garden.dot', { name: p.title })}. ${p.subtitle}` : undefined}
               className="tubu-bento-card tubu-bento-card--hero tubu-press"
               style={heroes.length === 1 ? { gridColumn: '1 / -1' } : undefined}
               onClick={() => {
@@ -100,6 +107,7 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
               <span className="tubu-bento-head">
                 <span aria-hidden="true" className={`tubu-bento-icon${p.tone === 'warm' ? ' tubu-bento-icon--warm' : ''}`}>
                   <Icon icon={PILLAR_ICONS[p.id]} size="sm" tone="current" />
+                  {dot && <span data-testid="garden-card-dot" className="tubu-remind-dot tubu-remind-dot--card" />}
                 </span>
                 <span data-pillar-tag="" className={`tubu-bento-tag${p.tone === 'warm' ? ' tubu-bento-tag--warm' : ''}`}>
                   {p.badge}
@@ -114,7 +122,8 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
                 </span>
               </span>
             </button>
-          ))}
+            );
+          })}
         </div>
         <div className="tubu-chip-row">
           {chips.map((p) => (

@@ -105,6 +105,9 @@ describe('Trang Tích điểm đơn sàn', () => {
     expect(await screen.findByText('Chưa mở')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tích điểm' })).toBeNull();
     expect(mocks.getMyExternalClaims).not.toHaveBeenCalled();
+    // Tab giữa vẫn mở được màn này khi cờ tắt (W42): không hứa tỉ lệ tích cho tính năng chưa mở.
+    expect(screen.queryByTestId('scan-guide')).toBeNull();
+    expect(screen.queryByText(/giá trị đơn thành Điểm Xanh/)).toBeNull();
   });
 
   it('cờ bật: có dải gấp đôi, ô nhập tay và danh sách rỗng', async () => {
@@ -417,15 +420,15 @@ describe('Trang Tích điểm đơn sàn', () => {
       __resetEntrySourceForTest();
     };
 
-    it('lời chào theo sàn và ba bước; nút chính vẫn là quét', async () => {
+    it('lời chào theo sàn; ba bước nằm ở hướng dẫn chung đầu màn (W42), không lặp trong lời chào; nút chính vẫn là quét', async () => {
       openFromCard('src=shopee&card=2611');
       renderPage();
       const welcome = await screen.findByTestId('card-welcome');
       expect(welcome).toHaveTextContent('Cảm ơn bạn đã mua Tubu Tree trên Shopee');
-      expect(welcome).toHaveTextContent('Quét mã trên nhãn dán ngoài hộp');
-      expect(welcome).toHaveTextContent('Nhận Điểm Xanh sau khi đơn giao thành công');
-      expect(welcome).toHaveTextContent('1. Quét mã trên nhãn dán ngoài hộp');
-      expect(welcome).toHaveTextContent('3. Nhận Điểm Xanh');
+      expect(welcome).not.toHaveTextContent('1.');
+      const guide = await screen.findByTestId('scan-guide');
+      expect(guide).toHaveTextContent('Quét mã vận đơn Shopee, TikTok, Lazada');
+      expect(guide.querySelectorAll('li')).toHaveLength(3);
       expect(screen.getByRole('button', { name: 'Quét mã trên nhãn' })).toBeInTheDocument();
     });
 
@@ -505,10 +508,11 @@ describe('Trang Tích điểm đơn sàn', () => {
       expect(await screen.findByText('Tích điểm đơn sàn sắp mở')).toBeInTheDocument();
       expect(screen.getByTestId('claim-soon')).toHaveTextContent('trong vòng 45 ngày kể từ ngày đặt đơn');
       expect(screen.queryByLabelText('Hoặc nhập mã vận đơn')).toBeNull();
+      // Màn quét là tab gốc (W42): sang tab gốc khác thì thay mục lịch sử.
       fireEvent.click(screen.getByRole('button', { name: 'Xem sản phẩm' }));
-      expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+      expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
       fireEvent.click(screen.getByRole('button', { name: 'Về trang chủ' }));
-      expect(mocks.navigate).toHaveBeenLastCalledWith('/');
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/', { replace: true });
     });
 
     it('cờ tắt, vào không qua thẻ: vẫn có lối đi, chữ là "Chưa mở"', async () => {

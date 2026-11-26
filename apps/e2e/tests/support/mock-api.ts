@@ -712,13 +712,17 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   return user;
 }
 
-export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
+/** Cấu hình công khai của Mini App cộng cờ chỉ web đọc (tự mở Mini App trên web điện thoại, W42). */
+export type MockPublicConfig = PublicConfig & { mobileMiniappRedirectEnabled?: boolean };
+
+export function publicConfig(over: Partial<MockPublicConfig> = {}): MockPublicConfig {
   return {
     freeshipThreshold: 200000,
     subscribeDiscountPct: 0.12,
     affiliateWalletMultiplier: 1.5,
     cashbackHoldDays: 30,
     waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
+    mobileMiniappRedirectEnabled: false,
     ...over,
   };
 }

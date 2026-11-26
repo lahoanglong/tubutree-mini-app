@@ -247,17 +247,17 @@ describe('/uu-dai — khung trang và thanh tab', () => {
 });
 
 describe('/uu-dai — tab Săn mã', () => {
-  it('khách đã đăng nhập: thứ tự Banner, Giờ vàng, Nhận mã, Điểm Xanh, dải điểm danh, Tiện ích; không còn thẻ Điểm danh đầy đủ, không ví mã, không Kho quà', async () => {
+  it('khách đã đăng nhập: thứ tự Banner, dòng Vườn Xanh, Giờ vàng, Nhận mã, Điểm Xanh, Tiện ích; không còn thẻ Điểm danh đầy đủ, không ví mã, không Kho quà', async () => {
     state.campaigns = [campaign('a')];
     state.flash = [FLASH_ITEM];
     state.collectable = [OPEN_CODE];
     const c = await mount();
     inOrder([
       c.querySelector('[data-offers-banner]'),
+      region(c, 'Hôm nay bạn chưa điểm danh'),
       region(c, 'Giờ vàng hôm nay'),
       region(c, 'Nhận mã'),
       region(c, 'Điểm Xanh của bạn'),
-      region(c, 'Hôm nay bạn chưa điểm danh'),
       region(c, 'Tiện ích'),
     ]);
     expect(region(c, 'Điểm danh mỗi ngày')).toBeNull();
@@ -267,12 +267,12 @@ describe('/uu-dai — tab Săn mã', () => {
     expect(state.posts).toEqual([]);
   });
 
-  it('từ lg: hàng Điểm Xanh | dải điểm danh hai cột', async () => {
+  it('dòng Vườn Xanh đứng riêng ngay sau banner (W42), hàng Điểm Xanh chỉ còn thẻ điểm', async () => {
     const c = await mount();
     const row = c.querySelector('[data-testid="offers-points-row"]')!;
-    expect(row.className).toContain('lg:grid-cols-2');
     expect(row.contains(region(c, 'Điểm Xanh của bạn'))).toBe(true);
-    expect(row.contains(region(c, 'Hôm nay bạn chưa điểm danh'))).toBe(true);
+    expect(row.contains(region(c, 'Hôm nay bạn chưa điểm danh'))).toBe(false);
+    expect(c.querySelectorAll('[data-testid="offers-garden-row"]')).toHaveLength(1);
   });
 
   it('đang trong hạn giữ hạng: dòng giữ hạng, không vẽ thanh tiến độ lên hạng kế', async () => {
@@ -295,21 +295,21 @@ describe('/uu-dai — tab Săn mã', () => {
     expect(state.push).toHaveBeenCalledWith('/tai-khoan/diem-xanh');
   });
 
-  it('dải điểm danh: chưa điểm danh thì báo "chưa", phụ đề mở tab Vườn Xanh; bấm sang /vuon-xanh bằng replace (tab gốc kế bên), không POST điểm danh', async () => {
+  it('dải điểm danh: chưa điểm danh thì báo "chưa", phụ đề mở Vườn Xanh; bấm sang /vuon-xanh bằng push (trang con từ W42), không POST điểm danh', async () => {
     const c = await mount();
     const strip = region(c, 'Hôm nay bạn chưa điểm danh')!;
     expect(strip.textContent).toContain('Hôm nay bạn chưa điểm danh');
-    expect(strip.textContent).toContain('Mở tab Vườn Xanh');
+    expect(strip.textContent).toContain('Mở Vườn Xanh');
     click(byText(strip, '[role="button"]', /Hôm nay bạn chưa điểm danh/));
-    expect(state.replace).toHaveBeenCalledWith('/vuon-xanh');
-    expect(state.push).not.toHaveBeenCalled();
+    expect(state.push).toHaveBeenCalledWith('/vuon-xanh');
+    expect(state.replace).not.toHaveBeenCalledWith('/vuon-xanh');
     expect(state.posts).toEqual([]);
   });
 
   it('dải điểm danh: đã điểm danh hôm nay thì báo "đã"', async () => {
     state.checkIn = { checkedInToday: true, streakDays: 3, currentCycleDay: 3, rewards: REWARDS };
     const c = await mount();
-    expect(region(c, 'Hôm nay bạn đã điểm danh')!.textContent).toContain('Mở tab Vườn Xanh');
+    expect(region(c, 'Hôm nay bạn đã điểm danh')!.textContent).toContain('Mở Vườn Xanh');
     expect(region(c, 'Hôm nay bạn chưa điểm danh')).toBeNull();
   });
 
@@ -331,22 +331,26 @@ describe('/uu-dai — tab Săn mã', () => {
     for (const label of ['Vườn Xanh', 'Đổi rác lấy quà', 'Kho quà', 'Quà của tôi', 'Tích điểm đơn sàn']) expect(utilities.textContent, label).not.toContain(label);
   });
 
-  it('Tích điểm đơn sàn: cờ bật thì có dòng sau Mua chung, bấm mở thông báo chỉ Mini App, không điều hướng; cờ tắt thì không có', async () => {
+  it('Tích điểm đơn sàn không còn ở Tiện ích kể cả khi cờ bật (W42: tab giữa Quét mã là lối vào duy nhất)', async () => {
     state.config = { waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
     const c = await mount();
     const utilities = region(c, 'Tiện ích')!;
-    const titles = Array.from(utilities.querySelectorAll('[role="button"], button')).map((b) => b.textContent ?? '');
-    const claim = titles.findIndex((t) => t.includes('Tích điểm đơn sàn'));
-    expect(claim).toBeGreaterThan(titles.findIndex((t) => t.includes('Mua chung nhóm')));
-    expect(utilities.textContent).toContain('Quét mã trên phiếu giao hàng');
+    expect(utilities.textContent).not.toContain('Tích điểm đơn sàn');
     expect(utilities.textContent).not.toContain('cần mở Tubu Tree trên Zalo');
-    click(byText(utilities, '[role="button"], button', 'Tích điểm đơn sàn'));
-    await flush(2);
-    expect(utilities.textContent).toContain('cần mở Tubu Tree trên Zalo');
-    expect(state.push).not.toHaveBeenCalled();
-    mounted.pop()!.unmount();
-    state.config = { waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: false } };
-    expect(region(await mount(), 'Tiện ích')!.textContent).not.toContain('Tích điểm đơn sàn');
+    expect(c.querySelector('#claim-notice')).toBeNull();
+  });
+
+  it('khách chưa đăng nhập vẫn thấy dòng Vườn Xanh ngay sau banner; bấm mở /vuon-xanh, không gọi lịch điểm danh', async () => {
+    state.phase = 'guest';
+    state.flash = [FLASH_ITEM];
+    const c = await mount();
+    const row = region(c, 'Vườn Xanh')!;
+    expect(row.getAttribute('data-testid')).toBe('offers-garden-row');
+    expect(row.textContent).toContain('Tưới cây mỗi ngày, nhận quà thật');
+    inOrder([row, region(c, 'Giờ vàng hôm nay')]);
+    click(byText(row, '[role="button"]', /Vườn Xanh/));
+    expect(state.push).toHaveBeenCalledWith('/vuon-xanh');
+    expect(state.calls).not.toContain('/me/daily-check-in');
   });
 
   it('Nhận mã: khách đã đăng nhập không thấy mã đã có trong ví', async () => {

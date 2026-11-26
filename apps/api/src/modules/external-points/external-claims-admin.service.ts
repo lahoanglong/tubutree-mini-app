@@ -25,9 +25,10 @@ import { isSameAsPancakeCreator, phoneVerifiedFresh, STALE_APPROVE_MARK } from '
 import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
 import { evaluateClaimRules, settlePoints } from './external-claim.rules';
-import { advisoryUserLock, type CreatedClaim, ExternalClaimService, rejectionOf, USER_SELECT } from './external-claim.service';
+import { advisoryUserLock, type CreatedClaim, ExternalClaimService, LOCK_COUNTED_RESULTS, rejectionOf, USER_SELECT } from './external-claim.service';
 import { closedCreditedWhere, partialRefundWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
+import { orderPhoneMatch } from './order-phone-match';
 import { claimCodeLabel, claimPoints, maskClaimCode } from './external-points-rate';
 
 /** Lý do REVIEW khi nhân viên gắn tay một đơn sàn có SĐT khác SĐT thành viên. */
@@ -53,9 +54,19 @@ const CLAIM_ROW_SELECT = {
   creditedAt: true,
   createdAt: true,
   externalOrder: {
-    select: { id: true, pancakeOrderId: true, channel: true, source: true, trackingCode: true, phone: true, goodsValue: true, status: true, deliveredAt: true },
+    select: { id: true, pancakeOrderId: true, channel: true, source: true, trackingCode: true, phone: true, phoneMask: true, goodsValue: true, status: true, deliveredAt: true },
   },
 } satisfies Prisma.ExternalPointsClaimSelect;
+
+/**
+ * SĐT đã che sẵn của sàn (`098*****26`, `09812345**`): chỉ để lộ tối đa 3 ký tự đầu và 3 ký tự cuối, cùng mức che của `maskPhoneOrNull`,
+ * để sàn che ít hơn Tubu thì màn admin cũng không lộ thêm số.
+ */
+export function displayOrderPhoneMask(mask: string | null | undefined): string | null {
+  const s = (mask ?? '').replace(/\s+/g, '');
+  if (!s) return null;
+  return [...s].map((ch, i) => (i < 3 || i >= s.length - 3 || !/\d/.test(ch) ? ch : '*')).join('');
+}
 
 interface MemberInfo {
   name: string | null;
@@ -113,7 +124,9 @@ export class ExternalClaimsAdminService {
       userId: c.userId,
       userName: user?.name ?? null,
       userPhoneMasked: maskPhoneOrNull(user?.phone),
-      orderPhoneMasked: maskPhoneOrNull(o.phone),
+      orderPhoneMasked: maskPhoneOrNull(o.phone) ?? displayOrderPhoneMask(o.phoneMask),
+      // Đơn sàn khách tự gửi mã: kết luận đối chiếu SĐT Zalo hiện tại của khách với SĐT (đầy đủ hoặc che) trên đơn (W42).
+      phoneMatch: c.kind === 'SCAN' && c.userId ? orderPhoneMatch(user?.phone, o) : null,
       goodsValue: o.goodsValue,
       points: c.points,
       kind: c.kind,
@@ -214,12 +227,13 @@ export class ExternalClaimsAdminService {
       this.prisma.externalClaimAttempt.count({ where }),
     ]);
     // Người khác cùng gửi mã (lượt NOT_FOUND của họ không nằm trong hàng đợi): hiện ở dòng chờ của người gửi đầu để CSKH biết gắn cho ai.
+    // Lượt bị từ chối vì SĐT lệch (W42) cũng hiện, kèm nhãn: người cầm mã của người khác là dấu hiệu CSKH cần thấy trước khi gắn.
     const since = new Date(now.getTime() - OTHER_SUBMITTER_DAYS * 864e5);
     const others = rows.length
       ? await this.prisma.externalClaimAttempt.findMany({
-          where: { code: { in: [...new Set(rows.map((r) => r.code))] }, result: { in: ['UNMATCHED', 'NOT_FOUND'] }, createdAt: { gte: since } },
+          where: { code: { in: [...new Set(rows.map((r) => r.code))] }, result: { in: [...LOCK_COUNTED_RESULTS] }, createdAt: { gte: since } },
           orderBy: { createdAt: 'desc' },
-          select: { code: true, userId: true, createdAt: true },
+          select: { code: true, userId: true, createdAt: true, result: true },
         })
       : [];
     const users = await this.usersById([...rows.map((r) => r.userId), ...others.map((o) => o.userId)]);
@@ -229,7 +243,13 @@ export class ExternalClaimsAdminService {
       for (const o of others) {
         if (o.code !== r.code || o.userId === r.userId || seen.has(o.userId)) continue;
         seen.add(o.userId);
-        list.push({ userId: o.userId, userName: users.get(o.userId)?.name ?? null, userPhoneMasked: maskPhoneOrNull(users.get(o.userId)?.phone), createdAt: o.createdAt.toISOString() });
+        list.push({
+          userId: o.userId,
+          userName: users.get(o.userId)?.name ?? null,
+          userPhoneMasked: maskPhoneOrNull(users.get(o.userId)?.phone),
+          createdAt: o.createdAt.toISOString(),
+          result: o.result,
+        });
       }
       return list;
     };

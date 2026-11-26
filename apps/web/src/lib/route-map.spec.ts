@@ -189,7 +189,7 @@ describe('miniappRedirects', () => {
 
   it('bỏ dòng hai bên cùng đường dẫn, /product/:slug và dòng skip', () => {
     const sources = list.map((r) => r.source);
-    for (const s of ['/', '/s/:slug', '/brand/:slug', '/admin', '/product/:slug', '/points/scan']) {
+    for (const s of ['/', '/s/:slug', '/brand/:slug', '/admin', '/product/:slug']) {
       expect(sources).not.toContain(s);
     }
   });
@@ -202,6 +202,7 @@ describe('miniappRedirects', () => {
       permanent: false,
     });
     expect(list).toContainEqual({ source: '/order/:code', destination: '/tai-khoan/don-hang/:code', permanent: false });
+    expect(list).toContainEqual({ source: '/points/scan', destination: '/quet-ma', permanent: false });
   });
 
   it('đường tĩnh đứng trước đường động', () => {

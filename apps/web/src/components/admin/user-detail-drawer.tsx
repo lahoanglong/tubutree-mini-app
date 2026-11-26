@@ -18,7 +18,8 @@ import {
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
-import { pointsSummary } from '@/lib/checkout-points';
+import { MARKETPLACE_POINTS_ORDER_ONLY_NOTE } from '@tubutree/shared-types';
+import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
@@ -153,8 +154,11 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
           <dd className="font-medium">{formatVnd(u.walletBalance)}</dd>
           <dt className="text-stone-500">Điểm Xanh</dt>
           <dd>
-            {pts.total}
-            {pts.convertedNote && <span className="text-xs text-stone-500"> ({pts.convertedNote})</span>}
+            {formatCount(pts.total)}
+            <span data-points-lots className="block text-xs text-stone-500">
+              Thường {formatCount(pts.standard)} · Không hết hạn {formatCount(pts.converted)} · Từ đơn sàn {formatCount(pts.marketplace)}
+            </span>
+            {pts.marketplaceNote && <span className="block text-xs text-stone-500">{MARKETPLACE_POINTS_ORDER_ONLY_NOTE}</span>}
           </dd>
           <dt className="text-stone-500">Tham gia</dt>
           <dd>{formatDateTime(u.createdAt)}</dd>

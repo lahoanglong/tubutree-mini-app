@@ -157,17 +157,17 @@ describe('Trung tâm Ưu đãi (tab giữa thanh đáy, ba phân mục)', () => 
       expect(screen.getByRole('link', { name: 'Giữa Thu' })).toHaveAttribute('href', '/campaign/giua-thu');
     });
 
-    it('thứ tự: Banner, Giờ vàng, Nhận mã, Điểm Xanh, dải điểm danh', async () => {
+    it('thứ tự: Banner, dòng Vườn Xanh (W42: lối vào Vườn Xanh ngay đầu Ưu đãi), Giờ vàng, Nhận mã, Điểm Xanh', async () => {
       mocks.campaigns.mockResolvedValue([LIVE_CAMPAIGN]);
       mocks.flash.mockResolvedValue([FLASH_ITEM]);
       mocks.collectable.mockResolvedValue([OPEN_CODE]);
       renderPage();
       const regions = [
         await screen.findByRole('region', { name: 'Chương trình nổi bật' }),
+        await screen.findByRole('region', { name: 'Hôm nay bạn chưa điểm danh' }),
         await screen.findByRole('region', { name: 'Giờ vàng hôm nay' }),
         await screen.findByRole('region', { name: 'Nhận mã' }),
         await screen.findByRole('region', { name: /Điểm Xanh/ }),
-        await screen.findByRole('region', { name: 'Hôm nay bạn chưa điểm danh' }),
       ];
       for (let i = 1; i < regions.length; i++) {
         expect(regions[i - 1]!.compareDocumentPosition(regions[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
@@ -183,12 +183,12 @@ describe('Trung tâm Ưu đãi (tab giữa thanh đáy, ba phân mục)', () => 
       expect(screen.queryByText('Quà của tôi')).toBeNull();
     });
 
-    it('dải điểm danh chỉ báo trạng thái hôm nay và mở tab Vườn Xanh, không gọi POST check-in', async () => {
+    it('dải điểm danh chỉ báo trạng thái hôm nay và mở Vườn Xanh (trang con từ W42), không gọi POST check-in', async () => {
       renderPage();
       const strip = await screen.findByRole('region', { name: 'Hôm nay bạn chưa điểm danh' });
-      expect(within(strip).getByText('Mở tab Vườn Xanh')).toBeInTheDocument();
+      expect(within(strip).getByText('Mở Vườn Xanh')).toBeInTheDocument();
       fireEvent.click(within(strip).getByRole('button'));
-      expect(mocks.navigate).toHaveBeenLastCalledWith('/game', { replace: true });
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
       expect(mocks.postCheckIn).not.toHaveBeenCalled();
     });
 
@@ -199,17 +199,22 @@ describe('Trung tâm Ưu đãi (tab giữa thanh đáy, ba phân mục)', () => 
       expect(screen.queryByRole('region', { name: 'Hôm nay bạn chưa điểm danh' })).toBeNull();
     });
 
-    it('tiện ích: Mua chung nhóm và Tích điểm đơn sàn; cờ tắt thì ẩn Tích điểm đơn sàn', async () => {
-      const first = renderPage();
+    it('tiện ích: Mua chung nhóm; không còn dòng Tích điểm đơn sàn (tab giữa Quét mã đã là lối vào, W42)', async () => {
+      renderPage();
       expect(await screen.findByText('Mua chung nhóm')).toBeInTheDocument();
-      expect(screen.getByText('Tích điểm đơn sàn')).toBeInTheDocument();
+      expect(screen.queryByText('Tích điểm đơn sàn')).toBeNull();
       fireEvent.click(screen.getByText('Mua chung nhóm'));
       expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
-      first.unmount();
-      mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
+    });
+
+    it('khách chưa đăng nhập vẫn thấy dòng Vườn Xanh (không có trạng thái điểm danh), bấm mở Vườn Xanh', async () => {
+      mocks.phase = 'guest';
       renderPage();
-      await screen.findByText('Mua chung nhóm');
-      expect(screen.queryByText('Tích điểm đơn sàn')).toBeNull();
+      const row = await screen.findByTestId('offers-garden-row');
+      expect(row).toHaveTextContent('Vườn Xanh');
+      expect(row).toHaveTextContent('Tưới cây mỗi ngày, nhận quà thật');
+      fireEvent.click(within(row).getByRole('button'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
     });
 
     it('thẻ Điểm Xanh dẫn tới /loyalty; tên đọc chứa hạng và số điểm', async () => {

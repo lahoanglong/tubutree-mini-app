@@ -1114,9 +1114,10 @@ video.review-lightbox__media {
   box-shadow: 0 0 0 2px var(--color-bg-surface);
   pointer-events: none;
 }
-.tubu-remind-dot--center {
-  top: 2px;
-  right: 2px;
+/* Chấm "có việc hôm nay" ở góc biểu tượng thẻ Vườn Xanh của Trang chủ (thẻ chính hàng 1). */
+.tubu-remind-dot--card {
+  top: -3px;
+  right: -3px;
 }
 .tubu-daily-row {
   display: flex;

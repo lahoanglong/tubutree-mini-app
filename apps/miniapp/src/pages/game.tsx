@@ -19,7 +19,7 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage, getLoadErrorMessage, isServerRejection } from '../services/api';
 import { getDailyCheckInStatus, getLoyalty } from '../services/account-api';
 import { shareLink } from '../services/zmp-bridge';
-import { pointsSummary } from '../utils/points-lots';
+import { gardenPoints } from '@tubutree/app-core/points-lots';
 import { dismissGameTutorial, isGameTutorialDismissed } from '../utils/game-tutorial';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { Text } from '../components/ui/text';
@@ -38,6 +38,7 @@ import { EarnWaterSheet, type EarnQuizState } from '../components/game/earn-wate
 import { NewbieGuide } from '../components/game/newbie-guide';
 import { isSameVNDay } from '../components/game/game-utils';
 import { GardenPlots } from '../components/game/garden-plots';
+import { MarketplacePointsNote } from '../components/game/marketplace-points-note';
 import { SeasonPass } from '../components/game/season-pass';
 import { CommunityGoal } from '../components/game/community-goal';
 import { SpeciesCodex } from '../components/game/species-codex';
@@ -89,11 +90,8 @@ export default function GamePage() {
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
   const checkInStatusQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
   const mini = useMiniToday(phase !== 'loading', authed);
-  // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null
-  // để nút vẫn bấm được (API là lưới an toàn).
-  const loyalty = loyaltyQ.data;
-  const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
-  const fundPoints = loyalty ? (loyalty.redeemableTotal ?? pointsSummary(loyalty).total) : null;
+  // Điểm dùng được (luật ở `gardenPoints`); chưa tải được thì null để nút vẫn bấm được (API là lưới an toàn).
+  const { wheel: wheelPoints, fund: fundPoints, marketplaceNote } = gardenPoints(loyaltyQ.data);
 
   const { checkInM, dewM, freezeM, repairM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
     useGameActions({
@@ -131,8 +129,8 @@ export default function GamePage() {
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   const shell = (children: ReactNode) => (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
-      <PageHeader title="Vườn Xanh" back={false} />
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(var(--space-section) + var(--safe-bottom))' }}>
+      <PageHeader title="Vườn Xanh" />
       {children}
     </Page>
   );
@@ -274,6 +272,7 @@ export default function GamePage() {
             onSpin={handleSpin}
             onResult={wheelPrize.onResult}
           />
+          <MarketplacePointsNote note={marketplaceNote} />
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9) */}
           {publicConfig.waste.enabled && (
@@ -325,6 +324,7 @@ export default function GamePage() {
             buyPending={buyTreeM.isPending}
             onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, isServerRejection)}
           />
+          <MarketplacePointsNote note={marketplaceNote} />
 
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}

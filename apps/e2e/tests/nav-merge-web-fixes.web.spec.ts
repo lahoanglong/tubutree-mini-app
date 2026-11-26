@@ -10,14 +10,13 @@ import { mockTourWorld, tourUser } from './support/tour-world';
 /**
  * Wave tubu-nav-merge, nhánh D (web): chân trang không bị đẩy trong tầm nhìn khi nội dung thay khung chờ (CLS ≤ 0,1 ở /mua-chung, /gio-vang, /kho-qua,
  * 390×844 và 1440×900, khách mới bộ nhớ trống, 3 lần lấy trung vị), trang ngắn không có khoảng trắng vô lý trước chân trang, canonical của hai landing,
- * vùng chạm chip ở Trang chủ và link Điều khoản/Bảo mật ở /dang-nhap, chữ ≥ 12px ở /cau-chuyen, bóng gợi ý Vườn Xanh không đè tiêu đề kệ.
+ * vùng chạm chip ở Trang chủ và link Điều khoản/Bảo mật ở /dang-nhap, chữ ≥ 12px ở /cau-chuyen.
  * Dữ liệu trình duyệt mock (API về trễ như PROD để khung chờ hiện); Trang chủ dựng phía máy chủ từ DB e2e đã seed như w182-acceptance.
  */
 const CLS_MAX = 0.1;
 /** API về sau chừng này: đủ để khung chờ vẽ xong rồi mới bị thay, như PROD ở mạng điện thoại (nội dung chính hiện sau FCP ~1,7 giây). */
 const SLOW_MS = 700;
 const RUNS = 3;
-const HINT_KEY = 'tubu_garden_hint_seen';
 
 const later = <T>(value: T, ms = SLOW_MS) => new Promise<T>((resolve) => setTimeout(() => resolve(value), ms));
 
@@ -216,8 +215,8 @@ test.describe('Trang chủ 390px (dữ liệu máy chủ từ DB e2e)', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
   const IMAGE_PNG = solidPng(150, 60, [47, 107, 79]);
 
-  /** Khách vãng lai; `?hint=1` thì bóng gợi ý Vườn Xanh chưa xem (bộ nhớ trống), không thì coi như đã xem để đo Trang chủ yên. */
-  async function openHome(page: Page, api: MockApi, request: APIRequestContext, size: { width: number; height: number }, hint: boolean) {
+  /** Khách vãng lai. */
+  async function openHome(page: Page, api: MockApi, request: APIRequestContext, size: { width: number; height: number }) {
     mockTourWorld(api, tourUser('CUSTOMER'));
     api.get('/config/public', await (await request.get(`${API_ORIGIN}/api/config/public`)).json());
     api.allowUnmocked('GET /auth/me', 'GET /me/summary', 'GET /waste/requests');
@@ -225,74 +224,20 @@ test.describe('Trang chủ 390px (dữ liệu máy chủ từ DB e2e)', () => {
       (url) => url.pathname === '/api/img' || url.pathname.startsWith('/api/public-image/'),
       (route) => route.fulfill({ contentType: 'image/png', body: IMAGE_PNG }),
     );
-    await page.addInitScript((key) => {
-      try {
-        if (location.search.includes('hint=1')) localStorage.removeItem(key);
-        else localStorage.setItem(key, '1');
-      } catch {
-        // không có localStorage
-      }
-    }, HINT_KEY);
     await page.setViewportSize(size);
-    await page.goto(hint ? '/?hint=1' : '/');
+    await page.goto('/');
     await page.evaluate(() => document.fonts.ready.then(() => undefined)).catch(() => {});
   }
 
-  const bubble = (page: Page) => page.locator('nav[aria-label="Thanh điều hướng dưới"] [role="status"]');
-  /** Tiêu đề (h1–h3) nhìn thấy mà bóng đang đè. */
-  const coveredHeadings = (page: Page) =>
-    bubble(page).evaluate((b) => {
-      const box = b.getBoundingClientRect();
-      return Array.from(document.querySelectorAll('h1, h2, h3'))
-        .filter((h) => {
-          const r = h.getBoundingClientRect();
-          return r.width > 1 && r.height > 1 && r.bottom > box.top && r.top < box.bottom && r.right > box.left && r.left < box.right;
-        })
-        .map((h) => (h.textContent ?? '').trim());
-    });
-  const hintSeen = (page: Page) => page.evaluate((key) => localStorage.getItem(key), HINT_KEY);
-
   test('chip Thương hiệu dưới Danh mục: vùng chạm thật ≥ 44×44px (hộp nhìn 36px, ::after của .tubu-hit-44 giãn dọc)', async ({ page, api, request }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ chạm điện thoại');
-    await openHome(page, api, request, { width: 390, height: 844 }, false);
+    await openHome(page, api, request, { width: 390, height: 844 });
     const row = page.locator('[role="region"][aria-label="Thương hiệu"]');
     await row.scrollIntoViewIfNeeded();
     await expect(row.locator('button').first()).toBeVisible();
     const box = await row.locator('button').first().boundingBox();
     console.log(`NAV_MERGE_CHIP visual ${box?.width}x${box?.height}`);
     expect(await probeTapTargets(page, { scope: '[role="region"][aria-label="Thương hiệu"]' })).toEqual([]);
-  });
-
-  test('bóng gợi ý Vườn Xanh ở 390×844 không đè tiêu đề "Bán chạy nhất" (hay tiêu đề nào khác)', async ({ page, api, request }, testInfo) => {
-    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'thanh tab đáy chỉ có dưới md');
-    await openHome(page, api, request, { width: 390, height: 844 }, true);
-    await page.waitForTimeout(2500);
-    if (await bubble(page).isVisible()) expect(await coveredHeadings(page)).toEqual([]);
-  });
-
-  test('bóng gợi ý: chỗ bóng nổi lên có tiêu đề kệ thì chưa hiện, khách cuộn tới chỗ trống thì hiện và không đè tiêu đề', async ({ page, api, request }, testInfo) => {
-    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'thanh tab đáy chỉ có dưới md');
-    // Đo vị trí "Bán chạy nhất" ở khổ thường (bóng coi như đã xem), rồi chọn chiều cao màn để tiêu đề rơi đúng dải bóng nổi
-    // (bóng cách mép trên thanh tab 60px thêm 26px, cao ~44px): đáy màn = tiêu đề + 100px.
-    await openHome(page, api, request, { width: 390, height: 844 }, false);
-    const shelf = page.getByRole('heading', { name: 'Bán chạy nhất' }).filter({ visible: true }).first();
-    await expect(shelf).toBeVisible();
-    const top = (await shelf.boundingBox())!.y;
-    await openHome(page, api, request, { width: 390, height: Math.round(top + 100) }, true);
-    await expect(shelf).toBeVisible();
-    await page.waitForTimeout(2500);
-    await expect(bubble(page)).toHaveCount(0);
-    expect(await hintSeen(page), 'chưa hiện thì chưa đánh dấu đã xem').toBeNull();
-
-    let shown = false;
-    for (let i = 0; i < 8 && !shown; i += 1) {
-      await page.mouse.wheel(0, 140);
-      await page.waitForTimeout(2200);
-      shown = await bubble(page).isVisible();
-      if (shown) expect(await coveredHeadings(page)).toEqual([]);
-    }
-    expect(shown, 'cuộn tới chỗ không có tiêu đề dưới dải bóng thì bóng hiện').toBe(true);
-    expect(await hintSeen(page)).toBe('1');
   });
 });
 

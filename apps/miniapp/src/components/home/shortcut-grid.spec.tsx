@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   cfg: { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } } as Record<string, unknown>,
   openRequests: false,
   recycleHook: vi.fn(),
+  gardenDot: false,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -21,6 +22,7 @@ vi.mock('../../hooks/use-recycle-open-requests', () => ({
 }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../../hooks/use-engagement-dots', () => ({ useEngagementDots: () => ({ garden: mocks.gardenDot, profile: false, checkInElsewhere: false }) }));
 vi.mock('./earn-sheet', () => ({ EarnSheet: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Kiếm tiền cùng Tubu" /> : null) }));
 
 import { recordVisit, resetNavTrail } from '../../lib/smart-nav';
@@ -33,6 +35,7 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     vi.clearAllMocks();
     mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
     mocks.openRequests = false;
+    mocks.gardenDot = false;
   });
 
   it('dựng tĩnh đủ 6 lối vào: hàng 1 hai thẻ chính, hàng 2 bốn ô phụ, và điều hướng đúng route Mini App', () => {
@@ -40,20 +43,21 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     const hub = screen.getByTestId('ecosystem-bento-hub');
     const all = Array.from(hub.querySelectorAll<HTMLButtonElement>('button[data-pillar]'));
     expect(all).toHaveLength(6);
+    // W42: Vườn Xanh rời thanh đáy thành thẻ chính thứ hai, Đổi rác xuống ô phụ.
     expect(all.map((c) => [c.dataset.pillar, c.dataset.tier])).toEqual([
       ['retail', 'hero'],
-      ['recycle', 'hero'],
+      ['garden', 'hero'],
+      ['recycle', 'chip'],
       ['groupBuy', 'chip'],
       ['subscription', 'chip'],
-      ['garden', 'chip'],
       ['rewards', 'chip'],
     ]);
     expect(all.map((c) => c.querySelector('[data-pillar-title]')?.textContent)).toEqual([
       'Mua lẻ · Giờ vàng',
-      'Đổi rác — Miễn ship đơn sau',
+      'Vườn Xanh',
+      'Đổi rác',
       'Mua chung',
       'Mua xoay vòng',
-      'Vườn Xanh',
       'Kho quà 0đ',
     ]);
     expect(container.querySelectorAll('.tubu-bento-card--hero')).toHaveLength(2);
@@ -63,17 +67,18 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
       expect(chip.querySelector('[data-pillar-sub], [data-pillar-tag]')).toBeNull();
     }
 
-    const expectedRoutes = ['/flash-sale', '/recycle', '/group-buy', '/subscriptions', '/game', '/offers?tab=rewards'];
+    const expectedRoutes = ['/flash-sale', '/game', '/recycle', '/group-buy', '/subscriptions', '/offers?tab=rewards'];
     all.forEach((card, idx) => {
       fireEvent.click(card);
       expect(mocks.navigate).toHaveBeenLastCalledWith(expectedRoutes[idx]);
     });
   });
 
-  it('thẻ chính: nêu Điểm Xanh; ô phụ đọc đủ tên và phụ đề cho trình đọc màn hình', () => {
+  it('thẻ chính: Vườn Xanh nêu quà thật; ô phụ đọc đủ tên và phụ đề cho trình đọc màn hình', () => {
     const { container } = render(<ShortcutGrid />);
-    expect(container.querySelector('[data-pillar="recycle"]')?.textContent).toContain('Nhận Điểm Xanh');
+    expect(container.querySelector('[data-pillar="garden"]')?.textContent).toContain('Tưới cây mỗi ngày nhận quà thật');
     expect(container.querySelector('[data-pillar="retail"]')?.textContent).toContain('Giờ vàng');
+    expect(container.querySelector('[data-pillar="recycle"]')?.getAttribute('aria-label')).toBe('Đổi rác. Miễn ship đơn sau, nhận Điểm Xanh');
     expect(container.querySelector('[data-pillar="groupBuy"]')?.getAttribute('aria-label')).toBe('Mua chung. Rủ bạn đủ nhóm giảm sâu');
   });
 
@@ -89,7 +94,7 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
-    expect(rows(dialog)).toHaveLength(10);
+    expect(rows(dialog)).toHaveLength(9);
     fireEvent.click(within(dialog).getByRole('button', { name: /Giờ vàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/flash-sale');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tất cả lối tắt' })).toBeNull());
@@ -108,7 +113,7 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
     const gifts = within(dialog).getByRole('button', { name: /Bộ quà tặng và combo khởi đầu/ });
-    // Đứng sau Đơn hàng, trước Đơn sàn: không chen vào nhóm ưu đãi phía trên.
+    // Đứng ngay sau Đơn hàng: không chen vào nhóm ưu đãi phía trên.
     const names = rows(dialog).map((b) => b.textContent ?? '');
     expect(names.findIndex((t) => t.startsWith('Bộ quà tặng'))).toBe(names.findIndex((t) => t.startsWith('Đơn hàng')) + 1);
     fireEvent.click(gifts);
@@ -137,7 +142,7 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     expect(await screen.findByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
   });
 
-  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ chính thứ hai đổi sang "Yêu cầu của tôi" và dẫn vào /recycle/requests', () => {
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, ô Đổi rác đổi sang "Yêu cầu của tôi" và dẫn vào /recycle/requests', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     mocks.openRequests = true;
     const { container } = render(<ShortcutGrid />);
@@ -176,11 +181,11 @@ describe('ShortcutGrid Mini App — Giờ vàng đã biết và con số tiết 
     mocks.openRequests = false;
   });
 
-  it('flashLive=false (đã biết không có Giờ vàng): bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Đổi rác trải hết hàng 1 và các ô phụ không đổi', () => {
+  it('flashLive=false (đã biết không có Giờ vàng): bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Vườn Xanh trải hết hàng 1 và các ô phụ không đổi', () => {
     const { container } = render(<ShortcutGrid flashLive={false} />);
     expect(container.querySelector('[data-pillar="retail"]')).toBeNull();
     const heroes = Array.from(container.querySelectorAll<HTMLElement>('[data-tier="hero"]'));
-    expect(heroes.map((h) => h.dataset.pillar)).toEqual(['recycle']);
+    expect(heroes.map((h) => h.dataset.pillar)).toEqual(['garden']);
     expect(heroes[0]!.style.gridColumn).toBe('1 / -1');
     expect(container.querySelectorAll('[data-tier="chip"]')).toHaveLength(4);
   });
@@ -198,7 +203,7 @@ describe('ShortcutGrid Mini App — Giờ vàng đã biết và con số tiết 
     for (const flashLive of [true, undefined]) {
       const { container, unmount } = render(<ShortcutGrid flashLive={flashLive} />);
       const heroes = Array.from(container.querySelectorAll<HTMLElement>('[data-tier="hero"]'));
-      expect(heroes.map((h) => h.dataset.pillar)).toEqual(['retail', 'recycle']);
+      expect(heroes.map((h) => h.dataset.pillar)).toEqual(['retail', 'garden']);
       for (const h of heroes) expect(h.style.gridColumn).toBe('');
       unmount();
     }
@@ -220,5 +225,26 @@ describe('ShortcutGrid Mini App — Giờ vàng đã biết và con số tiết 
     mocks.cfg = { isLoaded: true, subscribeDiscountPct: 0, waste: { enabled: true } };
     const zero = render(<ShortcutGrid />);
     expect(label(zero.container)).not.toMatch(/\d+%/);
+  });
+});
+
+describe('ShortcutGrid Mini App — chấm nhắc ở thẻ Vườn Xanh (W42, thay chấm của tab giữa cũ)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
+    mocks.openRequests = false;
+  });
+
+  it('có việc hôm nay: chấm 8px trên biểu tượng thẻ Vườn Xanh, nhãn đọc nói rõ; không có việc thì không chấm, không nhãn thêm', () => {
+    mocks.gardenDot = true;
+    const on = render(<ShortcutGrid />);
+    const card = on.container.querySelector<HTMLElement>('[data-pillar="garden"]')!;
+    expect(within(card).getByTestId('garden-card-dot')).toHaveClass('tubu-remind-dot', 'tubu-remind-dot--card');
+    expect(card.getAttribute('aria-label')).toBe('Vườn Xanh, có việc hôm nay. Tưới cây mỗi ngày nhận quà thật');
+    on.unmount();
+    mocks.gardenDot = false;
+    const off = render(<ShortcutGrid />);
+    expect(off.container.querySelector('[data-testid="garden-card-dot"]')).toBeNull();
+    expect(off.container.querySelector('[data-pillar="garden"]')?.getAttribute('aria-label')).toBeNull();
   });
 });

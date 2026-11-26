@@ -1,11 +1,12 @@
-import { Gift, Home, LayoutGrid, Sprout, User, type LucideIcon } from 'lucide-react';
+import { Gift, Home, LayoutGrid, ScanLine, User, type LucideIcon } from 'lucide-react';
 import { NAV_TAB_SPECS, type NavTabId, type NavTabSpec } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
 
 /**
  * 5 mục gốc của web, cùng nhãn, thứ tự và huy hiệu với `apps/miniapp/src/components/nav-config.ts` (cả hai đọc `NAV_TAB_SPECS`
  * ở app-core); ở đây chỉ gắn biểu tượng và route web (route-map.json). Phương án A: "Ưu đãi" thay "Đơn hàng", đơn nằm ở hàng
- * trạng thái đầu trang Cá nhân. Thanh đáy điện thoại và thanh đầu máy tính cùng đọc từ đây.
+ * trạng thái đầu trang Cá nhân. Tab giữa "Quét mã" (W42) mở `/quet-ma`; Vườn Xanh vẫn ở hàng điều hướng máy tính (`WEB_DESKTOP_NAV`).
+ * Thanh đáy điện thoại và thanh đầu máy tính cùng đọc từ đây.
  */
 export interface WebNavTab extends NavTabSpec {
   path: string;
@@ -15,7 +16,7 @@ export interface WebNavTab extends NavTabSpec {
 const WEB_VISUALS: Record<NavTabId, { path: string; Icon: LucideIcon }> = {
   home: { path: '/', Icon: Home },
   browse: { path: '/san-pham', Icon: LayoutGrid },
-  garden: { path: '/vuon-xanh', Icon: Sprout },
+  scan: { path: '/quet-ma', Icon: ScanLine },
   offers: { path: '/uu-dai', Icon: Gift },
   profile: { path: '/tai-khoan', Icon: User },
 };

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 
 /**
  * Thứ bậc lối vào Trang chủ (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác), hàng 2 bốn ô phụ (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ).
- * Không có suất Giờ vàng nào thì thẻ "Mua lẻ · Giờ vàng" bị bỏ: `heroes: 1` (thẻ Đổi rác trải hết hàng 1).
+ * Không có suất Giờ vàng nào thì thẻ "Mua lẻ · Giờ vàng" bị bỏ: `heroes: 1` (thẻ Vườn Xanh trải hết hàng 1).
  * Đo hình học thật trên trình duyệt; trả về danh sách lỗi (rỗng = đúng). Dùng chung cho Mini App (375/360/320) và web điện thoại.
  */
 export async function homeHierarchyProblems(page: Page, { heroes: heroCount = 2 }: { heroes?: 1 | 2 } = {}): Promise<string[]> {

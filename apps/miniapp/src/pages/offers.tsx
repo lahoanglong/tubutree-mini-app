@@ -2,7 +2,7 @@ import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-tier-copy';
 import { lazy, Suspense, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Leaf, Recycle, ScanLine, Users, type LucideIcon } from 'lucide-react';
+import { Leaf, Recycle, Users, type LucideIcon } from 'lucide-react';
 import { mineRows } from '@tubutree/app-core/commerce/voucher-center';
 import {
   OFFERS_CODES_PARAM,
@@ -117,7 +117,6 @@ export default function OffersPage() {
 
   const utilities: { icon: LucideIcon; title: string; subtitle: string; to: string; show: boolean }[] = [
     { icon: Users, title: 'Mua chung nhóm', subtitle: homeCopy.offers.groupBuyHint, to: '/group-buy', show: true },
-    { icon: ScanLine, title: 'Tích điểm đơn sàn', subtitle: homeCopy.offers.claimHint, to: '/points/scan', show: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true },
   ];
   const shownUtilities = utilities.filter((s) => s.show);
 
@@ -128,6 +127,8 @@ export default function OffersPage() {
       <>
         {/* Khách chưa đăng nhập là khách mới; đã đăng nhập mà máy chưa nhớ loại thì chưa biết (chỉ thấy chiến dịch cho mọi người). */}
         <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : 'new'} />
+        {/* Lối vào Vườn Xanh nổi ngay dưới banner cho mọi khách (W42: Vườn Xanh không còn là tab giữa thanh đáy). */}
+        <OffersCheckInStrip authed={authed} showGuest onOpenGarden={() => go('/game')} />
         <OffersFlash />
         <OffersCollect wallet={couponsQ} openAll={offersCodesOpen(query.get(OFFERS_CODES_PARAM))} />
         {phase === 'guest' && <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={blocked ?? fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />}
@@ -135,7 +136,6 @@ export default function OffersPage() {
           <>
             <GuestLinkCard title={homeCopy.offers.guestTitle} body={homeCopy.offers.guestBody} cta={homeCopy.profile.guestCta} />
             <OffersPointsStrip loyalty={loyaltyQ} />
-            <OffersCheckInStrip authed={authed} onOpenGarden={() => go('/game')} />
           </>
         )}
         {(authed || phase === 'guest') && shownUtilities.length > 0 && (

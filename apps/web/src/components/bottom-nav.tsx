@@ -10,7 +10,6 @@ import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useOffersDot } from '@/lib/use-offers-dot';
 import { useEngagementDots } from '@/lib/use-engagement-dots';
-import { GardenHintBubble } from './garden-hint-bubble';
 import { CountBadge } from './mini/badge';
 import { useShellPathname } from '@/lib/shell-pathname';
 
@@ -40,31 +39,31 @@ export default function BottomNav() {
   });
   const activeOrders = activeQ.data ?? 0;
   const reminders = useEngagementDots(isRoot, activeOrders);
-  const offersDot = useOffersDot(isRoot && tabs.some((t) => t.badge === 'offers-dot'), reminders.checkInElsewhere);
+  // Lý do "chưa điểm danh" chỉ nhường cho chấm thẻ Vườn Xanh ở Trang chủ (W42); tab gốc khác không có chấm đó nên Ưu đãi giữ lý do này.
+  const offersDot = useOffersDot(isRoot && tabs.some((t) => t.badge === 'offers-dot'), reminders.checkInElsewhere && pathname === '/');
   if (!isRoot) return null;
 
   return (
     <div data-bottom-nav className="md:hidden">
-      {/* Chừa cả phần nút Vườn Xanh nhô 22px trên thanh: cuộn hết trang thì dòng chữ cuối của chân trang không nằm dưới nút. */}
+      {/* Chừa cả phần nút Quét mã nhô 22px trên thanh: cuộn hết trang thì dòng chữ cuối của chân trang không nằm dưới nút. */}
       <div aria-hidden="true" data-testid="bottom-nav-spacer" style={{ height: 'calc(60px + 22px + env(safe-area-inset-bottom, 0px))' }} />
       <nav
         aria-label="Thanh điều hướng dưới"
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch bg-stone-0 shadow-nav"
         style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <GardenHintBubble onGardenTab={pathname === '/vuon-xanh'} />
         {tabs.map((t) => {
           const active = pathname === t.path;
           const count = t.badge === 'active-orders' ? activeOrders : 0;
           const dot = t.badge === 'offers-dot' && offersDot !== null;
-          const remind = (t.center === true && reminders.garden) || (t.badge === 'active-orders' && reminders.profile);
+          const remind = t.badge === 'active-orders' && reminders.profile;
           const label =
             count > 0
               ? `${t.label}, ${count} đơn đang xử lý`
               : dot
                 ? `${t.label}, có việc cần làm`
                 : remind
-                  ? fillCopy(t.center ? 'nav.gardenDot' : 'nav.profileDot', { name: t.label })
+                  ? fillCopy('nav.profileDot', { name: t.label })
                   : t.label;
           return (
             <Link
@@ -89,7 +88,6 @@ export default function BottomNav() {
                     className="absolute left-1/2 top-[-22px] grid h-[54px] w-[54px] -translate-x-1/2 place-items-center rounded-full border-[3px] border-stone-0 bg-forest-600 text-stone-0 shadow-card"
                   >
                     <t.Icon className="h-6 w-6" />
-                    {remind && <RemindDot testId="garden-dot" center />}
                   </span>
                 </>
               ) : (
@@ -115,7 +113,7 @@ export default function BottomNav() {
   );
 }
 
-/** Chấm nhắc 8px của nhiệm vụ hằng ngày (Vườn Xanh, Cá nhân): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
-function RemindDot({ testId, center = false }: { testId: string; center?: boolean }) {
-  return <span data-testid={testId} aria-hidden="true" className={center ? 'tubu-remind-dot tubu-remind-dot--center' : 'tubu-remind-dot'} />;
+/** Chấm nhắc 8px của tab Cá nhân (thông báo chưa đọc): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
+function RemindDot({ testId }: { testId: string }) {
+  return <span data-testid={testId} aria-hidden="true" className="tubu-remind-dot" />;
 }

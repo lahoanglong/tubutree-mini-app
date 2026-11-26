@@ -85,8 +85,13 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
 
       const welcome = page.getByTestId('card-welcome');
       await expect(welcome).toContainText('Cảm ơn bạn đã mua Tubu Tree trên Shopee', { timeout: 15_000 });
-      await expect(welcome).toContainText('1. Quét mã trên nhãn dán ngoài hộp');
-      await expect(welcome).toContainText('3. Nhận Điểm Xanh');
+      // Ba bước nằm ở hướng dẫn chung đầu màn (W42), gọn dưới 120px; lời chào không lặp lại.
+      const guide = page.getByTestId('scan-guide');
+      await expect(guide.locator('li')).toHaveCount(3);
+      await expect(guide).toContainText('Quét mã vận đơn Shopee, TikTok, Lazada');
+      await expect(guide).toContainText('Tích 1% giá trị đơn thành Điểm Xanh');
+      expect((await guide.boundingBox())!.height).toBeLessThanOrEqual(120);
+      await expect(welcome).not.toContainText('1. ');
       const scan = page.getByRole('button', { name: 'Quét mã trên nhãn' });
       await expect(scan).toBeVisible();
       const [scanBox, submitBox] = await Promise.all([scan.boundingBox(), page.getByRole('button', { name: 'Tích điểm' }).boundingBox()]);

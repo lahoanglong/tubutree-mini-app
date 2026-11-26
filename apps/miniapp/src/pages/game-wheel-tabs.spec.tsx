@@ -144,7 +144,8 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
     expect(screen.getByText('GAME20000-ABCDE-1234')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
     await advance(500);
-    expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
+    // Vườn Xanh là trang con từ W42: sang Danh mục là đẩy trang mới.
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse');
     expect(screen.queryByText('GAME20000-ABCDE-1234')).not.toBeInTheDocument();
   });
 

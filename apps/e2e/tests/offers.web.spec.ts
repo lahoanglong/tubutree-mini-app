@@ -168,12 +168,12 @@ test.describe('Web khách: Ưu đãi, đã đăng nhập', () => {
     const strip = page.getByRole('region', { name: STRIP_TODO, exact: true });
     await expect(strip).toBeVisible();
     await expect(anyStrip(page)).toHaveCount(1);
-    await expect(strip.getByText('Mở tab Vườn Xanh')).toBeVisible();
+    await expect(strip.getByText('Mở Vườn Xanh')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Điểm danh', exact: true })).toHaveCount(0);
     const length = await page.evaluate(() => window.history.length);
     await strip.getByRole('button').click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/vuon-xanh');
-    expect(await page.evaluate(() => window.history.length), 'sang tab gốc kế bên phải thay mục hiện tại, không thêm mục lịch sử').toBe(length);
+    expect(await page.evaluate(() => window.history.length), 'Vườn Xanh là trang con từ W42: thêm một mục lịch sử để nút quay lại về Ưu đãi').toBe(length + 1);
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(0);
   });
 });

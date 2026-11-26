@@ -115,7 +115,8 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     expect(screen.getByText('Dành cho đơn đầu tiên của bạn tại Tubu Tree.')).toBeInTheDocument();
     await waitFor(() => expect(mocks.storage[PENDING_CLAIM_KEY]).toBeUndefined());
     fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+    // /points/scan là tab gốc (Quét mã, W42): sang tab gốc khác thì thay mục lịch sử, không chồng.
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
   });
 
   it('trên /points/scan: nút chính là "Tích điểm đơn này" (đóng sheet, không đi mua sắm); "Xem ưu đãi" mới đi mua sắm', async () => {
@@ -160,7 +161,8 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     setAuth(REAL);
     renderGate();
     fireEvent.click(await screen.findByRole('button', { name: 'Xem ưu đãi' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+    // /points/scan là tab gốc (Quét mã, W42): sang tab gốc khác thì thay mục lịch sử, không chồng.
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
   });
 
   it('trên /points/scan: khách cũ gặp thẻ "chỉ khách mới" thì không mở sheet lỗi, để lại ghi chú nhẹ cho màn tích điểm', async () => {

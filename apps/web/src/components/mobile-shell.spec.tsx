@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -28,8 +27,6 @@ import BackLink from './back-link';
 import BackButton from './mini/back-button';
 import { PageHeader } from './ui/page-header';
 import { HomeHeader } from './home/home-header';
-import { GARDEN_HINT_AUTO_HIDE_MS, GARDEN_HINT_DELAY_MS, GardenHintBubble } from './garden-hint-bubble';
-import { GARDEN_HINT_KEY } from './garden-hint';
 
 let mounted: Rendered[] = [];
 const mount = (ui: React.ReactElement) => {
@@ -158,109 +155,6 @@ describe('HomeHeader (đầu Trang chủ ở điện thoại)', () => {
     expect(container.querySelector('a[href="/tai-khoan/thong-bao"]')!.getAttribute('aria-label')).toBe('Thông báo');
     expect(container.querySelector('[data-testid="count-badge"]')).toBeNull();
     expect(container.querySelector('a[href="/gio-hang"]')).not.toBeNull();
-  });
-});
-
-describe('GardenHintBubble', () => {
-  const settle = async () => {
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, GARDEN_HINT_DELAY_MS + 50));
-    });
-  };
-
-  it('hiện một lần: đánh dấu đã xem lúc hiện, lần sau không hiện lại', async () => {
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    expect(a.container.querySelector('[role="status"]')).toBeNull();
-    await settle();
-    expect(a.container.querySelector('[role="status"]')!.textContent).toContain('Trồng cây mỗi ngày, nhận quà thật');
-    expect(localStorage.getItem(GARDEN_HINT_KEY)).toBe('1');
-    const b = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    expect(b.container.querySelector('[role="status"]')).toBeNull();
-  });
-
-  it('bấm vào bóng mở Vườn Xanh (liên kết thật) và tắt bóng', async () => {
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    const link = a.container.querySelector('[role="status"] a')!;
-    expect(link.getAttribute('href')).toBe('/vuon-xanh');
-    click(a.container.querySelector('[role="status"]'));
-    expect(a.container.querySelector('[role="status"]')).toBeNull();
-    expect(mocks.push).toHaveBeenCalledWith('/vuon-xanh');
-  });
-
-  it('bấm vào phần đệm của bóng (không trúng chữ) cũng mở Vườn Xanh, giống Mini App', async () => {
-    mocks.push.mockClear();
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    click(a.container.querySelector('[role="status"]'));
-    expect(mocks.push).toHaveBeenCalledTimes(1);
-    expect(mocks.push).toHaveBeenCalledWith('/vuon-xanh');
-  });
-
-  it('bấm đúng chữ không đẩy trang hai lần (Link tự điều hướng)', async () => {
-    mocks.push.mockClear();
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    click(a.container.querySelector('[role="status"] a'));
-    expect(mocks.push).not.toHaveBeenCalled();
-  });
-
-  it('cao ít nhất 44px để chạm tắt được (D6-16)', async () => {
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    const bubble = a.container.querySelector<HTMLElement>('[role="status"]')!;
-    expect(Number.parseFloat(bubble.style.minHeight)).toBeGreaterThanOrEqual(44);
-  });
-
-  it('tự tắt sau 5 giây để không che nội dung phía sau thanh tab (D6-16)', async () => {
-    vi.useFakeTimers();
-    try {
-      const a = mount(<GardenHintBubble onGardenTab={false} />);
-      act(() => {
-        vi.advanceTimersByTime(GARDEN_HINT_DELAY_MS + 10);
-      });
-      expect(a.container.querySelector('[role="status"]')).not.toBeNull();
-      act(() => {
-        vi.advanceTimersByTime(GARDEN_HINT_AUTO_HIDE_MS - 1);
-      });
-      expect(a.container.querySelector('[role="status"]')).not.toBeNull();
-      act(() => {
-        vi.advanceTimersByTime(1);
-      });
-      expect(a.container.querySelector('[role="status"]')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('khách cuộn trang thì bóng tắt ngay', async () => {
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    expect(a.container.querySelector('[role="status"]')).not.toBeNull();
-    act(() => {
-      document.dispatchEvent(new Event('scroll'));
-    });
-    expect(a.container.querySelector('[role="status"]')).toBeNull();
-  });
-
-  it('có lớp phủ đang mở thì chưa hiện và chưa đánh dấu đã xem', async () => {
-    const overlay = document.createElement('div');
-    overlay.setAttribute('role', 'dialog');
-    overlay.setAttribute('aria-modal', 'true');
-    document.body.appendChild(overlay);
-    const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await settle();
-    expect(a.container.querySelector('[role="status"]')).toBeNull();
-    expect(localStorage.getItem(GARDEN_HINT_KEY)).toBeNull();
-    overlay.remove();
-  });
-
-  it('đang ở tab Vườn Xanh thì không hiện và đánh dấu đã xem', async () => {
-    const a = mount(<GardenHintBubble onGardenTab />);
-    await flush();
-    expect(a.container.querySelector('[role="status"]')).toBeNull();
-    expect(localStorage.getItem(GARDEN_HINT_KEY)).toBe('1');
   });
 });
 
