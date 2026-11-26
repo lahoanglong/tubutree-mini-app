@@ -333,3 +333,19 @@ describe('GeoPicker — "Thử lại" khi tải tỉnh/phường lỗi (kiểm h
     expect(retries()).toHaveLength(0);
   });
 });
+
+describe('GeoPicker — provinceLocked (khách sửa đơn trong tỉnh của đơn, tubu-w39-03)', () => {
+  it('không vẽ ô Tỉnh, không tải danh sách tỉnh; Phường/Xã của tỉnh đơn chọn được và giữ mã tỉnh', async () => {
+    const api = mockFetch({ '/geo/provinces': { body: [] }, '/geo/communes': { body: [{ code: 'c9', name: 'Phường Ba Đình' }] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const onChange = vi.fn();
+    const { container } = mount(
+      <GeoPicker provinceLocked value={{ province: 'Hà Nội', provinceCode: '84_VN01', ward: '', wardCode: '' }} onChange={onChange} />,
+    );
+    await flush();
+    expect(selectByLabel(container, 'Tỉnh/Thành phố')).toBeNull();
+    expect(api.calls.some((c) => c.url.includes('/geo/provinces'))).toBe(false);
+    chooseGeo(container, 'Phường/Xã', 'Phường Ba Đình');
+    expect(onChange).toHaveBeenCalledWith({ province: 'Hà Nội', provinceCode: '84_VN01', ward: 'Phường Ba Đình', wardCode: 'c9' });
+  });
+});

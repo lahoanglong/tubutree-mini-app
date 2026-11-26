@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -10,6 +10,8 @@ import { OrderCountsService } from './order-counts.service';
 import { OrderReturnsService } from './order-returns.service';
 import { CustomerRefundsService } from './customer-refunds.service';
 import { OrderCodSwitchService } from './order-cod-switch.service';
+import { OrderCustomerEditService } from './order-customer-edit.service';
+import { EditOrderDeliveryDto } from './dto/order-edit.dto';
 
 export class MyRefundsQuery {
   @IsOptional() @IsString() @MaxLength(64) orderId?: string;
@@ -23,6 +25,7 @@ export class OrdersController {
     private readonly refunds: CustomerRefundsService,
     private readonly counts: OrderCountsService,
     private readonly codSwitch: OrderCodSwitchService,
+    private readonly customerEdit: OrderCustomerEditService,
   ) {}
 
   @Get()
@@ -81,6 +84,16 @@ export class OrdersController {
   @HttpCode(200)
   switchToCod(@CurrentUser('sub') userId: string, @Param('code') code: string) {
     return this.codSwitch.switchForOwner(userId, code);
+  }
+
+  /**
+   * Chủ đơn tự sửa người nhận, SĐT, phường/xã, số nhà (cùng tỉnh) và ghi chú trước khi đóng gói (cờ `orders.customer_self_edit_enabled`). Không sửa
+   * được: 409 ORDER_EDIT_REFUSED (khác tỉnh: 400). Đơn của người khác: 404.
+   */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Patch(':code/delivery')
+  editDelivery(@CurrentUser('sub') userId: string, @Param('code') code: string, @Body() dto: EditOrderDeliveryDto) {
+    return this.customerEdit.editForOwner(userId, code, { address: dto?.address, note: dto?.note });
   }
 
   @Post(':code/repurchase')

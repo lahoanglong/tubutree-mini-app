@@ -216,6 +216,25 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Tin nhắc qua Zalo gửi như trước, không giới hạn số tin mỗi ngày (vẫn giữ trần 2 tin khuyến mãi mỗi tháng).',
   },
   {
+    key: 'notify.order_email_fallback_enabled',
+    label: 'Email xác nhận đơn khi Zalo không tới',
+    description:
+      'Khi tin Zalo đặt đơn / đã nhận tiền không tới khách (chưa kết bạn, chặn người lạ, hết lượt, MSS lỗi) và không có tin ZNS nào đi, gửi một email xác nhận đơn tới email tài khoản hoặc email xuất hoá đơn VAT. Tối đa một email mỗi đơn, dùng SMTP của email cảnh báo.',
+    fallback: false,
+    onWarning: 'Chỉ bật khi email cảnh báo đang gửi được (Sức khoẻ hệ thống). Khách đã nhận tin Zalo của đơn không bao giờ nhận thêm email.',
+    offWarning: 'Khách không nhận được tin Zalo chỉ còn thông báo trong app (và ZNS khi có mẫu được duyệt).',
+  },
+  {
+    key: 'orders.customer_self_edit_enabled',
+    label: 'Khách tự sửa địa chỉ và ghi chú trước khi đóng gói',
+    description:
+      'Chi tiết đơn (Mini App và web) có nút "Sửa" ở khối Địa chỉ nhận hàng: khách đăng nhập đổi người nhận, SĐT, phường/xã, số nhà trong cùng tỉnh và ghi chú, không đổi tiền hàng hay phí giao. Đơn vãng lai, đơn CTV đặt hộ, đại lý, gian hàng tự giao và đơn kèm thu gom không có nút.',
+    fallback: false,
+    onWarning:
+      'Khách đăng nhập sửa được người nhận, SĐT, phường/xã, số nhà (cùng tỉnh) và ghi chú khi đơn còn Chờ thanh toán/Đã xác nhận, tối đa 3 lần. Đơn đã lên kho thì Tubu hỏi Pancake trước và sửa đơn Pancake theo; lỗi thì vào Cần xử lý Pancake.',
+    offWarning: 'Khách cần nhắn Zalo OA hoặc gọi hotline để đổi địa chỉ.',
+  },
+  {
     key: 'eco.product_badges_enabled',
     label: 'Nhãn xanh có nguồn trên thẻ và trang sản phẩm',
     description:

@@ -11,6 +11,8 @@ export const ATTENTION_CANCEL_PENDING = 'Đã huỷ ở Tubu nhưng CHƯA huỷ 
 export const ATTENTION_PAYMENT_PENDING = 'Chưa báo được "đã thanh toán, không thu COD" sang Pancake';
 /** Khách đã đổi đơn chuyển khoản sang COD mà đơn Pancake còn ghi "chờ chuyển khoản, chưa giao": kho không giao tới khi sửa tay. */
 export const ATTENTION_COD_SWITCH_PENDING = 'Khách đã đổi sang COD nhưng đơn Pancake còn ghi "chờ chuyển khoản"';
+/** Khách đã tự sửa địa chỉ/ghi chú mà đơn Pancake còn thông tin cũ (PUT lỗi hoặc đọc lại thấy lệch): kho sửa tay trước khi giao. */
+export const ATTENTION_CUSTOMER_EDIT_PENDING = 'Khách đã sửa địa chỉ/ghi chú nhưng đơn Pancake còn thông tin cũ';
 /** Đơn đã đổi sang COD, hàng đã rời kho, rồi Pancake ghi nhận tiền chuyển khoản: có thể khách trả hai lần (chuyển khoản + COD). */
 export const ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER = 'Đơn đã đổi sang COD và đã giao vận chuyển nhưng khách vẫn chuyển khoản';
 /**

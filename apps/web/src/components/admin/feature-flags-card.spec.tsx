@@ -41,7 +41,7 @@ describe('FeatureFlagsCard', () => {
     expect(container.querySelector('[data-flag="chat.enabled"]')!.textContent).toContain('Đang bật');
     expect(sw(container, 'Đổi rác lấy quà').getAttribute('aria-checked')).toBe('false');
     expect(sw(container, 'Bắt duyệt gian hàng CTV trước khi hiện').getAttribute('aria-checked')).toBe('true');
-    for (const k of ['loyalty.marketplace_claim_enabled', 'pancake.external_lookup_enabled', 'pancake.external_poll_enabled', 'loyalty.chat_order_points_enabled', 'loyalty.pos_credit_enabled', 'waste.enabled', 'chat.enabled', 'storefront.require_approval', 'community.public_preview']) {
+    for (const k of ['loyalty.marketplace_claim_enabled', 'pancake.external_lookup_enabled', 'pancake.external_poll_enabled', 'loyalty.chat_order_points_enabled', 'loyalty.pos_credit_enabled', 'waste.enabled', 'chat.enabled', 'storefront.require_approval', 'community.public_preview', 'notify.order_email_fallback_enabled', 'orders.customer_self_edit_enabled']) {
       expect(FEATURE_FLAGS.some((f) => f.key === k)).toBe(true);
     }
   });

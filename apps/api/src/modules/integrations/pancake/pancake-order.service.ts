@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
@@ -40,8 +41,17 @@ import {
   pancakeOrderIdOf,
 } from './pancake-outbound';
 import { CRON_TZ } from '../../../common/cron-tz';
-import { enqueuePancakeCancel, enqueuePancakeCodSwitch, enqueuePancakePayment, enqueuePancakePush, PANCAKE_JOB_PUSH, removeFailedPancakePush } from './pancake-queue';
+import {
+  enqueuePancakeCancel,
+  enqueuePancakeCodSwitch,
+  enqueuePancakeCustomerEdit,
+  enqueuePancakePayment,
+  enqueuePancakePush,
+  PANCAKE_JOB_PUSH,
+  removeFailedPancakePush,
+} from './pancake-queue';
 import { switchedFromTransfer } from '../../orders/cod-switch';
+import { orderEditHistoryWhere, snapshotOf } from '../../orders/order-customer-edit';
 import { classifyPushError, isPushFailureSettled, keepsPriorKind, kindAfterFailure, PUSH_ERROR_KIND, PUSH_RETRY, storedErrorText, type PushErrorKind } from './pancake-push-error';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 import {
@@ -55,6 +65,7 @@ import {
 import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_COD_SWITCH_PENDING,
+  ATTENTION_CUSTOMER_EDIT_PENDING,
   ATTENTION_PAYMENT_PENDING,
   ATTENTION_PUSH_FAILED,
   ATTENTION_PUSH_RETRYING,
@@ -133,6 +144,41 @@ export function sendWindowOpenWhere(at: Date = new Date()): Prisma.OrderWhereInp
   return {
     OR: [{ pancakePushClaimedAt: null }, { pancakePushClaimedAt: { lt: new Date(at.getTime() - PancakeOrderService.SEND_SETTLE_MS) } }],
   };
+}
+
+/**
+ * Trạng thái Pancake còn trước đóng gói (pancake-status.map.ts): Mới, Chờ xác nhận, Chờ hàng, Đã đặt hàng, Đã xác nhận. Từ "Chờ in" (12) trở đi
+ * kho đã bắt đầu: sửa địa chỉ lúc này có thể ra nhãn sai. Không đọc được trạng thái (không còn đơn, mã lạ) cũng coi là đã bắt đầu.
+ */
+const PANCAKE_BEFORE_PACKING: ReadonlySet<string> = new Set(['0', '17', '11', '20', '1']);
+export const isPancakeBeforePacking = (status: unknown): boolean =>
+  status !== null && status !== undefined && PANCAKE_BEFORE_PACKING.has(String(status).trim());
+
+/**
+ * Dấu vân tay phần khách tự sửa được của đơn (ảnh chụp địa chỉ đã chuẩn hoá + ghi chú): job `customer-edit` so trước/sau PUT để biết khách vừa sửa
+ * thêm, `saveCreated` so đơn lúc dựng thân với đơn lúc lưu mã để biết thân vừa gửi đã cũ.
+ */
+export function editFingerprint(order: Pick<Order, 'shippingAddress' | 'note'>): string {
+  const note = (order.note ?? '').trim() || null;
+  return createHash('sha256').update(JSON.stringify([snapshotOf(order.shippingAddress), note])).digest('hex');
+}
+
+const digitsTail = (s: string | null | undefined): string => (s ?? '').replace(/\D/g, '').slice(-9);
+
+/**
+ * Đơn Pancake đọc lại sau PUT có mang địa chỉ mới không: đúng phường/xã (mã), đúng SĐT người nhận, và địa chỉ chữ chứa số nhà. Trả lý do lệch, null
+ * khi khớp. Pancake không trả `shipping_address` cũng là lệch: không chứng minh được kho đã có địa chỉ mới.
+ */
+export function customerEditMismatch(found: PancakeOrderDTO | null, order: Pick<Order, 'shippingAddress'>): string | null {
+  const want = snapshotOf(order.shippingAddress);
+  const sa = found?.shipping_address;
+  if (!sa) return 'Pancake không trả địa chỉ giao khi đọc lại';
+  const lines = [sa.full_address, sa.address].map((s) => (s ?? '').normalize('NFC').toLowerCase());
+  const street = want.street.normalize('NFC').toLowerCase();
+  if (want.wardCode && String(sa.commune_id ?? '') !== want.wardCode) return 'phường/xã trên Pancake khác đơn Tubu';
+  if (digitsTail(sa.phone_number) !== digitsTail(want.phone)) return 'SĐT người nhận trên Pancake khác đơn Tubu';
+  if (street && !lines.some((l) => l.includes(street))) return 'số nhà trên Pancake khác đơn Tubu';
+  return null;
 }
 
 const VN_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: CRON_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -828,6 +874,89 @@ export class PancakeOrderService {
   }
 
   /**
+   * Khách vừa tự sửa người nhận/SĐT/phường/số nhà/ghi chú (OrderCustomerEditService): PUT địa chỉ giao + tên/SĐT người nhận + ghi chú dựng lại từ đơn
+   * hiện tại (giữ dấu thanh toán, thu gom, quà; `mergedTags` giữ thẻ tay). KHÔNG gửi `shipping_fee` / `items`: sửa địa chỉ cùng tỉnh không đổi tiền.
+   * Sau PUT đọc lại đơn Pancake để đối chiếu (Pancake bỏ qua trường thì ops thấy ngay, không âm thầm giao sai), rồi đọc lại đơn Tubu: khách sửa thêm
+   * trong lúc job chạy (BullMQ bỏ lần thêm trùng khi job đang active) thì ném để chạy lại với dữ liệu mới. Lần cuối vẫn lỗi: "Cần xử lý Pancake".
+   */
+  async syncCustomerEdit(orderId: string, final = false): Promise<void> {
+    const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+    if (order.status === 'CANCELLED' || order.status === 'RETURNED' || isMerchantFulfilledOrder(order)) return;
+    if (!order.pancakeOrderId) {
+      // Lệnh tạo đơn còn bay (dấu gửi còn mới): saveCreated sẽ xếp lại job này, nhưng nếu chính job này đang chạy thì BullMQ bỏ lần thêm trùng —
+      // ném để thử lại khi đơn đã gắn mã. Không có lệnh nào bay: lần đẩy sau dựng thân mới từ đơn đã sửa.
+      if (!final && order.pancakePushClaimedAt && Date.now() - order.pancakePushClaimedAt.getTime() < PancakeOrderService.SEND_SETTLE_MS) {
+        throw new Error(`Đơn ${order.code} đang được tạo trên Pancake: chờ có mã đơn rồi mới sửa địa chỉ/ghi chú.`);
+      }
+      return;
+    }
+    if (!this.client.isConfigured()) return;
+    const fp = editFingerprint(order);
+    const pancakeOrderId = order.pancakeOrderId;
+    const fail = async (err: unknown) => {
+      await this.setPushError(order.id, err);
+      if (final || classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) {
+        await flagPancakeAttention(
+          this.prisma,
+          this.alerts,
+          order,
+          `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${pancakeErrorText(err)}. Sửa tay trên Pancake theo đơn Tubu rồi giao.`,
+          this.logger,
+        );
+      }
+      throw err;
+    };
+    // Lần hỏi Pancake lúc khách bấm lưu đã cũ (job chờ hàng đợi, thử lại nhiều lượt): kho đã vào đóng gói thì không PUT nữa vì nhãn có thể đã in theo
+    // địa chỉ cũ, báo người đổi nhãn tay.
+    let current: PancakeOrderDTO | null;
+    try {
+      current = await this.client.getOrder(pancakeOrderId);
+    } catch (err) {
+      return fail(err);
+    }
+    if (!isPancakeBeforePacking(current?.status)) {
+      await flagPancakeAttention(
+        this.prisma,
+        this.alerts,
+        order,
+        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): kho đã vào đóng gói (trạng thái Pancake ${current?.status ?? 'không đọc được'}) trước khi kịp sửa. Đổi nhãn và địa chỉ tay theo đơn Tubu rồi giao.`,
+        this.logger,
+      );
+      return;
+    }
+    let found: PancakeOrderDTO | null;
+    try {
+      const update = await this.orderUpdate(order, await this.isOnDealerCredit(order));
+      await this.putOrder(pancakeOrderId, { ...update.payload, ...update.address });
+      found = await this.client.getOrder(pancakeOrderId);
+    } catch (err) {
+      return fail(err);
+    }
+    // Khách sửa thêm trong lúc job chạy: PUT vừa rồi đã cũ.
+    const now = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { shippingAddress: true, note: true } });
+    if (editFingerprint(now) !== fp) {
+      const stale = new Error(`Đơn ${order.code}: khách vừa sửa thêm trong lúc gửi Pancake, gửi lại với dữ liệu mới.`);
+      if (final) return fail(stale);
+      throw stale;
+    }
+    const mismatch = customerEditMismatch(found, order);
+    if (mismatch) {
+      // Pancake nhận lệnh mà không giữ địa chỉ mới: thử lại không chắc giúp gì, báo ngay để kho sửa tay trước khi in nhãn.
+      await flagPancakeAttention(
+        this.prisma,
+        this.alerts,
+        order,
+        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${mismatch}. Sửa tay trên Pancake theo đơn Tubu rồi giao.`,
+        this.logger,
+      );
+      return;
+    }
+    await this.prisma.order.updateMany({ where: { id: order.id, pancakeSyncError: { not: null } }, data: { pancakeSyncError: null } });
+    await clearPancakeAttention(this.prisma, order.id, ATTENTION_CUSTOMER_EDIT_PENDING);
+    this.logger.log(`Đã sửa địa chỉ/ghi chú đơn Pancake #${pancakeOrderId} (${order.code}) theo lần khách tự sửa.`);
+  }
+
+  /**
    * Vận đơn Gomdon vừa gắn cho đơn đã có trên Pancake: PUT lại ghi chú + tag (mã vận đơn, "KHÔNG TẠO VẬN ĐƠN KHÁC",
    * tag GOMDON, lời dặn khách, dấu thanh toán) — cùng đường với job thanh toán. Đơn đã trả trước thì kèm luôn số đã
    * trả (cod 0). Ném lỗi khi Pancake từ chối để người gọi báo "ghi mã vào Pancake".
@@ -846,7 +975,10 @@ export class PancakeOrderService {
     this.logger.log(`Đã ghi mã vận đơn Gomdon ${order.gomdonPartnerCode ?? '(chưa có)'} vào đơn Pancake #${order.pancakeOrderId} (${order.code}).`);
   }
 
-  /** Nội dung PUT: note/tag (và số đã trả khi trả trước) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. */
+  /**
+   * Nội dung PUT: note/tag (và số đã trả khi trả trước) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. `address` (địa chỉ giao, tên/SĐT
+   * người nhận) chỉ job khách tự sửa gửi kèm.
+   */
   private async orderUpdate(order: OrderWithItems, onCredit: boolean) {
     const variations = await this.variationsOf(order);
     const { body, amountDue, paymentState, tagNames } = buildPancakeOrderBody(order, {
@@ -863,7 +995,8 @@ export class PancakeOrderService {
       ...(tags ? { tags } : {}),
       note: body.note,
     };
-    return { payload, amountDue };
+    const address = { shipping_address: body.shipping_address, bill_full_name: body.bill_full_name, bill_phone_number: body.bill_phone_number };
+    return { payload, amountDue, address };
   }
 
   /**
@@ -1100,6 +1233,25 @@ export class PancakeOrderService {
         flagPancakeAttention(this.prisma, this.alerts, now, `${ATTENTION_COD_SWITCH_PENDING} (#${pancakeOrderId}): ${pancakeErrorText(e)}. Sửa tay ghi chú thành thu COD rồi giao.`, this.logger),
       );
     }
+    // Khối riêng (không nối chuỗi trên): khách tự sửa địa chỉ/ghi chú giữa lúc dựng thân và lúc lưu mã (thân vừa gửi mang địa chỉ cũ), hoặc đơn vừa
+    // gắn do lần thử trước tạo (không biết thân lúc đó) mà khách từng sửa: PUT lại địa chỉ/ghi chú một lần (cùng nội dung nếu thân đã đúng).
+    if (now.status !== 'CANCELLED' && (editFingerprint(now) !== editFingerprint(order) || (adopted && (await this.customerEdited(now.id))))) {
+      await enqueuePancakeCustomerEdit(this.pushQueue, now.id).catch((e) =>
+        flagPancakeAttention(
+          this.prisma,
+          this.alerts,
+          now,
+          `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${pancakeErrorText(e)}. Sửa tay địa chỉ/ghi chú theo đơn Tubu.`,
+          this.logger,
+        ),
+      );
+    }
+  }
+
+  /** Khách từng tự sửa địa chỉ/ghi chú đơn này (dòng lịch sử của lần sửa). */
+  private async customerEdited(orderId: string): Promise<boolean> {
+    const row = await this.prisma.orderStatusHistory.findFirst({ where: orderEditHistoryWhere(orderId), select: { id: true } });
+    return row !== null;
   }
 
   /**

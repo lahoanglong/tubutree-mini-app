@@ -10,7 +10,6 @@ import { PancakeEventsReconcileService } from './pancake-events-reconcile.servic
 import { PancakeWebhookController } from './pancake-webhook.controller';
 import { PancakeController } from './pancake.controller';
 import { GeoController } from './geo.controller';
-import { GeoService } from './geo.service';
 import { QUEUE_PANCAKE_EVENTS, QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { LifecycleModule } from '../../lifecycle/lifecycle.module';
 import { OrdersModule } from '../../orders/orders.module';
@@ -42,9 +41,9 @@ import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module
     PancakePushProcessor,
     PancakePushReconcileService,
     PancakeEventsReconcileService,
-    GeoService,
     GomdonAlertService,
   ],
-  exports: [PancakeSyncHooksModule, PancakeSyncService, PancakeOrderService, PancakeDirectBackend, GeoService],
+  // GeoService nằm ở PancakeSyncHooksModule (OrdersModule cũng cần): module nhập PancakeModule nhận nó qua PancakeSyncHooksModule xuất lại.
+  exports: [PancakeSyncHooksModule, PancakeSyncService, PancakeOrderService, PancakeDirectBackend],
 })
 export class PancakeModule {}

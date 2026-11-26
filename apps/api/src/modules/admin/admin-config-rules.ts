@@ -245,6 +245,7 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'perf.rum_sample_pct': (k, v) => assertIntInRange(k, v, 0, 100, '%'),
   'orders.timeline_v2_enabled': assertBoolean,
   'orders.tracking_stale_hours': (k, v) => assertIntInRange(k, v, 1, 720, 'giờ'),
+  'orders.customer_self_edit_enabled': assertBoolean,
   'referral.share_card_enabled': assertBoolean,
   // Cùng biên với lúc đọc (referral/viral-config.ts): admin không lưu được số mà máy chủ sẽ lặng lẽ đổi về mặc định.
   [REFERRAL_VIRAL_ENABLED_KEY]: assertBoolean,

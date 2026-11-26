@@ -128,3 +128,24 @@ describe('GeoPicker: "Thử lại" khi tải tỉnh/phường lỗi (kiểm hồ
     await waitFor(() => expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull());
   });
 });
+
+describe('GeoPicker: provinceLocked (khách sửa đơn trong tỉnh của đơn, tubu-w39-03)', () => {
+  it('không vẽ ô Tỉnh, không tải danh sách tỉnh; chọn Phường/Xã của tỉnh đơn và giữ mã tỉnh', async () => {
+    mocks.getProvinces.mockReset();
+    mocks.getCommunes.mockResolvedValue(WARDS);
+    const onChange = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <GeoPicker provinceLocked value={{ province: 'Hà Nội', provinceCode: 'p1', ward: '', wardCode: '' }} onChange={onChange} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(mocks.getCommunes).toHaveBeenCalledWith('p1'));
+    expect(screen.queryByRole('button', { name: /^Tỉnh\/Thành phố/ })).toBeNull();
+    expect(mocks.getProvinces).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /^Phường\/Xã/ }));
+    const list = await screen.findByRole('listbox', { name: 'Phường/Xã' });
+    fireEvent.click(within(list).getByRole('option', { name: 'Phường Đống Đa' }));
+    expect(onChange).toHaveBeenCalledWith({ province: 'Hà Nội', provinceCode: 'p1', ward: 'Phường Đống Đa', wardCode: 'w2' });
+  });
+});

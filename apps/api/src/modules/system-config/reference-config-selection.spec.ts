@@ -193,6 +193,7 @@ const APPROVED_LOADED_KEYS = [
     'ops.alert_unsynced_minutes',
     'ops.alert_webhook_failed',
     'ops.webhook_reject_alert_per_hour',
+    'orders.customer_self_edit_enabled',
     'orders.dealer_pending_payment_ttl_hours',
     'orders.pending_payment_ttl_hours',
     'pancake.category_map',

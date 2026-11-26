@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import { Page, Sheet, useLocation, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Heading, Text } from '../components/ui/text';
@@ -66,6 +66,8 @@ import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView as CoreOrderView } from '@tubutree/app-core/api/orders';
+import { canEditOrder } from '@tubutree/app-core/api/order-edit';
+import { ORDER_EDIT_COPY, orderEditLinkAria } from '@tubutree/app-core/order-edit-copy';
 import { orderLineReviewSlot, revealReviewTarget, reviewFocusIndex } from '@tubutree/app-core/order-line-review';
 import { wantsReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
@@ -100,6 +102,9 @@ import { bankDetailsError } from '../utils/refund-form-rules';
 
 // Thẻ nhựa đã giảm của đơn: chữ, số và module tiền chỉ tải khi máy chủ trả số lớn hơn 0.
 const OrderEcoImpactCard = lazy(() => import('../components/orders/eco-impact-card'));
+// Tấm sửa địa chỉ và ghi chú (form, GeoPicker khoá tỉnh) chỉ tải khi khách bấm "Sửa".
+const OrderEditSheet = lazy(() => import('../components/orders/order-edit-sheet'));
+const EDIT_LINK: CSSProperties = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', flex: '0 0 auto' };
 
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
@@ -110,6 +115,7 @@ export default function OrderDetailPage() {
   const queryClient = useQueryClient();
   const publicConfig = usePublicConfig();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
   // Đổi key mỗi lần mở để form đổi/trả khởi tạo lại theo dữ liệu mới nhất (vẫn giữ animation đóng của sheet).
@@ -745,9 +751,29 @@ export default function OrderDetailPage() {
         }
         return (
           <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-            <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
-              {viCheckout.address}
-            </Text>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-inline-sm)' }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
+                {viCheckout.address}
+              </Text>
+              {/* Lối duy nhất của việc sửa địa chỉ và ghi chú: chỉ khi máy chủ báo canEdit (API cũ không trả thì ẩn). */}
+              {canEditOrder(o) && (
+                <button
+                  type="button"
+                  data-testid="order-edit-open"
+                  aria-label={orderEditLinkAria(o.code)}
+                  className="tubu-press tubu-hit-44"
+                  style={EDIT_LINK}
+                  onClick={() => {
+                    haptic('light');
+                    setEditOpen(true);
+                  }}
+                >
+                  <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>
+                    {ORDER_EDIT_COPY.link}
+                  </Text>
+                </button>
+              )}
+            </div>
             <Text variant="body-sm" as="div">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
             {line && (
               <Text variant="caption" tone="secondary" as="div">
@@ -757,6 +783,17 @@ export default function OrderDetailPage() {
           </Box>
         );
       })()}
+      {editOpen && canEditOrder(o) && (
+        <Suspense fallback={null}>
+          <OrderEditSheet
+            code={o.code}
+            address={o.shippingAddress}
+            note={customerOrderNote(o)}
+            split={(o.siblings?.length ?? 0) > 0}
+            onClose={() => setEditOpen(false)}
+          />
+        </Suspense>
+      )}
 
       {customerOrderNote(o) ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
