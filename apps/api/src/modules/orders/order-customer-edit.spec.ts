@@ -7,11 +7,13 @@ import {
   ORDER_EDIT_MAX,
   orderEditHistoryNote,
   orderEditRefusalMessage,
+  orderPhoneEditHistoryWhere,
   planCustomerEdit,
   snapshotOf,
   type OrderEditFacts,
   type OrderEditRefusal,
 } from './order-customer-edit';
+import { SUBSCRIPTION_NOTE_SEP, SUBSCRIPTION_ORDER_NOTE } from '../subscriptions/subscription-note';
 
 const base: OrderEditFacts = {
   type: 'RETAIL',
@@ -124,7 +126,7 @@ const snap = {
   districtCode: '',
   wardCode: '84_VN0100004',
 };
-const current = { shippingAddress: snap, note: 'Giao giờ hành chính', notifyRecipientZalo: false };
+const current = { shippingAddress: snap, note: 'Giao giờ hành chính', notifyRecipientZalo: false, source: 'checkout' as string | null };
 const addr = { recipient: 'Lan', phone: '0912345678', ward: 'Phường Ba Đình', street: '12 Kim Mã', provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN0100004' };
 
 describe('planCustomerEdit', () => {
@@ -176,6 +178,78 @@ describe('planCustomerEdit', () => {
   it('chỉ ghi chú đổi: ảnh chụp địa chỉ giữ nguyên', () => {
     const plan = planCustomerEdit(current, { address: { ...addr, phone: '+84912345678' }, note: 'mới' });
     expect(plan).toMatchObject({ kind: 'WRITE', shippingAddress: snap, addressChanged: false, changed: ['ghi chú'] });
+  });
+
+  it('quận (tên và mã) giữ của đơn, không lấy của client: hệ 2 cấp không có quận để đổi', () => {
+    const withDistrict = { ...current, shippingAddress: { ...snap, district: 'Quận Ba Đình', districtCode: 'D01' } };
+    expect(planCustomerEdit(withDistrict, { address: { ...addr, districtCode: 'D99' } })).toEqual({ kind: 'NOOP' });
+    const plan = planCustomerEdit(withDistrict, { address: { ...addr, districtCode: 'D99', street: '7 Kim Mã' } });
+    expect(plan).toMatchObject({ kind: 'WRITE', changed: ['số nhà'], shippingAddress: { district: 'Quận Ba Đình', districtCode: 'D01', street: '7 Kim Mã' } });
+  });
+});
+
+describe('planCustomerEdit — đơn đặt định kỳ giữ dấu hệ thống trong ghi chú', () => {
+  const sub = { ...current, source: 'subscription', note: SUBSCRIPTION_ORDER_NOTE };
+
+  it('khách thêm ghi chú: lưu `dấu · phần của khách`', () => {
+    expect(planCustomerEdit(sub, { note: ' Giao giờ HC ' })).toMatchObject({
+      kind: 'WRITE',
+      note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC`,
+      changed: ['ghi chú'],
+      addressChanged: false,
+    });
+  });
+
+  it('sửa phần của khách: so và thay đúng phần đó, dấu ở lại', () => {
+    const withCustomer = { ...sub, note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC` };
+    expect(planCustomerEdit(withCustomer, { note: 'Gọi trước 15 phút' })).toMatchObject({
+      kind: 'WRITE',
+      note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Gọi trước 15 phút`,
+    });
+    // Màn khách điền sẵn phần của khách (chi tiết đơn trả customerFacingNote): gửi lại đúng chữ đó là không đổi.
+    expect(planCustomerEdit(withCustomer, { note: 'Giao giờ HC' })).toEqual({ kind: 'NOOP' });
+  });
+
+  it('khách xoá trắng: còn đúng dấu, không bao giờ mất dấu', () => {
+    const withCustomer = { ...sub, note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC` };
+    expect(planCustomerEdit(withCustomer, { note: '' })).toMatchObject({ kind: 'WRITE', note: SUBSCRIPTION_ORDER_NOTE, changed: ['ghi chú'] });
+    expect(planCustomerEdit(withCustomer, { note: null })).toMatchObject({ kind: 'WRITE', note: SUBSCRIPTION_ORDER_NOTE });
+    // Đơn chưa có phần của khách: xoá trắng là không đổi gì.
+    expect(planCustomerEdit(sub, { note: '' })).toEqual({ kind: 'NOOP' });
+    expect(planCustomerEdit(sub, { note: null })).toEqual({ kind: 'NOOP' });
+  });
+
+  it('khách dán lại nguyên ghi chú có dấu: NOOP', () => {
+    expect(planCustomerEdit(sub, { note: SUBSCRIPTION_ORDER_NOTE })).toEqual({ kind: 'NOOP' });
+    const withCustomer = { ...sub, note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC` };
+    expect(planCustomerEdit(withCustomer, { note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC` })).toEqual({ kind: 'NOOP' });
+    expect(planCustomerEdit(sub, { note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Mới` })).toMatchObject({
+      note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Mới`,
+    });
+  });
+
+  it('sửa riêng địa chỉ: ghi chú lưu giữ nguyên từng chữ (kể cả ghi chú cũ không mở đầu bằng dấu)', () => {
+    expect(planCustomerEdit(sub, { address: { ...addr, street: '9 Kim Mã' } })).toMatchObject({ kind: 'WRITE', note: SUBSCRIPTION_ORDER_NOTE, changed: ['số nhà'] });
+    const legacy = { ...sub, note: 'ghi chú lạ' };
+    expect(planCustomerEdit(legacy, { address: { ...addr, street: '9 Kim Mã' } })).toMatchObject({ note: 'ghi chú lạ' });
+  });
+
+  it('đơn không phải định kỳ: chữ giống dấu vẫn là ghi chú của khách như cũ', () => {
+    const checkout = { ...current, note: SUBSCRIPTION_ORDER_NOTE };
+    expect(planCustomerEdit(checkout, { note: '' })).toMatchObject({ kind: 'WRITE', note: null });
+    expect(planCustomerEdit({ ...current, source: null }, { note: 'Giao giờ HC' })).toMatchObject({ kind: 'WRITE', note: 'Giao giờ HC' });
+  });
+});
+
+describe('orderPhoneEditHistoryWhere', () => {
+  it('chỉ dòng tự sửa của khách có tên trường SĐT', () => {
+    expect(orderPhoneEditHistoryWhere('o1')).toEqual({
+      orderId: 'o1',
+      actorType: 'CUSTOMER',
+      note: { startsWith: ORDER_EDIT_HISTORY_NOTE, contains: 'SĐT' },
+    });
+    expect(orderEditHistoryNote(['người nhận', 'SĐT'])).toContain('SĐT');
+    expect(orderEditHistoryNote(['người nhận', 'phường/xã', 'số nhà', 'ghi chú'])).not.toContain('SĐT');
   });
 });
 

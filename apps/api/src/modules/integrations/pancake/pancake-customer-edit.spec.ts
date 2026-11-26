@@ -1,5 +1,5 @@
 import { UnrecoverableError } from 'bullmq';
-import { customerEditMismatch, editFingerprint, PancakeOrderService } from './pancake-order.service';
+import { customerEditMismatch, customerEditMoneyDrift, editFingerprint, PancakeOrderService } from './pancake-order.service';
 import { PancakePackingError, PancakeSyncHooks, PancakeUnreachableError } from './pancake-sync-hooks';
 import { PancakePushProcessor } from './pancake-push.processor';
 import { PancakeApiError } from './pancake-outbound';
@@ -72,10 +72,72 @@ describe('PancakeOrderService.syncCustomerEdit', () => {
     expect(t.row().pancakeSyncError).toBeNull();
   });
 
-  it('đơn đã trả trước: giữ số đã trả như các lần PUT khác (không đổi tiền)', async () => {
-    const t = setup({ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' });
+  it('không gửi tiền (transfer_money/cod) ở PUT sửa địa chỉ với mọi loại thanh toán: kho có thể đã chỉnh tay', async () => {
+    for (const order of [{ paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }, { paymentMethod: 'COD', paymentStatus: 'UNPAID' }]) {
+      const t = setup(order);
+      await t.svc.syncCustomerEdit('o1');
+      const body = t.put();
+      expect(body).not.toHaveProperty('transfer_money');
+      expect(body).not.toHaveProperty('cod');
+      expect(body).not.toHaveProperty('shipping_fee');
+      expect(Object.keys(body).sort()).toEqual(expect.arrayContaining(['bill_full_name', 'bill_phone_number', 'note', 'shipping_address']));
+      expect(t.row().pancakeAttention).toBeNull();
+    }
+  });
+
+  it('tiền trên Pancake đổi sau PUT (Pancake tự tính lại phí ship/COD theo địa chỉ mới) → "Cần xử lý Pancake" nêu khoản lệch, không ném', async () => {
+    for (const [before, after, want] of [
+      [{ cod: 230_000 }, { cod: 0 }, 'cod 230.000đ→0đ'],
+      [{ shipping_fee: '30000' }, { shipping_fee: 45_000 }, 'shipping_fee 30.000đ→45.000đ'],
+      [{ cod: 230_000, transfer_money: 0 }, { cod: 200_000, transfer_money: 30_000 }, 'cod 230.000đ→200.000đ, transfer_money 0đ→30.000đ'],
+    ] as const) {
+      // Thứ tự gọi getOrder: đọc trước PUT (current), mergedTags đọc thẻ, đọc lại sau PUT (found).
+      const getOrder = jest
+        .fn()
+        .mockResolvedValueOnce({ ...readBack(), ...before })
+        .mockResolvedValueOnce({ ...readBack(), ...before })
+        .mockResolvedValueOnce({ ...readBack(), ...after });
+      const t = setup({}, { getOrder });
+      await expect(t.svc.syncCustomerEdit('o1')).resolves.toBeUndefined();
+      expect(getOrder).toHaveBeenCalledTimes(3);
+      expect(t.row().pancakeAttention).toBe(
+        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): tiền trên Pancake đổi sau khi sửa địa chỉ (${want}). Sửa tay tiền theo đơn Tubu rồi giao.`,
+      );
+    }
+  });
+
+  it('địa chỉ lệch và tiền lệch cùng lúc → một cờ nêu cả hai', async () => {
+    const getOrder = jest
+      .fn()
+      .mockResolvedValueOnce({ ...readBack(), cod: 230_000 })
+      .mockResolvedValueOnce({ ...readBack(), cod: 230_000 })
+      .mockResolvedValueOnce({ ...readBack({ commune_id: '84_VN7900001' }), cod: 0 });
+    const t = setup({}, { getOrder });
     await t.svc.syncCustomerEdit('o1');
-    expect(t.put()).toMatchObject({ transfer_money: 230_000, cod: 0 });
+    expect(t.row().pancakeAttention).toBe(
+      `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): phường/xã trên Pancake khác đơn Tubu. Sửa tay trên Pancake theo đơn Tubu rồi giao. tiền trên Pancake đổi sau khi sửa địa chỉ (cod 230.000đ→0đ). Sửa tay tiền theo đơn Tubu rồi giao.`,
+    );
+  });
+
+  it('thiếu trường tiền ở một trong hai lần đọc (hoặc không phải số) → không gắn cờ: không chứng minh được có lệch', () => {
+    expect(customerEditMoneyDrift({ cod: 230_000 }, {})).toBeNull();
+    expect(customerEditMoneyDrift({}, { cod: 0 })).toBeNull();
+    expect(customerEditMoneyDrift({ cod: null }, { cod: 0 })).toBeNull();
+    expect(customerEditMoneyDrift({ cod: '' }, { cod: 0 })).toBeNull();
+    expect(customerEditMoneyDrift({ cod: 'abc' }, { cod: 0 })).toBeNull();
+    expect(customerEditMoneyDrift(null, { cod: 0 })).toBeNull();
+    expect(customerEditMoneyDrift({ cod: '230000', shipping_fee: 30_000 }, { cod: 230_000, shipping_fee: '30000' })).toBeNull();
+  });
+
+  it('job chạy với đơn Pancake thiếu trường tiền → đi tiếp như cũ, gỡ cờ', async () => {
+    const getOrder = jest
+      .fn()
+      .mockResolvedValueOnce({ ...readBack(), cod: 230_000 })
+      .mockResolvedValueOnce(readBack())
+      .mockResolvedValueOnce(readBack());
+    const t = setup({ pancakeAttention: `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): cũ` }, { getOrder });
+    await t.svc.syncCustomerEdit('o1');
+    expect(t.row().pancakeAttention).toBeNull();
   });
 
   it.each<[string, Record<string, unknown>]>([

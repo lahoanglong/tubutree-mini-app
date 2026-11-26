@@ -6,6 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 import { PancakePackingError, PancakeSyncHooks, PancakeUnreachableError } from '../integrations/pancake/pancake-sync-hooks';
+import { customerFacingNote } from '../subscriptions/subscription-note';
 import {
   countCustomerEdits,
   customerEditBlock,
@@ -74,7 +75,9 @@ export class OrderCustomerEditService {
     const flagOn = await this.flagOn();
     const block = customerEditBlock(order, { flagOn, editsUsed: await countCustomerEdits(this.prisma, order.id) });
     if (block) throw refused(block);
-    const precheck = planCustomerEdit(order, input);
+    // Dùng cho cả lần xét ngoài lẫn lần dựng trong khoá: tên phường so và ghi phải là cùng một chữ.
+    const edit = await this.withCanonicalWard(input);
+    const precheck = planCustomerEdit(order, edit);
     if (precheck.kind === 'REFUSED') throw refused(precheck.reason, snapshotOf(order.shippingAddress).province);
     // Không đổi gì: trả đơn như đang có, không khoá, không hỏi Pancake, không tính lượt.
     if (precheck.kind === 'NOOP') return this.result(order, ORDER_EDIT_MAX - (await countCustomerEdits(this.prisma, order.id)));
@@ -93,7 +96,7 @@ export class OrderCustomerEditService {
       // Lệnh tạo đơn Pancake vừa xong giữa lúc hỏi Pancake và lúc lấy khoá: đơn kho chưa được hỏi.
       if (current.pancakeOrderId !== order.pancakeOrderId) return { kind: 'REFUSED', reason: 'SYNCING' };
       // Dựng lại trên đơn hiện tại: lần sửa chạy song song có thể vừa đổi ảnh chụp.
-      const plan = planCustomerEdit(current, input);
+      const plan = planCustomerEdit(current, edit);
       if (plan.kind === 'REFUSED') return { kind: 'REFUSED', reason: plan.reason, province: snapshotOf(current.shippingAddress).province };
       if (plan.kind === 'NOOP') return { kind: 'NOOP', order: current, editsUsed };
       const data: Prisma.OrderUpdateManyMutationInput = {
@@ -132,11 +135,23 @@ export class OrderCustomerEditService {
     return this.result(outcome.order, ORDER_EDIT_MAX - outcome.editsUsed);
   }
 
+  /**
+   * Tên phường lưu theo danh mục địa giới, không theo chữ client gửi (client chỉ chọn mã, mã đã được kiểm thuộc tỉnh). Danh mục chưa tải được
+   * thì giữ tên client gửi, cùng luật "chưa đối chiếu được thì cho qua" của `assertDeliverableAddress`.
+   */
+  private async withCanonicalWard(input: OrderEditInput): Promise<OrderEditInput> {
+    const a = input.address;
+    if (!a || !this.geo) return input;
+    const ward = await this.geo.wardName(a.provinceCode, a.wardCode);
+    return ward ? { ...input, address: { ...a, ward } } : input;
+  }
+
   private result(o: Order, editsLeft: number): OrderEditResultDTO {
     return {
       code: o.code,
       shippingAddress: snapshotOf(o.shippingAddress),
-      note: o.note,
+      // Đơn định kỳ: chỉ phần khách viết (dấu hệ thống ở lại cho kho), để vòng điền sẵn → sửa → gửi không mang dấu theo.
+      note: customerFacingNote(o),
       notifyRecipientZalo: o.notifyRecipientZalo,
       editsLeft: Math.max(0, editsLeft),
     };

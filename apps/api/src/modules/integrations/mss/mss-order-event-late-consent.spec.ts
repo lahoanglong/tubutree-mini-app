@@ -1,4 +1,4 @@
-import { buyerOrderNotices, buyerPhoneOf, lateConsentBlock, lateConsentOrderBlock, normalizeVnPhone, recipientPhoneFor, shippingPhoneOf } from './mss-order-event-types';
+import { buyerOrderNotices, buyerPhoneOf, lateConsentBlock, MSS_CREATED_COVERS_PAYMENT_REMINDER_WHERE, outboxRecipientPhone, lateConsentOrderBlock, normalizeVnPhone, recipientPhoneFor, shippingPhoneOf } from './mss-order-event-types';
 
 const gate = { enabled: true, open: true, rolloutPct: 100 };
 const order = {
@@ -69,16 +69,16 @@ describe('buyerPhoneOf (PO A2) và recipientPhoneFor (PO A1)', () => {
   const verifiedAt = new Date('2026-01-01T00:00:00Z');
 
   it('số tài khoản đã xác minh: account_verified, kể cả khi địa chỉ giao số khác', () => {
-    expect(buyerPhoneOf({ user: { phone: '+84901234567', phoneVerifiedAt: verifiedAt }, shippingAddress: { phone: '0987654321' } })).toEqual({ phone: '0901234567', source: 'account_verified' });
+    expect(buyerPhoneOf({ user: { phone: '+84901234567', phoneVerifiedAt: verifiedAt }, shippingAddress: { phone: '0987654321' } })).toEqual({ phone: '0901234567', source: 'account_verified', via: 'account' });
   });
 
   it('chưa xác minh: số đầu tiên đọc được của tài khoản, khách vãng lai, địa chỉ giao, nguồn checkout_contact', () => {
     const at = (user: { phone: string | null; phoneVerifiedAt: Date | null }, guestPhone: string | null, shippingAddress: unknown) => buyerPhoneOf({ user, guestPhone, shippingAddress });
-    expect(at({ phone: '0901234567', phoneVerifiedAt: null }, '0912345678', { phone: '0987654321' })).toEqual({ phone: '0901234567', source: 'checkout_contact' });
-    expect(at({ phone: null, phoneVerifiedAt: null }, '0912345678', { phone: '0987654321' })).toEqual({ phone: '0912345678', source: 'checkout_contact' });
-    expect(at({ phone: null, phoneVerifiedAt: null }, null, { phone: '0987 654 321' })).toEqual({ phone: '0987654321', source: 'checkout_contact' });
+    expect(at({ phone: '0901234567', phoneVerifiedAt: null }, '0912345678', { phone: '0987654321' })).toEqual({ phone: '0901234567', source: 'checkout_contact', via: 'account' });
+    expect(at({ phone: null, phoneVerifiedAt: null }, '0912345678', { phone: '0987654321' })).toEqual({ phone: '0912345678', source: 'checkout_contact', via: 'guest' });
+    expect(at({ phone: null, phoneVerifiedAt: null }, null, { phone: '0987 654 321' })).toEqual({ phone: '0987654321', source: 'checkout_contact', via: 'shipping' });
     // Đã xác minh mà số lưu hỏng: không tin cờ xác minh, đi tiếp các số khác.
-    expect(at({ phone: '12345', phoneVerifiedAt: verifiedAt }, null, { phone: '0987654321' })).toEqual({ phone: '0987654321', source: 'checkout_contact' });
+    expect(at({ phone: '12345', phoneVerifiedAt: verifiedAt }, null, { phone: '0987654321' })).toEqual({ phone: '0987654321', source: 'checkout_contact', via: 'shipping' });
     expect(at({ phone: null, phoneVerifiedAt: null }, 'x', { phone: '0201234567' })).toBeNull();
     expect(at({ phone: null, phoneVerifiedAt: null }, null, null)).toBeNull();
   });
@@ -148,5 +148,28 @@ describe('buyerOrderNotices (dòng "Đã báo qua Zalo" cho khách)', () => {
     const out = buyerOrderNotices(rows);
     expect(out).toHaveLength(1);
     expect(Object.keys(out[0]!).sort()).toEqual(['at', 'channel', 'event']);
+  });
+});
+
+describe('outboxRecipientPhone (MINOR 2: số người mua lúc đặt đọc từ thân dòng outbox)', () => {
+  it('đọc và chuẩn hoá recipient.phone; thân hỏng hoặc thiếu số → null', () => {
+    expect(outboxRecipientPhone(JSON.stringify({ recipient: { phone: '+84987654321', phone_source: 'checkout_contact' } }))).toBe('0987654321');
+    expect(outboxRecipientPhone(JSON.stringify({ recipient: { phone: '0987654321' } }))).toBe('0987654321');
+    expect(outboxRecipientPhone('{')).toBeNull();
+    expect(outboxRecipientPhone('null')).toBeNull();
+    expect(outboxRecipientPhone(JSON.stringify({ recipient: null }))).toBeNull();
+    expect(outboxRecipientPhone(JSON.stringify({ recipient: { phone: 987654321 } }))).toBeNull();
+    expect(outboxRecipientPhone(JSON.stringify({ recipient: { phone: '12345' } }))).toBeNull();
+    expect(outboxRecipientPhone(JSON.stringify([{ recipient: { phone: '0987654321' } }]))).toBeNull();
+  });
+});
+
+describe('MSS_CREATED_COVERS_PAYMENT_REMINDER_WHERE (GAP-1 w39-01)', () => {
+  it('chỉ dòng order.created của chính người mua; người lạ (resultReason khác null) không tính', () => {
+    expect(MSS_CREATED_COVERS_PAYMENT_REMINDER_WHERE).toEqual({
+      eventType: 'order.created',
+      recipientRole: 'buyer',
+      OR: [{ status: { in: ['PENDING', 'SENDING', 'DELIVERED'] } }, { status: 'RESULT_SENT', resultReason: null }],
+    });
   });
 });

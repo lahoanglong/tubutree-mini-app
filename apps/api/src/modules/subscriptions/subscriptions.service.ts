@@ -31,6 +31,7 @@ import { overStockText } from '../cart/cart.stock-message';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
 import { intervalCandidates, SMART_INTERVAL_ENABLED_KEY, SMART_INTERVAL_LOOKBACK_DAYS, SMART_INTERVAL_MAX } from './smart-interval';
+import { SUBSCRIPTION_ORDER_NOTE } from './subscription-note';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -1039,7 +1040,7 @@ export class SubscriptionsService {
         shippingAddress: address,
         // Kho/Pancake đọc chữ này, nên giữ nguyên giá trị lưu. App-core (SUBSCRIPTION_ORDER_NOTE) nhận ra đơn định kỳ bằng đúng chữ này
         // để hiện nhãn "Đơn định kỳ" thay vì ghi chú tiếng Anh; đổi chữ ở đây thì phải đổi cả bên đó.
-        note: 'Đơn đặt định kỳ (Subscribe & Save)',
+        note: SUBSCRIPTION_ORDER_NOTE,
         source: 'subscription',
         platform: 'system',
         subscriptionId: sub.id,

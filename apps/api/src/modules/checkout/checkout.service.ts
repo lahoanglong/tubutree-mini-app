@@ -105,6 +105,7 @@ import {
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { orderEditHistoryWhere } from '../orders/order-customer-edit';
 import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import { formatVnd } from '../orders/refund-destination';
 import { formatVnDateTime } from '../../common/vn-time';
@@ -1075,7 +1076,11 @@ export class CheckoutService {
     return this.findOrderResponse(existing.id);
   }
 
-  /** Đơn đã có và lần gửi này cùng địa chỉ, cách trả tiền, thu kèm rác (wasteRequestId) (so snapshot địa chỉ bằng stableStringify, xem trên). */
+  /**
+   * Đơn đã có và lần gửi này cùng địa chỉ, cách trả tiền, thu kèm rác (wasteRequestId) (so snapshot địa chỉ bằng stableStringify, xem trên).
+   * Khách đã tự sửa người nhận/địa chỉ của đơn sau lần đặt thì ảnh chụp không còn khớp sổ địa chỉ: vẫn là cùng một yêu cầu (cách trả tiền và
+   * phiếu thu kèm vẫn phải khớp), nên lần gửi lại bằng cùng khoá trả đúng đơn đó thay vì báo "thông tin khác".
+   */
   private async isSameRequest(
     existing: { id: string; paymentMethod: string; total?: number; shippingAddress: Prisma.JsonValue; checkoutGroup?: string | null },
     dto: PlaceOrderDto,
@@ -1087,7 +1092,10 @@ export class CheckoutService {
     // Gắn yêu cầu thu kèm rác khác (hoặc bật/tắt) giữa 2 lần gửi cũng là "yêu cầu khác" — không trả đơn cũ.
     if (!(await this.isSamePickup(existing, dto))) return false;
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
-    return !!address && stableStringify(this.addressSnapshot(address)) === stableStringify(existing.shippingAddress);
+    if (!address) return false;
+    if (stableStringify(this.addressSnapshot(address)) === stableStringify(existing.shippingAddress)) return true;
+    const edited = await this.prisma.orderStatusHistory.findFirst({ where: orderEditHistoryWhere(existing.id), select: { id: true } });
+    return edited !== null;
   }
 
   /**

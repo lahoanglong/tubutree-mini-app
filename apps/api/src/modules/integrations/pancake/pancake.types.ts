@@ -141,6 +141,10 @@ export interface PancakeOrderDTO {
   extension?: { external_order_id?: string } | null;
   inserted_at?: string;
   tags?: Array<PancakeOrderTagRef | string>;
+  /** Tiền trên đơn kho, đọc trước và sau PUT của job customer-edit để bắt Pancake tự tính lại khi đổi địa chỉ (không bao giờ ghi từ job đó). */
+  cod?: number | string | null;
+  transfer_money?: number | string | null;
+  shipping_fee?: number | string | null;
   /** Địa chỉ giao đọc lại sau khi khách tự sửa (job customer-edit đối chiếu phường và số nhà). */
   shipping_address?: {
     full_address?: string | null;

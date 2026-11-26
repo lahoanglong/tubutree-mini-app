@@ -392,4 +392,113 @@ describe('MssOrderEventRecorder.record: link xem đơn và bill (w37-01)', () =>
     }
     expect(rows.find((r) => r.eventType === 'order.created')!.json.order.items).toHaveLength(2);
   });
+
+  /**
+   * Bộ ghi trên DB giả giữ dòng outbox (kèm giờ ghi) và dòng lịch sử sửa SĐT, để chạy nhiều sự kiện trên cùng một đơn mà SĐT giao hàng đổi giữa
+   * chừng (MINOR 2 w39-04: tài khoản không có số, số người mua là SĐT giao hàng khách tự sửa được).
+   */
+  async function harness(state: { order: ReturnType<typeof orderRow>; phoneEditAt: Date | null }) {
+    const flags = {
+      isEnabled: jest.fn(async (f: string) => f === 'orderEvents' || f === 'orderBill'),
+      snapshot: jest.fn(async () => ({ orderEventsRolloutPct: 100 })),
+    } as unknown as MssFlagsService;
+    const health = { assertCapability: jest.fn(async () => true) } as unknown as MssHealthService;
+    const client = { circuit: { isTripped: () => false } } as unknown as MssClient;
+    const dispatcher = { enqueue: jest.fn() } as unknown as MssOrderEventDispatcher;
+    const recorder = new MssOrderEventRecorder(flags, health, client, dispatcher, ENV);
+    await recorder.refreshGate();
+    const rows: (Row & { createdAt: Date })[] = [];
+    let seq = 0;
+    let clock = Date.parse('2026-11-25T02:00:00Z');
+    const outboxFindFirst = jest.fn(async ({ where }: { where: { recipientRole: string } }) => {
+      const r = rows.find((x) => x.recipientRole === where.recipientRole);
+      return r ? { body: r.body, createdAt: r.createdAt } : null;
+    });
+    const historyFindFirst = jest.fn(async () => (state.phoneEditAt ? { createdAt: state.phoneEditAt } : null));
+    const tx = {
+      order: { findUnique: jest.fn(async () => state.order), count: jest.fn(async () => 1) },
+      orderStatusHistory: { findFirst: historyFindFirst },
+      mssOrderEventOutbox: {
+        findUnique: jest.fn(async () => null),
+        findFirst: outboxFindFirst,
+        count: jest.fn(async () => 1),
+        createMany: jest.fn(async ({ data }: { data: Row[] }) => {
+          for (const d of data) rows.push({ ...d, createdAt: new Date((clock += 60_000)) });
+          return { count: data.length };
+        }),
+      },
+      $queryRaw: jest.fn(async () => [{ seq: ++seq }]),
+    } as unknown as Prisma.TransactionClient;
+    const buyer = (type: string) => {
+      const r = rows.find((x) => x.eventType === type && x.recipientRole === 'buyer');
+      return r ? (JSON.parse(r.body) as { order: Record<string, unknown>; recipient: Record<string, unknown> }) : undefined;
+    };
+    return { record: (t: string) => recorder.record(tx, 'o1', t as never), rows, buyer, outboxFindFirst, historyFindFirst };
+  }
+
+  const NO_PHONE = { phone: null, phoneVerifiedAt: null };
+  const A = '0987654321';
+  const B = '0911222333';
+
+  it('MINOR 2: tài khoản không có số, có dòng created tới A, khách sửa SĐT giao sang B → thanh toán/giao/huỷ vẫn về A, tin thanh toán có bill', async () => {
+    const state = { order: orderRow({ shippingAddress: { phone: A }, notifyRecipientZalo: false }, NO_PHONE), phoneEditAt: null as Date | null };
+    const h = await harness(state);
+    await h.record('order.created');
+    state.order = { ...state.order, shippingAddress: { phone: B } };
+    state.phoneEditAt = new Date('2026-11-25T03:00:00Z');
+    for (const t of ['order.payment_confirmed', 'order.shipping', 'order.cancelled']) await h.record(t);
+    for (const t of ['order.created', 'order.payment_confirmed', 'order.shipping', 'order.cancelled']) {
+      expect([t, h.buyer(t)?.recipient.phone]).toEqual([t, A]);
+    }
+    expect(h.buyer('order.payment_confirmed')!.order.items).toHaveLength(2);
+    expect(h.rows.map((r) => r.body).join('')).not.toContain(B);
+  });
+
+  it('MINOR 2: chưa có dòng nào của người mua mà SĐT đã sửa → vẫn ghi tin thanh toán (số hiện tại) nhưng không có bill', async () => {
+    const h = await harness({ order: orderRow({ shippingAddress: { phone: B }, notifyRecipientZalo: false }, NO_PHONE), phoneEditAt: new Date('2026-11-25T03:00:00Z') });
+    expect(await h.record('order.payment_confirmed')).toBeNull();
+    const paid = h.buyer('order.payment_confirmed')!;
+    expect(paid.recipient.phone).toBe(B);
+    for (const k of BILL_KEYS) expect(paid.order).not.toHaveProperty(k);
+  });
+
+  it('MINOR 2: dòng sớm nhất ghi SAU lần sửa SĐT (khách bật Zalo muộn) → tin đặt đơn và tin thanh toán đều không có bill', async () => {
+    const h = await harness({ order: orderRow({ shippingAddress: { phone: B }, notifyRecipientZalo: false }, NO_PHONE), phoneEditAt: new Date('2026-11-25T01:00:00Z') });
+    await h.record('order.created');
+    await h.record('order.payment_confirmed');
+    for (const t of ['order.created', 'order.payment_confirmed']) {
+      const row = h.buyer(t)!;
+      expect([t, row.recipient.phone]).toEqual([t, B]);
+      for (const k of BILL_KEYS) expect(row.order).not.toHaveProperty(k);
+    }
+  });
+
+  it('MINOR 2: chưa sửa SĐT, chưa có dòng nào → tin thanh toán có bill như cũ', async () => {
+    const h = await harness({ order: orderRow({ shippingAddress: { phone: A }, notifyRecipientZalo: false }, NO_PHONE), phoneEditAt: null });
+    await h.record('order.payment_confirmed');
+    expect(h.buyer('order.payment_confirmed')!.recipient.phone).toBe(A);
+    expect(h.buyer('order.payment_confirmed')!.order.items).toHaveLength(2);
+  });
+
+  it('MINOR 2: số tài khoản (đã hay chưa xác minh) hoặc số khách vãng lai không đổi theo địa chỉ → không đọc outbox hay lịch sử sửa', async () => {
+    for (const [order, want] of [
+      [orderRow({ notifyRecipientZalo: false }), '0901234567'],
+      [orderRow({ notifyRecipientZalo: false }, { phoneVerifiedAt: null }), '0901234567'],
+      [orderRow({ notifyRecipientZalo: false, guestPhone: '0912345678' }, NO_PHONE), '0912345678'],
+    ] as const) {
+      const h = await harness({ order, phoneEditAt: new Date('2026-11-25T01:00:00Z') });
+      for (const t of ['order.created', 'order.payment_confirmed', 'order.shipping']) await h.record(t);
+      expect(h.outboxFindFirst).not.toHaveBeenCalled();
+      expect(h.historyFindFirst).not.toHaveBeenCalled();
+      expect(h.buyer('order.payment_confirmed')!.recipient.phone).toBe(want);
+      expect(h.buyer('order.payment_confirmed')!.order.items).toHaveLength(2);
+    }
+  });
+
+  it('MINOR 2: tin không có bill (giao, giao xong, huỷ) chỉ ghim số, không đọc lịch sử sửa', async () => {
+    const h = await harness({ order: orderRow({ shippingAddress: { phone: B }, notifyRecipientZalo: false }, NO_PHONE), phoneEditAt: null });
+    await h.record('order.shipping');
+    expect(h.outboxFindFirst).toHaveBeenCalledTimes(1);
+    expect(h.historyFindFirst).not.toHaveBeenCalled();
+  });
 });

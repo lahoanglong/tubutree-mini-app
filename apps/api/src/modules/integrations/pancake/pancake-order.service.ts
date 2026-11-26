@@ -181,6 +181,30 @@ export function customerEditMismatch(found: PancakeOrderDTO | null, order: Pick<
   return null;
 }
 
+const CUSTOMER_EDIT_MONEY_KEYS = ['cod', 'transfer_money', 'shipping_fee'] as const;
+
+const moneyOf = (v: unknown): number | null => {
+  if (v === null || v === undefined || (typeof v === 'string' && !v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Tiền trên đơn Pancake đổi giữa lần đọc trước PUT và lần đọc sau PUT của job khách tự sửa (PUT không gửi tiền, nên lệch là Pancake tự tính lại
+ * khi đổi địa chỉ). Trả chuỗi lệch kiểu `cod 230.000đ→0đ`, null khi khớp. Chỉ so khoá mà cả hai lần đọc đều có số: thiếu trường không chứng
+ * minh được có lệch.
+ */
+export function customerEditMoneyDrift(before: PancakeOrderDTO | null, after: PancakeOrderDTO | null): string | null {
+  const drift: string[] = [];
+  for (const key of CUSTOMER_EDIT_MONEY_KEYS) {
+    const was = moneyOf(before?.[key]);
+    const now = moneyOf(after?.[key]);
+    if (was === null || now === null || was === now) continue;
+    drift.push(`${key} ${was.toLocaleString('vi-VN')}đ→${now.toLocaleString('vi-VN')}đ`);
+  }
+  return drift.length ? drift.join(', ') : null;
+}
+
 const VN_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: CRON_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const vnClock = (d: Date): string => VN_CLOCK.format(d);
 
@@ -926,7 +950,8 @@ export class PancakeOrderService {
     }
     let found: PancakeOrderDTO | null;
     try {
-      const update = await this.orderUpdate(order, await this.isOnDealerCredit(order));
+      // Không gửi tiền (transfer_money/cod) ở PUT này với mọi loại thanh toán: kho có thể đã chỉnh tay, lần sửa địa chỉ không được ghi đè.
+      const update = await this.orderUpdate(order, await this.isOnDealerCredit(order), { money: false });
       await this.putOrder(pancakeOrderId, { ...update.payload, ...update.address });
       found = await this.client.getOrder(pancakeOrderId);
     } catch (err) {
@@ -940,15 +965,15 @@ export class PancakeOrderService {
       throw stale;
     }
     const mismatch = customerEditMismatch(found, order);
-    if (mismatch) {
-      // Pancake nhận lệnh mà không giữ địa chỉ mới: thử lại không chắc giúp gì, báo ngay để kho sửa tay trước khi in nhãn.
-      await flagPancakeAttention(
-        this.prisma,
-        this.alerts,
-        order,
-        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${mismatch}. Sửa tay trên Pancake theo đơn Tubu rồi giao.`,
-        this.logger,
-      );
+    // Pancake có thể tự tính lại phí ship/COD khi đổi địa chỉ: shipper thu sai tiền nếu không ai sửa tay trước khi giao.
+    const drift = customerEditMoneyDrift(current, found);
+    if (mismatch || drift) {
+      // Pancake nhận lệnh mà không giữ đúng địa chỉ mới hay giữ tiền cũ: thử lại không chắc giúp gì, báo ngay để kho sửa tay trước khi in nhãn.
+      const problems = [
+        mismatch ? `${mismatch}. Sửa tay trên Pancake theo đơn Tubu rồi giao.` : null,
+        drift ? `tiền trên Pancake đổi sau khi sửa địa chỉ (${drift}). Sửa tay tiền theo đơn Tubu rồi giao.` : null,
+      ].filter(Boolean);
+      await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${problems.join(' ')}`, this.logger);
       return;
     }
     await this.prisma.order.updateMany({ where: { id: order.id, pancakeSyncError: { not: null } }, data: { pancakeSyncError: null } });
@@ -976,10 +1001,10 @@ export class PancakeOrderService {
   }
 
   /**
-   * Nội dung PUT: note/tag (và số đã trả khi trả trước) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. `address` (địa chỉ giao, tên/SĐT
-   * người nhận) chỉ job khách tự sửa gửi kèm.
+   * Nội dung PUT: note/tag (và số đã trả khi trả trước, trừ khi `money: false`) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. `address`
+   * (địa chỉ giao, tên/SĐT người nhận) chỉ job khách tự sửa gửi kèm, và job đó không gửi tiền.
    */
-  private async orderUpdate(order: OrderWithItems, onCredit: boolean) {
+  private async orderUpdate(order: OrderWithItems, onCredit: boolean, { money = true }: { money?: boolean } = {}) {
     const variations = await this.variationsOf(order);
     const { body, amountDue, paymentState, tagNames } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
@@ -991,7 +1016,7 @@ export class PancakeOrderService {
     });
     const tags = await this.mergedTags(order, tagNames);
     const payload = {
-      ...(isPancakePrepaid(paymentState) ? { transfer_money: body.transfer_money, cod: body.cod } : {}),
+      ...(money && isPancakePrepaid(paymentState) ? { transfer_money: body.transfer_money, cod: body.cod } : {}),
       ...(tags ? { tags } : {}),
       note: body.note,
     };

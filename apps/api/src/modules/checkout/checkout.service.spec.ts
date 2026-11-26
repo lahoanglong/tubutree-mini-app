@@ -138,6 +138,8 @@ function build(
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     wasteRequest: { findFirst: jest.fn().mockResolvedValue(opts.requestRow ?? null) },
+    // Dòng "Khách tự sửa đơn" của đơn cũ (lần gửi lại cùng khoá sau khi khách sửa địa chỉ): mặc định chưa sửa.
+    orderStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
     wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(opts.wasteFlags ?? null) },
     wasteItem: { findMany: jest.fn().mockResolvedValue(opts.wasteItems ?? [{ hazardous: false }]) },
     user: {
@@ -447,6 +449,30 @@ describe('CheckoutService.placeOrder — money safety', () => {
     await expect(
       svc.placeOrder('u1', { addressId: 'addr2', paymentMethod: 'COD' } as never, 'key-123'),
     ).rejects.toThrow('thông tin khác đã được xử lý');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('idempotency sau khi khách tự sửa địa chỉ đơn: ảnh chụp lệch sổ địa chỉ vẫn là cùng yêu cầu → trả đúng đơn đó; đổi cách trả tiền vẫn 400', async () => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing',
+      userId: 'u1',
+      paymentMethod: 'COD',
+      // Ảnh chụp sau lần khách sửa người nhận + số nhà: không còn khớp addr1 trong sổ địa chỉ.
+      shippingAddress: {
+        recipient: 'B', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S2',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
+      },
+    });
+    const history = (prisma as unknown as { orderStatusHistory: { findFirst: jest.Mock } }).orderStatusHistory.findFirst;
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123')).rejects.toThrow('thông tin khác');
+    history.mockResolvedValue({ id: 'h1' });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'key-123')).resolves.toBeDefined();
+    expect(history).toHaveBeenCalledWith({
+      where: { orderId: 'existing', actorType: 'CUSTOMER', note: { startsWith: 'Khách tự sửa đơn' } },
+      select: { id: true },
+    });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never, 'key-123')).rejects.toThrow('thông tin khác');
     expect(orderCreate).not.toHaveBeenCalled();
   });
 });

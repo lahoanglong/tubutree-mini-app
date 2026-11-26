@@ -12,6 +12,7 @@ import { MssZnsHoldService } from '../../src/modules/integrations/mss/mss-zns-ho
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../../src/config/env.validation';
+import { orderEditHistoryNote } from '../../src/modules/orders/order-customer-edit';
 import { createOrder, createUser, deleteItData, randCode, uniquePhone, warmPool } from './helpers';
 
 /**
@@ -794,6 +795,66 @@ describe('MSS order events (real Postgres)', () => {
       const [row] = await rowsOf(off.order.id);
       expect(bodyOf(row!).order).not.toHaveProperty('tracking_url');
       expect(row!.body).not.toContain('#k=');
+    });
+  });
+
+  describe('(15) MINOR 2 w39-04: tài khoản không có số, số người mua là SĐT giao hàng mà khách tự sửa được', () => {
+    const BILL_KEYS = ['detail_url', 'items', 'items_more', 'subtotal_vnd', 'discount_vnd', 'shipping_fee_vnd'];
+    const bodyOf = (row: { body: string }) => JSON.parse(row.body) as { order: Record<string, unknown>; recipient: Record<string, unknown> };
+    const buyerRow = async (orderId: string, eventType: string) =>
+      (await prisma.mssOrderEventOutbox.findMany({ where: { orderId, eventType, recipientRole: 'buyer' } }))[0];
+
+    /** Đơn chuyển khoản của tài khoản không có số: số người mua đọc từ SĐT giao hàng A. */
+    async function noPhoneOrder() {
+      const { user, order } = await consentedOrder({ paymentMethod: 'BANK_TRANSFER' });
+      await prisma.user.update({ where: { id: user.id }, data: { phone: null, phoneVerifiedAt: null } });
+      const A = (order.shippingAddress as { phone: string }).phone;
+      return { order, A };
+    }
+
+    /** Lần khách tự sửa SĐT người nhận A → B (cùng dòng lịch sử mà OrderCustomerEditService ghi), ở giờ `at`. */
+    async function editPhone(order: { id: string; status: string; userId: string; shippingAddress: unknown }, at: Date) {
+      const B = uniquePhone('08');
+      await prisma.order.update({ where: { id: order.id }, data: { shippingAddress: { ...(order.shippingAddress as object), phone: B } } });
+      await prisma.orderStatusHistory.create({
+        data: { orderId: order.id, fromStatus: order.status, toStatus: order.status, actorType: 'CUSTOMER', actorId: order.userId, note: orderEditHistoryNote(['SĐT']), createdAt: at },
+      });
+      return B;
+    }
+
+    it('có dòng created tới A, khách sửa sang B: thanh toán/giao/huỷ đều về A, tin thanh toán có bill; B không nhận gì', async () => {
+      const { order, A } = await noPhoneOrder();
+      expect(await recordIn(order.id, 'order.created')).toBeNull();
+      const B = await editPhone(order, new Date(Date.now() + 5_000));
+      for (const t of ['order.payment_confirmed', 'order.shipping', 'order.delivered'] as const) expect(await recordIn(order.id, t)).toBeNull();
+      for (const t of ['order.created', 'order.payment_confirmed', 'order.shipping', 'order.delivered']) {
+        expect([t, bodyOf((await buyerRow(order.id, t))!).recipient.phone]).toEqual([t, A]);
+      }
+      expect(bodyOf((await buyerRow(order.id, 'order.payment_confirmed'))!).order.items).toHaveLength(1);
+      const all = await rowsOf(order.id);
+      expect(all.every((r) => r.recipientRole === 'buyer')).toBe(true);
+      expect(all.map((r) => r.body).join('')).not.toContain(B);
+    });
+
+    it('chưa có dòng nào của người mua, SĐT đã sửa: tin thanh toán vẫn ghi (về số hiện tại) nhưng không có bill', async () => {
+      const { order } = await noPhoneOrder();
+      const B = await editPhone(order, new Date(Date.now() - 60_000));
+      expect(await recordIn(order.id, 'order.payment_confirmed')).toBeNull();
+      const paid = bodyOf((await buyerRow(order.id, 'order.payment_confirmed'))!);
+      expect(paid.recipient.phone).toBe(B);
+      for (const k of BILL_KEYS) expect(paid.order).not.toHaveProperty(k);
+    });
+
+    it('khách bật Zalo sau khi đã sửa SĐT (dòng created ghi sau lần sửa): created và tin thanh toán đều không có bill', async () => {
+      const { order } = await noPhoneOrder();
+      const B = await editPhone(order, new Date(Date.now() - 60_000));
+      expect(await recordIn(order.id, 'order.created')).toBeNull();
+      expect(await recordIn(order.id, 'order.payment_confirmed')).toBeNull();
+      for (const t of ['order.created', 'order.payment_confirmed']) {
+        const body = bodyOf((await buyerRow(order.id, t))!);
+        expect([t, body.recipient.phone]).toEqual([t, B]);
+        for (const k of BILL_KEYS) expect(body.order).not.toHaveProperty(k);
+      }
     });
   });
 });
