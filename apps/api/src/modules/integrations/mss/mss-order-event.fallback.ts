@@ -17,6 +17,12 @@ import { parseHeldZns } from './mss-zns-hold';
 export const mssFallbackDedupeKey = (eventId: string) => `mss:${eventId}`;
 
 /**
+ * Tắt ứng dụng chờ email đường lui đang gửi tối đa chừng này: compose cho 30 giây (`stop_grace_period`), worker BullMQ cần phần còn lại
+ * để chờ lệnh Pancake (≤ 15 giây). Email chưa kịp nhận việc thì nhánh cứu IN_APP_ONLY của cron quét gửi sau khi app lên lại.
+ */
+export const MSS_FALLBACK_SHUTDOWN_WAIT_MS = 5_000;
+
+/**
  * Đường lui khi MSS không gửi được (hợp đồng mục 12): chạy đúng một lần mỗi sự kiện, nhận phần việc bằng `fallbackAt IS NULL`. Tin trong
  * app đã lưu lúc nghiệp vụ gọi notify (luật hoãn chỉ hoãn kênh ZNS), nên "chỉ trong app" là không gửi thêm gì; "ZNS" gửi tin đã hoãn.
  * Tin đặt đơn / đã nhận tiền của người mua mà không có ZNS nào đi (chưa có mẫu ZNS, khách không có SĐT hay tắt nhóm tin) thì gửi email
@@ -26,6 +32,8 @@ export const mssFallbackDedupeKey = (eventId: string) => `mss:${eventId}`;
 export class MssOrderEventFallback implements OnModuleDestroy {
   private readonly logger = new Logger(MssOrderEventFallback.name);
   private readonly emails = new Set<Promise<void>>();
+  /** Đang tắt ứng dụng: không mở email mới. */
+  private closing = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -74,7 +82,16 @@ export class MssOrderEventFallback implements OnModuleDestroy {
       if (decision === 'ZNS' && held && row.znsHeldTemplate) {
         try {
           const zns = await this.notifications.sendHeldZns(row.order.userId, row.znsHeldTemplate, held.data, held.znsTemplateId, mssFallbackDedupeKey(row.eventId));
-          if ((zns === 'NO_PHONE' || zns === 'PREFS') && emailable) this.sendEmail(row.id);
+          if (zns === 'NO_PHONE' || zns === 'PREFS') {
+            // Không có tin ZNS nào đi (và không có log ZNS): ghi đúng kênh, để chi tiết đơn không báo "Đã báo qua ZNS" và nhánh cứu
+            // IN_APP_ONLY của cron quét gửi bù email khi lần gửi dưới bị bỏ (app đang tắt).
+            await this.prisma.mssOrderEventOutbox.updateMany({
+              where: { id: row.id, fallbackAt: claimedAt, fallbackChannel: 'ZNS' },
+              data: { fallbackChannel: 'IN_APP_ONLY' },
+            });
+            if (emailable) this.sendEmail(row.id);
+            return 'IN_APP_ONLY';
+          }
         } catch (err) {
           this.logger.error(`Gửi ZNS đường lui đơn ${row.orderCode} (sự kiện ${row.eventId}) lỗi, lượt quét sau thử lại: ${err instanceof Error ? err.message : String(err)}`);
           // Nhả phần việc để cron quét bù thử lại; khoá chống trùng mss:<eventId> của sendHeldZns giữ đúng một tin nếu lần này đã kịp gửi.
@@ -94,7 +111,8 @@ export class MssOrderEventFallback implements OnModuleDestroy {
    * phần việc đường lui (ZNS/trong app) đã chốt; khoá + log EMAIL của OrderConfirmEmailService giữ đúng một email dù cron quét chạy cùng lúc.
    */
   private sendEmail(outboxRowId: string): void {
-    if (!this.orderEmail) return;
+    // Đang tắt: không mở email mới (dòng đã chốt IN_APP_ONLY, nhánh cứu của cron quét gửi sau khi app lên lại).
+    if (!this.orderEmail || this.closing) return;
     const job: Promise<void> = this.orderEmail
       .sendForEvent(outboxRowId)
       .then(
@@ -110,7 +128,27 @@ export class MssOrderEventFallback implements OnModuleDestroy {
     await Promise.all([...this.emails]);
   }
 
+  /**
+   * Chờ email đang gửi tối đa MSS_FALLBACK_SHUTDOWN_WAIT_MS rồi thôi (SMTP treo tới 30 giây không được ăn hết thời gian tắt của compose).
+   * Job email không bao giờ reject (`.then(ok, err)` ở sendEmail) nên `emailsSettled` không ném. Timer `unref` + `clearTimeout`: không giữ
+   * tiến trình sống, không để timer treo khi email xong sớm.
+   */
   async onModuleDestroy(): Promise<void> {
-    await this.emailsSettled();
+    this.closing = true;
+    if (this.emails.size === 0) return;
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = await Promise.race([
+      this.emailsSettled().then(() => false),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(true), MSS_FALLBACK_SHUTDOWN_WAIT_MS);
+        timer.unref();
+      }),
+    ]);
+    clearTimeout(timer);
+    if (timedOut) {
+      this.logger.warn(
+        `Tắt ứng dụng: thôi chờ ${this.emails.size} email đường lui sau ${MSS_FALLBACK_SHUTDOWN_WAIT_MS} ms (log EMAIL còn PENDING thì đơn đó không gửi lại).`,
+      );
+    }
   }
 }

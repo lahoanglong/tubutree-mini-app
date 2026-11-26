@@ -23,6 +23,8 @@ set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 9
+# shellcheck source=./colima-forward.sh
+source "$ROOT/scripts/release/colima-forward.sh"
 SHA=$(git rev-parse --short=8 HEAD)
 OUT="${PRE_SUBMIT_OUT:-/tmp/pre-submit-$SHA}"
 mkdir -p "$OUT"
@@ -110,30 +112,20 @@ step jest-api bash -c "cd apps/api && npx jest --maxWorkers=2"
 
 # Race toàn bộ trên Postgres 16 + Redis 7 tạm (container --rm, dữ liệu trên tmpfs, xoá khi xong), 3 lô --shard, mỗi lô DB và Redis sạch như race.yml:
 # một tiến trình jest hết heap 4096 sau ~396 suite.
-# Chạy trong subshell của step(): trap EXIT dọn container và đường hầm kể cả khi bị Ctrl-C/kill giữa chừng. Chỉ kill PID của ssh do chính bước này mở
-# (lấy bằng $!), không bao giờ PID tìm theo cổng: tiến trình nghe cổng có thể là hostagent của Colima, kill nó làm hỏng Docker của mọi phiên.
+# Chạy trong subshell của step(): trap EXIT dọn container và đường hầm Colima (scripts/release/colima-forward.sh, chỉ kill PID ssh do chính
+# helper mở) kể cả khi bị Ctrl-C/kill giữa chừng.
 race() {
-  local pgp=${RACE_PG_PORT:-5638} rdp=${RACE_REDIS_PORT:-6438} c="tubu-presubmit-pg-$$" r="tubu-presubmit-redis-$$" pw pid
-  RACE_TUNNELS=""
+  local pgp=${RACE_PG_PORT:-5638} rdp=${RACE_REDIS_PORT:-6438} c="tubu-presubmit-pg-$$" r="tubu-presubmit-redis-$$" pw
   for p in $pgp $rdp; do lsof -nP -iTCP:$p -sTCP:LISTEN >/dev/null 2>&1 && { echo "cổng $p đang bận"; return 8; }; done
-  trap 'for t in $RACE_TUNNELS; do kill "$t" >/dev/null 2>&1; done; docker rm -f -v '"$c $r"' >/dev/null 2>&1' EXIT
+  trap 'colima_forward_cleanup; docker rm -f -v '"$c $r"' >/dev/null 2>&1' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
   pw=$(openssl rand -hex 12)
   docker run -d --rm --tmpfs /var/lib/postgresql/data --name $c -e POSTGRES_USER=tubu -e POSTGRES_PASSWORD="$pw" -e POSTGRES_DB=tubutree_it -p 127.0.0.1:$pgp:5432 postgres:16-alpine -c max_connections=200 >/dev/null || return 9
   docker run -d --rm --name $r -p 127.0.0.1:$rdp:6379 redis:7-alpine >/dev/null || return 9
   for _ in $(seq 1 40); do docker exec $c pg_isready -h 127.0.0.1 -U tubu -d tubutree_it >/dev/null 2>&1 && break; sleep 1; done
-  sleep 2
-  # Colima có lúc không chuyển tiếp cổng container mới ra máy (từ 24/11): mở ssh -L riêng tới VM khi cổng chưa nghe, tắt khi xong.
-  for p in $pgp $rdp; do
-    if ! lsof -nP -iTCP:$p -sTCP:LISTEN >/dev/null 2>&1 && [ -f "$HOME/.colima/_lima/colima/ssh.config" ]; then
-      ssh -F "$HOME/.colima/_lima/colima/ssh.config" -o ControlMaster=no -o ControlPath=none -o ExitOnForwardFailure=yes -n -N -L "127.0.0.1:$p:127.0.0.1:$p" lima-colima &
-      pid=$!
-      sleep 1
-      if kill -0 "$pid" 2>/dev/null; then RACE_TUNNELS="$RACE_TUNNELS $pid"; fi
-    fi
-    lsof -nP -iTCP:$p -sTCP:LISTEN >/dev/null 2>&1 || { echo "cổng $p không nghe sau khi mở container"; return 9; }
-  done
+  # Colima có lúc không chuyển tiếp cổng container mới ra máy (từ 24/11): chờ hostagent, không có thì mở ssh -L riêng tới VM, tắt khi xong.
+  colima_forward_ports "$pgp" "$rdp" || return 9
   local url="postgresql://tubu:$pw@127.0.0.1:$pgp/tubutree_it?schema=public&connection_limit=20&pool_timeout=30"
   (
     set -o pipefail
