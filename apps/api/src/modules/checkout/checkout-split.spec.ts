@@ -1,6 +1,7 @@
 import { computeReturnShares, storedLinePaid } from '../orders/refund-allocation';
 import {
   allocateGroupAmounts,
+  clampToRoom,
   allocateLineAmounts,
   allocateProRata,
   allocationError,
@@ -166,6 +167,41 @@ describe('allocateGroupAmounts', () => {
       linePaid: [231_394, 45_106],
       linePoints: [25_106, 4_894],
     });
+  });
+
+  it('W42: tổng điểm của từng kiện bằng đúng phần giảm điểm của kiện (1 điểm = 1đ) và tổng từng lô khớp cả lần đặt, mọi cách chia', () => {
+    let seed = 7;
+    const rnd = (n: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed % n;
+    };
+    // Mọi kiện đều có hàng Tubu để điểm rải ra nhiều kiện (ca xấu nhất cho làm tròn từng lô).
+    for (let run = 0; run < 2_000; run++) {
+      const groups = Array.from({ length: 2 + rnd(3) }, (_, g) => ({
+        lines: Array.from({ length: 1 + rnd(3) }, (_, k) => line(`g${g}l${k}`, 1 + rnd(50), TUBU)),
+      }));
+      const subtotal = groups.reduce((s, g) => s + g.lines.reduce((a, l) => a + l.total, 0), 0);
+      const pointsUsed = rnd(subtotal + 1);
+      const marketplace = rnd(pointsUsed + 1);
+      const converted = rnd(pointsUsed - marketplace + 1);
+      const t = { comboPerLine: {}, comboTotal: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: pointsUsed, pointsUsed, pointsUsedConverted: converted, pointsUsedMarketplace: marketplace };
+      const out = allocateGroupAmounts(groups, t);
+      for (const g of out) {
+        expect(g.pointsUsed).toBe(g.pointsDiscount);
+        expect(g.pointsUsedMarketplace).toBeGreaterThanOrEqual(0);
+        expect(g.pointsUsedConverted).toBeGreaterThanOrEqual(0);
+        expect(g.pointsUsedMarketplace + g.pointsUsedConverted).toBeLessThanOrEqual(g.pointsUsed);
+      }
+      expect(out.reduce((s, g) => s + g.pointsUsedMarketplace, 0)).toBe(marketplace);
+      expect(out.reduce((s, g) => s + g.pointsUsedConverted, 0)).toBe(converted);
+      expect(out.reduce((s, g) => s + g.pointsUsed, 0)).toBe(pointsUsed);
+    }
+  });
+
+  it('clampToRoom: phần vượt chỗ dồn sang phần còn chỗ theo thứ tự, tổng giữ nguyên', () => {
+    expect(clampToRoom([2, 0], [1, 2])).toEqual([1, 1]);
+    expect(clampToRoom([0, 3, 0], [1, 1, 5])).toEqual([1, 1, 1]);
+    expect(clampToRoom([1, 1], [2, 1])).toEqual([1, 1]);
   });
 
   it('nhiều kiện: mỗi khoản chia theo nền của bước đó, tổng các kiện khớp cả lần đặt', () => {

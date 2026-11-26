@@ -1,4 +1,4 @@
-import { evaluateClaimRules, lockedUntil, NO_PHONE_REVIEW_REASON, settlePoints, type ClaimFacts } from './external-claim.rules';
+import { evaluateClaimRules, lockedUntil, NO_PHONE_REVIEW_REASON, PHONE_MISMATCH_REVIEW_REASON, settlePoints, type ClaimFacts } from './external-claim.rules';
 
 const NOW = new Date('2026-10-20T05:00:00.000Z');
 const day = (n: number) => new Date(NOW.getTime() - n * 864e5);
@@ -138,6 +138,11 @@ describe('evaluateClaimRules: SĐT trên đơn sàn (W42)', () => {
       claimId: 'c1',
       state: 'PENDING',
     });
+  });
+  it('claim của chính khách được nhân viên mở lại mà SĐT lệch: vào REVIEW và lý do nêu SĐT lệch trước lý do mở lại', () => {
+    const d = evaluateClaimRules(mismatch({ claim: { id: 'c1', reopenable: true, own: true, state: 'VOIDED' } }));
+    expect(d).toMatchObject({ kind: 'CLAIM', state: 'REVIEW' });
+    expect(d.kind === 'CLAIM' && d.reviewReason).toBe(`${PHONE_MISMATCH_REVIEW_REASON}; Mã được nhân viên mở lại, cần người khác duyệt`);
   });
 });
 

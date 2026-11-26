@@ -3,7 +3,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { ExternalClaimService } from '../../src/modules/external-points/external-claim.service';
 import { ExternalClaimsAdminService, ATTACH_PHONE_MISMATCH_REASON } from '../../src/modules/external-points/external-claims-admin.service';
-import { releaseClaim, SCAN_PHONE_CHANGED_REASON } from '../../src/modules/external-points/external-claim-release';
+import { releaseClaim, SCAN_NO_MEMBER_PHONE_REASON, SCAN_PHONE_CHANGED_REASON } from '../../src/modules/external-points/external-claim-release';
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
 import { vnDateKey } from '../../src/common/vn-time';
 import { createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
@@ -144,5 +144,19 @@ describe('W42: SĐT che trên đơn sàn, khoá thử và cộng điểm (real P
     expect(credit[0]).toMatchObject({ lot: 'MARKETPLACE', delta: 10_000, refType: 'EXTERNAL_ORDER', refId: c2.id });
     expect(credit[0]!.expiresAt!.getTime()).toBeGreaterThan(Date.now() + 360 * DAY);
     expect(await prisma.user.findUniqueOrThrow({ where: { id: kept.id } })).toMatchObject({ pointsBalance: 0, pointsMarketplaceBalance: 10_000 });
+  });
+
+  it('khách gỡ SĐT trước lúc cộng: releaseClaim ×2 song song → REVIEW đúng một lần với lý do thiếu SĐT, không cộng', async () => {
+    const user = await mkUser('66');
+    const o = await mkOrder('66', { status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY) });
+    expect((await svc().submit(user.id, o.code)).status).toBe('CLAIMED');
+    const c = await prisma.externalPointsClaim.findFirstOrThrow({ where: { userId: user.id } });
+    await prisma.user.update({ where: { id: user.id }, data: { phone: null } });
+
+    const runs = await Promise.allSettled(Array.from({ length: 2 }, () => releaseClaim(prisma, c.id, { pendingDays: 14, expiryMonths: 12 })));
+    expect(runs.every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(runs.map((r) => (r as PromiseFulfilledResult<{ outcome: string }>).value.outcome).filter((x) => x === 'TO_REVIEW')).toHaveLength(1);
+    expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: c.id } })).toMatchObject({ state: 'REVIEW', reviewReason: SCAN_NO_MEMBER_PHONE_REASON, pointsTxId: null });
+    expect(await prisma.pointsTransaction.count({ where: { userId: user.id } })).toBe(0);
   });
 });

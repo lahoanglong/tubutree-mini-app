@@ -905,11 +905,12 @@ describe('LoyaltyService.reverseOrderPoints chỉ hoàn phần STANDARD (PD-3, r
  * Sổ PointsTransaction giả lọc ĐÚNG theo where (userId/reason.startsWith/delta.gt/createdAt.gte/
  * refId.in) — test hành vi "điểm xét hạng" theo dữ liệu, không phụ thuộc hình dạng câu truy vấn.
  */
-type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date; expiresAt?: Date | null };
+type LedgerRow = { userId?: string; reason: string; delta: number; refId?: string | null; createdAt?: Date; expiresAt?: Date | null; lot?: string };
 function fakeLedger(rows: LedgerRow[]) {
-  const all = rows.map((r) => ({ userId: 'u1', refId: null as string | null, createdAt: new Date(), ...r }));
+  const all = rows.map((r) => ({ userId: 'u1', refId: null as string | null, createdAt: new Date(), lot: 'STANDARD', ...r }));
   type W = {
     userId?: string;
+    lot?: string;
     reason?: { startsWith?: string };
     delta?: { gt?: number };
     createdAt?: { gte?: Date };
@@ -917,6 +918,7 @@ function fakeLedger(rows: LedgerRow[]) {
   };
   const match = (r: (typeof all)[number], w: W) =>
     (!w.userId || r.userId === w.userId) &&
+    (!w.lot || r.lot === w.lot) &&
     (!w.reason?.startsWith || r.reason.startsWith(w.reason.startsWith)) &&
     (w.delta?.gt === undefined || r.delta > w.delta.gt) &&
     (!w.createdAt?.gte || r.createdAt >= w.createdAt.gte) &&
@@ -1418,6 +1420,46 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(ov.pointExpireMonths).toBe(6);
   });
 
+  it('W42 getOverview: điểm sắp hết hạn tính cả lô điểm sàn: lô sàn hết hạn trước thì hiện lô sàn; cùng ngày thì cộng hai lô', async () => {
+    const day = (n: number) => new Date(Date.now() + n * 864e5);
+    const overview = async (rows: LedgerRow[], balances: { pointsBalance: number; pointsMarketplaceBalance: number }) => {
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', ...balances, pointsConvertedBalance: 0, tierId: null, tier: null }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+        order: NO_SPEND(),
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger(rows),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      return (await new LoyaltyService(prisma, makeConfig()).getOverview('u1')).expiringPoints;
+    };
+    const mkt = day(10);
+    expect(
+      await overview(
+        [
+          { reason: 'DAILY_CHECKIN:DAY_1', delta: 70, expiresAt: day(20) },
+          { reason: 'MARKETPLACE_ORDER:c1', delta: 500, expiresAt: mkt, lot: 'MARKETPLACE' },
+        ],
+        { pointsBalance: 70, pointsMarketplaceBalance: 500 },
+      ),
+    ).toEqual({ amount: 500, expiresAt: mkt.toISOString() });
+    // Chỉ có điểm sàn: thẻ điểm vẫn báo sắp hết hạn như tin nhắc.
+    expect(
+      await overview([{ reason: 'MARKETPLACE_ORDER:c1', delta: 500, expiresAt: mkt, lot: 'MARKETPLACE' }], { pointsBalance: 0, pointsMarketplaceBalance: 500 }),
+    ).toEqual({ amount: 500, expiresAt: mkt.toISOString() });
+    const same = day(15);
+    expect(
+      await overview(
+        [
+          { reason: 'DAILY_CHECKIN:DAY_1', delta: 70, expiresAt: same },
+          { reason: 'MARKETPLACE_ORDER:c1', delta: 500, expiresAt: same, lot: 'MARKETPLACE' },
+        ],
+        { pointsBalance: 70, pointsMarketplaceBalance: 500 },
+      ),
+    ).toEqual({ amount: 570, expiresAt: same.toISOString() });
+  });
+
   it('getOverview: không có lô nào có hạn → expiringPoints null, pointExpireMonths mặc định 12', async () => {
     const prisma = {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: null, tier: null }) },
@@ -1433,10 +1475,12 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(ov.pointExpireMonths).toBe(12);
   });
 
-  it('PD-3 getOverview: trả pointsConvertedBalance, pointsTotal, redeemableTotal; redeemablePoints giữ nghĩa lô STANDARD dùng được', async () => {
+  it('PD-3 + W42 getOverview: trả số dư từng lô, pointsTotal gồm cả ba lô; redeemableTotal (quỹ vòng quay/cây/đổi quà) không gồm điểm sàn', async () => {
     const prisma = {
       user: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 900, pointsConvertedBalance: 124, tierId: null, tier: null }),
+        findUniqueOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: 'u1', pointsBalance: 900, pointsConvertedBalance: 124, pointsMarketplaceBalance: 300, tierId: null, tier: null }),
       },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: NO_SPEND(),
@@ -1449,7 +1493,8 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(ov).toMatchObject({
       pointsBalance: 900,
       pointsConvertedBalance: 124,
-      pointsTotal: 1024,
+      pointsMarketplaceBalance: 300,
+      pointsTotal: 1324,
       redeemablePoints: 900,
       redeemableTotal: 1024,
       tierPoints: 0,

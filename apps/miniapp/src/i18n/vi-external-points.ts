@@ -81,5 +81,7 @@ export const viExternalPoints = {
     DAILY_MAX: 'Hôm nay bạn đã tích đủ số đơn cho phép. Bạn quay lại vào ngày mai nhé.',
     MONTHLY_CAP: 'Bạn đã đạt mức điểm tối đa từ đơn sàn trong tháng này.',
     ZERO_POINTS: 'Giá trị đơn nhỏ quá nên chưa quy ra được Điểm Xanh.',
+    PHONE_MISMATCH:
+      'Số điện thoại trên đơn sàn không khớp số Zalo bạn đang đăng nhập. Bạn đăng nhập đúng tài khoản Zalo dùng số đã đặt đơn, hoặc liên hệ Tubu nếu bạn đã đổi số nhé.',
   },
 } as const;

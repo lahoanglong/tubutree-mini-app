@@ -57,6 +57,14 @@ describe('parseOrderPhoneForMatch + phoneMatchesOrderMask: SĐT che số trên �
     expect(parseOrderPhoneForMatch('981*****26')).toEqual({ kind: 'MASK', lead: '', tail: '26', positional: null, mask: '*26' });
   });
 
+  it('84 không có + và ngắn hơn 84 + 9 ký tự: có thể là số nội địa mất số 0 đầu, chỉ tin đuôi; đủ 11 ký tự thì là mã nước', () => {
+    expect(parseOrderPhoneForMatch('843****26')).toEqual({ kind: 'MASK', lead: '', tail: '26', positional: null, mask: '*26' });
+    expect(phoneMatchesOrderMask('0843123426', parseOrderPhoneForMatch('843****26'))).toBe('MATCH');
+    expect(parseOrderPhoneForMatch('84981****26')).toMatchObject({ kind: 'MASK', positional: '0981****26' });
+    expect(phoneMatchesOrderMask(USER, parseOrderPhoneForMatch('84981****26'))).toBe('MATCH');
+    expect(phoneMatchesOrderMask('0912345626', parseOrderPhoneForMatch('84981****26'))).toBe('MISMATCH');
+  });
+
   it('SĐT khách thiếu hoặc sai dạng: NO_DATA, không bao giờ MISMATCH', () => {
     for (const u of [null, undefined, '', 'abc', '12345']) {
       expect(phoneMatchesOrderMask(u, parseOrderPhoneForMatch('098*****27'))).toBe('NO_DATA');

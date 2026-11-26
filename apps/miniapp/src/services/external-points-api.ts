@@ -22,7 +22,7 @@ export const getMyExternalClaims = (page = 1, limit = 10) =>
 
 const REJECT_CODES: readonly ExternalClaimRejectCode[] = [
   'DISABLED', 'NOT_ELIGIBLE_USER', 'INVALID_CODE', 'LOCKED', 'DAILY_ATTEMPTS', 'APP_ORDER', 'CHAT_ORDER', 'TOO_OLD',
-  'BEFORE_SINCE', 'CLOSED', 'ALREADY_CLAIMED', 'DAILY_MAX', 'MONTHLY_CAP', 'ZERO_POINTS',
+  'BEFORE_SINCE', 'CLOSED', 'ALREADY_CLAIMED', 'DAILY_MAX', 'MONTHLY_CAP', 'ZERO_POINTS', 'PHONE_MISMATCH',
 ];
 
 /** `code` ổn định mà API gắn vào lỗi từ chối; undefined khi lỗi không phải từ chối nghiệp vụ (mạng, 5xx, API cũ). */

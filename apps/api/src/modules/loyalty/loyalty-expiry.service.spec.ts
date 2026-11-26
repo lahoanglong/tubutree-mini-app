@@ -1060,8 +1060,9 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     /** Mốc lần chạy thành công trước ở cron_runs (mặc định chưa có dòng nào = quét đủ). */
     lastSuccessAt?: Date | null;
   }) {
-    const queryRaw = jest.fn().mockResolvedValueOnce(opts.candidates); // ứng viên (SELECT DISTINCT userId ... LIMIT)
-    const findMany = jest.fn().mockResolvedValueOnce(opts.userTxns); // toàn bộ txn của user đó (đọc nhanh, chưa khoá)
+    // Ứng viên (SELECT DISTINCT userId ... LIMIT) của lô STANDARD; lô MARKETPLACE quét sau, không có ứng viên.
+    const queryRaw = jest.fn().mockResolvedValueOnce(opts.candidates).mockResolvedValue([]);
+    const findMany = jest.fn().mockResolvedValueOnce(opts.userTxns).mockResolvedValue([]); // toàn bộ txn của user đó (đọc nhanh, chưa khoá)
     const order: string[] = [];
     const txQueryRaw = jest.fn(async () => {
       order.push('lock');
@@ -1137,7 +1138,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     expect(txCreate).not.toHaveBeenCalled();
   });
 
-  it('PD-3 (T7): ứng viên và sổ FIFO chỉ lấy lô STANDARD; dòng POINTS_EXPIRED ghi lô STANDARD', async () => {
+  it('PD-3 (T7) + W42: ứng viên và sổ FIFO quét từng lô có hạn (STANDARD rồi MARKETPLACE), không bao giờ CONVERTED; dòng POINTS_EXPIRED ghi đúng lô', async () => {
     // Lô CONVERTED (quy từ xu) lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô
     // thường trông "còn nguyên" và cron trừ quá tay (spec PD-3 mục 2.2).
     const { svc, findMany, queryRaw, txUpdateMany, txCreate } = setup({
@@ -1147,8 +1148,10 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     });
     await svc.expirePoints();
 
-    expect(queryRaw).toHaveBeenCalledTimes(1);
-    expect(sqlText(queryRaw)).toContain(`"lot" = 'STANDARD'`);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect(sqlText(queryRaw)).toContain(`"lot" IN ('STANDARD')`);
+    expect(sqlText(queryRaw, 1)).toContain(`"lot" IN ('MARKETPLACE')`);
+    for (const call of [0, 1]) expect(sqlText(queryRaw, call)).not.toContain('CONVERTED');
     expect(sqlText(queryRaw)).toContain('"delta" > 0');
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
@@ -1306,6 +1309,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
         return args.where.userId === 'fresh' ? [tx('f', 70, '2026-01-01', '2026-07-04T12:00:00.000Z')] : [tx('o', 100, '2025-05-01', '2026-05-01')];
       });
       const queryRaw = jest.fn(async (q: Prisma.Sql) => {
+        if (q.sql.includes("'MARKETPLACE'")) return [];
         const dates = q.values.filter((v): v is Date => v instanceof Date);
         const [gt, lte] = dates.length === 2 ? dates : [undefined, dates[0]!];
         return [oldLot, freshLot].filter((l) => (!gt || l.expiresAt > gt) && l.expiresAt <= lte!).map((l) => ({ userId: l.userId }));
@@ -1395,9 +1399,13 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     userTxns: PointExpiryTxn[];
     recentLog: unknown;
     reminderDays?: number;
+    marketplaceTxns?: PointExpiryTxn[];
   }) {
     const queryRaw = jest.fn().mockResolvedValueOnce(opts.candidates);
-    const findMany = jest.fn().mockResolvedValueOnce(opts.userTxns);
+    // Sổ lô STANDARD của khách; lô MARKETPLACE (đọc sau) mặc định trống.
+    const findMany = jest.fn(async (args: { where: { lot: string } }) =>
+      args.where.lot === 'MARKETPLACE' ? (opts.marketplaceTxns ?? []) : opts.userTxns,
+    );
     const notifFindFirst = jest.fn().mockResolvedValue(opts.recentLog);
     const notify = jest.fn().mockResolvedValue(undefined);
     const prisma = {
@@ -1592,7 +1600,7 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('PD-3: nhắc sắp hết hạn chỉ xét lô STANDARD (lô quy đổi không bao giờ hết hạn)', async () => {
+  it('PD-3 + W42: nhắc sắp hết hạn xét hai lô có hạn (STANDARD, MARKETPLACE), không bao giờ lô quy đổi', async () => {
     const soon = new Date(Date.now() + 3 * DAY);
     const { svc, findMany, queryRaw } = setup({
       candidates: [{ userId: 'u1' }],
@@ -1600,8 +1608,26 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
       recentLog: null,
     });
     await svc.remindExpiringPoints();
-    expect(sqlText(queryRaw)).toContain(`"lot" = 'STANDARD'`);
-    expect(findMany.mock.calls[0][0].where).toEqual({ userId: 'u1', lot: 'STANDARD' });
+    expect(sqlText(queryRaw)).toContain(`"lot" IN ('STANDARD', 'MARKETPLACE')`);
+    expect(sqlText(queryRaw)).not.toContain('CONVERTED');
+    expect(findMany.mock.calls.map((c) => c[0].where)).toEqual([
+      { userId: 'u1', lot: 'STANDARD' },
+      { userId: 'u1', lot: 'MARKETPLACE' },
+    ]);
+  });
+
+  it('W42: một tin cho cả hai lô: tổng điểm sắp hết hạn của lô thường và lô điểm sàn, ngày là lô sớm nhất', async () => {
+    const standardSoon = new Date(Date.now() + 5 * DAY);
+    const marketplaceSoon = new Date(Date.now() + 2 * DAY);
+    const { svc, notify } = setup({
+      candidates: [{ userId: 'u1' }],
+      userTxns: [tx('a', 40, '2025-08-01', standardSoon.toISOString())],
+      marketplaceTxns: [tx('m', 60, '2025-08-01', marketplaceSoon.toISOString())],
+      recentLog: null,
+    });
+    await svc.remindExpiringPoints();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][2]).toMatchObject({ points: '100', date: formatVnDate(marketplaceSoon) });
   });
 
   it('không có điểm nào trong cửa sổ (amount=0) → không notify', async () => {

@@ -52,6 +52,22 @@ function firstTierRecalcAtOrAfter(t: Date): Date {
   return sameDay.getTime() >= t.getTime() ? sameDay : new Date(sameDay.getTime() + 86_400_000);
 }
 
+type PointExpiry = { amount: number; expiresAt: Date };
+
+/** Điểm sắp hết hạn của một lô không quá số dư của lô đó (sổ có thể đi trước số dư trong lúc đảo). */
+function capExpiry(e: PointExpiry | null, balance: number): PointExpiry | null {
+  return e ? { amount: Math.min(e.amount, balance), expiresAt: e.expiresAt } : null;
+}
+
+/** Ngày hết hạn sớm nhất qua các lô có hạn; các lô cùng ngày VN đó thì cộng số điểm. */
+function earliestExpiry(items: (PointExpiry | null)[]): PointExpiry | null {
+  const live = items.filter((e): e is PointExpiry => e !== null && e.amount > 0);
+  if (live.length === 0) return null;
+  const first = live.reduce((min, e) => (e.expiresAt.getTime() < min.expiresAt.getTime() ? e : min));
+  const day = vnDateKey(first.expiresAt);
+  return { amount: live.filter((e) => vnDateKey(e.expiresAt) === day).reduce((s, e) => s + e.amount, 0), expiresAt: first.expiresAt };
+}
+
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
  *  - creditOrderPoints khi DELIVERED
@@ -737,14 +753,21 @@ export class LoyaltyService {
     const { spent12m } = await this.spending12m(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
-    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
+    const marketplaceBalance = user.pointsMarketplaceBalance ?? 0;
+    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns, marketplaceExpiryTxns] = await Promise.all([
       this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
       this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
       this.fractionConfig('loyalty.max_redeem_pct', 0.2),
       this.pointExpireMonths(),
       loadPointExpiryTxns(this.prisma, userId),
+      marketplaceBalance > 0 ? loadPointExpiryTxns(this.prisma, userId, 'MARKETPLACE') : Promise.resolve([]),
     ]);
-    const expiring = user.pointsBalance > 0 ? nextPointExpiry(expiryTxns, new Date()) : null;
+    // Cùng cách tính với tin nhắc sắp hết hạn (remindUser): mỗi lô có hạn replay riêng, lấy ngày sớm nhất, cùng ngày VN thì cộng.
+    const now = new Date();
+    const expiring = earliestExpiry([
+      user.pointsBalance > 0 ? capExpiry(nextPointExpiry(expiryTxns, now), user.pointsBalance) : null,
+      marketplaceBalance > 0 ? capExpiry(nextPointExpiry(marketplaceExpiryTxns, now), marketplaceBalance) : null,
+    ]);
     // Đang trong hạn giữ hạng (đã đủ điều kiện rớt hạng nhưng chưa bị hạ): cho khách biết phải mua thêm bao nhiêu để giữ.
     const graceUntil = user.tierGraceUntil && user.tier && user.tierGraceUntil.getTime() > Date.now() ? user.tierGraceUntil : null;
     const keepGap = graceUntil && user.tier ? await this.tierKeepGap(userId, user.tier, graceUntil) : null;
@@ -755,8 +778,8 @@ export class LoyaltyService {
       rates: { earnPct, vndPerPoint: Math.round(100 / earnPct), vndPerPointRedeem, maxRedeemPct },
       /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
-      /** Điểm thường sắp hết hạn gần nhất (cộng các lô cùng ngày hết hạn) để khách dùng trước; null nếu không có. */
-      expiringPoints: expiring ? { amount: Math.min(expiring.amount, user.pointsBalance), expiresAt: expiring.expiresAt.toISOString() } : null,
+      /** Điểm có hạn (lô thường và lô điểm sàn) sắp hết hạn gần nhất, cộng các lô cùng ngày hết hạn, để khách dùng trước; null nếu không có. */
+      expiringPoints: expiring ? { amount: expiring.amount, expiresAt: expiring.expiresAt.toISOString() } : null,
       /** Số tháng điểm thường hết hạn kể từ ngày tích (SystemConfig loyalty.point_expire_months). Điểm quy đổi không hết hạn. */
       pointExpireMonths,
       /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */

@@ -63,6 +63,26 @@ describe('applyPointsDelta (ghi sổ Điểm Xanh theo lô)', () => {
     expect(pointsTransaction.create).not.toHaveBeenCalled();
   });
 
+  it('W42: cộng lô MARKETPLACE thiếu hạn → ném lỗi, không ghi gì; có hạn → tăng pointsMarketplaceBalance; trừ không cần hạn', async () => {
+    const bad = fakeTx();
+    await expect(applyPointsDelta(bad.tx, { userId: 'u1', delta: 10, lot: 'MARKETPLACE', reason: 'R' })).rejects.toThrow(/phải có expiresAt/);
+    expect(bad.user.update).not.toHaveBeenCalled();
+    expect(bad.pointsTransaction.create).not.toHaveBeenCalled();
+
+    const ok = fakeTx();
+    const exp = new Date('2027-10-01T00:00:00Z');
+    await applyPointsDelta(ok.tx, { userId: 'u1', delta: 10, lot: 'MARKETPLACE', reason: 'R', expiresAt: exp });
+    expect(ok.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsMarketplaceBalance: { increment: 10 } } });
+    expect(ok.pointsTransaction.create.mock.calls[0][0].data).toMatchObject({ lot: 'MARKETPLACE', expiresAt: exp });
+
+    const spend = fakeTx();
+    await applyPointsDelta(spend.tx, { userId: 'u1', delta: -10, lot: 'MARKETPLACE', reason: 'SPEND' });
+    expect(spend.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'u1', pointsMarketplaceBalance: { gte: 10 } },
+      data: { pointsMarketplaceBalance: { decrement: 10 } },
+    });
+  });
+
   it('skipDuplicates: dòng đã có (khoá partial unique) → applied:false, số dư KHÔNG đổi', async () => {
     const dup = fakeTx({ createdRows: 0 });
     const r = await applyPointsDelta(dup.tx, {

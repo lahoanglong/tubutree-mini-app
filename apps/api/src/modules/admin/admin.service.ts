@@ -525,7 +525,7 @@ export class AdminService {
         ...skipTake(page, limit),
         select: {
           id: true, zaloId: true, phone: true, fullName: true, role: true,
-          pointsBalance: true, pointsConvertedBalance: true, walletBalance: true, tierId: true, createdAt: true,
+          pointsBalance: true, pointsConvertedBalance: true, pointsMarketplaceBalance: true, walletBalance: true, tierId: true, createdAt: true,
           isBlocked: true, blockedAt: true, blockedReason: true,
         },
       }),
@@ -937,6 +937,7 @@ export class AdminService {
         referralCode: true,
         pointsBalance: true,
         pointsConvertedBalance: true,
+        pointsMarketplaceBalance: true,
         walletBalance: true,
         isBlocked: true,
         blockedAt: true,

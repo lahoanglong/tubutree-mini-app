@@ -203,7 +203,7 @@ describe('cột SĐT / mã số giữ nguyên số 0 đầu khi mở bằng Exce
 
   it('file người dùng: cột SĐT là văn bản', async () => {
     const { prisma } = cursorPrisma(
-      [{ id: 'u1', fullName: 'A', phone: '0910039595', role: 'CUSTOMER', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0, isBlocked: false, createdAt: new Date() }],
+      [{ id: 'u1', fullName: 'A', phone: '0910039595', role: 'CUSTOMER', pointsBalance: 0, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, walletBalance: 0, isBlocked: false, createdAt: new Date() }],
       'user',
     );
     expect(await collect(userCsvChunks(prisma, undefined))).toContain(',"=""0910039595""",');
@@ -230,6 +230,7 @@ describe('userCsvChunks', () => {
       role: 'CUSTOMER',
       pointsBalance: 1,
       pointsConvertedBalance: 2,
+      pointsMarketplaceBalance: 4,
       walletBalance: 0,
       isBlocked: false,
       createdAt: new Date('2026-10-01T00:00:00Z'),
@@ -237,6 +238,8 @@ describe('userCsvChunks', () => {
     const { prisma } = cursorPrisma(rows, 'user');
     const csv = await collect(userCsvChunks(prisma, undefined));
     expect(csv.trimEnd().split('\r\n')).toHaveLength(rows.length + 1);
+    // Cột Điểm Xanh là tổng ba lô (thường 1 + không hết hạn 2 + điểm đơn sàn 4).
+    expect(csv.split('\r\n')[1]!.split(',')[4]).toBe('7');
   });
 });
 

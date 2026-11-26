@@ -22,6 +22,8 @@ import { orderPhoneMatch } from './order-phone-match';
 
 /** Claim SCAN chưa có người duyệt mà SĐT Zalo của thành viên lúc cộng không còn khớp SĐT (đầy đủ hoặc che) trên đơn sàn. */
 export const SCAN_PHONE_CHANGED_REASON = 'SĐT Zalo của thành viên đã đổi, không còn khớp SĐT trên đơn sàn';
+/** Claim SCAN chưa có người duyệt mà thành viên lúc cộng không còn SĐT để đối chiếu với đơn sàn. */
+export const SCAN_NO_MEMBER_PHONE_REASON = 'Thành viên không còn SĐT để đối chiếu với đơn sàn';
 
 const logger = new Logger('ExternalClaimRelease');
 const BATCH = 100;
@@ -142,6 +144,7 @@ export async function releaseClaim(
     else if (chat && row.decidedById === null && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
     // Đơn sàn (W42): khớp lúc gửi mã nhưng thành viên đổi SĐT Zalo trước lúc cộng. Claim đã có người duyệt (gắn tay khi lệch) thì thôi.
     else if (!chat && row.decidedById === null && orderPhoneMatch(user.phone, order) === 'MISMATCH') reviewReason = SCAN_PHONE_CHANGED_REASON;
+    else if (!chat && row.decidedById === null && !user.phone) reviewReason = SCAN_NO_MEMBER_PHONE_REASON;
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
     else if (chat && !phoneVerifiedFresh(user.phoneVerifiedAt, { now, maxDays: opts.chat!.phoneVerifiedMaxDays }) && !(await approvedDespiteStale(tx, row))) reviewReason = PHONE_STALE_REASON;
     let finalPoints = points ?? 0;

@@ -135,6 +135,18 @@ export function allocateProRata(total: number, weights: number[]): number[] {
   return out;
 }
 
+/** Kẹp từng phần về chỗ trống của nó; phần bị kẹp dồn lần lượt vào phần còn chỗ theo thứ tự. Tổng giữ nguyên khi tổng chỗ đủ. */
+export function clampToRoom(alloc: number[], room: number[]): number[] {
+  const out = alloc.map((a, i) => Math.min(a, Math.max(0, room[i] ?? 0)));
+  let rest = sumOf(alloc) - sumOf(out);
+  for (let i = 0; i < out.length && rest > 0; i++) {
+    const add = Math.min(rest, Math.max(0, room[i] ?? 0) - out[i]!);
+    out[i]! += add;
+    rest -= add;
+  }
+  return out;
+}
+
 export interface CheckoutTotals {
   /** Combo theo dòng (variationId → đồng). */
   comboPerLine: Record<string, number>;
@@ -280,11 +292,15 @@ export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: Checko
     return s;
   });
   const points = slices.map((ls) => sumOf(ls.map((l) => l.points)));
-  // Mỗi lô chia theo cùng trọng số (phần điểm của kiện) nên mỗi kiện mang đúng phần lô của nó; huỷ một đơn của lần đặt bị tách chỉ
-  // hoàn đúng lô đã dùng cho đơn đó.
-  const standard = allocateProRata(standardPointsUsed(t), points);
-  const converted = allocateProRata(convertedPointsUsed(t), points);
-  const marketplace = allocateProRata(marketplacePointsUsed(t), points);
+  // Tổng điểm chia theo phần giảm của kiện một lần (một lần làm tròn), rồi tách lô trong từng kiện: chia ba lô độc lập thì mỗi lô làm
+  // tròn riêng và điểm ghi trên một đơn lệch phần giảm của chính đơn đó tới 2 điểm, huỷ đơn đó hoàn dư. Huỷ một đơn của lần đặt bị
+  // tách chỉ hoàn đúng lô đã dùng cho đơn đó.
+  const marketplaceTotal = marketplacePointsUsed(t);
+  const convertedTotal = convertedPointsUsed(t);
+  const used = allocateProRata(marketplaceTotal + convertedTotal + standardPointsUsed(t), points);
+  const marketplace = clampToRoom(allocateProRata(marketplaceTotal, points), used);
+  const roomAfterMarketplace = used.map((u, i) => u - marketplace[i]!);
+  const converted = clampToRoom(allocateProRata(convertedTotal, roomAfterMarketplace), roomAfterMarketplace);
   return slices.map((ls, i) => {
     const subtotal = sumOf(ls.map((l) => l.total));
     const comboDiscount = sumOf(ls.map((l) => l.combo));
@@ -297,7 +313,7 @@ export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: Checko
       couponDiscount,
       tierDiscount,
       pointsDiscount: points[i]!,
-      pointsUsed: standard[i]! + converted[i]! + marketplace[i]!,
+      pointsUsed: used[i]!,
       pointsUsedConverted: converted[i]!,
       pointsUsedMarketplace: marketplace[i]!,
       discount,

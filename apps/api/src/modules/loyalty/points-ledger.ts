@@ -44,6 +44,10 @@ export async function applyPointsDelta(tx: Prisma.TransactionClient, input: Poin
   if (lot === 'CONVERTED' && input.expiresAt) {
     throw new Error('applyPointsDelta: lô CONVERTED không hết hạn, expiresAt phải để trống');
   }
+  // Điểm sàn không có hạn thì cron hết hạn không bao giờ trừ: lệnh cộng lô này luôn phải mang hạn.
+  if (lot === 'MARKETPLACE' && delta > 0 && !input.expiresAt) {
+    throw new Error('applyPointsDelta: lệnh cộng lô MARKETPLACE phải có expiresAt');
+  }
   if (input.skipDuplicates && delta < 0) {
     throw new Error('applyPointsDelta: skipDuplicates chỉ dùng cho lệnh cộng');
   }

@@ -7,6 +7,7 @@ const DAY_MS = 864e5;
 export const NOT_FOUND_LOCK_THRESHOLD = 5;
 /** Đơn sàn không có SĐT (đầy đủ hay che đủ số) để đối chiếu tự động: người kiểm xem đơn trước khi cộng. */
 export const NO_PHONE_REVIEW_REASON = 'Đơn sàn không có thông tin SĐT để đối chiếu tự động';
+export const PHONE_MISMATCH_REVIEW_REASON = 'SĐT trên đơn sàn không khớp SĐT thành viên';
 const OWN_REPORTABLE = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED'];
 
 export interface ClaimOrderFacts {
@@ -103,6 +104,9 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   else if (order.status === 'PARTIAL_RETURN') reviewReason = 'Đơn đã hoàn một phần trên sàn, cần nhân viên kiểm';
   else if ((order.goodsValue ?? 0) > f.cfg.reviewAboveVnd) reviewReason = 'Giá trị đơn vượt ngưỡng tự duyệt';
   else if (order.phoneMatch === 'NO_DATA') reviewReason = NO_PHONE_REVIEW_REASON;
+  // Chỉ claim của chính khách (mã được mở lại) qua được tới đây khi SĐT lệch: người duyệt phải thấy lý do lệch, vì duyệt xong thì lúc
+  // cộng không kiểm lại SĐT.
+  if (order.phoneMatch === 'MISMATCH') reviewReason = [PHONE_MISMATCH_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
   return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };
 }
 

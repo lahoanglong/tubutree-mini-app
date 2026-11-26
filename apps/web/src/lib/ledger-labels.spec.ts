@@ -24,7 +24,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
 /**
  * Mọi `reason` mà API ghi vào points_transactions (R5-ADMIN-4). Nguồn: loyalty.service (ORDER_DELIVERED, ORDER_REVERSED,
  * ORDER_REFUND_POINTS, LOYALTY_REDEEM_VOUCHER, DAILY_CHECKIN, POS_OFFLINE_ORDER), loyalty-expiry.service (POINTS_EXPIRED),
- * checkout.service (ORDER_REDEEM, ORDER_REDEEM_CONVERTED), order-reversal.service (ORDER_REFUND_*, RETURN_*),
+ * checkout.service (ORDER_REDEEM, ORDER_REDEEM_CONVERTED, ORDER_REDEEM_MARKETPLACE), order-reversal.service (ORDER_REFUND_*, RETURN_*),
  * wallet/referral-reward + reward-points.service (REFERRAL_*), feed/community-reward.service (COMMUNITY_*),
  * storefront-quest.service, affiliate.service (CTV_MILESTONE), game.service (GAME_*, MISSION), season-pass.service,
  * reviews.service (REVIEW, REVIEW_DELETE, REVIEW_RETURN, REVIEW_PHOTO), waste-exchange (RECYCLE, RECYCLE_REVERSED), gift redemptions (GIFT_REDEEM, GIFT_REFUND), external-points (PANCAKE_CHAT_ORDER, MARKETPLACE_ORDER và hai mã _REVERSED), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
@@ -38,9 +38,12 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['ORDER_REFUND_XU:TUBU2026101546241', 'Hoàn điểm đơn huỷ/trả', 'Hoàn điểm đơn huỷ/trả · TUBU2026101546241'],
   ['ORDER_REDEEM:TUBU2026101546241', 'Dùng điểm khi thanh toán', 'Dùng điểm khi thanh toán · TUBU2026101546241'],
   ['ORDER_REDEEM_CONVERTED:TUBU2026101546241', 'Dùng điểm khi thanh toán', 'Dùng điểm khi thanh toán · TUBU2026101546241'],
+  ['ORDER_REDEEM_MARKETPLACE:TUBU2026101546241', 'Dùng điểm khi thanh toán', 'Dùng điểm khi thanh toán · TUBU2026101546241'],
+  ['ORDER_REFUND_MARKETPLACE:TUBU2026101546241', 'Hoàn điểm đơn huỷ/trả', 'Hoàn điểm đơn huỷ/trả · TUBU2026101546241'],
   ['RETURN_REVERSED:TUBU2026101538731', 'Thu hồi điểm của đơn trả hàng', 'Thu hồi điểm của đơn trả hàng · TUBU2026101538731'],
   ['RETURN_REFUND_POINTS:TUBU2026101538731', 'Hoàn lại điểm đã dùng (trả hàng)', 'Hoàn lại điểm đã dùng (trả hàng) · TUBU2026101538731'],
   ['RETURN_REFUND_CONVERTED:TUBU2026101538731', 'Hoàn lại điểm đã dùng (trả hàng)', 'Hoàn lại điểm đã dùng (trả hàng) · TUBU2026101538731'],
+  ['RETURN_REFUND_MARKETPLACE:TUBU2026101538731', 'Hoàn lại điểm đã dùng (trả hàng)', 'Hoàn lại điểm đã dùng (trả hàng) · TUBU2026101538731'],
   ['LOYALTY_REDEEM_VOUCHER:reward-discount-50k', 'Đổi điểm lấy mã giảm giá', 'Đổi điểm lấy mã giảm giá'],
   ['DAILY_CHECKIN:DAY_3', 'Điểm danh hằng ngày', 'Điểm danh hằng ngày · ngày 3'],
   ['POS_OFFLINE_ORDER:rcpt-77', 'Tích điểm mua tại cửa hàng', 'Tích điểm mua tại cửa hàng'],
