@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED } from '@tubutree/app-core/client-copy';
 import { BANK_QR_LOAD_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import { HttpError } from '../services/http';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -851,6 +851,11 @@ describe('Thanh toán chuyển khoản: đổi sang trả tiền khi nhận (COD
 });
 
 describe('Thanh toán chuyển khoản: thẻ kết bạn Zalo (w39-02)', () => {
+  // Nạp sẵn chunk thẻ: ca "không có thẻ" phải chứng minh trang không dựng thẻ, không phải lazy() chưa kịp nạp xong lúc đếm.
+  beforeAll(() => import('../components/checkout/order-zalo'));
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await act(async () => {});
+  };
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getBankQr.mockResolvedValue(QR);
@@ -878,7 +883,7 @@ describe('Thanh toán chuyển khoản: thẻ kết bạn Zalo (w39-02)', () => 
     mocks.getBankQr.mockResolvedValue({ ...QR, ...extra });
     renderPage();
     await screen.findByRole('button', { name: 'Để sau / Xem đơn hàng' });
-    await act(async () => {});
+    await settle();
     expect(card()).toBeNull();
   });
 
@@ -906,6 +911,7 @@ describe('Thanh toán chuyển khoản: thẻ kết bạn Zalo (w39-02)', () => 
     mocks.getBankQr.mockRejectedValue(new Error('Network Error'));
     renderPage();
     await screen.findByText('Chưa tải được thông tin thanh toán');
+    await settle();
     expect(card()).toBeNull();
   });
 });

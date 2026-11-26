@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopied, bankCopyFailed } from '@tubutree/app-core/client-copy';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { Page, useParams, useNavigate } from 'zmp-ui';
 import { useNotify } from '../hooks/use-notify';
 import { Text } from '../components/ui/text';
@@ -32,7 +32,30 @@ import { trackEvent } from '../services/analytics';
 import { CodSwitchAction } from '../components/orders/cod-switch-action';
 
 // Thẻ kết bạn Zalo chỉ hiện khi máy chủ bảo hiện: tải lười để màn chuyển khoản không kéo thẻ và câu chữ cửa hàng (`shop-copy`) theo khi thẻ ẩn.
-const OrderZaloFriend = lazy(() => import('../components/checkout/order-zalo').then((m) => ({ default: m.OrderZaloFriend })));
+// Khung thẻ nằm cùng chunk với lời mời, nên lúc chờ chunk không có ô trống hiện trước. Chunk lỗi (webview Zalo chập mạng, bản mới thay chunk) thì
+// bỏ cả thẻ: lỗi nạp không được lan lên RouteBoundary và thay cả mã QR khách sắp quét, cũng không để lại khung rỗng.
+const NoZaloFriendCard = () => null;
+const ZaloFriendCardBody = lazy<ComponentType<{ code: string }>>(() =>
+  import('../components/checkout/order-zalo').then(
+    ({ OrderZaloFriend }) => ({
+      default: function BankZaloFriendCard({ code }: { code: string }) {
+        return (
+          <Box
+            mt={3}
+            p={4}
+            role="region"
+            aria-label="Zalo Tubu Tree"
+            data-testid="bank-zalo-friend"
+            style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'left' }}
+          >
+            <OrderZaloFriend code={code} from="bank_transfer" />
+          </Box>
+        );
+      },
+    }),
+    () => ({ default: NoZaloFriendCard }),
+  ),
+);
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
@@ -407,16 +430,7 @@ export default function BankPaymentPage() {
 function ZaloFriendCard({ code }: { code: string }) {
   return (
     <Suspense fallback={null}>
-      <Box
-        mt={3}
-        p={4}
-        role="region"
-        aria-label="Zalo Tubu Tree"
-        data-testid="bank-zalo-friend"
-        style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'left' }}
-      >
-        <OrderZaloFriend code={code} from="bank_transfer" />
-      </Box>
+      <ZaloFriendCardBody code={code} />
     </Suspense>
   );
 }

@@ -93,6 +93,31 @@ test.describe('Trang chuyển khoản web: thẻ kết bạn Zalo (w39-02)', () 
     }
   });
 
+  test('chunk thẻ lỗi tải (mạng chập, bản mới thay chunk): mã QR và nút vẫn còn, không có thẻ, không lỗi trang', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'Khổ điện thoại');
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    // Tên chunk Next là mã băm: nhận chunk thẻ theo testid chỉ có trong order-zalo.tsx.
+    let aborted = 0;
+    await page.route('**/_next/static/chunks/**', async (route) => {
+      const res = await route.fetch();
+      const body = await res.text();
+      if (body.includes('order-zalo-friend-qr')) {
+        aborted++;
+        return route.abort('failed');
+      }
+      return route.fulfill({ response: res, body });
+    });
+    await openBankPage(page, api, { zaloFriendCard: true });
+    await expect.poll(() => aborted, { timeout: 20_000 }).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    await expect(page.locator('img[alt="VietQR"]').filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Để sau / Xem đơn hàng' }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: CHECK }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByTestId('bank-zalo-friend')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('đã nhận tiền: thẻ vẫn ở dưới "Xem đơn hàng / Về trang chủ"', async ({ page, api }) => {
     await openBankPage(page, api, { zaloFriendCard: true, paymentStatus: 'PAID', paymentDeadline: null });
     await expect(page.getByText('Đã nhận thanh toán!').filter({ visible: true })).toBeVisible({ timeout: 20_000 });

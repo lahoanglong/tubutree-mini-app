@@ -4,6 +4,7 @@ import { GUEST_LOOKUP_LIMIT } from '@tubutree/shared-types';
 import { throttleRefusalOf } from '../../../common/throttle/throttle.config';
 import { GuestCheckoutController, GUEST_LOOKUP_CODE_LIMIT, GUEST_LOOKUP_IP_LIMIT, GUEST_LOOKUP_PHONE_LIMIT, GUEST_LOOKUP_PHONE_TTL_MS } from './guest-checkout.controller';
 import { GuestCheckoutService } from './guest-checkout.service';
+import { GUEST_COD_MAX_DEFAULT } from './guest-checkout.config';
 
 /**
  * tubu-w28-02: trang /don hiện các mốc có giờ và nút nhắn Zalo kèm mã đơn, nên bản xem đơn khách là thứ duy nhất trình duyệt nhận được. Khoá danh sách
@@ -45,7 +46,14 @@ const ORDER = {
 
 const SIBLING_ROW = { code: 'TUBU2026112412346', status: 'CONFIRMED', total: 99_000 };
 
-function service(opts: { order?: Partial<typeof ORDER> & { orderZaloConsent?: boolean | null }; gate?: { enabled: boolean; open: boolean; rolloutPct: number }; friendRow?: { id: string } | null } = {}) {
+function service(
+  opts: {
+    order?: Partial<typeof ORDER> & { orderZaloConsent?: boolean | null };
+    gate?: { enabled: boolean; open: boolean; rolloutPct: number };
+    friendRow?: { id: string } | null;
+    bankTransfer?: { getBankQr: jest.Mock };
+  } = {},
+) {
   const order = { orderZaloConsent: null, ...ORDER, ...opts.order };
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([SIBLING_ROW]) },
@@ -68,7 +76,8 @@ function service(opts: { order?: Partial<typeof ORDER> & { orderZaloConsent?: bo
   const env = { get: jest.fn(() => 'test-jwt-access-secret-test-jwt-access-secret') };
   const none = {} as never;
   const mss = opts.gate ? ({ gate: () => opts.gate } as never) : undefined;
-  return { svc: new GuestCheckoutService(prisma as never, none, none, none, config as never, none, env as never, none, mss), prisma };
+  const bankTransfer = (opts.bankTransfer ?? none) as never;
+  return { svc: new GuestCheckoutService(prisma as never, none, none, bankTransfer, config as never, none, env as never, none, mss), prisma };
 }
 
 const TRACK_FIELDS = [
@@ -181,5 +190,22 @@ describe('U3 zaloFriendCard: thẻ kết bạn Zalo ở /don', () => {
     ['không có MssModule', { order: { orderZaloConsent: true } }],
   ])('%s: không hiện', async (_n, opts) => {
     expect((await service(opts).svc.track(ORDER.code, KEY)).zaloFriendCard).toBe(false);
+  });
+});
+
+describe('GET mã QR chuyển khoản của khách vãng lai: thẻ Zalo chỉ xét tin của đơn này', () => {
+  it("gọi getBankQr với friendScope 'order' và trần COD của khách vãng lai, trả nguyên kết quả", async () => {
+    const qr = { orderCode: ORDER.code, zaloFriendCard: true };
+    const getBankQr = jest.fn().mockResolvedValue(qr);
+    const { svc } = service({ order: { status: 'PENDING_PAYMENT', paymentStatus: 'PENDING' }, bankTransfer: { getBankQr } });
+    await expect(svc.bankQr(ORDER.code, KEY)).resolves.toBe(qr);
+    expect(getBankQr).toHaveBeenCalledWith(ORDER.code, ORDER.userId, { codMax: GUEST_COD_MAX_DEFAULT, friendScope: 'order' });
+  });
+
+  it('khoá sai: không gọi getBankQr', async () => {
+    const getBankQr = jest.fn();
+    const { svc } = service({ bankTransfer: { getBankQr } });
+    await expect(svc.bankQr(ORDER.code, 'X'.repeat(43))).rejects.toThrow();
+    expect(getBankQr).not.toHaveBeenCalled();
   });
 });

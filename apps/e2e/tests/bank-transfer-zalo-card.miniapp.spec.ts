@@ -76,6 +76,27 @@ test.describe('Màn chuyển khoản Mini App: thẻ kết bạn Zalo (w39-02)',
     }
   });
 
+  test('chunk thẻ lỗi tải (mạng chập, bản mới thay chunk): mã QR và nút vẫn còn, không có thẻ, không lỗi trang', async ({ page, api }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    let aborted = 0;
+    await page.route(
+      (u) => /\/order-zalo\.[^/]*$/.test(u.pathname),
+      (route) => {
+        aborted++;
+        return route.abort('failed');
+      },
+    );
+    await openBankPage(page, api, { zaloFriendCard: true });
+    await expect.poll(() => aborted, { timeout: 20_000 }).toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    await expect(page.locator('img[alt="VietQR"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Để sau / Xem đơn hàng' })).toBeVisible();
+    await expect(page.getByRole('button', { name: CHECK })).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('đã nhận tiền: thẻ vẫn ở dưới "Về trang chủ"', async ({ page, api }) => {
     await openBankPage(page, api, { zaloFriendCard: true, paymentStatus: 'PAID', paymentDeadline: null });
     await expect(page.getByText('Đã nhận thanh toán!')).toBeVisible({ timeout: 20_000 });

@@ -1,11 +1,11 @@
 'use client';
 
 import { BANK_QR_HINT } from '@tubutree/app-core/bank-payment-copy';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
@@ -15,23 +15,27 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { guestBankQr, guestSwitchToCod } from '@/lib/guest-checkout/api';
-import { getBankQr, switchOrderToCod } from '@/lib/shop-client';
+import { switchOrderToCod, type BankQrDTO } from '@/lib/shop-client';
 import { guestTrackHref, hashTrackingKey, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
 
 // Thẻ kết bạn Zalo chỉ hiện khi máy chủ bảo hiện: tải lười để màn QR không mang mã thẻ khi thẻ ẩn. Khung thẻ nằm cùng chunk với lời mời, nên lúc chờ
-// chunk không có ô trắng rỗng nào hiện trước rồi mới có chữ.
+// chunk không có ô trắng rỗng nào hiện trước rồi mới có chữ. Chunk lỗi (mạng chập, bản mới thay chunk lúc khách đang mở trang) thì bỏ thẻ: lỗi nạp
+// không được lan lên error boundary của route và thay cả mã QR khách sắp quét.
+const NoZaloFriendCard = () => null;
 const BankZaloFriendCard = dynamic(
   () =>
-    import('@/components/checkout/order-zalo').then(({ OrderZaloFriend }) => {
-      function BankZaloFriendCard({ code }: { code: string }) {
-        return (
-          <section data-testid="bank-zalo-friend" className={`mt-3 p-4 ${ui.card} ${mini.card}`} aria-label="Zalo Tubu Tree">
-            <OrderZaloFriend code={code} from="bank_transfer" />
-          </section>
-        );
-      }
-      return BankZaloFriendCard;
-    }),
+    import('@/components/checkout/order-zalo')
+      .then(({ OrderZaloFriend }) => {
+        function BankZaloFriendCard({ code }: { code: string }) {
+          return (
+            <section data-testid="bank-zalo-friend" className={`mt-3 p-4 ${ui.card} ${mini.card}`} aria-label="Zalo Tubu Tree">
+              <OrderZaloFriend code={code} from="bank_transfer" />
+            </section>
+          );
+        }
+        return BankZaloFriendCard;
+      })
+      .catch(() => NoZaloFriendCard),
   { ssr: false, loading: () => null },
 );
 
@@ -67,16 +71,22 @@ export default function BankPaymentPage() {
   const detail = guestMode ? guestTrackHref(code, guestKey!) : orderDetailHref(code);
   const fetchGuestQr = useCallback((c: string) => guestBankQr(c, guestKey!), [guestKey]);
   const router = useRouter();
-  // Thẻ kết bạn Zalo: đọc bản bank-qr BankTransferPanel đang dò (cùng khoá cache), không request riêng. Chốt lần đầu máy chủ bảo hiện: lần dò
-  // sau trả false (MSS vừa nhắn được như bạn bè) thì thẻ vẫn ở yên, không nhảy bố cục giữa lúc khách đang đọc.
-  const qrCache = useQuery({
-    queryKey: guestMode ? ['bank-qr', code, 'guest'] : ['bank-qr', code],
-    queryFn: () => (guestMode ? fetchGuestQr : getBankQr)(code),
-    enabled: false,
-  });
-  const zaloCardFor = useRef<string | null>(null);
-  if (qrCache.data?.zaloFriendCard === true) zaloCardFor.current = code;
-  const zaloCard = zaloCardFor.current === code && (paid || panelState === 'ready');
+  // Thẻ kết bạn Zalo: nghe cache bản bank-qr mà BankTransferPanel đang dò (cùng khoá), không request riêng và không thêm observer (observer thứ hai
+  // chép tuỳ chọn của nó lên query của panel). Chốt lần đầu máy chủ bảo hiện: lần dò sau trả false (MSS vừa nhắn được như bạn bè) thì thẻ vẫn ở
+  // yên, không nhảy bố cục giữa lúc khách đang đọc.
+  const [zaloCardFor, setZaloCardFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!code) return;
+    const key = guestMode ? ['bank-qr', code, 'guest'] : ['bank-qr', code];
+    const check = () => {
+      if (qc.getQueryData<BankQrDTO>(key)?.zaloFriendCard === true) setZaloCardFor(code);
+    };
+    check();
+    return qc.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' && event.query.queryKey[0] === 'bank-qr') check();
+    });
+  }, [qc, code, guestMode]);
+  const zaloCard = zaloCardFor === code && (paid || panelState === 'ready');
 
   // Không làm mới thì chi tiết/danh sách đơn đọc lại từ cache và còn hiện "Chờ thanh toán" ngay sau khi khách vừa thấy "Đã nhận thanh toán".
   const refreshOrders = useCallback(() => {
