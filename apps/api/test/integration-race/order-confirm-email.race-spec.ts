@@ -123,19 +123,28 @@ describe('Order confirm email fallback (real Postgres)', () => {
   });
 
   async function buyerOrder(
-    over: { email?: string | null; guest?: boolean; invoiceEmail?: string; paymentMethod?: 'COD' | 'BANK_TRANSFER' } = {},
+    over: {
+      email?: string | null;
+      guest?: boolean;
+      invoiceEmail?: string;
+      paymentMethod?: 'COD' | 'BANK_TRANSFER';
+      /** Đơn thứ hai của cùng người mua (không tạo người dùng mới). */
+      user?: Awaited<ReturnType<typeof createUser>>;
+    } = {},
   ) {
     const phone = uniquePhone('09');
-    const user = await createUser(prisma, {
-      phone: over.guest ? null : phone,
-      email: over.email === undefined ? `lan.${randCode(8).toLowerCase()}@example.com` : over.email,
-      fullName: over.guest ? 'Khách' : 'Nguyễn Thị Lan',
-      notifyOrderZalo: true,
-      notifyOrderZaloAt: new Date(),
-      notifyOrderZaloSource: 'checkout',
-      ...(over.guest ? { zaloId: `guest_it_${randCode(8)}` } : {}),
-    });
-    userIds.push(user.id);
+    const user =
+      over.user ??
+      (await createUser(prisma, {
+        phone: over.guest ? null : phone,
+        email: over.email === undefined ? `lan.${randCode(8).toLowerCase()}@example.com` : over.email,
+        fullName: over.guest ? 'Khách' : 'Nguyễn Thị Lan',
+        notifyOrderZalo: true,
+        notifyOrderZaloAt: new Date(),
+        notifyOrderZaloSource: 'checkout',
+        ...(over.guest ? { zaloId: `guest_it_${randCode(8)}` } : {}),
+      }));
+    if (!over.user) userIds.push(user.id);
     const order = await createOrder(prisma, {
       userId: user.id,
       platform: over.guest ? 'web' : 'miniapp',
@@ -678,6 +687,8 @@ describe('Order confirm email fallback (real Postgres)', () => {
     }
     const retire = (ids: string[]) => prisma.mssOrderEventOutbox.updateMany({ where: { id: { in: ids } }, data: { fallbackChannel: null } });
 
+    // P1 chỉ kiểm luật từng dòng (SQL = mssEmailEligible). Luật cấp đơn (anh em RESULT_SENT/RESULT_UNKNOWN chặn cả đơn) do R1–R5 kiểm:
+    // dòng RESULT_UNKNOWN duy nhất ghép chung đơn với trạng thái khác là chỉ số 245, đi cặp với 244 (CANCELLED), vốn không đủ điều kiện.
     it.each(['ZNS', 'IN_APP_ONLY'] as const)('P1 bảng chéo (nhánh %s): dòng câu SQL chọn = dòng mssEmailEligible (TS) trả true, trên mọi tổ hợp trạng thái × lý do × mã HTTP', async (channel) => {
       const STATUSES: MssOutboxStatus[] = ['RESULT_SKIPPED', 'RESULT_FAILED', 'DEAD', 'EXPIRED', 'CANCELLED', 'RESULT_UNKNOWN'];
       const REASONS = [null, 'superseded', 'stranger_cap', 'event_id_reused', 'ttl', 'mss_lost', 'consent_withdrawn'];
@@ -791,6 +802,109 @@ describe('Order confirm email fallback (real Postgres)', () => {
       await fallback.emailsSettled();
       expect(mailsFor(order.code)).toHaveLength(1);
       expect((await emailLogs(user.id)).map((l) => l.status)).toEqual(['SENT']);
+    });
+  });
+
+  describe('w41-01 PO: RESULT_UNKNOWN chặn email cả đơn', () => {
+    const failZns = (userId: string, eventId: string) =>
+      prisma.notificationLog.create({
+        data: { userId, templateCode: 'ORDER_CONFIRMED', channel: 'ZNS', status: 'FAILED', error: 'zns_quota', payload: { dedupeKey: `mss:${eventId}:failed:it` } },
+      });
+    /** Câu chọn của cron (không qua service): dòng nào được đưa sang `sendForEvent`. */
+    async function cronPicks(now: number) {
+      const spy = jest.spyOn(email, 'sendForEvent');
+      try {
+        await reconcile.emailRescueOnce(now);
+        return spy.mock.calls.map((c) => c[0]);
+      } finally {
+        spy.mockRestore();
+      }
+    }
+    /** `order.created` thành RESULT_UNKNOWN (Zalo có thể đã tới khách), `order.payment_confirmed` sau đó MSS báo lỗi (tự nó đủ điều kiện email). */
+    async function unknownThenFailed(reason: string | null, over: Parameters<typeof buyerOrder>[0] = {}) {
+      const { user, order } = await buyerOrder({ paymentMethod: 'BANK_TRANSFER', ...over });
+      const created = await eventOf(order.id, 'order.created');
+      const paid = await eventOf(order.id, 'order.payment_confirmed');
+      await settle(created.eventId, 'RESULT_UNKNOWN', reason);
+      await settle(paid.eventId, 'RESULT_FAILED', 'zalo_error');
+      return { user, order, created, paid };
+    }
+
+    it.each([null, 'stranger', 'stuck'])('R1 anh em order.created RESULT_UNKNOWN (lý do %s): đường lui, cron nhánh cứu và gọi thẳng đều 0 email', async (reason) => {
+      const { user, order, paid } = await unknownThenFailed(reason);
+      expect(mssEmailEligible('RESULT_FAILED', 'zalo_error', null)).toBe(true);
+      expect(await runFallback(paid.eventId)).toBe('IN_APP_ONLY');
+      await fallback.emailsSettled();
+      const later = Date.now() + 3 * 60_000;
+      expect(await cronPicks(later)).not.toContain(paid.id);
+      await reconcile.emailRescueOnce(later);
+      expect(await email.sendForEvent(paid.id, later)).toBe('NOT_ELIGIBLE');
+      expect(mailsFor(order.code)).toHaveLength(0);
+      expect(await emailLogs(user.id)).toHaveLength(0);
+    });
+
+    it('R2 nhánh A (đường lui ZNS, log ZNS FAILED): câu chọn của cron bỏ dòng, 0 email', async () => {
+      const { user, order, paid } = await unknownThenFailed(null);
+      expect(await runFallback(paid.eventId)).toBe('IN_APP_ONLY');
+      await prisma.mssOrderEventOutbox.update({ where: { eventId: paid.eventId }, data: { fallbackChannel: 'ZNS' } });
+      await failZns(user.id, paid.eventId);
+      expect(await cronPicks(Date.now())).not.toContain(paid.id);
+      await reconcile.emailRescueOnce();
+      expect(mailsFor(order.code)).toHaveLength(0);
+      expect(await emailLogs(user.id)).toHaveLength(0);
+    });
+
+    it('R3 đối chứng phạm vi: RESULT_UNKNOWN ở đơn X không chặn đơn Y của cùng người mua, Y nhận đúng 1 email', async () => {
+      const x = await unknownThenFailed(null);
+      const y = await buyerOrder({ user: x.user });
+      const yRow = await failedEvent(y.order.id, 'order.created');
+      expect(await runFallback(x.paid.eventId)).toBe('IN_APP_ONLY');
+      expect(await runFallback(yRow.eventId)).toBe('IN_APP_ONLY');
+      await reconcile.emailRescueOnce(Date.now() + 3 * 60_000);
+      expect(mailsFor(x.order.code)).toHaveLength(0);
+      expect(mailsFor(y.order.code)).toHaveLength(1);
+      const logs = await emailLogs(x.user.id);
+      expect(logs).toHaveLength(1);
+      expect(logs[0]!.payload).toMatchObject({ dedupeKey: orderEmailDedupeKey(y.order.code) });
+    });
+
+    it('R4 dòng người nhận (recipientRole recipient) RESULT_UNKNOWN không chặn email người mua: đúng 1 email', async () => {
+      const { user, order } = await buyerOrder();
+      const created = await eventOf(order.id, 'order.created');
+      await prisma.mssOrderEventOutbox.create({
+        data: {
+          eventId: `itr${randCode(24)}`,
+          orderId: order.id,
+          orderCode: order.code,
+          eventType: 'order.shipping',
+          recipientRole: 'recipient',
+          sequence: 3,
+          occurredAt: new Date(),
+          body: '{}',
+          bodySha256: 'it',
+          status: 'RESULT_UNKNOWN',
+          resultAt: new Date(),
+          expiresAt: new Date(Date.now() + 6 * 3_600_000),
+        },
+      });
+      await settle(created.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
+      expect(await runFallback(created.eventId)).toBe('IN_APP_ONLY');
+      await reconcile.emailRescueOnce(Date.now() + 3 * 60_000);
+      expect(mailsFor(order.code)).toHaveLength(1);
+      expect((await emailLogs(user.id)).map((l) => l.status)).toEqual(['SENT']);
+    });
+
+    it('R5 song song (SMTP chậm): 2 lượt cron + gọi thẳng cùng lúc khi có anh em RESULT_UNKNOWN: 0 email', async () => {
+      const { user, order, paid } = await unknownThenFailed('stuck');
+      mailDelayMs = 3_000;
+      const later = Date.now() + 3 * 60_000;
+      expect(await fallback.run(paid.eventId)).toBe('IN_APP_ONLY');
+      // Số trả về của lượt cron có thể đếm dòng sót của ca khác trong DB dùng chung: chỉ đếm thư của đơn này.
+      const [, , direct] = await Promise.all([reconcile.emailRescueOnce(later), reconcile.emailRescueOnce(later), email.sendForEvent(paid.id, later)]);
+      await fallback.emailsSettled();
+      expect(direct).toBe('NOT_ELIGIBLE');
+      expect(mailsFor(order.code)).toHaveLength(0);
+      expect(await emailLogs(user.id)).toHaveLength(0);
     });
   });
 });

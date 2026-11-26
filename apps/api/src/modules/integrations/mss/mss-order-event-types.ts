@@ -37,7 +37,10 @@ export const MSS_CREATED_COVERS_PAYMENT_REMINDER_WHERE: Prisma.MssOrderEventOutb
   OR: [{ status: { in: [...MSS_HOLDING_STATUSES] } }, { status: 'RESULT_SENT', resultReason: null }],
 };
 
-/** Kết quả cuối mà khách chắc chắn hoặc có thể đã nhận tin Zalo: không gửi ZNS cho sự kiện này (tránh tin đôi). */
+/**
+ * Kết quả cuối mà khách chắc chắn hoặc có thể đã nhận tin Zalo: không gửi ZNS cho sự kiện này (tránh tin đôi). Cũng là luật email cấp
+ * đơn: một dòng người mua ở trạng thái này chặn email xác nhận cho cả đơn (`OrderConfirmEmailService.run`, `emailRescueOnce`).
+ */
 export const MSS_NO_ZNS_STATUSES: readonly MssOutboxStatus[] = ['RESULT_SENT', 'RESULT_UNKNOWN'];
 
 /**
@@ -323,6 +326,9 @@ export function mssDefinitelyRejected(http: number | null): boolean {
  * (`mssDefinitelyRejected`). Lượt cuối 5xx/429/408, hết giờ chờ, lỗi mạng hay cầu dao ngắt thì một lượt POST trước có thể đã tới MSS và
  * tin đã đi: không email (thà thiếu email còn hơn Zalo + email). `DEAD` không có mã HTTP (nhận việc hỏng, thân lỗi) vẫn email.
  * Đổi luật này thì sửa cả bản SQL ở `MssOrderEventReconcileService.emailRescueOnce`.
+ * Luật cấp đơn (chạy sau luật từng dòng này): đơn có bất kỳ dòng người mua nào ở `MSS_NO_ZNS_STATUSES` (đã gửi hoặc `RESULT_UNKNOWN`)
+ * thì không email cho mọi sự kiện của đơn. Đổi luật cấp đơn thì sửa cả 2 chỗ: `OrderConfirmEmailService.run` (findFirst anh em) và câu
+ * `NOT EXISTS` trong `emailRescueOnce`.
  */
 export function mssEmailEligible(status: MssOutboxStatus, reason: string | null, lastHttpStatus: number | null): boolean {
   if (status === 'RESULT_SKIPPED') return !(reason && MSS_COVERED_SKIP_REASONS.has(reason));

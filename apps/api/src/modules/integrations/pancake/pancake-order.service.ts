@@ -185,7 +185,8 @@ export function customerEditMismatch(found: PancakeOrderDTO | null, order: Pick<
 
 const CUSTOMER_EDIT_MONEY_KEYS = ['cod', 'transfer_money', 'shipping_fee'] as const;
 
-const moneyOf = (v: unknown): number | null => {
+/** Tiền Pancake trả về (số hoặc chuỗi số) thành số; vắng, rỗng hay không phải số thì null. Dùng chung với bản dò chỉ đọc `pancake-self-edit-probe`. */
+export const moneyOf = (v: unknown): number | null => {
   if (v === null || v === undefined || (typeof v === 'string' && !v.trim())) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
