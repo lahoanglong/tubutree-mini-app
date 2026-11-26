@@ -1182,7 +1182,7 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       goods: 0,
       shipping: 0,
       pointsUsedBack: 0,
-      convertedBack: 0,
+      convertedBack: 0, marketplaceBack: 0,
       pointsEarnedBack: 0,
       ratioBefore: 0,
       ratioAfter: 0,
@@ -1311,7 +1311,7 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
       await partial(tx, { i1: 1 }, {}, ctvOrder());
       const shares = (qty: Record<string, number>) => ({
-        isFull: false, goods: 0, shipping: 0, pointsUsedBack: 0, convertedBack: 0, pointsEarnedBack: 0, ratioBefore: 0, ratioAfter: 0,
+        isFull: false, goods: 0, shipping: 0, pointsUsedBack: 0, convertedBack: 0, marketplaceBack: 0, pointsEarnedBack: 0, ratioBefore: 0, ratioAfter: 0,
         lines: Object.entries(qty).map(([orderItemId, quantity]) => ({ orderItemId, quantity, refundAmount: 0 })),
       });
       await service.reversePartialReturn(tx as never, ctvOrder(), {
@@ -1571,7 +1571,7 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
       goods: 50_000,
       shipping: 0,
       pointsUsedBack: 5,
-      convertedBack: 0,
+      convertedBack: 0, marketplaceBack: 0,
       pointsEarnedBack: 3,
       ratioBefore: 0,
       ratioAfter: 0,
@@ -1627,7 +1627,7 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
         goods: 0,
         shipping: 0,
         pointsUsedBack: 0,
-        convertedBack: 0,
+        convertedBack: 0, marketplaceBack: 0,
         pointsEarnedBack: 0,
         ratioBefore: 0,
         ratioAfter: 0,
@@ -1708,7 +1708,7 @@ describe('OrderReversalService — thưởng đánh giá khi trả hàng', () =>
       goods: 0,
       shipping: 0,
       pointsUsedBack: 0,
-      convertedBack: 0,
+      convertedBack: 0, marketplaceBack: 0,
       pointsEarnedBack: 0,
       lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 0 }],
     };
@@ -1739,7 +1739,7 @@ describe('OrderReversalService — thưởng đánh giá khi trả hàng', () =>
       goods: 0,
       shipping: 0,
       pointsUsedBack: 0,
-      convertedBack: 0,
+      convertedBack: 0, marketplaceBack: 0,
       pointsEarnedBack: 0,
       lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 0 }],
     };

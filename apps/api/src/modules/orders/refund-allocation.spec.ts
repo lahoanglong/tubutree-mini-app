@@ -187,9 +187,9 @@ describe('điểm đã dùng trả lại không bao giờ quá số đã dùng (
   const opts = { shopFault: false, priorShipping: 0 };
 
   it('không có lần trả một phần: lô quy đổi trả hết phần quy đổi, lô thường phần còn lại (như trước)', () => {
-    expect(remainingPointsBack({ pointsUsed: 50, pointsUsedConverted: 46 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 46, standard: 4 });
-    expect(remainingPointsBack({ pointsUsed: 30, pointsUsedConverted: 0 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 0, standard: 30 });
-    expect(remainingPointsBack({ pointsUsed: 10, pointsUsedConverted: 12 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 10, standard: 0 });
+    expect(remainingPointsBack({ pointsUsed: 50, pointsUsedConverted: 46 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 46, marketplace: 0, standard: 4 });
+    expect(remainingPointsBack({ pointsUsed: 30, pointsUsedConverted: 0 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 0, marketplace: 0, standard: 30 });
+    expect(remainingPointsBack({ pointsUsed: 10, pointsUsedConverted: 12 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({ converted: 10, marketplace: 0, standard: 0 });
   });
 
   it('50 điểm (46 quy đổi), 5 dòng, trả lần lượt 4 dòng rồi trả nốt: cả đơn trả đúng 50 điểm (trước: 51), khớp số báo trước của lần trả nốt', () => {
@@ -214,7 +214,7 @@ describe('điểm đã dùng trả lại không bao giờ quá số đã dùng (
     const last = computeReturnShares(order, before, new Map([['L1', 1]]), opts);
     expect(last).toMatchObject({ isFull: true, pointsUsedBack: 3, convertedBack: 3 });
     const rest = remainingPointsBack(order, prior);
-    expect(rest).toEqual({ converted: 3, standard: 0 });
+    expect(rest).toEqual({ converted: 3, marketplace: 0, standard: 0 });
     expect(prior.pointsUsedBack + rest.converted + rest.standard).toBe(50);
   });
 
@@ -319,5 +319,96 @@ describe('Điểm Xanh đã tích thu hồi theo tiền khách thực trả củ
   it('đơn cũ không có paidTotal → vẫn theo tỉ lệ giá trị dòng như trước', () => {
     const legacy = order({ ...o, items: o.items.map(({ paidTotal: _p, ...i }) => i) });
     expect(computeReturnShares(legacy, new Map(), new Map([['h', 1], ['t', 1]]), none).pointsEarnedBack).toBe(50);
+  });
+});
+
+describe('W42: ba lô (STANDARD, CONVERTED, MARKETPLACE) — mỗi lô trả lại không quá phần lô đó đã dùng', () => {
+  const opts = { shopFault: false, priorShipping: 0 };
+
+  it('đảo cả đơn chưa trả lần nào: mỗi lô nhận đúng phần đã dùng', () => {
+    expect(remainingPointsBack({ pointsUsed: 100, pointsUsedConverted: 30, pointsUsedMarketplace: 20 }, { pointsUsedBack: 0, convertedBack: 0 })).toEqual({
+      converted: 30,
+      marketplace: 20,
+      standard: 50,
+    });
+  });
+
+  it('sau các lần trả một phần: chỉ phần còn lại của từng lô', () => {
+    const order = { pointsUsed: 100, pointsUsedConverted: 30, pointsUsedMarketplace: 20 };
+    expect(remainingPointsBack(order, { pointsUsedBack: 40, convertedBack: 12, marketplaceBack: 8 })).toEqual({ converted: 18, marketplace: 12, standard: 30 });
+  });
+
+  it('trả một phần chia theo lô, lần trả nốt trả đủ phần còn lại của từng lô', () => {
+    const order: AllocOrder = {
+      total: 300_000 - 100_000,
+      shippingFee: 0,
+      pointsUsed: 100,
+      pointsUsedConverted: 30,
+      pointsUsedMarketplace: 20,
+      pointsEarned: 0,
+      items: [100_000, 200_000].map((total, k) => ({ id: `L${k + 1}`, total, quantity: 1 })),
+    };
+    const first = computeReturnShares(order, new Map(), new Map([['L1', 1]]), opts);
+    expect(first).toMatchObject({ pointsUsedBack: 33, convertedBack: 10, marketplaceBack: 7 });
+    const prior = { pointsUsedBack: first.pointsUsedBack, convertedBack: first.convertedBack, marketplaceBack: first.marketplaceBack };
+    const last = computeReturnShares(order, new Map([['L1', 1]]), new Map([['L2', 1]]), { ...opts, priorPoints: prior });
+    expect(last).toMatchObject({ isFull: true, pointsUsedBack: 67, convertedBack: 20, marketplaceBack: 13 });
+  });
+
+  it('20.000 đơn ngẫu nhiên × chuỗi trả ngẫu nhiên có điểm sàn: không lô nào trả quá phần đã dùng, cả đơn trả đúng từng lô', () => {
+    let seed = 20261127;
+    const rand = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
+    for (let n = 0; n < 20_000; n += 1) {
+      const items = Array.from({ length: int(1, 6) }, (_, k) => ({ id: `L${k}`, total: int(1, 400) * 1_000 + int(0, 999), quantity: int(1, 6) }));
+      const gross = items.reduce((s, i) => s + i.total, 0);
+      const pointsUsed = int(1, Math.min(300, Math.floor(gross / 1_000)));
+      const pointsUsedMarketplace = int(0, pointsUsed);
+      const pointsUsedConverted = int(0, pointsUsed - pointsUsedMarketplace);
+      const usedStandard = pointsUsed - pointsUsedConverted - pointsUsedMarketplace;
+      const perLine = rand() < 0.5;
+      const weights = items.map((i) => (rand() < 0.2 ? 0 : i.total));
+      const linePoints = distributeByWeight(pointsUsed * 1_000, weights.some((w) => w > 0) ? weights : items.map((i) => i.total));
+      const order: AllocOrder = {
+        total: gross - pointsUsed * 1_000,
+        shippingFee: 0,
+        pointsUsed,
+        pointsUsedConverted,
+        pointsUsedMarketplace,
+        pointsEarned: 0,
+        items: items.map((i, k) => (perLine ? { ...i, pointsDiscount: linePoints[k]! } : i)),
+      };
+      const before = new Map<string, number>();
+      const prior = { pointsUsedBack: 0, convertedBack: 0, marketplaceBack: 0 };
+      for (;;) {
+        const left = items.filter((i) => (before.get(i.id) ?? 0) < i.quantity);
+        const req = new Map<string, number>();
+        for (const i of left) if (rand() < 0.5 || left.length === 1) req.set(i.id, int(1, i.quantity - (before.get(i.id) ?? 0)));
+        if (req.size === 0) continue;
+        const sh = computeReturnShares(order, before, req, { ...opts, priorPoints: prior });
+        expect(sh.convertedBack + sh.marketplaceBack).toBeLessThanOrEqual(sh.pointsUsedBack);
+        if (sh.isFull) {
+          const rest = remainingPointsBack(order, prior);
+          expect(rest.converted + rest.marketplace + rest.standard).toBe(sh.pointsUsedBack);
+          expect(prior.convertedBack + rest.converted).toBe(pointsUsedConverted);
+          expect(prior.marketplaceBack + rest.marketplace).toBe(pointsUsedMarketplace);
+          expect(prior.pointsUsedBack - prior.convertedBack - prior.marketplaceBack + rest.standard).toBe(usedStandard);
+          break;
+        }
+        prior.pointsUsedBack += sh.pointsUsedBack;
+        prior.convertedBack += sh.convertedBack;
+        prior.marketplaceBack += sh.marketplaceBack;
+        expect(prior.pointsUsedBack).toBeLessThanOrEqual(pointsUsed);
+        expect(prior.convertedBack).toBeLessThanOrEqual(pointsUsedConverted);
+        expect(prior.marketplaceBack).toBeLessThanOrEqual(pointsUsedMarketplace);
+        expect(prior.pointsUsedBack - prior.convertedBack - prior.marketplaceBack).toBeLessThanOrEqual(usedStandard);
+        for (const [id, q] of req) before.set(id, (before.get(id) ?? 0) + q);
+      }
+    }
   });
 });

@@ -535,13 +535,14 @@ export class AuthService {
           zaloId: string | null;
           pointsBalance: number;
           pointsConvertedBalance: number;
+          pointsMarketplaceBalance: number;
           walletBalance: number;
           cashbackPending: number;
           firstTouchSource: string | null;
           firstTouchCampaign: string | null;
           firstTouchAt: Date | null;
         }[]
-      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "walletBalance", "cashbackPending",
+      >`SELECT "zaloId", "pointsBalance", "pointsConvertedBalance", "pointsMarketplaceBalance", "walletBalance", "cashbackPending",
                 "firstTouchSource", "firstTouchCampaign", "firstTouchAt"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       const g = lockedGuest[0];
@@ -809,6 +810,8 @@ export class AuthService {
           pointsBalance: { increment: g.pointsBalance },
           // Dòng sổ lô CONVERTED đã theo pointsTransaction.updateMany ở bước 5, nên số dư lô đi cùng.
           pointsConvertedBalance: { increment: g.pointsConvertedBalance },
+          // Lô MARKETPLACE cũng theo sổ ở bước 5 (khách vãng lai không gửi mã đơn sàn được, nên thường là 0).
+          pointsMarketplaceBalance: { increment: g.pointsMarketplaceBalance },
           // Xu đã quy sang Điểm Xanh và bị khoá ở DB (users_coins_frozen): không chuyển cột xu.
           cashbackPending: { increment: g.cashbackPending },
           ...(!target.zaloId ? { zaloId: info.zaloId } : {}),
@@ -834,6 +837,7 @@ export class AuthService {
           sessionsRevokedAt: new Date(),
           pointsBalance: 0,
           pointsConvertedBalance: 0,
+          pointsMarketplaceBalance: 0,
           cashbackPending: 0,
         },
       });
@@ -1219,6 +1223,7 @@ export class AuthService {
       referralCode: user.referralCode,
       pointsBalance: user.pointsBalance,
       pointsConvertedBalance: user.pointsConvertedBalance,
+      pointsMarketplaceBalance: user.pointsMarketplaceBalance,
       walletBalance: user.walletBalance,
     };
   }

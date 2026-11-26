@@ -38,6 +38,7 @@ import { formatPoints } from '../../common/format-points';
 import { assertActiveStaff } from '../../common/staff-access';
 import { generateWasteCode } from '../waste-exchange/waste-codes';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
+import { withMarketplaceNote } from './marketplace-points-note';
 
 /** Số dòng tối đa mỗi lần đọc lịch sử điểm (cũng là số dòng khi client cũ không gửi limit). */
 const POINTS_HISTORY_MAX_PAGE = 100;
@@ -49,6 +50,22 @@ function firstTierRecalcAtOrAfter(t: Date): Date {
   const { year, month, day } = vnDateParts(t);
   const sameDay = new Date(Date.UTC(year, month - 1, day, 3, 15) - VN_OFFSET_MS);
   return sameDay.getTime() >= t.getTime() ? sameDay : new Date(sameDay.getTime() + 86_400_000);
+}
+
+type PointExpiry = { amount: number; expiresAt: Date };
+
+/** Điểm sắp hết hạn của một lô không quá số dư của lô đó (sổ có thể đi trước số dư trong lúc đảo). */
+function capExpiry(e: PointExpiry | null, balance: number): PointExpiry | null {
+  return e ? { amount: Math.min(e.amount, balance), expiresAt: e.expiresAt } : null;
+}
+
+/** Ngày hết hạn sớm nhất qua các lô có hạn; các lô cùng ngày VN đó thì cộng số điểm. */
+function earliestExpiry(items: (PointExpiry | null)[]): PointExpiry | null {
+  const live = items.filter((e): e is PointExpiry => e !== null && e.amount > 0);
+  if (live.length === 0) return null;
+  const first = live.reduce((min, e) => (e.expiresAt.getTime() < min.expiresAt.getTime() ? e : min));
+  const day = vnDateKey(first.expiresAt);
+  return { amount: live.filter((e) => vnDateKey(e.expiresAt) === day).reduce((s, e) => s + e.amount, 0), expiresAt: first.expiresAt };
 }
 
 /**
@@ -736,14 +753,21 @@ export class LoyaltyService {
     const { spent12m } = await this.spending12m(userId, since);
     const lock = await this.lockedOrderPoints(userId, new Date());
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
-    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns] = await Promise.all([
+    const marketplaceBalance = user.pointsMarketplaceBalance ?? 0;
+    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns, marketplaceExpiryTxns] = await Promise.all([
       this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
       this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
       this.fractionConfig('loyalty.max_redeem_pct', 0.2),
       this.pointExpireMonths(),
       loadPointExpiryTxns(this.prisma, userId),
+      marketplaceBalance > 0 ? loadPointExpiryTxns(this.prisma, userId, 'MARKETPLACE') : Promise.resolve([]),
     ]);
-    const expiring = user.pointsBalance > 0 ? nextPointExpiry(expiryTxns, new Date()) : null;
+    // Cùng cách tính với tin nhắc sắp hết hạn (remindUser): mỗi lô có hạn replay riêng, lấy ngày sớm nhất, cùng ngày VN thì cộng.
+    const now = new Date();
+    const expiring = earliestExpiry([
+      user.pointsBalance > 0 ? capExpiry(nextPointExpiry(expiryTxns, now), user.pointsBalance) : null,
+      marketplaceBalance > 0 ? capExpiry(nextPointExpiry(marketplaceExpiryTxns, now), marketplaceBalance) : null,
+    ]);
     // Đang trong hạn giữ hạng (đã đủ điều kiện rớt hạng nhưng chưa bị hạ): cho khách biết phải mua thêm bao nhiêu để giữ.
     const graceUntil = user.tierGraceUntil && user.tier && user.tierGraceUntil.getTime() > Date.now() ? user.tierGraceUntil : null;
     const keepGap = graceUntil && user.tier ? await this.tierKeepGap(userId, user.tier, graceUntil) : null;
@@ -754,16 +778,18 @@ export class LoyaltyService {
       rates: { earnPct, vndPerPoint: Math.round(100 / earnPct), vndPerPointRedeem, maxRedeemPct },
       /** Lô STANDARD (có hạn, trần % khi tiêu). */
       pointsBalance: user.pointsBalance,
-      /** Điểm thường sắp hết hạn gần nhất (cộng các lô cùng ngày hết hạn) để khách dùng trước; null nếu không có. */
-      expiringPoints: expiring ? { amount: Math.min(expiring.amount, user.pointsBalance), expiresAt: expiring.expiresAt.toISOString() } : null,
+      /** Điểm có hạn (lô thường và lô điểm sàn) sắp hết hạn gần nhất, cộng các lô cùng ngày hết hạn, để khách dùng trước; null nếu không có. */
+      expiringPoints: expiring ? { amount: expiring.amount, expiresAt: expiring.expiresAt.toISOString() } : null,
       /** Số tháng điểm thường hết hạn kể từ ngày tích (SystemConfig loyalty.point_expire_months). Điểm quy đổi không hết hạn. */
       pointExpireMonths,
       /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */
       pointsConvertedBalance: user.pointsConvertedBalance,
       /** Hạn giữ hạng (loyalty.tier_grace_days): có khi khách sắp bị hạ hạng; null khi hạng đang ổn. */
       tierGrace,
-      /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
-      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
+      /** W42: lô điểm tích từ đơn sàn (có hạn, chỉ dùng khi mua hàng, chung trần % với lô STANDARD). */
+      pointsMarketplaceBalance: user.pointsMarketplaceBalance,
+      /** Số Điểm Xanh khách nhìn thấy = tổng ba lô. */
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance + user.pointsMarketplaceBalance,
       tierPoints,
       /** Tiền mua 12 tháng: thước đo thật của hạng, `nextTier.spendingToGo` tính theo số này. */
       spent12m,
@@ -774,6 +800,7 @@ export class LoyaltyService {
       /** Mốc muộn nhất phần khoá theo cửa sổ đổi/trả được mở (null nếu không có). */
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
       redeemablePoints,
+      // Số góp quỹ/đổi quà được: không gồm lô MARKETPLACE (điểm sàn chỉ tiêu khi mua hàng).
       redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
       /** Hệ số server sẽ nhân khi tích điểm: 1 khi chưa có hạng, dù `tier` bên dưới hiển thị hạng thấp nhất (xem getTierMultiplier). */
       earnMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
@@ -1215,7 +1242,8 @@ export class LoyaltyService {
         data: { pointsBalance: { decrement: gift.pointsCost } },
       });
       if (dec.count === 0) {
-        const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
+        // Đọc dưới khoá dòng user ở đầu tx: số dư và lô điểm sàn cùng một thời điểm.
+        const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true, pointsMarketplaceBalance: true } });
         const balance = cur?.pointsBalance ?? 0;
         if (lock.locked > 0 && balance >= gift.pointsCost) {
           const usable = Math.max(0, balance - lock.locked);
@@ -1224,7 +1252,10 @@ export class LoyaltyService {
           );
         }
         throw new BadRequestException(
-          `Bạn cần ${formatPoints(gift.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
+          withMarketplaceNote(
+            `Bạn cần ${formatPoints(gift.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
+            cur?.pointsMarketplaceBalance,
+          ),
         );
       }
 
@@ -1587,11 +1618,13 @@ export class LoyaltyService {
       phone: string | null;
       pointsBalance: number;
       pointsConvertedBalance?: number;
+      pointsMarketplaceBalance?: number;
       tier?: { name: string } | null;
     },
     pointsBalance = member.pointsBalance,
   ) {
     const pointsConvertedBalance = member.pointsConvertedBalance ?? 0;
+    const pointsMarketplaceBalance = member.pointsMarketplaceBalance ?? 0;
     return {
       id: member.id,
       memberCode: memberCodeOf(member.referralCode),
@@ -1600,7 +1633,8 @@ export class LoyaltyService {
       tier: member.tier?.name ?? 'Mầm Xanh',
       pointsBalance,
       pointsConvertedBalance,
-      pointsTotal: pointsBalance + pointsConvertedBalance,
+      pointsMarketplaceBalance,
+      pointsTotal: pointsBalance + pointsConvertedBalance + pointsMarketplaceBalance,
     };
   }
 

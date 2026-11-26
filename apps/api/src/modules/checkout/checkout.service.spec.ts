@@ -92,6 +92,7 @@ function build(
     pointsBalance?: number;
     /** PD-3: số dư lô CONVERTED (xu cũ quy đổi). */
     pointsConvertedBalance?: number;
+    pointsMarketplaceBalance?: number;
     /** PD-3: phần lô CONVERTED mà pricing chia cho đơn (mặc định 0). */
     pointsUsedConverted?: number;
     /** Điểm Xanh còn có thể bị đảo (LoyaltyService.lockedOrderPoints) — mặc định 0. */
@@ -143,7 +144,7 @@ function build(
     wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(opts.wasteFlags ?? null) },
     wasteItem: { findMany: jest.fn().mockResolvedValue(opts.wasteItems ?? [{ hazardous: false }]) },
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, phoneVerifiedAt: verifiedAt, tierId: opts.tierId ?? null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, pointsMarketplaceBalance: opts.pointsMarketplaceBalance ?? 0, phoneVerifiedAt: verifiedAt, tierId: opts.tierId ?? null }),
       findUnique: jest.fn().mockImplementation(async (args?: { select?: Record<string, boolean> }) =>
         args?.select?.phoneVerifiedAt ? { phoneVerifiedAt: verifiedAt } : null,
       ),
@@ -217,6 +218,7 @@ function build(
         pointsUsed: (opts.pointsUsed ?? 0) + (opts.pointsUsedConverted ?? 0),
         pointsUsedStandard: opts.pointsUsed ?? 0,
         pointsUsedConverted: opts.pointsUsedConverted ?? 0,
+        pointsUsedMarketplace: 0,
         discount: 0,
       }),
       calcShippingFee: jest.fn().mockResolvedValue(0),
@@ -811,21 +813,21 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
   it('quote: kẹp điểm theo số dùng được (số dư − phần khoá) và trả redeemablePoints/lockedPoints cho FE', async () => {
     const { svc, pricing } = build({ pointsBalance: 1000, locked: 600 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1000 } as never);
-    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number), expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, { marketplace: 0, standardUsable: 400, converted: 0 }, expect.any(Number), expect.any(Number));
     expect(q).toMatchObject({ pointsBalance: 1000, lockedPoints: 600, redeemablePoints: 400 });
   });
 
   it('quote: phần khoá ≥ số dư (điểm đã tiêu trước đó) → redeemablePoints = 0, không âm; không tiêu điểm nào', async () => {
     const { svc, pricing } = build({ pointsBalance: 100, locked: 250 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 100 } as never);
-    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(100, 0, 0, expect.any(Number), expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(100, { marketplace: 0, standardUsable: 0, converted: 0 }, expect.any(Number), expect.any(Number));
     expect(q.redeemablePoints).toBe(0);
   });
 
   it('placeOrder: kẹp theo số dùng được như quote (không tin pointsToUse client gửi)', async () => {
     const { svc, pricing } = build({ pointsBalance: 1000, locked: 600, pointsUsed: 400 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000 } as never);
-    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number), expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, { marketplace: 0, standardUsable: 400, converted: 0 }, expect.any(Number), expect.any(Number));
   });
 
   it('placeOrder: khoá dòng user (FOR UPDATE) rồi tính phần khoá TRONG tx, guard pointsBalance ≥ dùng + khoá', async () => {
@@ -924,16 +926,16 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
     let open!: () => void;
     const gate = new Promise<void>((r) => (open = r));
     (prisma.user.findUniqueOrThrow as jest.Mock).mockImplementation(async () => {
-      const snap = { id: 'u1', walletBalance: 0, pointsBalance: state.pointsBalance, pointsConvertedBalance: 0, tierId: null };
+      const snap = { id: 'u1', walletBalance: 0, pointsBalance: state.pointsBalance, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, tierId: null };
       reads += 1;
       if (reads === 2) open();
       await gate;
       return snap;
     });
     (prisma.user.findUnique as jest.Mock).mockImplementation(async () => ({ pointsBalance: state.pointsBalance }));
-    (pricing.resolvePointsRedemptionByLot as jest.Mock).mockImplementation(async (want: number, usable: number) => {
-      const used = Math.max(0, Math.min(want, usable));
-      return { pointsUsed: used, pointsUsedStandard: used, pointsUsedConverted: 0, discount: used };
+    (pricing.resolvePointsRedemptionByLot as jest.Mock).mockImplementation(async (want: number, lots: { standardUsable: number }) => {
+      const used = Math.max(0, Math.min(want, lots.standardUsable));
+      return { pointsUsed: used, pointsUsedStandard: used, pointsUsedConverted: 0, pointsUsedMarketplace: 0, discount: used };
     });
     (loyalty.lockedOrderPoints as jest.Mock).mockImplementation(async () => {
       await tick();
@@ -2500,7 +2502,7 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
         cartData: SMALL,
       });
       (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
-        id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: 'DAI_THU',
+        id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, tierId: 'DAI_THU',
       });
       const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
       expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: GENERIC_REASON });
@@ -2587,7 +2589,7 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
           merchantStores: SHOP_FEE,
         });
         (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
-          id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: 'DAI_THU',
+          id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, tierId: 'DAI_THU',
         });
         const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
         expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: MIXED_GENERIC });
@@ -2636,7 +2638,7 @@ describe('CheckoutService.placeOrder — chạm đầu của khách trên order_
   it('mang nguồn và chiến dịch chạm đầu của khách đặt đơn', async () => {
     const { svc, prisma, analytics } = build();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
-      id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: null,
+      id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, tierId: null,
       firstTouchSource: 'card-2610', firstTouchCampaign: 'hop-hang',
     });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);

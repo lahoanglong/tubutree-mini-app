@@ -68,6 +68,7 @@ import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.se
 import { GameOrderWaterService } from '../game/game-order-water.service';
 import { markReversalEffectsDone } from './reversal-effects';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
+import { usesExpiringPoints } from './points-used-split';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
 export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
@@ -332,7 +333,7 @@ export class OrderStatusService {
 
     // Hạn của điểm thường hoàn lại đọc NGOÀI tx (không giữ kết nối tx trong lúc chờ cấu hình); đơn không dùng điểm thường thì bỏ qua.
     const standardPointsExpiresAt =
-      (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && order.pointsUsed > order.pointsUsedConverted
+      (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && usesExpiringPoints(order)
         ? await this.loyalty.pointsExpiresAt(new Date())
         : undefined;
 

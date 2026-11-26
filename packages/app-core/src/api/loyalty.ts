@@ -20,15 +20,20 @@ export interface LoyaltyOverview {
    * không rút ra tiền. Optional: API cũ chưa trả (coi như 0).
    */
   pointsConvertedBalance?: number;
+  /**
+   * Điểm Xanh tích từ đơn sàn (W42): có hạn, chỉ dùng để giảm giá khi mua hàng (chung trần % với lô thường), không góp quỹ, không đổi
+   * quà, không quay thưởng. Optional: API cũ chưa trả (coi như 0).
+   */
+  pointsMarketplaceBalance?: number;
   /** Điểm thường sắp hết hạn gần nhất (số điểm + ngày ISO); null khi không có. Optional: API cũ chưa trả. */
   expiringPoints?: { amount: number; expiresAt: string } | null;
   /** Số tháng điểm thường hết hạn kể từ ngày nhận (cấu hình). Optional: API cũ chưa trả. */
   pointExpireMonths?: number;
   /** Hệ số server nhân khi tích điểm (1 khi chưa có hạng, dù `tier` hiển thị hạng thấp nhất). Optional: API cũ chưa trả. */
   earnMultiplier?: number;
-  /** pointsBalance + pointsConvertedBalance (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
+  /** Tổng ba lô (BE tính sẵn; FE tự cộng bằng `pointsSummary` ở utils/points-lots). */
   pointsTotal?: number;
-  /** redeemablePoints + pointsConvertedBalance: trần điểm đề nghị dùng ở thanh toán. */
+  /** redeemablePoints + pointsConvertedBalance: số góp quỹ/trồng cây được. Không gồm điểm sàn (chỉ dùng khi mua hàng). */
   redeemableTotal?: number;
   /**
    * Điểm XÉT HẠNG 12 tháng — CHỈ điểm tích từ đơn online đã giao, trừ phần của đơn bị trả/huỷ

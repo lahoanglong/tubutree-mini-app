@@ -29,7 +29,15 @@ export type ExternalClaimRejectCode =
   | 'ALREADY_CLAIMED'
   | 'DAILY_MAX'
   | 'MONTHLY_CAP'
-  | 'ZERO_POINTS';
+  | 'ZERO_POINTS'
+  /** W42: SĐT (đầy đủ hoặc đã che) trên đơn sàn không khớp SĐT Zalo của khách đang gửi mã. HTTP 403, câu lỗi không in số trên đơn. */
+  | 'PHONE_MISMATCH';
+
+/**
+ * Điểm Xanh tích từ đơn sàn (lô MARKETPLACE, W42) chỉ dùng để giảm giá khi đặt đơn; vòng quay, góp cây, đổi quà và phí lấy rác không
+ * tiêu lô này. API nối câu này vào lỗi thiếu điểm của các đường đó khi khách còn điểm sàn; app dùng cùng câu cạnh số dư.
+ */
+export const MARKETPLACE_POINTS_ORDER_ONLY_NOTE = 'Điểm tích từ đơn sàn chỉ dùng để giảm giá khi mua hàng trên Web / Mini App Tubu Tree.';
 
 /** Mã lỗi của thao tác admin (ngoài ExternalClaimRejectCode, vốn cũng có thể trả khi gắn đơn chạy luật gửi mã). */
 export type ExternalClaimAdminErrorCode =

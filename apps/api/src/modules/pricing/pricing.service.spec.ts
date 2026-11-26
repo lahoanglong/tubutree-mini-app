@@ -97,12 +97,12 @@ describe('PricingService', () => {
   // PD-3 (spec 2.3): lô STANDARD chịu trần max_redeem_pct, lô CONVERTED (xu cũ) trả tới 100% giá trị hàng.
   describe('resolvePointsRedemptionByLot (PD-3, T8/T9)', () => {
     it('T8: đơn 500.000đ, STANDARD 1.000.000, CONVERTED 1.000.000, dùng 1.000.000 → s = 100.000, c = 400.000, giảm đủ 500.000đ', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 1_000_000, 1_000_000, 500000);
-      expect(r).toEqual({ pointsUsed: 500_000, pointsUsedStandard: 100_000, pointsUsedConverted: 400_000, discount: 500000 });
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, { standardUsable: 1_000_000, converted: 1_000_000 }, 500000);
+      expect(r).toEqual({ pointsUsed: 500_000, pointsUsedStandard: 100_000, pointsUsedConverted: 400_000, pointsUsedMarketplace: 0, discount: 500000 });
     });
 
     it('T8: giá trị hàng lẻ 123.456đ → điểm cộng tới đúng 123.456 (1 điểm = 1đ), giảm không vượt giá trị hàng', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 1_000_000, 1_000_000, 123456);
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, { standardUsable: 1_000_000, converted: 1_000_000 }, 123456);
       expect(r.pointsUsedStandard).toBe(24_691); // floor(123.456 × 0,2)
       expect(r.pointsUsedConverted).toBe(123_456 - 24_691);
       expect(r.discount).toBe(123456);
@@ -110,33 +110,72 @@ describe('PricingService', () => {
     });
 
     it('T9: STANDARD tiêu tới trần trước rồi mới tới CONVERTED', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(30_000, 1_000_000, 1_000_000, 100000);
+      const r = await svc.resolvePointsRedemptionByLot(30_000, { standardUsable: 1_000_000, converted: 1_000_000 }, 100000);
       expect(r).toMatchObject({ pointsUsedStandard: 20_000, pointsUsedConverted: 10_000, pointsUsed: 30_000, discount: 30000 });
     });
 
     it('T9: dùng ít hơn trần STANDARD → không đụng CONVERTED', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(15_000, 1_000_000, 1_000_000, 100000);
+      const r = await svc.resolvePointsRedemptionByLot(15_000, { standardUsable: 1_000_000, converted: 1_000_000 }, 100000);
       expect(r).toMatchObject({ pointsUsedStandard: 15_000, pointsUsedConverted: 0 });
     });
 
     it('T9: STANDARD dùng được = 0 (đang khoá) → chỉ CONVERTED, vẫn giảm được 100% giá trị hàng', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 0, 1_000_000, 250000);
-      expect(r).toEqual({ pointsUsed: 250_000, pointsUsedStandard: 0, pointsUsedConverted: 250_000, discount: 250000 });
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, { standardUsable: 0, converted: 1_000_000 }, 250000);
+      expect(r).toEqual({ pointsUsed: 250_000, pointsUsedStandard: 0, pointsUsedConverted: 250_000, pointsUsedMarketplace: 0, discount: 250000 });
     });
 
     it('kẹp theo số dư CONVERTED, không bao giờ âm', async () => {
-      const r = await svc.resolvePointsRedemptionByLot(1_000_000, 5_000, 7_000, 1000000);
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, { standardUsable: 5_000, converted: 7_000 }, 1000000);
       expect(r).toMatchObject({ pointsUsedStandard: 5_000, pointsUsedConverted: 7_000, pointsUsed: 12_000 });
-      const z = await svc.resolvePointsRedemptionByLot(0, 5_000, 7_000, 1000000);
-      expect(z).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 });
-      const neg = await svc.resolvePointsRedemptionByLot(10_000, -3_000, -4_000, 1000000);
-      expect(neg).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 });
+      const z = await svc.resolvePointsRedemptionByLot(0, { standardUsable: 5_000, converted: 7_000 }, 1000000);
+      expect(z).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, pointsUsedMarketplace: 0, discount: 0 });
+      const neg = await svc.resolvePointsRedemptionByLot(10_000, { standardUsable: -3_000, converted: -4_000 }, 1000000);
+      expect(neg).toEqual({ pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, pointsUsedMarketplace: 0, discount: 0 });
     });
 
     it('giá trị hàng 0 hoặc tỉ giá lỗi → không giảm', async () => {
-      expect((await svc.resolvePointsRedemptionByLot(10, 10, 10, 0)).pointsUsed).toBe(0);
+      expect((await svc.resolvePointsRedemptionByLot(10, { standardUsable: 10, converted: 10 }, 0)).pointsUsed).toBe(0);
       const bad = new PricingService(makeConfig({ ...DEFAULTS, 'loyalty.vnd_per_point_redeem': 0 }));
-      expect((await bad.resolvePointsRedemptionByLot(10, 10, 10, 100000)).pointsUsed).toBe(0);
+      expect((await bad.resolvePointsRedemptionByLot(10, { standardUsable: 10, converted: 10 }, 100000)).pointsUsed).toBe(0);
+    });
+  });
+
+  // W42: lô MARKETPLACE (điểm tích từ đơn sàn) tiêu trước STANDARD, hai lô chung trần max_redeem_pct; CONVERTED vẫn không trần.
+  describe('resolvePointsRedemptionByLot — 3 lô (W42)', () => {
+    it('MARKETPLACE trước, STANDARD tới trần chung 20%, phần còn lại từ CONVERTED', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(1_000_000, { marketplace: 30_000, standardUsable: 1_000_000, converted: 1_000_000 }, 500_000);
+      expect(r).toEqual({ pointsUsed: 500_000, pointsUsedStandard: 70_000, pointsUsedConverted: 400_000, pointsUsedMarketplace: 30_000, discount: 500_000 });
+    });
+
+    it('chỉ có điểm sàn: kẹp ở trần 20% như điểm thường, không vượt', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(200_000, { marketplace: 200_000, standardUsable: 0, converted: 0 }, 100_000);
+      expect(r).toEqual({ pointsUsed: 20_000, pointsUsedStandard: 0, pointsUsedConverted: 0, pointsUsedMarketplace: 20_000, discount: 20_000 });
+    });
+
+    it('dùng ít: hết lô MARKETPLACE mới sang STANDARD, không đụng CONVERTED', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(10_000, { marketplace: 5_000, standardUsable: 1_000_000, converted: 1_000_000 }, 100_000);
+      expect(r).toEqual({ pointsUsed: 10_000, pointsUsedStandard: 5_000, pointsUsedConverted: 0, pointsUsedMarketplace: 5_000, discount: 10_000 });
+    });
+
+    it('trần thêm (phần trần gộp còn lại sau mã) áp cho tổng MARKETPLACE + STANDARD', async () => {
+      const r = await svc.resolvePointsRedemptionByLot(50_000, { marketplace: 5_000, standardUsable: 1_000_000, converted: 1_000_000 }, 100_000, 8_000);
+      expect(r).toEqual({ pointsUsed: 50_000, pointsUsedStandard: 3_000, pointsUsedConverted: 42_000, pointsUsedMarketplace: 5_000, discount: 50_000 });
+    });
+
+    it('số dư âm hoặc thiếu lô MARKETPLACE coi như 0; tổng các lô luôn bằng pointsUsed', async () => {
+      const neg = await svc.resolvePointsRedemptionByLot(10_000, { marketplace: -5, standardUsable: 3_000, converted: 0 }, 100_000);
+      expect(neg).toEqual({ pointsUsed: 3_000, pointsUsedStandard: 3_000, pointsUsedConverted: 0, pointsUsedMarketplace: 0, discount: 3_000 });
+      for (const [p, m, st, c, v] of [
+        [7, 3, 3, 3, 30],
+        [999, 100, 50, 900, 1_234],
+        [123_456, 77_777, 11_111, 99_999, 654_321],
+      ] as const) {
+        const r = await svc.resolvePointsRedemptionByLot(p, { marketplace: m, standardUsable: st, converted: c }, v);
+        expect(r.pointsUsedMarketplace + r.pointsUsedStandard + r.pointsUsedConverted).toBe(r.pointsUsed);
+        expect(r.pointsUsedMarketplace + r.pointsUsedStandard).toBeLessThanOrEqual(Math.floor(v * 0.2));
+        expect(r.pointsUsedMarketplace).toBeLessThanOrEqual(m);
+        expect(r.discount).toBeLessThanOrEqual(v);
+      }
     });
   });
 

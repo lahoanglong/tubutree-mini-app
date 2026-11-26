@@ -1,4 +1,4 @@
-import { evaluateClaimRules, lockedUntil, settlePoints, type ClaimFacts } from './external-claim.rules';
+import { evaluateClaimRules, lockedUntil, NO_PHONE_REVIEW_REASON, PHONE_MISMATCH_REVIEW_REASON, settlePoints, type ClaimFacts } from './external-claim.rules';
 
 const NOW = new Date('2026-10-20T05:00:00.000Z');
 const day = (n: number) => new Date(NOW.getTime() - n * 864e5);
@@ -7,12 +7,11 @@ const base = (over: Partial<ClaimFacts> = {}): ClaimFacts => ({
   now: NOW,
   cfg: { enabled: true, earnPct: 1, dailyAttempts: 10, dailyMax: 3, monthlyPointsCap: 200_000, maxAgeDays: 60, reviewAboveVnd: 2_000_000, pendingDays: 14, externalSince: null },
   userOk: true,
-  userPhoneLast3: '678',
   userIsStaff: false,
   lockedUntil: null,
   attemptsToday: 0,
   isAppOrder: false,
-  order: { source: 'MARKETPLACE', status: 'OPEN', insertedAt: day(3), goodsValue: 200_000, phoneLast3: '678' },
+  order: { source: 'MARKETPLACE', status: 'OPEN', insertedAt: day(3), goodsValue: 200_000, phoneMatch: 'MATCH' },
   claim: null,
   codeTaken: false,
   claimsToday: 0,
@@ -78,8 +77,8 @@ describe('evaluateClaimRules: thứ tự luật', () => {
   it('thành viên là nhân viên: luôn REVIEW với lý do riêng, kể cả đơn nhỏ khớp SĐT', () => {
     expect(evaluateClaimRules(base({ userIsStaff: true }))).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', reviewReason: expect.stringContaining('nhân viên') });
   });
-  it('N1: nhận lại mã đã được nhân viên mở lại luôn vào REVIEW, kể cả đơn không có 3 số cuối', () => {
-    const f = base({ claim: { id: 'c1', reopenable: true, own: false, state: 'VOIDED' }, order: { ...base().order!, phoneLast3: null } });
+  it('N1: nhận lại mã đã được nhân viên mở lại luôn vào REVIEW, kể cả đơn không có SĐT để đối chiếu', () => {
+    const f = base({ claim: { id: 'c1', reopenable: true, own: false, state: 'VOIDED' }, order: { ...base().order!, phoneMatch: 'NO_DATA' } });
     expect(evaluateClaimRules(f)).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', reviewReason: expect.stringContaining('mở lại') });
   });
   it('N2: đơn đã hoàn một phần vào REVIEW', () => {
@@ -92,15 +91,58 @@ describe('evaluateClaimRules: thứ tự luật', () => {
     expect(evaluateClaimRules(base({ monthPoints: 199_000 }))).toEqual({ kind: 'REJECT', code: 'MONTHLY_CAP' });
     expect(evaluateClaimRules(base({ monthPoints: 198_000 })).kind).toBe('CLAIM');
   });
-  it('REVIEW: thiếu tiền hàng (points 0 không áp luật tháng), vượt ngưỡng, hoặc 3 số cuối SĐT khác', () => {
+  it('REVIEW: thiếu tiền hàng (points 0 không áp luật tháng), vượt ngưỡng, hoặc đơn không có SĐT để đối chiếu', () => {
     expect(evaluateClaimRules(base({ order: { ...base().order!, goodsValue: null } }))).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', points: 0 });
     expect(evaluateClaimRules(base({ order: { ...base().order!, goodsValue: 2_000_001 } }))).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', points: 20_000 });
     expect(evaluateClaimRules(base({ order: { ...base().order!, goodsValue: 2_000_000 } }))).toMatchObject({ state: 'PENDING' });
-    expect(evaluateClaimRules(base({ userPhoneLast3: '111' }))).toMatchObject({ state: 'REVIEW' });
-    expect(evaluateClaimRules(base({ order: { ...base().order!, phoneLast3: null }, userPhoneLast3: '111' }))).toMatchObject({ state: 'PENDING' });
+    expect(evaluateClaimRules(base({ order: { ...base().order!, phoneMatch: 'NO_DATA' } }))).toEqual({
+      kind: 'CLAIM',
+      state: 'REVIEW',
+      reviewReason: NO_PHONE_REVIEW_REASON,
+      points: 2_000,
+    });
+    expect(evaluateClaimRules(base({ order: { ...base().order!, phoneMatch: 'MATCH' } }))).toMatchObject({ state: 'PENDING', reviewReason: null });
   });
   it('giá trị đơn quá nhỏ (dưới 100đ ở 1%) bị từ chối vì 0 điểm', () => {
     expect(evaluateClaimRules(base({ order: { ...base().order!, goodsValue: 99 } }))).toEqual({ kind: 'REJECT', code: 'ZERO_POINTS' });
+  });
+});
+
+describe('evaluateClaimRules: SĐT trên đơn sàn (W42)', () => {
+  const mismatch = (over: Partial<ClaimFacts> = {}) => base({ ...over, order: { ...base().order!, ...(over.order ?? {}), phoneMatch: 'MISMATCH' } });
+  it('SĐT lệch: từ chối PHONE_MISMATCH, không tạo claim', () => {
+    expect(evaluateClaimRules(mismatch())).toEqual({ kind: 'REJECT', code: 'PHONE_MISMATCH' });
+  });
+  it('khoá 24h, lần thử/ngày, đơn chat, đơn lạ đứng trước SĐT lệch', () => {
+    expect(evaluateClaimRules(mismatch({ lockedUntil: day(-1) }))).toEqual({ kind: 'REJECT', code: 'LOCKED' });
+    expect(evaluateClaimRules(mismatch({ attemptsToday: 10 }))).toEqual({ kind: 'REJECT', code: 'DAILY_ATTEMPTS' });
+    expect(evaluateClaimRules(mismatch({ order: { ...base().order!, source: 'CHAT' } }))).toEqual({ kind: 'REJECT', code: 'CHAT_ORDER' });
+    expect(evaluateClaimRules(mismatch({ order: { ...base().order!, source: 'UNKNOWN' } }))).toEqual({ kind: 'UNKNOWN_SOURCE' });
+  });
+  it('SĐT lệch đứng trước đơn quá hạn, đã đóng, đã được tích: người cầm mã không dò được trạng thái đơn của người khác', () => {
+    expect(evaluateClaimRules(mismatch({ order: { ...base().order!, insertedAt: day(400) } }))).toEqual({ kind: 'REJECT', code: 'PHONE_MISMATCH' });
+    expect(evaluateClaimRules(mismatch({ order: { ...base().order!, status: 'CANCELLED' } }))).toEqual({ kind: 'REJECT', code: 'PHONE_MISMATCH' });
+    expect(evaluateClaimRules(mismatch({ codeTaken: true }))).toEqual({ kind: 'REJECT', code: 'PHONE_MISMATCH' });
+    expect(evaluateClaimRules(mismatch({ claim: { id: 'c9', reopenable: false, own: false, state: 'CREDITED' } }))).toEqual({
+      kind: 'REJECT',
+      code: 'PHONE_MISMATCH',
+    });
+    expect(evaluateClaimRules(mismatch({ claim: { id: 'c9', reopenable: true, own: false, state: 'VOIDED' } }))).toEqual({
+      kind: 'REJECT',
+      code: 'PHONE_MISMATCH',
+    });
+  });
+  it('claim của chính khách (đã đổi SĐT) vẫn xem được trạng thái cũ', () => {
+    expect(evaluateClaimRules(mismatch({ claim: { id: 'c1', reopenable: false, own: true, state: 'PENDING' } }))).toEqual({
+      kind: 'OWN_CLAIM',
+      claimId: 'c1',
+      state: 'PENDING',
+    });
+  });
+  it('claim của chính khách được nhân viên mở lại mà SĐT lệch: vào REVIEW và lý do nêu SĐT lệch trước lý do mở lại', () => {
+    const d = evaluateClaimRules(mismatch({ claim: { id: 'c1', reopenable: true, own: true, state: 'VOIDED' } }));
+    expect(d).toMatchObject({ kind: 'CLAIM', state: 'REVIEW' });
+    expect(d.kind === 'CLAIM' && d.reviewReason).toBe(`${PHONE_MISMATCH_REVIEW_REASON}; Mã được nhân viên mở lại, cần người khác duyệt`);
   });
 });
 

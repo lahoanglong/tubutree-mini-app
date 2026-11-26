@@ -59,10 +59,9 @@ describe('LoyaltyExpiryService: ứng viên hết hạn phân trang bằng SQL (
   it('phân trang theo cursor cho ra đúng danh sách của cách cũ, mỗi trang tối đa BATCH và có LIMIT trong SQL', async () => {
     expect(expected.length).toBeGreaterThan(600);
     const page = (cursor?: string) =>
-      (svc as unknown as { candidateUserIds: (r: { gt?: Date; lte: Date }, c?: string) => Promise<{ userId: string }[]> }).candidateUserIds(
-        { gt: floor, lte: now },
-        cursor,
-      );
+      (
+        svc as unknown as { candidateUserIds: (r: { gt?: Date; lte: Date }, c: string | undefined, lots: readonly string[]) => Promise<{ userId: string }[]> }
+      ).candidateUserIds({ gt: floor, lte: now }, cursor, ['STANDARD']);
     const got: string[] = [];
     let cursor: string | undefined;
     captured = [];

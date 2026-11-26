@@ -138,31 +138,42 @@ export class PricingService {
   }
 
   /**
-   * PD-3 (spec 2.3): chia `pointsToUse` giữa hai lô Điểm Xanh.
-   *  s = phần STANDARD, chịu trần `loyalty.max_redeem_pct` như resolvePointsRedemption.
+   * Chia `pointsToUse` giữa ba lô Điểm Xanh (PD-3 spec 2.3, W42).
+   *  m = phần MARKETPLACE (điểm đơn sàn, chỉ dùng khi mua hàng) lấy TRƯỚC, s = phần STANDARD: hai lô CHUNG một trần
+   *      `loyalty.max_redeem_pct` (và phần trần gộp voucher còn lại `standardCapVnd`), như resolvePointsRedemption trên m + s.
    *  c = phần CONVERTED (xu cũ quy đổi), không trần %: phủ phần giá trị hàng còn lại, trừ lẻ < 1 điểm.
-   * Lấy STANDARD tới trần trước vì lô đó hết hạn còn lô CONVERTED thì không, và vì CONVERTED vẫn bù
-   * được tới `orderValue` nên tổng giảm không bao giờ nhỏ hơn cách chia khác. Tổng giảm ≤ orderValue
-   * (không bao giờ trừ vào phí ship).
+   * MARKETPLACE trước vì lô đó chỉ tiêu được ở đây (lô STANDARD còn dùng cho vòng quay, cây, đổi quà); STANDARD trước CONVERTED vì lô
+   * đó hết hạn còn lô CONVERTED thì không, và CONVERTED vẫn bù được tới `orderValue` nên tổng giảm không bao giờ nhỏ hơn cách chia
+   * khác. Tổng giảm ≤ orderValue (không bao giờ trừ vào phí ship).
    */
   async resolvePointsRedemptionByLot(
     pointsToUse: number,
-    standardUsable: number,
-    convertedBalance: number,
+    lots: {
+      /** Lô MARKETPLACE (users.pointsMarketplaceBalance). Bỏ trống = 0. */
+      marketplace?: number;
+      /** Phần DÙNG ĐƯỢC của lô STANDARD (số dư − điểm đơn còn có thể bị đảo). */
+      standardUsable: number;
+      /** Lô CONVERTED. */
+      converted: number;
+    },
     orderValue: number,
-    /** Trần VND thêm cho phần STANDARD (phần trần gộp voucher + Điểm Xanh còn lại sau mã); lô CONVERTED không chịu. */
+    /** Trần VND thêm cho phần MARKETPLACE + STANDARD (phần trần gộp voucher + Điểm Xanh còn lại sau mã); lô CONVERTED không chịu. */
     standardCapVnd?: number,
-  ): Promise<{ pointsUsed: number; pointsUsedStandard: number; pointsUsedConverted: number; discount: number }> {
-    const none = { pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 };
+  ): Promise<{ pointsUsed: number; pointsUsedStandard: number; pointsUsedConverted: number; pointsUsedMarketplace: number; discount: number }> {
+    const none = { pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, pointsUsedMarketplace: 0, discount: 0 };
     const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1);
     if (!(vnd > 0) || !(orderValue > 0) || !(pointsToUse > 0)) return none;
-    const std = await this.resolvePointsRedemption(pointsToUse, Math.max(0, standardUsable), orderValue, standardCapVnd);
-    const s = std.pointsUsed;
+    const marketplace = Math.max(0, lots.marketplace ?? 0);
+    const standard = Math.max(0, lots.standardUsable);
+    // Một lần kẹp trần cho cả hai lô có trần: phần chung không bao giờ vượt trần dù chia thế nào.
+    const capped = (await this.resolvePointsRedemption(pointsToUse, marketplace + standard, orderValue, standardCapVnd)).pointsUsed;
+    const m = Math.min(capped, marketplace);
+    const s = Math.min(capped - m, standard);
     const c = Math.max(
       0,
-      Math.min(pointsToUse - s, Math.max(0, convertedBalance), Math.floor((orderValue - s * vnd) / vnd)),
+      Math.min(pointsToUse - m - s, Math.max(0, lots.converted), Math.floor((orderValue - (m + s) * vnd) / vnd)),
     );
-    return { pointsUsed: s + c, pointsUsedStandard: s, pointsUsedConverted: c, discount: (s + c) * vnd };
+    return { pointsUsed: m + s + c, pointsUsedStandard: s, pointsUsedConverted: c, pointsUsedMarketplace: m, discount: (m + s + c) * vnd };
   }
 
   /**

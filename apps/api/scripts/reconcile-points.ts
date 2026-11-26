@@ -12,12 +12,14 @@
  *
  * Lô CONVERTED (điểm quy từ xu — tiền trả trước của khách) chỉ BÁO, không tự sửa kể cả với --apply:
  * lệch ở lô này nghĩa là có đường ghi sai lô hoặc thiếu dòng sổ, phải tra nguyên nhân trước khi chỉnh
- * tiền của khách (giống reconcile-wallet). Có lệch lô CONVERTED thì thoát mã 1.
+ * tiền của khách (giống reconcile-wallet). Lô MARKETPLACE (điểm tích từ đơn sàn, W42) cũng chỉ BÁO: mọi dòng của lô này đi qua
+ * applyPointsDelta, lệch là lỗi đường ghi chứ không phải dòng sổ bị dedupe. Có lệch lô CONVERTED hoặc MARKETPLACE thì thoát mã 1.
  *
  * An toàn: --apply chạy 1 câu UPDATE atomic (set = subquery), không TOCTOU; idempotent
  * (chạy lại = no-op). Mặc định KHÔNG sửa gì để xem trước tác động.
  */
 import { PrismaClient } from '@prisma/client';
+import { POINTS_LOTS } from '../src/modules/loyalty/points-lot-columns';
 import { diffPointsBalances, findPointsLotDrift } from '../src/modules/loyalty/points-reconcile';
 
 const prisma = new PrismaClient();
@@ -28,9 +30,9 @@ async function main() {
   const report = diffPointsBalances(await findPointsLotDrift(prisma));
 
   console.log(`\n=== ĐỐI SOÁT Điểm Xanh theo lô ${apply ? '(APPLY — sẽ sửa lô STANDARD)' : '(DRY-RUN — chỉ xem)'} ===`);
-  for (const lot of ['STANDARD', 'CONVERTED'] as const) {
+  for (const lot of POINTS_LOTS) {
     const t = report.byLot[lot];
-    console.log(`Lô ${lot.padEnd(9)}: ${t.affectedCount} user lệch, chênh ròng ${t.totalDrift} điểm, tuyệt đối ${t.totalAbsDrift} điểm`);
+    console.log(`Lô ${lot.padEnd(11)}: ${t.affectedCount} user lệch, chênh ròng ${t.totalDrift} điểm, tuyệt đối ${t.totalAbsDrift} điểm`);
   }
   console.log('(chênh âm = đang cộng dư cần thu hồi)\n');
 
@@ -47,10 +49,9 @@ async function main() {
     console.log(`  … và ${report.corrections.length - 50} dòng khác`);
   }
 
-  if (report.byLot.CONVERTED.affectedCount > 0) {
-    console.error(
-      `\n❌ ${report.byLot.CONVERTED.affectedCount} user lệch lô CONVERTED (điểm quy từ xu): KHÔNG tự sửa, cần tra nguyên nhân.`,
-    );
+  for (const lot of ['CONVERTED', 'MARKETPLACE'] as const) {
+    if (report.byLot[lot].affectedCount === 0) continue;
+    console.error(`\n❌ ${report.byLot[lot].affectedCount} user lệch lô ${lot}: KHÔNG tự sửa, cần tra nguyên nhân.`);
     process.exitCode = 1;
   }
 

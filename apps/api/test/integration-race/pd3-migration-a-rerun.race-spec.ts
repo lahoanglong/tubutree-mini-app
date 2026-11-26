@@ -58,7 +58,8 @@ describe('PD-3 migration A chạy lại được trên DB đã áp (real Postgre
     const c = await catalogOfA();
     expect(c.constraints.map((x) => x.conname)).toEqual(['points_transactions_converted_no_expiry', 'users_points_converted_nonneg']);
     expect(c.columns).toHaveLength(5);
-    expect(c.enumValues.map((x) => x.enumlabel)).toEqual(['STANDARD', 'CONVERTED']);
+    // W42 thêm MARKETPLACE sau A (migration 20261127100000): A chỉ cần hai giá trị đầu.
+    expect(c.enumValues.map((x) => x.enumlabel).slice(0, 2)).toEqual(['STANDARD', 'CONVERTED']);
     expect(c.indexes).toHaveLength(6);
   });
 

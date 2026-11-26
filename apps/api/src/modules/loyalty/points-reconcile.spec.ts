@@ -52,7 +52,7 @@ describe('diffPointsBalances (đối soát số dư Điểm Xanh theo sổ cái 
     expect(r.byLot.CONVERTED).toEqual({ affectedCount: 1, totalDrift: -2, totalAbsDrift: 2 });
   });
 
-  it('PD-3: lô nào ứng với cột số dư nào', () => {
-    expect(POINTS_LOT_BALANCE_COLUMN).toEqual({ STANDARD: 'pointsBalance', CONVERTED: 'pointsConvertedBalance' });
+  it('PD-3 + W42: lô nào ứng với cột số dư nào', () => {
+    expect(POINTS_LOT_BALANCE_COLUMN).toEqual({ STANDARD: 'pointsBalance', CONVERTED: 'pointsConvertedBalance', MARKETPLACE: 'pointsMarketplaceBalance' });
   });
 });

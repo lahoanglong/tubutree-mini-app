@@ -1,4 +1,4 @@
-import type { Prisma, WasteCloseReason } from '@prisma/client';
+import type { PointsLot, Prisma, WasteCloseReason } from '@prisma/client';
 import { applyPointsDelta } from '../../loyalty/points-ledger';
 import { creditWalletUnlessAnonymized } from '../../wallet/wallet-anonymized-guard';
 import { writeWasteEvent, type WasteEventInput } from '../core/waste-events';
@@ -25,7 +25,8 @@ export async function refundShipFeePoints(tx: Prisma.TransactionClient, req: Ref
     where: { userId: req.userId, refType: WASTE_PICKUP_FEE_REF_TYPE, refId: req.id, reason: wastePickupFeeReason(req.code), delta: { lt: 0 } },
     select: { delta: true, lot: true },
   });
-  const byLot = { STANDARD: 0, CONVERTED: 0 };
+  // Phí shipper không bao giờ trừ lô MARKETPLACE (chỉ dùng khi mua hàng): có dòng như vậy thì tổng lệch và cả phần hoàn về lô thường.
+  const byLot: Record<PointsLot, number> = { STANDARD: 0, CONVERTED: 0, MARKETPLACE: 0 };
   for (const e of entries) byLot[e.lot] += -e.delta;
   if (byLot.STANDARD + byLot.CONVERTED !== used) {
     byLot.STANDARD = used;

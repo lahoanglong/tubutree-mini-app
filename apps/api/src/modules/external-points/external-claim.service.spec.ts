@@ -66,6 +66,9 @@ const order = (over: Record<string, unknown> = {}) => ({
   trackingCodes: ['SPXVN0123456789'],
   marketplaceOrderSn: null,
   goodsValue: 200_000,
+  // Sàn che SĐT người mua (W42): mẫu khớp SĐT Zalo 0912345678 của khách trong build().
+  phone: null,
+  phoneMask: '091*****78',
   phoneLast3: '678',
   pancakeInsertedAt: new Date(NOW.getTime() - 864e5),
   firstSeenAt: NOW,
@@ -88,7 +91,7 @@ describe('ExternalClaimService.submit: sự kiện phễu ext_claim_submitted', 
     const { svc, tx } = build({ config: flagOn, order: order() });
     await svc.submit('u1', 'SPXVN0123456789', 'scan');
     expect(evt(tx)).toEqual([
-      expect.objectContaining({ eventName: 'ext_claim_submitted', userId: 'u1', platform: 'system', props: { via: 'scan', result: 'CLAIMED', channel: 'shopee', points: 2_000 } }),
+      expect.objectContaining({ eventName: 'ext_claim_submitted', userId: 'u1', platform: 'system', props: { via: 'scan', result: 'CLAIMED', channel: 'shopee', points: 10_000 } }),
     ]);
   });
   it('SEARCHING và REVIEW', async () => {
@@ -132,9 +135,9 @@ describe('ExternalClaimService.submit', () => {
     const res = await svc.submit('u1', ' spx-vn0123456789 ');
     expect(calls).toEqual(['lock', 'rowlock']);
     expect(tx.user.findUnique.mock.invocationCallOrder[0]!).toBeGreaterThan(tx.$executeRaw.mock.invocationCallOrder[0]!);
-    expect(res).toMatchObject({ status: 'CLAIMED', points: 2_000, channel: 'shopee', maskedCode: 'SPX*********789', expectedCreditAt: null });
+    expect(res).toMatchObject({ status: 'CLAIMED', points: 10_000, channel: 'shopee', maskedCode: 'SPX*********789', expectedCreditAt: null });
     expect(tx.externalPointsClaim.createManyAndReturn).toHaveBeenCalledWith(
-      expect.objectContaining({ skipDuplicates: true, data: [expect.objectContaining({ userId: 'u1', state: 'PENDING', points: 2_000, countsForTier: false, claimedCode: 'SPXVN0123456789', multiplier: 1 })] }),
+      expect.objectContaining({ skipDuplicates: true, data: [expect.objectContaining({ userId: 'u1', state: 'PENDING', points: 10_000, countsForTier: false, claimedCode: 'SPXVN0123456789', multiplier: 1 })] }),
     );
   });
   it('không thấy đơn: tra Pancake ngoài transaction, rồi ghi attempt UNMATCHED và trả SEARCHING', async () => {
@@ -160,10 +163,36 @@ describe('ExternalClaimService.submit', () => {
     expect(res).toMatchObject({ status: 'REVIEW', points: null });
     expect(notifications.notify).not.toHaveBeenCalled();
   });
+  it('W42: SĐT trên đơn lệch SĐT khách: 403 PHONE_MISMATCH, ghi attempt REJECTED_PHONE_MISMATCH, không tạo claim', async () => {
+    const { svc, tx, attemptCreate } = build({ config: flagOn, order: order({ phoneMask: '098*****26' }) });
+    let status = 0;
+    try {
+      await svc.submit('u1', 'SPXVN0123456789');
+    } catch (e) {
+      status = e instanceof HttpException ? e.getStatus() : -1;
+    }
+    expect(status).toBe(403);
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_MISMATCH', userId: 'u1' }) });
+    expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+  it('W42: lần lệch SĐT tính vào khoá 24h cùng lần không tìm thấy', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    await svc.submit('u1', 'SPXVN0123456789');
+    expect(tx.externalClaimAttempt.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ result: { in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH'] } }) }),
+    );
+  });
+  it('W42: đơn chỉ có số đầy đủ khớp: PENDING; đơn không có SĐT nào: REVIEW', async () => {
+    const full = build({ config: flagOn, order: order({ phone: '0912345678', phoneMask: null }) });
+    expect(await full.svc.submit('u1', 'SPXVN0123456789')).toMatchObject({ status: 'CLAIMED' });
+    const none = build({ config: flagOn, order: order({ phone: null, phoneMask: null }) });
+    expect(await none.svc.submit('u1', 'SPXVN0123456789')).toMatchObject({ status: 'REVIEW' });
+    expect(none.notifications.notify).not.toHaveBeenCalled();
+  });
   it('thành công: gửi EXTERNAL_POINTS_PENDING với dedupeKey theo claim', async () => {
     const { svc, notifications } = build({ config: flagOn, order: order() });
     await svc.submit('u1', 'SPXVN0123456789');
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'EXTERNAL_POINTS_PENDING', { points: '2.000', code: 'SPX*********789' }, { dedupeKey: 'ext-pending:c1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'EXTERNAL_POINTS_PENDING', { points: '10.000', code: 'SPX*********789' }, { dedupeKey: 'ext-pending:c1' });
   });
   it('mã đã có claim (createMany trả rỗng): 409 ALREADY_CLAIMED và ghi attempt', async () => {
     const { svc, tx, attemptCreate } = build({ config: flagOn, order: order() });

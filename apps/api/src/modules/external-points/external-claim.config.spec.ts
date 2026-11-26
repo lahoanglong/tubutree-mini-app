@@ -3,11 +3,11 @@ import { CLAIM_CONFIG_DEFAULTS, loadClaimConfig } from './external-claim.config'
 const cfg = (values: Record<string, unknown>) => ({ get: jest.fn((k: string, d: unknown) => Promise.resolve(k in values ? values[k] : d)) });
 
 describe('loadClaimConfig', () => {
-  it('mặc định: cờ tắt, 1%, ngày 3, tháng 200.000, tuổi đơn 60, external_since null', async () => {
+  it('mặc định: cờ tắt, 5%, ngày 3, tháng 200.000, tuổi đơn 60, external_since null', async () => {
     const c = await loadClaimConfig(cfg({}) as never);
     expect(c).toEqual({
       enabled: false,
-      earnPct: 1,
+      earnPct: 5,
       dailyAttempts: 10,
       dailyMax: 3,
       monthlyPointsCap: 200_000,
@@ -26,7 +26,7 @@ describe('loadClaimConfig', () => {
     const c = await loadClaimConfig(
       cfg({ 'loyalty.marketplace_earn_pct': 'x', 'loyalty.marketplace_claim_daily_max': -1, 'loyalty.external_pending_days': 1.5, 'loyalty.marketplace_claim_monthly_points_cap': null }) as never,
     );
-    expect(c).toMatchObject({ earnPct: 1, dailyMax: 3, pendingDays: 14, monthlyPointsCap: 200_000 });
+    expect(c).toMatchObject({ earnPct: 5, dailyMax: 3, pendingDays: 14, monthlyPointsCap: 200_000 });
   });
   it('earnPct 0,5 được giữ; ngày rộng hơn trần thì kẹp về trần', async () => {
     const c = await loadClaimConfig(cfg({ 'loyalty.marketplace_earn_pct': 0.5, 'loyalty.marketplace_claim_max_age_days': 99999 }) as never);

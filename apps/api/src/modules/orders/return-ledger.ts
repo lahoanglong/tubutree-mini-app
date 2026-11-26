@@ -7,6 +7,8 @@ export interface PartialReturnTotals {
   shipping: number;
   pointsUsedBack: number;
   convertedBack: number;
+  /** Phần điểm lô MARKETPLACE đã trả lại (W42). */
+  marketplaceBack: number;
   pointsEarnedBack: number;
   commissionReversed: number;
   /** Số đơn vị đã duyệt trả theo dòng (đã hoàn quota flash sale, đã hoàn tiền). */
@@ -37,6 +39,7 @@ export async function partialReturnTotals(db: Db, orderId: string, excludeReques
     shipping: 0,
     pointsUsedBack: 0,
     convertedBack: 0,
+    marketplaceBack: 0,
     pointsEarnedBack: 0,
     commissionReversed: 0,
     approvedQty: new Map(),
@@ -47,6 +50,7 @@ export async function partialReturnTotals(db: Db, orderId: string, excludeReques
     totals.shipping += r.shippingRefund;
     totals.pointsUsedBack += r.pointsRefunded;
     totals.convertedBack += r.convertedPointsRefunded;
+    totals.marketplaceBack += r.marketplacePointsRefunded ?? 0;
     totals.pointsEarnedBack += r.pointsReversed;
     totals.commissionReversed += r.commissionReversed;
     for (const it of r.items ?? []) {
@@ -79,6 +83,7 @@ export const NO_PARTIAL_RETURNS: PartialReturnTotals = {
   shipping: 0,
   pointsUsedBack: 0,
   convertedBack: 0,
+  marketplaceBack: 0,
   pointsEarnedBack: 0,
   commissionReversed: 0,
   approvedQty: new Map(),

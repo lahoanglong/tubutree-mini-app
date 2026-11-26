@@ -17,6 +17,7 @@ import {
 import { FIRST_ORDER_REFEREE_PREFIX, FIRST_ORDER_REFERRER_PREFIX, FIRST_ORDER_REVOKE_PREFIX } from '../referral/first-order-reasons';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { CTV_MILESTONE_REF_TYPE, CTV_MILESTONE_REVOKE_REF_TYPE, ctvMilestoneLotKey } from '../affiliate/ctv-milestone-ref';
+import { EXPIRING_POINTS_LOTS, POINTS_LOT_BALANCE_COLUMN, type ExpiringPointsLot } from './points-lot-columns';
 
 const DAY = 864e5;
 const BATCH = 500; // kích thước mỗi trang candidate.
@@ -307,7 +308,7 @@ export function lotRecoverable(txns: PointExpiryTxn[], key: string): number | nu
 /**
  * Tính điểm hết hạn theo FIFO (lô cũ tiêu trước) — HÀM THUẦN, không đụng DB, tất định.
  *
- * Bất biến: pointsBalance == SUM(delta) lô STANDARD; caller chỉ đưa vào dòng lô STANDARD (PD-3). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
+ * Bất biến: cột số dư của lô == SUM(delta) của lô đó; caller chỉ đưa vào dòng của MỘT lô có hạn (STANDARD hoặc MARKETPLACE). Mỗi delta DƯƠNG là một "lô" điểm (có/không expiresAt),
  * mỗi delta ÂM (tiêu/đổi/hoàn) tiêu dần từ lô CŨ NHẤT; riêng POINTS_EXPIRED kỳ trước tiêu lô đã hết hạn trước,
  * và dòng âm đảo ngược một khoản cộng cụ thể (huỷ/trả đơn, xoá đánh giá, thu hồi thưởng giới thiệu) tiêu lô của đúng
  * khoản cộng đó trước, phần dư mới FIFO (xem ReversalRule).
@@ -364,16 +365,18 @@ export function nextPointExpiry(txns: PointExpiryTxn[], now: Date): { amount: nu
 }
 
 /**
- * Sổ lô STANDARD của một user để đưa vào computePointExpiry / lotRecoverable. Chỉ lô STANDARD (PD-3): dòng lô CONVERTED
- * (quy từ xu, không hạn) mà lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu trông
- * "còn nguyên" và cron trừ quá tay; ngược lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu.
+ * Sổ MỘT lô có hạn của một user để đưa vào computePointExpiry / lotRecoverable, mặc định lô STANDARD. Mỗi lô replay riêng (PD-3):
+ * dòng lô CONVERTED (quy từ xu, không hạn) mà lọt vào FIFO thì dòng tiêu điểm thường ăn nhầm lô quy đổi cũ hơn, lô thường đã tiêu
+ * trông "còn nguyên" và cron trừ quá tay; ngược lại dòng tiêu lô quy đổi ăn lô thường cũ và cron trừ thiếu. Lô MARKETPLACE (W42)
+ * cũng có hạn và cũng replay riêng: dòng tiêu điểm sàn ở thanh toán chỉ ăn lô sàn.
  */
 export function loadPointExpiryTxns(
   db: Pick<Prisma.TransactionClient, 'pointsTransaction'>,
   userId: string,
+  lot: ExpiringPointsLot = 'STANDARD',
 ): Promise<PointExpiryTxn[]> {
   return db.pointsTransaction.findMany({
-    where: { userId, lot: 'STANDARD' },
+    where: { userId, lot },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { id: true, delta: true, expiresAt: true, createdAt: true, reason: true, refType: true, refId: true },
   });
@@ -396,8 +399,9 @@ export class LoyaltyExpiryService {
   private loadTxns(
     userId: string,
     db: Pick<Prisma.TransactionClient, 'pointsTransaction'> = this.prisma,
+    lot: ExpiringPointsLot = 'STANDARD',
   ): Promise<PointExpiryTxn[]> {
-    return loadPointExpiryTxns(db, userId);
+    return loadPointExpiryTxns(db, userId, lot);
   }
 
   /**
@@ -430,22 +434,25 @@ export class LoyaltyExpiryService {
       const floor = await this.expiryScanFloor(now);
       let totalExpired = 0;
       let affected = 0;
-      let cursor: string | undefined;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        const candidates = await this.candidateUserIds({ gt: floor, lte: now }, cursor);
-        if (candidates.length === 0) break;
-        cursor = candidates[candidates.length - 1]!.userId;
-        for (const c of candidates) {
-          const expired = await this.expireUser(c.userId, now).catch((e) => {
-            this.logger.error(`expirePoints lỗi user=${c.userId}: ${(e as Error).message}`);
-            return 0;
-          });
-          if (expired > 0) {
-            totalExpired += expired;
-            affected++;
+      // Mỗi lô có hạn quét và trừ riêng (cột số dư riêng, FIFO riêng): lô MARKETPLACE (điểm đơn sàn) hết hạn như điểm thường.
+      for (const lot of EXPIRING_POINTS_LOTS) {
+        let cursor: string | undefined;
+        for (let page = 0; page < MAX_PAGES; page++) {
+          const candidates = await this.candidateUserIds({ gt: floor, lte: now }, cursor, [lot]);
+          if (candidates.length === 0) break;
+          cursor = candidates[candidates.length - 1]!.userId;
+          for (const c of candidates) {
+            const expired = await this.expireUser(c.userId, now, lot).catch((e) => {
+              this.logger.error(`expirePoints lỗi user=${c.userId} lô=${lot}: ${(e as Error).message}`);
+              return 0;
+            });
+            if (expired > 0) {
+              totalExpired += expired;
+              affected++;
+            }
           }
+          if (candidates.length < BATCH) break;
         }
-        if (candidates.length < BATCH) break;
       }
       if (affected) this.logger.log(`Điểm hết hạn: trừ ${totalExpired} điểm của ${affected} user.`);
     } catch (err) {
@@ -454,14 +461,20 @@ export class LoyaltyExpiryService {
   }
 
   /**
-   * Một trang khách có lô STANDARD hết hạn trong (gt, lte], tăng dần theo userId, sau `cursor`.
+   * Một trang khách có dòng cộng của các lô `lots` hết hạn trong (gt, lte], tăng dần theo userId, sau `cursor`.
    * Viết bằng SQL thẳng: `findMany({ distinct, take })` của Prisma (không bật nativeDistinct) bỏ LIMIT khỏi câu SQL và
    * kéo mọi dòng sổ trong cửa sổ về bộ nhớ rồi mới cắt trang.
    */
-  private candidateUserIds(range: { gt?: Date; lte: Date }, cursor?: string): Promise<{ userId: string }[]> {
+  private candidateUserIds(
+    range: { gt?: Date; lte: Date },
+    cursor: string | undefined,
+    lots: readonly ExpiringPointsLot[],
+  ): Promise<{ userId: string }[]> {
+    // Tên lô là hằng trong mã (EXPIRING_POINTS_LOTS), không phải dữ liệu khách: ghép thẳng để so được với cột enum.
+    const lotList = Prisma.raw(lots.map((l) => `'${l}'`).join(', '));
     return this.prisma.$queryRaw<{ userId: string }[]>(Prisma.sql`
       SELECT DISTINCT "userId" FROM "points_transactions"
-      WHERE "lot" = 'STANDARD' AND "delta" > 0
+      WHERE "lot" IN (${lotList}) AND "delta" > 0
         ${range.gt ? Prisma.sql`AND "expiresAt" > ${range.gt}` : Prisma.empty}
         AND "expiresAt" <= ${range.lte}
         ${cursor ? Prisma.sql`AND "userId" > ${cursor}` : Prisma.empty}
@@ -493,32 +506,33 @@ export class LoyaltyExpiryService {
    * lượt chạy đồng thời (nhiều instance, chạy tay lúc cron) cùng thấy expiredNow trước khi bên kia commit
    * sẽ cùng trừ, guard gte chỉ chặn số dư âm chứ không chặn trừ đôi, và khách mất điểm chưa hết hạn.
    */
-  private async expireUser(userId: string, now: Date): Promise<number> {
-    const { expiredNow: preview } = computePointExpiry(await this.loadTxns(userId), now, 0);
+  private async expireUser(userId: string, now: Date, lot: ExpiringPointsLot = 'STANDARD'): Promise<number> {
+    const { expiredNow: preview } = computePointExpiry(await this.loadTxns(userId, this.prisma, lot), now, 0);
     if (preview <= 0) return 0;
+    const column = POINTS_LOT_BALANCE_COLUMN[lot];
 
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      const { expiredNow } = computePointExpiry(await this.loadTxns(userId, tx), now, 0);
+      const { expiredNow } = computePointExpiry(await this.loadTxns(userId, tx, lot), now, 0);
       if (expiredNow <= 0) return { expiredNow: 0, applied: true };
 
-      // Guard gte: chỉ trừ khi số dư đủ → pointsBalance KHÔNG bao giờ âm. Nếu count=0
+      // Guard gte trên cột của ĐÚNG lô: chỉ trừ khi số dư lô đủ → cột KHÔNG bao giờ âm. Nếu count=0
       // (bất biến vỡ: balance < expiredNow) → KHÔNG tạo txn âm, giữ ledger nhất quán.
       const res = await tx.user.updateMany({
-        where: { id: userId, pointsBalance: { gte: expiredNow } },
-        data: { pointsBalance: { decrement: expiredNow } },
+        where: { id: userId, [column]: { gte: expiredNow } },
+        data: { [column]: { decrement: expiredNow } },
       });
       if (res.count === 0) return { expiredNow, applied: false };
       // Không đặt createdAt tay: xem EXPIRY_REASON.
       await tx.pointsTransaction.create({
-        data: { userId, delta: -expiredNow, reason: EXPIRY_REASON, refType: 'EXPIRE', lot: 'STANDARD' },
+        data: { userId, delta: -expiredNow, reason: EXPIRY_REASON, refType: 'EXPIRE', lot },
       });
       return { expiredNow, applied: true };
     });
 
     if (!result.applied) {
       this.logger.error(
-        `expirePoints bỏ qua user=${userId}: số dư < expiredNow=${result.expiredNow} (guard gte)`,
+        `expirePoints bỏ qua user=${userId} lô=${lot}: số dư < expiredNow=${result.expiredNow} (guard gte)`,
       );
       return 0;
     }
@@ -551,7 +565,7 @@ export class LoyaltyExpiryService {
       let sent = 0;
       let cursor: string | undefined;
       for (let page = 0; page < MAX_PAGES; page++) {
-        const candidates = await this.candidateUserIds({ gt: now, lte: windowEnd }, cursor);
+        const candidates = await this.candidateUserIds({ gt: now, lte: windowEnd }, cursor, EXPIRING_POINTS_LOTS);
         if (candidates.length === 0) break;
         cursor = candidates[candidates.length - 1]!.userId;
         for (const c of candidates) {
@@ -584,9 +598,17 @@ export class LoyaltyExpiryService {
     });
     if (recent) return false;
 
-    // Kiểm nhắc trước, nạp sổ sau: khách đã nhắc trong kỳ không phải đọc cả sổ điểm.
-    const txns = await this.loadTxns(userId);
-    const { expiringSoon } = computePointExpiry(txns, now, windowMs);
+    // Kiểm nhắc trước, nạp sổ sau: khách đã nhắc trong kỳ không phải đọc cả sổ điểm. Một tin cho cả hai lô có hạn: tổng điểm sắp
+    // hết hạn, ngày sớm nhất.
+    let amount = 0;
+    let earliest: Date | null = null;
+    for (const lot of EXPIRING_POINTS_LOTS) {
+      const { expiringSoon } = computePointExpiry(await this.loadTxns(userId, this.prisma, lot), now, windowMs);
+      if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) continue;
+      amount += expiringSoon.amount;
+      if (!earliest || expiringSoon.earliestExpiresAt.getTime() < earliest.getTime()) earliest = expiringSoon.earliestExpiresAt;
+    }
+    const expiringSoon = { amount, earliestExpiresAt: earliest };
     if (expiringSoon.amount <= 0 || !expiringSoon.earliestExpiresAt) return false;
 
     await this.notifications

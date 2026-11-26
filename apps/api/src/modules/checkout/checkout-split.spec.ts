@@ -1,6 +1,7 @@
 import { computeReturnShares, storedLinePaid } from '../orders/refund-allocation';
 import {
   allocateGroupAmounts,
+  clampToRoom,
   allocateLineAmounts,
   allocateProRata,
   allocationError,
@@ -159,12 +160,48 @@ describe('allocateGroupAmounts', () => {
       pointsDiscount: 30_000,
       pointsUsed: 30,
       pointsUsedConverted: 5,
+      pointsUsedMarketplace: 0,
       discount: 73_500,
       goodsAfterAll: 276_500,
       // t1: 300.000 − combo 10.000 − mã 20.000 − hạng 13.500 − điểm 25.106; t2 (flash): 50.000 − điểm 4.894.
       linePaid: [231_394, 45_106],
       linePoints: [25_106, 4_894],
     });
+  });
+
+  it('W42: tổng điểm của từng kiện bằng đúng phần giảm điểm của kiện (1 điểm = 1đ) và tổng từng lô khớp cả lần đặt, mọi cách chia', () => {
+    let seed = 7;
+    const rnd = (n: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed % n;
+    };
+    // Mọi kiện đều có hàng Tubu để điểm rải ra nhiều kiện (ca xấu nhất cho làm tròn từng lô).
+    for (let run = 0; run < 2_000; run++) {
+      const groups = Array.from({ length: 2 + rnd(3) }, (_, g) => ({
+        lines: Array.from({ length: 1 + rnd(3) }, (_, k) => line(`g${g}l${k}`, 1 + rnd(50), TUBU)),
+      }));
+      const subtotal = groups.reduce((s, g) => s + g.lines.reduce((a, l) => a + l.total, 0), 0);
+      const pointsUsed = rnd(subtotal + 1);
+      const marketplace = rnd(pointsUsed + 1);
+      const converted = rnd(pointsUsed - marketplace + 1);
+      const t = { comboPerLine: {}, comboTotal: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: pointsUsed, pointsUsed, pointsUsedConverted: converted, pointsUsedMarketplace: marketplace };
+      const out = allocateGroupAmounts(groups, t);
+      for (const g of out) {
+        expect(g.pointsUsed).toBe(g.pointsDiscount);
+        expect(g.pointsUsedMarketplace).toBeGreaterThanOrEqual(0);
+        expect(g.pointsUsedConverted).toBeGreaterThanOrEqual(0);
+        expect(g.pointsUsedMarketplace + g.pointsUsedConverted).toBeLessThanOrEqual(g.pointsUsed);
+      }
+      expect(out.reduce((s, g) => s + g.pointsUsedMarketplace, 0)).toBe(marketplace);
+      expect(out.reduce((s, g) => s + g.pointsUsedConverted, 0)).toBe(converted);
+      expect(out.reduce((s, g) => s + g.pointsUsed, 0)).toBe(pointsUsed);
+    }
+  });
+
+  it('clampToRoom: phần vượt chỗ dồn sang phần còn chỗ theo thứ tự, tổng giữ nguyên', () => {
+    expect(clampToRoom([2, 0], [1, 2])).toEqual([1, 1]);
+    expect(clampToRoom([0, 3, 0], [1, 1, 5])).toEqual([1, 1, 1]);
+    expect(clampToRoom([1, 1], [2, 1])).toEqual([1, 1]);
   });
 
   it('nhiều kiện: mỗi khoản chia theo nền của bước đó, tổng các kiện khớp cả lần đặt', () => {
@@ -181,6 +218,7 @@ describe('allocateGroupAmounts', () => {
       pointsDiscount: 50_000,
       pointsUsed: 50,
       pointsUsedConverted: 7,
+      pointsUsedMarketplace: 11,
     };
     const out = allocateGroupAmounts(groups, t);
     const sum = (k: Exclude<keyof (typeof out)[number], 'linePaid' | 'linePoints'>) => out.reduce((s, g) => s + g[k], 0);
@@ -190,11 +228,12 @@ describe('allocateGroupAmounts', () => {
     expect(sum('pointsDiscount')).toBe(50_000);
     expect(sum('pointsUsed')).toBe(50);
     expect(sum('pointsUsedConverted')).toBe(7);
+    expect(sum('pointsUsedMarketplace')).toBe(11);
     expect(sum('goodsAfterAll')).toBe(373_333 - 5_000 - 32_777 - 9_999 - 50_000);
     expect(out[1]!.comboDiscount).toBe(5_000);
     expect(out[0]!.comboDiscount).toBe(0);
     for (const g of out) {
-      expect(g.pointsUsedConverted).toBeLessThanOrEqual(g.pointsUsed);
+      expect(g.pointsUsedConverted + g.pointsUsedMarketplace).toBeLessThanOrEqual(g.pointsUsed);
       expect(g.goodsAfterAll).toBe(g.subtotal - g.discount);
       expect(g.linePaid.reduce((s, v) => s + v, 0)).toBe(g.goodsAfterAll);
     }
@@ -423,7 +462,8 @@ describe('hồi quy: giỏ không có hàng đối tác ra đúng số như trư
       const groups = groupByFulfiller(lines);
       const [now] = allocateGroupAmounts(groups, t);
       const [before] = preQ8GroupAmounts(groups, t);
-      const { linePaid, linePoints, ...amounts } = now!;
+      const { linePaid, linePoints, pointsUsedMarketplace, ...amounts } = now!;
+      expect(pointsUsedMarketplace).toBe(0);
       expect(amounts).toEqual(before);
       expect(linePoints.reduce((s, x) => s + x, 0)).toBe(before!.pointsDiscount);
       expect(linePaid.reduce((s, x) => s + x, 0)).toBe(before!.goodsAfterAll);
@@ -460,7 +500,7 @@ describe('trần Điểm Xanh và phép chia từng dòng dùng chung một phé
   });
 
   it('lưới an toàn: dòng âm, giảm quá tiền hàng, tiền các dòng lệch tiền hàng của kiện → báo lỗi (checkout ném lỗi, không tạo đơn)', () => {
-    const ok = { subtotal: 100, comboDiscount: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0, discount: 0, goodsAfterAll: 100, linePaid: [60, 40], linePoints: [0, 0] };
+    const ok = { subtotal: 100, comboDiscount: 0, couponDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0, pointsUsedMarketplace: 0, discount: 0, goodsAfterAll: 100, linePaid: [60, 40], linePoints: [0, 0] };
     expect(allocationError([ok])).toBeNull();
     expect(allocationError([ok, { ...ok, discount: 101, pointsDiscount: 101, goodsAfterAll: 0, linePaid: [-1, 0], linePoints: [101, 0] }])).toMatch(/kiện 2/);
     expect(allocationError([{ ...ok, linePaid: [-1, 101] }])).toMatch(/âm/);
@@ -531,7 +571,8 @@ describe('trần Điểm Xanh và phép chia từng dòng dùng chung một phé
         });
         if (!mixed) {
           tubuOnly += 1;
-          const { linePaid: _p, linePoints: _q, ...amounts } = a;
+          const { linePaid: _p, linePoints: _q, pointsUsedMarketplace: marketplace, ...amounts } = a;
+          expect(marketplace).toBe(0);
           expect(amounts).toEqual(preQ8GroupAmounts(groups, t)[i]);
         }
 

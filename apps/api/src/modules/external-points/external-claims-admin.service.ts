@@ -30,6 +30,9 @@ import { closedCreditedWhere, partialRefundWhere, stalePendingWhere, UNMATCHED_R
 import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
 import { claimCodeLabel, claimPoints, maskClaimCode } from './external-points-rate';
 
+/** Lý do REVIEW khi nhân viên gắn tay một đơn sàn có SĐT khác SĐT thành viên. */
+export const ATTACH_PHONE_MISMATCH_REASON = 'SĐT trên đơn sàn không khớp SĐT thành viên, nhân viên gắn tay';
+
 /** Người gửi trùng mã còn được liệt kê cho CSKH trong chừng này ngày, kể cả lượt đã đóng. */
 const OTHER_SUBMITTER_DAYS = 30;
 
@@ -434,8 +437,9 @@ export class ExternalClaimsAdminService {
 
   /**
    * Gắn lần gửi mã chưa thấy đơn vào một đơn Pancake. Chạy đủ luật của một lần gửi mã (tuổi đơn, external_since, trần ngày/tháng,
-   * ngưỡng REVIEW, 3 số cuối SĐT) trừ giới hạn lần thử/ngày. Mã của lần gửi phải trùng mã của đơn; không trùng, hoặc đơn nguồn UNKNOWN,
-   * thì chỉ ADMIN và phải có ghi chú. REVIEW vẫn là REVIEW: người gắn không tự duyệt được.
+   * ngưỡng REVIEW, đối chiếu SĐT) trừ giới hạn lần thử/ngày. Mã của lần gửi phải trùng mã của đơn; không trùng, hoặc đơn nguồn UNKNOWN,
+   * thì chỉ ADMIN và phải có ghi chú. SĐT trên đơn lệch SĐT thành viên (W42) thì phải có ghi chú và claim luôn vào REVIEW. REVIEW vẫn là
+   * REVIEW: người gắn không tự duyệt được.
    */
   async attach(attemptId: string, pancakeOrderId: string, actor: { id: string; role: string }, note: string | undefined, now: Date = new Date()): Promise<{ claimId: string; state: 'PENDING' | 'REVIEW' }> {
     const cfg = await loadClaimConfig(this.config);
@@ -465,9 +469,18 @@ export class ExternalClaimsAdminService {
       }
       // Nguồn UNKNOWN đã được ADMIN xác nhận bằng ghi chú; chỉ đổi cách luật nhìn đơn, không sửa dòng đơn.
       if (g.facts.order.source === 'UNKNOWN') g.facts.order = { ...g.facts.order, source: 'MARKETPLACE' };
-      const decision = evaluateClaimRules(g.facts);
-      if (decision.kind === 'REJECT') throw rejectionOf(decision.code);
-      if (decision.kind !== 'CLAIM') throw new ConflictException('Khách đã có claim cho mã này.');
+      // SĐT lệch: nhân viên gắn tay được (khách đổi số, đơn quà) nhưng phải ghi lý do, và claim chờ người khác duyệt.
+      const phoneMismatch = g.facts.order.phoneMatch === 'MISMATCH';
+      if (phoneMismatch) {
+        if (!reason) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'Cần ghi chú lý do khi SĐT trên đơn sàn không khớp SĐT thành viên.' });
+        g.facts.order = { ...g.facts.order, phoneMatch: 'MATCH' };
+      }
+      const ruled = evaluateClaimRules(g.facts);
+      if (ruled.kind === 'REJECT') throw rejectionOf(ruled.code);
+      if (ruled.kind !== 'CLAIM') throw new ConflictException('Khách đã có claim cho mã này.');
+      const decision = phoneMismatch
+        ? { ...ruled, state: 'REVIEW' as const, reviewReason: [ATTACH_PHONE_MISMATCH_REASON, ruled.reviewReason].filter(Boolean).join('; ') }
+        : ruled;
 
       const releaseAt = order.status === 'DELIVERED' && order.deliveredAt ? new Date(order.deliveredAt.getTime() + cfg.pendingDays * 864e5) : null;
       const data = {

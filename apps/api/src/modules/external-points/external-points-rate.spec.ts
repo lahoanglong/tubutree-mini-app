@@ -1,5 +1,6 @@
 import { maskClaimCode, claimPoints } from './external-points-rate';
 import { pointsForGoods } from '../pricing/points-earn';
+import { DEFAULT_MARKETPLACE_EARN_PCT } from '../loyalty/earn-rates';
 
 describe('claimPoints (đơn sàn: phần trăm, hệ số 1, làm tròn xuống)', () => {
   it('1% của 199.000 là 1.990 điểm; không áp hệ số hạng', () => {
@@ -25,6 +26,21 @@ describe('claimPoints (đơn sàn: phần trăm, hệ số 1, làm tròn xuống
     for (const g of [1, 99, 100, 101, 12_345, 199_000, 2_000_001, 999_999_999]) {
       for (const pct of [0.5, 1, 1.5, 2]) expect(claimPoints(g, pct)).toBe(pointsForGoods(g, pct, 1));
     }
+  });
+});
+
+describe('W42: mặc định 5% (DEFAULT_MARKETPLACE_EARN_PCT) và đơn vị điểm', () => {
+  it('mặc định trong mã là 5 (5% tiền hàng), không phải 1', () => {
+    expect(DEFAULT_MARKETPLACE_EARN_PCT).toBe(5);
+  });
+  it('200.000đ ở 5% là 10.000 Điểm Xanh = 10.000đ khi tiêu (vnd_per_point_redeem khoá 1, không nhân 100)', () => {
+    expect(claimPoints(200_000, 5)).toBe(10_000);
+    expect(claimPoints(200_000, DEFAULT_MARKETPLACE_EARN_PCT)).toBe(10_000);
+  });
+  it('làm tròn xuống: 199.999đ là 9.999 điểm; 19đ là 0 điểm (luật trả ZERO_POINTS)', () => {
+    expect(claimPoints(199_999, 5)).toBe(9_999);
+    expect(claimPoints(19, 5)).toBe(0);
+    expect(claimPoints(20, 5)).toBe(1);
   });
 });
 

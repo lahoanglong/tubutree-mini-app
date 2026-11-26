@@ -108,6 +108,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { orderEditHistoryWhere } from '../orders/order-customer-edit';
 import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import { formatVnd } from '../orders/refund-destination';
+import { standardPointsUsed } from '../orders/points-used-split';
 import { formatVnDateTime } from '../../common/vn-time';
 import {
   allocateGroupAmounts,
@@ -437,6 +438,7 @@ export class CheckoutService {
       tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
       pointsUsedConverted: computed.pointsUsedConverted,
+      pointsUsedMarketplace: computed.pointsUsedMarketplace,
       pointsDiscount: computed.pointsDiscount,
       // Số Điểm Xanh tối đa dùng được cho lần đặt này (số dư dùng được, trần %, chỉ trên hàng Tubu) và câu giải thích khi giỏ
       // có hàng của gian hàng đối tác; pointsNotice khi số khách chọn bị kẹp vì hàng đó.
@@ -461,6 +463,9 @@ export class CheckoutService {
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
       pointsConvertedBalance: user.pointsConvertedBalance,
+      // Lô điểm tích từ đơn sàn (W42): chỉ dùng khi mua hàng, chung trần % với lô STANDARD, không bị khoá như điểm đơn.
+      pointsMarketplaceBalance: user.pointsMarketplaceBalance,
+      redeemableMarketplacePoints: user.pointsMarketplaceBalance,
       // Trần điểm FE được phép đề nghị: số dư − điểm đơn còn có thể bị đảo (cùng luật đổi quà).
       // placeOrder kẹp theo đúng số này + guard trong tx, nên UI không bao giờ hứa số điểm bị từ chối.
       redeemablePoints: computed.redeemablePoints,
@@ -615,7 +620,7 @@ export class CheckoutService {
     const checkoutGroup = computed.shipments.length > 1 ? code : null;
     const linesById = new Map(cart.items.map((l) => [l.id, l]));
 
-    const usedStandard = computed.pointsUsed - computed.pointsUsedConverted;
+    const usedStandard = standardPointsUsed(computed);
     // Cửa sổ đổi/trả cho lockedOrderPoints trong tx, đọc NGOÀI tx: lần trượt cache cấu hình trong tx xin kết nối pool thứ
     // hai khi tx đang giữ một và đang khoá dòng user (đặt đơn dồn dập lúc cache hết hạn có thể cạn pool, P2024).
     // null khi không tiêu điểm thường: nhánh trừ điểm trong tx chỉ chạy khi windowDays khác null (kiểu của lockedOrderPoints
@@ -710,6 +715,7 @@ export class CheckoutService {
                 pointsEarned: shipment.pointsEarned,
                 pointsUsed: shipment.pointsUsed,
                 pointsUsedConverted: shipment.pointsUsedConverted,
+                pointsUsedMarketplace: shipment.pointsUsedMarketplace,
                 paymentMethod,
                 paymentStatus: paid ? 'PAID' : 'UNPAID',
                 shippingAddress: this.addressSnapshot(address),
@@ -819,7 +825,7 @@ export class CheckoutService {
           }
           // Sổ điểm theo từng đơn: huỷ một đơn của lần đặt bị tách chỉ hoàn đúng phần điểm của đơn đó.
           for (const [i, shipment] of computed.shipments.entries()) {
-            const standard = shipment.pointsUsed - shipment.pointsUsedConverted;
+            const standard = standardPointsUsed(shipment);
             if (standard <= 0) continue;
             await tx.pointsTransaction.create({
               data: {
@@ -847,6 +853,23 @@ export class CheckoutService {
           if (!conv.applied) {
             throw new BadRequestException(
               `Số Điểm Xanh không hết hạn của bạn đã thay đổi (đơn này cần ${formatPoints(computed.pointsUsedConverted)} điểm). Bạn tải lại trang thanh toán nhé.`,
+            );
+          }
+        }
+        for (const [i, shipment] of computed.shipments.entries()) {
+          if (shipment.pointsUsedMarketplace <= 0) continue;
+          // Lô điểm sàn (W42): guard gte trên pointsMarketplaceBalance dưới khoá dòng user ở trên; thiếu → rollback cả đơn.
+          const mkt = await applyPointsDelta(tx, {
+            userId,
+            delta: -shipment.pointsUsedMarketplace,
+            lot: 'MARKETPLACE',
+            reason: `ORDER_REDEEM_MARKETPLACE:${codes[i]}`,
+            refType: 'ORDER',
+            refId: created[i]!.id,
+          });
+          if (!mkt.applied) {
+            throw new BadRequestException(
+              `Điểm Xanh tích từ đơn sàn của bạn đã thay đổi (đơn này cần ${formatPoints(computed.pointsUsedMarketplace)} điểm). Bạn tải lại trang thanh toán nhé.`,
             );
           }
         }
@@ -1395,7 +1418,7 @@ export class CheckoutService {
     // giá giỏ ở đây và lần trừ suất lúc đặt dùng cùng các khoá.
     const flashLimitKeys = buyerFlashLimitKeys(account, { phone: address.phone, ipHash });
     const cart = await this.checkoutLines(userId, itemIds, flashLimitKeys);
-    const user = guest ? { ...account, tierId: null, pointsBalance: 0, pointsConvertedBalance: 0 } : account;
+    const user = guest ? { ...account, tierId: null, pointsBalance: 0, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0 } : account;
     const couponCode = guest ? null : cart.couponCode;
 
     // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
@@ -1470,32 +1493,28 @@ export class CheckoutService {
     const lockedPoints =
       user.pointsBalance > 0 ? (await this.loyalty.lockedOrderPoints(userId, new Date())).locked : 0;
     const redeemablePoints = Math.max(0, user.pointsBalance - lockedPoints);
-    // PD-3: STANDARD (trần max_redeem_pct) trước, phần còn lại từ lô quy đổi (không trần), spec 2.3. Phần STANDARD còn chịu
-    // phần trần gộp mã đã chưa dùng.
+    // PD-3 + W42: MARKETPLACE trước (chỉ tiêu được khi mua hàng, có hạn), rồi STANDARD; hai lô này chung trần max_redeem_pct và phần
+    // trần gộp mã đã chưa dùng. Phần còn lại từ lô quy đổi (không trần), spec 2.3. Điểm sàn đã qua hạn chờ nên không bị khoá như điểm đơn.
     const pointsCapVnd = Math.max(0, redeemCap - discount);
-    const redemption = await this.pricing.resolvePointsRedemptionByLot(
-      pointsToUse ?? 0,
-      redeemablePoints,
-      user.pointsConvertedBalance,
-      redeemBase,
-      pointsCapVnd,
-    );
-    const allPoints = redeemablePoints + user.pointsConvertedBalance;
-    const pointsMax = (
-      await this.pricing.resolvePointsRedemptionByLot(allPoints, redeemablePoints, user.pointsConvertedBalance, redeemBase, pointsCapVnd)
-    ).pointsUsed;
+    const lots = {
+      marketplace: user.pointsMarketplaceBalance,
+      standardUsable: redeemablePoints,
+      converted: user.pointsConvertedBalance,
+    };
+    const redemption = await this.pricing.resolvePointsRedemptionByLot(pointsToUse ?? 0, lots, redeemBase, pointsCapVnd);
+    const allPoints = lots.marketplace + redeemablePoints + user.pointsConvertedBalance;
+    const pointsMax = (await this.pricing.resolvePointsRedemptionByLot(allPoints, lots, redeemBase, pointsCapVnd)).pointsUsed;
     // Mã đã dùng một phần trần gộp làm khách dùng được ít điểm hơn khi không có mã: nói lý do cạnh ô Điểm Xanh.
     const pointsCappedByCoupon =
       discount > 0 &&
       allPoints > pointsMax &&
-      (await this.pricing.resolvePointsRedemptionByLot(allPoints, redeemablePoints, user.pointsConvertedBalance, redeemBase)).pointsUsed > pointsMax;
+      (await this.pricing.resolvePointsRedemptionByLot(allPoints, lots, redeemBase)).pointsUsed > pointsMax;
     // Báo khách khi chính hàng của gian hàng đối tác làm số điểm dùng được ít hơn số khách chọn (không báo khi chỉ vì số dư/trần %).
     let pointsNotice: string | null = null;
     if (hasPartnerLines && (pointsToUse ?? 0) > redemption.pointsUsed) {
       const withPartner = await this.pricing.resolvePointsRedemptionByLot(
         pointsToUse ?? 0,
-        redeemablePoints,
-        user.pointsConvertedBalance,
+        lots,
         goodsAfterTierDiscount + flashSubtotal,
         pointsCapVnd,
       );
@@ -1514,6 +1533,7 @@ export class CheckoutService {
       pointsDiscount: redemption.discount,
       pointsUsed: redemption.pointsUsed,
       pointsUsedConverted: redemption.pointsUsedConverted,
+      pointsUsedMarketplace: redemption.pointsUsedMarketplace,
     });
     const broken = allocationError(amounts);
     if (broken) {
@@ -1585,6 +1605,7 @@ export class CheckoutService {
         tierDiscount,
         pointsUsed: redemption.pointsUsed,
         pointsUsedConverted: redemption.pointsUsedConverted,
+        pointsUsedMarketplace: redemption.pointsUsedMarketplace,
         pointsDiscount: redemption.discount,
         couponCapNote: couponCapNoteText,
         pointsMax,

@@ -234,7 +234,9 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('ORDER_REDEEM')) return 'Dùng điểm khi thanh toán';
   if (reason.startsWith('ORDER_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
   if (reason.startsWith('ORDER_REFUND_POINTS')) return 'Hoàn lại điểm đã dùng';
-  if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU')) return 'Hoàn điểm đơn huỷ/trả';
+  if (reason.startsWith('ORDER_REFUND_CONVERTED') || reason.startsWith('ORDER_REFUND_XU') || reason.startsWith('ORDER_REFUND_MARKETPLACE')) {
+    return 'Hoàn điểm đơn huỷ/trả';
+  }
   if (reason.startsWith('RETURN_REVERSED')) return 'Thu hồi điểm của đơn trả hàng';
   if (reason.startsWith('RETURN_REFUND')) return 'Hoàn lại điểm đã dùng (trả hàng)';
   if (reason.startsWith('POINTS_EXPIRED')) return 'Điểm hết hạn';

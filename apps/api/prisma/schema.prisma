@@ -257,6 +257,10 @@ model User {
   // ra tiền. Cột riêng để mọi guard `gte pointsBalance` cũ (vòng quay, đổi voucher...) không chạm tới.
   // == SUM(delta) lot CONVERTED; CHECK users_points_converted_nonneg (>= 0) chỉ có trong migration SQL.
   pointsConvertedBalance Int             @default(0)
+  // W42: Điểm Xanh lô MARKETPLACE, tích từ đơn sàn (claim SCAN): có hạn, chỉ tiêu được khi đặt đơn (chung trần
+  // loyalty.max_redeem_pct với lô STANDARD), không dùng cho vòng quay, cây, đổi quà hay phí lấy rác. Cột riêng để mọi guard
+  // `gte pointsBalance` cũ không chạm tới. == SUM(delta) lot MARKETPLACE; CHECK users_points_marketplace_nonneg (>= 0) chỉ có trong SQL.
+  pointsMarketplaceBalance Int           @default(0)
   walletBalance          Int             @default(0)
   coinsBalance           Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không phải tiền VND thật)
   cashbackPending        Int             @default(0)
@@ -1185,9 +1189,10 @@ model Order {
   total                  Int
   pointsEarned           Int                   @default(0)
   pointsUsed             Int                   @default(0)
-  // Phần của pointsUsed lấy từ lô CONVERTED (PD-3); phần STANDARD = pointsUsed − pointsUsedConverted.
-  // Cần để hoàn điểm khi huỷ/trả về đúng lô.
+  // Phần của pointsUsed lấy từ lô CONVERTED (PD-3) và lô MARKETPLACE (W42); phần STANDARD chỉ tính qua
+  // standardPointsUsed() (orders/points-used-split.ts). Cần để hoàn điểm khi huỷ/trả về đúng lô.
   pointsUsedConverted    Int                   @default(0)
+  pointsUsedMarketplace  Int                   @default(0)
   paymentMethod          PaymentMethod
   paymentStatus          PaymentStatus
   paymentTxnId           String?
@@ -1519,9 +1524,11 @@ model OrderItem {
 
 // PD-3: lô của một dòng sổ Điểm Xanh. STANDARD = điểm thưởng thường (users.pointsBalance);
 // CONVERTED = điểm quy từ xu (users.pointsConvertedBalance), luôn expiresAt NULL.
+// MARKETPLACE (W42) = điểm tích từ đơn sàn (users.pointsMarketplaceBalance), có hạn, chỉ tiêu khi đặt đơn.
 enum PointsLot {
   STANDARD
   CONVERTED
+  MARKETPLACE
 }
 
 model PointsTransaction {
@@ -1556,6 +1563,8 @@ model PointsTransaction {
   // *_referral_unique (reason) WHERE refType='REFERRAL', *_community_reason_key (reason) WHERE
   // refType='COMMUNITY', *_quest_unique (userId, reason) WHERE refType='QUEST',
   // *_converted_refund_unique (reason, refId) WHERE ORDER_REFUND_CONVERTED:% / ORDER_REFUND_XU:%.
+  // W42 (20261127100000_w42_01_marketplace_lot_phone_mask): *_marketplace_refund_unique (reason, refId) WHERE
+  // ORDER_REFUND_MARKETPLACE:% / RETURN_REFUND_MARKETPLACE:%.
   // Đổi rác lấy quà (20261020000000_waste_exchange): points_transactions_recycle_ref_key, points_transactions_recycle_reverse_key
   // và points_transactions_gift_refund_key, đều (refId) WHERE refType = 'RECYCLE' / 'RECYCLE_REVERSED' / 'GIFT_REFUND'.
   // Thu hồi thưởng đánh giá khi trả hàng (20261020100000_review_return_reversal): points_transactions_review_return_key (reason)
@@ -3059,6 +3068,8 @@ model ReturnRequest {
   shippingRefund          Int                 @default(0)
   pointsRefunded          Int                 @default(0)
   convertedPointsRefunded Int                 @default(0)
+  /// Phần của pointsRefunded thuộc lô MARKETPLACE (W42).
+  marketplacePointsRefunded Int               @default(0)
   pointsReversed          Int                 @default(0)
   commissionReversed      Int                 @default(0)
   adminNote               String?
@@ -3957,6 +3968,8 @@ model ExternalOrder {
   /// SĐT dạng 0xxxxxxxxx để ghép thành viên; không bao giờ trả thô qua API.
   phone              String?
   phoneLast3         String?
+  /// SĐT sàn đã che (vd `098*****26`, `*26`) dạng chuẩn của parseOrderPhoneForMatch; chỉ để đối chiếu với SĐT Zalo, không trả qua API khách.
+  phoneMask          String?
   goodsValue         Int?
   pancakeStatus      Int?
   status             ExternalOrderStatus  @default(OPEN)

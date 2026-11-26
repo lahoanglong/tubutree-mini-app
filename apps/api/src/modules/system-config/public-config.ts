@@ -23,6 +23,7 @@ import { PERF_RUM_ENABLED_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT, PERF_RUM_SAMPLE_PCT_
 import { REFILL_FIRST_ENABLED_KEY } from '../catalog/refill/refill-pairs';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 import { REFERRAL_VIRAL_ENABLED_KEY } from '../referral/viral-config';
+import { MOBILE_MINIAPP_REDIRECT_KEY } from './mobile-miniapp-redirect';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 /** Cờ Giờ Xanh Ưu Đãi (tubu-w3-06): chỉ đổi cách vẽ khối Giờ vàng ở Trang chủ và Ưu đãi, giá và suất vẫn của Giờ vàng. */
@@ -138,6 +139,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     refillFirst,
     wasteRepeatRequest,
     referralViral,
+    mobileMiniappRedirect,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -196,6 +198,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     // Như các cờ đổi rác khác: đọc lỗi thì tắt, phần còn lại của cấu hình công khai vẫn trả.
     config.get<unknown>(WASTE_REPEAT_REQUEST_KEY, false).catch(() => false),
     config.get<unknown>(REFERRAL_VIRAL_ENABLED_KEY, false),
+    config.get<unknown>(MOBILE_MINIAPP_REDIRECT_KEY, false),
   ]);
   const zaloGate = orderZaloGate?.();
   return {
@@ -297,6 +300,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     wasteRepeatRequestEnabled: wasteRepeatRequest === true,
     // Thẻ thành tích Sổ tay Xanh kèm link mời (`GET /me/green-card`) và thưởng đơn đầu cho cả hai phía; tắt hay API cũ thì app không gọi endpoint đó.
     referralViralEnabled: referralViral === true,
+    // Web điện thoại tự mở Zalo Mini App 1 lần mỗi 24 giờ (có lối ở lại web); chỉ boolean true mới bật, API cũ không trả thì web không tự mở.
+    mobileMiniappRedirectEnabled: mobileMiniappRedirect === true,
   };
 }
 
