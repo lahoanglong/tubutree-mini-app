@@ -103,6 +103,22 @@ describe('selfEditProbe (dò chỉ GET trước khi bật khách tự sửa đơ
     expect(failsOf(selfEditProbe(ORDER, dto({}, { province_id: 79 })))).toEqual(['shipping_address.province_id']);
   });
 
+  it('status vắng / null / không phải mã số: FAIL (job coi mọi lần sửa là đã đóng gói); mã số chuỗi trước đóng gói: PASS', () => {
+    const body = dto();
+    delete body.status;
+    expect(failsOf(selfEditProbe(ORDER, body))).toEqual(['status']);
+    expect(failsOf(selfEditProbe(ORDER, dto({ status: null as unknown as number })))).toEqual(['status']);
+    expect(failsOf(selfEditProbe(ORDER, dto({ status: 'new' })))).toEqual(['status']);
+    expect(selfEditProbe(ORDER, dto({ status: '17' })).find((l) => l.check === 'status')!.level).toBe('PASS');
+  });
+
+  it('SĐT hay địa chỉ chữ dạng số (hàm đối chiếu của job ném): FAIL customerEditMismatch, không ném ra ngoài', () => {
+    const lines = selfEditProbe(ORDER, dto({}, { phone_number: 912345678 }));
+    expect(failsOf(lines)).toEqual(['shipping_address.phone_number', 'customerEditMismatch']);
+    expect(lines.find((l) => l.check === 'customerEditMismatch')!.detail).toContain('TypeError');
+    expect(failsOf(selfEditProbe(ORDER, dto({}, { full_address: 12, address: 12 })))).toEqual(['shipping_address.full_address|address', 'customerEditMismatch']);
+  });
+
   it('district_id có giá trị với địa chỉ 84_VN: WARN (không FAIL); trạng thái đã đóng gói: WARN', () => {
     const lines = selfEditProbe(ORDER, dto({ status: 12 }, { district_id: '760' }));
     expect(failsOf(lines)).toEqual([]);
@@ -135,6 +151,9 @@ describe('selfEditProbe (dò chỉ GET trước khi bật khách tự sửa đơ
     expect(parseProbeCode(['--code', 'tb1a2b'])).toBe('TB1A2B');
     expect(parseProbeCode(['--code=TB9Z'])).toBe('TB9Z');
     expect(parseProbeCode([])).toBeNull();
+    expect(() => parseProbeCode(['--code'])).toThrow('--code thiếu mã đơn');
+    expect(() => parseProbeCode(['--code='])).toThrow('--code thiếu mã đơn');
+    expect(() => parseProbeCode(['--code', '--x'])).toThrow('--code thiếu mã đơn');
     expect(probeOrderWhere('TB1A2B')).toEqual({ code: 'TB1A2B', pancakeOrderId: { not: null } });
     expect(probeOrderWhere(null)).toEqual({
       pancakeOrderId: { not: null },

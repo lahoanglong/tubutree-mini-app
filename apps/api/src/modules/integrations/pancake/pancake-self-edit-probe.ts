@@ -109,11 +109,20 @@ export function selfEditProbe(order: Pick<Order, 'shippingAddress'>, dto: Pancak
     else add('PASS', key, kindOf(raw[key]));
   }
 
-  const mismatch = customerEditMismatch(dto, order);
-  add(mismatch ? 'FAIL' : 'PASS', 'customerEditMismatch', mismatch ?? 'khớp (đơn chưa sửa)');
+  // Trường sai kiểu (SĐT hay địa chỉ chữ là số) làm hàm của job ném: báo FAIL đúng dòng, không để bản dò chết không báo cáo.
+  try {
+    const mismatch = customerEditMismatch(dto, order);
+    add(mismatch ? 'FAIL' : 'PASS', 'customerEditMismatch', mismatch ?? 'khớp (đơn chưa sửa)');
+  } catch (err) {
+    add('FAIL', 'customerEditMismatch', `job sẽ ném lỗi khi đối chiếu (${err instanceof Error ? err.name : 'lỗi'}): trường địa chỉ sai kiểu`);
+  }
 
-  const before = isPancakeBeforePacking(raw.status);
-  add(before ? 'PASS' : 'WARN', 'status', `${kindOf(raw.status)}, ${before ? 'trước đóng gói' : 'đã vào đóng gói hoặc không đọc được'} (chỉ để thông tin)`);
+  // Job coi trạng thái vắng hoặc không phải mã số là "đã vào đóng gói" và gắn cờ mọi lần sửa: FAIL. Mã đọc được mà đã qua đóng gói chỉ nói
+  // đơn được dò đã đi xa (chỉ để thông tin).
+  const statusText = raw.status === null || raw.status === undefined ? '' : String(raw.status).trim();
+  if (!/^\d+$/.test(statusText)) add('FAIL', 'status', `${kindOf(raw.status)}: không phải mã số, job sẽ coi mọi lần sửa là đã đóng gói`);
+  else if (isPancakeBeforePacking(raw.status)) add('PASS', 'status', `${kindOf(raw.status)}, trước đóng gói`);
+  else add('WARN', 'status', `${kindOf(raw.status)}, đã qua đóng gói (chỉ để thông tin)`);
 
   const near = nearMissKeys(dto);
   add(near.length ? 'WARN' : 'PASS', 'nearMissKeys', near.length ? near.join(', ') : 'không có');
@@ -150,11 +159,14 @@ export function formatProbeReport(
   return out.join('\n');
 }
 
-/** Đối số `--code TB…` (mã đơn Tubu). Không có thì bản dò tự chọn đơn mới nhất hợp lệ. */
+/** Đối số `--code TB…` (mã đơn Tubu). Không có thì bản dò tự chọn đơn mới nhất hợp lệ. Có cờ mà thiếu mã thì ném (không tự dò đơn khác). */
 export function parseProbeCode(args: readonly string[]): string | null {
   const i = args.indexOf('--code');
-  const v = i >= 0 ? args[i + 1] : args.find((a) => a.startsWith('--code='))?.slice('--code='.length);
-  return v && v.trim() ? v.trim().toUpperCase() : null;
+  const eq = args.find((a) => a.startsWith('--code='));
+  if (i < 0 && eq === undefined) return null;
+  const v = (i >= 0 ? args[i + 1] : eq!.slice('--code='.length)) ?? '';
+  if (!v.trim() || v.startsWith('--')) throw new Error('--code thiếu mã đơn (vd --code TB1A2B)');
+  return v.trim().toUpperCase();
 }
 
 /**
