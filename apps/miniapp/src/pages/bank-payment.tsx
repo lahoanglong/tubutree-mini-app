@@ -400,21 +400,24 @@ export default function BankPaymentPage() {
   );
 }
 
-/** Lời mời kết bạn Zalo dưới các nút của màn (ưu tiên thấp nhất, không tranh nút Kiểm tra): khối nền trắng như khung mã QR, chữ canh trái. */
+/**
+ * Lời mời kết bạn Zalo dưới các nút của màn (ưu tiên thấp nhất, không tranh nút Kiểm tra): khối nền trắng như khung mã QR, chữ canh trái. Suspense
+ * bọc cả khối: lúc chờ chunk không có ô trắng rỗng nào hiện trước rồi mới có chữ.
+ */
 function ZaloFriendCard({ code }: { code: string }) {
   return (
-    <Box
-      mt={3}
-      p={4}
-      role="region"
-      aria-label="Zalo Tubu Tree"
-      data-testid="bank-zalo-friend"
-      style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'left' }}
-    >
-      <Suspense fallback={null}>
+    <Suspense fallback={null}>
+      <Box
+        mt={3}
+        p={4}
+        role="region"
+        aria-label="Zalo Tubu Tree"
+        data-testid="bank-zalo-friend"
+        style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'left' }}
+      >
         <OrderZaloFriend code={code} from="bank_transfer" />
-      </Suspense>
-    </Box>
+      </Box>
+    </Suspense>
   );
 }
 

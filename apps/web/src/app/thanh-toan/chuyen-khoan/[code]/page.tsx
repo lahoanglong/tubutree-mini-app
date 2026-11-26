@@ -18,8 +18,22 @@ import { guestBankQr, guestSwitchToCod } from '@/lib/guest-checkout/api';
 import { getBankQr, switchOrderToCod } from '@/lib/shop-client';
 import { guestTrackHref, hashTrackingKey, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
 
-// Thẻ kết bạn Zalo chỉ hiện khi máy chủ bảo hiện: tải lười để màn QR không mang mã thẻ (và câu chữ của nó) khi thẻ ẩn.
-const OrderZaloFriend = dynamic(() => import('@/components/checkout/order-zalo').then((m) => m.OrderZaloFriend), { ssr: false, loading: () => null });
+// Thẻ kết bạn Zalo chỉ hiện khi máy chủ bảo hiện: tải lười để màn QR không mang mã thẻ khi thẻ ẩn. Khung thẻ nằm cùng chunk với lời mời, nên lúc chờ
+// chunk không có ô trắng rỗng nào hiện trước rồi mới có chữ.
+const BankZaloFriendCard = dynamic(
+  () =>
+    import('@/components/checkout/order-zalo').then(({ OrderZaloFriend }) => {
+      function BankZaloFriendCard({ code }: { code: string }) {
+        return (
+          <section data-testid="bank-zalo-friend" className={`mt-3 p-4 ${ui.card} ${mini.card}`} aria-label="Zalo Tubu Tree">
+            <OrderZaloFriend code={code} from="bank_transfer" />
+          </section>
+        );
+      }
+      return BankZaloFriendCard;
+    }),
+  { ssr: false, loading: () => null },
+);
 
 const TITLE = 'Quét QR để chuyển khoản';
 // Tên trang của Mini App khi chưa có QR để quét (đã trả, chưa đăng nhập).
@@ -134,11 +148,7 @@ export default function BankPaymentPage() {
               </Link>
             </div>
           )}
-          {zaloCard && (
-            <section data-testid="bank-zalo-friend" className={`mt-3 p-4 ${ui.card} ${mini.card}`} aria-label="Zalo Tubu Tree">
-              <OrderZaloFriend code={code} from="bank_transfer" />
-            </section>
-          )}
+          {zaloCard && <BankZaloFriendCard code={code} />}
         </div>
       </div>
     );
