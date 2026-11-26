@@ -130,3 +130,24 @@ describe('GeoService.checkWard — đối chiếu địa chỉ trước khi lưu
     expect(pancake.fetchProvinces).not.toHaveBeenCalled();
   });
 });
+
+describe('GeoService.wardName — tên phường lưu theo danh mục, không theo chữ client gửi (NIT-7)', () => {
+  it('mã thuộc tỉnh → tên trong danh mục; mã lạ / tỉnh lạ / mã cũ → null', async () => {
+    const { svc } = makeService();
+    await expect(svc.wardName(' 84_VN26 ', ' c1 ')).resolves.toBe('Xã A');
+    await expect(svc.wardName('84_VN26', 'c9')).resolves.toBeNull();
+    await expect(svc.wardName('84_VN99', 'c1')).resolves.toBeNull();
+    await expect(svc.wardName('01', 'c1')).resolves.toBeNull();
+    await expect(svc.wardName('84_VN26', '')).resolves.toBeNull();
+  });
+
+  it('Pancake lỗi/chưa cấu hình → null (nơi gọi giữ tên client gửi), không ném', async () => {
+    const { svc, pancake } = makeService();
+    pancake.fetchProvinces.mockRejectedValue(new Error('ECONNRESET'));
+    await expect(svc.wardName('84_VN26', 'c1')).resolves.toBeNull();
+    pancake.isConfigured.mockReturnValue(false);
+    pancake.fetchProvinces.mockClear();
+    await expect(svc.wardName('84_VN26', 'c1')).resolves.toBeNull();
+    expect(pancake.fetchProvinces).not.toHaveBeenCalled();
+  });
+});

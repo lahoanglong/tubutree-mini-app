@@ -104,6 +104,22 @@ export class GeoService {
     return communes.some((c) => c.code === wardCode) ? 'ok' : 'invalid';
   }
 
+  /** Tên phường/xã của mã trong danh mục Pancake; null khi chưa cấu hình, danh mục lỗi hoặc không có mã đó (nơi gọi giữ tên client gửi). */
+  async wardName(provinceCode: string | null | undefined, wardCode: string | null | undefined): Promise<string | null> {
+    const province = provinceCode?.trim() ?? '';
+    const ward = wardCode?.trim() ?? '';
+    if (!isNewGeoCode(province) || !ward || !this.pancake.isConfigured()) return null;
+    try {
+      const name = (await this.communes(province)).find((c) => c.code === ward)?.name?.trim();
+      return name ? name : null;
+    } catch (err) {
+      if (!(err instanceof BadRequestException)) {
+        this.logger.warn(`Chưa tra được tên phường ${ward} / tỉnh ${province}: ${err instanceof Error ? err.message : err}`);
+      }
+      return null;
+    }
+  }
+
   private async refresh(
     what: string,
     load: () => Promise<GeoOption[]>,

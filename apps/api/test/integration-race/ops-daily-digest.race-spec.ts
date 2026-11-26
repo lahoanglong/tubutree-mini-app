@@ -10,7 +10,7 @@ import './setup-env';
 /**
  * Bản tin sáng của chủ shop trên Postgres THẬT: SQL doanh thu (cùng định nghĩa báo cáo Doanh thu), đơn kẹt theo lần vào trạng thái, hàng sắp
  * hết kho Tubu, từ khoá tìm không ra, bộ đếm 5xx cộng dồn giữa hai instance, và chốt ngày đã gửi. Ngày tóm tắt 10/03/2034 (spec khác không dùng);
- * đơn chờ chuyển khoản và đơn kẹt là trạng thái toàn DB nên đơn của spec đặt mốc năm 2001 để luôn đứng đầu danh sách "cũ nhất".
+ * đơn chờ chuyển khoản và đơn kẹt là trạng thái toàn DB nên đơn của spec đặt mốc năm 1971 để luôn đứng đầu danh sách "cũ nhất" (r6-expiry-handover để lại đơn chờ chuyển khoản năm 2000).
  */
 const DAY = '2034-03-10';
 // 08:00 giờ VN ngày 11/03/2034.
@@ -94,19 +94,19 @@ describe('DailyDigestService — Postgres thật', () => {
     await order('nextDay', { userId: u.id, total: 999_000, createdAt: t('2034-03-10T17:00:00Z') });
 
     // Chuyển khoản chờ tiền rất cũ: đứng đầu danh sách. ZaloPay còn chờ thanh toán không phải chuyển khoản.
-    await order('pendingOld', { userId: u.id, total: 33_000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', createdAt: t('2001-01-01T00:00:00Z') });
-    await order('pendingZalo', { userId: u.id, total: 44_000, status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', createdAt: t('2001-01-01T00:00:01Z') });
+    await order('pendingOld', { userId: u.id, total: 33_000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', createdAt: t('1971-01-01T00:00:00Z') });
+    await order('pendingZalo', { userId: u.id, total: 44_000, status: 'PENDING_PAYMENT', paymentMethod: 'ZALOPAY', createdAt: t('1971-01-01T00:00:01Z') });
 
-    // Đơn kẹt: S1 chưa có lịch sử (tính từ lúc tạo); S2 vừa đóng gói 13 giờ trước nên không kẹt; S3 đóng gói từ 2001, dòng ghi chú
+    // Đơn kẹt: S1 chưa có lịch sử (tính từ lúc tạo); S2 vừa đóng gói 13 giờ trước nên không kẹt; S3 đóng gói từ 1971, dòng ghi chú
     // cùng trạng thái hôm qua không làm mới mốc. Đơn gian hàng tự giao cũ hơn cả S1 không tính (đối tác đã có nhắc SLA riêng).
-    await order('merchantStuck', { userId: u.id, status: 'CONFIRMED', fulfiller: 'MERCHANT', createdAt: t('2001-01-01T12:00:00Z') });
-    const s1 = await order('stuckNoHistory', { userId: u.id, status: 'CONFIRMED', createdAt: t('2001-01-02T00:00:00Z') });
-    const s2 = await order('packedRecently', { userId: u.id, status: 'PACKED', createdAt: t('2001-01-03T00:00:00Z') });
-    const s3 = await order('packedLongAgo', { userId: u.id, status: 'PACKED', createdAt: t('2001-01-04T00:00:00Z') });
+    await order('merchantStuck', { userId: u.id, status: 'CONFIRMED', fulfiller: 'MERCHANT', createdAt: t('1971-01-01T12:00:00Z') });
+    const s1 = await order('stuckNoHistory', { userId: u.id, status: 'CONFIRMED', createdAt: t('1971-01-02T00:00:00Z') });
+    const s2 = await order('packedRecently', { userId: u.id, status: 'PACKED', createdAt: t('1971-01-03T00:00:00Z') });
+    const s3 = await order('packedLongAgo', { userId: u.id, status: 'PACKED', createdAt: t('1971-01-04T00:00:00Z') });
     await prisma.orderStatusHistory.createMany({
       data: [
         { orderId: s2.id, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'ADMIN', createdAt: t('2034-03-10T12:00:00Z') },
-        { orderId: s3.id, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'ADMIN', createdAt: t('2001-01-05T00:00:00Z') },
+        { orderId: s3.id, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'ADMIN', createdAt: t('1971-01-05T00:00:00Z') },
         { orderId: s3.id, fromStatus: 'PACKED', toStatus: 'PACKED', actorType: 'PANCAKE', note: 'ghi chú', createdAt: t('2034-03-10T20:00:00Z') },
       ],
     });
@@ -140,12 +140,12 @@ describe('DailyDigestService — Postgres thật', () => {
     expect(d.orders).toEqual({ placed: 4, cancelled: 1, paidOrders: 2, revenue: 300_000, gmv: 300_000 });
     expect(d.unpaidTransfers!.count).toBe(before.unpaidTransfers!.count + 2);
     expect(d.unpaidTransfers!.amount).toBe(before.unpaidTransfers!.amount + 103_000);
-    expect(d.unpaidTransfers!.oldest[0]).toEqual({ code: codes.pendingOld, createdAt: '2001-01-01T00:00:00.000Z', total: 33_000 });
+    expect(d.unpaidTransfers!.oldest[0]).toEqual({ code: codes.pendingOld, createdAt: '1971-01-01T00:00:00.000Z', total: 33_000 });
     expect(d.unpaidTransfers!.oldest.map((x) => x.code)).not.toContain(codes.pendingZalo);
 
     expect(d.stuckOrders!.oldest.slice(0, 2)).toEqual([
-      { code: codes.stuckNoHistory, status: 'CONFIRMED', since: '2001-01-02T00:00:00.000Z' },
-      { code: codes.packedLongAgo, status: 'PACKED', since: '2001-01-05T00:00:00.000Z' },
+      { code: codes.stuckNoHistory, status: 'CONFIRMED', since: '1971-01-02T00:00:00.000Z' },
+      { code: codes.packedLongAgo, status: 'PACKED', since: '1971-01-05T00:00:00.000Z' },
     ]);
     expect(d.stuckOrders!.oldest.map((x) => x.code)).not.toContain(codes.packedRecently);
     expect(d.stuckOrders!.oldest.map((x) => x.code)).not.toContain(codes.merchantStuck);

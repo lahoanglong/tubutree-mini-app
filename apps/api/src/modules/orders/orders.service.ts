@@ -39,6 +39,8 @@ import { orderLineReviews, pendingReviewCounts, type OrderLineReview } from '../
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
+import { customerFacingNote } from '../subscriptions/subscription-note';
+import { firstStatusTimes } from './order-status-times';
 import { buyerOrderNotices, lateConsentBlock, lateConsentOrderBlock, ORDER_ZALO_ACTIVE_STATUSES, ORDER_ZALO_CONSENT_TEXT_VERSION, type BuyerOrderNotice } from '../integrations/mss/mss-order-event-types';
 
 export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
@@ -355,6 +357,8 @@ export class OrdersService {
     ]);
     return {
       ...view!,
+      // Đơn định kỳ: chỉ phần khách viết; dấu hệ thống ở lại cho kho và không bị vòng điền sẵn → sửa → gửi mang theo.
+      note: customerFacingNote(order),
       statusTimes,
       cancelReason,
       items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
@@ -467,24 +471,14 @@ export class OrdersService {
     return customerCancelReason(rows);
   }
 
-  /**
-   * Lúc đơn chạm từng trạng thái, cho dòng giờ dưới mỗi bước hành trình. Chỉ trạng thái + giờ: không trả ghi chú hay người thao tác
-   * của sổ lịch sử. Lần đầu chạm mỗi trạng thái; dòng chuyển về chính nó (admin chạy lại việc sau giao) bỏ qua.
-   */
+  /** Lúc đơn chạm từng trạng thái lần đầu (luật ở `firstStatusTimes`). */
   private async statusTimesOf(order: { id: string }): Promise<Record<string, string>> {
     const rows = await this.prisma.orderStatusHistory.findMany({
       where: { orderId: order.id },
       orderBy: { createdAt: 'asc' },
-      // Dòng đầu tiên của mỗi trạng thái, không giới hạn số dòng: lịch sử dài (qua lại nhiều lần) không làm rớt trạng thái mới nhất.
-      distinct: ['toStatus'],
       select: { fromStatus: true, toStatus: true, createdAt: true },
     });
-    const times: Record<string, string> = {};
-    for (const r of rows) {
-      if (r.fromStatus === r.toStatus || r.toStatus in times) continue;
-      times[r.toStatus] = r.createdAt.toISOString();
-    }
-    return times;
+    return firstStatusTimes(rows);
   }
 
   private async fulfilmentOf(order: {

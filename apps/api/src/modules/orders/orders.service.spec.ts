@@ -12,6 +12,7 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { CouponsService } from '../coupons/coupons.service';
+import { SUBSCRIPTION_NOTE_SEP, SUBSCRIPTION_ORDER_NOTE } from '../subscriptions/subscription-note';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
 // test/integration-race/wallet-ledger*.race-spec.ts. Ở đây thay bằng đúng tác động số dư của nó
@@ -1166,10 +1167,45 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     const q = history.mock.calls[0][0];
     expect(q.where).toEqual({ orderId: 'o1' });
     expect(Object.keys(q.select).sort()).toEqual(['createdAt', 'fromStatus', 'toStatus']);
-    // Lấy dòng đầu mỗi trạng thái, không cắt theo số dòng: lịch sử dài không làm rớt trạng thái mới nhất.
-    expect(q.distinct).toEqual(['toStatus']);
+    // Đọc mọi dòng theo giờ rồi lọc ở bộ nhớ: không cắt theo số dòng (lịch sử dài không làm rớt trạng thái mới nhất), không `distinct` theo
+    // trạng thái (dòng tự sửa cùng trạng thái đứng đầu sẽ che lần vào thật về sau).
+    expect(q).not.toHaveProperty('distinct');
     expect(q.orderBy).toEqual({ createdAt: 'asc' });
     expect(q).not.toHaveProperty('take');
+  });
+
+  it('detailView: dòng khách tự sửa (CONFIRMED → CONFIRMED) đứng đầu không che lần vào CONFIRMED thật về sau (kho lùi PACKED → CONFIRMED)', async () => {
+    const order = { ...baseOrder, items: [] };
+    const history = jest.fn().mockResolvedValue([
+      { fromStatus: 'CONFIRMED', toStatus: 'CONFIRMED', createdAt: new Date('2026-10-01T02:00:00Z') },
+      { fromStatus: 'CONFIRMED', toStatus: 'PACKED', createdAt: new Date('2026-10-01T03:00:00Z') },
+      { fromStatus: 'PACKED', toStatus: 'CONFIRMED', createdAt: new Date('2026-10-01T04:00:00Z') },
+      { fromStatus: 'CONFIRMED', toStatus: 'CONFIRMED', createdAt: new Date('2026-10-01T05:00:00Z') },
+    ]);
+    const prisma = {
+      order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn() },
+      flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
+      orderStatusHistory: { findMany: history },
+    } as unknown as PrismaService;
+    const view = await new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU1');
+    expect(view.statusTimes).toEqual({ PACKED: '2026-10-01T03:00:00.000Z', CONFIRMED: '2026-10-01T04:00:00.000Z' });
+  });
+
+  it('detailView: đơn định kỳ trả phần ghi chú của khách (dấu hệ thống ở lại cho kho); đơn khác trả nguyên ghi chú', async () => {
+    const build = (over: Record<string, unknown>) => {
+      const order = { ...baseOrder, items: [], ...over };
+      const prisma = {
+        order: { findUnique: jest.fn().mockResolvedValue(order), findMany: jest.fn().mockResolvedValue([]) },
+        variation: { findMany: jest.fn() },
+        flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
+        orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
+      } as unknown as PrismaService;
+      return new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal).detailView('u1', 'TUBU1');
+    };
+    expect((await build({ source: 'subscription', note: `${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC` })).note).toBe('Giao giờ HC');
+    expect((await build({ source: 'subscription', note: SUBSCRIPTION_ORDER_NOTE })).note).toBe(SUBSCRIPTION_ORDER_NOTE);
+    expect((await build({ source: 'checkout', note: 'Gọi trước' })).note).toBe('Gọi trước');
   });
 
   describe('detailView: cancelReason', () => {

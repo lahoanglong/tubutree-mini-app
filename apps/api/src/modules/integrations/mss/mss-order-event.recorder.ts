@@ -8,13 +8,16 @@ import { MssClient } from './mss.client';
 import { billMoneyConsistent, buildMssEventBody, greetingName, MssEventBodyError, newEventId, type MssBillInput } from './mss-order-event-body';
 import { MSS_ORDER_LINK_ORIGIN, orderDetailUrl } from './mss-order-link';
 import { MSS_FIRST_JOB_DELAY_MS, MssOrderEventDispatcher } from './mss-order-event.dispatch';
+import { orderPhoneEditHistoryWhere } from '../../orders/order-customer-edit';
 import {
   buyerPhoneOf,
   inRollout,
   MSS_EVENT_TTL_MS,
   MSS_RECIPIENT_EVENT_TYPES,
   ORDER_ZALO_CONSENT_TEXT_VERSION,
+  outboxRecipientPhone,
   recipientPhoneFor,
+  type BuyerPhone,
   type MssCancelReason,
   type MssOrderEventType,
   type MssPhoneSource,
@@ -259,9 +262,10 @@ export class MssOrderEventRecorder implements OnModuleInit {
     if (order.type !== 'RETAIL') return skip('dealer_order');
     if (order.orderZaloConsent !== true || order.user.notifyOrderZalo !== true) return skip('no_consent');
     if (!inRollout(order.userId, gate.rolloutPct)) return skip('rollout');
-    const buyer = buyerPhoneOf({ user: order.user, guestPhone: order.guestPhone, shippingAddress: order.shippingAddress });
-    if (!buyer) return skip('no_phone');
+    const found = buyerPhoneOf({ user: order.user, guestPhone: order.guestPhone, shippingAddress: order.shippingAddress });
+    if (!found) return skip('no_phone');
     if (eventType === 'order.payment_confirmed' && order.paymentMethod === 'COD') return skip('cod_payment');
+    const buyer = await this.buyerAtPlacement(tx, order.id, eventType, found);
 
     const placed: RecordedOrder = { ...order, platform: order.platform };
     const bought = await this.writeRow(
@@ -270,11 +274,47 @@ export class MssOrderEventRecorder implements OnModuleInit {
       eventType,
       { role: 'buyer', phone: buyer.phone, source: buyer.source, name: greetingName(order.user.fullName) },
       extra,
-      gate.bill,
+      gate.bill && buyer.billOpen,
     );
     if (bought !== null && bought !== 'duplicate') return skip(bought);
     if (MSS_RECIPIENT_EVENT_TYPES.includes(eventType)) await this.recordRecipient(tx, placed, eventType, buyer.phone, gate);
     return bought === null ? null : skip(bought);
+  }
+
+  /**
+   * Số người mua của dòng này và có được kèm bill không. Tài khoản không có số thì số người mua là SĐT giao hàng, mà khách tự sửa được SĐT đó
+   * trước khi đóng gói: tin sau tin đặt đơn đi về số ở dòng người mua sớm nhất của đơn (thân lưu nguyên `recipient.phone` lúc ghi), không về số
+   * mới. Bill (giá từng món) chỉ đi khi chứng minh được số đó có từ trước lần sửa SĐT đầu tiên; không chứng minh được (chưa có dòng nào, hoặc
+   * dòng sớm nhất ghi sau lần sửa, ví dụ khách bật Zalo muộn) thì vẫn gửi tin trạng thái nhưng bỏ bill. Số tài khoản hay số khách vãng lai
+   * không đổi theo địa chỉ nên không đọc gì thêm.
+   */
+  private async buyerAtPlacement(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    eventType: MssOrderEventType,
+    found: BuyerPhone,
+  ): Promise<{ phone: string; source: MssPhoneSource; billOpen: boolean }> {
+    if (found.via !== 'shipping') return { phone: found.phone, source: found.source, billOpen: true };
+    const earliest =
+      eventType === 'order.created'
+        ? null
+        : await tx.mssOrderEventOutbox.findFirst({
+            where: { orderId, recipientRole: 'buyer' },
+            orderBy: [{ createdAt: 'asc' }, { sequence: 'asc' }],
+            select: { body: true, createdAt: true },
+          });
+    const pinned = earliest ? outboxRecipientPhone(earliest.body) : null;
+    const phone = pinned ?? found.phone;
+    // Chỉ tin đặt đơn và tin đã thanh toán có bill; tin khác khỏi đọc lịch sử sửa.
+    if (eventType !== 'order.created' && eventType !== 'order.payment_confirmed') return { phone, source: found.source, billOpen: true };
+    const firstPhoneEdit = await tx.orderStatusHistory.findFirst({
+      where: orderPhoneEditHistoryWhere(orderId),
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    });
+    const billOpen = !firstPhoneEdit || (pinned !== null && earliest!.createdAt < firstPhoneEdit.createdAt);
+    if (!billOpen) this.logger.log(`mss_order_event_bill_dropped ${eventType} order=${orderId} reason=buyer_phone_edited`);
+    return { phone, source: found.source, billOpen };
   }
 
   /** Dòng người nhận của tin giao hàng (PO A1): không kèm giá, nguồn số `checkout_contact`. Lý do bỏ qua chỉ ghi log. */

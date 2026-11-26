@@ -13,6 +13,12 @@ export const ATTENTION_PAYMENT_PENDING = 'Chưa báo được "đã thanh toán,
 export const ATTENTION_COD_SWITCH_PENDING = 'Khách đã đổi sang COD nhưng đơn Pancake còn ghi "chờ chuyển khoản"';
 /** Khách đã tự sửa địa chỉ/ghi chú mà đơn Pancake còn thông tin cũ (PUT lỗi hoặc đọc lại thấy lệch): kho sửa tay trước khi giao. */
 export const ATTENTION_CUSTOMER_EDIT_PENDING = 'Khách đã sửa địa chỉ/ghi chú nhưng đơn Pancake còn thông tin cũ';
+/**
+ * Sau lần PUT địa chỉ khách tự sửa, tiền trên đơn Pancake đổi (Pancake tự tính lại COD/phí ship) hoặc không đọc lại được để so. Tiền tố riêng,
+ * khác ATTENTION_CUSTOMER_EDIT_PENDING: lượt sửa sau thành công không tự gỡ, vì lượt đó lấy tiền đã đổi làm mốc nên không còn thấy lệch. Chỉ người
+ * sửa tay bấm "Đã xử lý".
+ */
+export const ATTENTION_CUSTOMER_EDIT_MONEY_CHECK = 'Kiểm tiền trên Pancake sau khi khách sửa địa chỉ';
 /** Đơn đã đổi sang COD, hàng đã rời kho, rồi Pancake ghi nhận tiền chuyển khoản: có thể khách trả hai lần (chuyển khoản + COD). */
 export const ATTENTION_COD_SWITCH_PAID_AFTER_HANDOVER = 'Đơn đã đổi sang COD và đã giao vận chuyển nhưng khách vẫn chuyển khoản';
 /**

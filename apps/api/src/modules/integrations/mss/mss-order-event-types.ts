@@ -32,6 +32,8 @@ export const MSS_HOLDING_STATUSES: readonly MssOutboxStatus[] = ['PENDING', 'SEN
  */
 export const MSS_CREATED_COVERS_PAYMENT_REMINDER_WHERE: Prisma.MssOrderEventOutboxWhereInput = {
   eventType: 'order.created',
+  // Chỉ tin tới chính người mua mới thay được tin nhắc (dòng người nhận hiện chỉ có ở tin giao hàng; lọc để luật không đổi nếu điều đó đổi).
+  recipientRole: 'buyer',
   OR: [{ status: { in: [...MSS_HOLDING_STATUSES] } }, { status: 'RESULT_SENT', resultReason: null }],
 };
 
@@ -106,6 +108,15 @@ export function shippingPhoneOf(address: unknown): string | null {
   return typeof phone === 'string' ? phone : null;
 }
 
+/** Số người mua đọc từ đâu: số tài khoản, SĐT khách vãng lai gõ, hay SĐT trong địa chỉ giao (khách tự sửa được trước khi đóng gói). */
+export type BuyerPhoneVia = 'account' | 'guest' | 'shipping';
+
+export interface BuyerPhone {
+  phone: string;
+  source: MssPhoneSource;
+  via: BuyerPhoneVia;
+}
+
 /**
  * Số người mua nhận tin hành trình (PO A2). Số tài khoản đã xác minh thì nguồn `account_verified`; chưa xác minh thì số đầu tiên đọc được
  * trong số tài khoản, SĐT khách vãng lai gõ (`orders.guestPhone`), SĐT trong địa chỉ giao, nguồn `checkout_contact` (MSS ẩn tên ở lời mời).
@@ -114,11 +125,26 @@ export function buyerPhoneOf(input: {
   user: { phone: string | null; phoneVerifiedAt: Date | null };
   guestPhone?: string | null;
   shippingAddress?: unknown;
-}): { phone: string; source: MssPhoneSource } | null {
+}): BuyerPhone | null {
   const own = normalizeVnPhone(input.user.phone);
-  if (own && input.user.phoneVerifiedAt) return { phone: own, source: 'account_verified' };
-  const phone = own ?? normalizeVnPhone(input.guestPhone) ?? normalizeVnPhone(shippingPhoneOf(input.shippingAddress));
-  return phone ? { phone, source: 'checkout_contact' } : null;
+  if (own) return { phone: own, source: input.user.phoneVerifiedAt ? 'account_verified' : 'checkout_contact', via: 'account' };
+  const guest = normalizeVnPhone(input.guestPhone);
+  if (guest) return { phone: guest, source: 'checkout_contact', via: 'guest' };
+  const shipping = normalizeVnPhone(shippingPhoneOf(input.shippingAddress));
+  return shipping ? { phone: shipping, source: 'checkout_contact', via: 'shipping' } : null;
+}
+
+/** `recipient.phone` (đã chuẩn hoá) trong thân JSON của một dòng outbox; null khi thân hỏng hoặc thiếu số. */
+export function outboxRecipientPhone(body: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  const recipient = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>).recipient : null;
+  const phone = recipient && typeof recipient === 'object' && !Array.isArray(recipient) ? (recipient as Record<string, unknown>).phone : null;
+  return typeof phone === 'string' ? normalizeVnPhone(phone) : null;
 }
 
 /** Số người nhận cho tin giao hàng không kèm giá: khách đã bật lúc đặt và số nhận hàng đọc được, khác số người mua. Không thì null. */

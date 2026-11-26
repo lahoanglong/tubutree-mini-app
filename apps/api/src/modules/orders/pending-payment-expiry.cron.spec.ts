@@ -259,6 +259,7 @@ describe('PendingPaymentExpiryCron: nhắc chuyển khoản ~2 giờ trước h�
     expect(where.mssOrderEvents).toEqual({
       none: {
         eventType: 'order.created',
+        recipientRole: 'buyer',
         OR: [{ status: { in: ['PENDING', 'SENDING', 'DELIVERED'] } }, { status: 'RESULT_SENT', resultReason: null }],
       },
     });

@@ -1,6 +1,7 @@
 import type { Order, Prisma } from '@prisma/client';
 import type { OrderEditAddressInput, OrderEditRefusalReason, ShippingAddressSnapshot } from '@tubutree/shared-types';
 import { isNewGeoCode } from '../integrations/pancake/geo-code';
+import { composeSubscriptionNote, subscriptionCustomerPart } from '../subscriptions/subscription-note';
 import { cancelHandover } from './order-transition';
 
 /**
@@ -146,11 +147,15 @@ export function addressEditable(snapshot: Pick<ShippingAddressSnapshot, 'provinc
 }
 
 /**
- * Dựng câu ghi từ đơn hiện tại và thân yêu cầu. Cùng tỉnh do máy chủ ép (so `provinceCode` sau trim); tên tỉnh và mã tỉnh giữ của đơn, không tin
- * client. Không có gì đổi (so sau chuẩn hoá): NOOP, không ghi, không tính lượt. Không bao giờ chạm cột tiền hay trạng thái.
+ * Dựng câu ghi từ đơn hiện tại và thân yêu cầu. Cùng tỉnh do máy chủ ép (so `provinceCode` sau trim); tên tỉnh, mã tỉnh và quận (hệ 2 cấp không
+ * có quận) giữ của đơn, không tin client. Tên phường người gọi đã thay bằng tên trong danh mục địa giới khi có. Không có gì đổi (so sau chuẩn hoá):
+ * NOOP, không ghi, không tính lượt. Không bao giờ chạm cột tiền hay trạng thái.
+ *
+ * Đơn định kỳ: ghi chú lưu là dấu của hệ thống (kho đọc) nối phần của khách. Khách chỉ thấy và sửa phần của mình (chi tiết đơn trả
+ * `customerFacingNote`), nên so và ghi trên phần đó rồi ghép lại dấu: khách xoá trắng thì còn đúng dấu.
  */
 export function planCustomerEdit(
-  current: { shippingAddress: Prisma.JsonValue; note: string | null; notifyRecipientZalo: boolean },
+  current: { shippingAddress: Prisma.JsonValue; note: string | null; notifyRecipientZalo: boolean; source: string | null },
   input: OrderEditInput,
 ): OrderEditPlan {
   const old = snapshotOf(current.shippingAddress);
@@ -167,7 +172,6 @@ export function planCustomerEdit(
       phone: text(a.phone),
       ward: text(a.ward),
       street: text(a.street),
-      districtCode: text(a.districtCode),
       wardCode: text(a.wardCode),
     };
     if (next.recipient !== old.recipient) changed.push('người nhận');
@@ -175,20 +179,25 @@ export function planCustomerEdit(
       changed.push('SĐT');
       phoneChanged = true;
     }
-    if (next.wardCode !== old.wardCode || next.ward !== old.ward || next.districtCode !== old.districtCode) changed.push('phường/xã');
+    if (next.wardCode !== old.wardCode || next.ward !== old.ward) changed.push('phường/xã');
     if (next.street !== old.street) changed.push('số nhà');
     // Chỉ đổi cách viết SĐT (+84 ↔ 0): không tính là sửa, giữ ảnh chụp cũ.
     if (changed.length === 0) next = { ...old };
   }
   const addressChanged = changed.length > 0;
-  const oldNote = noteOf(current.note);
-  const newNote = input.note === undefined ? oldNote : noteOf(input.note);
-  if (newNote !== oldNote) changed.push('ghi chú');
+  const subscription = current.source === 'subscription';
+  // Đơn định kỳ: bỏ dấu ở đầu cả hai phía (khách dán lại nguyên ghi chú có dấu thì vẫn là không đổi).
+  const customerNote = subscription ? subscriptionCustomerPart : noteOf;
+  const oldNote = customerNote(current.note);
+  const newNote = input.note === undefined ? oldNote : customerNote(input.note);
+  const noteChanged = newNote !== oldNote;
+  if (noteChanged) changed.push('ghi chú');
   if (changed.length === 0) return { kind: 'NOOP' };
   return {
     kind: 'WRITE',
     shippingAddress: next,
-    note: newNote,
+    // Đơn định kỳ không đổi ghi chú: giữ nguyên chữ đang lưu (kể cả ghi chú cũ không mở đầu bằng dấu).
+    note: subscription ? (noteChanged ? composeSubscriptionNote(newNote) : current.note) : newNote,
     disableRecipientZalo: phoneChanged && current.notifyRecipientZalo,
     changed,
     addressChanged,
@@ -203,6 +212,12 @@ export const orderEditHistoryWhere = (orderId: string): Prisma.OrderStatusHistor
   orderId,
   actorType: 'CUSTOMER',
   note: { startsWith: ORDER_EDIT_HISTORY_NOTE },
+});
+
+/** Dòng lịch sử của lần khách tự sửa có đổi SĐT người nhận (dòng ghi tên trường, không ghi số). */
+export const orderPhoneEditHistoryWhere = (orderId: string): Prisma.OrderStatusHistoryWhereInput => ({
+  ...orderEditHistoryWhere(orderId),
+  note: { startsWith: ORDER_EDIT_HISTORY_NOTE, contains: 'SĐT' satisfies OrderEditField },
 });
 
 /** Số lần khách đã sửa đơn. Dòng `from = to` lọc ở bộ nhớ: Prisma không so hai cột trong `where`. */

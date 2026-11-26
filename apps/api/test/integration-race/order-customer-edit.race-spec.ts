@@ -9,6 +9,8 @@ import { OrderCustomerEditService } from '../../src/modules/orders/order-custome
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import { ORDER_CUSTOMER_SELF_EDIT_KEY, ORDER_EDIT_HISTORY_NOTE, ORDER_EDIT_MAX, ORDER_EDIT_REFUSED } from '../../src/modules/orders/order-customer-edit';
 import { PancakeSyncHooks } from '../../src/modules/integrations/pancake/pancake-sync-hooks';
+import type { GeoService } from '../../src/modules/integrations/pancake/geo.service';
+import { SUBSCRIPTION_NOTE_SEP, SUBSCRIPTION_ORDER_NOTE } from '../../src/modules/subscriptions/subscription-note';
 import { PancakeApiError } from '../../src/modules/integrations/pancake/pancake-outbound';
 import type { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import type { AffiliateService } from '../../src/modules/affiliate/affiliate.service';
@@ -353,5 +355,60 @@ describe('Customer self-edit of delivery address + note (real Postgres)', () => 
     const { order: name, userId: u2 } = await order({ notifyRecipientZalo: true });
     await edit.editForOwner(u2, name.code, { address: addr({ recipient: 'Ten Moi' }) });
     expect((await prisma.order.findUniqueOrThrow({ where: { id: name.id } })).notifyRecipientZalo).toBe(true);
+  });
+
+  it('R9 (MINOR 1): đơn đặt định kỳ: sửa ghi chú → DB giữ dấu hệ thống + phần của khách, khách chỉ thấy phần của mình; xoá trắng → còn đúng dấu', async () => {
+    const { order: o, userId } = await order({ source: 'subscription', note: SUBSCRIPTION_ORDER_NOTE });
+    const r1 = await edit.editForOwner(userId, o.code, { note: 'Giao giờ HC' });
+    expect(r1.note).toBe('Giao giờ HC');
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).note).toBe(`${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC`);
+
+    // Màn khách điền sẵn đúng phần đã thấy, chỉ sửa địa chỉ: ghi chú lưu không đổi một chữ.
+    await edit.editForOwner(userId, o.code, { address: addr({ street: '5 Dinh Ky' }), note: r1.note });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).note).toBe(`${SUBSCRIPTION_ORDER_NOTE}${SUBSCRIPTION_NOTE_SEP}Giao giờ HC`);
+
+    const r3 = await edit.editForOwner(userId, o.code, { note: '' });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).note).toBe(SUBSCRIPTION_ORDER_NOTE);
+    expect(r3.note).toBe(SUBSCRIPTION_ORDER_NOTE);
+    expect(r3.editsLeft).toBe(0);
+    expect(await editRows(o.id)).toHaveLength(3);
+  });
+
+  it('R10 (NIT-7): tên phường lưu theo danh mục, không theo chữ client gửi; danh mục lỗi thì giữ chữ client gửi', async () => {
+    const catalog = (name: string | null) =>
+      new OrderCustomerEditService(prisma, new SystemConfigService(prisma), {
+        checkWard: jest.fn().mockResolvedValue(name ? 'ok' : 'unknown'),
+        wardName: jest.fn().mockResolvedValue(name),
+      } as unknown as GeoService);
+
+    const { order: a, userId: ua } = await order();
+    await catalog('Phường Giảng Võ').editForOwner(ua, a.code, { address: addr({ ward: 'gõ sai tên', wardCode: '84_VN0100007' }) });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: a.id } })).shippingAddress).toMatchObject({ ward: 'Phường Giảng Võ', wardCode: '84_VN0100007' });
+
+    // Client gửi lại đúng mã đang có với tên khác: tên danh mục trùng tên đang lưu nên không phải lần sửa, không tốn lượt.
+    const { order: same, userId: us } = await order();
+    const noop = await catalog(SNAP.ward).editForOwner(us, same.code, { address: addr({ ward: 'tên lạ' }) });
+    expect(noop.editsLeft).toBe(ORDER_EDIT_MAX);
+    expect(await editRows(same.id)).toHaveLength(0);
+
+    const { order: b, userId: ub } = await order();
+    await catalog(null).editForOwner(ub, b.code, { address: addr({ ward: 'Phường Khách Gõ', wardCode: '84_VN0100009' }) });
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: b.id } })).shippingAddress).toMatchObject({ ward: 'Phường Khách Gõ', wardCode: '84_VN0100009' });
+  });
+
+  it('R11 (còn mở 3): dòng tự sửa CONFIRMED → CONFIRMED đứng đầu sổ không che giờ CONFIRMED thật khi kho lùi PACKED → CONFIRMED', async () => {
+    const { order: o, userId } = await order();
+    await edit.editForOwner(userId, o.code, { note: 'Sua truoc dong goi' });
+    const base = Date.now() + 60_000;
+    await prisma.orderStatusHistory.createMany({
+      data: [
+        { orderId: o.id, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'PANCAKE', createdAt: new Date(base) },
+        { orderId: o.id, fromStatus: 'PACKED', toStatus: 'CONFIRMED', actorType: 'PANCAKE', createdAt: new Date(base + 60_000) },
+      ],
+    });
+    expect(await statusTimes(o.id)).toEqual({
+      PACKED: new Date(base).toISOString(),
+      CONFIRMED: new Date(base + 60_000).toISOString(),
+    });
   });
 });

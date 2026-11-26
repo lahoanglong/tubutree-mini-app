@@ -21,6 +21,7 @@ import { orderZaloFriendCard } from '../../integrations/mss/order-zalo-friend-ca
 import { codSwitchEligible } from '../../orders/cod-switch';
 import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
 import { isLiveGuestOwner, signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
+import { firstStatusTimes } from '../../orders/order-status-times';
 import {
   GUEST_CLOSED_STATUSES,
   GUEST_DEVICE_DAILY_CAP,
@@ -384,15 +385,9 @@ export class GuestCheckoutService {
     const rows = await this.prisma.orderStatusHistory.findMany({
       where: { orderId },
       orderBy: { createdAt: 'asc' },
-      distinct: ['toStatus'],
       select: { fromStatus: true, toStatus: true, createdAt: true },
     });
-    const times: Record<string, string> = {};
-    for (const r of rows) {
-      if (r.fromStatus === r.toStatus || r.toStatus in times) continue;
-      times[r.toStatus] = r.createdAt.toISOString();
-    }
-    return times;
+    return firstStatusTimes(rows);
   }
 
   /** Trang theo dõi đơn: chỉ trạng thái, món, tiền, SĐT che 4 số giữa, phường/xã và tỉnh (không tên, không số nhà). */
