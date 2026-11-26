@@ -1685,15 +1685,15 @@ describe('admin/page — tab Voucher', () => {
   it('Tạo voucher khoá khi Hết hạn sớm hơn Bắt đầu, mở lại khi sửa đúng thứ tự', async () => {
     const { container } = await openCoupons();
     typeInto(container.querySelector('input[placeholder^="Mã"]'), 'NGUOC');
-    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '20/11/2026');
-    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '10/11/2026');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '20/11/2028');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '10/11/2028');
     await flush();
     const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
     expect(create.disabled).toBe(true);
     act(() => create.click());
     await flush();
     expect(mocks.createCoupon).not.toHaveBeenCalled();
-    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '25/11/2026');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '25/11/2028');
     await flush();
     expect(create.disabled).toBe(false);
   });
@@ -1701,14 +1701,14 @@ describe('admin/page — tab Voucher', () => {
   it('Tạo voucher gửi mốc đầu/cuối ngày theo giờ VN, không theo múi giờ máy admin', async () => {
     const { container } = await openCoupons();
     typeInto(container.querySelector('input[placeholder^="Mã"]'), 'GIOVN');
-    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '01/11/2026');
-    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '30/11/2026');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '01/11/2028');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '30/11/2028');
     await flush();
     mocks.createCoupon.mockResolvedValueOnce({});
     act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!.click());
     await flush();
     expect(mocks.createCoupon).toHaveBeenCalledWith(
-      expect.objectContaining({ startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-30T16:59:59.000Z' }),
+      expect.objectContaining({ startAt: '2028-10-31T17:00:00.000Z', endAt: '2028-11-30T16:59:59.000Z' }),
     );
   });
 
