@@ -227,6 +227,10 @@ export interface CheckoutQuote {
   total: number;
   pointsEarned: number;
   pointsBalance: number;
+  /** Điểm Xanh tích từ đơn sàn (W42): chỉ dùng khi mua hàng, chung trần % với lô thường. Optional: API cũ chưa trả. */
+  pointsMarketplaceBalance?: number;
+  /** Phần điểm sàn dùng được cho lần đặt này (trước trần %). Optional: API cũ chưa trả. */
+  redeemableMarketplacePoints?: number;
   /** Số Điểm Xanh tối đa dùng được cho lần đặt này (chỉ trên hàng Tubu). API cũ chưa trả. */
   pointsMax?: number;
   /** Voucher đã dùng một phần trần giảm gộp nên `pointsMax` thấp hơn khi không có mã: câu giải thích cạnh ô Điểm Xanh. null/không có = không vậy. */

@@ -7,6 +7,7 @@ import { Trim } from '../../common/decorators/trim.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { AllowStaff } from '../../common/staff-permissions';
 import { ExternalClaimsAdminService } from './external-claims-admin.service';
+import { FUNNEL_PERIODS } from './external-claims-funnel';
 import { ExternalClaimsStaleBatchService, STALE_BATCH_MAX } from './external-claims-stale-batch.service';
 
 const STATES = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'] as const;
@@ -19,6 +20,11 @@ export class ExternalClaimListQueryDto extends PaginationQuery {
   @IsOptional() @IsIn(['closed_credited', 'stale', 'partial_refund']) attention?: 'closed_credited' | 'stale' | 'partial_refund';
   /** Mã đơn Pancake, mã vận đơn, id claim hoặc SĐT đầy đủ. */
   @IsOptional() @Trim() @IsString() @MaxLength(100) q?: string;
+}
+
+export class ExternalClaimFunnelQueryDto {
+  /** Bỏ trống = 30 ngày. */
+  @IsOptional() @IsIn([...FUNNEL_PERIODS]) period?: (typeof FUNNEL_PERIODS)[number];
 }
 
 export class ClaimReasonDto {
@@ -75,6 +81,13 @@ export class ExternalClaimsAdminController {
   @AllowStaff('CSKH', 'KE_TOAN')
   attempts(@Query() q: PaginationQuery) {
     return this.admin.listAttempts(q.page, q.limit);
+  }
+
+  /** Phễu đơn sàn → điểm → mua lại, chỉ số đếm. Phải đứng trước `:id` để "funnel" không bị hiểu là id. */
+  @Get('funnel')
+  @AllowStaff('CSKH', 'KE_TOAN')
+  funnel(@Query() q: ExternalClaimFunnelQueryDto) {
+    return this.admin.funnel(q.period ?? '30d');
   }
 
   @Post('attempts/:id/attach')

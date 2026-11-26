@@ -269,7 +269,7 @@ describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng có nút và tiêu �
     ['COMMISSION_PAYOUT_PAID', ['Xem Ví Tubu', '/wallet']],
     ['COMMISSION_NEW', ['Xem hoa hồng', '/affiliate?tab=commission']],
     ['TIER_DROP_NOTICE', ['Xem cách giữ hạng', '/loyalty']],
-    ['EXTERNAL_POINTS_CREDITED', ['Xem Điểm Xanh', '/loyalty']],
+    ['EXTERNAL_POINTS_CREDITED', ['Dùng điểm mua hàng', '/browse']],
     ['CHAT_ORDER_POINTS_LINKED', ['Xem Điểm Xanh', '/loyalty']],
     ['STOREFRONT_APPROVED', ['Chia sẻ gian hàng', '/storefront']],
     ['STOREFRONT_REINSTATED', ['Chia sẻ gian hàng', '/storefront']],
@@ -282,6 +282,7 @@ describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng có nút và tiêu �
   it.each([
     ['TIER_DROP_NOTICE', 'Hạng thành viên'],
     ['EXTERNAL_POINTS_VOIDED', 'Điểm Xanh'],
+    ['EXTERNAL_POINTS_CREDITED', 'Điểm Xanh đã cộng, dùng ngay'],
     ['CHAT_ORDER_POINTS_CREDITED', 'Điểm Xanh'],
     ['COMMISSION_REVERSED', 'Hoa hồng CTV'],
   ])('%s → tiêu đề %s', (code, title) => {

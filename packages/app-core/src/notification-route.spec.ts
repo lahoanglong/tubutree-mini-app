@@ -55,7 +55,9 @@ describe('notificationTitle', () => {
     ['COMMISSION_PAYOUT_PAID', 'Hoa hồng CTV'],
     ['TIER_DROP_NOTICE', 'Hạng thành viên'],
     ['TIER_UPGRADED', 'Hạng thành viên'],
-    ['EXTERNAL_POINTS_CREDITED', 'Điểm Xanh'],
+    ['EXTERNAL_POINTS_CREDITED', 'Điểm Xanh đã cộng, dùng ngay'],
+    ['EXTERNAL_POINTS_PENDING', 'Điểm Xanh'],
+    ['EXTERNAL_POINTS_VOIDED', 'Điểm Xanh'],
     ['EXTERNAL_POINTS_CLAIM_NOT_FOUND', 'Điểm Xanh'],
     ['CHAT_ORDER_POINTS_CREDITED', 'Điểm Xanh'],
     ['CHAT_ORDER_POINTS_LINKED', 'Điểm Xanh'],
@@ -135,7 +137,7 @@ describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng', () => {
     ['TIER_DROP_NOTICE', 'Xem cách giữ hạng', '/loyalty'],
     ['TIER_UPGRADED', 'Xem hạng của tôi', '/loyalty'],
     ['EXTERNAL_POINTS_PENDING', 'Xem Điểm Xanh', '/loyalty'],
-    ['EXTERNAL_POINTS_CREDITED', 'Xem Điểm Xanh', '/loyalty'],
+    ['EXTERNAL_POINTS_CREDITED', 'Dùng điểm mua hàng', '/browse'],
     ['EXTERNAL_POINTS_VOIDED', 'Xem Điểm Xanh', '/loyalty'],
     ['EXTERNAL_POINTS_CLAIM_NOT_FOUND', 'Xem Điểm Xanh', '/loyalty'],
     ['CHAT_ORDER_POINTS_CREDITED', 'Xem Điểm Xanh', '/loyalty'],
@@ -224,5 +226,20 @@ describe('giữ nguyên các nút cũ', () => {
   it('tin chỉ gửi cho admin không có nút', () => {
     expect(notificationAction('DEALER_CREDIT_PAYMENT_REPORTED', { dealer: 'A' }, mini)).toBeNull();
     expect(link(notificationAction('DEALER_REWARD_CLAIM_APPROVED', {}, mini))).toBe('/dealer');
+  });
+});
+
+describe('W43: tin điểm đơn sàn đã cộng mời dùng điểm ngay', () => {
+  it('chỉ EXTERNAL_POINTS_CREDITED đổi; tin điểm đơn chat đã cộng vẫn về Điểm Xanh', () => {
+    expect(notificationTitle('EXTERNAL_POINTS_CREDITED')).toBe('Điểm Xanh đã cộng, dùng ngay');
+    expect(notificationTitle('CHAT_ORDER_POINTS_CREDITED')).toBe('Điểm Xanh');
+    expect(notificationAction('CHAT_ORDER_POINTS_CREDITED', {}, web)).toEqual({ kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' });
+  });
+
+  it('kèm mã đơn hay route trong payload vẫn sang trang mua hàng, không mở đơn của người khác', () => {
+    const data = { points: '1500', code: 'SPX***123', order_code: 'TB1', route: '/loyalty' };
+    for (const opts of [mini, web]) {
+      expect(notificationAction('EXTERNAL_POINTS_CREDITED', data, opts)).toEqual({ kind: 'link', label: 'Dùng điểm mua hàng', to: '/browse' });
+    }
   });
 });

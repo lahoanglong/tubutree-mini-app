@@ -4,7 +4,7 @@ import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/comm
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { ExternalClaimsAdminController, StaleBatchDto } from './external-claims-admin.controller';
+import { ExternalClaimFunnelQueryDto, ExternalClaimsAdminController, StaleBatchDto } from './external-claims-admin.controller';
 
 describe('ExternalClaimsAdminController.approve: body qua ValidationPipe thật', () => {
   const metatype = (Reflect.getMetadata('design:paramtypes', ExternalClaimsAdminController.prototype, 'approve') as unknown[])[1] as new () => object;
@@ -63,5 +63,36 @@ describe('ExternalClaimsAdminController.staleBatchApprove', () => {
   it('body rỗng (xem trước) và danh sách 50 claim đi qua', async () => {
     await expect(pipe({})).resolves.toBeDefined();
     await expect(pipe({ dryRun: false, claimIds: Array.from({ length: 50 }, (_, i) => `c${i}`) })).resolves.toBeDefined();
+  });
+});
+
+describe('ExternalClaimsAdminController.funnel', () => {
+  const fn = ExternalClaimsAdminController.prototype.funnel;
+  const query = (q: unknown) => createValidationPipe().transform(q, { type: 'query', metatype: ExternalClaimFunnelQueryDto as never });
+
+  it('GET funnel, ADMIN + CSKH + KE_TOAN, khai báo trước :id để "funnel" không bị hiểu là id', () => {
+    expect(RequestMethod[Reflect.getMetadata(METHOD_METADATA, fn)]).toBe('GET');
+    expect(Reflect.getMetadata(PATH_METADATA, fn)).toBe('funnel');
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, fn)).toEqual(['CSKH', 'KE_TOAN']);
+    expect(Reflect.getMetadata(ROLES_KEY, ExternalClaimsAdminController)).toEqual(['ADMIN']);
+    const names = Object.getOwnPropertyNames(ExternalClaimsAdminController.prototype);
+    expect(names.indexOf('funnel')).toBeGreaterThan(-1);
+    expect(names.indexOf('funnel')).toBeLessThan(names.indexOf('detail'));
+  });
+
+  it('bỏ trống kỳ thì lấy 30 ngày; có kỳ thì chuyển đúng kỳ', async () => {
+    const admin = { funnel: jest.fn().mockResolvedValue('ok') };
+    const c = new ExternalClaimsAdminController(admin as never, {} as never);
+    await c.funnel({});
+    await c.funnel({ period: '7d' });
+    expect(admin.funnel.mock.calls).toEqual([['30d'], ['7d']]);
+  });
+
+  it.each([['1d'], ['30'], ['all'], [7]])('kỳ %p: 400', async (period) => {
+    await expect(query({ period })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each([['7d'], ['30d'], ['90d']])('kỳ %s đi qua', async (period) => {
+    await expect(query({ period })).resolves.toMatchObject({ period });
   });
 });

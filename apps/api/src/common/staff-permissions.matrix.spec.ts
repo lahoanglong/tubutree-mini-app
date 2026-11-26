@@ -155,6 +155,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/game-mini/stats': ADMIN_ONLY,
   'GET /admin/external-claims': [CSKH, KE_TOAN],
   'GET /admin/external-claims/attempts': [CSKH, KE_TOAN],
+  'GET /admin/external-claims/funnel': [CSKH, KE_TOAN],
   'POST /admin/external-claims/attempts/:id/attach': [CSKH],
   'POST /admin/external-claims/attempts/:id/reject': [CSKH],
   'GET /admin/external-claims/:id': [CSKH, KE_TOAN],
