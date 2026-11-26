@@ -17,8 +17,7 @@ import { MAX_ITEM_QUANTITY } from '../../cart/dto/cart.dto';
 import { GUEST_ORDER_CLAIMED, type CodSwitchResultDTO, type GuestOrderLookupDTO, type GuestOrderTrackDTO, type GuestReorderDTO } from '@tubutree/shared-types';
 import { OrderCodSwitchService } from '../../orders/order-cod-switch.service';
 import { MssOrderEventRecorder } from '../../integrations/mss/mss-order-event.recorder';
-import { ORDER_ZALO_ACTIVE_STATUSES } from '../../integrations/mss/mss-order-event-types';
-import { orderZaloGateOpen } from '../../system-config/order-zalo-config';
+import { orderZaloFriendCard } from '../../integrations/mss/order-zalo-friend-card';
 import { codSwitchEligible } from '../../orders/cod-switch';
 import type { GuestAddressDto, GuestLineDto, GuestLookupDto, GuestPlaceOrderDto, GuestQuoteDto } from './dto/guest-checkout.dto';
 import { isLiveGuestOwner, signGuestLookupKey, verifyGuestLookupKey } from './guest-track-link';
@@ -413,7 +412,7 @@ export class GuestCheckoutService {
           })
         : Promise.resolve([]),
       readGuestCheckoutSettings(this.config).then((settings) => codSwitchEligible(this.prisma, order, settings.codMax)),
-      this.zaloFriendCard(order),
+      orderZaloFriendCard(this.prisma, this.mssEvents?.gate(), order, 'order'),
     ]);
     return {
       code: order.code,
@@ -448,19 +447,6 @@ export class GuestCheckoutService {
   }
 
   /**
-   * Thẻ kết bạn Zalo ở trang theo dõi (trang "đặt thành công" của khách vãng lai): cổng tin đơn mở, khách đồng ý ở đơn này, đơn còn đang đi,
-   * và MSS chưa gửi được tin nào của đơn tới người mua như bạn bè (`RESULT_SENT` lý do null). Tin người lạ (`stranger`) vẫn mời kết bạn.
-   */
-  private async zaloFriendCard(order: { id: string; status: string; orderZaloConsent: boolean | null }): Promise<boolean> {
-    if (!orderZaloGateOpen(this.mssEvents?.gate()) || order.orderZaloConsent !== true || !ORDER_ZALO_ACTIVE_STATUSES.includes(order.status)) return false;
-    const friend = await this.prisma.mssOrderEventOutbox.findFirst({
-      where: { orderId: order.id, recipientRole: 'buyer', status: 'RESULT_SENT', resultReason: null },
-      select: { id: true },
-    });
-    return friend === null;
-  }
-
-  /**
    * Tra đơn đặt không đăng nhập bằng mã đơn + SĐT đặt hàng (khách mất đường dẫn, đổi máy, xoá dữ liệu trình duyệt). Mọi trường hợp không khớp
    * (không có mã, không phải đơn vãng lai, sai SĐT, hết hạn theo dõi) cùng một 404 và cùng số lần so, để không dò được mã đơn nào có thật.
    * Khớp thì cấp khoá theo dõi tạm (24 giờ) thay cho khoá gốc mà máy chủ không giữ. Khớp nhưng đơn đã về tài khoản Zalo: 403 GUEST_ORDER_CLAIMED,
@@ -488,7 +474,7 @@ export class GuestCheckoutService {
   async bankQr(code: string, key: string | undefined) {
     const { order } = await this.orderByKey(code, key);
     const settings = await readGuestCheckoutSettings(this.config);
-    return this.bankTransfer.getBankQr(order.code, order.userId, settings.codMax);
+    return this.bankTransfer.getBankQr(order.code, order.userId, { codMax: settings.codMax, friendScope: 'order' });
   }
 
   /**

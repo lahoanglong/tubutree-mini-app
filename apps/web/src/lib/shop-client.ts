@@ -641,6 +641,8 @@ export interface BankQrDTO {
   serverNow?: string;
   /** Đơn đổi được sang trả tiền khi nhận (nút phụ dưới mã QR). API cũ không trả. */
   codSwitchable?: boolean;
+  /** Hiện thẻ kết bạn Zalo Tubu Tree dưới "Để sau / Xem đơn hàng" (máy chủ đã xét cổng MSS, đồng ý ở đơn, tin bạn bè). API cũ không trả: ẩn. */
+  zaloFriendCard?: boolean;
 }
 export const getBankQr = async (code: string) => {
   const qr = await apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);

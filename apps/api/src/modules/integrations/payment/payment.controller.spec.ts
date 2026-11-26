@@ -122,3 +122,13 @@ describe('POST /webhooks/zalopay qua ValidationPipe toàn cục', () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /payments/bank-qr/:code (khách đăng nhập)', () => {
+  it("thẻ Zalo xét theo tài khoản: getBankQr nhận friendScope 'account', không ghi đè trần COD", async () => {
+    const qr = { orderCode: 'TB8495', zaloFriendCard: false };
+    const getBankQr = jest.fn().mockResolvedValue(qr);
+    const controller = new PaymentController({} as never, { getBankQr } as never);
+    await expect(controller.bankQr('u1', 'TB8495')).resolves.toBe(qr);
+    expect(getBankQr).toHaveBeenCalledWith('TB8495', 'u1', { friendScope: 'account' });
+  });
+});

@@ -18,6 +18,8 @@ export interface BankQr {
   qrImageUrl: string;
   /** Đơn đổi được sang trả tiền khi nhận (nút phụ dưới mã QR). API cũ không trả. */
   codSwitchable?: boolean;
+  /** Hiện thẻ kết bạn Zalo Tubu Tree dưới "Để sau" (máy chủ đã xét cổng MSS, đồng ý ở đơn, tin bạn bè). API cũ không trả: ẩn. */
+  zaloFriendCard?: boolean;
 }
 
 export const getBankQr = (code: string) =>

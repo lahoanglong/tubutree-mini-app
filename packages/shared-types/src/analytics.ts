@@ -143,7 +143,7 @@ export function isShareableSearchTerm(term: string): boolean {
 }
 
 /** Nơi khách bấm "Mở Zalo Tubu Tree" (`order_zalo_friend_click.from`). */
-export const ORDER_ZALO_FRIEND_FROM = ['success', 'order_detail'] as const;
+export const ORDER_ZALO_FRIEND_FROM = ['success', 'order_detail', 'bank_transfer'] as const;
 export type OrderZaloFriendFrom = (typeof ORDER_ZALO_FRIEND_FROM)[number];
 
 /** Loại sự thật xanh (`eco_badge_opened.kind`), cùng tập với enum `EcoFactKind` của API. */

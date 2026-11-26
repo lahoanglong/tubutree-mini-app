@@ -1,10 +1,12 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from './vietqr';
 import { pendingPaymentDeadline } from '../../orders/pending-payment-ttl';
 import { codSwitchEligible } from '../../orders/cod-switch';
 import { COD_MAX_PER_ORDER } from '../../checkout/checkout-split';
+import { MssOrderEventRecorder } from '../mss/mss-order-event.recorder';
+import { orderZaloFriendCard, type OrderZaloFriendScope } from '../mss/order-zalo-friend-card';
 
 /** Thẻ xem trước chuyển khoản ở màn thanh toán; mặc định tắt (seed createOnly + migration 20261118060137_checkout_transfer_preview_flag). */
 export const TRANSFER_PREVIEW_ENABLED_KEY = 'checkout.transfer_preview_enabled';
@@ -30,6 +32,7 @@ export class BankTransferService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    @Optional() private readonly mssEvents?: MssOrderEventRecorder,
   ) {}
 
   /** Cờ tắt hoặc thiếu cấu hình nào trong bốn khoá ngân hàng (thẻ sẽ hứa một mã QR không tạo được) thì `bank` là null và app ẩn thẻ. */
@@ -49,8 +52,12 @@ export class BankTransferService {
     return { enabled: true, bank: { name, accountName: holder } };
   }
 
-  /** `codMax`: trần thu hộ của người xem cho cờ `codSwitchable` (khách vãng lai có trần riêng, thấp hơn). */
-  async getBankQr(orderCode: string, userId: string, codMax: number = COD_MAX_PER_ORDER) {
+  /**
+   * `codMax`: trần thu hộ của người xem cho cờ `codSwitchable` (khách vãng lai có trần riêng, thấp hơn).
+   * `friendScope`: luật thẻ kết bạn Zalo `zaloFriendCard` theo người xem: `account` cho khách đăng nhập, `order` cho khách vãng lai (`#k=`).
+   */
+  async getBankQr(orderCode: string, userId: string, opts: { codMax?: number; friendScope?: OrderZaloFriendScope } = {}) {
+    const { codMax = COD_MAX_PER_ORDER, friendScope = 'account' } = opts;
     const order = await this.prisma.order.findUnique({ where: { code: orderCode } });
     // Không lộ đơn người khác: sai chủ sở hữu coi như không tìm thấy.
     if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
@@ -119,7 +126,11 @@ export class BankTransferService {
       : '';
 
     // Hạn trùng với cron tự huỷ: trang QR nói rõ "chuyển trước HH:mm" để khách không chuyển sau khi đơn đã huỷ.
-    const [paymentDeadline, codSwitchable] = await Promise.all([pendingPaymentDeadline(order, this.config), codSwitchEligible(this.prisma, order, codMax)]);
+    const [paymentDeadline, codSwitchable, zaloFriendCard] = await Promise.all([
+      pendingPaymentDeadline(order, this.config),
+      codSwitchEligible(this.prisma, order, codMax),
+      orderZaloFriendCard(this.prisma, this.mssEvents?.gate(), order, friendScope),
+    ]);
 
     return {
       orderCode: order.code,
@@ -135,6 +146,8 @@ export class BankTransferService {
       qrImageUrl,
       // Nút phụ "Đổi sang trả tiền khi nhận (COD)" dưới QR (POST …/switch-to-cod).
       codSwitchable,
+      // Thẻ kết bạn Zalo dưới "Để sau / Xem đơn hàng": đơn chuyển khoản không qua màn đặt xong nên đây là chỗ duy nhất khách thấy lời mời.
+      zaloFriendCard,
     };
   }
 }

@@ -31,7 +31,7 @@ export class PaymentController {
   /** VietQR chuyển khoản cho đơn BANK_TRANSFER (Pancake đối soát → webhook lật PAID). */
   @Get('payments/bank-qr/:code')
   bankQr(@CurrentUser('sub') userId: string, @Param('code') code: string) {
-    return this.bankTransfer.getBankQr(code, userId);
+    return this.bankTransfer.getBankQr(code, userId, { friendScope: 'account' });
   }
 
   /**
