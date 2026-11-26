@@ -183,15 +183,15 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
   });
 
   test.describe('tab Săn mã', () => {
-    test('thứ tự khối: Giờ vàng, Nhận mã, Điểm Xanh, dải điểm danh, Tiện ích; không còn Mã của tôi, Kho quà, thẻ điểm danh đầy đủ', async ({ page }) => {
+    test('thứ tự khối: dòng Vườn Xanh (điểm danh) ngay dưới banner, Giờ vàng, Nhận mã, Điểm Xanh, Tiện ích; không còn Mã của tôi, Kho quà, thẻ điểm danh đầy đủ', async ({ page }) => {
       await page.goto('/offers');
       await expect(page.getByRole('region', { name: STRIP_TODO, exact: true })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible();
       const ys = [
+        await regionTop(page, STRIP_TODO),
         await regionTop(page, 'Giờ vàng hôm nay'),
         await regionTop(page, 'Nhận mã'),
         await regionTop(page, 'Điểm Xanh của bạn'),
-        await regionTop(page, STRIP_TODO),
         await regionTop(page, 'Tiện ích'),
       ];
       ys.forEach((y, i) => {
@@ -207,13 +207,13 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     });
 
     for (const checkedIn of [false, true]) {
-      test(`dải điểm danh mỏng khi ${checkedIn ? 'đã điểm danh' : 'chưa điểm danh'}: chữ phụ "Mở tab Vườn Xanh", một hàng cao ≤ 96px, không có nút điểm danh`, async ({ page, api }) => {
+      test(`dải điểm danh mỏng khi ${checkedIn ? 'đã điểm danh' : 'chưa điểm danh'}: chữ phụ "Mở Vườn Xanh", một hàng cao ≤ 96px, không có nút điểm danh`, async ({ page, api }) => {
         mockHomeEngagement(api, { checkedIn });
         await page.goto('/offers');
         const strip = page.getByRole('region', { name: checkedIn ? STRIP_DONE : STRIP_TODO, exact: true });
         await expect(strip).toBeVisible({ timeout: 15_000 });
         await expect(anyStrip(page)).toHaveCount(1);
-        await expect(strip.getByText('Mở tab Vườn Xanh')).toBeVisible();
+        await expect(strip.getByText('Mở Vườn Xanh')).toBeVisible();
         await expect(strip.getByRole('button')).toHaveCount(1);
         const h = Math.round((await strip.boundingBox())!.height);
         expect(h, `dải điểm danh cao ${h}px`).toBeLessThanOrEqual(96);
@@ -254,9 +254,10 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
         await expect(page.getByTestId('offers-collect-loading')).toHaveCount(0);
         // Lời gọi đã tới máy chủ mock nhưng đang bị giữ (mock chỉ ghi nhật ký sau khi trả lời).
         await expect.poll(() => asked, { timeout: 10_000 }).toBe(true);
-        // Dải chưa có dữ liệu thì không vẽ gì: không khung chờ, không thông báo lỗi.
+        // Trạng thái chưa về: chỉ dòng Vườn Xanh chung (cùng chiều cao), không khung chờ, không thông báo lỗi.
         await expect(anyStrip(page)).toHaveCount(0);
-        await expect(page.getByText('Mở tab Vườn Xanh')).toHaveCount(0);
+        await expect(page.getByTestId('offers-garden-row')).toHaveCount(1);
+        await expect(page.getByText('Mở Vườn Xanh')).toHaveCount(0);
         const flashY = await regionTop(page, 'Giờ vàng hôm nay');
         const collectY = await regionTop(page, 'Nhận mã');
         const pointsY = await regionTop(page, 'Điểm Xanh của bạn');

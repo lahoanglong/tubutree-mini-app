@@ -137,7 +137,6 @@ export const vi = {
 
   nav: {
     main: 'Điều hướng chính',
-    gardenHint: 'Trồng cây mỗi ngày, nhận quà thật',
     activeOrders: (n: number) => `${n} đơn đang xử lý`,
     tabWithActiveOrders: (label: string, n: number) => `${label}, ${n} đơn đang xử lý`,
     tabWithOffersDot: (label: string) => `${label}, có việc cần làm`,

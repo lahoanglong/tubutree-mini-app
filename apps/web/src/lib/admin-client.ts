@@ -2568,6 +2568,8 @@ export interface AdminUserDetail {
     referralCode: string | null;
     pointsBalance: number;
     pointsConvertedBalance: number;
+    /** Điểm tích từ đơn sàn (W42), chỉ dùng khi mua hàng. API cũ chưa trả. */
+    pointsMarketplaceBalance?: number;
     walletBalance: number;
     isBlocked: boolean;
     blockedAt: string | null;

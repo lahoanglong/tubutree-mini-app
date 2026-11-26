@@ -142,6 +142,11 @@ export default function WalletPage() {
                   </span>
                 )}
                 {points?.convertedNote && <span className="mt-1 block text-xs text-stone-700">{points.convertedNote}</span>}
+                {points?.marketplaceNote && (
+                  <span data-testid="marketplace-points-note" className="mt-0.5 block text-xs text-stone-700">
+                    {points.marketplaceNote}
+                  </span>
+                )}
               </span>
               <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
             </Link>

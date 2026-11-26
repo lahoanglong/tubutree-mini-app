@@ -168,6 +168,11 @@ export default function LoyaltyPage() {
               Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatCount(lots.total)} Điểm Xanh
             </p>
             {lots.convertedNote && <p className="mt-0.5 text-caption text-stone-600">{lots.convertedNote}</p>}
+            {lots.marketplaceNote && (
+              <p data-testid="marketplace-points-note" className="mt-0.5 text-caption text-stone-600">
+                {lots.marketplaceNote}
+              </p>
+            )}
             {pendingWasteLine && <p className="mt-0.5 text-caption tabular-nums text-stone-600">{pendingWasteLine}</p>}
             {expiring && <p className={`mt-1.5 text-caption ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
             {expiryPolicy && <p className="mt-0.5 text-caption text-stone-600">{expiryPolicy}</p>}

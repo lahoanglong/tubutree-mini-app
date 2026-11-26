@@ -175,8 +175,8 @@ export const BOOT_COPY = {
   'badges.how.INVITE_1': 'Mời một người bạn mua đơn thứ hai thành công.',
   'badges.earnedAria': '{name}, đã đạt',
   'badges.lockedAria': '{name}, chưa đạt. {how}',
-  // Chấm nhắc ở thanh đáy (cùng cờ nhiệm vụ hằng ngày): chữ đọc của tab có chấm.
-  'nav.gardenDot': '{name}, có việc hôm nay',
+  // Chấm nhắc (cùng cờ nhiệm vụ hằng ngày): chữ đọc của thẻ Vườn Xanh ở Trang chủ và của tab Cá nhân khi có chấm.
+  'home.pillar.garden.dot': '{name}, có việc hôm nay',
   'nav.profileDot': '{name}, có thông báo chưa đọc',
 } as const;
 

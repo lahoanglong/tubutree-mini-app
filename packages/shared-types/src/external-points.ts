@@ -109,7 +109,14 @@ export interface AdminExternalClaimRow {
   userId: string | null;
   userName: string | null;
   userPhoneMasked: string | null;
+  /** SĐT trên đơn: số đầy đủ đã che, không có thì mẫu che sẵn của sàn (chỉ lộ tối đa 3 ký tự đầu, 3 ký tự cuối). */
   orderPhoneMasked: string | null;
+  /**
+   * W42, chỉ claim SCAN có khách: SĐT Zalo hiện tại của khách so với SĐT trên đơn. MATCH khớp, MISMATCH lệch (khách gửi mã bị từ chối
+   * PHONE_MISMATCH; claim do nhân viên gắn tay thì chờ duyệt), NO_DATA đơn không có SĐT đủ để so. null ở claim PHONE / chưa có khách.
+   * Optional: API cũ chưa trả.
+   */
+  phoneMatch?: 'MATCH' | 'MISMATCH' | 'NO_DATA' | null;
   goodsValue: number | null;
   points: number;
   /** Có từ gói chatpts. Danh sách admin lọc được theo `?kind=SCAN|PHONE`. */
@@ -183,6 +190,8 @@ export interface AdminExternalAttemptOtherSubmitter {
   userName: string | null;
   userPhoneMasked: string | null;
   createdAt: string;
+  /** Kết quả lượt gửi gần nhất của người này: `UNMATCHED`, `NOT_FOUND` hay `REJECTED_PHONE_MISMATCH` (W42). API cũ chưa trả. */
+  result?: string;
 }
 
 export interface AdminExternalAttemptListResponse {

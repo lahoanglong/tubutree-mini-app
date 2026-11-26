@@ -274,11 +274,11 @@ describe('HomeView — nội dung các khối', () => {
     expect(block(c, 'member').style.minHeight).toBe(`${HOME_CONTEXT_HEIGHT}px`);
   });
 
-  it('khối quiz của người đã đăng nhập không thêm request nào ở Trang chủ (không gọi /game/arcade/status, chỉ đọc bộ nhớ đệm)', async () => {
+  it('khối quiz của người đã đăng nhập không thêm request nào ở Trang chủ (không gọi /game/arcade/status, chỉ đọc bộ nhớ đệm); /game/daily là khoá chung của chấm thẻ Vườn Xanh và thanh đáy', async () => {
     mocks.phase = 'authenticated';
     await mount();
     expect(calls('/game/arcade/status')).toEqual([]);
-    expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/game/'))).toEqual([]);
+    expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/game/') && String(p) !== '/game/daily')).toEqual([]);
   });
 
   it('"Bán chạy nhất" có nút Xem tất cả sang /ban-chay', async () => {

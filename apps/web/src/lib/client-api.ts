@@ -36,11 +36,14 @@ function cookieAttrs(maxAgeS: number): string {
   return `; Path=/; Max-Age=${maxAgeS}; SameSite=Lax${secure}`;
 }
 
-/** Ghi hoặc xoá cookie của chính web; trình duyệt chặn cookie thì bỏ qua (Trang chủ chỉ mất bản dựng sẵn, vẫn chạy đúng). */
-export function writeWebCookie(name: string, value: string | null): void {
+/**
+ * Ghi hoặc xoá cookie của chính web; trình duyệt chặn cookie thì bỏ qua (Trang chủ chỉ mất bản dựng sẵn, vẫn chạy đúng). `maxAgeS` mặc định
+ * 30 ngày như cờ phiên; cookie chống lặp tự mở Mini App dùng 24 giờ.
+ */
+export function writeWebCookie(name: string, value: string | null, maxAgeS: number = SESSION_COOKIE_MAX_AGE_S): void {
   if (typeof document === 'undefined') return;
   try {
-    document.cookie = value === null ? `${name}=${cookieAttrs(0)}` : `${name}=${encodeURIComponent(value)}${cookieAttrs(SESSION_COOKIE_MAX_AGE_S)}`;
+    document.cookie = value === null ? `${name}=${cookieAttrs(0)}` : `${name}=${encodeURIComponent(value)}${cookieAttrs(maxAgeS)}`;
   } catch {
     /* cookie bị chặn */
   }

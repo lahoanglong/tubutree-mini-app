@@ -25,6 +25,20 @@ export const CLAIM_STATE_TONE: Record<ExternalClaimState, Tone> = {
 
 export const CLAIM_SOURCE_LABEL = { MARKETPLACE: 'Đơn sàn', CHAT: 'Chat / điện thoại', UNKNOWN: 'Chưa biết nguồn' } as const;
 
+/** Kết luận đối chiếu SĐT Zalo của khách với SĐT trên đơn sàn (W42), cạnh dòng "SĐT trên đơn". */
+export const PHONE_MATCH_LABEL = {
+  MATCH: 'Khớp SĐT Zalo của khách',
+  MISMATCH: 'Không khớp SĐT Zalo của khách',
+  NO_DATA: 'Đơn không đủ số để so',
+} as const;
+
+export const PHONE_MATCH_TONE = { MATCH: 'success', MISMATCH: 'danger', NO_DATA: 'neutral' } as const;
+
+/** Nhãn kết quả lượt gửi mã của người khác cùng mã; kết quả khác (chưa tìm thấy đơn) không cần nhãn. */
+export const ATTEMPT_RESULT_LABEL: Record<string, string> = {
+  REJECTED_PHONE_MISMATCH: 'bị từ chối: SĐT không khớp đơn',
+};
+
 export interface ClaimActions {
   approve: boolean;
   void: boolean;

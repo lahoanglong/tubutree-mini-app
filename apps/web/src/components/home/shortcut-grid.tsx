@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Ellipsis } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
   HOME_QUICK_SHORTCUT_IDS,
   resolveHomeEcosystemPillars,
@@ -16,6 +17,7 @@ import {
 import { isWebRouteReady } from '@/lib/route-map';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
+import { useEngagementDots } from '@/lib/use-engagement-dots';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { Icon } from '@/components/mini';
 import { EarnSheet } from './earn-sheet';
@@ -23,8 +25,9 @@ import { PILLAR_ICONS, SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visual
 import { ShortcutsSheet } from './shortcuts-sheet';
 
 /**
- * Hệ sinh thái 6 lối vào ở Trang chủ web (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác; không có suất Giờ vàng thì còn một thẻ Đổi rác trải hết hàng), hàng 2 bốn ô phụ
- * (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ), cùng cấu trúc ở điện thoại lẫn máy tính, dựng tĩnh ngay từ khung hình đầu nên CLS = 0.
+ * Hệ sinh thái 6 lối vào ở Trang chủ web (W177, W42): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Vườn Xanh; không có suất Giờ vàng thì còn một thẻ Vườn Xanh trải hết hàng), hàng 2 bốn ô phụ
+ * (Đổi rác, Mua chung, Mua xoay vòng, Kho quà 0đ), cùng cấu trúc ở điện thoại lẫn máy tính, dựng tĩnh ngay từ khung hình đầu nên CLS = 0.
+ * - Thẻ Vườn Xanh mang chấm "có việc hôm nay" như Mini App (chỉ vẽ sau khi tải nhiệm vụ của khách đã đăng nhập, HTML máy chủ không đổi).
  * - Phía dưới là hàng lối tắt nhanh (Mã giảm giá · Cộng đồng) cùng nút "Thêm" mở hộp thoại mọi lối tắt (có cả Giờ vàng).
  */
 export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: PublicConfig; /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ" và lối tắt Giờ vàng. `undefined` = chưa biết (giữ). */ flashLive?: boolean } = {}) {
@@ -35,6 +38,8 @@ export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: Pub
   const authed = useAuthPhase() === 'authenticated';
   const wastePaused = cfg.isLoaded && !cfg.waste.enabled;
   const recycleOpenRequests = useRecycleOpenRequests(authed, wastePaused);
+  // Cùng khoá truy vấn với thanh đáy nên không thêm lệnh gọi.
+  const gardenDot = useEngagementDots(true, 0).garden;
 
   const { heroes, chips } = splitHomeEcosystemPillars(
     resolveHomeEcosystemPillars({
@@ -48,7 +53,6 @@ export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: Pub
   const all = visibleHomeShortcuts({
     recycleOpenRequests,
     wasteEnabled: !cfg.isLoaded || cfg.waste.enabled,
-    claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
     flashLive,
   }).filter((s) => {
     const to = SHORTCUT_ROUTES[s.id];
@@ -71,12 +75,15 @@ export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: Pub
     <section aria-label={homeCopy.shortcuts.title} data-testid="shortcut-grid">
       <div data-testid="ecosystem-bento-hub" className="tubu-bento-hub">
         <div className="tubu-bento-grid">
-          {heroes.map((p) => (
+          {heroes.map((p) => {
+            const dot = p.id === 'garden' && gardenDot;
+            return (
             <Link
               key={p.id}
               href={p.webHref}
               data-pillar={p.id}
               data-tier="hero"
+              aria-label={dot ? `${fillCopy('home.pillar.garden.dot', { name: p.title })}. ${p.subtitle}` : undefined}
               className="tubu-bento-card tubu-bento-card--hero tubu-press"
               // Còn MỘT thẻ chính thì nó trải hết hàng; chiều cao do CSS của thẻ giữ nên hàng không đổi cao.
               style={heroes.length === 1 ? { gridColumn: '1 / -1' } : undefined}
@@ -84,6 +91,7 @@ export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: Pub
               <div className="tubu-bento-head">
                 <span aria-hidden="true" className={`tubu-bento-icon${p.tone === 'warm' ? ' tubu-bento-icon--warm' : ''}`}>
                   <Icon icon={PILLAR_ICONS[p.id]} size="sm" tone="current" />
+                  {dot && <span data-testid="garden-card-dot" className="tubu-remind-dot tubu-remind-dot--card" />}
                 </span>
                 <span data-pillar-tag="" className={`tubu-bento-tag${p.tone === 'warm' ? ' tubu-bento-tag--warm' : ''}`}>
                   {p.badge}
@@ -98,7 +106,8 @@ export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: Pub
                 </span>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
         <div className="tubu-chip-row">
           {chips.map((p) => (

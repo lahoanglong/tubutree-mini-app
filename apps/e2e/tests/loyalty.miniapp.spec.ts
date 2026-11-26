@@ -191,7 +191,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     await expect(page.getByTestId('daily-check-in')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^(Đã )?[Đđ]iểm danh/ })).toHaveCount(0);
 
-    await strip.getByText('Mở tab Vườn Xanh').click();
+    await strip.getByText('Mở Vườn Xanh').click();
     await expect(page).toHaveURL(/\/game$/);
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(0);
   });

@@ -92,7 +92,7 @@ describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
   it('Sao chép liên kết: chép đúng link và báo thành công', async () => {
     render(<WebPortalRedirectPage screen="/admin/community" />);
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép liên kết' }));
-    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/admin?tab=community'));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/admin?tab=community&stay=web'));
     await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép liên kết', type: 'success' }));
   });
 
@@ -108,7 +108,7 @@ describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
 
   it('query vô hại của link cũ đi theo sang link web (hiện, mở và chép cùng một link), khoá nhạy cảm bị bỏ', async () => {
     routerSearch.value = '?khoi=gian-hang-moi&token=abc&code=1';
-    const expected = 'https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi';
+    const expected = 'https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi&stay=web';
     render(<WebPortalRedirectPage screen="/storefront" />);
     expect(screen.getByText(expected)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Mở trên website' }));
@@ -120,7 +120,7 @@ describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
   it('/admin/community giữ tab=community của đích, tab từ link ngoài không ghi đè', () => {
     routerSearch.value = '?tab=orders&khoi=x';
     render(<WebPortalRedirectPage screen="/admin/community" />);
-    expect(screen.getByText('https://tubutree.com/admin?tab=community&khoi=x')).toBeInTheDocument();
+    expect(screen.getByText('https://tubutree.com/admin?tab=community&khoi=x&stay=web')).toBeInTheDocument();
   });
 });
 
@@ -131,7 +131,7 @@ describe('WebPortalRedirectPage — /dealer chỉ mở bằng trình duyệt', (
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Kênh đại lý');
     expect(screen.getByText(DEALER_NOTE)).toBeInTheDocument();
-    expect(screen.getByText('https://tubutree.com/dai-ly')).toBeInTheDocument();
+    expect(screen.getByText('https://tubutree.com/dai-ly?stay=web')).toBeInTheDocument();
     expect(screen.queryByText(/thao tác đầy đủ trên website/)).toBeNull();
   });
 
@@ -147,7 +147,7 @@ describe('WebPortalRedirectPage — /dealer chỉ mở bằng trình duyệt', (
   it('Sao chép liên kết chép đúng link /dai-ly, báo thành công, không bao giờ gọi openWebPortal', async () => {
     render(<WebPortalRedirectPage screen="/dealer" />);
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép liên kết' }));
-    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/dai-ly'));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/dai-ly?stay=web'));
     await waitFor(() => expect(openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép liên kết', type: 'success' }));
     expect(openWebPortal).not.toHaveBeenCalled();
     expect(screen.queryByText(/Chưa mở được website/)).toBeNull();
@@ -156,10 +156,10 @@ describe('WebPortalRedirectPage — /dealer chỉ mở bằng trình duyệt', (
   it('link cũ có query vô hại: link hiện và chép giữ query, câu hướng dẫn chỉ nêu tubutree.com/dai-ly', async () => {
     routerSearch.value = '?tab=bang-gia&token=abc';
     render(<WebPortalRedirectPage screen="/dealer" />);
-    expect(screen.getByText('https://tubutree.com/dai-ly?tab=bang-gia')).toBeInTheDocument();
+    expect(screen.getByText('https://tubutree.com/dai-ly?tab=bang-gia&stay=web')).toBeInTheDocument();
     expect(screen.getByText(DEALER_NOTE)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép liên kết' }));
-    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/dai-ly?tab=bang-gia'));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith('https://tubutree.com/dai-ly?tab=bang-gia&stay=web'));
     expect(openWebPortal).not.toHaveBeenCalled();
   });
 });

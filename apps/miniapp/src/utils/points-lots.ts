@@ -1,6 +1,6 @@
 import { formatDate, formatNumber } from './format';
 
-export { convertedPointsNote, pointsSummary } from '@tubutree/app-core/points-lots';
+export { convertedPointsNote, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from '@tubutree/app-core/points-lots';
 
 const DAY_MS = 864e5;
 const URGENT_WITHIN_DAYS = 30;

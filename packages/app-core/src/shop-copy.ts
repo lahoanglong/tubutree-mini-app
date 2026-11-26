@@ -288,7 +288,10 @@ export const SHOP_COPY: Record<string, string> = {
   // Dải điểm danh mỏng ở Săn mã: điểm danh làm ở Vườn Xanh, đây chỉ báo trạng thái hôm nay.
   'offers.checkInDone': 'Hôm nay bạn đã điểm danh',
   'offers.checkInTodo': 'Hôm nay bạn chưa điểm danh',
-  'offers.openGarden': 'Mở tab Vườn Xanh',
+  'offers.openGarden': 'Mở Vườn Xanh',
+  // Thẻ Vườn Xanh ở Ưu đãi cho khách chưa đăng nhập hoặc khi trạng thái điểm danh chưa về (W42: Vườn Xanh không còn là tab của thanh đáy).
+  'offers.gardenTitle': 'Vườn Xanh',
+  'offers.gardenSub': 'Tưới cây mỗi ngày, nhận quà thật',
   'offers.walletMore': 'Nhận thêm mã',
   'offers.walletHistory': 'Mã đã dùng, hết hạn',
   // Nút cuối kho mã đang mở cả ở Săn mã (`?codes=all`), gập về 3 mã đầu.

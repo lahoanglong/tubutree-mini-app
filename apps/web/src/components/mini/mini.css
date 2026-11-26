@@ -1607,9 +1607,10 @@
   box-shadow: 0 0 0 2px var(--color-bg-surface);
   pointer-events: none;
 }
-.tubu-remind-dot--center {
-  top: 2px;
-  right: 2px;
+/* Chấm "có việc hôm nay" ở góc biểu tượng thẻ Vườn Xanh của Trang chủ (thẻ chính hàng 1). */
+.tubu-remind-dot--card {
+  top: -3px;
+  right: -3px;
 }
 .tubu-daily-row {
   display: flex;
@@ -1674,4 +1675,139 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   min-height: 32px;
+}
+
+/* ── Màn Quét mã (tab giữa thanh đáy, W42): hướng dẫn 3 bước gọn (≤ 120px), cùng số đo với Mini (apps/miniapp/src/css/scan-guide.css). ── */
+.tubu-scan-guide {
+  list-style: none;
+  margin: var(--space-gutter) 0 0;
+  padding: var(--space-inset-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inline-sm);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+}
+.tubu-scan-guide__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  min-width: 0;
+}
+.tubu-scan-guide__num {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: var(--type-label-weight);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-scan-guide__text {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-body-sm-weight);
+}
+
+/* ── Tự mở Zalo Mini App trên web điện thoại (W42): lớp phủ chuyển cảnh ngắn và dải mời trong luồng ở đầu nội dung (không nổi đè danh sách).
+ * Lối "Ở lại bản Web" là chữ nhỏ màu phụ (không phải nút nổi), mờ dần rồi ẩn sau ~4,5 giây; giảm chuyển động thì ẩn ngay không hiệu ứng. ── */
+.tubu-miniapp-opening {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--space-gutter);
+  background: var(--color-bg-scrim-light);
+}
+.tubu-miniapp-opening__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  width: 100%;
+  max-width: 320px;
+  padding: var(--space-section) var(--space-gutter) var(--space-inline-sm);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-4);
+  text-align: center;
+}
+.tubu-miniapp-opening__title {
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: 600;
+}
+.tubu-miniapp-stay {
+  min-height: 44px;
+  padding: 0 var(--space-inline-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: opacity 600ms ease-out, visibility 0s linear 600ms;
+}
+.tubu-miniapp-stay[data-hidden='true'] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.tubu-miniapp-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  margin: var(--space-inline-md) var(--space-gutter) 0;
+  padding: 4px 4px 4px var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+}
+.tubu-miniapp-bar__copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.tubu-miniapp-bar__title {
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: 600;
+}
+.tubu-miniapp-bar__sub {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Trang con tràn viền (PDP, PageHeader): body không đệm cho nút lùi nổi (top 8px, left 12px, 44px), nên dải đứng cùng hàng, bên phải nút. */
+body.with-back-btn:has([data-page-bleed]) .tubu-miniapp-bar {
+  margin-top: 8px;
+  margin-left: calc(12px + 44px + var(--space-inline-sm));
+}
+@media (min-width: 768px) {
+  .tubu-miniapp-bar,
+  .tubu-miniapp-opening {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tubu-miniapp-stay {
+    transition: none;
+  }
 }

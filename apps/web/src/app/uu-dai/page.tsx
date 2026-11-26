@@ -1,10 +1,10 @@
 'use client';
 
 import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-tier-copy';
-import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useMemo, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Leaf, Recycle, ScanLine, Users, type LucideIcon } from 'lucide-react';
+import { Leaf, Recycle, Users, type LucideIcon } from 'lucide-react';
 import { mineRows } from '@tubutree/app-core/commerce/voucher-center';
 import {
   OFFERS_CODES_PARAM,
@@ -32,7 +32,6 @@ import { isWebRootPath } from '@/lib/web-nav';
 import { CampaignBanner } from '@/components/campaign/campaign-banner';
 import { readStoredHomeKind } from '@/components/home/use-home-customer-kind';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
-import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { OffersCheckInStrip } from '@/components/offers/offers-check-in-strip';
 import { OffersCollect } from '@/components/offers/offers-collect';
 import { OffersFlash } from '@/components/offers/offers-flash';
@@ -68,7 +67,6 @@ function OffersContent() {
   const { user } = useAuth();
   const cfg = usePublicConfig();
   const { use: applyCoupon, notice: couponNotice, usingCode } = useCouponUse();
-  const [claimNoticeOpen, setClaimNoticeOpen] = useState(false);
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const tab = parseOffersTab(params?.get('tab'), params?.get('section'));
@@ -102,9 +100,8 @@ function OffersContent() {
     </div>
   );
 
-  const utilities: { icon: LucideIcon; title: string; subtitle: string; to: string; show: boolean; miniAppOnly?: boolean }[] = [
+  const utilities: { icon: LucideIcon; title: string; subtitle: string; to: string; show: boolean }[] = [
     { icon: Users, title: 'Mua chung nhóm', subtitle: homeCopy.offers.groupBuyHint, to: '/mua-chung', show: true },
-    { icon: ScanLine, title: 'Tích điểm đơn sàn', subtitle: homeCopy.offers.claimHint, to: '/points/scan', show: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true, miniAppOnly: true },
   ];
   const shownUtilities = utilities.filter((s) => s.show);
 
@@ -115,15 +112,16 @@ function OffersContent() {
       <>
         {/* Khách chưa đăng nhập là khách mới; đã đăng nhập mà máy chưa nhớ loại (hoặc đang khôi phục phiên) thì chưa biết: chỉ thấy chiến dịch cho mọi người. */}
         <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : phase === 'guest' ? 'new' : 'unknown'} />
+        {/* Lối vào Vườn Xanh nổi ngay dưới banner cho mọi khách (W42: Vườn Xanh không còn là tab giữa thanh đáy). */}
+        <OffersCheckInStrip authed={authed} showGuest onOpenGarden={() => go('/vuon-xanh')} />
         <OffersFlash />
         <OffersCollect wallet={couponsQ} openAll={offersCodesOpen(params?.get(OFFERS_CODES_PARAM))} />
         {phase === 'loading' && pageSkeleton}
         {phase === 'unavailable' && <SessionUnavailable />}
         {phase === 'guest' && <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />}
         {authed && (
-          <div data-testid="offers-points-row" className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+          <div data-testid="offers-points-row">
             <OffersPointsStrip loyalty={loyaltyQ} />
-            <OffersCheckInStrip authed={authed} onOpenGarden={() => go('/vuon-xanh')} />
           </div>
         )}
         {(authed || phase === 'guest') && shownUtilities.length > 0 && (
@@ -136,15 +134,10 @@ function OffersContent() {
                   title={s.title}
                   subtitle={s.subtitle}
                   trailing="chevron"
-                  onPress={() => (s.miniAppOnly ? setClaimNoticeOpen((o) => !o) : go(s.to))}
+                  onPress={() => go(s.to)}
                   style={{ padding: 'var(--space-inset-card)', borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
                 />
               ))}
-              {claimNoticeOpen && shownUtilities.some((s) => s.miniAppOnly) && (
-                <div id="claim-notice">
-                  <MiniAppOnlyNotice compact miniappPath="/points/scan" />
-                </div>
-              )}
             </Card>
           </section>
         )}

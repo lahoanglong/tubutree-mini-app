@@ -3,7 +3,7 @@ import { test, expect } from './support/mock-api';
 import { mockDiscovery } from './support/discovery-mocks';
 import { MAX_BASELINE_DRIFT_PX, tabLabelBottoms } from './support/nav-baseline';
 
-/** Mini App 375x812: nhãn của cả 5 tab (kể cả "Vườn Xanh" ở tab giữa nổi) cùng đường chân chữ, lệch tối đa 0,5 px. Đặt SHOT_DIR để chụp ảnh. */
+/** Mini App 375x812: nhãn của cả 5 tab (kể cả "Quét mã" ở tab giữa nổi) cùng đường chân chữ, lệch tối đa 0,5 px. Đặt SHOT_DIR để chụp ảnh. */
 test.describe('Mini App — thanh đáy: đường chân chữ nhãn tab', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
@@ -21,7 +21,7 @@ test.describe('Mini App — thanh đáy: đường chân chữ nhãn tab', () =>
     }
     const bottoms = await tabLabelBottoms(nav);
     console.log(`NAV_BASELINE_MINI ${JSON.stringify(bottoms)}`);
-    expect(bottoms.map((b) => b.text)).toEqual(['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân']);
+    expect(bottoms.map((b) => b.text)).toEqual(['Trang chủ', 'Danh mục', 'Quét mã', 'Ưu đãi', 'Cá nhân']);
     const values = bottoms.map((b) => b.bottom);
     expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(MAX_BASELINE_DRIFT_PX);
   });

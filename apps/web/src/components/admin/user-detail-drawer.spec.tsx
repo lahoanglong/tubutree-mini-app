@@ -470,3 +470,19 @@ describe('UserDetailDrawer — Cắt phiên (L1-04)', () => {
     expect(byText(section(body, 'Phiên đăng nhập'), 'button', 'Cắt phiên')).not.toBeNull();
   });
 });
+
+describe('UserDetailDrawer — Điểm Xanh tách ba lô (W42)', () => {
+  it('tổng gồm điểm từ đơn sàn, kèm từng lô và câu chỉ dùng khi mua hàng', async () => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, pointsBalance: 1_000, pointsConvertedBalance: 200, pointsMarketplaceBalance: 1_250 } });
+    const lots = body.querySelector('[data-points-lots]');
+    expect(lots?.textContent).toBe('Thường 1.000 · Không hết hạn 200 · Từ đơn sàn 1.250');
+    expect(body.textContent).toContain('2.450');
+    expect(body.textContent).toContain('Điểm tích từ đơn sàn chỉ dùng để giảm giá khi mua hàng');
+  });
+
+  it('không có điểm sàn (API cũ): vẫn hiện ba lô, không có câu đơn sàn', async () => {
+    const body = await open();
+    expect(body.querySelector('[data-points-lots]')?.textContent).toBe('Thường 55 · Không hết hạn 0 · Từ đơn sàn 0');
+    expect(body.textContent).not.toContain('Điểm tích từ đơn sàn chỉ dùng');
+  });
+});

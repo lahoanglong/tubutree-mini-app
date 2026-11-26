@@ -15,8 +15,8 @@ beforeEach(() => {
 
 describe('isRootPath', () => {
   it('đúng 5 tab gốc của thanh đáy', () => {
-    for (const p of ['/', '/browse', '/game', '/offers', '/profile']) expect(isRootPath(p)).toBe(true);
-    for (const p of ['/wallet', '/cart', '/orders', '/offers/x', '/vouchers']) expect(isRootPath(p)).toBe(false);
+    for (const p of ['/', '/browse', '/points/scan', '/offers', '/profile']) expect(isRootPath(p)).toBe(true);
+    for (const p of ['/wallet', '/cart', '/orders', '/offers/x', '/vouchers', '/game']) expect(isRootPath(p)).toBe(false);
   });
 });
 

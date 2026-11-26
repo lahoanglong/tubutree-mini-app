@@ -93,20 +93,24 @@ describe('safePortalParams — query nào được đi theo sang website', () =>
 });
 
 describe('webPortalUrl có query', () => {
-  it('không có query thì giữ link gốc như W177', () => {
-    expect(webPortalUrl('/storefront')).toBe('https://tubutree.com/ctv/gian-hang');
-    expect(webPortalUrl('/admin/community')).toBe('https://tubutree.com/admin?tab=community');
+  it('không có query thì giữ link gốc như W177, thêm stay=web (W42)', () => {
+    expect(webPortalUrl('/storefront')).toBe('https://tubutree.com/ctv/gian-hang?stay=web');
+    expect(webPortalUrl('/admin/community')).toBe('https://tubutree.com/admin?tab=community&stay=web');
   });
 
   it('nối query vô hại và bỏ khoá nhạy cảm', () => {
-    expect(webPortalUrl('/storefront', '?khoi=gian-hang-moi&token=abc&code=1&session=2')).toBe('https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi');
+    expect(webPortalUrl('/storefront', '?khoi=gian-hang-moi&token=abc&code=1&session=2')).toBe('https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi&stay=web');
   });
 
   it('query cố định của đích đứng trước, khoá trùng bị bỏ, khoá khác đi theo', () => {
-    expect(webPortalUrl('/admin/community', '?tab=orders&khoi=x&jwt=eyJ')).toBe('https://tubutree.com/admin?tab=community&khoi=x');
+    expect(webPortalUrl('/admin/community', '?tab=orders&khoi=x&jwt=eyJ')).toBe('https://tubutree.com/admin?tab=community&khoi=x&stay=web');
   });
 
   it('mã hoá giá trị, không mang theo dấu # hay khoá lạ qua đường dẫn', () => {
-    expect(webPortalUrl('/dealer', '?q=a%20b%26c')).toBe('https://tubutree.com/dai-ly?q=a+b%26c');
+    expect(webPortalUrl('/dealer', '?q=a%20b%26c')).toBe('https://tubutree.com/dai-ly?q=a+b%26c&stay=web');
+  });
+
+  it('stay=web chỉ một lần và đứng cuối, kể cả khi link Mini App đã mang stay', () => {
+    expect(webPortalUrl('/storefront', '?stay=mini&khoi=x')).toBe('https://tubutree.com/ctv/gian-hang?khoi=x&stay=web');
   });
 });

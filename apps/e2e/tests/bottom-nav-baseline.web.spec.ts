@@ -31,7 +31,7 @@ test.describe('Web khổ 375: thanh đáy, đường chân chữ nhãn tab', () 
     }
     const bottoms = await tabLabelBottoms(nav);
     console.log(`NAV_BASELINE_WEB ${JSON.stringify(bottoms)}`);
-    expect(bottoms.map((b) => b.text)).toEqual(['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân']);
+    expect(bottoms.map((b) => b.text)).toEqual(['Trang chủ', 'Danh mục', 'Quét mã', 'Ưu đãi', 'Cá nhân']);
     const values = bottoms.map((b) => b.bottom);
     expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(MAX_BASELINE_DRIFT_PX);
   });

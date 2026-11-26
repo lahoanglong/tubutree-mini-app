@@ -354,12 +354,12 @@ test.describe('Web khách: Trang chủ /', () => {
   });
 
   for (const width of [375, 320]) {
-    test(`điện thoại ${width}px: không có suất Giờ vàng thì còn thẻ Đổi rác + 4 ô phụ + lối tắt nhanh, không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
+    test(`điện thoại ${width}px: không có suất Giờ vàng thì còn thẻ Vườn Xanh + 4 ô phụ + lối tắt nhanh, không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
       mockHome(api);
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
       const grid = page.getByTestId('shortcut-grid');
-      // mockHome không có suất Giờ vàng nào: thẻ "Mua lẻ · Giờ vàng" bị bỏ, thẻ Đổi rác trải hết hàng 1.
+      // mockHome không có suất Giờ vàng nào: thẻ "Mua lẻ · Giờ vàng" bị bỏ, thẻ Vườn Xanh trải hết hàng 1.
       await expect(grid.locator('[data-pillar]')).toHaveCount(5);
       await expect(grid.getByRole('link', { name: /Mã giảm giá/ })).toBeVisible();
       expect(await shortcutLabelProblems(page)).toEqual([]);
@@ -830,7 +830,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       const pointsY = await top('Điểm Xanh của bạn');
       release();
       await expect(strip).toBeVisible();
-      await expect(strip.getByText('Mở tab Vườn Xanh')).toBeVisible();
+      await expect(strip.getByText('Mở Vườn Xanh')).toBeVisible();
       expect(await top('Nhận mã'), 'Nhận mã bị đẩy khi dải về').toBeCloseTo(collectY, 0);
       expect(await top('Điểm Xanh của bạn'), 'Điểm Xanh bị đẩy khi dải về').toBeCloseTo(pointsY, 0);
     });

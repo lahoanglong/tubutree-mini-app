@@ -35,7 +35,7 @@ describe('BackButton', () => {
     expect(document.body.classList.contains('with-back-btn')).toBe(true);
   });
 
-  it.each(['/', '/san-pham', '/vuon-xanh', '/uu-dai', '/tai-khoan'])('ẩn ở trang gốc %s', (p) => {
+  it.each(['/', '/san-pham', '/quet-ma', '/uu-dai', '/tai-khoan'])('ẩn ở trang gốc %s', (p) => {
     nav.pathname = p;
     expect(mount(<BackButton />).container.querySelector('button')).toBeNull();
     expect(document.body.classList.contains('with-back-btn')).toBe(false);
@@ -43,6 +43,11 @@ describe('BackButton', () => {
 
   it('hiện ở trang đơn hàng vì không còn là tab gốc', () => {
     nav.pathname = '/tai-khoan/don-hang';
+    expect(mount(<BackButton />).container.querySelector('button')).not.toBeNull();
+  });
+
+  it('hiện ở /vuon-xanh vì Vườn Xanh là trang con từ W42 (tab giữa là Quét mã)', () => {
+    nav.pathname = '/vuon-xanh';
     expect(mount(<BackButton />).container.querySelector('button')).not.toBeNull();
   });
 

@@ -13,10 +13,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({ usePathname: () => mocks.pathname, useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => mocks.ready(p) }));
-const offers = vi.hoisted(() => ({ dot: null as string | null, enabled: [] as boolean[] }));
+const offers = vi.hoisted(() => ({ dot: null as string | null, enabled: [] as boolean[], elsewhere: [] as (boolean | undefined)[] }));
 vi.mock('@/lib/use-offers-dot', () => ({
-  useOffersDot: (enabled: boolean) => {
+  useOffersDot: (enabled: boolean, checkInElsewhere?: boolean) => {
     offers.enabled.push(enabled);
+    offers.elsewhere.push(checkInElsewhere);
     return enabled ? offers.dot : null;
   },
 }));
@@ -48,6 +49,7 @@ beforeEach(() => {
   mocks.query.mockReset();
   offers.dot = null;
   offers.enabled = [];
+  offers.elsewhere = [];
   reminders.garden = false;
   reminders.profile = false;
   reminders.checkInElsewhere = false;
@@ -68,9 +70,13 @@ describe('BottomNav (điện thoại)', () => {
   });
 
   it('hiện ở 5 route gốc, kể cả route gốc chưa làm xong', () => {
-    for (const p of ['/', '/san-pham', '/vuon-xanh', '/uu-dai', '/tai-khoan']) {
+    for (const p of ['/', '/san-pham', '/quet-ma', '/uu-dai', '/tai-khoan']) {
       expect(render(p), p).toContain('<nav');
     }
+  });
+
+  it('Vườn Xanh là trang con từ W42 (lối vào ở thẻ Trang chủ và Ưu đãi): không có thanh đáy', () => {
+    expect(render('/vuon-xanh')).toBe('');
   });
 
   it('không hiện ở trang con, trang quản trị', () => {
@@ -84,19 +90,20 @@ describe('BottomNav (điện thoại)', () => {
     expect(out).toContain('href="/"');
     expect(out).toContain('href="/tai-khoan"');
     expect(out).not.toContain('href="/san-pham"');
-    expect(out).not.toContain('href="/vuon-xanh"');
+    expect(out).not.toContain('href="/quet-ma"');
     expect(out).not.toContain('href="/uu-dai"');
   });
 
-  it('đủ 5 mục đúng nhãn như Mini App khi mọi route đã xong; Vườn Xanh là nút nổi giữa', () => {
+  it('đủ 5 mục đúng nhãn như Mini App khi mọi route đã xong; Quét mã là nút nổi giữa', () => {
     mocks.ready = () => true;
     const out = render('/');
-    const labels = ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân'];
+    const labels = ['Trang chủ', 'Danh mục', 'Quét mã', 'Ưu đãi', 'Cá nhân'];
     const positions = labels.map((l) => out.indexOf(`>${l}<`));
     expect(positions.every((i) => i > 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    expect(out).toContain('href="/vuon-xanh"');
-    expect(out).toMatch(/data-center="true"[^>]*href="\/vuon-xanh"|href="\/vuon-xanh"[^>]*data-center="true"/);
+    expect(out).toContain('href="/quet-ma"');
+    expect(out).not.toContain('href="/vuon-xanh"');
+    expect(out).toMatch(/data-center="true"[^>]*href="\/quet-ma"|href="\/quet-ma"[^>]*data-center="true"/);
   });
 
   it('đánh dấu trang hiện tại bằng aria-current', () => {
@@ -153,7 +160,7 @@ describe('BottomNav (điện thoại)', () => {
   it('nhãn tab dùng cỡ chữ nhãn của token như Mini App (12px, text-label), không phải text-xs hay text-caption 13px; khoảng cách icon-nhãn 3px', () => {
     mocks.ready = () => true;
     const out = render('/');
-    const labels = ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân'];
+    const labels = ['Trang chủ', 'Danh mục', 'Quét mã', 'Ưu đãi', 'Cá nhân'];
     for (const l of labels) expect(out, l).toContain(`<span class="text-label">${l}</span>`);
     expect(out).not.toContain('text-xs');
     expect(out).not.toContain('text-caption');
@@ -194,18 +201,18 @@ describe('BottomNav (điện thoại)', () => {
     expect(css).toMatch(/body\.has-sticky-bar\s+\[data-bottom-nav\]\s*\{[^}]*display:\s*none/);
   });
 
-  it('chấm nhắc nhiệm vụ hằng ngày: 8px, đứng yên, nghĩa ở aria-label; số đơn thắng chấm ở tab Cá nhân', () => {
+  it('chấm nhắc 8px, đứng yên, nghĩa ở aria-label; số đơn thắng chấm ở tab Cá nhân; chấm Vườn Xanh dời sang thẻ Trang chủ (W42) nên tab giữa không có chấm', () => {
     mocks.ready = () => true;
     reminders.garden = true;
     reminders.profile = true;
     let out = render('/');
-    expect(out).toMatch(/data-testid="garden-dot"[^>]*class="tubu-remind-dot tubu-remind-dot--center"/);
+    expect(out).not.toContain('garden-dot');
+    expect(out).toMatch(/<a[^>]*aria-label="Quét mã"[^>]*data-center="true"|<a[^>]*data-center="true"[^>]*aria-label="Quét mã"/);
     expect(out).toMatch(/data-testid="profile-dot"[^>]*class="tubu-remind-dot"/);
     expect(out).not.toMatch(/animate-/);
     const rule = /\.tubu-remind-dot\s*\{([^}]*)\}/.exec(readFileSync(fileURLToPath(new URL('./mini/mini.css', import.meta.url)), 'utf8'))![1]!;
     expect(rule).toMatch(/width:\s*8px;[\s\S]*height:\s*8px;/);
     expect(rule).not.toMatch(/animation|transition/);
-    expect(out).toContain('aria-label="Vườn Xanh, có việc hôm nay"');
     expect(out).toContain('aria-label="Cá nhân, có thông báo chưa đọc"');
     expect(reminders.args.at(-1)).toEqual([true, 0]);
     mocks.count = 2;
@@ -220,5 +227,16 @@ describe('BottomNav (điện thoại)', () => {
     const out = render('/');
     expect(out).not.toContain('garden-dot');
     expect(out).not.toContain('profile-dot');
+  });
+
+  it('lý do "chưa điểm danh" của chấm Ưu đãi chỉ nhường cho thẻ Vườn Xanh ở Trang chủ; tab gốc khác giữ lý do đó (W42)', () => {
+    mocks.ready = () => true;
+    reminders.checkInElsewhere = true;
+    render('/');
+    expect(offers.elsewhere.at(-1)).toBe(true);
+    for (const p of ['/san-pham', '/quet-ma', '/uu-dai', '/tai-khoan']) {
+      render(p);
+      expect(offers.elsewhere.at(-1), p).toBe(false);
+    }
   });
 });

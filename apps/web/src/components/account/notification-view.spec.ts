@@ -180,8 +180,8 @@ describe('resolveWebRoute: đổi đường dẫn Mini App sang route web bằng
     expect(resolveWebRoute('/wallet#lich-su')).toBe('/tai-khoan/vi-tubu');
   });
 
-  it('không có trong bản đồ hoặc chỉ có ở Mini App thì null', () => {
-    expect(resolveWebRoute('/points/scan')).toBeNull();
+  it('màn Quét mã có trang web /quet-ma (W42); không có trong bản đồ thì null', () => {
+    expect(resolveWebRoute('/points/scan')).toBe('/quet-ma');
     expect(resolveWebRoute('/khong-co-trang-nay')).toBeNull();
   });
 });

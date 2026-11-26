@@ -14,11 +14,14 @@ import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../serv
 import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { getPublicConfig } from '../services/shop-api';
+import { getLoyalty } from '../services/account-api';
+import { checkoutPoints } from '../utils/checkout-rules';
 import { followOA, getOaPromptState, hasOA, openOAChat, requestNotifyPermission, scanCode, setOaPromptState } from '../services/zmp-bridge';
 import { trackEvent } from '../services/analytics';
 import { useCardGiftNote } from '../services/card-gift-note';
 import { getSessionAttribution, type LaunchAttribution } from '../utils/entry-source';
 import { extractClaimCode, normalizeClaimCode } from '@tubutree/app-core/claim-code';
+import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -37,6 +40,7 @@ import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { INPUT_LIMITS } from '../utils/input-limits';
 import { Input } from '../components/ui/input';
+import '../css/scan-guide.css';
 
 const PAGE_SIZE = 10;
 const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];
@@ -86,6 +90,42 @@ function claimDetail(item: MyExternalClaimItem): string | null {
 /** Mốc dự kiến đã qua mà API vẫn trả CLAIMED: khách gửi lại mã đã được cộng hoặc sắp cộng, dùng câu của API thay vì hứa "sẽ cộng". */
 function isPastMilestone(r: SubmitExternalClaimResponse): boolean {
   return r.status === 'CLAIMED' && r.expectedCreditAt != null && Date.parse(r.expectedCreditAt) <= Date.now();
+}
+
+/**
+ * Hướng dẫn 3 bước ở đầu màn khi tính năng đã mở (kể cả khi chưa đăng nhập), gọn dưới 120px; chưa mở thì không hứa tỉ lệ tích, chỉ còn màn
+ * "sắp mở". Tỉ lệ tích đơn sàn đọc từ cấu hình công khai, cùng chữ với web `/quet-ma` (`marketplace-scan-guide.ts`).
+ */
+export function ScanGuide({ marketplaceEarnPct }: { marketplaceEarnPct: number | null | undefined }) {
+  return (
+    <ol className="tubu-scan-guide" aria-label={MARKETPLACE_SCAN_COPY.guideTitle} data-testid="scan-guide">
+      {marketplaceScanSteps(marketplaceEarnPct).map((step, i) => (
+        <li key={step} className="tubu-scan-guide__step">
+          <span aria-hidden="true" className="tubu-scan-guide__num">
+            {i + 1}
+          </span>
+          <span className="tubu-scan-guide__text">{step}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * Nút chính sau khi gửi mã thành công: về Trang chủ mua sắm. Điểm của đơn vừa quét còn chờ nên nhãn chỉ nhắc số điểm khách dùng được ngay
+ * (`checkoutPoints().usable`: trừ điểm còn khoá chờ đổi trả, cộng lô không hết hạn và lô điểm sàn, cùng số với màn thanh toán).
+ */
+function ShopNowButton() {
+  const goSmart = useSmartNavigate();
+  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
+  const available = loyaltyQ.data ? checkoutPoints(loyaltyQ.data, 0).usable : null;
+  return (
+    <div data-testid="scan-shop-now" style={{ marginTop: 'var(--space-inline-md)' }}>
+      <Button fullWidth size="lg" onPress={() => goSmart('/')}>
+        {scanSuccessCtaLabel(available)}
+      </Button>
+    </div>
+  );
 }
 
 function ResultCard({ result, children }: { result: SubmitExternalClaimResponse; children?: React.ReactNode }) {
@@ -227,7 +267,7 @@ function OaInvite({ onDone }: { onDone: (note: string | null) => void }) {
         <Text variant="label" as="div">{t.oaInviteTitle}</Text>
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>{t.oaInviteBody}</Text>
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <Button loading={busy} onPress={follow}>{t.oaFollow}</Button>
+          <Button variant="secondary" loading={busy} onPress={follow}>{t.oaFollow}</Button>
           <Button variant="ghost" disabled={busy} onPress={() => finish('dismissed')}>{t.oaLater}</Button>
         </div>
       </div>
@@ -399,7 +439,8 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
     setOaNote(note);
   };
   const showOaInvite = oaState === 'ask' && result != null && (result.status === 'CLAIMED' || result.status === 'REVIEW');
-  const showSupportOnReject = rejectedCode?.reject === 'ALREADY_CLAIMED';
+  const showSupportOnReject = rejectedCode?.reject === 'ALREADY_CLAIMED' || rejectedCode?.reject === 'PHONE_MISMATCH';
+  const shopNow = result != null && (result.status === 'CLAIMED' || result.status === 'REVIEW');
   // Mã từ QR hoặc mã gõ tay đã đúng dạng (cùng luật máy chủ) thì việc kế tiếp là Tích điểm: nút gửi thành nút chính.
   const ready = scanned !== null || normalizeClaimCode(code) !== null;
 
@@ -409,14 +450,10 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
         {fromCard && (
           <div data-testid="card-welcome" style={{ marginBottom: 14 }}>
             <Text variant="body-lg" as="h2" style={{ fontWeight: 600 }}>{t.greeting(channel)}</Text>
-            <div style={{ margin: '8px 0 0', display: 'grid', gap: 4 }}>
-              {t.steps.map((step, i) => (
-                <Text key={step} variant="body-sm" tone="secondary" as="div">{`${i + 1}. ${step}`}</Text>
-              ))}
-            </div>
           </div>
         )}
-        <Button fullWidth size="lg" icon={ScanLine} onPress={scan}>{t.scanMain}</Button>
+        {/* Một nút chính trên màn: khi mã đã sẵn (quét xong hay gõ đúng dạng) thì "Tích điểm" là nút chính, sau khi gửi xong thì "mua ngay" là nút chính. */}
+        <Button fullWidth size="lg" variant={ready || shopNow ? 'secondary' : 'primary'} icon={ScanLine} onPress={scan}>{t.scanMain}</Button>
         {!hasPhone && (
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
             {t.phoneWhy}
@@ -481,6 +518,7 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
           {result.status === 'CLAIMED_BY_OTHER' && <SupportButton maskedCode={result.maskedCode} />}
         </ResultCard>
       )}
+      {shopNow && <ShopNowButton />}
       {showOaInvite && <OaInvite onDone={oaDone} />}
       {oaNote && (
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 8 }}>
@@ -519,6 +557,7 @@ export default function ExternalPointsPage() {
   const initialCode = extractClaimCode(codeParam).code ?? '';
   const codeParamRejected = !!codeParam?.trim() && !initialCode;
 
+  const guide = enabled ? <ScanGuide marketplaceEarnPct={cfgQ.data?.loyalty?.marketplaceEarnPct} /> : null;
   let body;
   if (cfgQ.isError) {
     body = <ErrorState message={getLoadErrorMessage(cfgQ.error)} onRetry={() => cfgQ.refetch()} />;
@@ -542,9 +581,11 @@ export default function ExternalPointsPage() {
     );
   }
 
+  // Trang gốc của tab giữa "Quét mã" (W42): không có nút lùi, thanh đáy luôn hiện nên đệm đáy chừa chỗ (lớp .tubu-scan-page).
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title={t.title} />
+    <Page className="tubu-scan-page" style={{ background: 'var(--color-bg-canvas)' }}>
+      <PageHeader title={t.title} back={false} />
+      {guide}
       {body}
     </Page>
   );

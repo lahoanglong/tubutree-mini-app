@@ -136,8 +136,9 @@ describe('Trang chủ gộp request (C-037)', () => {
     // Danh sách nhãn đến từ khối gộp /home (thanh chip dưới Danh mục và tiêu đề từng nhãn); món của nhãn chưa tải vì khối còn ở xa màn.
     expect(screen.getAllByText('Cobote').length).toBeGreaterThan(0);
     expect(screen.queryByText(BRAND_ITEM)).toBeNull();
-    // Số yêu cầu đổi rác đang mở lấy từ /home/me (không gọi /waste/me).
-    expect(paths().sort()).toEqual(['/home', '/home/me', '/me/summary']);
+    // Số yêu cầu đổi rác đang mở lấy từ /home/me (không gọi /waste/me). /game/daily là chấm của thẻ Vườn Xanh (W42), cùng khoá truy vấn với
+    // thanh đáy vốn đã gọi ở mọi tab gốc, nên trong app thật không thêm request.
+    expect(paths().sort()).toEqual(['/game/daily', '/home', '/home/me', '/me/summary']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
   });
 
@@ -174,7 +175,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/home', '/home/me', '/me/new-customer-offer', '/me/summary']);
+    expect(paths().sort()).toEqual(['/config/public', '/game/daily', '/home', '/home/me', '/me/new-customer-offer', '/me/summary']);
   });
 
   it('banner chiến dịch đến từ khối gộp /home: hiện slide, không thêm request /campaigns', async () => {
@@ -249,7 +250,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect((await screen.findAllByRole('button', { name: 'LẻDanhMục' })).length).toBeGreaterThan(0);
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/categories', '/home', '/home/me', '/me/summary']);
+    expect(paths().sort()).toEqual(['/categories', '/game/daily', '/home', '/home/me', '/me/summary']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {

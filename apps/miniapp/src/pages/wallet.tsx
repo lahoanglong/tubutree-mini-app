@@ -13,7 +13,7 @@ import { walletTxLabel, formatWalletTxTime, walletNegativeNote } from '../utils/
 import { formatVnd, formatPoints } from '../utils/format';
 import { uniqueById } from '../utils/unique-by-id';
 import { FIRST_PAGE, nextPageParam } from '../utils/keyset-paging';
-import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
+import { convertedPointsNote, marketplacePointsNote, pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -61,6 +61,7 @@ export default function WalletPage() {
   const showCommission = isCommissionRole || (w?.commissionPending ?? 0) > 0 || (w?.commissionApproved ?? 0) > 0;
   const points = loyalty ? pointsSummary(loyalty) : null;
   const convertedNote = convertedPointsNote(points?.converted);
+  const marketplaceNote = marketplacePointsNote(points?.marketplace);
   // Ví 0đ và chưa có biến động: nói tiền vào Ví từ đâu thay cho câu chung chung và khối Mẹo (trùng ý).
   const walletEmpty = !!w && w.walletBalance === 0 && txQ.isSuccess && (txQ.data?.pages[0]?.data.length ?? 0) === 0;
 
@@ -142,9 +143,10 @@ export default function WalletPage() {
                     {loyalty.tier.name}
                   </Badge>
                 )}
-                {convertedNote && (
+                {(convertedNote || marketplaceNote) && (
                   <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
-                    {convertedNote}
+                    {convertedNote && <div>{convertedNote}</div>}
+                    {marketplaceNote && <div data-testid="marketplace-points-note">{marketplaceNote}</div>}
                   </Text>
                 )}
               </div>

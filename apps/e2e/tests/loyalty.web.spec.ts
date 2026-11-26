@@ -136,7 +136,7 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(page.getByRole('button', { name: /^(Đã )?[Đđ]iểm danh/ })).toHaveCount(0);
     // Chỉ kiểm điều hướng: Vườn Xanh có spec riêng (game.web.spec.ts), ở đây không mock dữ liệu vườn.
     api.allowUnmocked('GET /game/:a', 'GET /game/:a/:b');
-    await strip.getByText('Mở tab Vườn Xanh').click();
+    await strip.getByText('Mở Vườn Xanh').click();
     await expect(page).toHaveURL(/\/vuon-xanh$/);
     expect(api.unmocked.filter((u) => u.startsWith('POST /me/daily-check-in'))).toHaveLength(0);
   });

@@ -262,7 +262,7 @@ export default function CheckoutPage() {
   // Điểm DÙNG ĐƯỢC, không phải số dư: điểm thường của đơn vừa giao còn trong hạn đổi/trả hoặc đang chờ xử
   // lý đổi/trả chưa tiêu được; điểm quy đổi (không hết hạn) luôn dùng được. Backend chia hai lô + kẹp theo
   // đúng số này khi báo giá và đặt đơn.
-  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0, user?.pointsConvertedBalance ?? 0);
+  const points = checkoutPoints(loyaltyQ.data, user?.pointsBalance ?? 0, user?.pointsConvertedBalance ?? 0, user?.pointsMarketplaceBalance ?? 0);
 
   const pointsToUse = usePoints ? points.usable : 0;
   // Giỏ chưa tải xong hoặc không có món nào thì không báo giá: máy chủ trả 400 cho giỏ rỗng.

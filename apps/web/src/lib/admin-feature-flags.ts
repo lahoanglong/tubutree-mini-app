@@ -92,6 +92,15 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Khách chưa đăng nhập bấm mua lại bị đưa sang trang đăng nhập như trước. Món khách đã chọn vẫn nằm trong trình duyệt của họ và hiện lại khi bạn bật lại.',
   },
   {
+    key: 'app.mobile_miniapp_redirect_enabled',
+    label: 'Tự mở Mini App trên web điện thoại',
+    description:
+      'Khách mở tubutree.com bằng trình duyệt điện thoại được đưa sang đúng màn tương ứng trong Mini App trên Zalo. Không áp cho máy tính, máy dò của Google, trang đăng nhập, giỏ hàng, thanh toán, theo dõi đơn và link mời. Khách bấm "Ở lại bản Web" thì không bị chuyển trong 24 giờ.',
+    fallback: false,
+    onWarning: 'Khách mở tubutree.com trên điện thoại sẽ được chuyển sang Zalo 1 lần mỗi 24 giờ. Web nhận thay đổi trong tối đa 1 giờ.',
+    offWarning: 'Web điện thoại không tự chuyển sang Zalo nữa, kể cả dải mời mở Zalo ở đầu trang. Web nhận thay đổi trong tối đa 1 giờ.',
+  },
+  {
     key: 'perf.rum_enabled',
     label: 'Đo tốc độ trên máy khách',
     description: 'Mini App và web gửi số đo tốc độ của từng lượt xem trang (thời gian hiện nội dung chính, độ nhảy bố cục, độ trễ khi bấm; Mini App thêm thời gian tới màn đầu bấm được), mỗi lượt một gói, theo tỉ lệ ở "perf.rum_sample_pct". Chỉ ghi mẫu trang và cỡ màn hình, không ghi đường dẫn thật hay mã khách. Kết quả ở thẻ Tốc độ trên máy khách (tab Vận hành).',

@@ -67,7 +67,21 @@ export const CLIENT_EVENT_NAMES = [
   'repurchase_due_view',
   'repurchase_due_add',
   'repurchase_due_dismiss',
+  'miniapp_auto_open',
+  'miniapp_smartbar_click',
 ] as const;
+
+/**
+ * Web điện thoại tự mở Zalo Mini App (W42, cờ `app.mobile_miniapp_redirect_enabled`), kết quả mỗi lần xét (`miniapp_auto_open.result`):
+ * `navigated` đã chuyển sang Zalo, `stayed` khách bấm "Ở lại bản Web", `suppressed` trang vẫn hiện sau khi chuyển (hệ điều hành chặn, chuyển sang
+ * dải mời), `blocked_cookie` không ghi được cookie chống lặp nên không tự mở.
+ */
+export const MINIAPP_AUTO_OPEN_RESULTS = ['navigated', 'stayed', 'suppressed', 'blocked_cookie'] as const;
+export type MiniappAutoOpenResult = (typeof MINIAPP_AUTO_OPEN_RESULTS)[number];
+
+/** Dải mời mở Mini App ở đầu trang web điện thoại (`miniapp_smartbar_click.action`): bấm "Mở" hay đóng (ẩn 24 giờ). */
+export const MINIAPP_SMARTBAR_ACTIONS = ['open', 'dismiss'] as const;
+export type MiniappSmartbarAction = (typeof MINIAPP_SMARTBAR_ACTIONS)[number];
 
 /**
  * Nơi hiện gợi ý đổi chai sang gói Refill (`refill_swap_*.surface`); `pdp` là thẻ gói Refill ở trang chi tiết chai (hiện và "+ Thêm"), `landing` là
@@ -228,6 +242,9 @@ export interface PurchaseEventProps {
   review_started: { orderAgeDays: number };
   review_submitted: { orderAgeDays: number };
   return_requested: { orderAgeDays: number };
+  /** Lối vào Mini App từ web điện thoại (W42): không thuộc phễu mua nhưng dùng chung `trackOncePerSession`. `path` là mẫu route. */
+  miniapp_auto_open: { result: MiniappAutoOpenResult; path: string };
+  miniapp_smartbar_click: { action: MiniappSmartbarAction; path: string };
 }
 export type PurchaseEventName = keyof PurchaseEventProps;
 

@@ -84,6 +84,8 @@ function drift(): { found: Map<string, string>; shared: number } {
 
 /** Mỗi mục: `<bộ chọn> | <thuộc tính>` → vì sao web được khác Mini. Thêm mục mới cần lý do thật, không phải "cho qua". */
 const ALLOWED: Record<string, string> = {
+  '.tubu-scan-guide | margin-left': 'Trang /quet-ma của web đã có lề ngang từ khung trang; Mini đặt lề gutter trên chính thẻ (W42).',
+  '.tubu-scan-guide | margin-right': 'Trang /quet-ma của web đã có lề ngang từ khung trang; Mini đặt lề gutter trên chính thẻ (W42).',
   // Dải Story ở Trang chủ: cùng kích thước ra, khác cách viết (web dựa biến --reel-ring/--reel-label-h và ô lồng nhau, Mini ghi số cứng).
   '.tubu-reel-head | margin-bottom': 'Web 4px + hàng 116px, Mini 8px + hàng 112px: cả hai ra khối 144px (chú thích W42A ở mini.css).',
   '.tubu-reel-item | flex': 'Web `0 0 auto` + width 72px (--reel-ring) tương đương Mini `0 0 72px`.',

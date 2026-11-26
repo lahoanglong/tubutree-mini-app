@@ -205,7 +205,7 @@ export function customerKind(purchasedCount: number | undefined): HomeCustomerKi
 
 // ---- Lối tắt ----
 
-export type HomeShortcutId = 'flash' | 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'gifts' | 'claim' | 'earn' | 'community';
+export type HomeShortcutId = 'flash' | 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'gifts' | 'earn' | 'community';
 export type ShortcutTint = 'forest' | 'sage' | 'clay' | 'amber' | 'sky' | 'rose';
 
 export interface HomeShortcutSpec {
@@ -215,12 +215,11 @@ export interface HomeShortcutSpec {
   ariaLabel: string;
   tint: ShortcutTint;
   /** Mục chỉ hiện khi cờ này bật. */
-  flag?: 'waste' | 'claim';
+  flag?: 'waste';
 }
 
 export interface HomeFlags {
   wasteEnabled: boolean;
-  claimEnabled: boolean;
   /** Khách còn yêu cầu đổi rác đang mở: mục Đổi rác vẫn hiện (ghi "Yêu cầu") dù chương trình tạm dừng. */
   recycleOpenRequests?: boolean;
   /** `false` = đã biết không có suất Giờ vàng nào (đang chạy hay sắp tới) có món: bỏ lối vào Giờ vàng thay vì dẫn tới trang trống. Chưa biết thì giữ. */
@@ -240,13 +239,13 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
   { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
   { id: 'gifts', label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu', tint: 'rose' },
-  { id: 'claim', label: 'Đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
   { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
 ];
 
 /**
- * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
+ * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là thẻ chính của khối lối vào ngay trên) và Tích điểm đơn sàn (tab giữa
+ * "Quét mã" của thanh đáy đã dẫn tới đó, một đích chỉ có một lối). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
  * đổi nhãn thành "Yêu cầu" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
  */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
@@ -255,7 +254,6 @@ export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
       if (flags.wasteEnabled) return [s];
       return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_SHORTCUT_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
     }
-    if (s.flag === 'claim') return flags.claimEnabled ? [s] : [];
     if (s.id === 'flash' && flags.flashLive === false) return [];
     return [s];
   });
@@ -287,7 +285,8 @@ export interface HomeEcosystemPillarSpec {
 }
 
 /**
- * Thứ tự = thứ tự vẽ. Hàng 1 là hai động lực mua lại (Mua lẻ / Giờ vàng, Đổi rác miễn ship đơn sau), hàng 2 là bốn lối vào phụ.
+ * Thứ tự = thứ tự vẽ. Hàng 1 là hai thẻ chính (Mua lẻ / Giờ vàng, Vườn Xanh), hàng 2 là bốn lối vào phụ (Đổi rác đứng đầu).
+ * Vườn Xanh lên hàng 1 từ khi tab giữa thanh đáy thành "Quét mã" (W42): nó cần một lối vào nổi ở Trang chủ, mang luôn chấm "có việc hôm nay".
  * Cả sáu giữ nguyên lối vào và `data-pillar` của W171 để đo 14 ngày; chỉ thứ bậc hiển thị đổi.
  */
 export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
@@ -302,10 +301,20 @@ export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
     miniRoute: '/flash-sale',
   },
   {
-    id: 'recycle',
+    id: 'garden',
     tier: 'hero',
-    title: 'Đổi rác — Miễn ship đơn sau',
-    subtitle: 'Nhận Điểm Xanh',
+    title: 'Vườn Xanh',
+    subtitle: 'Tưới cây mỗi ngày nhận quà thật',
+    badge: 'Quà thật',
+    tone: 'botanical',
+    webHref: '/vuon-xanh',
+    miniRoute: '/game',
+  },
+  {
+    id: 'recycle',
+    tier: 'chip',
+    title: 'Đổi rác',
+    subtitle: 'Miễn ship đơn sau, nhận Điểm Xanh',
     badge: 'Điểm Xanh',
     tone: 'botanical',
     webHref: '/doi-rac',
@@ -332,16 +341,6 @@ export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
     miniRoute: '/subscriptions',
   },
   {
-    id: 'garden',
-    tier: 'chip',
-    title: 'Vườn Xanh',
-    subtitle: 'Tưới cây mỗi ngày nhận quà thật',
-    badge: 'Quà thật',
-    tone: 'botanical',
-    webHref: '/vuon-xanh',
-    miniRoute: '/game',
-  },
-  {
     id: 'rewards',
     tier: 'chip',
     title: 'Kho quà 0đ',
@@ -357,7 +356,7 @@ export interface HomePillarOptions {
   wastePausedWithOpenRequests?: boolean;
   /** Tỉ lệ giảm của đơn định kỳ do máy chủ cấu hình (0,12 = 12%). Chưa có cấu hình thật thì không hứa con số nào. */
   subscribeDiscountPct?: number | null;
-  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Đổi rác giãn hết hàng (cùng chiều cao, không làm trang nhảy). */
+  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Vườn Xanh giãn hết hàng (cùng chiều cao, không làm trang nhảy). */
   flashLive?: boolean;
 }
 
@@ -407,7 +406,7 @@ export const HOME_QUICK_SHORTCUT_IDS: readonly HomeShortcutId[] = ['coupons', 'c
 
 // ---- Thanh đáy ----
 
-export type NavTabId = 'home' | 'browse' | 'garden' | 'offers' | 'profile';
+export type NavTabId = 'home' | 'browse' | 'scan' | 'offers' | 'profile';
 
 export interface NavTabSpec {
   id: NavTabId;
@@ -420,7 +419,7 @@ export interface NavTabSpec {
 export const NAV_TAB_SPECS: readonly NavTabSpec[] = [
   { id: 'home', label: 'Trang chủ' },
   { id: 'browse', label: 'Danh mục' },
-  { id: 'garden', label: 'Vườn Xanh', center: true },
+  { id: 'scan', label: 'Quét mã', center: true },
   { id: 'offers', label: 'Ưu đãi', badge: 'offers-dot' },
   { id: 'profile', label: 'Cá nhân', badge: 'active-orders' },
 ];

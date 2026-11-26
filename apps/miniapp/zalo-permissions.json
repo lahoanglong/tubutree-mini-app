@@ -32,7 +32,7 @@
     "followOA": "Khách bấm Theo dõi OA sau đơn đầu tiên.",
     "requestSendNotification": "Khách bấm bật nhận thông báo đơn hàng qua OA.",
     "saveImageToGallery": "Khách bấm Lưu ảnh mã QR chuyển khoản của đơn.",
-    "scanQRCode": "Khách bấm Quét mã ở màn tích điểm từ mã trên hàng mua ngoài; không thuộc bảng scope của authorize (SDK 2.51.4).",
+    "scanQRCode": "Khách bấm tab Quét mã hoặc nút Quét mã ở màn tích điểm từ mã vận đơn của đơn mua trên sàn; không thuộc bảng scope của authorize (SDK 2.51.4).",
     "vibrate": "Rung nhẹ khi bấm nút."
   },
   "consoleLinks": {

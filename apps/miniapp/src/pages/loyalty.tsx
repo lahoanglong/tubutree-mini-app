@@ -39,7 +39,7 @@ import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
-import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
+import { convertedPointsNote, expiringPointsNote, marketplacePointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 /**
@@ -114,6 +114,7 @@ export default function LoyaltyPage() {
   // Con số khách thấy là tổng hai lô.
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
+  const marketplaceNote = marketplacePointsNote(lots?.marketplace);
   const expiringNote = expiringPointsNote(data?.expiringPoints);
   const offersRow = loyaltyOffersRow('/offers', couponsQ.data?.length, expiringRedeemCta(expiringNote, { redeemable: data?.redeemablePoints, total: lots?.total ?? 0 }));
   const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
@@ -181,9 +182,10 @@ export default function LoyaltyPage() {
               <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
                 Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatNumber(lots?.total ?? 0)} Điểm Xanh
               </Text>
-              {convertedNote && (
+              {(convertedNote || marketplaceNote) && (
                 <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                  {convertedNote}
+                  {convertedNote && <div>{convertedNote}</div>}
+                  {marketplaceNote && <div data-testid="marketplace-points-note">{marketplaceNote}</div>}
                 </Text>
               )}
               {expiringNote && (

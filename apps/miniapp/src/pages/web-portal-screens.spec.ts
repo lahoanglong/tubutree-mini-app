@@ -42,7 +42,7 @@ describe('8 màn rời gói Mini App sang cổng web (W177)', () => {
     expect(title.trim()).not.toBe('');
     expect(audience.trim()).not.toBe('');
     expect(webPath.startsWith('/')).toBe(true);
-    expect(webPortalUrl(key)).toBe(`https://tubutree.com${webPath}`);
+    expect(webPortalUrl(key)).toBe(`https://tubutree.com${webPath}${webPath.includes('?') ? '&' : '?'}stay=web`);
   });
 
   it('chỉ /dealer có browserOnly: true, và mọi màn browserOnly là đúng các đường dẫn zmp-bridge chặn (PO A3)', () => {

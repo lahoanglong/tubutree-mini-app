@@ -99,8 +99,9 @@ export function pointsEarnLabel(points: number): string {
  * Điểm Xanh màn thanh toán được đề nghị dùng. Khách thấy MỘT con số (lô thường + lô quy đổi), nhưng:
  *  - lô thường: chỉ phần DÙNG ĐƯỢC (`redeemablePoints` = số dư − điểm đơn còn trong hạn đổi/trả hoặc đang chờ
  *    xử lý đổi/trả); backend kẹp báo giá + đặt đơn đúng luật này và áp trần % giá trị hàng;
- *  - lô quy đổi từ xu cũ: không hết hạn, không bị khoá, dùng tới 100% giá trị hàng → cộng nguyên vào `usable`.
- * `usable` được gửi làm `pointsToUse`; backend tự chia hai lô và trả `pointsUsed` thật trong báo giá.
+ *  - lô quy đổi từ xu cũ: không hết hạn, không bị khoá, dùng tới 100% giá trị hàng → cộng nguyên vào `usable`;
+ *  - lô điểm tích từ đơn sàn (W42): không bị khoá theo hạn đổi/trả, chung trần % với lô thường → cộng nguyên vào `usable`.
+ * `usable` được gửi làm `pointsToUse`; backend tự chia ba lô, kẹp trần và trả `pointsUsed` thật trong báo giá.
  *  - API cũ chưa trả `redeemablePoints` → số dư − `lockedPoints` (≥ 0).
  *  - Chưa tải xong overview → số dư từ hồ sơ đăng nhập (`fallbackBalance`, `fallbackConverted`); backend vẫn
  *    tự kẹp khi báo giá.
@@ -109,19 +110,23 @@ export function pointsEarnLabel(points: number): string {
  * `convertedNote` = nói rõ phần không hết hạn khi khách có điểm quy đổi.
  */
 export function checkoutPoints(
-  ov: { pointsBalance: number; pointsConvertedBalance?: number; lockedPoints?: number; redeemablePoints?: number } | undefined,
+  ov:
+    | { pointsBalance: number; pointsConvertedBalance?: number; pointsMarketplaceBalance?: number; lockedPoints?: number; redeemablePoints?: number }
+    | undefined,
   fallbackBalance: number,
   fallbackConverted = 0,
+  fallbackMarketplace = 0,
 ): { balance: number; converted: number; usable: number; label: string | null; lockNote: string | null; convertedNote: string | null } {
   const lots = pointsSummary({
     pointsBalance: ov?.pointsBalance ?? fallbackBalance,
     pointsConvertedBalance: ov?.pointsConvertedBalance ?? fallbackConverted,
+    pointsMarketplaceBalance: ov ? ov.pointsMarketplaceBalance : fallbackMarketplace,
   });
   const standardUsable = Math.min(
     lots.standard,
     Math.max(0, ov?.redeemablePoints ?? lots.standard - (ov?.lockedPoints ?? 0)),
   );
-  const usable = standardUsable + lots.converted;
+  const usable = standardUsable + lots.converted + lots.marketplace;
   const balance = lots.total;
   const held = lots.standard - standardUsable;
   const heldText = heldPointsNote(held);

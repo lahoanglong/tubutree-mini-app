@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { act, render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   count: 0,
   dot: null as null | 'check-in' | 'coupon-expiring',
   reminders: { garden: false, profile: false, checkInElsewhere: false },
+  offersArgs: [] as [boolean, boolean | undefined][],
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -16,19 +17,18 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: mocks.pathname, search: '', state: null }),
 }));
 vi.mock('../hooks/use-active-order-count', () => ({ useActiveOrderCount: (enabled: boolean) => (enabled ? mocks.count : 0) }));
-vi.mock('../hooks/use-offers-dot', () => ({ useOffersDot: (enabled: boolean) => (enabled ? mocks.dot : null) }));
+vi.mock('../hooks/use-offers-dot', () => ({
+  useOffersDot: (enabled: boolean, checkInElsewhere?: boolean) => {
+    mocks.offersArgs.push([enabled, checkInElsewhere]);
+    return enabled ? mocks.dot : null;
+  },
+}));
 vi.mock('../hooks/use-engagement-dots', () => ({
   useEngagementDots: (enabled: boolean) => (enabled ? mocks.reminders : { garden: false, profile: false, checkInElsewhere: false }),
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import BottomNav from './bottom-nav';
-import { GARDEN_HINT_DELAY_MS } from './garden-hint-bubble';
-
-const settle = () =>
-  act(() => {
-    vi.advanceTimersByTime(GARDEN_HINT_DELAY_MS + 10);
-  });
 
 describe('BottomNav', () => {
   beforeEach(() => {
@@ -37,6 +37,7 @@ describe('BottomNav', () => {
     mocks.count = 0;
     mocks.dot = null;
     mocks.reminders = { garden: false, profile: false, checkInElsewhere: false };
+    mocks.offersArgs = [];
     localStorage.clear();
   });
 
@@ -67,7 +68,7 @@ describe('BottomNav', () => {
 
   it('tab giữa cùng đường chân chữ với các tab khác: căn giữa như các tab khác, ô trống 24px không co thay chỗ icon', () => {
     render(<BottomNav />);
-    const center = screen.getByRole('button', { name: 'Vườn Xanh' });
+    const center = screen.getByRole('button', { name: 'Quét mã' });
     expect(center.style.justifyContent).toBe('center');
     expect(center.style.paddingBottom).toBe('0px');
     const spacer = center.firstElementChild as HTMLElement;
@@ -112,20 +113,32 @@ describe('BottomNav', () => {
     expect(screen.getByRole('button', { name: 'Ưu đãi, có việc cần làm' })).toBeInTheDocument();
   });
 
-  it('chấm nhắc nhiệm vụ hằng ngày: tắt thì không có; bật thì chấm 8px ở Vườn Xanh và Cá nhân kèm nhãn đọc, không nhấp nháy', () => {
+  it('chấm nhắc: tắt thì không có; bật thì chấm 8px ở Cá nhân kèm nhãn đọc, không nhấp nháy; chấm Vườn Xanh nằm ở thẻ Trang chủ, không ở thanh đáy (W42)', () => {
     const none = render(<BottomNav />);
-    expect(screen.queryByTestId('garden-dot')).toBeNull();
     expect(screen.queryByTestId('profile-dot')).toBeNull();
     none.unmount();
     mocks.reminders = { garden: true, profile: true, checkInElsewhere: true };
     render(<BottomNav />);
-    expect(screen.getByTestId('garden-dot')).toHaveClass('tubu-remind-dot', 'tubu-remind-dot--center');
+    expect(screen.queryByTestId('garden-dot')).toBeNull();
     expect(screen.getByTestId('profile-dot')).toHaveClass('tubu-remind-dot');
     const rule = /\.tubu-remind-dot\s*\{([^}]*)\}/.exec(readFileSync(join(__dirname, '../css/tokens.css'), 'utf8'))![1]!;
     expect(rule).toMatch(/width:\s*8px;[\s\S]*height:\s*8px;/);
     expect(rule).not.toMatch(/animation|transition/);
-    expect(screen.getByRole('button', { name: 'Vườn Xanh, có việc hôm nay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quét mã' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cá nhân, có thông báo chưa đọc' })).toBeInTheDocument();
+  });
+
+  it('lý do "chưa điểm danh" của chấm Ưu đãi chỉ nhường cho thẻ Vườn Xanh ở Trang chủ; tab gốc khác giữ lý do đó (W42)', () => {
+    mocks.reminders = { garden: true, profile: false, checkInElsewhere: true };
+    const home = render(<BottomNav />);
+    expect(mocks.offersArgs.at(-1)).toEqual([true, true]);
+    home.unmount();
+    for (const p of ['/browse', '/points/scan', '/offers', '/profile']) {
+      mocks.pathname = p;
+      const r = render(<BottomNav />);
+      expect(mocks.offersArgs.at(-1), p).toEqual([true, false]);
+      r.unmount();
+    }
   });
 
   it('tab Cá nhân đang mang số đơn thì số thắng, không thêm chấm', () => {
@@ -197,57 +210,22 @@ describe('BottomNav', () => {
     expect(container.innerHTML).not.toMatch(/--(neutral|leaf|primary)-/);
   });
 
-  describe('bóng gợi ý Vườn Xanh', () => {
-    const HINT = 'Trồng cây mỗi ngày, nhận quà thật';
-    beforeEach(() => vi.useFakeTimers());
-    afterEach(() => vi.useRealTimers());
-
-    it('lần mở đầu hiện, bấm vào bóng thì mở Vườn Xanh và tắt; mở lại app không hiện nữa', () => {
+  describe('tab giữa Quét mã (W42)', () => {
+    it('bấm Quét mã mở màn tích điểm đơn sàn; đang ở đó thì tab giữa là trang hiện tại', () => {
       const first = render(<BottomNav />);
-      settle();
-      fireEvent.click(screen.getByText(HINT));
-      expect(mocks.navigate).toHaveBeenCalledWith('/game', { replace: true });
-      expect(screen.queryByText(HINT)).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Quét mã' }));
+      expect(mocks.navigate).toHaveBeenCalledWith('/points/scan', { replace: true });
       first.unmount();
+      mocks.pathname = '/points/scan';
       render(<BottomNav />);
-      settle();
-      expect(screen.queryByText(HINT)).toBeNull();
+      expect(screen.getByRole('button', { name: 'Quét mã' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('đã hiện một lần thì không hiện lại dù khách chưa bấm đóng', () => {
-      const first = render(<BottomNav />);
-      settle();
-      expect(screen.getByText(HINT)).toBeInTheDocument();
-      first.unmount();
-      render(<BottomNav />);
-      settle();
-      expect(screen.queryByText(HINT)).toBeNull();
-    });
-
-    it('mở tab Vườn Xanh thì bóng tắt', () => {
-      const { rerender } = render(<BottomNav />);
-      settle();
-      expect(screen.getByText(HINT)).toBeInTheDocument();
+    it('Vườn Xanh không còn là tab: /game là trang con, thanh đáy ẩn', () => {
+      expect(screen.queryByRole('button', { name: 'Vườn Xanh' })).toBeNull();
       mocks.pathname = '/game';
-      rerender(<BottomNav />);
-      expect(screen.queryByText(HINT)).toBeNull();
-    });
-
-    it('không hiện ở trang con, và không hiện khi mở thẳng tab Vườn Xanh', () => {
-      mocks.pathname = '/game';
-      render(<BottomNav />);
-      expect(screen.queryByText(HINT)).toBeNull();
-      expect(localStorage.getItem('tubu_garden_hint_seen')).toBe('1');
-    });
-
-    it('storage ném lỗi thì không hiện và không vỡ nav', () => {
-      const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-        throw new Error('blocked');
-      });
-      render(<BottomNav />);
-      expect(screen.queryByText(HINT)).toBeNull();
-      expect(screen.getAllByRole('button')).toHaveLength(5);
-      spy.mockRestore();
+      const { container } = render(<BottomNav />);
+      expect(container).toBeEmptyDOMElement();
     });
   });
 });

@@ -195,6 +195,26 @@ describe('checkoutPoints — điểm quy đổi không hết hạn (PD-3)', () =
   });
 });
 
+// W42: điểm tích từ đơn sàn chỉ dùng khi mua hàng, nên ở thanh toán là điểm dùng được như lô thường (không khoá theo hạn đổi/trả).
+describe('checkoutPoints — điểm từ đơn sàn (W42)', () => {
+  it('chỉ có điểm sàn → dùng được hết, gửi làm pointsToUse (backend kẹp trần %)', () => {
+    const r = checkoutPoints({ pointsBalance: 0, pointsMarketplaceBalance: 1_250, lockedPoints: 0, redeemablePoints: 0 }, 0);
+    expect(r).toMatchObject({ balance: 1_250, usable: 1_250, label: 'Bạn đang có 1.250 điểm', lockNote: null, convertedNote: null });
+  });
+
+  it('lô thường khoá một phần: điểm sàn vẫn dùng được, tổng gồm cả ba lô', () => {
+    const r = checkoutPoints({ pointsBalance: 500, pointsConvertedBalance: 100, pointsMarketplaceBalance: 50, lockedPoints: 300, redeemablePoints: 200 }, 0);
+    expect(r.balance).toBe(650);
+    expect(r.usable).toBe(350);
+    expect(r.label).toBe('Dùng được 350/650 điểm');
+  });
+
+  it('chưa tải overview → lấy điểm sàn từ hồ sơ đăng nhập; API cũ chưa trả → 0', () => {
+    expect(checkoutPoints(undefined, 70, 30, 40)).toMatchObject({ balance: 140, usable: 140 });
+    expect(checkoutPoints({ pointsBalance: 120, redeemablePoints: 120 }, 0, 0, 999)).toMatchObject({ balance: 120, usable: 120 });
+  });
+});
+
 describe('checkoutPoints — số ≥ 1.000 có dấu phân cách nghìn (C-080)', () => {
   it('"Dùng được 48/65.000 điểm" thay vì "48/65000"', () => {
     const r = checkoutPoints({ pointsBalance: 65_000, lockedPoints: 64_952, redeemablePoints: 48 }, 0);
@@ -329,7 +349,7 @@ const legacyClamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0,
 const legacySummary = (ov: { pointsBalance: number; pointsConvertedBalance?: number }) => {
   const standard = legacyClamp(ov.pointsBalance);
   const converted = legacyClamp(ov.pointsConvertedBalance);
-  return { standard, converted, total: standard + converted };
+  return { standard, converted, marketplace: 0, total: standard + converted };
 };
 const CASES: { pointsBalance: number; pointsConvertedBalance?: number }[] = [
   { pointsBalance: 0 },

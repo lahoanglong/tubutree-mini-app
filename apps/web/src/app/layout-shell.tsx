@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { Providers } from './providers';
 import SiteHeader from '@/components/site-header';
 import HideOnPortals from '@/components/hide-on-portals';
@@ -14,6 +14,33 @@ import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { ScreenTracker } from '@/components/analytics/screen-tracker';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
 import { SkipLink } from '@/components/skip-link';
+import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
+
+/**
+ * Cổng tải lười của "tự mở Mini App trên web điện thoại": chỉ khung nhìn điện thoại mới tải phần còn lại (đọc cờ, luật, lớp phủ, dải mời),
+ * nên `lib/mini-app-auto-open.ts` không vào JS tải đầu. Server và lượt hydrate đầu là false nên HTML dựng sẵn không đổi.
+ * Tự `import()` trong hiệu ứng thay vì `next/dynamic`: ranh giới Suspense của `next/dynamic` đặt cạnh nội dung trang làm thẻ `<meta>` của trang
+ * cũ còn lại trong `<head>` sau khi chuyển trang phía client (hai `meta[name="robots"]` ở `/don` trên điện thoại, web-guest-checkout e2e).
+ */
+function MiniAppAutoOpenGate() {
+  const mobile = useMediaQuery(MD_DOWN);
+  const [AutoOpen, setAutoOpen] = useState<ComponentType | null>(null);
+  useEffect(() => {
+    if (!mobile || AutoOpen) return;
+    let alive = true;
+    import('@/components/layout/mini-app-auto-open')
+      .then((m) => {
+        if (alive) setAutoOpen(() => m.MiniAppAutoOpen);
+      })
+      .catch(() => {
+        /* mạng chập chờn: bỏ qua tự mở ở lượt này, trang vẫn dùng bình thường */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [mobile, AutoOpen]);
+  return mobile && AutoOpen ? <AutoOpen /> : null;
+}
 
 /**
  * Phần client của khung trang chung, gom trong MỘT thành phần client: mỗi thành phần client mà layout server dựng trực tiếp thêm một dòng
@@ -40,6 +67,10 @@ export function LayoutShell({ vitals, footer, children }: { vitals: ReactNode; f
         <SiteHeader />
       </HideOnPortals>
       <PortalHeader />
+      {/* Dải mời mở Zalo nằm trong luồng, ngay trên nội dung trang (không nổi đè danh sách). */}
+      <HideOnPortals>
+        <MiniAppAutoOpenGate />
+      </HideOnPortals>
       {children}
       <HideOnPortals>{footer}</HideOnPortals>
       <HideOnPortals>

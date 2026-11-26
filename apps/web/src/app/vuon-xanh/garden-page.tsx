@@ -15,7 +15,7 @@ import { useHydrated } from '@/lib/use-hydrated';
 import { loginHref } from '@/lib/return-to';
 import { refreshSession } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
-import { pointsSummary } from '@/lib/checkout-points';
+import { gardenPoints } from '@tubutree/app-core/points-lots';
 import { dismissGameTutorial, isGameTutorialDismissed } from '@/lib/game-tutorial';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -118,8 +118,7 @@ function GameBody() {
   const miniQuiz = miniToday?.games.some((g) => g.game === 'daily_quiz') ? miniToday : null;
   // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null để
   // nút vẫn bấm được (API là lưới an toàn).
-  const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
-  const fundPoints = loyalty ? (loyalty.redeemableTotal ?? pointsSummary(loyalty).total) : null;
+  const { wheel: wheelPoints, fund: fundPoints, marketplaceNote } = gardenPoints(loyalty);
 
   const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM, shareHarvestM } = useGameActions({
     notify,
@@ -321,6 +320,11 @@ function GameBody() {
             onSpin={handleSpin}
             onResult={wheelPrize.onResult}
           />
+          {marketplaceNote && (
+            <p data-testid="marketplace-points-note" className="mt-2 text-caption text-stone-700">
+              {marketplaceNote}
+            </p>
+          )}
           </div>
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
@@ -366,6 +370,11 @@ function GameBody() {
             buyPending={buyTreeM.isPending}
             onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
           />
+          {marketplaceNote && (
+            <p data-testid="marketplace-points-note" className="text-caption text-stone-700">
+              {marketplaceNote}
+            </p>
+          )}
 
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}

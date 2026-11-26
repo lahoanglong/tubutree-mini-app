@@ -295,7 +295,7 @@ describe('/tai-khoan/diem-xanh — điểm danh chỉ ở Vườn Xanh: trang ch
     const c = await mount();
     const row = strip(c)!;
     expect(row.getAttribute('aria-label')).toBe('Hôm nay bạn chưa điểm danh');
-    expect(row.textContent).toContain('Mở tab Vườn Xanh');
+    expect(row.textContent).toContain('Mở Vườn Xanh');
     expect(checkInButtons(c)).toHaveLength(0);
     click(row.querySelector('[role="button"]') as HTMLElement);
     expect(state.push).toHaveBeenCalledWith('/vuon-xanh');

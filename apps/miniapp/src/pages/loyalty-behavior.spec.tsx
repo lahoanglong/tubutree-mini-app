@@ -282,7 +282,7 @@ describe('LoyaltyPage — điểm danh chỉ ở Vườn Xanh: trang chỉ có d
   it('chưa điểm danh: dòng "Hôm nay bạn chưa điểm danh" mở Vườn Xanh; không có nút điểm danh, không gọi lệnh điểm danh', async () => {
     renderPage();
     const row = await screen.findByRole('button', { name: /^Hôm nay bạn chưa điểm danh/ });
-    expect(row).toHaveTextContent('Mở tab Vườn Xanh');
+    expect(row).toHaveTextContent('Mở Vườn Xanh');
     expect(checkInButtons()).toHaveLength(0);
     fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');

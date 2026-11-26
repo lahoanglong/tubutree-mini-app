@@ -232,10 +232,10 @@ describe('route-map.json thật', () => {
     }
   });
 
-  it('dòng skip /points/scan nêu đúng điều kiện Zalo thay vì chỉ "máy quét QR"', () => {
-    const skip = map.routes.flatMap((g) => g.items).find((i) => i.miniapp === '/points/scan')?.skip ?? '';
-    expect(skip).toContain('SĐT đã xác minh');
-    expect(skip).toContain('ô nhập mã tay');
+  it('/points/scan có web /quet-ma (W42: tab giữa Quét mã ở cả hai app; web hướng dẫn và mở Mini App để quét)', () => {
+    const row = map.routes.flatMap((g) => g.items).find((i) => i.miniapp === '/points/scan');
+    expect(row).toMatchObject({ web: '/quet-ma', private: false });
+    expect(row?.skip).toBeUndefined();
   });
 });
 

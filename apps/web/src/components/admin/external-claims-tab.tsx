@@ -35,8 +35,11 @@ import {
   isNoteRequiredError,
   creditedOnClosedOrder,
   isIntroducer,
+  ATTEMPT_RESULT_LABEL,
   CLAIM_SOURCE_LABEL,
   CLAIM_STATE_LABEL,
+  PHONE_MATCH_LABEL,
+  PHONE_MATCH_TONE,
   CLAIM_STATE_ORDER,
   CLAIM_STATE_TONE,
   claimActions,
@@ -331,7 +334,14 @@ function ClaimRow({ claim: c, who, onOutcome }: { claim: AdminExternalClaimRow; 
       </div>
       <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs text-stone-600 sm:grid-cols-2">
         <DlRow label="Khách">{c.userName ?? '—'} · {c.userPhoneMasked ?? 'không có SĐT'}</DlRow>
-        <DlRow label="SĐT trên đơn">{c.orderPhoneMasked ?? 'không có hoặc bị che'}</DlRow>
+        <DlRow label="SĐT trên đơn">
+          {c.orderPhoneMasked ?? 'không có hoặc bị che'}
+          {c.phoneMatch && (
+            <span data-phone-match={c.phoneMatch} className="ml-1 inline-block align-middle">
+              <ToneBadge tone={PHONE_MATCH_TONE[c.phoneMatch]}>{PHONE_MATCH_LABEL[c.phoneMatch]}</ToneBadge>
+            </span>
+          )}
+        </DlRow>
         <DlRow label="Tiền hàng">{c.goodsValue === null ? 'chưa tính được' : formatVnd(c.goodsValue)}</DlRow>
         <DlRow label="Điểm">{c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</DlRow>
         <DlRow label="Trạng thái đơn">{ORDER_STATUS_LABEL[c.orderStatus] ?? c.orderStatus}</DlRow>
@@ -552,6 +562,12 @@ function AttemptRow({ attempt: a, who, onOutcome }: { attempt: AdminExternalAtte
             {a.otherSubmitters.map((o) => (
               <li key={o.userId}>
                 {o.userName ?? '—'} · {o.userPhoneMasked ?? 'không có SĐT'} · gửi lúc {formatDateTime(o.createdAt)}
+                {o.result && ATTEMPT_RESULT_LABEL[o.result] && (
+                  <span data-attempt-result={o.result} className="font-medium text-danger-fg">
+                    {' · '}
+                    {ATTEMPT_RESULT_LABEL[o.result]}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
