@@ -22,18 +22,21 @@ const TRIGGER = 'flex items-center justify-between gap-2 text-left disabled:curs
 /**
  * Picker địa giới 2 cấp Tỉnh → Phường/Xã, danh mục lấy TỪ Pancake (mã "84_VN*" chuẩn
  * → đặt đơn không bị đẩy sai mã vùng). Đổi tỉnh sẽ reset phường. Mỗi cấp là một nút mở `AddressLocationSheet`
- * (tìm không dấu); chọn tỉnh xong sheet Phường/Xã tự mở tiếp để khách khỏi bấm thêm một lần.
+ * (tìm không dấu); chọn tỉnh xong sheet Phường/Xã tự mở tiếp để khách khỏi bấm thêm một lần. `provinceLocked`: tỉnh giữ theo `value`
+ * (sửa đơn chỉ trong tỉnh của đơn), không vẽ ô Tỉnh và không tải danh sách tỉnh; màn chứa tự ghi tỉnh đang khoá.
  */
 export function GeoPicker({
   value,
   onChange,
   errorProvince,
   errorWard,
+  provinceLocked = false,
 }: {
   value: GeoValue;
   onChange: (v: GeoValue) => void;
   errorProvince?: string;
   errorWard?: string;
+  provinceLocked?: boolean;
 }) {
   const provinceId = useId();
   const wardId = useId();
@@ -45,7 +48,7 @@ export function GeoPicker({
     if (prevOpen.current === 'ward' && open === null) wardTrigger.current?.focus();
     prevOpen.current = open;
   }, [open]);
-  const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity });
+  const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity, enabled: !provinceLocked });
   const communesQ = useQuery({
     queryKey: ['geo-communes', value.provinceCode],
     queryFn: () => getCommunes(value.provinceCode),
@@ -58,39 +61,41 @@ export function GeoPicker({
 
   return (
     <>
-      <div>
-        <label htmlFor={provinceId} className="mb-1 block text-field-label text-stone-700">
-          Tỉnh/Thành phố
-        </label>
-        <button
-          id={provinceId}
-          type="button"
-          role="combobox"
-          aria-haspopup="dialog"
-          aria-expanded={open === 'province'}
-          aria-controls={`${provinceId}-list`}
-          aria-required="true"
-          aria-invalid={errorProvince ? true : undefined}
-          aria-describedby={errorProvince ? `${provinceId}-err` : undefined}
-          data-value={value.provinceCode}
-          onClick={() => setOpen('province')}
-          className={`${errorProvince ? ui.fieldError : ui.field} ${TRIGGER}`}
-        >
-          <span className={`min-w-0 truncate ${provinceName ? '' : 'text-stone-600'}`}>
-            {provinceName || (provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành')}
-          </span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-stone-600" aria-hidden />
-        </button>
-        {errorProvince && (
-          <p id={`${provinceId}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
-            <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
-            {errorProvince}
-          </p>
-        )}
-        {provincesQ.isError && !errorProvince && (
-          <LoadFailed what="tỉnh/thành" onRetry={() => void provincesQ.refetch()} />
-        )}
-      </div>
+      {!provinceLocked && (
+        <div>
+          <label htmlFor={provinceId} className="mb-1 block text-field-label text-stone-700">
+            Tỉnh/Thành phố
+          </label>
+          <button
+            id={provinceId}
+            type="button"
+            role="combobox"
+            aria-haspopup="dialog"
+            aria-expanded={open === 'province'}
+            aria-controls={`${provinceId}-list`}
+            aria-required="true"
+            aria-invalid={errorProvince ? true : undefined}
+            aria-describedby={errorProvince ? `${provinceId}-err` : undefined}
+            data-value={value.provinceCode}
+            onClick={() => setOpen('province')}
+            className={`${errorProvince ? ui.fieldError : ui.field} ${TRIGGER}`}
+          >
+            <span className={`min-w-0 truncate ${provinceName ? '' : 'text-stone-600'}`}>
+              {provinceName || (provincesQ.isLoading ? 'Đang tải…' : 'Chọn tỉnh/thành')}
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-stone-600" aria-hidden />
+          </button>
+          {errorProvince && (
+            <p id={`${provinceId}-err`} className="mt-0.5 flex items-start gap-1 text-caption text-danger-fg">
+              <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden />
+              {errorProvince}
+            </p>
+          )}
+          {provincesQ.isError && !errorProvince && (
+            <LoadFailed what="tỉnh/thành" onRetry={() => void provincesQ.refetch()} />
+          )}
+        </div>
+      )}
 
       <div>
         <label htmlFor={wardId} className="mb-1 block text-field-label text-stone-700">
@@ -128,22 +133,24 @@ export function GeoPicker({
         )}
       </div>
 
-      <AddressLocationSheet
-        open={open === 'province'}
-        onClose={() => setOpen((cur) => (cur === 'province' ? null : cur))}
-        listId={`${provinceId}-list`}
-        title="Tỉnh/Thành phố"
-        options={provincesQ.data ?? []}
-        value={value.provinceCode}
-        status={status(provincesQ)}
-        onRetry={() => void provincesQ.refetch()}
-        onSelect={(o) => {
-          if (o.code === value.provinceCode) return;
-          onChange({ province: o.name, provinceCode: o.code, ward: '', wardCode: '' });
-          // Sheet tỉnh gọi onClose ngay sau onSelect; onClose chỉ đóng khi vẫn đang ở bước tỉnh nên bước Phường/Xã giữ nguyên.
-          setOpen('ward');
-        }}
-      />
+      {!provinceLocked && (
+        <AddressLocationSheet
+          open={open === 'province'}
+          onClose={() => setOpen((cur) => (cur === 'province' ? null : cur))}
+          listId={`${provinceId}-list`}
+          title="Tỉnh/Thành phố"
+          options={provincesQ.data ?? []}
+          value={value.provinceCode}
+          status={status(provincesQ)}
+          onRetry={() => void provincesQ.refetch()}
+          onSelect={(o) => {
+            if (o.code === value.provinceCode) return;
+            onChange({ province: o.name, provinceCode: o.code, ward: '', wardCode: '' });
+            // Sheet tỉnh gọi onClose ngay sau onSelect; onClose chỉ đóng khi vẫn đang ở bước tỉnh nên bước Phường/Xã giữ nguyên.
+            setOpen('ward');
+          }}
+        />
+      )}
       <AddressLocationSheet
         open={open === 'ward'}
         onClose={() => setOpen((cur) => (cur === 'ward' ? null : cur))}

@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { UnrecoverableError, type Job } from 'bullmq';
 import { PancakeOrderService } from './pancake-order.service';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
-import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_COD_SWITCH, PANCAKE_JOB_PAYMENT } from './pancake-queue';
+import { PANCAKE_JOB_CANCEL, PANCAKE_JOB_COD_SWITCH, PANCAKE_JOB_CUSTOMER_EDIT, PANCAKE_JOB_PAYMENT } from './pancake-queue';
 import { PancakeCancelRefusedError, pancakeErrorText } from './pancake-outbound';
 import { classifyPushError, isPermanentPushError, PUSH_ERROR_KIND } from './pancake-push-error';
 
@@ -16,6 +16,7 @@ import { classifyPushError, isPermanentPushError, PUSH_ERROR_KIND } from './panc
  *  - payment / cancel: cập nhật "đã thanh toán" / huỷ đơn Pancake; lần cuối báo admin xử lý tay (Pancake từ chối lệnh huỷ
  *    thì chốt và báo ngay lượt đầu).
  *  - cod-switch: khách đổi đơn chuyển khoản sang COD → sửa ghi chú/thẻ đơn Pancake; lần cuối báo admin sửa tay.
+ *  - customer-edit: khách tự sửa địa chỉ/ghi chú → sửa đơn Pancake rồi đọc lại; lần cuối (hoặc đọc lại lệch) báo admin sửa tay.
  */
 @Processor(QUEUE_PANCAKE_PUSH)
 export class PancakePushProcessor extends WorkerHost {
@@ -43,6 +44,15 @@ export class PancakePushProcessor extends WorkerHost {
     if (job.name === PANCAKE_JOB_COD_SWITCH) {
       try {
         await this.pancakeOrder.syncCodSwitch(orderId, final);
+      } catch (err) {
+        if (classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) throw new UnrecoverableError(pancakeErrorText(err));
+        throw err;
+      }
+      return;
+    }
+    if (job.name === PANCAKE_JOB_CUSTOMER_EDIT) {
+      try {
+        await this.pancakeOrder.syncCustomerEdit(orderId, final);
       } catch (err) {
         if (classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) throw new UnrecoverableError(pancakeErrorText(err));
         throw err;

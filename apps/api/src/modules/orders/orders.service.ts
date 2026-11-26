@@ -20,6 +20,7 @@ import { customerCancelReason } from './customer-cancel-reason';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { codSwitchEligible } from './cod-switch';
+import { OrderCustomerEditService } from './order-customer-edit.service';
 import { orderCsatAsk, recordOrderCsat, type OrderCsatAnswer, type OrderCsatPlatform } from './order-csat';
 import { refundNote } from './order-returns.service';
 import { pendingPaymentDeadlines } from './pending-payment-ttl';
@@ -127,6 +128,8 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
   canCancel: boolean;
   /** Chỉ chi tiết đơn: đơn chuyển khoản chưa trả này đổi được sang trả tiền khi nhận (COD) bằng POST /orders/:code/switch-to-cod (`codSwitchEligible`). */
   codSwitchable?: boolean;
+  /** Chỉ chi tiết đơn: chủ đơn tự sửa được địa chỉ cùng tỉnh và ghi chú bằng PATCH /orders/:code/delivery (`OrderCustomerEditService.canEdit`). */
+  canEdit?: boolean;
   /** Chỉ chi tiết đơn: hiện thẻ "Đơn này thế nào?" (`orderCsatAsk`): đơn lẻ đã giao trong 30 ngày, chưa trả lời, chưa có yêu cầu trả. */
   csatAsk?: boolean;
   /**
@@ -268,6 +271,8 @@ export class OrdersService {
     // Optional như trên: không có thì dòng đơn không mang giá Giờ vàng (sheet Mua lại dùng giá đang bán).
     @Optional() private readonly flashSale?: FlashSaleService,
     @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
+    // Optional như trên: không có thì chi tiết đơn không bày lối tự sửa (canEdit false).
+    @Optional() private readonly customerEdit?: OrderCustomerEditService,
   ) {}
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
@@ -336,7 +341,7 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey, codSwitchable, csatAsk] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey, codSwitchable, csatAsk, canEdit] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
@@ -346,6 +351,7 @@ export class OrdersService {
       this.journeyOf(order),
       codSwitchEligible(this.prisma, order),
       orderCsatAsk(this.prisma, order),
+      this.customerEdit?.canEdit(order) ?? false,
     ]);
     return {
       ...view!,
@@ -357,6 +363,7 @@ export class OrdersService {
       ...journey,
       codSwitchable,
       csatAsk,
+      canEdit,
     };
   }
 

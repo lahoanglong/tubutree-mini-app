@@ -6,7 +6,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { PancakeClient } from './pancake.client';
-import { cancelPancakeOrder, mayExistOnPancake, PANCAKE_CANCEL } from './pancake-order.service';
+import { cancelPancakeOrder, isPancakeBeforePacking, mayExistOnPancake, PANCAKE_CANCEL } from './pancake-order.service';
 import {
   PancakeApiError,
   PancakeCancelRefusedError,
@@ -16,8 +16,8 @@ import {
   isPancakeCancelled,
   isPancakeHandedOver,
 } from './pancake-outbound';
-import { enqueuePancakeCancel, enqueuePancakeCodSwitch, enqueuePancakePayment, removeFailedPancakePush } from './pancake-queue';
-import { ATTENTION_CANCEL_PENDING, ATTENTION_COD_SWITCH_PENDING, flagPancakeAttention } from './pancake-attention';
+import { enqueuePancakeCancel, enqueuePancakeCodSwitch, enqueuePancakeCustomerEdit, enqueuePancakePayment, removeFailedPancakePush } from './pancake-queue';
+import { ATTENTION_CANCEL_PENDING, ATTENTION_COD_SWITCH_PENDING, ATTENTION_CUSTOMER_EDIT_PENDING, flagPancakeAttention } from './pancake-attention';
 import { isMerchantFulfilledOrder } from './pancake-fulfilment';
 
 /** Lời báo khách/admin khi Pancake đã bàn giao đơn cho đơn vị vận chuyển (D1). */
@@ -42,6 +42,14 @@ export class PancakeUnreachableError extends Error {
   constructor(readonly reason: string) {
     super(PANCAKE_UNREACHABLE_MESSAGE);
     this.name = 'PancakeUnreachableError';
+  }
+}
+
+/** Kho Pancake đã bắt đầu đóng gói (hoặc đã gửi, huỷ, xoá) đơn khách muốn tự sửa: không sửa địa chỉ/ghi chú nữa. */
+export class PancakePackingError extends Error {
+  constructor(readonly pancakeStatus: number | string | null) {
+    super(`Pancake đã nhận xử lý đơn (trạng thái ${pancakeStatus ?? 'không rõ'})`);
+    this.name = 'PancakePackingError';
   }
 }
 
@@ -218,6 +226,49 @@ export class PancakeSyncHooks {
         this.alerts,
         order,
         `${ATTENTION_COD_SWITCH_PENDING} (#${order.pancakeOrderId}): sửa tay ghi chú thành thu COD rồi giao.`,
+        this.logger,
+      ).catch((e) => this.logger.error(`Không ghi được cờ cần xử lý cho đơn ${order.code}: ${pancakeErrorText(e)}`));
+    }
+  }
+
+  /**
+   * Khách tự sửa địa chỉ/ghi chú đơn đã lên kho: hỏi Pancake trước (ngoài transaction, timeout ngắn như huỷ). Chỉ trạng thái trước đóng gói mới cho
+   * sửa; mọi trạng thái khác (kể cả lạ, không đọc được, không còn đơn) là PancakePackingError. Không hỏi được: PancakeUnreachableError. Không tự đồng
+   * bộ trạng thái ở đây: webhook và cron làm việc đó.
+   */
+  async precheckCustomerEdit(order: Pick<Order, 'code' | 'pancakeOrderId'>): Promise<void> {
+    if (!order.pancakeOrderId) return;
+    if (!this.client.isConfigured()) throw new PancakeUnreachableError('Pancake chưa được cấu hình');
+    let found: Awaited<ReturnType<PancakeClient['getOrder']>>;
+    try {
+      found = await this.client.getOrder(order.pancakeOrderId, { timeoutMs: PancakeSyncHooks.CANCEL_TIMEOUT_MS });
+    } catch (err) {
+      this.logger.warn(`Không hỏi được Pancake khi khách sửa đơn ${order.code}: ${pancakeErrorText(err)} — từ chối, khách thử lại sau.`);
+      throw new PancakeUnreachableError(pancakeErrorText(err));
+    }
+    const status = found?.status ?? null;
+    if (!isPancakeBeforePacking(status)) throw new PancakePackingError(status);
+  }
+
+  /**
+   * Khách vừa tự sửa địa chỉ/ghi chú: đơn đã lên Pancake thì xếp lệnh sửa đơn kho. Chưa lên thì lần đẩy sau dựng thân mới (lệnh tạo đang bay bị chặn
+   * sửa, và `saveCreated` tự xếp job khi thấy đơn đổi giữa lúc dựng thân và lúc lưu mã). Không có cron nào quét lại việc này, nên xếp lệnh lỗi thì
+   * đưa đơn vào "Cần xử lý Pancake" để người sửa tay, kẻo kho giao theo địa chỉ cũ.
+   */
+  async afterCustomerEdit(orderId: string): Promise<void> {
+    const order = await this.prisma.order
+      .findUnique({ where: { id: orderId }, select: { id: true, code: true, fulfiller: true, pancakeOrderId: true } })
+      .catch(() => null);
+    if (!order || isMerchantFulfilledOrder(order) || !order.pancakeOrderId) return;
+    try {
+      await enqueuePancakeCustomerEdit(this.queue, orderId);
+    } catch (err) {
+      this.logger.error(`Xếp lệnh sửa địa chỉ/ghi chú Pancake lỗi cho đơn ${order.code}: ${pancakeErrorText(err)}.`);
+      await flagPancakeAttention(
+        this.prisma,
+        this.alerts,
+        order,
+        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${order.pancakeOrderId}): ${pancakeErrorText(err)}. Sửa tay địa chỉ/ghi chú trên Pancake theo đơn Tubu rồi giao.`,
         this.logger,
       ).catch((e) => this.logger.error(`Không ghi được cờ cần xử lý cho đơn ${order.code}: ${pancakeErrorText(e)}`));
     }

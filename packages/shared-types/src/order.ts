@@ -108,6 +108,11 @@ export interface OrderDTO {
    */
   canCancel?: boolean;
   /**
+   * Chỉ chi tiết đơn: chủ đơn đăng nhập tự sửa được người nhận, SĐT, phường/xã, số nhà (cùng tỉnh) và ghi chú bằng PATCH /orders/:code/delivery
+   * (cờ `orders.customer_self_edit_enabled`, đơn chưa đóng gói, còn lượt sửa). API cũ hoặc cờ tắt: không có = không bày lối sửa.
+   */
+  canEdit?: boolean;
+  /**
    * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (hệ thống thôi tự huỷ): Tubu xử lý với khách. App/web không ghi hạn thanh
    * toán, không bày nút trả tiền/huỷ, chỉ một câu "Tubu đang xử lý đơn này". API cũ chưa trả.
    */
@@ -130,6 +135,49 @@ export interface OrderDTO {
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Lý do không sửa được đơn (PATCH /orders/:code/delivery). Từ chối là 409 với body `code` = `ORDER_EDIT_REFUSED`, riêng `PROVINCE_CHANGED` là 400.
+ * `PACKING_ON_PANCAKE`: kho Pancake đã bắt đầu đóng gói; `PANCAKE_UNREACHABLE`: không hỏi được kho (thử lại sau); `PROVINCE_LOCKED`: địa chỉ cũ chưa theo
+ * địa giới mới, chỉ sửa được ghi chú.
+ */
+export type OrderEditRefusalReason =
+  | 'DISABLED'
+  | 'NOT_ELIGIBLE'
+  | 'NOT_EDITABLE_STATUS'
+  | 'HANDED_OVER'
+  | 'PACKING_ON_PANCAKE'
+  | 'PANCAKE_UNREACHABLE'
+  | 'SYNCING'
+  | 'EDIT_LIMIT'
+  | 'PROVINCE_CHANGED'
+  | 'PROVINCE_LOCKED';
+
+/** Địa chỉ mới khách gửi: không có tên tỉnh (máy chủ giữ tỉnh của đơn), `provinceCode` phải trùng tỉnh của đơn. */
+export interface OrderEditAddressInput {
+  recipient: string;
+  phone: string;
+  ward: string;
+  street: string;
+  provinceCode: string;
+  districtCode: string;
+  wardCode: string;
+}
+
+/** Thân PATCH /orders/:code/delivery: ít nhất một trong hai. `note` rỗng hoặc null = xoá ghi chú. */
+export interface EditOrderDeliveryBody {
+  address?: OrderEditAddressInput;
+  note?: string | null;
+}
+
+/** Kết quả PATCH /orders/:code/delivery. Không đổi gì (trùng giá trị cũ) vẫn 200, không tính lượt. */
+export interface OrderEditResultDTO {
+  code: string;
+  shippingAddress: ShippingAddressSnapshot;
+  note: string | null;
+  notifyRecipientZalo: boolean;
+  editsLeft: number;
 }
 
 /** Mức giảm một mã trong ví cho lần đặt đang xem — POST /checkout/coupon-previews. API cũ không có endpoint này. */

@@ -56,6 +56,15 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
+// Tấm sửa là mảnh `dynamic`: thay bằng bản giả nhẹ để đọc props và gọi kết cục, không chờ tải form thật (form có spec riêng).
+const editSheet = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
+vi.mock('./order-edit-sheet', () => ({
+  default: (p: Record<string, unknown>) => {
+    editSheet.props = p;
+    return <div data-testid="order-edit-sheet-stub" />;
+  },
+}));
+
 import { ORDER_CSAT_COPY } from '@tubutree/app-core/order-csat';
 import { ApiError } from '@/lib/client-api';
 import OrderDetailPage from './page';
@@ -897,5 +906,67 @@ describe('/tai-khoan/don-hang/[code] — 👎 ở thẻ "Đơn này thế nào?"
     await flush(2);
     expect(status(container).textContent).toBe(ORDER_CSAT_COPY.thanksDownNoContact);
     expect(document.activeElement).toBe(status(container));
+  });
+});
+
+describe('/tai-khoan/don-hang/[code] — khách tự sửa địa chỉ và ghi chú (tubu-w39-03)', () => {
+  const editable = () => ({ ...structuredClone(ORDER), status: 'CONFIRMED', paymentMethod: 'COD', note: 'Gọi trước', canEdit: true });
+  const openLinks = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('[data-testid="order-edit-open"]'));
+
+  beforeEach(() => {
+    editSheet.props = null;
+  });
+
+  it('API cũ (không có canEdit) hay canEdit=false: không có lối "Sửa"', async () => {
+    const { container } = await mount();
+    expect(openLinks(container)).toHaveLength(0);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.order = { ...editable(), canEdit: false };
+    const again = await mount();
+    expect(openLinks(again.container)).toHaveLength(0);
+  });
+
+  it('canEdit=true: đúng một lối "Sửa" ở tiêu đề khối địa chỉ, mở tấm sửa với địa chỉ và ghi chú của khách', async () => {
+    mocks.order = editable();
+    const { container } = await mount();
+    const links = openLinks(container);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toBe('Sửa');
+    expect(links[0]!.getAttribute('aria-label')).toBe('Sửa địa chỉ và ghi chú đơn TB-9');
+    expect(links[0]!.closest('section')!.querySelector('h2')!.textContent).toBe('Địa chỉ giao hàng');
+    expect(container.querySelector('[data-testid="order-edit-sheet-stub"]')).toBeNull();
+    act(() => links[0]!.click());
+    await flush(4);
+    expect(container.querySelector('[data-testid="order-edit-sheet-stub"]')).not.toBeNull();
+    expect(editSheet.props).toMatchObject({ code: 'TB-9', note: 'Gọi trước', split: false, address: expect.objectContaining({ recipient: 'Nguyễn An' }) });
+  });
+
+  it('lưu xong: đóng tấm, báo "Đã cập nhật đơn" kèm lượt còn, tải lại đơn', async () => {
+    mocks.order = editable();
+    const { container } = await mount();
+    act(() => openLinks(container)[0]!.click());
+    await flush(4);
+    act(() => (editSheet.props!.onSettled as (o: unknown) => void)({ kind: 'saved', editsLeft: 2 }));
+    await flush(4);
+    expect(container.querySelector('[data-testid="order-edit-sheet-stub"]')).toBeNull();
+    const notice = container.querySelector('[data-testid="order-edit-notice"]')!;
+    expect(notice.getAttribute('role')).toBe('status');
+    expect(notice.textContent).toBe('Đã cập nhật đơn TB-9. Còn 2 lần sửa cho đơn này.');
+    expect(mocks.orderCalls).toEqual(['TB-9', 'TB-9']);
+  });
+
+  it('máy chủ từ chối (đơn vừa đóng gói): đóng tấm, hiện câu máy chủ, tải lại đơn; đơn không còn canEdit thì lối "Sửa" biến mất', async () => {
+    mocks.order = editable();
+    const { container } = await mount();
+    act(() => openLinks(container)[0]!.click());
+    await flush(4);
+    mocks.order = { ...editable(), status: 'PACKED', canEdit: false };
+    act(() => (editSheet.props!.onSettled as (o: unknown) => void)({ kind: 'refused', message: 'Đơn đã vào khâu đóng gói nên không sửa được nữa.' }));
+    await flush(6);
+    const notice = container.querySelector('[data-testid="order-edit-notice"]')!;
+    expect(notice.getAttribute('role')).toBe('alert');
+    expect(notice.textContent).toBe('Đơn đã vào khâu đóng gói nên không sửa được nữa.');
+    expect(openLinks(container)).toHaveLength(0);
   });
 });

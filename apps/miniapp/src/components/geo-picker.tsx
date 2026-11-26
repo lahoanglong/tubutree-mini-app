@@ -40,21 +40,24 @@ const RETRY_STYLE: CSSProperties = {
 
 /**
  * Picker địa giới 2 cấp Tỉnh → Phường/Xã, danh mục lấy TỪ Pancake (mã "84_VN*" chuẩn
- * → đặt đơn không lỗi). Đổi tỉnh sẽ reset phường.
+ * → đặt đơn không lỗi). Đổi tỉnh sẽ reset phường. `provinceLocked`: tỉnh giữ theo `value` (sửa đơn chỉ trong tỉnh của đơn), không vẽ ô Tỉnh và
+ * không tải danh sách tỉnh; màn chứa tự ghi tỉnh đang khoá. Cùng web `components/geo-picker.tsx`.
  */
 export function GeoPicker({
   value,
   onChange,
   errorProvince,
   errorWard,
+  provinceLocked = false,
 }: {
   value: GeoValue;
   onChange: (v: GeoValue) => void;
   errorProvince?: string;
   errorWard?: string;
+  provinceLocked?: boolean;
 }) {
   const errId = useId();
-  const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity });
+  const provincesQ = useQuery({ queryKey: ['geo-provinces'], queryFn: getProvinces, staleTime: Infinity, enabled: !provinceLocked });
   const communesQ = useQuery({
     queryKey: ['geo-communes', value.provinceCode],
     queryFn: () => getCommunes(value.provinceCode),
@@ -64,32 +67,34 @@ export function GeoPicker({
 
   return (
     <>
-      <div>
-        <GeoSelect
-          label="Tỉnh/Thành phố"
-          placeholder={
-            provincesQ.isLoading ? 'Đang tải…' : provincesQ.isError ? vi.errors.loadFailed : 'Chọn tỉnh/thành'
-          }
-          options={provincesQ.data ?? []}
-          value={value.provinceCode}
-          invalid={!!errorProvince}
-          errorId={`${errId}-province`}
-          onSelect={(code) => {
-            const name = provincesQ.data?.find((p) => p.code === code)?.name ?? '';
-            onChange({ province: name, provinceCode: code, ward: '', wardCode: '' });
-          }}
-        />
-        {errorProvince && <ErrText id={`${errId}-province`}>{errorProvince}</ErrText>}
-        {/* API lỗi thì Select sẽ im lặng mãi ở placeholder nếu không có dòng này — cho user biết + retry */}
-        {provincesQ.isError && !errorProvince && (
-          <button type="button" onClick={() => void provincesQ.refetch()} style={RETRY_STYLE}>
-            <Icon icon={TriangleAlert} size="sm" tone="danger" />
-            <Text variant="caption" tone="danger">
-              {vi.errors.loadFailed} · {vi.common.retry}
-            </Text>
-          </button>
-        )}
-      </div>
+      {!provinceLocked && (
+        <div>
+          <GeoSelect
+            label="Tỉnh/Thành phố"
+            placeholder={
+              provincesQ.isLoading ? 'Đang tải…' : provincesQ.isError ? vi.errors.loadFailed : 'Chọn tỉnh/thành'
+            }
+            options={provincesQ.data ?? []}
+            value={value.provinceCode}
+            invalid={!!errorProvince}
+            errorId={`${errId}-province`}
+            onSelect={(code) => {
+              const name = provincesQ.data?.find((p) => p.code === code)?.name ?? '';
+              onChange({ province: name, provinceCode: code, ward: '', wardCode: '' });
+            }}
+          />
+          {errorProvince && <ErrText id={`${errId}-province`}>{errorProvince}</ErrText>}
+          {/* API lỗi thì Select sẽ im lặng mãi ở placeholder nếu không có dòng này — cho user biết + retry */}
+          {provincesQ.isError && !errorProvince && (
+            <button type="button" onClick={() => void provincesQ.refetch()} style={RETRY_STYLE}>
+              <Icon icon={TriangleAlert} size="sm" tone="danger" />
+              <Text variant="caption" tone="danger">
+                {vi.errors.loadFailed} · {vi.common.retry}
+              </Text>
+            </button>
+          )}
+        </div>
+      )}
 
       <div>
         <GeoSelect

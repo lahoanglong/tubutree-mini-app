@@ -7,6 +7,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { Leaf, Star } from 'lucide-react';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView } from '@tubutree/app-core/api/orders';
+import { canEditOrder } from '@tubutree/app-core/api/order-edit';
+import { ORDER_EDIT_COPY, orderEditLinkAria, orderEditSaved, orderEditsLeftText } from '@tubutree/app-core/order-edit-copy';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
@@ -71,6 +73,8 @@ import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { ProductThumb } from '@/components/mini';
+import type { ShippingAddressSnapshot } from '@tubutree/shared-types';
+import type { OrderEditOutcome } from './order-edit-sheet';
 
 // Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác) tải sau để First Load của trang tăng ít nhất có thể.
 const FollowOaPrompt = dynamic(() => import('./order-extras').then((m) => m.FollowOaPrompt), { ssr: false });
@@ -79,6 +83,8 @@ const OrderWasteLink = dynamic(() => import('./order-extras').then((m) => m.Orde
 const OrderSecondOrderInvite = dynamic(() => import('./order-extras').then((m) => m.OrderSecondOrderInvite), { ssr: false });
 // Thẻ nhựa đã giảm của đơn: chữ, số và module tiền chỉ tải khi máy chủ trả số lớn hơn 0.
 const OrderEcoImpactCard = dynamic(() => import('@/components/orders/eco-impact-card'), { ssr: false });
+// Tấm sửa địa chỉ và ghi chú (form, GeoPicker khoá tỉnh) chỉ tải khi khách bấm "Sửa".
+const OrderEditSheet = dynamic(() => import('./order-edit-sheet'), { ssr: false });
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -166,6 +172,18 @@ export default function OrderDetailPage() {
     },
     [qc, code],
   );
+  const [editOpen, setEditOpen] = useState(false);
+  // Câu báo sau lần sửa (lưu xong, hay máy chủ từ chối vì đơn vừa đổi) giữ ở khối địa chỉ tới khi rời trang hay mở lại tấm sửa.
+  const [editNotice, setEditNotice] = useState<AddressNotice | null>(null);
+  const onEditSettled = useCallback(
+    (r: OrderEditOutcome) => {
+      setEditOpen(false);
+      setEditNotice(r.kind === 'saved' ? { tone: 'ok', text: `${orderEditSaved(code)}. ${orderEditsLeftText(r.editsLeft)}` } : { tone: 'error', text: r.message });
+      void qc.invalidateQueries({ queryKey: ['order', code] });
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+    [qc, code],
+  );
 
   // Đếm ngược theo giờ máy chủ chỉ khi đơn còn chờ khách chuyển khoản; hook phải đứng trước các return sớm.
   const deadlineLeft = useCountdown(
@@ -244,6 +262,9 @@ export default function OrderDetailPage() {
   }
 
   const o = orderQ.data;
+  // `OrderDetailDTO` của shop-client chưa khai `canEdit` và mã địa giới của ảnh chụp địa chỉ; máy chủ vẫn trả cả hai (OrderView).
+  const editable = o as EditableOrder;
+  const editAddress = canEditOrder(editable) ? (editable.shippingAddress ?? null) : null;
   const orderReturns = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
   const stamp = orderStamp(o);
   const etaLabel = orderDeliveryEtaLabel(cfgQ.data?.shippingEta, o);
@@ -534,7 +555,28 @@ export default function OrderDetailPage() {
             />
           </div>
           <div className="order-11">
-            <AddressSection order={o} />
+            <AddressSection
+              order={o}
+              notice={editNotice}
+              onEdit={
+                editAddress
+                  ? () => {
+                      setEditNotice(null);
+                      setEditOpen(true);
+                    }
+                  : undefined
+              }
+            />
+            {editOpen && editAddress && (
+              <OrderEditSheet
+                code={o.code}
+                address={editAddress}
+                note={customerOrderNote(o)}
+                split={(o.siblings?.length ?? 0) > 0}
+                onClose={() => setEditOpen(false)}
+                onSettled={onEditSettled}
+              />
+            )}
           </div>
       {customerOrderNote(o) ? (
         <section className={`mt-4 p-4 order-[12] max-md:mt-2 ${ui.card} ${mini.band}`}>
@@ -564,7 +606,11 @@ export default function OrderDetailPage() {
   );
 }
 
-function AddressSection({ order: o }: { order: OrderDetailDTO }) {
+type AddressNotice = { tone: 'ok' | 'error'; text: string };
+type EditableOrder = OrderDetailDTO & { canEdit?: boolean; shippingAddress?: ShippingAddressSnapshot | null };
+
+/** `onEdit`: lối "Sửa" duy nhất của việc sửa địa chỉ và ghi chú (máy chủ báo `canEdit`); `notice`: câu báo của lần sửa vừa rồi. */
+function AddressSection({ order: o, onEdit, notice }: { order: OrderDetailDTO; onEdit?: () => void; notice?: AddressNotice | null }) {
   const addr = o.shippingAddress;
   const line = addressLine(addr);
   const contact = [addr?.recipient, addr?.phone].filter(Boolean).join(' · ');
@@ -573,12 +619,34 @@ function AddressSection({ order: o }: { order: OrderDetailDTO }) {
 
   return (
     <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-      <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
+        {onEdit && (
+          <button
+            type="button"
+            data-testid="order-edit-open"
+            aria-label={orderEditLinkAria(o.code)}
+            onClick={onEdit}
+            className={`${ui.btnText} -my-2 text-[color:var(--color-text-brand)]`}
+          >
+            {ORDER_EDIT_COPY.link}
+          </button>
+        )}
+      </div>
       <div className="mt-2 space-y-1 text-sm">
         {contact && <p className="font-medium text-stone-900">{contact}</p>}
         {line && <p className="text-stone-700">{line}</p>}
         {!contact && !line && addr?.note && <p className="text-stone-700">{addr.note}</p>}
       </div>
+      {notice && (
+        <p
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+          data-testid="order-edit-notice"
+          className={`mt-2 text-sm ${notice.tone === 'error' ? 'text-danger-fg' : 'text-success-fg'}`}
+        >
+          {notice.text}
+        </p>
+      )}
     </section>
   );
 }

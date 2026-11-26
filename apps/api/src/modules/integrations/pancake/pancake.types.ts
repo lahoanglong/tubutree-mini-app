@@ -123,9 +123,12 @@ export interface PancakeOrderTagRef {
   name?: string;
 }
 
-/** Cập nhật một phần đơn (PUT /shops/{SHOP_ID}/orders/{ORDER_ID}). */
+/**
+ * Cập nhật một phần đơn (PUT /shops/{SHOP_ID}/orders/{ORDER_ID}). `shipping_address` / `bill_*` chỉ job khách tự sửa địa chỉ gửi; Open API mô tả
+ * thân PUT cùng schema "Đơn hàng" với lệnh tạo, và job luôn đọc lại đơn sau PUT để đối chiếu (Pancake bỏ qua trường thì ops thấy ngay).
+ */
 export type PancakeUpdateOrderBody = Partial<
-  Pick<PancakeCreateOrderBody, 'transfer_money' | 'cod' | 'note' | 'tags'>
+  Pick<PancakeCreateOrderBody, 'transfer_money' | 'cod' | 'note' | 'tags' | 'shipping_address' | 'bill_full_name' | 'bill_phone_number'>
 > & { status?: number };
 
 /** Đơn Pancake đọc về (GET một đơn / danh sách / phản hồi tạo-cập nhật) — chỉ các trường app dùng. */
@@ -138,6 +141,15 @@ export interface PancakeOrderDTO {
   extension?: { external_order_id?: string } | null;
   inserted_at?: string;
   tags?: Array<PancakeOrderTagRef | string>;
+  /** Địa chỉ giao đọc lại sau khi khách tự sửa (job customer-edit đối chiếu phường và số nhà). */
+  shipping_address?: {
+    full_address?: string | null;
+    address?: string | null;
+    commune_id?: string | number | null;
+    province_id?: string | number | null;
+    phone_number?: string | null;
+    full_name?: string | null;
+  } | null;
 }
 
 /** Open API mô tả phản hồi là chính object đơn; bản thật hay bọc `{success, data}`. Đọc được cả hai. */

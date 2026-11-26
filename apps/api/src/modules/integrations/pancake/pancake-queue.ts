@@ -8,17 +8,20 @@ import { withQueueTimeout } from '../../../jobs/queue-timeout';
  *  - payment: đơn đã trả tiền sau khi lên Pancake → cập nhật "đã thanh toán, không thu COD";
  *  - cancel: đơn huỷ ở Tubu → huỷ đơn Pancake (chưa bàn giao vận chuyển);
  *  - cod-switch: khách đổi đơn chuyển khoản chưa trả sang COD → sửa ghi chú/thẻ đơn Pancake từ "chờ chuyển khoản" sang "thu COD".
+ *  - customer-edit: khách tự sửa địa chỉ/ghi chú → sửa địa chỉ giao, người nhận và ghi chú đơn Pancake, đọc lại để đối chiếu.
  */
 export const PANCAKE_JOB_PUSH = 'push';
 export const PANCAKE_JOB_PAYMENT = 'payment';
 export const PANCAKE_JOB_CANCEL = 'cancel';
 export const PANCAKE_JOB_COD_SWITCH = 'cod-switch';
+export const PANCAKE_JOB_CUSTOMER_EDIT = 'customer-edit';
 
 /** jobId KHÔNG được chứa ':' (BullMQ 5). */
 export const pancakePushJobId = (orderId: string) => orderId;
 export const pancakePaymentJobId = (orderId: string) => `payment-${orderId}`;
 export const pancakeCancelJobId = (orderId: string) => `cancel-${orderId}`;
 export const pancakeCodSwitchJobId = (orderId: string) => `cod-switch-${orderId}`;
+export const pancakeCustomerEditJobId = (orderId: string) => `customer-edit-${orderId}`;
 
 /**
  * Xoá job cùng jobId đã KẾT THÚC (completed/failed) rồi add lại: BullMQ giữ hash job đã xong (removeOnComplete /
@@ -58,6 +61,33 @@ export function enqueuePancakeCancel(queue: Queue, orderId: string): Promise<voi
 
 export function enqueuePancakeCodSwitch(queue: Queue, orderId: string): Promise<void> {
   return addPancakeJob(queue, PANCAKE_JOB_COD_SWITCH, orderId, pancakeCodSwitchJobId(orderId));
+}
+
+/** Job nối tiếp chờ một nhịp để job đang chạy kịp xong lượt PUT của nó. */
+const CUSTOMER_EDIT_FOLLOW_UP_DELAY_MS = 5_000;
+
+/**
+ * Như addPancakeJob, thêm một ca: job sửa đang chạy (active) có thể đã qua bước so dấu vân tay với đơn Tubu mà BullMQ bỏ lần thêm trùng id, nên lần
+ * sửa mới nhất không bao giờ tới Pancake. Khi đó xếp thêm một job id riêng; job nào cũng dựng thân từ đơn hiện tại nên chạy thừa một lượt vô hại.
+ */
+export function enqueuePancakeCustomerEdit(queue: Queue, orderId: string): Promise<void> {
+  const jobId = pancakeCustomerEditJobId(orderId);
+  return withQueueTimeout(addCustomerEditJob(queue, orderId, jobId), `${queue.name} ${jobId}`);
+}
+
+async function addCustomerEditJob(queue: Queue, orderId: string, jobId: string): Promise<void> {
+  try {
+    const existing = await queue.getJob(jobId);
+    const state = existing ? await existing.getState() : null;
+    if (state === 'active') {
+      await queue.add(PANCAKE_JOB_CUSTOMER_EDIT, { orderId }, { jobId: `${jobId}-${Date.now()}`, delay: CUSTOMER_EDIT_FOLLOW_UP_DELAY_MS });
+      return;
+    }
+    if (existing && (state === 'completed' || state === 'failed')) await existing.remove();
+  } catch {
+    /* không đọc được trạng thái job → cứ add, BullMQ tự dedupe */
+  }
+  await queue.add(PANCAKE_JOB_CUSTOMER_EDIT, { orderId }, { jobId });
 }
 
 /**

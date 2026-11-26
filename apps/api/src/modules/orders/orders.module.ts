@@ -18,6 +18,7 @@ import { ReturnImagesController } from './return-images.controller';
 import { MssOrderStatusController } from './mss-order-status.controller';
 import { MssPaymentRescueService } from './mss-payment-rescue.service';
 import { OrderCodSwitchService } from './order-cod-switch.service';
+import { OrderCustomerEditService } from './order-customer-edit.service';
 import { PickListController } from './pick-list.controller';
 import { PickListService } from './pick-list.service';
 import { CartModule } from '../cart/cart.module';
@@ -43,6 +44,7 @@ import { WastePickupModule } from '../waste-exchange/pickup/waste-pickup.module'
     ReversalEffectsResyncCron,
     MssPaymentRescueService,
     OrderCodSwitchService,
+    OrderCustomerEditService,
     PickListService,
   ],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
