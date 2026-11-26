@@ -19,6 +19,7 @@ import { MSS_FLAG_KEYS } from '../../integrations/mss/mss-flag-keys';
 import {
   MSS_EMAIL_EVENT_TYPES,
   MSS_FALLBACK_ZNS_GRACE_MS,
+  MSS_NO_ZNS_STATUSES,
   mssEmailEligible,
   ORDER_ZALO_ACTIVE_STATUSES,
   type MssOutboxStatus,
@@ -154,8 +155,12 @@ export class OrderConfirmEmailService {
     if (!ORDER_ZALO_ACTIVE_STATUSES.includes(row.order.status)) return 'NOT_ELIGIBLE';
     // Cùng hạn với ZNS đường lui: báo xác nhận trễ hàng giờ còn tệ hơn không báo.
     if (now > row.expiresAt.getTime() + MSS_FALLBACK_ZNS_GRACE_MS) return 'STALE';
-    // Khách đã nhận một tin Zalo khác của chính đơn này qua MSS (kể cả tin người lạ): không email.
-    const zaloSent = await this.prisma.mssOrderEventOutbox.findFirst({ where: { orderId: row.orderId, recipientRole: 'buyer', status: 'RESULT_SENT' }, select: { id: true } });
+    // Khách đã nhận, hoặc có thể đã nhận (RESULT_UNKNOWN: MSS hết giờ chờ, kẹt, báo unknown), một tin Zalo khác của chính đơn này qua MSS
+    // (kể cả tin người lạ): không email. Thà thiếu email còn hơn Zalo + email.
+    const zaloSent = await this.prisma.mssOrderEventOutbox.findFirst({
+      where: { orderId: row.orderId, recipientRole: 'buyer', status: { in: [...MSS_NO_ZNS_STATUSES] } },
+      select: { id: true },
+    });
     if (zaloSent) return 'NOT_ELIGIBLE';
     const { order } = row;
     const to = orderEmailRecipient(order.user.email, order.invoiceRequest);

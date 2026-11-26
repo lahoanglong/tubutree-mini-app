@@ -17,6 +17,7 @@ import {
   mssDefinitelyRejected,
   mssEmailEligible,
   mssEventTypeForZns,
+  MSS_NO_ZNS_STATUSES,
   MSS_ORDER_EVENT_TYPES,
   MSS_RETRY_DELAYS_MS,
   nextRetryAt,
@@ -430,6 +431,10 @@ describe('hàm thuần của outbox', () => {
     expect(mssEmailEligible('RESULT_SKIPPED', 'stranger_cap', null)).toBe(true);
     expect(mssEmailEligible('RESULT_UNKNOWN', 'stranger', null)).toBe(false);
     expect(mssEmailEligible('RESULT_SENT', 'stranger', null)).toBe(false);
+  });
+
+  it('MSS_NO_ZNS_STATUSES (w41-01 PO): đã gửi và RESULT_UNKNOWN, cũng là luật chặn email cả đơn', () => {
+    expect([...MSS_NO_ZNS_STATUSES]).toEqual(['RESULT_SENT', 'RESULT_UNKNOWN']);
   });
 
   it('mssDefinitelyRejected: chỉ 4xx khác 408/409/429 là MSS chắc chắn không nhận', () => {

@@ -16,6 +16,7 @@ import {
   MSS_FALLBACK_STATUSES,
   MSS_FALLBACK_ZNS_GRACE_MS,
   MSS_HTTP_4XX_MAYBE_ACCEPTED,
+  MSS_NO_ZNS_STATUSES,
   MSS_RESULT_RECONCILE_AFTER_MS,
   MSS_RESULT_STUCK_GRACE_MS,
   ORDER_ZALO_ACTIVE_STATUSES,
@@ -107,7 +108,7 @@ export class MssOrderEventReconcileService {
    * (B) đường lui IN_APP_ONLY đã chốt quá MSS_EMAIL_IN_APP_RESCUE_AFTER_MS mà email trong tiến trình chưa từng nhận việc (app tắt giữa chừng).
    * Cả hai chỉ khi đơn chưa có email nào (khoá `orderEmailDedupeKey`, kể cả FAILED: lượt quét không gửi lại email lỗi). Câu chọn bỏ trước
    * mọi dòng OrderConfirmEmailService sẽ từ chối (luật `mssEmailEligible` bản SQL, quá hạn sống, đơn đã đóng, đơn đã có tin Zalo MSS tới
-   * khách) để chúng không chiếm chỗ trong lô của dòng còn gửi được. SMTP chưa sẵn sàng thì không chạy câu chọn. Log tìm theo khoá, không
+   * hoặc có thể đã tới khách: dòng người mua `MSS_NO_ZNS_STATUSES`) để chúng không chiếm chỗ trong lô của dòng còn gửi được. SMTP chưa sẵn sàng thì không chạy câu chọn. Log tìm theo khoá, không
    * theo userId (đơn đổi chủ khi khách vãng lai đăng nhập), giới hạn từ trước lúc tạo đơn một ngày theo chỉ mục (channel, status, sentAt) /
    * (templateCode, sentAt). Gửi đôi bị chặn bởi khoá advisory theo mã đơn + log PENDING/SENT trong service. Trả số email đã gửi.
    */
@@ -138,7 +139,7 @@ export class MssOrderEventReconcileService {
          )
          AND NOT EXISTS (
            SELECT 1 FROM "mss_order_event_outbox" s
-            WHERE s."orderId" = o."orderId" AND s."recipientRole" = 'buyer' AND s."status" = 'RESULT_SENT')
+            WHERE s."orderId" = o."orderId" AND s."recipientRole" = 'buyer' AND s."status" IN (${Prisma.join([...MSS_NO_ZNS_STATUSES])}))
          AND NOT EXISTS (
            SELECT 1 FROM "notification_logs" e
             WHERE e."templateCode" = ${ORDER_CONFIRM_EMAIL_TEMPLATE} AND e."channel" = 'EMAIL' AND e."sentAt" >= ord."createdAt" - interval '1 day'
