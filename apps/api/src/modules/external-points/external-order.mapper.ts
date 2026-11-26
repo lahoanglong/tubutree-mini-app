@@ -3,6 +3,7 @@ import { parseTypedVnPhone } from '../../common/phone';
 import { foldVietnamese } from '../catalog/search-text';
 import { pancakeEventOrderCode } from '../integrations/pancake/pancake-webhook-dedupe';
 import type { OrderSourceMap } from './external-order.config';
+import { parseOrderPhoneForMatch, visibleDigits, type OrderPhonePattern } from './order-phone-match';
 
 /**
  * Hàm thuần nhận biết và đọc đơn Pancake ngoài app. Tên field theo Pancake POS Open API; chưa có payload webhook thật
@@ -180,6 +181,20 @@ export function buyerPhone(data: Data): string | null {
     if (phone) return phone;
   }
   return null;
+}
+
+/**
+ * SĐT người mua để đối chiếu với SĐT Zalo của khách gửi mã (W42): cùng hai nguồn và thứ tự như buyerPhone, nhận cả số đã che. Số đầy đủ
+ * thắng; không có thì lấy mẫu che có nhiều chữ số nhìn thấy nhất. buyerPhone giữ nguyên vì đường đơn chat cần số đầy đủ để ghép.
+ */
+export function buyerPhonePattern(data: Data): OrderPhonePattern {
+  let best: OrderPhonePattern = { kind: 'NONE' };
+  for (const c of [data['bill_phone_number'], asRecord(data['shipping_address'])?.['phone_number']]) {
+    const p = parseOrderPhoneForMatch(c);
+    if (p.kind === 'FULL') return p;
+    if (visibleDigits(p) > visibleDigits(best)) best = p;
+  }
+  return best;
 }
 
 export interface PancakeCreatorRef {

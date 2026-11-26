@@ -21,6 +21,7 @@ import { evaluateClaimRules, lockedUntil, type ClaimDecision, type ClaimFacts } 
 import { normalizeTrackingCode } from './external-order.mapper';
 import { UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { maskClaimCode } from './external-points-rate';
+import { orderPhoneMatch } from './order-phone-match';
 
 const DAY_MS = 864e5;
 export const UNMATCHED_RETRY_DAYS = UNMATCHED_RETRY_DAYS_FOR_ATTENTION;
@@ -31,11 +32,17 @@ type Tx = Prisma.TransactionClient;
 /** Lý do không ghi vào attempt: khách chưa được tính là "đã thử" (cờ tắt, không đủ điều kiện, đang bị khoá, hết lần). */
 const UNRECORDED: readonly ExternalClaimRejectCode[] = ['DISABLED', 'NOT_ELIGIBLE_USER', 'LOCKED', 'DAILY_ATTEMPTS'];
 
+/**
+ * Kết quả lần thử tính vào khoá 24h (5 lần trong 24 giờ): mã không thấy đơn, và (W42) mã của đơn mang SĐT khác. Đếm lần lệch SĐT để
+ * một người không dò được nhiều mã vận đơn của người khác; lần lệch vẫn được ghi như mọi lần thử nên cũng tính vào trần lần thử/ngày.
+ */
+export const LOCK_COUNTED_RESULTS = ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH'] as const;
+
 export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; message: string }> = {
   DISABLED: { status: HttpStatus.NOT_FOUND, message: 'Tính năng tích điểm đơn mua ngoài app chưa mở.' },
   NOT_ELIGIBLE_USER: { status: HttpStatus.FORBIDDEN, message: 'Bạn cần đăng nhập Zalo và cung cấp số điện thoại để tích điểm đơn mua ngoài app.' },
   INVALID_CODE: { status: HttpStatus.BAD_REQUEST, message: 'Mã không hợp lệ. Hãy nhập mã vận đơn hoặc mã đơn trên sàn (8 đến 30 chữ và số).' },
-  LOCKED: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Bạn đã nhập mã chưa tìm thấy quá nhiều lần. Bạn thử lại sau 24 giờ hoặc liên hệ Tubu Tree nhé.' },
+  LOCKED: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Bạn đã nhập quá nhiều mã chưa tìm thấy hoặc không khớp số điện thoại. Bạn thử lại sau 24 giờ hoặc liên hệ Tubu Tree nhé.' },
   DAILY_ATTEMPTS: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Hôm nay bạn đã nhập mã quá số lần cho phép. Hãy thử lại vào ngày mai.' },
   APP_ORDER: { status: HttpStatus.CONFLICT, message: 'Đây là đơn bạn mua trong Mini App, điểm đã được tích tự động khi đơn giao thành công.' },
   CHAT_ORDER: { status: HttpStatus.CONFLICT, message: 'Đơn đặt qua tư vấn viên được cộng điểm tự động theo số điện thoại, bạn không cần nhập mã.' },
@@ -46,6 +53,12 @@ export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; 
   DAILY_MAX: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Hôm nay bạn đã tích đủ số đơn cho phép. Hãy quay lại vào ngày mai.' },
   MONTHLY_CAP: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Bạn đã đạt mức điểm tối đa từ đơn mua ngoài app trong tháng này.' },
   ZERO_POINTS: { status: HttpStatus.BAD_REQUEST, message: 'Giá trị đơn quá nhỏ để quy ra Điểm Xanh.' },
+  // Không bao giờ in số nhìn thấy trên đơn: người cầm mã của người khác không được biết thêm gì về chủ đơn.
+  PHONE_MISMATCH: {
+    status: HttpStatus.FORBIDDEN,
+    message:
+      'Số điện thoại trên đơn sàn không khớp số điện thoại Zalo bạn đang đăng nhập. Bạn hãy đăng nhập đúng tài khoản Zalo dùng số đã đặt đơn, hoặc liên hệ Tubu Tree nếu bạn đã đổi số.',
+  },
 };
 
 export function rejectionOf(code: ExternalClaimRejectCode): HttpException {
@@ -72,6 +85,8 @@ export interface ClaimOrderRow {
   trackingCodes: string[];
   marketplaceOrderSn: string | null;
   goodsValue: number | null;
+  phone: string | null;
+  phoneMask: string | null;
   phoneLast3: string | null;
   pancakeInsertedAt: Date | null;
   firstSeenAt: Date;
@@ -123,8 +138,6 @@ export interface OwnClaim {
   maskedCode: string;
   expectedCreditAt: Date | null;
 }
-
-const last3 = (phone: string | null): string | null => (phone && phone.length >= 3 ? phone.slice(-3) : null);
 
 /** Tìm đơn ngoài theo mã đã chuẩn hoá: mã vận đơn hoặc mã đơn sàn. Đơn sàn thắng khi một mã khớp nhiều dòng. */
 export function findExternalOrderByCode(db: Pick<Tx, 'externalOrder'>, code: string) {
@@ -280,7 +293,7 @@ export class ExternalClaimService {
   private async mayTry(userId: string, cfg: ClaimConfig, now: Date): Promise<boolean> {
     const [times, today] = await Promise.all([
       this.prisma.externalClaimAttempt.findMany({
-        where: { userId, result: { in: ['UNMATCHED', 'NOT_FOUND'] }, createdAt: { gte: new Date(now.getTime() - 2 * DAY_MS) } },
+        where: { userId, result: { in: [...LOCK_COUNTED_RESULTS] }, createdAt: { gte: new Date(now.getTime() - 2 * DAY_MS) } },
         select: { createdAt: true },
       }),
       this.prisma.externalClaimAttempt.count({ where: { userId, dayKey: vnDateKey(now) } }),
@@ -302,7 +315,7 @@ export class ExternalClaimService {
     const [notFound, attemptsToday, appOrder, found] = await Promise.all([
       opts.skipAttemptLimits
         ? Promise.resolve([] as { createdAt: Date }[])
-        : tx.externalClaimAttempt.findMany({ where: { userId, result: { in: ['UNMATCHED', 'NOT_FOUND'] }, createdAt: { gte: sinceNotFound } }, select: { createdAt: true } }),
+        : tx.externalClaimAttempt.findMany({ where: { userId, result: { in: [...LOCK_COUNTED_RESULTS] }, createdAt: { gte: sinceNotFound } }, select: { createdAt: true } }),
       opts.skipAttemptLimits ? Promise.resolve(0) : tx.externalClaimAttempt.count({ where: { userId, dayKey: vnDateKey(now) } }),
       tx.order.findFirst({
         where: { OR: [{ shippingCode: { equals: code, mode: 'insensitive' } }, { gomdonPartnerCode: { equals: code, mode: 'insensitive' } }] },
@@ -356,13 +369,18 @@ export class ExternalClaimService {
       now,
       cfg,
       userOk: !!user && isRealUser(user) && !!user.phone && !!user.phoneVerifiedAt && !user.isBlocked,
-      userPhoneLast3: last3(user?.phone ?? null),
       userIsStaff: user?.role === 'STAFF' || user?.role === 'ADMIN',
       lockedUntil: lockedUntil(notFound.map((n) => n.createdAt), now),
       attemptsToday,
       isAppOrder: !!appOrder,
       order: order
-        ? { source: order.source, status: order.status, insertedAt: order.pancakeInsertedAt ?? order.firstSeenAt, goodsValue: order.goodsValue, phoneLast3: order.phoneLast3 }
+        ? {
+            source: order.source,
+            status: order.status,
+            insertedAt: order.pancakeInsertedAt ?? order.firstSeenAt,
+            goodsValue: order.goodsValue,
+            phoneMatch: orderPhoneMatch(user?.phone ?? null, order),
+          }
         : null,
       claim: claim ? { id: claim.id, reopenable: claim.reopenable, own: claim.own, state: claim.state } : null,
       codeTaken,

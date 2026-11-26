@@ -190,7 +190,7 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
       earnPct: 2,
       marketplaceClaimEnabled: false,
       marketplaceClaimMaxAgeDays: 60,
-      marketplaceEarnPct: 1,
+      marketplaceEarnPct: 5,
       vndPerPoint: 50,
       vndPerPointRedeem: 1,
       maxRedeemPct: 0.2,
@@ -233,10 +233,10 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
 
 // D5-10: câu trả lời FAQ dự phòng ("tối đa 20% giá trị đơn", "điểm có hạn 12 tháng") đọc từ đây, cùng khoá và mặc định với getOverview.
 describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)', () => {
-  it('cờ tắt và tỉ lệ 1% khi chưa cấu hình; bật thì trả đúng tỉ lệ admin đặt', async () => {
+  it('cờ tắt và tỉ lệ 5% khi chưa cấu hình; bật thì trả đúng tỉ lệ admin đặt', async () => {
     const off = await makeController(makeConfig()).publicConfig();
     expect(off.loyalty.marketplaceClaimEnabled).toBe(false);
-    expect(off.loyalty.marketplaceEarnPct).toBe(1);
+    expect(off.loyalty.marketplaceEarnPct).toBe(5);
     expect(off.loyalty.marketplaceClaimMaxAgeDays).toBe(60);
     const age = await makeController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 30 })).publicConfig();
     expect(age.loyalty.marketplaceClaimMaxAgeDays).toBe(30);
@@ -247,7 +247,7 @@ describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)'
     const high = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': 25 })).publicConfig();
     expect(high.loyalty.marketplaceEarnPct).toBe(20);
     const junk = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': -3 })).publicConfig();
-    expect(junk.loyalty.marketplaceEarnPct).toBe(1);
+    expect(junk.loyalty.marketplaceEarnPct).toBe(5);
   });
 
   it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) coi là tắt: không hứa tích điểm đơn sàn', async (bad) => {
@@ -255,9 +255,9 @@ describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)'
     expect(out.loyalty.marketplaceClaimEnabled).toBe(false);
   });
 
-  it.each(['1', 0, -1, null])('tỉ lệ sai (%p) rơi về 1%', async (bad) => {
+  it.each(['1', 0, -1, null])('tỉ lệ sai (%p) rơi về 5%', async (bad) => {
     const out = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': bad })).publicConfig();
-    expect(out.loyalty.marketplaceEarnPct).toBe(1);
+    expect(out.loyalty.marketplaceEarnPct).toBe(5);
   });
 
   it('tỉ lệ quá trần (99) bị kẹp về 20%, cùng quy tắc với phía cộng điểm', async () => {

@@ -173,8 +173,8 @@ export class DataRetentionService {
           {
             table: 'external_orders',
             label: 'external_orders.phone',
-            set: Prisma.sql`"phone" = NULL`,
-            where: Prisma.sql`"phone" IS NOT NULL AND "updatedAt" < ${cutoff} AND NOT EXISTS (
+            set: Prisma.sql`"phone" = NULL, "phoneMask" = NULL`,
+            where: Prisma.sql`("phone" IS NOT NULL OR "phoneMask" IS NOT NULL) AND "updatedAt" < ${cutoff} AND NOT EXISTS (
               SELECT 1 FROM external_points_claims c
               WHERE c."externalOrderId" = external_orders.id AND c."state" IN ('PENDING', 'REVIEW', 'HELD_NO_MEMBER')
             )`,
@@ -182,8 +182,8 @@ export class DataRetentionService {
           {
             table: 'external_orders',
             label: 'external_orders.phone_after_final',
-            set: Prisma.sql`"phone" = NULL`,
-            where: Prisma.sql`"phone" IS NOT NULL AND EXISTS (
+            set: Prisma.sql`"phone" = NULL, "phoneMask" = NULL`,
+            where: Prisma.sql`("phone" IS NOT NULL OR "phoneMask" IS NOT NULL) AND EXISTS (
               SELECT 1 FROM external_points_claims c
               WHERE c."externalOrderId" = external_orders.id
                 AND c."state" IN ('CREDITED', 'VOIDED', 'REVERSED', 'LAPSED') AND c."updatedAt" < ${finalClaimCutoff}

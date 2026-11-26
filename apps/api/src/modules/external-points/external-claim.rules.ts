@@ -1,9 +1,12 @@
 import type { ExternalClaimRejectCode } from '@tubutree/shared-types';
 import type { ClaimConfig } from './external-claim.config';
 import { claimPoints } from './external-points-rate';
+import type { OrderPhoneMatch } from './order-phone-match';
 
 const DAY_MS = 864e5;
 export const NOT_FOUND_LOCK_THRESHOLD = 5;
+/** Đơn sàn không có SĐT (đầy đủ hay che đủ số) để đối chiếu tự động: người kiểm xem đơn trước khi cộng. */
+export const NO_PHONE_REVIEW_REASON = 'Đơn sàn không có thông tin SĐT để đối chiếu tự động';
 const OWN_REPORTABLE = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED'];
 
 export interface ClaimOrderFacts {
@@ -12,7 +15,8 @@ export interface ClaimOrderFacts {
   /** `inserted_at` của Pancake, rơi về lần đầu thấy đơn khi payload không có. */
   insertedAt: Date;
   goodsValue: number | null;
-  phoneLast3: string | null;
+  /** SĐT trên đơn (đầy đủ hoặc đã che, order-phone-match.ts) so với SĐT Zalo của khách gửi mã. */
+  phoneMatch: OrderPhoneMatch;
 }
 
 /** Mọi dữ kiện luật cần, đọc xong trong transaction đã giữ khoá advisory của khách. Hàm luật thuần nên thứ tự được kiểm bằng unit test. */
@@ -20,7 +24,6 @@ export interface ClaimFacts {
   now: Date;
   cfg: ClaimConfig;
   userOk: boolean;
-  userPhoneLast3: string | null;
   /** Thành viên là nhân viên hoặc admin: tự tích điểm cho mình thì luôn phải có người khác duyệt. */
   userIsStaff: boolean;
   lockedUntil: Date | null;
@@ -59,8 +62,11 @@ export function lockedUntil(notFoundTimes: readonly Date[], now: Date): Date | n
 
 /**
  * Thứ tự luật của một lần gửi mã (extpoints-plan, bước 2): cờ và loại khách, khoá 24h, lần thử trong ngày, mã trùng đơn trong
- * app, có đơn không (UNMATCHED), loại đơn (chat từ chối, lạ vào hàng admin), mốc external_since và tuổi đơn, trạng thái đơn, mã
- * đã được tích, trần claim/ngày, trần điểm/tháng, cuối cùng REVIEW hay PENDING. Luật đứng trước thắng.
+ * app, có đơn không (UNMATCHED), loại đơn (chat từ chối, lạ vào hàng admin), SĐT trên đơn lệch SĐT khách (W42), mốc external_since
+ * và tuổi đơn, trạng thái đơn, mã đã được tích, trần claim/ngày, trần điểm/tháng, cuối cùng REVIEW hay PENDING. Luật đứng trước thắng.
+ *
+ * PHONE_MISMATCH đứng ngay sau loại đơn: người cầm mã của người khác không dò được đơn đó đã huỷ, đã tích hay quá hạn. Claim của chính
+ * khách (gửi lại mã đã có) không bị chặn ở đây để khách vẫn xem được trạng thái claim cũ dù đã đổi SĐT.
  */
 export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   const reject = (code: ExternalClaimRejectCode): ClaimDecision => ({ kind: 'REJECT', code });
@@ -73,6 +79,7 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   if (!order) return { kind: 'UNMATCHED' };
   if (order.source === 'CHAT') return reject('CHAT_ORDER');
   if (order.source === 'UNKNOWN') return { kind: 'UNKNOWN_SOURCE' };
+  if (order.phoneMatch === 'MISMATCH' && !f.claim?.own) return reject('PHONE_MISMATCH');
 
   if (f.cfg.externalSince && order.insertedAt.getTime() < f.cfg.externalSince.getTime()) return reject('BEFORE_SINCE');
   if (f.now.getTime() - order.insertedAt.getTime() > f.cfg.maxAgeDays * DAY_MS) return reject('TOO_OLD');
@@ -95,7 +102,7 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   else if (f.userIsStaff) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
   else if (order.status === 'PARTIAL_RETURN') reviewReason = 'Đơn đã hoàn một phần trên sàn, cần nhân viên kiểm';
   else if ((order.goodsValue ?? 0) > f.cfg.reviewAboveVnd) reviewReason = 'Giá trị đơn vượt ngưỡng tự duyệt';
-  else if (order.phoneLast3 && f.userPhoneLast3 && order.phoneLast3 !== f.userPhoneLast3) reviewReason = '3 số cuối SĐT trên đơn khác SĐT thành viên';
+  else if (order.phoneMatch === 'NO_DATA') reviewReason = NO_PHONE_REVIEW_REASON;
   return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };
 }
 

@@ -423,6 +423,7 @@ export class UsersService {
     referralCode: string;
     pointsBalance: number;
     pointsConvertedBalance: number;
+    pointsMarketplaceBalance?: number;
     walletBalance: number;
     cashbackPending: number;
     metadata?: unknown;
@@ -444,7 +445,9 @@ export class UsersService {
       pointsBalance: user.pointsBalance,
       // Lô quy đổi từ xu cũ (không hết hạn); pointsTotal là con số "Điểm Xanh" khách thấy.
       pointsConvertedBalance: user.pointsConvertedBalance,
-      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
+      // Lô điểm tích từ đơn sàn (W42), chỉ dùng khi mua hàng.
+      pointsMarketplaceBalance: user.pointsMarketplaceBalance ?? 0,
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance + (user.pointsMarketplaceBalance ?? 0),
       walletBalance: user.walletBalance,
       cashbackPending: user.cashbackPending,
       onboarded: Boolean(meta?.onboardedAt),

@@ -116,6 +116,8 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261118142510_review_green_corner', ordersLock: false },
   // Thêm cột NULL (chỉ sửa catalog) rồi dựng chỉ mục thường (không CONCURRENTLY) trên orders: chặn ghi orders trong lúc dựng.
   { name: '20261124090000_w24_01_orders_affiliate_link_code', ordersLock: true },
+  // Chỉ mục duy nhất một phần trên points_transactions (hoàn điểm lô MARKETPLACE) và VALIDATE ràng buộc quét users; cột mới có mặc định hằng.
+  { name: '20261127100000_w42_01_marketplace_lot_phone_mask', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

@@ -18,6 +18,10 @@ import { lockOrderThenClaim } from './external-claim-status';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 import { settlePoints } from './external-claim.rules';
 import { claimPoints, maskClaimCode } from './external-points-rate';
+import { orderPhoneMatch } from './order-phone-match';
+
+/** Claim SCAN chưa có người duyệt mà SĐT Zalo của thành viên lúc cộng không còn khớp SĐT (đầy đủ hoặc che) trên đơn sàn. */
+export const SCAN_PHONE_CHANGED_REASON = 'SĐT Zalo của thành viên đã đổi, không còn khớp SĐT trên đơn sàn';
 
 const logger = new Logger('ExternalClaimRelease');
 const BATCH = 100;
@@ -73,7 +77,7 @@ export async function releaseClaim(
     if (!row || (!row.userId && !chat)) return skipped;
     const order = await tx.externalOrder.findUniqueOrThrow({
       where: { id: row.externalOrderId },
-      select: { pancakeOrderId: true, source: true, status: true, deliveredAt: true, goodsValue: true, trackingCode: true, phone: true, channel: true },
+      select: { pancakeOrderId: true, source: true, status: true, deliveredAt: true, goodsValue: true, trackingCode: true, phone: true, phoneMask: true, channel: true },
     });
     // SĐT trên đơn khác SĐT lúc tạo claim (nhân viên sửa đơn): không cộng theo số nào, người kiểm quyết. Claim đã có người duyệt thì thôi.
     if (chat && row.decidedById === null && phoneDiffers(row.orderPhone, order.phone)) {
@@ -136,6 +140,8 @@ export async function releaseClaim(
     else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
     else if (chat && row.decidedById === null && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
+    // Đơn sàn (W42): khớp lúc gửi mã nhưng thành viên đổi SĐT Zalo trước lúc cộng. Claim đã có người duyệt (gắn tay khi lệch) thì thôi.
+    else if (!chat && row.decidedById === null && orderPhoneMatch(user.phone, order) === 'MISMATCH') reviewReason = SCAN_PHONE_CHANGED_REASON;
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
     else if (chat && !phoneVerifiedFresh(user.phoneVerifiedAt, { now, maxDays: opts.chat!.phoneVerifiedMaxDays }) && !(await approvedDespiteStale(tx, row))) reviewReason = PHONE_STALE_REASON;
     let finalPoints = points ?? 0;
@@ -183,10 +189,11 @@ export async function releaseClaim(
     });
     if (moved.count !== 1) return skipped;
     const prefix = chat ? 'PANCAKE_CHAT_ORDER' : 'MARKETPLACE_ORDER';
+    // W42: điểm đơn sàn (SCAN) vào lô MARKETPLACE, chỉ tiêu khi đặt đơn; đơn chat (PHONE) do Tubu bán vẫn là điểm thường.
     const res = await applyPointsDelta(tx, {
       userId,
       delta: finalPoints,
-      lot: 'STANDARD',
+      lot: chat ? 'STANDARD' : 'MARKETPLACE',
       reason: `${prefix}:${order.pancakeOrderId}`,
       refType: 'EXTERNAL_ORDER',
       refId: row.id,

@@ -41,7 +41,8 @@ describe('Gửi mã khi người khác đang chờ cùng mã (real Postgres)', (
     await prisma?.$disconnect();
   });
 
-  const phone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  // W42: đơn sàn che SĐT; mọi khách của bộ này có đuôi 78 để khớp mẫu `******78` của đơn dựng sẵn.
+  const phone = () => `09${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}78`;
   async function mkUser() {
     const u = await createUser(prisma, { phone: phone(), zaloId: `zalo_${randCode(10)}` });
     userIds.push(u.id);
@@ -89,6 +90,7 @@ describe('Gửi mã khi người khác đang chờ cùng mã (real Postgres)', (
       data: {
         pancakeOrderId: `EXS${randCode(10)}`, source: 'MARKETPLACE', channel: 'shopee', sourceKey: '-3|it|-3', trackingCode: code, trackingCodes: [code],
         goodsValue: 200_000, pancakeStatus: 3, status: 'DELIVERED', deliveredAt: new Date(now.getTime() - DAY), pancakeInsertedAt: new Date(now.getTime() - 3 * DAY), pancakeUpdatedAt: now, lastPayload: {},
+        phoneMask: '******78',
       },
     });
     orderIds.push(order.id);

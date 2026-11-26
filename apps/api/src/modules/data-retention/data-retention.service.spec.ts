@@ -139,6 +139,8 @@ describe('DataRetentionService (C-046)', () => {
     expect(sql).toContain('UPDATE');
     expect(sql).not.toContain('DELETE');
     expect(sql).toContain('"phone" = NULL');
+    expect(sql).toContain('"phoneMask" = NULL');
+    expect(sql).toContain('"phoneMask" IS NOT NULL');
     expect(sql).toContain("'PENDING', 'REVIEW', 'HELD_NO_MEMBER'");
   });
 
@@ -151,6 +153,7 @@ describe('DataRetentionService (C-046)', () => {
     expect(sql).not.toContain('DELETE');
     expect(sql).toContain('"phone" = NULL');
     expect(sql).toContain("'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'");
+    expect(sql).toContain('"phoneMask" = NULL');
     expect(sql).not.toContain('phoneLast3');
     expect(datesIn(c.values)[0]!.getTime()).toBe(NOW.getTime() - 7 * DAY);
   });

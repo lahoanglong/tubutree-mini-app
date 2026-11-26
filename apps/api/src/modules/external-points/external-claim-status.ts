@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { formatPoints } from '../../common/format-points';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
+import { POINTS_LOT_BALANCE_COLUMN } from '../loyalty/points-lot-columns';
 import { externalLotKey, loadPointExpiryTxns, lotRecoverable } from '../loyalty/loyalty-expiry.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
@@ -85,13 +86,18 @@ export async function reverseCreditedClaimTx(
   by: { reason: string; actorId: string | null },
 ): Promise<ReverseResult | null> {
   if (!(await lockOrderThenClaim(tx, claimId))) return null;
-  const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; points: number; externalOrderId: string; kind: string }[]>`
-    SELECT "id", "userId", "points", "externalOrderId", "kind"::text AS "kind" FROM "external_points_claims" WHERE "id" = ${claimId} AND "state" = 'CREDITED' FOR UPDATE`;
+  const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; points: number; externalOrderId: string; kind: string; pointsTxId: string | null }[]>`
+    SELECT "id", "userId", "points", "externalOrderId", "kind"::text AS "kind", "pointsTxId" FROM "external_points_claims" WHERE "id" = ${claimId} AND "state" = 'CREDITED' FOR UPDATE`;
   if (!claim || !claim.userId) return null;
-  const [user] = await tx.$queryRaw<{ pointsBalance: number }[]>`SELECT "pointsBalance" FROM "users" WHERE "id" = ${claim.userId} FOR UPDATE`;
+  // Thu hồi từ ĐÚNG lô của dòng cộng (W42: claim SCAN cộng từ W42 nằm ở lô MARKETPLACE, claim cũ và claim chat ở STANDARD). Claim cũ
+  // thiếu pointsTxId là claim cộng trước khi có lô MARKETPLACE: STANDARD.
+  const credit = claim.pointsTxId ? await tx.pointsTransaction.findUnique({ where: { id: claim.pointsTxId }, select: { lot: true } }) : null;
+  const lot = credit?.lot === 'MARKETPLACE' ? 'MARKETPLACE' : 'STANDARD';
+  const column = Prisma.raw(`"${POINTS_LOT_BALANCE_COLUMN[lot]}"`);
+  const [user] = await tx.$queryRaw<{ balance: number }[]>`SELECT ${column} AS "balance" FROM "users" WHERE "id" = ${claim.userId} FOR UPDATE`;
   const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: claim.externalOrderId }, select: { pancakeOrderId: true } });
-  const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, claim.userId), externalLotKey(claim.id));
-  const take = Math.max(0, Math.min(claim.points, recoverable ?? claim.points, user?.pointsBalance ?? 0));
+  const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, claim.userId, lot), externalLotKey(claim.id));
+  const take = Math.max(0, Math.min(claim.points, recoverable ?? claim.points, user?.balance ?? 0));
   const done = await tx.externalPointsClaim.updateMany({
     where: { id: claim.id, state: 'CREDITED' },
     data: { state: 'REVERSED', voidReason: by.reason, decidedById: by.actorId },
@@ -102,7 +108,7 @@ export async function reverseCreditedClaimTx(
     const res = await applyPointsDelta(tx, {
       userId: claim.userId,
       delta: -take,
-      lot: 'STANDARD',
+      lot,
       reason: `${prefix}:${order.pancakeOrderId}`,
       refType: 'EXTERNAL_ORDER',
       refId: claim.id,

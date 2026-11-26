@@ -73,6 +73,7 @@ export const RETURN_LIST_SELECT = {
   shippingRefund: true,
   pointsRefunded: true,
   convertedPointsRefunded: true,
+  marketplacePointsRefunded: true,
   pointsReversed: true,
   commissionReversed: true,
   adminNote: true,
@@ -158,6 +159,7 @@ function allocOrder(order: OrderWithItems): AllocOrder {
     shippingFee: order.shippingFee,
     pointsUsed: order.pointsUsed,
     pointsUsedConverted: order.pointsUsedConverted,
+    pointsUsedMarketplace: order.pointsUsedMarketplace,
     pointsEarned: order.pointsEarned,
     items: paidItems(order).map((i) => ({
       id: i.id,
@@ -302,7 +304,7 @@ export class OrderReturnsService {
     const prior = await partialReturnTotals(this.prisma, order.id);
     const lines = this.requestedLines(order, prior.approvedQty, dto.items);
     const shopFault = dto.reasonCode ? defaultShopFault(dto.reasonCode) : false;
-    const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping });
+    const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping, priorPoints: prior });
     const moneyRefundable = isMoneyBackable(order);
     return {
       isFull: shares.isFull,
@@ -400,7 +402,7 @@ export class OrderReturnsService {
     const prior = await partialReturnTotals(this.prisma, order.id, id);
     const lines = this.linesOf(req, order, prior.approvedQty);
     const shopFault = shopFaultInput ?? req.shopFault ?? defaultShopFault(req.reasonCode);
-    const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping });
+    const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping, priorPoints: prior });
     return this.previewOf(req, order, shares, shopFault);
   }
 
@@ -453,7 +455,7 @@ export class OrderReturnsService {
       const prior = await partialReturnTotals(tx, order.id, id);
       const lines = this.linesOf(req, order, prior.approvedQty);
       const shopFault = input.shopFault ?? req.shopFault ?? defaultShopFault(req.reasonCode);
-      const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping });
+      const shares = computeReturnShares(allocOrder(order), prior.approvedQty, lines, { shopFault, priorShipping: prior.shipping, priorPoints: prior });
       const moneyRefundable = isMoneyBackable(order);
       const refund = moneyRefundable ? shares.goods + shares.shipping : 0;
       if (input.expectedRefund !== undefined && input.expectedRefund !== refund) {
@@ -509,6 +511,7 @@ export class OrderReturnsService {
           shippingRefund: moneyRefundable ? shares.shipping : 0,
           pointsRefunded: shares.pointsUsedBack,
           convertedPointsRefunded: shares.convertedBack,
+          marketplacePointsRefunded: shares.marketplaceBack,
           pointsReversed: shares.pointsEarnedBack,
           commissionReversed: commissionCut,
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),

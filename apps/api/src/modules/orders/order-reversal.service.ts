@@ -48,8 +48,9 @@ export interface ReversalOptions {
    */
   withholdPrepaidRefund?: boolean;
   /**
-   * Hạn của Điểm Xanh thường hoàn lại (caller đọc cấu hình NGOÀI tx). Có giá trị thì phần điểm thường đã dùng cũng hoàn trong tx
-   * này, cùng commit với lần lật trạng thái; bỏ trống thì phần đó do LoyaltyService.reverseOrderPoints hoàn sau commit (đường cũ).
+   * Hạn của Điểm Xanh có hạn hoàn lại, lô STANDARD và MARKETPLACE (caller đọc cấu hình NGOÀI tx, khi `usesExpiringPoints(order)`).
+   * Có giá trị thì hai phần đó hoàn trong tx này, cùng commit với lần lật trạng thái; bỏ trống thì phần STANDARD do
+   * LoyaltyService.reverseOrderPoints hoàn sau commit (đường cũ), còn phần MARKETPLACE không có đường cũ nên chỉ ghi lỗi.
    */
   standardPointsExpiresAt?: Date;
 }
@@ -286,6 +287,8 @@ export class OrderReversalService {
     // Điểm thường khách đã tiêu cũng là của khách: hoàn sau commit mà lỗi (đứt DB, SIGTERM) thì lần gọi lại thấy đơn đã ở trạng
     // thái cuối và không làm gì, khách mất điểm vĩnh viễn.
     if (opts.standardPointsExpiresAt) pointsRefunded += await this.refundStandardPoints(tx, order, prior, opts.standardPointsExpiresAt);
+    // Điểm sàn (W42) về đúng lô MARKETPLACE: hoàn thành điểm thường thì khách tiêu được cho vòng quay, cây, đổi quà.
+    pointsRefunded += await this.refundMarketplacePoints(tx, order, prior, opts.standardPointsExpiresAt ?? null);
 
     // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
     // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
@@ -493,6 +496,7 @@ export class OrderReversalService {
     }
 
     const converted = Math.min(shares.convertedBack, shares.pointsUsedBack);
+    const marketplace = Math.min(shares.marketplaceBack, shares.pointsUsedBack - converted);
     if (converted > 0) {
       const res = await applyPointsDelta(tx, {
         userId: order.userId,
@@ -505,7 +509,22 @@ export class OrderReversalService {
       });
       if (res.applied) result.pointsBack += converted;
     }
-    const standard = shares.pointsUsedBack - converted;
+    if (marketplace > 0 && input.standardPointsExpiresAt) {
+      const res = await applyPointsDelta(tx, {
+        userId: order.userId,
+        delta: marketplace,
+        lot: 'MARKETPLACE',
+        reason: `RETURN_REFUND_MARKETPLACE:${order.code}`,
+        refType: 'RETURN_REQUEST',
+        refId: requestId,
+        expiresAt: input.standardPointsExpiresAt,
+        skipDuplicates: true,
+      });
+      if (res.applied) result.pointsBack += marketplace;
+    } else if (marketplace > 0) {
+      this.logger.error(`Trả một phần đơn ${order.code}: thiếu hạn điểm, chưa hoàn ${marketplace} điểm lô MARKETPLACE (yêu cầu ${requestId}).`);
+    }
+    const standard = Math.max(0, shares.pointsUsedBack - converted - marketplace);
     if (standard > 0) {
       const res = await applyPointsDelta(tx, {
         userId: order.userId,
@@ -847,6 +866,39 @@ export class OrderReversalService {
     });
     if (!res.applied) {
       this.logger.warn(`Đơn ${order.code} đã có dòng ORDER_REFUND_CONVERTED, bỏ qua hoàn lô quy đổi lần 2.`);
+      return 0;
+    }
+    return points;
+  }
+
+  /**
+   * Hoàn phần Điểm Xanh lô MARKETPLACE đã dùng (W42) về đúng lô, có hạn mới như điểm thường. Một lần: caller đã lật trạng thái bằng
+   * guard atomic; `points_transactions_marketplace_refund_unique` (reason `ORDER_REFUND_MARKETPLACE:<code>`, refId) là lớp hai.
+   */
+  private async refundMarketplacePoints(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    prior: PartialReturnTotals,
+    expiresAt: Date | null,
+  ): Promise<number> {
+    const points = remainingPointsBack(order, prior).marketplace;
+    if (!(points > 0)) return 0;
+    if (!expiresAt) {
+      this.logger.error(`Đơn ${order.code}: thiếu hạn điểm, chưa hoàn ${points} điểm lô MARKETPLACE. Caller phải truyền standardPointsExpiresAt khi usesExpiringPoints.`);
+      return 0;
+    }
+    const res = await applyPointsDelta(tx, {
+      userId: order.userId,
+      delta: points,
+      lot: 'MARKETPLACE',
+      reason: `ORDER_REFUND_MARKETPLACE:${order.code}`,
+      refType: 'ORDER',
+      refId: order.id,
+      expiresAt,
+      skipDuplicates: true,
+    });
+    if (!res.applied) {
+      this.logger.warn(`Đơn ${order.code} đã có dòng ORDER_REFUND_MARKETPLACE, bỏ qua hoàn điểm sàn lần 2.`);
       return 0;
     }
     return points;

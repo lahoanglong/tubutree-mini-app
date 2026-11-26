@@ -38,6 +38,7 @@ import { formatPoints } from '../../common/format-points';
 import { assertActiveStaff } from '../../common/staff-access';
 import { generateWasteCode } from '../waste-exchange/waste-codes';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
+import { withMarketplaceNote } from './marketplace-points-note';
 
 /** Số dòng tối đa mỗi lần đọc lịch sử điểm (cũng là số dòng khi client cũ không gửi limit). */
 const POINTS_HISTORY_MAX_PAGE = 100;
@@ -762,8 +763,10 @@ export class LoyaltyService {
       pointsConvertedBalance: user.pointsConvertedBalance,
       /** Hạn giữ hạng (loyalty.tier_grace_days): có khi khách sắp bị hạ hạng; null khi hạng đang ổn. */
       tierGrace,
-      /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
-      pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
+      /** W42: lô điểm tích từ đơn sàn (có hạn, chỉ dùng khi mua hàng, chung trần % với lô STANDARD). */
+      pointsMarketplaceBalance: user.pointsMarketplaceBalance,
+      /** Số Điểm Xanh khách nhìn thấy = tổng ba lô. */
+      pointsTotal: user.pointsBalance + user.pointsConvertedBalance + user.pointsMarketplaceBalance,
       tierPoints,
       /** Tiền mua 12 tháng: thước đo thật của hạng, `nextTier.spendingToGo` tính theo số này. */
       spent12m,
@@ -774,6 +777,7 @@ export class LoyaltyService {
       /** Mốc muộn nhất phần khoá theo cửa sổ đổi/trả được mở (null nếu không có). */
       lockedUntil: lock.lockedUntil?.toISOString() ?? null,
       redeemablePoints,
+      // Số góp quỹ/đổi quà được: không gồm lô MARKETPLACE (điểm sàn chỉ tiêu khi mua hàng).
       redeemableTotal: redeemablePoints + user.pointsConvertedBalance,
       /** Hệ số server sẽ nhân khi tích điểm: 1 khi chưa có hạng, dù `tier` bên dưới hiển thị hạng thấp nhất (xem getTierMultiplier). */
       earnMultiplier: user.tier ? Number(user.tier.pointMultiplier) : 1,
@@ -1215,7 +1219,8 @@ export class LoyaltyService {
         data: { pointsBalance: { decrement: gift.pointsCost } },
       });
       if (dec.count === 0) {
-        const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true } });
+        // Đọc dưới khoá dòng user ở đầu tx: số dư và lô điểm sàn cùng một thời điểm.
+        const cur = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true, pointsMarketplaceBalance: true } });
         const balance = cur?.pointsBalance ?? 0;
         if (lock.locked > 0 && balance >= gift.pointsCost) {
           const usable = Math.max(0, balance - lock.locked);
@@ -1224,7 +1229,10 @@ export class LoyaltyService {
           );
         }
         throw new BadRequestException(
-          `Bạn cần ${formatPoints(gift.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
+          withMarketplaceNote(
+            `Bạn cần ${formatPoints(gift.pointsCost)} Điểm Xanh để đổi ưu đãi này (hiện có ${formatPoints(balance)} điểm).`,
+            cur?.pointsMarketplaceBalance,
+          ),
         );
       }
 
@@ -1587,11 +1595,13 @@ export class LoyaltyService {
       phone: string | null;
       pointsBalance: number;
       pointsConvertedBalance?: number;
+      pointsMarketplaceBalance?: number;
       tier?: { name: string } | null;
     },
     pointsBalance = member.pointsBalance,
   ) {
     const pointsConvertedBalance = member.pointsConvertedBalance ?? 0;
+    const pointsMarketplaceBalance = member.pointsMarketplaceBalance ?? 0;
     return {
       id: member.id,
       memberCode: memberCodeOf(member.referralCode),
@@ -1600,7 +1610,8 @@ export class LoyaltyService {
       tier: member.tier?.name ?? 'Mầm Xanh',
       pointsBalance,
       pointsConvertedBalance,
-      pointsTotal: pointsBalance + pointsConvertedBalance,
+      pointsMarketplaceBalance,
+      pointsTotal: pointsBalance + pointsConvertedBalance + pointsMarketplaceBalance,
     };
   }
 

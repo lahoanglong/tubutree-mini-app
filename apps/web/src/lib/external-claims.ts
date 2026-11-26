@@ -140,6 +140,7 @@ const ADMIN_ERROR_TEXT: Record<ExternalClaimAdminErrorCode | ExternalClaimReject
   DAILY_MAX: 'Khách đã tích đủ số đơn cho phép trong ngày.',
   MONTHLY_CAP: 'Khách đã đạt trần điểm đơn sàn trong tháng này.',
   ZERO_POINTS: 'Giá trị đơn quá nhỏ, quy ra 0 điểm.',
+  PHONE_MISMATCH: 'SĐT trên đơn sàn không khớp SĐT Zalo của khách.',
 };
 
 /** Câu tiếng Việt cho lỗi của API admin (viết cho nhân viên, không phải câu của khách): theo `code` nếu biết, không thì nguyên văn message của API. */

@@ -1,6 +1,7 @@
 import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import { MERCHANT_PORTAL_ROLES } from '../merchant/merchant-config';
 import { isPartnerStore } from '../merchant/partner-store';
+import { convertedPointsUsed, marketplacePointsUsed, standardPointsUsed } from '../orders/points-used-split';
 
 /**
  * Tách một lần đặt thành một đơn cho mỗi nơi giao (docs/2026-10-14-merchant-fulfilment-design.md mục 3). Hàm thuần —
@@ -145,6 +146,8 @@ export interface CheckoutTotals {
   pointsDiscount: number;
   pointsUsed: number;
   pointsUsedConverted: number;
+  /** Phần của pointsUsed thuộc lô MARKETPLACE (W42); bỏ trống = 0. */
+  pointsUsedMarketplace?: number;
 }
 
 export interface GroupAmounts {
@@ -155,6 +158,7 @@ export interface GroupAmounts {
   pointsDiscount: number;
   pointsUsed: number;
   pointsUsedConverted: number;
+  pointsUsedMarketplace: number;
   /** Tổng các khoản giảm — cùng cách cộng của Order.discount. */
   discount: number;
   /** Tiền hàng sau mọi khoản giảm (nền tích điểm). */
@@ -255,10 +259,10 @@ function linesOf(groups: { lines: SplitLine[] }[]): SplitLine[] {
  */
 export function pointsRedeemBase(
   groups: { lines: SplitLine[] }[],
-  t: Omit<CheckoutTotals, 'pointsDiscount' | 'pointsUsed' | 'pointsUsedConverted'>,
+  t: Omit<CheckoutTotals, 'pointsDiscount' | 'pointsUsed' | 'pointsUsedConverted' | 'pointsUsedMarketplace'>,
 ): number {
   const lines = linesOf(groups);
-  const out = allocateLineAmounts(lines, { ...t, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0 });
+  const out = allocateLineAmounts(lines, { ...t, pointsDiscount: 0, pointsUsed: 0, pointsUsedConverted: 0, pointsUsedMarketplace: 0 });
   return lines.reduce((s, l, k) => s + (partnerLine(l) ? 0 : Math.max(0, out[k]!.paid)), 0);
 }
 
@@ -276,8 +280,11 @@ export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: Checko
     return s;
   });
   const points = slices.map((ls) => sumOf(ls.map((l) => l.points)));
-  const standard = allocateProRata(t.pointsUsed - t.pointsUsedConverted, points);
-  const converted = allocateProRata(t.pointsUsedConverted, points);
+  // Mỗi lô chia theo cùng trọng số (phần điểm của kiện) nên mỗi kiện mang đúng phần lô của nó; huỷ một đơn của lần đặt bị tách chỉ
+  // hoàn đúng lô đã dùng cho đơn đó.
+  const standard = allocateProRata(standardPointsUsed(t), points);
+  const converted = allocateProRata(convertedPointsUsed(t), points);
+  const marketplace = allocateProRata(marketplacePointsUsed(t), points);
   return slices.map((ls, i) => {
     const subtotal = sumOf(ls.map((l) => l.total));
     const comboDiscount = sumOf(ls.map((l) => l.combo));
@@ -290,8 +297,9 @@ export function allocateGroupAmounts(groups: { lines: SplitLine[] }[], t: Checko
       couponDiscount,
       tierDiscount,
       pointsDiscount: points[i]!,
-      pointsUsed: standard[i]! + converted[i]!,
+      pointsUsed: standard[i]! + converted[i]! + marketplace[i]!,
       pointsUsedConverted: converted[i]!,
+      pointsUsedMarketplace: marketplace[i]!,
       discount,
       goodsAfterAll: Math.max(0, subtotal - discount),
       linePaid: ls.map((l) => l.paid),

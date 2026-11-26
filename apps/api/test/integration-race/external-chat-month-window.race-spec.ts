@@ -158,8 +158,11 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
       await pin('loyalty.marketplace_claim_enabled', true);
       await pin('loyalty.marketplace_claim_monthly_points_cap', 20_000);
       await pin('loyalty.marketplace_claim_review_above_vnd', 5_000_000);
+      // Điểm của ca này tính ở 1% (trước W42 đổi mặc định sang 5%).
+      await pin('loyalty.marketplace_earn_pct', 1);
       const user = await mkUser();
-      const o = await mkScanOrder({ goodsValue: 200_000 });
+      // W42: đơn sàn phải có SĐT (che) khớp SĐT khách, không thì claim vào REVIEW (thiếu dữ liệu đối chiếu).
+      const o = await mkScanOrder({ goodsValue: 200_000, phoneMask: `******${user.phone!.slice(-2)}` });
       const r = await claimSvc().submit(user.id, o.code);
       expect(r.status).toBe('CLAIMED');
       await prisma.externalPointsClaim.update({ where: { id: r.claimId! }, data: { createdAt: PAST() } });

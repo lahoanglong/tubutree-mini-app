@@ -145,6 +145,7 @@ describe('mọi dòng điểm dương lô STANDARD đều có hạn hoặc là n
       'modules/checkout/checkout.service.ts',
       'modules/orders/order-reversal.service.ts',
       'modules/loyalty/loyalty-expiry.service.ts',
+      'modules/external-points/external-claim-release.ts',
     ]) {
       expect(files).toContain(f);
     }
@@ -213,6 +214,14 @@ describe('bộ quét bắt đúng (test của chính chốt chặn)', () => {
     expect(bad('tx.pointsTransaction.create({ data: { userId, delta: 5, expiresAt: input.expiresAt ?? exp } })')).toHaveLength(0);
     expect(bad("tx.pointsTransaction.create({ data: { userId, delta: 5, reason: 'x', expiresAt: nullable ? null : date } })")).toHaveLength(0);
     expect(bad("tx.pointsTransaction.create({ data: { userId, delta: 5, reason: 'x', expiresAt: nulled } })")).toHaveLength(0);
+  });
+
+  it('W42: lô MARKETPLACE có hạn như lô STANDARD — dòng dương thiếu hạn bị bắt, có hạn hoặc là lệnh trừ thì qua', () => {
+    expect(bad("applyPointsDelta(tx, { userId, delta: p, lot: 'MARKETPLACE', reason })")).toHaveLength(1);
+    expect(bad("applyPointsDelta(tx, { userId, delta: p, lot: 'MARKETPLACE', reason, expiresAt: null })")).toHaveLength(1);
+    expect(bad("applyPointsDelta(tx, { userId, delta: p, lot: chat ? 'STANDARD' : 'MARKETPLACE', reason })")).toHaveLength(1);
+    expect(bad("applyPointsDelta(tx, { userId, delta: p, lot: 'MARKETPLACE', reason, expiresAt })")).toHaveLength(0);
+    expect(bad("applyPointsDelta(tx, { userId, delta: -p, lot: 'MARKETPLACE', reason })")).toHaveLength(0);
   });
 
   it('cho qua: có expiresAt, lô CONVERTED, delta âm hoặc 0', () => {

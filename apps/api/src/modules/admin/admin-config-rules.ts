@@ -20,6 +20,7 @@ import { POPULAR_FALLBACK_MAX, SEARCH_POPULAR_FLAG, SEARCH_POPULAR_TERMS_KEY, is
 import { SEARCH_FUZZY_FLAG } from '../catalog/search-fuzzy';
 import { REFILL_REMINDER_ENABLED_KEY, REFILL_REMINDER_ZNS_KEY } from '../notifications/refill-reminder.rules';
 import { REPURCHASE_DUE_CARD_ENABLED_KEY } from '../orders/repurchase-due.rules';
+import { MOBILE_MINIAPP_REDIRECT_KEY } from '../system-config/mobile-miniapp-redirect';
 import {
   REFERRAL_FIRST_ORDER_MIN_KEY,
   REFERRAL_FIRST_ORDER_MIN_MAX,
@@ -249,6 +250,8 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'referral.share_card_enabled': assertBoolean,
   // Cùng biên với lúc đọc (referral/viral-config.ts): admin không lưu được số mà máy chủ sẽ lặng lẽ đổi về mặc định.
   [REFERRAL_VIRAL_ENABLED_KEY]: assertBoolean,
+  // Web đọc đúng boolean true (public-config.ts); chuỗi "true" sẽ lặng lẽ thành tắt nên chặn ngay lúc lưu.
+  [MOBILE_MINIAPP_REDIRECT_KEY]: assertBoolean,
   [REFERRAL_FIRST_ORDER_POINTS_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_FIRST_ORDER_POINTS_MAX, 'Điểm Xanh'),
   [REFERRAL_FIRST_ORDER_MIN_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_FIRST_ORDER_MIN_MAX, 'đ'),
   [REFERRAL_MONTHLY_CAP_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_MONTHLY_CAP_MAX, 'lần/tháng'),

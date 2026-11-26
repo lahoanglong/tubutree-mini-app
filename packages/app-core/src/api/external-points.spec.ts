@@ -19,7 +19,7 @@ describe('external-points — hợp đồng gọi API', () => {
 describe('externalClaimRejectCode', () => {
   it('nhận mọi mã từ chối đã biết', () => {
     for (const c of EXTERNAL_CLAIM_REJECT_CODES) expect(externalClaimRejectCode(c)).toBe(c);
-    expect(EXTERNAL_CLAIM_REJECT_CODES).toHaveLength(14);
+    expect(EXTERNAL_CLAIM_REJECT_CODES).toHaveLength(15);
   });
   it('mã lạ, rỗng, null đều trả undefined', () => {
     expect(externalClaimRejectCode('WHATEVER')).toBeUndefined();

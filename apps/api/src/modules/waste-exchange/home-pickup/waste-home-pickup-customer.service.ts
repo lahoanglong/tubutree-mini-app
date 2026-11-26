@@ -27,6 +27,7 @@ import { generateWasteCode } from '../waste-codes';
 import { lockWasteCustomer } from '../waste-locks';
 import { WASTE_PICKUP_FEE_REF_TYPE, wastePickupFeeCashPayReason, wastePickupFeeReason } from './waste-home-pickup-ledger';
 import { HOME_PICKUP_CARRIER, HOME_PICKUP_ROW_SELECT, WasteHomePickupService } from './waste-home-pickup.service';
+import { withMarketplaceNote } from '../../loyalty/marketplace-points-note';
 
 const PRIOR_SELECT = {
   id: true,
@@ -329,13 +330,18 @@ export class WasteHomePickupCustomerService {
     const fee = p.shipFeeVnd;
     let standardUse = 0;
     let convertedUse = 0;
+    let marketplaceBalance = 0;
     const lockUserRow = (body.usePointsForShipFee === true && fee > 0 && p.windowDays !== null) || body.shipFeePayment === 'WALLET';
     if (lockUserRow) {
       // Khoá dòng khách rồi mới tính phần dùng được: hai lần tạo phiếu / đặt đơn song song không cùng tiêu một số điểm hay một số dư Ví.
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
     }
     if (body.usePointsForShipFee === true && fee > 0 && p.windowDays !== null) {
-      const user = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true, pointsConvertedBalance: true } });
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { pointsBalance: true, pointsConvertedBalance: true, pointsMarketplaceBalance: true },
+      });
+      marketplaceBalance = user?.pointsMarketplaceBalance ?? 0;
       const lock = await this.loyalty.lockedOrderPoints(userId, now, tx, p.windowDays);
       standardUse = Math.min(fee, Math.max(0, (user?.pointsBalance ?? 0) - lock.locked));
       convertedUse = Math.min(fee - standardUse, user?.pointsConvertedBalance ?? 0);
@@ -349,7 +355,8 @@ export class WasteHomePickupCustomerService {
           statusCode: 400,
           error: 'Bad Request',
           code: 'WASTE_FEE_NEED_PAYMENT',
-          message: WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(cashVnd),
+          // Điểm sàn (W42) không trả phí lấy rác: khách thấy tổng điểm đủ mà vẫn phải trả tiền thì câu báo nói rõ.
+          message: withMarketplaceNote(WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(cashVnd), marketplaceBalance),
           cashDueVnd: cashVnd,
         });
       }

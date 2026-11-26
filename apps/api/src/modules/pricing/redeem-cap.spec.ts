@@ -51,8 +51,8 @@ describe('PricingService: trần VND thêm cho lô STANDARD (phần trần gộp
   });
 
   it('trần thêm chỉ áp lô STANDARD; lô CONVERTED vẫn trả tới giá trị hàng', async () => {
-    const r = await svc.resolvePointsRedemptionByLot(1_100_000, 1_000_000, 100_000, 400_000, 0);
-    expect(r).toEqual({ pointsUsed: 100_000, pointsUsedStandard: 0, pointsUsedConverted: 100_000, discount: 100_000 });
+    const r = await svc.resolvePointsRedemptionByLot(1_100_000, { standardUsable: 1_000_000, converted: 100_000 }, 400_000, 0);
+    expect(r).toEqual({ pointsUsed: 100_000, pointsUsedStandard: 0, pointsUsedConverted: 100_000, pointsUsedMarketplace: 0, discount: 100_000 });
   });
 
   it('maxRedeemPct đọc cùng khoá với trần Điểm Xanh', async () => {

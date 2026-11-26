@@ -42,6 +42,7 @@ import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recor
 import { customerFacingNote } from '../subscriptions/subscription-note';
 import { firstStatusTimes } from './order-status-times';
 import { buyerOrderNotices, lateConsentBlock, lateConsentOrderBlock, ORDER_ZALO_ACTIVE_STATUSES, ORDER_ZALO_CONSENT_TEXT_VERSION, type BuyerOrderNotice } from '../integrations/mss/mss-order-event-types';
+import { usesExpiringPoints } from './points-used-split';
 
 export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
@@ -86,7 +87,7 @@ export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }
 export const ORDER_LIST_SELECT = {
   id: true, code: true, idempotencyKey: true, pancakeOrderId: true, userId: true, type: true, status: true, subtotal: true,
   discount: true, couponDiscount: true, comboDiscount: true, tierDiscount: true, pointsDiscount: true, shippingFee: true, total: true, pointsEarned: true,
-  pointsUsed: true, pointsUsedConverted: true, paymentMethod: true, paymentStatus: true, paymentTxnId: true, shippingAddress: true, recipientSearch: true, shippingPartner: true,
+  pointsUsed: true, pointsUsedConverted: true, pointsUsedMarketplace: true, paymentMethod: true, paymentStatus: true, paymentTxnId: true, shippingAddress: true, recipientSearch: true, shippingPartner: true,
   shippingCode: true, shippingStatus: true, trackingLink: true, invoiceUrl: true, invoiceStatus: true, referrerUserId: true, storefrontSlug: true, storefrontId: true,
   fulfiller: true, fulfillerStorefrontId: true, merchantCommissionPct: true, checkoutGroup: true, merchantAcceptedAt: true, shippedAt: true, merchantSlaNotifiedAt: true, placedForCustomer: true,
   commission: true, source: true, platform: true, backendRoute: true, paidAt: true, subscriptionId: true, endCustomerKey: true, couponCode: true, note: true,
@@ -630,7 +631,7 @@ export class OrdersService {
     // Điểm thường khách đã tiêu hoàn trong tx huỷ (cùng commit với lần lật CANCELLED): hoàn sau commit mà lỗi thì bấm huỷ lại bị
     // chặn bởi "đã huỷ" và khách mất điểm vĩnh viễn. Hạn của điểm hoàn đọc ngoài tx để không giữ kết nối trong lúc chờ cấu hình.
     const standardPointsExpiresAt =
-      order.pointsUsed > order.pointsUsedConverted ? await this.loyalty.pointsExpiresAt(new Date()) : undefined;
+      usesExpiringPoints(order) ? await this.loyalty.pointsExpiresAt(new Date()) : undefined;
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard

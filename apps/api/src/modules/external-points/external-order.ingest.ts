@@ -4,6 +4,7 @@ import type { OrderSourceMap } from './external-order.config';
 import type { ExternalOrderKind } from './external-order.mapper';
 import {
   buyerPhone,
+  buyerPhonePattern,
   classifyPancakeOrder,
   deliveredAt,
   externalStatusOf,
@@ -52,6 +53,10 @@ export async function ingestExternalOrder(
   const { pancakeStatus, status } = externalStatusOf(data);
   const codes = extractTrackingCodes(data);
   const phone = buyerPhone(data);
+  // Mẫu che (W42) chỉ lưu khi không có số đầy đủ; 3 số cuối cho admin lấy từ đuôi che khi đuôi đủ 3 số.
+  const pattern = phone ? null : buyerPhonePattern(data);
+  const phoneMask = pattern?.kind === 'MASK' ? pattern.mask : null;
+  const phoneLast3 = phone ? phone.slice(-3) : pattern?.kind === 'MASK' && pattern.tail.length >= 3 ? pattern.tail.slice(-3) : null;
   const payloadDeliveredAt = deliveredAt(data);
   const closed = CLOSED.includes(status);
   const updatedAt = pancakeTime(data['updated_at']);
@@ -79,7 +84,8 @@ export async function ingestExternalOrder(
         trackingCodes: codes,
         marketplaceOrderSn: sn,
         phone,
-        phoneLast3: phone ? phone.slice(-3) : null,
+        phoneMask,
+        phoneLast3,
         pancakeStatus,
         status,
         pancakeInsertedAt: insertedAt,
@@ -105,7 +111,7 @@ export async function ingestExternalOrder(
       ...(hasItems ? { lastPayload: stored } : {}),
       ...(codes.length > 0 ? { trackingCode: codes[0]!, trackingCodes: codes } : {}),
       ...(sn ? { marketplaceOrderSn: sn } : {}),
-      ...(phone ? { phone, phoneLast3: phone.slice(-3) } : {}),
+      ...(phone ? { phone, phoneMask: null, phoneLast3 } : phoneMask ? { phoneMask, ...(phoneLast3 ? { phoneLast3 } : {}) } : {}),
       ...(pancakeStatus !== null ? { pancakeStatus, status } : {}),
       ...(insertedAt ? { pancakeInsertedAt: insertedAt } : {}),
       ...(updatedAt ? { pancakeUpdatedAt: updatedAt } : {}),

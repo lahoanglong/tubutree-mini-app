@@ -13,6 +13,7 @@
  * phần của lần này = share(đã trả sau lần này) − share(đã trả trước đó). Nhờ vậy trả nhiều lần cộng lại đúng bằng
  * cả đơn, không lệch đồng nào vì làm tròn, và lần trả nốt nhận đúng phần còn lại.
  */
+import { convertedPointsUsed, marketplacePointsUsed, standardPointsUsed, type PointsUsedByLot } from './points-used-split';
 export interface AllocItem {
   id: string;
   total: number;
@@ -51,6 +52,8 @@ export interface AllocOrder {
   shippingFee: number;
   pointsUsed: number;
   pointsUsedConverted: number;
+  /** Phần của pointsUsed thuộc lô MARKETPLACE (W42); đơn cũ không có: 0. */
+  pointsUsedMarketplace?: number | null;
   pointsEarned: number;
   items: AllocItem[];
 }
@@ -64,6 +67,8 @@ export interface ReturnShares {
   pointsUsedBack: number;
   /** Phần của pointsUsedBack thuộc lô quy đổi (CONVERTED). */
   convertedBack: number;
+  /** Phần của pointsUsedBack thuộc lô điểm sàn (MARKETPLACE); phần lô STANDARD = pointsUsedBack − convertedBack − marketplaceBack. */
+  marketplaceBack: number;
   /** Điểm Xanh tích từ đơn cần thu hồi. */
   pointsEarnedBack: number;
   /** Tỉ lệ giá trị đã trả trước và sau lần này — để giảm hoa hồng CTV cùng cách. */
@@ -126,27 +131,67 @@ export function distributeByWeight(amount: number, weights: number[]): number[] 
   return out;
 }
 
+/** Điểm đã trả lại ở các lần trước, theo lô. Thiếu `marketplaceBack` (đơn trước W42) = 0. */
+export interface PriorPointsBack {
+  pointsUsedBack: number;
+  convertedBack: number;
+  marketplaceBack?: number;
+}
+
+export interface PointsBackByLot {
+  converted: number;
+  marketplace: number;
+  standard: number;
+}
+
+/** Phần mỗi lô khách đã dùng mà chưa được trả lại (không âm). */
+function lotRoom(order: PointsUsedByLot, prior: PriorPointsBack): PointsBackByLot {
+  return {
+    converted: Math.max(0, convertedPointsUsed(order) - prior.convertedBack),
+    marketplace: Math.max(0, marketplacePointsUsed(order) - (prior.marketplaceBack ?? 0)),
+    standard: Math.max(0, standardPointsUsed(order) - (prior.pointsUsedBack - prior.convertedBack - (prior.marketplaceBack ?? 0))),
+  };
+}
+
 /**
- * Điểm đã dùng còn phải trả khi đảo cả đơn sau các lần trả một phần (`prior`): đúng phần chưa trả của `pointsUsed`, lô quy đổi
- * trước (không quá phần quy đổi chưa trả), lô thường nhận phần còn lại. Mỗi lần trả một phần kẹp phần quy đổi theo số điểm của
- * lần đó, nên các lần trước có thể đã trả nhiều điểm thường hơn phần thường của đơn; trả đủ phần quy đổi còn lại lúc đó sẽ
- * vượt số khách đã dùng.
+ * Chia `total` điểm trả lại về các lô: theo phần mong muốn của lô CONVERTED và MARKETPLACE, lô STANDARD nhận phần còn lại; không lô nào
+ * vượt phần còn chưa trả của lô đó. Phần dư do làm tròn (lô STANDARD đã hết chỗ) dồn về MARKETPLACE rồi CONVERTED trong giới hạn chỗ
+ * của chúng, để điểm sàn không bao giờ thành điểm thường (tiêu được cho vòng quay, cây, đổi quà). Chỉ khi mọi lô hết chỗ (dữ liệu
+ * trước W42 đã trả lệch) phần dư mới về STANDARD như trước.
  */
-export function remainingPointsBack(
-  order: { pointsUsed: number; pointsUsedConverted: number },
-  prior: { pointsUsedBack: number; convertedBack: number },
-): { converted: number; standard: number } {
-  const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
+function splitPointsBack(total: number, want: Omit<PointsBackByLot, 'standard'>, room: PointsBackByLot): PointsBackByLot {
+  const converted = Math.min(total, want.converted, room.converted);
+  const marketplace = Math.min(total - converted, want.marketplace, room.marketplace);
+  const standard = Math.min(total - converted - marketplace, room.standard);
+  let left = total - converted - marketplace - standard;
+  const extraMarketplace = Math.min(left, room.marketplace - marketplace);
+  left -= extraMarketplace;
+  const extraConverted = Math.min(left, room.converted - converted);
+  left -= extraConverted;
+  return { converted: converted + extraConverted, marketplace: marketplace + extraMarketplace, standard: standard + left };
+}
+
+/**
+ * Điểm đã dùng còn phải trả khi đảo cả đơn sau các lần trả một phần (`prior`): đúng phần chưa trả của `pointsUsed`, mỗi lô không quá
+ * phần lô đó chưa trả. Đơn trước W42 các lần trả một phần có thể đã trả nhiều điểm thường hơn phần thường của đơn; phần còn lại khi
+ * đó vẫn trả đủ tổng, lô thường nhận phần dư.
+ */
+export function remainingPointsBack(order: PointsUsedByLot, prior: PriorPointsBack): PointsBackByLot {
   const left = Math.max(0, order.pointsUsed - prior.pointsUsedBack);
-  const converted = Math.max(0, Math.min(usedConverted - prior.convertedBack, left));
-  return { converted, standard: left - converted };
+  const room = lotRoom(order, prior);
+  return splitPointsBack(left, room, room);
 }
 
 export function computeReturnShares(
   order: AllocOrder,
   before: ReadonlyMap<string, number>,
   request: ReadonlyMap<string, number>,
-  opts: { shopFault: boolean; priorShipping: number },
+  opts: {
+    shopFault: boolean;
+    priorShipping: number;
+    /** Điểm đã trả theo lô ở các lần trả một phần trước: kẹp phần mỗi lô lần này trong phần lô đó chưa trả. Bỏ trống = chưa trả lần nào. */
+    priorPoints?: PriorPointsBack;
+  },
 ): ReturnShares {
   const after = new Map(before);
   for (const [id, q] of request) after.set(id, (after.get(id) ?? 0) + q);
@@ -160,12 +205,18 @@ export function computeReturnShares(
   const linePaid = storedLinePaid(goodsPaid, order.items);
   const shippingLeft = Math.max(0, order.shippingFee - opts.priorShipping);
   const shipping = isFull || opts.shopFault ? shippingLeft : 0;
-  const usedConverted = Math.min(order.pointsUsed, order.pointsUsedConverted);
   const prb = returnedPointsRatio(order.items, before) ?? rb;
   const pra = returnedPointsRatio(order.items, after) ?? ra;
   const pointsDelta = (amount: number) => Math.max(0, shareOf(amount, pra) - shareOf(amount, prb));
-  const pointsUsedBack = pointsDelta(order.pointsUsed);
-  const convertedBack = Math.min(pointsUsedBack, pointsDelta(usedConverted));
+  const priorPoints = opts.priorPoints ?? { pointsUsedBack: 0, convertedBack: 0, marketplaceBack: 0 };
+  const pointsUsedBack = Math.min(pointsDelta(order.pointsUsed), Math.max(0, order.pointsUsed - priorPoints.pointsUsedBack));
+  const byLot = splitPointsBack(
+    pointsUsedBack,
+    { converted: pointsDelta(convertedPointsUsed(order)), marketplace: pointsDelta(marketplacePointsUsed(order)) },
+    lotRoom(order, priorPoints),
+  );
+  const convertedBack = byLot.converted;
+  const marketplaceBack = byLot.marketplace;
 
   const lineIds = [...request.keys()].filter((id) => (request.get(id) ?? 0) > 0);
   let goods: number;
@@ -198,6 +249,7 @@ export function computeReturnShares(
     shipping,
     pointsUsedBack,
     convertedBack,
+    marketplaceBack,
     pointsEarnedBack,
     ratioBefore: rb,
     ratioAfter: ra,

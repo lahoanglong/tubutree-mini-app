@@ -34,6 +34,8 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
     await warmPool(prisma);
     restore.push(await pinConfig(prisma, 'loyalty.marketplace_claim_enabled', true));
     restore.push(await pinConfig(prisma, 'loyalty.point_expire_months', 12));
+    // Số điểm trong bộ này tính ở 1% (trước W42 đổi mặc định sang 5%).
+    restore.push(await pinConfig(prisma, 'loyalty.marketplace_earn_pct', 1));
   });
   afterAll(async () => {
     for (const r of restore.reverse()) await r();
@@ -47,7 +49,8 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
   });
   beforeEach(() => notify.mockClear());
 
-  const phone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  // W42: đơn sàn che SĐT; mọi khách của bộ này có đuôi 78 để khớp mẫu `******78` của đơn dựng sẵn.
+  const phone = () => `09${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}78`;
   async function mkUser(role: 'CUSTOMER' | 'STAFF' = 'CUSTOMER') {
     const u = await createUser(prisma, { phone: phone(), zaloId: `z_${randCode(10)}`, role });
     userIds.push(u.id);
@@ -59,7 +62,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
     const o = await prisma.externalOrder.create({
       data: {
         pancakeOrderId: `EXTRV${randCode(10)}`, source: 'MARKETPLACE', channel: 'shopee', sourceKey: 'x', trackingCode: code, trackingCodes: [code],
-        goodsValue: 200_000, pancakeStatus: 2, status: 'OPEN', pancakeInsertedAt: new Date(now.getTime() - DAY), pancakeUpdatedAt: now, lastPayload: {}, ...over,
+        goodsValue: 200_000, pancakeStatus: 2, status: 'OPEN', pancakeInsertedAt: new Date(now.getTime() - DAY), pancakeUpdatedAt: now, lastPayload: {}, phoneMask: '******78', ...over,
       },
     });
     orderIds.push(o.id);
@@ -218,7 +221,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       await applyStatusToClaim(prisma, { notify, notifySafe: notify }, cfg(), order.pancakeOrderId);
       const after = await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } });
       expect(after).toMatchObject({ state: 'CREDITED', reviewReason: null });
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsBalance).toBe(2_000);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsMarketplaceBalance).toBe(2_000);
       const ev = await events(claim.id);
       expect(ev.map((e) => e.action)).toEqual(['CREDIT', 'FLAG_PARTIAL', 'KEEP_POINTS']);
       expect(ev[2]).toMatchObject({ actorId: ADMIN.id });
@@ -236,7 +239,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       const res = await releaseDueClaims(prisma, cfg(), { notify, notifySafe: notify });
       expect(res.credited).toBe(0);
       expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({ state: 'REVIEW' });
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsBalance).toBe(0);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).pointsMarketplaceBalance).toBe(0);
     });
     it('điểm tính lại vượt trần tháng còn lại: cộng ở mức chốt 3.000 (không REVIEW)', async () => {
       const restoreCap = await pinConfig(prisma, 'loyalty.marketplace_claim_monthly_points_cap', 3_000);
@@ -326,7 +329,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
         await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 2_100_000, status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY) } });
         await releaseDueClaims(prisma, cfg(), { notify, notifySafe: notify });
         expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'CREDITED', points: 20_000 });
-        expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).pointsBalance).toBe(20_000);
+        expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).pointsMarketplaceBalance).toBe(20_000);
         const credit = (await events(r.claimId!)).find((e) => e.action === 'CREDIT');
         expect(credit?.note).toContain('trần');
       } finally {
@@ -423,7 +426,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       expect(await applyStatusToClaim(prisma, { notify, notifySafe: notify }, cfg(), o.pancakeOrderId)).toBe('TO_REVIEW');
       await releaseDueClaims(prisma, cfg(), { notify, notifySafe: notify }, new Date(Date.now() + 30 * DAY));
       expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'REVIEW' });
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).pointsBalance).toBe(0);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).pointsMarketplaceBalance).toBe(0);
       // Duyệt lại lúc đơn đã hoàn một phần mới là quyết định cho đơn hoàn một phần: cộng được.
       await adm().approve(r.claimId!, 'cskh-z');
       await releaseDueClaims(prisma, cfg(), { notify, notifySafe: notify }, new Date(Date.now() + 30 * DAY));
@@ -437,7 +440,7 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       await prisma.externalOrder.update({ where: { id: o.id }, data: { status: 'PARTIAL_RETURN', pancakeStatus: 15 } });
       await releaseDueClaims(prisma, cfg(), { notify, notifySafe: notify }, new Date(Date.now() + 30 * DAY));
       expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'REVIEW' });
-      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).pointsBalance).toBe(0);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).pointsMarketplaceBalance).toBe(0);
     });
     it('Nhỏ 1: cron cộng và duyệt chạy song song không chốt vượt trần tháng (40 vòng)', async () => {
       const restoreCap = await pinConfig(prisma, 'loyalty.marketplace_claim_monthly_points_cap', 20_000);

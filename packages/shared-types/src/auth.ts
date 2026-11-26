@@ -26,6 +26,8 @@ export interface AuthUser {
   pointsBalance: number;
   /** Điểm Xanh lô quy đổi từ xu cũ: không hết hạn, dùng ở thanh toán tới 100% giá trị hàng, không rút ra tiền. */
   pointsConvertedBalance: number;
+  /** Điểm Xanh tích từ đơn sàn (W42): có hạn, chỉ dùng để giảm giá khi mua hàng. Optional: API cũ chưa trả (coi như 0). */
+  pointsMarketplaceBalance?: number;
   walletBalance: number;
 }
 

@@ -48,6 +48,8 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     notify.mockClear();
     await pin('loyalty.marketplace_claim_enabled', true);
     await pin('loyalty.point_expire_months', 12);
+    // Số điểm trong bộ này tính ở 1% (trước W42 đổi mặc định sang 5%).
+    await pin('loyalty.marketplace_earn_pct', 1);
   });
 
   afterEach(async () => {
@@ -65,7 +67,8 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     await prisma?.$disconnect();
   });
 
-  const phone = () => `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  // W42: đơn sàn che SĐT; mọi khách của bộ này có đuôi 78 để khớp mẫu `******78` của đơn dựng sẵn.
+  const phone = () => `09${String(Math.floor(Math.random() * 1e6)).padStart(6, '0')}78`;
   async function mkUser() {
     const u = await createUser(prisma, { phone: phone(), zaloId: `zalo_${randCode(10)}` });
     userIds.push(u.id);
@@ -88,6 +91,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
         pancakeInsertedAt: new Date(now.getTime() - DAY),
         pancakeUpdatedAt: now,
         lastPayload: {},
+        phoneMask: '******78',
         ...over,
       },
     });
@@ -115,7 +119,11 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     });
     return { order, claim };
   }
-  const balanceOf = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id } })).pointsBalance;
+  /** Điểm có hạn của khách: lô STANDARD + lô MARKETPLACE (W42: claim đơn sàn cộng vào lô MARKETPLACE). */
+  const balanceOf = async (id: string) => {
+    const u = await prisma.user.findUniqueOrThrow({ where: { id } });
+    return u.pointsBalance + u.pointsMarketplaceBalance;
+  };
   const ledger = (userId: string, prefix: string) => prisma.pointsTransaction.findMany({ where: { userId, reason: { startsWith: prefix } } });
   async function noDrift() {
     expect(await findPointsLotDrift(prisma, userIds)).toEqual([]);
@@ -177,7 +185,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     expect(summarize(runs).rejected).toHaveLength(0);
     const rows = await ledger(user.id, 'MARKETPLACE_ORDER:');
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ delta: 2_000, refType: 'EXTERNAL_ORDER', refId: claim.id, lot: 'STANDARD' });
+    expect(rows[0]).toMatchObject({ delta: 2_000, refType: 'EXTERNAL_ORDER', refId: claim.id, lot: 'MARKETPLACE' });
     expect(rows[0]!.expiresAt!.getTime()).toBeGreaterThan(Date.now() + 360 * DAY);
     expect(await balanceOf(user.id)).toBe(2_000);
     const after = await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } });
@@ -239,8 +247,8 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     it('khách đã tiêu 1.500: chỉ thu hồi phần số dư còn (500), không âm', async () => {
       const { user, order } = await credited();
       await prisma.$transaction([
-        prisma.pointsTransaction.create({ data: { userId: user.id, delta: -1_500, lot: 'STANDARD', reason: 'IT_SPEND', refType: 'IT' } }),
-        prisma.user.update({ where: { id: user.id }, data: { pointsBalance: { decrement: 1_500 } } }),
+        prisma.pointsTransaction.create({ data: { userId: user.id, delta: -1_500, lot: 'MARKETPLACE', reason: 'IT_SPEND', refType: 'IT' } }),
+        prisma.user.update({ where: { id: user.id }, data: { pointsMarketplaceBalance: { decrement: 1_500 } } }),
       ]);
       await markReturned(order.id, 'CANCELLED');
       await apply(order.pancakeOrderId);

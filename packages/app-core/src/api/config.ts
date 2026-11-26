@@ -97,6 +97,8 @@ export interface PublicConfig {
   wasteRepeatRequestEnabled?: boolean;
   /** Cờ `growth.referral_viral_enabled`: thẻ thành tích Sổ tay Xanh (`GET /me/green-card`) và thưởng đơn đầu cho cả hai phía. API cũ chưa trả. */
   referralViralEnabled?: boolean;
+  /** Cờ `app.mobile_miniapp_redirect_enabled`: web điện thoại tự mở Zalo Mini App 1 lần mỗi 24 giờ. API cũ chưa trả → không tự mở. */
+  mobileMiniappRedirectEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

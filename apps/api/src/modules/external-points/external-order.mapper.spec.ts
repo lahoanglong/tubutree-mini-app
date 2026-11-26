@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   buyerPhone,
+  buyerPhonePattern,
   classifyPancakeOrder,
   deliveredAt,
   externalStatusOf,
@@ -215,6 +216,29 @@ describe('buyerPhone', () => {
     expect(buyerPhone({ bill_phone_number: '09******78', shipping_address: { phone_number: '0912345678' } })).toBe('0912345678');
     expect(buyerPhone({})).toBeNull();
     expect(buyerPhone({ bill_phone_number: 123 })).toBeNull();
+  });
+});
+
+describe('buyerPhonePattern (W42: giữ mẫu che để đối chiếu SĐT khách)', () => {
+  it('số đầy đủ ở bất kỳ nguồn nào thắng mẫu che', () => {
+    expect(buyerPhonePattern({ bill_phone_number: '09******78', shipping_address: { phone_number: '0912345678' } })).toEqual({
+      kind: 'FULL',
+      phone: '0912345678',
+    });
+  });
+  it('hai mẫu che: lấy mẫu nhìn thấy nhiều số hơn', () => {
+    const p = buyerPhonePattern({ bill_phone_number: '******78', shipping_address: { phone_number: '091*****78' } });
+    expect(p).toMatchObject({ kind: 'MASK', lead: '091', tail: '78', mask: '091*****78' });
+    const q = buyerPhonePattern({ bill_phone_number: '091*****678', shipping_address: { phone_number: '******78' } });
+    expect(q).toMatchObject({ kind: 'MASK', lead: '091', tail: '678' });
+  });
+  it('không có nguồn nào đủ tin: NONE', () => {
+    expect(buyerPhonePattern({})).toEqual({ kind: 'NONE' });
+    expect(buyerPhonePattern({ bill_phone_number: '*********', shipping_address: { phone_number: 123 } })).toEqual({ kind: 'NONE' });
+    expect(buyerPhonePattern({ bill_phone_number: '*******8' })).toEqual({ kind: 'NONE' });
+  });
+  it('fixture đơn sàn thật không ném và trả một trong ba dạng', () => {
+    expect(['FULL', 'MASK', 'NONE']).toContain(buyerPhonePattern(fixture('synthetic-shopee.json')).kind);
   });
 });
 

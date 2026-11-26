@@ -43,6 +43,7 @@ import { missionKindOf } from '../../common/mission-kinds';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
 import { returnedProductsByOrder, REVIEWABLE_ORDER, returnWindowClosed } from '../reviews/review-eligibility';
 import { isSerializationFailure } from '../../common/lock-busy';
+import { withMarketplaceNote } from '../loyalty/marketplace-points-note';
 
 interface SpinPrize {
   id: string;
@@ -224,12 +225,16 @@ export class GameService {
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user TRƯỚC khi đọc số dư và điểm đang khoá (cùng quy ước buyTree/redeemReward/reverseOrderPoints:
       // user rồi mới tới sổ): trả hàng song song xếp hàng ở đây thay vì chen giữa lúc đã đọc "dùng được" và lúc trừ.
-      const [bal] = await tx.$queryRaw<{ pointsBalance: number }[]>`
-        SELECT "pointsBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsMarketplaceBalance: number }[]>`
+        SELECT "pointsBalance", "pointsMarketplaceBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
       const lock = await loyalty.lockedOrderPoints(userId, new Date(), tx, windowDays);
       if (Math.max(0, (bal?.pointsBalance ?? 0) - lock.locked) < cost) {
+        // Điểm sàn (W42) không quay thưởng được: khách thấy tổng đủ mà bị từ chối thì câu báo nói rõ.
         throw new BadRequestException(
-          lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+          withMarketplaceNote(
+            lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+            bal?.pointsMarketplaceBalance,
+          ),
         );
       }
       // Trừ điểm ATOMIC (gte phí + điểm khoá) trong transaction — lưới an toàn cuối nếu số dư đổi giữa hai câu.
@@ -601,8 +606,8 @@ export class GameService {
     const windowDays = await loyalty.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {
       // Khoá dòng user rồi mới chia lô: hai lượt góp song song không cùng đọc một số dư.
-      const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number }[]>`
-        SELECT "pointsBalance", "pointsConvertedBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const [bal] = await tx.$queryRaw<{ pointsBalance: number; pointsConvertedBalance: number; pointsMarketplaceBalance: number }[]>`
+        SELECT "pointsBalance", "pointsConvertedBalance", "pointsMarketplaceBalance" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
       if (key) {
         const replay = await this.replayTreeBuy(tx, userId, certificateCode);
         if (replay) return replay;
@@ -612,7 +617,10 @@ export class GameService {
       const conv = price - std;
       if (conv > Math.max(0, bal?.pointsConvertedBalance ?? 0)) {
         throw new BadRequestException(
-          lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+          withMarketplaceNote(
+            lock.locked > 0 ? `${notEnough} Một phần điểm chưa dùng được: ${loyalty.lockedPointsMessage(lock)}.` : notEnough,
+            bal?.pointsMarketplaceBalance,
+          ),
         );
       }
       for (const [lot, amount] of [['STANDARD', std], ['CONVERTED', conv]] as const) {
