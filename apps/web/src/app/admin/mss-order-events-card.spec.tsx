@@ -140,7 +140,7 @@ describe('MssOrderEventsCard', () => {
   });
 
   it('lý do MSS in tiếng Việt (stranger: tin người lạ), mã thô giữ ở title; khoá lạ in thô', async () => {
-    stub({ ...offCard(), enabled: true, open: true, recent: [row({ reason: 'stranger' }), row({ status: 'RESULT_SKIPPED', reason: 'stranger_cap' }), row({ reason: 'new_mss_reason' })] });
+    stub({ ...offCard(), enabled: true, open: true, recent: [row({ reason: 'stranger' }), row({ status: 'RESULT_SKIPPED', reason: 'stranger_cap' }), row({ reason: 'new_mss_reason' }), row({ reason: 'constructor' })] });
     const r = mount();
     await flush(10);
     const items = Array.from(r.container.querySelectorAll('ul[aria-label="Tin đơn gần nhất"] > li'));
@@ -149,6 +149,8 @@ describe('MssOrderEventsCard', () => {
     expect(items[0]!.querySelector('[title="stranger"]')).not.toBeNull();
     expect(items[1]!.textContent).toContain('hết lượt nhắn người lạ hôm nay');
     expect(items[2]!.textContent).toContain('new_mss_reason');
+    // Khoá trùng tên thuộc tính của Object.prototype vẫn in thô, không ra hàm.
+    expect(items[3]!.querySelector('[title="constructor"]')!.textContent).toBe('constructor');
   });
 
   it('API lỗi: báo riêng trong thẻ, không ném', async () => {

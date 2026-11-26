@@ -32,17 +32,18 @@ colima_forward_ports() {
     ssh -F "$cfg" -o ControlMaster=no -o ControlPath=none -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
       -n -N -L "127.0.0.1:$p:127.0.0.1:$p" lima-colima &
     pid=$!
+    # Ghi PID ngay: Ctrl-C/TERM trong lúc chờ thì trap dọn vẫn thấy ssh này (kill PID đã thoát thì vô hại).
+    COLIMA_TUNNEL_PIDS="$COLIMA_TUNNEL_PIDS $pid"
     for ((i = 0; i < 20; i++)); do
       colima_port_listening "$p" && break
       kill -0 "$pid" 2>/dev/null || break
       sleep 0.25
     done
     if kill -0 "$pid" 2>/dev/null; then
-      COLIMA_TUNNEL_PIDS="$COLIMA_TUNNEL_PIDS $pid"
       colima_port_listening "$p" || { echo "colima: đường hầm cổng $p không lên" >&2; return 9; }
       echo "colima: đường hầm cổng $p (pid $pid)"
     else
-      # ssh thoát (ExitOnForwardFailure): hostagent vừa kịp chuyển tiếp cổng, hoặc ssh hỏng. Không giữ PID đã chết.
+      # ssh thoát (ExitOnForwardFailure): hostagent vừa kịp chuyển tiếp cổng, hoặc ssh hỏng.
       colima_port_listening "$p" || { echo "colima: đường hầm cổng $p không lên (ssh thoát)" >&2; return 9; }
       echo "colima: cổng $p đã được Colima tự chuyển tiếp"
     fi

@@ -259,13 +259,14 @@ describe('Order confirm email fallback (real Postgres)', () => {
     expect(mailsFor(order.code)).toHaveLength(0);
   });
 
-  it.each(['NO_PHONE', 'PREFS'] as const)('E3 đường lui ZNS không gửi được (%s): gửi email ngay', async (outcome) => {
+  it.each(['NO_PHONE', 'PREFS'] as const)('E3 đường lui ZNS không gửi được (%s): kênh ghi lại IN_APP_ONLY (không ZNS nào đi), gửi email ngay', async (outcome) => {
     sendHeldZns.mockResolvedValue(outcome);
     const { user, order } = await buyerOrder();
     const row = await eventOf(order.id, 'order.created');
     await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code }, 'zns-tpl');
     await settle(row.eventId, 'DEAD', 'http_413');
-    expect(await runFallback(row.eventId)).toBe('ZNS');
+    expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
+    expect((await prisma.mssOrderEventOutbox.findUniqueOrThrow({ where: { eventId: row.eventId } })).fallbackChannel).toBe('IN_APP_ONLY');
     expect(mailsFor(order.code)).toHaveLength(1);
   });
 
@@ -280,7 +281,8 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const row = await eventOf(order.id, 'order.created');
       await settle(row.eventId, status, reason);
       expect(await runFallback(row.eventId)).toBe('IN_APP_ONLY');
-      await reconcile.emailRescueOnce();
+      // Quét sau cổng 2 phút của nhánh cứu IN_APP_ONLY: chính luật đủ diện của câu SQL phải loại dòng này.
+      await reconcile.emailRescueOnce(Date.now() + 3 * 60_000);
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
     });
@@ -294,7 +296,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       const row = await eventOf(order.id, 'order.created');
       await settle(row.eventId, status, reason);
       expect(await runFallback(row.eventId)).toBe(decision);
-      await reconcile.emailRescueOnce();
+      await reconcile.emailRescueOnce(Date.now() + 3 * 60_000);
       expect(mailsFor(order.code)).toHaveLength(0);
       expect(await emailLogs(user.id)).toHaveLength(0);
     });
@@ -676,7 +678,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
     }
     const retire = (ids: string[]) => prisma.mssOrderEventOutbox.updateMany({ where: { id: { in: ids } }, data: { fallbackChannel: null } });
 
-    it('P1 bảng chéo: dòng câu SQL chọn = dòng mssEmailEligible (TS) trả true, trên mọi tổ hợp trạng thái × lý do × mã HTTP', async () => {
+    it.each(['ZNS', 'IN_APP_ONLY'] as const)('P1 bảng chéo (nhánh %s): dòng câu SQL chọn = dòng mssEmailEligible (TS) trả true, trên mọi tổ hợp trạng thái × lý do × mã HTTP', async (channel) => {
       const STATUSES: MssOutboxStatus[] = ['RESULT_SKIPPED', 'RESULT_FAILED', 'DEAD', 'EXPIRED', 'CANCELLED', 'RESULT_UNKNOWN'];
       const REASONS = [null, 'superseded', 'stranger_cap', 'event_id_reused', 'ttl', 'mss_lost', 'consent_withdrawn'];
       const HTTP = [null, 401, 408, 409, 422, 429, 503];
@@ -686,7 +688,7 @@ describe('Order confirm email fallback (real Postgres)', () => {
       try {
         // Lô quét 50 dòng: mỗi phần 40 dòng, cũ nhất trong cửa sổ để đứng đầu lô; xong phần nào rút phần đó khỏi diện quét.
         for (let i = 0; i < matrix.length; i += 40) {
-          const rows = await rawRows(matrix.slice(i, i + 40), new Date(Date.now() - 23 * HOUR));
+          const rows = await rawRows(matrix.slice(i, i + 40), new Date(Date.now() - 23 * HOUR), channel);
           spy.mockClear();
           await reconcile.emailRescueOnce();
           const picked = new Set(spy.mock.calls.map((c) => c[0]));
@@ -759,6 +761,21 @@ describe('Order confirm email fallback (real Postgres)', () => {
       } finally {
         spy.mockRestore();
       }
+      expect(mailsFor(order.code)).toHaveLength(1);
+      expect((await emailLogs(user.id)).map((l) => l.status)).toEqual(['SENT']);
+    });
+
+    it('P4b app tắt khi đường lui ZNS gặp NO_PHONE (không ZNS nào đi): email bị bỏ lúc tắt, nhánh cứu gửi đúng 1 email sau 2 phút', async () => {
+      sendHeldZns.mockResolvedValue('NO_PHONE');
+      const { user, order } = await buyerOrder();
+      const row = await eventOf(order.id, 'order.created');
+      await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code }, 'zns-tpl');
+      await settle(row.eventId, 'RESULT_SKIPPED', 'privacy_blocked');
+      const closing = new MssOrderEventFallback(prisma, notifications, email);
+      await closing.onModuleDestroy();
+      expect(await closing.run(row.eventId)).toBe('IN_APP_ONLY');
+      expect(mailsFor(order.code)).toHaveLength(0);
+      await reconcile.emailRescueOnce(Date.now() + 3 * 60_000);
       expect(mailsFor(order.code)).toHaveLength(1);
       expect((await emailLogs(user.id)).map((l) => l.status)).toEqual(['SENT']);
     });

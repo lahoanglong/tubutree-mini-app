@@ -82,7 +82,16 @@ export class MssOrderEventFallback implements OnModuleDestroy {
       if (decision === 'ZNS' && held && row.znsHeldTemplate) {
         try {
           const zns = await this.notifications.sendHeldZns(row.order.userId, row.znsHeldTemplate, held.data, held.znsTemplateId, mssFallbackDedupeKey(row.eventId));
-          if ((zns === 'NO_PHONE' || zns === 'PREFS') && emailable) this.sendEmail(row.id);
+          if (zns === 'NO_PHONE' || zns === 'PREFS') {
+            // Không có tin ZNS nào đi (và không có log ZNS): ghi đúng kênh, để chi tiết đơn không báo "Đã báo qua ZNS" và nhánh cứu
+            // IN_APP_ONLY của cron quét gửi bù email khi lần gửi dưới bị bỏ (app đang tắt).
+            await this.prisma.mssOrderEventOutbox.updateMany({
+              where: { id: row.id, fallbackAt: claimedAt, fallbackChannel: 'ZNS' },
+              data: { fallbackChannel: 'IN_APP_ONLY' },
+            });
+            if (emailable) this.sendEmail(row.id);
+            return 'IN_APP_ONLY';
+          }
         } catch (err) {
           this.logger.error(`Gửi ZNS đường lui đơn ${row.orderCode} (sự kiện ${row.eventId}) lỗi, lượt quét sau thử lại: ${err instanceof Error ? err.message : String(err)}`);
           // Nhả phần việc để cron quét bù thử lại; khoá chống trùng mss:<eventId> của sendHeldZns giữ đúng một tin nếu lần này đã kịp gửi.
