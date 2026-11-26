@@ -3,7 +3,7 @@ import { customerEditMismatch, customerEditMoneyDrift, editFingerprint, PancakeO
 import { PancakePackingError, PancakeSyncHooks, PancakeUnreachableError } from './pancake-sync-hooks';
 import { PancakePushProcessor } from './pancake-push.processor';
 import { PancakeApiError } from './pancake-outbound';
-import { ATTENTION_CUSTOMER_EDIT_PENDING } from './pancake-attention';
+import { ATTENTION_CUSTOMER_EDIT_MONEY_CHECK, ATTENTION_CUSTOMER_EDIT_PENDING, ATTENTION_SEPARATOR } from './pancake-attention';
 import { pancakeCustomerEditJobId } from './pancake-queue';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeClient } from './pancake.client';
@@ -100,9 +100,7 @@ describe('PancakeOrderService.syncCustomerEdit', () => {
       const t = setup({}, { getOrder });
       await expect(t.svc.syncCustomerEdit('o1')).resolves.toBeUndefined();
       expect(getOrder).toHaveBeenCalledTimes(3);
-      expect(t.row().pancakeAttention).toBe(
-        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): tiền trên Pancake đổi sau khi sửa địa chỉ (${want}). Sửa tay tiền theo đơn Tubu rồi giao.`,
-      );
+      expect(t.row().pancakeAttention).toBe(`${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): ${want}. Sửa tay tiền theo đơn Tubu rồi giao.`);
     }
   });
 
@@ -115,8 +113,81 @@ describe('PancakeOrderService.syncCustomerEdit', () => {
     const t = setup({}, { getOrder });
     await t.svc.syncCustomerEdit('o1');
     expect(t.row().pancakeAttention).toBe(
-      `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): phường/xã trên Pancake khác đơn Tubu. Sửa tay trên Pancake theo đơn Tubu rồi giao. tiền trên Pancake đổi sau khi sửa địa chỉ (cod 230.000đ→0đ). Sửa tay tiền theo đơn Tubu rồi giao.`,
+      `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): phường/xã trên Pancake khác đơn Tubu. Sửa tay trên Pancake theo đơn Tubu rồi giao.` +
+        `${ATTENTION_SEPARATOR}${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): cod 230.000đ→0đ. Sửa tay tiền theo đơn Tubu rồi giao.`,
     );
+  });
+
+  describe('cờ kiểm tiền bền qua các lượt sau', () => {
+    const CHECK = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): cod 230.000đ→0đ. Sửa tay tiền theo đơn Tubu rồi giao.`;
+
+    it('lượt sửa sau khớp hết (tiền trước PUT đã là số mới) → KHÔNG gỡ cờ kiểm tiền của lượt trước', async () => {
+      const t = setup({ pancakeAttention: CHECK, pancakeSyncError: 'cũ' });
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.row().pancakeAttention).toBe(CHECK);
+      expect(t.row().pancakeSyncError ?? null).toBeNull();
+    });
+
+    it('ô có cả lời "còn thông tin cũ" lẫn cờ kiểm tiền → lượt khớp chỉ gỡ phần "còn thông tin cũ"', async () => {
+      const t = setup({ pancakeAttention: `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): lỗi mạng${ATTENTION_SEPARATOR}${CHECK}` });
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.row().pancakeAttention).toBe(CHECK);
+    });
+
+    it('lượt sau đọc lại lệch địa chỉ → lời mới đứng trước, cờ kiểm tiền cũ vẫn giữ', async () => {
+      const t = setup({ pancakeAttention: CHECK }, { getOrder: jest.fn().mockResolvedValue(readBack({ commune_id: '84_VN7900001' })) });
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.row().pancakeAttention).toBe(
+        `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): phường/xã trên Pancake khác đơn Tubu. Sửa tay trên Pancake theo đơn Tubu rồi giao.${ATTENTION_SEPARATOR}${CHECK}`,
+      );
+    });
+
+    it('lượt sau gặp kho đã đóng gói → cờ kiểm tiền cũ vẫn giữ', async () => {
+      const t = setup({ pancakeAttention: CHECK }, { getOrder: jest.fn().mockResolvedValue({ ...readBack(), status: 2 }) });
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.row().pancakeAttention).toEqual(expect.stringContaining('kho đã vào đóng gói'));
+      expect(t.row().pancakeAttention).toEqual(expect.stringContaining(CHECK));
+    });
+
+    it('tiền lệch mà khách sửa thêm trong lúc PUT → gắn cờ kiểm tiền TRƯỚC khi ném; lượt chạy lại khớp không gỡ', async () => {
+      const getOrder = jest
+        .fn()
+        .mockResolvedValueOnce({ ...readBack(), cod: 230_000 })
+        .mockResolvedValueOnce({ ...readBack(), cod: 230_000 })
+        .mockResolvedValueOnce({ ...readBack(), cod: 0 })
+        .mockResolvedValue({ ...readBack(), cod: 0 });
+      const t = setup({}, { getOrder });
+      t.client.updateOrder.mockImplementationOnce(async () => {
+        Object.assign(t.row(), { note: 'Để ở bảo vệ' });
+        return { id: 'pk-1' };
+      });
+      await expect(t.svc.syncCustomerEdit('o1')).rejects.toThrow('vừa sửa thêm');
+      expect(t.row().pancakeAttention).toBe(CHECK);
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.client.updateOrder).toHaveBeenCalledTimes(2);
+      expect(t.row().pancakeAttention).toBe(CHECK);
+    });
+
+    it('PUT tới Pancake rồi đọc lại lỗi → gắn cờ kiểm tiền (lượt chạy lại không còn mốc tiền cũ) rồi ném để thử lại', async () => {
+      const getOrder = jest
+        .fn()
+        .mockResolvedValueOnce(readBack())
+        .mockResolvedValueOnce(readBack())
+        .mockRejectedValueOnce(new PancakeApiError('timeout', true))
+        .mockResolvedValue(readBack());
+      const t = setup({}, { getOrder });
+      await expect(t.svc.syncCustomerEdit('o1')).rejects.toThrow('timeout');
+      expect(t.row().pancakeAttention).toEqual(expect.stringMatching(new RegExp(`^${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} \\(#pk-1\\): không đọc lại được`)));
+      const flagged = t.row().pancakeAttention;
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.row().pancakeAttention).toBe(flagged);
+    });
+
+    it('PUT bị Pancake từ chối (chưa tới đơn) → không gắn cờ kiểm tiền', async () => {
+      const t = setup({}, { updateOrder: jest.fn().mockRejectedValue(new PancakeApiError('bad', false, false, 400)) });
+      await expect(t.svc.syncCustomerEdit('o1')).rejects.toThrow('bad');
+      expect(t.row().pancakeAttention ?? null).toBeNull();
+    });
   });
 
   it('thiếu trường tiền ở một trong hai lần đọc (hoặc không phải số) → không gắn cờ: không chứng minh được có lệch', () => {

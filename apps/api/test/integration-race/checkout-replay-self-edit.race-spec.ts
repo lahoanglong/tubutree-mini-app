@@ -110,7 +110,7 @@ describe('Gửi lại place-order cùng Idempotency-Key sau khi khách tự sử
     return { userId: u.id, addressId: addr.id, phone };
   }
 
-  it('đặt bằng K → tự sửa người nhận + số nhà → gửi lại bằng K: cùng mã đơn, đúng 1 đơn, ảnh chụp đã sửa giữ nguyên; đổi sang WALLET với K: 400', async () => {
+  it('đặt bằng K → tự sửa người nhận + số nhà → gửi lại bằng K: cùng mã đơn, đúng 1 đơn, ảnh chụp đã sửa giữ nguyên; addressId của người khác hay đổi sang WALLET với K: 400', async () => {
     const b = await buyer();
     await cart.addItem(b.userId, { variationId: await product(), quantity: 2 });
     const key = `itrse-${randCode(12)}`;
@@ -129,6 +129,9 @@ describe('Gửi lại place-order cùng Idempotency-Key sau khi khách tự sử
     expect(replays.map((r) => r.code)).toEqual([first.code, first.code, first.code]);
     expect(await prisma.order.count({ where: { userId: b.userId } })).toBe(1);
     expect((await prisma.order.findUniqueOrThrow({ where: { code: first.code } })).shippingAddress).toEqual(edited.shippingAddress);
+
+    const stranger = await buyer();
+    await expect(checkout.placeOrder(b.userId, { addressId: stranger.addressId, paymentMethod: 'COD' } as never, key)).rejects.toThrow('thông tin khác');
 
     const err = await checkout.placeOrder(b.userId, { addressId: b.addressId, paymentMethod: 'WALLET' } as never, key).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);

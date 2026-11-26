@@ -1079,10 +1079,11 @@ export class CheckoutService {
   /**
    * Đơn đã có và lần gửi này cùng địa chỉ, cách trả tiền, thu kèm rác (wasteRequestId) (so snapshot địa chỉ bằng stableStringify, xem trên).
    * Khách đã tự sửa người nhận/địa chỉ của đơn sau lần đặt thì ảnh chụp không còn khớp sổ địa chỉ: vẫn là cùng một yêu cầu (cách trả tiền và
-   * phiếu thu kèm vẫn phải khớp), nên lần gửi lại bằng cùng khoá trả đúng đơn đó thay vì báo "thông tin khác".
+   * phiếu thu kèm vẫn phải khớp), nên lần gửi lại bằng cùng khoá trả đúng đơn đó thay vì báo "thông tin khác". Nới này chỉ cho địa chỉ trong sổ
+   * của chính người đặt và cùng tỉnh với đơn (tự sửa không đổi được tỉnh): addressId của người khác hay tỉnh khác vẫn là yêu cầu khác.
    */
   private async isSameRequest(
-    existing: { id: string; paymentMethod: string; total?: number; shippingAddress: Prisma.JsonValue; checkoutGroup?: string | null },
+    existing: { id: string; userId: string; paymentMethod: string; total?: number; shippingAddress: Prisma.JsonValue; checkoutGroup?: string | null },
     dto: PlaceOrderDto,
   ): Promise<boolean> {
     // Đơn 0đ đã bị ép COD (placeOrderInner): khách gửi lại đúng phương thức đã chọn lúc đầu vẫn là
@@ -1094,6 +1095,8 @@ export class CheckoutService {
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     if (!address) return false;
     if (stableStringify(this.addressSnapshot(address)) === stableStringify(existing.shippingAddress)) return true;
+    const placedProvince = (existing.shippingAddress as { provinceCode?: unknown } | null)?.provinceCode;
+    if (address.userId !== existing.userId || placedProvince !== address.provinceCode) return false;
     const edited = await this.prisma.orderStatusHistory.findFirst({ where: orderEditHistoryWhere(existing.id), select: { id: true } });
     return edited !== null;
   }
@@ -1119,6 +1122,7 @@ export class CheckoutService {
   private async recentlyPlacedOrder(userId: string, dto: PlaceOrderDto) {
     const select = {
       id: true,
+      userId: true,
       code: true,
       checkoutGroup: true,
       paymentMethod: true,

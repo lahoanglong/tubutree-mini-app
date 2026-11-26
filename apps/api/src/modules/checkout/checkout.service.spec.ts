@@ -475,6 +475,26 @@ describe('CheckoutService.placeOrder — money safety', () => {
     await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never, 'key-123')).rejects.toThrow('thông tin khác');
     expect(orderCreate).not.toHaveBeenCalled();
   });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['địa chỉ trong sổ của người khác', { id: 'addr-x', userId: 'u2' }],
+    ['địa chỉ khác tỉnh', { id: 'addr3', provinceCode: '84_VN79', province: 'HCM' }],
+  ])('đơn đã tự sửa nhưng lần gửi lại dùng %s → vẫn 400, không trả đơn cũ', async (_l, other) => {
+    const { svc, prisma, orderCreate } = build();
+    (prisma.order.findUnique as jest.Mock).mockResolvedValue({
+      id: 'existing',
+      userId: 'u1',
+      paymentMethod: 'COD',
+      shippingAddress: {
+        recipient: 'B', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S2',
+        provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003',
+      },
+    });
+    (prisma as unknown as { orderStatusHistory: { findFirst: jest.Mock } }).orderStatusHistory.findFirst.mockResolvedValue({ id: 'h1' });
+    (prisma.address.findUnique as jest.Mock).mockResolvedValue({ ...ADDRESS, ...other });
+    await expect(svc.placeOrder('u1', { addressId: String(other.id), paymentMethod: 'COD' } as never, 'key-123')).rejects.toThrow('thông tin khác');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
 });
 
 describe('CheckoutService.placeOrder — giỏ đổi khi chờ khoá giỏ (R2-MONEY-2)', () => {

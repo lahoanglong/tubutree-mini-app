@@ -65,10 +65,12 @@ import {
 import {
   ATTENTION_CANCEL_PENDING,
   ATTENTION_COD_SWITCH_PENDING,
+  ATTENTION_CUSTOMER_EDIT_MONEY_CHECK,
   ATTENTION_CUSTOMER_EDIT_PENDING,
   ATTENTION_PAYMENT_PENDING,
   ATTENTION_PUSH_FAILED,
   ATTENTION_PUSH_RETRYING,
+  ATTENTION_SEPARATOR,
   ATTENTION_SETTLED_BY_CANCEL,
   clearPancakeAttention,
   flagPancakeAttention,
@@ -204,6 +206,9 @@ export function customerEditMoneyDrift(before: PancakeOrderDTO | null, after: Pa
   }
   return drift.length ? drift.join(', ') : null;
 }
+
+const moneyCheckParts = (cell: string | null | undefined): string[] =>
+  (cell ?? '').split(ATTENTION_SEPARATOR).filter((part) => part.startsWith(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK));
 
 const VN_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: CRON_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const vnClock = (d: Date): string => VN_CLOCK.format(d);
@@ -917,16 +922,11 @@ export class PancakeOrderService {
     if (!this.client.isConfigured()) return;
     const fp = editFingerprint(order);
     const pancakeOrderId = order.pancakeOrderId;
+    const flag = (reason: string) => this.flagCustomerEdit(order, reason);
     const fail = async (err: unknown) => {
       await this.setPushError(order.id, err);
       if (final || classifyPushError(err) === PUSH_ERROR_KIND.CONFIG) {
-        await flagPancakeAttention(
-          this.prisma,
-          this.alerts,
-          order,
-          `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${pancakeErrorText(err)}. Sửa tay trên Pancake theo đơn Tubu rồi giao.`,
-          this.logger,
-        );
+        await flag(`${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${pancakeErrorText(err)}. Sửa tay trên Pancake theo đơn Tubu rồi giao.`);
       }
       throw err;
     };
@@ -939,46 +939,72 @@ export class PancakeOrderService {
       return fail(err);
     }
     if (!isPancakeBeforePacking(current?.status)) {
-      await flagPancakeAttention(
-        this.prisma,
-        this.alerts,
-        order,
+      await flag(
         `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): kho đã vào đóng gói (trạng thái Pancake ${current?.status ?? 'không đọc được'}) trước khi kịp sửa. Đổi nhãn và địa chỉ tay theo đơn Tubu rồi giao.`,
-        this.logger,
       );
       return;
     }
-    let found: PancakeOrderDTO | null;
     try {
       // Không gửi tiền (transfer_money/cod) ở PUT này với mọi loại thanh toán: kho có thể đã chỉnh tay, lần sửa địa chỉ không được ghi đè.
       const update = await this.orderUpdate(order, await this.isOnDealerCredit(order), { money: false });
       await this.putOrder(pancakeOrderId, { ...update.payload, ...update.address });
-      found = await this.client.getOrder(pancakeOrderId);
     } catch (err) {
       return fail(err);
     }
+    // PUT đã tới Pancake: lượt chạy lại sẽ lấy tiền sau PUT làm mốc và không còn thấy lệch, nên việc so tiền phải xong (hoặc được báo) ngay lượt này.
+    let found: PancakeOrderDTO | null;
+    try {
+      found = await this.client.getOrder(pancakeOrderId);
+    } catch (err) {
+      await flag(
+        `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#${pancakeOrderId}): không đọc lại được đơn sau khi gửi địa chỉ mới (${pancakeErrorText(err)}). Mở đơn Pancake, so COD và phí ship với đơn Tubu rồi giao.`,
+      );
+      return fail(err);
+    }
+    // Pancake có thể tự tính lại phí ship/COD khi đổi địa chỉ: shipper thu sai tiền nếu không ai sửa tay trước khi giao.
+    const drift = customerEditMoneyDrift(current, found);
+    const driftReason = drift ? `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#${pancakeOrderId}): ${drift}. Sửa tay tiền theo đơn Tubu rồi giao.` : null;
     // Khách sửa thêm trong lúc job chạy: PUT vừa rồi đã cũ.
     const now = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { shippingAddress: true, note: true } });
     if (editFingerprint(now) !== fp) {
+      if (driftReason) await flag(driftReason);
       const stale = new Error(`Đơn ${order.code}: khách vừa sửa thêm trong lúc gửi Pancake, gửi lại với dữ liệu mới.`);
       if (final) return fail(stale);
       throw stale;
     }
     const mismatch = customerEditMismatch(found, order);
-    // Pancake có thể tự tính lại phí ship/COD khi đổi địa chỉ: shipper thu sai tiền nếu không ai sửa tay trước khi giao.
-    const drift = customerEditMoneyDrift(current, found);
-    if (mismatch || drift) {
+    if (mismatch || driftReason) {
       // Pancake nhận lệnh mà không giữ đúng địa chỉ mới hay giữ tiền cũ: thử lại không chắc giúp gì, báo ngay để kho sửa tay trước khi in nhãn.
-      const problems = [
-        mismatch ? `${mismatch}. Sửa tay trên Pancake theo đơn Tubu rồi giao.` : null,
-        drift ? `tiền trên Pancake đổi sau khi sửa địa chỉ (${drift}). Sửa tay tiền theo đơn Tubu rồi giao.` : null,
-      ].filter(Boolean);
-      await flagPancakeAttention(this.prisma, this.alerts, order, `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${problems.join(' ')}`, this.logger);
-      return;
+      const mismatchReason = mismatch ? `${ATTENTION_CUSTOMER_EDIT_PENDING} (#${pancakeOrderId}): ${mismatch}. Sửa tay trên Pancake theo đơn Tubu rồi giao.` : null;
+      await flag([mismatchReason, driftReason].filter(Boolean).join(ATTENTION_SEPARATOR));
+      if (mismatch) return;
     }
     await this.prisma.order.updateMany({ where: { id: order.id, pancakeSyncError: { not: null } }, data: { pancakeSyncError: null } });
-    await clearPancakeAttention(this.prisma, order.id, ATTENTION_CUSTOMER_EDIT_PENDING);
+    await this.clearCustomerEditAttention(order.id);
     this.logger.log(`Đã sửa địa chỉ/ghi chú đơn Pancake #${pancakeOrderId} (${order.code}) theo lần khách tự sửa.`);
+  }
+
+  /**
+   * "Cần xử lý Pancake" của job khách tự sửa. Lý do mới đè cả ô, nên phần ATTENTION_CUSTOMER_EDIT_MONEY_CHECK đang có được nối lại sau nó: lời nhắc
+   * kiểm tiền không được mất khi lượt sau báo lệch địa chỉ hay đã đóng gói.
+   */
+  private async flagCustomerEdit(order: { id: string; code: string }, reason: string): Promise<void> {
+    const row = await this.prisma.order.findUnique({ where: { id: order.id }, select: { pancakeAttention: true } });
+    const parts = reason.split(ATTENTION_SEPARATOR);
+    const held = moneyCheckParts(row?.pancakeAttention).filter((part) => !parts.includes(part));
+    await flagPancakeAttention(this.prisma, this.alerts, order, [reason, ...held].join(ATTENTION_SEPARATOR), this.logger);
+  }
+
+  /** Lượt khách tự sửa đã khớp trên Pancake: gỡ phần ATTENTION_CUSTOMER_EDIT_PENDING, giữ phần kiểm tiền chờ người sửa tay. */
+  private async clearCustomerEditAttention(orderId: string): Promise<void> {
+    const row = await this.prisma.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    const cell = row?.pancakeAttention;
+    if (!cell?.startsWith(ATTENTION_CUSTOMER_EDIT_PENDING)) return;
+    const held = moneyCheckParts(cell);
+    await this.prisma.order.updateMany({
+      where: { id: orderId, pancakeAttention: cell },
+      data: held.length ? { pancakeAttention: held.join(ATTENTION_SEPARATOR) } : { pancakeAttention: null, pancakeAttentionAt: null },
+    });
   }
 
   /**
