@@ -856,5 +856,19 @@ describe('MSS order events (real Postgres)', () => {
         for (const k of BILL_KEYS) expect(body.order).not.toHaveProperty(k);
       }
     });
+
+    it('release w40-02: created ghi theo số tài khoản P chưa xác minh, sau đó P bị gỡ khỏi tài khoản, chưa sửa SĐT: tin sau về SĐT giao hàng, không về P', async () => {
+      const ship = uniquePhone('08');
+      const { user, order } = await consentedOrder({ paymentMethod: 'BANK_TRANSFER', unverified: true, giftPhone: ship });
+      expect(await recordIn(order.id, 'order.created')).toBeNull();
+      const P = bodyOf((await buyerRow(order.id, 'order.created'))!).recipient.phone;
+      expect(P).not.toBe(ship);
+      await prisma.user.update({ where: { id: user.id }, data: { phone: null, phoneVerifiedAt: null } });
+      for (const t of ['order.payment_confirmed', 'order.shipping', 'order.delivered'] as const) expect(await recordIn(order.id, t)).toBeNull();
+      for (const t of ['order.payment_confirmed', 'order.shipping', 'order.delivered']) {
+        expect([t, bodyOf((await buyerRow(order.id, t))!).recipient.phone]).toEqual([t, ship]);
+      }
+      expect(bodyOf((await buyerRow(order.id, 'order.payment_confirmed'))!).order.items).toHaveLength(1);
+    });
   });
 });

@@ -287,6 +287,8 @@ export class MssOrderEventRecorder implements OnModuleInit {
    * mới. Bill (giá từng món) chỉ đi khi chứng minh được số đó có từ trước lần sửa SĐT đầu tiên; không chứng minh được (chưa có dòng nào, hoặc
    * dòng sớm nhất ghi sau lần sửa, ví dụ khách bật Zalo muộn) thì vẫn gửi tin trạng thái nhưng bỏ bill. Số tài khoản hay số khách vãng lai
    * không đổi theo địa chỉ nên không đọc gì thêm.
+   * Chỉ ghim khi đơn có lần tự sửa SĐT: dòng sớm nhất có thể đã ghi theo số tài khoản mà sau đó bị gỡ (`phoneIfFree` trả số chưa xác minh cho chủ
+   * Zalo thật), ghim về số đó là gửi tin đơn cho người khác. Chưa sửa SĐT thì đi theo SĐT giao hàng hiện tại như trước w40-01.
    */
   private async buyerAtPlacement(
     tx: Prisma.TransactionClient,
@@ -295,6 +297,12 @@ export class MssOrderEventRecorder implements OnModuleInit {
     found: BuyerPhone,
   ): Promise<{ phone: string; source: MssPhoneSource; billOpen: boolean }> {
     if (found.via !== 'shipping') return { phone: found.phone, source: found.source, billOpen: true };
+    const firstPhoneEdit = await tx.orderStatusHistory.findFirst({
+      where: orderPhoneEditHistoryWhere(orderId),
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    });
+    if (!firstPhoneEdit) return { phone: found.phone, source: found.source, billOpen: true };
     const earliest =
       eventType === 'order.created'
         ? null
@@ -305,14 +313,9 @@ export class MssOrderEventRecorder implements OnModuleInit {
           });
     const pinned = earliest ? outboxRecipientPhone(earliest.body) : null;
     const phone = pinned ?? found.phone;
-    // Chỉ tin đặt đơn và tin đã thanh toán có bill; tin khác khỏi đọc lịch sử sửa.
+    // Chỉ tin đặt đơn và tin đã thanh toán có bill.
     if (eventType !== 'order.created' && eventType !== 'order.payment_confirmed') return { phone, source: found.source, billOpen: true };
-    const firstPhoneEdit = await tx.orderStatusHistory.findFirst({
-      where: orderPhoneEditHistoryWhere(orderId),
-      orderBy: { createdAt: 'asc' },
-      select: { createdAt: true },
-    });
-    const billOpen = !firstPhoneEdit || (pinned !== null && earliest!.createdAt < firstPhoneEdit.createdAt);
+    const billOpen = pinned !== null && earliest!.createdAt < firstPhoneEdit.createdAt;
     if (!billOpen) this.logger.log(`mss_order_event_bill_dropped ${eventType} order=${orderId} reason=buyer_phone_edited`);
     return { phone, source: found.source, billOpen };
   }

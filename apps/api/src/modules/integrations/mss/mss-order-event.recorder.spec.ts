@@ -495,10 +495,25 @@ describe('MssOrderEventRecorder.record: link xem đơn và bill (w37-01)', () =>
     }
   });
 
-  it('MINOR 2: tin không có bill (giao, giao xong, huỷ) chỉ ghim số, không đọc lịch sử sửa', async () => {
+  it('MINOR 2: chưa sửa SĐT → không đọc outbox để ghim, tin đi theo SĐT giao hàng hiện tại', async () => {
     const h = await harness({ order: orderRow({ shippingAddress: { phone: B }, notifyRecipientZalo: false }, NO_PHONE), phoneEditAt: null });
     await h.record('order.shipping');
-    expect(h.outboxFindFirst).toHaveBeenCalledTimes(1);
-    expect(h.historyFindFirst).not.toHaveBeenCalled();
+    expect(h.historyFindFirst).toHaveBeenCalledTimes(1);
+    expect(h.outboxFindFirst).not.toHaveBeenCalled();
+    expect(h.buyer('order.shipping')!.recipient.phone).toBe(B);
+  });
+
+  it('release w40-02: dòng đặt đơn ghi theo số tài khoản A, sau đó A bị gỡ khỏi tài khoản (chủ Zalo thật nhận lại), chưa sửa SĐT → tin sau về SĐT giao hàng, không về A', async () => {
+    const state = { order: orderRow({ shippingAddress: { phone: B }, notifyRecipientZalo: false }, { phone: A, phoneVerifiedAt: null }), phoneEditAt: null as Date | null };
+    const h = await harness(state);
+    await h.record('order.created');
+    expect(h.buyer('order.created')!.recipient.phone).toBe(A);
+    state.order = orderRow({ shippingAddress: { phone: B }, notifyRecipientZalo: false }, NO_PHONE);
+    for (const t of ['order.payment_confirmed', 'order.shipping', 'order.delivered']) await h.record(t);
+    for (const t of ['order.payment_confirmed', 'order.shipping', 'order.delivered']) {
+      expect([t, h.buyer(t)?.recipient.phone]).toEqual([t, B]);
+    }
+    expect(h.buyer('order.payment_confirmed')!.order.items).toHaveLength(2);
+    expect(h.outboxFindFirst).not.toHaveBeenCalled();
   });
 });
