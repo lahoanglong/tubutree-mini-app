@@ -5,6 +5,7 @@ import { startOfNextVnMonth, startOfVnMonth } from '../../common/vn-time';
 import { describeError } from '../../config/go-live/secrets';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { DIRECT_APP_DELIVERED_WHERE } from './claim-trust-signals';
 import { canonicalUserId } from './external-claim-audit';
 import { chatMonthPoints, creatorIsReceiver, creatorMonthPoints, phoneBelongsToStaff, resolveMemberByPhone } from './external-chat.claim';
 import { loadChatConfig, loadStaffMap, type ChatConfig } from './external-chat.config';
@@ -17,11 +18,7 @@ import { maskClaimCode } from './external-points-rate';
 export const STALE_BATCH_MAX = 50;
 /** Thành viên phải đã nhận ít nhất ngần này đơn app (đơn Tubu, đã giao) thì SĐT cũ mới được duyệt nhanh. */
 export const STALE_BATCH_MIN_DELIVERED = 1;
-/**
- * "Đơn app đã nhận" của thành viên: đơn bán lẻ chính thành viên đặt, đã giao. Không đếm đơn đại lý (DEALER) và đơn CTV đặt hộ khách cuối
- * (`placedForCustomer`): người nhận các đơn đó không phải thành viên, nên chúng không chứng minh SĐT cũ vẫn là của thành viên.
- */
-export const DIRECT_APP_DELIVERED_WHERE = { status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false } satisfies Prisma.OrderWhereInput;
+export { DIRECT_APP_DELIVERED_WHERE };
 export const STALE_BATCH_AUDIT_ACTION = 'EXTERNAL_CLAIM_STALE_BATCH_APPROVE';
 /** Ghi chú duyệt của mỗi claim (approve bọc thêm dấu "SĐT xác minh cũ:"): lượt kiểm thay cho cuộc gọi xác nhận người nhận. */
 export const STALE_BATCH_NOTE = 'Duyệt nhanh: thành viên đã nhận đơn app đã giao, SĐT trên đơn vẫn thuộc tài khoản này, không vướng luật nào khác';
@@ -56,7 +53,8 @@ export interface StaleBatchResponse {
 
 const CLAIM_INCLUDE = { externalOrder: true } satisfies Prisma.ExternalPointsClaimInclude;
 
-function errorText(err: unknown): string {
+/** Lời lỗi của một claim trong lượt duyệt nhanh (lời của HttpException, hoặc câu chung kèm mô tả lỗi máy chủ). Dùng chung cho các lượt duyệt nhanh. */
+export function batchApproveErrorText(err: unknown): string {
   if (err instanceof HttpException) {
     const res = err.getResponse();
     const msg = typeof res === 'string' ? res : (res as { message?: unknown }).message;
@@ -208,7 +206,7 @@ export class ExternalClaimsStaleBatchService {
         try {
           await this.admin.approve(row.id, actorId, now, STALE_BATCH_NOTE, { guard: (tx, c) => staleOnlyBlock(tx, c, ctx) });
         } catch (err) {
-          const text = errorText(err);
+          const text = batchApproveErrorText(err);
           // Người khác vừa duyệt/huỷ claim này: bỏ qua, không phải lỗi của lượt.
           const skipped = /không ở trạng thái chờ duyệt|vừa được xử lý/i.test(text);
           Object.assign(row, { ok: false, outcome: skipped ? 'SKIPPED' : 'FAILED', reason: text });

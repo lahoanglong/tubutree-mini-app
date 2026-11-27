@@ -227,6 +227,7 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
       submissions: { total: 1_250, scan: 900, typed: 350 },
       matchedOrders: 820,
       phoneMismatch: { rejected: 12, review: 7 },
+      noPhoneReview: { review: 31, waiting: 9 },
       unmatched: 95,
       pending: { claims: 140, points: 210_000 },
       credited: { claims: 600, points: 905_000, users: 480 },
@@ -247,6 +248,7 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     const card = p.locator('[data-external-funnel]');
     await expect(card.getByRole('heading', { name: 'Phễu tích điểm đơn sàn' })).toBeVisible({ timeout: 15_000 });
     await expect(card.getByText('1.250 (quét 900, gõ tay 350)')).toBeVisible();
+    await expect(card.locator('[data-funnel-no-phone]')).toHaveText('31 yêu cầu phải duyệt, 9 còn đang chờ');
     await expect(p.locator('h2')).toHaveCount(1);
     const week = api.waitForCall('GET', '/admin/external-claims/funnel');
     await card.getByRole('button', { name: '7 ngày' }).click();

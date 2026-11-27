@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { ExternalClaimFunnel, ExternalClaimFunnelPeriod } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { GMV_ORDER_SQL } from '../admin/admin-revenue';
-import { PHONE_MISMATCH_REVIEW_REASON } from './external-claim.rules';
+import { NO_PHONE_REVIEW_REASON, PHONE_MISMATCH_REVIEW_REASON } from './external-claim.rules';
 
 export const FUNNEL_PERIODS = ['7d', '30d', '90d'] as const satisfies readonly ExternalClaimFunnelPeriod[];
 
@@ -38,6 +38,8 @@ interface CreatedRow {
   pending_claims: Count;
   pending_points: Count;
   phone_review: Count;
+  no_phone_review: Count;
+  no_phone_waiting: Count;
 }
 
 interface CreditedRow {
@@ -64,6 +66,8 @@ interface AttemptRow {
  *   còn sự kiện `ext_claim_submitted` chỉ có ở lúc gửi.
  * - Chờ duyệt vì SĐT lệch: claim từng vào REVIEW với câu SĐT lệch, đọc từ sổ `external_claim_events` (chỉ thêm dòng). Duyệt xoá
  *   `reviewReason` của claim, nên chỉ đọc cột đó thì claim đã duyệt và đã cộng rơi khỏi số đếm.
+ * - Chờ duyệt vì đơn không có SĐT để đối chiếu (Lazada che `***`): đọc như dòng trên, với câu `NO_PHONE_REVIEW_REASON`, tách khỏi SĐT lệch
+ *   để Ops thấy đúng lượng hàng chờ thiếu SĐT. `waiting` là phần trong số đó hiện vẫn REVIEW với đúng lý do này.
  * - Chưa thấy đơn: đếm theo MÃ gửi trong kỳ mà tới giờ chưa lượt nào của mã đó tìm thấy đơn (không theo lượt: khách gửi lại sau khi
  *   lượt chờ hết hạn, hay người thứ hai gửi cùng mã, không đếm thêm).
  * - Khách quay lại mua: gộp tài khoản theo `users.mergedIntoId` (một bước, như báo cáo nguồn khách). Đơn của tài khoản đã gộp vẫn tính
@@ -100,7 +104,19 @@ export async function loadExternalClaimFunnel(
                        AND ev."toState" = 'REVIEW'
                        AND strpos(COALESCE(ev.note, ''), ${PHONE_MISMATCH_REVIEW_REASON}) > 0
                   )
-             ) AS phone_review
+             ) AS phone_review,
+             count(*) FILTER (
+               WHERE strpos(COALESCE(c."reviewReason", ''), ${NO_PHONE_REVIEW_REASON}) > 0
+                  OR EXISTS (
+                    SELECT 1 FROM "external_claim_events" ev
+                     WHERE ev."claimId" = c.id
+                       AND ev."toState" = 'REVIEW'
+                       AND strpos(COALESCE(ev.note, ''), ${NO_PHONE_REVIEW_REASON}) > 0
+                  )
+             ) AS no_phone_review,
+             count(*) FILTER (
+               WHERE c.state = 'REVIEW' AND strpos(COALESCE(c."reviewReason", ''), ${NO_PHONE_REVIEW_REASON}) > 0
+             ) AS no_phone_waiting
         FROM "external_points_claims" c
        WHERE c.kind = 'SCAN'
          AND c."createdAt" >= ${f}::timestamp
@@ -166,6 +182,7 @@ export async function loadExternalClaimFunnel(
     submissions: { total: num(s?.total), scan: num(s?.scan), typed: num(s?.typed) },
     matchedOrders: num(c?.matched),
     phoneMismatch: { rejected: num(attempts[0]?.phone_rejected), review: num(c?.phone_review) },
+    noPhoneReview: { review: num(c?.no_phone_review), waiting: num(c?.no_phone_waiting) },
     unmatched: num(attempts[0]?.unmatched),
     pending: { claims: num(c?.pending_claims), points: num(c?.pending_points) },
     credited: { claims: num(k?.credited_claims), points: num(k?.credited_points), users: creditedUsers },

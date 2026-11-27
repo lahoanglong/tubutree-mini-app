@@ -34,6 +34,16 @@ export const PHONE_MATCH_LABEL = {
 
 export const PHONE_MATCH_TONE = { MATCH: 'success', MISMATCH: 'danger', NO_DATA: 'neutral' } as const;
 
+/** W45: tên người nhận trên đơn sàn so với tên thành viên (đơn chỉ lưu mã băm, không lưu tên). Tên Zalo hay là biệt danh: chỉ là tín hiệu. */
+export const RECIPIENT_NAME_LABEL = {
+  MATCH: 'Tên người nhận khớp tên thành viên',
+  PARTIAL: 'Tên người nhận gần khớp',
+  MISMATCH: 'Tên người nhận khác tên thành viên',
+  NO_DATA: 'Chưa có tên người nhận để so',
+} as const;
+
+export const RECIPIENT_NAME_TONE = { MATCH: 'success', PARTIAL: 'info', MISMATCH: 'danger', NO_DATA: 'neutral' } as const;
+
 /** Nhãn kết quả lượt gửi mã của người khác cùng mã; kết quả khác (chưa tìm thấy đơn) không cần nhãn. */
 export const ATTEMPT_RESULT_LABEL: Record<string, string> = {
   REJECTED_PHONE_MISMATCH: 'bị từ chối: SĐT không khớp đơn',

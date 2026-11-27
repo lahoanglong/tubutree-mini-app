@@ -68,6 +68,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   // Cột boolean có mặc định trên orders và cột có mặc định 'buyer' trên outbox MSS; image cũ không đọc hai cột, câu tìm theo (orderId, eventType)
   // và createMany skipDuplicates của nó vẫn chạy trên chỉ mục duy nhất mới; một dòng cờ tắt.
   '20261125070000_w35_01_order_recipient_zalo',
+  // Chỉ thêm chỉ mục thường trên `users.mergedIntoId`; không đổi cột, câu của image cũ chỉ được thêm đường đọc.
+  '20261127220000_w45_02_users_merged_into_idx',
 ];
 
 /**
@@ -118,6 +120,8 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261124090000_w24_01_orders_affiliate_link_code', ordersLock: true },
   // Một giao dịch: chỉ mục duy nhất trên points_transactions và VALIDATE users chạy trước; ALTER orders đặt cuối nên khoá orders chỉ giữ vài mili giây.
   { name: '20261127100000_w42_01_marketplace_lot_phone_mask', ordersLock: false },
+  // Chỉ mục thường (không CONCURRENTLY) trên users.mergedIntoId: chặn ghi users trong lúc dựng; cột thưa, không đụng orders.
+  { name: '20261127220000_w45_02_users_merged_into_idx', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

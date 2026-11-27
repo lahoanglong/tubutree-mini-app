@@ -40,6 +40,8 @@ import {
   CLAIM_STATE_LABEL,
   PHONE_MATCH_LABEL,
   PHONE_MATCH_TONE,
+  RECIPIENT_NAME_LABEL,
+  RECIPIENT_NAME_TONE,
   CLAIM_STATE_ORDER,
   CLAIM_STATE_TONE,
   claimActions,
@@ -51,6 +53,7 @@ import { configValue } from '@/lib/admin-config-forms';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
+import { ExternalClaimsNoPhoneBatch } from './external-claims-no-phone-batch';
 import { ExternalClaimsStaleBatch } from './external-claims-stale-batch';
 import { ExternalClaimsFunnelCard } from './external-claims-funnel-card';
 import { ExternalInsertQrCard } from './external-insert-qr-card';
@@ -204,7 +207,12 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
           className={`${FIELD_XS} w-full sm:w-96`}
         />
       </div>
-      {(isAdmin || canAct) && state === 'REVIEW' && <ExternalClaimsStaleBatch />}
+      {(isAdmin || canAct) && state === 'REVIEW' && (
+        <div className="flex flex-wrap items-start gap-2" data-batch-actions>
+          <ExternalClaimsNoPhoneBatch />
+          <ExternalClaimsStaleBatch />
+        </div>
+      )}
       {claims.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {claims.isError && <LoadError onRetry={() => void claims.refetch()} retrying={claims.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
       {claims.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có yêu cầu nào khớp.</p>}
@@ -370,19 +378,30 @@ function ClaimRow({ claim: c, who, onOutcome }: { claim: AdminExternalClaimRow; 
         <DlRow label="Điểm">{c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</DlRow>
         <DlRow label="Trạng thái đơn">{ORDER_STATUS_LABEL[c.orderStatus] ?? c.orderStatus}</DlRow>
         <DlRow label="Gửi lúc">{formatDateTime(c.createdAt)}</DlRow>
-        {c.kind === 'PHONE' && c.userId && (
+        {c.userId && (c.kind === 'PHONE' || row.memberCreatedAt) && (
           <div className="sm:col-span-2" data-member-info>
-            <dt className="inline">Người nhận: </dt>
+            <dt className="inline">{c.kind === 'PHONE' ? 'Người nhận: ' : 'Thành viên: '}</dt>
             <dd className="inline">
               SĐT xác minh {row.memberPhoneVerifiedAt ? `lúc ${formatDateTime(row.memberPhoneVerifiedAt)}` : 'chưa từng'} · tài khoản tạo{' '}
               {row.memberCreatedAt ? formatDate(row.memberCreatedAt) : '—'} · {row.memberDeliveredAppOrders ?? 0} đơn app đã giao
+              {c.kind === 'SCAN' && row.memberCreditedMarketplaceClaims != null && ` · ${row.memberCreditedMarketplaceClaims} đơn sàn khác đã cộng điểm`}
               {row.memberPhoneStale && (
                 <span className="ml-1.5 align-middle">
                   <ToneBadge tone="warning">{PHONE_STALE_LABEL}</ToneBadge>
                 </span>
               )}
+              {row.recipientNameMatch && (
+                <span className="ml-1.5 align-middle" data-recipient-name={row.recipientNameMatch}>
+                  <ToneBadge tone={RECIPIENT_NAME_TONE[row.recipientNameMatch]}>{RECIPIENT_NAME_LABEL[row.recipientNameMatch]}</ToneBadge>
+                </span>
+              )}
             </dd>
           </div>
+        )}
+        {c.kind === 'SCAN' && row.itemSummary && (
+          <DlRow label="Giỏ hàng" className="sm:col-span-2">
+            <span data-item-summary>{row.itemSummary}</span>
+          </DlRow>
         )}
         {c.reviewReason && (
           <DlRow label={c.state === 'CREDITED' ? 'Cờ cần xử lý' : 'Lý do cần duyệt'} className="sm:col-span-2">

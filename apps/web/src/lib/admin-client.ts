@@ -2772,6 +2772,7 @@ export type {
   AdminExternalClaimEvent,
   AdminExternalClaimRow,
   AdminExternalAttemptRow,
+  AdminRecipientNameMatch,
   AdminReverseClaimResponse,
   ExternalClaimFunnel,
   ExternalClaimFunnelPeriod,

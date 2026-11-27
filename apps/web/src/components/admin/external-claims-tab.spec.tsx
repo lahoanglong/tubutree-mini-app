@@ -617,6 +617,50 @@ describe('w17-03: nút duyệt nhanh SĐT cũ', () => {
   });
 });
 
+describe('ExternalClaimsTab: tín hiệu duyệt đơn sàn thiếu SĐT (W45)', () => {
+  const scan = claim({
+    channel: 'lazada', kind: 'SCAN', phoneMatch: 'NO_DATA', orderPhoneMasked: '***', reviewReason: 'Đơn sàn không có thông tin SĐT để đối chiếu tự động',
+    memberPhoneVerifiedAt: '2026-11-01T03:00:00.000Z', memberPhoneStale: false, memberCreatedAt: '2026-05-02T03:00:00.000Z', memberDeliveredAppOrders: 3,
+    memberCreditedMarketplaceClaims: 2, itemSummary: '3 sản phẩm, 2 dòng: 2 × 115.000đ, 1 × 20.000đ', recipientNameMatch: 'PARTIAL',
+  });
+
+  it('dòng SCAN có thành viên: mốc xác minh, tuổi tài khoản, đơn app, đơn sàn đã cộng, kết luận tên, giỏ hàng; không đòi ghi chú SĐT cũ', async () => {
+    stub({ claims: [scan] });
+    const r = mount(<ExternalClaimsTab isAdmin={false} canAct meId="s1" />);
+    await flush();
+    const li = r.container.querySelector('[data-external-claim="c1"]')!;
+    const member = li.querySelector('[data-member-info]')!;
+    expect(member.textContent).toContain('Thành viên:');
+    expect(member.textContent).toContain('3 đơn app đã giao · 2 đơn sàn khác đã cộng điểm');
+    expect(member.querySelector('[data-recipient-name="PARTIAL"]')!.textContent).toBe('Tên người nhận gần khớp');
+    expect(member.textContent).not.toContain('SĐT xác minh đã cũ');
+    expect(li.querySelector('[data-item-summary]')!.textContent).toBe('3 sản phẩm, 2 dòng: 2 × 115.000đ, 1 × 20.000đ');
+    expect(dlProblems(li)).toEqual([]);
+  });
+
+  it('API cũ chưa trả tín hiệu SCAN: không hiện khối thành viên hay giỏ hàng', async () => {
+    stub({ claims: [claim({ kind: 'SCAN' })] });
+    const r = mount(<ExternalClaimsTab isAdmin={false} canAct meId="s1" />);
+    await flush();
+    expect(r.container.querySelector('[data-member-info]')).toBeNull();
+    expect(r.container.querySelector('[data-item-summary]')).toBeNull();
+  });
+
+  it('tab Chờ duyệt: CSKH và ADMIN thấy cả hai nút duyệt nhanh; KE_TOAN không; mở tab không gọi lượt nào', async () => {
+    for (const [who, visible] of [[{ isAdmin: true, canAct: true }, true], [{ isAdmin: false, canAct: true }, true], [{ isAdmin: false, canAct: false }, false]] as const) {
+      const m = stub({ claims: [scan] });
+      const r = mount(<ExternalClaimsTab {...who} meId="x1" />);
+      await flush();
+      const labels = buttons(r.container);
+      expect(labels.includes('Duyệt nhanh đơn Lazada đủ điều kiện')).toBe(visible);
+      expect(labels.includes('Duyệt nhanh đơn chat SĐT đã từng nhận app')).toBe(visible);
+      expect(m.calls.some((x) => x.url.includes('no-phone-batch') || x.url.includes('stale-phone-batch'))).toBe(false);
+      r.unmount();
+      mounted = [];
+    }
+  });
+});
+
 describe('ExternalClaimsTab: phễu, cài đặt và mã QR bỏ hộp (W43)', () => {
   const configCalls = (m: ReturnType<typeof stub>) => m.calls.filter((c) => c.url.includes('/admin/config') && !c.url.includes('category='));
 
@@ -629,6 +673,7 @@ describe('ExternalClaimsTab: phễu, cài đặt và mã QR bỏ hộp (W43)', (
       expect(card.querySelector('h3')!.textContent).toBe('Phễu tích điểm đơn sàn');
       expect(r.container.querySelectorAll('h2')).toHaveLength(1);
       expect(card.textContent).toContain('Lượt gửi mã: 1.250 (quét 900, gõ tay 300)');
+      expect(card.querySelector('[data-funnel-no-phone]')!.textContent).toBe('31 yêu cầu phải duyệt, 9 còn đang chờ');
       expect(card.textContent).toContain('Quay lại mua trên Mini App hoặc web: 96 khách (20,0% số khách đã cộng điểm), 130 đơn');
       expect(dlProblems(card)).toEqual([]);
       expect(m.calls.some((c) => c.url.includes('/admin/external-claims/funnel?period=30d'))).toBe(true);

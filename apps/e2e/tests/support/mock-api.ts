@@ -432,6 +432,7 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         submissions: { total: 0, scan: 0, typed: 0 },
         matchedOrders: 0,
         phoneMismatch: { rejected: 0, review: 0 },
+        noPhoneReview: { review: 0, waiting: 0 },
         unmatched: 0,
         pending: { claims: 0, points: 0 },
         credited: { claims: 0, points: 0, users: 0 },

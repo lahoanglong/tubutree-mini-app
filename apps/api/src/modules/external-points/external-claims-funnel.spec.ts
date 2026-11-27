@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { ExternalClaimFunnel, ExternalClaimFunnelPeriod } from '@tubutree/shared-types';
-import { PHONE_MISMATCH_REVIEW_REASON } from './external-claim.rules';
+import { NO_PHONE_REVIEW_REASON, PHONE_MISMATCH_REVIEW_REASON } from './external-claim.rules';
 import { ExternalClaimFunnelCache, FUNNEL_CACHE_TTL_MS, FUNNEL_PERIODS, funnelRange, isFunnelPeriod, loadExternalClaimFunnel } from './external-claims-funnel';
 
 const NOW = new Date('2026-11-27T05:00:00.000Z');
@@ -46,7 +46,7 @@ describe('loadExternalClaimFunnel', () => {
   it('ánh xạ bigint sang số và dựng đúng DTO', async () => {
     const prisma = fakePrisma({
       submissions: [{ total: 12n, scan: 7n, typed: 4n }],
-      created: [{ matched: 6n, pending_claims: 3n, pending_points: 4500n, phone_review: 1n }],
+      created: [{ matched: 6n, pending_claims: 3n, pending_points: 4500n, phone_review: 1n, no_phone_review: 5n, no_phone_waiting: 2n }],
       credited: [{ credited_claims: 4n, credited_points: 9000n, credited_users: 3n, conv_users: 2n, conv_orders: 5n, conv_gmv: 3_250_000_000n }],
       attempts: [{ unmatched: 3n, phone_rejected: 2n }],
     });
@@ -58,6 +58,7 @@ describe('loadExternalClaimFunnel', () => {
       submissions: { total: 12, scan: 7, typed: 4 },
       matchedOrders: 6,
       phoneMismatch: { rejected: 2, review: 1 },
+      noPhoneReview: { review: 5, waiting: 2 },
       unmatched: 3,
       pending: { claims: 3, points: 4500 },
       credited: { claims: 4, points: 9000, users: 3 },
@@ -76,6 +77,7 @@ describe('loadExternalClaimFunnel', () => {
     expect(out.credited).toEqual({ claims: 0, points: 0, users: 0 });
     expect(out.submissions).toEqual({ total: 0, scan: 0, typed: 0 });
     expect(out.unmatched).toBe(0);
+    expect(out.noPhoneReview).toEqual({ review: 0, waiting: 0 });
     expect(Number.isFinite(out.converted.rate)).toBe(true);
   });
 
@@ -99,6 +101,10 @@ describe('loadExternalClaimFunnel', () => {
     expect(text).toContain('"external_claim_events"');
     expect(text).toContain("'REJECTED_PHONE_MISMATCH'");
     expect(values).toContain(PHONE_MISMATCH_REVIEW_REASON);
+    // Thiếu SĐT (Lazada che) đếm riêng: từng vào REVIEW (cột hoặc sổ sự kiện) và đang chờ (cột) đều dùng đúng câu của luật.
+    expect(values.filter((v) => v === NO_PHONE_REVIEW_REASON)).toHaveLength(3);
+    expect(text).toContain('AS no_phone_review');
+    expect(text).toContain("c.state = 'REVIEW' AND strpos");
     expect(values).toContain(new Date(NOW.getTime() - 90 * DAY_MS).toISOString());
     expect(values).toContain(NOW.toISOString());
     // GMV_ORDER_SQL là mảnh Prisma.sql lồng vào: trạng thái GMV và loại đơn thử đã dọn.

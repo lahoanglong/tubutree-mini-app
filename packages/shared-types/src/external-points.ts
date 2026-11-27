@@ -98,6 +98,12 @@ export interface MyExternalClaimsResponse {
   searching: MySearchingAttempt[];
 }
 
+/**
+ * W45: tên người nhận trên đơn sàn so với tên thành viên (đơn chỉ lưu mã băm từng chữ, không lưu tên). MATCH cùng một tập chữ; PARTIAL trùng
+ * ít nhất một chữ riêng (không tính họ phổ biến, "Thị", "Văn"); MISMATCH tên đầy đủ không trùng chữ riêng nào; NO_DATA không đủ để so.
+ */
+export type AdminRecipientNameMatch = 'MATCH' | 'PARTIAL' | 'MISMATCH' | 'NO_DATA';
+
 /** Hàng claim cho admin. SĐT luôn che; không bao giờ trả payload. */
 export interface AdminExternalClaimRow {
   id: string;
@@ -132,14 +138,24 @@ export interface AdminExternalClaimRow {
   creditedAt: string | null;
   createdAt: string;
   /**
-   * Chỉ claim PHONE đã có thành viên (null ở các dòng còn lại): để người kiểm đối chiếu người nhận với lý do REVIEW. `memberPhoneVerifiedAt`
-   * là lần gần nhất Zalo trả đúng SĐT này; `memberPhoneStale` = mốc đó đã quá hạn xác minh (hoặc chưa có), nên người nhận chưa được xác nhận.
+   * Claim đã có thành viên, cả PHONE lẫn SCAN (từ W45; null khi chưa có thành viên): để người kiểm đối chiếu người nhận với lý do REVIEW.
+   * `memberPhoneVerifiedAt` là lần gần nhất Zalo trả đúng SĐT này. `memberPhoneStale` chỉ có nghĩa ở claim PHONE (luôn false ở SCAN): mốc
+   * xác minh đã quá hạn (hoặc chưa có), nên người nhận chưa được xác nhận và nút Duyệt đòi ghi chú.
    */
   memberPhoneVerifiedAt?: string | null;
   memberPhoneStale?: boolean;
   memberCreatedAt?: string | null;
   /** Số đơn mua trong app của thành viên đã giao (DELIVERED): thành viên đã mua thật thì SĐT đáng tin hơn. */
   memberDeliveredAppOrders?: number | null;
+  /**
+   * W45, chỉ claim SCAN có thành viên: số claim đơn sàn KHÁC của thành viên này đã cộng điểm (CREDITED, không tính claim đang xem), để duyệt
+   * nhanh khách quen khi đơn không có SĐT để đối chiếu. null ở claim PHONE / chưa có thành viên.
+   */
+  memberCreditedMarketplaceClaims?: number | null;
+  /** W45, chỉ claim SCAN: giỏ hàng tóm tắt không có tên món ("3 sản phẩm, 2 dòng: 2 × 150.000đ, 1 × 89.000đ"); null khi đơn thiếu số. */
+  itemSummary?: string | null;
+  /** W45, chỉ claim SCAN có thành viên: tên người nhận trên đơn so với tên thành viên. null ở claim PHONE / chưa có thành viên. */
+  recipientNameMatch?: AdminRecipientNameMatch | null;
 }
 
 /** Một dòng nhật ký chỉ-thêm của claim: mọi thao tác của người, cron và khách. */
@@ -257,6 +273,11 @@ export interface ExternalClaimFunnel {
    * từng phải chờ duyệt vì SĐT lệch (kể cả đã duyệt, đã cộng sau đó).
    */
   phoneMismatch: { rejected: number; review: number };
+  /**
+   * W45: claim SCAN tạo trong kỳ từng chờ duyệt vì đơn sàn không có SĐT để đối chiếu tự động (`review`, kể cả đã duyệt hay cộng sau đó),
+   * tách khỏi `phoneMismatch.review`; `waiting` = phần trong số đó hiện vẫn chờ duyệt với đúng lý do này. Optional: API cũ chưa trả.
+   */
+  noPhoneReview?: { review: number; waiting: number };
   /** Số mã gửi trong kỳ mà tới giờ chưa lượt nào tìm thấy đơn (đếm theo mã, không theo lượt gửi). */
   unmatched: number;
   /** Claim SCAN tạo trong kỳ đang chờ cộng hoặc chờ duyệt, và số điểm của chúng. */
