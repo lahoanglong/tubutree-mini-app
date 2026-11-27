@@ -1,23 +1,24 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Info } from 'lucide-react';
 import type { SubmitExternalClaimResponse } from '@tubutree/shared-types';
 import { normalizeClaimCode } from '@tubutree/app-core/claim-code';
+import { saveContactPhone } from '@tubutree/app-core/api/account';
 import { externalClaimRejectCode, submitExternalClaim } from '@tubutree/app-core/api/external-points';
 import { MARKETPLACE_CLAIM_COPY as COPY, MARKETPLACE_CLAIM_WEB_COPY as WEB, claimResultDetail, isPastMilestone } from '@tubutree/app-core/marketplace-claim-copy';
 import { scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
+import { parseVnContactPhone } from '@tubutree/app-core/phone-input';
 import { usableShopPoints } from '@tubutree/app-core/points-lots';
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { Button } from '@/components/mini/button';
 import { Card } from '@/components/mini/card';
 import { Icon } from '@/components/mini/icon';
 import { Text } from '@/components/mini/text';
-import { ClaimScanButton, useClaimScanFormats } from '@/components/points/claim-scan-button';
+import { ClaimScanButton } from '@/components/points/claim-scan-button';
 import { Field } from '@/components/ui/field';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -106,13 +107,23 @@ function ShopNowButton() {
 }
 
 /**
- * Thẻ gửi mã của web `/quet-ma` (W44, PO 27/11: quét và tích điểm ngay trên web): nút quét bằng camera trình duyệt (khi máy đọc được mã vạch),
- * ô nhập mã và nút "Tích điểm", rồi thẻ kết quả và nút mua sắm. Cùng thứ tự, cùng chữ, cùng một nút chính tại mỗi lúc như Mini App `/points/scan`:
- * chưa có mã thì nút quét là nút chính; mã đã sẵn (quét xong hay gõ đúng dạng) thì "Tích điểm"; gửi xong thì nút mua sắm.
+ * Thẻ gửi mã của web `/quet-ma` (W44, PO 27/11: quét và tích điểm ngay trên web): nút quét bằng camera trình duyệt (mọi máy từ W45, iPhone đọc
+ * bằng bộ đọc JS) kèm lối chụp/chọn ảnh, ô nhập mã và nút "Tích điểm", rồi thẻ kết quả và nút mua sắm. Cùng thứ tự, cùng chữ, cùng một nút chính
+ * tại mỗi lúc như Mini App `/points/scan`: chưa có mã thì nút quét là nút chính; mã đã sẵn (quét xong hay gõ đúng dạng) thì "Tích điểm"; gửi
+ * xong thì nút mua sắm. `unverified`: SĐT là số liên hệ tự gõ trên web, nói trước rằng đơn sẽ được CSKH đối chiếu (máy chủ đưa vào REVIEW).
  */
-export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { initialCode: string; codeParamRejected: boolean; verifyHref: string }) {
+export function ClaimForm({
+  initialCode,
+  codeParamRejected,
+  verifyHref,
+  unverified = false,
+}: {
+  initialCode: string;
+  codeParamRejected: boolean;
+  verifyHref: string;
+  unverified?: boolean;
+}) {
   const qc = useQueryClient();
-  const formats = useClaimScanFormats();
   const [code, setCode] = useState(initialCode);
   const [scanned, setScanned] = useState<string | null>(initialCode || null);
   const [error, setError] = useState<ClaimError | null>(codeParamRejected ? { text: COPY.codeLinkInvalid, verify: false } : null);
@@ -180,7 +191,6 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
 
   const shopNow = result != null && (result.status === 'CLAIMED' || result.status === 'REVIEW');
   const ready = scanned !== null || normalizeClaimCode(code) !== null;
-  const canScan = formats.length > 0;
 
   return (
     <div className="mt-4">
@@ -193,8 +203,8 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
             void send();
           }}
         >
-          {canScan && <ClaimScanButton formats={formats} primary={!ready && !shopNow} onCode={onScanned} onFail={(text) => setError({ text, verify: false })} />}
-          <div className={canScan ? 'mt-4' : undefined}>
+          <ClaimScanButton primary={!ready && !shopNow} onCode={onScanned} onFail={(text) => setError({ text, verify: false })} />
+          <div className="mt-3">
             <Field label={COPY.inputLabel}>
               <input
                 type="text"
@@ -215,6 +225,11 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
             <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 'var(--space-stack-xs)' }}>
               {COPY.inputHelp}
             </Text>
+            {unverified && (
+              <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
+                <span data-testid="claim-unverified-note">{WEB.unverifiedNote}</span>
+              </Text>
+            )}
           </div>
           {error && (
             <div className="mt-2" data-testid="claim-error">
@@ -243,28 +258,91 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
 }
 
 /**
- * Khách đã đăng nhập mà tài khoản chưa có SĐT: máy chủ chỉ ghép đơn sàn theo SĐT Zalo đã xác minh, nên nói thật điều kiện và chỉ đúng chỗ làm được
- * (mở Tubu Tree trên Zalo một lần để chia sẻ số). Lối phụ tới Hồ sơ để khách xem thông tin tài khoản.
+ * Khách đã đăng nhập mà tài khoản chưa có SĐT (W45): nhập số ngay trên màn quét (`PATCH /me/contact-phone`, số liên hệ chưa xác minh) rồi quét
+ * tiếp; đơn tích bằng số này vào hàng CSKH đối chiếu. Lối phụ: xác minh số trên Zalo để cộng tự động. Lưu xong thì hồ sơ `['me']` có SĐT và màn
+ * tự chuyển sang thẻ gửi mã.
  */
-export function PhonePrompt({ verifyHref, children }: { verifyHref: string; children?: ReactNode }) {
+export function PhoneEntry({ verifyHref }: { verifyHref: string }) {
+  const qc = useQueryClient();
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const saving = useRef(false);
+  const save = useMutation({
+    mutationFn: (normalized: string) => saveContactPhone(coreHttp, normalized),
+    onSuccess: (me) => {
+      if (me) qc.setQueryData(['me'], me);
+      return settleWithin(qc.invalidateQueries({ queryKey: ['me'] }));
+    },
+    onError: (e) => setError(actionErrorText(e)),
+  });
+
+  const submit = async () => {
+    if (saving.current) return;
+    const normalized = parseVnContactPhone(phone);
+    if (!normalized) {
+      setError(phone.trim() === '' ? WEB.phoneEmpty : WEB.phoneInvalid);
+      return;
+    }
+    saving.current = true;
+    setError(null);
+    try {
+      await save.mutateAsync(normalized);
+    } catch {
+      /* câu lỗi đã đặt ở onError */
+    } finally {
+      saving.current = false;
+    }
+  };
+
   return (
     <div className="mt-4">
       <Card variant="raised" padding={16}>
-        <div data-testid="scan-phone-prompt">
+        <form
+          noValidate
+          data-testid="scan-phone-prompt"
+          aria-label={WEB.phoneTitle}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
           <Text variant="label" as="h2">
             {WEB.phoneTitle}
           </Text>
           <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
             {WEB.phoneBody}
           </Text>
-          <a href={verifyHref} className={`${ui.btnPrimary} mt-3 w-full`}>
-            {WEB.phoneCta}
+          <div className="mt-3">
+            <Field label={WEB.phoneLabel}>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                enterKeyHint="done"
+                placeholder={WEB.phonePlaceholder}
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (error) setError(null);
+                }}
+                className={`${error ? ui.fieldError : ui.field} tabular-nums`}
+              />
+            </Field>
+          </div>
+          {error && (
+            <p role="alert" className={`${ui.error} mt-2`}>
+              {error}
+            </p>
+          )}
+          <div className="mt-3">
+            <Button type="submit" fullWidth size="lg" loading={save.isPending}>
+              {WEB.phoneSave}
+            </Button>
+          </div>
+          <a href={verifyHref} className="mt-2 flex min-h-11 items-center justify-center text-center text-sm font-medium text-forest-700 underline underline-offset-2">
+            {WEB.phoneAlt}
           </a>
-          <Link href="/tai-khoan/ho-so" className={`${ui.btnSecondary} mt-2 w-full`}>
-            {WEB.phoneProfile}
-          </Link>
-          {children}
-        </div>
+        </form>
       </Card>
     </div>
   );

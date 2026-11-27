@@ -50,6 +50,7 @@ export function userPhoneWriters(): string[] {
  * Điểm đơn chat tự liên kết theo SĐT chỉ an toàn khi `users.phone` là số đã xác minh (Zalo cấp qua getPhoneNumber). Test này canh
  * nơi GHI cột đó: thêm đường ghi mới (vd khách tự gõ SĐT liên hệ ở hồ sơ/đổi rác Web) làm test đỏ để người thêm bắt buộc giữ
  * `phoneVerifiedAt == null` cho số tự nhập và chặn ở cả `linkableMemberPhone`, `verifiedMemberPhone`, `ExternalClaimService` và `RbacService.applyGrants`.
+ * Từ W45, `ExternalClaimService` không từ chối số tự nhập mà buộc claim vào REVIEW (CSKH đối chiếu), không bao giờ tự cộng.
  */
 describe('nguồn của users.phone (điều kiện để tự liên kết điểm đơn chat theo SĐT)', () => {
   it('chỉ AuthService ghi SĐT xác minh Zalo, UsersService.saveContactPhone chỉ ghi khi phone=null (giữ phoneVerifiedAt=null), xoá tài khoản chỉ xoá số về null', () => {
@@ -68,7 +69,10 @@ describe('nguồn của users.phone (điều kiện để tự liên kết đi�
     const chatRules = readFileSync(join(SRC, 'modules/external-points/external-chat.rules.ts'), 'utf8');
     expect(chatRules).toContain('if (!u.phoneVerifiedAt) return null;');
     const claimSvc = readFileSync(join(SRC, 'modules/external-points/external-claim.service.ts'), 'utf8');
-    expect(claimSvc).toContain('!!user.phoneVerifiedAt');
+    expect(claimSvc).toContain('const phoneVerified = !!user?.phoneVerifiedAt;');
+    const claimRules = readFileSync(join(SRC, 'modules/external-points/external-claim.rules.ts'), 'utf8');
+    expect(claimRules).toContain("if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, unverifiedMatchNote(order), reviewReason].filter(Boolean).join('; ');");
+    expect(claimRules).toContain("state: reviewReason ? 'REVIEW' : 'PENDING'");
   });
 
   it('UpdateMeDto không cho khách gửi `phone`, còn ContactPhoneDto chỉ đi qua saveContactPhone một chiều khi chưa có SĐT', () => {

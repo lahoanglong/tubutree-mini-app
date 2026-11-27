@@ -21,7 +21,7 @@ import { evaluateClaimRules, lockedUntil, type ClaimDecision, type ClaimFacts } 
 import { normalizeTrackingCode } from './external-order.mapper';
 import { UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { maskClaimCode } from './external-points-rate';
-import { orderPhoneMatch } from './order-phone-match';
+import { orderPhoneMatch, orderPhoneVisibleDigits } from './order-phone-match';
 
 const DAY_MS = 864e5;
 export const UNMATCHED_RETRY_DAYS = UNMATCHED_RETRY_DAYS_FOR_ATTENTION;
@@ -35,12 +35,13 @@ const UNRECORDED: readonly ExternalClaimRejectCode[] = ['DISABLED', 'NOT_ELIGIBL
 /**
  * Kết quả lần thử tính vào khoá 24h (5 lần trong 24 giờ): mã không thấy đơn, và (W42) mã của đơn mang SĐT khác. Đếm lần lệch SĐT để
  * một người không dò được nhiều mã vận đơn của người khác; lần lệch vẫn được ghi như mọi lần thử nên cũng tính vào trần lần thử/ngày.
+ * (W45) SĐT tự gõ trên Web mà đơn không đủ căn cứ (REJECTED_NOT_ELIGIBLE_USER sau khi đã thấy đơn) cũng tính, để không dò được mã nào có đơn.
  */
-export const LOCK_COUNTED_RESULTS = ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH'] as const;
+export const LOCK_COUNTED_RESULTS = ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER'] as const;
 
 export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; message: string }> = {
   DISABLED: { status: HttpStatus.NOT_FOUND, message: 'Tính năng tích điểm đơn mua ngoài app chưa mở.' },
-  NOT_ELIGIBLE_USER: { status: HttpStatus.FORBIDDEN, message: 'Bạn cần đăng nhập Zalo và cung cấp số điện thoại để tích điểm đơn mua ngoài app.' },
+  NOT_ELIGIBLE_USER: { status: HttpStatus.FORBIDDEN, message: 'Bạn cần đăng nhập Zalo và xác minh số điện thoại qua Zalo để tích điểm đơn mua ngoài app.' },
   INVALID_CODE: { status: HttpStatus.BAD_REQUEST, message: 'Mã không hợp lệ. Hãy nhập mã vận đơn hoặc mã đơn trên sàn (8 đến 30 chữ và số).' },
   LOCKED: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Bạn đã nhập quá nhiều mã chưa tìm thấy hoặc không khớp số điện thoại. Bạn thử lại sau 24 giờ hoặc liên hệ Tubu Tree nhé.' },
   DAILY_ATTEMPTS: { status: HttpStatus.TOO_MANY_REQUESTS, message: 'Hôm nay bạn đã nhập mã quá số lần cho phép. Hãy thử lại vào ngày mai.' },
@@ -312,7 +313,8 @@ export class ExternalClaimService {
   ): Promise<{ facts: ClaimFacts; order: ClaimOrderRow | null; existingClaimId: string | null; existingClaimOwnerId: string | null }> {
     const userId = user?.id ?? '';
     const sinceNotFound = new Date(now.getTime() - 2 * DAY_MS);
-    const [notFound, attemptsToday, appOrder, found] = await Promise.all([
+    const phoneVerified = !!user?.phoneVerifiedAt;
+    const [notFound, attemptsToday, appOrder, found, deliveredAppOrders] = await Promise.all([
       opts.skipAttemptLimits
         ? Promise.resolve([] as { createdAt: Date }[])
         : tx.externalClaimAttempt.findMany({ where: { userId, result: { in: [...LOCK_COUNTED_RESULTS] }, createdAt: { gte: sinceNotFound } }, select: { createdAt: true } }),
@@ -322,6 +324,8 @@ export class ExternalClaimService {
         select: { id: true },
       }),
       opts.orderId ? tx.externalOrder.findUnique({ where: { id: opts.orderId } }) : findExternalOrderByCode(tx, code),
+      // SĐT chưa xác minh qua Zalo: đã mua trong app và nhận hàng thì SĐT đáng tin hơn (luật W45). SĐT đã xác minh không cần đếm.
+      user && user.phone && !phoneVerified ? tx.order.count({ where: { userId: user.id, status: 'DELIVERED' }, take: 1 }) : Promise.resolve(0),
     ]);
 
     let order: ClaimOrderRow | null = null;
@@ -368,7 +372,9 @@ export class ExternalClaimService {
     const facts: ClaimFacts = {
       now,
       cfg,
-      userOk: !!user && isRealUser(user) && !!user.phone && !!user.phoneVerifiedAt && !user.isBlocked,
+      userOk: !!user && isRealUser(user) && !!user.phone && !user.isBlocked,
+      phoneVerified,
+      deliveredAppOrder: deliveredAppOrders > 0,
       userIsStaff: user?.role === 'STAFF' || user?.role === 'ADMIN',
       lockedUntil: lockedUntil(notFound.map((n) => n.createdAt), now),
       attemptsToday,
@@ -380,6 +386,7 @@ export class ExternalClaimService {
             insertedAt: order.pancakeInsertedAt ?? order.firstSeenAt,
             goodsValue: order.goodsValue,
             phoneMatch: orderPhoneMatch(user?.phone ?? null, order),
+            phoneVisibleDigits: orderPhoneVisibleDigits(order),
           }
         : null,
       claim: claim ? { id: claim.id, reopenable: claim.reopenable, own: claim.own, state: claim.state } : null,
@@ -414,7 +421,7 @@ export class ExternalClaimService {
     };
 
     if (decision.kind === 'REJECT') {
-      if (!UNRECORDED.includes(decision.code)) await addAttempt(`REJECTED_${decision.code}`, { externalOrderId: order?.id ?? null });
+      if (decision.record || !UNRECORDED.includes(decision.code)) await addAttempt(`REJECTED_${decision.code}`, { externalOrderId: order?.id ?? null });
       return { kind: 'REJECT', code: decision.code };
     }
     if (decision.kind === 'OWN_CLAIM') {

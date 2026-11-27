@@ -37,6 +37,7 @@ export const PHONE_MATCH_TONE = { MATCH: 'success', MISMATCH: 'danger', NO_DATA:
 /** Nhãn kết quả lượt gửi mã của người khác cùng mã; kết quả khác (chưa tìm thấy đơn) không cần nhãn. */
 export const ATTEMPT_RESULT_LABEL: Record<string, string> = {
   REJECTED_PHONE_MISMATCH: 'bị từ chối: SĐT không khớp đơn',
+  REJECTED_NOT_ELIGIBLE_USER: 'bị từ chối: SĐT tự nhập trên web, đơn không đủ căn cứ',
 };
 
 export interface ClaimActions {

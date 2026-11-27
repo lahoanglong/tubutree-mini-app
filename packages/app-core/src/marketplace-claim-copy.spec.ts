@@ -20,9 +20,14 @@ describe('MARKETPLACE_CLAIM_WEB_COPY', () => {
     expect(MARKETPLACE_CLAIM_WEB_COPY.loginCta).toBe('Đăng nhập để tích điểm');
   });
 
-  it('nói thật điều kiện SĐT đã xác minh qua Zalo, không hứa thêm số ở Hồ sơ là đủ', () => {
-    expect(MARKETPLACE_CLAIM_WEB_COPY.phoneBody).toContain('đã xác minh');
+  it('SĐT tự gõ trên web (W45): nói rõ đơn được CSKH đối chiếu, không hứa cộng ngay; vẫn mời xác minh trên Zalo', () => {
+    expect(MARKETPLACE_CLAIM_WEB_COPY.unverifiedNote).toContain('CSKH đối chiếu');
+    expect(MARKETPLACE_CLAIM_WEB_COPY.phoneAlt).toContain('xác minh số trên Zalo');
     expect(MARKETPLACE_CLAIM_WEB_COPY.notVerified).toContain('xác minh qua Zalo');
+  });
+
+  it('lối chụp/chọn ảnh mã vận đơn dùng đúng chữ trong đề bài (W45)', () => {
+    expect(MARKETPLACE_CLAIM_WEB_COPY.photoCta).toBe('Chụp/chọn ảnh mã vận đơn');
   });
 });
 

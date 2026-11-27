@@ -414,6 +414,7 @@ export class UsersService {
     id: string;
     zaloId: string | null;
     phone: string | null;
+    phoneVerifiedAt?: Date | null;
     email: string | null;
     fullName: string | null;
     dob?: Date | null;
@@ -434,6 +435,8 @@ export class UsersService {
       id: user.id,
       zaloId: user.zaloId,
       phone: user.phone,
+      // Web đọc để biết SĐT là số Zalo đã xác minh hay SĐT liên hệ tự gõ (tích điểm đơn sàn vào REVIEW, W45).
+      phoneVerified: user.phoneVerifiedAt != null,
       email: user.email,
       fullName: user.fullName,
       dob: user.dob ? user.dob.toISOString().slice(0, 10) : null,

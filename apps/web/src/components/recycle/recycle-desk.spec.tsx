@@ -559,26 +559,35 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt', () => {
     await flush(5);
     expect(dialog()).toBeNull();
     const alert = c.querySelector('[role="alert"]')?.textContent ?? '';
-    expect(alert).toContain('Hãy cho phép camera trong trình duyệt hoặc gõ mã bên dưới');
+    expect(alert).toContain('Hãy cho phép camera');
+    expect(alert).toContain('gõ mã bên dưới');
     expect(alert).not.toContain('thử lại');
   });
-  it('BarcodeDetector có nhưng không đọc được QR (hoặc không hỏi được định dạng): không hiện nút quét', async () => {
+  it('BarcodeDetector không đọc được QR (thiếu Play Services) hay không hỏi được định dạng: vẫn hiện nút quét (W45: bộ đọc JS đọc thay)', async () => {
     supported.formats = ['ean_13', 'code_128'];
-    expect(button(await mount(), 'Quét mã của khách')).toBeNull();
+    expect(button(await mount(), 'Quét mã của khách')).not.toBeNull();
     supported.formats = new Error('không hỏi được');
-    expect(button(await mount(), 'Quét mã của khách')).toBeNull();
+    expect(button(await mount(), 'Quét mã của khách')).not.toBeNull();
   });
-  it('không có BarcodeDetector: không hiện nút quét, giữ ô gõ và nút Tra mã', async () => {
+  it('không có BarcodeDetector (iPhone): vẫn có nút quét là nút chính, lối chụp/chọn ảnh mã QR, ô gõ và nút Tra mã (W45)', async () => {
     delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
     const c = await mount();
-    expect(button(c, 'Quét mã của khách')).toBeNull();
+    expect(button(c, 'Quét mã của khách')).not.toBeNull();
+    expect(button(c, 'Chụp/chọn ảnh mã QR')).not.toBeNull();
+    expect(button(c, 'Tra mã')!.className).toContain(skin.btnSecondary);
     expect(label(c, CODE_LABEL)).not.toBeNull();
     expect(button(c, 'Tra mã')).not.toBeNull();
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    expect(dialog()).not.toBeNull();
   });
-  it('có BarcodeDetector nhưng không có camera: không hiện nút quét', async () => {
+  it('không có API camera (WebView cũ): không có nút quét, còn lối chụp/chọn ảnh; "Tra mã" là nút chính', async () => {
     Reflect.deleteProperty(navigator, 'mediaDevices');
     const c = await mount();
     expect(button(c, 'Quét mã của khách')).toBeNull();
+    expect(button(c, 'Chụp/chọn ảnh mã QR')).not.toBeNull();
+    typeInto(label(c, CODE_LABEL), 'TR-8K2M9');
+    expect(button(c, 'Tra mã')!.className).not.toContain(skin.btnSecondary);
   });
 });
 

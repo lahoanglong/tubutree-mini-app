@@ -1,63 +1,34 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { ScanLine } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Camera, ScanLine } from 'lucide-react';
 import { extractWasteLookupCode } from '@tubutree/app-core/waste-code-input';
 import { Sheet } from '@/components/ui/sheet';
+import { useCameraAvailable, useCameraScan, usePhotoScan, type ScanFormat } from '@/lib/code-scan';
 import { ui } from '@/lib/guest-ui';
 
-type Detector = { detect(source: HTMLVideoElement): Promise<{ rawValue?: string }[]> };
-type DetectorCtor = (new (opts?: { formats?: string[] }) => Detector) & { getSupportedFormats?: () => Promise<string[]> };
-
 const NOT_WASTE_CODE = 'Mã QR này không phải mã Đổi rác. Hãy quét lại hoặc gõ mã bên dưới.';
-const SCAN_FAILED = 'Chưa quét được. Hãy thử lại hoặc gõ mã bên dưới.';
-const CAMERA_DENIED = 'Chưa mở được camera. Hãy cho phép camera trong trình duyệt hoặc gõ mã bên dưới.';
-const FRAME_MS = 250;
+const SCAN_FAILED = 'Chưa quét được. Hãy thử lại, chụp ảnh mã hoặc gõ mã bên dưới.';
+const CAMERA_DENIED = 'Chưa mở được camera. Hãy cho phép camera, chụp ảnh mã hoặc gõ mã bên dưới.';
+const PHOTO_CTA = 'Chụp/chọn ảnh mã QR';
+const PHOTO_READING = 'Đang đọc ảnh…';
+const PHOTO_UNREADABLE = 'Chưa đọc được mã QR trong ảnh. Hãy chụp gần, rõ nét hơn hoặc gõ mã bên dưới.';
+const QR_ONLY: readonly ScanFormat[] = ['qr_code'];
 
-function detectorCtor(): DetectorCtor | null {
-  if (typeof window === 'undefined') return null;
-  const ctor = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
-  return typeof ctor === 'function' ? ctor : null;
+/** Mã TR-/QG- đầu tiên trong các chuỗi đọc được, hoặc null. */
+function wasteCodeOf(values: readonly string[]): string | null {
+  for (const value of values) {
+    const code = extractWasteLookupCode(value);
+    if (code) return code;
+  }
+  return null;
 }
 
 /**
- * Trình duyệt có camera và BarcodeDetector đọc được QR. Safari và Firefox chưa có BarcodeDetector; một số máy Android có API nhưng
- * không đọc được QR (thiếu Google Play Services), mở camera ra sẽ im lặng không quét được gì, nên phải hỏi định dạng hỗ trợ.
- * Không đủ thì nút quét bị ẩn, chỉ còn ô gõ.
+ * Quét mã QR của khách ở quầy Đổi rác (W45: mọi máy, kể cả iPhone). Máy có camera: nút "Quét mã của khách" mở camera trong Sheet, kèm lối phụ
+ * "Chụp/chọn ảnh mã QR" cho WebView chặn camera; máy không có API camera thì chỉ còn lối ảnh (nút "Tra mã" của quầy là nút chính). Gọi `onCode`
+ * với mã TR-/QG- đầu tiên đọc được.
  */
-export async function barcodeScanSupported(): Promise<boolean> {
-  const ctor = detectorCtor();
-  if (!ctor || typeof navigator === 'undefined' || typeof navigator.mediaDevices?.getUserMedia !== 'function') return false;
-  try {
-    return ((await ctor.getSupportedFormats?.()) ?? []).includes('qr_code');
-  } catch {
-    return false;
-  }
-}
-
-/** Chỉ biết sau khi trang chạy trên trình duyệt, để bản dựng sẵn trên máy chủ và lần vẽ đầu giống nhau. */
-export function useBarcodeScan(): boolean {
-  const [supported, setSupported] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void barcodeScanSupported().then((ok) => alive && setSupported(ok));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return supported;
-}
-
-function makeDetector(): Detector {
-  const Ctor = detectorCtor()!;
-  try {
-    return new Ctor({ formats: ['qr_code'] });
-  } catch {
-    return new Ctor();
-  }
-}
-
-/** Quét mã QR của khách bằng camera trình duyệt, không thêm thư viện. Gọi `onCode` với mã TR-/QG- đầu tiên đọc được. */
 export function ScanCodeButton({
   onCode,
   onFail,
@@ -70,87 +41,73 @@ export function ScanCodeButton({
   /** Quầy đang bận việc khác: nút báo aria-disabled và không mở camera, nhưng KHÔNG `disabled` thật để giữ focus bàn phím. */
   busy?: boolean;
 }) {
+  const camera = useCameraAvailable();
   const [open, setOpen] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const onCodeRef = useRef(onCode);
-  onCodeRef.current = onCode;
-  const onFailRef = useRef(onFail);
-  onFailRef.current = onFail;
 
-  useEffect(() => {
-    if (!open) return;
-    let stopped = false;
-    let stream: MediaStream | null = null;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const stop = () => {
-      stopped = true;
-      if (timer) clearInterval(timer);
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-    void (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        const video = videoRef.current;
-        if (stopped || !video) {
-          stop();
-          return;
-        }
-        video.srcObject = stream;
-        await Promise.resolve(video.play()).catch(() => undefined);
-        const detector = makeDetector();
-        let busy = false;
-        timer = setInterval(() => {
-          if (busy || stopped) return;
-          busy = true;
-          detector
-            .detect(video)
-            .then((found) => {
-              if (stopped) return;
-              for (const f of found) {
-                const code = f.rawValue ? extractWasteLookupCode(f.rawValue) : null;
-                if (code) {
-                  stop();
-                  setOpen(false);
-                  onCodeRef.current(code);
-                  return;
-                }
-              }
-              if (found.length > 0) setHint(NOT_WASTE_CODE);
-            })
-            // Khung hình chưa sẵn sàng thì ném lỗi; thử lại ở nhịp sau.
-            .catch(() => undefined)
-            .finally(() => {
-              busy = false;
-            });
-        }, FRAME_MS);
-      } catch (e) {
-        if (stopped) return;
-        stop();
-        setOpen(false);
-        // Quyền camera bị chặn thì thử lại vẫn lỗi y như cũ: nói khách phải cho phép camera.
-        onFailRef.current((e as { name?: string } | null)?.name === 'NotAllowedError' ? CAMERA_DENIED : SCAN_FAILED);
+  useCameraScan({
+    open,
+    videoRef,
+    formats: QR_ONLY,
+    onValues: (values) => {
+      const code = wasteCodeOf(values);
+      if (!code) {
+        setHint(NOT_WASTE_CODE);
+        return false;
       }
-    })();
-    return stop;
-  }, [open]);
+      setOpen(false);
+      onCode(code);
+      return true;
+    },
+    onError: (kind) => {
+      setOpen(false);
+      onFail(kind === 'denied' ? CAMERA_DENIED : SCAN_FAILED);
+    },
+  });
+
+  const photo = usePhotoScan({
+    formats: QR_ONLY,
+    onValues: (values) => {
+      const code = wasteCodeOf(values);
+      if (code) onCode(code);
+      else onFail(NOT_WASTE_CODE);
+    },
+    onError: (kind) => onFail(kind === 'failed' ? SCAN_FAILED : PHOTO_UNREADABLE),
+  });
 
   return (
     <>
+      {camera && (
+        <button
+          type="button"
+          className={`${ui.btnPrimary} w-full gap-2`}
+          disabled={disabled}
+          aria-disabled={busy || undefined}
+          onClick={() => {
+            if (busy) return;
+            setHint(null);
+            setOpen(true);
+          }}
+        >
+          <ScanLine className="h-5 w-5" aria-hidden="true" />
+          Quét mã của khách
+        </button>
+      )}
       <button
         type="button"
-        className={`${ui.btnPrimary} w-full gap-2`}
+        className="flex min-h-11 w-full items-center justify-center gap-1.5 text-sm font-medium text-forest-700 underline underline-offset-2 disabled:opacity-50"
         disabled={disabled}
         aria-disabled={busy || undefined}
+        aria-busy={photo.reading || undefined}
         onClick={() => {
-          if (busy) return;
-          setHint(null);
-          setOpen(true);
+          if (!busy) photo.pick();
         }}
       >
-        <ScanLine className="h-5 w-5" aria-hidden="true" />
-        Quét mã của khách
+        <Camera className="h-4 w-4" aria-hidden="true" />
+        {photo.reading ? PHOTO_READING : PHOTO_CTA}
       </button>
+      <input {...photo.inputProps} />
       <Sheet
         open={open}
         onClose={() => setOpen(false)}

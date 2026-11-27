@@ -190,7 +190,10 @@ export interface AdminExternalAttemptOtherSubmitter {
   userName: string | null;
   userPhoneMasked: string | null;
   createdAt: string;
-  /** Kết quả lượt gửi gần nhất của người này: `UNMATCHED`, `NOT_FOUND` hay `REJECTED_PHONE_MISMATCH` (W42). API cũ chưa trả. */
+  /**
+   * Kết quả lượt gửi gần nhất của người này: `UNMATCHED`, `NOT_FOUND`, `REJECTED_PHONE_MISMATCH` (W42) hay `REJECTED_NOT_ELIGIBLE_USER`
+   * (W45, SĐT tự gõ trên web mà đơn không đủ căn cứ). API cũ chưa trả.
+   */
   result?: string;
 }
 

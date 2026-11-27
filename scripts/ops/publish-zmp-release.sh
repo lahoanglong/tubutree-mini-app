@@ -2,7 +2,7 @@
 # Kiểm và (khi được yêu cầu rõ) đưa bản Mini App (ZMP) lên kênh TEST của Zalo. Không bao giờ nộp bản production: việc đó làm tay trên trang quản lý Mini App của Zalo.
 #
 #   bash scripts/ops/publish-zmp-release.sh                      # chỉ kiểm: API khoẻ, build production, ngân sách bundle, zmp CLI + đăng nhập. KHÔNG đẩy gì lên Zalo.
-#   bash scripts/ops/publish-zmp-release.sh --testing "<mô tả>"  # như trên, rồi `zmp deploy -t -e -m "<mô tả>"` ở apps/miniapp (kênh test). Chỉ cờ --testing mới gọi zmp deploy.
+#   bash scripts/ops/publish-zmp-release.sh --testing "<mô tả>"  # như trên, rồi `zmp deploy -t -e -p -m "<mô tả>"` từ thư mục dựng tạm (kênh test). Chỉ cờ --testing mới gọi zmp deploy.
 #   bash scripts/ops/publish-zmp-release.sh --help
 #
 # Các bước, dừng ở bước đầu tiên lỗi:
@@ -11,11 +11,16 @@
 #   3. Node >= 22; pnpm --filter @tubutree/shared-types build; typecheck; test; VITE_API_BASE_URL=https://api.tubutree.com/api ... build; bundle-budget.cjs ở chế độ strict
 #      (vượt ngưỡng cảnh báo của dự án thì dừng; đặt MINIAPP_ENTRY_WARN_KB / MINIAPP_TOTAL_WARN_KB nếu chủ chấp nhận bản lớn hơn). apps/miniapp/www nằm trong .gitignore, không commit.
 #   4. Không có zmp hoặc chưa đăng nhập: in hướng dẫn 2 dòng rồi thoát 3 (bản build vẫn đã kiểm xong).
-#   5. (chỉ với --testing) zmp deploy -t -e -m "<mô tả>".
+#   5. (chỉ với --testing) dựng thư mục tạm (mktemp -d, xoá khi thoát) gồm www/, package.json, zmp-cli.json và www/app-config.json chép ra gốc,
+#      rồi `zmp deploy -t -e -p -m "<mô tả>"` ở đó. `zmp deploy -e` đọc app-config.json ở thư mục đang chạy trước www/app-config.json; bản nguồn
+#      apps/miniapp/app-config.json có listSyncJS rỗng (plugin zmp chỉ điền danh sách vào bản trong www lúc build) nên chạy thẳng ở apps/miniapp
+#      báo "No asset defined". apps/miniapp không bị sửa. ZMP_TOKEN (và APP_ID) lấy từ môi trường, thiếu thì đọc từ apps/miniapp/.env, chỉ
+#      truyền qua biến môi trường của tiến trình zmp (không qua tham số dòng lệnh, không ghi ra đĩa).
 # Giá trị ZMP_TOKEN và nội dung ~/.zmp KHÔNG BAO GIỜ được in.
 # Mã thoát: 0 mọi thứ xong (kiểm xong; hoặc đã đẩy lên test nếu có --testing), 1 một bước kiểm lỗi, 2 sai tham số, 3 thiếu zmp CLI hoặc chưa đăng nhập.
 #
 # Biến môi trường, chủ yếu để diễn tập/kiểm thử: API_HEALTH_URL (https://api.tubutree.com/api/health), ZMP_HOME (~/.zmp), CURL_TIMEOUT (15).
+# PUBLISH_ZMP_LIB_ONLY=1 khi `source` script: chỉ nạp các hàm, không chạy bước nào (scripts/ops/publish-zmp-release.test.mjs).
 set -u
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -72,17 +77,18 @@ ZMP_REASON=""
 zmp_status() { # trả 0 khi đủ CLI và phiên đăng nhập
   ZMP_CMD=()
   ZMP_REASON=""
+  # Đường dẫn tuyệt đối: lệnh deploy chạy ở thư mục dựng tạm, nơi `npx --no-install` không thấy node_modules của apps/miniapp.
   if command -v zmp >/dev/null 2>&1; then
     ZMP_CMD=(zmp)
-  elif command -v npx >/dev/null 2>&1 && (cd "$REPO_ROOT/apps/miniapp" && npx --no-install zmp --version >/dev/null 2>&1); then
-    ZMP_CMD=(npx --no-install zmp)
+  elif [ -x "$REPO_ROOT/apps/miniapp/node_modules/.bin/zmp" ]; then
+    ZMP_CMD=("$REPO_ROOT/apps/miniapp/node_modules/.bin/zmp")
   else
     ZMP_REASON="chưa cài zmp CLI"
     return 1
   fi
   # zmp đọc ZMP_TOKEN từ môi trường hoặc từ .env ở thư mục nó chạy (apps/miniapp, nơi `zmp login` ghi); grep -q để không bao giờ in giá trị.
   if [ -n "${ZMP_TOKEN:-}" ] || [ -e "$ZMP_HOME" ]; then return 0; fi
-  if [ -f "$ZMP_ENV_FILE" ] && grep -q '^ZMP_TOKEN=.' "$ZMP_ENV_FILE" 2>/dev/null; then return 0; fi
+  if [ -n "$(env_file_value "$ZMP_ENV_FILE" ZMP_TOKEN)" ]; then return 0; fi
   ZMP_REASON="chưa đăng nhập zmp (không có ZMP_TOKEN trong môi trường hay $ZMP_ENV_FILE, không có $ZMP_HOME)"
   return 1
 }
@@ -103,6 +109,57 @@ run_step() { # nhãn lệnh...
 }
 
 node_ok() { node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' >/dev/null 2>&1; }
+
+# ── 5. dựng thư mục tạm cho zmp deploy ──
+# Giá trị một khoá trong tệp .env (dòng cuối thắng; nhận tiền tố `export `, bỏ nháy bao ngoài, chú thích ` # …` sau giá trị không nháy và \r).
+# Chỉ dùng để gán biến, không bao giờ in.
+env_file_value() { # $1 = tệp, $2 = khoá
+  [ -f "$1" ] || return 0
+  local line v
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$2[[:space:]]*=" "$1" | tail -n 1 | tr -d '\r')" || true
+  [ -n "$line" ] || return 0
+  v="${line#*=}"
+  v="${v#"${v%%[![:space:]]*}"}"
+  case "$v" in
+    \"*) v="${v#\"}"; v="${v%%\"*}" ;;
+    \'*) v="${v#\'}"; v="${v%%\'*}" ;;
+    *) v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$v"
+}
+
+# Chép bản build vào thư mục tạm $2: www/, package.json, zmp-cli.json và www/app-config.json ra gốc (bản zmp đọc trước). Dừng nếu bản trong www
+# không khai file JS nào ở listSyncJS (build hỏng hoặc chưa build): deploy kiểu đó luôn bị Zalo từ chối "No asset defined".
+stage_zmp_bundle() { # $1 = apps/miniapp, $2 = thư mục tạm rỗng
+  local src="$1" dst="$2" f
+  [ -f "$src/www/app-config.json" ] || { echo "thiếu $src/www/app-config.json (chưa build Mini App?)" >&2; return 1; }
+  node -e 'const c = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.exit(Array.isArray(c.listSyncJS) && c.listSyncJS.length > 0 ? 0 : 1)' \
+    "$src/www/app-config.json" 2>/dev/null || { echo "$src/www/app-config.json không có file nào trong listSyncJS (build hỏng?)" >&2; return 1; }
+  cp -R "$src/www" "$dst/www" || return 1
+  for f in package.json zmp-cli.json; do
+    [ -f "$src/$f" ] || { echo "thiếu $src/$f" >&2; return 1; }
+    cp "$src/$f" "$dst/$f" || return 1
+  done
+  cp "$src/www/app-config.json" "$dst/app-config.json"
+}
+
+# ── 6. zmp deploy ở thư mục tạm ──
+deploy_staged() { # $1 = apps/miniapp, $2 = mô tả phiên bản
+  local src="$1" desc="$2"
+  STAGE="$(mktemp -d "${TMPDIR:-/tmp}/zmp-stage.XXXXXX")" || fail "không tạo được thư mục tạm"
+  trap 'rm -rf "$STAGE"' EXIT
+  stage_zmp_bundle "$src" "$STAGE" || fail "không dựng được thư mục deploy từ $src"
+  (
+    # Biến chỉ sống trong subshell này: zmp đọc ZMP_TOKEN/APP_ID từ môi trường trước .env ở thư mục chạy.
+    [ -n "${ZMP_TOKEN:-}" ] || ZMP_TOKEN="$(env_file_value "$ZMP_ENV_FILE" ZMP_TOKEN)"
+    [ -n "${APP_ID:-}" ] || APP_ID="$(env_file_value "$ZMP_ENV_FILE" APP_ID)"
+    [ -z "$ZMP_TOKEN" ] || export ZMP_TOKEN
+    [ -z "$APP_ID" ] || export APP_ID
+    cd "$STAGE" && "${ZMP_CMD[@]}" deploy -t -e -p -m "$desc"
+  ) || fail "zmp deploy lỗi (mã $?)"
+}
+
+if [ "${PUBLISH_ZMP_LIB_ONLY:-0}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
 check_api_health
 
@@ -128,6 +185,6 @@ if [ "$TESTING" != 1 ]; then
   exit 3
 fi
 
-say "[$TOTAL/$TOTAL] zmp deploy -t -e -m \"$MESSAGE\" (kênh TEST, ở apps/miniapp)"
-(cd "$REPO_ROOT/apps/miniapp" && "${ZMP_CMD[@]}" deploy -t -e -m "$MESSAGE") || fail "zmp deploy lỗi (mã $?)"
+say "[$TOTAL/$TOTAL] zmp deploy -t -e -p -m \"$MESSAGE\" (kênh TEST, từ thư mục dựng tạm của apps/miniapp/www)"
+deploy_staged "$REPO_ROOT/apps/miniapp" "$MESSAGE"
 say "Đã đẩy lên kênh test. Việc còn lại là của người: quét QR kiểm trên Zalo thật (docs/launch/zmp-miniapp-release.md mục 4), rồi gửi duyệt/phát hành production TAY trên trang quản lý Mini App."

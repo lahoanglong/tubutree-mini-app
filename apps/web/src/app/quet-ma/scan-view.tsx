@@ -20,7 +20,7 @@ import { MINIAPP_KEEP_PARAMS, miniAppDeepLink } from '@/lib/mini-app-auto-open';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { loginHref, safeReturnPath } from '@/lib/return-to';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { ClaimForm, PhonePrompt } from './claim-form';
+import { ClaimForm, PhoneEntry } from './claim-form';
 import { ClaimHistory } from './claim-history';
 
 /**
@@ -28,8 +28,9 @@ import { ClaimHistory } from './claim-history';
  * 3 bước, cùng chữ, cùng API (`POST/GET /me/external-points/claims`) với Mini App `/points/scan`:
  * - Khách chưa đăng nhập: hướng dẫn + "Đăng nhập để tích điểm" (quay lại đúng trang, giữ nguồn `utm_*`/`card` của mã QR bỏ hộp) và lối phụ mở
  *   màn quét trong Tubu Tree trên Zalo.
- * - Đã đăng nhập: nút quét bằng camera trình duyệt (máy đọc được mã vạch), ô nhập mã, thẻ kết quả, nút mua sắm và lịch sử tích điểm đơn sàn.
- *   Tài khoản chưa có SĐT: nói rõ cần SĐT Zalo đã xác minh và chỉ đường xác minh trên Zalo (máy chủ chỉ ghép đơn theo SĐT đã xác minh).
+ * - Đã đăng nhập: nút quét bằng camera trình duyệt (mọi máy, iPhone đọc bằng bộ đọc JS) và lối chụp/chọn ảnh, ô nhập mã, thẻ kết quả, nút mua
+ *   sắm và lịch sử tích điểm đơn sàn. Tài khoản chưa có SĐT (W45): nhập số ngay tại đây rồi quét; SĐT chưa xác minh qua Zalo (`phoneVerified`
+ *   false) thì nói trước đơn sẽ được CSKH đối chiếu (máy chủ đưa claim vào REVIEW thay vì từ chối 403).
  * Cờ `loyalty.marketplace_claim_enabled` tắt: chỉ báo "sắp mở", không hứa tỉ lệ tích. Cấu hình chưa về: chỉ tiêu đề.
  */
 const noSubscribe = () => () => undefined;
@@ -104,9 +105,15 @@ function AuthedScan({ search }: { search: string }) {
   if (meQ.isPending) return <Loading />;
   // Lỗi tải hồ sơ: vẫn cho gửi mã, máy chủ là nơi quyết điều kiện SĐT.
   const noPhone = meQ.isSuccess && !meQ.data?.phone;
+  // API cũ chưa gửi `phoneVerified` (vắng): không đoán, không hiện ghi chú.
+  const unverified = meQ.isSuccess && !!meQ.data?.phone && meQ.data.phoneVerified === false;
   return (
     <>
-      {noPhone ? <PhonePrompt verifyHref={verifyHref} /> : <ClaimForm initialCode={initialCode} codeParamRejected={codeParamRejected} verifyHref={verifyHref} />}
+      {noPhone ? (
+        <PhoneEntry verifyHref={verifyHref} />
+      ) : (
+        <ClaimForm initialCode={initialCode} codeParamRejected={codeParamRejected} verifyHref={verifyHref} unverified={unverified} />
+      )}
       <ClaimHistory />
     </>
   );

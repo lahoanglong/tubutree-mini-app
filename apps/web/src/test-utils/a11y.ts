@@ -100,6 +100,8 @@ export function smallTouchTargets(root: ParentNode): string[] {
   return Array.from(
     root.querySelectorAll<HTMLElement>('button, input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]), select, textarea'),
   )
+    // Ô ẩn khỏi người dùng (vd `<input type="file">` chỉ mở bằng nút khác) không phải vùng chạm.
+    .filter((el) => !el.hidden && el.getAttribute('aria-hidden') !== 'true')
     .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className) && !px44(el.style.minHeight) && !hasHit44(el))
     .map((el) => el.outerHTML.slice(0, 120));
 }
