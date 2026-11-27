@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import type { MiniappAutoOpenResult, MiniappSmartbarAction } from '@tubutree/shared-types';
 import { Button } from '@/components/mini/button';
@@ -198,7 +198,8 @@ function AutoOpenRunner() {
   const leaving = phase === 'leaving';
   const showBar = (phase === 'banner' || leaving) && !isExcludedPath(pathname);
   // Chưa quyết (`idle`) thì giữ nguyên chỗ script ở <head> đã đoán; quyết xong thì chỗ giữ đi theo đúng việc dải có hiện hay không.
-  useEffect(() => {
+  // Trước khi vẽ: dải vừa gỡ (×, sang trang bị loại) thì ô sập cùng khung hình, không nháy một ô trống.
+  useLayoutEffect(() => {
     if (phase !== 'idle') setMiniAppBarSlot(showBar);
   }, [phase, showBar]);
 

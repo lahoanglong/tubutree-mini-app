@@ -1726,7 +1726,6 @@
   /* Dải: nút 44px + đệm 4px hai đầu + viền 1px hai đầu. */
   --miniapp-bar-h: 54px;
   --miniapp-bar-gap: var(--space-inline-md);
-  --miniapp-bar-block: calc(var(--miniapp-bar-gap) + var(--miniapp-bar-h));
 }
 /* Trang con tràn viền (PDP, PageHeader): dải đứng cùng hàng nút lùi nổi (top 8px). Không đợi lớp `with-back-btn` (gắn sau khi hydrate) để chỗ
    giữ trước khi vẽ đã đúng khe 8px. */
@@ -1737,8 +1736,9 @@ body:has([data-page-bleed]) {
   .tubu-miniapp-slot:has(> .tubu-miniapp-bar) {
     padding-top: var(--miniapp-bar-gap);
   }
+  /* Cộng ngay tại ô (không qua biến khai ở :root): biến tham chiếu var() được tính ở nơi khai báo, nên khe 8px của trang tràn viền phải đọc ở đây. */
   html[data-miniapp-bar] .tubu-miniapp-slot {
-    min-height: var(--miniapp-bar-block);
+    min-height: calc(var(--miniapp-bar-gap) + var(--miniapp-bar-h));
   }
 }
 .tubu-miniapp-opening {

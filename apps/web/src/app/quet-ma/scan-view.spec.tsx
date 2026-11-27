@@ -30,7 +30,7 @@ vi.mock('@/lib/core-http', () => ({
   },
 }));
 
-import { ScanView, scanReturnPath } from './scan-view';
+import { ScanView, scanLoginHref, scanMiniLink, scanReturnPath } from './scan-view';
 
 let mounted: Rendered | null = null;
 const mount = async () => {
@@ -143,6 +143,20 @@ describe('/quet-ma — khách chưa đăng nhập (W44 U5)', () => {
   it('scanReturnPath giữ cả code điền sẵn, bỏ stay và tham số lạ', () => {
     expect(scanReturnPath('?code=SPXVN0123456789&stay=web&x=1')).toBe('/quet-ma?code=SPXVN0123456789');
     expect(scanReturnPath('')).toBe('/quet-ma');
+  });
+
+  it('tham số nguồn quá dài (safeReturnPath từ chối): vẫn quay về /quet-ma, không rơi về Trang chủ', () => {
+    const href = scanLoginHref(`?utm_content=${'x'.repeat(600)}`);
+    expect(new URL(href, 'http://x').searchParams.get('returnTo')).toBe('/quet-ma');
+    expect(new URL(scanLoginHref('?card=2611'), 'http://x').searchParams.get('returnTo')).toBe('/quet-ma?card=2611');
+  });
+
+  it('link sang Mini App mang theo mã điền sẵn (đã chuẩn hoá), bỏ mã sai dạng', () => {
+    const withCode = new URL(scanMiniLink('?utm_source=shopee&code=spx-vn-0123456789'));
+    expect(withCode.pathname.endsWith('/points/scan')).toBe(true);
+    expect(Object.fromEntries(withCode.searchParams)).toEqual({ utm_source: 'shopee', code: 'SPXVN0123456789' });
+    expect(new URL(scanMiniLink('?code=SPXVN0123456789')).searchParams.get('code')).toBe('SPXVN0123456789');
+    expect(new URL(scanMiniLink('?code=abc')).searchParams.has('code')).toBe(false);
   });
 
   it('phiên chưa khôi phục được (mất mạng): không mời đăng nhập lại', async () => {

@@ -261,6 +261,12 @@ test.describe('Web điện thoại: chỗ giữ dải mời không đẩy trang 
     expect(m.topAtDcl).not.toBeNull();
     expect(Math.abs(m.top! - m.topAtDcl!), `đỉnh nội dung lúc tải ${m.topAtDcl} so lúc có dải ${m.top}`).toBeLessThanOrEqual(1);
     expect(m.cls, 'tổng layout-shift').toBeLessThan(0.01);
+    // Chỗ giữ đúng bằng khe trên + dải, không dư (khe 8px ở trang tràn viền, 12px ở trang thường).
+    const fit = await page.locator('.tubu-miniapp-slot').evaluate((slot) => {
+      const barEl = slot.querySelector<HTMLElement>('[data-testid="miniapp-smartbar"]')!;
+      return { slot: slot.getBoundingClientRect().height, bar: barEl.getBoundingClientRect().height, gap: parseFloat(getComputedStyle(slot).paddingTop) };
+    });
+    expect(Math.abs(fit.slot - (fit.gap + fit.bar)), `ô ${fit.slot}px, khe ${fit.gap}px + dải ${fit.bar}px`).toBeLessThanOrEqual(0.5);
     if (SHOTS) {
       mkdirSync(SHOTS, { recursive: true });
       await page.screenshot({ path: `${SHOTS}/${shot}` });

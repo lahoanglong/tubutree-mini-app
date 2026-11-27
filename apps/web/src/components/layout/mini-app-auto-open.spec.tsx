@@ -315,9 +315,11 @@ describe('MiniAppAutoOpen — tự mở Mini App trên web điện thoại (W42)
 
   it('CSS W44 U4: ô giữ chỗ cao đúng khe trên + dải; khe trên nằm ở ô, không phải lề của dải (lề con tràn ra ngoài ô)', () => {
     const css = readFileSync(path.join(__dirname, '../mini/mini.css'), 'utf8');
-    expect(css).toMatch(/html\[data-miniapp-bar\] \.tubu-miniapp-slot\s*\{\s*min-height:\s*var\(--miniapp-bar-block\)/);
+    // Cộng tại ô: khe 8px của trang tràn viền (khai trên body) phải được đọc ở chính ô, không qua biến đã tính sẵn ở :root.
+    expect(css).toMatch(/html\[data-miniapp-bar\] \.tubu-miniapp-slot\s*\{\s*min-height:\s*calc\(var\(--miniapp-bar-gap\) \+ var\(--miniapp-bar-h\)\)/);
     expect(css).toMatch(/\.tubu-miniapp-slot:has\(> \.tubu-miniapp-bar\)\s*\{\s*padding-top:\s*var\(--miniapp-bar-gap\)/);
-    expect(css).toMatch(/--miniapp-bar-block:\s*calc\(var\(--miniapp-bar-gap\) \+ var\(--miniapp-bar-h\)\)/);
+    expect(css).toMatch(/body:has\(\[data-page-bleed\]\)\s*\{\s*--miniapp-bar-gap:\s*8px/);
+    expect(css).not.toMatch(/--miniapp-bar-block/);
     const bar = /\.tubu-miniapp-bar\s*\{([^}]*)\}/.exec(css)![1]!;
     expect(bar).toMatch(/min-height:\s*var\(--miniapp-bar-h\)/);
     expect(bar).toMatch(/margin:\s*0 var\(--space-gutter\)/);

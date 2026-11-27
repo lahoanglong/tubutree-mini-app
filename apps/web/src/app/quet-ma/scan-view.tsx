@@ -18,7 +18,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { MINIAPP_KEEP_PARAMS, miniAppDeepLink } from '@/lib/mini-app-auto-open';
 import { PAGE_NARROW } from '@/lib/page-frame';
-import { loginHref } from '@/lib/return-to';
+import { loginHref, safeReturnPath } from '@/lib/return-to';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ClaimForm, PhonePrompt } from './claim-form';
 import { ClaimHistory } from './claim-history';
@@ -48,6 +48,25 @@ export function scanReturnPath(search: string): string {
   return `/quet-ma${q ? `?${q}` : ''}`;
 }
 
+/** Link đăng nhập quay lại màn quét; tham số nguồn quá dài (`safeReturnPath` từ chối) thì vẫn quay về `/quet-ma` trần chứ không rơi về Trang chủ. */
+export function scanLoginHref(search: string): string {
+  const back = scanReturnPath(search);
+  return loginHref(safeReturnPath(back) ? back : '/quet-ma');
+}
+
+/** Mã vận đơn hợp lệ trong `?code=` (đã chuẩn hoá), hoặc null. */
+const codeOf = (search: string): string | null => extractClaimCode(new URLSearchParams(search).get('code')).code ?? null;
+
+/**
+ * Link mở màn quét trong Tubu Tree trên Zalo: giữ nguồn như mọi link sang Mini App và mang theo mã điền sẵn (Mini `/points/scan` đọc `?code=`),
+ * để khách sang Zalo không phải quét hay gõ lại mã. Chỉ màn quét mang `code`, nên không thêm vào `MINIAPP_KEEP_PARAMS` chung.
+ */
+export function scanMiniLink(search: string): string {
+  const link = miniAppDeepLink('/quet-ma', search);
+  const code = codeOf(search);
+  return code ? `${link}${link.includes('?') ? '&' : '?'}code=${encodeURIComponent(code)}` : link;
+}
+
 function Loading() {
   return (
     <div className="mt-4" data-testid="scan-loading">
@@ -64,10 +83,10 @@ function GuestCard({ search }: { search: string }) {
           <Text variant="body-sm" tone="secondary" as="p">
             {WEB.loginWhy}
           </Text>
-          <Link href={loginHref(scanReturnPath(search))} className={`${ui.btnPrimary} mt-3 w-full`}>
+          <Link href={scanLoginHref(search)} className={`${ui.btnPrimary} mt-3 w-full`}>
             {WEB.loginCta}
           </Link>
-          <a href={miniAppDeepLink('/quet-ma', search)} className="mt-2 flex min-h-11 items-center justify-center text-sm font-medium text-forest-700 underline underline-offset-2">
+          <a href={scanMiniLink(search)} className="mt-2 flex min-h-11 items-center justify-center text-sm font-medium text-forest-700 underline underline-offset-2">
             {WEB.openMiniAlt}
           </a>
         </div>
@@ -78,9 +97,9 @@ function GuestCard({ search }: { search: string }) {
 
 function AuthedScan({ search }: { search: string }) {
   const meQ = useQuery(meQuery(coreHttp));
-  const verifyHref = miniAppDeepLink('/quet-ma', search);
+  const verifyHref = scanMiniLink(search);
   const codeParam = new URLSearchParams(search).get('code');
-  const initialCode = extractClaimCode(codeParam).code ?? '';
+  const initialCode = codeOf(search) ?? '';
   const codeParamRejected = !!codeParam?.trim() && !initialCode;
   if (meQ.isPending) return <Loading />;
   // Lỗi tải hồ sơ: vẫn cho gửi mã, máy chủ là nơi quyết điều kiện SĐT.
