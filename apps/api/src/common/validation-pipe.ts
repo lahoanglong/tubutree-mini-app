@@ -290,6 +290,8 @@ export const FIELD_LABELS: Record<string, string> = {
   confirm: 'Cặp duyệt gợi ý',
   confirmText: 'Câu xác nhận',
   phones: 'SĐT người thử',
+  // Tích điểm đơn sàn (SubmitExternalClaimDto).
+  recipientPhoneLast4: '4 số cuối SĐT người nhận',
 };
 
 /** Nhãn riêng của một trường trong một DTO, khi chữ trên màn hình khác nhãn toàn cục (cùng tên `category` mà là "Nhóm", "Chủ đề" hay "Danh mục"). */
