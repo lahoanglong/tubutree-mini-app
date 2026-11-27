@@ -58,6 +58,17 @@
     # `bash ops/check-edge.sh` (dòng "nén"). Bật ☁ cam của Cloudflare thì Cloudflare tự nén ở biên, khối này vẫn vô hại.
     # AddOutputFilterByType thuộc mod_filter, bộ lọc DEFLATE thuộc mod_deflate: thiếu mod_filter mà vẫn có chỉ thị này là
     # lỗi cú pháp, làm configtest (và mọi lần graceful của Apache dùng chung với ChoDeli/WordPress) hỏng, nên bọc cả hai.
+    # Brotli (mod_brotli, Apache >= 2.4.26) cho client gửi `Accept-Encoding: br`, gzip vẫn là đường cho client còn lại. Khối brotli phải
+    # đứng TRƯỚC khối DEFLATE: bộ lọc chạy trước nén xong thì bộ sau thấy Content-Encoding và bỏ qua, nên DEFLATE đứng trước thì trình
+    # duyệt nhận cả hai luôn được gzip. Đo trên body live 28/11: JSON /api/home nhỏ hơn gzip 7%, /api/products 9% (quality 5).
+    # Thiếu mod_brotli thì khối này bị bỏ qua, phản hồi vẫn gzip như cũ. Kiểm: ops/README-perf-edge.md.
+    <IfModule mod_brotli.c>
+        <IfModule mod_filter.c>
+            BrotliCompressionQuality 5
+            AddOutputFilterByType BROTLI_COMPRESS application/json application/manifest+json application/javascript text/javascript
+            AddOutputFilterByType BROTLI_COMPRESS text/html text/css text/plain text/xml application/xml application/xhtml+xml image/svg+xml
+        </IfModule>
+    </IfModule>
     <IfModule mod_deflate.c>
         <IfModule mod_filter.c>
             AddOutputFilterByType DEFLATE application/json application/manifest+json application/javascript text/javascript
