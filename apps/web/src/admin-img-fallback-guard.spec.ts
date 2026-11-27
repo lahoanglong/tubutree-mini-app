@@ -15,6 +15,7 @@ const EXEMPT: Record<string, string> = {
   'components/admin/admin-image.tsx': 'nhánh blob URL ảnh có xác thực (lỗi tải đã báo "Không tải được ảnh"); nhánh URL trực tiếp đã có onError',
   'components/admin/payroll-admin-tab.tsx': 'mã QR chuyển khoản: ẩn đi là mất mã để quét, để trình duyệt báo ảnh gãy cho kế toán thấy',
   'components/admin/support-chat/qr-modal.tsx': 'mã QR đăng nhập Zalo: ẩn đi là mất mã để quét',
+  'components/admin/external-insert-qr-card.tsx': 'mã QR thẻ bỏ hộp: data URL SVG dựng ngay trên trình duyệt, không có URL ngoài để lỗi; ẩn đi là mất mã để in',
 };
 
 const SRC = fileURLToPath(new URL('.', import.meta.url));
