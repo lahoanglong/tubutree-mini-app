@@ -50,6 +50,23 @@ describe('chữ màn quản trị web', () => {
     expect(offenders(/aria-label=\{`Đã chuyển · /)).toEqual([]);
   });
 
+  it('W43: chữ hiển thị không dùng "funnel" hay "O2O" (viết "Phễu", "tích điểm đơn sàn")', () => {
+    // Chữ người đọc = chuỗi có khoảng trắng hoặc chữ giữa thẻ JSX. Từ dính "-", "." hay chữ khác là khoá truy vấn,
+    // thuộc tính data-*, tên biến (w.funnel.x) nên không tính; đoạn giữa ">" và "<" có ( ) ; = là mã TS (kiểu generic), không phải chữ JSX.
+    const WORD = /(?<![\w.$/-])(?:funnel|O2O)(?![\w$/-]|\.\w)/i;
+    const visibleText = (text: string) => [
+      ...[...text.matchAll(/'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? '').filter((t) => /\s/.test(t)),
+      ...[...text.matchAll(/>([^<>{}();=]+)</g)].map((m) => m[1]!),
+    ];
+    const hasWord = (text: string) => visibleText(text).some((t) => WORD.test(t));
+    expect(hasWord(`<h3>Cài đặt O2O</h3>`)).toBe(true);
+    expect(hasWord(`const t = 'Phễu funnel 30 ngày';`)).toBe(true);
+    expect(hasWord(`<section aria-labelledby="external-funnel-title" data-external-funnel className="p-4 rounded">`)).toBe(false);
+    expect(hasWord(`const ok = rows.every((r) => r.total === 0) && w.funnel.confirmedRequests === 0;`)).toBe(false);
+    expect(hasWord(`useQuery({ queryKey: ['admin-external-claims-funnel', period] })`)).toBe(false);
+    expect(sources.filter((s) => hasWord(s.text)).map((s) => s.file)).toEqual([]);
+  });
+
   it('tên nhóm menu cũ và chữ chỉ đường cũ không còn trong app', () => {
     expect(offenders(/Người bán|Đơn hàng & giao vận|Hoàn tiền & đổi trả|Cấu hình & tích hợp|Khách hàng › Đổi rác/)).toEqual([]);
     // tab Nhân sự & quyền thuộc gói khác, chữ "cờ đối tác" ở đó đổi cùng gói đó.

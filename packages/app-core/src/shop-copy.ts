@@ -448,6 +448,8 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.placeWith': 'Đặt hàng · {price}',
   'checkout.changeCode': 'Đổi mã',
   'checkout.pointsNone': 'Tích điểm từ đơn đầu tiên nhé',
+  // Dòng chú thích trong ô Điểm Xanh màn thanh toán (W43): phần điểm từ đơn sàn trong số đang đề nghị, n đã nhóm nghìn.
+  'checkout.pointsOrderOnly': 'Gồm {n} điểm từ đơn sàn, giảm ngay',
   'checkout.addressEmpty': 'Bạn chưa thêm địa chỉ',
   // Khối địa chỉ gọn một dòng + tấm chọn địa chỉ đã lưu (wave tubu-w2-06)
   'checkout.addressChange': 'Đổi',

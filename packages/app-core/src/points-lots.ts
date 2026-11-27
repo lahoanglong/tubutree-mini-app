@@ -74,3 +74,22 @@ export function convertedPointsNote(converted: number | null | undefined): strin
 export function lockedPointsLabel(total: number): string {
   return `Bạn đang có ${formatVnNumber(total)} điểm`;
 }
+
+/**
+ * Số Điểm Xanh từ đơn sàn trong ô Điểm Xanh thanh toán (W43), cho dòng chú thích `checkout.pointsOrderOnly`. Chỉ đọc số máy chủ tính:
+ * lô sàn chung trần % với lô thường còn lô quy đổi thì không (`PricingService.resolvePointsRedemptionByLot`), nên FE không suy được từ
+ * số dư hay `pointsMax`.
+ *  - khách đã tick và báo giá đã trừ điểm (`applied`): `pointsUsedMarketplace`;
+ *  - chưa tick: `pointsMaxMarketplace` (phần lô sàn khi dùng hết điểm, đúng số máy chủ sẽ trừ khi khách tick).
+ * null khi 0, khi chưa có báo giá hay API cũ chưa trả số: không hiện dòng còn hơn đoán sai. File này nằm trong gói đầu Mini App nên không
+ * điền chữ ở đây.
+ */
+export function checkoutMarketplacePoints(input: {
+  quote: { pointsMaxMarketplace?: number; pointsUsedMarketplace?: number } | null | undefined;
+  applied: boolean;
+}): number | null {
+  const raw = input.applied ? input.quote?.pointsUsedMarketplace : input.quote?.pointsMaxMarketplace;
+  if (!Number.isFinite(raw)) return null;
+  const n = Math.max(0, Math.floor(raw as number));
+  return n > 0 ? n : null;
+}

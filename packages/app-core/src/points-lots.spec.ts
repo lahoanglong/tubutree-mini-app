@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from './points-lots';
+import { checkoutMarketplacePoints, convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from './points-lots';
 
 describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một luật cho web và Mini)', () => {
   it('tổng = lô thường + lô quy đổi', () => {
@@ -55,5 +55,27 @@ describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một 
     expect(lockedPointsLabel(500)).toBe('Bạn đang có 500 điểm');
     expect(lockedPointsLabel(1800)).toBe('Bạn đang có 1.800 điểm');
     expect(lockedPointsLabel(0)).toBe('Bạn đang có 0 điểm');
+  });
+});
+
+describe('checkoutMarketplacePoints (W43: dòng điểm từ đơn sàn trong ô Điểm Xanh thanh toán)', () => {
+  it('chưa tick: đúng pointsMaxMarketplace của báo giá (máy chủ đã kẹp trần chung với lô thường)', () => {
+    // 100.000đ hàng, trần 20%, 30.000 điểm sàn, 50.000 điểm quy đổi: pointsMax 70.000 nhưng phần sàn chỉ 20.000.
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: 20_000, pointsUsedMarketplace: 0 }, applied: false })).toBe(20_000);
+  });
+
+  it('đã tick: đúng pointsUsedMarketplace', () => {
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: 20_000, pointsUsedMarketplace: 20_000 }, applied: true })).toBe(20_000);
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: 20_000, pointsUsedMarketplace: 0 }, applied: true })).toBeNull();
+  });
+
+  it('chưa có báo giá, API cũ chưa trả số, 0 hay số rác: null (không đoán từ số dư)', () => {
+    expect(checkoutMarketplacePoints({ quote: undefined, applied: false })).toBeNull();
+    expect(checkoutMarketplacePoints({ quote: null, applied: true })).toBeNull();
+    expect(checkoutMarketplacePoints({ quote: {}, applied: false })).toBeNull();
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: 0 }, applied: false })).toBeNull();
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: Number.NaN }, applied: false })).toBeNull();
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: -3 }, applied: false })).toBeNull();
+    expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: 1_250.7 }, applied: false })).toBe(1_250);
   });
 });

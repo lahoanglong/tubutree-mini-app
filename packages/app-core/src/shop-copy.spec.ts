@@ -68,6 +68,8 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'refill.railSave': { pct: '99', per: '100ml' },
   'refill.railAllNote': { n: '10' },
   'pdp.etaSchedule': { range: 'T5 31/12 – CN 04/01', cutoff: '15:00' },
+  // n là số điểm (đã nhóm nghìn), không phải số đếm nhỏ.
+  'checkout.pointsOrderOnly': { n: '999.999' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);

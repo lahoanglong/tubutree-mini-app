@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expect, makeUser, mockSession, test, type MockApi } from './support/mock-api';
-import { CHECKOUT_QUOTE, CHECKOUT_WALLET, mockCheckout, mockWebCheckoutExtras } from './support/checkout-mocks';
+import { CHECKOUT_LOYALTY, CHECKOUT_QUOTE, CHECKOUT_WALLET, mockCheckout, mockWebCheckoutExtras } from './support/checkout-mocks';
 import { CATALOG } from './support/discovery-mocks';
 import { diffMeasure, expectedFor, measure, probesFor, type Measure, type Side } from './support/ds-parity';
 import { mockFlashSlots, mockNoSession } from './support/flash-slot-mocks';
@@ -303,6 +303,61 @@ test.describe('ds-parity: thanh toán 375px, ghi chú, VAT, câu đồng ý, Đi
     for (const k of Object.keys(MINI_POS) as (keyof typeof MINI_POS)[]) {
       expect(Math.abs(positions[k] - MINI_POS[k]), `${k}: ${positions[k]} so với Mini ${MINI_POS[k]}`).toBeLessThanOrEqual(POS_TOLERANCE);
     }
+  });
+});
+
+test.describe('ds-parity: thanh toán 375px, dòng điểm từ đơn sàn (W43)', () => {
+  // 6 chữ số là số dài nhất câu chữ được tính cho (budget checkout.pointsOrderOnly): vẫn phải vừa một dòng ở 375.
+  const MARKET = 999_999;
+  const LINE = 'Gồm 999.999 điểm từ đơn sàn, giảm ngay';
+
+  test('có điểm từ đơn sàn: một dòng trong cột chữ cạnh ô tick, ô tick vẫn ở 339 ±2 như Mini', async ({ page, api }, testInfo) => {
+    const side = sideOf(testInfo.project.name);
+    mockCheckout(api);
+    api.allowUnmocked('POST /events');
+    if (side === 'web') {
+      await mockWebCheckoutData(api);
+      await page.addInitScript(() => {
+        try {
+          localStorage.setItem('tubu_web_session', '1');
+        } catch {
+          // không có localStorage: trang vẫn mở, chỉ không khôi phục phiên
+        }
+      });
+    }
+    api.get('/me/loyalty', { ...CHECKOUT_LOYALTY, pointsMarketplaceBalance: MARKET });
+    api.post('/checkout/quote', {
+      ...CHECKOUT_QUOTE, pointsBalance: 50, pointsConvertedBalance: 50, pointsMax: 1_000_000,
+      pointsMarketplaceBalance: MARKET, redeemableMarketplacePoints: MARKET, pointsMaxMarketplace: MARKET,
+    });
+    await page.goto(side === 'web' ? '/thanh-toan' : '/checkout');
+    await expect(page.locator('[data-ds="checkout-summary-total"]').first()).toBeVisible({ timeout: 20_000 });
+    await page.evaluate(() => document.fonts.ready);
+
+    const note = page.locator('[data-points-marketplace]:visible');
+    await expect(note).toHaveCount(1);
+    await note.scrollIntoViewIfNeeded();
+    const got = await note.evaluate((el) => {
+      let row: Element | null = el;
+      while (row && !row.querySelector('input[type=checkbox]')) row = row.parentElement;
+      const box = row!.querySelector('input[type=checkbox]')!.getBoundingClientRect();
+      const title = Array.from(row!.querySelectorAll('span, div')).find((n) => n.textContent?.trim() === 'Điểm Xanh')!;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const lines = new Set(Array.from(range.getClientRects()).filter((r) => r.width > 0).map((r) => Math.round(r.top))).size;
+      const text = el.getBoundingClientRect();
+      return {
+        text: (el as HTMLElement).innerText.trim(),
+        lines,
+        insideTextColumn: text.right <= box.left + 1,
+        leftOfTitle: Math.round(text.left - title.getBoundingClientRect().left),
+        checkboxRight: Math.round(box.right),
+      };
+    });
+    if (process.env.PARITY_SHOT_DIR) await page.screenshot({ path: `${process.env.PARITY_SHOT_DIR}/checkout-points-marketplace-${side}375.png` });
+    await testInfo.attach(`points-marketplace-${side}`, { body: JSON.stringify(got), contentType: 'application/json' });
+    expect(got).toEqual({ text: LINE, lines: 1, insideTextColumn: true, leftOfTitle: 0, checkboxRight: got.checkboxRight });
+    expect(Math.abs(got.checkboxRight - 339), `ô tick ${got.checkboxRight} so với Mini 339`).toBeLessThanOrEqual(2);
   });
 });
 

@@ -593,6 +593,51 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
     expect(await screen.findByText('Nhận +520 Điểm Xanh khi giao thành công')).toBeInTheDocument();
   });
 
+  describe('dòng điểm từ đơn sàn (W43)', () => {
+    const line = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+    // 100.000đ hàng, trần 20%: 30.000 điểm sàn + 50.000 điểm quy đổi. Máy chủ tiêu lô sàn trước nhưng lô sàn chung trần 20% với lô thường,
+    // nên chỉ 20.000 điểm sàn được dùng (pointsMax 70.000 gồm 50.000 điểm quy đổi không trần).
+    const CAPPED = { ...BIG_QUOTE, subtotal: 100_000, total: 120_000, pointsMax: 70_000, pointsMarketplaceBalance: 30_000, redeemableMarketplacePoints: 30_000, pointsMaxMarketplace: 20_000 };
+    const LOYALTY = { pointsBalance: 0, lockedPoints: 0, redeemablePoints: 0, pointsConvertedBalance: 50_000, pointsMarketplaceBalance: 30_000 };
+
+    it('chưa tick: số máy chủ kẹp (20.000), không phải số dư lô sàn (30.000); tick xong vẫn đúng số máy chủ trừ', async () => {
+      mocks.getLoyalty.mockResolvedValue(LOYALTY);
+      mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) =>
+        pts > 0
+          ? { ...CAPPED, pointsUsed: 70_000, pointsUsedMarketplace: 20_000, pointsUsedConverted: 50_000, pointsDiscount: 70_000, total: 50_000 }
+          : { ...CAPPED, pointsUsed: 0, pointsUsedMarketplace: 0, pointsDiscount: 0 },
+      );
+      const { container } = renderPage();
+      const before = await screen.findByText(line('20.000'));
+      expect(before).toHaveAttribute('data-points-marketplace');
+      expect(screen.queryByText(line('30.000'))).toBeNull();
+      const row = before.closest('[role="checkbox"]')!;
+      expect(row).not.toBeNull();
+      fireEvent.click(row);
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 80_000, undefined, undefined, {}));
+      await waitFor(() => expect(row).toHaveAttribute('aria-checked', 'true'));
+      expect(await screen.findByText(line('20.000'))).toBeInTheDocument();
+      expect(container.querySelectorAll('[data-points-marketplace]')).toHaveLength(1);
+    });
+
+    it('API cũ chưa trả pointsMaxMarketplace: không đoán từ số dư lô sàn', async () => {
+      mocks.getLoyalty.mockResolvedValue(LOYALTY);
+      const { pointsMaxMarketplace: _omit, ...oldApi } = CAPPED;
+      mocks.checkoutQuote.mockResolvedValue({ ...oldApi, pointsUsed: 0, pointsDiscount: 0 });
+      renderPage();
+      await screen.findByText(/^Dùng [\d.]+ điểm, giảm/);
+      expect(screen.queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
+    });
+
+    it('không có lô sàn: không có dòng nhắc', async () => {
+      mocks.getLoyalty.mockResolvedValue({ pointsBalance: 120, lockedPoints: 0, redeemablePoints: 120 });
+      renderPage();
+      await screen.findByText('Dùng 120 điểm, giảm 120đ');
+      expect(screen.queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
+    });
+  });
+
   describe('đơn 0đ (điểm phủ hết hàng + freeship)', () => {
     const ZERO = { ...QUOTE, subtotal: 50_000, pointsUsed: 50, pointsUsedConverted: 50, pointsDiscount: 50_000, shippingFee: 0, total: 0 };
 

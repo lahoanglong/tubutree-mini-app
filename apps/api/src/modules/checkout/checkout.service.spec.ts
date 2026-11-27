@@ -1472,6 +1472,15 @@ describe('CheckoutService — trần giảm gộp voucher + Điểm Xanh ≤ 20%
     expect(q2.pointsCapNote).toBe('Đơn này dùng tối đa 50.000 Điểm Xanh: voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn.');
   });
 
+  it('W43: pointsMaxMarketplace = phần lô sàn khi dùng hết điểm (chung trần 20% với lô thường), không lấy từ pointsMax có lô quy đổi', async () => {
+    const { svc } = build({ cartData: cartOf(100_000, null), pricing: realPricing(), pointsBalance: 0, pointsConvertedBalance: 50_000, pointsMarketplaceBalance: 30_000 });
+    const before = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(before).toMatchObject({ pointsMax: 70_000, pointsMaxMarketplace: 20_000, pointsUsed: 0, pointsUsedMarketplace: 0 });
+    const after = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 80_000 } as never);
+    expect(after).toMatchObject({ pointsUsed: 70_000, pointsUsedMarketplace: 20_000, pointsUsedConverted: 50_000 });
+    expect(after.pointsUsedMarketplace).toBe(before.pointsMaxMarketplace);
+  });
+
   it('không có mã → trần Điểm Xanh như cũ (20% giá trị hàng), không có câu trần gộp', async () => {
     const { svc } = build({ cartData: cartOf(500_000, null), pricing: realPricing(), pointsBalance: 1_000_000 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1_000_000 } as never);

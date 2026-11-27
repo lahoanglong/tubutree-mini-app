@@ -194,6 +194,8 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "components/admin/loyalty-config-card.tsx::form.memberCap": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/order-status-actions.tsx::groupDigits(received)": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/partner-rules-card.tsx::form[f.form]": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
+  "components/admin/external-o2o-settings-card.tsx::form.numbers[f.key]": "ô gõ số (inputMode numeric/decimal): trần là biên giá trị của SystemConfigService.RANGES (0,1–20 và 1–60), không phải độ dài chuỗi",
+  "components/admin/external-insert-qr-card.tsx::tag": "tên đợt thẻ chỉ nằm trong link QR, không gửi lên API nên không có DTO; ô chặn 35 (INSERT_QR_TAG_MAX) vì bộ đọc nguồn ghép card-<tag> rồi kiểm ENTRY_TOKEN_PATTERN tối đa 40 ký tự",
   "components/admin/pos-screen.tsx::total": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/shift-approval-tab.tsx::end": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/waste-config-card.tsx::text#2": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",

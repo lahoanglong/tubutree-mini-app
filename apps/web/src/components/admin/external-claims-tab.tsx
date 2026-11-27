@@ -52,6 +52,9 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { ExternalClaimsStaleBatch } from './external-claims-stale-batch';
+import { ExternalClaimsFunnelCard } from './external-claims-funnel-card';
+import { ExternalInsertQrCard } from './external-insert-qr-card';
+import { ExternalO2oSettingsCard } from './external-o2o-settings-card';
 import { settleWithin } from '@/lib/settle-within';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useDebounced } from './search-picker';
@@ -110,6 +113,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   const total = claims.data?.pages[0]?.meta.total;
   const who = { isAdmin, canAct, meId };
   const [outcome, setOutcome] = useState<Outcome>(null);
+  const [setupOpened, setSetupOpened] = useState(false);
   // Chỉ admin đọc được cấu hình; nhân viên không thấy băng này.
   const flag = useQuery({ queryKey: ['admin-config', 'loyalty'], queryFn: () => getConfig('loyalty'), enabled: isAdmin });
   const flagOff = isAdmin && flag.isSuccess && configValue<unknown>(flag.data, 'loyalty.marketplace_claim_enabled', false) !== true;
@@ -134,6 +138,26 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
         Không ai xử lý được yêu cầu của chính mình, và người gắn đơn hoặc đưa yêu cầu vào chờ duyệt không tự duyệt được.
         {!canAct && ' Bạn chỉ có quyền xem.'}
       </Notice>
+      <ExternalClaimsFunnelCard />
+      {isAdmin && (
+        // Đóng sẵn, dựng thẻ từ lần mở đầu: tải tab không gọi /admin/config. Đã dựng thì giữ khi đóng lại, để chữ đang sửa và kết quả lưu
+        // (kể cả "Đã lưu: … Chưa lưu: …") không mất.
+        <details
+          data-external-setup
+          onToggle={(e) => {
+            if ((e.currentTarget as HTMLDetailsElement).open) setSetupOpened(true);
+          }}
+          className="rounded-card border border-stone-200 bg-stone-0"
+        >
+          <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-sm font-medium text-stone-900 sm:min-h-[36px]">Cài đặt và mã QR bỏ hộp</summary>
+          {setupOpened && (
+            <div className="space-y-3 border-t border-stone-200 p-3">
+              <ExternalO2oSettingsCard />
+              <ExternalInsertQrCard />
+            </div>
+          )}
+        </details>
+      )}
       {parts && ATTENTION_PART_ORDER.some((p) => (parts[p] ?? 0) > 0) && (
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Việc cần xử lý">
           <span className="text-xs font-medium text-stone-600">Cần xử lý:</span>

@@ -11,7 +11,7 @@ vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: 
 const quoteFail = vi.hoisted(() => ({ error: null as Error | null }));
 const cartExtra = vi.hoisted(() => ({ coupon: null as string | null, discount: 0, second: false, combo: 0, tier: 0 }));
 const addrMode = vi.hoisted(() => ({ none: false }));
-const quoteExtra = vi.hoisted(() => ({ pointsEarned: 0, shippingFee: 30000, discount: 0, hang: false }));
+const quoteExtra = vi.hoisted(() => ({ pointsEarned: 0, shippingFee: 30000, discount: 0, hang: false, lots: {} as Record<string, number> }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => ({
@@ -35,7 +35,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     if (quoteExtra.hang) await new Promise(() => {});
     return {
     subtotal: 300000, discount: quoteExtra.discount, pointsUsed: 0, pointsDiscount: 0, shippingFee: quoteExtra.shippingFee, total: 300000 + quoteExtra.shippingFee, pointsEarned: quoteExtra.pointsEarned,
-    pointsBalance: 500, redeemablePoints: 500,
+    pointsBalance: 500, redeemablePoints: 500, ...quoteExtra.lots,
     };
   },
   placeOrder: async () => ({ code: 'TT0001', total: 330000 }),
@@ -68,6 +68,7 @@ beforeEach(() => {
   quoteExtra.shippingFee = 30000;
   quoteExtra.discount = 0;
   quoteExtra.hang = false;
+  quoteExtra.lots = {};
   addrMode.none = false;
 });
 afterEach(() => {
@@ -174,6 +175,24 @@ describe('/thanh-toan — ô chọn Điểm Xanh', () => {
     expect(box.tagName).toBe('SPAN');
     expect(box.className).toMatch(/\brelative\b/);
     expect(box.querySelector('svg')).not.toBeNull();
+  });
+
+  it('W43: có điểm từ đơn sàn → một dòng nhắc nằm trong cột chữ cạnh ô tick (như Mini), bản md+ nằm dưới ô', async () => {
+    quoteExtra.lots = { pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250, pointsMax: 10_000, pointsMaxMarketplace: 1_250 };
+    const c = await mount();
+    const block = c.querySelector<HTMLElement>('[data-mini-block="points"]')!;
+    const notes = [...block.querySelectorAll<HTMLElement>('[data-points-marketplace]')];
+    expect(notes.map((n) => n.textContent)).toEqual(['Gồm 1.250 điểm từ đơn sàn, giảm ngay', 'Gồm 1.250 điểm từ đơn sàn, giảm ngay']);
+    const phone = notes.find((n) => n.classList.contains('md:hidden'))!;
+    expect(phone.closest('label')).not.toBeNull();
+    expect(phone.parentElement!.className).toMatch(/\bmin-w-0\b/);
+    expect(phone.parentElement!.querySelector('input')).toBeNull();
+    expect(notes.find((n) => n.classList.contains('md:block'))!.closest('label')).toBeNull();
+  });
+
+  it('W43: không có điểm từ đơn sàn → không có dòng nhắc', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-points-marketplace]')).toBeNull();
   });
 });
 

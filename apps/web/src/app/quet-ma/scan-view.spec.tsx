@@ -69,4 +69,16 @@ describe('/quet-ma — tab giữa Quét mã của web (W42)', () => {
     expect(links[0]!.textContent).toBe(MARKETPLACE_SCAN_COPY.webOpenMiniApp);
     expect(links[0]!.getAttribute('href')).toMatch(/\/points\/scan$/);
   });
+
+  it('W43: quét mã QR bỏ hộp rồi bấm nút: link Mini App giữ utm_source và card, bỏ tham số lạ', () => {
+    window.history.replaceState(null, '', '/quet-ma?utm_source=shopee&card=box-2026-11&fbclid=abc');
+    try {
+      const href = mount().querySelector('a')!.getAttribute('href')!;
+      const url = new URL(href);
+      expect(url.pathname.endsWith('/points/scan')).toBe(true);
+      expect(Object.fromEntries(url.searchParams)).toEqual({ utm_source: 'shopee', card: 'box-2026-11' });
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
 });

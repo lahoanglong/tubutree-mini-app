@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPointsOffer, convertedPointsLine, idlePointsLabel, lockedPointsLabel, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
+import {
+  checkoutPointsOffer,
+  convertedPointsLine,
+  idlePointsLabel,
+  lockedPointsLabel,
+  marketplacePointsLine,
+  pointsCapState,
+  pointsSummary,
+  zeroTotalNote,
+} from './checkout-points';
 
 // Backend kẹp Điểm Xanh ở checkout theo số DÙNG ĐƯỢC (số dư − điểm đơn còn trong hạn đổi/trả hoặc đang
 // chờ xử lý đổi/trả) — ô "Dùng … Điểm Xanh" trên web phải đề nghị đúng số đó, không phải số dư.
@@ -116,6 +125,28 @@ describe('checkoutPointsOffer với điểm từ đơn sàn (W42)', () => {
   it('nhãn khi ô khoá và khi chưa có báo giá tính cả điểm sàn', () => {
     expect(lockedPointsLabel({ pointsBalance: 10, pointsMarketplaceBalance: 1_000 }, { usable: 0 })).toBe('Bạn đang có 1.010 điểm');
     expect(idlePointsLabel({ pointsBalance: 0, pointsMarketplaceBalance: 5 })).toBe('Bạn đang có 5 điểm');
+  });
+});
+
+describe('marketplacePointsLine (W43, cùng luật với Mini)', () => {
+  const LINE = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+  it('chưa tick: pointsMaxMarketplace của báo giá (máy chủ kẹp trần chung với lô thường), không phải số dư', () => {
+    const quote = { pointsMax: 70_000, pointsMarketplaceBalance: 30_000, redeemableMarketplacePoints: 30_000, pointsMaxMarketplace: 20_000 };
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote, applied: false })).toBe(LINE('20.000'));
+  });
+
+  it('đã tick: số pointsUsedMarketplace của máy chủ, 0 thì ẩn', () => {
+    const quote = { pointsMaxMarketplace: 20_000, pointsUsedMarketplace: 20_000 };
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote, applied: true })).toBe(LINE('20.000'));
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote: { ...quote, pointsUsedMarketplace: 0 }, applied: true })).toBeNull();
+  });
+
+  it('chưa có báo giá, API cũ, ô khoá hoặc usable 0: không hiện', () => {
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: undefined, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: {}, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: true, quote: { pointsMaxMarketplace: 300 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 0, disabled: false, quote: { pointsMaxMarketplace: 300 }, applied: false })).toBeNull();
   });
 });
 

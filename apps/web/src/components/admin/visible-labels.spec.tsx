@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountDeletionPanel } from './account-deletion-panel';
 import { DealerCreditPanel } from './dealer-credit-panel';
 import { DealerPaymentPanel } from './dealer-payment-panel';
+import { ExternalInsertQrCard } from './external-insert-qr-card';
+import { ExternalO2oSettingsCard } from './external-o2o-settings-card';
 import { OrderInvoicePanel } from './order-detail-extras';
 import { OrderStatusActions } from './order-status-actions';
 import { PancakeAttentionPanel } from './pancake-attention';
@@ -90,6 +92,8 @@ const CASES: [string, () => ReactElement, (c: HTMLElement) => Promise<void>][] =
   ['Rút tiền: chờ duyệt', () => <PayoutRow payout={payout()} />, async () => undefined],
   ['Rút tiền: chờ chi', () => <PayoutRow payout={payout({ status: 'APPROVED' })} />, async () => undefined],
   ['Yêu cầu xoá tài khoản', () => <AccountDeletionPanel />, async () => flush()],
+  ['Tích điểm đơn sàn: cài đặt', () => <ExternalO2oSettingsCard />, async () => flush()],
+  ['Tích điểm đơn sàn: mã QR in thẻ bỏ hộp', () => <ExternalInsertQrCard />, async () => undefined],
 ];
 
 /** WCAG 2.5.3: tên truy cập phải chứa chữ đang hiện trên nhãn, nếu không người dùng giọng nói đọc nhãn mà không tới được ô. */
@@ -126,6 +130,7 @@ describe('ô nhập trong tab quản trị có nhãn hiện (D7-25)', () => {
         ],
       },
       '/credit-ledger': { body: { balance: 0, entries: [] } },
+      '/admin/config': { body: [] },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const r = render(ui());

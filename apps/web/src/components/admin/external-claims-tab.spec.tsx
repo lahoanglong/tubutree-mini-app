@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ExternalClaimsTab } from './external-claims-tab';
 import { answerConfirm, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { EXTERNAL_FUNNEL, EXTERNAL_FUNNEL_PATH } from '@/test-utils/fixtures/external-funnel';
 
 /** `<dl>` hợp lệ: con trực tiếp chỉ là `<div>` gói `dt`/`dd` (axe `definition-list`). */
 const dlProblems = (root: ParentNode) =>
@@ -38,6 +39,7 @@ function stub(opts: { claims?: unknown[]; attempts?: unknown[]; events?: unknown
   const claims = opts.claims ?? [claim()];
   const attempts = opts.attempts ?? [];
   const m = mockFetch({
+    [EXTERNAL_FUNNEL_PATH]: { body: EXTERNAL_FUNNEL },
     '/admin/external-claims/attempts?': { body: { data: attempts, meta: { page: 1, limit: 20, total: attempts.length } } },
     '/admin/external-claims/attempts/': (init) => opts.post?.('attempts', JSON.parse(String(init?.body ?? '{}'))) ?? { body: { claimId: 'c9', state: 'PENDING' } },
     '/admin/external-claims/c1/': (init) => opts.post?.('claim', JSON.parse(String(init?.body ?? '{}'))) ?? { body: { id: 'c1' } },
@@ -612,5 +614,95 @@ describe('w17-03: nút duyệt nhanh SĐT cũ', () => {
     mount(<ExternalClaimsTab isAdmin={false} canAct meId="cs1" />);
     await flush();
     expect(m.calls.some((x) => x.url.includes('stale-phone-batch'))).toBe(false);
+  });
+});
+
+describe('ExternalClaimsTab: phễu, cài đặt và mã QR bỏ hộp (W43)', () => {
+  const configCalls = (m: ReturnType<typeof stub>) => m.calls.filter((c) => c.url.includes('/admin/config') && !c.url.includes('category='));
+
+  it('ADMIN, CSKH và KE_TOAN đều thấy thẻ phễu kỳ 30 ngày, đổi chip thì tải đúng kỳ; tab vẫn đúng một <h2>', async () => {
+    for (const who of [{ isAdmin: true, canAct: true }, { isAdmin: false, canAct: true }, { isAdmin: false, canAct: false }]) {
+      const m = stub();
+      const r = mount(<ExternalClaimsTab {...who} meId="x1" />);
+      await flush();
+      const card = r.container.querySelector('[data-external-funnel]')!;
+      expect(card.querySelector('h3')!.textContent).toBe('Phễu tích điểm đơn sàn');
+      expect(r.container.querySelectorAll('h2')).toHaveLength(1);
+      expect(card.textContent).toContain('Lượt gửi mã: 1.250 (quét 900, gõ tay 300)');
+      expect(card.textContent).toContain('Quay lại mua trên Mini App hoặc web: 96 khách (20,0% số khách đã cộng điểm), 130 đơn');
+      expect(dlProblems(card)).toEqual([]);
+      expect(m.calls.some((c) => c.url.includes('/admin/external-claims/funnel?period=30d'))).toBe(true);
+      click(btn(card, '7 ngày'));
+      await flush();
+      expect(m.calls.some((c) => c.url.includes('/admin/external-claims/funnel?period=7d'))).toBe(true);
+      expect(btn(card, '7 ngày')!.getAttribute('aria-pressed')).toBe('true');
+      expect(card.textContent).not.toMatch(/funnel|o2o/i);
+      r.unmount();
+      mounted = [];
+    }
+  });
+
+  it('phễu lỗi: câu lỗi kèm Thử lại, bấm thì tải lại', async () => {
+    const m = stub();
+    let fail = true;
+    const base = m.fn;
+    vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (u.includes('/funnel') && fail ? Promise.resolve(new Response('{}', { status: 500 })) : base(u, i))));
+    const r = mount(<ExternalClaimsTab isAdmin={false} canAct={false} meId="kt1" />);
+    await flush();
+    const card = r.container.querySelector('[data-external-funnel]')!;
+    expect(card.textContent).toContain('Không tải được số liệu.');
+    fail = false;
+    click(btn(card, 'Thử lại'));
+    await flush();
+    expect(card.textContent).toContain('Đơn sàn tìm thấy: 820');
+  });
+
+  it('ADMIN: "Cài đặt và mã QR bỏ hộp" đóng sẵn, chưa gọi /admin/config; mở ra mới tải cài đặt và hiện thẻ QR', async () => {
+    const m = stub();
+    const base = m.fn;
+    const config = mockFetch({ '/admin/config': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (u.includes('/admin/config') ? config.fn(u, i) : base(u, i))));
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="admin1" />);
+    await flush();
+    const details = r.container.querySelector<HTMLDetailsElement>('[data-external-setup]')!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector('summary')!.textContent).toBe('Cài đặt và mã QR bỏ hộp');
+    expect(config.calls.filter((c) => !c.url.includes('category='))).toHaveLength(0);
+    expect(details.querySelector('[data-external-o2o-settings]')).toBeNull();
+
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    await flush();
+    expect(config.calls.filter((c) => !c.url.includes('category='))).toHaveLength(1);
+    expect(details.querySelector('[data-external-o2o-settings] h3')!.textContent).toBe('Cài đặt tích điểm đơn sàn');
+    expect(details.querySelector('[data-external-insert-qr] h3')!.textContent).toBe('Mã QR in thẻ bỏ hộp');
+    expect(r.container.querySelectorAll('h2')).toHaveLength(1);
+
+    // Đóng lại rồi mở: thẻ giữ nguyên (chữ đang gõ còn), không tải lại cấu hình.
+    const tag = details.querySelector<HTMLInputElement>('[data-external-insert-qr] input')!;
+    typeInto(tag, 'box-2026-11');
+    details.open = false;
+    details.dispatchEvent(new Event('toggle'));
+    await flush();
+    expect(details.querySelector('[data-external-o2o-settings]')).not.toBeNull();
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    await flush();
+    expect(details.querySelector<HTMLInputElement>('[data-external-insert-qr] input')!.value).toBe('box-2026-11');
+    expect(config.calls.filter((c) => !c.url.includes('category='))).toHaveLength(1);
+  });
+
+  it('CSKH và KE_TOAN: không có phần cài đặt, không gọi /admin/config lần nào', async () => {
+    for (const who of [{ isAdmin: false, canAct: true }, { isAdmin: false, canAct: false }]) {
+      const m = stub();
+      const r = mount(<ExternalClaimsTab {...who} meId="s1" />);
+      await flush();
+      expect(r.container.querySelector('[data-external-setup]')).toBeNull();
+      expect(r.container.textContent).not.toContain('Cài đặt và mã QR bỏ hộp');
+      expect(m.calls.filter((c) => c.url.includes('/admin/config'))).toHaveLength(0);
+      expect(configCalls(m)).toHaveLength(0);
+      r.unmount();
+      mounted = [];
+    }
   });
 });

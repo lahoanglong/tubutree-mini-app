@@ -506,6 +506,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.placeWith': 24,
   'checkout.changeCode': 10,
   'checkout.pointsNone': 32,
+  // Một dòng trong cột chữ 299px cạnh ô tick ở 375 (ds-parity.shop đo): "999.999" rộng 258px. Câu dài hơn (vd thêm "cho đơn này") xuống 2 dòng.
+  'checkout.pointsOrderOnly': 40,
   'checkout.addressEmpty': 24,
   'checkout.addressChange': 4,
   'checkout.addressChangeAria': 24,

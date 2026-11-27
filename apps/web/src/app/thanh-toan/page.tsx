@@ -48,7 +48,7 @@ import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { checkoutLineProblems, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { giftTrialPlaceField } from '@tubutree/app-core/commerce/gift-trial';
 import { checkoutEtaLabel, etaSchedule, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
-import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, marketplacePointsLine, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -321,12 +321,26 @@ export default function CheckoutPage() {
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote, usablePoints);
   const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
+  const marketplaceLine = marketplacePointsLine({
+    usable: usablePoints,
+    disabled: partnerPoints.disabled,
+    quote,
+    // Báo giá cũ (chưa áp điểm) còn trên màn trong lúc tính lại: chỉ đọc số đã dùng khi báo giá thật sự đã trừ điểm.
+    applied: usePoints && (quote?.pointsUsed ?? 0) > 0,
+  });
   // Dưới md ghi chú nằm trong cột chữ cạnh ô tick như Mini; từ md trở lên giữ dòng riêng dưới ô. Hai bản chỉ khác nhau ở lớp hiển thị.
   const pointNotes = (vis: 'md:hidden' | 'md:block') => {
     const cls = vis === 'md:hidden' ? 'mt-0.5 block text-caption text-[color:var(--color-text-tertiary)] md:hidden' : 'mt-1 hidden text-caption text-[color:var(--color-text-secondary)] md:block';
     const Tag = vis === 'md:hidden' ? 'span' : 'p';
     const notes = [usablePoints > 0 && partnerPoints.capNote, usablePoints > 0 && partnerPoints.partnerNote, convertedLine, pointsOffer.lockNote];
-    return notes.map((n, i) => (n ? <Tag key={i} className={cls}>{n}</Tag> : null));
+    return [
+      ...notes.map((n, i) => (n ? <Tag key={i} className={cls}>{n}</Tag> : null)),
+      marketplaceLine ? (
+        <Tag key="marketplace" className={cls} data-points-marketplace="">
+          {marketplaceLine}
+        </Tag>
+      ) : null,
+    ];
   };
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);

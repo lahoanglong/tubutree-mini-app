@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExternalClaimsTab } from './external-claims-tab';
 import { answerAsk, answerConfirm, click, confirmDialog, flush, render, type Rendered } from '@/test-utils/dom';
+import { EXTERNAL_FUNNEL, EXTERNAL_FUNNEL_PATH } from '@/test-utils/fixtures/external-funnel';
 
 // W96B: Duyệt / Huỷ / Đảo điểm / Giữ điểm yêu cầu tích điểm đơn sàn và Gắn đơn / Từ chối lần gửi mã (Điểm Xanh của khách) giữ khoá tới khi danh sách
 // làm mới về (tối đa 4 giây), nút báo bận bằng aria-busy/aria-disabled (không disabled), lời báo kết quả ở cấp danh sách để không mất khi dòng rời bộ lọc
@@ -64,6 +65,7 @@ beforeEach(() => {
         if (url.endsWith('/reverse')) return json(200, { claimId: 'c1', reversedPoints: 12500 });
         return json(200, { id: 'c1' });
       }
+      if (url.includes(EXTERNAL_FUNNEL_PATH)) return json(200, EXTERNAL_FUNNEL);
       if (url.includes('/admin/external-claims/attempts?')) {
         attemptLoads += 1;
         if (attemptLoads > 1) await listGate;

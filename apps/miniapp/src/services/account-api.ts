@@ -15,6 +15,8 @@ export interface LoyaltyOverview {
    * không rút ra tiền. Optional: API cũ chưa trả (coi như 0).
    */
   pointsConvertedBalance?: number;
+  /** Điểm Xanh tích từ đơn sàn (W42): có hạn, chỉ dùng khi mua hàng. Optional: API cũ chưa trả (coi như 0). */
+  pointsMarketplaceBalance?: number;
   /** Điểm thường sắp hết hạn gần nhất (số điểm + ngày ISO); null khi không có. Optional: API cũ chưa trả. */
   expiringPoints?: { amount: number; expiresAt: string } | null;
   /** Số tháng điểm thường hết hạn kể từ ngày nhận (cấu hình). Optional: API cũ chưa trả. */

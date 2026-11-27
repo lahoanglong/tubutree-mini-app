@@ -3,6 +3,7 @@ import {
   checkoutPoints,
   lockedPointsLabel,
   isInvoiceValid,
+  marketplacePointsLine,
   pointsCapState,
   walletUnavailableReason,
   paymentMissingNote,
@@ -212,6 +213,31 @@ describe('checkoutPoints — điểm từ đơn sàn (W42)', () => {
   it('chưa tải overview → lấy điểm sàn từ hồ sơ đăng nhập; API cũ chưa trả → 0', () => {
     expect(checkoutPoints(undefined, 70, 30, 40)).toMatchObject({ balance: 140, usable: 140 });
     expect(checkoutPoints({ pointsBalance: 120, redeemablePoints: 120 }, 0, 0, 999)).toMatchObject({ balance: 120, usable: 120 });
+  });
+});
+
+describe('marketplacePointsLine — dòng nhắc điểm đơn sàn ở thanh toán (W43)', () => {
+  const LINE = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+  it('chưa tick: số máy chủ kẹp sẵn (pointsMaxMarketplace), không phải số dư lô sàn', () => {
+    // 100.000đ hàng, trần 20%, 30.000 điểm sàn + 50.000 điểm quy đổi: pointsMax 70.000, phần sàn 20.000.
+    const quote = { pointsMax: 70_000, pointsMarketplaceBalance: 30_000, redeemableMarketplacePoints: 30_000, pointsMaxMarketplace: 20_000, pointsUsedMarketplace: 0 };
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote, applied: false })).toBe(LINE('20.000'));
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote: { ...quote, pointsMaxMarketplace: 123_456 }, applied: false })).toBe(LINE('123.456'));
+  });
+
+  it('đã tick: số máy chủ đã trừ từ lô sàn', () => {
+    const quote = { pointsMaxMarketplace: 20_000, pointsUsedMarketplace: 20_000 };
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote, applied: true })).toBe(LINE('20.000'));
+    expect(marketplacePointsLine({ usable: 80_000, disabled: false, quote: { ...quote, pointsUsedMarketplace: 0 }, applied: true })).toBeNull();
+  });
+
+  it('chưa có báo giá, API cũ chưa trả số, ô khoá hoặc không có điểm dùng được: không hiện', () => {
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: undefined, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: { pointsMaxMarketplace: undefined }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: { pointsMaxMarketplace: 0 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: true, quote: { pointsMaxMarketplace: 300 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 0, disabled: false, quote: { pointsMaxMarketplace: 300 }, applied: false })).toBeNull();
   });
 });
 
