@@ -145,6 +145,8 @@ export function ExternalO2oSettingsCard() {
                 onChange={(e) => {
                   const v = e.target.value;
                   setForm((s) => ({ ...s, numbers: { ...s.numbers, [f.key]: v } }));
+                  // Đang sửa đúng ô bị báo lỗi: bỏ lỗi cũ, kiểm lại khi bấm Lưu.
+                  setMsg((m) => (m?.field === f.key ? null : m));
                 }}
               />
             </Field>

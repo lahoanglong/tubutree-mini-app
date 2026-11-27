@@ -91,12 +91,13 @@ export function buildO2oWrites(form: O2oSettingsForm, rows: ConfigRow[] | undefi
   }
   for (const f of O2O_NUMBER_FIELDS) {
     const raw = form.numbers[f.key].trim();
-    // Chỉ chữ số và tối đa 2 chữ số lẻ sau "," hoặc ".": Number() còn nhận "0x10", "1e1", và "1.000" (một nghìn kiểu Việt) sẽ thành 1.
-    const shape = f.integer ? /^\d+$/ : /^\d+(?:[.,]\d{1,2})?$/;
+    // Chỉ chữ số, số lẻ sau "," hoặc ".": Number() còn nhận "0x10", "1e1". Số ngày là số nguyên nên "1.000" (một nghìn kiểu Việt) bị từ chối.
+    // Không giới hạn số chữ số lẻ: giá trị đặt ở tab Cấu hình (vd 0,125) vẫn lưu lại được khi chỉ đổi công tắc.
+    const shape = f.integer ? /^\d+$/ : /^\d+(?:[.,]\d+)?$/;
     const n = shape.test(raw) ? Number(raw.replace(',', '.')) : Number.NaN;
     if (!Number.isFinite(n) || n < f.min || n > f.max) {
       return {
-        error: `${f.label}: nhập ${f.integer ? 'số nguyên' : 'số (tối đa 2 chữ số lẻ)'} từ ${numberShown(f.min)} đến ${numberShown(f.max)}.`,
+        error: `${f.label}: nhập ${f.integer ? 'số nguyên' : 'số'} từ ${numberShown(f.min)} đến ${numberShown(f.max)}.`,
         field: f.key,
       };
     }

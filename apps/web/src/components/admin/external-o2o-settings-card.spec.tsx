@@ -101,11 +101,14 @@ describe('ExternalO2oSettingsCard', () => {
     expect(inputs(r.container)[1]!.getAttribute('aria-invalid')).toBe('true');
     expect(inputs(r.container)[1]!.getAttribute('aria-describedby')).toBe(r.container.querySelector('[role="alert"]')!.parentElement!.id);
     expect(inputs(r.container)[0]!.hasAttribute('aria-invalid')).toBe(false);
+    typeInto(inputs(r.container)[1]!, '7');
+    expect(inputs(r.container)[1]!.hasAttribute('aria-invalid')).toBe(false);
+    expect(r.container.querySelector('[role="alert"]')).toBeNull();
     typeInto(inputs(r.container)[1]!, '14');
     typeInto(inputs(r.container)[0]!, '25');
     click(byText(r.container, 'button', 'Lưu cài đặt'));
     await flush();
-    expect(r.container.textContent).toContain('Tỉ lệ tích điểm đơn sàn (%): nhập số (tối đa 2 chữ số lẻ) từ 0,1 đến 20.');
+    expect(r.container.textContent).toContain('Tỉ lệ tích điểm đơn sàn (%): nhập số từ 0,1 đến 20.');
     typeInto(inputs(r.container)[0]!, '5');
     click(byText(r.container, 'button', 'Lưu cài đặt'));
     await flush();
@@ -145,14 +148,14 @@ describe('external-o2o-settings (hàm thuần)', () => {
     expect(o2oConfirmMessage(built.writes!)).toBe(`Khách nhập mã đơn sàn để nhận điểm\nBật → Tắt\n${flag.offWarning}`);
   });
 
-  it('chỉ nhận số thập phân thường: "0x10", "1e1", "1.000", "6,555", "-1" bị từ chối kèm tên ô; "6,5" và "6.25" nhận', () => {
+  it('chỉ nhận số thập phân thường: "0x10", "1e1", "1.000" (số ngày), "-1" bị từ chối kèm tên ô; "6,5", "6.25", "0,125" nhận', () => {
     const form = readO2oSettings(ROWS);
     for (const bad of ['0x10', '1e1', '1.000', ' ', '-1']) {
       form.numbers['loyalty.external_pending_days'] = bad;
       expect(buildO2oWrites(form, ROWS), bad).toMatchObject({ field: 'loyalty.external_pending_days' });
     }
     form.numbers['loyalty.external_pending_days'] = '14';
-    for (const bad of ['6,555', '0x1', '2e1', '1.000']) {
+    for (const bad of ['0x1', '2e1', '1,2,3', '.5']) {
       form.numbers['loyalty.marketplace_earn_pct'] = bad;
       expect(buildO2oWrites(form, ROWS), bad).toMatchObject({ field: 'loyalty.marketplace_earn_pct' });
     }
@@ -160,6 +163,12 @@ describe('external-o2o-settings (hàm thuần)', () => {
     expect(buildO2oWrites(form, ROWS).writes).toEqual([{ key: 'loyalty.marketplace_earn_pct', label: 'Tỉ lệ tích điểm đơn sàn (%)', from: 5, to: 6.5 }]);
     form.numbers['loyalty.marketplace_earn_pct'] = ' 6.25 ';
     expect(buildO2oWrites(form, ROWS).writes![0]!.to).toBe(6.25);
+    // Giá trị lẻ 3 chữ số đặt ở tab Cấu hình: đổi một công tắc vẫn lưu được.
+    const rows = [...ROWS.filter((r) => r.key !== 'loyalty.marketplace_earn_pct'), { key: 'loyalty.marketplace_earn_pct', value: 0.125, description: null, category: 'loyalty' }];
+    const kept = readO2oSettings(rows);
+    expect(kept.numbers['loyalty.marketplace_earn_pct']).toBe('0,125');
+    kept.switches['pancake.external_lookup_enabled'] = true;
+    expect(buildO2oWrites(kept, rows).writes!.map((w) => w.key)).toEqual(['pancake.external_lookup_enabled']);
   });
 
   it('số ngày: "14 ngày → 7 ngày" và câu áp cho cả yêu cầu đang chờ', () => {
