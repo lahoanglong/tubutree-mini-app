@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ExternalClaimKind, ExternalClaimState, OrderStatus, OrderType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { PHONE_MISMATCH_REVIEW_REASON } from '../../src/modules/external-points/external-claim.rules';
+import { NO_PHONE_REVIEW_REASON, PHONE_MISMATCH_REVIEW_REASON } from '../../src/modules/external-points/external-claim.rules';
 import { ATTACH_PHONE_MISMATCH_REASON } from '../../src/modules/external-points/external-claims-admin.service';
 import { loadExternalClaimFunnel } from '../../src/modules/external-points/external-claims-funnel';
 import { createOrder, createUser, deleteItData, randCode, warmPool } from './helpers';
@@ -171,6 +171,7 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
       submissions: { total: 5, scan: 2, typed: 2 },
       matchedOrders: 5,
       phoneMismatch: { rejected: 1, review: 2 },
+      noPhoneReview: { review: 0, waiting: 0 },
       unmatched: 2,
       pending: { claims: 2, points: 2_000 },
       credited: { claims: 2, points: 2_900, users: 2 },
@@ -334,5 +335,25 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     expect(f.phoneMismatch).toEqual({ rejected: 3, review: 0 });
     expect(f.matchedOrders).toBe(0);
     expect(f.unmatched).toBe(0);
+  });
+
+  it('10. đơn thiếu SĐT (Lazada che) đếm riêng khỏi SĐT lệch: từng chờ duyệt (cột hoặc sổ sự kiện) và đang chờ; claim PHONE không tính', async () => {
+    const now = nextNow();
+    const t = (daysAgo: number) => new Date(now.getTime() - daysAgo * DAY);
+    const u = await mkUser();
+    // Đang chờ duyệt vì thiếu SĐT: vào cả `review` và `waiting`.
+    await claim({ userId: u.id, at: t(10), state: 'REVIEW', reviewReason: NO_PHONE_REVIEW_REASON, reviewEvent: { action: 'CLAIM_CREATED', note: NO_PHONE_REVIEW_REASON } });
+    await claim({ userId: u.id, at: t(9), state: 'REVIEW', reviewReason: NO_PHONE_REVIEW_REASON });
+    // Đã duyệt (cột lý do bị xoá) rồi đã cộng: chỉ sổ sự kiện còn giữ, vẫn tính `review`, không tính `waiting`.
+    await claim({ userId: u.id, at: t(8), state: 'CREDITED', creditedAt: t(2), reviewReason: null, reviewEvent: { action: 'CLAIM_CREATED', note: NO_PHONE_REVIEW_REASON } });
+    // SĐT lệch không lẫn vào nhóm thiếu SĐT, và ngược lại.
+    await claim({ userId: u.id, at: t(7), state: 'REVIEW', reviewReason: PHONE_MISMATCH_REVIEW_REASON });
+    await claim({ userId: u.id, at: t(6), kind: 'PHONE', state: 'REVIEW', reviewReason: NO_PHONE_REVIEW_REASON });
+    // Ngoài kỳ 30 ngày.
+    await claim({ userId: u.id, at: t(40), state: 'REVIEW', reviewReason: NO_PHONE_REVIEW_REASON });
+
+    const f = await loadExternalClaimFunnel(prisma, '30d', now);
+    expect(f.noPhoneReview).toEqual({ review: 3, waiting: 2 });
+    expect(f.phoneMismatch.review).toBe(1);
   });
 });

@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { RECIPIENT_PAYLOAD_KEY } from './claim-trust-signals';
 import type { OrderSourceMap } from './external-order.config';
 import type { ExternalOrderKind } from './external-order.mapper';
 import {
@@ -77,7 +78,8 @@ export async function ingestExternalOrder(
 
   const sourceKey = sourceKeyOf(data);
   const goods = goodsValue(data);
-  const stored = payloadForStorage(data) as Prisma.InputJsonValue;
+  const storedData = payloadForStorage(data);
+  const stored = storedData as Prisma.InputJsonValue;
   const hasItems = Array.isArray(data['items']) && data['items'].length > 0;
   // Webhook một phần (vd {id, status, updated_at}) không mang nguồn nên phân thành UNKNOWN: không được đè loại, khoá nguồn,
   // tiền hàng hay payload đã biết bằng thứ rỗng.
@@ -109,6 +111,13 @@ export async function ingestExternalOrder(
     skipDuplicates: true,
   });
   if (created.count > 0) return { result: 'STORED', kind: klass.kind };
+
+  // Payload có giỏ hàng nhưng thiếu tên người nhận không được xoá dấu vân tay tên đã lưu: lượt duyệt nhanh đơn Lazada đọc nó để chặn tên lệch.
+  if (hasItems && storedData[RECIPIENT_PAYLOAD_KEY] === undefined) {
+    const prev = await prisma.externalOrder.findUnique({ where: { pancakeOrderId }, select: { lastPayload: true } });
+    const keep = prev?.lastPayload && typeof prev.lastPayload === 'object' && !Array.isArray(prev.lastPayload) ? prev.lastPayload[RECIPIENT_PAYLOAD_KEY] : undefined;
+    if (keep !== undefined && keep !== null) storedData[RECIPIENT_PAYLOAD_KEY] = keep;
+  }
 
   // Payload thiếu field (webhook một phần) không được xoá thứ đã biết: chỉ ghi đè khi có giá trị mới.
   const updated = await prisma.externalOrder.updateMany({

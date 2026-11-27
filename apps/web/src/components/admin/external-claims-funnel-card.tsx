@@ -69,6 +69,13 @@ export function ExternalClaimsFunnelCard() {
             <DlRow label="SĐT trên đơn khác SĐT thành viên">
               {n(f.phoneMismatch.rejected)} lượt bị từ chối, {n(f.phoneMismatch.review)} yêu cầu phải duyệt
             </DlRow>
+            {f.noPhoneReview && (
+              <DlRow label="Đơn sàn không có SĐT để đối chiếu (Lazada che số)">
+                <span data-funnel-no-phone>
+                  {n(f.noPhoneReview.review)} yêu cầu phải duyệt, {n(f.noPhoneReview.waiting)} còn đang chờ
+                </span>
+              </DlRow>
+            )}
             <DlRow label="Mã chưa tìm thấy đơn">{n(f.unmatched)}</DlRow>
             <DlRow label="Đang chờ cộng">
               {n(f.pending.claims)} yêu cầu, {n(f.pending.points)} điểm

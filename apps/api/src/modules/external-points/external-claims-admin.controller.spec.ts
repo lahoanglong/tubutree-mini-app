@@ -4,7 +4,7 @@ import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/comm
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
 import { createValidationPipe } from '../../common/validation-pipe';
-import { ExternalClaimFunnelQueryDto, ExternalClaimsAdminController, StaleBatchDto } from './external-claims-admin.controller';
+import { ExternalClaimFunnelQueryDto, ExternalClaimsAdminController, NoPhoneBatchDto, StaleBatchDto } from './external-claims-admin.controller';
 
 describe('ExternalClaimsAdminController.approve: body qua ValidationPipe thật', () => {
   const metatype = (Reflect.getMetadata('design:paramtypes', ExternalClaimsAdminController.prototype, 'approve') as unknown[])[1] as new () => object;
@@ -46,7 +46,7 @@ describe('ExternalClaimsAdminController.staleBatchApprove', () => {
 
   it('delegates to the batch service with the caller id', async () => {
     const staleBatch = { run: jest.fn().mockResolvedValue('ok') };
-    const c = new ExternalClaimsAdminController({} as never, staleBatch as never);
+    const c = new ExternalClaimsAdminController({} as never, staleBatch as never, {} as never);
     await expect(c.staleBatchApprove({ dryRun: false, claimIds: ['c1'] }, { sub: 'u1', role: 'STAFF' } as never)).resolves.toBe('ok');
     expect(staleBatch.run).toHaveBeenCalledWith('u1', { dryRun: false, claimIds: ['c1'] });
   });
@@ -61,6 +61,42 @@ describe('ExternalClaimsAdminController.staleBatchApprove', () => {
   });
 
   it('body rỗng (xem trước) và danh sách 50 claim đi qua', async () => {
+    await expect(pipe({})).resolves.toBeDefined();
+    await expect(pipe({ dryRun: false, claimIds: Array.from({ length: 50 }, (_, i) => `c${i}`) })).resolves.toBeDefined();
+  });
+});
+
+describe('ExternalClaimsAdminController.noPhoneBatchApprove (W45)', () => {
+  const pipe = (body: unknown) => createValidationPipe().transform(body, { type: 'body', metatype: NoPhoneBatchDto as never });
+  const fn = ExternalClaimsAdminController.prototype.noPhoneBatchApprove;
+
+  it('POST no-phone-batch, 200, ADMIN + CSKH từ lớp (KE_TOAN không), khai báo trước :id', () => {
+    expect(RequestMethod[Reflect.getMetadata(METHOD_METADATA, fn)]).toBe('POST');
+    expect(Reflect.getMetadata(PATH_METADATA, fn)).toBe('no-phone-batch');
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, fn)).toBe(200);
+    expect(Reflect.getMetadata(ROLES_KEY, fn)).toBeUndefined();
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, fn)).toBeUndefined();
+    const names = Object.getOwnPropertyNames(ExternalClaimsAdminController.prototype);
+    expect(names.indexOf('noPhoneBatchApprove')).toBeGreaterThan(-1);
+    expect(names.indexOf('noPhoneBatchApprove')).toBeLessThan(names.indexOf('detail'));
+  });
+
+  it('chuyển cho service duyệt nhanh thiếu SĐT với id người gọi', async () => {
+    const noPhone = { run: jest.fn().mockResolvedValue('ok') };
+    const c = new ExternalClaimsAdminController({} as never, {} as never, noPhone as never);
+    await expect(c.noPhoneBatchApprove({ dryRun: true }, { sub: 'u9', role: 'STAFF' } as never)).resolves.toBe('ok');
+    expect(noPhone.run).toHaveBeenCalledWith('u9', { dryRun: true });
+  });
+
+  it.each([
+    ['dryRun là chuỗi', { dryRun: 'no' }],
+    ['51 claim', { claimIds: Array.from({ length: 51 }, (_, i) => `c${i}`) }],
+    ['mã claim là số', { claimIds: [1] }],
+  ])('%s: 400', async (_n, body) => {
+    await expect(pipe(body)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('body rỗng và 50 claim đi qua', async () => {
     await expect(pipe({})).resolves.toBeDefined();
     await expect(pipe({ dryRun: false, claimIds: Array.from({ length: 50 }, (_, i) => `c${i}`) })).resolves.toBeDefined();
   });
@@ -82,7 +118,7 @@ describe('ExternalClaimsAdminController.funnel', () => {
 
   it('bỏ trống kỳ thì lấy 30 ngày; có kỳ thì chuyển đúng kỳ', async () => {
     const admin = { funnel: jest.fn().mockResolvedValue('ok') };
-    const c = new ExternalClaimsAdminController(admin as never, {} as never);
+    const c = new ExternalClaimsAdminController(admin as never, {} as never, {} as never);
     await c.funnel({});
     await c.funnel({ period: '7d' });
     expect(admin.funnel.mock.calls).toEqual([['30d'], ['7d']]);

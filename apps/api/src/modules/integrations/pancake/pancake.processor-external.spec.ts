@@ -20,6 +20,8 @@ function setup(rawPayload: Record<string, unknown>, o: Opts = {}, eventType = 'o
     createMany: jest.fn().mockResolvedValue({ count: o.createCount ?? 1 }),
     updateMany: jest.fn().mockResolvedValue({ count: o.updateCount ?? 1 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    // Bản cập nhật có giỏ hàng mà thiếu tên người nhận đọc lại dấu vân tay tên đã lưu (W45); đơn mẫu chưa có.
+    findUnique: jest.fn().mockResolvedValue(null),
   };
   const prisma = {
     order: {

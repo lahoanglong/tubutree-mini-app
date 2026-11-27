@@ -111,10 +111,11 @@ describe('ExternalClaimsAdminService.list: chỉ đọc cột màn hình cần (
     const findMany = jest.fn().mockResolvedValue([claimRow]);
     const findUnique = jest.fn().mockResolvedValue(claimRow);
     const prisma = {
-      externalPointsClaim: { findMany, count: jest.fn().mockResolvedValue(1), findUnique },
+      externalPointsClaim: { findMany, count: jest.fn().mockResolvedValue(1), findUnique, groupBy: jest.fn().mockResolvedValue([]) },
       externalClaimEvent: { findMany: jest.fn().mockResolvedValue([]) },
       user: { findMany: jest.fn().mockResolvedValue([]) },
       order: { groupBy: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     const config = { get: jest.fn().mockResolvedValue(undefined), getMany: jest.fn().mockResolvedValue({}) };
     return { svc: new ExternalClaimsAdminService(prisma as never, config as never, {} as never, {} as never), findMany, findUnique };
@@ -150,10 +151,11 @@ describe('ExternalClaimsAdminService: SĐT che của sàn và kết luận khớ
   });
   const detailOf = async (row: ReturnType<typeof mkRow>, userPhone: string | null) => {
     const prisma = {
-      externalPointsClaim: { findUnique: jest.fn().mockResolvedValue(row) },
+      externalPointsClaim: { findUnique: jest.fn().mockResolvedValue(row), groupBy: jest.fn().mockResolvedValue([]) },
       externalClaimEvent: { findMany: jest.fn().mockResolvedValue([]) },
       user: { findMany: jest.fn().mockResolvedValue(row.userId ? [{ id: row.userId, fullName: 'Lan', phone: userPhone, phoneVerifiedAt: null, createdAt: new Date('2026-01-01T00:00:00Z') }] : []) },
       order: { groupBy: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
     };
     const config = { get: jest.fn().mockResolvedValue(undefined), getMany: jest.fn().mockResolvedValue({}) };
     return new ExternalClaimsAdminService(prisma as never, config as never, {} as never, {} as never).detail('c1');
@@ -168,6 +170,85 @@ describe('ExternalClaimsAdminService: SĐT che của sàn và kết luận khớ
   it('claim PHONE hay chưa có khách: không có kết luận', async () => {
     expect(await detailOf(mkRow({ kind: 'PHONE', phone: '0981234526' }), '0981234526')).toMatchObject({ phoneMatch: null });
     expect(await detailOf(mkRow({ userId: null, phoneMask: '098*****26' }), null)).toMatchObject({ phoneMatch: null });
+  });
+});
+
+describe('ExternalClaimsAdminService: tín hiệu duyệt claim SCAN (W45)', () => {
+  const NOW_ROW = new Date('2026-11-20T00:00:00Z');
+  const mkRow = (over: { id?: string; userId?: string | null; kind?: 'SCAN' | 'PHONE'; state?: string; orderId?: string; reviewReason?: string | null; orderStatus?: string }) => ({
+    id: over.id ?? 'c1', externalOrderId: over.orderId ?? 'o1', userId: over.userId === undefined ? 'u1' : over.userId, kind: over.kind ?? 'SCAN', state: over.state ?? 'REVIEW',
+    points: 10, holdUntil: null, reviewReason: over.reviewReason === undefined ? 'Đơn sàn không có thông tin SĐT để đối chiếu tự động' : over.reviewReason, voidReason: null,
+    decidedById: null, creditedAt: null, createdAt: NOW_ROW,
+    externalOrder: { id: over.orderId ?? 'o1', pancakeOrderId: 'P1', channel: 'lazada', source: 'MARKETPLACE', trackingCode: 'LZ123456789', phone: null, phoneMask: '***', goodsValue: 250000, status: over.orderStatus ?? 'DELIVERED', deliveredAt: null },
+  });
+  const mk = (rows: ReturnType<typeof mkRow>[], recipient: unknown = null) => {
+    const claimGroupBy = jest.fn().mockResolvedValue([{ userId: 'u1', _count: { _all: 3 } }]);
+    const queryRaw = jest.fn().mockResolvedValue(rows.map((r) => ({ id: r.externalOrder.id, items: [{ quantity: 2, variation_info: { retail_price: 125000 } }], recipient })));
+    const prisma = {
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue(rows), count: jest.fn().mockResolvedValue(rows.length), groupBy: claimGroupBy },
+      user: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'u1', fullName: 'Lan', phone: '0981234526', phoneVerifiedAt: new Date('2026-11-01T00:00:00Z'), createdAt: new Date('2026-01-01T00:00:00Z') },
+        ]),
+      },
+      order: { groupBy: jest.fn().mockResolvedValue([{ userId: 'u1', _count: { _all: 4 } }]) },
+      $queryRaw: queryRaw,
+    };
+    const config = { get: jest.fn().mockResolvedValue(undefined), getMany: jest.fn().mockResolvedValue({}) };
+    return { svc: new ExternalClaimsAdminService(prisma as never, config as never, {} as never, {} as never), claimGroupBy, queryRaw, prisma };
+  };
+
+  it('dòng SCAN có thành viên: mốc xác minh, ngày tạo, đơn app đã giao, claim đơn sàn khác đã cộng, giỏ hàng tóm tắt, kết luận tên', async () => {
+    const { svc, claimGroupBy, queryRaw } = mk([mkRow({})]);
+    const out = await svc.list({ page: 1, limit: 20 });
+    expect(out.data[0]).toMatchObject({
+      memberPhoneVerifiedAt: '2026-11-01T00:00:00.000Z',
+      memberPhoneStale: false,
+      memberCreatedAt: '2026-01-01T00:00:00.000Z',
+      memberDeliveredAppOrders: 4,
+      memberCreditedMarketplaceClaims: 3,
+      itemSummary: '2 sản phẩm: 2 × 125.000đ',
+      recipientNameMatch: 'NO_DATA',
+    });
+    expect(claimGroupBy.mock.calls[0]![0]).toMatchObject({ by: ['userId'], where: { userId: { in: ['u1'] }, kind: 'SCAN', state: 'CREDITED' } });
+    // Chỉ hai phần nhỏ của payload, đọc bằng toán tử JSON trong DB; không kéo cả lastPayload.
+    const sql = (queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
+    expect(sql).toContain(`"lastPayload"->'items'`);
+    expect(sql).toContain('"lastPayload"->(?::text)');
+    expect(queryRaw.mock.calls[0]).toContain('tubu_recipient');
+  });
+
+  it('claim đang xem đã cộng và còn đứng thì không tự đếm chính nó; đã cộng mà đơn huỷ hay vướng cờ thì vốn không nằm trong số đếm', async () => {
+    const { svc } = mk([mkRow({ state: 'CREDITED', reviewReason: null })]);
+    expect((await svc.list({ page: 1, limit: 20 })).data[0]!.memberCreditedMarketplaceClaims).toBe(2);
+    const cancelled = mk([mkRow({ state: 'CREDITED', reviewReason: null, orderStatus: 'CANCELLED' })]);
+    expect((await cancelled.svc.list({ page: 1, limit: 20 })).data[0]!.memberCreditedMarketplaceClaims).toBe(3);
+    const flagged = mk([mkRow({ state: 'CREDITED', reviewReason: 'Đơn hoàn một phần' })]);
+    expect((await flagged.svc.list({ page: 1, limit: 20 })).data[0]!.memberCreditedMarketplaceClaims).toBe(3);
+  });
+
+  it('đếm claim đơn sàn đã cộng chỉ lấy claim còn đứng; đơn app chỉ đếm đơn tự đặt', async () => {
+    const { svc, prisma } = mk([mkRow({})]);
+    await svc.list({ page: 1, limit: 20 });
+    expect(prisma.externalPointsClaim.groupBy.mock.calls[0]![0].where).toMatchObject({
+      kind: 'SCAN', state: 'CREDITED', reviewReason: null, externalOrder: { status: { notIn: ['CANCELLED', 'RETURNED', 'DELETED'] } },
+    });
+    expect(prisma.order.groupBy.mock.calls[0]![0].where).toMatchObject({ status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false });
+  });
+
+  it('SCAN chưa có thành viên: không có tín hiệu thành viên, vẫn có giỏ hàng', async () => {
+    const { svc, claimGroupBy } = mk([mkRow({ userId: null })]);
+    const row = (await svc.list({ page: 1, limit: 20 })).data[0]!;
+    expect(row).toMatchObject({ memberCreditedMarketplaceClaims: null, recipientNameMatch: null, memberDeliveredAppOrders: null, itemSummary: '2 sản phẩm: 2 × 125.000đ' });
+    expect(claimGroupBy).not.toHaveBeenCalled();
+  });
+
+  it('danh sách chỉ có claim PHONE: không đọc thêm gì cho SCAN, trường SCAN là null', async () => {
+    const { svc, claimGroupBy, queryRaw } = mk([mkRow({ kind: 'PHONE' })]);
+    const row = (await svc.list({ page: 1, limit: 20 })).data[0]!;
+    expect(row).toMatchObject({ memberCreditedMarketplaceClaims: null, itemSummary: null, recipientNameMatch: null, memberDeliveredAppOrders: 4 });
+    expect(claimGroupBy).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 });
 

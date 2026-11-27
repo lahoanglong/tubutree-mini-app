@@ -8,6 +8,7 @@ export const EXTERNAL_FUNNEL: ExternalClaimFunnel = {
   submissions: { total: 1250, scan: 900, typed: 300 },
   matchedOrders: 820,
   phoneMismatch: { rejected: 12, review: 7 },
+  noPhoneReview: { review: 31, waiting: 9 },
   unmatched: 95,
   pending: { claims: 140, points: 210_000 },
   credited: { claims: 600, points: 905_000, users: 480 },

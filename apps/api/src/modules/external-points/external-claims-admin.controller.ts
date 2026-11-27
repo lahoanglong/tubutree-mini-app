@@ -8,6 +8,7 @@ import { PaginationQuery } from '../../common/pagination';
 import { AllowStaff } from '../../common/staff-permissions';
 import { ExternalClaimsAdminService } from './external-claims-admin.service';
 import { FUNNEL_PERIODS } from './external-claims-funnel';
+import { ExternalClaimsNoPhoneBatchService, NO_PHONE_BATCH_MAX } from './external-claims-no-phone-batch.service';
 import { ExternalClaimsStaleBatchService, STALE_BATCH_MAX } from './external-claims-stale-batch.service';
 
 const STATES = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED', 'VOIDED', 'REVERSED', 'LAPSED'] as const;
@@ -53,6 +54,13 @@ export class StaleBatchDto {
   @IsOptional() @IsArray() @ArrayMaxSize(STALE_BATCH_MAX) @IsString({ each: true }) @MaxLength(40, { each: true }) claimIds?: string[];
 }
 
+export class NoPhoneBatchDto {
+  /** Mặc định true: chỉ xem trước, không duyệt gì. */
+  @IsOptional() @IsBoolean() dryRun?: boolean;
+  /** Lượt thật: đúng danh sách claim vừa xem trước. */
+  @IsOptional() @IsArray() @ArrayMaxSize(NO_PHONE_BATCH_MAX) @IsString({ each: true }) @MaxLength(40, { each: true }) claimIds?: string[];
+}
+
 export class RejectAttemptDto {
   @IsOptional() @Trim() @IsString() @MaxLength(300) note?: string;
 }
@@ -68,6 +76,7 @@ export class ExternalClaimsAdminController {
   constructor(
     private readonly admin: ExternalClaimsAdminService,
     private readonly staleBatch: ExternalClaimsStaleBatchService,
+    private readonly noPhoneBatch: ExternalClaimsNoPhoneBatchService,
   ) {}
 
   @Get()
@@ -105,6 +114,13 @@ export class ExternalClaimsAdminController {
   @HttpCode(200)
   staleBatchApprove(@Body() dto: StaleBatchDto, @CurrentUser() user: JwtPayload) {
     return this.staleBatch.run(user.sub, dto);
+  }
+
+  /** Duyệt nhanh claim đơn Lazada chỉ vướng "đơn không có SĐT để đối chiếu" của thành viên đã xác minh và là khách quen (CSKH bấm, không tự chạy). */
+  @Post('no-phone-batch')
+  @HttpCode(200)
+  noPhoneBatchApprove(@Body() dto: NoPhoneBatchDto, @CurrentUser() user: JwtPayload) {
+    return this.noPhoneBatch.run(user.sub, dto);
   }
 
   @Get(':id')

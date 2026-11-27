@@ -44,7 +44,7 @@ describe('ExternalClaimPollService.pollOnce', () => {
     });
     const now = new Date('2026-11-27T03:00:00.000Z');
 
-    await expect(service.pollOnce(now)).resolves.toEqual({ pages: 3, ingested: 21 });
+    await expect(service.pollOnce(now)).resolves.toEqual({ pages: 3, ingested: 21, failed: 0 });
 
     expect(listUpdatedOrders.mock.calls.map(([c]) => c.orderSources)).toEqual([['-3'], ['-4'], ['-9']]);
     for (const [c] of listUpdatedOrders.mock.calls) {
@@ -59,7 +59,7 @@ describe('ExternalClaimPollService.pollOnce', () => {
       list: async (c) => (c.orderSources[0] === '-3' ? (c.page === 1 ? orders(50, 'a') : orders(3, 'b')) : []),
     });
 
-    await expect(service.pollOnce()).resolves.toEqual({ pages: 4, ingested: 53 });
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 4, ingested: 53, failed: 0 });
     expect(listUpdatedOrders.mock.calls.map(([c]) => `${c.orderSources[0]}#${c.page}`)).toEqual(['-3#1', '-3#2', '-4#1', '-9#1']);
   });
 
@@ -71,7 +71,7 @@ describe('ExternalClaimPollService.pollOnce', () => {
       },
     });
 
-    await expect(service.pollOnce()).resolves.toEqual({ pages: 2, ingested: 2 });
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 2, ingested: 2, failed: 0 });
     expect(listUpdatedOrders.mock.calls.map(([c]) => c.orderSources[0])).toEqual(['-3', '-4', '-9']);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('nguồn -4'));
     expect(lease.release).toHaveBeenCalledTimes(1);
@@ -80,7 +80,7 @@ describe('ExternalClaimPollService.pollOnce', () => {
   it('mất khoá giữa chừng thì dừng hẳn, không gọi thêm nguồn nào', async () => {
     const { service, listUpdatedOrders, lease } = setup({ renew: async () => false, list: async () => orders(1, 'x') });
 
-    await expect(service.pollOnce()).resolves.toEqual({ pages: 1, ingested: 1 });
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 1, ingested: 1, failed: 0 });
     expect(listUpdatedOrders).toHaveBeenCalledTimes(1);
     expect(lease.release).toHaveBeenCalledTimes(1);
   });
@@ -93,7 +93,7 @@ describe('ExternalClaimPollService.pollOnce', () => {
       list: async () => orders(1, 'x'),
     });
 
-    await expect(service.pollOnce()).resolves.toEqual({ pages: 1, ingested: 1 });
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 1, ingested: 1, failed: 0 });
     expect(listUpdatedOrders).toHaveBeenCalledTimes(1);
   });
 
@@ -101,7 +101,47 @@ describe('ExternalClaimPollService.pollOnce', () => {
     jest.mocked(ingestAndApply).mockResolvedValueOnce({ result: 'STORED' } as never).mockResolvedValue({ result: 'STALE' } as never);
     const { service } = setup({ list: async (c) => (c.orderSources[0] === '-3' ? orders(3, 's') : []) });
 
-    await expect(service.pollOnce()).resolves.toEqual({ pages: 3, ingested: 1 });
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 3, ingested: 1, failed: 0 });
+  });
+
+  it('một đơn hỏng không bỏ dở trang: các đơn sau vẫn nạp, trang sau và nguồn sau vẫn kéo, đơn lỗi được đếm', async () => {
+    jest.mocked(ingestAndApply).mockImplementation(async (_db, _deps, raw) => {
+      if ((raw as { id?: string }).id === 'a-1') throw new TypeError("Cannot read properties of null (reading 'status')");
+      return { result: 'STORED' } as never;
+    });
+    const { service, listUpdatedOrders, warn, lease } = setup({
+      list: async (c) => (c.orderSources[0] === '-3' ? (c.page === 1 ? orders(50, 'a') : orders(2, 'b')) : c.orderSources[0] === '-4' ? orders(1, 'l') : []),
+    });
+
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 4, ingested: 52, failed: 1 });
+    expect(ingestAndApply).toHaveBeenCalledTimes(53);
+    expect(listUpdatedOrders.mock.calls.map(([c]) => `${c.orderSources[0]}#${c.page}`)).toEqual(['-3#1', '-3#2', '-4#1', '-9#1']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('nạp đơn a-1 (nguồn -3) lỗi TypeError'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('failed=1 kinds={"TypeError":1} firstIds=a-1'));
+    expect(lease.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('DB rớt: 3 đơn liền nhau lỗi thì bỏ phần còn lại của nguồn (không chờ hết trang), nguồn sau vẫn kéo, dòng tổng đếm đủ', async () => {
+    jest.mocked(ingestAndApply).mockRejectedValue(new Error("Can't reach database server"));
+    const { service, warn, listUpdatedOrders } = setup({ list: async (c) => (c.orderSources[0] === '-3' ? orders(10, 's') : []) });
+
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 3, ingested: 0, failed: 3 });
+    expect(ingestAndApply).toHaveBeenCalledTimes(3);
+    expect(listUpdatedOrders.mock.calls.map(([c]) => `${c.orderSources[0]}#${c.page}`)).toEqual(['-3#1', '-4#1', '-9#1']);
+    expect(warn.mock.calls.filter(([m]) => m.includes('Kéo dự phòng: nạp đơn'))).toHaveLength(3);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('(nguồn -3): 3 đơn liền nhau nạp lỗi (Error)'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('failed=3 kinds={"Error":3} firstIds=s-0,s-1,s-2'));
+  });
+
+  it('lỗi xen kẽ đơn tốt không cắt nguồn: chuỗi lỗi liền nhau đếm lại từ 0 sau mỗi đơn nạp được', async () => {
+    jest.mocked(ingestAndApply).mockImplementation(async (_p, _d, o) => {
+      if (Number(String(o['id']).split('-')[1]) % 3 === 2) return { result: 'STORED' } as never;
+      throw new Error('payload lạ');
+    });
+    const { service } = setup({ list: async (c) => (c.orderSources[0] === '-3' ? orders(9, 's') : []) });
+
+    await expect(service.pollOnce()).resolves.toEqual({ pages: 3, ingested: 3, failed: 6 });
+    expect(ingestAndApply).toHaveBeenCalledTimes(9);
   });
 
   it('cờ tắt thì không giành khoá, không gọi Pancake', async () => {

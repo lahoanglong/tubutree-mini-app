@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import type { ExternalClaimState, Prisma } from '@prisma/client';
+import { Prisma, type ExternalClaimState } from '@prisma/client';
 import type {
   AdminExternalAttemptListResponse,
   AdminExternalAttemptOtherSubmitter,
@@ -20,6 +20,14 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
+import {
+  DIRECT_APP_DELIVERED_WHERE,
+  isStandingCreditedScan,
+  itemSummary,
+  RECIPIENT_PAYLOAD_KEY,
+  recipientNameMatch,
+  STANDING_CREDITED_SCAN_WHERE,
+} from './claim-trust-signals';
 import { advisoryPhoneLock, chatMonthPoints, tierMultiplierOf } from './external-chat.claim';
 import { loadChatConfig, loadStaffMap } from './external-chat.config';
 import { MIN_NOTE_CHARS, noteContentLength, stripInvisible } from './external-claim-note';
@@ -79,12 +87,29 @@ interface MemberInfo {
   deliveredAppOrders: number;
 }
 
+/** Tín hiệu thêm của dòng claim SCAN (W45): đọc riêng vì danh sách không kéo `lastPayload`. */
+interface ScanSignal {
+  /** Claim SCAN đã cộng của thành viên giữ claim, gồm cả chính claim này nếu nó đã cộng. */
+  creditedClaims: number;
+  items: unknown;
+  recipient: unknown;
+}
+
+interface ScanSignals {
+  creditedByUser: Map<string, number>;
+  payloadByOrder: Map<string, { items: unknown; recipient: unknown }>;
+}
+
+type ClaimRowSource = Prisma.ExternalPointsClaimGetPayload<{ select: typeof CLAIM_ROW_SELECT }>;
+
 /** Claim đã khoá (FOR UPDATE) kèm đơn, đúng bản `approve` đang xét. */
 export type LockedClaim = Prisma.ExternalPointsClaimGetPayload<{ include: { externalOrder: true } }>;
 
 export interface ApproveOptions {
   /** Chạy trong transaction duyệt, sau khi đã khoá SĐT, đơn và claim: trả lý do thì không duyệt (409), null thì duyệt tiếp. */
   guard?: (tx: Prisma.TransactionClient, c: LockedClaim) => Promise<string | null>;
+  /** Ghi thêm vào nhật ký APPROVE của claim (vd dấu lượt duyệt nhanh), để sổ sự kiện của từng claim tự nói claim được duyệt theo lượt nào. */
+  eventNote?: string;
 }
 
 export interface AdminClaimListQuery {
@@ -116,8 +141,9 @@ export class ExternalClaimsAdminService {
     @Optional() private readonly loyalty?: LoyaltyService,
   ) {}
 
-  private rowOf(c: Prisma.ExternalPointsClaimGetPayload<{ select: typeof CLAIM_ROW_SELECT }>, user: MemberInfo | null, staleAfterMs: number, now: Date): AdminExternalClaimRow {
+  private rowOf(c: ClaimRowSource, user: MemberInfo | null, staleAfterMs: number, now: Date, scan: ScanSignal | null = null): AdminExternalClaimRow {
     const o = c.externalOrder;
+    const scanMember = c.kind === 'SCAN' && !!c.userId && !!user;
     return {
       id: c.id,
       externalOrderId: o.id,
@@ -143,12 +169,49 @@ export class ExternalClaimsAdminService {
       deliveredAt: o.deliveredAt?.toISOString() ?? null,
       creditedAt: c.creditedAt?.toISOString() ?? null,
       createdAt: c.createdAt.toISOString(),
-      // Chỉ claim PHONE đã có thành viên: người kiểm đối chiếu người nhận với lý do REVIEW (SĐT cũ, nhân viên...).
-      memberPhoneVerifiedAt: c.kind === 'PHONE' && user ? (user.phoneVerifiedAt?.toISOString() ?? null) : null,
+      // Claim đã có thành viên (PHONE và, từ W45, SCAN): người kiểm đối chiếu người nhận với lý do REVIEW (SĐT cũ, đơn sàn thiếu SĐT...).
+      // Mốc "SĐT cũ" chỉ là luật của đơn chat: nút Duyệt đòi ghi chú theo cờ này, nên SCAN luôn false.
+      memberPhoneVerifiedAt: user ? (user.phoneVerifiedAt?.toISOString() ?? null) : null,
       memberPhoneStale: c.kind === 'PHONE' && !!user && (!user.phoneVerifiedAt || now.getTime() - user.phoneVerifiedAt.getTime() > staleAfterMs),
-      memberCreatedAt: c.kind === 'PHONE' && user ? user.createdAt.toISOString() : null,
-      memberDeliveredAppOrders: c.kind === 'PHONE' && user ? user.deliveredAppOrders : null,
+      memberCreatedAt: user ? user.createdAt.toISOString() : null,
+      memberDeliveredAppOrders: user ? user.deliveredAppOrders : null,
+      memberCreditedMarketplaceClaims: scanMember
+        ? Math.max(0, (scan?.creditedClaims ?? 0) - (isStandingCreditedScan({ kind: c.kind, state: c.state, reviewReason: c.reviewReason, orderStatus: o.status }) ? 1 : 0))
+        : null,
+      itemSummary: c.kind === 'SCAN' ? itemSummary(scan?.items) : null,
+      recipientNameMatch: scanMember ? recipientNameMatch(scan?.recipient, user?.name) : null,
     };
+  }
+
+  /**
+   * Tín hiệu duyệt claim SCAN (W45): số claim đơn sàn đã cộng của từng thành viên, và hai phần nhỏ của `lastPayload` (giỏ hàng chỉ có số,
+   * dấu vân tay tên người nhận) đọc bằng toán tử JSON ngay trong DB để danh sách không kéo cả payload về.
+   */
+  private async scanSignals(rows: readonly ClaimRowSource[]): Promise<ScanSignals> {
+    const scan = rows.filter((r) => r.kind === 'SCAN');
+    if (scan.length === 0) return { creditedByUser: new Map(), payloadByOrder: new Map() };
+    const userIds = [...new Set(scan.map((r) => r.userId).filter((u): u is string => !!u))];
+    const orderIds = [...new Set(scan.map((r) => r.externalOrder.id))];
+    const [credited, payload] = await Promise.all([
+      userIds.length
+        ? this.prisma.externalPointsClaim.groupBy({ by: ['userId'], where: { userId: { in: userIds }, ...STANDING_CREDITED_SCAN_WHERE }, _count: { _all: true } })
+        : Promise.resolve([]),
+      // Tham số khoá JSON phải ép `::text`: không ép thì Postgres không chọn được giữa jsonb -> text và jsonb -> int.
+      this.prisma.$queryRaw<{ id: string; items: unknown; recipient: unknown }[]>`
+        SELECT o.id, o."lastPayload"->'items' AS items, o."lastPayload"->(${RECIPIENT_PAYLOAD_KEY}::text) AS recipient
+          FROM "external_orders" o
+         WHERE o.id IN (${Prisma.join(orderIds)})`,
+    ]);
+    return {
+      creditedByUser: new Map(credited.map((g) => [g.userId ?? '', g._count._all])),
+      payloadByOrder: new Map(payload.map((p) => [p.id, { items: p.items, recipient: p.recipient }])),
+    };
+  }
+
+  private scanSignalOf(c: ClaimRowSource, s: ScanSignals): ScanSignal | null {
+    if (c.kind !== 'SCAN') return null;
+    const p = s.payloadByOrder.get(c.externalOrder.id);
+    return { creditedClaims: c.userId ? (s.creditedByUser.get(c.userId) ?? 0) : 0, items: p?.items ?? null, recipient: p?.recipient ?? null };
   }
 
   private async usersById(ids: (string | null)[]): Promise<Map<string, MemberInfo>> {
@@ -156,8 +219,8 @@ export class ExternalClaimsAdminService {
     if (unique.length === 0) return new Map();
     const [users, delivered] = await Promise.all([
       this.prisma.user.findMany({ where: { id: { in: unique } }, select: { id: true, fullName: true, phone: true, phoneVerifiedAt: true, createdAt: true } }),
-      // Đơn mua trong app đã giao: thành viên đã mua thật thì SĐT đáng tin hơn khi người kiểm xét lý do SĐT cũ.
-      this.prisma.order.groupBy({ by: ['userId'], where: { userId: { in: unique }, status: 'DELIVERED' }, _count: { _all: true } }),
+      // Đơn app chính thành viên đặt, đã giao (cùng cách đếm của hai lượt duyệt nhanh): thành viên đã nhận hàng thật thì SĐT đáng tin hơn.
+      this.prisma.order.groupBy({ by: ['userId'], where: { userId: { in: unique }, ...DIRECT_APP_DELIVERED_WHERE }, _count: { _all: true } }),
     ]);
     const counts = new Map(delivered.map((d) => [d.userId, d._count._all]));
     return new Map(
@@ -193,22 +256,23 @@ export class ExternalClaimsAdminService {
       this.prisma.externalPointsClaim.findMany({ where, select: CLAIM_ROW_SELECT, orderBy: { createdAt: 'desc' }, ...skipTake(q.page, q.limit) }),
       this.prisma.externalPointsClaim.count({ where }),
     ]);
-    const users = await this.usersById(rows.map((r) => r.userId));
+    const [users, signals] = await Promise.all([this.usersById(rows.map((r) => r.userId)), this.scanSignals(rows)]);
     const staleAfterMs = (await loadChatConfig(this.config)).phoneVerifiedMaxDays * 864e5;
     const now = new Date();
-    return paginated(rows.map((r) => this.rowOf(r, users.get(r.userId ?? '') ?? null, staleAfterMs, now)), q.page, q.limit, total);
+    return paginated(rows.map((r) => this.rowOf(r, users.get(r.userId ?? '') ?? null, staleAfterMs, now, this.scanSignalOf(r, signals))), q.page, q.limit, total);
   }
 
   async detail(id: string): Promise<AdminExternalClaimDetail> {
     const c = await this.prisma.externalPointsClaim.findUnique({ where: { id }, select: CLAIM_ROW_SELECT });
     if (!c) throw new NotFoundException('Không tìm thấy claim.');
-    const [users, events] = await Promise.all([
+    const [users, events, signals] = await Promise.all([
       this.usersById([c.userId]),
       this.prisma.externalClaimEvent.findMany({ where: { claimId: id }, orderBy: { createdAt: 'asc' } }),
+      this.scanSignals([c]),
     ]);
     const staleAfterMs = (await loadChatConfig(this.config)).phoneVerifiedMaxDays * 864e5;
     return {
-      ...this.rowOf(c, users.get(c.userId ?? '') ?? null, staleAfterMs, new Date()),
+      ...this.rowOf(c, users.get(c.userId ?? '') ?? null, staleAfterMs, new Date(), this.scanSignalOf(c, signals)),
       events: events.map((e) => ({
         id: e.id,
         action: e.action,
@@ -387,7 +451,7 @@ export class ExternalClaimsAdminService {
         o.status === 'DELIVERED' && o.deliveredAt ? new Date(o.deliveredAt.getTime() + cfg.pendingDays * 864e5) : o.status === 'PARTIAL_RETURN' ? new Date(now.getTime() + cfg.pendingDays * 864e5) : null;
       const res = await tx.externalPointsClaim.updateMany({ where: { id, state: 'REVIEW' }, data: { state: 'PENDING', points, releaseAt, decidedById: actorId, reviewReason: null, creditedGoodsValue: o.goodsValue, ...(c.kind === 'PHONE' ? { multiplier } : {}) } });
       if (res.count !== 1) throw new ConflictException('Claim vừa được xử lý bởi người khác.');
-      await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, orderStatus: o.status, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: [points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm`, staleNote].filter(Boolean).join(' | ') });
+      await recordClaimEvent(tx, { claimId: id, action: 'APPROVE', actorId, orderStatus: o.status, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: c.userId, userIdAfter: c.userId, note: [points < fullPoints ? `Chốt theo trần tháng: ${points} thay vì ${fullPoints} điểm` : `${points} điểm`, staleNote, opts.eventNote].filter(Boolean).join(' | ') });
       return { userId: c.userId, points, channel: o.channel, trackingCode: o.trackingCode, releaseAt, kind: c.kind };
     });
     // Đơn chat không có chuyện báo "điểm chờ" ở bước duyệt: khách chỉ được báo khi điểm đã cộng (hoặc lúc liên kết SĐT).
