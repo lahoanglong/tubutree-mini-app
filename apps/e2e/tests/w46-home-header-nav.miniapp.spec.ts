@@ -42,7 +42,8 @@ async function shot(page: Page, name: string, target?: Locator): Promise<void> {
   else await page.screenshot({ path: `${SHOTS}/${name}.png`, animations: 'disabled' });
 }
 
-for (const width of [360, 375] as const) {
+// 365px: khổ giữa 360 và 375 (logo đã ẩn từ 374px trở xuống, chữ không bị cắt).
+for (const width of [360, 365, 375] as const) {
   test.describe(`Mini App ${width}px: đầu Trang chủ và thanh đáy (W46)`, () => {
     test('ô tìm "Tìm sản phẩm" một dòng, không cắt; chuông và giỏ nằm trái vùng viên thuốc Zalo; không tràn ngang', async ({ page, api }) => {
       const crashed = await setup(page, api, width, {});
@@ -72,7 +73,7 @@ for (const width of [360, 375] as const) {
 
       const logo = header.getByAltText('Tubu Tree');
       const lb = (await logo.boundingBox())!;
-      if (width <= 360) {
+      if (width < 375) {
         // Khổ hẹp: dấu logo nhường chỗ cho ô tìm, h1 vẫn có tên "Tubu Tree" cho trình đọc màn hình.
         expect(lb.width).toBeLessThanOrEqual(1);
         await expect(page.getByRole('heading', { level: 1, name: 'Tubu Tree' })).toHaveCount(1);
@@ -82,9 +83,11 @@ for (const width of [360, 375] as const) {
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
       await shot(page, `mini${width}-home-header`, header);
-      await shot(page, `mini${width}-home`);
+      if (width !== 365) await shot(page, `mini${width}-home`);
       expect(crashed).toEqual([]);
     });
+
+    if (width === 365) return;
 
     test('thanh đáy: Cá nhân có 2 đơn đang xử lý và tin chưa đọc chỉ hiện số đơn (một dấu); Ưu đãi chưa điểm danh có chấm 8px', async ({ page, api }) => {
       const crashed = await setup(page, api, width, { dailyEnabled: false, checkedInToday: false, unread: 5, activeOrders: 2 });

@@ -11,7 +11,7 @@ import { miniAppLink } from './zalo-mini-app';
  * Luật:
  * - Tự mở tối đa 1 lần mỗi 24 giờ mỗi trình duyệt: cookie `tubu_mini_auto` ghi TRƯỚC khi chuyển trang, đọc lại được mới chuyển (khách không có
  *   Zalo hay bấm Back quay lại thì không bị chuyển lần hai, không lặp vô hạn). Cookie bị chặn thì không tự mở, chỉ còn dải mời.
- * - Khách bấm "Ở lại bản Web", đóng dải mời, hay vào bằng `?stay=web` (link từ chính Mini App): cookie `tubu_stay_web` 24 giờ, không mở, không dải.
+ * - Khách bấm "Ở lại web", đóng dải mời, hay vào bằng `?stay=web` (link từ chính Mini App): cookie `tubu_stay_web` 24 giờ, không mở, không dải.
  * - Chỉ điện thoại (UA di động VÀ khung nhìn ≤ 767px), chỉ host chính (không phải gian hàng CTV), không bot, không trình duyệt tự động
  *   (`navigator.webdriver`), không ở trang bị loại (quản trị, đăng nhập, thanh toán, giỏ, theo dõi đơn vãng lai, link mời, khôi phục...).
  * - Trình duyệt tự động vẫn thấy dải mời (bấm "Mở" là cử chỉ thật), chỉ không bị chuyển trang ngầm.
@@ -30,13 +30,13 @@ export const MOBILE_MEDIA_QUERY = MD_DOWN;
 /** Lớp phủ "Đang mở…" hiện bao lâu trước khi chuyển sang Zalo. */
 export const AUTO_OPEN_DELAY_MS = 1200;
 /**
- * Lớp phủ (cùng lối "Ở lại bản Web") rời đi sau chừng này (PO 26/11 23:13: lối thoát kín đáo, tự ẩn sau 4–5 giây). Lối ở lại bấm được suốt
+ * Lớp phủ (cùng lối "Ở lại web") rời đi sau chừng này (PO 26/11 23:13: lối thoát kín đáo, tự ẩn sau 4–5 giây). Lối ở lại bấm được suốt
  * đời lớp phủ, tới lúc lớp phủ bắt đầu mờ.
  */
 export const STAY_LINK_HIDE_MS = 4500;
 /**
  * Sau khi chuyển mà trang vẫn hiện tới lúc lớp phủ rời đi: coi như hệ điều hành chặn (hoặc khách đang ở hộp hỏi "Mở bằng Zalo?"), đóng lớp phủ
- * và hiện dải mời. Lớp phủ sống đủ 4,5 giây nên lối "Ở lại bản Web" bấm được suốt thời gian đó, không chỉ 1,2 giây trước khi chuyển.
+ * và hiện dải mời. Lớp phủ sống đủ 4,5 giây nên lối "Ở lại web" bấm được suốt thời gian đó, không chỉ 1,2 giây trước khi chuyển.
  */
 export const SUPPRESSED_CHECK_MS = STAY_LINK_HIDE_MS - AUTO_OPEN_DELAY_MS;
 /**
@@ -240,5 +240,5 @@ export const MINI_APP_AUTO_OPEN_COPY = {
   bannerTitle: 'Tubu Tree trên Zalo',
   bannerSub: 'Mua nhanh · Tích điểm Xanh',
   bannerOpen: 'Mở',
-  bannerClose: 'Đóng, ở lại bản Web',
+  bannerClose: 'Đóng, ở lại web',
 } as const;

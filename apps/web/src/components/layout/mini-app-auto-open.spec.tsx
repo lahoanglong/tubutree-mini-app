@@ -356,6 +356,9 @@ describe('MiniAppAutoOpen — tự mở Mini App trên web điện thoại (W42)
     expect(close).toMatch(/height:\s*44px/);
     expect(close).toMatch(/background:\s*transparent/);
     expect(close).toMatch(/color:\s*var\(--color-text-tertiary\)/);
+    const closeIcon = rule('.tubu-miniapp-bar__close-icon');
+    expect(closeIcon).toMatch(/width:\s*24px/);
+    expect(closeIcon).toMatch(/height:\s*24px/);
     const open = rule('.tubu-miniapp-bar__open');
     expect(open).toMatch(/min-width:\s*44px/);
     expect(open).toMatch(/height:\s*44px/);

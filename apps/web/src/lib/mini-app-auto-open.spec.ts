@@ -135,7 +135,7 @@ describe('decideMiniAppAutoOpen — bảng quyết định', () => {
     }
   });
 
-  it('?stay=web hay cookie ở lại bản Web: không tự mở, không dải', () => {
+  it('?stay=web hay cookie ở lại web: không tự mở, không dải', () => {
     expect(decideMiniAppAutoOpen(ctx({ search: '?stay=web' }))).toEqual(NONE);
     expect(decideMiniAppAutoOpen(ctx({ search: '?ref=A1&stay=web' }))).toEqual(NONE);
     expect(decideMiniAppAutoOpen(ctx({ cookies: `x=1; ${STAY_WEB_COOKIE}=1` }))).toEqual(NONE);

@@ -19,8 +19,8 @@ import { Text } from '../ui/text';
 const LOGO_HEIGHT = 30;
 const LOGO_MARK_WIDTH = 20;
 // Ô tìm phải chứa trọn "Tìm sản phẩm" (13px, ~87px) trên một dòng. Ở 375px, chừa vùng viên thuốc 96px, ô còn ~135px (chuông và giỏ đứng sát nhau
-// khe 4px) nên vừa có cả dấu logo. Từ 360px trở xuống ô chỉ còn ~120px: dấu logo nhường chỗ (h1 vẫn đọc được "Tubu Tree"), ô tìm thành ~148px.
-const COMPACT_HEADER_MAX_WIDTH = 360;
+// khe 4px) nên vừa có cả dấu logo. Hẹp hơn 375px (361–374px chữ đã bị cắt) dấu logo nhường chỗ (h1 vẫn đọc được "Tubu Tree"): ở 360px ô thành ~148px.
+const COMPACT_HEADER_MAX_WIDTH = 374;
 const COMPACT_HEADER_QUERY = `(max-width: ${COMPACT_HEADER_MAX_WIDTH}px)`;
 
 function useCompactHeader(): boolean {

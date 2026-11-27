@@ -68,10 +68,10 @@ describe('HomeHeader — một hàng dính 56px (logo, ô tìm, chuông, giỏ)'
     expect(screen.getByTestId('home-header')).toHaveStyle({ paddingLeft: 'var(--space-gutter)', paddingRight: '96px' });
   });
 
-  it('W46: chữ gợi ý "Tìm sản phẩm" luôn hiện (cả ≤360px), một dòng 13px cắt "…" chứ không xuống dòng; ≤360px dấu logo nhường chỗ nhưng h1 vẫn đọc được', () => {
+  it('W46: chữ gợi ý "Tìm sản phẩm" luôn hiện (cả 360px), một dòng 13px cắt "…" chứ không xuống dòng; dưới 375px dấu logo nhường chỗ nhưng h1 vẫn đọc được', () => {
     const original = window.matchMedia;
     const stub = (narrow: boolean) =>
-      ((query: string) => ({ matches: narrow && query.includes('max-width: 360px'), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
+      ((query: string) => ({ matches: narrow && query.includes('max-width: 374px'), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
     try {
       window.matchMedia = stub(true);
       const { unmount } = wrap(<HomeHeader unreadCount={0} />);

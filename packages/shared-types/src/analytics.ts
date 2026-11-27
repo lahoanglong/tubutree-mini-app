@@ -73,7 +73,7 @@ export const CLIENT_EVENT_NAMES = [
 
 /**
  * Web điện thoại tự mở Zalo Mini App (W42, cờ `app.mobile_miniapp_redirect_enabled`), kết quả mỗi lần xét (`miniapp_auto_open.result`):
- * `navigated` đã chuyển sang Zalo, `stayed` khách bấm "Ở lại bản Web", `suppressed` trang vẫn hiện sau khi chuyển (hệ điều hành chặn, chuyển sang
+ * `navigated` đã chuyển sang Zalo, `stayed` khách bấm "Ở lại web", `suppressed` trang vẫn hiện sau khi chuyển (hệ điều hành chặn, chuyển sang
  * dải mời), `blocked_cookie` không ghi được cookie chống lặp nên không tự mở.
  */
 export const MINIAPP_AUTO_OPEN_RESULTS = ['navigated', 'stayed', 'suppressed', 'blocked_cookie'] as const;

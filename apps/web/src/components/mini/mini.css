@@ -1858,8 +1858,8 @@ body:has([data-back-bar]):has([data-page-bleed]) {
   color: var(--color-text-tertiary);
 }
 .tubu-miniapp-bar__close-icon {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
 }
 .tubu-miniapp-bar__copy {
   display: flex;

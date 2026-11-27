@@ -82,12 +82,12 @@ export function MiniAppAutoOpen() {
  * Quyết định một lần lúc cờ vừa xác nhận bật ở trang đầu (luật ở `lib/mini-app-auto-open.ts`):
  * 1. `?stay=web`: ghi `tubu_stay_web` 24 giờ, xoá tham số khỏi thanh địa chỉ, không mở, không dải mời.
  * 2. Đủ điều kiện: ghi `tubu_mini_auto` 24 giờ rồi đọc lại; không ghi được thì chỉ hiện dải mời. Ghi được thì lớp phủ "Đang mở…" khoảng 1,2 giây
- *    với lối "Ở lại bản Web" (chữ nhỏ màu phụ), hết giờ thì `location.assign(link Mini App)`.
+ *    với lối "Ở lại web" (chữ nhỏ màu phụ), hết giờ thì `location.assign(link Mini App)`.
  * 3. Tới giây 4,5 (hệ điều hành không mở app, hoặc khách đang ở Zalo), hoặc khách quay lại từ Zalo: lớp phủ mờ dần 300ms (pha `leaving`, không
- *    bấm được nữa) trong khi dải mời đã gắn sẵn bên dưới, rồi chỉ còn dải. Giảm chuyển động thì bỏ bước mờ. Lối "Ở lại bản Web" bấm được suốt lúc
+ *    bấm được nữa) trong khi dải mời đã gắn sẵn bên dưới, rồi chỉ còn dải. Giảm chuyển động thì bỏ bước mờ. Lối "Ở lại web" bấm được suốt lúc
  *    lớp phủ còn, kể cả sau lượt chuyển (khách đang ở hộp hỏi mở app).
  * 4. Dải mời nằm trong luồng ở đầu nội dung (dưới thanh đầu trang, không nổi đè danh sách): "Mở" là cử chỉ thật của khách nên iOS mở được app;
- *    × ẩn 24 giờ (cùng cookie "ở lại bản Web"). Trang bị loại (thanh toán, giỏ, đăng nhập...) và trang sản phẩm không có dải.
+ *    × ẩn 24 giờ (cùng cookie "ở lại web"). Trang bị loại (thanh toán, giỏ, đăng nhập...) và trang sản phẩm không có dải.
  */
 function AutoOpenRunner() {
   const pathname = useShellPathname();
@@ -238,7 +238,7 @@ function AppIcon({ size }: { size: 'md' | 'lg' }) {
 }
 
 /**
- * Dải mời trong luồng ở đầu nội dung, bố cục Smart App Banner của iOS: × nhỏ màu phụ ở mép trái (ẩn 24 giờ, cùng cookie "ở lại bản Web"), ô biểu
+ * Dải mời trong luồng ở đầu nội dung, bố cục Smart App Banner của iOS: × nhỏ màu phụ ở mép trái (ẩn 24 giờ, cùng cookie "ở lại web"), ô biểu
  * tượng app, tên app và dòng phụ, nút viên thuốc "Mở" ở mép phải ("Mở" là cử chỉ thật của khách nên iOS mở được app). Mọi nút có vùng chạm 44px.
  */
 function SmartBar({ pathname, onDismiss }: { pathname: string; onDismiss: () => void }) {

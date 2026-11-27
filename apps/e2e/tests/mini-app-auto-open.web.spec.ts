@@ -109,7 +109,7 @@ test.describe('Web điện thoại: tự mở Mini App (W42)', () => {
   test('× trên dải: ghi tubu_stay_web 24 giờ, dải biến mất và không quay lại khi tải lại', async ({ page, api }) => {
     mockPage(api, true);
     await page.goto(PAGE);
-    await bar(page).getByRole('button', { name: 'Đóng, ở lại bản Web' }).click();
+    await bar(page).getByRole('button', { name: 'Đóng, ở lại web' }).click();
     await expect(bar(page)).toHaveCount(0);
     const stay = (await cookieOf(page, 'tubu_stay_web'))!;
     expect(stay.value).toBe('1');
@@ -346,7 +346,7 @@ test.describe('Web điện thoại: dải mời kiểu Smart App Banner (W46)', 
         expect(Math.abs(b.height - 56), `dải cao ${b.height}px`).toBeLessThanOrEqual(0.5);
         expect(b.x).toBeGreaterThanOrEqual(0);
         expect(b.x + b.width).toBeLessThanOrEqual(width);
-        const close = (await bar(page).getByRole('button', { name: 'Đóng, ở lại bản Web' }).boundingBox())!;
+        const close = (await bar(page).getByRole('button', { name: 'Đóng, ở lại web' }).boundingBox())!;
         const icon = (await bar(page).locator('.tubu-miniapp-icon').boundingBox())!;
         const copy = (await bar(page).locator('.tubu-miniapp-bar__copy').boundingBox())!;
         const open = (await bar(page).getByRole('button', { name: 'Mở', exact: true }).boundingBox())!;
