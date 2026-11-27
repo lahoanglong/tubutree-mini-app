@@ -15,6 +15,11 @@ type NativeDetector = { detect(source: ImageBitmapSource): Promise<{ rawValue?: 
 type NativeCtor = (new (opts?: { formats?: string[] }) => NativeDetector) & { getSupportedFormats?: () => Promise<string[]> };
 
 const FRAME_MS = 250;
+/**
+ * Máy có BarcodeDetector mà khung hình không thấy gì: chỉ 1 trong 4 nhịp (khoảng 1 lần/giây) đọc thêm bằng ZXing. ZXing chạy trên luồng
+ * chính, mỗi nhịp đều chạy thì máy Android yếu giật khung quét.
+ */
+const NATIVE_FALLBACK_EVERY = 4;
 /** Khung hình video đọc ở độ phân giải gốc tới 1280px (mã vạch một chiều cần đủ điểm ảnh mỗi vạch). */
 const FRAME_MAX_SIDE = 1280;
 /** Ảnh chụp 12MP: thử ở vài cỡ, nhỏ dần (mã to trong ảnh đọc tốt hơn khi thu nhỏ, mã nhỏ cần cỡ lớn). */
@@ -113,6 +118,7 @@ export function createCodeReader(formats: readonly ScanFormat[]): CodeReader {
   const native = nativeDetector(formats);
   let decoder: Promise<CanvasDecoder> | null = null;
   let tick = 0;
+  let nativeMisses = 0;
   const fallback = (): Promise<CanvasDecoder> => {
     decoder ??= loadZxing().then(
       (m) => m.createDecoder(formats),
@@ -130,6 +136,7 @@ export function createCodeReader(formats: readonly ScanFormat[]): CodeReader {
         // Khung hình chưa sẵn sàng thì BarcodeDetector ném lỗi: coi như chưa thấy.
         const found = valuesOf(await n.detect(video).catch(() => []));
         if (found.length > 0) return found;
+        if (nativeMisses++ % NATIVE_FALLBACK_EVERY !== 0) return [];
       }
       const w = video.videoWidth;
       const h = video.videoHeight;
@@ -214,7 +221,16 @@ export function useCameraScan(opts: {
           return;
         }
         video.srcObject = stream;
-        await Promise.resolve(video.play()).catch(() => undefined);
+        // WebView chặn phát video (NotAllowedError) thì khung quét chỉ là màn đen: báo khách dùng ảnh hay gõ mã. AbortError (đóng khung
+        // giữa chừng) thì bỏ qua.
+        const blocked = await Promise.resolve(video.play()).then(
+          () => false,
+          (e: unknown) => (e as { name?: string } | null)?.name === 'NotAllowedError',
+        );
+        if (blocked) {
+          fail('failed');
+          return;
+        }
         const reader = createCodeReader(latest.current.formats);
         let busy = false;
         timer = setInterval(() => {

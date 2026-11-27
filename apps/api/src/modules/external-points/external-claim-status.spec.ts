@@ -1,4 +1,5 @@
-import { decideStatusAction } from './external-claim-status';
+import { decideStatusAction, restoredReviewReason } from './external-claim-status';
+import { WEB_UNVERIFIED_PHONE_REVIEW_REASON } from './external-claim.rules';
 
 type S = Parameters<typeof decideStatusAction>[0];
 type C = Parameters<typeof decideStatusAction>[1];
@@ -39,5 +40,19 @@ describe('decideStatusAction (status Pancake 4/5/6/7/15 và giao sau huỷ)', ()
     expect(decideStatusAction('DELIVERED', claim('VOIDED', { autoVoided: true }))).toEqual({ action: 'TO_REVIEW', reason: 'Đơn được giao sau khi đã bị huỷ hoặc hoàn trên sàn' });
     expect(act('DELIVERED', claim('VOIDED'))).toBe('NONE');
     expect(act('DELIVERED', claim('REVERSED', { autoVoided: true }))).toBe('NONE');
+  });
+});
+
+describe('restoredReviewReason (claim quay lại REVIEW)', () => {
+  const DELIVERED_AFTER_VOID = 'Đơn được giao sau khi đã bị huỷ hoặc hoàn trên sàn';
+  it('SĐT tự gõ trên Web (W45): giữ cờ chưa xác minh trước lý do mới', () => {
+    expect(restoredReviewReason(`${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; SĐT tự nhập chỉ khớp 2/10 chữ số nhìn thấy trên đơn sàn`, DELIVERED_AFTER_VOID)).toBe(
+      `${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; ${DELIVERED_AFTER_VOID}`,
+    );
+  });
+  it('SĐT đã xác minh: chỉ lý do mới, như trước W45', () => {
+    expect(restoredReviewReason('Giá trị đơn vượt ngưỡng tự duyệt', DELIVERED_AFTER_VOID)).toBe(DELIVERED_AFTER_VOID);
+    expect(restoredReviewReason(null, DELIVERED_AFTER_VOID)).toBe(DELIVERED_AFTER_VOID);
+    expect(restoredReviewReason(null, undefined)).toBeNull();
   });
 });

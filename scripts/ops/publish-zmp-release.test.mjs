@@ -21,14 +21,14 @@ const ENV_FILE = `APP_ID=1\nZMP_TOKEN="${FILE_TOKEN}"\n`;
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 /** apps/miniapp giả: app-config.json nguồn (listSyncJS rỗng), www/ đã build, .env có token; cùng một zmp giả ghi nhật ký vào `log/`. */
-function fixture({ built = BUILT_CONFIG } = {}) {
+function fixture({ built = BUILT_CONFIG, envFile = ENV_FILE } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'zmp-release-test-'));
   const mini = join(root, 'apps/miniapp');
   mkdirSync(join(mini, 'www/assets'), { recursive: true });
   writeFileSync(join(mini, 'app-config.json'), SOURCE_CONFIG);
   writeFileSync(join(mini, 'package.json'), '{"name":"miniapp"}');
   writeFileSync(join(mini, 'zmp-cli.json'), '{"name":"tubutree"}');
-  writeFileSync(join(mini, '.env'), ENV_FILE);
+  writeFileSync(join(mini, '.env'), envFile);
   writeFileSync(join(mini, 'www/index.html'), '<!doctype html>');
   writeFileSync(join(mini, 'www/assets/index.module.js'), 'console.log(1)');
   writeFileSync(join(mini, 'www/app-config.json'), built);
@@ -96,6 +96,26 @@ test('ZMP_TOKEN đọc từ apps/miniapp/.env (bỏ nháy) và APP_ID đi kèm; 
   assert.equal(read(fx, 'token'), 'match');
   assert.equal(read(fx, 'app-id'), '1');
   assert.equal(`${r.stdout}${r.stderr}`.includes(FILE_TOKEN), false);
+});
+
+test('.env có tiền tố export, khoảng trắng quanh dấu =, chú thích cuối dòng và dòng sau thắng: vẫn ra đúng token', (t) => {
+  const envFile = `# zmp login\nexport ZMP_TOKEN=old-token\nexport APP_ID = 1 # app Tubu\nexport ZMP_TOKEN = ${FILE_TOKEN}   # ghi bởi zmp login\r\n`;
+  const fx = fixture({ envFile });
+  t.after(() => rmSync(fx.root, { recursive: true, force: true }));
+  const r = runDeploy(fx);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(read(fx, 'token'), 'match');
+  assert.equal(read(fx, 'app-id'), '1');
+  assert.equal(`${r.stdout}${r.stderr}`.includes(FILE_TOKEN), false);
+});
+
+test("token trong nháy đơn: bỏ nháy và chú thích sau nháy", (t) => {
+  const fx = fixture({ envFile: `APP_ID='1'\nZMP_TOKEN='${FILE_TOKEN}' # cmt\n` });
+  t.after(() => rmSync(fx.root, { recursive: true, force: true }));
+  const r = runDeploy(fx);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(read(fx, 'token'), 'match');
+  assert.equal(read(fx, 'app-id'), '1');
 });
 
 test('ZMP_TOKEN trong môi trường thắng .env; không in token nào', (t) => {

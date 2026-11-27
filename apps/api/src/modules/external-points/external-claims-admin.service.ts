@@ -502,7 +502,7 @@ export class ExternalClaimsAdminService {
       const phoneMismatch = g.facts.order.phoneMatch === 'MISMATCH';
       if (phoneMismatch) {
         if (!reason) throw new BadRequestException({ code: 'NOTE_REQUIRED', message: 'Cần ghi chú lý do khi SĐT trên đơn sàn không khớp SĐT thành viên.' });
-        g.facts.order = { ...g.facts.order, phoneMatch: 'MATCH' };
+        g.facts.order = { ...g.facts.order, phoneMatch: 'MATCH', phoneVisibleDigits: undefined };
       }
       const ruled = evaluateClaimRules(g.facts);
       if (ruled.kind === 'REJECT') throw rejectionOf(ruled.code);

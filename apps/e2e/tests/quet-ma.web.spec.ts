@@ -159,9 +159,11 @@ test.describe('Web /quet-ma trên iPhone: Safari, Zalo, Facebook không có Barc
       submit: { status: 'REVIEW', claimId: 'c2', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250, expectedCreditAt: null, message: 'ok' },
     });
     quietShell(api);
-    const scripts: string[] = [];
-    page.on('request', (r) => {
-      if (r.resourceType() === 'script') scripts.push(r.url());
+    // Chunk bộ đọc JS nhận ra qua tên lỗi riêng của ZXing (chỉ có trong chunk đó, tên tệp là mã băm).
+    let zxingLoads = 0;
+    page.on('response', async (res) => {
+      if (res.request().resourceType() !== 'script') return;
+      if ((await res.text().catch(() => '')).includes('ChecksumException')) zxingLoads++;
     });
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto('/quet-ma');
@@ -178,14 +180,15 @@ test.describe('Web /quet-ma trên iPhone: Safari, Zalo, Facebook không có Barc
     await noHorizontalScroll(page);
     await shot(page, 'web375-quet-ma-ios');
 
-    const before = scripts.length;
+    await page.waitForLoadState('networkidle');
+    expect(zxingLoads).toBe(0);
     const chooser = page.waitForEvent('filechooser');
     await photoBtn.click();
     await (await chooser).setFiles({ name: 'nhan-spx.png', mimeType: 'image/png', buffer: await code128Png(page, 'SPXVN0123456789') });
     const input = page.getByLabel('Hoặc nhập mã vận đơn');
     await expect(input).toHaveValue('SPXVN0123456789', { timeout: 15_000 });
-    // Bộ đọc JS là chunk riêng, chỉ tải sau khi khách chọn ảnh.
-    expect(scripts.length).toBeGreaterThan(before);
+    // Bộ đọc JS là chunk riêng: không tải lúc mở trang, tải đúng một lần sau khi khách chọn ảnh.
+    await expect.poll(() => zxingLoads).toBe(1);
     await page.getByRole('button', { name: 'Tích điểm', exact: true }).click();
     await expect(page.getByTestId('claim-result')).toContainText('Tubu đang kiểm tra đơn này');
     expect(api.callsTo('POST', '/me/external-points/claims').map((c) => c.body)).toEqual([{ code: 'SPXVN0123456789', via: 'scan' }]);

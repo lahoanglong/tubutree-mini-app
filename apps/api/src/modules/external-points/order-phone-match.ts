@@ -88,6 +88,11 @@ export function visibleDigits(p: OrderPhonePattern): number {
  * `phoneMask` chỉ đến từ hồ sơ khách trên Pancake (ingest, khi đơn che hết SĐT), không phải SĐT của chính đơn: khớp thì MATCH, lệch thì chưa
  * đủ để từ chối (hồ sơ có thể là số của người nhà) nên coi như không có dữ liệu, claim vào REVIEW như trước.
  */
+/** Số chữ số nhìn thấy của SĐT đơn mà `orderPhoneMatch` dùng để so (11 = số đầy đủ): cho CSKH biết MATCH mạnh tới đâu (W45). */
+export function orderPhoneVisibleDigits(order: { phone: string | null; phoneMask?: string | null }): number {
+  return visibleDigits(parseOrderPhoneForMatch(order.phone !== null ? order.phone : (order.phoneMask ?? null)));
+}
+
 export function orderPhoneMatch(userPhone: string | null | undefined, order: { phone: string | null; phoneMask?: string | null }): OrderPhoneMatch {
   if (order.phone !== null) return phoneMatchesOrderMask(userPhone, parseOrderPhoneForMatch(order.phone));
   const stored = parseOrderPhoneForMatch(order.phoneMask ?? null);

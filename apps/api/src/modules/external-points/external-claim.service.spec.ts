@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { ExternalClaimService } from './external-claim.service';
+import { ExternalClaimService, LOCK_COUNTED_RESULTS } from './external-claim.service';
 
 const NOW = new Date();
 const flagOn = { 'loyalty.marketplace_claim_enabled': true };
@@ -181,7 +181,7 @@ describe('ExternalClaimService.submit', () => {
     const { svc, tx } = build({ config: flagOn, order: order() });
     await svc.submit('u1', 'SPXVN0123456789');
     expect(tx.externalClaimAttempt.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ result: { in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH'] } }) }),
+      expect.objectContaining({ where: expect.objectContaining({ result: { in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER'] } }) }),
     );
   });
   it('W42: đơn chỉ có số đầy đủ khớp: PENDING; đơn không có SĐT nào: REVIEW', async () => {
@@ -305,11 +305,15 @@ describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa
   const created = (tx: { externalPointsClaim: { createManyAndReturn: jest.Mock } }) =>
     (tx.externalPointsClaim.createManyAndReturn.mock.calls[0]?.[0] as { data: Record<string, unknown>[] } | undefined)?.data[0];
 
-  it('SĐT trên đơn khớp SĐT liên hệ: claim vào REVIEW chờ CSKH, không còn 403', async () => {
+  it('SĐT trên đơn khớp SĐT liên hệ: claim vào REVIEW chờ CSKH, không còn 403; lý do ghi khớp bao nhiêu chữ số của đơn che số', async () => {
     const { svc, tx } = build({ config: flagOn, order: order(), user: webUser });
     const res = await svc.submit('u1', 'SPXVN0123456789');
     expect(res).toMatchObject({ status: 'REVIEW', points: 10_000 });
-    expect(created(tx)).toMatchObject({ state: 'REVIEW', reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu', userId: 'u1' });
+    expect(created(tx)).toMatchObject({
+      state: 'REVIEW',
+      reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu; SĐT tự nhập chỉ khớp 5/10 chữ số nhìn thấy trên đơn sàn',
+      userId: 'u1',
+    });
   });
   it('đơn không có SĐT nhưng khách đã có đơn app giao thành công: REVIEW', async () => {
     const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: null, phoneLast3: null }), user: webUser, deliveredAppOrders: 1 });
@@ -322,6 +326,8 @@ describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa
     expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('NOT_ELIGIBLE_USER');
     expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_NOT_ELIGIBLE_USER', externalOrderId: 'x1' }) });
     expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+    // 403 lộ ra mã có đơn (khác SEARCHING): tính vào khoá 24h để không dò mã hàng loạt.
+    expect(LOCK_COUNTED_RESULTS).toContain('REJECTED_NOT_ELIGIBLE_USER');
   });
   it('SĐT trên đơn lệch: 403 PHONE_MISMATCH như khách đã xác minh', async () => {
     const { svc, attemptCreate } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }), user: webUser, deliveredAppOrders: 3 });

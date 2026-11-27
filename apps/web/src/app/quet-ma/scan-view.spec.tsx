@@ -399,6 +399,7 @@ describe('/quet-ma — quét bằng camera trình duyệt (W44 U5)', () => {
   const scan = { value: 'SPXVN0123456789' };
   class FakeDetector {
     static lastFormats: string[] | undefined;
+    static calls = 0;
     constructor(opts?: { formats?: string[] }) {
       FakeDetector.lastFormats = opts?.formats;
     }
@@ -406,7 +407,8 @@ describe('/quet-ma — quét bằng camera trình duyệt (W44 U5)', () => {
       return ['code_128', 'qr_code', 'aztec'];
     }
     async detect() {
-      return [{ rawValue: scan.value }];
+      FakeDetector.calls++;
+      return scan.value ? [{ rawValue: scan.value }] : [];
     }
   }
   const waitFrames = () => act(async () => void (await new Promise((r) => setTimeout(r, 700))));
@@ -414,6 +416,7 @@ describe('/quet-ma — quét bằng camera trình duyệt (W44 U5)', () => {
   beforeEach(() => {
     stopTrack.mockClear();
     scan.value = 'SPXVN0123456789';
+    FakeDetector.calls = 0;
     Object.defineProperty(window, 'BarcodeDetector', { configurable: true, writable: true, value: FakeDetector });
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop: stopTrack }] }) } });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
@@ -422,6 +425,30 @@ describe('/quet-ma — quét bằng camera trình duyệt (W44 U5)', () => {
     vi.restoreAllMocks();
     delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
     Reflect.deleteProperty(navigator, 'mediaDevices');
+  });
+
+  it('BarcodeDetector không thấy gì: bộ đọc JS (nạp lười) chỉ đọc thêm 1 trong 4 nhịp để máy Android yếu không giật', async () => {
+    scan.value = '';
+    vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(1280);
+    vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(720);
+    const c = await mount();
+    click(buttonByText(c, WEB.scanCta));
+    await flush(3);
+    await act(async () => void (await new Promise((r) => setTimeout(r, 1900))));
+    const zx = mocks.zxDecode.mock.calls.length;
+    expect(FakeDetector.calls).toBeGreaterThanOrEqual(5);
+    expect(zx).toBeGreaterThanOrEqual(1);
+    expect(zx).toBeLessThanOrEqual(Math.ceil(FakeDetector.calls / 4));
+  });
+
+  it('WebView chặn phát video (play() NotAllowedError): đóng khung quét, báo chưa quét được kèm lối ảnh, tắt camera', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
+    const c = await mount();
+    click(buttonByText(c, WEB.scanCta));
+    await flush(6);
+    expect(document.querySelector('[role="dialog"] video')).toBeNull();
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(WEB.scanFailed);
+    expect(stopTrack).toHaveBeenCalled();
   });
 
   it('máy đọc được mã vạch: nút "Quét mã trên nhãn" là nút chính trước ô nhập; quét ra mã vận đơn thì điền ô, tắt camera, gửi với via=scan', async () => {

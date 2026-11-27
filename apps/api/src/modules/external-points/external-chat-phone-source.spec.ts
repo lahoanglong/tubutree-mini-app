@@ -71,7 +71,7 @@ describe('nguồn của users.phone (điều kiện để tự liên kết đi�
     const claimSvc = readFileSync(join(SRC, 'modules/external-points/external-claim.service.ts'), 'utf8');
     expect(claimSvc).toContain('const phoneVerified = !!user?.phoneVerifiedAt;');
     const claimRules = readFileSync(join(SRC, 'modules/external-points/external-claim.rules.ts'), 'utf8');
-    expect(claimRules).toContain("if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');");
+    expect(claimRules).toContain("if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, unverifiedMatchNote(order), reviewReason].filter(Boolean).join('; ');");
     expect(claimRules).toContain("state: reviewReason ? 'REVIEW' : 'PENDING'");
   });
 

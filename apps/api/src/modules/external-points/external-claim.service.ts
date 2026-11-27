@@ -21,7 +21,7 @@ import { evaluateClaimRules, lockedUntil, type ClaimDecision, type ClaimFacts } 
 import { normalizeTrackingCode } from './external-order.mapper';
 import { UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { maskClaimCode } from './external-points-rate';
-import { orderPhoneMatch } from './order-phone-match';
+import { orderPhoneMatch, orderPhoneVisibleDigits } from './order-phone-match';
 
 const DAY_MS = 864e5;
 export const UNMATCHED_RETRY_DAYS = UNMATCHED_RETRY_DAYS_FOR_ATTENTION;
@@ -35,8 +35,9 @@ const UNRECORDED: readonly ExternalClaimRejectCode[] = ['DISABLED', 'NOT_ELIGIBL
 /**
  * Kết quả lần thử tính vào khoá 24h (5 lần trong 24 giờ): mã không thấy đơn, và (W42) mã của đơn mang SĐT khác. Đếm lần lệch SĐT để
  * một người không dò được nhiều mã vận đơn của người khác; lần lệch vẫn được ghi như mọi lần thử nên cũng tính vào trần lần thử/ngày.
+ * (W45) SĐT tự gõ trên Web mà đơn không đủ căn cứ (REJECTED_NOT_ELIGIBLE_USER sau khi đã thấy đơn) cũng tính, để không dò được mã nào có đơn.
  */
-export const LOCK_COUNTED_RESULTS = ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH'] as const;
+export const LOCK_COUNTED_RESULTS = ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER'] as const;
 
 export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; message: string }> = {
   DISABLED: { status: HttpStatus.NOT_FOUND, message: 'Tính năng tích điểm đơn mua ngoài app chưa mở.' },
@@ -385,6 +386,7 @@ export class ExternalClaimService {
             insertedAt: order.pancakeInsertedAt ?? order.firstSeenAt,
             goodsValue: order.goodsValue,
             phoneMatch: orderPhoneMatch(user?.phone ?? null, order),
+            phoneVisibleDigits: orderPhoneVisibleDigits(order),
           }
         : null,
       claim: claim ? { id: claim.id, reopenable: claim.reopenable, own: claim.own, state: claim.state } : null,

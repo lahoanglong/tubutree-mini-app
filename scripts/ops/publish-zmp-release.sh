@@ -88,7 +88,7 @@ zmp_status() { # trả 0 khi đủ CLI và phiên đăng nhập
   fi
   # zmp đọc ZMP_TOKEN từ môi trường hoặc từ .env ở thư mục nó chạy (apps/miniapp, nơi `zmp login` ghi); grep -q để không bao giờ in giá trị.
   if [ -n "${ZMP_TOKEN:-}" ] || [ -e "$ZMP_HOME" ]; then return 0; fi
-  if [ -f "$ZMP_ENV_FILE" ] && grep -q '^ZMP_TOKEN=.' "$ZMP_ENV_FILE" 2>/dev/null; then return 0; fi
+  if [ -n "$(env_file_value "$ZMP_ENV_FILE" ZMP_TOKEN)" ]; then return 0; fi
   ZMP_REASON="chưa đăng nhập zmp (không có ZMP_TOKEN trong môi trường hay $ZMP_ENV_FILE, không có $ZMP_HOME)"
   return 1
 }
@@ -111,10 +111,21 @@ run_step() { # nhãn lệnh...
 node_ok() { node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' >/dev/null 2>&1; }
 
 # ── 5. dựng thư mục tạm cho zmp deploy ──
-# Giá trị một khoá trong tệp .env (dòng cuối thắng, bỏ nháy bao ngoài và \r). Chỉ dùng để gán biến, không bao giờ in.
+# Giá trị một khoá trong tệp .env (dòng cuối thắng; nhận tiền tố `export `, bỏ nháy bao ngoài, chú thích ` # …` sau giá trị không nháy và \r).
+# Chỉ dùng để gán biến, không bao giờ in.
 env_file_value() { # $1 = tệp, $2 = khoá
   [ -f "$1" ] || return 0
-  sed -n "s/^$2=//p" "$1" | tail -n 1 | tr -d '\r' | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+  local line v
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?$2[[:space:]]*=" "$1" | tail -n 1 | tr -d '\r')" || true
+  [ -n "$line" ] || return 0
+  v="${line#*=}"
+  v="${v#"${v%%[![:space:]]*}"}"
+  case "$v" in
+    \"*) v="${v#\"}"; v="${v%%\"*}" ;;
+    \'*) v="${v#\'}"; v="${v%%\'*}" ;;
+    *) v="${v%%[[:space:]]#*}"; v="${v%"${v##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$v"
 }
 
 # Chép bản build vào thư mục tạm $2: www/, package.json, zmp-cli.json và www/app-config.json ra gốc (bản zmp đọc trước). Dừng nếu bản trong www

@@ -197,6 +197,20 @@ describe('evaluateClaimRules: SĐT liên hệ tự gõ trên Web, chưa xác min
   });
   it('SĐT đã xác minh: không đổi gì (PENDING, không thêm lý do)', () => {
     expect(evaluateClaimRules(base({ order: order('MATCH') }))).toEqual({ kind: 'CLAIM', state: 'PENDING', reviewReason: null, points: 2_000 });
+    expect(evaluateClaimRules(base({ order: { ...order('MATCH'), phoneVisibleDigits: 2 } }))).toMatchObject({ state: 'PENDING', reviewReason: null });
+  });
+  it('khớp đơn che số: lý do ghi rõ khớp bao nhiêu chữ số (SĐT tự gõ trùng 2 số cuối là 1/100), khớp số đầy đủ thì nói đầy đủ', () => {
+    expect(evaluateClaimRules(web({ order: { ...order('MATCH'), phoneVisibleDigits: 2 } }))).toMatchObject({
+      state: 'REVIEW',
+      reviewReason: `${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; SĐT tự nhập chỉ khớp 2/10 chữ số nhìn thấy trên đơn sàn`,
+    });
+    expect(evaluateClaimRules(web({ order: { ...order('MATCH'), phoneVisibleDigits: 11 } }))).toMatchObject({
+      state: 'REVIEW',
+      reviewReason: `${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; SĐT tự nhập khớp số đầy đủ trên đơn sàn`,
+    });
+    expect(evaluateClaimRules(web({ order: { ...order('NO_DATA'), phoneVisibleDigits: 0 }, deliveredAppOrder: true }))).toMatchObject({
+      reviewReason: `${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; ${NO_PHONE_REVIEW_REASON}`,
+    });
   });
 });
 

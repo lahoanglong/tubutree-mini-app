@@ -20,6 +20,8 @@ export interface ClaimOrderFacts {
   goodsValue: number | null;
   /** SĐT trên đơn (đầy đủ hoặc đã che, order-phone-match.ts) so với SĐT Zalo của khách gửi mã. */
   phoneMatch: OrderPhoneMatch;
+  /** Số chữ số SĐT đơn nhìn thấy khi so (11 = số đầy đủ). Vắng khi nhân viên đã gắn tay thay cho phép so. */
+  phoneVisibleDigits?: number;
 }
 
 /** Mọi dữ kiện luật cần, đọc xong trong transaction đã giữ khoá advisory của khách. Hàm luật thuần nên thứ tự được kiểm bằng unit test. */
@@ -80,6 +82,15 @@ export function lockedUntil(notFoundTimes: readonly Date[], now: Date): Date | n
  * SĐT liên hệ tự gõ trên Web, chưa xác minh qua Zalo (W45): chỉ đi tiếp khi SĐT trên đơn khớp SĐT đó, hoặc khách đã có đơn mua trong app giao
  * thành công; claim luôn vào REVIEW để CSKH đối chiếu. Không thoả thì NOT_ELIGIBLE_USER, có ghi lần thử (đã tra đơn nên phải tính vào trần).
  */
+/**
+ * SĐT tự gõ trên Web do chính khách chọn, nên MATCH với đơn che còn 2 số cuối chỉ là trùng 1/100: nói rõ đã khớp bao nhiêu số để CSKH không
+ * coi đó là bằng chứng chủ đơn.
+ */
+function unverifiedMatchNote(order: ClaimOrderFacts): string | null {
+  if (order.phoneMatch !== 'MATCH' || order.phoneVisibleDigits === undefined) return null;
+  return order.phoneVisibleDigits > 10 ? 'SĐT tự nhập khớp số đầy đủ trên đơn sàn' : `SĐT tự nhập chỉ khớp ${order.phoneVisibleDigits}/10 chữ số nhìn thấy trên đơn sàn`;
+}
+
 export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   const reject = (code: ExternalClaimRejectCode): ClaimDecision => ({ kind: 'REJECT', code });
   if (!f.cfg.enabled) return reject('DISABLED');
@@ -119,7 +130,7 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   // Chỉ claim của chính khách (mã được mở lại) qua được tới đây khi SĐT lệch: người duyệt phải thấy lý do lệch, vì duyệt xong thì lúc
   // cộng không kiểm lại SĐT.
   if (order.phoneMatch === 'MISMATCH') reviewReason = [PHONE_MISMATCH_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
-  if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
+  if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, unverifiedMatchNote(order), reviewReason].filter(Boolean).join('; ');
   return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };
 }
 

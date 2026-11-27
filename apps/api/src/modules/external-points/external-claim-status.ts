@@ -9,6 +9,7 @@ import { externalLotKey, loadPointExpiryTxns, lotRecoverable } from '../loyalty/
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig } from './external-claim.config';
 import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
+import { WEB_UNVERIFIED_PHONE_REVIEW_REASON } from './external-claim.rules';
 import { claimCodeLabel } from './external-points-rate';
 
 const logger = new Logger('ExternalClaimStatus');
@@ -68,6 +69,15 @@ type Tx = Prisma.TransactionClient;
  * (UPDATE cần khoá mạnh hơn) và cho các đường đọc đơn song song đi cùng nhau; claim FOR UPDATE xếp hàng các đường đổi claim. Đảo
  * thứ tự ở bất kỳ đâu sẽ deadlock với cron cộng điểm.
  */
+/**
+ * Lý do khi claim quay lại REVIEW. Claim của SĐT tự gõ trên Web (W45) giữ cờ đó qua lần huỷ rồi giao lại (huỷ tự động không xoá `reviewReason`),
+ * để người duyệt vẫn biết SĐT chưa xác minh.
+ */
+export function restoredReviewReason(previous: string | null, reason: string | undefined): string | null {
+  const unverified = previous?.includes(WEB_UNVERIFIED_PHONE_REVIEW_REASON) ?? false;
+  return [unverified ? WEB_UNVERIFIED_PHONE_REVIEW_REASON : null, reason].filter(Boolean).join('; ') || null;
+}
+
 export async function lockOrderThenClaim(tx: Tx, claimId: string): Promise<{ orderId: string } | null> {
   const head = await tx.externalPointsClaim.findUnique({ where: { id: claimId }, select: { externalOrderId: true } });
   if (!head) return null;
@@ -216,9 +226,10 @@ export async function applyStatusToClaim(
             };
           }
           case 'TO_REVIEW': {
+            const reviewReason = restoredReviewReason(claim.reviewReason, reason);
             const res = await tx.externalPointsClaim.updateMany({
               where: { id: claim.id, OR: [{ state: 'PENDING' }, { state: 'VOIDED', decidedById: null }] },
-              data: { state: 'REVIEW', reviewReason: reason ?? null, voidReason: null },
+              data: { state: 'REVIEW', reviewReason, voidReason: null },
             });
             if (res.count !== 1) return { retry: true, notice: null };
             await recordClaimEvent(tx, { claimId: claim.id, action: 'TO_REVIEW', fromState: claim.state, toState: 'REVIEW', userIdBefore: claim.userId, userIdAfter: claim.userId, note: reason ?? null });
