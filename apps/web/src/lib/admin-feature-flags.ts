@@ -95,7 +95,7 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     key: 'app.mobile_miniapp_redirect_enabled',
     label: 'Tự mở Mini App trên web điện thoại',
     description:
-      'Khách mở tubutree.com bằng trình duyệt điện thoại được đưa sang đúng màn tương ứng trong Mini App trên Zalo. Không áp cho máy tính, máy dò của Google, trang đăng nhập, giỏ hàng, thanh toán, theo dõi đơn và link mời. Khách bấm "Ở lại bản Web" thì không bị chuyển trong 24 giờ.',
+      'Khách mở tubutree.com bằng trình duyệt điện thoại được đưa sang đúng màn tương ứng trong Mini App trên Zalo. Không áp cho máy tính, máy dò của Google, trang đăng nhập, giỏ hàng, thanh toán, theo dõi đơn và link mời. Khách bấm "Ở lại web" (hoặc × trên dải mời) thì không bị chuyển trong 24 giờ. Trang sản phẩm vẫn tự mở nhưng không hiện dải mời.',
     fallback: false,
     onWarning: 'Khách mở tubutree.com trên điện thoại sẽ được chuyển sang Zalo 1 lần mỗi 24 giờ. Web nhận thay đổi trong tối đa 1 giờ.',
     offWarning: 'Web điện thoại không tự chuyển sang Zalo nữa, kể cả dải mời mở Zalo ở đầu trang. Web nhận thay đổi trong tối đa 1 giờ.',

@@ -1718,25 +1718,30 @@
 }
 
 /* ── Tự mở Zalo Mini App trên web điện thoại (W42): lớp phủ chuyển cảnh ngắn và dải mời trong luồng ở đầu nội dung (không nổi đè danh sách).
- * Lối "Ở lại bản Web" là chữ nhỏ màu phụ (không phải nút nổi), bấm được suốt đời lớp phủ. Giây 4,5 lớp phủ mờ dần 300ms (W44 U1,
+ * Lối "Ở lại web" là chữ nhỏ màu phụ (không phải nút nổi), bấm được suốt đời lớp phủ. Giây 4,5 lớp phủ mờ dần 300ms (W44 U1,
  * `OVERLAY_FADE_MS`) trong khi dải mời đã gắn sẵn bên dưới; giảm chuyển động thì lớp phủ rời đi ngay không hiệu ứng.
  * Giữ chỗ (W44 U4): script ở <head> đặt `html[data-miniapp-bar]` khi đoán được dải sẽ hiện, ô `.tubu-miniapp-slot` cao sẵn đúng bằng khe trên +
- * dải, nên dải hiện sau không đẩy trang. Khe trên nằm ở ô (không phải lề của dải, lề con sẽ tràn ra ngoài ô) để hai chiều cao bằng nhau. ── */
+ * dải, nên dải hiện sau không đẩy trang. Khe trên nằm ở ô (không phải lề của dải, lề con sẽ tràn ra ngoài ô) để hai chiều cao bằng nhau.
+ * Dải theo bố cục Smart App Banner của iOS (W46, PO 27/11 22:25 A2): × màu phụ trái, ô biểu tượng app 36px, tên app + dòng phụ, viên thuốc "Mở" phải. ── */
 :root {
-  /* Dải: nút 44px + đệm 4px hai đầu + viền 1px hai đầu. */
-  --miniapp-bar-h: 54px;
+  /* Dải: vùng chạm 44px + đệm 5px hai đầu + viền 1px hai đầu. */
+  --miniapp-bar-h: 56px;
   --miniapp-bar-gap: var(--space-inline-md);
+  /* Token thành phần: nền chuyển từ trắng sang lục nhạt và viền lục (cặp chữ trên nền này có trong mini-app-auto-open.spec). */
+  --miniapp-bar-tint: var(--forest-50);
+  --miniapp-bar-border: var(--forest-200);
 }
-/* Trang con tràn viền (PDP, PageHeader): dải đứng cùng hàng nút lùi nổi (top 8px). Không đợi lớp `with-back-btn` (gắn sau khi hydrate) để chỗ
-   giữ trước khi vẽ đã đúng khe 8px. */
-body:has([data-page-bleed]) {
-  --miniapp-bar-gap: 8px;
+/* Trang con tràn viền có nút lùi nổi (PageHeader, bìa thương hiệu...): dải nằm dưới hàng nút lùi (top 8px, cao 44px), cùng đỉnh 60px như trang con
+   thường (đệm 48px của body + khe 12px), không chen cạnh nút. Biết được trước khi vẽ: nút lùi (`data-back-bar`) và `data-page-bleed` đều có trong
+   HTML máy chủ, không đợi lớp `with-back-btn` gắn sau khi hydrate. Trang sản phẩm không có dải (`isSmartBarHiddenPath`). */
+body:has([data-back-bar]):has([data-page-bleed]) {
+  --miniapp-bar-gap: calc(48px + var(--space-inline-md));
 }
 @media (max-width: 767.98px) {
   .tubu-miniapp-slot:has(> .tubu-miniapp-bar) {
     padding-top: var(--miniapp-bar-gap);
   }
-  /* Cộng ngay tại ô (không qua biến khai ở :root): biến tham chiếu var() được tính ở nơi khai báo, nên khe 8px của trang tràn viền phải đọc ở đây. */
+  /* Cộng ngay tại ô (không qua biến khai ở :root): biến tham chiếu var() được tính ở nơi khai báo, nên khe của trang tràn viền phải đọc ở đây. */
   html[data-miniapp-bar] .tubu-miniapp-slot {
     min-height: calc(var(--miniapp-bar-gap) + var(--miniapp-bar-h));
   }
@@ -1787,46 +1792,126 @@ body:has([data-page-bleed]) {
   text-underline-offset: 2px;
   cursor: pointer;
 }
+/* Ô biểu tượng app: dấu logo (ảnh 60×90, hiện 16×24 nên nét ở máy 3x) giữa ô vuông bo 12px viền lục. Cỡ md trong dải, lg trên lớp phủ (nhịp sáng
+   nhẹ thay vòng xoay chung chung). */
+.tubu-miniapp-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--miniapp-bar-border);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  box-sizing: border-box;
+}
+.tubu-miniapp-icon__mark {
+  display: block;
+  width: 16px;
+  height: 24px;
+}
+.tubu-miniapp-icon[data-size='lg'] {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-card);
+  animation: tubu-miniapp-pulse 1.6s ease-in-out infinite;
+}
+/* Nhịp nhẹ: ô phồng 4% và vòng lục nhạt loang ra rồi tan, thay vòng xoay chung chung. */
+@keyframes tubu-miniapp-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 var(--miniapp-bar-border);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.tubu-miniapp-icon[data-size='lg'] .tubu-miniapp-icon__mark {
+  width: 24px;
+  height: 36px;
+}
 .tubu-miniapp-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-inline-sm);
   min-height: var(--miniapp-bar-h);
   margin: 0 var(--space-gutter);
-  padding: 4px 4px 4px var(--space-inline-sm);
-  border: 1px solid var(--color-border-subtle);
+  padding: 5px 6px 5px 0;
+  border: 1px solid var(--miniapp-bar-border);
   border-radius: var(--radius-card);
-  background: var(--color-bg-surface);
+  background: linear-gradient(135deg, var(--color-bg-surface) 0%, var(--miniapp-bar-tint) 100%);
+  box-shadow: var(--elevation-1);
+  box-sizing: border-box;
+}
+/* × kín đáo: biểu tượng 16px màu phụ trong vùng chạm 44px, không nền, sát mép trái dải. */
+.tubu-miniapp-bar__close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-tertiary);
+}
+.tubu-miniapp-bar__close-icon {
+  width: 24px;
+  height: 24px;
 }
 .tubu-miniapp-bar__copy {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  margin: 0 var(--space-inline-sm);
 }
+/* Tên app 13px đậm và dòng phụ 11px, mỗi thứ một dòng: ở 360px chữ còn ~176px, "Mua nhanh · Tích điểm Xanh" cần ~148px nên không bị cắt. */
 .tubu-miniapp-bar__title {
   overflow: hidden;
   color: var(--color-text-primary);
-  font-size: var(--type-body-sm-size);
-  line-height: var(--type-body-sm-lh);
+  font-size: var(--type-caption-size);
+  line-height: 18px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Nút "Mở" vừa chữ (không theo min-width 96px của nút cỡ vừa) và đệm trái của dải 8px, để tiêu đề và chữ phụ mỗi thứ nằm trên một dòng ở 360px cả khi
-   dải đứng cạnh nút lùi nổi (e2e mini-app-auto-open.web đo); dải nhờ đó cao đúng `--miniapp-bar-h`, bằng chỗ đã giữ. */
-.tubu-miniapp-bar__open.zaui-btn { flex: 0 0 auto; min-width: 44px; height: 44px; padding: 0 var(--space-inline-sm); }
 .tubu-miniapp-bar__sub {
   overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-lh);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Trang con tràn viền (PDP, PageHeader): body không đệm cho nút lùi nổi (top 8px, left 12px, 44px), nên dải đứng cùng hàng, bên phải nút. */
-body.with-back-btn:has([data-page-bleed]) .tubu-miniapp-bar {
-  margin-left: calc(12px + 44px + var(--space-inline-sm));
+/* "Mở": viên thuốc 32px màu chính giữa vùng chạm 44px (nút trong suốt), vòng focus bao cả vùng chạm. */
+.tubu-miniapp-bar__open {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+.tubu-miniapp-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--space-inline-md);
+  border-radius: var(--radius-pill);
+  background: var(--color-action-primary-bg);
+  color: var(--color-action-primary-fg);
+  font-size: var(--type-caption-size);
+  line-height: 1;
+  font-weight: 600;
+}
+.tubu-miniapp-bar__open:active .tubu-miniapp-bar__pill {
+  background: var(--color-action-primary-bg-pressed);
 }
 @media (min-width: 768px) {
   .tubu-miniapp-bar,
@@ -1837,5 +1922,8 @@ body.with-back-btn:has([data-page-bleed]) .tubu-miniapp-bar {
 @media (prefers-reduced-motion: reduce) {
   .tubu-miniapp-opening {
     transition: none;
+  }
+  .tubu-miniapp-icon[data-size='lg'] {
+    animation: none;
   }
 }

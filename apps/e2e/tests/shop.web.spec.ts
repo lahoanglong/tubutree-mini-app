@@ -139,7 +139,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 700, height: 900 });
     api.get('/products', ({ call }) => (call.query.get('q') === 'xyz' ? pageOf([], 0) : pageOf([product(1)], 1)));
     await page.goto('/san-pham');
-    const input = page.getByRole('searchbox', { name: 'Tìm sản phẩm' });
+    const input = page.getByRole('searchbox', { name: 'Tìm sản phẩm', exact: true });
     await input.fill('nước');
     await expect(page.getByRole('button', { name: /Nước rửa chén/ })).toBeVisible();
     await expect(page).toHaveURL(/\/san-pham$/);
@@ -184,7 +184,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
-    await page.getByRole('searchbox', { name: 'Tìm sản phẩm' }).fill('nước');
+    await page.getByRole('searchbox', { name: 'Tìm sản phẩm', exact: true }).fill('nước');
     await expect(page.getByRole('button', { name: /Nước rửa chén/ })).toBeVisible();
     const withSuggest = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(withSuggest).toBeLessThanOrEqual(0);
@@ -256,11 +256,11 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page).toHaveURL(/\/san-pham\?category=c-goi$/);
     await page.goBack();
     if (phone) {
-      await page.getByRole('link', { name: 'Bạn tìm gì hôm nay?' }).click();
+      await page.getByRole('link', { name: 'Tìm sản phẩm', exact: true }).click();
       await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
     } else {
       // Máy tính chỉ giữ ô tìm của thanh đầu website; ô vỏ ở trang chủ chỉ có ở điện thoại.
-      await expect(page.getByRole('link', { name: 'Bạn tìm gì hôm nay?' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Tìm sản phẩm', exact: true })).toHaveCount(0);
     }
   });
 

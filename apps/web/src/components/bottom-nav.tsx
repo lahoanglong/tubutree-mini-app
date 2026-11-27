@@ -56,7 +56,8 @@ export default function BottomNav() {
           const active = pathname === t.path;
           const count = t.badge === 'active-orders' ? activeOrders : 0;
           const dot = t.badge === 'offers-dot' && offersDot !== null;
-          const remind = t.badge === 'active-orders' && reminders.profile;
+          // Mỗi tab tối đa một dấu: số đơn đang xử lý thắng chấm nhắc, để hai dấu đỏ không chồng lên một biểu tượng 24px.
+          const remind = t.badge === 'active-orders' && reminders.profile && count === 0;
           const label =
             count > 0
               ? `${t.label}, ${count} đơn đang xử lý`
@@ -95,13 +96,7 @@ export default function BottomNav() {
                   <t.Icon className="h-6 w-6" {...(active ? { fill: 'currentColor', fillOpacity: 0.16, strokeWidth: 2 } : null)} />
                   <CountBadge count={count} />
                   {remind && <RemindDot testId="profile-dot" />}
-                  {dot && (
-                    <span
-                      data-testid="offers-dot"
-                      aria-hidden="true"
-                      className="absolute -right-[3px] -top-px h-2.5 w-2.5 rounded-full border-2 border-stone-0 bg-[var(--color-action-danger-bg)] box-border"
-                    />
-                  )}
+                  {dot && <RemindDot testId="offers-dot" />}
                 </span>
               )}
               <span className="text-label">{t.label}</span>
@@ -113,7 +108,7 @@ export default function BottomNav() {
   );
 }
 
-/** Chấm nhắc 8px của tab Cá nhân (thông báo chưa đọc): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
+/** Chấm nhắc 8px (tab Cá nhân: thông báo chưa đọc; tab Ưu đãi: việc cần làm): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
 function RemindDot({ testId }: { testId: string }) {
   return <span data-testid={testId} aria-hidden="true" className="tubu-remind-dot" />;
 }

@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import {
@@ -33,7 +34,7 @@ const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebK
 const DEEP_LINK = 'https://zalo.me/s/2070857098114207963/';
 
 let mounted: Rendered | null = null;
-const mount = (search = '') => {
+const mount = (search = '', client?: QueryClient) => {
   vi.stubGlobal('location', {
     href: `http://localhost:3000${mocks.pathname}${search}`,
     origin: 'http://localhost:3000',
@@ -47,7 +48,7 @@ const mount = (search = '') => {
     replace: vi.fn(),
     reload: vi.fn(),
   });
-  mounted = render(<MiniAppAutoOpen />);
+  mounted = client ? render(<MiniAppAutoOpen />, client) : render(<MiniAppAutoOpen />);
   return mounted.container;
 };
 const advance = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
@@ -108,7 +109,7 @@ describe('MiniAppAutoOpen — tự mở Mini App trên web điện thoại (W42)
     expect(mocks.assign).not.toHaveBeenCalled();
   });
 
-  it('đủ điều kiện: ghi tubu_mini_auto TRƯỚC khi chuyển, lớp phủ có lối "Ở lại bản Web" dạng chữ, rồi mở đúng link Mini App', () => {
+  it('đủ điều kiện: ghi tubu_mini_auto TRƯỚC khi chuyển, lớp phủ có lối "Ở lại web" dạng chữ, rồi mở đúng link Mini App', () => {
     const c = mount();
     expect(overlay(c)).not.toBeNull();
     expect(cookie(MINI_AUTO_COOKIE)).toBe(true);
@@ -124,7 +125,7 @@ describe('MiniAppAutoOpen — tự mở Mini App trên web điện thoại (W42)
     expect(tracked()).toEqual(['navigated']);
   });
 
-  it('bấm "Ở lại bản Web" trước khi chuyển: ghi tubu_stay_web, đóng lớp phủ, không bao giờ chuyển trang', () => {
+  it('bấm "Ở lại web" trước khi chuyển: ghi tubu_stay_web, đóng lớp phủ, không bao giờ chuyển trang', () => {
     const c = mount();
     click(stayLink(c));
     expect(overlay(c)).toBeNull();
@@ -135,7 +136,7 @@ describe('MiniAppAutoOpen — tự mở Mini App trên web điện thoại (W42)
     expect(tracked()).toEqual(['stayed']);
   });
 
-  it('sau lượt chuyển mà trang còn hiện (hộp hỏi mở app): lối "Ở lại bản Web" vẫn bấm được tới giây 4,5, bấm thì ở lại, không chuyển lần nữa', () => {
+  it('sau lượt chuyển mà trang còn hiện (hộp hỏi mở app): lối "Ở lại web" vẫn bấm được tới giây 4,5, bấm thì ở lại, không chuyển lần nữa', () => {
     const c = mount();
     advance(AUTO_OPEN_DELAY_MS + 1500);
     expect(mocks.assign).toHaveBeenCalledTimes(1);
@@ -310,15 +311,79 @@ describe('MiniAppAutoOpen — tự mở Mini App trên web điện thoại (W42)
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.tubu-miniapp-opening\s*\{\s*transition:\s*none/);
     const bar = /\.tubu-miniapp-bar\s*\{([^}]*)\}/.exec(css)![1]!;
     expect(bar).not.toMatch(/position:\s*(fixed|sticky|absolute)/);
-    expect(css).toMatch(/body\.with-back-btn:has\(\[data-page-bleed\]\) \.tubu-miniapp-bar\s*\{[^}]*margin-left:\s*calc\(12px \+ 44px/);
+    // W46: bỏ kiểu ép dải sang phải cạnh nút lùi nổi (trang sản phẩm không còn dải; trang tràn viền khác đặt dải dưới hàng nút lùi).
+    expect(css).not.toMatch(/with-back-btn:has\(\[data-page-bleed\]\) \.tubu-miniapp-bar/);
+    expect(css).not.toMatch(/margin-left:\s*calc\(12px \+ 44px/);
+  });
+
+  it('W46: chữ trên dải đạt 4,5:1 cả ở đầu trắng lẫn đầu lục nhạt của nền; × màu phụ và viên thuốc "Mở" đạt 4,5:1 (WCAG 1.4.3)', () => {
+    const tokens = readFileSync(path.join(__dirname, '../../../../../packages/design-tokens/src/tokens.css'), 'utf8');
+    const hex = (name: string): string => {
+      const v = new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)![1]!.trim();
+      const ref = /^var\((--[a-z0-9-]+)\)$/.exec(v);
+      return ref ? hex(ref[1]!) : v;
+    };
+    const lum = (h: string) => {
+      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+    };
+    const ratio = (a: string, b: string) => {
+      const [hi, lo] = [lum(hex(a)), lum(hex(b))].sort((x, y) => y - x);
+      return (hi! + 0.05) / (lo! + 0.05);
+    };
+    for (const bg of ['--color-bg-surface', '--forest-50']) {
+      expect(ratio('--color-text-primary', bg), `tên app trên ${bg}`).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--color-text-secondary', bg), `dòng phụ 11px trên ${bg}`).toBeGreaterThanOrEqual(4.5);
+      expect(ratio('--color-text-tertiary', bg), `× trên ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(ratio('--color-action-primary-fg', '--color-action-primary-bg')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('CSS W46: dải kiểu Smart App Banner iOS: cao 56px, nền chuyển trắng → lục nhạt, viền lục, đổ bóng cấp 1; × và "Mở" vùng chạm 44px, viên thuốc 32px', () => {
+    const css = readFileSync(path.join(__dirname, '../mini/mini.css'), 'utf8');
+    const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()'=]/g, (ch) => `\\${ch}`)}\\s*\\{([^}]*)\\}`).exec(css)![1]!;
+    expect(css).toMatch(/--miniapp-bar-h:\s*56px/);
+    expect(css).toMatch(/--miniapp-bar-tint:\s*var\(--forest-50\)/);
+    expect(css).toMatch(/--miniapp-bar-border:\s*var\(--forest-200\)/);
+    const bar = rule('.tubu-miniapp-bar');
+    expect(bar).toMatch(/background:\s*linear-gradient\(135deg, var\(--color-bg-surface\) 0%, var\(--miniapp-bar-tint\) 100%\)/);
+    expect(bar).toMatch(/border:\s*1px solid var\(--miniapp-bar-border\)/);
+    expect(bar).toMatch(/box-shadow:\s*var\(--elevation-1\)/);
+    // Đệm dọc 5px + viền 1px hai đầu + vùng chạm 44px = 56px, đúng chiều cao ô giữ chỗ.
+    expect(bar).toMatch(/padding:\s*5px 6px 5px 0/);
+    const close = rule('.tubu-miniapp-bar__close');
+    expect(close).toMatch(/width:\s*44px/);
+    expect(close).toMatch(/height:\s*44px/);
+    expect(close).toMatch(/background:\s*transparent/);
+    expect(close).toMatch(/color:\s*var\(--color-text-tertiary\)/);
+    const closeIcon = rule('.tubu-miniapp-bar__close-icon');
+    expect(closeIcon).toMatch(/width:\s*24px/);
+    expect(closeIcon).toMatch(/height:\s*24px/);
+    const open = rule('.tubu-miniapp-bar__open');
+    expect(open).toMatch(/min-width:\s*44px/);
+    expect(open).toMatch(/height:\s*44px/);
+    const pill = rule('.tubu-miniapp-bar__pill');
+    expect(pill).toMatch(/height:\s*32px/);
+    expect(pill).toMatch(/border-radius:\s*var\(--radius-pill\)/);
+    expect(pill).toMatch(/background:\s*var\(--color-action-primary-bg\)/);
+    const icon = rule('.tubu-miniapp-icon');
+    expect(icon).toMatch(/width:\s*36px/);
+    expect(icon).toMatch(/height:\s*36px/);
+    expect(icon).toMatch(/border:\s*1px solid var\(--miniapp-bar-border\)/);
+    expect(rule('.tubu-miniapp-bar__title')).toMatch(/font-size:\s*var\(--type-caption-size\)/);
+    expect(rule('.tubu-miniapp-bar__sub')).toMatch(/font-size:\s*11px/);
+    // Nhịp của biểu tượng trên lớp phủ tắt khi khách bật giảm chuyển động.
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.tubu-miniapp-icon\[data-size='lg'\]\s*\{\s*animation:\s*none/);
   });
 
   it('CSS W44 U4: ô giữ chỗ cao đúng khe trên + dải; khe trên nằm ở ô, không phải lề của dải (lề con tràn ra ngoài ô)', () => {
     const css = readFileSync(path.join(__dirname, '../mini/mini.css'), 'utf8');
-    // Cộng tại ô: khe 8px của trang tràn viền (khai trên body) phải được đọc ở chính ô, không qua biến đã tính sẵn ở :root.
+    // Cộng tại ô: khe của trang tràn viền (khai trên body) phải được đọc ở chính ô, không qua biến đã tính sẵn ở :root.
     expect(css).toMatch(/html\[data-miniapp-bar\] \.tubu-miniapp-slot\s*\{\s*min-height:\s*calc\(var\(--miniapp-bar-gap\) \+ var\(--miniapp-bar-h\)\)/);
     expect(css).toMatch(/\.tubu-miniapp-slot:has\(> \.tubu-miniapp-bar\)\s*\{\s*padding-top:\s*var\(--miniapp-bar-gap\)/);
-    expect(css).toMatch(/body:has\(\[data-page-bleed\]\)\s*\{\s*--miniapp-bar-gap:\s*8px/);
+    // W46: trang tràn viền có nút lùi nổi: dải xuống dưới hàng nút lùi (48px + khe 12px), không chen cạnh nút; biết trước khi vẽ nhờ data-back-bar.
+    expect(css).toMatch(/body:has\(\[data-back-bar\]\):has\(\[data-page-bleed\]\)\s*\{\s*--miniapp-bar-gap:\s*calc\(48px \+ var\(--space-inline-md\)\)/);
+    expect(css).not.toMatch(/--miniapp-bar-gap:\s*8px/);
     expect(css).not.toMatch(/--miniapp-bar-block/);
     const bar = /\.tubu-miniapp-bar\s*\{([^}]*)\}/.exec(css)![1]!;
     expect(bar).toMatch(/min-height:\s*var\(--miniapp-bar-h\)/);
@@ -379,9 +444,56 @@ describe('MiniAppAutoOpen — chỗ giữ cho dải mời (W44 U4)', () => {
     expect(reserved()).toBe(false);
   });
 
-  it('dải dùng chữ phụ mới, một dòng ngắn (PO 27/11: không bị cắt "…")', () => {
+  it('W46: dải theo thứ tự Smart App Banner iOS: × trái, ô biểu tượng app, "Tubu Tree trên Zalo" + "Mua nhanh · Tích điểm Xanh", viên thuốc "Mở" phải', () => {
     document.cookie = `${MINI_AUTO_COOKIE}=1; Path=/`;
     const c = mount();
-    expect(banner(c)!.querySelector('.tubu-miniapp-bar__sub')?.textContent).toBe('Mua nhanh & tích điểm');
+    const bar = banner(c)!;
+    const kids = Array.from(bar.children);
+    expect(kids.map((k) => k.className.split(' ')[0])).toEqual([
+      'tubu-miniapp-bar__close',
+      'tubu-miniapp-icon',
+      'tubu-miniapp-bar__copy',
+      'tubu-miniapp-bar__open',
+    ]);
+    expect(kids[0]!.getAttribute('aria-label')).toBe(COPY.bannerClose);
+    expect(kids[1]!.getAttribute('aria-hidden')).toBe('true');
+    expect(kids[1]!.querySelector('img')?.getAttribute('alt')).toBe('');
+    expect(bar.querySelector('.tubu-miniapp-bar__title')?.textContent).toBe('Tubu Tree trên Zalo');
+    expect(bar.querySelector('.tubu-miniapp-bar__sub')?.textContent).toBe('Mua nhanh · Tích điểm Xanh');
+    expect(kids[3]!.querySelector('.tubu-miniapp-bar__pill')?.textContent).toBe('Mở');
+    expect(bar.getAttribute('aria-label')).toBe('Tubu Tree trên Zalo');
+  });
+
+  it('W46 (PO A2): trang sản phẩm: không dải, không giữ chỗ; sang Danh mục thì dải hiện', () => {
+    document.cookie = `${MINI_AUTO_COOKIE}=1; Path=/`;
+    document.documentElement.setAttribute(MINI_APP_BAR_ATTR, '');
+    mocks.pathname = '/san-pham/nuoc-rua-chen';
+    const client = new QueryClient();
+    mount('', client);
+    const c = mounted!.container;
+    expect(banner(c)).toBeNull();
+    expect(reserved()).toBe(false);
+    // Cùng cây (không gắn lại): khách đi tiếp trong phiên, quyết định ở trang đầu giữ nguyên, chỉ đường dẫn đổi.
+    mocks.pathname = '/san-pham';
+    act(() =>
+      mounted!.root.render(
+        <QueryClientProvider client={client}>
+          <MiniAppAutoOpen />
+        </QueryClientProvider>,
+      ),
+    );
+    expect(banner(c)).not.toBeNull();
+    expect(reserved()).toBe(true);
+  });
+
+  it('W46 (PO A2): vào thẳng trang sản phẩm vẫn tự mở đúng màn sản phẩm Mini App (chỉ dải mời bị ẩn ở trang này)', () => {
+    mocks.pathname = '/san-pham/nuoc-rua-chen';
+    const c = mount();
+    expect(overlay(c)).not.toBeNull();
+    advance(AUTO_OPEN_DELAY_MS);
+    expect(mocks.assign).toHaveBeenCalledWith(`${DEEP_LINK}product/nuoc-rua-chen`);
+    pastFade();
+    expect(overlay(c)).toBeNull();
+    expect(banner(c)).toBeNull();
   });
 });

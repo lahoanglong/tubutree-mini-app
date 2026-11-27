@@ -52,7 +52,9 @@ async function watchLayout(page: Page): Promise<void> {
     }).observe({ type: 'layout-shift', buffered: true });
     document.addEventListener('DOMContentLoaded', () => {
       w.__reservedAtDcl = document.documentElement.hasAttribute('data-miniapp-bar');
-      const first = document.querySelector('main')?.firstElementChild;
+      // Bỏ qua <template> của ranh giới Suspense (không có hộp, đỉnh luôn 0): đo phần tử đầu thật sự được vẽ.
+      const main = document.querySelector('main');
+      const first = main ? (Array.from(main.children).find((el) => el.tagName !== 'TEMPLATE' && el.getBoundingClientRect().height > 0) ?? main) : null;
       w.__topAtDcl = first ? first.getBoundingClientRect().top : null;
     });
   });
@@ -61,7 +63,8 @@ async function watchLayout(page: Page): Promise<void> {
 const layoutNow = (page: Page) =>
   page.evaluate(() => {
     const w = window as unknown as { __cls: number; __topAtDcl: number | null; __reservedAtDcl: boolean };
-    const first = document.querySelector('main')?.firstElementChild;
+    const main = document.querySelector('main');
+    const first = main ? (Array.from(main.children).find((el) => el.tagName !== 'TEMPLATE' && el.getBoundingClientRect().height > 0) ?? main) : null;
     return { cls: w.__cls, topAtDcl: w.__topAtDcl, reservedAtDcl: w.__reservedAtDcl, top: first ? first.getBoundingClientRect().top : null };
   });
 
@@ -106,7 +109,7 @@ test.describe('Web điện thoại: tự mở Mini App (W42)', () => {
   test('× trên dải: ghi tubu_stay_web 24 giờ, dải biến mất và không quay lại khi tải lại', async ({ page, api }) => {
     mockPage(api, true);
     await page.goto(PAGE);
-    await bar(page).getByRole('button', { name: 'Đóng, ở lại bản Web' }).click();
+    await bar(page).getByRole('button', { name: 'Đóng, ở lại web' }).click();
     await expect(bar(page)).toHaveCount(0);
     const stay = (await cookieOf(page, 'tubu_stay_web'))!;
     expect(stay.value).toBe('1');
@@ -134,7 +137,7 @@ test.describe('Web điện thoại: tự mở Mini App (W42)', () => {
     await expect(bar(page)).toHaveCount(0);
   });
 
-  test('trình duyệt thường: ghi tubu_mini_auto 24 giờ, lớp phủ có lối "Ở lại bản Web" dạng chữ, rồi mở đúng màn Mini App', async ({ page, api }) => {
+  test('trình duyệt thường: ghi tubu_mini_auto 24 giờ, lớp phủ có biểu tượng app và lối "Ở lại web" dạng chữ, rồi mở đúng màn Mini App', async ({ page, api }) => {
     mockPage(api, true);
     await page.addInitScript(() => {
       Object.defineProperty(Navigator.prototype, 'webdriver', { configurable: true, get: () => false });
@@ -153,8 +156,11 @@ test.describe('Web điện thoại: tự mở Mini App (W42)', () => {
     const overlay = page.getByTestId('miniapp-opening');
     await expect(overlay).toBeVisible({ timeout: 15_000 });
     await expect(overlay.getByRole('status')).toHaveText('Đang mở Tubu Tree trên Zalo…');
-    const stay = overlay.getByRole('button', { name: 'Ở lại bản Web' });
+    const stay = overlay.getByRole('button', { name: 'Ở lại web' });
     await expect(stay).toBeVisible();
+    // W46: biểu tượng app Tubu (nhịp nhẹ) thay vòng xoay chung chung.
+    await expect(overlay.locator('.tubu-miniapp-icon[data-size="lg"] img')).toBeVisible();
+    await expect(overlay.locator('.animate-spin')).toHaveCount(0);
     expect(await stay.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
     if (SHOTS) {
       mkdirSync(SHOTS, { recursive: true });
@@ -261,7 +267,7 @@ test.describe('Web điện thoại: chỗ giữ dải mời không đẩy trang 
     expect(m.topAtDcl).not.toBeNull();
     expect(Math.abs(m.top! - m.topAtDcl!), `đỉnh nội dung lúc tải ${m.topAtDcl} so lúc có dải ${m.top}`).toBeLessThanOrEqual(1);
     expect(m.cls, 'tổng layout-shift').toBeLessThan(0.01);
-    // Chỗ giữ đúng bằng khe trên + dải, không dư (khe 8px ở trang tràn viền, 12px ở trang thường).
+    // Chỗ giữ đúng bằng khe trên + dải, không dư.
     const fit = await page.locator('.tubu-miniapp-slot').evaluate((slot) => {
       const barEl = slot.querySelector<HTMLElement>('[data-testid="miniapp-smartbar"]')!;
       return { slot: slot.getBoundingClientRect().height, bar: barEl.getBoundingClientRect().height, gap: parseFloat(getComputedStyle(slot).paddingTop) };
@@ -277,10 +283,28 @@ test.describe('Web điện thoại: chỗ giữ dải mời không đẩy trang 
     await expectNoShift(page, api, baseURL, '/', 'web375-miniapp-slot-home.png');
   });
 
-  test('Trang sản phẩm tràn viền: dải cạnh nút lùi nổi ở chỗ đã giữ, CLS < 0,01', async ({ page, api, baseURL, request }) => {
+  test('Trang con tràn viền có nút lùi nổi (Câu chuyện): dải nằm dưới hàng nút lùi ở chỗ đã giữ, CLS < 0,01', async ({ page, api, baseURL }) => {
+    await expectNoShift(page, api, baseURL, PAGE, 'web375-miniapp-slot-subpage.png');
+  });
+
+  test('W46 (PO A2): trang sản phẩm không có dải và không giữ chỗ (nút lùi nổi trên ảnh đứng một mình), CLS < 0,01', async ({ page, api, baseURL, request }) => {
     const p = await firstProduct(request);
     test.skip(!p, 'DB e2e chưa có sản phẩm');
-    await expectNoShift(page, api, baseURL, `/san-pham/${p!.slug}`, 'web375-miniapp-slot-pdp.png');
+    mockPage(api, true);
+    await page.context().addCookies([{ name: 'tubu_mini_auto', value: '1', url: baseURL! }]);
+    await watchLayout(page);
+    await page.goto(`/san-pham/${p!.slug}`);
+    await expect(page.locator('main').first()).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(2500);
+    const m = await layoutNow(page);
+    expect(m.reservedAtDcl, 'boot script không giữ chỗ ở trang sản phẩm').toBe(false);
+    await expect(bar(page)).toHaveCount(0);
+    expect(await page.locator('.tubu-miniapp-slot').evaluate((el) => el.getBoundingClientRect().height)).toBe(0);
+    expect(m.cls, 'tổng layout-shift').toBeLessThan(0.01);
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/web375-pdp-no-smartbar.png` });
+    }
   });
 
   test('cookie tubu_stay_web: boot script không giữ chỗ, không có khoảng trống', async ({ page, api, baseURL }) => {
@@ -300,26 +324,65 @@ test.describe('Web điện thoại: chỗ giữ dải mời không đẩy trang 
   });
 });
 
-test.describe('Web điện thoại: chữ phụ dải mời không bị cắt (W44 U6)', () => {
+/**
+ * W46 (PO 27/11 22:25 A2): dải kiểu Smart App Banner iOS ở 360px và 375px, trên Trang chủ, /quet-ma và một trang con tràn viền có nút lùi nổi:
+ * × trái, ô biểu tượng app, tên + dòng phụ không bị cắt, viên thuốc "Mở" phải cùng trục giữa, dải cao 56px bằng chỗ giữ, không đè nút lùi.
+ */
+test.describe('Web điện thoại: dải mời kiểu Smart App Banner (W46)', () => {
   for (const width of [360, 375]) {
-    test(`${width}px: "Mua nhanh & tích điểm" hiện đủ`, async ({ page, api }) => {
-      mockPage(api, true);
-      await page.setViewportSize({ width, height: 800 });
-      await page.goto(PAGE);
-      await expect(bar(page)).toBeVisible({ timeout: 15_000 });
-      const sub = bar(page).locator('.tubu-miniapp-bar__sub');
-      await expect(sub).toHaveText('Mua nhanh & tích điểm');
-      const fit = await sub.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
-      expect(fit.scroll, `scrollWidth ${fit.scroll} > clientWidth ${fit.client}`).toBeLessThanOrEqual(fit.client);
-      const title = await bar(page).locator('.tubu-miniapp-bar__title').evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
-      expect(title.scroll, `tiêu đề: scrollWidth ${title.scroll} > clientWidth ${title.client}`).toBeLessThanOrEqual(title.client);
-      // Mỗi dòng chữ một dòng: dải cao đúng 54px như chỗ đã giữ.
-      const h = (await bar(page).boundingBox())!.height;
-      expect(Math.abs(h - 54), `dải cao ${h}px`).toBeLessThanOrEqual(0.5);
-      if (SHOTS) {
-        mkdirSync(SHOTS, { recursive: true });
-        await bar(page).screenshot({ path: `${SHOTS}/web${width}-miniapp-bar.png` });
-      }
-    });
+    for (const path of ['/', '/quet-ma', PAGE]) {
+      test(`${width}px ${path}: thứ tự ×, biểu tượng, chữ, "Mở"; không cắt chữ; cao 56px; không đè nút lùi`, async ({ page, api }) => {
+        mockPage(api, true);
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(path);
+        await expect(bar(page)).toBeVisible({ timeout: 15_000 });
+        await expect(bar(page).locator('.tubu-miniapp-bar__title')).toHaveText('Tubu Tree trên Zalo');
+        await expect(bar(page).locator('.tubu-miniapp-bar__sub')).toHaveText('Mua nhanh · Tích điểm Xanh');
+        for (const sel of ['.tubu-miniapp-bar__title', '.tubu-miniapp-bar__sub']) {
+          const fit = await bar(page).locator(sel).evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+          expect(fit.scroll, `${sel}: scrollWidth ${fit.scroll} > clientWidth ${fit.client}`).toBeLessThanOrEqual(fit.client);
+        }
+        const b = (await bar(page).boundingBox())!;
+        expect(Math.abs(b.height - 56), `dải cao ${b.height}px`).toBeLessThanOrEqual(0.5);
+        expect(b.x).toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width).toBeLessThanOrEqual(width);
+        const close = (await bar(page).getByRole('button', { name: 'Đóng, ở lại web' }).boundingBox())!;
+        const icon = (await bar(page).locator('.tubu-miniapp-icon').boundingBox())!;
+        const copy = (await bar(page).locator('.tubu-miniapp-bar__copy').boundingBox())!;
+        const open = (await bar(page).getByRole('button', { name: 'Mở', exact: true }).boundingBox())!;
+        const pill = (await bar(page).locator('.tubu-miniapp-bar__pill').boundingBox())!;
+        expect(close.x + close.width).toBeLessThanOrEqual(icon.x + 0.5);
+        expect(icon.x + icon.width).toBeLessThanOrEqual(copy.x + 0.5);
+        expect(copy.x + copy.width).toBeLessThanOrEqual(open.x + 0.5);
+        for (const t of [close, open]) {
+          expect(t.width).toBeGreaterThanOrEqual(44);
+          expect(t.height).toBeGreaterThanOrEqual(44);
+        }
+        expect(Math.round(icon.width)).toBe(36);
+        expect(Math.round(icon.height)).toBe(36);
+        expect(Math.round(pill.height)).toBe(32);
+        const mid = b.y + b.height / 2;
+        for (const [name, t] of [['×', close], ['biểu tượng', icon], ['Mở', pill]] as const) {
+          expect(Math.abs(t.y + t.height / 2 - mid), `${name} lệch trục giữa dải`).toBeLessThanOrEqual(1);
+        }
+        // Logo nét: ảnh 60×90 hiện 16×24 (dư cho máy 3x), đã tải xong.
+        const img = await bar(page).locator('.tubu-miniapp-icon img').evaluate((el: HTMLImageElement) => ({ nw: el.naturalWidth, nh: el.naturalHeight, w: el.getBoundingClientRect().width, h: el.getBoundingClientRect().height, ok: el.complete }));
+        expect(img.ok && img.nw >= img.w * 3 && img.nh >= img.h * 3, JSON.stringify(img)).toBe(true);
+        const back = page.getByRole('button', { name: 'Quay lại' });
+        if ((await back.count()) > 0 && (await back.first().isVisible())) {
+          const k = (await back.first().boundingBox())!;
+          const overlap = !(k.x + k.width <= b.x || b.x + b.width <= k.x || k.y + k.height <= b.y || b.y + b.height <= k.y);
+          expect(overlap, `nút lùi ${JSON.stringify(k)} đè dải ${JSON.stringify(b)}`).toBe(false);
+        }
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+        console.log(`SMARTBAR_W46 ${width} ${path} bar=${b.width}x${b.height} copy=${Math.round(copy.width)} icon=${img.nw}x${img.nh}->${img.w}x${img.h}`);
+        if (SHOTS) {
+          mkdirSync(SHOTS, { recursive: true });
+          const slug = path === '/' ? 'home' : path.replace(/^\//, '').replace(/\//g, '-');
+          await page.screenshot({ path: `${SHOTS}/web${width}-smartbar-${slug}.png` });
+          await bar(page).screenshot({ path: `${SHOTS}/web${width}-smartbar-${slug}-bar.png` });
+        }
+      });
+    }
   }
 });

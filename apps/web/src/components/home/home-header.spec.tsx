@@ -26,11 +26,23 @@ describe('HomeHeader web — một hàng dính 56px như Mini App (HM-01)', () =
 
   it('dấu logo, ô tìm, chuông và giỏ cùng một hàng; ô tìm mở /san-pham?focus=search', () => {
     const c = mount();
-    const search = c.querySelector('a[aria-label="Bạn tìm gì hôm nay?"]')!;
+    const search = c.querySelector('a[aria-label="Tìm sản phẩm"]')!;
     expect(search.getAttribute('href')).toBe('/san-pham?focus=search');
     expect(c.querySelector('a[aria-label="Thông báo"]')).not.toBeNull();
     expect(c.querySelector('a[aria-label="Giỏ hàng"]')).not.toBeNull();
     expect(c.querySelector('img[alt="Tubu Tree"]')).not.toBeNull();
+  });
+
+  it('W46: chữ gợi ý ngắn "Tìm sản phẩm" một dòng 13px như Mini App; chuông và giỏ là một cụm khe 4px', () => {
+    const c = mount();
+    const text = c.querySelector('a[aria-label="Tìm sản phẩm"] span')!;
+    expect(text.textContent).toBe('Tìm sản phẩm');
+    expect(text.className).toContain('truncate');
+    expect(text.className).toContain('text-caption');
+    const actions = c.querySelector<HTMLElement>('[data-testid="home-header-actions"]')!;
+    expect(actions.className).toContain('gap-1');
+    expect(actions.querySelector('a[aria-label="Thông báo"]')).not.toBeNull();
+    expect(actions.querySelector('a[aria-label="Giỏ hàng"]')).not.toBeNull();
   });
 
   it('chuông báo số chưa đọc; trang đã có một h1 (page.tsx) nên header không thêm h1; mọi điều khiển có tên', () => {

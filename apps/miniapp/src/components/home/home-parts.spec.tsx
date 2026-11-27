@@ -59,40 +59,58 @@ describe('HomeHeader — một hàng dính 56px (logo, ô tìm, chuông, giỏ)'
     wrap(<HomeHeader unreadCount={0} />);
     expect(screen.getByTestId('home-header')).toHaveStyle({ height: '56px' });
     expect(screen.getByRole('heading', { level: 1 })).toContainElement(screen.getByAltText('Tubu Tree'));
-    fireEvent.click(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm sản phẩm' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
   });
 
-  it('chừa vùng viên thuốc của Zalo bên phải (96px) để chuông và giỏ không nằm dưới nó', () => {
+  it('chừa vùng viên thuốc của Zalo bên phải (96px) để chuông và giỏ không nằm dưới nó; lề trái là lề trang', () => {
     wrap(<HomeHeader unreadCount={0} />);
-    expect(screen.getByTestId('home-header')).toHaveStyle({ paddingLeft: '16px', paddingRight: '96px' });
+    expect(screen.getByTestId('home-header')).toHaveStyle({ paddingLeft: 'var(--space-gutter)', paddingRight: '96px' });
   });
 
-  it('khổ ≤360px: ô tìm chỉ còn biểu tượng (chữ gợi ý không lọt), tên truy cập vẫn đọc được; khổ rộng hơn vẫn có chữ', () => {
+  it('W46: chữ gợi ý "Tìm sản phẩm" luôn hiện (cả 360px), một dòng 13px cắt "…" chứ không xuống dòng; dưới 375px dấu logo nhường chỗ nhưng h1 vẫn đọc được', () => {
     const original = window.matchMedia;
     const stub = (narrow: boolean) =>
-      ((query: string) => ({ matches: narrow && query.includes('max-width: 360px'), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
+      ((query: string) => ({ matches: narrow && query.includes('max-width: 374px'), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
     try {
       window.matchMedia = stub(true);
       const { unmount } = wrap(<HomeHeader unreadCount={0} />);
-      expect(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).textContent).toBe('');
+      const narrow = screen.getByRole('button', { name: 'Tìm sản phẩm' });
+      expect(narrow.textContent).toBe('Tìm sản phẩm');
+      const h1 = screen.getByRole('heading', { level: 1 });
+      expect(h1).toContainElement(screen.getByAltText('Tubu Tree'));
+      expect(h1).toHaveStyle({ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden' });
       unmount();
       window.matchMedia = stub(false);
       wrap(<HomeHeader unreadCount={0} />);
-      expect(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).textContent).toBe('Bạn tìm gì hôm nay?');
+      const wide = screen.getByRole('button', { name: 'Tìm sản phẩm' });
+      expect(wide.textContent).toBe('Tìm sản phẩm');
+      expect(screen.getByRole('heading', { level: 1 })).not.toHaveStyle({ position: 'absolute' });
+      const text = wide.querySelector('span:last-child') as HTMLElement;
+      expect(text).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', fontSize: 'var(--type-caption-size)' });
+      expect(text.style.webkitLineClamp).toBe('');
     } finally {
       window.matchMedia = original;
     }
   });
 
+  it('W46: chuông và giỏ là một cụm khe 4px (ô tìm thêm chỗ cho chữ gợi ý một dòng)', () => {
+    wrap(<HomeHeader unreadCount={0} />);
+    const bell = screen.getByRole('button', { name: 'Thông báo' });
+    const cart = screen.getByRole('button', { name: 'Giỏ hàng' });
+    const cluster = bell.parentElement!.parentElement!;
+    expect(cluster).toContainElement(cart);
+    expect(cluster).toHaveStyle({ display: 'flex', gap: 'calc(var(--space-inline-sm) / 2)' });
+  });
+
   it('ô tìm, chuông, giỏ cùng một hàng và đều có vùng chạm ≥44px', () => {
     wrap(<HomeHeader unreadCount={0} />);
     const row = screen.getByTestId('home-header');
-    for (const name of ['Bạn tìm gì hôm nay?', 'Thông báo', 'Giỏ hàng']) {
+    for (const name of ['Tìm sản phẩm', 'Thông báo', 'Giỏ hàng']) {
       const btn = screen.getByRole('button', { name });
       expect(row).toContainElement(btn);
     }
-    expect(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' })).toHaveStyle({ minHeight: '44px' });
+    expect(screen.getByRole('button', { name: 'Tìm sản phẩm' })).toHaveStyle({ minHeight: '44px' });
   });
 });
 

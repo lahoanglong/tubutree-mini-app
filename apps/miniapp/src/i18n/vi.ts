@@ -52,7 +52,8 @@ export const vi = {
 
   home: {
     tagline: 'Sống xanh An Lành',
-    searchPlaceholder: 'Bạn tìm gì hôm nay?',
+    /** Một dòng ở 360px và 375px (W46, PO 27/11 22:25 A3): câu cũ "Bạn tìm gì hôm nay?" xuống hai dòng ở 375px và mất hẳn ở 360px. */
+    searchPlaceholder: 'Tìm sản phẩm',
     notifications: 'Thông báo',
     notificationsUnread: (n: number) => `Thông báo, ${n} chưa đọc`,
     unreadBadge: (n: number) => `${n} thông báo chưa đọc`,

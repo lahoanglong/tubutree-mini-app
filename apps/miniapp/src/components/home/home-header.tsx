@@ -10,6 +10,7 @@ import { CartButton } from '../cart-button';
 import { CountBadge } from '../ui/cart-badge';
 import { Icon } from '../ui/icon';
 import { IconButton } from '../ui/icon-button';
+import { SR_ONLY } from '../ui/sr-only';
 import { Text } from '../ui/text';
 
 // Chỉ hiện dấu logo (khối vuông có lá), không kèm chữ "Tubu Tree": chữ sẽ chiếm chỗ của ô tìm ở 375px. Ảnh là 60 cột đầu (3x) của logo ngang
@@ -17,16 +18,16 @@ import { Text } from '../ui/text';
 // Hiện 20x30; khai báo cả hai để trình duyệt giữ chỗ trước khi ảnh tải.
 const LOGO_HEIGHT = 30;
 const LOGO_MARK_WIDTH = 20;
-// Chừa vùng viên thuốc 96px thì ô tìm còn ~116px ở 360 (chữ gợi ý chỉ lọt ~60px, thành "Bạn tì…"): từ khổ này trở xuống chỉ giữ biểu tượng kính lúp, tên truy cập vẫn là aria-label.
-// Ở 375 ô tìm còn ~131px (chữ lọt ~77px, một dòng cần ~115px): chữ xuống hai dòng cân nhau ("Bạn tìm gì" / "hôm nay?", 2 × 22px + viền 1px ≈ 46px, vẫn lọt header 56px; `WebkitLineClamp: 2` chặn khi chữ phóng to) thay vì cắt thành "Bạn tìm gì hôm…".
-const COMPACT_SEARCH_MAX_WIDTH = 360;
-const COMPACT_SEARCH_QUERY = `(max-width: ${COMPACT_SEARCH_MAX_WIDTH}px)`;
+// Ô tìm phải chứa trọn "Tìm sản phẩm" (13px, ~87px) trên một dòng. Ở 375px, chừa vùng viên thuốc 96px, ô còn ~135px (chuông và giỏ đứng sát nhau
+// khe 4px) nên vừa có cả dấu logo. Hẹp hơn 375px (361–374px chữ đã bị cắt) dấu logo nhường chỗ (h1 vẫn đọc được "Tubu Tree"): ở 360px ô thành ~148px.
+const COMPACT_HEADER_MAX_WIDTH = 374;
+const COMPACT_HEADER_QUERY = `(max-width: ${COMPACT_HEADER_MAX_WIDTH}px)`;
 
-function useCompactSearch(): boolean {
-  const [compact, setCompact] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(COMPACT_SEARCH_QUERY).matches);
+function useCompactHeader(): boolean {
+  const [compact, setCompact] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(COMPACT_HEADER_QUERY).matches);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia(COMPACT_SEARCH_QUERY);
+    const mq = window.matchMedia(COMPACT_HEADER_QUERY);
     const sync = () => setCompact(mq.matches);
     sync();
     mq.addEventListener('change', sync);
@@ -43,19 +44,28 @@ function useCompactSearch(): boolean {
  */
 export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   const navigate = useNavigate();
-  const compactSearch = useCompactSearch();
+  const compact = useCompactHeader();
   return (
     <div
       data-testid="home-header"
-      style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 16, paddingRight: CAPSULE_INSET_END, height: HOME_HEADER_HEIGHT, boxSizing: 'border-box' }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-inline-sm)',
+        paddingLeft: 'var(--space-gutter)',
+        paddingRight: CAPSULE_INSET_END,
+        height: HOME_HEADER_HEIGHT,
+        boxSizing: 'border-box',
+      }}
     >
-      {/* h1 của trang: logo là tên trang (tên truy cập lấy từ alt) để trình đọc màn hình có điểm mốc tiêu đề. */}
-      <h1 style={{ margin: 0, fontSize: 0, lineHeight: 0, flex: '0 0 auto' }}>
+      {/* h1 của trang: logo là tên trang (tên truy cập lấy từ alt) để trình đọc màn hình có điểm mốc tiêu đề. Khổ hẹp thì ẩn hình, giữ h1. */}
+      <h1 style={compact ? SR_ONLY : { margin: 0, fontSize: 0, lineHeight: 0, flex: '0 0 auto' }}>
         <img src={logo} alt="Tubu Tree" width={LOGO_MARK_WIDTH} height={LOGO_HEIGHT} style={{ height: LOGO_HEIGHT, width: LOGO_MARK_WIDTH, display: 'block' }} />
       </h1>
       <button
         type="button"
         aria-label={vi.home.searchPlaceholder}
+        data-testid="home-search"
         className="tubu-press"
         onClick={() => {
           haptic('light');
@@ -67,9 +77,8 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
           minHeight: 44,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: compactSearch ? 'center' : undefined,
-          gap: 8,
-          padding: '0 14px',
+          gap: 'var(--space-inline-sm)',
+          padding: '0 var(--space-inline-sm) 0 var(--space-inline-md)',
           borderRadius: 'var(--radius-pill)',
           border: '1px solid var(--color-border-subtle)',
           background: 'var(--color-bg-surface)',
@@ -80,25 +89,26 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
         }}
       >
         <Icon icon={Search} size="sm" tone="muted" />
-        {!compactSearch && (
-          <Text variant="body-sm" tone="tertiary" style={{ minWidth: 0, textWrap: 'balance', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>
-            {vi.home.searchPlaceholder}
-          </Text>
-        )}
+        <Text variant="caption" tone="tertiary" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {vi.home.searchPlaceholder}
+        </Text>
       </button>
-      <div style={{ position: 'relative', flex: '0 0 auto' }}>
-        <IconButton
-          icon={Bell}
-          label={unreadCount > 0 ? vi.home.notificationsUnread(unreadCount) : vi.home.notifications}
-          onPress={() => {
-            haptic('light');
-            navigate('/notifications');
-          }}
-          style={{ background: 'var(--color-action-secondary-bg)' }}
-        />
-        <CountBadge count={unreadCount} label={vi.home.unreadBadge(unreadCount)} />
+      {/* Chuông và giỏ là một cụm (khe 4px) để ô tìm có thêm chỗ cho chữ gợi ý một dòng. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'calc(var(--space-inline-sm) / 2)', flex: '0 0 auto' }}>
+        <div style={{ position: 'relative', flex: '0 0 auto' }}>
+          <IconButton
+            icon={Bell}
+            label={unreadCount > 0 ? vi.home.notificationsUnread(unreadCount) : vi.home.notifications}
+            onPress={() => {
+              haptic('light');
+              navigate('/notifications');
+            }}
+            style={{ background: 'var(--color-action-secondary-bg)' }}
+          />
+          <CountBadge count={unreadCount} label={vi.home.unreadBadge(unreadCount)} />
+        </div>
+        <CartButton />
       </div>
-      <CartButton />
     </div>
   );
 }
