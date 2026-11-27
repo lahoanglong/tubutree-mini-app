@@ -1,6 +1,6 @@
 {
-  "$comment": "Số byte thô của entry Mini App (script module trong apps/miniapp/www/index.html) trên bản build có .env.production như gói ZMP. scripts/release/pre-submit-check.sh chặn khi entry khác số này: entry đổi phải có chủ đích, đo lại rồi sửa số này trong cùng PR (UPDATE_MINI_ENTRY_BASELINE=1 ghi số mới). Đo ở tubu-w46-03 trên wave/w46-03-release (w45-03 93de22ea7 + merge w46-01 ô tìm Trang chủ một dòng và mỗi tab một dấu ở thanh đáy, -48 B; + merge w46-02 hướng dẫn quét gập khi có lịch sử và hộp xác nhận 4 số cuối SĐT, +8 B): entry 298.657 B (-40 B so với 298.697 B của tubu-w44-02), tổng www 2.149.439 B.",
-  "entryBytes": 298657,
-  "totalBytes": 2149439,
+  "$comment": "Số byte thô của entry Mini App (script module trong apps/miniapp/www/index.html) trên bản build có .env.production như gói ZMP. scripts/release/pre-submit-check.sh chặn khi entry khác số này: entry đổi phải có chủ đích, đo lại rồi sửa số này trong cùng PR (UPDATE_MINI_ENTRY_BASELINE=1 ghi số mới). Đo ở tubu-w46-03 trên wave/w46-03-release (w45-03 93de22ea7 + merge w46-01 ô tìm Trang chủ một dòng và mỗi tab một dấu ở thanh đáy, -48 B; + merge w46-02 hướng dẫn quét gập khi có lịch sử và hộp xác nhận 4 số cuối SĐT, +8 B; + sửa release ô tìm Trang chủ chỉ còn kính lúp ở khổ ≤344px để 320px không cắt \"Tìm s…\", +44 B): entry 298.701 B (+4 B so với 298.697 B của tubu-w44-02), tổng www 2.149.483 B.",
+  "entryBytes": 298701,
+  "totalBytes": 2149483,
   "measuredOn": "tubu-w46-03"
 }
