@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { hmacPhone } from '../../common/crypto/phone-hmac';
 import { maskClaimCode } from './external-points-rate';
 import type { OrderSourceMap } from './external-order.config';
 import { buyerPhonePattern, classifyPancakeOrder, externalStatusOf, extractTrackingCodes, marketplaceOrderSn, normalizeTrackingCode } from './external-order.mapper';
@@ -12,7 +13,7 @@ import { parseOrderPhoneForMatch, visibleDigits } from './order-phone-match';
  * Chỉ import hàm đã có trên image API đang chạy, để bản dò gắn `:ro` vào container tạm chạy được trước deploy.
  *
  * Không bao giờ trả ra: chữ số SĐT, tên, địa chỉ, giá trị mã (mã chỉ hiện 3 ký tự đầu và cuối như `maskClaimCode`). SĐT đầy đủ chỉ được
- * băm sha256 trong bộ nhớ để đếm số khác nhau; băm cũng không in.
+ * băm HMAC-SHA256 với khoá ngẫu nhiên của lần chạy, trong bộ nhớ, để đếm số khác nhau; mã băm cũng không in.
  */
 
 type Data = Record<string, unknown>;
@@ -143,7 +144,12 @@ export function phonePrefixClassOf(raw: unknown): PhonePrefixClass | null {
 /** Khuôn của chuỗi che không đọc được: chữ số thay bằng `d`, ký tự che thành `*` (vd `dddd*****ddd`). Không mang chữ số nào. */
 export const maskForm = (raw: unknown): string => compactPhone(raw).replace(/\d/g, 'd').replace(/[xX•●]/g, '*').slice(0, 20);
 
-const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
+/** Khoá của một lần chạy: mã băm chỉ để đếm số khác nhau, không so được với lần chạy khác hay với `hmacPhone` lưu trong DB. */
+const RUN_KEY = randomBytes(32).toString('hex');
+const addPhoneKey = (set: Set<string>, phone: string): void => {
+  const key = hmacPhone(phone, RUN_KEY);
+  if (key) set.add(key);
+};
 
 /** Hai đường dẫn `buyerPhonePattern` đang đọc. */
 export const BUYER_PHONE_PATHS: readonly string[] = ['bill_phone_number', 'shipping_address.phone_number'];
@@ -170,7 +176,7 @@ export interface PhonePathRow {
   /** Số chữ số nhìn thấy: nhỏ nhất, lớn nhất (trên đơn có số). */
   digitsMin: number | null;
   digitsMax: number | null;
-  /** Số FULL khác nhau / số đơn có FULL (đếm bằng sha256 trong bộ nhớ). */
+  /** Số FULL khác nhau / số đơn có FULL (đếm bằng mã băm có khoá của lần chạy, trong bộ nhớ). */
   fullDistinctRatio: number | null;
   /** Khuôn của MASK_UNPARSED (không chữ số), tối đa 3. */
   unparsedForms: string[];
@@ -331,7 +337,7 @@ export function censusChannel(fetched: FetchedChannel, perChannel: number): Chan
       if (extracted.length > 0) anyCode++;
       if (extracted.length > 0 && buyer.kind !== 'NONE') claimable++;
       buyerShapes[buyerShapeOf(data)]++;
-      if (buyer.kind === 'FULL') buyerFullHashes.add(sha256(buyer.phone));
+      if (buyer.kind === 'FULL') addPhoneKey(buyerFullHashes, buyer.phone);
     }
     const weak = buyer.kind !== 'FULL';
     if (weak) weakBuyer++;
@@ -354,7 +360,7 @@ export function censusChannel(fetched: FetchedChannel, perChannel: number): Chan
         const parsed = parseOrderPhoneForMatch(typeof leaf.value === 'number' ? String(leaf.value) : leaf.value);
         if (parsed.kind === 'FULL') {
           acc.full++;
-          acc.fullHashes.add(sha256(parsed.phone));
+          addPhoneKey(acc.fullHashes, parsed.phone);
         }
         if (cls === 'MASK_UNPARSED') bump(acc.unparsed, maskForm(leaf.value));
         if (weak && !BUYER_PHONE_PATHS.includes(leaf.path) && visibleDigits(parsed) > visibleDigits(buyer)) acc.better++;
