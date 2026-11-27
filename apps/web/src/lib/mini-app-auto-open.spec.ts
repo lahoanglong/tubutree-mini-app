@@ -14,6 +14,8 @@ import {
   hasStayWebParam,
   isBotUserAgent,
   isExcludedPath,
+  isSmartBarHiddenPath,
+  SMARTBAR_HIDDEN_CHILD_PREFIXES,
   isMobileUserAgent,
   isPrimaryWebHost,
   miniAppBarBootScript,
@@ -112,6 +114,19 @@ describe('decideMiniAppAutoOpen — bảng quyết định', () => {
   ])('trang bị loại %s: không tự mở, không dải', (pathname) => {
     expect(decideMiniAppAutoOpen(ctx({ pathname }))).toEqual(NONE);
     expect(decideMiniAppAutoOpen(ctx({ pathname, webdriver: true }))).toEqual(NONE);
+  });
+
+  it('W46 (PO A2): trang sản phẩm vẫn tự mở (link chia sẻ sang đúng màn Mini App) nhưng không có dải mời; Danh mục /san-pham vẫn có dải', () => {
+    expect(SMARTBAR_HIDDEN_CHILD_PREFIXES).toEqual(['/san-pham']);
+    for (const pathname of ['/san-pham/nuoc-rua-chen', '/san-pham/x/danh-gia', '/SAN-PHAM/abc', '//san-pham/abc', '/san-pham/abc?ref=A1']) {
+      expect(isSmartBarHiddenPath(pathname), pathname).toBe(true);
+      expect(isExcludedPath(pathname), pathname).toBe(false);
+    }
+    for (const pathname of ['/', '/san-pham', '/san-pham?focus=search', '/quet-ma', '/uu-dai', '/cau-chuyen', '/san-phamx/abc', '/hub-san-pham-x']) {
+      expect(isSmartBarHiddenPath(pathname), pathname).toBe(false);
+    }
+    expect(isSmartBarHiddenPath('/gio-hang')).toBe(true);
+    expect(decideMiniAppAutoOpen(ctx({ pathname: '/san-pham/nuoc-rua-chen' }))).toEqual(AUTO);
   });
 
   it('chỉ loại theo ranh giới đoạn: /don-hang-mau, /moi-nhat, /doi-rac, /ctv không bị loại nhầm', () => {
@@ -235,7 +250,7 @@ describe('miniAppBarBootScript — giữ chỗ dải mời trước khi vẽ (W4
 
   it('đủ 5 điều kiện (điện thoại, có cookie tự mở, chưa ở lại, host chính, trang không bị loại): giữ chỗ', () => {
     expect(runBoot({})).toBe(true);
-    expect(runBoot({ cookie: `foo=bar; ${MINI_AUTO_COOKIE}=1; x=y`, ua: ANDROID_CHROME, pathname: '/san-pham/dau-goi' })).toBe(true);
+    expect(runBoot({ cookie: `foo=bar; ${MINI_AUTO_COOKIE}=1; x=y`, ua: ANDROID_CHROME, pathname: '/san-pham' })).toBe(true);
     expect(runBoot({ hostname: 'localhost' })).toBe(true);
   });
 
@@ -251,6 +266,13 @@ describe('miniAppBarBootScript — giữ chỗ dải mời trước khi vẽ (W4
     expect(runBoot({ pathname: '/Dang-Nhap' })).toBe(false);
   });
 
+  it('W46: trang sản phẩm không giữ chỗ (dải không hiện ở đó), Danh mục thì có', () => {
+    expect(runBoot({ pathname: '/san-pham/dau-goi' })).toBe(false);
+    expect(runBoot({ pathname: '/San-Pham/dau-goi' })).toBe(false);
+    expect(runBoot({ pathname: '/san-pham' })).toBe(true);
+    expect(runBoot({ pathname: '/san-phamx/dau-goi' })).toBe(true);
+  });
+
   it('không giữ chỗ cho máy tính, bot hay công cụ xem trước link (dải không bao giờ hiện cho họ)', () => {
     expect(runBoot({ ua: DESKTOP_CHROME })).toBe(false);
     expect(runBoot({ ua: GOOGLEBOT_MOBILE })).toBe(false);
@@ -261,10 +283,12 @@ describe('miniAppBarBootScript — giữ chỗ dải mời trước khi vẽ (W4
     expect(runBoot({ hostname: 'staging.tubutree.vn' }, 'staging.tubutree.vn')).toBe(true);
   });
 
-  it('cùng luật với decideMiniAppAutoOpen ở nhánh "dải mời" (cờ bật) trên một loạt ngữ cảnh', () => {
+  it('cùng luật với decideMiniAppAutoOpen ở nhánh "dải mời" (cờ bật) và isSmartBarHiddenPath trên một loạt ngữ cảnh', () => {
     const cases: Env[] = [
       {},
       { pathname: '/don/ABC' },
+      { pathname: '/san-pham/dau-goi' },
+      { pathname: '/san-pham' },
       { pathname: '/admin' },
       { pathname: '/cau-chuyen' },
       { search: '?stay=web' },
@@ -285,7 +309,7 @@ describe('miniAppBarBootScript — giữ chỗ dải mời trước khi vẽ (W4
         search: env.search ?? '',
         cookies: env.cookie ?? `${MINI_AUTO_COOKIE}=1`,
       };
-      expect(runBoot(env), JSON.stringify(env)).toBe(decideMiniAppAutoOpen(ctx).banner);
+      expect(runBoot(env), JSON.stringify(env)).toBe(decideMiniAppAutoOpen(ctx).banner && !isSmartBarHiddenPath(ctx.pathname));
     }
   });
 
@@ -303,8 +327,11 @@ describe('W44 hằng số lớp phủ và chữ dải mời', () => {
     expect(STAY_LINK_HIDE_MS).toBe(4500);
   });
 
-  it('chữ phụ của dải ngắn gọn một dòng (PO 27/11 10:29)', () => {
-    expect(MINI_APP_AUTO_OPEN_COPY.bannerSub).toBe('Mua nhanh & tích điểm');
-    expect(MINI_APP_AUTO_OPEN_COPY.bannerSub.length).toBeLessThanOrEqual(24);
+  it('W46: chữ dải kiểu Smart App Banner (PO 27/11 22:25): tên app và dòng phụ ngắn, lối ở lại gọn', () => {
+    expect(MINI_APP_AUTO_OPEN_COPY.bannerTitle).toBe('Tubu Tree trên Zalo');
+    expect(MINI_APP_AUTO_OPEN_COPY.bannerSub).toBe('Mua nhanh · Tích điểm Xanh');
+    expect(MINI_APP_AUTO_OPEN_COPY.stayWeb).toBe('Ở lại web');
+    expect(MINI_APP_AUTO_OPEN_COPY.bannerOpen).toBe('Mở');
+    expect(MINI_APP_AUTO_OPEN_COPY.bannerSub.length).toBeLessThanOrEqual(26);
   });
 });

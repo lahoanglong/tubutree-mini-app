@@ -89,9 +89,23 @@ const PRIMARY_HOSTS = new Set(['tubutree.com', 'www.tubutree.com']);
 /** Máy dev và bộ kiểm e2e chạy trên localhost; không có trên PROD. */
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1']);
 
+/**
+ * Trang vẫn được tự mở (link chia sẻ sản phẩm sang đúng màn Mini App) nhưng không có dải mời: chỉ trang con của các đường này, trang gốc vẫn có dải.
+ * `/san-pham/<slug>` (trang sản phẩm, PO 27/11 22:25 A2): nút lùi nổi nằm trên ảnh sản phẩm, dải không chen cạnh nó; `/san-pham` (Danh mục) giữ dải.
+ */
+export const SMARTBAR_HIDDEN_CHILD_PREFIXES: readonly string[] = ['/san-pham'];
+
+const normalizePath = (pathname: string): string => (pathname.split(/[?#]/)[0] ?? '').replace(/\/{2,}/g, '/').toLowerCase();
+
 export function isExcludedPath(pathname: string): boolean {
-  const path = (pathname.split(/[?#]/)[0] ?? '').replace(/\/{2,}/g, '/').toLowerCase();
+  const path = normalizePath(pathname);
   return EXCLUDED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
+/** Trang không vẽ dải mời: trang bị loại hẳn, cộng trang con trong `SMARTBAR_HIDDEN_CHILD_PREFIXES` (vẫn tự mở được). */
+export function isSmartBarHiddenPath(pathname: string): boolean {
+  const path = normalizePath(pathname);
+  return isExcludedPath(path) || SMARTBAR_HIDDEN_CHILD_PREFIXES.some((p) => path.startsWith(`${p}/`));
 }
 
 export function isBotUserAgent(ua: string): boolean {
@@ -166,7 +180,10 @@ export interface AutoOpenContext {
 export interface AutoOpenDecision {
   /** Chuyển ngầm sang Zalo lần này. */
   autoOpen: boolean;
-  /** Hiện dải mời "Mở Tubu Tree trên Zalo" ở đầu nội dung (khi không tự mở). */
+  /**
+   * Phiên này có dải mời "Tubu Tree trên Zalo" ở đầu nội dung (khi không tự mở). Từng trang còn lọc theo `isSmartBarHiddenPath`: vào từ trang sản
+   * phẩm thì dải chưa hiện ở đó, sang Trang chủ hay Danh mục mới hiện.
+   */
   banner: boolean;
 }
 
@@ -192,7 +209,7 @@ export function shouldAutoOpenMiniApp(ctx: AutoOpenContext): boolean {
  * chỉ biết được sau khi cấu hình công khai về và chunk tải lười nạp xong, không giữ thì dải ~66px chèn vào và đẩy cả trang xuống.
  * Đặt `data-miniapp-bar` trên `<html>` khi đủ cả 5 điều kiện của nhánh "dải mời" trong `decideMiniAppAutoOpen` (trừ cờ, chưa biết lúc này):
  * khung nhìn điện thoại (và UA di động, không bot), đã có cookie `tubu_mini_auto=1` (lần trước đã tự mở), chưa chọn ở lại (`tubu_stay_web`,
- * `?stay=web`), host chính và đường dẫn không bị loại. Đoán sai (cờ tắt, chưa tải được cấu hình) thì `mini-app-auto-open.tsx` gỡ thuộc tính.
+ * `?stay=web`), host chính và đường dẫn không bị loại; cộng thêm trang không ẩn dải (`isSmartBarHiddenPath`, vd trang sản phẩm). Đoán sai (cờ tắt, chưa tải được cấu hình) thì `mini-app-auto-open.tsx` gỡ thuộc tính.
  * Hằng số sinh từ cùng nguồn với luật ở trên (JSON), không chép tay.
  */
 export function miniAppBarBootScript(siteHost?: string | null): string {
@@ -203,8 +220,9 @@ export function miniAppBarBootScript(siteHost?: string | null): string {
     `if(!w.matchMedia||!w.matchMedia(${j(MOBILE_MEDIA_QUERY)}).matches)return;` +
     `if(!new RegExp(${j(MOBILE_UA_RE.source)},"i").test(u)||new RegExp(${j(BOT_UA_RE.source)},"i").test(u))return;` +
     `if(${j(hosts)}.indexOf(l.hostname.toLowerCase())<0)return;` +
-    `var p=l.pathname.replace(/\\/{2,}/g,"/").toLowerCase(),x=${j(EXCLUDED_PREFIXES)};` +
-    'for(var i=0;i<x.length;i++)if(p===x[i]||p.indexOf(x[i]+"/")===0)return;' +
+    `var p=l.pathname.replace(/\\/{2,}/g,"/").toLowerCase(),x=${j(EXCLUDED_PREFIXES)},y=${j(SMARTBAR_HIDDEN_CHILD_PREFIXES)},i;` +
+    'for(i=0;i<x.length;i++)if(p===x[i]||p.indexOf(x[i]+"/")===0)return;' +
+    'for(i=0;i<y.length;i++)if(p.indexOf(y[i]+"/")===0)return;' +
     `if(new URLSearchParams(l.search).get(${j(STAY_WEB_PARAM)})===${j(STAY_WEB_VALUE)})return;` +
     'var c={};d.cookie.split(";").forEach(function(s){var k=s.trim().split("=");c[k[0]]=k[1]});' +
     `if(c[${j(STAY_WEB_COOKIE)}]==="1"||c[${j(MINI_AUTO_COOKIE)}]!=="1")return;` +
@@ -212,13 +230,15 @@ export function miniAppBarBootScript(siteHost?: string | null): string {
   );
 }
 
-/** Chữ của lớp phủ và dải mời (chỉ web; Mini App không có màn này). */
+/**
+ * Chữ của lớp phủ và dải mời (chỉ web; Mini App không có màn này). Dải kiểu Smart App Banner của iOS (PO 27/11 22:25 A2): tên app một dòng, dòng
+ * phụ một dòng, cả hai không bị cắt "…" ở 360px (e2e `mini-app-auto-open.web` đo).
+ */
 export const MINI_APP_AUTO_OPEN_COPY = {
   opening: 'Đang mở Tubu Tree trên Zalo…',
-  stayWeb: 'Ở lại bản Web',
-  bannerTitle: 'Mở Tubu Tree trên Zalo',
-  /** Một dòng không bị cắt "…" ở 360px, kể cả trang tràn viền có nút lùi cạnh dải (PO 27/11 10:29). */
-  bannerSub: 'Mua nhanh & tích điểm',
+  stayWeb: 'Ở lại web',
+  bannerTitle: 'Tubu Tree trên Zalo',
+  bannerSub: 'Mua nhanh · Tích điểm Xanh',
   bannerOpen: 'Mở',
   bannerClose: 'Đóng, ở lại bản Web',
 } as const;

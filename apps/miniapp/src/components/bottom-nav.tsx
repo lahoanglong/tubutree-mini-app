@@ -67,7 +67,8 @@ export default function BottomNav() {
         const active = pathname === t.path;
         const count = t.badge === 'active-orders' ? activeOrders : 0;
         const dot = t.badge === 'offers-dot' && offersDot !== null;
-        const remind = t.badge === 'active-orders' && profileDot;
+        // Mỗi tab tối đa một dấu: số đơn đang xử lý thắng chấm nhắc, để hai dấu đỏ không chồng lên một biểu tượng 24px.
+        const remind = t.badge === 'active-orders' && profileDot && count === 0;
         const label =
           count > 0
             ? vi.nav.tabWithActiveOrders(t.label, count)
@@ -128,23 +129,7 @@ export default function BottomNav() {
                 <Icon icon={t.Icon} size="lg" tone={active ? 'brand' : 'muted'} filled={active} />
                 <CountBadge count={count} label={vi.nav.activeOrders(count)} />
                 {remind && <RemindDot testId="profile-dot" />}
-                {dot && (
-                  <span
-                    data-testid="offers-dot"
-                    aria-hidden
-                    style={{
-                      position: 'absolute',
-                      top: -1,
-                      right: -3,
-                      width: 10,
-                      height: 10,
-                      borderRadius: 'var(--radius-pill)',
-                      background: 'var(--color-action-danger-bg)',
-                      border: '2px solid var(--color-bg-surface)',
-                      boxSizing: 'border-box',
-                    }}
-                  />
-                )}
+                {dot && <RemindDot testId="offers-dot" />}
               </span>
             )}
             <Text variant="label" tone={active ? 'brand' : 'tertiary'} style={{ fontWeight: active ? 600 : 500 }}>
@@ -157,7 +142,7 @@ export default function BottomNav() {
   );
 }
 
-/** Chấm nhắc 8px của tab Cá nhân (thông báo chưa đọc): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
+/** Chấm nhắc 8px (tab Cá nhân: thông báo chưa đọc; tab Ưu đãi: việc cần làm): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
 function RemindDot({ testId }: { testId: string }) {
   return <span data-testid={testId} aria-hidden className="tubu-remind-dot" />;
 }

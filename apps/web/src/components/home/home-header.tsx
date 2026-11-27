@@ -44,21 +44,24 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
       <Link
         href="/san-pham?focus=search"
         aria-label={homeText.searchPlaceholder}
-        className="tubu-press flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3.5"
+        className="tubu-press flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] pl-3 pr-2"
       >
         <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
-        <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>
+        <span className="min-w-0 truncate text-caption text-stone-600">{homeText.searchPlaceholder}</span>
       </Link>
-      {isWebRouteReady('/tai-khoan/thong-bao') && (
-        <Link href="/tai-khoan/thong-bao" aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications} className={BUTTON}>
-          <Bell className="h-5 w-5" aria-hidden="true" />
-          <CountBadge count={unreadCount} label={homeText.unreadBadge(unreadCount)} />
+      {/* Chuông và giỏ là một cụm khe 4px, như Mini App (ở đó ô tìm cần chỗ cho chữ gợi ý một dòng cạnh viên thuốc Zalo). */}
+      <div data-testid="home-header-actions" className="flex flex-none items-center gap-1">
+        {isWebRouteReady('/tai-khoan/thong-bao') && (
+          <Link href="/tai-khoan/thong-bao" aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications} className={BUTTON}>
+            <Bell className="h-5 w-5" aria-hidden="true" />
+            <CountBadge count={unreadCount} label={homeText.unreadBadge(unreadCount)} />
+          </Link>
+        )}
+        <Link href="/gio-hang" data-cart-target="" aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'} className={BUTTON}>
+          <ShoppingCart className="h-5 w-5" aria-hidden="true" />
+          <CountBadge count={count} bump />
         </Link>
-      )}
-      <Link href="/gio-hang" data-cart-target="" aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'} className={BUTTON}>
-        <ShoppingCart className="h-5 w-5" aria-hidden="true" />
-        <CountBadge count={count} bump />
-      </Link>
+      </div>
     </div>
   );
 }

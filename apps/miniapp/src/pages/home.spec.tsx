@@ -240,7 +240,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
 
   it('ô tìm là vỏ: chạm mở /browse?focus=search', async () => {
     renderHome();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Tìm sản phẩm' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
   });
 

@@ -113,6 +113,14 @@ describe('BottomNav', () => {
     expect(screen.getByRole('button', { name: 'Ưu đãi, có việc cần làm' })).toBeInTheDocument();
   });
 
+  it('W46: chấm Ưu đãi cùng một chấm 8px với Cá nhân (lớp tubu-remind-dot), không còn chấm 10px vẽ tay', () => {
+    mocks.dot = 'check-in';
+    render(<BottomNav />);
+    const dot = screen.getByTestId('offers-dot');
+    expect(dot).toHaveClass('tubu-remind-dot');
+    expect(dot.getAttribute('style')).toBeNull();
+  });
+
   it('chấm nhắc: tắt thì không có; bật thì chấm 8px ở Cá nhân kèm nhãn đọc, không nhấp nháy; chấm Vườn Xanh nằm ở thẻ Trang chủ, không ở thanh đáy (W42)', () => {
     const none = render(<BottomNav />);
     expect(screen.queryByTestId('profile-dot')).toBeNull();
@@ -146,6 +154,15 @@ describe('BottomNav', () => {
     mocks.reminders = { garden: false, profile: false, checkInElsewhere: true };
     render(<BottomNav />);
     expect(screen.queryByTestId('profile-dot')).toBeNull();
+  });
+
+  it('W46: mỗi tab tối đa một dấu: có số đơn thì chấm nhắc Cá nhân không vẽ kể cả khi hook nhắc còn bật (số và chấm không chồng trên một biểu tượng)', () => {
+    mocks.count = 2;
+    mocks.reminders = { garden: false, profile: true, checkInElsewhere: false };
+    render(<BottomNav />);
+    const tab = screen.getByRole('button', { name: 'Cá nhân, 2 đơn đang xử lý' });
+    expect(screen.queryByTestId('profile-dot')).toBeNull();
+    expect(tab).toHaveTextContent('2');
   });
 
   it('bấm tab khác → navigate; tab đang mở có aria-current=page', () => {

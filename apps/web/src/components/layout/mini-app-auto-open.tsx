@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import Image from 'next/image';
+import { X } from 'lucide-react';
 import type { MiniappAutoOpenResult, MiniappSmartbarAction } from '@tubutree/shared-types';
-import { Button } from '@/components/mini/button';
-import { IconButton } from '@/components/mini/icon-button';
+import tubuLogoMark from '@/assets/tubu-logo-mark.png';
 import { routeTemplate, trackOncePerSession } from '@/lib/analytics';
 import { writeWebCookie } from '@/lib/client-api';
 import {
@@ -20,7 +20,7 @@ import {
   decideMiniAppAutoOpen,
   hasCookie,
   hasStayWebParam,
-  isExcludedPath,
+  isSmartBarHiddenPath,
   miniAppDeepLink,
   searchWithoutStay,
 } from '@/lib/mini-app-auto-open';
@@ -87,7 +87,7 @@ export function MiniAppAutoOpen() {
  *    bấm được nữa) trong khi dải mời đã gắn sẵn bên dưới, rồi chỉ còn dải. Giảm chuyển động thì bỏ bước mờ. Lối "Ở lại bản Web" bấm được suốt lúc
  *    lớp phủ còn, kể cả sau lượt chuyển (khách đang ở hộp hỏi mở app).
  * 4. Dải mời nằm trong luồng ở đầu nội dung (dưới thanh đầu trang, không nổi đè danh sách): "Mở" là cử chỉ thật của khách nên iOS mở được app;
- *    × ẩn 24 giờ (cùng cookie "ở lại bản Web"). Trang bị loại (thanh toán, giỏ, đăng nhập...) không có dải.
+ *    × ẩn 24 giờ (cùng cookie "ở lại bản Web"). Trang bị loại (thanh toán, giỏ, đăng nhập...) và trang sản phẩm không có dải.
  */
 function AutoOpenRunner() {
   const pathname = useShellPathname();
@@ -196,7 +196,7 @@ function AutoOpenRunner() {
   };
 
   const leaving = phase === 'leaving';
-  const showBar = (phase === 'banner' || leaving) && !isExcludedPath(pathname);
+  const showBar = (phase === 'banner' || leaving) && !isSmartBarHiddenPath(pathname);
   // Chưa quyết (`idle`) thì giữ nguyên chỗ script ở <head> đã đoán; quyết xong thì chỗ giữ đi theo đúng việc dải có hiện hay không.
   // Trước khi vẽ: dải vừa gỡ (×, sang trang bị loại) thì ô sập cùng khung hình, không nháy một ô trống.
   useLayoutEffect(() => {
@@ -207,7 +207,7 @@ function AutoOpenRunner() {
     phase === 'opening' || leaving ? (
       <div className="tubu-miniapp-opening" data-testid="miniapp-opening" data-leaving={leaving ? '' : undefined} aria-hidden={leaving || undefined}>
         <div className="tubu-miniapp-opening__card">
-          <Loader2 aria-hidden="true" className="h-6 w-6 animate-spin text-forest-600 motion-reduce:animate-none" />
+          <AppIcon size="lg" />
           <p role="status" aria-live="polite" className="tubu-miniapp-opening__title">
             {COPY.opening}
           </p>
@@ -227,32 +227,50 @@ function AutoOpenRunner() {
   );
 }
 
-/** Dải mời trong luồng ở đầu nội dung: "Mở" là cử chỉ thật của khách (iOS mở được app); × ẩn 24 giờ (cùng cookie "ở lại bản Web"). */
+/** Biểu tượng app (dấu logo Tubu trên ô vuông bo góc), như ô biểu tượng của Smart App Banner trên iOS. Chỉ trang trí: tên app nằm ở chữ bên cạnh. */
+function AppIcon({ size }: { size: 'md' | 'lg' }) {
+  return (
+    <span aria-hidden="true" className="tubu-miniapp-icon" data-size={size}>
+      {/* Ở đầu màn ngay khi hiện: tải ngay, không đợi lazy (ảnh 3 KB, chunk này vốn đã nạp lười chỉ ở điện thoại). */}
+      <Image src={tubuLogoMark} alt="" width={16} height={24} loading="eager" className="tubu-miniapp-icon__mark" />
+    </span>
+  );
+}
+
+/**
+ * Dải mời trong luồng ở đầu nội dung, bố cục Smart App Banner của iOS: × nhỏ màu phụ ở mép trái (ẩn 24 giờ, cùng cookie "ở lại bản Web"), ô biểu
+ * tượng app, tên app và dòng phụ, nút viên thuốc "Mở" ở mép phải ("Mở" là cử chỉ thật của khách nên iOS mở được app). Mọi nút có vùng chạm 44px.
+ */
 function SmartBar({ pathname, onDismiss }: { pathname: string; onDismiss: () => void }) {
   return (
     <section aria-label={COPY.bannerTitle} className="tubu-miniapp-bar" data-testid="miniapp-smartbar">
-      <div className="tubu-miniapp-bar__copy">
-        <span className="tubu-miniapp-bar__title">{COPY.bannerTitle}</span>
-        <span className="tubu-miniapp-bar__sub">{COPY.bannerSub}</span>
-      </div>
-      <Button
-        className="tubu-miniapp-bar__open"
-        onPress={() => {
-          trackSmartbar('open', pathname);
-          window.location.assign(miniAppDeepLink(pathname, window.location.search));
-        }}
-      >
-        {COPY.bannerOpen}
-      </Button>
-      <IconButton
-        icon={X}
-        label={COPY.bannerClose}
-        onPress={() => {
+      <button
+        type="button"
+        aria-label={COPY.bannerClose}
+        className="tubu-miniapp-bar__close tubu-press"
+        onClick={() => {
           writeWebCookie(STAY_WEB_COOKIE, '1', AUTO_OPEN_COOKIE_MAX_AGE_S);
           trackSmartbar('dismiss', pathname);
           onDismiss();
         }}
-      />
+      >
+        <X aria-hidden="true" className="tubu-miniapp-bar__close-icon" />
+      </button>
+      <AppIcon size="md" />
+      <div className="tubu-miniapp-bar__copy">
+        <span className="tubu-miniapp-bar__title">{COPY.bannerTitle}</span>
+        <span className="tubu-miniapp-bar__sub">{COPY.bannerSub}</span>
+      </div>
+      <button
+        type="button"
+        className="tubu-miniapp-bar__open tubu-press"
+        onClick={() => {
+          trackSmartbar('open', pathname);
+          window.location.assign(miniAppDeepLink(pathname, window.location.search));
+        }}
+      >
+        <span className="tubu-miniapp-bar__pill">{COPY.bannerOpen}</span>
+      </button>
     </section>
   );
 }

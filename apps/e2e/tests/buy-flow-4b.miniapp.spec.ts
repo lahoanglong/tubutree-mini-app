@@ -92,9 +92,9 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await expect(page.getByText('Khám phá vườn')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).click();
+    await page.getByRole('button', { name: 'Tìm sản phẩm', exact: true }).click();
     await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 }); // ?focus=search đã được dùng rồi bỏ
-    await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeFocused();
+    await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm', exact: true })).toBeFocused();
   });
 
   test('Việc cần làm: "Đơn … đang giao" mở chi tiết đơn', async ({ page, api }) => {

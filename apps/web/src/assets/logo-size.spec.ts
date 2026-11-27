@@ -28,6 +28,15 @@ describe('logo nhẹ và sát cỡ hiển thị (Pa6)', () => {
     expect(png('tubu-logo-login-2x.png').bytes).toBeLessThan(png('tubu-logo-login.png').bytes);
   });
 
+  it('tubu-logo-mark.png (ô biểu tượng app của dải mời Zalo, W46): dấu logo 60×90 hiện 16×24 nên đủ nét ở máy 3x, nhẹ dưới 4 KB, trùng byte bản của Mini App', () => {
+    const { bytes, w, h } = png('tubu-logo-mark.png');
+    expect([w, h]).toEqual([60, 90]);
+    expect(w).toBeGreaterThanOrEqual(16 * 3);
+    expect(bytes).toBeLessThan(4 * 1024);
+    const mini = fs.readFileSync(path.join(__dirname, '../../../miniapp/src/assets/tubu-logo-mark.png'));
+    expect(fs.readFileSync(path.join(__dirname, 'tubu-logo-mark.png')).equals(mini)).toBe(true);
+  });
+
   it('tubu-logo-home.png (3x) và tubu-logo-home-2x.png: nhẹ dưới 12 KB', () => {
     expect(png('tubu-logo-home.png').bytes).toBeLessThan(12 * 1024);
     expect(png('tubu-logo-home-2x.png').bytes).toBeLessThan(12 * 1024);

@@ -79,7 +79,7 @@ for (const vp of VIEWPORTS) {
       const box = (await strip(page).boundingBox())!;
       const best = (await page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).boundingBox())!;
       const shortcuts = (await page.locator('[data-home-block="shortcuts"]').boundingBox())!;
-      const search = (await page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).boundingBox())!;
+      const search = (await page.getByRole('button', { name: 'Tìm sản phẩm', exact: true }).boundingBox())!;
       expect(box.y).toBeGreaterThan(search.y);
       expect(box.y, 'dải Mua lại nằm dưới kệ Bán chạy nhất').toBeGreaterThanOrEqual(best.y + best.height - 1);
       expect(box.y + box.height, 'dải Mua lại nằm trên lối tắt').toBeLessThanOrEqual(shortcuts.y + 1);

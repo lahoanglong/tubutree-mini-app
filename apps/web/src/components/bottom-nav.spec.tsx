@@ -149,6 +149,9 @@ describe('BottomNav (điện thoại)', () => {
     const out = render('/');
     expect(out).toContain('Ưu đãi, có việc cần làm');
     expect(out).toContain('data-testid="offers-dot"');
+    // W46: cùng chấm 8px với tab Cá nhân (lớp tubu-remind-dot), không còn chấm 10px vẽ tay.
+    expect(out).toMatch(/data-testid="offers-dot"[^>]*class="tubu-remind-dot"/);
+    expect(out).not.toContain('h-2.5 w-2.5');
     offers.dot = null;
     expect(render('/')).not.toContain('offers-dot');
     mocks.ready = (p) => p !== '/uu-dai';
@@ -220,6 +223,11 @@ describe('BottomNav (điện thoại)', () => {
     out = render('/');
     expect(out).not.toContain('data-testid="profile-dot"');
     expect(reminders.args.at(-1)).toEqual([true, 2]);
+    // W46: mỗi tab tối đa một dấu, kể cả khi hook nhắc còn bật lúc đã có số đơn.
+    reminders.profile = true;
+    out = render('/');
+    expect(out).toContain('aria-label="Cá nhân, 2 đơn đang xử lý"');
+    expect(out).not.toContain('data-testid="profile-dot"');
   });
 
   it('cờ tắt: không chấm nhắc, tab Ưu đãi giữ lý do điểm danh', () => {
