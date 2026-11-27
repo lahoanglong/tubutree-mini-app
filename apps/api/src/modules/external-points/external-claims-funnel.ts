@@ -31,7 +31,6 @@ interface SubmissionRow {
   total: Count;
   scan: Count;
   typed: Count;
-  phone_rejected: Count;
 }
 
 interface CreatedRow {
@@ -52,15 +51,21 @@ interface CreditedRow {
 
 interface AttemptRow {
   unmatched: Count;
+  phone_rejected: Count;
 }
 
 /**
  * Phễu đơn sàn → Điểm Xanh → mua lại trên app trong [from, to), chỉ claim SCAN (đơn chat PHONE không phải luồng quét thẻ trong hộp).
- * Bốn truy vấn đọc song song, mỗi cái đi theo index sẵn có: `analytics_events [eventName, occurredAt]`, `external_claim_attempts
- * [result, createdAt]`; bảng claim nhỏ; đơn dò theo `orders [userId, createdAt]` của đúng nhóm khách đã được cộng.
+ * Bốn truy vấn đọc song song: `analytics_events` đi theo index `[eventName, occurredAt]`; bảng claim và bảng lượt gửi mã nhỏ (sổ sự
+ * kiện claim dò theo `[claimId, createdAt]`); đơn dò theo `orders [userId, createdAt]` của đúng nhóm khách đã được cộng.
  *
- * - Lượt gửi và lượt bị từ chối vì SĐT lệch đọc từ `ext_claim_submitted` (lượt bị từ chối không tạo claim).
- * - Chờ duyệt vì SĐT lệch: claim có lý do REVIEW chứa câu SĐT lệch, kể cả khi đã được duyệt sau đó (duyệt không xoá lý do).
+ * - Lượt gửi đọc từ `ext_claim_submitted`.
+ * - Từ chối vì SĐT lệch đọc từ `external_claim_attempts` (`REJECTED_PHONE_MISMATCH`): lúc gửi mã và lúc cron ghép lại đều ghi kết quả này,
+ *   còn sự kiện `ext_claim_submitted` chỉ có ở lúc gửi.
+ * - Chờ duyệt vì SĐT lệch: claim từng vào REVIEW với câu SĐT lệch, đọc từ sổ `external_claim_events` (chỉ thêm dòng). Duyệt xoá
+ *   `reviewReason` của claim, nên chỉ đọc cột đó thì claim đã duyệt và đã cộng rơi khỏi số đếm.
+ * - Chưa thấy đơn: đếm theo MÃ gửi trong kỳ mà tới giờ chưa lượt nào của mã đó tìm thấy đơn (không theo lượt: khách gửi lại sau khi
+ *   lượt chờ hết hạn, hay người thứ hai gửi cùng mã, không đếm thêm).
  * - Khách quay lại mua: gộp tài khoản theo `users.mergedIntoId` (một bước, như báo cáo nguồn khách). Đơn của tài khoản đã gộp vẫn tính
  *   cho tài khoản đích. Chỉ đơn lẻ Mini App/web đặt SAU lần cộng đầu trong kỳ và trước `to`, trạng thái GMV (`GMV_ORDER_SQL`: đang chạy
  *   hoặc đã giao, không gồm đơn thử đã dọn), nên đơn đại lý, đơn chưa rõ nền tảng, đơn chờ thanh toán, huỷ, hoàn không tính.
@@ -78,8 +83,7 @@ export async function loadExternalClaimFunnel(
     prisma.$queryRaw<SubmissionRow[]>`
       SELECT count(*) AS total,
              count(*) FILTER (WHERE e.props->>'via' = 'scan') AS scan,
-             count(*) FILTER (WHERE e.props->>'via' = 'typed') AS typed,
-             count(*) FILTER (WHERE e.props->>'result' = 'REJECT_PHONE_MISMATCH') AS phone_rejected
+             count(*) FILTER (WHERE e.props->>'via' = 'typed') AS typed
         FROM "analytics_events" e
        WHERE e."eventName" = 'ext_claim_submitted'
          AND e."occurredAt" >= ${f}::timestamp
@@ -88,7 +92,15 @@ export async function loadExternalClaimFunnel(
       SELECT count(DISTINCT c."externalOrderId") AS matched,
              count(*) FILTER (WHERE c.state IN ('PENDING', 'REVIEW')) AS pending_claims,
              COALESCE(sum(c.points) FILTER (WHERE c.state IN ('PENDING', 'REVIEW')), 0) AS pending_points,
-             count(*) FILTER (WHERE strpos(COALESCE(c."reviewReason", ''), ${PHONE_MISMATCH_REVIEW_REASON}) > 0) AS phone_review
+             count(*) FILTER (
+               WHERE strpos(COALESCE(c."reviewReason", ''), ${PHONE_MISMATCH_REVIEW_REASON}) > 0
+                  OR EXISTS (
+                    SELECT 1 FROM "external_claim_events" ev
+                     WHERE ev."claimId" = c.id
+                       AND ev."toState" = 'REVIEW'
+                       AND strpos(COALESCE(ev.note, ''), ${PHONE_MISMATCH_REVIEW_REASON}) > 0
+                  )
+             ) AS phone_review
         FROM "external_points_claims" c
        WHERE c.kind = 'SCAN'
          AND c."createdAt" >= ${f}::timestamp
@@ -126,11 +138,20 @@ export async function loadExternalClaimFunnel(
              (SELECT count(*) FROM conv) AS conv_orders,
              (SELECT COALESCE(sum(total), 0) FROM conv) AS conv_gmv`,
     prisma.$queryRaw<AttemptRow[]>`
-      SELECT count(*) AS unmatched
-        FROM "external_claim_attempts" a
-       WHERE a.result IN ('UNMATCHED', 'NOT_FOUND')
-         AND a."createdAt" >= ${f}::timestamp
-         AND a."createdAt" < ${t}::timestamp`,
+      WITH att AS (
+        SELECT a.code, a.result, a."externalOrderId"
+          FROM "external_claim_attempts" a
+         WHERE a."createdAt" >= ${f}::timestamp
+           AND a."createdAt" < ${t}::timestamp
+      ), codes AS (
+        SELECT att.code
+          FROM att
+         GROUP BY att.code
+        HAVING bool_or(att.result IN ('UNMATCHED', 'NOT_FOUND') AND att."externalOrderId" IS NULL)
+           AND NOT bool_or(att.result = 'MATCHED' OR att."externalOrderId" IS NOT NULL)
+      )
+      SELECT (SELECT count(*) FROM codes) AS unmatched,
+             (SELECT count(*) FROM att WHERE att.result = 'REJECTED_PHONE_MISMATCH') AS phone_rejected`,
   ]);
 
   const s = submissions[0];
@@ -144,7 +165,7 @@ export async function loadExternalClaimFunnel(
     to: to.toISOString(),
     submissions: { total: num(s?.total), scan: num(s?.scan), typed: num(s?.typed) },
     matchedOrders: num(c?.matched),
-    phoneMismatch: { rejected: num(s?.phone_rejected), review: num(c?.phone_review) },
+    phoneMismatch: { rejected: num(attempts[0]?.phone_rejected), review: num(c?.phone_review) },
     unmatched: num(attempts[0]?.unmatched),
     pending: { claims: num(c?.pending_claims), points: num(c?.pending_points) },
     credited: { claims: num(k?.credited_claims), points: num(k?.credited_points), users: creditedUsers },

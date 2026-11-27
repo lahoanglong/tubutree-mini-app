@@ -424,7 +424,7 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
       api.fallback('GET', '/admin/analytics/cohort-repeat', []);
       api.fallback('GET', '/admin/analytics/funnel-daily', []);
-      // Tab "Tích điểm đơn sàn" (admin) hỏi phễu đơn sàn → điểm → mua lại mỗi lần mở: mặc định kỳ 30 ngày chưa có lượt gửi mã nào.
+      // Phễu đơn sàn → điểm → mua lại của tab "Tích điểm đơn sàn" (admin): mặc định kỳ 30 ngày chưa có lượt gửi mã nào.
       api.fallback('GET', '/admin/external-claims/funnel', {
         period: '30d',
         from: '2026-10-28T03:00:00.000Z',

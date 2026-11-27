@@ -19,6 +19,7 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
   const userIds: string[] = [];
   const orderIds: string[] = [];
   const eventIds: string[] = [];
+  const claimIds: string[] = [];
   const base = Date.UTC(2000 + Math.floor(Math.random() * 3), 0, 15, 5);
   let slot = 0;
   /** Lúc tính của ca tiếp theo: mỗi ca một kỳ 30 ngày riêng, không chồng nhau. */
@@ -31,6 +32,7 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
   });
   afterAll(async () => {
     await prisma.analyticsEvent.deleteMany({ where: { eventId: { in: eventIds } } });
+    await prisma.externalClaimEvent.deleteMany({ where: { claimId: { in: claimIds } } });
     await prisma.externalClaimAttempt.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.externalPointsClaim.deleteMany({ where: { externalOrderId: { in: orderIds } } });
     await prisma.externalOrder.deleteMany({ where: { id: { in: orderIds } } });
@@ -53,6 +55,8 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     points?: number;
     creditedAt?: Date | null;
     reviewReason?: string | null;
+    /** Sự kiện vào REVIEW trong sổ claim, đúng như luồng thật ghi (`CLAIM_CREATED`/`ATTACH`/`TO_REVIEW` kèm lý do ở `note`). */
+    reviewEvent?: { action: string; note: string };
   }) {
     const code = `SPX${randCode(10)}`;
     const ext = await prisma.externalOrder.create({
@@ -70,7 +74,7 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     });
     orderIds.push(ext.id);
     const state = o.state ?? 'PENDING';
-    return prisma.externalPointsClaim.create({
+    const row = await prisma.externalPointsClaim.create({
       data: {
         externalOrderId: ext.id,
         userId: o.userId,
@@ -85,6 +89,13 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
         createdAt: o.at,
       },
     });
+    claimIds.push(row.id);
+    if (o.reviewEvent) {
+      await prisma.externalClaimEvent.create({
+        data: { claimId: row.id, action: o.reviewEvent.action, fromState: null, toState: 'REVIEW', userIdAfter: o.userId, note: o.reviewEvent.note, createdAt: o.at },
+      });
+    }
+    return row;
   }
 
   async function submitted(userId: string, at: Date, props: Record<string, unknown>) {
@@ -95,10 +106,12 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     });
   }
 
-  async function attempt(userId: string, at: Date, result: string) {
+  async function attempt(userId: string, at: Date, result: string, o: { code?: string; externalOrderId?: string | null; resolvedAt?: Date | null } = {}) {
+    const code = o.code ?? `SPX${randCode(10)}`;
     await prisma.externalClaimAttempt.create({
-      data: { userId, code: `SPX${randCode(10)}`, result, dayKey: at.toISOString().slice(0, 10), createdAt: at },
+      data: { userId, code, result, externalOrderId: o.externalOrderId ?? null, resolvedAt: o.resolvedAt ?? null, dayKey: at.toISOString().slice(0, 10), createdAt: at },
     });
+    return code;
   }
 
   async function order(userId: string, at: Date, o: { total?: number; status?: OrderStatus; platform?: string | null; type?: OrderType } = {}) {
@@ -126,16 +139,24 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     await submitted(b.id, t(17), { via: 'typed', result: 'REJECT_PHONE_MISMATCH' });
     await submitted(c.id, t(16), { result: 'SEARCHING' });
 
-    await claim({ userId: a.id, at: t(20), state: 'CREDITED', points: 2_000, creditedAt: t(10) });
-    await claim({ userId: a.id, at: t(19), state: 'REVIEW', points: 700, reviewReason: `${PHONE_MISMATCH_REVIEW_REASON}; Đơn giá trị lớn` });
-    await claim({ userId: b.id, at: t(18), state: 'PENDING', points: 1_300 });
-    await claim({ userId: b.id, at: t(18), state: 'CREDITED', points: 900, creditedAt: t(5), reviewReason: ATTACH_PHONE_MISMATCH_REASON });
-    await claim({ userId: c.id, at: t(15), state: 'VOIDED', points: 400 });
+    const mismatch = `${PHONE_MISMATCH_REVIEW_REASON}; Đơn giá trị lớn`;
+    const c1 = await claim({ userId: a.id, at: t(20), state: 'CREDITED', points: 2_000, creditedAt: t(10) });
+    const c2 = await claim({ userId: a.id, at: t(19), state: 'REVIEW', points: 700, reviewReason: mismatch, reviewEvent: { action: 'CLAIM_CREATED', note: mismatch } });
+    const c3 = await claim({ userId: b.id, at: t(18), state: 'PENDING', points: 1_300 });
+    // Nhân viên gắn tay đơn SĐT lệch → REVIEW → duyệt (xoá reviewReason) → cộng: vẫn là một ca SĐT lệch phải duyệt.
+    await claim({ userId: b.id, at: t(18), state: 'CREDITED', points: 900, creditedAt: t(5), reviewEvent: { action: 'ATTACH', note: `Gắn tay | ${ATTACH_PHONE_MISMATCH_REASON}` } });
+    await claim({ userId: c.id, at: t(15), state: 'VOIDED', points: 400, reviewEvent: { action: 'CLAIM_CREATED', note: 'Đơn giá trị lớn' } });
 
-    await attempt(c.id, t(16), 'UNMATCHED');
+    // Mã chờ của c và lượt NOT_FOUND của b cùng mã: một mã chưa thấy đơn. Mã thứ hai chỉ có NOT_FOUND.
+    const waiting = await attempt(c.id, t(16), 'UNMATCHED');
+    await attempt(b.id, t(15), 'NOT_FOUND', { code: waiting });
     await attempt(c.id, t(14), 'NOT_FOUND');
-    await attempt(c.id, t(13), 'MATCHED');
-    await attempt(b.id, t(17), 'REJECTED_PHONE_MISMATCH');
+    // Mã đã được ghép (MATCHED) dù có lượt NOT_FOUND của người khác: đã thấy đơn, không đếm.
+    const found = await attempt(c.id, t(13), 'MATCHED', { externalOrderId: c1.externalOrderId, resolvedAt: t(12) });
+    await attempt(a.id, t(13), 'NOT_FOUND', { code: found });
+    // Nguồn đơn chưa xác định: vẫn UNMATCHED nhưng đã thấy đơn.
+    await attempt(a.id, t(12), 'UNMATCHED', { externalOrderId: c2.externalOrderId });
+    await attempt(b.id, t(17), 'REJECTED_PHONE_MISMATCH', { externalOrderId: c3.externalOrderId, resolvedAt: t(17) });
 
     await order(a.id, t(8), { total: 350_000, platform: 'miniapp' });
     await order(a.id, t(2), { total: 150_000, status: 'DELIVERED', platform: 'web' });
@@ -241,6 +262,7 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     const u = await mkUser();
     const old = t(31);
     await submitted(u.id, old, { via: 'scan', result: 'REJECT_PHONE_MISMATCH' });
+    await attempt(u.id, old, 'REJECTED_PHONE_MISMATCH', { resolvedAt: old });
     await claim({ userId: u.id, at: old, state: 'CREDITED', creditedAt: old });
     await claim({ userId: u.id, at: old, state: 'PENDING' });
     await attempt(u.id, old, 'UNMATCHED');
@@ -249,6 +271,7 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     await submitted(u.id, now, { via: 'typed', result: 'CLAIMED' });
     await claim({ userId: u.id, at: now, state: 'CREDITED', creditedAt: now });
     await attempt(u.id, now, 'NOT_FOUND');
+    await attempt(u.id, now, 'REJECTED_PHONE_MISMATCH', { resolvedAt: now });
 
     const f30 = await loadExternalClaimFunnel(prisma, '30d', now);
     expect(f30).toMatchObject({
@@ -290,15 +313,21 @@ describe('Phễu tích điểm đơn sàn (real Postgres)', () => {
     expect(f.converted).toEqual({ users: 1, orders: 1, gmv: 300_000, rate: 1 });
   });
 
-  it('9. lượt bị từ chối vì SĐT lệch đếm từ sự kiện phân tích (không tạo claim, không cần dòng attempt)', async () => {
+  it('9. từ chối vì SĐT lệch: lúc gửi (sự kiện REJECT_PHONE_MISMATCH + lượt gửi) đếm một lần; lúc cron ghép lại (chỉ lượt gửi) cũng đếm', async () => {
     const now = nextNow();
     const t = (daysAgo: number) => new Date(now.getTime() - daysAgo * DAY);
     const u = await mkUser();
     const v = await mkUser();
+    // Gửi mã bị từ chối ngay: luồng thật ghi cả sự kiện lẫn lượt gửi REJECTED_PHONE_MISMATCH.
     await submitted(u.id, t(3), { via: 'scan', result: 'REJECT_PHONE_MISMATCH', channel: 'shopee' });
+    await attempt(u.id, t(3), 'REJECTED_PHONE_MISMATCH');
     await submitted(u.id, t(2), { via: 'typed', result: 'REJECT_PHONE_MISMATCH', channel: 'tiktok' });
+    await attempt(u.id, t(2), 'REJECTED_PHONE_MISMATCH');
     await submitted(v.id, t(2), { via: 'scan', result: 'REJECT_CLOSED' });
-    await submitted(v.id, t(1), { result: 'REJECT_PHONE_MISMATCH' });
+    await attempt(v.id, t(2), 'REJECTED_CLOSED');
+    // Gửi lúc chưa thấy đơn (SEARCHING), cron ghép lại sau đó và từ chối vì SĐT lệch: lượt UNMATCHED đổi kết quả, không có sự kiện mới.
+    await submitted(v.id, t(1), { result: 'SEARCHING' });
+    await attempt(v.id, t(1), 'REJECTED_PHONE_MISMATCH', { resolvedAt: now });
 
     const f = await loadExternalClaimFunnel(prisma, '7d', now);
     expect(f.submissions).toEqual({ total: 4, scan: 2, typed: 1 });

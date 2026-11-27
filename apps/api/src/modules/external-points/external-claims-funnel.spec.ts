@@ -45,10 +45,10 @@ describe('funnelRange', () => {
 describe('loadExternalClaimFunnel', () => {
   it('ánh xạ bigint sang số và dựng đúng DTO', async () => {
     const prisma = fakePrisma({
-      submissions: [{ total: 12n, scan: 7n, typed: 4n, phone_rejected: 2n }],
+      submissions: [{ total: 12n, scan: 7n, typed: 4n }],
       created: [{ matched: 6n, pending_claims: 3n, pending_points: 4500n, phone_review: 1n }],
       credited: [{ credited_claims: 4n, credited_points: 9000n, credited_users: 3n, conv_users: 2n, conv_orders: 5n, conv_gmv: 3_250_000_000n }],
-      attempts: [{ unmatched: 3n }],
+      attempts: [{ unmatched: 3n, phone_rejected: 2n }],
     });
     const out = await loadExternalClaimFunnel(prisma, '30d', NOW);
     expect(out).toEqual<ExternalClaimFunnel>({
@@ -96,6 +96,8 @@ describe('loadExternalClaimFunnel', () => {
     expect(text).toContain("o.type = 'RETAIL'");
     expect(text).toContain("o.platform IN ('miniapp', 'web')");
     expect(text).toContain('"mergedIntoId"');
+    expect(text).toContain('"external_claim_events"');
+    expect(text).toContain("'REJECTED_PHONE_MISMATCH'");
     expect(values).toContain(PHONE_MISMATCH_REVIEW_REASON);
     expect(values).toContain(new Date(NOW.getTime() - 90 * DAY_MS).toISOString());
     expect(values).toContain(NOW.toISOString());

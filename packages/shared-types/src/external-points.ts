@@ -252,9 +252,12 @@ export interface ExternalClaimFunnel {
   submissions: { total: number; scan: number; typed: number };
   /** Số đơn sàn có claim SCAN tạo trong kỳ. */
   matchedOrders: number;
-  /** `rejected`: lượt gửi bị từ chối vì SĐT trên đơn lệch; `review`: claim SCAN tạo trong kỳ phải chờ duyệt vì SĐT lệch. */
+  /**
+   * `rejected`: lượt gửi mã trong kỳ bị từ chối vì SĐT trên đơn lệch, cả lúc gửi lẫn lúc hệ thống ghép lại; `review`: claim SCAN tạo trong kỳ
+   * từng phải chờ duyệt vì SĐT lệch (kể cả đã duyệt, đã cộng sau đó).
+   */
   phoneMismatch: { rejected: number; review: number };
-  /** Lượt gửi mã tạo trong kỳ mà tới giờ vẫn chưa thấy đơn (`UNMATCHED`, `NOT_FOUND`). */
+  /** Số mã gửi trong kỳ mà tới giờ chưa lượt nào tìm thấy đơn (đếm theo mã, không theo lượt gửi). */
   unmatched: number;
   /** Claim SCAN tạo trong kỳ đang chờ cộng hoặc chờ duyệt, và số điểm của chúng. */
   pending: { claims: number; points: number };
