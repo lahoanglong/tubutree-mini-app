@@ -1,4 +1,4 @@
-import { orderPhoneMatch, parseOrderPhoneForMatch, phoneMatchesOrderMask, visibleDigits, type OrderPhoneMatch } from './order-phone-match';
+import { orderPhoneMatch, parseOrderPhoneForMatch, phoneMatchesOrderMask, recipientLast4MatchesOrder, visibleDigits, type OrderPhoneMatch } from './order-phone-match';
 
 const USER = '0981234526';
 
@@ -112,5 +112,30 @@ describe('parseOrderPhoneForMatch + phoneMatchesOrderMask: SĐT che số trên �
     expect(lead3).toBe(5);
     expect(tail2).toBe(2);
     expect(visibleDigits(parseOrderPhoneForMatch('*********'))).toBe(0);
+  });
+});
+
+describe('recipientLast4MatchesOrder: 4 số cuối SĐT người nhận (W46)', () => {
+  const rows: [order: { phone: string | null; phoneMask?: string | null }, last4: string, ok: boolean, why: string][] = [
+    [{ phone: null, phoneMask: '0*26' }, '8326', true, 'Shopee 0*26: 2 số đuôi khớp'],
+    [{ phone: null, phoneMask: '0*26' }, '8327', false, 'Shopee 0*26: đuôi khác'],
+    [{ phone: null, phoneMask: '098*****26' }, '1126', true, 'Shopee 3 đầu + 2 cuối: chỉ so đuôi trong 4 số cuối'],
+    [{ phone: null, phoneMask: '******526' }, '4526', true, 'TikTok 3 số đuôi khớp'],
+    [{ phone: null, phoneMask: '******526' }, '4527', false, 'TikTok 3 số đuôi: số cuối khác'],
+    [{ phone: null, phoneMask: '******526' }, '4626', false, 'TikTok 3 số đuôi: số giữa khác'],
+    [{ phone: null, phoneMask: '0981234*26' }, '4926', true, 'mẫu theo vị trí: 4 số cuối là 4*26, số bị che nhận mọi giá trị'],
+    [{ phone: null, phoneMask: '0981234*26' }, '5926', false, 'mẫu theo vị trí: số thứ 7 nhìn thấy (4) phải khớp'],
+    [{ phone: null, phoneMask: '098123*526' }, '3526', true, 'mẫu theo vị trí: dấu che nằm trong 4 số cuối thì bỏ qua'],
+    [{ phone: '0987654321', phoneMask: null }, '4321', true, 'Lazada số đầy đủ khớp 4 số cuối'],
+    [{ phone: '0987654321', phoneMask: null }, '9921', false, 'Lazada số đầy đủ: 2 số cuối đúng chưa đủ'],
+    [{ phone: '0987654321', phoneMask: '******26' }, '4321', true, 'có số đầy đủ thì không xét mẫu che'],
+    [{ phone: null, phoneMask: '*********' }, '1234', false, 'che hết: không có gì để so'],
+    [{ phone: null, phoneMask: null }, '1234', false, 'không có SĐT'],
+    [{ phone: null, phoneMask: '0*26' }, '826', false, 'không đủ 4 số'],
+    [{ phone: null, phoneMask: '0*26' }, '83a6', false, 'có ký tự không phải số'],
+    [{ phone: null, phoneMask: '0*26' }, ' 8326', false, 'khoảng trắng không được tự cắt ở đây (DTO đã kiểm)'],
+  ];
+  it.each(rows)('%j + %s → %s (%s)', (order, last4, ok) => {
+    expect(recipientLast4MatchesOrder(last4, order)).toBe(ok);
   });
 });

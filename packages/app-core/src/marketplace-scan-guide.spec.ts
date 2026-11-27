@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanSuccessCtaLabel } from './marketplace-scan-guide';
+import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanGuideCollapsed, scanSuccessCtaLabel } from './marketplace-scan-guide';
 
 describe('marketplaceScanSteps', () => {
   it('bước 2 đọc tỉ lệ từ cấu hình, không ghi cứng', () => {
@@ -52,5 +52,19 @@ describe('MARKETPLACE_SCAN_COPY: web và Mini App đều gửi mã được (W44
     expect(MARKETPLACE_SCAN_COPY.webSoonBody).toContain('trên web');
     expect(MARKETPLACE_SCAN_COPY.webSoonBody).toContain('Zalo');
     expect(Object.keys(MARKETPLACE_SCAN_COPY)).not.toContain('webWhy');
+  });
+});
+
+describe('scanGuideCollapsed (W46)', () => {
+  it('lịch sử rỗng: mở đủ 3 bước cho khách mới', () => {
+    expect(scanGuideCollapsed({ meta: { total: 0 }, searching: [] })).toBe(false);
+  });
+  it('đã có đơn, có mã đang tìm hay lịch sử chưa về: gập một dòng', () => {
+    expect(scanGuideCollapsed({ meta: { total: 2 }, searching: [] })).toBe(true);
+    expect(scanGuideCollapsed({ meta: { total: 0 }, searching: [{}] })).toBe(true);
+    expect(scanGuideCollapsed(undefined)).toBe(true);
+  });
+  it('dòng gập ngắn, không thuật ngữ cấm', () => {
+    expect(MARKETPLACE_SCAN_COPY.guideToggle).toBe('Hướng dẫn quét mã');
   });
 });

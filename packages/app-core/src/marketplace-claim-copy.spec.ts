@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { MARKETPLACE_CLAIM_COPY, MARKETPLACE_CLAIM_WEB_COPY, claimDetail, claimResultDetail, claimStateView, isPastMilestone } from './marketplace-claim-copy';
+import {
+  MARKETPLACE_CLAIM_COPY,
+  MARKETPLACE_CLAIM_WEB_COPY,
+  PHONE_CONFIRM_COPY,
+  claimDetail,
+  claimResultDetail,
+  claimStateView,
+  isPastMilestone,
+  marketplaceChannelName,
+  phoneConfirmErrorText,
+} from './marketplace-claim-copy';
 import { EXTERNAL_CLAIM_REJECT_CODES } from './api/external-points';
 
 describe('MARKETPLACE_CLAIM_COPY', () => {
@@ -26,8 +36,46 @@ describe('MARKETPLACE_CLAIM_WEB_COPY', () => {
     expect(MARKETPLACE_CLAIM_WEB_COPY.notVerified).toContain('xác minh qua Zalo');
   });
 
-  it('lối chụp/chọn ảnh mã vận đơn dùng đúng chữ trong đề bài (W45)', () => {
-    expect(MARKETPLACE_CLAIM_WEB_COPY.photoCta).toBe('Chụp/chọn ảnh mã vận đơn');
+  it('camera trước (W46): hai lối phụ và câu nhắc trong khung đúng chữ đề bài', () => {
+    expect(MARKETPLACE_CLAIM_WEB_COPY.photoCta).toBe('Chụp / chọn ảnh');
+    expect(MARKETPLACE_CLAIM_WEB_COPY.manualCta).toBe('Nhập mã thủ công');
+    expect(MARKETPLACE_CLAIM_WEB_COPY.cameraStart).toBe('Bật camera quét ngay');
+    expect(MARKETPLACE_CLAIM_WEB_COPY.viewfinderHint).toBe('Đưa mã vạch/QR trên phiếu giao hàng vào khung');
+  });
+
+  it('câu cắt gọn (W46): tối đa 12 từ', () => {
+    const words = (t: string) => t.trim().split(/\s+/).length;
+    for (const t of [MARKETPLACE_CLAIM_COPY.inputHelp, MARKETPLACE_CLAIM_COPY.scanNoCode, MARKETPLACE_CLAIM_WEB_COPY.notVerified]) {
+      expect(words(t)).toBeLessThanOrEqual(12);
+    }
+  });
+});
+
+describe('PHONE_CONFIRM_COPY (W46): xác nhận 4 số cuối SĐT người nhận', () => {
+  it('chữ đúng đề bài, tên sàn theo channel', () => {
+    expect(PHONE_CONFIRM_COPY.title).toBe('Xác nhận SĐT nhận hàng');
+    expect(PHONE_CONFIRM_COPY.label(marketplaceChannelName('shopee'))).toBe('Nhập 4 số cuối SĐT nhận hàng trên đơn Shopee');
+    expect(PHONE_CONFIRM_COPY.label(marketplaceChannelName('tiktok'))).toBe('Nhập 4 số cuối SĐT nhận hàng trên đơn TikTok Shop');
+    expect(PHONE_CONFIRM_COPY.label(marketplaceChannelName('lazada'))).toBe('Nhập 4 số cuối SĐT nhận hàng trên đơn Lazada');
+    expect(PHONE_CONFIRM_COPY.label(marketplaceChannelName(null))).toBe('Nhập 4 số cuối SĐT nhận hàng trên đơn sàn TMĐT');
+    expect(PHONE_CONFIRM_COPY.note('Shopee')).toBe(
+      'Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng Shopee (có thể khác SĐT tài khoản hiện tại của bạn).',
+    );
+    expect(PHONE_CONFIRM_COPY.submit).toBe('Xác nhận & Tích điểm');
+    expect(PHONE_CONFIRM_COPY.other).toBe('Quét đơn khác');
+  });
+
+  it('sàn lạ (không có trong bảng) dùng tên chung, không in nguyên giá trị API', () => {
+    expect(marketplaceChannelName('tiki')).toBe('sàn TMĐT');
+    expect(marketplaceChannelName(undefined)).toBe('sàn TMĐT');
+  });
+
+  it('câu lỗi theo mã: sai kèm lượt còn lại, khoá, lần hỏi đầu không báo lỗi', () => {
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_REQUIRED', null)).toBeNull();
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', 2)).toBe('4 số cuối chưa khớp (còn 2 lượt thử)');
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', null)).toBe('4 số cuối chưa khớp.');
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', 0)).toBe('4 số cuối chưa khớp.');
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_LOCKED', 0)).toBe(PHONE_CONFIRM_COPY.locked);
   });
 });
 

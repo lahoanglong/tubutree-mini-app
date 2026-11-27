@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Page, useLocation } from 'zmp-ui';
 import { canPop, useSmartNavigate } from '../lib/smart-nav';
 import { isBackableRoot } from '../components/nav-config';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
 import {
+  externalClaimPhoneConfirm,
   externalClaimRejectCode,
   getMyExternalClaims,
   submitExternalClaim,
@@ -22,11 +23,19 @@ import { trackEvent } from '../services/analytics';
 import { useCardGiftNote } from '../services/card-gift-note';
 import { getSessionAttribution, type LaunchAttribution } from '../utils/entry-source';
 import { extractClaimCode, normalizeClaimCode } from '@tubutree/app-core/claim-code';
-import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
-import { DEAD_CLAIM_STATES, claimDetail as claimDetailOf, claimResultDetail, claimStateView, isPastMilestone } from '@tubutree/app-core/marketplace-claim-copy';
+import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanGuideCollapsed, scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
+import {
+  DEAD_CLAIM_STATES,
+  claimDetail as claimDetailOf,
+  claimResultDetail,
+  claimStateView,
+  isPastMilestone,
+  phoneConfirmErrorText,
+} from '@tubutree/app-core/marketplace-claim-copy';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { PhoneConfirmSheet } from '../components/loyalty/phone-confirm-sheet';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -74,20 +83,42 @@ function claimDetail(item: MyExternalClaimItem): string | null {
 
 /**
  * Hướng dẫn 3 bước ở đầu màn khi tính năng đã mở (kể cả khi chưa đăng nhập), gọn dưới 120px; chưa mở thì không hứa tỉ lệ tích, chỉ còn màn
- * "sắp mở". Tỉ lệ tích đơn sàn đọc từ cấu hình công khai, cùng chữ với web `/quet-ma` (`marketplace-scan-guide.ts`).
+ * "sắp mở". Tỉ lệ tích đơn sàn đọc từ cấu hình công khai, cùng chữ với web `/quet-ma` (`marketplace-scan-guide.ts`). `collapsed` (W46, khách đã
+ * có đơn sàn, luật `scanGuideCollapsed`): chỉ còn dòng "Hướng dẫn quét mã", chạm để mở 3 bước.
  */
-export function ScanGuide({ marketplaceEarnPct }: { marketplaceEarnPct: number | null | undefined }) {
+export function ScanGuide({ marketplaceEarnPct, collapsed = false }: { marketplaceEarnPct: number | null | undefined; collapsed?: boolean }) {
+  const listId = useId();
+  const [expanded, setExpanded] = useState(false);
+  const showList = !collapsed || expanded;
   return (
-    <ol className="tubu-scan-guide" aria-label={MARKETPLACE_SCAN_COPY.guideTitle} data-testid="scan-guide">
-      {marketplaceScanSteps(marketplaceEarnPct).map((step, i) => (
-        <li key={step} className="tubu-scan-guide__step">
-          <span aria-hidden="true" className="tubu-scan-guide__num">
-            {i + 1}
-          </span>
-          <span className="tubu-scan-guide__text">{step}</span>
-        </li>
-      ))}
-    </ol>
+    <>
+      {collapsed && (
+        <button
+          type="button"
+          className="tubu-scan-guide-toggle tubu-hit-44"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          data-testid="scan-guide-toggle"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <Info aria-hidden="true" />
+          {MARKETPLACE_SCAN_COPY.guideToggle}
+          <ChevronDown aria-hidden="true" className="tubu-scan-guide-toggle__chevron" />
+        </button>
+      )}
+      {showList && (
+        <ol id={listId} className="tubu-scan-guide" aria-label={MARKETPLACE_SCAN_COPY.guideTitle} data-testid="scan-guide">
+          {marketplaceScanSteps(marketplaceEarnPct).map((step, i) => (
+            <li key={step} className="tubu-scan-guide__step">
+              <span aria-hidden="true" className="tubu-scan-guide__num">
+                {i + 1}
+              </span>
+              <span className="tubu-scan-guide__text">{step}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
   );
 }
 
@@ -244,6 +275,16 @@ function OaInvite({ onDone }: { onDone: (note: string | null) => void }) {
   );
 }
 
+/** Đang hỏi 4 số cuối SĐT người nhận (W46): mã và cách nhập để gửi lại, sàn của đơn, câu lỗi máy chủ trả và đơn đã bị khoá chưa. */
+interface PhoneConfirm {
+  code: string;
+  via: 'scan' | 'typed';
+  channel: string | null;
+  error: string | null;
+  locked: boolean;
+  attempt: number;
+}
+
 function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { fromCard: boolean; channel: string | null; initialCode: string; codeParamRejected: boolean }) {
   const qc = useQueryClient();
   const hasPhone = useAuthStore((s) => !!s.user?.phone);
@@ -256,6 +297,7 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
   const [phoneDeclined, setPhoneDeclined] = useState(false);
   const [result, setResult] = useState<SubmitExternalClaimResponse | null>(null);
   const [rejectedCode, setRejectedCode] = useState<{ reject: string; code: string } | null>(null);
+  const [confirm, setConfirm] = useState<PhoneConfirm | null>(null);
   const [oaState, setOaState] = useState<'unknown' | 'ask' | 'done'>(hasOA ? 'unknown' : 'done');
   const [oaNote, setOaNote] = useState<string | null>(null);
   const scanning = useRef(false);
@@ -298,10 +340,12 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
   // Khoá của Button chỉ giữ tới khi Promise của `send` xong (ngay sau mutate khi đã có SĐT) và không phủ nút `sharePhone`;
   // khoá này giữ tới khi API trả lời, chung cho cả gõ tay, quét QR và chia sẻ SĐT.
   const submit = useLockedMutation({
-    mutationFn: (v: { code: string; via: 'scan' | 'typed' }) => submitExternalClaim(v.code, v.via),
+    mutationFn: (v: { code: string; via: 'scan' | 'typed'; last4?: string }) =>
+      v.last4 ? submitExternalClaim(v.code, v.via, v.last4) : submitExternalClaim(v.code, v.via),
     onSuccess: (r) => {
       haptic('medium');
       setResult(r);
+      setConfirm(null);
       setError(null);
       setNotice(null);
       setRejectedCode(null);
@@ -314,6 +358,28 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
     onError: (e, v) => {
       setResult(null);
       setNotice(null);
+      const prompt = externalClaimPhoneConfirm(e);
+      if (prompt) {
+        // SĐT người nhận trên đơn khác SĐT tài khoản (W46): hỏi 4 số cuối rồi gửi lại đúng mã đó; sai, khoá thì báo trong hộp.
+        if (prompt.code !== 'PHONE_CONFIRM_REQUIRED') haptic('light');
+        setError(null);
+        setRejectedCode(null);
+        setConfirm((c) => ({
+          code: v.code,
+          via: v.via,
+          channel: prompt.channel ?? c?.channel ?? null,
+          error: phoneConfirmErrorText(prompt.code, prompt.remainingAttempts),
+          locked: prompt.code === 'PHONE_CONFIRM_LOCKED',
+          attempt: (c?.attempt ?? 0) + 1,
+        }));
+        return undefined;
+      }
+      // Mất mạng hay máy chủ lỗi khi đang ở hộp 4 số: báo ngay trong hộp, khách gửi lại được mà không mất mã.
+      if (v.last4 && !externalClaimRejectCode(e) && !isStaleStateError(e)) {
+        setConfirm((c) => (c ? { ...c, error: getErrorMessage(e), attempt: c.attempt + 1 } : c));
+        return undefined;
+      }
+      setConfirm(null);
       const rejected = externalClaimRejectCode(e);
       const blockedAccount = rejected === 'NOT_ELIGIBLE_USER' && hasPhone;
       setError(blockedAccount ? ACCOUNT_NOT_ELIGIBLE : rejected ? t.reject[rejected] : getErrorMessage(e));
@@ -403,6 +469,14 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
     }
   };
 
+  const scanAnother = () => {
+    setConfirm(null);
+    setCode('');
+    setScanned(null);
+    setError(null);
+    void scan();
+  };
+
   const oaDone = (note: string | null) => {
     setOaState('done');
     setOaNote(note);
@@ -489,6 +563,20 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
       )}
       {shopNow && <ShopNowButton />}
       {showOaInvite && <OaInvite onDone={oaDone} />}
+      <PhoneConfirmSheet
+        open={confirm !== null}
+        channel={confirm?.channel ?? null}
+        error={confirm?.error ?? null}
+        locked={confirm?.locked ?? false}
+        pending={submit.isPending}
+        attempt={confirm?.attempt ?? 0}
+        onSubmit={(last4) => {
+          if (confirm) submit.mutate({ code: confirm.code, via: confirm.via, last4 });
+        }}
+        onOther={scanAnother}
+        onClose={() => setConfirm(null)}
+        onSupport={hasOA && confirm ? () => openOAChat(t.chatSupportMessage(maskForSupport(confirm.code))) : undefined}
+      />
       {oaNote && (
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 8 }}>
           <span role="status">{oaNote}</span>
@@ -527,7 +615,14 @@ export default function ExternalPointsPage() {
   const initialCode = extractClaimCode(codeParam).code ?? '';
   const codeParamRejected = !!codeParam?.trim() && !initialCode;
 
-  const guide = enabled ? <ScanGuide marketplaceEarnPct={cfgQ.data?.loyalty?.marketplaceEarnPct} /> : null;
+  // Cùng khoá trang 1 với `ClaimList` nên không gọi API thêm lần nào.
+  const historyQ = useQuery({
+    queryKey: ['external-claims', 1],
+    queryFn: () => getMyExternalClaims(1, PAGE_SIZE),
+    enabled: enabled && phase === 'authenticated',
+  });
+  const guideCollapsed = phase === 'guest' || phase === 'unavailable' ? false : scanGuideCollapsed(historyQ.data);
+  const guide = enabled ? <ScanGuide marketplaceEarnPct={cfgQ.data?.loyalty?.marketplaceEarnPct} collapsed={guideCollapsed} /> : null;
   let body;
   if (cfgQ.isError) {
     body = <ErrorState message={getLoadErrorMessage(cfgQ.error)} onRetry={() => cfgQ.refetch()} />;

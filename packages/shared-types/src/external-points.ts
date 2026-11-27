@@ -30,8 +30,30 @@ export type ExternalClaimRejectCode =
   | 'DAILY_MAX'
   | 'MONTHLY_CAP'
   | 'ZERO_POINTS'
-  /** W42: SĐT (đầy đủ hoặc đã che) trên đơn sàn không khớp SĐT Zalo của khách đang gửi mã. HTTP 403, câu lỗi không in số trên đơn. */
-  | 'PHONE_MISMATCH';
+  /**
+   * W42: SĐT (đầy đủ hoặc đã che) trên đơn sàn không khớp SĐT Zalo của khách. Từ W46 chỉ còn ở lượt không có khách trước màn hình (cron ghép
+   * lại mã chờ); khách tự gửi mã thì nhận PHONE_CONFIRM_REQUIRED. HTTP 403, câu lỗi không in số trên đơn.
+   */
+  | 'PHONE_MISMATCH'
+  /**
+   * W46: SĐT người nhận trên đơn khác SĐT tài khoản. Khách nhập 4 số cuối SĐT nhận hàng rồi gửi lại cùng mã kèm `recipientPhoneLast4`.
+   * HTTP 403, thân lỗi kèm `ExternalClaimPhoneConfirmInfo`, không bao giờ kèm chữ số nào của SĐT trên đơn.
+   */
+  | 'PHONE_CONFIRM_REQUIRED'
+  /** W46: 4 số cuối khách nhập chưa khớp; `remainingAttempts` (1 hoặc 2) là số lần nhập sai còn được trong 24 giờ. HTTP 403. */
+  | 'PHONE_CONFIRM_WRONG'
+  /** W46: đã nhập sai 3 lần trong 24 giờ cho đơn này: khoá xác nhận đơn này 24 giờ, kể cả khi lần sau nhập đúng. HTTP 429. */
+  | 'PHONE_CONFIRM_LOCKED';
+
+/** W46: phần thêm trong thân lỗi PHONE_CONFIRM_* để màn xác nhận nói đúng tên sàn và số lượt còn lại. */
+export interface ExternalClaimPhoneConfirmInfo {
+  /** Tên sàn viết thường theo `pancake.order_source_map` (`shopee`, `lazada`, `tiktok`); null khi đơn sàn không rõ sàn. */
+  channel: string | null;
+  /** Số chữ số khách nhập: luôn 4 (4 số cuối SĐT nhận hàng). */
+  requiredDigits: 4;
+  /** Chỉ có ở PHONE_CONFIRM_WRONG (1 hoặc 2) và PHONE_CONFIRM_LOCKED (0). */
+  remainingAttempts?: number;
+}
 
 /**
  * Điểm Xanh tích từ đơn sàn (lô MARKETPLACE, W42) chỉ dùng để giảm giá khi đặt đơn; vòng quay, góp cây, đổi quà và phí lấy rác không
@@ -54,6 +76,8 @@ export interface SubmitExternalClaimRequest {
   code: string;
   /** Khách quét nhãn hay gõ tay; chỉ để đo phễu. */
   via?: 'scan' | 'typed';
+  /** W46: 4 số cuối SĐT người nhận ghi trên đơn sàn (`^\d{4}$`), chỉ gửi sau khi API trả PHONE_CONFIRM_REQUIRED cho đúng mã này. */
+  recipientPhoneLast4?: string;
 }
 
 export interface SubmitExternalClaimResponse {

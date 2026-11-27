@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { extractClaimCode } from '@tubutree/app-core/claim-code';
 import { MARKETPLACE_CLAIM_WEB_COPY as WEB } from '@tubutree/app-core/marketplace-claim-copy';
-import { MARKETPLACE_SCAN_COPY } from '@tubutree/app-core/marketplace-scan-guide';
+import { MARKETPLACE_SCAN_COPY, scanGuideCollapsed } from '@tubutree/app-core/marketplace-scan-guide';
 import { meQuery } from '@tubutree/app-core/queries/account';
+import { externalClaimsQuery } from '@tubutree/app-core/queries/external-points';
 import { Card } from '@/components/mini/card';
 import { Skeleton } from '@/components/mini/skeleton';
 import { Text } from '@/components/mini/text';
@@ -21,15 +22,15 @@ import { PAGE_NARROW } from '@/lib/page-frame';
 import { loginHref, safeReturnPath } from '@/lib/return-to';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ClaimForm, PhoneEntry } from './claim-form';
-import { ClaimHistory } from './claim-history';
+import { CLAIM_HISTORY_PAGE_SIZE, ClaimHistory } from './claim-history';
 
 /**
  * Tab giữa "Quét mã" của web (W42; W44 theo PO 27/11 10:29: quét và tích điểm làm được ngay trên web, không chỉ trong Mini App). Cùng hướng dẫn
  * 3 bước, cùng chữ, cùng API (`POST/GET /me/external-points/claims`) với Mini App `/points/scan`:
  * - Khách chưa đăng nhập: hướng dẫn + "Đăng nhập để tích điểm" (quay lại đúng trang, giữ nguồn `utm_*`/`card` của mã QR bỏ hộp) và lối phụ mở
  *   màn quét trong Tubu Tree trên Zalo.
- * - Đã đăng nhập: nút quét bằng camera trình duyệt (mọi máy, iPhone đọc bằng bộ đọc JS) và lối chụp/chọn ảnh, ô nhập mã, thẻ kết quả, nút mua
- *   sắm và lịch sử tích điểm đơn sàn. Tài khoản chưa có SĐT (W45): nhập số ngay tại đây rồi quét; SĐT chưa xác minh qua Zalo (`phoneVerified`
+ * - Đã đăng nhập: khung quét camera trình duyệt ngay đầu thẻ (W46, mọi máy, iPhone đọc bằng bộ đọc JS), lối chụp/chọn ảnh và nhập mã thủ công,
+ *   thẻ kết quả, nút mua sắm và lịch sử tích điểm đơn sàn. Đã có đơn sàn trong lịch sử thì hướng dẫn 3 bước gập thành một dòng. Tài khoản chưa có SĐT (W45): nhập số ngay tại đây rồi quét; SĐT chưa xác minh qua Zalo (`phoneVerified`
  *   false) thì nói trước đơn sẽ được CSKH đối chiếu (máy chủ đưa claim vào REVIEW thay vì từ chối 403).
  * Cờ `loyalty.marketplace_claim_enabled` tắt: chỉ báo "sắp mở", không hứa tỉ lệ tích. Cấu hình chưa về: chỉ tiêu đề.
  */
@@ -125,12 +126,15 @@ export function ScanView() {
   // Máy chủ dựng không có query; trình duyệt đọc lại sau khi hydrate nên không lệch HTML.
   const search = useSyncExternalStore(noSubscribe, () => window.location.search, () => '');
   const enabled = cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true;
+  // Cùng khoá trang 1 với `ClaimHistory` nên không gọi API thêm lần nào.
+  const historyQ = useQuery({ ...externalClaimsQuery(coreHttp, 1, CLAIM_HISTORY_PAGE_SIZE), enabled: enabled && phase === 'authenticated' });
+  const guideCollapsed = phase === 'guest' || phase === 'unavailable' ? false : scanGuideCollapsed(historyQ.data);
   return (
     <main className={`${PAGE_NARROW} pb-6 pt-0 md:pt-6`}>
       <PageHeader title="Tích điểm đơn sàn" />
       {enabled && (
         <>
-          <ScanGuide marketplaceEarnPct={cfg.loyalty?.marketplaceEarnPct} />
+          <ScanGuide marketplaceEarnPct={cfg.loyalty?.marketplaceEarnPct} collapsed={guideCollapsed} />
           {phase === 'loading' && <Loading />}
           {phase === 'unavailable' && <SessionUnavailable />}
           {phase === 'guest' && <GuestCard search={search} />}

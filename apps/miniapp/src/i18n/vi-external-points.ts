@@ -15,7 +15,7 @@ export const viExternalPoints = {
   greeting: (channel: string | null) => `Cảm ơn bạn đã mua Tubu Tree${channel ? ` trên ${channel}` : ''}`,
   scanMain: 'Quét mã trên nhãn',
   phoneWhy: 'Tubu dùng số điện thoại Zalo của bạn để ghép đúng đơn và báo khi điểm được cộng.',
-  phoneDeclined: 'Tubu chưa có số điện thoại nên chưa ghép được đơn. Mã bạn nhập vẫn được giữ, bạn bấm "Chia sẻ số điện thoại" khi sẵn sàng nhé.',
+  phoneDeclined: 'Chưa có SĐT nên chưa ghép được đơn. Mã vẫn được giữ.',
   giftNewOnly: 'Quà thẻ dành cho tài khoản chưa có đơn. Bạn vẫn tích điểm đơn này được.',
   chatSupport: 'Nhắn Tubu Tree',
   chatSupportMessage: (maskedCode: string) => `Mình cần hỗ trợ tích điểm cho mã ${maskedCode}`,

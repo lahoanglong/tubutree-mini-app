@@ -99,3 +99,27 @@ export function orderPhoneMatch(userPhone: string | null | undefined, order: { p
   const match = phoneMatchesOrderMask(userPhone, stored);
   return stored.kind === 'FULL' && match === 'MISMATCH' ? 'NO_DATA' : match;
 }
+
+/** W46: số chữ số cuối của SĐT người nhận mà khách nhập để xác nhận đơn khi SĐT tài khoản khác SĐT trên đơn. */
+export const RECIPIENT_LAST_DIGITS = 4;
+const LAST4 = /^\d{4}$/;
+
+/**
+ * W46: 4 số cuối khách nhập có khớp SĐT người nhận trên đơn không. Cùng nguồn số với `orderPhoneMatch` (`phone` nếu có, không thì
+ * `phoneMask`):
+ * - Số đầy đủ (Lazada, TikTok có số): khớp đủ 4 số cuối.
+ * - Mẫu che biết vị trí (`0981234*26`): mọi chữ số nhìn thấy trong 4 vị trí cuối phải khớp.
+ * - Mẫu che chỉ có đuôi (Shopee `0*26`, TikTok `******526`): khớp mọi chữ số đuôi nhìn thấy, tối đa 4 số cuối.
+ * Không có số để so (rỗng, che hết) thì false. Hàm không bao giờ trả lại chữ số của đơn.
+ */
+export function recipientLast4MatchesOrder(last4: string, order: { phone: string | null; phoneMask?: string | null }): boolean {
+  if (!LAST4.test(last4)) return false;
+  const p = parseOrderPhoneForMatch(order.phone !== null ? order.phone : (order.phoneMask ?? null));
+  if (p.kind === 'NONE') return false;
+  if (p.kind === 'FULL') return p.phone.endsWith(last4);
+  if (p.positional) {
+    const end = p.positional.slice(-RECIPIENT_LAST_DIGITS);
+    return [...end].every((c, i) => c === '*' || c === last4[i]);
+  }
+  return last4.endsWith(p.tail.slice(-RECIPIENT_LAST_DIGITS));
+}

@@ -280,7 +280,9 @@ describe('ExternalClaimsAdminService.listAttempts: người khác cùng mã bị
     };
     const svc = new ExternalClaimsAdminService(prisma as never, {} as never, {} as never, {} as never);
     const out = await svc.listAttempts(1, 20, now);
-    expect(attemptFindMany.mock.calls[1]![0].where.result).toEqual({ in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER'] });
+    expect(attemptFindMany.mock.calls[1]![0].where.result).toEqual({
+      in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER', 'REJECTED_PHONE_CONFIRM_REQUIRED', 'REJECTED_PHONE_CONFIRM_WRONG'],
+    });
     expect(out.data[0]!.otherSubmitters).toEqual([
       { userId: 'u2', userName: 'Minh', userPhoneMasked: '091****333', createdAt: '2026-11-21T00:00:00.000Z', result: 'REJECTED_PHONE_MISMATCH' },
     ]);

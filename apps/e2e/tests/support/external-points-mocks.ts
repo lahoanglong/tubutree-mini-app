@@ -9,10 +9,20 @@ import { publicConfig, reply, type MockApi } from './mock-api';
  */
 export const EMPTY_CLAIMS: MyExternalClaimsResponse = { data: [], meta: { page: 1, limit: 10, total: 0 }, searching: [] };
 
-export function mockExternalPoints(
-  api: MockApi,
-  opts: { enabled?: boolean; claims?: MyExternalClaimsResponse; submit?: SubmitExternalClaimResponse | { rejectCode: string; status: number; message: string } } = {},
-) {
+/** Lỗi nghiệp vụ của POST: `extra` là các trường thêm vào thân lỗi (W46 PHONE_CONFIRM_*: channel, requiredDigits, remainingAttempts). */
+export interface ExternalClaimRejectMock {
+  rejectCode: string;
+  status: number;
+  message: string;
+  extra?: Record<string, unknown>;
+}
+type SubmitMock = SubmitExternalClaimResponse | ExternalClaimRejectMock;
+
+/**
+ * `submit` là một câu trả lời cho mọi lần gửi, hoặc một dãy trả lần lượt (lần thứ n nhận phần tử n, hết dãy thì lặp phần tử cuối), để dựng
+ * luồng nhiều bước như hỏi 4 số cuối SĐT rồi gửi lại.
+ */
+export function mockExternalPoints(api: MockApi, opts: { enabled?: boolean; claims?: MyExternalClaimsResponse; submit?: SubmitMock | readonly SubmitMock[] } = {}) {
   api.get(
     '/config/public',
     publicConfig({
@@ -29,11 +39,13 @@ export function mockExternalPoints(
   api.post('/events', { accepted: 1 });
   api.get('/me/external-points/claims', opts.claims ?? EMPTY_CLAIMS);
   const submit = opts.submit;
-  if (submit) {
-    api.post('/me/external-points/claims', () =>
-      'rejectCode' in submit
-        ? reply(submit.status, { statusCode: submit.status, error: submit.rejectCode, code: submit.rejectCode, message: submit.message })
-        : submit,
-    );
-  }
+  if (!submit) return;
+  const steps: readonly SubmitMock[] = Array.isArray(submit) ? submit : [submit as SubmitMock];
+  let n = 0;
+  api.post('/me/external-points/claims', () => {
+    const step = steps[Math.min(n++, steps.length - 1)]!;
+    return 'rejectCode' in step
+      ? reply(step.status, { statusCode: step.status, error: step.rejectCode, code: step.rejectCode, message: step.message, ...step.extra })
+      : step;
+  });
 }

@@ -16,7 +16,7 @@ import { recordExtClaimEvent } from './external-claim-events';
 import { advisoryUserLock } from './external-claim.service';
 import { lockOrderThenClaim } from './external-claim-status';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
-import { settlePoints } from './external-claim.rules';
+import { PHONE_CONFIRMED_NOTE, settlePoints } from './external-claim.rules';
 import { claimPoints, maskClaimCode } from './external-points-rate';
 import { orderPhoneMatch } from './order-phone-match';
 
@@ -37,6 +37,19 @@ async function approvedDespiteStale(tx: Pick<Prisma.TransactionClient, 'external
   if (row.decidedById === null) return false;
   const e = await tx.externalClaimEvent.findFirst({ where: { claimId: row.id, action: 'APPROVE', note: { contains: STALE_APPROVE_MARK } }, select: { id: true } });
   return !!e;
+}
+
+/**
+ * W46: claim đơn sàn tạo nhờ khách nhập đúng 4 số cuối SĐT người nhận (SĐT tài khoản vốn khác SĐT trên đơn). Đọc dòng tạo/mở lại claim mới
+ * nhất trong sổ: phải của đúng khách đang giữ claim và có ghi chú xác nhận. Chỉ đọc khi SĐT lệch, nên claim thường không tốn truy vấn này.
+ */
+async function confirmedByRecipientPhone(tx: Pick<Prisma.TransactionClient, 'externalClaimEvent'>, row: { id: string; userId: string | null }): Promise<boolean> {
+  const e = await tx.externalClaimEvent.findFirst({
+    where: { claimId: row.id, action: { in: ['CLAIM_CREATED', 'REOPEN_CLAIM'] } },
+    orderBy: { createdAt: 'desc' },
+    select: { userIdAfter: true, note: true },
+  });
+  return !!e && e.userIdAfter === row.userId && (e.note ?? '').includes(PHONE_CONFIRMED_NOTE);
 }
 
 /**
@@ -142,8 +155,10 @@ export async function releaseClaim(
     else if (user.isBlocked) reviewReason = 'Tài khoản đang bị khoá';
     else if (points === null || points <= 0) reviewReason = 'Chưa tính được tiền hàng của đơn';
     else if (chat && row.decidedById === null && (row.orderPhone ?? order.phone) !== null && user.phone !== (row.orderPhone ?? order.phone)) reviewReason = 'SĐT thành viên không còn khớp SĐT trên đơn';
-    // Đơn sàn (W42): khớp lúc gửi mã nhưng thành viên đổi SĐT Zalo trước lúc cộng. Claim đã có người duyệt (gắn tay khi lệch) thì thôi.
-    else if (!chat && row.decidedById === null && orderPhoneMatch(user.phone, order) === 'MISMATCH') reviewReason = SCAN_PHONE_CHANGED_REASON;
+    // Đơn sàn (W42): khớp lúc gửi mã nhưng thành viên đổi SĐT Zalo trước lúc cộng. Claim đã có người duyệt (gắn tay khi lệch) thì thôi, claim
+    // khách đã xác nhận 4 số cuối SĐT người nhận (W46) cũng thôi: SĐT tài khoản vốn khác SĐT trên đơn từ lúc gửi.
+    else if (!chat && row.decidedById === null && orderPhoneMatch(user.phone, order) === 'MISMATCH' && !(await confirmedByRecipientPhone(tx, row)))
+      reviewReason = SCAN_PHONE_CHANGED_REASON;
     else if (!chat && row.decidedById === null && !user.phone) reviewReason = SCAN_NO_MEMBER_PHONE_REASON;
     else if (chat && (user.role === 'STAFF' || user.role === 'ADMIN') && row.decidedById === null) reviewReason = 'Thành viên là nhân viên Tubu Tree, cần người khác duyệt';
     else if (chat && !phoneVerifiedFresh(user.phoneVerifiedAt, { now, maxDays: opts.chat!.phoneVerifiedMaxDays }) && !(await approvedDespiteStale(tx, row))) reviewReason = PHONE_STALE_REASON;

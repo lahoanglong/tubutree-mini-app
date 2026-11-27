@@ -46,3 +46,41 @@
   line-height: var(--type-body-sm-lh);
   font-weight: var(--type-body-sm-weight);
 }
+
+/* Dòng gập hướng dẫn (W46): khách đã có đơn sàn thì 3 bước thu về một dòng chạm để mở; cùng lớp ở web (components/mini/mini.css). */
+.tubu-scan-guide-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-xs);
+  min-height: 44px;
+  margin: var(--space-stack-xs) var(--space-gutter) 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+  cursor: pointer;
+}
+
+.tubu-scan-guide-toggle svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.tubu-scan-guide-toggle[aria-expanded='true'] .tubu-scan-guide-toggle__chevron {
+  transform: rotate(180deg);
+}
+
+.tubu-scan-guide-toggle:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tubu-scan-guide-toggle__chevron {
+    transition: transform 150ms ease-out;
+  }
+}

@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import type { ExternalOrderStatus, Prisma } from '@prisma/client';
 import type {
+  ExternalClaimPhoneConfirmInfo,
   ExternalClaimRejectCode,
   MyExternalClaimItem,
   MyExternalClaimsResponse,
@@ -17,11 +18,19 @@ import { loadClaimConfig, type ClaimConfig } from './external-claim.config';
 import { recordClaimEvent } from './external-claim-audit';
 import { recordExtClaimEvent } from './external-claim-events';
 import { ExternalClaimLookupService } from './external-claim-lookup.service';
-import { evaluateClaimRules, lockedUntil, type ClaimDecision, type ClaimFacts } from './external-claim.rules';
+import {
+  evaluateClaimRules,
+  lockedUntil,
+  PHONE_CONFIRM_RESULTS,
+  PHONE_CONFIRMED_NOTE,
+  phoneConfirmPassed,
+  type ClaimDecision,
+  type ClaimFacts,
+} from './external-claim.rules';
 import { normalizeTrackingCode } from './external-order.mapper';
 import { UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { maskClaimCode } from './external-points-rate';
-import { orderPhoneMatch, orderPhoneVisibleDigits } from './order-phone-match';
+import { orderPhoneMatch, orderPhoneVisibleDigits, RECIPIENT_LAST_DIGITS, recipientLast4MatchesOrder } from './order-phone-match';
 
 const DAY_MS = 864e5;
 export const UNMATCHED_RETRY_DAYS = UNMATCHED_RETRY_DAYS_FOR_ATTENTION;
@@ -36,8 +45,17 @@ const UNRECORDED: readonly ExternalClaimRejectCode[] = ['DISABLED', 'NOT_ELIGIBL
  * Kết quả lần thử tính vào khoá 24h (5 lần trong 24 giờ): mã không thấy đơn, và (W42) mã của đơn mang SĐT khác. Đếm lần lệch SĐT để
  * một người không dò được nhiều mã vận đơn của người khác; lần lệch vẫn được ghi như mọi lần thử nên cũng tính vào trần lần thử/ngày.
  * (W45) SĐT tự gõ trên Web mà đơn không đủ căn cứ (REJECTED_NOT_ELIGIBLE_USER sau khi đã thấy đơn) cũng tính, để không dò được mã nào có đơn.
+ * (W46) Lượt SĐT lệch giờ hỏi 4 số cuối (REQUIRED, thay chỗ PHONE_MISMATCH) và mỗi lần nhập sai 4 số đều tính; REQUIRED đổi thành
+ * PHONE_CONFIRMED (thôi tính) khi chính khách đó xác nhận đúng đơn đó, nên khách đặt hàng bằng SĐT người nhà không bị khoá oan.
  */
-export const LOCK_COUNTED_RESULTS = ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER'] as const;
+export const LOCK_COUNTED_RESULTS = [
+  'UNMATCHED',
+  'NOT_FOUND',
+  'REJECTED_PHONE_MISMATCH',
+  'REJECTED_NOT_ELIGIBLE_USER',
+  PHONE_CONFIRM_RESULTS.required,
+  PHONE_CONFIRM_RESULTS.wrong,
+] as const;
 
 export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; message: string }> = {
   DISABLED: { status: HttpStatus.NOT_FOUND, message: 'Tính năng tích điểm đơn mua ngoài app chưa mở.' },
@@ -60,11 +78,22 @@ export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; 
     message:
       'Số điện thoại trên đơn sàn không khớp số điện thoại Zalo bạn đang đăng nhập. Bạn hãy đăng nhập đúng tài khoản Zalo dùng số đã đặt đơn, hoặc liên hệ Tubu Tree nếu bạn đã đổi số.',
   },
+  // W46: app bản cũ (chưa có màn nhập 4 số) đọc thẳng câu này.
+  PHONE_CONFIRM_REQUIRED: { status: HttpStatus.FORBIDDEN, message: 'Cần xác nhận 4 số cuối SĐT người nhận trên đơn sàn để tích điểm đơn này.' },
+  PHONE_CONFIRM_WRONG: { status: HttpStatus.FORBIDDEN, message: '4 số cuối SĐT người nhận chưa khớp đơn sàn.' },
+  PHONE_CONFIRM_LOCKED: {
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    message: 'Bạn đã nhập sai 4 số cuối SĐT người nhận 3 lần. Bạn thử lại đơn này sau 24 giờ hoặc liên hệ Tubu Tree nhé.',
+  },
 };
 
-export function rejectionOf(code: ExternalClaimRejectCode): HttpException {
+/**
+ * Lỗi từ chối gửi mã. `confirm` (chỉ PHONE_CONFIRM_*) thêm vào thân lỗi tên sàn, số chữ số cần nhập và lượt còn lại; không bao giờ có chữ
+ * số nào của SĐT trên đơn.
+ */
+export function rejectionOf(code: ExternalClaimRejectCode, confirm?: ExternalClaimPhoneConfirmInfo): HttpException {
   const r = REJECT_HTTP[code];
-  return new HttpException({ statusCode: r.status, error: code, code, message: r.message }, r.status);
+  return new HttpException({ statusCode: r.status, error: code, code, message: r.message, ...(confirm ?? {}) }, r.status);
 }
 
 interface UserRow {
@@ -101,10 +130,12 @@ export interface CreatedClaim {
   channel: string | null;
   maskedCode: string;
   expectedCreditAt: Date | null;
+  /** W46: claim tạo nhờ khách nhập đúng 4 số cuối SĐT người nhận. */
+  phoneConfirmed?: true;
 }
 
 export type Persisted =
-  | { kind: 'REJECT'; code: ExternalClaimRejectCode }
+  | { kind: 'REJECT'; code: ExternalClaimRejectCode; confirm?: ExternalClaimPhoneConfirmInfo }
   | { kind: 'SEARCHING' }
   /** Mã đang được tài khoản khác chờ tìm đơn: lần gửi này không bao giờ được tìm tiếp. */
   | { kind: 'WAITING_OTHER' }
@@ -118,7 +149,13 @@ function submittedProps(out: Persisted, orderChannel: string | null, via?: 'scan
     case 'REJECT':
       return { ...base, result: `REJECT_${out.code}`, channel: orderChannel };
     case 'CLAIM':
-      return { ...base, result: out.created.state === 'REVIEW' ? 'REVIEW' : 'CLAIMED', channel: out.created.channel, points: out.created.points };
+      return {
+        ...base,
+        result: out.created.state === 'REVIEW' ? 'REVIEW' : 'CLAIMED',
+        channel: out.created.channel,
+        points: out.created.points,
+        ...(out.created.phoneConfirmed ? { phoneConfirmed: true } : {}),
+      };
     case 'OWN':
       return { ...base, result: 'OWN', channel: out.own.channel, points: out.own.points };
     case 'UNKNOWN_SOURCE':
@@ -163,8 +200,11 @@ export class ExternalClaimService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  /** Khách gửi mã. Toàn bộ luật chạy trong một transaction giữ khoá advisory theo khách nên gửi song song nhiều mã không vượt trần. */
-  async submit(userId: string, rawCode: unknown, via?: 'scan' | 'typed'): Promise<SubmitExternalClaimResponse> {
+  /**
+   * Khách gửi mã. Toàn bộ luật chạy trong một transaction giữ khoá advisory theo khách nên gửi song song nhiều mã không vượt trần.
+   * `recipientPhoneLast4` (W46): 4 số cuối SĐT người nhận, chỉ dùng khi SĐT tài khoản lệch SĐT trên đơn.
+   */
+  async submit(userId: string, rawCode: unknown, via?: 'scan' | 'typed', recipientPhoneLast4?: string | null): Promise<SubmitExternalClaimResponse> {
     const cfg = await loadClaimConfig(this.config);
     if (!cfg.enabled) throw rejectionOf('DISABLED');
     const code = normalizeTrackingCode(rawCode);
@@ -180,7 +220,13 @@ export class ExternalClaimService {
       async (tx) => {
         await advisoryUserLock(tx, userId);
         const user = await tx.user.findUnique({ where: { id: userId }, select: USER_SELECT });
-        const g = await this.gatherFacts(tx, user, code, cfg, now);
+        const g = await this.gatherFacts(tx, user, code, cfg, now, { recipientPhoneLast4: recipientPhoneLast4 ?? null });
+        if (g.order && phoneConfirmPassed(g.facts)) {
+          await tx.externalClaimAttempt.updateMany({
+            where: { userId, externalOrderId: g.order.id, result: PHONE_CONFIRM_RESULTS.required },
+            data: { result: PHONE_CONFIRM_RESULTS.confirmed, resolvedAt: now, note: PHONE_CONFIRMED_NOTE },
+          });
+        }
         const out = await this.persist(tx, { userId, code, cfg, now, decision: evaluateClaimRules(g.facts), order: g.order, existingClaimId: g.existingClaimId, existingClaimOwnerId: g.existingClaimOwnerId, attemptId: null });
         await recordExtClaimEvent(tx, { name: 'ext_claim_submitted', userId, at: now, props: submittedProps(out, g.order?.channel ?? null, via) });
         return out;
@@ -188,7 +234,7 @@ export class ExternalClaimService {
       { timeout: 15_000, maxWait: 10_000 },
     );
 
-    if (persisted.kind === 'REJECT') throw rejectionOf(persisted.code);
+    if (persisted.kind === 'REJECT') throw rejectionOf(persisted.code, persisted.confirm);
     const masked = maskClaimCode(code);
     if (persisted.kind === 'WAITING_OTHER') {
       return {
@@ -309,7 +355,11 @@ export class ExternalClaimService {
     code: string,
     cfg: ClaimConfig,
     now: Date,
-    opts: { skipAttemptLimits?: boolean; orderId?: string } = {},
+    /**
+     * `recipientPhoneLast4`: có mặt (kể cả null) = lượt khách tự gửi mã, SĐT lệch thì hỏi 4 số cuối (W46); vắng = cron hay nhân viên, SĐT
+     * lệch vẫn là PHONE_MISMATCH.
+     */
+    opts: { skipAttemptLimits?: boolean; orderId?: string; recipientPhoneLast4?: string | null } = {},
   ): Promise<{ facts: ClaimFacts; order: ClaimOrderRow | null; existingClaimId: string | null; existingClaimOwnerId: string | null }> {
     const userId = user?.id ?? '';
     const sinceNotFound = new Date(now.getTime() - 2 * DAY_MS);
@@ -361,6 +411,17 @@ export class ExternalClaimService {
       codeTaken = others.some((o) => !(sn && o.externalOrder.marketplaceOrderSn && o.externalOrder.marketplaceOrderSn !== sn));
     }
 
+    const phoneMatch = order ? orderPhoneMatch(user?.phone ?? null, order) : null;
+    let phoneConfirm: ClaimFacts['phoneConfirm'];
+    if (order && phoneMatch === 'MISMATCH' && opts.recipientPhoneLast4 !== undefined) {
+      const last4 = opts.recipientPhoneLast4;
+      const wrong = await tx.externalClaimAttempt.findMany({
+        where: { userId, externalOrderId: order.id, result: PHONE_CONFIRM_RESULTS.wrong, createdAt: { gte: sinceNotFound } },
+        select: { createdAt: true },
+      });
+      phoneConfirm = { last4, matches: last4 !== null && recipientLast4MatchesOrder(last4, order), wrongTimes: wrong.map((w) => w.createdAt) };
+    }
+
     const [claimsToday, month] = await Promise.all([
       tx.externalPointsClaim.count({ where: { userId, kind: 'SCAN', dayKey: vnDateKey(now) } }),
       tx.externalPointsClaim.aggregate({
@@ -385,7 +446,7 @@ export class ExternalClaimService {
             status: order.status,
             insertedAt: order.pancakeInsertedAt ?? order.firstSeenAt,
             goodsValue: order.goodsValue,
-            phoneMatch: orderPhoneMatch(user?.phone ?? null, order),
+            phoneMatch: phoneMatch ?? 'NO_DATA',
             phoneVisibleDigits: orderPhoneVisibleDigits(order),
           }
         : null,
@@ -393,6 +454,7 @@ export class ExternalClaimService {
       codeTaken,
       claimsToday,
       monthPoints: month._sum.points ?? 0,
+      ...(phoneConfirm ? { phoneConfirm } : {}),
     };
     return { facts, order, existingClaimId: claim?.reopenable ? claim.id : null, existingClaimOwnerId: claim?.reopenable ? claim.ownerId : null };
   }
@@ -421,7 +483,17 @@ export class ExternalClaimService {
     };
 
     if (decision.kind === 'REJECT') {
-      if (decision.record || !UNRECORDED.includes(decision.code)) await addAttempt(`REJECTED_${decision.code}`, { externalOrderId: order?.id ?? null });
+      if (decision.record || !UNRECORDED.includes(decision.code)) {
+        await addAttempt(decision.attemptResult ?? `REJECTED_${decision.code}`, { externalOrderId: order?.id ?? null });
+      }
+      if (decision.code.startsWith('PHONE_CONFIRM_')) {
+        const confirm: ExternalClaimPhoneConfirmInfo = {
+          channel: order?.channel ?? null,
+          requiredDigits: RECIPIENT_LAST_DIGITS,
+          ...(decision.remainingAttempts !== undefined ? { remainingAttempts: decision.remainingAttempts } : {}),
+        };
+        return { kind: 'REJECT', code: decision.code, confirm };
+      }
       return { kind: 'REJECT', code: decision.code };
     }
     if (decision.kind === 'OWN_CLAIM') {
@@ -507,6 +579,7 @@ export class ExternalClaimService {
       await addAttempt('REJECTED_ALREADY_CLAIMED', { externalOrderId: order.id });
       return { kind: 'REJECT', code: 'ALREADY_CLAIMED' };
     }
+    const phoneConfirmed = decision.phoneConfirmed === true;
     await recordClaimEvent(tx, {
       claimId,
       action: a.existingClaimId ? 'REOPEN_CLAIM' : 'CLAIM_CREATED',
@@ -515,7 +588,8 @@ export class ExternalClaimService {
       toState: decision.state,
       userIdBefore: a.existingClaimId ? (a.existingClaimOwnerId ?? null) : null,
       userIdAfter: userId,
-      note: decision.reviewReason,
+      // Sổ claim phải nói claim qua được bằng 4 số cuối SĐT người nhận: lúc cộng điểm đọc dòng này để không đưa claim về REVIEW vì SĐT lệch.
+      note: phoneConfirmed && !decision.reviewReason?.includes(PHONE_CONFIRMED_NOTE) ? [PHONE_CONFIRMED_NOTE, decision.reviewReason].filter(Boolean).join('; ') : decision.reviewReason,
     });
     if (a.attemptId) {
       await tx.externalClaimAttempt.updateMany({
@@ -523,11 +597,19 @@ export class ExternalClaimService {
         data: { result: 'MATCHED', resolvedAt: now, externalOrderId: order.id, note: 'Ghép tự động' },
       });
     } else {
-      await addAttempt('MATCHED', { externalOrderId: order.id });
+      await addAttempt('MATCHED', { externalOrderId: order.id, note: phoneConfirmed ? PHONE_CONFIRMED_NOTE : null });
     }
     return {
       kind: 'CLAIM',
-      created: { claimId, state: decision.state, points: decision.points, channel: order.channel, maskedCode: maskClaimCode(code), expectedCreditAt: releaseAt },
+      created: {
+        claimId,
+        state: decision.state,
+        points: decision.points,
+        channel: order.channel,
+        maskedCode: maskClaimCode(code),
+        expectedCreditAt: releaseAt,
+        ...(phoneConfirmed ? { phoneConfirmed: true as const } : {}),
+      },
     };
   }
 

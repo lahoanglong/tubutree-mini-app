@@ -7,8 +7,14 @@ import { CheckCircle2, Clock, Info } from 'lucide-react';
 import type { SubmitExternalClaimResponse } from '@tubutree/shared-types';
 import { normalizeClaimCode } from '@tubutree/app-core/claim-code';
 import { saveContactPhone } from '@tubutree/app-core/api/account';
-import { externalClaimRejectCode, submitExternalClaim } from '@tubutree/app-core/api/external-points';
-import { MARKETPLACE_CLAIM_COPY as COPY, MARKETPLACE_CLAIM_WEB_COPY as WEB, claimResultDetail, isPastMilestone } from '@tubutree/app-core/marketplace-claim-copy';
+import { externalClaimRejectCode, phoneConfirmPrompt, submitExternalClaim } from '@tubutree/app-core/api/external-points';
+import {
+  MARKETPLACE_CLAIM_COPY as COPY,
+  MARKETPLACE_CLAIM_WEB_COPY as WEB,
+  claimResultDetail,
+  isPastMilestone,
+  phoneConfirmErrorText,
+} from '@tubutree/app-core/marketplace-claim-copy';
 import { scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { parseVnContactPhone } from '@tubutree/app-core/phone-input';
@@ -18,7 +24,8 @@ import { Button } from '@/components/mini/button';
 import { Card } from '@/components/mini/card';
 import { Icon } from '@/components/mini/icon';
 import { Text } from '@/components/mini/text';
-import { ClaimScanButton } from '@/components/points/claim-scan-button';
+import { ClaimScanner } from '@/components/points/claim-scan-button';
+import { PhoneConfirmSheet } from '@/components/points/phone-confirm-sheet';
 import { Field } from '@/components/ui/field';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -106,11 +113,24 @@ function ShopNowButton() {
   );
 }
 
+/** Đang hỏi 4 số cuối SĐT người nhận (W46): mã và cách nhập để gửi lại, sàn của đơn, câu lỗi máy chủ trả và đơn đã bị khoá chưa. */
+interface PhoneConfirm {
+  code: string;
+  via: Via;
+  channel: string | null;
+  error: string | null;
+  locked: boolean;
+  attempt: number;
+}
+
+const errorBody = (e: unknown): unknown => (e as { body?: unknown } | null)?.body;
+
 /**
- * Thẻ gửi mã của web `/quet-ma` (W44, PO 27/11: quét và tích điểm ngay trên web): nút quét bằng camera trình duyệt (mọi máy từ W45, iPhone đọc
- * bằng bộ đọc JS) kèm lối chụp/chọn ảnh, ô nhập mã và nút "Tích điểm", rồi thẻ kết quả và nút mua sắm. Cùng thứ tự, cùng chữ, cùng một nút chính
- * tại mỗi lúc như Mini App `/points/scan`: chưa có mã thì nút quét là nút chính; mã đã sẵn (quét xong hay gõ đúng dạng) thì "Tích điểm"; gửi
- * xong thì nút mua sắm. `unverified`: SĐT là số liên hệ tự gõ trên web, nói trước rằng đơn sẽ được CSKH đối chiếu (máy chủ đưa vào REVIEW).
+ * Thẻ gửi mã của web `/quet-ma` (W44; W46 camera trước): khung quét camera ngay đầu thẻ, đọc được mã là tự gửi (không bấm thêm). Hai lối phụ
+ * dưới khung: chụp/chọn ảnh và "Nhập mã thủ công" (mở ô nhập mã + nút "Tích điểm"; màn mở với `?code=` thì ô này mở sẵn). Gửi xong là thẻ kết
+ * quả và nút mua sắm. Một nút chính tại mỗi lúc: chưa có mã thì "Bật camera quét ngay"; mã đã sẵn thì "Tích điểm"; gửi xong thì nút mua sắm.
+ * Đơn có SĐT người nhận khác SĐT tài khoản (PHONE_CONFIRM_REQUIRED): hộp hỏi 4 số cuối SĐT trên đơn rồi gửi lại đúng mã đó.
+ * `unverified`: SĐT là số liên hệ tự gõ trên web, nói trước rằng đơn sẽ được CSKH đối chiếu (máy chủ đưa vào REVIEW).
  */
 export function ClaimForm({
   initialCode,
@@ -126,38 +146,58 @@ export function ClaimForm({
   const qc = useQueryClient();
   const [code, setCode] = useState(initialCode);
   const [scanned, setScanned] = useState<string | null>(initialCode || null);
+  const [manual, setManual] = useState(!!initialCode || codeParamRejected);
   const [error, setError] = useState<ClaimError | null>(codeParamRejected ? { text: COPY.codeLinkInvalid, verify: false } : null);
   const [result, setResult] = useState<SubmitExternalClaimResponse | null>(null);
+  const [confirm, setConfirm] = useState<PhoneConfirm | null>(null);
+  const [restartKey, setRestartKey] = useState(0);
   const sending = useRef(false);
-  const submitWrap = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (initialCode) {
       setCode(initialCode);
       setScanned(initialCode);
+      setManual(true);
     }
   }, [initialCode]);
-
-  useEffect(() => {
-    if (scanned !== null) submitWrap.current?.querySelector('button')?.focus();
-  }, [scanned]);
 
   useEffect(() => {
     if (result) resultRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [result]);
 
   const submit = useMutation({
-    mutationFn: (v: { code: string; via: Via }) => submitExternalClaim(coreHttp, v.code, v.via),
+    mutationFn: (v: { code: string; via: Via; last4?: string }) => submitExternalClaim(coreHttp, v.code, v.via, v.last4),
     onSuccess: (r) => {
       setResult(r);
       setError(null);
+      setConfirm(null);
       setCode('');
       setScanned(null);
       void qc.invalidateQueries({ queryKey: ['external-claims'] });
     },
-    onError: (e) => {
+    onError: (e, v) => {
       setResult(null);
+      const prompt = phoneConfirmPrompt(errorBody(e));
+      if (prompt) {
+        setError(null);
+        setConfirm((c) => ({
+          code: v.code,
+          via: v.via,
+          channel: prompt.channel ?? c?.channel ?? null,
+          error: phoneConfirmErrorText(prompt.code, prompt.remainingAttempts),
+          locked: prompt.code === 'PHONE_CONFIRM_LOCKED',
+          attempt: (c?.attempt ?? 0) + 1,
+        }));
+        // Lần sai, lần khoá là một lượt thử đã ghi: lịch sử không đổi nên không cần làm mới.
+        return undefined;
+      }
+      // Mất mạng hay máy chủ lỗi khi đang ở hộp 4 số: báo ngay trong hộp, khách gửi lại được mà không mất mã.
+      if (v.last4 && !externalClaimRejectCode(errorCode(e)) && errorStatus(e) !== 429) {
+        setConfirm((c) => (c ? { ...c, error: actionErrorText(e), attempt: c.attempt + 1 } : c));
+        return undefined;
+      }
+      setConfirm(null);
       setError(claimErrorOf(e));
       // Giữ khoá tới khi lịch sử mới về (tối đa `settleWithin`), kẻo gửi lại đúng mã đó nhận đúng lời từ chối. Mất mạng, 429, 5xx nhả ngay.
       if (isStale(e)) return settleWithin(qc.invalidateQueries({ queryKey: ['external-claims'] }));
@@ -165,9 +205,9 @@ export function ClaimForm({
     },
   });
 
-  const send = async () => {
+  const send = async (raw: string, via: Via, last4?: string) => {
     if (sending.current) return;
-    const trimmed = code.trim();
+    const trimmed = raw.trim();
     if (!trimmed) {
       setError({ text: COPY.emptyCode, verify: false });
       return;
@@ -175,7 +215,7 @@ export function ClaimForm({
     sending.current = true;
     setResult(null);
     try {
-      await submit.mutateAsync({ code: trimmed, via: scanned !== null && scanned === trimmed ? 'scan' : 'typed' });
+      await submit.mutateAsync({ code: trimmed, via, ...(last4 ? { last4 } : {}) });
     } catch {
       /* câu lỗi đã đặt ở onError */
     } finally {
@@ -183,10 +223,25 @@ export function ClaimForm({
     }
   };
 
+  const sendTyped = () => {
+    const trimmed = code.trim();
+    void send(trimmed, scanned !== null && scanned === trimmed ? 'scan' : 'typed');
+  };
+
   const onScanned = (value: string) => {
     setCode(value);
     setScanned(value);
     setError(null);
+    void send(value, 'scan');
+  };
+
+  const scanAnother = () => {
+    setConfirm(null);
+    setCode('');
+    setScanned(null);
+    setError(null);
+    setResult(null);
+    setRestartKey((k) => k + 1);
   };
 
   const shopNow = result != null && (result.status === 'CLAIMED' || result.status === 'REVIEW');
@@ -200,37 +255,49 @@ export function ClaimForm({
           aria-label={WEB.scanSheetTitle}
           onSubmit={(e) => {
             e.preventDefault();
-            void send();
+            sendTyped();
           }}
         >
-          <ClaimScanButton primary={!ready && !shopNow} onCode={onScanned} onFail={(text) => setError({ text, verify: false })} />
-          <div className="mt-3">
-            <Field label={COPY.inputLabel}>
-              <input
-                type="text"
-                maxLength={CODE_MAX_LENGTH}
-                placeholder={COPY.inputPlaceholder}
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value);
-                  setScanned(null);
-                }}
-                autoCapitalize="characters"
-                autoComplete="off"
-                spellCheck={false}
-                enterKeyHint="send"
-                className={ui.field}
-              />
-            </Field>
-            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 'var(--space-stack-xs)' }}>
-              {COPY.inputHelp}
-            </Text>
-            {unverified && (
-              <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
-                <span data-testid="claim-unverified-note">{WEB.unverifiedNote}</span>
+          <ClaimScanner
+            primary={!ready && !shopNow}
+            paused={confirm !== null || submit.isPending}
+            busy={submit.isPending && confirm === null}
+            autoStart={!initialCode && !codeParamRejected}
+            restartKey={restartKey}
+            manualOpen={manual}
+            onManual={() => setManual((m) => !m)}
+            onCode={onScanned}
+            onFail={(text) => setError({ text, verify: false })}
+          />
+          {manual && (
+            <div className="mt-3" data-testid="claim-manual">
+              <Field label={COPY.inputLabel}>
+                <input
+                  type="text"
+                  maxLength={CODE_MAX_LENGTH}
+                  placeholder={COPY.inputPlaceholder}
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value);
+                    setScanned(null);
+                  }}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  spellCheck={false}
+                  enterKeyHint="send"
+                  className={ui.field}
+                />
+              </Field>
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 'var(--space-stack-xs)' }}>
+                {COPY.inputHelp}
               </Text>
-            )}
-          </div>
+            </div>
+          )}
+          {unverified && (
+            <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
+              <span data-testid="claim-unverified-note">{WEB.unverifiedNote}</span>
+            </Text>
+          )}
           {error && (
             <div className="mt-2" data-testid="claim-error">
               <Text variant="body-sm" tone="danger" as="div">
@@ -243,16 +310,31 @@ export function ClaimForm({
               )}
             </div>
           )}
-          <div ref={submitWrap} className="mt-3">
-            <Button type="submit" fullWidth size={ready ? 'lg' : undefined} variant={ready && !shopNow ? 'primary' : 'secondary'} loading={submit.isPending}>
-              {COPY.submit}
-            </Button>
-          </div>
+          {manual && (
+            <div className="mt-3">
+              <Button type="submit" fullWidth size={ready ? 'lg' : undefined} variant={ready && !shopNow ? 'primary' : 'secondary'} loading={submit.isPending}>
+                {COPY.submit}
+              </Button>
+            </div>
+          )}
         </form>
       </Card>
       <div ref={resultRef} />
       {result && <ResultCard result={result} />}
       {shopNow && <ShopNowButton />}
+      <PhoneConfirmSheet
+        open={confirm !== null}
+        channel={confirm?.channel ?? null}
+        error={confirm?.error ?? null}
+        locked={confirm?.locked ?? false}
+        pending={submit.isPending}
+        attempt={confirm?.attempt ?? 0}
+        onSubmit={(last4) => {
+          if (confirm) void send(confirm.code, confirm.via, last4);
+        }}
+        onOther={scanAnother}
+        onClose={() => setConfirm(null)}
+      />
     </div>
   );
 }
