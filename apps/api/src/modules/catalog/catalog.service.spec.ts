@@ -452,6 +452,26 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
     return { prisma, svc: new CatalogService(prisma) };
   }
 
+  it('nhãn theo dõi được đọc cùng lúc với lịch sử mua, không chờ câu đơn hàng về', async () => {
+    let releaseOrders: (rows: unknown[]) => void = () => undefined;
+    const orderItemFindMany = jest.fn(() => new Promise((r) => (releaseOrders = r)));
+    const brandFollowFindMany = jest.fn().mockResolvedValue([{ brandId: 'b1' }]);
+    const productFindMany = jest.fn().mockResolvedValueOnce([{ id: 'p1', categoryIds: [] }]).mockResolvedValueOnce([]).mockResolvedValue([]);
+    const { prisma, svc } = setup({
+      orderItem: { findMany: orderItemFindMany },
+      brandFollow: { findMany: brandFollowFindMany },
+      product: { findMany: productFindMany },
+    });
+    const run = svc.getForYou('u1');
+    await new Promise((r) => setImmediate(r));
+    expect(orderItemFindMany).toHaveBeenCalledTimes(1);
+    expect(brandFollowFindMany).toHaveBeenCalledWith({ where: { userId: 'u1' }, select: { brandId: true } });
+    releaseOrders([{ variationId: 'v1' }]);
+    await run;
+    const candidates = (prisma.product.findMany as jest.Mock).mock.calls[1][0];
+    expect(candidates.where.OR).toEqual([{ brandId: { in: ['b1'] } }]);
+  });
+
   it('có lịch sử mua ở danh mục C → gợi ý cùng danh mục; SP ĐÃ MUA vẫn có mặt nhưng xếp SAU mọi SP chưa mua (spec 4a.3, A2-04)', async () => {
     const orderItemFindMany = jest.fn().mockResolvedValue([{ variationId: 'v1' }]);
     const variationFindMany = jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]);

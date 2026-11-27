@@ -736,8 +736,16 @@ describe('OrdersService.list / activeCount — nhóm trạng thái (tab Đơn h�
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), findMany, count };
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), findMany, count, prisma };
   }
+
+  it('trang đơn và tổng đếm chạy song song, không gói $transaction (bớt BEGIN/COMMIT và xếp hàng một kết nối)', async () => {
+    const { svc, findMany, count, prisma } = makeListService();
+    await svc.list('u1', {}, 1, 20);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(count).toHaveBeenCalledTimes(1);
+  });
 
   it('group=processing → CONFIRMED + PACKED', async () => {
     const { svc, findMany, count } = makeListService();

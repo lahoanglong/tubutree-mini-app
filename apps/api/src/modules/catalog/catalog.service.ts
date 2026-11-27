@@ -50,6 +50,7 @@ import {
   type MssEnrichmentPayload,
 } from './mss-enrichment';
 import { MerchShelfReader } from '../merch-shelves/merch-shelf-reader';
+import { prefetch } from '../../common/prefetch';
 import { BEST_SELLERS_SHELF, HOME_FEATURED_SHELF, categoryShelfKey, leadPins, pinFirst } from '../merch-shelves/merch-shelf';
 
 /**
@@ -1053,6 +1054,8 @@ export class CatalogService {
     const TAKE = 10;
     const RECENT_ITEMS = 20;
 
+    // Nhãn đang theo dõi không phụ thuộc lịch sử mua: đọc cùng lúc thay vì chờ hai câu đơn hàng/sản phẩm phía dưới.
+    const followsRead = prefetch(this.prisma.brandFollow.findMany({ where: { userId }, select: { brandId: true } }));
     const orderItems =
       known.hasOrders === false
         ? []
@@ -1074,10 +1077,7 @@ export class CatalogService {
     const purchasedProductIds = purchasedProducts.map((p) => p.id);
     const categorySet = [...new Set(purchasedProducts.flatMap((p) => p.categoryIds))];
 
-    const follows = await this.prisma.brandFollow.findMany({
-      where: { userId },
-      select: { brandId: true },
-    });
+    const follows = await followsRead;
     const followedBrandIds = follows.map((f) => f.brandId);
 
     // Hai bước: chọn ứng viên chỉ với cột xếp hạng, rồi nạp thẻ (kèm phân loại) cho đúng các món được chọn.

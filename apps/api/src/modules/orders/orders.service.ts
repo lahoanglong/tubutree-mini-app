@@ -283,7 +283,9 @@ export class OrdersService {
     const needle = foldVietnamese((filter.q ?? '').replace(/^\s*#/, ''));
     if (needle) return this.search(base, needle, page, limit, userId);
     const cursor = filter.cursor ? decodeKeysetCursor(filter.cursor) : null;
-    const [fetched, total] = await this.prisma.$transaction([
+    // Song song, không gói `$transaction([...])`: gói đó không cho chung ảnh chụp (READ COMMITTED chụp lại mỗi câu) mà chỉ thêm
+    // BEGIN/COMMIT và bắt hai câu xếp hàng trên một kết nối (thêm ba vòng chờ DB mỗi lần mở tab Đơn hàng).
+    const [fetched, total] = await Promise.all([
       this.prisma.order.findMany({
         where: cursor ? { AND: [base, keysetAfter(cursor)] } : base,
         orderBy: KEYSET_ORDER,

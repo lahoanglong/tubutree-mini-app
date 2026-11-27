@@ -734,34 +734,46 @@ export class LoyaltyService {
 
   /** Tổng quan loyalty: hạng hiện tại, multiplier, tiến độ lên hạng kế tiếp. */
   async getOverview(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      include: { tier: true },
-    });
-    const tiers = await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } });
-    // Mọi user mặc định ở hạng thấp nhất (Mầm Xanh, minPoints 0) — tierId chỉ được gán khi có
-    // đơn DELIVERED đầu tiên, nên user mới chưa có tier. Hiển thị hạng nền để trang loyalty đúng.
-    const current = user.tier ?? tiers[0] ?? null;
-    const currentSort = current?.sortOrder ?? -1;
-    const next = tiers.find((t) => t.sortOrder > currentSort);
     // "Còn X điểm để lên hạng" phải tính theo ĐÚNG điểm mà recalcTier xét (điểm tích từ mua hàng
     // 12 tháng), không theo số dư: số dư có cả điểm danh/POS — hiển thị theo số dư sẽ hứa lên hạng
     // mà backend không bao giờ cho.
     const since = new Date();
     since.setMonth(since.getMonth() - 12);
-    const tierPoints = await this.tierPoints(userId, since);
-    const { spent12m } = await this.spending12m(userId, since);
-    const lock = await this.lockedOrderPoints(userId, new Date());
+    // Các lượt đọc không phụ thuộc nhau chạy cùng lúc, tối đa 4 lượt một lúc: khách, bảng hạng, điểm xét hạng và tiền mua 12 tháng
+    // bắt đầu ngay; khách và bảng hạng xong trước thì phần khoá điểm và hạn điểm nối vào chỗ trống. Trang Điểm Xanh chờ DB khoảng
+    // 3 vòng thay vì 9 (loyalty-overview-rounds.spec.ts).
+    const head = Promise.all([
+      this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { tier: true } }),
+      this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } }),
+    ]);
+    const tail = head.then(([u]) =>
+      Promise.all([
+        this.lockedOrderPoints(userId, new Date()),
+        this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
+        this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
+        this.fractionConfig('loyalty.max_redeem_pct', 0.2),
+        this.pointExpireMonths(),
+        // Lô điểm sàn đọc sau lô thường (không song song) để không vượt 4 lượt đọc một lúc.
+        loadPointExpiryTxns(this.prisma, userId).then(async (standard) => ({
+          standard,
+          marketplace: (u.pointsMarketplaceBalance ?? 0) > 0 ? await loadPointExpiryTxns(this.prisma, userId, 'MARKETPLACE') : [],
+        })),
+      ]),
+    );
+    const [[user, tiers], tierPoints, { spent12m }, [lock, earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryLots]] = await Promise.all([
+      head,
+      this.tierPoints(userId, since),
+      this.spending12m(userId, since),
+      tail,
+    ]);
+    const { standard: expiryTxns, marketplace: marketplaceExpiryTxns } = expiryLots;
+    // Mọi user mặc định ở hạng thấp nhất (Mầm Xanh, minPoints 0) — tierId chỉ được gán khi có
+    // đơn DELIVERED đầu tiên, nên user mới chưa có tier. Hiển thị hạng nền để trang loyalty đúng.
+    const current = user.tier ?? tiers[0] ?? null;
+    const currentSort = current?.sortOrder ?? -1;
+    const next = tiers.find((t) => t.sortOrder > currentSort);
     const redeemablePoints = Math.max(0, user.pointsBalance - lock.locked);
     const marketplaceBalance = user.pointsMarketplaceBalance ?? 0;
-    const [earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths, expiryTxns, marketplaceExpiryTxns] = await Promise.all([
-      this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
-      this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
-      this.fractionConfig('loyalty.max_redeem_pct', 0.2),
-      this.pointExpireMonths(),
-      loadPointExpiryTxns(this.prisma, userId),
-      marketplaceBalance > 0 ? loadPointExpiryTxns(this.prisma, userId, 'MARKETPLACE') : Promise.resolve([]),
-    ]);
     // Cùng cách tính với tin nhắc sắp hết hạn (remindUser): mỗi lô có hạn replay riêng, lấy ngày sớm nhất, cùng ngày VN thì cộng.
     const now = new Date();
     const expiring = earliestExpiry([
@@ -903,18 +915,22 @@ export class LoyaltyService {
         })
       : [];
 
-    // Pre-filter theo scope trước, rồi 1 groupBy duy nhất đếm used count cho mọi coupon.
-    // Trước đây loop từng coupon gọi count() → 1 + N query khi user có nhiều voucher khả dụng.
+    // Pre-filter theo scope, rồi 1 groupBy duy nhất đếm used count cho mọi coupon (không count() từng mã).
+    // groupBy chạy cùng lúc với lượt đọc mã đã nhận, theo mọi mã ứng viên thay vì chờ lọc xong: số lượt dùng tra theo id nên mã bị lọc
+    // bỏ không ảnh hưởng, mà ví bớt một vòng chờ DB.
     // Điều kiện scope dùng CHUNG isCouponEligible với CouponsService.assertScopeOwnership
     // (validate/redeem) để list & apply KHÔNG lệch (coupon hiện mà redeem fail).
     // Mã đã tắt và mã công khai giới hạn theo người (với tài khoản khách) cũng bị validateAndCompute từ chối.
     // Mã chỉ khách mới bị từ chối khi khách đã có đơn chưa huỷ: ẩn luôn khỏi ví.
     const claimIds = coupons.filter((c) => c.scope === 'CLAIM').map((c) => c.id);
-    const [claims, priorOrder] = await Promise.all([
+    const [claims, priorOrder, grouped] = await Promise.all([
       claimIds.length
         ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
         : [],
       coupons.some((c) => c.newCustomerOnly) ? (known.hasPriorOrder ?? hasPriorOrder(this.prisma, userId)) : false,
+      coupons.length
+        ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: coupons.map((c) => c.id) } }, _count: { _all: true } })
+        : [],
     ]);
     const eligibleUser = { ...user, claimedCouponIds: new Set(claims.map((c) => c.couponId)) };
     const realUser = isRealUser(user);
@@ -926,14 +942,6 @@ export class LoyaltyService {
         !(c.newCustomerOnly && priorOrder),
     );
 
-    const ids = filtered.map((c) => c.id);
-    const grouped = ids.length
-      ? await this.prisma.couponRedemption.groupBy({
-          by: ['couponId'],
-          where: { userId, couponId: { in: ids } },
-          _count: { _all: true },
-        })
-      : [];
     const usedMap = new Map(grouped.map((g) => [g.couponId, g._count._all]));
     // Mã chỉ áp cho vài sản phẩm (mã mua chung): trả kèm sản phẩm áp dụng để trang sản phẩm/giỏ chỉ mời dùng đúng chỗ.
     const scopedIds = [...new Set(filtered.flatMap((c) => couponProductIds(c.applyTo) ?? []))];

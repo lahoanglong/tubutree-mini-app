@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { CartService } from './cart.service';
+import { CartService as RealCartService } from './cart.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { CouponMinOrderError, CouponsService } from '../coupons/coupons.service';
 import { COUPON_PRODUCT_FLASH_REASON } from '../coupons/coupon-notice';
@@ -8,6 +8,31 @@ import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { ComboService } from '../storefront/combo.service';
 import { COUPON_CAP_ZERO_REASON } from '../pricing/redeem-cap';
+
+/**
+ * Giá giỏ đọc dòng giỏ bằng `cartItem.findMany` song song với `cart.findUnique` (không còn `include: { items }`). Mock trong file này khai
+ * dòng giỏ ở `items` của kết quả `cart.findUnique`: khi mock chưa có `cartItem.findMany` thì lần đọc dòng giỏ trả `items` của lượt
+ * `cart.findUnique` mới nhất (lượt đó luôn được gọi trước, cùng một Promise.all), kể cả khi test đổi kết quả mock giữa chừng.
+ */
+function withCartItems<T>(prisma: T): T {
+  const p = prisma as unknown as { cart?: { findUnique?: jest.Mock }; cartItem?: Record<string, unknown> };
+  const findUnique = p?.cart?.findUnique;
+  if (!findUnique?.mock || typeof p.cartItem?.findMany === 'function') return prisma;
+  p.cartItem = {
+    ...(p.cartItem ?? {}),
+    findMany: async () => {
+      const results = findUnique.mock.results;
+      const row = (await results[results.length - 1]?.value) as { items?: unknown[] } | null | undefined;
+      return row?.items ?? [];
+    },
+  };
+  return prisma;
+}
+class CartService extends RealCartService {
+  constructor(prisma: PrismaService, ...rest: ConstructorParameters<typeof RealCartService> extends [unknown, ...infer R] ? R : never) {
+    super(withCartItems(prisma), ...rest);
+  }
+}
 
 const coupons = {} as unknown as CouponsService;
 // Freeship đơn đầu mặc định bật; các test không xét nó tắt cờ để khỏi phải dựng bảng user/order.
@@ -1161,12 +1186,29 @@ describe('CartService guard tồn kho', () => {
     });
   });
 
+  describe('getCart: số vòng chờ DB', () => {
+    it('dòng giỏ đọc song song với dòng carts (không chờ dòng carts về rồi mới đọc qua include lồng)', async () => {
+      let releaseCart: () => void = () => undefined;
+      const row = { id: 'c1', couponCode: null, user: { tierId: null, phone: null, zaloId: 'z1', _count: { orders: 0 } } };
+      const findUnique = jest.fn(() => new Promise((resolve) => (releaseCart = () => resolve(row))));
+      const itemsFindMany = jest.fn().mockResolvedValue([]);
+      const prisma = { cart: { findUnique }, cartItem: { findMany: itemsFindMany }, membershipTier: { findUnique: jest.fn().mockResolvedValue(null) } } as any;
+      const pending = new CartService(prisma, coupons, config, flash, analytics, combo).getCart('u1', null);
+      await new Promise((r) => setImmediate(r));
+      expect(itemsFindMany).toHaveBeenCalledTimes(1);
+      expect((findUnique.mock.calls[0] as unknown[])[0]).not.toHaveProperty('include.items');
+      releaseCart();
+      await expect(pending).resolves.toMatchObject({ items: [], subtotal: 0 });
+    });
+  });
+
   describe('getCart: thứ tự dòng ổn định (B01)', () => {
     it('đọc dòng giỏ theo id tăng dần để đổi số lượng không làm dòng nhảy xuống cuối', async () => {
-      const findUnique = jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [] });
-      const prisma = { cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique, update: jest.fn() } } as any;
+      const findUnique = jest.fn().mockResolvedValue({ id: 'c1', couponCode: null });
+      const itemsFindMany = jest.fn().mockResolvedValue([]);
+      const prisma = { cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique, update: jest.fn() }, cartItem: { findMany: itemsFindMany } } as any;
       await new CartService(prisma, { validateAndCompute: jest.fn() } as any, config, { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any, analytics, combo).getCart('u1');
-      expect(findUnique.mock.calls[0][0].include.items.orderBy).toEqual({ id: 'asc' });
+      expect(itemsFindMany.mock.calls[0][0]).toMatchObject({ where: { cart: { userId: 'u1' } }, orderBy: { id: 'asc' } });
     });
   });
 

@@ -40,6 +40,16 @@ function listPrisma(storefrontRow: { id: string } | null = null, titleRows: { id
   return { prisma, findMany, count, storefrontFind, storefrontMany };
 }
 
+describe('AdminService.listOrders — số vòng chờ DB', () => {
+  it('trang đơn và tổng đếm chạy song song, không gói $transaction (bớt BEGIN/COMMIT và xếp hàng một kết nối)', async () => {
+    const { prisma, findMany, count } = listPrisma();
+    await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, VIEWER, {});
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(count).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D1-17)', () => {
   it('kind/payment/platform/referrer đẩy xuống where của cả findMany lẫn count; mặc định mới nhất trước', async () => {
     const { prisma, findMany, count } = listPrisma();

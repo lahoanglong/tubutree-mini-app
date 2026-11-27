@@ -306,6 +306,48 @@ function build(
   return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications, wasteHold, wasteRequests, giftAttach };
 }
 
+describe('CheckoutService.quote — số vòng chờ DB', () => {
+  /** Giữ một lời gọi lại tới khi test mở: thấy được lời gọi nào đã bắt đầu trong lúc nó còn chờ. */
+  function hold(fn: jest.Mock) {
+    const original = fn.getMockImplementation()!;
+    let open: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (open = r));
+    fn.mockImplementation(async (...a: unknown[]) => {
+      await gate;
+      return original(...a);
+    });
+    return () => open();
+  }
+  const tick = () => new Promise((r) => setImmediate(r));
+
+  it('khách, địa chỉ, ghi công và quà chờ gắn đơn bắt đầu cùng lúc; khoá điểm và mốc freeship đơn đầu không chờ giá giỏ', async () => {
+    const systemConfig = { get: jest.fn(async (_k: string, fb?: unknown) => fb) };
+    const { svc, prisma, giftAttach, affiliate, loyalty, cart } = build({ pointsBalance: 500, systemConfig });
+    const releaseUser = hold(prisma.user.findUniqueOrThrow as jest.Mock);
+    const quoted = svc.quote('u1', { addressId: 'addr1' } as never);
+    await tick();
+    expect(prisma.address.findUnique).toHaveBeenCalledTimes(1);
+    expect(affiliate.getActiveTouch).toHaveBeenCalledTimes(1);
+    expect(giftAttach.listPending).toHaveBeenCalledTimes(1);
+    expect(cart.getCartForCheckout).not.toHaveBeenCalled();
+    const releaseCart = hold(cart.getCartForCheckout as jest.Mock);
+    releaseUser();
+    await tick();
+    // Giá giỏ còn chờ mà hai lượt đọc theo khách đã chạy.
+    expect(cart.getCartForCheckout).toHaveBeenCalledTimes(1);
+    expect(loyalty.lockedOrderPoints).toHaveBeenCalledTimes(1);
+    expect(systemConfig.get).toHaveBeenCalledWith('shipping.first_order_free_enabled', expect.anything());
+    releaseCart();
+    await expect(quoted).resolves.toHaveProperty('shipments');
+  });
+
+  it('khách không có điểm: không đọc điểm khoá (như trước)', async () => {
+    const { svc, loyalty } = build({ pointsBalance: 0 });
+    await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(loyalty.lockedOrderPoints).not.toHaveBeenCalled();
+  });
+});
+
 describe('CheckoutService.placeOrder — money safety', () => {
   it('WALLET số dư không đủ (check sớm) → BadRequest', async () => {
     const { svc, orderCreate } = build({ walletBalance: 50, total: 100 });

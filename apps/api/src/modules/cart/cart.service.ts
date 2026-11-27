@@ -17,6 +17,7 @@ import { resolvePublishedStorefront } from '../storefront/resolve-storefront';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { resolveAttribution } from '../checkout/attribution';
+import { prefetch } from '../../common/prefetch';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { AddItemDto, MAX_ITEM_QUANTITY } from './dto/cart.dto';
 import { batchStockMessage, cartBatchRejected } from './cart.batch-error';
@@ -141,7 +142,8 @@ export class CartService {
    * (đường nội bộ của checkout đã tự resolve).
    */
   async getCart(userId: string, storefrontSlug?: string | null) {
-    return this.priceCart(userId, storefrontSlug === null ? undefined : await this.attributedSlug(userId, storefrontSlug));
+    // Ghi công (tra "chạm" giới thiệu) chạy song song với lúc đọc giỏ; giá giỏ chỉ cần gian hàng ở bước combo.
+    return this.priceCart(userId, storefrontSlug === null ? undefined : prefetch(this.attributedSlug(userId, storefrontSlug)));
   }
 
   /**
@@ -150,7 +152,7 @@ export class CartService {
    * không đạt điều kiện của mã — mã vẫn thuộc cả giỏ.
    */
   async getCartSelection(userId: string, storefrontSlug: string | undefined, itemIds: string[]) {
-    return this.priceCart(userId, await this.attributedSlug(userId, storefrontSlug), itemIds);
+    return this.priceCart(userId, prefetch(this.attributedSlug(userId, storefrontSlug)), itemIds);
   }
 
   /**
@@ -167,16 +169,28 @@ export class CartService {
     return priced;
   }
 
-  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[], forCheckout = false, flashLimitKeys: readonly string[] = []) {
+  private async priceCart(
+    userId: string,
+    /** Gian hàng ghi công; nhận cả promise để lượt tra ghi công chạy song song với lúc đọc giỏ (chỉ chờ ở bước combo). */
+    storefrontSlug: string | undefined | Promise<string | undefined>,
+    itemIds?: string[],
+    forCheckout = false,
+    flashLimitKeys: readonly string[] = [],
+  ) {
     const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
-    // Đọc giỏ bằng một lần findUnique theo userId: GET không tạo giỏ (khách chưa có giỏ thì giỏ rỗng), giỏ chỉ được tạo khi ghi.
-    const found = await this.prisma.cart.findUnique({
-      where: { userId },
-      include: {
-        user: forCheckout ? false : { select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } },
-        items: { orderBy: { id: 'asc' }, select: CART_ITEM_SELECT },
-      },
-    });
+    // Đọc giỏ theo userId: GET không tạo giỏ (khách chưa có giỏ thì giỏ rỗng), giỏ chỉ được tạo khi ghi. Dòng giỏ đọc song song với dòng
+    // `carts` thay vì `include` lồng: Prisma chạy từng tầng include nối tiếp trên một kết nối (giỏ → khách → dòng → biến thể → sản phẩm),
+    // tách ra thì còn 3 vòng chờ DB thay vì 5 cho GET /cart, báo giá và đặt đơn. Hai lần đọc vốn không chung giao dịch nên không đổi gì.
+    const [cartRow, cartItems] = await Promise.all([
+      this.prisma.cart.findUnique({
+        where: { userId },
+        include: {
+          user: forCheckout ? false : { select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } },
+        },
+      }),
+      this.prisma.cartItem.findMany({ where: { cart: { userId } }, orderBy: { id: 'asc' }, select: CART_ITEM_SELECT }),
+    ]);
+    const found = cartRow ? { ...cartRow, items: cartItems } : null;
     const cart =
       found ??
       ({
@@ -257,7 +271,7 @@ export class CartService {
     });
     const subtotal = lines.reduce((s, l) => s + l.total, 0);
     // Coupon base LOẠI flash item (giá flash là giá cuối, không stack coupon) và TRỪ combo → giảm hiển thị khớp checkout.
-    const { combo, greenBox, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(lines, userId, storefrontSlug, {
+    const { combo, greenBox, goodsAfterCombo: couponBase, couponLines } = await this.couponBaseAfterCombo(lines, userId, await storefrontSlug, {
       code: cart.couponCode,
       userFacts,
     });

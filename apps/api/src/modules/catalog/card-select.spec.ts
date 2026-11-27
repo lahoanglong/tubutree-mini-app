@@ -188,16 +188,17 @@ describe('thẻ sản phẩm không mang số tồn ra ngoài (Smart Stock, tồ
 
 describe('giỏ hàng chỉ đọc cột giỏ cần', () => {
   it('select của dòng giỏ không có description, images, dealerPrices, affiliateRate', async () => {
-    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [] });
-    const prisma = { cart: { findUnique }, user: { findUnique: jest.fn().mockResolvedValue(null) } } as unknown as PrismaService;
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1', couponCode: null });
+    const itemsFindMany = jest.fn().mockResolvedValue([]);
+    const prisma = { cart: { findUnique }, cartItem: { findMany: itemsFindMany }, user: { findUnique: jest.fn().mockResolvedValue(null) } } as unknown as PrismaService;
     const cfg = { get: async <T>(_k: string, fb?: T) => fb as T } as unknown as SystemConfigService;
     const combo = { computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }) } as unknown as ComboService;
     const flash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as unknown as FlashSaleService;
     const svc = new CartService(prisma, {} as CouponsService, cfg, flash, { record: jest.fn() } as unknown as AnalyticsEventsService, combo);
     await svc.getCartForCheckout('u1');
-    const args = findUnique.mock.calls[0]![0] as { include: { items: { include?: unknown; select: { variation: { select: Record<string, unknown> & { product: { select: Record<string, unknown> } } } } } } };
-    expect(args.include.items.include).toBeUndefined();
-    const variation = args.include.items.select.variation.select;
+    const args = itemsFindMany.mock.calls[0]![0] as { include?: unknown; select: { variation: { select: Record<string, unknown> & { product: { select: Record<string, unknown> } } } } };
+    expect(args.include).toBeUndefined();
+    const variation = args.select.variation.select;
     const product = variation.product.select;
     for (const col of HEAVY) {
       expect(variation).not.toHaveProperty(col);

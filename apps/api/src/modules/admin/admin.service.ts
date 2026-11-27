@@ -1364,7 +1364,9 @@ export class AdminService {
     { order = 'desc', ...extra }: OrderListExtra = {},
   ) {
     const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra }, { exactPhoneOnly: !seesFullOrderPhones(viewer) });
-    const [items, total] = await this.prisma.$transaction([
+    // Trang đơn và tổng đếm chạy song song trên hai kết nối. Gói `$transaction([...])` không cho chung ảnh chụp (READ COMMITTED chụp
+    // lại mỗi câu) mà chỉ thêm BEGIN/COMMIT và bắt hai câu xếp hàng trên một kết nối: thêm ba vòng chờ DB cho mỗi lần mở danh sách.
+    const [items, total] = await Promise.all([
       this.prisma.order.findMany({
         where,
         orderBy: [{ createdAt: order }, { id: order }],

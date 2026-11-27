@@ -56,6 +56,7 @@ import { normalizeZaloPhone } from '../../common/phone';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
 import { applyGreenBox, comboKeyIds, greenBoxLineOf, loadGreenBoxSettings, yieldGreenBoxToCoupon, type GreenBoxResult } from '../bundles/green-box';
 import { resolveAttribution } from './attribution';
+import { prefetch } from '../../common/prefetch';
 import {
   FlashQuotaLineError,
   FlashSaleService,
@@ -392,8 +393,10 @@ export class CheckoutService {
 
   private async quoteInner(userId: string, dto: QuoteDto, guest: GuestPricingContext | false, buyerIpHash: string | null) {
     const pickupInput = pickupInputOf(dto);
-    const { storefront } = guest ? { storefront: null } : await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, guest ? null : pickupInput, !!guest, guest ? guest.ipHash : buyerIpHash);
+    // Ghi công (tra "chạm" giới thiệu) và quà chờ gắn đơn không phụ thuộc giỏ: bắt đầu cùng lúc với phần tính giá thay vì nối trước/sau nó.
+    const storefrontSlug = guest ? undefined : prefetch(this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug }).then(({ storefront }) => storefront?.slug));
+    const pendingGiftsRead = this.giftAttach ? prefetch(this.giftAttach.listPending(userId)) : null;
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefrontSlug, dto.itemIds, guest ? null : pickupInput, !!guest, guest ? guest.ipHash : buyerIpHash);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU') ?? null;
     // W179-C (G2): cùng hàm thuần giftAttachDecision cho cả báo giá lẫn đặt đơn (SĐT xác minh Zalo, kiện Tubu >= 99.000đ ròng, tối đa 1 quà/đơn).
@@ -401,7 +404,7 @@ export class CheckoutService {
       hasTubuShipment: tubuShipment !== null,
       phoneVerified: (user as { phoneVerifiedAt?: Date | null }).phoneVerifiedAt != null,
       netGoodsVnd: tubuShipment ? Math.max(0, tubuShipment.subtotal - tubuShipment.discount) : 0,
-      pending: this.giftAttach ? await this.giftAttach.listPending(userId) : [],
+      pending: pendingGiftsRead ? await pendingGiftsRead : [],
       excludedIds: pickupInput.excludeGiftIds,
     });
     const pendingGiftRedemptions = giftDecision.lines;
@@ -1406,7 +1409,8 @@ export class CheckoutService {
     userId: string,
     addressId: string,
     pointsToUse?: number,
-    storefrontSlug?: string,
+    /** Gian hàng ghi công; báo giá truyền promise để lượt tra ghi công chạy song song với lúc đọc khách và giỏ (chỉ chờ ở bước combo). */
+    storefrontSlug?: string | Promise<string | undefined>,
     itemIds?: string[],
     /** Thu rác kèm đơn khách chọn (báo giá luôn truyền để dựng thẻ thu kèm; đặt đơn chỉ truyền khi khách chọn thu kèm). null = không đánh giá. */
     pickupInput: PickupRequestInput | null = null,
@@ -1415,13 +1419,17 @@ export class CheckoutService {
     /** IP đã băm của lần gọi: khoá giới hạn Giờ vàng của người mua chưa xác thực (flash-buyer-keys.ts). */
     ipHash: string | null = null,
   ) {
-    const account = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const address = await this.deliveryAddress(userId, addressId);
+    // Khách và địa chỉ đọc cùng lúc (chỉ cần userId/addressId).
+    const [account, address] = await Promise.all([this.prisma.user.findUniqueOrThrow({ where: { id: userId } }), this.deliveryAddress(userId, addressId)]);
     // Người mua chưa xác thực (guest_ Mini, khách web vãng lai) được giá Giờ vàng; giới hạn mua đếm thêm theo SĐT nhận hàng và IP web, nên
     // giá giỏ ở đây và lần trừ suất lúc đặt dùng cùng các khoá.
     const flashLimitKeys = buyerFlashLimitKeys(account, { phone: address.phone, ipHash });
-    const cart = await this.checkoutLines(userId, itemIds, flashLimitKeys);
     const user = guest ? { ...account, tierId: null, pointsBalance: 0, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0 } : account;
+    // Hai lượt đọc chỉ phụ thuộc khách (điểm đang khoá, mốc freeship đơn đầu) bắt đầu ngay, chạy song song với lúc đọc và tính giá giỏ;
+    // kết quả vẫn được chờ ở đúng chỗ cũ bên dưới nên phép tính không đổi thứ tự.
+    const lockedPointsRead = user.pointsBalance > 0 ? prefetch(this.loyalty.lockedOrderPoints(userId, new Date())) : null;
+    const firstOrderFromRead = prefetch(firstOrderFreeShipFrom(this.config, this.prisma, userId));
+    const cart = await this.checkoutLines(userId, itemIds, flashLimitKeys);
     const couponCode = guest ? null : cart.couponCode;
 
     // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
@@ -1429,7 +1437,7 @@ export class CheckoutService {
     //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
     //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
     //   3) Điểm Xanh — trên phần còn lại sau coupon (lô STANDARD có trần %, lô quy đổi thì không).
-    const { flashSubtotal, combo, greenBox, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, storefrontSlug, userId, couponCode);
+    const { flashSubtotal, combo, greenBox, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, await storefrontSlug, userId, couponCode);
     // Lời báo mã chỉ nhắc combo khi có combo thật: `combo.total` gồm cả Hộp Xanh.
     const hasCombo = combo.total - (greenBox?.total ?? 0) > 0;
 
@@ -1493,8 +1501,7 @@ export class CheckoutService {
     });
     // Trần điểm = số DÙNG ĐƯỢC (số dư − điểm đơn còn có thể bị đảo), không phải số dư — cùng luật
     // LoyaltyService.redeemReward. Đọc ngoài tx ở đây chỉ để báo giá/kẹp; placeOrder kiểm lại trong tx.
-    const lockedPoints =
-      user.pointsBalance > 0 ? (await this.loyalty.lockedOrderPoints(userId, new Date())).locked : 0;
+    const lockedPoints = lockedPointsRead ? (await lockedPointsRead).locked : 0;
     const redeemablePoints = Math.max(0, user.pointsBalance - lockedPoints);
     // PD-3 + W42: MARKETPLACE trước (chỉ tiêu được khi mua hàng, có hạn), rồi STANDARD; hai lô này chung trần max_redeem_pct và phần
     // trần gộp mã đã chưa dùng. Phần còn lại từ lô quy đổi (không trần), spec 2.3. Điểm sàn đã qua hạn chờ nên không bị khoá như điểm đơn.
@@ -1546,7 +1553,7 @@ export class CheckoutService {
       );
       throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Bạn thử lại sau hoặc liên hệ Tubu Tree nhé.');
     }
-    const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+    const firstOrderFrom = await firstOrderFromRead;
     // Đánh giá thu rác kèm đơn TRƯỚC phí giao: phí kiện Tubu về 0 là một phần của số tiền báo giá và đặt đơn cùng dùng.
     const pickup = pickupInput ? await this.evaluatePickup(userId, address, groups, pickupInput) : null;
     const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship, firstOrderFrom, pickup?.freeShip === true);
