@@ -87,7 +87,7 @@ const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
  * `search` tra ra đúng đơn 10/10 mỗi sàn. Đơn POS/chat không có `marketplace_id` nên `id` nội bộ của Pancake không bao giờ thành mã.
  * Số vượt Number.MAX_SAFE_INTEGER đã mất chữ số khi parse JSON nên bỏ.
  */
-function marketplaceOrderIdCode(data: Data): string | null {
+export function marketplaceOrderIdCode(data: Data): string | null {
   const marketplaceId = finiteNumber(data['marketplace_id']);
   if ((marketplaceId === null || marketplaceId === 0) && data['is_from_ecommerce'] !== true) return null;
   const id = data['id'];

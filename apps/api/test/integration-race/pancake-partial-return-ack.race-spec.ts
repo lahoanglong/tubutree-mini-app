@@ -11,6 +11,7 @@ import { OrderReturnsService } from '../../src/modules/orders/order-returns.serv
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
+import { ATTENTION_CUSTOMER_EDIT_MONEY_CHECK, ATTENTION_PARTIAL_RETURN_HELD } from '../../src/modules/integrations/pancake/pancake-attention';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
 
 const ACK = 'Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu';
@@ -130,16 +131,17 @@ describe('Pancake "Hoàn một phần" (15) cho đơn đã duyệt trả trên T
     expect((await orderRow(order.id)).pancakeAttention).toBeNull();
   });
 
-  it('(e) W44: ô còn phần kiểm tiền sau khi khách sửa địa chỉ → bấm nhận hàng gỡ việc hoàn một phần, giữ phần kiểm tiền và mốc giờ', async () => {
-    const MONEY = 'Kiểm tiền trên Pancake sau khi khách sửa địa chỉ (#pk-1): cod 230.000đ→0đ. Sửa tay tiền theo đơn Tubu rồi giao.';
+  it('(e) W44: ô còn phần kiểm tiền và dòng chờ Kế toán → bấm nhận hàng gỡ việc hoàn một phần, giữ hai phần đó (đúng thứ tự) và mốc giờ', async () => {
+    const MONEY = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): cod 230.000đ→0đ. Sửa tay tiền theo đơn Tubu rồi giao.`;
+    const HELD = `${ATTENTION_PARTIAL_RETURN_HELD}: 38.000đ`;
     const { admin, order, req } = await approvedPartialReturn();
     await proc.onStatusUpdated({ id: order.pancakeOrderId, status: 15 });
     const acked = await orderRow(order.id);
     expect(acked.pancakeAttention).toMatch(new RegExp(`^${ACK}`));
-    await prisma.order.update({ where: { id: order.id }, data: { pancakeAttention: `${acked.pancakeAttention} | ${MONEY}` } });
+    await prisma.order.update({ where: { id: order.id }, data: { pancakeAttention: `${acked.pancakeAttention} | ${HELD} | ${MONEY}` } });
     await returns.markReceived(admin.id, req.id);
     const after = await orderRow(order.id);
-    expect(after.pancakeAttention).toBe(MONEY);
+    expect(after.pancakeAttention).toBe(`${HELD} | ${MONEY}`);
     expect(after.pancakeAttentionAt).not.toBeNull();
   });
 

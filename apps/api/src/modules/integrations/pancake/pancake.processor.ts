@@ -21,6 +21,7 @@ import {
   ATTENTION_UNDERPAID,
   PANCAKE_COD_SWITCH_PAID_NOTE,
   PANCAKE_PARTIAL_RETURN_MANUAL_NOTE,
+  attentionHeadIgnoringMoneyCheck,
   clearPancakeAttention,
   removeAttentionReasonsByPrefix,
   writePancakeAttention,
@@ -328,14 +329,16 @@ export class PancakeProcessor extends WorkerHost {
 
     this.warnUnreadableMoney(order, unreadableTotalFields(data), data);
     const mismatch = pancakeTotalMismatch(data, order);
-    const own = order.pancakeAttention?.startsWith(ATTENTION_TOTAL_MISMATCH) ?? false;
+    // Phần kiểm tiền sau khi khách sửa địa chỉ luôn đứng sau và không phải việc của job khác: xét lý do đầu ngoài phần đó.
+    const head = attentionHeadIgnoringMoneyCheck(order.pancakeAttention);
+    const own = head?.startsWith(ATTENTION_TOTAL_MISMATCH) ?? false;
     if (!mismatch) {
       if (own) await clearPancakeAttention(this.prisma, order.id, ATTENTION_TOTAL_MISMATCH);
       return;
     }
     // Hàng đợi chỉ có một ô lý do: đang chờ việc khác (khách chuyển thiếu, huỷ chưa tới Pancake…) thì không ghi đè. Dòng này chỉ
     // bỏ sớm cho đỡ tốn truy vấn; việc chặn thật nằm trong điều kiện updateMany vì job khác có thể ghi chen sau lúc đọc đơn.
-    if (order.pancakeAttention && !own) return;
+    if (head && !own) return;
     // Đơn có dòng do đối tác tự giao chỉ gửi phần dòng kho Tubu lên Pancake nên tổng Pancake thấp hơn là đúng thiết kế.
     if (await this.hasNonPancakeLines(order.id)) return;
 

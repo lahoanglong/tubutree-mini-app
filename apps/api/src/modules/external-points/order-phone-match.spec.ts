@@ -97,6 +97,13 @@ describe('parseOrderPhoneForMatch + phoneMatchesOrderMask: SĐT che số trên �
     expect(orderPhoneMatch(USER, { phone: null })).toBe('NO_DATA');
   });
 
+  it('W44: số đầy đủ trong phoneMask (từ hồ sơ khách) chỉ nâng lên MATCH; lệch thì NO_DATA (REVIEW), không MISMATCH (từ chối, tính khoá)', () => {
+    expect(orderPhoneMatch(USER, { phone: null, phoneMask: '0981234526' })).toBe('MATCH');
+    expect(orderPhoneMatch(USER, { phone: null, phoneMask: '0911111111' })).toBe('NO_DATA');
+    expect(orderPhoneMatch(USER, { phone: null, phoneMask: '098*****27' })).toBe('MISMATCH');
+    expect(orderPhoneMatch(USER, { phone: '0911111111', phoneMask: null })).toBe('MISMATCH');
+  });
+
   it('visibleDigits: FULL thắng mọi mẫu che, mẫu nhiều số hơn thắng', () => {
     const full = visibleDigits(parseOrderPhoneForMatch('0981234526'));
     const lead3 = visibleDigits(parseOrderPhoneForMatch('098*****26'));

@@ -6,6 +6,9 @@ import {
   ATTENTION_PARTIAL_RETURN_ACK,
   ATTENTION_PUSH_FAILED,
   ATTENTION_PUSH_RETRYING,
+  ATTENTION_PARTIAL_RETURN_HELD,
+  ATTENTION_UNDERPAID,
+  attentionHeadIgnoringMoneyCheck,
   clearPancakeAttention,
   flagPancakeAttention,
   keepMoneyCheck,
@@ -251,6 +254,20 @@ describe('W44 MINOR 2: phần kiểm tiền sau khi khách sửa địa chỉ kh
     const other = fakeOrderDb([baseOrder({ pancakeAttention: `Khác | ${M}` })]);
     await clearPancakeAttention(other.prisma as never, 'o1', ATTENTION_CUSTOMER_EDIT_PENDING);
     expect(other.row().pancakeAttention).toBe(`Khác | ${M}`);
+  });
+
+  it('clearPancakeAttention: dòng chờ Kế toán nối sau lý do đầu (lật trạng thái có hoàn một phần) cũng ở lại, kèm mốc giờ', async () => {
+    const held = `${ATTENTION_PARTIAL_RETURN_HELD}: 38.000đ`;
+    const db = fakeOrderDb([baseOrder({ pancakeAttention: `${ATTENTION_UNDERPAID} 50.000đ | ${held} | ${M}`, pancakeAttentionAt: AT })]);
+    await clearPancakeAttention(db.prisma as never, 'o1', ATTENTION_UNDERPAID);
+    expect(db.row()).toMatchObject({ pancakeAttention: `${held} | ${M}`, pancakeAttentionAt: AT });
+  });
+
+  it('attentionHeadIgnoringMoneyCheck: lý do đầu ngoài phần kiểm tiền', () => {
+    expect(attentionHeadIgnoringMoneyCheck(null)).toBeNull();
+    expect(attentionHeadIgnoringMoneyCheck(M)).toBeNull();
+    expect(attentionHeadIgnoringMoneyCheck(`A | ${M}`)).toBe('A');
+    expect(attentionHeadIgnoringMoneyCheck(`${M} | B`)).toBe('B');
   });
 
   it('clearPancakeAttention: ô không khớp tiền tố thì chỉ đọc, không ghi', async () => {

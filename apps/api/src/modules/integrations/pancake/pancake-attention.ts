@@ -119,6 +119,15 @@ export function keepMoneyCheck(next: string | null, current: string | null | und
   return [...parts, ...held].join(ATTENTION_SEPARATOR) || null;
 }
 
+/** Lý do đầu của ô khi bỏ qua phần kiểm tiền (phần đó luôn đứng sau): null khi ô trống hay chỉ có phần kiểm tiền. */
+export function attentionHeadIgnoringMoneyCheck(cell: string | null | undefined): string | null {
+  return (cell ?? '').split(ATTENTION_SEPARATOR).find((part) => part !== '' && !part.startsWith(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK)) ?? null;
+}
+
+/** Tiền tố các phần không bị gỡ khi một việc khác tự xong: phần kiểm tiền sau khi khách sửa địa chỉ và các dòng chờ Kế toán quyết. */
+export const STICKY_ATTENTION_PREFIXES: readonly string[] = [ATTENTION_CUSTOMER_EDIT_MONEY_CHECK, ...ACCOUNTANT_OWNED_REASONS];
+const isStickyPart = (part: string): boolean => STICKY_ATTENTION_PREFIXES.some((p) => part.startsWith(p));
+
 /** Ô không chứa phần kiểm tiền: lệnh ghi một câu chỉ chạy khi điều kiện này đúng, ô có phần đó đi đường đọc-ghi có điều kiện. */
 const NO_MONEY_CHECK: Prisma.OrderWhereInput = {
   // NOT (NULL LIKE ..) ra NULL trong SQL: ô trống phải được nêu riêng, không thì dòng không khớp.
@@ -182,9 +191,8 @@ export async function writePancakeAttention(
     const accountantOwned = current !== null && ACCOUNTANT_OWNED_REASONS.some((r) => current.includes(r));
     if (onlyReplacingPrefix) {
       // Phần kiểm tiền không tính là lý do của job khác: so tiền tố trên phần còn lại của ô.
-      const rest = currentParts.filter((part) => !part.startsWith(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK));
-      const prefixOk = rest.length === 0 || rest[0]!.startsWith(onlyReplacingPrefix);
-      if (accountantOwned || rest.length === currentParts.length || !prefixOk) return null;
+      const head = attentionHeadIgnoringMoneyCheck(current);
+      if (accountantOwned || stickyMoneyCheckParts(current).length === 0 || (head !== null && !head.startsWith(onlyReplacingPrefix))) return null;
     }
     // Cùng phép thử với notCod/notHeld của lệnh ghi đầu: còn dòng chờ Kế toán thì nối sau nó; vừa được Kế toán gỡ thì ghi như lệnh đầu.
     const next = accountantOwned
@@ -205,9 +213,9 @@ export async function writePancakeAttention(
 export const ATTENTION_SETTLED_BY_CANCEL = [ATTENTION_PUSH_FAILED, ATTENTION_CANCEL_PENDING, ATTENTION_PAYMENT_PENDING];
 
 /**
- * Gỡ lý do do chính chiều outbound ghi (việc đã tự xong) — không đụng lý do khác (webhook, admin): xoá ô khi lý do ĐẦU khớp tiền tố. Phần
- * kiểm tiền sau khi khách sửa địa chỉ (stickyMoneyCheckParts) vẫn ở lại. Đọc trước rồi mới ghi có điều kiện theo giá trị đã đọc: ô thường
- * không khớp tiền tố nên đa số lần gọi chỉ tốn một câu đọc, không câu ghi nào.
+ * Gỡ lý do do chính chiều outbound ghi (việc đã tự xong) — không đụng lý do khác (webhook, admin): xoá ô khi lý do ĐẦU khớp tiền tố. Các
+ * phần STICKY_ATTENTION_PREFIXES (kiểm tiền sau khi khách sửa địa chỉ, dòng chờ Kế toán nối sau lý do đầu) vẫn ở lại. Đọc trước rồi mới ghi
+ * có điều kiện theo giá trị đã đọc: ô thường không khớp tiền tố nên đa số lần gọi chỉ tốn một câu đọc, không câu ghi nào.
  */
 export async function clearPancakeAttention(prisma: Pick<Prisma.TransactionClient, 'order'>, orderId: string, prefix: string | string[]): Promise<void> {
   const prefixes = Array.isArray(prefix) ? prefix : [prefix];
@@ -215,7 +223,7 @@ export async function clearPancakeAttention(prisma: Pick<Prisma.TransactionClien
     const row = await prisma.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
     const cell = row?.pancakeAttention;
     if (!cell || !prefixes.some((p) => cell.startsWith(p))) return;
-    const next = keepMoneyCheck(null, cell);
+    const next = cell.split(ATTENTION_SEPARATOR).filter(isStickyPart).join(ATTENTION_SEPARATOR) || null;
     if (next === cell) return;
     const r = await prisma.order.updateMany({
       where: { id: orderId, pancakeAttention: cell },

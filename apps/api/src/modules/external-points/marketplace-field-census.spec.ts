@@ -119,7 +119,7 @@ describe('marketplace-field-census (W44, chỉ GET)', () => {
       'tracking_number',
     ]);
     const lz = c.codePaths.find((r) => r.path === 'lazada_info.order_number')!;
-    expect(lz).toMatchObject({ coverageClaim: 1, distinctRatio: 1, inExtractRatio: 0, prefixes: ['LZO×9'], shapes: ['A5D6×9'] });
+    expect(lz).toMatchObject({ coverageClaim: 1, distinctRatio: 1, inExtractRatio: 0, prefixes: [], shapes: ['A5D6×9'] });
     expect(lz.coverage).toEqual({ DELIVERED: 1, SHIPPED: 1, OPEN: 0, CLOSED: null });
     expect(c.codePaths.find((r) => r.path === 'shop_id')!.distinctRatio).toBe(0.1);
     expect(c.candidatePaths).toEqual(['lazada_info.order_number']);

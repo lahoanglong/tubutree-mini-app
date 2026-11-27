@@ -374,7 +374,8 @@ export function censusChannel(fetched: FetchedChannel, perChannel: number): Chan
       acc.orders++;
       acc.present[bucket]++;
       bump(acc.shapes, codeShape(code));
-      const prefix = codePrefix(code);
+      // Tiền tố chỉ in cho đường dẫn mã vận đơn (tiền tố hãng): ở trường khác (vd mã giới thiệu của khách) nó là mẩu định danh khách.
+      const prefix = EXTRACTED_CODE_PATHS.includes(leaf.path) ? codePrefix(code) : null;
       if (prefix) bump(acc.prefixes, prefix);
       bump(acc.values, code);
       if (extracted.includes(code)) acc.inExtract++;

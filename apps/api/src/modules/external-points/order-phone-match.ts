@@ -83,7 +83,14 @@ export function visibleDigits(p: OrderPhonePattern): number {
   return p.positional ? p.positional.replace(/\*/g, '').length : p.lead.length + p.tail.length;
 }
 
-/** Đối chiếu SĐT khách với dữ liệu đã lưu của đơn ngoài: số đầy đủ (`phone`) nếu có, không thì mẫu che (`phoneMask`). */
+/**
+ * Đối chiếu SĐT khách với dữ liệu đã lưu của đơn ngoài: số đầy đủ (`phone`) nếu có, không thì mẫu che (`phoneMask`). Số đầy đủ nằm trong
+ * `phoneMask` chỉ đến từ hồ sơ khách trên Pancake (ingest, khi đơn che hết SĐT), không phải SĐT của chính đơn: khớp thì MATCH, lệch thì chưa
+ * đủ để từ chối (hồ sơ có thể là số của người nhà) nên coi như không có dữ liệu, claim vào REVIEW như trước.
+ */
 export function orderPhoneMatch(userPhone: string | null | undefined, order: { phone: string | null; phoneMask?: string | null }): OrderPhoneMatch {
-  return phoneMatchesOrderMask(userPhone, parseOrderPhoneForMatch(order.phone ?? order.phoneMask ?? null));
+  if (order.phone !== null) return phoneMatchesOrderMask(userPhone, parseOrderPhoneForMatch(order.phone));
+  const stored = parseOrderPhoneForMatch(order.phoneMask ?? null);
+  const match = phoneMatchesOrderMask(userPhone, stored);
+  return stored.kind === 'FULL' && match === 'MISMATCH' ? 'NO_DATA' : match;
 }

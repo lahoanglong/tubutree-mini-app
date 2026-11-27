@@ -117,6 +117,29 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
     ]);
   });
 
+  describe('W44: ô có phần kiểm tiền sau khi khách sửa địa chỉ', () => {
+    const MONEY = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#7001): cod 230.000đ→0đ.`;
+
+    it('ô chỉ có phần kiểm tiền mà tổng lệch → vẫn gắn lý do lệch tổng', async () => {
+      const { proc, updateMany } = setup(order({ pancakeAttention: MONEY }));
+      await proc.onOrderEvent(EDITED);
+      expect(flagged(updateMany)[0]).toEqual(expect.stringContaining(ATTENTION_TOTAL_MISMATCH));
+    });
+
+    it('"lệch tổng | kiểm tiền" mà nhân viên đã sửa đúng số → gỡ lệch tổng, giữ phần kiểm tiền', async () => {
+      const cell = `${ATTENTION_TOTAL_MISMATCH}: cũ | ${MONEY}`;
+      const { proc, updateMany } = setup(order({ pancakeAttention: cell }));
+      await proc.onOrderEvent(UNTOUCHED);
+      expect(calls(updateMany)).toEqual([{ where: { id: 'o1', pancakeAttention: cell }, data: { pancakeAttention: MONEY } }]);
+    });
+
+    it('"lý do khác | kiểm tiền" mà tổng lệch → không đè lý do khác', async () => {
+      const { proc, updateMany } = setup(order({ pancakeAttention: `${ATTENTION_UNDERPAID}: 1/2 | ${MONEY}` }));
+      await proc.onOrderEvent(EDITED);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
+  });
+
   it('khớp mà đơn đang chờ lý do KHÁC (khách chuyển thiếu): không gỡ lý do đó', async () => {
     const { proc, updateMany } = setup(order({ pancakeAttention: `${ATTENTION_UNDERPAID}: 1/2` }));
     await proc.onOrderEvent(UNTOUCHED);

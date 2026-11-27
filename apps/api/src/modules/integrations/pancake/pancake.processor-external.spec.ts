@@ -94,6 +94,13 @@ describe('PancakeProcessor — nạp đơn ngoài app', () => {
     });
   });
 
+  it('W44: marketplace_id chưa có trong bản đồ (đơn không xếp MARKETPLACE) → id nội bộ không thành mã vận đơn hay mã đơn sàn', async () => {
+    const t = setup(fixture('synthetic-lazada-masked.json'), { config: { [ORDER_SOURCE_MAP_KEY]: { marketplaceIds: {}, chatSources: [] } } });
+    await t.run();
+    const row = (t.externalOrder.createMany.mock.calls[0]![0] as { data: Record<string, unknown>[] }).data[0]!;
+    expect(row).toMatchObject({ source: 'UNKNOWN', trackingCodes: ['BESVN0000000017VNA'], marketplaceOrderSn: null });
+  });
+
   it('payload bọc {event, data} cũng được nạp theo object đơn bên trong', async () => {
     const t = setup({ event: 'order.updated', data: fixture('synthetic-lazada.json') }, {}, 'order.updated');
     await t.run();

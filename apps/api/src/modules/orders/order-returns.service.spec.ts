@@ -7,7 +7,7 @@ import type { OrderReversalService } from './order-reversal.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
-import { ATTENTION_CUSTOMER_EDIT_MONEY_CHECK } from '../integrations/pancake/pancake-attention';
+import { ATTENTION_CUSTOMER_EDIT_MONEY_CHECK, STICKY_ATTENTION_PREFIXES } from '../integrations/pancake/pancake-attention';
 
 const DAY = 864e5;
 const notifyMock = jest.fn().mockResolvedValue(true);
@@ -755,10 +755,11 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     expect(raw).toHaveLength(1);
     const [strings, ...parts] = raw[0] as [TemplateStringsArray, ...unknown[]];
     const q = Prisma.sql(strings, ...(parts as Prisma.Sql[]));
-    expect(q.sql).toMatch(/SET "pancakeAttention" = NULLIF\(array_to_string\(ARRAY\([\s\S]*starts_with\(part, \?\)[\s\S]*NOT EXISTS[\s\S]*"receivedAt" IS NULL/);
+    expect(q.sql).toMatch(/SET "pancakeAttention" = NULLIF\(array_to_string\(ARRAY\([\s\S]*starts_with\(part, s\.p\)[\s\S]*NOT EXISTS[\s\S]*"receivedAt" IS NULL/);
     expect(q.values).toContain('Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu');
-    // W44: ô còn phần kiểm tiền sau khi khách sửa địa chỉ thì phần đó ở lại (câu chỉ giữ các phần bắt đầu bằng tiền tố kiểm tiền).
-    expect(q.values).toContain(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK);
+    // W44: phần kiểm tiền sau khi khách sửa địa chỉ và dòng chờ Kế toán ở lại (câu chỉ giữ các phần mang tiền tố đó).
+    expect(q.values).toContainEqual([...STICKY_ATTENTION_PREFIXES]);
+    expect(STICKY_ATTENTION_PREFIXES).toContain(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK);
   });
 
   it('listForMerchant: chỉ đơn của gian hàng mình, không lộ tài khoản ngân hàng nhận hoàn của khách', async () => {
