@@ -9,7 +9,7 @@
  *   PG_TARGET=127.0.0.1:5571 PROXY_PORT=5573 CONTROL_PORT=5574 LATENCY_MS=0 node scripts/perf/pg-latency-proxy.cjs
  *   curl 'localhost:5574/latency?ms=30'   # doi do tre luc dang chay
  *   curl localhost:5574/reset             # xoa so dem, bat dau ghi
- *   curl localhost:5574/stats             # {"statements":12,"roundTrips":14,"depth":5}
+ *   curl localhost:5574/stats             # {"statements":12,"roundTrips":14,"depth":5,"maxParallel":3}
  */
 const net = require('node:net');
 const http = require('node:http');
@@ -37,6 +37,15 @@ function depthOf(rts) {
     }
   }
   return n;
+}
+
+/** So vong hoi-dap mo cung luc nhieu nhat = so ket noi pool mot request giu dong thoi. */
+function maxParallelOf(rts) {
+  const ev = rts.flatMap((r) => [[r.s, 1], [r.e, -1]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let cur = 0;
+  let max = 0;
+  for (const [, d] of ev) max = Math.max(max, (cur += d));
+  return max;
 }
 
 /** Tach goi theo khung Postgres (1 byte loai + int32 do dai). Goi dau (Startup/SSLRequest) khong co byte loai. */
@@ -145,6 +154,6 @@ http
       roundTrips = [];
     }
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ latency, statements, roundTrips: roundTrips.length, depth: depthOf(roundTrips) }));
+    res.end(JSON.stringify({ latency, statements, roundTrips: roundTrips.length, depth: depthOf(roundTrips), maxParallel: maxParallelOf(roundTrips) }));
   })
   .listen(CONTROL, '127.0.0.1');

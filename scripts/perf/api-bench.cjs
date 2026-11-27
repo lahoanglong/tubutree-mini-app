@@ -12,6 +12,7 @@
  *   node scripts/perf/api-bench.cjs --out=before.json [--only=home,pdp] [--n=11] [--latency=30] [--cold]
  *   [--dump=<thu muc>] ghi body tung endpoint de so truoc/sau khi sha lech
  *   --crons [--only=Lop.ham,...]: goi tung ham @Cron mot lan va do (xem runCrons)
+ *   --load=C [--seconds=S] [--only=cart,checkout_quote]: tai song song + tham do $transaction (cho ket noi pool, P2028)
  *
  * In bang: endpoint | stmts | depth | p50 @0ms | p50 @Lms. KHONG chay vao DB that (tu choi neu ten DB khac tubutree_perf).
  */
@@ -33,6 +34,8 @@ const COLD = args.cold === '1';
 const CONTROL = `http://127.0.0.1:${process.env.CONTROL_PORT || 5574}`;
 const PORT = Number(process.env.BENCH_PORT || 3311);
 const API_DIR = path.resolve(process.env.API_DIR || path.join(__dirname, '../../apps/api'));
+// Thu muc ban build (tuong doi API_DIR): dat ban cu o vd dist/_base de so A/B xen ke ma van tim duoc node_modules.
+const DIST = process.env.BENCH_DIST || 'dist';
 const DB_URL = process.env.BENCH_DB_URL || '';
 if (!/\/tubutree_perf(\?|$)/.test(DB_URL)) {
   console.error('TU CHOI: BENCH_DB_URL phai tro toi database "tubutree_perf".');
@@ -136,8 +139,8 @@ async function runCrons(app, req) {
 async function main() {
   const req = createRequire(path.join(API_DIR, 'package.json'));
   req('reflect-metadata');
-  const { bootstrap } = require(path.join(API_DIR, 'dist/bootstrap.js'));
-  const { AppModule } = require(path.join(API_DIR, 'dist/app.module.js'));
+  const { bootstrap } = require(path.join(API_DIR, DIST, 'bootstrap.js'));
+  const { AppModule } = require(path.join(API_DIR, DIST, 'app.module.js'));
   const { SchedulerRegistry } = req('@nestjs/schedule');
   const app = await bootstrap(AppModule, { port: PORT });
   if (!app) throw new Error('bootstrap that bai');
@@ -153,11 +156,11 @@ async function main() {
     ['modules/flash-sale/flash-sale.service.js', 'FlashSaleService'],
   ]) {
     try {
-      cacheClasses.push(require(path.join(API_DIR, 'dist', file))[name]);
+      cacheClasses.push(require(path.join(API_DIR, DIST, file))[name]);
     } catch {}
   }
 
-  const prisma = app.get(require(path.join(API_DIR, 'dist/prisma/prisma.service.js')).PrismaService);
+  const prisma = app.get(require(path.join(API_DIR, DIST, 'prisma/prisma.service.js')).PrismaService);
   const pick = async (sql) => (await prisma.$queryRawUnsafe(sql))[0] ?? {};
   if (args.crons) return runCrons(app, req);
   // --trace: in tung cau Prisma cua MOT lan goi (moc bat dau/ket thuc, model.action, khung goi trong dist) de thay chuoi tuan tu.
@@ -242,7 +245,69 @@ async function main() {
     const text = await r.text();
     const ms = performance.now() - t0;
     const st = await ctl('/stats');
-    return { status: r.status, ms, bytes: text.length, statements: st.statements, roundTrips: st.roundTrips, depth: st.depth, body: text };
+    return { status: r.status, ms, bytes: text.length, statements: st.statements, roundTrips: st.roundTrips, depth: st.depth, maxParallel: st.maxParallel, body: text };
+  }
+
+  // --load=C [--seconds=S]: C client song song goi cac kich ban (mac dinh cart,checkout_quote) trong S giay, kem vong tham do
+  // $transaction tuong tac (giong tx dat don, PRISMA_TRANSACTION_OPTIONS) do thoi gian cho lay ket noi pool va dem P2028.
+  if (args.load) {
+    const C = Number(args.load);
+    const until = Date.now() + Number(args.seconds || 20) * 1000;
+    const pick = S.filter((sc) => (only ?? new Set(['cart', 'checkout_quote'])).has(sc[0]));
+    const { PRISMA_TRANSACTION_OPTIONS } = require(path.join(API_DIR, DIST, 'prisma/prisma.service.js'));
+    // Vai tro khach that la nhieu nguoi; o day chi co vai token nen throttle theo user chan ngay: tat guard trong tien trinh bench.
+    require(path.join(API_DIR, DIST, 'common/throttle/app-throttler.guard.js')).AppThrottlerGuard.prototype.canActivate = async () => true;
+    await ctl(`/latency?ms=${LAT}`);
+    const per = Object.fromEntries(pick.map((sc) => [sc[0], { ms: [], errors: 0 }]));
+    let k = 0;
+    const worker = async () => {
+      while (Date.now() < until) {
+        const [name, method, p, tok, body] = pick[k++ % pick.length];
+        const headers = { 'x-forwarded-for': `10.8.${(k >> 8) & 255}.${k & 255}`, 'x-throttle-bypass': process.env.THROTTLE_BYPASS_TOKEN };
+        if (tok) headers.authorization = `Bearer ${T[tok]}`;
+        if (body) headers['content-type'] = 'application/json';
+        const t0 = performance.now();
+        try {
+          const r = await fetch(base + p, { method, headers, body: body ? JSON.stringify(body) : undefined });
+          await r.text();
+          if (r.status >= 400) per[name].errors++;
+          else per[name].ms.push(performance.now() - t0);
+        } catch {
+          per[name].errors++;
+        }
+      }
+    };
+    const probe = { wait: [], p2028: 0, other: 0 };
+    const prober = async () => {
+      while (Date.now() < until) {
+        const t0 = performance.now();
+        try {
+          await prisma.$transaction(async (tx) => {
+            probe.wait.push(performance.now() - t0);
+            await tx.$queryRawUnsafe('SELECT 1');
+          }, PRISMA_TRANSACTION_OPTIONS);
+        } catch (e) {
+          if (e?.code === 'P2028') probe.p2028++;
+          else probe.other++;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    };
+    const t0 = Date.now();
+    await Promise.all([...Array.from({ length: C }, worker), prober()]);
+    const secs = (Date.now() - t0) / 1000;
+    const q = (a, f) => (a.length ? Math.round([...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(a.length * f))]) : null);
+    const out = { at: new Date().toISOString(), concurrency: C, seconds: secs, latency: LAT, scenarios: {}, txProbe: {} };
+    for (const [name, v] of Object.entries(per)) {
+      out.scenarios[name] = { ok: v.ms.length, errors: v.errors, rps: Math.round((v.ms.length / secs) * 10) / 10, p50: q(v.ms, 0.5), p95: q(v.ms, 0.95), p99: q(v.ms, 0.99) };
+      console.log(`${name.padEnd(16)} ok=${v.ms.length} err=${v.errors} rps=${out.scenarios[name].rps} p50=${q(v.ms, 0.5)}ms p95=${q(v.ms, 0.95)}ms p99=${q(v.ms, 0.99)}ms`);
+    }
+    out.txProbe = { n: probe.wait.length, p50: q(probe.wait, 0.5), p95: q(probe.wait, 0.95), max: q(probe.wait, 1), p2028: probe.p2028, otherErrors: probe.other };
+    console.log(`tx-probe         n=${probe.wait.length} cho-ket-noi p50=${out.txProbe.p50}ms p95=${out.txProbe.p95}ms max=${out.txProbe.max}ms P2028=${probe.p2028} khac=${probe.other}`);
+    if (args.out) fs.writeFileSync(args.out, JSON.stringify(out, null, 2));
+    await ctl('/latency?ms=0');
+    await app.close();
+    process.exit(0);
   }
 
   if (args.trace) {
@@ -276,6 +341,8 @@ async function main() {
         row.statements = median(runs.map((r) => r.statements));
         row.roundTrips = median(runs.map((r) => r.roundTrips));
         row.depth = median(runs.map((r) => r.depth));
+        row.maxParallel = Math.max(...runs.map((r) => r.maxParallel ?? 0));
+        row.parallelRuns = runs.map((r) => r.maxParallel ?? 0);
         row.status = runs[0].status;
         row.bytes = runs[0].bytes;
         if (args.show && row.status >= 400) console.log(sc[0], runs[0].body.slice(0, 300));
@@ -285,7 +352,7 @@ async function main() {
     }
     results[sc[0]] = row;
     console.log(
-      `${sc[0].padEnd(22)} ${String(row.status).padStart(3)} stmts=${String(row.statements).padStart(3)} rt=${String(row.roundTrips).padStart(3)} depth=${String(row.depth).padStart(3)} p50@0=${String(row['p50_0']).padStart(4)}ms p50@${LAT}=${String(row[`p50_${LAT}`]).padStart(5)}ms ${row.bytes}B`,
+      `${sc[0].padEnd(22)} ${String(row.status).padStart(3)} stmts=${String(row.statements).padStart(3)} rt=${String(row.roundTrips).padStart(3)} depth=${String(row.depth).padStart(3)} par=${String(row.maxParallel).padStart(2)} p50@0=${String(row['p50_0']).padStart(4)}ms p50@${LAT}=${String(row[`p50_${LAT}`]).padStart(5)}ms ${row.bytes}B`,
     );
   }
   if (args.out) fs.writeFileSync(args.out, JSON.stringify({ at: new Date().toISOString(), cold: COLD, latency: LAT, n: N, results }, null, 2));

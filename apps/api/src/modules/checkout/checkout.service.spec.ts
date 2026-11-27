@@ -341,6 +341,13 @@ describe('CheckoutService.quote — số vòng chờ DB', () => {
     await expect(quoted).resolves.toHaveProperty('shipments');
   });
 
+  it('khách vãng lai có số dư điểm trên tài khoản: báo giá không đọc điểm khoá, không tra ghi công', async () => {
+    const { svc, loyalty, affiliate } = build({ pointsBalance: 500 });
+    await svc.quote('u1', { addressId: 'addr1' } as never, { ipHash: null });
+    expect(loyalty.lockedOrderPoints).not.toHaveBeenCalled();
+    expect(affiliate.getActiveTouch).not.toHaveBeenCalled();
+  });
+
   it('khách không có điểm: không đọc điểm khoá (như trước)', async () => {
     const { svc, loyalty } = build({ pointsBalance: 0 });
     await svc.quote('u1', { addressId: 'addr1' } as never);
