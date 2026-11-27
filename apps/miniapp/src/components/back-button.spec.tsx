@@ -140,3 +140,43 @@ describe('BackButton: lùi thật, không đẩy chồng (W163)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith(-1);
   });
 });
+
+describe('BackButton: /points/scan vào bằng PUSH từ trang con (W44)', () => {
+  beforeEach(() => {
+    mocks.navigate.mockClear();
+    setIdx(0);
+  });
+  it('từ trang sản phẩm (popup Cách tính Điểm Xanh), còn lịch sử: hiện nút, bấm thì lùi thật về trang sản phẩm', () => {
+    setIdx(3);
+    mocks.location = { pathname: '/points/scan', search: '', state: { from: '/product/dau-goi-buoi' } };
+    render(<BackButton />);
+    const btn = screen.getByRole('button', { name: 'Quay lại' });
+    expect(document.body.classList.contains('with-back-btn')).toBe(true);
+    act(() => btn.click());
+    expect(mocks.navigate).toHaveBeenCalledWith(-1);
+  });
+  it('vào bằng thanh đáy (thay trang, không state): ẩn nút', () => {
+    setIdx(3);
+    mocks.location = { pathname: '/points/scan', search: '', state: null };
+    render(<BackButton />);
+    expect(screen.queryByRole('button', { name: 'Quay lại' })).toBeNull();
+    expect(document.body.classList.contains('with-back-btn')).toBe(false);
+  });
+  it('state.from là tab gốc khác: ẩn nút (không lùi vòng giữa các tab)', () => {
+    setIdx(3);
+    mocks.location = { pathname: '/points/scan', search: '', state: { from: '/offers' } };
+    render(<BackButton />);
+    expect(screen.queryByRole('button', { name: 'Quay lại' })).toBeNull();
+  });
+  it('mở nguội hay deep link (idx 0) dù có `from`: ẩn nút', () => {
+    mocks.location = { pathname: '/points/scan', search: '', state: { from: '/product/dau-goi-buoi' } };
+    render(<BackButton />);
+    expect(screen.queryByRole('button', { name: 'Quay lại' })).toBeNull();
+  });
+  it('tab gốc khác có `from` trang con vẫn ẩn nút', () => {
+    setIdx(3);
+    mocks.location = { pathname: '/offers', search: '', state: { from: '/product/dau-goi-buoi' } };
+    render(<BackButton />);
+    expect(screen.queryByRole('button', { name: 'Quay lại' })).toBeNull();
+  });
+});

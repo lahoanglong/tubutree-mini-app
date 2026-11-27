@@ -24,12 +24,33 @@ describe('marketplaceScanSteps', () => {
 });
 
 describe('scanSuccessCtaLabel', () => {
-  it('có điểm dùng được: nói đúng số đang có, số kiểu Việt', () => {
-    expect(scanSuccessCtaLabel(1200)).toBe('Dùng 1.200 Điểm Xanh mua ngay');
-    expect(scanSuccessCtaLabel(1.9)).toBe('Dùng 1 Điểm Xanh mua ngay');
+  it('có điểm dùng được: nói đúng số ĐANG CÓ (khác "đang chờ cộng" của đơn vừa quét), số kiểu Việt', () => {
+    expect(scanSuccessCtaLabel(1200)).toBe('Dùng 1.200 Điểm Xanh đang có');
+    expect(scanSuccessCtaLabel(1.9)).toBe('Dùng 1 Điểm Xanh đang có');
+    expect(scanSuccessCtaLabel(1200, 'web')).toBe('Dùng 1.200 Điểm Xanh đang có');
   });
 
-  it('chưa có điểm hoặc chưa biết số dư: mời mua sắm, không hứa điểm', () => {
-    for (const n of [0, -5, null, undefined, Number.NaN]) expect(scanSuccessCtaLabel(n)).toBe('Mua sắm ngay trên Mini App');
+  it('không dùng chữ "chờ" hay "mua ngay" để khỏi lẫn với điểm vừa quét còn chờ cộng', () => {
+    expect(MARKETPLACE_SCAN_COPY.ctaUsePoints).not.toMatch(/chờ|mua ngay/i);
+  });
+
+  it('gọn một dòng nút ở 375px: ≤ 32 ký tự kể cả 99.999 điểm', () => {
+    expect(scanSuccessCtaLabel(99_999).length).toBeLessThanOrEqual(32);
+    expect(scanSuccessCtaLabel(0).length).toBeLessThanOrEqual(32);
+  });
+
+  it('chưa có điểm hoặc chưa biết số dư: mời mua sắm, không hứa điểm; web không nói "trên Mini App"', () => {
+    for (const n of [0, -5, null, undefined, Number.NaN]) {
+      expect(scanSuccessCtaLabel(n)).toBe('Mua sắm ngay trên Mini App');
+      expect(scanSuccessCtaLabel(n, 'web')).toBe('Mua sắm ngay');
+    }
+  });
+});
+
+describe('MARKETPLACE_SCAN_COPY: web và Mini App đều gửi mã được (W44)', () => {
+  it('câu "sắp mở" của web nhắc cả web lẫn Zalo, không bảo chỉ làm trong Mini App', () => {
+    expect(MARKETPLACE_SCAN_COPY.webSoonBody).toContain('trên web');
+    expect(MARKETPLACE_SCAN_COPY.webSoonBody).toContain('Zalo');
+    expect(Object.keys(MARKETPLACE_SCAN_COPY)).not.toContain('webWhy');
   });
 });

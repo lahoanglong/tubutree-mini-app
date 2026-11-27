@@ -2,7 +2,8 @@ import { percentLabel } from './loyalty-copy';
 import { formatVnNumber } from './number-format';
 
 /**
- * Chữ của màn Quét mã (tab giữa thanh đáy, W42): Mini `/points/scan` và web `/quet-ma` cùng đọc ở đây để hai bên nói giống nhau.
+ * Chữ của màn Quét mã (tab giữa thanh đáy, W42): Mini `/points/scan` và web `/quet-ma` cùng đọc ở đây để hai bên nói giống nhau. Từ W44 cả hai
+ * bên đều gửi mã được (web có camera trình duyệt và ô nhập mã), chữ gửi mã và lịch sử dùng chung ở `marketplace-claim-copy.ts`.
  * Tỉ lệ tích đơn sàn lấy từ cấu hình công khai (`loyalty.marketplaceEarnPct`), không ghi cứng: cấu hình chưa về hay số hỏng thì bước 2
  * chỉ nói "tích Điểm Xanh" mà không hứa con số.
  */
@@ -12,16 +13,18 @@ export const MARKETPLACE_SCAN_COPY = {
   step2Pct: 'Tích {pct} giá trị đơn thành Điểm Xanh',
   step2Plain: 'Tích Điểm Xanh theo giá trị đơn',
   step3: 'Dùng giảm thẳng khi mua trên Mini App, Web',
-  /** Nút chính sau khi quét xong, khách đang có điểm dùng được. */
-  ctaUsePoints: 'Dùng {n} Điểm Xanh mua ngay',
-  /** Nút chính sau khi quét xong, khách chưa có điểm (điểm của đơn vừa quét còn chờ). */
+  /**
+   * Nút chính sau khi quét xong, khách đang có điểm dùng được. "đang có" tách rõ khỏi "{n} Điểm Xanh đang chờ cộng" của thẻ kết quả ngay trên
+   * (W44, PO duyệt U2): số trên nút là điểm khách dùng được NGAY, không phải điểm của đơn vừa quét.
+   */
+  ctaUsePoints: 'Dùng {n} Điểm Xanh đang có',
+  /** Nút chính sau khi quét xong ở Mini App, khách chưa có điểm (điểm của đơn vừa quét còn chờ). */
   ctaShop: 'Mua sắm ngay trên Mini App',
-  /** Web: nút mở đúng màn quét của Mini App. */
-  webOpenMiniApp: 'Mở Mini App để quét',
-  webWhy: 'Quét mã cần camera và số điện thoại Zalo đã xác minh, nên làm trong Tubu Tree trên Zalo.',
-  /** Web: tính năng chưa mở (cờ `loyalty.marketplace_claim_enabled` tắt), cùng ý với màn "sắp mở" của Mini App. */
+  /** Như `ctaShop` nhưng ở web (khách đang ở web, nút dẫn về Trang chủ web). */
+  ctaShopWeb: 'Mua sắm ngay',
+  /** Tính năng chưa mở (cờ `loyalty.marketplace_claim_enabled` tắt), cùng ý với màn "sắp mở" của Mini App. */
   soonTitle: 'Tích điểm đơn sàn sắp mở',
-  webSoonBody: 'Bạn cứ giữ lại phiếu giao hàng. Khi tính năng mở, hãy quét mã vận đơn trong Tubu Tree trên Zalo để tích điểm cho đơn này.',
+  webSoonBody: 'Bạn cứ giữ lại phiếu giao hàng. Khi tính năng mở, bạn quét mã vận đơn ngay trên web hoặc trong Tubu Tree trên Zalo để tích điểm cho đơn này.',
 } as const;
 
 const okPct = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
@@ -36,9 +39,11 @@ export function marketplaceScanSteps(marketplaceEarnPct: number | null | undefin
 
 /**
  * Nhãn nút chính sau khi gửi mã thành công. Điểm của đơn vừa quét còn CHỜ (giao xong + hạn đối soát) nên nút chỉ nhắc số điểm khách đang
- * dùng được ngay; chưa có điểm hay chưa biết số dư thì mời mua sắm (thẻ kết quả ngay trên đã nói ngày cộng).
+ * có và dùng được ngay ("đang có", khác "đang chờ cộng" ở thẻ kết quả); chưa có điểm hay chưa biết số dư thì mời mua sắm (thẻ kết quả ngay
+ * trên đã nói ngày cộng). `surface` chỉ đổi câu mời mua sắm: Mini App nói "trên Mini App", web thì không.
  */
-export function scanSuccessCtaLabel(availablePoints: number | null | undefined): string {
+export function scanSuccessCtaLabel(availablePoints: number | null | undefined, surface: 'mini' | 'web' = 'mini'): string {
   const n = typeof availablePoints === 'number' && Number.isFinite(availablePoints) ? Math.floor(availablePoints) : 0;
-  return n > 0 ? MARKETPLACE_SCAN_COPY.ctaUsePoints.replace('{n}', formatVnNumber(n)) : MARKETPLACE_SCAN_COPY.ctaShop;
+  if (n > 0) return MARKETPLACE_SCAN_COPY.ctaUsePoints.replace('{n}', formatVnNumber(n));
+  return surface === 'web' ? MARKETPLACE_SCAN_COPY.ctaShopWeb : MARKETPLACE_SCAN_COPY.ctaShop;
 }

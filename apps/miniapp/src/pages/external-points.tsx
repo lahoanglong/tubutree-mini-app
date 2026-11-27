@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useLocation } from 'zmp-ui';
-import { useSmartNavigate } from '../lib/smart-nav';
+import { canPop, useSmartNavigate } from '../lib/smart-nav';
+import { isBackableRoot } from '../components/nav-config';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
 import {
@@ -22,11 +23,12 @@ import { useCardGiftNote } from '../services/card-gift-note';
 import { getSessionAttribution, type LaunchAttribution } from '../utils/entry-source';
 import { extractClaimCode, normalizeClaimCode } from '@tubutree/app-core/claim-code';
 import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
+import { DEAD_CLAIM_STATES, claimDetail as claimDetailOf, claimResultDetail, claimStateView, isPastMilestone } from '@tubutree/app-core/marketplace-claim-copy';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
-import { Badge, type BadgeTone } from '../components/ui/badge';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -43,7 +45,7 @@ import { Input } from '../components/ui/input';
 import '../css/scan-guide.css';
 
 const PAGE_SIZE = 10;
-const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];
+const DEAD_STATES = DEAD_CLAIM_STATES;
 const t = viExternalPoints;
 
 // App đã có SĐT mà máy chủ vẫn không coi tài khoản đủ điều kiện (máy chủ thiếu SĐT hoặc tài khoản bị khoá): chia sẻ lại SĐT không giúp vì máy chủ giữ SĐT cũ, chỉ CSKH gỡ được.
@@ -63,33 +65,11 @@ function maskForSupport(code: string): string {
   return code.length <= 6 ? code : `${code.slice(0, 3)}***${code.slice(-3)}`;
 }
 
-export function claimStateView(item: Pick<MyExternalClaimItem, 'state' | 'expectedCreditAt'>): { label: string; tone: BadgeTone } {
-  switch (item.state) {
-    case 'PENDING':
-      return item.expectedCreditAt ? { label: t.state.waitCredit, tone: 'info' } : { label: t.state.waitDelivery, tone: 'warning' };
-    case 'REVIEW':
-    case 'HELD_NO_MEMBER':
-      return { label: t.state.review, tone: 'warning' };
-    case 'CREDITED':
-      return { label: t.state.credited, tone: 'success' };
-    case 'REVERSED':
-      return { label: t.state.reversed, tone: 'danger' };
-    case 'LAPSED':
-      return { label: t.state.lapsed, tone: 'neutral' };
-    default:
-      return { label: t.state.voided, tone: 'danger' };
-  }
-}
+// Nhãn trạng thái, dòng phụ và câu thẻ kết quả dùng chung với web `/quet-ma` (app-core `marketplace-claim-copy.ts`, W44).
+export { claimStateView };
 
 function claimDetail(item: MyExternalClaimItem): string | null {
-  if (item.state === 'CREDITED') return item.creditedAt ? t.creditedOn(formatDate(item.creditedAt)) : null;
-  if (item.state === 'PENDING' && item.expectedCreditAt) return t.expectedOn(formatDate(item.expectedCreditAt));
-  return null;
-}
-
-/** Mốc dự kiến đã qua mà API vẫn trả CLAIMED: khách gửi lại mã đã được cộng hoặc sắp cộng, dùng câu của API thay vì hứa "sẽ cộng". */
-function isPastMilestone(r: SubmitExternalClaimResponse): boolean {
-  return r.status === 'CLAIMED' && r.expectedCreditAt != null && Date.parse(r.expectedCreditAt) <= Date.now();
+  return claimDetailOf(item, formatDate);
 }
 
 /**
@@ -131,18 +111,7 @@ function ShopNowButton() {
 function ResultCard({ result, children }: { result: SubmitExternalClaimResponse; children?: React.ReactNode }) {
   const past = isPastMilestone(result);
   const byOther = result.status === 'CLAIMED_BY_OTHER';
-  const detail =
-    result.status === 'SEARCHING'
-      ? t.resultSearching
-      : byOther
-        ? t.resultClaimedByOther
-        : result.status === 'REVIEW'
-        ? t.resultReview
-        : past
-          ? result.message
-          : result.expectedCreditAt
-            ? t.resultCreditAt(formatDate(result.expectedCreditAt))
-            : t.resultAfterDelivery;
+  const detail = claimResultDetail(result, formatDate);
   const waiting = result.status === 'SEARCHING' || result.status === 'REVIEW';
   return (
     <Card variant="outline" padding={16} style={{ marginTop: 12 }}>
@@ -549,7 +518,8 @@ function ClosedView({ fromCard, maxAgeDays }: { fromCard: boolean; maxAgeDays: n
 
 export default function ExternalPointsPage() {
   const phase = useAuthPhase();
-  const { search } = useLocation();
+  const { pathname, search, state } = useLocation();
+  const backable = isBackableRoot(pathname, state, canPop);
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const enabled = cfgQ.data?.loyalty?.marketplaceClaimEnabled === true;
   const { fromCard, channel } = cardEntryOf(getSessionAttribution());
@@ -581,10 +551,11 @@ export default function ExternalPointsPage() {
     );
   }
 
-  // Trang gốc của tab giữa "Quét mã" (W42): không có nút lùi, thanh đáy luôn hiện nên đệm đáy chừa chỗ (lớp .tubu-scan-page).
+  // Trang gốc của tab giữa "Quét mã" (W42): thanh đáy luôn hiện nên đệm đáy chừa chỗ (lớp .tubu-scan-page). Không nút lùi, trừ khi vào bằng PUSH
+  // từ trang con (`isBackableRoot`): khi đó tiêu đề chừa 48px cho nút lùi nổi.
   return (
     <Page className="tubu-scan-page" style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title={t.title} back={false} />
+      <PageHeader title={t.title} back={backable ? 'auto' : false} />
       {guide}
       {body}
     </Page>

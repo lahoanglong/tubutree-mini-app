@@ -22,12 +22,14 @@ const mocks = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   user: { phone: '0901234567' } as { phone?: string | null } | null,
   ensurePhone: vi.fn(),
+  getLoyalty: vi.fn(),
+  locState: null as unknown,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/points/scan', search: mocks.search, state: null }),
+  useLocation: () => ({ pathname: '/points/scan', search: mocks.search, state: mocks.locState }),
   useSnackbar: () => ({ openSnackbar: vi.fn(), closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
@@ -51,6 +53,10 @@ vi.mock('../services/zmp-bridge', () => ({
   setOaPromptState: mocks.setOaPromptState,
 }));
 vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
+vi.mock('../services/account-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getLoyalty: mocks.getLoyalty,
+}));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('../store/auth', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -97,6 +103,57 @@ describe('Trang Tích điểm đơn sàn', () => {
     mocks.user = { phone: '0901234567' };
     mocks.getPublicConfig.mockResolvedValue({ loyalty: LOYALTY });
     mocks.getMyExternalClaims.mockResolvedValue(EMPTY_LIST);
+    mocks.locState = null;
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, lockedPoints: 0 });
+  });
+
+  describe('nút chính sau khi quét (W44 U2)', () => {
+    const claimed = () =>
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250,
+        expectedCreditAt: futureIso(), message: 'ok',
+      });
+    const submit = async () => {
+      fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'spxvn123456789' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      await screen.findByTestId('claim-result');
+    };
+
+    it('đang có 1.200 điểm dùng được: nút nói "đang có", khác số "đang chờ cộng" của đơn vừa quét', async () => {
+      claimed();
+      mocks.getLoyalty.mockResolvedValue({ pointsBalance: 1200, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, lockedPoints: 0 });
+      renderPage();
+      await submit();
+      const cta = screen.getByTestId('scan-shop-now');
+      await waitFor(() => expect(cta).toHaveTextContent('Dùng 1.200 Điểm Xanh đang có'));
+      expect(screen.getByTestId('claim-result')).toHaveTextContent('1.250 Điểm Xanh đang chờ cộng');
+    });
+
+    it('chưa có điểm dùng được: mời mua sắm trên Mini App, không hứa điểm', async () => {
+      claimed();
+      renderPage();
+      await submit();
+      const cta = screen.getByTestId('scan-shop-now');
+      await waitFor(() => expect(cta).toHaveTextContent('Mua sắm ngay trên Mini App'));
+      expect(cta).not.toHaveTextContent('Điểm Xanh');
+    });
+  });
+
+  describe('nút lùi khi vào từ trang con (W44 U3)', () => {
+    const titleBox = async () => (await screen.findByText('Tích điểm đơn sàn', { selector: 'h1, h1 *' })).closest('div') as HTMLElement;
+
+    it('vào bằng thanh đáy: tiêu đề sát lề, không chừa chỗ nút lùi', async () => {
+      window.history.replaceState({ idx: 2 }, '', '/points/scan');
+      renderPage();
+      expect((await titleBox()).style.paddingLeft).toBe('0px');
+    });
+
+    it('PUSH từ trang sản phẩm, còn lịch sử: tiêu đề chừa chỗ cho nút lùi nổi', async () => {
+      window.history.replaceState({ idx: 2 }, '', '/points/scan');
+      mocks.locState = { from: '/product/dau-goi-buoi' };
+      renderPage();
+      expect((await titleBox()).style.paddingLeft).not.toBe('0px');
+    });
   });
 
   it('cờ tắt: báo chưa mở, không có ô nhập', async () => {

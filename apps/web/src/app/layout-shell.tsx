@@ -15,6 +15,7 @@ import { ScreenTracker } from '@/components/analytics/screen-tracker';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
 import { SkipLink } from '@/components/skip-link';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
+import { MINI_APP_BAR_ATTR } from '@/lib/mini-app-attr';
 
 /**
  * Cổng tải lười của "tự mở Mini App trên web điện thoại": chỉ khung nhìn điện thoại mới tải phần còn lại (đọc cờ, luật, lớp phủ, dải mời),
@@ -33,7 +34,8 @@ function MiniAppAutoOpenGate() {
         if (alive) setAutoOpen(() => m.MiniAppAutoOpen);
       })
       .catch(() => {
-        /* mạng chập chờn: bỏ qua tự mở ở lượt này, trang vẫn dùng bình thường */
+        // Mạng chập chờn: bỏ qua tự mở ở lượt này, trang vẫn dùng bình thường; gỡ chỗ giữ cho dải mời (script ở <head> đã đoán) để không hở khoảng trống.
+        document.documentElement.removeAttribute(MINI_APP_BAR_ATTR);
       });
     return () => {
       alive = false;
@@ -67,9 +69,12 @@ export function LayoutShell({ vitals, footer, children }: { vitals: ReactNode; f
         <SiteHeader />
       </HideOnPortals>
       <PortalHeader />
-      {/* Dải mời mở Zalo nằm trong luồng, ngay trên nội dung trang (không nổi đè danh sách). */}
+      {/* Dải mời mở Zalo nằm trong luồng, ngay trên nội dung trang (không nổi đè danh sách). Ô bọc giữ sẵn đúng chiều cao dải khi script ở <head>
+          đoán được dải sẽ hiện (`html[data-miniapp-bar]`, components/mini/mini.css), nên dải hiện sau không đẩy trang. */}
       <HideOnPortals>
-        <MiniAppAutoOpenGate />
+        <div className="tubu-miniapp-slot">
+          <MiniAppAutoOpenGate />
+        </div>
       </HideOnPortals>
       {children}
       <HideOnPortals>{footer}</HideOnPortals>

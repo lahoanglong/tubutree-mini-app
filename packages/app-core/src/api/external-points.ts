@@ -1,8 +1,9 @@
 import type { ExternalClaimRejectCode, MyExternalClaimsResponse, SubmitExternalClaimResponse } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 
-export const submitExternalClaim = (http: HttpClient, code: string) =>
-  http.post<SubmitExternalClaimResponse>('/me/external-points/claims', { code });
+/** `via`: mã do khách quét nhãn hay gõ tay (chỉ để đo phễu); bỏ trống thì gửi đúng `{ code }` như cũ. */
+export const submitExternalClaim = (http: HttpClient, code: string, via?: 'scan' | 'typed') =>
+  http.post<SubmitExternalClaimResponse>('/me/external-points/claims', via ? { code, via } : { code });
 
 export const getMyExternalClaims = (http: HttpClient, page = 1, limit = 10) =>
   http.get<MyExternalClaimsResponse>('/me/external-points/claims', { query: { page, limit } });

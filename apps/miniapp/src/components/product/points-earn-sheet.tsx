@@ -1,4 +1,4 @@
-import { useNavigate } from 'zmp-ui';
+import { useLocation, useNavigate } from 'zmp-ui';
 import { Leaf, ShoppingBag, Sparkles, Truck, type LucideIcon } from 'lucide-react';
 import { POINTS_EARN_POPUP, type PointsEarnPopup } from '@tubutree/app-core/points-earn-popup';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -20,12 +20,17 @@ function Row({ icon, children }: { icon: LucideIcon; children: React.ReactNode }
 
 const linkStyle = { minHeight: 44, display: 'inline-flex', alignItems: 'center', background: 'none', border: 0, padding: 0, color: 'var(--color-text-brand)', fontWeight: 600, fontSize: 14, lineHeight: '20px', fontFamily: 'inherit' } as const;
 
-/** Popup "Cách tính Điểm Xanh" mở từ dòng "Nhận ~X Điểm Xanh" ở PDP. Chữ và số do `pointsEarnPopup` (app-core) dựng sẵn, giống web. */
+/**
+ * Popup "Cách tính Điểm Xanh" mở từ dòng "Nhận ~X Điểm Xanh" ở PDP. Chữ và số do `pointsEarnPopup` (app-core) dựng sẵn, giống web.
+ * Lối sang `/points/scan` (tab gốc) mang `state.from` để màn quét hiện nút lùi về đúng trang sản phẩm (`isBackableRoot`).
+ */
 export function PointsEarnSheet({ open, onClose, popup }: { open: boolean; onClose: () => void; popup: PointsEarnPopup }) {
   const navigate = useNavigate();
-  const go = (to: string) => {
+  const { pathname } = useLocation();
+  const go = (to: string, state?: { from: string }) => {
     onClose();
-    navigate(to);
+    if (state) navigate(to, { state });
+    else navigate(to);
   };
   return (
     <BottomSheet open={open} onClose={onClose} title={popup.title}>
@@ -39,7 +44,7 @@ export function PointsEarnSheet({ open, onClose, popup }: { open: boolean; onClo
             {POINTS_EARN_POPUP.ranksLink}
           </button>
           {popup.marketplace && (
-            <button type="button" style={linkStyle} onClick={() => go('/points/scan')}>
+            <button type="button" style={linkStyle} onClick={() => go('/points/scan', { from: pathname })}>
               {POINTS_EARN_POPUP.marketplaceLink}
             </button>
           )}

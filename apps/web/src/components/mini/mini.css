@@ -1718,7 +1718,29 @@
 }
 
 /* ── Tự mở Zalo Mini App trên web điện thoại (W42): lớp phủ chuyển cảnh ngắn và dải mời trong luồng ở đầu nội dung (không nổi đè danh sách).
- * Lối "Ở lại bản Web" là chữ nhỏ màu phụ (không phải nút nổi), mờ dần rồi ẩn sau ~4,5 giây; giảm chuyển động thì ẩn ngay không hiệu ứng. ── */
+ * Lối "Ở lại bản Web" là chữ nhỏ màu phụ (không phải nút nổi), bấm được suốt đời lớp phủ. Giây 4,5 lớp phủ mờ dần 300ms (W44 U1,
+ * `OVERLAY_FADE_MS`) trong khi dải mời đã gắn sẵn bên dưới; giảm chuyển động thì lớp phủ rời đi ngay không hiệu ứng.
+ * Giữ chỗ (W44 U4): script ở <head> đặt `html[data-miniapp-bar]` khi đoán được dải sẽ hiện, ô `.tubu-miniapp-slot` cao sẵn đúng bằng khe trên +
+ * dải, nên dải hiện sau không đẩy trang. Khe trên nằm ở ô (không phải lề của dải, lề con sẽ tràn ra ngoài ô) để hai chiều cao bằng nhau. ── */
+:root {
+  /* Dải: nút 44px + đệm 4px hai đầu + viền 1px hai đầu. */
+  --miniapp-bar-h: 54px;
+  --miniapp-bar-gap: var(--space-inline-md);
+}
+/* Trang con tràn viền (PDP, PageHeader): dải đứng cùng hàng nút lùi nổi (top 8px). Không đợi lớp `with-back-btn` (gắn sau khi hydrate) để chỗ
+   giữ trước khi vẽ đã đúng khe 8px. */
+body:has([data-page-bleed]) {
+  --miniapp-bar-gap: 8px;
+}
+@media (max-width: 767.98px) {
+  .tubu-miniapp-slot:has(> .tubu-miniapp-bar) {
+    padding-top: var(--miniapp-bar-gap);
+  }
+  /* Cộng ngay tại ô (không qua biến khai ở :root): biến tham chiếu var() được tính ở nơi khai báo, nên khe 8px của trang tràn viền phải đọc ở đây. */
+  html[data-miniapp-bar] .tubu-miniapp-slot {
+    min-height: calc(var(--miniapp-bar-gap) + var(--miniapp-bar-h));
+  }
+}
 .tubu-miniapp-opening {
   position: fixed;
   inset: 0;
@@ -1727,6 +1749,12 @@
   place-items: center;
   padding: var(--space-gutter);
   background: var(--color-bg-scrim-light);
+  opacity: 1;
+  transition: opacity 300ms ease-out;
+}
+.tubu-miniapp-opening[data-leaving] {
+  opacity: 0;
+  pointer-events: none;
 }
 .tubu-miniapp-opening__card {
   display: flex;
@@ -1758,19 +1786,14 @@
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
-  transition: opacity 600ms ease-out, visibility 0s linear 600ms;
-}
-.tubu-miniapp-stay[data-hidden='true'] {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
 }
 .tubu-miniapp-bar {
   display: flex;
   align-items: center;
   gap: var(--space-inline-sm);
-  margin: var(--space-inline-md) var(--space-gutter) 0;
-  padding: 4px 4px 4px var(--space-inline-md);
+  min-height: var(--miniapp-bar-h);
+  margin: 0 var(--space-gutter);
+  padding: 4px 4px 4px var(--space-inline-sm);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-card);
   background: var(--color-bg-surface);
@@ -1782,11 +1805,17 @@
   min-width: 0;
 }
 .tubu-miniapp-bar__title {
+  overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--type-body-sm-size);
   line-height: var(--type-body-sm-lh);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* Nút "Mở" vừa chữ (không theo min-width 96px của nút cỡ vừa) và đệm trái của dải 8px, để tiêu đề và chữ phụ mỗi thứ nằm trên một dòng ở 360px cả khi
+   dải đứng cạnh nút lùi nổi (e2e mini-app-auto-open.web đo); dải nhờ đó cao đúng `--miniapp-bar-h`, bằng chỗ đã giữ. */
+.tubu-miniapp-bar__open.zaui-btn { flex: 0 0 auto; min-width: 44px; height: 44px; padding: 0 var(--space-inline-sm); }
 .tubu-miniapp-bar__sub {
   overflow: hidden;
   color: var(--color-text-tertiary);
@@ -1797,7 +1826,6 @@
 }
 /* Trang con tràn viền (PDP, PageHeader): body không đệm cho nút lùi nổi (top 8px, left 12px, 44px), nên dải đứng cùng hàng, bên phải nút. */
 body.with-back-btn:has([data-page-bleed]) .tubu-miniapp-bar {
-  margin-top: 8px;
   margin-left: calc(12px + 44px + var(--space-inline-sm));
 }
 @media (min-width: 768px) {
@@ -1807,7 +1835,7 @@ body.with-back-btn:has([data-page-bleed]) .tubu-miniapp-bar {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tubu-miniapp-stay {
+  .tubu-miniapp-opening {
     transition: none;
   }
 }

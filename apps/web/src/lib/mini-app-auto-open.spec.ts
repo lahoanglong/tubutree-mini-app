@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTO_OPEN_COOKIE_MAX_AGE_S,
   AUTO_OPEN_DELAY_MS,
+  MINI_APP_AUTO_OPEN_COPY,
+  MINI_APP_BAR_ATTR,
   MINI_AUTO_COOKIE,
+  OVERLAY_FADE_MS,
   STAY_LINK_HIDE_MS,
   STAY_WEB_COOKIE,
   SUPPRESSED_CHECK_MS,
@@ -13,6 +16,7 @@ import {
   isExcludedPath,
   isMobileUserAgent,
   isPrimaryWebHost,
+  miniAppBarBootScript,
   miniAppDeepLink,
   searchWithoutStay,
   shouldAutoOpenMiniApp,
@@ -204,5 +208,103 @@ describe('miniAppDeepLink', () => {
 
   it('chỉ mang theo tham số nguồn/giới thiệu, bỏ tham số lạ và stay', () => {
     expect(miniAppDeepLink('/', '?ref=A1&utm_source=fb&token=x&stay=web&q=abc')).toBe(`${HOME}/?ref=A1&utm_source=fb`);
+  });
+});
+
+describe('miniAppBarBootScript — giữ chỗ dải mời trước khi vẽ (W44 U4)', () => {
+  interface Env {
+    narrow?: boolean;
+    ua?: string;
+    hostname?: string;
+    pathname?: string;
+    search?: string;
+    cookie?: string;
+  }
+  /** Chạy chuỗi script như trình duyệt ở <head>, trên một bộ window/document giả; trả về thuộc tính có được đặt không. */
+  function runBoot(env: Env, siteHost?: string | null): boolean {
+    const attrs = new Map<string, string>();
+    const win = {
+      matchMedia: (q: string) => ({ matches: q.includes('max-width') ? env.narrow !== false : false }),
+      location: { hostname: env.hostname ?? 'tubutree.com', pathname: env.pathname ?? '/', search: env.search ?? '' },
+    };
+    const doc = { cookie: env.cookie ?? `${MINI_AUTO_COOKIE}=1`, documentElement: { setAttribute: (k: string, v: string) => attrs.set(k, v) } };
+    const nav = { userAgent: env.ua ?? IPHONE_SAFARI };
+    new Function('window', 'document', 'navigator', 'URLSearchParams', miniAppBarBootScript(siteHost))(win, doc, nav, URLSearchParams);
+    return attrs.has(MINI_APP_BAR_ATTR);
+  }
+
+  it('đủ 5 điều kiện (điện thoại, có cookie tự mở, chưa ở lại, host chính, trang không bị loại): giữ chỗ', () => {
+    expect(runBoot({})).toBe(true);
+    expect(runBoot({ cookie: `foo=bar; ${MINI_AUTO_COOKIE}=1; x=y`, ua: ANDROID_CHROME, pathname: '/san-pham/dau-goi' })).toBe(true);
+    expect(runBoot({ hostname: 'localhost' })).toBe(true);
+  });
+
+  it('thiếu một điều kiện thì không giữ chỗ', () => {
+    expect(runBoot({ narrow: false })).toBe(false);
+    expect(runBoot({ cookie: '' })).toBe(false);
+    expect(runBoot({ cookie: `${MINI_AUTO_COOKIE}=0` })).toBe(false);
+    expect(runBoot({ cookie: `${MINI_AUTO_COOKIE}=1; ${STAY_WEB_COOKIE}=1` })).toBe(false);
+    expect(runBoot({ search: '?ref=A1&stay=web' })).toBe(false);
+    expect(runBoot({ hostname: 'shop-a.tubutree.com' })).toBe(false);
+    expect(runBoot({ pathname: '/gio-hang' })).toBe(false);
+    expect(runBoot({ pathname: '//thanh-toan/x' })).toBe(false);
+    expect(runBoot({ pathname: '/Dang-Nhap' })).toBe(false);
+  });
+
+  it('không giữ chỗ cho máy tính, bot hay công cụ xem trước link (dải không bao giờ hiện cho họ)', () => {
+    expect(runBoot({ ua: DESKTOP_CHROME })).toBe(false);
+    expect(runBoot({ ua: GOOGLEBOT_MOBILE })).toBe(false);
+  });
+
+  it('host của NEXT_PUBLIC_SITE_URL được coi là host chính', () => {
+    expect(runBoot({ hostname: 'staging.tubutree.vn' })).toBe(false);
+    expect(runBoot({ hostname: 'staging.tubutree.vn' }, 'staging.tubutree.vn')).toBe(true);
+  });
+
+  it('cùng luật với decideMiniAppAutoOpen ở nhánh "dải mời" (cờ bật) trên một loạt ngữ cảnh', () => {
+    const cases: Env[] = [
+      {},
+      { pathname: '/don/ABC' },
+      { pathname: '/admin' },
+      { pathname: '/cau-chuyen' },
+      { search: '?stay=web' },
+      { cookie: `${STAY_WEB_COOKIE}=1` },
+      { cookie: '' },
+      { ua: ZALO_INAPP },
+      { hostname: 'www.tubutree.com' },
+    ];
+    for (const env of cases) {
+      const ctx: AutoOpenContext = {
+        ...base,
+        flagOn: true,
+        hostname: env.hostname ?? 'tubutree.com',
+        userAgent: env.ua ?? IPHONE_SAFARI,
+        webdriver: false,
+        narrowViewport: env.narrow !== false,
+        pathname: env.pathname ?? '/',
+        search: env.search ?? '',
+        cookies: env.cookie ?? `${MINI_AUTO_COOKIE}=1`,
+      };
+      expect(runBoot(env), JSON.stringify(env)).toBe(decideMiniAppAutoOpen(ctx).banner);
+    }
+  });
+
+  it('chuỗi script không có gì lỗi cú pháp và bọc try/catch (trình duyệt cũ không làm vỡ trang)', () => {
+    const src = miniAppBarBootScript('tubutree.com');
+    expect(() => new Function(src)).not.toThrow();
+    expect(src).toMatch(/^\(function\(\)\{try\{/);
+    expect(src).toMatch(/catch\(e\)\{\}\}\)\(\)$/);
+  });
+});
+
+describe('W44 hằng số lớp phủ và chữ dải mời', () => {
+  it('mờ 300ms, vẫn rời đi ở giây 4,5', () => {
+    expect(OVERLAY_FADE_MS).toBe(300);
+    expect(STAY_LINK_HIDE_MS).toBe(4500);
+  });
+
+  it('chữ phụ của dải ngắn gọn một dòng (PO 27/11 10:29)', () => {
+    expect(MINI_APP_AUTO_OPEN_COPY.bannerSub).toBe('Mua nhanh & tích điểm');
+    expect(MINI_APP_AUTO_OPEN_COPY.bannerSub.length).toBeLessThanOrEqual(24);
   });
 });

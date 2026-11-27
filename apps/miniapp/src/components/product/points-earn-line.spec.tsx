@@ -16,6 +16,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
       </div>
     ) : null,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/product/dau-goi-buoi', search: '', state: null }),
 }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.config }));
 
@@ -87,7 +88,8 @@ describe('PointsEarnLine — bấm mở popup Cách tính Điểm Xanh', () => {
     const dlg = openPopup();
     expect(within(dlg).getByText('Đơn sàn 1% · Mua trong Mini App từ 2%, nhân theo hạng')).toBeInTheDocument();
     fireEvent.click(within(dlg).getByRole('button', { name: 'Gửi đơn sàn để tích điểm' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/points/scan');
+    // W44: mang theo trang sản phẩm để màn quét (tab gốc) hiện nút lùi về đúng trang này.
+    expect(mocks.navigate).toHaveBeenCalledWith('/points/scan', { state: { from: '/product/dau-goi-buoi' } });
   });
 
   it('liên kết tới trang Điểm Xanh', () => {

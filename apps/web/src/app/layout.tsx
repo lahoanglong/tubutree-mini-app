@@ -6,6 +6,7 @@ import { LayoutShell } from './layout-shell';
 import SiteFooter from '@/components/site-footer';
 import { VitalsGate } from '@/lib/vitals/vitals-gate';
 import { apiImageOrigin } from '@/lib/image-origin';
+import { miniAppBarBootScript } from '@/lib/mini-app-auto-open';
 import { SITE_URL, fontScaleBootScript, offersHintBootScript, recentlyViewedBootScript, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -28,6 +29,14 @@ const PRELOAD_FONTS = [
   new URL('../../../../packages/design-tokens/src/fonts/inter-600.woff2', import.meta.url),
 ];
 
+const siteHost = (() => {
+  try {
+    return new URL(SITE_URL).hostname;
+  } catch {
+    return null;
+  }
+})();
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Không `crossOrigin`: thẻ img (no-cors) dùng nhóm kết nối có thông tin xác thực; preconnect `anonymous` mở nhóm khác nên ảnh không dùng lại được.
   const imageOrigin = apiImageOrigin(process.env.NEXT_PUBLIC_API_BASE_URL);
@@ -36,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     preconnect(imageOrigin);
   }
   return (
-    // suppressHydrationWarning: script ở <head> thêm data-tenant-host / data-restoring / data-has-recent / data-has-offers / data-font-scale + font-size lên <html> trước khi React hydrate.
+    // suppressHydrationWarning: script ở <head> thêm data-tenant-host / data-restoring / data-has-recent / data-has-offers / data-miniapp-bar / data-font-scale + font-size lên <html> trước khi React hydrate.
     <html lang="vi" suppressHydrationWarning>
       <head>
         {PRELOAD_FONTS.map((u) => (
@@ -47,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: recentlyViewedBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: fontScaleBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: offersHintBootScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: miniAppBarBootScript(siteHost) }} />
       </head>
       <body className="flex min-h-screen flex-col font-ui">
         {/* Thanh đầu, nút lùi, thanh đáy và các bộ bắt sự kiện nằm trong LayoutShell (một thành phần client: ít dòng tham chiếu RSC trong HTML mỗi trang). */}

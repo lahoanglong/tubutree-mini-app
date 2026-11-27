@@ -27,3 +27,14 @@ export const ROOT_PATHS: readonly string[] = NAV_TABS.map((t) => t.path);
 export function isRootPath(pathname: string): boolean {
   return ROOT_PATHS.includes(pathname);
 }
+
+/**
+ * Tab gốc `/points/scan` có hiện nút lùi không. Dòng "Tích điểm đơn sàn" trong popup "Cách tính Điểm Xanh" ở trang sản phẩm mở màn quét kèm
+ * `state.from`: khách vào kiểu đó cần nút lùi về đúng trang sản phẩm. Vào bằng thanh đáy, mở nguội hay deep link (không `from`, hoặc `from` là tab
+ * gốc) thì vẫn là tab gốc, không nút. Phải còn lịch sử để lùi (`canPop`, truyền vào để file này không phụ thuộc `lib/smart-nav`), kẻo lùi thành
+ * thay trang và vòng giữa các tab. Gọn nhất có thể vì nằm trong gói đầu của Mini App.
+ */
+export function isBackableRoot(pathname: string, state: unknown, canPop: () => boolean): boolean {
+  const from = (state as { from?: unknown } | null)?.from;
+  return pathname === '/points/scan' && typeof from === 'string' && !!from && from !== pathname && !isRootPath(from.split('?')[0]!) && canPop();
+}

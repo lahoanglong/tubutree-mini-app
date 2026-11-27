@@ -62,6 +62,7 @@ describe('ds-shop-guard (web)', () => {
       'components/add-to-cart.tsx', // giá theo phân loại ở thanh mua
       'components/variation-chip.tsx', // tên phân loại hết hàng gạch ngang, không phải giá gạch
       'app/gio-hang/cart-page.tsx', // dòng giỏ hàng
+      'app/quet-ma/claim-history.tsx', // số điểm của đơn sàn đã huỷ bị gạch, như Mini `pages/external-points.tsx`
       'app/merchant/settlement-tab.tsx',
       'components/dealer/price-tab.tsx', // bảng giá đại lý
       'components/admin/merchant-products-tab.tsx',

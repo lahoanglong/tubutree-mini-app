@@ -93,3 +93,16 @@ export function checkoutMarketplacePoints(input: {
   const n = Math.max(0, Math.floor(raw as number));
   return n > 0 ? n : null;
 }
+
+/**
+ * Điểm Xanh khách dùng được NGAY khi mua hàng (cùng luật `checkoutPoints().usable` của Mini App và màn thanh toán): lô thường trừ phần còn khoá
+ * chờ đổi trả (`redeemablePoints`, API cũ thì số dư trừ `lockedPoints`), cộng nguyên lô quy đổi và lô điểm sàn. Chưa có số liệu thì null.
+ */
+export function usableShopPoints(
+  ov: { pointsBalance: number; pointsConvertedBalance?: number; pointsMarketplaceBalance?: number; lockedPoints?: number; redeemablePoints?: number } | null | undefined,
+): number | null {
+  if (!ov) return null;
+  const lots = pointsSummary(ov);
+  const standardUsable = Math.min(lots.standard, Math.max(0, ov.redeemablePoints ?? lots.standard - (ov.lockedPoints ?? 0)));
+  return standardUsable + lots.converted + lots.marketplace;
+}

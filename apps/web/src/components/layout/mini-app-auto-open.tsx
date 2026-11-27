@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import type { MiniappAutoOpenResult, MiniappSmartbarAction } from '@tubutree/shared-types';
 import { Button } from '@/components/mini/button';
@@ -11,9 +11,10 @@ import {
   AUTO_OPEN_COOKIE_MAX_AGE_S,
   AUTO_OPEN_DELAY_MS,
   MINI_APP_AUTO_OPEN_COPY as COPY,
+  MINI_APP_BAR_ATTR,
   MINI_AUTO_COOKIE,
   MOBILE_MEDIA_QUERY,
-  STAY_LINK_HIDE_MS,
+  OVERLAY_FADE_MS,
   STAY_WEB_COOKIE,
   SUPPRESSED_CHECK_MS,
   decideMiniAppAutoOpen,
@@ -27,7 +28,21 @@ import { useShellPathname } from '@/lib/shell-pathname';
 import { SITE_URL } from '@/lib/site';
 import { usePublicConfig } from '@/lib/use-public-config';
 
-type Phase = 'idle' | 'opening' | 'banner' | 'done';
+/** `leaving`: lớp phủ đang mờ dần (không bấm được nữa), dải mời đã gắn bên dưới; hết `OVERLAY_FADE_MS` thì sang `banner`. */
+type Phase = 'idle' | 'opening' | 'leaving' | 'banner' | 'done';
+
+/**
+ * Bật/gỡ chỗ giữ cho dải mời (`data-miniapp-bar` trên `<html>`, script ở `<head>` đặt trước khi vẽ khi đoán được). Gỡ khi biết chắc dải không
+ * hiện; dải đang hiện thì giữ (chỗ giữ cao đúng bằng dải nên không xê dịch).
+ */
+export function setMiniAppBarSlot(reserved: boolean): void {
+  if (typeof document === 'undefined') return;
+  const html = document.documentElement;
+  if (reserved) html.setAttribute(MINI_APP_BAR_ATTR, '');
+  else html.removeAttribute(MINI_APP_BAR_ATTR);
+}
+
+const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const siteHost = (() => {
   try {
@@ -51,23 +66,32 @@ function trackSmartbar(action: MiniappSmartbarAction, pathname: string) {
  */
 export function MiniAppAutoOpen() {
   const cfg = usePublicConfig();
-  return cfg.isLoaded && cfg.mobileMiniappRedirectEnabled === true ? <AutoOpenRunner /> : null;
+  const on = cfg.isLoaded && cfg.mobileMiniappRedirectEnabled === true;
+  // Cờ tắt (hoặc không tải được cấu hình): gỡ chỗ giữ mà script ở <head> đã đoán. Riêng cờ tắt thì xoá luôn cookie tự mở, để lần tải sau
+  // không giữ chỗ cho một dải sẽ không hiện (mỗi lần giữ rồi gỡ là một lần xê dịch).
+  const off = cfg.isLoaded ? cfg.mobileMiniappRedirectEnabled !== true : !cfg.isPending;
+  useEffect(() => {
+    if (!off) return;
+    setMiniAppBarSlot(false);
+    if (cfg.isLoaded && hasCookie(document.cookie, MINI_AUTO_COOKIE)) writeWebCookie(MINI_AUTO_COOKIE, null);
+  }, [off, cfg.isLoaded]);
+  return on ? <AutoOpenRunner /> : null;
 }
 
 /**
  * Quyết định một lần lúc cờ vừa xác nhận bật ở trang đầu (luật ở `lib/mini-app-auto-open.ts`):
  * 1. `?stay=web`: ghi `tubu_stay_web` 24 giờ, xoá tham số khỏi thanh địa chỉ, không mở, không dải mời.
  * 2. Đủ điều kiện: ghi `tubu_mini_auto` 24 giờ rồi đọc lại; không ghi được thì chỉ hiện dải mời. Ghi được thì lớp phủ "Đang mở…" khoảng 1,2 giây
- *    với lối "Ở lại bản Web" (chữ nhỏ màu phụ, tự mờ rồi ẩn sau ~4,5 giây), hết giờ thì `location.assign(link Mini App)`.
- * 3. Trang vẫn hiện tới giây 4,5 (hệ điều hành không mở app), hoặc khách quay lại từ Zalo: đóng lớp phủ, hiện dải mời. Lối "Ở lại bản Web" bấm
- *    được suốt lúc lớp phủ còn, kể cả sau lượt chuyển (khách đang ở hộp hỏi mở app).
+ *    với lối "Ở lại bản Web" (chữ nhỏ màu phụ), hết giờ thì `location.assign(link Mini App)`.
+ * 3. Tới giây 4,5 (hệ điều hành không mở app, hoặc khách đang ở Zalo), hoặc khách quay lại từ Zalo: lớp phủ mờ dần 300ms (pha `leaving`, không
+ *    bấm được nữa) trong khi dải mời đã gắn sẵn bên dưới, rồi chỉ còn dải. Giảm chuyển động thì bỏ bước mờ. Lối "Ở lại bản Web" bấm được suốt lúc
+ *    lớp phủ còn, kể cả sau lượt chuyển (khách đang ở hộp hỏi mở app).
  * 4. Dải mời nằm trong luồng ở đầu nội dung (dưới thanh đầu trang, không nổi đè danh sách): "Mở" là cử chỉ thật của khách nên iOS mở được app;
  *    × ẩn 24 giờ (cùng cookie "ở lại bản Web"). Trang bị loại (thanh toán, giỏ, đăng nhập...) không có dải.
  */
 function AutoOpenRunner() {
   const pathname = useShellPathname();
   const [phase, setPhase] = useState<Phase>('idle');
-  const [stayHidden, setStayHidden] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const decided = useRef(false);
   const pathRef = useRef(pathname);
@@ -121,7 +145,12 @@ function AutoOpenRunner() {
     let wentHidden = false;
     const toBanner = () => {
       clearTimers();
-      setPhase((p) => (p === 'opening' ? 'banner' : p));
+      if (reducedMotion()) {
+        setPhase((p) => (p === 'opening' ? 'banner' : p));
+        return;
+      }
+      setPhase((p) => (p === 'opening' ? 'leaving' : p));
+      timers.current.push(setTimeout(() => setPhase((p) => (p === 'leaving' ? 'banner' : p)), OVERLAY_FADE_MS));
     };
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') wentHidden = true;
@@ -133,14 +162,14 @@ function AutoOpenRunner() {
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pageshow', onPageShow);
     setPhase('opening');
-    timers.current.push(setTimeout(() => setStayHidden(true), STAY_LINK_HIDE_MS));
     timers.current.push(
       setTimeout(() => {
         trackAutoOpen('navigated', pathRef.current);
+        // Giây 4,5 (`STAY_LINK_HIDE_MS`): lớp phủ rời đi trong mọi trường hợp. Trang còn hiện thì ghi "bị chặn"; trang đang ẩn (khách ở Zalo) thì
+        // dải mời chờ sẵn cho lúc khách quay lại.
         timers.current.push(
           setTimeout(() => {
-            if (wentHidden || document.visibilityState !== 'visible') return;
-            trackAutoOpen('suppressed', pathRef.current);
+            if (!wentHidden && document.visibilityState === 'visible') trackAutoOpen('suppressed', pathRef.current);
             toBanner();
           }, SUPPRESSED_CHECK_MS),
         );
@@ -166,23 +195,40 @@ function AutoOpenRunner() {
     setPhase('done');
   };
 
-  if (phase === 'opening') {
-    return (
-      <div className="tubu-miniapp-opening" data-testid="miniapp-opening">
+  const leaving = phase === 'leaving';
+  const showBar = (phase === 'banner' || leaving) && !isExcludedPath(pathname);
+  // Chưa quyết (`idle`) thì giữ nguyên chỗ script ở <head> đã đoán; quyết xong thì chỗ giữ đi theo đúng việc dải có hiện hay không.
+  // Trước khi vẽ: dải vừa gỡ (×, sang trang bị loại) thì ô sập cùng khung hình, không nháy một ô trống.
+  useLayoutEffect(() => {
+    if (phase !== 'idle') setMiniAppBarSlot(showBar);
+  }, [phase, showBar]);
+
+  const overlay =
+    phase === 'opening' || leaving ? (
+      <div className="tubu-miniapp-opening" data-testid="miniapp-opening" data-leaving={leaving ? '' : undefined} aria-hidden={leaving || undefined}>
         <div className="tubu-miniapp-opening__card">
           <Loader2 aria-hidden="true" className="h-6 w-6 animate-spin text-forest-600 motion-reduce:animate-none" />
           <p role="status" aria-live="polite" className="tubu-miniapp-opening__title">
             {COPY.opening}
           </p>
-          <button type="button" className="tubu-miniapp-stay" data-hidden={stayHidden ? 'true' : undefined} aria-hidden={stayHidden || undefined} tabIndex={stayHidden ? -1 : 0} onClick={stayWeb}>
+          <button type="button" className="tubu-miniapp-stay" tabIndex={leaving ? -1 : 0} disabled={leaving} onClick={stayWeb}>
             {COPY.stayWeb}
           </button>
         </div>
       </div>
-    );
-  }
+    ) : null;
 
-  if (phase !== 'banner' || isExcludedPath(pathname)) return null;
+  if (!showBar) return overlay;
+  return (
+    <>
+      {overlay}
+      <SmartBar pathname={pathname} onDismiss={() => setPhase('done')} />
+    </>
+  );
+}
+
+/** Dải mời trong luồng ở đầu nội dung: "Mở" là cử chỉ thật của khách (iOS mở được app); × ẩn 24 giờ (cùng cookie "ở lại bản Web"). */
+function SmartBar({ pathname, onDismiss }: { pathname: string; onDismiss: () => void }) {
   return (
     <section aria-label={COPY.bannerTitle} className="tubu-miniapp-bar" data-testid="miniapp-smartbar">
       <div className="tubu-miniapp-bar__copy">
@@ -190,6 +236,7 @@ function AutoOpenRunner() {
         <span className="tubu-miniapp-bar__sub">{COPY.bannerSub}</span>
       </div>
       <Button
+        className="tubu-miniapp-bar__open"
         onPress={() => {
           trackSmartbar('open', pathname);
           window.location.assign(miniAppDeepLink(pathname, window.location.search));
@@ -203,7 +250,7 @@ function AutoOpenRunner() {
         onPress={() => {
           writeWebCookie(STAY_WEB_COOKIE, '1', AUTO_OPEN_COOKIE_MAX_AGE_S);
           trackSmartbar('dismiss', pathname);
-          setPhase('done');
+          onDismiss();
         }}
       />
     </section>
