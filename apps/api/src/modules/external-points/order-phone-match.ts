@@ -33,11 +33,16 @@ export function parseOrderPhoneForMatch(raw: unknown): OrderPhonePattern {
   // `+` chỉ hợp lệ ở đầu và chỉ cho +84. Chuẩn hoá tiền tố quốc gia về 0 để vị trí các số khớp dạng 0xxxxxxxxx.
   if (compact.lastIndexOf('+') > 0) return { kind: 'NONE' };
   let body = compact.startsWith('+') ? compact.slice(1) : compact;
-  // `84` không có `+` chỉ là mã nước khi chuỗi dài đúng 84 + 9 ký tự; ngắn hơn có thể là số nội địa mất số 0 đầu (`843****26` của
-  // 0843xxxx26). Khi đó cụm đầu không bắt đầu bằng 0 nên bên dưới chỉ tin đuôi.
-  const countryCode = compact.startsWith('+') || body.length === VN_PHONE_LENGTH + 1;
-  if (body.startsWith('84') && countryCode) body = `0${body.slice(2)}`;
-  else if (compact.startsWith('+')) return { kind: 'NONE' };
+  // `0084` (quay số quốc tế) luôn là mã nước: `0084*****789` thành `0*****789`. Không đổi thì cụm đầu `0084` được tin như đầu số và khách
+  // số 09…789 bị chấm lệch.
+  if (!compact.startsWith('+') && body.startsWith('0084')) body = `0${body.slice(4)}`;
+  else {
+    // `84` không có `+` chỉ là mã nước khi chuỗi dài đúng 84 + 9 ký tự; ngắn hơn có thể là số nội địa mất số 0 đầu (`843****26` của
+    // 0843xxxx26). Khi đó cụm đầu không bắt đầu bằng 0 nên bên dưới chỉ tin đuôi.
+    const countryCode = compact.startsWith('+') || body.length === VN_PHONE_LENGTH + 1;
+    if (body.startsWith('84') && countryCode) body = `0${body.slice(2)}`;
+    else if (compact.startsWith('+')) return { kind: 'NONE' };
+  }
   const first = body.indexOf('*');
   const last = body.lastIndexOf('*');
   let lead = body.slice(0, first);

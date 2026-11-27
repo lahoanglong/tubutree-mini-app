@@ -53,10 +53,17 @@ export async function ingestExternalOrder(
   const { pancakeStatus, status } = externalStatusOf(data);
   const codes = extractTrackingCodes(data);
   const phone = buyerPhone(data);
-  // Mẫu che (W42) chỉ lưu khi không có số đầy đủ; 3 số cuối cho admin lấy từ đuôi che khi đuôi đủ 3 số.
+  // Mẫu che (W42) chỉ lưu khi không có số đầy đủ; 3 số cuối cho admin lấy từ đuôi che khi đuôi đủ 3 số. FULL ở đây chỉ đến từ hồ sơ khách
+  // (buyerPhone đã null): lưu ở phoneMask để đối chiếu, không ở `phone`, vì `phone` là số của chính đơn mà đường ghép đơn chat dùng.
   const pattern = phone ? null : buyerPhonePattern(data);
-  const phoneMask = pattern?.kind === 'MASK' ? pattern.mask : null;
-  const phoneLast3 = phone ? phone.slice(-3) : pattern?.kind === 'MASK' && pattern.tail.length >= 3 ? pattern.tail.slice(-3) : null;
+  const phoneMask = pattern?.kind === 'MASK' ? pattern.mask : pattern?.kind === 'FULL' ? pattern.phone : null;
+  const phoneLast3 = phone
+    ? phone.slice(-3)
+    : pattern?.kind === 'FULL'
+      ? pattern.phone.slice(-3)
+      : pattern?.kind === 'MASK' && pattern.tail.length >= 3
+        ? pattern.tail.slice(-3)
+        : null;
   const payloadDeliveredAt = deliveredAt(data);
   const closed = CLOSED.includes(status);
   const updatedAt = pancakeTime(data['updated_at']);

@@ -17,13 +17,13 @@ import type { Env } from '../src/config/env.validation';
 import { PancakeClient } from '../src/modules/integrations/pancake/pancake.client';
 import { assertGetOnly } from '../src/modules/integrations/pancake/pancake-self-edit-probe';
 import { ORDER_SOURCE_MAP_KEY, resolveOrderSourceMap } from '../src/modules/external-points/external-order.config';
+import { orderCarriesCode } from '../src/modules/external-points/external-order.mapper';
 import {
   censusChannel,
   censusExitCode,
   channelOrders,
   formatCensusReport,
   isClaimBucket,
-  liveLookupPredicate,
   pickCensusSample,
   pickSearchSamples,
   runSearchChecks,
@@ -109,7 +109,7 @@ async function main(): Promise<number> {
     const census = censusChannel({ channel, orders }, perChannel);
     const searched = pickSearchSamples(pickCensusSample(orders, perChannel), searchSamples);
     const search = async (text: string) => (await throttled(() => client.searchOrders(text))) as unknown as Data[];
-    channels.push(await runSearchChecks(census, searched, search, liveLookupPredicate));
+    channels.push(await runSearchChecks(census, searched, search, orderCarriesCode));
   }
   const report = { days, perChannel, getCalls, channels, db: read.db };
   console.log(json ? JSON.stringify(report, null, 2) : formatCensusReport(report));

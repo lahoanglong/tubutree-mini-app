@@ -81,7 +81,24 @@ export function normalizeTrackingCode(raw: unknown): string | null {
 
 const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
-/** Mã vận đơn và mã đơn sàn đã chuẩn hoá, không trùng, theo thứ tự ưu tiên (phần tử đầu là mã chính). */
+/**
+ * Mã đơn trên sàn mà Pancake dùng làm `id` của đơn sàn. Dò PROD 27/11 (W44, 50 đơn mỗi sàn): `invoice_info_list` không có ở cả 3 sàn,
+ * còn `id` của đơn sàn là mã đơn khách thấy trên app sàn (Lazada 15 số, TikTok 18 số, Shopee 14 ký tự), không trùng giữa các đơn và
+ * `search` tra ra đúng đơn 10/10 mỗi sàn. Đơn POS/chat không có `marketplace_id` nên `id` nội bộ của Pancake không bao giờ thành mã.
+ * Số vượt Number.MAX_SAFE_INTEGER đã mất chữ số khi parse JSON nên bỏ.
+ */
+function marketplaceOrderIdCode(data: Data): string | null {
+  const marketplaceId = finiteNumber(data['marketplace_id']);
+  if ((marketplaceId === null || marketplaceId === 0) && data['is_from_ecommerce'] !== true) return null;
+  const id = data['id'];
+  if (typeof id === 'number' && !Number.isSafeInteger(id)) return null;
+  return normalizeTrackingCode(id);
+}
+
+/**
+ * Mã vận đơn và mã đơn sàn đã chuẩn hoá, không trùng, theo thứ tự ưu tiên (phần tử đầu là mã chính). Mã đơn sàn lấy từ `id` đứng cuối
+ * để mã chính của đơn đã có vận đơn không đổi.
+ */
 export function extractTrackingCodes(data: Data): string[] {
   const partner = asRecord(data['partner']);
   const raw: unknown[] = [
@@ -90,6 +107,7 @@ export function extractTrackingCodes(data: Data): string[] {
     data['order_number_vtp'],
     ...asArray(data['invoice_info_list']).map((i) => asRecord(i)?.['order_sn']),
     data['tracking_number'],
+    marketplaceOrderIdCode(data),
   ];
   const codes: string[] = [];
   for (const r of raw) {
@@ -99,13 +117,18 @@ export function extractTrackingCodes(data: Data): string[] {
   return codes;
 }
 
-/** Mã đơn trên sàn (invoice_info_list[].order_sn) đã chuẩn hoá; null khi không có. */
+/** Mã đơn trên sàn đã chuẩn hoá: `invoice_info_list[].order_sn`, không có thì `id` của đơn sàn; null khi không có. */
 export function marketplaceOrderSn(data: Data): string | null {
   for (const i of asArray(data['invoice_info_list'])) {
     const sn = normalizeTrackingCode(asRecord(i)?.['order_sn']);
     if (sn) return sn;
   }
-  return null;
+  return marketplaceOrderIdCode(data);
+}
+
+/** Đơn Pancake mang đúng mã `code` (đã chuẩn hoá): vị từ của tra Pancake (`search` là tìm chữ tự do) và của bản dò. */
+export function orderCarriesCode(data: Data, code: string): boolean {
+  return extractTrackingCodes(data).includes(code) || marketplaceOrderSn(data) === code;
 }
 
 const GOODS_TOLERANCE = 0.01;
@@ -186,6 +209,10 @@ export function buyerPhone(data: Data): string | null {
 /**
  * SĐT người mua để đối chiếu với SĐT Zalo của khách gửi mã (W42): cùng hai nguồn và thứ tự như buyerPhone, nhận cả số đã che. Số đầy đủ
  * thắng; không có thì lấy mẫu che có nhiều chữ số nhìn thấy nhất. buyerPhone giữ nguyên vì đường đơn chat cần số đầy đủ để ghép.
+ *
+ * Hai nguồn đó không có chữ số nào thì xét nguồn thứ 3 là hồ sơ khách Pancake (`customer.phone_numbers`). Dò PROD 27/11 (W44): Lazada
+ * che hẳn SĐT (`***`) ở 9/50 đơn đã nhận, 3/9 đơn đó có số trong hồ sơ người mua. Chỉ nhận khi hồ sơ có đúng một số đọc được, để không
+ * chọn bừa một trong nhiều số rồi từ chối nhầm khách.
  */
 export function buyerPhonePattern(data: Data): OrderPhonePattern {
   let best: OrderPhonePattern = { kind: 'NONE' };
@@ -194,7 +221,15 @@ export function buyerPhonePattern(data: Data): OrderPhonePattern {
     if (p.kind === 'FULL') return p;
     if (visibleDigits(p) > visibleDigits(best)) best = p;
   }
-  return best;
+  return best.kind === 'NONE' ? (customerProfilePhone(data) ?? best) : best;
+}
+
+function customerProfilePhone(data: Data): OrderPhonePattern | null {
+  const found = asArray(asRecord(data['customer'])?.['phone_numbers'])
+    .map((c) => parseOrderPhoneForMatch(c))
+    .filter((p) => p.kind !== 'NONE');
+  const distinct = new Set(found.map((p) => (p.kind === 'FULL' ? p.phone : p.kind === 'MASK' ? p.mask : '')));
+  return distinct.size === 1 ? found[0]! : null;
 }
 
 export interface PancakeCreatorRef {

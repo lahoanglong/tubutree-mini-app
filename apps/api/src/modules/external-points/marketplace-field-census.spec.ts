@@ -1,4 +1,5 @@
 import { DEFAULT_ORDER_SOURCE_MAP } from './external-order.config';
+import { orderCarriesCode } from './external-order.mapper';
 import {
   censusChannel,
   censusExitCode,
@@ -8,7 +9,6 @@ import {
   codeShape,
   codesAtPath,
   formatCensusReport,
-  liveLookupPredicate,
   maskForm,
   payloadLeaves,
   phoneFieldClassOf,
@@ -164,7 +164,7 @@ describe('marketplace-field-census (W44, chỉ GET)', () => {
       if (text.startsWith('LZORD')) return orders.filter((o) => codesAtPath(o, 'lazada_info.order_number').includes(text));
       return [];
     };
-    const out = await runSearchChecks(census, pickSearchSamples(orders, 10), search, liveLookupPredicate);
+    const out = await runSearchChecks(census, pickSearchSamples(orders, 10), search, orderCarriesCode);
     expect(out.searches.map((s) => [s.trackingHit, s.orderSnHit, s.candidateHits['lazada_info.order_number'], s.sameOrder])).toEqual([
       [true, null, true, true],
       [false, false, true, true],
@@ -191,7 +191,7 @@ describe('marketplace-field-census (W44, chỉ GET)', () => {
       lazada({ status: 1, bill_phone_number: '+8*******21' }),
     ];
     const census = censusChannel({ channel: 'lazada', orders }, 50);
-    const out = await runSearchChecks(census, pickSearchSamples(orders, 10), async () => orders, liveLookupPredicate);
+    const out = await runSearchChecks(census, pickSearchSamples(orders, 10), async () => orders, orderCarriesCode);
     const db = [{ channel: 'lazada', status: 'DELIVERED', n: 5, noCode: 5, noPhone: 0, withOrderSn: 0 }];
     const text = formatCensusReport({ days: 30, perChannel: 50, getCalls: 9, channels: [out], db });
     const json = JSON.stringify({ channels: [out], db });

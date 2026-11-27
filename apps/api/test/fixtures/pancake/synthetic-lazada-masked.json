@@ -1,0 +1,24 @@
+{
+  "_synthetic": "Dữ liệu tự dựng theo hình dạng đo trên PROD 27/11 (W44, đã che), KHÔNG phải payload thật: Lazada không có invoice_info_list, id là mã đơn trên sàn 15 số, SĐT trên đơn bị che hết, hồ sơ khách còn một số.",
+  "id": "350000000000017",
+  "status": 3,
+  "status_name": "delivered",
+  "marketplace_id": -4,
+  "order_sources": -4,
+  "account": "lazada_gian_hang",
+  "bill_phone_number": "***",
+  "shipping_address": { "phone_number": "***", "full_name": "***", "address": "***" },
+  "customer": { "fb_id": "LZD000000000017", "phone_numbers": ["0987650017"] },
+  "items": [{ "quantity": 1, "discount_each_product": 0, "variation_info": { "retail_price": 250000 } }],
+  "total_price": 250000,
+  "total_discount": 0,
+  "shipping_fee": 0,
+  "partner": { "extend_code": "BESVN0000000017VNA", "extend_update": [] },
+  "status_history": [
+    { "status": 1, "updated_at": "2026-11-20T09:00:00" },
+    { "status": 2, "updated_at": "2026-11-21T09:00:00" },
+    { "status": 3, "updated_at": "2026-11-23T15:30:00" }
+  ],
+  "inserted_at": "2026-11-20T08:55:00",
+  "updated_at": "2026-11-23T15:30:00"
+}

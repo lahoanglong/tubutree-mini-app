@@ -444,9 +444,6 @@ export function censusChannel(fetched: FetchedChannel, perChannel: number): Chan
 export type CarriesCode = (data: Data, code: string) => boolean;
 export type SearchOrders = (text: string) => Promise<readonly Data[]>;
 
-/** Vị từ của lookup trên image đang LIVE (trước W44): mã nằm trong extract hoặc bằng mã đơn sàn. */
-export const liveLookupPredicate: CarriesCode = (data, code) => extractTrackingCodes(data).includes(code) || marketplaceOrderSn(data) === code;
-
 /** Đơn tra thử: tối đa `n` đơn DELIVERED rồi SHIPPED của mẫu. */
 export function pickSearchSamples(sample: readonly Data[], n: number): Data[] {
   return pickCensusSample(
