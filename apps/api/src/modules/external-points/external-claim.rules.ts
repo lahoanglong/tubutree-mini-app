@@ -134,12 +134,6 @@ function phoneConfirmStep(pc: NonNullable<ClaimFacts['phoneConfirm']>, now: Date
   return { kind: 'REJECT', code: 'PHONE_CONFIRM_WRONG', attemptResult: PHONE_CONFIRM_RESULTS.wrong, remainingAttempts };
 }
 
-/** Đơn SĐT lệch mà khách vừa nhập đúng 4 số cuối và đơn không bị khoá xác nhận: lượt REQUIRED cũ của khách cho đơn này thôi tính vào khoá. */
-export function phoneConfirmPassed(f: Pick<ClaimFacts, 'now' | 'order' | 'claim' | 'phoneConfirm'>): boolean {
-  if (!f.phoneConfirm || f.order?.phoneMatch !== 'MISMATCH' || f.claim?.own) return false;
-  return phoneConfirmStep(f.phoneConfirm, f.now) === null;
-}
-
 export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   const reject = (code: ExternalClaimRejectCode): ClaimDecision => ({ kind: 'REJECT', code });
   if (!f.cfg.enabled) return reject('DISABLED');

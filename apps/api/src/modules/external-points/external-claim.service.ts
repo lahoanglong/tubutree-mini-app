@@ -23,7 +23,6 @@ import {
   lockedUntil,
   PHONE_CONFIRM_RESULTS,
   PHONE_CONFIRMED_NOTE,
-  phoneConfirmPassed,
   type ClaimDecision,
   type ClaimFacts,
 } from './external-claim.rules';
@@ -221,13 +220,16 @@ export class ExternalClaimService {
         await advisoryUserLock(tx, userId);
         const user = await tx.user.findUnique({ where: { id: userId }, select: USER_SELECT });
         const g = await this.gatherFacts(tx, user, code, cfg, now, { recipientPhoneLast4: recipientPhoneLast4 ?? null });
-        if (g.order && phoneConfirmPassed(g.facts)) {
+        const decision = evaluateClaimRules(g.facts);
+        // Lượt REQUIRED cũ của đơn này thôi tính vào khoá 24h CHỈ khi lần này thật sự tạo claim nhờ 4 số đúng. Lật sớm hơn (trước các luật
+        // khoá, trần lần thử) thì khách đang bị khoá dò được 4 số: lần sai không được ghi, lần đúng mở khoá.
+        if (g.order && decision.kind === 'CLAIM' && decision.phoneConfirmed) {
           await tx.externalClaimAttempt.updateMany({
             where: { userId, externalOrderId: g.order.id, result: PHONE_CONFIRM_RESULTS.required },
             data: { result: PHONE_CONFIRM_RESULTS.confirmed, resolvedAt: now, note: PHONE_CONFIRMED_NOTE },
           });
         }
-        const out = await this.persist(tx, { userId, code, cfg, now, decision: evaluateClaimRules(g.facts), order: g.order, existingClaimId: g.existingClaimId, existingClaimOwnerId: g.existingClaimOwnerId, attemptId: null });
+        const out = await this.persist(tx, { userId, code, cfg, now, decision, order: g.order, existingClaimId: g.existingClaimId, existingClaimOwnerId: g.existingClaimOwnerId, attemptId: null });
         await recordExtClaimEvent(tx, { name: 'ext_claim_submitted', userId, at: now, props: submittedProps(out, g.order?.channel ?? null, via) });
         return out;
       },

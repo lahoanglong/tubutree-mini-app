@@ -200,12 +200,15 @@ export function useCameraScan(opts: {
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
     let trackShown = false;
+    // Gọi lại được nhiều lần: dọn dẹp chạy khi getUserMedia còn chờ thì lần gọi sau (stream vừa về) vẫn phải tắt track.
     const stop = () => {
-      if (stopped) return;
       stopped = true;
       if (timer) clearInterval(timer);
       stream?.getTracks().forEach((t) => t.stop());
-      if (trackShown) latest.current.onTrack?.(null);
+      if (trackShown) {
+        trackShown = false;
+        latest.current.onTrack?.(null);
+      }
     };
     const fail = (kind: CameraScanError) => {
       if (stopped) return;

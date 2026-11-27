@@ -51,7 +51,7 @@
 .tubu-scan-guide-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-inline-xs);
+  gap: var(--space-stack-xs);
   min-height: 44px;
   margin: var(--space-stack-xs) var(--space-gutter) 0;
   padding: 0;

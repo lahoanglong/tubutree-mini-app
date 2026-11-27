@@ -1720,7 +1720,7 @@
 .tubu-scan-guide-toggle {
   display: flex;
   align-items: center;
-  gap: var(--space-inline-xs);
+  gap: var(--space-stack-xs);
   min-height: 44px;
   margin: var(--space-stack-xs) 0 0;
   padding: 0;
@@ -1809,7 +1809,7 @@
   left: var(--space-inline-md);
   right: var(--space-inline-md);
   margin: 0;
-  padding: var(--space-inline-xs) var(--space-inline-sm);
+  padding: var(--space-stack-xs) var(--space-inline-sm);
   border-radius: var(--radius-pill);
   background: var(--color-bg-lightbox-control);
   text-align: center;
@@ -1862,25 +1862,26 @@
   width: 20px;
   height: 20px;
 }
+/* Hai viên cùng hàng khi đủ chỗ (375px); thiếu chỗ (360px, chữ phóng to) thì mỗi viên một hàng thay vì tràn chữ ra viền. */
 .tubu-scanner__pills {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-inline-sm);
 }
 .tubu-scanner__pill {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-inline-xs);
+  gap: var(--space-stack-xs);
   min-height: 44px;
   padding: 0 var(--space-inline-sm);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-pill);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  font-size: var(--type-body-sm-size);
-  line-height: var(--type-body-sm-lh);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
   font-weight: var(--type-label-weight);
   white-space: nowrap;
   cursor: pointer;
@@ -1889,8 +1890,8 @@
   border-color: var(--color-border-focus);
 }
 .tubu-scanner__pill svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 .tubu-scanner__torch:focus-visible,

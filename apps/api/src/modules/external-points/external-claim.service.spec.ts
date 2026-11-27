@@ -442,6 +442,24 @@ describe('ExternalClaimService.submit: xác nhận 4 số cuối SĐT người n
     expect(fourth.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
   });
 
+  it('tài khoản đang khoá 24h: nhập đúng 4 số vẫn LOCKED, không lật lượt REQUIRED cũ (không thành máy dò 4 số)', async () => {
+    const b = build({ config: flagOn, order: order({ channel: 'lazada', phone: '0987654321', phoneMask: null }) });
+    const now = Date.now();
+    b.tx.externalClaimAttempt.findMany.mockImplementation((async (args: { where: { result?: unknown } }) => {
+      const r = args.where.result;
+      return typeof r === 'object' && r !== null && 'in' in r ? [1, 2, 3, 4, 5].map((h) => ({ createdAt: new Date(now - h * HOUR) })) : [];
+    }) as never);
+    expect((await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'typed', '4321'))).body).toMatchObject({ code: 'LOCKED' });
+    expect(b.tx.externalClaimAttempt.updateMany).not.toHaveBeenCalled();
+    expect(b.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('nhập đúng 4 số mà đơn bị từ chối vì lý do khác (đơn đã huỷ): không lật lượt REQUIRED cũ', async () => {
+    const b = build({ config: flagOn, order: order({ channel: 'lazada', phone: '0987654321', phoneMask: null, status: 'CANCELLED' }) });
+    expect((await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'typed', '4321'))).body).toMatchObject({ code: 'CLOSED' });
+    expect(b.tx.externalClaimAttempt.updateMany).not.toHaveBeenCalled();
+  });
+
   it('lần sai đếm theo đúng khách và đúng đơn, trong 48 giờ gần nhất', async () => {
     const b = build({ config: flagOn, order: order({ phoneMask: '0*26' }) });
     await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'scan', '1111'));

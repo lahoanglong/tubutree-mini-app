@@ -94,6 +94,10 @@ test.describe('Web /quet-ma: tích điểm đơn sàn trên web (W44)', () => {
       const frame = (await scanner.locator('.tubu-scanner__frame').boundingBox())!;
       expect(frame.y + frame.height).toBeLessThanOrEqual(800);
       expect(Math.round(frame.height)).toBe(Math.round((frame.width * 3) / 4));
+      // Chữ hai viên thuốc không tràn viền ở 360px.
+      for (const pill of await scanner.locator('.tubu-scanner__pill').all()) {
+        expect(await pill.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+      }
       await noHorizontalScroll(page);
       await shot(page, `web${width}-quet-ma-authed`);
       await manual.click();

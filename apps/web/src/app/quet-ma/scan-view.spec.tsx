@@ -706,6 +706,23 @@ describe('/quet-ma — khung quét camera trình duyệt (W44 U5, W46 camera tr�
     expect(c.querySelector('.tubu-scanner__frame')?.hasAttribute('data-live')).toBe(true);
   });
 
+  it('camera đang mở dở (chưa có stream) mà khách chuyển sang chụp ảnh: stream về muộn vẫn bị tắt, không giữ đèn camera', async () => {
+    let resolveStream!: (s: unknown) => void;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(() => new Promise((r) => (resolveStream = r))) },
+    });
+    const c = await mount();
+    await startCamera(c);
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
+    click(c.querySelector('button[data-testid="claim-photo-scan"]'));
+    await flush(2);
+    await act(async () => resolveStream(fakeStream()));
+    await flush(2);
+    expect(stopTrack).toHaveBeenCalled();
+    expect(c.querySelector('.tubu-scanner__frame')?.hasAttribute('data-live')).toBe(false);
+  });
+
   it('máy cho bật đèn pin: nút đèn ở góc khung, chạm thì bật torch', async () => {
     caps.torch = true;
     scan.value = '';

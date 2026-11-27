@@ -4,7 +4,6 @@ import {
   NO_PHONE_REVIEW_REASON,
   PHONE_CONFIRM_RESULTS,
   PHONE_CONFIRMED_NOTE,
-  phoneConfirmPassed,
   PHONE_MISMATCH_REVIEW_REASON,
   settlePoints,
   WEB_UNVERIFIED_PHONE_REVIEW_REASON,
@@ -299,14 +298,6 @@ describe('evaluateClaimRules: xác nhận 4 số cuối SĐT người nhận khi
     const d = evaluateClaimRules(mismatch({ last4: '4321', matches: true, wrongTimes: [] }, { phoneVerified: false }));
     expect(d).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', phoneConfirmed: true });
     expect(d.kind === 'CLAIM' && d.reviewReason).toBe(`${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; ${PHONE_CONFIRMED_NOTE}`);
-  });
-  it('phoneConfirmPassed: chỉ đúng khi SĐT lệch, nhập đúng và đơn không khoá', () => {
-    expect(phoneConfirmPassed(mismatch({ last4: '4321', matches: true, wrongTimes: [] }))).toBe(true);
-    expect(phoneConfirmPassed(mismatch({ last4: '4321', matches: true, wrongTimes: [hour(3), hour(2), hour(1)] }))).toBe(false);
-    expect(phoneConfirmPassed(mismatch({ last4: '9921', matches: false, wrongTimes: [] }))).toBe(false);
-    expect(phoneConfirmPassed(mismatch({ last4: null, matches: false, wrongTimes: [] }))).toBe(false);
-    expect(phoneConfirmPassed(base({ phoneConfirm: { last4: '4321', matches: true, wrongTimes: [] } }))).toBe(false);
-    expect(phoneConfirmPassed(mismatch(undefined))).toBe(false);
   });
 });
 

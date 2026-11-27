@@ -125,6 +125,16 @@ describe('W46: xác nhận 4 số cuối SĐT người nhận (real Postgres)', 
     expect(await prisma.externalPointsClaim.count({ where: { userId: user.id } })).toBe(0);
   });
 
+  it('tài khoản đang khoá 24h (5 lượt REQUIRED): nhập đúng 4 số vẫn LOCKED, lượt REQUIRED không bị lật nên không dò được 4 số', async () => {
+    const user = await mkUser('77');
+    const o = await mkOrder({ channel: 'lazada', sourceKey: '-4|it|-4', phone: '0987654321' });
+    for (let i = 0; i < 5; i++) expect((await outcome(svc().submit(user.id, o.code, 'typed'))).code).toBe('PHONE_CONFIRM_REQUIRED');
+    for (const d of ['1111', '4321', '2222']) expect((await outcome(svc().submit(user.id, o.code, 'typed', d))).code).toBe('LOCKED');
+    expect(await prisma.externalClaimAttempt.count({ where: { userId: user.id, externalOrderId: o.id, result: PHONE_CONFIRM_RESULTS.required } })).toBe(5);
+    expect(await prisma.externalClaimAttempt.count({ where: { userId: user.id, result: PHONE_CONFIRM_RESULTS.confirmed } })).toBe(0);
+    expect(await prisma.externalPointsClaim.count({ where: { userId: user.id } })).toBe(0);
+  });
+
   it('khoá theo (khách, đơn): đơn khác của cùng khách vẫn xác nhận được; khách khác cùng đơn không bị khoá', async () => {
     const user = await mkUser('55');
     const other = await mkUser('66');
