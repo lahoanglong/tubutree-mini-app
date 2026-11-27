@@ -328,7 +328,7 @@ test.describe('ds-parity: thanh toán 375px, dòng điểm từ đơn sàn (W43)
     api.get('/me/loyalty', { ...CHECKOUT_LOYALTY, pointsMarketplaceBalance: MARKET });
     api.post('/checkout/quote', {
       ...CHECKOUT_QUOTE, pointsBalance: 50, pointsConvertedBalance: 50, pointsMax: 1_000_000,
-      pointsMarketplaceBalance: MARKET, redeemableMarketplacePoints: MARKET,
+      pointsMarketplaceBalance: MARKET, redeemableMarketplacePoints: MARKET, pointsMaxMarketplace: MARKET,
     });
     await page.goto(side === 'web' ? '/thanh-toan' : '/checkout');
     await expect(page.locator('[data-ds="checkout-summary-total"]').first()).toBeVisible({ timeout: 20_000 });

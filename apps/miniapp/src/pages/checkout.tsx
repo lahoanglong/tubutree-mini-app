@@ -356,7 +356,6 @@ export default function CheckoutPage() {
   const marketplaceLine = marketplacePointsLine({
     usable: points.usable,
     disabled: partnerPoints.disabled,
-    overview: loyaltyQ.data ?? (user ? { pointsMarketplaceBalance: user.pointsMarketplaceBalance } : null),
     quote: quote.data,
     // Báo giá cũ (chưa áp điểm) còn trên màn trong lúc tính lại: chỉ đọc số đã dùng khi báo giá thật sự đã trừ điểm.
     applied: usePoints && (quote.data?.pointsUsed ?? 0) > 0,

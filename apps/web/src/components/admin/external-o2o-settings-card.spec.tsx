@@ -76,7 +76,7 @@ describe('ExternalO2oSettingsCard', () => {
       { key: 'pancake.external_lookup_enabled', value: true },
       { key: 'loyalty.marketplace_earn_pct', value: 6.5 },
     ]);
-    expect(r.container.textContent).toContain('Đã lưu 2 mục.');
+    expect(r.container.querySelector('[role="status"]')!.textContent).toBe('Đã lưu 2 mục.');
   });
 
   it('bấm Huỷ: không ghi khoá nào', async () => {
@@ -97,12 +97,15 @@ describe('ExternalO2oSettingsCard', () => {
     click(byText(r.container, 'button', 'Lưu cài đặt'));
     await flush();
     expect(confirmDialog()).toBeNull();
-    expect(r.container.textContent).toContain('Số ngày chờ sau khi giao xong: nhập số nguyên từ 1 đến 60.');
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toBe('Số ngày chờ sau khi giao xong: nhập số nguyên từ 1 đến 60.');
+    expect(inputs(r.container)[1]!.getAttribute('aria-invalid')).toBe('true');
+    expect(inputs(r.container)[1]!.getAttribute('aria-describedby')).toBe(r.container.querySelector('[role="alert"]')!.parentElement!.id);
+    expect(inputs(r.container)[0]!.hasAttribute('aria-invalid')).toBe(false);
     typeInto(inputs(r.container)[1]!, '14');
     typeInto(inputs(r.container)[0]!, '25');
     click(byText(r.container, 'button', 'Lưu cài đặt'));
     await flush();
-    expect(r.container.textContent).toContain('Tỉ lệ tích điểm đơn sàn (%): nhập số từ 0,1 đến 20.');
+    expect(r.container.textContent).toContain('Tỉ lệ tích điểm đơn sàn (%): nhập số (tối đa 2 chữ số lẻ) từ 0,1 đến 20.');
     typeInto(inputs(r.container)[0]!, '5');
     click(byText(r.container, 'button', 'Lưu cài đặt'));
     await flush();
@@ -120,7 +123,7 @@ describe('ExternalO2oSettingsCard', () => {
     answerConfirm(true);
     await flush();
     expect(puts).toEqual([{ key: 'app.mobile_miniapp_redirect_enabled', value: true }]);
-    expect(r.container.textContent).toContain('Đã lưu: Tự mở Mini App trên web điện thoại. Chưa lưu: Số ngày chờ sau khi giao xong.');
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('Đã lưu: Tự mở Mini App trên web điện thoại. Chưa lưu: Số ngày chờ sau khi giao xong.');
   });
 
   it('tải cài đặt lỗi: có nút Thử lại, các ô khoá lại', async () => {
@@ -140,6 +143,23 @@ describe('external-o2o-settings (hàm thuần)', () => {
     expect(built.writes).toEqual([{ key: 'loyalty.marketplace_claim_enabled', label: 'Khách nhập mã đơn sàn để nhận điểm', from: true, to: false }]);
     const flag = FEATURE_FLAGS.find((f) => f.key === 'loyalty.marketplace_claim_enabled')!;
     expect(o2oConfirmMessage(built.writes!)).toBe(`Khách nhập mã đơn sàn để nhận điểm\nBật → Tắt\n${flag.offWarning}`);
+  });
+
+  it('chỉ nhận số thập phân thường: "0x10", "1e1", "1.000", "6,555", "-1" bị từ chối kèm tên ô; "6,5" và "6.25" nhận', () => {
+    const form = readO2oSettings(ROWS);
+    for (const bad of ['0x10', '1e1', '1.000', ' ', '-1']) {
+      form.numbers['loyalty.external_pending_days'] = bad;
+      expect(buildO2oWrites(form, ROWS), bad).toMatchObject({ field: 'loyalty.external_pending_days' });
+    }
+    form.numbers['loyalty.external_pending_days'] = '14';
+    for (const bad of ['6,555', '0x1', '2e1', '1.000']) {
+      form.numbers['loyalty.marketplace_earn_pct'] = bad;
+      expect(buildO2oWrites(form, ROWS), bad).toMatchObject({ field: 'loyalty.marketplace_earn_pct' });
+    }
+    form.numbers['loyalty.marketplace_earn_pct'] = '6,5';
+    expect(buildO2oWrites(form, ROWS).writes).toEqual([{ key: 'loyalty.marketplace_earn_pct', label: 'Tỉ lệ tích điểm đơn sàn (%)', from: 5, to: 6.5 }]);
+    form.numbers['loyalty.marketplace_earn_pct'] = ' 6.25 ';
+    expect(buildO2oWrites(form, ROWS).writes![0]!.to).toBe(6.25);
   });
 
   it('số ngày: "14 ngày → 7 ngày" và câu áp cho cả yêu cầu đang chờ', () => {

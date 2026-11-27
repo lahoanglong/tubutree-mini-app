@@ -596,20 +596,38 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
   describe('dòng điểm từ đơn sàn (W43)', () => {
     const line = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
 
-    it('có lô sàn: nhắc ngay dưới ô điểm khi chưa tick; tick xong ghi đúng số server trừ từ lô sàn', async () => {
-      mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100, lockedPoints: 0, redeemablePoints: 100, pointsMarketplaceBalance: 1_250 });
-      mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => ({
-        ...BIG_QUOTE, pointsUsed: pts, pointsUsedMarketplace: pts > 0 ? 900 : 0, pointsDiscount: pts * 1_000, total: 520_000 - pts * 1_000,
-      }));
+    // 100.000đ hàng, trần 20%: 30.000 điểm sàn + 50.000 điểm quy đổi. Máy chủ tiêu lô sàn trước nhưng lô sàn chung trần 20% với lô thường,
+    // nên chỉ 20.000 điểm sàn được dùng (pointsMax 70.000 gồm 50.000 điểm quy đổi không trần).
+    const CAPPED = { ...BIG_QUOTE, subtotal: 100_000, total: 120_000, pointsMax: 70_000, pointsMarketplaceBalance: 30_000, redeemableMarketplacePoints: 30_000, pointsMaxMarketplace: 20_000 };
+    const LOYALTY = { pointsBalance: 0, lockedPoints: 0, redeemablePoints: 0, pointsConvertedBalance: 50_000, pointsMarketplaceBalance: 30_000 };
+
+    it('chưa tick: số máy chủ kẹp (20.000), không phải số dư lô sàn (30.000); tick xong vẫn đúng số máy chủ trừ', async () => {
+      mocks.getLoyalty.mockResolvedValue(LOYALTY);
+      mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) =>
+        pts > 0
+          ? { ...CAPPED, pointsUsed: 70_000, pointsUsedMarketplace: 20_000, pointsUsedConverted: 50_000, pointsDiscount: 70_000, total: 50_000 }
+          : { ...CAPPED, pointsUsed: 0, pointsUsedMarketplace: 0, pointsDiscount: 0 },
+      );
       const { container } = renderPage();
-      const before = await screen.findByText(line('1.250'));
+      const before = await screen.findByText(line('20.000'));
       expect(before).toHaveAttribute('data-points-marketplace');
+      expect(screen.queryByText(line('30.000'))).toBeNull();
       const row = before.closest('[role="checkbox"]')!;
       expect(row).not.toBeNull();
       fireEvent.click(row);
-      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 1_350, undefined, undefined, {}));
-      expect(await screen.findByText(line('900'))).toBeInTheDocument();
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 80_000, undefined, undefined, {}));
+      await waitFor(() => expect(row).toHaveAttribute('aria-checked', 'true'));
+      expect(await screen.findByText(line('20.000'))).toBeInTheDocument();
       expect(container.querySelectorAll('[data-points-marketplace]')).toHaveLength(1);
+    });
+
+    it('API cũ chưa trả pointsMaxMarketplace: không đoán từ số dư lô sàn', async () => {
+      mocks.getLoyalty.mockResolvedValue(LOYALTY);
+      const { pointsMaxMarketplace: _omit, ...oldApi } = CAPPED;
+      mocks.checkoutQuote.mockResolvedValue({ ...oldApi, pointsUsed: 0, pointsDiscount: 0 });
+      renderPage();
+      await screen.findByText(/^Dùng [\d.]+ điểm, giảm/);
+      expect(screen.queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
     });
 
     it('không có lô sàn: không có dòng nhắc', async () => {

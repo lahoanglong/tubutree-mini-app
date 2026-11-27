@@ -178,7 +178,7 @@ describe('/thanh-toan — ô chọn Điểm Xanh', () => {
   });
 
   it('W43: có điểm từ đơn sàn → một dòng nhắc nằm trong cột chữ cạnh ô tick (như Mini), bản md+ nằm dưới ô', async () => {
-    quoteExtra.lots = { pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250, pointsMax: 10_000 };
+    quoteExtra.lots = { pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250, pointsMax: 10_000, pointsMaxMarketplace: 1_250 };
     const c = await mount();
     const block = c.querySelector<HTMLElement>('[data-mini-block="points"]')!;
     const notes = [...block.querySelectorAll<HTMLElement>('[data-points-marketplace]')];

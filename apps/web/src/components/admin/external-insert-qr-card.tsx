@@ -46,7 +46,7 @@ export function ExternalInsertQrCard() {
         Mã QR in thẻ bỏ hộp
       </h3>
       <p className="mt-0.5 text-xs text-stone-600">
-        Khách quét bằng camera điện thoại sẽ mở màn tích điểm đơn sàn trong Mini App trên Zalo. Mã không kèm mã giảm giá.
+        Khách quét bằng camera điện thoại vào trang tích điểm đơn sàn, rồi sang màn quét trong Mini App trên Zalo (tự mở khi bật &quot;Tự mở Mini App trên web điện thoại&quot;, không thì khách bấm nút). Mã không kèm mã giảm giá.
       </p>
       <div className="mt-3 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 space-y-3">

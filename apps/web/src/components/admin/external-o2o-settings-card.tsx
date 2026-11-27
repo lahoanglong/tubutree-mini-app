@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getConfig, setConfig } from '@/lib/admin-client';
 import { actionErrorText } from '@/lib/admin-error-text';
@@ -10,6 +10,7 @@ import {
   buildO2oWrites,
   o2oConfirmMessage,
   readO2oSettings,
+  type O2oNumberKey,
   type O2oSettingsForm,
   type O2oSwitchKey,
   type O2oWrite,
@@ -36,7 +37,8 @@ export function ExternalO2oSettingsCard() {
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
   const rows = q.data;
   const [form, setForm] = useState<O2oSettingsForm>(() => readO2oSettings(rows));
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string; field?: O2oNumberKey } | null>(null);
+  const msgId = useId();
   const snapshot = JSON.stringify(readO2oSettings(rows));
   const [loaded, setLoaded] = useState(snapshot);
   useEffect(() => {
@@ -68,7 +70,7 @@ export function ExternalO2oSettingsCard() {
 
   const askSave = async () => {
     const built = buildO2oWrites(form, rows);
-    if (!built.writes) return setMsg({ ok: false, text: built.error ?? 'Không lưu được.' });
+    if (!built.writes) return setMsg({ ok: false, text: built.error ?? 'Không lưu được.', field: built.field });
     if (built.writes.length === 0) return setMsg({ ok: true, text: 'Không có thay đổi.' });
     const ok = await confirm({
       title: 'Lưu cài đặt tích điểm đơn sàn?',
@@ -137,6 +139,8 @@ export function ExternalO2oSettingsCard() {
                 inputMode={f.integer ? 'numeric' : 'decimal'}
                 className={`${INPUT_CLASS} min-h-[44px] sm:min-h-0`}
                 value={form.numbers[f.key]}
+                aria-invalid={msg?.field === f.key || undefined}
+                aria-describedby={msg?.field === f.key ? msgId : undefined}
                 disabled={busy}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -152,7 +156,11 @@ export function ExternalO2oSettingsCard() {
           </button>
           {msg && (
             <div className="mt-2">
-              <Notice tone={msg.ok ? 'success' : 'danger'}>{msg.text}</Notice>
+              <div id={msgId}>
+                <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>
+                  {msg.text}
+                </Notice>
+              </div>
             </div>
           )}
         </div>

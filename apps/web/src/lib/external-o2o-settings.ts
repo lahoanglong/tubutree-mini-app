@@ -82,7 +82,7 @@ export function o2oValueText(key: string, v: boolean | number): string {
 }
 
 /** Kiểm cả form → các khoá ĐỔI so với giá trị đang áp (khoá chưa có dòng thì so với mặc định), theo thứ tự hiện trên thẻ. */
-export function buildO2oWrites(form: O2oSettingsForm, rows: ConfigRow[] | undefined): { writes?: O2oWrite[]; error?: string } {
+export function buildO2oWrites(form: O2oSettingsForm, rows: ConfigRow[] | undefined): { writes?: O2oWrite[]; error?: string; field?: O2oNumberKey } {
   const writes: O2oWrite[] = [];
   for (const flag of O2O_SWITCHES) {
     const from = currentSwitch(rows, flag);
@@ -90,10 +90,15 @@ export function buildO2oWrites(form: O2oSettingsForm, rows: ConfigRow[] | undefi
     if (from !== to) writes.push({ key: flag.key as O2oSwitchKey, label: flag.label, from, to });
   }
   for (const f of O2O_NUMBER_FIELDS) {
-    const raw = form.numbers[f.key].trim().replace(',', '.');
-    const n = Number(raw);
-    if (raw === '' || !Number.isFinite(n) || n < f.min || n > f.max || (f.integer && !Number.isInteger(n))) {
-      return { error: `${f.label}: nhập ${f.integer ? 'số nguyên' : 'số'} từ ${numberShown(f.min)} đến ${numberShown(f.max)}.` };
+    const raw = form.numbers[f.key].trim();
+    // Chỉ chữ số và tối đa 2 chữ số lẻ sau "," hoặc ".": Number() còn nhận "0x10", "1e1", và "1.000" (một nghìn kiểu Việt) sẽ thành 1.
+    const shape = f.integer ? /^\d+$/ : /^\d+(?:[.,]\d{1,2})?$/;
+    const n = shape.test(raw) ? Number(raw.replace(',', '.')) : Number.NaN;
+    if (!Number.isFinite(n) || n < f.min || n > f.max) {
+      return {
+        error: `${f.label}: nhập ${f.integer ? 'số nguyên' : 'số (tối đa 2 chữ số lẻ)'} từ ${numberShown(f.min)} đến ${numberShown(f.max)}.`,
+        field: f.key,
+      };
     }
     const from = currentNumber(rows, f);
     if (from !== n) writes.push({ key: f.key, label: f.label, from, to: n });

@@ -136,6 +136,8 @@ export interface CheckoutQuote {
   pointsUsedConverted?: number;
   /** Phần của `pointsUsed` lấy từ lô điểm đơn sàn (W42, máy chủ tiêu lô này trước). Optional: API cũ chưa trả. */
   pointsUsedMarketplace?: number;
+  /** Phần lô sàn khi dùng hết điểm (W43): máy chủ đã kẹp trần chung với lô thường. API cũ chưa trả. */
+  pointsMaxMarketplace?: number;
   pointsConvertedBalance?: number;
   redeemableConvertedPoints?: number;
   /** Điểm Xanh tích từ đơn sàn (W42): chỉ dùng khi mua hàng, chung trần % với lô thường. Optional: API cũ chưa trả. */

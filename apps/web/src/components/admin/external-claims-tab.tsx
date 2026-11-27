@@ -113,7 +113,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   const total = claims.data?.pages[0]?.meta.total;
   const who = { isAdmin, canAct, meId };
   const [outcome, setOutcome] = useState<Outcome>(null);
-  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupOpened, setSetupOpened] = useState(false);
   // Chỉ admin đọc được cấu hình; nhân viên không thấy băng này.
   const flag = useQuery({ queryKey: ['admin-config', 'loyalty'], queryFn: () => getConfig('loyalty'), enabled: isAdmin });
   const flagOff = isAdmin && flag.isSuccess && configValue<unknown>(flag.data, 'loyalty.marketplace_claim_enabled', false) !== true;
@@ -140,10 +140,17 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
       </Notice>
       <ExternalClaimsFunnelCard />
       {isAdmin && (
-        // Đóng sẵn và chỉ dựng thẻ khi mở: tải tab không gọi /admin/config thêm lần nào.
-        <details data-external-setup onToggle={(e) => setSetupOpen((e.currentTarget as HTMLDetailsElement).open)} className="rounded-card border border-stone-200 bg-stone-0">
+        // Đóng sẵn, dựng thẻ từ lần mở đầu: tải tab không gọi /admin/config. Đã dựng thì giữ khi đóng lại, để chữ đang sửa và kết quả lưu
+        // (kể cả "Đã lưu: … Chưa lưu: …") không mất.
+        <details
+          data-external-setup
+          onToggle={(e) => {
+            if ((e.currentTarget as HTMLDetailsElement).open) setSetupOpened(true);
+          }}
+          className="rounded-card border border-stone-200 bg-stone-0"
+        >
           <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-sm font-medium text-stone-900 sm:min-h-[36px]">Cài đặt và mã QR bỏ hộp</summary>
-          {setupOpen && (
+          {setupOpened && (
             <div className="space-y-3 border-t border-stone-200 p-3">
               <ExternalO2oSettingsCard />
               <ExternalInsertQrCard />

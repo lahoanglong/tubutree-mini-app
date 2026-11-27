@@ -165,40 +165,48 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
   });
 
   describe('dòng điểm từ đơn sàn (W43)', () => {
-    const MARKET = { pointsBalance: 100, redeemablePoints: 100, pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250 };
+    // 100.000đ hàng (trần 20% = 20.000đ): 30.000 điểm sàn + 50.000 điểm quy đổi. Máy chủ: pointsMax 70.000, phần sàn 20.000.
+    const MARKET = {
+      pointsBalance: 0, redeemablePoints: 0, pointsConvertedBalance: 50_000, redeemableConvertedPoints: 50_000,
+      pointsMarketplaceBalance: 30_000, redeemableMarketplacePoints: 30_000, pointsMax: 70_000, pointsMaxMarketplace: 20_000, pointsPartnerNote: null,
+    };
     const line = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
 
-    it('chưa tick: nhắc số điểm sàn sẽ trừ (kẹp trần đơn); tick xong: đúng số server trừ từ lô sàn', async () => {
-      calls.extra = { ...MARKET, pointsMax: 10_000, pointsPartnerNote: null, pointsUsedMarketplace: 900 };
-      calls.used = 1_000;
+    it('chưa tick: số máy chủ kẹp (20.000), không phải số dư lô sàn (30.000); tick xong: số máy chủ trừ từ lô sàn', async () => {
+      calls.extra = { ...MARKET, pointsUsedMarketplace: 20_000 };
+      calls.used = 70_000;
       const r = render(<CheckoutPage />);
       mounted.push(r);
       await flush(8);
-      expect(r.container.textContent).toContain(line('1.250'));
+      expect(r.container.textContent).toContain(line('20.000'));
+      expect(r.container.textContent).not.toContain(line('30.000'));
       const box = [...r.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((i) => /Điểm Xanh/.test(i.closest('label')?.textContent ?? ''))!;
       click(box);
       await flush(8);
-      expect(r.container.textContent).toContain(line('900'));
-      expect(r.container.textContent).not.toContain(line('1.250'));
+      expect(calls.pointsToUse).toContain(80_000);
+      expect(box.checked).toBe(true);
+      expect(r.container.textContent).toContain(line('20.000'));
     });
 
-    it('trần của đơn thấp hơn lô sàn: số nhắc không vượt trần', async () => {
-      calls.extra = { ...MARKET, pointsMax: 300, pointsPartnerNote: null };
+    it('API cũ chưa trả pointsMaxMarketplace: không đoán từ số dư', async () => {
+      const { pointsMaxMarketplace: _omit, ...oldApi } = MARKET;
+      calls.extra = oldApi;
       const r = render(<CheckoutPage />);
       mounted.push(r);
       await flush(8);
-      expect(r.container.textContent).toContain(line('300'));
+      expect(r.container.textContent).toContain('Điểm Xanh');
+      expect(r.container.textContent).not.toContain('từ đơn sàn, giảm ngay');
     });
 
     it('ô Điểm Xanh khoá hoặc không có lô sàn: không có dòng nhắc', async () => {
-      calls.extra = { ...MARKET, pointsMax: 0, pointsPartnerNote: NOTE };
+      calls.extra = { ...MARKET, pointsMax: 0, pointsMaxMarketplace: 0, pointsPartnerNote: NOTE };
       const locked = render(<CheckoutPage />);
       mounted.push(locked);
       await flush(8);
       expect(locked.container.textContent).not.toContain('từ đơn sàn, giảm ngay');
       locked.unmount();
       mounted = [];
-      calls.extra = { pointsMax: 10_000, pointsPartnerNote: null };
+      calls.extra = { pointsMax: 10_000, pointsMaxMarketplace: 0, pointsPartnerNote: null };
       const none = render(<CheckoutPage />);
       mounted.push(none);
       await flush(8);

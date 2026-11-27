@@ -677,6 +677,19 @@ describe('ExternalClaimsTab: phễu, cài đặt và mã QR bỏ hộp (W43)', (
     expect(details.querySelector('[data-external-o2o-settings] h3')!.textContent).toBe('Cài đặt tích điểm đơn sàn');
     expect(details.querySelector('[data-external-insert-qr] h3')!.textContent).toBe('Mã QR in thẻ bỏ hộp');
     expect(r.container.querySelectorAll('h2')).toHaveLength(1);
+
+    // Đóng lại rồi mở: thẻ giữ nguyên (chữ đang gõ còn), không tải lại cấu hình.
+    const tag = details.querySelector<HTMLInputElement>('[data-external-insert-qr] input')!;
+    typeInto(tag, 'box-2026-11');
+    details.open = false;
+    details.dispatchEvent(new Event('toggle'));
+    await flush();
+    expect(details.querySelector('[data-external-o2o-settings]')).not.toBeNull();
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    await flush();
+    expect(details.querySelector<HTMLInputElement>('[data-external-insert-qr] input')!.value).toBe('box-2026-11');
+    expect(config.calls.filter((c) => !c.url.includes('category='))).toHaveLength(1);
   });
 
   it('CSKH và KE_TOAN: không có phần cài đặt, không gọi /admin/config lần nào', async () => {

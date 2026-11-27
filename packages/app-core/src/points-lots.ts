@@ -76,26 +76,20 @@ export function lockedPointsLabel(total: number): string {
 }
 
 /**
- * Số Điểm Xanh từ đơn sàn nằm trong số ô thanh toán đang đề nghị (W43), cho dòng chú thích `checkout.pointsOrderOnly`. Máy chủ tiêu lô
- * sàn TRƯỚC (`PricingService.resolvePointsRedemptionByLot`), nên:
- *  - khách đã tick và báo giá có `pointsUsedMarketplace` (`appliedMarketplace`): đúng số đó;
- *  - chưa tick (hoặc API cũ chưa trả số đã dùng): phần sàn dùng được (`redeemableMarketplacePoints` của báo giá; chưa có báo giá hay API cũ
- *    thì `pointsMarketplaceBalance`), không vượt số ô đề nghị (`usable`, kẹp theo `pointsMax` khi báo giá đã có trần của đơn).
- * null khi 0: khách không có điểm sàn hoặc đơn không dùng được điểm. File này nằm trong gói đầu Mini App nên không điền chữ ở đây.
+ * Số Điểm Xanh từ đơn sàn trong ô Điểm Xanh thanh toán (W43), cho dòng chú thích `checkout.pointsOrderOnly`. Chỉ đọc số máy chủ tính:
+ * lô sàn chung trần % với lô thường còn lô quy đổi thì không (`PricingService.resolvePointsRedemptionByLot`), nên FE không suy được từ
+ * số dư hay `pointsMax`.
+ *  - khách đã tick và báo giá đã trừ điểm (`applied`): `pointsUsedMarketplace`;
+ *  - chưa tick: `pointsMaxMarketplace` (phần lô sàn khi dùng hết điểm, đúng số máy chủ sẽ trừ khi khách tick).
+ * null khi 0, khi chưa có báo giá hay API cũ chưa trả số: không hiện dòng còn hơn đoán sai. File này nằm trong gói đầu Mini App nên không
+ * điền chữ ở đây.
  */
 export function checkoutMarketplacePoints(input: {
-  lots: { pointsMarketplaceBalance?: number; redeemableMarketplacePoints?: number } | null | undefined;
-  usable: number;
-  pointsMax?: number;
-  appliedMarketplace?: number | null;
+  quote: { pointsMaxMarketplace?: number; pointsUsedMarketplace?: number } | null | undefined;
+  applied: boolean;
 }): number | null {
-  const clamp = (n: number | null | undefined) => (Number.isFinite(n) ? Math.max(0, Math.floor(n as number)) : 0);
-  if (Number.isFinite(input.appliedMarketplace)) {
-    const used = clamp(input.appliedMarketplace);
-    return used > 0 ? used : null;
-  }
-  const lot = clamp(input.lots?.redeemableMarketplacePoints ?? input.lots?.pointsMarketplaceBalance);
-  const offered = Number.isFinite(input.pointsMax) ? Math.min(clamp(input.usable), clamp(input.pointsMax)) : clamp(input.usable);
-  const n = Math.min(lot, offered);
+  const raw = input.applied ? input.quote?.pointsUsedMarketplace : input.quote?.pointsMaxMarketplace;
+  if (!Number.isFinite(raw)) return null;
+  const n = Math.max(0, Math.floor(raw as number));
   return n > 0 ? n : null;
 }

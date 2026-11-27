@@ -140,27 +140,18 @@ export function checkoutPoints(
 }
 
 /**
- * Dòng "Gồm n điểm từ đơn sàn, giảm ngay" trong ô Điểm Xanh (W43, cùng luật với web `checkoutPointsOffer`). Lô sàn đọc ở báo
- * giá (`redeemableMarketplacePoints`), chưa có thì ở tổng quan điểm (`pointsMarketplaceBalance`). Đã tick thì n là số máy chủ thật sự lấy từ
- * lô sàn. null khi ô không dùng được (`disabled`: giỏ chỉ hàng đối tác, trần 0) hoặc không có điểm sàn trong số đề nghị.
+ * Dòng "Gồm n điểm từ đơn sàn, giảm ngay" trong ô Điểm Xanh (W43, cùng luật với web `marketplacePointsLine`). n là số máy chủ tính
+ * (`checkoutMarketplacePoints`): chưa tick là `pointsMaxMarketplace`, đã tick là `pointsUsedMarketplace`. Chưa có báo giá thì không hiện.
+ * null khi ô không dùng được (`disabled`: giỏ chỉ hàng đối tác, trần 0) hoặc không có điểm sàn trong số đề nghị.
  */
 export function marketplacePointsLine(input: {
   usable: number;
   disabled: boolean;
-  overview?: { pointsMarketplaceBalance?: number } | null;
-  quote?: { redeemableMarketplacePoints?: number; pointsMarketplaceBalance?: number; pointsMax?: number; pointsUsedMarketplace?: number } | null;
+  quote?: { pointsMaxMarketplace?: number; pointsUsedMarketplace?: number } | null;
   applied: boolean;
 }): string | null {
   if (input.disabled || !(input.usable > 0)) return null;
-  const n = checkoutMarketplacePoints({
-    lots: {
-      redeemableMarketplacePoints: input.quote?.redeemableMarketplacePoints,
-      pointsMarketplaceBalance: input.quote?.pointsMarketplaceBalance ?? input.overview?.pointsMarketplaceBalance,
-    },
-    usable: input.usable,
-    pointsMax: input.quote?.pointsMax,
-    appliedMarketplace: input.applied ? input.quote?.pointsUsedMarketplace : undefined,
-  });
+  const n = checkoutMarketplacePoints({ quote: input.quote, applied: input.applied });
   return n === null ? null : fillCopy('checkout.pointsOrderOnly', { n: groupThousands(n) });
 }
 

@@ -443,6 +443,9 @@ export class CheckoutService {
       // Số Điểm Xanh tối đa dùng được cho lần đặt này (số dư dùng được, trần %, chỉ trên hàng Tubu) và câu giải thích khi giỏ
       // có hàng của gian hàng đối tác; pointsNotice khi số khách chọn bị kẹp vì hàng đó.
       pointsMax: computed.pointsMax,
+      // Phần lô MARKETPLACE trong pointsMax: lô này chung trần % với lô STANDARD còn pointsMax gồm cả lô quy đổi không trần, nên
+      // FE không tự suy được từ pointsMax. Ô Điểm Xanh dùng số này cho dòng "Gồm n điểm từ đơn sàn" trước khi khách tick.
+      pointsMaxMarketplace: computed.pointsMaxMarketplace,
       // Mã đã dùng một phần trần gộp nên pointsMax thấp hơn khi không có mã: câu giải thích cho ô Điểm Xanh. Không vậy: không có trường.
       ...(computed.pointsCapNote ? { pointsCapNote: computed.pointsCapNote } : {}),
       pointsPartnerNote: computed.pointsPartnerNote,
@@ -1503,7 +1506,8 @@ export class CheckoutService {
     };
     const redemption = await this.pricing.resolvePointsRedemptionByLot(pointsToUse ?? 0, lots, redeemBase, pointsCapVnd);
     const allPoints = lots.marketplace + redeemablePoints + user.pointsConvertedBalance;
-    const pointsMax = (await this.pricing.resolvePointsRedemptionByLot(allPoints, lots, redeemBase, pointsCapVnd)).pointsUsed;
+    const maxRedemption = await this.pricing.resolvePointsRedemptionByLot(allPoints, lots, redeemBase, pointsCapVnd);
+    const pointsMax = maxRedemption.pointsUsed;
     // Mã đã dùng một phần trần gộp làm khách dùng được ít điểm hơn khi không có mã: nói lý do cạnh ô Điểm Xanh.
     const pointsCappedByCoupon =
       discount > 0 &&
@@ -1609,6 +1613,7 @@ export class CheckoutService {
         pointsDiscount: redemption.discount,
         couponCapNote: couponCapNoteText,
         pointsMax,
+        pointsMaxMarketplace: maxRedemption.pointsUsedMarketplace,
         pointsCapNote: pointsCappedByCoupon ? pointsCapNote(pointsMax, redeemPct) : null,
         pointsNotice,
         pointsPartnerNote: hasPartnerLines ? PARTNER_POINTS_NOTE : null,
