@@ -1,7 +1,7 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
 import { waitForHydrationAfterGoto } from './hydrate';
 import { captureByPathname, installVisualMode, recordTourUnmocked } from './visual';
-import type { AuthUser, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
+import type { AuthUser, ExternalClaimFunnel, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
 import type { CartSummary, PublicConfig } from '../../../miniapp/src/services/shop-api';
 
@@ -424,6 +424,19 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
       api.fallback('GET', '/admin/analytics/cohort-repeat', []);
       api.fallback('GET', '/admin/analytics/funnel-daily', []);
+      // Phễu đơn sàn → điểm → mua lại của tab "Tích điểm đơn sàn" (admin): mặc định kỳ 30 ngày chưa có lượt gửi mã nào.
+      api.fallback('GET', '/admin/external-claims/funnel', {
+        period: '30d',
+        from: '2026-10-28T03:00:00.000Z',
+        to: '2026-11-27T03:00:00.000Z',
+        submissions: { total: 0, scan: 0, typed: 0 },
+        matchedOrders: 0,
+        phoneMismatch: { rejected: 0, review: 0 },
+        unmatched: 0,
+        pending: { claims: 0, points: 0 },
+        credited: { claims: 0, points: 0, users: 0 },
+        converted: { users: 0, orders: 0, gmv: 0, rate: 0 },
+      } satisfies ExternalClaimFunnel);
       // Thẻ xem trước chuyển khoản ở thanh toán hỏi cờ checkout.transfer_preview_enabled khi khách chọn Chuyển khoản: mặc định cờ tắt như PROD.
       api.fallback('GET', '/payments/bank-preview', { enabled: false, bank: null });
       // Banner chiến dịch (Trang chủ, Ưu đãi) là công khai và tự ẩn khi không có: mặc định không có chiến dịch nào.

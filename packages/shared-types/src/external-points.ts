@@ -234,3 +234,38 @@ export interface AdminReverseClaimResponse {
   /** Số điểm thực thu hồi: min(điểm đã cộng, phần lô còn thu hồi được, số dư). */
   reversedPoints: number;
 }
+
+/** Kỳ của phễu tích điểm đơn sàn: 7, 30 hoặc 90 ngày tính lùi từ lúc gọi. */
+export type ExternalClaimFunnelPeriod = '7d' | '30d' | '90d';
+
+/**
+ * GET /admin/external-claims/funnel: phễu đơn sàn → điểm → mua lại trên Mini App/web trong [from, to). Chỉ claim SCAN (đơn sàn khách
+ * nhập mã); claim PHONE (đơn chat) không tính. Chỉ số đếm và tổng, không định danh khách.
+ */
+export interface ExternalClaimFunnel {
+  period: ExternalClaimFunnelPeriod;
+  /** ISO, mốc đầu (gồm). */
+  from: string;
+  /** ISO, mốc cuối (không gồm), là lúc tính. */
+  to: string;
+  /** Lượt gửi mã (sự kiện `ext_claim_submitted`). `scan` + `typed` có thể nhỏ hơn `total`: bản app cũ không gửi cách nhập. */
+  submissions: { total: number; scan: number; typed: number };
+  /** Số đơn sàn có claim SCAN tạo trong kỳ. */
+  matchedOrders: number;
+  /**
+   * `rejected`: lượt gửi mã trong kỳ bị từ chối vì SĐT trên đơn lệch, cả lúc gửi lẫn lúc hệ thống ghép lại; `review`: claim SCAN tạo trong kỳ
+   * từng phải chờ duyệt vì SĐT lệch (kể cả đã duyệt, đã cộng sau đó).
+   */
+  phoneMismatch: { rejected: number; review: number };
+  /** Số mã gửi trong kỳ mà tới giờ chưa lượt nào tìm thấy đơn (đếm theo mã, không theo lượt gửi). */
+  unmatched: number;
+  /** Claim SCAN tạo trong kỳ đang chờ cộng hoặc chờ duyệt, và số điểm của chúng. */
+  pending: { claims: number; points: number };
+  /** Claim SCAN đã cộng điểm trong kỳ (theo lúc cộng) và chưa bị đảo; `users` đếm tài khoản đã gộp một lần. */
+  credited: { claims: number; points: number; users: number };
+  /**
+   * Khách trong `credited.users` có đơn lẻ trên Mini App/web đặt sau lần cộng đầu trong kỳ, trước `to`, đang chạy hoặc đã giao.
+   * `gmv` theo tổng tiền đơn (VND); `rate` = users / credited.users, từ 0 đến 1, 0 khi chưa có ai được cộng.
+   */
+  converted: { users: number; orders: number; gmv: number; rate: number };
+}

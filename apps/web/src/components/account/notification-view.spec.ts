@@ -236,7 +236,7 @@ describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng', () => {
     ['COMMISSION_NEW', ['Xem hoa hồng', '/w/affiliate?tab=commission']],
     ['COMMISSION_REVERSED', ['Xem hoa hồng', '/w/affiliate?tab=commission']],
     ['TIER_DROP_NOTICE', ['Xem cách giữ hạng', '/w/loyalty']],
-    ['EXTERNAL_POINTS_CREDITED', ['Xem Điểm Xanh', '/w/loyalty']],
+    ['EXTERNAL_POINTS_CREDITED', ['Dùng điểm mua hàng', '/w/browse']],
     ['CHAT_ORDER_POINTS_CREDITED', ['Xem Điểm Xanh', '/w/loyalty']],
     ['STOREFRONT_APPROVED', ['Chia sẻ gian hàng', '/w/storefront']],
     ['STOREFRONT_REINSTATED', ['Chia sẻ gian hàng', '/w/storefront']],
@@ -251,11 +251,13 @@ describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng', () => {
     expect(notificationAction('COMMISSION_WALLET_CREDITED', {}, resolveWebRoute)).toMatchObject({ to: '/tai-khoan/vi-tubu' });
     expect(notificationAction('TIER_DROP_NOTICE', {}, resolveWebRoute)).toMatchObject({ to: '/tai-khoan/diem-xanh' });
     expect(notificationAction('STOREFRONT_APPROVED', {}, resolveWebRoute)).toMatchObject({ to: '/ctv/gian-hang' });
+    expect(notificationAction('EXTERNAL_POINTS_CREDITED', {}, resolveWebRoute)).toMatchObject({ label: 'Dùng điểm mua hàng', to: '/san-pham' });
   });
 
   it.each([
     ['TIER_DROP_NOTICE', 'Hạng thành viên'],
     ['EXTERNAL_POINTS_PENDING', 'Điểm Xanh'],
+    ['EXTERNAL_POINTS_CREDITED', 'Điểm Xanh đã cộng, dùng ngay'],
     ['CHAT_ORDER_POINTS_LINKED', 'Điểm Xanh'],
     ['COMMISSION_APPROVED', 'Hoa hồng CTV'],
   ])('%s → tiêu đề %s', (code, title) => {

@@ -7,6 +7,8 @@ import type {
   AdminExternalClaimListResponse,
   AdminExternalClaimRow,
   AdminReverseClaimResponse,
+  ExternalClaimFunnel,
+  ExternalClaimFunnelPeriod,
 } from '@tubutree/shared-types';
 import { formatPoints } from '../../common/format-points';
 import { maskPhoneOrNull, maskVnPhonesInText } from '../../common/mask-pii';
@@ -25,6 +27,7 @@ import { isSameAsPancakeCreator, phoneVerifiedFresh, STALE_APPROVE_MARK } from '
 import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-claim-audit';
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
 import { evaluateClaimRules, settlePoints } from './external-claim.rules';
+import { ExternalClaimFunnelCache, loadExternalClaimFunnel } from './external-claims-funnel';
 import { advisoryUserLock, type CreatedClaim, ExternalClaimService, LOCK_COUNTED_RESULTS, rejectionOf, USER_SELECT } from './external-claim.service';
 import { closedCreditedWhere, partialRefundWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
@@ -102,6 +105,7 @@ export interface AdminClaimListQuery {
 @Injectable()
 export class ExternalClaimsAdminService {
   private readonly logger = new Logger(ExternalClaimsAdminService.name);
+  private readonly funnelCache = new ExternalClaimFunnelCache();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -159,6 +163,11 @@ export class ExternalClaimsAdminService {
     return new Map(
       users.map((u) => [u.id, { name: u.fullName, phone: u.phone, phoneVerifiedAt: u.phoneVerifiedAt, createdAt: u.createdAt, deliveredAppOrders: counts.get(u.id) ?? 0 }]),
     );
+  }
+
+  /** Phễu đơn sàn → điểm → mua lại trên app (chỉ đọc, chỉ số đếm); mỗi kỳ giữ 60 giây trong bộ nhớ. */
+  funnel(period: ExternalClaimFunnelPeriod = '30d', now: Date = new Date()): Promise<ExternalClaimFunnel> {
+    return this.funnelCache.get(period, now, () => loadExternalClaimFunnel(this.prisma, period, now));
   }
 
   async list(q: AdminClaimListQuery): Promise<AdminExternalClaimListResponse> {

@@ -35,6 +35,12 @@ const MERCHANT_TO_BUYER = 'MERCHANT_ORDER_CANCELLED_BY_SELLER';
 
 const isMerchantNotice = (code: string) => code.startsWith('MERCHANT_') && code !== MERCHANT_TO_BUYER;
 
+/**
+ * Điểm đơn sàn vừa cộng (lô MARKETPLACE chỉ dùng để giảm tiền hàng): tiêu đề và nút đưa khách đi mua ngay thay vì xem số dư. Thân tin
+ * nằm ở bảng `notification_templates`, không đổi ở đây.
+ */
+const EXTERNAL_POINTS_CREDITED = 'EXTERNAL_POINTS_CREDITED';
+
 /** Tiêu đề nhóm của tin theo templateCode. Mã lạ mới là "Thông báo". */
 export function notificationTitle(code: string): string {
   if (code.startsWith('ORDER_CONFIRMED')) return 'Đơn đã xác nhận';
@@ -55,6 +61,7 @@ export function notificationTitle(code: string): string {
   if (code === 'REFERRAL_REWARD_PAID') return 'Thưởng giới thiệu bạn bè';
   if (code === 'REFERRAL_MILESTONE_PAID') return 'Thưởng mốc giới thiệu';
   if (code === 'REFERRAL_REWARD_REVOKED') return 'Thu lại thưởng giới thiệu';
+  if (code === EXTERNAL_POINTS_CREDITED) return 'Điểm Xanh đã cộng, dùng ngay';
   if (code.startsWith('POINTS') || code === 'XU_CONVERTED' || code.startsWith('EXTERNAL_POINTS_') || code.startsWith('CHAT_ORDER_POINTS_')) return 'Điểm Xanh';
   if (code === 'TIER_DROP_NOTICE' || code === 'TIER_UPGRADED') return 'Hạng thành viên';
   if (code.startsWith('STOREFRONT')) return 'Gian hàng của bạn';
@@ -146,6 +153,7 @@ export function notificationAction(
   }
   if (templateCode === 'TIER_UPGRADED') return { kind: 'link', label: 'Xem hạng của tôi', to: '/loyalty' };
   if (templateCode === 'TIER_DROP_NOTICE') return { kind: 'link', label: 'Xem cách giữ hạng', to: '/loyalty' };
+  if (templateCode === EXTERNAL_POINTS_CREDITED) return { kind: 'link', label: 'Dùng điểm mua hàng', to: '/browse' };
   if (templateCode.startsWith('EXTERNAL_POINTS_') || templateCode.startsWith('CHAT_ORDER_POINTS_')) {
     return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
   }
