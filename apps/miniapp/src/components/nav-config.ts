@@ -29,20 +29,12 @@ export function isRootPath(pathname: string): boolean {
 }
 
 /**
- * Tab gốc vẫn có lối vào bằng PUSH từ trang con: dòng "Tích điểm đơn sàn" trong popup "Cách tính Điểm Xanh" ở trang sản phẩm mở `/points/scan`
- * kèm `state.from`. Khách vào kiểu đó cần nút lùi về đúng trang sản phẩm; vào bằng thanh đáy, mở nguội hay deep link thì vẫn là tab gốc, không nút.
- */
-const BACKABLE_ROOT_PATHS: readonly string[] = ['/points/scan'];
-
-/**
- * Tab gốc này có hiện nút lùi không: chỉ khi là `/points/scan`, `state.from` là trang con (không phải tab gốc, không phải chính nó) và còn lịch
- * sử để lùi (`canPop`, truyền vào để file này không phụ thuộc `lib/smart-nav`). Không lịch sử thì lùi sẽ là thay trang, dễ thành vòng lùi giữa tab.
+ * Tab gốc `/points/scan` có hiện nút lùi không. Dòng "Tích điểm đơn sàn" trong popup "Cách tính Điểm Xanh" ở trang sản phẩm mở màn quét kèm
+ * `state.from`: khách vào kiểu đó cần nút lùi về đúng trang sản phẩm. Vào bằng thanh đáy, mở nguội hay deep link (không `from`, hoặc `from` là tab
+ * gốc) thì vẫn là tab gốc, không nút. Phải còn lịch sử để lùi (`canPop`, truyền vào để file này không phụ thuộc `lib/smart-nav`), kẻo lùi thành
+ * thay trang và vòng giữa các tab. Gọn nhất có thể vì nằm trong gói đầu của Mini App.
  */
 export function isBackableRoot(pathname: string, state: unknown, canPop: () => boolean): boolean {
-  if (!BACKABLE_ROOT_PATHS.includes(pathname)) return false;
-  const from = state && typeof state === 'object' ? (state as { from?: unknown }).from : undefined;
-  if (typeof from !== 'string') return false;
-  const fromPath = from.split(/[?#]/)[0] ?? '';
-  if (fromPath === '' || fromPath === pathname || isRootPath(fromPath)) return false;
-  return canPop();
+  const from = (state as { from?: unknown } | null)?.from;
+  return pathname === '/points/scan' && typeof from === 'string' && !!from && from !== pathname && !isRootPath(from.split('?')[0]!) && canPop();
 }
