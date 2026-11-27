@@ -10,6 +10,7 @@ import { isoToVnLocal } from '@/lib/admin-campaign-form';
 import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
+import { EXTERNAL_FUNNEL, EXTERNAL_FUNNEL_PATH } from '@/test-utils/fixtures/external-funnel';
 
 /** Tab tải lười (next/dynamic) hiện sau vài lượt chờ: đợi tới khi điều kiện đúng thay vì đoán số lượt flush. */
 async function waitFor(cond: () => boolean, timeoutMs = 5000) {
@@ -3918,6 +3919,7 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
 
   it('mục Tích điểm đơn sàn: ADMIN, CSKH và KE_TOAN (chỉ xem) mở được; KHO thì không; khoá hộp việc externalPoints mở đúng tab', async () => {
     const api = mockFetch({
+      [EXTERNAL_FUNNEL_PATH]: { body: EXTERNAL_FUNNEL },
       '/admin/external-claims/attempts?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
       '/admin/external-claims?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
     });
@@ -3926,6 +3928,8 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     const admin = await mount();
     expect(navItems(admin.container)).toContain('Tích điểm đơn sàn');
     expect(admin.container.querySelector('h2')!.textContent).toBe('Tích điểm đơn sàn');
+    expect(admin.container.querySelector('[data-external-funnel] h3')?.textContent).toBe('Phễu tích điểm đơn sàn');
+    expect(admin.container.querySelector('[data-external-setup] summary')?.textContent).toBe('Cài đặt và mã QR bỏ hộp');
     admin.unmount();
     mounted = [];
 
@@ -3936,6 +3940,8 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
       const r = await mount();
       expect(navItems(r.container)).toContain('Tích điểm đơn sàn');
       expect(r.container.querySelector('h2')!.textContent).toBe('Tích điểm đơn sàn');
+      expect(r.container.querySelector('[data-external-funnel]')).not.toBeNull();
+      expect(r.container.querySelector('[data-external-setup]')).toBeNull();
       r.unmount();
       mounted = [];
     }

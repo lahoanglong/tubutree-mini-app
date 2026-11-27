@@ -74,3 +74,28 @@ export function convertedPointsNote(converted: number | null | undefined): strin
 export function lockedPointsLabel(total: number): string {
   return `Bạn đang có ${formatVnNumber(total)} điểm`;
 }
+
+/**
+ * Số Điểm Xanh từ đơn sàn nằm trong số ô thanh toán đang đề nghị (W43), cho dòng chú thích `checkout.pointsOrderOnly`. Máy chủ tiêu lô
+ * sàn TRƯỚC (`PricingService.resolvePointsRedemptionByLot`), nên:
+ *  - khách đã tick và báo giá có `pointsUsedMarketplace` (`appliedMarketplace`): đúng số đó;
+ *  - chưa tick (hoặc API cũ chưa trả số đã dùng): phần sàn dùng được (`redeemableMarketplacePoints` của báo giá; chưa có báo giá hay API cũ
+ *    thì `pointsMarketplaceBalance`), không vượt số ô đề nghị (`usable`, kẹp theo `pointsMax` khi báo giá đã có trần của đơn).
+ * null khi 0: khách không có điểm sàn hoặc đơn không dùng được điểm. File này nằm trong gói đầu Mini App nên không điền chữ ở đây.
+ */
+export function checkoutMarketplacePoints(input: {
+  lots: { pointsMarketplaceBalance?: number; redeemableMarketplacePoints?: number } | null | undefined;
+  usable: number;
+  pointsMax?: number;
+  appliedMarketplace?: number | null;
+}): number | null {
+  const clamp = (n: number | null | undefined) => (Number.isFinite(n) ? Math.max(0, Math.floor(n as number)) : 0);
+  if (Number.isFinite(input.appliedMarketplace)) {
+    const used = clamp(input.appliedMarketplace);
+    return used > 0 ? used : null;
+  }
+  const lot = clamp(input.lots?.redeemableMarketplacePoints ?? input.lots?.pointsMarketplaceBalance);
+  const offered = Number.isFinite(input.pointsMax) ? Math.min(clamp(input.usable), clamp(input.pointsMax)) : clamp(input.usable);
+  const n = Math.min(lot, offered);
+  return n > 0 ? n : null;
+}

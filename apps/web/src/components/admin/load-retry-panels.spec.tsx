@@ -9,6 +9,7 @@ import { UserDetailDrawer } from './user-detail-drawer';
 import { WasteRequestDetail } from './waste-request-detail';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { wasteRequestDetail } from '@/test-utils/fixtures/waste-admin';
+import { EXTERNAL_FUNNEL, EXTERNAL_FUNNEL_PATH } from '@/test-utils/fixtures/external-funnel';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -106,6 +107,7 @@ describe('panel con và ngăn kéo — lỗi tải có nút "Thử lại" (D7-19
         '/admin/external-claims?': list,
         '/admin/external-claims/attempts?': { data: [], meta: { page: 1, limit: 20, total: 0 } },
         '/admin/external-claims/c1': { ...claim, events: [] },
+        [EXTERNAL_FUNNEL_PATH]: EXTERNAL_FUNNEL,
         '/admin/ops/inbox': { generatedAt: '2026-10-28T03:00:00.000Z', items: [] },
       },
       '/admin/external-claims/c1',

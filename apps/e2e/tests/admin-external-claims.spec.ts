@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import type { ExternalClaimFunnel } from '@tubutree/shared-types';
 import { test, expect, type MockApi } from './support/mock-api';
 import type { AdminExternalAttemptRow, AdminExternalClaimRow } from '../../web/src/lib/admin-client';
 
@@ -215,5 +217,83 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     await expect(p.locator('[data-external-attempt="att-alone"] [data-other-submitters]')).toHaveCount(0);
     await expect(p.locator('[data-external-attempt="att-legacy"] [data-other-submitters]')).toHaveCount(0);
     await expect(p.locator('[data-other-submitters]')).toHaveCount(1);
+  });
+  test('W43: phễu theo kỳ; khối "Cài đặt và mã QR bỏ hộp" đóng sẵn, mở mới đọc cấu hình; lưu có hộp xác nhận; tải mã QR', async ({ page: p, api }, testInfo) => {
+    mockClaimLists(api, { claims: () => [] });
+    const funnel: ExternalClaimFunnel = {
+      period: '30d',
+      from: '2026-10-28T03:00:00.000Z',
+      to: '2026-11-27T03:00:00.000Z',
+      submissions: { total: 1_250, scan: 900, typed: 350 },
+      matchedOrders: 820,
+      phoneMismatch: { rejected: 12, review: 7 },
+      unmatched: 95,
+      pending: { claims: 140, points: 210_000 },
+      credited: { claims: 600, points: 905_000, users: 480 },
+      converted: { users: 96, orders: 130, gmv: 41_500_000, rate: 0.2 },
+    };
+    api.get('/admin/external-claims/funnel', ({ call }) => ({ ...funnel, period: call.query.get('period') ?? '30d' }));
+    // Băng "tính năng đang tắt" hỏi theo category (object); thẻ cài đặt hỏi cả bảng (mảng dòng) như API thật.
+    const rows = [
+      { key: 'loyalty.marketplace_claim_enabled', value: true, description: null, category: 'loyalty' },
+      { key: 'loyalty.marketplace_earn_pct', value: 5, description: null, category: 'loyalty' },
+    ];
+    api.get('/admin/config', ({ call }) => (call.query.get('category') ? { 'loyalty.marketplace_claim_enabled': true } : rows));
+    api.put('/admin/config', () => ({ ok: true }));
+    const wholeConfigCalls = () => api.callsTo('GET', '/admin/config').filter((c) => !c.query.get('category')).length;
+
+    await p.goto('/admin?tab=externalClaims');
+
+    const card = p.locator('[data-external-funnel]');
+    await expect(card.getByRole('heading', { name: 'Phễu tích điểm đơn sàn' })).toBeVisible({ timeout: 15_000 });
+    await expect(card.getByText('1.250 (quét 900, gõ tay 350)')).toBeVisible();
+    await expect(p.locator('h2')).toHaveCount(1);
+    const week = api.waitForCall('GET', '/admin/external-claims/funnel');
+    await card.getByRole('button', { name: '7 ngày' }).click();
+    expect((await week).query.get('period')).toBe('7d');
+    await expect(card.getByRole('button', { name: '7 ngày' })).toHaveAttribute('aria-pressed', 'true');
+
+    const setup = p.locator('details[data-external-setup]');
+    await expect(setup).not.toHaveAttribute('open', '');
+    expect(wholeConfigCalls()).toBe(0);
+    const configLoad = api.waitForCall('GET', '/admin/config');
+    await setup.locator('summary').click();
+    await configLoad;
+    await expect(setup.getByRole('heading', { name: 'Cài đặt tích điểm đơn sàn' })).toBeVisible();
+    expect(wholeConfigCalls()).toBe(1);
+
+    await setup.getByLabel('Tỉ lệ tích điểm đơn sàn (%)').fill('6');
+    await setup.getByRole('button', { name: 'Lưu cài đặt' }).click();
+    const dialog = p.getByRole('alertdialog', { name: 'Lưu cài đặt tích điểm đơn sàn?' });
+    await expect(dialog).toContainText('5% → 6%');
+    const put = api.waitForCall('PUT', '/admin/config');
+    await dialog.getByRole('button', { name: 'Lưu thay đổi' }).click();
+    expect((await put).body).toEqual({ key: 'loyalty.marketplace_earn_pct', value: 6 });
+    await expect(setup.getByText('Đã lưu 1 mục.')).toBeVisible();
+
+    const qr = setup.locator('[data-external-insert-qr]');
+    await qr.getByRole('button', { name: 'TikTok Shop' }).click();
+    await qr.getByLabel('Tên đợt thẻ (không bắt buộc)').fill('box-2026-11');
+    await expect(qr.locator('code')).toHaveText(/\/quet-ma\?utm_source=tiktok&card=box-2026-11$/);
+
+    const svgDl = p.waitForEvent('download');
+    await qr.getByRole('button', { name: 'Tải SVG' }).click();
+    const svg = await svgDl;
+    expect(svg.suggestedFilename()).toBe('tubu-qr-tiktok-box-2026-11.svg');
+    expect(await readFile((await svg.path())!, 'utf8')).toContain('shape-rendering="crispEdges"');
+
+    const pngDl = p.waitForEvent('download');
+    await qr.getByRole('button', { name: 'Tải PNG' }).click();
+    const png = await pngDl;
+    expect(png.suggestedFilename()).toBe('tubu-qr-tiktok-box-2026-11.png');
+    const bytes = await readFile((await png.path())!);
+    expect(bytes.subarray(1, 4).toString('latin1')).toBe('PNG');
+    // IHDR: rộng ở byte 16, cao ở byte 20 (big-endian).
+    expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1024, 1024]);
+    // Giữ tệp tải về và link trong mã làm bằng chứng để đối chiếu ma trận QR ngoài trình duyệt.
+    await png.saveAs(testInfo.outputPath('insert-qr.png'));
+    await svg.saveAs(testInfo.outputPath('insert-qr.svg'));
+    await testInfo.attach('insert-qr-link', { body: (await qr.locator('code').innerText()).trim(), contentType: 'text/plain' });
+    expect(api.unexpectedUnmocked()).toEqual([]);
   });
 });

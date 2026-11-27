@@ -21,6 +21,8 @@ import type {
   AdminExternalClaimDetail,
   AdminExternalClaimRow,
   AdminReverseClaimResponse,
+  ExternalClaimFunnel,
+  ExternalClaimFunnelPeriod,
   ExternalClaimState,
   ZaloBridgeState,
   LaunchWatchDTO,
@@ -2771,6 +2773,8 @@ export type {
   AdminExternalClaimRow,
   AdminExternalAttemptRow,
   AdminReverseClaimResponse,
+  ExternalClaimFunnel,
+  ExternalClaimFunnelPeriod,
   ExternalClaimState,
 } from '@tubutree/shared-types';
 
@@ -2805,3 +2809,6 @@ export const keepExternalClaimPoints = (id: string, note: string) =>
   apiFetch<{ id: string }>(`/admin/external-claims/${encodeURIComponent(id)}/keep-points`, { method: 'POST', body: { note } });
 export const rejectExternalClaimAttempt = (id: string, note?: string) =>
   apiFetch(`/admin/external-claims/attempts/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { note } });
+/** Phễu đơn sàn → điểm → mua lại trên app (W43). API giữ 60 giây cho mỗi kỳ. */
+export const getExternalClaimFunnel = (period: ExternalClaimFunnelPeriod) =>
+  apiFetch<ExternalClaimFunnel>(`/admin/external-claims/funnel?period=${encodeURIComponent(period)}`);

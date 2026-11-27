@@ -222,6 +222,8 @@ export interface CheckoutQuote {
   pointsUsed: number;
   /** Phần của `pointsUsed` lấy từ lô quy đổi (không hết hạn). Optional: API cũ chưa trả. */
   pointsUsedConverted?: number;
+  /** Phần của `pointsUsed` lấy từ lô điểm đơn sàn (W42, máy chủ tiêu lô này trước). Optional: API cũ chưa trả. */
+  pointsUsedMarketplace?: number;
   pointsDiscount: number;
   shippingFee: number;
   total: number;

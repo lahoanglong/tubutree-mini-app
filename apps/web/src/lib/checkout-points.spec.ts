@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPointsOffer, convertedPointsLine, idlePointsLabel, lockedPointsLabel, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
+import {
+  checkoutPointsOffer,
+  convertedPointsLine,
+  idlePointsLabel,
+  lockedPointsLabel,
+  marketplacePointsLine,
+  pointsCapState,
+  pointsSummary,
+  zeroTotalNote,
+} from './checkout-points';
 
 // Backend kẹp Điểm Xanh ở checkout theo số DÙNG ĐƯỢC (số dư − điểm đơn còn trong hạn đổi/trả hoặc đang
 // chờ xử lý đổi/trả) — ô "Dùng … Điểm Xanh" trên web phải đề nghị đúng số đó, không phải số dư.
@@ -116,6 +125,30 @@ describe('checkoutPointsOffer với điểm từ đơn sàn (W42)', () => {
   it('nhãn khi ô khoá và khi chưa có báo giá tính cả điểm sàn', () => {
     expect(lockedPointsLabel({ pointsBalance: 10, pointsMarketplaceBalance: 1_000 }, { usable: 0 })).toBe('Bạn đang có 1.010 điểm');
     expect(idlePointsLabel({ pointsBalance: 0, pointsMarketplaceBalance: 5 })).toBe('Bạn đang có 5 điểm');
+  });
+});
+
+describe('marketplacePointsLine (W43, cùng luật với Mini)', () => {
+  const LINE = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+  it('chưa tick: lô sàn của báo giá kẹp theo usable và pointsMax', () => {
+    const quote = { redeemableMarketplacePoints: 12_345, pointsMarketplaceBalance: 20_000, pointsMax: 8_000 };
+    expect(marketplacePointsLine({ usable: 30_000, disabled: false, quote, applied: false })).toBe(LINE('8.000'));
+    expect(marketplacePointsLine({ usable: 30_000, disabled: false, quote: { ...quote, pointsMax: 50_000 }, applied: false })).toBe(LINE('12.345'));
+    expect(marketplacePointsLine({ usable: 300, disabled: false, quote: { pointsMarketplaceBalance: 1_250 }, applied: false })).toBe(LINE('300'));
+  });
+
+  it('đã tick: số pointsUsedMarketplace của server, 0 thì ẩn', () => {
+    const quote = { redeemableMarketplacePoints: 1_250, pointsMax: 5_000, pointsUsedMarketplace: 900 };
+    expect(marketplacePointsLine({ usable: 3_000, disabled: false, quote, applied: true })).toBe(LINE('900'));
+    expect(marketplacePointsLine({ usable: 3_000, disabled: false, quote: { ...quote, pointsUsedMarketplace: 0 }, applied: true })).toBeNull();
+  });
+
+  it('chưa có báo giá, không lô sàn, ô khoá hoặc usable 0: không hiện', () => {
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: undefined, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: false, quote: { redeemableMarketplacePoints: 0 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: true, quote: { redeemableMarketplacePoints: 300 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 0, disabled: false, quote: { redeemableMarketplacePoints: 300 }, applied: false })).toBeNull();
   });
 });
 

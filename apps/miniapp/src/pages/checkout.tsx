@@ -65,6 +65,7 @@ import {
   pickPaymentMethod,
   lockedPointsLabel,
   pointsCapState,
+  marketplacePointsLine,
   pointsEarnLabel,
   zeroTotalNote,
 } from '../utils/checkout-rules';
@@ -102,6 +103,8 @@ type PlaceBody = Parameters<typeof placeOrder>[0];
 
 // Đang tính lại báo giá cho địa chỉ mới: giữ số cũ nhưng mờ đi, khoá Đặt hàng (placeLocked).
 const RECALC_DIM = { opacity: 0.5 } as const;
+// Dòng phụ dưới ô Điểm Xanh: cùng một khoảng cách để các ghi chú xếp đều như nhau.
+const POINTS_NOTE_STYLE = { lineHeight: 18 / 13, marginTop: 2 } as const;
 
 /** Bộ nhớ theo phiên cho lựa chọn giữ qua một lần sang giỏ (như checkout-selection): bị chặn thì null, quay lại chọn lại. */
 function tabStorage(): Storage | null {
@@ -350,6 +353,14 @@ export default function CheckoutPage() {
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote.data, points.usable);
   const pointsUsable = points.usable > 0 && !partnerPoints.disabled;
+  const marketplaceLine = marketplacePointsLine({
+    usable: points.usable,
+    disabled: partnerPoints.disabled,
+    overview: loyaltyQ.data ?? (user ? { pointsMarketplaceBalance: user.pointsMarketplaceBalance } : null),
+    quote: quote.data,
+    // Báo giá cũ (chưa áp điểm) còn trên màn trong lúc tính lại: chỉ đọc số đã dùng khi báo giá thật sự đã trừ điểm.
+    applied: usePoints && (quote.data?.pointsUsed ?? 0) > 0,
+  });
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -1225,23 +1236,28 @@ export default function CheckoutPage() {
                     : (points.label ?? fillCopy('checkout.pointsNone'))}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
                   {partnerPoints.capNote}
                 </Text>
               )}
               {points.usable > 0 && partnerPoints.partnerNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
                   {partnerPoints.partnerNote}
                 </Text>
               )}
               {points.convertedNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
                   {partnerPoints.capNote || partnerPoints.partnerNote ? convertedPointsNote(points.converted) : points.convertedNote}
                 </Text>
               )}
               {points.lockNote && (
-                <Text variant="caption" tone="tertiary" as="div" style={{ lineHeight: 18 / 13, marginTop: 2 }}>
+                <Text variant="caption" tone="tertiary" as="div" style={POINTS_NOTE_STYLE}>
                   {points.lockNote}
+                </Text>
+              )}
+              {marketplaceLine && (
+                <Text variant="caption" tone="tertiary" as="div" data-points-marketplace style={POINTS_NOTE_STYLE}>
+                  {marketplaceLine}
                 </Text>
               )}
             </Box>

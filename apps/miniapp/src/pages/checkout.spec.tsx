@@ -593,6 +593,33 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
     expect(await screen.findByText('Nhận +520 Điểm Xanh khi giao thành công')).toBeInTheDocument();
   });
 
+  describe('dòng điểm từ đơn sàn (W43)', () => {
+    const line = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+    it('có lô sàn: nhắc ngay dưới ô điểm khi chưa tick; tick xong ghi đúng số server trừ từ lô sàn', async () => {
+      mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100, lockedPoints: 0, redeemablePoints: 100, pointsMarketplaceBalance: 1_250 });
+      mocks.checkoutQuote.mockImplementation(async (_a: string, pts: number) => ({
+        ...BIG_QUOTE, pointsUsed: pts, pointsUsedMarketplace: pts > 0 ? 900 : 0, pointsDiscount: pts * 1_000, total: 520_000 - pts * 1_000,
+      }));
+      const { container } = renderPage();
+      const before = await screen.findByText(line('1.250'));
+      expect(before).toHaveAttribute('data-points-marketplace');
+      const row = before.closest('[role="checkbox"]')!;
+      expect(row).not.toBeNull();
+      fireEvent.click(row);
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 1_350, undefined, undefined, {}));
+      expect(await screen.findByText(line('900'))).toBeInTheDocument();
+      expect(container.querySelectorAll('[data-points-marketplace]')).toHaveLength(1);
+    });
+
+    it('không có lô sàn: không có dòng nhắc', async () => {
+      mocks.getLoyalty.mockResolvedValue({ pointsBalance: 120, lockedPoints: 0, redeemablePoints: 120 });
+      renderPage();
+      await screen.findByText('Dùng 120 điểm, giảm 120đ');
+      expect(screen.queryByText(/từ đơn sàn, giảm ngay/)).toBeNull();
+    });
+  });
+
   describe('đơn 0đ (điểm phủ hết hàng + freeship)', () => {
     const ZERO = { ...QUOTE, subtotal: 50_000, pointsUsed: 50, pointsUsedConverted: 50, pointsDiscount: 50_000, shippingFee: 0, total: 0 };
 

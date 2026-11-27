@@ -164,6 +164,48 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     expect(calls.pointsToUse.every((p) => p === 0)).toBe(true);
   });
 
+  describe('dòng điểm từ đơn sàn (W43)', () => {
+    const MARKET = { pointsBalance: 100, redeemablePoints: 100, pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250 };
+    const line = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+    it('chưa tick: nhắc số điểm sàn sẽ trừ (kẹp trần đơn); tick xong: đúng số server trừ từ lô sàn', async () => {
+      calls.extra = { ...MARKET, pointsMax: 10_000, pointsPartnerNote: null, pointsUsedMarketplace: 900 };
+      calls.used = 1_000;
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain(line('1.250'));
+      const box = [...r.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((i) => /Điểm Xanh/.test(i.closest('label')?.textContent ?? ''))!;
+      click(box);
+      await flush(8);
+      expect(r.container.textContent).toContain(line('900'));
+      expect(r.container.textContent).not.toContain(line('1.250'));
+    });
+
+    it('trần của đơn thấp hơn lô sàn: số nhắc không vượt trần', async () => {
+      calls.extra = { ...MARKET, pointsMax: 300, pointsPartnerNote: null };
+      const r = render(<CheckoutPage />);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain(line('300'));
+    });
+
+    it('ô Điểm Xanh khoá hoặc không có lô sàn: không có dòng nhắc', async () => {
+      calls.extra = { ...MARKET, pointsMax: 0, pointsPartnerNote: NOTE };
+      const locked = render(<CheckoutPage />);
+      mounted.push(locked);
+      await flush(8);
+      expect(locked.container.textContent).not.toContain('từ đơn sàn, giảm ngay');
+      locked.unmount();
+      mounted = [];
+      calls.extra = { pointsMax: 10_000, pointsPartnerNote: null };
+      const none = render(<CheckoutPage />);
+      mounted.push(none);
+      await flush(8);
+      expect(none.container.textContent).not.toContain('từ đơn sàn, giảm ngay');
+    });
+  });
+
   // R5-CHECKOUT-5: bản sửa R4-BUYER-2 ở Mini App (8aea1a0d) chưa sang web — web vẫn hứa lô quy đổi "trả tới 100% giá trị hàng"
   // ngay dưới câu Điểm Xanh không dùng cho hàng của gian hàng đối tác.
   describe('dòng điểm quy đổi (R5-CHECKOUT-5)', () => {

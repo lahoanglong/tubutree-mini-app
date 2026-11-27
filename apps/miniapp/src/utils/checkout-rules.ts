@@ -2,7 +2,8 @@ import { isTaxCodeValid } from '@tubutree/app-core/commerce/tax-code';
 import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
 import { heldPointsNote } from '@tubutree/app-core/cart-copy';
-import { lockedPointsLabel } from '@tubutree/app-core/points-lots';
+import { checkoutMarketplacePoints, lockedPointsLabel } from '@tubutree/app-core/points-lots';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { convertedPointsNote, pointsSummary } from './points-lots';
 
 export interface InvoiceInfo {
@@ -136,6 +137,31 @@ export function checkoutPoints(
   if (usable === 0) return { ...base, label: heldText, lockNote: null };
   if (held === 0) return { ...base, label: `Bạn đang có ${formatPoints(usable)}`, lockNote: null };
   return { ...base, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
+}
+
+/**
+ * Dòng "Gồm n điểm từ đơn sàn, giảm ngay" trong ô Điểm Xanh (W43, cùng luật với web `checkoutPointsOffer`). Lô sàn đọc ở báo
+ * giá (`redeemableMarketplacePoints`), chưa có thì ở tổng quan điểm (`pointsMarketplaceBalance`). Đã tick thì n là số máy chủ thật sự lấy từ
+ * lô sàn. null khi ô không dùng được (`disabled`: giỏ chỉ hàng đối tác, trần 0) hoặc không có điểm sàn trong số đề nghị.
+ */
+export function marketplacePointsLine(input: {
+  usable: number;
+  disabled: boolean;
+  overview?: { pointsMarketplaceBalance?: number } | null;
+  quote?: { redeemableMarketplacePoints?: number; pointsMarketplaceBalance?: number; pointsMax?: number; pointsUsedMarketplace?: number } | null;
+  applied: boolean;
+}): string | null {
+  if (input.disabled || !(input.usable > 0)) return null;
+  const n = checkoutMarketplacePoints({
+    lots: {
+      redeemableMarketplacePoints: input.quote?.redeemableMarketplacePoints,
+      pointsMarketplaceBalance: input.quote?.pointsMarketplaceBalance ?? input.overview?.pointsMarketplaceBalance,
+    },
+    usable: input.usable,
+    pointsMax: input.quote?.pointsMax,
+    appliedMarketplace: input.applied ? input.quote?.pointsUsedMarketplace : undefined,
+  });
+  return n === null ? null : fillCopy('checkout.pointsOrderOnly', { n: groupThousands(n) });
 }
 
 export { lockedPointsLabel };

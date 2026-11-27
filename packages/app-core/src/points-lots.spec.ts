@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from './points-lots';
+import { checkoutMarketplacePoints, convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from './points-lots';
 
 describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một luật cho web và Mini)', () => {
   it('tổng = lô thường + lô quy đổi', () => {
@@ -55,5 +55,34 @@ describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một 
     expect(lockedPointsLabel(500)).toBe('Bạn đang có 500 điểm');
     expect(lockedPointsLabel(1800)).toBe('Bạn đang có 1.800 điểm');
     expect(lockedPointsLabel(0)).toBe('Bạn đang có 0 điểm');
+  });
+});
+
+describe('checkoutMarketplacePoints (W43: dòng điểm từ đơn sàn trong ô Điểm Xanh thanh toán)', () => {
+  it('chưa tick: phần sàn dùng được, không vượt số đề nghị và trần của đơn', () => {
+    const lots = { pointsMarketplaceBalance: 8_000, redeemableMarketplacePoints: 8_000 };
+    expect(checkoutMarketplacePoints({ lots, usable: 20_000 })).toBe(8_000);
+    expect(checkoutMarketplacePoints({ lots, usable: 5_000 })).toBe(5_000);
+    expect(checkoutMarketplacePoints({ lots, usable: 20_000, pointsMax: 3_000 })).toBe(3_000);
+    expect(checkoutMarketplacePoints({ lots: { redeemableMarketplacePoints: 2_500, pointsMarketplaceBalance: 9_000 }, usable: 20_000 })).toBe(2_500);
+  });
+
+  it('API cũ hoặc chưa có báo giá: dùng số dư lô sàn', () => {
+    expect(checkoutMarketplacePoints({ lots: { pointsMarketplaceBalance: 1_250 }, usable: 3_000 })).toBe(1_250);
+  });
+
+  it('đã tick: đúng số máy chủ lấy từ lô sàn, kể cả khi thấp hơn số dư', () => {
+    const lots = { pointsMarketplaceBalance: 8_000 };
+    expect(checkoutMarketplacePoints({ lots, usable: 20_000, pointsMax: 6_000, appliedMarketplace: 6_000 })).toBe(6_000);
+    expect(checkoutMarketplacePoints({ lots, usable: 20_000, appliedMarketplace: 0 })).toBeNull();
+  });
+
+  it('không có điểm sàn, đơn không dùng được điểm, hay số rác: null', () => {
+    expect(checkoutMarketplacePoints({ lots: { pointsMarketplaceBalance: 0 }, usable: 5_000 })).toBeNull();
+    expect(checkoutMarketplacePoints({ lots: undefined, usable: 5_000 })).toBeNull();
+    expect(checkoutMarketplacePoints({ lots: { pointsMarketplaceBalance: 4_000 }, usable: 0 })).toBeNull();
+    expect(checkoutMarketplacePoints({ lots: { pointsMarketplaceBalance: 4_000 }, usable: 5_000, pointsMax: 0 })).toBeNull();
+    expect(checkoutMarketplacePoints({ lots: { pointsMarketplaceBalance: Number.NaN }, usable: 5_000 })).toBeNull();
+    expect(checkoutMarketplacePoints({ lots: { pointsMarketplaceBalance: -3 }, usable: 5_000 })).toBeNull();
   });
 });

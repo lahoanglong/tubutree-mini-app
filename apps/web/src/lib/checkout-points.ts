@@ -1,6 +1,7 @@
 import { heldPointsNote } from '@tubutree/app-core/cart-copy';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import {
+  checkoutMarketplacePoints,
   convertedPointsNote,
   lockedPointsLabel as coreLockedPointsLabel,
   marketplacePointsNote,
@@ -75,6 +76,27 @@ export function checkoutPointsOffer(
     lockNote: held > 0 ? heldPointsNote(held) : null,
     convertedNote: converted > 0 ? `${convertedPointsNote(converted)}${CONVERTED_FULL_VALUE}` : null,
   };
+}
+
+/**
+ * Dòng "Gồm n điểm từ đơn sàn, giảm ngay" trong ô Điểm Xanh (W43, cùng luật với `marketplacePointsLine` của Mini App). `quote`
+ * là báo giá đang hiện: chưa tick thì lô sàn dùng được (`redeemableMarketplacePoints`) kẹp theo số đề nghị và trần của đơn; đã tick thì số
+ * máy chủ thật sự lấy từ lô sàn. null khi ô bị khoá (`disabled`) hoặc không có điểm sàn trong số đề nghị.
+ */
+export function marketplacePointsLine(input: {
+  usable: number;
+  disabled: boolean;
+  quote?: { redeemableMarketplacePoints?: number; pointsMarketplaceBalance?: number; pointsMax?: number; pointsUsedMarketplace?: number } | null;
+  applied: boolean;
+}): string | null {
+  if (input.disabled || !(input.usable > 0)) return null;
+  const n = checkoutMarketplacePoints({
+    lots: input.quote,
+    usable: input.usable,
+    pointsMax: input.quote?.pointsMax,
+    appliedMarketplace: input.applied ? input.quote?.pointsUsedMarketplace : undefined,
+  });
+  return n === null ? null : fillCopy('checkout.pointsOrderOnly', { n: group(n) });
 }
 
 /**

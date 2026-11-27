@@ -3,6 +3,7 @@ import {
   checkoutPoints,
   lockedPointsLabel,
   isInvoiceValid,
+  marketplacePointsLine,
   pointsCapState,
   walletUnavailableReason,
   paymentMissingNote,
@@ -212,6 +213,34 @@ describe('checkoutPoints — điểm từ đơn sàn (W42)', () => {
   it('chưa tải overview → lấy điểm sàn từ hồ sơ đăng nhập; API cũ chưa trả → 0', () => {
     expect(checkoutPoints(undefined, 70, 30, 40)).toMatchObject({ balance: 140, usable: 140 });
     expect(checkoutPoints({ pointsBalance: 120, redeemablePoints: 120 }, 0, 0, 999)).toMatchObject({ balance: 120, usable: 120 });
+  });
+});
+
+describe('marketplacePointsLine — dòng nhắc điểm đơn sàn ở thanh toán (W43)', () => {
+  const LINE = (n: string) => `Gồm ${n} điểm từ đơn sàn, giảm ngay`;
+
+  it('chưa có báo giá: lấy lô sàn từ overview, kẹp theo số dùng được', () => {
+    expect(marketplacePointsLine({ usable: 1_300, disabled: false, overview: { pointsMarketplaceBalance: 1_250 }, applied: false })).toBe(LINE('1.250'));
+    expect(marketplacePointsLine({ usable: 400, disabled: false, overview: { pointsMarketplaceBalance: 1_250 }, applied: false })).toBe(LINE('400'));
+  });
+
+  it('có báo giá chưa tick: dùng redeemableMarketplacePoints, kẹp theo trần pointsMax của đơn', () => {
+    const quote = { redeemableMarketplacePoints: 12_345, pointsMarketplaceBalance: 20_000, pointsMax: 8_000 };
+    expect(marketplacePointsLine({ usable: 30_000, disabled: false, overview: { pointsMarketplaceBalance: 1 }, quote, applied: false })).toBe(LINE('8.000'));
+    expect(marketplacePointsLine({ usable: 30_000, disabled: false, quote: { ...quote, pointsMax: 50_000 }, applied: false })).toBe(LINE('12.345'));
+  });
+
+  it('đã tick và báo giá trả pointsUsedMarketplace: ghi đúng số server trừ, 0 thì ẩn', () => {
+    const quote = { redeemableMarketplacePoints: 1_250, pointsMax: 5_000, pointsUsedMarketplace: 900 };
+    expect(marketplacePointsLine({ usable: 3_000, disabled: false, quote, applied: true })).toBe(LINE('900'));
+    expect(marketplacePointsLine({ usable: 3_000, disabled: false, quote: { ...quote, pointsUsedMarketplace: 0 }, applied: true })).toBeNull();
+  });
+
+  it('không có lô sàn, ô điểm bị khoá hoặc không có điểm dùng được: không hiện', () => {
+    expect(marketplacePointsLine({ usable: 500, disabled: false, overview: { pointsMarketplaceBalance: 0 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: false, overview: null, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 500, disabled: true, overview: { pointsMarketplaceBalance: 300 }, applied: false })).toBeNull();
+    expect(marketplacePointsLine({ usable: 0, disabled: false, overview: { pointsMarketplaceBalance: 300 }, applied: false })).toBeNull();
   });
 });
 
