@@ -94,6 +94,25 @@ describe('HomeHeader — một hàng dính 56px (logo, ô tìm, chuông, giỏ)'
     }
   });
 
+  it('W46: khổ ≤344px (320px) ô tìm không đủ chỗ cho cả chữ: chỉ còn kính lúp ở giữa, không cắt "Tìm s…", tên truy cập vẫn "Tìm sản phẩm"', () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('max-width: 374px') || query.includes('max-width: 344px'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      wrap(<HomeHeader unreadCount={0} />);
+      const search = screen.getByRole('button', { name: 'Tìm sản phẩm' });
+      expect(search.textContent).toBe('');
+      expect(search).toHaveStyle({ justifyContent: 'center' });
+      expect(search.querySelector('svg')).not.toBeNull();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it('W46: chuông và giỏ là một cụm khe 4px (ô tìm thêm chỗ cho chữ gợi ý một dòng)', () => {
     wrap(<HomeHeader unreadCount={0} />);
     const bell = screen.getByRole('button', { name: 'Thông báo' });

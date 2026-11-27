@@ -21,19 +21,22 @@ const LOGO_MARK_WIDTH = 20;
 // Ô tìm phải chứa trọn "Tìm sản phẩm" (13px, ~87px) trên một dòng. Ở 375px, chừa vùng viên thuốc 96px, ô còn ~135px (chuông và giỏ đứng sát nhau
 // khe 4px) nên vừa có cả dấu logo. Hẹp hơn 375px (361–374px chữ đã bị cắt) dấu logo nhường chỗ (h1 vẫn đọc được "Tubu Tree"): ở 360px ô thành ~148px.
 const COMPACT_HEADER_MAX_WIDTH = 374;
-const COMPACT_HEADER_QUERY = `(max-width: ${COMPACT_HEADER_MAX_WIDTH}px)`;
+// Ô cần ~133px cho chữ một dòng (viền 2 + đệm 12 + kính lúp 16 + khe 8 + chữ ~87 + đệm 8), tức khổ ≥ 345px khi đã bỏ logo. Hẹp hơn (320px: ô ~108px)
+// chữ chỉ còn "Tìm s…", nên giữ kính lúp ở giữa như trước W46; tên truy cập vẫn là aria-label.
+const ICON_ONLY_SEARCH_MAX_WIDTH = 344;
 
-function useCompactHeader(): boolean {
-  const [compact, setCompact] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(COMPACT_HEADER_QUERY).matches);
+function useMaxWidth(maxWidth: number): boolean {
+  const query = `(max-width: ${maxWidth}px)`;
+  const [matches, setMatches] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(query).matches);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia(COMPACT_HEADER_QUERY);
-    const sync = () => setCompact(mq.matches);
+    const mq = window.matchMedia(query);
+    const sync = () => setMatches(mq.matches);
     sync();
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
-  }, []);
-  return compact;
+  }, [query]);
+  return matches;
 }
 
 /**
@@ -44,7 +47,8 @@ function useCompactHeader(): boolean {
  */
 export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   const navigate = useNavigate();
-  const compact = useCompactHeader();
+  const compact = useMaxWidth(COMPACT_HEADER_MAX_WIDTH);
+  const iconOnlySearch = useMaxWidth(ICON_ONLY_SEARCH_MAX_WIDTH);
   return (
     <div
       data-testid="home-header"
@@ -77,6 +81,7 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
           minHeight: 44,
           display: 'flex',
           alignItems: 'center',
+          justifyContent: iconOnlySearch ? 'center' : undefined,
           gap: 'var(--space-inline-sm)',
           padding: '0 var(--space-inline-sm) 0 var(--space-inline-md)',
           borderRadius: 'var(--radius-pill)',
@@ -89,9 +94,11 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
         }}
       >
         <Icon icon={Search} size="sm" tone="muted" />
-        <Text variant="caption" tone="tertiary" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {vi.home.searchPlaceholder}
-        </Text>
+        {!iconOnlySearch && (
+          <Text variant="caption" tone="tertiary" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {vi.home.searchPlaceholder}
+          </Text>
+        )}
       </button>
       {/* Chuông và giỏ là một cụm (khe 4px) để ô tìm có thêm chỗ cho chữ gợi ý một dòng. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'calc(var(--space-inline-sm) / 2)', flex: '0 0 auto' }}>
