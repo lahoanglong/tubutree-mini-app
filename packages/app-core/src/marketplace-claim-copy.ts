@@ -63,9 +63,10 @@ export const MARKETPLACE_CLAIM_COPY = {
 } as const;
 
 /**
- * Chữ riêng của web `/quet-ma` (W44, PO 27/11: quét và tích điểm làm được ngay trên web). Web không xin SĐT Zalo như Mini App: máy chủ chỉ ghép
- * đơn theo SĐT ĐÃ XÁC MINH qua Zalo (`phoneVerifiedAt`), còn SĐT liên hệ khách tự gõ ở Hồ sơ web chưa được xác minh. Vì vậy web nói thật
- * điều kiện đó và chỉ đúng chỗ làm được (mở Tubu Tree trên Zalo một lần để chia sẻ số), không hứa "thêm số ở Hồ sơ là tích được".
+ * Chữ riêng của web `/quet-ma` (W44, PO 27/11: quét và tích điểm làm được ngay trên web). Web không xin SĐT Zalo như Mini App. Từ W45 khách chỉ
+ * có SĐT liên hệ tự gõ trên web (chưa xác minh qua Zalo) vẫn gửi mã được: đơn khớp số đó, hoặc khách đã có đơn app giao thành công, vào hàng
+ * CSKH đối chiếu trước khi cộng; chưa có SĐT thì nhập ngay trên màn quét. Xác minh trên Zalo vẫn là lối cộng tự động, nên vẫn được mời.
+ * Camera: mọi máy đều có nút quét (iPhone đọc bằng bộ đọc JS) và lối chụp/chọn ảnh khi trình duyệt chặn camera.
  */
 export const MARKETPLACE_CLAIM_WEB_COPY = {
   loginCta: 'Đăng nhập để tích điểm',
@@ -76,15 +77,23 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   scanSheetHint: 'Đưa mã vạch hoặc mã QR trên phiếu giao hàng vào khung hình',
   scanClose: 'Đóng',
   cameraLabel: 'Camera quét mã vận đơn',
-  scanFailed: 'Chưa quét được. Bạn thử lại hoặc nhập mã vào ô bên dưới nhé.',
-  cameraDenied: 'Chưa mở được camera. Bạn cho phép camera trong trình duyệt hoặc nhập mã vào ô bên dưới nhé.',
-  phoneTitle: 'Cần số điện thoại đã xác minh',
-  phoneBody:
-    'Tubu ghép đơn sàn theo số điện thoại Zalo đã xác minh. Bạn mở Tubu Tree trên Zalo một lần và cho phép chia sẻ số điện thoại, rồi quay lại đây tích điểm nhé.',
+  scanFailed: 'Chưa quét được. Bạn thử lại, chụp/chọn ảnh mã vận đơn hoặc nhập mã vào ô bên dưới nhé.',
+  cameraDenied: 'Chưa mở được camera. Bạn cho phép camera, chụp/chọn ảnh mã vận đơn hoặc nhập mã vào ô bên dưới nhé.',
+  photoCta: 'Chụp/chọn ảnh mã vận đơn',
+  photoReading: 'Đang đọc ảnh…',
+  photoUnreadable: 'Chưa đọc được mã trong ảnh. Bạn chụp gần và rõ nét cả mã vạch, hoặc nhập mã vào ô bên dưới nhé.',
+  phoneTitle: 'Thêm số điện thoại để tích điểm',
+  phoneBody: 'Tubu ghép đơn sàn theo số điện thoại đặt hàng. Bạn nhập số di động đã dùng khi mua trên Shopee, TikTok Shop, Lazada nhé.',
+  phoneLabel: 'Số điện thoại đặt hàng',
+  phonePlaceholder: '0912 345 678',
+  phoneEmpty: 'Nhập số điện thoại di động 10 số.',
+  phoneInvalid: 'Số điện thoại di động chưa đúng định dạng (đầu 03, 05, 07, 08, 09).',
+  phoneSave: 'Lưu số và tích điểm',
+  phoneAlt: 'Hoặc xác minh số trên Zalo để cộng điểm tự động',
   phoneCta: 'Xác minh số trên Zalo',
-  phoneProfile: 'Xem hồ sơ của bạn',
+  unverifiedNote: 'Số điện thoại của bạn chưa xác minh qua Zalo: đơn tích trên web sẽ được CSKH đối chiếu trước khi cộng điểm.',
   notVerified:
-    'Số điện thoại của bạn chưa được xác minh qua Zalo nên Tubu chưa ghép được đơn. Bạn mở Tubu Tree trên Zalo, cho phép chia sẻ số điện thoại một lần rồi tích điểm lại nhé. Đã xác minh mà vẫn gặp lỗi này thì bạn liên hệ CSKH Tubu.',
+    'Tubu chưa đối chiếu được đơn này với số điện thoại bạn nhập trên web (số chưa xác minh qua Zalo). Bạn mở Tubu Tree trên Zalo, cho phép chia sẻ số điện thoại một lần rồi tích điểm lại nhé. Đã xác minh mà vẫn gặp lỗi này thì bạn liên hệ CSKH Tubu.',
   rateLimited: 'Bạn gửi mã hơi nhanh. Bạn chờ một phút rồi thử lại nhé.',
   historyTitle: 'Lịch sử tích điểm đơn sàn',
 } as const;

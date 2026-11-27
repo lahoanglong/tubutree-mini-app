@@ -15,8 +15,10 @@ const mocks = vi.hoisted(() => ({
   loyalty: { pointsBalance: 0 } as Record<string, unknown>,
   list: {} as unknown,
   post: vi.fn(),
+  patch: vi.fn(),
   get: vi.fn(),
   push: vi.fn(),
+  zxDecode: vi.fn((): string[] => []),
 }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
@@ -27,8 +29,11 @@ vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: (path: string, opts?: unknown) => mocks.get(path, opts),
     post: (path: string, body?: unknown) => mocks.post(path, body),
+    patch: (path: string, body?: unknown) => mocks.patch(path, body),
   },
 }));
+// Bộ đọc JS (ZXing) chỉ nạp khi máy không có BarcodeDetector; jsdom không có canvas nên giả lập kết quả đọc.
+vi.mock('@/lib/code-scan-zxing', () => ({ createDecoder: () => ({ decodeSource: (...args: unknown[]) => mocks.zxDecode(...(args as [])) }) }));
 
 import { ScanView, scanLoginHref, scanMiniLink, scanReturnPath } from './scan-view';
 
@@ -63,6 +68,9 @@ beforeEach(() => {
   mocks.loyalty = { pointsBalance: 0 };
   mocks.list = EMPTY_LIST;
   mocks.post.mockReset();
+  mocks.patch.mockReset();
+  mocks.zxDecode.mockReset();
+  mocks.zxDecode.mockReturnValue([]);
   mocks.push.mockReset();
   mocks.get.mockReset();
   mocks.get.mockImplementation(async (path: string) => {
@@ -168,12 +176,13 @@ describe('/quet-ma — khách chưa đăng nhập (W44 U5)', () => {
 });
 
 describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên web (W44 U5)', () => {
-  it('có ô nhập mã, nút Tích điểm và lịch sử; máy không đọc được mã vạch thì không có nút quét', async () => {
+  it('có ô nhập mã, nút Tích điểm và lịch sử; máy không có API camera: không có nút camera, "Chụp/chọn ảnh mã vận đơn" là nút chính', async () => {
     const c = await mount();
     expect(input(c)?.getAttribute('placeholder')).toBe(COPY.inputPlaceholder);
     expect(c.textContent).toContain(COPY.inputLabel);
     expect(submitBtn(c)).not.toBeNull();
     expect(buttonByText(c, WEB.scanCta)).toBeNull();
+    expect(buttonByText(c, WEB.photoCta)!.className).toContain('zaui-btn-primary');
     expect(c.querySelector('[data-testid="claim-history"]')?.textContent).toContain(WEB.historyTitle);
     expect(c.textContent).toContain(COPY.listEmpty);
   });
@@ -294,18 +303,75 @@ describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên we
     expect(c.querySelector('[role="alert"]')?.textContent).toBe(COPY.codeLinkInvalid);
   });
 
-  it('tài khoản chưa có SĐT: không ô nhập (chắc chắn bị từ chối), nói cần SĐT đã xác minh, nút chính mở Zalo để xác minh; vẫn xem được lịch sử', async () => {
+  it('tài khoản chưa có SĐT (W45): nhập số ngay trên màn quét, chưa có ô mã; lối phụ xác minh trên Zalo; vẫn xem được lịch sử', async () => {
     mocks.me = { phone: null };
     const c = await mount();
     const prompt = c.querySelector('[data-testid="scan-phone-prompt"]')!;
     expect(prompt.textContent).toContain(WEB.phoneTitle);
-    expect(prompt.textContent).toContain('đã xác minh');
-    const links = Array.from(prompt.querySelectorAll<HTMLAnchorElement>('a'));
-    expect(links[0]!.textContent).toBe(WEB.phoneCta);
-    expect(new URL(links[0]!.href).pathname.endsWith('/points/scan')).toBe(true);
-    expect(links[1]!.getAttribute('href')).toBe('/tai-khoan/ho-so');
+    expect(prompt.querySelector<HTMLInputElement>('input[type="tel"]')).not.toBeNull();
+    expect(buttonByText(prompt, WEB.phoneSave)!.className).toContain('zaui-btn-primary');
+    const alt = Array.from(prompt.querySelectorAll<HTMLAnchorElement>('a')).find((a) => a.textContent === WEB.phoneAlt)!;
+    expect(new URL(alt.href).pathname.endsWith('/points/scan')).toBe(true);
     expect(input(c)).toBeNull();
     expect(c.querySelector('[data-testid="claim-history"]')).not.toBeNull();
+  });
+
+  it('nhập SĐT sai dạng: báo ngay, không gọi API; đúng dạng: lưu SĐT liên hệ rồi hiện ô gửi mã kèm ghi chú CSKH đối chiếu', async () => {
+    mocks.me = { phone: null };
+    const c = await mount();
+    const tel = () => c.querySelector<HTMLInputElement>('[data-testid="scan-phone-prompt"] input[type="tel"]');
+    typeInto(tel(), '12345');
+    act(() => void buttonByText(c, WEB.phoneSave)!.click());
+    await flush(2);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(WEB.phoneInvalid);
+    expect(mocks.patch).not.toHaveBeenCalled();
+    mocks.patch.mockImplementation(async () => {
+      mocks.me = { phone: '0912345678', phoneVerified: false };
+      return mocks.me;
+    });
+    typeInto(tel(), '0912 345 678');
+    act(() => void buttonByText(c, WEB.phoneSave)!.click());
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledTimes(1);
+    expect(mocks.patch).toHaveBeenCalledWith('/me/contact-phone', { phone: '0912345678' });
+    expect(c.querySelector('[data-testid="scan-phone-prompt"]')).toBeNull();
+    expect(input(c)).not.toBeNull();
+    expect(c.querySelector('[data-testid="claim-unverified-note"]')?.textContent).toBe(WEB.unverifiedNote);
+  });
+
+  it('lưu SĐT bị từ chối (số đã thuộc tài khoản khác): hiện lời máy chủ, vẫn ở bước nhập số', async () => {
+    mocks.me = { phone: null };
+    mocks.patch.mockRejectedValue(new ApiError('Số điện thoại này đã được dùng cho tài khoản khác.', 409));
+    const c = await mount();
+    typeInto(c.querySelector('[data-testid="scan-phone-prompt"] input[type="tel"]'), '0912345678');
+    act(() => void buttonByText(c, WEB.phoneSave)!.click());
+    await flush(4);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Số điện thoại này đã được dùng cho tài khoản khác.');
+    expect(c.querySelector('[data-testid="scan-phone-prompt"]')).not.toBeNull();
+  });
+
+  it('SĐT liên hệ chưa xác minh (phoneVerified false): báo trước đơn được CSKH đối chiếu; đã xác minh hay API cũ (vắng) thì không', async () => {
+    mocks.me = { phone: '0912345678', phoneVerified: false };
+    let c = await mount();
+    expect(c.querySelector('[data-testid="claim-unverified-note"]')?.textContent).toBe(WEB.unverifiedNote);
+    mounted?.unmount();
+    mocks.me = { phone: '0912345678', phoneVerified: true };
+    c = await mount();
+    expect(c.querySelector('[data-testid="claim-unverified-note"]')).toBeNull();
+    mounted?.unmount();
+    mocks.me = { phone: '0912345678' };
+    c = await mount();
+    expect(c.querySelector('[data-testid="claim-unverified-note"]')).toBeNull();
+  });
+
+  it('SĐT chưa xác minh gửi mã khớp: máy chủ trả REVIEW (không còn 403), thẻ kết quả nói đang kiểm tra', async () => {
+    mocks.me = { phone: '0912345678', phoneVerified: false };
+    mocks.post.mockResolvedValue(claimed({ status: 'REVIEW', points: 1250, expectedCreditAt: null }));
+    const c = await mount();
+    typeInto(input(c), 'SPXVN123456789');
+    await submitForm(c);
+    expect(c.querySelector('[data-testid="claim-result"]')?.textContent).toContain(COPY.resultReview);
+    expect(c.querySelector('[data-testid="claim-error"]')).toBeNull();
   });
 
   it('lịch sử: nhãn trạng thái, điểm, đang tìm đơn và phân trang', async () => {
@@ -395,5 +461,101 @@ describe('/quet-ma — quét bằng camera trình duyệt (W44 U5)', () => {
     await flush(4);
     expect(c.querySelector('[role="alert"]')?.textContent).toBe(WEB.cameraDenied);
     expect(input(c)).not.toBeNull();
+  });
+});
+
+describe('/quet-ma — iPhone: Safari, Zalo, Facebook không có BarcodeDetector (W45)', () => {
+  const stopTrack = vi.fn();
+  const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+  const close = vi.fn();
+  const photoFile = () => new File([new Uint8Array([1, 2, 3])], 'nhan.jpg', { type: 'image/jpeg' });
+  const choose = async (c: HTMLElement, file: File) => {
+    const picker = c.querySelector<HTMLInputElement>('[data-testid="claim-photo-input"]')!;
+    Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
+    await act(async () => void picker.dispatchEvent(new Event('change', { bubbles: true })));
+    await flush(6);
+  };
+
+  beforeEach(() => {
+    stopTrack.mockClear();
+    getUserMedia.mockClear();
+    close.mockClear();
+    delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4032, height: 3024, close })));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(navigator, 'mediaDevices');
+  });
+
+  it('vẫn có nút "Quét mã trên nhãn" là nút chính (trước W45 nút biến mất) và lối "Chụp/chọn ảnh mã vận đơn" ngay dưới', async () => {
+    const c = await mount();
+    const scanBtn = buttonByText(c, WEB.scanCta)!;
+    expect(scanBtn.className).toContain('zaui-btn-primary');
+    const photoBtn = c.querySelector<HTMLButtonElement>('button[data-testid="claim-photo-scan"]')!;
+    expect(photoBtn.textContent).toBe(WEB.photoCta);
+    expect(Boolean(scanBtn.compareDocumentPosition(photoBtn) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    const picker = c.querySelector<HTMLInputElement>('[data-testid="claim-photo-input"]')!;
+    expect(picker.type).toBe('file');
+    expect(picker.accept).toBe('image/*');
+    expect(picker.getAttribute('capture')).toBe('environment');
+  });
+
+  it('bấm quét: mở camera sau trong khung quét (không cần BarcodeDetector)', async () => {
+    const c = await mount();
+    click(buttonByText(c, WEB.scanCta));
+    await flush(3);
+    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ video: expect.objectContaining({ facingMode: 'environment' }), audio: false }));
+    expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
+  });
+
+  it('bấm "Chụp/chọn ảnh mã vận đơn" mở bộ chọn ảnh của máy', async () => {
+    const c = await mount();
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => undefined);
+    click(c.querySelector('button[data-testid="claim-photo-scan"]'));
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('chọn ảnh có mã vận đơn: bộ đọc JS đọc ảnh, điền ô, gửi với via=scan', async () => {
+    mocks.zxDecode.mockImplementation(() => ['SPXVN0123456789']);
+    mocks.post.mockResolvedValue(claimed());
+    const c = await mount();
+    await choose(c, photoFile());
+    expect(mocks.zxDecode).toHaveBeenCalledWith(expect.anything(), 4032, 3024, expect.objectContaining({ tryHarder: true }));
+    expect(input(c)!.value).toBe('SPXVN0123456789');
+    expect(close).toHaveBeenCalled();
+    await submitForm(c);
+    expect(mocks.post).toHaveBeenCalledWith('/me/external-points/claims', { code: 'SPXVN0123456789', via: 'scan' });
+  });
+
+  it('ảnh không có mã: thử cả ảnh xoay rồi báo chưa đọc được, ô mã để trống', async () => {
+    const c = await mount();
+    await choose(c, photoFile());
+    const rotations = mocks.zxDecode.mock.calls.map((call) => (call as unknown as [unknown, number, number, { rotate: boolean }])[3].rotate);
+    expect(rotations).toContain(true);
+    expect(rotations).toContain(false);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(WEB.photoUnreadable);
+    expect(input(c)!.value).toBe('');
+  });
+
+  it('ảnh chụp phải thẻ Tubu (không phải mã vận đơn): nhắc quét nhãn ngoài hộp', async () => {
+    mocks.zxDecode.mockImplementation(() => ['WIFI:S:nha;T:WPA;P:12345678;;']);
+    const c = await mount();
+    await choose(c, photoFile());
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(COPY.scanNoCode);
+    expect(input(c)!.value).toBe('');
+  });
+
+  it('WebView không có API camera: chỉ còn nút chụp/chọn ảnh, vẫn đọc được mã', async () => {
+    Reflect.deleteProperty(navigator, 'mediaDevices');
+    mocks.zxDecode.mockImplementation(() => ['SPXVN0123456789']);
+    const c = await mount();
+    expect(buttonByText(c, WEB.scanCta)).toBeNull();
+    expect(buttonByText(c, WEB.photoCta)!.className).toContain('zaui-btn-primary');
+    await choose(c, photoFile());
+    expect(input(c)!.value).toBe('SPXVN0123456789');
   });
 });

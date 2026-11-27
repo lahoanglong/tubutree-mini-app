@@ -8,6 +8,8 @@ export const NOT_FOUND_LOCK_THRESHOLD = 5;
 /** Đơn sàn không có SĐT (đầy đủ hay che đủ số) để đối chiếu tự động: người kiểm xem đơn trước khi cộng. */
 export const NO_PHONE_REVIEW_REASON = 'Đơn sàn không có thông tin SĐT để đối chiếu tự động';
 export const PHONE_MISMATCH_REVIEW_REASON = 'SĐT trên đơn sàn không khớp SĐT thành viên';
+/** Thành viên chỉ có SĐT liên hệ tự gõ trên Web (`phoneVerifiedAt = null`): luôn có người đối chiếu trước khi cộng (W45). */
+export const WEB_UNVERIFIED_PHONE_REVIEW_REASON = 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu';
 const OWN_REPORTABLE = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED'];
 
 export interface ClaimOrderFacts {
@@ -24,7 +26,12 @@ export interface ClaimOrderFacts {
 export interface ClaimFacts {
   now: Date;
   cfg: ClaimConfig;
+  /** Khách thật, có SĐT (đã xác minh qua Zalo hoặc SĐT liên hệ tự gõ trên Web), không bị khoá. */
   userOk: boolean;
+  /** SĐT đã xác minh qua Zalo (`phoneVerifiedAt`). false = SĐT liên hệ tự gõ trên Web. */
+  phoneVerified: boolean;
+  /** Có ít nhất một đơn mua trong app đã giao (chỉ cần khi SĐT chưa xác minh). */
+  deliveredAppOrder: boolean;
   /** Thành viên là nhân viên hoặc admin: tự tích điểm cho mình thì luôn phải có người khác duyệt. */
   userIsStaff: boolean;
   lockedUntil: Date | null;
@@ -41,7 +48,8 @@ export interface ClaimFacts {
 }
 
 export type ClaimDecision =
-  | { kind: 'REJECT'; code: ExternalClaimRejectCode }
+  /** `record`: ghi lần thử dù mã thuộc nhóm thường không ghi (UNRECORDED), để từ chối nằm sau bước tra đơn vẫn tính vào trần lần thử/ngày. */
+  | { kind: 'REJECT'; code: ExternalClaimRejectCode; record?: true }
   | { kind: 'UNMATCHED' }
   | { kind: 'UNKNOWN_SOURCE' }
   | { kind: 'OWN_CLAIM'; claimId: string; state: string }
@@ -68,6 +76,9 @@ export function lockedUntil(notFoundTimes: readonly Date[], now: Date): Date | n
  *
  * PHONE_MISMATCH đứng ngay sau loại đơn: người cầm mã của người khác không dò được đơn đó đã huỷ, đã tích hay quá hạn. Claim của chính
  * khách (gửi lại mã đã có) không bị chặn ở đây để khách vẫn xem được trạng thái claim cũ dù đã đổi SĐT.
+ *
+ * SĐT liên hệ tự gõ trên Web, chưa xác minh qua Zalo (W45): chỉ đi tiếp khi SĐT trên đơn khớp SĐT đó, hoặc khách đã có đơn mua trong app giao
+ * thành công; claim luôn vào REVIEW để CSKH đối chiếu. Không thoả thì NOT_ELIGIBLE_USER, có ghi lần thử (đã tra đơn nên phải tính vào trần).
  */
 export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   const reject = (code: ExternalClaimRejectCode): ClaimDecision => ({ kind: 'REJECT', code });
@@ -81,6 +92,7 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   if (order.source === 'CHAT') return reject('CHAT_ORDER');
   if (order.source === 'UNKNOWN') return { kind: 'UNKNOWN_SOURCE' };
   if (order.phoneMatch === 'MISMATCH' && !f.claim?.own) return reject('PHONE_MISMATCH');
+  if (!f.phoneVerified && order.phoneMatch !== 'MATCH' && !f.deliveredAppOrder && !f.claim?.own) return { kind: 'REJECT', code: 'NOT_ELIGIBLE_USER', record: true };
 
   if (f.cfg.externalSince && order.insertedAt.getTime() < f.cfg.externalSince.getTime()) return reject('BEFORE_SINCE');
   if (f.now.getTime() - order.insertedAt.getTime() > f.cfg.maxAgeDays * DAY_MS) return reject('TOO_OLD');
@@ -107,6 +119,7 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   // Chỉ claim của chính khách (mã được mở lại) qua được tới đây khi SĐT lệch: người duyệt phải thấy lý do lệch, vì duyệt xong thì lúc
   // cộng không kiểm lại SĐT.
   if (order.phoneMatch === 'MISMATCH') reviewReason = [PHONE_MISMATCH_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
+  if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
   return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };
 }
 

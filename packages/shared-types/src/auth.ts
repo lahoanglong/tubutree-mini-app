@@ -16,6 +16,11 @@ export interface AuthUser {
   id: string;
   zaloId?: string | null;
   phone?: string | null;
+  /**
+   * `phone` đã xác minh qua Zalo (`phoneVerifiedAt`); false = SĐT liên hệ khách tự gõ trên Web. GET /me luôn gửi (W45); đăng nhập/refresh
+   * chưa gửi nên client coi vắng là chưa biết.
+   */
+  phoneVerified?: boolean;
   email?: string | null;
   fullName?: string | null;
   avatarUrl?: string | null;

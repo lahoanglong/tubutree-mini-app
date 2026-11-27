@@ -1,3 +1,4 @@
+import type { AuthUser } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 import type { AddressDTO } from './checkout';
 
@@ -7,6 +8,8 @@ export interface MeProfile {
   email: string | null;
   /** Chỉ đọc: UpdateMeDto không nhận số điện thoại. API cũ chưa trả thì vắng. */
   phone?: string | null;
+  /** `phone` đã xác minh qua Zalo; false = SĐT liên hệ tự gõ trên Web. API cũ chưa trả thì vắng. */
+  phoneVerified?: AuthUser['phoneVerified'];
   avatarUrl: string | null;
   dob: string | null;
   onboarded: boolean;

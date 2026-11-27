@@ -37,9 +37,10 @@ import { Sheet } from '@/components/ui/sheet';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
+import { useCameraAvailable } from '@/lib/code-scan';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { WasteDeskPerk, WasteDeskReport } from './recycle-desk-perk';
-import { ScanCodeButton, useBarcodeScan } from './recycle-scan';
+import { ScanCodeButton } from './recycle-scan';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, formatPoints } from './recycle-labels';
 
 const PATH = '/doi-rac/quay';
@@ -211,7 +212,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [done, setDone] = useState<DeskDone | null>(null);
 
-  const canScan = useBarcodeScan();
+  // Có camera thì nút quét là nút chính; không có thì chỉ còn lối chụp ảnh, nút "Tra mã" là nút chính.
+  const canScan = useCameraAvailable();
   // Quầy làm MỘT việc một lúc (tra mã, xác nhận, từ chối, trao quà) bằng ref đồng bộ: `isPending` chỉ đúng sau lần vẽ kế,
   // hai cú chạm sát nhau vẫn gọi API hai lần; xác nhận rồi từ chối cùng một yêu cầu cũng không được chồng nhau.
   const deskBusy = useRef(false);
@@ -340,18 +342,16 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start">
         <div className="flex flex-col gap-4 md:col-start-2 md:row-start-1">
           <div className="flex flex-col gap-2.5">
-            {canScan && (
-              <ScanCodeButton
-                busy={busy}
-                onCode={(c) => {
-                  setCode(c);
-                  if (deskBusy.current) return;
-                  deskBusy.current = true;
-                  find.mutate(c);
-                }}
-                onFail={(text) => setNotice({ text, ok: false })}
-              />
-            )}
+            <ScanCodeButton
+              busy={busy}
+              onCode={(c) => {
+                setCode(c);
+                if (deskBusy.current) return;
+                deskBusy.current = true;
+                find.mutate(c);
+              }}
+              onFail={(text) => setNotice({ text, ok: false })}
+            />
             <Field label="Mã yêu cầu hoặc mã nhận quà">
               <input
                 value={code}

@@ -22,6 +22,7 @@
     "@tubutree/app-core": "workspace:*",
     "@tubutree/design-tokens": "workspace:*",
     "@tubutree/shared-types": "workspace:*",
+    "@zxing/library": "0.21.3",
     "lucide-react": "^1.18.0",
     "next": "^15.5.28",
     "qrcode": "^1.5.4",

@@ -4,7 +4,9 @@ import { ExternalClaimService } from './external-claim.service';
 const NOW = new Date();
 const flagOn = { 'loyalty.marketplace_claim_enabled': true };
 
-function build(opts: { config?: Record<string, unknown>; order?: Record<string, unknown> | null; user?: Record<string, unknown> | null; appOrder?: boolean } = {}) {
+function build(
+  opts: { config?: Record<string, unknown>; order?: Record<string, unknown> | null; user?: Record<string, unknown> | null; appOrder?: boolean; deliveredAppOrders?: number } = {},
+) {
   const calls: string[] = [];
   const attemptCreate = jest.fn(async () => ({}));
   const tx = {
@@ -34,7 +36,7 @@ function build(opts: { config?: Record<string, unknown>; order?: Record<string, 
     },
     externalClaimEvent: { create: jest.fn(async () => ({})) },
     analyticsEvent: { create: jest.fn(async () => ({})) },
-    order: { findFirst: jest.fn(async () => (opts.appOrder ? { id: 'o1' } : null)) },
+    order: { findFirst: jest.fn(async () => (opts.appOrder ? { id: 'o1' } : null)), count: jest.fn(async () => opts.deliveredAppOrders ?? 0) },
     externalOrder: {
       findFirst: jest.fn(async () => (opts.order ? { id: 'x1' } : null)),
       findUniqueOrThrow: jest.fn(async () => opts.order),
@@ -296,12 +298,44 @@ describe('ExternalClaimService.rematchOne', () => {
     });
   });
 
-  it('SĐT liên hệ tự nhập trên Web (phoneVerifiedAt=null) bị chặn NOT_ELIGIBLE_USER khi gửi mã tích điểm đơn sàn', async () => {
-    const { svc } = build({
-      config: flagOn,
-      order: order(),
-      user: { id: 'u1', phone: '0912345678', phoneVerifiedAt: null, zaloId: 'z1', isBlocked: false, role: 'CUSTOMER' },
-    });
+});
+
+describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa xác minh qua Zalo (W45)', () => {
+  const webUser = { id: 'u1', phone: '0912345678', phoneVerifiedAt: null, zaloId: 'z1', isBlocked: false, role: 'CUSTOMER' };
+  const created = (tx: { externalPointsClaim: { createManyAndReturn: jest.Mock } }) =>
+    (tx.externalPointsClaim.createManyAndReturn.mock.calls[0]?.[0] as { data: Record<string, unknown>[] } | undefined)?.data[0];
+
+  it('SĐT trên đơn khớp SĐT liên hệ: claim vào REVIEW chờ CSKH, không còn 403', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order(), user: webUser });
+    const res = await svc.submit('u1', 'SPXVN0123456789');
+    expect(res).toMatchObject({ status: 'REVIEW', points: 10_000 });
+    expect(created(tx)).toMatchObject({ state: 'REVIEW', reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu', userId: 'u1' });
+  });
+  it('đơn không có SĐT nhưng khách đã có đơn app giao thành công: REVIEW', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: null, phoneLast3: null }), user: webUser, deliveredAppOrders: 1 });
+    expect((await svc.submit('u1', 'SPXVN0123456789')).status).toBe('REVIEW');
+    expect(tx.order.count).toHaveBeenCalledWith({ where: { userId: 'u1', status: 'DELIVERED' }, take: 1 });
+    expect(String(created(tx)?.reviewReason)).toContain('chờ CSKH đối chiếu');
+  });
+  it('đơn không có SĐT, chưa có đơn app giao: 403 NOT_ELIGIBLE_USER và ghi lần thử (tính vào trần lần thử/ngày)', async () => {
+    const { svc, tx, attemptCreate } = build({ config: flagOn, order: order({ phoneMask: null, phoneLast3: null }), user: webUser });
     expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('NOT_ELIGIBLE_USER');
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_NOT_ELIGIBLE_USER', externalOrderId: 'x1' }) });
+    expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+  it('SĐT trên đơn lệch: 403 PHONE_MISMATCH như khách đã xác minh', async () => {
+    const { svc, attemptCreate } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }), user: webUser, deliveredAppOrders: 3 });
+    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('PHONE_MISMATCH');
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_MISMATCH' }) });
+  });
+  it('chưa thấy đơn: SEARCHING (ghi UNMATCHED để cron ghép lại)', async () => {
+    const { svc, tx } = build({ config: flagOn, order: null, user: webUser });
+    expect((await svc.submit('u1', 'SPXVN0123456789')).status).toBe('SEARCHING');
+    expect(tx.externalClaimAttempt.createMany).toHaveBeenCalledWith(expect.objectContaining({ data: [expect.objectContaining({ result: 'UNMATCHED' })] }));
+  });
+  it('SĐT đã xác minh: không đếm đơn app, claim PENDING như cũ', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    expect((await svc.submit('u1', 'SPXVN0123456789')).status).toBe('CLAIMED');
+    expect(tx.order.count).not.toHaveBeenCalled();
   });
 });

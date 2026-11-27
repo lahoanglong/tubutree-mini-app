@@ -651,6 +651,20 @@ describe('UsersService.getMe: Điểm Xanh hai lô (review C1)', () => {
   });
 });
 
+describe('UsersService.getMe: phoneVerified (W45)', () => {
+  const meOf = async (over: Record<string, unknown>) => {
+    const findUniqueOrThrow = jest.fn().mockResolvedValue({ ...fakeUser, ...over });
+    return new UsersService({ user: { findUniqueOrThrow } } as unknown as PrismaService).getMe('u1');
+  };
+  it('SĐT Zalo đã xác minh: phoneVerified true', async () => {
+    expect(await meOf({ phone: '0912345678', phoneVerifiedAt: new Date('2026-11-01T00:00:00Z') })).toMatchObject({ phone: '0912345678', phoneVerified: true });
+  });
+  it('SĐT liên hệ tự gõ trên Web (phoneVerifiedAt null) hoặc chưa có SĐT: phoneVerified false', async () => {
+    expect(await meOf({ phone: '0912345678', phoneVerifiedAt: null })).toMatchObject({ phoneVerified: false });
+    expect(await meOf({ phone: null, phoneVerifiedAt: null })).toMatchObject({ phone: null, phoneVerified: false });
+  });
+});
+
 describe('UsersService.setContactPhone (W171 native web recycle)', () => {
   function buildContactPrisma(opts: {
     current?: Record<string, unknown> | null;
