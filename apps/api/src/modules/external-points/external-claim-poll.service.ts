@@ -43,20 +43,31 @@ export class ExternalClaimPollService {
     if (!lease) return null;
     let pages = 0;
     let ingested = 0;
+    let leaseLost = false;
     try {
       const sinceSec = Math.floor((now.getTime() - POLL_WINDOW_MS) / 1000);
-      for (let page = 1; page <= MAX_PAGES; page++) {
-        if (page > 1 && !(await lease.renew())) break;
-        const orders = await this.client.listUpdatedOrders({ sinceEpochSec: sinceSec, orderSources: sources, page, pageSize: PAGE_SIZE });
-        pages++;
-        for (const o of orders) {
-          const out = await ingestAndApply(this.prisma, { notifier: this.notifications, config: this.config, recalcTier: (id) => this.loyalty.recalcTier(id) }, o as unknown as Record<string, unknown>, map, now);
-          if (out.result === 'STORED') ingested++;
+      // Pancake chỉ lọc theo giá trị `order_sources[]` CUỐI khi nhận nhiều giá trị (PROD 27/11: [-3,-4,-9] chỉ trả đơn -9, bỏ sót 17 đơn
+      // Shopee và 4 đơn Lazada trong 2 giờ), nên mỗi nguồn kéo riêng. Lỗi ở một nguồn không chặn các nguồn sau.
+      for (const source of sources) {
+        if (leaseLost) break;
+        try {
+          for (let page = 1; page <= MAX_PAGES; page++) {
+            if (pages > 0 && !(await lease.renew().catch(() => false))) {
+              leaseLost = true;
+              break;
+            }
+            const orders = await this.client.listUpdatedOrders({ sinceEpochSec: sinceSec, orderSources: [source], page, pageSize: PAGE_SIZE });
+            pages++;
+            for (const o of orders) {
+              const out = await ingestAndApply(this.prisma, { notifier: this.notifications, config: this.config, recalcTier: (id) => this.loyalty.recalcTier(id) }, o as unknown as Record<string, unknown>, map, now);
+              if (out.result === 'STORED') ingested++;
+            }
+            if (orders.length < PAGE_SIZE) break;
+          }
+        } catch (err) {
+          this.logger.warn(`Kéo dự phòng đơn ngoài lỗi (nguồn ${source}): ${err instanceof Error ? err.message : err}`);
         }
-        if (orders.length < PAGE_SIZE) break;
       }
-    } catch (err) {
-      this.logger.warn(`Kéo dự phòng đơn ngoài lỗi: ${err instanceof Error ? err.message : err}`);
     } finally {
       await lease.release();
     }
