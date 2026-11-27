@@ -1297,7 +1297,7 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     (prisma.order.findUniqueOrThrow as jest.Mock).mockResolvedValue({ ...order, status: 'CANCELLED' });
     await proc.onStatusUpdated({ id: 'p1', status: 5 });
     expect(orderUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: 'Pancake báo ĐANG HOÀN' } }] },
+      where: { id: 'o1', pancakeAttention: order.pancakeAttention },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
   });

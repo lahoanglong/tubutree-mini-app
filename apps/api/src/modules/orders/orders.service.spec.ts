@@ -162,6 +162,12 @@ describe('OrdersService.cancel', () => {
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
   });
 
+  it('NIT 5 w40-02: đơn định kỳ vừa huỷ trả ghi chú khách thấy, không lộ dấu hệ thống', async () => {
+    const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', source: 'subscription', note: 'Đơn đặt định kỳ (Subscribe & Save) · Gọi trước' });
+    const out = await svc.cancel('u1', 'TUBU1');
+    expect(out.note).toBe('Gọi trước');
+  });
+
   it('huỷ kèm lý do: ghi vào ghi chú lịch sử (Khác kèm lời khách viết); không gửi lý do hoặc mã lạ thì ghi chú rỗng', async () => {
     const a = makeService({ ...baseOrder, status: 'CONFIRMED' });
     await a.svc.cancel('u1', 'TUBU1', { cancelReasonCode: 'CHANGED_MIND' });
@@ -1456,6 +1462,21 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       expect(byId.get('o3')).not.toHaveProperty('pendingReviewCount');
       expect(reviewFindMany).toHaveBeenCalledTimes(1);
       expect(returnFindMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('NIT 5 w40-02: danh sách trả ghi chú khách thấy, không lộ dấu đơn định kỳ (như chi tiết đơn)', async () => {
+      const sub = { ...delivered, source: 'subscription' };
+      const { svc } = listWith([
+        { ...sub, id: 'o1', note: 'Đơn đặt định kỳ (Subscribe & Save) · Gọi trước 15 phút', items: [sl('i1', 'v1')] },
+        { ...sub, id: 'o2', code: 'TUBU2', note: 'Đơn đặt định kỳ (Subscribe & Save)', items: [sl('i2', 'v1')] },
+        { ...delivered, id: 'o3', code: 'TUBU3', source: 'checkout', note: 'Đơn đặt định kỳ (Subscribe & Save) · x', items: [sl('i3', 'v1')] },
+      ]);
+      const page = await svc.list('u1', {}, 1, 20);
+      expect((page.data as { id: string; note: string | null }[]).map((o) => [o.id, o.note])).toEqual([
+        ['o1', 'Gọi trước 15 phút'],
+        ['o2', 'Đơn đặt định kỳ (Subscribe & Save)'],
+        ['o3', 'Đơn đặt định kỳ (Subscribe & Save) · x'],
+      ]);
     });
 
     it('chi tiết đơn không tính số này (đã có trạng thái từng dòng): một lượt tra dòng trả của riêng đơn này', async () => {

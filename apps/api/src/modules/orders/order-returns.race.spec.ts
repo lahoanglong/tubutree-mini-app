@@ -165,7 +165,7 @@ function setup(opts: { merchant?: boolean } = {}) {
 
   // Khoá đơn chỉ có hiệu lực khi chính câu SQL còn FOR UPDATE (RawContext.locking): sửa mã nguồn bỏ nó thì khoá biến mất theo.
   db.handlers.push(
-    { match: /UPDATE "orders" SET "pancakeAttention" = NULL/, run: () => 0 },
+    { match: /UPDATE "orders" SET "pancakeAttention" = /, run: () => 0 },
     { match: /unnest\(rr\."images"\)/, run: () => [] },
     {
       match: /FROM "orders" WHERE "id" = \?/,

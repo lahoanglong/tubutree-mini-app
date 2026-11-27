@@ -7,6 +7,7 @@ import type { OrderReversalService } from './order-reversal.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import { ATTENTION_CUSTOMER_EDIT_MONEY_CHECK } from '../integrations/pancake/pancake-attention';
 
 const DAY = 864e5;
 const notifyMock = jest.fn().mockResolvedValue(true);
@@ -752,9 +753,12 @@ describe('OrderReturnsService — hàng trả của đơn gian hàng tự giao v
     await h.svc.markReceived('admin1', 'r1');
     const raw = (h.prisma.$executeRaw as unknown as jest.Mock).mock.calls;
     expect(raw).toHaveLength(1);
-    const [sql, ...values] = raw[0] as [TemplateStringsArray, ...unknown[]];
-    expect(sql.join('?')).toMatch(/SET "pancakeAttention" = NULL[\s\S]*NOT EXISTS[\s\S]*"receivedAt" IS NULL/);
-    expect(values).toContain('Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu');
+    const [strings, ...parts] = raw[0] as [TemplateStringsArray, ...unknown[]];
+    const q = Prisma.sql(strings, ...(parts as Prisma.Sql[]));
+    expect(q.sql).toMatch(/SET "pancakeAttention" = NULLIF\(array_to_string\(ARRAY\([\s\S]*starts_with\(part, \?\)[\s\S]*NOT EXISTS[\s\S]*"receivedAt" IS NULL/);
+    expect(q.values).toContain('Pancake đã nhận phiếu hoàn một phần — đã hoàn trên Tubu');
+    // W44: ô còn phần kiểm tiền sau khi khách sửa địa chỉ thì phần đó ở lại (câu chỉ giữ các phần bắt đầu bằng tiền tố kiểm tiền).
+    expect(q.values).toContain(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK);
   });
 
   it('listForMerchant: chỉ đơn của gian hàng mình, không lộ tài khoản ngân hàng nhận hoàn của khách', async () => {

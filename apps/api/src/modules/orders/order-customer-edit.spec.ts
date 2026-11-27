@@ -186,6 +186,31 @@ describe('planCustomerEdit', () => {
     const plan = planCustomerEdit(withDistrict, { address: { ...addr, districtCode: 'D99', street: '7 Kim Mã' } });
     expect(plan).toMatchObject({ kind: 'WRITE', changed: ['số nhà'], shippingAddress: { district: 'Quận Ba Đình', districtCode: 'D01', street: '7 Kim Mã' } });
   });
+
+  describe('phường theo mã (NIT 4 w40-02): tên danh mục khác tên đang lưu cùng mã không tính là sửa', () => {
+    const shortName = { ...current, shippingAddress: { ...snap, ward: 'P. Ba Đình' } };
+
+    it('cùng wardCode, chỉ khác tên (người gọi đã thay bằng tên danh mục): NOOP, không mất lượt', () => {
+      expect(planCustomerEdit(shortName, { address: addr })).toEqual({ kind: 'NOOP' });
+    });
+
+    it('cùng wardCode, sửa trường khác: giữ tên phường đang lưu, không ghi lại tên danh mục', () => {
+      const plan = planCustomerEdit(shortName, { address: { ...addr, street: '7 Kim Mã' } });
+      expect(plan).toMatchObject({ kind: 'WRITE', changed: ['số nhà'], shippingAddress: { ward: 'P. Ba Đình', wardCode: '84_VN0100004', street: '7 Kim Mã' } });
+    });
+
+    it('khác wardCode: đổi phường, lấy tên mới', () => {
+      const plan = planCustomerEdit(shortName, { address: { ...addr, ward: 'Phường Giảng Võ', wardCode: '84_VN0100007' } });
+      expect(plan).toMatchObject({ kind: 'WRITE', changed: ['phường/xã'], shippingAddress: { ward: 'Phường Giảng Võ', wardCode: '84_VN0100007' } });
+    });
+
+    it('đơn cũ không có wardCode: so cả mã lẫn tên như trước', () => {
+      const noCode = { ...current, shippingAddress: { ...snap, ward: 'P. Ba Đình', wardCode: '' } };
+      expect(planCustomerEdit(noCode, { address: { ...addr, wardCode: '' } })).toMatchObject({ kind: 'WRITE', changed: ['phường/xã'], shippingAddress: { ward: 'Phường Ba Đình' } });
+      expect(planCustomerEdit(noCode, { address: { ...addr, ward: 'P. Ba Đình', wardCode: '' } })).toEqual({ kind: 'NOOP' });
+      expect(planCustomerEdit(noCode, { address: addr })).toMatchObject({ kind: 'WRITE', changed: ['phường/xã'], shippingAddress: { wardCode: '84_VN0100004' } });
+    });
+  });
 });
 
 describe('planCustomerEdit — đơn đặt định kỳ giữ dấu hệ thống trong ghi chú', () => {

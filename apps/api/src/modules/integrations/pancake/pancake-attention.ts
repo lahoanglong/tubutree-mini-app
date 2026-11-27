@@ -106,6 +106,26 @@ const ACCOUNTANT_OWNED_REASONS = [ATTENTION_COD_RETURN_UNVERIFIED, ...ATTENTION_
 const ATTENTION_WRITE_ATTEMPTS = 10;
 
 /**
+ * Phần "kiểm tiền sau khi khách sửa địa chỉ" của ô: dính như dòng chờ Kế toán. Lượt sửa sau lấy tiền đã đổi làm mốc nên không còn thấy lệch,
+ * vì vậy mọi đường ghi đè hay xoá ô (lý do mới, việc tự xong) đều giữ lại phần này; chỉ người sửa tay bấm "Đã xử lý" mới gỡ.
+ */
+export const stickyMoneyCheckParts = (cell: string | null | undefined): string[] =>
+  (cell ?? '').split(ATTENTION_SEPARATOR).filter((part) => part.startsWith(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK));
+
+/** Lý do mới `next` (null = xoá ô) ghép với phần kiểm tiền của ô hiện tại, bỏ trùng. null khi không còn gì. */
+export function keepMoneyCheck(next: string | null, current: string | null | undefined): string | null {
+  const parts = next ? next.split(ATTENTION_SEPARATOR) : [];
+  const held = stickyMoneyCheckParts(current).filter((part) => !parts.includes(part));
+  return [...parts, ...held].join(ATTENTION_SEPARATOR) || null;
+}
+
+/** Ô không chứa phần kiểm tiền: lệnh ghi một câu chỉ chạy khi điều kiện này đúng, ô có phần đó đi đường đọc-ghi có điều kiện. */
+const NO_MONEY_CHECK: Prisma.OrderWhereInput = {
+  // NOT (NULL LIKE ..) ra NULL trong SQL: ô trống phải được nêu riêng, không thì dòng không khớp.
+  OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_CUSTOMER_EDIT_MONEY_CHECK } } }],
+};
+
+/**
  * Ghi lý do lên ô "Cần xử lý Pancake" (một ô cho mọi lý do). Dòng "COD chờ Kế toán" và dòng "hoàn tay chờ Kế toán" không bị ghi đè: nó chỉ gỡ khi Kế toán quyết,
  * nên lý do mới được nối sau nó. Đọc rồi ghi có điều kiện theo giá trị đã đọc (lý do vừa chen giữa không bị đè; thua thì đọc lại).
  * Lý do mở đầu bằng ATTENTION_PUSH_FAILED chỉ ghi khi đơn CHƯA có mã Pancake, ngay trong câu ghi: lượt đẩy xong chen giữa lúc đọc và lúc
@@ -136,14 +156,19 @@ export async function writePancakeAttention(
   };
   const first = await db.order.updateMany({
     where: onlyReplacingPrefix
-      ? { id: orderId, ...open, ...unsynced, AND: [changed, notCod, notHeld, ...notStale, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }] }
-      : { id: orderId, ...open, ...unsynced, AND: [changed, notCod, notHeld, ...notStale] },
+      ? {
+          id: orderId,
+          ...open,
+          ...unsynced,
+          AND: [changed, notCod, notHeld, NO_MONEY_CHECK, ...notStale, { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: onlyReplacingPrefix } }] }],
+        }
+      : { id: orderId, ...open, ...unsynced, AND: [changed, notCod, notHeld, NO_MONEY_CHECK, ...notStale] },
     data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
   });
   if (first.count === 1) return reason;
-  if (onlyReplacingPrefix) return null;
-  // Không khớp: cùng lý do đang chờ, đơn đã đóng (onlyOpenOrder), hoặc ô đang giữ dòng COD chờ Kế toán — trường hợp sau nối lý do
-  // mới vào sau dòng đó. Ô có thể đổi tiếp giữa các bước (Kế toán gỡ COD, instance khác nối), nên mỗi lượt ghi theo đúng giá trị vừa đọc.
+  // Không khớp: cùng lý do đang chờ, đơn đã đóng (onlyOpenOrder), ô đang giữ dòng chờ Kế toán (nối lý do mới sau dòng đó), hoặc ô có phần
+  // kiểm tiền (lý do mới thay phần còn lại, giữ phần kiểm tiền). Ô có thể đổi tiếp giữa các bước (Kế toán gỡ COD, instance khác nối), nên
+  // mỗi lượt ghi theo đúng giá trị vừa đọc. Có `onlyReplacingPrefix` thì chỉ đi tiếp khi ô có phần kiểm tiền và phần còn lại trống hoặc khớp tiền tố.
   for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
     const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true, status: true, pancakeOrderId: true, pancakePushStatus: true } });
     if (!row) return null;
@@ -151,10 +176,21 @@ export async function writePancakeAttention(
     if (notStale.length > 0 && row.pancakePushStatus === 'STALE') return null;
     if (onlyOpenOrder && (row.status === 'CANCELLED' || row.status === 'RETURNED')) return null;
     const current = row.pancakeAttention ?? null;
-    // Lý do đã nằm trong ô (ở bất kỳ vị trí nào, vd 'X | COD' do order-status nối) thì không đổi và không báo lại.
-    if (current?.split(ATTENTION_SEPARATOR).includes(reason)) return null;
+    const currentParts = current ? current.split(ATTENTION_SEPARATOR) : [];
+    // Mọi phần của lý do đã nằm trong ô (ở bất kỳ vị trí nào, vd 'X | COD' do order-status nối, hay 'X | kiểm tiền') thì không đổi và không báo lại.
+    if (reason.split(ATTENTION_SEPARATOR).every((part) => currentParts.includes(part))) return null;
+    const accountantOwned = current !== null && ACCOUNTANT_OWNED_REASONS.some((r) => current.includes(r));
+    if (onlyReplacingPrefix) {
+      // Phần kiểm tiền không tính là lý do của job khác: so tiền tố trên phần còn lại của ô.
+      const rest = currentParts.filter((part) => !part.startsWith(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK));
+      const prefixOk = rest.length === 0 || rest[0]!.startsWith(onlyReplacingPrefix);
+      if (accountantOwned || rest.length === currentParts.length || !prefixOk) return null;
+    }
     // Cùng phép thử với notCod/notHeld của lệnh ghi đầu: còn dòng chờ Kế toán thì nối sau nó; vừa được Kế toán gỡ thì ghi như lệnh đầu.
-    const next = current && ACCOUNTANT_OWNED_REASONS.some((r) => current.includes(r)) ? `${current}${ATTENTION_SEPARATOR}${reason}` : reason;
+    const next = accountantOwned
+      ? [...currentParts, ...reason.split(ATTENTION_SEPARATOR).filter((part) => !currentParts.includes(part))].join(ATTENTION_SEPARATOR)
+      : keepMoneyCheck(reason, current)!;
+    if (next === current) return null;
     const r = await db.order.updateMany({
       where: { id: orderId, ...open, ...unsynced, ...(notStale.length > 0 ? { AND: notStale } : {}), pancakeAttention: current },
       data: { pancakeAttention: next, pancakeAttentionAt: new Date() },
@@ -168,13 +204,49 @@ export async function writePancakeAttention(
 /** Đơn đã huỷ xong trên Pancake (hoặc chưa từng lên): việc đẩy/huỷ/báo thanh toán còn treo không còn ý nghĩa. */
 export const ATTENTION_SETTLED_BY_CANCEL = [ATTENTION_PUSH_FAILED, ATTENTION_CANCEL_PENDING, ATTENTION_PAYMENT_PENDING];
 
-/** Gỡ lý do do chính chiều outbound ghi (việc đã tự xong) — không đụng lý do khác (webhook, admin). */
+/**
+ * Gỡ lý do do chính chiều outbound ghi (việc đã tự xong) — không đụng lý do khác (webhook, admin): xoá ô khi lý do ĐẦU khớp tiền tố. Phần
+ * kiểm tiền sau khi khách sửa địa chỉ (stickyMoneyCheckParts) vẫn ở lại. Đọc trước rồi mới ghi có điều kiện theo giá trị đã đọc: ô thường
+ * không khớp tiền tố nên đa số lần gọi chỉ tốn một câu đọc, không câu ghi nào.
+ */
 export async function clearPancakeAttention(prisma: Pick<Prisma.TransactionClient, 'order'>, orderId: string, prefix: string | string[]): Promise<void> {
   const prefixes = Array.isArray(prefix) ? prefix : [prefix];
-  await prisma.order.updateMany({
-    where: { id: orderId, OR: prefixes.map((p) => ({ pancakeAttention: { startsWith: p } })) },
-    data: { pancakeAttention: null, pancakeAttentionAt: null },
+  for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
+    const row = await prisma.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    const cell = row?.pancakeAttention;
+    if (!cell || !prefixes.some((p) => cell.startsWith(p))) return;
+    const next = keepMoneyCheck(null, cell);
+    if (next === cell) return;
+    const r = await prisma.order.updateMany({
+      where: { id: orderId, pancakeAttention: cell },
+      data: next ? { pancakeAttention: next } : { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+    if (r.count === 1) return;
+  }
+  attentionLogger.error(`Không gỡ được lý do "Cần xử lý Pancake" (${prefixes.join(', ')}) của đơn ${orderId} sau ${ATTENTION_WRITE_ATTEMPTS} lượt (ô đổi liên tục).`);
+}
+
+/**
+ * Ghi đè cả ô bằng `reason` như các đường ghi thẳng (lệch tiền ZaloPay, tiền về muộn), trừ phần kiểm tiền sau khi khách sửa địa chỉ: phần đó
+ * được nối lại sau lý do mới. Ô đã có đủ (lý do + phần kiểm tiền) thì không ghi. Trả true khi ô đổi (người gọi báo admin lần đầu).
+ */
+export async function overwriteAttentionKeepingMoneyCheck(db: Pick<Prisma.TransactionClient, 'order'>, orderId: string, reason: string): Promise<boolean> {
+  const first = await db.order.updateMany({
+    where: { id: orderId, AND: [{ OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] }, NO_MONEY_CHECK] },
+    data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
   });
+  if (first.count === 1) return true;
+  for (let attempt = 0; attempt < ATTENTION_WRITE_ATTEMPTS; attempt += 1) {
+    const row = await db.order.findUnique({ where: { id: orderId }, select: { pancakeAttention: true } });
+    if (!row) return false;
+    const current = row.pancakeAttention ?? null;
+    const next = keepMoneyCheck(reason, current)!;
+    if (next === current) return false;
+    const r = await db.order.updateMany({ where: { id: orderId, pancakeAttention: current }, data: { pancakeAttention: next, pancakeAttentionAt: new Date() } });
+    if (r.count === 1) return true;
+  }
+  attentionLogger.error(`Không ghi được lý do "Cần xử lý Pancake" cho đơn ${orderId} sau ${ATTENTION_WRITE_ATTEMPTS} lượt (ô đổi liên tục): ${reason}`);
+  return false;
 }
 
 export const ATTENTION_SEPARATOR = ' | ';

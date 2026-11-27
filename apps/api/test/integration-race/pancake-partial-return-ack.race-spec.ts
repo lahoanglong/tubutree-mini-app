@@ -130,6 +130,19 @@ describe('Pancake "Hoàn một phần" (15) cho đơn đã duyệt trả trên T
     expect((await orderRow(order.id)).pancakeAttention).toBeNull();
   });
 
+  it('(e) W44: ô còn phần kiểm tiền sau khi khách sửa địa chỉ → bấm nhận hàng gỡ việc hoàn một phần, giữ phần kiểm tiền và mốc giờ', async () => {
+    const MONEY = 'Kiểm tiền trên Pancake sau khi khách sửa địa chỉ (#pk-1): cod 230.000đ→0đ. Sửa tay tiền theo đơn Tubu rồi giao.';
+    const { admin, order, req } = await approvedPartialReturn();
+    await proc.onStatusUpdated({ id: order.pancakeOrderId, status: 15 });
+    const acked = await orderRow(order.id);
+    expect(acked.pancakeAttention).toMatch(new RegExp(`^${ACK}`));
+    await prisma.order.update({ where: { id: order.id }, data: { pancakeAttention: `${acked.pancakeAttention} | ${MONEY}` } });
+    await returns.markReceived(admin.id, req.id);
+    const after = await orderRow(order.id);
+    expect(after.pancakeAttention).toBe(MONEY);
+    expect(after.pancakeAttentionAt).not.toBeNull();
+  });
+
   it('(b) Pancake báo 15 SONG SONG với admin bấm "Đã nhận hàng về" (10 đơn) → không đơn nào kẹt lại lời nhắc nhận hàng đã nhận', async () => {
     const fixtures = await Promise.all(Array.from({ length: 10 }, () => approvedPartialReturn()));
     await Promise.all(

@@ -142,6 +142,16 @@ describe('PancakeOrderService.syncCustomerEdit', () => {
       );
     });
 
+    it('W44: lượt chạy lại gặp đúng lệch địa chỉ cũ (ô đã là "lệch địa chỉ | kiểm tiền") → không ghi lại, không báo ADMIN lần nữa', async () => {
+      const t = setup({ pancakeAttention: CHECK }, { getOrder: jest.fn().mockResolvedValue(readBack({ commune_id: '84_VN7900001' })) });
+      await t.svc.syncCustomerEdit('o1');
+      const after = t.row().pancakeAttention;
+      expect(t.alerts.alert).toHaveBeenCalledTimes(1);
+      await t.svc.syncCustomerEdit('o1');
+      expect(t.row().pancakeAttention).toBe(after);
+      expect(t.alerts.alert).toHaveBeenCalledTimes(1);
+    });
+
     it('lượt sau gặp kho đã đóng gói → cờ kiểm tiền cũ vẫn giữ', async () => {
       const t = setup({ pancakeAttention: CHECK }, { getOrder: jest.fn().mockResolvedValue({ ...readBack(), status: 2 }) });
       await t.svc.syncCustomerEdit('o1');

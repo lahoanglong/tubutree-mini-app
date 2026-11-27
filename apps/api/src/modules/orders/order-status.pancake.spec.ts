@@ -34,6 +34,7 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
     order: {
       findFirst: jest.fn().mockResolvedValue(order),
       findUniqueOrThrow: jest.fn().mockResolvedValue(order),
+      findUnique: jest.fn().mockResolvedValue({ pancakeAttention: order.pancakeAttention ?? null }),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -199,8 +200,10 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     const divergence = (c: [{ where: Record<string, unknown>; data: Record<string, unknown> }]) =>
       JSON.stringify(c[0].where).includes('Pancake đã huỷ nhưng đơn Tubu còn hiệu lực');
 
+    const diverged = () => makeOrder({ pancakeAttention: 'Pancake đã huỷ nhưng đơn Tubu còn hiệu lực (lần huỷ trước)' });
+
     it('đóng đúng dấu "Pancake đã huỷ nhưng đơn Tubu còn hiệu lực" sau khi gọi hook huỷ Pancake', async () => {
-      const { svc, prisma, pancakeHooks } = make(makeOrder());
+      const { svc, prisma, pancakeHooks } = make(diverged());
       await svc.afterPancakeCancel('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' });
       expect(pancakeHooks.afterLocalCancel).toHaveBeenCalledWith('o1', expect.objectContaining({ kind: 'CONFIRMED' }));
       const clears = prisma.order.updateMany.mock.calls.filter((c) => c[0].data?.pancakeAttention === null);
@@ -210,7 +213,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     });
 
     it('lỗi khi xoá dấu không làm hỏng lần huỷ đã xong', async () => {
-      const { svc, prisma } = make(makeOrder());
+      const { svc, prisma } = make(diverged());
       prisma.order.updateMany.mockRejectedValue(new Error('db down'));
       await expect(svc.afterPancakeCancel('o1')).resolves.toBe(true);
     });

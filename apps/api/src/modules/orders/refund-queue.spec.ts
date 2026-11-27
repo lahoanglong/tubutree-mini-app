@@ -219,7 +219,9 @@ describe('MONEY-1: huỷ đơn CTV lên hộ khi khách cuối đã chuyển thi
     const { ctx, prisma, createdRow, notifiedTo } = setup();
     prisma.order.findUnique.mockResolvedValue(assistedOrder({ pancakePaidReported: 120_000 }));
     expect(await refundReportedUnderpayment(ctx, 'o1')).toBe(120_000);
-    expect(prisma.order.findUnique).toHaveBeenCalledTimes(1);
+    // Câu đọc riêng ô "Cần xử lý Pancake" (clearPancakeAttention) không phải lần đọc đơn.
+    const orderReads = prisma.order.findUnique.mock.calls.filter(([args]: [{ select?: object }]) => JSON.stringify(args.select) !== '{"pancakeAttention":true}');
+    expect(orderReads).toHaveLength(1);
     expect(createdRow()).toMatchObject({ kind: 'LATE_PAYMENT', amount: 120_000, userId: null, phone: '0912345678', recipientName: 'Khach That' });
     expect(notifiedTo('ctv1')).toEqual([]);
   });

@@ -1,5 +1,11 @@
 import { PancakeProcessor } from './pancake.processor';
-import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD_REASONS, ATTENTION_TOTAL_MISMATCH, ATTENTION_UNDERPAID } from './pancake-attention';
+import {
+  ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_CUSTOMER_EDIT_MONEY_CHECK,
+  ATTENTION_PARTIAL_RETURN_HELD_REASONS,
+  ATTENTION_TOTAL_MISMATCH,
+  ATTENTION_UNDERPAID,
+} from './pancake-attention';
 import { PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 
 /** Payload "Đơn hàng" Pancake sau khi nhân viên THÊM một món 50.000 vào đơn TUBU20260001 (Tubu đẩy 269.000). */
@@ -39,7 +45,7 @@ function setup(o: Record<string, unknown>, opts: Opts = {}) {
     ? jest.fn().mockRejectedValue(new Error('db down'))
     : jest.fn().mockResolvedValue(lines.map((_, i) => ({ variationId: `v${i}` })));
   const prisma = {
-    order: { findFirst: jest.fn().mockResolvedValue(o), updateMany, update },
+    order: { findFirst: jest.fn().mockResolvedValue(o), findUnique: jest.fn().mockResolvedValue({ pancakeAttention: o['pancakeAttention'] ?? null }), updateMany, update },
     orderItem: { findMany: orderItemFindMany },
     variation: {
       findMany: jest.fn().mockResolvedValue(lines.map((l, i) => ({ id: `v${i}`, pancakeId: l.pancakeId, product: { fulfilment: l.fulfilment } }))),
@@ -107,7 +113,7 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
     const { proc, updateMany } = setup(order({ pancakeAttention: `${ATTENTION_TOTAL_MISMATCH}: cũ` }));
     await proc.onOrderEvent(UNTOUCHED);
     expect(cleared(updateMany)).toEqual([
-      expect.objectContaining({ where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] } }),
+      expect.objectContaining({ where: { id: 'o1', pancakeAttention: `${ATTENTION_TOTAL_MISMATCH}: cũ` } }),
     ]);
   });
 
@@ -134,6 +140,7 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: write.data.pancakeAttention } }] },
         { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] },
         { OR: [{ pancakeAttention: null }, { NOT: { OR: ATTENTION_PARTIAL_RETURN_HELD_REASONS.map((held) => ({ pancakeAttention: { contains: held } })) } }] },
+        { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_CUSTOMER_EDIT_MONEY_CHECK } } }] },
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] },
       ],
     });
