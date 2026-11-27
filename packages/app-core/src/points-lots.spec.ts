@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkoutMarketplacePoints, convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary } from './points-lots';
+import { checkoutMarketplacePoints, convertedPointsNote, gardenPoints, lockedPointsLabel, marketplaceExcludedNote, marketplacePointsNote, pointsSummary, usableShopPoints } from './points-lots';
 
 describe('pointsSummary / convertedPointsNote / lockedPointsLabel (R-163: một luật cho web và Mini)', () => {
   it('tổng = lô thường + lô quy đổi', () => {
@@ -77,5 +77,21 @@ describe('checkoutMarketplacePoints (W43: dòng điểm từ đơn sàn trong ô
     expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: Number.NaN }, applied: false })).toBeNull();
     expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: -3 }, applied: false })).toBeNull();
     expect(checkoutMarketplacePoints({ quote: { pointsMaxMarketplace: 1_250.7 }, applied: false })).toBe(1_250);
+  });
+});
+
+describe('usableShopPoints (W44: nút "Dùng {n} Điểm Xanh đang có" của web /quet-ma, cùng luật checkoutPoints của Mini)', () => {
+  it('chưa có số liệu: null', () => {
+    expect(usableShopPoints(undefined)).toBeNull();
+    expect(usableShopPoints(null)).toBeNull();
+  });
+  it('lô thường trừ phần khoá chờ đổi trả, cộng nguyên lô quy đổi và lô điểm sàn', () => {
+    expect(usableShopPoints({ pointsBalance: 1000, pointsConvertedBalance: 200, pointsMarketplaceBalance: 300, redeemablePoints: 700 })).toBe(1200);
+    expect(usableShopPoints({ pointsBalance: 1000, lockedPoints: 400 })).toBe(600);
+    expect(usableShopPoints({ pointsBalance: 1200 })).toBe(1200);
+  });
+  it('số rác hay khoá vượt số dư: không âm', () => {
+    expect(usableShopPoints({ pointsBalance: 100, lockedPoints: 500 })).toBe(0);
+    expect(usableShopPoints({ pointsBalance: Number.NaN, pointsMarketplaceBalance: -5 })).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import { miniappPathFor } from './route-map';
 import { PORTAL_PATHS } from './site';
-import { MD_DOWN } from './use-media-query';
+import { MD_DOWN } from './breakpoints';
+import { MINI_APP_BAR_ATTR } from './mini-app-attr';
 import { miniAppLink } from './zalo-mini-app';
 
 /**
@@ -28,13 +29,22 @@ export const MOBILE_MEDIA_QUERY = MD_DOWN;
 
 /** Lớp phủ "Đang mở…" hiện bao lâu trước khi chuyển sang Zalo. */
 export const AUTO_OPEN_DELAY_MS = 1200;
-/** Lối "Ở lại bản Web" mờ dần rồi ẩn sau chừng này (PO 26/11 23:13: lối thoát kín đáo, tự ẩn sau 4–5 giây). */
+/**
+ * Lớp phủ (cùng lối "Ở lại bản Web") rời đi sau chừng này (PO 26/11 23:13: lối thoát kín đáo, tự ẩn sau 4–5 giây). Lối ở lại bấm được suốt
+ * đời lớp phủ, tới lúc lớp phủ bắt đầu mờ.
+ */
 export const STAY_LINK_HIDE_MS = 4500;
 /**
- * Sau khi chuyển mà trang vẫn hiện tới lúc lối ở lại ẩn: coi như hệ điều hành chặn (hoặc khách đang ở hộp hỏi "Mở bằng Zalo?"), đóng lớp phủ và
- * hiện dải mời. Lớp phủ sống đủ 4,5 giây nên lối "Ở lại bản Web" bấm được suốt thời gian đó, không chỉ 1,2 giây trước khi chuyển.
+ * Sau khi chuyển mà trang vẫn hiện tới lúc lớp phủ rời đi: coi như hệ điều hành chặn (hoặc khách đang ở hộp hỏi "Mở bằng Zalo?"), đóng lớp phủ
+ * và hiện dải mời. Lớp phủ sống đủ 4,5 giây nên lối "Ở lại bản Web" bấm được suốt thời gian đó, không chỉ 1,2 giây trước khi chuyển.
  */
 export const SUPPRESSED_CHECK_MS = STAY_LINK_HIDE_MS - AUTO_OPEN_DELAY_MS;
+/**
+ * Lớp phủ mờ dần chừng này khi rời đi (W44 U1), dải mời đã gắn sẵn bên dưới nên không có khoảng trống nháy. Khớp `transition` của
+ * `.tubu-miniapp-opening` ở `components/mini/mini.css`. Máy bật giảm chuyển động thì bỏ bước mờ.
+ */
+export const OVERLAY_FADE_MS = 300;
+export { MINI_APP_BAR_ATTR };
 
 /**
  * Crawler, công cụ xem trước link và đo tốc độ: không bao giờ bị chuyển trang (Google coi chuyển hướng theo UA là cloaking) và không thấy dải mời.
@@ -177,12 +187,38 @@ export function shouldAutoOpenMiniApp(ctx: AutoOpenContext): boolean {
   return decideMiniAppAutoOpen(ctx).autoOpen;
 }
 
+/**
+ * Script chạy ở `<head>` trước khi vẽ (W44 U4, cùng mẫu `offersHintBootScript` ở `lib/site.ts`): đoán trước dải mời sẽ hiện để giữ chỗ, vì dải
+ * chỉ biết được sau khi cấu hình công khai về và chunk tải lười nạp xong, không giữ thì dải ~66px chèn vào và đẩy cả trang xuống.
+ * Đặt `data-miniapp-bar` trên `<html>` khi đủ cả 5 điều kiện của nhánh "dải mời" trong `decideMiniAppAutoOpen` (trừ cờ, chưa biết lúc này):
+ * khung nhìn điện thoại (và UA di động, không bot), đã có cookie `tubu_mini_auto=1` (lần trước đã tự mở), chưa chọn ở lại (`tubu_stay_web`,
+ * `?stay=web`), host chính và đường dẫn không bị loại. Đoán sai (cờ tắt, chưa tải được cấu hình) thì `mini-app-auto-open.tsx` gỡ thuộc tính.
+ * Hằng số sinh từ cùng nguồn với luật ở trên (JSON), không chép tay.
+ */
+export function miniAppBarBootScript(siteHost?: string | null): string {
+  const hosts = [...PRIMARY_HOSTS, ...LOCAL_HOSTS, ...(siteHost ? [siteHost.toLowerCase()] : [])];
+  const j = JSON.stringify;
+  return (
+    '(function(){try{var w=window,d=document,l=w.location,u=navigator.userAgent||"";' +
+    `if(!w.matchMedia||!w.matchMedia(${j(MOBILE_MEDIA_QUERY)}).matches)return;` +
+    `if(!new RegExp(${j(MOBILE_UA_RE.source)},"i").test(u)||new RegExp(${j(BOT_UA_RE.source)},"i").test(u))return;` +
+    `if(${j(hosts)}.indexOf(l.hostname.toLowerCase())<0)return;` +
+    `var p=l.pathname.replace(/\\/{2,}/g,"/").toLowerCase(),x=${j(EXCLUDED_PREFIXES)};` +
+    'for(var i=0;i<x.length;i++)if(p===x[i]||p.indexOf(x[i]+"/")===0)return;' +
+    `if(new URLSearchParams(l.search).get(${j(STAY_WEB_PARAM)})===${j(STAY_WEB_VALUE)})return;` +
+    'var c={};d.cookie.split(";").forEach(function(s){var k=s.trim().split("=");c[k[0]]=k[1]});' +
+    `if(c[${j(STAY_WEB_COOKIE)}]==="1"||c[${j(MINI_AUTO_COOKIE)}]!=="1")return;` +
+    `d.documentElement.setAttribute(${j(MINI_APP_BAR_ATTR)},"")}catch(e){}})()`
+  );
+}
+
 /** Chữ của lớp phủ và dải mời (chỉ web; Mini App không có màn này). */
 export const MINI_APP_AUTO_OPEN_COPY = {
   opening: 'Đang mở Tubu Tree trên Zalo…',
   stayWeb: 'Ở lại bản Web',
   bannerTitle: 'Mở Tubu Tree trên Zalo',
-  bannerSub: 'Mua nhanh hơn, tích điểm, nhận báo đơn',
+  /** Một dòng không bị cắt "…" ở 360px, kể cả trang tràn viền có nút lùi cạnh dải (PO 27/11 10:29). */
+  bannerSub: 'Mua nhanh & tích điểm',
   bannerOpen: 'Mở',
   bannerClose: 'Đóng, ở lại bản Web',
 } as const;

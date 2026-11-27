@@ -1,5 +1,9 @@
+import { mkdirSync } from 'node:fs';
+import type { Page } from '@playwright/test';
 import { test, expect, makeUser, mockSession } from './support/mock-api';
 import { mockExternalPoints } from './support/external-points-mocks';
+import { tourEntries } from './support/tour';
+import { mockTourWorld } from './support/tour-world';
 
 /**
  * Zalo Mini App E2E - Tích điểm đơn sàn bằng mã vận đơn (B6 bước 2, trang /points/scan).
@@ -11,6 +15,13 @@ const FUTURE = new Date(Date.now() + 7 * 864e5);
 FUTURE.setUTCHours(12, 0, 0, 0);
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const FUTURE_LABEL = `${pad2(FUTURE.getUTCDate())}/${pad2(FUTURE.getUTCMonth() + 1)}/${FUTURE.getUTCFullYear()}`;
+// Đặt EXT_POINTS_SHOTS_DIR để chụp ảnh màn quét (W44: nút lùi, nút sau khi quét).
+const SHOTS = process.env.EXT_POINTS_SHOTS_DIR;
+async function shot(page: Page, name: string): Promise<void> {
+  if (!SHOTS) return;
+  mkdirSync(SHOTS, { recursive: true });
+  await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
 
 test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
   test.beforeEach(({ api }) => {
@@ -135,6 +146,75 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
       await expect(page.getByRole('button', { name: 'Xem sản phẩm' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Về trang chủ' })).toBeVisible();
       await expect(page.getByLabel('Hoặc nhập mã vận đơn')).toHaveCount(0);
+    });
+  });
+
+  test.describe('nút lùi (W44 U3)', () => {
+    test('vào từ trang sản phẩm (sheet Điểm Xanh): có nút lùi, tiêu đề không bị đè, bấm thì về đúng trang sản phẩm', async ({ page, api }) => {
+      const entry = tourEntries().find((e) => e.key === '/product/:slug')!;
+      mockTourWorld(api, makeUser({ id: 'user-ext', fullName: 'Nguyễn Văn A' }));
+      entry.setup?.(api);
+      mockExternalPoints(api);
+      await page.goto(entry.miniapp);
+      const earn = page.locator('.tubu-points-earn');
+      await expect(earn).toBeVisible({ timeout: 15_000 });
+      const pdpPath = new URL(page.url()).pathname;
+      await earn.click();
+      await page.getByRole('button', { name: 'Gửi đơn sàn để tích điểm' }).click();
+      await expect.poll(() => new URL(page.url()).pathname).toBe('/points/scan');
+      // Chờ màn quét dựng xong và sheet đã đóng: nút lùi kiểm dưới phải là của màn quét, không phải của trang sản phẩm đang rời đi.
+      await expect(page.getByLabel('Hoặc nhập mã vận đơn')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('points-earn-popup')).toHaveCount(0);
+      await expect(page.locator('.tubu-points-earn')).toHaveCount(0);
+      const back = page.getByRole('button', { name: 'Quay lại' });
+      await expect(back).toHaveCount(1);
+      await expect(back).toBeVisible();
+      // Tiêu đề lùi sang phải nhường chỗ nút lùi nổi, không bị đè.
+      await shot(page, 'mini375-scan-from-pdp');
+      const backBox = (await back.boundingBox())!;
+      const titleBox = (await page.getByRole('heading', { level: 1 }).first().boundingBox())!;
+      expect(titleBox.x).toBeGreaterThanOrEqual(backBox.x + backBox.width - 1);
+      await back.click();
+      await expect.poll(() => new URL(page.url()).pathname).toBe(pdpPath);
+    });
+
+    test('vào thẳng URL (như bấm tab giữa): tab gốc, không có nút lùi', async ({ page, api }) => {
+      mockExternalPoints(api);
+      await page.goto('/points/scan');
+      await expect(page.getByLabel('Hoặc nhập mã vận đơn')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('button', { name: 'Quay lại' })).toHaveCount(0);
+      await shot(page, 'mini375-scan-from-tab');
+    });
+  });
+
+  test.describe('nút sau khi quét nói số điểm đang có (W44 U2)', () => {
+    const CLAIMED = {
+      status: 'CLAIMED' as const, claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250,
+      expectedCreditAt: FUTURE.toISOString(), message: 'ok',
+    };
+    for (const width of [360, 375]) {
+      test(`${width}px có 1.200 điểm dùng được: "Dùng 1.200 Điểm Xanh đang có" vừa một dòng`, async ({ page, api }) => {
+        mockExternalPoints(api, { submit: CLAIMED });
+        api.get('/me/loyalty', { pointsBalance: 1000, pointsMarketplaceBalance: 200, lockedPoints: 0 });
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto('/points/scan');
+        await page.getByLabel('Hoặc nhập mã vận đơn').fill('SPXVN0123456789');
+        await page.getByRole('button', { name: 'Tích điểm' }).click();
+        const cta = page.getByRole('button', { name: 'Dùng 1.200 Điểm Xanh đang có' });
+        await expect(cta).toBeVisible({ timeout: 15_000 });
+        expect((await cta.boundingBox())!.height).toBeLessThanOrEqual(52);
+        await shot(page, `mini${width}-scan-cta-points`);
+      });
+    }
+
+    test('chưa có điểm dùng được: "Mua sắm ngay trên Mini App"', async ({ page, api }) => {
+      mockExternalPoints(api, { submit: CLAIMED });
+      api.get('/me/loyalty', { pointsBalance: 0, lockedPoints: 0 });
+      await page.goto('/points/scan');
+      await page.getByLabel('Hoặc nhập mã vận đơn').fill('SPXVN0123456789');
+      await page.getByRole('button', { name: 'Tích điểm' }).click();
+      await expect(page.getByRole('button', { name: 'Mua sắm ngay trên Mini App' })).toBeVisible({ timeout: 15_000 });
+      await shot(page, 'mini375-scan-cta-zero');
     });
   });
 });

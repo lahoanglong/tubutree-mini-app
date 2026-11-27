@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'zmp-ui';
 import { ChevronLeft } from 'lucide-react';
 import { useStorefrontContext } from '../store/storefront-context';
-import { isRootPath, recordVisit, smartBack } from '../lib/smart-nav';
+import { canPop, isRootPath, recordVisit, smartBack } from '../lib/smart-nav';
+import { isBackableRoot } from './nav-config';
 
 /**
  * Nút back NỔI cho trang con. Vì đã ẩn actionBar gốc Zalo (immersive, content tràn
@@ -38,8 +39,8 @@ export default function BackButton() {
   const rawFrom = (location.state as { from?: string } | null)?.from;
   const fromPath =
     typeof rawFrom === 'string' && rawFrom !== location.pathname ? rawFrom : undefined;
-  // 5 tab gốc luôn ẩn nút, bất kể `state.from` (có BottomNav; nút nổi ở đó chỉ gây lùi vòng).
-  const show = !isRootPath(location.pathname);
+  // Tab gốc ẩn nút (có BottomNav; nút nổi ở đó chỉ gây lùi vòng). Ngoại lệ duy nhất: `/points/scan` vào bằng PUSH từ trang con (`isBackableRoot`).
+  const show = !isRootPath(location.pathname) || isBackableRoot(location.pathname, location.state, canPop);
 
   // Vết đường dẫn cho `smartNavigate` biết trang ngay trước (xem lib/smart-nav.ts). Ghi cả khi nút ẩn vì tab gốc cũng là "trang trước".
   const fullPath = location.pathname + (location.search ?? '');

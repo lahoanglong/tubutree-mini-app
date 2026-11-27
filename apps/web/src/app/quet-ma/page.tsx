@@ -5,7 +5,7 @@ import { ScanView } from './scan-view';
 const SEO = {
   path: '/quet-ma',
   title: 'Tích điểm đơn sàn',
-  description: 'Quét mã vận đơn Shopee, TikTok, Lazada trong Tubu Tree trên Zalo để tích Điểm Xanh, dùng giảm giá khi mua trên Mini App và web.',
+  description: 'Quét mã vận đơn Shopee, TikTok, Lazada ngay trên web hoặc trong Tubu Tree trên Zalo để tích Điểm Xanh, dùng giảm giá khi mua trên Mini App và web.',
 };
 
 export const metadata: Metadata = staticPageMetadata(SEO);
