@@ -9,11 +9,12 @@ import { formatVnNumber } from './number-format';
 export const MARKETPLACE_CLAIM_COPY = {
   inputLabel: 'Hoặc nhập mã vận đơn',
   inputPlaceholder: 'Ví dụ: SPXVN0123456789',
-  inputHelp: 'Mã vận đơn in trên phiếu giao hàng dán ngoài hộp. Không còn phiếu thì xem trong chi tiết đơn trên Shopee, Lazada hoặc TikTok Shop.',
+  // W46: chữ phụ dưới ô và câu nhắc giữ trong khoảng 12 tiếng (PO 27/11): khách đọc lướt khi tay đang cầm hộp hàng.
+  inputHelp: 'Mã in trên phiếu giao hàng hoặc chi tiết đơn sàn.',
   submit: 'Tích điểm',
   emptyCode: 'Bạn nhập mã vận đơn trước nhé.',
   scanCardLink: 'Đây là mã trên thẻ Tubu. Bạn quét mã vạch trên nhãn dán ngoài hộp nhé.',
-  scanNoCode: 'Chưa tìm thấy mã vận đơn trong nội dung vừa quét. Bạn kiểm tra mã trong ô bên dưới hoặc quét lại nhé.',
+  scanNoCode: 'Mã vừa quét không phải mã vận đơn. Bạn quét lại nhé.',
   codeLinkInvalid: 'Link bạn mở có mã vận đơn không đúng dạng nên chưa điền sẵn. Bạn nhập hoặc quét lại mã trên nhãn nhé.',
   resultClaimed: (channel: string | null, code: string) => `Đã ghi nhận đơn${channel ? ` ${channel}` : ''} ${code}`,
   resultPoints: (points: number) => `${formatVnNumber(points)} Điểm Xanh đang chờ cộng`,
@@ -59,8 +60,43 @@ export const MARKETPLACE_CLAIM_COPY = {
     ZERO_POINTS: 'Giá trị đơn nhỏ quá nên chưa quy ra được Điểm Xanh.',
     PHONE_MISMATCH:
       'Số điện thoại trên đơn sàn không khớp số Zalo bạn đang đăng nhập. Bạn đăng nhập đúng tài khoản Zalo dùng số đã đặt đơn, hoặc liên hệ Tubu nếu bạn đã đổi số nhé.',
+    PHONE_CONFIRM_REQUIRED: 'Bạn xác nhận 4 số cuối SĐT nhận hàng để tích điểm đơn này.',
+    PHONE_CONFIRM_WRONG: '4 số cuối SĐT nhận hàng chưa khớp.',
+    PHONE_CONFIRM_LOCKED: 'Bạn đã nhập sai 3 lần. Thử lại đơn này sau 24 giờ hoặc nhắn Tubu nhé.',
   } satisfies Record<ExternalClaimRejectCode, string>,
 } as const;
+
+/**
+ * Màn "Xác nhận SĐT nhận hàng" (W46, PO A1 27/11): SĐT tài khoản khác SĐT trên đơn sàn thì khách nhập 4 số cuối SĐT người nhận. Mini `/points/scan`
+ * và web `/quet-ma` cùng đọc ở đây. Tên sàn theo `channel` của API (`marketplaceChannelName`).
+ */
+export const PHONE_CONFIRM_COPY = {
+  title: 'Xác nhận SĐT nhận hàng',
+  label: (channelName: string) => `Nhập 4 số cuối SĐT nhận hàng trên đơn ${channelName}`,
+  note: (channelName: string) => `Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng ${channelName} (có thể khác SĐT tài khoản hiện tại của bạn).`,
+  placeholder: '4 số cuối',
+  submit: 'Xác nhận & Tích điểm',
+  other: 'Quét đơn khác',
+  empty: 'Bạn nhập đủ 4 chữ số nhé.',
+  wrong: (remaining: number) => `4 số cuối chưa khớp (còn ${remaining} lượt thử)`,
+  wrongNoCount: '4 số cuối chưa khớp.',
+  locked: 'Bạn đã nhập sai 3 lần. Thử lại đơn này sau 24 giờ hoặc nhắn CSKH.',
+  support: 'Nhắn CSKH Tubu',
+} as const;
+
+const CHANNEL_NAMES: Record<string, string> = { shopee: 'Shopee', tiktok: 'TikTok Shop', lazada: 'Lazada' };
+
+/** Tên sàn khách đọc được từ `channel` của API (`shopee`, `tiktok`, `lazada`); sàn khác hay không rõ thì "sàn TMĐT". */
+export function marketplaceChannelName(channel: string | null | undefined): string {
+  return (channel && CHANNEL_NAMES[channel]) || 'sàn TMĐT';
+}
+
+/** Câu báo lỗi trong màn xác nhận theo mã API; null khi không có lỗi để báo (lần hỏi đầu). */
+export function phoneConfirmErrorText(code: 'PHONE_CONFIRM_REQUIRED' | 'PHONE_CONFIRM_WRONG' | 'PHONE_CONFIRM_LOCKED', remaining: number | null): string | null {
+  if (code === 'PHONE_CONFIRM_LOCKED') return PHONE_CONFIRM_COPY.locked;
+  if (code === 'PHONE_CONFIRM_WRONG') return remaining != null && remaining > 0 ? PHONE_CONFIRM_COPY.wrong(remaining) : PHONE_CONFIRM_COPY.wrongNoCount;
+  return null;
+}
 
 /**
  * Chữ riêng của web `/quet-ma` (W44, PO 27/11: quét và tích điểm làm được ngay trên web). Web không xin SĐT Zalo như Mini App. Từ W45 khách chỉ
@@ -72,16 +108,21 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   loginCta: 'Đăng nhập để tích điểm',
   loginWhy: 'Đăng nhập bằng Zalo để Tubu ghép đúng đơn sàn với số điện thoại của bạn.',
   openMiniAlt: 'Hoặc quét trong Tubu Tree trên Zalo',
-  scanCta: 'Quét mã trên nhãn',
+  // W46 camera trước: khung quét nằm ngay đầu thẻ, hai lối phụ dạng viên thuốc bên dưới.
   scanSheetTitle: 'Quét mã vận đơn',
-  scanSheetHint: 'Đưa mã vạch hoặc mã QR trên phiếu giao hàng vào khung hình',
-  scanClose: 'Đóng',
+  viewfinderHint: 'Đưa mã vạch/QR trên phiếu giao hàng vào khung',
+  cameraStart: 'Bật camera quét ngay',
   cameraLabel: 'Camera quét mã vận đơn',
-  scanFailed: 'Chưa quét được. Bạn thử lại, chụp/chọn ảnh mã vận đơn hoặc nhập mã vào ô bên dưới nhé.',
-  cameraDenied: 'Chưa mở được camera. Bạn cho phép camera, chụp/chọn ảnh mã vận đơn hoặc nhập mã vào ô bên dưới nhé.',
-  photoCta: 'Chụp/chọn ảnh mã vận đơn',
+  torchOn: 'Bật đèn pin',
+  torchOff: 'Tắt đèn pin',
+  manualCta: 'Nhập mã thủ công',
+  sending: 'Đang tích điểm…',
+  scanFailed: 'Chưa quét được. Bạn thử lại, chụp ảnh hoặc nhập mã nhé.',
+  cameraDenied: 'Chưa có quyền camera. Bạn cho phép camera hoặc chụp ảnh mã.',
+  cameraUnavailable: 'Máy chưa mở được camera. Bạn chụp ảnh hoặc nhập mã.',
+  photoCta: 'Chụp / chọn ảnh',
   photoReading: 'Đang đọc ảnh…',
-  photoUnreadable: 'Chưa đọc được mã trong ảnh. Bạn chụp gần và rõ nét cả mã vạch, hoặc nhập mã vào ô bên dưới nhé.',
+  photoUnreadable: 'Chưa đọc được mã trong ảnh. Bạn chụp gần và rõ hơn.',
   phoneTitle: 'Thêm số điện thoại để tích điểm',
   phoneBody: 'Tubu ghép đơn sàn theo số điện thoại đặt hàng. Bạn nhập số di động đã dùng khi mua trên Shopee, TikTok Shop, Lazada nhé.',
   phoneLabel: 'Số điện thoại đặt hàng',
@@ -92,8 +133,7 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   phoneAlt: 'Hoặc xác minh số trên Zalo để cộng điểm tự động',
   phoneCta: 'Xác minh số trên Zalo',
   unverifiedNote: 'Số điện thoại của bạn chưa xác minh qua Zalo: đơn tích trên web sẽ được CSKH đối chiếu trước khi cộng điểm.',
-  notVerified:
-    'Tubu chưa đối chiếu được đơn này với số điện thoại bạn nhập trên web (số chưa xác minh qua Zalo). Bạn mở Tubu Tree trên Zalo, cho phép chia sẻ số điện thoại một lần rồi tích điểm lại nhé. Đã xác minh mà vẫn gặp lỗi này thì bạn liên hệ CSKH Tubu.',
+  notVerified: 'Đơn này cần SĐT đã xác minh qua Zalo để ghép.',
   rateLimited: 'Bạn gửi mã hơi nhanh. Bạn chờ một phút rồi thử lại nhé.',
   historyTitle: 'Lịch sử tích điểm đơn sàn',
 } as const;

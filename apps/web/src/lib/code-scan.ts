@@ -180,7 +180,7 @@ export type CameraScanError = 'denied' | 'failed';
 /**
  * Vòng quét camera khi `open`: mở camera sau, cứ 250ms đọc một khung hình, gọi `onValues` với các chuỗi đọc được (trả true = đã dùng,
  * dừng camera). Đóng (`open` false) hay rời màn thì tắt camera. Quyền camera bị chặn: `onError('denied')`; lỗi khác hoặc bộ đọc không tải
- * được: `onError('failed')`.
+ * được: `onError('failed')`. `onTrack` nhận track video khi hình đã lên (để bật đèn pin) và null khi camera tắt.
  */
 export function useCameraScan(opts: {
   open: boolean;
@@ -188,6 +188,7 @@ export function useCameraScan(opts: {
   formats: readonly ScanFormat[];
   onValues: (values: string[]) => boolean;
   onError: (kind: CameraScanError) => void;
+  onTrack?: (track: MediaStreamTrack | null) => void;
 }): void {
   const { open, videoRef } = opts;
   const latest = useRef(opts);
@@ -198,10 +199,16 @@ export function useCameraScan(opts: {
     let stopped = false;
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let trackShown = false;
+    // Gọi lại được nhiều lần: dọn dẹp chạy khi getUserMedia còn chờ thì lần gọi sau (stream vừa về) vẫn phải tắt track.
     const stop = () => {
       stopped = true;
       if (timer) clearInterval(timer);
       stream?.getTracks().forEach((t) => t.stop());
+      if (trackShown) {
+        trackShown = false;
+        latest.current.onTrack?.(null);
+      }
     };
     const fail = (kind: CameraScanError) => {
       if (stopped) return;
@@ -230,6 +237,12 @@ export function useCameraScan(opts: {
         if (blocked) {
           fail('failed');
           return;
+        }
+        if (stopped) return;
+        const track = latest.current.onTrack ? stream.getVideoTracks()[0] : undefined;
+        if (track && latest.current.onTrack) {
+          trackShown = true;
+          latest.current.onTrack(track);
         }
         const reader = createCodeReader(latest.current.formats);
         let busy = false;

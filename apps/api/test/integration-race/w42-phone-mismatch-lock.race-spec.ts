@@ -79,24 +79,25 @@ describe('W42: SĐT che trên đơn sàn, khoá thử và cộng điểm (real P
     }
   };
 
-  it('6 lần gửi mã lệch SĐT song song → đúng 5 PHONE_MISMATCH (403) + 1 LOCKED; lần sau vẫn LOCKED, không claim nào', async () => {
+  // W46: khách tự gửi mã lệch SĐT nhận PHONE_CONFIRM_REQUIRED thay cho PHONE_MISMATCH, vẫn tính vào khoá 24h y như cũ.
+  it('6 lần gửi mã lệch SĐT song song → đúng 5 PHONE_CONFIRM_REQUIRED (403) + 1 LOCKED; lần sau vẫn LOCKED, không claim nào', async () => {
     const user = await mkUser('11');
     const orders = await Promise.all(Array.from({ length: 6 }, () => mkOrder('78')));
     const results = await Promise.allSettled(orders.map((o) => svc().submit(user.id, o.code)));
     const codes = await Promise.all(results.map((r) => codeOf(r.status === 'fulfilled' ? Promise.resolve(r.value) : Promise.reject(r.reason))));
-    expect(codes.sort()).toEqual(['LOCKED', 'PHONE_MISMATCH', 'PHONE_MISMATCH', 'PHONE_MISMATCH', 'PHONE_MISMATCH', 'PHONE_MISMATCH']);
+    expect(codes.sort()).toEqual(['LOCKED', 'PHONE_CONFIRM_REQUIRED', 'PHONE_CONFIRM_REQUIRED', 'PHONE_CONFIRM_REQUIRED', 'PHONE_CONFIRM_REQUIRED', 'PHONE_CONFIRM_REQUIRED']);
     const forbidden = results.find((r) => r.status === 'rejected' && (r.reason as HttpException).getStatus() === 403);
     expect(forbidden).toBeDefined();
     // Thông báo không bao giờ lộ số nhìn thấy trên đơn.
     expect(JSON.stringify((forbidden as PromiseRejectedResult).reason.getResponse())).not.toContain('78');
-    expect(await prisma.externalClaimAttempt.count({ where: { userId: user.id, result: 'REJECTED_PHONE_MISMATCH' } })).toBe(5);
+    expect(await prisma.externalClaimAttempt.count({ where: { userId: user.id, result: 'REJECTED_PHONE_CONFIRM_REQUIRED' } })).toBe(5);
     expect(await codeOf(svc().submit(user.id, (await mkOrder('11')).code))).toBe('LOCKED');
     expect(await prisma.externalPointsClaim.count({ where: { userId: user.id } })).toBe(0);
   });
 
   it('lần thử lệch SĐT tính vào trần lần thử trong ngày: đủ 10 lần thì DAILY_ATTEMPTS dù mã khớp', async () => {
     const user = await mkUser('22');
-    for (let i = 0; i < 4; i++) expect(await codeOf(svc().submit(user.id, (await mkOrder('78')).code))).toBe('PHONE_MISMATCH');
+    for (let i = 0; i < 4; i++) expect(await codeOf(svc().submit(user.id, (await mkOrder('78')).code))).toBe('PHONE_CONFIRM_REQUIRED');
     await prisma.externalClaimAttempt.createMany({
       data: Array.from({ length: 6 }, () => ({ userId: user.id, code: `IT${randCode(10)}`, result: 'REJECTED_CLOSED', dayKey: vnDateKey(new Date()) })),
     });

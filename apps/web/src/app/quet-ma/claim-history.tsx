@@ -15,7 +15,8 @@ import { ErrorState } from '@/components/ui/error-state';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 
-const PAGE_SIZE = 10;
+export const CLAIM_HISTORY_PAGE_SIZE = 10;
+const PAGE_SIZE = CLAIM_HISTORY_PAGE_SIZE;
 
 /**
  * "Lịch sử tích điểm đơn sàn" của web `/quet-ma` (W44): cùng dữ liệu (`GET /me/external-points/claims`), cùng nhãn trạng thái và cùng khoá cache

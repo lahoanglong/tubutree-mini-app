@@ -1,4 +1,5 @@
 import { HttpException } from '@nestjs/common';
+import { PHONE_CONFIRM_RESULTS, PHONE_CONFIRMED_NOTE } from './external-claim.rules';
 import { ExternalClaimService, LOCK_COUNTED_RESULTS } from './external-claim.service';
 
 const NOW = new Date();
@@ -165,7 +166,7 @@ describe('ExternalClaimService.submit', () => {
     expect(res).toMatchObject({ status: 'REVIEW', points: null });
     expect(notifications.notify).not.toHaveBeenCalled();
   });
-  it('W42: SĐT trên đơn lệch SĐT khách: 403 PHONE_MISMATCH, ghi attempt REJECTED_PHONE_MISMATCH, không tạo claim', async () => {
+  it('W46: SĐT trên đơn lệch SĐT khách: 403 PHONE_CONFIRM_REQUIRED (thay PHONE_MISMATCH), ghi attempt REQUIRED, không tạo claim', async () => {
     const { svc, tx, attemptCreate } = build({ config: flagOn, order: order({ phoneMask: '098*****26' }) });
     let status = 0;
     try {
@@ -174,14 +175,20 @@ describe('ExternalClaimService.submit', () => {
       status = e instanceof HttpException ? e.getStatus() : -1;
     }
     expect(status).toBe(403);
-    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_MISMATCH', userId: 'u1' }) });
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_CONFIRM_REQUIRED', userId: 'u1', externalOrderId: 'x1' }) });
     expect(tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
   });
-  it('W42: lần lệch SĐT tính vào khoá 24h cùng lần không tìm thấy', async () => {
+  it('W42/W46: lần lệch SĐT (cũ và mới) và lần nhập sai 4 số tính vào khoá 24h cùng lần không tìm thấy', async () => {
     const { svc, tx } = build({ config: flagOn, order: order() });
     await svc.submit('u1', 'SPXVN0123456789');
     expect(tx.externalClaimAttempt.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ result: { in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER'] } }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({
+          result: {
+            in: ['UNMATCHED', 'NOT_FOUND', 'REJECTED_PHONE_MISMATCH', 'REJECTED_NOT_ELIGIBLE_USER', 'REJECTED_PHONE_CONFIRM_REQUIRED', 'REJECTED_PHONE_CONFIRM_WRONG'],
+          },
+        }),
+      }),
     );
   });
   it('W42: đơn chỉ có số đầy đủ khớp: PENDING; đơn không có SĐT nào: REVIEW', async () => {
@@ -329,10 +336,15 @@ describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa
     // 403 lộ ra mã có đơn (khác SEARCHING): tính vào khoá 24h để không dò mã hàng loạt.
     expect(LOCK_COUNTED_RESULTS).toContain('REJECTED_NOT_ELIGIBLE_USER');
   });
-  it('SĐT trên đơn lệch: 403 PHONE_MISMATCH như khách đã xác minh', async () => {
+  it('SĐT trên đơn lệch: hỏi 4 số cuối SĐT người nhận như khách đã xác minh (W46)', async () => {
     const { svc, attemptCreate } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }), user: webUser, deliveredAppOrders: 3 });
-    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('PHONE_MISMATCH');
-    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_MISMATCH' }) });
+    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('PHONE_CONFIRM_REQUIRED');
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_CONFIRM_REQUIRED' }) });
+  });
+  it('SĐT lệch + nhập đúng 4 số: claim vẫn REVIEW (SĐT chưa xác minh), lý do ghi đã xác nhận 4 số', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }), user: webUser });
+    expect(await svc.submit('u1', 'SPXVN0123456789', 'scan', '5511')).toMatchObject({ status: 'REVIEW' });
+    expect(created(tx)).toMatchObject({ state: 'REVIEW', reviewReason: `SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu; ${PHONE_CONFIRMED_NOTE}` });
   });
   it('chưa thấy đơn: SEARCHING (ghi UNMATCHED để cron ghép lại)', async () => {
     const { svc, tx } = build({ config: flagOn, order: null, user: webUser });
@@ -343,5 +355,125 @@ describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa
     const { svc, tx } = build({ config: flagOn, order: order() });
     expect((await svc.submit('u1', 'SPXVN0123456789')).status).toBe('CLAIMED');
     expect(tx.order.count).not.toHaveBeenCalled();
+  });
+});
+
+describe('ExternalClaimService.submit: xác nhận 4 số cuối SĐT người nhận khi SĐT lệch (W46)', () => {
+  /** Mock đếm lần nhập sai của đơn: `findMany` của lần thử trả `wrongTimes` khi hỏi đúng kết quả REJECTED_PHONE_CONFIRM_WRONG. */
+  function withWrong(b: ReturnType<typeof build>, wrongTimes: Date[]) {
+    b.tx.externalClaimAttempt.findMany.mockImplementation((async (args: { where: { result?: unknown } }) =>
+      args.where.result === PHONE_CONFIRM_RESULTS.wrong ? wrongTimes.map((createdAt) => ({ createdAt })) : []) as never);
+    return b;
+  }
+  const bodyOf = async (p: Promise<unknown>): Promise<{ status: number; body: Record<string, unknown> }> => {
+    try {
+      await p;
+      return { status: 200, body: {} };
+    } catch (e) {
+      const h = e as HttpException;
+      return { status: h.getStatus(), body: h.getResponse() as Record<string, unknown> };
+    }
+  };
+  const created = (tx: { externalPointsClaim: { createManyAndReturn: jest.Mock } }) =>
+    (tx.externalPointsClaim.createManyAndReturn.mock.calls[0]?.[0] as { data: Record<string, unknown>[] } | undefined)?.data[0];
+  const events = (tx: { externalClaimEvent: { create: jest.Mock } }) => tx.externalClaimEvent.create.mock.calls.map((c) => (c[0] as { data: Record<string, unknown> }).data);
+  const HOUR = 36e5;
+
+  it('1. SĐT khớp: PENDING ngay, không hỏi 4 số, không đếm lần sai', async () => {
+    const b = build({ config: flagOn, order: order() });
+    expect(await b.svc.submit('u1', 'SPXVN0123456789', 'scan')).toMatchObject({ status: 'CLAIMED', points: 10_000 });
+    expect(created(b.tx)).toMatchObject({ state: 'PENDING', reviewReason: null });
+    expect(b.tx.externalClaimAttempt.findMany).not.toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.wrong }) }));
+  });
+
+  it('2. SĐT lệch, chưa nhập: 403 PHONE_CONFIRM_REQUIRED kèm sàn + số chữ số; thân lỗi không có chữ số nào của SĐT đơn', async () => {
+    const b = build({ config: flagOn, order: order({ phoneMask: '0*26', phoneLast3: '326' }) });
+    const r = await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'scan'));
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual({ statusCode: 403, error: 'PHONE_CONFIRM_REQUIRED', code: 'PHONE_CONFIRM_REQUIRED', message: expect.any(String), channel: 'shopee', requiredDigits: 4 });
+    expect(JSON.stringify(r.body)).not.toMatch(/26|326|\*/);
+    expect(b.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('3. Shopee 0*26 + 8326: PENDING (không REVIEW), sổ claim và lần thử ghi đã xác nhận, lượt REQUIRED cũ thôi tính khoá', async () => {
+    const b = build({ config: flagOn, order: order({ phoneMask: '0*26', phoneLast3: null }) });
+    const res = await b.svc.submit('u1', 'SPXVN0123456789', 'scan', '8326');
+    expect(res).toMatchObject({ status: 'CLAIMED', points: 10_000 });
+    expect(created(b.tx)).toMatchObject({ state: 'PENDING', reviewReason: null });
+    expect(events(b.tx)[0]).toMatchObject({ action: 'CLAIM_CREATED', toState: 'PENDING', note: PHONE_CONFIRMED_NOTE });
+    expect(b.attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'MATCHED', note: PHONE_CONFIRMED_NOTE }) });
+    expect(b.tx.externalClaimAttempt.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', externalOrderId: 'x1', result: PHONE_CONFIRM_RESULTS.required },
+      data: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.confirmed }),
+    });
+    expect(b.notifications.notify).toHaveBeenCalledWith('u1', 'EXTERNAL_POINTS_PENDING', expect.anything(), expect.anything());
+    expect(b.tx.analyticsEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ props: expect.objectContaining({ result: 'CLAIMED', phoneConfirmed: true }) }) }));
+  });
+
+  it('4. Lazada số đầy đủ 0987654321: 4321 → PENDING; 9921 → 403 PHONE_CONFIRM_WRONG còn 2 lượt', async () => {
+    const lazada = () => order({ channel: 'lazada', phone: '0987654321', phoneMask: null, phoneLast3: '321' });
+    const ok = build({ config: flagOn, order: lazada() });
+    expect(await ok.svc.submit('u1', 'SPXVN0123456789', 'typed', '4321')).toMatchObject({ status: 'CLAIMED' });
+    expect(created(ok.tx)).toMatchObject({ state: 'PENDING', reviewReason: null });
+
+    const bad = build({ config: flagOn, order: lazada() });
+    const r = await bodyOf(bad.svc.submit('u1', 'SPXVN0123456789', 'typed', '9921'));
+    expect(r).toEqual({ status: 403, body: expect.objectContaining({ code: 'PHONE_CONFIRM_WRONG', channel: 'lazada', requiredDigits: 4, remainingAttempts: 2 }) });
+    expect(JSON.stringify(r.body)).not.toMatch(/0987|4321|321/);
+    expect(bad.attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.wrong, externalOrderId: 'x1' }) });
+    expect(bad.tx.externalClaimAttempt.updateMany).not.toHaveBeenCalled();
+    expect(bad.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('5. đã sai 2 lần: lần sai thứ 3 → 429 PHONE_CONFIRM_LOCKED (ghi là lần sai); có 3 lần sai thì lần thứ 4 nhập đúng vẫn LOCKED', async () => {
+    const lazada = () => order({ channel: 'lazada', phone: '0987654321', phoneMask: null });
+    const now = Date.now();
+    const third = withWrong(build({ config: flagOn, order: lazada() }), [new Date(now - 2 * HOUR), new Date(now - HOUR)]);
+    expect(await bodyOf(third.svc.submit('u1', 'SPXVN0123456789', 'typed', '1111'))).toEqual({
+      status: 429,
+      body: expect.objectContaining({ code: 'PHONE_CONFIRM_LOCKED', channel: 'lazada', remainingAttempts: 0 }),
+    });
+    expect(third.attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.wrong }) });
+
+    const fourth = withWrong(build({ config: flagOn, order: lazada() }), [new Date(now - 3 * HOUR), new Date(now - 2 * HOUR), new Date(now - HOUR)]);
+    expect((await bodyOf(fourth.svc.submit('u1', 'SPXVN0123456789', 'typed', '4321'))).body).toMatchObject({ code: 'PHONE_CONFIRM_LOCKED' });
+    expect(fourth.attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.locked }) });
+    expect(fourth.tx.externalClaimAttempt.updateMany).not.toHaveBeenCalled();
+    expect(fourth.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản đang khoá 24h: nhập đúng 4 số vẫn LOCKED, không lật lượt REQUIRED cũ (không thành máy dò 4 số)', async () => {
+    const b = build({ config: flagOn, order: order({ channel: 'lazada', phone: '0987654321', phoneMask: null }) });
+    const now = Date.now();
+    b.tx.externalClaimAttempt.findMany.mockImplementation((async (args: { where: { result?: unknown } }) => {
+      const r = args.where.result;
+      return typeof r === 'object' && r !== null && 'in' in r ? [1, 2, 3, 4, 5].map((h) => ({ createdAt: new Date(now - h * HOUR) })) : [];
+    }) as never);
+    expect((await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'typed', '4321'))).body).toMatchObject({ code: 'LOCKED' });
+    expect(b.tx.externalClaimAttempt.updateMany).not.toHaveBeenCalled();
+    expect(b.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+  });
+
+  it('nhập đúng 4 số mà đơn bị từ chối vì lý do khác (đơn đã huỷ): không lật lượt REQUIRED cũ', async () => {
+    const b = build({ config: flagOn, order: order({ channel: 'lazada', phone: '0987654321', phoneMask: null, status: 'CANCELLED' }) });
+    expect((await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'typed', '4321'))).body).toMatchObject({ code: 'CLOSED' });
+    expect(b.tx.externalClaimAttempt.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('lần sai đếm theo đúng khách và đúng đơn, trong 48 giờ gần nhất', async () => {
+    const b = build({ config: flagOn, order: order({ phoneMask: '0*26' }) });
+    await bodyOf(b.svc.submit('u1', 'SPXVN0123456789', 'scan', '1111'));
+    expect(b.tx.externalClaimAttempt.findMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', externalOrderId: 'x1', result: PHONE_CONFIRM_RESULTS.wrong, createdAt: { gte: expect.any(Date) } },
+      select: { createdAt: true },
+    });
+  });
+
+  it('cron ghép lại (không có khách trước màn hình) vẫn từ chối PHONE_MISMATCH, không hỏi 4 số', async () => {
+    const b = build({ config: flagOn, order: order({ phoneMask: '0*26' }) });
+    b.tx.externalClaimAttempt.findUnique.mockResolvedValue({ id: 'a1', userId: 'u1', code: 'SPXVN0123456789', result: 'UNMATCHED', resolvedAt: null, externalOrderId: null });
+    const cfg = { enabled: true, earnPct: 1, dailyAttempts: 10, dailyMax: 3, monthlyPointsCap: 200_000, maxAgeDays: 60, reviewAboveVnd: 2_000_000, pendingDays: 14, externalSince: null };
+    expect(await (b.svc as unknown as { rematchOne: (id: string, c: unknown, now: Date) => Promise<string> }).rematchOne('a1', cfg, NOW)).toBe('RESOLVED');
+    expect(b.tx.externalClaimAttempt.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: 'REJECTED_PHONE_MISMATCH' }) }));
   });
 });

@@ -1716,6 +1716,198 @@
   line-height: var(--type-body-sm-lh);
   font-weight: var(--type-body-sm-weight);
 }
+/* Dòng gập hướng dẫn (W46): khách đã có đơn sàn thì 3 bước thu về một dòng chạm để mở; cùng lớp ở Mini (css/scan-guide.css). */
+.tubu-scan-guide-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-stack-xs);
+  min-height: 44px;
+  margin: var(--space-stack-xs) 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: var(--type-label-weight);
+  cursor: pointer;
+}
+.tubu-scan-guide-toggle svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.tubu-scan-guide-toggle[aria-expanded='true'] .tubu-scan-guide-toggle__chevron {
+  transform: rotate(180deg);
+}
+
+/* ── Khung quét camera của web /quet-ma (W46, camera trước): khung tối 4:3 có 4 góc ngắm, chữ nhắc trong khung, nút bật camera giữa khung,
+ * nút đèn pin ở góc; hai lối phụ dạng viên thuốc bên dưới. Mini App dùng trình quét của Zalo nên không có lớp này. ── */
+.tubu-scanner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+.tubu-scanner__frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-lightbox);
+  color: var(--color-text-inverse);
+}
+.tubu-scanner__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+}
+.tubu-scanner__frame[data-live] .tubu-scanner__video {
+  opacity: 1;
+}
+.tubu-scanner__corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0 solid var(--color-text-inverse);
+  pointer-events: none;
+}
+.tubu-scanner__corner--tl {
+  top: 14%;
+  left: 10%;
+  border-top-width: 3px;
+  border-left-width: 3px;
+  border-top-left-radius: var(--radius-card);
+}
+.tubu-scanner__corner--tr {
+  top: 14%;
+  right: 10%;
+  border-top-width: 3px;
+  border-right-width: 3px;
+  border-top-right-radius: var(--radius-card);
+}
+.tubu-scanner__corner--bl {
+  bottom: 14%;
+  left: 10%;
+  border-bottom-width: 3px;
+  border-left-width: 3px;
+  border-bottom-left-radius: var(--radius-card);
+}
+.tubu-scanner__corner--br {
+  bottom: 14%;
+  right: 10%;
+  border-bottom-width: 3px;
+  border-right-width: 3px;
+  border-bottom-right-radius: var(--radius-card);
+}
+.tubu-scanner__hint,
+.tubu-scanner__alert {
+  position: absolute;
+  left: var(--space-inline-md);
+  right: var(--space-inline-md);
+  margin: 0;
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-lightbox-control);
+  text-align: center;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+}
+.tubu-scanner__hint {
+  bottom: var(--space-inline-sm);
+}
+.tubu-scanner__alert {
+  top: var(--space-inline-sm);
+  font-weight: var(--type-label-weight);
+}
+.tubu-scanner__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-stack-sm);
+  padding: var(--space-gutter);
+  text-align: center;
+}
+.tubu-scanner__text {
+  margin: 0;
+  max-width: 32ch;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+}
+.tubu-scanner__torch {
+  position: absolute;
+  top: var(--space-inline-sm);
+  right: var(--space-inline-sm);
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-lightbox-control);
+  color: var(--color-text-inverse);
+  cursor: pointer;
+}
+.tubu-scanner__torch[aria-pressed='true'] {
+  background: var(--color-text-inverse);
+  color: var(--color-text-primary);
+}
+.tubu-scanner__torch svg {
+  width: 20px;
+  height: 20px;
+}
+/* Hai viên cùng hàng khi đủ chỗ (375px); thiếu chỗ (360px, chữ phóng to) thì mỗi viên một hàng thay vì tràn chữ ra viền. */
+.tubu-scanner__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-inline-sm);
+}
+.tubu-scanner__pill {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-stack-xs);
+  min-height: 44px;
+  padding: 0 var(--space-inline-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  font-weight: var(--type-label-weight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tubu-scanner__pill[aria-expanded='true'] {
+  border-color: var(--color-border-focus);
+}
+.tubu-scanner__pill svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.tubu-scanner__torch:focus-visible,
+.tubu-scanner__pill:focus-visible,
+.tubu-scan-guide-toggle:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tubu-scanner__video {
+    transition: opacity 150ms ease-out;
+  }
+  .tubu-scan-guide-toggle__chevron {
+    transition: transform 150ms ease-out;
+  }
+}
 
 /* ── Tự mở Zalo Mini App trên web điện thoại (W42): lớp phủ chuyển cảnh ngắn và dải mời trong luồng ở đầu nội dung (không nổi đè danh sách).
  * Lối "Ở lại web" là chữ nhỏ màu phụ (không phải nút nổi), bấm được suốt đời lớp phủ. Giây 4,5 lớp phủ mờ dần 300ms (W44 U1,

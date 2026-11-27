@@ -239,7 +239,7 @@ describe('Trang Tích điểm đơn sàn', () => {
       renderPage();
       await typeCode();
       fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
-      expect(await screen.findByTestId('phone-declined')).toHaveTextContent('Mã bạn nhập vẫn được giữ');
+      expect(await screen.findByTestId('phone-declined')).toHaveTextContent('Mã vẫn được giữ');
       expect(screen.queryByRole('alert')).toBeNull();
       expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('SPXVN123456789');
       expect(screen.getByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeInTheDocument();
@@ -436,7 +436,7 @@ describe('Trang Tích điểm đơn sàn', () => {
       renderPage();
       await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
       fireEvent.click(scanBtn());
-      expect(await screen.findByRole('alert')).toHaveTextContent('Chưa tìm thấy mã vận đơn');
+      expect(await screen.findByRole('alert')).toHaveTextContent('không phải mã vận đơn');
       expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('https://example.com/about');
       expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
       expect(mocks.trackEvent).toHaveBeenCalledWith('ext_claim_scan', 'miniapp', { result: 'ok', parsed: 'url' });
@@ -1062,3 +1062,122 @@ describe('W113A: Tích điểm đơn sàn giữ khoá tới khi danh sách yêu 
     await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
   });
 });
+
+describe('Trang Tích điểm đơn sàn — W46: xác nhận 4 số cuối SĐT người nhận, gập hướng dẫn', () => {
+  const confirmRejection = (code: string, status: number, extra: Record<string, unknown> = {}) =>
+    Object.assign(new Error('x'), { isHttpError: true, response: { status, data: { code, message: 'máy chủ', requiredDigits: 4, ...extra } } });
+  const CLAIMED = { status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250, expectedCreditAt: futureIso(), message: 'ok' };
+  const typeAndSend = async () => {
+    fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+  };
+  const last4 = () => screen.getByTestId('phone-confirm-input') as HTMLInputElement;
+  const confirmWith = async (digits: string) => {
+    fireEvent.change(last4(), { target: { value: digits } });
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận & Tích điểm' }));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.phase = 'authenticated';
+    mocks.search = '';
+    mocks.hasOA = true;
+    mocks.getOaPromptState.mockResolvedValue({ promptSeen: true, followed: false });
+    mocks.setOaPromptState.mockResolvedValue(undefined);
+    window.history.replaceState({}, '', '/points/scan');
+    __resetEntrySourceForTest();
+    setCardGiftNote(null);
+    mocks.user = { phone: '0901234567' };
+    mocks.getPublicConfig.mockResolvedValue({ loyalty: LOYALTY });
+    mocks.getMyExternalClaims.mockResolvedValue(EMPTY_LIST);
+    mocks.locState = null;
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, lockedPoints: 0 });
+  });
+
+  it('SĐT lệch: hộp đúng chữ đề bài theo sàn, ô 4 số kiểu số; không câu lỗi đỏ ở thẻ gửi mã', async () => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'shopee' }));
+    renderPage();
+    await typeAndSend();
+    const box = await screen.findByTestId('phone-confirm-sheet');
+    expect(screen.getByText('Xác nhận SĐT nhận hàng')).toBeTruthy();
+    expect(box).toHaveTextContent('Nhập 4 số cuối SĐT nhận hàng trên đơn Shopee');
+    expect(box).toHaveTextContent('Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng Shopee (có thể khác SĐT tài khoản hiện tại của bạn).');
+    expect(last4().getAttribute('inputmode')).toBe('numeric');
+    expect(last4().getAttribute('pattern')).toBe('[0-9]*');
+    expect(last4().maxLength).toBe(4);
+    expect(screen.getByRole('button', { name: 'Quét đơn khác' })).toBeTruthy();
+    expect(screen.queryByTestId('phone-confirm-error')).toBeNull();
+    expect(screen.queryByText('máy chủ')).toBeNull();
+  });
+
+  it('đúng 4 số: gửi lại đúng mã kèm 4 số, đóng hộp, thẻ kết quả', async () => {
+    mocks.submitExternalClaim
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'shopee' }))
+      .mockResolvedValueOnce(CLAIMED);
+    renderPage();
+    await typeAndSend();
+    await screen.findByTestId('phone-confirm-sheet');
+    await confirmWith('8326');
+    await screen.findByTestId('claim-result');
+    expect(mocks.submitExternalClaim).toHaveBeenLastCalledWith('SPXVN123456789', 'typed', '8326');
+    await waitFor(() => expect(screen.queryByTestId('phone-confirm-sheet')).toBeNull());
+  });
+
+  it('Lazada sai: báo còn 2 lượt kèm nút nhắn CSKH; sai lần 3: khoá, nút xác nhận tắt', async () => {
+    mocks.submitExternalClaim
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'lazada' }))
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_WRONG', 403, { channel: 'lazada', remainingAttempts: 2 }))
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_LOCKED', 429, { channel: 'lazada', remainingAttempts: 0 }));
+    renderPage();
+    await typeAndSend();
+    expect(await screen.findByTestId('phone-confirm-sheet')).toHaveTextContent('trên đơn Lazada');
+    await confirmWith('9921');
+    expect(await screen.findByText('4 số cuối chưa khớp (còn 2 lượt thử)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Nhắn CSKH Tubu' }));
+    expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('SPX***789'));
+    await waitFor(() => expect(last4().value).toBe(''));
+    await confirmWith('1111');
+    expect(await screen.findByText('Bạn đã nhập sai 3 lần. Thử lại đơn này sau 24 giờ hoặc nhắn CSKH.')).toBeTruthy();
+    expect(last4().disabled).toBe(true);
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(3);
+  });
+
+  it('chưa đủ 4 số: nhắc, không gọi API', async () => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: null }));
+    renderPage();
+    await typeAndSend();
+    expect(await screen.findByTestId('phone-confirm-sheet')).toHaveTextContent('trên đơn sàn TMĐT');
+    await confirmWith('83');
+    expect(await screen.findByText('Bạn nhập đủ 4 chữ số nhé.')).toBeTruthy();
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Quét đơn khác": đóng hộp, mở trình quét của Zalo', async () => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'shopee' }));
+    mocks.scanCode.mockResolvedValue({ kind: 'cancelled' });
+    renderPage();
+    await typeAndSend();
+    await screen.findByTestId('phone-confirm-sheet');
+    fireEvent.click(screen.getByRole('button', { name: 'Quét đơn khác' }));
+    await waitFor(() => expect(mocks.scanCode).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('phone-confirm-sheet')).toBeNull());
+    expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('');
+  });
+
+  it('hướng dẫn: lịch sử rỗng mở đủ 3 bước; đã có đơn thì gập một dòng, chạm để mở', async () => {
+    const first = renderPage();
+    expect(await screen.findByTestId('scan-guide')).toBeTruthy();
+    expect(screen.queryByTestId('scan-guide-toggle')).toBeNull();
+    first.unmount();
+    mocks.getMyExternalClaims.mockResolvedValue({ ...EMPTY_LIST, meta: { page: 1, limit: 10, total: 2 } });
+    renderPage();
+    const toggle = await screen.findByTestId('scan-guide-toggle');
+    expect(toggle).toHaveTextContent('Hướng dẫn quét mã');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('scan-guide')).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('scan-guide').id).toBe(toggle.getAttribute('aria-controls'));
+  });
+});
+

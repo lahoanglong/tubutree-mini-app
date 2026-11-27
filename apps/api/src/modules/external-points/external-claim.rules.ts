@@ -12,6 +12,22 @@ export const PHONE_MISMATCH_REVIEW_REASON = 'SĐT trên đơn sàn không khớp
 export const WEB_UNVERIFIED_PHONE_REVIEW_REASON = 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu';
 const OWN_REPORTABLE = ['PENDING', 'REVIEW', 'HELD_NO_MEMBER', 'CREDITED'];
 
+/** W46: số lần nhập sai 4 số cuối SĐT nhận hàng cho một đơn trong 24 giờ; tới mức này thì khoá xác nhận đơn đó 24 giờ. */
+export const PHONE_CONFIRM_MAX_WRONG = 3;
+/** Ghi ở sổ claim (và lý do REVIEW khi SĐT chưa xác minh) khi claim được tạo nhờ khách nhập đúng 4 số cuối SĐT người nhận. */
+export const PHONE_CONFIRMED_NOTE = 'Xác nhận qua 4 số cuối SĐT nhận hàng';
+/** Kết quả lượt gửi mã (`external_claim_attempts.result`) của luồng xác nhận 4 số cuối. */
+export const PHONE_CONFIRM_RESULTS = {
+  /** Lượt đầu, chưa nhập 4 số: tính vào khoá 24h như PHONE_MISMATCH cũ, đổi thành CONFIRMED khi khách xác nhận đúng sau đó. */
+  required: 'REJECTED_PHONE_CONFIRM_REQUIRED',
+  /** Nhập sai: tính vào khoá 24h của khách và vào khoá 3 lần của đơn. */
+  wrong: 'REJECTED_PHONE_CONFIRM_WRONG',
+  /** Lượt bị chặn vì đơn đang khoá xác nhận: chỉ tính vào trần lần thử/ngày. */
+  locked: 'REJECTED_PHONE_CONFIRM_LOCKED',
+  /** Lượt REQUIRED cũ của đơn đã được chính khách đó xác nhận đúng: không còn tính vào khoá. */
+  confirmed: 'PHONE_CONFIRMED',
+} as const;
+
 export interface ClaimOrderFacts {
   source: 'MARKETPLACE' | 'CHAT' | 'UNKNOWN';
   status: 'OPEN' | 'DELIVERED' | 'RETURNING' | 'RETURNED' | 'CANCELLED' | 'PARTIAL_RETURN' | 'DELETED';
@@ -47,26 +63,36 @@ export interface ClaimFacts {
   claimsToday: number;
   /** Tổng điểm các claim còn hiệu lực tạo trong tháng VN này của khách. */
   monthPoints: number;
+  /**
+   * W46: chỉ có ở lượt khách tự gửi mã. Vắng (cron ghép lại, nhân viên gắn tay) thì SĐT lệch vẫn là PHONE_MISMATCH như W42.
+   * `last4` null = khách chưa nhập; `matches` = 4 số khớp SĐT người nhận trên đơn; `wrongTimes` = các lần nhập sai cho đơn này (48 giờ gần nhất).
+   */
+  phoneConfirm?: { last4: string | null; matches: boolean; wrongTimes: readonly Date[] };
 }
 
 export type ClaimDecision =
   /** `record`: ghi lần thử dù mã thuộc nhóm thường không ghi (UNRECORDED), để từ chối nằm sau bước tra đơn vẫn tính vào trần lần thử/ngày. */
-  | { kind: 'REJECT'; code: ExternalClaimRejectCode; record?: true }
+  /**
+   * `attemptResult`: kết quả ghi vào lần thử khi khác `REJECTED_<code>` (lần sai thứ 3 trả PHONE_CONFIRM_LOCKED nhưng vẫn là một lần sai).
+   * `remainingAttempts`: lần nhập sai 4 số cuối còn được (chỉ PHONE_CONFIRM_*).
+   */
+  | { kind: 'REJECT'; code: ExternalClaimRejectCode; record?: true; attemptResult?: string; remainingAttempts?: number }
   | { kind: 'UNMATCHED' }
   | { kind: 'UNKNOWN_SOURCE' }
   | { kind: 'OWN_CLAIM'; claimId: string; state: string }
-  | { kind: 'CLAIM'; state: 'PENDING' | 'REVIEW'; reviewReason: string | null; points: number };
+  /** `phoneConfirmed`: SĐT tài khoản khác SĐT trên đơn, khách đã nhập đúng 4 số cuối SĐT người nhận (W46). */
+  | { kind: 'CLAIM'; state: 'PENDING' | 'REVIEW'; reviewReason: string | null; points: number; phoneConfirmed?: true };
 
 /**
  * Khoá 24h sau 5 lần gửi mã không tìm thấy. Khoá tính từ lần thứ 5 (lần mới nhất trong chuỗi): lúc đó ba lần gần nhất cộng với lần
  * này đã đủ 5 trong cửa sổ 24h. Khi đang khoá thì không ghi thêm lần thử, nên lần mới nhất đứng yên và khoá tự hết sau đúng 24h.
  */
-export function lockedUntil(notFoundTimes: readonly Date[], now: Date): Date | null {
-  if (notFoundTimes.length < NOT_FOUND_LOCK_THRESHOLD) return null;
+export function lockedUntil(notFoundTimes: readonly Date[], now: Date, threshold: number = NOT_FOUND_LOCK_THRESHOLD): Date | null {
+  if (notFoundTimes.length < threshold) return null;
   const sorted = [...notFoundTimes].sort((a, b) => b.getTime() - a.getTime());
   const newest = sorted[0]!.getTime();
   const inWindow = sorted.filter((t) => newest - t.getTime() < DAY_MS).length;
-  if (inWindow < NOT_FOUND_LOCK_THRESHOLD) return null;
+  if (inWindow < threshold) return null;
   const until = new Date(newest + DAY_MS);
   return until.getTime() > now.getTime() ? until : null;
 }
@@ -86,9 +112,26 @@ export function lockedUntil(notFoundTimes: readonly Date[], now: Date): Date | n
  * SĐT tự gõ trên Web do chính khách chọn, nên MATCH với đơn che còn 2 số cuối chỉ là trùng 1/100: nói rõ đã khớp bao nhiêu số để CSKH không
  * coi đó là bằng chứng chủ đơn.
  */
-function unverifiedMatchNote(order: ClaimOrderFacts): string | null {
+function unverifiedMatchNote(order: ClaimOrderFacts, phoneConfirmed: boolean): string | null {
+  if (phoneConfirmed) return PHONE_CONFIRMED_NOTE;
   if (order.phoneMatch !== 'MATCH' || order.phoneVisibleDigits === undefined) return null;
   return order.phoneVisibleDigits > 10 ? 'SĐT tự nhập khớp số đầy đủ trên đơn sàn' : `SĐT tự nhập chỉ khớp ${order.phoneVisibleDigits}/10 chữ số nhìn thấy trên đơn sàn`;
+}
+
+/**
+ * W46 (PO A1): SĐT tài khoản lệch SĐT trên đơn thì khách xác nhận bằng 4 số cuối SĐT người nhận thay vì bị chặn hẳn. Trả quyết định từ chối,
+ * hoặc null khi khách đã xác nhận đúng (đi tiếp các luật sau như đơn khớp SĐT). Đơn đang khoá (đủ 3 lần sai trong 24 giờ) thì chặn trước
+ * mọi thứ, kể cả lần nhập đúng.
+ */
+function phoneConfirmStep(pc: NonNullable<ClaimFacts['phoneConfirm']>, now: Date): ClaimDecision | null {
+  const locked = { kind: 'REJECT' as const, code: 'PHONE_CONFIRM_LOCKED' as const, remainingAttempts: 0 };
+  if (lockedUntil(pc.wrongTimes, now, PHONE_CONFIRM_MAX_WRONG)) return { ...locked, attemptResult: PHONE_CONFIRM_RESULTS.locked };
+  if (pc.last4 === null) return { kind: 'REJECT', code: 'PHONE_CONFIRM_REQUIRED', attemptResult: PHONE_CONFIRM_RESULTS.required };
+  if (pc.matches) return null;
+  const used = pc.wrongTimes.filter((t) => now.getTime() - t.getTime() < DAY_MS).length + 1;
+  const remainingAttempts = Math.max(0, PHONE_CONFIRM_MAX_WRONG - used);
+  if (remainingAttempts === 0) return { ...locked, attemptResult: PHONE_CONFIRM_RESULTS.wrong };
+  return { kind: 'REJECT', code: 'PHONE_CONFIRM_WRONG', attemptResult: PHONE_CONFIRM_RESULTS.wrong, remainingAttempts };
 }
 
 export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
@@ -102,8 +145,15 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   if (!order) return { kind: 'UNMATCHED' };
   if (order.source === 'CHAT') return reject('CHAT_ORDER');
   if (order.source === 'UNKNOWN') return { kind: 'UNKNOWN_SOURCE' };
-  if (order.phoneMatch === 'MISMATCH' && !f.claim?.own) return reject('PHONE_MISMATCH');
-  if (!f.phoneVerified && order.phoneMatch !== 'MATCH' && !f.deliveredAppOrder && !f.claim?.own) return { kind: 'REJECT', code: 'NOT_ELIGIBLE_USER', record: true };
+  let phoneConfirmed = false;
+  if (order.phoneMatch === 'MISMATCH' && !f.claim?.own) {
+    if (!f.phoneConfirm) return reject('PHONE_MISMATCH');
+    const step = phoneConfirmStep(f.phoneConfirm, f.now);
+    if (step) return step;
+    phoneConfirmed = true;
+  }
+  const phoneOk = order.phoneMatch === 'MATCH' || phoneConfirmed;
+  if (!f.phoneVerified && !phoneOk && !f.deliveredAppOrder && !f.claim?.own) return { kind: 'REJECT', code: 'NOT_ELIGIBLE_USER', record: true };
 
   if (f.cfg.externalSince && order.insertedAt.getTime() < f.cfg.externalSince.getTime()) return reject('BEFORE_SINCE');
   if (f.now.getTime() - order.insertedAt.getTime() > f.cfg.maxAgeDays * DAY_MS) return reject('TOO_OLD');
@@ -129,9 +179,10 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   else if (order.phoneMatch === 'NO_DATA') reviewReason = NO_PHONE_REVIEW_REASON;
   // Chỉ claim của chính khách (mã được mở lại) qua được tới đây khi SĐT lệch: người duyệt phải thấy lý do lệch, vì duyệt xong thì lúc
   // cộng không kiểm lại SĐT.
-  if (order.phoneMatch === 'MISMATCH') reviewReason = [PHONE_MISMATCH_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
-  if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, unverifiedMatchNote(order), reviewReason].filter(Boolean).join('; ');
-  return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0 };
+  // Khách đã xác nhận 4 số cuối SĐT người nhận (W46) thì SĐT lệch không còn là lý do chờ duyệt: claim vào PENDING như đơn khớp SĐT.
+  if (order.phoneMatch === 'MISMATCH' && !phoneConfirmed) reviewReason = [PHONE_MISMATCH_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
+  if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, unverifiedMatchNote(order, phoneConfirmed), reviewReason].filter(Boolean).join('; ');
+  return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0, ...(phoneConfirmed ? { phoneConfirmed: true as const } : {}) };
 }
 
 /**

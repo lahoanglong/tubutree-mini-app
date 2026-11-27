@@ -13,6 +13,8 @@ export const MARKETPLACE_SCAN_COPY = {
   step2Pct: 'Tích {pct} giá trị đơn thành Điểm Xanh',
   step2Plain: 'Tích Điểm Xanh theo giá trị đơn',
   step3: 'Dùng giảm thẳng khi mua trên Mini App, Web',
+  /** Dòng gập hướng dẫn (W46): khách đã có đơn sàn trong lịch sử thì 3 bước thu về một dòng, chạm để mở. */
+  guideToggle: 'Hướng dẫn quét mã',
   /**
    * Nút chính sau khi quét xong, khách đang có điểm dùng được. "đang có" tách rõ khỏi "{n} Điểm Xanh đang chờ cộng" của thẻ kết quả ngay trên
    * (W44, PO duyệt U2): số trên nút là điểm khách dùng được NGAY, không phải điểm của đơn vừa quét.
@@ -35,6 +37,15 @@ export function marketplaceScanSteps(marketplaceEarnPct: number | null | undefin
     ? MARKETPLACE_SCAN_COPY.step2Pct.replace('{pct}', percentLabel(marketplaceEarnPct))
     : MARKETPLACE_SCAN_COPY.step2Plain;
   return [MARKETPLACE_SCAN_COPY.step1, step2, MARKETPLACE_SCAN_COPY.step3];
+}
+
+/**
+ * Hướng dẫn 3 bước gập thành một dòng (W46) khi khách đã từng gửi mã: lịch sử có đơn (`meta.total`) hay có mã đang tìm (`searching`). Lịch sử
+ * chưa về (`undefined`) cũng gập, để khung quét không bị đẩy xuống khi danh sách về; lịch sử rỗng mới mở đủ 3 bước cho khách mới.
+ */
+export function scanGuideCollapsed(history: { meta: { total: number }; searching: readonly unknown[] } | undefined): boolean {
+  if (!history) return true;
+  return history.meta.total > 0 || history.searching.length > 0;
 }
 
 /**

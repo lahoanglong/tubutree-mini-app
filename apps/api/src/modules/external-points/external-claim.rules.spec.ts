@@ -2,6 +2,8 @@ import {
   evaluateClaimRules,
   lockedUntil,
   NO_PHONE_REVIEW_REASON,
+  PHONE_CONFIRM_RESULTS,
+  PHONE_CONFIRMED_NOTE,
   PHONE_MISMATCH_REVIEW_REASON,
   settlePoints,
   WEB_UNVERIFIED_PHONE_REVIEW_REASON,
@@ -211,6 +213,91 @@ describe('evaluateClaimRules: SĐT liên hệ tự gõ trên Web, chưa xác min
     expect(evaluateClaimRules(web({ order: { ...order('NO_DATA'), phoneVisibleDigits: 0 }, deliveredAppOrder: true }))).toMatchObject({
       reviewReason: `${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; ${NO_PHONE_REVIEW_REASON}`,
     });
+  });
+});
+
+describe('evaluateClaimRules: xác nhận 4 số cuối SĐT người nhận khi SĐT lệch (W46)', () => {
+  const hour = (n: number) => new Date(NOW.getTime() - n * 36e5);
+  const mismatch = (pc: ClaimFacts['phoneConfirm'], over: Partial<ClaimFacts> = {}) =>
+    base({ order: { ...base().order!, phoneMatch: 'MISMATCH' }, phoneConfirm: pc, ...over });
+
+  it('SĐT khớp: PENDING ngay, không hỏi 4 số (kể cả khi lượt này là khách tự gửi)', () => {
+    expect(evaluateClaimRules(base({ phoneConfirm: { last4: null, matches: false, wrongTimes: [] } }))).toEqual({ kind: 'CLAIM', state: 'PENDING', reviewReason: null, points: 2_000 });
+  });
+  it('SĐT lệch, chưa nhập 4 số: PHONE_CONFIRM_REQUIRED, ghi lần thử REQUIRED (tính vào khoá 24h)', () => {
+    expect(evaluateClaimRules(mismatch({ last4: null, matches: false, wrongTimes: [] }))).toEqual({
+      kind: 'REJECT',
+      code: 'PHONE_CONFIRM_REQUIRED',
+      attemptResult: PHONE_CONFIRM_RESULTS.required,
+    });
+  });
+  it('vẫn hỏi 4 số trước khi lộ trạng thái đơn (đã huỷ, quá hạn, đã tích)', () => {
+    const pc = { last4: null, matches: false, wrongTimes: [] };
+    for (const over of [{ order: { ...base().order!, phoneMatch: 'MISMATCH' as const, status: 'CANCELLED' as const } }, { codeTaken: true }]) {
+      expect(evaluateClaimRules(mismatch(pc, over))).toMatchObject({ kind: 'REJECT', code: 'PHONE_CONFIRM_REQUIRED' });
+    }
+  });
+  it('nhập đúng: PENDING, không vào REVIEW vì SĐT lệch, đánh dấu phoneConfirmed', () => {
+    expect(evaluateClaimRules(mismatch({ last4: '8326', matches: true, wrongTimes: [] }))).toEqual({
+      kind: 'CLAIM',
+      state: 'PENDING',
+      reviewReason: null,
+      points: 2_000,
+      phoneConfirmed: true,
+    });
+  });
+  it('nhập đúng nhưng luật khác vẫn chạy: giá trị vượt ngưỡng → REVIEW; đơn đã huỷ → CLOSED', () => {
+    const ok = { last4: '4321', matches: true, wrongTimes: [] };
+    expect(evaluateClaimRules(mismatch(ok, { order: { ...base().order!, phoneMatch: 'MISMATCH', goodsValue: 3_000_000 } }))).toMatchObject({
+      kind: 'CLAIM',
+      state: 'REVIEW',
+      reviewReason: 'Giá trị đơn vượt ngưỡng tự duyệt',
+      phoneConfirmed: true,
+    });
+    expect(evaluateClaimRules(mismatch(ok, { order: { ...base().order!, phoneMatch: 'MISMATCH', status: 'CANCELLED' } }))).toEqual({ kind: 'REJECT', code: 'CLOSED' });
+  });
+  it('nhập sai lần 1 → còn 2 lượt; lần 2 → còn 1; lần 3 → PHONE_CONFIRM_LOCKED (vẫn ghi là một lần sai)', () => {
+    expect(evaluateClaimRules(mismatch({ last4: '9921', matches: false, wrongTimes: [] }))).toEqual({
+      kind: 'REJECT',
+      code: 'PHONE_CONFIRM_WRONG',
+      attemptResult: PHONE_CONFIRM_RESULTS.wrong,
+      remainingAttempts: 2,
+    });
+    expect(evaluateClaimRules(mismatch({ last4: '9921', matches: false, wrongTimes: [hour(1)] }))).toMatchObject({ code: 'PHONE_CONFIRM_WRONG', remainingAttempts: 1 });
+    expect(evaluateClaimRules(mismatch({ last4: '9921', matches: false, wrongTimes: [hour(2), hour(1)] }))).toEqual({
+      kind: 'REJECT',
+      code: 'PHONE_CONFIRM_LOCKED',
+      attemptResult: PHONE_CONFIRM_RESULTS.wrong,
+      remainingAttempts: 0,
+    });
+  });
+  it('đủ 3 lần sai trong 24 giờ: khoá cả lần nhập đúng; hết 24 giờ kể từ lần sai thứ 3 thì mở lại', () => {
+    const three = [hour(3), hour(2), hour(1)];
+    expect(evaluateClaimRules(mismatch({ last4: '4321', matches: true, wrongTimes: three }))).toEqual({
+      kind: 'REJECT',
+      code: 'PHONE_CONFIRM_LOCKED',
+      attemptResult: PHONE_CONFIRM_RESULTS.locked,
+      remainingAttempts: 0,
+    });
+    expect(evaluateClaimRules(mismatch({ last4: null, matches: false, wrongTimes: three }))).toMatchObject({ code: 'PHONE_CONFIRM_LOCKED' });
+    const old = [hour(27), hour(26), hour(25)];
+    expect(evaluateClaimRules(mismatch({ last4: '4321', matches: true, wrongTimes: old }))).toMatchObject({ kind: 'CLAIM', state: 'PENDING' });
+    expect(evaluateClaimRules(mismatch({ last4: '9921', matches: false, wrongTimes: old }))).toMatchObject({ code: 'PHONE_CONFIRM_WRONG', remainingAttempts: 2 });
+  });
+  it('2 lần sai cách nhau hơn 24 giờ không cộng dồn thành khoá', () => {
+    expect(evaluateClaimRules(mismatch({ last4: '9921', matches: false, wrongTimes: [hour(30), hour(1)] }))).toMatchObject({ code: 'PHONE_CONFIRM_WRONG', remainingAttempts: 1 });
+  });
+  it('lượt không có khách (cron, nhân viên) vẫn PHONE_MISMATCH như W42', () => {
+    expect(evaluateClaimRules(mismatch(undefined))).toEqual({ kind: 'REJECT', code: 'PHONE_MISMATCH' });
+  });
+  it('claim của chính khách (gửi lại mã đã có) không bị hỏi 4 số', () => {
+    const own = { claim: { id: 'c1', reopenable: false, own: true, state: 'PENDING' } };
+    expect(evaluateClaimRules(mismatch({ last4: null, matches: false, wrongTimes: [] }, own))).toEqual({ kind: 'OWN_CLAIM', claimId: 'c1', state: 'PENDING' });
+  });
+  it('SĐT tự gõ trên Web chưa xác minh + nhập đúng: đi tiếp (không NOT_ELIGIBLE_USER) nhưng vẫn REVIEW, lý do ghi đã xác nhận 4 số', () => {
+    const d = evaluateClaimRules(mismatch({ last4: '4321', matches: true, wrongTimes: [] }, { phoneVerified: false }));
+    expect(d).toMatchObject({ kind: 'CLAIM', state: 'REVIEW', phoneConfirmed: true });
+    expect(d.kind === 'CLAIM' && d.reviewReason).toBe(`${WEB_UNVERIFIED_PHONE_REVIEW_REASON}; ${PHONE_CONFIRMED_NOTE}`);
   });
 });
 

@@ -183,10 +183,13 @@ export class ApiError extends Error {
   status: number;
   /** Mã lỗi nghiệp vụ ổn định trong body (vd TOTAL_CHANGED, ADDRESS_OUTDATED); null nếu API không gửi. */
   code: string | null;
-  constructor(message: string, status: number, code: string | null = null) {
+  /** Thân lỗi đã đọc (JSON), cho lỗi mang thêm dữ liệu ngoài `code` (vd PHONE_CONFIRM_* của gửi mã đơn sàn); undefined khi không có. */
+  body: unknown;
+  constructor(message: string, status: number, code: string | null = null, body?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }
 
@@ -302,7 +305,7 @@ export async function apiFetch<T>(
 
   if (!reply.ok) {
     const { message, code } = parseError(reply.body);
-    throw new ApiError(message, reply.status, code);
+    throw new ApiError(message, reply.status, code, reply.body);
   }
   if (reply.status === 204) return null as T;
   return reply.body as T;

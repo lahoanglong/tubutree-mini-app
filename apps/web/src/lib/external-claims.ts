@@ -48,6 +48,8 @@ export const RECIPIENT_NAME_TONE = { MATCH: 'success', PARTIAL: 'info', MISMATCH
 export const ATTEMPT_RESULT_LABEL: Record<string, string> = {
   REJECTED_PHONE_MISMATCH: 'bị từ chối: SĐT không khớp đơn',
   REJECTED_NOT_ELIGIBLE_USER: 'bị từ chối: SĐT tự nhập trên web, đơn không đủ căn cứ',
+  REJECTED_PHONE_CONFIRM_REQUIRED: 'SĐT lệch, chưa xác nhận 4 số cuối SĐT người nhận',
+  REJECTED_PHONE_CONFIRM_WRONG: 'nhập sai 4 số cuối SĐT người nhận',
 };
 
 export interface ClaimActions {
@@ -166,6 +168,9 @@ const ADMIN_ERROR_TEXT: Record<ExternalClaimAdminErrorCode | ExternalClaimReject
   MONTHLY_CAP: 'Khách đã đạt trần điểm đơn sàn trong tháng này.',
   ZERO_POINTS: 'Giá trị đơn quá nhỏ, quy ra 0 điểm.',
   PHONE_MISMATCH: 'SĐT trên đơn sàn không khớp SĐT Zalo của khách.',
+  PHONE_CONFIRM_REQUIRED: 'SĐT trên đơn sàn khác SĐT của khách: khách cần tự xác nhận 4 số cuối SĐT người nhận.',
+  PHONE_CONFIRM_WRONG: 'Khách nhập sai 4 số cuối SĐT người nhận.',
+  PHONE_CONFIRM_LOCKED: 'Khách nhập sai 4 số cuối SĐT người nhận 3 lần, đơn này khoá 24 giờ với khách đó.',
 };
 
 /** Câu tiếng Việt cho lỗi của API admin (viết cho nhân viên, không phải câu của khách): theo `code` nếu biết, không thì nguyên văn message của API. */

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { MyExternalClaimsResponse, SubmitExternalClaimResponse } from '@tubutree/shared-types';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { PaginationQuery } from '../../common/pagination';
@@ -12,6 +12,8 @@ export class SubmitExternalClaimDto {
   @Trim() @IsString() @MinLength(1) @MaxLength(100) code!: string;
   /** Mã do khách quét nhãn hay gõ tay; chỉ để đo phễu. */
   @IsOptional() @IsIn(['scan', 'typed']) via?: 'scan' | 'typed';
+  /** W46: 4 số cuối SĐT người nhận trên đơn sàn, gửi sau khi API trả PHONE_CONFIRM_REQUIRED. */
+  @IsOptional() @IsString() @Matches(/^\d{4}$/, { message: 'Bạn nhập đúng 4 chữ số cuối của số điện thoại người nhận.' }) recipientPhoneLast4?: string;
 }
 
 export class MyClaimsQuery extends PaginationQuery {
@@ -27,7 +29,7 @@ export class ExternalClaimsController {
   @Post('claims')
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   submit(@CurrentUser('sub') userId: string, @Body() dto: SubmitExternalClaimDto): Promise<SubmitExternalClaimResponse> {
-    return this.claims.submit(userId, dto.code, dto.via);
+    return this.claims.submit(userId, dto.code, dto.via, dto.recipientPhoneLast4);
   }
 
   @Get('claims')
