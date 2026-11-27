@@ -169,7 +169,7 @@ describe('mã đơn sàn lấy từ id (W44: dò PROD 27/11, invoice_info_list v
   });
 
   it('id dạng số vượt MAX_SAFE_INTEGER đã mất chữ số khi parse JSON: bỏ; số an toàn thì nhận', () => {
-    expect(extractTrackingCodes({ marketplace_id: -9, id: 576000000000000017 })).toEqual([]);
+    expect(extractTrackingCodes({ marketplace_id: -9, id: Number('576000000000000017') })).toEqual([]);
     expect(extractTrackingCodes({ marketplace_id: -4, id: 350000000000017 })).toEqual(['350000000000017']);
   });
 
@@ -294,7 +294,11 @@ describe('buyerPhonePattern (W42: giữ mẫu che để đối chiếu SĐT khá
       const lazada = fixture('synthetic-lazada-masked.json');
       expect(buyerPhonePattern(lazada)).toEqual({ kind: 'FULL', phone: '0987650017' });
       expect(buyerPhone(lazada)).toBeNull();
-      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['+84******26'] } })).toMatchObject({ kind: 'MASK', tail: '26' });
+    });
+    it('hồ sơ chỉ có số đã che: NONE (lệch mẫu che sẽ thành từ chối, mà số hồ sơ có thể của người nhà)', () => {
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['+84******26'] } })).toEqual({ kind: 'NONE' });
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['+8498****12', '+8498****12'] } })).toEqual({ kind: 'NONE' });
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['0911111111', '091*****11'] } })).toEqual({ kind: 'NONE' });
     });
     it('đơn có số (đầy đủ hay che) thì không xét hồ sơ', () => {
       const profile = { customer: { phone_numbers: ['0911111111'] } };

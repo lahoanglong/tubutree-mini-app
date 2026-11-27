@@ -212,7 +212,9 @@ export function buyerPhone(data: Data): string | null {
  *
  * Hai nguồn đó không có chữ số nào thì xét nguồn thứ 3 là hồ sơ khách Pancake (`customer.phone_numbers`). Dò PROD 27/11 (W44): Lazada
  * che hẳn SĐT (`***`) ở 9/50 đơn đã nhận, 3/9 đơn đó có số trong hồ sơ người mua. Chỉ nhận khi hồ sơ có đúng một số đọc được, để không
- * chọn bừa một trong nhiều số rồi từ chối nhầm khách.
+ * chọn bừa một trong nhiều số rồi từ chối nhầm khách. Số đó phải đầy đủ: số hồ sơ có thể của người nhà, nên lệch chỉ được coi là thiếu dữ liệu
+ * (orderPhoneMatch hạ MISMATCH xuống NO_DATA khi phoneMask là số đầy đủ). Mẫu che từ hồ sơ lưu vào phoneMask sẽ không phân biệt được với mẫu
+ * che của chính đơn, và lệch sẽ thành từ chối.
  */
 export function buyerPhonePattern(data: Data): OrderPhonePattern {
   let best: OrderPhonePattern = { kind: 'NONE' };
@@ -229,7 +231,7 @@ function customerProfilePhone(data: Data): OrderPhonePattern | null {
     .map((c) => parseOrderPhoneForMatch(c))
     .filter((p) => p.kind !== 'NONE');
   const distinct = new Set(found.map((p) => (p.kind === 'FULL' ? p.phone : p.kind === 'MASK' ? p.mask : '')));
-  return distinct.size === 1 ? found[0]! : null;
+  return distinct.size === 1 && found[0]!.kind === 'FULL' ? found[0]! : null;
 }
 
 export interface PancakeCreatorRef {
