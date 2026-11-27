@@ -179,7 +179,11 @@ export function planCustomerEdit(
       changed.push('SĐT');
       phoneChanged = true;
     }
-    if (next.wardCode !== old.wardCode || next.ward !== old.ward) changed.push('phường/xã');
+    // Đơn có mã phường thì mã quyết phường đổi hay không: người gọi đã thay tên bằng tên trong danh mục, nên đơn lưu tên viết khác ("P. Bến Nghé")
+    // cùng mã không được tính là sửa (khách mất một lượt, Pancake nhận một lần PUT). Mã không đổi thì giữ tên đang lưu. Đơn cũ không có mã: so cả hai.
+    const wardChanged = old.wardCode ? next.wardCode !== old.wardCode : next.wardCode !== old.wardCode || next.ward !== old.ward;
+    if (old.wardCode && !wardChanged) next.ward = old.ward;
+    if (wardChanged) changed.push('phường/xã');
     if (next.street !== old.street) changed.push('số nhà');
     // Chỉ đổi cách viết SĐT (+84 ↔ 0): không tính là sửa, giữ ảnh chụp cũ.
     if (changed.length === 0) next = { ...old };

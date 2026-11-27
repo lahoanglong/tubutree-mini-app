@@ -7,7 +7,7 @@ import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
 import type { BankDetails } from './refund-destination';
 import { formatVnd, maskedBank } from './refund-destination';
-import { ATTENTION_UNDERPAID } from '../integrations/pancake/pancake-attention';
+import { ATTENTION_UNDERPAID, clearPancakeAttention, overwriteAttentionKeepingMoneyCheck } from '../integrations/pancake/pancake-attention';
 import { beforeHandover, switchedFromTransfer } from './cod-switch';
 
 /** Phần của NotificationsService cần ở đây (khai báo cấu trúc: hàm tự do không kéo DI/vòng module). */
@@ -385,10 +385,7 @@ export async function recordCumulativeLatePayment(
     return 0;
   }
   // Số Pancake báo đã nằm trọn trong khoản hoàn: cảnh báo "khách chuyển thiếu" của đơn đã huỷ không còn việc gì.
-  await ctx.prisma.order.updateMany({
-    where: { id: order.id, pancakeAttention: { startsWith: ATTENTION_UNDERPAID } },
-    data: { pancakeAttention: null, pancakeAttentionAt: null },
-  });
+  await clearPancakeAttention(ctx.prisma, order.id, ATTENTION_UNDERPAID);
   if (outcome > 0) await announceLatePayment(ctx, order, outcome, input.source, opts.notifyCustomer ?? true);
   return outcome;
 }
@@ -615,11 +612,7 @@ export async function flagRefundAttention(
   reason: string,
   subject = `tiền về muộn đơn ${order.code}`,
 ): Promise<void> {
-  const r = await ctx.prisma.order.updateMany({
-    where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
-    data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-  });
-  if (r.count === 0) return;
+  if (!(await overwriteAttentionKeepingMoneyCheck(ctx.prisma, order.id, reason))) return;
   ctx.logger.warn(`Đơn ${order.code}: ${reason}`);
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },

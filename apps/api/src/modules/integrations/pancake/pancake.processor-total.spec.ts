@@ -1,5 +1,11 @@
 import { PancakeProcessor } from './pancake.processor';
-import { ATTENTION_COD_RETURN_UNVERIFIED, ATTENTION_PARTIAL_RETURN_HELD_REASONS, ATTENTION_TOTAL_MISMATCH, ATTENTION_UNDERPAID } from './pancake-attention';
+import {
+  ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_CUSTOMER_EDIT_MONEY_CHECK,
+  ATTENTION_PARTIAL_RETURN_HELD_REASONS,
+  ATTENTION_TOTAL_MISMATCH,
+  ATTENTION_UNDERPAID,
+} from './pancake-attention';
 import { PANCAKE_ALERT_TEMPLATE } from '../gomdon/gomdon-alert.service';
 
 /** Payload "Đơn hàng" Pancake sau khi nhân viên THÊM một món 50.000 vào đơn TUBU20260001 (Tubu đẩy 269.000). */
@@ -39,7 +45,7 @@ function setup(o: Record<string, unknown>, opts: Opts = {}) {
     ? jest.fn().mockRejectedValue(new Error('db down'))
     : jest.fn().mockResolvedValue(lines.map((_, i) => ({ variationId: `v${i}` })));
   const prisma = {
-    order: { findFirst: jest.fn().mockResolvedValue(o), updateMany, update },
+    order: { findFirst: jest.fn().mockResolvedValue(o), findUnique: jest.fn().mockResolvedValue({ pancakeAttention: o['pancakeAttention'] ?? null }), updateMany, update },
     orderItem: { findMany: orderItemFindMany },
     variation: {
       findMany: jest.fn().mockResolvedValue(lines.map((l, i) => ({ id: `v${i}`, pancakeId: l.pancakeId, product: { fulfilment: l.fulfilment } }))),
@@ -107,8 +113,31 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
     const { proc, updateMany } = setup(order({ pancakeAttention: `${ATTENTION_TOTAL_MISMATCH}: cũ` }));
     await proc.onOrderEvent(UNTOUCHED);
     expect(cleared(updateMany)).toEqual([
-      expect.objectContaining({ where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] } }),
+      expect.objectContaining({ where: { id: 'o1', pancakeAttention: `${ATTENTION_TOTAL_MISMATCH}: cũ` } }),
     ]);
+  });
+
+  describe('W44: ô có phần kiểm tiền sau khi khách sửa địa chỉ', () => {
+    const MONEY = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#7001): cod 230.000đ→0đ.`;
+
+    it('ô chỉ có phần kiểm tiền mà tổng lệch → vẫn gắn lý do lệch tổng', async () => {
+      const { proc, updateMany } = setup(order({ pancakeAttention: MONEY }));
+      await proc.onOrderEvent(EDITED);
+      expect(flagged(updateMany)[0]).toEqual(expect.stringContaining(ATTENTION_TOTAL_MISMATCH));
+    });
+
+    it('"lệch tổng | kiểm tiền" mà nhân viên đã sửa đúng số → gỡ lệch tổng, giữ phần kiểm tiền', async () => {
+      const cell = `${ATTENTION_TOTAL_MISMATCH}: cũ | ${MONEY}`;
+      const { proc, updateMany } = setup(order({ pancakeAttention: cell }));
+      await proc.onOrderEvent(UNTOUCHED);
+      expect(calls(updateMany)).toEqual([{ where: { id: 'o1', pancakeAttention: cell }, data: { pancakeAttention: MONEY } }]);
+    });
+
+    it('"lý do khác | kiểm tiền" mà tổng lệch → không đè lý do khác', async () => {
+      const { proc, updateMany } = setup(order({ pancakeAttention: `${ATTENTION_UNDERPAID}: 1/2 | ${MONEY}` }));
+      await proc.onOrderEvent(EDITED);
+      expect(updateMany).not.toHaveBeenCalled();
+    });
   });
 
   it('khớp mà đơn đang chờ lý do KHÁC (khách chuyển thiếu): không gỡ lý do đó', async () => {
@@ -134,6 +163,7 @@ describe('PancakeProcessor — so tổng tiền Pancake với order.total (D1-03
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { not: write.data.pancakeAttention } }] },
         { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_COD_RETURN_UNVERIFIED } } }] },
         { OR: [{ pancakeAttention: null }, { NOT: { OR: ATTENTION_PARTIAL_RETURN_HELD_REASONS.map((held) => ({ pancakeAttention: { contains: held } })) } }] },
+        { OR: [{ pancakeAttention: null }, { NOT: { pancakeAttention: { contains: ATTENTION_CUSTOMER_EDIT_MONEY_CHECK } } }] },
         { OR: [{ pancakeAttention: null }, { pancakeAttention: { startsWith: ATTENTION_TOTAL_MISMATCH } }] },
       ],
     });

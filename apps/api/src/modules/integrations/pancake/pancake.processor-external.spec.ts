@@ -68,6 +68,39 @@ describe('PancakeProcessor — nạp đơn ngoài app', () => {
     expect((row['deliveredAt'] as Date).toISOString()).toBe('2026-10-13T08:30:00.000Z');
   });
 
+  it('đơn Lazada che hết SĐT (W44): mã đơn sàn từ id, số từ hồ sơ khách lưu ở phoneMask để đối chiếu, không ở phone', async () => {
+    const t = setup(fixture('synthetic-lazada-masked.json'));
+    await t.run();
+    const row = (t.externalOrder.createMany.mock.calls[0]![0] as { data: Record<string, unknown>[] }).data[0]!;
+    expect(row).toMatchObject({
+      pancakeOrderId: '350000000000017',
+      channel: 'lazada',
+      trackingCode: 'BESVN0000000017VNA',
+      trackingCodes: ['BESVN0000000017VNA', '350000000000017'],
+      marketplaceOrderSn: '350000000000017',
+      phone: null,
+      phoneMask: '0987650017',
+      phoneLast3: '017',
+    });
+    expect(JSON.stringify(row['lastPayload'])).not.toContain('0987650017');
+
+    const again = setup(fixture('synthetic-lazada-masked.json'), { createCount: 0 });
+    await again.run();
+    expect((again.externalOrder.updateMany.mock.calls[0]![0] as { data: Record<string, unknown> }).data).toMatchObject({
+      trackingCodes: ['BESVN0000000017VNA', '350000000000017'],
+      marketplaceOrderSn: '350000000000017',
+      phoneMask: '0987650017',
+      phoneLast3: '017',
+    });
+  });
+
+  it('W44: marketplace_id chưa có trong bản đồ (đơn không xếp MARKETPLACE) → id nội bộ không thành mã vận đơn hay mã đơn sàn', async () => {
+    const t = setup(fixture('synthetic-lazada-masked.json'), { config: { [ORDER_SOURCE_MAP_KEY]: { marketplaceIds: {}, chatSources: [] } } });
+    await t.run();
+    const row = (t.externalOrder.createMany.mock.calls[0]![0] as { data: Record<string, unknown>[] }).data[0]!;
+    expect(row).toMatchObject({ source: 'UNKNOWN', trackingCodes: ['BESVN0000000017VNA'], marketplaceOrderSn: null });
+  });
+
   it('payload bọc {event, data} cũng được nạp theo object đơn bên trong', async () => {
     const t = setup({ event: 'order.updated', data: fixture('synthetic-lazada.json') }, {}, 'order.updated');
     await t.run();

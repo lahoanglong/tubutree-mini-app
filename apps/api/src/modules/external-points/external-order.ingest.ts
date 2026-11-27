@@ -10,6 +10,7 @@ import {
   externalStatusOf,
   extractTrackingCodes,
   goodsValue,
+  marketplaceOrderIdCode,
   marketplaceOrderSn,
   pancakeTime,
   payloadForStorage,
@@ -51,17 +52,28 @@ export async function ingestExternalOrder(
   if (klass.kind === 'APP') return { result: 'NOT_EXTERNAL', kind: null };
 
   const { pancakeStatus, status } = externalStatusOf(data);
-  const codes = extractTrackingCodes(data);
+  // Mã lấy từ `id` chỉ là mã đơn sàn khi đơn được xếp MARKETPLACE; đơn loại khác (vd marketplace_id chưa có trong bản đồ, nguồn chat) không
+  // được tính `id` nội bộ là vận đơn (luật requireCarrier của đơn chat) hay mã đơn sàn.
+  const internalId = klass.kind === 'MARKETPLACE' ? null : marketplaceOrderIdCode(data);
+  const codes = extractTrackingCodes(data).filter((c) => c !== internalId);
   const phone = buyerPhone(data);
-  // Mẫu che (W42) chỉ lưu khi không có số đầy đủ; 3 số cuối cho admin lấy từ đuôi che khi đuôi đủ 3 số.
+  // Mẫu che (W42) chỉ lưu khi không có số đầy đủ; 3 số cuối cho admin lấy từ đuôi che khi đuôi đủ 3 số. FULL ở đây chỉ đến từ hồ sơ khách
+  // (buyerPhone đã null): lưu ở phoneMask để đối chiếu, không ở `phone`, vì `phone` là số của chính đơn mà đường ghép đơn chat dùng.
   const pattern = phone ? null : buyerPhonePattern(data);
-  const phoneMask = pattern?.kind === 'MASK' ? pattern.mask : null;
-  const phoneLast3 = phone ? phone.slice(-3) : pattern?.kind === 'MASK' && pattern.tail.length >= 3 ? pattern.tail.slice(-3) : null;
+  const phoneMask = pattern?.kind === 'MASK' ? pattern.mask : pattern?.kind === 'FULL' ? pattern.phone : null;
+  const phoneLast3 = phone
+    ? phone.slice(-3)
+    : pattern?.kind === 'FULL'
+      ? pattern.phone.slice(-3)
+      : pattern?.kind === 'MASK' && pattern.tail.length >= 3
+        ? pattern.tail.slice(-3)
+        : null;
   const payloadDeliveredAt = deliveredAt(data);
   const closed = CLOSED.includes(status);
   const updatedAt = pancakeTime(data['updated_at']);
   const insertedAt = pancakeTime(data['inserted_at']);
-  const sn = marketplaceOrderSn(data);
+  const orderSn = marketplaceOrderSn(data);
+  const sn = orderSn === internalId ? null : orderSn;
 
   const sourceKey = sourceKeyOf(data);
   const goods = goodsValue(data);

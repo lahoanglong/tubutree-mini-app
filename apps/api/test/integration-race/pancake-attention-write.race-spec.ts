@@ -1,7 +1,17 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { ATTENTION_COD_RETURN_UNVERIFIED, removeAttentionReason, writePancakeAttention } from '../../src/modules/integrations/pancake/pancake-attention';
+import {
+  ATTENTION_COD_RETURN_UNVERIFIED,
+  ATTENTION_CUSTOMER_EDIT_MONEY_CHECK,
+  ATTENTION_CUSTOMER_EDIT_PENDING,
+  ATTENTION_PAYMENT_PENDING,
+  clearPancakeAttention,
+  flagPancakeAttention,
+  overwriteAttentionKeepingMoneyCheck,
+  removeAttentionReason,
+  writePancakeAttention,
+} from '../../src/modules/integrations/pancake/pancake-attention';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
 import { createOrder, createUser, randCode, warmPool } from './helpers';
@@ -134,5 +144,34 @@ describe('writePancakeAttention (real Postgres)', () => {
     const cell = (await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention ?? '';
     expect(cell.split(' | ')[0]).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
     expect(cell.split(' | ').slice(1).sort()).toEqual(reasons);
+  });
+
+  it('W44 MINOR 2: 50 vòng ghi kiểm tiền / báo thanh toán / gỡ / đè song song: phần kiểm tiền còn sau mọi vòng', async () => {
+    const MONEY = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): cod 230.000đ→0đ. Sửa tay tiền theo đơn Tubu rồi giao.`;
+    const MONEY2 = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): ship 25.000đ→31.000đ. Sửa tay tiền theo đơn Tubu rồi giao.`;
+    const user = await createUser(prisma);
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'CONFIRMED',
+      pancakeOrderId: `pk-${randCode(8)}`,
+      pancakeAttention: MONEY,
+      pancakeAttentionAt: new Date(),
+    });
+    const target = { id: order.id, code: order.code };
+    for (let round = 0; round < 50; round++) {
+      await Promise.all([
+        flagPancakeAttention(prisma, alerts as never, target, `${ATTENTION_PAYMENT_PENDING} (vòng ${round})`),
+        flagPancakeAttention(prisma, alerts as never, target, round % 2 ? MONEY2 : `${ATTENTION_CUSTOMER_EDIT_PENDING} (#pk-1): vòng ${round}`),
+        clearPancakeAttention(prisma, order.id, [ATTENTION_PAYMENT_PENDING, ATTENTION_CUSTOMER_EDIT_PENDING]),
+        overwriteAttentionKeepingMoneyCheck(prisma, order.id, `ZaloPay lệch tiền (vòng ${round})`),
+      ]);
+      const cell = (await attentionOf(order.id)) ?? '';
+      expect(cell.split(' | ')).toContain(MONEY);
+    }
+    await clearPancakeAttention(prisma, order.id, 'ZaloPay lệch tiền');
+    await clearPancakeAttention(prisma, order.id, [ATTENTION_PAYMENT_PENDING, ATTENTION_CUSTOMER_EDIT_PENDING]);
+    const final = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(final.pancakeAttention?.split(' | ').every((part) => part.startsWith(ATTENTION_CUSTOMER_EDIT_MONEY_CHECK))).toBe(true);
+    expect(final.pancakeAttentionAt).not.toBeNull();
   });
 });

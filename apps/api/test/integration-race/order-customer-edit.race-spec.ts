@@ -411,4 +411,30 @@ describe('Customer self-edit of delivery address + note (real Postgres)', () => 
       CONFIRMED: new Date(base + 60_000).toISOString(),
     });
   });
+
+  it('R12 (NIT 4 w40-02): đơn lưu "P. Bến Nghé", danh mục ghi "Phường Bến Nghé", cùng mã phường → không phải lần sửa: 0 lượt, 0 dòng sổ, 0 job customer-edit', async () => {
+    const added: { name: string; data: unknown }[] = [];
+    const queue = {
+      name: 'pancake-push',
+      getJob: jest.fn().mockResolvedValue(null),
+      add: jest.fn(async (name: string, data: unknown) => {
+        added.push({ name, data });
+        return {};
+      }),
+    };
+    const getOrder = jest.fn().mockResolvedValue({ status: 1 });
+    const svc = new OrderCustomerEditService(
+      prisma,
+      new SystemConfigService(prisma),
+      { checkWard: jest.fn().mockResolvedValue('ok'), wardName: jest.fn().mockResolvedValue('Phường Bến Nghé') } as unknown as GeoService,
+      new PancakeSyncHooks(prisma, { isConfigured: () => true, getOrder } as unknown as PancakeClient, queue as never),
+    );
+    const stored = { ...SNAP, ward: 'P. Bến Nghé' };
+    const { order: o, userId } = await order({ shippingAddress: stored, pancakeOrderId: `it-pk-${Date.now()}-r12`, pancakePushStatus: 'SYNCED' });
+    const r = await svc.editForOwner(userId, o.code, { address: addr({ ward: 'Phường Bến Nghé' }) });
+    expect(r.editsLeft).toBe(ORDER_EDIT_MAX);
+    expect(await editRows(o.id)).toHaveLength(0);
+    expect(added.filter((j) => j.name === 'customer-edit')).toHaveLength(0);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: o.id } })).shippingAddress).toEqual(stored);
+  });
 });

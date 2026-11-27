@@ -38,6 +38,8 @@ import {
   ATTENTION_PARTIAL_RETURN_APPROVED_ON_TUBU,
   ATTENTION_PARTIAL_RETURN_SETTLED,
   ATTENTION_RETURN_APPROVED,
+  ATTENTION_SEPARATOR,
+  STICKY_ATTENTION_PREFIXES,
   appendPancakeAttention,
   replaceAttentionReasonsByPrefix,
 } from '../integrations/pancake/pancake-attention';
@@ -726,9 +728,14 @@ export class OrderReturnsService {
       const items = await tx.returnRequestItem.findMany({ where: { returnRequestId: id } });
       return this.reversal.restockReturnedItems(tx, order, items, prior.restockedQty);
     });
-    // Pancake đã báo "Hoàn một phần" và chỉ còn chờ nhận hàng: nhận hết rồi thì việc trong "Cần xử lý Pancake" đã xong.
+    // Pancake đã báo "Hoàn một phần" và chỉ còn chờ nhận hàng: nhận hết rồi thì việc trong "Cần xử lý Pancake" đã xong. Các phần
+    // STICKY_ATTENTION_PREFIXES (kiểm tiền sau khi khách sửa địa chỉ, dòng chờ Kế toán) vẫn ở lại, giữ thứ tự cũ; ô không có phần nào thành NULL.
+    const moneyParts = Prisma.sql`NULLIF(array_to_string(ARRAY(
+        SELECT part FROM unnest(string_to_array("pancakeAttention", ${ATTENTION_SEPARATOR})) WITH ORDINALITY AS t(part, idx)
+        WHERE EXISTS (SELECT 1 FROM unnest(${[...STICKY_ATTENTION_PREFIXES]}::text[]) AS s(p) WHERE starts_with(part, s.p)) ORDER BY idx), ${ATTENTION_SEPARATOR}), '')`;
     await this.prisma.$executeRaw`
-      UPDATE "orders" SET "pancakeAttention" = NULL, "pancakeAttentionAt" = NULL
+      UPDATE "orders" SET "pancakeAttention" = ${moneyParts},
+        "pancakeAttentionAt" = CASE WHEN ${moneyParts} IS NULL THEN NULL ELSE "pancakeAttentionAt" END
       WHERE "id" = ${req.orderId}
         AND starts_with("pancakeAttention", ${ATTENTION_PARTIAL_RETURN_ACK})
         AND NOT EXISTS (SELECT 1 FROM "return_requests" rr WHERE rr."orderId" = ${req.orderId} AND rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL)`.catch(

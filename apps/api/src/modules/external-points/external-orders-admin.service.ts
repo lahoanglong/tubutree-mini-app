@@ -12,6 +12,7 @@ import {
   type OrderSourceMap,
 } from './external-order.config';
 import { classifyPancakeOrder, normalizeTrackingCode, type ExternalOrderKind } from './external-order.mapper';
+import { displayOrderPhoneMask } from './external-claims-admin.service';
 
 export interface ExternalOrderListQuery {
   page: number;
@@ -111,8 +112,9 @@ export class ExternalOrdersAdminService {
     }
   }
 
-  private view<T extends { phone: string | null }>(r: T): Omit<T, 'phone'> & { phone: string | null } {
-    return { ...r, phone: maskPhoneOrNull(r.phone) };
+  /** `phoneMask` có thể là số đầy đủ lấy từ hồ sơ khách (ingest): che cùng mức với `phone`. */
+  private view<T extends { phone: string | null; phoneMask?: string | null }>(r: T): Omit<T, 'phone'> & { phone: string | null } {
+    return { ...r, phone: maskPhoneOrNull(r.phone), ...('phoneMask' in r ? { phoneMask: displayOrderPhoneMask(r.phoneMask) } : {}) };
   }
 }
 

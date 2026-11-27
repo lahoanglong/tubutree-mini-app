@@ -8,7 +8,9 @@ import {
   externalStatusOf,
   extractTrackingCodes,
   goodsValue,
+  marketplaceOrderSn,
   normalizeTrackingCode,
+  orderCarriesCode,
   pancakeTime,
   payloadForStorage,
   sourceKeyOf,
@@ -145,6 +147,52 @@ describe('normalizeTrackingCode / extractTrackingCodes', () => {
   });
 });
 
+describe('mã đơn sàn lấy từ id (W44: dò PROD 27/11, invoice_info_list vắng ở cả 3 sàn)', () => {
+  const lazada = fixture('synthetic-lazada-masked.json');
+
+  it('id của đơn sàn đứng CUỐI danh sách mã: mã chính (vận đơn) không đổi', () => {
+    expect(extractTrackingCodes(lazada)).toEqual(['BESVN0000000017VNA', '350000000000017']);
+    expect(extractTrackingCodes({ marketplace_id: -9, id: '576000000000000017', partner: { extend_code: '862000000017' } })).toEqual([
+      '862000000017',
+      '576000000000000017',
+    ]);
+    expect(extractTrackingCodes({ marketplace_id: -3, id: '2411270ABCDEFG' })).toEqual(['2411270ABCDEFG']);
+    expect(extractTrackingCodes({ is_from_ecommerce: true, id: '350000000000018' })).toEqual(['350000000000018']);
+  });
+
+  it('đơn không phải đơn sàn: id nội bộ Pancake không bao giờ thành mã', () => {
+    expect(extractTrackingCodes({ id: '350000000000017' })).toEqual([]);
+    expect(extractTrackingCodes({ id: 12345678, marketplace_id: null, order_sources: -1 })).toEqual([]);
+    expect(extractTrackingCodes({ id: 12345678, marketplace_id: 0 })).toEqual([]);
+    expect(extractTrackingCodes(fixture('synthetic-chat.json'))).not.toContain(String(fixture('synthetic-chat.json')['id']));
+    expect(marketplaceOrderSn({ id: '350000000000017' })).toBeNull();
+  });
+
+  it('id dạng số vượt MAX_SAFE_INTEGER đã mất chữ số khi parse JSON: bỏ; số an toàn thì nhận', () => {
+    expect(extractTrackingCodes({ marketplace_id: -9, id: 576000000000000017 })).toEqual([]);
+    expect(extractTrackingCodes({ marketplace_id: -4, id: 350000000000017 })).toEqual(['350000000000017']);
+  });
+
+  it('marketplaceOrderSn: invoice_info_list trước, vắng thì id của đơn sàn', () => {
+    expect(marketplaceOrderSn(lazada)).toBe('350000000000017');
+    expect(marketplaceOrderSn({ ...lazada, invoice_info_list: [{ order_sn: '2410101ABCDEF' }] })).toBe('2410101ABCDEF');
+    expect(marketplaceOrderSn(fixture('synthetic-shopee.json'))).toBe('2410101ABCDEF');
+  });
+
+  it('orderCarriesCode: đúng vị từ của lookup (vận đơn, mã đơn sàn), đơn chỉ có chữ giống thì không', () => {
+    expect(orderCarriesCode(lazada, 'BESVN0000000017VNA')).toBe(true);
+    expect(orderCarriesCode(lazada, '350000000000017')).toBe(true);
+    expect(orderCarriesCode(lazada, '350000000000018')).toBe(false);
+    expect(orderCarriesCode({ note: 'BESVN0000000017VNA', marketplace_id: -4, id: '350000000000099' }, 'BESVN0000000017VNA')).toBe(false);
+    expect(orderCarriesCode(fixture('synthetic-shopee.json'), '2410101ABCDEF')).toBe(true);
+  });
+
+  it('payloadForStorage giữ id + marketplace_id: mã đọc lại từ bản lưu không đổi', () => {
+    expect(extractTrackingCodes(payloadForStorage(lazada))).toEqual(extractTrackingCodes(lazada));
+    expect(marketplaceOrderSn(payloadForStorage(lazada))).toBe('350000000000017');
+  });
+});
+
 describe('goodsValue', () => {
   it('Σ qty × (retail − giảm/món) − total_discount, không cộng ship', () => {
     expect(goodsValue(fixture('synthetic-shopee.json'))).toBe(320_000);
@@ -239,6 +287,29 @@ describe('buyerPhonePattern (W42: giữ mẫu che để đối chiếu SĐT khá
   });
   it('fixture đơn sàn thật không ném và trả một trong ba dạng', () => {
     expect(['FULL', 'MASK', 'NONE']).toContain(buyerPhonePattern(fixture('synthetic-shopee.json')).kind);
+  });
+
+  describe('nguồn thứ 3: hồ sơ khách (W44, Lazada che hết SĐT trên đơn)', () => {
+    it('hai nguồn của đơn không có chữ số nào: lấy số duy nhất trong customer.phone_numbers; buyerPhone vẫn null', () => {
+      const lazada = fixture('synthetic-lazada-masked.json');
+      expect(buyerPhonePattern(lazada)).toEqual({ kind: 'FULL', phone: '0987650017' });
+      expect(buyerPhone(lazada)).toBeNull();
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['+84******26'] } })).toMatchObject({ kind: 'MASK', tail: '26' });
+    });
+    it('đơn có số (đầy đủ hay che) thì không xét hồ sơ', () => {
+      const profile = { customer: { phone_numbers: ['0911111111'] } };
+      expect(buyerPhonePattern({ bill_phone_number: '0912345678', ...profile })).toEqual({ kind: 'FULL', phone: '0912345678' });
+      expect(buyerPhonePattern({ bill_phone_number: '098*****26', ...profile })).toMatchObject({ kind: 'MASK', mask: '098*****26' });
+    });
+    it('hồ sơ có nhiều số khác nhau, không có số đọc được, hoặc sai kiểu: NONE', () => {
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['0911111111', '0922222222'] } })).toEqual({ kind: 'NONE' });
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: ['***', ''] } })).toEqual({ kind: 'NONE' });
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: { phone_numbers: '0911111111' } })).toEqual({ kind: 'NONE' });
+      expect(buyerPhonePattern({ bill_phone_number: '***', customer: 'x' })).toEqual({ kind: 'NONE' });
+    });
+    it('cùng một số lặp lại trong hồ sơ vẫn là một số', () => {
+      expect(buyerPhonePattern({ customer: { phone_numbers: ['0911111111', '+84911111111', '***'] } })).toEqual({ kind: 'FULL', phone: '0911111111' });
+    });
   });
 });
 

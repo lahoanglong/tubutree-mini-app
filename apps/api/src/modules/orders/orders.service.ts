@@ -599,6 +599,8 @@ export class OrdersService {
     };
     return orders.map((o) => ({
       ...forBuyer(o),
+      // Đơn định kỳ: chỉ phần khách viết, như chi tiết đơn (Admin vẫn đọc `note` thô qua API quản trị).
+      note: customerFacingNote(o),
       items: o.items.map((it) => ({ ...it, ...media(it.variationId, it.productSlug) })),
       canCancel: customerCancelBlock(o, viewerId) === null,
       manualHandling: isManualHandling(o),
@@ -609,7 +611,7 @@ export class OrdersService {
 
   async cancel(userId: string, code: string, refundInput: CancelOrderInput = {}) {
     const order = await this.cancelOrder(userId, code, refundInput);
-    return { ...forBuyer(order), canCancel: customerCancelBlock(order, userId) === null, manualHandling: isManualHandling(order) };
+    return { ...forBuyer(order), note: customerFacingNote(order), canCancel: customerCancelBlock(order, userId) === null, manualHandling: isManualHandling(order) };
   }
 
   private async cancelOrder(userId: string, code: string, refundInput: CancelOrderInput) {

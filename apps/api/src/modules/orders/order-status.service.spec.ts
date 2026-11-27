@@ -9,6 +9,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { PANCAKE_RETURNING_PREFIX } from '../integrations/pancake/pancake-status.map';
+import { ATTENTION_CUSTOMER_EDIT_MONEY_CHECK } from '../integrations/pancake/pancake-attention';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -915,6 +916,7 @@ describe('OrderStatusService.markPaid', () => {
       order: {
         findFirst,
         findUniqueOrThrow: jest.fn(async () => reads[reads.length - 1]),
+        findUnique: jest.fn(async () => ({ pancakeAttention: attention })),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
@@ -950,11 +952,27 @@ describe('OrderStatusService.markPaid', () => {
   type FlipCall = [{ where: unknown; data: Record<string, unknown> }];
 
   it('lật PAID → gỡ cảnh báo "Khách chuyển thiếu" (đơn đã đủ tiền), không đụng lý do khác', async () => {
-    const { svc, prisma } = make([pending()]);
+    const underpaid = 'Khách chuyển thiếu 50.000đ';
+    const { svc, prisma } = make([pending()], [1], underpaid);
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
     await svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: { id: 'o1', OR: [{ pancakeAttention: { startsWith: 'Khách chuyển thiếu' } }] },
+      where: { id: 'o1', pancakeAttention: underpaid },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
+    });
+    const other = make([pending()], [1], 'Tổng tiền Pancake lệch với Tubu: 1đ');
+    await other.svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
+    expect(other.prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('W44: lật PAID gỡ "Khách chuyển thiếu" nhưng giữ phần kiểm tiền sau khi khách sửa địa chỉ', async () => {
+    const money = `${ATTENTION_CUSTOMER_EDIT_MONEY_CHECK} (#pk-1): cod 230.000đ→0đ.`;
+    const { svc, prisma } = make([pending()], [1], `Khách chuyển thiếu 50.000đ | ${money}`);
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    await svc.markPaid('TUBU1', { actorType: 'PANCAKE' });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'o1', pancakeAttention: `Khách chuyển thiếu 50.000đ | ${money}` },
+      data: { pancakeAttention: money },
     });
   });
 

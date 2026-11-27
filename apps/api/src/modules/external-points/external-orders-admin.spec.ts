@@ -121,6 +121,16 @@ describe('ExternalOrdersAdminService.detail', () => {
     expect(JSON.stringify(res)).not.toContain('0912345678');
   });
 
+  it('W44: phoneMask là số đầy đủ lấy từ hồ sơ khách → CSKH và ADMIN chỉ thấy bản che', async () => {
+    const { ctrl, prisma } = setup();
+    prisma.externalOrder.findUnique.mockResolvedValue({ ...row({ phone: null, phoneMask: '0987650017' }), lastPayload: {} });
+    for (const user of [{ sub: 's', role: 'STAFF', staffPermissions: ['CSKH'] }, { sub: 'a', role: 'ADMIN' }]) {
+      const res = (await ctrl.detail('x1', user as never)) as Record<string, unknown>;
+      expect(res['phoneMask']).toBe('098****017');
+      expect(JSON.stringify(res)).not.toContain('0987650017');
+    }
+  });
+
   it('không có đơn thì 404', async () => {
     const { service, prisma } = setup();
     prisma.externalOrder.findUnique.mockResolvedValue(null);

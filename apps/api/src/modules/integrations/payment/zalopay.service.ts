@@ -20,6 +20,7 @@ import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
 import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { vnDateKey } from '../../../common/vn-time';
+import { overwriteAttentionKeepingMoneyCheck } from '../pancake/pancake-attention';
 import { PancakeSyncHooks } from '../pancake/pancake-sync-hooks';
 import { OPS_PAYMENT_TEMPLATE, flagRefundAttention, recordLatePaymentRefund, recordOverpaymentRefund } from '../../orders/refund-queue';
 import { formatVnd } from '../../orders/refund-destination';
@@ -353,11 +354,7 @@ export class ZalopayService {
       `ZaloPay (${source}) báo thanh toán ${appTransId} lệch số tiền cho đơn ${order.code}: nhận ${got}, kỳ vọng ${expected} — KHÔNG lật PAID.`,
     );
     const reason = `ZaloPay báo đã thanh toán lần ${appTransId} nhưng số tiền (${got}) không khớp ${formatVnd(expected)} — chưa ghi nhận tiền. Đối soát với ZaloPay rồi xử lý tay.`;
-    const r = await this.prisma.order.updateMany({
-      where: { id: order.id, OR: [{ pancakeAttention: null }, { pancakeAttention: { not: reason } }] },
-      data: { pancakeAttention: reason, pancakeAttentionAt: new Date() },
-    });
-    if (r.count === 0) return;
+    if (!(await overwriteAttentionKeepingMoneyCheck(this.prisma, order.id, reason))) return;
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       { template: OPS_PAYMENT_TEMPLATE, subject: `lệch tiền ZaloPay đơn ${order.code}`, data: () => ({ order_code: order.code, message: reason }) },

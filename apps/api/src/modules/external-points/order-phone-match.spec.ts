@@ -65,6 +65,16 @@ describe('parseOrderPhoneForMatch + phoneMatchesOrderMask: SĐT che số trên �
     expect(phoneMatchesOrderMask('0912345626', parseOrderPhoneForMatch('84981****26'))).toBe('MISMATCH');
   });
 
+  it('0084 đầu chuỗi che là mã nước (W44): 0084*****526 thành 0*****526, chỉ tin đuôi; số đầy đủ 0084… vẫn NONE như trước', () => {
+    expect(parseOrderPhoneForMatch('0084*****526')).toEqual({ kind: 'MASK', lead: '0', tail: '526', positional: null, mask: '0*526' });
+    expect(phoneMatchesOrderMask(USER, parseOrderPhoneForMatch('0084*****526'))).toBe('MATCH');
+    expect(phoneMatchesOrderMask('0912345527', parseOrderPhoneForMatch('0084*****526'))).toBe('MISMATCH');
+    expect(parseOrderPhoneForMatch('0084981***526')).toMatchObject({ kind: 'MASK', positional: '0981***526' });
+    expect(phoneMatchesOrderMask(USER, parseOrderPhoneForMatch('0084 981 *** 526'))).toBe('MATCH');
+    expect(parseOrderPhoneForMatch('0084981234526')).toEqual({ kind: 'NONE' });
+    expect(parseOrderPhoneForMatch('+0084*****526')).toEqual({ kind: 'NONE' });
+  });
+
   it('SĐT khách thiếu hoặc sai dạng: NO_DATA, không bao giờ MISMATCH', () => {
     for (const u of [null, undefined, '', 'abc', '12345']) {
       expect(phoneMatchesOrderMask(u, parseOrderPhoneForMatch('098*****27'))).toBe('NO_DATA');
@@ -85,6 +95,13 @@ describe('parseOrderPhoneForMatch + phoneMatchesOrderMask: SĐT che số trên �
     expect(orderPhoneMatch(USER, { phone: '0911111111', phoneMask: '098*****26' })).toBe('MISMATCH');
     expect(orderPhoneMatch(USER, { phone: null, phoneMask: null })).toBe('NO_DATA');
     expect(orderPhoneMatch(USER, { phone: null })).toBe('NO_DATA');
+  });
+
+  it('W44: số đầy đủ trong phoneMask (từ hồ sơ khách) chỉ nâng lên MATCH; lệch thì NO_DATA (REVIEW), không MISMATCH (từ chối, tính khoá)', () => {
+    expect(orderPhoneMatch(USER, { phone: null, phoneMask: '0981234526' })).toBe('MATCH');
+    expect(orderPhoneMatch(USER, { phone: null, phoneMask: '0911111111' })).toBe('NO_DATA');
+    expect(orderPhoneMatch(USER, { phone: null, phoneMask: '098*****27' })).toBe('MISMATCH');
+    expect(orderPhoneMatch(USER, { phone: '0911111111', phoneMask: null })).toBe('MISMATCH');
   });
 
   it('visibleDigits: FULL thắng mọi mẫu che, mẫu nhiều số hơn thắng', () => {

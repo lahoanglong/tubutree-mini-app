@@ -5,7 +5,7 @@ import { PancakeClient } from '../integrations/pancake/pancake.client';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { EXTERNAL_LOOKUP_ENABLED_KEY } from './external-claim.config';
 import { ORDER_SOURCE_MAP_KEY, resolveOrderSourceMap } from './external-order.config';
-import { extractTrackingCodes, marketplaceOrderSn } from './external-order.mapper';
+import { orderCarriesCode } from './external-order.mapper';
 import { ingestAndApply } from './external-order.sync';
 
 const LOOKUP_TIMEOUT_MS = 5_000;
@@ -53,8 +53,7 @@ export class ExternalClaimLookupService {
       for (const order of orders) {
         const data = order as unknown as Record<string, unknown>;
         // `search` là tìm chữ tự do: chỉ nhận đơn mang ĐÚNG mã này, không đơn khác có chữ giống.
-        const matches = extractTrackingCodes(data).includes(code) || marketplaceOrderSn(data) === code;
-        if (!matches) continue;
+        if (!orderCarriesCode(data, code)) continue;
         const out = await ingestAndApply(this.prisma, { notifier: this.notifications, config: this.config }, data, map, now);
         if (out.result !== 'NOT_EXTERNAL') ingested++;
       }
