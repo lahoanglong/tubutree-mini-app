@@ -141,7 +141,7 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
   const [error, setError] = useState<ClaimError | null>(codeParamRejected ? { text: COPY.codeLinkInvalid, verify: false } : null);
   const [result, setResult] = useState<SubmitExternalClaimResponse | null>(null);
   const [confirm, setConfirm] = useState<PhoneConfirm | null>(null);
-  const [later, setLater] = useState(false);
+  const [later, setLater] = useState<string | null>(null);
   const [restartKey, setRestartKey] = useState(0);
   const sending = useRef(false);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -163,7 +163,7 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
     onSuccess: (r) => {
       setResult(r);
       setError(null);
-      setLater(false);
+      setLater(null);
       setConfirm(null);
       setCode('');
       setScanned(null);
@@ -207,7 +207,7 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
     }
     sending.current = true;
     setResult(null);
-    setLater(false);
+    setLater(null);
     try {
       await submit.mutateAsync({ code: trimmed, via, ...(last4 ? { last4 } : {}) });
     } catch {
@@ -231,7 +231,7 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
 
   const scanAnother = () => {
     setConfirm(null);
-    setLater(false);
+    setLater(null);
     setCode('');
     setScanned(null);
     setError(null);
@@ -291,7 +291,7 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
           {later && (
             <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
               <span role="status" data-testid="claim-later">
-                {PHONE_CONFIRM_COPY.later}
+                {later}
               </span>
             </Text>
           )}
@@ -332,8 +332,8 @@ export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { init
         onOther={scanAnother}
         onClose={() => {
           // Đóng hộp mà chưa khớp: lượt hỏi 4 số đã ghi ở máy chủ nên làm mới lịch sử để dòng "Chờ bạn nhập 4 số cuối" hiện ra.
+          setLater(confirm?.locked ? PHONE_CONFIRM_COPY.locked : PHONE_CONFIRM_COPY.later);
           setConfirm(null);
-          setLater(true);
           void qc.invalidateQueries({ queryKey: ['external-claims'] });
         }}
       />

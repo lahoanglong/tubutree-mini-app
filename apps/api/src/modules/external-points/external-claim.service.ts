@@ -147,7 +147,9 @@ export type Persisted =
   | { kind: 'OWN'; own: OwnClaim }
   | { kind: 'CLAIM'; created: CreatedClaim };
 
-function submittedProps(out: Persisted, orderChannel: string | null, via?: 'scan' | 'typed'): Record<string, unknown> {
+type ClaimVia = 'scan' | 'typed' | 'history';
+
+function submittedProps(out: Persisted, orderChannel: string | null, via?: ClaimVia): Record<string, unknown> {
   const base = { ...(via ? { via } : {}) };
   switch (out.kind) {
     case 'REJECT':
@@ -194,6 +196,10 @@ export function claimCreatedNote(reviewReason: string | null, phoneConfirmed: bo
 /** W59: lượt hỏi 4 số cuối còn mở để khách quay lại nhập (danh sách "Cần xác nhận SĐT" trong lịch sử). */
 export const PHONE_RETRY_DAYS = 7;
 const PHONE_RETRY_ATTEMPT_RESULTS = [PHONE_CONFIRM_RESULTS.required, PHONE_CONFIRM_RESULTS.wrong, PHONE_CONFIRM_RESULTS.locked];
+/** Từ chối không đổi khi thử lại (đơn quá hạn, trước mốc mở, đã đóng, mã đã có người tích ở dòng khác, 0 điểm): có sau lượt "cần 4 số" thì dòng đó thôi hiện. */
+const PHONE_RETRY_SETTLED_RESULTS = (['TOO_OLD', 'BEFORE_SINCE', 'CLOSED', 'ALREADY_CLAIMED', 'ZERO_POINTS', 'APP_ORDER', 'CHAT_ORDER'] as const).map(
+  (c) => `REJECTED_${c}`,
+);
 
 /** Claim sẵn có của chính khách gửi mã: trả lại trạng thái, không ghi lần thử. */
 export interface OwnClaim {
@@ -232,7 +238,8 @@ export class ExternalClaimService {
    * Khách gửi mã. Toàn bộ luật chạy trong một transaction giữ khoá advisory theo khách nên gửi song song nhiều mã không vượt trần.
    * `recipientPhoneLast4` (W46): 4 số cuối SĐT người nhận, chỉ dùng khi SĐT tài khoản lệch SĐT trên đơn.
    */
-  async submit(userId: string, rawCode: unknown, via?: 'scan' | 'typed', recipientPhoneLast4?: string | null): Promise<SubmitExternalClaimResponse> {
+  /** `via` 'history' chỉ do `retryPhone` truyền (khách nhập 4 số từ dòng lịch sử), để phễu tách khỏi lượt quét/gõ mã. */
+  async submit(userId: string, rawCode: unknown, via?: ClaimVia, recipientPhoneLast4?: string | null): Promise<SubmitExternalClaimResponse> {
     const cfg = await loadClaimConfig(this.config);
     if (!cfg.enabled) throw rejectionOf('DISABLED');
     const code = normalizeTrackingCode(rawCode);
@@ -386,16 +393,24 @@ export class ExternalClaimService {
     for (const r of rows) if (r.externalOrderId && !latest.has(r.externalOrderId)) latest.set(r.externalOrderId, r);
     if (latest.size === 0) return [];
     const ids = [...latest.keys()];
-    const [taken, orders] = await Promise.all([
+    const oldest = rows.reduce((min, r) => (r.createdAt < min ? r.createdAt : min), now);
+    const [taken, orders, settledRows] = await Promise.all([
       this.prisma.externalPointsClaim.findMany({ where: { externalOrderId: { in: ids }, state: { not: 'VOIDED' } }, select: { externalOrderId: true } }),
       this.prisma.externalOrder.findMany({ where: { id: { in: ids } }, select: { id: true, channel: true, status: true } }),
+      this.prisma.externalClaimAttempt.findMany({
+        where: { userId, externalOrderId: { in: ids }, result: { in: PHONE_RETRY_SETTLED_RESULTS }, createdAt: { gte: oldest } },
+        select: { externalOrderId: true, createdAt: true },
+      }),
     ]);
     const takenIds = new Set(taken.map((t) => t.externalOrderId));
+    const settled = new Set(
+      settledRows.filter((s) => s.externalOrderId && s.createdAt > (latest.get(s.externalOrderId)?.createdAt ?? now)).map((s) => s.externalOrderId),
+    );
     const orderById = new Map(orders.map((o) => [o.id, o]));
     const out: MyPhoneRetryAttempt[] = [];
     for (const [orderId, a] of latest) {
       const o = orderById.get(orderId);
-      if (!o || takenIds.has(orderId) || o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELETED') continue;
+      if (!o || takenIds.has(orderId) || settled.has(orderId) || o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELETED') continue;
       out.push({ attemptId: a.id, channel: o.channel, maskedCode: maskClaimCode(a.code), createdAt: a.createdAt.toISOString() });
       if (out.length >= 10) break;
     }
@@ -417,7 +432,7 @@ export class ExternalClaimService {
         select: { code: true },
       });
       if (!attempt) throw retryGone();
-      return this.submit(userId, attempt.code, undefined, last4);
+      return this.submit(userId, attempt.code, 'history', last4);
     }
     if (!target.claimId) throw retryGone();
     const claimId = target.claimId;

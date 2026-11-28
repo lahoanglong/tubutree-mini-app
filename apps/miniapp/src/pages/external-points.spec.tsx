@@ -74,7 +74,7 @@ import ExternalPointsPage, { cardEntryOf, claimStateView } from './external-poin
 import { __resetEntrySourceForTest } from '../utils/entry-source';
 import { setCardGiftNote } from '../services/card-gift-note';
 import { formatDate } from '../utils/format';
-import { PHONE_CONFIRM_COPY } from '@tubutree/app-core/marketplace-claim-copy';
+import { MARKETPLACE_CLAIM_COPY, PHONE_CONFIRM_COPY } from '@tubutree/app-core/marketplace-claim-copy';
 
 // Mốc tương lai tính từ giờ chạy test, để ca "mốc chưa qua" không tự hỏng khi đồng hồ đi qua một ngày cố định.
 const futureIso = () => new Date(Date.now() + 7 * 864e5).toISOString();
@@ -1235,6 +1235,35 @@ describe('Trang Tích điểm đơn sàn — W59: không claim REVIEW rác, nh�
     expect(await screen.findByText(PHONE_CONFIRM_COPY.later)).toBeTruthy();
     await waitFor(() => expect(mocks.getMyExternalClaims.mock.calls.length).toBeGreaterThan(before));
     expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+  });
+
+  it('sai đủ 3 lần (đơn khoá) rồi đóng hộp: báo câu khoá, không mời nhập lại từ lịch sử', async () => {
+    mocks.submitExternalClaim
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'shopee' }))
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_LOCKED', 429, { channel: 'shopee', remainingAttempts: 0 }));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    await screen.findByTestId('phone-confirm-sheet');
+    confirmWith('1111');
+    expect(await screen.findByText(PHONE_CONFIRM_COPY.locked, { selector: '[role="alert"]' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(await screen.findByText(PHONE_CONFIRM_COPY.locked, { selector: '[role="status"]' })).toBeTruthy();
+    expect(screen.queryByText(PHONE_CONFIRM_COPY.later)).toBeNull();
+  });
+
+  it('đúng 4 số từ lịch sử nhưng máy chủ đưa đơn vào kiểm tra (REVIEW): báo đang kiểm tra, không hiện điểm chờ cộng', async () => {
+    mocks.getMyExternalClaims.mockResolvedValue({ ...EMPTY_LIST, needsPhone: [{ attemptId: 'a1', channel: 'shopee', maskedCode: 'SPX***001', createdAt: '2026-11-28T01:00:00Z' }] });
+    mocks.retryExternalClaimPhone.mockResolvedValueOnce({ status: 'REVIEW', claimId: 'c9', channel: 'shopee', maskedCode: 'SPX***001', points: 9000, expectedCreditAt: null, message: 'ok' });
+    renderPage();
+    await screen.findByTestId('claim-needs-phone');
+    fireEvent.click(screen.getByTestId('claim-needs-phone-row').querySelector('[role="button"]')!);
+    await screen.findByTestId('phone-confirm-sheet');
+    confirmWith('5511');
+    const done = await screen.findByTestId('claim-retry-done');
+    expect(done).toHaveTextContent('Đã ghi nhận đơn Shopee SPX***001');
+    expect(done).toHaveTextContent(MARKETPLACE_CLAIM_COPY.resultReview);
+    expect(done).not.toHaveTextContent('Điểm Xanh đang chờ cộng');
   });
 
   it('dòng "Chờ bạn nhập 4 số cuối": chạm mở hộp (không có "Quét đơn khác"), đúng 4 số gửi attemptId và báo đã ghi nhận', async () => {

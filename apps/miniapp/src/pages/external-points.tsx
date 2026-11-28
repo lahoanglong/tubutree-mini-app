@@ -31,6 +31,7 @@ import {
   PHONE_CONFIRM_COPY,
   claimDetail as claimDetailOf,
   claimResultDetail,
+  retryDoneView,
   claimStateView,
   isPastMilestone,
   marketplaceChannelName,
@@ -263,14 +264,14 @@ function ClaimList() {
     <div>
       {done && (
         <div role="status" data-testid="claim-retry-done" style={{ marginBottom: 'var(--space-inline-md)' }}>
-          <Text variant="label" tone="brand" as="div">
-            {PHONE_CONFIRM_COPY.retryDone(marketplaceChannelName(done.channel), done.result.maskedCode)}
-          </Text>
-          {done.result.points != null && (
-            <Text variant="body-sm" tone="secondary" as="div">
-              {t.resultPoints(done.result.points)}
+          {retryDoneView(done.result, formatDate).recorded && (
+            <Text variant="label" tone="brand" as="div">
+              {PHONE_CONFIRM_COPY.retryDone(marketplaceChannelName(done.channel), done.result.maskedCode)}
             </Text>
           )}
+          <Text variant="body-sm" tone="secondary" as="div">
+            {retryDoneView(done.result, formatDate).detail}
+          </Text>
         </div>
       )}
       {notice && (
@@ -694,8 +695,8 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
         onOther={scanAnother}
         onClose={() => {
           // Đóng hộp mà chưa khớp (W59): không có claim nào, mã nằm ở lịch sử "Chờ bạn nhập 4 số cuối"; làm mới để dòng đó hiện ra.
+          setNotice(confirm?.locked ? PHONE_CONFIRM_COPY.locked : PHONE_CONFIRM_COPY.later);
           setConfirm(null);
-          setNotice(PHONE_CONFIRM_COPY.later);
           void qc.invalidateQueries({ queryKey: ['external-claims'] });
         }}
         onSupport={hasOA && confirm ? () => openOAChat(t.chatSupportMessage(maskForSupport(confirm.code))) : undefined}

@@ -902,6 +902,32 @@ describe('/quet-ma — W59: không claim REVIEW rác, nhập lại 4 số cuối
     expect(mocks.post).toHaveBeenCalledTimes(1);
   });
 
+  it('sai đủ 3 lần (đơn khoá) rồi đóng hộp: báo câu khoá, không mời chạm lịch sử để nhập lại', async () => {
+    const lockedErr = new ApiError('Khoá', 429, 'PHONE_CONFIRM_LOCKED', { statusCode: 429, code: 'PHONE_CONFIRM_LOCKED', channel: 'shopee', requiredDigits: 4, remainingAttempts: 0 });
+    mocks.post.mockRejectedValueOnce(required()).mockRejectedValueOnce(lockedErr);
+    const c = await mount();
+    openManual(c);
+    typeInto(input(c), 'SPXVN123456789');
+    await submitForm(c);
+    await confirmWith('1111');
+    click(document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Đóng"]'));
+    await flush(4);
+    expect(c.querySelector('[data-testid="claim-later"]')?.textContent).toBe(PHONE_CONFIRM_COPY.locked);
+  });
+
+  it('nhập đúng từ lịch sử nhưng máy chủ đưa đơn vào kiểm tra (REVIEW, vd vượt ngưỡng tự duyệt): báo đang kiểm tra, không hiện điểm chờ cộng', async () => {
+    mocks.list = listWith({ needsPhone: [{ attemptId: 'a1', channel: 'shopee', maskedCode: 'SPX***001', createdAt: '2026-11-28T01:00:00Z' }] });
+    mocks.post.mockResolvedValueOnce(claimed({ status: 'REVIEW', claimId: 'c9', channel: 'shopee', maskedCode: 'SPX***001', points: 9000, expectedCreditAt: null }));
+    const c = await mount();
+    click(c.querySelector('[data-testid="claim-needs-phone"] button'));
+    await flush(2);
+    await confirmWith('5511');
+    const done = c.querySelector('[data-testid="claim-retry-done"]')!;
+    expect(done.textContent).toContain('Đã ghi nhận đơn Shopee SPX***001');
+    expect(done.textContent).toContain(COPY.resultReview);
+    expect(done.textContent).not.toContain('Điểm Xanh đang chờ cộng');
+  });
+
   it('dòng "Chờ bạn nhập 4 số cuối": chạm mở hộp (không có "Quét đơn khác"), nhập đúng là gửi attemptId và báo đã ghi nhận', async () => {
     mocks.list = listWith({ needsPhone: [{ attemptId: 'a1', channel: 'shopee', maskedCode: 'SPX***001', createdAt: '2026-11-28T01:00:00Z' }] });
     mocks.post.mockResolvedValueOnce(claimed({ claimId: 'c9', channel: 'shopee', maskedCode: 'SPX***001', points: 700 }));

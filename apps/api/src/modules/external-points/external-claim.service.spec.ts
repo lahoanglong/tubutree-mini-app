@@ -538,7 +538,7 @@ describe('W59: quét đơn không tạo claim REVIEW rác khi SĐT nhận hàng 
     expect((await zalo.svc.submit('u1', 'SPXVN0123456789')).status).toBe('REVIEW');
     const web = build({ config: flagOn, order: noPhone(), user: webUser, deliveredAppOrders: 1 });
     expect((await web.svc.submit('u1', 'SPXVN0123456789')).status).toBe('REVIEW');
-    expect((web.tx.externalPointsClaim.createManyAndReturn.mock.calls[0]?.[0] as { data: { state: string }[] }).data[0]).toMatchObject({ state: 'REVIEW' });
+    expect(((web.tx.externalPointsClaim.createManyAndReturn as jest.Mock).mock.calls[0]?.[0] as { data: { state: string }[] }).data[0]).toMatchObject({ state: 'REVIEW' });
   });
 });
 
@@ -559,7 +559,7 @@ describe('W59: nhập lại 4 số cuối từ dòng lịch sử (retryPhone)', 
   const setup = (claim: Record<string, unknown> | null, opts: { order?: Record<string, unknown> } = {}) => {
     const b = build({ config: flagOn, order: opts.order ?? order({ phoneMask: '098*****11', phoneLast3: '011' }) });
     b.tx.externalPointsClaim.findUnique.mockResolvedValue({ externalOrderId: 'x1' });
-    b.tx.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce(claim ? [claim] : []);
+    (b.tx.$queryRaw as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce(claim ? [claim] : []);
     return b;
   };
 
@@ -609,6 +609,13 @@ describe('W59: nhập lại 4 số cuối từ dòng lịch sử (retryPhone)', 
     );
     expect(tx.externalPointsClaim.createManyAndReturn).toHaveBeenCalledTimes(1);
   });
+  it('(c) attemptId: sự kiện gửi mã ghi via "history" để phễu tách khỏi lượt quét/gõ', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }) });
+    tx.externalClaimAttempt.findFirst.mockResolvedValue({ code: 'SPXVN0123456789' });
+    const submit = jest.spyOn(svc, 'submit');
+    await svc.retryPhone('u1', { attemptId: 'a1' }, '5511');
+    expect(submit).toHaveBeenCalledWith('u1', 'SPXVN0123456789', 'history', '5511');
+  });
   it('(c) attemptId lạ, của người khác hoặc quá 7 ngày: 409 PHONE_RETRY_GONE', async () => {
     const { svc } = build({ config: flagOn });
     expect(await codeOf(svc.retryPhone('u1', { attemptId: 'zz' }, '5511'))).toBe('PHONE_RETRY_GONE');
@@ -632,12 +639,12 @@ describe('W59: listMine trả dòng "cần nhập 4 số" cho lịch sử', () =
       externalOrder: { channel: 'shopee', trackingCode: 'SPXVN0123456789', status: 'OPEN', deliveredAt: null, phone: null, phoneMask: '******11' },
       ...over,
     });
-    tx.externalPointsClaim.findMany.mockImplementation(async (args: { where: { userId?: string } }) =>
+    (tx.externalPointsClaim.findMany as jest.Mock).mockImplementation(async (args: { where: { userId?: string } }) =>
       args.where.userId
         ? [claimRow('c1', {}), claimRow('c2', { reviewReason: 'Giá trị đơn vượt ngưỡng tự duyệt' }), claimRow('c3', { state: 'PENDING', reviewReason: null })]
         : [{ externalOrderId: 'x2' }],
     );
-    tx.externalClaimAttempt.findMany.mockImplementation(async (args: { where: { result: unknown } }) =>
+    (tx.externalClaimAttempt.findMany as jest.Mock).mockImplementation(async (args: { where: { result: unknown } }) =>
       args.where.result === 'UNMATCHED'
         ? []
         : [
@@ -658,6 +665,31 @@ describe('W59: listMine trả dòng "cần nhập 4 số" cho lịch sử', () =
     ]);
     expect(res.needsPhone).toEqual([{ attemptId: 'a3', channel: 'tiktok', maskedCode: expect.any(String), createdAt: '2026-11-28T09:00:00.000Z' }]);
     expect(JSON.stringify(res)).not.toContain('******11');
+  });
+  it('lượt "cần 4 số" mà sau đó đã bị từ chối vĩnh viễn (quá hạn, mã đã có người tích ở dòng khác): không còn là dòng nhập lại', async () => {
+    const { svc, tx } = build({ config: flagOn });
+    const now = new Date('2026-11-28T10:00:00Z');
+    tx.externalPointsClaim.findMany.mockResolvedValue([]);
+    (tx.externalClaimAttempt.findMany as jest.Mock).mockImplementation(async (args: { where: { result: unknown } }) => {
+      const inList = (args.where.result as { in?: string[] } | undefined)?.in ?? [];
+      if (inList.includes('REJECTED_TOO_OLD')) {
+        return [
+          { externalOrderId: 'x1', createdAt: new Date('2026-11-28T09:30:00Z') },
+          { externalOrderId: 'x2', createdAt: new Date('2026-11-28T07:00:00Z') },
+        ];
+      }
+      if (inList.length === 0) return [];
+      return [
+        { id: 'a1', code: 'SPXVN0000000001', externalOrderId: 'x1', createdAt: new Date('2026-11-28T09:00:00Z') },
+        { id: 'a2', code: 'SPXVN0000000002', externalOrderId: 'x2', createdAt: new Date('2026-11-28T08:00:00Z') },
+      ];
+    });
+    tx.externalOrder.findMany.mockResolvedValue([
+      { id: 'x1', channel: 'tiktok', status: 'OPEN' },
+      { id: 'x2', channel: 'shopee', status: 'OPEN' },
+    ]);
+    const res = await svc.listMine('u1', 1, 10, 'SCAN', now);
+    expect(res.needsPhone?.map((n) => n.attemptId)).toEqual(['a2']);
   });
   it('trang 2 hay danh sách PHONE: không đọc needsPhone', async () => {
     const { svc, tx } = build({ config: flagOn });

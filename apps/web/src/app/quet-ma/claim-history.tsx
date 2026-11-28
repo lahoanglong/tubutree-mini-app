@@ -15,6 +15,7 @@ import {
   claimStateView,
   marketplaceChannelName,
   phoneConfirmErrorText,
+  retryDoneView,
 } from '@tubutree/app-core/marketplace-claim-copy';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { Badge } from '@/components/mini/badge';
@@ -129,14 +130,14 @@ export function ClaimHistory() {
       </Heading>
       {done && (
         <div role="status" data-testid="claim-retry-done" className="mb-3">
-          <Text variant="label" tone="brand" as="div">
-            {PHONE_CONFIRM_COPY.retryDone(marketplaceChannelName(done.channel), done.result.maskedCode)}
-          </Text>
-          {done.result.points != null && (
-            <Text variant="body-sm" tone="secondary" as="div" numeric>
-              {COPY.resultPoints(done.result.points)}
+          {retryDoneView(done.result, formatDate).recorded && (
+            <Text variant="label" tone="brand" as="div">
+              {PHONE_CONFIRM_COPY.retryDone(marketplaceChannelName(done.channel), done.result.maskedCode)}
             </Text>
           )}
+          <Text variant="body-sm" tone="secondary" as="div" numeric>
+            {retryDoneView(done.result, formatDate).detail}
+          </Text>
         </div>
       )}
       {notice && (

@@ -194,3 +194,13 @@ export function claimResultDetail(r: SubmitExternalClaimResponse, fmtDate: (iso:
   if (isPastMilestone(r, now)) return r.message;
   return r.expectedCreditAt ? MARKETPLACE_CLAIM_COPY.resultCreditAt(fmtDate(r.expectedCreditAt)) : MARKETPLACE_CLAIM_COPY.resultAfterDelivery;
 }
+
+/**
+ * W59: thông báo sau khi khách nhập đúng 4 số từ dòng lịch sử. `recorded`: có claim của khách (chờ cộng hoặc đang kiểm tra), mới hiện dòng
+ * "Đã ghi nhận đơn …"; `detail`: số điểm chờ cộng khi đã nhận, còn lại câu của thẻ kết quả (đơn vượt ngưỡng tự duyệt vào REVIEW thì báo đang kiểm tra).
+ */
+export function retryDoneView(r: SubmitExternalClaimResponse, fmtDate: (iso: string) => string): { recorded: boolean; detail: string } {
+  const recorded = r.status === 'CLAIMED' || r.status === 'REVIEW';
+  const detail = r.status === 'CLAIMED' && r.points != null ? MARKETPLACE_CLAIM_COPY.resultPoints(r.points) : claimResultDetail(r, fmtDate);
+  return { recorded, detail };
+}

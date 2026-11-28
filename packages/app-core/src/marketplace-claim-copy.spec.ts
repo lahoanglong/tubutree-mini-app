@@ -9,6 +9,7 @@ import {
   isPastMilestone,
   marketplaceChannelName,
   phoneConfirmErrorText,
+  retryDoneView,
 } from './marketplace-claim-copy';
 import { EXTERNAL_CLAIM_REJECT_CODES } from './api/external-points';
 
@@ -110,5 +111,28 @@ describe('claimStateView / claimDetail / claimResultDetail (Mini và web cùng l
     expect(claimResultDetail({ ...r, status: 'CLAIMED', expectedCreditAt: '2026-12-01T00:00:00Z' }, fmt, now)).toBe('Dự kiến cộng từ 2026-12-01');
     expect(claimResultDetail({ ...r, status: 'CLAIMED', expectedCreditAt: null }, fmt, now)).toBe(MARKETPLACE_CLAIM_COPY.resultAfterDelivery);
     expect(isPastMilestone({ status: 'REVIEW', expectedCreditAt: '2026-11-20T00:00:00Z' }, now)).toBe(false);
+  });
+});
+
+describe('retryDoneView (W59, nhập 4 số từ lịch sử)', () => {
+  const base = { claimId: 'c1', channel: 'shopee', maskedCode: 'SPX***001', message: 'ok' };
+  const fmt = (iso: string) => iso.slice(0, 10);
+  it('đã nhận: có dòng "Đã ghi nhận", dòng phụ là số điểm chờ cộng', () => {
+    expect(retryDoneView({ ...base, status: 'CLAIMED', points: 700, expectedCreditAt: null }, fmt)).toEqual({
+      recorded: true,
+      detail: MARKETPLACE_CLAIM_COPY.resultPoints(700),
+    });
+  });
+  it('máy chủ đưa vào kiểm tra: vẫn ghi nhận nhưng báo đang kiểm tra, không hứa điểm', () => {
+    expect(retryDoneView({ ...base, status: 'REVIEW', points: 9000, expectedCreditAt: null }, fmt)).toEqual({
+      recorded: true,
+      detail: MARKETPLACE_CLAIM_COPY.resultReview,
+    });
+  });
+  it('mã đã có người khác tích: không có dòng "Đã ghi nhận"', () => {
+    expect(retryDoneView({ ...base, status: 'CLAIMED_BY_OTHER', points: null, expectedCreditAt: null }, fmt)).toEqual({
+      recorded: false,
+      detail: MARKETPLACE_CLAIM_COPY.resultClaimedByOther,
+    });
   });
 });
