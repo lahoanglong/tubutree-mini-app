@@ -8,9 +8,10 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 import { captureUnhandledRejections } from '@/test-utils/unhandled';
 import { ApiError } from '@/lib/client-api';
+import { GUEST_CART_KEY } from '@/lib/guest-cart/store';
 
 // Lớp mạng (apiFetch) là bản giả; core-http, query và quick-add là bản THẬT để Reel đi đúng đường thêm giỏ nhanh của web.
-const net = vi.hoisted(() => ({ apiFetch: vi.fn(), push: vi.fn(), phase: 'authenticated' as 'authenticated' | 'guest' }));
+const net = vi.hoisted(() => ({ apiFetch: vi.fn(), push: vi.fn(), phase: 'authenticated' as 'authenticated' | 'guest', guestCart: false }));
 vi.mock('@/lib/client-api', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/client-api')>()), apiFetch: net.apiFetch }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => net.phase, useAuthRestoring: () => false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' }, status: 'authenticated', initialized: true }) }));
@@ -54,11 +55,14 @@ function mount(ui: React.ReactElement) {
 beforeEach(() => {
   sessionStorage.clear();
   net.phase = 'authenticated';
+  net.guestCart = false;
+  localStorage.clear();
   net.push.mockReset();
   details = Object.fromEntries(CARDS.map((c) => [c.slug, detail(c.slug)]));
   net.apiFetch.mockReset().mockImplementation(async (path: string, opts?: { method?: string }) => {
     const key = path.split('?')[0]!;
     if (key === '/products') return PAGE(CARDS);
+    if (key === '/config/public') return { webGuestCartEnabled: net.guestCart };
     if (key === '/cart/items' && opts?.method === 'POST') return { ...CART, itemCount: 1 };
     if (key === '/cart') return CART;
     const m = /^\/products\/([^/]+)$/.exec(key);
@@ -324,6 +328,7 @@ describe('HomeStoryReel (web)', () => {
     click(rings()[0]!);
     await flush(4);
     click(q('story-add-to-cart'));
+    await flush(6);
     expect(net.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fa');
     expect(sessionStorage.getItem('tubu_pending_add')).toBeNull();
   });
@@ -335,9 +340,45 @@ describe('HomeStoryReel (web)', () => {
     click(rings()[0]!);
     await flush(4);
     click(q('story-add-to-cart'));
+    await flush(6);
     expect(net.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fa');
     expect(JSON.parse(sessionStorage.getItem('tubu_pending_add')!)).toMatchObject({ variationId: 'v-a', quantity: 1 });
     expect(calls().filter((c) => c.endsWith('/cart/items'))).toHaveLength(0);
+  });
+
+  it('khách vãng lai, cờ giỏ khách bật, một phân loại: vào giỏ trình duyệt, không sang đăng nhập, không gọi API giỏ', async () => {
+    net.phase = 'guest';
+    net.guestCart = true;
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    click(rings()[0]!);
+    await flush(4);
+    click(q('story-add-to-cart'));
+    await flush(8);
+    expect(net.push).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem(GUEST_CART_KEY)!)).toMatchObject([{ variationId: 'v-a', slug: 'a', quantity: 1 }]);
+    expect(sessionStorage.getItem('tubu_pending_add')).toBeNull();
+    expect(calls().filter((c) => c.endsWith('/cart/items'))).toHaveLength(0);
+  });
+
+  it('khách vãng lai, cờ giỏ khách bật, nhiều phân loại: mở bảng chọn phân loại thay vì sang đăng nhập', async () => {
+    net.phase = 'guest';
+    net.guestCart = true;
+    details.a = detail('a', {
+      variations: [
+        { id: 'v-a1', sku: 'a1', name: 'Bé', attributes: {}, retailPrice: 50000, salePrice: null, stock: 5 },
+        { id: 'v-a2', sku: 'a2', name: 'Lớn', attributes: {}, retailPrice: 90000, salePrice: null, stock: 5 },
+      ],
+    });
+    mount(<HomeStoryReel initialBestSellers={PAGE(CARDS)} />);
+    await flush(2);
+    click(rings()[0]!);
+    await flush(4);
+    click(q('story-add-to-cart'));
+    await flush(8);
+    expect(net.push).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[data-testid="variation-sheet"]')!.textContent).toBe('Món a:2');
+    expect(localStorage.getItem(GUEST_CART_KEY)).toBeNull();
   });
 
   it('món hết sạch tồn ở chi tiết: nút thêm giỏ khoá và ghi "Hết hàng"', async () => {

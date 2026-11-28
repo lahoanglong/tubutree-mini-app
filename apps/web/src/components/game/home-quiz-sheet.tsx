@@ -4,18 +4,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchProduct, fetchProducts, type ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
+import { fetchProducts, type ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { completeHomeQuiz, type HomeQuizResult } from '@tubutree/app-core/api/game';
 import { homeQuizQuestions, pickKitProducts, type HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
-import { quickAddPlan } from '@tubutree/app-core/quick-add';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
+import { guestQuickAddLogin, useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
-import { loginHref, rememberPendingAdd } from '@/lib/return-to';
+import { loginHref } from '@/lib/return-to';
 import { Button, Heading, ProductCard, ProductTileSkeleton, Text } from '@/components/mini';
 import { Sheet } from '@/components/ui/sheet';
 
@@ -50,7 +49,8 @@ export function HomeQuizSheet({ onClose, claimed, onClaimed }: HomeQuizSheetProp
   const [answers, setAnswers] = useState<Partial<HomeQuizAnswers>>({});
   const [stage, setStage] = useState(0);
   const done = stage >= questions.length;
-  const quick = useQuickAdd(undefined, HOME_QUIZ_KEY, { inlineNotice: true });
+  const guest = useMemo(() => ({ login: guestQuickAddLogin(router) }), [router]);
+  const quick = useQuickAdd(undefined, HOME_QUIZ_KEY, { inlineNotice: true, guest });
 
   const products = useQuery({
     queryKey: HOME_QUIZ_KEY,
@@ -98,17 +98,8 @@ export function HomeQuizSheet({ onClose, claimed, onClaimed }: HomeQuizSheetProp
     setStage(0);
   };
 
-  const add = async (p: ProductCardData) => {
-    if (authed) return quick.quickAdd(p);
-    // Như Reel Trang chủ: khách chưa đăng nhập chỉ nhớ lượt thêm khi không phải chọn phân loại, rồi sang đăng nhập về lại trang sản phẩm.
-    try {
-      const plan = quickAddPlan((await fetchProduct(coreHttp, p.slug)).variations);
-      if (plan.kind === 'add') rememberPendingAdd({ variationId: plan.variationId, quantity: 1 });
-    } catch {
-      /* không tải được chi tiết thì khách tự chọn ở trang sản phẩm */
-    }
-    router.push(loginHref(`/san-pham/${encodeURIComponent(p.slug)}`));
-  };
+  // Như Reel Trang chủ: khách chưa đăng nhập cũng đi qua `quickAdd` (cờ giỏ khách bật thì vào giỏ trình duyệt, nhiều phân loại mở bảng chọn; tắt thì nhớ món rồi sang đăng nhập).
+  const add = (p: ProductCardData) => quick.quickAdd(p);
 
   const question = questions[stage];
   // Lần đầu có quà thì nói số Giọt nước; đã nhận từ trước thì chỉ một dòng nói vậy (không khoe lại).

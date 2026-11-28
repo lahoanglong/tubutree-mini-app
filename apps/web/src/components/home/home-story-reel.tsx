@@ -4,18 +4,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BestSellersPage } from '@tubutree/app-core/api/browse';
-import type { ProductCard, ProductDetail, VariationDetail } from '@tubutree/app-core/api/catalog';
+import type { ProductCard, ProductDetail } from '@tubutree/app-core/api/catalog';
 import { markReelSeen, readReelSeen, reelDisabled, reelItems, reelNeighbor } from '@tubutree/app-core/commerce/story-reel';
 import { productQuery } from '@tubutree/app-core/queries/catalog';
-import { quickAddPlan } from '@tubutree/app-core/quick-add';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
+import { guestQuickAddLogin, useQuickAdd } from '@/app/tai-khoan/yeu-thich/quick-add';
 import { ProductStoryShowcase, StoryReelStrip } from '@/components/mini';
-import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
-import { loginHref, rememberPendingAdd } from '@/lib/return-to';
 import { useCardPricing } from '@/lib/use-card-pricing';
 import { useBlockQuery } from './use-block-query';
 
@@ -79,7 +76,7 @@ interface OverlayProps {
   onGo: (slug: string) => void;
   onClose: () => void;
   onFail: () => void;
-  onAdd: (card: ProductCard, variations: VariationDetail[]) => void | Promise<unknown>;
+  onAdd: (card: ProductCard) => void | Promise<unknown>;
 }
 
 /** Reel của một món: tải chi tiết, tải trước món kế, tự nhảy qua món mà admin đã tắt câu chuyện, và dựng `ProductStoryShowcase` toàn màn kiểu Reel. */
@@ -122,7 +119,7 @@ function ReelOverlay({ slug, items, onGo, onClose, onFail, onAdd }: OverlayProps
       position={fillCopy('reel.position', { n: index + 1, total: slugs.length })}
       onNext={next ? () => onGo(next) : undefined}
       onClose={onClose}
-      onAddToCart={() => onAdd(card, detail.variations)}
+      onAddToCart={() => onAdd(card)}
     />
   );
 }
@@ -135,11 +132,11 @@ function ReelOverlay({ slug, items, onGo, onClose, onFail, onAdd }: OverlayProps
 export function HomeStoryReel({ initialBestSellers }: { initialBestSellers?: BestSellersPage }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const phase = useAuthPhase();
   const best = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...(initialBestSellers ? { initialData: initialBestSellers, staleTime: STALE } : {}) }));
   const items = useMemo(() => reelItems(best.data?.data), [best.data]);
   const pricing = useCardPricing();
-  const { quickAdd, notify, feedback } = useQuickAdd(undefined, homeBestSellerQuery(coreHttp).queryKey);
+  const guest = useMemo(() => ({ login: guestQuickAddLogin(router) }), [router]);
+  const { quickAdd, notify, feedback } = useQuickAdd(undefined, homeBestSellerQuery(coreHttp).queryKey, { guest });
 
   const [seen, setSeen] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
@@ -160,15 +157,9 @@ export function HomeStoryReel({ initialBestSellers }: { initialBestSellers?: Bes
   // Reel có z-index cao hơn bảng chọn phân loại và thông báo: đóng Reel TRƯỚC khi mở chúng (như trang chi tiết).
   // `async` để nút của Reel nhận Promise: khoá của nút chỉ là lớp phòng thủ thêm (Reel đóng ngay dòng đầu nên khung bị gỡ cùng khoá); chặn bấm trùng thật sự là `inFlight` trong `useQuickAdd.run`.
   // Lỗi ném đồng bộ thành Promise bị từ chối, nút ném lại nên vẫn tới `unhandledrejection`.
-  const add = async (card: ProductCard, variations: VariationDetail[]) => {
+  const add = async (card: ProductCard) => {
     setOpenSlug(null);
-    if (phase === 'guest') {
-      // Chỉ nhớ lượt thêm khi khách không phải chọn gì (đúng một phân loại còn hàng): nhiều phân loại thì trang sản phẩm sau đăng nhập để khách tự chọn, không thêm hộ.
-      const plan = quickAddPlan(variations);
-      if (plan.kind === 'add') rememberPendingAdd({ variationId: plan.variationId, quantity: 1 });
-      router.push(loginHref(`/san-pham/${encodeURIComponent(card.slug)}`));
-      return;
-    }
+    // Khách chưa đăng nhập cũng đi qua `quickAdd`: cờ giỏ khách bật thì vào giỏ trình duyệt (nhiều phân loại mở bảng chọn), tắt thì nhớ món rồi sang đăng nhập.
     // Bảng chọn phân loại mở sẵn ở phân loại mang đúng giá trên nút Reel (Giờ vàng thắng thì phân loại của suất đó).
     await quickAdd(card, { initialId: pricing(card).variationId ?? null });
   };

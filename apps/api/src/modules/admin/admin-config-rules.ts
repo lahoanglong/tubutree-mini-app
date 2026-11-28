@@ -241,6 +241,8 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'waste.lane_pickup_enabled': assertBoolean,
   'waste.home_pickup_bank_transfer_enabled': assertBoolean,
   'web.guest_cart_enabled': assertBoolean,
+  // Máy chủ đọc đúng boolean true (guest-checkout.config.ts); chuỗi "true" sẽ lặng lẽ thành tắt nên chặn ngay lúc lưu.
+  'web.guest_checkout_enabled': assertBoolean,
   'catalog.pdp_compare_enabled': assertBoolean,
   'perf.rum_enabled': assertBoolean,
   'perf.rum_sample_pct': (k, v) => assertIntInRange(k, v, 0, 100, '%'),

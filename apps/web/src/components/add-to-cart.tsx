@@ -41,6 +41,7 @@ import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
 import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
 import { markCheckoutEntry } from '@/lib/analytics';
 import { trackPdpAction } from '@/components/analytics/funnel';
+import { guestCheckoutOn } from '@/lib/guest-checkout/flag';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { addGuestLine, GUEST_CART_MAX_LINES as GUEST_CART_LINE_CAP, guestCartCount, type GuestAddResult } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
@@ -165,7 +166,10 @@ export default function AddToCart({
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
-  const unitOn = usePublicConfig(initialConfig).unitPriceEnabled === true;
+  const publicConfig = usePublicConfig(initialConfig);
+  const unitOn = publicConfig.unitPriceEnabled === true;
+  // Đặt hàng không đăng nhập (`web.guest_checkout_enabled`) bật thì khách "Mua ngay" đi thẳng tới thanh toán; tắt thì dừng ở giỏ (đặt hàng cần đăng nhập ở đó).
+  const guestCheckout = publicConfig.isLoaded && guestCheckoutOn(publicConfig);
   const units = unitOn ? variationUnitPrices(variations, flash, productName, selectedId) : null;
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước): một request cho các suất của sản phẩm này, chỉ khi đã đăng nhập; chỉ nút, tổng và ghi chú đọc nó.
   const flashWithAllowance = useFlashAllowance(flash, variations.map((v) => v.id));
@@ -358,7 +362,7 @@ export default function AddToCart({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chạy đúng một lần khi vừa có phiên
   }, [phase]);
 
-  // Giỏ khách: ghi vào trình duyệt ngay, phản hồi như khách đã đăng nhập. "Mua ngay" thêm rồi sang giỏ (đặt hàng cần đăng nhập ở đó).
+  // Giỏ khách: ghi vào trình duyệt ngay, phản hồi như khách đã đăng nhập. "Mua ngay" thêm rồi sang thanh toán khi đặt hàng không đăng nhập bật, không thì sang giỏ (đặt hàng cần đăng nhập ở đó).
   // Trình duyệt chặn bộ nhớ thì trả false để đi lối cũ (nhớ món rồi sang đăng nhập).
   const addToGuestCart = (target: Variation, quantity: number, buyNow: boolean): boolean => {
     const res: GuestAddResult = addGuestLine({ variationId: target.id, slug, quantity, maxQty: target.stock });
@@ -367,9 +371,9 @@ export default function AddToCart({
     setBusy(true);
     setBuying(buyNow);
     setWarn(null);
-    // Mua ngay mà giỏ khách đã có đủ số còn hàng: món đã nằm trong giỏ, vẫn sang giỏ để đặt.
+    // Mua ngay mà giỏ khách đã có đủ số còn hàng: món đã nằm trong giỏ, vẫn đi tiếp để đặt.
     if (buyNow && (res.ok || res.reason === 'max')) {
-      router.push('/gio-hang');
+      router.push(guestCheckout ? '/thanh-toan' : '/gio-hang');
       return true;
     }
     setSuccess(res.ok);

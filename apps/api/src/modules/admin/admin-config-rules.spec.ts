@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { configPartnerKey, validateAdminConfigValue } from './admin-config-rules';
+import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
 
 const ok = (key: string, value: unknown) => expect(() => validateAdminConfigValue(key, value)).not.toThrow();
 const bad = (key: string, value: unknown) => expect(() => validateAdminConfigValue(key, value)).toThrow(BadRequestException);
@@ -39,6 +39,17 @@ describe('validateAdminConfigValue', () => {
     ok('loyalty.pos_credit_enabled', false);
     bad('shipping.gomdon.recycling_enabled', 'true');
     bad('loyalty.pos_credit_enabled', 1);
+  });
+
+  it('cờ web.guest_cart_enabled và web.guest_checkout_enabled: chỉ nhận boolean (máy chủ đọc đúng true, chuỗi "true" sẽ lặng lẽ thành tắt)', () => {
+    for (const key of ['web.guest_cart_enabled', 'web.guest_checkout_enabled']) {
+      expect(hasAdminConfigRule(key)).toBe(true);
+      ok(key, true);
+      ok(key, false);
+      bad(key, 'true');
+      bad(key, 1);
+      bad(key, null);
+    }
   });
 
   it('trần POS: số nguyên dương trong biên', () => {

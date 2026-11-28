@@ -100,7 +100,7 @@ describe('addonRows', () => {
   it('giá kèm, giá gốc, % tiết kiệm làm tròn, giữ maxQty', () => {
     const rows = addonRows([addon('a1', [deal('p2', 40_000, { maxQty: 2 })])], NOW);
     expect(rows).toEqual([
-      { key: 'a1:p2', bundleId: 'a1', productId: 'p2', variationId: 'v-p2', name: 'SP p2', thumbnail: 'https://img/p2.jpg', listPrice: 60_000, addonPrice: 40_000, savingPct: 33, maxQty: 2 },
+      { key: 'a1:p2', bundleId: 'a1', productId: 'p2', variationId: 'v-p2', slug: 'sp-p2', name: 'SP p2', thumbnail: 'https://img/p2.jpg', listPrice: 60_000, addonPrice: 40_000, savingPct: 33, maxQty: 2 },
     ]);
   });
 

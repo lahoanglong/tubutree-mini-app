@@ -26,8 +26,14 @@ export function resolvePublicConfig(data: PublicConfig | undefined): PublicConfi
 
 /** `isLoaded` = số liệu đến từ server thật; màn nào hứa một con số cụ thể với khách nên chờ `isLoaded`. */
 /** `initial`: bản dựng sẵn ở server, chỉ làm placeholder (không vào cache) để lần dựng đầu có cờ thật mà vẫn tải lại bản mới. */
-export function usePublicConfig(initial?: PublicConfig): PublicConfig & { isLoaded: boolean; isPending: boolean } {
-  const q = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, ...(initial ? { placeholderData: initial } : {}) });
+/** `opts.enabled === false`: không tự gọi máy chủ, chỉ đọc bản đã có trong bộ nhớ đệm (cho thành phần chỉ cần cờ khi khách chưa đăng nhập). */
+export function usePublicConfig(initial?: PublicConfig, opts?: { enabled?: boolean }): PublicConfig & { isLoaded: boolean; isPending: boolean } {
+  const q = useQuery({
+    ...publicConfigQuery(coreHttp),
+    staleTime: 5 * 60_000,
+    ...(initial ? { placeholderData: initial } : {}),
+    ...(opts?.enabled === false ? { enabled: false } : {}),
+  });
   return { ...resolvePublicConfig(q.data), isLoaded: q.data != null, isPending: q.isPending };
 }
 

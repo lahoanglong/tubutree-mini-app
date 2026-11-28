@@ -8,6 +8,8 @@ import { comboView } from '@tubutree/app-core/commerce/bundle-view';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
+import { readGuestCart } from '@/lib/guest-cart/store';
+import { PUBLIC_CONFIG_FALLBACK } from '@/lib/use-public-config';
 
 const mocks = vi.hoisted(() => ({ addAll: vi.fn(), push: vi.fn(), phase: 'authenticated' as string }));
 vi.mock('@/lib/shop-combo', () => ({ addAllToCart: mocks.addAll }));
@@ -42,6 +44,7 @@ beforeEach(() => {
   mocks.addAll.mockReset().mockResolvedValue({});
   mocks.push.mockReset();
   mocks.phase = 'authenticated';
+  localStorage.clear();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -83,8 +86,34 @@ describe('HomeCombos (web)', () => {
     mocks.phase = 'guest';
     const c = await mount(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />);
     click(addAllButtons(c)[0]!);
+    await flush();
     expect(mocks.addAll).not.toHaveBeenCalled();
     expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/dang-nhap'));
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật: cả combo vào giỏ trình duyệt kèm slug từng món, không sang đăng nhập, không gọi giỏ máy chủ', async () => {
+    mocks.phase = 'guest';
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['public-config'], { ...PUBLIC_CONFIG_FALLBACK, webGuestCartEnabled: true });
+    const r = render(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />, qc);
+    mounted.push(r);
+    await flush();
+    click(addAllButtons(r.container)[0]!);
+    await flush();
+    expect(mocks.addAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(readGuestCart().map(({ variationId, slug, quantity }) => ({ variationId, slug, quantity }))).toEqual([
+      { variationId: 'v-a', slug: 'sp-a', quantity: 1 },
+      { variationId: 'v-b', slug: 'sp-b', quantity: 1 },
+    ]);
+    expect(r.container.querySelector('[role="status"]')!.textContent).toBe('Đã thêm cả combo vào giỏ');
+  });
+
+  it('khách đã đăng nhập: lệnh lô chỉ gửi variationId và quantity (máy chủ không nhận slug)', async () => {
+    const c = await mount(<HomeCombos views={views(['c1', 'a', 'b'], ['c2', 'c', 'd'])} />);
+    click(addAllButtons(c)[0]!);
+    await flush();
+    for (const line of mocks.addAll.mock.calls[0]![0] as object[]) expect(Object.keys(line).sort()).toEqual(['quantity', 'variationId']);
   });
 
   it('lỗi hết hàng của máy chủ đọc thẳng cho khách', async () => {

@@ -61,6 +61,8 @@ export interface AddonRow {
   bundleId: string;
   productId: string;
   variationId: string;
+  /** Slug sản phẩm: giỏ của khách chưa đăng nhập trên web tra lại món theo slug. */
+  slug: string;
   name: string;
   thumbnail: string | null;
   /** Giá đang bán của món (chưa mua kèm). */
@@ -89,6 +91,7 @@ export function addonRows(bundles: readonly BundleDTO[], now: number, max: numbe
         bundleId: b.id,
         productId: it.productId,
         variationId: it.variationId,
+        slug: it.product.slug,
         name: it.product.name,
         thumbnail: it.product.thumbnail,
         listPrice,

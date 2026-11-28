@@ -8,7 +8,7 @@ import { FrequentlyBoughtTogether } from '@/components/mini/frequently-bought-to
 import { productStockKey } from '@/components/pdp-stock';
 import { playCartFeedback } from '@/lib/cart-feedback';
 import { coreHttp } from '@/lib/core-http';
-import { useBundleAdd } from '@/lib/use-bundle-add';
+import { useBundleAdd, withSlugs } from '@/lib/use-bundle-add';
 import { useFbt, type FbtHostArgs } from './use-fbt';
 
 const FBT_ID = 'fbt';
@@ -54,7 +54,7 @@ export function PdpFbt(props: FbtHostArgs) {
         onAdd={() =>
           add({
             id: FBT_ID,
-            lines: frequentlyBoughtLines(lines, picked),
+            lines: withSlugs(frequentlyBoughtLines(lines, picked), lines),
             errorKey: 'fbt.error',
             successText: fillCopy('fbt.added', { n: summary.count }),
             onDone: () => playCartFeedback(root.current?.querySelector('[data-testid="fbt-add"]') ?? null),

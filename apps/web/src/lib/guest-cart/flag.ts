@@ -18,8 +18,8 @@ export function guestCartOn(cfg: Pick<PublicConfig, 'webGuestCartEnabled'> | nul
  * Cờ `web.guest_cart_enabled` cho màn đang vẽ. `pending` khi cấu hình đang tải lần đầu: trang giỏ chờ thay vì chớp tường đăng nhập rồi đổi
  * sang giỏ khách. Cấu hình lỗi thì coi như tắt (hành vi cũ).
  */
-export function useGuestCartFlag(): { enabled: boolean; pending: boolean } {
-  const cfg = usePublicConfig();
+export function useGuestCartFlag(opts?: { enabled?: boolean }): { enabled: boolean; pending: boolean } {
+  const cfg = usePublicConfig(undefined, opts);
   return { enabled: cfg.isLoaded && guestCartOn(cfg), pending: cfg.isPending };
 }
 

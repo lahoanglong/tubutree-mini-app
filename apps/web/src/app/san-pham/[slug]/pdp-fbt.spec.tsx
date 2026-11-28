@@ -4,6 +4,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { ApiError } from '@/lib/client-api';
+import { readGuestCart } from '@/lib/guest-cart/store';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
@@ -61,6 +62,7 @@ const status = (c: ParentNode) => c.querySelector('[data-testid="fbt-status"]')!
 beforeEach(() => {
   mocks.phase = 'authenticated';
   mocks.flash = [];
+  localStorage.clear();
   mocks.push.mockReset();
   mocks.get.mockReset().mockRejectedValue(new Error('offline'));
   mocks.addAll.mockReset().mockResolvedValue(CART);
@@ -285,6 +287,25 @@ describe('PdpFbt (web): thêm cả bộ', () => {
     await flush(2);
     expect(mocks.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fsp-0');
     expect(mocks.addAll).not.toHaveBeenCalled();
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật: các món đã tick vào giỏ trình duyệt kèm slug, không sang đăng nhập, không gọi giỏ máy chủ', async () => {
+    mocks.phase = 'guest';
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/config/public') return { webGuestCartEnabled: true };
+      throw new Error('offline');
+    });
+    const c = await mount();
+    click(addBtn(c));
+    await flush(4);
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(mocks.addAll).not.toHaveBeenCalled();
+    expect(readGuestCart().map(({ variationId, slug, quantity }) => ({ variationId, slug, quantity }))).toEqual([
+      { variationId: 'v0a', slug: 'sp-0', quantity: 1 },
+      { variationId: 'v1', slug: 'sp-1', quantity: 1 },
+      { variationId: 'v2', slug: 'sp-2', quantity: 1 },
+    ]);
+    expect(status(c).textContent).toBe('Đã thêm 3 món vào giỏ');
   });
 
   it('vùng báo luôn có mặt (role=status) kể cả khi chưa có kết quả, để lần đổi chữ sau được đọc ra', async () => {

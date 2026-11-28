@@ -2,15 +2,13 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { ShoppingBag, User } from 'lucide-react';
 import { givenName } from '@tubutree/app-core/person-name';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { getCart } from '@/lib/shop-client';
+import { useCartBadgeCount } from '@/lib/guest-cart/use-cart-badge-count';
 import SiteSearch from '@/components/site-search';
 import { HeaderBell } from '@/components/header-bell';
-import { useCartKey } from '@/lib/cart-key';
 import { useCartBumpKey } from '@/lib/cart-feedback';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { useShellPathname } from '@/lib/shell-pathname';
@@ -21,8 +19,7 @@ export default function SiteHeader() {
   const { user, status } = useAuth();
   const sessionDown = useAuthPhase() === 'unavailable';
   const pathname = useShellPathname();
-  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: status === 'authenticated' });
-  const count = cartQ.data?.itemCount ?? 0;
+  const count = useCartBadgeCount();
   const bumpKey = useCartBumpKey();
   const navItems = readyDesktopNav();
 

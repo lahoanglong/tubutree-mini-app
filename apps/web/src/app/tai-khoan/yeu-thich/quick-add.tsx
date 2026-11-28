@@ -8,6 +8,7 @@ import { ShoppingCart } from 'lucide-react';
 import { addToCart, getCart, type AddToCartSource } from '@tubutree/app-core/api/cart';
 import { fetchProduct, type ProductCard, type VariationDetail } from '@tubutree/app-core/api/catalog';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { productQuery } from '@tubutree/app-core/queries/catalog';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -15,6 +16,10 @@ import { cartKey, cartStorefrontSlug, useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { playCartFeedback } from '@/lib/cart-feedback';
 import { actionErrorText } from '@/lib/error-text';
+import { guestCartFlagNow } from '@/lib/guest-cart/flag';
+import { addGuestLine, GUEST_CART_MAX_LINES } from '@/lib/guest-cart/store';
+import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
+import { loginHref, rememberPendingAdd } from '@/lib/return-to';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -53,14 +58,27 @@ export interface QuickAdd {
  * `staleKey` là khoá truy vấn của danh sách đang vẽ thẻ/món để thêm: máy chủ từ chối vì trạng thái đã đổi (400/404/409/422) thì danh sách đó đã cũ nên tải lại đúng khoá này.
  * Cùng lúc tải lại chi tiết của đúng sản phẩm vừa bấm (khi biết slug): Reel và nơi khác vẽ nút từ chi tiết đó, còn bản cũ thì nút vẫn sáng.
  */
-export function useQuickAdd(source: AddToCartSource | undefined, staleKey: readonly unknown[], opts: { inlineNotice?: boolean } = {}): QuickAdd {
+export function useQuickAdd(
+  source: AddToCartSource | undefined,
+  staleKey: readonly unknown[],
+  opts: {
+    inlineNotice?: boolean;
+    /**
+     * Chỉ nơi bán cho khách chưa đăng nhập (Trang chủ) truyền. Khách chưa đăng nhập, cờ `web.guest_cart_enabled` bật: thêm vào giỏ trình duyệt (nhiều phân loại thì mở bảng chọn
+     * như khách đã đăng nhập), không rời trang. Cờ tắt hay chưa về, hoặc trình duyệt chặn bộ nhớ: gọi `login` để nơi gọi nhớ món rồi sang đăng nhập như trước.
+     */
+    guest?: { login: (product: ProductCard, variations: VariationDetail[]) => void };
+  } = {},
+): QuickAdd {
   const qc = useQueryClient();
   const flash = useActiveFlashSales();
   const phase = useAuthPhase();
+  const guestLines = useGuestCartLines();
+  const guest = phase === 'guest' ? opts.guest : undefined;
   // Giỏ cho bảng chọn: thêm giỏ cộng dồn và máy chủ giá Giờ vàng trên cả dòng, nên nút phải biết số đã có (cùng khoá với giỏ ở thanh đầu và trang sản phẩm, thêm xong `setQueryData` cập nhật).
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: () => getCart(coreHttp, cartStorefrontSlug()), enabled: phase === 'authenticated' });
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[]; initialId: string | null } | null>(null);
+  const [picker, setPicker] = useState<{ product: ProductCard; variations: VariationDetail[]; initialId: string | null; guestCart: boolean } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước) cho các phân loại của sản phẩm trong bảng; không có bảng thì không có id nên không gọi.
   const flashWithAllowance = useFlashAllowance(flash, picker?.variations.map((v) => v.id) ?? []);
@@ -77,6 +95,21 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
     qc.setQueryData(cartKey(), cart);
     show({ ok: true, text: 'Đã thêm vào giỏ!' });
     playCartFeedback(origin?.isConnected ? origin : null);
+  };
+
+  // Khách chưa đăng nhập (cờ giỏ khách bật): ghi vào giỏ trình duyệt, cùng phản hồi như `addLine`. Trình duyệt chặn bộ nhớ thì nhờ nơi gọi đưa sang đăng nhập.
+  const addGuest = (product: ProductCard, variations: VariationDetail[], variation: { id: string; stock?: number }, qty: number, origin: Element | null = null) => {
+    const res = addGuestLine({ variationId: variation.id, slug: product.slug, quantity: qty, maxQty: variation.stock });
+    if (res.ok) {
+      show({ ok: true, text: 'Đã thêm vào giỏ!' });
+      playCartFeedback(origin?.isConnected ? origin : null);
+      return;
+    }
+    if (res.reason === 'storage') {
+      guest?.login(product, variations);
+      return;
+    }
+    show({ ok: false, text: res.reason === 'full' ? fillCopy('guestCart.full', { n: GUEST_CART_MAX_LINES }) : fillCopy('guestCart.atMax') });
   };
 
   const reloadStale = (slug: string | undefined) =>
@@ -98,18 +131,32 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
     }
   };
 
-  const quickAdd = (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) =>
-    run(async () => {
+  const quickAdd = async (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) => {
+    // Sang đăng nhập chạy SAU `run` (đã nhả khoá, đã bắt lỗi của chính lượt thêm): lỗi điều hướng ném ra khỏi hàm này, không bị `run` nuốt thành thông báo.
+    let login: (() => void) | undefined;
+    await run(async () => {
       setBusyId(product.id);
+      // Cờ đọc lúc bấm (bản đã có sẵn, chưa có thì chờ ngắn) để Trang chủ không gọi cấu hình riêng cho nút này.
+      const guestOn = guest ? await guestCartFlagNow(qc) : false;
+      if (guest && !guestOn) {
+        // Cờ giỏ khách tắt hay chưa về: lối cũ. Chi tiết không tải được thì khách tự chọn ở trang sản phẩm sau đăng nhập.
+        const variations = await fetchProduct(coreHttp, product.slug).then((d) => d.variations, () => [] as VariationDetail[]);
+        if (variations.length > 0 && quickAddPlan(variations).kind === 'soldOut') show({ ok: false, text: QUICK_ADD_SOLD_OUT });
+        else login = () => guest.login(product, variations);
+        return;
+      }
       const detail = await fetchProduct(coreHttp, product.slug);
       const plan = quickAddPlan(detail.variations);
       if (plan.kind === 'soldOut') {
         show({ ok: false, text: QUICK_ADD_SOLD_OUT });
         // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
         void reloadStale(product.slug);
-      } else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null });
+      } else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null, guestCart: guestOn });
+      else if (guestOn) addGuest(product, detail.variations, detail.variations.find((v) => v.id === plan.variationId) ?? { id: plan.variationId }, 1, opts?.origin ?? null);
       else await addLine(plan.variationId, 1, opts?.origin ?? null);
     }, product.slug);
+    login?.();
+  };
 
   const addVariation = (variationId: string, opts?: { origin?: Element | null }) =>
     run(async () => {
@@ -117,10 +164,11 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
       await addLine(variationId, 1, opts?.origin ?? null);
     });
 
-  const confirmPick = (variation: { id: string }, qty: number) =>
+  const confirmPick = (variation: { id: string; stock?: number }, qty: number) =>
     run(async () => {
       setBusyId(picker?.product.id ?? null);
-      await addLine(variation.id, qty);
+      if (picker?.guestCart && guest) addGuest(picker.product, picker.variations, variation, qty);
+      else await addLine(variation.id, qty);
       setPicker(null);
     }, picker?.product.slug);
 
@@ -156,7 +204,7 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
           initialId={picker.initialId ?? picker.product.pinnedVariationId ?? picker.product.repVariationId ?? null}
           initialQty={1}
           busy={busyId === picker.product.id}
-          cartLines={cartQ.data?.items}
+          cartLines={picker.guestCart ? guestLines : cartQ.data?.items}
           onConfirm={confirmPick}
         />
       )}
@@ -164,6 +212,18 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
   );
 
   return { quickAdd, addVariation, notify: show, notice, busyId, feedback };
+}
+
+/**
+ * Lối cũ của khách chưa đăng nhập khi cờ giỏ khách tắt (hay trình duyệt chặn bộ nhớ): nhớ món nếu khách không phải chọn gì (đúng một phân loại còn hàng; nhiều phân loại thì trang
+ * sản phẩm sau đăng nhập để khách tự chọn, không thêm hộ) rồi sang đăng nhập, quay lại đúng trang sản phẩm.
+ */
+export function guestQuickAddLogin(router: { push: (href: string) => void }): (product: ProductCard, variations: VariationDetail[]) => void {
+  return (product, variations) => {
+    const plan = quickAddPlan(variations);
+    if (plan.kind === 'add') rememberPendingAdd({ variationId: plan.variationId, quantity: 1 });
+    router.push(loginHref(`/san-pham/${encodeURIComponent(product.slug)}`));
+  };
 }
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */

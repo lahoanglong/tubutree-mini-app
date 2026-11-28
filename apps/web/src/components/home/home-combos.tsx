@@ -7,7 +7,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useRouter } from 'next/navigation';
 import { ComboCard, RailShell, SectionHeader } from '@/components/mini';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
-import { useBundleAdd } from '@/lib/use-bundle-add';
+import { comboBundleLines, useBundleAdd } from '@/lib/use-bundle-add';
 
 /** Bề rộng một thẻ combo trong kệ: chừa lề phải để thấy một góc thẻ kế tiếp (gợi ý vuốt), không vượt 288px ở màn rộng. */
 const CELL_WIDTH = 'min(288px, calc(100vw - 56px))';
@@ -18,8 +18,8 @@ export interface HomeCombosProps {
 }
 
 /**
- * Combo tiết kiệm (khối `combos` của Trang chủ, sau Bán chạy nhất): mỗi thẻ một combo toàn sàn, "Thêm cả combo" vào giỏ ngay tại Trang chủ;
- * "Xem tất cả" mở trang Bộ quà tặng `/bo-qua-tang` như Mini App. Rỗng thì không dựng gì (cũng không gọi hook giỏ/định tuyến): phần lớn lượt
+ * Combo tiết kiệm (khối `combos` của Trang chủ, sau Bán chạy nhất): mỗi thẻ một combo toàn sàn, "Thêm cả combo" vào giỏ ngay tại Trang chủ
+ * (khách chưa đăng nhập: giỏ trình duyệt khi cờ giỏ khách bật, còn không thì sang đăng nhập); "Xem tất cả" mở trang Bộ quà tặng `/bo-qua-tang` như Mini App. Rỗng thì không dựng gì (cũng không gọi hook giỏ/định tuyến): phần lớn lượt
  * xem chưa có combo nào.
  */
 export function HomeCombos({ views }: HomeCombosProps) {
@@ -48,7 +48,7 @@ function HomeCombosRail({ views }: HomeCombosProps) {
                   total={v.total}
                   comboTotal={v.comboTotal}
                   busy={busyId === v.id}
-                  onAddAll={() => add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') })}
+                  onAddAll={() => add({ id: v.id, lines: comboBundleLines(v), errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') })}
                   onSeeItems={target?.slug ? () => router.push(`/san-pham/${encodeURIComponent(target.slug)}`) : undefined}
                 />
               </div>

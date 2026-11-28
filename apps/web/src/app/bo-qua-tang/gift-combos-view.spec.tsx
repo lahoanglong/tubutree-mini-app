@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BundleDTO, GiftLanding } from '@tubutree/app-core/api/bundle';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { ApiError } from '@/lib/client-api';
+import { readGuestCart } from '@/lib/guest-cart/store';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -47,6 +48,7 @@ beforeEach(() => {
   mocks.addAll.mockReset().mockResolvedValue({});
   mocks.push.mockReset();
   mocks.phase = 'authenticated';
+  localStorage.clear();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -150,8 +152,29 @@ describe('GiftCombosView (/bo-qua-tang)', () => {
     mocks.phase = 'guest';
     const c = await mount(landing());
     click(addAllButtons(c)[0]!);
+    await flush();
     expect(mocks.addAll).not.toHaveBeenCalled();
     expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/dang-nhap'));
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật: combo vào giỏ trình duyệt, báo đã thêm, không dòng "còn thiếu tới Miễn phí giao hàng" (chưa có giỏ máy chủ), không sang đăng nhập', async () => {
+    mocks.phase = 'guest';
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/bundles/gift-landing') return landing();
+      if (path === '/config/public') return { webGuestCartEnabled: true };
+      throw new Error(`đường dẫn lạ ${path}`);
+    });
+    const c = await mount(landing());
+    click(addAllButtons(c)[0]!);
+    await flush();
+    expect(mocks.addAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(readGuestCart().map(({ variationId, slug }) => ({ variationId, slug }))).toEqual([
+      { variationId: 'v-a', slug: 'sp-a' },
+      { variationId: 'v-b', slug: 'sp-b' },
+    ]);
+    const cue = c.querySelector('[data-testid="gift-combos-cue"]')!;
+    expect(cue.textContent).toBe('Đã thêm cả combo vào giỏ');
   });
 
   it('0 combo: trạng thái trống có lối sang sản phẩm, mốc vẫn hiện', async () => {

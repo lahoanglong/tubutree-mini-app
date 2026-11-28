@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addGuestLine,
+  addGuestLines,
   clearGuestCart,
   EMPTY_GUEST_CART,
   GUEST_CART_KEY,
@@ -95,6 +96,74 @@ describe('giỏ khách: trần 30 dòng và 99 mỗi dòng', () => {
     expect(localStorage.getItem(GUEST_CART_KEY)).toBe(before);
     expect(addGuestLine({ variationId: 'v2', slug: 'het-hang', quantity: 1, maxQty: 0 })).toEqual({ ok: false, reason: 'max' });
     expect(readGuestCart().map((l) => l.variationId)).toEqual(['v1']);
+  });
+});
+
+describe('giỏ khách: thêm cả bộ bằng một lần ghi (addGuestLines)', () => {
+  const bundle = [
+    { variationId: 'b1', slug: 'dau-goi', quantity: 1 },
+    { variationId: 'b2', slug: 'xa-phong', quantity: 1 },
+  ];
+
+  it('ghi mọi dòng trong một lần: một sự kiện đổi giỏ, giữ thứ tự, cộng dồn dòng đã có', () => {
+    addGuestLine({ variationId: 'b2', slug: 'xa-phong', quantity: 2 }, 500);
+    const onChange = vi.fn();
+    const stop = subscribeGuestCart(onChange);
+    expect(addGuestLines(bundle, 1000)).toEqual({ ok: true, added: 2, quantity: 4 });
+    stop();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(readGuestCart()).toEqual([
+      { variationId: 'b2', slug: 'xa-phong', quantity: 3, addedAt: 500 },
+      { variationId: 'b1', slug: 'dau-goi', quantity: 1, addedAt: 1000 },
+    ]);
+  });
+
+  it('không đủ chỗ cho dòng mới thì không món nào vào (full), giỏ giữ nguyên', () => {
+    for (let i = 0; i < GUEST_CART_MAX_LINES - 1; i += 1) addGuestLine({ variationId: `f${i}`, slug: 'xa-phong', quantity: 1 }, 1);
+    const before = localStorage.getItem(GUEST_CART_KEY);
+    expect(addGuestLines(bundle, 2)).toEqual({ ok: false, reason: 'full' });
+    expect(localStorage.getItem(GUEST_CART_KEY)).toBe(before);
+    expect(readGuestCart()).toHaveLength(GUEST_CART_MAX_LINES - 1);
+  });
+
+  it('đủ 30 dòng mà bộ chỉ gồm món đã có thì vẫn cộng được', () => {
+    for (let i = 0; i < GUEST_CART_MAX_LINES - 1; i += 1) addGuestLine({ variationId: `f${i}`, slug: 'xa-phong', quantity: 1 }, 1);
+    addGuestLine({ variationId: 'b1', slug: 'dau-goi', quantity: 1 }, 1);
+    expect(readGuestCart()).toHaveLength(GUEST_CART_MAX_LINES);
+    expect(addGuestLines([{ variationId: 'b1', slug: 'dau-goi', quantity: 1 }], 2)).toEqual({ ok: true, added: 1, quantity: GUEST_CART_MAX_LINES + 1 });
+  });
+
+  it('có dòng vượt trần 99 thì cả bộ bị từ chối (max), không kẹp xuống 99 và không ghi gì', () => {
+    addGuestLine({ variationId: 'b1', slug: 'dau-goi', quantity: GUEST_CART_MAX_QTY }, 1);
+    addGuestLine({ variationId: 'b2', slug: 'xa-phong', quantity: GUEST_CART_MAX_QTY - 1 }, 1);
+    const before = localStorage.getItem(GUEST_CART_KEY);
+    expect(addGuestLines([{ variationId: 'b1', slug: 'dau-goi', quantity: 1 }], 2)).toEqual({ ok: false, reason: 'max' });
+    expect(addGuestLines([{ variationId: 'b3', slug: 'dau-goi', quantity: 1 }, { variationId: 'b2', slug: 'xa-phong', quantity: 2 }], 3)).toEqual({ ok: false, reason: 'max' });
+    expect(localStorage.getItem(GUEST_CART_KEY)).toBe(before);
+  });
+
+  it('dòng sai dạng hay bộ rỗng: không ghi gì (sai dạng trả storage để nơi gọi đi lối cũ, rỗng trả max)', () => {
+    addGuestLine({ variationId: 'b1', slug: 'dau-goi', quantity: 1 }, 1);
+    const before = localStorage.getItem(GUEST_CART_KEY);
+    expect(addGuestLines([{ variationId: 'hỏng id', slug: 'dau-goi', quantity: 1 }, { variationId: 'b4', slug: 'xa-phong', quantity: 1 }], 4)).toEqual({ ok: false, reason: 'storage' });
+    expect(addGuestLines([{ variationId: 'b3', slug: 'Sai Slug!', quantity: 1 }], 3)).toEqual({ ok: false, reason: 'storage' });
+    expect(addGuestLines([{ variationId: 'b5', slug: 'dau-goi', quantity: 0 }], 5)).toEqual({ ok: false, reason: 'storage' });
+    expect(addGuestLines([], 6)).toEqual({ ok: false, reason: 'max' });
+    expect(localStorage.getItem(GUEST_CART_KEY)).toBe(before);
+  });
+
+  it('bộ nhớ bị chặn: trả storage, không ném', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('đầy');
+    });
+    expect(addGuestLines(bundle, 1)).toEqual({ ok: false, reason: 'storage' });
+  });
+
+  it('dòng có mốc gộp: thêm cả bộ là ý định mới nên bỏ mốc', () => {
+    addGuestLine({ variationId: 'b1', slug: 'dau-goi', quantity: 1 }, 1);
+    markGuestMergeBase('b1', 3, 5);
+    addGuestLines(bundle, 6);
+    expect(readGuestCart().find((l) => l.variationId === 'b1')).toEqual({ variationId: 'b1', slug: 'dau-goi', quantity: 2, addedAt: 1 });
   });
 });
 

@@ -37,9 +37,9 @@ import { GUEST_CART_KEY, readGuestCart } from '@/lib/guest-cart/store';
 const VARIATIONS = [{ id: 'v1', name: '250ml', retailPrice: 200000, salePrice: 150000, stock: 5 }];
 const PENDING_ADD_KEY = 'tubu_pending_add';
 
-const clientWith = (flag: boolean | null) => {
+const clientWith = (flag: boolean | null, guestCheckout?: boolean) => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  if (flag !== null) qc.setQueryData(['public-config'], { ...PUBLIC_CONFIG_FALLBACK, webGuestCartEnabled: flag });
+  if (flag !== null) qc.setQueryData(['public-config'], { ...PUBLIC_CONFIG_FALLBACK, webGuestCartEnabled: flag, ...(guestCheckout === undefined ? {} : { webGuestCheckoutEnabled: guestCheckout }) });
   return qc;
 };
 
@@ -157,6 +157,41 @@ describe('AddToCart — giỏ khách (cờ bật)', () => {
     expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(PENDING_ADD_KEY)).toBeNull();
+  });
+
+  it('"Mua ngay" khi đặt hàng không đăng nhập bật (web.guest_checkout_enabled): món vào giỏ khách rồi đi thẳng /thanh-toan', async () => {
+    const { container } = await mount(clientWith(true, true));
+    await tap(buyBtn(container));
+    await flush();
+    expect(guestQty()).toBe(1);
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(PENDING_ADD_KEY)).toBeNull();
+  });
+
+  it('"Mua ngay" khi đặt hàng không đăng nhập bật mà giỏ khách đã đủ số còn hàng: không cộng thêm, vẫn đi /thanh-toan', async () => {
+    localStorage.setItem(GUEST_CART_KEY, JSON.stringify([{ variationId: 'v1', slug: 'dau-goi', quantity: 5, addedAt: 1 }]));
+    const { container } = await mount(clientWith(true, true));
+    await tap(buyBtn(container));
+    await flush();
+    expect(guestQty()).toBe(5);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+  });
+
+  it('"Mua ngay" khi đặt hàng không đăng nhập tắt rõ ràng: vẫn dừng ở /gio-hang', async () => {
+    const { container } = await mount(clientWith(true, false));
+    await tap(buyBtn(container));
+    await flush();
+    expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('"Thêm vào giỏ" không đổi khi đặt hàng không đăng nhập bật: ở lại trang, không sang /thanh-toan', async () => {
+    const { container } = await mount(clientWith(true, true));
+    await tap(addBtn(container));
+    await flush();
+    expect(guestQty()).toBe(1);
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it('"Mua ngay" khi giỏ khách đã đủ số còn hàng: không cộng thêm, vẫn sang /gio-hang', async () => {

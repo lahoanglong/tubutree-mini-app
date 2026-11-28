@@ -28,7 +28,7 @@ import { ProductThumb } from '@/components/mini/product-thumb';
 import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import { coreHttp } from '@/lib/core-http';
 import { phoneCaption } from '@/lib/phone-ui';
-import { useBundleAdd, type BundleAddResult } from '@/lib/use-bundle-add';
+import { comboBundleLines, useBundleAdd, withSlugs, type BundleAddResult } from '@/lib/use-bundle-add';
 import { useHydrated } from '@/lib/use-hydrated';
 import { PdpBundleSlots } from './pdp-bundle-slots';
 import { pdpSectionTitle } from './pdp-sections';
@@ -159,7 +159,7 @@ export function PdpBundles({
   const addAddons = () =>
     add({
       id: 'addons',
-      lines: addonLines(rows, picked),
+      lines: withSlugs(addonLines(rows, picked), rows),
       errorKey: 'addon.error',
       successText: fillCopy('addon.added'),
       onDone: () => {
@@ -189,7 +189,7 @@ export function PdpBundles({
                     busy={busyId === v.id}
                     itemPrices
                     onAddAll={() => {
-                      if (combosHeld === null) add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') });
+                      if (combosHeld === null) add({ id: v.id, lines: comboBundleLines(v), errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded') });
                     }}
                   />
                 ))}

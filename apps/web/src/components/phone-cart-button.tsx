@@ -1,17 +1,13 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
 import { BackAwareLink } from '@/components/back-aware-link';
-import { useAuthPhase } from '@/lib/auth-phase';
-import { useCartKey } from '@/lib/cart-key';
-import { getCart } from '@/lib/shop-client';
+import { useCartBadgeCount } from '@/lib/guest-cart/use-cart-badge-count';
 import { CountBadge } from '@/components/mini/badge';
 
 /** Nút giỏ tròn như `CartButton` của Mini App, chỉ ở điện thoại (từ md thanh đầu website đã có giỏ). */
 export function PhoneCartButton() {
-  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: useAuthPhase() === 'authenticated' });
-  const count = cartQ.data?.itemCount ?? 0;
+  const count = useCartBadgeCount();
   return (
     <BackAwareLink
       href="/gio-hang"

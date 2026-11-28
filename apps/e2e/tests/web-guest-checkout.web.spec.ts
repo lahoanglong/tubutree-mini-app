@@ -6,7 +6,7 @@ import { assertProductOnCi, singleVariationProduct } from './support/pdp-product
 import { probeW182 } from './support/w182-probe';
 
 /**
- * Đặt hàng trên web không đăng nhập (cờ `web.guest_checkout_enabled`). Cờ bật: khách đi trang sản phẩm → Mua ngay → giỏ → Đặt hàng → một biểu mẫu
+ * Đặt hàng trên web không đăng nhập (cờ `web.guest_checkout_enabled`). Cờ bật: khách đi trang sản phẩm → Mua ngay (đi thẳng thanh toán, không qua giỏ) → một biểu mẫu
  * (tên, SĐT, tỉnh, phường, số nhà) → đơn COD → trang theo dõi `/don/<mã>#k=<khoá>`; COD trên trần thì chỉ còn chuyển khoản và sang trang QR kèm khoá.
  * Cờ tắt: giỏ và thanh toán như bản trước (tường đăng nhập), không gọi thêm đường nào; ca này ghi danh sách request và ảnh vào
  * GUEST_CHECKOUT_COMPARE_DIR/<GUEST_CHECKOUT_COMPARE_LABEL> để so với cùng ca chạy trên main.
@@ -242,7 +242,7 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     await setServerGuestCheckout(request, false);
   });
 
-  test('trang sản phẩm → Mua ngay → giỏ → Đặt hàng → một biểu mẫu → đơn COD → trang theo dõi, đúng 9 chạm', async ({ page, api, request }, testInfo) => {
+  test('trang sản phẩm → Mua ngay → một biểu mẫu → đơn COD → trang theo dõi, đúng 8 chạm', async ({ page, api, request }, testInfo) => {
     const d = await inStockProduct(request);
     test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
     test.skip(!(await serverGuestCheckoutReady(testInfo.config.workers)), NEEDS_TEMP_DB);
@@ -255,13 +255,13 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     await page.goto(`/san-pham/${d!.slug}`);
     const buy = mobile ? page.getByTestId('buy-now') : page.getByTestId('pdp-buy-now');
     await expect(buy).toBeEnabled({ timeout: 30_000 });
+    const visited: string[] = [];
+    page.on('framenavigated', (f) => {
+      if (f === page.mainFrame()) visited.push(new URL(f.url()).pathname);
+    });
     await tap.click(buy);
-    await page.waitForURL('**/gio-hang', { timeout: 15_000 });
-    const cta = visible(page, 'guest-cart-login');
-    await expect(cta).toHaveText('Đặt hàng');
-    await expect(cta).toHaveAttribute('href', '/thanh-toan');
-    await tap.click(cta);
     await page.waitForURL('**/thanh-toan', { timeout: 15_000 });
+    expect(visited, 'cờ đặt hàng không đăng nhập bật: Mua ngay đi thẳng thanh toán, không qua giỏ').not.toContain('/gio-hang');
     await expect(page.getByTestId('guest-checkout')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('guest-login-link')).toHaveText(/30\.000đ/);
     expect(page.url()).not.toContain('/dang-nhap');
@@ -274,7 +274,7 @@ test.describe('Đặt hàng không đăng nhập trên web, cờ bật', () => {
     await tap.click(place);
 
     await page.waitForURL(new RegExp(`/don/${CODE}#k=[A-Za-z0-9_-]{43}$`), { timeout: 20_000 });
-    expect(tap.count, 'số chạm từ trang sản phẩm tới lúc đặt xong').toBe(9);
+    expect(tap.count, 'số chạm từ trang sản phẩm tới lúc đặt xong').toBe(8);
 
     const placed = api.callsTo('POST', '/checkout/guest/orders');
     expect(placed).toHaveLength(1);

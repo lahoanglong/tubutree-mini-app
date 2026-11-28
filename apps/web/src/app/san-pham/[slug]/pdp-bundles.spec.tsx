@@ -8,7 +8,9 @@ import type { BundleDTO, BundleItemDTO, ProductBundles } from '@tubutree/app-cor
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ApiError } from '@/lib/client-api';
+import { addGuestLine, GUEST_CART_MAX_LINES, readGuestCart } from '@/lib/guest-cart/store';
 
 const mocks = vi.hoisted(() => ({ addAll: vi.fn(), push: vi.fn(), phase: 'authenticated' as string, get: vi.fn() }));
 
@@ -54,6 +56,7 @@ beforeEach(() => {
   mocks.push.mockReset();
   mocks.get.mockReset().mockRejectedValue(new Error('offline'));
   mocks.phase = 'authenticated';
+  localStorage.clear();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -301,9 +304,49 @@ describe('PdpBundles (web): Combo ưu đãi', () => {
     mocks.phase = 'guest';
     const c = await mount({ combos: ONE_COMBO, addons: [] });
     click(buttonText(c, /Thêm cả combo/)!);
+    await flush();
     expect(mocks.addAll).not.toHaveBeenCalled();
     expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/dang-nhap'));
     expect(String(mocks.push.mock.calls[0]![0])).toContain(encodeURIComponent('/san-pham/sp-anchor'));
+    expect(readGuestCart()).toHaveLength(0);
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật: cả combo vào giỏ trình duyệt bằng một lần ghi, không sang đăng nhập, không gọi giỏ máy chủ', async () => {
+    mocks.phase = 'guest';
+    mocks.get.mockResolvedValue({ webGuestCartEnabled: true });
+    const c = await mount({ combos: ONE_COMBO, addons: [] });
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush();
+    expect(mocks.addAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(readGuestCart().map(({ variationId, slug, quantity }) => ({ variationId, slug, quantity }))).toEqual([
+      { variationId: 'v-a', slug: 'sp-a', quantity: 1 },
+      { variationId: 'v-b', slug: 'sp-b', quantity: 1 },
+    ]);
+    expect(c.querySelector('[data-testid="pdp-combos"] [role="status"]')!.textContent).toBe('Đã thêm cả combo vào giỏ');
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật: chạm đúp "Thêm cả combo" chỉ cộng một lần', async () => {
+    mocks.phase = 'guest';
+    mocks.get.mockResolvedValue({ webGuestCartEnabled: true });
+    const c = await mount({ combos: ONE_COMBO, addons: [] });
+    const add = buttonText(c, /Thêm cả combo/)!;
+    click(add);
+    click(add);
+    await flush();
+    expect(readGuestCart().map((l) => l.quantity)).toEqual([1, 1]);
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật, giỏ khách đã đủ 30 dòng: báo giỏ đầy, không ghi gì, không sang đăng nhập', async () => {
+    mocks.phase = 'guest';
+    mocks.get.mockResolvedValue({ webGuestCartEnabled: true });
+    for (let i = 0; i < GUEST_CART_MAX_LINES; i += 1) addGuestLine({ variationId: `full-${i}`, slug: `full-${i}`, quantity: 1 });
+    const c = await mount({ combos: ONE_COMBO, addons: [] });
+    click(buttonText(c, /Thêm cả combo/)!);
+    await flush();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(readGuestCart()).toHaveLength(GUEST_CART_MAX_LINES);
+    expect(c.querySelector('[data-testid="pdp-combos"] [role="status"]')!.textContent).toBe(fillCopy('guestCart.full', { n: GUEST_CART_MAX_LINES }));
   });
 
   it('lỗi nghiệp vụ 4xx đọc thẳng lời máy chủ; lỗi khác dùng câu cố định (giỏ không đổi)', async () => {
@@ -406,8 +449,21 @@ describe('PdpBundles (web): Mua kèm giá tốt', () => {
     const c = await mount({ combos: [], addons: TWO_ADDONS });
     click(rows(c)[0]!);
     click(buttonText(c, 'Thêm 1 món vào giỏ')!);
+    await flush();
     expect(mocks.addAll).not.toHaveBeenCalled();
     expect(mocks.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách chưa đăng nhập, cờ giỏ khách bật: món mua kèm đã chọn vào giỏ trình duyệt kèm slug, không sang đăng nhập', async () => {
+    mocks.phase = 'guest';
+    mocks.get.mockResolvedValue({ webGuestCartEnabled: true });
+    const c = await mount({ combos: [], addons: TWO_ADDONS });
+    click(rows(c)[0]!);
+    click(buttonText(c, 'Thêm 1 món vào giỏ')!);
+    await flush();
+    expect(mocks.addAll).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(readGuestCart().map(({ variationId, slug, quantity }) => ({ variationId, slug, quantity }))).toEqual([{ variationId: 'v-x', slug: 'sp-x', quantity: 1 }]);
   });
 
   describe('"Chọn tất cả"', () => {

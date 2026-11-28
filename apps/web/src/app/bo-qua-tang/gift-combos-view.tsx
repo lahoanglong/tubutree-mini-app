@@ -17,7 +17,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
-import { useBundleAdd } from '@/lib/use-bundle-add';
+import { comboBundleLines, useBundleAdd } from '@/lib/use-bundle-add';
 import { useHydrated } from '@/lib/use-hydrated';
 
 const GRID = 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 md:gap-4';
@@ -47,7 +47,7 @@ function GiftCombosCallouts({ items }: { items: readonly GiftCombosCallout[] }) 
 
 /**
  * Trang Bộ quà tặng & combo khởi đầu của web: combo thật đang bán được (luật Combo Trang chủ, tối đa 8), "Tiết kiệm" của thẻ là số máy chủ tính bằng
- * đúng hàm giỏ trừ, hai mốc đọc từ máy chủ, "Thêm cả combo" một chạm (khách chưa đăng nhập được đưa sang đăng nhập rồi quay lại, như Combo Trang chủ).
+ * đúng hàm giỏ trừ, hai mốc đọc từ máy chủ, "Thêm cả combo" một chạm (khách chưa đăng nhập: cờ giỏ khách bật thì vào giỏ trình duyệt ngay tại trang, tắt thì sang đăng nhập rồi quay lại, như Combo Trang chủ).
  * Kết quả hiện ngay dưới thẻ vừa bấm (web không có thông báo nổi): "Đã thêm…" kèm câu còn thiếu bao nhiêu tới Miễn phí giao hàng, rồi quà dùng thử 0đ,
  * đọc từ giỏ máy chủ trả về. HTML máy chủ (ISR 5 phút) vẽ sẵn; lượt hydrate đầu lọc hạn theo đúng giờ dựng HTML, sau đó theo giờ máy chủ hiện tại.
  */
@@ -97,7 +97,7 @@ export default function GiftCombosView({ initial, initialFetchedAt }: { initial?
               // Ưu tiên món còn hàng: "Xem từng món" luôn dẫn tới một món mua được.
               const target = v.items.find((it) => it.stock !== 'out') ?? v.items[0];
               const mine = result?.id === v.id ? result : null;
-              const onDone = (cart: CueCart) => {
+              const onDone = (cart: CueCart | null) => {
                 const next = comboAddedCue(cart);
                 setCue(next ? { id: v.id, text: next.text } : null);
               };
@@ -113,7 +113,7 @@ export default function GiftCombosView({ initial, initialFetchedAt }: { initial?
                     itemPrices={!v.clamped}
                     onAddAll={() => {
                       setCue(null);
-                      add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
+                      add({ id: v.id, lines: comboBundleLines(v), errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
                     }}
                     onSeeItems={target?.slug ? () => router.push(`/san-pham/${encodeURIComponent(target.slug)}`) : undefined}
                   />

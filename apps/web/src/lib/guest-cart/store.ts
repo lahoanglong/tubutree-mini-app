@@ -147,6 +147,34 @@ export function addGuestLine(
   return { ok: true, added: quantity - have, quantity };
 }
 
+/**
+ * Thêm cả bộ (combo, mua kèm, gợi ý mua kèm) bằng một lần ghi: hoặc vào hết hoặc không món nào, như lệnh lô của giỏ máy chủ.
+ * Một sự kiện đổi giỏ duy nhất nên huy hiệu giỏ chỉ vẽ lại một lần. Giỏ không đủ chỗ cho các dòng mới thì `full`; có dòng cộng dồn vượt trần 99 thì `max`
+ * (không kẹp xuống 99: bộ thiếu món thì máy chủ không áp giảm giá combo). Dòng sai dạng (mã phân loại hay slug lạ) thì `storage`, để nơi gọi đi lối cũ (sang đăng nhập)
+ * thay vì thêm thiếu. Không có tồn kho ở đây: giỏ khách kiểm lại tồn lúc hiển thị, và đặt hàng kiểm lần nữa ở máy chủ.
+ * Kết quả: `added` là số đơn vị thêm vào, `quantity` là tổng số món trong giỏ sau khi thêm (một bộ nhiều dòng nên không có "số lượng của dòng").
+ */
+export function addGuestLines(
+  inputs: readonly { variationId: string; slug: string; quantity: number }[],
+  now: number = Date.now(),
+): GuestAddResult {
+  if (inputs.length === 0) return { ok: false, reason: 'max' };
+  const lines = readGuestCart();
+  const next = new Map(lines.map((l) => [l.variationId, l] as const));
+  for (const input of inputs) {
+    if (!ID_RE.test(input.variationId) || !SLUG_RE.test(input.slug) || !Number.isFinite(input.quantity) || input.quantity < 1) return { ok: false, reason: 'storage' };
+    const prev = next.get(input.variationId);
+    const quantity = (prev?.quantity ?? 0) + Math.floor(input.quantity);
+    if (quantity > GUEST_CART_MAX_QTY) return { ok: false, reason: 'max' };
+    if (!prev && next.size >= GUEST_CART_MAX_LINES) return { ok: false, reason: 'full' };
+    next.set(input.variationId, prev ? { ...withoutBase(prev), quantity } : { variationId: input.variationId, slug: input.slug, quantity, addedAt: now });
+  }
+  const merged = [...next.values()];
+  if (!write(merged)) return { ok: false, reason: 'storage' };
+  const after = guestCartCount(merged);
+  return { ok: true, added: after - guestCartCount(lines), quantity: after };
+}
+
 /** Đổi số lượng một dòng (kẹp 1..99; trần tồn kho do nơi gọi kẹp). Dòng không còn thì thôi. */
 export function setGuestQuantity(variationId: string, quantity: number): boolean {
   const lines = readGuestCart();

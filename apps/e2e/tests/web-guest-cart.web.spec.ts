@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { test, expect, makeUser, mockSession, publicConfig, type MockApi } from './support/mock-api';
+import { homeCombos, mockHomeCombos } from './support/bundle-mocks';
 import { assertProductOnCi, singleVariationProduct } from './support/pdp-product';
 import { WEB_SIZES_GUARD } from './support/w182-audit';
 import { probeW182 } from './support/w182-probe';
@@ -9,6 +10,8 @@ import { probeW182 } from './support/w182-probe';
  * Giỏ khách trên web (cờ `web.guest_cart_enabled`). Cờ bật: khách chưa đăng nhập thêm món ở trang sản phẩm mà không bị đưa sang đăng nhập,
  * mở giỏ thấy món với giá lấy lại từ API công khai và một nút "Đăng nhập để đặt hàng"; đăng nhập (giả lập callback Zalo) thì món chuyển vào
  * giỏ tài khoản bằng POST /cart/items và trang quay về giỏ. Cờ tắt: hành vi cũ (sang đăng nhập, giỏ là tường đăng nhập).
+ * Phễu khách: ở Trang chủ thêm cả combo và thêm nhanh một phân loại không bị đưa sang đăng nhập, huy hiệu giỏ ở Trang chủ, Duyệt và trang sản phẩm khớp giỏ trình duyệt;
+ * "Mua ngay" khi cờ đặt hàng không đăng nhập chưa bật sang giỏ khách (cờ bật thì đi thẳng thanh toán: web-guest-checkout.web.spec.ts).
  * Phần server của Next gọi API thật (sản phẩm một phân loại có sẵn trong DB e2e); mọi lời gọi từ trình duyệt đi qua mock.
  * Có GUEST_CART_SHOTS_DIR thì chụp ảnh 360/390px trước (cờ tắt) và sau (cờ bật) vào thư mục đó.
  */
@@ -198,5 +201,129 @@ test.describe('Giỏ khách trên web, cờ tắt', () => {
     await page.waitForURL(/\/dang-nhap\?returnTo=/, { timeout: 15_000 });
     expect(await page.evaluate(() => localStorage.getItem('tubu.guestCart.v1'))).toBeNull();
     expect(await page.evaluate(() => sessionStorage.getItem('tubu_pending_add'))).toContain(d!.variations[0]!.id);
+  });
+});
+
+const HOME_BEST_NAME = 'Nước rửa chén sinh học hương chanh sả';
+const HOME_BEST_SLUG = 'sp-gf-best';
+const HOME_CARD = (id: string, name: string, slug: string) => ({
+  id, slug, name, brand: 'Tubu', thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, ratingAvg: 4.7, reviewCount: 30, sold: 820,
+});
+const HOME_FEED = [HOME_CARD('gf-best', HOME_BEST_NAME, HOME_BEST_SLUG), HOME_CARD('gf-feed-2', 'Sản phẩm gợi ý hai', 'sp-gf-feed-2')];
+const pageOf = (data: unknown[]) => ({ data, meta: { page: 1, limit: 20, total: data.length } });
+
+/** Sản phẩm hai phân loại cho nút ＋ ở Trang chủ: bấm là mở bảng chọn phân loại, không phải thêm thẳng. */
+const VARIANT_PRODUCT = {
+  id: 'gf-best', slug: HOME_BEST_SLUG, brand: 'Tubu', name: HOME_BEST_NAME, shortDesc: 'Mô tả ngắn', description: '<p>IT</p>', images: [], thumbnail: null,
+  basePrice: 100_000, salePrice: null, certifications: [],
+  variations: [
+    { id: 'gf-best-a', sku: 'GFBA', name: 'Chanh sả 500ml', attributes: {}, retailPrice: 100_000, salePrice: null, stock: 20 },
+    { id: 'gf-best-b', sku: 'GFBB', name: 'Bạc hà 500ml', attributes: {}, retailPrice: 100_000, salePrice: null, stock: 20 },
+  ],
+};
+
+function mockGuestHome(api: MockApi): void {
+  api.get('/categories', [{ id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4, children: [] }]);
+  api.get('/brands', [{ brand: 'Tubu', count: 3 }]);
+  api.get('/search/suggest', []);
+  api.get('/products', pageOf(HOME_FEED));
+  api.get(`/products/${HOME_BEST_SLUG}`, VARIANT_PRODUCT);
+  mockHomeCombos(api, homeCombos());
+}
+
+/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (chép từ tiles-scroll.web.spec.ts). */
+async function refetchStale(page: Page, api: MockApi, method: string, pattern: string): Promise<void> {
+  await page.waitForFunction(() => {
+    const all = document.querySelectorAll('main *');
+    const last = all[all.length - 1];
+    return !!last && Object.keys(last).some((k) => k.startsWith('__reactFiber$'));
+  }, undefined, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const w = window as unknown as { __tubuClockOffset?: number };
+    if (w.__tubuClockOffset === undefined) {
+      w.__tubuClockOffset = 0;
+      const real = Date.now.bind(Date);
+      Date.now = () => real() + (w.__tubuClockOffset ?? 0);
+    }
+    w.__tubuClockOffset += 10 * 60_000;
+  });
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => {
+        window.dispatchEvent(new Event('offline'));
+        window.dispatchEvent(new Event('online'));
+      });
+      return api.callsTo(method, pattern).length;
+    }, { timeout: 15_000 })
+    .toBeGreaterThanOrEqual(1);
+}
+
+const cartLink = (page: Page) => page.locator('[aria-label^="Giỏ hàng"]:visible').first();
+const storedLines = (page: Page) =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('tubu.guestCart.v1') ?? '[]') as { variationId: string; slug: string; quantity: number }[]);
+
+test.describe('Phễu khách trên web, cờ giỏ khách bật', () => {
+  test('Trang chủ thêm combo và thêm nhanh phân loại; huy hiệu giỏ khớp ở Trang chủ, Duyệt, trang sản phẩm; không lần nào sang /dang-nhap', async ({ page, api, request }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ điện thoại 375px');
+    const d = await inStockProduct(request);
+    test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockGuestPdp(api, d!, true);
+    mockGuestHome(api);
+    const visited: string[] = [];
+    page.on('framenavigated', (f) => {
+      if (f === page.mainFrame()) visited.push(new URL(f.url()).pathname);
+    });
+    const badge = (n: number) => expect(cartLink(page)).toHaveAttribute('aria-label', `Giỏ hàng, ${n} sản phẩm`, { timeout: 15_000 });
+
+    await page.goto('/');
+    await refetchStale(page, api, 'GET', '/bundles/combos');
+    const combos = page.getByTestId('home-combos');
+    await expect(combos).toBeVisible({ timeout: 15_000 });
+    await combos.getByRole('button', { name: /^Thêm cả combo Combo bếp xanh/ }).click();
+    await expect.poll(async () => (await storedLines(page)).length, { timeout: 10_000 }).toBe(2);
+    expect(new URL(page.url()).pathname).toBe('/');
+    await badge(2);
+
+    await page.getByRole('button', { name: `Thêm ${HOME_BEST_NAME} vào giỏ` }).first().click();
+    await expect(page.getByText('Chọn phân loại')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('group', { name: 'Phân loại' }).getByText('Bạc hà 500ml').click();
+    await page.getByRole('dialog', { name: 'Chọn phân loại' }).getByRole('button', { name: /^Thêm vào giỏ/ }).click();
+    await expect.poll(async () => (await storedLines(page)).some((l) => l.variationId === 'gf-best-b' && l.slug === HOME_BEST_SLUG), { timeout: 10_000 }).toBe(true);
+    await badge(3);
+
+    await page.goto('/san-pham');
+    await badge(3);
+
+    // Trang sản phẩm ở điện thoại không có thanh đầu: huy hiệu giỏ nằm ở thanh dính đáy.
+    const pdpBadge = (n: number) =>
+      expect(page.locator('a[aria-label="Xem giỏ hàng"]:visible [data-testid="count-badge"]').first()).toHaveText(String(n), { timeout: 15_000 });
+    await page.goto(`/san-pham/${d!.slug}`);
+    await pdpBadge(3);
+    const add = visibleAdd(page);
+    await expect(add).toBeEnabled({ timeout: 30_000 });
+    await add.click();
+    await pdpBadge(4);
+
+    expect(visited.filter((p) => p.startsWith('/dang-nhap')), 'khách không bị đưa sang đăng nhập ở bất kỳ bước nào').toEqual([]);
+    expect(api.callsTo('POST', '/cart/items')).toHaveLength(0);
+    expect(api.callsTo('POST', '/cart/items/batch')).toHaveLength(0);
+    expect((await storedLines(page)).reduce((n, l) => n + l.quantity, 0)).toBe(4);
+  });
+
+  test('Mua ngay khi chưa bật đặt hàng không đăng nhập: sang giỏ khách, không sang thanh toán', async ({ page, api, request }, testInfo) => {
+    const d = await inStockProduct(request);
+    test.skip(!d, 'DB e2e chưa có sản phẩm một phân loại còn hàng');
+    const mobile = testInfo.project.name === 'Web Customer Mobile';
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+    mockGuestPdp(api, d!, true);
+
+    await page.goto(`/san-pham/${d!.slug}`);
+    const buy = page.locator('[data-testid="buy-now"]:visible, [data-testid="pdp-buy-now"]:visible').first();
+    await expect(buy).toBeEnabled({ timeout: 30_000 });
+    await buy.click();
+    await page.waitForURL('**/gio-hang', { timeout: 15_000 });
+    await expect(page.getByTestId('guest-cart')).toBeVisible({ timeout: 15_000 });
+    expect((await storedLines(page)).map((l) => l.variationId)).toEqual([d!.variations[0]!.id]);
   });
 });

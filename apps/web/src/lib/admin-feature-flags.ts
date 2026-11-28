@@ -92,6 +92,14 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Khách chưa đăng nhập bấm mua lại bị đưa sang trang đăng nhập như trước. Món khách đã chọn vẫn nằm trong trình duyệt của họ và hiện lại khi bạn bật lại.',
   },
   {
+    key: 'web.guest_checkout_enabled',
+    label: 'Cho khách chưa đăng nhập đặt hàng bằng số điện thoại trên web',
+    description: 'Khách chưa đăng nhập trên website đặt hàng bằng họ tên, số điện thoại và địa chỉ (không cần Zalo) và theo dõi đơn bằng đường dẫn riêng; "Mua ngay" đi thẳng tới thanh toán. Không dùng mã giảm giá, Điểm Xanh hay giá Giờ vàng, không tích điểm. Cần bật cùng "Giỏ hàng cho khách chưa đăng nhập trên web". Mini App không đổi.',
+    fallback: false,
+    onWarning: 'Khách chưa đăng nhập trên web đặt được đơn ngay mà không cần tài khoản; nút Mua ngay đưa thẳng tới thanh toán. Đơn không tích Điểm Xanh và không dùng mã giảm giá.',
+    offWarning: 'Khách chưa đăng nhập bấm đặt hàng bị mời đăng nhập như trước, nút Mua ngay dừng ở giỏ. Trang theo dõi và tra cứu đơn đặt không đăng nhập (/don) ngừng mở được với khách; đơn đã đặt vẫn nằm trong hệ thống, nhân viên xem như thường.',
+  },
+  {
     key: 'app.mobile_miniapp_redirect_enabled',
     label: 'Tự mở Mini App trên web điện thoại',
     description:

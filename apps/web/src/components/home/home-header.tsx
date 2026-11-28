@@ -2,12 +2,9 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { Bell, Search, ShoppingCart } from 'lucide-react';
 import { isWebRouteReady } from '@/lib/route-map';
-import { useAuth } from '@/lib/auth-context';
-import { useCartKey } from '@/lib/cart-key';
-import { getCart } from '@/lib/shop-client';
+import { useCartBadgeCount } from '@/lib/guest-cart/use-cart-badge-count';
 import { homeText } from '@/lib/home-text';
 import { CountBadge } from '@/components/mini/badge';
 import tubuLogo2x from '@/assets/tubu-logo-home-2x.png';
@@ -27,9 +24,7 @@ const LOGO_MARK_HEIGHT = 30;
  * Ô tìm chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chuông hiện cả với khách chưa đăng nhập như Mini App.
  */
 export function HomeHeader({ unreadCount }: { unreadCount: number }) {
-  const { status } = useAuth();
-  const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: status === 'authenticated' });
-  const count = cartQ.data?.itemCount ?? 0;
+  const count = useCartBadgeCount();
   return (
     <div data-testid="home-header" className="flex h-14 items-center gap-2 md:hidden">
       <Link href="/" aria-label="Tubu Tree — trang chủ" className="relative block flex-none after:absolute after:-inset-y-2 after:-left-4 after:-right-2 after:content-['']" style={{ width: LOGO_MARK_WIDTH, height: LOGO_MARK_HEIGHT }}>

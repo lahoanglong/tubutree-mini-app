@@ -46,6 +46,23 @@ describe('FeatureFlagsCard', () => {
     }
   });
 
+  it('web.guest_checkout_enabled: có công tắc, mặc định tắt (khoá chưa có dòng), bật hỏi xác nhận rồi PUT đúng boolean true', async () => {
+    const flag = FEATURE_FLAGS.find((f) => f.key === 'web.guest_checkout_enabled');
+    expect(flag).toBeDefined();
+    expect(flag!.fallback).toBe(false);
+    expect(flag!.manageIn).toBeUndefined();
+    const { container, puts } = setup([]);
+    const toggle = sw(container, flag!.label);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    click(toggle);
+    await flush();
+    expect(confirmDialog()!.textContent).toContain(flag!.onWarning!);
+    expect(puts).toEqual([]);
+    answerConfirm(true);
+    await flush();
+    expect(puts).toEqual([{ key: 'web.guest_checkout_enabled', value: true }]);
+  });
+
   it('bấm công tắc hỏi xác nhận rồi PUT boolean đúng khoá, kể cả khoá chưa có dòng', async () => {
     const { container, puts } = setup([]);
     click(sw(container, 'Đổi rác lấy quà'));
