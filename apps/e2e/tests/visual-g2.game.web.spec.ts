@@ -36,7 +36,7 @@ test('chụp g2 hộp chúc mừng và vòng quay (web)', async ({ page, api }) 
   api.post('/game/spin', () => ({ prize: { id: 'p', name: '30 giọt nước', rewardType: 'SEEDS', value: 30 } }));
   await page.goto('/vuon-xanh');
   mkdirSync(path.join(OUT!, 'web'), { recursive: true });
-  await page.getByRole('button', { name: 'Tưới hết (65💧)' }).click({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Tưới cây', exact: true }).click({ timeout: 15_000 });
   await expect(page.getByText('Thu hoạch thành công!')).toBeVisible();
   await settle(page);
   await page.screenshot({ path: path.join(OUT!, 'web', 'harvest-dialog.png') });

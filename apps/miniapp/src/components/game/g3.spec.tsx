@@ -25,7 +25,6 @@ import { GardenHero } from './garden-hero';
 import { GardenPlots } from './garden-plots';
 import { EcoImpact } from './eco-impact';
 import { WaterTank } from './water-tank';
-import { SeasonEmpty } from './season-banner';
 
 describe('OrderWaterCard', () => {
   it('hiện nguồn "Từ đơn hàng" và tiến độ tuần', () => {
@@ -186,10 +185,6 @@ describe('G3 lượt 2', () => {
   it('thẻ nước đơn nói rõ lần mua giao thành công và trần tuần', () => {
     render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 0 }} onShop={vi.fn()} />);
     expect(screen.getByText(/Mỗi lần mua giao thành công \+100/)).toHaveTextContent('tối đa 300');
-  });
-  it('màn mùa rỗng có tiêu đề và lời nhắn', () => {
-    render(<SeasonEmpty />);
-    expect(screen.getByTestId('season-empty')).toBeInTheDocument();
   });
   it('hộp thu hoạch ghi giá trị, đơn tối thiểu, hạn của mã', () => {
     const base = { open: true, guest: false, onLogin: vi.fn(), certificate: null, species: null, points: null, sprout: false, couponCapped: null, nextTarget: 60, onClose: vi.fn(), onShare: vi.fn(), onUseCoupon: vi.fn() };

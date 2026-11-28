@@ -13,6 +13,13 @@ describe('LegalMarkdown — hiển thị nội dung admin dán vào (D5-01)', ()
     expect(out).not.toContain('<h1');
   });
 
+  it('neo cho chân trang (Bộ Công Thương): tiêu đề đầu tiên nhắc "đặt hàng" / "kiểm hàng" mang id dat-hang / kiem-hang, tiêu đề khác không có id', () => {
+    const out = html('## 2. Tài khoản\n\n## 3. Đặt hàng và thanh toán\n\n### Chính sách kiểm hàng khi nhận hàng\n\n## Đặt hàng lần nữa');
+    expect(out).toContain('<h2 id="dat-hang"');
+    expect(out).toContain('<h3 id="kiem-hang"');
+    expect(out.match(/ id="/g)).toHaveLength(2);
+  });
+
   it('đoạn văn tách bằng dòng trống; xuống dòng đơn trong đoạn được giữ', () => {
     const out = html('Dòng một\nDòng hai\n\nĐoạn hai');
     expect(out.match(/<p/g)).toHaveLength(2);

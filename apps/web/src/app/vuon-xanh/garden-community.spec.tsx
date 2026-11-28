@@ -520,7 +520,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     reward: { coupon: 'XANH-123', certificate: 'TT-77', species: { id: 's', name: 'Sao đen', emoji: '🌴', rarity: 'LEGENDARY', ecoFact: 'Sống hàng trăm năm.' } },
   };
   const water = async (c: HTMLElement) => {
-    click(btn(c, /Tưới hết/));
+    click(btn(c, 'Tưới cây'));
     await flush(8);
   };
 
@@ -665,7 +665,7 @@ describe('Vườn Xanh: hộp thu hoạch khi trình duyệt không có clipboar
     });
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
     const c = await mount();
-    click(btn(c, /Tưới hết/));
+    click(btn(c, 'Tưới cây'));
     await flush(8);
     click(document.querySelector<HTMLElement>('[role="dialog"] [data-coupon]'));
     await flush();

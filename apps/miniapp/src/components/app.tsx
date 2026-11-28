@@ -8,6 +8,7 @@ import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { OpenAppRouter } from './open-app-router';
+import { SiteSnowGate } from './season/site-snow-gate';
 import { MainLandmark } from './ui/main-landmark';
 import { NotifyRegion } from './notify-region';
 import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
@@ -300,6 +301,7 @@ export default function MyApp() {
               </NavigationTypeProvider>
               </LivePathnameProvider>
               <BottomNav />
+              <SiteSnowGate />
               {ONBOARDING_SURVEY_ENABLED && (
                 <SilentBoundary>
                   <Suspense fallback={null}>

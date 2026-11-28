@@ -148,12 +148,15 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
       state.me = makeWasteMe({ items: [ITEM_CARTON, pin] });
       state.request = makeRequestDetail({ createdAt, lines: [{ ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty }] });
     };
-    it('tạo hôm nay và đã giữ đủ trần: chỉ câu trần, không "còn 0", không tăng quá trần', async () => {
+    it('tạo hôm nay và đã giữ đủ trần: không "còn 0" trên thẻ, câu trần ở sheet ⓘ Thể lệ, không tăng quá trần', async () => {
       withPin(new Date().toISOString(), 20);
       const c = await mount();
       const t = card(c, 'Pin đã dùng');
       expect(t.textContent).not.toContain('Hôm nay còn nhận được');
-      expect(t.textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+      expect(t.textContent).not.toContain('Mỗi ngày mang tới');
+      click(byText(c, 'button', 'Thể lệ')!);
+      await flush();
+      expect(byText(document.querySelector<HTMLElement>('[data-testid="waste-rules-items"]')!, 'li', 'Pin đã dùng')!.textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
       expect(t.querySelector('button[aria-label^="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
     });
     it('không tạo hôm nay: không áp trần ngày phía khách, không dòng "Hôm nay còn…"', async () => {

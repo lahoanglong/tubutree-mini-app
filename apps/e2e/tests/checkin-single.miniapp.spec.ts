@@ -10,7 +10,7 @@ import { mockTourWorld, tourUser } from './support/tour-world';
 
 // Mọi nhãn nút làm việc điểm danh trên các màn (loyalty-copy, game-newbie, game-more-copy, daily-check-in-guest-copy). Neo đầu chuỗi
 // để dòng trạng thái ("Hôm nay bạn chưa điểm danh …") không bị tính là nút.
-const CHECK_IN_ACTION = /^(Điểm danh|Đã điểm danh|Nhận nước hôm nay|Nhận Điểm Xanh hôm nay)/;
+const CHECK_IN_ACTION = /^(Điểm danh|Đã điểm danh|Nhận Điểm Xanh hôm nay)/;
 const STATUS_TODO = 'Hôm nay bạn chưa điểm danh';
 
 const SCREENS = [

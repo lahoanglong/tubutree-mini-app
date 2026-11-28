@@ -5,6 +5,7 @@ import {
   DEFAULT_LEGAL_DELIVERY,
   DEFAULT_LEGAL_SUPPORT,
   DEFAULT_LEGAL_VARS,
+  FOOTER_POLICY_LINKS,
   LEGAL_DRAFT_NOTICE,
   LEGAL_PAGES,
   LEGAL_SLUGS,
@@ -13,6 +14,8 @@ import {
   isBctNoticeUrl,
   isLegalSlug,
   companyLegalLine,
+  footerCompanyLine,
+  legalHeadingIds,
   legalDeliveryOf,
   merchantIdentityOrDefault,
   normalizeRegistrationDate,
@@ -482,5 +485,45 @@ describe('normalizeRegistrationDate — ngày cấp ĐKDN', () => {
     expect(normalizeRegistrationDate('16/11/2026', now)).toBe('16/11/2026');
     // Chừa một ngày cho lệch múi giờ (máy chủ UTC, admin ở UTC+7): "ngày mai" theo giờ UTC vẫn là hôm nay ở Việt Nam.
     expect(normalizeRegistrationDate('17/11/2026', now)).toBe('17/11/2026');
+  });
+});
+
+describe('footerCompanyLine — khối pháp lý gọn ở chân trang (tubu-w62-01)', () => {
+  const TUBU = 'CÔNG TY TNHH TUBU TREE · MST 0319585995 · Cấp ngày 09/06/2026 tại TP.HCM · Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh';
+  it('chưa nhập gì: thương nhân đã đăng ký kèm ngày, nơi cấp trên giấy chứng nhận của Tubu Tree', () => {
+    expect(footerCompanyLine(undefined)).toBe(TUBU);
+    expect(footerCompanyLine({ representative: ' ', registrationDate: '', registrationPlace: '  ' })).toBe(TUBU);
+  });
+  it('admin đã nhập thì theo admin: số ĐKDN khác MST, nơi cấp, ngày cấp, người đại diện', () => {
+    expect(
+      footerCompanyLine({ legalName: 'Công ty TNHH A', taxCode: '0312345678', address: '1 Đường A', registrationNumber: '41A000001', registrationDate: '12/03/2020', registrationPlace: 'Sở Tài chính TP.HCM', representative: 'Nguyễn Văn A' }),
+    ).toBe('Công ty TNHH A · MST 0312345678 · ĐKDN số 41A000001 · Cấp ngày 12/03/2020 tại Sở Tài chính TP.HCM · Người đại diện: Nguyễn Văn A · 1 Đường A');
+    expect(footerCompanyLine({ legalName: 'CÔNG TY TNHH TUBU TREE', taxCode: '0319585995', registrationNumber: '0319585995', registrationPlace: 'Sở Tài chính TP.HCM' })).toBe(
+      'CÔNG TY TNHH TUBU TREE · MST 0319585995 · Cấp ngày 09/06/2026 tại Sở Tài chính TP.HCM',
+    );
+  });
+  it('đơn vị khác Tubu Tree chưa nhập ngày, nơi cấp: không bịa; thiếu phần nào thì bỏ phần đó, không dấu nối thừa', () => {
+    expect(footerCompanyLine({ legalName: 'Hộ kinh doanh B', taxCode: '0312345678' })).toBe('Hộ kinh doanh B · MST 0312345678');
+    expect(footerCompanyLine({ taxCode: '0312345678' })).toBe('MST 0312345678');
+    expect(footerCompanyLine({ taxCode: '0312345678', registrationDate: '12/03/2020' })).toBe('MST 0312345678 · Cấp ngày 12/03/2020');
+  });
+});
+
+describe('FOOTER_POLICY_LINKS và neo tiêu đề chính sách (Bộ Công Thương, tubu-w62-01)', () => {
+  it('đủ sáu mục Bộ Công Thương yêu cầu cùng điều khoản sử dụng, mỗi lối trỏ tới trang chính sách có thật', () => {
+    expect(FOOTER_POLICY_LINKS.map((l) => l.label)).toEqual(['Hướng dẫn mua hàng', 'Thanh toán', 'Vận chuyển', 'Đổi trả', 'Kiểm hàng', 'Bảo mật thông tin', 'Điều khoản sử dụng']);
+    for (const l of FOOTER_POLICY_LINKS) expect(LEGAL_SLUGS).toContain(l.slug);
+  });
+  it('neo của chân trang có thật trong bản chính sách mặc định: tiêu đề đầu tiên nhắc "đặt hàng" / "kiểm hàng" mang id đó', () => {
+    for (const l of FOOTER_POLICY_LINKS.filter((x) => x.anchor)) {
+      const headings = defaultLegalContent(l.slug, VARS, SUPPORT)
+        .split('\n')
+        .filter((line) => /^#{1,6}\s/.test(line))
+        .map((line) => line.replace(/^#{1,6}\s+/, ''));
+      expect(legalHeadingIds(headings), l.label).toContain(l.anchor);
+    }
+  });
+  it('mỗi id chỉ gắn cho một tiêu đề; tiêu đề khác không có id', () => {
+    expect(legalHeadingIds(['1. Giới thiệu', '3. Đặt hàng và thanh toán', 'Kiểm hàng khi nhận', 'Lại đặt hàng', 'Chính sách KIỂM HÀNG'])).toEqual([undefined, 'dat-hang', 'kiem-hang', undefined, undefined]);
   });
 });

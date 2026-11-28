@@ -205,14 +205,15 @@ describe('/recycle trang vào (§4.1)', () => {
     expect(rules.getByText('Mang tới điểm nhận')).toBeInTheDocument();
     expect(rules.queryByText('Shipper lấy tận nhà')).toBeNull();
   });
-  it('danh sách món: quy tắc + chuẩn bị; món sắp nhận mờ, nhãn "Sắp nhận"', async () => {
+  it('danh sách món: tỉ lệ đổi trên thẻ, cách chuẩn bị trong sheet ⓘ Thể lệ; món sắp nhận nhãn "Sắp nhận"', async () => {
     renderPage();
     expect(await screen.findByText('1 thùng = 1.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('5 vỏ = 1.000 điểm')).toBeInTheDocument();
-    expect(screen.getByText('Gấp phẳng, bỏ băng keo')).toBeInTheDocument();
     const battery = screen.getByText('Pin đã dùng').closest('[data-item]') as HTMLElement;
     expect(battery).toHaveAttribute('data-status', 'COMING_SOON');
     expect(within(battery).getByText('Sắp nhận')).toBeInTheDocument();
+    expect(document.querySelector('[data-item]')!.textContent).not.toContain('Gấp phẳng, bỏ băng keo');
+    expect((await openRules()).getByText('Gấp phẳng, bỏ băng keo')).toBeInTheDocument();
   });
   it('món sắp nhận không làm mờ cả khối bằng opacity (chữ phải đạt 4,5:1) và báo aria-disabled; món đang nhận thì không', async () => {
     renderPage();
@@ -405,13 +406,13 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     renderPage();
     expect(await screen.findByText('Thùng carton')).toBeInTheDocument();
     expect(screen.getByText('Cách đổi')).toBeInTheDocument();
-    expect(screen.getAllByText('Chỉ kho TP.HCM nhận')).toHaveLength(1);
     expect(screen.getByText('Cần số điện thoại để cộng Điểm Xanh đúng tài khoản của bạn.')).toBeInTheDocument();
     expect(mocks.getWasteMe).not.toHaveBeenCalled();
     expect(screen.getByTestId('waste-step-strip')).toBeInTheDocument();
     const rules = await openRules();
     expect(rules.getByText('Chọn món và số lượng bạn có')).toBeInTheDocument();
     expect(rules.queryByText('Cách giao')).toBeNull();
+    expect(rules.getAllByText('Chỉ kho TP.HCM nhận')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: /Xem Thể lệ chương trình/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/rules');
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi rác' }));
@@ -474,11 +475,12 @@ describe('/recycle bố cục (B-35, B-83, B-36)', () => {
     const how = screen.getByText('Cách đổi').closest('section') as HTMLElement;
     expect(how.querySelector('[class*="card"], [data-variant="outline"]')).toBeNull();
   });
-  it('danh sách món: món chỉ kho nhận có nhãn "Chỉ kho TP.HCM nhận"', async () => {
+  it('món chỉ kho nhận: sheet ⓘ Thể lệ ghi "Chỉ kho TP.HCM nhận" dưới đúng món đó', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }] }));
     renderPage();
-    const milk = (await screen.findByText('Vỏ hộp sữa')).closest('[data-item]') as HTMLElement;
-    expect(within(milk).getByText('Chỉ kho TP.HCM nhận')).toBeInTheDocument();
-    expect(within(screen.getByText('Thùng carton').closest('[data-item]') as HTMLElement).queryByText('Chỉ kho TP.HCM nhận')).toBeNull();
+    await screen.findByText('Vỏ hộp sữa');
+    const items = within((await openRules()).getByTestId('waste-rules-items'));
+    expect(within(items.getByText('Vỏ hộp sữa').closest('li') as HTMLElement).getByText('Chỉ kho TP.HCM nhận')).toBeInTheDocument();
+    expect(within(items.getByText('Thùng carton').closest('li') as HTMLElement).queryByText('Chỉ kho TP.HCM nhận')).toBeNull();
   });
 });

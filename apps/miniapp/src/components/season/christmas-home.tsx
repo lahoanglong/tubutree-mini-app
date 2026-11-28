@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { countdownClock } from '@tubutree/app-core/commerce/countdown';
 import { adventTileClock, adventView, msUntilNextVnDay, vnDayKeyOf, type AdventView } from '@tubutree/app-core/seasonal/advent';
-import { BURST_FLAKES, GIFT_ART, GIFT_VIEWBOX, ICON_VIEWBOX, SNOWFLAKES, TREE_ART, TREE_VIEWBOX, XMAS_ICONS, type Flake } from '@tubutree/app-core/seasonal/christmas-art';
+import { BURST_FLAKES, GIFT_ART, GIFT_VIEWBOX, TREE_ART, TREE_VIEWBOX, XMAS_ICONS } from '@tubutree/app-core/seasonal/christmas-art';
 import { christmasCopy as c } from '@tubutree/app-core/seasonal/christmas-copy';
 import { adventLeadLine, christmasHeroView, giftPreview, readSnowOff, settleOpening, SHAKE_MS, shouldClaim, type GiftPhase, writeSnowOff } from '@tubutree/app-core/seasonal/christmas-hero';
 import { useCheckIn } from '../../hooks/use-check-in';
@@ -14,6 +14,7 @@ import { haptic } from '../../utils/haptic';
 import { browserStorage } from '../../utils/recently-viewed';
 import { serverNow } from '../../utils/server-clock';
 import { SR_ONLY } from '../ui/sr-only';
+import { flakeVars, SnowfallLayer, useReducedMotion, XmasIcon } from './snowfall';
 
 /**
  * Noel Xanh trên Trang chủ Mini App (chunk riêng, chỉ tải khi `theme.seasonal` là "christmas"): thẻ cây thông rung quà kèm lịch quà 12 ngày,
@@ -237,16 +238,6 @@ function GiftArt({ open, dropped, mini = false }: { open: boolean; dropped: bool
   );
 }
 
-function XmasIcon({ d }: { d: string }) {
-  return (
-    <svg className="tubu-xmas-icon" viewBox={ICON_VIEWBOX} aria-hidden="true" focusable="false">
-      <path d={d} />
-    </svg>
-  );
-}
-
-const flakeVars = (f: Flake): CSSProperties => ({ '--x': f.x, '--s': f.size, '--d': f.dur, '--delay': f.delay, '--drift': f.drift, '--o': f.opacity }) as CSSProperties;
-
 function SnowBurst() {
   return (
     <div className="tubu-xmas-burst" aria-hidden="true" data-testid="christmas-burst">
@@ -254,19 +245,6 @@ function SnowBurst() {
         <span key={i} className={f.needle ? 'tubu-xmas-burst-flake is-needle' : 'tubu-xmas-burst-flake'} style={flakeVars(f)} />
       ))}
     </div>
-  );
-}
-
-/** Lớp tuyết toàn màn (gắn vào body, không chặn chạm): tạm dừng khi app chạy nền; không gắn khi khách tắt ❄️ hay máy bật giảm chuyển động. */
-export function SnowfallLayer() {
-  const hidden = usePageHidden();
-  return createPortal(
-    <div className={hidden ? 'tubu-xmas-snow is-paused' : 'tubu-xmas-snow'} data-season="christmas" aria-hidden="true" data-testid="christmas-snow">
-      {SNOWFLAKES.map((f, i) => (
-        <span key={i} className={f.needle ? 'tubu-xmas-flake is-needle' : 'tubu-xmas-flake'} style={flakeVars(f)} />
-      ))}
-    </div>,
-    document.body,
   );
 }
 
@@ -285,28 +263,4 @@ function useNow(everySecond: boolean): number {
     return () => window.clearInterval(id);
   }, [everySecond]);
   return now;
-}
-
-function usePageHidden(): boolean {
-  const [hidden, setHidden] = useState(() => document.hidden);
-  useEffect(() => {
-    const on = () => setHidden(document.hidden);
-    document.addEventListener('visibilitychange', on);
-    return () => document.removeEventListener('visibilitychange', on);
-  }, []);
-  return hidden;
-}
-
-const REDUCED = '(prefers-reduced-motion: reduce)';
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia(REDUCED).matches);
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia(REDUCED);
-    const on = () => setReduced(mq.matches);
-    mq.addEventListener?.('change', on);
-    return () => mq.removeEventListener?.('change', on);
-  }, []);
-  return reduced;
 }

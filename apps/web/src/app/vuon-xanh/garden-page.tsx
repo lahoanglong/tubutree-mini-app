@@ -17,7 +17,6 @@ import { loginHref } from '@/lib/return-to';
 import { refreshSession } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { gardenPoints } from '@tubutree/app-core/points-lots';
-import { dismissGameTutorial, isGameTutorialDismissed } from '@/lib/game-tutorial';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { useCouponUse } from '@/lib/use-coupon-use';
@@ -27,7 +26,6 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ArcadeHub } from '@/components/game/arcade-hub';
-import { CheckInStreak } from '@/components/game/checkin-streak';
 import { CommunityGoal } from '@/components/game/community-goal';
 import { EcoImpact } from '@/components/game/eco-impact';
 import { FriendGifts } from '@/components/game/friend-gifts';
@@ -38,19 +36,17 @@ import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
 import { GAME_TAB_KEYS, GAME_COL, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
-import { OrderWaterCard } from '@/components/game/order-water-card';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
 import { MissionsCard } from '@/components/game/missions-card';
 import { QuizCard, type QuizReveal } from '@/components/game/quiz-card';
-import { SeasonBanner, SeasonEmpty } from '@/components/game/season-banner';
+import { SeasonBanner } from '@/components/game/season-banner';
 import { SeasonLeaderboard } from '@/components/game/season-leaderboard';
 import { SeasonPass } from '@/components/game/season-pass';
 import { SpeciesCodex } from '@/components/game/species-codex';
 import { StreakRepair } from '@/components/game/streak-repair';
-import { TreeActions } from '@/components/game/tree-actions';
+import { GardenDayActions, GardenRulesSheet } from '@/components/game/garden-day-actions';
 import { TreeFund } from '@/components/game/tree-fund';
 import { EarnWaterSheet, type EarnQuizState } from '@/components/game/earn-water-sheet';
-import { NewbieGuide } from '@/components/game/newbie-guide';
 import { isSameVNDay } from '@/components/game/game-utils';
 import { TreeHealthAlert } from '@/components/game/tree-health-alert';
 import { useGameActions, type HarvestMeta, type HarvestReward } from '@/components/game/use-game-actions';
@@ -115,7 +111,8 @@ function GameBody() {
 
   // `id` tăng mỗi lần thu hoạch: chia sẻ của lần trước xong muộn không được lật cờ `shared` của lần mới.
   const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null; shared: boolean; id: number }>({ open: false, reward: undefined, meta: null, shared: false, id: 0 });
-  const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
+  // Sheet ⓘ của Chăm vườn: luật chuỗi, vé giữ lửa, hứng sương và nước từ đơn hàng (w62-01 dời khỏi màn chính).
+  const [rulesOpen, setRulesOpen] = useState(false);
   const { data: loyalty } = useQuery(loyaltyQuery(coreHttp));
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
   const checkInStatusQ = useQuery(checkInQuery(coreHttp));
@@ -168,7 +165,6 @@ function GameBody() {
   const status = checkInStatusQ.data;
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
   const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
-  const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
   const quizState: EarnQuizState = miniQuiz
     ? { status: 'ready', left: miniEarnQuizLeft(miniQuiz) }
     : quiz
@@ -176,7 +172,6 @@ function GameBody() {
     : quizQ.isError
       ? { status: 'error' }
       : { status: 'loading' };
-  const quizTotal = quiz ? quiz.reduce((sum, q) => sum + (q.waterReward ?? 0), 0) : null;
   const earnError = checkInM.isError ? actionErrorText(checkInM.error) : dewM.isError ? actionErrorText(dewM.error) : null;
   const plotsOpen = garden ? extraPlotsVisible(eco?.treesPlanted, garden.plots.some((p) => !p.isHome)) : false;
   const wasteLink = publicConfig.waste.enabled && isWebRouteReady(WASTE_PATH);
@@ -185,7 +180,7 @@ function GameBody() {
   const seasonBlocks = (
     <>
       {/* Banner mùa/sự kiện (Phase 4) */}
-      {season ? <SeasonBanner season={season} /> : season === null ? <SeasonEmpty /> : null}
+      {season && <SeasonBanner season={season} />}
 
       {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
       {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
@@ -244,47 +239,28 @@ function GameBody() {
             />
           )}
 
-          <NewbieGuide
-            profile={profile}
-            dismissed={tutorialDismissed}
-            quizTotal={quizTotal}
-            tomorrowGain={tomorrowGain}
-            onDismiss={() => {
-              dismissGameTutorial();
-              setTutorialDismissed(true);
-            }}
-          />
-
-          <TreeActions
-            profile={profile}
-            pointsPending={pointsPending}
-            pointsBlocked={!!checkInStatusQ.data?.pointsBlocked}
-            checkInSeeds={checkInSeeds}
-            pending={waterM.isPending || checkInM.isPending || dewM.isPending}
-            onClaim={claimDaily}
-            onWater={(drops) => waterM.mutate(drops, { onSuccess: () => setWaterTick((k) => k + 1) })}
-            onHarvest={() => waterM.mutate(0)}
-            onEarn={() => openEarn()}
-          />
-
-          <OrderWaterCard info={profile?.orderWater} shopHref="/san-pham" />
+          {/* Hai nút màu của ngày + viên chuỗi; mọi chữ luật nằm trong sheet ⓘ. Nhiệm vụ "điểm danh" cuộn tới đây. */}
+          <div id={GAME_CHECKIN_ANCHOR}>
+            <GardenDayActions
+              profile={profile}
+              streakDays={status?.streakDays ?? profile?.streakDays}
+              pointsPending={pointsPending}
+              pointsBlocked={!!status?.pointsBlocked}
+              checkInSeeds={checkInSeeds}
+              statusError={checkInStatusQ.isError}
+              onRetryStatus={() => checkInStatusQ.refetch()}
+              waterPending={waterM.isPending}
+              checkInPending={checkInM.isPending || dewM.isPending}
+              onClaim={claimDaily}
+              onWater={(drops) => waterM.mutate(drops, { onSuccess: () => setWaterTick((k) => k + 1) })}
+              onHarvest={() => waterM.mutate(0)}
+              onEarn={openEarn}
+              onRules={() => setRulesOpen(true)}
+            />
+          </div>
           </GameCol>
 
           <GameCol place={GAME_COL.side}>
-          <div id={GAME_CHECKIN_ANCHOR}>
-          <CheckInStreak
-            profile={profile}
-            status={checkInStatusQ.data}
-            statusError={checkInStatusQ.isError}
-            onRetryStatus={() => checkInStatusQ.refetch()}
-            onBuyFreeze={() => freezeM.mutate()}
-            freezePending={freezeM.isPending}
-            onCollectDew={() => dewM.mutate()}
-            dewPending={dewM.isPending}
-            onNeedWater={openEarn}
-          />
-          </div>
-
           <div className="empty:hidden">
           <MissionsCard
             missions={missions}
@@ -421,6 +397,19 @@ function GameBody() {
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi khách đã đổi tab trong lúc quay. */}
       <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => router.push('/san-pham')} />
+
+      <GardenRulesSheet
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        profile={profile}
+        status={status}
+        freezePending={freezeM.isPending}
+        dewPending={dewM.isPending}
+        onBuyFreeze={() => freezeM.mutate()}
+        onCollectDew={() => dewM.mutate()}
+        onNeedWater={openEarn}
+        shopHref="/san-pham"
+      />
 
       <EarnWaterSheet
         open={earn.open}

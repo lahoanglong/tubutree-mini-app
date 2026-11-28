@@ -97,6 +97,8 @@ const feedCalls = () => mocks.get.mock.calls.filter((c) => c[0] === '/feed');
 const lastFeedArgs = () => feedCalls().at(-1)![1].query;
 const btn = (c: HTMLElement, text: string) => byText(c, 'button', text) as HTMLButtonElement;
 const exact = (c: HTMLElement, sel: string, text: string) => Array.from(c.querySelectorAll<HTMLElement>(sel)).find((e) => e.textContent?.trim() === text)!;
+/** Nút "+ Đăng" ở đầu trang (w62-01): chữ ngắn "Đăng", tên đọc màn hình "Đăng bài". */
+const postButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-label="Đăng bài"]');
 const h1 = (c: HTMLElement) => c.querySelectorAll('h1').length;
 const searchInput = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[placeholder="Tìm câu hỏi, mẹo, bài viết…"]')!;
 
@@ -123,27 +125,22 @@ afterEach(() => {
   mounted = [];
 });
 
-describe('FeedView — kênh cộng đồng của chủ shop', () => {
-  it('chưa cấu hình link: không vẽ nhóm kênh', async () => {
+describe('FeedView — không còn chip kênh cộng đồng (w62-01, như Mini App; kênh nằm ở chân trang)', () => {
+  const ALL = { community: { zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: 'https://facebook.com/tubutree', tiktokUrl: 'https://tiktok.com/@tubu' } };
+
+  it('đã đăng nhập: không có nhóm kênh Zalo/Facebook/TikTok dù đã cấu hình link', async () => {
+    config = ALL;
     const { container } = await mount();
-    expect(container.querySelector('[role="group"][aria-label="Kênh cộng đồng của Tubu Tree"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Kênh cộng đồng của Tubu Tree"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/Nhóm Zalo|Facebook|TikTok/);
   });
 
-  it('chỉ hiện kênh có link https, mở ở tab mới', async () => {
-    config = { community: { zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: null, tiktokUrl: 'http://tiktok.com/x' } };
-    const { container } = await mount();
-    const links = Array.from(container.querySelectorAll('[aria-label="Kênh cộng đồng của Tubu Tree"] a'));
-    expect(links.map((a) => a.textContent)).toEqual(['Nhóm Zalo']);
-    expect(links[0]!.getAttribute('href')).toBe('https://zalo.me/g/abc');
-    expect(links[0]!.getAttribute('target')).toBe('_blank');
-    expect(links[0]!.getAttribute('rel')).toContain('noopener');
-  });
-
-  it('khách chưa đăng nhập vẫn thấy kênh ở màn cổng đăng nhập', async () => {
+  it('màn cổng đăng nhập cũng không có chip kênh', async () => {
     mocks.auth.status = 'idle';
-    config = { community: { facebookUrl: 'https://facebook.com/tubutree' } };
+    config = ALL;
     const { container } = await mount();
-    expect(container.textContent).toContain('Facebook');
+    expect(container.textContent).toContain('Đăng nhập để xem cộng đồng');
+    expect(container.textContent).not.toMatch(/Nhóm Zalo|Facebook|TikTok/);
   });
 });
 
@@ -214,7 +211,7 @@ describe('FeedView — đã đăng nhập', () => {
     expect(byText(container, 'a', 'Xếp hạng')).toBeFalsy();
     expect(container.querySelector('a[aria-label="Sự kiện"]')).toBeNull();
     expect(container.querySelector('[data-testid="composer"]')).toBeNull();
-    click(exact(container, 'button', 'Đăng bài'));
+    click(postButton(container));
     expect(document.body.querySelector('[data-testid="composer"]')).not.toBeNull();
   });
 
@@ -226,7 +223,7 @@ describe('FeedView — đã đăng nhập', () => {
 
   it('đăng xong: đóng khung soạn, tải lại bảng tin và hiện câu thông báo', async () => {
     const { container } = await mount();
-    click(exact(container, 'button', 'Đăng bài'));
+    click(postButton(container));
     const before = feedCalls().length;
     click(byText(document.body, 'button', 'stub-dang-xong'));
     await flush();
@@ -427,11 +424,15 @@ describe('/cong-dong — giao diện điện thoại như Mini App', () => {
     expect(events.closest('[role="group"]')).toBe(group);
   });
 
-  it('hàng nút đầu trang chỉ còn một nút Đăng bài (và tìm kiếm), không còn nút Sự kiện riêng', async () => {
+  it('đầu trang gọn: một nút "+ Đăng" cạnh tiêu đề, không còn hàng "+ Đăng bài" riêng hay nút Sự kiện riêng', async () => {
     mocks.ready.add('/cong-dong/su-kien');
     const { container } = await mount();
-    const post = exact(container, 'button', 'Đăng bài')!;
-    expect(post.parentElement!.querySelector('a')).toBeNull();
+    const post = postButton(container)!;
+    expect(post.textContent?.trim()).toBe('Đăng');
+    expect(container.querySelectorAll('button[aria-label="Đăng bài"]')).toHaveLength(1);
+    expect(exact(container, 'button', 'Đăng bài')).toBeUndefined();
+    expect(post.closest('main')!.querySelector('h1')!.compareDocumentPosition(post) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(post.parentElement!.querySelector('a[href="/cong-dong/su-kien"]')).toBeNull();
   });
 
   it('đã đăng nhập: không có câu phụ đề dưới tiêu đề để bài đầu lên sớm hơn (D6-05)', async () => {
@@ -608,7 +609,7 @@ describe('FeedView — nút bận giữ focus, vùng báo luôn có trong DOM', 
     const status = container.querySelector('[role="status"]')!;
     expect(status.textContent).toBe('');
     expect(status.className).toBe('sr-only');
-    click(exact(container, 'button', 'Đăng bài'));
+    click(postButton(container));
     click(byText(document.body, 'button', 'stub-dang-xong'));
     await flush();
     expect(container.querySelector('[role="status"]')).toBe(status);

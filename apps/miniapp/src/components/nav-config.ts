@@ -1,5 +1,5 @@
 import { Gift, Home, LayoutGrid, ScanLine, User, type LucideIcon } from 'lucide-react';
-import { NAV_TAB_SPECS, type NavTabId, type NavTabSpec } from '@tubutree/app-core/home-layout';
+import { NAV_DISCOVERY_PATHS, NAV_TAB_SPECS, type NavTabId, type NavTabSpec } from '@tubutree/app-core/home-layout';
 
 /**
  * Nguồn DUY NHẤT cho tab bar + danh sách trang gốc (spec §3.5). Nhãn, thứ tự, huy hiệu lấy từ app-core (`NAV_TAB_SPECS`,
@@ -26,6 +26,11 @@ export const ROOT_PATHS: readonly string[] = NAV_TABS.map((t) => t.path);
 
 export function isRootPath(pathname: string): boolean {
   return ROOT_PATHS.includes(pathname);
+}
+
+/** Thanh đáy hiện ở 5 tab gốc và các trang khám phá (`NAV_DISCOVERY_PATHS`); trang khám phá vẫn là trang con nên vẫn có nút lùi. */
+export function showsBottomNav(pathname: string): boolean {
+  return isRootPath(pathname) || (NAV_DISCOVERY_PATHS.miniapp as readonly string[]).includes(pathname);
 }
 
 /**

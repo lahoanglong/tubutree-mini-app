@@ -442,6 +442,134 @@
   }
 }
 
+/*
+ * Chăm vườn (w62-01): hai nút màu "Tưới cây" / "Điểm danh", ô "Đã điểm danh" và viên chuỗi ngày. Gradient vẽ bằng background-image nên phủ lên
+ * màu nền của nút ZaUI (Mini) mà không tranh độ ưu tiên; chữ trắng đạt 4,5:1 dọc cả gradient (contrast.spec.ts).
+ */
+.tubu-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}
+.tubu-day-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-stack-sm);
+}
+/* Mỗi lớp tự khai đủ vùng chạm 48px (bộ kiểm vùng chạm của web đọc luật một lớp). */
+.tubu-day-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--stone-0);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: normal;
+  text-align: center;
+  box-shadow: var(--elevation-1);
+  cursor: pointer;
+  transition: transform 160ms ease-out, box-shadow 160ms ease-out;
+}
+.tubu-day-done {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+.tubu-day-btn:active {
+  transform: scale(0.96);
+}
+.tubu-day-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.tubu-day-btn--water {
+  background-image: linear-gradient(135deg, var(--blue-600), var(--forest-600));
+}
+.tubu-day-btn--checkin {
+  background-image: linear-gradient(135deg, var(--amber-600), var(--clay-600));
+}
+/* Lời mời điểm danh: ba nhịp sáng quanh nút rồi đứng yên, không nhấp nháy mãi. */
+.tubu-day-btn--ready {
+  animation: tubu-day-pulse 2.4s ease-out 3;
+}
+@keyframes tubu-day-pulse {
+  0% {
+    box-shadow: var(--elevation-1), 0 0 0 0 color-mix(in srgb, var(--amber-600) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: var(--elevation-1), 0 0 0 10px color-mix(in srgb, var(--amber-600) 0%, transparent);
+  }
+}
+/* Nút đang chờ lượt kia xong: bỏ gradient để không trông như bấm được; nút đang gửi (aria-busy) giữ màu. */
+.tubu-day-btn[disabled]:not([aria-busy='true']),
+.tubu-day-btn[aria-disabled='true']:not([aria-busy='true']) {
+  background-color: var(--color-bg-subtle);
+  background-image: none;
+  color: var(--color-text-secondary);
+  box-shadow: none;
+  animation: none;
+}
+.tubu-day-done {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+.tubu-day-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-stack-xs);
+}
+.tubu-day-streak {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--amber-50);
+  color: var(--amber-600);
+  font-size: var(--type-label-size);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tubu-day-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-stack-xs);
+}
+/* Thẻ Sảnh Game nhấc nhẹ khi rê chuột (máy tính), hình minh hoạ nhún nhanh hơn để thẻ trông "sống". */
+@media (hover: hover) and (pointer: fine) {
+  .tubu-hub-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--elevation-2);
+  }
+  .tubu-hub-card:hover .tubu-hub-art-svg {
+    animation-duration: 1.4s;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tubu-burst,
   .tubu-drops {
@@ -452,9 +580,15 @@
     animation: none;
   }
   .tubu-hub-card,
-  .tubu-hub-card:active {
+  .tubu-hub-card:active,
+  .tubu-hub-card:hover,
+  .tubu-day-btn,
+  .tubu-day-btn:active {
     transition: none;
     transform: none;
+  }
+  .tubu-day-btn--ready {
+    animation: none;
   }
   .tubu-hero-progress > span {
     transition: none;

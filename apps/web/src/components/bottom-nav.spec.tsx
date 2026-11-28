@@ -75,8 +75,9 @@ describe('BottomNav (điện thoại)', () => {
     }
   });
 
-  it('Vườn Xanh là trang con từ W42 (lối vào ở thẻ Trang chủ và Ưu đãi): không có thanh đáy', () => {
-    expect(render('/vuon-xanh')).toBe('');
+  it('Vườn Xanh không là tab nhưng giữ thanh đáy (trang khám phá, UAT 28/11); màn chơi con thì ẩn', () => {
+    expect(render('/vuon-xanh')).not.toBe('');
+    expect(render('/vuon-xanh/choi')).toBe('');
   });
 
   it('không hiện ở trang con, trang quản trị', () => {

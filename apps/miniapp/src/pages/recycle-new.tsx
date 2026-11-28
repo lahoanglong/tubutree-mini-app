@@ -69,7 +69,6 @@ import {
   ITEMS_NEXT_HINT,
   MAX_OPEN_VIEW_CTA,
   QUICK_QTY_STEPS,
-  WAREHOUSE_ONLY_TEXT,
   WASTE_CONSENT_TEXT,
   WASTE_PENDING_POINTS_SUBNOTE,
   WASTE_RULES_LINK,
@@ -78,9 +77,12 @@ import {
   maxOpenNotice,
   pendingPointsText,
   readLastPointId,
+  wasteRulesSheetCopy,
   wasteStepCopy,
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
+import { Info } from 'lucide-react';
+import { WasteRulesSheet } from '../components/waste-steps';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPoints, formatVnd } from '../utils/format';
 import { useDebounced } from '../utils/use-debounced';
@@ -89,7 +91,7 @@ import {
   PREVIEW_DEBOUNCE_MS,
   UNCAPPED_QTY_MAX,
   blockMessage,
-  capSentence,
+  itemRuleNotes,
   monthRemainingText,
   feeExceedsPoints,
   feeRangeText,
@@ -153,16 +155,31 @@ interface WasteItemStepProps {
   allowance?: Readonly<Record<string, number>>;
   /** Sai khi sửa một yêu cầu không tạo hôm nay: máy chủ tính trần ngày theo ngày của yêu cầu nên khách không áp trần ngày. */
   dayCap?: boolean;
+  /** Lối "Xem thể lệ đầy đủ" ở cuối sheet ⓘ Thể lệ (trang gọi tự giữ nháp trước khi rời trang). */
+  onFullRules: () => void;
 }
 
-export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true }: WasteItemStepProps) {
+/**
+ * Bước chọn món: mỗi thẻ chỉ còn hình, tên, tỉ lệ đổi và bộ đếm (UAT iPhone); điều kiện nhận (chuẩn bị, chỉ kho nhận, trần tháng/ngày) nằm trong
+ * một sheet "ⓘ Thể lệ" ở đầu danh sách. Dòng trạng thái (còn bao nhiêu trong tháng, trần hôm nay) vẫn ở thẻ vì nó giải thích bộ đếm bị chặn.
+ */
+export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true, onFullRules }: WasteItemStepProps) {
   const sorted = useMemo(() => items.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder), [items]);
+  const notes = useMemo(() => itemRuleNotes(sorted), [sorted]);
+  const [rulesOpen, setRulesOpen] = useState(false);
   return (
     <div style={{ ...COLUMN, gap: 12 }}>
+      {notes.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button variant="ghost" icon={Info} onPress={() => setRulesOpen(true)}>
+            {wasteRulesSheetCopy.button}
+          </Button>
+        </div>
+      )}
+      <WasteRulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} items={notes} onFullRules={onFullRules} />
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
         const dayLine = dropOffDayLimitText(item, allowance?.[item.id] ?? 0, dayCap);
-        const cap = capSentence(item, dayLine !== null);
         const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
         const comingSoon = item.status === 'COMING_SOON';
@@ -194,21 +211,6 @@ export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true
               <Text variant="caption" tone={comingSoon ? 'tertiary' : 'secondary'} as="div">
                 {ruleText(item)}
               </Text>
-              {item.warehouseOnly && (
-                <div>
-                  <Badge tone="info" size="sm">{WAREHOUSE_ONLY_TEXT}</Badge>
-                </div>
-              )}
-              {item.prepInstructions && (
-                <Text variant="caption" tone="tertiary" as="div">
-                  {item.prepInstructions}
-                </Text>
-              )}
-              {cap && (
-                <Text variant="caption" tone="tertiary" as="div">
-                  {cap}
-                </Text>
-              )}
               {monthLeft && (
                 <Text variant="caption" tone={item.monthRemainingQty === 0 ? 'warning' : 'secondary'} as="div">
                   {monthLeft}
@@ -642,7 +644,7 @@ export default function RecycleNewPage() {
       )
     ) : undefined;
     return shell(
-      <WasteItemStep items={me.items} lines={draft.lines} onChange={onChange} />,
+      <WasteItemStep items={me.items} lines={draft.lines} onChange={onChange} onFullRules={openRules} />,
       subtitle,
       <StickyActionBar
         summary={summary}

@@ -358,6 +358,15 @@ export const NAV_TAB_SPECS: readonly NavTabSpec[] = [
   { id: 'profile', label: 'Cá nhân', badge: 'active-orders' },
 ];
 
+/**
+ * Trang khám phá không phải tab gốc nhưng vẫn giữ thanh đáy, để khách không bị kẹt ở trang con (UAT iPhone 28/11): Cộng đồng, Đổi rác, Vườn Xanh.
+ * Trang con của chúng (chi tiết bài, tạo yêu cầu, màn chơi) và trang có thanh mua dính đáy (sản phẩm, giỏ, thanh toán) vẫn ẩn thanh.
+ */
+export const NAV_DISCOVERY_PATHS = {
+  miniapp: ['/feed', '/recycle', '/game'],
+  web: ['/cong-dong', '/doi-rac', '/vuon-xanh'],
+} as const satisfies Record<'miniapp' | 'web', readonly string[]>;
+
 /** Mã còn dưới số ngày này thì tính là sắp hết hạn. */
 export const COUPON_EXPIRING_DAYS = 3;
 

@@ -233,13 +233,14 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     expect(within(tabPanel('Khu vườn')).getByText('Bảng tin cộng đồng')).toBeInTheDocument();
   });
 
-  it('mỗi khối đặt vào đúng tab: thẻ vườn/nút chính/điểm danh/nhiệm vụ ở Chăm vườn, game/quiz/vòng quay ở Sảnh Game, lô đất ở Khu vườn', async () => {
+  it('mỗi khối đặt vào đúng tab: thẻ vườn/hai nút Tưới cây · Điểm danh/viên chuỗi/nhiệm vụ ở Chăm vườn, game/quiz/vòng quay ở Sảnh Game, lô đất ở Khu vườn', async () => {
     renderPage();
     await loadGardenTab();
     const today = within(tabPanel('Chăm vườn'));
     expect(today.getByTestId('garden-hero')).toBeInTheDocument();
-    expect(today.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
-    expect(today.getByText(/^Chuỗi \d+ ngày$/)).toBeInTheDocument();
+    expect(today.getByRole('button', { name: 'Tưới cây' })).toBeInTheDocument();
+    expect(today.getByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
+    expect(today.getByTestId('garden-streak-pill')).toHaveTextContent(/Chuỗi \d+ ngày/);
     expect(today.getByRole('heading', { name: 'Nhiệm vụ' })).toBeInTheDocument();
     expect(today.queryByTestId('arcade-hub')).toBeNull();
     expect(today.queryByTestId('wheel')).toBeNull();
@@ -263,15 +264,16 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 });
 
 describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
-  it('trong tab Chăm vườn: tab → thẻ vườn → nút chính → thẻ chuỗi → nhiệm vụ; trang có ba khối tab', async () => {
+  it('trong tab Chăm vườn: tab → thẻ vườn → Tưới cây → Điểm danh → viên chuỗi → nhiệm vụ; trang có ba khối tab', async () => {
     const { container } = renderPage();
     await screen.findByRole('tab', { name: 'Chăm vườn' });
     const tabList = screen.getByRole('tablist');
     const hero = screen.getByText('Sồi');
-    const water = screen.getByRole('button', { name: 'Nhận nước hôm nay' });
-    const checkIn = screen.getByText(/^Chuỗi \d+ ngày$/);
+    const water = screen.getByRole('button', { name: 'Tưới cây' });
+    const checkIn = screen.getByRole('button', { name: 'Điểm danh' });
+    const streak = screen.getByTestId('garden-streak-pill');
     const missions = screen.getByRole('heading', { name: 'Nhiệm vụ' });
-    const order = [tabList, hero, water, checkIn, missions];
+    const order = [tabList, hero, water, checkIn, streak, missions];
     for (let i = 0; i + 1 < order.length; i += 1) expect(follows(order[i]!, order[i + 1]!)).toBe(true);
     expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
   });
@@ -291,11 +293,12 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     expect(screen.queryByText('Chẩn đoán tổ ấm')).toBeNull();
   });
 
-  it('chỉ có một nút điểm danh trên trang Vườn (nút chính trên cây), kèm dòng nói rõ nhận giọt nước và Điểm Xanh', async () => {
+  it('chỉ có một nút điểm danh trên trang Vườn (cạnh Tưới cây); sheet ⓘ nói rõ nhận giọt nước và Điểm Xanh', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Chăm vườn' });
     expect(screen.getAllByRole('button', { name: /(Điểm danh|Nhận nước hôm nay)/ })).toHaveLength(1);
-    expect(screen.getByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Luật chăm vườn' }));
+    expect(await screen.findByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
   });
 
   it('mỗi khối có tiêu đề h2 thật', async () => {

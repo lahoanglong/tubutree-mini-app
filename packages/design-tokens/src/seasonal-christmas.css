@@ -230,6 +230,50 @@
   border: 1px solid var(--xmas-frost-line);
 }
 .tubu-xmas-snow-toggle[aria-pressed='false'] > span { opacity: 0.55; }
+/* Nút ❄️ nổi của tuyết toàn site (trang ngoài Trang chủ): góc phải dưới, trên thanh đáy khi trang có thanh đáy (từ md web không còn thanh
+   đáy); trang có thanh mua dính đáy thì ẩn để không đè nút mua. Vùng bấm 44px, vòng kính 36px. */
+.tubu-xmas-snow-pill {
+  position: fixed;
+  right: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 31;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--xmas-pine);
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-xmas-snow-pill[data-over-nav] { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+.tubu-xmas-snow-pill > span {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--xmas-glass);
+  border: 1px solid var(--xmas-frost-line);
+  box-shadow: var(--elevation-2);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transition: transform 120ms ease-out, opacity 160ms ease-out;
+}
+.tubu-xmas-snow-pill:active > span { transform: scale(0.92); }
+.tubu-xmas-snow-pill[aria-pressed='false'] > span { opacity: 0.55; }
+.tubu-xmas-snow-pill:focus-visible {
+  outline: 2px solid var(--xmas-pine-deep);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+html[data-sticky-bar] .tubu-xmas-snow-pill,
+body.has-sticky-bar .tubu-xmas-snow-pill { display: none; }
+@media (min-width: 768px) {
+  .tubu-xmas-snow-pill[data-over-nav] { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+}
 .tubu-xmas-icon {
   width: 16px;
   height: 16px;
@@ -735,5 +779,7 @@
   .tubu-xgd-open[data-ready]::after,
   .tubu-xgd-slot[data-state='ready'] { animation: none; }
   .tubu-xgd-slot:active { transform: none; }
-  .tubu-xmas-gift-lid-group { transition: none; }
+  .tubu-xmas-gift-lid-group,
+  .tubu-xmas-snow-pill > span { transition: none; }
+  .tubu-xmas-snow-pill:active > span { transform: none; }
 }

@@ -66,6 +66,8 @@ const openRules = async (c: HTMLElement) => {
   if (!d) throw new Error('không mở được sheet Thể lệ');
   return d;
 };
+/** Dòng điều kiện của một món trong sheet ⓘ Thể lệ (w62-01: chuẩn bị, chỉ kho nhận, trần nằm ở đây thay vì trên thẻ). */
+const itemRule = (rules: HTMLElement, name: string) => byText(rules.querySelector<HTMLElement>('[data-testid="waste-rules-items"]')!, 'li', name)!;
 const closeRules = async () => {
   click(document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Đóng"]')!);
   await flush(3);
@@ -164,11 +166,13 @@ describe('/doi-rac trang vào (§4.1)', () => {
     expect(link(c, '/doi-rac/tao')).toBeNull();
   });
 
-  it('danh sách món: quy tắc + chuẩn bị; món sắp nhận mờ, nhãn "Sắp nhận"', async () => {
+  it('danh sách món: thẻ có tỉ lệ đổi, chuẩn bị nằm trong sheet ⓘ Thể lệ; món sắp nhận mờ, nhãn "Sắp nhận"', async () => {
     const c = await mount();
     expect(c.textContent).toContain('1 thùng = 1.000 điểm');
     expect(c.textContent).toContain('5 vỏ = 1.000 điểm');
-    expect(c.textContent).toContain('Gấp phẳng, bỏ băng keo');
+    expect(c.textContent).not.toContain('Gấp phẳng, bỏ băng keo');
+    expect(itemRule(await openRules(c), 'Thùng carton').textContent).toContain('Gấp phẳng, bỏ băng keo');
+    await closeRules();
     const battery = Array.from(c.querySelectorAll<HTMLElement>('[data-item]')).find((e) => e.textContent?.includes('Pin đã dùng'))!;
     expect(battery.getAttribute('data-status')).toBe('COMING_SOON');
     expect(battery.textContent).toContain('Sắp nhận');
@@ -373,9 +377,10 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(c.textContent).toContain('Đổi bao bì lấy Điểm Xanh');
     expect(c.querySelectorAll('[data-testid="waste-step-strip"] li')).toHaveLength(3);
     expect(c.querySelectorAll('[data-item]')).toHaveLength(2);
-    expect(byText(c, '[data-item]', 'Vỏ hộp sữa')!.textContent).toContain('Chỉ kho TP.HCM nhận');
-    expect(byText(c, '[data-item]', 'Thùng carton')!.textContent).not.toContain('Chỉ kho TP.HCM nhận');
+    expect(byText(c, '[data-item]', 'Vỏ hộp sữa')!.textContent).not.toContain('Chỉ kho TP.HCM nhận');
     const rules = await openRules(c);
+    expect(itemRule(rules, 'Vỏ hộp sữa').textContent).toContain('Chỉ kho TP.HCM nhận');
+    expect(itemRule(rules, 'Thùng carton').textContent).not.toContain('Chỉ kho TP.HCM nhận');
     expect(rules.querySelectorAll('ol li')).toHaveLength(3);
     expect(rules.textContent).not.toContain('Cách giao');
     expect(document.querySelector('[data-sheet-footer] a[href="/doi-rac/quy-dinh"]')).not.toBeNull();
@@ -402,7 +407,7 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(c.querySelector('a[href*="/dang-nhap"]')).not.toBeNull();
   });
 
-  it('lối vào quầy nằm trên cùng, trước thẻ điểm; món chỉ kho nhận có nhãn; 0 điểm thì không dòng "Dùng như 0đ"', async () => {
+  it('lối vào quầy nằm trên cùng, trước thẻ điểm; món chỉ kho nhận ghi trong sheet Thể lệ; 0 điểm thì không dòng "Dùng như 0đ"', async () => {
     state.me = makeWasteMe({
       deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }],
       items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }],
@@ -411,7 +416,7 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     const c = await mount();
     expect(c.textContent!.indexOf('Nhận hàng tại điểm')).toBeLessThan(c.textContent!.indexOf('Điểm Xanh của bạn'));
     expect(c.textContent).not.toContain('Dùng như');
-    expect(byText(c, '[data-item]', 'Vỏ hộp sữa')!.textContent).toContain('Chỉ kho TP.HCM nhận');
+    expect(itemRule(await openRules(c), 'Vỏ hộp sữa').textContent).toContain('Chỉ kho TP.HCM nhận');
   });
 
   it('khách chưa đăng nhập + cấu hình chưa tải: mời đăng nhập, không nháy "tạm dừng"', async () => {

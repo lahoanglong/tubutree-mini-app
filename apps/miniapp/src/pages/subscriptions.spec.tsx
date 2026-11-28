@@ -87,8 +87,8 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
   it('khách chưa đăng nhập vẫn xem rõ quyền lợi Mua xoay vòng và danh sách sản phẩm đủ điều kiện (không bị chặn đăng nhập)', async () => {
     mount();
     expect(screen.getByRole('heading', { level: 1, name: 'Mua xoay vòng' })).toBeInTheDocument();
-    expect(screen.getByTestId('subscription-hero').textContent).toContain('Đặt định kỳ · Tiết kiệm 12%');
-    expect(screen.getByTestId('subscription-hero').textContent).toContain('4 · 6 · 8 · 10 tuần');
+    // Dải 40px (w62-01): chỉ số % tiết kiệm và lối "Lịch của tôi →"; thẻ sản phẩm lên ngay nửa trên màn.
+    expect(screen.getByTestId('subscription-hero').textContent).toBe('Đặt định kỳ · Tiết kiệm 12%Lịch của tôi →');
     expect(await screen.findByText('Nước rửa chén sinh học')).toBeInTheDocument();
     expect(screen.queryByTestId('subscriptions-panel-mock')).toBeNull();
 
@@ -99,7 +99,7 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
   it('phần trăm đọc đúng cấu hình (0.12 → 12%), không sàn 10%, không còn "17%" gõ cứng', async () => {
     mount();
     const hero = screen.getByTestId('subscription-hero');
-    expect(hero.textContent).toContain('Giảm 12% cho mỗi kỳ giao.');
+    expect(hero.textContent).toContain('Tiết kiệm 12%');
     expect(hero.textContent).not.toContain('17%');
     await screen.findByText('Nước rửa chén sinh học');
   });
@@ -109,7 +109,7 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
     mount();
     const hero = screen.getByTestId('subscription-hero');
     expect(hero.textContent).toContain('Tiết kiệm 5%');
-    expect(hero.textContent).toContain('Giảm 5% cho mỗi kỳ giao.');
+    expect(hero.textContent).not.toContain('10%');
     await screen.findByText('Nước rửa chén sinh học');
   });
 
@@ -118,7 +118,6 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
     mount();
     const hero = screen.getByTestId('subscription-hero');
     expect(hero.textContent).toContain('Đặt định kỳ · Tiết kiệm mỗi kỳ');
-    expect(hero.textContent).toContain('Giảm giá cho mỗi kỳ giao.');
     expect(hero.textContent).not.toMatch(/\d+%/);
     await screen.findByText('Nước rửa chén sinh học');
   });
@@ -130,36 +129,36 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
     mount();
     expect(await screen.findByTestId('subscriptions-panel-mock')).toBeInTheDocument();
     expect(await screen.findByText('Nước rửa chén sinh học')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lịch của tôi →' })).toBeInTheDocument();
     expect(screen.queryByTestId('subscription-suggestion')).toBeNull();
     expect(mocks.getSuggestions).not.toHaveBeenCalled();
   });
 
-  it('đang chờ danh sách gói: chưa hiện nút "Xem mục Định kỳ", khách có gói không thấy nút hiện rồi mất', async () => {
+  it('lối "Lịch của tôi →" có sẵn trong dải, không chờ danh sách gói nên không hiện rồi mất', async () => {
     mocks.phase = 'authenticated';
     let resolve!: (v: unknown) => void;
     mocks.getSubscriptions.mockImplementation(() => new Promise((r) => (resolve = r)));
     mount();
     await screen.findByText('Nước rửa chén sinh học');
-    expect(screen.queryByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lịch của tôi →' })).toBeInTheDocument();
     await act(async () => resolve([{ status: 'ACTIVE' }]));
     expect(await screen.findByTestId('subscriptions-panel-mock')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lịch của tôi →' })).toBeInTheDocument();
   });
 
-  it('đăng nhập, chưa có gói còn hiệu lực (chỉ gói đã huỷ): gợi ý theo nhịp mua trong khối quyền lợi, chạm mở sheet Đặt định kỳ chọn sẵn chu kỳ', async () => {
+  it('đăng nhập, chưa có gói còn hiệu lực (chỉ gói đã huỷ): gợi ý theo nhịp mua ngay dưới dải quyền lợi, chạm mở sheet Đặt định kỳ chọn sẵn chu kỳ', async () => {
     mocks.phase = 'authenticated';
     mocks.subscriptions = [{ status: 'CANCELLED' }];
     mocks.getSuggestions.mockResolvedValue({ enabled: true, items: [SUGGESTION] });
     mount();
     const row = await screen.findByTestId('subscription-suggestion');
-    expect(screen.getByTestId('subscription-hero')).toContainElement(row);
+    expect(screen.getByTestId('subscription-hero').nextElementSibling).toBe(row);
     expect(row).toHaveTextContent('Bạn thường mua Nước giặt Tubu khoảng 10 tuần một lần. Đặt giao định kỳ, giảm 12%');
     expect(screen.queryByTestId('subscriptions-panel-mock')).toBeNull();
     fireEvent.click(row);
     expect(mocks.trackEvent).toHaveBeenCalledWith('subscription_suggestion_accepted', 'miniapp', { intervalWeeks: 10 });
     expect(await screen.findByTestId('subscribe-sheet-stub')).toHaveTextContent('v-giat · 10 tuần');
-    fireEvent.click(screen.getByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lịch của tôi →' }));
     expect(mocks.goSmart).toHaveBeenCalledWith('/orders?tab=subscriptions');
   });
 

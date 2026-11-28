@@ -1,10 +1,11 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { SEASONAL_THEMES as API_THEMES, normalizeSeasonalTheme as apiNormalize } from '../../../../apps/api/src/modules/system-config/seasonal-theme';
 import { ADVENT_DAYS, adventDayKeys, adventTileClock, adventView, adventYear, msUntilNextVnDay, vnDayKeyOf } from './advent';
 import { BURST_FLAKES, SNOWFLAKES, TREE_ART, XMAS_ICONS } from './christmas-art';
 import { christmasCopy } from './christmas-copy';
 import { adventLeadLine, christmasHeroView, giftPreview, readSnowOff, settleOpening, shouldClaim, type HeroInput, writeSnowOff } from './christmas-hero';
-import { normalizeSeasonalTheme, readSeasonHint, SEASONAL_THEMES, seasonHasHomeTheme, writeSeasonHint } from './seasonal-theme';
+import { normalizeSeasonalTheme, readSeasonHint, SEASONAL_THEMES, seasonHasHomeTheme, showsSiteSnow, SITE_SNOW_PAGES, writeSeasonHint } from './seasonal-theme';
 
 const vn = (iso: string) => Date.parse(`${iso}+07:00`);
 
@@ -221,5 +222,23 @@ describe('hình và chữ', () => {
     for (const [k, max] of Object.entries(MAX)) expect((christmasCopy[k as keyof typeof christmasCopy] as string).length, k).toBeLessThanOrEqual(max!);
     expect(christmasCopy.nextGift('05:12:09').length).toBeLessThanOrEqual(24);
     expect(christmasCopy.adventLabel(12, 12)).toBe('Lịch quà 12 ngày, đã mở 12/12');
+  });
+});
+
+describe('tuyết toàn site (tubu-w62-01)', () => {
+  it('trang mua sắm chính, Ưu đãi, Cộng đồng, Đổi rác và mọi trang Vườn Xanh/trò chơi; không Trang chủ, sản phẩm, giỏ, tài khoản', () => {
+    for (const p of ['/browse', '/offers', '/feed', '/recycle', '/game', '/game/play/eco-merge', '/game/matcher']) expect(showsSiteSnow('miniapp', p)).toBe(true);
+    for (const p of ['/', '/product/1', '/cart', '/checkout', '/profile', '/points/scan', '/gamex', '/recycle/new']) expect(showsSiteSnow('miniapp', p)).toBe(false);
+    for (const p of ['/san-pham', '/uu-dai', '/cong-dong', '/doi-rac', '/vuon-xanh', '/vuon-xanh/choi']) expect(showsSiteSnow('web', p)).toBe(true);
+    for (const p of ['/', '/san-pham/ao-thun', '/gio-hang', '/thanh-toan', '/tai-khoan', '/vuon-xanhh', null, undefined, '']) expect(showsSiteSnow('web', p)).toBe(false);
+  });
+
+  it('mỗi đường dẫn là trang thật của app đó (đổi tên route thì sửa danh sách)', () => {
+    const mini = readFileSync(new URL('../../../../apps/miniapp/src/components/app.tsx', import.meta.url), 'utf8');
+    for (const p of [...SITE_SNOW_PAGES.miniapp.exact, ...SITE_SNOW_PAGES.miniapp.prefix]) expect(mini, p).toContain(`<Route path="${p}" `);
+    for (const p of [...SITE_SNOW_PAGES.web.exact, ...SITE_SNOW_PAGES.web.prefix]) {
+      const dir = new URL(`../../../../apps/web/src/app${p}/`, import.meta.url);
+      expect(existsSync(new URL('page.tsx', dir)) || existsSync(new URL('[[...variant]]/page.tsx', dir)), p).toBe(true);
+    }
   });
 });

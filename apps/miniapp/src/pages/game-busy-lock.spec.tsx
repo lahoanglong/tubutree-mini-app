@@ -168,17 +168,22 @@ const twice = async (name: string | RegExp) => {
   return [btn, btn];
 };
 const byName = (name: string | RegExp) => () => twice(name);
+// Hứng sương và vé giữ lửa nằm trong sheet ⓘ "Luật chăm vườn": mở sheet rồi mới tìm nút.
+const inRules = (name: string | RegExp) => async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Luật chăm vườn' }));
+  return twice(name);
+};
 
 const CASES: Case[] = [
   {
-    label: 'tưới hết',
+    label: 'tưới cây',
     api: () => mocks.api.waterTree,
     setup: () => mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() }),
-    targets: byName(/Tưới hết/),
+    targets: byName('Tưới cây'),
   },
-  { label: 'điểm danh', api: () => mocks.api.checkIn, targets: byName(/^(Điểm danh nhận|Nhận nước hôm nay)/) },
-  { label: 'hứng giọt sương', api: () => mocks.api.collectDew, targets: byName('Hứng giọt sương') },
-  { label: 'mua vé giữ lửa', api: () => mocks.api.buyStreakFreeze, targets: byName('Mua (80💧)') },
+  { label: 'điểm danh', api: () => mocks.api.checkIn, targets: byName(/^Điểm danh$/) },
+  { label: 'hứng giọt sương', api: () => mocks.api.collectDew, targets: inRules('Hứng giọt sương') },
+  { label: 'mua vé giữ lửa', api: () => mocks.api.buyStreakFreeze, targets: inRules('Mua (80💧)') },
   { label: 'hồi sinh chuỗi', api: () => mocks.api.repairStreak, targets: byName('Hồi sinh (300💧)') },
   {
     label: 'nhận thưởng nhiệm vụ',
@@ -359,7 +364,7 @@ describe('GamePage — nhả khoá để bấm lại được', () => {
   it('lỗi mạng: nhả khoá, bấm lại gọi API lần hai', async () => {
     mocks.api.checkIn.mockRejectedValueOnce(new Error('boom'));
     renderPage();
-    const btn = await screen.findByRole('button', { name: /^(Điểm danh nhận|Nhận nước hôm nay)/ });
+    const btn = await screen.findByRole('button', { name: /^Điểm danh$/ });
     await tapTogether(btn, btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
@@ -384,7 +389,7 @@ describe('GamePage — nhả khoá để bấm lại được', () => {
   it('thành công: nhả khoá, lần tưới sau gọi API bình thường', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() });
     renderPage();
-    const btn = await screen.findByRole('button', { name: /Tưới hết/ });
+    const btn = await screen.findByRole('button', { name: 'Tưới cây' });
     await tapTogether(btn, btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
     await waitFor(() => expect(btn).toBeEnabled());

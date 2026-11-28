@@ -178,6 +178,7 @@ export default function RecycleEditPage() {
         onChange={setLine}
         allowance={Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty]))}
         dayCap={createdTodayVn(r.createdAt)}
+        onFullRules={() => navigate('/recycle/rules')}
       />
       {isDropOff && shownPoint && (
         <div style={{ ...COLUMN, gap: 8 }}>

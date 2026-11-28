@@ -8,6 +8,7 @@ import PortalHeader from '@/components/admin/portal-header';
 import { ReferralCapture } from '@/components/storefront-tracker';
 import { AppGates } from '@/components/app-gates';
 import BottomNav from '@/components/bottom-nav';
+import { SiteSnowGate } from '@/components/season/site-snow-gate';
 import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
@@ -81,6 +82,7 @@ export function LayoutShell({ vitals, footer, children }: { vitals: ReactNode; f
       <HideOnPortals>
         <BottomNav />
       </HideOnPortals>
+      <SiteSnowGate />
     </Providers>
   );
 }

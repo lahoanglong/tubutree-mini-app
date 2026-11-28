@@ -53,34 +53,14 @@ export default function SubscriptionsPage() {
       <PageHeader title="Mua xoay vòng" />
 
       <div className="tubu-subs-body">
-        <section aria-label="Quyền lợi Mua xoay vòng" data-testid="subscription-hero" className="tubu-subs-hero">
-          <span className="tubu-subs-eyebrow">{pct ? fillCopy('subs.heroEyebrow', { pct }) : fillCopy('subs.heroEyebrowNoPct')}</span>
-          <Heading variant="title-md" font="ui">Chẳng lo hết đồ thiết yếu giữa chừng</Heading>
-          <ul className="tubu-subs-perks">
-            <li className="tubu-subs-perk">
-              <span aria-hidden="true" className="tubu-subs-dot" />
-              <span>{pct ? fillCopy('subs.perkDiscount', { pct }) : fillCopy('subs.perkDiscountNoPct')}</span>
-            </li>
-            <li className="tubu-subs-perk">
-              <span aria-hidden="true" className="tubu-subs-dot" />
-              <span>Chu kỳ 4 · 6 · 8 · 10 tuần theo nhịp nhà bạn.</span>
-            </li>
-            <li className="tubu-subs-perk">
-              <span aria-hidden="true" className="tubu-subs-dot" />
-              <span>Đổi ngày, bỏ qua kỳ hay tạm dừng chỉ 1 chạm.</span>
-            </li>
-          </ul>
-          {noOpenSub && suggestion && (
-            <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={setSubscribeTo} />
-          )}
-          {authed && !subsQ.isLoading && !hasSubscription && (
-            <div>
-              <Button variant="secondary" size="md" className="tubu-subs-cta" onPress={() => goSmart('/orders?tab=subscriptions')}>
-                Xem mục Định kỳ trong Đơn hàng
-              </Button>
-            </div>
-          )}
+        {/* Một dải 40px (UAT iPhone): số % tiết kiệm + lối sang lịch định kỳ, để thẻ sản phẩm lên ngay nửa trên màn; cùng chữ với web /san-pham?filter=subscription. */}
+        <section aria-label="Quyền lợi Mua xoay vòng" data-testid="subscription-hero" className="tubu-subs-strip">
+          <span className="tubu-subs-strip-text">{pct ? fillCopy('subs.heroEyebrow', { pct }) : fillCopy('subs.heroEyebrowNoPct')}</span>
+          <button type="button" className="tubu-subs-strip-link tubu-press" onClick={() => goSmart('/orders?tab=subscriptions')}>
+            {fillCopy('subs.myScheduleLink')}
+          </button>
         </section>
+        {noOpenSub && suggestion && <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={setSubscribeTo} />}
 
         {authed && hasSubscription && (
           <section aria-label="Lịch định kỳ của tôi" className="tubu-subs-section">
@@ -90,7 +70,6 @@ export default function SubscriptionsPage() {
         )}
 
         <section aria-label="Sản phẩm đặt xoay vòng" data-testid="subscription-products" className="tubu-subs-section">
-          <Heading variant="title-md" font="ui">Sản phẩm tiêu dùng phù hợp đặt xoay vòng</Heading>
           {products.isLoading ? (
             <ProductGrid items={[]} variant="grid" loading skeletonCount={6} />
           ) : products.isError && list.length === 0 ? (

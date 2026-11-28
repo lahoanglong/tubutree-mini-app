@@ -116,6 +116,64 @@ export function companyLegalLine(company?: CompanyRegistrationInput | null): str
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+/** Ngày và nơi cấp trên Giấy chứng nhận đăng ký doanh nghiệp của Tubu Tree (MST 0319585995): chân trang dùng khi admin chưa nhập hai ô này. */
+export const TUBU_TREE_REGISTRATION = { date: '09/06/2026', place: 'TP.HCM' } as const;
+
+/**
+ * Khối pháp lý gọn ở chân trang web: "CÔNG TY TNHH TUBU TREE · MST 0319585995 · Cấp ngày 09/06/2026 tại TP.HCM · <địa chỉ>" (hotline, email nối
+ * thêm ở chỗ vẽ). Số ĐKDN chỉ nêu riêng khi khác MST; người đại diện, ngày và nơi cấp lấy theo admin nhập. Admin chưa nhập ngày, nơi cấp mà
+ * đơn vị đang hiện chính là Tubu Tree thì dùng ngày, nơi cấp trên giấy chứng nhận của Tubu Tree; đơn vị khác thì không bịa. Không có gì thì null.
+ */
+export function footerCompanyLine(company?: CompanyRegistrationInput | null): string | null {
+  const id = merchantIdentityOrDefault(company);
+  const tubu = id.taxCode === TUBU_TREE_MERCHANT.taxCode;
+  const number = filled(company?.registrationNumber);
+  const date = filled(company?.registrationDate) ?? (tubu ? TUBU_TREE_REGISTRATION.date : null);
+  const place = filled(company?.registrationPlace) ?? (tubu ? TUBU_TREE_REGISTRATION.place : null);
+  const representative = filled(company?.representative);
+  const issued = date && place ? `Cấp ngày ${date} tại ${place}` : date ? `Cấp ngày ${date}` : place ? `Cấp tại ${place}` : null;
+  const parts = [
+    id.legalName,
+    id.taxCode ? `MST ${id.taxCode}` : null,
+    number && number !== id.taxCode ? `ĐKDN số ${number}` : null,
+    issued,
+    representative ? `Người đại diện: ${representative}` : null,
+    id.address,
+  ].filter((p): p is string => !!p);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+/**
+ * Lối vào chính sách ở chân trang theo danh mục Bộ Công Thương yêu cầu (hướng dẫn mua hàng, thanh toán, vận chuyển, đổi trả, kiểm hàng, bảo
+ * mật thông tin), thêm điều khoản sử dụng. Hướng dẫn mua hàng và kiểm hàng là một mục trong trang điều khoản / đổi trả, trỏ thẳng bằng neo
+ * (`legalHeadingIds`).
+ */
+export const FOOTER_POLICY_LINKS: readonly { label: string; slug: LegalSlug; anchor?: string }[] = [
+  { label: 'Hướng dẫn mua hàng', slug: 'dieu-khoan', anchor: 'dat-hang' },
+  { label: 'Thanh toán', slug: 'thanh-toan' },
+  { label: 'Vận chuyển', slug: 'van-chuyen' },
+  { label: 'Đổi trả', slug: 'doi-tra' },
+  { label: 'Kiểm hàng', slug: 'doi-tra', anchor: 'kiem-hang' },
+  { label: 'Bảo mật thông tin', slug: 'bao-mat' },
+  { label: 'Điều khoản sử dụng', slug: 'dieu-khoan' },
+];
+
+const SECTION_HEADINGS = [
+  { id: 'dat-hang', match: /đặt hàng/iu },
+  { id: 'kiem-hang', match: /kiểm hàng/iu },
+] as const;
+
+/** id cho các tiêu đề của một trang chính sách: tiêu đề ĐẦU TIÊN nhắc "đặt hàng" / "kiểm hàng" nhận id để chân trang trỏ thẳng tới, còn lại không có. */
+export function legalHeadingIds(headings: readonly string[]): (string | undefined)[] {
+  const used = new Set<string>();
+  return headings.map((h) => {
+    const text = h.normalize('NFC');
+    const hit = SECTION_HEADINGS.find((s) => !used.has(s.id) && s.match.test(text));
+    if (hit) used.add(hit.id);
+    return hit?.id;
+  });
+}
+
 /** Link huy hiệu "Đã thông báo Bộ Công Thương" chỉ hợp lệ khi là https tới cổng online.gov.vn hoặc một tên miền *.gov.vn. */
 export function isBctNoticeUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.trim() !== value || value === '' || value.length > 500) return false;

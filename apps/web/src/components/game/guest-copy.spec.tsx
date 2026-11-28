@@ -5,7 +5,7 @@ import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
 import { render, type Rendered } from '@/test-utils/dom';
 
 import { CheckInStreak } from './checkin-streak';
-import { TreeActions } from './tree-actions';
+import { GardenDayActions } from './garden-day-actions';
 
 const PROFILE = { streakDays: 0, totalSeeds: 5, dailyLoginSeeds: 10, firstCheckinBonus: 0, lastCheckInAt: new Date().toISOString(), lastDewAt: null } as unknown as GameProfile;
 const STATUS = { checkedInToday: false, streakDays: 0, streakDay: 1, currentCycleDay: 1, rewards: Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 1000, claimed: false, isToday: i === 0 })) } as unknown as CheckInStatusResponse;
@@ -21,7 +21,9 @@ const streak = (status: CheckInStatusResponse) => {
   return mounted.container;
 };
 const actions = (pointsBlocked: boolean, onClaim = vi.fn()) => {
-  mounted = render(<TreeActions profile={PROFILE} pointsPending pointsBlocked={pointsBlocked} pending={false} onClaim={onClaim} onWater={vi.fn()} onHarvest={vi.fn()} onEarn={vi.fn()} />);
+  mounted = render(
+    <GardenDayActions profile={PROFILE} streakDays={0} pointsPending pointsBlocked={pointsBlocked} waterPending={false} checkInPending={false} onClaim={onClaim} onWater={vi.fn()} onHarvest={vi.fn()} onEarn={vi.fn()} onRules={vi.fn()} />,
+  );
   return { c: mounted.container, onClaim };
 };
 
@@ -36,7 +38,7 @@ describe('CheckInStreak (web): câu phụ theo khách vãng lai', () => {
   });
 });
 
-describe('TreeActions (web): nhãn khi còn dở phần điểm danh', () => {
+describe('GardenDayActions (web): nhãn nút Điểm danh khi còn dở phần điểm danh', () => {
   it('user thật: "Nhận Điểm Xanh hôm nay"', () => {
     expect(actions(false).c.textContent).toContain('Nhận Điểm Xanh hôm nay');
   });
@@ -44,7 +46,7 @@ describe('TreeActions (web): nhãn khi còn dở phần điểm danh', () => {
     const { c, onClaim } = actions(true);
     expect(c.textContent).toContain('Điểm danh hôm nay');
     expect(c.textContent).not.toContain('Điểm Xanh');
-    c.querySelector('button')!.click();
+    c.querySelector<HTMLButtonElement>('.tubu-day-btn--checkin')!.click();
     expect(onClaim).toHaveBeenCalledTimes(1);
   });
 });

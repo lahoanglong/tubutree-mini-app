@@ -10,7 +10,6 @@ import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { POST_CARD_SKELETON_COUNT } from '@tubutree/app-core/community-skeleton';
 import { feedCategoriesQuery, feedListQuery, feedPublicPreviewQuery } from '@tubutree/app-core/queries/feed';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
-import { CommunityChannels } from '@/components/community/community-channels';
 import { PostCard } from '@/components/community/post-card';
 import { PostComposer } from '@/components/community/post-composer';
 import { PublicPreviewList } from '@/components/community/public-preview-list';
@@ -132,7 +131,6 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     if (initialPreview && initialPreview.length > 0) {
       return (
         <FeedShell subtitle>
-          <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
           <PublicPreviewList posts={initialPreview} />
         </FeedShell>
       );
@@ -164,14 +162,12 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     if (previewOn && preview.data && preview.data.posts.length > 0) {
       return (
         <FeedShell subtitle>
-          <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
           <PublicPreviewList posts={preview.data.posts} />
         </FeedShell>
       );
     }
     return (
       <FeedShell subtitle>
-        <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
         <section
           data-testid="community-guest-intro"
           className="rounded-card border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 [box-shadow:var(--elevation-1)]"
@@ -194,26 +190,16 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
   };
 
   return (
-    <FeedShell>
-      <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
-
+    <FeedShell
+      actions={
+        // Một đầu trang gọn (UAT iPhone): tên trang và nút "+ Đăng" cùng một hàng; chữ ngắn để tiêu đề không xuống dòng ở 360px.
+        <button type="button" onClick={openComposer} aria-label="Đăng bài" className={`${ui.btnPrimary} flex-none whitespace-nowrap max-md:px-3`}>
+          <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+          Đăng
+        </button>
+      }
+    >
       <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-1 md:contents">
-        <div className="flex items-center gap-2 max-md:gap-1.5">
-          <button type="button" onClick={openComposer} className={`${ui.btnPrimary} whitespace-nowrap max-md:flex-1 max-md:px-3 md:ml-auto`}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Đăng bài
-          </button>
-          <button
-            type="button"
-            aria-label="Mở ô tìm kiếm"
-            aria-expanded={searchOpen || q !== ''}
-            onClick={() => setSearchOpen((v) => !v)}
-            className="inline-flex h-11 min-h-11 w-11 flex-none items-center justify-center rounded-full text-stone-700 hover:bg-stone-50 md:hidden"
-          >
-            <Search className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-
         {/* Vùng live luôn có trong DOM (trống thì sr-only, không chiếm khoảng cách): chèn vùng live cùng lúc với chữ thì nhiều trình đọc không đọc. */}
         <div role="status" className={notice ? 'rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800' : 'sr-only'}>
           {notice}
@@ -238,6 +224,15 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
 
         {/* Điện thoại: danh mục và sắp xếp nằm chung một hàng cuộn ngang để bài đầu lên sớm hơn. */}
         <div className="flex flex-col gap-3 max-md:-mx-3 max-md:flex-row max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:px-3 max-md:py-1">
+          <button
+            type="button"
+            aria-label="Mở ô tìm kiếm"
+            aria-expanded={searchOpen || q !== ''}
+            onClick={() => setSearchOpen((v) => !v)}
+            className="inline-flex h-11 min-h-11 w-11 flex-none items-center justify-center rounded-full bg-stone-100 text-stone-700 hover:bg-stone-50 md:hidden"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+          </button>
           <div role="group" aria-label="Chọn danh mục" className="flex gap-2 overflow-x-auto max-md:shrink-0 max-md:overflow-visible md:flex-wrap">
             {isWebRouteReady('/cong-dong/su-kien') && (
               <Link

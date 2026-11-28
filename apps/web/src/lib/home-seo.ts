@@ -106,7 +106,7 @@ export const toE164 = (phone: string): string | undefined => {
 
 /**
  * Organization + WebSite (một `@graph`) cho trang chủ. Chỉ dùng giá trị đã có trong cấu hình công khai (hotline/email hỗ trợ, link cộng đồng https,
- * tên pháp lý, MST và địa chỉ trụ sở); thiếu thì bỏ trường, không bịa. Tên pháp lý, MST, địa chỉ cùng nguồn với dòng "Đơn vị vận hành" ở chân trang
+ * tên pháp lý, MST và địa chỉ trụ sở); thiếu thì bỏ trường, không bịa. Tên pháp lý, MST, địa chỉ cùng nguồn với khối pháp lý ở chân trang
  * (`merchantIdentityOrDefault`: admin chưa nhập gì thì là thương nhân đã đăng ký của Tubu Tree; nhập một phần thì giữ đúng phần đó).
  * Logo là app/icon.png, được Next phục vụ ở /icon.png.
  */

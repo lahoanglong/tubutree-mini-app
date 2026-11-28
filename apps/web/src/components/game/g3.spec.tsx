@@ -7,7 +7,6 @@ import { GardenHero } from './garden-hero';
 import { GardenPlots } from './garden-plots';
 import { EcoImpact } from './eco-impact';
 import { WaterTank } from './water-tank';
-import { SeasonEmpty } from './season-banner';
 import { WeeklyLeaderboard } from './weekly-leaderboard';
 
 // Dải Nhịp Sống Xanh cần phiên đăng nhập và react-query; thẻ vườn ở đây chỉ kiểm chữ của thẻ (dải có spec riêng: week-rhythm.spec.tsx).
@@ -145,10 +144,6 @@ describe('G3 lượt 2', () => {
   it('nước từ đơn nhận khi mở game lần đầu: hiện claimedNow', () => {
     mounted = render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 100, claimedNow: 100 }} shopHref="/san-pham" />);
     expect(q('order-water-claimed')!.textContent).toContain('+100');
-  });
-  it('màn mùa rỗng hiện', () => {
-    mounted = render(<SeasonEmpty />);
-    expect(q('season-empty')).not.toBeNull();
   });
   it('bảng xếp hạng chưa tải: khung chờ, không phải "chưa có ai"', () => {
     mounted = render(<WeeklyLeaderboard board={undefined} />);

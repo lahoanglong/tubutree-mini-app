@@ -238,11 +238,14 @@ describe('BottomNav', () => {
       expect(screen.getByRole('button', { name: 'Quét mã' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('Vườn Xanh không còn là tab: /game là trang con, thanh đáy ẩn', () => {
+    it('Vườn Xanh không còn là tab nhưng /game giữ thanh đáy (trang khám phá, UAT 28/11); màn chơi con thì ẩn', () => {
       expect(screen.queryByRole('button', { name: 'Vườn Xanh' })).toBeNull();
       mocks.pathname = '/game';
-      const { container } = render(<BottomNav />);
-      expect(container).toBeEmptyDOMElement();
+      const { container, unmount } = render(<BottomNav />);
+      expect(container).not.toBeEmptyDOMElement();
+      unmount();
+      mocks.pathname = '/game/play/eco_merge';
+      expect(render(<BottomNav />).container).toBeEmptyDOMElement();
     });
   });
 });

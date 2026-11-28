@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -85,12 +85,14 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     await screen.findByText(/Rừng Tubu/);
     const text = container.textContent ?? '';
 
-    expect(text).toContain('Mua (1.500💧)');
     expect(text).toContain('Góp quỹ trồng cây (50 điểm)');
     expect(text).toContain('1.250.000/5.000.000💧');
     expect(text).toContain('Bạn đã góp 89.000💧');
     expect(text).toContain('12.000/50.000💧');
     expect(text).toContain('Chuỗi 12 ngày');
+    // Giá vé giữ lửa nằm trong sheet ⓘ "Luật chăm vườn" (tìm theo nhãn/chữ: dò vai trò trên cả trang làm jsdom vấp ở nền gradient).
+    fireEvent.click(screen.getByLabelText('Luật chăm vườn'));
+    await waitFor(() => expect(document.body.textContent).toContain('Mua (1.500💧)'));
     expect(text).toContain('Mở lô (1.200💧)');
     expect(text).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
     expect(text).not.toMatch(/(^|[^\d.])\d{4,}(?![\d.])/);

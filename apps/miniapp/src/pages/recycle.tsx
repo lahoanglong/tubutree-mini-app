@@ -3,7 +3,7 @@ import { Info } from 'lucide-react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
-import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
+import { pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { getWasteCatalogue, getWasteMe, listWasteRequests, WASTE_QUERY_KEYS } from '../services/waste-api';
@@ -44,6 +44,7 @@ import {
   formatLineQty,
   nextRewardProgress,
   isRequestPaused,
+  itemRuleNotes,
   requestStatusText,
   ruleText,
   timelineFor,
@@ -67,7 +68,7 @@ const SECTION_STYLE = { display: 'flex', flexDirection: 'column', gap: 8 } as co
  * Khối "Cách đổi": tiêu đề + nút "ⓘ Thể lệ" mở sheet, dải 3 bước có biểu tượng, rồi nút chính (nếu có).
  * Câu đầy đủ từng bước và các cách giao nằm trong sheet để màn chính chỉ còn một hàng bước và một nút.
  */
-function HowTo({ methods = [], onRules, children }: { methods?: readonly WasteMethod[]; onRules: () => void; children?: React.ReactNode }) {
+function HowTo({ methods = [], items, onRules, children }: { methods?: readonly WasteMethod[]; items?: readonly WasteItemDTO[]; onRules: () => void; children?: React.ReactNode }) {
   const cfg = usePublicConfig();
   const [open, setOpen] = useState(false);
   return (
@@ -87,6 +88,7 @@ function HowTo({ methods = [], onRules, children }: { methods?: readonly WasteMe
         onClose={() => setOpen(false)}
         steps={wasteIntroCopy(cfg.waste).steps}
         methods={methods.map((m) => ({ label: METHOD_LABELS[m], line: METHOD_LINE[m] }))}
+        items={itemRuleNotes(items ?? [])}
         onFullRules={onRules}
       />
     </section>
@@ -125,16 +127,10 @@ function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
                 {item.name}
               </Text>
               {item.status === 'COMING_SOON' && <Badge>Sắp nhận</Badge>}
-              {item.warehouseOnly && item.status !== 'COMING_SOON' && <Badge tone="info" size="sm">{WAREHOUSE_ONLY_TEXT}</Badge>}
             </div>
             <Text variant="caption" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'secondary'} as="div">
               {ruleText(item)}
             </Text>
-            {item.prepInstructions && (
-              <Text variant="caption" tone="tertiary" as="div">
-                {item.prepInstructions}
-              </Text>
-            )}
           </div>
         </div>
       ))}
@@ -155,7 +151,7 @@ function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | un
           {intro.intro}
         </Text>
       </div>
-      <HowTo onRules={onRules} />
+      <HowTo items={items} onRules={onRules} />
       {items === undefined ? <Skeleton height={120} radius="var(--radius-card)" /> : <ItemList items={items} />}
     </>
   );
@@ -276,7 +272,7 @@ export default function RecyclePage() {
   const shell = (content: React.ReactNode, bar?: React.ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       {header}
-      <div style={{ padding: 16, paddingBottom: bar ? 140 : 16, display: 'flex', flexDirection: 'column', gap: 16 }}>{content}</div>
+      <div style={{ padding: 16, paddingBottom: bar ? 140 : 'calc(96px + var(--safe-bottom))', display: 'flex', flexDirection: 'column', gap: 16 }}>{content}</div>
       {bar}
     </Page>
   );
@@ -404,7 +400,7 @@ export default function RecyclePage() {
       </Card>
 
       {methods.length > 0 && (
-        <HowTo methods={methods} onRules={() => navigate('/recycle/rules')}>
+        <HowTo methods={methods} items={items} onRules={() => navigate('/recycle/rules')}>
           {lastDone ? (
             <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/recycle/new" />
           ) : (

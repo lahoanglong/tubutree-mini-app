@@ -154,6 +154,14 @@ body.with-back-btn .page.page-bleed {
 .tubu-scroll-pad-sticky-bar {
   scroll-padding-bottom: calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px);
 }
+/* Trang khám phá (Đổi rác, Vườn Xanh, Cộng đồng) giữ thanh đáy; lúc trang có thanh CTA dính đáy thì thanh CTA thắng, như web. */
+html[data-sticky-bar] [data-bottom-nav] {
+  display: none;
+}
+/* Chừa chỗ cho thanh 5 tab ở trang khám phá (nav-config `showsBottomNav`): 96px như các màn gốc có thanh đáy. */
+.tubu-nav-clear {
+  padding-bottom: calc(96px + var(--safe-bottom));
+}
 
 /* ── Chip phân loại (trang chi tiết và bảng chọn): cao tối thiểu 44px, viền 1,5px. px để ở CSS vì bánh cóc P17b chỉ đếm TSX. ── */
 .tubu-var-chip {

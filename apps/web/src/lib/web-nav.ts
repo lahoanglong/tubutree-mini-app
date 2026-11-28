@@ -1,5 +1,5 @@
 import { Gift, Home, LayoutGrid, ScanLine, User, type LucideIcon } from 'lucide-react';
-import { NAV_TAB_SPECS, type NavTabId, type NavTabSpec } from '@tubutree/app-core/home-layout';
+import { NAV_DISCOVERY_PATHS, NAV_TAB_SPECS, type NavTabId, type NavTabSpec } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
 
 /**
@@ -26,6 +26,10 @@ export const WEB_NAV_TABS: readonly WebNavTab[] = NAV_TAB_SPECS.map((t) => ({ ..
 export const WEB_ROOT_PATHS: readonly string[] = WEB_NAV_TABS.map((t) => t.path);
 
 export const isWebRootPath = (pathname: string | null | undefined): boolean => !!pathname && WEB_ROOT_PATHS.includes(pathname);
+
+/** Thanh đáy điện thoại: 5 route gốc và các trang khám phá (`NAV_DISCOVERY_PATHS`, cùng bộ với Mini App); trang khám phá vẫn giữ nút lùi nổi. */
+export const showsWebBottomNav = (pathname: string | null | undefined): boolean =>
+  isWebRootPath(pathname) || (!!pathname && (NAV_DISCOVERY_PATHS.web as readonly string[]).includes(pathname));
 
 /** Mục có route web đã xong; route còn `pending` trong route-map thì ẩn để khách không bấm vào trang chưa có. */
 export const readyNavTabs = (): WebNavTab[] => WEB_NAV_TABS.filter((t) => isWebRouteReady(t.path));

@@ -204,3 +204,27 @@ describe('bảng màu Noel Xanh (tubu-w57-01) đạt 4,5:1 cho chữ — WCAG 1.
     expect(rule).not.toMatch(/opacity/);
   });
 });
+
+describe('hai nút màu và viên chuỗi của Chăm vườn (tubu-w62-01) đạt 4,5:1 cho chữ — WCAG 1.4.3', () => {
+  const HUB = readText(path.join(SRC, 'css/game-hub.css'));
+  const gradient = (sel: string) => {
+    const body = new RegExp(`\\${sel} \\{([^}]*)\\}`).exec(HUB)?.[1] ?? '';
+    const stops = /linear-gradient\(135deg, var\((--[a-z0-9-]+)\), var\((--[a-z0-9-]+)\)\)/.exec(body);
+    expect(stops, `thiếu gradient của ${sel} trong game-hub.css`).toBeTruthy();
+    return [tokenRgb(stops![1]!), tokenRgb(stops![2]!)] as const;
+  };
+  const white = tokenRgb('--stone-0');
+
+  it.each(['.tubu-day-btn--water', '.tubu-day-btn--checkin'])('chữ trắng trên %s ở mọi điểm của gradient', (sel) => {
+    const [from, to] = gradient(sel);
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) expect(ratio(white, lerp(from, to, t))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([
+    ['--amber-600', '--amber-50'],
+    ['--color-status-success-fg', '--color-status-success-bg'],
+    ['--color-text-secondary', '--color-bg-subtle'],
+  ])('%s trên %s (viên chuỗi, ô "Đã điểm danh", nút đang chờ)', (fg, bg) => {
+    expect(ratio(tokenRgb(fg), tokenRgb(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+});

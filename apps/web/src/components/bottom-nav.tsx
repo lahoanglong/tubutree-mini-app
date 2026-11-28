@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { coreHttp } from '@/lib/core-http';
-import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
+import { readyNavTabs, showsWebBottomNav } from '@/lib/web-nav';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useOffersDot } from '@/lib/use-offers-dot';
 import { useEngagementDots } from '@/lib/use-engagement-dots';
@@ -27,21 +27,21 @@ function scrollToTop() {
 export default function BottomNav() {
   const pathname = useShellPathname();
   const { status } = useAuth();
-  const isRoot = isWebRootPath(pathname);
+  const visible = showsWebBottomNav(pathname);
   const tabs = readyNavTabs();
   // Cùng query /me/summary với Cá nhân và chuông (số đơn đang xử lý); đặt/huỷ đơn làm mới nó (TubuQueryClient).
   const activeQ = useQuery({
     ...meSummaryQuery(coreHttp),
     select: (s) => s.orders.active,
-    enabled: isRoot && status === 'authenticated' && tabs.some((t) => t.badge === 'active-orders'),
+    enabled: visible && status === 'authenticated' && tabs.some((t) => t.badge === 'active-orders'),
     staleTime: 30_000,
     retry: false,
   });
   const activeOrders = activeQ.data ?? 0;
-  const reminders = useEngagementDots(isRoot, activeOrders);
+  const reminders = useEngagementDots(visible, activeOrders);
   // Lý do "chưa điểm danh" chỉ nhường cho chấm thẻ Vườn Xanh ở Trang chủ (W42); tab gốc khác không có chấm đó nên Ưu đãi giữ lý do này.
-  const offersDot = useOffersDot(isRoot && tabs.some((t) => t.badge === 'offers-dot'), reminders.checkInElsewhere && pathname === '/');
-  if (!isRoot) return null;
+  const offersDot = useOffersDot(visible && tabs.some((t) => t.badge === 'offers-dot'), reminders.checkInElsewhere && pathname === '/');
+  if (!visible) return null;
 
   return (
     <div data-bottom-nav className="md:hidden">

@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 import Link from 'next/link';
+import { legalHeadingIds } from '@tubutree/app-core/legal-core';
 
 type Block =
   | { kind: 'heading'; level: 2 | 3; text: string }
@@ -113,20 +114,25 @@ function inline(text: string): ReactNode[] {
 export function LegalMarkdown({ source }: { source: string }) {
   const blocks = parseBlocks(source);
   if (blocks.length === 0) return null;
+  // Neo cho lối "Hướng dẫn mua hàng" / "Kiểm hàng" ở chân trang (Bộ Công Thương): chỉ tiêu đề đầu tiên khớp mới mang id.
+  const ids = legalHeadingIds(blocks.flatMap((b) => (b.kind === 'heading' ? [b.text] : [])));
+  let heading = 0;
   return (
     <div className="space-y-3 text-base leading-relaxed text-stone-700">
       {blocks.map((b, i) => {
         switch (b.kind) {
-          case 'heading':
+          case 'heading': {
+            const id = ids[heading++];
             return b.level === 2 ? (
-              <h2 key={i} className="pt-4 font-display text-xl font-semibold text-stone-900">
+              <h2 key={i} id={id} className="pt-4 font-display text-xl font-semibold text-stone-900">
                 {inline(b.text)}
               </h2>
             ) : (
-              <h3 key={i} className="pt-2 text-lg font-semibold text-stone-900">
+              <h3 key={i} id={id} className="pt-2 text-lg font-semibold text-stone-900">
                 {inline(b.text)}
               </h3>
             );
+          }
           case 'para':
             return (
               <p key={i}>

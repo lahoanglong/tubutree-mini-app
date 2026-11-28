@@ -106,68 +106,43 @@
   gap: var(--space-stack-md);
 }
 
-.tubu-subs-hero {
-  padding: var(--space-inset-page);
-  border: 1px solid var(--color-action-secondary-border);
-  border-radius: var(--radius-card);
+/* Dải Mua xoay vòng một hàng, cao 40px: chữ cắt một dòng bên trái, lối "Lịch của tôi" bên phải với vùng chạm 44px (lề âm dọc không đổi chiều cao dải). */
+.tubu-subs-strip {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
   background: var(--color-bg-subtle);
   display: flex;
-  flex-direction: column;
-  gap: var(--space-stack-sm);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
 }
 
-.tubu-subs-eyebrow {
-  display: inline-flex;
-  align-self: flex-start;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-action-secondary-bg);
+.tubu-subs-strip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--color-action-secondary-fg);
   font-size: var(--type-label-size);
   line-height: var(--type-label-lh);
   font-weight: 600;
 }
 
-.tubu-subs-perks {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tubu-subs-perk {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-inline-sm);
-  color: var(--color-text-primary);
-  font-size: var(--type-body-sm-size);
-  line-height: var(--type-body-sm-lh);
-}
-
-/* Nhãn dài của nút trong thẻ giới thiệu (hẹp 254px ở 320): xuống hai dòng thay vì "…"; cao tự giãn, tối thiểu 44px. Bộ chọn dài hơn luật rút gọn nhãn của `.tubu-btn` nên thắng bất kể thứ tự nạp. */
-.tubu-subs-hero .tubu-subs-cta {
-  height: auto;
-  padding: 8px 16px;
-  white-space: normal;
-}
-.tubu-subs-hero .tubu-subs-cta .zaui-btn-container > span:not(.zaui-btn-icon):not(.zaui-btn-loading-container) {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  text-wrap: balance;
-  padding-block: 0;
-  margin-block: 0;
-}
-
-.tubu-subs-dot {
+.tubu-subs-strip-link {
   flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  margin-top: 8px;
-  border-radius: var(--radius-pill);
-  background: var(--color-action-primary-bg);
+  min-height: 44px;
+  margin: -2px 0;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-brand);
+  font: inherit;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .tubu-subs-section {

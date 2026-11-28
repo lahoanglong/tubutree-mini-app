@@ -123,6 +123,12 @@ const mount = async (search = '') => {
 const postsOf = (path: string) => state.calls.filter((c) => c.method === 'post' && c.path === path);
 const getsOf = (path: string) => state.calls.filter((c) => c.method === 'get' && c.path === path);
 const btn = (c: ParentNode, text: string | RegExp) => byText(c, 'button', text) as HTMLButtonElement;
+// Thẻ chuỗi đầy đủ (hứng sương, vé giữ lửa) nằm trong sheet ⓘ "Luật chăm vườn", vẽ qua portal ở body.
+const openRules = async (c: HTMLElement) => {
+  click(c.querySelector<HTMLButtonElement>('button[aria-label="Luật chăm vườn"]')!);
+  await flush(4);
+  return document.body;
+};
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 const toastAlert = () => Array.from(document.querySelectorAll<HTMLElement>('[role="alert"]')).at(-1)!;
 const panel = (c: HTMLElement, label: string) => c.querySelector<HTMLElement>(`[role="tabpanel"][aria-label="${label}"]`)!;
@@ -181,7 +187,7 @@ describe('Vườn Xanh: nút chính trên cây', () => {
     const g = gate();
     state.postHold.set('/game/tree/water', g.p);
     const c = await mount();
-    const b = btn(c, /Tưới hết/);
+    const b = btn(c, 'Tưới cây');
     await tapTogether(b, b);
     await flush();
     expectBusy(b);
@@ -189,7 +195,7 @@ describe('Vườn Xanh: nút chính trên cây', () => {
     g.open();
     await flush(8);
     expect(postsOf('/game/tree/water')).toHaveLength(1);
-    expectIdle(btn(c, /Tưới hết/));
+    expectIdle(btn(c, 'Tưới cây'));
   });
 
   it('tưới: khoá giữ tới khi hồ sơ mới về; chạm lúc số nước còn là số cũ không gọi API lần hai', async () => {
@@ -200,13 +206,13 @@ describe('Vườn Xanh: nút chính trên cây', () => {
       return WATERED;
     };
     const c = await mount();
-    const b = btn(c, /Tưới hết/);
+    const b = btn(c, 'Tưới cây');
     const fresh = gate();
     state.getHold.set('/game/profile', fresh.p);
     click(b);
     await flush(8);
     expect(postsOf('/game/tree/water')).toHaveLength(1);
-    // POST đã xong nhưng hồ sơ mới chưa về: nút vẫn bận và vẫn nói "Tưới hết".
+    // POST đã xong nhưng hồ sơ mới chưa về: nút "Tưới cây" vẫn bận.
     expectBusy(b);
     click(b);
     await flush();
@@ -214,8 +220,12 @@ describe('Vườn Xanh: nút chính trên cây', () => {
     fresh.open();
     await flush(8);
     expect(getsOf('/game/profile').length).toBeGreaterThan(1);
-    expect(byText(c, 'button', /Tưới hết/)).toBeNull();
-    expectIdle(btn(c, gameNewbieCopy.primary.earn));
+    // Hồ sơ mới 0💧: "Tưới cây" rảnh lại và giờ mở sheet "Kiếm nước" thay vì gọi API tưới.
+    expectIdle(btn(c, 'Tưới cây'));
+    click(btn(c, 'Tưới cây'));
+    await flush(4);
+    expect(postsOf('/game/tree/water')).toHaveLength(1);
+    expect(dialog()?.textContent).toContain('Kiếm nước');
   });
 
   it('tưới lỗi: báo role="alert", nhả khoá, bấm lại gọi API lần hai', async () => {
@@ -225,7 +235,7 @@ describe('Vườn Xanh: nút chính trên cây', () => {
       return WATERED;
     };
     const c = await mount();
-    const b = btn(c, /Tưới hết/);
+    const b = btn(c, 'Tưới cây');
     await tapTogether(b, b);
     await flush(8);
     expect(postsOf('/game/tree/water')).toHaveLength(1);
@@ -241,7 +251,7 @@ describe('Vườn Xanh: nút chính trên cây', () => {
     state.data['/game/profile'] = () => profile({ lastCheckInAt: null });
     state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
     const c = await mount();
-    const b = btn(c, /^(Điểm danh nhận|Nhận nước hôm nay)/);
+    const b = btn(c, /^Điểm danh$/);
     await tapTogether(b, b);
     await flush(8);
     expect(postsOf('/me/daily-check-in')).toHaveLength(1);
@@ -254,7 +264,7 @@ describe('Vườn Xanh: sương, vé giữ lửa, hồi sinh chuỗi', () => {
     const g = gate();
     state.postHold.set('/game/dew/collect', g.p);
     const c = await mount();
-    const b = btn(c, 'Hứng giọt sương');
+    const b = btn(await openRules(c), 'Hứng giọt sương');
     await tapTogether(b, b);
     await flush();
     expectBusy(b);
@@ -268,7 +278,7 @@ describe('Vườn Xanh: sương, vé giữ lửa, hồi sinh chuỗi', () => {
     const g = gate();
     state.postHold.set('/game/streak-freeze/buy', g.p);
     const c = await mount();
-    const b = btn(c, /^Mua \(/);
+    const b = btn(await openRules(c), /^Mua \(/);
     await tapTogether(b, b);
     await flush();
     expectBusy(b);
@@ -486,7 +496,7 @@ describe('Vườn Xanh: lỗi tải có Thử lại khoá chạm đúp', () => {
 
   it('lịch điểm danh lỗi: dòng báo role="alert" tại thẻ, Thử lại chạm đúp cùng khung hình chỉ tải lại một lần', async () => {
     const c = await mount();
-    const inCard = () => Array.from(c.querySelectorAll('section')).find((s) => s.textContent?.includes('Vé giữ lửa'))!;
+    const inCard = () => c.querySelector<HTMLElement>('[data-testid="garden-day-actions"]')!;
     expect(inCard().querySelector('[role="alert"]')!.textContent).toContain('Chưa tải được lịch điểm danh');
     expect(getsOf('/me/daily-check-in')).toHaveLength(1);
     const g = gate();
@@ -510,7 +520,7 @@ describe('Vườn Xanh: sheet Kiếm nước', () => {
     state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
     state.posts['/game/dew/collect'] = () => ({ seedsEarned: 5 });
     const c = await mount();
-    click(btn(c, gameMoreCopy.freezeShort(70)));
+    click(btn(await openRules(c), gameMoreCopy.freezeShort(70)));
     await flush();
     return c;
   };
@@ -565,7 +575,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
   const harvestNow = async () => {
     state.posts['/game/tree/water'] = () => harvest;
     const c = await mount();
-    click(btn(c, /Tưới hết/));
+    click(btn(c, 'Tưới cây'));
     await flush(8);
     return c;
   };
@@ -616,7 +626,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     click(btn(dialog()!, gameNewbieCopy.harvest.later));
     await flush(8);
     state.posts['/game/tree/water'] = () => harvest2;
-    click(btn(c, /Tưới hết/));
+    click(btn(c, 'Tưới cây'));
     await flush(8);
     expect(dialog()!.textContent).toContain('XANH-456');
     g.open();
@@ -659,7 +669,7 @@ describe('Vườn Xanh: khoá giữ tới khi dữ liệu mới về', () => {
       return { seedsEarned: 5 };
     };
     const c = await mount();
-    const b = btn(c, 'Hứng giọt sương');
+    const b = btn(await openRules(c), 'Hứng giọt sương');
     const fresh = gate();
     state.getHold.set('/game/profile', fresh.p);
     click(b);
@@ -681,7 +691,7 @@ describe('Vườn Xanh: khoá giữ tới khi dữ liệu mới về', () => {
       throw new NetworkError(true);
     };
     const c = await mount();
-    const b = btn(c, 'Hứng giọt sương');
+    const b = btn(await openRules(c), 'Hứng giọt sương');
     const fresh = gate();
     state.getHold.set('/game/profile', fresh.p);
     const before = getsOf('/game/profile').length;
@@ -731,7 +741,7 @@ describe('Vườn Xanh: khoá giữ tới khi dữ liệu mới về', () => {
       return { points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] };
     };
     const c = await mount();
-    const b = btn(c, /^(Điểm danh nhận|Nhận nước hôm nay)/);
+    const b = btn(c, /^Điểm danh$/);
     const fresh = gate();
     state.getHold.set('/game/profile', fresh.p);
     click(b);
@@ -744,7 +754,7 @@ describe('Vườn Xanh: khoá giữ tới khi dữ liệu mới về', () => {
     fresh.open();
     await flush(8);
     expect(postsOf('/me/daily-check-in')).toHaveLength(1);
-    expect(byText(c, 'button', /^(Điểm danh nhận|Nhận nước hôm nay)/)).toBeNull();
+    expect(byText(c, 'button', /^Điểm danh$/)).toBeNull();
   });
 
   it('nhận hai nhiệm vụ khác nhau cùng khung hình: song song, mỗi nhiệm vụ một POST', async () => {

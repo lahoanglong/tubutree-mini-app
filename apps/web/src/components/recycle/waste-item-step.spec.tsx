@@ -16,6 +16,11 @@ const mount = (props: Partial<Parameters<typeof WasteItemStep>[0]> = {}) => {
 };
 const card = (c: HTMLElement, name: string) => byText(c, '[data-item]', name)!;
 const btn = (el: HTMLElement, label: string) => el.querySelector<HTMLElement>(`button[aria-label^="${label}"]`)!;
+/** Điều kiện nhận của một món trong sheet ⓘ Thể lệ (w62-01): mở sheet nếu chưa mở, trả về dòng của món đó. */
+const itemRules = (c: HTMLElement, name: string) => {
+  if (!document.body.querySelector('[data-testid="waste-rules-items"]')) click(byText(c, 'button', 'Thể lệ')!);
+  return byText(document.body.querySelector<HTMLElement>('[data-testid="waste-rules-items"]')!, 'li', name)!;
+};
 
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -23,38 +28,45 @@ afterEach(() => {
 });
 
 describe('WasteItemStep (web)', () => {
-  it('thẻ món: quy tắc, chuẩn bị, câu trần, ảnh hoặc biểu tượng; xếp theo sortOrder', () => {
+  it('thẻ món chỉ còn hình, tên, tỉ lệ, bộ đếm; chuẩn bị và câu trần nằm trong sheet ⓘ Thể lệ; xếp theo sortOrder', () => {
     const { c } = mount();
     expect(Array.from(c.querySelectorAll('[data-item]')).map((e) => e.getAttribute('data-status'))).toEqual(['ACTIVE', 'ACTIVE', 'COMING_SOON']);
     const carton = card(c, 'Thùng carton');
     expect(carton.textContent).toContain('1 thùng = 1.000 điểm');
-    expect(carton.textContent).toContain('Gấp phẳng, bỏ băng keo');
-    expect(carton.textContent).toContain('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
+    expect(carton.textContent).not.toContain('Gấp phẳng, bỏ băng keo');
+    expect(carton.textContent).not.toContain('Tối đa 20 thùng mỗi tháng');
     expect(carton.querySelector('[data-item-media] svg, [data-item-media] img')).not.toBeNull();
+    const rules = itemRules(c, 'Thùng carton').textContent!;
+    expect(rules).toContain('Gấp phẳng, bỏ băng keo');
+    expect(rules).toContain('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
   });
   it('món sắp nhận mờ đi, có nhãn và không có bộ đếm; món ẩn không hiện', () => {
     const { c } = mount({ items: [ITEM_CARTON, ITEM_BATTERY, { ...ITEM_MILK, status: 'HIDDEN' }] });
     const battery = card(c, 'Pin đã dùng');
     expect(battery.textContent).toContain('Sắp nhận');
-    expect(battery.textContent).toContain('Đợt này Tubu chưa nhận pin');
+    expect(battery.textContent).not.toContain('Đợt này Tubu chưa nhận pin');
     expect(battery.className).not.toContain('opacity-');
     expect(battery.getAttribute('aria-disabled')).toBe('true');
     expect(card(c, 'Pin đã dùng').querySelector('span.text-stone-500')?.textContent).toBe('Pin đã dùng');
     expect(card(c, 'Thùng carton').hasAttribute('aria-disabled')).toBe(false);
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
+    expect(itemRules(c, 'Pin đã dùng').textContent).toContain('Đợt này Tubu chưa nhận pin');
   });
-  it('món chỉ mang tới (pin): trần ngày đã bớt thì một dòng gộp thay câu trần ngày; còn nguyên trần thì chỉ câu trần', () => {
+  it('món chỉ mang tới (pin): trần ngày đã bớt thì thẻ có một dòng "Hôm nay còn…"; còn nguyên trần thì thẻ không có dòng đó; câu trần ở sheet', () => {
     const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 12 };
     const { c } = mount({ items: [ITEM_CARTON, pin] });
     const t = card(c, 'Pin đã dùng').textContent!;
     expect(t).toContain('Hôm nay còn nhận được 12 viên (tối đa 20 viên mỗi ngày)');
-    expect(t).not.toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
-    expect(card(c, 'Thùng carton').textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
+    expect(t).not.toContain('Mỗi ngày mang tới');
+    expect(itemRules(c, 'Pin đã dùng').textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+    expect(itemRules(c, 'Thùng carton').textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
     const full = mount({ items: [{ ...pin, dayRemainingQty: 20 }] });
     const ft = card(full.c, 'Pin đã dùng').textContent!;
-    expect(ft).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
     expect(ft).not.toContain('Hôm nay còn nhận được');
+    expect(ft).not.toContain('Mỗi ngày mang tới');
   });
   it('trần tháng đã bớt hoặc hết: thẻ món nói lý do dưới câu trần', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, { ...ITEM_MILK, monthRemainingQty: 0 }] });

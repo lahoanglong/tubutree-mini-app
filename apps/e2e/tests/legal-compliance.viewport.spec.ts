@@ -24,6 +24,16 @@ const POLICIES = [
   { slug: 'thanh-toan', title: 'Chính sách và hình thức thanh toán', label: 'Thanh toán' },
 ] as const;
 const HREFS = POLICIES.map((p) => `/chinh-sach/${p.slug}`);
+/** Chân trang (w62-01): sáu lối Bộ Công Thương yêu cầu và điều khoản sử dụng; hướng dẫn mua hàng, kiểm hàng là neo trong trang điều khoản / đổi trả. */
+const FOOTER_LINKS = [
+  ['Hướng dẫn mua hàng', '/chinh-sach/dieu-khoan#dat-hang'],
+  ['Thanh toán', '/chinh-sach/thanh-toan'],
+  ['Vận chuyển', '/chinh-sach/van-chuyen'],
+  ['Đổi trả', '/chinh-sach/doi-tra'],
+  ['Kiểm hàng', '/chinh-sach/doi-tra#kiem-hang'],
+  ['Bảo mật thông tin', '/chinh-sach/bao-mat'],
+  ['Điều khoản sử dụng', '/chinh-sach/dieu-khoan'],
+] as const;
 const HOME_HTML_MAX = 235_000;
 
 const sizeOf = (testInfo: TestInfo) => {
@@ -49,13 +59,15 @@ async function expectFooterCompliant(page: Page, wide: boolean): Promise<void> {
   await expect(footer).toBeVisible();
   const nav = footer.getByRole('navigation', { name: wide ? 'Chính sách' : 'Chính sách (điện thoại)', exact: true });
   const links = nav.getByRole('link');
-  await expect(links).toHaveCount(5);
-  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute('href')))).toEqual(HREFS);
-  for (const p of POLICIES) await expect(nav.getByRole('link', { name: p.label, exact: true })).toBeVisible();
+  await expect(links).toHaveCount(FOOTER_LINKS.length);
+  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute('href')))).toEqual(FOOTER_LINKS.map(([, href]) => href));
+  for (const [label] of FOOTER_LINKS) await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible();
+  // Lưới đều cột: mọi link cùng cột thẳng hàng, không link lẻ rớt dòng giữa chừng.
+  const lefts = new Set(await links.evaluateAll((as) => as.map((a) => Math.round(a.getBoundingClientRect().left))));
+  expect(lefts.size, 'số cột của lưới chính sách').toBe(wide ? 7 : 2);
 
   const company = footer.getByTestId('footer-company');
-  await expect(company).toContainText(/Đơn vị vận hành: .+ · MST \d{10}/);
-  await expect(company).toContainText(/Giấy chứng nhận đăng ký doanh nghiệp số \d{10}/);
+  await expect(company).toContainText(/.+ · MST \d{10} · Cấp ngày \d{2}\/\d{2}\/\d{4} tại .+/);
   await expect(footer.locator('a[href^="tel:"]').first()).toBeVisible();
   await expect(footer.locator('a[href^="mailto:"]').first()).toBeVisible();
   expect(await footer.innerText()).not.toMatch(/lorem|todo|\[[^\]]*\]|undefined|NaN/i);
@@ -64,7 +76,7 @@ async function expectFooterCompliant(page: Page, wide: boolean): Promise<void> {
 }
 
 for (const p of POLICIES) {
-  base(`chính sách ${p.slug}: 200, chữ tiếng Việt thật, chân trang đủ năm link, không cuộn ngang`, async ({ page, request }, testInfo) => {
+  base(`chính sách ${p.slug}: 200, chữ tiếng Việt thật, chân trang đủ lối chính sách, không cuộn ngang`, async ({ page, request }, testInfo) => {
     const size = sizeOf(testInfo);
     expect(page.viewportSize(), 'khổ của project').toEqual(size);
     const wide = size.width >= 768;

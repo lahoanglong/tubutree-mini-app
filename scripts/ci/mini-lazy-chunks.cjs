@@ -39,6 +39,9 @@ const NOT_EAGER = [
   // Toàn bảng chữ gian hàng SHOP_COPY (~52 KB). Mô-đun gói đầu dùng `fillBootCopy` (packages/app-core/src/shop-copy-boot.ts); một lệnh `fillCopy`
   // trong mô-đun gói đầu đưa cả bảng về entry (tubu-w31-04).
   'shop-copy',
+  // Tuyết toàn site + nút ❄️ (tubu-w62-01): gate trong entry nạp bằng import() khi theme.seasonal = christmas; chunk lười christmas-home import
+  // tĩnh nó (dùng chung lớp tuyết), nên không thuộc LAZY_ONLY nhưng không được về gói đầu.
+  'snowfall',
 ];
 
 const CHUNK_RE = /^(.+)\.[A-Za-z0-9_-]{7}\.module\.js$/;

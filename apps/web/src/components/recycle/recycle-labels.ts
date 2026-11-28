@@ -13,6 +13,7 @@ import type {
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
+import { WAREHOUSE_ONLY_TEXT } from '@tubutree/app-core/waste-copy';
 import { homePickupShortStatus } from '@tubutree/app-core/recycle-home-pickup-view';
 import { TIMELINE_STEPS, timelineFor } from '@tubutree/app-core/waste-timeline';
 import type { WasteTimeline } from '@tubutree/app-core/waste-timeline';
@@ -225,6 +226,18 @@ export function capSentence(item: WasteItemDTO, omitDaily = false): string | nul
   // Trần ngày vẫn áp cho DROP_OFF tới kho (waste-hold.service); món chỉ kho nhận thì nơi mang tới là kho.
   if (item.dailyCapQty != null && !omitDaily) parts.push(`Mỗi ngày mang tới ${item.warehouseOnly ? 'kho' : 'điểm nhận'} tối đa ${formatCount(item.dailyCapQty)} ${item.unitLabel}`);
   return parts.length ? parts.join('. ') : null;
+}
+
+/**
+ * Điều kiện nhận của từng món cho sheet "ⓘ Thể lệ" (chỉ kho nhận, cách chuẩn bị, trần tháng/ngày): thẻ món chỉ còn tên, tỉ lệ và bộ đếm (UAT iPhone).
+ * Thứ tự như thẻ (sortOrder); món ẩn hoặc không có điều kiện nào thì bỏ. Cùng luật với `itemRuleNotes` của Mini App.
+ */
+export function itemRuleNotes(items: readonly WasteItemDTO[]): { name: string; notes: string[] }[] {
+  return items
+    .filter((i) => i.status !== 'HIDDEN')
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((i) => ({ name: i.name, notes: [i.warehouseOnly ? WAREHOUSE_ONLY_TEXT : null, i.prepInstructions?.trim() || null, capSentence(i)].filter((n): n is string => !!n) }))
+    .filter((r) => r.notes.length > 0);
 }
 
 /** Trần tháng còn lại, chỉ khi đã bớt so với trần (hoặc hết hẳn) để khách hiểu vì sao bộ đếm bị chặn. */

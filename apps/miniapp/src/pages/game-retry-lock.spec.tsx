@@ -127,7 +127,7 @@ async function tapTwice(target: HTMLElement, how: Taps) {
 
 const openHarvest = async (reward: Record<string, unknown>) => {
   mocks.api.waterTree.mockResolvedValue({ progress: 50, target: 50, harvested: true, treesPlanted: 4, ...reward });
-  const btn = await screen.findByRole('button', { name: /^Tưới hết/ });
+  const btn = await screen.findByRole('button', { name: 'Tưới cây' });
   await act(async () => {
     btn.click();
   });

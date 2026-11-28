@@ -108,12 +108,12 @@ describe('Vườn Xanh web khi cờ GAME_SOCIAL_ON_WEB tắt', () => {
     expect(state.calls).not.toContain('/game/leaderboard');
   });
 
-  it('sheet Kiếm thêm nước không có hàng "Nước từ bạn bè" dù có bạn', async () => {
+  it('sheet Kiếm nước (mở từ "Tưới cây" khi thiếu nước) không có hàng "Nước từ bạn bè" dù có bạn', async () => {
     const today = new Date().toISOString();
     state.data['/game/profile'] = { ...PROFILE, totalSeeds: 0, firstCheckinBonus: 0, dailyLoginSeeds: 15, dewSeeds: 15, lastCheckInAt: today, lastDewAt: today };
     state.data['/me/daily-check-in'] = { checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, streakDay: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] };
     const c = await mount();
-    click(byText(c, 'button', 'Kiếm thêm nước')!);
+    click(byText(c, 'button', 'Tưới cây')!);
     await flush(4);
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Kiếm nước');
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Nước từ bạn bè');

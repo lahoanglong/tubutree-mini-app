@@ -97,14 +97,29 @@ let lastTrackedSearch: string | null = null;
  * 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL (`useBrowseState`): từ hub chạm ô hoặc gửi từ khoá là PUSH (Back về hub), trong
  * danh sách là replace. Gõ chỉ hiện GỢI Ý; Enter hoặc chạm gợi ý mới ghi `q`.
  */
-/** Câu giới thiệu Mua xoay vòng: số % là số máy chủ cấu hình (như dòng Đặt định kỳ ở trang sản phẩm); chưa có cấu hình thật thì không nêu số. */
-function SubscriptionPitch() {
+/**
+ * Dải Mua xoay vòng một hàng (cao 40px) thay khối giới thiệu 4 dòng, để thẻ sản phẩm lên ngay nửa trên màn 375px (UAT iPhone). Số % là số máy chủ
+ * cấu hình (như dòng Đặt định kỳ ở trang sản phẩm); chưa có cấu hình thật thì không nêu số. Cùng chữ với dải đầu trang /subscriptions của Mini App.
+ */
+function SubscriptionStrip() {
   const cfg = usePublicConfig();
   const pct = subscribePct(cfg.isLoaded ? cfg.subscribeDiscountPct : null);
   return (
-    <p className="mt-1 text-sm text-[color:var(--color-text-primary)]">
-      Giao tự động theo chu kỳ 4 · 6 · 8 · 10 tuần, tiết kiệm {pct === null ? '' : `${pct}% `}mỗi kỳ, tạm dừng lúc nào cũng được.
-    </p>
+    <section
+      data-testid="subscription-browse-banner"
+      aria-label="Quyền lợi Mua xoay vòng"
+      className="flex min-h-10 items-center justify-between gap-2 rounded-control bg-[var(--color-bg-subtle)] px-3"
+    >
+      <span className="min-w-0 truncate text-xs font-semibold text-[color:var(--color-action-secondary-fg)]">
+        {pct ? fillCopy('subs.heroEyebrow', { pct }) : fillCopy('subs.heroEyebrowNoPct')}
+      </span>
+      <Link
+        href="/tai-khoan/don-hang?tab=subscriptions"
+        className="tubu-hit-44 inline-flex shrink-0 items-center text-xs font-semibold text-[color:var(--color-text-brand)] underline"
+      >
+        {fillCopy('subs.myScheduleLink')}
+      </Link>
+    </section>
   );
 }
 
@@ -495,26 +510,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
         ) : (
           <>
             {state.filter === 'subscription' && (
-              <div className="mb-4 space-y-3">
+              <div className="mb-2 space-y-2">
                 <GroupCycleDealsNavPills activeOverride="subscription" />
-                <section
-                  data-testid="subscription-browse-banner"
-                  aria-label="Quyền lợi Mua xoay vòng"
-                  className="rounded-card border border-[var(--color-action-secondary-border)] bg-[var(--color-bg-subtle)] p-4 md:p-5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="inline-flex rounded-full bg-[var(--color-action-secondary-bg)] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--color-action-secondary-fg)]">
-                      Mua xoay vòng · Đặt định kỳ
-                    </span>
-                    <Link
-                      href="/tai-khoan/don-hang?tab=subscriptions"
-                      className="inline-flex min-h-11 items-center text-xs font-semibold text-[color:var(--color-text-brand)] underline"
-                    >
-                      Quản lý lịch định kỳ của tôi →
-                    </Link>
-                  </div>
-                  <SubscriptionPitch />
-                </section>
+                <SubscriptionStrip />
               </div>
             )}
             {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi (`!hidden` vì nút có `display` ở style). */}
@@ -535,7 +533,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               />
             </div>
             <ListHeading
-              title={listTitle}
+              // Mua xoay vòng: dải ở trên đã nói tên chế độ, hàng này chỉ còn số kết quả (không lặp "Mua xoay vòng (Đặt định kỳ)").
+              title={titleScope === 'subscription' ? null : listTitle}
               count={products.isError && list.length === 0 ? undefined : Math.max(0, (firstPage?.meta.total ?? 0) - filteredOutCount)}
               isLoading={products.isLoading || pastLastPage}
             />

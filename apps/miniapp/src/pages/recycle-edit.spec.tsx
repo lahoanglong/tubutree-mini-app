@@ -72,6 +72,13 @@ function renderPage() {
 
 mocks.params = { id: 'req-1' };
 
+/** Điều kiện nhận từng món (chỉ kho nhận, chuẩn bị, trần tháng/ngày) nằm trong sheet "ⓘ Thể lệ" của bước chọn món (w62-01). */
+async function itemRules(name: string): Promise<HTMLElement> {
+  if (!screen.queryByTestId('waste-rules-items')) fireEvent.click(await screen.findByRole('button', { name: 'Thể lệ' }));
+  const list = await screen.findByTestId('waste-rules-items');
+  return within(list).getByText(name).closest('li') as HTMLElement;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.location.state = null;
@@ -115,13 +122,13 @@ describe('/recycle/r/:id/edit (§4.5, §7.4)', () => {
       mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [ITEM_CARTON, pin] }));
       mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ createdAt, lines: [{ ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty }] }));
     };
-    it('tạo hôm nay và đã giữ đủ trần: chỉ câu trần, không "còn 0", không tăng quá trần', async () => {
+    it('tạo hôm nay và đã giữ đủ trần: không "còn 0", không tăng quá trần; câu trần ngày trong sheet ⓘ Thể lệ', async () => {
       withPin(new Date().toISOString(), 20);
       renderPage();
       const card = (await screen.findByText('Pin đã dùng')).closest('[data-item]') as HTMLElement;
       expect(within(card).queryByText(/Hôm nay còn nhận được/)).toBeNull();
-      expect(within(card).getByText(/Mỗi ngày mang tới điểm nhận tối đa 20 viên/)).toBeInTheDocument();
       expect(within(card).getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+      expect(within(await itemRules('Pin đã dùng')).getByText(/Mỗi ngày mang tới điểm nhận tối đa 20 viên/)).toBeInTheDocument();
     });
     it('không tạo hôm nay: không áp trần ngày phía khách, không dòng "Hôm nay còn…"', async () => {
       withPin('2026-10-17T03:00:00.000Z', 5);

@@ -16,6 +16,24 @@ export function seasonHasHomeTheme(theme: SeasonalTheme): theme is 'christmas' {
   return theme === 'christmas';
 }
 
+/**
+ * Trang có lớp tuyết và nút ❄️ nổi khi mùa Noel bật: các trang mua sắm chính, Ưu đãi, Cộng đồng, Đổi rác và mọi trang Vườn Xanh/trò chơi.
+ * Trang chủ không nằm đây (thẻ Noel ở đó đã có lớp tuyết và nút ❄️ riêng); trang sản phẩm, giỏ, thanh toán, tài khoản cũng không.
+ */
+export const SITE_SNOW_PAGES = {
+  miniapp: { exact: ['/browse', '/best-sellers', '/gift-combos', '/refill-deals', '/green-box', '/offers', '/feed', '/recycle'], prefix: ['/game'] },
+  web: {
+    exact: ['/san-pham', '/ban-chay', '/bo-qua-tang', '/tiet-kiem-refill', '/hop-xanh', '/uu-dai', '/gio-vang', '/mua-chung', '/cong-dong', '/doi-rac', '/kho-qua'],
+    prefix: ['/vuon-xanh'],
+  },
+} as const satisfies Record<'miniapp' | 'web', { exact: readonly string[]; prefix: readonly string[] }>;
+
+export function showsSiteSnow(app: keyof typeof SITE_SNOW_PAGES, pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  const pages = SITE_SNOW_PAGES[app];
+  return (pages.exact as readonly string[]).includes(pathname) || pages.prefix.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 /** Chiều cao thẻ cây thông (`.tubu-xmas-hero` trong design-tokens/src/seasonal-christmas.css): chỗ gắn giữ đúng chừng này khi chunk mùa lễ chưa về. */
 export const CHRISTMAS_HERO_HEIGHT = 184;
 

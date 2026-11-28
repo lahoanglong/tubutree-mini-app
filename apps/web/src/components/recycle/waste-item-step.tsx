@@ -1,14 +1,20 @@
 'use client';
 
 import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Info } from 'lucide-react';
 import type { WasteMeItemDTO } from '@tubutree/shared-types';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
-import { QUICK_QTY_STEPS, WAREHOUSE_ONLY_TEXT } from '@tubutree/app-core/waste-copy';
+import { ui } from '@/lib/guest-ui';
+import { QUICK_QTY_STEPS, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
 import { WasteItemThumb } from './waste-item-thumb';
-import { UNCAPPED_QTY_MAX, capSentence, groupProgressText, monthRemainingText, ruleText } from './recycle-labels';
+import { WasteRulesSheet } from './waste-steps';
+import { UNCAPPED_QTY_MAX, groupProgressText, itemRuleNotes, monthRemainingText, ruleText } from './recycle-labels';
+
+/** Trang Thể lệ đầy đủ (lối ở cuối sheet ⓘ Thể lệ), như trang đích /doi-rac. */
+const RULES_HREF = '/doi-rac/quy-dinh';
 
 interface WasteItemStepProps {
   items: readonly WasteMeItemDTO[];
@@ -20,15 +26,29 @@ interface WasteItemStepProps {
   dayCap?: boolean;
 }
 
-/** Bước chọn món: thẻ từng món với quy tắc điểm, hạn mức và bộ đếm; món sắp nhận mờ đi và không có bộ đếm. */
+/**
+ * Bước chọn món (như Mini `WasteItemStep`): mỗi thẻ chỉ còn hình, tên, tỉ lệ đổi và bộ đếm; điều kiện nhận (chuẩn bị, chỉ kho nhận, trần tháng/ngày)
+ * nằm trong một sheet "ⓘ Thể lệ" ở đầu danh sách. Dòng trạng thái (còn bao nhiêu trong tháng, trần hôm nay) vẫn ở thẻ vì nó giải thích bộ đếm bị chặn.
+ * Món sắp nhận mờ đi và không có bộ đếm.
+ */
 export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true }: WasteItemStepProps) {
   const sorted = useMemo(() => items.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder), [items]);
+  const notes = useMemo(() => itemRuleNotes(sorted), [sorted]);
+  const [rulesOpen, setRulesOpen] = useState(false);
   return (
     <div className="grid gap-3 md:grid-cols-2">
+      {notes.length > 0 && (
+        <div className="-mb-1 -mt-2 flex justify-end md:col-span-2">
+          <button type="button" onClick={() => setRulesOpen(true)} className={`${ui.btnText} flex-none gap-1.5 text-forest-700 no-underline`}>
+            <Info className="h-4 w-4" aria-hidden="true" />
+            {wasteRulesSheetCopy.button}
+          </button>
+        </div>
+      )}
+      <WasteRulesSheet open={rulesOpen} onClose={() => setRulesOpen(false)} items={notes} rulesHref={RULES_HREF} />
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
         const dayLine = dropOffDayLimitText(item, allowance?.[item.id] ?? 0, dayCap);
-        const cap = capSentence(item, dayLine !== null);
         const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
         const comingSoon = item.status === 'COMING_SOON';
@@ -49,13 +69,6 @@ export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true
                 {comingSoon && <Badge>Sắp nhận</Badge>}
               </div>
               <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
-              {item.warehouseOnly && (
-                <div>
-                  <Badge tone="info" size="sm">{WAREHOUSE_ONLY_TEXT}</Badge>
-                </div>
-              )}
-              {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
-              {cap && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{cap}</p>}
               {monthLeft && <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
               {dayLine && item.status === 'ACTIVE' && <p className="text-xs text-warning-fg max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{dayLine}</p>}
               {item.status === 'ACTIVE' && (

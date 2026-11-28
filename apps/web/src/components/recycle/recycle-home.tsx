@@ -9,7 +9,7 @@ import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-typ
 import { wasteCatalogueQuery, wasteMeQuery, wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
 import { wasteRepeatOn } from '@tubutree/app-core/refill/refill-api';
 import { lastCompletedRequest } from '@tubutree/app-core/refill/repeat-waste';
-import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
+import { pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -53,6 +53,7 @@ import {
   formatVnd,
   impactLine,
   isRequestPaused,
+  itemRuleNotes,
   nextRewardProgress,
   requestStatusText,
   ruleText,
@@ -86,7 +87,7 @@ const RULES_HREF = '/doi-rac/quy-dinh';
  * Khối "Cách đổi" (như Mini `HowTo`): tiêu đề + nút "ⓘ Thể lệ" mở sheet, dải 3 bước có biểu tượng, rồi nút chính (nếu có).
  * Câu đầy đủ từng bước và các cách giao nằm trong sheet để màn chính chỉ còn một hàng bước và một nút.
  */
-function HowTo({ methods = [], children }: { methods?: readonly WasteMethod[]; children?: ReactNode }) {
+function HowTo({ methods = [], items, children }: { methods?: readonly WasteMethod[]; items?: readonly WasteItemDTO[]; children?: ReactNode }) {
   const cfg = usePublicConfig();
   const [open, setOpen] = useState(false);
   return (
@@ -105,6 +106,7 @@ function HowTo({ methods = [], children }: { methods?: readonly WasteMethod[]; c
         onClose={() => setOpen(false)}
         steps={wasteIntroCopy(cfg.waste).steps}
         methods={methods.map((m) => ({ label: METHOD_LABELS[m], line: METHOD_LINE[m] }))}
+        items={itemRuleNotes(items ?? [])}
         rulesHref={RULES_HREF}
       />
     </section>
@@ -133,10 +135,8 @@ function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`text-sm font-semibold max-md:text-[length:var(--type-body-sm-size)] ${comingSoon ? 'text-stone-500' : 'text-stone-900'}`}>{item.name}</span>
                 {comingSoon && <Badge>Sắp nhận</Badge>}
-                {item.warehouseOnly && !comingSoon && <Badge tone="info">{WAREHOUSE_ONLY_TEXT}</Badge>}
               </div>
               <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
-              {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
             </div>
           </div>
         );
@@ -154,7 +154,7 @@ function GuestOverview({ items }: { items: readonly WasteItemDTO[] | undefined }
         <h2 className={skin.sectionTitle}>{wasteGuestCopy.introTitle}</h2>
         {cfg.isLoaded ? <p className="text-sm text-stone-700">{intro.intro}</p> : <Skeleton height={40} rounded="rounded-card" />}
       </div>
-      <HowTo />
+      <HowTo items={items} />
       {items === undefined ? <Skeleton height={120} rounded="rounded-card" /> : <ItemList items={items} />}
     </>
   );
@@ -375,7 +375,7 @@ export function RecycleHome() {
           </div>
 
           {methods.length > 0 && (
-            <HowTo methods={methods}>
+            <HowTo methods={methods} items={items}>
               {lastDone ? (
                 <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/doi-rac/tao" />
               ) : (

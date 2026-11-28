@@ -12,7 +12,6 @@ vi.mock('./gio-vang/flash-slots-view', () => ({ default: () => null }));
 vi.mock('@/components/recycle/recycle-rules-view', () => ({ RecycleRulesView: () => null }));
 vi.mock('./cong-dong/feed-shell', () => ({ FeedShell: () => null }));
 vi.mock('./cong-dong/feed-view', () => ({ FeedView: () => null }));
-vi.mock('@/components/community/community-channels', () => ({ CommunityChannels: () => null }));
 vi.mock('@/components/community/public-preview-list', () => ({ PublicPreviewList: () => null }));
 vi.mock('./gioi-thieu/about-view', () => ({ AboutView: () => null }));
 vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: vi.fn().mockRejectedValue(new Error('offline')) }) }));

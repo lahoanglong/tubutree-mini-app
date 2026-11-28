@@ -62,7 +62,7 @@ test.describe('Vườn Xanh mùa Noel (Mini App 375px)', () => {
     const ob = (await open.boundingBox())!;
     expect(Math.min(ob.width, ob.height)).toBeGreaterThanOrEqual(44);
 
-    const primary = page.getByRole('button', { name: /Nhận nước hôm nay|Tưới/ }).first();
+    const primary = page.getByTestId('garden-day-actions').getByRole('button').first();
     await expect(primary).toBeVisible();
     const p = (await primary.boundingBox())!;
     expect(p.y + p.height, 'nút chính của ngày vẫn ở màn đầu').toBeLessThanOrEqual(VIEW.height - BOTTOM_NAV);

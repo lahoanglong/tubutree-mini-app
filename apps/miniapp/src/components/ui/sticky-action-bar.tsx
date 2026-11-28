@@ -22,6 +22,8 @@ const mountedBars: Array<{ el: HTMLElement; page: Element | null }> = [];
 function publishBarHeight(): void {
   const root = document.documentElement;
   const top = mountedBars[mountedBars.length - 1];
+  // `data-sticky-bar` ẩn thanh đáy ở trang khám phá đang có thanh CTA (tokens.css), như lớp `has-sticky-bar` của web.
+  root.toggleAttribute('data-sticky-bar', !!top);
   if (!top) root.style.removeProperty('--sticky-bar-h');
   else root.style.setProperty('--sticky-bar-h', `${Math.ceil(top.el.getBoundingClientRect().height)}px`);
 }

@@ -24,6 +24,8 @@ test('chụp g3 Hôm nay có nước từ đơn hàng (Mini App)', async ({ page
   await setup(page, api);
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65, orderWater: ORDER_WATER });
   await page.goto('/game');
+  // w62-01: thẻ nước từ đơn hàng nằm trong sheet ⓘ "Luật chăm vườn".
+  await page.getByRole('button', { name: 'Luật chăm vườn' }).click({ timeout: 15_000 });
   await expect(page.getByTestId('order-water-progress')).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-today');
@@ -38,7 +40,7 @@ test('chụp g3 hộp thu hoạch có mã và loài mới (Mini App)', async ({ 
     reward: { coupon: 'XANH-123', coupons: ['XANH-123'], couponTerms: [{ code: 'XANH-123', value: 20000, minOrder: 150000, expiresAt: '2026-12-31T16:59:59.000Z' }], species: { id: 's', name: 'Sao đen', emoji: '🌴', rarity: 'RARE', ecoFact: 'Sống hàng trăm năm.' } },
   }));
   await page.goto('/game');
-  await page.getByRole('button', { name: 'Tưới hết (65💧)' }).click({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Tưới cây', exact: true }).click({ timeout: 15_000 });
   await expect(page.getByText('Thu hoạch thành công!')).toBeVisible();
   await settle(page);
   await shot(page, 'g3-harvest-coupon', false);
@@ -49,7 +51,7 @@ test('chụp g3 hồ sơ cũ 400/60 thu hoạch ngay (Mini App)', async ({ page,
   await setup(page, api);
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 20, harvestReady: true, ecoImpact: { progress: 60, target: 60, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0 } });
   await page.goto('/game');
-  await expect(page.getByRole('button', { name: 'Thu hoạch cây' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: 'Thu hoạch', exact: true })).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-old-profile', false);
 });
@@ -69,6 +71,8 @@ test('chụp g3 mở game lần đầu có nước từ đơn hàng (Mini App)',
   await setup(page, api);
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 200, orderWater: { ...FIRST_OPEN, weeklyGranted: 200 } });
   await page.goto('/game');
+  // w62-01: thẻ nước từ đơn hàng nằm trong sheet ⓘ "Luật chăm vườn".
+  await page.getByRole('button', { name: 'Luật chăm vườn' }).click({ timeout: 15_000 });
   await expect(page.getByTestId('order-water-claimed')).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-first-open');
@@ -84,16 +88,18 @@ test('chụp g3 bể vượt sức chứa nhờ nước đơn hàng (Mini App)',
   await shot(page, 'g3-tank-over', false);
 });
 
-test('chụp g3 chưa có mùa, thân rỗng từ server (Mini App)', async ({ page, api }) => {
+test('chụp g3 không có mùa (khối Mùa ẩn), thân rỗng từ server (Mini App)', async ({ page, api }) => {
   test.skip(!OUT, 'đặt GAME_SHOTS_DIR để chụp');
   await setup(page, api);
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
   api.get('/game/season', () => replyEmptyBody());
   await page.goto('/game');
   await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
-  await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Lô đất của bạn/)).toBeVisible({ timeout: 15_000 });
+  // w62-01: không còn dòng "Chưa có mùa nào đang mở"; khối Mùa ẩn hẳn.
+  await expect(page.getByText('Chưa có mùa nào đang mở')).toHaveCount(0);
   await settle(page);
-  await shot(page, 'g3-season-empty', false);
+  await shot(page, 'g3-no-season', false);
 });
 
 test('chụp g3 thẻ nước từ đơn hàng (Mini App)', async ({ page, api }) => {
@@ -101,6 +107,8 @@ test('chụp g3 thẻ nước từ đơn hàng (Mini App)', async ({ page, api }
   await setup(page, api);
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65, orderWater: ORDER_WATER });
   await page.goto('/game');
+  // w62-01: thẻ nước từ đơn hàng nằm trong sheet ⓘ "Luật chăm vườn".
+  await page.getByRole('button', { name: 'Luật chăm vườn' }).click({ timeout: 15_000 });
   const card = page.getByTestId('order-water-progress').locator('xpath=ancestor::*[self::div or self::section][2]');
   await expect(page.getByTestId('order-water-progress')).toBeVisible({ timeout: 15_000 });
   await card.scrollIntoViewIfNeeded();

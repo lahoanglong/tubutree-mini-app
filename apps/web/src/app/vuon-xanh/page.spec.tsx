@@ -106,8 +106,15 @@ const getsOf = (path: string) => state.calls.filter((c) => c.method === 'get' &&
 const btn = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text) as HTMLButtonElement;
 // Thông báo nổi nằm ở cuối body; vùng báo lỗi tại chỗ của thẻ (vd lịch điểm danh chưa tải được) nằm trước nó trong tài liệu.
 const toastAlert = () => Array.from(document.querySelectorAll<HTMLElement>('[role="alert"]')).at(-1)!;
-// Vườn chỉ còn một nút điểm danh: nút chính trên cây (nhận nước hôm nay, hoặc nhận nốt Điểm Xanh khi chỉ còn phần đó).
-const CLAIM = /^(Điểm danh nhận|Nhận nước hôm nay)/;
+// Vườn chỉ còn một nút điểm danh: nút "Điểm danh" cạnh "Tưới cây" (nhận nước hôm nay, hoặc nhận nốt Điểm Xanh khi chỉ còn phần đó).
+const CLAIM = /^Điểm danh$/;
+// Thẻ chuỗi đầy đủ (hứng sương, vé giữ lửa) nằm trong sheet ⓘ "Luật chăm vườn", vẽ qua portal ở body.
+const openRules = async (c: HTMLElement) => {
+  click(c.querySelector<HTMLButtonElement>('button[aria-label="Luật chăm vườn"]')!);
+  await flush(4);
+  return document.body;
+};
+const pill = (c: HTMLElement) => c.querySelector('[data-testid="garden-streak-pill"]')!.textContent;
 const POINTS = 'Nhận Điểm Xanh hôm nay';
 const panel = (c: HTMLElement, label: string) => c.querySelector<HTMLElement>(`[role="tabpanel"][aria-label="${label}"]`)!;
 const visible = (c: HTMLElement, label: string) => !panel(c, label).hidden;
@@ -180,7 +187,7 @@ describe('Vườn Xanh: trạng thái trang', () => {
     state.fail.set('/game/profile', 1);
     const c = await mount();
     expect(c.querySelector('[role="alert"]')).not.toBeNull();
-    expect(c.textContent).not.toContain('Nhận nước hôm nay');
+    expect(c.textContent).not.toContain('Tưới cây');
     click(btn(c, 'Thử lại'));
     await flush(8);
     expect(getsOf('/game/profile')).toHaveLength(2);
@@ -277,7 +284,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     const c = await mount();
     const today = panel(c, 'Chăm vườn');
     expect(today.querySelector('[data-testid="garden-hero"]')).not.toBeNull();
-    for (const t of ['Nhận nước hôm nay', 'Chuỗi 3 ngày']) expect(today.textContent).toContain(t);
+    for (const t of ['Tưới cây', 'Điểm danh', 'Chuỗi 3 ngày']) expect(today.textContent).toContain(t);
     expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Nhiệm vụ');
     const games = panel(c, 'Sảnh Game');
     expect(Array.from(games.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
@@ -341,7 +348,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
     state.fail.set('/me/daily-check-in', 5);
     const c = await mount();
-    expect(btn(c, /^Tưới hết/).disabled).toBe(false);
+    expect(btn(c, 'Tưới cây').getAttribute('aria-disabled')).toBeNull();
     expect(btn(c, POINTS)).toBeFalsy();
     expect(c.textContent).toContain('Chưa tải được lịch điểm danh');
     expect(btn(c, /Thử lại/)).toBeTruthy();
@@ -417,11 +424,11 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(c.querySelectorAll('[data-testid="streak-cell"]')).toHaveLength(0);
   });
 
-  it('nút chính hiện số nước từ trạng thái chung (ngày 3: 15 + sương 15 = 30), cùng số với Ưu đãi', async () => {
+  it('viên chuỗi hiện số nước từ trạng thái chung (ngày 3: 15 + sương 15 = 30), cùng số với Ưu đãi', async () => {
     state.data['/game/profile'] = PROFILE({ lastCheckInAt: new Date(Date.now() - 864e5).toISOString(), streakDays: 2, dailyLoginSeeds: 10, dewSeeds: 15 });
     state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 2, streakDay: 3, currentCycleDay: 3, todayPoints: 1000, todayWater: 15, rewards: [] };
     const c = await mount();
-    expect(c.textContent).toContain('Nhận nước hôm nay (+30💧)');
+    expect(pill(c)).toBe('🔥 Chuỗi 2 ngày · +30💧');
   });
 
   it('chuỗi chẵn bội 7: tiêu đề chuỗi 7 ngày và vẫn đúng một dải bảy ô', async () => {
@@ -434,27 +441,32 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
   it('giọt sương: gọi một lần, báo số giọt nước; đã hứng hôm nay thì tắt và độc lập với điểm danh', async () => {
     state.posts['/game/dew/collect'] = () => ({ seedsEarned: 5, totalSeeds: 1255 });
     let c = await mount();
-    click(btn(c, 'Hứng giọt sương'));
+    click(btn(await openRules(c), 'Hứng giọt sương'));
     await flush(6);
     expect(postsOf('/game/dew/collect')).toHaveLength(1);
     expect(document.body.textContent).toContain('Hứng được +5💧 từ giọt sương sáng 💦');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
     state.data['/game/profile'] = PROFILE({ lastDewAt: todayIso(), lastCheckInAt: null });
     c = await mount();
-    expect(btn(c, 'Đã hứng sương').disabled).toBe(true);
-    expect(btn(c, CLAIM).disabled).toBe(false);
+    expect(btn(c, CLAIM).getAttribute('aria-disabled')).toBeNull();
+    expect(btn(await openRules(c), 'Đã hứng sương').disabled).toBe(true);
   });
 
   it('vé giữ lửa: số vé và giá từ hồ sơ (mặc định 80💧), mua gọi một lần và báo số vé còn lại', async () => {
     state.posts['/game/streak-freeze/buy'] = () => ({ streakFreezes: 2, totalSeeds: 1100 });
     let c = await mount();
-    expect(c.textContent).toContain('Vé giữ lửa: 1');
-    click(btn(c, 'Mua (80💧)'));
+    const body = await openRules(c);
+    expect(body.textContent).toContain('Vé giữ lửa: 1');
+    click(btn(body, 'Mua (80💧)'));
     await flush(6);
     expect(postsOf('/game/streak-freeze/buy')).toHaveLength(1);
     expect(document.body.textContent).toContain('Đã mua vé giữ lửa 🧊 (còn 2 vé)');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
     state.data['/game/profile'] = PROFILE({ streakFreezeCost: undefined });
     c = await mount();
-    expect(btn(c, 'Mua (80💧)')).not.toBeNull();
+    expect(btn(await openRules(c), 'Mua (80💧)')).not.toBeNull();
   });
 
   it('hồi sinh chuỗi: chỉ trong cửa sổ hồi sinh; bấm gọi API một lần và báo', async () => {
@@ -490,7 +502,7 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
     state.posts['/game/tree/water'] = () => ({ progress: 620, target: 1000, harvested: false, treesPlanted: 2 });
     const c = await mount();
-    const b = btn(c, 'Tưới hết (1.250💧)');
+    const b = btn(c, 'Tưới cây');
     act(() => {
       b.click();
       b.click();
@@ -509,10 +521,10 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
       throw new Error('Không đủ giọt nước');
     };
     const c = await mount();
-    click(btn(c, 'Tưới hết (1.250💧)'));
+    click(btn(c, 'Tưới cây'));
     await flush(6);
     expect(toastAlert().textContent).toContain('Không đủ giọt nước');
-    expect(btn(c, 'Tưới hết (1.250💧)').disabled).toBe(false);
+    expect(btn(c, 'Tưới cây').disabled).toBe(false);
   });
 
   it('nút góp quỹ kèm giá Điểm Xanh từ hồ sơ; không có giá thì không kèm', async () => {
@@ -841,16 +853,17 @@ describe('Vườn Xanh: khung rộng và thanh tab', () => {
     }
   });
 
-  it('từ lg tab Chăm vườn chia cố định 2/3 + 1/3 (điểm danh và nhiệm vụ ở cột phụ), tab khác xếp hai cột đều; tab ẩn vẫn hidden; điện thoại một cột', async () => {
+  it('từ lg tab Chăm vườn chia cố định 2/3 + 1/3 (hai nút Tưới cây · Điểm danh ở cột chính, nhiệm vụ ở cột phụ), tab khác xếp hai cột đều; tab ẩn vẫn hidden; điện thoại một cột', async () => {
     const c = await mount();
     const today = panel(c, 'Chăm vườn');
     expect(today.className).toContain('lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
     expect(today.className).toContain('flex-col');
-    // Thứ tự DOM = thứ tự nhìn ở điện thoại (WCAG 2.4.3): thẻ vườn + việc chính, rồi điểm danh + nhiệm vụ, rồi lối Đổi rác; từ lg ba khối đặt vào ô lưới.
+    // Thứ tự DOM = thứ tự nhìn ở điện thoại (WCAG 2.4.3): thẻ vườn + hai nút của ngày, rồi nhiệm vụ, rồi lối Đổi rác; từ lg ba khối đặt vào ô lưới.
     const [top, side, bottom] = Array.from(today.children) as HTMLElement[];
     for (const col of [top!, side!, bottom!]) expect(col.className).toContain('contents');
     expect(top!.querySelector('[data-testid="garden-hero"]')).not.toBeNull();
-    expect(side!.querySelector('#game-checkin')).not.toBeNull();
+    expect(top!.querySelector('#game-checkin [data-testid="garden-day-actions"]')).not.toBeNull();
+    expect(side!.querySelector('#game-checkin')).toBeNull();
     expect(today.querySelector('#game-quiz')).toBeNull();
     expect(panel(c, 'Sảnh Game').querySelector('#game-quiz')).not.toBeNull();
     expect(panel(c, 'Sảnh Game').querySelector('#game-wheel')).not.toBeNull();
@@ -944,7 +957,7 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
     state.posts['/game/tree/water'] = () => ({ progress: 620, target: 1000, harvested: false, treesPlanted: 2 });
     const c = await mount();
     arm();
-    click(btn(c, 'Tưới hết (1.250💧)'));
+    click(btn(c, 'Tưới cây'));
     await flush(6);
     expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
   });
@@ -986,8 +999,9 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
 describe('Vườn Xanh: giao diện điện thoại như Mini App', () => {
   it('nút phụ (Mua vé giữ lửa, Hứng giọt sương, Góp quỹ) là nút ZaUI secondary ở điện thoại', async () => {
     const c = await mount();
+    const body = await openRules(c);
     for (const label of ['Mua (', 'Hứng giọt sương', 'Góp quỹ trồng cây']) {
-      const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes(label));
+      const btn = Array.from(body.querySelectorAll('button')).find((b) => b.textContent?.includes(label));
       expect(btn, label).toBeTruthy();
       expect(btn!.className, label).toContain('max-md:bg-forest-50');
     }

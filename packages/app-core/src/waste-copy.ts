@@ -57,6 +57,7 @@ export const wasteRulesSheetCopy = {
   title: 'Thể lệ Đổi rác',
   stepsTitle: 'Các bước',
   methodsTitle: 'Cách giao',
+  itemsTitle: 'Điều kiện nhận từng món',
   stripLabel: 'Ba bước đổi rác',
 } as const;
 

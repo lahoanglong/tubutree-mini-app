@@ -93,6 +93,13 @@ const mount = async () => {
 };
 const postsOf = (path: string) => state.calls.filter((c) => c.method === 'post' && c.path === path);
 const btn = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text) as HTMLButtonElement;
+// Thẻ chuỗi đầy đủ (hứng sương, vé giữ lửa, thưởng mốc) và nước từ đơn hàng nằm trong sheet ⓘ "Luật chăm vườn", vẽ qua portal ở body.
+const openRules = async (c: HTMLElement) => {
+  click(c.querySelector<HTMLButtonElement>('button[aria-label="Luật chăm vườn"]')!);
+  await flush(4);
+  return document.body;
+};
+const pill = (c: HTMLElement) => c.querySelector('[data-testid="garden-streak-pill"]')!.textContent;
 const maybeBtn = (c: HTMLElement, text: string | RegExp) => Array.from(c.querySelectorAll('button')).find((b) => (typeof text === 'string' ? b.textContent === text : text.test(b.textContent ?? '')));
 const panel = (c: HTMLElement, label: string) => c.querySelector<HTMLElement>(`[role="tabpanel"][aria-label="${label}"]`)!;
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
@@ -137,49 +144,53 @@ afterEach(() => {
 });
 
 describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt', () => {
-  it('hồ sơ mới 0 giọt: nút đầu tiên của tab Hôm nay là điểm danh nhận 65💧, bấm gọi check-in, không tưới', async () => {
+  it('hồ sơ mới 0 giọt: hai nút đầu của tab Hôm nay là "Tưới cây" và "Điểm danh", viên chuỗi ghi +65💧; bấm điểm danh gọi check-in, không tưới', async () => {
     const c = await mount();
-    const first = panel(c, 'Chăm vườn').querySelector('button')!;
-    expect(first.textContent).toContain('Điểm danh nhận 65💧');
-    click(first);
+    const [water, checkIn] = Array.from(panel(c, 'Chăm vườn').querySelectorAll('button'));
+    expect(water!.textContent).toBe('Tưới cây');
+    expect(checkIn!.textContent).toBe('Điểm danh');
+    expect(pill(c)).toMatch(/· \+65💧$/);
+    click(checkIn!);
     await flush(6);
     expect(postsOf('/me/daily-check-in')).toHaveLength(1);
     expect(postsOf('/game/tree/water')).toHaveLength(0);
     expect(postsOf('/game/dew/collect')).toHaveLength(0);
   });
 
-  it('ngày sau: "Nhận nước hôm nay (+30💧)" điểm danh rồi hứng sương luôn', async () => {
+  it('ngày sau: viên chuỗi ghi +30💧, "Điểm danh" điểm danh rồi hứng sương luôn', async () => {
     state.data['/game/profile'] = P({ firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), streakDays: 1 });
     const c = await mount();
-    click(btn(c, 'Nhận nước hôm nay (+30💧)'));
+    expect(pill(c)).toMatch(/· \+30💧$/);
+    click(btn(c, 'Điểm danh'));
     await flush(8);
     expect(postsOf('/me/daily-check-in')).toHaveLength(1);
     expect(postsOf('/game/dew/collect')).toHaveLength(1);
   });
 
-  it('có từ 20💧: "Tưới hết (65💧)" gửi drops = toàn bộ số giọt', async () => {
+  it('có từ 20💧: "Tưới cây" gửi drops = toàn bộ số giọt; đã điểm danh thì thành ô "Đã điểm danh"', async () => {
     state.data['/game/profile'] = DRY({ totalSeeds: 65 });
     const c = await mount();
-    click(btn(c, 'Tưới hết (65💧)'));
+    expect(c.querySelector('[data-testid="garden-checkin-done"]')!.textContent).toBe('Đã điểm danh');
+    click(btn(c, 'Tưới cây'));
     await flush(6);
     expect(postsOf('/game/tree/water')[0]!.body).toEqual({ drops: 65 });
   });
 
-  const cases: { label: string; tab?: string; name: string; path: string; need: string }[] = [
-    { label: 'nút chính', name: 'Kiếm thêm nước', path: '/game/tree/water', need: 'Bạn đang có 0💧' },
-    { label: 'vé giữ lửa', name: 'Giữ chuỗi (cần thêm 40💧)', path: '/game/streak-freeze/buy', need: 'Bạn cần thêm 40💧 nữa.' },
+  const cases: { label: string; tab?: string; name: string; path: string; need: string; rules?: boolean }[] = [
+    { label: 'nút Tưới cây', name: 'Tưới cây', path: '/game/tree/water', need: 'Bạn cần thêm 20💧 nữa.' },
+    { label: 'vé giữ lửa (trong sheet ⓘ)', name: 'Giữ chuỗi (cần thêm 40💧)', path: '/game/streak-freeze/buy', need: 'Bạn cần thêm 40💧 nữa.', rules: true },
     { label: 'hồi sinh chuỗi', name: 'Còn thiếu 50💧', path: '/game/streak/repair', need: 'Bạn cần thêm 50💧 nữa.' },
     { label: 'tưới lô phụ', tab: 'Khu vườn', name: 'Tưới', path: '/game/garden/plot/pa/water', need: 'Bạn cần thêm 20💧 nữa.' },
     { label: 'mở lô', tab: 'Khu vườn', name: 'Còn thiếu 100💧', path: '/game/garden/unlock', need: 'Bạn cần thêm 100💧 nữa.' },
   ];
-  it.each(cases)('mọi nút thiếu nước mở sheet "Kiếm nước", không gọi API, không báo lỗi: $label', async ({ tab: t, name, path, need }) => {
+  it.each(cases)('mọi nút thiếu nước mở sheet "Kiếm nước", không gọi API, không báo lỗi: $label', async ({ tab: t, name, path, need, rules }) => {
     state.data['/game/profile'] = DRY({ totalSeeds: 0, streakRepairable: true, brokenStreakDays: 5 });
     state.data['/game/garden'] = { plots: [HOME, PLOT], maxPlots: 4, nextUnlock: { slot: 3, seedCost: 100 } };
     // Dữ liệu tab Vườn chỉ tải khi mở tab (?tab=garden).
     state.search = t ? 'tab=garden' : '';
     const c = await mount();
     if (t) await tab(c, t);
-    click(btn(t ? panel(c, t) : c, name));
+    click(btn(rules ? await openRules(c) : t ? panel(c, t) : c, name));
     await flush(4);
     expect(sheetOpen()).toBe(true);
     expect(dialog()!.textContent).toContain(need);
@@ -191,7 +202,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     state.data['/game/profile'] = P({ firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 3 });
     state.data['/game/friends'] = [{ id: 'f1', nickname: 'Lan', giftedToday: false }];
     const c = await mount();
-    click(btn(c, 'Giữ chuỗi (cần thêm 37💧)'));
+    click(btn(await openRules(c), 'Giữ chuỗi (cần thêm 37💧)'));
     await flush(4);
     const d = dialog()!;
     expect(d.textContent).toContain('Điểm danh hôm nay');
@@ -208,7 +219,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     state.data['/game/profile'] = DRY();
     state.data['/game/quiz/today'] = [];
     let c = await mount();
-    click(btn(c, 'Kiếm thêm nước'));
+    click(btn(c, 'Tưới cây'));
     await flush(4);
     expect(dialog()!.textContent).toContain('Bạn đã làm hết việc kiếm nước hôm nay.');
     expect(dialog()!.textContent).toContain('Điểm danh và hứng sương mở lại sau 0 giờ ngày mai.');
@@ -218,7 +229,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     state.data['/game/quiz/today'] = QUIZ;
     state.fail.add('/game/quiz/today');
     c = await mount();
-    click(btn(c, 'Kiếm thêm nước'));
+    click(btn(c, 'Tưới cây'));
     await flush(4);
     expect(dialog()!.textContent).toContain('Chưa tải được việc kiếm nước.');
     click(btn(dialog()!, 'Thử lại'));
@@ -232,7 +243,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
       throw new Error('Hôm nay bạn đã điểm danh rồi');
     };
     const c = await mount();
-    click(btn(c, 'Giữ chuỗi (cần thêm 40💧)'));
+    click(btn(await openRules(c), 'Giữ chuỗi (cần thêm 40💧)'));
     await flush(4);
     click(btn(dialog()!, 'Điểm danh'));
     await flush(6);
@@ -240,32 +251,21 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
   });
 });
 
-describe('Vườn Xanh người mới (web): thẻ 3 bước', () => {
-  it('bước 1 → 2 → 3 theo dữ liệu; bước 3 có "Đã hiểu", bấm thì ẩn và không hiện lại', async () => {
-    let c = await mount();
-    expect(c.textContent).toContain('Bước 1/3');
-    expect(maybeBtn(c, 'Đã hiểu')).toBeUndefined();
-    mounted.forEach((m) => m.unmount());
-    mounted = [];
-
-    state.data['/game/profile'] = P({ lastCheckInAt: todayIso(), totalSeeds: 65 });
-    c = await mount();
-    expect(c.textContent).toContain('Bước 2/3');
-    mounted.forEach((m) => m.unmount());
-    mounted = [];
-
-    state.data['/game/profile'] = DRY({ totalSeeds: 5, ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 } });
-    c = await mount();
-    expect(c.textContent).toContain('Bước 3/3');
-    expect(c.textContent).toContain('Câu đố đúng hết thêm khoảng 18💧.');
-    expect(c.textContent).toContain('Ngày mai: điểm danh + sương = 30💧');
-    click(btn(c, 'Đã hiểu'));
-    await flush(2);
-    expect(c.textContent).not.toContain('Phiên đầu tiên của bạn');
-    mounted.forEach((m) => m.unmount());
-    mounted = [];
-    c = await mount();
-    expect(c.textContent).not.toContain('Phiên đầu tiên của bạn');
+describe('Vườn Xanh (web): Chăm vườn gọn, luật trong sheet ⓘ (w62-01)', () => {
+  it('màn chính không còn thẻ 3 bước, thẻ nước từ đơn hàng hay chữ vé giữ lửa; sheet ⓘ giữ đủ các luật đó', async () => {
+    state.data['/game/profile'] = DRY({
+      totalSeeds: 5,
+      ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 },
+      orderWater: { perOrder: 100, weeklyCap: 300, weeklyGranted: 0 },
+    });
+    const c = await mount();
+    const today = panel(c, 'Chăm vườn');
+    expect(today.textContent).not.toMatch(/Bước \d\/3|Phiên đầu tiên|Ngày mai: điểm danh|Đã hiểu/);
+    expect(today.textContent).not.toContain('Từ đơn hàng');
+    expect(today.textContent).not.toContain('Vé giữ lửa');
+    const body = await openRules(c);
+    expect(dialog()!.textContent).toContain('Vé giữ lửa');
+    expect(body.textContent).toContain('Từ đơn hàng');
   });
 });
 
@@ -273,35 +273,36 @@ describe('Vườn Xanh người mới (web): số hiện trước khi bấm lấ
   it('điểm danh, sương, ô N3 và N7 ghi số 💧 từ profile', async () => {
     state.data['/game/profile'] = DRY({ lastCheckInAt: yesterdayIso(), lastDewAt: null, dailyLoginSeeds: 17, dewSeeds: 11, streak7Seeds: 40, totalSeeds: 500 });
     const c = await mount();
-    expect(c.textContent).toContain('Nhận +17💧 và Điểm Xanh mỗi ngày');
-    expect(maybeBtn(c, 'Hứng giọt sương (+11💧)')).toBeDefined();
-    expect(c.textContent).toContain('+5💧');
-    expect(c.textContent).toContain('+40💧');
-    expect(maybeBtn(c, 'Nhận nước hôm nay (+28💧)')).toBeDefined();
+    expect(pill(c)).toContain('+28💧');
+    const d = await openRules(c);
+    expect(d.textContent).toContain('Nhận +17💧 và Điểm Xanh mỗi ngày');
+    expect(maybeBtn(d, 'Hứng giọt sương (+11💧)')).toBeDefined();
+    expect(d.textContent).toContain('+5💧');
+    expect(d.textContent).toContain('+40💧');
   });
 
-  it('bình đầy: nút chính "Nhận nước hôm nay" không ghi +N💧; gần đầy ghi số chỗ trống', async () => {
+  it('bình đầy: vẫn có "Điểm danh" nhưng viên chuỗi không hứa +N💧; gần đầy ghi số chỗ trống', async () => {
     state.data['/game/profile'] = DRY({ lastCheckInAt: yesterdayIso(), lastDewAt: null, firstCheckinBonus: 0, totalSeeds: 500, tankCapacity: 500 });
     let c = await mount();
-    expect(maybeBtn(c, 'Nhận nước hôm nay')).toBeDefined();
-    expect(c.textContent).not.toContain('Nhận nước hôm nay (+');
+    expect(maybeBtn(c, 'Điểm danh')).toBeDefined();
+    expect(pill(c)).not.toContain('+');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.data['/game/profile'] = DRY({ lastCheckInAt: yesterdayIso(), lastDewAt: null, firstCheckinBonus: 0, totalSeeds: 495, tankCapacity: 500 });
     c = await mount();
-    expect(maybeBtn(c, 'Nhận nước hôm nay (+5💧)')).toBeDefined();
+    expect(pill(c)).toMatch(/· \+5💧$/);
   });
 
   it('lần đầu nói rõ quà người mới; API cũ chưa trả số thì không hiện "undefined"', async () => {
     let c = await mount();
-    expect(c.textContent).toContain('Lần đầu nhận +65💧, các ngày sau +15💧');
+    expect((await openRules(c)).textContent).toContain('Lần đầu nhận +65💧, các ngày sau +15💧');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.data['/game/profile'] = { totalSeeds: 500, streakDays: 2, treeStage: 1, streakFreezes: 0, lastDewAt: null, lastCheckInAt: yesterdayIso(), ecoImpact: { progress: 0, target: 600, treeType: 'Cây', treesPlanted: 1 } };
     c = await mount();
-    expect(c.textContent).toContain('Nhận giọt nước và Điểm Xanh mỗi ngày');
-    expect(maybeBtn(c, 'Nhận nước hôm nay')).toBeDefined();
-    expect(c.textContent).not.toMatch(/undefined|NaN/);
+    expect(maybeBtn(c, 'Điểm danh')).toBeDefined();
+    expect((await openRules(c)).textContent).toContain('Nhận giọt nước và Điểm Xanh mỗi ngày');
+    expect(document.body.textContent).not.toMatch(/undefined|NaN/);
   });
 });
 
@@ -310,7 +311,7 @@ describe('Vườn Xanh người mới (web): hộp chúc mừng', () => {
     state.data['/game/profile'] = DRY({ totalSeeds: 65 });
     state.posts['/game/tree/water'] = () => resp;
     const c = await mount();
-    click(btn(c, 'Tưới hết (65💧)'));
+    click(btn(c, 'Tưới cây'));
     await flush(8);
     return dialog()!;
   };

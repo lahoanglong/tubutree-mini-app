@@ -5,7 +5,7 @@ import { vi } from '../i18n/vi';
 import { useActiveOrderCount } from '../hooks/use-active-order-count';
 import { useOffersDot } from '../hooks/use-offers-dot';
 import { useEngagementDots } from '../hooks/use-engagement-dots';
-import { NAV_TABS, isRootPath, type NavTab } from './nav-config';
+import { NAV_TABS, showsBottomNav, type NavTab } from './nav-config';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
 import { CountBadge } from './ui/cart-badge';
@@ -28,13 +28,13 @@ function scrollPageToTop() {
 export default function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const isRoot = isRootPath(pathname);
-  const activeOrders = useActiveOrderCount(isRoot);
-  const reminders = useEngagementDots(isRoot, activeOrders);
+  const visible = showsBottomNav(pathname);
+  const activeOrders = useActiveOrderCount(visible);
+  const reminders = useEngagementDots(visible, activeOrders);
   // Lý do "chưa điểm danh" chỉ nhường cho chấm thẻ Vườn Xanh ở Trang chủ (W42); tab gốc khác không có chấm đó nên Ưu đãi giữ lý do này.
-  const offersDot = useOffersDot(isRoot, reminders.checkInElsewhere && pathname === '/');
+  const offersDot = useOffersDot(visible, reminders.checkInElsewhere && pathname === '/');
   const profileDot = reminders.profile;
-  if (!isRoot) return null;
+  if (!visible) return null;
 
   const go = (t: NavTab) => {
     haptic('light');
@@ -49,6 +49,7 @@ export default function BottomNav() {
   return (
     <nav
       aria-label={vi.nav.main}
+      data-bottom-nav
       style={{
         position: 'fixed',
         left: 0,

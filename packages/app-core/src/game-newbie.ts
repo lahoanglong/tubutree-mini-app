@@ -1,5 +1,5 @@
 /**
- * Nhịp chơi người mới của Vườn Xanh: luật chọn nút chính, thẻ 3 bước và chữ dùng chung. Mini App (import trực tiếp `gameNewbieCopy`)
+ * Nhịp chơi người mới của Vườn Xanh: luật và chữ dùng chung. Mini App (import trực tiếp `gameNewbieCopy`)
  * và web cùng đọc file này nên chữ và luật không lệch nhau.
  */
 import { formatVnNumber as n } from './number-format';
@@ -20,45 +20,16 @@ export function missingDrops(have: number, cost: number): number {
   return Math.max(0, Math.ceil(cost - (Number.isFinite(have) ? have : 0)));
 }
 
-export interface TutorialInput {
-  lastCheckInAt: string | null | undefined;
-  treesPlanted: number | null | undefined;
-  dismissed: boolean;
-}
-
-export interface TutorialState {
-  visible: boolean;
-  /** Bước đang làm (1..3); 3 giữ tới khi khách bấm "Đã hiểu". */
-  current: 1 | 2 | 3;
-  done: [boolean, boolean, boolean];
-}
-
-/** Thẻ 3 bước dựng từ dữ liệu sẵn có: bước 1 xong khi đã điểm danh, bước 2 khi đã thu hoạch, bước 3 khi khách bấm "Đã hiểu". */
-export function tutorialState(t: TutorialInput): TutorialState {
-  const done: [boolean, boolean, boolean] = [t.lastCheckInAt != null, (t.treesPlanted ?? 0) >= 1, t.dismissed];
-  const current = (done[0] ? (done[1] ? 3 : 2) : 1) as 1 | 2 | 3;
-  return { visible: !t.dismissed, current, done };
-}
-
 /** Lô phụ chỉ hiện từ khi thu hoạch cây thứ 2, hoặc khi khách đã có lô phụ. */
 export function extraPlotsVisible(treesPlanted: number | null | undefined, hasExtraPlot: boolean): boolean {
   return hasExtraPlot || (treesPlanted ?? 0) >= 2;
 }
-
-export const TUTORIAL_DISMISSED_KEY = 'tubu_game_tutorial_done';
 
 const drops = (v: number) => `${n(v)}💧`;
 
 export const gameNewbieCopy = {
   loginToView: 'Đăng nhập để trồng cây, nhận nước và quà',
   treeWilted: 'Cây đang héo, tưới để cây xanh lại.',
-  primary: {
-    claim: (gain: number | null) => (gain == null ? 'Nhận nước hôm nay' : `Nhận nước hôm nay (+${drops(gain)})`),
-    claimFirst: (gain: number | null) => (gain == null ? 'Điểm danh nhận nước' : `Điểm danh nhận ${drops(gain)}`),
-    water: (d: number) => `Tưới hết (${drops(d)})`,
-    harvest: 'Thu hoạch cây',
-    earn: 'Kiếm thêm nước',
-  },
   hero: {
     tankLabel: 'giọt nước',
     /** Nước thưởng đơn hàng được vượt sức chứa bình; nói rõ để số lớn hơn sức chứa không trông như lỗi. */
@@ -109,18 +80,6 @@ export const gameNewbieCopy = {
     retry: 'Thử lại',
     close: 'Đóng',
   },
-  tutorial: {
-    title: 'Phiên đầu tiên của bạn',
-    stepOf: (i: number) => `Bước ${i}/3`,
-    steps: [
-      { title: 'Nhận nước đầu tiên', hint: 'Bấm nút xanh bên dưới để điểm danh.' },
-      { title: 'Tưới cây mầm', hint: 'Tưới hết nước để cây mầm lớn và thu hoạch ngay.' },
-      { title: 'Kiếm nước cho cây tiếp theo', hint: 'Làm câu đố và hứng sương mỗi ngày.' },
-    ],
-    tomorrow: (v: number | null) => (v == null ? 'Ngày mai: điểm danh và hứng sương nhận thêm nước.' : `Ngày mai: điểm danh + sương = ${drops(v)}`),
-    quizTotal: (v: number) => `Câu đố đúng hết thêm khoảng ${drops(v)}.`,
-    gotIt: 'Đã hiểu',
-  },
   recycle: {
     hint: 'Mang rác tái chế đến kho, nhận giọt nước và Điểm Xanh',
   },
@@ -156,10 +115,7 @@ export const gameNewbieCopy = {
     board: 'Chưa tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.',
     retry: 'Thử lại',
   },
-  seasonEmpty: {
-    title: 'Chưa có mùa nào đang mở',
-    body: 'Mùa mới sẽ sớm ra mắt. Trong lúc chờ, bạn vẫn điểm danh và tưới cây mỗi ngày như thường.',
-  },
+
   community: {
     feedTitle: 'Bảng tin cộng đồng',
     feedHintReadOnly: 'Xem mẹo sống xanh từ mọi người',

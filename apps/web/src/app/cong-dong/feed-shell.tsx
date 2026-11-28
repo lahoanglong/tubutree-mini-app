@@ -36,10 +36,10 @@ function FeedAside() {
  * Khung chung của /cong-dong: dùng cả cho bản server (xem trước công khai trong HTML) lẫn bản client, để hai bên khớp nhau.
  * Từ lg là lưới 12 cột: bảng tin 8 cột, cột phụ 4 cột bên phải; thứ tự DOM là thứ tự của Mini (bảng tin trước), cột phụ chỉ xuất hiện từ lg.
  */
-export function FeedShell({ subtitle, children }: { subtitle?: boolean; children: ReactNode }) {
+export function FeedShell({ subtitle, actions, children }: { subtitle?: boolean; actions?: ReactNode; children: ReactNode }) {
   return (
     <main className={`${PAGE_NARROW_UNTIL_LG} py-6 max-md:pt-0`}>
-      <PageHeader title={FEED_TITLE} subtitle={subtitle ? FEED_SUBTITLE : undefined} backHref="/" />
+      <PageHeader title={FEED_TITLE} subtitle={subtitle ? FEED_SUBTITLE : undefined} backHref="/" actions={actions} />
       <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-6">
         <div className="mt-3 flex flex-col gap-3 max-md:mt-0 max-md:gap-2 lg:col-span-8 lg:min-w-0">{children}</div>
         <FeedAside />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget, tutorialState } from './game-newbie';
-import { primaryWaterAction } from './game-primary-action';
+import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget } from './game-newbie';
+import { gardenDayActions, gardenDayCopy, primaryWaterAction } from './game-primary-action';
 
 const BASE = { totalSeeds: 0, checkedInToday: false, dewToday: false, dailyLoginSeeds: 15, dewSeeds: 15, firstCheckinBonus: 0 };
 
@@ -51,13 +51,29 @@ describe('cây đã đủ nước từ trước (B-107)', () => {
   });
 });
 
-describe('thẻ 3 bước và lô phụ', () => {
-  it('bước theo dữ liệu, tự ẩn khi bấm "Đã hiểu"', () => {
-    expect(tutorialState({ lastCheckInAt: null, treesPlanted: 0, dismissed: false })).toMatchObject({ visible: true, current: 1 });
-    expect(tutorialState({ lastCheckInAt: 'x', treesPlanted: 0, dismissed: false })).toMatchObject({ current: 2 });
-    expect(tutorialState({ lastCheckInAt: 'x', treesPlanted: 1, dismissed: false })).toMatchObject({ current: 3, done: [true, true, false] });
-    expect(tutorialState({ lastCheckInAt: 'x', treesPlanted: 1, dismissed: true }).visible).toBe(false);
+describe('hai nút Chăm vườn (gardenDayActions)', () => {
+  it('chưa điểm danh: nút Điểm danh nhận nước, nút Tưới cây vẫn theo số giọt đang có (không bị điểm danh che)', () => {
+    expect(gardenDayActions({ ...BASE, totalSeeds: 40 })).toEqual({
+      water: { kind: 'water', drops: 40 },
+      checkIn: { kind: 'claim', first: false, withDew: true, gain: 30 },
+    });
+    expect(gardenDayActions({ ...BASE, totalSeeds: 5 }).water).toEqual({ kind: 'earn' });
   });
+  it('cây đã đủ nước: Tưới cây thành thu hoạch, Điểm danh vẫn còn nếu chưa nhận', () => {
+    expect(gardenDayActions({ ...BASE, harvestReady: true })).toMatchObject({ water: { kind: 'harvest' }, checkIn: { kind: 'claim', gain: 30 } });
+  });
+  it('xong nước nhưng Điểm Xanh còn thiếu: Điểm danh nhận nốt phần điểm, Tưới cây không đổi', () => {
+    expect(gardenDayActions({ ...BASE, checkedInToday: true, pointsPending: true, totalSeeds: 25 })).toEqual({
+      water: { kind: 'water', drops: 25 },
+      checkIn: { kind: 'claim', first: false, withDew: false, gain: null, pointsOnly: true },
+    });
+  });
+  it('đã xong cả hai phần: không còn nút điểm danh để bấm', () => {
+    expect(gardenDayActions({ ...BASE, checkedInToday: true, totalSeeds: 19 })).toEqual({ water: { kind: 'earn' }, checkIn: null });
+  });
+});
+
+describe('lô phụ và số giọt thiếu', () => {
   it('lô phụ hiện từ cây thứ 2 hoặc khi đã có lô phụ', () => {
     expect(extraPlotsVisible(1, false)).toBe(false);
     expect(extraPlotsVisible(2, false)).toBe(true);
@@ -73,10 +89,11 @@ describe('chữ dùng chung', () => {
   it('không còn lời hứa mất tiến độ', () => {
     expect(JSON.stringify(gameNewbieCopy)).not.toMatch(/chết|từ đầu|héo úa/);
   });
-  it('nhãn nút chính', () => {
-    expect(gameNewbieCopy.primary.claim(30)).toBe('Nhận nước hôm nay (+30💧)');
-    expect(gameNewbieCopy.primary.claimFirst(65)).toBe('Điểm danh nhận 65💧');
-    expect(gameNewbieCopy.primary.water(1250)).toBe('Tưới hết (1.250💧)');
+  it('nhãn hai nút và viên chuỗi ngày của Chăm vườn', () => {
+    expect([gardenDayCopy.water, gardenDayCopy.checkIn]).toEqual(['Tưới cây', 'Điểm danh']);
+    expect(gardenDayCopy.streak(12, 15)).toBe('🔥 Chuỗi 12 ngày · +15💧');
+    expect(gardenDayCopy.streak(1250, null)).toBe('🔥 Chuỗi 1.250 ngày');
+    expect(gardenDayCopy.streak(0, 65)).toBe('🔥 Bắt đầu chuỗi · +65💧');
   });
   it('báo trần mã tắt không hứa "mai/sang tháng có mã" (B-108)', () => {
     expect(gameNewbieCopy.harvest.capped.OFF).not.toMatch(/mai|sang tháng|tiếp/);

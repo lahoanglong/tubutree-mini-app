@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
  * Nhịp chơi người mới của Vườn Xanh (docs/2026-10-25-ux-review/03-game-nguoi-moi.md, 2.3, 2.6, 2.7, F1-F10): nút chính
- * theo trạng thái, sheet "Kiếm nước", thẻ 3 bước, số hiện trước khi bấm, hộp chúc mừng cây mầm, vòng quay thiếu điểm.
+ * theo trạng thái, sheet "Kiếm nước", sheet ⓘ luật chăm vườn, số hiện trước khi bấm, hộp chúc mừng cây mầm, vòng quay thiếu điểm.
  * Dùng vòng quay THẬT để kiểm nút "Cách kiếm Điểm Xanh".
  */
 const mocks = vi.hoisted(() => ({
@@ -110,6 +110,9 @@ function renderPage() {
   );
 }
 const openTab = async (name: 'Chăm vườn' | 'Sảnh Game' | 'Khu vườn') => fireEvent.click(await screen.findByRole('tab', { name }));
+// Thẻ chuỗi đầy đủ (hứng sương, vé giữ lửa, thưởng mốc) và nước từ đơn hàng nằm trong sheet ⓘ "Luật chăm vườn".
+const openRules = async () => fireEvent.click(await screen.findByRole('button', { name: 'Luật chăm vườn' }));
+const streakPill = () => screen.getByTestId('garden-streak-pill');
 const todayPanel = async () => {
   await screen.findByRole('tab', { name: 'Chăm vườn' });
   return within(screen.getByRole('tabpanel', { name: 'Chăm vườn' }));
@@ -151,55 +154,62 @@ beforeEach(() => {
 });
 
 describe('Vườn Xanh người mới — nút chính và không ngõ cụt', () => {
-  it('hồ sơ mới 0 giọt: nút đầu tiên là điểm danh nhận 65💧, bấm gọi checkIn, không gọi tưới', async () => {
+  it('hồ sơ mới 0 giọt: "Tưới cây" và "Điểm danh" là hai nút đầu, viên chuỗi ghi +65💧; bấm điểm danh gọi checkIn, không gọi tưới', async () => {
     renderPage();
     const buttons = await (await todayPanel()).findAllByRole('button');
-    expect(buttons[0]).toHaveTextContent('Điểm danh nhận 65💧');
-    fireEvent.click(buttons[0]!);
+    expect(buttons[0]).toHaveTextContent('Tưới cây');
+    expect(buttons[1]).toHaveTextContent('Điểm danh');
+    expect(streakPill()).toHaveTextContent('🔥 Bắt đầu chuỗi · +65💧');
+    fireEvent.click(buttons[1]!);
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
     expect(mocks.api.waterTree).not.toHaveBeenCalled();
     // Lần đầu chỉ điểm danh: hứng sương để bước 3.
     expect(mocks.api.collectDew).not.toHaveBeenCalled();
   });
 
-  it('ngày sau: "Nhận nước hôm nay (+30💧)" điểm danh rồi hứng sương luôn một lần bấm', async () => {
+  it('ngày sau: viên chuỗi ghi +30💧, "Điểm danh" điểm danh rồi hứng sương luôn một lần bấm', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), streakDays: 1 });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Nhận nước hôm nay (+30💧)' }));
+    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    expect(streakPill()).toHaveTextContent('🔥 Chuỗi 1 ngày · +30💧');
+    fireEvent.click(btn);
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.api.collectDew).toHaveBeenCalledTimes(1));
   });
 
-  it('đã nhận nước và có từ 20💧: "Tưới hết (N💧)" gửi drops = toàn bộ số giọt', async () => {
+  it('đã nhận nước và có từ 20💧: "Tưới cây" gửi drops = toàn bộ số giọt; điểm danh xong thành ô "Đã điểm danh"', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, totalSeeds: 65 });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     await waitFor(() => expect(mocks.api.waterTree).toHaveBeenCalledWith(65));
+    expect(screen.getByTestId('garden-checkin-done')).toHaveTextContent('Đã điểm danh');
+    expect(screen.queryByRole('button', { name: /^Điểm danh/ })).not.toBeInTheDocument();
   });
 
-  it('hết nước: nút chính thành "Kiếm thêm nước" và mở sheet, không gọi API tưới', async () => {
+  it('hết nước: "Tưới cây" mở sheet "Kiếm nước" kèm số giọt còn thiếu, không gọi API tưới', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, totalSeeds: 5 });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Kiếm thêm nước' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     expect(await screen.findByRole('heading', { name: 'Kiếm nước' })).toBeInTheDocument();
-    expect(screen.getByText(/Bạn đang có 5💧/)).toBeInTheDocument();
+    expect(screen.getByText(/Bạn đang có 5💧 · Bạn cần thêm 15💧 nữa\./)).toBeInTheDocument();
     expect(mocks.api.waterTree).not.toHaveBeenCalled();
   });
 
   describe('mọi nút thiếu nước mở sheet "Kiếm nước", không bấm ra lỗi', () => {
     const STUCK = { ...DRY, totalSeeds: 0, streakRepairable: true, brokenStreakDays: 5, streakFreezeCost: 40, streakRepairCost: 50 };
-    const cases: { label: string; tab: 'Hôm nay' | 'Vườn'; name: RegExp | string; api: () => ReturnType<typeof vi.fn>; need: string }[] = [
-      { label: 'nút chính', tab: 'Hôm nay', name: 'Kiếm thêm nước', api: () => mocks.api.waterTree, need: 'Bạn đang có 0💧' },
-      { label: 'vé giữ lửa', tab: 'Hôm nay', name: 'Giữ chuỗi (cần thêm 40💧)', api: () => mocks.api.buyStreakFreeze, need: 'Bạn cần thêm 40💧 nữa.' },
+    const cases: { label: string; tab: 'Hôm nay' | 'Vườn'; name: RegExp | string; api: () => ReturnType<typeof vi.fn>; need: string; rules?: boolean }[] = [
+      { label: 'nút Tưới cây', tab: 'Hôm nay', name: 'Tưới cây', api: () => mocks.api.waterTree, need: 'Bạn cần thêm 20💧 nữa.' },
+      { label: 'vé giữ lửa (trong sheet ⓘ)', tab: 'Hôm nay', name: 'Giữ chuỗi (cần thêm 40💧)', api: () => mocks.api.buyStreakFreeze, need: 'Bạn cần thêm 40💧 nữa.', rules: true },
       { label: 'hồi sinh chuỗi', tab: 'Hôm nay', name: 'Còn thiếu 50💧', api: () => mocks.api.repairStreak, need: 'Bạn cần thêm 50💧 nữa.' },
       { label: 'tưới lô phụ', tab: 'Vườn', name: 'Tưới', api: () => mocks.api.waterPlot, need: 'Bạn cần thêm 20💧 nữa.' },
       { label: 'mở lô', tab: 'Vườn', name: 'Còn thiếu 100💧', api: () => mocks.api.unlockPlot, need: 'Bạn cần thêm 100💧 nữa.' },
     ];
-    it.each(cases)('$label', async ({ tab, name, api, need }) => {
+    it.each(cases)('$label', async ({ tab, name, api, need, rules }) => {
       mocks.api.getGameProfile.mockResolvedValue(STUCK);
       mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT], maxPlots: 4, nextUnlock: { slot: 3, seedCost: 100 } });
       renderPage();
       if (tab === 'Vườn') await openTab('Khu vườn');
+      if (rules) await openRules();
       fireEvent.click(await screen.findByRole('button', { name }));
       expect(await screen.findByRole('heading', { name: 'Kiếm nước' })).toBeInTheDocument();
       expect(screen.getByText(new RegExp(need.replace('.', '\\.')))).toBeInTheDocument();
@@ -212,7 +222,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, totalSeeds: 0 });
     mocks.api.getTodayQuiz.mockResolvedValue([]);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Kiếm thêm nước' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     const sheet = await screen.findByRole('heading', { name: 'Kiếm nước' });
     expect(sheet).toBeInTheDocument();
     expect(screen.queryByText('Điểm danh hôm nay')).not.toBeInTheDocument();
@@ -225,7 +235,8 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 3 });
     mocks.api.getFriends.mockResolvedValue([{ id: 'f1', nickname: 'Lan', canGift: true }]);
     renderPage();
-    // Hôm nay chưa nhận nước nên nút chính là "Nhận nước"; mở sheet từ vé giữ lửa (thiếu nước).
+    // Mở sheet "Kiếm nước" từ vé giữ lửa (thiếu nước) trong sheet ⓘ: sheet ⓘ tự đóng nhường chỗ.
+    await openRules();
     fireEvent.click(await screen.findByRole('button', { name: 'Giữ chuỗi (cần thêm 37💧)' }));
     await screen.findByRole('heading', { name: 'Kiếm nước' });
     const checkin = rowOf('Điểm danh hôm nay');
@@ -240,6 +251,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 3 });
     mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: false, pointsDone: false, waterDone: false, tankFull: true, streakDays: 1, currentCycleDay: 2, todayPoints: 1000, todayWater: 0, rewards: [] });
     renderPage();
+    await openRules();
     fireEvent.click(await screen.findByRole('button', { name: /^Giữ chuỗi/ }));
     await screen.findByRole('heading', { name: 'Kiếm nước' });
     expect(rowOf('Điểm danh hôm nay').queryByText(/^\+\d+💧$/)).not.toBeInTheDocument();
@@ -249,7 +261,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, totalSeeds: 0 });
     mocks.api.getTodayQuiz.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(QUIZ);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Kiếm thêm nước' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     expect(await screen.findByText('Chưa tải được việc kiếm nước.')).toBeInTheDocument();
     // Thẻ câu đố trong trang cũng có "Thử lại" cho cùng truy vấn.
     fireEvent.click(screen.getAllByRole('button', { name: 'Thử lại' })[0]!);
@@ -261,6 +273,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 0 });
     mocks.api.checkIn.mockRejectedValue(new Error('Hôm nay bạn đã điểm danh rồi'));
     renderPage();
+    await openRules();
     fireEvent.click(await screen.findByRole('button', { name: 'Giữ chuỗi (cần thêm 40💧)' }));
     await screen.findByRole('heading', { name: 'Kiếm nước' });
     fireEvent.click(rowOf('Điểm danh hôm nay').getByRole('button', { name: 'Điểm danh' }));
@@ -268,39 +281,24 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
   });
 });
 
-describe('Vườn Xanh người mới — thẻ 3 bước', () => {
-  it('hồ sơ mới: bước 1 đang làm; xong điểm danh sang bước 2; xong cây đầu sang bước 3 có "Đã hiểu"', async () => {
-    const view = renderPage();
-    expect(await screen.findByText('Bước 1/3')).toBeInTheDocument();
-    expect(screen.getByText('Bấm nút xanh bên dưới để điểm danh.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Đã hiểu' })).not.toBeInTheDocument();
-    view.unmount();
-
-    mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, lastCheckInAt: todayIso(), totalSeeds: 65 });
-    const second = renderPage();
-    expect(await screen.findByText('Bước 2/3')).toBeInTheDocument();
-    second.unmount();
-
+describe('Vườn Xanh — Chăm vườn gọn, luật trong sheet ⓘ (w62-01)', () => {
+  it('màn chính không còn thẻ 3 bước, thẻ nước từ đơn hàng hay chữ vé giữ lửa; sheet ⓘ giữ đủ các luật đó', async () => {
     mocks.api.getGameProfile.mockResolvedValue({
       ...DRY,
       totalSeeds: 5,
       ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 },
+      orderWater: { perOrder: 100, weeklyCap: 300, weeklyGranted: 0 },
     });
     renderPage();
-    expect(await screen.findByText('Bước 3/3')).toBeInTheDocument();
-    expect(screen.getByText('Câu đố đúng hết thêm khoảng 18💧.')).toBeInTheDocument();
-    expect(screen.getByText('Ngày mai: điểm danh + sương = 30💧')).toBeInTheDocument();
-  });
-
-  it('bấm "Đã hiểu": thẻ tự ẩn và không hiện lại ở lần mở sau', async () => {
-    mocks.api.getGameProfile.mockResolvedValue({ ...DRY, ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 } });
-    const view = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đã hiểu' }));
-    await waitFor(() => expect(screen.queryByText('Phiên đầu tiên của bạn')).not.toBeInTheDocument());
-    view.unmount();
-    renderPage();
-    await screen.findByRole('button', { name: /Kiếm thêm nước|Tưới hết/ });
-    expect(screen.queryByText('Phiên đầu tiên của bạn')).not.toBeInTheDocument();
+    const today = await todayPanel();
+    await today.findByTestId('garden-day-actions');
+    expect(today.queryByText(/Bước \d\/3|Phiên đầu tiên|Ngày mai: điểm danh/)).toBeNull();
+    expect(today.queryByRole('button', { name: 'Đã hiểu' })).toBeNull();
+    expect(today.queryByText('Từ đơn hàng')).toBeNull();
+    expect(today.queryByText(/Vé giữ lửa/)).toBeNull();
+    await openRules();
+    expect((await screen.findAllByText(/Vé giữ lửa/)).length).toBeGreaterThan(0);
+    expect(screen.getByText('Từ đơn hàng')).toBeInTheDocument();
   });
 });
 
@@ -317,29 +315,33 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
       totalSeeds: 500,
     });
     renderPage();
+    // Viên chuỗi cạnh hai nút gộp điểm danh + sương theo đúng hai số đó.
+    await screen.findByRole('button', { name: 'Điểm danh' });
+    expect(streakPill()).toHaveTextContent('+28💧');
+    await openRules();
     expect(await screen.findByText('Nhận +17💧 và Điểm Xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hứng giọt sương (+11💧)' })).toBeInTheDocument();
     // Thưởng ngày 3 và 7 nằm trong câu chú thích của thẻ Điểm danh (hàng ô cũ đã dời sang dải Nhịp Sống Xanh).
     expect(screen.getByText('Thưởng thêm ngày 3 (+5💧) và ngày 7 (+40💧)')).toBeInTheDocument();
-    // Nút chính gộp điểm danh + sương theo đúng hai số đó.
-    expect(screen.getByRole('button', { name: 'Nhận nước hôm nay (+28💧)' })).toBeInTheDocument();
   });
 
-  it('bình đầy: nút chính "Nhận nước hôm nay" không ghi +N💧', async () => {
+  it('bình đầy: vẫn có nút "Điểm danh" nhưng viên chuỗi không hứa +N💧', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), lastDewAt: null, streakDays: 1, totalSeeds: 500, tankCapacity: 500 });
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Nhận nước hôm nay \(\+/ })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
+    expect(streakPill()).toHaveTextContent(/^🔥 Chuỗi 1 ngày$/);
   });
 
-  it('bình gần đầy: nút chính ghi số chỗ trống', async () => {
+  it('bình gần đầy: viên chuỗi ghi số chỗ trống', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), lastDewAt: null, streakDays: 1, totalSeeds: 495, tankCapacity: 500 });
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Nhận nước hôm nay (+5💧)' })).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Điểm danh' });
+    expect(streakPill()).toHaveTextContent('🔥 Chuỗi 1 ngày · +5💧');
   });
 
-  it('lần đầu: dòng phụ nói lần đầu nhận gồm quà người mới', async () => {
+  it('lần đầu: dòng phụ (sheet ⓘ) nói lần đầu nhận gồm quà người mới', async () => {
     renderPage();
+    await openRules();
     expect(await screen.findByText('Lần đầu nhận +65💧, các ngày sau +15💧, kèm Điểm Xanh')).toBeInTheDocument();
   });
 
@@ -354,8 +356,9 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
       ecoImpact: { progress: 0, target: 600, treeType: 'Cây', treesPlanted: 1 },
     });
     renderPage();
+    expect(await screen.findByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
+    await openRules();
     expect(await screen.findByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/undefined|NaN/);
   });
 });
@@ -374,7 +377,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
       reward: { points: 2000, species: { name: 'Lim xanh', emoji: '🌲', rarity: 'COMMON', ecoFact: null } },
     });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
     expect(screen.getByText('+2.000 Điểm Xanh')).toBeInTheDocument();
     expect(screen.getByText('🌲 Lim xanh')).toBeInTheDocument();
@@ -396,7 +399,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
       reward: { certificate: 'CERT-1' },
     });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     expect(await screen.findByText(new RegExp(text))).toBeInTheDocument();
     expect(screen.getByText('CERT-1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Dùng mã giảm giá ngay' })).not.toBeInTheDocument();
@@ -405,7 +408,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   it('nhiều mã trong một lần tưới: hiện tất cả mã', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 3, reward: { coupon: 'A1', coupons: ['A1', { code: 'B2' }] } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     expect(await screen.findByText('A1')).toBeInTheDocument();
     expect(screen.getByText('B2')).toBeInTheDocument();
   });
@@ -416,7 +419,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   ])('khách vãng lai (%s): mời đăng nhập Zalo kèm nút đăng nhập', async (_n, extra) => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 1, ...extra });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     expect(await screen.findByText('Đăng nhập Zalo để nhận quà khi thu hoạch.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeInTheDocument();
   });
@@ -424,7 +427,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   it('"Chia sẻ với bạn bè" mở hộp chia sẻ Zalo gốc tới /game, không đăng bài Cộng đồng', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 2, reward: { certificate: 'C2' } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ với bạn bè' }));
     // Cùng các màn khác: link mời mang mã giới thiệu của người chia sẻ, và thẻ mở bằng ưu đãi khách mới (không có số thì câu không số).
     expect(bridge.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/game?ref=GAME1', title: expect.any(String) }));
@@ -436,7 +439,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   it('khách vãng lai không có nút chia sẻ', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST' });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     await screen.findByText('Thu hoạch thành công!');
     expect(screen.queryByRole('button', { name: 'Chia sẻ với bạn bè' })).not.toBeInTheDocument();
   });
@@ -444,7 +447,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   it('cây mầm của khách (không điểm, không mã): nói cây mầm, không nói Tubu góp 1 cây', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 300, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST', reward: { sprout: true } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     await screen.findByText('Thu hoạch thành công!');
     expect(document.body.textContent).toContain('Cây mầm đầu tiên của bạn đã lớn');
     expect(document.body.textContent).not.toContain('Tubu sẽ góp');
@@ -453,7 +456,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   it('thu hoạch thường vẫn nói Tubu góp 1 cây và không có khung điểm', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 2, reward: { coupon: 'GAME30000-X', certificate: 'C2' } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây' }));
     await screen.findByText('Thu hoạch thành công!');
     expect(document.body.textContent).toContain('Tubu sẽ góp 1 cây vào quỹ trồng cây');
     expect(screen.queryByText(/Điểm Xanh$/)).not.toBeInTheDocument();
@@ -501,7 +504,7 @@ describe('Vườn Xanh người mới — thiếu điểm và lô phụ', () => 
 
   it('đủ điểm: tab Vườn có nút góp quỹ kèm giá, tab Hôm nay không có', async () => {
     renderPage();
-    expect(await (await todayPanel()).findByRole('button', { name: /Điểm danh nhận/ })).toBeInTheDocument();
+    expect(await (await todayPanel()).findByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
     expect((await todayPanel()).queryByRole('button', { name: /Góp quỹ trồng cây/ })).not.toBeInTheDocument();
     await openTab('Khu vườn');
     expect(await screen.findByRole('button', { name: 'Góp quỹ trồng cây (50.000 điểm)' })).toBeInTheDocument();

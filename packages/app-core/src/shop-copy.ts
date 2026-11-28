@@ -367,8 +367,8 @@ export const SHOP_COPY: Record<string, string> = {
   // Trang Mua xoay vòng: số % đọc từ cấu hình như dòng Đặt định kỳ ở trang sản phẩm.
   'subs.heroEyebrow': 'Đặt định kỳ · Tiết kiệm {pct}%',
   'subs.heroEyebrowNoPct': 'Đặt định kỳ · Tiết kiệm mỗi kỳ',
-  'subs.perkDiscount': 'Giảm {pct}% cho mỗi kỳ giao.',
-  'subs.perkDiscountNoPct': 'Giảm giá cho mỗi kỳ giao.',
+  // Dải Mua xoay vòng một hàng (web /san-pham?filter=subscription, Mini /subscriptions): lối sang lịch định kỳ của khách.
+  'subs.myScheduleLink': 'Lịch của tôi →',
   // Video sản phẩm trong thư viện ảnh PDP (PdpVideoSlide): nút phát trên ô poster, nhãn đọc, nút ở dải ảnh nhỏ (web), câu khi không phát được.
   'pdp.videoPlay': 'Phát video',
   'pdp.videoPlayAria': 'Phát video của {name}',

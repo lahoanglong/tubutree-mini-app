@@ -45,15 +45,16 @@ test('Vườn Xanh 375x812: dải Nhịp Sống Xanh cao ≤ 52px, một hàng 7
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(VIEW.width);
 
-  // Thẻ Điểm danh không còn hàng 7 ô thứ hai; câu thưởng ngày 3/7 vẫn còn đúng một lần.
-  await expect(page.getByTestId('streak-cell')).toHaveCount(0);
-  await expect(page.getByText(/Thưởng thêm ngày 3/)).toHaveCount(1);
-
   // Nút chính của ngày vẫn trong màn đầu (không bị dải đẩy xuống dưới thanh đáy).
-  const primary = page.getByRole('button', { name: /Nhận nước hôm nay|Tưới/ }).first();
+  const primary = page.getByTestId('garden-day-actions').getByRole('button').first();
   await expect(primary).toBeVisible();
   const p = (await primary.boundingBox())!;
   expect(p.y + p.height).toBeLessThanOrEqual(VIEW.height - BOTTOM_NAV);
+
+  // Thẻ Điểm danh (trong sheet ⓘ từ w62-01) không còn hàng 7 ô thứ hai; câu thưởng ngày 3/7 vẫn còn đúng một lần.
+  await page.getByRole('button', { name: 'Luật chăm vườn' }).click();
+  await expect(page.getByText(/Thưởng thêm ngày 3/)).toHaveCount(1);
+  await expect(page.getByTestId('streak-cell')).toHaveCount(0);
 
   const shots = process.env.W166_SHOTS;
   if (shots) {

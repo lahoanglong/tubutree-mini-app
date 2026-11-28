@@ -32,14 +32,17 @@ export function WasteStepStrip({ flags }: { flags: { dropoff: boolean; mailin: b
 export interface WasteRulesSheetProps {
   open: boolean;
   onClose: () => void;
-  steps: readonly string[];
+  /** Các bước đầy đủ; rỗng thì không có mục Các bước (sheet mở từ bước chọn món chỉ cần điều kiện từng món). */
+  steps?: readonly string[];
   /** Cách giao đang mở cho khách (tên + một dòng); rỗng thì không có mục Cách giao. */
   methods?: readonly { label: string; line: string }[];
+  /** Điều kiện nhận từng món (`itemRuleNotes`): chữ đã rời khỏi thẻ món để thẻ chỉ còn tên, tỉ lệ và bộ đếm. */
+  items?: readonly { name: string; notes: readonly string[] }[];
   rulesHref: string;
 }
 
-/** Sheet "Thể lệ" của màn Đổi rác (bản web của Mini `WasteRulesSheet`): các bước đầy đủ, cách giao đang mở, lối sang trang Thể lệ. */
-export function WasteRulesSheet({ open, onClose, steps, methods = [], rulesHref }: WasteRulesSheetProps) {
+/** Sheet "Thể lệ" của màn Đổi rác (bản web của Mini `WasteRulesSheet`): các bước đầy đủ, cách giao đang mở, điều kiện từng món, lối sang trang Thể lệ. */
+export function WasteRulesSheet({ open, onClose, steps = [], methods = [], items = [], rulesHref }: WasteRulesSheetProps) {
   return (
     <Sheet
       open={open}
@@ -52,14 +55,16 @@ export function WasteRulesSheet({ open, onClose, steps, methods = [], rulesHref 
       }
     >
       <div className="tubu-waste-rules" data-testid="waste-rules">
-        <section className="tubu-waste-rules-section">
-          <h3 className="text-base font-semibold text-stone-900">{wasteRulesSheetCopy.stepsTitle}</h3>
-          <ol className="tubu-waste-rules-steps text-sm text-stone-900">
-            {steps.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ol>
-        </section>
+        {steps.length > 0 && (
+          <section className="tubu-waste-rules-section">
+            <h3 className="text-base font-semibold text-stone-900">{wasteRulesSheetCopy.stepsTitle}</h3>
+            <ol className="tubu-waste-rules-steps text-sm text-stone-900">
+              {steps.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ol>
+          </section>
+        )}
         {methods.length > 0 && (
           <section className="tubu-waste-rules-section">
             <h3 className="text-base font-semibold text-stone-900">{wasteRulesSheetCopy.methodsTitle}</h3>
@@ -68,6 +73,23 @@ export function WasteRulesSheet({ open, onClose, steps, methods = [], rulesHref 
                 <li key={m.label}>
                   <p className="text-sm font-semibold text-stone-900">{m.label}</p>
                   <p className="text-xs text-stone-600">{m.line}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {items.length > 0 && (
+          <section className="tubu-waste-rules-section" data-testid="waste-rules-items">
+            <h3 className="text-base font-semibold text-stone-900">{wasteRulesSheetCopy.itemsTitle}</h3>
+            <ul className="tubu-waste-rules-methods">
+              {items.map((it) => (
+                <li key={it.name}>
+                  <p className="text-sm font-semibold text-stone-900">{it.name}</p>
+                  {it.notes.map((n) => (
+                    <p key={n} className="text-xs text-stone-600">
+                      {n}
+                    </p>
+                  ))}
                 </li>
               ))}
             </ul>

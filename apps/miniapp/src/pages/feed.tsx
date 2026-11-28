@@ -159,7 +159,7 @@ export default function FeedPage() {
   }
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(96px + var(--safe-bottom))' }}>
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
       <PageHeader

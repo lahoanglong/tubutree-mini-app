@@ -1,4 +1,5 @@
 import { WATER_STEP } from './game-newbie';
+import { formatVnNumber } from './number-format';
 
 // Tách khỏi game-newbie.ts: Mini App nạp game-newbie vào gói đầu (qua i18n/vi.ts) nên hàm chỉ Vườn dùng phải ở file riêng.
 
@@ -47,3 +48,33 @@ export function primaryWaterAction(p: PrimaryWaterInput): PrimaryWaterAction {
   if (seeds >= WATER_STEP) return { kind: 'water', drops: seeds };
   return { kind: 'earn' };
 }
+
+export interface GardenDayActions {
+  /** Nút "Tưới cây": thu hoạch khi cây đã đủ nước, tưới hết khi có từ 20💧, thiếu nước thì mở sheet "Kiếm nước". */
+  water: Exclude<PrimaryWaterAction, { kind: 'claim' }>;
+  /** Nút "Điểm danh": còn nhận được hôm nay (nước, hoặc nốt phần Điểm Xanh); null khi đã xong cả hai. */
+  checkIn: Extract<PrimaryWaterAction, { kind: 'claim' }> | null;
+}
+
+/** Hai nút của Chăm vườn tách từ cùng luật `primaryWaterAction`: điểm danh không còn chặn nút tưới, thu hoạch không che nút điểm danh. */
+export function gardenDayActions(p: PrimaryWaterInput): GardenDayActions {
+  const claim = primaryWaterAction({ ...p, harvestReady: false });
+  const rest = primaryWaterAction({ ...p, checkedInToday: true, pointsPending: false });
+  return { water: rest.kind === 'claim' ? { kind: 'earn' } : rest, checkIn: claim.kind === 'claim' ? claim : null };
+}
+
+const drops = (v: number) => `${formatVnNumber(v)}💧`;
+
+/** Chữ của hai nút Chăm vườn và viên chuỗi ngày; số giọt của lần điểm danh nằm ở viên chuỗi nên nhãn nút giữ ngắn. */
+export const gardenDayCopy = {
+  water: 'Tưới cây',
+  harvest: 'Thu hoạch',
+  checkIn: 'Điểm danh',
+  checkInDone: 'Đã điểm danh',
+  /** Chưa có chuỗi (khách mới, hoặc chuỗi vừa đứt) thì mời bắt đầu thay vì "Chuỗi 0 ngày". */
+  streak: (days: number, gain: number | null) => {
+    const head = days > 0 ? `🔥 Chuỗi ${formatVnNumber(days)} ngày` : '🔥 Bắt đầu chuỗi';
+    return gain == null ? head : `${head} · +${drops(gain)}`;
+  },
+  rules: 'Luật chăm vườn',
+} as const;

@@ -20,22 +20,18 @@ import { getErrorMessage, getLoadErrorMessage, isServerRejection } from '../serv
 import { getDailyCheckInStatus, getLoyalty } from '../services/account-api';
 import { shareLink } from '../services/zmp-bridge';
 import { gardenPoints } from '@tubutree/app-core/points-lots';
-import { dismissGameTutorial, isGameTutorialDismissed } from '../utils/game-tutorial';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { Text } from '../components/ui/text';
 import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
-import { SeasonBanner, SeasonEmpty } from '../components/game/season-banner';
+import { SeasonBanner } from '../components/game/season-banner';
 import { TreeHealthAlert } from '../components/game/tree-health-alert';
-import { CheckInStreak } from '../components/game/checkin-streak';
 import { StreakRepair } from '../components/game/streak-repair';
-import { TreeActions } from '../components/game/tree-actions';
-import { OrderWaterCard } from '../components/game/order-water-card';
+import { GardenDayActions, GardenRulesSheet } from '../components/game/garden-day-actions';
 import { GuestBanner } from '../components/game/guest-banner';
 import { TreeFund } from '../components/game/tree-fund';
 import { EarnWaterSheet, type EarnQuizState } from '../components/game/earn-water-sheet';
-import { NewbieGuide } from '../components/game/newbie-guide';
 import { isSameVNDay } from '../components/game/game-utils';
 import { GardenPlots } from '../components/game/garden-plots';
 import { MarketplacePointsNote } from '../components/game/marketplace-points-note';
@@ -86,7 +82,8 @@ export default function GamePage() {
   const [harvestMeta, setHarvestMeta] = useState<HarvestMeta | null>(null);
   // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
   const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
-  const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
+  // Sheet ⓘ của Chăm vườn: luật chuỗi, vé giữ lửa, hứng sương và nước từ đơn hàng (w62-01 dời khỏi màn chính).
+  const [rulesOpen, setRulesOpen] = useState(false);
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
   const checkInStatusQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
@@ -130,7 +127,7 @@ export default function GamePage() {
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   const shell = (children: ReactNode) => (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(var(--space-section) + var(--safe-bottom))' }}>
+    <Page className="tubu-nav-clear" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Vườn Xanh" actions={<SoundToggle />} />
       {children}
     </Page>
@@ -156,13 +153,11 @@ export default function GamePage() {
   const pointsPending = status ? !status.checkedInToday : false;
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
   const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
-  const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
   const quizState: EarnQuizState = quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
     : quizQ.isError
       ? { status: 'error' }
       : { status: 'loading' };
-  const quizTotal = quiz ? quiz.reduce((sum, q) => sum + (q.waterReward ?? 0), 0) : null;
   const earnError = checkInM.isError ? getErrorMessage(checkInM.error) : dewM.isError ? getErrorMessage(dewM.error) : null;
   const plotsOpen = garden ? extraPlotsVisible(eco?.treesPlanted, garden.plots.some((p) => !p.isHome)) : false;
 
@@ -195,44 +190,24 @@ export default function GamePage() {
             />
           )}
 
-          <NewbieGuide
-            profile={profile}
-            dismissed={tutorialDismissed}
-            quizTotal={quizTotal}
-            tomorrowGain={tomorrowGain}
-            onDismiss={() => {
-              dismissGameTutorial();
-              setTutorialDismissed(true);
-            }}
-          />
-
-          <TreeActions
-            profile={profile}
-            pointsPending={pointsPending}
-            pointsBlocked={!!status?.pointsBlocked}
-            checkInSeeds={checkInSeeds}
-            pending={waterM.isPending || checkInM.isPending || dewM.isPending}
-            onClaim={claimDaily}
-            onWater={(drops) => waterM.mutate(drops, { onSuccess: () => setWaterTick((k) => k + 1) })}
-            onHarvest={() => waterM.mutate(0)}
-            onEarn={() => openEarn()}
-          />
-
-          <OrderWaterCard info={profile?.orderWater} onShop={() => navigate('/browse')} />
-
-          {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
+          {/* Hai nút màu của ngày + viên chuỗi; mọi chữ luật nằm trong sheet ⓘ. Nhiệm vụ "điểm danh" cuộn tới đây. */}
           <div id={GAME_CHECKIN_ANCHOR}>
-          <CheckInStreak
-            profile={profile}
-            status={status}
-            statusError={checkInStatusQ.isError}
-            onRetryStatus={() => (checkInStatusQ.isFetching ? undefined : checkInStatusQ.refetch())}
-            onBuyFreeze={() => freezeM.mutate()}
-            freezePending={freezeM.isPending}
-            onCollectDew={() => dewM.mutate()}
-            dewPending={dewM.isPending}
-            onNeedWater={openEarn}
-          />
+            <GardenDayActions
+              profile={profile}
+              streakDays={status?.streakDays ?? profile?.streakDays}
+              pointsPending={pointsPending}
+              pointsBlocked={!!status?.pointsBlocked}
+              checkInSeeds={checkInSeeds}
+              statusError={checkInStatusQ.isError}
+              onRetryStatus={() => (checkInStatusQ.isFetching ? undefined : checkInStatusQ.refetch())}
+              waterPending={waterM.isPending}
+              checkInPending={checkInM.isPending || dewM.isPending}
+              onClaim={claimDaily}
+              onWater={(drops) => waterM.mutate(drops, { onSuccess: () => setWaterTick((k) => k + 1) })}
+              onHarvest={() => waterM.mutate(0)}
+              onEarn={openEarn}
+              onRules={() => setRulesOpen(true)}
+            />
           </div>
 
           <MissionsCard
@@ -329,7 +304,7 @@ export default function GamePage() {
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
 
           {/* Banner mùa/sự kiện (Phase 4) */}
-          {season ? <SeasonBanner season={season} /> : season === null ? <SeasonEmpty /> : null}
+          {season && <SeasonBanner season={season} />}
 
           {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
           {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
@@ -353,6 +328,19 @@ export default function GamePage() {
       </div>
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
       <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => navigate('/browse')} />
+
+      <GardenRulesSheet
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        profile={profile}
+        status={status}
+        freezePending={freezeM.isPending}
+        dewPending={dewM.isPending}
+        onBuyFreeze={() => freezeM.mutate()}
+        onCollectDew={() => dewM.mutate()}
+        onNeedWater={openEarn}
+        onShop={() => navigate('/browse')}
+      />
 
       <EarnWaterSheet
         open={earn.open}

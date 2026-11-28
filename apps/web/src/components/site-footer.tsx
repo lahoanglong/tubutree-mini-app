@@ -1,10 +1,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { ExternalLink, Mail, Phone } from 'lucide-react';
+import { BadgeCheck, ExternalLink, Mail, Phone } from 'lucide-react';
 import { getPublicSupport, type SupportContact } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import tubuLogo from '@/assets/tubu-logo.png';
-import { LEGAL_PAGES, LEGAL_SLUGS, companyLegalLine, isBctNoticeUrl, merchantIdentityOrDefault } from '@/lib/legal';
+import { FOOTER_POLICY_LINKS, footerCompanyLine, isBctNoticeUrl } from '@/lib/legal';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { isWebRouteReady } from '@/lib/route-map';
 import { FooterProgramLinks } from '@/components/footer-program-links';
@@ -13,19 +13,13 @@ import { REFILL_LANDING_PATH, refillLandingCopy } from '@tubutree/app-core/refil
 
 const LINK =
   'inline-flex min-h-11 min-w-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
-/** Dải cuối (chính sách, kênh cộng đồng, huy hiệu Bộ Công Thương): chữ nhỏ cho gọn một hàng ở 360px, vùng chạm vẫn 44px. */
+/** Kênh cộng đồng: chữ nhỏ cho gọn một hàng ở 360px, vùng chạm vẫn 44px. */
 const SMALL_LINK =
   'inline-flex min-h-11 min-w-11 items-center justify-center gap-1 text-xs font-medium text-stone-600 transition-colors hover:text-forest-800 hover:underline';
-
-/**
- * "Đơn vị vận hành: <tên> · MST <mã> · <địa chỉ>". Admin chưa nhập thông tin nào thì hiện thương nhân đã đăng ký của Tubu Tree
- * (website bán hàng của công ty phải luôn nêu rõ chủ website); đã nhập thì ẩn từng phần để trống.
- */
-function operatorLine(company: SupportContact['company']): string | null {
-  const id = merchantIdentityOrDefault(company);
-  const parts = [id.legalName, id.taxCode ? `MST ${id.taxCode}` : undefined, id.address].filter(Boolean);
-  return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
-}
+/** Ô của lưới chính sách / hỗ trợ: chữ nhỏ canh trái, vùng chạm 44px; lưới đều cột nên không có link lẻ rớt dòng. */
+const GRID_BASE = 'inline-flex min-h-11 min-w-0 items-center gap-1.5 text-xs font-medium transition-colors hover:text-forest-800 hover:underline';
+const GRID_LINK = `${GRID_BASE} text-stone-600`;
+const GRID_CONTACT = `${GRID_BASE} text-forest-700`;
 
 /** Khách đặt không đăng nhập mất đường dẫn theo dõi: chỉ chữ, không icon (chân trang nằm trong HTML mọi trang, kể cả trang chủ). */
 const LOOKUP_LABEL = guestCopy('lookupTitle');
@@ -77,23 +71,27 @@ function LinkColumn({ title, links }: { title: string; links: DiscoverLink[] }) 
   );
 }
 
-function CompanyInfo({ company, className }: { company: SupportContact['company']; className?: string }) {
-  const line = operatorLine(company);
-  // Người đại diện, ngày và nơi cấp ĐKDN chỉ hiện khi admin đã nhập (không bịa). Số ĐKDN để trống thì doanh nghiệp dùng MST (mã số doanh nghiệp), hộ kinh doanh thì ẩn.
-  const legalLine = companyLegalLine(company);
+/**
+ * Khối pháp lý gọn (Bộ Công Thương): "CÔNG TY TNHH TUBU TREE · MST … · Cấp ngày … tại … · <địa chỉ>" kèm `contact` (hotline, email) khi chỗ vẽ
+ * chưa có link liên hệ riêng. Ô huy hiệu "Đã thông báo Bộ Công Thương" chỉ hiện khi admin dán link thật của cổng online.gov.vn (company.bctNoticeUrl).
+ */
+function LegalBlock({ company, contact, className }: { company: SupportContact['company']; contact?: string; className?: string }) {
+  const text = [footerCompanyLine(company), contact].filter(Boolean).join(' · ');
   const bctRaw = company?.bctNoticeUrl;
   const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;
-  if (!line && !legalLine && !bctUrl) return null;
+  if (!text && !bctUrl) return null;
   return (
     <div className={className} data-testid="footer-company">
-      {line && <p className="text-xs text-stone-600">{line}</p>}
-      {legalLine && (
-        <p className="text-xs text-stone-600" data-testid="footer-company-legal">
-          {legalLine}
-        </p>
-      )}
+      {text && <p className="text-xs leading-relaxed text-stone-600 [text-wrap:pretty]">{text}</p>}
       {bctUrl && (
-        <a href={bctUrl} target="_blank" rel="noopener noreferrer" className={SMALL_LINK}>
+        <a
+          href={bctUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="footer-bct-badge"
+          className="mt-1 inline-flex min-h-11 items-center gap-1.5 rounded-control border border-stone-200 px-3 text-xs font-semibold text-stone-700 transition-colors hover:border-forest-600 hover:text-forest-800"
+        >
+          <BadgeCheck className="h-4 w-4 text-forest-700" aria-hidden="true" />
           Đã thông báo Bộ Công Thương
         </a>
       )}
@@ -101,14 +99,15 @@ function CompanyInfo({ company, className }: { company: SupportContact['company'
   );
 }
 
-function LegalNav({ label, className }: { label: string; className?: string }) {
+/** Lối chính sách theo danh mục Bộ Công Thương (FOOTER_POLICY_LINKS): lưới đều cột, `cols` là số cột theo khổ màn. */
+function PolicyNav({ label, cols }: { label: string; cols: string }) {
   return (
-    <nav aria-label={label} className={className}>
-      <ul className="flex flex-wrap gap-x-2 md:gap-x-4">
-        {LEGAL_SLUGS.map((slug) => (
-          <li key={slug}>
-            <Link href={`/chinh-sach/${slug}`} className={SMALL_LINK}>
-              {LEGAL_PAGES[slug].footerLabel}
+    <nav aria-label={label}>
+      <ul className={`grid gap-x-4 ${cols}`}>
+        {FOOTER_POLICY_LINKS.map((l) => (
+          <li key={l.label} className="min-w-0">
+            <Link href={`/chinh-sach/${l.slug}${l.anchor ? `#${l.anchor}` : ''}`} className={GRID_LINK}>
+              {l.label}
             </Link>
           </li>
         ))}
@@ -182,38 +181,49 @@ export default async function SiteFooter() {
       </div>
 
       <div className={`${PAGE_WIDE} border-t border-stone-200 pb-3`}>
-        <LegalNav label="Chính sách" />
-        <CompanyInfo company={company} />
+        <PolicyNav label="Chính sách" cols="grid-cols-4 lg:grid-cols-7" />
+        <LegalBlock company={company} contact={`Hotline ${formatPhoneDisplay(hotline)} · ${email}`} />
       </div>
     </footer>
 
-    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline, email và chính sách vẫn phải với tới được từ mọi trang (Bộ Công Thương).
-        Trang có thanh dính đáy ([data-sticky-bar]) thì globals.css ẩn luôn chân trang gọn này, nhắm theo data-compact-footer. */}
+    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline, email, chính sách và thông tin thương nhân vẫn phải với tới được từ
+        mọi trang (Bộ Công Thương). Hai lưới 2 cột đều nhau (liên hệ, chính sách) thay hàng link tự xuống dòng. Trang có thanh dính đáy
+        ([data-sticky-bar]) thì globals.css ẩn luôn chân trang gọn này, nhắm theo data-compact-footer. */}
     <footer aria-label="Hỗ trợ và chính sách" data-compact-footer className="mt-6 border-t border-stone-200 bg-stone-0 px-4 pb-3 md:hidden">
-      <div className="flex flex-wrap items-center gap-x-4">
-        <a href={`tel:${tel}`} className={LINK}>
-          <Phone className="h-4 w-4" aria-hidden="true" />
-          <span>
-            <span className="sr-only">Hotline: </span>
-            {formatPhoneDisplay(hotline)}
-          </span>
-        </a>
-        <a href={`mailto:${email}`} className={`${LINK} min-w-0`}>
-          <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="break-all">{email}</span>
-        </a>
+      <ul aria-label="Hỗ trợ" className="grid grid-cols-2 gap-x-4">
+        <li className="min-w-0">
+          <a href={`tel:${tel}`} className={GRID_CONTACT}>
+            <Phone className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            <span>
+              <span className="sr-only">Hotline: </span>
+              {formatPhoneDisplay(hotline)}
+            </span>
+          </a>
+        </li>
+        <li className="min-w-0">
+          <a href={`mailto:${email}`} className={GRID_CONTACT}>
+            <Mail className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            <span className="break-all">{email}</span>
+          </a>
+        </li>
         {guestOrderLookup && (
-          <Link href="/don" className={LINK}>
-            {LOOKUP_LABEL}
-          </Link>
+          <li className="min-w-0">
+            <Link href="/don" className={GRID_LINK}>
+              {LOOKUP_LABEL}
+            </Link>
+          </li>
         )}
-        <a href="https://blog.tubutree.com" target="_blank" rel="noopener noreferrer" className={LINK}>
-          <span>Blog</span>
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        </a>
+        <li className="min-w-0">
+          <a href="https://blog.tubutree.com" target="_blank" rel="noopener noreferrer" className={GRID_LINK}>
+            <span>Blog</span>
+            <ExternalLink className="h-3 w-3 flex-none" aria-hidden="true" />
+          </a>
+        </li>
+      </ul>
+      <div className="border-t border-stone-100">
+        <PolicyNav label="Chính sách (điện thoại)" cols="grid-cols-2" />
       </div>
-      <LegalNav label="Chính sách (điện thoại)" className="border-t border-stone-100" />
-      <CompanyInfo company={company} />
+      <LegalBlock company={company} className="border-t border-stone-100 pt-2" />
     </footer>
     </>
   );

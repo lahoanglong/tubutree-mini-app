@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { getFeedPublicPreview, type FeedPreviewItem } from '@tubutree/app-core/api/feed';
 import { getPublicConfig, type PublicConfig } from '@tubutree/app-core/api/config';
-import { CommunityChannels } from '@/components/community/community-channels';
 import { PublicPreviewList } from '@/components/community/public-preview-list';
 import { JsonLd } from '@/components/seo/json-ld';
 import { createServerHttp } from '@/lib/core-http-server';
@@ -35,12 +34,7 @@ export default async function CommunityPage() {
       <Suspense
         fallback={
           <FeedShell subtitle={Boolean(preview?.length)}>
-            {preview && preview.length > 0 ? (
-              <>
-                <CommunityChannels {...(config ? { initialConfig: config } : {})} />
-                <PublicPreviewList posts={preview} />
-              </>
-            ) : null}
+            {preview && preview.length > 0 ? <PublicPreviewList posts={preview} /> : null}
           </FeedShell>
         }
       >

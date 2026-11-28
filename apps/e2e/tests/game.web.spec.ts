@@ -100,12 +100,12 @@ test.describe('Web khách: Vườn Xanh', () => {
     await expect(page.locator('.tubu-hero-chip', { hasText: '600/1.000💧' })).toBeVisible();
     await expect(page.locator('.tubu-hero-chip', { hasText: '🌳 Đã thu hoạch 2 cây' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Chăm vườn' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Chuỗi 3 ngày' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Điểm danh', exact: true })).toBeVisible();
+    await expect(page.getByTestId('garden-streak-pill')).toContainText('Chuỗi 3 ngày');
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây/ })).toBeHidden();
     await page.getByRole('tab', { name: 'Khu vườn' }).click();
     await expect(page).toHaveURL(/tab=garden/);
-    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Điểm danh', exact: true })).toBeHidden();
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(20\.000 điểm\)/ })).toBeVisible();
   });
 
@@ -115,7 +115,7 @@ test.describe('Web khách: Vườn Xanh', () => {
   test('mở /vuon-xanh: dữ liệu tab Vườn và Cộng đồng chỉ tải khi mở tab', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
-    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Điểm danh', exact: true })).toBeVisible();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(800);
     const gameOwned = /^GET \/(game\/|me\/loyalty$|me\/daily-check-in$)/;
@@ -154,17 +154,18 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, state);
     api.get('/game/profile', () => profile({ lastCheckInAt: state.checkedIn ? new Date().toISOString() : null, lastDewAt: new Date().toISOString() }));
     await page.goto('/vuon-xanh');
-    const claim = page.getByRole('button', { name: /^(Nhận nước hôm nay|Điểm danh nhận)/ });
+    const claim = page.getByRole('button', { name: 'Điểm danh', exact: true });
     await claim.dblclick();
     await expect(page.getByRole('status').getByText('+10 giọt nước')).toBeVisible();
     await expect(claim).toHaveCount(0);
+    await expect(page.getByTestId('garden-checkin-done')).toHaveText('Đã điểm danh');
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
   test('tưới hết: gửi {drops: 1250} một lần dù bấm đúp', async ({ page, api }) => {
     mockGame(api, { checkedIn: true });
     await page.goto('/vuon-xanh');
-    await page.getByRole('button', { name: 'Tưới hết (1.250💧)' }).dblclick();
+    await page.getByRole('button', { name: 'Tưới cây', exact: true }).dblclick();
     await expect(page.getByText('Đã tưới −1.250💧 · còn 380💧 nữa là thu hoạch')).toBeVisible();
     const calls = api.callsTo('POST', '/game/tree/water');
     expect(calls).toHaveLength(1);
@@ -175,7 +176,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: true });
     api.get('/game/profile', () => profile({ totalSeeds: 0, lastCheckInAt: new Date().toISOString(), lastDewAt: new Date().toISOString() }));
     await page.goto('/vuon-xanh');
-    await page.getByRole('button', { name: 'Kiếm thêm nước' }).click();
+    await page.getByRole('button', { name: 'Tưới cây', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Kiếm nước' })).toBeVisible();
     expect(api.callsTo('POST', '/game/tree/water')).toHaveLength(0);
   });
@@ -215,10 +216,14 @@ test.describe('Web khách: Vườn Xanh', () => {
     api.get('/game/profile', () => profile({ dailyLoginSeeds: 10, firstCheckinBonus: 0 }));
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/vuon-xanh');
-    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
-    const streak = page.locator('section').filter({ has: page.getByRole('heading', { name: /^Chuỗi \d+ ngày$/ }) });
+    await expect(page.getByRole('button', { name: 'Điểm danh', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Luật chăm vườn' }).click();
+    const rules = page.getByRole('dialog', { name: 'Luật chăm vườn' });
+    const streak = rules.locator('section').filter({ has: page.getByRole('heading', { name: /^Chuỗi \d+ ngày$/ }) });
     await expect(streak.getByText('Nhận +10💧 mỗi ngày')).toBeVisible();
     await expect(streak.getByText('Điểm Xanh')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(rules).toBeHidden();
     const missions = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Nhiệm vụ' }) });
     await expect(missions.getByText('Đánh giá 3 sản phẩm')).toBeVisible();
     await expect(missions.getByTestId('guest-points-note')).toContainText('Đăng nhập Zalo để nhận Điểm Xanh');
@@ -264,12 +269,14 @@ test.describe('Web khách: Vườn Xanh', () => {
     expect(calls[0]!.body).toEqual({ drops: 20 });
   });
 
-  test('không có mùa nào chạy: thân rỗng từ server vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
+  test('không có mùa nào chạy: thân rỗng từ server không vỡ trang và không còn dòng "chưa có mùa" (w62-01)', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     api.get('/game/season', () => replyEmptyBody());
     // Cộng đồng tắt thì khối Mùa nằm cuối tab Vườn, như Mini App.
     await page.goto(`/vuon-xanh?tab=${GAME_SOCIAL_ON_WEB ? 'community' : 'garden'}`);
-    await expect(page.getByTestId('season-empty')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Vườn Xanh', level: 1 })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByText('Chưa có mùa nào đang mở')).toHaveCount(0);
   });
 
   test('API bảng xếp hạng lỗi: tab Cộng đồng báo lỗi có nút Thử lại', async ({ page, api }) => {
