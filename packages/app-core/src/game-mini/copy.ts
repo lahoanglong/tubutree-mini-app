@@ -31,6 +31,8 @@ export const GAME_MINI_COPY = {
   'game.eco_merge.rules':
     'Vuốt (hoặc bấm phím mũi tên) để dồn mọi ô. Hai ô cùng loại chạm nhau thì ghép lên bậc mới: Hạt giống, Mầm non, Chồi lá, Cây con, Hoa xanh, Quả lành, Cổ thụ, Rừng Tubu. 3 phút, tới Rừng Tubu là thắng.',
   'game.green_conveyor.title': 'Băng Chuyền Xanh',
+  /** Tên mùa Noel (`theme.seasonal` = christmas) ở Sảnh Game và đầu ván; luật ván không đổi. */
+  'game.green_conveyor.xmasTitle': 'Xưởng Gói Quà Ông Già Noel Xanh',
   'game.green_conveyor.desc': 'Phân 24 món vào 3 thùng trong 30 giây',
   'game.green_conveyor.rules':
     'Món trôi xuống băng: vuốt trái bỏ Tái chế, vuốt xuống bỏ Hữu cơ, vuốt phải bỏ Refill, hoặc chạm thẳng vào thùng. Đúng liền tay để nhân điểm tới x5, món vàng cộng thêm 5 điểm. 30 giây.',
@@ -162,6 +164,7 @@ export const GAME_MINI_COPY_MAX: Partial<Record<GameMiniCopyKey, number>> = {
   'game.eco_merge.title': 24,
   'game.eco_merge.desc': 48,
   'game.green_conveyor.title': 24,
+  'game.green_conveyor.xmasTitle': 32,
   'game.green_conveyor.desc': 48,
   'card.new': 6,
   'progress.tier': 12,

@@ -16,6 +16,7 @@ import { saveLocalBest } from './arcade-best';
 import { ArcadeResultPanel } from './arcade-result';
 import { prefersReducedMotion, readArcadeTheme } from './arcade-theme';
 import { useArcadeComplete, type PlayedRun, type RunIdPromise } from './use-arcade-complete';
+import { sfx } from '../../utils/sfx';
 import '../../css/arcade.css';
 
 type Controller = ReturnType<typeof mountArcade>;
@@ -37,6 +38,8 @@ const loadEngine = (): Promise<ArcadeEngine> => {
 
 export interface ArcadeGameOverlayProps {
   gameId: ArcadeGameId;
+  /** `theme.seasonal` là "christmas": Hứng Giọt Sương mặc áo Noel (tên, cách chơi, hình vẽ, tiếng chuông); luật và điểm không đổi. */
+  xmas?: boolean;
   onClose: () => void;
 }
 
@@ -45,10 +48,13 @@ export interface ArcadeGameOverlayProps {
  * Ba pha: màn bắt đầu → đang chơi (có Tạm dừng) → bảng kết quả. Đã đăng nhập thì gửi ván đúng một lần (`useArcadeComplete`); khách chơi trọn vẹn, kỷ lục lưu trên máy
  * và nút đăng nhập nêu số Giọt nước nhận được. Mở thì khoá cuộn nền; đóng thì trả focus về nút đã mở nó.
  */
-export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
+export function ArcadeGameOverlay({ gameId, xmas = false, onClose }: ArcadeGameOverlayProps) {
   const real = useRealUser();
   const login = useLoginWithNotice();
   const key = COPY_KEY[gameId];
+  // Chốt áo lúc mở lớp phủ: cấu hình mùa về muộn (hay đổi giữa ván) không được đổi `skin`, vì effect dựng engine phụ thuộc nó và sẽ huỷ ván đang chơi.
+  const [skin] = useState(() => xmas && gameId === 'dew_catcher');
+  const title = fillCopy(skin ? 'arcade.dew.xmasTitle' : `arcade.${key}.title`);
   const titleId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -91,8 +97,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   useEffect(() => {
     let cancelled = false;
     let mounted: Controller | null = null;
-    loadEngine().then(
-      ({ mountArcade: mount }) => {
+    // Áo Noel của Dew nạp lười cùng engine; nạp lỗi thì chơi áo thường.
+    Promise.all([loadEngine(), skin ? import('@tubutree/app-core/seasonal/xmas-dew').catch(() => null) : null]).then(
+      ([{ mountArcade: mount }, xmasDew]) => {
         const canvas = canvasRef.current;
         const root = rootRef.current;
         if (cancelled || !canvas || !root) return;
@@ -101,6 +108,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
           canvas,
           theme: readArcadeTheme(root),
           reducedMotion: prefersReducedMotion(),
+          skin: xmasDew?.xmasDewSkin(prefersReducedMotion(), () => sfx.play('bell')),
           raf: (cb) => window.requestAnimationFrame(cb),
           caf: (id) => window.cancelAnimationFrame(id),
           now: () => performance.now(),
@@ -118,7 +126,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
       mounted?.destroy();
       controller.current = null;
     };
-  }, [gameId, attempt]);
+  }, [gameId, attempt, skin]);
 
   const measure = useCallback(() => {
     const stage = stageRef.current;
@@ -240,7 +248,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
           style={{ visibility: pausable ? 'visible' : 'hidden' }}
         />
         <Heading as="h2" id={titleId} variant="title-sm" font="ui" className="tubu-arcade-title">
-          {fillCopy(`arcade.${key}.title`)}
+          {title}
         </Heading>
       </div>
       <div ref={stageRef} className="tubu-arcade-stage">
@@ -248,11 +256,11 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
         {phase === 'ready' && (
           <div className="tubu-arcade-cover" data-testid="arcade-ready">
             {loadError ? (
-              <ErrorState variant="inline" title={fillCopy(`arcade.${key}.title`)} message={getLoadErrorMessage(loadError)} onRetry={retryLoad} />
+              <ErrorState variant="inline" title={title} message={getLoadErrorMessage(loadError)} onRetry={retryLoad} />
             ) : (
               <>
                 <Text variant="body-md" as="p">
-                  {fillCopy(`arcade.${key}.how`)}
+                  {fillCopy(skin ? 'arcade.dew.xmasHow' : `arcade.${key}.how`)}
                 </Text>
                 <Text variant="caption" tone="secondary" as="p" className="tubu-arcade-keys">
                   {fillCopy(`arcade.${key}.keys`)}
@@ -286,6 +294,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
             onLogin={() => login()}
             onPlayAgain={begin}
             onClose={onClose}
+            xmas={skin}
           />
         )}
       </div>

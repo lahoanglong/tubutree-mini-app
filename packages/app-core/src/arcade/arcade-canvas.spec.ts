@@ -4,6 +4,7 @@ import { ARCADE_MAX_DT_MS, mountArcade, type ArcadeCanvasLike, type ArcadeCtx2D,
 import type { ArcadeGameId } from './arcade-config';
 import { DEW_PADDLE_W } from './dew-catcher';
 import { createRefillRush, RUSH_ITEMS, RUSH_STATIONS, type RushStation } from './refill-rush';
+import { xmasDewSkin } from '../seasonal/xmas-dew';
 
 const mulberry32 = (seed: number): (() => number) => () => {
   seed = (seed + 0x6d2b79f5) | 0;
@@ -709,5 +710,70 @@ describe('reducedMotion', () => {
     expect(normal.cues.some((c) => c.endsWith(' ✦'))).toBe(true);
     expect(reduced.cues.some((c) => c.includes('✦'))).toBe(false);
     expect(normal.cues.map((c) => c.replace(' ✦', ''))).toEqual(reduced.cues);
+  });
+});
+
+describe('Dew: áo Noel (theme.seasonal = christmas)', () => {
+  const XMAS_ITEMS = ['❄️', '🔔', '🎁'];
+  /** Chơi trọn ván, mỗi khung đưa vợt tới món tốt thấp nhất vừa vẽ (đọc từ lệnh vẽ, không đọc trạng thái engine). */
+  function playChasing(h: ReturnType<typeof setup>, goods: string[]) {
+    h.api.start();
+    for (let i = 0; i < 3000 && h.ends.length === 0; i++) {
+      const items = h.texts().filter((o) => goods.includes(o.text ?? ''));
+      const low = items.reduce<Op | null>((a, o) => (!a || o.args[1]! > a.args[1]! ? o : a), null);
+      h.clear();
+      if (low) h.emit('pointermove', h.at(low.args[0]! / 400, 0.5));
+      h.frame(16);
+    }
+  }
+
+  it('đổi hình vật rơi, vợt và cây nền; mọi màu vẫn từ theme; luật và điểm như bản thường', () => {
+    const xmas = setup('dew_catcher', { skin: xmasDewSkin(false, () => undefined) }, 11);
+    const plain = setup('dew_catcher', {}, 11);
+    for (const h of [xmas, plain]) {
+      h.api.start();
+      h.frames(400);
+    }
+    const seen = (h: typeof xmas) => new Set(h.texts().map((o) => o.text));
+    expect(seen(xmas).has('🛷')).toBe(true);
+    expect(seen(xmas).has('🍃')).toBe(false);
+    expect(seen(xmas).has('🎄')).toBe(true);
+    expect(XMAS_ITEMS.some((e) => seen(xmas).has(e))).toBe(true);
+    expect(seen(plain).has('🍃')).toBe(true);
+    for (const e of [...XMAS_ITEMS, '🛷', '🎄']) expect(seen(plain).has(e), e).toBe(false);
+    const colors = new Set(Object.values(THEME));
+    for (const o of xmas.ops().filter((x) => x.op !== 'transform')) expect(colors.has(o.fill as string), `${o.text ?? o.op}`).toBe(true);
+    // Cùng hạt giống, cùng vợt đứng yên: điểm và nhịp HUD giống hệt bản thường (áo không đổi luật).
+    expect(xmas.ticks).toEqual(plain.ticks);
+  });
+
+  it('hứng hộp quà (món tinh dầu) trong ván thật gọi onGift', () => {
+    let gifts = 0;
+    const xmas = setup('dew_catcher', { skin: xmasDewSkin(false, () => (gifts += 1)) }, 5);
+    playChasing(xmas, XMAS_ITEMS);
+    expect(xmas.ends).toHaveLength(1);
+    expect(gifts).toBeGreaterThan(0);
+  });
+
+  it('Refill Rush không mặc áo Noel dù truyền skin', () => {
+    const h = setup('refill_rush', { skin: xmasDewSkin(false, () => undefined) });
+    h.api.start();
+    h.frames(30);
+    const seen = new Set(h.texts().map((o) => o.text));
+    expect(seen.has('🎄')).toBe(false);
+    expect(seen.has('🌲')).toBe(true);
+  });
+
+  it('giảm chuyển động: không có chùm bông tuyết khi hứng, tuyết nền đứng yên', () => {
+    const h = setup('dew_catcher', { skin: xmasDewSkin(true, () => undefined), reducedMotion: true }, 5);
+    h.api.start();
+    const flakes = () => h.texts().filter((o) => o.text === '❄').map((o) => `${o.args[0]},${o.args[1]}`);
+    const first = flakes();
+    expect(first).toHaveLength(12);
+    h.clear();
+    h.frames(60);
+    h.clear();
+    h.frame(16);
+    expect(flakes()).toEqual(first);
   });
 });

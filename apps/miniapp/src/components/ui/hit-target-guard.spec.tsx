@@ -293,6 +293,10 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     for (const c of ['tubu-xmas-tree-btn', 'tubu-xmas-cta', 'tubu-xmas-snow-toggle']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
   });
 
+  it('seasonal-christmas.css: nút "Trang trí" và 6 ô khay của Cây Thông Noel Tự Trang Trí (w57-02) tự khai vùng chạm >= 44px', () => {
+    for (const c of ['tubu-xgd-open', 'tubu-xgd-slot']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
+  });
+
   it('declutter.css: các lớp nút của w47-01 tự khai vùng chạm >= 44px (guard đọc đúng tệp CSS)', () => {
     for (const c of ['tubu-buy-mode', 'tubu-buy-mode-action', 'tubu-pdp-detail-toggle', 'tubu-points-row-info', 'tubu-consent-line']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
   });

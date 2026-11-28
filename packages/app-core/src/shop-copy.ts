@@ -821,6 +821,9 @@ export const SHOP_COPY: Record<string, string> = {
   'arcade.dew.title': 'Hứng Sương Tinh Khiết',
   'arcade.dew.desc': 'Kéo chiếc lá hứng sương, né hoá chất. 40 giây.',
   'arcade.dew.how': 'Kéo chiếc lá sang trái, phải để hứng sương. Né giọt hoá chất và bụi mịn kẻo mất tim.',
+  // Áo Noel (`theme.seasonal` = christmas): hộp quà đỏ là món 30 điểm sẵn có, gấp 3 bông tuyết 10 điểm; luật và điểm không đổi.
+  'arcade.dew.xmasTitle': 'Hứng Bông Tuyết & Hộp Quà Xanh',
+  'arcade.dew.xmasHow': 'Kéo xe trượt hứng bông tuyết và hộp quà đỏ (x3 điểm). Né giọt hoá chất và bụi mịn kẻo mất tim.',
   'arcade.dew.keys': 'Bàn phím: mũi tên trái, phải để di chuyển chiếc lá.',
   'arcade.dew.aria': 'Hứng Sương Tinh Khiết: kéo hoặc dùng mũi tên trái, phải để di chuyển chiếc lá hứng sương',
   'arcade.rush.title': 'Phân Loại Vỏ Chai Thần Tốc',

@@ -389,7 +389,7 @@ describe('Đoán Xuất Xứ: đồng hồ lượt và bản đồ', () => {
 describe('Chữ đợt B', () => {
   it('đủ 8 game có tên, thứ tự cố định (Đố Xanh trước, hai game mới ngay sau)', () => {
     expect(PLAYABLE_MINI_GAMES).toEqual(['daily_quiz', 'eco_merge', 'green_conveyor', 'sort', 'match', 'origin', 'basket', 'kitchen_swap']);
-    expect(PLAYABLE_MINI_GAMES.map(miniGameTitle)).toEqual([
+    expect(PLAYABLE_MINI_GAMES.map((g) => miniGameTitle(g))).toEqual([
       'Đố Xanh Mỗi Ngày',
       'Ghép Mầm Xanh',
       'Băng Chuyền Xanh',

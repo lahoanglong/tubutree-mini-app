@@ -118,6 +118,8 @@ function summaryLines(end: End, authed: boolean, save: ArcadeSaveState): Line[] 
 
 export interface ArcadeGameOverlayProps {
   gameId: ArcadeGameId;
+  /** `theme.seasonal` là "christmas": Dew Catcher mặc áo Noel (bông tuyết, hộp quà đỏ, xe trượt, chuông khi hứng quà). */
+  xmas?: boolean;
   onClose: () => void;
 }
 
@@ -127,8 +129,10 @@ export interface ArcadeGameOverlayProps {
  * Tab quay vòng trong lớp, Esc đóng, khoá cuộn nền và trả focus về nút mở (`useModalA11y`); tab ẩn thì ván tạm dừng.
  * Đã đăng nhập: cuối ván gửi `completeArcade` đúng một lần (`useArcadeSave`); khách chơi thử và giữ kỷ lục trên máy.
  */
-export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
+export function ArcadeGameOverlay({ gameId, xmas = false, onClose }: ArcadeGameOverlayProps) {
   const k = ARCADE_COPY_KEY[gameId];
+  // Chốt áo lúc mở lớp phủ: cấu hình mùa về muộn (hay đổi giữa ván) không được đổi `skin`, vì effect dựng engine phụ thuộc nó và sẽ huỷ ván đang chơi.
+  const [skin] = useState(() => xmas && gameId === 'dew_catcher');
   const authed = useAuthPhase() === 'authenticated';
   const panelRef = useModalA11y<HTMLDivElement>(onClose);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -180,8 +184,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     // clientWidth/clientHeight là cỡ bố cục, không bị `transform` của hiệu ứng mở hộp thoại (scale 0.97 trong `tubu-dialog-pop`) kéo nhỏ như
     // getBoundingClientRect: đo bằng cái sau thì khung nền của canvas nhỏ hơn cỡ CSS 3% và ảnh vẽ bị phóng to, mờ.
     const fit = () => ctl?.resize(stage.clientWidth, stage.clientHeight, window.devicePixelRatio || 1);
-    import('@tubutree/app-core/arcade/arcade-canvas').then(
-      ({ mountArcade: mount }) => {
+    // Áo Noel của Dew nạp lười cùng engine; nạp lỗi thì chơi áo thường.
+    Promise.all([import('@tubutree/app-core/arcade/arcade-canvas'), skin ? import('@tubutree/app-core/seasonal/xmas-dew').catch(() => null) : null]).then(
+      ([{ mountArcade: mount }, xmasDew]) => {
         if (cancelled) return;
         ctl = mount({
           game: gameId,
@@ -192,6 +197,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
           caf: (id) => window.cancelAnimationFrame(id),
           now: () => performance.now(),
           onEnd: (r) => endRef.current(r),
+          skin: xmasDew?.xmasDewSkin(prefersReducedMotion(), () => sfx.play('bell')),
         });
         controls.current = ctl;
         fit();
@@ -215,7 +221,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
       controls.current = null;
       setMounted(false);
     };
-  }, [gameId, attempt]);
+  }, [gameId, attempt, skin]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -268,13 +274,13 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     });
   };
 
-  const title = fillCopy(`arcade.${k}.title`);
+  const title = fillCopy(skin ? 'arcade.dew.xmasTitle' : `arcade.${k}.title`);
   const lines = useMemo(() => (end ? summaryLines(end, authed, save.state) : []), [end, authed, save.state]);
   // Kỷ lục mới hoặc ván được thưởng: chùm lấp lánh trên màn kết quả và một tiếng "thắng" (tắt được bằng nút âm thanh của trang).
   const win = phase === 'ended' && end !== null && (end.guestNew || (save.state.status === 'done' && (save.state.data.isNewBest || save.state.data.rewarded)));
   useEffect(() => {
-    if (win) sfx.play('win');
-  }, [win]);
+    if (win) sfx.play(skin ? 'jingle' : 'win');
+  }, [win, skin]);
   const tip = useMemo(() => (end ? endTip(gameId, end.result.stats) : null), [end, gameId]);
   if (typeof document === 'undefined') return null;
 
@@ -327,7 +333,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
               ) : (
                 <>
                   <Text variant="body-md" as="p">
-                    {fillCopy(`arcade.${k}.how`)}
+                    {fillCopy(skin ? 'arcade.dew.xmasHow' : `arcade.${k}.how`)}
                   </Text>
                   {/* Gợi ý phím chỉ có nghĩa với bàn phím: màn chạm (pointer: coarse) ẩn bằng CSS, vẫn nằm trong DOM. */}
                   <Text variant="caption" tone="tertiary" as="p" className="[@media(pointer:coarse)]:hidden" data-testid="arcade-keys">

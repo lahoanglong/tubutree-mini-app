@@ -11,6 +11,7 @@ import { Button } from '../../ui/button';
 import { PageHeader } from '../../ui/page-header';
 import { Heading, Text } from '../../ui/text';
 import { useAuthPhase } from '../../../hooks/use-auth-phase';
+import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
 import { getDailyCheckInStatus } from '../../../services/account-api';
 import { refreshAccessToken } from '../../../services/api';
@@ -143,7 +144,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
     if (state.phase === 'playing') void loadResult();
   }, [state.phase]);
 
-  const title = miniGameTitle(game);
+  const title = miniGameTitle(game, usePublicConfig().seasonalTheme === 'christmas');
   const streak = state.result?.checkIn?.streakDays ?? streakQ.data?.streakDays ?? 0;
   const disabled = (todayQ.isError && isMiniDisabled(todayQ.error)) || (todayQ.isSuccess && !todayQ.data.games.some((g) => g.game === game));
   const intro = miniIntroReward(todayQ.data, game);

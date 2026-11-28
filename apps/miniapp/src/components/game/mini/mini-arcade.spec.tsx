@@ -7,8 +7,9 @@ import { arcadeCopy } from '@tubutree/app-core/game-mini/arcade-copy';
 import { ARCADE_SOUND_KEY } from '@tubutree/app-core/game-mini/arcade-sfx';
 import { CONVEYOR_LEAD_MS, CONVEYOR_ROUND_MS } from '@tubutree/app-core/game-mini/conveyor';
 
-const mocks = vi.hoisted(() => ({ vibrate: vi.fn(() => Promise.resolve()) }));
+const mocks = vi.hoisted(() => ({ vibrate: vi.fn(() => Promise.resolve()), season: null as string | null }));
 vi.mock('zmp-sdk/apis', () => ({ vibrate: mocks.vibrate }));
+vi.mock('../../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ seasonalTheme: mocks.season }) }));
 
 import MiniEcoMerge from './mini-eco-merge';
 import MiniGreenConveyor from './mini-green-conveyor';
@@ -25,8 +26,33 @@ const items: MiniConveyorItem[] = Array.from({ length: 24 }, (_, i) => ({
 beforeEach(() => {
   localStorage.clear();
   mocks.vibrate.mockClear();
+  mocks.season = null;
 });
 afterEach(() => vi.useRealTimers());
+
+describe('áo Noel (theme.seasonal = christmas)', () => {
+  it('2048: ô mang tên bậc Noel, bàn gắn data-season; tắt mùa thì về tên thường', async () => {
+    mocks.season = 'christmas';
+    const { unmount } = render(<MiniEcoMerge content={{ seed: 7, size: 4, goal: 256, maxMoves: 2000 }} onFinish={vi.fn()} onStatus={vi.fn()} />);
+    expect(await screen.findByTestId('mini-eco-merge')).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.getByTestId('mini-eco-merge').getAttribute('data-season')).toBe('christmas'));
+    const { xmasTierName } = await import('@tubutree/app-core/seasonal/xmas-arcade');
+    const { mergeTierName } = await import('@tubutree/app-core/game-mini/eco-merge');
+    const value = Number(screen.getAllByTestId('eco-merge-tile')[0]!.getAttribute('data-value'));
+    expect(screen.getAllByText(xmasTierName(value)).length).toBeGreaterThan(0);
+    unmount();
+    mocks.season = null;
+    render(<MiniEcoMerge content={{ seed: 7, size: 4, goal: 256, maxMoves: 2000 }} onFinish={vi.fn()} onStatus={vi.fn()} />);
+    expect(screen.getByTestId('mini-eco-merge').hasAttribute('data-season')).toBe(false);
+    expect(screen.getAllByText(mergeTierName(value)).length).toBeGreaterThan(0);
+  });
+
+  it('băng chuyền: bàn gắn data-season khi bật mùa, luật ván giữ nguyên', async () => {
+    mocks.season = 'christmas';
+    render(<MiniGreenConveyor content={{ seed: 1, bins: [...BINS], items }} onFinish={vi.fn()} onStatus={vi.fn()} />);
+    await vi.waitFor(() => expect(screen.getByTestId('mini-green-conveyor').getAttribute('data-season')).toBe('christmas'));
+  });
+});
 
 describe('MiniEcoMerge', () => {
   it('mở ván có 2 ô; phím mũi tên dồn bàn, tăng số nước, báo tiến độ theo bậc /8', () => {

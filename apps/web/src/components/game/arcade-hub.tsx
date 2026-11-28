@@ -18,6 +18,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { sfx } from '@/lib/sfx';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { Button, Heading, Icon, SectionHeader, Text } from '@/components/mini';
 import { ArcadeGameOverlay, rewardLines } from './arcade-game-overlay';
 import { readGuestBest } from './arcade-storage';
@@ -172,6 +173,7 @@ export function ArcadeHub({ mini, wheel = null }: { mini: MiniTodayResponse | nu
   const status = useQuery({ ...gameArcadeStatusQuery(coreHttp), enabled: authed });
   const matcher = matcherOn(useQuery({ ...matcherStatusQuery(coreHttp), enabled: mini !== null }).data);
   const badge = arcadeWindowBadge(useMinuteClock());
+  const xmas = usePublicConfig().seasonalTheme === 'christmas';
   const pending = usePendingArcadeSave(authed);
   const [open, setOpen] = useState<ArcadeGameId | null>(null);
   const headingId = useId();
@@ -184,7 +186,7 @@ export function ArcadeHub({ mini, wheel = null }: { mini: MiniTodayResponse | nu
     real: authed,
     arcade: status.data,
     guestBest: authed ? null : guestBest,
-    bonusWindow: badge.activeWindow !== null,
+    xmas,
     mini,
     matcher,
     wheelCost: wheel?.cost ?? null,
@@ -225,7 +227,7 @@ export function ArcadeHub({ mini, wheel = null }: { mini: MiniTodayResponse | nu
           <HubCardView key={card.id} card={card} loading={authed && card.action.kind === 'arcade' && status.isLoading} onPlay={play} />
         ))}
       </ul>
-      {open && <ArcadeGameOverlay key={open} gameId={open} onClose={() => setOpen(null)} />}
+      {open && <ArcadeGameOverlay key={open} gameId={open} xmas={xmas} onClose={() => setOpen(null)} />}
     </section>
   );
 }

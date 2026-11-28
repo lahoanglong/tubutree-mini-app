@@ -2,7 +2,8 @@
  * Âm thanh ngắn của hai game thao tác, tổng hợp bằng WebAudio (không tải tệp âm thanh). Tắt được bằng một chạm, nhớ lựa chọn trên máy.
  * Mọi lỗi (trình duyệt không có WebAudio, WebView chặn, chưa có cử chỉ chạm) đều im lặng bỏ qua: âm thanh không bao giờ làm vỡ ván chơi.
  */
-export type ArcadeSfx = 'merge' | 'combo' | 'win' | 'right' | 'wrong' | 'golden' | 'over';
+/** `bell`, `jingle`: tiếng chuông và hợp âm ngũ cung thay `combo`/`golden` và `win` khi bàn chơi mặc áo Noel. */
+export type ArcadeSfx = 'merge' | 'combo' | 'win' | 'right' | 'wrong' | 'golden' | 'over' | 'bell' | 'jingle';
 
 type Wave = 'sine' | 'square' | 'triangle';
 /** Mỗi tiếng là vài nốt: [tần số Hz, bắt đầu ms, dài ms, dạng sóng]. */
@@ -59,6 +60,18 @@ export const ARCADE_SFX_NOTES: Record<ArcadeSfx, readonly Note[]> = {
     [392, 0, 140, 'triangle'],
     [294, 130, 220, 'triangle'],
   ],
+  bell: [
+    [2093, 0, 60, 'sine'],
+    [2637, 50, 60, 'sine'],
+    [3136, 100, 140, 'sine'],
+  ],
+  jingle: [
+    [659, 0, 110, 'triangle'],
+    [784, 100, 110, 'triangle'],
+    [880, 200, 110, 'triangle'],
+    [1047, 300, 260, 'triangle'],
+    [1319, 300, 240, 'sine'],
+  ],
 };
 
 export const ARCADE_SOUND_KEY = 'tubu.game.sound';
@@ -69,13 +82,18 @@ export interface ArcadeSoundStorage {
   setItem(key: string, value: string): void;
 }
 
-/** Mặc định bật; khách đã tắt (`'off'`) thì giữ tắt. Kho bị chặn thì bật. */
-export function readSoundOn(storage: ArcadeSoundStorage | null): boolean {
+/**
+ * Mặc định bật, trừ máy bật giảm chuyển động (`reducedMotion`): khi đó mặc định im, cùng luật với âm thanh Vườn Xanh (`game-hub/sfx`). Lựa chọn của
+ * khách (`'on'`/`'off'`) luôn thắng. Kho bị chặn thì theo mặc định.
+ */
+export function readSoundOn(storage: ArcadeSoundStorage | null, reducedMotion = false): boolean {
+  let saved: string | null = null;
   try {
-    return storage?.getItem(ARCADE_SOUND_KEY) !== 'off';
+    saved = storage?.getItem(ARCADE_SOUND_KEY) ?? null;
   } catch {
-    return true;
+    saved = null;
   }
+  return saved === 'on' || (saved !== 'off' && !reducedMotion);
 }
 
 export function saveSoundOn(storage: ArcadeSoundStorage | null, on: boolean): void {

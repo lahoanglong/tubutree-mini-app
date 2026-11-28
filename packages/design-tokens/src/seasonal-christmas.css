@@ -1,5 +1,5 @@
 /*
- * Noel Xanh (tubu-w57-01): giao diện mùa lễ của Trang chủ Mini App và web, chỉ nạp cùng chunk mùa lễ khi `theme.seasonal` là "christmas".
+ * Noel Xanh (tubu-w57-01, Vườn Xanh và áo game tubu-w57-02): giao diện mùa lễ của Mini App và web, chỉ nạp cùng chunk mùa lễ khi `theme.seasonal` là "christmas".
  * Bảng màu Botanical Nordic chỉ sống dưới [data-season="christmas"], không đổi token chung của app. Mọi số đo ở đây (không ở TSX) để hai app
  * ra cùng hình và bánh cóc px (scripts/uiux/ds-ratchet.mjs) không tăng. Chuyển động chỉ dùng transform/opacity (GPU), tắt hết khi
  * prefers-reduced-motion, tạm dừng khi tab ẩn (.is-paused) và khi khách tắt ❄️ thì lớp tuyết không gắn.
@@ -15,6 +15,9 @@
   --xmas-frost: #dceef5;
   --xmas-frost-line: #b9d6e1;
   --xmas-bark: #6b4a2b;
+  --xmas-fawn: #b98552;
+  --xmas-night: #1d3550;
+  --xmas-night-deep: #0e1d30;
   --xmas-glass: rgba(250, 247, 240, 0.62);
   --xmas-gold-glow: rgba(233, 185, 73, 0.55);
 }
@@ -402,6 +405,277 @@
   animation: xmas-sheen 3.4s ease-in-out 0.6s infinite;
 }
 
+/* ---- Vườn Xanh: Cây Thông Tự Trang Trí ở thẻ đầu tab Chăm vườn (khung cây giữ 84px) ---- */
+.tubu-hero[data-season='christmas'][data-sky] {
+  background:
+    radial-gradient(90% 55% at 50% 100%, color-mix(in srgb, var(--xmas-pine) 60%, transparent), transparent 72%),
+    linear-gradient(180deg, var(--xmas-night-deep) 0%, var(--xmas-night) 58%, var(--xmas-pine-deep) 100%);
+}
+.tubu-hero[data-season='christmas'][data-sky]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 9% 14%, var(--xmas-snow) 0 1px, transparent 2px),
+    radial-gradient(circle at 30% 6%, var(--xmas-gold) 0 1px, transparent 2px),
+    radial-gradient(circle at 63% 9%, var(--xmas-snow) 0 1px, transparent 2px),
+    radial-gradient(circle at 92% 7%, var(--xmas-snow) 0 1px, transparent 2px);
+}
+.tubu-hero[data-season='christmas'][data-sky] .tubu-hero-orb {
+  background: transparent;
+  box-shadow: inset -7px 3px 0 0 var(--xmas-snow);
+}
+.tubu-xgd-snow {
+  position: absolute;
+  top: -64px;
+  bottom: -260px;
+  left: -16px;
+  right: -16px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.tubu-xgd-snow .tubu-xmas-flake { animation-name: xgd-fall; }
+.tubu-xgd-tree {
+  display: block;
+  width: 98px;
+  height: 84px;
+  overflow: visible;
+}
+.tubu-xgd-orn {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.tubu-xgd-orn[data-pop] { animation: xgd-pop 520ms cubic-bezier(0.3, 1.45, 0.5, 1) both; }
+.tubu-xgd-deer { fill: var(--xmas-fawn); }
+.tubu-xgd-deer-line,
+.tubu-xgd-antler,
+.tubu-xgd-wire {
+  fill: none;
+  stroke: var(--xmas-fawn);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.tubu-xgd-antler { stroke-width: 1.2; }
+.tubu-xgd-wire { stroke: var(--xmas-pine-light); stroke-width: 1.2; }
+.tubu-xgd-wreath {
+  fill: none;
+  stroke: var(--xmas-pine-light);
+  stroke-width: 3;
+  stroke-dasharray: 2.2 1.2;
+}
+.tubu-xgd-cap { fill: var(--xmas-gold); }
+
+/* Nút mở khay: góc phải khung cây, vùng chạm ≥ 44px; chấm đỏ khi có món đủ điều kiện mở. */
+.tubu-xgd-open {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 1px solid var(--xmas-gold);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--xmas-night-deep) 60%, transparent);
+  color: var(--xmas-snow);
+  font-family: inherit;
+  font-size: var(--type-caption-size);
+  line-height: 16px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.tubu-xgd-open-count {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tubu-xgd-open[data-ready]::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--xmas-berry);
+  box-shadow: 0 0 0 2px var(--xmas-night-deep);
+  animation: xmas-twinkle 1.8s ease-in-out infinite;
+}
+.tubu-xgd-open:focus-visible {
+  outline: 2px solid var(--xmas-gold);
+  outline-offset: 2px;
+}
+
+/* Khay trang trí và thiệp xem trước (trong BottomSheet) */
+.tubu-xgd-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tubu-xgd-card {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-card);
+  background: linear-gradient(180deg, var(--xmas-night-deep), var(--xmas-night) 60%, var(--xmas-pine-deep));
+  color: var(--xmas-snow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.tubu-xgd-card-tree {
+  position: relative;
+  flex: 0 0 117px;
+  height: 100px;
+}
+.tubu-xgd-card-tree .tubu-xgd-tree {
+  width: 117px;
+  height: 100px;
+}
+.tubu-xgd-card-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--type-caption-size);
+  line-height: 16px;
+}
+.tubu-xgd-card-text strong {
+  font-family: var(--font-display);
+  font-size: var(--type-body-md-size);
+  line-height: 20px;
+  color: var(--xmas-gold);
+}
+.tubu-xgd-tray {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.tubu-xgd-slot {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: 1px solid var(--xmas-frost-line);
+  background: var(--xmas-snow);
+  color: var(--xmas-pine-deep);
+  font-family: inherit;
+  font-size: var(--type-caption-size);
+  line-height: 14px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.tubu-xgd-slot[data-state='on'] {
+  background: var(--xmas-pine-deep);
+  border-color: var(--xmas-gold);
+  color: var(--xmas-snow);
+  box-shadow: 0 0 0 2px var(--xmas-gold-glow);
+}
+.tubu-xgd-slot[data-state='ready'] {
+  border-color: var(--xmas-gold);
+  animation: xmas-pulse 1.8s ease-in-out infinite;
+}
+.tubu-xgd-slot[data-state='locked'] {
+  border-style: dashed;
+  background: transparent;
+  color: var(--xmas-pine);
+}
+.tubu-xgd-slot[data-state='locked'] .tubu-xgd-icon { opacity: 0.4; }
+.tubu-xgd-slot:active { transform: scale(0.96); }
+.tubu-xgd-slot:focus-visible {
+  outline: 2px solid var(--xmas-pine-deep);
+  outline-offset: 2px;
+}
+.tubu-xgd-icon {
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+}
+.tubu-xgd-lock {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+}
+.tubu-xgd-msg {
+  margin: 0;
+  min-height: 20px;
+  font-size: var(--type-body-sm-size);
+  line-height: 20px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* ---- Áo Noel của Ghép Mầm Xanh và Băng Chuyền Xanh (data-season trên vỏ bàn chơi) ---- */
+.tubu-ar-merge[data-season='christmas'] .tubu-ar-grid {
+  background: linear-gradient(180deg, var(--xmas-frost), var(--xmas-frost-line));
+}
+.tubu-ar-merge[data-season='christmas'] .tubu-ar-tile-inner::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 0, var(--xmas-snow) 0 3px, transparent 3.6px) 0 0 / 10px 6px repeat-x;
+  filter: drop-shadow(0 1px 0 var(--xmas-frost-line));
+}
+/* Tên bậc Noel dài hơn tên thường tới 2 ký tự ("Chuông vàng", "Người tuyết"): bỏ lề ngang của ô, chữ nhỏ hơn 1px và khít chữ để vừa ô 72px ở khổ 360px, không cắt "…". */
+.tubu-ar-merge[data-season='christmas'] .tubu-ar-tile-inner {
+  padding-inline: 0;
+}
+.tubu-ar-merge[data-season='christmas'] .tubu-ar-tile-name {
+  font-size: calc(var(--type-caption-size) - 1px);
+  letter-spacing: -0.02em;
+}
+.tubu-ar-merge[data-season='christmas'] .tubu-ar-tile[data-tier='8'] .tubu-ar-tile-inner {
+  background: var(--xmas-snow);
+  box-shadow: 0 0 0 3px var(--xmas-gold), var(--elevation-2);
+  color: var(--xmas-pine-deep);
+}
+.tubu-ar-conveyor[data-season='christmas'] .tubu-ar-belt {
+  background:
+    radial-gradient(circle at 18% 20%, var(--xmas-snow) 0 2px, transparent 3px) 0 0 / 56px 64px,
+    linear-gradient(180deg, var(--xmas-frost), var(--xmas-snow));
+}
+.tubu-ar-conveyor[data-season='christmas'] .tubu-ar-belt-track {
+  background: repeating-linear-gradient(180deg, color-mix(in srgb, var(--xmas-berry) 20%, transparent) 0 14px, transparent 14px 28px);
+  border-left-color: var(--xmas-berry);
+  border-right-color: var(--xmas-berry);
+}
+.tubu-ar-conveyor[data-season='christmas'] .tubu-ar-bin::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 12px;
+  right: 12px;
+  height: 8px;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 100%, var(--xmas-snow) 0 4px, transparent 4.6px) 0 0 / 12px 8px repeat-x;
+  filter: drop-shadow(0 1px 0 var(--xmas-frost-line));
+}
+.tubu-ar-conveyor[data-season='christmas'] .tubu-ar-burst::after {
+  content: '\2744';
+  margin-left: 4px;
+  color: var(--xmas-frost-line);
+}
+
 @keyframes xmas-shake {
   0% { transform: rotate(0deg); }
   15% { transform: rotate(-7deg); }
@@ -433,6 +707,15 @@
   15% { opacity: 1; }
   100% { transform: translate3d(calc(var(--drift) * 1px), 120px, 0); opacity: 0; }
 }
+@keyframes xgd-fall {
+  from { transform: translate3d(0, -12px, 0) rotate(0deg); }
+  to { transform: translate3d(calc(var(--drift) * 1px), 420px, 0) rotate(240deg); }
+}
+@keyframes xgd-pop {
+  0% { transform: scale(0.2); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
 @keyframes xmas-sheen {
   0%, 60% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
@@ -440,12 +723,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tubu-xmas-snow,
-  .tubu-xmas-burst { display: none; }
+  .tubu-xmas-burst,
+  .tubu-xgd-snow { display: none; }
   .tubu-xmas-tree.is-shaking,
   .tubu-xmas-gift.is-dropped,
   .tubu-xmas-light,
   .tubu-xmas-garland::after,
   .tubu-xmas-tile[data-state='open'],
-  .tubu-xmas-combo .tubu-btn::after { animation: none; }
+  .tubu-xmas-combo .tubu-btn::after,
+  .tubu-xgd-orn[data-pop],
+  .tubu-xgd-open[data-ready]::after,
+  .tubu-xgd-slot[data-state='ready'] { animation: none; }
+  .tubu-xgd-slot:active { transform: none; }
   .tubu-xmas-gift-lid-group { transition: none; }
 }

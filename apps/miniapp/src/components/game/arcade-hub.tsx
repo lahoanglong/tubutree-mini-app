@@ -9,6 +9,7 @@ import { browserSessionStore, markHubReturn } from '@tubutree/app-core/game-hub/
 import { miniPlayPath } from '@tubutree/app-core/game-mini/format';
 import { MATCHER_MINI_PATH, matcherOn, matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { usePublicConfig } from '../../hooks/use-public-config';
 import { useRealUser } from '../../hooks/use-real-user';
 import { useSmartNavigate } from '../../lib/smart-nav';
 import { arcadeStatusQuery } from '../../services/arcade-api';
@@ -112,11 +113,12 @@ export function ArcadeHub({ mini, wheel = null }: { mini: MiniTodayResponse | nu
   const [open, setOpen] = useState<ArcadeGameId | null>(null);
   const headingId = useId();
   const badge = arcadeWindowBadge(useMinuteClock());
+  const xmas = usePublicConfig().seasonalTheme === 'christmas';
   const cards = buildHubCards({
     real,
     arcade: status.data,
     guestBest: real ? null : { dew_catcher: readLocalBest('dew_catcher'), refill_rush: readLocalBest('refill_rush') },
-    bonusWindow: badge.activeWindow !== null,
+    xmas,
     mini,
     matcher,
     wheelCost: wheel?.cost ?? null,
@@ -167,7 +169,7 @@ export function ArcadeHub({ mini, wheel = null }: { mini: MiniTodayResponse | nu
       )}
       {open && (
         <Suspense fallback={null}>
-          <ArcadeGameOverlay key={open} gameId={open} onClose={() => setOpen(null)} />
+          <ArcadeGameOverlay key={open} gameId={open} xmas={xmas} onClose={() => setOpen(null)} />
         </Suspense>
       )}
     </section>

@@ -1236,6 +1236,14 @@
       "screens": [
         "/"
       ]
+    },
+    {
+      "name": "ChristmasGarden",
+      "miniapp": "apps/miniapp/src/components/season/christmas-garden.tsx",
+      "web": "apps/web/src/components/game/season/christmas-garden.tsx",
+      "screens": [
+        "/game"
+      ]
     }
   ],
   "webOnly": [

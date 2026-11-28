@@ -3,7 +3,8 @@
  * thao tác của khách. Khách tắt bằng nút "Âm thanh trò chơi"; lựa chọn lưu trên máy (`SFX_MUTED_KEY`). Lõi không chạm `window`: app truyền cách tạo
  * AudioContext và kho lưu (PlatformBridge của từng nền tảng), lỗi nào cũng nuốt im vì âm thanh không bao giờ được làm hỏng thao tác chính.
  */
-export type SfxCue = 'water' | 'pop' | 'win' | 'harvest';
+/** `bell` (chuông xe trượt: treo món lên cây thông, hứng hộp quà) và `jingle` (ngũ cung, thắng ván) chỉ phát khi `theme.seasonal` là "christmas". */
+export type SfxCue = 'water' | 'pop' | 'win' | 'harvest' | 'bell' | 'jingle';
 
 interface Note {
   freq: number;
@@ -42,6 +43,18 @@ export const SFX_CUES: Record<SfxCue, readonly Note[]> = {
     { freq: G5, at: 0.3, dur: 0.14, wave: 'triangle', gain: 0.06 },
     { freq: C6, at: 0.4, dur: 0.45, wave: 'sine', gain: 0.05 },
     { freq: G5, at: 0.4, dur: 0.45, wave: 'sine', gain: 0.03 },
+  ],
+  bell: [
+    { freq: 2093, at: 0, dur: 0.07, wave: 'sine', gain: 0.04 },
+    { freq: 2637, at: 0.05, dur: 0.07, wave: 'sine', gain: 0.035 },
+    { freq: 3136, at: 0.1, dur: 0.16, wave: 'sine', gain: 0.03 },
+  ],
+  jingle: [
+    { freq: E5, at: 0, dur: 0.14, wave: 'triangle', gain: 0.06 },
+    { freq: G5, at: 0.1, dur: 0.14, wave: 'triangle', gain: 0.06 },
+    { freq: 880, at: 0.2, dur: 0.14, wave: 'triangle', gain: 0.06 },
+    { freq: C6, at: 0.3, dur: 0.4, wave: 'sine', gain: 0.05 },
+    { freq: 2637, at: 0.3, dur: 0.3, wave: 'sine', gain: 0.025 },
   ],
 };
 

@@ -365,7 +365,35 @@
 
 /* ── Kết quả ── */
 .tubu-mg-score {
+  position: relative;
   font-variant-numeric: tabular-nums;
+}
+/* Chùm lấp lánh một lượt quanh điểm khi xong ván game thao tác (chỉ CSS, không thêm chunk); tắt khi giảm chuyển động. */
+.tubu-mg-sparkle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 144px;
+  height: 144px;
+  margin: -72px 0 0 -72px;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 6%, var(--color-rating) 0 4px, transparent 5px),
+    radial-gradient(circle at 90% 28%, var(--color-text-success) 0 3px, transparent 4px),
+    radial-gradient(circle at 88% 76%, var(--color-story-tone-amber) 0 4px, transparent 5px),
+    radial-gradient(circle at 46% 96%, var(--color-text-success) 0 3px, transparent 4px),
+    radial-gradient(circle at 10% 74%, var(--color-rating) 0 3px, transparent 4px),
+    radial-gradient(circle at 8% 24%, var(--color-story-tone-leaf) 0 4px, transparent 5px);
+  animation: tubu-mg-sparkle 900ms cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+@keyframes tubu-mg-sparkle {
+  0% { transform: scale(0.3) rotate(0deg); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: scale(1) rotate(50deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tubu-mg-sparkle { display: none; }
 }
 .tubu-mg-gains {
   display: flex;

@@ -12,6 +12,7 @@ import { headingLevels, smallTouchTargets, unnamedControls } from '@/test-utils/
 
 const m = vi.hoisted(() => ({
   phase: 'authenticated' as string,
+  season: null as string | null,
   get: vi.fn(),
   post: vi.fn(),
   start: vi.fn(),
@@ -20,6 +21,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
+vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ seasonalTheme: m.season }) }));
 // `arcade-start` (xin mã ván lúc bấm Chơi) tách khỏi `arcade-complete`: ca đếm lần lưu ván chỉ nhìn `m.post`.
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
@@ -61,6 +63,7 @@ async function mountHub() {
 
 beforeEach(() => {
   m.phase = 'authenticated';
+  m.season = null;
   m.opts = null;
   Object.values(m.ctl).forEach((f) => f.mockReset());
   m.get.mockReset().mockResolvedValue(STATUS);
@@ -76,6 +79,19 @@ afterEach(() => {
   vi.useRealTimers();
   document.body.style.overflow = '';
   document.body.innerHTML = '';
+});
+
+describe('ArcadeHub: mùa Noel (theme.seasonal = christmas)', () => {
+  it('thẻ Hứng Giọt Sương mang tên Noel; hết mùa thì về tên thường', async () => {
+    m.season = 'christmas';
+    await mountHub();
+    expect(card('dew_catcher').textContent).toContain(fillCopy('arcade.dew.xmasTitle'));
+    mounted!.unmount();
+    m.season = null;
+    await mountHub();
+    expect(card('dew_catcher').textContent).not.toContain(fillCopy('arcade.dew.xmasTitle'));
+    expect(card('dew_catcher').textContent).toContain('Hứng Sương Tinh Khiết');
+  });
 });
 
 describe('ArcadeHub: đã đăng nhập', () => {

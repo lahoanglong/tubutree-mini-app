@@ -871,6 +871,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'arcade.dew.title': 23,
   'arcade.dew.desc': 50,
   'arcade.dew.how': 91,
+  'arcade.dew.xmasTitle': 30,
+  'arcade.dew.xmasHow': 96,
   'arcade.dew.keys': 56,
   'arcade.dew.aria': 96,
   'arcade.rush.title': 29,

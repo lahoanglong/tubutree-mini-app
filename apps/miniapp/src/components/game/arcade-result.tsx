@@ -37,13 +37,15 @@ export interface ArcadeResultPanelProps {
   onLogin: () => void | Promise<void>;
   onPlayAgain: () => void;
   onClose: () => void;
+  /** Áo Noel: thắng ván phát hợp âm chuông ngũ cung thay tiếng thắng thường. */
+  xmas?: boolean;
 }
 
 /**
  * Bảng kết quả cuối ván. Vùng `aria-live="polite"` gồm điểm, kỷ lục và phần thưởng: phần thưởng về muộn sau máy chủ nên được đọc khi xuất hiện.
  * Lỗi lưu không làm mất bảng điểm: hiện câu báo và nút thử lại cho đúng ván này.
  */
-export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin, onPlayAgain, onClose }: ArcadeResultPanelProps) {
+export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin, onPlayAgain, onClose, xmas = false }: ArcadeResultPanelProps) {
   const navigate = useNavigate();
   const headingId = useId();
   const tip = useMemo(() => endTip(run.gameId, run.stats), [run]);
@@ -54,8 +56,8 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
   // Thắng ván: phá kỷ lục hoặc được thưởng. Bung chùm lấp lánh và kêu một lần khi điều đó vừa thành sự thật (kết quả máy chủ về muộn).
   const win = Boolean(best?.isNewBest || saved?.rewarded);
   useEffect(() => {
-    if (win) sfx.play('win');
-  }, [win]);
+    if (win) sfx.play(xmas ? 'jingle' : 'win');
+  }, [win, xmas]);
 
   return (
     <div className="tubu-arcade-panel" role="region" aria-labelledby={headingId} aria-busy={busy || undefined} data-testid="arcade-result">
