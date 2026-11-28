@@ -428,7 +428,7 @@
   "apps/web/src/app/brand/[slug]/page.tsx": 1,
   "apps/web/src/app/cau-chuyen/brand-story-view.tsx": 1,
   "apps/web/src/app/ctv/ctv-page.tsx": 1,
-  "apps/web/src/app/dang-nhap/login-skeleton.tsx": 4,
+  "apps/web/src/app/dang-nhap/login-skeleton.tsx": 3,
   "apps/web/src/app/dang-nhap/page.tsx": 2,
   "apps/web/src/app/gio-hang/cart-page.tsx": 8,
   "apps/web/src/app/gio-vang/flash-slots-view.tsx": 13,

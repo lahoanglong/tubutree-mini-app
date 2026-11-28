@@ -99,6 +99,10 @@ export interface PublicConfig {
   referralViralEnabled?: boolean;
   /** Cờ `app.mobile_miniapp_redirect_enabled`: web điện thoại tự mở Zalo Mini App 1 lần mỗi 24 giờ. API cũ chưa trả → không tự mở. */
   mobileMiniappRedirectEnabled?: boolean;
+  /** Đăng nhập web bằng mã 6 số qua email (SMTP máy chủ gửi được thư). Chỉ `false` mới ẩn form email; API cũ chưa trả thì form vẫn hiện và API báo rõ khi bấm. */
+  emailLoginConfigured?: boolean;
+  /** Đăng nhập web bằng Google (máy chủ có GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET). API cũ chưa trả → ẩn nút. */
+  googleLoginConfigured?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

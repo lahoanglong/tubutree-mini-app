@@ -22,6 +22,7 @@ import { VouchersService } from '../vouchers/vouchers.service';
 import { ExternalChatService } from '../external-points/external-chat.service';
 import { activeGrantWhere } from '../staff/rbac/active-grant';
 import { guestZaloId, isHashedGuestKey, legacyGuestZaloId } from './device-id';
+import { emailLoginZaloId } from './web-login/email-otp.rules';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -1005,6 +1006,62 @@ export class AuthService {
       });
     }
     return this.issueTokens(user);
+  }
+
+  /**
+   * Đăng nhập web bằng email đã chứng minh sở hữu (mã 6 số gửi qua email, hoặc email Google đã xác minh) → cùng cặp token như Zalo.
+   * Một hộp thư là một tài khoản riêng (zaloId `email_<băm hộp thư>`, xem emailLoginZaloId): lần đầu thì tạo (là user thật, nhận quà
+   * chào mừng như tài khoản Zalo mới), các lần sau vào lại đúng tài khoản đó. Không ghép theo email trong hồ sơ tài khoản Zalo: ô email
+   * hồ sơ (PATCH /users/me) không được xác minh, ai cũng gõ được email của người khác vào đó, nên ghép theo nó là mở đường chiếm tài khoản.
+   */
+  async loginWithVerifiedEmail(
+    email: string,
+    opts: { name?: string; avatarUrl?: string; referralCode?: string; firstTouch?: unknown } = {},
+  ): Promise<LoginResponse> {
+    return this.issueTokens(await this.userForVerifiedEmail(email, opts));
+  }
+
+  private async userForVerifiedEmail(
+    email: string,
+    opts: { name?: string; avatarUrl?: string; referralCode?: string; firstTouch?: unknown },
+  ): Promise<User> {
+    const key = emailLoginZaloId(email);
+    let own = await this.prisma.user.findUnique({ where: { zaloId: key } });
+    // Dòng đã gộp không còn là danh tính (issueTokens chặn): vào tài khoản đích của nó.
+    if (own?.mergedIntoId) {
+      const rootId = await resolveMergedUserId(this.prisma, own.id);
+      own = rootId ? ((await this.prisma.user.findUnique({ where: { id: rootId } })) ?? own) : own;
+    }
+    if (own) return this.fillEmailProfile(own, opts);
+
+    let user: User;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          zaloId: key,
+          email,
+          fullName: opts.name ?? null,
+          avatarUrl: opts.avatarUrl ?? null,
+          referralCode: await this.generateReferralCode(),
+          referredById: await this.resolveReferrerId(opts.referralCode),
+          ...firstTouchColumns(opts.firstTouch),
+        },
+      });
+    } catch (err) {
+      // Hai lần xác minh đồng thời cùng hộp thư → P2002 trên zaloId; dùng tài khoản lần kia vừa tạo.
+      user = await this.recoverFromZaloIdConflict(err, key);
+    }
+    await this.grantWelcomeVoucher(user.id);
+    return user;
+  }
+
+  /** Google cho tên/ảnh: chỉ điền chỗ còn trống của tài khoản email, không ghi đè thứ khách đã tự đặt. */
+  private async fillEmailProfile(user: User, opts: { name?: string; avatarUrl?: string }): Promise<User> {
+    const data: { fullName?: string; avatarUrl?: string } = {};
+    if (opts.name && !user.fullName) data.fullName = opts.name;
+    if (opts.avatarUrl && !user.avatarUrl) data.avatarUrl = opts.avatarUrl;
+    if (Object.keys(data).length === 0) return user;
+    return this.prisma.user.update({ where: { id: user.id }, data });
   }
 
   /**

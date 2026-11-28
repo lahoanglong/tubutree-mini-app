@@ -28,6 +28,11 @@ export function apiMediaUrl(path: string): string {
   return `${BASE.replace(/\/+$/, '')}${path}`;
 }
 
+/** URL đầy đủ của một đường API để trình duyệt mở thẳng (vd /auth/google/start chuyển hướng sang Google). */
+export function apiPageUrl(path: string): string {
+  return `${BASE.replace(/\/+$/, '')}${path}`;
+}
+
 const SESSION_MARKER = SESSION_COOKIE;
 const SESSION_COOKIE_MAX_AGE_S = 30 * 24 * 3600;
 

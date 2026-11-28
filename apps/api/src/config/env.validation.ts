@@ -43,6 +43,11 @@ export const envSchema = z.object({
   ZALO_OA_REFRESH_TOKEN: z.string().default(''), // bootstrap; sau đó token mới lưu DB (xoay vòng)
   ZALO_OA_ID: z.string().default(''),
   ZALO_OAUTH_BASE: z.string().default('https://oauth.zaloapp.com'),
+
+  // Đăng nhập Google trên web (OAuth 2.0 + PKCE, modules/auth/web-login). Thiếu một trong hai = tắt: /auth/google/* trả 404, web ẩn nút.
+  // Redirect URI khai trong Google Cloud Console: <origin web>/dang-nhap/google (mỗi origin trong CORS_ORIGINS dùng đăng nhập).
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
   // CSKH quick-reply/auto-reply: token tĩnh verify webhook OA khi chưa bật chữ ký (thiếu ZALO_OA_SECRET_KEY hoặc ZALO_APP_ID);
   // bật chữ ký thì token bị bỏ qua (xem ZALO_OA_SECRET_KEY bên dưới).
   // Không bắt buộc ở production qua superRefine (tính năng optional, chưa đăng ký webhook thì

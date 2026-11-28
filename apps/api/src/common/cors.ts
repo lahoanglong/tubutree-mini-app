@@ -20,6 +20,15 @@ function isTenantOrigin(origin: string): boolean {
 }
 
 export const FALLBACK_WEB_ORIGINS = ['https://tubutree.com', 'https://app.tubutree.com'];
+
+/** CORS_ORIGINS (CSV) → danh sách origin; rỗng thì domain chính (FALLBACK_WEB_ORIGINS). Cùng một luật cho bootstrap và nơi cần biết origin web. */
+export function staticWebOrigins(raw: string | undefined): string[] {
+  const list = (raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return list.length > 0 ? list : FALLBACK_WEB_ORIGINS;
+}
 export const COOKIE_AUTH_ORIGIN_MESSAGE = 'Yêu cầu không đến từ trang web Tubu Tree.';
 
 export interface CorsPolicy {
@@ -47,7 +56,7 @@ export function buildCorsPolicy(isProd: boolean, staticAllow: readonly string[])
 
 // Mọi endpoint đặt hoặc dùng cookie phiên ở chế độ web. Tất cả là fetch POST từ trang web (luôn có Origin): zalo-oauth nhận `code`
 // ở trang callback của web rồi mới POST, không phải redirect GET từ Zalo tới API.
-const COOKIE_AUTH_ROUTE = /^\/api\/auth\/(refresh|logout|guest|zalo-oauth|zalo-mini-app|ensure-phone)\/?$/i;
+const COOKIE_AUTH_ROUTE = /^\/api\/auth\/(refresh|logout|guest|zalo-oauth|zalo-mini-app|ensure-phone|email-otp\/verify|google\/callback)\/?$/i;
 
 /**
  * Endpoint auth ở chế độ cookie `HttpOnly` (`x-client: web`) chỉ nhận khi Origin là trang web shop (CORS_ORIGINS hoặc gian hàng

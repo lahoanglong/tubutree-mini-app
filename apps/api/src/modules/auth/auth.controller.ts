@@ -12,8 +12,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import {
   clearRefreshCookies,
+  deliverRefreshToken,
   readRefreshCookie,
-  setRefreshCookies,
   wantsCookieAuth,
 } from './refresh-cookie';
 import { ZaloMiniAppLoginDto } from './dto/zalo-login.dto';
@@ -60,10 +60,7 @@ export class AuthController {
    * nên vẫn nhận token trong thân như cũ; đổi một đầu không làm chết đầu kia.
    */
   private withRefreshDelivery(req: Request, res: Response, result: LoginResponse): LoginResponse {
-    if (!wantsCookieAuth(req)) return result;
-    const ttlDays = this.config.get('JWT_REFRESH_TTL_DAYS', { infer: true });
-    setRefreshCookies(res, result.refreshToken, ttlDays);
-    return { ...result, refreshToken: '' };
+    return deliverRefreshToken(req, res, result, this.config.get('JWT_REFRESH_TTL_DAYS', { infer: true }));
   }
 
   @Public()

@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { HttpException, Injectable, Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'node:crypto';
 import axios, { AxiosError } from 'axios';
@@ -6,6 +6,18 @@ import type { Env } from '../../config/env.validation';
 import { normalizeZaloPhone } from '../../common/phone';
 
 const ZALO_BUSY_MESSAGE = 'Zalo đang bận, bạn thử lại sau ít phút nhé.';
+
+/** Zalo trả -14029 "The application is not approved" cho người không phải tester khi ứng dụng Zalo chưa được duyệt đăng nhập web. */
+export const ZALO_APP_NOT_APPROVED_CODE = 'ZALO_APP_NOT_APPROVED';
+export const ZALO_APP_NOT_APPROVED_MESSAGE = 'Đăng nhập Zalo đang chờ duyệt — bạn đăng nhập nhanh bằng Email bên dưới nhé.';
+
+export function isZaloNotApproved(code: unknown, description: unknown): boolean {
+  return Number(code) === -14029 || (typeof description === 'string' && /application is not approved/i.test(description));
+}
+
+function zaloNotApproved(): ServiceUnavailableException {
+  return new ServiceUnavailableException({ statusCode: 503, error: 'Service Unavailable', code: ZALO_APP_NOT_APPROVED_CODE, message: ZALO_APP_NOT_APPROVED_MESSAGE });
+}
 
 /** Zalo không trả lời được (mất kết nối, quá hạn chờ, 5xx, quá tải 429): lỗi tạm của Zalo, không phải lỗi của khách. */
 function isZaloUnavailable(err: AxiosError): boolean {
@@ -59,6 +71,10 @@ export class ZaloService {
         timeout: 8000,
       });
       const data = res.data as { access_token?: string; error?: number; error_description?: string };
+      if (!data.access_token && isZaloNotApproved(data.error, data.error_description)) {
+        this.logger.warn('Zalo exchangeOAuthCode: -14029 ứng dụng chưa được duyệt đăng nhập web');
+        throw zaloNotApproved();
+      }
       if (!data.access_token) {
         // Lời của Zalo ("invalid code") chỉ để chẩn đoán; khách nhận câu tiếng Việt và biết phải làm gì tiếp.
         this.logger.warn(`Zalo exchangeOAuthCode bị từ chối: ${data.error ?? '?'} ${data.error_description ?? 'unknown'}`);
@@ -66,8 +82,9 @@ export class ZaloService {
       }
       return data.access_token;
     } catch (err) {
-      if (err instanceof UnauthorizedException) throw err;
-      const ax = err as AxiosError;
+      if (err instanceof HttpException) throw err;
+      const ax = err as AxiosError<{ error?: number; error_description?: string }>;
+      if (isZaloNotApproved(ax.response?.data?.error, ax.response?.data?.error_description)) throw zaloNotApproved();
       this.logger.error(`Zalo exchangeOAuthCode error: ${ax.message}`);
       if (isZaloUnavailable(ax)) throw new ServiceUnavailableException(ZALO_BUSY_MESSAGE);
       throw new UnauthorizedException('Không đổi được mã đăng nhập Zalo. Bạn đăng nhập lại nhé.');

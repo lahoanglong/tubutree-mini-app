@@ -224,3 +224,41 @@ describe('buildPublicConfig — lịch kho của ngày nhận dự kiến (tubu-
     expect(cfg.pdpEtaEnabled).toBe(false);
   });
 });
+
+describe('buildPublicConfig — đăng nhập web không cần Zalo (Email, Google)', () => {
+  const KEYS = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const;
+  let saved: Record<string, string | undefined>;
+  beforeEach(() => {
+    saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    for (const k of KEYS) delete process.env[k];
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('chưa có khoá Google/SMTP → cả hai false (web ẩn nút Google, ẩn form Email)', async () => {
+    const cfg = await build({});
+    expect(cfg.googleLoginConfigured).toBe(false);
+    expect(cfg.emailLoginConfigured).toBe(false);
+  });
+
+  it('chỉ một khoá Google → vẫn false; đủ hai khoá → true; không lộ giá trị khoá', async () => {
+    process.env.GOOGLE_CLIENT_ID = 'cid.apps.googleusercontent.com';
+    expect((await build({})).googleLoginConfigured).toBe(false);
+    process.env.GOOGLE_CLIENT_SECRET = 'gsecret-should-not-leak';
+    const cfg = await build({});
+    expect(cfg.googleLoginConfigured).toBe(true);
+    expect(JSON.stringify(cfg)).not.toContain('gsecret-should-not-leak');
+    expect(JSON.stringify(cfg)).not.toContain('cid.apps.googleusercontent.com');
+  });
+
+  it('SMTP Gmail đủ (như PROD) → emailLoginConfigured true, không lộ mật khẩu', async () => {
+    Object.assign(process.env, { SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'shop@gmail.com', SMTP_PASS: 'app-pass-should-not-leak' });
+    const cfg = await build({});
+    expect(cfg.emailLoginConfigured).toBe(true);
+    expect(JSON.stringify(cfg)).not.toContain('app-pass-should-not-leak');
+  });
+});

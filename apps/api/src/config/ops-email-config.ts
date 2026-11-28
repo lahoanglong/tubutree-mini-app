@@ -66,27 +66,17 @@ const SMTP_SECURE_HELP =
   `${SMTP_SECURE_TRUE.join('/')} = TLS ngay từ đầu (thường cổng 465), ${SMTP_SECURE_FALSE.join('/')} = STARTTLS (thường cổng 587); để trống thì theo cổng.`;
 const HOST_RE = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$|^\[[0-9A-Fa-f:.]+\]$/;
 
-/**
- * Đọc cấu hình email báo động vận hành từ env. Không đặt biến nào = kênh tắt (ứng dụng chạy bình thường). Đặt dở
- * dang hoặc sai = `misconfigured` kèm từng lỗi theo khoá, để env.validation chặn lúc boot/deploy và màn Sức khoẻ hệ
- * thống nêu rõ — không để người vận hành tưởng đã có kênh email mà thực ra không gửi được.
- */
-export function resolveOpsEmailConfig(env: Partial<Record<OpsEmailKey, unknown>>): OpsEmailConfig {
-  const v = (k: OpsEmailKey) => (typeof env[k] === 'string' ? (env[k] as string).trim() : '');
-  if (OPS_EMAIL_KEYS.every((k) => !v(k))) return { state: 'disabled' };
+type Ready = Extract<OpsEmailConfig, { state: 'ready' }>;
+type SmtpEnvKey = Exclude<OpsEmailKey, 'OPS_ALERT_EMAIL_TO'>;
+const SMTP_ENV_KEYS: readonly SmtpEnvKey[] = OPS_EMAIL_KEYS.filter((k): k is SmtpEnvKey => k !== 'OPS_ALERT_EMAIL_TO');
 
-  const issues: OpsEmailIssue[] = [];
-  const bad = (key: OpsEmailKey, message: string) => issues.push({ key, message });
-
-  const to = parseEmailRecipients(v('OPS_ALERT_EMAIL_TO'));
-  if (!v('OPS_ALERT_EMAIL_TO')) {
-    bad('OPS_ALERT_EMAIL_TO', 'OPS_ALERT_EMAIL_TO còn trống: đã đặt cấu hình email nhưng chưa có địa chỉ nhận báo động (cách nhau bằng dấu phẩy hoặc chấm phẩy).');
-  } else if (to.invalid.length > 0) {
-    bad('OPS_ALERT_EMAIL_TO', `OPS_ALERT_EMAIL_TO có địa chỉ không hợp lệ: ${to.invalid.slice(0, 3).join(', ')}${to.invalid.length > 3 ? '…' : ''}.`);
-  } else if (to.valid.length === 0) {
-    bad('OPS_ALERT_EMAIL_TO', 'OPS_ALERT_EMAIL_TO không có địa chỉ nào (chỉ có dấu phân cách).');
-  }
-
+/** Máy chủ và người gửi SMTP, dùng chung cho email báo động và thư mã đăng nhập; ghi lỗi theo khoá qua `bad`. */
+function readSmtpSender(v: (k: OpsEmailKey) => string, report: (key: OpsEmailKey, message: string) => void): Pick<Ready, 'from' | 'smtp'> | null {
+  let failed = false;
+  const bad = (key: OpsEmailKey, message: string) => {
+    failed = true;
+    report(key, message);
+  };
   const host = v('SMTP_HOST');
   if (!host) bad('SMTP_HOST', 'SMTP_HOST còn trống: đã đặt cấu hình email nhưng chưa có máy chủ SMTP.');
   else if (!HOST_RE.test(host)) bad('SMTP_HOST', 'SMTP_HOST chỉ gồm tên máy chủ hoặc IP (vd smtp.gmail.com), không kèm smtp://, cổng hay đường dẫn.');
@@ -117,12 +107,10 @@ export function resolveOpsEmailConfig(env: Partial<Record<OpsEmailKey, unknown>>
     bad('SMTP_FROM', 'SMTP_FROM phải là địa chỉ email, dạng alerts@tubutree.com hoặc Tubu Tree <alerts@tubutree.com>.');
   }
 
-  if (issues.length > 0 || !from) return { state: 'misconfigured', issues };
+  if (failed || !from) return null;
 
   const resolvedSecure = secure ?? port === 465;
   return {
-    state: 'ready',
-    recipients: to.valid,
     from,
     smtp: {
       host,
@@ -132,4 +120,47 @@ export function resolveOpsEmailConfig(env: Partial<Record<OpsEmailKey, unknown>>
       ...(user ? { auth: { user, pass } } : {}),
     },
   };
+}
+
+const envReader = (env: Partial<Record<OpsEmailKey, unknown>>) => (k: OpsEmailKey) => (typeof env[k] === 'string' ? (env[k] as string).trim() : '');
+
+/**
+ * Đọc cấu hình email báo động vận hành từ env. Không đặt biến nào = kênh tắt (ứng dụng chạy bình thường). Đặt dở
+ * dang hoặc sai = `misconfigured` kèm từng lỗi theo khoá, để env.validation chặn lúc boot/deploy và màn Sức khoẻ hệ
+ * thống nêu rõ — không để người vận hành tưởng đã có kênh email mà thực ra không gửi được.
+ */
+export function resolveOpsEmailConfig(env: Partial<Record<OpsEmailKey, unknown>>): OpsEmailConfig {
+  const v = envReader(env);
+  if (OPS_EMAIL_KEYS.every((k) => !v(k))) return { state: 'disabled' };
+
+  const issues: OpsEmailIssue[] = [];
+  const bad = (key: OpsEmailKey, message: string) => issues.push({ key, message });
+
+  const to = parseEmailRecipients(v('OPS_ALERT_EMAIL_TO'));
+  if (!v('OPS_ALERT_EMAIL_TO')) {
+    bad('OPS_ALERT_EMAIL_TO', 'OPS_ALERT_EMAIL_TO còn trống: đã đặt cấu hình email nhưng chưa có địa chỉ nhận báo động (cách nhau bằng dấu phẩy hoặc chấm phẩy).');
+  } else if (to.invalid.length > 0) {
+    bad('OPS_ALERT_EMAIL_TO', `OPS_ALERT_EMAIL_TO có địa chỉ không hợp lệ: ${to.invalid.slice(0, 3).join(', ')}${to.invalid.length > 3 ? '…' : ''}.`);
+  } else if (to.valid.length === 0) {
+    bad('OPS_ALERT_EMAIL_TO', 'OPS_ALERT_EMAIL_TO không có địa chỉ nào (chỉ có dấu phân cách).');
+  }
+
+  const sender = readSmtpSender(v, bad);
+  if (issues.length > 0 || !sender) return { state: 'misconfigured', issues };
+  return { state: 'ready', recipients: to.valid, ...sender };
+}
+
+export type SmtpSenderConfig = { state: 'disabled' } | { state: 'misconfigured'; issues: OpsEmailIssue[] } | ({ state: 'ready' } & Pick<Ready, 'from' | 'smtp'>);
+
+/**
+ * Chỉ máy chủ và người gửi SMTP, không cần OPS_ALERT_EMAIL_TO: thư gửi cho khách (mã đăng nhập) có người nhận riêng từng lần.
+ * Không đặt biến SMTP nào = tắt.
+ */
+export function resolveSmtpSenderConfig(env: Partial<Record<OpsEmailKey, unknown>>): SmtpSenderConfig {
+  const v = envReader(env);
+  if (SMTP_ENV_KEYS.every((k) => !v(k))) return { state: 'disabled' };
+  const issues: OpsEmailIssue[] = [];
+  const sender = readSmtpSender(v, (key, message) => issues.push({ key, message }));
+  if (issues.length > 0 || !sender) return { state: 'misconfigured', issues };
+  return { state: 'ready', ...sender };
 }
