@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown } from 'lucide-react';
@@ -6,6 +6,7 @@ import { refillLandingBottleCaption, refillLandingCopy, refillLandingFaq, refill
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PdpRefillOffer } from '../components/product/pdp-refill-offer';
 import { RefillNextDelivery } from '../components/refill/refill-next-delivery';
+import { SilentBoundary } from '../components/route-shell';
 import { useRefillOfferAdd } from '../components/refill/use-refill-offer-add';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
@@ -18,7 +19,9 @@ import { getLoadErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { haptic } from '../utils/haptic';
 
-const PAGE_STYLE: CSSProperties = { background: 'var(--color-bg-canvas)', paddingBottom: 'var(--space-stack-xl)' };
+const RepurchaseDueCard = lazy(() => import('../components/refill/repurchase-due-card'));
+
+const PAGE_STYLE: CSSProperties ={ background: 'var(--color-bg-canvas)', paddingBottom: 'var(--space-stack-xl)' };
 const BODY: CSSProperties = { padding: '0 var(--space-inset-page)' };
 const STACK: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--space-inline-md)' };
 const LIST: CSSProperties = { ...STACK, listStyle: 'none', margin: 0, padding: 0, fontVariantNumeric: 'tabular-nums' };
@@ -95,6 +98,11 @@ export default function RefillDealsPage() {
       <PageHeader title={refillLandingCopy('title')} subtitle={rows.length > 0 ? refillLandingIntro(rows) : undefined} />
       <div style={BODY}>
         <RefillNextDelivery landing={q.data} />
+        <SilentBoundary>
+          <Suspense fallback={null}>
+            <RepurchaseDueCard surface="refill_landing" />
+          </Suspense>
+        </SilentBoundary>
         <div style={{ marginTop: 'var(--space-stack-md)' }}>
           {q.isLoading ? (
             <div style={STACK} aria-hidden="true">

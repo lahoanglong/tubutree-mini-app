@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { addToCart } from '@tubutree/app-core/api/cart';
 import { REPURCHASE_DUE_KEY, repurchaseDueQuery } from '@tubutree/app-core/api/repurchase-due';
+import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import {
   dismissRepurchaseDue,
   isRepurchaseDueDismissed,
@@ -41,21 +42,25 @@ const BODY_CLAMP = clampLines(3);
 const NOTICE_MS = 4000;
 
 export interface RepurchaseDueCardProps {
-  /** Nơi đặt thẻ (`repurchase_due_*.surface`): Tài khoản hay giỏ trống. */
+  /** Nơi đặt thẻ (`repurchase_due_*.surface`): Tài khoản, giỏ trống hay trang Tiết kiệm với Refill. */
   surface: RepurchaseDueSurface;
 }
 
 /**
- * Thẻ "Mua lại" hàng tiêu hao 25–40 ngày sau khi nhận (w36-01), tải lười ở Tài khoản và giỏ trống. Một nút thêm gói Refill ghép cặp (không có thì đúng món
- * đã mua) vào giỏ, số lượng 1, nguồn `repurchase_due`; xong thì thẻ biến mất và thông báo nổi "Đã thêm" kèm "Xem giỏ" (cùng kiểu thông báo giỏ nhanh).
- * × ẩn đúng món đó 14 ngày ở trình duyệt này. Chỉ khách đã đăng nhập; cờ tắt, không có món hay lỗi: không vẽ gì, kể cả vùng báo.
+ * Thẻ "Mua lại" hàng tiêu hao theo nhịp 21–30 ngày (nước rửa chén, nước rửa rau 25–40) sau khi nhận (w36-01, w55-01), tải lười ở Tài khoản, giỏ trống và trang Tiết kiệm
+ * với Refill. Một nút thêm gói Refill ghép cặp (không có thì đúng món đã mua) vào giỏ, số lượng 1, nguồn `repurchase_due`; xong thì thẻ biến mất và thông báo nổi "Đã thêm"
+ * kèm "Xem giỏ" (trừ giỏ trống, nơi giỏ tự hiện món vừa thêm). Giỏ trống mà khách chỉ có đơn sàn đã quét (không có dòng sản phẩm) thì ghép gói Refill đầu trang Tiết kiệm
+ * theo mốc `scanDays`. × ẩn đúng món đó 14 ngày ở trình duyệt này. Chỉ khách đã đăng nhập; cờ tắt, không có món hay lỗi: không vẽ gì, kể cả vùng báo.
  * Cùng vai và cùng số đo với `RepurchaseDueCard` của Mini App.
  */
 export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
   const authed = useAuthPhase() === 'authenticated';
   const qc = useQueryClient();
   const q = useQuery({ ...repurchaseDueQuery(coreHttp), enabled: authed });
-  const view = authed ? repurchaseDueView(q.data?.item, formatVnd) : null;
+  // Trang Refill là công khai và đã có ở trang Tiết kiệm: chỉ tải khi giỏ trống có mốc đơn sàn mà không có món theo đơn trực tiếp.
+  const scanDays = q.data?.item ? null : (q.data?.scanDays ?? null);
+  const landingQ = useQuery({ ...refillLandingQuery(coreHttp), enabled: authed && surface === 'cart_empty' && scanDays !== null });
+  const view = authed ? repurchaseDueView(q.data?.item, formatVnd, { surface, scanDays, landing: landingQ.data }) : null;
   const [hiddenKey, setHiddenKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const noticeHold = useAutoDismiss(!!notice, NOTICE_MS, () => setNotice(null), notice);
@@ -107,7 +112,12 @@ export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
   return (
     <>
       {view && shown && (
-        <section aria-label={repurchaseDueCopy('region')} data-testid="repurchase-due-card" className="px-4 pt-3 md:px-0 lg:col-span-full">
+        <section
+          aria-label={repurchaseDueCopy('region')}
+          data-testid="repurchase-due-card"
+          className={surface === 'refill_landing' ? 'md:max-w-md' : 'px-4 pt-3 md:px-0 lg:col-span-full'}
+          style={surface === 'refill_landing' ? { marginTop: 'var(--space-stack-md)' } : undefined}
+        >
           <Card padding={12}>
             <div className="flex items-start gap-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -141,7 +151,7 @@ export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
             className="fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-card bg-[color:var(--color-bg-inverse)] px-4 py-2 text-sm text-[color:var(--color-text-inverse)] shadow-raised"
           >
             <span>{notice.text}</span>
-            {notice.ok && surface === 'account' && (
+            {notice.ok && surface !== 'cart_empty' && (
               <Link href="/gio-hang" className="inline-flex min-h-11 flex-none items-center font-semibold underline underline-offset-2">
                 {repurchaseDueCopy('viewCart')}
               </Link>

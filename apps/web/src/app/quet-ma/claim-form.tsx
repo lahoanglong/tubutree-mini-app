@@ -15,7 +15,7 @@ import {
   isPastMilestone,
   phoneConfirmErrorText,
 } from '@tubutree/app-core/marketplace-claim-copy';
-import { scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
+import { MARKETPLACE_SCAN_COPY, scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { parseVnContactPhone } from '@tubutree/app-core/phone-input';
 import { usableShopPoints } from '@tubutree/app-core/points-lots';
@@ -26,6 +26,7 @@ import { Icon } from '@/components/mini/icon';
 import { Text } from '@/components/mini/text';
 import { ClaimScanner } from '@/components/points/claim-scan-button';
 import { PhoneConfirmSheet } from '@/components/points/phone-confirm-sheet';
+import { PostScanOffer } from '@/components/points/post-scan-offer-lazy';
 import { Field } from '@/components/ui/field';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -99,7 +100,7 @@ function ResultCard({ result }: { result: SubmitExternalClaimResponse }) {
 
 /**
  * Nút chính sau khi gửi mã thành công: về Trang chủ mua sắm. Điểm của đơn vừa quét còn chờ nên nhãn chỉ nhắc số điểm khách đang có và dùng được
- * ngay (`usableShopPoints`, cùng luật màn thanh toán), chưa có thì "Mua sắm ngay".
+ * ngay (`usableShopPoints`, cùng luật màn thanh toán), chưa có thì "Dùng điểm mua lần sau" (w55-01).
  */
 function ShopNowButton() {
   const router = useRouter();
@@ -108,6 +109,17 @@ function ShopNowButton() {
     <div data-testid="scan-shop-now" style={{ marginTop: 'var(--space-inline-md)' }}>
       <Button fullWidth size="lg" onPress={() => router.push('/')}>
         {scanSuccessCtaLabel(usableShopPoints(loyaltyQ.data), 'web')}
+      </Button>
+    </div>
+  );
+}
+
+/** Liên kết chữ dưới nút chính sau khi quét xong (w55-01): xoá kết quả và mở lại khung quét cho đơn kế tiếp. */
+function ScanAnotherLink({ onPress }: { onPress: () => void }) {
+  return (
+    <div data-testid="scan-another" style={{ marginTop: 'var(--space-inline-sm)' }}>
+      <Button variant="ghost" fullWidth onPress={onPress}>
+        {MARKETPLACE_SCAN_COPY.scanAnother}
       </Button>
     </div>
   );
@@ -321,7 +333,9 @@ export function ClaimForm({
       </Card>
       <div ref={resultRef} />
       {result && <ResultCard result={result} />}
+      {shopNow && result && <PostScanOffer points={result.status === 'CLAIMED' ? result.points : null} />}
       {shopNow && <ShopNowButton />}
+      {shopNow && <ScanAnotherLink onPress={scanAnother} />}
       <PhoneConfirmSheet
         open={confirm !== null}
         channel={confirm?.channel ?? null}

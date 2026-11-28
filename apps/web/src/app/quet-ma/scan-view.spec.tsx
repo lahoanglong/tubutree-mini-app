@@ -32,6 +32,8 @@ vi.mock('@/lib/core-http', () => ({
     patch: (path: string, body?: unknown) => mocks.patch(path, body),
   },
 }));
+// Thẻ gợi ý sau khi quét nạp qua next/dynamic (không chạy đồng bộ trong jsdom): dùng đúng thành phần thật nhưng nạp thẳng.
+vi.mock('@/components/points/post-scan-offer-lazy', async () => ({ PostScanOffer: (await import('@/components/points/post-scan-offer')).default }));
 // Bộ đọc JS (ZXing) chỉ nạp khi máy không có BarcodeDetector; jsdom không có canvas nên giả lập kết quả đọc.
 vi.mock('@/lib/code-scan-zxing', () => ({ createDecoder: () => ({ decodeSource: (...args: unknown[]) => mocks.zxDecode(...(args as [])) }) }));
 
@@ -199,7 +201,7 @@ describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên we
     expect(c.textContent).toContain(COPY.listEmpty);
   });
 
-  it('gõ mã đúng dạng thì Tích điểm thành nút chính; gửi xong: thẻ kết quả, làm mới lịch sử, nút "Mua sắm ngay" khi chưa có điểm', async () => {
+  it('gõ mã đúng dạng thì Tích điểm thành nút chính; gửi xong: thẻ kết quả, làm mới lịch sử, nút "Dùng điểm mua lần sau" khi chưa có điểm', async () => {
     mocks.post.mockResolvedValue(claimed());
     const c = await mount();
     openManual(c);
@@ -215,7 +217,7 @@ describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên we
     expect(result.textContent).toContain('1.250 Điểm Xanh đang chờ cộng');
     expect(listCalls()).toBeGreaterThan(before);
     const cta = c.querySelector('[data-testid="scan-shop-now"]')!;
-    expect(cta.textContent).toBe('Mua sắm ngay');
+    expect(cta.textContent).toBe('Dùng điểm mua lần sau');
     expect(input(c)!.value).toBe('');
     click(cta.querySelector('button'));
     expect(mocks.push).toHaveBeenCalledWith('/');
@@ -231,7 +233,30 @@ describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên we
     expect(c.querySelector('[data-testid="scan-shop-now"]')?.textContent).toBe('Dùng 1.200 Điểm Xanh đang có');
   });
 
-  it('chưa thấy đơn (SEARCHING): báo sẽ tìm lại, không có nút mua sắm', async () => {
+  it('w55-01: thẻ gợi ý trên nút chính (dòng giá trị điểm, 1 Điểm Xanh = 1đ); "Quét đơn khác" là nút phụ ngoài khung nút chính, xoá kết quả và mở lại khung quét', async () => {
+    mocks.post.mockResolvedValue(claimed());
+    const c = await mount();
+    openManual(c);
+    typeInto(input(c), 'SPXVN123456789');
+    await submitForm(c);
+    await flush(6);
+    expect(c.querySelector('[data-testid="post-scan-value"]')?.textContent).toBe('≈ 1.250đ giảm cho lần mua sau');
+    const primary = c.querySelector('[data-testid="scan-shop-now"]')!;
+    const card = c.querySelector('[data-testid="post-scan-offer"]')!;
+    expect(card.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(primary.querySelectorAll('button')).toHaveLength(1);
+    const another = c.querySelector('[data-testid="scan-another"]')!;
+    expect(primary.contains(another)).toBe(false);
+    expect(another.textContent).toBe(MARKETPLACE_SCAN_COPY.scanAnother);
+    click(another.querySelector('button'));
+    await flush(2);
+    expect(c.querySelector('[data-testid="claim-result"]')).toBeNull();
+    expect(c.querySelector('[data-testid="scan-shop-now"]')).toBeNull();
+    expect(c.querySelector('[data-testid="scan-another"]')).toBeNull();
+    expect(c.querySelector('[data-testid="post-scan-offer"]')).toBeNull();
+  });
+
+  it('chưa thấy đơn (SEARCHING): báo sẽ tìm lại, không có nút mua sắm, không có thẻ gợi ý', async () => {
     mocks.post.mockResolvedValue(claimed({ status: 'SEARCHING', claimId: null, channel: null, points: null, expectedCreditAt: null }));
     const c = await mount();
     openManual(c);
@@ -239,6 +264,8 @@ describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên we
     await submitForm(c);
     expect(c.querySelector('[data-testid="claim-result"]')?.textContent).toContain(COPY.resultSearching);
     expect(c.querySelector('[data-testid="scan-shop-now"]')).toBeNull();
+    expect(c.querySelector('[data-testid="post-scan-offer"]')).toBeNull();
+    expect(c.querySelector('[data-testid="scan-another"]')).toBeNull();
   });
 
   it('đơn cần kiểm tra (REVIEW): câu đang kiểm tra, vẫn mời mua sắm', async () => {
@@ -396,6 +423,7 @@ describe('/quet-ma — đã đăng nhập: quét và tích điểm ngay trên we
     await submitForm(c);
     expect(c.querySelector('[data-testid="claim-result"]')?.textContent).toContain(COPY.resultReview);
     expect(c.querySelector('[data-testid="claim-error"]')).toBeNull();
+    expect(c.querySelector('[data-testid="post-scan-value"]')).toBeNull();
   });
 
   it('lịch sử: nhãn trạng thái, điểm, đang tìm đơn và phân trang', async () => {

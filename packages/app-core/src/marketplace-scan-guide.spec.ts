@@ -39,10 +39,10 @@ describe('scanSuccessCtaLabel', () => {
     expect(scanSuccessCtaLabel(0).length).toBeLessThanOrEqual(32);
   });
 
-  it('chưa có điểm hoặc chưa biết số dư: mời mua sắm, không hứa điểm; web không nói "trên Mini App"', () => {
+  it('chưa có điểm hoặc chưa biết số dư: "Dùng điểm mua lần sau" (w55-01), cùng chữ ở Mini và web, không hứa số điểm', () => {
     for (const n of [0, -5, null, undefined, Number.NaN]) {
-      expect(scanSuccessCtaLabel(n)).toBe('Mua sắm ngay trên Mini App');
-      expect(scanSuccessCtaLabel(n, 'web')).toBe('Mua sắm ngay');
+      expect(scanSuccessCtaLabel(n)).toBe('Dùng điểm mua lần sau');
+      expect(scanSuccessCtaLabel(n, 'web')).toBe('Dùng điểm mua lần sau');
     }
   });
 });

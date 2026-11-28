@@ -27,8 +27,8 @@ import { isVitalRoute } from './vitals/vitals-rules';
 const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
 // Nơi khách bấm gửi: không có trường là Sổ tay Xanh; `order` là thẻ nhựa đã giảm ở Chi tiết đơn; `account` là thẻ chia sẻ ở khối Mời bạn của Tài khoản.
 const GREEN_CARD_SHARE_SURFACES = ['order', 'account'] as const;
-// Nơi hiện thẻ "Mua lại" hàng tiêu hao (w36-01): khối đầu trang Tài khoản, hoặc giỏ trống. Không đặt ở shared-types, cùng lý do trên.
-const REPURCHASE_DUE_SURFACES = ['account', 'cart_empty'] as const;
+// Nơi hiện thẻ "Mua lại" hàng tiêu hao (w36-01): khối đầu trang Tài khoản, giỏ trống, hoặc đầu trang Tiết kiệm với Refill (w55-01). Không đặt ở shared-types, cùng lý do trên.
+const REPURCHASE_DUE_SURFACES = ['account', 'cart_empty', 'refill_landing'] as const;
 
 type Rule = (v: unknown) => boolean;
 

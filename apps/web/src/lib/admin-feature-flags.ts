@@ -259,8 +259,8 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     description:
       'Mỗi sáng 9:30: khách nhận một chai có gói Refill ghép cặp từ 21 tới 28 ngày trước được một tin trong app mở thẳng trang gói Refill. Mỗi đơn nhắc tối đa một lần, mỗi khách tối đa một tin mỗi 7 ngày. Bỏ qua khách đã đặt lại gói Refill đó, đã trả chai, đã tắt tin khuyến mãi hay MSS báo từ chối tin.',
     fallback: false,
-    onWarning: 'Khách bắt đầu nhận tin từ lượt 9:30 kế tiếp (sáng nay nếu chưa tới 9:30, không thì sáng mai). Chỉ đơn giao trong 21–28 ngày gần nhất, không nhắc lại đơn cũ hơn. Chai đã được nhắc ở đây thì tin "Nhắc mua lại" 30 ngày bỏ chu kỳ đó.',
-    offWarning: 'Ngừng nhắc từ lượt sau. Tin đã gửi vẫn nằm trong chuông thông báo của khách.',
+    onWarning: 'Khách bắt đầu nhận tin từ lượt 9:30 kế tiếp (sáng nay nếu chưa tới 9:30, không thì sáng mai). Chỉ đơn giao trong 21–28 ngày gần nhất, không nhắc lại đơn cũ hơn. Chai đã được nhắc ở đây thì tin "Nhắc mua lại" 30 ngày bỏ chu kỳ đó. Bật cờ này cũng làm thẻ "Sắp hết hàng? Đặt lại 1 chạm" hiện trong Tài khoản, giỏ trống và trang Tiết kiệm với Refill (cùng cờ thẻ Mua lại bên dưới, bật một trong hai là hiện).',
+    offWarning: 'Ngừng nhắc từ lượt sau. Tin đã gửi vẫn nằm trong chuông thông báo của khách. Thẻ trong app chỉ ẩn khi cờ thẻ Mua lại bên dưới cũng tắt.',
   },
   {
     key: 'retention.refill_21d_zns_enabled',
@@ -275,7 +275,7 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     key: 'retention.repurchase_due_card_enabled',
     label: 'Thẻ Mua lại hàng tiêu hao (Tài khoản, giỏ trống)',
     description:
-      'Khách đã nhận nước rửa chén hay nước rửa rau từ 25 tới 40 ngày trước thấy một thẻ gọn ở đầu Tài khoản và ở giỏ trống (Mini App và web): gói Refill ghép cặp (không có thì đúng món đã mua), thêm vào giỏ một chạm. Không gửi tin nào. Bỏ qua món đã đặt lại, đã trả hết, đang có gói định kỳ hay đã nằm trong giỏ.',
+      'Khách đã nhận nước rửa chén hay nước rửa rau từ 25 tới 40 ngày trước (chai có gói Refill ghép cặp: từ 21 tới 30 ngày) thấy một thẻ gọn ở đầu Tài khoản và ở giỏ trống (Mini App và web): gói Refill ghép cặp (không có thì đúng món đã mua), thêm vào giỏ một chạm. Khách chỉ quét đơn Shopee/Lazada/TikTok (không có tên món) thấy lời nhắc chung dẫn tới trang Tiết kiệm với Refill. Thẻ cũng hiện khi cờ nhắc Refill 21 ngày bật. Không gửi tin nào và không đọc cờ ZNS. Bỏ qua món đã đặt lại, đã trả hết, đang có gói định kỳ hay đã nằm trong giỏ.',
     fallback: false,
     onWarning: 'Thẻ hiện ngay ở lần mở Tài khoản hay giỏ trống kế tiếp (bộ đệm 5 phút). Khách bấm × thì món đó ẩn 14 ngày trên máy của họ.',
     offWarning: 'Thẻ biến mất ở lần tải kế tiếp. Món khách đã thêm vào giỏ vẫn còn trong giỏ.',

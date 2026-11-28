@@ -104,6 +104,36 @@ describe('RefillDealsPage (Mini App, tubu-w17-01)', () => {
     expect(screen.queryByTestId('refill-next-delivery')).toBeNull();
   });
 
+  it('w55-01: khách có món sắp hết theo đơn đã giao: thẻ "Sắp hết hàng? Đặt lại 1 chạm" nằm trên danh sách, ghi view surface refill_landing; không có món thì không có thẻ', async () => {
+    const due = {
+      key: 'o1:v-a', days: 24, boughtName: 'Nước rửa chén a 500ml', kind: 'refill', variationId: 'v-a', productId: 'p-a', slug: 'refill-a', productName: 'Túi Refill a 2L',
+      variationName: '', thumbnail: null, price: 200_000, listPrice: 220_000,
+    };
+    mocks.coreGet.mockImplementation(async (path: string) => {
+      if (path === '/catalog/refill-pairs/landing') return landing;
+      if (path === '/me/repurchase-due') return { item: due };
+      throw new Error(`đường dẫn lạ ${path}`);
+    });
+    const first = renderPage();
+    await screen.findAllByTestId('refill-landing-row');
+    const card = await screen.findByTestId('repurchase-due-card');
+    expect(card.textContent).toContain('Sắp hết hàng? Đặt lại 1 chạm');
+    expect(card.textContent).toContain('Nước rửa chén a 500ml đã 24 ngày. Châm lại bằng Túi Refill a 2L.');
+    expect(card.compareDocumentPosition(screen.getByTestId('refill-landing-list')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(mocks.track).toHaveBeenCalledWith('repurchase_due_view', 'miniapp', { surface: 'refill_landing', variationId: 'v-a' }));
+    first.unmount();
+
+    mocks.coreGet.mockImplementation(async (path: string) => {
+      if (path === '/catalog/refill-pairs/landing') return landing;
+      if (path === '/me/repurchase-due') return { item: null };
+      throw new Error(`đường dẫn lạ ${path}`);
+    });
+    renderPage();
+    await screen.findAllByTestId('refill-landing-row');
+    await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledWith('/me/repurchase-due'));
+    expect(screen.queryByTestId('repurchase-due-card')).toBeNull();
+  });
+
   it('Câu hỏi thường gặp: ba câu, chạm mở/đóng câu trả lời', async () => {
     renderPage();
     const faq = await screen.findByTestId('refill-landing-faq');

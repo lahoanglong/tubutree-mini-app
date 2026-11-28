@@ -37,6 +37,7 @@ import { GiftTrialRow } from '../checkout/gift-rows';
 import { PdpRebuyRow } from '../product/pdp-rebuy';
 import { PdpRefillOffer } from '../product/pdp-refill-offer';
 import RepurchaseDueCard from '../refill/repurchase-due-card';
+import PostScanOffer from '../loyalty/post-scan-offer';
 import { ScanGuide } from '../../pages/external-points';
 import { PdpOriginGuide } from '../product/pdp-origin-guide';
 import { pdpOriginView } from '@tubutree/app-core/commerce/pdp-origin';
@@ -265,6 +266,22 @@ describe('vùng chạm DS v2 >= 44x44', () => {
         <MemoryRouter>
           <QueryClientProvider client={qc}>
             <RepurchaseDueCard surface="account" />
+          </QueryClientProvider>
+        </MemoryRouter>
+      );
+    }],
+    ['PostScanOffer (nút "Thêm" của hai gói Refill sau khi quét, w55-01)', () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+      const pair = (id: string, price: number) => ({
+        bottle: { productId: `b-${id}`, slug: `chai-${id}`, name: `Nước rửa chén ${id} 500ml`, thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true },
+        refill: { productId: `r-${id}`, slug: `refill-${id}`, name: `Túi Refill ${id} 2L`, thumbnail: null, variationId: `v-${id}`, price, compareAt: null, sizeLabel: '2L', inStock: true, tubu: true },
+        savingPct: 20,
+      });
+      qc.setQueryData(['refill-pairs', 'landing'], { enabled: true, pairs: [pair('a', 200_000), pair('b', 230_000)] });
+      return (
+        <MemoryRouter>
+          <QueryClientProvider client={qc}>
+            <PostScanOffer points={398} />
           </QueryClientProvider>
         </MemoryRouter>
       );

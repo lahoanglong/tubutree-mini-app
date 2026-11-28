@@ -32,7 +32,29 @@ const item = {
 };
 
 let mounted: Rendered[] = [];
-const mount = async (surface: 'account' | 'cart_empty' = 'account') => {
+const scanOffer = {
+  productId: 'p-scan',
+  slug: 'refill-scan-2l',
+  name: 'Túi Refill nước rửa chén 2L',
+  thumbnail: null,
+  variationId: 'v-scan',
+  price: 120_000,
+  compareAt: null,
+  sizeLabel: '2L',
+  inStock: true,
+  tubu: true,
+};
+const landingDto = {
+  enabled: true,
+  pairs: [{ bottle: { productId: 'b-scan', slug: 'chai-scan', name: 'Nước rửa chén 500ml', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true }, refill: scanOffer, savingPct: 20 }],
+};
+const scanOnly = (days: number) =>
+  mocks.get.mockImplementation(async (path: string) => {
+    if (path === '/me/repurchase-due') return { item: null, scanDays: days };
+    if (path === '/catalog/refill-pairs/landing') return landingDto;
+    return null;
+  });
+const mount = async (surface: 'account' | 'cart_empty' | 'refill_landing' = 'account') => {
   const r = render(<RepurchaseDueCard surface={surface} />);
   mounted.push(r);
   await flush(4);
@@ -150,5 +172,54 @@ describe('RepurchaseDueCard (web)', () => {
     mocks.phase = 'authenticated';
     mocks.get.mockResolvedValueOnce({ item: null });
     expect((await mount()).innerHTML).toBe('');
+  });
+
+  describe('w55-01: "Sắp hết hàng? Đặt lại 1 chạm"', () => {
+    it('giỏ trống và trang Refill nói tiêu đề ngắn + câu theo số ngày; Tài khoản giữ chữ w36-01', async () => {
+      const cart = card(await mount('cart_empty'))!;
+      expect(cart.textContent).toContain('Sắp hết hàng? Đặt lại 1 chạm');
+      expect(cart.textContent).toContain('Nước rửa chén Fuwa3e 500ml đã 31 ngày. Châm lại bằng Túi Refill nước rửa chén Fuwa3e 1L.');
+      expect(cart.querySelectorAll('button')).toHaveLength(2);
+      const landing = card(await mount('refill_landing'))!;
+      expect(landing.textContent).toContain('Sắp hết hàng? Đặt lại 1 chạm');
+      const account = card(await mount('account'))!;
+      expect(account.textContent).toContain('Đã 31 ngày từ khi bạn nhận Nước rửa chén Fuwa3e 500ml');
+    });
+
+    it('trang Refill: thẻ không thêm lề trang lần hai, báo "Đã thêm" có lối "Xem giỏ", ghi surface refill_landing', async () => {
+      const c = await mount('refill_landing');
+      const region = card(c)!;
+      expect(region.className).not.toContain('px-4');
+      expect(region.className).not.toContain('pt-3');
+      expect((region as HTMLElement).style.marginTop).toBe('var(--space-stack-md)');
+      await act(async () => buttonNamed(c, ADD)!.click());
+      await flush(2);
+      expect(mocks.track).toHaveBeenCalledWith('repurchase_due_add', { surface: 'refill_landing', variationId: 'v-refill' });
+      expect(notice(c)!.querySelector('a')?.getAttribute('href')).toBe('/gio-hang');
+    });
+
+    it('giỏ trống, chỉ có đơn sàn đã quét (scanDays): ghép gói Refill đầu trang Tiết kiệm, thêm một chạm đúng nguồn repurchase_due', async () => {
+      scanOnly(24);
+      const c = await mount('cart_empty');
+      expect(card(c)!.textContent).toContain('Đơn sàn của bạn giao 24 ngày trước. Châm lại bằng Túi Refill nước rửa chén 2L.');
+      await act(async () => buttonNamed(c, 'Thêm vào giỏ · 120.000đ')!.click());
+      await flush(2);
+      expect(mocks.post.mock.calls[0]![1]).toEqual({ variationId: 'v-scan', quantity: 1, addSource: 'repurchase_due' });
+      expect(mocks.track).toHaveBeenCalledWith('repurchase_due_view', { surface: 'cart_empty', variationId: 'v-scan' });
+      expect(notice(c)!.querySelector('a')).toBeNull();
+    });
+
+    it('mốc đơn sàn chỉ dùng ở giỏ trống: Tài khoản và trang Refill không vẽ, cũng không tải trang Refill', async () => {
+      scanOnly(24);
+      expect((await mount('account')).innerHTML).toBe('');
+      expect((await mount('refill_landing')).innerHTML).toBe('');
+      expect(mocks.get.mock.calls.some(([p]) => p === '/catalog/refill-pairs/landing')).toBe(false);
+    });
+
+    it('có món theo đơn trực tiếp thì không tải trang Refill dù có scanDays', async () => {
+      mocks.get.mockImplementation(async (path: string) => (path === '/me/repurchase-due' ? { item, scanDays: 24 } : null));
+      expect(card(await mount('cart_empty'))).not.toBeNull();
+      expect(mocks.get.mock.calls.some(([p]) => p === '/catalog/refill-pairs/landing')).toBe(false);
+    });
   });
 });

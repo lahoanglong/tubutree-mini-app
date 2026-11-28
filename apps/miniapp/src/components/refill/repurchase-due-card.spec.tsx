@@ -45,7 +45,24 @@ const item = {
   listPrice: 99_000,
 };
 
-function renderCard(surface: 'account' | 'cart_empty' = 'account') {
+const scanOffer = {
+  productId: 'p-scan',
+  slug: 'refill-scan-2l',
+  name: 'Túi Refill nước rửa chén 2L',
+  thumbnail: null,
+  variationId: 'v-scan',
+  price: 120_000,
+  compareAt: null,
+  sizeLabel: '2L',
+  inStock: true,
+  tubu: true,
+};
+const landingDto = {
+  enabled: true,
+  pairs: [{ bottle: { productId: 'b-scan', slug: 'chai-scan', name: 'Nước rửa chén 500ml', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true }, refill: scanOffer, savingPct: 20 }],
+};
+
+function renderCard(surface: 'account' | 'cart_empty' | 'refill_landing' = 'account') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const view = render(
     <QueryClientProvider client={qc}>
@@ -142,6 +159,72 @@ describe('RepurchaseDueCard (Mini App)', () => {
     const failed = renderCard();
     await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledTimes(2));
     expect(failed.container.innerHTML).toBe('');
+  });
+
+  describe('w55-01: "Sắp hết hàng? Đặt lại 1 chạm"', () => {
+    it('giỏ trống và trang Refill nói tiêu đề ngắn + câu theo số ngày; Tài khoản giữ chữ w36-01', async () => {
+      const cart = renderCard('cart_empty');
+      const region = await screen.findByRole('region', { name: 'Gợi ý mua lại' });
+      expect(region.textContent).toContain('Sắp hết hàng? Đặt lại 1 chạm');
+      expect(region.textContent).toContain('Nước rửa chén Fuwa3e 500ml đã 31 ngày. Châm lại bằng Túi Refill nước rửa chén Fuwa3e 1L.');
+      expect(region.querySelectorAll('button')).toHaveLength(2);
+      cart.unmount();
+
+      renderCard('account');
+      const account = await screen.findByRole('region', { name: 'Gợi ý mua lại' });
+      expect(account.textContent).toContain('Đã 31 ngày từ khi bạn nhận Nước rửa chén Fuwa3e 500ml');
+    });
+
+    it('trang Refill: thẻ không chèn lề trang lần hai (thân trang đã có lề), báo "Đã thêm" có lối "Xem giỏ"', async () => {
+      renderCard('refill_landing');
+      const section = await screen.findByTestId('repurchase-due-card');
+      expect(section.style.padding).toBe('');
+      expect(section.style.marginTop).toBe('var(--space-stack-md)');
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ · 89.000đ' }));
+      await waitFor(() => expect(mocks.snackbar).toHaveBeenCalled());
+      expect((mocks.snackbar.mock.calls[0]![0] as { action?: { text: string } }).action?.text).toBe('Xem giỏ');
+      expect(mocks.track).toHaveBeenCalledWith('repurchase_due_add', 'miniapp', { surface: 'refill_landing', variationId: 'v-refill' });
+    });
+
+    it('giỏ trống, chỉ có đơn sàn đã quét (scanDays): ghép gói Refill đầu trang Tiết kiệm, thêm một chạm đúng nguồn repurchase_due', async () => {
+      mocks.coreGet.mockImplementation(async (path: string) => {
+        if (path === '/me/repurchase-due') return { item: null, scanDays: 24 };
+        if (path === '/catalog/refill-pairs/landing') return landingDto;
+        throw new Error(`đường dẫn lạ ${path}`);
+      });
+      renderCard('cart_empty');
+      const region = await screen.findByRole('region', { name: 'Gợi ý mua lại' });
+      expect(region.textContent).toContain('Đơn sàn của bạn giao 24 ngày trước. Châm lại bằng Túi Refill nước rửa chén 2L.');
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ · 120.000đ' }));
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-scan', 1, 'repurchase_due'));
+      expect(mocks.track).toHaveBeenCalledWith('repurchase_due_view', 'miniapp', { surface: 'cart_empty', variationId: 'v-scan' });
+    });
+
+    it('mốc đơn sàn chỉ dùng ở giỏ trống: Tài khoản và trang Refill không vẽ, cũng không tải trang Refill', async () => {
+      mocks.coreGet.mockImplementation(async (path: string) => {
+        if (path === '/me/repurchase-due') return { item: null, scanDays: 24 };
+        if (path === '/catalog/refill-pairs/landing') return landingDto;
+        throw new Error(`đường dẫn lạ ${path}`);
+      });
+      for (const surface of ['account', 'refill_landing'] as const) {
+        const { container, unmount } = renderCard(surface);
+        await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledWith('/me/repurchase-due'));
+        await act(async () => undefined);
+        expect(container.innerHTML).toBe('');
+        unmount();
+      }
+      expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());
+    });
+
+    it('có món theo đơn trực tiếp thì không tải trang Refill dù có scanDays', async () => {
+      mocks.coreGet.mockImplementation(async (path: string) => {
+        if (path === '/me/repurchase-due') return { item, scanDays: 24 };
+        throw new Error(`đường dẫn lạ ${path}`);
+      });
+      renderCard('cart_empty');
+      await screen.findByRole('region', { name: 'Gợi ý mua lại' });
+      expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());
+    });
   });
 
   it('máy chủ từ chối (hết hàng): báo lỗi, thẻ còn để khách đọc lại', async () => {

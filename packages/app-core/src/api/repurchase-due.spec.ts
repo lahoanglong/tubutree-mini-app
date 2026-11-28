@@ -44,6 +44,13 @@ describe('GET /me/repurchase-due', () => {
     expect(parseRepurchaseDue(bad)).toEqual({ item: null });
   });
 
+  it('w55-01: không có món mà có mốc đơn sàn thì giữ scanDays; số hỏng thì bỏ; có món thì bỏ scanDays', () => {
+    expect(parseRepurchaseDue({ item: null, scanDays: 27 })).toEqual({ item: null, scanDays: 27 });
+    for (const bad of [0, -1, 2.5, '27', null, undefined]) expect(parseRepurchaseDue({ item: null, scanDays: bad })).toEqual({ item: null });
+    expect(parseRepurchaseDue({ item, scanDays: 27 })).toEqual({ item });
+    expect(parseRepurchaseDue({ item: { ...item, price: 0 }, scanDays: 27 })).toEqual({ item: null, scanDays: 27 });
+  });
+
   it('không mang khoá lạ từ máy chủ sang máy khách', () => {
     expect(parseRepurchaseDue({ item: { ...item, phone: '0907345678' } }).item).not.toHaveProperty('phone');
   });

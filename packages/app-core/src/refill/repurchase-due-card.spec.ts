@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RepurchaseDueItemDTO } from '../api/repurchase-due';
+import type { RefillLandingDTO } from './refill-landing';
 import {
   dismissRepurchaseDue,
   isRepurchaseDueDismissed,
@@ -65,8 +66,71 @@ describe('repurchaseDueView', () => {
     expect(repurchaseDueView(undefined, vnd)).toBeNull();
   });
 
+  it('Tài khoản giữ chữ w36-01; giỏ trống và trang Refill nói "Sắp hết hàng? Đặt lại 1 chạm" (w55-01)', () => {
+    expect(repurchaseDueView(item(), vnd, { surface: 'account' })!.title).toBe('Đã 30 ngày từ khi bạn nhận Nước rửa chén Fuwa3e 500ml');
+    for (const surface of ['cart_empty', 'refill_landing'] as const) {
+      const v = repurchaseDueView(item(), vnd, { surface })!;
+      expect(v.title).toBe('Sắp hết hàng? Đặt lại 1 chạm');
+      expect(v.body).toBe('Nước rửa chén Fuwa3e 500ml đã 30 ngày. Châm lại bằng Túi Refill nước rửa chén Fuwa3e 1L.');
+      expect(v.cta).toBe(`Thêm vào giỏ · ${vnd(89000)}`);
+      expect(v.source).toBe('order');
+    }
+    const same = repurchaseDueView(item({ kind: 'same', productName: 'Nước ngâm rửa rau quả' }), vnd, { surface: 'cart_empty' })!;
+    expect(same.body).toBe('Nước ngâm rửa rau quả đã 30 ngày, sắp dùng hết.');
+  });
+
+  describe('mốc đơn sàn (không có món theo đơn trực tiếp)', () => {
+    const landing: RefillLandingDTO = {
+      enabled: true,
+      pairs: [
+        {
+          bottle: { productId: 'b1', slug: 'nuoc-rua-chen-500ml', name: 'Nước rửa chén Fuwa3e 500ml', thumbnail: null, price: 68_000, compareAt: null, sizeLabel: null, inStock: true },
+          refill: {
+            productId: 'p-refill',
+            slug: 'refill-nuoc-rua-chen-fuwa3e-10l',
+            name: 'Refill Nước rửa chén Fuwa3e 10L',
+            thumbnail: null,
+            variationId: 'v-refill',
+            price: 890_000,
+            compareAt: null,
+            sizeLabel: '10L',
+            inStock: true,
+            tubu: true,
+          },
+          savingPct: 34,
+        },
+      ],
+    };
+
+    it('giỏ trống: ghép gói Refill đầu trang Refill, khoá ẩn riêng theo gói, nói đúng là đơn sàn', () => {
+      const v = repurchaseDueView(null, vnd, { surface: 'cart_empty', scanDays: 27, landing })!;
+      expect(v).toMatchObject({
+        key: 'scan:v-refill',
+        variationId: 'v-refill',
+        source: 'scan',
+        title: 'Sắp hết hàng? Đặt lại 1 chạm',
+        body: 'Đơn sàn của bạn giao 27 ngày trước. Châm lại bằng Refill Nước rửa chén Fuwa3e 10L.',
+        cta: `Thêm vào giỏ · ${vnd(890_000)}`,
+      });
+    });
+
+    it('chỉ ở giỏ trống: Tài khoản và trang Refill (đã liệt kê đúng gói đó) không vẽ', () => {
+      expect(repurchaseDueView(null, vnd, { surface: 'account', scanDays: 27, landing })).toBeNull();
+      expect(repurchaseDueView(null, vnd, { surface: 'refill_landing', scanDays: 27, landing })).toBeNull();
+      expect(repurchaseDueView(null, vnd, { scanDays: 27, landing })).toBeNull();
+    });
+
+    it('thiếu mốc, mốc hỏng, trang Refill chưa tải/cờ tắt/rỗng: không vẽ; món theo đơn luôn thắng mốc', () => {
+      for (const scanDays of [undefined, null, 0, -3]) expect(repurchaseDueView(null, vnd, { surface: 'cart_empty', scanDays, landing })).toBeNull();
+      for (const bad of [null, undefined, { enabled: false, pairs: landing.pairs }, { enabled: true, pairs: [] }]) {
+        expect(repurchaseDueView(null, vnd, { surface: 'cart_empty', scanDays: 27, landing: bad })).toBeNull();
+      }
+      expect(repurchaseDueView(item(), vnd, { surface: 'cart_empty', scanDays: 27, landing })!.source).toBe('order');
+    });
+  });
+
   it('trần độ dài sau khi điền số xấu nhất; mọi khoá điền đủ biến', () => {
-    const worst: Record<string, string | number> = { days: 40, product: 'x', refill: 'x', price: vnd(9_999_000) };
+    const worst: Record<string, string | number> = { days: 40, product: 'x', refill: 'x', bought: 'x', price: vnd(9_999_000) };
     for (const key of Object.keys(REPURCHASE_DUE_COPY) as (keyof typeof REPURCHASE_DUE_COPY)[]) {
       const text = repurchaseDueCopy(key, worst);
       expect(text).not.toMatch(/[{}]/);

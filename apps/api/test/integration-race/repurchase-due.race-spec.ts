@@ -20,7 +20,13 @@ function letterTag(len: number): string {
 describe('Thẻ Mua lại hàng tiêu hao (real Postgres)', () => {
   let prisma: PrismaService;
   const values: Record<string, unknown> = { 'retention.repurchase_due_card_enabled': true };
-  const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k in values ? (values[k] as T) : (fb as T)) } as unknown as SystemConfigService;
+  const keysRead: string[] = [];
+  const config = {
+    get: async <T>(k: string, fb?: T): Promise<T> => {
+      keysRead.push(k);
+      return k in values ? (values[k] as T) : (fb as T);
+    },
+  } as unknown as SystemConfigService;
   const now = new Date();
   const tag = letterTag(8);
   let bottleVariation: string;
@@ -31,6 +37,7 @@ describe('Thẻ Mua lại hàng tiêu hao (real Postgres)', () => {
   const productIds: string[] = [];
   const userIds: string[] = [];
   const orderIds: string[] = [];
+  const externalOrderIds: string[] = [];
 
   const createRealUser = async (data: Parameters<typeof createRealUserRow>[1] = {}) => {
     const u = await createRealUserRow(prisma, data);
@@ -75,6 +82,8 @@ describe('Thẻ Mua lại hàng tiêu hao (real Postgres)', () => {
       await prisma.subscription.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.address.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.cart.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.externalPointsClaim.deleteMany({ where: { externalOrderId: { in: externalOrderIds } } });
+      await prisma.externalOrder.deleteMany({ where: { id: { in: externalOrderIds } } });
       await prisma.returnRequest.deleteMany({ where: { orderId: { in: orderIds } } });
       await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -86,6 +95,8 @@ describe('Thẻ Mua lại hàng tiêu hao (real Postgres)', () => {
 
   beforeEach(() => {
     values['retention.repurchase_due_card_enabled'] = true;
+    delete values['retention.refill_21d_reminder_enabled'];
+    keysRead.length = 0;
   });
 
   const service = () => new RepurchaseDueService(prisma, config);
@@ -202,5 +213,121 @@ describe('Thẻ Mua lại hàng tiêu hao (real Postgres)', () => {
     await deliveredOrder(u.id, bottleVariation, 27);
     const rauOrder = await deliveredOrder(u.id, rauVariation, 35);
     expect((await service().forUser(u.id, now)).item).toMatchObject({ key: `${rauOrder.id}:${rauVariation}`, kind: 'same', variationId: rauVariation });
+  });
+
+  it('w55-01: chỉ cờ nhắc Refill 21 ngày bật cũng hiện thẻ; cả hai tắt thì { item: null }; cờ ZNS không bao giờ được đọc', async () => {
+    const u = await createRealUser();
+    await deliveredOrder(u.id, bottleVariation, 30);
+    values['retention.repurchase_due_card_enabled'] = false;
+    values['retention.refill_21d_reminder_enabled'] = true;
+    expect((await service().forUser(u.id, now)).item).toMatchObject({ kind: 'refill', variationId: refillVariation });
+    values['retention.refill_21d_reminder_enabled'] = false;
+    expect(await service().forUser(u.id, now)).toEqual({ item: null });
+    expect(keysRead).not.toContain('retention.refill_21d_zns_enabled');
+  });
+
+  let extSeq = 0;
+  /** Đơn sàn đã quét: đơn ngoài giao `daysAgo` ngày trước kèm claim SCAN của khách. */
+  async function scannedOrder(
+    userId: string,
+    daysAgo: number,
+    state: 'PENDING' | 'CREDITED' | 'REVIEW' = 'PENDING',
+    status: 'DELIVERED' | 'RETURNING' | 'RETURNED' | 'CANCELLED' | 'DELETED' = 'DELIVERED',
+  ) {
+    extSeq += 1;
+    const code = `W55${tag}${String.fromCharCode(97 + (extSeq % 26))}${extSeq}`;
+    const o = await prisma.externalOrder.create({
+      data: {
+        pancakeOrderId: `W55${tag}${extSeq}`,
+        source: 'MARKETPLACE',
+        channel: 'shopee',
+        sourceKey: '-3|it|-3',
+        trackingCode: code,
+        trackingCodes: [code],
+        goodsValue: 200_000,
+        pancakeStatus: 3,
+        status,
+        deliveredAt: new Date(now.getTime() - daysAgo * DAY),
+        pancakeInsertedAt: new Date(now.getTime() - (daysAgo + 3) * DAY),
+        pancakeUpdatedAt: now,
+        lastPayload: {},
+        phoneMask: '******78',
+      },
+    });
+    externalOrderIds.push(o.id);
+    await prisma.externalPointsClaim.create({
+      data: { externalOrderId: o.id, userId, kind: 'SCAN', state, ratePct: 1, multiplier: 1, points: 2_000, claimedCode: code, dayKey: '2026-11-01' },
+    });
+    return o;
+  }
+
+  it('w55-01: đơn sàn đã quét giao 27 ngày trước, chưa đặt gì: { item: null, scanDays: 27 } (đang chờ cộng hay đã cộng đều tính)', async () => {
+    for (const state of ['PENDING', 'CREDITED'] as const) {
+      const u = await createRealUser();
+      await scannedOrder(u.id, 27, state);
+      expect(await service().forUser(u.id, now)).toEqual({ item: null, scanDays: 27 });
+    }
+  });
+
+  it('w55-01: không có mốc khi claim còn REVIEW, đơn sàn quá cũ (35 ngày), quá mới (3 ngày) hay có đơn sàn mới hơn chu kỳ', async () => {
+    const review = await createRealUser();
+    await scannedOrder(review.id, 27, 'REVIEW');
+    const old = await createRealUser();
+    await scannedOrder(old.id, 35);
+    const fresh = await createRealUser();
+    await scannedOrder(fresh.id, 3);
+    const both = await createRealUser();
+    await scannedOrder(both.id, 27);
+    await scannedOrder(both.id, 3);
+    for (const u of [review, old, fresh, both]) expect(await service().forUser(u.id, now)).toEqual({ item: null });
+  });
+
+  it('w55-01: đã đặt đơn (chưa huỷ) sau lúc đơn sàn giao thì không có mốc; đơn đã huỷ không tính', async () => {
+    const reordered = await createRealUser();
+    await scannedOrder(reordered.id, 27);
+    await createOrder({ userId: reordered.id, status: 'CONFIRMED', createdAt: new Date(now.getTime() - 5 * DAY), items: { create: { variationId: bottleVariation, productName: 'Món IT', variationName: 'IT', unitPrice: 100_000, quantity: 1, total: 100_000 } } });
+    expect(await service().forUser(reordered.id, now)).toEqual({ item: null });
+    const cancelled = await createRealUser();
+    await scannedOrder(cancelled.id, 27);
+    await createOrder({ userId: cancelled.id, status: 'CANCELLED', createdAt: new Date(now.getTime() - 5 * DAY), items: { create: { variationId: bottleVariation, productName: 'Món IT', variationName: 'IT', unitPrice: 100_000, quantity: 1, total: 100_000 } } });
+    expect(await service().forUser(cancelled.id, now)).toEqual({ item: null, scanDays: 27 });
+  });
+
+  it('w55-01: món theo đơn trực tiếp thắng mốc đơn sàn (không có scanDays); cờ tắt thì không đọc đơn sàn', async () => {
+    const u = await createRealUser();
+    await deliveredOrder(u.id, bottleVariation, 30);
+    await scannedOrder(u.id, 27);
+    const r = await service().forUser(u.id, now);
+    expect(r.item).toMatchObject({ variationId: refillVariation });
+    expect(r).not.toHaveProperty('scanDays');
+    values['retention.repurchase_due_card_enabled'] = false;
+    expect(await service().forUser(u.id, now)).toEqual({ item: null });
+  });
+
+  it('w55-01: đơn sàn quét giao SAU đơn trực tiếp và chưa tới 21 ngày là chu kỳ mới: không mời món cũ; giao sau mà đã tới nhịp thì món cũ vẫn được mời', async () => {
+    const reset = await createRealUser();
+    await deliveredOrder(reset.id, bottleVariation, 26);
+    await scannedOrder(reset.id, 2);
+    expect(await service().forUser(reset.id, now)).toEqual({ item: null });
+    const aged = await createRealUser();
+    await deliveredOrder(aged.id, bottleVariation, 30);
+    await scannedOrder(aged.id, 22);
+    expect((await service().forUser(aged.id, now)).item).toMatchObject({ variationId: refillVariation });
+    const older = await createRealUser();
+    await deliveredOrder(older.id, bottleVariation, 26);
+    await scannedOrder(older.id, 29);
+    expect((await service().forUser(older.id, now)).item).toMatchObject({ variationId: refillVariation });
+  });
+
+  it('w55-01: đơn sàn đã trả, đang trả, huỷ hay xoá không là mốc và không đặt lại chu kỳ', async () => {
+    for (const status of ['RETURNING', 'RETURNED', 'CANCELLED', 'DELETED'] as const) {
+      const anchorOnly = await createRealUser();
+      await scannedOrder(anchorOnly.id, 27, 'PENDING', status);
+      expect(await service().forUser(anchorOnly.id, now)).toEqual({ item: null });
+      const withDirect = await createRealUser();
+      await deliveredOrder(withDirect.id, bottleVariation, 26);
+      await scannedOrder(withDirect.id, 2, 'PENDING', status);
+      expect((await service().forUser(withDirect.id, now)).item).toMatchObject({ variationId: refillVariation });
+    }
   });
 });

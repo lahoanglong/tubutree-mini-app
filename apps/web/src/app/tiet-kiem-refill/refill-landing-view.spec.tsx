@@ -25,6 +25,11 @@ vi.mock('next/navigation', async (importOriginal) => ({
   usePathname: () => '/tiet-kiem-refill',
 }));
 
+// Thẻ Mua lại nạp qua next/dynamic (không chạy đồng bộ trong jsdom); thẻ thật có spec riêng, ở đây chỉ kiểm chỗ đặt và surface.
+vi.mock('@/components/refill/repurchase-due-card-lazy', () => ({
+  RepurchaseDueCard: ({ surface }: { surface: string }) => <div data-testid="repurchase-due-card-slot" data-surface={surface} />,
+}));
+
 import RefillLandingView from './refill-landing-view';
 
 const offer = (id: string, price: number) => ({
@@ -99,6 +104,13 @@ describe('RefillLandingView (tubu-w17-01)', () => {
     expect(mocks.track).toHaveBeenCalledWith('refill_swap_applied', { surface: 'landing' });
     expect(adds(c)[0]!.getAttribute('aria-disabled')).toBeNull();
     expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it('w55-01: chỗ của thẻ "Sắp hết hàng? Đặt lại 1 chạm" (surface refill_landing) nằm trên danh sách gói', async () => {
+    const c = await mount();
+    const slot = c.querySelector('[data-testid="repurchase-due-card-slot"]')!;
+    expect(slot.getAttribute('data-surface')).toBe('refill_landing');
+    expect(slot.compareDocumentPosition(c.querySelector('[data-testid="refill-landing-list"]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('khách chưa đăng nhập, giỏ khách tắt: nhớ món rồi sang đăng nhập, quay về trang gói Refill', async () => {

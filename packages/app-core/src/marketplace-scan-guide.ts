@@ -20,10 +20,12 @@ export const MARKETPLACE_SCAN_COPY = {
    * (W44, PO duyệt U2): số trên nút là điểm khách dùng được NGAY, không phải điểm của đơn vừa quét.
    */
   ctaUsePoints: 'Dùng {n} Điểm Xanh đang có',
-  /** Nút chính sau khi quét xong ở Mini App, khách chưa có điểm (điểm của đơn vừa quét còn chờ). */
-  ctaShop: 'Mua sắm ngay trên Mini App',
-  /** Như `ctaShop` nhưng ở web (khách đang ở web, nút dẫn về Trang chủ web). */
-  ctaShopWeb: 'Mua sắm ngay',
+  /** Nút chính sau khi quét xong ở Mini App, khách chưa có điểm dùng được (điểm của đơn vừa quét còn chờ; nút nói việc điểm sẽ làm: giảm lần mua sau). */
+  ctaShop: 'Dùng điểm mua lần sau',
+  /** Như `ctaShop` ở web: cùng chữ, nút dẫn về Trang chủ web. */
+  ctaShopWeb: 'Dùng điểm mua lần sau',
+  /** Liên kết chữ dưới nút chính sau khi quét xong (w55-01): xoá kết quả và quét mã khác. */
+  scanAnother: 'Quét đơn khác',
   /** Tính năng chưa mở (cờ `loyalty.marketplace_claim_enabled` tắt), cùng ý với màn "sắp mở" của Mini App. */
   soonTitle: 'Tích điểm đơn sàn sắp mở',
   webSoonBody: 'Bạn cứ giữ lại phiếu giao hàng. Khi tính năng mở, bạn quét mã vận đơn ngay trên web hoặc trong Tubu Tree trên Zalo để tích điểm cho đơn này.',

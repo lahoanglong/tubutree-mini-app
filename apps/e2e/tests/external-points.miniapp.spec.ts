@@ -207,14 +207,59 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
       });
     }
 
-    test('chưa có điểm dùng được: "Mua sắm ngay trên Mini App"', async ({ page, api }) => {
+    test('chưa có điểm dùng được: "Dùng điểm mua lần sau"', async ({ page, api }) => {
       mockExternalPoints(api, { submit: CLAIMED });
       api.get('/me/loyalty', { pointsBalance: 0, lockedPoints: 0 });
       await page.goto('/points/scan');
       await page.getByLabel('Hoặc nhập mã vận đơn').fill('SPXVN0123456789');
       await page.getByRole('button', { name: 'Tích điểm' }).click();
-      await expect(page.getByRole('button', { name: 'Mua sắm ngay trên Mini App' })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole('button', { name: 'Dùng điểm mua lần sau' })).toBeVisible({ timeout: 15_000 });
       await shot(page, 'mini375-scan-cta-zero');
     });
+  });
+
+  test.describe('thẻ gợi ý sau khi quét (w55-01)', () => {
+    const CLAIMED = {
+      status: 'CLAIMED' as const, claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250,
+      expectedCreditAt: FUTURE.toISOString(), message: 'ok',
+    };
+    const pair = (id: string, price: number) => ({
+      bottle: { productId: `b-${id}`, slug: `chai-${id}`, name: `Nước rửa chén ${id} 500ml`, thumbnail: null, price: 68_000, compareAt: null, sizeLabel: '500ml', inStock: true },
+      refill: { productId: `r-${id}`, slug: `refill-${id}`, name: `Túi Refill nước rửa chén ${id} 2L`, thumbnail: null, variationId: `v-${id}`, price, compareAt: null, sizeLabel: '2L', inStock: true, tubu: true },
+      savingPct: 20,
+    });
+    for (const width of [320, 360, 375]) {
+      test(`${width}px: một dòng giá trị điểm + hai gói Refill một chạm, một nút chính, "Quét đơn khác" là nút phụ, không tràn ngang, chạm >= 44px`, async ({ page, api }) => {
+        mockExternalPoints(api, { submit: CLAIMED });
+        api.get('/me/loyalty', { pointsBalance: 0, lockedPoints: 0 });
+        api.get('/catalog/refill-pairs/landing', { enabled: true, pairs: [pair('a', 200_000), pair('b', 230_000), pair('c', 250_000)] });
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto('/points/scan');
+        await page.getByLabel('Hoặc nhập mã vận đơn').fill('SPXVN0123456789');
+        await page.getByRole('button', { name: 'Tích điểm' }).click();
+        const card = page.getByTestId('post-scan-offer');
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        // vnd_per_point_redeem = 1 trong mock: 1.250 điểm = 1.250đ.
+        await expect(page.getByTestId('post-scan-value')).toHaveText('≈ 1.250đ giảm cho lần mua sau');
+        const adds = card.getByRole('button', { name: /^Thêm / });
+        await expect(adds).toHaveCount(2);
+        for (const add of await adds.all()) expect((await add.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // Thẻ ba dòng (giá trị + hai gói): không cao quá ba hàng chạm 44px cộng lề.
+        expect((await card.boundingBox())!.height).toBeLessThanOrEqual(3 * 44 + 3 * 8 + 24 + 8);
+        const primary = page.getByTestId('scan-shop-now').getByRole('button', { name: 'Dùng điểm mua lần sau' });
+        await expect(primary).toBeVisible();
+        const another = page.getByTestId('scan-another').getByRole('button', { name: 'Quét đơn khác' });
+        await expect(another).toBeVisible();
+        expect((await another.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const order = await page.evaluate(() => {
+          const y = (id: string) => document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect().top;
+          return [y('post-scan-offer'), y('scan-shop-now'), y('scan-another')];
+        });
+        expect(order[0]).toBeLessThan(order[1]!);
+        expect(order[1]).toBeLessThan(order[2]!);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+        await shot(page, `mini${width}-scan-post-offer`);
+      });
+    }
   });
 });

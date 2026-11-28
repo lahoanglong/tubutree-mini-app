@@ -1023,7 +1023,17 @@
       "props": "RepurchaseDueCardProps",
       "screens": [
         "/profile",
-        "/cart"
+        "/cart",
+        "/refill-deals"
+      ]
+    },
+    {
+      "name": "PostScanOffer",
+      "miniapp": "apps/miniapp/src/components/loyalty/post-scan-offer.tsx",
+      "web": "apps/web/src/components/points/post-scan-offer.tsx",
+      "props": "PostScanOfferProps",
+      "screens": [
+        "/points/scan"
       ]
     },
     {

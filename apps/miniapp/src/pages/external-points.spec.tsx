@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -129,13 +129,73 @@ describe('Trang Tích điểm đơn sàn', () => {
       expect(screen.getByTestId('claim-result')).toHaveTextContent('1.250 Điểm Xanh đang chờ cộng');
     });
 
-    it('chưa có điểm dùng được: mời mua sắm trên Mini App, không hứa điểm', async () => {
+    it('chưa có điểm dùng được: nút chính nói việc điểm sẽ làm ("Dùng điểm mua lần sau"), không hứa số điểm', async () => {
       claimed();
       renderPage();
       await submit();
       const cta = screen.getByTestId('scan-shop-now');
-      await waitFor(() => expect(cta).toHaveTextContent('Mua sắm ngay trên Mini App'));
+      await waitFor(() => expect(cta).toHaveTextContent('Dùng điểm mua lần sau'));
       expect(cta).not.toHaveTextContent('Điểm Xanh');
+    });
+  });
+
+  describe('thẻ gợi ý sau khi quét (w55-01)', () => {
+    const submitWith = async (response: Record<string, unknown>) => {
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'CLAIMED', claimId: 'c1', channel: 'Shopee', maskedCode: 'SPX***789', points: 1250, expectedCreditAt: futureIso(), message: 'ok', ...response,
+      });
+      fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'spxvn123456789' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      await screen.findByTestId('claim-result');
+    };
+
+    it('một dòng giá trị điểm theo cấu hình đổi điểm, đứng trên nút chính; chỉ MỘT nút chính', async () => {
+      renderPage();
+      await submitWith({});
+      // LOYALTY.vndPerPointRedeem = 1000 trong spec này: 1.250 điểm × 1.000đ.
+      const value = await screen.findByTestId('post-scan-value');
+      expect(value).toHaveTextContent('≈ 1.250.000đ giảm cho lần mua sau');
+      const card = screen.getByTestId('post-scan-offer');
+      const primary = screen.getByTestId('scan-shop-now');
+      expect(card.compareDocumentPosition(primary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(primary).getAllByRole('button')).toHaveLength(1);
+    });
+
+    it('"Quét đơn khác" là nút phụ nằm ngoài khung nút chính, xoá kết quả cũ rồi mở khung quét', async () => {
+      mocks.scanCode.mockResolvedValue({ kind: 'failed' });
+      renderPage();
+      await submitWith({});
+      const link = within(screen.getByTestId('scan-another')).getByRole('button', { name: 'Quét đơn khác' });
+      expect(screen.getByTestId('scan-shop-now')).not.toContainElement(link);
+      fireEvent.click(link);
+      await waitFor(() => expect(mocks.scanCode).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('claim-result')).toBeNull();
+      expect(screen.queryByTestId('scan-shop-now')).toBeNull();
+      expect(screen.queryByTestId('scan-another')).toBeNull();
+    });
+
+    it('đơn chờ đối soát chưa có điểm (REVIEW, points null): không có dòng giá trị, vẫn có hai nút của trang', async () => {
+      renderPage();
+      await submitWith({ status: 'REVIEW', points: null });
+      await waitFor(() => expect(screen.getByTestId('scan-shop-now')).toHaveTextContent('Dùng điểm mua lần sau'));
+      expect(screen.queryByTestId('post-scan-value')).toBeNull();
+      expect(screen.getByTestId('scan-another')).toBeTruthy();
+    });
+
+    it('đơn chờ đối soát dù máy chủ trả sẵn điểm (REVIEW, points 1250): không hứa giá trị điểm, vẫn có hai nút của trang', async () => {
+      renderPage();
+      await submitWith({ status: 'REVIEW', points: 1250 });
+      await waitFor(() => expect(screen.getByTestId('scan-shop-now')).toBeTruthy());
+      expect(screen.queryByTestId('post-scan-value')).toBeNull();
+      expect(screen.getByTestId('scan-another')).toBeTruthy();
+    });
+
+    it('mã đã có người nhận: không có thẻ gợi ý, không có nút mua lần sau', async () => {
+      renderPage();
+      await submitWith({ status: 'CLAIMED_BY_OTHER', points: null });
+      expect(screen.queryByTestId('post-scan-offer')).toBeNull();
+      expect(screen.queryByTestId('scan-shop-now')).toBeNull();
+      expect(screen.queryByTestId('scan-another')).toBeNull();
     });
   });
 

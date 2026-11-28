@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type ExternalOrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
@@ -8,12 +8,18 @@ import { NOT_PILOT_CLEANED_SQL } from '../admin/admin-revenue';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import {
-  isConsumableName,
+  cadenceFor,
+  newerScanResetsCycle,
   pickRepurchaseDue,
   repurchaseDueWindow,
-  REPURCHASE_DUE_CARD_ENABLED_KEY,
+  REPURCHASE_DUE_GATE_KEYS,
+  scanAnchorDays,
+  scanAnchorFrom,
   type RepurchaseCandidateLine,
 } from './repurchase-due.rules';
+
+/** Đơn sàn đã trả, đang trả, huỷ hay xoá: khách không giữ hàng nên không là mốc mua. */
+const DEAD_EXTERNAL_ORDER_STATUSES: ExternalOrderStatus[] = ['RETURNING', 'RETURNED', 'CANCELLED', 'DELETED'];
 
 /** Món gợi ý mua lại trên thẻ ở Tài khoản và giỏ trống. */
 export interface RepurchaseDueItem {
@@ -39,6 +45,11 @@ export interface RepurchaseDueItem {
 
 export interface RepurchaseDueResponse {
   item: RepurchaseDueItem | null;
+  /**
+   * Chỉ khi `item` là null (w55-01): số ngày lịch VN từ lúc đơn sàn đã quét gần nhất giao xong, trong chu kỳ Refill mặc định, khách chưa đặt gì từ đó. Đơn sàn
+   * không có dòng sản phẩm nên máy chủ không chọn món; máy khách ghép gói Refill đầu trang Tiết kiệm với Refill.
+   */
+  scanDays?: number;
 }
 
 interface CandidateRow {
@@ -75,8 +86,9 @@ const CANDIDATE_LIMIT = 100;
 const NONE: RepurchaseDueResponse = { item: null };
 
 /**
- * Thẻ "Mua lại" hàng tiêu hao (w36-01, cờ `retention.repurchase_due_card_enabled`, mặc định tắt). Không gửi tin nào: tin "Nhắc mua lại"
- * và nhắc Refill 21 ngày đã có. Luôn trả 200; cờ tắt, không có món hay lỗi đọc đều là `{ item: null }`.
+ * Thẻ "Mua lại" hàng tiêu hao (w36-01, w55-01). Hiện khi cờ `retention.repurchase_due_card_enabled` HOẶC `retention.refill_21d_reminder_enabled` bật (đều mặc
+ * định tắt). Không gửi tin nào và không đọc cờ ZNS: tin "Nhắc mua lại" và nhắc Refill 21 ngày đã có. Chu kỳ theo nhóm hàng (`cadenceFor`). Luôn trả 200; cờ tắt,
+ * không có món hay lỗi đọc đều là `{ item: null }`; không có món mà đơn sàn đã quét gần nhất tới chu kỳ thì thêm `scanDays`.
  */
 @Injectable()
 export class RepurchaseDueService {
@@ -90,13 +102,63 @@ export class RepurchaseDueService {
   ) {}
 
   async forUser(userId: string, now: Date = new Date()): Promise<RepurchaseDueResponse> {
-    if ((await this.config.get<unknown>(REPURCHASE_DUE_CARD_ENABLED_KEY, false)) !== true) return NONE;
+    if (!(await this.gateOn())) return NONE;
     try {
-      return { item: await this.find(userId, now) };
+      const item = await this.find(userId, now);
+      if (item) return { item };
+      const scanDays = await this.scanAnchor(userId, now);
+      return scanDays === null ? NONE : { item: null, scanDays };
     } catch (err) {
       this.logger.warn(`Không đọc được thẻ mua lại (user=${userId}): ${err instanceof Error ? err.message : String(err)}`);
       return NONE;
     }
+  }
+
+  /** Cờ thẻ hoặc cờ nhắc Refill 21 ngày bật thì hiện thẻ. Cờ ZNS không đọc ở đây: thẻ không gửi tin nào. */
+  private async gateOn(): Promise<boolean> {
+    for (const key of REPURCHASE_DUE_GATE_KEYS) {
+      if ((await this.config.get<unknown>(key, false)) === true) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Mốc theo đơn sàn đã quét (w55-01): đơn SCAN còn hiệu lực (chờ cộng hay đã cộng) giao xong gần nhất trong chu kỳ Refill mặc định, và khách chưa đặt đơn nào
+   * (chưa huỷ) từ lúc đó. Chỉ đọc; đơn sàn không có dòng sản phẩm nên không chọn được món.
+   */
+  private async scanAnchor(userId: string, now: Date): Promise<number | null> {
+    const claims = await this.prisma.externalPointsClaim.findMany({
+      where: {
+        userId,
+        kind: 'SCAN',
+        state: { in: ['PENDING', 'CREDITED'] },
+        externalOrder: { status: { notIn: DEAD_EXTERNAL_ORDER_STATUSES }, deliveredAt: { gte: scanAnchorFrom(now), lte: now } },
+      },
+      select: { externalOrder: { select: { deliveredAt: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    const deliveredAts = claims.map((c) => c.externalOrder.deliveredAt);
+    const days = scanAnchorDays(deliveredAts, now);
+    if (days === null) return null;
+    const latest = new Date(Math.max(...deliveredAts.filter((d): d is Date => d !== null).map((d) => d.getTime())));
+    const since = await this.prisma.order.findFirst({ where: { userId, createdAt: { gt: latest }, status: { in: [...REORDER_STATUSES] } }, select: { id: true } });
+    return since ? null : days;
+  }
+
+  /** Đơn sàn còn hiệu lực giao gần nhất trong 22 ngày qua (đủ để biết có chu kỳ mới trong nhịp 21 ngày); null khi không có. */
+  private async latestScanDelivery(userId: string, now: Date): Promise<Date | null> {
+    const claim = await this.prisma.externalPointsClaim.findFirst({
+      where: {
+        userId,
+        kind: 'SCAN',
+        state: { in: ['PENDING', 'CREDITED'] },
+        externalOrder: { status: { notIn: DEAD_EXTERNAL_ORDER_STATUSES }, deliveredAt: { gte: new Date(now.getTime() - 22 * 864e5), lte: now } },
+      },
+      orderBy: { externalOrder: { deliveredAt: 'desc' } },
+      select: { externalOrder: { select: { deliveredAt: true } } },
+    });
+    return claim?.externalOrder.deliveredAt ?? null;
   }
 
   private async find(userId: string, now: Date): Promise<RepurchaseDueItem | null> {
@@ -127,8 +189,11 @@ export class RepurchaseDueService {
          AND oi."isGift" = false
        ORDER BY o."deliveredAt" ASC, oi.id ASC
        LIMIT ${CANDIDATE_LIMIT}`;
+    if (rows.length === 0) return null;
+    // Cặp Refill đọc trước khi lọc: chai có cặp là hàng tiêu hao dù tên không khớp từ khoá nhóm (`cadenceFor`).
+    const pairs = await loadRefillPairTable(this.prisma, this.config);
     const lines: RepurchaseCandidateLine[] = rows
-      .filter((r) => isConsumableName(r.productName))
+      .filter((r) => cadenceFor(r.productName, pairs.has(r.productId)) !== null)
       .map((r) => ({
         orderId: r.orderId,
         orderCreatedAt: new Date(r.orderCreatedAt),
@@ -142,7 +207,6 @@ export class RepurchaseDueService {
       }));
     if (lines.length === 0) return null;
 
-    const pairs = await loadRefillPairTable(this.prisma, this.config);
     const related = [...new Set(lines.flatMap((l) => [l.productId, pairs.get(l.productId)].filter((id): id is string => !!id)))];
     const earliest = new Date(Math.min(...lines.map((l) => l.orderCreatedAt.getTime())));
     const [reordered, subs] = await Promise.all([
@@ -170,7 +234,11 @@ export class RepurchaseDueService {
       subscribedProductIds: new Set(subs.map((s) => s.variation.productId)),
     });
 
+    // Đơn sàn mới giao sau đơn trực tiếp và chưa tới nhịp là chu kỳ mới: đọc một lần, chỉ khi đã có món để mời.
+    let latestScan: Date | null | undefined;
     for (const pick of picks) {
+      latestScan ??= await this.latestScanDelivery(userId, now);
+      if (newerScanResetsCycle(latestScan, pick.line.deliveredAt, now)) continue;
       const refillId = pairs.get(pick.line.productId);
       const refill = refillId
         ? await this.prisma.variation.findFirst({ where: { productId: refillId, ...OFFERABLE_WHERE }, orderBy: [{ retailPrice: 'asc' }, { id: 'asc' }], select: OFFER_SELECT })

@@ -34,8 +34,11 @@ type Notice = QuickAddNotice;
 export interface QuickAdd {
   /** Thêm một thẻ vào giỏ theo đúng luật giỏ nhanh: tải chi tiết, một phân loại còn hàng thì thêm thẳng, nhiều thì mở bảng chọn, hết hàng thì báo. */
   quickAdd: (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) => Promise<void>;
-  /** Thêm thẳng một phân loại đã biết (dải Mua lại món quen), số lượng 1, không tải chi tiết. Lỗi (hết hàng, ngừng bán) hiện thông báo như mọi đường giỏ nhanh. */
-  addVariation: (variationId: string, opts?: { origin?: Element | null }) => Promise<void>;
+  /**
+   * Thêm thẳng một phân loại đã biết (dải Mua lại món quen), số lượng 1, không tải chi tiết. Lỗi (hết hàng, ngừng bán) hiện thông báo như mọi đường giỏ nhanh.
+   * Trả true khi đã thêm vào giỏ, false khi lỗi hay bị chặn vì một lượt khác đang chạy: nơi dùng chỉ đổi nút sang "Đã thêm" khi true.
+   */
+  addVariation: (variationId: string, opts?: { origin?: Element | null }) => Promise<boolean>;
   /** Hiện một thông báo nổi ở đáy màn (cùng chỗ với "Đã thêm vào giỏ!"). */
   notify: (n: QuickAddNotice) => void;
   /** Thông báo đang hiện, để nơi dùng `inlineNotice` tự vẽ trong khung của mình. */
@@ -82,24 +85,26 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
   const reloadStale = (slug: string | undefined) =>
     Promise.all((slug ? [staleKey, productQuery(coreHttp, slug).queryKey] : [staleKey]).map((queryKey) => qc.invalidateQueries({ queryKey })));
 
-  const run = async (task: () => Promise<void>, slug?: string) => {
-    if (inFlight.current) return;
+  const run = async (task: () => Promise<void>, slug?: string): Promise<boolean> => {
+    if (inFlight.current) return false;
     inFlight.current = true;
     try {
       await task();
+      return true;
     } catch (e) {
       show({ ok: false, text: actionErrorText(e) });
       setPicker(null);
       // Thẻ/món đang hiện đã cũ: giữ khoá tới khi dữ liệu của nơi gọi mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Lời lỗi đã hiện trước khi chờ.
       if (serverRejectedState(e)) await settleWithin(reloadStale(slug));
+      return false;
     } finally {
       inFlight.current = false;
       setBusyId(null);
     }
   };
 
-  const quickAdd = (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }) =>
-    run(async () => {
+  const quickAdd = async (product: ProductCard, opts?: { initialId?: string | null; origin?: Element | null }): Promise<void> => {
+    await run(async () => {
       setBusyId(product.id);
       const detail = await fetchProduct(coreHttp, product.slug);
       const plan = quickAddPlan(detail.variations);
@@ -110,6 +115,7 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
       } else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations, initialId: opts?.initialId ?? null });
       else await addLine(plan.variationId, 1, opts?.origin ?? null);
     }, product.slug);
+  };
 
   const addVariation = (variationId: string, opts?: { origin?: Element | null }) =>
     run(async () => {
@@ -117,12 +123,13 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
       await addLine(variationId, 1, opts?.origin ?? null);
     });
 
-  const confirmPick = (variation: { id: string }, qty: number) =>
-    run(async () => {
+  const confirmPick = async (variation: { id: string }, qty: number): Promise<void> => {
+    await run(async () => {
       setBusyId(picker?.product.id ?? null);
       await addLine(variation.id, qty);
       setPicker(null);
     }, picker?.product.slug);
+  };
 
   const feedback = (
     <>

@@ -21,9 +21,14 @@ export interface RepurchaseDueItemDTO {
   listPrice: number;
 }
 
-/** GET /me/repurchase-due. Cờ `retention.repurchase_due_card_enabled` tắt, không có món hay lỗi đọc: `{ item: null }`. */
+/**
+ * GET /me/repurchase-due. Cả hai cờ `retention.repurchase_due_card_enabled` và `retention.refill_21d_reminder_enabled` tắt, không có món hay lỗi đọc:
+ * `{ item: null }`. `scanDays` (w55-01) chỉ có khi không có món theo đơn trực tiếp: số ngày lịch VN từ lúc đơn sàn đã quét gần nhất giao xong, nằm trong chu kỳ
+ * Refill mặc định và khách chưa đặt gì từ đó. Đơn sàn không có dòng sản phẩm nên máy chủ không chọn được món; máy khách ghép gói Refill của trang Tiết kiệm.
+ */
 export interface RepurchaseDueDTO {
   item: RepurchaseDueItemDTO | null;
+  scanDays?: number;
 }
 
 /** Riêng một gốc khoá: không nằm dưới ['me'] (Vườn Xanh làm mới ['me'] sau mỗi lần tưới, thẻ không đổi theo đó). */
@@ -34,7 +39,9 @@ const isMoney = (v: unknown): v is number => typeof v === 'number' && Number.isI
 
 /** Body lạ (API cũ chưa có route, route khác trả nhầm) thì không có thẻ, không ném: thẻ chỉ là gợi ý. */
 export function parseRepurchaseDue(body: unknown): RepurchaseDueDTO {
-  const i = (body as { item?: Partial<RepurchaseDueItemDTO> | null } | null | undefined)?.item;
+  const raw = body as { item?: Partial<RepurchaseDueItemDTO> | null; scanDays?: unknown } | null | undefined;
+  const i = raw?.item;
+  const scanDays = typeof raw?.scanDays === 'number' && Number.isInteger(raw.scanDays) && raw.scanDays >= 1 ? raw.scanDays : null;
   if (
     !i ||
     !isText(i.key, 120) ||
@@ -52,7 +59,8 @@ export function parseRepurchaseDue(body: unknown): RepurchaseDueDTO {
     !isMoney(i.price) ||
     !isMoney(i.listPrice)
   ) {
-    return { item: null };
+    // `scanDays` chỉ có nghĩa khi không có món theo đơn trực tiếp; món hợp lệ thì bỏ qua nó.
+    return scanDays === null ? { item: null } : { item: null, scanDays };
   }
   return {
     item: {

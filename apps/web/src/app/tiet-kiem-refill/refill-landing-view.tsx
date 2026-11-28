@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/empty-state';
 import { Skeleton, Text } from '@/components/mini';
 import { PdpRefillOffer } from '@/components/mini/pdp-refill-offer';
 import { RefillNextDelivery } from '@/components/refill/refill-next-delivery';
+import { RepurchaseDueCard } from '@/components/refill/repurchase-due-card-lazy';
 import { useRefillOfferAdd } from '@/components/refill/use-refill-offer-add';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -42,6 +43,7 @@ export default function RefillLandingView({ initial, initialFetchedAt }: { initi
     <>
       <PageHeader title={refillLandingCopy('title')} subtitle={rows.length > 0 ? refillLandingIntro(rows) : undefined} backHref="/san-pham" />
       <RefillNextDelivery landing={q.data} />
+      <RepurchaseDueCard surface="refill_landing" />
       <div style={{ marginTop: 'var(--space-stack-md)' }}>
         {q.isLoading ? (
           <div className={GRID} aria-hidden="true">

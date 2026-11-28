@@ -462,6 +462,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/me/purchased-items', { items: [], nextCursor: null });
       // Thẻ Mua lại hàng tiêu hao ở Cá nhân/Tài khoản và giỏ trống (Mini và web): mặc định như PROD khi cờ retention.repurchase_due_card_enabled tắt, không có thẻ.
       api.fallback('GET', '/me/repurchase-due', { item: null });
+      // Thẻ gợi ý sau khi quét mã đơn sàn (Mini /points/scan, web /quet-ma) và thẻ Mua lại ở giỏ trống hỏi trang Tiết kiệm với Refill: mặc định cờ Refill tắt, không có hàng gói.
+      api.fallback('GET', '/catalog/refill-pairs/landing', { enabled: false, pairs: [] });
       // PDP có phân loại hết hàng hỏi trạng thái "Báo tôi khi có hàng": mặc định như PROD khi cờ catalog.restock_alert_enabled tắt (nút xám "Tạm hết hàng").
       api.fallback('GET', '/restock-alerts', { enabled: false, variationIds: [] });
       // Trang Yêu thích (Mini và web) hỏi các đăng ký báo hàng về đang chờ khi danh sách có thẻ hết hàng: cùng mặc định cờ tắt (không chuông, không nhãn, không chip).

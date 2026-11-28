@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { Page, useLocation } from 'zmp-ui';
 import { canPop, useSmartNavigate } from '../lib/smart-nav';
 import { isBackableRoot } from '../components/nav-config';
@@ -37,6 +37,7 @@ import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { PhoneConfirmSheet } from '../components/loyalty/phone-confirm-sheet';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
+import { SilentBoundary } from '../components/route-shell';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -56,6 +57,9 @@ import '../css/scan-guide.css';
 const PAGE_SIZE = 10;
 const DEAD_STATES = DEAD_CLAIM_STATES;
 const t = viExternalPoints;
+
+// Thẻ gợi ý sau khi quét (w55-01): chỉ khách vừa gửi mã thành công mới cần, nên chunk lười riêng như thẻ Mua lại.
+const PostScanOffer = lazy(() => import('../components/loyalty/post-scan-offer'));
 
 // App đã có SĐT mà máy chủ vẫn không coi tài khoản đủ điều kiện (máy chủ thiếu SĐT hoặc tài khoản bị khoá): chia sẻ lại SĐT không giúp vì máy chủ giữ SĐT cũ, chỉ CSKH gỡ được.
 const ACCOUNT_NOT_ELIGIBLE = 'Tài khoản của bạn chưa đủ điều kiện tích điểm đơn sàn. Bạn liên hệ CSKH Tubu để được hỗ trợ nhé.';
@@ -134,6 +138,17 @@ function ShopNowButton() {
     <div data-testid="scan-shop-now" style={{ marginTop: 'var(--space-inline-md)' }}>
       <Button fullWidth size="lg" onPress={() => goSmart('/')}>
         {scanSuccessCtaLabel(available)}
+      </Button>
+    </div>
+  );
+}
+
+/** Liên kết chữ dưới nút chính sau khi quét xong (w55-01): xoá kết quả và mở khung quét cho đơn kế tiếp. */
+function ScanAnotherLink({ onPress }: { onPress: () => void }) {
+  return (
+    <div data-testid="scan-another" style={{ marginTop: 'var(--space-inline-sm)' }}>
+      <Button variant="ghost" fullWidth onPress={onPress}>
+        {MARKETPLACE_SCAN_COPY.scanAnother}
       </Button>
     </div>
   );
@@ -477,6 +492,12 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
     void scan();
   };
 
+  // Liên kết "Quét đơn khác" sau khi gửi xong: bỏ thẻ kết quả cũ rồi mở khung quét ngay.
+  const scanAnotherFromResult = () => {
+    setResult(null);
+    scanAnother();
+  };
+
   const oaDone = (note: string | null) => {
     setOaState('done');
     setOaNote(note);
@@ -561,7 +582,15 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
           {result.status === 'CLAIMED_BY_OTHER' && <SupportButton maskedCode={result.maskedCode} />}
         </ResultCard>
       )}
+      {shopNow && result && (
+        <SilentBoundary>
+          <Suspense fallback={null}>
+            <PostScanOffer points={result.status === 'CLAIMED' ? result.points : null} />
+          </Suspense>
+        </SilentBoundary>
+      )}
       {shopNow && <ShopNowButton />}
+      {shopNow && <ScanAnotherLink onPress={scanAnotherFromResult} />}
       {showOaInvite && <OaInvite onDone={oaDone} />}
       <PhoneConfirmSheet
         open={confirm !== null}

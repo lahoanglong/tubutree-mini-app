@@ -3,6 +3,7 @@ import { useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { REPURCHASE_DUE_KEY, repurchaseDueQuery } from '@tubutree/app-core/api/repurchase-due';
+import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import {
   dismissRepurchaseDue,
   isRepurchaseDueDismissed,
@@ -39,15 +40,19 @@ const clampLines = (lines: number) => ({ display: '-webkit-box', WebkitLineClamp
 const TITLE_CLAMP = clampLines(2);
 // Thân 3 dòng: câu Refill dài hai dòng ở 375px sẽ cắt mất lý do (bớt một chai nhựa).
 const BODY_CLAMP = clampLines(3);
+const PAGE_SECTION = { padding: 'var(--space-inset-card) var(--space-inset-page) 0' } as const;
+// Trang Refill đã đặt thân trang trong lề trang: thẻ chỉ cần khoảng cách dọc như thẻ "Kỳ Refill tới" ngay trên.
+const LANDING_SECTION = { marginTop: 'var(--space-stack-md)' } as const;
 
 export interface RepurchaseDueCardProps {
-  /** Nơi đặt thẻ (`repurchase_due_*.surface`): Cá nhân hay giỏ trống. */
+  /** Nơi đặt thẻ (`repurchase_due_*.surface`): Cá nhân, giỏ trống hay trang Tiết kiệm với Refill. */
   surface: RepurchaseDueSurface;
 }
 
 /**
- * Thẻ "Mua lại" hàng tiêu hao (nước rửa chén, nước rửa rau) 25–40 ngày sau khi nhận (w36-01), chunk lười ở Cá nhân và giỏ trống. Một nút: thêm gói Refill
- * ghép cặp (không có thì đúng món đã mua) vào giỏ một chạm. × ẩn đúng món đó 14 ngày ở máy này. Chỉ khách đã đăng nhập; cờ tắt, không có món hay lỗi: không vẽ gì.
+ * Thẻ "Mua lại" hàng tiêu hao theo nhịp 21–30 ngày (nước rửa chén, nước rửa rau 25–40) sau khi nhận (w36-01, w55-01), chunk lười ở Cá nhân, giỏ trống và trang Tiết kiệm
+ * với Refill. Một nút: thêm gói Refill ghép cặp (không có thì đúng món đã mua) vào giỏ một chạm. Giỏ trống mà khách chỉ có đơn sàn đã quét (không có dòng sản phẩm)
+ * thì ghép gói Refill đầu trang Tiết kiệm theo mốc `scanDays`. × ẩn đúng món đó 14 ngày ở máy này. Chỉ khách đã đăng nhập; cờ tắt, không có món hay lỗi: không vẽ gì.
  * Cùng vai với `RepurchaseDueCard` của web.
  */
 export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
@@ -56,7 +61,10 @@ export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const q = useQuery({ ...repurchaseDueQuery(coreHttp), enabled: authed });
-  const view = repurchaseDueView(q.data?.item, formatVnd);
+  // Trang Refill là công khai và đã có ở trang Tiết kiệm: chỉ tải khi giỏ trống có mốc đơn sàn mà không có món theo đơn trực tiếp.
+  const scanDays = q.data?.item ? null : (q.data?.scanDays ?? null);
+  const landingQ = useQuery({ ...refillLandingQuery(coreHttp), enabled: authed && surface === 'cart_empty' && scanDays !== null });
+  const view = repurchaseDueView(q.data?.item, formatVnd, { surface, scanDays, landing: landingQ.data });
   const [hiddenKey, setHiddenKey] = useState<string | null>(null);
   const dismissed = view ? hiddenKey === view.key || isRepurchaseDueDismissed(view.key, Date.now(), dismissStore()) : true;
   const shown = authed && view !== null && !dismissed;
@@ -85,7 +93,7 @@ export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
         text,
         type: 'success',
         duration: 4000,
-        ...(surface === 'account' ? { action: { text: repurchaseDueCopy('viewCart'), close: true, onClick: () => navigate('/cart') } } : null),
+        ...(surface !== 'cart_empty' ? { action: { text: repurchaseDueCopy('viewCart'), close: true, onClick: () => navigate('/cart') } } : null),
       });
       announce('status', text);
     },
@@ -117,7 +125,7 @@ export default function RepurchaseDueCard({ surface }: RepurchaseDueCardProps) {
   };
 
   return (
-    <section aria-label={repurchaseDueCopy('region')} data-testid="repurchase-due-card" style={{ padding: 'var(--space-inset-card) var(--space-inset-page) 0' }}>
+    <section aria-label={repurchaseDueCopy('region')} data-testid="repurchase-due-card" style={surface === 'refill_landing' ? LANDING_SECTION : PAGE_SECTION}>
       <Card padding={12}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-inline-md)' }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-xs)' }}>
