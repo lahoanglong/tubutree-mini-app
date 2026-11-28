@@ -2,7 +2,7 @@ import { HOME_COMBOS_LIMIT, fetchHomeCombos } from '@tubutree/app-core/api/bundl
 import { fetchCampaigns } from '@tubutree/app-core/api/campaign';
 import { fetchUpcomingFlashSales } from '@tubutree/app-core/api/flash-sale';
 import { fetchActiveFlashSalesNoSync } from '@/lib/server-flash';
-import { fetchCategories } from '@tubutree/app-core/api/catalog';
+import { fetchBrands, fetchCategories } from '@tubutree/app-core/api/catalog';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { vnDateSeed } from '@tubutree/app-core/home-suggest';
@@ -33,17 +33,18 @@ export const COMBO_REVALIDATE_S = 60;
 
 /**
  * Dữ liệu công khai của Trang chủ cho trang ISR (bản thường và bản khôi phục phiên dùng chung). Mọi lệnh gọi chạy cùng một lượt.
- * Không tải trang 1 của lưới Gợi ý hay danh sách thương hiệu: HTML đầu không vẽ chúng (lưới dựng khi gần khung nhìn và tự tải theo
- * `suggestSeed`; thương hiệu không khối nào dùng).
+ * Không tải trang 1 của lưới Gợi ý: HTML đầu không vẽ nó (lưới dựng khi gần khung nhìn và tự tải theo `suggestSeed`). Thương hiệu có tải: thanh chip dưới
+ * Danh mục cần biết ngay trong HTML đầu là có vẽ hay không.
  */
 export async function loadHomeInitial(): Promise<HomeInitial> {
   const http = createServerHttp();
   // Cùng hạt giống ngày VN mà khách dùng ở client (HomeView lấy lại từ đây ở lần vẽ đầu): lưới Gợi ý tải sau hydrate vẫn đúng thứ tự trong ngày.
   const suggestSeed = vnDateSeed(Date.now());
   const combosAt = Date.now();
-  const [best, cats, publicConfig, flash, flashUpcoming, campaigns, combos] = await Promise.all([
+  const [best, cats, brands, publicConfig, flash, flashUpcoming, campaigns, combos] = await Promise.all([
     settle(homeBestSellerQuery(http).queryFn()),
     settle(fetchCategories(http)),
+    orUndefined(fetchBrands(http)),
     orUndefined(publicConfigQuery(http).queryFn()),
     orUndefined(fetchActiveFlashSalesNoSync(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
     // Chỉ dùng số suất sắp mở (bản ẩn danh): đủ để HTML đầu biết hàng lối tắt có giữ lối vào Giờ vàng không. Danh sách và cờ nhắc của từng khách vẫn tải ở trình duyệt.
@@ -65,7 +66,7 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   const liveCampaigns = campaigns?.filter((c) => new Date(c.endAt).getTime() > Date.now());
   const liveCombos = combos?.filter((b) => new Date(b.endAt).getTime() > Date.now());
   return {
-    bestSellers, suggestSeed, categories, publicConfig, flash: liveFlash, flashUpcomingCount: flashUpcoming?.length,
+    bestSellers, suggestSeed, categories, brands, publicConfig, flash: liveFlash, flashUpcomingCount: flashUpcoming?.length,
     campaigns: liveCampaigns, combos: liveCombos, combosAt: liveCombos ? combosAt : undefined,
   };
 }

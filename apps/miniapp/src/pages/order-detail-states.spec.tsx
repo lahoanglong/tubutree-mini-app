@@ -241,7 +241,8 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, ...STATES[0]!.order, createdAt: hoursFromNow(-1), updatedAt: hoursFromNow(-1) });
     renderPage();
     expect(await screen.findByText(/Thanh toán trước 14:00 05\/11, còn 2 giờ/)).toBeInTheDocument();
-    expect(screen.getByText('Đơn đang chờ bạn thanh toán.')).toBeInTheDocument();
+    // Thẻ trạng thái chỉ một câu (W47): hạn thanh toán thay cho câu "Đơn đang chờ bạn thanh toán." lặp nhãn trạng thái.
+    expect(screen.getByTestId('status-hero').children).toHaveLength(3);
     expect(within(bar()).getByText(/Còn 2 giờ/)).toBeInTheDocument();
   });
 
@@ -257,7 +258,7 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     expect(screen.getByTestId('track-events-toggle')).toHaveTextContent('Xem thêm 1 mốc vận chuyển');
     fireEvent.click(screen.getByTestId('track-events-toggle'));
     expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
-    expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
+    expect(within(screen.getByTestId('order-shipping')).getByTestId('order-tracking-pill')).toHaveTextContent('GHN6789012345 · Giao Hàng Nhanh');
     mocks.copyText.mockResolvedValue(true);
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345 (Giao Hàng Nhanh)' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GHN6789012345');
@@ -288,8 +289,10 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
   it('đơn huỷ chưa có vận chuyển, lịch sử vận chuyển rỗng: không rơi chữ số 0 ra trang', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5), shippingHistory: [], statusTimes: { CANCELLED: hoursFromNow(-6) } });
     const { container } = renderPage();
-    await screen.findByText('Đơn đã huỷ.');
-    expect(container.querySelector('[data-testid="order-shipping"]')).toBeNull();
+    await screen.findByTestId('status-hero');
+    // Thẻ Vận chuyển vẫn có (hành trình và địa chỉ nằm trong thẻ) nhưng không có viên mã, dòng hãng hay mốc hãng.
+    expect(container.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
+    expect(container.querySelector('[data-testid="order-shipping"] [aria-label="Mốc vận chuyển"]')).toBeNull();
     const hero = screen.getByTestId('status-hero');
     expect(hero.nextSibling?.textContent ?? '').not.toBe('0');
     expect(within(container).queryByText(/^0$/)).toBeNull();
@@ -305,8 +308,9 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
       shippingHistory: [{ at: hoursFromNow(-6) }, { at: hoursFromNow(-5), status: '', code: null }, null],
     });
     const { container } = renderPage();
-    await screen.findByText('Đơn đã huỷ.');
-    expect(container.querySelector('[data-testid="order-shipping"]')).toBeNull();
+    await screen.findByTestId('status-hero');
+    expect(container.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
+    expect(container.querySelector('[data-testid="order-shipping"] [aria-label="Mốc vận chuyển"]')).toBeNull();
     const emptyFrames = Array.from(container.querySelectorAll<HTMLElement>('div')).filter(
       (d) => d.style.background.includes('--color-bg-surface') && d.childElementCount === 0 && !d.textContent?.trim(),
     );
@@ -317,7 +321,7 @@ describe('OrderDetailPage — nút theo trạng thái (gói hl)', () => {
     const base = { ...ORDER, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', createdAt: hoursFromNow(-30), updatedAt: hoursFromNow(-5) };
     mocks.fetchOrder.mockResolvedValue({ ...base, paymentDeadline: hoursFromNow(-6), statusTimes: { CANCELLED: hoursFromNow(-6) } });
     renderPage();
-    expect(await screen.findByText('Đơn đã huỷ.')).toBeInTheDocument();
+    expect(await screen.findByText('Đã huỷ', { selector: 'h2' })).toBeInTheDocument();
     expect(screen.queryByText(/quá hạn thanh toán/)).toBeNull();
     expect(screen.queryByTestId('order-cancel-reason')).toBeNull();
   });

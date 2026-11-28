@@ -1,6 +1,6 @@
 import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import type { BundleDTO } from '@tubutree/app-core/api/bundle';
-import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
+import type { BrandCount, CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
@@ -15,6 +15,8 @@ export interface HomeInitial {
   /** Hạt giống ngày VN lúc dựng trang: client dùng lại đúng hạt giống này để lưới Gợi ý và thẻ chen không đổi thứ tự trong cả lần mở. */
   suggestSeed?: string;
   categories?: CategoryDTO[];
+  /** Thương hiệu lúc dựng trang: HTML đầu đã biết có vẽ thanh chip thương hiệu dưới Danh mục không (W47 ẩn khi không đủ hai nhãn thật), không co thanh sau hydrate. */
+  brands?: BrandCount[];
   /** Cấu hình công khai: dải Quà khách mới của khách vãng lai có ngay trong HTML server, cao đúng 64px (không hiện sau hydrate làm Danh mục nhảy). */
   publicConfig?: PublicConfig;
   /** Suất Giờ vàng đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate làm cả trang nhảy. */

@@ -66,7 +66,8 @@ test.describe('Web: hành trình đơn, nút Zalo, lời mời', () => {
     const w = await openOrder(api, page, SHIPPING, { orderZaloEnabled: true, tubuZaloPhone: '0899149229' }, V2);
     const journey = page.getByTestId('order-journey');
     await expect(journey).toBeVisible();
-    await expect(journey.getByRole('heading', { name: 'Hành trình đơn hàng' })).toBeVisible();
+    // Dòng thời gian nằm trong thẻ Vận chuyển, tiêu đề của thẻ là tiêu đề của cả khối.
+    await expect(page.getByTestId('order-shipping').getByTestId('order-journey')).toBeVisible();
     const steps = journey.locator('li[data-step]');
     await expect(steps).toHaveCount(4);
     const tops = await steps.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));

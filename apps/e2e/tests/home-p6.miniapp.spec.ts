@@ -3,7 +3,6 @@ import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
 import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
-import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — Trang chủ (gói P6, bố cục gọn): màn đầu 375×812 có thẻ sản phẩm đầu tiên (kệ Bán chạy nhất) và thứ tự khối đúng (Giờ vàng là ô khuyến mãi
@@ -62,7 +61,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(flash).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 15_000 });
     const blocks = await visibleBlocks(page);
     // Ô khuyến mãi chỉ có MỘT khối: Giờ vàng đang chạy thì không banner, không combo.
     expect(blocks).not.toContain('banner');
@@ -99,7 +98,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(welcome).toBeVisible({ timeout: 15_000 });
     await expect(flash).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 15_000 });
     const blocks = await visibleBlocks(page);
     expect(blocks).not.toContain('member');
     expect(blocks).not.toContain('purchased');
@@ -143,9 +142,9 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
   });
 
   for (const width of [375, 360, 320]) {
-    test(`${width}px: có Giờ vàng thì 2 thẻ chính + 4 ô phụ + lối tắt nhanh đọc đủ nhãn, vùng chạm ≥44px, không tràn ngang`, async ({ page, api }) => {
+    test(`${width}px: có Giờ vàng thì một lưới 4 cột × 2 hàng (6 lối vào + Mã giảm giá + Thêm) đọc đủ nhãn, vùng chạm ≥44px, không tràn ngang`, async ({ page, api }) => {
       mockDiscovery(api, { returning: true });
-      // Thẻ "Mua lẻ · Giờ vàng" chỉ hiện khi có suất Giờ vàng đang chạy hay sắp tới: không mock thì khối lối tắt chỉ còn 5 lối vào.
+      // Ô Giờ vàng chỉ hiện khi có suất Giờ vàng đang chạy hay sắp tới: không mock thì lưới chỉ còn 5 lối vào.
       mockFlash(api);
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
@@ -154,12 +153,12 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
       await expect(grid.getByRole('button', { name: /Mã giảm giá/ })).toBeVisible({ timeout: 15_000 });
       expect(await shortcutLabelProblems(page)).toEqual([]);
       expect(await homeHierarchyProblems(page)).toEqual([]);
-      // 6 lối vào + Mã giảm giá + Cộng đồng + Thêm: Giờ vàng chỉ còn ở thẻ chính, không lặp ở hàng lối tắt.
+      // 6 lối vào + Mã giảm giá + Thêm: Giờ vàng chỉ có một ô, không lặp ở hộp "Thêm lối tắt".
       const goldenHour = grid.getByRole('button', { name: /Giờ vàng/ });
       await expect(goldenHour).toHaveCount(1);
       await expect(goldenHour).toHaveAttribute('data-pillar', 'retail');
       const heights = await grid.getByRole('button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
-      expect(heights).toHaveLength(9);
+      expect(heights).toHaveLength(8);
       for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
       const overflow = await page.evaluate(() => {
         const scroller = document.querySelector('.zaui-page') as HTMLElement | null;

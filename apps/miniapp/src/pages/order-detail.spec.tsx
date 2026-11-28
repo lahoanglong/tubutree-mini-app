@@ -552,7 +552,7 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
       statusTimes: { CONFIRMED: at(1, 8, 5), PACKED: at(2, 9, 30) },
     });
     const first = renderPage();
-    await screen.findByText('Hành trình đơn hàng');
+    await screen.findByRole('list', { name: 'Hành trình đơn hàng' });
     // Thanh tiến trình 4 bước cũng ghi các mốc này: chỉ kiểm danh sách Hành trình đơn hàng.
     const track = within(screen.getByRole('list', { name: 'Hành trình đơn hàng' }));
     expect(track.getByText(/^08:05 01\/10/)).toBeInTheDocument();
@@ -587,7 +587,7 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
   it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'COD' });
     const cod = renderPage();
-    await screen.findByText('Hành trình đơn hàng');
+    await screen.findByTestId('order-shipping');
     expect(screen.queryByText('Chờ thanh toán')).toBeNull();
     expect(screen.getByText('Đã xác nhận')).toBeInTheDocument();
     cod.unmount();
@@ -983,37 +983,35 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     ...extra,
   });
 
-  it('vận đơn: hiện hãng, mã, hành trình và nút "Chép mã"; không có nút/link tra cứu trang hãng', async () => {
+  it('vận đơn: thẻ Vận chuyển gộp có hành trình, viên mã kèm hãng (nút "Chép mã" DUY NHẤT của trang) và địa chỉ; không có nút/link tra cứu trang hãng', async () => {
     mocks.fetchOrder.mockResolvedValue(shipped());
     renderPage();
-    expect(await screen.findByText('GHN')).toBeInTheDocument();
-    expect(within(screen.getByTestId('order-shipping')).getByText('GHN001')).toBeInTheDocument();
+    const shipping = await screen.findByTestId('order-shipping');
+    const pill = within(shipping).getByTestId('order-tracking-pill');
+    expect(pill).toHaveTextContent('GHN001 · GHN');
     expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('button', { name: 'Tra cứu hành trình' })).toBeNull();
     expect(screen.queryAllByRole('link').filter((l) => !/^Xem sản phẩm/.test(l.getAttribute('aria-label') ?? ''))).toHaveLength(0);
-    // Một nút chép mỗi trang: ở viên vận đơn ngay dưới thẻ trạng thái; khối Vận chuyển chỉ in hãng và mã.
-    const pill = screen.getByTestId('order-tracking-pill');
-    expect(screen.getByTestId('status-hero').nextElementSibling).toBe(pill);
-    expect(within(screen.getByTestId('order-shipping')).queryByRole('button')).toBeNull();
+    // W47: thẻ Vận chuyển đứng ngay sau thẻ trạng thái, chứa cả địa chỉ nhận.
+    expect(screen.getByTestId('status-hero').nextElementSibling?.contains(shipping)).toBe(true);
+    expect(within(shipping).getByTestId('order-shipping-address')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveLength(1);
     fireEvent.click(within(pill).getByRole('button', { name: 'Sao chép mã vận đơn GHN001 (GHN)' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
     await waitFor(() => expect(screen.getByTestId('order-tracking-pill')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
-  it.each(['CANCELLED', 'RETURNED'])('đơn %s có mã vận đơn: KHÔNG có viên vận đơn (PO A3); mã in ở khối Vận chuyển kèm nút "Chép mã" duy nhất của trang', async (status) => {
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s có mã vận đơn: viên chép mã vẫn ở thẻ Vận chuyển (đối chiếu, khiếu nại), là nút "Chép mã" duy nhất của trang', async (status) => {
     mocks.fetchOrder.mockResolvedValue(shipped({ status }));
     renderPage();
     const shipping = await screen.findByTestId('order-shipping');
-    expect(within(shipping).getByText('GHN001')).toBeInTheDocument();
-    expect(within(shipping).getByText('GHN')).toBeInTheDocument();
-    expect(screen.queryByTestId('order-tracking-pill')).toBeNull();
+    const pill = within(shipping).getByTestId('order-tracking-pill');
+    expect(pill).toHaveTextContent('GHN001 · GHN');
     expect(screen.getAllByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveLength(1);
-    const copy = within(shipping).getByRole('button', { name: 'Sao chép mã vận đơn GHN001 (GHN)' });
+    const copy = within(pill).getByRole('button', { name: 'Sao chép mã vận đơn GHN001 (GHN)' });
     expect(copy).toHaveTextContent('Chép mã');
     fireEvent.click(copy);
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
-    await waitFor(() => expect(within(shipping).getByRole('status')).toHaveTextContent('Đã sao chép mã vận đơn'));
   });
 
   it('hoá đơn điện tử: chỉ chép đường dẫn, không mở ngoài', async () => {
@@ -1478,7 +1476,7 @@ describe('OrderDetailPage — viên vận đơn và thẻ Refill như web (tubu-
     });
   });
 
-  it('đơn đã giao, cờ Refill bật: thẻ "Lần sau rót lại bằng Refill" ngay sau thẻ trạng thái, trước hành trình và Sản phẩm; đơn không có mã vận đơn thì không có viên', async () => {
+  it('đơn đã giao, cờ Refill bật: thẻ "Lần sau rót lại bằng Refill" là phần phụ, nằm DƯỚI thẻ Vận chuyển, Sản phẩm và Thanh toán (W47); đơn không có mã vận đơn thì không có viên', async () => {
     mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, refillFirstEnabled: true });
     mocks.fetchOrder.mockResolvedValue(ORDER);
     renderPage();
@@ -1487,10 +1485,11 @@ describe('OrderDetailPage — viên vận đơn và thẻ Refill như web (tubu-
     expect(card).toHaveTextContent('Chọn túi Refill 2L tiết kiệm');
     fireEvent.click(within(card).getByTestId('pdp-refill-open'));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong-refill');
-    const hero = screen.getByTestId('status-hero');
-    expect(hero.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(card.nextElementSibling).toHaveTextContent('Đã tiếp nhận, đã qua');
-    expect(card.compareDocumentPosition(screen.getByText('Sản phẩm')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const following = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(following(screen.getByTestId('status-hero'), screen.getByTestId('order-shipping'))).toBe(true);
+    expect(following(screen.getByTestId('order-shipping'), screen.getByText('Sản phẩm'))).toBe(true);
+    expect(following(screen.getByText('Sản phẩm'), card)).toBe(true);
+    expect(following(screen.getAllByText('Tổng cộng')[0]!, card)).toBe(true);
     expect(screen.queryByTestId('order-tracking-pill')).toBeNull();
   });
 
@@ -1503,12 +1502,12 @@ describe('OrderDetailPage — viên vận đơn và thẻ Refill như web (tubu-
     expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());
   });
 
-  it('đơn đang giao: viên vận đơn ngay sau thẻ trạng thái, chưa có thẻ Refill (khách chưa có chai)', async () => {
+  it('đơn đang giao: viên vận đơn trong thẻ Vận chuyển ngay sau thẻ trạng thái, chưa có thẻ Refill (khách chưa có chai)', async () => {
     mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7, refillFirstEnabled: true });
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN001' });
     renderPage();
     const pill = await screen.findByTestId('order-tracking-pill');
-    expect(screen.getByTestId('status-hero').nextElementSibling).toBe(pill);
+    expect(screen.getByTestId('status-hero').nextElementSibling?.contains(pill)).toBe(true);
     expect(within(pill).getByRole('button', { name: 'Sao chép mã vận đơn GHN001 (GHN)' })).toHaveTextContent('GHN001 · GHN');
     expect(screen.queryByTestId('order-refill')).toBeNull();
     expect(mocks.coreGet).not.toHaveBeenCalledWith('/catalog/refill-pairs/landing', expect.anything());

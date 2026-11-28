@@ -1,9 +1,5 @@
-/* Viên vận đơn dưới thẻ trạng thái của Chi tiết đơn (OrderTrackingPill): cùng hình với viên tra cứu của web (rounded-full, viền mảnh, đệm ngang 16, khe 6,
+/* Viên mã vận đơn trong thẻ Vận chuyển của Chi tiết đơn (OrderTrackingPill): cùng hình với viên của web (rounded-full, viền mảnh, đệm ngang 16, khe 6,
    chữ 14 đậm); cao 44 do lớp `touch-target`. Số đo đặt ở đây vì bánh cóc px của P17b chỉ đếm TSX. */
-
-.tubu-order-track {
-  padding: 8px 16px 0;
-}
 
 .tubu-order-track-pill {
   box-sizing: border-box;
@@ -29,11 +25,11 @@
   height: 16px;
 }
 
+/* Mã dài (SPX 18 ký tự) cùng tên hãng ở 360px không vừa một dòng: xuống dòng thay vì cắt "…", khách đối chiếu hay khiếu nại cần đủ mã. */
 .tubu-order-track-code {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-align: left;
   color: var(--color-text-primary);
 }
 

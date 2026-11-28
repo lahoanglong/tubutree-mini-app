@@ -6,13 +6,13 @@ import {
   orderActionLabel,
   orderActionPlan,
   orderHeadline,
+  orderHeroLine,
   orderStage,
   orderTrack,
   pendingReviewItem,
   returnWindowOpen,
   shippingEvents,
   shortDateTime,
-  showTrackingPill,
   trackAddsDetail,
   type OrderStage,
   type TrackOrder,
@@ -515,17 +515,49 @@ describe('orderTrack', () => {
   });
 });
 
-describe('showTrackingPill (PO A3: viên vận đơn chỉ cho đơn còn chờ hàng)', () => {
-  it.each(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'])('%s có mã vận đơn: hiện viên', (status) => {
-    expect(showTrackingPill({ status, shippingCode: 'GHN123' })).toBe(true);
+describe('orderHeroLine: thẻ trạng thái chỉ còn MỘT câu (W47)', () => {
+  const h = (over: Partial<Parameters<typeof orderHeroLine>[0]>) =>
+    orderHeroLine({ stage: 'CONFIRMED', sentence: 'Câu trạng thái', reason: null, milestone: null, next: null, ...over });
+
+  it('lý do huỷ thắng mọi câu khác', () => {
+    expect(h({ stage: 'CANCELLED', reason: 'Khách đổi ý', next: 'Đặt lại' })).toEqual({ kind: 'reason', text: 'Khách đổi ý' });
   });
 
-  it.each(['CANCELLED', 'RETURNED'])('%s: ẩn viên dù kho đã gắn mã vận đơn', (status) => {
-    expect(showTrackingPill({ status, shippingCode: 'GHN123' })).toBe(false);
+  it('đơn huỷ đã trả tiền có lý do: câu hoàn tiền đi cùng lý do (mục Hoàn tiền nằm cuối trang), không chấm đôi', () => {
+    const refund = 'Tiền hoàn của đơn xem ở mục Hoàn tiền bên dưới.';
+    const paid = orderHeroLine(orderHeadline(order({ status: 'CANCELLED', paymentStatus: 'PAID', cancelReason: 'Hết hàng' }), { now: NOW, userId: 'u1' }));
+    expect(paid).toEqual({ kind: 'reason', text: `Hết hàng. ${refund}` });
+    expect(h({ stage: 'CANCELLED', reason: 'Shop hết hàng.', next: refund })).toEqual({ kind: 'reason', text: `Shop hết hàng. ${refund}` });
+    const unpaid = orderHeroLine(orderHeadline(order({ status: 'CANCELLED', paymentStatus: 'UNPAID', cancelReason: 'Hết hàng' }), { now: NOW, userId: 'u1' }));
+    expect(unpaid).toEqual({ kind: 'reason', text: 'Hết hàng' });
   });
 
-  it.each([null, undefined, ''])('chưa có mã vận đơn (%s): không có viên', (shippingCode) => {
-    expect(showTrackingPill({ status: 'SHIPPING', shippingCode })).toBe(false);
+  it('mốc cần biết (hạn thanh toán, ngày giao dự kiến, hạn đổi/trả) thắng câu trạng thái và bước kế', () => {
+    expect(h({ milestone: 'Dự kiến giao 06/11', next: 'Còn huỷ được' })).toEqual({ kind: 'milestone', text: 'Dự kiến giao 06/11' });
+  });
+
+  it('không có mốc: bước kế (vì sao không huỷ được, hoàn tiền, mua lại) thắng câu trạng thái vốn lặp nhãn', () => {
+    expect(h({ stage: 'RETURNED', next: 'Tiền hoàn về trong 3 ngày' })).toEqual({ kind: 'next', text: 'Tiền hoàn về trong 3 ngày' });
+    expect(h({ stage: 'SHIPPING', next: 'Đơn không huỷ được' })).toEqual({ kind: 'next', text: 'Đơn không huỷ được' });
+  });
+
+  it('đơn quá hạn thanh toán: câu "sắp tự huỷ" (nhãn "Chờ thanh toán" không nói được) thắng bước kế "liên hệ Tubu"', () => {
+    expect(h({ stage: 'PAY_OVERDUE', sentence: 'Đơn đã quá hạn thanh toán và sắp tự huỷ.', next: 'Cần hỗ trợ thì bạn liên hệ Tubu.' })).toEqual({
+      kind: 'sentence',
+      text: 'Đơn đã quá hạn thanh toán và sắp tự huỷ.',
+    });
+    const line = orderHeroLine(orderHeadline(order({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: iso(-HOUR) }), { now: NOW, userId: 'u1' }));
+    expect(line).toEqual({ kind: 'sentence', text: 'Đơn đã quá hạn thanh toán và sắp tự huỷ.' });
+  });
+
+  it('không có lý do, mốc, bước kế: câu trạng thái; không có gì thì null', () => {
+    expect(h({})).toEqual({ kind: 'sentence', text: 'Câu trạng thái' });
+    expect(h({ sentence: '' })).toBeNull();
+  });
+
+  it('nối với orderHeadline: đơn chờ chuyển khoản có hạn thì câu duy nhất là hạn thanh toán', () => {
+    const line = orderHeroLine(orderHeadline(order({ status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentDeadline: iso(HOUR) }), { now: NOW, userId: 'u1' }));
+    expect(line?.kind).toBe('milestone');
   });
 });
 

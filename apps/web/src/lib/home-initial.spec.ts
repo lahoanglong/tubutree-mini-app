@@ -132,16 +132,16 @@ describe('loadHomeInitial: Giờ vàng có trong HTML đầu', () => {
   });
 });
 
-describe('loadHomeInitial: Gợi ý hôm nay và thương hiệu không tải ở máy chủ', () => {
-  it('không xin trang 1 của lưới Gợi ý hay danh sách thương hiệu (HTML đầu không vẽ), chỉ trả hạt giống ngày VN để client tải đúng thứ tự', async () => {
+describe('loadHomeInitial: lưới Gợi ý không tải ở máy chủ, thương hiệu có (W47)', () => {
+  it('không xin trang 1 của lưới Gợi ý (HTML đầu không vẽ), chỉ trả hạt giống ngày VN; xin danh sách thương hiệu một lần để HTML đầu biết có vẽ thanh chip không', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-31T18:00:00Z'));
     try {
       const initial = await loadHomeInitial();
       expect(productCalls).toEqual([]);
-      expect(brandCalls).toBe(0);
+      expect(brandCalls).toBe(1);
       expect(initial).not.toHaveProperty('suggest');
-      expect(initial).not.toHaveProperty('brands');
+      expect(initial.brands).toEqual([]);
       expect(initial.suggestSeed).toBe('20261101');
     } finally {
       vi.useRealTimers();

@@ -5,8 +5,8 @@ import { shelf } from './merch/shelves';
 import { liveRoute } from './merch/route-fallback';
 import {
   memberCardAriaLabel, offersPointsAriaLabel, clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
-  visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
-  HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, HOME_MAX_BLOCKS, HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, homeContextVariant, homeContextBlockName, homeInterleaveCard, homePromoPick, homeTodoCount, homeTodoLead, resolveHomeEcosystemPillars, splitHomeEcosystemPillars,
+  homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutGrid, HOME_GRID_CELLS, HOME_GRID_COLUMNS, HOME_HEADER_HEIGHT, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
+  HOME_ECOSYSTEM_PILLARS, HOME_MAX_BLOCKS, HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, homeContextVariant, homeContextBlockName, homeInterleaveCard, homePromoPick, homeTodoCount, homeTodoLead, resolveHomeEcosystemPillars,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, BRAND_BAR_HEIGHT, categoriesBlockHeight, homeCategoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
@@ -147,79 +147,66 @@ describe('homeInterleaveCard', () => {
   });
 });
 
-describe('visibleHomeShortcuts', () => {
-  it('khai 9 lối tắt; khi mọi cờ bật hiện đủ 9, mở đầu bằng Giờ vàng; không có Vườn Xanh (thẻ chính) và Đơn sàn (tab giữa Quét mã, W42)', () => {
-    expect(HOME_SHORTCUTS).toHaveLength(9);
-    const ids = visibleHomeShortcuts({ wasteEnabled: true }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'gifts', 'earn', 'community']);
-    expect(ids).not.toContain('garden');
-    expect(ids).not.toContain('claim');
+describe('homeShortcutGrid (W47: MỘT lưới biểu tượng thay ba tầng thẻ chính, ô phụ, viên lối tắt)', () => {
+  const ids = (cells: { id: string }[]) => cells.map((c) => c.id);
+
+  it('lưới 4 cột × 2 hàng: sáu lối vào hệ sinh thái trước, Mã giảm giá, rồi ô "Thêm" mở Cộng đồng, Bộ quà tặng, Kiếm tiền', () => {
+    expect(HOME_GRID_COLUMNS).toBe(4);
+    expect(HOME_GRID_CELLS).toBe(8);
+    const { cells, more } = homeShortcutGrid();
+    expect(ids(cells)).toEqual(['retail', 'garden', 'recycle', 'groupBuy', 'subscription', 'rewards', 'coupons']);
+    expect(ids(more)).toEqual(['community', 'gifts', 'earn']);
   });
-  it('ô Giờ vàng hiện khi chưa biết hay có suất, không phụ thuộc cờ nào; biết chắc không có suất nào thì bỏ', () => {
-    for (const wasteEnabled of [false, true]) {
-      expect(visibleHomeShortcuts({ wasteEnabled })[0]!.id).toBe('flash');
-      expect(visibleHomeShortcuts({ wasteEnabled, flashLive: true })[0]!.id).toBe('flash');
-      expect(visibleHomeShortcuts({ wasteEnabled, flashLive: false }).map((x) => x.id)).not.toContain('flash');
-    }
+
+  it('không còn lối tắt trùng: không có Giờ vàng thứ hai (ô retail là lối duy nhất) và không có ô Đơn hàng (tab Tài khoản đã có)', () => {
+    expect(HOME_SHORTCUTS.map((s) => s.id)).toEqual(['coupons', 'community', 'gifts', 'earn']);
+    const { cells, more } = homeShortcutGrid();
+    const all = [...ids(cells), ...ids(more)];
+    expect(all).not.toContain('flash');
+    expect(all).not.toContain('orders');
+    expect(new Set(all).size).toBe(all.length);
   });
-  it('nhãn mọi lối tắt vừa MỘT dòng ở ô 5 cột (≤11 ký tự): nhãn xuống dòng làm hàng cao hơn khung chờ và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
-    for (const s of HOME_SHORTCUTS) expect(s.label.length, s.label).toBeLessThanOrEqual(11);
-  });
-  it('mọi tổ hợp cờ và trạng thái: nhãn hiển thị (kể cả nhãn thay thế của Đổi rác) tối đa 11 ký tự và có câu đọc đầy đủ chứa nhãn', () => {
-    const bools = [false, true];
-    for (const wasteEnabled of bools) for (const recycleOpenRequests of [undefined, false, true]) {
-      for (const s of visibleHomeShortcuts({ wasteEnabled, recycleOpenRequests })) {
-        expect(s.label.length, `${s.label} (${wasteEnabled}/${recycleOpenRequests})`).toBeLessThanOrEqual(11);
-        expect(s.ariaLabel.toLowerCase()).toContain(s.label.toLowerCase());
+
+  it('nhãn hiển thị 1–2 chữ, tối đa 11 ký tự (vừa hai dòng ở ô 4 cột); câu đọc bắt đầu bằng đúng nhãn (WCAG 2.5.3)', () => {
+    for (const flashLive of [undefined, false]) for (const wastePausedWithOpenRequests of [false, true]) for (const gardenDot of [false, true]) {
+      const { cells, more } = homeShortcutGrid({ flashLive, wastePausedWithOpenRequests, gardenDot });
+      for (const c of [...cells, ...more]) {
+        expect(c.label.length, c.label).toBeLessThanOrEqual(11);
+        expect(c.label.split(' ').length, c.label).toBeLessThanOrEqual(3);
+        expect(c.ariaLabel.startsWith(c.label), `${c.ariaLabel} / ${c.label}`).toBe(true);
       }
     }
   });
-  it('Đổi rác tạm dừng mà còn yêu cầu mở ghi "Yêu cầu", câu đọc vẫn nói đầy đủ', () => {
-    const paused = visibleHomeShortcuts({ wasteEnabled: false, recycleOpenRequests: true }).find((s) => s.id === 'recycle');
-    expect(paused).toMatchObject({ label: 'Yêu cầu', ariaLabel: expect.stringContaining('Yêu cầu của tôi') });
+
+  it('biết chắc không có suất Giờ vàng: bỏ ô retail, Cộng đồng lên lưới, vẫn đủ 8 ô (khối dưới không nhảy)', () => {
+    const { cells, more } = homeShortcutGrid({ flashLive: false });
+    expect(ids(cells)).toEqual(['garden', 'recycle', 'groupBuy', 'subscription', 'rewards', 'coupons', 'community']);
+    expect(ids(more)).toEqual(['gifts', 'earn']);
   });
-  it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
-    const ids = visibleHomeShortcuts({ wasteEnabled: false }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'groupBuy', 'rewards', 'orders', 'gifts', 'earn', 'community']);
+
+  it('web bỏ lối tắt chưa có trang: còn ≤ 8 ô thì không có ô "Thêm"', () => {
+    const { cells, more } = homeShortcutGrid({ shortcutReady: (s) => s.id === 'coupons' || s.id === 'community' });
+    expect(ids(cells)).toEqual(['retail', 'garden', 'recycle', 'groupBuy', 'subscription', 'rewards', 'coupons', 'community']);
+    expect(more).toEqual([]);
   });
-  it('Giờ vàng đi tới /flash-sale, Mã giảm giá ghi đúng chữ chốt', () => {
-    expect(HOME_SHORTCUTS.find((s) => s.id === 'flash')).toMatchObject({ label: 'Giờ vàng' });
-    expect(HOME_SHORTCUTS.find((s) => s.id === 'coupons')).toMatchObject({ label: 'Mã giảm giá' });
+
+  it('Vườn Xanh có việc hôm nay: ô mang chấm, câu đọc nói có việc; không có thì không chấm', () => {
+    const dotted = homeShortcutGrid({ gardenDot: true }).cells.find((c) => c.id === 'garden')!;
+    expect(dotted).toMatchObject({ kind: 'pillar', dot: true, label: 'Vườn Xanh' });
+    expect(dotted.ariaLabel).not.toBe(homeShortcutGrid().cells.find((c) => c.id === 'garden')!.ariaLabel);
+    expect(homeShortcutGrid().cells.find((c) => c.id === 'garden')).not.toHaveProperty('dot');
   });
-  it('Bộ quà tặng luôn có trong "Tất cả lối tắt" (không theo cờ) và không chiếm 4 ô cố định', () => {
-    for (const wasteEnabled of [true, false]) {
-      const { pinned, all } = homeShortcutSlots({ wasteEnabled, flashLive: false });
-      expect(all.find((s) => s.id === 'gifts')).toMatchObject({ label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu' });
-      expect(pinned.map((s) => s.id)).not.toContain('gifts');
-    }
+
+  it('khung chờ khối lối tắt = hai hàng ô 80 + khe 8', () => {
+    expect(HOME_SETTLING_HEIGHTS.shortcuts).toBe(80 + 8 + 80);
   });
 });
 
-describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
-  it('4 ô cố định là Giờ vàng, Mã giảm giá, Đổi rác, Mua chung (Q7); "Tất cả" liệt kê đủ mục còn hiển thị', () => {
-    expect(HOME_SHORTCUT_SLOTS).toBe(4);
-    const { pinned, all } = homeShortcutSlots({ wasteEnabled: true });
-    expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'recycle', 'groupBuy']);
-    expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'gifts']));
-    expect(all).toHaveLength(9);
-  });
-  it('Đổi rác tắt thì ô trống được mục kế lấp, vẫn đủ 4 ô', () => {
-    const { pinned } = homeShortcutSlots({ wasteEnabled: false });
-    expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'groupBuy', 'rewards']);
-  });
-});
-
-describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
-  it('đủ 6 lối vào theo thứ tự vẽ: hai thẻ chính (Mua lẻ · Giờ vàng, Vườn Xanh — W42 khi tab giữa thành Quét mã) rồi bốn ô phụ', () => {
-    expect(HOME_ECOSYSTEM_PILLARS.map((p) => [p.id, p.tier])).toEqual([
-      ['retail', 'hero'],
-      ['garden', 'hero'],
-      ['recycle', 'chip'],
-      ['groupBuy', 'chip'],
-      ['subscription', 'chip'],
-      ['rewards', 'chip'],
-    ]);
+describe('HOME_ECOSYSTEM_PILLARS (sáu lối vào của lưới lối tắt)', () => {
+  it('đủ 6 lối vào theo thứ tự vẽ, kèm đích web và Mini', () => {
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.id)).toEqual(['retail', 'garden', 'recycle', 'groupBuy', 'subscription', 'rewards']);
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.title)).toEqual(['Mua lẻ · Giờ vàng', 'Vườn Xanh', 'Đổi rác', 'Mua chung', 'Mua xoay vòng', 'Kho quà 0đ']);
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.short)).toEqual(['Giờ vàng', 'Vườn Xanh', 'Đổi rác', 'Mua chung', 'Định kỳ', 'Kho quà']);
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.webHref)).toEqual([
       '/gio-vang',
       '/vuon-xanh',
@@ -238,7 +225,7 @@ describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
     ]);
   });
 
-  it('đích thẻ chính khớp bảng route-fallback: route nào chuyển sang chờ thì spec này đỏ để thẻ chính đi qua liveRoute như lối tắt', () => {
+  it('đích lối vào khớp bảng route-fallback: route nào chuyển sang chờ thì spec này đỏ để ô đi qua liveRoute như lối tắt', () => {
     for (const p of HOME_ECOSYSTEM_PILLARS) {
       expect(liveRoute(p.miniRoute, 'mini'), `${p.id} miniRoute`).toBe(p.miniRoute);
       // Route lạ (không có trong bảng) được trả nguyên; chỉ route có trong bảng mới phải khớp webHref.
@@ -248,49 +235,26 @@ describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
     expect(liveRoute('/flash-sale', 'web')).toBe(HOME_ECOSYSTEM_PILLARS[0]!.webHref);
   });
 
-  it('Giờ vàng chỉ có một nút trên màn (thẻ chính), không lặp ở hàng lối tắt nhanh; Mã giảm giá và Cộng đồng còn ở hàng đó', () => {
-    expect(HOME_QUICK_SHORTCUT_IDS).toEqual(['coupons', 'community']);
-    expect(HOME_QUICK_SHORTCUT_IDS).not.toContain('flash');
-    // Mọi lối tắt vẫn còn trong hộp thoại "Thêm".
-    expect(visibleHomeShortcuts({ wasteEnabled: true }).map((s) => s.id)).toContain('flash');
-  });
-
-  it('chiều cao khung chờ khối lối vào = hàng 1 (96) + khe 8 + hàng 2 (64) + khe 8 + hàng lối tắt nhanh (44)', () => {
-    expect(HOME_SETTLING_HEIGHTS.shortcuts).toBe(96 + 8 + 64 + 8 + 44);
-  });
-
-  it('splitHomeEcosystemPillars: 2 thẻ chính và 4 ô phụ, giữ thứ tự', () => {
-    const { heroes, chips } = splitHomeEcosystemPillars(HOME_ECOSYSTEM_PILLARS);
-    expect(heroes.map((p) => p.id)).toEqual(['retail', 'garden']);
-    expect(chips.map((p) => p.id)).toEqual(['recycle', 'groupBuy', 'subscription', 'rewards']);
-  });
-
   it('Mua xoay vòng nói đúng % của cấu hình; chưa có cấu hình thì không nêu con số nào (không còn 17% viết cứng)', () => {
     const sub = (pct?: number | null) => resolveHomeEcosystemPillars({ subscribeDiscountPct: pct }).find((p) => p.id === 'subscription')!;
-    expect(sub(0.12)).toMatchObject({ subtitle: 'Đặt định kỳ tiết kiệm tới 12%', badge: 'Định kỳ -12%' });
-    expect(sub(0.15)).toMatchObject({ subtitle: 'Đặt định kỳ tiết kiệm tới 15%', badge: 'Định kỳ -15%' });
-    for (const missing of [undefined, null, 0]) {
-      const p = sub(missing);
-      expect(`${p.subtitle} ${p.badge}`).not.toMatch(/\d/);
-    }
+    expect(sub(0.12)).toMatchObject({ subtitle: 'Đặt định kỳ tiết kiệm tới 12%' });
+    expect(sub(0.15)).toMatchObject({ subtitle: 'Đặt định kỳ tiết kiệm tới 15%' });
+    for (const missing of [undefined, null, 0]) expect(sub(missing).subtitle).not.toMatch(/\d/);
     expect(JSON.stringify(HOME_ECOSYSTEM_PILLARS)).not.toContain('17%');
   });
 
-  it('biết chắc không có suất Giờ vàng: bỏ thẻ "Mua lẻ · Giờ vàng", còn một thẻ chính (Vườn Xanh giãn hết hàng); chưa biết thì giữ', () => {
-    const off = splitHomeEcosystemPillars(resolveHomeEcosystemPillars({ flashLive: false }));
-    expect(off.heroes.map((p) => p.id)).toEqual(['garden']);
-    expect(off.chips).toHaveLength(4);
-    expect(splitHomeEcosystemPillars(resolveHomeEcosystemPillars({})).heroes.map((p) => p.id)).toEqual(['retail', 'garden']);
+  it('biết chắc không có suất Giờ vàng: bỏ lối "Mua lẻ · Giờ vàng"; chưa biết thì giữ', () => {
+    expect(resolveHomeEcosystemPillars({ flashLive: false }).map((p) => p.id)).not.toContain('retail');
+    expect(resolveHomeEcosystemPillars({}).map((p) => p.id)).toContain('retail');
   });
 
-  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, ô Đổi rác đổi sang Yêu cầu của tôi', () => {
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 lối, ô Đổi rác đổi sang Yêu cầu của tôi', () => {
     const paused = resolveHomeEcosystemPillars({ wastePausedWithOpenRequests: true });
     expect(paused).toHaveLength(6);
-    expect(paused.filter((p) => p.tier === 'hero')).toHaveLength(2);
     expect(paused[2]).toMatchObject({
       id: 'recycle',
       title: 'Yêu cầu của tôi',
-      badge: 'Yêu cầu',
+      short: 'Yêu cầu',
       webHref: '/doi-rac/yeu-cau',
       miniRoute: '/recycle/requests',
     });
@@ -337,9 +301,8 @@ describe('hai ô cuối của Trang chủ phân biệt được', () => {
     expect(homeCopy.shortcuts.more).not.toBe(homeCopy.categories.all);
     expect(homeCopy.shortcuts.moreAria).not.toBe(homeCopy.categories.allAria);
   });
-  it('tên đọc ô "Thêm" bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3); hộp thoại nó mở vẫn tên "Tất cả lối tắt"', () => {
+  it('tên đọc ô "Thêm" bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3); hộp thoại nó mở mang cùng tên', () => {
     expect(homeCopy.shortcuts.moreAria.startsWith(homeCopy.shortcuts.more)).toBe(true);
-    expect(homeCopy.shortcuts.allAria).toBe('Tất cả lối tắt');
   });
 });
 

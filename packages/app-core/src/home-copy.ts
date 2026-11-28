@@ -35,10 +35,10 @@ export const homeCopy = {
     preparingHint: 'Chạm để xem đơn',
   },
   /**
-   * `more`/`moreAria`: ô cuối hàng lối tắt mở sheet các lối tắt còn lại (nhãn ≤ 6 ký tự, một dòng ở ô 75px). Khác ô "Tất cả" của hàng Danh mục (đi tới tab Danh mục):
-   * hai ô không được cùng nhãn. Tên đọc bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3). `allAria` là tên hộp thoại của sheet.
+   * `more`/`moreAria`: ô cuối lưới lối tắt mở sheet các lối tắt còn lại (nhãn ≤ 6 ký tự, một dòng); `moreAria` cũng là tên hộp thoại của sheet. Khác ô
+   * "Tất cả" của hàng Danh mục (đi tới tab Danh mục): hai ô không được cùng nhãn. Tên đọc bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3).
    */
-  shortcuts: { title: 'Lối tắt', more: 'Thêm', moreAria: 'Thêm lối tắt', allAria: 'Tất cả lối tắt' },
+  shortcuts: { title: 'Lối tắt', more: 'Thêm', moreAria: 'Thêm lối tắt' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
   categories: { title: 'Danh mục', all: 'Tất cả', allAria: 'Tất cả danh mục', brands: 'Thương hiệu' },
   journey: {
@@ -61,8 +61,11 @@ export const homeCopy = {
     comments: (n: number) => `${n} bình luận`,
     noComments: 'Chưa có bình luận',
   },
-  /** Nút cuối khối "Khám phá theo Thương hiệu" (block `suggest`); tiêu đề khối ở `SHOP_COPY['home.brands.title']`. */
+  /** Lưới "Gợi ý cho bạn" (block `suggest`, W47): tiêu đề, nút tải thêm, câu cuối lưới và lối vào Danh mục. */
   suggest: {
+    title: 'Gợi ý cho bạn',
+    more: 'Xem thêm',
+    end: 'Bạn đã xem hết gợi ý hôm nay',
     enter: 'Vào Danh mục',
   },
   guestGift: {

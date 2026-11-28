@@ -47,7 +47,7 @@ const PUBLIC_FEED = {
   newest: PAGE([card('n1', 'Mới nhất')]),
   flashActive: [],
   categories: [],
-  brands: [{ brand: 'Cobote', count: 3 }],
+  brands: [{ brand: 'Cobote', count: 3 }, { brand: 'Hector', count: 2 }],
   campaigns: [],
   combos: [],
   publicConfig: {
@@ -73,12 +73,12 @@ const ME_FEED = {
   purchasedLimit: 10,
 };
 
-/** Món bán chạy của nhãn Cobote (khối thương hiệu cuối trang): thấy món này là trang đã vẽ tới khối cuối. */
-const BRAND_ITEM = 'Món nhãn Cobote';
+/** Món của lưới "Gợi ý cho bạn" cuối trang: thấy món này là trang đã vẽ tới khối cuối. */
+const SUGGEST_ITEM = 'Món gợi ý cho bạn';
 
 const paths = () => mocks.get.mock.calls.map(([url]) => url as string);
 
-/** Khối "Khám phá theo Thương hiệu" ở cuối trang chỉ tải món của từng nhãn khi khối sắp vào màn: giữ nó ngoài màn để đếm đúng các request của lần mở Trang chủ. */
+/** Lưới "Gợi ý cho bạn" ở cuối trang chỉ tải khi khối sắp vào màn: giữ nó ngoài màn để đếm đúng các request của lần mở Trang chủ. */
 function keepSuggestOffScreen() {
   vi.stubGlobal(
     'IntersectionObserver',
@@ -110,9 +110,9 @@ describe('Trang chủ gộp request (C-037)', () => {
     localStorage.clear();
     mocks.status = 'authenticated';
     mocks.routes = {};
-    // Món của từng nhãn ở khối thương hiệu cuối trang không nằm trong request gộp: request riêng `/products?brand=`, chỉ tải khi khối sắp vào màn. Cộng đồng chỉ
-    // là thẻ chen trong khối đó (chỉ ngày lẻ) nên /feed không nằm trong lần mở Trang chủ.
-    mocks.routes['/products'] = (config) => ({ data: config?.params?.brand ? PAGE([card('cb', BRAND_ITEM)]) : PAGE([card('f2', 'Chỉ nổi bật')]) });
+    // Lưới gợi ý cuối trang (trang 1) không nằm trong request gộp: request riêng, chỉ tải khi khối sắp vào màn. Cộng đồng chỉ là thẻ chen trong lưới đó
+    // nên /feed không nằm trong lần mở Trang chủ.
+    mocks.routes['/products'] = () => ({ data: PAGE([card('sg', SUGGEST_ITEM)]) });
     mocks.routes['/feed'] = () => ({ data: { posts: [] } });
     // Chuông chỉ đếm bằng một lời gọi nhỏ (cả hộp thư, không dừng ở 50 tin của khối gộp): request riêng của khách đã đăng nhập.
     mocks.routes['/me/summary'] = () => ({ data: { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 } });
@@ -125,7 +125,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     });
   });
 
-  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng /me/summary (số tin chưa đọc, đơn đang xử lý), vẽ đủ khối; khối thương hiệu cuối trang chưa tải món khi chưa tới gần', async () => {
+  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng /me/summary (số tin chưa đọc, đơn đang xử lý), vẽ đủ khối; lưới gợi ý cuối trang chưa tải khi chưa tới gần', async () => {
     keepSuggestOffScreen();
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
@@ -133,9 +133,9 @@ describe('Trang chủ gộp request (C-037)', () => {
     // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    // Danh sách nhãn đến từ khối gộp /home (thanh chip dưới Danh mục và tiêu đề từng nhãn); món của nhãn chưa tải vì khối còn ở xa màn.
+    // Danh sách nhãn đến từ khối gộp /home (thanh chip dưới Danh mục, có vì đủ hai nhãn thật); lưới gợi ý chưa tải vì khối còn ở xa màn.
     expect(screen.getAllByText('Cobote').length).toBeGreaterThan(0);
-    expect(screen.queryByText(BRAND_ITEM)).toBeNull();
+    expect(screen.queryByText(SUGGEST_ITEM)).toBeNull();
     // Số yêu cầu đổi rác đang mở lấy từ /home/me (không gọi /waste/me). /game/daily là chấm của thẻ Vườn Xanh (W42), cùng khoá truy vấn với
     // thanh đáy vốn đã gọi ở mọi tab gốc, nên trong app thật không thêm request.
     expect(paths().sort()).toEqual(['/game/daily', '/home', '/home/me', '/me/summary']);
@@ -148,7 +148,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/home/me'] = () => ({ data: oldMe });
     mocks.routes['/waste/me/open-count'] = () => ({ data: { count: 0 } });
     renderHome();
-    expect(await screen.findByText(BRAND_ITEM)).toBeInTheDocument();
+    expect(await screen.findByText(SUGGEST_ITEM)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().filter((p) => p.startsWith('/waste'))).toEqual(['/waste/me/open-count']);
   });
@@ -197,7 +197,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
     mocks.routes['/campaigns'] = () => ({ data: [] });
     renderHome();
-    expect(await screen.findByText(BRAND_ITEM)).toBeInTheDocument();
+    expect(await screen.findByText(SUGGEST_ITEM)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().filter((p) => p === '/campaigns')).toHaveLength(1);
     expect(mocks.get.mock.calls.find(([u]) => u === '/campaigns')?.[1]).toMatchObject({ params: { placement: 'HOME_TOP' } });
@@ -222,7 +222,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
     mocks.routes['/bundles/combos'] = () => ({ data: [] });
     renderHome();
-    expect(await screen.findByText(BRAND_ITEM)).toBeInTheDocument();
+    expect(await screen.findByText(SUGGEST_ITEM)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().filter((p) => p === '/bundles/combos')).toHaveLength(1);
     expect(mocks.get.mock.calls.find(([u]) => u === '/bundles/combos')?.[1]).toMatchObject({ params: { limit: 4 } });
@@ -231,14 +231,14 @@ describe('Trang chủ gộp request (C-037)', () => {
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {
     mocks.routes['/categories'] = () => ({ data: [] });
-    mocks.routes['/brands'] = () => ({ data: [{ brand: 'Cobote', count: 3 }] });
+    mocks.routes['/brands'] = () => ({ data: [{ brand: 'Cobote', count: 3 }, { brand: 'Hector', count: 2 }] });
     mocks.routes['/flash-sales/active'] = () => ({ data: [] });
     mocks.routes['/flash-sales/upcoming'] = () => ({ data: [] });
     mocks.routes['/me/purchased-items'] = () => ({ data: { items: [], nextCursor: null } });
     mocks.routes['/orders/active-count'] = () => ({ data: { count: 0 } });
     mocks.routes['/me/subscriptions'] = () => ({ data: [] });
     renderHome();
-    expect(await screen.findByText(BRAND_ITEM)).toBeInTheDocument();
+    expect(await screen.findByText(SUGGEST_ITEM)).toBeInTheDocument();
     await waitFor(() => expect(paths()).toEqual(expect.arrayContaining(['/home', '/home/me', '/products', '/categories', '/brands'])));
   });
 
@@ -257,7 +257,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
     const { qc } = renderHome();
-    await screen.findByText(BRAND_ITEM);
+    await screen.findByText(SUGGEST_ITEM);
     await new Promise((r) => setTimeout(r, 50));
     mocks.get.mockClear();
     await refreshHomeQueries(qc);

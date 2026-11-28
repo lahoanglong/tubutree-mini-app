@@ -961,10 +961,7 @@
         "webOnly": [
           "trackingHref"
         ],
-        "miniOnly": [
-          "copyable"
-        ],
-        "reason": "Mini App không mở trang ngoài (Zalo 4.1) nên không có liên kết tra cứu của hãng; web mở tab mới, chỉ http/https đã lọc. Mini giữ một nút chép mỗi trang ở viên vận đơn nên khối Vận chuyển chỉ bật nút (copyable) khi đơn huỷ/hoàn không có viên; web luôn có nút chép ở khối này"
+        "reason": "Mini App không mở trang ngoài (Zalo 4.1) nên không có liên kết tra cứu của hãng; web mở tab mới, chỉ http/https đã lọc. Từ W47 khối là thẻ Vận chuyển gộp (hành trình, viên chép mã, địa chỉ nhận) ở cả hai app"
       },
       "screens": [
         "/order/:code"
@@ -975,15 +972,6 @@
       "miniapp": "apps/miniapp/src/components/orders/order-tracking-pill.tsx",
       "web": "apps/web/src/components/orders/order-tracking-pill.tsx",
       "props": "OrderTrackingPillProps",
-      "propsDiff": {
-        "miniOnly": [
-          "code"
-        ],
-        "webOnly": [
-          "href"
-        ],
-        "reason": "Mini App không mở trang hãng (Zalo 4.1) nên viên in mã vận đơn và chạm để chép mã; web mở trang tra cứu của hãng ở tab mới (href chỉ http/https đã lọc)"
-      },
       "screens": [
         "/order/:code"
       ]

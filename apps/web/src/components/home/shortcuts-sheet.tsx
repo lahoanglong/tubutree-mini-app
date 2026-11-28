@@ -13,10 +13,10 @@ export interface ShortcutsSheetProps {
   onSelect: (item: HomeShortcutSpec) => void;
 }
 
-/** "Tất cả lối tắt" (Q7), bản web của `shortcuts-sheet.tsx` ở Mini App: mọi mục còn hiển thị, mỗi mục một dòng, câu đọc đầy đủ làm mô tả. */
+/** "Thêm lối tắt", bản web của `shortcuts-sheet.tsx` ở Mini App: các lối tắt chưa lên lưới Trang chủ, mỗi mục một dòng, câu đọc đầy đủ làm mô tả. */
 export function ShortcutsSheet({ open, onClose, items, onSelect }: ShortcutsSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose} title={homeCopy.shortcuts.allAria}>
+    <BottomSheet open={open} onClose={onClose} title={homeCopy.shortcuts.moreAria}>
       <div>
         {items.map((it, i) => {
           const tint = SHORTCUT_TINT_VARS[it.tint];

@@ -3,7 +3,6 @@ import { test, expect, type MockApi } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
 import { campaignBanner, mockCampaigns } from './support/campaign-mocks';
-import { BRAND_SHOWCASE, LOADING_GRID_OUTSIDE_BRANDS } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — độ ổn định bố cục khi banner chiến dịch về muộn (gói P11). Dự án Mini chạy WebKit, không có PerformanceObserver 'layout-shift',
@@ -86,11 +85,11 @@ async function waitSettled(page: Page, o: { banner: boolean }): Promise<void> {
   if (o.banner) await expect(page.getByRole('region', { name: 'Chương trình nổi bật' })).toBeVisible({ timeout: 15_000 });
   else await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('flash-sale-loading')).toHaveCount(0);
   await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
   await expect(page.getByTestId('home-banner-loading')).toHaveCount(0);
-  await expect(page.locator(LOADING_GRID_OUTSIDE_BRANDS)).toHaveCount(0);
+  await expect(page.getByTestId('catalog-grid-skeleton')).toHaveCount(0);
 }
 
 test.describe('Trang chủ Mini — CLS khi có banner chiến dịch', () => {

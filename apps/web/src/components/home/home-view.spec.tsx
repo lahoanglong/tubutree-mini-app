@@ -24,7 +24,7 @@ vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.
 
 import HomeView from './home-view-client';
 import { homeBlockOrder } from './home-blocks';
-import { HOME_CONTEXT_HEIGHT, HOME_MAX_BLOCKS, HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, HOME_MAX_BLOCKS, HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder, SUGGEST_FIRST_RENDER } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
 import { BANNER_HINT_KEY, HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
@@ -41,18 +41,8 @@ const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name,
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
 /** Ba món bán chạy (kệ Bán chạy nhất chỉ hiện từ 3 món), khác slug với Giờ vàng và lưới gợi ý. */
 const BEST = () => PAGE([card('bs1', 'Hạng nhất A'), card('bs2', 'Hạng nhì B'), card('bs3', 'Hạng ba C')]);
-const FEED = 'Khám phá theo Thương hiệu';
-/** Ba nhãn của khối "Khám phá theo Thương hiệu" (thẻ chen đứng sau nhãn thứ hai); Fuwa3e có cả món đang ở kệ Bán chạy nhất. */
-const BRANDS = [
-  { brand: 'Fuwa3e', count: 20, slug: 'fuwa3e' },
-  { brand: 'Tubu Tree', count: 30, slug: null },
-  { brand: 'Pơ Lang', count: 6, slug: null },
-];
-const BRAND_PAGE = (brand: string) => {
-  const key = brand.toLowerCase().replace(/\W+/g, '');
-  const own = Array.from({ length: 4 }, (_, i) => card(`${key}${i + 1}`, `${brand} số ${i + 1}`));
-  return PAGE(brand === 'Fuwa3e' ? [card('bs1', 'Hạng nhất A'), ...own] : own);
-};
+/** Mười hai thẻ gợi ý: đủ để thẻ chen (sau 8 thẻ đầu) xuất hiện trong lưới. */
+const SUGGEST_PAGE = () => PAGE(Array.from({ length: 12 }, (_, i) => card(`g${i + 1}`, `Gợi ý số ${i + 1}`)));
 const CATEGORIES = [{ id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4, children: [] }];
 
 type Handler = (query?: Record<string, unknown>) => unknown;
@@ -82,9 +72,9 @@ beforeEach(() => {
   mocks.user = { id: 'u1', fullName: 'Lan', pointsBalance: 0 };
   mocks.push.mockReset();
   routes = {
-    '/products': (q) => (q?.brand ? BRAND_PAGE(String(q.brand)) : q?.sort === 'best_seller_30d' ? BEST() : PAGE([card('f1', 'Trùng gợi ý'), card('f2', 'Chỉ nổi bật')])),
+    '/products': (q) => (q?.sort === 'best_seller_30d' ? BEST() : PAGE([card('f1', 'Trùng gợi ý'), card('f2', 'Chỉ nổi bật')])),
     '/products/for-you': () => [card('f1', 'Trùng gợi ý')],
-    '/brands': () => BRANDS,
+    '/brands': () => [],
     '/categories': () => CATEGORIES,
     '/me/summary': () => ({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 }),
     '/me/purchased-items': () => ({ items: [], nextCursor: null }),
@@ -182,83 +172,72 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
 });
 
 describe('HomeView — nội dung các khối', () => {
-  it('"Bán chạy nhất" xin sort=best_seller_30d, HOME_BEST_SELLER_LIMIT món, có hạng #1..#3, cho cả khách cũ; khối thương hiệu xin 8 món bán chạy mỗi nhãn, không gọi newest/nổi bật/lưới theo ngày', async () => {
+  it('"Bán chạy nhất" xin sort=best_seller_30d, HOME_BEST_SELLER_LIMIT món, có hạng #1..#3, cho cả khách cũ; lưới gợi ý xin trang đầu kèm seed và không gọi newest/nổi bật riêng', async () => {
     const c = await mount();
     const calledSorts = productCalls().map((q) => q.sort);
+    expect(calledSorts).toEqual(expect.arrayContaining(['best_seller_30d', undefined]));
     expect(calledSorts).not.toContain('newest');
-    expect(calledSorts).not.toContain(undefined);
-    const best = productCalls().find((q) => q.sort === 'best_seller_30d' && !q.brand)!;
+    const best = productCalls().find((q) => q.sort === 'best_seller_30d')!;
     expect(best.limit).toBe(HOME_BEST_SELLER_LIMIT);
     const shelf = region(c, 'Bán chạy nhất')!;
     expect(shelf.textContent).toContain('Hạng nhất A');
     for (const rank of ['#1', '#2', '#3']) expect(shelf.textContent).toContain(rank);
-    expect(productCalls().filter((q) => q.brand)).toEqual(['Fuwa3e', 'Pơ Lang', 'Tubu Tree'].map((brand) => ({ brand, sort: 'best_seller_30d', limit: 8 })));
+    const suggest = productCalls().find((q) => !q.sort)!;
+    expect(suggest.seed).toMatch(/^\d{8}$/);
   });
 
-  it('khối "Khám phá theo Thương hiệu" thay lưới Gợi ý: mỗi nhãn một mục (nhiều sản phẩm trước, "Tubu Tree" cuối), không lặp món đã ở kệ trên', async () => {
+  it('chỉ MỘT lưới gợi ý cuối trang (W47): "Gợi ý cho bạn" không chip, không khối thương hiệu; gợi ý cá nhân đứng đầu, không trùng sản phẩm và không lặp món đã ở kệ trên', async () => {
     const c = await mount();
-    expect(region(c, 'Gợi ý hôm nay')).toBeNull();
-    const feed = region(c, FEED)!;
-    expect(Array.from(feed.querySelectorAll('h3')).map((h) => h.textContent)).toEqual(['Fuwa3e', 'Pơ Lang', 'Tubu Tree']);
-    const fuwa = feed.querySelector<HTMLElement>('#home-brand-fuwa3e')!;
-    expect(fuwa.textContent).toContain('Fuwa3e số 4');
-    expect(fuwa.textContent).not.toContain('Hạng nhất A');
+    const feed = region(c, 'Gợi ý cho bạn')!;
+    expect(feed).not.toBeNull();
+    expect(region(c, 'Khám phá theo Thương hiệu')).toBeNull();
+    expect(feed.querySelectorAll('ul[aria-hidden="true"]')).toHaveLength(0);
+    expect(feed.querySelector('[role="region"][aria-label*="Lọc gợi ý"]')).toBeNull();
+    const names = Array.from(feed.querySelectorAll('li')).map((li) => li.textContent ?? '');
+    expect(names.filter((t) => t.includes('Trùng gợi ý'))).toHaveLength(1);
+    expect(names[0]).toContain('Trùng gợi ý');
+    expect(names.some((t) => t.includes('Hạng nhất A'))).toBe(false);
   });
 
-  it('chip thương hiệu dưới Danh mục cuộn tới đúng mục nhãn trong khối (khối đã dựng), không đổi trang', async () => {
-    const scrolled: string[] = [];
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = function (this: Element) {
-      scrolled.push(this.id);
-    };
-    try {
-      const c = await mount();
-      click(byText(c.querySelector('[data-testid="home-brand-bar"]')!, 'button', 'Pơ Lang'));
-      expect(scrolled).toEqual(['home-brand-polang']);
-      expect(mocks.push).not.toHaveBeenCalled();
-    } finally {
-      Element.prototype.scrollIntoView = original;
-    }
-  });
+  const suggestItems = (c: HTMLElement) => Array.from(region(c, 'Gợi ý cho bạn')!.querySelectorAll<HTMLElement>('[data-testid="catalog-grid"] > li'));
 
-  const feedItems = (c: HTMLElement) => Array.from(region(c, FEED)!.querySelector('[data-testid="home-brand-section"]')!.parentElement!.children) as HTMLElement[];
-
-  it('ngày chẵn: Chẩn đoán tổ ấm đứng trong khối thương hiệu sau nhãn cuối (không còn là khối riêng), có h2 và nút Bắt đầu, chưa gọi API quà', async () => {
-    const c = await mount(<HomeView initial={{ suggestSeed: '20261102' }} />);
+  it('ngày chẵn: Chẩn đoán tổ ấm chen trong lưới Gợi ý ngay sau 8 thẻ đầu (không còn là khối riêng), có h2 và nút Bắt đầu, chưa gọi API sản phẩm hay quà', async () => {
+    const c = await mount(<HomeView initial={{ suggest: SUGGEST_PAGE(), suggestSeed: '20261102' }} />);
     expect(blockOrder(c)).not.toContain('quiz');
     expect(blockOrder(c)).not.toContain('community');
-    const items = feedItems(c);
-    const at = items.findIndex((el) => el.dataset.testid === 'suggest-interleave');
-    expect(at).toBe(items.length - 1);
-    expect(items[at - 1]!.dataset.testid).toBe('home-brand-section');
+    const items = suggestItems(c);
+    const at = items.findIndex((li) => li.dataset.testid === 'suggest-interleave');
+    expect(at).toBe(HOME_INTERLEAVE_AFTER);
+    // Điện thoại: lô đầu của lưới là `SUGGEST_FIRST_RENDER` thẻ, thẻ chen khép lô đó; thẻ sau hiện khi khách cuộn tới.
+    expect(items.length).toBe(SUGGEST_FIRST_RENDER + 1);
     expect(items[at]!.querySelector('h2')!.textContent).toBe('Chẩn đoán tổ ấm');
     expect(items[at]!.querySelector('button')!.textContent).toBe('Bắt đầu');
+    expect(items[at]!.style.gridColumn).toBe('1 / -1');
+    expect(productCalls().some((q) => q.limit === 40)).toBe(false);
     expect(calls('/game/home-quiz/complete')).toEqual([]);
   });
 
   it('ngày lẻ: Cộng đồng thay Chẩn đoán ở đúng chỗ chen đó', async () => {
     routes['/feed'] = () => ({ posts: [{ id: 'p1', title: 'Hỏi về dầu gội', body: '', author: 'Mai', createdAt: new Date().toISOString(), commentCount: 2 }] });
-    const c = await mount(<HomeView initial={{ suggestSeed: '20261101' }} />);
-    const feed = region(c, FEED)!;
+    const c = await mount(<HomeView initial={{ suggest: SUGGEST_PAGE(), suggestSeed: '20261101' }} />);
+    const feed = region(c, 'Gợi ý cho bạn')!;
     expect(feed.textContent).not.toContain('Chẩn đoán tổ ấm');
-    const items = feedItems(c);
-    const at = items.findIndex((el) => el.dataset.testid === 'suggest-interleave');
-    expect(at).toBe(items.length - 1);
-    expect(items[at]!.querySelector('section[aria-label="Cộng đồng hỏi đáp"], section')!.textContent).toContain('Hỏi về dầu gội');
+    const items = suggestItems(c);
+    expect(items.findIndex((li) => li.dataset.testid === 'suggest-interleave')).toBe(HOME_INTERLEAVE_AFTER);
+    expect(items[HOME_INTERLEAVE_AFTER]!.querySelector('section[aria-label="Cộng đồng hỏi đáp"], section')!.textContent).toContain('Hỏi về dầu gội');
   });
 
-  it('Cộng đồng chưa có bài: ô chen rỗng và ẩn (empty:hidden), không để lại khoảng trống cuối khối', async () => {
-    const c = await mount(<HomeView initial={{ suggestSeed: '20261101' }} />);
-    const slot = feedItems(c).find((el) => el.dataset.testid === 'suggest-interleave')!;
+  it('Cộng đồng chưa có bài: ô chen rỗng và ẩn (empty:hidden), không để lại hàng trống trong lưới', async () => {
+    const c = await mount(<HomeView initial={{ suggest: SUGGEST_PAGE(), suggestSeed: '20261101' }} />);
+    const slot = suggestItems(c).find((li) => li.dataset.testid === 'suggest-interleave')!;
     expect(slot.className).toContain('empty:hidden');
     expect(slot.childElementCount).toBe(0);
   });
 
-  it('chỉ một thương hiệu: thẻ chen vẫn đứng sau nhãn đó', async () => {
-    routes['/brands'] = () => BRANDS.slice(0, 1);
-    const c = await mount(<HomeView initial={{ suggestSeed: '20261102' }} />);
-    expect(feedItems(c).map((el) => el.dataset.testid)).toEqual(['home-brand-section', 'suggest-interleave']);
-    expect(region(c, FEED)!.textContent).toContain('Chẩn đoán tổ ấm');
+  it('lưới Gợi ý ngắn hơn 8 thẻ: không chen thẻ nào', async () => {
+    const c = await mount(<HomeView initial={{ suggest: PAGE([card('f1', 'Một'), card('f2', 'Hai')]), suggestSeed: '20261102' }} />);
+    expect(region(c, 'Gợi ý cho bạn')!.textContent).not.toContain('Chẩn đoán tổ ấm');
+    expect(suggestItems(c).some((li) => li.dataset.testid === 'suggest-interleave')).toBe(false);
   });
 
   it('tối đa 9 khối ở tổ hợp đông nhất (khách cũ + Giờ vàng đang chạy), và dải ngữ cảnh luôn cao tối thiểu HOME_CONTEXT_HEIGHT', async () => {
@@ -424,7 +403,7 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     const c = await mount();
     expect(hubPart(c, 'banner')).toBeNull();
     expect(c.textContent).not.toContain('Máy chủ đang bận');
-    expect(region(c, FEED)).not.toBeNull();
+    expect(region(c, 'Gợi ý cho bạn')).not.toBeNull();
   });
 
   it('chiến dịch đã hết hạn lúc khách mở (trang ISR cũ): không hiện', async () => {
@@ -558,22 +537,23 @@ describe('HomeView — chuông và khách vãng lai', () => {
 });
 
 describe('HomeView — lỗi từng khối và lỗi cấp trang', () => {
-  it('danh sách thương hiệu lỗi: khối hiện thông báo + "Thử lại" ngay tại chỗ, khối khác vẫn hiện; thử lại chỉ tải lại khối đó', async () => {
+  it('lưới gợi ý lỗi hiện thông báo + "Thử lại" ngay tại chỗ, khối khác vẫn hiện; thử lại chỉ tải lại lưới đó', async () => {
     let fail = true;
-    routes['/brands'] = () => {
-      if (fail) throw new ApiError('Máy chủ đang bận', 503);
-      return BRANDS;
+    routes['/products'] = (q) => {
+      if (!q?.sort && fail) throw new ApiError('Máy chủ đang bận', 503);
+      return q?.sort === 'best_seller_30d' ? BEST() : PAGE([card('f2', 'Chỉ nổi bật')]);
     };
+    routes['/products/for-you'] = () => [];
     const c = await mount();
-    const err = region(c, FEED)!;
+    const err = region(c, 'Gợi ý cho bạn')!;
     expect(err.textContent).toContain('Máy chủ đang bận');
     expect(region(c, 'Bán chạy nhất')!.textContent).toContain('Hạng nhất A');
     expect(c.querySelector('[data-testid="home-page-error"]')).toBeNull();
     fail = false;
-    click(err.querySelector(`button[aria-label="Thử lại ${FEED}"]`));
+    click(err.querySelector('button[aria-label="Thử lại Gợi ý cho bạn"]'));
     await flush(8);
-    expect(region(c, FEED)!.textContent).not.toContain('Máy chủ đang bận');
-    expect(region(c, FEED)!.textContent).toContain('Pơ Lang số 1');
+    expect(region(c, 'Gợi ý cho bạn')!.textContent).not.toContain('Máy chủ đang bận');
+    expect(region(c, 'Gợi ý cho bạn')!.textContent).toContain('Chỉ nổi bật');
   });
 
   it('API sập hẳn (Bán chạy lỗi, chưa có dữ liệu) → MỘT dải lỗi cấp trang ngay dưới ô tìm, không thẻ lỗi từng khối; thử lại xong thì dải biến mất', async () => {
@@ -607,14 +587,15 @@ describe('HomeView — dữ liệu server tải sẵn', () => {
       <HomeView
         initial={{
           bestSellers: PAGE([card('bs1', 'Bán chạy từ server'), card('bs2', 'Hạng nhì B'), card('bs3', 'Hạng ba C')]),
+          suggest: PAGE([card('f2', 'Gợi ý từ server')]),
           suggestSeed: '20261101',
           categories: CATEGORIES,
         }}
       />,
     );
     expect(c.textContent).toContain('Bán chạy từ server');
-    // Máy chủ không tải thương hiệu (HTML đầu không vẽ khối dưới màn đầu): chỉ các nhãn tự tải món của mình.
-    expect(productCalls().filter((q) => !q.brand)).toEqual([]);
+    expect(c.textContent).toContain('Gợi ý từ server');
+    expect(productCalls()).toEqual([]);
     expect(calls('/categories')).toHaveLength(0);
   });
 });
@@ -702,7 +683,7 @@ describe('HomeView — khung chờ chung khi khôi phục phiên (web: khung hì
     expect(blockOrder(live.container)).toEqual(named(homeKeptOrder('unknown'), 'member'));
     expect(blockOrder(live.container)).not.toContain('settling');
     expect(region(live.container, 'Bán chạy nhất')!.textContent).toContain('Hạng nhất A');
-    expect(region(live.container, FEED)).not.toBeNull();
+    expect(region(live.container, 'Gợi ý cho bạn')).not.toBeNull();
     expect(region(live.container, 'Quà khách mới')).toBeNull();
     expect(live.container.querySelector('[data-testid="member-card-loading"]')).not.toBeNull();
   });
@@ -851,7 +832,7 @@ describe('HomeView — khung chờ chung ở cấp trang: truy vấn quyết đ�
     await tick(200);
     expect(blockOrder(live.container)).toEqual(named(homeKeptOrder('unknown'), 'member'));
     expect(region(live.container, 'Bán chạy nhất')!.textContent).toContain('Hạng nhất A');
-    expect(region(live.container, FEED)).not.toBeNull();
+    expect(region(live.container, 'Gợi ý cho bạn')).not.toBeNull();
 
     routes['/me/purchased-items'] = () => ({ items: [], nextCursor: null });
     mocks.phase = 'authenticated';

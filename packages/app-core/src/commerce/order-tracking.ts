@@ -248,6 +248,27 @@ export function orderHeadline(o: TrackOrder, ctx: TrackCtx = {}): OrderHeadline 
   return { stage, sentence, reason, milestone, next };
 }
 
+export type OrderHeroLineKind = 'reason' | 'milestone' | 'next' | 'sentence';
+
+/**
+ * Câu duy nhất của thẻ trạng thái Chi tiết đơn (W47: tối đa ba phần tử là mốc ngày, trạng thái và một câu). Ưu tiên điều khách cần biết tiếp theo:
+ * lý do huỷ (nguyên văn) → mốc (hạn thanh toán, ngày giao dự kiến, hạn đổi/trả) → bước kế (còn huỷ được, vì sao không huỷ được, hoàn tiền, mua lại)
+ * → câu đơn đang ở đâu (thường chỉ lặp nhãn trạng thái nên đứng cuối). Riêng đơn quá hạn thanh toán, câu "sắp tự huỷ" là điều nhãn "Chờ thanh toán" không
+ * nói được nên đứng trước bước kế.
+ */
+export function orderHeroLine(h: OrderHeadline): { kind: OrderHeroLineKind; text: string } | null {
+  if (h.reason) {
+    // Đơn huỷ đã trả tiền: mục Hoàn tiền nằm cuối trang, nên câu tiền đi đâu đi cùng lý do ngay ở đầu trang.
+    const refund = h.next === fillCopy('order.next.refund') ? h.next : null;
+    if (!refund) return { kind: 'reason', text: h.reason };
+    return { kind: 'reason', text: `${/[.!?…]$/.test(h.reason) ? h.reason : `${h.reason}.`} ${refund}` };
+  }
+  if (h.milestone) return { kind: 'milestone', text: h.milestone };
+  if (h.stage === 'PAY_OVERDUE' && h.sentence) return { kind: 'sentence', text: h.sentence };
+  if (h.next) return { kind: 'next', text: h.next };
+  return h.sentence ? { kind: 'sentence', text: h.sentence } : null;
+}
+
 export interface TrackEvent {
   label: string;
   at: string | null;
@@ -347,14 +368,6 @@ export function orderTrack(o: TrackOrder, ctx: Pick<TrackCtx, 'etaLabel'> = {}):
  */
 export function trackAddsDetail(view: OrderTrackView): boolean {
   return view.current < view.steps.length || view.steps.some((s) => s.events.length > 0);
-}
-
-/**
- * Viên vận đơn ngay dưới thẻ trạng thái chỉ dành cho đơn còn đang chờ hàng (PO A3, 23/11/2026). Đơn đã huỷ hay đã hoàn không còn gì để theo
- * dõi nên ẩn viên dù kho đã gắn mã; mã vận đơn vẫn in ở khối Vận chuyển bên dưới để đối chiếu.
- */
-export function showTrackingPill(o: Pick<TrackOrder, 'status' | 'shippingCode'>): boolean {
-  return !!o.shippingCode && o.status !== 'CANCELLED' && o.status !== 'RETURNED';
 }
 
 export type OrderActionKind = 'pay' | 'cancel' | 'contact' | 'review' | 'reorder' | 'return';

@@ -1,6 +1,5 @@
 import { test, expect, makeOrder } from './support/mock-api';
 import { mockMergedHome } from './support/home-merged';
-import { BRAND_SHOWCASE } from './support/home-brands';
 
 const USER = {
   id: 'u-cls', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
@@ -70,7 +69,7 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
       });
       mockMergedHome(api);
       await page.goto('/');
-      await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 20_000 });
       await page.waitForTimeout(500);
       release();
       await page.waitForLoadState('networkidle');

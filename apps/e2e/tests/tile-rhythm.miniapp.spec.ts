@@ -3,8 +3,6 @@ import { test, expect, type MockApi } from './support/mock-api';
 import { THUMB } from './support/buy-flow-mocks';
 import { mockDiscovery } from './support/discovery-mocks';
 import type { PageResponse, ProductCard } from '../../miniapp/src/services/shop-api';
-import { BRAND_SHOWCASE_ITEMS } from '../../../packages/app-core/src/merch/brand-showcase';
-import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Mini App 375px — thẻ sản phẩm cùng nhịp (gói P4). Dữ liệu cố ý lệch nhau: tên dài có dấu "Ẩ"/"Ổ" (cắt 2 dòng), tên ngắn (1 dòng), thiếu ảnh,
@@ -27,7 +25,7 @@ const FIXTURE: ProductCard[] = [
   card('8', 'Giấy gói quà tái chế khổ lớn dùng cho mọi dịp lễ trong năm', { sold: 12 }),
 ];
 
-/** Kệ Bán chạy nhất dùng bộ riêng (khác slug): khối Khám phá theo Thương hiệu ưu tiên món chưa có ở kệ trên nên hai nơi không dùng chung được một bộ. */
+/** Kệ Bán chạy nhất dùng bộ riêng (khác slug): Gợi ý cho bạn bỏ món đã có ở kệ trên nên hai nơi không dùng chung được một bộ. */
 const BEST: ProductCard[] = FIXTURE.map((p) => ({ ...p, id: `b${p.id}`, slug: `bs-${p.id}` }));
 
 /** Hai suất (dưới mức tối thiểu của khối Giờ vàng): khối ẩn nên không lấy món khỏi kệ khác, mà nhãn Giờ vàng vẫn hiện trên thẻ ở lưới và kệ hạng. */
@@ -94,8 +92,8 @@ function expectRhythm(rows: RowMetrics[]): void {
   }
 }
 
-async function settled(page: Page, grid: Locator, count = FIXTURE.length): Promise<void> {
-  await expect(grid.locator('[data-ds="product-tile"]')).toHaveCount(count, { timeout: 15_000 });
+async function settled(page: Page, grid: Locator): Promise<void> {
+  await expect(grid.locator('[data-ds="product-tile"]')).toHaveCount(FIXTURE.length, { timeout: 15_000 });
   await expect(page.getByTestId('catalog-grid-skeleton')).toHaveCount(0);
 }
 
@@ -110,15 +108,14 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
     expectRhythm(await rowsOf(grid));
   });
 
-  test('Trang chủ, khối Khám phá theo Thương hiệu: cùng nhịp như Danh mục', async ({ page, api }) => {
+  test('Trang chủ, khối Gợi ý cho bạn: cùng nhịp như Danh mục', async ({ page, api }) => {
     mockRhythm(api);
     await page.goto('/');
-    const section = page.getByRole('region', { name: BRAND_SHOWCASE });
+    const section = page.getByRole('region', { name: 'Gợi ý cho bạn' });
     await section.scrollIntoViewIfNeeded();
-    // Mỗi thương hiệu một lưới 4 món (mock trả cùng bộ cho hai nhãn Tubu, Mộc An): đo hàng của mọi lưới.
-    await settled(page, section, 2 * BRAND_SHOWCASE_ITEMS);
-    const rows = await Promise.all((await section.getByTestId('catalog-grid').all()).map(rowsOf));
-    expectRhythm(rows.flat());
+    const grid = section.getByTestId('catalog-grid');
+    await settled(page, grid);
+    expectRhythm(await rowsOf(grid));
   });
 
   test('thẻ cao đúng số đo chung: mỗi biến thể grid dùng chiều cao thân thẻ có nhãn hiệu, không nhảy khi dữ liệu về', async ({ page, api }) => {
@@ -162,8 +159,8 @@ test.describe('Nhãn Giờ vàng trên ảnh không chui dưới nút tim', () =
       mockFlash(api);
       await page.goto('/');
       await expect(page.getByRole('region', { name: 'Bán chạy nhất, vuốt ngang để xem thêm', exact: true }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
-      await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
-      await settled(page, page.getByRole('region', { name: BRAND_SHOWCASE }).getByTestId('catalog-grid').first(), BRAND_SHOWCASE_ITEMS);
+      await page.getByRole('region', { name: 'Gợi ý cho bạn' }).scrollIntoViewIfNeeded();
+      await settled(page, page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByTestId('catalog-grid'));
       const checks = await page.evaluate(() =>
         Array.from(document.querySelectorAll<HTMLElement>('[data-ds="product-tile"]'))
           .map((t) => {

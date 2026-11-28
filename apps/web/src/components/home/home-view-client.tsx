@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useWindowScrollRestore } from '@/lib/use-window-scroll-restore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
-import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
+import { brandsQuery, categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { HOME_CONTEXT_HEIGHT, HOME_SETTLING_HEIGHTS, homeContextBlockName, homeInterleaveCard, homeKeptOrder, homeRenderOrder, writeFlashHint, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { vnDateSeed } from '@tubutree/app-core/home-suggest';
@@ -110,6 +110,8 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     { slides: banners.slides.length, pending: banners.loading, remembered: banners.hinted },
   );
   const categories = useQuery({ ...categoriesQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.categories ? { initialData: initial.categories } : {}) });
+  // Gieo sẵn thương hiệu máy chủ đã tải (cùng khoá với thanh chip trong Danh mục, không thêm request): thanh vẽ hay ẩn ngay từ HTML đầu.
+  useQuery({ ...brandsQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.brands ? { initialData: initial.brands } : {}) });
 
   // Lần mở đầu chưa biết loại khách: các khối dưới dải ngữ cảnh chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các
   // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
@@ -207,10 +209,10 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         <SuggestFeed
           initial={initial.suggest}
           seed={initial.suggestSeed}
-          categories={categories.data ?? []}
           exclude={shelves.seen}
-          // Ngày của thẻ Cộng đồng: Góc Sống Xanh bật và đủ đánh giá ảnh đã duyệt thì dải ảnh khách đứng chỗ đó, không thì thẻ Cộng đồng như cũ.
-          interleave={homeInterleaveCard(daySeed) === 'quiz' ? <HomeQuizCard /> : <GreenCornerStrip fallback={<CommunityPreview />} />}
+          // Dải "Khách hàng sống xanh" là dải bằng chứng xã hội duy nhất của Trang chủ (W47): Góc Sống Xanh bật và đủ đánh giá ảnh đã duyệt thì đứng chỗ thẻ
+          // chen mỗi ngày, không thì thẻ của ngày (Chẩn đoán tổ ấm hoặc Cộng đồng).
+          interleave={<GreenCornerStrip fallback={homeInterleaveCard(daySeed) === 'quiz' ? <HomeQuizCard /> : <CommunityPreview />} />}
         />
       </DeferUntilNear>
     ),
@@ -266,7 +268,7 @@ const CONTEXT_BLOCK: CSSProperties = { ...BLOCK_GAP, minHeight: HOME_CONTEXT_HEI
 // Khung giữ chỗ của hai khối hoãn, cao như khối thật (đo trên bản dựng thật, khách vãng lai). Dải Story cao `HOME_SETTLING_HEIGHTS.stories` ở mọi bề
 // ngang, như khung chờ của Mini App.
 const STORIES_PLACEHOLDER: CSSProperties = { height: HOME_SETTLING_HEIGHTS.stories };
-// Lưới Gợi ý lần đầu (tiêu đề, chip, 8 thẻ, thẻ chen, nút): ở điện thoại 2 cột nên cao theo bề ngang, 2 lần bề ngang cộng phần cố định
+// Lưới Gợi ý lần đầu (tiêu đề, 8 thẻ, thẻ chen, nút): ở điện thoại 2 cột nên cao theo bề ngang, 2 lần bề ngang cộng phần cố định
 // (360 → 1.469, 390 → 1.529); từ md và từ lg là số cố định.
 const SUGGEST_HEIGHT = { phoneFixed: 749, md: 1365, lg: 900 } as const;
 const SUGGEST_PLACEHOLDER: CSSProperties = {

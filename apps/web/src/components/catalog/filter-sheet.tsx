@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { CatalogPage } from '@tubutree/app-core/api/catalog';
 import { catalogCountQuery } from '@tubutree/app-core/queries/catalog';
 import { offeredIntentFilters } from '@tubutree/app-core/browse/intent-filters';
+import { hasBrandChoice } from '@tubutree/app-core/merch/brand-showcase';
 import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
@@ -135,7 +136,8 @@ export function FilterSheet({
           {browseText.filter.rating4}
         </Chip>
       </FilterGroup>
-      {brands.length > 0 && (
+      {/* Chỉ một nhãn thật (hay chỉ "Tubu Tree") thì không có gì để chọn: ẩn cả nhóm (W47, `hasBrandChoice`). */}
+      {hasBrandChoice(brands) && (
         <FilterGroup title={browseText.filter.brand} scroll>
           {brands.map((b) => (
             <Chip key={b.brand} selected={draft.brands.includes(b.brand)} onPress={() => toggleBrand(b.brand)}>

@@ -57,7 +57,6 @@ import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, or
 import { OrderShipping } from '@/components/orders/order-shipping';
 import { OrderRefillShortcut } from '@/components/orders/order-refill-shortcut';
 import { OrderCsatCard } from '@/components/orders/order-csat-card';
-import { OrderTrackingPill } from '@/components/orders/order-tracking-pill';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import { OrderZaloDetail } from '@/components/checkout/order-zalo';
@@ -298,7 +297,7 @@ export default function OrderDetailPage() {
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
-  // Đơn đã huỷ hay đã hoàn không còn gì để theo dõi (PO A3, như Mini): không có viên tra cứu dù kho đã gắn link; mã vẫn in ở khối Vận chuyển.
+  // Đơn đã huỷ hay đã hoàn không còn gì để theo dõi (PO A3): không có liên kết tra cứu dù kho đã gắn link; mã vẫn chép được ở viên trong thẻ Vận chuyển.
   const tracking = o.status === 'CANCELLED' || o.status === 'RETURNED' ? null : safeHttpUrl(o.trackingLink);
   const showPayPanel = !isPhone && (canPayNow(o) || (qrShown && canPayNow(o, 0)) || paidNotice);
   const returnedQty = returnedByLine(
@@ -313,11 +312,6 @@ export default function OrderDetailPage() {
           <div className="order-1 md:overflow-hidden md:rounded-card">
             <OrderStatusHero headline={headline} statusLabel={buyerOrderStatusLabel(o)} stamp={stamp} tone={STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!} />
           </div>
-          {tracking && (
-            <div className="order-1 mt-2 px-4 md:px-0">
-              <OrderTrackingPill href={tracking} partner={o.shippingPartner} />
-            </div>
-          )}
       {showPayPanel && (
         <div id="order-pay-panel" tabIndex={-1} className="order-2 mt-2 outline-none max-md:px-4">
           {canPayNow(o) && panelState === 'ready' && (
@@ -329,57 +323,56 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-          <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
-          <OrderCsatCard
-            order={o}
-            onSupport={() => {
-              const support = document.getElementById('order-support');
-              // `SupportContact` không vẽ gì khi số liên hệ đang tải hay không có kênh nào: không cuộn tới khối rỗng.
-              if (!support?.firstElementChild) return false;
-              revealReviewTarget(support, null);
-              return true;
-            }}
-            className={`order-3 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}
-          />
-          <OrderRefillShortcut
-            delivered={o.status === 'DELIVERED'}
-            refillOn={refillFirstOn(cfgQ.data)}
-            slugs={o.items.filter((it) => !it.isGift).map((it) => it.productSlug)}
-            className={`order-3 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}
-            titleClassName={`${ui.sectionTitle} ${mini.sectionLabel}`}
-          />
-          {journey ? (
-            <OrderJourneySection status={o.status} hasCarrierEvents={journey.hasCarrierEvents}>
-              <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
-              <OrderZaloDetail order={o} />
-            </OrderJourneySection>
-          ) : (
-            <>
-              <section data-testid="order-timeline" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
-                <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
-                <OrderZaloDetail order={o} />
-              </section>
-              {trackView && trackAddsDetail(trackView) && (
-                <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-                  <h2 id="order-track-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
-                    Hành trình đơn hàng
-                  </h2>
-                  <OrderTrack track={trackView} now={ctx.now} />
-                </section>
+          {/* Thẻ Vận chuyển: hành trình, mã vận đơn (chạm để chép), tra cứu trang hãng và địa chỉ nhận trong MỘT thẻ, ngay dưới thẻ trạng thái (W47, như Mini App). */}
+          <div className={`order-3 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
+            <OrderShipping
+              partner={o.shippingPartner}
+              code={o.shippingCode}
+              status={shippingEventLabel(o.shippingStatus)}
+              events={trackView || journey ? undefined : historyEvents}
+              trackingHref={tracking}
+              address={
+                <AddressBlock
+                  order={o}
+                  notice={editNotice}
+                  onEdit={
+                    editAddress
+                      ? () => {
+                          setEditNotice(null);
+                          setEditOpen(true);
+                        }
+                      : undefined
+                  }
+                />
+              }
+            >
+              {journey ? (
+                <OrderJourney status={o.status} hasCarrierEvents={journey.hasCarrierEvents}>
+                  <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
+                  <OrderZaloDetail order={o} />
+                </OrderJourney>
+              ) : (
+                <>
+                  <div data-testid="order-timeline">
+                    <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+                    <OrderZaloDetail order={o} />
+                  </div>
+                  {trackView && trackAddsDetail(trackView) && <OrderTrack track={trackView} now={ctx.now} />}
+                </>
               )}
-            </>
+            </OrderShipping>
+          </div>
+          {editOpen && editAddress && (
+            <OrderEditSheet
+              code={o.code}
+              address={editAddress}
+              note={customerOrderNote(o)}
+              split={(o.siblings?.length ?? 0) > 0}
+              onClose={() => setEditOpen(false)}
+              onSettled={onEditSettled}
+            />
           )}
-          {(o.shippingPartner || o.shippingCode || historyEvents.length > 0) && (
-            <section className={`order-5 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-              <OrderShipping
-                partner={o.shippingPartner}
-                code={o.shippingCode}
-                status={shippingEventLabel(o.shippingStatus)}
-                events={trackView || journey ? undefined : historyEvents}
-              />
-            </section>
-          )}
-      <section className={`order-6 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+      <section className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
         <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Sản phẩm</h2>
         <ul className="mt-2 divide-y divide-stone-200">
           {o.items.map((it, i) => {
@@ -464,7 +457,7 @@ export default function OrderDetailPage() {
 
         </div>
         <div data-testid="order-side" className="contents lg:flex lg:min-w-0 lg:flex-col">
-      <section className={`order-7 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+      <section className={`order-5 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
         <h2 className={`${ui.sectionTitle} max-md:sr-only`}>Thanh toán</h2>
         <div className="mt-2 space-y-1 text-sm max-md:mt-0 max-md:space-y-2">
           <Row label="Tạm tính" value={formatVnd(o.subtotal)} />
@@ -504,7 +497,7 @@ export default function OrderDetailPage() {
       </section>
 
       {o.fulfilment?.kind === 'MERCHANT' && (
-        <p className="mt-2 text-sm text-stone-700 order-8 max-md:px-4">
+        <p className="mt-2 text-sm text-stone-700 order-6 max-md:px-4">
           Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
           {o.fulfilment.phone && (
             <>
@@ -514,7 +507,7 @@ export default function OrderDetailPage() {
         </p>
       )}
       {(o.siblings?.length ?? 0) > 0 && (
-        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm order-8 max-md:mx-4 ${ui.card}`}>
+        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm order-6 max-md:mx-4 ${ui.card}`}>
           <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
           <ul className="mt-1 space-y-1">
             {o.siblings!.map((sb) => (
@@ -532,12 +525,49 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-          <div className="order-9 max-md:px-4 max-md:empty:hidden">
+          <div className="order-7 max-md:px-4 max-md:empty:hidden">
             {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
           </div>
-          <div className="order-10 max-md:px-4 max-md:empty:hidden">
+          <div className="order-8 max-md:px-4 max-md:empty:hidden">
             <OrderInvoice order={o} />
             <OrderWasteLink order={o} />
+          </div>
+      {customerOrderNote(o) ? (
+        <section className={`mt-4 p-4 order-9 max-md:mt-2 ${ui.card} ${mini.band}`}>
+          <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú</h2>
+          <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{customerOrderNote(o)}</p>
+        </section>
+      ) : (
+        // Ghi chú cố định của hệ thống không phải lời khách viết: thay bằng nhãn.
+        isSubscriptionOrder(o) && (
+          <section className={`mt-4 p-4 order-9 max-md:mt-2 ${ui.card} ${mini.band}`}>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Đơn định kỳ</h2>
+            <p className="mt-2 text-sm text-stone-700">Đơn này tự đặt theo lịch bạn đã chọn.</p>
+          </section>
+        )
+      )}
+
+          {/* Phần phụ sau mua (W47): mời theo dõi OA, hỏi cảm nhận, mua lại định kỳ, nhựa đã giảm, mời bạn — nằm DƯỚI Sản phẩm và Thanh toán. */}
+          <div className="order-10 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
+          <OrderCsatCard
+            order={o}
+            onSupport={() => {
+              const support = document.getElementById('order-support');
+              // `SupportContact` không vẽ gì khi số liên hệ đang tải hay không có kênh nào: không cuộn tới khối rỗng.
+              if (!support?.firstElementChild) return false;
+              revealReviewTarget(support, null);
+              return true;
+            }}
+            className={`order-10 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}
+          />
+          <OrderRefillShortcut
+            delivered={o.status === 'DELIVERED'}
+            refillOn={refillFirstOn(cfgQ.data)}
+            slugs={o.items.filter((it) => !it.isGift).map((it) => it.productSlug)}
+            className={`order-10 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}
+            titleClassName={`${ui.sectionTitle} ${mini.sectionLabel}`}
+          />
+          <div className="order-10 max-md:px-4 max-md:empty:hidden">
             {eco && <OrderEcoImpactCard impact={eco} />}
             {/* Thẻ nhựa đã giảm đã có nút gửi link mời: không thêm dòng mời thứ hai, chờ thẻ trả lời rồi mới quyết. */}
             <OrderSecondOrderInvite
@@ -554,45 +584,7 @@ export default function OrderDetailPage() {
               }
             />
           </div>
-          <div className="order-11">
-            <AddressSection
-              order={o}
-              notice={editNotice}
-              onEdit={
-                editAddress
-                  ? () => {
-                      setEditNotice(null);
-                      setEditOpen(true);
-                    }
-                  : undefined
-              }
-            />
-            {editOpen && editAddress && (
-              <OrderEditSheet
-                code={o.code}
-                address={editAddress}
-                note={customerOrderNote(o)}
-                split={(o.siblings?.length ?? 0) > 0}
-                onClose={() => setEditOpen(false)}
-                onSettled={onEditSettled}
-              />
-            )}
-          </div>
-      {customerOrderNote(o) ? (
-        <section className={`mt-4 p-4 order-[12] max-md:mt-2 ${ui.card} ${mini.band}`}>
-          <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú</h2>
-          <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{customerOrderNote(o)}</p>
-        </section>
-      ) : (
-        // Ghi chú cố định của hệ thống không phải lời khách viết: thay bằng nhãn.
-        isSubscriptionOrder(o) && (
-          <section className={`mt-4 p-4 order-[12] max-md:mt-2 ${ui.card} ${mini.band}`}>
-            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Đơn định kỳ</h2>
-            <p className="mt-2 text-sm text-stone-700">Đơn này tự đặt theo lịch bạn đã chọn.</p>
-          </section>
-        )
-      )}
-
+          {/* Thứ tự đọc của trình đọc màn hình theo DOM: nút thao tác đứng sau Thanh toán như chỗ nó hiện ở điện thoại; từ lg `order-first` đưa lên đầu cột phải. */}
           <div className="order-[13] lg:order-first">
             <OrderActions order={o} plan={plan} note={payNote} />
           </div>
@@ -609,18 +601,20 @@ export default function OrderDetailPage() {
 type AddressNotice = { tone: 'ok' | 'error'; text: string };
 type EditableOrder = OrderDetailDTO & { canEdit?: boolean; shippingAddress?: ShippingAddressSnapshot | null };
 
-/** `onEdit`: lối "Sửa" duy nhất của việc sửa địa chỉ và ghi chú (máy chủ báo `canEdit`); `notice`: câu báo của lần sửa vừa rồi. */
-function AddressSection({ order: o, onEdit, notice }: { order: OrderDetailDTO; onEdit?: () => void; notice?: AddressNotice | null }) {
+/**
+ * Địa chỉ nhận ở cuối thẻ Vận chuyển (W47). `onEdit`: lối "Sửa" duy nhất của việc sửa địa chỉ và ghi chú (máy chủ báo `canEdit`); `notice`: câu báo của lần
+ * sửa vừa rồi. Đơn đại lý giao theo hợp đồng nên snapshot chỉ có `note`; không có gì thì không vẽ.
+ */
+function AddressBlock({ order: o, onEdit, notice }: { order: OrderDetailDTO; onEdit?: () => void; notice?: AddressNotice | null }) {
   const addr = o.shippingAddress;
   const line = addressLine(addr);
   const contact = [addr?.recipient, addr?.phone].filter(Boolean).join(' · ');
-  // Đơn đại lý giao theo hợp đồng nên snapshot chỉ có `note`; không dựng khối rỗng.
   if (!contact && !line && !addr?.note) return null;
 
   return (
-    <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+    <div data-testid="order-address">
       <div className="flex items-center justify-between gap-2">
-        <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
+        <h3 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h3>
         {onEdit && (
           <button
             type="button"
@@ -647,7 +641,7 @@ function AddressSection({ order: o, onEdit, notice }: { order: OrderDetailDTO; o
           {notice.text}
         </p>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -680,17 +674,10 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
   );
 }
 
-/** Dòng thời gian một khối (cờ orders.timeline_v2_enabled) thay thanh 4 bước và khối hành trình; báo `order_timeline_viewed` mỗi lần đơn đổi trạng thái. */
-function OrderJourneySection({ status, hasCarrierEvents, children }: { status: string; hasCarrierEvents: boolean; children: ReactNode }) {
+/** Dòng thời gian một khối (cờ orders.timeline_v2_enabled) thay thanh 4 bước và hành trình chi tiết trong thẻ Vận chuyển; báo `order_timeline_viewed` mỗi lần đơn đổi trạng thái. */
+function OrderJourney({ status, hasCarrierEvents, children }: { status: string; hasCarrierEvents: boolean; children: ReactNode }) {
   useEffect(() => {
     trackWebEvent('order_timeline_viewed', { status, hasCarrierEvents });
   }, [status, hasCarrierEvents]);
-  return (
-    <section data-testid="order-journey" aria-labelledby="order-journey-title" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
-      <h2 id="order-journey-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
-        {fillCopy('order.timeline.title')}
-      </h2>
-      {children}
-    </section>
-  );
+  return <div data-testid="order-journey">{children}</div>;
 }

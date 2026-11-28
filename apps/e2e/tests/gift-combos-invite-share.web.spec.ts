@@ -102,17 +102,17 @@ for (const width of [320, 375]) {
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-${width}-bo-qua-tang.png`, fullPage: true });
     });
 
-    test('tubu-w15-02 Trang chủ: "Bộ quà tặng" nằm trong "Tất cả lối tắt" (hàng lối tắt nhanh không thêm ô), chạm mở /bo-qua-tang', async ({ page, api }) => {
+    test('tubu-w15-02 Trang chủ: "Bộ quà tặng" nằm trong hộp "Thêm lối tắt" (lưới vẫn 8 ô), chạm mở /bo-qua-tang', async ({ page, api }) => {
       mockDiscovery(api, { returning: true });
       api.get('/bundles/gift-landing', LANDING);
       await page.goto('/');
       const shortcuts = page.getByRole('region', { name: 'Lối tắt', exact: true });
       const more = shortcuts.getByRole('button', { name: 'Thêm lối tắt', exact: true });
       await expect(more).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId('shortcut-quick-pills').locator('a, button')).toHaveCount(3);
+      await expect(shortcuts.locator('.tubu-shortcut-cell')).toHaveCount(8);
       await expect(shortcuts.getByText('Bộ quà tặng')).toHaveCount(0);
       await more.click();
-      const dialog = page.getByRole('dialog', { name: 'Tất cả lối tắt' });
+      const dialog = page.getByRole('dialog', { name: 'Thêm lối tắt' });
       const gifts = dialog.getByRole('button', { name: /Bộ quà tặng/ });
       await expect(gifts).toBeVisible({ timeout: 15_000 });
       expect((await gifts.boundingBox())!.height, 'vùng chạm dòng Bộ quà tặng').toBeGreaterThanOrEqual(44);

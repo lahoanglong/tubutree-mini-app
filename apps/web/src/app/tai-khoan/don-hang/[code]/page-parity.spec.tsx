@@ -226,7 +226,7 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(at('Vận chuyển')).toBeLessThan(at('Địa chỉ giao hàng'));
   });
 
-  it('có cả hoá đơn VAT và phiếu thu rác: Vận chuyển → Hoá đơn VAT → thu rác → Địa chỉ → liên hệ', async () => {
+  it('có cả hoá đơn VAT và phiếu thu rác: thẻ Vận chuyển (kèm địa chỉ, W47) → Hoá đơn VAT → thu rác → liên hệ', async () => {
     mocks.order = {
       ...ORDER,
       status: 'SHIPPING',
@@ -238,7 +238,7 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     };
     mocks.waste = { id: 'w1', code: 'RC-77' };
     const t = text((await mount()).container);
-    const order = ['Vận chuyển', 'Hoá đơn VAT', 'Yêu cầu thu rác RC-77', 'Địa chỉ giao hàng', 'Cần hỗ trợ'].map((s) => t.indexOf(s));
+    const order = ['Vận chuyển', 'Địa chỉ giao hàng', 'Hoá đơn VAT', 'Yêu cầu thu rác RC-77', 'Cần hỗ trợ'].map((s) => t.indexOf(s));
     expect(order.every((i) => i > -1)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
   });

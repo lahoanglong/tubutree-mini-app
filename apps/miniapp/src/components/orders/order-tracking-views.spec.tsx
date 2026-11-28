@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { orderActionPlan, orderHeadline, orderTrack, showTrackingPill, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { orderActionPlan, orderHeadline, orderTrack, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 
 const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), copyText: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -126,11 +126,41 @@ describe('OrderShipping', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('mã vận đơn chỉ để đọc, số đều: nút "Chép mã" nằm ở viên vận đơn dưới thẻ trạng thái (một nút chép mỗi trang)', () => {
-    render(<OrderShipping code="GHN123" />);
-    expect(screen.getByText('GHN123').getAttribute('style')).toContain('tabular-nums');
+  it('có mã: mã nằm trên viên chép mã trong thẻ (số đều), đó là nút DUY NHẤT của thẻ; dòng "Đơn vị vận chuyển" riêng không lặp vì viên đã in hãng', () => {
+    render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" />);
+    const pill = within(screen.getByTestId('order-shipping')).getByTestId('order-tracking-pill');
+    expect(within(pill).getByText('GHN123').getAttribute('style')).toContain('tabular-nums');
+    expect(within(screen.getByTestId('order-shipping')).getAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByText('Đơn vị vận chuyển')).toBeNull();
+  });
+
+  it('chưa có mã mà đã có hãng: dòng "Đơn vị vận chuyển" và không có nút chép', () => {
+    render(<OrderShipping partner="Giao Hàng Nhanh" />);
+    expect(screen.getByText('Đơn vị vận chuyển')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('thẻ gộp (W47): tiêu đề, viên mã (trên hành trình, thấy không phải cuộn), hành trình (children), trạng thái hãng, rồi địa chỉ nhận cuối thẻ sau vạch ngăn', () => {
+    render(
+      <OrderShipping partner="GHN" code="GHN123" status="Đang giao hàng" address={<div data-testid="addr">Nguyễn A · 0901</div>}>
+        <div data-testid="journey">hành trình</div>
+      </OrderShipping>,
+    );
+    const card = screen.getByTestId('order-shipping');
+    const order = [...card.querySelectorAll('h2, [data-testid="journey"], [data-testid="order-tracking-pill"], [data-testid="order-shipping-address"]')].map(
+      (el) => el.getAttribute('data-testid') ?? el.tagName,
+    );
+    expect(order).toEqual(['H2', 'order-tracking-pill', 'journey', 'order-shipping-address']);
+    expect(screen.getByTestId('order-shipping-address').style.borderTop).toContain('1px solid');
+    expect(within(screen.getByTestId('order-shipping-address')).getByTestId('addr')).toBeInTheDocument();
+  });
+
+  it('chỉ có hành trình hay chỉ có địa chỉ vẫn dựng thẻ', () => {
+    const { unmount } = render(<OrderShipping><div>hành trình</div></OrderShipping>);
+    expect(screen.getByTestId('order-shipping')).toBeInTheDocument();
+    unmount();
+    render(<OrderShipping address={<div>địa chỉ</div>} />);
+    expect(screen.getByTestId('order-shipping')).toBeInTheDocument();
   });
 
   it('mốc mới nhất có data-latest="true", các mốc còn lại không có', () => {
@@ -157,8 +187,7 @@ describe('OrderShipping', () => {
 
   it('hiện hãng, mã và trạng thái hãng', () => {
     render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" status="Đang giao hàng" />);
-    expect(screen.getByText('Giao Hàng Nhanh')).toBeInTheDocument();
-    expect(screen.getByText('GHN123')).toBeInTheDocument();
+    expect(screen.getByTestId('order-tracking-pill')).toHaveTextContent('GHN123 · Giao Hàng Nhanh');
     expect(screen.getByText('Đang giao hàng')).toBeInTheDocument();
   });
 
@@ -176,15 +205,14 @@ describe('OrderShipping', () => {
   });
 });
 
-describe('OrderShipping copyable: nút chép mã khi trang không có viên vận đơn (đơn huỷ/hoàn, W19-01 MINOR #2)', () => {
+describe('OrderShipping: chép mã ở mọi trạng thái đơn (W47, viên trong thẻ là nút chép duy nhất)', () => {
   const copyButtons = () => screen.queryAllByRole('button', { name: /^Sao chép mã vận đơn/ });
 
-  it('copyable: nút "Chép mã" 44px cạnh mã, tên đọc nêu mã kèm hãng; chép đúng mã và báo tại chỗ, lỗi thì nhắc chép tay', async () => {
+  it('chép đúng mã và báo tại chỗ, lỗi thì nhắc chép tay; tên đọc nêu mã kèm hãng', async () => {
     mocks.copyText.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
-    render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" copyable />);
+    render(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" />);
     const button = screen.getByRole('button', { name: 'Sao chép mã vận đơn GHN123 (Giao Hàng Nhanh)' });
     expect(button).toHaveTextContent('Chép mã');
-    expect(button.getAttribute('style')).toContain('min-height: 44px');
     expect(screen.getByRole('status')).toBeEmptyDOMElement();
     fireEvent.click(button);
     expect(mocks.copyText).toHaveBeenCalledWith('GHN123');
@@ -194,27 +222,13 @@ describe('OrderShipping copyable: nút chép mã khi trang không có viên vậ
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Không sao chép được — hãy chép mã thủ công.'));
   });
 
-  it('copyable nhưng chưa có mã (chỉ có hãng hay mốc): không có nút; không copyable thì mã chỉ để đọc', () => {
-    const { unmount } = render(<OrderShipping partner="Giao Hàng Nhanh" copyable />);
-    expect(screen.queryByRole('button')).toBeNull();
-    unmount();
-    render(<OrderShipping code="GHN123" />);
-    expect(screen.queryByRole('button')).toBeNull();
-  });
-
   it.each(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'RETURNED'] as const)(
-    'đơn %s có mã: mỗi trang đúng MỘT nút chép (viên khi còn chờ hàng, khối Vận chuyển khi đã huỷ/hoàn), nối như order-detail',
+    'đơn %s có mã: đúng MỘT nút chép, nằm trong thẻ Vận chuyển',
     (status) => {
       const o = order({ status, shippingCode: 'GHN123' });
-      render(
-        <>
-          {showTrackingPill(o) && <OrderTrackingPill code="GHN123" />}
-          <OrderShipping code="GHN123" copyable={!showTrackingPill(o)} />
-        </>,
-      );
+      render(<OrderShipping code={o.shippingCode} partner="GHN" />);
       expect(copyButtons()).toHaveLength(1);
-      const inShipping = within(screen.getByTestId('order-shipping')).queryAllByRole('button').length === 1;
-      expect(inShipping).toBe(status === 'CANCELLED' || status === 'RETURNED');
+      expect(within(screen.getByTestId('order-shipping')).getAllByRole('button')).toHaveLength(1);
     },
   );
 });
@@ -370,31 +384,42 @@ describe('OrderTrackingPill: chép mã khoá chạm đúp, báo tại chỗ, s�
 describe('OrderStatusHero', () => {
   const tone = { bg: 'var(--color-status-info-bg)', fg: 'var(--color-status-info-fg)' };
 
-  it('trạng thái, một câu, mốc và bước kế tiếp; không dựng dòng rỗng', () => {
+  const parts = () => [...screen.getByTestId('status-hero').children];
+
+  it('tối đa ba phần tử (W47): mốc ngày, trạng thái, MỘT câu; đơn đang giao có ngày dự kiến thì câu đó là ngày giao', () => {
     const headline = orderHeadline(order(), { now: NOW, etaLabel: '06/11 – 08/11', returnDays: 7 });
     render(<OrderStatusHero headline={headline} statusLabel="Đang giao" stamp={{ label: 'Đặt lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
     expect(screen.getByRole('heading', { name: 'Đang giao' })).toBeInTheDocument();
-    expect(screen.getByText('Đơn đang trên đường giao đến bạn.')).toBeInTheDocument();
     expect(screen.getByTestId('order-milestone')).toHaveTextContent('Dự kiến giao 06/11 – 08/11');
-    expect(screen.getByTestId('order-next')).toHaveTextContent('không huỷ được');
     expect(screen.getByText('12:00 03/11')).toBeInTheDocument();
+    expect(parts()).toHaveLength(3);
+    expect(screen.queryByText('Đơn đang trên đường giao đến bạn.')).toBeNull();
+    expect(screen.queryByTestId('order-next')).toBeNull();
   });
 
-  it('đơn huỷ không có mốc', () => {
+  it('đơn đang đi chưa có ngày giao dự kiến: câu là bước kế (vì sao không huỷ được), không lặp câu trạng thái', () => {
+    const headline = orderHeadline(order(), { now: NOW, returnDays: 7 });
+    render(<OrderStatusHero headline={headline} statusLabel="Đang giao" stamp={{ label: 'Đặt lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
+    expect(screen.getByTestId('order-next')).toHaveTextContent('không huỷ được');
+    expect(screen.queryByText('Đơn đang trên đường giao đến bạn.')).toBeNull();
+    expect(parts()).toHaveLength(3);
+  });
+
+  it('đơn huỷ không lý do: câu là bước kế (mua lại), không có mốc', () => {
     const headline = orderHeadline(order({ status: 'CANCELLED' }), { now: NOW });
     render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
     expect(screen.queryByTestId('order-milestone')).toBeNull();
     expect(screen.queryByTestId('order-cancel-reason')).toBeNull();
+    expect(screen.getByTestId('order-next')).toBeInTheDocument();
+    expect(parts()).toHaveLength(3);
   });
 
-  it('đơn huỷ có lý do từ API: một dòng riêng ngay dưới câu "Đơn đã huỷ.", trước bước kế tiếp', () => {
+  it('đơn huỷ có lý do từ API: lý do là câu duy nhất', () => {
     const headline = orderHeadline(order({ status: 'CANCELLED', cancelReason: 'Bạn đã huỷ: Đổi ý, không muốn mua nữa' }), { now: NOW });
     render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
-    const reason = screen.getByTestId('order-cancel-reason');
-    expect(reason).toHaveTextContent('Bạn đã huỷ: Đổi ý, không muốn mua nữa');
-    const sentence = screen.getByText('Đơn đã huỷ.');
-    expect(sentence.nextElementSibling).toBe(reason);
-    expect(reason.nextElementSibling).toBe(screen.getByTestId('order-next'));
+    expect(screen.getByTestId('order-cancel-reason')).toHaveTextContent('Bạn đã huỷ: Đổi ý, không muốn mua nữa');
+    expect(screen.queryByTestId('order-next')).toBeNull();
+    expect(parts()).toHaveLength(3);
   });
 
   it('lý do huỷ là chuỗi dài không dấu cách (link, số tài khoản): được ngắt dòng, không đẩy trang cuộn ngang', () => {
@@ -402,7 +427,6 @@ describe('OrderStatusHero', () => {
     const headline = orderHeadline(order({ status: 'CANCELLED', cancelReason: long }), { now: NOW });
     render(<OrderStatusHero headline={headline} statusLabel="Đã huỷ" stamp={{ label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
     expect(screen.getByTestId('order-cancel-reason').style.overflowWrap).toBe('anywhere');
-    expect(screen.getByTestId('order-next').style.overflowWrap).toBe('anywhere');
   });
 });
 

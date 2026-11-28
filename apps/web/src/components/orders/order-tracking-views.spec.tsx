@@ -279,6 +279,31 @@ describe('OrderShipping (web)', () => {
     expect(empty.container.innerHTML).toBe('');
   });
 
+  it('thẻ gộp (W47): tiêu đề, viên chép mã (trên hành trình, thấy không phải cuộn), hành trình (children), liên kết tra cứu, rồi địa chỉ nhận cuối thẻ sau vạch ngăn', () => {
+    const { container } = mount(
+      <OrderShipping partner="GHN" code="GHN123" trackingHref="https://hang.example/x" address={<p data-testid="addr">Nguyễn A · 0901</p>}>
+        <div data-testid="journey">hành trình</div>
+      </OrderShipping>,
+    );
+    const card = container.querySelector('[data-testid="order-shipping"]')!;
+    const seen = Array.from(card.querySelectorAll('h2, [data-testid="journey"], [data-testid="order-tracking-pill"], [data-testid="order-tracking-link"], [data-testid="order-shipping-address"]')).map(
+      (el) => el.getAttribute('data-testid') ?? el.tagName,
+    );
+    expect(seen).toEqual(['H2', 'order-tracking-pill', 'journey', 'order-tracking-link', 'order-shipping-address']);
+    expect(card.querySelectorAll('button')).toHaveLength(1);
+    expect(container.querySelector<HTMLElement>('[data-testid="order-shipping-address"]')!.style.borderTop).toContain('1px solid');
+    expect(container.querySelector('[data-testid="order-shipping-address"] [data-testid="addr"]')).not.toBeNull();
+  });
+
+  it('viên in mã kèm hãng (không lặp dòng "Đơn vị vận chuyển"); chưa có mã thì dòng hãng, không nút chép', () => {
+    const withCode = mount(<OrderShipping partner="Giao Hàng Nhanh" code="GHN123" />);
+    expect(withCode.container.querySelector('[data-testid="order-tracking-pill"]')?.textContent).toContain('GHN123 · Giao Hàng Nhanh');
+    expect(withCode.container.textContent).not.toContain('Đơn vị vận chuyển');
+    const noCode = mount(<OrderShipping partner="Giao Hàng Nhanh" />);
+    expect(noCode.container.textContent).toContain('Đơn vị vận chuyển');
+    expect(noCode.container.querySelector('button')).toBeNull();
+  });
+
   it('vùng chạm 44px và mọi điều khiển có tên', () => {
     const { container } = mount(<OrderShipping partner="GHN" code="GHN123" trackingHref="https://hang.example/x" />);
     expect(unnamedControls(container)).toEqual([]);
@@ -289,25 +314,35 @@ describe('OrderShipping (web)', () => {
 describe('OrderStatusHero (web)', () => {
   const tone = { bg: 'var(--color-status-info-bg)', fg: 'var(--color-status-info-fg)' };
 
-  it('trạng thái, một câu, mốc và bước kế tiếp', () => {
+  const parts = (c: HTMLElement) => c.querySelector('[data-testid="status-hero"]')!.children.length;
+
+  it('tối đa ba phần tử (W47): mốc ngày, trạng thái, MỘT câu; đơn đang giao có ngày dự kiến thì câu đó là ngày giao', () => {
     const headline = orderHeadline(order(), { now: NOW, etaLabel: '06/11 – 08/11', returnDays: 7 });
     const { container } = mount(<OrderStatusHero headline={headline} statusLabel="Đang giao" stamp={{ label: 'Đặt lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
     expect(container.querySelector('h2')?.textContent).toBe('Đang giao');
-    expect(container.textContent).toContain('Đơn đang trên đường giao đến bạn.');
     expect(container.querySelector('[data-testid="order-milestone"]')?.textContent).toBe('Dự kiến giao 06/11 – 08/11');
-    expect(container.querySelector('[data-testid="order-next"]')?.textContent).toContain('không huỷ được');
+    expect(container.textContent).not.toContain('Đơn đang trên đường giao đến bạn.');
+    expect(container.querySelector('[data-testid="order-next"]')).toBeNull();
+    expect(parts(container)).toBe(3);
   });
 
-  it('đơn huỷ có lý do từ API: một dòng riêng ngay dưới câu "Đơn đã huỷ.", trước bước kế tiếp; không có lý do thì không dựng dòng', () => {
+  it('đơn đang đi chưa có ngày giao dự kiến: câu là bước kế (vì sao không huỷ được), không lặp câu trạng thái', () => {
+    const { container } = mount(<OrderStatusHero headline={orderHeadline(order(), { now: NOW, returnDays: 7 })} statusLabel="Đang giao" stamp={{ label: 'Đặt lúc', at: '2026-11-03T05:00:00Z' }} tone={tone} />);
+    expect(container.querySelector('[data-testid="order-next"]')?.textContent).toContain('không huỷ được');
+    expect(container.textContent).not.toContain('Đơn đang trên đường giao đến bạn.');
+    expect(parts(container)).toBe(3);
+  });
+
+  it('đơn huỷ có lý do từ API: lý do là câu duy nhất; không có lý do thì câu là bước kế', () => {
     const head = (cancelReason?: string | null) => orderHeadline(order({ status: 'CANCELLED', cancelReason }), { now: NOW });
     const props = { statusLabel: 'Đã huỷ', stamp: { label: 'Huỷ lúc', at: '2026-11-03T05:00:00Z' }, tone };
     const withReason = mount(<OrderStatusHero headline={head('Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.')} {...props} />);
-    const reason = withReason.container.querySelector('[data-testid="order-cancel-reason"]')!;
-    expect(reason.textContent).toBe('Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.');
-    expect(reason.previousElementSibling?.textContent).toBe('Đơn đã huỷ.');
-    expect(reason.nextElementSibling).toBe(withReason.container.querySelector('[data-testid="order-next"]'));
+    expect(withReason.container.querySelector('[data-testid="order-cancel-reason"]')!.textContent).toBe('Tubu Tree đã huỷ đơn này. Cần biết thêm, bạn liên hệ CSKH.');
+    expect(withReason.container.querySelector('[data-testid="order-next"]')).toBeNull();
+    expect(parts(withReason.container)).toBe(3);
     const without = mount(<OrderStatusHero headline={head(null)} {...props} />);
     expect(without.container.querySelector('[data-testid="order-cancel-reason"]')).toBeNull();
+    expect(without.container.querySelector('[data-testid="order-next"]')).not.toBeNull();
   });
 
   it('lý do huỷ là chuỗi dài không dấu cách (link, số tài khoản): được ngắt dòng, không bị body overflow-x: clip cắt mất cuối', () => {
@@ -315,7 +350,6 @@ describe('OrderStatusHero (web)', () => {
     const long = `Bạn đã huỷ: Lý do khác. https://example.com/${'a'.repeat(80)}`;
     const { container } = mount(<OrderStatusHero headline={orderHeadline(order({ status: 'CANCELLED', cancelReason: long }), { now: NOW })} {...props} />);
     expect(container.querySelector<HTMLElement>('[data-testid="order-cancel-reason"]')!.style.overflowWrap).toBe('anywhere');
-    expect(container.querySelector<HTMLElement>('[data-testid="order-next"]')!.style.overflowWrap).toBe('anywhere');
   });
 });
 

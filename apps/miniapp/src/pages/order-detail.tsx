@@ -54,13 +54,12 @@ import { OrderTimelineTracker } from '../components/orders/order-timeline-tracke
 import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '../components/orders/order-shipping';
 import { CodSwitchAction } from '../components/orders/cod-switch-action';
-import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
 import { OrderRefillShortcut } from '../components/orders/order-refill-shortcut';
 import { OrderCsatCard } from '../components/orders/order-csat-card';
 import { refillFirstOn } from '@tubutree/app-core/refill/refill-api';
 import { refillLandingQuery } from '@tubutree/app-core/refill/refill-landing';
 import { OrderActionBar } from '../components/orders/order-action-bar';
-import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, showTrackingPill, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
@@ -372,11 +371,6 @@ export default function OrderDetailPage() {
   });
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
-  const timelineTitle = (
-    <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 12 }}>
-      {viOrders.timeline}
-    </Text>
-  );
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
 
   // Mua lại một chạm: gửi mọi dòng của đơn với số lượng cũ, máy chủ thêm phần còn hàng (kẹp theo tồn) và trả lý do từng dòng bị bỏ, nên câu báo nêu
@@ -412,91 +406,102 @@ export default function OrderDetailPage() {
     }
   };
 
+  // Địa chỉ nhận ở cuối thẻ Vận chuyển. Đơn đại lý không có địa chỉ khách lẻ (giao theo hợp đồng) — snapshot chỉ có `note`;
+  // render thẳng các trường rỗng sẽ ra dòng "· " trơ trọi, nên rơi về ghi chú giao hàng.
+  const addressBlock = (() => {
+    const addr = o.shippingAddress as typeof o.shippingAddress & { note?: string | null };
+    const line = addressLine(addr);
+    const hasContact = !!(addr.recipient || addr.phone);
+    if (!hasContact && !line) {
+      return addr.note ? (
+        <>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
+            {viCheckout.address}
+          </Text>
+          <Text variant="body-sm" tone="secondary" as="div">
+            {addr.note}
+          </Text>
+        </>
+      ) : null;
+    }
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-inline-sm)' }}>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
+            {viCheckout.address}
+          </Text>
+          {/* Lối duy nhất của việc sửa địa chỉ và ghi chú: chỉ khi máy chủ báo canEdit (API cũ không trả thì ẩn). */}
+          {canEditOrder(o) && (
+            <button
+              type="button"
+              data-testid="order-edit-open"
+              aria-label={orderEditLinkAria(o.code)}
+              className="tubu-press tubu-hit-44"
+              style={EDIT_LINK}
+              onClick={() => {
+                haptic('light');
+                setEditOpen(true);
+              }}
+            >
+              <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>
+                {ORDER_EDIT_COPY.link}
+              </Text>
+            </button>
+          )}
+        </div>
+        <Text variant="body-sm" as="div">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
+        {line && (
+          <Text variant="caption" tone="secondary" as="div">
+            {line}
+          </Text>
+        )}
+      </>
+    );
+  })();
+
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
       <PageHeader title="Chi tiết đơn hàng" subtitle={o.code} />
 
       <OrderStatusHero headline={headline} statusLabel={buyerStatusLabel(o)} stamp={stamp} tone={color} />
-      {o.shippingCode && showTrackingPill(o) && <OrderTrackingPill code={o.shippingCode} partner={o.shippingPartner} />}
 
-      {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
-          Đúng lúc thiện chí cao nhất (vừa đặt xong đơn đầu), không hỏi lúc mở app nguội. ── */}
-      {showOaPrompt && (
-        <Box
-          mx={4}
-          mt={2}
-          p={3}
-          style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', border: '1px solid var(--forest-200)' }}
+      {/* ── Thẻ Vận chuyển: hành trình, mã vận đơn (chạm để chép) và địa chỉ nhận trong MỘT thẻ, ngay dưới thẻ trạng thái (W47) ── */}
+      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+        <OrderShipping
+          partner={o.shippingPartner}
+          code={o.shippingCode}
+          status={o.shippingStatus ? shippingEventLabel(o.shippingStatus) : null}
+          events={trackView || journey ? undefined : historyEvents}
+          address={addressBlock}
         >
-          <Text variant="body-sm" as="div" style={{ fontWeight: 600, color: 'var(--forest-800)' }}>
-            Theo dõi Tubu Tree trên Zalo
-          </Text>
-          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
-            Nhận cập nhật đơn và tư vấn từ Tubu Tree qua Zalo — không bỏ lỡ tin quan trọng.
-          </Text>
-          <Box flex style={{ gap: 8, marginTop: 10 }}>
-            <Button size="md" loading={oaBusy} onPress={() => void handleFollowOaPrompt()}>
-              Theo dõi ngay
-            </Button>
-            <Button size="md" variant="ghost" disabled={oaBusy} onPress={handleDismissOaPrompt} style={{ color: 'var(--color-text-tertiary)' }}>
-              Để sau
-            </Button>
-          </Box>
-        </Box>
-      )}
-
-      <OrderCsatCard
-        order={o}
-        onSupport={() => {
-          const support = document.getElementById('order-support');
-          // `SupportContact` không vẽ gì khi số liên hệ đang tải hay không có kênh nào: không cuộn tới khối rỗng.
-          if (!support?.firstElementChild) return false;
-          revealReviewTarget(support, null);
-          return true;
-        }}
-      />
-
-      <OrderRefillShortcut
-        delivered={o.status === 'DELIVERED'}
-        refillOn={refillFirstOn(publicConfig)}
-        slugs={o.items.filter((it) => !it.isGift).map((it) => it.productSlug)}
-      />
-
-      {journey ? (
-        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }} data-testid="order-journey">
-          {timelineTitle}
-          <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
-          <OrderZaloDetail order={o} />
-          <TimelineViewed status={o.status} hasCarrierEvents={journey.hasCarrierEvents} />
-        </Box>
-      ) : (
-        <>
-          {/* ── Tiến trình 4 bước nhìn một cái là biết đơn đang ở đâu, kèm nút chép thông tin đơn ── */}
-          <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-            <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
-            <OrderZaloDetail order={o} />
-          </Box>
-
-          {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}
-          {trackView && trackAddsDetail(trackView) && (
-            <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-              {timelineTitle}
-              <OrderTrack track={trackView} now={ctx.now} />
-            </Box>
+          {journey ? (
+            <div data-testid="order-journey">
+              <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
+              <OrderZaloDetail order={o} />
+              <TimelineViewed status={o.status} hasCarrierEvents={journey.hasCarrierEvents} />
+            </div>
+          ) : (
+            <>
+              {/* Tiến trình 4 bước nhìn một cái là biết đơn đang ở đâu, kèm nút chép thông tin đơn; hành trình chi tiết chỉ khi nó thêm điều thanh 4 bước không nói. */}
+              <div>
+                <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+                <OrderZaloDetail order={o} />
+              </div>
+              {trackView && trackAddsDetail(trackView) && <OrderTrack track={trackView} now={ctx.now} />}
+            </>
           )}
-        </>
-      )}
-
-      {(o.shippingPartner || o.shippingCode || historyEvents.length > 0) && (
-        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <OrderShipping
-            partner={o.shippingPartner}
-            code={o.shippingCode}
-            status={o.shippingStatus ? shippingEventLabel(o.shippingStatus) : null}
-            events={trackView || journey ? undefined : historyEvents}
-            copyable={!showTrackingPill(o)}
+        </OrderShipping>
+      </Box>
+      {editOpen && canEditOrder(o) && (
+        <Suspense fallback={null}>
+          <OrderEditSheet
+            code={o.code}
+            address={o.shippingAddress}
+            note={customerOrderNote(o)}
+            split={(o.siblings?.length ?? 0) > 0}
+            onClose={() => setEditOpen(false)}
           />
-        </Box>
+        </Suspense>
       )}
 
       {/* ── Sản phẩm ── */}
@@ -706,95 +711,6 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {eco && (
-        <Suspense fallback={null}>
-          <OrderEcoImpactCard impact={eco} />
-        </Suspense>
-      )}
-
-      {/* ── Mời giữ bao bì gửi kèm đơn kế tiếp (đơn đã giao, chưa kèm rác) ── */}
-      {/* Thẻ nhựa đã giảm đã có nút gửi link mời: không thêm dòng mời thứ hai, chờ thẻ trả lời rồi mới quyết. */}
-      <SecondOrderInvite
-        order={o}
-        fallback={
-          o.status === 'DELIVERED' && inviteLandingOn(publicConfig) && !eco && !(ecoAsked && ecoQ.isPending) ? (
-            <Box mt={2} p={4} style={{ background: 'var(--color-bg-surface)' }}>
-              <Text variant="body-sm" as="div">
-                {fillCopy('order.journey.inviteLead')}{' '}
-                <button type="button" className="tubu-press tubu-hit-44" onClick={() => navigate(MISSION_PATHS.miniapp.invite)} style={INVITE_LINK}>
-                  {fillCopy('invite.title')}
-                </button>
-              </Text>
-            </Box>
-          ) : null
-        }
-      />
-
-      {/* ── Địa chỉ nhận ── */}
-      {/* Đơn đại lý không có địa chỉ khách lẻ (giao theo hợp đồng) — snapshot chỉ có `note`.
-          Render thẳng các trường rỗng sẽ ra dòng "· " trơ trọi, nên rơi về ghi chú giao hàng. */}
-      {(() => {
-        const addr = o.shippingAddress as typeof o.shippingAddress & { note?: string | null };
-        const line = addressLine(addr);
-        const hasContact = !!(addr.recipient || addr.phone);
-        if (!hasContact && !line) {
-          return addr.note ? (
-            <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-              <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
-                {viCheckout.address}
-              </Text>
-              <Text variant="body-sm" tone="secondary" as="div">
-                {addr.note}
-              </Text>
-            </Box>
-          ) : null;
-        }
-        return (
-          <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 'var(--space-inline-sm)' }}>
-              <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
-                {viCheckout.address}
-              </Text>
-              {/* Lối duy nhất của việc sửa địa chỉ và ghi chú: chỉ khi máy chủ báo canEdit (API cũ không trả thì ẩn). */}
-              {canEditOrder(o) && (
-                <button
-                  type="button"
-                  data-testid="order-edit-open"
-                  aria-label={orderEditLinkAria(o.code)}
-                  className="tubu-press tubu-hit-44"
-                  style={EDIT_LINK}
-                  onClick={() => {
-                    haptic('light');
-                    setEditOpen(true);
-                  }}
-                >
-                  <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>
-                    {ORDER_EDIT_COPY.link}
-                  </Text>
-                </button>
-              )}
-            </div>
-            <Text variant="body-sm" as="div">{[addr.recipient, addr.phone].filter(Boolean).join(' · ')}</Text>
-            {line && (
-              <Text variant="caption" tone="secondary" as="div">
-                {line}
-              </Text>
-            )}
-          </Box>
-        );
-      })()}
-      {editOpen && canEditOrder(o) && (
-        <Suspense fallback={null}>
-          <OrderEditSheet
-            code={o.code}
-            address={o.shippingAddress}
-            note={customerOrderNote(o)}
-            split={(o.siblings?.length ?? 0) > 0}
-            onClose={() => setEditOpen(false)}
-          />
-        </Suspense>
-      )}
-
       {customerOrderNote(o) ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text variant="body-sm" as="div" style={{ fontWeight: 600, marginBottom: 4 }}>
@@ -848,6 +764,75 @@ export default function OrderDetailPage() {
             </Box>
           );
         })}
+
+      {/* ── Phần phụ sau mua (W47): mời theo dõi OA, hỏi cảm nhận, mua lại định kỳ, nhựa đã giảm, mời bạn — nằm DƯỚI Sản phẩm và Thanh toán ── */}
+      {/* ── Mời theo dõi OA (đơn đầu tiên) — finding A3-01 nửa 2, xem shouldShowFollowOaPrompt.
+          Đúng lúc thiện chí cao nhất (vừa đặt xong đơn đầu), không hỏi lúc mở app nguội. ── */}
+      {showOaPrompt && (
+        <Box
+          mx={4}
+          mt={2}
+          p={3}
+          style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', border: '1px solid var(--forest-200)' }}
+        >
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600, color: 'var(--forest-800)' }}>
+            Theo dõi Tubu Tree trên Zalo
+          </Text>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
+            Nhận cập nhật đơn và tư vấn từ Tubu Tree qua Zalo — không bỏ lỡ tin quan trọng.
+          </Text>
+          <Box flex style={{ gap: 8, marginTop: 10 }}>
+            <Button size="md" loading={oaBusy} onPress={() => void handleFollowOaPrompt()}>
+              Theo dõi ngay
+            </Button>
+            <Button size="md" variant="ghost" disabled={oaBusy} onPress={handleDismissOaPrompt} style={{ color: 'var(--color-text-tertiary)' }}>
+              Để sau
+            </Button>
+          </Box>
+        </Box>
+      )}
+
+      <OrderCsatCard
+        order={o}
+        onSupport={() => {
+          const support = document.getElementById('order-support');
+          // `SupportContact` không vẽ gì khi số liên hệ đang tải hay không có kênh nào: không cuộn tới khối rỗng.
+          if (!support?.firstElementChild) return false;
+          revealReviewTarget(support, null);
+          return true;
+        }}
+      />
+
+      <OrderRefillShortcut
+        delivered={o.status === 'DELIVERED'}
+        refillOn={refillFirstOn(publicConfig)}
+        slugs={o.items.filter((it) => !it.isGift).map((it) => it.productSlug)}
+      />
+
+      {eco && (
+        <Suspense fallback={null}>
+          <OrderEcoImpactCard impact={eco} />
+        </Suspense>
+      )}
+
+      {/* ── Mời giữ bao bì gửi kèm đơn kế tiếp (đơn đã giao, chưa kèm rác) ── */}
+      {/* Thẻ nhựa đã giảm đã có nút gửi link mời: không thêm dòng mời thứ hai, chờ thẻ trả lời rồi mới quyết. */}
+      <SecondOrderInvite
+        order={o}
+        fallback={
+          o.status === 'DELIVERED' && inviteLandingOn(publicConfig) && !eco && !(ecoAsked && ecoQ.isPending) ? (
+            <Box mt={2} p={4} style={{ background: 'var(--color-bg-surface)' }}>
+              <Text variant="body-sm" as="div">
+                {fillCopy('order.journey.inviteLead')}{' '}
+                <button type="button" className="tubu-press tubu-hit-44" onClick={() => navigate(MISSION_PATHS.miniapp.invite)} style={INVITE_LINK}>
+                  {fillCopy('invite.title')}
+                </button>
+              </Text>
+            </Box>
+          ) : null
+        }
+      />
+
       {/* Đích cuộn của 👎 ở thẻ "Đơn này thế nào?" khi chat chưa mở. */}
       <Box p={4} id="order-support" tabIndex={-1} style={{ outline: 'none' }}>
         <SupportContact orderCode={o.code} />

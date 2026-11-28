@@ -335,7 +335,7 @@ describe('CategoryRow web — từ md là hàng 5 thẻ ngang (W134)', () => {
   });
 });
 
-describe('CategoryRow web: thanh nhảy nhanh theo thương hiệu (w34-02)', () => {
+describe('CategoryRow web: thanh chip thương hiệu, lối duyệt theo thương hiệu duy nhất của Trang chủ (W47)', () => {
   const BRANDS = [
     { brand: 'Tubu Tree', count: 9, slug: null },
     { brand: 'Visante', count: 7, slug: null },
@@ -363,85 +363,7 @@ describe('CategoryRow web: thanh nhảy nhanh theo thương hiệu (w34-02)', ()
     expect(bar(c).style.height).toBe(`${BRAND_BAR_HEIGHT}px`);
   });
 
-  it('chạm chip khi khối đã dựng nhãn đó: cuộn mượt tới neo `home-brand-<slug>`, không đổi trang', async () => {
-    mocks.get.mockResolvedValue(BRANDS);
-    const anchor = document.createElement('section');
-    anchor.id = 'home-brand-fuwa3e';
-    const scrollIntoView = vi.fn();
-    anchor.scrollIntoView = scrollIntoView;
-    document.body.appendChild(anchor);
-    try {
-      const { c } = mount(4);
-      await flush();
-      click(chips(c)[0]!);
-      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
-      expect(mocks.push).not.toHaveBeenCalled();
-    } finally {
-      anchor.remove();
-    }
-  });
-
-  /** Khối thương hiệu còn hoãn: khung giữ chỗ `home-defer` trong ô `data-home-block="suggest"` như Trang chủ thật. */
-  function deferredSuggest() {
-    const block = document.createElement('div');
-    block.dataset.homeBlock = 'suggest';
-    const placeholder = document.createElement('div');
-    placeholder.dataset.testid = 'home-defer';
-    placeholder.scrollIntoView = vi.fn();
-    block.appendChild(placeholder);
-    document.body.appendChild(block);
-    return { block, placeholder };
-  }
-
-  it('chạm chip khi khối còn hoãn dưới màn đầu: cuộn tới khung giữ chỗ để khối dựng, neo nhãn hiện thì cuộn tiếp tới nhãn, không đổi trang', async () => {
-    mocks.get.mockResolvedValue(BRANDS);
-    const { block, placeholder } = deferredSuggest();
-    try {
-      const { c } = mount(4);
-      await flush();
-      vi.useFakeTimers();
-      click(chips(c)[0]!);
-      expect(placeholder.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
-      vi.advanceTimersByTime(200);
-      const anchor = document.createElement('section');
-      anchor.id = 'home-brand-fuwa3e';
-      anchor.scrollIntoView = vi.fn();
-      placeholder.replaceWith(anchor);
-      vi.advanceTimersByTime(100);
-      expect(anchor.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
-      vi.advanceTimersByTime(5_000);
-      expect(mocks.push).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-      block.remove();
-    }
-  });
-
-  it('khối còn hoãn mà neo nhãn không hiện (nhãn lỗi hay hết món): hết lượt chờ thì mở trang nhãn; khách đã rời Trang chủ thì thôi', async () => {
-    mocks.get.mockResolvedValue(BRANDS);
-    const { block } = deferredSuggest();
-    try {
-      const { c } = mount(4);
-      await flush();
-      vi.useFakeTimers();
-      click(chips(c)[0]!);
-      vi.advanceTimersByTime(1_000);
-      expect(mocks.push).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(1_000);
-      expect(mocks.push).toHaveBeenCalledTimes(1);
-      expect(mocks.push).toHaveBeenLastCalledWith('/brand/fuwa3e');
-
-      click(chips(c)[1]!);
-      block.remove();
-      vi.advanceTimersByTime(5_000);
-      expect(mocks.push).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-      block.remove();
-    }
-  });
-
-  it('chạm chip khi khối đã dựng mà không có nhãn đó: mở trang nhãn nếu có slug, không thì danh sách lọc theo nhãn', async () => {
+  it('chạm chip: mở trang nhãn nếu có slug, không thì danh sách lọc theo nhãn (không còn khối thương hiệu cuối trang để cuộn tới)', async () => {
     mocks.get.mockResolvedValue(BRANDS);
     const { c } = mount(4);
     await flush();
@@ -451,17 +373,15 @@ describe('CategoryRow web: thanh nhảy nhanh theo thương hiệu (w34-02)', ()
     expect(mocks.push).toHaveBeenLastCalledWith('/san-pham?brand=P%C6%A1+Lang');
   });
 
-  it('lỗi hay rỗng: không chip nhưng hàng vẫn giữ BRAND_BAR_HEIGHT (khối dưới không nhảy)', async () => {
-    mocks.get.mockResolvedValue([]);
-    const { c } = mount(4);
-    await flush();
-    expect(chips(c)).toHaveLength(0);
-    expect(bar(c).style.height).toBe(`${BRAND_BAR_HEIGHT}px`);
-    mounted?.unmount();
-    mocks.get.mockRejectedValue(new Error('x'));
-    const again = mount(4);
-    await flush();
-    expect(chips(again.c)).toHaveLength(0);
-    expect(bar(again.c).style.height).toBe(`${BRAND_BAR_HEIGHT}px`);
+  it('lỗi, rỗng, chỉ "Tubu Tree" hay một nhãn thật: không có lựa chọn nên không vẽ thanh (hasBrandChoice)', async () => {
+    for (const reply of [[], [{ brand: 'Tubu Tree', count: 40 }], [{ brand: 'Tubu Tree', count: 40 }, { brand: 'Fuwa3e', count: 12 }], new Error('x')]) {
+      if (reply instanceof Error) mocks.get.mockRejectedValue(reply);
+      else mocks.get.mockResolvedValue(reply);
+      const { c } = mount(4);
+      await flush();
+      expect(c.querySelector('[data-testid="home-brand-bar"]')).toBeNull();
+      mounted?.unmount();
+      mounted = null;
+    }
   });
 });

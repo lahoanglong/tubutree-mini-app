@@ -14,10 +14,10 @@ export interface ShortcutsSheetProps {
   onSelect: (item: HomeShortcutSpec) => void;
 }
 
-/** "Tất cả lối tắt" (Q7): mọi mục còn hiển thị, mỗi mục một dòng, câu đọc đầy đủ làm mô tả để ô 4 chữ ở Trang chủ không phải gánh ý nghĩa. */
+/** "Thêm lối tắt": các lối tắt chưa lên lưới Trang chủ (`homeShortcutGrid().more`), mỗi mục một dòng, câu đọc đầy đủ làm mô tả. Không lặp đích đã có ô trên lưới. */
 export function ShortcutsSheet({ open, onClose, items, onSelect }: ShortcutsSheetProps) {
   return (
-    <BottomSheet open={open} onClose={onClose} title={homeCopy.shortcuts.allAria}>
+    <BottomSheet open={open} onClose={onClose} title={homeCopy.shortcuts.moreAria}>
       <div>
         {items.map((it, i) => {
           const tint = SHORTCUT_TINT_VARS[it.tint];

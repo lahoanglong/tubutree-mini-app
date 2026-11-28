@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { offeredIntentFilters } from '@tubutree/app-core/browse/intent-filters';
+import { hasBrandChoice } from '@tubutree/app-core/merch/brand-showcase';
 import { fetchCatalog, type CatalogPage } from '../../services/shop-api';
 import { vi } from '../../i18n/vi';
 import { useDebounced } from '../../utils/use-debounced';
@@ -139,7 +140,8 @@ export function FilterSheet({ open, onClose, state, brands, onApply, refillOn = 
           {vi.browse.filter.rating4}
         </Chip>
       </FilterGroup>
-      {brands.length > 0 && (
+      {/* Chỉ một nhãn thật (hay chỉ "Tubu Tree") thì không có gì để chọn: ẩn cả nhóm (W47, `hasBrandChoice`). */}
+      {hasBrandChoice(brands) && (
         <FilterGroup title={vi.browse.filter.brand} scrollMaxHeight="30vh">
           {brands.map((b) => (
             <Chip key={b.brand} selected={draft.brands.includes(b.brand)} onPress={() => toggleBrand(b.brand)}>

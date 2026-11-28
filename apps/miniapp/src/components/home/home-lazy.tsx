@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
-import { HOME_SETTLING_HEIGHTS, purchasedSkeletonHeight, readPurchasedHint } from '@tubutree/app-core/home-layout';
+import { HOME_SETTLING_HEIGHTS, purchasedSkeletonHeight, readPurchasedHint, type HomeInterleaveCard } from '@tubutree/app-core/home-layout';
 import { PURCHASED_RAIL_LIMIT, usePurchasedItems } from '../../hooks/use-purchased-items';
 import { isChunkError } from '../../utils/chunk-error';
 import { browserStorage } from '../../utils/recently-viewed';
@@ -99,9 +99,13 @@ export const HomePurchasedRail = (p: PurchasedRailProps) => (
   <Block fallback={<PurchasedRailWait restoring={p.restoring} />}>{(m) => <m.PurchasedRail {...p} />}</Block>
 );
 export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => <BestSellerRail {...p} />;
-// Ngày của thẻ Cộng đồng: Góc Sống Xanh bật và đủ đánh giá ảnh đã duyệt thì dải ảnh khách đứng chỗ đó, không thì thẻ Cộng đồng như cũ.
-export const HomeCommunityPreview = () => <Block>{(m) => <m.GreenCornerStrip fallback={<m.CommunityPreview />} />}</Block>;
-export const HomeQuiz = () => <Block>{(m) => <m.HomeQuiz />}</Block>;
+/**
+ * Thẻ chen của lưới Gợi ý (W47): dải "Khách hàng sống xanh" là dải bằng chứng xã hội duy nhất của Trang chủ, đứng đó mỗi ngày khi Góc Sống Xanh bật và đủ
+ * đánh giá ảnh đã duyệt; không đủ thì thẻ của ngày (Chẩn đoán tổ ấm hoặc Cộng đồng, `homeInterleaveCard`).
+ */
+export const HomeInterleave = ({ fallback }: { fallback: HomeInterleaveCard }) => (
+  <Block>{(m) => <m.GreenCornerStrip fallback={fallback === 'quiz' ? <m.HomeQuiz /> : <m.CommunityPreview />} />}</Block>
+);
 export const HomeScrollRestoration = (p: ComponentProps<Below['HomeScrollRestoration']>) => <Block>{(m) => <m.HomeScrollRestoration {...p} />}</Block>;
 export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Block>{(m) => <m.SuggestFeed {...p} />}</Block>;
 // Dải Story (dưới màn đầu) cao đúng `HOME_SETTLING_HEIGHTS.stories` cả lúc chờ lẫn lúc có dữ liệu: khung giữ chỗ cùng chiều cao nên Mua lại và lưới Gợi ý không nhảy khi chunk về.

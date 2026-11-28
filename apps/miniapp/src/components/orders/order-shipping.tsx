@@ -1,9 +1,8 @@
-import { Copy } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { TrackEvent } from '@tubutree/app-core/commerce/order-tracking';
-import { Button } from '../ui/button';
 import { Text } from '../ui/text';
-import { CopyTrackingStatus, copyTrackingLabel, useCopyTrackingCode } from './order-tracking-pill';
+import { OrderTrackingPill } from './order-tracking-pill';
 import { TrackEventsList } from './track-events-list';
 
 export interface OrderShippingProps {
@@ -11,67 +10,55 @@ export interface OrderShippingProps {
   code?: string | null;
   /** Trạng thái hãng đã dịch ("Đang giao hàng"). */
   status?: string | null;
-  /** Mốc hãng ghi, chỉ truyền khi đơn không có hành trình 5 bước (đơn đã hoàn): còn lại các mốc nằm trong OrderTrack. */
+  /** Mốc hãng ghi, chỉ truyền khi đơn không có hành trình 5 bước (đơn đã hoàn): còn lại các mốc nằm trong hành trình (`children`). */
   events?: readonly TrackEvent[];
-  /**
-   * Có nút "Chép mã" cạnh mã: chỉ khi trang không có viên vận đơn (`showTrackingPill` sai, tức đơn đã huỷ/hoàn mà kho đã gắn mã), để mỗi trang vẫn
-   * đúng một nút chép và khách đối chiếu hay khiếu nại với hãng vẫn lấy được mã.
-   */
-  copyable?: boolean;
+  /** Hành trình của đơn (thanh tiến trình, mốc hãng), vẽ ngay dưới tiêu đề thẻ. */
+  children?: ReactNode;
+  /** Địa chỉ nhận, vẽ cuối thẻ sau một vạch ngăn. */
+  address?: ReactNode;
 }
 
-function CopyCodeButton({ code, partner }: { code: string; partner?: string | null }) {
-  const { copy, result, announce } = useCopyTrackingCode(code);
-  return (
-    <div style={{ flex: 'none' }}>
-      <Button variant="secondary" icon={Copy} aria-label={copyTrackingLabel(code, partner)} onPress={copy}>
-        {fillCopy('order.shipping.copy')}
-      </Button>
-      <CopyTrackingStatus result={result} announce={announce} />
-    </div>
-  );
-}
+const ADDRESS_SLOT = { borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--space-inset-card)' } as const;
 
 /**
- * Hãng vận chuyển và mã vận đơn, đặt liền dưới hành trình. Đơn còn chờ hàng thì nút "Chép mã" nằm ở `OrderTrackingPill` dưới thẻ trạng thái (một nút chép
- * mỗi trang) nên ở đây mã chỉ để đọc; đơn đã huỷ/hoàn không có viên nên nơi dùng bật `copyable`.
+ * Thẻ Vận chuyển của Chi tiết đơn, MỘT thẻ cho mọi thứ về đường đi của đơn: tiêu đề, viên mã vận đơn chạm để chép (nút chép DUY NHẤT của trang, mọi
+ * trạng thái có mã; đứng trên hành trình để khách thấy mã không phải cuộn) hoặc hãng khi chưa có mã, hành trình, trạng thái hãng, mốc hãng của đơn đã
+ * hoàn, rồi địa chỉ nhận.
  */
-export function OrderShipping({ partner, code, status, events = [], copyable = false }: OrderShippingProps) {
-  if (!partner && !code && events.length === 0) return null;
+export function OrderShipping({ partner, code, status, events = [], children, address }: OrderShippingProps) {
+  if (!children && !address && !partner && !code && events.length === 0) return null;
+  const title = fillCopy('order.shipping.title');
   return (
-    <section aria-label={fillCopy('order.shipping.title')} data-testid="order-shipping" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-inset-card)' }}>
+    <section aria-label={title} data-testid="order-shipping" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-inset-card)' }}>
       <Text variant="body-sm" as="h2" style={{ fontWeight: 700 }}>
-        {fillCopy('order.shipping.title')}
+        {title}
       </Text>
-      {partner && (
-        <div>
-          <Text variant="caption" tone="tertiary" as="div">
-            {fillCopy('order.shipping.carrier')}
-          </Text>
-          <Text variant="body-md" as="div">
-            {partner}
-          </Text>
-        </div>
-      )}
-      {code && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-inline-md)' }}>
-          <div style={{ minWidth: 0 }}>
+      {code ? (
+        <OrderTrackingPill code={code} partner={partner} />
+      ) : (
+        partner && (
+          <div>
             <Text variant="caption" tone="tertiary" as="div">
-              {fillCopy('order.shipping.code')}
+              {fillCopy('order.shipping.carrier')}
             </Text>
-            <Text variant="body-md" as="div" numeric style={{ fontWeight: 700, overflowWrap: 'anywhere' }}>
-              {code}
+            <Text variant="body-md" as="div">
+              {partner}
             </Text>
           </div>
-          {copyable && <CopyCodeButton code={code} partner={partner} />}
-        </div>
+        )
       )}
+      {children}
       {status && (
         <Text variant="caption" tone="success" as="div">
           {status}
         </Text>
       )}
       <TrackEventsList events={events} />
+      {address && (
+        <div data-testid="order-shipping-address" style={ADDRESS_SLOT}>
+          {address}
+        </div>
+      )}
     </section>
   );
 }

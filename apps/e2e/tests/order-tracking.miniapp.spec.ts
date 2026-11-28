@@ -28,9 +28,9 @@ test.describe('Mini App theo dõi đơn 375', () => {
     const w = await mockWorld(api, page, 'miniapp', state, Date.now());
     await openState(page, 'miniapp', 375, w.order.code);
     await state.ready(page);
-    // Một nút chép mỗi trang: ở viên vận đơn ngay dưới thẻ trạng thái; khối Vận chuyển chỉ in hãng và mã.
-    await expect(page.getByTestId('order-shipping').getByRole('button')).toHaveCount(0);
-    const pill = page.getByTestId('order-tracking-pill');
+    // W47: viên vận đơn nằm TRONG thẻ Vận chuyển (một thẻ gồm hành trình, viên chép mã và địa chỉ), là nút chép duy nhất của trang.
+    const pill = page.getByTestId('order-shipping').getByTestId('order-tracking-pill');
+    await expect(page.getByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveCount(1);
     // Tên đọc nói cả hãng (PO A3): khách dùng trình đọc biết dán mã vào ứng dụng nào.
     const pillButton = pill.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345 (Giao Hàng Nhanh)', exact: true });
     expect((await pillButton.boundingBox())!.height).toBeGreaterThanOrEqual(43.5);
@@ -41,7 +41,7 @@ test.describe('Mini App theo dõi đơn 375', () => {
   });
 
   for (const status of ['CANCELLED', 'RETURNED'] as const) {
-    test(`đơn ${status} mà kho đã gắn mã vận đơn: không có viên vận đơn (PO A3), mã in ở khối Vận chuyển kèm nút chép (W19-01 MINOR #2)`, async ({ page, api }) => {
+    test(`đơn ${status} mà kho đã gắn mã vận đơn: viên chép mã vẫn ở thẻ Vận chuyển để đối chiếu (W47), một nút chép duy nhất`, async ({ page, api }) => {
       const shipping = stateOf('shipping');
       const state: OrderState = {
         ...shipping,
@@ -59,8 +59,8 @@ test.describe('Mini App theo dõi đơn 375', () => {
       const card = page.getByTestId('order-shipping');
       await expect(card.getByText('GHN6789012345').first()).toBeVisible();
       await expect(card.getByText('Giao Hàng Nhanh').first()).toBeVisible();
-      await expect(page.getByTestId('order-tracking-pill')).toHaveCount(0);
-      // Không có viên thì nút chép duy nhất của trang nằm ở khối Vận chuyển (W20-03), tên đọc nêu mã kèm hãng như viên.
+      await expect(card.getByTestId('order-tracking-pill')).toHaveCount(1);
+      // Nút chép duy nhất của trang là viên trong thẻ Vận chuyển, tên đọc nêu mã kèm hãng.
       await expect(page.getByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveCount(1);
       const copy = card.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345 (Giao Hàng Nhanh)', exact: true });
       expect((await copy.boundingBox())!.height).toBeGreaterThanOrEqual(43.5);

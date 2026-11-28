@@ -1152,7 +1152,8 @@ describe('chi tiết đơn — điện thoại (như Mini App)', () => {
     expect(container.querySelector('img[src*="vietqr"]')).toBeNull();
     expect(container.textContent).not.toContain('Chuyển khoản trước');
     expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Thanh toán trước 10:00 01/01/2099');
-    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).toContain('Đơn đang chờ bạn thanh toán.');
+    expect(container.querySelector('[data-testid="status-hero"] h2')?.textContent).toBe('Chờ thanh toán');
+    expect(container.querySelector('[data-testid="status-hero"]')?.textContent).not.toContain('Đơn đang chờ bạn thanh toán.');
     expect(barLabels(container)).toEqual(['Thanh toán ngay']);
     expect(menuHas(container, 'Huỷ đơn')).toBe(true);
     click(btn(bar(container), 'Thanh toán ngay')!);
