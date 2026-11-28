@@ -25,8 +25,8 @@ test('Vòng quay 375px (web): nhãn "Mã giảm giá" ở cả hai ô COUPON, m�
   mockNewbieGame(api, 'after-checkin');
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
   api.get('/me/loyalty', { pointsBalance: 20000, redeemablePoints: 20000, redeemableTotal: 20000, tier: null, nextTier: null, tiers: [] });
-  await page.goto('/vuon-xanh');
-  await page.getByRole('heading', { name: 'Vòng quay may mắn' }).scrollIntoViewIfNeeded({ timeout: 30_000 });
+  await page.goto('/vuon-xanh?tab=games');
+  await page.getByRole('heading', { name: 'Vòng quay may mắn', exact: true }).scrollIntoViewIfNeeded({ timeout: 30_000 });
   await settle(page);
 
   const m = await measureWheel(page);

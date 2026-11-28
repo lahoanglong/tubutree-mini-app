@@ -2,6 +2,7 @@ import { test, expect, makeUser, mockSession } from './support/mock-api';
 import { mockNewbieGame, newbieProfile } from './support/game-newbie-states';
 import { installVisualMode, settle } from './support/visual';
 import { measureWheel, wheelProblems } from './support/wheel-metrics';
+import { openMiniGameHub } from './support/game-mini-mocks';
 
 /**
  * Nhãn ô Vòng quay may mắn ở 375px (Mini App): ô COUPON đọc "Mã giảm giá" (D2) mà chữ vẫn nằm trong ruột bánh, tối đa 2 dòng, không nhỏ hơn 12px.
@@ -14,8 +15,8 @@ test('Vòng quay 375px: nhãn "Mã giảm giá" ở cả hai ô COUPON, mọi nh
   mockNewbieGame(api, 'after-checkin');
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
   api.get('/me/loyalty', { pointsBalance: 20000, redeemablePoints: 20000, redeemableTotal: 20000, tier: null, nextTier: null, tiers: [] });
-  await page.goto('/game');
-  await page.getByRole('heading', { name: 'Vòng quay may mắn' }).scrollIntoViewIfNeeded({ timeout: 20_000 });
+  await openMiniGameHub(page);
+  await page.getByRole('heading', { name: 'Vòng quay may mắn', exact: true }).scrollIntoViewIfNeeded({ timeout: 20_000 });
   await settle(page);
 
   const m = await measureWheel(page);
