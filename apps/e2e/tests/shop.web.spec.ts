@@ -465,7 +465,9 @@ test.describe('Web khách: trang sản phẩm', () => {
       firstOrder: { id: 'o1', code: 'TB-1', status: 'CONFIRMED', paymentMethod: 'COD', total: 100000 },
     });
     await page.goto(`/san-pham/${p!.slug}`);
-    await page.getByRole('button', { name: /Đặt định kỳ/ }).click();
+    // tubu-w47-01: lối Đặt định kỳ nằm trong chế độ "Định kỳ" của dải cách mua.
+    await page.getByTestId('pdp-buy-modes').locator('[data-mode="subscribe"]').click();
+    await page.getByTestId('pdp-subscribe-open').click();
     const dialog = page.getByRole('dialog', { name: /Đặt định kỳ/ });
     await dialog.getByRole('button', { name: '6 tuần' }).click();
     const created = api.waitForCall('POST', '/me/subscriptions');

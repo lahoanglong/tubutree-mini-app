@@ -109,55 +109,43 @@ base('Trang chủ: chân trang có đủ năm link chính sách và thông tin t
   expect(o).toEqual({ doc: 0, body: 0 });
 });
 
-mocked('thanh toán: dòng đồng ý dẫn tới Điều khoản, Chính sách bảo mật và ba chính sách còn lại; không cuộn ngang', async ({ page, api }, testInfo) => {
+mocked('thanh toán: dòng đồng ý mở tấm năm chính sách (Điều khoản, Chính sách bảo mật và ba chính sách còn lại); không cuộn ngang', async ({ page, api }, testInfo) => {
   const size = sizeOf(testInfo);
   const normal = STATES.find((s) => s.key === 'normal')!;
   await mockWorld(api, page, 'web', normal, Promise.resolve());
   await page.goto('/thanh-toan');
   await normal.ready(page, 'web');
 
+  // tubu-w47-01: một dòng "Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách" là nút mở tấm năm chính sách (cùng Mini App), thay câu năm link.
   const consent = page.locator('[data-testid="order-consent"]:visible');
   await expect(consent).toHaveCount(1);
-  await expect(consent).toHaveText('Bằng việc đặt hàng, bạn đồng ý với: Điều khoản, Bảo mật, Đổi trả, Vận chuyển, Thanh toán.');
-  const links = consent.getByRole('link');
-  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute('href')))).toEqual(HREFS);
-  await expect(consent.getByRole('link', { name: 'Điều khoản', exact: true })).toBeVisible();
-  await expect(consent.getByRole('link', { name: 'Chính sách bảo mật', exact: true })).toBeVisible();
-  // Link không bị cắt giữa chữ, và điểm cách tâm link 20px phía trên/dưới vẫn trúng chính link đó: vùng chạm 44px không bị link dòng khác
-  // (cột tóm tắt 326px ở máy tính làm "Thanh toán" xuống dòng) hay nút Đặt hàng giành mất.
+  await expect(consent).toHaveText('Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách');
   await consent.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-  const hits = await links.evaluateAll((as) =>
-    as.map((a) => {
-      const b = a.getBoundingClientRect();
-      const x = b.left + b.width / 2;
-      const at = (y: number) => {
-        const el = document.elementFromPoint(x, y);
-        return el?.closest('a') === a ? 'self' : `${el?.tagName ?? 'none'}.${String(el?.className ?? '').slice(0, 40)}`;
-      };
-      const box = a.closest('[data-testid="order-consent"]')!.getBoundingClientRect();
-      return {
-        href: a.getAttribute('href'),
-        fragments: a.getClientRects().length,
-        above: at(b.top + b.height / 2 - 20),
-        below: at(b.top + b.height / 2 + 20),
-        geometry: `link ${b.left.toFixed(1)}–${b.right.toFixed(1)} × ${b.height.toFixed(1)}, dòng ${box.left.toFixed(1)}–${box.right.toFixed(1)}`,
-      };
-    }),
-  );
-  for (const h of hits) expect({ fragments: h.fragments, above: h.above, below: h.below }, `${h.href} ${h.geometry}`).toEqual({ fragments: 1, above: 'self', below: 'self' });
-  if (size.width < 768) {
-    // Điện thoại: như Mini App, câu và năm link vừa hai dòng chữ (dòng link 44px không làm khối cao thêm).
-    const m = await consent.evaluate((el) => {
-      const cs = getComputedStyle(el);
-      return { height: el.getBoundingClientRect().height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom), lineHeight: parseFloat(cs.lineHeight) };
-    });
-    expect(m.height, `cao ${m.height}px, dòng ${m.lineHeight}px`).toBeLessThanOrEqual(m.lineHeight * 2 + 1);
-  }
+  const m = await consent.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    // Nút có min-height 44px nên hộp nội dung cao hơn một dòng; đếm dòng chữ bằng Range, không bằng hộp nút.
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tops = new Set([...range.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top)));
+    return { lines: tops.size, height: r.height };
+  });
+  expect(m.height, 'cả dòng là vùng chạm 44px').toBeGreaterThanOrEqual(44);
+  if (size.width < 768) expect(m.lines, `câu đồng ý ${m.lines} dòng ở ${size.width}px: một dòng`).toBe(1);
 
   const o = await overflow(page);
   expect(o, `cuộn ngang ở /thanh-toan ${size.width}px`).toEqual({ doc: 0, body: 0 });
 
-  await consent.getByRole('link', { name: 'Chính sách bảo mật', exact: true }).click();
+  await consent.click();
+  const sheet = page.getByTestId('order-consent-policies');
+  await expect(sheet).toBeVisible();
+  const links = sheet.getByRole('link');
+  expect(await links.evaluateAll((as) => as.map((a) => a.getAttribute('href')))).toEqual(HREFS);
+  await expect(sheet.getByRole('link', { name: 'Điều khoản sử dụng', exact: true })).toBeVisible();
+  for (const h of await links.evaluateAll((as) => as.map((a) => a.getBoundingClientRect().height))) {
+    expect(h, 'mỗi chính sách chạm được 44px').toBeGreaterThanOrEqual(44);
+  }
+  await sheet.getByRole('link', { name: 'Chính sách bảo mật', exact: true }).click();
   await expect(page).toHaveURL(/\/chinh-sach\/bao-mat$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Chính sách bảo mật');
 });

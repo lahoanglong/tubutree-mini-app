@@ -8,7 +8,9 @@ import { APPLY_CODE, APPLY_DISCOUNT, mockVoucherHint, type HintWallet } from './
  * W44B + W166, Mini App ở 320/375/393px: gợi ý mã giảm giá ở Giỏ. API mock toàn bộ. Giỏ có 3 dòng, tạm tính 90.000đ:
  * GIAM20 đủ điều kiện (giảm 20.000đ), GIAM80 đòi đơn tối thiểu 120.000đ nên còn thiếu 30.000đ (thanh đạt 75%).
  * Từ W166 chỉ MỘT nút áp mã: "Áp dụng" ở cuối hàng "Mã giảm giá" của chân dính (thay "Chọn mã ›"). Dải dưới thanh Miễn phí giao hàng chỉ còn
- * dòng nhắc mã sắp mở khoá, không còn câu "Bạn có mã giảm giá … đủ điều kiện". Không đặt đơn thật.
+ * dòng nhắc mã sắp mở khoá, không còn câu "Bạn có mã giảm giá … đủ điều kiện". Từ tubu-w47-01 giỏ chỉ có MỘT thanh mốc: mã GIAM80 còn thiếu 30.000đ gần
+ * hơn mốc Miễn phí giao hàng (còn thiếu 110.000đ) nên chính thanh `freeship-progress` nói mã (`data-goal="voucher"`), không còn dải nhắc riêng bên dưới.
+ * Không đặt đơn thật.
  */
 const VIEWPORTS = [
   { width: 320, height: 640 },
@@ -31,7 +33,7 @@ function mockCart(api: MockApi, o: { wallet?: HintWallet; couponCode?: string; a
 }
 
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-const strip = (page: Page) => page.getByTestId('cart-voucher-hint');
+const strip = (page: Page) => page.locator('[data-testid="freeship-progress"][data-goal="voucher"]');
 const cta = (page: Page) => page.getByTestId('cart-voucher-apply-cta');
 const stickyRow = (page: Page) => page.getByTestId('coupon-row');
 
@@ -62,10 +64,10 @@ for (const vp of VIEWPORTS) {
       await expect(page.getByTestId('coupon-cta')).toHaveCount(0);
       expect(await page.getByTestId('cart-voucher-apply-cta').evaluate((el) => !!el.closest('[data-testid="coupon-row"]'))).toBe(false);
 
-      const freeship = (await page.getByTestId('freeship-progress').boundingBox())!;
+      await expect(page.getByTestId('cart-voucher-hint'), 'không còn dải nhắc mã riêng dưới thanh').toHaveCount(0);
+      await expect(page.getByTestId('freeship-progress'), 'một thanh mốc duy nhất').toHaveCount(1);
       const box = (await strip(page).boundingBox())!;
       const selectAll = (await page.getByText('Chọn tất cả', { exact: true }).first().boundingBox())!;
-      expect(freeship.y + freeship.height).toBeLessThanOrEqual(box.y + 1);
       expect(box.y + box.height).toBeLessThanOrEqual(selectAll.y + 1);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
@@ -139,7 +141,7 @@ for (const vp of VIEWPORTS) {
       const buttons = strip(page).getByRole('button');
       await expect(buttons).toHaveCount(1);
       await expect(buttons).toHaveText('Mua thêm');
-      const b = (await page.getByTestId('cart-voucher-unlock-cta').boundingBox())!;
+      const b = (await page.getByTestId('freeship-shop-more-cta').boundingBox())!;
       expect(b.width, 'chiều rộng nút Mua thêm').toBeGreaterThanOrEqual(44);
       expect(b.height, 'chiều cao nút Mua thêm').toBeGreaterThanOrEqual(44);
       expect(b.x + b.width).toBeLessThanOrEqual(vp.width);

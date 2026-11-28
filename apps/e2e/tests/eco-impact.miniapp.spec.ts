@@ -72,16 +72,23 @@ for (const vp of [
       if (SHOTS) await eco.screenshot({ path: `${SHOTS}/mini-${vp.width}-card-badge.png` });
     });
 
-    test('trang sản phẩm: khối "Điểm cộng xanh" sau khối lợi ích, nguồn bằng chữ, không link, không tràn ngang', async ({ page, api }) => {
+    test('trang sản phẩm: dòng Điểm cộng xanh nằm trong Điểm nổi bật (≤3 dòng), sau dòng lợi ích, nguồn bằng chữ, không link, không tràn ngang', async ({ page, api }) => {
       mockPdp(api, PDP_FACTS);
       await openPdp(page);
-      const block = page.getByTestId('pdp-eco');
+      // tubu-w47-01: khối "Điểm cộng xanh" riêng gộp vào Điểm nổi bật (trần 3 dòng chia giữa mô tả ngắn, Điểm cộng xanh và chứng nhận).
+      await expect(page.getByTestId('pdp-eco')).toHaveCount(0);
+      const block = page.getByTestId('pdp-highlights');
       await block.scrollIntoViewIfNeeded();
       await expect(block).toBeVisible();
-      await expect(block.getByText('Điểm cộng xanh', { exact: true })).toBeVisible();
-      await expect(block.locator('li')).toHaveCount(2);
-      await expect(block.getByText('Giảm khoảng 1,2 kg nhựa mỗi món, so với 20 chai 500ml cùng loại (ước tính)')).toBeVisible();
-      await expect(block.getByText('Nguồn: pannature.org').first()).toBeVisible();
+      const kinds = await block.locator('li').evaluateAll((els) => els.map((e) => e.getAttribute('data-kind')));
+      expect(kinds.length, `Điểm nổi bật tối đa 3 dòng: ${kinds.join(', ')}`).toBeLessThanOrEqual(3);
+      const eco = block.locator('li[data-kind="eco"]');
+      const n = await eco.count();
+      expect(n, 'có ít nhất một dòng Điểm cộng xanh').toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(2);
+      expect(kinds.lastIndexOf('benefit'), 'dòng lợi ích đứng trước dòng Điểm cộng xanh').toBeLessThan(kinds.indexOf('eco'));
+      if (n === 2) await expect(eco.nth(1)).toContainText('Giảm khoảng 1,2 kg nhựa mỗi món, so với 20 chai 500ml cùng loại (ước tính)');
+      await expect(eco.first().getByText('Nguồn: pannature.org')).toBeVisible();
       await expect(block.locator('a')).toHaveCount(0);
       await expect(page.getByText('Hộ chiếu Xanh')).toHaveCount(0);
       expect(await noHorizontalScroll(page)).toBe(true);
@@ -92,6 +99,7 @@ for (const vp of [
       mockPdp(api, null);
       await openPdp(page);
       await expect(page.getByTestId('pdp-eco')).toHaveCount(0);
+      await expect(page.locator('[data-testid="pdp-highlights"] li[data-kind="eco"]')).toHaveCount(0);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-${vp.width}-pdp-no-eco.png` });
     });
   });

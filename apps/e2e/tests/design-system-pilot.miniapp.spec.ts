@@ -100,7 +100,7 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     expect(api.callsTo('POST', '/cart/items')).toHaveLength(1);
   });
 
-  test('PDP 375px: mọi nút trong thanh CTA dính đáy nằm trọn trong màn hình, "Mua ngay" + giá hiện đủ', async ({ page, api }) => {
+  test('PDP 375px: mọi nút trong thanh CTA dính đáy nằm trọn trong màn hình, "Mua ngay" hiện đủ, giá nằm trong tên đọc', async ({ page, api }) => {
     // Bug cũ: hàng CTA đôi không co được (min-width:auto + nhãn nowrap + min-width 120 của ZaUI) →
     // "Mua ngay · 65.000đ" tràn tới x=421 trên màn 375/390px. Giá dài (1.250.000đ) là ca xấu nhất.
     await page.setViewportSize({ width: 375, height: 812 });
@@ -129,12 +129,11 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     const buy = page.getByRole('button', { name: 'Mua ngay 1.250.000đ' });
     await expect(buy).toBeVisible({ timeout: 15_000 });
     await assertBarFits();
-    // Cả nhãn lẫn giá hiện đủ — không bị rút gọn "…".
-    for (const text of ['Mua ngay', '1.250.000đ']) {
-      const line = buy.getByText(text, { exact: true });
-      await expect(line).toBeVisible();
-      expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth), `"${text}" bị rút gọn`).toBe(true);
-    }
+    // tubu-w47-01: thanh mua một dòng, nút chỉ ghi "Mua ngay" (hiện đủ, không "…"); giá nằm trong tên đọc "Mua ngay 1.250.000đ" (đã khớp ở trên).
+    const line = buy.getByText('Mua ngay', { exact: true });
+    await expect(line).toBeVisible();
+    expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth), '"Mua ngay" bị rút gọn').toBe(true);
+    await expect(buy.getByText('1.250.000đ', { exact: true })).toHaveCount(0);
 
     // Hết hàng: CTA đơn.
     api.get('/products/:slug', { ...PILOT_PRODUCT, variations: PILOT_PRODUCT.variations.map((v) => ({ ...v, stock: 0 })) });

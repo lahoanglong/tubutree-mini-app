@@ -89,6 +89,14 @@ async function openCart(page: Page): Promise<void> {
   await expect(progress(page)).toBeVisible({ timeout: 20_000 });
 }
 
+/** tubu-w47-01: dải món bù đơn gập sẵn một dòng; chạm tiêu đề mới hiện các nút "+ Thêm". */
+async function expandRail(page: Page): Promise<void> {
+  const toggle = page.getByTestId('freeship-addons-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
 async function expectTouchTarget44(t: Locator): Promise<void> {
   const b = (await t.boundingBox())!;
   expect(b.width, 'chiều rộng vùng chạm').toBeGreaterThanOrEqual(44);
@@ -120,6 +128,8 @@ for (const vp of VIEWPORTS) {
       expect(selectAll.y).toBeLessThan(line.y);
 
       await expect(page.getByTestId('freeship-addons')).toBeVisible();
+      await expect(page.getByTestId('freeship-add').first()).toBeHidden();
+      await expandRail(page);
       const cards = page.getByTestId('freeship-addon');
       await expect(cards).toHaveCount(2);
       await expect(cards.first()).toHaveAttribute('data-slug', 'dau');
@@ -139,6 +149,7 @@ for (const vp of VIEWPORTS) {
       const shop = mockCart(api);
       await openCart(page);
       const bar = page.getByRole('progressbar');
+      await expandRail(page);
 
       const first = api.waitForCall('POST', '/cart/items');
       await addButton(page, 'Bơ').click();

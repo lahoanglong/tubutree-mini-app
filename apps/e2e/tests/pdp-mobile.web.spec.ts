@@ -132,10 +132,11 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
         }
         for (const child of Array.from(el.children)) walk(child, id);
       };
-      // Khối lợi ích (mô tả ngắn + chứng nhận) là dải riêng nhưng không có `data-section` ở vỏ.
+      // Khối lợi ích (mô tả ngắn + chứng nhận) và dải "Chi tiết sản phẩm" (tubu-w47-01: Thành phần, Nguồn gốc, Mô tả gập trong một dải) là dải
+      // riêng nhưng không có `data-section` ở vỏ.
       document
-        .querySelectorAll<HTMLElement>('[data-section], [data-pdp-block="benefits"]')
-        .forEach((el) => walk(el, el.dataset.section ?? 'pdp-benefits'));
+        .querySelectorAll<HTMLElement>('[data-section], [data-pdp-block="benefits"], [data-pdp-group="details"]')
+        .forEach((el) => walk(el, el.dataset.section ?? (el.dataset.pdpGroup === 'details' ? 'pdp-details' : 'pdp-benefits')));
       return found.sort((x, y) => x.top - y.top || x.bottom - y.bottom);
     });
     // Số lượng là dải riêng ngay dưới chip, cách đúng 8px như Mini App (hai hộp liền nhau, mt-2).

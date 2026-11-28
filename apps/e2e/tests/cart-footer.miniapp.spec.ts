@@ -57,7 +57,8 @@ test.describe('Giỏ Mini App: chân dính gọn', () => {
     await openCart(page);
 
     await expect(page.getByTestId('freeship-bar')).toHaveCount(1);
-    await expect(bar(page).getByText('Giảm giá combo')).toBeVisible();
+    // tubu-w47-01: dòng "Giảm giá combo" gập trong chi tiết tính tiền; chân dính đo ở trạng thái mặc định (gập).
+    await expect(bar(page).getByText('Giảm giá combo')).toBeHidden();
     const h = await barHeight(page);
     // Trước G2 combo không vào "Tiết kiệm" nên ca này không có dòng đó và cao ≤175; nay có dòng "Tiết kiệm 6.000đ" dưới số tiền (khối tổng cao hơn nút ~10px).
     await expect(page.getByTestId('cart-saving')).toHaveText('Tiết kiệm 6.000đ');
@@ -65,6 +66,8 @@ test.describe('Giỏ Mini App: chân dính gọn', () => {
     const total = (await page.getByTestId('cart-total-value').boundingBox())!;
     const pay = (await payButton(page).boundingBox())!;
     expect(Math.abs(mid(total) - mid(pay))).toBeLessThanOrEqual(12);
+    await page.getByTestId('cart-total-toggle').click();
+    await expect(bar(page).getByText('Giảm giá combo')).toBeVisible();
   });
 
   for (const safe of [0, 34] as const) {

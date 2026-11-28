@@ -56,6 +56,11 @@ test.describe('Giỏ web: khối combo', () => {
       await expect(group(page).getByText('Món lẻ 1')).toHaveCount(0);
       await expect(page.getByTestId('cart-line')).toHaveCount(3);
       const summary = size.width < 768 ? page.getByTestId('sticky-bar') : page.getByTestId('cart-summary-rows');
+      // tubu-w47-01: ở điện thoại các dòng tính tiền gập trong chân dính, chạm khối tổng mới mở.
+      if (size.width < 768) {
+        await expect(summary.getByText('Giảm giá combo')).toBeHidden();
+        await page.getByTestId('cart-total-toggle').click();
+      }
       await expect(summary.getByText('Giảm giá combo')).toBeVisible();
       await expect(summary.getByText('-65.250đ')).toBeVisible();
       const color = await page.getByTestId('cart-combo-saving').locator('span').evaluate((el) => getComputedStyle(el).color);

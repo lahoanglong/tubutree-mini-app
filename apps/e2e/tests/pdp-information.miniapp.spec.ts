@@ -158,7 +158,7 @@ test.describe('Mini App 360px: trang sản phẩm sắp lại thông tin', () =>
     expect(api.callsTo('POST', '/cart/items').length).toBe(before);
   });
 
-  test('mô tả HTML có định dạng, không thẻ dạng chữ; Thành phần mở 3 dòng; đánh giá rỗng một dòng', async ({ page, api }) => {
+  test('mô tả HTML có định dạng, không thẻ dạng chữ; Thành phần là dòng gập, chạm mở đủ danh sách; đánh giá rỗng một dòng', async ({ page, api }) => {
     mockPdp(api);
     await openPdp(page);
     const desc = page.locator('[data-pdp-block="description"]');
@@ -168,11 +168,18 @@ test.describe('Mini App 360px: trang sản phẩm sắp lại thông tin', () =>
     expect(descText).not.toMatch(/<\/?(p|ul|li|strong|script)/);
     expect(descText).not.toContain('alert');
 
+    // tubu-w47-01: Thành phần là dòng gập 48px trong "Chi tiết sản phẩm" (gợi ý số thành phần), thân gập vẫn có trong DOM.
     const ing = page.locator('[data-pdp-block="ingredients"]');
-    await expect(ing).toContainText('Chiết xuất chanh');
-    await expect(ing).not.toContainText('Nước tinh khiết');
-    await ing.getByRole('button', { name: /Xem đủ/ }).click();
-    await expect(ing).toContainText('Nước tinh khiết');
+    const toggle = ing.getByTestId('pdp-ingredients-toggle');
+    const body = ing.locator('.tubu-pdp-detail-body');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toContainText('5 thành phần');
+    await expect(body).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(body).toBeVisible();
+    await expect(body).toContainText('Chiết xuất chanh');
+    await expect(body).toContainText('Nước tinh khiết');
 
     const reviews = page.locator('[data-pdp-block="reviews"]');
     await reviews.scrollIntoViewIfNeeded();
@@ -203,17 +210,23 @@ test.describe('Mini App 360px: trang sản phẩm sắp lại thông tin', () =>
 
 test.describe('Mini App: thẻ gói Refill ở trang chai (tubu-w13-01)', () => {
   for (const width of [320, 375, 393]) {
-    test(`${width}px: một thẻ ngay sau dòng Mua lại, số tiết kiệm và số chai, vùng chạm 44px, số đều, không tràn ngang; "+ Thêm" thêm đúng gói`, async ({ page, api }) => {
+    test(`${width}px: dải cách mua ngay sau dòng Mua lại, chọn "Túi Refill" thì có một thẻ: số tiết kiệm và số chai, vùng chạm 44px, số đều, không tràn ngang; "+ Thêm" thêm đúng gói`, async ({ page, api }) => {
       await page.setViewportSize({ width, height: 740 });
       mockPdp(api, { purchased: true, refill: true });
       await openPdp(page);
-      const card = page.getByTestId('pdp-refill');
+      // tubu-w47-01: thẻ gói Refill chỉ hiện ở chế độ "Túi Refill" của dải cách mua (Mua lẻ là mặc định).
+      const modes = page.getByTestId('pdp-buy-modes');
+      await expect(modes).toBeVisible();
+      await expect(page.getByTestId('pdp-refill')).toHaveCount(0);
+      await modes.locator('[data-mode="refill"]').click();
+      await expect(modes.locator('[data-mode="refill"]')).toHaveAttribute('aria-pressed', 'true');
+      const card = modes.getByTestId('pdp-buy-mode-detail').getByTestId('pdp-refill');
       await expect(card).toHaveCount(1);
       await expect(card).toContainText('Chọn túi Refill 10L tiết kiệm 410.000đ (~31%)');
       await expect(card).toContainText('Thay thế 20 chai nhựa · 890.000đ');
       await expect(card.getByRole('button')).toHaveCount(2);
       const order = await blockOrder(page);
-      expect(order.indexOf('refill'), 'thẻ Refill ngay sau dòng Mua lại').toBe(order.indexOf('rebuy') + 1);
+      expect(order.indexOf('modes'), 'dải cách mua ngay sau dòng Mua lại').toBe(order.indexOf('rebuy') + 1);
 
       const add = card.getByTestId('pdp-refill-add');
       await add.scrollIntoViewIfNeeded();
@@ -236,6 +249,7 @@ test.describe('Mini App: thẻ gói Refill ở trang chai (tubu-w13-01)', () => 
     await page.setViewportSize({ width: 375, height: 740 });
     mockPdp(api, { refill: true });
     await openPdp(page);
+    await page.getByTestId('pdp-buy-modes').locator('[data-mode="refill"]').click();
     await page.getByTestId('pdp-refill-open').click();
     await expect(page).toHaveURL(/\/product\/tui-refill-nuoc-rua-chen-10l$/);
   });

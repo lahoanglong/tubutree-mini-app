@@ -49,30 +49,35 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.locator('#checkout-waste-pickup')).toHaveCount(0);
   });
 
-  test('Dòng đồng ý ở 375px: năm link chính sách chung một dòng, mỗi link có vùng chạm 44px của riêng nó, cả khối không quá hai dòng', async ({ page }) => {
+  test('Dòng đồng ý ở 375px (tubu-w47-01): một dòng là một nút cao từ 44px, chạm mở tấm năm chính sách, mỗi chính sách là một hàng chạm 44px', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/checkout');
     const consent = page.getByTestId('order-consent');
     await expect(consent).toBeVisible({ timeout: 15_000 });
-    const m = await consent.evaluate((el) => {
-      const lh = parseFloat(getComputedStyle(el).lineHeight);
-      return { height: el.getBoundingClientRect().height - parseFloat(getComputedStyle(el).paddingTop), lineHeight: Number.isFinite(lh) ? lh : 20 };
-    });
-    expect(m.height).toBeLessThanOrEqual(m.lineHeight * 2 + 1);
-    const links = consent.getByRole('button');
-    await expect(links).toHaveCount(5);
+    await expect(consent).toHaveText('Đặt đơn nghĩa là bạn đồng ý Điều khoản & Chính sách');
     await consent.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-    const tops = await links.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
-    expect(new Set(tops).size, `năm link phải chung một dòng: ${tops.join(', ')}`).toBe(1);
-    const hits = await links.evaluateAll((els) =>
-      els.map((el) => {
-        const b = el.getBoundingClientRect();
-        const x = b.left + b.width / 2;
-        const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-        return { name: el.getAttribute('aria-label') ?? el.textContent, above: at(b.top + b.height / 2 - 20), below: at(b.top + b.height / 2 + 20) };
-      }),
-    );
-    for (const h of hits) expect(h, h.name ?? '').toMatchObject({ above: true, below: true });
+    const m = await consent.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const lh = parseFloat(cs.lineHeight);
+      const r = el.getBoundingClientRect();
+      // Nút có min-height 44px nên hộp nội dung cao hơn một dòng; đếm dòng chữ bằng Range, không bằng hộp nút.
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const tops = new Set([...range.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top)));
+      return { lines: tops.size, text: range.getBoundingClientRect().height, height: r.height, right: r.right, lineHeight: Number.isFinite(lh) ? lh : 20 };
+    });
+    expect(m.lines, 'câu đồng ý chỉ một dòng').toBe(1);
+    expect(m.text, 'câu đồng ý chỉ một dòng').toBeLessThanOrEqual(m.lineHeight + 4);
+    expect(m.height, 'cả dòng là vùng chạm 44px').toBeGreaterThanOrEqual(44);
+    expect(m.right).toBeLessThanOrEqual(375);
+    await consent.click();
+    const sheet = page.getByTestId('order-consent-policies');
+    await expect(sheet).toBeVisible();
+    const links = sheet.getByRole('button');
+    await expect(links).toHaveCount(5);
+    for (const h of await links.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))) {
+      expect(h, 'mỗi chính sách chạm được 44px').toBeGreaterThanOrEqual(44);
+    }
   });
 
   // R5-BUYER-5: giỏ rỗng mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.
@@ -89,9 +94,12 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await page.goto('/checkout');
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
 
-    // 50 điểm thường + 50 điểm quy đổi = 100 điểm đề nghị dùng; phần quy đổi nói rõ không hết hạn.
-    await expect(page.getByText('Dùng 100 điểm, giảm 100đ')).toBeVisible();
-    await expect(page.getByText('trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng')).toBeVisible();
+    // 50 điểm thường + 50 điểm quy đổi = 100 điểm đề nghị dùng; phần quy đổi nói rõ không hết hạn trong tấm ⓘ (tubu-w47-01: hàng chỉ còn một dòng).
+    const row = page.getByTestId('checkout-points');
+    await expect(row.getByRole('switch', { name: 'Dùng 100 Điểm Xanh (-100đ)' })).toBeVisible();
+    await expect(row.getByRole('switch')).not.toBeChecked();
+    await row.getByRole('button', { name: 'Cách dùng Điểm Xanh' }).click();
+    await expect(page.getByTestId('checkout-points-info').locator('[data-points-note="converted"]')).toContainText('trong đó 50 điểm không hết hạn');
   });
 
   test('Bật dùng Điểm Xanh: báo giá và đặt đơn gửi MỘT số pointsToUse = thường + quy đổi (BE tự chia lô)', async ({ page, api }) => {
@@ -105,10 +113,10 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
 
     const quoted = api.waitForCall('POST', '/checkout/quote');
-    await page.locator('[role="checkbox"]').filter({ hasText: 'trong đó 50 điểm không hết hạn' }).click();
+    await page.getByTestId('checkout-points').getByRole('switch', { name: 'Dùng 100 Điểm Xanh (-100đ)' }).click();
     expect((await quoted).body).toMatchObject({ addressId: CHECKOUT_ADDRESS.id, pointsToUse: 100 });
 
-    await expect(page.getByText('Dùng 76 điểm, giảm 76.000đ')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('checkout-points').getByRole('switch', { name: 'Dùng 76 Điểm Xanh (-76.000đ)' })).toBeChecked({ timeout: 10_000 });
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 73\.000đ/ });
     await expect(placeBtn).toBeEnabled();
 
@@ -129,7 +137,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await page.goto('/checkout');
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
 
-    await page.locator('[role="checkbox"]').filter({ hasText: 'trong đó 200 điểm không hết hạn' }).click();
+    await page.getByTestId('checkout-points').getByRole('switch').click();
     await expect(page.getByText('Đơn đã được trả đủ bằng Điểm Xanh. Bạn không cần thanh toán thêm.')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('radio', { name: /Thanh toán khi nhận hàng|Chuyển khoản ngân hàng|Ví Tubu/ })).toHaveCount(0);
 

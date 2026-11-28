@@ -15,6 +15,15 @@ test.use({ viewport: { width: 360, height: 780 } });
 
 const bar = (page: Page) => page.getByTestId('sticky-bar');
 
+/** tubu-w47-01: các dòng tính tiền (tạm tính, giảm combo, phí giao ước tính) gập trong "chi tiết tính tiền"; chạm khối tổng của chân dính mới mở. */
+async function openBreakdown(page: Page): Promise<void> {
+  const toggle = page.getByTestId('cart-total-toggle');
+  await expect(page.getByTestId('cart-breakdown')).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('cart-breakdown')).toBeVisible();
+}
+
 test.describe('Giỏ: phí giao ước tính dưới Tạm tính', () => {
   test.beforeEach(({ api }) => {
     mockSession(api, makeUser({ id: 'user-fee-early', fullName: 'Khách Phí' }));
@@ -26,8 +35,6 @@ test.describe('Giỏ: phí giao ước tính dưới Tạm tính', () => {
     await page.goto('/cart');
     await expect(bar(page)).toBeVisible({ timeout: 15_000 });
 
-    await expect(bar(page).getByText('Phí giao (ước tính)')).toBeVisible();
-    await expect(bar(page).getByText('19.000đ')).toBeVisible();
     await expect(bar(page).getByText('Tổng tạm tính')).toBeVisible();
     await expect(page.getByTestId('cart-total-value')).toHaveText(`${(cart.subtotal + 19_000).toLocaleString('vi-VN')}đ`);
     const asked = api.callsTo('GET', '/checkout/shipping-estimate');
@@ -41,6 +48,12 @@ test.describe('Giỏ: phí giao ước tính dưới Tạm tính', () => {
     // Chân dính chưa đạt miễn phí giao (không dòng giảm) trước gói này ≈ 140px; dòng phí thêm một hàng gọn ≈ 20px.
     expect(h, `chân dính cao ${h}px`).toBeLessThanOrEqual(175);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+
+    // tubu-w47-01: dòng phí ước tính nằm trong chi tiết tính tiền gập, chạm khối tổng thì hiện.
+    await openBreakdown(page);
+    await expect(bar(page).getByText('Phí giao (ước tính)')).toBeVisible();
+    await expect(bar(page).getByText('19.000đ', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
   });
 
   test('đã đạt miễn phí giao: dòng phí ghi "Miễn phí", tổng bằng tiền hàng', async ({ page, api }) => {
@@ -48,6 +61,7 @@ test.describe('Giỏ: phí giao ước tính dưới Tạm tính', () => {
     api.get('/checkout/shipping-estimate', ({ call }) => shippingEstimate(Number(call.query.get('subtotal'))));
     await page.goto('/cart');
     await expect(bar(page)).toBeVisible({ timeout: 15_000 });
+    await openBreakdown(page);
     await expect(bar(page).getByText('Miễn phí', { exact: true })).toBeVisible();
     await expect(page.getByTestId('cart-total-value')).toHaveText(`${cart.subtotal.toLocaleString('vi-VN')}đ`);
   });

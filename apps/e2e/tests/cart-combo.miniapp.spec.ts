@@ -17,6 +17,15 @@ async function openCart(page: Page, api: Parameters<typeof mockComboCart>[0], o:
   return routes;
 }
 
+/** tubu-w47-01: các dòng tính tiền (tạm tính, giảm combo, phí giao ước tính) gập trong "chi tiết tính tiền"; chạm khối tổng của chân dính mới mở. */
+async function openBreakdown(page: Page): Promise<void> {
+  const toggle = page.getByTestId('cart-total-toggle');
+  await expect(page.getByTestId('cart-breakdown')).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByTestId('cart-breakdown')).toBeVisible();
+}
+
 test.beforeEach(({ api }) => {
   mockSession(api, makeUser({ id: 'user-cart-combo', fullName: 'Khách Giỏ Combo' }));
 });
@@ -32,6 +41,7 @@ test.describe('Giỏ Mini App: khối combo', () => {
     await expect(group(page).getByText('Món lẻ 1')).toHaveCount(0);
     await expect(page.getByTestId('cart-line')).toHaveCount(3);
     const bar = page.getByTestId('sticky-bar');
+    await openBreakdown(page);
     await expect(bar.getByText('Giảm giá combo')).toBeVisible();
     await expect(bar.getByText('-65.250đ')).toBeVisible();
     // Số trong đầu nhóm cùng màu deal với giá đang giảm.
@@ -60,6 +70,7 @@ test.describe('Giỏ Mini App: khối combo', () => {
 
   test('375px: bấm + trên món của bộ khi PATCH còn bay: đầu nhóm giữ chiều cao (số ẩn, không bỏ dòng) nên các dòng và nút + bên dưới không nhảy; máy chủ trả thì số hiện lại', async ({ page, api }) => {
     const routes = await openCart(page, api);
+    await openBreakdown(page);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     api.patch('/cart/items/:id', async () => {
@@ -135,6 +146,7 @@ test.describe('Giỏ Mini App: bỏ món của bộ combo', () => {
 
   test('bỏ chọn một món của bộ: đầu nhóm không ghi Tiết kiệm, nhắc chọn đủ món, chân dính hết dòng combo; chọn lại thì trở về', async ({ page, api }) => {
     await openCart(page, api);
+    await openBreakdown(page);
     await page.getByRole('checkbox', { name: 'Chọn Món combo 2' }).uncheck({ force: true });
     await expect(page.getByTestId('cart-combo-heading')).toHaveText(`Combo: ${COMBO_TITLE}`);
     await expect(page.getByTestId('cart-combo-hint')).toHaveText(`Chọn đủ các món để được giảm ${COMBO_DISCOUNT.toLocaleString('vi-VN')}đ`);

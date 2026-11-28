@@ -56,13 +56,22 @@ async function openCart(page: Page, api: MockApi, width: number, cart: ReturnTyp
   await expect(page.getByTestId('freeship-addons')).toBeVisible({ timeout: 15_000 });
 }
 
+/** tubu-w47-01: dải mua thêm ở Giỏ gập sẵn một dòng 44px; chưa chạm thì không có nút "+ Thêm" nào hiện. Chạm tiêu đề mới mở danh sách. */
+async function expandRail(page: Page) {
+  const toggle = page.getByTestId('freeship-addons-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByTestId('freeship-add').first()).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
 async function expectRailFits(page: Page, width: number) {
   const rail = page.getByTestId('freeship-addons');
   await expect(rail.getByTestId('freeship-addon')).toHaveCount(2);
   await expect(rail.locator('.scroll-x')).toHaveCount(0);
   const box = (await rail.getByTestId('freeship-add').first().boundingBox())!;
   expect(Math.min(box.width, box.height), 'nút "+ Thêm" tối thiểu 44×44').toBeGreaterThanOrEqual(44);
-  expect(await rail.locator('.tubu-addon-title').evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
+  expect(await rail.locator('.tubu-addon-toggle-text').evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
   expect(await page.evaluate(() => document.documentElement.scrollWidth), 'không tràn ngang').toBeLessThanOrEqual(width);
 }
 
@@ -89,10 +98,11 @@ test.describe('Mini App Giỏ: dải mua thêm món nhỏ chạm mốc (tubu-w7-
       await openCart(page, api, width, cartAt(45_000));
       const rail = page.getByTestId('freeship-addons');
       await expect(rail).toHaveAttribute('data-stage', 'freeship');
-      await expect(rail.getByRole('heading')).toHaveText('Gợi ý mua thêm cho đủ Miễn phí giao hàng');
+      await expect(rail.getByRole('heading')).toHaveText('Gợi ý thêm để được Miễn phí giao hàng');
       await expect(page.getByTestId('freeship-progress')).toContainText('Mua thêm 110.000đ để được Miễn phí giao hàng');
       expect(api.callsTo('GET', '/upsell/freeship')[0]!.query.get('gap')).toBe('110000');
       expect(await slugs(page)).toEqual(['nuoc-rua-chen-mini', 'binh-nuoc']);
+      await expandRail(page);
       await expectRailFits(page, width);
       await expectTwoMilestones(page, width, false);
       await shot(page, `aov-freeship-${width}`);
@@ -108,6 +118,7 @@ test.describe('Mini App Giỏ: dải mua thêm món nhỏ chạm mốc (tubu-w7-
       await expect(page.getByTestId('gift-trial-row')).toHaveCount(0);
       await expect(page.getByTestId('freeship-progress')).toContainText('Đơn hàng đã được Miễn phí giao hàng');
       await expect(page.getByTestId('freeship-progress')).not.toContainText('60.000đ');
+      await expandRail(page);
       await expectRailFits(page, width);
       await expectTwoMilestones(page, width, true);
       await shot(page, `aov-gift-${width}`);
@@ -125,6 +136,7 @@ test.describe('Mini App Giỏ: dải mua thêm món nhỏ chạm mốc (tubu-w7-
       return after;
     });
     const url = page.url();
+    await expandRail(page);
     await page.getByTestId('freeship-addons').locator('[data-slug="binh-nuoc"]').getByTestId('freeship-add').click();
     await expect.poll(() => api.callsTo('POST', '/cart/items').length).toBe(1);
     expect(api.callsTo('POST', '/cart/items')[0]!.body).toMatchObject({ variationId: 'v-binh-nuoc', quantity: 1 });

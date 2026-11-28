@@ -86,6 +86,14 @@ async function openCart(page: Page): Promise<void> {
   await expect(progress(page)).toBeVisible({ timeout: 20_000 });
 }
 
+/** tubu-w47-01: dải món bù đơn gập sẵn một dòng; chạm tiêu đề mới hiện các nút "+ Thêm". */
+async function expandRail(page: Page): Promise<void> {
+  const toggle = page.getByTestId('freeship-addons-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
 async function expectTouchTarget44(t: Locator): Promise<void> {
   const b = (await t.boundingBox())!;
   expect(b.width, 'chiều rộng vùng chạm').toBeGreaterThanOrEqual(44);
@@ -120,6 +128,8 @@ for (const vp of VIEWPORTS) {
 
       const rail = page.getByTestId('freeship-addons');
       await expect(rail).toBeVisible();
+      await expect(page.getByTestId('freeship-add').first()).toBeHidden();
+      await expandRail(page);
       const cards = page.getByTestId('freeship-addon');
       await expect(cards).toHaveCount(2);
       const count = await cards.count();
@@ -130,7 +140,7 @@ for (const vp of VIEWPORTS) {
         await buttons.nth(i).scrollIntoViewIfNeeded();
         await expectTouchTarget44(buttons.nth(i));
       }
-      await expect(page.getByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Gợi ý thêm để được Miễn phí giao hàng' })).toBeVisible();
       expect(await noHorizontalScroll(page)).toBe(true);
 
       // Ánh sáng chạy trên phần đã đầy khi chuyển động được bật.
@@ -141,6 +151,7 @@ for (const vp of VIEWPORTS) {
     test('"+ Thêm" một chạm: thêm đúng một sản phẩm, thanh chạy lên mức mới, món vừa thêm rời khỏi dải, không tràn ngang', async ({ page, api }) => {
       mockCart(api);
       await openCart(page);
+      await expandRail(page);
 
       await addButton(page, 'Dâu').scrollIntoViewIfNeeded();
       const adding = api.waitForCall('POST', '/cart/items');
@@ -167,6 +178,7 @@ for (const vp of VIEWPORTS) {
       const before = (await progress(page).boundingBox())!.height;
       expect(before).toBeGreaterThanOrEqual(56);
 
+      await expandRail(page);
       await addButton(page, 'Mận').click();
       await expect(progress(page)).toContainText('Mua thêm 25.000đ');
       await addButton(page, 'Bơ').click();
@@ -189,7 +201,7 @@ for (const vp of VIEWPORTS) {
       await openCart(page);
       await expect(progress(page)).toContainText('Mua thêm 120.000đ');
       await expect(page.getByTestId('freeship-addons')).toHaveCount(0);
-      await expect(page.getByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toHaveCount(0);
+      await expect(page.getByTestId('freeship-addons-toggle')).toHaveCount(0);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 

@@ -47,7 +47,8 @@ function mockCart(api: MockApi, o: { wallet?: HintWallet; couponCode?: string; a
 }
 
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-const strip = (page: Page) => page.getByTestId('cart-voucher-hint');
+// tubu-w47-01: giỏ chỉ có MỘT thanh mốc; mã GIAM80 còn thiếu 30.000đ gần hơn mốc Miễn phí giao hàng nên chính thanh `freeship-progress` nói mã.
+const strip = (page: Page) => page.locator('[data-testid="freeship-progress"][data-goal="voucher"]');
 const cta = (page: Page) => page.getByTestId('cart-voucher-apply-cta');
 const couponRow = (page: Page) => page.getByTestId('coupon-row');
 /** Dưới md hàng mã nằm trong thanh dính; từ md nằm trong khung tóm tắt. */
@@ -91,10 +92,10 @@ for (const size of SIZES) {
       await expect(page.getByTestId('coupon-cta')).toHaveCount(0);
       expect(await cta(page).evaluate((el) => !!el.closest('[data-testid="coupon-row"]'))).toBe(false);
 
-      const freeship = (await page.getByTestId('freeship-progress').boundingBox())!;
+      await expect(page.getByTestId('cart-voucher-hint'), 'không còn dải nhắc mã riêng dưới thanh').toHaveCount(0);
+      await expect(page.getByTestId('freeship-progress'), 'một thanh mốc duy nhất').toHaveCount(1);
       const box = (await strip(page).boundingBox())!;
       const selectAll = (await page.getByLabel('Chọn tất cả sản phẩm').locator('xpath=ancestor::label').boundingBox())!;
-      expect(freeship.y + freeship.height).toBeLessThanOrEqual(box.y + 1);
       expect(box.y + box.height).toBeLessThanOrEqual(selectAll.y + 1);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(size.width);
@@ -165,7 +166,7 @@ for (const size of SIZES) {
       const buttons = strip(page).getByRole('button');
       await expect(buttons).toHaveCount(1);
       await expect(buttons).toHaveText('Mua thêm');
-      const b = (await page.getByTestId('cart-voucher-unlock-cta').boundingBox())!;
+      const b = (await page.getByTestId('freeship-shop-more-cta').boundingBox())!;
       expect(b.width, 'chiều rộng nút Mua thêm').toBeGreaterThanOrEqual(44);
       expect(b.height, 'chiều cao nút Mua thêm').toBeGreaterThanOrEqual(44);
       expect(b.x + b.width).toBeLessThanOrEqual(size.width);

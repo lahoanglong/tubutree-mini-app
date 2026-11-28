@@ -226,7 +226,8 @@ export const STATES: CheckoutState[] = [
     },
     act: async (page) => {
       await page.getByRole('radio', { name: /Ví Tubu/ }).click();
-      await page.getByText(/^Điểm Xanh$/).first().click({ timeout: 4000 });
+      // tubu-w47-01: hàng Điểm Xanh một dòng có công tắc thật (role="switch").
+      await page.getByTestId('checkout-points').getByRole('switch').first().click({ timeout: 4000 });
       await page.waitForTimeout(600);
     },
     wide: true,
