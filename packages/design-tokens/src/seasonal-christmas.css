@@ -1,0 +1,451 @@
+/*
+ * Noel Xanh (tubu-w57-01): giao diện mùa lễ của Trang chủ Mini App và web, chỉ nạp cùng chunk mùa lễ khi `theme.seasonal` là "christmas".
+ * Bảng màu Botanical Nordic chỉ sống dưới [data-season="christmas"], không đổi token chung của app. Mọi số đo ở đây (không ở TSX) để hai app
+ * ra cùng hình và bánh cóc px (scripts/uiux/ds-ratchet.mjs) không tăng. Chuyển động chỉ dùng transform/opacity (GPU), tắt hết khi
+ * prefers-reduced-motion, tạm dừng khi tab ẩn (.is-paused) và khi khách tắt ❄️ thì lớp tuyết không gắn.
+ */
+[data-season='christmas'] {
+  --xmas-pine-deep: #0f3d2e;
+  --xmas-pine: #1b5e43;
+  --xmas-pine-light: #2f7d5a;
+  --xmas-snow: #faf7f0;
+  --xmas-berry: #c84b31;
+  --xmas-berry-deep: #9e3822;
+  --xmas-gold: #e9b949;
+  --xmas-frost: #dceef5;
+  --xmas-frost-line: #b9d6e1;
+  --xmas-bark: #6b4a2b;
+  --xmas-glass: rgba(250, 247, 240, 0.62);
+  --xmas-gold-glow: rgba(233, 185, 73, 0.55);
+}
+
+/* ---- Thẻ cây thông rung quà ---- */
+.tubu-xmas-hero {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  height: 184px;
+  padding: 10px 12px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--xmas-frost-line);
+  background: radial-gradient(120% 90% at 0% 0%, var(--xmas-snow) 0%, var(--xmas-frost) 78%);
+  color: var(--xmas-pine-deep);
+  display: grid;
+  grid-template-rows: 104px 52px;
+  row-gap: 8px;
+}
+.tubu-xmas-top {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+.tubu-xmas-tree-btn {
+  position: relative;
+  flex: 0 0 84px;
+  width: 84px;
+  height: 104px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-xmas-tree-btn:focus-visible,
+.tubu-xmas-cta:focus-visible,
+.tubu-xmas-snow-toggle:focus-visible,
+.tubu-xmas-tile:focus-visible {
+  outline: 2px solid var(--xmas-pine-deep);
+  outline-offset: 2px;
+}
+.tubu-xmas-tree {
+  display: block;
+  width: 84px;
+  height: 104px;
+  transform-origin: 50% 96%;
+  overflow: visible;
+}
+.tubu-xmas-tree.is-shaking {
+  animation: xmas-shake 700ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+.tubu-xmas-tier-1 { fill: var(--xmas-pine-light); }
+.tubu-xmas-tier-2 { fill: var(--xmas-pine); }
+.tubu-xmas-tier-3 { fill: var(--xmas-pine-deep); }
+.tubu-xmas-snowline {
+  fill: none;
+  stroke: var(--xmas-snow);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  opacity: 0.92;
+}
+.tubu-xmas-star {
+  fill: var(--xmas-gold);
+  filter: drop-shadow(0 0 2px var(--xmas-gold-glow));
+}
+.tubu-xmas-berry { fill: var(--xmas-berry); }
+.tubu-xmas-light {
+  fill: var(--xmas-gold);
+  animation: xmas-twinkle 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -0.3s);
+}
+.tubu-xmas-trunk { fill: var(--xmas-bark); }
+.tubu-xmas-pot-rim { fill: var(--xmas-berry-deep); }
+.tubu-xmas-pot { fill: var(--xmas-berry); }
+.tubu-xmas-leaf { fill: var(--xmas-snow); }
+
+/* Hộp quà rơi xuống chân cây; mở thì nắp bật lên. */
+.tubu-xmas-gift {
+  position: absolute;
+  right: -10px;
+  bottom: 0;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+  overflow: visible;
+}
+.tubu-xmas-gift.is-dropped {
+  animation: xmas-drop 520ms cubic-bezier(0.3, 1.45, 0.5, 1) both;
+}
+.tubu-xmas-gift-body,
+.tubu-xmas-gift-lid { fill: var(--xmas-berry); }
+.tubu-xmas-gift-lid-group {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+  transition: transform 320ms cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+.tubu-xmas-gift.is-open .tubu-xmas-gift-lid-group { transform: translate(-3px, -7px) rotate(-18deg); }
+.tubu-xmas-gift-ribbon,
+.tubu-xmas-gift-bow { fill: var(--xmas-gold); }
+
+/* Đợt tuyết quanh cây khi rung: một lượt rồi thôi. */
+.tubu-xmas-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.tubu-xmas-burst-flake {
+  position: absolute;
+  top: -8px;
+  left: calc(var(--x) * 1%);
+  width: calc(var(--s) * 1px);
+  height: calc(var(--s) * 1px);
+  border-radius: 50%;
+  background: var(--xmas-snow);
+  box-shadow: 0 0 0 1px var(--xmas-frost-line);
+  opacity: 0;
+  animation: xmas-burst calc(var(--d) * 1s) ease-in calc(var(--delay) * 1s) both;
+}
+.tubu-xmas-burst-flake.is-needle {
+  width: 2px;
+  height: calc(var(--s) * 1.4px);
+  border-radius: 2px;
+  box-shadow: none;
+  background: var(--xmas-pine-light);
+}
+
+.tubu-xmas-body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.tubu-xmas-title {
+  margin: 0;
+  padding-right: 36px;
+  font-family: var(--font-display);
+  font-size: var(--type-body-md-size);
+  line-height: 20px;
+  font-weight: 700;
+  color: var(--xmas-pine-deep);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tubu-xmas-line {
+  margin: 0;
+  font-size: var(--type-label-size);
+  line-height: 16px;
+  min-height: 32px;
+  color: var(--xmas-pine);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tubu-xmas-clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--xmas-pine-deep);
+}
+.tubu-xmas-cta {
+  align-self: flex-start;
+  max-width: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--xmas-gold);
+  color: var(--xmas-pine-deep);
+  font-family: inherit;
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--xmas-berry-deep);
+}
+.tubu-xmas-cta[aria-busy='true'] { cursor: default; opacity: 0.85; }
+.tubu-xmas-cta:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--xmas-berry-deep); }
+
+/* Nút ❄️: vùng chạm 44px, hình tròn 28px ở góc phải thẻ. */
+.tubu-xmas-snow-toggle {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--xmas-pine);
+}
+.tubu-xmas-snow-toggle > span {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--xmas-glass);
+  border: 1px solid var(--xmas-frost-line);
+}
+.tubu-xmas-snow-toggle[aria-pressed='false'] > span { opacity: 0.55; }
+.tubu-xmas-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- Lịch quà 12 ngày ---- */
+.tubu-xmas-advent {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.tubu-xmas-advent::-webkit-scrollbar { display: none; }
+.tubu-xmas-advent > li { flex: 0 0 44px; scroll-snap-align: center; }
+.tubu-xmas-tile {
+  box-sizing: border-box;
+  width: 44px;
+  height: 52px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--xmas-frost-line);
+  background: var(--xmas-glass);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--xmas-pine-deep);
+  font-family: inherit;
+  font-size: var(--type-label-size);
+  line-height: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.tubu-xmas-tile[data-state='claimed'] {
+  background: var(--xmas-pine);
+  border-color: var(--xmas-pine);
+  color: var(--xmas-snow);
+}
+/* Ngày đã qua: bỏ nền kính, không làm mờ chữ (chữ xanh thông trên nền băng vẫn 6,4:1). */
+.tubu-xmas-tile[data-state='missed'] {
+  background: transparent;
+  border-style: dashed;
+  color: var(--xmas-pine);
+}
+.tubu-xmas-tile[data-state='open'] {
+  background: var(--xmas-gold);
+  border-color: var(--xmas-gold);
+  color: var(--xmas-pine-deep);
+  animation: xmas-pulse 1.8s ease-in-out infinite;
+}
+.tubu-xmas-tile[data-today='true'][data-state='claimed'] { box-shadow: 0 0 0 2px var(--xmas-gold); }
+.tubu-xmas-tile-sub {
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 700;
+}
+.tubu-xmas-tile .tubu-xmas-icon { width: 14px; height: 14px; }
+.tubu-xmas-gift-mini { stroke: none; }
+/* Ô hôm nay nền vàng: ruy băng vàng chìm vào nền, hộp còn hai nửa đỏ rời nhau; đổi ruy băng sang trắng tuyết. */
+.tubu-xmas-tile[data-state='open'] .tubu-xmas-gift-ribbon,
+.tubu-xmas-tile[data-state='open'] .tubu-xmas-gift-bow { fill: var(--xmas-snow); }
+
+/* ---- Lớp tuyết toàn màn ---- */
+.tubu-xmas-snow {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+.tubu-xmas-flake {
+  position: absolute;
+  top: -12px;
+  left: calc(var(--x) * 1%);
+  width: calc(var(--s) * 1px);
+  height: calc(var(--s) * 1px);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--xmas-snow) 0 50%, rgba(250, 247, 240, 0) 72%);
+  opacity: var(--o);
+  will-change: transform;
+  animation: xmas-fall calc(var(--d) * 1s) linear calc(var(--delay) * 1s) infinite;
+}
+.tubu-xmas-flake.is-needle {
+  width: 2px;
+  height: calc(var(--s) * 1.6px);
+  border-radius: 2px;
+  background: var(--xmas-pine-light);
+}
+.tubu-xmas-snow.is-paused .tubu-xmas-flake { animation-play-state: paused; }
+
+/* ---- Dây đèn ở mép dưới header Trang chủ (không thêm chiều cao header) ---- */
+.tubu-xmas-garland {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 12px;
+  pointer-events: none;
+  z-index: 1;
+}
+.tubu-xmas-garland::before,
+.tubu-xmas-garland::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.tubu-xmas-garland::before {
+  background: radial-gradient(circle at 50% 0, transparent 11px, var(--xmas-pine) 11px 12.2px, transparent 13px) 0 -7px / 28px 14px repeat-x;
+  opacity: 0.7;
+}
+.tubu-xmas-garland::after {
+  background:
+    radial-gradient(circle, var(--xmas-gold) 0 2.4px, transparent 3.2px) 0 3px / 28px 12px repeat-x,
+    radial-gradient(circle, var(--xmas-berry) 0 2.2px, transparent 3px) 14px 3px / 56px 12px repeat-x;
+  filter: drop-shadow(0 0 2px var(--xmas-gold-glow));
+  animation: xmas-twinkle 2.6s ease-in-out infinite;
+}
+/* Web: từ md thanh đầu website thay header Trang chủ (không còn dính), dây đèn chỉ ở khổ điện thoại. */
+@media (min-width: 768px) {
+  .tubu-xmas-garland.is-phone-only { display: none; }
+}
+
+/* ---- Bộ quà tặng (/gift-combos, /bo-qua-tang): nắp tuyết, góc ruy băng, nút ánh sáng chạy ---- */
+.tubu-xmas-combo { position: relative; }
+.tubu-xmas-combo::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 14px;
+  right: 46px;
+  height: 9px;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 100%, var(--xmas-snow) 0 5px, transparent 5.6px) 0 0 / 14px 9px repeat-x;
+  filter: drop-shadow(0 1px 0 var(--xmas-frost-line));
+}
+.tubu-xmas-combo::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  z-index: 1;
+  pointer-events: none;
+  border-top-right-radius: var(--radius-card);
+  background:
+    linear-gradient(225deg, transparent 0 30%, var(--xmas-berry) 30% 44%, transparent 44%),
+    radial-gradient(circle at 78% 22%, var(--xmas-gold) 0 4px, transparent 4.6px);
+}
+.tubu-xmas-combo .tubu-btn:not([aria-disabled='true']) { position: relative; overflow: hidden; }
+.tubu-xmas-combo .tubu-btn:not([aria-disabled='true'])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgba(250, 247, 240, 0.35) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: xmas-sheen 3.4s ease-in-out 0.6s infinite;
+}
+
+@keyframes xmas-shake {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(-7deg); }
+  32% { transform: rotate(6deg); }
+  48% { transform: rotate(-4deg); }
+  64% { transform: rotate(3deg); }
+  80% { transform: rotate(-1.5deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes xmas-drop {
+  0% { transform: translateY(-64px) rotate(-14deg); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+}
+@keyframes xmas-twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes xmas-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--xmas-gold-glow); }
+  50% { box-shadow: 0 0 0 5px var(--xmas-gold-glow); }
+}
+@keyframes xmas-fall {
+  from { transform: translate3d(0, -12px, 0) rotate(0deg); }
+  to { transform: translate3d(calc(var(--drift) * 1px), 110vh, 0) rotate(240deg); }
+}
+@keyframes xmas-burst {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate3d(calc(var(--drift) * 1px), 120px, 0); opacity: 0; }
+}
+@keyframes xmas-sheen {
+  0%, 60% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-xmas-snow,
+  .tubu-xmas-burst { display: none; }
+  .tubu-xmas-tree.is-shaking,
+  .tubu-xmas-gift.is-dropped,
+  .tubu-xmas-light,
+  .tubu-xmas-garland::after,
+  .tubu-xmas-tile[data-state='open'],
+  .tubu-xmas-combo .tubu-btn::after { animation: none; }
+  .tubu-xmas-gift-lid-group { transition: none; }
+}

@@ -3,6 +3,7 @@ import type { CouponDTO } from '../api/loyalty';
 import { productCardView, type ProductCardView } from './product-card-view';
 import { pickerRows, type PickerRow } from './voucher-picker';
 import { voucherView, type VoucherFlags, type VoucherView } from './voucher';
+import { adventTileClock, adventView, type AdventView } from '../seasonal/advent';
 
 /**
  * Dữ liệu giả cho trang `/ds-gallery` (chỉ bản dev của Mini App và web). Cả hai app đọc cùng file này nên hai bản gallery
@@ -155,3 +156,16 @@ export const GALLERY_STORY_PRODUCTS: { label: string; product: ProductDetail }[]
     product: { ...STORY_BASE, id: 'gs3', slug: 'san-pham-hai-loai', name: 'Sản phẩm hai loại', certifications: [], images: [], variations: [storyVariation('v1', '250g', 99_000), storyVariation('v2', '500g', 179_000)] },
   },
 ];
+
+const vnAt = (iso: string) => Date.parse(`${iso}+07:00`);
+const ADVENT_DONE = ['2026-12-14', '2026-12-15', '2026-12-16', '2026-12-18', '2026-12-19', '2026-12-20', '2026-12-21', '2026-12-22', '2026-12-23', '2026-12-24'];
+
+/** Lịch quà Noel Xanh (`AdventGreenStrip`) ở ba giai đoạn, giờ VN cố định để ảnh chụp gallery không đổi theo ngày chạy. */
+export const GALLERY_ADVENT: readonly { label: string; view: AdventView; clock: string }[] = [
+  { label: 'trước 14/12: mọi ô khoá', at: '2026-11-28T18:00:00', days: [] as string[] },
+  { label: '16/12 21:30: đã mở, đã qua, hôm nay, ô kế đếm giờ', at: '2026-12-16T21:30:00', days: ['2026-12-14'] },
+  { label: 'Giáng sinh 25/12, đã mở 10/12, chưa mở hôm nay', at: '2026-12-25T09:00:00', days: ADVENT_DONE },
+].map(({ label, at, days }) => {
+  const view = adventView({ nowMs: vnAt(at), checkInDays: days });
+  return { label, view, clock: adventTileClock(view.msToNextUnlock) };
+});

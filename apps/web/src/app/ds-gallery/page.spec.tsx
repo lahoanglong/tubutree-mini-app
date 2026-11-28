@@ -1,20 +1,27 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mount } from '@/components/mini/harness';
+import { mount as mountRaw } from '@/components/mini/harness';
 import { STOREFRONT_TRUST_TITLE } from '@tubutree/app-core/commerce/storefront-trust';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a>,
 }));
+vi.mock('@/lib/auth-phase', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useAuthPhase: () => 'guest' }));
+vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useRouter: () => ({ push: vi.fn() }) }));
 
 import DsGalleryPage from './page';
 
-const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel', 'product-story-showcase'];
+// Thẻ cây thông Noel Xanh trong gallery là thẻ thật (đọc phiên và trạng thái điểm danh) nên cần QueryClient, router và phiên (ở đây: khách) như ở app.
+const mount = (ui: ReactElement) => mountRaw(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
+
+const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel', 'product-story-showcase', 'christmas-home-hero'];
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe('/ds-gallery (web)', () => {
-  it('ngoài production: có đủ 9 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
+  it('ngoài production: có đủ 10 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
     vi.stubEnv('NODE_ENV', 'development');
     mount(<DsGalleryPage />);
     for (const g of GROUPS) {

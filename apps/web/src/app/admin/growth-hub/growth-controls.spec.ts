@@ -6,19 +6,36 @@ import {
   GIFT_TRIAL_MIN_ORDER_KEY,
   GROWTH_GROUPS,
   checkinWeekTotal,
+  choiceValue,
   formatStored,
   numberValue,
   parseInput,
   switchOn,
   toInput,
+  type GrowthChoice,
   type GrowthNumber,
   type GrowthSwitch,
 } from './growth-controls';
+import { SEASONAL_THEMES } from '@tubutree/app-core/seasonal/seasonal-theme';
 
 const all = GROWTH_GROUPS.flatMap((g) => g.items);
 const num = (key: string) => all.find((i) => i.key === key) as GrowthNumber;
 const sw = (key: string) => all.find((i) => i.key === key) as GrowthSwitch;
 const rows = (o: Record<string, unknown>): ConfigRow[] => Object.entries(o).map(([key, value]) => ({ key, value, description: null, category: 'x' }));
+
+describe('giao diện theo mùa (theme.seasonal)', () => {
+  const season = () => all.find((i) => i.key === 'theme.seasonal') as GrowthChoice;
+  it('ba lựa chọn đúng giá trị máy chủ nhận, nhãn PO chốt, mặc định "none" như máy chủ khi chưa có dòng', () => {
+    expect(season().kind).toBe('choice');
+    expect(season().options.map((o) => o.value)).toEqual([...SEASONAL_THEMES]);
+    expect(season().options.map((o) => o.label)).toEqual(['Mặc định', 'Giáng Sinh (Noel Xanh)', 'Tết']);
+    expect(choiceValue(undefined, season())).toBe('none');
+    expect(choiceValue(rows({}), season())).toBe('none');
+    expect(choiceValue(rows({ 'theme.seasonal': 'christmas' }), season())).toBe('christmas');
+    expect(choiceValue(rows({ 'theme.seasonal': 'halloween' }), season())).toBe('none');
+    expect(choiceValue(rows({ 'theme.seasonal': true }), season())).toBe('none');
+  });
+});
 
 describe('danh sách điều khiển', () => {
   it('mỗi khoá xuất hiện một lần', () => {

@@ -4,7 +4,7 @@ import { DailyCheckInService } from './daily-check-in.service';
 const POINTS_RESULT = { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: 'ok' };
 const WATER_RESULT = { seedsEarned: 15, pointsEarned: 0, streakDays: 1, totalSeeds: 15, streakFrozeUsed: false, bonusNote: '' };
 
-function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThrows?: boolean; totalSeeds?: number; tankCap?: number; neverCheckedIn?: boolean; lastDaysAgo?: number; streakDays?: number; streakFreezes?: number } = {}) {
+function build(opts: { checkInDays?: string[]; checkInDaysThrows?: boolean; pointsDone?: boolean; waterDone?: boolean; waterCheckThrows?: boolean; totalSeeds?: number; tankCap?: number; neverCheckedIn?: boolean; lastDaysAgo?: number; streakDays?: number; streakFreezes?: number } = {}) {
   const state = { pointsDone: !!opts.pointsDone, waterDone: !!opts.waterDone };
   const loyalty = {
     getDailyCheckInStatus: jest.fn(async () => ({ checkedInToday: state.pointsDone, streakDays: 0, currentCycleDay: 1, todayPoints: 1000, rewards: [] })),
@@ -21,6 +21,9 @@ function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThro
   };
   const profile = (lastCheckInAt: Date | null) => ({ lastCheckInAt, totalSeeds: opts.totalSeeds ?? 0, streakDays: opts.streakDays ?? 0, streakFreezes: opts.streakFreezes ?? 0 });
   const prisma = {
+    loyaltyCheckIn: {
+      findMany: jest.fn(async () => (opts.checkInDaysThrows ? Promise.reject(new Error('db down')) : (opts.checkInDays ?? []).map((dayKey) => ({ dayKey })))),
+    },
     gameProfile: {
       findUnique: jest.fn(async () => {
         if (opts.waterCheckThrows) return Promise.reject(new Error('db down'));
@@ -32,7 +35,7 @@ function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThro
   };
   const config = { get: jest.fn(async (key: string, def: unknown) => (key === 'game.tank_capacity' && opts.tankCap != null ? opts.tankCap : def)) };
   const svc = new DailyCheckInService(prisma as never, config as never, loyalty as never, economy as never);
-  return { svc, loyalty, economy, state };
+  return { svc, loyalty, economy, state, prisma };
 }
 
 describe('DailyCheckInService.run', () => {
@@ -220,5 +223,35 @@ describe('DailyCheckInService.status', () => {
     it('ngày 3 mà bình gần đầy: chỉ phần còn chứa được', async () => {
       expect((await build({ lastDaysAgo: 1, streakDays: 2, totalSeeds: 495, tankCap: 500 }).svc.status('u1')).todayWater).toBe(5);
     });
+  });
+});
+
+describe('DailyCheckInService.status: checkInDays (lịch quà mùa lễ)', () => {
+  it('trả các ngày đã điểm danh trong 31 ngày gần nhất, đọc từ loyalty_check_ins theo khách', async () => {
+    const { svc, prisma } = build({ checkInDays: ['2026-12-14', '2026-12-15'] });
+    const s = await svc.status('u1');
+    expect(s.checkInDays).toEqual(['2026-12-14', '2026-12-15']);
+    const args = (prisma.loyaltyCheckIn.findMany.mock.calls[0] as unknown[])[0] as { where: { userId: string; dayKey: { gte: string } }; take: number };
+    expect(args.where.userId).toBe('u1');
+    expect(args.where.dayKey.gte).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(args.take).toBe(32);
+  });
+
+  it('mốc đầu cửa sổ là 30 ngày trước hôm nay theo giờ VN (23:30 giờ VN vẫn là ngày VN)', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-12-15T16:30:00.000Z')); // 23:30 ngày 15/12 giờ VN
+    try {
+      const { svc, prisma } = build();
+      await svc.status('u1');
+      const args = (prisma.loyaltyCheckIn.findMany.mock.calls[0] as unknown[])[0] as { where: { dayKey: { gte: string } } };
+      expect(args.where.dayKey.gte).toBe('2026-11-15');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('đọc lịch lỗi: vẫn trả trạng thái điểm danh, checkInDays rỗng', async () => {
+    const s = await build({ checkInDaysThrows: true }).svc.status('u1');
+    expect(s.checkInDays).toEqual([]);
+    expect(s.todayPoints).toBe(1000);
   });
 });

@@ -168,6 +168,8 @@ export interface CheckInStatusResponse {
   todayWater?: number;
   /** Bình nước đã đầy (totalSeeds >= sức chứa): phần nước hôm nay sẽ không cộng thêm. Optional: API cũ chưa trả thì không hiện chữ bình đầy. */
   tankFull?: boolean;
+  /** Ngày giờ VN ('YYYY-MM-DD', tăng dần) đã điểm danh trong 31 ngày gần nhất: lịch quà 12 ngày mùa lễ tô ô đã nhận. Optional: API cũ chưa trả → chỉ biết hôm nay. */
+  checkInDays?: string[];
 }
 
 /** Phần Điểm Xanh của lần điểm danh. */

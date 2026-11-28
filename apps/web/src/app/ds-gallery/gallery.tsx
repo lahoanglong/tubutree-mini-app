@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { Truck } from 'lucide-react';
 import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commerce/frequently-bought';
 import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
-import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
+import { GALLERY_ADVENT, GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { CartComboBlock } from '@/components/cart-combo-block';
@@ -19,6 +19,7 @@ import { PdpBuyModes } from '@/components/mini/pdp-buy-modes';
 import { PdpHighlights } from '@/components/mini/pdp-highlights';
 import { PdpDetailRow } from '@/components/mini/pdp-detail-row';
 import { PointsToggleRow } from '@/components/mini/points-toggle-row';
+import { AdventGreenStrip, ChristmasHomeHero } from '@/components/home/season/christmas-home';
 import { OrderConsent } from '@/components/order-consent';
 import { pdpBuyModes } from '@tubutree/app-core/commerce/pdp-buy-modes';
 import { pdpHighlights } from '@tubutree/app-core/commerce/pdp-highlights';
@@ -490,6 +491,22 @@ export function DsGallery() {
           <Variant label="đang thêm">
             <FrequentlyBoughtTogether lines={GALLERY_FBT_LINES} picked={GALLERY_FBT_ALL} summary={frequentlyBoughtSummary(GALLERY_FBT_LINES, GALLERY_FBT_ALL)} busy onToggle={noop} onAdd={noop} />
           </Variant>
+        </Group>
+
+        <Group name="christmas-home-hero">
+          {/* Thẻ thật theo phiên đang mở (khách hay đã đăng nhập) và giờ máy; lịch quà bên dưới vẽ ba giai đoạn cố định. */}
+          <Variant label="thẻ cây thông theo phiên hiện tại">
+            <div data-season="christmas">
+              <ChristmasHomeHero snowOn={false} onToggleSnow={() => undefined} />
+            </div>
+          </Variant>
+          {GALLERY_ADVENT.map((a) => (
+            <Variant key={a.label} label={`lịch quà: ${a.label}`}>
+              <div data-season="christmas" style={{ background: 'var(--xmas-frost)', borderRadius: 'var(--radius-card)', padding: 'var(--space-inline-md)' }}>
+                <AdventGreenStrip view={a.view} clock={a.clock} />
+              </div>
+            </Variant>
+          ))}
         </Group>
 
         <Group name="product-trust-strip">

@@ -355,6 +355,8 @@ export interface PublicConfig {
   deliverySchedule?: DeliverySchedule;
   /** Cờ `growth.referral_viral_enabled`: cùng nghĩa với `PublicConfig.referralViralEnabled` ở app-core. Thiếu khi API cũ → tắt. */
   referralViralEnabled?: boolean;
+  /** Khoá `theme.seasonal`: cùng nghĩa với `PublicConfig.seasonalTheme` ở app-core. Thiếu khi API cũ → như 'none'. */
+  seasonalTheme?: string;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

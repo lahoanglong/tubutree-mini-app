@@ -120,6 +120,11 @@ export interface PublicConfig {
   reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
   /** Cờ `flashsale.green_hour_enabled`: khối Giờ vàng ở Trang chủ và Ưu đãi hiện dạng "Giờ Xanh Ưu Đãi" (tông xanh, nút thêm nhanh). Thiếu khi API cũ → như tắt. */
   flashGreenHourEnabled?: boolean;
+  /**
+   * Khoá `theme.seasonal`: giao diện mùa của Trang chủ ('none' | 'christmas' | 'tet', đọc qua `normalizeSeasonalTheme` ở seasonal/seasonal-theme).
+   * Thiếu khi API cũ → như 'none' (không tải mã của mùa nào).
+   */
+  seasonalTheme?: string;
 }
 
 export const getPublicConfig = (http: HttpClient) => http.get<PublicConfig>('/config/public');

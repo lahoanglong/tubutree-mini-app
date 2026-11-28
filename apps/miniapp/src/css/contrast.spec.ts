@@ -172,3 +172,29 @@ describe('game thao tác và lưới thẻ "Chơi hôm nay" (w48-01b) đạt 4,5
     expect(ratio(tokenRgb('--color-text-secondary'), bg)).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('bảng màu Noel Xanh (tubu-w57-01) đạt 4,5:1 cho chữ — WCAG 1.4.3', () => {
+  const XMAS = readText(path.join(SRC, '../../../packages/design-tokens/src/seasonal-christmas.css'));
+  const rgb = (name: string) => {
+    const v = firstDecl(XMAS, name);
+    expect(v, `thiếu ${name} trong seasonal-christmas.css`).toBeTruthy();
+    return parseColor(v!).rgb;
+  };
+  // Chữ trên thẻ: tiêu đề và dòng phụ trên nền băng/tuyết; nút vàng chữ thông đậm; ô đã mở chữ tuyết trên nền thông; ô hôm nay chữ thông đậm trên vàng.
+  it.each([
+    ['--xmas-pine-deep', '--xmas-frost'],
+    ['--xmas-pine', '--xmas-frost'],
+    ['--xmas-pine-deep', '--xmas-snow'],
+    ['--xmas-pine', '--xmas-snow'],
+    ['--xmas-pine-deep', '--xmas-gold'],
+    ['--xmas-snow', '--xmas-pine'],
+  ])('%s trên %s', (fg, bg) => {
+    expect(ratio(rgb(fg), rgb(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('ô ngày đã qua không làm mờ chữ bằng opacity (chữ mờ rơi dưới 4,5:1)', () => {
+    const rule = /\.tubu-xmas-tile\[data-state='missed'\] \{([^}]*)\}/.exec(XMAS)?.[1] ?? '';
+    expect(rule).toContain('color: var(--xmas-pine)');
+    expect(rule).not.toMatch(/opacity/);
+  });
+});

@@ -56,7 +56,7 @@ vi.mock('../components/home/home-below', () => {
     chunk.failures -= 1;
     throw new Error(chunk.message);
   }
-  return { HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeStoryReel: () => null, HomeScrollRestoration: () => null };
+  return { HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeStoryReel: () => null, HomeScrollRestoration: () => null, HomeSeasonSlot: () => null };
 });
 
 import HomePage from './home';

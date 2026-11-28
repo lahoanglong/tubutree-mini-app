@@ -53,7 +53,7 @@ export function tierProgressPercent(
 
 export function checkInView(s: CheckInStatusResponse): { canCheckIn: boolean; buttonLabel: string } {
   if (s.checkedInToday) return { canCheckIn: false, buttonLabel: 'Đã điểm danh' };
-  // Nhãn không kèm số: số điểm/giọt nước còn thiếu nằm ở dòng "Hôm nay nhận …" (checkInTodayLine), tránh hai chỗ ghi lệch nhau.
+  // Nhãn không kèm số: số điểm/giọt nước còn thiếu nằm ở dòng "Hôm nay nhận …" (checkInTodayLine ở daily-check-in-today-line.ts), tránh hai chỗ ghi lệch nhau.
   return { canCheckIn: true, buttonLabel: 'Điểm danh' };
 }
 

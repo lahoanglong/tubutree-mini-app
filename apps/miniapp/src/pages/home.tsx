@@ -15,6 +15,7 @@ import {
   HomeBestSellerRail,
   HomeInterleave,
   HomePurchasedRail,
+  HomeSeason,
   HomeStoryReel,
   HomeSuggestFeed,
   HomeScrollRestoration,
@@ -223,6 +224,7 @@ export default function HomePage() {
                 <div data-home-block={name} style={shellStyle(id)}>
                   {blocks[id]}
                 </div>
+                {id === 'context' && <HomeSeason />}
                 {(pageDown || belowState.failed) && id === 'search' && (
                   <div data-home-block="pageError">
                     <PageErrorStrip

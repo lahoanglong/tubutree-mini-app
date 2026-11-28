@@ -212,6 +212,39 @@ describe('GrowthHubTab', () => {
     expect(row(container, 'game.mini.match.enabled').textContent).toContain('Đã bật.');
   });
 
+  it('giao diện theo mùa: chưa có dòng thì "Mặc định"; chọn Giáng Sinh hỏi xác nhận rồi PUT theme.seasonal = "christmas"', async () => {
+    const { container, puts } = setup(cfg({ 'game.mini.enabled': true }));
+    await flush(8);
+    const season = row(container, 'theme.seasonal');
+    const radios = [...season.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((r) => r.textContent)).toEqual(['Mặc định', 'Giáng Sinh (Noel Xanh)', 'Tết']);
+    expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false']);
+    expect(season.textContent).toContain('Đang chạy: Mặc định');
+    click(season.querySelector('[data-choice="none"]'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    click(season.querySelector('[data-choice="christmas"]'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Đổi sang "Giáng Sinh (Noel Xanh)"?');
+    expect(confirmDialog()!.textContent).toContain('Mặc định → Giáng Sinh (Noel Xanh)');
+    answerConfirm(true);
+    await flush(8);
+    expect(puts).toEqual([{ key: 'theme.seasonal', value: 'christmas' }]);
+    expect(row(container, 'theme.seasonal').textContent).toContain('Đã đổi sang Giáng Sinh (Noel Xanh).');
+  });
+
+  it('giao diện theo mùa đang Giáng Sinh: nút Giáng Sinh được chọn, về Mặc định cũng hỏi trước', async () => {
+    const { container, puts } = setup(cfg({ 'theme.seasonal': 'christmas' }));
+    await flush(8);
+    const season = row(container, 'theme.seasonal');
+    expect(season.querySelector('[data-choice="christmas"]')!.getAttribute('aria-checked')).toBe('true');
+    click(season.querySelector('[data-choice="none"]'));
+    await flush();
+    answerConfirm(false);
+    await flush();
+    expect(puts).toEqual([]);
+  });
+
   it('huỷ xác nhận thì không ghi; tắt công tắc chung có lời cảnh báo riêng', async () => {
     const { container, puts } = setup(cfg({ 'game.mini.enabled': true }));
     await flush(8);

@@ -4,11 +4,11 @@ import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ checkIn: vi.fn(), get: vi.fn(), fullName: 'Lan' as string | null, pending: false, message: null as { text: string } | null }));
+const mocks = vi.hoisted(() => ({ checkIn: vi.fn(), get: vi.fn(), fullName: 'Lan' as string | null, pending: false, message: null as { text: string } | null, season: undefined as string | undefined }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1', fullName: mocks.fullName, pointsBalance: 120 } }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
-vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, loyalty: { vndPerPointRedeem: 1000 } }) }));
+vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, loyalty: { vndPerPointRedeem: 1000 }, seasonalTheme: mocks.season }) }));
 vi.mock('@/lib/use-check-in', () => ({
   useCheckIn: () => ({ view: { canCheckIn: true, buttonLabel: 'Điểm danh' }, pending: mocks.pending, checkIn: mocks.checkIn, message: mocks.message }),
 }));
@@ -31,6 +31,20 @@ afterEach(() => {
   mocks.fullName = 'Lan';
   mocks.pending = false;
   mocks.message = null;
+  mocks.season = undefined;
+});
+
+describe('MemberCard web — mùa Noel (w57-01)', () => {
+  it('theme.seasonal = christmas: không còn nút Điểm danh (điểm danh là "Mở quà" của thẻ cây thông), mùa khác vẫn có', async () => {
+    mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    mocks.season = 'christmas';
+    const c = await mount(<MemberCard />);
+    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Điểm danh')).toBe(false);
+    mounted!.unmount();
+    mocks.season = 'none';
+    const c2 = await mount(<MemberCard />);
+    expect(Array.from(c2.querySelectorAll('button')).some((b) => b.textContent === 'Điểm danh')).toBe(true);
+  });
 });
 
 describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
