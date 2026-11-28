@@ -59,13 +59,9 @@ function qrModules(text: string): { size: number; dark: (x: number, y: number) =
   return { size: modules.size, dark: (x, y) => modules.data[y * modules.size + x] === 1 };
 }
 
-/**
- * SVG để in: mỗi hàng gom các ô đen liền nhau thành một đoạn, cả mã là MỘT `<path>`, `crispEdges` để máy in không làm nhoè mép ô.
- * Kích thước khai bằng đơn vị ô (`viewBox`), phóng to bao nhiêu cũng nét.
- */
-export function qrSvg(text: string): string {
+/** Đường vẽ các ô đen của mã (đơn vị ô, đã cộng lề lặng): mỗi hàng gom các ô đen liền nhau thành một đoạn, cả mã là MỘT `<path>`. */
+export function qrPath(text: string): { full: number; d: string } {
   const { size, dark } = qrModules(text);
-  const full = size + QUIET_ZONE * 2;
   let d = '';
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; ) {
@@ -79,6 +75,14 @@ export function qrSvg(text: string): string {
       x += run;
     }
   }
+  return { full: size + QUIET_ZONE * 2, d };
+}
+
+/**
+ * SVG để in: `crispEdges` để máy in không làm nhoè mép ô. Kích thước khai bằng đơn vị ô (`viewBox`), phóng to bao nhiêu cũng nét.
+ */
+export function qrSvg(text: string): string {
+  const { full, d } = qrPath(text);
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${full} ${full}" width="${full * 10}" height="${full * 10}" shape-rendering="crispEdges">` +
     `<rect width="${full}" height="${full}" fill="white"/><path fill="black" d="${d}"/></svg>`
