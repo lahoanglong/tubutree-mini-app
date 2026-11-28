@@ -99,7 +99,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(row.getByRole('switch', { name: 'Dùng 100 Điểm Xanh (-100đ)' })).toBeVisible();
     await expect(row.getByRole('switch')).not.toBeChecked();
     await row.getByRole('button', { name: 'Cách dùng Điểm Xanh' }).click();
-    await expect(page.getByTestId('checkout-points-info').locator('[data-points-note="converted"]')).toContainText('trong đó 50 điểm không hết hạn');
+    await expect(page.getByTestId('checkout-points-info').locator('[data-points-note="converted"]')).toContainText('trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng');
   });
 
   test('Bật dùng Điểm Xanh: báo giá và đặt đơn gửi MỘT số pointsToUse = thường + quy đổi (BE tự chia lô)', async ({ page, api }) => {

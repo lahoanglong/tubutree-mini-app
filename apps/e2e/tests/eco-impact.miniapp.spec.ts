@@ -84,10 +84,10 @@ for (const vp of [
       expect(kinds.length, `Điểm nổi bật tối đa 3 dòng: ${kinds.join(', ')}`).toBeLessThanOrEqual(3);
       const eco = block.locator('li[data-kind="eco"]');
       const n = await eco.count();
-      expect(n, 'có ít nhất một dòng Điểm cộng xanh').toBeGreaterThanOrEqual(1);
-      expect(n).toBeLessThanOrEqual(2);
+      // Hai dòng Điểm cộng xanh và tối đa một dòng lợi ích: trần 3 dòng vẫn đủ chỗ cho cả hai dòng xanh (pdpHighlights).
+      expect(n, 'đủ hai dòng Điểm cộng xanh').toBe(2);
       expect(kinds.lastIndexOf('benefit'), 'dòng lợi ích đứng trước dòng Điểm cộng xanh').toBeLessThan(kinds.indexOf('eco'));
-      if (n === 2) await expect(eco.nth(1)).toContainText('Giảm khoảng 1,2 kg nhựa mỗi món, so với 20 chai 500ml cùng loại (ước tính)');
+      await expect(eco.nth(1)).toContainText('Giảm khoảng 1,2 kg nhựa mỗi món, so với 20 chai 500ml cùng loại (ước tính)');
       await expect(eco.first().getByText('Nguồn: pannature.org')).toBeVisible();
       await expect(block.locator('a')).toHaveCount(0);
       await expect(page.getByText('Hộ chiếu Xanh')).toHaveCount(0);

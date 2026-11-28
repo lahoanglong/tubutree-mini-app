@@ -103,7 +103,7 @@ test.describe('w2-03 Hộp Xanh web', () => {
     await expect(strip.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '57');
     // tubu-w47-01: ở điện thoại dòng Hộp Xanh nằm trong chi tiết tính tiền gập của chân dính; chạm khối tổng mới hiện.
     const total = page.getByTestId('cart-total-toggle');
-    if (await total.isVisible()) await total.click();
+    if (page.viewportSize()!.width < 768) await total.click();
     await expect(page.getByText(`-${vnd(7_200)}`).filter({ visible: true }).first()).toBeVisible();
     expect(await probeTapTargets(page, { scope: '[data-testid="green-box-progress"]' })).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);

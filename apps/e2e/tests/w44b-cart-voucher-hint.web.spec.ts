@@ -73,7 +73,7 @@ for (const size of SIZES) {
       await page.setViewportSize(size);
     });
 
-    test('mã đủ điều kiện chỉ có MỘT nút "Áp dụng" ở hàng mã; dải thân giỏ chỉ nhắc mã sắp mở khoá, nằm dưới thanh Miễn phí giao hàng, trên "Chọn tất cả", nút từ 44px, không tràn ngang', async ({ page, api }) => {
+    test('mã đủ điều kiện chỉ có MỘT nút "Áp dụng" ở hàng mã; dải thân giỏ là thanh mốc duy nhất nhắc mã sắp mở khoá, trên "Chọn tất cả", nút từ 44px, không tràn ngang', async ({ page, api }) => {
       mockCart(api);
       await openCart(page);
       await expect(strip(page)).toBeVisible();
