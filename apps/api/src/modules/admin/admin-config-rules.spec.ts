@@ -19,6 +19,12 @@ describe('validateAdminConfigValue', () => {
     },
   );
 
+  it('theme.seasonal (w57-01): chỉ "none", "christmas", "tet"; sai chữ hoa, kiểu hay giá trị lạ bị chặn', () => {
+    for (const v of ['none', 'christmas', 'tet']) ok('theme.seasonal', v);
+    for (const v of ['Christmas', 'halloween', '', true, 1, null, ['christmas']]) bad('theme.seasonal', v);
+    expect(() => validateAdminConfigValue('theme.seasonal', 'xmas')).toThrow(/"none", "christmas", "tet"/);
+  });
+
   it('khoá thay thế đang sống vẫn ghi được (voucher.welcome_amount)', () => {
     ok('voucher.welcome_amount', 50000);
   });

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   loyalty: vi.fn(() => new Promise(() => {})),
   navigate: vi.fn(),
   pathname: '/',
+  cfg: { loyalty: { vndPerPointRedeem: 1000 } } as { loyalty: { vndPerPointRedeem: number }; seasonalTheme?: string },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -21,7 +22,7 @@ vi.mock('../../store/auth', () => ({
     sel({ user: { fullName: mocks.fullName, pointsBalance: 120 }, status: 'authenticated' }),
 }));
 vi.mock('../../services/account-api', () => ({ getLoyalty: () => mocks.loyalty() }));
-vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ loyalty: { vndPerPointRedeem: 1000 } }) }));
+vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('../../hooks/use-check-in', () => ({
   useCheckIn: () => ({ view: { canCheckIn: true, buttonLabel: 'Điểm danh' }, pending: false, checkIn: vi.fn(), message: null }),
 }));
@@ -32,6 +33,20 @@ import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-
 import { HomeBlockErrorSuppressed } from './home-block-error';
 
 const render = (ui: ReactElement) => rtlRender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
+
+describe('MemberCard — mùa Noel (w57-01)', () => {
+  it('theme.seasonal = christmas: không còn nút Điểm danh (điểm danh là "Mở quà" của thẻ cây thông), mùa khác vẫn có', () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.cfg = { loyalty: { vndPerPointRedeem: 1000 }, seasonalTheme: 'christmas' };
+    const { unmount } = render(<MemberCard />);
+    expect(screen.queryByRole('button', { name: 'Điểm danh' })).toBeNull();
+    unmount();
+    mocks.cfg = { loyalty: { vndPerPointRedeem: 1000 }, seasonalTheme: 'none' };
+    render(<MemberCard />);
+    expect(screen.getByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
+    mocks.cfg = { loyalty: { vndPerPointRedeem: 1000 } };
+  });
+});
 
 describe('MemberCard — lời chào bằng tên gọi (P2 #7)', () => {
   it('họ tên dài chào bằng từ cuối, không cắt "Chào Nguyễ…"', () => {

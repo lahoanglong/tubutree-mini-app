@@ -1,5 +1,6 @@
-import { render } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render as rtlRender } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -10,10 +11,13 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 
 import DsGalleryPage from './ds-gallery';
 
-const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel', 'product-story-showcase'];
+// Thẻ cây thông Noel Xanh trong gallery là thẻ thật (đọc phiên và trạng thái điểm danh) nên cần QueryClient như ở app.
+const render = (ui: ReactElement) => rtlRender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
+
+const GROUPS = ['section-header', 'section', 'countdown', 'flash-sold-bar', 'sort-bar', 'voucher-ticket', 'combo-card', 'banner-carousel', 'product-story-showcase', 'christmas-home-hero'];
 
 describe('ds-gallery (Mini)', () => {
-  it('có đủ 9 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
+  it('có đủ 10 mục, mỗi mục ít nhất 2 biến thể hoặc trạng thái', () => {
     render(<DsGalleryPage />);
     for (const g of GROUPS) {
       const el = document.getElementById(`ds-${g}`);

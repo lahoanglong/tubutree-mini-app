@@ -41,10 +41,11 @@ export function useCheckIn(enabled: boolean) {
       busy.current = false;
     },
   });
-  const checkIn = () => {
+  // `onDone(true)` khi đã nhận đủ phần hôm nay (thẻ cây thông Noel mở hộp quà theo kết quả này, không đoán qua `pending`).
+  const checkIn = (onDone?: (ok: boolean) => void) => {
     if (busy.current) return;
     busy.current = true;
-    mut.mutate();
+    mut.mutate(undefined, onDone && { onSuccess: (res) => onDone(res.pending.length === 0), onError: () => onDone(false) });
   };
   const view = statusQ.data ? checkInView(statusQ.data) : null;
   return { status: statusQ.data, statusQ, view, pending: mut.isPending, checkIn };

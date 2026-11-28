@@ -43,6 +43,7 @@ import { ShortcutGrid } from './shortcut-grid';
 import { SuggestFeed } from './suggest-feed';
 import { useHomeTodoQueries } from './todo-strip';
 import { HomeSettlingSkeleton } from './home-settling';
+import { HomeSeasonSlot } from './home-season-slot';
 import { useHomeSettling, useStartedAsNew } from './use-home-settling';
 import { useHomeCustomerKind } from './use-home-customer-kind';
 import { useHomeShelves } from './use-home-shelves';
@@ -233,8 +234,17 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const head: readonly HomeRenderBlock[] = order.filter((id) => id === 'search');
   const rest = order.filter((id) => id !== 'search' && id !== 'context');
   // Máy tính (HubLayout): khối giới thiệu mặc định (từ md) bên trái, dải ngữ cảnh ở `aside`, mọi khối còn lại bên dưới. Điện thoại giữ đúng thứ tự Mini: banner đã nằm trong ô khuyến mãi.
+  // Khối mùa lễ (Noel Xanh) đứng ngay dưới dải ngữ cảnh như Mini; từ lg cùng cột phải với nó. Mùa không có giao diện thì không vẽ gì.
   const body = (
-    <HubLayout hero={<HomeEditorialHero />} aside={wrap('context')}>
+    <HubLayout
+      hero={<HomeEditorialHero />}
+      aside={
+        <>
+          {wrap('context')}
+          <HomeSeasonSlot initialConfig={initial.publicConfig} />
+        </>
+      }
+    >
       {rest.map(wrap)}
     </HubLayout>
   );

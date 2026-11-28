@@ -145,30 +145,33 @@ export function MemberCard() {
             {homeCopy.member.retry}
           </button>
         )}
-        <button
-          type="button"
-          className="tubu-press"
-          disabled={!checkInView?.canCheckIn || pending}
-          aria-busy={pending || undefined}
-          onClick={checkIn}
-          style={{
-            flex: '0 0 auto',
-            minWidth: 96,
-            minHeight: 44,
-            padding: '0 12px',
-            border: 'none',
-            borderRadius: 'var(--radius-control)',
-            background: 'var(--color-action-primary-bg)',
-            color: 'var(--color-action-primary-fg)',
-            fontFamily: 'inherit',
-            fontSize: 'var(--type-label-size)',
-            fontWeight: 700,
-            cursor: checkInView?.canCheckIn ? 'pointer' : 'default',
-            opacity: checkInView?.canCheckIn || pending ? 1 : 0.75,
-          }}
-        >
-          {checkInView?.buttonLabel ?? homeCopy.member.checkInLoading}
-        </button>
+        {/* Mùa Noel: điểm danh là "Mở quà" của thẻ cây thông ngay dưới, không để hai nút cho cùng một việc. */}
+        {cfg.seasonalTheme !== 'christmas' && (
+          <button
+            type="button"
+            className="tubu-press"
+            disabled={!checkInView?.canCheckIn || pending}
+            aria-busy={pending || undefined}
+            onClick={() => checkIn()}
+            style={{
+              flex: '0 0 auto',
+              minWidth: 96,
+              minHeight: 44,
+              padding: '0 12px',
+              border: 'none',
+              borderRadius: 'var(--radius-control)',
+              background: 'var(--color-action-primary-bg)',
+              color: 'var(--color-action-primary-fg)',
+              fontFamily: 'inherit',
+              fontSize: 'var(--type-label-size)',
+              fontWeight: 700,
+              cursor: checkInView?.canCheckIn ? 'pointer' : 'default',
+              opacity: checkInView?.canCheckIn || pending ? 1 : 0.75,
+            }}
+          >
+            {checkInView?.buttonLabel ?? homeCopy.member.checkInLoading}
+          </button>
+        )}
       </div>
     </section>
   );

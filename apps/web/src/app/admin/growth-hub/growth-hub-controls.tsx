@@ -10,6 +10,7 @@ import { useConfirm } from '@/components/admin/confirm-dialog';
 import { BTN_LINK, BTN_XS_PRIMARY, FIELD_XS, Notice, ToneBadge } from '@/components/admin/ui';
 import {
   checkinWeekTotal,
+  choiceValue,
   findRow,
   formatStored,
   numberValue,
@@ -17,6 +18,7 @@ import {
   switchOn,
   toInput,
   type GrowthCheckin,
+  type GrowthChoice,
   type GrowthGroup,
   type GrowthNumber,
   type GrowthSwitch,
@@ -216,6 +218,66 @@ function CheckinRow({ item, rows, onOpenConfig }: { item: GrowthCheckin; rows: C
   );
 }
 
+/** Chọn một trong vài giá trị (giao diện theo mùa): nhóm nút radio, bấm nút khác giá trị đang chạy thì hỏi xác nhận rồi ghi. */
+function ChoiceRow({ item, rows, confirm }: { item: GrowthChoice; rows: ConfigRow[] | undefined; confirm: Confirm }) {
+  const save = useSaveConfig();
+  const labelId = useId();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const current = choiceValue(rows, item);
+  const currentLabel = item.options.find((o) => o.value === current)?.label ?? current;
+
+  const pick = async (value: string) => {
+    if (value === current) return;
+    const opt = item.options.find((o) => o.value === value)!;
+    const ok = await confirm({
+      title: `Đổi sang "${opt.label}"?`,
+      message: `${item.label}\n${currentLabel} → ${opt.label}\n\n${opt.hint}`,
+      confirmLabel: 'Đổi giao diện',
+    });
+    if (!ok) return;
+    setMsg(null);
+    save.mutate(
+      { key: item.key, value },
+      {
+        onSuccess: () => setMsg({ ok: true, text: `Đã đổi sang ${opt.label}.` }),
+        onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
+      },
+    );
+  };
+
+  return (
+    <li data-growth-key={item.key} className="py-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <p id={labelId} className="text-sm font-medium text-stone-900">{item.label}</p>
+        <ToneBadge tone={current === item.fallback ? 'neutral' : 'success'}>Đang chạy: {currentLabel}</ToneBadge>
+      </div>
+      <p className="mt-0.5 text-xs leading-relaxed text-stone-600">{item.description}</p>
+      <div role="radiogroup" aria-labelledby={labelId} className="mt-2 flex flex-wrap gap-2">
+        {item.options.map((o) => {
+          const on = o.value === current;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              data-choice={o.value}
+              disabled={!rows || save.isPending}
+              onClick={() => void pick(o.value)}
+              title={o.hint}
+              className={`min-h-[44px] rounded-control border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[36px] ${on ? 'border-forest-600 bg-forest-600 text-stone-0' : 'border-stone-450 bg-stone-0 text-stone-900 hover:border-forest-600'}`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1 text-xs text-stone-600">{item.options.find((o) => o.value === current)?.hint}</p>
+      <RowStatus text={msg?.text ?? null} ok={msg?.ok ?? true} />
+    </li>
+  );
+}
+
 export function GrowthControlGroup({ group, rows, onOpenConfig }: { group: GrowthGroup; rows: ConfigRow[] | undefined; onOpenConfig?: () => void }) {
   const { confirm, dialog } = useConfirm();
   const titleId = `growth-${group.id}-title`;
@@ -227,6 +289,7 @@ export function GrowthControlGroup({ group, rows, onOpenConfig }: { group: Growt
         {group.items.map((item) => {
           if (item.kind === 'switch') return <SwitchRow key={item.key} item={item} rows={rows} confirm={confirm} />;
           if (item.kind === 'checkin') return <CheckinRow key={item.key} item={item} rows={rows} onOpenConfig={onOpenConfig} />;
+          if (item.kind === 'choice') return <ChoiceRow key={item.key} item={item} rows={rows} confirm={confirm} />;
           return <NumberRow key={item.key} item={item} rows={rows} confirm={confirm} />;
         })}
       </ul>

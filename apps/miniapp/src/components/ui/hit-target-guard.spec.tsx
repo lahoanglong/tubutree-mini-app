@@ -87,7 +87,8 @@ function declared(el: HTMLElement, axis: 'w' | 'h'): number {
  * và bề ngang (`width: 100%`, `width`/`min-width` >= 44px). Sửa số đo trong CSS xuống dưới 44 thì guard đỏ ngay.
  */
 const CSS_HIT_CLASSES = (() => {
-  const css = ['../../css/declutter.css', '../game/mini/mini-arcade.css', '../game/mini/mini-game.css']
+  // Cùng luật cho bảng kiểu Noel Xanh (tubu-w57-01): nút của thẻ cây thông khai vùng chạm trong design-tokens/src/seasonal-christmas.css.
+  const css = ['../../css/declutter.css', '../game/mini/mini-arcade.css', '../game/mini/mini-game.css', '../../../../../packages/design-tokens/src/seasonal-christmas.css']
     .map((f) => readFileSync(resolve(__dirname, f), 'utf-8'))
     .join('\n')
     .replace(/\/\*[\s\S]*?\*\//g, '');
@@ -286,6 +287,10 @@ describe('vùng chạm DS v2 >= 44x44', () => {
       // ZaUI vẽ input checkbox/radio/switch đè lên ô gốc; vùng chạm là khối hitArea bọc ngoài.
       expect(reaches44(el), `${el.tagName} ${el.className} không đạt 44x44`).toBe(true);
     }
+  });
+
+  it('seasonal-christmas.css: nút cây thông, nút chữ và nút ❄️ của thẻ Noel Xanh tự khai vùng chạm >= 44px', () => {
+    for (const c of ['tubu-xmas-tree-btn', 'tubu-xmas-cta', 'tubu-xmas-snow-toggle']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
   });
 
   it('declutter.css: các lớp nút của w47-01 tự khai vùng chạm >= 44px (guard đọc đúng tệp CSS)', () => {

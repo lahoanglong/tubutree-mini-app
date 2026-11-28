@@ -26,16 +26,17 @@ describe('scripts/check-undefined-css-vars.mjs — nguồn định nghĩa token 
     put('apps/miniapp/src/css/tokens.css', ':root{--app-token:1}');
     put('apps/miniapp/src/css/zaui-bridge.css', ':root{--zaui-light-color-primary:#222}');
     put('apps/miniapp/src/css/brand-theme.css', ':root{--color-brand-poland:#444}');
+    put('packages/design-tokens/src/seasonal-christmas.css', "[data-season='christmas']{--xmas-pine:#1b5e43}");
   });
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('token khai báo ở 4 file nguồn (design-tokens, tokens, zaui-bridge, brand-theme) đều hợp lệ', () => {
+  it('token khai báo ở 5 file nguồn (design-tokens, tokens, zaui-bridge, brand-theme, bảng màu Noel Xanh) đều hợp lệ', () => {
     put(
       'apps/miniapp/src/pages/x.tsx',
-      "const s = 'var(--stone-900) var(--app-token) var(--zaui-light-color-primary) var(--color-dealer-ink) var(--color-brand-poland)';",
+      "const s = 'var(--stone-900) var(--app-token) var(--zaui-light-color-primary) var(--color-dealer-ink) var(--color-brand-poland) var(--xmas-pine)';",
     );
     const r = run();
     expect(r.stderr).toBe('');

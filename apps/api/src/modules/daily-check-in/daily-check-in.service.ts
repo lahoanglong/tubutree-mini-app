@@ -9,6 +9,9 @@ import { planCheckInSeeds, projectCheckIn } from '../game/checkin-streak';
 type PointsResult = Awaited<ReturnType<LoyaltyService['dailyCheckIn']>>;
 type WaterResult = Awaited<ReturnType<GameEconomyService['checkIn']>>;
 
+/** Số ngày gần nhất (tính cả hôm nay, giờ VN) trả trong `checkInDays`: đủ cho lịch quà 12 ngày mùa lễ và còn dư. */
+export const CHECK_IN_DAYS_WINDOW = 31;
+
 export interface DailyCheckInResult {
   /** Kết quả cộng Điểm Xanh của LẦN GỌI NÀY; null = đã điểm danh từ trước (hoặc phần này vừa lỗi, xem `pending`). */
   points: PointsResult | null;
@@ -42,6 +45,26 @@ export class DailyCheckInService {
     });
     const proj = projectCheckIn(p, today);
     return { done: proj.doneToday, totalSeeds: p?.totalSeeds ?? 0, first: !p?.lastCheckInAt, proj };
+  }
+
+  /**
+   * Các ngày (giờ VN, 'YYYY-MM-DD', tăng dần) khách đã điểm danh trong `CHECK_IN_DAYS_WINDOW` ngày gần nhất, đọc từ dòng chốt chặn trùng ngày
+   * (loyalty_check_ins, unique userId+dayKey). Lịch quà mùa lễ ở Trang chủ tô ô đã nhận theo danh sách này. Đọc lỗi thì rỗng: thẻ điểm danh vẫn chạy.
+   */
+  private async recentCheckInDays(userId: string, now: Date): Promise<string[]> {
+    const from = vnDateKey(new Date(now.getTime() - (CHECK_IN_DAYS_WINDOW - 1) * 86_400_000));
+    try {
+      const rows = await this.prisma.loyaltyCheckIn.findMany({
+        where: { userId, dayKey: { gte: from } },
+        select: { dayKey: true },
+        orderBy: { dayKey: 'asc' },
+        take: CHECK_IN_DAYS_WINDOW + 1,
+      });
+      return rows.map((r) => r.dayKey);
+    } catch (e) {
+      this.log.warn(`Không đọc được ngày điểm danh của ${userId}: ${String(e)}`);
+      return [];
+    }
   }
 
   private async waterDoneToday(userId: string, now: Date): Promise<boolean> {
@@ -101,10 +124,12 @@ export class DailyCheckInService {
    * Phần đã xong trả 0 ở `todayPoints`/`todayWater` để màn hình không hứa lại phần thưởng đã nhận.
    */
   async status(userId: string) {
-    const [pointsStatus, water, tankCap] = await Promise.all([
-      this.loyalty.getDailyCheckInStatus(userId),
-      this.waterToday(userId),
+    const now = new Date();
+    const [pointsStatus, water, tankCap, checkInDays] = await Promise.all([
+      this.loyalty.getDailyCheckInStatus(userId, now),
+      this.waterToday(userId, vnDateKey(now)),
       this.config.get<number>('game.tank_capacity', 500),
+      this.recentCheckInDays(userId, now),
     ]);
     const waterDone = water.done;
     const { seeds } = await planCheckInSeeds(this.config, {
@@ -125,6 +150,7 @@ export class DailyCheckInService {
        */
       tankFull: water.totalSeeds >= tankCap,
       todayWater: waterDone ? 0 : Math.max(0, Math.min(seeds, tankCap - water.totalSeeds)),
+      checkInDays,
     };
   }
 }

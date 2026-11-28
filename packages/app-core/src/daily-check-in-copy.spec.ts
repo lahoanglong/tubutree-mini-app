@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkInCopy, checkInDayIcon, checkInSuccessText, checkInTodayLine } from './daily-check-in-copy';
+import { checkInCopy, checkInDayIcon, checkInSuccessText } from './daily-check-in-copy';
+import { checkInTodayLine } from './daily-check-in-today-line';
 import { checkInDayAria, checkInRule, guestCheckInCopy } from './daily-check-in-guest-copy';
 import type { CheckInResult } from './api/loyalty';
 

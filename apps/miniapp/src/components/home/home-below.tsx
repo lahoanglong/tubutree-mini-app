@@ -7,6 +7,8 @@ export { HomeQuiz } from './home-quiz';
 export { HomeStoryReel } from './home-story-reel';
 // Kệ Mua lại (dải "Mua lại món quen", dòng một món, nút "Báo khi có") chỉ vẽ cho khách cũ đã đăng nhập: khách mới và khách chưa đăng nhập không tải mã của nó.
 export { PurchasedRail } from '../reorder/purchased-rail';
+// Chỗ gắn khối mùa lễ (Noel Xanh): chỉ đọc cấu hình, mã của mùa ở chunk riêng tải khi `theme.seasonal` bật.
+export { HomeSeasonSlot } from './home-season-slot';
 
 import { useScrollRestoration } from '../../hooks/use-scroll-restoration';
 

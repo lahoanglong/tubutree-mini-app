@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useState, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { Gift, Truck } from 'lucide-react';
@@ -7,6 +7,7 @@ import { giftLandingQuery } from '@tubutree/app-core/queries/bundle';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useBundleAdd } from '../components/product/use-bundle-add';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { RefillLandingEntry } from '../components/refill/refill-landing-entry';
 import { Card } from '../components/ui/card';
 import { ComboCard } from '../components/ui/combo-card';
@@ -23,6 +24,8 @@ const PAGE_STYLE: CSSProperties = { background: 'var(--color-bg-canvas)', paddin
 const BODY: CSSProperties = { padding: '0 var(--space-inset-page)' };
 const LIST: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 'var(--space-inline-md)', fontVariantNumeric: 'tabular-nums' };
 const CALLOUT_ICON = { freeship: Truck, gift: Gift } as const;
+// Noel Xanh (`theme.seasonal` = christmas): thẻ combo đội nắp tuyết, góc ruy băng, nút có ánh sáng chạy; kiểu nạp lười, mùa khác không tải.
+const ChristmasStyles = lazy(() => import('../components/season/christmas-styles'));
 
 /** Hai mốc kèm đơn (Miễn phí giao hàng, quà dùng thử 0đ): chỉ là thông tin, không nút. Cùng `GiftCombosCallouts` của web. */
 function GiftCombosCallouts({ items }: { items: readonly GiftCombosCallout[] }) {
@@ -56,12 +59,18 @@ export default function GiftCombosPage() {
   const goSmart = useSmartNavigate();
   const q = useQuery(giftLandingQuery(coreHttp));
   const { add, busyId } = useBundleAdd();
+  const xmas = usePublicConfig().seasonalTheme === 'christmas';
   const [cue, setCue] = useState<{ id: string; text: string } | null>(null);
   const views = giftCombosViews(q.data, serverNow());
   const callouts = giftCombosCallouts(q.data);
 
   return (
     <Page className="page" style={PAGE_STYLE}>
+      {xmas && (
+        <Suspense fallback={null}>
+          <ChristmasStyles />
+        </Suspense>
+      )}
       <PageHeader title={fillCopy('giftCombos.title')} />
       <div style={BODY}>
         <Text variant="body-sm" tone="secondary" as="p">
@@ -95,20 +104,22 @@ export default function GiftCombosPage() {
                 };
                 return (
                   <div key={v.id}>
-                    <ComboCard
-                      title={v.title}
-                      items={v.items}
-                      pct={v.pct}
-                      total={v.total}
-                      comboTotal={v.comboTotal}
-                      busy={busyId === v.id}
-                      itemPrices={!v.clamped}
-                      onAddAll={() => {
-                        setCue(null);
-                        add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
-                      }}
-                      onSeeItems={target?.slug ? () => navigate(`/product/${encodeURIComponent(target.slug)}`) : undefined}
-                    />
+                    <div className={xmas ? 'tubu-xmas-combo' : undefined} data-season={xmas ? 'christmas' : undefined}>
+                      <ComboCard
+                        title={v.title}
+                        items={v.items}
+                        pct={v.pct}
+                        total={v.total}
+                        comboTotal={v.comboTotal}
+                        busy={busyId === v.id}
+                        itemPrices={!v.clamped}
+                        onAddAll={() => {
+                          setCue(null);
+                          add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
+                        }}
+                        onSeeItems={target?.slug ? () => navigate(`/product/${encodeURIComponent(target.slug)}`) : undefined}
+                      />
+                    </div>
                     {/* Vùng đọc luôn có sẵn để câu mốc được đọc khi vừa hiện; báo "đã thêm" là thông báo nổi của hook. */}
                     <div role="status" data-testid="gift-combos-cue">
                       {cue?.id === v.id && (

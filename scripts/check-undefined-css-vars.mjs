@@ -27,6 +27,8 @@ const DEFINITION_FILES = [
   'apps/miniapp/src/css/tokens.css',
   'apps/miniapp/src/css/zaui-bridge.css',
   'apps/miniapp/src/css/brand-theme.css',
+  // Bảng màu Noel Xanh (`--xmas-*`), chỉ sống dưới [data-season="christmas"]; nạp cùng chunk mùa lễ.
+  'packages/design-tokens/src/seasonal-christmas.css',
 ];
 
 const RUNTIME_PREFIXES = ['zaui-safe-area-'];

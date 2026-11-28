@@ -112,3 +112,5 @@ export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Blo
 export const HomeStoryReel = () => (
   <Block fallback={<div aria-hidden data-testid="home-stories-wait" style={{ height: HOME_SETTLING_HEIGHTS.stories }} />}>{(m) => <m.HomeStoryReel />}</Block>
 );
+// Khối mùa lễ dưới dải ngữ cảnh: mùa không có giao diện thì không vẽ gì; giữ chỗ khi chờ nằm trong chunk (home-season-slot).
+export const HomeSeason = () => <Block>{(m) => <m.HomeSeasonSlot />}</Block>;

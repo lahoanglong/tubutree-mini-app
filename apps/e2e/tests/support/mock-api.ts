@@ -739,6 +739,8 @@ export function publicConfig(over: Partial<MockPublicConfig> = {}): MockPublicCo
     cashbackHoldDays: 30,
     waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
     mobileMiniappRedirectEnabled: false,
+    // Như DB tạm của web-gate.sh / e2e.yml (seedSeasonalThemeNone): Trang chủ không có khối mùa lễ trừ khi spec bật.
+    seasonalTheme: 'none',
     ...over,
   };
 }

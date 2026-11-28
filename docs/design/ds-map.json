@@ -1220,6 +1220,22 @@
         ],
         "reason": "web mở từng chính sách bằng liên kết thật /chinh-sach/[loai] (tấm năm link) và trang đặt chỗ câu đồng ý theo khổ (className); Mini không có trang chính sách riêng nên trao slug cho PolicySheet của trang thanh toán"
       }
+    },
+    {
+      "name": "ChristmasHomeHero",
+      "miniapp": "apps/miniapp/src/components/season/christmas-home.tsx",
+      "web": "apps/web/src/components/home/season/christmas-home.tsx",
+      "screens": [
+        "/"
+      ]
+    },
+    {
+      "name": "AdventGreenStrip",
+      "miniapp": "apps/miniapp/src/components/season/christmas-home.tsx",
+      "web": "apps/web/src/components/home/season/christmas-home.tsx",
+      "screens": [
+        "/"
+      ]
     }
   ],
   "webOnly": [

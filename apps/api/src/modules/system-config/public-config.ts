@@ -25,6 +25,7 @@ import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PH
 import { REFERRAL_VIRAL_ENABLED_KEY } from '../referral/viral-config';
 import { MOBILE_MINIAPP_REDIRECT_KEY } from './mobile-miniapp-redirect';
 import { emailLoginConfigured, googleLoginConfigured } from '../auth/web-login/web-login-config';
+import { SEASONAL_THEME_FALLBACK, SEASONAL_THEME_KEY, normalizeSeasonalTheme } from './seasonal-theme';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 /** Cờ Giờ Xanh Ưu Đãi (tubu-w3-06): chỉ đổi cách vẽ khối Giờ vàng ở Trang chủ và Ưu đãi, giá và suất vẫn của Giờ vàng. */
@@ -141,6 +142,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     wasteRepeatRequest,
     referralViral,
     mobileMiniappRedirect,
+    seasonalTheme,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -200,6 +202,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(WASTE_REPEAT_REQUEST_KEY, false).catch(() => false),
     config.get<unknown>(REFERRAL_VIRAL_ENABLED_KEY, false),
     config.get<unknown>(MOBILE_MINIAPP_REDIRECT_KEY, false),
+    config.get<unknown>(SEASONAL_THEME_KEY, SEASONAL_THEME_FALLBACK),
   ]);
   const zaloGate = orderZaloGate?.();
   return {
@@ -307,6 +310,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     // Chỉ boolean, không lộ khoá nào. API cũ không trả thì web coi như tắt.
     emailLoginConfigured: emailLoginConfigured(),
     googleLoginConfigured: googleLoginConfigured(),
+    // Giao diện mùa của Trang chủ ('none' | 'christmas' | 'tet'); giá trị lạ hay dòng chưa có là 'none'. App chỉ tải mã của mùa khi khác 'none'; API cũ không trả thì như 'none'.
+    seasonalTheme: normalizeSeasonalTheme(seasonalTheme),
   };
 }
 

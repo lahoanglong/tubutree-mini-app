@@ -95,6 +95,7 @@ export E2E_LOG_DIR="${E2E_LOG_DIR:-$E2E_DIR/server-logs}"
   npx tsx prisma/check-partial-indexes.ts
   npx tsx prisma/seed.ts
   npx tsx -e "const w = require('../e2e/tests/support/waste-db'); w.seedWasteRulesText(w.WASTE_RULES_TEXT)"
+  npx tsx -e "const w = require('../e2e/tests/support/waste-db'); w.seedSeasonalThemeNone()"
 )
 
 # API lên và trả dữ liệu TRƯỚC khi Playwright chạy `next build`: trang ISR lấy dữ liệu lúc build (/doi-rac đọc /config/public, /waste/warehouses,

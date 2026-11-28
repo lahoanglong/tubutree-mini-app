@@ -47,7 +47,18 @@ export interface GrowthCheckin {
   label: string;
 }
 
-export type GrowthControl = GrowthSwitch | GrowthNumber | GrowthCheckin;
+/** Một khoá chuỗi chọn một trong vài giá trị (giao diện theo mùa): mỗi lựa chọn là một nút, bấm là hỏi xác nhận rồi ghi. */
+export interface GrowthChoice {
+  kind: 'choice';
+  key: string;
+  label: string;
+  description: string;
+  options: readonly { value: string; label: string; hint: string }[];
+  /** Giá trị máy chủ dùng khi DB chưa có dòng hoặc giá trị lạ. */
+  fallback: string;
+}
+
+export type GrowthControl = GrowthSwitch | GrowthNumber | GrowthCheckin | GrowthChoice;
 
 export interface GrowthGroup {
   id: string;
@@ -62,6 +73,8 @@ export const GIFT_TRIAL_MIN_ORDER_KEY = 'commerce.gift_trial_min_order';
 export const GIFT_TRIAL_ENABLED_KEY = 'commerce.gift_trial_enabled';
 export const GREEN_HOUR_KEY = 'flashsale.green_hour_enabled';
 export const CHECKIN_POINTS_KEY = 'loyalty.checkin_points';
+/** Trùng `SEASONAL_THEME_KEY` ở apps/api/src/modules/system-config/seasonal-theme.ts; giá trị nhận được chốt ở admin-config-rules.ts. */
+export const SEASONAL_THEME_KEY = 'theme.seasonal';
 
 /** Công tắc cũng có ở thẻ "Bật/tắt tính năng" (tab Cấu hình): lấy nhãn, mô tả, mặc định và cảnh báo từ đó để hai nơi không lệch chữ. */
 function sharedSwitch(key: string, extra: Pick<GrowthSwitch, 'needsRow' | 'requires'> = {}): GrowthSwitch {
@@ -248,6 +261,29 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
     ],
   },
   {
+    id: 'season',
+    title: 'Giao diện theo mùa',
+    description: 'Trang trí Trang chủ Mini App và web theo dịp lễ, một chạm là đổi. Mini App đổi ở lần mở kế; web đổi khi khách tải trang (HTML dựng sẵn cập nhật trong tối đa 5 phút).',
+    items: [
+      {
+        kind: 'choice',
+        key: SEASONAL_THEME_KEY,
+        label: 'Giao diện Trang chủ',
+        description: 'Mã trang trí chỉ tải khi bật mùa đó; "Mặc định" không tải gì thêm.',
+        fallback: 'none',
+        options: [
+          { value: 'none', label: 'Mặc định', hint: 'Trang chủ như thường ngày.' },
+          {
+            value: 'christmas',
+            label: 'Giáng Sinh (Noel Xanh)',
+            hint: 'Cây thông rung quà ngay dưới thẻ thành viên (mở quà = điểm danh ngày, thay nút Điểm danh của thẻ), lịch quà 12 ngày 14/12–25/12, tuyết rơi khách tắt được, dây đèn dưới đầu trang; thẻ Bộ quà tặng đội nắp tuyết.',
+          },
+          { value: 'tet', label: 'Tết', hint: 'Chưa có giao diện: Trang chủ vẽ như Mặc định.' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'economy',
     title: 'Kinh tế đơn hàng',
     description: 'Mức chuẩn chốt ngày 18/11: miễn phí giao từ 199.000đ, quà dùng thử 0đ từ 299.000đ, +100 Điểm Xanh cho đánh giá có ảnh thật, trần dùng Điểm Xanh 20% tạm tính.',
@@ -365,6 +401,12 @@ export function formatStored(item: GrowthNumber, stored: number): string {
   if (item.percent) return `${toInput(item, stored).replace('.', ',')}%`;
   if (item.unit === 'đ') return `${formatVnNumber(stored)}đ`;
   return `${formatVnNumber(stored)} ${item.unit}`;
+}
+
+/** Lựa chọn đang chạy: chưa có dòng hay giá trị lạ thì như máy chủ (`normalizeSeasonalTheme`), về `fallback`. */
+export function choiceValue(rows: ConfigRow[] | undefined, item: GrowthChoice): string {
+  const v = findRow(rows, item.key)?.value;
+  return typeof v === 'string' && item.options.some((o) => o.value === v) ? v : item.fallback;
 }
 
 /** Tổng điểm 7 ngày điểm danh; bảng hỏng thì null. */

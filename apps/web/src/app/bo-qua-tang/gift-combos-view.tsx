@@ -3,6 +3,7 @@
 // Nguồn: apps/miniapp/src/pages/gift-combos.tsx
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Gift, Truck } from 'lucide-react';
 import type { GiftLanding } from '@tubutree/app-core/api/bundle';
@@ -19,9 +20,12 @@ import { coreHttp } from '@/lib/core-http';
 import { loadErrorText } from '@/lib/error-text';
 import { useBundleAdd } from '@/lib/use-bundle-add';
 import { useHydrated } from '@/lib/use-hydrated';
+import { usePublicConfig } from '@/lib/use-public-config';
 
 const GRID = 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 md:gap-4';
 const CALLOUT_ICON = { freeship: Truck, gift: Gift } as const;
+// Noel Xanh (`theme.seasonal` = christmas): thẻ combo đội nắp tuyết, góc ruy băng, nút có ánh sáng chạy; kiểu nạp lười, mùa khác không tải.
+const ChristmasStyles = dynamic(() => import('@/components/home/season/christmas-styles'), { ssr: false });
 
 /** Hai mốc kèm đơn (Miễn phí giao hàng, quà dùng thử 0đ): chỉ là thông tin, không nút. Cùng `GiftCombosCallouts` của Mini App. */
 function GiftCombosCallouts({ items }: { items: readonly GiftCombosCallout[] }) {
@@ -58,6 +62,7 @@ export default function GiftCombosView({ initial, initialFetchedAt }: { initial?
   const [cue, setCue] = useState<{ id: string; text: string } | null>(null);
   const router = useRouter();
   const title = fillCopy('giftCombos.title');
+  const xmas = usePublicConfig().seasonalTheme === 'christmas';
   const now = hydrated ? serverNow() : (initialFetchedAt ?? serverNow());
   // Trước hydrate `now` là giờ máy chủ dựng HTML (cùng mốc lọc hạn với JSON-LD của page.tsx) nên hai lượt vẽ đầu khớp nhau; sau hydrate là giờ thật.
   const views = giftCombosViews(q.data, now);
@@ -67,6 +72,7 @@ export default function GiftCombosView({ initial, initialFetchedAt }: { initial?
 
   return (
     <>
+      {xmas && <ChristmasStyles />}
       <PageHeader title={title} backHref="/" />
       <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-sm)' }}>
         {fillCopy('giftCombos.intro')}
@@ -103,20 +109,22 @@ export default function GiftCombosView({ initial, initialFetchedAt }: { initial?
               };
               return (
                 <div key={v.id}>
-                  <ComboCard
-                    title={v.title}
-                    items={v.items}
-                    pct={v.pct}
-                    total={v.total}
-                    comboTotal={v.comboTotal}
-                    busy={busyId === v.id}
-                    itemPrices={!v.clamped}
-                    onAddAll={() => {
-                      setCue(null);
-                      add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
-                    }}
-                    onSeeItems={target?.slug ? () => router.push(`/san-pham/${encodeURIComponent(target.slug)}`) : undefined}
-                  />
+                  <div className={xmas ? 'tubu-xmas-combo' : undefined} data-season={xmas ? 'christmas' : undefined}>
+                    <ComboCard
+                      title={v.title}
+                      items={v.items}
+                      pct={v.pct}
+                      total={v.total}
+                      comboTotal={v.comboTotal}
+                      busy={busyId === v.id}
+                      itemPrices={!v.clamped}
+                      onAddAll={() => {
+                        setCue(null);
+                        add({ id: v.id, lines: v.lines, errorKey: 'shop.comboError', successText: fillCopy('shop.comboAdded'), onDone });
+                      }}
+                      onSeeItems={target?.slug ? () => router.push(`/san-pham/${encodeURIComponent(target.slug)}`) : undefined}
+                    />
+                  </div>
                   {/* Vùng đọc luôn có sẵn dưới mỗi thẻ để kết quả được đọc khi vừa hiện, ngay chỗ khách vừa bấm. */}
                   <div role="status" data-testid="gift-combos-cue" className={mine ? 'pt-2 text-sm' : undefined}>
                     {mine && <p className={mine.ok ? 'text-success-fg' : 'text-danger-fg'}>{mine.text}</p>}

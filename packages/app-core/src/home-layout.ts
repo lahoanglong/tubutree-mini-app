@@ -21,7 +21,10 @@ export type HomeBlockId = 'search' | 'context' | 'categories' | 'bestSellers' | 
 /** Header dính của Trang chủ (logo, ô tìm, chuông, giỏ): thay hàng logo 68px và ô tìm 54px cũ. */
 export const HOME_HEADER_HEIGHT = 56;
 
-/** Trần số khối Trang chủ ở mọi tổ hợp (loại khách, có/không Giờ vàng, banner, combo). */
+/**
+ * Trần số khối Trang chủ ở mọi tổ hợp (loại khách, có/không Giờ vàng, banner, combo). Khối mùa lễ (`data-home-block="season"`, thẻ Noel Xanh
+ * khi `theme.seasonal` = christmas) nằm ngoài trần này: chỉ hiện theo mùa do Admin bật, ngay dưới dải ngữ cảnh.
+ */
 export const HOME_MAX_BLOCKS = 9;
 
 // Món hàng lên màn đầu: header, dải ngữ cảnh 64px, Danh mục một hàng, rồi kệ Bán chạy nhất (thẻ đầu lộ ở 360×640 và 390×844). Mua lại (khách cũ) ngay dưới kệ

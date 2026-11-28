@@ -14,21 +14,27 @@ export const writableTempDb = (url: string): boolean => GATE_DB.test(url) || (pr
 
 export const WASTE_RULES_TEXT = 'Điểm Xanh là ưu đãi cho khách.\nKhông đổi ra tiền.';
 
-/** Trả `false` khi không ghi (DB không phải DB tạm), để bước CI báo lỗi thay vì im lặng bỏ qua. */
-export async function seedWasteRulesText(text: string): Promise<boolean> {
+/** Ghi một dòng `system_configs` vào DB tạm trước khi build web. Trả `false` khi không ghi (DB không phải DB tạm), để bước CI báo lỗi thay vì im lặng bỏ qua. */
+export async function upsertGateConfig(key: string, value: string, category: string): Promise<boolean> {
   const url = process.env.DATABASE_URL ?? '';
   if (!writableTempDb(url)) return false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { PrismaClient } = require(path.resolve(__dirname, '../../../api/node_modules/@prisma/client')) as { PrismaClient: new (o: unknown) => any };
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   try {
-    await prisma.systemConfig.upsert({
-      where: { key: 'waste.rules_text' },
-      update: { value: text },
-      create: { key: 'waste.rules_text', value: text, category: 'waste' },
-    });
+    await prisma.systemConfig.upsert({ where: { key }, update: { value }, create: { key, value, category } });
   } finally {
     await prisma.$disconnect();
   }
   return true;
 }
+
+/** Trả `false` khi không ghi (DB không phải DB tạm), để bước CI báo lỗi thay vì im lặng bỏ qua. */
+export const seedWasteRulesText = (text: string): Promise<boolean> => upsertGateConfig('waste.rules_text', text, 'waste');
+
+/**
+ * Migration 20261128190000_w57_01_theme_seasonal đặt `theme.seasonal` = "christmas" (PROD bật Noel Xanh khi deploy). Trang chủ web dựng ở máy chủ (ISR) đọc mùa từ
+ * API thật, còn mock trình duyệt (`publicConfig()` của mock-api.ts) mặc định "none": để nguyên thì khối mùa 184px có trong HTML rồi biến mất khi trình duyệt tải
+ * lại cấu hình, mọi spec Trang chủ web lệch số đo và CLS. web-gate.sh và e2e.yml đưa DB tạm về "none" trước khi build; spec Noel bật mùa qua mock.
+ */
+export const seedSeasonalThemeNone = (): Promise<boolean> => upsertGateConfig('theme.seasonal', 'none', 'theme');

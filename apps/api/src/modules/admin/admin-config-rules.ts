@@ -21,6 +21,7 @@ import { SEARCH_FUZZY_FLAG } from '../catalog/search-fuzzy';
 import { REFILL_REMINDER_ENABLED_KEY, REFILL_REMINDER_ZNS_KEY } from '../notifications/refill-reminder.rules';
 import { REPURCHASE_DUE_CARD_ENABLED_KEY } from '../orders/repurchase-due.rules';
 import { MOBILE_MINIAPP_REDIRECT_KEY } from '../system-config/mobile-miniapp-redirect';
+import { SEASONAL_THEME_KEY, SEASONAL_THEMES } from '../system-config/seasonal-theme';
 import {
   REFERRAL_FIRST_ORDER_MIN_KEY,
   REFERRAL_FIRST_ORDER_MIN_MAX,
@@ -50,6 +51,11 @@ const GOMDON_WEIGHT_MAX = 50_000;
 const VN_PHONE = /^(0|\+84)\d{9,10}$/;
 
 const fail = (key: string, msg: string) => new BadRequestException(`"${key}": ${msg}`);
+
+/** Giá trị lạ được máy chủ đọc thành 'none' (public-config.ts): chặn lúc lưu để admin không thấy "đã lưu" mà Trang chủ vẫn như thường. */
+function assertSeasonalTheme(key: string, v: unknown) {
+  if (typeof v !== 'string' || !(SEASONAL_THEMES as readonly string[]).includes(v)) throw fail(key, `phải là một trong ${SEASONAL_THEMES.map((t) => `"${t}"`).join(', ')}.`);
+}
 
 function assertBoolean(key: string, v: unknown) {
   if (typeof v !== 'boolean') throw fail(key, 'phải là true/false.');
@@ -252,6 +258,7 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [REFERRAL_VIRAL_ENABLED_KEY]: assertBoolean,
   // Web đọc đúng boolean true (public-config.ts); chuỗi "true" sẽ lặng lẽ thành tắt nên chặn ngay lúc lưu.
   [MOBILE_MINIAPP_REDIRECT_KEY]: assertBoolean,
+  [SEASONAL_THEME_KEY]: assertSeasonalTheme,
   [REFERRAL_FIRST_ORDER_POINTS_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_FIRST_ORDER_POINTS_MAX, 'Điểm Xanh'),
   [REFERRAL_FIRST_ORDER_MIN_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_FIRST_ORDER_MIN_MAX, 'đ'),
   [REFERRAL_MONTHLY_CAP_KEY]: (k, v) => assertIntInRange(k, v, 0, REFERRAL_MONTHLY_CAP_MAX, 'lần/tháng'),

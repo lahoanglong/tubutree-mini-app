@@ -262,3 +262,24 @@ describe('buildPublicConfig — đăng nhập web không cần Zalo (Email, Goog
     expect(JSON.stringify(cfg)).not.toContain('app-pass-should-not-leak');
   });
 });
+
+describe('buildPublicConfig — giao diện theo mùa (tubu-w57-01, theme.seasonal)', () => {
+  it('chưa có dòng: "none" (Trang chủ không tải chunk mùa lễ nào); "christmas" và "tet" trả nguyên', async () => {
+    expect((await build({})).seasonalTheme).toBe('none');
+    expect((await build({ 'theme.seasonal': 'christmas' })).seasonalTheme).toBe('christmas');
+    expect((await build({ 'theme.seasonal': 'tet' })).seasonalTheme).toBe('tet');
+  });
+
+  it('giá trị lạ hay sai kiểu về "none", không lộ chuỗi admin gõ nhầm', async () => {
+    expect((await build({ 'theme.seasonal': 'Christmas' })).seasonalTheme).toBe('none');
+    expect((await build({ 'theme.seasonal': true })).seasonalTheme).toBe('none');
+    expect((await build({ 'theme.seasonal': { v: 'christmas' } })).seasonalTheme).toBe('none');
+  });
+
+  it('bật mùa không đổi số nào khác: freeship, điểm, trần đổi điểm giữ nguyên', async () => {
+    const { seasonalTheme: on, ...restOn } = await build({ 'theme.seasonal': 'christmas' });
+    const { seasonalTheme: off, ...restOff } = await build({});
+    expect([on, off]).toEqual(['christmas', 'none']);
+    expect(restOn).toEqual(restOff);
+  });
+});

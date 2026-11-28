@@ -30,6 +30,7 @@ const LAZY_ONLY = [
   'ai-advisor', // trợ lý chọn sản phẩm
   'support-chat', // trò chuyện hỗ trợ
   'repurchase-due-card', // thẻ Mua lại hàng tiêu hao ở Cá nhân và giỏ trống (w36-01)
+  'christmas-home', // Noel Xanh ở Trang chủ (cây thông, lịch quà, tuyết, dây đèn): chỉ tải khi theme.seasonal = christmas (w57-01)
 ];
 
 /** Chunk mà trang con import tĩnh nhưng gói đầu không được kéo theo. */

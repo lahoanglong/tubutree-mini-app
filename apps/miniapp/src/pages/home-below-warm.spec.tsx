@@ -60,6 +60,7 @@ vi.mock('../components/home/home-below', async () => {
     SuggestFeed: () => null,
     HomeStoryReel: () => null,
     HomeScrollRestoration: () => null,
+    HomeSeasonSlot: () => null,
     PurchasedRail: () => <div data-testid="purchased-rail-real" />,
   };
 });
