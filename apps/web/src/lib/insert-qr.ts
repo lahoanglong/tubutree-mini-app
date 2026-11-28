@@ -33,15 +33,21 @@ export function normalizeInsertTag(raw: string): string | null {
   return normalizeEntryToken(tag.startsWith('card-') ? tag : `card-${tag}`) ? tag : null;
 }
 
+/** Số thứ tự thẻ trong link (`n=042`): chỉ chữ số, 1 tới 4 ký tự. Bộ đọc nguồn không biết tham số này nên báo cáo nguồn vẫn gom theo đợt `card`. */
+const SERIAL_PATTERN = /^\d{1,4}$/;
+
 /**
  * `${base}/quet-ma?utm_source=<kênh>&card=<tag>`; tag rỗng thì không có `card`. Kênh lạ hoặc tag bộ đọc nguồn không nhận: `null`.
+ * `serial` (in hàng loạt, W58-03) thêm `&n=<số thứ tự>` để mỗi thẻ có mã riêng; số không hợp lệ cũng `null`.
  */
-export function insertQrUrl(channel: string, tag: string, base: string = SITE_URL): string | null {
+export function insertQrUrl(channel: string, tag: string, base: string = SITE_URL, serial?: string): string | null {
   if (!(INSERT_QR_CHANNELS as readonly string[]).includes(channel)) return null;
   const t = normalizeInsertTag(tag);
   if (t === null) return null;
+  if (serial !== undefined && !SERIAL_PATTERN.test(serial)) return null;
   const params = new URLSearchParams({ utm_source: channel });
   if (t) params.set('card', t);
+  if (serial !== undefined) params.set('n', serial);
   return `${base.replace(/\/+$/, '')}/quet-ma?${params.toString()}`;
 }
 

@@ -59,10 +59,12 @@ export type InsertCardSvgOptions = {
   unit?: 'px' | 'mm';
   /** Tỉ lệ tích điểm đơn sàn (%) in ở bước 3; bỏ trống (chưa biết) thì thẻ không in con số. */
   earnPct?: number | null;
+  /** Số thứ tự thẻ trong đợt in hàng loạt (vd `042`), in nhỏ ở góc chân thẻ để đối chiếu thẻ với tờ in. */
+  serial?: string;
 };
 
 /** SVG thẻ A6: nền xanh Tubu, nhãn sàn, mã QR, ba bước, link rút gọn. `url` phải là link từ `insertQrUrl`. */
-export function insertQrCardSvg(url: string, channel: InsertQrChannel, { unit = 'px', earnPct }: InsertCardSvgOptions = {}): string {
+export function insertQrCardSvg(url: string, channel: InsertQrChannel, { unit = 'px', earnPct, serial }: InsertCardSvgOptions = {}): string {
   const { widthPx: W, heightPx: H } = A6_CARD_PX;
   const { full, d } = qrPath(url);
   const scale = Math.max(1, Math.floor(QR_BOX_PX / full));
@@ -114,6 +116,7 @@ export function insertQrCardSvg(url: string, channel: InsertQrChannel, { unit = 
     // Chân thẻ.
     `<rect y="1660" width="${W}" height="${H - 1660}" fill="${FOREST_50}"/>` +
     `<text x="${W / 2}" y="1716" text-anchor="middle" font-size="40" font-weight="700" fill="${FOREST_700}">${esc(insertCardShortLink(url))}</text>` +
+    (serial ? `<text data-serial="1" x="${W - 70}" y="1716" text-anchor="end" font-size="34" font-weight="700" fill="${MUTED}">Thẻ ${esc(serial)}</text>` : '') +
     `</svg>`
   );
 }
@@ -238,19 +241,19 @@ const removePrintFrame = (frame: HTMLIFrameElement) => {
 };
 
 /**
- * Mở hộp thoại in cho thẻ trong một khung ẩn: trang quản trị không bị đụng tới (không cần CSS `@media print` cho cả ứng dụng). Khung có cỡ thật
- * của thẻ nhưng nằm ngoài màn hình (khung 0×0 làm Safari in trang cha hoặc trang trắng). Chỉ gỡ khung khi in xong (`afterprint`) hoặc ở lần in
- * kế tiếp, không gỡ theo đồng hồ: hộp xem trước của vài trình duyệt vẫn mở sau khi `print()` trả về và còn cần nội dung khung. `print` tách ra
- * để test không gọi hộp thoại thật.
+ * Mở hộp thoại in cho một trang HTML trong một khung ẩn: trang quản trị không bị đụng tới (không cần CSS `@media print` cho cả ứng dụng). Khung
+ * có cỡ thật của trang in (thẻ A6 hoặc tờ A4) nhưng nằm ngoài màn hình (khung 0×0 làm Safari in trang cha hoặc trang trắng). Chỉ gỡ khung khi
+ * in xong (`afterprint`) hoặc ở lần in kế tiếp, không gỡ theo đồng hồ: hộp xem trước của vài trình duyệt vẫn mở sau khi `print()` trả về và còn
+ * cần nội dung khung. `print` tách ra để test không gọi hộp thoại thật. Dùng chung cho thẻ lẻ và in hàng loạt (`insert-qr-batch.ts`).
  */
-export function printInsertQrCard(svgMm: string, print: (w: Window) => void = defaultPrint): Promise<void> {
+export function printHtmlInFrame(html: string, frameMm: { widthMm: number; heightMm: number; title: string }, print: (w: Window) => void = defaultPrint): Promise<void> {
   return new Promise((resolve, reject) => {
     if (printFrame) removePrintFrame(printFrame);
     const frame = document.createElement('iframe');
     frame.setAttribute('aria-hidden', 'true');
     frame.tabIndex = -1;
-    frame.title = 'Thẻ A6 sẵn in';
-    frame.style.cssText = `position:fixed;left:-300mm;top:0;width:${A6_CARD_MM.widthMm}mm;height:${A6_CARD_MM.heightMm}mm;border:0`;
+    frame.title = frameMm.title;
+    frame.style.cssText = `position:fixed;left:-300mm;top:0;width:${frameMm.widthMm}mm;height:${frameMm.heightMm}mm;border:0`;
     document.body.appendChild(frame);
     const win = frame.contentWindow;
     if (!win) {
@@ -260,7 +263,7 @@ export function printInsertQrCard(svgMm: string, print: (w: Window) => void = de
     }
     printFrame = frame;
     win.document.open();
-    win.document.write(insertQrCardPrintHtml(svgMm));
+    win.document.write(html);
     win.document.close();
     win.addEventListener('afterprint', () => removePrintFrame(frame));
     setTimeout(() => {
@@ -273,4 +276,9 @@ export function printInsertQrCard(svgMm: string, print: (w: Window) => void = de
       }
     }, PRINT_START_DELAY_MS);
   });
+}
+
+/** In một thẻ A6 (khung ẩn cỡ thẻ). Xem `printHtmlInFrame`. */
+export function printInsertQrCard(svgMm: string, print: (w: Window) => void = defaultPrint): Promise<void> {
+  return printHtmlInFrame(insertQrCardPrintHtml(svgMm), { ...A6_CARD_MM, title: 'Thẻ A6 sẵn in' }, print);
 }

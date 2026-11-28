@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import type { Page } from '@playwright/test';
 import type { ExternalClaimFunnel } from '@tubutree/shared-types';
 import { test, expect, type MockApi } from './support/mock-api';
 import type { AdminExternalAttemptRow, AdminExternalClaimRow } from '../../web/src/lib/admin-client';
@@ -401,4 +402,123 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
       expect(api.unexpectedUnmocked()).toEqual([]);
     });
   }
+
+  test.describe('W58-03: in hàng loạt thẻ A6 trên tờ A4', () => {
+    async function openBulk(p: Page, api: MockApi) {
+      mockClaimLists(api, { claims: () => [] });
+      api.get('/admin/external-claims/funnel', () => ({
+        period: '30d',
+        from: '2026-10-28T03:00:00.000Z',
+        to: '2026-11-27T03:00:00.000Z',
+        submissions: { total: 0, scan: 0, typed: 0 },
+        matchedOrders: 0,
+        phoneMismatch: { rejected: 0, review: 0 },
+        noPhoneReview: { review: 0, waiting: 0 },
+        unmatched: 0,
+        pending: { claims: 0, points: 0 },
+        credited: { claims: 0, points: 0, users: 0 },
+        converted: { users: 0, orders: 0, gmv: 0, rate: 0 },
+      } satisfies ExternalClaimFunnel));
+      api.get('/admin/config', ({ call }) =>
+        call.query.get('category')
+          ? { 'loyalty.marketplace_claim_enabled': true }
+          : [
+              { key: 'loyalty.marketplace_claim_enabled', value: true, description: null, category: 'loyalty' },
+              { key: 'loyalty.marketplace_earn_pct', value: 5, description: null, category: 'loyalty' },
+            ],
+      );
+      // Hộp thoại in thật không chạy được trong headless: thay `print` của khung in ẩn bằng hàm ghi lại HTML khung đang có.
+      await p.addInitScript(() => {
+        const w = window as unknown as { __printed?: string[] };
+        const append = Node.prototype.appendChild;
+        Node.prototype.appendChild = function <T extends Node>(this: Node, node: T): T {
+          const out = append.call(this, node) as T;
+          if (node instanceof HTMLIFrameElement && node.contentWindow) {
+            const frame = node;
+            frame.contentWindow!.print = () => {
+              (w.__printed ??= []).push(frame.contentDocument!.documentElement.outerHTML);
+            };
+          }
+          return out;
+        };
+      });
+      await p.goto('/admin?tab=externalClaims');
+      const setup = p.locator('details[data-external-setup]');
+      await expect(setup.locator('summary')).toBeVisible({ timeout: 15_000 });
+      await setup.locator('summary').click();
+      const qr = setup.locator('[data-external-insert-qr]');
+      await expect(qr).toBeVisible();
+      return qr;
+    }
+
+    for (const width of [320, 360, 375]) {
+      test(`khối in hàng loạt ở ${width}px nằm gọn, ô nhập và nút đủ 44px, đúng một nút`, async ({ page: p, api }, testInfo) => {
+        await p.setViewportSize({ width, height: 900 });
+        const qr = await openBulk(p, api);
+        const bulk = qr.locator('[data-insert-qr-bulk]');
+        await qr.getByLabel('Tên đợt thẻ (không bắt buộc)').fill('box-2026-11');
+        await bulk.getByLabel('Số thẻ (1 tới 200)').fill('25');
+        await expect(bulk.locator('[data-bulk-summary]')).toHaveText('25 thẻ, số 001 tới 025, 7 tờ A4 (4 thẻ mỗi tờ).');
+        await bulk.scrollIntoViewIfNeeded();
+
+        expect(await bulk.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+        expect(await bulk.getByRole('button').count()).toBe(1);
+        const frame = (await bulk.boundingBox())!;
+        expect(frame.x).toBeGreaterThanOrEqual(0);
+        expect(frame.x + frame.width).toBeLessThanOrEqual(width);
+        const targets = [
+          ['Số thẻ', bulk.getByLabel('Số thẻ (1 tới 200)')],
+          ['Bắt đầu từ số', bulk.getByLabel('Bắt đầu từ số')],
+          ['nút in', bulk.getByRole('button', { name: 'In 25 thẻ (7 tờ A4)' })],
+        ] as const;
+        for (const [name, target] of targets) {
+          const b = (await target.boundingBox())!;
+          expect(b.height, name).toBeGreaterThanOrEqual(44);
+          expect(b.x, name).toBeGreaterThanOrEqual(frame.x);
+          expect(b.x + b.width, name).toBeLessThanOrEqual(frame.x + frame.width + 1);
+        }
+        const dir = process.env.E2E_EVIDENCE_DIR;
+        await bulk.screenshot({ path: dir ? `${dir}/admin-insert-qr-bulk-${width}.png` : testInfo.outputPath(`admin-insert-qr-bulk-${width}.png`) });
+        expect(api.unexpectedUnmocked()).toEqual([]);
+      });
+    }
+
+    test('bấm in: khung in A4 chứa đúng số tờ, số thẻ; mở HTML đó ra PDF thì ra đúng số trang A4, không thừa tờ trắng', async ({ page: p, api }, testInfo) => {
+      const qr = await openBulk(p, api);
+      const bulk = qr.locator('[data-insert-qr-bulk]');
+      await qr.getByLabel('Tên đợt thẻ (không bắt buộc)').fill('box-2026-11');
+      const host = new URL((await qr.locator('code').textContent())!).host;
+      const printed = () => p.evaluate(() => (window as unknown as { __printed?: string[] }).__printed ?? []);
+      let seen = 0;
+      for (const [count, sheets] of [[4, 1], [5, 2], [8, 2]] as const) {
+        await bulk.getByLabel('Số thẻ (1 tới 200)').fill(String(count));
+        await bulk.getByRole('button', { name: `In ${count} thẻ (${sheets} tờ A4)` }).click();
+        seen += 1;
+        await expect.poll(async () => (await printed()).length, { timeout: 5_000 }).toBe(seen);
+        const html = (await printed())[seen - 1]!;
+        expect(html).toContain('@page{size:210mm 297mm;margin:0}');
+        expect(html.match(/<section class="sheet"/g)).toHaveLength(sheets);
+        expect(html.match(/data-serial="1"/g)).toHaveLength(count);
+        expect(html.match(/data-crop-marks="1"/g)).toHaveLength(sheets);
+        expect(html.match(new RegExp(`${host.replace(/\./g, '\\.')}/quet-ma`, 'g'))).toHaveLength(count);
+
+        const pdfPage = await p.context().newPage();
+        await pdfPage.setContent(html);
+        const pdf = (await pdfPage.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1');
+        if (count === 8) {
+          await pdfPage.setViewportSize({ width: 794, height: 1123 });
+          const dir = process.env.E2E_EVIDENCE_DIR;
+          await pdfPage.screenshot({ path: dir ? `${dir}/admin-insert-qr-bulk-a4-8cards.png` : testInfo.outputPath('admin-insert-qr-bulk-a4-8cards.png'), fullPage: true });
+        }
+        await pdfPage.close();
+        const box = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(pdf);
+        expect(box, 'PDF có MediaBox').not.toBeNull();
+        // A4 = 595,28 × 841,89 pt; Chromium làm tròn MediaBox về điểm nguyên.
+        expect(Math.abs(Number(box![1]) - 595.28)).toBeLessThan(1);
+        expect(Math.abs(Number(box![2]) - 841.89)).toBeLessThan(1);
+        expect(pdf.match(/\/Type\s*\/Page\b(?!s)/g), `${count} thẻ`).toHaveLength(sheets);
+      }
+      expect(api.unexpectedUnmocked()).toEqual([]);
+    });
+  });
 });

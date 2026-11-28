@@ -17,7 +17,8 @@ import {
 import { getConfig } from '@/lib/admin-client';
 import { marketplaceEarnPct } from '@/lib/external-o2o-settings';
 import { A6_CARD_MM, A6_CARD_PX, formatEarnPct, insertQrCardFileName, insertQrCardPngBlob, insertQrCardSvg, printInsertQrCard } from '@/lib/insert-qr-card';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, chipClass } from './ui';
+import { BATCH_CARDS_PER_SHEET, BATCH_ERROR_TEXT, BATCH_MAX, BATCH_MIN, BATCH_SERIAL_MAX, parseBatchInt, planInsertQrBatch, printInsertQrBatch } from '@/lib/insert-qr-batch';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, TOUCH_H, chipClass } from './ui';
 
 /**
  * Thẻ bỏ vào hộp hàng bán trên sàn (W43, chỉ ADMIN). Chọn sàn và tên đợt thẻ, xem trước thẻ A6 và link, tải PNG A6 300 DPI hoặc in/lưu PDF
@@ -35,9 +36,30 @@ export function ExternalInsertQrCard() {
   const url = insertQrUrl(channel, tag);
   const svg = useMemo(() => (url ? qrSvg(url) : null), [url]);
   const cardSvg = useMemo(() => (url ? insertQrCardSvg(url, channel, { earnPct }) : null), [url, channel, earnPct]);
+  const [bulkCount, setBulkCount] = useState('20');
+  const [bulkStart, setBulkStart] = useState('1');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkFailure, setBulkFailure] = useState<string | null>(null);
+  const plan = useMemo(() => planInsertQrBatch({ channel, tag, count: parseBatchInt(bulkCount), start: parseBatchInt(bulkStart) }), [channel, tag, bulkCount, bulkStart]);
+  const busy = a6Busy !== null || bulkBusy;
+
+  const printBulk = async () => {
+    if (!plan.ok || busy) return;
+    setBulkFailure(null);
+    setBulkBusy(true);
+    try {
+      // Nhường một nhịp cho trạng thái "đang chuẩn bị" hiện ra: dựng 200 mã QR chiếm luồng chính vài trăm mili giây.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await printInsertQrBatch(plan, { earnPct });
+    } catch (e) {
+      setBulkFailure(e instanceof Error ? e.message : 'Không mở được hộp thoại in.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const downloadA6Png = async () => {
-    if (!url || !cardSvg || a6Busy) return;
+    if (!url || !cardSvg || busy) return;
     setFailure(null);
     setA6Busy('png');
     try {
@@ -50,7 +72,7 @@ export function ExternalInsertQrCard() {
   };
 
   const printA6 = async () => {
-    if (!url || a6Busy) return;
+    if (!url || busy) return;
     setFailure(null);
     setA6Busy('print');
     try {
@@ -145,10 +167,10 @@ export function ExternalInsertQrCard() {
                 ? `Thẻ ghi "Nhận ${formatEarnPct(earnPct)}% Điểm Xanh" theo cài đặt hiện tại; đổi tỉ lệ thì tải lại thẻ.`
                 : 'Chưa đọc được tỉ lệ tích điểm nên thẻ chỉ ghi "Nhận Điểm Xanh".'}
             </p>
-            <button type="button" className={`${BTN_PRIMARY} w-full`} aria-busy={a6Busy === 'png' || undefined} disabled={a6Busy !== null} onClick={() => void downloadA6Png()}>
+            <button type="button" className={`${BTN_PRIMARY} w-full`} aria-busy={a6Busy === 'png' || undefined} disabled={busy} onClick={() => void downloadA6Png()}>
               Tải PNG thẻ A6 sẵn in (300 DPI)
             </button>
-            <button type="button" className={`${BTN_SECONDARY} w-full`} aria-busy={a6Busy === 'print' || undefined} disabled={a6Busy !== null} onClick={() => void printA6()}>
+            <button type="button" className={`${BTN_SECONDARY} w-full`} aria-busy={a6Busy === 'print' || undefined} disabled={busy} onClick={() => void printA6()}>
               In / Lưu PDF thẻ A6 (10×15cm)
             </button>
             <div className="flex items-center gap-2 pt-1">
@@ -162,6 +184,57 @@ export function ExternalInsertQrCard() {
             </div>
           </div>
         )}
+      </div>
+      <div data-insert-qr-bulk className="mt-4 space-y-2 border-t border-stone-200 pt-3">
+        <h4 className="text-xs font-semibold text-stone-900">In hàng loạt: mỗi thẻ một số thứ tự</h4>
+        <div className="grid max-w-sm grid-cols-2 gap-3">
+          <Field label={`Số thẻ (${BATCH_MIN} tới ${BATCH_MAX})`}>
+            <input
+              className={`${INPUT_CLASS} ${TOUCH_H} tabular-nums`}
+              value={bulkCount}
+              inputMode="numeric"
+              maxLength={4}
+              autoComplete="off"
+              aria-invalid={(!plan.ok && (plan.error === 'count' || plan.error === 'range')) || undefined}
+              onChange={(e) => setBulkCount(e.target.value)}
+            />
+          </Field>
+          <Field label="Bắt đầu từ số">
+            <input
+              className={`${INPUT_CLASS} ${TOUCH_H} tabular-nums`}
+              value={bulkStart}
+              inputMode="numeric"
+              maxLength={4}
+              autoComplete="off"
+              aria-invalid={(!plan.ok && (plan.error === 'start' || plan.error === 'range')) || undefined}
+              onChange={(e) => setBulkStart(e.target.value)}
+            />
+          </Field>
+        </div>
+        {plan.ok ? (
+          <p data-bulk-summary className="text-xs tabular-nums text-stone-700">
+            {plan.cards.length} thẻ, số {plan.cards[0]!.serial} tới {plan.cards[plan.cards.length - 1]!.serial}, {plan.sheets} tờ A4 ({BATCH_CARDS_PER_SHEET} thẻ mỗi tờ).
+          </p>
+        ) : plan.error === 'tag-required' ? (
+          <p data-bulk-hint className="text-xs text-stone-600">
+            Điền tên đợt thẻ ở trên để in hàng loạt.
+          </p>
+        ) : (
+          <p role="alert" className="text-xs text-danger-fg">
+            {BATCH_ERROR_TEXT[plan.error]}
+          </p>
+        )}
+        {bulkFailure && (
+          <p role="alert" className="text-xs text-danger-fg">
+            {bulkFailure}
+          </p>
+        )}
+        <button type="button" className={`${BTN_SECONDARY} w-full sm:w-auto`} aria-busy={bulkBusy || undefined} disabled={!plan.ok || busy} onClick={() => void printBulk()}>
+          {plan.ok ? `In ${plan.cards.length} thẻ (${plan.sheets} tờ A4)` : 'In hàng loạt'}
+        </button>
+        <p className="text-xs text-stone-600">
+          Khi in chọn khổ A4, tỉ lệ 100%, không lề, rồi cắt theo dấu giữa tờ. Lượt sau cùng đợt thì đặt &quot;Bắt đầu từ số&quot; nối tiếp số cuối (tối đa {BATCH_SERIAL_MAX}).
+        </p>
       </div>
     </section>
   );
