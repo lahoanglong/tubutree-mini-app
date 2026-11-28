@@ -22,7 +22,7 @@ import {
 } from '@tubutree/app-core/game-mini/conveyor';
 import { Icon, Text } from '@/components/mini';
 import { arcadeHaptic } from './arcade-platform';
-import { useArcadeSound, useSwipe, useWindowKeys } from './mini-arcade-hooks';
+import { useArcadeSound, useSwipe, useWindowKeys, useXmasSkin } from './mini-arcade-hooks';
 import { ArcadeArt, SoundToggle } from './mini-arcade-ui';
 import './mini-arcade.css';
 
@@ -54,6 +54,9 @@ export default function MiniGreenConveyor({ content, onFinish, onStatus }: MiniB
   const startRef = useRef<number | null>(null);
   const sound = useArcadeSound();
   const synth = sound.synth;
+  const skin = useXmasSkin();
+  const xmasRef = useRef(false);
+  xmasRef.current = skin !== null;
   const finished = useRef(false);
   /** Độ trễ hoạt ảnh của từng món, chốt một lần lúc món lên băng: đổi `animation-delay` khi hoạt ảnh đang chạy sẽ làm món nhảy cóc. */
   const laneDelay = useRef(new Map<number, number>());
@@ -75,7 +78,7 @@ export default function MiniGreenConveyor({ content, onFinish, onStatus }: MiniB
       for (const ev of next.events) {
         if (prev.events.includes(ev)) continue;
         if (ev.kind === 'right') {
-          synth.play(ev.golden ? 'golden' : leveledUp(ev.combo) ? 'combo' : 'right');
+          synth.play(ev.golden || leveledUp(ev.combo) ? (xmasRef.current ? 'bell' : ev.golden ? 'golden' : 'combo') : 'right');
           arcadeHaptic(ev.golden || leveledUp(ev.combo) ? 'combo' : 'tap');
         } else {
           synth.play('wrong');
@@ -137,7 +140,7 @@ export default function MiniGreenConveyor({ content, onFinish, onStatus }: MiniB
   const burst = recent && recent.kind === 'right' && (recent.golden || leveledUp(recent.combo)) ? recent : null;
 
   return (
-    <div className="tubu-mg-panel tubu-ar-conveyor" data-testid="mini-green-conveyor" data-shake={shake}>
+    <div className="tubu-mg-panel tubu-ar-conveyor" data-testid="mini-green-conveyor" data-shake={shake} data-season={skin ? 'christmas' : undefined}>
       <div className="tubu-ar-hud">
         <div className="tubu-ar-stat">
           <Text variant="caption" tone="secondary" as="span">
@@ -194,7 +197,7 @@ export default function MiniGreenConveyor({ content, onFinish, onStatus }: MiniB
                 data-to={exit?.bin ?? undefined}
               >
                 <ArcadeArt shapes={CONVEYOR_ART[item.art]} className="tubu-ar-item-art" />
-                {item.golden && <ArcadeArt shapes={GOLDEN_DROP_ART} className="tubu-ar-item-gold" />}
+                {item.golden && <ArcadeArt shapes={skin?.XMAS_GOLDEN_ART ?? GOLDEN_DROP_ART} className="tubu-ar-item-gold" />}
                 <span className="tubu-ar-item-label">{item.label}</span>
               </div>
             </div>

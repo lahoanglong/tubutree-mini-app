@@ -20,7 +20,8 @@ import {
 import { FORBIDDEN_TERMS } from '../shop-copy';
 import { ARCADE_MINI_COPY, ARCADE_MINI_COPY_MAX, arcadeCopy, type ArcadeMiniCopyKey } from './arcade-copy';
 import { ARCADE_TONES, CONVEYOR_ART, GOLDEN_DROP_ART, MERGE_TIER_ART, type ArcadeShape } from './arcade-art';
-import { arcadeBestKey, arcadeResultView, readArcadeBest, saveArcadeBest, swipeDir } from './arcade';
+import { arcadeBestKey, arcadeResultCelebration, arcadeResultView, readArcadeBest, saveArcadeBest, swipeDir } from './arcade';
+import { xmasTierName } from '../seasonal/xmas-tier-names';
 import { ARCADE_SOUND_KEY, createArcadeSynth, readSoundOn, saveSoundOn } from './arcade-sfx';
 import { MINI_NEW_GAMES, miniGameCards } from './cards';
 import {
@@ -294,6 +295,19 @@ describe('kỷ lục, âm thanh, dòng kết quả', () => {
       score: 61,
     });
     expect(arcadeResultView({ game: 'sort', items: [] })).toBeNull();
+  });
+
+  it('màn kết quả: Ghép thắng mới lấp lánh, thua thì không; không phát tiếng sau Ghép (bàn đã phát); Băng Chuyền lấp lánh và có tiếng', () => {
+    expect(arcadeResultCelebration({ game: 'eco_merge', score: 9_000, maxTile: 256, moves: 400, won: true })).toEqual({ sparkle: true, sound: false });
+    expect(arcadeResultCelebration({ game: 'eco_merge', score: 1234, maxTile: 64, moves: 210, won: false })).toEqual({ sparkle: false, sound: false });
+    expect(arcadeResultCelebration({ game: 'green_conveyor', score: 61, bestCombo: 14, golden: 2, missed: 3 })).toEqual({ sparkle: true, sound: true });
+    expect(arcadeResultCelebration({ game: 'sort', items: [] })).toEqual({ sparkle: false, sound: false });
+  });
+
+  it('mùa Noel: màn kết quả dùng tên bậc Noel như bàn chơi; Băng Chuyền không có dòng bậc', () => {
+    expect(arcadeResultView({ game: 'eco_merge', score: 1234, maxTile: 64, moves: 210, won: false }, xmasTierName)?.headline).toBe('Người tuyết');
+    expect(arcadeResultView({ game: 'eco_merge', score: 0, maxTile: 0, moves: 0, won: false }, xmasTierName)?.headline).toBe('Bông tuyết');
+    expect(arcadeResultView({ game: 'green_conveyor', score: 61, bestCombo: 14, golden: 2, missed: 3 }, xmasTierName)?.headline).toBeNull();
   });
 });
 

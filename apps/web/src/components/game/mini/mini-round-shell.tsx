@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useReducer, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, type ComponentType } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -13,7 +13,7 @@ import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { arcadeCopy } from '@tubutree/app-core/game-mini/arcade-copy';
-import { arcadeResultView, isMiniArcadeGameId, readArcadeBest, saveArcadeBest } from '@tubutree/app-core/game-mini/arcade';
+import { arcadeResultCelebration, arcadeResultView, isMiniArcadeGameId, readArcadeBest, saveArcadeBest } from '@tubutree/app-core/game-mini/arcade';
 import {
   MINI_RECYCLE_PATH,
   miniClock,
@@ -42,6 +42,7 @@ import {
 } from '@tubutree/app-core/game-mini/review';
 import { kitchenDiscovered, kitchenReviewRows } from '@tubutree/app-core/game-mini/kitchen';
 import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
+import { xmasTierName } from '@tubutree/app-core/seasonal/xmas-tier-names';
 import { checkInQuery } from '@tubutree/app-core/queries/loyalty';
 import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { Button, Heading, ProductTile, Text } from '@/components/mini';
@@ -55,6 +56,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AlbumLine } from '@/components/game-album/album-line';
 import { arcadeStorage } from './arcade-platform';
+import { useArcadeSound } from './mini-arcade-hooks';
 import { takePendingBasket, type MiniCartGame } from './basket-pending';
 import './mini-game.css';
 import './mini-game-b.css';
@@ -230,8 +232,18 @@ function MatchProducts({ slugs }: { slugs: string[] }) {
 }
 
 /** Dòng điểm ván, kỷ lục trên máy (đọc trước khi ghi điểm ván này) của hai game thao tác. */
-function ArcadeLine({ game, line, score }: { game: PlayableMiniGame; line: string; score: number }) {
+function ArcadeLine({ game, line, score, sound }: { game: PlayableMiniGame; line: string; score: number; sound: boolean }) {
   const [previous] = useState(() => (isMiniArcadeGameId(game) ? readArcadeBest(arcadeStorage(), game) : 0));
+  // Hồi chuông của màn kết quả (chuông Noel khi bật mùa) khi `arcadeResultCelebration` cho phép, theo nút âm thanh của bàn chơi.
+  const { synth } = useArcadeSound();
+  const jingle = usePublicConfig().seasonalTheme === 'christmas';
+  // Một hồi cho một màn kết quả: cấu hình mùa về muộn (đổi `jingle`) không kêu lại lần hai.
+  const played = useRef(false);
+  useEffect(() => {
+    if (!sound || played.current) return;
+    played.current = true;
+    synth.play(jingle ? 'jingle' : 'win');
+  }, [sound, jingle, synth]);
   useEffect(() => {
     if (isMiniArcadeGameId(game)) saveArcadeBest(arcadeStorage(), game, score);
   }, [game, score]);
@@ -272,10 +284,12 @@ export function ResultView({
   onLogin: () => void;
   onAgain?: () => void;
 }) {
-  const waste = usePublicConfig().waste.enabled && isWebRouteReady(MINI_RECYCLE_PATH.web);
+  const config = usePublicConfig();
+  const waste = config.waste.enabled && isWebRouteReady(MINI_RECYCLE_PATH.web);
   const r = state.result!;
   const summary = miniResultSummary(r);
-  const arcade = arcadeResultView(r.review);
+  const arcade = arcadeResultView(r.review, config.seasonalTheme === 'christmas' ? xmasTierName : undefined);
+  const party = arcadeResultCelebration(r.review);
   const product = miniQuizProduct(state.round?.content);
   const matchSlugs = miniMatchProductSlugs(r.review);
   const basketSet = miniBasketSet(r.review, state.round?.content);
@@ -287,8 +301,9 @@ export function ResultView({
       </Heading>
       <Heading as="p" variant="display-md" className="tubu-mg-score" data-testid="mini-result-score">
         {arcade?.headline ?? summary.score}
+        {party.sparkle && <span className="tubu-mg-sparkle" aria-hidden data-testid="mini-result-sparkle" />}
       </Heading>
-      {arcade && <ArcadeLine game={game} line={arcade.line} score={arcade.score} />}
+      {arcade && <ArcadeLine game={game} line={arcade.line} score={arcade.score} sound={party.sound} />}
       {summary.gains.length > 0 && (
         <div className="tubu-mg-gains">
           {summary.gains.map((g) => (
@@ -383,7 +398,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
     if (p) setPendingBasket(p);
   }, [game]);
 
-  const title = miniGameTitle(game);
+  const title = miniGameTitle(game, usePublicConfig().seasonalTheme === 'christmas');
   const streak = state.result?.checkIn?.streakDays ?? streakQ.data?.streakDays ?? 0;
   const disabled = (todayQ.isError && isMiniDisabled(todayQ.error)) || (todayQ.isSuccess && !todayQ.data.games.some((g) => g.game === game));
   const intro = miniIntroReward(todayQ.data, game);

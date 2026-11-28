@@ -149,10 +149,6 @@
   font-weight: 700;
   line-height: var(--type-label-lh);
 }
-.tubu-hub-badge[data-kind='bonus'] {
-  background: var(--amber-50);
-  color: var(--amber-600);
-}
 .tubu-hub-body {
   display: flex;
   flex: 1 1 auto;

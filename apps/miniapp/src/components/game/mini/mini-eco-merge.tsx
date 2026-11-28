@@ -16,7 +16,7 @@ import {
 import { Text } from '../../ui/text';
 import { formatNumber } from '../../../utils/format';
 import { arcadeHaptic, arcadeStorage } from './arcade-platform';
-import { useArcadeSound, useSwipe, useWindowKeys } from './mini-arcade-hooks';
+import { useArcadeSound, useSwipe, useWindowKeys, useXmasSkin } from './mini-arcade-hooks';
 import { ArcadeArt, SoundToggle } from './mini-arcade-ui';
 import './mini-arcade.css';
 
@@ -40,6 +40,8 @@ export default function MiniEcoMerge({ content, onFinish, onStatus }: MiniBoardP
   const [best] = useState(() => readArcadeBest(arcadeStorage(), 'eco_merge'));
   const sound = useArcadeSound();
   const synth = sound.synth;
+  const skin = useXmasSkin();
+  const tierName = skin ? skin.xmasTierName : mergeTierName;
   const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
   const finished = useRef(false);
 
@@ -63,7 +65,7 @@ export default function MiniEcoMerge({ content, onFinish, onStatus }: MiniBoardP
 
   useEffect(() => {
     if (!game.won && !game.over) return;
-    synth.play(game.won ? 'win' : 'over');
+    synth.play(game.won ? (skin ? 'jingle' : 'win') : 'over');
     arcadeHaptic(game.won ? 'win' : 'wrong');
     const t = setTimeout(finish, END_HOLD_MS);
     return () => clearTimeout(t);
@@ -88,21 +90,21 @@ export default function MiniEcoMerge({ content, onFinish, onStatus }: MiniBoardP
     gameRef.current = next;
     setGame(next);
     if (next.lastMerges > 1) {
-      synth.play('combo');
+      synth.play(skin ? 'bell' : 'combo');
       arcadeHaptic('combo');
       setToast({ key: next.path.length, text: arcadeCopy('merge.combo', { n: next.lastMerges }) });
     } else if (next.lastMerges === 1) {
       synth.play('merge');
       arcadeHaptic('merge');
     }
-    if (next.newTier >= 3 && !next.won) setToast({ key: next.path.length, text: arcadeCopy('merge.reached', { tier: mergeTierName(2 ** next.newTier) }) });
+    if (next.newTier >= 3 && !next.won) setToast({ key: next.path.length, text: arcadeCopy('merge.reached', { tier: tierName(2 ** next.newTier) }) });
   };
   useWindowKeys(mergeKeyDir, move);
   const swipe = useSwipe(move);
 
-  const end = game.won ? arcadeCopy('merge.win') : game.over ? arcadeCopy('merge.over') : null;
+  const end = game.won ? (skin?.XMAS_MERGE_WIN ?? arcadeCopy('merge.win')) : game.over ? arcadeCopy('merge.over') : null;
   return (
-    <div className="tubu-mg-panel tubu-ar-merge" data-testid="mini-eco-merge">
+    <div className="tubu-mg-panel tubu-ar-merge" data-testid="mini-eco-merge" data-season={skin ? 'christmas' : undefined}>
       <div className="tubu-ar-hud">
         <div className="tubu-ar-stat">
           <Text variant="caption" tone="secondary" as="span">
@@ -151,8 +153,8 @@ export default function MiniEcoMerge({ content, onFinish, onStatus }: MiniBoardP
                 <span className="tubu-ar-tile-num" aria-hidden>
                   {t.value}
                 </span>
-                <ArcadeArt shapes={MERGE_TIER_ART[tier] ?? []} />
-                <span className="tubu-ar-tile-name">{mergeTierName(t.value)}</span>
+                <ArcadeArt shapes={(skin?.XMAS_MERGE_ART ?? MERGE_TIER_ART)[tier] ?? []} />
+                <span className="tubu-ar-tile-name">{tierName(t.value)}</span>
               </span>
             </div>
           );

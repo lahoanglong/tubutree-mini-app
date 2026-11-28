@@ -4,11 +4,37 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import type { MergeDir } from '@tubutree/shared-types';
 import { swipeDir } from '@tubutree/app-core/game-mini/arcade';
 import { createArcadeSynth, readSoundOn, saveSoundOn } from '@tubutree/app-core/game-mini/arcade-sfx';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { arcadeStorage } from './arcade-platform';
 
-/** Âm thanh của bàn chơi: bật/tắt nhớ trên máy, bộ phát tạo lười ở lần phát đầu, đóng khi rời bàn. */
+type XmasSkin = typeof import('../season/xmas-arcade-skin');
+let skinLoad: Promise<XmasSkin> | null = null;
+
+/**
+ * Áo Noel của bàn chơi (hình ô, ngôi sao vàng, tiếng chuông): chunk hình chỉ tải khi `theme.seasonal` là "christmas". Chunk chưa về hay tải lỗi
+ * thì bàn chơi giữ áo thường; luật ván không đổi. Một promise cho cả trang để hai bàn mở liền nhau không tải hai lần.
+ */
+export function useXmasSkin(): XmasSkin | null {
+  const xmas = usePublicConfig().seasonalTheme === 'christmas';
+  const [skin, setSkin] = useState<XmasSkin | null>(null);
+  useEffect(() => {
+    if (!xmas) return;
+    let live = true;
+    skinLoad ??= import('../season/xmas-arcade-skin').catch((e: unknown) => {
+      skinLoad = null;
+      throw e;
+    });
+    skinLoad.then((m) => live && setSkin(m), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [xmas]);
+  return xmas ? skin : null;
+}
+
+/** Âm thanh của bàn chơi: bật/tắt nhớ trên máy (mặc định tắt khi máy bật giảm chuyển động), bộ phát tạo lười ở lần phát đầu, đóng khi rời bàn. */
 export function useArcadeSound() {
-  const [on, setOn] = useState(() => readSoundOn(arcadeStorage()));
+  const [on, setOn] = useState(() => readSoundOn(arcadeStorage(), typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true));
   const onRef = useRef(on);
   onRef.current = on;
   const synth = useMemo(() => createArcadeSynth(() => onRef.current), []);

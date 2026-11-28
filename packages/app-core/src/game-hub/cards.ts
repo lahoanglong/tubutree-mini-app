@@ -23,11 +23,12 @@ export interface HubCard {
   title: string;
   art: HubArt;
   tone: HubTone;
-  /** "+💧 · Điểm Xanh": thứ khách nhận được; null khi game không hứa thưởng trước. */
+  /** "+💧 và Điểm Xanh": thứ khách nhận được; null khi game không hứa thưởng trước. */
   reward: string | null;
   best: string | null;
   status: { text: string; tone: 'brand' | 'secondary' } | null;
-  badge: { kind: 'new' | 'bonus'; text: string } | null;
+  /** Chỉ một loại huy hiệu, "Mới": không "Hot", không huy hiệu giục chơi khác. */
+  badge: { kind: 'new'; text: string } | null;
   cta: string;
   action: HubAction;
 }
@@ -38,8 +39,8 @@ export interface HubInput {
   arcade: ArcadeStatus | undefined;
   /** Kỷ lục lưu trên máy của khách chơi thử. */
   guestBest: Partial<Record<ArcadeGameId, number>> | null;
-  /** Đang trong khung giờ thưởng của arcade (Sương Sớm, Mưa Rào). */
-  bonusWindow: boolean;
+  /** `theme.seasonal` là "christmas": game có áo Noel mang tên mùa lễ (luật và thưởng không đổi). */
+  xmas?: boolean;
   /** "Chơi hôm nay" của game mini; null khi `game.mini.enabled` tắt. */
   mini: MiniTodayResponse | null;
   matcher: boolean;
@@ -82,13 +83,13 @@ function arcadeCard(input: HubInput, id: ArcadeGameId): HubCard {
   const best = input.real ? input.arcade?.games[id]?.bestScore ?? 0 : input.guestBest?.[id] ?? 0;
   return {
     id,
-    title: fillCopy(`arcade.${meta.copy}.title`),
+    title: fillCopy(input.xmas && id === 'dew_catcher' ? 'arcade.dew.xmasTitle' : `arcade.${meta.copy}.title`),
     art: meta.art,
     tone: meta.tone,
     reward: hubCopy('reward.water'),
     best: best > 0 ? hubCopy('best', { n: fmt(best) }) : null,
     status: arcadeStatus(input, id),
-    badge: input.bonusWindow ? { kind: 'bonus', text: hubCopy('badge.bonus') } : null,
+    badge: null,
     cta: hubCopy(input.real ? 'cta.play' : 'cta.try'),
     action: { kind: 'arcade', game: id },
   };
@@ -107,7 +108,7 @@ export function buildHubCards(input: HubInput): HubCard[] {
       const meta = MINI_META[g.game] ?? { art: 'leaf' as const, tone: 'leaf' as const };
       cards.push({
         id: g.game,
-        title: miniGameTitle(g.game),
+        title: miniGameTitle(g.game, input.xmas),
         art: meta.art,
         tone: meta.tone,
         reward: hubCopy('reward.waterPoints'),

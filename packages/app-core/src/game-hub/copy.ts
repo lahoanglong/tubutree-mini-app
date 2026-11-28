@@ -3,18 +3,17 @@ import { fillTemplate } from '../copy-template';
 /**
  * Chữ của Sảnh Game, thẻ đầu Vườn Xanh và nút âm thanh. Tách khỏi `SHOP_COPY` (bảng đó đã quá lớn) và khỏi `game-mini/copy.ts` (của gói game mini):
  * chỉ đi theo chunk lười của trang Vườn Xanh. `copy.spec.ts` chạy `FORBIDDEN_TERMS` và ngân sách độ dài `GAME_HUB_COPY_MAX` trên từng khoá.
- * "Hot" nằm trong FORBIDDEN_TERMS (chữ giục mua) nên huy hiệu của game đang trong khung giờ thưởng là "Giờ thưởng".
+ * Huy hiệu duy nhất là "Mới": "Hot" nằm trong FORBIDDEN_TERMS (chữ giục mua), và không có huy hiệu khung giờ thưởng.
  */
 export const GAME_HUB_COPY = {
   'tab.care': 'Chăm vườn',
   'tab.games': 'Sảnh Game',
   'tab.garden': 'Khu vườn',
   'reward.water': '+💧 Giọt nước',
-  'reward.waterPoints': '+💧 · Điểm Xanh',
+  'reward.waterPoints': '+💧 và Điểm Xanh',
   'reward.wheel': 'Trúng quà, mã giảm giá',
   'reward.matcher': 'Gợi ý bộ đồ xanh',
   'badge.new': 'Mới',
-  'badge.bonus': 'Giờ thưởng',
   'cta.play': 'Chơi',
   'cta.try': 'Chơi thử',
   'cta.wheel': 'Quay',
@@ -45,7 +44,6 @@ export const GAME_HUB_COPY_MAX: Record<GameHubCopyKey, number> = {
   'reward.wheel': 24,
   'reward.matcher': 20,
   'badge.new': 6,
-  'badge.bonus': 12,
   'cta.play': 8,
   'cta.try': 10,
   'cta.wheel': 8,

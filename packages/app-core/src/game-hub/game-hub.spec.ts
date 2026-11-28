@@ -52,7 +52,6 @@ const input = (over: Partial<HubInput> = {}): HubInput => ({
   real: true,
   arcade: arcade(),
   guestBest: null,
-  bonusWindow: false,
   mini: today(),
   matcher: false,
   wheelCost: null,
@@ -89,14 +88,30 @@ describe('buildHubCards', () => {
     const cards = buildHubCards(input());
     const quiz = cards.find((c) => c.id === 'daily_quiz')!;
     expect(quiz.status?.text).toBe(gameCopy('row.full'));
-    expect(quiz.reward).toBe('+💧 · Điểm Xanh');
+    expect(quiz.reward).toBe('+💧 và Điểm Xanh');
     expect(quiz.action).toEqual({ kind: 'mini', game: 'daily_quiz' });
     expect(buildHubCards(input({ mini: today({ rewardEligible: false, noRewardReason: 'NOT_LOGGED_IN' }) })).find((c) => c.id === 'sort')!.cta).toBe('Chơi thử');
   });
 
-  it('khung giờ thưởng gắn huy hiệu "Giờ thưởng" vào hai game hành động', () => {
-    const cards = buildHubCards(input({ bonusWindow: true }));
-    expect(cards.filter((c) => c.badge?.kind === 'bonus').map((c) => c.id)).toEqual(['dew_catcher', 'refill_rush']);
+  it('huy hiệu duy nhất là "Mới" (PO 28/11): game hành động không mang huy hiệu khung giờ thưởng', () => {
+    const games = [...today().games, { game: 'eco_merge' as const, items: 8, timeLimitMs: 180_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 }];
+    const cards = buildHubCards(input({ mini: today({ games }) }));
+    expect(cards.find((c) => c.id === 'dew_catcher')!.badge).toBeNull();
+    expect(new Set(cards.flatMap((c) => (c.badge ? [c.badge.text] : [])))).toEqual(new Set(['Mới']));
+  });
+
+  it('mùa Noel đổi tên Hứng Sương và Băng Chuyền ở sảnh, giữ thưởng, thứ tự và hành động; mùa thường giữ tên cũ', () => {
+    const games = [...today().games, { game: 'green_conveyor' as const, items: 24, timeLimitMs: 30_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 }];
+    const plain = buildHubCards(input({ mini: today({ games }) }));
+    const xmas = buildHubCards(input({ mini: today({ games }), xmas: true }));
+    const title = (cards: typeof plain, id: string) => cards.find((c) => c.id === id)?.title;
+    expect(title(plain, 'dew_catcher')).toBe('Hứng Sương Tinh Khiết');
+    expect(title(xmas, 'dew_catcher')).toBe('Hứng Bông Tuyết & Hộp Quà Xanh');
+    expect(xmas.map((c) => c.id)).toEqual(plain.map((c) => c.id));
+    expect(xmas.map((c) => [c.reward, c.cta, c.action])).toEqual(plain.map((c) => [c.reward, c.cta, c.action]));
+    expect(title(plain, 'green_conveyor')).toBe('Băng Chuyền Xanh');
+    expect(title(xmas, 'green_conveyor')).toBe('Xưởng Gói Quà Ông Già Noel Xanh');
+    expect(title(xmas, 'refill_rush')).toBe(title(plain, 'refill_rush'));
   });
 
   it('mã game chưa có giao diện (chưa vào `PLAYABLE_MINI_GAMES`) không hiện', () => {

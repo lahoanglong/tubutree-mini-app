@@ -188,6 +188,12 @@ describe('bảng màu Noel Xanh (tubu-w57-01) đạt 4,5:1 cho chữ — WCAG 1.
     ['--xmas-pine', '--xmas-snow'],
     ['--xmas-pine-deep', '--xmas-gold'],
     ['--xmas-snow', '--xmas-pine'],
+    // Cây Thông Noel Tự Trang Trí (w57-02): nút "Trang trí" và thiệp chữ tuyết/vàng trên nền đêm; ô khay đã treo chữ tuyết trên thông đậm.
+    ['--xmas-snow', '--xmas-night-deep'],
+    ['--xmas-snow', '--xmas-night'],
+    ['--xmas-gold', '--xmas-night-deep'],
+    ['--xmas-gold', '--xmas-night'],
+    ['--xmas-snow', '--xmas-pine-deep'],
   ])('%s trên %s', (fg, bg) => {
     expect(ratio(rgb(fg), rgb(bg))).toBeGreaterThanOrEqual(4.5);
   });

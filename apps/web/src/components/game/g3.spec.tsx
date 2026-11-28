@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, type Rendered } from '@/test-utils/dom';
+import { flush, render, type Rendered } from '@/test-utils/dom';
 import { OrderWaterCard } from './order-water-card';
 import { HarvestCelebration } from './harvest-celebration';
 import { GardenHero } from './garden-hero';
@@ -16,10 +16,22 @@ const RHYTHM = { lastCheckInAt: null, activeToday: false };
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
+const season = vi.hoisted(() => ({ theme: undefined as string | undefined }));
+vi.mock('@/lib/use-public-config', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/lib/use-public-config')>();
+  return { ...orig, usePublicConfig: (...a: Parameters<typeof orig.usePublicConfig>) => ({ ...orig.usePublicConfig(...a), seasonalTheme: season.theme }) };
+});
+vi.mock('./season/christmas-garden', () => ({
+  default: ({ progress }: { progress: { streakDays: number; activeToday: boolean; drops: number; harvested: number } }) => (
+    <div data-testid="xmas-garden" data-progress={JSON.stringify(progress)} />
+  ),
+}));
+
 let mounted: Rendered | null = null;
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  season.theme = undefined;
 });
 
 describe('OrderWaterCard', () => {
@@ -74,6 +86,21 @@ describe('GardenHero', () => {
     expect(title(eco('Cây Dứa Fuwa3e'))).toContain('Cây của bạn');
     expect(title(eco(''))).toContain('Cây của bạn');
     expect(title(undefined)).toContain('Vườn của bạn');
+  });
+  it('mùa Noel (theme.seasonal = christmas): cây thông tự trang trí thay cây đang lớn, nhận mốc sẵn có của thẻ; hết mùa thì không có', async () => {
+    season.theme = 'christmas';
+    mounted = render(<GardenHero eco={{ progress: 10, target: 60, treeType: 'Sồi', treesPlanted: 2 }} totalSeeds={55} streakDays={4} rhythm={{ lastCheckInAt: null, activeToday: true }} />);
+    const hero = mounted.container.querySelector('[data-testid="garden-hero"]')!;
+    expect(hero.getAttribute('data-season')).toBe('christmas');
+    await flush(4);
+    const garden = mounted.container.querySelector('[data-testid="xmas-garden"]')!;
+    expect(JSON.parse(garden.getAttribute('data-progress')!)).toEqual({ streakDays: 4, activeToday: true, drops: 55, harvested: 2 });
+    mounted.unmount();
+    season.theme = undefined;
+    mounted = render(<GardenHero eco={{ progress: 10, target: 60, treeType: 'Sồi', treesPlanted: 2 }} totalSeeds={55} streakDays={4} rhythm={RHYTHM} />);
+    await flush(2);
+    expect(mounted.container.querySelector('[data-testid="garden-hero"]')!.hasAttribute('data-season')).toBe(false);
+    expect(mounted.container.querySelector('[data-testid="xmas-garden"]')).toBeNull();
   });
 });
 

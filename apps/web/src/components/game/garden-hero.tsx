@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import dynamic from 'next/dynamic';
 import { Flame } from 'lucide-react';
 import { hubCopy } from '@tubutree/app-core/game-hub/copy';
 import { skyPhase, treeStage, treeStageLabel, type SkyPhase } from '@tubutree/app-core/game-hub/scene';
@@ -8,13 +9,17 @@ import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { treeTitle } from '@tubutree/app-core/tree-title';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { sfx } from '@/lib/sfx';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { Heading, Icon, Text } from '@/components/mini';
 import { formatNumber } from './format';
 import { GardenTreeArt } from './garden-tree-art';
 import { WaterTank } from './water-tank';
 import { WeekRhythm, type WeekRhythmProps } from './week-rhythm';
+import type { ChristmasGardenProps } from './season/christmas-garden';
 
 const t = gameNewbieCopy.hero;
+// Cây thông tự trang trí: chunk riêng chỉ tải khi bật mùa Noel (không dựng ở server: cây đọc localStorage); tải lỗi thì giữ cây thường.
+const ChristmasGarden = dynamic(() => import('./season/christmas-garden').catch(() => ({ default: ({ plain }: ChristmasGardenProps) => <>{plain}</> })), { ssr: false });
 const SKY_REFRESH_MS = 5 * 60_000;
 const DROPS = [
   { dx: -26, dd: 0 },
@@ -78,8 +83,10 @@ export function GardenHero({
   const pct = eco && eco.target > 0 ? Math.min(100, Math.round((progress / eco.target) * 100)) : 0;
   const left = eco ? Math.max(0, eco.target - progress) : 0;
   const stage = treeStage(harvestReady ? 100 : pct, wilted);
+  const xmas = usePublicConfig().seasonalTheme === 'christmas';
+  const plain = <GardenTreeArt key={stage} stage={stage} label={hubCopy('hero.treeAria', { stage: treeStageLabel(stage) })} />;
   return (
-    <div className="tubu-hero" data-sky={sky} data-testid="garden-hero">
+    <div className="tubu-hero" data-sky={sky} data-season={xmas ? 'christmas' : undefined} data-testid="garden-hero">
       <span className="tubu-hero-orb" aria-hidden />
       <div className="tubu-hero-top">
         <WaterTank seeds={totalSeeds} capacity={tankCapacity} />
@@ -93,7 +100,14 @@ export function GardenHero({
         )}
       </div>
       <div className="tubu-hero-stage" data-testid="garden-stage">
-        <GardenTreeArt key={stage} stage={stage} label={hubCopy('hero.treeAria', { stage: treeStageLabel(stage) })} />
+        {xmas ? (
+          <ChristmasGarden
+            plain={plain}
+            progress={{ streakDays: streakDays ?? 0, activeToday: rhythm.activeToday, drops: totalSeeds ?? 0, harvested: eco?.treesPlanted ?? 0 }}
+          />
+        ) : (
+          plain
+        )}
         {waterTick > 0 && (
           <span key={waterTick} className="tubu-drops" aria-hidden>
             {DROPS.map((d) => (

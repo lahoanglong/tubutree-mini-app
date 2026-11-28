@@ -10,7 +10,7 @@ import {
   type MiniTodayResponse,
 } from '@tubutree/shared-types';
 import type { RoundFailure } from './api';
-import { gameCopy } from './copy';
+import { GAME_MINI_COPY, gameCopy, type GameMiniCopyKey } from './copy';
 
 /** Game đã có giao diện, theo thứ tự hiện trong "Chơi hôm nay" (hai game thao tác mới đứng đầu). */
 export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'eco_merge', 'green_conveyor', 'sort', 'match', 'origin', 'basket', 'kitchen_swap'] as const satisfies readonly MiniGameId[];
@@ -41,7 +41,9 @@ export function playableToday(today: MiniTodayResponse | undefined): Array<MiniT
   return PLAYABLE_MINI_GAMES.flatMap((g) => today.games.filter((x): x is MiniTodayGame & { game: PlayableMiniGame } => x.game === g));
 }
 
-export const miniGameTitle = (game: PlayableMiniGame) => gameCopy(`game.${game}.title`);
+/** `xmas`: tên mùa Noel nếu game có (`game.<mã>.xmasTitle`), không thì tên thường. */
+export const miniGameTitle = (game: PlayableMiniGame, xmas = false) =>
+  gameCopy(xmas && `game.${game}.xmasTitle` in GAME_MINI_COPY ? (`game.${game}.xmasTitle` as GameMiniCopyKey) : `game.${game}.title`);
 export const miniGameDesc = (game: PlayableMiniGame) => gameCopy(`game.${game}.desc`);
 export const miniGameRules = (game: PlayableMiniGame) => gameCopy(`game.${game}.rules`);
 

@@ -1,4 +1,5 @@
 import { fillCopy } from '../shop-copy';
+import type { ArcadeSkin } from '../seasonal/xmas-dew';
 import type { ArcadeGameId } from './arcade-config';
 import { createDewCatcher, DEW_CATCH_Y, DEW_HEARTS, DEW_ITEMS, type DewCatcherState, type DewCatcherStats, type DewEvent } from './dew-catcher';
 import { createRefillRush, type RefillRushState, type RefillRushStats, type RushEvent, type RushStation } from './refill-rush';
@@ -25,6 +26,7 @@ export interface ArcadeHud { score: number; secondsLeft: number; lives: number |
 export interface ArcadeResult { gameId: ArcadeGameId; score: number; durationMs: number; stats: DewCatcherStats | RefillRushStats }
 export interface ArcadeMountOptions {
   game: ArcadeGameId; canvas: ArcadeCanvasLike; theme: ArcadeTheme; reducedMotion?: boolean;
+  skin?: ArcadeSkin;
   raf(cb: (ts: number) => void): number;
   caf(id: number): void;
   now(): number;
@@ -63,7 +65,7 @@ export function mountArcade(o: ArcadeMountOptions) {
     g.font = `600 ${Math.round(size * W)}px system-ui, sans-serif`;
     g.textAlign = align;
     g.fillStyle = color;
-    g.fillText(t, x * W, y * H, W * 0.9);
+    g.fillText((dew && o.skin?.glyph[t]) || t, x * W, y * H, W * 0.9);
   };
   const box = (x: number, y: number, w: number, h: number, color: string, a = 1) => {
     g.globalAlpha = a;
@@ -139,6 +141,7 @@ export function mountArcade(o: ArcadeMountOptions) {
     if (dew) {
       const d = s as DewCatcherState;
       drawDew(d);
+      o.skin?.paint(txt, theme, dt, d);
       hud = { score: d.score, secondsLeft: Math.ceil(d.timeLeftMs / 1000), lives: d.hearts, combo: d.combo, multiplier: d.multiplier };
     } else {
       const r = s as RefillRushState;

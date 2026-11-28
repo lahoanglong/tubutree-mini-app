@@ -1,11 +1,13 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { arcadeCopy } from '@tubutree/app-core/game-mini/arcade-copy';
-import { arcadeResultView, isMiniArcadeGameId, readArcadeBest, saveArcadeBest } from '@tubutree/app-core/game-mini/arcade';
+import { arcadeResultCelebration, arcadeResultView, isMiniArcadeGameId, readArcadeBest, saveArcadeBest } from '@tubutree/app-core/game-mini/arcade';
+import { createArcadeSynth, readSoundOn } from '@tubutree/app-core/game-mini/arcade-sfx';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { MINI_RECYCLE_PATH, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
 import { kitchenReviewRows } from '@tubutree/app-core/game-mini/kitchen';
 import { MINI_REVIEW_BADGE, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
+import { xmasTierName } from '@tubutree/app-core/seasonal/xmas-tier-names';
 import { Button } from '../../ui/button';
 import { Heading, Text } from '../../ui/text';
 import { SilentBoundary } from '../../route-shell';
@@ -80,16 +82,32 @@ export default function MiniResult({
   onAgain?: () => void;
 }) {
   const navigate = useSmartNavigate();
-  const waste = usePublicConfig().waste.enabled;
+  const config = usePublicConfig();
+  const waste = config.waste.enabled;
+  const jingle = config.seasonalTheme === 'christmas';
   const r = state.result!;
   const summary = miniResultSummary(r);
-  const arcade = arcadeResultView(r.review);
+  const arcade = arcadeResultView(r.review, jingle ? xmasTierName : undefined);
   // Đọc kỷ lục cũ một lần trước khi ghi điểm ván này, để chữ "Kỷ lục mới" không mất khi màn vẽ lại.
   const [previousBest] = useState(() => (isMiniArcadeGameId(game) ? readArcadeBest(arcadeStorage(), game) : 0));
   useEffect(() => {
     if (arcade && isMiniArcadeGameId(game)) saveArcadeBest(arcadeStorage(), game, arcade.score);
   }, [arcade?.score, game]);
   const newBest = arcade !== null && previousBest > 0 && arcade.score > previousBest;
+  // Lấp lánh và hồi chuông (chuông Noel khi bật mùa) theo `arcadeResultCelebration`, tiếng theo nút âm thanh của bàn chơi. Bộ phát tạo ở đây
+  // (không qua useArcadeSound) để chunk kết quả không kéo theo chunk hook của bàn chơi.
+  const party = arcadeResultCelebration(r.review);
+  const [synth] = useState(() =>
+    createArcadeSynth(() => readSoundOn(arcadeStorage(), typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true)),
+  );
+  useEffect(() => () => synth.close(), [synth]);
+  // Một hồi cho một màn kết quả: cấu hình mùa về muộn (đổi `jingle`) không kêu lại lần hai.
+  const played = useRef(false);
+  useEffect(() => {
+    if (!party.sound || played.current) return;
+    played.current = true;
+    synth.play(jingle ? 'jingle' : 'win');
+  }, [party.sound, jingle, synth]);
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
@@ -97,6 +115,7 @@ export default function MiniResult({
       </Heading>
       <Heading as="p" variant="display-md" className="tubu-mg-score" data-testid="mini-result-score">
         {arcade?.headline ?? summary.score}
+        {party.sparkle && <span className="tubu-mg-sparkle" aria-hidden data-testid="mini-result-sparkle" />}
       </Heading>
       {arcade && (
         <div className="tubu-mg-gains" data-testid="mini-result-arcade">

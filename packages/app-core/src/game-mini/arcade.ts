@@ -57,11 +57,11 @@ export interface ArcadeResultView {
   score: number;
 }
 
-/** Dòng kết quả riêng của game thao tác từ phần chấm của máy chủ; game nội dung thì null. */
-export function arcadeResultView(review: MiniReview): ArcadeResultView | null {
+/** Dòng kết quả riêng của game thao tác từ phần chấm của máy chủ; game nội dung thì null. `tierName`: tên bậc theo áo đang mặc (mùa Noel truyền tên bậc Noel). */
+export function arcadeResultView(review: MiniReview, tierName: (value: number) => string = mergeTierName): ArcadeResultView | null {
   if (review.game === 'eco_merge') {
     return {
-      headline: mergeTierName(Math.max(2, review.maxTile)),
+      headline: tierName(Math.max(2, review.maxTile)),
       line: arcadeCopy('result.mergeLine', { score: formatVnNumber(review.score), moves: review.moves }),
       score: review.score,
     };
@@ -74,6 +74,16 @@ export function arcadeResultView(review: MiniReview): ArcadeResultView | null {
     };
   }
   return null;
+}
+
+/**
+ * Màn kết quả game thao tác: lấp lánh khi Ghép Mầm Xanh thắng (tới bậc 8) hay xong ván Băng Chuyền Xanh (không có thua). Tiếng chỉ phát ở Băng Chuyền:
+ * bàn Ghép đã tự phát tiếng cuối ván (thắng hay hết nước), và màn kết quả không được kêu "thắng" sau một ván thua.
+ */
+export function arcadeResultCelebration(review: MiniReview): { sparkle: boolean; sound: boolean } {
+  if (review.game === 'eco_merge') return { sparkle: review.won, sound: false };
+  if (review.game === 'green_conveyor') return { sparkle: true, sound: true };
+  return { sparkle: false, sound: false };
 }
 
 /** Kiểu rung ngắn theo sự kiện (ms), app tự quy về API rung của nền tảng. */

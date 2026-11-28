@@ -16,6 +16,7 @@ vi.mock('../../store/auth', () => ({
 }));
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { GuestBanner } from './guest-banner';
 import { HttpError } from '../../services/http';
 import { OrderWaterCard } from './order-water-card';
@@ -121,6 +122,23 @@ describe('GardenHero', () => {
     expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
     rerender(hero({ eco: undefined, totalSeeds: undefined, streakDays: undefined }));
     expect(screen.getByText('Vườn của bạn')).toBeInTheDocument();
+  });
+  it('mùa Noel (theme.seasonal = christmas): cây thông tự trang trí thay cây đang lớn; hết mùa thì không có', async () => {
+    const xmasClient = new QueryClient();
+    xmasClient.setQueryData(['public-config'], { seasonalTheme: 'christmas' } as PublicConfig);
+    const props = { rhythm: RHYTHM, eco: { progress: 10, target: 60, treeType: 'Sồi', treesPlanted: 1 }, totalSeeds: 60, streakDays: 3 };
+    const { unmount } = render(
+      <QueryClientProvider client={xmasClient}>
+        <GardenHero {...props} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId('garden-hero').getAttribute('data-season')).toBe('christmas');
+    expect(await screen.findByTestId('xmas-tree')).toBeInTheDocument();
+    expect(screen.getByTestId('xmas-decorate')).toBeInTheDocument();
+    unmount();
+    render(hero({ eco: props.eco, totalSeeds: 60, streakDays: 3 }));
+    expect(screen.getByTestId('garden-hero').hasAttribute('data-season')).toBe(false);
+    expect(screen.queryByTestId('xmas-tree')).toBeNull();
   });
 });
 

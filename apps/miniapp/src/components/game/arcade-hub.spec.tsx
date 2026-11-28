@@ -168,7 +168,7 @@ describe('ArcadeHub: Sảnh Game gom mọi game', () => {
       .map((a) => a.getAttribute('data-testid'));
     expect(ids).toEqual(['arcade-game-dew_catcher', 'arcade-game-refill_rush', 'mini-play-row-daily_quiz', 'mini-play-row-sort']);
     expect(screen.getByTestId('mini-play-status-daily_quiz')).toHaveTextContent(gameCopy('row.left', { n: 1 }));
-    expect(within(screen.getByTestId('mini-play-row-sort')).getByText('+💧 · Điểm Xanh')).toBeInTheDocument();
+    expect(within(screen.getByTestId('mini-play-row-sort')).getByText('+💧 và Điểm Xanh')).toBeInTheDocument();
     expect(document.querySelectorAll('.tubu-hub-art-svg')).toHaveLength(4);
     expect(await screen.findByTestId('album-line')).toBeInTheDocument();
   });
@@ -201,11 +201,12 @@ describe('ArcadeHub: Sảnh Game gom mọi game', () => {
     expect(screen.queryByTestId('album-line')).toBeNull();
   });
 
-  it('trong khung giờ thưởng, hai game hành động mang huy hiệu "Giờ thưởng"', () => {
+  it('trong khung giờ thưởng, thẻ game không mang huy hiệu "Giờ thưởng" (chỉ còn huy hiệu "Mới")', () => {
     at('2026-11-14T00:00:00Z');
     renderHub({ mini: TODAY });
-    expect(screen.getAllByText('Giờ thưởng')).toHaveLength(2);
-    expect(within(screen.getByTestId('mini-play-row-sort')).queryByText('Giờ thưởng')).toBeNull();
+    const list = screen.getByRole('list');
+    expect(within(list).queryAllByText('Giờ thưởng')).toHaveLength(0);
+    for (const badge of list.querySelectorAll('.tubu-hub-badge')) expect(badge.getAttribute('data-kind')).toBe('new');
   });
 });
 
