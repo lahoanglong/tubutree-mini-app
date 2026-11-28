@@ -31,6 +31,8 @@ export interface AdminEcoFact {
   label: string | null;
   co2Grams: number | null;
   sourceUrl: string;
+  /** `internal_sheet`: phiếu cân nội bộ ở tubutree.com; `external`: nguồn ngoài; null: chưa có link https hợp lệ. */
+  sourceKind: 'internal_sheet' | 'external' | null;
   sourceNote: string;
   status: EcoFactStatus;
   approvedById: string | null;
@@ -57,6 +59,20 @@ export interface EcoImportResult {
   skippedApproved: number;
   errors: { line: number; message: string }[];
 }
+
+export interface EcoBatchApproveResult {
+  approved: string[];
+  skipped: { id: string; reason: 'not_found' | 'conflict' | 'not_draft' | 'blocked'; message: string }[];
+}
+
+export interface EcoRefillDraftResult {
+  refillProducts: number;
+  created: number;
+  skippedExisting: number;
+}
+
+/** Số dòng tối đa một lần duyệt hàng loạt; bằng `APPROVE_BATCH_MAX` của eco-facts-admin.service.ts. */
+export const ECO_APPROVE_BATCH_MAX = 50;
 
 /** Giới hạn độ dài, cùng số với cột của bảng `product_eco_facts` (schema.prisma). */
 export const ECO_FIELD_MAX = { baselineText: 120, label: 80, sourceUrl: 500, sourceNote: 300 } as const;
@@ -103,3 +119,7 @@ export const approveEcoFact = (row: AdminEcoFact) =>
   apiFetch<AdminEcoFact>(`/admin/eco-facts/${encodeURIComponent(row.id)}/approve`, { method: 'POST', body: { expectedUpdatedAt: row.updatedAt } });
 export const retireEcoFact = (id: string) => apiFetch<AdminEcoFact>(`/admin/eco-facts/${encodeURIComponent(id)}/retire`, { method: 'POST' });
 export const importEcoFacts = (csv: string) => apiFetch<EcoImportResult>('/admin/eco-facts/import', { method: 'POST', body: { csv } });
+export const approveEcoFactsBatch = (rows: Pick<AdminEcoFact, 'id' | 'updatedAt'>[]) =>
+  apiFetch<EcoBatchApproveResult>('/admin/eco-facts/approve-batch', { method: 'POST', body: { items: rows.map((r) => ({ id: r.id, expectedUpdatedAt: r.updatedAt })) } });
+export const createRefillDrafts = (sheetUrl: string, sourceNote: string) =>
+  apiFetch<EcoRefillDraftResult>('/admin/eco-facts/refill-drafts', { method: 'POST', body: { sheetUrl: sheetUrl.trim() || null, sourceNote: sourceNote.trim() || null } });

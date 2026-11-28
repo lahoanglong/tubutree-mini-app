@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { EcoFactsAdminService, type AdminEcoFact, type EcoImportResult } from './eco-facts-admin.service';
+import { EcoFactsAdminService, type AdminEcoFact, type EcoBatchApproveResult, type EcoImportResult, type EcoRefillDraftResult } from './eco-facts-admin.service';
 import { EcoFactBodyDto } from './eco-facts.input';
 
 /**
@@ -27,6 +27,20 @@ export class EcoFactsAdminController {
   @HttpCode(200)
   importCsv(@Body() body: unknown): Promise<EcoImportResult> {
     return this.facts.importCsv(body);
+  }
+
+  /** Tạo nháp Can refill + Giảm nhựa cho mọi gói Refill của danh mục; chỉ nháp, chạy lại không tạo trùng. */
+  @Post('refill-drafts')
+  @HttpCode(200)
+  refillDrafts(@Body() body: unknown): Promise<EcoRefillDraftResult> {
+    return this.facts.createRefillDrafts(body);
+  }
+
+  /** Duyệt hàng loạt: chỉ dòng Nháp đủ điều kiện (`approvalBlockers` rỗng); dòng còn lại trả kèm lý do. */
+  @Post('approve-batch')
+  @HttpCode(200)
+  approveBatch(@CurrentUser('sub') adminId: string, @Body() body: unknown): Promise<EcoBatchApproveResult> {
+    return this.facts.approveBatch(adminId, body);
   }
 
   @Patch(':id')

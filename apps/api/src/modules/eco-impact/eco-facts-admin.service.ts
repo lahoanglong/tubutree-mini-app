@@ -1,10 +1,27 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { BLOCKER_TEXT, approvalBlockers, httpsSourceUrl, isEcoFactStatus, type ApprovalBlocker, type EcoFactStatusName } from './eco-facts.rules';
+import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
+import { isRefillProduct } from '../catalog/refill/refill-pairs';
+import {
+  BLOCKER_TEXT,
+  ECO_LIMITS,
+  approvalBlockers,
+  httpsSourceUrl,
+  isEcoFactStatus,
+  isInternalSheetUrl,
+  sourceKindOf,
+  type ApprovalBlocker,
+  type EcoFactStatusName,
+  type SourceKind,
+} from './eco-facts.rules';
 import { csvRecords, parseEcoFactInput, type EcoFactInput } from './eco-facts.input';
 
 const LIST_MAX = 500;
+/** Số dòng tối đa một lần duyệt hàng loạt (khớp ô chọn ở thẻ admin; danh sách nháp tải tối đa `LIST_MAX`). */
+export const APPROVE_BATCH_MAX = 50;
+/** Trần số sản phẩm Refill một lần tạo nháp: danh mục có vài chục gói, quá trần này là dữ liệu lạ. */
+export const REFILL_DRAFT_PRODUCT_MAX = 200;
 
 const ADMIN_SELECT = {
   id: true,
@@ -41,6 +58,8 @@ export interface AdminEcoFact {
   label: string | null;
   co2Grams: number | null;
   sourceUrl: string;
+  /** `internal_sheet`: phiếu cân nội bộ ở tubutree.com; `external`: nguồn ngoài; null: chưa có link https hợp lệ. */
+  sourceKind: SourceKind | null;
   sourceNote: string;
   status: EcoFactStatusName;
   approvedById: string | null;
@@ -56,6 +75,24 @@ export interface EcoImportResult {
   /** Dòng đã duyệt không bị nhập đè (muốn sửa thì sửa từng dòng ở form, dòng sẽ về nháp). */
   skippedApproved: number;
   errors: { line: number; message: string }[];
+}
+
+export type BatchSkipReason = 'not_found' | 'conflict' | 'not_draft' | 'blocked';
+
+export interface EcoBatchApproveResult {
+  /** Id đã duyệt. */
+  approved: string[];
+  /** Dòng không duyệt, kèm lý do để thẻ admin hiện; một dòng bị bỏ không chặn dòng khác. */
+  skipped: { id: string; reason: BatchSkipReason; message: string }[];
+}
+
+export interface EcoRefillDraftResult {
+  /** Số sản phẩm Refill (không tính combo) trong danh mục công khai. */
+  refillProducts: number;
+  /** Dòng nháp mới tạo (Can refill + Giảm nhựa). */
+  created: number;
+  /** Dòng đã có sẵn (mọi trạng thái, kể cả đã duyệt hay ngừng dùng): không bị ghi đè hay tạo thêm. */
+  skippedExisting: number;
 }
 
 const CONTENT_KEYS = ['valueGrams', 'baselineText', 'label', 'co2Grams', 'sourceUrl', 'sourceNote'] as const;
@@ -75,6 +112,7 @@ function view(r: AdminRow): AdminEcoFact {
     label: r.label,
     co2Grams: r.co2Grams,
     sourceUrl: r.sourceUrl,
+    sourceKind: sourceKindOf(r.sourceUrl),
     sourceNote: r.sourceNote,
     status: r.status,
     approvedById: r.approvedById,
@@ -220,5 +258,112 @@ export class EcoFactsAdminService {
       }
     }
     return out;
+  }
+
+  /**
+   * Duyệt hàng loạt các dòng NHÁP admin đã chọn. Mỗi dòng được đọc lại và kiểm lại y như duyệt từng dòng: `expectedUpdatedAt` phải khớp, chỉ dòng
+   * Nháp, và `approvalBlockers(row)` phải rỗng; ghi có điều kiện `updatedAt` nên một lần sửa chen giữa làm dòng đó bị bỏ qua thay vì duyệt nội dung
+   * chưa ai xem. Dòng bị bỏ được trả kèm lý do; không dòng nào làm hỏng cả lô. Không đụng khoá `eco.product_badges_enabled`.
+   */
+  async approveBatch(adminId: string, body: unknown): Promise<EcoBatchApproveResult> {
+    const raw = (body as Record<string, unknown> | null)?.items;
+    if (!Array.isArray(raw) || raw.length === 0) throw new BadRequestException('Chưa chọn dòng nào để duyệt.');
+    if (raw.length > APPROVE_BATCH_MAX) throw new BadRequestException(`Tối đa ${APPROVE_BATCH_MAX} dòng mỗi lần duyệt.`);
+    const items: { id: string; expectedUpdatedAt: string }[] = [];
+    const seen = new Set<string>();
+    for (const it of raw) {
+      const { id, expectedUpdatedAt } = (it && typeof it === 'object' ? it : {}) as Record<string, unknown>;
+      if (typeof id !== 'string' || id.trim() === '' || typeof expectedUpdatedAt !== 'string') throw new BadRequestException('Mỗi dòng cần id và expectedUpdatedAt.');
+      if (seen.has(id)) continue;
+      seen.add(id);
+      items.push({ id, expectedUpdatedAt });
+    }
+    const rows = await this.prisma.productEcoFact.findMany({ where: { id: { in: items.map((i) => i.id) } }, select: ADMIN_SELECT });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const out: EcoBatchApproveResult = { approved: [], skipped: [] };
+    const skip = (id: string, reason: BatchSkipReason, message: string) => out.skipped.push({ id, reason, message });
+    const now = new Date();
+    for (const { id, expectedUpdatedAt } of items) {
+      const row = byId.get(id);
+      if (!row) {
+        skip(id, 'not_found', 'Không tìm thấy sự thật này.');
+        continue;
+      }
+      if (expectedUpdatedAt !== row.updatedAt.toISOString()) {
+        skip(id, 'conflict', 'Dòng này vừa đổi. Tải lại, xem lại rồi duyệt.');
+        continue;
+      }
+      if (row.status !== 'DRAFT') {
+        skip(id, 'not_draft', 'Chỉ duyệt hàng loạt được dòng Nháp.');
+        continue;
+      }
+      const blockers = approvalBlockers(row);
+      if (blockers.length > 0) {
+        skip(id, 'blocked', blockers.map((b) => BLOCKER_TEXT[b]).join(' '));
+        continue;
+      }
+      const res = await this.prisma.productEcoFact.updateMany({
+        where: { id, updatedAt: row.updatedAt, status: 'DRAFT' },
+        data: { status: 'APPROVED', approvedById: adminId, approvedAt: now },
+      });
+      if (res.count === 0) skip(id, 'conflict', 'Dòng này vừa đổi. Tải lại, xem lại rồi duyệt.');
+      else out.approved.push(id);
+    }
+    return out;
+  }
+
+  /**
+   * Tạo nháp từ danh sách Refill: mỗi gói Refill của danh mục công khai (cùng luật `isRefillProduct` với cặp Refill, bỏ combo) nhận một "Can refill"
+   * ở cấp sản phẩm, và một "Giảm nhựa" (cấp sản phẩm, hoặc từng phân loại đang bán khi gói có từ hai phân loại vì gam nhựa theo cỡ can). Mọi dòng là
+   * NHÁP, không số gam, không chữ: chưa cân thì "Giảm nhựa" vẫn thiếu `valueGrams` nên không duyệt được. Link phiếu cân (tuỳ chọn) phải là
+   * trang https://tubutree.com/… và chỉ gắn vào các nháp Giảm nhựa; "Can refill" luôn sinh ra thiếu nguồn (cần điền tay từng dòng) để một lần bấm
+   * không đủ đưa cả loạt ra công khai. Chỗ đã có dòng cùng loại (mọi trạng thái) bị bỏ qua, chạy lại không tạo trùng.
+   */
+  async createRefillDrafts(body: unknown): Promise<EcoRefillDraftResult> {
+    const b = (body && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
+    const field = (v: unknown, name: string): string => {
+      if (v === undefined || v === null) return '';
+      if (typeof v !== 'string') throw new BadRequestException(`${name} phải là chữ.`);
+      return v.replace(/\s+/g, ' ').trim();
+    };
+    const sheet = field(b.sheetUrl, 'Link phiếu cân');
+    if (sheet !== '' && !isInternalSheetUrl(sheet)) throw new BadRequestException('Link phiếu cân phải là một trang https://tubutree.com/… (phiếu cân nội bộ).');
+    const note = field(b.sourceNote, 'Ghi chú nguồn');
+    if (note.length > ECO_LIMITS.sourceNote) throw new BadRequestException(`Ghi chú nguồn dài quá ${ECO_LIMITS.sourceNote} ký tự.`);
+    const sourceUrl = sheet === '' ? '' : (httpsSourceUrl(sheet) ?? '');
+
+    const products = await this.prisma.product.findMany({
+      where: { ...PUBLIC_PRODUCT_WHERE },
+      select: { id: true, slug: true, name: true, isCombo: true, variations: { where: { isActive: true }, select: { id: true }, orderBy: { sku: 'asc' } } },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+    const refills = products.filter((p) => !p.isCombo && isRefillProduct(p));
+    if (refills.length > REFILL_DRAFT_PRODUCT_MAX) throw new BadRequestException(`Có hơn ${REFILL_DRAFT_PRODUCT_MAX} gói Refill: kiểm lại danh mục trước khi tạo nháp.`);
+    if (refills.length === 0) return { refillProducts: 0, created: 0, skippedExisting: 0 };
+
+    const existing = await this.prisma.productEcoFact.findMany({
+      where: { productId: { in: refills.map((p) => p.id) }, kind: { in: ['REFILL_PACK', 'PLASTIC_AVOIDED'] } },
+      select: { productId: true, variationId: true, kind: true },
+    });
+    const has = (productId: string, kind: string, variationId: string | null | 'any') =>
+      existing.some((e) => e.productId === productId && e.kind === kind && (variationId === 'any' || e.variationId === null || e.variationId === variationId));
+
+    const data: Prisma.ProductEcoFactCreateManyInput[] = [];
+    let planned = 0;
+    const plan = (productId: string, kind: 'REFILL_PACK' | 'PLASTIC_AVOIDED', variationId: string | null) => {
+      planned += 1;
+      // Dòng cấp sản phẩm coi là đã có khi sản phẩm có bất kỳ dòng cùng loại nào (kể cả của một phân loại); dòng phân loại thì khi đã có dòng của nó hoặc dòng cấp sản phẩm.
+      if (has(productId, kind, variationId ?? 'any')) return;
+      // Nguồn chung chỉ gắn vào Giảm nhựa (còn thiếu số gam tới khi cân). Can refill không có số gam để chặn, nên để trống nguồn: không dòng nào ra công khai
+      // chỉ nhờ một link dán chung, người duyệt phải mở từng dòng Can refill và điền nguồn của nó.
+      data.push(kind === 'PLASTIC_AVOIDED' ? { productId, variationId, kind, status: 'DRAFT', sourceUrl, sourceNote: note } : { productId, variationId, kind, status: 'DRAFT', sourceUrl: '', sourceNote: '' });
+    };
+    for (const p of refills) {
+      plan(p.id, 'REFILL_PACK', null);
+      if (p.variations.length >= 2) for (const v of p.variations) plan(p.id, 'PLASTIC_AVOIDED', v.id);
+      else plan(p.id, 'PLASTIC_AVOIDED', null);
+    }
+    const created = data.length === 0 ? 0 : (await this.prisma.productEcoFact.createMany({ data, skipDuplicates: true })).count;
+    return { refillProducts: refills.length, created, skippedExisting: planned - created };
   }
 }

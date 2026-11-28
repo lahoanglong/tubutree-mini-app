@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DealerTierSelect } from './dealer-tier-select';
 import { ProductPicker, useVariationLabels } from './product-picker';
 import { UserPicker } from './user-picker';
+import { QueryClient } from '@tanstack/react-query';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
@@ -91,6 +92,45 @@ describe('ProductPicker', () => {
     expect(options(container)).toHaveLength(2);
     click(options(container)[1]!);
     expect(onChange).toHaveBeenCalledWith({ id: 'p2', label: 'Nước lau sàn' });
+  });
+
+  it('onPickHit: trả cả dòng sản phẩm (slug, biến thể) khi chọn, null khi Đổi; kết quả lấy từ bộ nhớ đệm vẫn kèm dòng đó', async () => {
+    const api = mockFetch({ '/admin/products/search': { body: PRODUCTS } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onPickHit = vi.fn();
+    const first = render(<ProductPicker mode="product" value={null} onChange={() => {}} onPickHit={onPickHit} label="Chọn sản phẩm" debounceMs={0} />, client);
+    mounted.push(first);
+    typeInto(search(first.container), 'nuoc');
+    await flush();
+    click(options(first.container)[0]!);
+    expect(onPickHit).toHaveBeenLastCalledWith(PRODUCTS[0]);
+    first.unmount();
+
+    // Lần mở thứ hai (cùng QueryClient, cùng từ khoá): React Query trả kết quả đệm, không gọi API lần nữa, hit vẫn phải có.
+    const second = render(<ProductPicker mode="product" value={null} onChange={() => {}} onPickHit={onPickHit} label="Chọn sản phẩm" debounceMs={0} />, client);
+    mounted.push(second);
+    typeInto(search(second.container), 'nuoc');
+    await flush();
+    expect(api.calls).toHaveLength(1);
+    click(options(second.container)[1]!);
+    expect(onPickHit).toHaveBeenLastCalledWith(PRODUCTS[1]);
+
+    const third = render(<ProductPicker mode="product" value={{ id: 'p1', label: 'Nước rửa chén Lá Sả' }} onChange={() => {}} onPickHit={onPickHit} label="Chọn sản phẩm" />, client);
+    mounted.push(third);
+    click(byText(third.container, 'button', 'Đổi'));
+    expect(onPickHit).toHaveBeenLastCalledWith(null);
+  });
+
+  it('chế độ biến thể không gọi onPickHit', async () => {
+    const api = mockFetch({ '/admin/products/search': { body: PRODUCTS } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const onPickHit = vi.fn();
+    const { container } = mount(<ProductPicker mode="variation" value={null} onChange={() => {}} onPickHit={onPickHit} label="Chọn biến thể" debounceMs={0} />);
+    typeInto(search(container), 'nuoc');
+    await flush();
+    click(options(container)[0]!);
+    expect(onPickHit).not.toHaveBeenCalled();
   });
 
   it('đã chọn → hiện nhãn đã chọn (không còn ô gõ), bấm "Đổi" → onChange(null)', () => {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { CSV_MAX_ROWS, csvRecords, parseCsv, parseEcoFactInput } from './eco-facts.input';
-import { approvalBlockers, cardFacts, factClaims, factsForVariation, httpsSourceUrl, type FactRow } from './eco-facts.rules';
+import { approvalBlockers, cardFacts, factClaims, factsForVariation, httpsSourceUrl, isInternalSheetUrl, sourceKindOf, type FactRow } from './eco-facts.rules';
 
 const row = (over: Partial<FactRow> = {}): FactRow => ({
   kind: 'REFILL_PACK',
@@ -115,5 +115,47 @@ describe('docs/eco/eco-facts-draft.csv', () => {
       expect(input.value.productSlug).toMatch(/-10l-[0-9a-f]{6}$/);
       expect(approvalBlockers(input.value).length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('phiếu cân nội bộ (tubutree.com)', () => {
+  it('nhận trang https ở tubutree.com / www.tubutree.com, kể cả có tham số và mốc', () => {
+    expect(isInternalSheetUrl('https://tubutree.com/phieu-can/refill-10l')).toBe(true);
+    expect(isInternalSheetUrl('https://www.tubutree.com/phieu-can/refill-10l/?v=2#dong-3')).toBe(true);
+    expect(isInternalSheetUrl('https://TubuTree.com/phieu-can')).toBe(true);
+  });
+
+  it('từ chối http, trang chủ, tên miền giả, tên miền con khác, user:pass, cổng lạ, rác', () => {
+    for (const u of [
+      'http://tubutree.com/phieu-can',
+      'https://tubutree.com',
+      'https://tubutree.com/',
+      'https://tubutree.com.evil.org/phieu-can',
+      'https://evil.org/https://tubutree.com/phieu-can',
+      'https://nottubutree.com/phieu-can',
+      'https://cdn.tubutree.com/phieu-can',
+      'https://user:pw@tubutree.com/phieu-can',
+      'https://tubutree.com:8443/phieu-can',
+      'javascript:alert(1)',
+      '',
+      null,
+      42,
+    ]) {
+      expect(isInternalSheetUrl(u)).toBe(false);
+    }
+  });
+
+  it('sourceKindOf: nội bộ / ngoài / chưa có link', () => {
+    expect(sourceKindOf('https://tubutree.com/phieu-can/a')).toBe('internal_sheet');
+    expect(sourceKindOf('https://pannature.org/a')).toBe('external');
+    expect(sourceKindOf('')).toBeNull();
+    expect(sourceKindOf('http://pannature.org/a')).toBeNull();
+  });
+
+  it('link phiếu cân nội bộ qua được blocker source_url; Giảm nhựa vẫn bị chặn tới khi có số gam', () => {
+    const base = { kind: 'PLASTIC_AVOIDED', valueGrams: null, baselineText: null, label: null, sourceUrl: 'https://tubutree.com/phieu-can/a', sourceNote: 'Dòng 3' };
+    expect(approvalBlockers(base)).toEqual(['value_grams']);
+    expect(approvalBlockers({ ...base, valueGrams: 640 })).toEqual([]);
+    expect(approvalBlockers({ ...base, kind: 'REFILL_PACK' })).toEqual([]);
   });
 });

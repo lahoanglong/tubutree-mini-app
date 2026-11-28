@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { lookupVariations, searchAdminProducts, type AdminVariationLabel } from '@/lib/admin-client';
+import { lookupVariations, searchAdminProducts, type AdminProductHit, type AdminVariationLabel } from '@/lib/admin-client';
 import { variationLabel, variationOptionLabel } from '@/lib/admin-pickers';
 import { SearchPicker, type PickedItem, type PickerResult } from './search-picker';
 
@@ -15,6 +15,7 @@ export function ProductPicker({
   mode,
   value,
   onChange,
+  onPickHit,
   label,
   debounceMs,
   className,
@@ -22,6 +23,8 @@ export function ProductPicker({
   mode: 'product' | 'variation';
   value: PickedItem | null;
   onChange: (v: PickedItem | null) => void;
+  /** Chỉ mode=product: kèm cả dòng kết quả đã chọn (slug, các biến thể) cho form cần hơn id; null khi bấm "Đổi". */
+  onPickHit?: (hit: AdminProductHit | null) => void;
   label: string;
   debounceMs?: number;
   className?: string;
@@ -30,6 +33,7 @@ export function ProductPicker({
     <SearchPicker
       value={value}
       onChange={onChange}
+      onPickOption={onPickHit && mode === 'product' ? (o) => onPickHit((o?.data as AdminProductHit | undefined) ?? null) : undefined}
       label={label}
       placeholder={mode === 'product' ? 'Gõ tên sản phẩm hoặc SKU…' : 'Gõ tên sản phẩm hoặc SKU để chọn biến thể…'}
       queryKey={`admin-product-search-${mode}`}
@@ -43,6 +47,7 @@ export function ProductPicker({
               id: p.id,
               label: p.name,
               detail: [p.brand, p.isActive ? null : 'đang ẩn'].filter(Boolean).join(' · ') || undefined,
+              data: p,
             })),
           };
         }

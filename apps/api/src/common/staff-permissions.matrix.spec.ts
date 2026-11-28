@@ -276,6 +276,8 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/eco-facts': ADMIN_ONLY,
   'POST /admin/eco-facts': ADMIN_ONLY,
   'POST /admin/eco-facts/import': ADMIN_ONLY,
+  'POST /admin/eco-facts/refill-drafts': ADMIN_ONLY,
+  'POST /admin/eco-facts/approve-batch': ADMIN_ONLY,
   'PATCH /admin/eco-facts/:id': ADMIN_ONLY,
   'POST /admin/eco-facts/:id/approve': ADMIN_ONLY,
   'POST /admin/eco-facts/:id/retire': ADMIN_ONLY,
