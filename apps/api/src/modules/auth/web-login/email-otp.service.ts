@@ -4,6 +4,7 @@ import type { Env } from '../../../config/env.validation';
 import { vnDateKey } from '../../../common/vn-time';
 import { EmailOtpMailer } from './email-otp.mailer';
 import {
+  EMAIL_OTP_DAILY_TOTAL,
   EMAIL_OTP_MAX_WRONG,
   EMAIL_OTP_RESEND_COOLDOWN_MS,
   EMAIL_OTP_TTL_MS,
@@ -25,7 +26,9 @@ export const otpWrongMessage = (left: number) => `Mã chưa đúng. Bạn còn $
 function limitMessage(reason: EmailOtpLimit, retryAfterSec: number): string {
   if (reason === 'cooldown') return `Bạn đợi ${retryAfterSec} giây rồi bấm gửi lại mã nhé.`;
   if (reason === 'daily_cap') return 'Đăng nhập bằng Email đang quá tải. Bạn thử lại sau hoặc đăng nhập bằng Zalo nhé.';
-  return `Bạn yêu cầu mã quá nhiều lần. Thử lại sau khoảng ${Math.max(1, Math.ceil(retryAfterSec / 60))} phút nhé.`;
+  const minutes = Math.max(1, Math.ceil(retryAfterSec / 60));
+  const wait = minutes >= 90 ? `${Math.ceil(minutes / 60)} giờ` : `${minutes} phút`;
+  return `Bạn yêu cầu mã quá nhiều lần. Thử lại sau khoảng ${wait} nhé.`;
 }
 
 export interface EmailOtpRequestResult {
@@ -42,6 +45,8 @@ export interface EmailOtpRequestResult {
 @Injectable()
 export class EmailOtpService {
   private readonly logger = new Logger(EmailOtpService.name);
+  /** Ngày đã báo chạm trần chung (mỗi tiến trình báo một lần mỗi ngày, không ghi một dòng cho mỗi lượt bị từ chối). */
+  private dailyCapReported: string | null = null;
 
   constructor(
     private readonly config: ConfigService<Env, true>,
@@ -78,6 +83,10 @@ export class EmailOtpService {
       throw this.unavailable();
     }
     if (!started.ok) {
+      if (started.reason === 'daily_cap' && this.dailyCapReported !== slot.day) {
+        this.dailyCapReported = slot.day;
+        this.logger.error(`Đăng nhập Email chạm trần ${EMAIL_OTP_DAILY_TOTAL} thư ngày ${slot.day}: khách mới không nhận được mã tới hết ngày`);
+      }
       const retryAfterSec = Math.max(1, Math.ceil(started.retryAfterMs / 1000));
       throw new HttpException(
         {

@@ -5,6 +5,8 @@ export const EMAIL_OTP_LENGTH = 6;
 export const EMAIL_OTP_TTL_MS = 10 * 60_000;
 export const EMAIL_OTP_RESEND_COOLDOWN_MS = 60_000;
 export const EMAIL_OTP_MAX_WRONG = 5;
+/** Số lần đoán sai mỗi hộp thư trong một giờ, cộng dồn qua mọi mã: đủ thì không cấp mã mới tới hết giờ (xin mã mới không xoá được lượt sai). */
+export const EMAIL_OTP_WRONG_PER_HOUR = 10;
 
 /**
  * Trần gửi thư trong Redis (bền qua khởi động lại, chung mọi replica). Theo email là trần chặt; theo IP nới rộng hơn vì nhiều máy
@@ -15,6 +17,8 @@ export const EMAIL_OTP_HOUR_MS = 60 * 60_000;
 export const EMAIL_OTP_HOURLY_PER_EMAIL = 10;
 export const EMAIL_OTP_HOURLY_PER_IP = 30;
 export const EMAIL_OTP_DAY_MS = 24 * 60 * 60_000;
+/** Trần mỗi IP trong ngày: một nguồn không tự tiêu hết trần chung của cả ngày. */
+export const EMAIL_OTP_DAILY_PER_IP = 60;
 export const EMAIL_OTP_DAILY_TOTAL = 400;
 
 const EMAIL_MAX = 254;
@@ -34,15 +38,17 @@ export function normalizeEmail(raw: unknown): string | null {
 const GMAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
 
 /**
- * Danh tính đăng nhập của một hộp thư. Gmail bỏ dấu chấm và phần `+nhãn` (a.b+x@gmail.com và ab@gmail.com là một hộp thư), để một
- * hộp thư không tự tạo vô hạn tài khoản (mỗi tài khoản mới nhận quà chào mừng). Nhà cung cấp khác giữ nguyên.
+ * Danh tính đăng nhập của một hộp thư: bỏ phần `+nhãn` ở mọi nhà cung cấp (Gmail, Outlook, iCloud… đều giao a+x@ về a@), Gmail bỏ
+ * thêm dấu chấm (a.b@gmail.com và ab@gmail.com là một hộp thư). Để một hộp thư không tự tạo vô hạn tài khoản (mỗi tài khoản mới nhận
+ * quà chào mừng).
  */
 export function canonicalEmail(email: string): string {
   const at = email.lastIndexOf('@');
   const domain = email.slice(at + 1);
-  if (!GMAIL_DOMAINS.has(domain)) return email;
-  const local = email.slice(0, at).split('+')[0]!.replace(/\./g, '');
-  return `${local}@gmail.com`;
+  const local = email.slice(0, at);
+  const base = local.split('+')[0] || local;
+  if (GMAIL_DOMAINS.has(domain)) return `${base.replace(/\./g, '')}@gmail.com`;
+  return `${base}@${domain}`;
 }
 
 /** Khoá băm của hộp thư: dùng cho khoá Redis và cột zaloId, để log/Redis/màn admin không chứa email thô. */

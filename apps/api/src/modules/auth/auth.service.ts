@@ -22,7 +22,7 @@ import { VouchersService } from '../vouchers/vouchers.service';
 import { ExternalChatService } from '../external-points/external-chat.service';
 import { activeGrantWhere } from '../staff/rbac/active-grant';
 import { guestZaloId, isHashedGuestKey, legacyGuestZaloId } from './device-id';
-import { EMAIL_LOGIN_ZALO_PREFIX, emailLoginZaloId } from './web-login/email-otp.rules';
+import { emailLoginZaloId } from './web-login/email-otp.rules';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -1010,11 +1010,9 @@ export class AuthService {
 
   /**
    * Đăng nhập web bằng email đã chứng minh sở hữu (mã 6 số gửi qua email, hoặc email Google đã xác minh) → cùng cặp token như Zalo.
-   * Thứ tự tìm tài khoản:
-   *  1. Tài khoản email (zaloId `email_<băm hộp thư>`, xem emailLoginZaloId): lần đăng nhập email trước đã tạo.
-   *  2. Tài khoản Zalo (khách, CTV, đại lý) đã khai đúng email này trong hồ sơ: khách quen dùng Mini App sang web vẫn thấy điểm,
-   *     đơn, Vườn Xanh của mình. Không áp cho nhân viên/admin: tài khoản có quyền chỉ vào bằng Zalo.
-   *  3. Không có thì tạo tài khoản mới (là user thật, nhận quà chào mừng như tài khoản Zalo mới).
+   * Một hộp thư là một tài khoản riêng (zaloId `email_<băm hộp thư>`, xem emailLoginZaloId): lần đầu thì tạo (là user thật, nhận quà
+   * chào mừng như tài khoản Zalo mới), các lần sau vào lại đúng tài khoản đó. Không ghép theo email trong hồ sơ tài khoản Zalo: ô email
+   * hồ sơ (PATCH /users/me) không được xác minh, ai cũng gõ được email của người khác vào đó, nên ghép theo nó là mở đường chiếm tài khoản.
    */
   async loginWithVerifiedEmail(
     email: string,
@@ -1036,9 +1034,6 @@ export class AuthService {
     }
     if (own) return this.fillEmailProfile(own, opts);
 
-    const linked = await this.profileEmailAccount(email);
-    if (linked) return linked;
-
     let user: User;
     try {
       user = await this.prisma.user.create({
@@ -1058,24 +1053,6 @@ export class AuthService {
     }
     await this.grantWelcomeVoucher(user.id);
     return user;
-  }
-
-  /** Tài khoản Zalo khai email này trong hồ sơ (so không phân biệt hoa thường). Nhiều dòng thì ưu tiên dòng có SĐT đã xác minh, rồi dòng cũ nhất. */
-  private async profileEmailAccount(email: string): Promise<User | null> {
-    const rows = await this.prisma.user.findMany({
-      where: {
-        email: { equals: email, mode: 'insensitive' },
-        mergedIntoId: null,
-        role: { in: ['CUSTOMER', 'AFFILIATE', 'DEALER'] },
-        zaloId: { not: null },
-        NOT: [{ zaloId: { startsWith: 'guest_' } }, { zaloId: { startsWith: EMAIL_LOGIN_ZALO_PREFIX } }],
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: 10,
-    });
-    if (rows.length === 0) return null;
-    if (rows.length > 1) this.logger.warn(`Email hồ sơ khớp ${rows.length} tài khoản Zalo; đăng nhập email chọn một theo SĐT đã xác minh rồi ngày tạo`);
-    return rows.find((u) => u.phoneVerifiedAt !== null) ?? rows[0]!;
   }
 
   /** Google cho tên/ảnh: chỉ điền chỗ còn trống của tài khoản email, không ghi đè thứ khách đã tự đặt. */

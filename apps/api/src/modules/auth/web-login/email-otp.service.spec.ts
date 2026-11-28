@@ -5,9 +5,13 @@ import { EmailOtpService } from './email-otp.service';
 import { MemoryEmailOtpStore, type EmailOtpStore } from './email-otp.store';
 import {
   canonicalEmail,
+  EMAIL_OTP_DAILY_PER_IP,
   EMAIL_OTP_DAILY_TOTAL,
+  EMAIL_OTP_HOUR_MS,
   EMAIL_OTP_HOURLY_PER_EMAIL,
   EMAIL_OTP_HOURLY_PER_IP,
+  EMAIL_OTP_MAX_WRONG,
+  EMAIL_OTP_WRONG_PER_HOUR,
   emailIdentityHash,
   emailLoginZaloId,
   generateEmailOtp,
@@ -59,10 +63,13 @@ describe('email-otp.rules', () => {
     }
   });
 
-  it('Gmail: dấu chấm và +nhãn là cùng một hộp thư (một danh tính), nhà cung cấp khác giữ nguyên', () => {
+  it('+nhãn là cùng một hộp thư ở mọi nhà cung cấp; Gmail bỏ thêm dấu chấm; một danh tính cho mỗi hộp thư', () => {
     expect(canonicalEmail('a.b+shop@gmail.com')).toBe('ab@gmail.com');
     expect(canonicalEmail('ab@googlemail.com')).toBe('ab@gmail.com');
-    expect(canonicalEmail('a.b+x@yahoo.com')).toBe('a.b+x@yahoo.com');
+    expect(canonicalEmail('a.b+x@outlook.com')).toBe('a.b@outlook.com');
+    expect(canonicalEmail('a.b@yahoo.com')).toBe('a.b@yahoo.com');
+    expect(canonicalEmail('+only@x.com')).toBe('+only@x.com');
+    expect(emailLoginZaloId('an+1@icloud.com')).toBe(emailLoginZaloId('an+2@icloud.com'));
     expect(emailLoginZaloId('a.b+shop@gmail.com')).toBe(emailLoginZaloId('ab@gmail.com'));
     expect(emailLoginZaloId('ab@gmail.com')).toMatch(/^email_[0-9a-f]{64}$/);
     expect(emailLoginZaloId('ab@gmail.com')).not.toContain('ab@');
@@ -156,12 +163,30 @@ describe('EmailOtpService.request', () => {
     await expect(svc.request('late@x.com', 'ip-other')).resolves.toBeTruthy();
   });
 
-  it(`trần ${EMAIL_OTP_DAILY_TOTAL} thư/ngày toàn hệ thống bảo vệ tài khoản Gmail gửi thư`, async () => {
+  it(`trần ${EMAIL_OTP_DAILY_TOTAL} thư/ngày toàn hệ thống bảo vệ tài khoản Gmail gửi thư; chạm trần thì báo lỗi vận hành một lần`, async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const { svc } = makeService();
     for (let i = 0; i < EMAIL_OTP_DAILY_TOTAL; i++) await svc.request(`u${i}@x.com`, `ip${i}`);
     const r = await rejection(svc.request('one-more@x.com', 'ip-z'));
     expect(r.status).toBe(429);
     expect(String(r.body.message)).toContain('quá tải');
+    await rejection(svc.request('two-more@x.com', 'ip-y'));
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0]![0])).toContain(`trần ${EMAIL_OTP_DAILY_TOTAL}`);
+    error.mockRestore();
+  });
+
+  it(`tối đa ${EMAIL_OTP_DAILY_PER_IP} mã/ngày cho một IP (qua nhiều giờ): một nguồn không tự tiêu hết trần chung`, async () => {
+    const { svc, clock } = makeService();
+    let sent = 0;
+    while (sent < EMAIL_OTP_DAILY_PER_IP) {
+      for (let i = 0; i < EMAIL_OTP_HOURLY_PER_IP && sent < EMAIL_OTP_DAILY_PER_IP; i++) await svc.request(`d${sent++}@x.com`, 'ip-day');
+      clock.advance(EMAIL_OTP_HOUR_MS + 1);
+    }
+    const r = await rejection(svc.request('late@x.com', 'ip-day'));
+    expect(r.body.code).toBe('EMAIL_OTP_RATE_LIMITED');
+    expect(String(r.body.message)).toContain('giờ');
+    await expect(svc.request('late@x.com', 'ip-other')).resolves.toBeTruthy();
   });
 
   it('SMTP chưa cấu hình hoặc không có kho Redis → 503 EMAIL_LOGIN_UNAVAILABLE', async () => {
@@ -245,6 +270,23 @@ describe('EmailOtpService.verify', () => {
     const locked = await rejection(svc.verify('a@x.com', wrong));
     expect(locked.body.code).toBe('EMAIL_OTP_LOCKED');
     expect((await rejection(svc.verify('a@x.com', code))).body.code).toBe('EMAIL_OTP_EXPIRED');
+    warn.mockRestore();
+  });
+
+  it(`xin mã mới không xoá lượt sai: ${EMAIL_OTP_WRONG_PER_HOUR} lần sai trong giờ (qua nhiều mã) thì không cấp mã mới tới hết giờ`, async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const { svc, clock, lastCode } = makeService();
+    const burn = async () => {
+      await svc.request('a@x.com', 'ip1');
+      const wrong = lastCode() === '000000' ? '111111' : '000000';
+      for (let i = 0; i < EMAIL_OTP_MAX_WRONG; i++) await rejection(svc.verify('a@x.com', wrong));
+      clock.advance(61_000);
+    };
+    for (let k = 0; k < EMAIL_OTP_WRONG_PER_HOUR / EMAIL_OTP_MAX_WRONG; k++) await burn();
+    const r = await rejection(svc.request('a@x.com', 'ip2'));
+    expect(r.body.code).toBe('EMAIL_OTP_RATE_LIMITED');
+    clock.advance(EMAIL_OTP_HOUR_MS);
+    await expect(svc.request('a@x.com', 'ip2')).resolves.toBeTruthy();
     warn.mockRestore();
   });
 

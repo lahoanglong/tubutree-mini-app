@@ -1,4 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
@@ -55,33 +55,19 @@ describe('AuthService.loginWithVerifiedEmail', () => {
     expect(vouchers.grantWelcomeNow).not.toHaveBeenCalled();
   });
 
-  it('khách Zalo đã khai đúng email trong hồ sơ → vào chính tài khoản Zalo đó (giữ điểm/đơn), không tạo tài khoản mới', async () => {
-    const zaloUser = { id: 'zalo-u', role: 'CUSTOMER', zaloId: '8812345', email: 'Khach@Gmail.com', phoneVerifiedAt: new Date(), isBlocked: false, mergedIntoId: null };
-    const { svc, user } = setup({ findMany: jest.fn().mockResolvedValue([zaloUser]) });
+  it('không ghép theo email trong hồ sơ tài khoản Zalo (ô đó không xác minh, gõ email người khác được): luôn là tài khoản email riêng', async () => {
+    const zaloUser = { id: 'zalo-u', role: 'CUSTOMER', zaloId: '8812345', email: 'khach@gmail.com', phoneVerifiedAt: new Date(), isBlocked: false, mergedIntoId: null };
+    const findMany = jest.fn().mockResolvedValue([zaloUser]);
+    const { svc, user } = setup({ findMany });
     const res = await svc.loginWithVerifiedEmail('khach@gmail.com');
-    expect(res.user.id).toBe('zalo-u');
-    expect(user.create).not.toHaveBeenCalled();
-    const where = user.findMany.mock.calls[0][0].where;
-    expect(where.email).toEqual({ equals: 'khach@gmail.com', mode: 'insensitive' });
-    expect(where.mergedIntoId).toBeNull();
-    // Tài khoản có quyền (nhân viên, admin) chỉ vào bằng Zalo; dòng khách vãng lai và tài khoản email khác không bao giờ được ghép theo email hồ sơ.
-    expect(where.role).toEqual({ in: ['CUSTOMER', 'AFFILIATE', 'DEALER'] });
-    expect(where.NOT).toEqual([{ zaloId: { startsWith: 'guest_' } }, { zaloId: { startsWith: 'email_' } }]);
+    expect(res.user.id).toBe('new-u');
+    expect(findMany).not.toHaveBeenCalled();
+    expect(user.create.mock.calls[0][0].data.zaloId).toBe(emailLoginZaloId('khach@gmail.com'));
   });
 
-  it('nhiều tài khoản Zalo cùng email hồ sơ → chọn tài khoản có SĐT đã xác minh', async () => {
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const rows = [
-      { id: 'old-unverified', role: 'CUSTOMER', zaloId: '1', phoneVerifiedAt: null, isBlocked: false, mergedIntoId: null },
-      { id: 'verified', role: 'CUSTOMER', zaloId: '2', phoneVerifiedAt: new Date(), isBlocked: false, mergedIntoId: null },
-    ];
-    const { svc } = setup({ findMany: jest.fn().mockResolvedValue(rows) });
-    expect((await svc.loginWithVerifiedEmail('a@x.com')).user.id).toBe('verified');
-  });
-
-  it('tài khoản bị khoá → vẫn bị chặn (ACCOUNT_BLOCKED), không mở tài khoản mới để lách khoá', async () => {
-    const blocked = { id: 'zalo-b', role: 'CUSTOMER', zaloId: '9', phoneVerifiedAt: null, isBlocked: true, mergedIntoId: null };
-    const { svc, user } = setup({ findMany: jest.fn().mockResolvedValue([blocked]) });
+  it('tài khoản email bị khoá → vẫn bị chặn (ACCOUNT_BLOCKED), không mở tài khoản mới để lách khoá', async () => {
+    const blocked = { id: 'email-b', role: 'CUSTOMER', zaloId: emailLoginZaloId('a@x.com'), isBlocked: true, mergedIntoId: null };
+    const { svc, user } = setup({ findUnique: jest.fn().mockResolvedValue(blocked) });
     await expect(svc.loginWithVerifiedEmail('a@x.com')).rejects.toBeInstanceOf(UnauthorizedException);
     expect(user.create).not.toHaveBeenCalled();
   });

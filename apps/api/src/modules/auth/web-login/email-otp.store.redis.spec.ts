@@ -1,7 +1,7 @@
 import { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
 import { RedisEmailOtpStore } from './email-otp.store';
-import { EMAIL_OTP_HOURLY_PER_EMAIL, EMAIL_OTP_MAX_WRONG } from './email-otp.rules';
+import { EMAIL_OTP_DAILY_PER_IP, EMAIL_OTP_HOURLY_PER_EMAIL, EMAIL_OTP_MAX_WRONG, EMAIL_OTP_WRONG_PER_HOUR } from './email-otp.rules';
 
 /**
  * Lua của RedisEmailOtpStore chạy trên Redis thật. Cần EMAIL_OTP_TEST_REDIS_URL (vd Redis tạm `docker run --rm -p 127.0.0.1:16399:6379 redis:7-alpine`);
@@ -73,6 +73,27 @@ suite('RedisEmailOtpStore (Redis thật)', () => {
     expect((await store.start({ ...s, codeHash: 'again' })).ok).toBe(true);
   });
 
+  it(`lượt sai cộng dồn qua mã: ${EMAIL_OTP_WRONG_PER_HOUR} lần sai trong giờ thì không cấp mã mới (email_hourly)`, async () => {
+    const s = slot();
+    const client = (await queue.client) as unknown as { del(...k: string[]): Promise<number> };
+    for (let k = 0; k < EMAIL_OTP_WRONG_PER_HOUR / EMAIL_OTP_MAX_WRONG; k++) {
+      expect((await store.start({ ...s, codeHash: `good${k}` })).ok).toBe(true);
+      for (let i = 0; i < EMAIL_OTP_MAX_WRONG; i++) await store.verify(s.id, 'bad');
+      await client.del(`tubu:auth:eotp:cd:${s.id}`);
+    }
+    expect(await store.start({ ...s, codeHash: 'again' })).toMatchObject({ ok: false, reason: 'email_hourly' });
+  });
+
+  it(`trần ${EMAIL_OTP_DAILY_PER_IP}/ngày theo IP (ip_daily) khi trần giờ theo IP được đặt lại`, async () => {
+    const s = slot();
+    const client = (await queue.client) as unknown as { del(...k: string[]): Promise<number> };
+    for (let i = 0; i < EMAIL_OTP_DAILY_PER_IP; i++) {
+      expect((await store.start({ ...s, id: `${s.id}-${i}`, codeHash: 'h' })).ok).toBe(true);
+      await client.del(`tubu:auth:eotp:hi:${s.ip}`);
+    }
+    expect(await store.start({ ...s, id: `${s.id}-x`, codeHash: 'h' })).toMatchObject({ ok: false, reason: 'ip_daily' });
+  });
+
   it('khoá mã có hạn (PTTL) ≤ 10 phút, bộ đếm có hạn', async () => {
     const s = slot();
     await store.start({ ...s, codeHash: 'h' });
@@ -83,5 +104,8 @@ suite('RedisEmailOtpStore (Redis thật)', () => {
     expect(await client.pttl(`tubu:auth:eotp:he:${s.id}`)).toBeGreaterThan(0);
     expect(await client.pttl(`tubu:auth:eotp:hi:${s.ip}`)).toBeGreaterThan(0);
     expect(await client.pttl(`tubu:auth:eotp:d:${s.day}`)).toBeGreaterThan(0);
+    expect(await client.pttl(`tubu:auth:eotp:di:${s.day}:${s.ip}`)).toBeGreaterThan(0);
+    await store.verify(s.id, 'bad');
+    expect(await client.pttl(`tubu:auth:eotp:wh:${s.id}`)).toBeGreaterThan(0);
   });
 });
