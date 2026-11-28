@@ -43,8 +43,15 @@ for (const width of [360, 375]) {
       mockLogin(api);
       await page.goto('/dang-nhap?returnTo=%2Fchinh-sach%2Fdieu-khoan');
       await expect(page.getByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Nhận mã qua Email' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Đăng nhập với Zalo' })).toBeVisible();
+      const emailSubmit = page.getByRole('button', { name: 'Nhận mã qua Email' });
+      await expect(emailSubmit).toBeVisible();
+      // Nút Zalo theo NEXT_PUBLIC_ZALO_APP_ID lúc build (cổng release build không đặt, PROD có): có thì phải là nút phụ nằm dưới nút Email.
+      const zalo = page.getByRole('button', { name: 'Đăng nhập với Zalo' });
+      if ((await zalo.count()) > 0) {
+        await expect(zalo).toBeVisible();
+        const [e, z] = await Promise.all([emailSubmit.boundingBox(), zalo.boundingBox()]);
+        expect(z!.y).toBeGreaterThan(e!.y + e!.height);
+      }
       await expect(page.getByRole('button', { name: 'Đăng nhập với Google' })).toHaveCount(0);
       await expectNoSideScroll(page);
       await shot(page, `w54-login-${width}-1-email`);
