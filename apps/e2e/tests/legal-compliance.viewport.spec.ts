@@ -6,7 +6,7 @@ import { STATES, mockWorld } from './support/checkout-states';
  * Hồ sơ thông báo website TMĐT với Bộ Công Thương (docs/launch/bo-cong-thuong-submission-pack-2026-11-15.md), ở hai khổ chuẩn 390×844
  * ("Web Core 390") và 1440×900 ("Web Core 1440"):
  * - năm trang chính sách trả 200, có chữ tiếng Việt thật (không Lorem/TODO, không chỗ giữ [ ] trong nội dung), không cuộn ngang;
- * - chân trang (đầy đủ ở máy tính, gọn ở điện thoại) có đủ năm link chính sách bấm được, thông tin thương nhân, hotline và email;
+ * - chân trang (đầy đủ ở máy tính, gọn ở điện thoại) có đủ bảy link chính sách (danh mục Bộ Công Thương) bấm được, thông tin thương nhân, hotline và email;
  * - trang thanh toán có dòng đồng ý dẫn tới Điều khoản, Chính sách bảo mật và ba chính sách còn lại, mỗi link có vùng chạm 44px riêng;
  * - HTML Trang chủ dưới 235 KB.
  * Trang chính sách và Trang chủ do máy chủ Next dựng từ API thật trên DB tạm của web-gate.sh; trang thanh toán mock API ở trình duyệt.
@@ -98,12 +98,12 @@ for (const p of POLICIES) {
     const o = await overflow(page);
     expect(o, `cuộn ngang ở /chinh-sach/${p.slug}`).toEqual({ doc: 0, body: 0 });
 
-    // Cả năm link đều mở được (200), không chỉ trang đang đứng.
+    // Cả năm trang chính sách đều mở được (200), không chỉ trang đang đứng.
     for (const href of HREFS) expect((await request.get(href)).status(), href).toBe(200);
   });
 }
 
-base('Trang chủ: chân trang có đủ năm link chính sách và thông tin thương nhân, HTML dưới 235 KB, không cuộn ngang', async ({ page, request }, testInfo) => {
+base('Trang chủ: chân trang có đủ bảy link chính sách và thông tin thương nhân, HTML dưới 235 KB, không cuộn ngang', async ({ page, request }, testInfo) => {
   const size = sizeOf(testInfo);
   const wide = size.width >= 768;
   const html = await (await request.get('/')).text();
@@ -114,7 +114,7 @@ base('Trang chủ: chân trang có đủ năm link chính sách và thông tin t
   await page.goto('/');
   await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   await expectFooterCompliant(page, wide);
-  await visibleFooter(page, wide).getByRole('link', { name: 'Bảo mật', exact: true }).click();
+  await visibleFooter(page, wide).getByRole('link', { name: 'Bảo mật thông tin', exact: true }).click();
   await expect(page).toHaveURL(/\/chinh-sach\/bao-mat$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Chính sách bảo mật');
   const o = await overflow(page);
