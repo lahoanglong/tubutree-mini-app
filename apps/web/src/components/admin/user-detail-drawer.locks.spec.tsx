@@ -69,6 +69,7 @@ beforeEach(() => {
         if (flagsLoads > 1) await flagsGate;
         return json(200, currentFlags);
       }
+      if (method === 'GET' && url.includes('/goodwill-credits')) return json(200, { perGrantMax: 200_000, dailyCap: 1_000_000, dailyUsed: 0, items: [] });
       if (method === 'GET' && url.includes('/admin/users/u1/detail')) {
         detailLoads += 1;
         if (detailLoads > 1) await detailGate;

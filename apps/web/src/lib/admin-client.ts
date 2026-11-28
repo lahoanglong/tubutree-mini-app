@@ -24,6 +24,9 @@ import type {
   ExternalClaimFunnel,
   ExternalClaimFunnelPeriod,
   ExternalClaimState,
+  GoodwillCreditList,
+  GoodwillCreditResult,
+  GoodwillKind,
   ZaloBridgeState,
   LaunchWatchDTO,
 } from '@tubutree/shared-types';
@@ -95,6 +98,23 @@ export interface AdminInvoiceRequest {
   email?: string;
 }
 export type AdminInvoiceStatus = 'NOT_REQUESTED' | 'REQUESTED' | 'ISSUED' | 'FAILED';
+export interface AdminOrderStaffNote {
+  note: string;
+  updatedAt: string;
+  updatedById: string;
+  updatedByName: string | null;
+}
+
+/**
+ * `PUT /admin/orders/:id/staff-note` (ADMIN + CSKH, đơn còn mở). `baseUpdatedAt` = mốc của ghi chú đang thấy (null khi chưa có):
+ * người khác vừa lưu chen giữa thì 409. Chữ rỗng là xoá.
+ */
+export const saveOrderStaffNote = (orderId: string, note: string, baseUpdatedAt: string | null) =>
+  apiFetch<{ orderId: string; code: string; changed: boolean; staffNote: AdminOrderStaffNote | null }>(`/admin/orders/${encodeURIComponent(orderId)}/staff-note`, {
+    method: 'PUT',
+    body: { note, baseUpdatedAt },
+  });
+
 export interface AdminOrder {
   id: string;
   code: string;
@@ -127,6 +147,8 @@ export interface AdminOrder {
   referrerUserId?: string | null;
   storefrontId?: string | null;
   note?: string | null;
+  /** Ghi chú nội bộ CSKH/Admin cho kho (không phải lời khách, không tới khách). null = chưa có. */
+  staffNote?: AdminOrderStaffNote | null;
   createdAt: string;
   updatedAt?: string;
   shippingAddress?: AdminShippingAddress | null;
@@ -2778,6 +2800,16 @@ export type {
   ExternalClaimFunnelPeriod,
   ExternalClaimState,
 } from '@tubutree/shared-types';
+
+// ── Tặng thiện chí (chỉ ADMIN, w51-01) ──
+export const listGoodwillCredits = (userId: string) => apiFetch<GoodwillCreditList>(`/admin/users/${encodeURIComponent(userId)}/goodwill-credits`);
+/** Idempotency-Key giữ nguyên qua các lần bấm lại của cùng một lần tặng: máy chủ trả kết quả cũ (`replayed`) thay vì ghi sổ lần hai. */
+export const grantGoodwillCredit = (userId: string, body: { kind: GoodwillKind; amount: number; reason: string; orderCode?: string }, idempotencyKey: string) =>
+  apiFetch<GoodwillCreditResult>(`/admin/users/${encodeURIComponent(userId)}/goodwill-credits`, {
+    method: 'POST',
+    body: { kind: body.kind, amount: body.amount, reason: body.reason, ...(body.orderCode ? { orderCode: body.orderCode } : {}) },
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
 
 export const listExternalClaims = (f: { state?: ExternalClaimState; q?: string; attention?: AdminExternalClaimAttentionFilter }, page = 1, limit = 20) => {
   const qs = new URLSearchParams({ page: String(page), limit: String(limit) });

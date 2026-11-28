@@ -1,7 +1,7 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
 import { waitForHydrationAfterGoto } from './hydrate';
 import { captureByPathname, installVisualMode, recordTourUnmocked } from './visual';
-import type { AuthUser, ExternalClaimFunnel, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
+import type { AuthUser, ExternalClaimFunnel, GoodwillCreditList, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
 import type { CartSummary, PublicConfig } from '../../../miniapp/src/services/shop-api';
 
@@ -421,6 +421,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         rows: [],
         truncated: false,
       });
+      // Hồ sơ khách của ADMIN (ngăn kéo ở tab Đơn hàng, Người dùng, Chat CSKH) đọc hạn mức "Tặng thiện chí": mặc định chưa tặng lần nào hôm nay.
+      api.fallback('GET', '/admin/users/:id/goodwill-credits', { perGrantMax: 200_000, dailyCap: 1_000_000, dailyUsed: 0, items: [] } satisfies GoodwillCreditList);
       // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
       api.fallback('GET', '/admin/analytics/cohort-repeat', []);
       api.fallback('GET', '/admin/analytics/funnel-daily', []);

@@ -36,6 +36,8 @@ export interface PickOrder {
   phoneMasked: string | null;
   address: string;
   note: string | null;
+  /** Ghi chú nội bộ CSKH/Admin cho kho (SĐT đã che). */
+  staffNote: string | null;
   hasRecyclingPickup: boolean;
   items: PickLine[];
   gifts: PickLine[];

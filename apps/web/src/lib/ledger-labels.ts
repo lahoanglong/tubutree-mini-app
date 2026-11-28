@@ -3,6 +3,7 @@
  * wallet-rules.ts `walletTxLabel`) để khách đối chiếu số dư ở đâu cũng thấy cùng một câu. Không bao giờ in mã kỹ thuật thô.
  */
 import { wastePickupFeeReasonLabel } from '@tubutree/app-core/waste-points-reason';
+import { GOODWILL_GIFT_LABEL } from '@tubutree/shared-types';
 
 type ReasonRef = 'order' | 'day';
 interface ReasonRule {
@@ -84,6 +85,7 @@ const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   RECYCLE_REVERSED: { label: 'Thu hồi điểm đổi rác' },
   GIFT_REDEEM: { label: 'Đổi điểm lấy quà' },
   GIFT_REFUND: { label: 'Hoàn điểm quà' },
+  GOODWILL: { label: GOODWILL_GIFT_LABEL, ref: 'order' },
 };
 
 const FALLBACK_POINTS_LABEL = 'Điều chỉnh Điểm Xanh';

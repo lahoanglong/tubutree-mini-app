@@ -16,12 +16,19 @@ const WALLET_TX_LABELS: Record<string, string> = {
   ADJUST: 'Điều chỉnh',
 };
 
+/**
+ * Dòng ADJUST do quản trị viên tặng thiện chí (API goodwill-credit) ghi reason bắt đầu bằng chữ này. Trùng GOODWILL_GIFT_LABEL
+ * của shared-types (spec đối chiếu); viết thẳng ở đây để gói Mini không kéo thêm module.
+ */
+export const GOODWILL_WALLET_LABEL = 'Quà tặng từ Tubu Tree';
+
 /** Nhãn dòng sao kê Ví theo loại biến động; loại BE mới thêm mà bản app cũ chưa biết vẫn hiện được.
  * ORDER_REFUND gộp mọi nguồn hoàn; chỉ "Hoàn tiền trả hàng đơn …" (trả một phần) chắc chắn là trả hàng. "Hoàn tiền đơn …" API ghi cả cho huỷ đơn, trả hàng toàn phần và đổi nơi nhận về Ví nên không đoán nguồn. */
 export function walletTxLabel(type: string, reason?: string | null): string {
   if (type === 'ORDER_REFUND' && reason) {
     if (reason.startsWith('Hoàn tiền trả hàng')) return 'Hoàn tiền trả hàng';
   }
+  if (type === 'ADJUST' && reason?.startsWith(GOODWILL_WALLET_LABEL)) return GOODWILL_WALLET_LABEL;
   return WALLET_TX_LABELS[type] ?? 'Biến động ví';
 }
 

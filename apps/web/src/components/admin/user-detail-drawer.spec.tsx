@@ -4,9 +4,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { UserDetailDrawer } from './user-detail-drawer';
 import { answerAsk, answerConfirm, byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminUserDetail } from '@/lib/admin-client';
-import type { WasteUserFlagsDTO } from '@tubutree/shared-types';
+import type { GoodwillCreditList, WasteUserFlagsDTO } from '@tubutree/shared-types';
 
 const NO_FLAGS: WasteUserFlagsDTO = { userId: 'u1', shipLockedAt: null, shipUnlockedAt: null, blockedAt: null, reason: null, setByUserId: null, updatedAt: null };
+const NO_GOODWILL: GoodwillCreditList = { perGrantMax: 200_000, dailyCap: 1_000_000, dailyUsed: 0, items: [] };
 const calls: { url: string; init?: RequestInit }[] = [];
 
 let mounted: Rendered[] = [];
@@ -62,7 +63,8 @@ async function open(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, init });
-      return new Response(JSON.stringify(url.includes('/admin/waste/users/') ? flags : detail), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      const body = url.includes('/admin/waste/users/') ? flags : url.includes('/goodwill-credits') ? NO_GOODWILL : detail;
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }),
   );
   const r = render(<UserDetailDrawer userId="u1" isAdmin={isAdmin} onClose={() => undefined} {...nav} />);
@@ -354,6 +356,7 @@ describe('UserDetailDrawer — Đổi rác (15.4)', () => {
           if (failFlags && init?.method !== 'PUT') return new Response(JSON.stringify({ message: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
           return new Response(JSON.stringify(NO_FLAGS), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
+        if (url.includes('/goodwill-credits')) return new Response(JSON.stringify(NO_GOODWILL), { status: 200, headers: { 'Content-Type': 'application/json' } });
         return new Response(JSON.stringify(DETAIL), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }),
     );
@@ -486,3 +489,29 @@ describe('UserDetailDrawer — Điểm Xanh tách ba lô (W42)', () => {
     expect(body.textContent).not.toContain('Điểm tích từ đơn sàn chỉ dùng');
   });
 });
+
+describe('UserDetailDrawer — khối Tặng thiện chí (w51-01)', () => {
+  const goodwill = (body: HTMLElement) => body.querySelector('section[aria-label="Tặng thiện chí"]');
+  it('ADMIN xem hồ sơ khách: có khối và nút, đọc hạn mức của chính khách này', async () => {
+    const body = await open();
+    expect(goodwill(body)?.textContent).toContain('Tặng thiện chí');
+    expect(byText(goodwill(body)!, 'button', 'Tặng thiện chí')).not.toBeNull();
+    expect(calls.some((c) => c.url.includes('/admin/users/u1/goodwill-credits'))).toBe(true);
+  });
+
+  it('nhân viên CSKH (không phải ADMIN) không thấy khối và không gọi API tặng', async () => {
+    const body = await open(DETAIL, NO_FLAGS, false);
+    expect(goodwill(body)).toBeNull();
+    expect(calls.some((c) => c.url.includes('/goodwill-credits'))).toBe(false);
+  });
+
+  it.each([
+    ['tài khoản nhân viên', { role: 'STAFF' }],
+    ['tài khoản quản trị', { role: 'ADMIN' }],
+    ['tài khoản đang khoá', { isBlocked: true }],
+  ])('%s: ẩn khối (máy chủ cũng từ chối)', async (_label, over) => {
+    const body = await open({ ...DETAIL, user: { ...DETAIL.user, ...over } });
+    expect(goodwill(body)).toBeNull();
+  });
+});
+

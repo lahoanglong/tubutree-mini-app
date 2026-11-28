@@ -100,6 +100,11 @@ function OrderSlip({ o, index, count }: { o: PickOrder; index: number; count: nu
       </div>
       <div className="break-words text-stone-700">{o.address || 'Đơn chưa ghi địa chỉ giao hàng.'}</div>
       {o.note && <div className="mt-1 break-words italic text-stone-700">Ghi chú khách: {o.note}</div>}
+      {o.staffNote && (
+        <div data-pick-staff-note className="mt-1 break-words font-semibold text-stone-900">
+          Ghi chú nội bộ: {o.staffNote}
+        </div>
+      )}
       {o.items.length > 0 && (
         <div className="mt-2" data-pick-items>
           <OrderLines lines={o.items} />

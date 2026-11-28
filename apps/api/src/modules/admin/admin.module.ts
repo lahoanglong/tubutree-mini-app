@@ -31,10 +31,12 @@ import { BulkOpsController } from './bulk-ops/bulk-ops.controller';
 import { OrderBulkStatusService } from './bulk-ops/order-bulk-status.service';
 import { PancakeReconcileController } from './pancake-reconcile/pancake-reconcile.controller';
 import { AccountingExportController } from './accounting-export/accounting-export.controller';
+import { OrderStaffNoteController } from './order-staff-note.controller';
+import { OrderStaffNoteService } from './order-staff-note.service';
 
 @Module({
   imports: [ImageRegistryModule, CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
-  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController, GoLiveController, BulkOpsController, PancakeReconcileController, AccountingExportController],
-  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService, GoLiveCockpitService, GoLivePilotService, OrderBulkStatusService],
+  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController, GoLiveController, BulkOpsController, PancakeReconcileController, AccountingExportController, OrderStaffNoteController],
+  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService, GoLiveCockpitService, GoLivePilotService, OrderBulkStatusService, OrderStaffNoteService],
 })
 export class AdminModule {}

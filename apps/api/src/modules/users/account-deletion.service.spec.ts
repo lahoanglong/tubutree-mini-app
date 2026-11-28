@@ -156,6 +156,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
       referralTouch: { updateMany: noop },
       address: { updateMany: noop },
       order: { updateMany: noop },
+      orderStaffNote: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
       refreshToken: { updateMany: noop }, mssCartEvent: { findMany: jest.fn().mockResolvedValue([]), createMany: noop, deleteMany: noop },
       dealerApplication: { updateMany: noop },
       storefront: { updateMany: noop },
@@ -167,6 +168,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     };
     const svc = new AccountDeletionService({} as unknown as PrismaService);
     await (svc as any).anonymize(tx, 'u1', 'req-1', new Date());
+    expect(tx.orderStaffNote.deleteMany).toHaveBeenCalledWith({ where: { order: { userId: 'u1' } } });
     expect(tx.supportMessage.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'c1' } });
     expect(tx.supportForward.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'c1' } });
     expect(tx.supportConversation.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
@@ -178,7 +180,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     const order: string[] = [];
     const noop = jest.fn().mockResolvedValue({ count: 0 });
     const tx: any = {
-      user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop },
+      user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop }, orderStaffNote: { deleteMany: noop },
       refreshToken: { updateMany: noop }, mssCartEvent: { findMany: jest.fn().mockResolvedValue([]), createMany: noop, deleteMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
       supportConversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', code: 'K7Q2' }), delete: jest.fn().mockImplementation(() => { order.push('conversation'); return Promise.resolve({}); }) },
@@ -192,7 +194,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
   it('khách chưa từng chat: không có gì để xoá, không lỗi', async () => {
     const noop = jest.fn().mockResolvedValue({ count: 0 });
     const tx: any = {
-      user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop },
+      user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop }, orderStaffNote: { deleteMany: noop },
       refreshToken: { updateMany: noop }, mssCartEvent: { findMany: jest.fn().mockResolvedValue([]), createMany: noop, deleteMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
       supportConversation: { findUnique: jest.fn().mockResolvedValue(null), delete: jest.fn() },

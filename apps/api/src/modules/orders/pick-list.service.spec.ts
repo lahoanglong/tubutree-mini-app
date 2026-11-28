@@ -244,6 +244,20 @@ describe('buildPickList: phiếu từng đơn', () => {
     const r = buildPickList(['TB0001'], [order('TB0001', [item('v-tui-luoi')], { note: '   ' })], lk());
     expect(r.orders[0]!.note).toBeNull();
   });
+
+  it('ghi chú nội bộ CSKH in riêng một dòng, che SĐT, không qua luật ẩn câu thanh toán của ghi chú khách; không có thì null', () => {
+    const r = buildPickList(
+      ['TB0001', 'TB0002'],
+      [
+        order('TB0001', [item('v-tui-luoi')], { staffNote: { note: 'Khách đã chuyển khoản.\nGọi 0987654321 trước' } }),
+        order('TB0002', [item('v-tui-luoi')]),
+      ],
+      lk(),
+    );
+    expect(r.orders[0]!.staffNote).toBe('Khách đã chuyển khoản. Gọi *******321 trước');
+    expect(r.orders[0]!.note).toBeNull();
+    expect(r.orders[1]!.staffNote).toBeNull();
+  });
 });
 
 describe('parsePickListIds', () => {

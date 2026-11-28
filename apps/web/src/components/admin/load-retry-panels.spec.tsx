@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import type { ReactElement } from 'react';
+import type { GoodwillCreditList } from '@tubutree/shared-types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DealerTiersSection } from './dealer-tiers-section';
 import { ExternalClaimsTab } from './external-claims-tab';
 import { ExternalOrdersTab } from './external-orders-tab';
 import { GomdonConfigCard } from './gomdon-config-card';
+import { GoodwillCreditSection } from './goodwill-credit-section';
 import { UserDetailDrawer } from './user-detail-drawer';
 import { WasteRequestDetail } from './waste-request-detail';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -19,6 +21,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+const NO_GOODWILL: GoodwillCreditList = { perGrantMax: 200_000, dailyCap: 1_000_000, dailyUsed: 0, items: [] };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 /**
@@ -151,10 +154,17 @@ describe('panel con và ngăn kéo — lỗi tải có nút "Thử lại" (D7-19
       grants: [],
     };
     const flags = { userId: 'u1', shipLockedAt: null, shipUnlockedAt: null, blockedAt: null, reason: null, setByUserId: null, updatedAt: null };
-    const api = stub({ '/admin/waste/users/u1/flags': flags }, '/admin/waste/users/u1/flags', detail);
+    const api = stub({ '/admin/waste/users/u1/flags': flags, '/goodwill-credits': NO_GOODWILL }, '/admin/waste/users/u1/flags', detail);
     mount(<UserDetailDrawer userId="u1" isAdmin onClose={() => undefined} />);
     await flush();
     await expectRetryHeals(document.body, api, () => expect(document.body.textContent).not.toContain('Không tải được trạng thái khoá đổi rác'));
+  });
+
+  it('hạn mức Tặng thiện chí trong ngăn kéo người dùng (w51-01)', async () => {
+    const api = stub({ '/goodwill-credits': NO_GOODWILL }, '/admin/users/u1/goodwill-credits');
+    mount(<GoodwillCreditSection userId="u1" customerName="An" orderCodes={[]} />);
+    await flush();
+    await expectRetryHeals(document.body, api, () => expect(document.body.textContent).toContain('Hôm nay bạn đã tặng 0/1.000.000'));
   });
 
   it('tình trạng tích hợp Gomdon', async () => {

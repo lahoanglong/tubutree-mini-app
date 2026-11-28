@@ -98,6 +98,7 @@ import {
 import { startOfVnDay } from '../../common/vn-time';
 import { loadCommandCenter } from './command-center';
 import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
+import { staffNoteViews } from './order-staff-note.service';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { invoiceIssuedDedupeKey, vatInvoiceUrlError } from '../../common/vat-invoice-url';
 import {
@@ -187,6 +188,7 @@ function maskOrderPhones<
     recyclingNote?: string | null;
     gomdonAlerts?: { message: string }[];
     cancellation?: { note: string | null } | null;
+    staffNote?: { note: string } | null;
   },
 >(o: T): T {
   const addr = o.shippingAddress && typeof o.shippingAddress === 'object' ? (o.shippingAddress as Record<string, unknown>) : null;
@@ -199,6 +201,7 @@ function maskOrderPhones<
     ...(o.guestPhone ? { guestPhone: maskPhoneKeepLast3(o.guestPhone) } : {}),
     ...(o.cancellation?.note ? { cancellation: { ...o.cancellation, note: maskVnPhonesInText(o.cancellation.note) } } : {}),
     ...(o.recyclingNote ? { recyclingNote: maskVnPhonesInText(o.recyclingNote) } : {}),
+    ...(o.staffNote ? { staffNote: { ...o.staffNote, note: maskVnPhonesInText(o.staffNote.note) } } : {}),
     ...(o.gomdonAlerts ? { gomdonAlerts: o.gomdonAlerts.map((a) => ({ ...a, message: maskVnPhonesInText(a.message) })) } : {}),
   };
 }
@@ -1380,6 +1383,7 @@ export class AdminService {
             take: 10,
             select: { id: true, message: true, createdAt: true },
           },
+          staffNote: { select: { note: true, updatedAt: true, updatedById: true } },
         },
       }),
       this.prisma.order.count({ where }),
@@ -1414,12 +1418,13 @@ export class AdminService {
         : [],
     );
     // Hạn chuyển khoản ghi cho khách (đúng mốc cron tự huỷ) và lần huỷ mới nhất (lý do + lúc nhả kho) cho màn vận hành.
-    const [deadlines, cancellations] = await Promise.all([
+    const [deadlines, cancellations, staffNotes] = await Promise.all([
       pendingPaymentDeadlines(items, this.config),
       latestCancellations(
         this.prisma,
         items.filter((o) => o.status === 'CANCELLED').map((o) => o.id),
       ),
+      staffNoteViews(this.prisma, new Map(items.flatMap((o) => (o.staffNote ? [[o.id, o.staffNote] as const] : [])))),
     ]);
     // allowedTransitions/canConfirmPayment: web admin chỉ hiện nút API sẽ nhận (C-024) — cùng luật với
     // OrderStatusService.setStatus và confirmOrderPayment, không để UI tự đoán theo điều kiện cứng.
@@ -1433,6 +1438,8 @@ export class AdminService {
         guestSource: orderGuestSource({ guestPhone: o.guestPhone, user }),
         paymentDeadline: deadlines.get(o.id) ?? null,
         cancellation: cancellations.get(o.id) ?? null,
+        // Ghi chú nội bộ CSKH cho kho (bảng order_staff_notes): tên người lưu kèm theo, chữ của người mua vẫn ở `note`.
+        staffNote: staffNotes.get(o.id) ?? null,
         ...(o.type === 'DEALER' ? { dealerOnCredit } : {}),
         allowedTransitions: actorAllowedTransitions(viewer, o, allowedNextStatuses({ ...o, onCredit: dealerOnCredit === true })),
         canConfirmPayment: canAdminConfirmRetailPayment(o, codSwitched.has(o.id)),

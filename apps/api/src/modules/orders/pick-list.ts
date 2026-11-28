@@ -28,6 +28,8 @@ export interface PickSourceOrder {
   total: number;
   shippingAddress: unknown;
   note: string | null;
+  /** Ghi chú nội bộ CSKH/Admin gửi kho (order_staff_notes); không có thì null hoặc vắng. */
+  staffNote?: { note: string } | null;
   hasRecyclingPickup: boolean;
   createdAt: Date;
   items: PickSourceItem[];
@@ -76,6 +78,8 @@ export interface PickOrder {
   phoneMasked: string | null;
   address: string;
   note: string | null;
+  /** Ghi chú nội bộ CSKH/Admin cho kho, che SĐT như ghi chú khách: phiếu in nằm trên bàn kho. */
+  staffNote: string | null;
   hasRecyclingPickup: boolean;
   items: PickLine[];
   gifts: PickLine[];
@@ -150,6 +154,16 @@ export interface PickListLookups {
  * Dựng phiếu soạn hàng từ các đơn đã đọc. Thứ tự phiếu từng đơn giữ đúng thứ tự `ids` người bấm gửi; mã gửi trùng (id và mã đơn
  * của cùng một đơn) chỉ in một lần.
  */
+/**
+ * Ghi chú nội bộ trên phiếu in: một dòng, bỏ ký tự điều khiển. Không qua `sanitizeCustomerText` vì luật ẩn câu "đã chuyển khoản" dành cho
+ * chữ của khách; ghi chú do CSKH viết, còn tình trạng tiền thì phiếu in riêng ở ô thanh toán.
+ */
+function staffNoteLine(note: string | null | undefined): string | null {
+  // eslint-disable-next-line no-control-regex
+  const line = (note ?? '').normalize('NFC').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return line || null;
+}
+
 export function buildPickList(ids: readonly string[], found: readonly PickSourceOrder[], { skuByVariation, onCredit, redeemedGifts, now }: PickListLookups): PickListResponse {
   const byKey = new Map<string, PickSourceOrder>();
   for (const o of found) {
@@ -214,6 +228,7 @@ export function buildPickList(ids: readonly string[], found: readonly PickSource
 
     const addr = addressOf(o.shippingAddress);
     const note = sanitizeCustomerText(o.note);
+    const staffNote = staffNoteLine(o.staffNote?.note);
     orders.push({
       id: o.id,
       code: o.code,
@@ -225,6 +240,7 @@ export function buildPickList(ids: readonly string[], found: readonly PickSource
       phoneMasked: maskPhoneOrNull(addr.phone),
       address: addr.line,
       note: note ? maskVnPhonesInText(note) : null,
+      staffNote: staffNote ? maskVnPhonesInText(staffNote) : null,
       hasRecyclingPickup: o.hasRecyclingPickup,
       items,
       gifts,

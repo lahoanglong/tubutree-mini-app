@@ -20,6 +20,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { MARKETPLACE_POINTS_ORDER_ONLY_NOTE } from '@tubutree/shared-types';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
+import { GoodwillCreditSection } from './goodwill-credit-section';
 import { SideDrawer } from './side-drawer';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
@@ -195,6 +196,11 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
       {isAdmin && u.role === 'STAFF' && <StaffPermissionsForm userId={u.id} current={u.staffPermissions} />}
 
       {isAdmin && <WasteFlagsSection userId={u.id} />}
+
+      {/* Tặng cho tài khoản nhân sự hoặc đang khoá bị máy chủ từ chối: ẩn luôn nút để không mở form vô ích. */}
+      {isAdmin && u.role !== 'ADMIN' && u.role !== 'STAFF' && !u.isBlocked && (
+        <GoodwillCreditSection userId={u.id} customerName={u.fullName ?? u.phone ?? 'Khách'} orderCodes={d.orders.items.map((o) => o.code)} />
+      )}
 
       {isAdmin && u.sessionsRevocable !== false && <RevokeSessionsSection userId={u.id} />}
 

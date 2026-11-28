@@ -1353,6 +1353,8 @@ model Order {
   merchantPayoutLines    MerchantPayoutLine[]
   wasteRequest           WasteRequest?
   attachedGiftRedemptions WasteGiftRedemption[]
+  /// Ghi chú nội bộ CSKH/Admin cho kho (bảng order_staff_notes): không phải cột của orders nên không đi theo dòng đơn trả cho người mua.
+  staffNote              OrderStaffNote?
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -3030,6 +3032,21 @@ model GroupBuyMember {
 /// chuỗi note nối thêm — không có actor. Một tài khoản admin bị chiếm chuyển 50 đơn đã giao
 /// sang CANCELLED là mỗi đơn tự động hoàn tổng tiền vào ví khách, mà sau đó không truy được
 /// admin nào thao tác đơn nào.
+/// Ghi chú nội bộ của CSKH/Admin trên một đơn còn mở, cho kho đọc lúc soạn hàng (w51-01). Bảng riêng thay vì cột của orders: các
+/// đường trả nguyên dòng Order cho khách, đại lý, CTV hay gian hàng (findMany không select) không bao giờ kéo theo ghi chú này.
+/// Một đơn một ghi chú; xoá chữ là xoá dòng. Mỗi lần lưu ghi một dòng admin_audit_logs (action ORDER_STAFF_NOTE) kèm chữ cũ và mới.
+model OrderStaffNote {
+  orderId     String   @id
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  note        String
+  /// Người lưu gần nhất (ADMIN hoặc nhân viên CSKH).
+  updatedById String
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("order_staff_notes")
+}
+
 model OrderStatusHistory {
   id         String   @id @default(cuid())
   orderId    String

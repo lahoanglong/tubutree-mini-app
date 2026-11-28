@@ -17,6 +17,7 @@ import type { Tone } from '@/lib/recycling';
 import { useConfirm } from '../confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, INPUT_CLASS, LoadError, ToneBadge } from '../ui';
 import { CONVERSATIONS_KEY } from './conversation-list';
+import { QuickReplyPicker } from './quick-reply-picker';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
@@ -41,13 +42,34 @@ function senderLabel(m: SupportAdminMessage): string {
 }
 
 const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
+const CONTEXT_LINK = 'underline decoration-dotted underline-offset-2 hover:text-forest-700';
 
-/** Toàn bộ tin của một hội thoại kèm người trả lời, trạng thái chuyển vào Zalo, ô trả lời, chặn/bỏ chặn. */
-export function ConversationDetail({ id }: { id: string }) {
+/**
+ * Chèn mẫu vào chỗ con trỏ đang đứng trong ô trả lời (bấm nút mẫu làm ô mất focus nhưng selectionStart/End vẫn giữ).
+ * Ô trống thì thay luôn; chèn giữa chữ thì tách bằng xuống dòng để mẫu không dính vào câu đang gõ.
+ */
+export function insertTemplate(current: string, template: string, start: number, end: number): { text: string; caret: number } {
+  if (!current.trim()) return { text: template, caret: template.length };
+  const s = Math.max(0, Math.min(start, current.length));
+  const e = Math.max(s, Math.min(end, current.length));
+  const before = current.slice(0, s);
+  const after = current.slice(e);
+  const lead = before && !before.endsWith('\n') ? '\n' : '';
+  const trail = after && !after.startsWith('\n') ? '\n' : '';
+  const text = `${before}${lead}${template}${trail}${after}`;
+  return { text, caret: before.length + lead.length + template.length };
+}
+
+/**
+ * Toàn bộ tin của một hội thoại kèm người trả lời, trạng thái chuyển vào Zalo, ô trả lời (có bộ chọn mẫu), chặn/bỏ chặn.
+ * `onOpenUser`: bấm tên/SĐT khách mở hồ sơ khách; `onOpenOrder`: bấm mã đơn trong ngữ cảnh tin mở dòng đơn ở tab Đơn hàng.
+ */
+export function ConversationDetail({ id, onOpenUser, onOpenOrder }: { id: string; onOpenUser?: (userId: string) => void; onOpenOrder?: (code: string) => void }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [reply, setReply] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
   const detailQ = useQuery({ queryKey: ['admin-support-conversation', id], queryFn: () => getSupportConversation(id), refetchInterval: 10_000 });
   const d = detailQ.data;
 
@@ -123,6 +145,23 @@ export function ConversationDetail({ id }: { id: string }) {
     if (ok) doBlock(false);
   };
 
+  const pickTemplate = (template: string) => {
+    const ta = replyRef.current;
+    const next = insertTemplate(reply, template, ta?.selectionStart ?? reply.length, ta?.selectionEnd ?? reply.length);
+    if (next.text.length > REPLY_MAX) {
+      setError(`Chèn mẫu này thì trả lời dài ${next.text.length}/${REPLY_MAX} ký tự. Bớt chữ đang gõ hoặc chọn mẫu ngắn hơn.`);
+      return;
+    }
+    setError(null);
+    setReply(next.text);
+    requestAnimationFrame(() => {
+      const el = replyRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
   if (detailQ.isLoading) return <p className="text-sm text-stone-500">Đang tải…</p>;
   if (!d) return <LoadError onRetry={() => detailQ.refetch({ cancelRefetch: false })} retrying={detailQ.isFetching}>Không tải được hội thoại.</LoadError>;
 
@@ -138,9 +177,22 @@ export function ConversationDetail({ id }: { id: string }) {
       <div data-detail-head className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 id="detail-h" className="font-display text-lg font-semibold text-stone-900">
-            #{d.code} · {d.user.fullName ?? 'Khách'}
+            #{d.code} ·{' '}
+            {onOpenUser ? (
+              <button type="button" data-open-user className={CONTEXT_LINK} onClick={() => onOpenUser(d.user.id)}>
+                {d.user.fullName ?? 'Khách'}
+              </button>
+            ) : (
+              (d.user.fullName ?? 'Khách')
+            )}
           </h2>
-          <p className="text-xs text-stone-600">{d.user.phone ?? 'Chưa có SĐT'}</p>
+          {onOpenUser ? (
+            <button type="button" className={`text-xs text-stone-600 ${CONTEXT_LINK}`} aria-label={`Mở hồ sơ khách ${d.user.phone ?? ''}`.trim()} onClick={() => onOpenUser(d.user.id)}>
+              {d.user.phone ?? 'Chưa có SĐT'} · Hồ sơ khách
+            </button>
+          ) : (
+            <p className="text-xs text-stone-600">{d.user.phone ?? 'Chưa có SĐT'}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {d.blocked && <ToneBadge tone="danger">Đã chặn</ToneBadge>}
@@ -170,10 +222,21 @@ export function ConversationDetail({ id }: { id: string }) {
                 {m.sender === 'STAFF' && m.staffName && SOURCE_LABEL[m.source] ? ` · ${SOURCE_LABEL[m.source]}` : ''} · {formatDateTime(m.createdAt)}
               </p>
               {m.context && (
-                <p className="text-[11px] text-stone-500">
-                  {m.context.orderCode ? `Đơn ${m.context.orderCode}` : ''}
+                <p data-msg-context className="text-[11px] text-stone-500">
+                  {m.context.orderCode &&
+                    (onOpenOrder ? (
+                      <button type="button" data-open-order={m.context.orderCode} className={CONTEXT_LINK} onClick={() => onOpenOrder(m.context!.orderCode!)}>
+                        Đơn {m.context.orderCode}
+                      </button>
+                    ) : (
+                      `Đơn ${m.context.orderCode}`
+                    ))}
                   {m.context.orderCode && m.context.productSlug ? ' · ' : ''}
-                  {m.context.productSlug ? `Sản phẩm ${m.context.productSlug}` : ''}
+                  {m.context.productSlug && (
+                    <a href={`/san-pham/${encodeURIComponent(m.context.productSlug)}`} target="_blank" rel="noopener noreferrer" className={CONTEXT_LINK}>
+                      Sản phẩm {m.context.productSlug}
+                    </a>
+                  )}
                 </p>
               )}
               {m.body && <p className={`whitespace-pre-wrap break-words ${m.recalledAt ? 'line-through opacity-60' : ''}`}>{m.body}</p>}
@@ -228,8 +291,9 @@ export function ConversationDetail({ id }: { id: string }) {
       >
         <label className="block text-xs">
           <span className="font-medium text-stone-700">Trả lời khách (không gửi vào nhóm Zalo)</span>
-          <textarea name="reply" rows={3} maxLength={REPLY_MAX} value={reply} onChange={(e) => setReply(e.target.value)} className={`mt-1 ${INPUT_CLASS}`} />
+          <textarea ref={replyRef} name="reply" rows={3} maxLength={REPLY_MAX} value={reply} onChange={(e) => setReply(e.target.value)} className={`mt-1 ${INPUT_CLASS}`} />
         </label>
+        <QuickReplyPicker onPick={pickTemplate} />
         <button type="submit" className={`${BTN_PRIMARY} ${BUSY_CLASS}`} disabled={!reply.trim()} aria-busy={send.isPending || undefined} aria-disabled={send.isPending || undefined}>
           {send.isPending ? 'Đang gửi…' : 'Gửi trả lời'}
         </button>

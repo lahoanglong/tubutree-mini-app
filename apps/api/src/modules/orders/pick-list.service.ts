@@ -39,6 +39,7 @@ export class PickListService {
         note: true,
         hasRecyclingPickup: true,
         createdAt: true,
+        staffNote: { select: { note: true } },
         items: {
           orderBy: { id: 'asc' },
           select: { variationId: true, productName: true, variationName: true, unitPrice: true, quantity: true, isGift: true, backorderedQty: true },

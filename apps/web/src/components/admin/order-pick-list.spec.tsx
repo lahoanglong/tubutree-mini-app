@@ -37,6 +37,7 @@ const PICK: PickListResponse = {
       phoneMasked: '091****678',
       address: '12 Lê Lợi, Phường Bến Thành, TP Hồ Chí Minh',
       note: 'Gọi trước khi giao',
+      staffNote: 'Gói thêm xốp',
       hasRecyclingPickup: false,
       items: [{ variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 2, backorderedQty: 0, redeemed: false }],
       gifts: [{ variationId: 'v2', sku: 'TUI-LUOI', productName: 'Túi lưới', variationName: 'Túi lưới', quantity: 1, backorderedQty: 0, redeemed: false }],
@@ -53,6 +54,7 @@ const PICK: PickListResponse = {
       phoneMasked: '098****321',
       address: '5 Trần Phú, Hà Nội',
       note: null,
+      staffNote: null,
       hasRecyclingPickup: true,
       items: [
         { variationId: 'v1', sku: 'NRC-500', productName: 'Nước rửa chén', variationName: '500ml', quantity: 3, backorderedQty: 0, redeemed: false },
@@ -121,6 +123,8 @@ describe('PickListSheet', () => {
     expect(slips[1]!.querySelector('[data-pick-payment]')!.getAttribute('data-pick-payment')).toBe('PAID');
     expect(slips[1]!.textContent).toContain('Kèm thu gom vỏ');
     expect(slips[1]!.querySelector('[data-pick-gifts]')).toBeNull();
+    expect(slips[0]!.querySelector('[data-pick-staff-note]')!.textContent).toBe('Ghi chú nội bộ: Gói thêm xốp');
+    expect(slips[1]!.querySelector('[data-pick-staff-note]')).toBeNull();
 
     const warn = root.querySelector('[data-pick-excluded]')!;
     expect(warn.textContent).toContain('Không in 1 đơn:');

@@ -227,6 +227,8 @@ export function pointsReasonLabel(rawReason: string): string {
   if (reason.startsWith('RECYCLE:')) return 'Đổi rác lấy quà';
   if (reason.startsWith('GIFT_REDEEM:')) return 'Đổi điểm lấy quà';
   if (reason.startsWith('GIFT_REFUND:')) return 'Hoàn điểm quà';
+  // Tặng thiện chí của quản trị viên: `GOODWILL` hoặc `GOODWILL:<mã đơn>` (trùng GOODWILL_GIFT_LABEL của shared-types).
+  if (reason === 'GOODWILL' || reason.startsWith('GOODWILL:')) return 'Quà tặng từ Tubu Tree';
   // Hậu tố _REVERSED phải đứng trước mã ngắn hơn vì cùng khớp startsWith.
   if (reason.startsWith('PANCAKE_CHAT_ORDER_REVERSED:')) return 'Thu hồi điểm đơn đặt qua tư vấn viên';
   if (reason.startsWith('PANCAKE_CHAT_ORDER:')) return 'Tích điểm đơn đặt qua tư vấn viên';

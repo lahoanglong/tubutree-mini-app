@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as walletRules from './wallet-rules';
-import { walletTxLabel, formatWalletTxTime, walletNegativeNote, walletNegativeCheckoutReason } from './wallet-rules';
+import { GOODWILL_GIFT_LABEL } from '@tubutree/shared-types';
+import { GOODWILL_WALLET_LABEL, walletTxLabel, formatWalletTxTime, walletNegativeNote, walletNegativeCheckoutReason } from './wallet-rules';
 
 describe('rút Ví về ngân hàng đã bỏ', () => {
   it('không còn quy tắc rút', () => {
@@ -39,6 +40,15 @@ describe('walletTxLabel (sao kê Ví)', () => {
 
   it('loại mới BE thêm sau mà FE chưa biết → nhãn chung, không vỡ màn', () => {
     expect(walletTxLabel('SOMETHING_NEW')).toBe('Biến động ví');
+  });
+
+  it('tặng thiện chí (ADJUST, reason "Quà tặng từ Tubu Tree…") hiện nhãn quà; ADJUST khác giữ "Điều chỉnh"', () => {
+    expect(GOODWILL_WALLET_LABEL).toBe(GOODWILL_GIFT_LABEL);
+    expect(walletTxLabel('ADJUST', 'Quà tặng từ Tubu Tree')).toBe('Quà tặng từ Tubu Tree');
+    expect(walletTxLabel('ADJUST', 'Quà tặng từ Tubu Tree · đơn TB1')).toBe('Quà tặng từ Tubu Tree');
+    expect(walletTxLabel('ADJUST', 'Đối soát tay')).toBe('Điều chỉnh');
+    expect(walletTxLabel('ADJUST', null)).toBe('Điều chỉnh');
+    expect(walletTxLabel('CASHBACK', 'Quà tặng từ Tubu Tree')).toBe('Hoàn tiền sàn ngoài');
   });
 });
 

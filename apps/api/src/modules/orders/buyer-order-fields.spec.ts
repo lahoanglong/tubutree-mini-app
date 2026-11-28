@@ -17,6 +17,10 @@ describe('forBuyer — cột đồng bộ Pancake/Gomdon của Order (R5-SYNC-4)
     expect([...hidden, ...visible].filter((c) => !orderColumns.includes(c))).toEqual([]);
   });
 
+  it('ghi chú nội bộ CSKH (w51-01) không phải cột của Order: đường trả nguyên dòng đơn cho người mua không thể kéo theo nó', () => {
+    expect(orderColumns.filter((c) => /staff|internal/i.test(c))).toEqual([]);
+  });
+
   it('danh sách hiện chỉ gồm cột đồng bộ (cột khác hiện theo mặc định, không cần nêu)', () => {
     expect([...visible].filter((c) => !SYNC_COLUMN.test(c))).toEqual([]);
   });

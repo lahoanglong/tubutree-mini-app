@@ -76,6 +76,8 @@ describe('pointsReasonLabel', () => {
     ['RECYCLE_REVERSED:TR-8K2M9', 'Thu hồi điểm đổi rác'],
     ['GIFT_REDEEM:gift-seed', 'Đổi điểm lấy quà'],
     ['GIFT_REFUND:QG-8K2M9P4T', 'Hoàn điểm quà'],
+    ['GOODWILL', 'Quà tặng từ Tubu Tree'],
+    ['GOODWILL:TB123', 'Quà tặng từ Tubu Tree'],
     ['PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
     ['PANCAKE_CHAT_ORDER_REVERSED:1234567', 'Thu hồi điểm đơn đặt qua tư vấn viên'],
     ['MARKETPLACE_ORDER:2610A1B2C3', 'Tích điểm đơn mua trên sàn'],

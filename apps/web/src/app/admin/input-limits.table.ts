@@ -145,6 +145,8 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/season-admin.tsx::f.theme": { dto: "apps/api/src/modules/admin/admin-game-season.controller.ts:CreateSeasonDto.theme", max: 120 },
   "components/admin/season-admin.tsx::f.region": { dto: "apps/api/src/modules/admin/admin-game-season.controller.ts:CreateSeasonDto.region", max: 80 },
   "components/admin/support-chat/conversation-detail.tsx::reply": { dto: "apps/api/src/modules/support-chat/dto/admin.dto.ts:AdminReplyDto.body", max: 1000 },
+  "components/admin/order-staff-note.tsx::draft": { dto: "apps/api/src/modules/admin/order-staff-note.controller.ts:SaveOrderStaffNoteDto.note", max: 500 },
+  "components/admin/goodwill-credit-section.tsx::draft.reason": { dto: "apps/api/src/modules/loyalty/goodwill-credit.controller.ts:GoodwillCreditDto.reason", max: 500 },
   "components/admin/waste-bulk-bar.tsx::reason": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteBulkActionDto.reason", max: 500 },
   "components/admin/waste-gifts-section.tsx::reason": { dto: "apps/api/src/modules/waste-exchange/catalog/waste-admin-gifts.controller.ts:WasteGiftCancelDto.reason", max: 500 },
   "components/admin/waste-request-detail.tsx::note": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteReverseDto.reason", max: 500 },
@@ -159,6 +161,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
 
 /** Ô gõ chữ không đặt `maxLength`, kèm lý do. */
 export const EXEMPT_INPUTS: Record<string, string> = {
+  "components/admin/support-chat/quick-reply-picker.tsx::query": "chỉ lọc tại máy trên danh sách mẫu trả lời đã tải (GET /admin/quick-replies), không gửi lên API nên không có DTO; 60 ký tự đủ cho một cụm tìm",
   "components/admin/search-terms-card.tsx::popValue": "mỗi dòng một cụm: khoá catalog.search_popular_terms là mảng chuỗi kiểm bằng assertPopularTerms (admin-config-rules.ts: tối đa 12 cụm, mỗi cụm 2–40 ký tự), không có DTO; web đếm cụm và độ dài từng cụm (popularTermsError) rồi khoá nút Lưu trước khi gửi",
   "components/admin/eco-facts-card.tsx::form.productSlug": "thân /admin/eco-facts đọc tay bằng parseEcoFactInput (eco-facts.input.ts), không có @MaxLength trên EcoFactBodyDto; ô chặn đúng trần của bộ đọc (slug 200)",
   "components/admin/eco-facts-card.tsx::form.variationSku": "thân /admin/eco-facts đọc tay bằng parseEcoFactInput (eco-facts.input.ts), không có @MaxLength trên EcoFactBodyDto; ô chặn đúng trần của bộ đọc (SKU 100)",

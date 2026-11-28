@@ -512,6 +512,8 @@ export class AccountDeletionService {
       SET "shippingAddress" = "shippingAddress" || jsonb_build_object('recipient', ${ANONYMIZED_NAME}::text, 'phone', '', 'street', '')
       WHERE "userId" = ${userId} AND jsonb_typeof("shippingAddress") = 'object'`;
     await tx.order.updateMany({ where: { userId }, data: { note: null, recyclingNote: null } });
+    // Ghi chú nội bộ CSKH trên đơn của khách có thể chép SĐT, địa chỉ hay lời khách: xoá cùng lúc với ghi chú của khách.
+    await tx.orderStaffNote.deleteMany({ where: { order: { userId } } });
     await tx.$executeRaw`
       UPDATE "orders" SET "invoiceRequest" = "invoiceRequest" - 'email'
       WHERE "userId" = ${userId} AND jsonb_typeof("invoiceRequest") = 'object'`;

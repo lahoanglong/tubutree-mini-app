@@ -34,3 +34,4 @@ export * from './admin-growth';
 export * from './gift-trial';
 export * from './guest-order';
 export * from './order-code';
+export * from './goodwill';

@@ -1877,6 +1877,32 @@ describe('AdminService.listOrders — allowedTransitions + canConfirmPayment (C-
     }
   });
 
+  it('ghi chú nội bộ CSKH (w51-01): kèm tên người lưu; Kế toán thấy SĐT trong ghi chú bị che; đơn không có ghi chú trả null', async () => {
+    const at = new Date('2026-11-28T14:00:00.000Z');
+    const items = [
+      { code: 'S', status: 'CONFIRMED', paymentMethod: 'COD', staffNote: { note: 'Gọi 0912345678 trước khi giao', updatedAt: at, updatedById: 'cskh-1' } },
+      { code: 'E', status: 'CONFIRMED', paymentMethod: 'COD', staffNote: null },
+    ];
+    const run = async (viewer: { role: string; staffPermissions?: string[] }) => {
+      const prisma = makePrisma({
+        order: { findMany: jest.fn().mockResolvedValue(items.map(row)), count: jest.fn().mockResolvedValue(items.length) },
+        dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
+        orderCustomerRefund: { findMany: jest.fn().mockResolvedValue([]) },
+        user: { findMany: jest.fn().mockResolvedValue([{ id: 'cskh-1', fullName: 'Lan CSKH' }]) },
+        $transaction: jest.fn().mockImplementation((arr) => Promise.all(arr)),
+      });
+      const res = (await mkAdmin(prisma).listOrders(1, 20, undefined, undefined, undefined, undefined, undefined, undefined, undefined, viewer)) as unknown as {
+        data: { code: string; staffNote: unknown }[];
+      };
+      return Object.fromEntries(res.data.map((o) => [o.code, o.staffNote]));
+    };
+    const admin = await run({ role: 'ADMIN' });
+    expect(admin.S).toEqual({ note: 'Gọi 0912345678 trước khi giao', updatedAt: at.toISOString(), updatedById: 'cskh-1', updatedByName: 'Lan CSKH' });
+    expect(admin.E).toBeNull();
+    const kt = await run({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(kt.S).toMatchObject({ note: 'Gọi *******678 trước khi giao', updatedByName: 'Lan CSKH' });
+  });
+
   it('trả deliveredEffectsAt để màn admin biết đơn DELIVERED nào chưa xong việc sau giao (nút chạy lại)', async () => {
     const done = new Date('2026-10-02T00:00:00.000Z');
     const by = (await list([

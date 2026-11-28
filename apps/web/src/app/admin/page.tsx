@@ -187,6 +187,7 @@ import type { ExternalClaimsSeed } from '@/components/admin/external-claims-tab'
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
 import { DealerAppImage } from '@/components/admin/dealer-app-image';
 import { UserDetailDrawer } from '@/components/admin/user-detail-drawer';
+import { OrderStaffNotePanel } from '@/components/admin/order-staff-note';
 import { UsersList, USER_ROLE_LABELS } from '@/components/admin/users-list';
 import { SideDrawer, useNarrowScreen } from '@/components/admin/side-drawer';
 import { ORDER_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
@@ -869,7 +870,7 @@ export default function AdminPage() {
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab key={externalSeed?.n ?? 0} seed={externalSeed} isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
-          {active === 'supportChat' && <SupportChatTab isAdmin={isAdmin} />}
+          {active === 'supportChat' && <SupportChatTab isAdmin={isAdmin} onOpenOrder={openOrderByCode} onOpenUserOrders={openUserOrders} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} isAdmin={isAdmin} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} phoneMasked={!(isAdmin || (accessQ.data?.staffPermissions ?? []).some((p) => p === 'CSKH' || p === 'KHO'))} />}
@@ -2189,7 +2190,7 @@ function OrdersTab({
                       {isExpanded && (
                         <tr ref={detailRowRef} className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(o, message, alreadyPaid)} onOpenProfile={canViewProfile && o.user?.id ? () => setProfileId(o.user!.id) : undefined} />
+                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(o, message, alreadyPaid)} onOpenProfile={canViewProfile && o.user?.id ? () => setProfileId(o.user!.id) : undefined} canEditStaffNote={canViewProfile} />
                           </td>
                         </tr>
                       )}
@@ -2231,7 +2232,7 @@ function OrdersTab({
               {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
             </span>
           </div>
-          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(expandedOrder, message, alreadyPaid)} onOpenProfile={canViewProfile && expandedOrder.user?.id ? () => setProfileId(expandedOrder.user!.id) : undefined} />
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(expandedOrder, message, alreadyPaid)} onOpenProfile={canViewProfile && expandedOrder.user?.id ? () => setProfileId(expandedOrder.user!.id) : undefined} canEditStaffNote={canViewProfile} />
         </SideDrawer>
       )}
 
@@ -2333,6 +2334,7 @@ function OrderDetailBody({
   canWarehouse,
   onPaid,
   onOpenProfile,
+  canEditStaffNote = false,
 }: {
   o: AdminOrder;
   isAdmin: boolean;
@@ -2342,6 +2344,8 @@ function OrderDetailBody({
   onPaid?: (message: string, alreadyPaid: boolean) => void;
   /** Có thì dòng "Khách" có nút "Xem hồ sơ" (chỉ ADMIN và nhân viên CSKH được xem hồ sơ khách). */
   onOpenProfile?: () => void;
+  /** ADMIN và nhân viên CSKH sửa được ghi chú nội bộ cho kho (người xem khác chỉ đọc). */
+  canEditStaffNote?: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -2388,6 +2392,8 @@ function OrderDetailBody({
           <span className="font-semibold">Ghi chú từ khách:</span> {o.note}
         </div>
       )}
+
+      <OrderStaffNotePanel order={o} canEdit={canEditStaffNote} />
 
       {(o.shippingCode || o.shippingStatus) && !o.hasRecyclingPickup && (
         <div className="text-xs text-stone-600">

@@ -27,7 +27,7 @@ describe('pointsReasonLabel — sổ Điểm Xanh luôn đọc được bằng t
  * checkout.service (ORDER_REDEEM, ORDER_REDEEM_CONVERTED, ORDER_REDEEM_MARKETPLACE), order-reversal.service (ORDER_REFUND_*, RETURN_*),
  * wallet/referral-reward + reward-points.service (REFERRAL_*), feed/community-reward.service (COMMUNITY_*),
  * storefront-quest.service, affiliate.service (CTV_MILESTONE), game.service (GAME_*, MISSION), season-pass.service,
- * reviews.service (REVIEW, REVIEW_DELETE, REVIEW_RETURN, REVIEW_PHOTO), waste-exchange (RECYCLE, RECYCLE_REVERSED), gift redemptions (GIFT_REDEEM, GIFT_REFUND), external-points (PANCAKE_CHAT_ORDER, MARKETPLACE_ORDER và hai mã _REVERSED), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
+ * reviews.service (REVIEW, REVIEW_DELETE, REVIEW_RETURN, REVIEW_PHOTO), waste-exchange (RECYCLE, RECYCLE_REVERSED), gift redemptions (GIFT_REDEEM, GIFT_REFUND), goodwill-credit (GOODWILL), external-points (PANCAKE_CHAT_ORDER, MARKETPLACE_ORDER và hai mã _REVERSED), migration pd3_xu_to_points (XU_TO_POINTS), auth.service gộp phiên (tiền tố MERGED:<id>:).
  * Thêm mã mới ở API thì thêm một dòng ở đây và ở ledger-labels.ts (và account-api.ts của miniapp).
  */
 const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail: string]> = [
@@ -89,6 +89,8 @@ const API_REASONS: ReadonlyArray<readonly [reason: string, label: string, detail
   ['MARKETPLACE_ORDER_REVERSED:2610A1B2C3', 'Thu hồi điểm đơn mua trên sàn', 'Thu hồi điểm đơn mua trên sàn'],
   ['GIFT_REDEEM:gr1', 'Đổi điểm lấy quà', 'Đổi điểm lấy quà'],
   ['GIFT_REFUND:gr1', 'Hoàn điểm quà', 'Hoàn điểm quà'],
+  ['GOODWILL', 'Quà tặng từ Tubu Tree', 'Quà tặng từ Tubu Tree'],
+  ['GOODWILL:TUBU2026101546241', 'Quà tặng từ Tubu Tree', 'Quà tặng từ Tubu Tree · TUBU2026101546241'],
 ];
 const FALLBACK = 'Điều chỉnh Điểm Xanh';
 
