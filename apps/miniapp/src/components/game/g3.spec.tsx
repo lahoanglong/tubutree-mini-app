@@ -102,12 +102,12 @@ describe('GardenHero', () => {
     expect(screen.queryByText(/400/)).toBeNull();
     expect(screen.getByText(/thu hoạch ngay/i)).toBeInTheDocument();
   });
-  it('hai chip thành tích, viên chuỗi chỉ ghi "N ngày" (không lặp nguyên văn "Chuỗi N ngày" của thẻ Điểm danh), dải có bảy ô', () => {
+  it('hai chip thành tích, không có viên chuỗi trên thẻ cây (viên chuỗi ở dưới hai nút, w62-01), dải có bảy ô', () => {
     const { container } = render(hero({ eco: { progress: 10, target: 60, treeType: 'Sồi', treesPlanted: 2 }, totalSeeds: 10, streakDays: 5 }));
     expect(screen.getByText('10/60💧')).toBeInTheDocument();
     expect(screen.getByText('🌳 Đã thu hoạch 2 cây')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Chuỗi điểm danh 5 ngày' })).toHaveTextContent('5 ngày');
-    expect(container.textContent).not.toContain('Chuỗi 5 ngày');
+    expect(screen.queryByTestId('hero-streak')).toBeNull();
+    expect(container.textContent).not.toMatch(/5 ngày/);
     expect(screen.getByTestId('week-rhythm').querySelectorAll('li')).toHaveLength(7);
   });
   it('tên thẻ: có loài thì hiện loài; loài mặc định hay trống thì "Cây của bạn"; chưa có dữ liệu vườn thì "Vườn của bạn"', () => {

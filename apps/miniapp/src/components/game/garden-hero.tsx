@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
-import { Flame } from 'lucide-react';
 import { hubCopy } from '@tubutree/app-core/game-hub/copy';
 import { skyPhase, treeStage, treeStageLabel, type SkyPhase } from '@tubutree/app-core/game-hub/scene';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
@@ -9,7 +8,6 @@ import type { GameProfile } from '../../services/game-api';
 import type { ChristmasGardenProps } from '../season/christmas-garden';
 import { formatNumber } from '../../utils/format';
 import { sfx } from '../../utils/sfx';
-import { Icon } from '../ui/icon';
 import { Heading, Text } from '../ui/text';
 import { GardenTreeArt } from './garden-tree-art';
 import { WaterTank } from './water-tank';
@@ -88,14 +86,6 @@ export function GardenHero({
       <span className="tubu-hero-orb" aria-hidden />
       <div className="tubu-hero-top">
         <WaterTank seeds={totalSeeds} capacity={tankCapacity} />
-        {streakDays != null && streakDays > 0 && (
-          <span className="tubu-hero-streak" role="img" aria-label={hubCopy('hero.streakAria', { n: formatNumber(streakDays) })} data-testid="hero-streak">
-            <Icon icon={Flame} size="sm" tone="current" />
-            <Text variant="label" tone="inverse" as="span" numeric style={{ fontWeight: 700 }}>
-              {hubCopy('hero.streak', { n: formatNumber(streakDays) })}
-            </Text>
-          </span>
-        )}
       </div>
       <div className="tubu-hero-stage" data-testid="garden-stage">
         {xmas ? (

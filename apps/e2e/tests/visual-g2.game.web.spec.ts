@@ -41,13 +41,15 @@ test('chụp g2 hộp chúc mừng và vòng quay (web)', async ({ page, api }) 
   await settle(page);
   await page.screenshot({ path: path.join(OUT!, 'web', 'harvest-dialog.png') });
   await page.getByRole('button', { name: 'Tuyệt vời!' }).click();
-  await page.getByRole('button', { name: 'Quay vòng quay' }).scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: 'Quay vòng quay' }).click();
+  // Vòng quay nằm ở tab "Sảnh Game" từ tubu-w48-01.
+  await page.getByRole('tab', { name: 'Sảnh Game' }).click();
+  await page.getByRole('button', { name: 'Quay vòng quay', exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Quay vòng quay', exact: true }).click();
   await expect(page.getByText('Chúc mừng!')).toBeVisible({ timeout: 10_000 });
   await settle(page);
   await page.screenshot({ path: path.join(OUT!, 'web', 'wheel-result.png') });
   await page.getByRole('button', { name: 'Tuyệt vời!' }).click();
   await settle(page);
-  await page.getByRole('heading', { name: 'Vòng quay may mắn' }).scrollIntoViewIfNeeded();
+  await page.getByRole('heading', { name: 'Vòng quay may mắn', exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(OUT!, 'web', 'wheel.png') });
 });

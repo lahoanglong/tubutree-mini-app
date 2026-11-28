@@ -21,7 +21,7 @@ export function seasonHasHomeTheme(theme: SeasonalTheme): theme is 'christmas' {
  * Trang chủ không nằm đây (thẻ Noel ở đó đã có lớp tuyết và nút ❄️ riêng); trang sản phẩm, giỏ, thanh toán, tài khoản cũng không.
  */
 export const SITE_SNOW_PAGES = {
-  miniapp: { exact: ['/browse', '/best-sellers', '/gift-combos', '/refill-deals', '/green-box', '/offers', '/feed', '/recycle'], prefix: ['/game'] },
+  miniapp: { exact: ['/browse', '/best-sellers', '/gift-combos', '/refill-deals', '/green-box', '/offers', '/feed', '/recycle', '/subscriptions'], prefix: ['/game'] },
   web: {
     exact: ['/san-pham', '/ban-chay', '/bo-qua-tang', '/tiet-kiem-refill', '/hop-xanh', '/uu-dai', '/gio-vang', '/mua-chung', '/cong-dong', '/doi-rac', '/kho-qua'],
     prefix: ['/vuon-xanh'],

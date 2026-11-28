@@ -95,7 +95,7 @@ test('chụp g3 không có mùa (khối Mùa ẩn), thân rỗng từ server (Mi
   api.get('/game/season', () => replyEmptyBody());
   await page.goto('/game');
   await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
-  await expect(page.getByText(/Lô đất của bạn/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Tác động xanh của bạn')).toBeVisible({ timeout: 15_000 });
   // w62-01: không còn dòng "Chưa có mùa nào đang mở"; khối Mùa ẩn hẳn.
   await expect(page.getByText('Chưa có mùa nào đang mở')).toHaveCount(0);
   await settle(page);
