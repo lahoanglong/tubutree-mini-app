@@ -229,7 +229,7 @@ function AccountContent() {
     return (
       <main className={`${PAGE_WIDE} py-6`}>
         <h1 className={ui.pageTitle}>Cá nhân</h1>
-        <LoginRequired message="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn." returnTo="/tai-khoan" />
+        <LoginRequired message="Đăng nhập để xem điểm, đơn hàng và ưu đãi của bạn." returnTo="/tai-khoan" />
       </main>
     );
   }

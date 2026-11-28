@@ -146,7 +146,7 @@ describe('khung trang /chu-thuong-hieu', () => {
   it('chưa được cấp nhãn (404): nói rõ, vẫn đúng một h1, không có nút thử lại', async () => {
     m.fail.set('GET /brand/owner/me', httpError(404, 'Not Found'));
     await mount();
-    expect(text()).toContain('Bạn chưa được cấp quyền quản lý thương hiệu nào. Liên hệ Tubu để trở thành đối tác thương hiệu.');
+    expect(text()).toContain('Bạn chưa có quyền quản lý thương hiệu nào. Liên hệ Tubu để trở thành đối tác.');
     expect(h1s()).toEqual(['Quản lý thương hiệu']);
     expect(btn(/thử lại/i)).toBeNull();
   });

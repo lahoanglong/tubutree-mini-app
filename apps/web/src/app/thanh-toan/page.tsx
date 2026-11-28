@@ -1131,7 +1131,7 @@ export default function CheckoutPage() {
           {cardPreview && previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} green />}
           {cardPreview && previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} green />}
           {cardPreview && previewRecalcNote && (
-            <p className="py-1 text-caption text-[color:var(--color-text-secondary)]">Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.</p>
+            <p className="py-1 text-caption text-[color:var(--color-text-secondary)]">Mua một phần giỏ: mã giảm giá và ưu đãi tính lại khi thanh toán.</p>
           )}
           {(quote?.discount ?? 0) > 0 && (
             <Row

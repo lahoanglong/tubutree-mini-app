@@ -196,7 +196,7 @@ describe('Trang Tích điểm đơn sàn', () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã tích điểm trước đó.');
     expect(screen.queryByText('máy chủ')).toBeNull();
     expect(screen.queryByTestId('claim-result')).toBeNull();
   });
@@ -223,7 +223,7 @@ describe('Trang Tích điểm đơn sàn', () => {
     it('chưa có SĐT: câu giải thích hiện sẵn ngay dưới nút quét, TRƯỚC khi xin', async () => {
       mocks.user = { phone: null };
       renderPage();
-      expect(await screen.findByText('Tubu dùng số điện thoại Zalo của bạn để ghép đúng đơn và báo khi điểm được cộng.')).toBeInTheDocument();
+      expect(await screen.findByText('Tubu dùng số điện thoại Zalo để ghép đơn và báo khi cộng điểm.')).toBeInTheDocument();
       expect(mocks.ensurePhone).not.toHaveBeenCalled();
     });
 
@@ -316,7 +316,7 @@ describe('Trang Tích điểm đơn sàn', () => {
       await typeCode();
       fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
       const share = await screen.findByRole('button', { name: 'Chia sẻ số điện thoại' });
-      expect(await screen.findByRole('alert')).toHaveTextContent('cho phép Tubu xem số điện thoại');
+      expect(await screen.findByRole('alert')).toHaveTextContent('cho phép xem số điện thoại');
       fireEvent.click(share);
       await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
       expect(mocks.submitExternalClaim).toHaveBeenLastCalledWith('SPXVN123456789', 'typed');
@@ -332,7 +332,7 @@ describe('Trang Tích điểm đơn sàn', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/chưa đủ điều kiện/);
     expect(alert).toHaveTextContent(/CSKH/);
-    expect(alert).not.toHaveTextContent('cho phép Tubu xem số điện thoại');
+    expect(alert).not.toHaveTextContent('cho phép xem số điện thoại');
     expect(screen.queryByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeNull();
   });
 
@@ -426,7 +426,7 @@ describe('Trang Tích điểm đơn sàn', () => {
       renderPage();
       await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
       fireEvent.click(scanBtn());
-      expect(await screen.findByRole('alert')).toHaveTextContent('Đây là mã trên thẻ Tubu. Bạn quét mã vạch trên nhãn dán ngoài hộp nhé.');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Đây là mã thẻ Tubu. Hãy quét mã vạch trên nhãn dán ngoài hộp nhé.');
       expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
       expect(mocks.trackEvent).toHaveBeenCalledWith('ext_claim_scan', 'miniapp', { result: 'ok', parsed: 'card_link' });
     });
@@ -585,7 +585,7 @@ describe('Trang Tích điểm đơn sàn', () => {
       await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
       expect(screen.queryByText(/Quà thẻ dành cho tài khoản chưa có đơn/)).toBeNull();
       act(() => setCardGiftNote('new-customers-only'));
-      expect(await screen.findByText('Quà thẻ dành cho tài khoản chưa có đơn. Bạn vẫn tích điểm đơn này được.')).toBeInTheDocument();
+      expect(await screen.findByText('Quà thẻ dành cho tài khoản chưa có đơn. Đơn này vẫn tích điểm được.')).toBeInTheDocument();
     });
   });
 
@@ -787,7 +787,7 @@ describe('Trang Tích điểm đơn sàn', () => {
     fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
     fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
     const result = await screen.findByTestId('claim-result');
-    expect(result).toHaveTextContent('Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.');
+    expect(result).toHaveTextContent('Mã này đang tích điểm cho tài khoản khác. Nếu là đơn của bạn, liên hệ CSKH nhé.');
     expect(result).not.toHaveTextContent('Chưa thấy đơn này');
     expect(result).not.toHaveTextContent('Đã ghi nhận');
     expect(result.querySelector('.lucide-info')).not.toBeNull();
@@ -947,7 +947,7 @@ describe('W78A: Tích điểm đơn sàn khoá đồng bộ chạm đúp', () =>
     fireEvent.click(submitBtn());
     await waitFor(() => expect(submitBtn()).toHaveAttribute('aria-busy', 'true'));
     await act(async () => d.reject(rejection('ALREADY_CLAIMED')));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã tích điểm trước đó.');
     await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
 
     mocks.submitExternalClaim.mockResolvedValueOnce(SEARCHING);
@@ -1006,7 +1006,7 @@ describe('W113A: Tích điểm đơn sàn giữ khoá tới khi danh sách yêu 
     const invalidate = renderLive(() => refresh.promise);
     await typeCode();
     fireEvent.click(submitBtn());
-    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã tích điểm trước đó.');
     expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['external-claims'] }]);
     expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
     await act(async () => {
@@ -1101,7 +1101,7 @@ describe('Trang Tích điểm đơn sàn — W46: xác nhận 4 số cuối SĐT
     const box = await screen.findByTestId('phone-confirm-sheet');
     expect(screen.getByText('Xác nhận SĐT nhận hàng')).toBeTruthy();
     expect(box).toHaveTextContent('Nhập 4 số cuối SĐT nhận hàng trên đơn Shopee');
-    expect(box).toHaveTextContent('Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng Shopee (có thể khác SĐT tài khoản hiện tại của bạn).');
+    expect(box).toHaveTextContent('Đây là số người nhận ghi trên đơn Shopee, có thể khác số tài khoản của bạn.');
     expect(last4().getAttribute('inputmode')).toBe('numeric');
     expect(last4().getAttribute('pattern')).toBe('[0-9]*');
     expect(last4().maxLength).toBe(4);

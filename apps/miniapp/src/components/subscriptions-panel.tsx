@@ -46,7 +46,7 @@ const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: '
  * sửa số lượng/chu kỳ/ngày giao kỳ tới/địa chỉ/cách trả (C-015), bỏ qua kỳ này và "Đặt kỳ này ngay" ngay trên thẻ gói đang chạy,
  * viên bậc giảm kế tiếp, huỷ qua sheet giữ chân (tạm dừng / bỏ qua kỳ / vẫn huỷ). Cùng web `components/orders/subscriptions-panel.tsx`.
  */
-export function SubscriptionsPanel() {
+export function SubscriptionsPanel({ showIntro = true }: { showIntro?: boolean } = {}) {
   const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
@@ -151,11 +151,13 @@ export function SubscriptionsPanel() {
   return (
     <div style={{ padding: '4px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
-        <Text variant="body-sm" tone="secondary" as="p" numeric>
-          {viSubscriptions.intro(subscribePct)}
-        </Text>
+        {showIntro && (
+          <Text variant="body-sm" tone="secondary" as="p" numeric>
+            {viSubscriptions.intro(subscribePct)}
+          </Text>
+        )}
         {subs[0] && (
-          <Text variant="caption" tone="brand" as="p" numeric style={{ marginTop: 4 }}>
+          <Text variant="caption" tone="brand" as="p" numeric style={{ marginTop: showIntro ? 4 : 0 }}>
             {viSubscriptions.discountLine(Math.round(subs[0].effectiveDiscountPct * 100))}
           </Text>
         )}

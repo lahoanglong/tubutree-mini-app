@@ -12,7 +12,7 @@ import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductGrid } from '../components/ui/product-grid';
-import { Heading, Text } from '../components/ui/text';
+import { Heading } from '../components/ui/text';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { hasLiveSubscription } from '../hooks/use-has-subscription';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -50,7 +50,7 @@ export default function SubscriptionsPage() {
   return (
     <Page className="tubu-subs-page">
       <PullToRefresh onRefresh={() => products.refetch()} />
-      <PageHeader title="Mua xoay vòng" subtitle="Đặt định kỳ tự động · Tiết kiệm mỗi kỳ giao" />
+      <PageHeader title="Mua xoay vòng" />
 
       <div className="tubu-subs-body">
         <section aria-label="Quyền lợi Mua xoay vòng" data-testid="subscription-hero" className="tubu-subs-hero">
@@ -63,16 +63,13 @@ export default function SubscriptionsPage() {
             </li>
             <li className="tubu-subs-perk">
               <span aria-hidden="true" className="tubu-subs-dot" />
-              <span>Chu kỳ linh hoạt 4 · 6 · 8 · 10 tuần theo nhịp sinh hoạt gia đình.</span>
+              <span>Chu kỳ 4 · 6 · 8 · 10 tuần theo nhịp nhà bạn.</span>
             </li>
             <li className="tubu-subs-perk">
               <span aria-hidden="true" className="tubu-subs-dot" />
-              <span>Đổi ngày nhận, bỏ qua kỳ hoặc tạm dừng bất cứ lúc nào chỉ với 1 chạm.</span>
+              <span>Đổi ngày, bỏ qua kỳ hay tạm dừng chỉ 1 chạm.</span>
             </li>
           </ul>
-          <Text variant="caption" tone="secondary" as="p">
-            Chọn sản phẩm bên dưới, mở chi tiết món và bấm Đặt định kỳ để bắt đầu.
-          </Text>
           {noOpenSub && suggestion && (
             <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={setSubscribeTo} />
           )}
@@ -88,7 +85,7 @@ export default function SubscriptionsPage() {
         {authed && hasSubscription && (
           <section aria-label="Lịch định kỳ của tôi" className="tubu-subs-section">
             <Heading variant="title-md" font="ui">Lịch định kỳ đang chạy</Heading>
-            <SubscriptionsPanel />
+            <SubscriptionsPanel showIntro={false} />
           </section>
         )}
 

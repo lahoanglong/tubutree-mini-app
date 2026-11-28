@@ -174,8 +174,8 @@ export function SubscriptionsPanel() {
       <div>
         <p className="text-sm text-stone-700 tabular-nums">
           {subscribePct > 0
-            ? `Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`
-            : 'Tự động đặt lại sản phẩm bạn dùng thường xuyên — huỷ bất kỳ lúc nào.'}
+            ? `Tự đặt lại món bạn hay dùng, tiết kiệm ${subscribePct}% mỗi đơn, huỷ lúc nào cũng được.`
+            : 'Tự đặt lại món bạn hay dùng, huỷ lúc nào cũng được.'}
         </p>
         {subs[0] && subs[0].effectiveDiscountPct > 0 && (
           <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>

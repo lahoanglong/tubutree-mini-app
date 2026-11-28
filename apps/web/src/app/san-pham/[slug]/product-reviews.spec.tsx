@@ -141,8 +141,8 @@ const MINE_B = { id: 'b', orderId: 'o2', rating: 3, comment: 'Lần này hơi kh
 const ELIG_NEW = { canReview: true, reason: null, rewardAvailable: true, purchaseCount: 1, reviewableOrders: [O1], myReviews: [] };
 const ELIG_REPEAT = { canReview: true, reason: null, rewardAvailable: false, purchaseCount: 2, reviewableOrders: [O2], myReviews: [REF_A] };
 const ELIG_ALL = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 2, reviewableOrders: [], myReviews: [REF_B, REF_A] };
-const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
-const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
+const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, lần này không cộng thêm.';
+const EDIT_HINT = 'Chỉ đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh.';
 
 let mounted: Rendered[] = [];
 /**
@@ -877,7 +877,7 @@ describe('ProductReviews (web) — đánh giá bị Tubu ẩn (R5-BUYER-2)', () 
   const HIDDEN_REF = { ...REF_A, isVisible: false };
   const ELIG_HIDDEN = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 1, reviewableOrders: [], myReviews: [HIDDEN_REF] };
   const HIDDEN_NOTICE = 'Đánh giá cho đơn TB0001 của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.';
-  const SAVED_HIDDEN = 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.';
+  const SAVED_HIDDEN = 'Đã lưu. Đánh giá đang được Tubu xem xét nên chưa hiện công khai.';
 
   beforeEach(() => {
     mocks.list = { ...structuredClone(LIST), count: 2, items: LIST.items.filter((i) => i.id !== 'a') };
@@ -904,7 +904,7 @@ describe('ProductReviews (web) — đánh giá bị Tubu ẩn (R5-BUYER-2)', () 
     const c = await mount();
     click(button(c, 'Sửa đánh giá của bạn'));
     await flush();
-    expect(form(c)!.textContent).toContain('Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.');
+    expect(form(c)!.textContent).toContain('Đánh giá đang chờ Tubu xem xét nên chưa hiện công khai.');
     click(button(c, 'Lưu đánh giá'));
     await flush();
     const statuses = [...c.querySelectorAll('[role="status"]')].map((n) => n.textContent);

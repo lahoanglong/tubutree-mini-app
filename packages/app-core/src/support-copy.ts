@@ -39,7 +39,7 @@ export const supportCopy = {
   orderQuick: (code: string) => ({ label: `Hỏi về đơn ${code}`, body: `Mình muốn hỏi về đơn ${code}.` }),
   advisorPaused: {
     title: 'Trợ lý AI đang tạm nghỉ',
-    body: 'Bạn quay lại sau nhé. Cần hỏi gấp, bạn liên hệ Tubu Tree theo cách bên dưới.',
+    body: 'Bạn quay lại sau nhé. Cần gấp thì liên hệ Tubu Tree theo cách bên dưới.',
     chat: 'Chat với Tubu',
     call: (display: string) => `Gọi ${display}`,
     home: 'Về Trang chủ',

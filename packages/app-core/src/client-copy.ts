@@ -15,9 +15,9 @@ export const BANK_NAME_REQUIRED = 'Nhập tên ngân hàng nhận tiền hoàn.'
 export const ACCOUNT_NUMBER_INVALID = 'Số tài khoản nhận tiền hoàn chỉ gồm chữ số, từ 6 đến 24 số.';
 export const ACCOUNT_NAME_REQUIRED = 'Nhập tên chủ tài khoản nhận tiền hoàn.';
 export const RETURN_REASON_REQUIRED = 'Bạn mô tả lý do đổi/trả (ít nhất 5 ký tự) nhé.';
-export const BANK_TX_FAILED = 'Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.';
+export const BANK_TX_FAILED = 'Giao dịch không thành công hoặc đã hoàn lại. Liên hệ Tubu để được hỗ trợ.';
 export const BANK_NOT_RECEIVED =
-  'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển. Bạn kiểm tra lại sau ít phút nhé.';
+  'Chưa thấy tiền về. Ngân hàng thường xử lý trong khoảng 1 phút, bạn kiểm tra lại sau nhé.';
 export const BANK_CHECK_NETWORK = 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
 /** Chép số tài khoản / số tiền / nội dung chuyển khoản vào clipboard được thật (Mini App và web cùng câu). */
 export const bankCopied = (label: string): string => `Đã sao chép ${label}`;
@@ -25,7 +25,7 @@ export const bankCopyFailed = (label: string): string => `Không thể sao chép
 
 export const INVOICE_ISSUE_FAILED = 'Phát hành lỗi. Liên hệ Tubu để được hỗ trợ.';
 export const returnWindowExpired = (days: number): string =>
-  `Đã quá hạn đổi/trả (${days} ngày kể từ khi nhận hàng). Cần hỗ trợ thêm, liên hệ Tubu bên dưới.`;
+  `Đã quá hạn đổi/trả (${days} ngày từ khi nhận hàng). Cần hỗ trợ, liên hệ Tubu bên dưới.`;
 
 export const DEALER_REJECTED_RESUBMIT = 'Hồ sơ trước bị từ chối. Kiểm tra lại thông tin rồi nộp lại.';
 export const DEALER_PRICE_LOADING = 'Đang tải bảng giá, đợi chút rồi dán đơn…';
@@ -39,7 +39,7 @@ export function overStockMessage(productName: string, stock: number): string {
     : `Số lượng sản phẩm "${productName}" vượt số hàng đang có. Sửa số lượng trong giỏ để tiếp tục.`;
 }
 
-export const STOREFRONT_TEMPLATE_HINT = 'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu. Tubu tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.';
+export const STOREFRONT_TEMPLATE_HINT = 'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu. Tubu tự thêm 8 sản phẩm nổi bật, bạn chỉnh sau được.';
 export const STOREFRONT_TEMPLATE_BUSY = 'Đang dựng…';
 export const STOREFRONT_PUBLIC_TITLE = 'Gian hàng';
 export const STOREFRONT_NOT_FOUND = 'Gian hàng này không tồn tại hoặc đã ngừng hoạt động.';
@@ -53,7 +53,7 @@ export const CASHBACK_REDIRECT = 'Đã ghi nhận hoàn tiền! Đang chuyển h
 
 export const BRAND_OWNER_TITLE = 'Quản lý thương hiệu';
 export const BRAND_BADGE = 'Thương hiệu trên Tubu Tree';
-export const BRAND_OWNER_NONE = 'Bạn chưa được cấp quyền quản lý thương hiệu nào. Liên hệ Tubu để trở thành đối tác thương hiệu.';
+export const BRAND_OWNER_NONE = 'Bạn chưa có quyền quản lý thương hiệu nào. Liên hệ Tubu để trở thành đối tác.';
 export const BRAND_OWNER_INFO = 'Thông tin thương hiệu';
 export const BRAND_OWNER_SAVED = 'Đã lưu thông tin thương hiệu';
 export const BRAND_OWNER_VIEW_PAGE = 'Xem trang thương hiệu';
@@ -63,4 +63,4 @@ export const BRAND_OWNER_NO_ORDERS = 'Khi khách đặt sản phẩm của thư�
 export const BRAND_OWNER_REVENUE_NOTE =
   'Doanh thu là giá bán sản phẩm của thương hiệu trong các đơn đã xác nhận (chưa trừ mã giảm giá của đơn, chưa gồm phí vận chuyển; không tính đơn chờ thanh toán, đã huỷ, đã trả hoặc đã hoàn tiền). Số liệu tổng hợp, không hiện thông tin khách.';
 export const BRAND_OWNER_COUPON_HINT =
-  'Có mã thì khách chạm để sao chép ngay trên trang thương hiệu. Mã giảm giá phải do Tubu tạo sẵn, công khai và còn hạn — mã không có trong hệ thống sẽ bị từ chối khi lưu. Để trống ô này khi sửa để gỡ mã.';
+  'Khách chạm để chép mã ngay trên trang thương hiệu. Mã giảm giá phải do Tubu tạo sẵn, công khai và còn hạn. Để trống ô này để gỡ mã.';

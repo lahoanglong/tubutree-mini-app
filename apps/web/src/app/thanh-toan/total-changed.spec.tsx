@@ -107,7 +107,7 @@ describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () 
     m.quote.mockRejectedValue(new ApiError('Địa chỉ giao hàng chưa theo địa giới mới. Vui lòng cập nhật lại địa chỉ.', 400, 'ADDRESS_OUTDATED'));
     const r = await mount();
     const text = r.container.textContent ?? '';
-    expect(text).toContain('Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được.');
+    expect(text).toContain('Địa chỉ theo địa giới cũ nên chưa giao được.');
     expect(text).toContain('Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.');
     expect(placeButton(r).disabled).toBe(true);
   });
@@ -127,7 +127,7 @@ describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () 
       m.addresses = [LEGACY, OTHER];
       const r = await mount();
       const note = alertOf(r)!;
-      expect(note.textContent).toContain('Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.');
+      expect(note.textContent).toContain('Bạn chọn lại tỉnh/thành và phường/xã nhé.');
       click([...note.querySelectorAll('button')].find((b) => b.textContent === 'Cập nhật địa chỉ')!);
       await flush(2);
       expect(r.container.textContent).toContain('Sửa địa chỉ');

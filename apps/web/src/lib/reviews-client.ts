@@ -145,8 +145,8 @@ export function purchaseNote(o: { isEdit: boolean; purchaseCount: number; orderC
 }
 
 export const ELIGIBILITY_FAILED = 'Chưa kiểm tra được quyền đánh giá.';
-export const EDIT_HIDDEN_NOTE = 'Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.';
-export const SAVED_HIDDEN = 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.';
+export const EDIT_HIDDEN_NOTE = 'Đánh giá đang chờ Tubu xem xét nên chưa hiện công khai.';
+export const SAVED_HIDDEN = 'Đã lưu. Đánh giá đang được Tubu xem xét nên chưa hiện công khai.';
 
 /**
  * Đánh giá bị admin ẩn không nằm trong danh sách công khai: khách chỉ biết qua câu này. Không hứa "sửa là hiện lại" vì sửa

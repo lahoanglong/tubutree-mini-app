@@ -14,8 +14,8 @@ import { browserStorage } from '@/lib/recently-viewed';
 import { ui } from '@/lib/guest-ui';
 import { createAddress, updateAddress, type AddressDTO } from '@/lib/shop-client';
 
-const LEGACY_TEXT = 'Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.';
-const MISMATCH_TEXT = 'Tỉnh/thành hoặc phường/xã của địa chỉ này chưa đúng nên Tubu chưa giao được. Bạn chọn lại tỉnh/thành và phường/xã giúp Tubu nhé.';
+const LEGACY_TEXT = 'Địa chỉ theo địa giới cũ nên chưa giao được. Bạn chọn lại tỉnh/thành và phường/xã nhé.';
+const MISMATCH_TEXT = 'Tỉnh/thành hoặc phường/xã chưa đúng nên chưa giao được. Bạn chọn lại nhé.';
 
 const fullLine = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 

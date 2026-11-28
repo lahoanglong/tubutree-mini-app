@@ -882,7 +882,7 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: các dò
     expect(screen.queryByText('Ưu đãi hạng thành viên')).toBeNull();
     expect(screen.queryByText('41.000đ')).toBeNull();
     expect(screen.getAllByText('50.000đ').length).toBeGreaterThan(0);
-    expect(screen.getByText(/tính lại ở bước thanh toán/)).toBeInTheDocument();
+    expect(screen.getByText(/tính lại khi thanh toán/)).toBeInTheDocument();
   });
 
   it('chưa có địa chỉ mà đã ước tính được phí kiện Tubu: dòng phí ghi "19.000đ (ước tính)", tổng vẫn chưa tính', async () => {
@@ -1166,12 +1166,12 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
     renderPage();
     const card = (await screen.findByText(/1 Lê Lợi/)).closest('[data-testid="checkout-address-row"]') as HTMLElement;
     const alert = await within(card).findByRole('alert');
-    expect(alert).toHaveTextContent('chưa đúng nên Tubu chưa giao được');
+    expect(alert).toHaveTextContent('chưa đúng nên chưa giao được');
     expect(alert).not.toHaveTextContent('theo địa giới cũ');
     expect(screen.getByText('Sửa địa chỉ giao hàng rồi đặt hàng.')).toBeInTheDocument();
     expect(screen.queryByText(/Bấm Thử lại ở phần tóm tắt/)).not.toBeInTheDocument();
     fireEvent.click(within(alert).getByRole('button', { name: 'Sửa địa chỉ' }));
-    await waitFor(() => expect(screen.queryByText(/chưa đúng nên Tubu chưa giao được/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/chưa đúng nên chưa giao được/)).not.toBeInTheDocument());
     expect(screen.getByDisplayValue('Ánh')).toBeInTheDocument();
   });
 
@@ -2800,8 +2800,8 @@ describe('CheckoutPage — gửi lỗi mạng (hk)', () => {
     renderPage();
     await placeOrderClick();
     const retry = await screen.findByText('Thử lại · 70.000đ');
-    const status = screen.getAllByRole('status').find((el) => el.textContent?.includes('Chưa rõ đơn đã được ghi nhận chưa'));
-    expect(status).toHaveTextContent('Chưa rõ đơn đã được ghi nhận chưa. Bấm Thử lại để gửi lại đúng đơn này, hệ thống không tạo đơn trùng.');
+    const status = screen.getAllByRole('status').find((el) => el.textContent?.includes('Chưa rõ đơn đã ghi nhận chưa'));
+    expect(status).toHaveTextContent('Chưa rõ đơn đã ghi nhận chưa. Bấm Thử lại để gửi lại, hệ thống không tạo đơn trùng.');
     expect(screen.queryByText(/Đặt hàng · /)).not.toBeInTheDocument();
     await waitFor(() => expect(retry.closest('button')).not.toBeDisabled());
     fireEvent.click(retry);
@@ -2811,13 +2811,13 @@ describe('CheckoutPage — gửi lỗi mạng (hk)', () => {
     expect(await screen.findByTestId('order-success')).toBeInTheDocument();
   });
 
-  it('lỗi 4xx của máy chủ: nút vẫn là "Đặt hàng · tổng", không có câu "Chưa rõ đơn đã được ghi nhận chưa"', async () => {
+  it('lỗi 4xx của máy chủ: nút vẫn là "Đặt hàng · tổng", không có câu "Chưa rõ đơn đã ghi nhận chưa"', async () => {
     mocks.placeOrder.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status: 400, data: { statusCode: 400, message: 'Mã giảm giá đã hết hạn.' } }));
     renderPage();
     await placeOrderClick();
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
     expect(screen.getByText(/Đặt hàng · /)).toBeInTheDocument();
-    expect(screen.queryByText(/Chưa rõ đơn đã được ghi nhận chưa/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Chưa rõ đơn đã ghi nhận chưa/)).not.toBeInTheDocument();
   });
 
   it('khối báo cố định theo tên nút: nói Bấm Thử lại, không còn "Bấm Đặt hàng lần nữa để thử lại"', async () => {
@@ -4134,7 +4134,7 @@ describe('CheckoutPage — công tắc tin giao hàng cho người nhận (PO A1
     expect(screen.queryByTestId('order-zalo-recipient')).toBeNull();
     fireEvent.click(row);
     const block = screen.getByTestId('order-zalo-recipient');
-    expect(block).toHaveTextContent('Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.');
+    expect(block).toHaveTextContent('Số nhận hàng khác số tài khoản. Tin xác nhận đơn gửi về Zalo số 090•••4567.');
     expect(block).toHaveTextContent('Gửi thêm thông báo giao hàng (không kèm giá) cho số người nhận');
     expect(toggleRow()).toHaveAttribute('aria-checked', 'false');
     expect(toggleRow()).toHaveClass('touch-target');
@@ -4265,7 +4265,7 @@ describe('CheckoutPage — địa chỉ gọn, đổi trong 2 chạm, xem trư�
     expect(card).toHaveTextContent('Techcombank');
     expect(card).toHaveTextContent('CONG TY TUBU TREE');
     expect(card).toHaveTextContent('70.000');
-    expect(card).toHaveTextContent('Mã QR có đúng số tiền và nội dung sẽ hiện ngay sau khi bạn bấm Đặt hàng.');
+    expect(card).toHaveTextContent('Mã QR đúng số tiền và nội dung hiện ngay sau khi bạn bấm Đặt hàng.');
     expect(document.querySelector('img[alt="VietQR"], img[src*="vietqr"], canvas')).toBeNull();
     expect(vi.mocked(trackEvent)).toHaveBeenCalledWith('transfer_preview_shown', 'miniapp', {});
   });

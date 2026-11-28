@@ -189,7 +189,7 @@ export default function ProfilePage() {
                 <EmptyState
                   art="sprout"
                   heading="Đã đăng xuất"
-                  body={blocked ?? 'Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn.'}
+                  body={blocked ?? 'Đăng nhập để xem điểm, đơn hàng và ưu đãi của bạn.'}
                   ctaLabel="Đăng nhập ngay"
                   onCta={() => void useAuthStore.getState().login()}
                 />

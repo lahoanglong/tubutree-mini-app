@@ -640,7 +640,7 @@ describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
     mocks.auth.status = 'idle';
     const c = await mount();
     mocks.auth.status = 'authenticated';
-    expect(c.textContent).toContain('Đăng nhập để xem tích điểm');
+    expect(c.textContent).toContain('Đăng nhập để xem điểm');
     expect(mocks.calls).toEqual([]);
   });
 });

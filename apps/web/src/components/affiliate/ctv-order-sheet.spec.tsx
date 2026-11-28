@@ -473,7 +473,7 @@ describe('CtvOrderSheet — mạng chậm không tạo đơn thứ hai', () => {
     };
     await readyWithAn();
     click(submit());
-    await until(() => text().includes('Mạng yếu nên chưa biết đơn đã được tạo chưa.'), 6000);
+    await until(() => text().includes('Mạng yếu, chưa rõ đơn đã tạo chưa.'), 6000);
     expect(keyOf(1)).toBe(keyOf(0));
     expect(submit().textContent).toBe('Gửi lại đơn');
     click(submit());
@@ -505,7 +505,7 @@ describe('CtvOrderSheet — mạng chậm không tạo đơn thứ hai', () => {
     click(submit());
     await until(() => submit().textContent === 'Gửi lại đơn', 6000);
     click(aria('Tăng số lượng'));
-    await until(() => text().includes('Đơn gửi lúc nãy có thể đã được tạo'));
+    await until(() => text().includes('Đơn lúc nãy có thể đã tạo'));
     await until(() => !submit().disabled);
     click(submit());
     await until(() => text().includes('Đã tạo đơn hộ khách'));

@@ -132,7 +132,7 @@ describe('OrderEditSheet (Mini)', () => {
   });
 
   it('409 ORDER_EDIT_REFUSED: báo câu máy chủ, tải lại đơn, đóng tấm', async () => {
-    const message = 'Kho đã bắt đầu đóng gói đơn này nên không sửa được nữa. Bạn nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
+    const message = 'Kho đã đóng gói đơn này nên không sửa được. Nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
     mocks.patch.mockRejectedValue(httpError(409, { code: 'ORDER_EDIT_REFUSED', reason: 'PACKING_ON_PANCAKE', message }));
     const t = setup();
     fireEvent.change(t.field('Ghi chú cho đơn'), { target: { value: 'mới' } });
@@ -153,7 +153,7 @@ describe('OrderEditSheet (Mini)', () => {
 
   it('đơn địa giới cũ: chỉ ô ghi chú kèm lời giải thích, chỉ gửi ghi chú; đơn tách nói rõ chỉ áp cho đơn này', async () => {
     const t = setup({ address: { ...ADDRESS, provinceCode: '' }, split: true });
-    expect(t.sheet().textContent).toContain('Địa chỉ của đơn này chưa theo địa giới mới nên chỉ sửa được ghi chú.');
+    expect(t.sheet().textContent).toContain('Địa chỉ chưa theo địa giới mới nên chỉ sửa được ghi chú.');
     expect(t.sheet().textContent).toContain('Thay đổi chỉ áp dụng cho đơn TT001.');
     expect(t.sheet().querySelectorAll('input')).toHaveLength(0);
     fireEvent.change(t.field('Ghi chú cho đơn'), { target: { value: 'x' } });

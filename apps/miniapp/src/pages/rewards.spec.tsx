@@ -109,7 +109,7 @@ describe('/rewards Kho quà (§4.8)', () => {
     try {
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: /Thể lệ/ }));
-      expect(await screen.findByText('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
+      expect(await screen.findByText('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu, không trừ phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
     } finally {
       mocks.publicConfig.loyalty = undefined;
     }

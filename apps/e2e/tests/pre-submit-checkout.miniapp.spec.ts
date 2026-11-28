@@ -109,7 +109,7 @@ test.describe('Trước gửi duyệt: thanh toán Mini App (COD, chuyển kho�
     await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
 
     await expect(zaloBox(page)).toHaveAttribute('aria-checked', 'true');
-    await expect(recipientBlock(page)).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.');
+    await expect(recipientBlock(page)).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn gửi về Zalo số 090•••4567.');
     await expect(recipientBox(page)).toHaveAttribute('aria-checked', 'false');
     expect((await recipientBox(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await recipientBox(page).click();

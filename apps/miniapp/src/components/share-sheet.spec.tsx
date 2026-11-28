@@ -90,8 +90,8 @@ describe('ShareSheet — lỗi chia sẻ không bị nuốt (C-067)', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(STORE_LINK);
     const arg = mocks.openSnackbar.mock.calls[0]![0] as { text: string; type: string };
-    expect(arg.text).toMatch(/Chưa chia sẻ được qua Zalo/);
-    expect(arg.text).toMatch(/đã sao chép/i);
+    expect(arg.text).toMatch(/Chưa chia sẻ (qua Zalo được|hay sao chép được)/);
+    expect(arg.text).toMatch(/đã chép/i);
   });
 
   it('shareLink reject và clipboard cũng không dùng được: báo lỗi, hướng dẫn chép tay', async () => {
@@ -102,7 +102,7 @@ describe('ShareSheet — lỗi chia sẻ không bị nuốt (C-067)', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     const arg = mocks.openSnackbar.mock.calls[0]![0] as { text: string; type: string };
     expect(arg.type).toBe('error');
-    expect(arg.text).toMatch(/Chưa chia sẻ được qua Zalo/);
+    expect(arg.text).toMatch(/Chưa chia sẻ (qua Zalo được|hay sao chép được)/);
     expect(arg.text).toMatch(/chép/i);
   });
 

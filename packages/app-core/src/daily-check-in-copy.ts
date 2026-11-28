@@ -10,7 +10,7 @@ export const checkInCopy = {
   ruleToggleLabel: 'Luật',
   /** Vị trí trong lịch 7 ngày: một chuỗi chung cho Điểm Xanh và giọt nước ở Vườn Xanh. */
   cycleDay: (day: number) => `Ngày ${day}/7`,
-  rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam). Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
+  rule: 'Mỗi ngày nhận 1 lần cả Điểm Xanh và giọt nước (giờ Việt Nam). Lỡ 1 ngày: có vé giữ lửa thì giữ chuỗi, không thì lịch 7 ngày bắt đầu lại. Không tính vào xét hạng.',
   todayLead: 'Hôm nay nhận',
   todayLeadShort: 'Nhận',
   /** Phần nước còn thiếu nhưng bình đã đầy: không hứa giọt nước mà bình không chứa được. */

@@ -7,7 +7,7 @@ const OFFLINE = 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại
 const GENERIC = 'Có chút trục trặc, thử lại nhé';
 export const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Đăng nhập lại để tiếp tục.';
 const LOAD_TIMEOUT = 'Tải chậm quá, thử lại nhé.';
-const ACTION_TIMEOUT = 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.';
+const ACTION_TIMEOUT = 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại nhé.';
 
 /** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
 const NO_VIETNAMESE = /^(?=[^]*[A-Za-z])[^\u0080-\uffff]*$/;

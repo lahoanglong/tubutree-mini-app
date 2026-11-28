@@ -30,7 +30,7 @@ test('Mini App 375: máy chủ báo phường không thuộc tỉnh cho địa c
 
   const card = page.getByTestId('checkout-address-row');
   const alert = card.getByRole('alert');
-  await expect(alert).toContainText('chưa đúng nên Tubu chưa giao được', { timeout: 15_000 });
+  await expect(alert).toContainText('chưa đúng nên chưa giao được', { timeout: 15_000 });
   await expect(page.getByText('Sửa địa chỉ giao hàng rồi đặt hàng.')).toBeVisible();
   await alert.getByRole('button', { name: 'Sửa địa chỉ' }).click();
   await expect(page.getByLabel(/Người nhận/).first()).toHaveValue(CHECKOUT_ADDRESS.recipient);

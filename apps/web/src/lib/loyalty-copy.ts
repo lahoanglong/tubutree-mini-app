@@ -68,7 +68,7 @@ export function pointsRulesNote(loyalty: { maxRedeemPct?: number; pointExpireMon
   const parts: string[] = [];
   const pct = loyalty?.maxRedeemPct;
   if (typeof pct === 'number' && Number.isFinite(pct) && pct > 0 && pct <= 1) {
-    parts.push(`Điểm Xanh thường dùng tối đa ${Math.round(pct * 100)}% giá trị hàng Tubu trong đơn, không trừ vào phí ship.`);
+    parts.push(`Điểm Xanh thường dùng tối đa ${Math.round(pct * 100)}% giá trị hàng Tubu, không trừ phí ship.`);
   }
   const expiry = pointExpiryPolicyNote(loyalty?.pointExpireMonths);
   if (expiry) parts.push(expiry);

@@ -32,7 +32,7 @@ import { settleWithin } from '@/lib/settle-within';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
-const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
+const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử lại sau nhé.';
 
 // Ảnh đã cắt là data URL; đổi sang Blob bằng atob thay vì fetch vì CSP connect-src của web không mở cho data:.
 function dataUrlToBlob(dataUrl: string): Blob {

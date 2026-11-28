@@ -76,7 +76,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('?ref=ABC123'));
-    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/Chưa chia sẻ được qua Zalo/);
+    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/Chưa chia sẻ (qua Zalo được|hay sao chép được)/);
   });
 
   function renderKit() {

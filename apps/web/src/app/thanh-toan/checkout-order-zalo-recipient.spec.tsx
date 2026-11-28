@@ -70,7 +70,7 @@ const STATUS = {
   enabled: true, prechecked: false, choice: null, phoneMasked: '090•••4567', buyerPhone: '0901234567', phoneSource: 'account_verified',
   recipientEnabled: true, tubuZaloPhone: '0899149229',
 };
-const NOTE = 'Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.';
+const NOTE = 'Số nhận hàng khác số tài khoản. Tin xác nhận đơn gửi về Zalo số 090•••4567.';
 
 let mounted: Rendered[] = [];
 const mount = async () => {

@@ -306,7 +306,7 @@ describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ 
     expect(summary.textContent).not.toContain('Giảm giá combo');
     expect(summary.textContent).not.toContain('-15.000đ');
     expect(summary.textContent).not.toContain('-20.000đ');
-    expect(summary.textContent).toContain('Mua một phần giỏ: mã giảm giá và ưu đãi được tính lại ở bước thanh toán.');
+    expect(summary.textContent).toContain('Mua một phần giỏ: mã giảm giá và ưu đãi tính lại khi thanh toán.');
   });
 
   it('không có mã trong giỏ: không ghi dòng giảm giá dù discount > 0', async () => {

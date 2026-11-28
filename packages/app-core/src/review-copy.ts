@@ -5,11 +5,11 @@ import { formatVnNumber } from './number-format';
 export const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
 // Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy thông báo không kèm điểm.
 export const REWARD_ALREADY_GIVEN =
-  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, lần này không cộng thêm.';
 // Đơn có một biến thể đã trả mà biến thể kia vẫn mời viết (PO A2.1): máy chủ không thưởng đánh giá cho sản phẩm đã trả ở đơn đó.
 export const REWARD_RETURNED = 'Sản phẩm này đã có phần được trả ở đơn này nên đánh giá không cộng Điểm Xanh.';
 export const REVIEW_NEEDS_PURCHASE = 'Mua và nhận hàng để đánh giá';
-export const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
+export const EDIT_HINT = 'Chỉ đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh.';
 
 /** Chữ trên ô chọn video và nút gửi khi video đang tải lên; ở đây để form nạp được mà không kéo theo mã tải video. */
 export const VIDEO_UPLOADING = 'Đang tải video…';
@@ -67,7 +67,7 @@ export function greenCornerRules(cfg: (GreenCornerRules & { enabled: boolean }) 
  */
 export function greenCornerHint(o: { isEdit: boolean; rewardAvailable: boolean; hasMedia: boolean; rules: GreenCornerRules }): string {
   const { rewardPoints, dailyCap, maxPhotos } = o.rules;
-  if (o.isEdit) return 'Đổi ảnh thì Tubu duyệt lại trước khi hiện. Sửa đánh giá không cộng thêm Điểm Xanh.';
+  if (o.isEdit) return 'Đổi ảnh thì Tubu duyệt lại. Sửa đánh giá không cộng thêm Điểm Xanh.';
   const reviewed = `Đánh giá có ảnh (tối đa ${maxPhotos}) được Tubu duyệt trước khi hiện công khai.`;
   if (!o.rewardAvailable) return `${reviewed} Lần mua này không cộng thêm Điểm Xanh.`;
   if (rewardPoints <= 0 || dailyCap <= 0) return reviewed;
@@ -77,7 +77,7 @@ export function greenCornerHint(o: { isEdit: boolean; rewardAvailable: boolean; 
 }
 
 /** Lời báo sau khi gửi đánh giá có ảnh đang chờ duyệt (máy chủ trả `awaitingApproval: true`). */
-export const REVIEW_PENDING_SAVED = 'Đã gửi. Ảnh của bạn đang chờ Tubu duyệt, duyệt xong đánh giá sẽ hiện công khai.';
+export const REVIEW_PENDING_SAVED = 'Đã gửi. Ảnh đang chờ Tubu duyệt, duyệt xong đánh giá sẽ hiện.';
 
 /** Đánh giá của chính khách đang chờ duyệt không có trong danh sách công khai: khách chỉ biết qua câu này. Bỏ hết ảnh thì đánh giá hiện ngay. */
 export function pendingNotice(orderCode: string | null): string {

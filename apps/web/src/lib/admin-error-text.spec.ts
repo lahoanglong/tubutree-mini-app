@@ -36,6 +36,6 @@ describe('admin-error-text', () => {
     expect(actionErrorText(new ApiError('ThrottlerException: Too Many Requests', 429))).toBe(
       'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.',
     );
-    expect(actionErrorText(new NetworkError(true))).toBe('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.');
+    expect(actionErrorText(new NetworkError(true))).toBe('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại nhé.');
   });
 });

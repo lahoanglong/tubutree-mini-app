@@ -115,9 +115,9 @@ const FIRST_ONLY = 'Lần đầu đánh giá sản phẩm này';
 const HINT_TEXT_ONLY = `${FIRST_ONLY}: thêm video +15.000 / ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
 const HINT_IMAGES = `${FIRST_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.000.`;
 const HINT_VIDEO = `Tuyệt! ${FIRST_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`;
-const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
+const EDIT_HINT = 'Chỉ đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh.';
 const REWARD_ALREADY_GIVEN =
-  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, lần này không cộng thêm.';
 
 // R8: mỗi lần mua (đơn) một đánh giá. O1 đã được đánh giá (dòng "a" trong danh sách), O2 là lần mua sau chưa đánh giá.
 const O1 = { orderId: 'o1', code: 'TB0001', deliveredAt: '2026-08-01T00:00:00.000Z' };
@@ -1184,7 +1184,7 @@ describe('ReviewsSection: đánh giá bị Tubu ẩn (R5-BUYER-2)', () => {
   const HIDDEN_REF = { ...REF_A, isVisible: false };
   const ELIG_HIDDEN = { canReview: false, reason: 'ALL_REVIEWED', rewardAvailable: false, purchaseCount: 1, reviewableOrders: [], myReviews: [HIDDEN_REF] };
   const HIDDEN_NOTICE = 'Đánh giá cho đơn TB0001 của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.';
-  const SAVED_HIDDEN = 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.';
+  const SAVED_HIDDEN = 'Đã lưu. Đánh giá đang được Tubu xem xét nên chưa hiện công khai.';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1212,7 +1212,7 @@ describe('ReviewsSection: đánh giá bị Tubu ẩn (R5-BUYER-2)', () => {
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Sửa đánh giá của bạn' }));
     await screen.findByRole('radiogroup', { name: 'Số sao' });
-    expect(screen.getByText('Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.')).toBeInTheDocument();
+    expect(screen.getByText('Đánh giá đang chờ Tubu xem xét nên chưa hiện công khai.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SAVED_HIDDEN, type: 'info' }));

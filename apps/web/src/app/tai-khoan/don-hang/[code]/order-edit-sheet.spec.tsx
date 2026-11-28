@@ -113,7 +113,7 @@ describe('OrderEditSheet (web)', () => {
   });
 
   it('409 ORDER_EDIT_REFUSED: chuyển câu máy chủ ra trang (trang đóng tấm và tải lại đơn)', async () => {
-    const message = 'Kho đã bắt đầu đóng gói đơn này nên không sửa được nữa. Bạn nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
+    const message = 'Kho đã đóng gói đơn này nên không sửa được. Nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
     const t = await setup({ reply: { status: 409, body: { code: 'ORDER_EDIT_REFUSED', reason: 'PACKING_ON_PANCAKE', message } } });
     typeInto(t.input('Ghi chú cho đơn'), 'mới');
     click(t.save());
@@ -132,7 +132,7 @@ describe('OrderEditSheet (web)', () => {
 
   it('đơn địa giới cũ: chỉ có ô ghi chú kèm lời giải thích; đơn tách: nói rõ chỉ áp cho đơn này', async () => {
     const t = await setup({ address: { ...ADDRESS, provinceCode: '' }, split: true });
-    expect(t.sheet().textContent).toContain('Địa chỉ của đơn này chưa theo địa giới mới nên chỉ sửa được ghi chú.');
+    expect(t.sheet().textContent).toContain('Địa chỉ chưa theo địa giới mới nên chỉ sửa được ghi chú.');
     expect(t.sheet().textContent).toContain('Thay đổi chỉ áp dụng cho đơn TB-9.');
     expect(t.sheet().querySelectorAll('input')).toHaveLength(0);
     typeInto(t.input('Ghi chú cho đơn'), 'x');

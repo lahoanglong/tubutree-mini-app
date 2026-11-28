@@ -36,7 +36,7 @@ test.describe('Zalo Mini App E2E - Đánh giá theo từng lần mua (R8)', () =
     isVisible: true,
   };
   const REWARD_ALREADY_GIVEN =
-    'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
+    'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, lần này không cộng thêm.';
 
   test.beforeEach(async ({ api }) => {
     mockPilotProduct(api);
@@ -202,9 +202,9 @@ test.describe('Zalo Mini App E2E - Đánh giá theo từng lần mua (R8)', () =
     ).toBeVisible({ timeout: 15_000 });
 
     await reviews.getByRole('button', { name: 'Sửa đánh giá của bạn' }).click();
-    await expect(page.getByText('Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Đánh giá đang chờ Tubu xem xét nên chưa hiện công khai.')).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Lưu đánh giá' }).click();
-    await expect(page.getByText('Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Đã lưu. Đánh giá đang được Tubu xem xét nên chưa hiện công khai.')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Đã cập nhật đánh giá của bạn')).toHaveCount(0);
   });
 

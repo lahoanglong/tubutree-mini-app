@@ -61,8 +61,8 @@ export function StorefrontEmpty({ referralCode }: { referralCode?: string | null
       <h2 className="mt-3 font-display text-base font-semibold text-stone-900">{title}</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">
         {owner
-          ? 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.'
-          : 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.'}
+          ? 'Gian hàng chưa có sản phẩm nào khách xem được. Thêm sản phẩm nhé.'
+          : 'Gian hàng đang bổ sung sản phẩm. Bạn xem thử món đang bán trên Tubu Tree nhé.'}
       </p>
       <div className="mt-4">
         {owner ? (

@@ -33,9 +33,9 @@ export const CTV_ORDER_COPY = {
   requiredField: REQUIRED_FIELD,
   checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
   unconfirmed:
-    'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',
+    'Mạng yếu, chưa rõ đơn đã tạo chưa. Bấm “Gửi lại đơn”, Tubu không tạo đơn trùng.',
   unconfirmedChanged:
-    'Đơn gửi lúc nãy có thể đã được tạo. Bạn đã sửa đơn nên lần gửi này là đơn mới: xem danh sách đơn trước để khách không nhận hai đơn.',
+    'Đơn lúc nãy có thể đã tạo. Lần này là đơn mới, xem danh sách đơn để tránh trùng.',
   resend: 'Gửi lại đơn',
   viewOrders: 'Xem danh sách đơn',
   successTitle: 'Đã tạo đơn hộ khách 🎉',

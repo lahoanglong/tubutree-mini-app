@@ -187,7 +187,7 @@ describe('/thanh-toan — thẻ xem trước chuyển khoản (cờ checkout.tra
     expect(card.textContent).toContain('Vietcombank');
     expect(card.textContent).toContain('CONG TY TUBU');
     expect(card.textContent).toContain('130.000đ');
-    expect(card.textContent).toContain('Mã QR có đúng số tiền và nội dung sẽ hiện ngay sau khi bạn bấm Đặt hàng.');
+    expect(card.textContent).toContain('Mã QR đúng số tiền và nội dung hiện ngay sau khi bạn bấm Đặt hàng.');
     expect(r.container.querySelector('img[alt="VietQR"]')).toBeNull();
     expect(m.events).toContainEqual(['transfer_preview_shown', {}]);
     expect(m.prefetch).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/_');

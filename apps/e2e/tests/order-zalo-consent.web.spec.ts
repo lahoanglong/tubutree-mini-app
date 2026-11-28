@@ -113,7 +113,7 @@ test.describe('Web: ô đồng ý hành trình đơn qua Zalo', () => {
     await zaloRow(page).click();
     await expect(zaloBox(page)).toBeChecked();
     const block = recipientBlock(page);
-    await expect(block).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.');
+    await expect(block).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn gửi về Zalo số 090•••4567.');
     await expect(recipientBox(page)).not.toBeChecked();
     const toggleRow = page.locator('label').filter({ has: recipientBox(page) });
     expect((await toggleRow.boundingBox())!.height).toBeGreaterThanOrEqual(44);

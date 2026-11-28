@@ -407,7 +407,7 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     });
     const c = await mount();
     expect(c.querySelector('[data-testid="waste-max-open-notice"]')?.textContent).toBe(
-      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.',
+      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới nhé.',
     );
     const link = c.querySelector<HTMLAnchorElement>('a[href="/doi-rac/yeu-cau"]');
     expect(link?.textContent).toBe('Xem yêu cầu đang mở');

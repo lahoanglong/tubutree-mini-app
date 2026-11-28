@@ -229,7 +229,7 @@ describe('/recycle/points — món chỉ kho nhận (B-36)', () => {
     mocks.location.state = NAV;
     mocks.getWastePoints.mockResolvedValue([HCM, makeWastePoint({ id: 'wh-1', kind: 'WAREHOUSE', name: 'Kho Tubu TP.HCM' })]);
     renderPage();
-    expect(await screen.findByText(/Vỏ hộp sữa chỉ kho TP\.HCM nhận, nên các điểm đại lý đang bị khoá.*chọn kho Tubu/)).toBeInTheDocument();
+    expect(await screen.findByText(/Vỏ hộp sữa chỉ kho TP\.HCM nhận nên điểm đại lý đang khoá.*chọn kho Tubu/)).toBeInTheDocument();
   });
   it('kho không có trong danh sách (không ACTIVE): không bảo khách chọn kho, nói chưa có điểm nhận món này', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }] }));

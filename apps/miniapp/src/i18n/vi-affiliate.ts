@@ -33,9 +33,9 @@ export const viCtvOrder = {
   requiredField: REQUIRED_FIELD,
   checking: 'Mạng chậm nên chưa nhận được kết quả. Đang kiểm tra đơn…',
   unconfirmed:
-    'Mạng yếu nên chưa biết đơn đã được tạo chưa. Bấm “Gửi lại đơn”: nếu đơn đã tạo, bạn sẽ thấy đúng đơn đó, không tạo thêm đơn mới.',
+    'Mạng yếu, chưa rõ đơn đã tạo chưa. Bấm “Gửi lại đơn”, Tubu không tạo đơn trùng.',
   unconfirmedChanged:
-    'Đơn gửi lúc nãy có thể đã được tạo. Bạn đã sửa đơn nên lần gửi này là đơn mới: xem danh sách đơn trước để khách không nhận hai đơn.',
+    'Đơn lúc nãy có thể đã tạo. Lần này là đơn mới, xem danh sách đơn để tránh trùng.',
   resend: 'Gửi lại đơn',
   viewOrders: 'Xem danh sách đơn',
   successTitle: 'Đã tạo đơn hộ khách 🎉',
@@ -62,7 +62,7 @@ export const viCtvTerms = {
   ],
   agree: 'Tôi đã đọc và đồng ý với điều khoản hoa hồng & thuế của CTV Tubu Tree',
   mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
-  needZalo: 'Cần liên kết Zalo để nhận hoa hồng. Bấm Đăng ký lại và chọn cho phép dùng số điện thoại nhé.',
+  needZalo: 'Liên kết Zalo để nhận hoa hồng: bấm Đăng ký lại và cho phép dùng số điện thoại.',
 } as const;
 
 export const viAcademy = {
@@ -80,6 +80,6 @@ export const viAcademy = {
   markDoneOk: 'Đã đánh dấu hoàn thành bài học! 🎉',
   alreadyDone: 'Đã học xong',
   ctvOnlyTitle: 'Học viện CTV dành cho cộng tác viên',
-  ctvOnlyBody: 'Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.',
+  ctvOnlyBody: 'Tài khoản chưa có quyền học. Tìm hiểu cách trở thành cộng tác viên nhé.',
   ctvOnlyCta: 'Tìm hiểu về CTV',
 } as const;

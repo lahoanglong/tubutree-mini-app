@@ -82,7 +82,7 @@ describe('checkInView', () => {
 describe('memberCardHint', () => {
   it('chỉ hứa tích điểm tại quầy khi backend bật', () => {
     expect(memberCardHint({ posCreditEnabled: true })).toContain('Đưa mã QR này cho thu ngân');
-    expect(memberCardHint({ posCreditEnabled: false })).toContain('chưa được áp dụng');
+    expect(memberCardHint({ posCreditEnabled: false })).toContain('chỉ tích khi mua hàng online');
   });
 });
 
@@ -112,11 +112,11 @@ describe('expiringPointsNote / pointExpiryPolicyNote', () => {
 describe('pointsRulesNote', () => {
   it('nói đúng trần % trên giá trị hàng, phí ship và hạn điểm theo cấu hình', () => {
     expect(pointsRulesNote({ maxRedeemPct: 0.2, pointExpireMonths: 12 })).toBe(
-      'Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.',
+      'Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu, không trừ phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.',
     );
   });
   it('bỏ vế thiếu cấu hình, không bịa số', () => {
-    expect(pointsRulesNote({ maxRedeemPct: 0.2 })).toBe('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship.');
+    expect(pointsRulesNote({ maxRedeemPct: 0.2 })).toBe('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu, không trừ phí ship.');
     expect(pointsRulesNote({ pointExpireMonths: 6 })).toBe('Điểm Xanh thường có hạn 6 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
     expect(pointsRulesNote(undefined)).toBeNull();
     expect(pointsRulesNote({ maxRedeemPct: 0, pointExpireMonths: 0 })).toBeNull();

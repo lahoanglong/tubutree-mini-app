@@ -59,7 +59,7 @@ describe('PHONE_CONFIRM_COPY (W46): xác nhận 4 số cuối SĐT người nh�
     expect(PHONE_CONFIRM_COPY.label(marketplaceChannelName('lazada'))).toBe('Nhập 4 số cuối SĐT nhận hàng trên đơn Lazada');
     expect(PHONE_CONFIRM_COPY.label(marketplaceChannelName(null))).toBe('Nhập 4 số cuối SĐT nhận hàng trên đơn sàn TMĐT');
     expect(PHONE_CONFIRM_COPY.note('Shopee')).toBe(
-      'Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng Shopee (có thể khác SĐT tài khoản hiện tại của bạn).',
+      'Đây là số người nhận ghi trên đơn Shopee, có thể khác số tài khoản của bạn.',
     );
     expect(PHONE_CONFIRM_COPY.submit).toBe('Xác nhận & Tích điểm');
     expect(PHONE_CONFIRM_COPY.other).toBe('Quét đơn khác');

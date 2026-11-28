@@ -61,5 +61,5 @@ export function checkInView(s: CheckInStatusResponse): { canCheckIn: boolean; bu
 export function memberCardHint(card: Pick<MemberCardResponse, 'posCreditEnabled'>): string {
   return card.posCreditEnabled
     ? 'Đưa mã QR này cho thu ngân khi thanh toán tại cửa hàng Tubu để được tích Điểm Xanh.'
-    : 'Đây là mã thành viên của bạn. Tích Điểm Xanh khi mua tại cửa hàng chưa được áp dụng — hiện điểm được tích khi mua hàng online.';
+    : 'Đây là mã thành viên của bạn. Hiện Điểm Xanh chỉ tích khi mua hàng online.';
 }

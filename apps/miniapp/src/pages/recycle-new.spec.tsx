@@ -313,7 +313,7 @@ describe('bước 1: chọn món (§4.2)', () => {
     );
     renderPage();
     expect(await screen.findByTestId('waste-max-open-notice')).toHaveTextContent(
-      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.',
+      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới nhé.',
     );
     const cta = screen.getByRole('button', { name: 'Xem yêu cầu đang mở' });
     fireEvent.click(cta);

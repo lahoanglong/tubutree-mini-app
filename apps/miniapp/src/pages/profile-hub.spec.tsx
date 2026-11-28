@@ -531,7 +531,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     // R-67: link chép là link Mini App, không phải link web.
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining(miniAppLink('/?ref=LAN1'))));
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('đã sao chép liên kết') })),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('đã chép liên kết') })),
     );
   });
 
