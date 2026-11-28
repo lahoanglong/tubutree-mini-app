@@ -494,12 +494,11 @@ describe('ProductDetailPage — số suất Giờ vàng khách đã dùng ở c�
     expect(screen.queryByRole('button', { name: /^Mua ngay/ })).toBeNull();
   });
 
-  it('giá trên nút Mua ngay dùng số tabular: đổi phân loại hay số lượng không làm nhãn xô ngang ở 320/375px', async () => {
+  it('nút Mua ngay một dòng (w47-01): chữ thấy được chỉ "Mua ngay", giá vẫn nằm trong tên truy cập; đổi giá không làm nhãn xô ngang', async () => {
     mocks.fetchFlashAllowance.mockResolvedValue([]);
     renderPdp();
     await screen.findByTestId('flash-price-bar');
-    await waitFor(() => expect(buyNow()).toHaveAccessibleName(/^Mua ngay \d/));
-    const price = within(buyNow()).getByText(/^\d[\d.]*đ$/);
-    expect(price.style.fontVariantNumeric).toBe('tabular-nums');
+    await waitFor(() => expect(buyNow()).toHaveAccessibleName(/^Mua ngay \d[\d.]*đ$/));
+    expect(buyNow().textContent).toBe('Mua ngay');
   });
 });

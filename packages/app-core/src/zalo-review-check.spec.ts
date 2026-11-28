@@ -235,6 +235,26 @@ describe('scripts/zalo-review/check-submission: hồ sơ gửi duyệt Zalo Mini
       expect(failing(checks)).toEqual(['legal.web-policy', 'legal.checkout-consent', 'legal.console-links']);
     });
 
+    it('câu đồng ý một dòng (OrderConsent): thanh toán dựng <OrderConsent onOpenPolicy> và tấm mở đủ dieu-khoan, bao-mat thì đạt; thiếu bao-mat hay không nối onOpenPolicy thì đỏ', () => {
+      const consent = (list: string, call = 'onOpenPolicy(slug)') =>
+        `export const ORDER_CONSENT_POLICIES: readonly LegalSlug[] = [${list}];\nexport const OrderConsent = ({ onOpenPolicy }) => ORDER_CONSENT_POLICIES.map((slug) => <button onClick={() => ${call}} />);`;
+      const ok = withRepo((r) => {
+        r[FILES.checkout] = 'export const C = () => <OrderConsent onOpenPolicy={setPolicy} />;';
+        r[FILES.orderConsent] = consent("'dieu-khoan', 'bao-mat'");
+      });
+      expect(failing(ok)).toEqual([]);
+      const noPrivacy = withRepo((r) => {
+        r[FILES.checkout] = 'export const C = () => <OrderConsent onOpenPolicy={setPolicy} />;';
+        r[FILES.orderConsent] = consent("'dieu-khoan'");
+      });
+      expect(failing(noPrivacy)).toEqual(['legal.checkout-consent']);
+      const unwired = withRepo((r) => {
+        r[FILES.checkout] = 'export const C = () => <OrderConsent onOpenPolicy={setPolicy} />;';
+        r[FILES.orderConsent] = consent("'dieu-khoan', 'bao-mat'", 'void slug');
+      });
+      expect(failing(unwired)).toEqual(['legal.checkout-consent']);
+    });
+
     it('web-policy: re-export nằm trong chú thích thì đỏ; bí danh kiểu trỏ tới LegalSlug import từ legal-core thì đạt', () => {
       const commented = withRepo((r) => {
         r[FILES.webPolicy] = "// export type { LegalSlug as WebPolicySlug } from '@tubutree/app-core/legal-core';\nexport type WebPolicySlug = 'dieu-khoan';";

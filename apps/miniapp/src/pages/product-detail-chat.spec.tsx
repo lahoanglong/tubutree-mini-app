@@ -95,17 +95,11 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối cam kết (D7 #3)
     expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('Xà phòng sả chanh'));
   });
 
-  it('khối cam kết có nút "Chính sách vận chuyển": bấm mở chính sách ngay trong app, không rời trang', async () => {
-    mocks.fetchLegalDoc.mockResolvedValue({ content: 'Giao trong 2 đến 4 ngày làm việc.', vars: {} });
+  // Lối dòng "Vận chuyển ›" mở chính sách được kiểm ở product-detail-trust.spec.tsx (cấu hình ở đây không có ngưỡng miễn phí giao nên không có dòng).
+  it('khối cam kết không thêm nút "Chính sách vận chuyển" thứ ba (w47-01)', async () => {
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
-    const block = promisesBlock();
-    const link = within(block).getByRole('button', { name: 'Chính sách vận chuyển' });
-    expect(parseInt(link.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
-    fireEvent.click(link);
-    expect(await screen.findByText('Giao trong 2 đến 4 ngày làm việc.')).toBeInTheDocument();
-    expect(mocks.fetchLegalDoc).toHaveBeenCalledWith('van-chuyen');
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(within(promisesBlock()).queryByRole('button', { name: 'Chính sách vận chuyển' })).toBeNull();
   });
 
   it('không còn khối "Cam kết Tubu" lặp dải cam kết; đổi trả tắt (0 ngày) thì dải bỏ trụ đổi trả và chỉ còn một lối xem chính sách vận chuyển', async () => {
@@ -116,7 +110,7 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối cam kết (D7 #3)
     const strip = within(promisesBlock()).getByTestId('product-trust-strip');
     expect(within(strip).getByTestId('trust-pillar-returns')).toBeInTheDocument();
     expect(within(strip).getByTestId('product-trust-cta')).toHaveAttribute('data-policy', 'doi-tra');
-    expect(within(promisesBlock()).getByRole('button', { name: 'Chính sách vận chuyển' })).toBeInTheDocument();
+    expect(within(promisesBlock()).queryByRole('button', { name: 'Chính sách vận chuyển' })).toBeNull();
     expect(document.body.textContent).not.toContain('7 ngày');
     first.unmount();
 
@@ -213,7 +207,15 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
     expect(h1.style.fontFamily).toBe('var(--font-ui)');
   });
 
-  it.each(['Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng thương hiệu'])(
+  it('dải "Chi tiết sản phẩm" có tiêu đề h2 (lớp tubu-pdp-details-title, cùng cỡ title-sm), mô tả là một dòng gập trong dải', async () => {
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    const h2 = await screen.findByRole('heading', { level: 2, name: 'Chi tiết sản phẩm' });
+    expect(h2.className).toContain('tubu-pdp-details-title');
+    expect(h2.closest('[data-pdp-group="details"]')!.querySelector('[data-pdp-block="description"]')).not.toBeNull();
+  });
+
+  it.each(['Khách thường mua cùng', 'Cùng thương hiệu'])(
     'tiêu đề khối "%s" là h2 Inter 16/700, -0.01em (Q1: khối trong luồng mua)',
     async (title) => {
       renderPdp();

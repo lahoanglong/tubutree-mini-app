@@ -20,6 +20,8 @@ export interface PdpRefillOfferProps {
    * không ghi ở thẻ, trang ghi một lần cho cả danh sách.
    */
   surface?: 'pdp' | 'landing' | 'order';
+  /** false: nơi đặt tự ghi lần hiện (trang sản phẩm ghi khi dải chọn cách mua có nút Refill, thẻ chỉ hiện khi khách chọn chế độ đó). Mặc định true. */
+  trackShown?: boolean;
 }
 
 /**
@@ -27,13 +29,13 @@ export interface PdpRefillOfferProps {
  * Trái: "Chọn túi Refill 10L tiết kiệm 470.000đ (~34%)" và "Thay thế 20 chai nhựa · 890.000đ" (chạm mở trang gói). Phải: "+ Thêm" 44px thêm gói vào giỏ
  * một chạm. Nút mua chính của trang vẫn là "Thêm vào giỏ" của chai.
  */
-export function PdpRefillOffer({ view, busy, blocked, onAdd, onOpen, surface = 'pdp' }: PdpRefillOfferProps) {
+export function PdpRefillOffer({ view, busy, blocked, onAdd, onOpen, surface = 'pdp', trackShown = true }: PdpRefillOfferProps) {
   const id = view.productId;
   useEffect(() => {
-    if (surface !== 'landing') trackEvent('refill_swap_shown', 'miniapp', { surface });
-  }, [id, surface]);
+    if (trackShown && surface !== 'landing') trackEvent('refill_swap_shown', 'miniapp', { surface });
+  }, [id, surface, trackShown]);
   return (
-    <div data-pdp-block="refill" data-testid="pdp-refill" className="tubu-refill-offer">
+    <div data-testid="pdp-refill" className="tubu-refill-offer">
       <div className="tubu-refill-offer-card">
         <button type="button" data-testid="pdp-refill-open" className="tubu-refill-offer-main tubu-hit-44" onClick={() => onOpen(view.slug)}>
           <span className="tubu-refill-offer-title">{view.title}</span>

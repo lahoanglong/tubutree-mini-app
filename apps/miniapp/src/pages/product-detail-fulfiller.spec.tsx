@@ -125,14 +125,15 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
     expect(screen.queryByText(/Mở nhóm mua chung/)).toBeNull();
   });
 
-  it('hàng Tubu giao: giữ badge freeship của Tubu, "Đặt định kỳ" (vùng chạm >= 44px) và mua chung', async () => {
+  it('hàng Tubu giao: giữ badge freeship của Tubu, nút "Định kỳ" của dải chọn cách mua (lớp tubu-buy-mode cao 44px) và mua chung', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } }));
     renderPdp();
     expect(await screen.findByText('Miễn phí giao hàng cho đơn từ 200.000đ')).toBeInTheDocument();
     expect(screen.getByText('Tubu Tree giao hàng')).toBeInTheDocument();
     expect(screen.queryByText(/không dùng Điểm Xanh/)).toBeNull();
-    const subscribe = screen.getByText(/Đặt định kỳ/).closest('[role="button"]') as HTMLElement;
-    expect(subscribe.style.minHeight).toBe('44px');
+    const subscribe = screen.getByRole('button', { name: /^Định kỳ/ });
+    expect(subscribe.className).toContain('tubu-buy-mode');
+    expect(subscribe.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByText(/Mở nhóm mua chung — nhận mã giảm giá khi đủ người/)).toBeInTheDocument();
     expect(screen.queryByText(/tự giao/)).toBeNull();
   });
@@ -153,7 +154,7 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
     mocks.fetchProduct.mockResolvedValue(product());
     renderPdp();
     expect(await screen.findByText('Miễn phí giao hàng cho đơn từ 200.000đ')).toBeInTheDocument();
-    expect(screen.getByText(/Đặt định kỳ/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Định kỳ/ })).toBeInTheDocument();
   });
 
   it('dòng "Vận chuyển" chỉ gồm ai giao + phí/freeship; hàng Tubu giao hộ đối tác: dòng bấm được, tên truy cập không kèm câu giải thích dài', async () => {
@@ -180,6 +181,8 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
     expect(notes).toHaveTextContent(/COD/);
     expect(notes).toHaveTextContent(/chỉ bán theo giá lẻ/);
     expect(notes.closest('[role="button"]')).toBeNull();
+    // Không có dải cam kết của Tubu nên khối cam kết giữ nút chính sách vận chuyển: lối duy nhất tới chính sách trên trang.
+    expect(screen.getByRole('button', { name: 'Chính sách vận chuyển' })).toBeInTheDocument();
   });
 
   it('gian hàng tạm nghỉ: thông báo trạng thái là chữ thường, không bọc trong một nút bấm', async () => {

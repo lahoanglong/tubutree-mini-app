@@ -260,24 +260,6 @@ body.with-back-btn .page.page-bleed {
   transform: translateY(-50%);
 }
 
-/* ── Dòng năm link chính sách dưới câu đồng ý ở trang thanh toán (Text xSmall: 13px, dòng 18px): mỗi dòng link cao 44px nên khi phải xuống
-   dòng (máy 360px) vùng chạm 44px của link dòng trên không đè link dòng dưới. Lề dọc âm (18 − 44) / 2 trả lại phần cao thêm: vừa một dòng
-   thì khối vẫn cao đúng một dòng chữ. inline-block để lề âm không lọt qua đáy đoạn văn. ── */
-.tubu-consent-links {
-  display: inline-block;
-  width: 100%;
-  vertical-align: top;
-  line-height: 44px;
-  margin-block: -13px;
-}
-/* Link chữ ngắn ("Đổi trả" 13px chỉ rộng ~41px) vẫn chạm đủ 44px bề ngang: lớp phủ giãn quanh tâm, lấn vào ", " bên cạnh chứ không đổi bố cục dòng. */
-.tubu-consent-links .tubu-hit-44::after {
-  left: 50%;
-  right: auto;
-  width: max(100%, 44px);
-  transform: translate(-50%, -50%);
-}
-
 /* ── Vùng chạm 44x44 cho nút vuông nhìn nhỏ hơn (QuantitySelector sm 36px): giãn cả hai chiều, không đổi hình ── */
 .tubu-hit-44-square {
   position: relative;

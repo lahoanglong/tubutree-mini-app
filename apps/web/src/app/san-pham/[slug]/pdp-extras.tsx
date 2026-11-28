@@ -345,21 +345,34 @@ export function PdpLowStock({ slug, variations }: { slug: string; variations: { 
  * Dòng "Đặt định kỳ" mở sheet tạo gói; chỉ có với hàng Tubu còn hàng ở phân loại đang chọn. Số % là số máy chủ cấu hình (`subscribePct`); chưa có cấu hình
  * thật (tải lỗi, không có bản máy chủ) thì câu không nêu số thay vì in số dự phòng.
  */
-export function PdpSubscribeRow({ slug, variations, initialConfig }: { slug: string; variations: PdpVariation[]; initialConfig?: PublicConfig }) {
-  const router = useRouter();
-  const phase = useAuthPhase();
+/**
+ * Đặt định kỳ dùng được cho phân loại đang chọn (còn hàng) và phần trăm đọc từ cấu hình, cho nút "Định kỳ" của dải chọn cách mua (`PdpBuyModeStrip`).
+ * Tải cấu hình ở trình duyệt lỗi thì giữ số máy chủ đã dựng trong HTML (như dải cam kết), không đổi câu giữa chừng.
+ */
+export function usePdpSubscribeOffer(slug: string, variations: PdpVariation[], initialConfig?: PublicConfig) {
   const cfg = usePublicConfig(initialConfig);
-  // Tải cấu hình ở trình duyệt lỗi thì giữ số máy chủ đã dựng trong HTML (như dải cam kết), không đổi câu giữa chừng.
   const pct = subscribePct(cfg.isLoaded ? cfg.subscribeDiscountPct : initialConfig?.subscribeDiscountPct);
   const sel = usePdpSelection();
   const stockQ = useProductStock(slug);
+  const selected = variations.find((v) => v.id === sel?.selectedId);
+  const stock = selected ? (stockQ.data?.[selected.id] ?? selected.stock) : 0;
+  return { pct, selected: stock > 0 ? selected : undefined, stock, quantity: sel?.quantity ?? 1 };
+}
+
+/** Khách vừa đăng nhập quay lại từ nút Đặt định kỳ (`?tiep=dinh-ky`): dải chọn cách mua chọn sẵn "Định kỳ" để dòng dưới đây tự mở tấm. */
+export function subscribeResumeRequested(): boolean {
+  return typeof window !== 'undefined' && new URL(window.location.href).searchParams.get(RESUME_PARAM) === RESUME_SUBSCRIBE;
+}
+
+/** Dòng chi tiết của chế độ "Định kỳ" trong dải chọn cách mua (w47-01): một nút mở tấm Đặt định kỳ (khách chưa đăng nhập thì sang đăng nhập rồi quay lại). */
+export function PdpSubscribeRow({ slug, variations, initialConfig }: { slug: string; variations: PdpVariation[]; initialConfig?: PublicConfig }) {
+  const router = useRouter();
+  const phase = useAuthPhase();
+  const { pct, selected, stock, quantity } = usePdpSubscribeOffer(slug, variations, initialConfig);
   const [open, setOpen] = useState(false);
   const everOpen = useEverOpen(open);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const selected = variations.find((v) => v.id === sel?.selectedId);
-  const stock = selected ? (stockQ.data?.[selected.id] ?? selected.stock) : 0;
 
   useEffect(() => {
     if (phase !== 'authenticated') return;
@@ -370,7 +383,7 @@ export function PdpSubscribeRow({ slug, variations, initialConfig }: { slug: str
     setOpen(true);
   }, [phase]);
 
-  if (!selected || stock <= 0) return null;
+  if (!selected) return null;
 
   const onClick = () => {
     setNotice(null);
@@ -388,15 +401,11 @@ export function PdpSubscribeRow({ slug, variations, initialConfig }: { slug: str
   };
 
   return (
-    <div data-pdp-block="subscribe" className="mt-3">
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-h-11 w-full items-center gap-2 rounded-control border border-dashed border-forest-600 bg-forest-50 px-3 py-2.5 text-left"
-      >
-        <Repeat className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold text-forest-700">{pct === null ? fillCopy('pdp.subscribeSaveNoPct') : fillCopy('pdp.subscribeSave', { pct })}</span>
-        <ChevronRight className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
+    <div>
+      <button type="button" data-testid="pdp-subscribe-open" onClick={onClick} className="tubu-buy-mode-action tubu-press">
+        <Repeat size={18} aria-hidden="true" />
+        <span className="tubu-buy-mode-action-text">{pct === null ? fillCopy('pdp.subscribeSaveNoPct') : fillCopy('pdp.subscribeSave', { pct })}</span>
+        <ChevronRight size={18} aria-hidden="true" />
       </button>
       {notice && (
         <p role="status" className="mt-1 text-sm text-success-fg">
@@ -414,7 +423,7 @@ export function PdpSubscribeRow({ slug, variations, initialConfig }: { slug: str
           onClose={() => setOpen(false)}
           onNotice={setNotice}
           variationId={selected.id}
-          quantity={Math.min(sel?.quantity ?? 1, qtyPickMax(stock))}
+          quantity={Math.min(quantity, qtyPickMax(stock))}
         />
       )}
     </div>

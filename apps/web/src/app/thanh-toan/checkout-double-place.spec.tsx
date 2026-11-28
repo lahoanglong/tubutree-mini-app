@@ -57,7 +57,7 @@ const mount = async () => {
   await flush(8);
   return r.container;
 };
-const lgButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-mini-part="place-order"] button')!;
+const lgButton = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-mini-part="place-order"] button:not([data-testid="order-consent"])')!;
 const barButton = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!.querySelector<HTMLButtonElement>('button')!;
 /** Hai cú bấm liên tiếp trước khi React vẽ lại: `click` của harness mở một `act` riêng cho mỗi cú nên không đủ nhanh. */
 const pressTwice = (...els: HTMLElement[]) =>

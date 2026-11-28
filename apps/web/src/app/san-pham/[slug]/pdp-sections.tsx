@@ -1,28 +1,26 @@
 'use client';
 
-import { Fragment, useId, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Star } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
-import { ingredientsPreview } from '@tubutree/app-core/commerce/pdp-info';
 import { LEGAL_PAGES } from '@tubutree/app-core/legal';
-import { parseRichText, richTextPlain, type RichBlock, type RichInline } from '@tubutree/app-core/rich-text';
+import { parseRichText, type RichBlock, type RichInline } from '@tubutree/app-core/rich-text';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
 import { RefillLandingLink, type RefillEntryLink } from '@/components/refill/refill-landing-link';
 import type { ProductDetail } from '@/lib/api';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText } from '@/lib/phone-ui';
+import { PdpDetailRow } from '@/components/mini/pdp-detail-row';
 import { SHIPPING_POLICY_PATH, useTrustView } from './pdp-extras';
 import { pdpBand, pdpSectionTitle } from './pdp-ui';
 
 export { pdpBand, pdpSectionTitle };
 
-const COLLAPSED_LINES_THRESHOLD = 220;
-
 /**
- * Ngay dưới thẻ gói Refill của chai đã ghép cặp: lối sang trang mọi gói Refill (link nội bộ cho SEO). Chỉ hiện từ md (xem `RefillLandingLink`):
+ * Ngay dưới dải chọn cách mua của chai đã ghép gói Refill: lối sang trang mọi gói Refill (link nội bộ cho SEO). Chỉ hiện từ md (xem `RefillLandingLink`):
  * thẻ Refill ở điện thoại giữ đúng một khối như Mini App.
  */
 export function PdpRefillLandingLink({ entry }: { entry: RefillEntryLink }) {
@@ -47,22 +45,16 @@ export function PdpRating({ average, count }: { average: number | undefined; cou
 }
 
 /**
- * Thành phần: niềm tin cho khách ngại hoá chất. Mở sẵn 3 dòng (`ingredientsPreview`), nhiều hơn thì "Xem đủ (n)" / "Thu gọn". Các dòng đang gập vẫn nằm
- * trong HTML (ẩn bằng `hidden`) để công cụ tìm kiếm đọc đủ thành phần. Không có thì không dựng mục.
+ * Dòng "Thành phần" của dải Chi tiết sản phẩm (w47-01): gập sẵn, chữ phụ là số thành phần; mở ra là đủ danh sách. Dòng đang gập vẫn nằm trong HTML
+ * (thuộc tính `hidden` của `PdpDetailRow`) để công cụ tìm kiếm đọc đủ thành phần. Không có thì không dựng mục.
  */
 export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['ingredients'] }) {
-  const [expanded, setExpanded] = useState(false);
-  const listId = useId();
   if (!ingredients || ingredients.length === 0) return null;
-  const { shown, hidden } = ingredientsPreview(ingredients, expanded);
-  const canToggle = expanded || hidden > 0;
   return (
-    <section data-pdp-block="ingredients" data-section="pdp-ingredients" className={pdpBand}>
-      <h2 className={pdpSectionTitle}>{fillCopy('pdp.ingredients')}</h2>
-      <ul id={listId} className="mt-3 flex flex-col gap-2.5">
+    <PdpDetailRow block="ingredients" title={fillCopy('pdp.ingredients')} hint={fillCopy('pdp.ingredientsCount', { n: ingredients.length })}>
+      <ul className="flex flex-col gap-2.5">
         {ingredients.map((ing, i) => (
-          // `hidden` của Tailwind chứ không thuộc tính `hidden`: lớp `flex` đứng sau trong CSS sẽ thắng thuộc tính và dòng gập vẫn hiện.
-          <li key={i} data-testid="pdp-ingredient" className={i < shown.length ? 'flex gap-2.5' : 'hidden'}>
+          <li key={i} data-testid="pdp-ingredient" className="flex gap-2.5">
             <span aria-hidden="true" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[var(--color-text-brand)]" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
@@ -74,25 +66,14 @@ export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['in
           </li>
         ))}
       </ul>
-      {canToggle && (
-        <button
-          type="button"
-          data-testid="pdp-ingredients-toggle"
-          aria-expanded={expanded}
-          aria-controls={listId}
-          onClick={() => setExpanded((e) => !e)}
-          className={`${ui.btnText} mt-1 no-underline text-[var(--color-text-brand)] tabular-nums`}
-        >
-          {expanded ? fillCopy('pdp.ingredientsLess') : fillCopy('pdp.ingredientsMore', { n: ingredients.length })}
-        </button>
-      )}
-    </section>
+    </PdpDetailRow>
   );
 }
 
 /**
- * Khối cam kết cuối trang: dải ba trụ cột (`ProductTrustStrip`, hàng gian hàng tự giao không có), lối xem chính sách vận chuyển (bỏ khi lối của dải đã trỏ
- * đúng chính sách đó), `children` là nút chat ngay trong dải trắng; `rows` (Mở nhóm mua chung, Nội dung bán hàng) là các dải bấm riêng ngay bên dưới.
+ * Khối cam kết cuối trang: dải ba trụ cột (`ProductTrustStrip`, hàng gian hàng tự giao không có), `children` là nút chat ngay trong dải trắng; `rows`
+ * (Mở nhóm mua chung, Nội dung bán hàng) là các dải bấm riêng ngay bên dưới. Hàng Tubu đã có lối tới chính sách vận chuyển ở dòng "Vận chuyển ›" và dải
+ * ba trụ cột nên khối không thêm link; khi không có dải (hàng gian hàng, không giao được) link là lối duy nhất tới chính sách.
  */
 export function PdpPromises({
   fulfillerKind,
@@ -110,8 +91,8 @@ export function PdpPromises({
     <div data-pdp-block="promises">
       <div data-section="pdp-promises" className={pdpBand}>
         <ProductTrustStrip view={trust} />
-        {trust?.cta.slug !== 'van-chuyen' && (
-          // Hàng riêng, cách lối chính sách của dải phía trên: hai link nằm sát hay cùng hàng với nút chat thì vùng chạm 44px chồng nhau.
+        {!trust && (
+          // Hàng riêng, cách nút chat: hai lối nằm cùng hàng thì vùng chạm 44px chồng nhau.
           <div className="mt-2">
             <Link href={SHIPPING_POLICY_PATH} data-testid="pdp-shipping-policy" className={`${ui.btnText} ${phoneBrandText}`}>
               {LEGAL_PAGES['van-chuyen'].title}
@@ -166,31 +147,21 @@ function RichBlockView({ block }: { block: RichBlock }) {
 }
 
 /**
- * Mô tả sản phẩm: chuỗi của Pancake/WordPress có thể là HTML; `parseRichText` (app-core) đọc theo danh sách thẻ cho phép thành đoạn, tiêu đề, danh sách,
- * chữ đậm/nghiêng và trang vẽ như chữ (không `innerHTML`), nên thẻ không bao giờ hiện thành chữ và không có mã lạ nào chạy. Dài thì thu gọn chừng 4 dòng
- * kèm Xem thêm; toàn bộ chữ vẫn nằm trong HTML để công cụ tìm kiếm đọc được.
+ * Dòng "Mô tả chi tiết" của dải Chi tiết sản phẩm (w47-01): chuỗi của Pancake/WordPress có thể là HTML; `parseRichText` (app-core) đọc theo danh sách thẻ
+ * cho phép thành đoạn, tiêu đề, danh sách, chữ đậm/nghiêng và trang vẽ như chữ (không `innerHTML`), nên thẻ không bao giờ hiện thành chữ. Gập sẵn; toàn
+ * bộ chữ vẫn nằm trong HTML để công cụ tìm kiếm đọc được.
  */
-export function PdpDescription({ source }: { source: string | null | undefined }) {
-  const [expanded, setExpanded] = useState(false);
-  const blocks = useMemo(() => parseRichText(source), [source]);
+export function PdpDescription({ source, lead }: { source: string | null | undefined; lead?: string | null }) {
+  // `lead`: mô tả ngắn nhiều ý (`pdpDescriptionLead`), đoạn đầu để phần Điểm nổi bật cắt bớt vẫn đọc được đủ.
+  const blocks = useMemo<RichBlock[]>(() => [...(lead ? [{ kind: 'p' as const, inlines: [{ text: lead }] }] : []), ...parseRichText(source)], [lead, source]);
   if (blocks.length === 0) return null;
-  const isLong = richTextPlain(blocks).length > COLLAPSED_LINES_THRESHOLD;
   return (
-    <section data-pdp-block="description" data-section="pdp-description" className={pdpBand}>
-      <h2 className={pdpSectionTitle}>Mô tả sản phẩm</h2>
-      <div
-        id="pdp-description"
-        className={`mt-2 flex flex-col gap-2 whitespace-pre-line break-words text-stone-700 max-md:mt-1.5 max-md:text-sm max-md:text-[var(--color-text-secondary)] ${isLong && !expanded ? 'max-h-24 overflow-hidden' : ''}`}
-      >
+    <PdpDetailRow block="description" title={fillCopy('pdp.descriptionRow')}>
+      <div data-testid="pdp-description-body" className="flex flex-col gap-2 whitespace-pre-line break-words">
         {blocks.map((b, i) => (
           <RichBlockView key={i} block={b} />
         ))}
       </div>
-      {isLong && (
-        <button type="button" aria-expanded={expanded} aria-controls="pdp-description" onClick={() => setExpanded((e) => !e)} className={`${ui.btnText} max-md:px-0 ${phoneBrandText}`}>
-          {expanded ? 'Thu gọn' : 'Xem thêm'}
-        </button>
-      )}
-    </section>
+    </PdpDetailRow>
   );
 }

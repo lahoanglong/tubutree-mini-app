@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '@/components/mini';
 import { GUEST_CART_MAX_LINES, addGuestLine } from '@/lib/guest-cart/store';
-import { FreeshipAddonsPending } from './freeship-addons';
+import { FreeshipAddonsPending, freeshipAddonsToggleLabel } from './freeship-addons';
 import { pickFreeshipAddonItems } from './freeship-addons-pick';
 import type { FreeshipAddonsViewProps } from './freeship-addons-view';
 
@@ -32,10 +32,10 @@ export function GuestFreeshipAddonsView({ goal, lines, exclude, onShownChange, s
     setError(res.ok ? null : res.reason === 'full' ? fillCopy('guestCart.full', { n: GUEST_CART_MAX_LINES }) : fillCopy('guestCart.atMax'));
   };
 
-  if (railGone && !error) return source.pending ? <FreeshipAddonsPending title={goal.headline} /> : null;
+  if (railGone && !error) return source.pending ? <FreeshipAddonsPending title={freeshipAddonsToggleLabel(goal)} /> : null;
   return (
     <>
-      <FreeshipAddonRail title={goal.headline} stage={goal.stage} items={picked} onAdd={add} />
+      <FreeshipAddonRail title={goal.headline} stage={goal.stage} items={picked} onAdd={add} collapsible />
       {error && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {error}

@@ -159,13 +159,14 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
       const guide = block('origin')!;
       expect(toggle.getAttribute('aria-expanded')).toBe('false');
       expect(toggle.textContent).toBe('Nguồn gốc & cách dùngThanh Hóa');
-      // `hidden` chỉ ẩn khi không có `display` viết tay đè lên.
+      // `hidden` chỉ ẩn khi không có `display` viết tay đè lên: phần thân gập không mang style riêng.
       const list = guide.querySelector('dl')!;
-      expect(list.hidden).toBe(true);
-      expect(list.style.display).toBe('');
+      const body = list.parentElement!;
+      expect(body.hidden).toBe(true);
+      expect(body.style.display).toBe('');
       fireEvent.click(toggle);
       expect(toggle.getAttribute('aria-expanded')).toBe('true');
-      expect(list.hidden).toBe(false);
+      expect(body.hidden).toBe(false);
       expect(list.style.display).toBe('flex');
       const rowText = (key: string) => guide.querySelector(`[data-testid="pdp-origin-${key}"]`)?.textContent;
       expect(rowText('origin')).toBe('Đến từFuwa3e · Thanh HóaXem trên bản đồ');
@@ -251,24 +252,35 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
     });
   });
 
-  describe('thẻ gói Refill của chai đã ghép cặp (tubu-w13-01, thay liên kết đổi của tubu-w9-03)', () => {
+  describe('thẻ gói Refill của chai đã ghép cặp (tubu-w13-01; w47-01: nằm dưới nút "Túi Refill" của dải cách mua)', () => {
+    /** Thẻ gói chỉ hiện khi khách chọn "Túi Refill" trong dải; Mua lẻ là mặc định. */
+    const openRefill = async () => {
+      const pill = await screen.findByRole('button', { name: /^Túi Refill/ });
+      expect(pill).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.queryByTestId('pdp-refill')).toBeNull();
+      fireEvent.click(pill);
+      expect(pill).toHaveAttribute('aria-pressed', 'true');
+      return screen.getByTestId('pdp-refill');
+    };
     const BOTTLE = { name: 'Nước rửa chén Fuwa3e 500ml', basePrice: 68_000 };
     const REFILL = {
       productId: 'p-refill', slug: 'refill-nuoc-rua-chen-fuwa3e-10l-69f244', name: 'Refill Nước rửa chén Fuwa3e 10L', thumbnail: null,
       variationId: 'v-refill', price: 890_000, compareAt: null, sizeLabel: '10L', inStock: true, tubu: true,
     };
 
-    it('cờ bật: MỘT khối ngay sau dòng Mua lại, tiết kiệm đúng số đồng (~%), số chai thay, giá gói; chạm chữ mở trang gói, "+ Thêm" thêm đúng phân loại gói 1 cái', async () => {
+    it('cờ bật: nút "Túi Refill · Tiết kiệm ~34%" trong dải ngay sau dòng Mua lại; chọn thì hiện thẻ: tiết kiệm đúng số đồng (~%), số chai thay, giá gói; chạm chữ mở trang gói, "+ Thêm" thêm đúng phân loại gói 1 cái', async () => {
       mocks.refillFirst = true;
       mocks.fetchProduct.mockResolvedValue(product(BOTTLE));
       mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
       renderPdp();
-      const card = await screen.findByTestId('pdp-refill');
+      expect(await screen.findByRole('button', { name: 'Túi Refill, Tiết kiệm ~34%' })).toBeInTheDocument();
+      const card = await openRefill();
       expect(mocks.fetchRefillPair).toHaveBeenCalledWith('p1');
       expect(card).toHaveTextContent('Chọn túi Refill 10L tiết kiệm 470.000đ (~34%)');
       expect(card).toHaveTextContent('Thay thế 20 chai nhựa · 890.000đ');
       expect(screen.getAllByTestId('pdp-refill')).toHaveLength(1);
-      await waitFor(() => expect(blockKeys().indexOf('refill')).toBe(blockKeys().indexOf('rebuy') + 1));
+      await waitFor(() => expect(blockKeys().indexOf('modes')).toBe(blockKeys().indexOf('rebuy') + 1));
+      expect(block('modes')!.contains(card)).toBe(true);
       expect(within(block('rebuy')!).getAllByRole('button')).toHaveLength(1);
       expect(within(card).getAllByRole('button')).toHaveLength(2);
       fireEvent.click(within(card).getByTestId('pdp-refill-open'));
@@ -285,13 +297,13 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
       mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [purchased({ productId: 'p-khac', slug: 'khac' })], nextCursor: null });
       const notBought = renderPdp();
-      expect(await screen.findByTestId('pdp-refill')).toHaveTextContent('tiết kiệm 470.000đ');
+      expect(await openRefill()).toHaveTextContent('tiết kiệm 470.000đ');
       expect(block('rebuy')).toBeNull();
       notBought.unmount();
 
       mocks.authStatus = 'guest';
       renderPdp();
-      expect(await screen.findByTestId('pdp-refill')).toHaveTextContent('Chọn túi Refill 10L');
+      expect(await openRefill()).toHaveTextContent('Chọn túi Refill 10L');
       expect(mocks.fetchPurchasedItems).toHaveBeenCalledTimes(1);
     });
 
@@ -302,6 +314,7 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
       await screen.findByRole('button', { name: 'Mua lại phân loại Can 5L đã mua ngày 03/11' });
       expect(mocks.fetchRefillPair).not.toHaveBeenCalled();
       expect(screen.queryByTestId('pdp-refill')).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Túi Refill/ })).toBeNull();
     });
 
     it('gói Refill hết hàng hay chai không có cặp: không có thẻ, dòng Mua lại giữ nguyên', async () => {
@@ -326,33 +339,59 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
       mocks.fetchProduct.mockResolvedValue(product({ name: 'Nước rửa chén Fuwa3e', basePrice: 68_000 }));
       mocks.fetchRefillPair.mockResolvedValue({ p1: REFILL });
       renderPdp();
-      const card = await screen.findByTestId('pdp-refill');
+      expect(await screen.findByRole('button', { name: 'Túi Refill' })).toBeInTheDocument();
+      const card = await openRefill();
       expect(card).toHaveTextContent('Chọn túi Refill 10L');
       expect(card).toHaveTextContent('890.000đ');
       expect(card.textContent).not.toMatch(/tiết kiệm|chai nhựa|%/);
     });
   });
 
-  it('Đặt định kỳ: số đọc từ cấu hình (0.12 → 12%), nằm sau dòng Mua lại; thiếu cấu hình thì không nêu số', async () => {
+  it('Đặt định kỳ: nút "Định kỳ" của dải nêu số đọc từ cấu hình (0.12 → 12%), dải nằm sau dòng Mua lại; chọn mới hiện lối mở tấm; thiếu cấu hình thì không nêu số', async () => {
     const first = renderPdp();
-    expect(await screen.findByText('Đặt định kỳ — tiết kiệm 12%')).toBeInTheDocument();
+    const pill = await screen.findByRole('button', { name: 'Định kỳ, Tiết kiệm 12%' });
     await screen.findByRole('button', { name: /^Mua lại/ });
-    expect(block('rebuy')!.compareDocumentPosition(block('subscribe')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(block('rebuy')!.compareDocumentPosition(block('modes')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mua lẻ' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('Đặt định kỳ — tiết kiệm 12%')).toBeNull();
+    fireEvent.click(pill);
+    expect(pill).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Đặt định kỳ — tiết kiệm 12%')).toBeInTheDocument();
     first.unmount();
 
     mocks.subscribeDiscountPct = undefined;
     renderPdp();
-    expect(await screen.findByText('Đặt định kỳ — tiết kiệm mỗi kỳ')).toBeInTheDocument();
-    expect(block('subscribe')!.textContent).not.toMatch(/\d+%/);
+    fireEvent.click(await screen.findByRole('button', { name: 'Định kỳ' }));
+    expect(screen.getByText('Đặt định kỳ — tiết kiệm mỗi kỳ')).toBeInTheDocument();
+    expect(block('modes')!.textContent).not.toMatch(/\d+%/);
   });
 
-  it('mô tả HTML (<p>, <strong>, <ul>): đọc thành chữ, không hiện thẻ dạng chữ', async () => {
+  it('mô tả HTML (<p>, <strong>, <ul>): dòng "Mô tả chi tiết" gập sẵn, mở ra đọc thành chữ, không hiện thẻ dạng chữ', async () => {
     renderPdp();
     const body = await screen.findByTestId('pdp-description-body');
+    expect(body.closest('[hidden]')).not.toBeNull();
+    fireEvent.click(screen.getByTestId('pdp-description-toggle'));
+    expect(body.closest('[hidden]')).toBeNull();
     expect(body.textContent).not.toMatch(/<\/?(p|strong|ul|li)>/);
     expect(document.body.textContent).not.toContain('<p>');
     expect(within(body).getByText('rửa').tagName).toBe('STRONG');
     expect(within(body).getByRole('listitem')).toHaveTextContent('Không mùi hắc');
+  });
+
+  it('mô tả ngắn 4 ý (Điểm nổi bật chỉ 3 dòng): đủ 4 ý ở đầu dòng "Mô tả chi tiết"; một ý thì không lặp', async () => {
+    const short = 'Sạch dầu mỡ. Không hại da tay. Hương sả chanh. Bọt mịn.';
+    mocks.fetchProduct.mockResolvedValue(product({ shortDesc: short, certifications: [] }));
+    const first = renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    expect(block('benefits')!.querySelectorAll('li')).toHaveLength(3);
+    const body = screen.getByTestId('pdp-description-body');
+    expect(body.firstElementChild!.textContent).toBe(short);
+    first.unmount();
+
+    mocks.fetchProduct.mockResolvedValue(product());
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    expect(screen.getByTestId('pdp-description-body').textContent).not.toContain('Lên men enzyme dứa.');
   });
 
   it('mô tả ngắn có HTML: khối Lợi ích chỉ hiện chữ', async () => {
@@ -364,19 +403,19 @@ describe('ProductDetailPage — sắp xếp thông tin trang sản phẩm (tubu-
     expect(benefits.textContent).not.toContain('<');
   });
 
-  it('Thành phần: mở sẵn 3 dòng, "Xem đủ (5)" mở hết, "Thu gọn" thu lại (aria-expanded)', async () => {
+  it('Thành phần: một dòng gập sẵn trong dải "Chi tiết sản phẩm" kèm "5 thành phần"; chạm mở đủ 5 dòng, chạm lại gập (aria-expanded)', async () => {
     renderPdp();
-    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    const toggle = await screen.findByTestId('pdp-ingredients-toggle');
     const section = block('ingredients')!;
-    expect(within(section).getAllByRole('listitem')).toHaveLength(3);
-    const more = within(section).getByRole('button', { name: 'Xem đủ (5)' });
-    expect(more).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(more);
+    expect(section.closest('[data-pdp-group="details"]')).not.toBeNull();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle.textContent).toBe('Thành phần5 thành phần');
+    expect(within(section).queryAllByRole('listitem')).toHaveLength(0);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(within(section).getAllByRole('listitem')).toHaveLength(5);
-    const less = within(section).getByRole('button', { name: 'Thu gọn' });
-    expect(less).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(less);
-    expect(within(section).getAllByRole('listitem')).toHaveLength(3);
+    fireEvent.click(toggle);
+    expect(within(section).queryAllByRole('listitem')).toHaveLength(0);
   });
 
   describe('So với món tương tự', () => {

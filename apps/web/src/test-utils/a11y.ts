@@ -4,6 +4,9 @@
  * (luật `page-has-heading-one`/`heading-order`). CHỈ dùng trong *.spec.tsx.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 const CONTROLS = 'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [role="switch"], [role="radio"], [role="checkbox"]';
 
 function visibleText(node: Node): string {
@@ -87,7 +90,29 @@ export function headingProblems(root: ParentNode): string[] {
 }
 
 const px44 = (value: string) => /^\d+(?:\.\d+)?px$/.test(value) && parseFloat(value) >= 44;
+
+let cssHitClasses: ReadonlySet<string> | null = null;
+/**
+ * Lớp `.tubu-*` mà mini.css tự khai vùng chạm 44px trong luật chỉ một lớp, vd `.tubu-consent-line`, `.tubu-cart-total`: cao (`height`/`min-height`)
+ * ≥ 44px VÀ rộng (`width`/`min-width` ≥ 44px hoặc `width: 100%`), để nút chỉ có biểu tượng mà quên bề ngang không lọt. jsdom không nạp CSS nên
+ * đọc thẳng file, như bộ kiểm vùng chạm của Mini App đọc declutter.css.
+ */
+function cssHit44Classes(): ReadonlySet<string> {
+  if (cssHitClasses) return cssHitClasses;
+  const css = readFileSync(resolve(__dirname, '../components/mini/mini.css'), 'utf8');
+  const found = new Set<string>();
+  for (const m of css.matchAll(/(?:^|\n)\.([\w-]+)\s*\{([^}]*)\}/g)) {
+    const h = /(?:^|[;\s])(?:min-)?height:\s*(\d+)px/.exec(m[2]!);
+    const w = /(?:^|[;\s])(?:min-)?width:\s*(\d+)px/.exec(m[2]!);
+    const wide = (w !== null && Number(w[1]) >= 44) || /(?:^|[;\s])width:\s*100%/.test(m[2]!);
+    if (h && Number(h[1]) >= 44 && wide) found.add(m[1]!);
+  }
+  cssHitClasses = found;
+  return found;
+}
+
 const hasHit44 = (el: HTMLElement) =>
+  Array.from(el.classList).some((c) => cssHit44Classes().has(c)) ||
   el.classList.contains('tubu-hit-44-square') ||
   (el.classList.contains('tubu-hit-44') && (/\b(?:min-w-11|w-11)\b/.test(el.className) || px44(el.style.minWidth)));
 

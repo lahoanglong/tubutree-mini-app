@@ -43,49 +43,40 @@ describe('PdpRating', () => {
   });
 });
 
+const toggleOf = (c: HTMLElement, block: string) => c.querySelector<HTMLButtonElement>(`[data-testid="pdp-${block}-toggle"]`)!;
+const bodyOf = (c: HTMLElement, block: string) => c.querySelector<HTMLElement>(`#${CSS.escape(toggleOf(c, block).getAttribute('aria-controls')!)}`)!;
+
 describe('PdpIngredients', () => {
   const ING = [{ name: 'Bồ kết', percentage: '30%', benefit: 'Sạch dịu' }, { name: 'Gừng' }];
-  it('liệt kê tên, tỉ lệ và công dụng; không có thì không dựng mục', () => {
+  it('dòng gập "Thành phần": gập sẵn kèm gợi ý số thành phần; tên, tỉ lệ, công dụng vẫn nằm trong HTML; bấm mở rồi thu lại', () => {
     const { container } = mount(<PdpIngredients ingredients={ING} />);
-    expect(container.querySelector('h2')!.textContent).toBe('Thành phần');
     expect(container.querySelector('[data-pdp-block="ingredients"]')).not.toBeNull();
+    const toggle = toggleOf(container, 'ingredients');
+    expect(toggle.textContent).toBe('Thành phần2 thành phần');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(bodyOf(container, 'ingredients').hidden).toBe(true);
+    expect(container.querySelectorAll('li')).toHaveLength(2);
     expect(container.textContent).toContain('Bồ kết');
     expect(container.textContent).toContain('30%');
     expect(container.textContent).toContain('Sạch dịu');
-    expect(container.querySelectorAll('li')).toHaveLength(2);
-    expect(byText(container, 'button', /Xem đủ|Thu gọn/)).toBeNull();
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(bodyOf(container, 'ingredients').hidden).toBe(false);
+    expect(toggle.textContent).toBe('Thành phần');
+    click(toggle);
+    expect(bodyOf(container, 'ingredients').hidden).toBe(true);
+    expect(smallTouchTargets(container)).toEqual([]);
+    expect(unnamedControls(container)).toEqual([]);
     expect(mount(<PdpIngredients ingredients={null} />).container.innerHTML).toBe('');
     expect(mount(<PdpIngredients ingredients={[]} />).container.innerHTML).toBe('');
   });
 
-  it('hơn 3 thành phần: mở sẵn 3 dòng, nút "Xem đủ" mở hết rồi thu lại; mọi dòng vẫn nằm trong HTML', () => {
-    const five = ['A', 'B', 'C', 'D', 'E'].map((name) => ({ name }));
-    const { container } = mount(<PdpIngredients ingredients={five} />);
-    const rows = () => Array.from(container.querySelectorAll('[data-testid="pdp-ingredient"]'));
-    expect(rows()).toHaveLength(5);
-    expect(rows().filter((r) => r.className.split(' ').includes('hidden'))).toHaveLength(2);
-    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="pdp-ingredients-toggle"]')!;
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(container.querySelector(`#${toggle.getAttribute('aria-controls')}`)).not.toBeNull();
-    click(toggle);
-    expect(rows().filter((r) => r.className.split(' ').includes('hidden'))).toHaveLength(0);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    click(toggle);
-    expect(rows().filter((r) => r.className.split(' ').includes('hidden'))).toHaveLength(2);
-    expect(smallTouchTargets(container)).toEqual([]);
-  });
-
-  it('nhãn INCI đủ 20 tên (trần lưu mới của admin): mặc định chỉ hiện tối đa 8 dòng kèm một nút "Xem đủ (20)", cả 20 tên vẫn nằm trong HTML', () => {
+  it('nhãn INCI đủ 20 tên (trần lưu mới của admin): một nút gập duy nhất, cả 20 tên vẫn nằm trong HTML', () => {
     const inci = Array.from({ length: 20 }, (_, i) => ({ name: `INCI ${i + 1}` }));
     const { container } = mount(<PdpIngredients ingredients={inci} />);
-    const rows = Array.from(container.querySelectorAll('[data-testid="pdp-ingredient"]'));
-    expect(rows).toHaveLength(20);
-    const visible = rows.filter((r) => !r.className.split(' ').includes('hidden'));
-    expect(visible.length).toBeGreaterThan(0);
-    expect(visible.length).toBeLessThanOrEqual(8);
-    const toggles = container.querySelectorAll<HTMLButtonElement>('[data-testid="pdp-ingredients-toggle"]');
-    expect(toggles).toHaveLength(1);
-    expect(toggles[0]!.textContent).toBe('Xem đủ (20)');
+    expect(container.querySelectorAll('[data-testid="pdp-ingredient"]')).toHaveLength(20);
+    expect(container.querySelectorAll('button')).toHaveLength(1);
+    expect(toggleOf(container, 'ingredients').textContent).toContain('20 thành phần');
     expect(container.textContent).toContain('INCI 20');
   });
 });
@@ -107,12 +98,11 @@ describe('PdpPromises', () => {
     expect(container.textContent).not.toContain('Cam kết Tubu');
   });
 
-  it('lối chính sách vận chuyển (/chinh-sach/van-chuyen) có một lần: dải đã trỏ đổi trả thì thêm lối riêng, dải trỏ vận chuyển thì không lặp; vùng chạm 44px', () => {
+  it('khối cam kết không thêm link chính sách vận chuyển riêng (đã có ở dòng "Vận chuyển ›"): chỉ còn lối xem của dải; vùng chạm 44px', () => {
     cfg.returnWindowDays = 10;
     const withReturns = mount(<PdpPromises fulfillerKind="TUBU" />).container;
-    const hrefs = Array.from(withReturns.querySelectorAll('a')).map((a) => a.getAttribute('href'));
-    expect(hrefs).toEqual(['/chinh-sach/doi-tra', '/chinh-sach/van-chuyen']);
-    expect(byText(withReturns, 'a', 'Chính sách vận chuyển')).not.toBeNull();
+    expect(Array.from(withReturns.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/chinh-sach/doi-tra']);
+    expect(withReturns.querySelector('[data-testid="pdp-shipping-policy"]')).toBeNull();
     expect(unnamedControls(withReturns)).toEqual([]);
     expect(smallTouchTargets(withReturns)).toEqual([]);
     cfg.returnWindowDays = 0;
@@ -121,7 +111,7 @@ describe('PdpPromises', () => {
     expect(noReturns.querySelectorAll('li')).toHaveLength(2);
   });
 
-  it('hàng gian hàng tự giao: không có dải ba trụ cột (không hứa thay gian hàng), vẫn có lối chính sách vận chuyển và nút chat', () => {
+  it('hàng gian hàng tự giao: không có dải ba trụ cột (không hứa thay gian hàng), link chính sách vận chuyển là lối duy nhất, vẫn có nút chat', () => {
     cfg.returnWindowDays = 10;
     const { container } = mount(
       <PdpPromises fulfillerKind="MERCHANT">
@@ -131,14 +121,17 @@ describe('PdpPromises', () => {
     expect(container.querySelectorAll('li')).toHaveLength(0);
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/chinh-sach/van-chuyen']);
     expect(byText(container, 'button', 'Chat')).not.toBeNull();
+    expect(smallTouchTargets(container.querySelector('a')!.parentElement!)).toEqual([]);
   });
 });
 
 describe('PdpDescription', () => {
-  const body = (c: HTMLElement) => c.querySelector('#pdp-description')!;
-  it('mô tả ngắn hiện đủ, không có nút Xem thêm', () => {
+  const body = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="pdp-description-body"]')!;
+  it('dòng gập "Mô tả chi tiết": gập sẵn, chữ vẫn nằm trong DOM; không còn nút Xem thêm', () => {
     const { container } = mount(<PdpDescription source="Ngắn gọn" />);
     expect(container.querySelector('[data-pdp-block="description"]')).not.toBeNull();
+    expect(toggleOf(container, 'description').textContent).toBe('Mô tả chi tiết');
+    expect(bodyOf(container, 'description').hidden).toBe(true);
     expect(container.textContent).toContain('Ngắn gọn');
     expect(byText(container, 'button', /Xem thêm|Thu gọn/)).toBeNull();
   });
@@ -158,17 +151,14 @@ describe('PdpDescription', () => {
     expect(mount(<PdpDescription source="<p> </p>" />).container.innerHTML).toBe('');
     expect(mount(<PdpDescription source={null} />).container.innerHTML).toBe('');
   });
-  it('mô tả dài thu gọn chừng 4 dòng, Xem thêm/Thu gọn đổi trạng thái aria-expanded; chữ vẫn nằm trong DOM', () => {
+  it('mô tả dài: bấm dòng thì mở đủ, aria-expanded đổi; vùng chạm 44px, nút có tên', () => {
     const text = 'Chữ dài '.repeat(60);
     const { container } = mount(<PdpDescription source={text} />);
-    expect(body(container).className).toContain('max-h-24');
     expect(body(container).textContent).toBe(text.trim());
-    const btn = byText(container, 'button', 'Xem thêm')!;
-    expect(btn.getAttribute('aria-expanded')).toBe('false');
-    expect(btn.getAttribute('aria-controls')).toBe('pdp-description');
-    click(btn);
-    expect(body(container).className).not.toContain('max-h-24');
-    expect(byText(container, 'button', 'Thu gọn')!.getAttribute('aria-expanded')).toBe('true');
+    const toggle = toggleOf(container, 'description');
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(bodyOf(container, 'description').hidden).toBe(false);
     expect(smallTouchTargets(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
   });
@@ -224,24 +214,18 @@ describe('PdpRails', () => {
 });
 
 describe('khối nửa dưới là dải trắng cách nhau 8px ở điện thoại (như Mini App)', () => {
-  const band = (el: Element | null, id: string) => {
-    expect(el).not.toBeNull();
-    expect(el!.getAttribute('data-section')).toBe(id);
-    expect(el!.className).toContain('max-md:mt-2');
-    expect(el!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
-    expect(el!.className).toContain('max-md:p-4');
-  };
-  it('Thành phần, Cam kết, Mô tả sản phẩm', () => {
-    band(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('section'), 'pdp-ingredients');
-    band(mount(<PdpPromises fulfillerKind="TUBU" />).container.querySelector('[data-section="pdp-promises"]'), 'pdp-promises');
-    band(mount(<PdpDescription source="Ngắn gọn" />).container.querySelector('section'), 'pdp-description');
-  });
-  it('chữ phụ cỡ Mini App: mô tả 14px; "Xem thêm" là chữ thương hiệu không gạch chân', () => {
-    const long = mount(<PdpDescription source={'x'.repeat(300)} />).container;
-    expect(long.querySelector('#pdp-description')!.className).toContain('max-md:text-sm');
-    const more = byText(long, 'button', 'Xem thêm')!;
-    expect(more.className).toContain('max-md:no-underline');
-    expect(more.className).toContain('max-md:text-[var(--color-text-brand)]');
+  it('Cam kết là dải riêng; Thành phần và Mô tả là dòng gập trong dải "Chi tiết sản phẩm" (lớp CSS dùng chung với Mini App)', () => {
+    const promises = mount(<PdpPromises fulfillerKind="TUBU" />).container.querySelector('[data-section="pdp-promises"]')!;
+    expect(promises.className).toContain('max-md:mt-2');
+    expect(promises.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(promises.className).toContain('max-md:p-4');
+    for (const el of [
+      mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('section'),
+      mount(<PdpDescription source="Ngắn gọn" />).container.querySelector('section'),
+    ]) {
+      expect(el!.className).toBe('tubu-pdp-detail');
+      expect(el!.querySelector('h2')).toBeNull();
+    }
   });
 });
 
@@ -253,10 +237,6 @@ describe('tiêu đề khối của trang sản phẩm: Inter 16/700 ở mọi kh
     expect(h!.className).not.toContain('font-display');
     expect(h!.className).not.toContain('max-md:');
   };
-  it('Thành phần, Mô tả sản phẩm', () => {
-    sans(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('h2'));
-    sans(mount(<PdpDescription source="Ngắn gọn" />).container.querySelector('h2'));
-  });
   it('hai dải sản phẩm', async () => {
     mocks.http.get.mockImplementation(async (p: string) => (p === '/products/for-you' ? Array.from({ length: 5 }, (_, i) => card(30 + i)) : []));
     const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh" initialRelated={[card(1)]} />);

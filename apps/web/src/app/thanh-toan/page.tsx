@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, ChevronRight, Sprout } from 'lucide-react';
+import { CheckCircle2, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useMutationState, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
@@ -95,12 +95,11 @@ import { isOutcomeUnknown } from '@/lib/checkout-waste';
 import BackLink from '@/components/back-link';
 import { BackAwareLink } from '@/components/back-aware-link';
 import { pushOrBack } from '@/lib/nav-depth';
-import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
+import { miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
-import { Button } from '@/components/mini';
 import { EmptyState } from '@/components/mini/empty-state';
 import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
-import { BottomSheet } from '@/components/mini/bottom-sheet';
+import { PointsToggleRow, type PointsToggleNote } from '@/components/mini/points-toggle-row';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Form đặt hàng không đăng nhập chỉ hiện cho khách chưa đăng nhập khi cờ web.guest_checkout_enabled bật: tách khỏi JS tải lần đầu của trang
@@ -145,7 +144,6 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const router = useRouter();
-  const [summarySheetOpen, setSummarySheetOpen] = useState(false);
   const [addressId, setAddressId] = useState<string | null>(null);
   const [payment, setPayment] = useState('COD');
   const [note, setNote] = useState('');
@@ -328,20 +326,14 @@ export default function CheckoutPage() {
     // Báo giá cũ (chưa áp điểm) còn trên màn trong lúc tính lại: chỉ đọc số đã dùng khi báo giá thật sự đã trừ điểm.
     applied: usePoints && (quote?.pointsUsed ?? 0) > 0,
   });
-  // Dưới md ghi chú nằm trong cột chữ cạnh ô tick như Mini; từ md trở lên giữ dòng riêng dưới ô. Hai bản chỉ khác nhau ở lớp hiển thị.
-  const pointNotes = (vis: 'md:hidden' | 'md:block') => {
-    const cls = vis === 'md:hidden' ? 'mt-0.5 block text-caption text-[color:var(--color-text-tertiary)] md:hidden' : 'mt-1 hidden text-caption text-[color:var(--color-text-secondary)] md:block';
-    const Tag = vis === 'md:hidden' ? 'span' : 'p';
-    const notes = [usablePoints > 0 && partnerPoints.capNote, usablePoints > 0 && partnerPoints.partnerNote, convertedLine, pointsOffer.lockNote];
-    return [
-      ...notes.map((n, i) => (n ? <Tag key={i} className={cls}>{n}</Tag> : null)),
-      marketplaceLine ? (
-        <Tag key="marketplace" className={cls} data-points-marketplace="">
-          {marketplaceLine}
-        </Tag>
-      ) : null,
-    ];
-  };
+  // Lưu ý của hàng Điểm Xanh, đọc trong tấm ⓘ (cùng thứ tự với Mini App): trần của đơn, hàng đối tác, điểm quy đổi, điểm đang giữ, điểm từ đơn sàn.
+  const pointsNotes: PointsToggleNote[] = [
+    { key: 'cap', text: usablePoints > 0 ? partnerPoints.capNote : null },
+    { key: 'partner', text: usablePoints > 0 ? partnerPoints.partnerNote : null },
+    { key: 'converted', text: convertedLine },
+    { key: 'lock', text: pointsOffer.lockNote },
+    { key: 'marketplace', text: marketplaceLine },
+  ].filter((n): n is PointsToggleNote => typeof n.text === 'string' && n.text !== '');
   useEffect(() => {
     if (partnerPoints.disabled && usePoints) setUsePoints(false);
   }, [partnerPoints.disabled, usePoints]);
@@ -1131,18 +1123,8 @@ export default function CheckoutPage() {
           )}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
-          <div className="mb-2.5 hidden items-center justify-between max-md:flex">
-            <h2 className="font-ui text-sm font-semibold">Tóm tắt đơn hàng</h2>
-            <button
-              type="button"
-              onClick={() => setSummarySheetOpen(true)}
-              aria-haspopup="dialog"
-              className="inline-flex min-h-11 items-center gap-1 text-caption font-bold text-[color:var(--color-text-brand)]"
-            >
-              Chi tiết
-              <ChevronRight size={16} aria-hidden="true" />
-            </button>
-          </div>
+          {/* Tóm tắt đủ từng dòng ngay tại đây: không còn nút "Chi tiết" mở tấm lặp lại đúng các dòng này (w47-01). */}
+          <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
           <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {cardPreview && shownComboOnly > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} green />}
           {cardPreview && shownGreenBox > 0 && <Row label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} green />}
@@ -1173,37 +1155,6 @@ export default function CheckoutPage() {
           <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} dim={recalculating} />
           {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
-          <BottomSheet
-            open={summarySheetOpen}
-            onClose={() => setSummarySheetOpen(false)}
-            title="Chi tiết tính tiền đơn hàng"
-            footer={
-              <Button fullWidth onPress={() => setSummarySheetOpen(false)}>
-                Đã hiểu
-              </Button>
-            }
-          >
-            <div className="rounded-[var(--radius-card)] bg-[var(--color-bg-canvas)] p-3">
-              <Row label="Tạm tính tiền hàng" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
-              {(quote ? quote.discount : previewDiscount) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote ? quote.discount : previewDiscount)}`} valueGreen />}
-              {shownComboOnly > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} valueGreen />}
-              {shownGreenBox > 0 && <Row label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} valueGreen />}
-              {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} valueGreen />}
-              {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} valueGreen />}
-              <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} />
-              <div className="my-2 h-px bg-[var(--color-border-subtle)]" />
-              <div className="flex justify-between gap-2.5 py-1.5 font-bold text-[color:var(--color-text-primary)]">
-                <span className="text-sm font-normal text-[color:var(--color-text-secondary)]">Tổng thanh toán</span>
-                <span className="text-base">{totalText}</span>
-              </div>
-              {quote && quote.pointsEarned > 0 && (
-                <p className="mt-1.5 flex items-center justify-end gap-1 text-caption text-success-fg">
-                  <Sprout size={13} aria-hidden="true" />
-                  {earnedLabel}
-                </p>
-              )}
-            </div>
-          </BottomSheet>
           {cart && (
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
               <CouponBox
@@ -1225,49 +1176,22 @@ export default function CheckoutPage() {
               />
             </div>
           )}
-          <div data-mini-block="points" className="max-md:order-6 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4 max-md:empty:hidden">
-          {usablePoints > 0 && (
-            <label
-              className={`relative mt-3 flex min-h-11 items-center gap-2 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3 text-sm max-md:mt-0 max-md:flex-row-reverse max-md:justify-between max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 ${
-                partnerPoints.disabled ? 'cursor-not-allowed md:opacity-60' : 'cursor-pointer'
-              }`}
-            >
-              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter} ${partnerPoints.disabled ? 'opacity-60 md:opacity-100' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={usePoints && !partnerPoints.disabled}
-                  disabled={partnerPoints.disabled}
-                  onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
-                  className={miniCheckbox}
-                />
-                <CheckMark />
-              </span>
-              {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
-              <span className="min-w-0 text-[color:var(--color-text-brand)]">
-                <span className="block font-semibold max-md:text-[color:var(--color-text-primary)]">Điểm Xanh</span>
-                <span className="block text-caption max-md:text-[color:var(--color-text-tertiary)]">
-                  {partnerPoints.disabled
-                    ? lockedPointsLabel(quote, pointsOffer)
-                    : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
-                </span>
-                {pointNotes('md:hidden')}
-              </span>
-            </label>
-          )}
-          {usablePoints === 0 && (
-            <div data-testid="points-none" className="flex min-h-11 items-center justify-between md:hidden">
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-primary)]">Điểm Xanh</span>
-                <span className="block text-caption text-[color:var(--color-text-tertiary)]">{idlePointsLabel(quote ?? user)}</span>
-                {pointNotes('md:hidden')}
-              </span>
-              <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
-                <input type="checkbox" checked={false} disabled readOnly aria-label="Dùng Điểm Xanh" className={miniCheckbox} />
-                <CheckMark />
-              </span>
-            </div>
-          )}
-          {pointNotes('md:block')}
+          <div data-mini-block="points" className="max-md:order-6 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4 max-md:empty:hidden md:mt-3">
+          {/* Một dòng có công tắc (w47-01); khách chưa có điểm hay đơn khoá điểm thì chỉ có chữ và nút ⓘ, không có ô tắt giả. */}
+          <PointsToggleRow
+            usable={usablePoints > 0 && !partnerPoints.disabled}
+            checked={usePoints && !partnerPoints.disabled}
+            onToggle={chosen(() => setUsePoints((v) => !v))}
+            text={
+              usablePoints === 0
+                ? idlePointsLabel(quote ?? user)
+                : partnerPoints.disabled
+                  ? lockedPointsLabel(quote, pointsOffer)
+                  : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)
+            }
+            notes={pointsNotes}
+            rate={formatVnd(configQ.data?.loyalty?.vndPerPointRedeem ?? 1)}
+          />
           </div>
           <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
           <div
@@ -1373,7 +1297,7 @@ export default function CheckoutPage() {
               )}
             </div>
           )}
-          <OrderConsent className="pt-3 lg:hidden" />
+          <OrderConsent className="lg:hidden" />
           </div>
         </div>
       </div>

@@ -13,7 +13,7 @@ const state = vi.hoisted(() => ({
   // Báo giá bị giữ tới khi test mở (holdQuote/releaseQuote): lỗi đặt đơn như PRICE_CHANGED/TOTAL_CHANGED tải lại báo giá trong onError nên
   // nút còn khoá đúng lúc trạng thái lỗi hiện ra. Không dùng hẹn giờ thật: máy CI bận thì báo giá về trước khi test kịp thấy nút khoá.
   quoteHeld: null as Promise<void> | null,
-  // Điểm Xanh dùng được: > 0 thì ô tick "Điểm Xanh" hiện trong khung Đơn hàng.
+  // Điểm Xanh dùng được: > 0 thì công tắc Điểm Xanh hiện trong khung Đơn hàng.
   points: 0,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
@@ -62,7 +62,7 @@ const mount = async () => {
   return r.container;
 };
 const part = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-mini-part="place-order"]')!;
-const lgButton = (c: HTMLElement) => part(c).querySelector<HTMLButtonElement>('button')!;
+const lgButton = (c: HTMLElement) => part(c).querySelector<HTMLButtonElement>('button:not([data-testid="order-consent"])')!;
 const note = (c: HTMLElement) => part(c).querySelector<HTMLElement>('[data-testid="place-note-lg"]');
 const errorNote = (c: HTMLElement) => part(c).querySelector<HTMLElement>('[data-testid="place-error-lg"]');
 
@@ -244,10 +244,10 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
     await keepsFocus(c, input);
   });
 
-  it('khách đang ở ô tick Điểm Xanh (trong khung Đơn hàng) lúc báo giá về: focus ở lại ô, Space kế tiếp không bấm nhầm Đặt hàng (L5 1)', async () => {
+  it('khách đang ở công tắc Điểm Xanh (trong khung Đơn hàng) lúc báo giá về: focus ở lại công tắc, Space kế tiếp không bấm nhầm Đặt hàng (L5 1)', async () => {
     state.points = 100;
     const c = await failWithSlowQuote();
-    const checkbox = c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[type="checkbox"]')!;
+    const checkbox = c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[role="switch"]')!;
     expect(checkbox).not.toBeNull();
     await keepsFocus(c, checkbox);
   });
@@ -260,9 +260,9 @@ describe('/thanh-toan lg: lỗi đặt đơn thấy được (K2 d)', () => {
     await keepsFocus(c, link);
   });
 
-  it('khách đang ở liên kết Điều khoản ngay trên nút Đặt hàng: focus ở lại, không kéo về nút (L5 1)', async () => {
+  it('khách đang ở dòng Điều khoản & Chính sách ngay trên nút Đặt hàng: focus ở lại, không kéo về nút (L5 1)', async () => {
     const c = await failWithSlowQuote();
-    await keepsFocus(c, part(c).querySelector<HTMLAnchorElement>('a[href="/chinh-sach/dieu-khoan"]')!);
+    await keepsFocus(c, part(c).querySelector<HTMLButtonElement>('[data-testid="order-consent"]')!);
   });
 
   it('focus bị mất vì nút khoá (body) khi báo giá về: nút Đặt hàng nhận lại focus (L5 1)', async () => {

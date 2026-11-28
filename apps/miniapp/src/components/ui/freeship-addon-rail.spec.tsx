@@ -123,3 +123,29 @@ describe('css/freeship.css: thẻ gợi ý bù đơn', () => {
     expect(add.getPropertyValue('flex')).toContain('0 0');
   });
 });
+
+describe('FreeshipAddonRail (Mini) `collapsible`: dải gập sau một dòng (w47-01)', () => {
+  it('gập sẵn: tiêu đề bọc nút "Gợi ý thêm để được Miễn phí giao hàng", chưa thấy thẻ; chạm mở/gập', () => {
+    render(<FreeshipAddonRail items={ITEMS} stage="freeship" collapsible onAdd={vi.fn()} />);
+    const heading = screen.getByRole('heading', { name: 'Gợi ý thêm để được Miễn phí giao hàng' });
+    const toggle = within(heading).getByRole('button');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryAllByRole('button', { name: /^Thêm / })).toHaveLength(0);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('button', { name: /^Thêm / }).length).toBeGreaterThan(0);
+    fireEvent.click(toggle);
+    expect(screen.queryAllByRole('button', { name: /^Thêm / })).toHaveLength(0);
+  });
+
+  it('mốc quà: dòng gập là tiêu đề có số còn thiếu', () => {
+    render(<FreeshipAddonRail items={ITEMS} stage="gift" title="Thêm 40.000đ nữa để nhận quà dùng thử 0đ" collapsible onAdd={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: 'Thêm 40.000đ nữa để nhận quà dùng thử 0đ' })).toBeInTheDocument();
+  });
+
+  it('không truyền collapsible: mở sẵn như cũ, không có nút gập', () => {
+    render(<FreeshipAddonRail items={ITEMS} onAdd={vi.fn()} />);
+    expect(screen.queryByTestId('freeship-addons-toggle')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Thêm / }).length).toBeGreaterThan(0);
+  });
+});

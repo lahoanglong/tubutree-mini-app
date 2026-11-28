@@ -279,9 +279,13 @@ describe('ProductDetailPage — lối Đặt định kỳ theo cờ giao định
     flags.subscriptions = true;
   });
 
-  it('cờ bật: có dòng "Đặt định kỳ — tiết kiệm 10%" (số đọc từ cấu hình) cho món còn hàng', async () => {
+  it('cờ bật: dải chọn cách mua có nút "Định kỳ · Tiết kiệm 10%" (số đọc từ cấu hình); chọn thì có dòng "Đặt định kỳ — tiết kiệm 10%"', async () => {
     renderPdp();
     await screen.findAllByText('500g');
+    const mode = await screen.findByRole('button', { name: 'Định kỳ, Tiết kiệm 10%' });
+    expect(screen.queryByText('Đặt định kỳ — tiết kiệm 10%')).toBeNull();
+    fireEvent.click(mode);
+    expect(mode.getAttribute('aria-pressed')).toBe('true');
     expect(await screen.findByText('Đặt định kỳ — tiết kiệm 10%')).toBeInTheDocument();
   });
 
@@ -290,5 +294,6 @@ describe('ProductDetailPage — lối Đặt định kỳ theo cờ giao định
     renderPdp();
     await screen.findAllByText('500g');
     expect(screen.queryByText(/Đặt định kỳ/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Định kỳ/ })).toBeNull();
   });
 });

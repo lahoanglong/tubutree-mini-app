@@ -107,13 +107,10 @@ const ALLOWED: Record<string, string> = {
   '.tubu-reel-skel-label | height': 'Xem .tubu-reel-skel-label | width: web giữ ô 32px bằng nhãn thật cho khỏi nhảy.',
   // Thanh Miễn phí giao hàng.
   '.tubu-freeship | min-height': 'Web chừa chỗ hai dòng chữ + thanh (chú thích mini.css), Mini chừa một dòng + thanh (56px). Chủ chưa quyết giữ bên nào: nêu ở báo cáo W142C.',
-  // Thẻ gói Refill ở trang chi tiết (tubu-w13-01): nền trắng của dải do khối `pdp-subscribe` của web lo (phoneBandPad), Mini tự tô.
-  '.tubu-refill-offer | background': 'Web: dải `pdp-subscribe` đã tô --color-bg-surface dưới md (phoneBandPad) nên thẻ không tô lại; Mini thẻ tự là dải trắng.',
+  // Thẻ gói Refill ở trang chi tiết (tubu-w13-01, w47-01): web để nền cho dải chứa thẻ (dải chọn cách mua `.tubu-buy-modes` đã tô nền trắng), Mini tự tô.
+  '.tubu-refill-offer | background': 'Web: ở trang chi tiết thẻ nằm trong dải chọn cách mua (`.tubu-buy-modes`) đã tô --color-bg-surface nên không tô lại; Mini thẻ tự là dải trắng.',
   // Gợi ý mua kèm.
   '.tubu-fbt-name | color': 'Mini kế thừa --color-text-primary từ body (tokens.css), web đặt rõ.',
-  // Dòng năm link chính sách ở trang thanh toán (w11-02): lề âm bù phần dòng 44px vượt dòng chữ, mỗi bên theo cỡ chữ của câu đồng ý.
-  '.tubu-consent-links | margin-block':
-    'Mini đặt câu trong Text xSmall (13px, dòng 18px) nên bù (18 − 44) / 2 = −13px; web dùng text-caption (13px × 1,54 ≈ 20px) nên bù theo token ≈ −12px. Cả hai giữ khối cao đúng 2 dòng chữ khi 5 link vừa một dòng.',
 };
 
 describe('tubu-css-parity: .tubu-* dùng chung giữa web và Mini App', () => {

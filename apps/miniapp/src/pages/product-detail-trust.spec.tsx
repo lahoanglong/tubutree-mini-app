@@ -77,7 +77,7 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     mocks.fetchProduct.mockResolvedValue(product());
   });
 
-  it('hàng Tubu giao: dải ba trụ cột mở đầu khối cam kết, sau khối Số lượng; nút chính sách vận chuyển nằm ngay dưới dải', async () => {
+  it('hàng Tubu giao: dải ba trụ cột mở đầu khối cam kết, sau khối Số lượng; không thêm nút chính sách vận chuyển trùng dưới dải (w47-01)', async () => {
     renderPdp();
     const strip = await screen.findByTestId('product-trust-strip');
     expect(within(strip).getAllByRole('listitem')).toHaveLength(3);
@@ -88,7 +88,7 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(limit, strip)).toBe(true);
     expect(promises.firstElementChild).toBe(strip);
-    expect(follows(strip, within(promises).getByRole('button', { name: 'Chính sách vận chuyển' }))).toBe(true);
+    expect(within(promises).queryByRole('button', { name: 'Chính sách vận chuyển' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Cam kết Tubu' })).toBeNull();
   });
 
@@ -98,10 +98,10 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     expect(screen.getByTestId('policy-sheet')).toHaveTextContent('doi-tra');
   });
 
-  it('nút Vận chuyển của khối cam kết vẫn mở chính sách vận chuyển', async () => {
+  it('dòng "Vận chuyển ›" vẫn mở chính sách vận chuyển (lối duy nhất ngoài dải cam kết)', async () => {
     renderPdp();
     await screen.findByTestId('product-trust-strip');
-    fireEvent.click(screen.getByRole('button', { name: 'Chính sách vận chuyển' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Vận chuyển/ }));
     expect(screen.getByTestId('policy-sheet')).toHaveTextContent('van-chuyen');
   });
 

@@ -101,7 +101,11 @@ import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SectionTitle } from '../components/ui/section-title';
-import { PdpEco } from '../components/eco/pdp-eco';
+import { PdpHighlights } from '../components/product/pdp-highlights';
+import { PdpBuyModes } from '../components/product/pdp-buy-modes';
+import { pdpBuyModeOrRetail, pdpBuyModes, type PdpBuyModeKey } from '@tubutree/app-core/commerce/pdp-buy-modes';
+import { pdpDescriptionLead, pdpHighlights } from '@tubutree/app-core/commerce/pdp-highlights';
+import { ecoFactLines } from '@tubutree/app-core/eco/facts';
 import { PriceTag } from '../components/ui/price-tag';
 import { PointsEarnLine } from '../components/product/points-earn-line';
 import { Badge } from '../components/ui/badge';
@@ -202,6 +206,8 @@ export default function ProductDetailPage() {
   const addedTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(addedTimer.current), []);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  // Dải chọn cách mua: "Mua lẻ" mặc định; về lại Mua lẻ khi chế độ đang chọn không còn (đổi sang phân loại hết hàng, gói Refill hết).
+  const [buyMode, setBuyMode] = useState<PdpBuyModeKey>('retail');
   // Chính sách mở ngay trong trang: dòng Vận chuyển, nút chính sách vận chuyển và lối xem của dải cam kết dùng chung một sheet.
   const [policySlug, setPolicySlug] = useState<LegalSlug | null>(null);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
@@ -293,6 +299,10 @@ export default function ProductDetailPage() {
   const originView = useMemo(() => {
     const d = product.data;
     return d ? pdpOriginView(d, { originChip: pdpOriginLink(d.brand) !== null }) : null;
+  }, [product.data]);
+  const hasDescription = useMemo(() => {
+    const text = product.data?.description;
+    return !!text && parseRichText(text).length > 0;
   }, [product.data]);
   // Cùng queryKey với FlashSale (trang chủ) → React Query dedupe nếu đã cache sẵn.
   const flashQ = useQuery({
@@ -704,6 +714,11 @@ export default function ProductDetailPage() {
   const refillPair = refillPairQ.data?.[p.id];
   const packFlashPrice = refillPair ? runningFlash(flashQ.data).find((f) => f.variationId === refillPair.variationId)?.flashPrice : undefined;
   const refillOffer = unavailable ? null : pdpRefillOffer({ name: p.name, price: p.salePrice ?? p.basePrice }, refillPair, { flash: bottleOnFlash, packFlashPrice });
+  const buyModes = pdpBuyModes({ refill: refillOffer, subscribe: SUBSCRIPTIONS_IN_MINIAPP && !!selected && inStock && !retailOnly, subscribePct: subPct });
+  const activeMode = pdpBuyModeOrRetail(buyModes, buyMode);
+  const highlights = pdpHighlights({ benefit: benefitText, certifications: p.certifications, eco: ecoFactLines((p as { ecoFacts?: unknown }).ecoFacts, selected?.id) });
+  const descriptionLead = pdpDescriptionLead(benefitText);
+  const hasDetails = (p.ingredients?.length ?? 0) > 0 || originView !== null || hasDescription || descriptionLead !== null;
   // Một chạm thêm đúng phân loại lần trước, số lượng 1, qua cùng khoá ghi giỏ và cùng phản hồi "Đã thêm" của nút Thêm vào giỏ. Không đổi phân loại đang xem.
   const handleRebuy = (variation: VariationDetail) => {
     haptic('light');
@@ -815,9 +830,9 @@ export default function ProductDetailPage() {
     });
   }
 
-  // Lối xem của dải cam kết đã là chính sách vận chuyển (đổi trả tắt) thì không thêm nút thứ hai cho cùng việc.
+  // Hàng Tubu đã có lối tới chính sách vận chuyển ở dòng "Vận chuyển ›" và dải cam kết. Khi không có dải (hàng gian hàng, không giao được) nút này là lối duy nhất tới chính sách.
   const promiseButtons: ReactNode[] = [];
-  if (trustView?.cta.slug !== 'van-chuyen') {
+  if (!trustView) {
     promiseButtons.push(
       <Button key="policy" variant="ghost" onPress={() => setPolicySlug('van-chuyen')} style={{ minWidth: 0 }}>
         {POLICY_TITLES['van-chuyen']}
@@ -1063,50 +1078,40 @@ export default function ProductDetailPage() {
         />
       )}
 
-      {refillOffer && (
-        <PdpRefillOffer
-          view={refillOffer}
-          busy={addMutation.isPending && addMutation.variables?.source === 'refill'}
-          blocked={cartWriting}
-          onAdd={(view) => void handleRefillAdd(view)}
-          onOpen={(refillSlug) => navigate(`/product/${encodeURIComponent(refillSlug)}`)}
-        />
+      {buyModes && (
+        <PdpBuyModes modes={buyModes} mode={activeMode} onModeChange={setBuyMode}>
+          {activeMode === 'refill' && refillOffer && (
+            <PdpRefillOffer
+              view={refillOffer}
+              trackShown={false}
+              busy={addMutation.isPending && addMutation.variables?.source === 'refill'}
+              blocked={cartWriting}
+              onAdd={(view) => void handleRefillAdd(view)}
+              onOpen={(refillSlug) => navigate(`/product/${encodeURIComponent(refillSlug)}`)}
+            />
+          )}
+          {activeMode === 'subscribe' && (
+            <button
+              type="button"
+              data-testid="pdp-subscribe-open"
+              className="tubu-buy-mode-action tubu-press"
+              onClick={async () => {
+                haptic('light');
+                if (status !== 'authenticated') {
+                  await loginWithNotice();
+                  if (useAuthStore.getState().status !== 'authenticated') return;
+                }
+                setShowSubscribe(true);
+              }}
+            >
+              <Repeat size={18} aria-hidden="true" />
+              <span className="tubu-buy-mode-action-text">{subPct ? fillCopy('pdp.subscribeSave', { pct: subPct }) : fillCopy('pdp.subscribeSaveNoPct')}</span>
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          )}
+        </PdpBuyModes>
       )}
-
-      {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
-        <div data-pdp-block="subscribe" style={{ padding: '0 var(--space-inset-page) var(--space-inset-card)', background: 'var(--color-bg-surface)' }}>
-          <Box
-            role="button"
-            {...rowKeyboardProps()}
-            className="tubu-press"
-            onClick={async () => {
-              haptic('light');
-              if (status !== 'authenticated') {
-                await loginWithNotice();
-                if (useAuthStore.getState().status !== 'authenticated') return;
-              }
-              setShowSubscribe(true);
-            }}
-            flex
-            alignItems="center"
-            style={{
-              gap: 8,
-              minHeight: 44,
-              boxSizing: 'border-box',
-              padding: '10px 12px',
-              borderRadius: 'var(--radius-control)',
-              border: '1px dashed var(--color-border-selected)',
-              background: 'var(--color-bg-subtle)',
-            }}
-          >
-            <Repeat size={18} color="var(--color-text-brand)" strokeWidth={1.9} />
-            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600, flex: 1 }}>
-              {subPct ? fillCopy('pdp.subscribeSave', { pct: subPct }) : fillCopy('pdp.subscribeSaveNoPct')}
-            </Text>
-            <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
-          </Box>
-        </div>
-      )}
+      {buyModes?.some((m) => m.key === 'refill') && refillOffer && <RefillShownTracker productId={refillOffer.productId} />}
 
       {/* ── Ưu đãi, Vận chuyển › và lưu ý giao hàng ── */}
       {(infoRows.length > 0 || shippingNotes.length > 0) && (
@@ -1136,46 +1141,20 @@ export default function ProductDetailPage() {
         </Box>
       )}
 
-      {/* ── Lợi ích (mô tả ngắn) và chứng nhận ── */}
-      {(benefitText || p.certifications.length > 0) && (
-        <Box data-pdp-block="benefits" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          {benefitText && (
-            <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>
-              {benefitText}
-            </Text>
-          )}
-          {p.certifications.length > 0 && (
-            <Box flex style={{ gap: 6, marginTop: benefitText ? 10 : 0, flexWrap: 'wrap' }}>
-              {p.certifications.map((c) => (
-                <Text
-                  key={c}
-                  variant="caption"
-                  tone="brand"
-                  style={{
-                    background: 'var(--color-bg-subtle)',
-                    padding: '3px 10px',
-                    borderRadius: 'var(--radius-pill)',
-                    fontWeight: 500,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <Icon icon={Check} size="sm" tone="brand" />
-                  {c}
-                </Text>
-              ))}
-            </Box>
-          )}
-        </Box>
+      {/* ── Điểm nổi bật: tối đa 3 dòng gộp mô tả ngắn, Điểm cộng xanh, chứng nhận ── */}
+      <PdpHighlights rows={highlights} productSlug={p.slug} />
+
+      {/* ── Chi tiết sản phẩm: Thành phần, Nguồn gốc & cách dùng, Mô tả chi tiết là các dòng gập sẵn trong một dải ── */}
+      {hasDetails && (
+        <section data-pdp-group="details" aria-labelledby="pdp-details-title" className="tubu-pdp-details">
+          <h2 id="pdp-details-title" className="tubu-pdp-details-title">
+            {fillCopy('pdp.details')}
+          </h2>
+          {p.ingredients && p.ingredients.length > 0 && <PdpIngredients items={p.ingredients} />}
+          <PdpOriginGuide view={originView} onOpenMap={(id) => navigate(`/brand-story?brand=${encodeURIComponent(id)}`)} />
+          {(hasDescription || descriptionLead) && <PdpDescription text={p.description} lead={descriptionLead} />}
+        </section>
       )}
-
-      <PdpEco facts={(p as { ecoFacts?: unknown }).ecoFacts} variationId={selected?.id} productSlug={p.slug} />
-
-      {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
-      {p.ingredients && p.ingredients.length > 0 && <PdpIngredients items={p.ingredients} />}
-
-      <PdpOriginGuide view={originView} onOpenMap={(id) => navigate(`/brand-story?brand=${encodeURIComponent(id)}`)} />
 
       {/* Dải câu chuyện chỉ khi sản phẩm có câu chuyện riêng đang bật (kịch bản mẫu hay tự sinh lặp lại khối Thành phần). Nút mua nằm ở thanh dưới nên dải không có nút/khung toàn màn riêng. */}
       {storyProduct && (
@@ -1192,8 +1171,6 @@ export default function ProductDetailPage() {
           </Suspense>
         </div>
       )}
-
-      {p.description && <PdpDescription text={p.description} />}
 
       {/* ── Một khối mua kèm: Combo/Mua kèm giá tốt, hoặc Gợi ý mua kèm hợp vị, hoặc dải Khách thường mua cùng (§6.12; tên cũ "Thường mua kèm" nhường chữ "mua kèm" cho ưu đãi giảm giá) ── */}
       {addOnSource === 'bundles' && slug && (
@@ -1434,8 +1411,8 @@ export default function ProductDetailPage() {
                   vi.product.addToCart
                 )}
               </Button>
-              {/* 2 dòng (nhãn + giá): "Mua ngay · 1.250.000đ" một dòng cần ~170px, trong khi mỗi nút
-                  chỉ còn ~110-140px ở 320-390px → trước đây tràn khỏi màn hình. aria-label là câu một dòng "Mua ngay <giá>" cho trình đọc màn hình (và cả lúc loading — I1). */}
+              {/* Một dòng "Mua ngay" (w47-01): giá đã có ở đầu trang và ở màn Thanh toán, nút không nhồi thêm dòng giá. Nhãn đọc vẫn nói số tiền
+                  nút sẽ thanh toán (bắt đầu bằng đúng chữ nhìn thấy, WCAG 2.5.3), kể cả lúc đang xử lý. */}
               <Button
                 variant="primary"
                 size="lg"
@@ -1444,14 +1421,9 @@ export default function ProductDetailPage() {
                 aria-disabled={ctaAriaDisabled}
                 onPress={handleBuyNow}
                 aria-label={`${buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'} ${formatVnd(line.lineTotal)}`}
-                style={{ flex: 1, paddingTop: 6, paddingBottom: 6 }}
+                style={{ flex: 1 }}
               >
-                <span style={BUY_NOW_LINE}>{buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'}</span>
-                {/* Khoảng trắng giữa hai khối (flex không vẽ ra) để chữ nhìn thấy khớp aria-label (WCAG 2.5.3). */}
-                {' '}
-                <span style={{ ...BUY_NOW_LINE, fontSize: 'var(--type-caption-size)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
-                  {formatVnd(line.lineTotal)}
-                </span>
+                {buyNowMutation.isPending ? 'Đang xử lý…' : 'Mua ngay'}
               </Button>
             </Box>
           ) : (
@@ -1480,14 +1452,13 @@ const PRODUCT_NAME_STYLE: CSSProperties = {
   color: 'var(--color-text-primary)',
 };
 
-/** Một dòng của nhãn 2 dòng trên nút "Mua ngay" (thanh CTA dính đáy). */
-const BUY_NOW_LINE: CSSProperties = {
-  display: 'block',
-  lineHeight: 1.2,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
+/** Ghi một lần hiện thẻ gói Refill cho mỗi sản phẩm khi dải chọn cách mua có nút Refill (thẻ chỉ dựng khi khách chọn chế độ đó). */
+function RefillShownTracker({ productId }: { productId: string }) {
+  useEffect(() => {
+    trackEvent('refill_swap_shown', 'miniapp', { surface: 'pdp' });
+  }, [productId]);
+  return null;
+}
 
 /** Bề rộng ảnh chi tiết ở khổ điện thoại (CSS px): chọn bản đổi cỡ 640 (1x) và 960 (2x). */
 const GALLERY_IMAGE_WIDTH = 480;

@@ -66,7 +66,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
   it('cờ bật: hỏi /upsell/freeship đúng số thiếu và slug trong giỏ, không hỏi kệ Bán chạy; dòng đầu không lặp số của thanh, giữ thứ tự máy chủ, bỏ quà 0đ', async () => {
     mocks.getPublicConfig.mockResolvedValue(CFG(true));
     mount();
-    expect(await screen.findByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Gợi ý thêm để được Miễn phí giao hàng' })).toBeInTheDocument();
     expect(mocks.get).toHaveBeenCalledWith('/upsell/freeship', { query: { gap: 35_000, exclude: 'fuwa3e,xb' } });
     expect(mocks.fetchProducts).not.toHaveBeenCalled();
     expect(screen.getByTestId('freeship-addons').getAttribute('data-stage')).toBe('freeship');
@@ -86,7 +86,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
   it('cờ tắt: món từ kệ Bán chạy (cửa sổ 25.000đ, bù đủ rẻ trước rồi món gần đủ), không hỏi /upsell/freeship', async () => {
     mocks.getPublicConfig.mockResolvedValue(CFG(false));
     mount();
-    expect(await screen.findByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Gợi ý thêm để được Miễn phí giao hàng' })).toBeInTheDocument();
     expect(mocks.get).not.toHaveBeenCalled();
     expect(slugs()).toEqual(['a', 'b']);
   });
@@ -94,7 +94,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
   it('cấu hình lỗi: vẫn có dải từ kệ Bán chạy như trước khi có cờ', async () => {
     mocks.getPublicConfig.mockRejectedValue(new Error('mạng'));
     mount();
-    expect(await screen.findByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Gợi ý thêm để được Miễn phí giao hàng' })).toBeInTheDocument();
     expect(mocks.get).not.toHaveBeenCalled();
   });
 
@@ -120,7 +120,7 @@ describe('FreeshipBoosterRail (Mini, tubu-w3-02 + tubu-w7-02)', () => {
     mocks.getPublicConfig.mockResolvedValue(CFG(true));
     mocks.get.mockRejectedValue(new Error('404'));
     mount();
-    expect(await screen.findByRole('heading', { name: 'Gợi ý mua thêm cho đủ Miễn phí giao hàng' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Gợi ý thêm để được Miễn phí giao hàng' })).toBeInTheDocument();
     expect(mocks.get).toHaveBeenCalled();
     expect(slugs()).toEqual(['a', 'b']);
   });

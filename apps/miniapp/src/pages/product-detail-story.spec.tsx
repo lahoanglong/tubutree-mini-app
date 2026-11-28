@@ -91,7 +91,7 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
   it('có thành phần nhưng chưa có câu chuyện riêng: không vẽ khối câu chuyện dựng sẵn (mục Thành phần đã nói đủ)', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
     renderPdp();
-    await screen.findByText('Thành phần', { selector: 'h2' });
+    await screen.findByTestId('pdp-ingredients-toggle');
     expect(screen.queryByTestId('product-story')).toBeNull();
     expect(document.querySelector('[data-pdp-block="story"]')).toBeNull();
   });
@@ -100,7 +100,7 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }], storyConfig: OWN_STORY }));
     renderPdp();
     const section = await screen.findByTestId('product-story');
-    const heading = screen.getByText('Thành phần', { selector: 'h2' });
+    const heading = screen.getByTestId('pdp-ingredients-toggle');
     expect(heading.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Xem câu chuyện sản phẩm' })).toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
@@ -132,18 +132,18 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     expect(story.querySelector('.tubu-story-sentinel')).toBeNull();
   });
 
-  it('khối câu chuyện nằm sau ô Số lượng và mục Thành phần, trước Mô tả và Đánh giá; không còn dải "Đánh giá nhanh"', async () => {
+  it('khối câu chuyện nằm sau ô Số lượng và dải Chi tiết sản phẩm (Thành phần, Mô tả), trước Đánh giá; không còn dải "Đánh giá nhanh"', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }], storyConfig: OWN_STORY }));
     mocks.fetchReviews.mockResolvedValue({ data: [], average: 4.5, count: 2, items: [{ id: 'r1', rating: 5, comment: 'Thơm', images: [], videoUrl: null, author: 'An', createdAt: '2026-11-01T00:00:00.000Z' }] });
     renderPdp();
     const story = await screen.findByTestId('product-story');
     const qty = screen.getByRole('button', { name: /Tăng số lượng/ });
     expect(qty.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const heading = screen.getByText('Thành phần', { selector: 'h2' });
+    const heading = screen.getByTestId('pdp-ingredients-toggle');
     expect(heading.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const desc = document.querySelector('[data-pdp-block="description"]')!;
     const reviews = document.querySelector('[data-pdp-block="reviews"]')!;
-    expect(story.compareDocumentPosition(desc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(desc.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(story.compareDocumentPosition(reviews) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Đánh giá nhanh' })).toBeNull();
   });

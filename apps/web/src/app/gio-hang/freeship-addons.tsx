@@ -3,7 +3,9 @@
 import { createContext, useContext, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { AovUpsellGoal } from '@tubutree/app-core/cart/aov-upsell';
-import { SectionTitle, Skeleton } from '@/components/mini';
+import { ChevronDown } from 'lucide-react';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { Skeleton } from '@/components/mini';
 import { useFreeshipBoosterCards } from '@/components/cart/freeship-booster/use-freeship-booster-cards';
 import { useCardPricing } from '@/lib/use-card-pricing';
 import type { FreeshipAddonsViewProps } from './freeship-addons-view';
@@ -29,36 +31,21 @@ function NoFreeshipAddonsView({ onShownChange }: FreeshipAddonsViewProps) {
   return null;
 }
 
+/** Dòng gập của dải (`FreeshipAddonRail` `collapsible`): mốc quà thì là tiêu đề có số còn thiếu, còn lại "Gợi ý thêm để được Miễn phí giao hàng". */
+export function freeshipAddonsToggleLabel(goal: Pick<AovUpsellGoal, 'stage' | 'headline'>): string {
+  return goal.stage === 'gift' ? goal.headline : fillCopy('freeship.boosterToggle');
+}
+
 /**
- * Khung chờ đúng khối của `FreeshipAddonRail` (tiêu đề + 2 thẻ gọn xếp dọc trong `.tubu-addon`): giữ chỗ lúc chunk phần vẽ hay nguồn món còn tải.
+ * Khung chờ đúng khối của `FreeshipAddonRail` gập sẵn (w47-01): một dòng 44px như dòng gập của dải, giữ chỗ lúc chunk phần vẽ hay nguồn món còn tải.
  * Dải nằm TRÊN các dòng giỏ, nên hiện muộn mà không giữ chỗ thì đẩy cả danh sách xuống (CLS 0,105 ở 390px khi đã đăng nhập, tubu-w8-01).
- * Nguồn về mà chỉ một món hay không món nào thì khung thu lại: ít gặp hơn nhiều so với dải đủ hai món.
  */
 export function FreeshipAddonsPending({ title }: { title?: string | undefined }) {
   return (
     <section aria-hidden data-testid="freeship-addons-pending" className="tubu-addon">
-      <div className="tubu-addon-head">
-        {title ? (
-          <SectionTitle as="p" block>
-            {title}
-          </SectionTitle>
-        ) : (
-          <Skeleton width="70%" height="var(--type-title-sm-lh)" />
-        )}
-      </div>
-      <div className="tubu-addon-list">
-        {[0, 1].map((i) => (
-          <div key={i} className="tubu-addon-card">
-            <Skeleton width={48} height={48} radius="var(--radius-media)" />
-            <div className="tubu-addon-body">
-              <div className="tubu-addon-name">
-                <Skeleton width="80%" height={12} />
-              </div>
-              <Skeleton width={64} height={16} />
-            </div>
-            <Skeleton width={72} height={44} />
-          </div>
-        ))}
+      <div className="tubu-addon-toggle">
+        {title ? <span className="tubu-addon-toggle-text">{title}</span> : <Skeleton width="70%" height="var(--type-body-sm-lh)" />}
+        <ChevronDown size={16} aria-hidden="true" className="tubu-addon-chevron" />
       </div>
     </section>
   );
@@ -97,7 +84,7 @@ export function FreeshipAddons(props: FreeshipAddonsProps) {
   const pricing = useCardPricing();
   const View = props.guest ? GuestFreeshipAddonsView : FreeshipAddonsView;
   return (
-    <PendingTitle.Provider value={goal.headline}>
+    <PendingTitle.Provider value={freeshipAddonsToggleLabel(goal)}>
       <View {...props} source={source} pricing={pricing} />
     </PendingTitle.Provider>
   );

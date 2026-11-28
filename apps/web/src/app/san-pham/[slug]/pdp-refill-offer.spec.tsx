@@ -65,7 +65,7 @@ afterEach(() => {
 describe('PdpRefillOfferBlock (tubu-w13-01)', () => {
   it('một thẻ: số tiết kiệm, số chai thay, liên kết thật tới trang gói, nút "+ Thêm" 44px có tên đọc; báo đã hiện', async () => {
     const c = await mount();
-    expect(c.querySelectorAll('[data-pdp-block="refill"]')).toHaveLength(1);
+    expect(c.querySelectorAll('[data-testid="pdp-refill"]')).toHaveLength(1);
     const open = c.querySelector<HTMLAnchorElement>('[data-testid="pdp-refill-open"]')!;
     expect(open.getAttribute('href')).toBe('/san-pham/refill-nuoc-rua-chen-10l');
     expect(open.textContent).toBe('Chọn túi Refill 10L tiết kiệm 470.000đ (~34%)Thay thế 20 chai nhựa · 890.000đ');
@@ -76,6 +76,11 @@ describe('PdpRefillOfferBlock (tubu-w13-01)', () => {
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(mocks.track).toHaveBeenCalledWith('refill_swap_shown', { surface: 'pdp' });
+  });
+
+  it('trackShown=false: thẻ không tự báo đã hiện (trang sản phẩm báo một lần khi dải chọn cách mua có Túi Refill)', async () => {
+    await mount({ trackShown: false });
+    expect(mocks.track).not.toHaveBeenCalledWith('refill_swap_shown', expect.anything());
   });
 
   it('đã đăng nhập: "+ Thêm" thêm đúng phân loại gói, số lượng 1, nguồn pdp, một lần dù chạm đúp; thành công thì báo đã đổi', async () => {

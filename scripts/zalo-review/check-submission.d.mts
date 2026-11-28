@@ -20,6 +20,7 @@ export const FILES: Record<
   | 'webPolicy'
   | 'about'
   | 'checkout'
+  | 'orderConsent'
   | 'webLegalPage'
   | 'appRoutes'
   | 'navConfig'

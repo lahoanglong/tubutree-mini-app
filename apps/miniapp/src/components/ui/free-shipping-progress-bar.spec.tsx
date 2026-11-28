@@ -330,3 +330,36 @@ describe('css/freeship.css: thanh hai mốc', () => {
     expect(css).toMatch(/\.tubu-freeship\[data-reached='true'\]\[data-gift='locked'\] \{[^}]*background: var\(--color-bg-surface\);/);
   });
 });
+
+describe('FreeShippingProgressBar (Mini): một thanh mốc gộp nhắc mã sắp mở khoá (w47-01)', () => {
+  const VOUCHER = { code: 'GIAM45', missing: 20_000, pct: 80, text: 'Mua thêm 20.000đ để mở khoá mã GIAM45', barAria: 'Đã đạt 80% đơn tối thiểu của mã GIAM45' };
+
+  it('mã gần hơn mốc Miễn phí giao hàng: thanh nói mã, đo theo mã, một nút "Mua thêm"', () => {
+    const onShopMore = vi.fn();
+    render(<FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={onShopMore} voucher={VOUCHER} />);
+    const block = screen.getByTestId('freeship-progress');
+    expect(block).toHaveAttribute('data-goal', 'voucher');
+    expect(within(block).getByTestId('cart-voucher-unlock')).toHaveTextContent(VOUCHER.text);
+    expect(screen.queryByText(/để được Miễn phí giao hàng/)).toBeNull();
+    const bar = screen.getByRole('progressbar');
+    expect(bar).toBe(screen.getByTestId('cart-voucher-unlock-bar'));
+    expect(bar).toHaveAttribute('aria-valuenow', '80');
+    expect(bar).toHaveAccessibleName(VOUCHER.barAria);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('freeship-shop-more-cta'));
+    expect(onShopMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('mốc Miễn phí giao hàng gần hơn (hoặc hoà): giữ thanh Miễn phí giao hàng, không nói mã', () => {
+    render(<FreeShippingProgressBar base={190_000} threshold={200_000} voucher={{ ...VOUCHER, missing: 10_000 }} />);
+    expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-goal', 'progress');
+    expect(screen.getByText('Mua thêm 10.000đ để được Miễn phí giao hàng 🚚')).toBeInTheDocument();
+    expect(screen.queryByTestId('cart-voucher-unlock')).toBeNull();
+  });
+
+  it('đã Miễn phí giao hàng, không mốc quà, còn mã sắp mở khoá: thanh nói mã (mốc còn thiếu duy nhất)', () => {
+    render(<FreeShippingProgressBar base={250_000} threshold={200_000} voucher={VOUCHER} />);
+    expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-goal', 'voucher');
+    expect(screen.queryByText('🎉 Đơn hàng đã được Miễn phí giao hàng')).toBeNull();
+  });
+});

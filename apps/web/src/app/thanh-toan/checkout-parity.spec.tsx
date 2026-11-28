@@ -71,6 +71,8 @@ const radio = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.startsWith(label))?.querySelector('input') as HTMLInputElement | undefined;
 const checkbox = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+/** Công tắc của hàng Điểm Xanh một dòng (w47-01). */
+const pointsSwitch = (r: Rendered) => r.container.querySelector<HTMLInputElement>('[data-testid="checkout-points"] input[role="switch"]');
 const field = (r: Rendered, label: string) =>
   [...r.container.querySelectorAll('label')].find((l) => l.textContent?.includes(label))!.querySelector('input') as HTMLInputElement;
 
@@ -127,11 +129,11 @@ describe('/thanh-toan — Ví Tubu (R2-BUYERWEB-2)', () => {
         : quote({ total: 130000, pointsBalance: 500, redeemablePoints: 500 }),
     );
     const r = await mount();
-    click(checkbox(r, 'Điểm Xanh'));
+    click(pointsSwitch(r));
     await flush(4);
     click(radio(r, 'Ví Tubu')!);
     expect(radio(r, 'Ví Tubu')!.checked).toBe(true);
-    click(checkbox(r, 'Điểm Xanh'));
+    click(pointsSwitch(r));
     await flush(4);
     expect(radio(r, 'Ví Tubu')!.disabled).toBe(true);
     expect(radio(r, 'Ví Tubu')!.checked).toBe(false);

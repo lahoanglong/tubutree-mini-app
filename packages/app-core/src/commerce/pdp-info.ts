@@ -9,15 +9,15 @@ export const PDP_BLOCK_ORDER = [
   'gallery',
   'main', // nhãn, xuất xứ, tim, chia sẻ, tên, sao, giá, Điểm Xanh, tồn
   'variations', // chip phân loại + Số lượng
-  'rebuy', // "Bạn đã mua ngày dd/mm · Mua lại" (thay chỗ dòng định kỳ)
-  'refill', // "Chọn túi Refill 10L tiết kiệm …" (chai đã ghép gói Refill còn hàng, mọi khách; tubu-w13-01)
-  'subscribe', // Đặt định kỳ (lùi xuống sau Mua lại khi có)
+  'rebuy', // một dòng nhỏ "Bạn đã mua ngày dd/mm · Mua lại"
+  'modes', // MỘT dải chọn cách mua (`pdpBuyModes`): Mua lẻ / Túi Refill / Định kỳ; chỉ chế độ đang chọn mới có một dòng chi tiết bên dưới
   'shipping', // Ưu đãi, Vận chuyển, lưu ý
-  'benefits', // mô tả ngắn (lợi ích) + chứng nhận
+  'benefits', // Điểm nổi bật (`pdpHighlights`): tối đa 3 dòng gộp Điểm cộng xanh, mô tả ngắn, chứng nhận
+  // Ba khối sau nằm chung một dải "Chi tiết sản phẩm" (`data-pdp-group="details"`), mỗi khối là một dòng gập sẵn.
   'ingredients',
-  'origin', // "Nguồn gốc & cách dùng" gập sẵn: xuất xứ, cách dùng/bảo quản chủ hàng viết trong mô tả, hạn dùng/số lô (`pdpOriginView`)
-  'story', // chỉ khi sản phẩm có câu chuyện riêng được bật
+  'origin', // "Nguồn gốc & cách dùng": xuất xứ, cách dùng/bảo quản chủ hàng viết trong mô tả, hạn dùng/số lô (`pdpOriginView`)
   'description',
+  'story', // chỉ khi sản phẩm có câu chuyện riêng được bật
   'addons', // MỘT khối mua kèm: combo thật > FBT > khách thường mua cùng
   'reviews',
   'compare',
@@ -34,15 +34,6 @@ export function pdpAddOnSource(has: { bundles: boolean; fbt: boolean; bought: bo
   if (has.fbt) return 'fbt';
   if (has.bought) return 'bought';
   return null;
-}
-
-/** Số dòng Thành phần mở sẵn; nhiều hơn thì có nút "Xem đủ". */
-export const PDP_INGREDIENTS_PREVIEW = 3;
-
-export function ingredientsPreview<T>(list: readonly T[] | null | undefined, expanded: boolean): { shown: readonly T[]; hidden: number } {
-  const all = list ?? [];
-  if (expanded || all.length <= PDP_INGREDIENTS_PREVIEW) return { shown: all, hidden: 0 };
-  return { shown: all.slice(0, PDP_INGREDIENTS_PREVIEW), hidden: all.length - PDP_INGREDIENTS_PREVIEW };
 }
 
 /**

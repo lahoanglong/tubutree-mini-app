@@ -29,6 +29,13 @@ import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commer
 import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
 import { OrderTrackingPill } from '../components/orders/order-tracking-pill';
 import { StorefrontTrustChips } from '../components/shop-page/storefront-trust-chips';
+import { PdpBuyModes } from '../components/product/pdp-buy-modes';
+import { PdpHighlights } from '../components/product/pdp-highlights';
+import { PdpDetailRow } from '../components/product/pdp-detail-row';
+import { PointsToggleRow } from '../components/checkout/points-toggle-row';
+import { OrderConsent } from '../components/checkout/order-consent';
+import { pdpBuyModes } from '@tubutree/app-core/commerce/pdp-buy-modes';
+import { pdpHighlights } from '@tubutree/app-core/commerce/pdp-highlights';
 
 const GALLERY_REEL_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, seen: false },
@@ -42,6 +49,13 @@ const GALLERY_REFILL_OFFER = {
 };
 const GALLERY_REFILL_VIEW = pdpRefillOffer({ name: 'Nước rửa chén 500ml', price: 68_000 }, GALLERY_REFILL_OFFER)!;
 const GALLERY_REFILL_PLAIN = pdpRefillOffer({ name: 'Nước rửa chén bồ hòn', price: 68_000 }, GALLERY_REFILL_OFFER)!;
+const GALLERY_BUY_MODES = pdpBuyModes({ refill: GALLERY_REFILL_VIEW, subscribe: true, subscribePct: 12 })!;
+const GALLERY_HIGHLIGHTS = pdpHighlights({
+  benefit: 'Sạch dầu mỡ nhanh, dịu da tay. Không chứa chất tạo màu.',
+  certifications: ['Hữu cơ', 'Không thử trên động vật'],
+  eco: [{ kind: 'REFILL_PACK', text: 'Có túi Refill 10L, giảm 20 chai nhựa', sourceUrl: 'https://tubutree.com/tiet-kiem-refill', sourceHost: 'tubutree.com' }],
+});
+const GALLERY_HIGHLIGHTS_SHORT = pdpHighlights({ benefit: 'Sạch dịu nhẹ', certifications: [], eco: [] });
 const GALLERY_ADDON_ITEMS = [
   { slug: 'rau-muong', name: 'Rau muống', thumbnail: null, price: 29_000, variationId: 'v1' },
   { slug: 'mat-ong', name: 'Mật ong rừng', thumbnail: null, price: 39_000, compareAt: 49_000, variationId: 'v2' },
@@ -361,6 +375,54 @@ export default function DsGalleryPage() {
           </Variant>
           <Variant label="đang thêm">
             <PdpRefillOffer view={GALLERY_REFILL_VIEW} busy onAdd={() => undefined} onOpen={() => undefined} />
+          </Variant>
+        </Group>
+
+        <Group name="pdp-buy-modes">
+          <Variant label="Mua lẻ đang chọn: không có dòng chi tiết">
+            <PdpBuyModes modes={GALLERY_BUY_MODES} mode="retail" onModeChange={noop} />
+          </Variant>
+          <Variant label="Túi Refill đang chọn: thẻ gói Refill ngay dưới">
+            <PdpBuyModes modes={GALLERY_BUY_MODES} mode="refill" onModeChange={noop}>
+              <PdpRefillOffer view={GALLERY_REFILL_VIEW} busy={false} onAdd={noop} onOpen={noop} />
+            </PdpBuyModes>
+          </Variant>
+        </Group>
+
+        <Group name="pdp-highlights">
+          <Variant label="ba dòng: lợi ích, Điểm cộng xanh, chứng nhận">
+            <PdpHighlights rows={GALLERY_HIGHLIGHTS} productSlug="ds-gallery" />
+          </Variant>
+          <Variant label="một dòng lợi ích">
+            <PdpHighlights rows={GALLERY_HIGHLIGHTS_SHORT} productSlug="ds-gallery" />
+          </Variant>
+        </Group>
+
+        <Group name="pdp-detail-row">
+          <Variant label="gập sẵn kèm gợi ý">
+            <PdpDetailRow block="ingredients" title="Thành phần" hint="5 thành phần">
+              <Text variant="body-sm" as="p">Bồ hòn, gừng, sả chanh, muối, nước</Text>
+            </PdpDetailRow>
+          </Variant>
+          <Variant label="không có gợi ý">
+            <PdpDetailRow block="description" title="Mô tả chi tiết">
+              <Text variant="body-sm" as="p">Nước rửa chén sinh học từ bồ hòn.</Text>
+            </PdpDetailRow>
+          </Variant>
+        </Group>
+
+        <Group name="points-toggle-row">
+          <Variant label="dùng được: công tắc bật">
+            <PointsToggleRow text="Dùng 1.200 Điểm Xanh (-1.200đ)" usable checked onToggle={noop} notes={[]} rate="1đ" />
+          </Variant>
+          <Variant label="chưa có điểm: không có công tắc">
+            <PointsToggleRow text="Bạn đang có 0 Điểm Xanh" usable={false} checked={false} onToggle={noop} notes={[]} rate="1đ" />
+          </Variant>
+        </Group>
+
+        <Group name="order-consent">
+          <Variant label="một dòng, chạm mở tấm năm chính sách">
+            <OrderConsent onOpenPolicy={noop} />
           </Variant>
         </Group>
 

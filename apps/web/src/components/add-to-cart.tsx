@@ -605,19 +605,16 @@ export default function AddToCart({
               <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-busy={addBusy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
-              {/* Hai dòng (nhãn + giá) như Mini App: một dòng "Mua ngay · giá" tràn ở 320-390px. */}
+              {/* Một dòng như Mini App (w47-01): giá đã có ở đầu trang và ở bảng chọn; tên đọc vẫn kèm giá, bắt đầu bằng chữ thấy được (WCAG 2.5.3). */}
               <button
                 type="button"
                 onClick={onBuyNow}
                 disabled={cannotBuy} aria-busy={buyBusy} aria-disabled={busy || undefined}
                 aria-label={`${buyLabel} ${buyTotal}`}
                 data-testid="buy-now"
-                className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
+                className={`${uiBar.primary} min-w-0 flex-1`}
               >
                 <span className="block max-w-full truncate">{buyLabel}</span>
-                {/* Khoảng trắng giữa hai khối (flex không vẽ ra) để chữ nhìn thấy, theo cách axe nối, khớp aria-label "Mua ngay <giá>" (WCAG 2.5.3). */}
-                {' '}
-                <span className="block max-w-full truncate text-xs font-medium tabular-nums">{buyTotal}</span>
               </button>
             </div>
           ) : showRestock ? (

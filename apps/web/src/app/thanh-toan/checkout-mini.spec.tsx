@@ -167,32 +167,37 @@ describe('/thanh-toan — khối Sản phẩm và thẻ mã', () => {
   });
 });
 
-describe('/thanh-toan — ô chọn Điểm Xanh', () => {
-  it('dấu tick nằm trong khung 24px bọc đúng ô chọn, không bám góc dòng', async () => {
-    const c = await mount();
-    const input = c.querySelector<HTMLInputElement>('[data-mini-block="points"] input[type="checkbox"]')!;
-    const box = input.parentElement!;
-    expect(box.tagName).toBe('SPAN');
-    expect(box.className).toMatch(/\brelative\b/);
-    expect(box.querySelector('svg')).not.toBeNull();
-  });
+describe('/thanh-toan — hàng Điểm Xanh một dòng (w47-01)', () => {
+  const openInfo = async (c: HTMLElement) => {
+    click(c.querySelector('[data-mini-block="points"] button[aria-label="Cách dùng Điểm Xanh"]'));
+    await flush(2);
+    return document.querySelector<HTMLElement>('[data-testid="checkout-points-info"]')!;
+  };
 
-  it('W43: có điểm từ đơn sàn → một dòng nhắc nằm trong cột chữ cạnh ô tick (như Mini), bản md+ nằm dưới ô', async () => {
-    quoteExtra.lots = { pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250, pointsMax: 10_000, pointsMaxMarketplace: 1_250 };
+  it('công tắc (.tubu-switch) trong nhãn 44px ở cuối hàng, tên đọc là câu "Dùng N Điểm Xanh (-Xđ)"; không còn ô tick 24px', async () => {
     const c = await mount();
     const block = c.querySelector<HTMLElement>('[data-mini-block="points"]')!;
-    const notes = [...block.querySelectorAll<HTMLElement>('[data-points-marketplace]')];
-    expect(notes.map((n) => n.textContent)).toEqual(['Gồm 1.250 điểm từ đơn sàn, giảm ngay', 'Gồm 1.250 điểm từ đơn sàn, giảm ngay']);
-    const phone = notes.find((n) => n.classList.contains('md:hidden'))!;
-    expect(phone.closest('label')).not.toBeNull();
-    expect(phone.parentElement!.className).toMatch(/\bmin-w-0\b/);
-    expect(phone.parentElement!.querySelector('input')).toBeNull();
-    expect(notes.find((n) => n.classList.contains('md:block'))!.closest('label')).toBeNull();
+    const sw = block.querySelector<HTMLInputElement>('input[role="switch"]')!;
+    expect(sw.classList.contains('tubu-switch')).toBe(true);
+    expect(sw.parentElement!.tagName).toBe('LABEL');
+    expect(sw.parentElement!.className).toContain('tubu-points-row-switch');
+    const text = block.querySelector<HTMLElement>(`#${CSS.escape(sw.getAttribute('aria-labelledby')!)}`)!;
+    expect(text.textContent).toMatch(/^Dùng [\d.]+ Điểm Xanh( \(-[\d.]+đ\))?$/);
+    expect(block.querySelector('input[type="checkbox"]:not([role="switch"])')).toBeNull();
+  });
+
+  it('W43: có điểm từ đơn sàn → đúng một dòng nhắc, nằm trong tấm ⓘ (hàng chỉ còn một dòng)', async () => {
+    quoteExtra.lots = { pointsMarketplaceBalance: 1_250, redeemableMarketplacePoints: 1_250, pointsMax: 10_000, pointsMaxMarketplace: 1_250 };
+    const c = await mount();
+    expect(c.querySelector('[data-points-note="marketplace"]')).toBeNull();
+    const info = await openInfo(c);
+    const notes = [...info.querySelectorAll<HTMLElement>('[data-points-note="marketplace"]')];
+    expect(notes.map((n) => n.textContent)).toEqual(['Gồm 1.250 điểm từ đơn sàn, giảm ngay']);
   });
 
   it('W43: không có điểm từ đơn sàn → không có dòng nhắc', async () => {
     const c = await mount();
-    expect(c.querySelector('[data-points-marketplace]')).toBeNull();
+    expect((await openInfo(c)).querySelector('[data-points-note="marketplace"]')).toBeNull();
   });
 });
 
@@ -244,58 +249,37 @@ describe('/thanh-toan — số giảm ở thẻ mã khi chưa có báo giá', ()
   });
 });
 
-describe('/thanh-toan — nút "Chi tiết" và sheet tính tiền như Mini App ở điện thoại', () => {
-  it('tiêu đề Tóm tắt có nút "Chi tiết" mở sheet "Chi tiết tính tiền đơn hàng" với nút "Đã hiểu", đóng lại được', async () => {
+describe('/thanh-toan — khối tóm tắt không còn tấm "Chi tiết" trùng lặp (w47-01)', () => {
+  it('tiêu đề Tóm tắt không có nút "Chi tiết"; tạm tính, phí vận chuyển và tổng nằm ngay trong khối', async () => {
     const c = await mount();
     const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
-    const btn = Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!;
-    expect(btn).toBeTruthy();
+    expect(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')).toBeUndefined();
     expect(document.body.textContent).not.toContain('Chi tiết tính tiền đơn hàng');
-    click(btn);
-    await flush(3);
-    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dlg.textContent).toContain('Chi tiết tính tiền đơn hàng');
-    expect(dlg.textContent).toContain('Tạm tính tiền hàng');
-    expect(dlg.textContent).toContain('Phí vận chuyển');
-    expect(dlg.textContent).toContain('Tổng thanh toán');
-    click(Array.from(dlg.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Đã hiểu')!);
-    await flush(3);
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(c.textContent).toContain('Phí vận chuyển');
+    expect(c.querySelector('[data-ds="checkout-summary-total"]')!.textContent).toContain('Tổng cộng');
   });
-});
 
-describe('/thanh-toan — sheet chi tiết giống Mini', () => {
-  const openSheet = async (c: HTMLElement) => {
-    const summary = c.querySelector<HTMLElement>('[data-mini-block="summary"]')!;
-    click(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!);
-    await flush(3);
-    return document.querySelector<HTMLElement>('[role="dialog"]')!;
-  };
-
-  it('có điểm thưởng: sheet ghi dòng "Nhận +N Điểm Xanh khi giao thành công"', async () => {
+  it('có điểm thưởng: dòng "Nhận +N Điểm Xanh khi giao thành công" dưới tổng', async () => {
     quoteExtra.pointsEarned = 1250;
-    const dlg = await openSheet(await mount());
-    expect(dlg.textContent).toContain('Nhận +1.250 Điểm Xanh khi giao thành công');
+    const c = await mount();
+    expect(c.querySelector('[data-mini-part="summary-total"]')!.textContent).toContain('Nhận +1.250 Điểm Xanh khi giao thành công');
   });
 
-  it('không có điểm thưởng: sheet không có dòng "Nhận +"', async () => {
-    const dlg = await openSheet(await mount());
-    expect(dlg.textContent).not.toContain('Nhận +');
+  it('không có điểm thưởng: không có dòng "Nhận +"', async () => {
+    const c = await mount();
+    expect(c.textContent).not.toContain('Nhận +');
   });
 
-  it('phí ship 0: "Miễn phí" tông success ở cả thẻ tóm tắt và sheet', async () => {
+  it('phí ship 0: "Miễn phí" tông success ở thẻ tóm tắt', async () => {
     quoteExtra.shippingFee = 0;
     const c = await mount();
     const inSummary = Array.from(c.querySelectorAll<HTMLElement>('[data-mini-block="summary"] span')).find((e) => e.textContent === 'Miễn phí')!;
     expect(inSummary.className).toMatch(/text-success-fg/);
-    const dlg = await openSheet(c);
-    const inSheet = Array.from(dlg.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === 'Miễn phí')!;
-    expect(inSheet.className).toMatch(/text-success-fg/);
   });
 });
 
 describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ giỏ như Mini', () => {
-  it('giỏ trọn có combo + hạng + mã: thẻ tóm tắt và sheet ghi số giảm', async () => {
+  it('giỏ trọn có combo + hạng + mã: thẻ tóm tắt ghi số giảm', async () => {
     cartExtra.coupon = 'XANH10';
     cartExtra.discount = 20000;
     cartExtra.combo = 15000;
@@ -307,13 +291,7 @@ describe('/thanh-toan — chưa có báo giá: xem trước khoản giảm từ 
     expect(summary.textContent).toContain('-15.000đ');
     expect(summary.textContent).toContain('-20.000đ');
     expect(summary.textContent).toContain('Ưu đãi hạng thành viên');
-    click(Array.from(summary.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!);
-    await flush(3);
-    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dlg.textContent).toContain('Giảm giá combo');
-    expect(dlg.textContent).toContain('-15.000đ');
-    expect(dlg.textContent).toContain('-20.000đ');
-    expect(dlg.textContent).toContain('-5.000đ');
+    expect(summary.textContent).toContain('-5.000đ');
   });
 
   it('mua một phần giỏ: không ghi số giảm của cả giỏ', async () => {
@@ -370,7 +348,7 @@ describe('/thanh-toan — thẻ tóm tắt khớp Mini ở 375 (nhãn trơn, ch�
     expect(t.indexOf('-20.000đ')).toBeLessThan(t.indexOf('Ưu đãi hạng thành viên'));
   });
 
-  it('báo giá lỗi: không chen dòng giảm xem trước cạnh dòng lỗi; nút Chi tiết vẫn bấm được như Mini', async () => {
+  it('báo giá lỗi: không chen dòng giảm xem trước cạnh dòng lỗi', async () => {
     cartExtra.coupon = 'XANH10';
     cartExtra.discount = 20000;
     cartExtra.combo = 15000;
@@ -379,8 +357,6 @@ describe('/thanh-toan — thẻ tóm tắt khớp Mini ở 375 (nhãn trơn, ch�
     const s = summaryOf(c);
     expect(s.textContent).not.toContain('-20.000đ');
     expect(s.textContent).not.toContain('-15.000đ');
-    const btn = Array.from(s.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Chi tiết')!;
-    expect(btn.disabled).toBe(false);
   });
 
   it('đang tải lại báo giá (bấm Dùng Điểm Xanh): không chen dòng giảm xem trước, không nhảy dòng', async () => {
