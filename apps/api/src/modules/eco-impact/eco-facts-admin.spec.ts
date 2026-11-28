@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { EcoFactsAdminService } from './eco-facts-admin.service';
+import { approvalBlockers } from './eco-facts.rules';
 import { EcoFactsReader } from './eco-facts.reader';
 import { EcoFactBodyDto, parseEcoFactInput } from './eco-facts.input';
 import { createValidationPipe } from '../../common/validation-pipe';
@@ -36,10 +37,11 @@ function makePrisma(row: Record<string, unknown> | null = dbRow()) {
       findUnique: jest.fn().mockResolvedValue(row),
       findUniqueOrThrow: jest.fn().mockResolvedValue(row),
       findFirst: jest.fn().mockResolvedValue(null),
+      createMany: jest.fn().mockImplementation(({ data }) => Promise.resolve({ count: data.length })),
       create: jest.fn().mockImplementation(({ data }) => Promise.resolve(dbRow(data))),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1' }) },
+    product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1' }), findMany: jest.fn().mockResolvedValue([]) },
     variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', productId: 'p1' }) },
   };
 }
@@ -208,5 +210,201 @@ describe('thân POST/PATCH /admin/eco-facts qua ValidationPipe toàn cục', () 
 
   it('khoá lạ: 400 tiếng Việt, không tới dịch vụ', async () => {
     await expect(pipe.transform({ ...form, status: 'APPROVED' }, meta)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('EcoFactsAdminService.approveBatch', () => {
+  const T1 = new Date('2026-11-18T02:00:00Z');
+  const body = (...ids: [string, Date][]) => ({ items: ids.map(([id, at]) => ({ id, expectedUpdatedAt: at.toISOString() })) });
+
+  it('duyệt đúng các dòng Nháp đủ điều kiện, ghi có điều kiện updatedAt + status DRAFT, cùng một mốc giờ', async () => {
+    const prisma = makePrisma();
+    prisma.productEcoFact.findMany.mockResolvedValue([dbRow({ id: 'a' }), dbRow({ id: 'b', kind: 'REFILL_PACK', valueGrams: null, updatedAt: T1 })]);
+    const out = await svcOf(prisma).approveBatch('admin1', body(['a', T0], ['b', T1]));
+    expect(out).toEqual({ approved: ['a', 'b'], skipped: [] });
+    const calls = prisma.productEcoFact.updateMany.mock.calls.map((c) => c[0]);
+    expect(calls[0]).toEqual({ where: { id: 'a', updatedAt: T0, status: 'DRAFT' }, data: { status: 'APPROVED', approvedById: 'admin1', approvedAt: expect.any(Date) } });
+    expect(calls[1].where).toEqual({ id: 'b', updatedAt: T1, status: 'DRAFT' });
+    expect(calls[0].data.approvedAt).toBe(calls[1].data.approvedAt);
+  });
+
+  it('dòng còn blocker (chưa cân, thiếu nguồn) KHÔNG bao giờ được duyệt; dòng khác trong lô vẫn duyệt', async () => {
+    const prisma = makePrisma();
+    prisma.productEcoFact.findMany.mockResolvedValue([
+      dbRow({ id: 'ok' }),
+      dbRow({ id: 'chua-can', valueGrams: null }),
+      dbRow({ id: 'thieu-nguon', kind: 'REFILL_PACK', sourceUrl: '', sourceNote: '' }),
+      dbRow({ id: 'chu-cam', baselineText: 'chữa bệnh hiệu quả' }),
+    ]);
+    const out = await svcOf(prisma).approveBatch('admin1', body(['ok', T0], ['chua-can', T0], ['thieu-nguon', T0], ['chu-cam', T0]));
+    expect(out.approved).toEqual(['ok']);
+    expect(out.skipped.map((s) => [s.id, s.reason])).toEqual([
+      ['chua-can', 'blocked'],
+      ['thieu-nguon', 'blocked'],
+      ['chu-cam', 'blocked'],
+    ]);
+    expect(out.skipped[0]!.message).toBe('Giảm nhựa cần số gam lớn hơn 0.');
+    expect(prisma.productEcoFact.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('chỉ duyệt dòng Nháp: đã duyệt hay ngừng dùng bị bỏ; không tìm thấy, bản cũ cũng bị bỏ kèm lý do', async () => {
+    const prisma = makePrisma();
+    prisma.productEcoFact.findMany.mockResolvedValue([dbRow({ id: 'done', status: 'APPROVED' }), dbRow({ id: 'off', status: 'RETIRED' }), dbRow({ id: 'stale' })]);
+    const out = await svcOf(prisma).approveBatch('admin1', body(['done', T0], ['off', T0], ['stale', T1], ['ghost', T0]));
+    expect(out.approved).toEqual([]);
+    expect(out.skipped.map((s) => [s.id, s.reason])).toEqual([
+      ['done', 'not_draft'],
+      ['off', 'not_draft'],
+      ['stale', 'conflict'],
+      ['ghost', 'not_found'],
+    ]);
+    expect(prisma.productEcoFact.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('có người ghi chen giữa (updateMany count 0) thì dòng đó bị bỏ, không tính là đã duyệt', async () => {
+    const prisma = makePrisma();
+    prisma.productEcoFact.findMany.mockResolvedValue([dbRow({ id: 'a' }), dbRow({ id: 'b' })]);
+    prisma.productEcoFact.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    const out = await svcOf(prisma).approveBatch('admin1', body(['a', T0], ['b', T0]));
+    expect(out.approved).toEqual(['b']);
+    expect(out.skipped).toEqual([{ id: 'a', reason: 'conflict', message: 'Dòng này vừa đổi. Tải lại, xem lại rồi duyệt.' }]);
+  });
+
+  it('thân sai: rỗng, quá 50 dòng, thiếu expectedUpdatedAt đều 400, không chạm bảng; id lặp chỉ tính một lần', async () => {
+    const prisma = makePrisma();
+    const svc = svcOf(prisma);
+    await expect(svc.approveBatch('a', {})).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.approveBatch('a', { items: [] })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.approveBatch('a', { items: Array.from({ length: 51 }, (_, i) => ({ id: `x${i}`, expectedUpdatedAt: T0.toISOString() })) })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.approveBatch('a', { items: [{ id: 'a' }] })).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.productEcoFact.findMany).not.toHaveBeenCalled();
+    prisma.productEcoFact.findMany.mockResolvedValue([dbRow({ id: 'a' })]);
+    const out = await svc.approveBatch('a', body(['a', T0], ['a', T0]));
+    expect(out.approved).toEqual(['a']);
+    expect(prisma.productEcoFact.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('không đọc hay ghi cấu hình hệ thống: cờ eco.product_badges_enabled giữ nguyên', async () => {
+    const prisma = { ...makePrisma(), systemConfig: { upsert: jest.fn(), update: jest.fn(), updateMany: jest.fn() } };
+    prisma.productEcoFact.findMany.mockResolvedValue([dbRow({ id: 'a' })]);
+    await svcOf(prisma as unknown as ReturnType<typeof makePrisma>).approveBatch('admin1', body(['a', T0]));
+    expect(prisma.systemConfig.upsert).not.toHaveBeenCalled();
+    expect(prisma.systemConfig.update).not.toHaveBeenCalled();
+    expect(prisma.systemConfig.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('EcoFactsAdminService.createRefillDrafts', () => {
+  const product = (over: Record<string, unknown>) => ({ id: 'p1', slug: 'refill-nuoc-giat-fuwa3e-10l-aa', name: 'Refill nước giặt Fuwa3e 10L', isCombo: false, variations: [{ id: 'v1' }], ...over });
+
+  it('mỗi gói Refill nhận Can refill + Giảm nhựa ở cấp sản phẩm; bỏ chai thường và combo; đều NHÁP, không số gam, không chữ', async () => {
+    const prisma = makePrisma();
+    prisma.product.findMany.mockResolvedValue([
+      product({}),
+      product({ id: 'p2', slug: 'nuoc-giat-fuwa3e-3-8l', name: 'Nước giặt Fuwa3e 3,8L' }),
+      product({ id: 'p3', slug: 'combo-refill', name: 'Combo Refill 2 can', isCombo: true }),
+      product({ id: 'p4', slug: 'x-yz', name: 'Refill Nước rửa chén Fuwa3e 10L' }),
+    ]);
+    const out = await svcOf(prisma).createRefillDrafts({});
+    expect(out).toEqual({ refillProducts: 2, created: 4, skippedExisting: 0 });
+    expect(prisma.product.findMany.mock.calls[0][0].where).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
+    const { data, skipDuplicates } = prisma.productEcoFact.createMany.mock.calls[0][0];
+    expect(skipDuplicates).toBe(true);
+    expect(data).toEqual([
+      { productId: 'p1', variationId: null, kind: 'REFILL_PACK', status: 'DRAFT', sourceUrl: '', sourceNote: '' },
+      { productId: 'p1', variationId: null, kind: 'PLASTIC_AVOIDED', status: 'DRAFT', sourceUrl: '', sourceNote: '' },
+      { productId: 'p4', variationId: null, kind: 'REFILL_PACK', status: 'DRAFT', sourceUrl: '', sourceNote: '' },
+      { productId: 'p4', variationId: null, kind: 'PLASTIC_AVOIDED', status: 'DRAFT', sourceUrl: '', sourceNote: '' },
+    ]);
+    for (const d of data) {
+      expect(d).not.toHaveProperty('valueGrams');
+      expect(d).not.toHaveProperty('approvedAt');
+    }
+  });
+
+  it('không dòng nào sinh ra duyệt được, kể cả khi đã gắn phiếu cân nội bộ: Giảm nhựa thiếu gam, Can refill thiếu nguồn riêng', async () => {
+    const prisma = makePrisma();
+    prisma.product.findMany.mockResolvedValue([product({})]);
+    await svcOf(prisma).createRefillDrafts({ sheetUrl: 'https://tubutree.com/phieu-can/refill-10l', sourceNote: 'Phiếu cân dòng 3' });
+    const { data } = prisma.productEcoFact.createMany.mock.calls[0][0];
+    const plastic = data.find((d: { kind: string }) => d.kind === 'PLASTIC_AVOIDED');
+    const pack = data.find((d: { kind: string }) => d.kind === 'REFILL_PACK');
+    expect(plastic).toMatchObject({ sourceUrl: 'https://tubutree.com/phieu-can/refill-10l', sourceNote: 'Phiếu cân dòng 3' });
+    expect(approvalBlockers(plastic)).toEqual(['value_grams']);
+    expect(pack).toMatchObject({ sourceUrl: '', sourceNote: '' });
+    expect(approvalBlockers(pack)).toEqual(['source_url', 'source_note']);
+    for (const d of data) expect(approvalBlockers(d)).not.toEqual([]);
+  });
+
+  it('gói có từ 2 phân loại đang bán: Giảm nhựa theo từng phân loại, Can refill vẫn một dòng cấp sản phẩm', async () => {
+    const prisma = makePrisma();
+    prisma.product.findMany.mockResolvedValue([product({ variations: [{ id: 'v5' }, { id: 'v10' }] })]);
+    const out = await svcOf(prisma).createRefillDrafts({});
+    expect(out.created).toBe(3);
+    const { data } = prisma.productEcoFact.createMany.mock.calls[0][0];
+    expect(data.map((d: { kind: string; variationId: string | null }) => [d.kind, d.variationId])).toEqual([
+      ['REFILL_PACK', null],
+      ['PLASTIC_AVOIDED', 'v5'],
+      ['PLASTIC_AVOIDED', 'v10'],
+    ]);
+  });
+
+  it('chạy lại không tạo trùng và không đụng dòng đã có (mọi trạng thái); dòng cấp sản phẩm che cả phân loại', async () => {
+    const prisma = makePrisma();
+    prisma.product.findMany.mockResolvedValue([product({}), product({ id: 'p2', slug: 'refill-b', name: 'Refill B 10L', variations: [{ id: 'v1' }, { id: 'v2' }] })]);
+    prisma.productEcoFact.findMany.mockResolvedValue([
+      { productId: 'p1', variationId: null, kind: 'REFILL_PACK' },
+      { productId: 'p2', variationId: null, kind: 'PLASTIC_AVOIDED' },
+      { productId: 'p2', variationId: 'v2', kind: 'REFILL_PACK' },
+    ]);
+    const out = await svcOf(prisma).createRefillDrafts({});
+    expect(out).toEqual({ refillProducts: 2, created: 1, skippedExisting: 4 });
+    expect(prisma.productEcoFact.createMany.mock.calls[0][0].data).toEqual([{ productId: 'p1', variationId: null, kind: 'PLASTIC_AVOIDED', status: 'DRAFT', sourceUrl: '', sourceNote: '' }]);
+    expect(prisma.productEcoFact.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('không có gói Refill hay mọi dòng đã có: không gọi createMany', async () => {
+    const none = makePrisma();
+    expect(await svcOf(none).createRefillDrafts(undefined)).toEqual({ refillProducts: 0, created: 0, skippedExisting: 0 });
+    expect(none.productEcoFact.createMany).not.toHaveBeenCalled();
+    const full = makePrisma();
+    full.product.findMany.mockResolvedValue([product({})]);
+    full.productEcoFact.findMany.mockResolvedValue([
+      { productId: 'p1', variationId: null, kind: 'REFILL_PACK' },
+      { productId: 'p1', variationId: null, kind: 'PLASTIC_AVOIDED' },
+    ]);
+    expect(await svcOf(full).createRefillDrafts({})).toEqual({ refillProducts: 1, created: 0, skippedExisting: 2 });
+    expect(full.productEcoFact.createMany).not.toHaveBeenCalled();
+  });
+
+  it('link phiếu cân phải là trang tubutree.com; nguồn ngoài, http hay chữ lạ đều 400 và không tạo gì', async () => {
+    for (const sheetUrl of ['https://pannature.org/a', 'http://tubutree.com/phieu-can', 'https://tubutree.com.evil.org/x', 42]) {
+      const prisma = makePrisma();
+      prisma.product.findMany.mockResolvedValue([product({})]);
+      await expect(svcOf(prisma).createRefillDrafts({ sheetUrl })).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.productEcoFact.createMany).not.toHaveBeenCalled();
+    }
+    const prisma = makePrisma();
+    await expect(svcOf(prisma).createRefillDrafts({ sourceNote: 'x'.repeat(301) })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('khoảng trắng link phiếu cân được cắt; dạng chuẩn hoá giống nhập tay', async () => {
+    const prisma = makePrisma();
+    prisma.product.findMany.mockResolvedValue([product({})]);
+    await svcOf(prisma).createRefillDrafts({ sheetUrl: '  https://TubuTree.com/phieu-can/a  ' });
+    const rows = prisma.productEcoFact.createMany.mock.calls[0][0].data as { kind: string; sourceUrl: string }[];
+    expect(rows.find((d) => d.kind === 'PLASTIC_AVOIDED')!.sourceUrl).toBe('https://tubutree.com/phieu-can/a');
+  });
+});
+
+describe('nguồn nội bộ trên thẻ admin', () => {
+  it('view gắn sourceKind: phiếu cân nội bộ, nguồn ngoài, hoặc null khi chưa có link', async () => {
+    const mk = async (sourceUrl: string) => {
+      const prisma = makePrisma(dbRow({ sourceUrl }));
+      return (await svcOf(prisma).create({ productSlug: 'nuoc-giat', kind: 'REFILL_PACK', sourceUrl: sourceUrl || undefined })).sourceKind;
+    };
+    expect(await mk('https://tubutree.com/phieu-can/a')).toBe('internal_sheet');
+    expect(await mk('https://pannature.org/a')).toBe('external');
+    expect(await mk('')).toBeNull();
   });
 });

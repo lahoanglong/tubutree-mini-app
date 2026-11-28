@@ -105,6 +105,28 @@ export function httpsSourceUrl(value: unknown): string | null {
   }
 }
 
+/** Máy chủ của phiếu cân nội bộ (trang đo khối lượng vỏ do Tubu Tree tự đăng). Chỉ host này, không phải mọi tên miền con. */
+export const INTERNAL_SHEET_HOSTS: readonly string[] = ['tubutree.com', 'www.tubutree.com'];
+
+/**
+ * Link phiếu cân nội bộ: https, đúng `INTERNAL_SHEET_HOSTS`, cổng mặc định, có đường dẫn (trang chủ không phải phiếu). Đi qua
+ * `httpsSourceUrl` nên cũng cùng luật không user:pass và độ dài; "tubutree.com.evil.org" hay "evil.org/https://tubutree.com" không khớp.
+ */
+export function isInternalSheetUrl(value: unknown): boolean {
+  const norm = httpsSourceUrl(value);
+  if (!norm) return false;
+  const u = new URL(norm);
+  return INTERNAL_SHEET_HOSTS.includes(u.hostname) && u.port === '' && u.pathname.replace(/\/+$/, '') !== '';
+}
+
+export type SourceKind = 'internal_sheet' | 'external';
+
+/** Loại nguồn để thẻ admin dán nhãn; null khi chưa có link https hợp lệ. */
+export function sourceKindOf(sourceUrl: unknown): SourceKind | null {
+  if (!httpsSourceUrl(sourceUrl)) return null;
+  return isInternalSheetUrl(sourceUrl) ? 'internal_sheet' : 'external';
+}
+
 /**
  * Nhãn tuyên bố của chữ công khai. `label` của CERTIFICATION/INGREDIENT_ORIGIN được phép nêu tên giấy tờ hay vùng nguyên liệu (nhóm `proof`)
  * vì dòng đó chỉ duyệt được khi có `sourceUrl`; các nhóm còn lại (y tế, "tự nhiên", tre) vẫn chặn. Mốc so sánh bị xét đủ mọi nhóm.

@@ -16,6 +16,8 @@ export interface PickerOption {
   group?: string;
   /** Nhãn hiện sau khi chọn; mặc định bằng `label`. */
   pickedLabel?: string;
+  /** Dữ liệu gốc của dòng, trả lại qua `onPickOption` (kết quả nằm trong bộ nhớ đệm truy vấn nên đi cùng dòng, không giữ ở nơi khác). */
+  data?: unknown;
 }
 export interface PickedItem {
   id: string;
@@ -47,6 +49,7 @@ export function useDebounced<T>(value: T, ms: number): T {
 export function SearchPicker({
   value,
   onChange,
+  onPickOption,
   label,
   placeholder,
   queryKey,
@@ -57,6 +60,8 @@ export function SearchPicker({
 }: {
   value: PickedItem | null;
   onChange: (v: PickedItem | null) => void;
+  /** Kèm cả dòng kết quả vừa bấm (null khi bấm "Đổi"), cho form cần hơn `{ id, label }`. */
+  onPickOption?: (o: PickerOption | null) => void;
   /** aria-label của ô gõ. */
   label: string;
   placeholder: string;
@@ -84,7 +89,10 @@ export function SearchPicker({
         <button
           type="button"
           aria-label={`Đổi lựa chọn: ${label}`}
-          onClick={() => onChange(null)}
+          onClick={() => {
+            onChange(null);
+            onPickOption?.(null);
+          }}
           className="min-h-[44px] shrink-0 px-2 text-xs font-medium text-forest-700 underline sm:min-h-0"
         >
           Đổi
@@ -137,6 +145,7 @@ export function SearchPicker({
                     aria-selected={false}
                     onClick={() => {
                       onChange({ id: o.id, label: o.pickedLabel ?? o.label });
+                      onPickOption?.(o);
                       setText('');
                     }}
                     className="flex min-h-[44px] w-full flex-col items-start justify-center px-2.5 py-1.5 text-left text-sm hover:bg-forest-50 sm:min-h-[36px]"
