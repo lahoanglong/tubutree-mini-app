@@ -17,8 +17,9 @@ export const HIDE_IN_ZALO_WEBVIEW = '[html[data-zalo-webview]_&]:hidden';
 export const SHOW_IN_ZALO_WEBVIEW = 'hidden [html[data-zalo-webview]_&]:block';
 
 /**
- * Script đặt ở trang cần chặn, chạy trước khi vẽ nội dung đứng sau nó: trang dựng sẵn ở máy chủ (ISR) giống nhau cho mọi người, nên không
- * có script này khách trong Zalo sẽ thấy nội dung thật chớp lên rồi mới bị thay bằng màn chặn. Cùng luật với `isZaloWebViewUserAgent`.
+ * Script ở <head> của layout gốc, chạy trước khi vẽ: trang dựng sẵn ở máy chủ (ISR) giống nhau cho mọi người, nên không có script này khách trong
+ * Zalo sẽ thấy nội dung thật chớp lên rồi mới bị thay bằng màn chặn. Đặt ở layout gốc (không ở layout của trang chặn) vì script trong layout con
+ * bị React vẽ lại ở trình duyệt khi khách chuyển trang bằng link và không chạy. Cùng luật với `isZaloWebViewUserAgent`.
  */
 export function zaloWebViewBootScript(): string {
   return (

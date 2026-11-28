@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   INSERT_QR_CHANNELS,
   INSERT_QR_CHANNEL_LABEL,
@@ -13,7 +14,9 @@ import {
   svgDataUrl,
   type InsertQrChannel,
 } from '@/lib/insert-qr';
-import { A6_CARD_MM, A6_CARD_PX, insertQrCardFileName, insertQrCardPngBlob, insertQrCardSvg, printInsertQrCard } from '@/lib/insert-qr-card';
+import { getConfig } from '@/lib/admin-client';
+import { marketplaceEarnPct } from '@/lib/external-o2o-settings';
+import { A6_CARD_MM, A6_CARD_PX, formatEarnPct, insertQrCardFileName, insertQrCardPngBlob, insertQrCardSvg, printInsertQrCard } from '@/lib/insert-qr-card';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, chipClass } from './ui';
 
 /**
@@ -26,9 +29,12 @@ export function ExternalInsertQrCard() {
   const [failure, setFailure] = useState<string | null>(null);
   const [pngBusy, setPngBusy] = useState(false);
   const [a6Busy, setA6Busy] = useState<'png' | 'print' | null>(null);
+  // Cùng khoá và bộ nhớ đệm với ExternalO2oSettingsCard ngay phía trên: lưu tỉ lệ mới ở đó thì thẻ ở đây đổi theo, không gọi API thêm.
+  const configQ = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
+  const earnPct = marketplaceEarnPct(configQ.data);
   const url = insertQrUrl(channel, tag);
   const svg = useMemo(() => (url ? qrSvg(url) : null), [url]);
-  const cardSvg = useMemo(() => (url ? insertQrCardSvg(url, channel) : null), [url, channel]);
+  const cardSvg = useMemo(() => (url ? insertQrCardSvg(url, channel, { earnPct }) : null), [url, channel, earnPct]);
 
   const downloadA6Png = async () => {
     if (!url || !cardSvg || a6Busy) return;
@@ -48,7 +54,7 @@ export function ExternalInsertQrCard() {
     setFailure(null);
     setA6Busy('print');
     try {
-      await printInsertQrCard(insertQrCardSvg(url, channel, { unit: 'mm' }));
+      await printInsertQrCard(insertQrCardSvg(url, channel, { unit: 'mm', earnPct }));
     } catch (e) {
       setFailure(e instanceof Error ? e.message : 'Không mở được hộp thoại in.');
     } finally {
@@ -133,6 +139,11 @@ export function ExternalInsertQrCard() {
             />
             <p className="text-xs text-stone-600">
               Thẻ A6 {A6_CARD_MM.widthMm} × {A6_CARD_MM.heightMm} mm. PNG đã gắn 300 DPI; khi in, chọn &quot;Lưu dưới dạng PDF&quot; để có tệp PDF.
+            </p>
+            <p data-card-earn-pct className="text-xs text-stone-600">
+              {earnPct != null
+                ? `Thẻ ghi "Nhận ${formatEarnPct(earnPct)}% Điểm Xanh" theo cài đặt hiện tại; đổi tỉ lệ thì tải lại thẻ.`
+                : 'Chưa đọc được tỉ lệ tích điểm nên thẻ chỉ ghi "Nhận Điểm Xanh".'}
             </p>
             <button type="button" className={`${BTN_PRIMARY} w-full`} aria-busy={a6Busy === 'png' || undefined} disabled={a6Busy !== null} onClick={() => void downloadA6Png()}>
               Tải PNG thẻ A6 sẵn in (300 DPI)

@@ -10,20 +10,26 @@ export const A6_CARD_MM = { widthMm: 105, heightMm: 148 } as const;
 export const A6_CARD_DPI = 300;
 export const A6_CARD_PX = { widthPx: 1240, heightPx: 1748 } as const;
 
-/**
- * Tỉ lệ in trên thẻ. Khớp mặc định `DEFAULT_MARKETPLACE_EARN_PCT` của API (khoá `loyalty.marketplace_earn_pct`); thẻ giấy không đọc cấu hình,
- * đổi tỉ lệ ở cấu hình thì phải in lại thẻ.
- */
-export const INSERT_CARD_EARN_PCT = 5;
-
 export type InsertCardStep = { n: number; lines: readonly string[] };
 
-/** Ba bước trên thẻ; `lines` là chữ đã ngắt dòng cho cột hẹp (nối bằng khoảng trắng ra câu đầy đủ). */
-export const INSERT_CARD_STEPS: readonly InsertCardStep[] = [
-  { n: 1, lines: ['Quét mã'] },
-  { n: 2, lines: ['Quét đơn', 'sàn'] },
-  { n: 3, lines: [`Nhận ${INSERT_CARD_EARN_PCT}%`, 'Điểm Xanh'] },
-];
+/** "5" hoặc "2,5": tỉ lệ cấu hình có thể lẻ (0,1 tới 20). */
+export function formatEarnPct(pct: number): string {
+  return String(pct).replace('.', ',');
+}
+
+/**
+ * Ba bước trên thẻ; `lines` là chữ đã ngắt dòng cho cột hẹp (nối bằng khoảng trắng ra câu đầy đủ). Con số ở bước 3 là tỉ lệ tích điểm đơn sàn
+ * đang cấu hình (`loyalty.marketplace_earn_pct`): thẻ giấy là lời hứa nằm trong hộp hàng nên không được in con số khác với cấu hình. Chưa biết
+ * tỉ lệ (chưa đọc được cấu hình) thì bước 3 chỉ ghi "Nhận Điểm Xanh", như `marketplaceScanSteps` của app-core.
+ */
+export function insertCardSteps(earnPct: number | null | undefined): readonly InsertCardStep[] {
+  const reward = earnPct != null && Number.isFinite(earnPct) && earnPct > 0 ? [`Nhận ${formatEarnPct(earnPct)}%`, 'Điểm Xanh'] : ['Nhận', 'Điểm Xanh'];
+  return [
+    { n: 1, lines: ['Quét mã'] },
+    { n: 2, lines: ['Quét đơn', 'sàn'] },
+    { n: 3, lines: reward },
+  ];
+}
 
 const FOREST_600 = '#245E3E';
 const FOREST_700 = '#1B4B31';
@@ -51,10 +57,12 @@ export function insertCardShortLink(url: string): string {
 export type InsertCardSvgOptions = {
   /** `px`: 1240 × 1748 để vẽ ra PNG và xem trước; `mm`: 105 × 148 mm để in. */
   unit?: 'px' | 'mm';
+  /** Tỉ lệ tích điểm đơn sàn (%) in ở bước 3; bỏ trống (chưa biết) thì thẻ không in con số. */
+  earnPct?: number | null;
 };
 
 /** SVG thẻ A6: nền xanh Tubu, nhãn sàn, mã QR, ba bước, link rút gọn. `url` phải là link từ `insertQrUrl`. */
-export function insertQrCardSvg(url: string, channel: InsertQrChannel, { unit = 'px' }: InsertCardSvgOptions = {}): string {
+export function insertQrCardSvg(url: string, channel: InsertQrChannel, { unit = 'px', earnPct }: InsertCardSvgOptions = {}): string {
   const { widthPx: W, heightPx: H } = A6_CARD_PX;
   const { full, d } = qrPath(url);
   const scale = Math.max(1, Math.floor(QR_BOX_PX / full));
@@ -70,7 +78,7 @@ export function insertQrCardSvg(url: string, channel: InsertQrChannel, { unit = 
   const connectors = [0, 1]
     .map((i) => `<line x1="${colX[i]! + 62}" y1="${stepY}" x2="${colX[i + 1]! - 62}" y2="${stepY}" stroke="#B9D4C0" stroke-width="6" stroke-linecap="round"/>`)
     .join('');
-  const steps = INSERT_CARD_STEPS.map((step, i) => {
+  const steps = insertCardSteps(earnPct).map((step, i) => {
     const cx = colX[i]!;
     const label = step.lines
       .map((line, li) => `<text x="${cx}" y="${stepY + 110 + li * 50}" text-anchor="middle" font-size="42" font-weight="700" fill="${FOREST_700}">${esc(line)}</text>`)
@@ -137,8 +145,9 @@ function crc32(bytes: Uint8Array): number {
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /**
- * Chèn khối `pHYs` (điểm ảnh trên mét) ngay sau `IHDR` để phần mềm in hiểu ảnh 1240 × 1748 là 105 × 148 mm. `canvas.toBlob` không ghi khối này,
- * nên không chèn thì trình in coi ảnh là 72/96 DPI và phóng ra cỡ giấy khác. Ảnh đã có `pHYs` hoặc không phải PNG thì trả nguyên.
+ * Đặt khối `pHYs` (điểm ảnh trên mét) để phần mềm in hiểu ảnh 1240 × 1748 là 105 × 148 mm. Chromium không ghi khối này khi `canvas.toBlob`, nhưng
+ * bộ mã hoá của trình duyệt khác có thể ghi sẵn 72 DPI (2835): ảnh đã có `pHYs` thì ghi đè đúng giá trị và CRC tại chỗ, chưa có thì chèn ngay sau
+ * `IHDR`. Không phải PNG thì trả nguyên.
  */
 export function pngWithDpi(png: Uint8Array, dpi: number): Uint8Array {
   const ihdrEnd = 8 + 4 + 4 + 13 + 4;
@@ -146,19 +155,28 @@ export function pngWithDpi(png: Uint8Array, dpi: number): Uint8Array {
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
   const type = (o: number) => String.fromCharCode(png[o]!, png[o + 1]!, png[o + 2]!, png[o + 3]!);
   if (type(12) !== 'IHDR') return png;
-  for (let o = 8; o + 8 <= png.length; ) {
-    if (type(o + 4) === 'pHYs') return png;
-    o += 12 + view.getUint32(o);
-  }
   const ppm = Math.round(dpi / 0.0254);
-  const chunk = new Uint8Array(4 + 4 + 9 + 4);
-  const cv = new DataView(chunk.buffer);
-  cv.setUint32(0, 9);
-  chunk.set([0x70, 0x48, 0x59, 0x73], 4); // "pHYs"
-  cv.setUint32(8, ppm);
-  cv.setUint32(12, ppm);
-  chunk[16] = 1; // đơn vị: mét
-  cv.setUint32(17, crc32(chunk.subarray(4, 17)));
+  const writePhys = (chunk: Uint8Array, at: number) => {
+    const cv = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+    cv.setUint32(at, 9);
+    chunk.set([0x70, 0x48, 0x59, 0x73], at + 4); // "pHYs"
+    cv.setUint32(at + 8, ppm);
+    cv.setUint32(at + 12, ppm);
+    chunk[at + 16] = 1; // đơn vị: mét
+    cv.setUint32(at + 17, crc32(chunk.subarray(at + 4, at + 17)));
+  };
+  for (let o = 8; o + 8 <= png.length; ) {
+    const len = view.getUint32(o);
+    if (type(o + 4) === 'pHYs') {
+      if (len !== 9 || o + 12 + len > png.length) return png;
+      const out = png.slice();
+      writePhys(out, o);
+      return out;
+    }
+    o += 12 + len;
+  }
+  const chunk = new Uint8Array(21);
+  writePhys(chunk, 0);
   const out = new Uint8Array(png.length + chunk.length);
   out.set(png.subarray(0, ihdrEnd), 0);
   out.set(chunk, ihdrEnd);
@@ -207,24 +225,32 @@ export function insertQrCardPrintHtml(svgMm: string): string {
 }
 
 const PRINT_START_DELAY_MS = 60;
-const PRINT_CLEANUP_MS = 120_000;
 
 const defaultPrint = (w: Window) => {
   w.focus();
   w.print();
 };
 
+let printFrame: HTMLIFrameElement | null = null;
+const removePrintFrame = (frame: HTMLIFrameElement) => {
+  frame.remove();
+  if (printFrame === frame) printFrame = null;
+};
+
 /**
- * Mở hộp thoại in cho thẻ trong một khung ẩn: trang quản trị không bị đụng tới (không cần CSS `@media print` cho cả ứng dụng). Gỡ khung khi
- * in xong (`afterprint`), hoặc sau 2 phút nếu trình duyệt không bắn sự kiện. `print` tách ra để test không gọi hộp thoại thật.
+ * Mở hộp thoại in cho thẻ trong một khung ẩn: trang quản trị không bị đụng tới (không cần CSS `@media print` cho cả ứng dụng). Khung có cỡ thật
+ * của thẻ nhưng nằm ngoài màn hình (khung 0×0 làm Safari in trang cha hoặc trang trắng). Chỉ gỡ khung khi in xong (`afterprint`) hoặc ở lần in
+ * kế tiếp, không gỡ theo đồng hồ: hộp xem trước của vài trình duyệt vẫn mở sau khi `print()` trả về và còn cần nội dung khung. `print` tách ra
+ * để test không gọi hộp thoại thật.
  */
 export function printInsertQrCard(svgMm: string, print: (w: Window) => void = defaultPrint): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (printFrame) removePrintFrame(printFrame);
     const frame = document.createElement('iframe');
     frame.setAttribute('aria-hidden', 'true');
     frame.tabIndex = -1;
     frame.title = 'Thẻ A6 sẵn in';
-    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    frame.style.cssText = `position:fixed;left:-300mm;top:0;width:${A6_CARD_MM.widthMm}mm;height:${A6_CARD_MM.heightMm}mm;border:0`;
     document.body.appendChild(frame);
     const win = frame.contentWindow;
     if (!win) {
@@ -232,23 +258,17 @@ export function printInsertQrCard(svgMm: string, print: (w: Window) => void = de
       reject(new Error('Trình duyệt không mở được trang in.'));
       return;
     }
-    let cleaned = false;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      frame.remove();
-    };
+    printFrame = frame;
     win.document.open();
     win.document.write(insertQrCardPrintHtml(svgMm));
     win.document.close();
-    win.addEventListener('afterprint', cleanup);
-    setTimeout(cleanup, PRINT_CLEANUP_MS);
+    win.addEventListener('afterprint', () => removePrintFrame(frame));
     setTimeout(() => {
       try {
         print(win);
         resolve();
       } catch (e) {
-        cleanup();
+        removePrintFrame(frame);
         reject(e instanceof Error ? e : new Error('Trình duyệt không mở được hộp thoại in.'));
       }
     }, PRINT_START_DELAY_MS);

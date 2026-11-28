@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ExternalInsertQrCard } from './external-insert-qr-card';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { SITE_URL } from '@/lib/site';
 import { insertQrCardPngBlob, insertQrCardSvg, printInsertQrCard } from '@/lib/insert-qr-card';
+
+const getConfigMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/admin-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/admin-client')>()),
+  getConfig: getConfigMock,
+}));
+const earnRow = (value: unknown) => [{ key: 'loyalty.marketplace_earn_pct', value, description: null, category: 'loyalty' }];
 
 vi.mock('@/lib/insert-qr-card', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/insert-qr-card')>()),
@@ -12,6 +19,10 @@ vi.mock('@/lib/insert-qr-card', async (importOriginal) => ({
 }));
 
 let mounted: Rendered[] = [];
+beforeEach(() => {
+  getConfigMock.mockReset();
+  getConfigMock.mockResolvedValue(earnRow(5));
+});
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
@@ -126,11 +137,12 @@ describe('ExternalInsertQrCard', () => {
       names.push(this.download);
     });
     const r = mount();
+    await flush();
     click(byText(r.container, 'button', 'Lazada'));
     typeInto(r.container.querySelector('input'), 'box-2026-11');
     click(exactButton(r.container, 'Tải PNG thẻ A6 sẵn in (300 DPI)'));
     await flush();
-    expect(vi.mocked(insertQrCardPngBlob)).toHaveBeenCalledWith(insertQrCardSvg(`${SITE_URL}/quet-ma?utm_source=lazada&card=box-2026-11`, 'lazada'));
+    expect(vi.mocked(insertQrCardPngBlob)).toHaveBeenCalledWith(insertQrCardSvg(`${SITE_URL}/quet-ma?utm_source=lazada&card=box-2026-11`, 'lazada', { earnPct: 5 }));
     expect(names).toEqual(['tubu-the-a6-lazada-box-2026-11.png']);
     expect(blobs[0]).toBe(png);
   });
@@ -147,16 +159,40 @@ describe('ExternalInsertQrCard', () => {
   it('In / Lưu PDF: gửi SVG cỡ mm của đúng sàn tới hộp thoại in; lỗi in thì báo lỗi', async () => {
     vi.mocked(printInsertQrCard).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Trình duyệt không mở được trang in.'));
     const r = mount();
+    await flush();
     click(byText(r.container, 'button', 'TikTok Shop'));
     click(exactButton(r.container, 'In / Lưu PDF thẻ A6 (10×15cm)'));
     await flush();
     expect(vi.mocked(printInsertQrCard)).toHaveBeenCalledTimes(1);
     const svg = vi.mocked(printInsertQrCard).mock.calls[0]![0];
-    expect(svg).toBe(insertQrCardSvg(`${SITE_URL}/quet-ma?utm_source=tiktok`, 'tiktok', { unit: 'mm' }));
+    expect(svg).toBe(insertQrCardSvg(`${SITE_URL}/quet-ma?utm_source=tiktok`, 'tiktok', { unit: 'mm', earnPct: 5 }));
     expect(svg).toContain('width="105mm" height="148mm"');
     expect(r.container.querySelector('[role="alert"]')).toBeNull();
     click(exactButton(r.container, 'In / Lưu PDF thẻ A6 (10×15cm)'));
     await flush();
     expect(r.container.querySelector('[role="alert"]')!.textContent).toBe('Trình duyệt không mở được trang in.');
+  });
+  it('con số trên thẻ theo tỉ lệ tích điểm đang cấu hình (lẻ dùng dấu phẩy), đổi theo khi cấu hình đổi', async () => {
+    getConfigMock.mockResolvedValue(earnRow(2.5));
+    const r = mount();
+    await flush();
+    expect(r.container.querySelector('[data-card-earn-pct]')!.textContent).toBe('Thẻ ghi "Nhận 2,5% Điểm Xanh" theo cài đặt hiện tại; đổi tỉ lệ thì tải lại thẻ.');
+    const src = decodeURIComponent(r.container.querySelector('img')!.getAttribute('src')!.split(',').slice(1).join(','));
+    expect(src).toContain('Nhận 2,5%');
+    expect(src).not.toContain('Nhận 5%');
+  });
+
+  it('bảng cấu hình chưa có dòng tỉ lệ: dùng mặc định API 5%; không đọc được cấu hình: thẻ chỉ ghi "Nhận Điểm Xanh" và nói rõ', async () => {
+    getConfigMock.mockResolvedValue([]);
+    const withDefault = mount();
+    await flush();
+    expect(withDefault.container.querySelector('[data-card-earn-pct]')!.textContent).toContain('Nhận 5% Điểm Xanh');
+
+    getConfigMock.mockRejectedValue(new Error('offline'));
+    const failed = mount();
+    await flush();
+    expect(failed.container.querySelector('[data-card-earn-pct]')!.textContent).toBe('Chưa đọc được tỉ lệ tích điểm nên thẻ chỉ ghi "Nhận Điểm Xanh".');
+    const src = decodeURIComponent(failed.container.querySelector('img')!.getAttribute('src')!.split(',').slice(1).join(','));
+    expect(src).not.toMatch(/Nhận \d/);
   });
 });

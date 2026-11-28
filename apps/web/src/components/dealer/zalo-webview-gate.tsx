@@ -51,7 +51,7 @@ function ZaloWebViewGateScreen() {
 /**
  * Chặn `/dai-ly` trong WebView của Zalo (w33-01: Mini App không mở kênh đại lý có đăng ký và thanh toán bên trong Zalo, nhưng link web vẫn dẫn
  * tới đây). Trang dựng sẵn (ISR) giống nhau cho mọi người nên nhận diện ở trình duyệt:
- * - Trước hydrate: HTML có cả nội dung thật lẫn màn chặn; script ở `dai-ly/layout.tsx` đặt `data-zalo-webview` lên <html> trước khi vẽ, CSS giấu
+ * - Trước hydrate: HTML có cả nội dung thật lẫn màn chặn; script ở <head> của `app/layout.tsx` đặt `data-zalo-webview` lên <html> trước khi vẽ, CSS giấu
  *   nội dung thật và hiện màn chặn nên khách trong Zalo không thấy nội dung thật chớp lên. Khách ngoài Zalo thấy nội dung ngay như cũ.
  * - Sau hydrate: UA là Zalo thì gỡ hẳn nội dung thật (không gọi API, không dựng form) và chỉ giữ màn chặn; ngoài Zalo thì gỡ màn chặn.
  *   Nội dung thật luôn là con đầu của cùng một thẻ bọc nên không bị dựng lại khi hydrate xong.

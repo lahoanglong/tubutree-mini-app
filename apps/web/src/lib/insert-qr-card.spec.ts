@@ -8,9 +8,9 @@ import {
   A6_CARD_DPI,
   A6_CARD_MM,
   A6_CARD_PX,
-  INSERT_CARD_EARN_PCT,
-  INSERT_CARD_STEPS,
+  formatEarnPct,
   insertCardShortLink,
+  insertCardSteps,
   insertQrCardFileName,
   insertQrCardPngBlob,
   insertQrCardPrintHtml,
@@ -20,6 +20,7 @@ import {
 } from './insert-qr-card';
 
 const URL_SHOPEE = insertQrUrl('shopee', 'box-2026-11', 'https://tubutree.com')!;
+const svgOf = (channel: 'shopee' | 'tiktok' | 'lazada' = 'shopee', opts: Parameters<typeof insertQrCardSvg>[2] = { earnPct: 5 }) => insertQrCardSvg(URL_SHOPEE, channel, opts);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -48,18 +49,30 @@ describe('insertQrCardSvg', () => {
   });
 
   it('có nhãn sàn đúng kênh và ba bước Quét mã, Quét đơn sàn, Nhận 5% Điểm Xanh', () => {
-    const shopee = texts(insertQrCardSvg(URL_SHOPEE, 'shopee'));
+    const shopee = texts(svgOf('shopee'));
     expect(shopee).toContain('Mua trên Shopee');
-    expect(texts(insertQrCardSvg(URL_SHOPEE, 'tiktok'))).toContain('Mua trên TikTok Shop');
-    expect(texts(insertQrCardSvg(URL_SHOPEE, 'lazada'))).toContain('Mua trên Lazada');
-    const sentences = INSERT_CARD_STEPS.map((s) => s.lines.join(' '));
-    expect(sentences).toEqual(['Quét mã', 'Quét đơn sàn', `Nhận ${INSERT_CARD_EARN_PCT}% Điểm Xanh`]);
-    expect(INSERT_CARD_EARN_PCT).toBe(5);
-    const doc = parse(insertQrCardSvg(URL_SHOPEE, 'shopee'));
+    expect(texts(svgOf('tiktok'))).toContain('Mua trên TikTok Shop');
+    expect(texts(svgOf('lazada'))).toContain('Mua trên Lazada');
+    const sentences = insertCardSteps(5).map((s) => s.lines.join(' '));
+    expect(sentences).toEqual(['Quét mã', 'Quét đơn sàn', 'Nhận 5% Điểm Xanh']);
+    const doc = parse(svgOf('shopee'));
     const stepsInSvg = Array.from(doc.querySelectorAll('[data-step]')).map((g) => Array.from(g.querySelectorAll('text')).slice(1).map((t) => t.textContent).join(' '));
     expect(stepsInSvg).toEqual(sentences);
     expect(shopee).toContain('Tubu Tree');
     expect(shopee).toContain('tubutree.com/quet-ma');
+  });
+
+  it('con số ở bước 3 là tỉ lệ cấu hình (lẻ dùng dấu phẩy); chưa biết tỉ lệ thì không in con số nào', () => {
+    const step3 = (opts: Parameters<typeof insertQrCardSvg>[2]) =>
+      Array.from(parse(svgOf('shopee', opts)).querySelectorAll('[data-step="3"] text')).slice(1).map((t) => t.textContent).join(' ');
+    expect(step3({ earnPct: 3 })).toBe('Nhận 3% Điểm Xanh');
+    expect(step3({ earnPct: 2.5 })).toBe('Nhận 2,5% Điểm Xanh');
+    expect(step3({ earnPct: null })).toBe('Nhận Điểm Xanh');
+    expect(step3({})).toBe('Nhận Điểm Xanh');
+    expect(step3({ earnPct: 0 })).toBe('Nhận Điểm Xanh');
+    expect(step3({ earnPct: Number.NaN })).toBe('Nhận Điểm Xanh');
+    expect(formatEarnPct(20)).toBe('20');
+    expect(formatEarnPct(0.1)).toBe('0,1');
   });
 
   it('chữ in lên thẻ không chứa link nguồn (utm_source, card) và không phạm FORBIDDEN_TERMS', () => {
@@ -164,11 +177,38 @@ describe('pngWithDpi', () => {
     expect(Array.from(out.subarray(54))).toEqual(Array.from(src.subarray(33)));
   });
 
-  it('chạy lại không chèn lần hai; ảnh không phải PNG trả nguyên', () => {
+  it('chạy lại không chèn lần hai (cùng kết quả); ảnh không phải PNG trả nguyên', () => {
     const once = pngWithDpi(tinyPng(), 300);
-    expect(pngWithDpi(once, 300)).toBe(once);
+    const twice = pngWithDpi(once, 300);
+    expect(chunkTypes(twice)).toEqual(['IHDR', 'pHYs', 'IDAT', 'IEND']);
+    expect(Array.from(twice)).toEqual(Array.from(once));
     const junk = Uint8Array.from([1, 2, 3, 4]);
     expect(pngWithDpi(junk, 300)).toBe(junk);
+  });
+
+  it('bộ mã hoá đã ghi sẵn pHYs 72 DPI (2835): ghi đè thành 300 DPI với CRC mới, không giữ giá trị cũ', () => {
+    const phys = (ppm: number) => {
+      const body = new Uint8Array(13);
+      body.set([0x70, 0x48, 0x59, 0x73], 0);
+      new DataView(body.buffer).setUint32(4, ppm);
+      new DataView(body.buffer).setUint32(8, ppm);
+      body[12] = 1;
+      const out = new Uint8Array(21);
+      const v = new DataView(out.buffer);
+      v.setUint32(0, 9);
+      out.set(body, 4);
+      v.setUint32(17, crc32(body));
+      return out;
+    };
+    const src = tinyPng([phys(2835)]);
+    const out = pngWithDpi(src, 300);
+    expect(out.length).toBe(src.length);
+    expect(chunkTypes(out)).toEqual(['IHDR', 'pHYs', 'IDAT', 'IEND']);
+    const v = new DataView(out.buffer, out.byteOffset, out.byteLength);
+    expect([v.getUint32(41), v.getUint32(45), out[49]]).toEqual([11811, 11811, 1]);
+    expect(v.getUint32(50)).toBe(crc32(out.subarray(37, 50)));
+    // Bản gốc không bị sửa.
+    expect(new DataView(src.buffer).getUint32(41)).toBe(2835);
   });
 });
 
@@ -238,12 +278,15 @@ describe('in / lưu PDF', () => {
     expect(doc.body.firstElementChild!.tagName.toLowerCase()).toBe('svg');
   });
 
-  it('mở khung ẩn có trang in rồi gọi in sau một nhịp; afterprint gỡ khung', async () => {
+  it('mở khung ẩn cỡ thật của thẻ (nằm ngoài màn hình, không 0×0) rồi gọi in sau một nhịp; afterprint gỡ khung', async () => {
     vi.useFakeTimers();
     const print = vi.fn();
     const done = printInsertQrCard(insertQrCardSvg(URL_SHOPEE, 'shopee', { unit: 'mm' }), print);
     const frame = document.querySelector('iframe')!;
     expect(frame.getAttribute('aria-hidden')).toBe('true');
+    expect(frame.style.width).toBe('105mm');
+    expect(frame.style.height).toBe('148mm');
+    expect(frame.style.left).toBe('-300mm');
     expect(frame.contentDocument!.documentElement.innerHTML).toContain('@page{size:105mm 148mm;margin:0}');
     expect(frame.contentDocument!.querySelector('svg')).not.toBeNull();
     expect(print).not.toHaveBeenCalled();
@@ -255,14 +298,19 @@ describe('in / lưu PDF', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('trình duyệt không bắn afterprint: khung vẫn được gỡ sau 2 phút', async () => {
+  it('không gỡ khung theo đồng hồ (hộp xem trước có thể còn mở); lần in kế tiếp thay khung cũ, không để dồn', async () => {
     vi.useFakeTimers();
-    const done = printInsertQrCard('<svg/>', vi.fn());
+    const first = printInsertQrCard('<svg id="one"/>', vi.fn());
     await vi.advanceTimersByTimeAsync(100);
-    await done;
-    expect(document.querySelector('iframe')).not.toBeNull();
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(document.querySelector('iframe')).toBeNull();
+    await first;
+    const frameOne = document.querySelector('iframe')!;
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(document.querySelector('iframe')).toBe(frameOne);
+    const second = printInsertQrCard('<svg id="two"/>', vi.fn());
+    expect(document.querySelectorAll('iframe')).toHaveLength(1);
+    expect(document.querySelector('iframe')).not.toBe(frameOne);
+    await vi.advanceTimersByTimeAsync(100);
+    await second;
   });
 
   it('in ném lỗi: gỡ khung và báo lỗi cho người gọi', async () => {

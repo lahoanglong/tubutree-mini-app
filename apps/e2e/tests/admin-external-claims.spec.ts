@@ -243,6 +243,21 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     api.put('/admin/config', () => ({ ok: true }));
     const wholeConfigCalls = () => api.callsTo('GET', '/admin/config').filter((c) => !c.query.get('category')).length;
 
+    // Hộp thoại in thật không chạy được trong headless: thay `print` của khung in ẩn bằng hàm ghi lại HTML khung đang có, để bắt đúng lần bấm nút.
+    await p.addInitScript(() => {
+      const w = window as unknown as { __printed?: string[] };
+      const append = Node.prototype.appendChild;
+      Node.prototype.appendChild = function <T extends Node>(this: Node, node: T): T {
+        const out = append.call(this, node) as T;
+        if (node instanceof HTMLIFrameElement && node.contentWindow) {
+          const frame = node;
+          frame.contentWindow!.print = () => {
+            (w.__printed ??= []).push(frame.contentDocument!.documentElement.outerHTML);
+          };
+        }
+        return out;
+      };
+    });
     await p.goto('/admin?tab=externalClaims');
 
     const card = p.locator('[data-external-funnel]');
@@ -308,16 +323,20 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     expect([a6Bytes.readUInt32BE(16), a6Bytes.readUInt32BE(20)]).toEqual([1240, 1748]);
     expect(a6Bytes.subarray(37, 41).toString('latin1')).toBe('pHYs');
     expect([a6Bytes.readUInt32BE(41), a6Bytes.readUInt32BE(45), a6Bytes[49]]).toEqual([11811, 11811, 1]);
-    await a6.saveAs(testInfo.outputPath('insert-qr-card-a6.png'));
+    await a6.saveAs(process.env.E2E_EVIDENCE_DIR ? `${process.env.E2E_EVIDENCE_DIR}/insert-qr-card-a6-tiktok-box-2026-11.png` : testInfo.outputPath('insert-qr-card-a6.png'));
 
-    // In / Lưu PDF: khung in ẩn chứa thẻ SVG cỡ mm với @page A6; mở đúng HTML đó ra PDF thì ra một trang A6 (≈ 297,6 × 419,5 pt).
+    // Thẻ ghi đúng tỉ lệ cấu hình (5%), và hiện dòng nói rõ điều đó.
+    await expect(qr.locator('[data-card-earn-pct]')).toContainText('Nhận 5% Điểm Xanh');
+
+    // In / Lưu PDF: bấm nút thì khung in ẩn được dựng và `print` gọi đúng một lần với trang A6 chứa thẻ SVG cỡ mm; mở đúng HTML đó ra PDF thì ra một trang A6 (≈ 297,6 × 419,5 pt).
     await qr.getByRole('button', { name: 'In / Lưu PDF thẻ A6 (10×15cm)' }).click();
-    const findPrintFrame = () => p.frames().find((f) => f !== p.mainFrame() && f.url() === 'about:blank');
-    await expect.poll(() => findPrintFrame() !== undefined, { timeout: 5_000 }).toBe(true);
-    const printFrame = findPrintFrame()!;
-    const printHtml = await printFrame.content();
+    const printed = () => p.evaluate(() => (window as unknown as { __printed?: string[] }).__printed ?? []);
+    await expect.poll(async () => (await printed()).length, { timeout: 5_000 }).toBe(1);
+    const printHtml = (await printed())[0]!;
     expect(printHtml).toContain('@page{size:105mm 148mm;margin:0}');
     expect(printHtml).toContain('width="105mm" height="148mm"');
+    expect(printHtml).toContain('Mua trên TikTok Shop');
+    expect(printHtml).toContain('Nhận 5%');
     const pdfPage = await p.context().newPage();
     await pdfPage.setContent(printHtml);
     const pdf = (await pdfPage.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1');

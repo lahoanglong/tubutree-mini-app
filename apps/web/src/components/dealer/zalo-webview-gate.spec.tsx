@@ -7,7 +7,6 @@ import { FORBIDDEN_TERMS } from '@tubutree/app-core/shop-copy';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { SITE_URL } from '@/lib/site';
 import { isZaloWebViewUserAgent, zaloWebViewBootScript } from '@/lib/zalo-webview';
-import DealerLayout from '@/app/dai-ly/layout';
 import { DEALER_BROWSER_URL, ZALO_GATE_BODY, ZALO_GATE_COPY_LABEL, ZALO_GATE_TITLE, ZaloWebViewGate } from './zalo-webview-gate';
 
 vi.mock('next/navigation', () => ({
@@ -56,9 +55,10 @@ const mount = () => {
   return r;
 };
 /** Giống trình duyệt thật: máy chủ trả HTML (chưa hydrate), React hydrate lên đúng HTML đó. */
-function hydrate(): HTMLElement {
-  const box = document.createElement('div');
+function hydrate(): HTMLElement & { realBefore: Element | null } {
+  const box = document.createElement('div') as unknown as HTMLElement & { realBefore: Element | null };
   box.innerHTML = renderToString(tree);
+  box.realBefore = box.querySelector('[data-real-page]');
   document.body.appendChild(box);
   let root!: Root;
   act(() => {
@@ -98,17 +98,6 @@ describe('zaloWebViewBootScript', () => {
     });
     expect(run).not.toThrow();
   });
-
-  it('layout /dai-ly đặt script TRƯỚC nội dung trang để chạy trước khi vẽ', () => {
-    const html = renderToString(
-      <DealerLayout>
-        <p>NOI-DUNG-TRANG</p>
-      </DealerLayout>,
-    );
-    const script = html.indexOf('data-zalo-webview');
-    expect(script).toBeGreaterThan(-1);
-    expect(script).toBeLessThan(html.indexOf('NOI-DUNG-TRANG'));
-  });
 });
 
 describe('ZaloWebViewGate: HTML máy chủ (chưa hydrate)', () => {
@@ -127,7 +116,9 @@ describe('ZaloWebViewGate: sau hydrate', () => {
   it('ngoài Zalo: trang thật nguyên vẹn (không dựng lại), màn chặn bị gỡ', () => {
     setUa(SAFARI_IOS);
     const box = hydrate();
-    expect(box.querySelector('[data-real-page]')).not.toBeNull();
+    expect(box.realBefore).not.toBeNull();
+    // Cùng một nút DOM của máy chủ: React hydrate lên nó, không dựng lại trang thật khi gỡ màn chặn.
+    expect(box.querySelector('[data-real-page]')).toBe(box.realBefore);
     expect(box.querySelector('[data-zalo-webview-gate]')).toBeNull();
     expect(box.querySelectorAll('h1')).toHaveLength(1);
     expect((box.querySelector('[data-real-page]')!.parentElement as HTMLElement).hasAttribute('class')).toBe(false);
