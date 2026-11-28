@@ -12,8 +12,8 @@ import {
 import type { RoundFailure } from './api';
 import { gameCopy } from './copy';
 
-/** Game đã có giao diện, theo thứ tự hiện trong "Chơi hôm nay". */
-export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap'] as const satisfies readonly MiniGameId[];
+/** Game đã có giao diện, theo thứ tự hiện trong "Chơi hôm nay" (hai game thao tác mới đứng đầu). */
+export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'eco_merge', 'green_conveyor', 'sort', 'match', 'origin', 'basket', 'kitchen_swap'] as const satisfies readonly MiniGameId[];
 export type PlayableMiniGame = (typeof PLAYABLE_MINI_GAMES)[number];
 
 export function isPlayableMiniGame(v: unknown): v is PlayableMiniGame {
@@ -78,6 +78,7 @@ export function miniIntroReward(today: MiniTodayResponse | undefined, game: Mini
   if (water <= 0 && !pointsOpen) return { rewarded: false, lines: [gameCopy('cap.account')] };
   const lines: string[] = [];
   if (water <= 0) lines.push(gameCopy('cap.accountWater'));
+  else if (pointsOpen && game === 'eco_merge') lines.push(gameCopy('intro.rewardMerge', { water, points: best.points }));
   else if (pointsOpen) lines.push(gameCopy('intro.reward', { water, points: best.points, pct: Math.round(MINI_REWARD.pointsMinRatio * 100) }));
   else lines.push(gameCopy('intro.rewardWater', { water }));
   if (!pointsOpen) lines.push(gameCopy('cap.points'));
@@ -151,7 +152,10 @@ export function miniFailureView(failure: RoundFailure, step: 'start' | 'submit')
   }
 }
 
-/** Chữ tiến độ của thanh trên: câu/lượt đang làm (Đố Xanh, Đoán Xuất Xứ), số cặp đã ghép, số món đã chọn, số món đã phân loại. */
+/**
+ * Chữ tiến độ của thanh trên: câu/lượt đang làm (Đố Xanh, Đoán Xuất Xứ), số cặp đã ghép, số món đã chọn, bậc cây đã ghép tới (Ghép Mầm
+ * Xanh), số món đã phân loại (Đúng Thùng, Băng Chuyền Xanh).
+ */
 export function miniProgressLabel(game: PlayableMiniGame, done: number, total: number): string {
   const m = total || 1;
   if (game === 'daily_quiz') return gameCopy('progress.question', { n: Math.min(done + 1, m), m });
@@ -159,6 +163,7 @@ export function miniProgressLabel(game: PlayableMiniGame, done: number, total: n
   if (game === 'match') return gameCopy('progress.pairs', { n: done, m: total });
   if (game === 'basket') return gameCopy('progress.picked', { n: done, m: total });
   if (game === 'kitchen_swap') return gameCopy('progress.swapped', { n: done, m: total });
+  if (game === 'eco_merge') return gameCopy('progress.tier', { n: done, m: total });
   return gameCopy('progress.items', { n: done, m: total });
 }
 

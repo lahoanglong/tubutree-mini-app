@@ -46,6 +46,7 @@ import { RefillNextDelivery } from '../refill/refill-next-delivery';
 import { useAuthStore } from '../../store/auth';
 import { MemoryRouter } from 'react-router-dom';
 import { LinkBuilderSheet } from '../affiliate/link-builder-sheet';
+import { SoundToggle } from '../game/mini/mini-arcade-ui';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -81,11 +82,15 @@ function declared(el: HTMLElement, axis: 'w' | 'h'): number {
 }
 
 /**
- * Lớp của `declutter.css` (w47-01) tự khai vùng chạm trong CSS thay vì style viết tay: đọc chính tệp CSS, lớp đạt khi luật của nó có `height`/`min-height` >= 44px
+ * Lớp của `declutter.css` (w47-01) và của game thao tác, lưới thẻ "Chơi hôm nay" (`mini-arcade.css`, `mini-game.css`, w48-01b) tự khai vùng chạm trong CSS
+ * thay vì style viết tay: đọc chính tệp CSS, lớp đạt khi luật của nó có `height`/`min-height` >= 44px
  * và bề ngang (`width: 100%`, `width`/`min-width` >= 44px). Sửa số đo trong CSS xuống dưới 44 thì guard đỏ ngay.
  */
 const CSS_HIT_CLASSES = (() => {
-  const css = readFileSync(resolve(__dirname, '../../css/declutter.css'), 'utf-8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = ['../../css/declutter.css', '../game/mini/mini-arcade.css', '../game/mini/mini-game.css']
+    .map((f) => readFileSync(resolve(__dirname, f), 'utf-8'))
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
   const out = new Set<string>();
   for (const m of css.matchAll(/(?:^|\n)\.([\w-]+)\s*\{([^}]*)\}/g)) {
     const body = m[2]!;
@@ -285,6 +290,14 @@ describe('vùng chạm DS v2 >= 44x44', () => {
 
   it('declutter.css: các lớp nút của w47-01 tự khai vùng chạm >= 44px (guard đọc đúng tệp CSS)', () => {
     for (const c of ['tubu-buy-mode', 'tubu-buy-mode-action', 'tubu-pdp-detail-toggle', 'tubu-points-row-info', 'tubu-consent-line']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
+  });
+
+  it('game thao tác và lưới thẻ "Chơi hôm nay": nút âm thanh, thùng Băng Chuyền Xanh, thẻ game tự khai vùng chạm >= 44px trong CSS', () => {
+    for (const c of ['tubu-ar-sound', 'tubu-ar-bin', 'tubu-mg-gcard']) expect(CSS_HIT_CLASSES.has(c), c).toBe(true);
+    const { container } = render(<SoundToggle on onToggle={() => {}} />);
+    const els = interactiveIn(container);
+    expect(els).toHaveLength(1);
+    expect(reaches44(els[0]!)).toBe(true);
   });
 
   it('QuickReorderStrip: thân thẻ và "+ Thêm" đạt 44x44; "Thêm lại tất cả" của tiêu đề khai minHeight 44', () => {

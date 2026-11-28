@@ -30,7 +30,7 @@ export class MiniSubmitDto {
 }
 
 /**
- * Lượt chơi có thưởng của 6 game mini. Công khai (khách chưa đăng nhập chơi thử, không thưởng); có phiên thì biết khách để giữ ván
+ * Lượt chơi có thưởng của game mini. Công khai (khách chưa đăng nhập chơi thử, không thưởng); có phiên thì biết khách để giữ ván
  * và cộng thưởng. Cờ `game.mini.enabled` hoặc cờ của game tắt: mọi route trả 404.
  */
 @Controller('game/mini')

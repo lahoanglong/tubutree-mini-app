@@ -1,7 +1,8 @@
 import { fillTemplate } from '../copy-template';
 
 /**
- * Chữ của game mini (lối vào "Chơi hôm nay", khung ván, Đố Xanh, Đúng Thùng). Tách khỏi `SHOP_COPY` vì bảng đó nằm trong gói đầu của Mini
+ * Chữ của game mini (lối vào "Chơi hôm nay", khung ván, Đố Xanh, Đúng Thùng). Chữ riêng trong bàn chơi của Ghép Mầm Xanh và Băng Chuyền
+ * Xanh ở `arcade-copy.ts` (chỉ chunk của hai bàn đó tải). Tách khỏi `SHOP_COPY` vì bảng đó nằm trong gói đầu của Mini
  * App: chữ ở đây chỉ đi theo chunk lười của Vườn Xanh và màn chơi, gói đầu không tăng. Cùng luật chữ với gian hàng: `copy.spec.ts` chạy
  * `FORBIDDEN_TERMS` và ngân sách độ dài `GAME_MINI_COPY_MAX` trên từng khoá.
  */
@@ -25,6 +26,15 @@ export const GAME_MINI_COPY = {
   'game.basket.rules': 'Đọc đề, chọn đúng 3 trong 6 sản phẩm rồi bấm Xong. 45 giây. Không có thưởng thêm khi bạn mua.',
   'game.kitchen_swap.title': 'Căn Bếp Xanh',
   'game.kitchen_swap.desc': 'Đổi đồ ở 3 góc nhà trong 45 giây',
+  'game.eco_merge.title': 'Ghép Mầm Xanh',
+  'game.eco_merge.desc': 'Ghép ô cây tới Rừng Tubu trong 3 phút',
+  'game.eco_merge.rules':
+    'Vuốt (hoặc bấm phím mũi tên) để dồn mọi ô. Hai ô cùng loại chạm nhau thì ghép lên bậc mới: Hạt giống, Mầm non, Chồi lá, Cây con, Hoa xanh, Quả lành, Cổ thụ, Rừng Tubu. 3 phút, tới Rừng Tubu là thắng.',
+  'game.green_conveyor.title': 'Băng Chuyền Xanh',
+  'game.green_conveyor.desc': 'Phân 24 món vào 3 thùng trong 30 giây',
+  'game.green_conveyor.rules':
+    'Món trôi xuống băng: vuốt trái bỏ Tái chế, vuốt xuống bỏ Hữu cơ, vuốt phải bỏ Refill, hoặc chạm thẳng vào thùng. Đúng liền tay để nhân điểm tới x5, món vàng cộng thêm 5 điểm. 30 giây.',
+  'card.new': 'Mới',
   'game.matcher.title': 'Chọn Chuẩn Xanh',
   'game.matcher.desc': '1 phút ra bộ đồ xanh hợp nhà bạn',
   'game.kitchen_swap.rules':
@@ -34,6 +44,7 @@ export const GAME_MINI_COPY = {
   'row.trial': 'Chơi thử, chưa tính thưởng',
   'intro.start': 'Bắt đầu',
   'intro.reward': 'Thưởng tới {water} Giọt nước, thêm {points} Điểm Xanh khi đúng từ {pct}%',
+  'intro.rewardMerge': 'Thưởng tới {water} Giọt nước, thêm {points} Điểm Xanh khi ghép tới Cổ thụ',
   'intro.rewardWater': 'Thưởng tới {water} Giọt nước',
   'intro.noReward': 'Ván này không tính thưởng',
   'reason.NOT_LOGGED_IN': 'Bạn đang chơi thử. Đăng nhập để nhận thưởng.',
@@ -55,6 +66,7 @@ export const GAME_MINI_COPY = {
   'progress.pairs': '{n}/{m} cặp',
   'progress.picked': 'Đã chọn {n}/{m}',
   'progress.swapped': 'Đã đổi {n}/{m}',
+  'progress.tier': 'Bậc {n}/{m}',
   'chip.noReward': 'Không tính thưởng',
   'quiz.next': 'Câu tiếp',
   'quiz.finish': 'Nộp bài',
@@ -113,6 +125,7 @@ export const GAME_MINI_COPY = {
   'result.originProduct': 'Sản phẩm ở lượt cuối',
   'result.add': '+ Thêm vào giỏ',
   'result.pairTitle': '{ingredient}: {use}',
+  'result.again': 'Chơi lại',
   'invite.sort': 'Bạn đang có vỏ chai thật? Gửi kèm đơn sau',
   'error.start': 'Chưa bắt đầu được ván. Bạn thử lại nhé.',
   'error.submit': 'Chưa nộp được bài. Đáp án vẫn được giữ, bạn thử lại nhé.',
@@ -146,6 +159,13 @@ export const GAME_MINI_COPY_MAX: Partial<Record<GameMiniCopyKey, number>> = {
   'game.origin.desc': 48,
   'game.basket.desc': 48,
   'game.kitchen_swap.desc': 48,
+  'game.eco_merge.title': 24,
+  'game.eco_merge.desc': 48,
+  'game.green_conveyor.title': 24,
+  'game.green_conveyor.desc': 48,
+  'card.new': 6,
+  'progress.tier': 12,
+  'result.again': 16,
   'game.matcher.title': 24,
   'game.matcher.desc': 48,
   'progress.turn': 12,

@@ -23,6 +23,8 @@ export interface MiniBuildCtx extends MiniPickCtx {
   cardId: (contentId: string, side: 'ingredient' | 'use') => string;
   /** Kho Đúng Thùng đang có vật nguy hại: thêm thùng thứ tư. */
   sortHazardous: boolean;
+  /** Seed 32 bit của game thao tác, suy từ mã ván bằng HMAC: dựng ván và chấm bài ra cùng một bàn mà không phải lưu. */
+  arcadeSeed: number;
 }
 
 export interface MiniGrade {
@@ -49,6 +51,11 @@ export interface MiniGameDef {
   pick(pool: readonly MiniContentRow[], ctx: MiniPickCtx): MiniContentRow[] | null;
   build(rows: readonly MiniContentRow[], ctx: MiniBuildCtx): MiniRoundContent;
   parseAnswers(raw: readonly unknown[], rows: readonly MiniContentRow[], ctx: MiniBuildCtx): unknown | null;
+  /**
+   * Thời gian tối thiểu (ms) để chơi ra bài đã nộp, ngoài sàn chung `MINI_GAME_MIN_ROUND_MS`: game thao tác mà mỗi nước đi cần một lần vuốt thật.
+   * Nộp sớm hơn thì máy chủ trả ROUND_TOO_FAST. Không khai thì chỉ có sàn chung.
+   */
+  minDurationMs?(answers: unknown): number;
   grade(rows: readonly MiniContentRow[], answers: unknown, ctx: MiniBuildCtx): MiniGrade;
 }
 

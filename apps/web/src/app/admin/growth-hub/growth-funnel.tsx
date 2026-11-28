@@ -36,6 +36,8 @@ const GAME_LABELS: Record<string, string> = {
   basket: 'Giỏ Đúng Việc',
   matcher: 'Chọn Chuẩn Xanh',
   kitchen_swap: 'Căn Bếp Xanh',
+  eco_merge: 'Ghép Mầm Xanh',
+  green_conveyor: 'Băng Chuyền Xanh',
 };
 export const gameLabel = (game: string): string => GAME_LABELS[game] ?? game;
 

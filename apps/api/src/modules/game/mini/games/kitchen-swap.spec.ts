@@ -49,6 +49,7 @@ const pickCtx = (rows: MiniContentRow[], over: Partial<MiniPickCtx> = {}): MiniP
 const buildCtx = (rows: MiniContentRow[], over: Partial<MiniBuildCtx> = {}): MiniBuildCtx => ({
   ...pickCtx(rows),
   sortHazardous: false,
+  arcadeSeed: 0,
   cardId: (id, side) => `${side}:${id}`,
   ...over,
 });

@@ -1,0 +1,560 @@
+/*
+ * Hai game thao tác: Ghép Mầm Xanh (4×4) và Băng Chuyền Xanh. Mini App và web dùng CÙNG nội dung file này (web:
+ * apps/web/src/components/game/mini/mini-arcade.css, spec so khớp hai file). Số đo nằm ở đây (bánh cóc px chỉ đếm TSX), mọi màu đi qua token.
+ * Không dùng biến CSS tự đặt (`pnpm lint:vars` chỉ tin file token): vị trí ô ghép theo `[data-cell]`, món trên băng theo hoạt ảnh `tubu-ar-glide`
+ * (thời lượng và độ trễ đặt inline theo lịch của từng món).
+ */
+
+/* ── Tông màu của hình vector (arcade-art.ts) ── */
+.tubu-ar-f-soil { fill: color-mix(in srgb, var(--color-story-tone-amber) 40%, var(--color-story-tone-ink)); }
+.tubu-ar-f-seed { fill: var(--color-story-tone-amber); }
+.tubu-ar-f-leaf { fill: var(--color-story-tone-leaf); }
+.tubu-ar-f-deep { fill: color-mix(in srgb, var(--color-story-tone-leaf) 60%, var(--color-story-tone-ink)); }
+.tubu-ar-f-lime { fill: color-mix(in srgb, var(--color-story-tone-leaf) 55%, var(--color-story-tone-amber)); }
+.tubu-ar-f-petal { fill: var(--color-story-tone-rose); }
+.tubu-ar-f-sky { fill: var(--color-story-tone-sky); }
+.tubu-ar-f-bark { fill: color-mix(in srgb, var(--color-story-tone-amber) 30%, var(--color-story-tone-ink)); }
+.tubu-ar-f-fruit { fill: color-mix(in srgb, var(--color-story-tone-rose) 75%, var(--color-story-tone-amber)); }
+.tubu-ar-f-gold { fill: var(--color-rating); }
+.tubu-ar-f-ink { fill: var(--color-story-tone-ink); }
+.tubu-ar-f-paper { fill: var(--color-bg-surface); }
+.tubu-ar-f-mist { fill: var(--color-story-ambient-sky); }
+.tubu-ar-f-stone { fill: var(--color-story-tone-sand); }
+.tubu-ar-s-soil { stroke: color-mix(in srgb, var(--color-story-tone-amber) 40%, var(--color-story-tone-ink)); }
+.tubu-ar-s-seed { stroke: var(--color-story-tone-amber); }
+.tubu-ar-s-leaf { stroke: var(--color-story-tone-leaf); }
+.tubu-ar-s-deep { stroke: color-mix(in srgb, var(--color-story-tone-leaf) 60%, var(--color-story-tone-ink)); }
+.tubu-ar-s-lime { stroke: color-mix(in srgb, var(--color-story-tone-leaf) 55%, var(--color-story-tone-amber)); }
+.tubu-ar-s-petal { stroke: var(--color-story-tone-rose); }
+.tubu-ar-s-sky { stroke: var(--color-story-tone-sky); }
+.tubu-ar-s-bark { stroke: color-mix(in srgb, var(--color-story-tone-amber) 30%, var(--color-story-tone-ink)); }
+.tubu-ar-s-fruit { stroke: color-mix(in srgb, var(--color-story-tone-rose) 75%, var(--color-story-tone-amber)); }
+.tubu-ar-s-gold { stroke: var(--color-rating); }
+.tubu-ar-s-ink { stroke: var(--color-story-tone-ink); }
+.tubu-ar-s-paper { stroke: var(--color-bg-surface); }
+.tubu-ar-s-mist { stroke: var(--color-story-ambient-sky); }
+.tubu-ar-s-stone { stroke: var(--color-story-tone-sand); }
+
+/* ── Thanh trên: điểm, kỷ lục / nhân điểm, âm thanh ── */
+.tubu-ar-hud {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+}
+.tubu-ar-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 72px;
+  padding: var(--space-stack-xs) var(--space-inline-md);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+  line-height: 1.2;
+}
+.tubu-ar-sound {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-subtle);
+  color: inherit;
+  cursor: pointer;
+}
+.tubu-ar-sound:focus-visible,
+.tubu-ar-grid:focus-visible,
+.tubu-ar-belt:focus-visible,
+.tubu-ar-bin:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Ghép Mầm Xanh ── */
+.tubu-ar-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--color-story-tone-leaf) 22%, var(--color-bg-surface));
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+.tubu-ar-cell {
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--color-bg-surface) 70%, transparent);
+}
+.tubu-ar-tile {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  width: calc((100% - 40px) / 4);
+  height: calc((100% - 40px) / 4);
+  transition: transform 110ms var(--ease-out);
+}
+.tubu-ar-tile[data-state='gone'] {
+  z-index: 1;
+}
+.tubu-ar-tile[data-cell='1'] { transform: translate(calc(100% + 8px), 0); }
+.tubu-ar-tile[data-cell='2'] { transform: translate(calc(200% + 16px), 0); }
+.tubu-ar-tile[data-cell='3'] { transform: translate(calc(300% + 24px), 0); }
+.tubu-ar-tile[data-cell='4'] { transform: translate(0, calc(100% + 8px)); }
+.tubu-ar-tile[data-cell='5'] { transform: translate(calc(100% + 8px), calc(100% + 8px)); }
+.tubu-ar-tile[data-cell='6'] { transform: translate(calc(200% + 16px), calc(100% + 8px)); }
+.tubu-ar-tile[data-cell='7'] { transform: translate(calc(300% + 24px), calc(100% + 8px)); }
+.tubu-ar-tile[data-cell='8'] { transform: translate(0, calc(200% + 16px)); }
+.tubu-ar-tile[data-cell='9'] { transform: translate(calc(100% + 8px), calc(200% + 16px)); }
+.tubu-ar-tile[data-cell='10'] { transform: translate(calc(200% + 16px), calc(200% + 16px)); }
+.tubu-ar-tile[data-cell='11'] { transform: translate(calc(300% + 24px), calc(200% + 16px)); }
+.tubu-ar-tile[data-cell='12'] { transform: translate(0, calc(300% + 24px)); }
+.tubu-ar-tile[data-cell='13'] { transform: translate(calc(100% + 8px), calc(300% + 24px)); }
+.tubu-ar-tile[data-cell='14'] { transform: translate(calc(200% + 16px), calc(300% + 24px)); }
+.tubu-ar-tile[data-cell='15'] { transform: translate(calc(300% + 24px), calc(300% + 24px)); }
+.tubu-ar-tile-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 4px 2px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+  color: var(--color-text-primary);
+}
+.tubu-ar-tile[data-tier='1'] .tubu-ar-tile-inner { background: var(--color-story-ambient-sand); }
+.tubu-ar-tile[data-tier='2'] .tubu-ar-tile-inner { background: var(--color-story-ambient-leaf); }
+.tubu-ar-tile[data-tier='3'] .tubu-ar-tile-inner { background: color-mix(in srgb, var(--color-story-tone-leaf) 28%, var(--color-bg-surface)); }
+.tubu-ar-tile[data-tier='4'] .tubu-ar-tile-inner { background: color-mix(in srgb, var(--color-story-tone-leaf) 34%, var(--color-bg-surface)); }
+.tubu-ar-tile[data-tier='5'] .tubu-ar-tile-inner { background: var(--color-story-ambient-rose); }
+.tubu-ar-tile[data-tier='6'] .tubu-ar-tile-inner { background: var(--color-story-ambient-amber); }
+.tubu-ar-tile[data-tier='7'] .tubu-ar-tile-inner { background: color-mix(in srgb, var(--color-story-tone-amber) 35%, var(--color-bg-surface)); }
+.tubu-ar-tile[data-tier='8'] .tubu-ar-tile-inner {
+  background: var(--color-action-primary-bg);
+  box-shadow: 0 0 0 3px var(--color-rating), var(--elevation-2);
+  color: var(--color-action-primary-fg);
+}
+.tubu-ar-tile[data-state='new'] .tubu-ar-tile-inner {
+  animation: tubu-ar-spawn 180ms var(--ease-out) 90ms both;
+}
+.tubu-ar-tile[data-state='merged'] .tubu-ar-tile-inner {
+  animation: tubu-ar-pop 220ms var(--ease-spring) 90ms both;
+}
+.tubu-ar-tile-num {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-label-weight);
+  line-height: 1.2;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-ar-tile[data-tier='8'] .tubu-ar-tile-num {
+  color: inherit;
+}
+.tubu-ar-art {
+  display: block;
+  width: 56%;
+  height: 56%;
+}
+.tubu-ar-tile-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-label-weight);
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tubu-ar-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  padding: var(--space-stack-xs) var(--space-inline-md);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-lh);
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tubu-ar-toast 900ms var(--ease-out) both;
+}
+.tubu-ar-end {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--type-display-md-size);
+  font-weight: var(--type-display-md-weight);
+  line-height: var(--type-display-md-lh);
+  animation: tubu-ar-fade 240ms var(--ease-out) both;
+}
+.tubu-ar-end[data-won='true'] {
+  color: var(--color-text-brand);
+}
+
+/* ── Băng Chuyền Xanh ── */
+.tubu-ar-combo {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-inline-xs);
+  min-width: 0;
+  color: var(--color-text-tertiary);
+}
+.tubu-ar-combo-flame {
+  display: flex;
+  align-items: center;
+}
+.tubu-ar-combo-bar {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 3px;
+  min-width: 56px;
+}
+.tubu-ar-combo-seg {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-track);
+  transition: background-color 160ms var(--ease-out);
+}
+.tubu-ar-combo-seg[data-on='true'] {
+  background: currentColor;
+}
+.tubu-ar-combo-label {
+  min-width: 2.2em;
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-lh);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tubu-ar-combo[data-mult='2'] { color: var(--color-text-success); }
+.tubu-ar-combo[data-mult='3'],
+.tubu-ar-combo[data-mult='4'] { color: var(--color-text-warning); }
+.tubu-ar-combo[data-mult='5'] { color: var(--color-text-danger); }
+.tubu-ar-combo[data-mult='5'] .tubu-ar-combo-flame {
+  animation: tubu-ar-flicker 600ms ease-in-out infinite alternate;
+}
+.tubu-ar-conveyor[data-shake='a'] {
+  animation: tubu-ar-shake-a 300ms ease-in-out;
+}
+.tubu-ar-conveyor[data-shake='b'] {
+  animation: tubu-ar-shake-b 300ms ease-in-out;
+}
+.tubu-ar-belt {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: min(46vh, 340px);
+  min-height: 260px;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-subtle);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+.tubu-ar-belt-track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 176px;
+  transform: translateX(-50%);
+  background: repeating-linear-gradient(
+    180deg,
+    var(--color-border-subtle) 0 2px,
+    transparent 2px 28px
+  );
+  border-left: 2px solid var(--color-border-default);
+  border-right: 2px solid var(--color-border-default);
+  animation: tubu-ar-track 900ms linear infinite;
+}
+.tubu-ar-lane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100% - 88px);
+  pointer-events: none;
+  animation-name: tubu-ar-glide;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+.tubu-ar-item {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 156px;
+  height: 88px;
+  margin-left: -78px;
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+  opacity: 0.82;
+  transition: opacity 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.tubu-ar-item[data-front='true'] {
+  border-color: var(--color-border-selected);
+  box-shadow: 0 0 0 2px var(--color-border-selected), var(--elevation-2);
+  opacity: 1;
+}
+.tubu-ar-item[data-golden='true'] {
+  border-color: var(--color-rating);
+  background: var(--color-status-warning-bg);
+}
+.tubu-ar-item[data-golden='true'][data-front='true'] {
+  box-shadow: 0 0 0 2px var(--color-rating), var(--elevation-2);
+}
+.tubu-ar-item[data-exit='right'][data-to='recycle'] { animation: tubu-ar-out-left 380ms var(--ease-out) both; }
+.tubu-ar-item[data-exit='right'][data-to='organic'] { animation: tubu-ar-out-down 380ms var(--ease-out) both; }
+.tubu-ar-item[data-exit='right'][data-to='refill'] { animation: tubu-ar-out-right 380ms var(--ease-out) both; }
+.tubu-ar-item[data-exit='wrong'],
+.tubu-ar-item[data-exit='miss'] {
+  border-color: var(--color-status-danger-fg);
+  background: var(--color-status-danger-bg);
+  animation: tubu-ar-out-fade 380ms var(--ease-out) both;
+}
+.tubu-ar-item-art {
+  display: block;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+}
+.tubu-ar-item-gold {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 28px;
+  height: 28px;
+  animation: tubu-ar-sparkle 900ms ease-in-out infinite alternate;
+}
+.tubu-ar-item-label {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-label-weight);
+  line-height: 1.25;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.tubu-ar-burst {
+  position: absolute;
+  bottom: var(--space-stack-md);
+  left: 50%;
+  z-index: 3;
+  color: var(--color-text-success);
+  font-family: var(--font-display);
+  font-size: var(--type-title-lg-size);
+  font-weight: var(--type-title-lg-weight);
+  line-height: var(--type-title-lg-lh);
+  pointer-events: none;
+  animation: tubu-ar-burst 440ms var(--ease-out) both;
+}
+.tubu-ar-burst[data-to='recycle'] { left: 22%; }
+.tubu-ar-burst[data-to='refill'] { left: 78%; }
+.tubu-ar-burst[data-golden='true'] {
+  color: var(--color-text-warning);
+  font-size: var(--type-display-md-size);
+  line-height: var(--type-display-md-lh);
+}
+.tubu-ar-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.tubu-ar-bins {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-inline-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-ar-bin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-stack-xs) var(--space-inline-xs);
+  border: 2px solid transparent;
+  border-radius: var(--radius-card);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 90ms var(--ease-out);
+}
+.tubu-ar-bin:active {
+  transform: scale(0.96);
+}
+.tubu-ar-bin[data-bin='recycle'] {
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+}
+.tubu-ar-bin[data-bin='organic'] {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+.tubu-ar-bin[data-bin='refill'] {
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
+}
+.tubu-ar-bin[data-flash='right'] {
+  border-color: var(--color-status-success-fg);
+  animation: tubu-ar-gulp 300ms var(--ease-spring);
+}
+.tubu-ar-bin[data-flash='wrong'] {
+  border-color: var(--color-status-danger-fg);
+  animation: tubu-ar-nope 300ms ease-in-out;
+}
+.tubu-ar-bin-label {
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-lh);
+}
+
+/* ── Hoạt ảnh ── */
+@keyframes tubu-ar-spawn {
+  from { opacity: 0; transform: scale(0.3); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes tubu-ar-pop {
+  0% { opacity: 0; transform: scale(0.7); }
+  55% { opacity: 1; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes tubu-ar-toast {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.9); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; transform: translate(-50%, -50%); }
+  100% { opacity: 0; transform: translate(-50%, -80%); }
+}
+@keyframes tubu-ar-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes tubu-ar-glide {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+@keyframes tubu-ar-track {
+  from { background-position: 0 0; }
+  to { background-position: 0 28px; }
+}
+@keyframes tubu-ar-out-left {
+  to { opacity: 0; transform: translate(-120%, 40%) scale(0.5) rotate(-12deg); }
+}
+@keyframes tubu-ar-out-right {
+  to { opacity: 0; transform: translate(120%, 40%) scale(0.5) rotate(12deg); }
+}
+@keyframes tubu-ar-out-down {
+  to { opacity: 0; transform: translateY(80%) scale(0.5); }
+}
+@keyframes tubu-ar-out-fade {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  50% { transform: translateX(6px); }
+  100% { opacity: 0; transform: translateX(0) scale(0.9); }
+}
+@keyframes tubu-ar-sparkle {
+  from { transform: scale(0.9) rotate(-8deg); }
+  to { transform: scale(1.1) rotate(8deg); }
+}
+@keyframes tubu-ar-burst {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+  30% { opacity: 1; transform: translate(-50%, -12px) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -48px) scale(1); }
+}
+@keyframes tubu-ar-gulp {
+  50% { transform: scale(1.08); }
+}
+@keyframes tubu-ar-nope {
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+@keyframes tubu-ar-flicker {
+  from { transform: scale(1); }
+  to { transform: scale(1.2) rotate(6deg); }
+}
+@keyframes tubu-ar-shake-a {
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes tubu-ar-shake-b {
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+
+/* Giảm chuyển động: tắt rung, nảy, toả sáng; món trên băng vẫn trôi vì đó là luật chơi. */
+@media (prefers-reduced-motion: reduce) {
+  .tubu-ar-tile,
+  .tubu-ar-combo-seg,
+  .tubu-ar-bin,
+  .tubu-ar-item {
+    transition: none;
+  }
+  .tubu-ar-tile-inner,
+  .tubu-ar-toast,
+  .tubu-ar-end,
+  .tubu-ar-conveyor,
+  .tubu-ar-belt-track,
+  .tubu-ar-item,
+  .tubu-ar-item-gold,
+  .tubu-ar-burst,
+  .tubu-ar-bin,
+  .tubu-ar-combo-flame {
+    animation: none !important;
+  }
+}

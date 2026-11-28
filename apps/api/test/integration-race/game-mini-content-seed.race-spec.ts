@@ -2,7 +2,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { PrismaClient } from '@prisma/client';
-import { MINI_GAME_IDS, MINI_GAME_RULES, type MiniGameId } from '@tubutree/shared-types';
+import { MINI_CONTENT_GAME_IDS, MINI_GAME_RULES, type MiniContentGameId } from '@tubutree/shared-types';
 import { activeCounts, loadGameMiniPack, seedGameMini, type GameMiniPack } from '../../prisma/seed-game-mini';
 import { seedGameQuiz } from '../../prisma/seed-game-quiz';
 import type { PrismaService } from '../../src/prisma/prisma.service';
@@ -33,9 +33,9 @@ const A = scratch('a');
 const B = scratch('b');
 const clientFor = (url: string) => new PrismaClient({ datasources: { db: { url } } });
 
-const GAMES: readonly MiniGameId[] = MINI_GAME_IDS;
+const GAMES: readonly MiniContentGameId[] = MINI_CONTENT_GAME_IDS;
 // Gói nạp Căn Bếp Xanh tắt hết (chờ chuyên gia duyệt): ca chơi trên kho thật bật nó lên để vẫn chơi trọn một ván trên DB vừa migrate.
-const SEEDED_OFF: readonly MiniGameId[] = ['kitchen_swap'];
+const SEEDED_OFF: readonly MiniContentGameId[] = ['kitchen_swap'];
 const pack = loadGameMiniPack();
 const clone = (): GameMiniPack => JSON.parse(JSON.stringify(pack)) as GameMiniPack;
 const totalItems = GAMES.reduce((n, g) => n + pack.games[g].length, 0) + pack.matcher.length;
@@ -51,7 +51,7 @@ function seeded(seed: number): () => number {
   };
 }
 
-function correctAnswers(game: MiniGameId, rows: MiniContentRow[], ctx: MiniBuildCtx): unknown[] {
+function correctAnswers(game: MiniContentGameId, rows: MiniContentRow[], ctx: MiniBuildCtx): unknown[] {
   switch (game) {
     case 'sort':
       return rows.map((r) => readSortPayload(r.payload)!.bin);

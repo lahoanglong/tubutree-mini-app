@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiTags } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import { MINI_GAME_IDS, type MiniGameId } from '@tubutree/shared-types';
+import { MINI_CONTENT_GAME_IDS, MINI_GAME_IDS, type MiniContentGameId } from '@tubutree/shared-types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { PaginationQuery } from '../../common/pagination';
@@ -17,7 +17,8 @@ export class MiniContentListQueryDto extends PaginationQuery {
 }
 
 export class MiniContentCreateDto {
-  @IsIn(MINI_GAME_IDS) game!: MiniGameId;
+  /** Chỉ game nội dung: Ghép Mầm Xanh và Băng Chuyền Xanh chạy luật cài sẵn, không có mục. */
+  @IsIn(MINI_CONTENT_GAME_IDS) game!: MiniContentGameId;
   /** Hình dạng theo game, máy chủ kiểm bằng luật của game đó. */
   @IsObject() payload!: Record<string, unknown>;
   @IsString() @MaxLength(MINI_EXPLANATION_MAX + 50) explanation!: string;

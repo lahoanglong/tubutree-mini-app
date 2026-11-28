@@ -66,6 +66,14 @@ export function matchCardId(secret: string | undefined, roundKey: string, conten
 }
 
 /**
+ * Seed 32 bit của ván game thao tác (Ghép Mầm Xanh, Băng Chuyền Xanh), suy từ khoá ván (id ván hoặc nonce của mã ván khách). Máy khách nhận
+ * seed để chơi; máy chủ suy lại lúc chấm nên không lưu, và khách không chọn được seed vì không có bí mật.
+ */
+export function arcadeSeed(secret: string | undefined, roundKey: string): number {
+  return createHmac('sha256', key(secret, 'arcade-seed')).update(roundKey).digest().readUInt32BE(0);
+}
+
+/**
  * Băm mã thiết bị trước khi lưu. Mã thiết bị do ứng dụng tự sinh và gửi lên nên giả được: trần theo thiết bị chỉ là lớp ma sát
  * với một máy nhiều tài khoản Zalo. Lớp chặn thật là trần theo tài khoản và ngân sách điểm toàn hệ thống.
  */

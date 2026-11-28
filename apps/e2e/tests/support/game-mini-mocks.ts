@@ -2,6 +2,9 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import type {
   MiniBasketTask,
   MiniChoiceItem,
+  MiniConveyorArt,
+  MiniConveyorBin,
+  MiniConveyorItem,
   MiniGameId,
   MiniKitchenSwap,
   MiniMatchCard,
@@ -13,14 +16,16 @@ import type {
 } from '@tubutree/shared-types';
 import { gameCopy } from '../../../../packages/app-core/src/game-mini/copy';
 import { gameWebCopy } from '../../../../packages/app-core/src/game-mini/web-copy';
+import { arcadeCopy } from '../../../../packages/app-core/src/game-mini/arcade-copy';
 import { reply, type MockApi } from './mock-api';
 
 /**
- * Dữ liệu và thao tác chung của spec game mini (Đố Xanh, Đúng Thùng, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc, Căn Bếp Xanh) ở Mini App và web: API mock như máy chủ
+ * Dữ liệu và thao tác chung của spec game mini (Đố Xanh, Đúng Thùng, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc, Căn Bếp Xanh, Ghép Mầm Xanh, Băng Chuyền Xanh)
+ * ở Mini App và web: API mock như máy chủ
  * thật khi cờ game.mini.* bật.
  */
 
-export { gameCopy, gameWebCopy };
+export { arcadeCopy, gameCopy, gameWebCopy };
 
 export function miniToday(over: Partial<MiniTodayResponse> = {}): MiniTodayResponse {
   return {
@@ -382,6 +387,72 @@ export function kitchenResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmi
   };
 }
 
+/** Hai game thao tác ở "Chơi hôm nay" (máy chủ bật `game.mini.eco_merge_enabled`, `game.mini.green_conveyor_enabled`). */
+export const ARCADE_TODAY_ROWS: MiniTodayGame[] = [
+  { game: 'eco_merge', items: 8, timeLimitMs: 180_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
+  { game: 'green_conveyor', items: 24, timeLimitMs: 30_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
+];
+
+export const MERGE_SEED = 20_261_128;
+
+const CONVEYOR_KINDS: Record<MiniConveyorBin, [string, MiniConveyorArt][]> = {
+  recycle: [['Chai nhựa', 'pet_bottle'], ['Lon nhôm', 'can'], ['Hộp giấy', 'carton']],
+  organic: [['Vỏ chuối', 'banana_peel'], ['Bã cà phê', 'coffee_grounds'], ['Vỏ trứng', 'eggshell']],
+  refill: [['Vỏ chai nước rửa chén', 'refill_pump'], ['Can nước giặt', 'refill_jug'], ['Bình xịt lau kính', 'refill_spray']],
+};
+const CONVEYOR_BINS: MiniConveyorBin[] = ['recycle', 'organic', 'refill'];
+
+/** 24 món như máy chủ phát: mỗi thùng 8 món xen kẽ Tái chế, Hữu cơ, Refill; món thứ 6, 12, 18 là món vàng. */
+export const CONVEYOR_ITEMS: MiniConveyorItem[] = Array.from({ length: 24 }, (_, i) => {
+  const bin = CONVEYOR_BINS[i % 3]!;
+  const [label, art] = CONVEYOR_KINDS[bin][Math.floor(i / 3) % 3]!;
+  return { id: `${art}-${i}`, label, art, bin, golden: i === 5 || i === 11 || i === 17 };
+});
+
+const arcadeBase = (): Pick<MiniSubmitResponse, 'rewarded' | 'noRewardReason' | 'capped' | 'totalSeeds' | 'checkIn'> => ({
+  rewarded: true,
+  noRewardReason: null,
+  capped: [],
+  totalSeeds: 140,
+  checkIn: null,
+});
+
+/** Ghép Mầm Xanh: máy chủ chơi lại chuỗi vuốt, tới Hoa xanh (bậc 5/8) thì 4 + 5 = 9 💧, chưa đủ 80% để có điểm. */
+export function mergeResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitResponse {
+  return {
+    ...arcadeBase(),
+    game: 'eco_merge',
+    roundId: 'r-eco_merge',
+    correct: 5,
+    total: 8,
+    durationMs: 60_000,
+    baseWater: 9,
+    basePoints: 0,
+    water: 9,
+    points: 0,
+    review: { game: 'eco_merge', score: 1_284, maxTile: 32, moves: 180, won: false },
+    ...over,
+  };
+}
+
+/** Băng Chuyền Xanh: 22/24 món đúng (trên 80%) nên 10 💧 và 10 Điểm Xanh; món vàng chỉ cộng điểm ván. */
+export function conveyorResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitResponse {
+  return {
+    ...arcadeBase(),
+    game: 'green_conveyor',
+    roundId: 'r-green_conveyor',
+    correct: 22,
+    total: 24,
+    durationMs: 30_000,
+    baseWater: 10,
+    basePoints: 10,
+    water: 10,
+    points: 10,
+    review: { game: 'green_conveyor', score: 96, bestCombo: 14, golden: 3, missed: 1 },
+    ...over,
+  };
+}
+
 /**
  * Danh mục và giỏ cho màn kết quả đợt B: `GET /products?slugs=` trả thẻ hiện hành (món `BASKET_SOLD_OUT` hết hàng), `POST /cart/items/batch`
  * ghi lại thân lệnh. Trả mảng thân các lần thêm giỏ.
@@ -425,6 +496,8 @@ export function mockMiniGames(
     origin?: MiniSubmitResponse;
     basket?: MiniSubmitResponse;
     kitchen?: MiniSubmitResponse;
+    merge?: MiniSubmitResponse;
+    conveyor?: MiniSubmitResponse;
     failFirstSubmit?: boolean;
   } = {},
 ) {
@@ -441,7 +514,13 @@ export function mockMiniGames(
   api.post('/game/mini/origin/start', () => round('origin', { game: 'origin', items: ORIGIN_ITEMS }, startOver));
   api.post('/game/mini/basket/start', () => round('basket', { game: 'basket', task: BASKET_TASK }, startOver));
   api.post('/game/mini/kitchen_swap/start', () => round('kitchen_swap', { game: 'kitchen_swap', swaps: KITCHEN_SWAPS }, startOver));
+  api.post('/game/mini/eco_merge/start', () => round('eco_merge', { game: 'eco_merge', seed: MERGE_SEED, size: 4, goal: 256, maxMoves: 2_000 }, startOver));
+  api.post('/game/mini/green_conveyor/start', () =>
+    round('green_conveyor', { game: 'green_conveyor', seed: 7, bins: CONVEYOR_BINS, items: CONVEYOR_ITEMS }, startOver),
+  );
   const results: Record<string, () => MiniSubmitResponse> = {
+    eco_merge: () => opts.merge ?? mergeResult(),
+    green_conveyor: () => opts.conveyor ?? conveyorResult(),
     daily_quiz: () => opts.quiz ?? quizResult(),
     sort: () => opts.sort ?? sortResult(),
     match: () => opts.match ?? matchResult(),
@@ -459,7 +538,7 @@ export function mockMiniGames(
     const guestResult = guest ? { rewarded: false, noRewardReason: guest, water: 0, points: 0, checkIn: null, ...(guest === 'NOT_LOGGED_IN' ? { roundId: null } : {}) } : {};
     return { ...results[game]!(), ...guestResult };
   };
-  for (const game of ['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap'] as const) api.post(`/game/mini/${game}/submit`, submit(game));
+  for (const game of ['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap', 'eco_merge', 'green_conveyor'] as const) api.post(`/game/mini/${game}/submit`, submit(game));
   return { submits };
 }
 
@@ -527,4 +606,80 @@ export async function expectTargets44(scope: Locator) {
 export async function expectNoHorizontalOverflow(page: Page) {
   const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
   expect(o.sw, 'Trang tràn ngang').toBeLessThanOrEqual(o.cw);
+}
+
+/** Vuốt trên `testId` bằng chuột (Pointer Events như ngón tay): từ giữa phần tử dời `dx`, `dy` rồi nhả. */
+export async function swipeOn(page: Page, testId: string, dx: number, dy: number) {
+  const box = (await page.getByTestId(testId).boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 4 });
+  await page.mouse.up();
+}
+
+const mergeCells = (page: Page) =>
+  page.getByTestId('eco-merge-tile').evaluateAll((els) => els.map((e) => `${e.getAttribute('data-cell')}:${e.getAttribute('data-value')}`).sort().join(','));
+
+/** Ghép Mầm Xanh: một phím mũi tên rồi một lần vuốt làm bàn đổi (thử lần lượt 4 hướng tới khi ô dời). */
+export async function mergeKeyThenSwipe(page: Page) {
+  let start = await mergeCells(page);
+  for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
+    await page.keyboard.press(key);
+    if ((await mergeCells(page)) !== start) break;
+  }
+  await expect.poll(() => mergeCells(page)).not.toBe(start);
+  start = await mergeCells(page);
+  for (const [dx, dy] of [[-120, 0], [0, -120], [120, 0], [0, 120]] as const) {
+    await swipeOn(page, 'eco-merge-grid', dx, dy);
+    if ((await mergeCells(page)) !== start) break;
+  }
+  await expect.poll(() => mergeCells(page)).not.toBe(start);
+}
+
+/** Ghép Mầm Xanh: bấm vòng 4 phím mũi tên tới khi hết nước đi và màn kết quả hiện. */
+export async function playMergeToEnd(page: Page) {
+  const result = page.getByTestId('mini-result');
+  const keys = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'];
+  for (let i = 0; i < 1_800 && !(await result.isVisible()); i++) {
+    await page.keyboard.press(keys[i % 4]!);
+    if (i % 25 === 24) await page.waitForTimeout(20);
+  }
+  await expect(result).toBeVisible({ timeout: 15_000 });
+}
+
+const BIN_KEY: Record<string, string> = { recycle: 'ArrowLeft', organic: 'ArrowDown', refill: 'ArrowRight' };
+const BIN_SWIPE: Record<string, [number, number]> = { recycle: [-120, 0], organic: [0, 120], refill: [120, 0] };
+const WRONG_BIN: Record<string, string> = { recycle: 'organic', organic: 'refill', refill: 'recycle' };
+
+/**
+ * Băng Chuyền Xanh trọn ván: đọc thùng của món đầu băng rồi phân loại (món 2 bằng phím, món 3 bằng vuốt, còn lại chạm thùng), cố ý sai một lần
+ * sau món thứ 3 và kiểm khung ván rung. `onEighth` chạy khi đã phân loại 8 món (chụp ảnh giữa ván). Trả số món đã phân loại đúng cách và việc đã
+ * thấy hệ số x2.
+ */
+export async function playConveyorRound(page: Page, onEighth: () => Promise<void> = async () => {}) {
+  const panel = page.getByTestId('mini-green-conveyor');
+  const result = page.getByTestId('mini-result');
+  const front = page.locator('[data-testid="conveyor-item"][data-front="true"]');
+  let sorted = 0;
+  let shook = false;
+  let sawCombo = false;
+  while (!(await result.isVisible())) {
+    const bin = await front.getAttribute('data-bin', { timeout: 1_000 }).catch(() => null);
+    if (!bin) continue;
+    if (sorted === 3 && !shook) {
+      await page.getByTestId(`conveyor-bin-${WRONG_BIN[bin]}`).click();
+      await expect(panel).toHaveAttribute('data-shake', /^(a|b)$/);
+      shook = true;
+      continue;
+    }
+    if (sorted === 1) await page.keyboard.press(BIN_KEY[bin]!);
+    else if (sorted === 2) await swipeOn(page, 'conveyor-belt', ...BIN_SWIPE[bin]!);
+    else await page.getByTestId(`conveyor-bin-${bin}`).click();
+    sorted++;
+    if (!sawCombo) sawCombo = Number(await page.getByTestId('conveyor-combo').getAttribute('data-mult')) >= 2;
+    if (sorted === 8) await onEighth();
+  }
+  return { sorted, shook, sawCombo };
 }

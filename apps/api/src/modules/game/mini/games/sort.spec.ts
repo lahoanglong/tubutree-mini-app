@@ -31,6 +31,7 @@ const pickCtx = (rng: () => number = seeded(7)): MiniPickCtx => ({ rng, dayKey: 
 const buildCtx = (extra: Partial<MiniBuildCtx> = {}): MiniBuildCtx => ({
   ...pickCtx(),
   sortHazardous: false,
+  arcadeSeed: 0,
   cardId: (id, side) => `${side}:${id}`,
   ...extra,
 });

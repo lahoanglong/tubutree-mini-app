@@ -123,3 +123,52 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     expect(tokenRgb('--color-text-price-deal')).toEqual([0x9a, 0x52, 0x00]);
   });
 });
+
+describe('game thao tác và lưới thẻ "Chơi hôm nay" (w48-01b) đạt 4,5:1 (chữ) — WCAG 1.4.3', () => {
+  /** `color-mix(in srgb, A p%, B)` của mini-arcade.css / mini-game.css. */
+  const mix = (a: string, p: number, b: string) => lerp(tokenRgb(b), tokenRgb(a), p);
+  const surface = '--color-bg-surface';
+
+  it.each([
+    // Ba thùng của Băng Chuyền Xanh: nhãn thùng trên nền trạng thái cùng tông.
+    ['--color-status-info-fg', '--color-status-info-bg'],
+    ['--color-status-success-fg', '--color-status-success-bg'],
+    ['--color-status-warning-fg', '--color-status-warning-bg'],
+    // Nhãn hệ số chuỗi x2..x5 trên nền thẻ của khung ván.
+    ['--color-text-success', surface],
+    ['--color-text-warning', surface],
+    ['--color-text-danger', surface],
+  ])('%s trên %s', (fg, bg) => {
+    expect(ratio(tokenRgb(fg), tokenRgb(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  const cardTones: [string, [number, number, number]][] = [
+    ['leaf', tokenRgb('--color-story-ambient-leaf')],
+    ['sky', tokenRgb('--color-story-ambient-sky')],
+    ['amber', tokenRgb('--color-story-ambient-amber')],
+    ['rose', tokenRgb('--color-story-ambient-rose')],
+    ['sand', tokenRgb('--color-story-ambient-sand')],
+    ['mint', mix('--color-story-ambient-leaf', 0.55, '--color-story-ambient-sky')],
+    ['peach', mix('--color-story-ambient-rose', 0.5, '--color-story-ambient-amber')],
+    ['fern', mix('--color-story-ambient-leaf', 0.6, '--color-story-ambient-sand')],
+    ['lilac', mix('--color-story-ambient-sky', 0.5, '--color-story-ambient-rose')],
+  ];
+  it.each(cardTones)('thẻ tông %s: tên game và mô tả (chữ phụ) đọc được', (_tone, bg) => {
+    expect(ratio(tokenRgb('--color-text-primary'), bg)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(tokenRgb('--color-text-secondary'), bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  const tierBg: [string, [number, number, number]][] = [
+    ['1', tokenRgb('--color-story-ambient-sand')],
+    ['2', tokenRgb('--color-story-ambient-leaf')],
+    ['3', mix('--color-story-tone-leaf', 0.28, surface)],
+    ['4', mix('--color-story-tone-leaf', 0.34, surface)],
+    ['5', tokenRgb('--color-story-ambient-rose')],
+    ['6', tokenRgb('--color-story-ambient-amber')],
+    ['7', mix('--color-story-tone-amber', 0.35, surface)],
+  ];
+  it.each(tierBg)('ô Ghép Mầm Xanh bậc %s: tên bậc và số điểm đọc được', (_tier, bg) => {
+    expect(ratio(tokenRgb('--color-text-primary'), bg)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(tokenRgb('--color-text-secondary'), bg)).toBeGreaterThanOrEqual(4.5);
+  });
+});

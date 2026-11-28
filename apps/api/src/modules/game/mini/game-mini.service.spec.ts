@@ -1,10 +1,15 @@
 import { HttpException, Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import {
+  MINI_CONTENT_GAME_IDS,
   MINI_GAME_IDS,
   MINI_GAME_RULES,
+  conveyorEncode,
+  mergeReplay,
+  mergeTier,
   MINI_MAX_ROUNDS_PER_GAME_PER_DAY,
   MINI_ROUND_TTL_MS,
+  type MiniContentGameId,
   type MiniGameId,
   type MiniMatchCard,
   type MiniProductCard,
@@ -17,10 +22,13 @@ import type { AnalyticsEventsService } from '../../analytics/analytics-events.se
 import type { DailyCheckInService } from '../../daily-check-in/daily-check-in.service';
 import type { GameMiniContentService } from './game-mini-content.service';
 import type { GameMiniRewardService } from './game-mini-reward.service';
-import { deviceHash, matchCardId, readGuestRound, signGuestRound } from './game-mini-crypto';
+import { arcadeSeed, deviceHash, matchCardId, readGuestRound, signGuestRound } from './game-mini-crypto';
 import { GameMiniService } from './game-mini.service';
 import { miniGameFlagKey } from './game-mini.settings';
 import type { MiniContentRow } from './games';
+import { ARCADE_CONTENT_ID, arcadeRow } from './games/arcade';
+import { conveyorItems } from './games/green-conveyor';
+import { MERGE_MIN_MS_PER_MOVE } from './games/eco-merge';
 
 const SECRET = 'secret-service-spec-0123456789';
 /** 10:00 giờ VN ngày 17/11/2026. */
@@ -111,6 +119,8 @@ function buildFixtures(): Record<MiniGameId, Fixture> {
       sortHazardous: false,
     },
     kitchen_swap: { rows: kitchenRows, products: new Map(kitchenSlugs.map((s) => [s, card(s)] as const)), sortHazardous: false },
+    eco_merge: { rows: [arcadeRow('eco_merge')], products: new Map(), sortHazardous: false },
+    green_conveyor: { rows: [arcadeRow('green_conveyor')], products: new Map(), sortHazardous: false },
   };
 }
 
@@ -245,9 +255,11 @@ const BLANK: Record<MiniGameId, unknown[]> = {
   match: [],
   basket: [],
   kitchen_swap: Array(3).fill(null),
+  eco_merge: [''],
+  green_conveyor: ['-'.repeat(24)],
 };
 
-const PERFECT: Record<MiniGameId, (rows: MiniContentRow[], roundKey: string) => unknown[]> = {
+const PERFECT: Record<MiniContentGameId, (rows: MiniContentRow[], roundKey: string) => unknown[]> = {
   sort: (rows) => rows.map((r) => (r.payload as { bin: string }).bin),
   daily_quiz: (rows) => rows.map((r) => (r.payload as { answer: number }).answer),
   origin: (rows) => rows.map((r) => (r.payload as { answer: number }).answer),
@@ -272,7 +284,7 @@ function scan(node: unknown, keys = new Set<string>(), objects: Record<string, u
 
 const PRODUCT_KEYS = ['slug', 'name', 'imageUrl', 'price', 'inStock'];
 /** Khoá JSON mà `content` của `start` được phép có, theo từng game. Khoá ngoài danh sách này là rò rỉ hoặc đổi hợp đồng. */
-const KEY_WHITELIST: Record<MiniGameId, string[]> = {
+const KEY_WHITELIST: Record<MiniContentGameId, string[]> = {
   sort: ['game', 'bins', 'items', 'id', 'label', 'emoji'],
   daily_quiz: ['game', 'items', 'id', 'prompt', 'options', 'product', ...PRODUCT_KEYS],
   origin: ['game', 'items', 'id', 'prompt', 'options', 'product', ...PRODUCT_KEYS],
@@ -281,7 +293,7 @@ const KEY_WHITELIST: Record<MiniGameId, string[]> = {
   kitchen_swap: ['game', 'swaps', 'id', 'corner', 'item', 'emoji', 'hidden', 'options', 'product', 'fact', ...PRODUCT_KEYS],
 };
 /** Khoá mà fixture phải làm xuất hiện, để phép quét không "xanh vì rỗng". */
-const KEYS_THAT_MUST_APPEAR: Record<MiniGameId, string[]> = {
+const KEYS_THAT_MUST_APPEAR: Record<MiniContentGameId, string[]> = {
   sort: ['bins', 'items', 'id', 'label', 'emoji'],
   daily_quiz: ['items', 'prompt', 'options', 'product', 'slug', 'price'],
   origin: ['items', 'prompt', 'options', 'product', 'slug', 'price'],
@@ -356,7 +368,7 @@ describe('GameMiniService.today', () => {
     }));
     const res = await w.service.today(null, NOW);
     expect(res.dayKey).toBe(DAY);
-    expect(res.games.map((g) => g.game)).toEqual(['sort', 'daily_quiz', 'basket', 'kitchen_swap']);
+    expect(res.games.map((g) => g.game)).toEqual(['sort', 'daily_quiz', 'basket', 'kitchen_swap', 'eco_merge', 'green_conveyor']);
     expect(res.rewardEligible).toBe(false);
     expect(res.noRewardReason).toBe('NOT_LOGGED_IN');
     for (const g of res.games) {
@@ -441,7 +453,7 @@ describe('GameMiniService.start: khách chưa đăng nhập', () => {
     expect(w.prisma.gameProfile.findUnique).not.toHaveBeenCalled();
   });
 
-  it.each(MINI_GAME_IDS)('%s: token đọc lại được bằng đúng secret và khớp danh sách mục đã phát', async (game) => {
+  it.each(MINI_CONTENT_GAME_IDS)('%s: token đọc lại được bằng đúng secret và khớp danh sách mục đã phát', async (game) => {
     const w = makeWorld();
     const res = await w.service.start(null, game, NOW);
     const guest = readGuestRound(res.token, SECRET)!;
@@ -451,7 +463,8 @@ describe('GameMiniService.start: khách chưa đăng nhập', () => {
     if (res.content.game === 'basket') expect(guest.contentIds).toEqual([res.content.task.id]);
     else if (res.content.game === 'kitchen_swap') expect(guest.contentIds).toEqual(res.content.swaps.map((x) => x.id));
     else if (res.content.game === 'match') expect(guest.contentIds).toHaveLength(res.content.cards.length / 2);
-    else expect(guest.contentIds).toEqual(res.content.items.map((i) => i.id));
+    else if ('items' in res.content) expect(guest.contentIds).toEqual(res.content.items.map((i) => i.id));
+    else throw new Error(`game nội dung lạ: ${res.content.game}`);
     expect(readGuestRound(res.token, 'secret-khac-hoan-toan')).toBeNull();
   });
 
@@ -472,7 +485,7 @@ describe('GameMiniService.start: nội dung không lộ đáp án (test 7)', () 
     ['khách', null],
     ['tài khoản đăng nhập', 'u1'],
   ] as const)('%s', (_label, userId) => {
-    it.each(MINI_GAME_IDS)('%s: tập khoá JSON của content nằm trong danh sách trắng và không có khoá đáp án', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: tập khoá JSON của content nằm trong danh sách trắng và không có khoá đáp án', async (game) => {
       const w = makeWorld();
       const res = await w.service.start(userId, game, NOW);
       expect(res.content.game).toBe(game);
@@ -487,7 +500,7 @@ describe('GameMiniService.start: nội dung không lộ đáp án (test 7)', () 
       expect(keys).not.toContain('use');
     });
 
-    it.each(MINI_GAME_IDS)('%s: chuỗi JSON không chứa lời giải thích, nguồn hay lý do của bất kỳ mục nào', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: chuỗi JSON không chứa lời giải thích, nguồn hay lý do của bất kỳ mục nào', async (game) => {
       const w = makeWorld();
       const json = JSON.stringify((await w.service.start(userId, game, NOW)).content);
       for (const r of w.fx[game].rows) {
@@ -772,7 +785,7 @@ describe('GameMiniService.submit: người dùng thật, ván đã lưu', () => 
       checkIn: null,
     });
     expect(res.review.game).toBe('sort');
-    expect(res.review.items).toHaveLength(10);
+    expect(res.review.game === 'sort' && res.review.items).toHaveLength(10);
     expect(w.analytics.recordBestEffort).toHaveBeenCalledWith({
       eventName: 'game_round_completed',
       userId: 'u1',
@@ -814,7 +827,7 @@ describe('GameMiniService.submit: người dùng thật, ván đã lưu', () => 
     expect(w.loyalty.pointsExpiresAt).not.toHaveBeenCalled();
   });
 
-  it.each(MINI_GAME_IDS)('%s: nộp đáp án đúng hết thì chấm đủ, mã thẻ và danh sách mục khớp với ván đã phát', async (game) => {
+  it.each(MINI_CONTENT_GAME_IDS)('%s: nộp đáp án đúng hết thì chấm đủ, mã thẻ và danh sách mục khớp với ván đã phát', async (game) => {
     const w = makeWorld();
     const round = roundOf(w, game);
     w.prisma.gamePlayRound.findUnique.mockResolvedValue(round);
@@ -943,7 +956,7 @@ describe('GameMiniService.submit: khách nộp bằng token', () => {
   };
   const later = (ms: number) => new Date(NOW.getTime() + ms);
 
-  it.each(MINI_GAME_IDS)('%s: khứ hồi start → submit chấm được, không ghi DB, không thưởng, không gọi settle', async (game) => {
+  it.each(MINI_CONTENT_GAME_IDS)('%s: khứ hồi start → submit chấm được, không ghi DB, không thưởng, không gọi settle', async (game) => {
     const w = makeWorld();
     const { token, guest } = await startGuest(w, game);
     const rows = guest.contentIds.map((id) => w.fx[game].rows.find((r) => r.id === id)!);
@@ -1045,7 +1058,7 @@ describe('GameMiniService.submit: khách nộp bằng token', () => {
 });
 
 describe('GameMiniService: kiểu nội dung trả về khớp hợp đồng', () => {
-  it.each(MINI_GAME_IDS)('%s: content.game trùng game và số mục đúng luật', async (game) => {
+  it.each(MINI_CONTENT_GAME_IDS)('%s: content.game trùng game và số mục đúng luật', async (game) => {
     const w = makeWorld();
     const res = await w.service.start(null, game, NOW);
     const content: MiniRoundContent = res.content;
@@ -1057,8 +1070,145 @@ describe('GameMiniService: kiểu nội dung trả về khớp hợp đồng', (
     } else if (content.game === 'kitchen_swap') {
       expect(content.swaps).toHaveLength(MINI_GAME_RULES.kitchen_swap.items);
       for (const sw of content.swaps) expect(sw.options).toHaveLength(3);
-    } else {
+    } else if (content.game === 'basket') {
       expect(content.task.products).toHaveLength(6);
+    } else {
+      throw new Error(`game nội dung lạ: ${content.game}`);
     }
+  });
+});
+
+describe('GameMiniService: game thao tác (Ghép Mầm Xanh, Băng Chuyền Xanh)', () => {
+  const later = (ms: number) => new Date(NOW.getTime() + ms);
+  /** Khách tự chơi theo vòng trái, xuống, phải, xuống tới khi hết nước hoặc đủ `limit` nước, như một người chơi thật. */
+  const playMerge = (seed: number, limit: number) => {
+    const order = ['l', 'd', 'r', 'd'] as const;
+    let path = '';
+    for (let i = 0; path.length < limit && i < limit * 4; i++) {
+      const next = path + order[i % 4];
+      const r = mergeReplay(seed, next);
+      if (!r) break;
+      if (r.moves > path.length) path = next;
+      if (r.over || r.won) break;
+    }
+    return path;
+  };
+
+  it('start eco_merge: chỉ phát hạt giống ván (HMAC theo mã ván), không có mục nội dung thật', async () => {
+    const w = makeWorld();
+    const res = await w.service.start(null, 'eco_merge', NOW);
+    const guest = readGuestRound(res.token, SECRET)!;
+    expect(guest.contentIds).toEqual([ARCADE_CONTENT_ID.eco_merge]);
+    expect(res.content).toEqual({ game: 'eco_merge', seed: arcadeSeed(SECRET, guest.nonce), size: 4, goal: 256, maxMoves: 2000 });
+    const again = await w.service.start(null, 'eco_merge', NOW);
+    expect(again.content).not.toEqual(res.content);
+  });
+
+  it('start green_conveyor: 24 món dựng lại được từ hạt giống, đủ ba thùng, đúng 3 món vàng', async () => {
+    const w = makeWorld();
+    const res = await w.service.start(null, 'green_conveyor', NOW);
+    const content = res.content;
+    if (content.game !== 'green_conveyor') throw new Error('sai game');
+    expect(content.bins).toEqual(['recycle', 'organic', 'refill']);
+    expect(content.items).toHaveLength(24);
+    expect(content.items.filter((i) => i.golden)).toHaveLength(3);
+    for (const bin of content.bins) expect(content.items.filter((i) => i.bin === bin)).toHaveLength(8);
+    expect(JSON.stringify(content)).not.toMatch(/"(?:explanation|sourceUrl|reason|answer)"/);
+  });
+
+  it('khách nộp eco_merge: máy chủ chơi lại chuỗi nước để chấm, điểm và bậc khớp đúng ván đã chơi', async () => {
+    const w = makeWorld();
+    const res = await w.service.start(null, 'eco_merge', NOW);
+    if (res.content.game !== 'eco_merge') throw new Error('sai game');
+    const path = playMerge(res.content.seed, 400);
+    const replay = mergeReplay(res.content.seed, path)!;
+    const out = await w.service.submit(null, 'eco_merge', { token: res.token!, answers: [path] }, later(path.length * MERGE_MIN_MS_PER_MOVE + 5_000));
+    expect(out).toMatchObject({ game: 'eco_merge', correct: mergeTier(replay.maxTile), total: 8, rewarded: false });
+    expect(out.review).toEqual({ game: 'eco_merge', score: replay.score, maxTile: replay.maxTile, moves: replay.moves, won: replay.won });
+    expect(w.reward.settle).not.toHaveBeenCalled();
+  });
+
+  it('khách nộp green_conveyor đủ 24 món đúng thùng: 24/24, chuỗi 24, 3 món vàng', async () => {
+    const w = makeWorld();
+    const res = await w.service.start(null, 'green_conveyor', NOW);
+    if (res.content.game !== 'green_conveyor') throw new Error('sai game');
+    const answers = [conveyorEncode(res.content.items.map((i) => i.bin))];
+    const out = await w.service.submit(null, 'green_conveyor', { token: res.token!, answers }, later(25_000));
+    expect(out).toMatchObject({ correct: 24, total: 24 });
+    expect(out.review).toMatchObject({ game: 'green_conveyor', bestCombo: 24, golden: 3, missed: 0 });
+  });
+
+  it('green_conveyor nộp trước 20 giây: 400 ROUND_TOO_FAST (ván 30 giây không thể xong sớm thế)', async () => {
+    const w = makeWorld();
+    const res = await w.service.start(null, 'green_conveyor', NOW);
+    await expectMini(w.service.submit(null, 'green_conveyor', { token: res.token!, answers: BLANK.green_conveyor }, later(19_999)), 400, 'ROUND_TOO_FAST');
+    const ok = await w.service.submit(null, 'green_conveyor', { token: res.token!, answers: BLANK.green_conveyor }, later(20_000));
+    expect(ok).toMatchObject({ correct: 0, total: 24 });
+  });
+
+  it('eco_merge nộp nhanh hơn 50ms mỗi nước: 400 ROUND_TOO_FAST (bài giải sẵn theo hạt giống không nộp ngay được)', async () => {
+    const w = makeWorld();
+    const res = await w.service.start(null, 'eco_merge', NOW);
+    const answers = ['ldrd'.repeat(100)];
+    await expectMini(w.service.submit(null, 'eco_merge', { token: res.token!, answers }, later(400 * MERGE_MIN_MS_PER_MOVE - 1)), 400, 'ROUND_TOO_FAST');
+    const ok = await w.service.submit(null, 'eco_merge', { token: res.token!, answers }, later(400 * MERGE_MIN_MS_PER_MOVE));
+    expect(ok).toMatchObject({ game: 'eco_merge', total: 8 });
+  });
+
+  it.each(['eco_merge', 'green_conveyor'] as const)(
+    'thành viên bấm Chơi %s khi còn ván dở: không nhận lại bàn cũ (đã biết trước), ván dở hết hạn ngay để trả ô, ván mới có mã và bàn mới',
+    async (game) => {
+      const w = makeWorld();
+      const issuedAt = new Date(NOW.getTime() - 60_000);
+      w.tx.gamePlayRound.findFirst.mockResolvedValue({
+        id: 'open-1',
+        slot: 1,
+        contentIds: [ARCADE_CONTENT_ID[game]],
+        issuedAt,
+        expiresAt: new Date(issuedAt.getTime() + MINI_ROUND_TTL_MS),
+        dayKey: DAY,
+      });
+      const res = await w.service.start('u1', game, NOW);
+      expect(w.tx.gamePlayRound.updateMany).toHaveBeenNthCalledWith(1, { where: { id: 'open-1', submittedAt: null }, data: { expiresAt: NOW } });
+      expect(w.tx.gamePlayRound.updateMany).toHaveBeenNthCalledWith(2, {
+        where: { userId: 'u1', game, dayKey: DAY, slot: { not: null }, submittedAt: null, expiresAt: { lte: NOW } },
+        data: { slot: null },
+      });
+      expect(w.tx.gamePlayRound.create).toHaveBeenCalledTimes(1);
+      expect(res).toMatchObject({ roundId: 'round-1', rewarded: true });
+      expect(JSON.stringify(res.content)).toContain(`"seed":${arcadeSeed(SECRET, 'round-1')}`);
+    },
+  );
+
+  it.each([
+    ['eco_merge', ['x']],
+    ['eco_merge', ['l', 'r']],
+    ['eco_merge', ['l'.repeat(2001)]],
+    ['eco_merge', [42]],
+    ['green_conveyor', ['r'.repeat(23)]],
+    ['green_conveyor', ['r'.repeat(25)]],
+    ['green_conveyor', ['x'.repeat(24)]],
+  ] as const)('%s bài nộp sai dạng %#: 400 ANSWERS_INVALID', async (game, answers) => {
+    const w = makeWorld();
+    const res = await w.service.start(null, game, NOW);
+    await expectMini(w.service.submit(null, game, { token: res.token!, answers: [...answers] }, later(25_000)), 400, 'ANSWERS_INVALID');
+  });
+
+  it('thành viên nộp green_conveyor đủ: thưởng cơ bản như game nội dung (10 💧, 10 Điểm Xanh), qua đúng settle và các trần chung', async () => {
+    const w = makeWorld();
+    w.prisma.gamePlayRound.findUnique.mockResolvedValue(roundOf(w, 'green_conveyor'));
+    const answers = [conveyorEncode(conveyorItems(arcadeSeed(SECRET, 'r1')).map((i) => i.bin))];
+    await w.service.submit('u1', 'green_conveyor', { roundId: 'r1', answers }, NOW);
+    expect(w.reward.settle).toHaveBeenCalledTimes(1);
+    expect(w.reward.settle).toHaveBeenCalledWith(
+      expect.objectContaining({ game: 'green_conveyor', correct: 24, total: 24, correctIds: [], base: { water: 10, points: 10 } }),
+    );
+  });
+
+  it('thành viên nộp eco_merge chưa ghép gì: 0 bậc, thưởng cơ bản 4 💧 và 0 Điểm Xanh', async () => {
+    const w = makeWorld();
+    w.prisma.gamePlayRound.findUnique.mockResolvedValue(roundOf(w, 'eco_merge'));
+    await w.service.submit('u1', 'eco_merge', { roundId: 'r1', answers: [''] }, NOW);
+    expect(w.reward.settle).toHaveBeenCalledWith(expect.objectContaining({ game: 'eco_merge', correct: 0, total: 8, base: { water: 4, points: 0 } }));
   });
 });

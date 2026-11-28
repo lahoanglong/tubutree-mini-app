@@ -70,6 +70,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261125070000_w35_01_order_recipient_zalo',
   // Chỉ thêm chỉ mục thường trên `users.mergedIntoId`; không đổi cột, câu của image cũ chỉ được thêm đường đọc.
   '20261127220000_w45_02_users_merged_into_idx',
+  // Chỉ thêm hai dòng cờ game mini vào `system_configs`, không đổi schema; image cũ không đọc hai khoá này.
+  '20261128140000_w48_01b_game_mini_arcade_flags',
 ];
 
 /**

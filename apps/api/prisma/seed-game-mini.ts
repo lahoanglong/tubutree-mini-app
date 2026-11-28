@@ -16,7 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { MINI_BASKET_PICK, MINI_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, claimsIn, type MiniGameId } from '@tubutree/shared-types';
+import { MINI_BASKET_PICK, MINI_CONTENT_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, claimsIn, type MiniContentGameId } from '@tubutree/shared-types';
 import { MINI_GAMES } from '../src/modules/game/mini/games';
 import { SLUG_RE } from '../src/modules/game/mini/games/game-def';
 import { readBasketPayload } from '../src/modules/game/mini/games/basket';
@@ -41,7 +41,7 @@ import { QUIZZES, type SeedQuiz } from './seed-game-quiz';
 
 export const GAME_MINI_DATA_DIR = join(__dirname, 'reference-data', 'game-mini');
 
-export const GAME_MINI_FILES: Record<MiniGameId, string> = {
+export const GAME_MINI_FILES: Record<MiniContentGameId, string> = {
   sort: 'sort.json',
   daily_quiz: 'daily-quiz.json',
   match: 'match.json',
@@ -53,7 +53,7 @@ export const GAME_MINI_FILES: Record<MiniGameId, string> = {
 export const GAME_MATCHER_FILE = 'matcher.json';
 const MATCHER_ID_PREFIX = 'gm-matcher-';
 
-const ID_PREFIX: Record<MiniGameId, string> = {
+const ID_PREFIX: Record<MiniContentGameId, string> = {
   sort: 'gm-sort-',
   daily_quiz: 'gm-quiz-',
   match: 'gm-match-',
@@ -110,7 +110,7 @@ export interface ProductSnapshotEntry {
 }
 
 export interface GameMiniPack {
-  games: Record<MiniGameId, GameMiniItem[]>;
+  games: Record<MiniContentGameId, GameMiniItem[]>;
   /** Chọn Chuẩn Xanh: câu nhu cầu, câu đố xen giữa, bộ sản phẩm (`matcher.json`). */
   matcher: GameMatcherItem[];
   legacy: LegacyQuizSource[];
@@ -124,8 +124,8 @@ function readJson<T>(dir: string, file: string): T {
 }
 
 export function loadGameMiniPack(dir: string = GAME_MINI_DATA_DIR): GameMiniPack {
-  const games = {} as Record<MiniGameId, GameMiniItem[]>;
-  for (const game of MINI_GAME_IDS) {
+  const games = {} as Record<MiniContentGameId, GameMiniItem[]>;
+  for (const game of MINI_CONTENT_GAME_IDS) {
     const file = readJson<{ game: string; items: GameMiniItem[] }>(dir, GAME_MINI_FILES[game]);
     if (file.game !== game) throw new Error(`${GAME_MINI_FILES[game]}: trường "game" là "${file.game}", phải là "${game}"`);
     games[game] = file.items;
@@ -316,7 +316,7 @@ export function validateGameMiniPack(pack: GameMiniPack, quizzes: readonly SeedQ
     if (!isValidDay(s.checkedAt)) errors.push(`sources.json ${s.code}: checkedAt phải là YYYY-MM-DD`);
   }
 
-  for (const game of MINI_GAME_IDS) {
+  for (const game of MINI_CONTENT_GAME_IDS) {
     const def = MINI_GAMES[game];
     for (const item of pack.games[game]) {
       const at = `${GAME_MINI_FILES[game]} ${item.id ?? '(thiếu id)'}`;
@@ -492,9 +492,9 @@ function validateMatcherItems(
 }
 
 /** Số mục bật của từng game và game nào chưa đủ `MINI_MIN_ACTIVE_ITEMS` (sẽ tự ẩn). */
-export function activeCounts(pack: GameMiniPack): Record<MiniGameId, { total: number; active: number; belowMinimum: boolean }> {
-  const out = {} as Record<MiniGameId, { total: number; active: number; belowMinimum: boolean }>;
-  for (const game of MINI_GAME_IDS) {
+export function activeCounts(pack: GameMiniPack): Record<MiniContentGameId, { total: number; active: number; belowMinimum: boolean }> {
+  const out = {} as Record<MiniContentGameId, { total: number; active: number; belowMinimum: boolean }>;
+  for (const game of MINI_CONTENT_GAME_IDS) {
     const items = pack.games[game];
     const legacy = game === 'daily_quiz' ? pack.legacy.length : 0;
     const active = items.filter((i) => i.active).length + legacy;
@@ -504,7 +504,7 @@ export function activeCounts(pack: GameMiniPack): Record<MiniGameId, { total: nu
 }
 
 export interface GameMiniSeedResult {
-  game: MiniGameId;
+  game: MiniContentGameId;
   total: number;
   created: number;
   updated: number;
@@ -525,7 +525,7 @@ export interface LegacySeedResult {
   changed: string[];
 }
 
-function contentData(game: MiniGameId, item: GameMiniItem) {
+function contentData(game: MiniContentGameId, item: GameMiniItem) {
   return {
     game,
     kind: MINI_CONTENT_KIND[game],
@@ -559,7 +559,7 @@ export async function seedGameMini(
   if (errors.length > 0) throw new Error(`seed-game-mini: gói nội dung có ${errors.length} lỗi, không ghi gì:\n- ${errors.join('\n- ')}`);
 
   const games: GameMiniSeedResult[] = [];
-  for (const game of MINI_GAME_IDS) {
+  for (const game of MINI_CONTENT_GAME_IDS) {
     const items = pack.games[game];
     const { count: created } = await prisma.gameContentItem.createMany({
       data: items.map((item) => ({ id: item.id, ...contentData(game, item), active: item.active })),

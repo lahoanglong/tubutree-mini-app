@@ -49,7 +49,7 @@ for (const viewport of [
       expect(api.calls.some((c) => c.method === 'GET' && c.path === '/game/mini/today')).toBe(true);
     });
 
-    test('cờ bật: một thẻ Chơi hôm nay thay sảnh arcade và khối đố vui, dòng gọn ghi lượt thưởng còn lại', async ({ page, api }) => {
+    test('cờ bật: một thẻ Chơi hôm nay thay sảnh arcade và khối đố vui, lưới 2 cột thẻ gọn ghi lượt thưởng còn lại', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       await page.goto('/game');
@@ -60,8 +60,11 @@ for (const viewport of [
       await expect(page.locator('#game-quiz')).toHaveCount(0);
       await expect(page.getByTestId('mini-play-status-daily_quiz')).toHaveText(gameCopy('row.left', { n: 1 }));
       await expect(page.getByTestId('mini-play-status-sort')).toHaveText(gameCopy('row.left', { n: 2 }));
-      const rowH = await page.getByTestId('mini-play-row-sort').evaluate((el) => el.getBoundingClientRect().height);
-      expect(rowH, 'dòng gọn: ít nhất 6 dòng trên màn 640px').toBeLessThanOrEqual(640 / 6);
+      const box = (id: string) => page.getByTestId(`mini-play-row-${id}`).evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+      const [quizBox, sortBox] = [await box('daily_quiz'), await box('sort')];
+      expect(sortBox.top, 'hai thẻ một hàng').toBeCloseTo(quizBox.top, 0);
+      expect(sortBox.left).toBeGreaterThan(quizBox.right);
+      expect(sortBox.height, 'thẻ gọn: ba hàng thẻ vừa màn 640px').toBeLessThanOrEqual(160);
       await expectTargets44(card);
       await expectNoHorizontalOverflow(page);
     });

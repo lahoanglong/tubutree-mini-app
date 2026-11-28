@@ -387,9 +387,18 @@ describe('Đoán Xuất Xứ: đồng hồ lượt và bản đồ', () => {
 });
 
 describe('Chữ đợt B', () => {
-  it('đủ 6 game có tên, thứ tự cố định', () => {
-    expect(PLAYABLE_MINI_GAMES).toEqual(['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap']);
-    expect(PLAYABLE_MINI_GAMES.map(miniGameTitle)).toEqual(['Đố Xanh Mỗi Ngày', 'Đúng Thùng', 'Ghép Cặp', 'Đoán Xuất Xứ', 'Giỏ Đúng Việc', 'Căn Bếp Xanh']);
+  it('đủ 8 game có tên, thứ tự cố định (Đố Xanh trước, hai game mới ngay sau)', () => {
+    expect(PLAYABLE_MINI_GAMES).toEqual(['daily_quiz', 'eco_merge', 'green_conveyor', 'sort', 'match', 'origin', 'basket', 'kitchen_swap']);
+    expect(PLAYABLE_MINI_GAMES.map(miniGameTitle)).toEqual([
+      'Đố Xanh Mỗi Ngày',
+      'Ghép Mầm Xanh',
+      'Băng Chuyền Xanh',
+      'Đúng Thùng',
+      'Ghép Cặp',
+      'Đoán Xuất Xứ',
+      'Giỏ Đúng Việc',
+      'Căn Bếp Xanh',
+    ]);
   });
 
   it('thanh tiến độ theo từng game', () => {

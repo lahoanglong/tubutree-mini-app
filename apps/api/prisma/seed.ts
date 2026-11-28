@@ -254,6 +254,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.mini.origin.enabled', value: false, category: 'game', description: 'Bật game Đoán Xuất Xứ; cần thêm game.mini.enabled.', createOnly: true },
   { key: 'game.mini.basket.enabled', value: false, category: 'game', description: 'Bật game Giỏ Đúng Việc; cần thêm game.mini.enabled.', createOnly: true },
   { key: 'game.mini.kitchen_swap.enabled', value: false, category: 'game', description: 'Bật game Căn Bếp Xanh (đổi đồ ở 3 góc nhà sang sản phẩm Tubu trong 45 giây, chỉ trên web); cần thêm game.mini.enabled và ít nhất 10 món đã bật trong admin, trải trên ít nhất 3 góc nhà có đủ sản phẩm còn hàng.', createOnly: true },
+  { key: 'game.mini.eco_merge.enabled', value: true, category: 'game', description: 'Bật game Ghép Mầm Xanh (ghép ô cây 4×4 tới Rừng Tubu trong 3 phút); cần thêm game.mini.enabled. Không cần mục nội dung.', createOnly: true },
+  { key: 'game.mini.green_conveyor.enabled', value: true, category: 'game', description: 'Bật game Băng Chuyền Xanh (phân 24 món vào Tái chế, Hữu cơ, Refill trong 30 giây); cần thêm game.mini.enabled. Không cần mục nội dung.', createOnly: true },
   { key: 'game.mini.rounds_per_game_per_day', value: 2, category: 'game', description: 'Số ván có thưởng mỗi game mỗi ngày (Đố Xanh tối đa 1 vì cùng bộ câu cả ngày); chơi tiếp vẫn được, không thưởng. 0–10.', createOnly: true },
   { key: 'game.mini.water_daily_cap', value: 40, category: 'game', description: 'Tổng 💧 từ 5 game mini mỗi tài khoản mỗi ngày. 0–200.', createOnly: true },
   { key: 'game.mini.points_daily_cap', value: 100, category: 'game', description: 'Tổng Điểm Xanh từ 5 game mini mỗi tài khoản mỗi ngày (1 điểm = 1đ). 0–500.', createOnly: true },
