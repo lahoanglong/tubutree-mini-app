@@ -71,7 +71,7 @@ function sameSite(): SameSite {
  * `Secure` bắt buộc khi `SameSite=None` (trình duyệt vứt cookie nếu thiếu) và khi chạy prod.
  * Dev http://localhost thì để false, nếu không cookie không bao giờ được lưu.
  */
-function cookieBase(): {
+export function cookieBase(): {
   httpOnly: boolean;
   secure: boolean;
   sameSite: SameSite;
@@ -96,4 +96,14 @@ export function setRefreshCookies(res: Response, token: string, ttlDays: number)
 
 export function clearRefreshCookies(res: Response): void {
   res.clearCookie(REFRESH_COOKIE, cookieBase());
+}
+
+/**
+ * Web (`x-client: web`) nhận refresh token qua cookie HttpOnly, thân response để trống; Mini App nhận trong thân như cũ.
+ * Mọi route đăng nhập dùng chung để không đường nào lỡ trả refresh token cho JS của web.
+ */
+export function deliverRefreshToken<T extends { refreshToken: string }>(req: Request, res: Response, result: T, ttlDays: number): T {
+  if (!wantsCookieAuth(req)) return result;
+  setRefreshCookies(res, result.refreshToken, ttlDays);
+  return { ...result, refreshToken: '' };
 }

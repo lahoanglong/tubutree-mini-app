@@ -28,6 +28,12 @@ export function loginHref(returnTo?: string | null): string {
   return safe ? `/dang-nhap?returnTo=${encodeURIComponent(safe)}` : '/dang-nhap';
 }
 
+/** Trang đăng nhập kèm lời báo Zalo đang chờ duyệt (Zalo trả -14029), vẫn giữ nơi cần quay lại. */
+export function zaloUnavailableLoginHref(returnTo?: string | null): string {
+  const href = loginHref(returnTo);
+  return `${href}${href.includes('?') ? '&' : '?'}zalo_unavailable=1`;
+}
+
 function store(): Storage | null {
   try {
     return typeof window === 'undefined' ? null : window.sessionStorage;

@@ -1,4 +1,4 @@
-import { parseEmailRecipients, resolveOpsEmailConfig } from './ops-email-config';
+import { parseEmailRecipients, resolveOpsEmailConfig, resolveSmtpSenderConfig } from './ops-email-config';
 
 const FULL = {
   OPS_ALERT_EMAIL_TO: 'ops@tubutree.com',
@@ -136,5 +136,37 @@ describe('resolveOpsEmailConfig', () => {
     expect(text).toContain('SMTP_HOST');
     expect(text).toContain('SMTP_PORT');
     expect(text).not.toContain(FULL.SMTP_PASS);
+  });
+});
+
+describe('resolveSmtpSenderConfig — thư mã đăng nhập chỉ cần SMTP, không cần người nhận báo động', () => {
+  it('đủ SMTP, thiếu OPS_ALERT_EMAIL_TO → ready (ops thì misconfigured)', () => {
+    const { OPS_ALERT_EMAIL_TO: _drop, ...smtpOnly } = FULL;
+    expect(resolveOpsEmailConfig(smtpOnly).state).toBe('misconfigured');
+    const r = resolveSmtpSenderConfig(smtpOnly);
+    expect(r).toEqual({
+      state: 'ready',
+      from: { name: 'Tubu Tree', address: 'alerts@tubutree.com' },
+      smtp: { host: 'smtp.example.test', port: 587, secure: false, requireTLS: true, auth: { user: 'mailer', pass: 'p@ss-word' } },
+    });
+  });
+
+  it('cùng máy chủ/người gửi với kênh báo động khi cả hai đủ', () => {
+    const ops = resolveOpsEmailConfig(FULL);
+    const sender = resolveSmtpSenderConfig(FULL);
+    expect(ops.state === 'ready' && sender.state === 'ready' && ops.smtp).toEqual(sender.state === 'ready' && sender.smtp);
+  });
+
+  it('chỉ đặt OPS_ALERT_EMAIL_TO (không SMTP) → disabled; SMTP hỏng → misconfigured kèm khoá lỗi', () => {
+    expect(resolveSmtpSenderConfig({ OPS_ALERT_EMAIL_TO: 'ops@tubutree.com' }).state).toBe('disabled');
+    expect(resolveSmtpSenderConfig({}).state).toBe('disabled');
+    const bad = resolveSmtpSenderConfig({ SMTP_HOST: 'smtp://bad', SMTP_USER: 'u' });
+    expect(bad.state).toBe('misconfigured');
+    expect(bad.state === 'misconfigured' && bad.issues.map((i) => i.key).sort()).toEqual(['SMTP_FROM', 'SMTP_HOST', 'SMTP_PASS']);
+  });
+
+  it('Gmail kiểu PROD (SMTP_USER là email, không SMTP_FROM) → gửi từ chính SMTP_USER', () => {
+    const r = resolveSmtpSenderConfig({ SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'shop@gmail.com', SMTP_PASS: 'app-password' });
+    expect(r.state === 'ready' && r.from).toEqual({ address: 'shop@gmail.com' });
   });
 });

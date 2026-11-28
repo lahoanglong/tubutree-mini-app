@@ -1,7 +1,7 @@
 import { Logger, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import axios from 'axios';
-import { ZaloService } from './zalo.service';
+import { isZaloNotApproved, ZaloService } from './zalo.service';
 
 jest.mock('axios');
 
@@ -204,5 +204,31 @@ describe('ZaloService.getUserInfo — appsecret_proof', () => {
       expect(axios.get).toHaveBeenCalledTimes(1);
       expect(errorLog.mock.calls.map((c) => String(c[0])).join()).not.toContain('appsecret_proof');
     });
+  });
+});
+
+describe('ZaloService — -14029 ứng dụng chưa được duyệt: web chuyển khách sang đăng nhập Email', () => {
+  const make = () => new ZaloService({ get: jest.fn((k: string) => (k === 'ZALO_APP_ID' ? 'app' : 'secret')) } as never);
+  const codeOf = (e: unknown) => ((e as { getResponse?: () => { code?: string } }).getResponse?.() ?? {}).code;
+
+  it('Zalo trả error -14029 trong thân → 503 mã ZALO_APP_NOT_APPROVED kèm câu mời đăng nhập Email', async () => {
+    (axios.post as jest.Mock).mockResolvedValue({ data: { error: -14029, error_description: 'The application is not approved' } });
+    const err = await make().exchangeOAuthCode('code', 'verifier').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect(codeOf(err)).toBe('ZALO_APP_NOT_APPROVED');
+    expect((err as Error).message).toBe('Đăng nhập Zalo đang chờ duyệt — bạn đăng nhập nhanh bằng Email bên dưới nhé.');
+  });
+
+  it('Zalo trả HTTP lỗi kèm "application is not approved" → cùng mã', async () => {
+    (axios.post as jest.Mock).mockRejectedValue(Object.assign(new Error('Request failed with status code 400'), { response: { status: 400, data: { error_description: 'The application is not approved' } } }));
+    expect(codeOf(await make().exchangeOAuthCode('code', 'verifier').catch((e: unknown) => e))).toBe('ZALO_APP_NOT_APPROVED');
+  });
+
+  it('isZaloNotApproved chỉ nhận đúng -14029 hoặc câu "not approved"', () => {
+    expect(isZaloNotApproved(-14029, undefined)).toBe(true);
+    expect(isZaloNotApproved('-14029', undefined)).toBe(true);
+    expect(isZaloNotApproved(undefined, 'The Application is NOT approved')).toBe(true);
+    expect(isZaloNotApproved(-14003, 'invalid code')).toBe(false);
+    expect(isZaloNotApproved(undefined, undefined)).toBe(false);
   });
 });

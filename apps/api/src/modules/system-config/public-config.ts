@@ -24,6 +24,7 @@ import { REFILL_FIRST_ENABLED_KEY } from '../catalog/refill/refill-pairs';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 import { REFERRAL_VIRAL_ENABLED_KEY } from '../referral/viral-config';
 import { MOBILE_MINIAPP_REDIRECT_KEY } from './mobile-miniapp-redirect';
+import { emailLoginConfigured, googleLoginConfigured } from '../auth/web-login/web-login-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 /** Cờ Giờ Xanh Ưu Đãi (tubu-w3-06): chỉ đổi cách vẽ khối Giờ vàng ở Trang chủ và Ưu đãi, giá và suất vẫn của Giờ vàng. */
@@ -302,6 +303,10 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     referralViralEnabled: referralViral === true,
     // Web điện thoại tự mở Zalo Mini App 1 lần mỗi 24 giờ (có lối ở lại web); chỉ boolean true mới bật, API cũ không trả thì web không tự mở.
     mobileMiniappRedirectEnabled: mobileMiniappRedirect === true,
+    // Trang /dang-nhap: form mã 6 số qua email khi SMTP gửi được thư; nút Google chỉ khi có đủ GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET.
+    // Chỉ boolean, không lộ khoá nào. API cũ không trả thì web coi như tắt.
+    emailLoginConfigured: emailLoginConfigured(),
+    googleLoginConfigured: googleLoginConfigured(),
   };
 }
 

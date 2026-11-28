@@ -8,7 +8,13 @@ export function LoginSkeleton() {
       <Skeleton width={120} height={28} style={{ marginTop: 20 }} />
       <Skeleton width="85%" height={16} style={{ marginTop: 12 }} />
       <Skeleton width="65%" height={16} style={{ marginTop: 8 }} />
-      <Skeleton height={44} rounded="rounded-control" style={{ marginTop: 32 }} />
+      <div className="mt-8 flex w-full flex-col gap-3">
+        <Skeleton height={44} rounded="rounded-control" />
+        <Skeleton height={44} rounded="rounded-control" />
+      </div>
+      <div className="mt-10 w-full">
+        <Skeleton height={44} rounded="rounded-control" />
+      </div>
     </main>
   );
 }

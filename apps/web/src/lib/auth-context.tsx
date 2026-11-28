@@ -11,6 +11,7 @@ import {
   clearSessionMarker,
   restoreSession,
   writeWebCookie,
+  apiPageUrl,
 } from './client-api';
 import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 import { clearSavedInvoices } from './saved-invoice';
@@ -71,6 +72,12 @@ interface AuthState {
   zaloLoginConfigured: boolean;
   startZaloLogin: () => Promise<void>;
   handleCallback: (code: string, state: string | null) => Promise<void>;
+  /** Đổi mã 6 số gửi qua email lấy phiên đăng nhập: cùng token và cookie như đăng nhập Zalo. */
+  loginWithEmailOtp: (email: string, code: string) => Promise<void>;
+  /** Rời sang trang chọn tài khoản Google; API giữ state + PKCE trong cookie HttpOnly của lượt này. */
+  startGoogleLogin: () => void;
+  /** Trang /dang-nhap/google đổi `code` + `state` Google gửi về lấy phiên đăng nhập. */
+  completeGoogleLogin: (code: string, state: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Cập nhật phần hồ sơ đã lưu thành công (vd đổi tên) để thanh đầu trang đổi theo ngay, không chờ đăng nhập lại. */
   updateProfile: (patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => void;
@@ -192,20 +199,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = url;
   }, []);
 
-  const handleCallback = useCallback(async (code: string, state: string | null) => {
+  // Mọi cách đăng nhập (Zalo, Email, Google) kết thúc giống nhau: API trả cùng cặp token, refresh đi bằng cookie HttpOnly.
+  const exchangeForSession = useCallback(async (path: string, body: Record<string, unknown>) => {
     setStatus('loading');
-    const expectedState = sessionStorage.getItem(STATE_KEY);
-    sessionStorage.removeItem(STATE_KEY);
-    if (!expectedState || state !== expectedState) {
-      setStatus('idle');
-      throw new Error('Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Đăng nhập lại để tiếp tục.');
-    }
     try {
-      const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;
-      const res = await apiFetch<LoginResponse>('/auth/zalo-oauth', {
+      const res = await apiFetch<LoginResponse>(path, {
         method: 'POST',
         // Nguồn chạm đầu (cookie 30 ngày): API chỉ ghi khi đây là lần tạo tài khoản, không bao giờ ghi đè.
-        body: { code, codeVerifier, firstTouch: readFirstTouchCookie() },
+        body: { ...body, firstTouch: readFirstTouchCookie() },
         auth: false,
       });
       setAccessToken(res.accessToken);
@@ -225,10 +226,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // hiện loading vô hạn thay vì màn hình "cần đăng nhập".
       setStatus('idle');
       throw e;
+    }
+  }, [qc]);
+
+  const handleCallback = useCallback(async (code: string, state: string | null) => {
+    const expectedState = sessionStorage.getItem(STATE_KEY);
+    sessionStorage.removeItem(STATE_KEY);
+    if (!expectedState || state !== expectedState) {
+      setStatus('idle');
+      throw new Error('Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Đăng nhập lại để tiếp tục.');
+    }
+    try {
+      const codeVerifier = sessionStorage.getItem(PKCE_KEY) ?? undefined;
+      await exchangeForSession('/auth/zalo-oauth', { code, codeVerifier });
     } finally {
       sessionStorage.removeItem(PKCE_KEY);
     }
-  }, [qc]);
+  }, [exchangeForSession]);
+
+  const loginWithEmailOtp = useCallback(
+    (email: string, code: string) => exchangeForSession('/auth/email-otp/verify', { email, code }),
+    [exchangeForSession],
+  );
+
+  const startGoogleLogin = useCallback(() => {
+    const redirectUri = `${window.location.origin}/dang-nhap/google`;
+    window.location.href = apiPageUrl(`/auth/google/start?redirect_uri=${encodeURIComponent(redirectUri)}`);
+  }, []);
+
+  const completeGoogleLogin = useCallback(
+    (code: string, state: string) => exchangeForSession('/auth/google/callback', { code, state }),
+    [exchangeForSession],
+  );
 
   const logout = useCallback(async () => {
     // Gọi kể cả khi không thấy cờ: cookie thật có thể còn sống (cờ bị xoá nhầm/hết hạn lệch),
@@ -264,6 +293,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         zaloLoginConfigured: !!ZALO_APP_ID,
         startZaloLogin,
         handleCallback,
+        loginWithEmailOtp,
+        startGoogleLogin,
+        completeGoogleLogin,
         logout,
         updateProfile,
       }}
