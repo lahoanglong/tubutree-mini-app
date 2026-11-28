@@ -111,7 +111,7 @@ function LoginInner() {
         <Image src={tubuLogo2x} alt="Tubu Tree" width={160} height={58} loading="eager" fetchPriority="high" className="h-[58px] w-[160px] object-contain" />
       </picture>
       <h1 className="mt-5 font-display text-2xl font-semibold text-forest-800">Đăng nhập</h1>
-      <p className="mt-2 text-stone-700">Đăng nhập để mua sắm, tích Điểm Xanh và theo dõi đơn hàng.</p>
+      <p className="mt-2 text-stone-700">Mua sắm, tích Điểm Xanh và theo dõi đơn hàng.</p>
       {benefit && (
         <p data-testid="login-benefit" className="mt-3 rounded-control bg-forest-50 px-3 py-2 text-sm font-medium text-forest-800">
           {benefit}

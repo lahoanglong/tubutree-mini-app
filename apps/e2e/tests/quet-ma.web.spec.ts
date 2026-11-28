@@ -115,7 +115,7 @@ test.describe('Web /quet-ma: tích điểm đơn sàn trên web (W44)', () => {
     });
   }
 
-  test('375px tài khoản chưa có SĐT (W45): nhập số ngay trên màn quét, lưu xong hiện khung quét kèm ghi chú CSKH đối chiếu', async ({ page, api }) => {
+  test('375px tài khoản chưa có SĐT (W45): nhập số ngay trên màn quét, lưu xong hiện khung quét, không còn ghi chú chờ CSKH đối chiếu (W59)', async ({ page, api }) => {
     await loggedIn(page, api, null);
     mockExternalPoints(api);
     quietShell(api);
@@ -131,7 +131,7 @@ test.describe('Web /quet-ma: tích điểm đơn sàn trên web (W44)', () => {
     await prompt.getByLabel('Số điện thoại đặt hàng').fill('0912 345 678');
     await prompt.getByRole('button', { name: 'Lưu số và tích điểm' }).click();
     await expect(page.getByTestId('claim-scanner')).toBeVisible();
-    await expect(page.getByTestId('claim-unverified-note')).toContainText('CSKH đối chiếu');
+    await expect(page.getByTestId('claim-unverified-note')).toHaveCount(0);
     expect(api.callsTo('PATCH', '/me/contact-phone').map((c) => c.body)).toEqual([{ phone: '0912345678' }]);
     await shot(page, 'web375-quet-ma-phone-saved');
   });
@@ -195,7 +195,7 @@ test.describe('Web /quet-ma trên iPhone: Safari, Zalo, Facebook không có Barc
     const picker = page.getByTestId('claim-photo-input');
     await expect(picker).toHaveAttribute('accept', 'image/*');
     await expect(picker).toHaveAttribute('capture', 'environment');
-    await expect(page.getByTestId('claim-unverified-note')).toBeVisible();
+    await expect(page.getByTestId('claim-unverified-note')).toHaveCount(0);
     await noHorizontalScroll(page);
     await shot(page, 'web375-quet-ma-ios');
 
@@ -284,7 +284,9 @@ test.describe('Web /quet-ma: xác nhận 4 số cuối SĐT người nhận (W46
     const field = dialog.getByLabel('Nhập 4 số cuối SĐT nhận hàng trên đơn Lazada');
     await field.fill('9921');
     await dialog.getByRole('button', { name: 'Xác nhận & Tích điểm' }).click();
-    await expect(dialog.getByRole('alert')).toHaveText('4 số cuối chưa khớp (còn 2 lượt thử)');
+    await expect(dialog.getByRole('alert')).toHaveText(
+      'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại (còn 2 lượt).',
+    );
     await expect(dialog.getByRole('link', { name: 'Nhắn CSKH Tubu' })).toHaveAttribute('href', /zalo\.me\//);
     await expect(field).toHaveValue('');
     await shot(page, 'web375-quet-ma-phone-wrong');
@@ -325,3 +327,92 @@ test.describe('Web /quet-ma: xác nhận 4 số cuối SĐT người nhận (W46
   });
 });
 
+
+test.describe('Web /quet-ma: sai 4 số cuối không tạo dòng "Đang kiểm tra", nhập lại từ lịch sử (W59)', () => {
+  const WRONG_MESSAGE = 'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại.';
+  const NEEDS_PHONE = { attemptId: 'att-1', channel: 'lazada', maskedCode: 'LZD***789', createdAt: '2026-11-28T10:00:00Z' };
+  const CLAIMED = {
+    status: 'CLAIMED' as const, claimId: 'c9', channel: 'lazada', maskedCode: 'LZD***789', points: 640,
+    expectedCreditAt: new Date(Date.now() + 7 * 864e5).toISOString(), message: 'ok',
+  };
+  const required = {
+    rejectCode: 'PHONE_CONFIRM_REQUIRED', status: 403, message: 'Cần xác nhận 4 số cuối SĐT người nhận trên đơn sàn để tích điểm đơn này.',
+    extra: { channel: 'lazada', requiredDigits: 4 },
+  };
+  const wrong = (remainingAttempts: number) => ({
+    rejectCode: 'PHONE_CONFIRM_WRONG', status: 403, message: WRONG_MESSAGE, extra: { channel: 'lazada', requiredDigits: 4, remainingAttempts },
+  });
+
+  for (const width of [360, 375, 1280] as const) {
+    test(`${width}px: nhập sai rồi đóng hộp, đơn nằm ở "Chờ bạn nhập 4 số cuối"; chạm dòng, sai lần nữa vẫn ở hộp, nhập đúng thì ghi nhận và tích điểm`, async ({ page, api }) => {
+      await loggedIn(page, api, '0901234567');
+      mockExternalPoints(api, { submit: [required, wrong(2)], retry: [wrong(1), CLAIMED] });
+      let claims = { data: [], meta: { page: 1, limit: 10, total: 0 }, searching: [] } as Record<string, unknown>;
+      api.get('/me/external-points/claims', () => claims);
+      quietShell(api);
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto('/quet-ma');
+      await page.getByTestId('claim-manual-toggle').click({ timeout: 20_000 });
+      await page.getByLabel('Hoặc nhập mã vận đơn').fill('LZDVN0123456789');
+      await page.getByRole('button', { name: 'Tích điểm', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Xác nhận SĐT nhận hàng' });
+      const field = dialog.getByLabel('Nhập 4 số cuối SĐT nhận hàng trên đơn Lazada');
+      await field.fill('9921');
+      await dialog.getByRole('button', { name: 'Xác nhận & Tích điểm' }).click();
+      await expect(dialog.getByRole('alert')).toHaveText(
+        'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại (còn 2 lượt).',
+      );
+      await shot(page, `web${width}-w59-quet-ma-wrong`);
+
+      // Máy chủ không tạo claim REVIEW: lịch sử chỉ có lượt quét chờ 4 số cuối.
+      claims = { ...claims, needsPhone: [NEEDS_PHONE] };
+      await dialog.getByRole('button', { name: 'Đóng' }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByTestId('claim-later')).toHaveText('Đơn này chưa tích điểm. Có phiếu giao thì chạm đơn ở lịch sử để nhập 4 số cuối.');
+      const row = page.getByTestId('claim-needs-phone-row');
+      await expect(row).toContainText('Lazada');
+      await expect(row).toContainText('Nhập 4 số cuối');
+      await expect(page.getByText('Đang kiểm tra')).toHaveCount(0);
+      await noHorizontalScroll(page);
+      await shot(page, `web${width}-w59-quet-ma-history-retry`);
+
+      await row.click();
+      await expect(dialog).toBeVisible();
+      await field.fill('1111');
+      await dialog.getByRole('button', { name: 'Xác nhận & Tích điểm' }).click();
+      await expect(dialog.getByRole('alert')).toHaveText(
+        'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại (còn 1 lượt).',
+      );
+      claims = {
+        data: [
+          {
+            id: 'c9', kind: 'SCAN', channel: 'lazada', maskedCode: 'LZD***789', state: 'PENDING', points: 640,
+            expectedCreditAt: CLAIMED.expectedCreditAt, creditedAt: null, holdUntil: null, createdAt: '2026-11-28T10:00:00Z',
+          },
+        ],
+        meta: { page: 1, limit: 10, total: 1 },
+        searching: [],
+      };
+      await field.fill('8326');
+      await dialog.getByRole('button', { name: 'Xác nhận & Tích điểm' }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByTestId('claim-retry-done')).toContainText('Đã ghi nhận đơn Lazada LZD***789');
+      await expect(page.getByTestId('claim-retry-done')).toContainText('640');
+      await expect(page.getByTestId('claim-needs-phone-row')).toHaveCount(0);
+      expect(api.callsTo('POST', '/me/external-points/claims/phone-retry').map((c) => c.body)).toEqual([
+        { attemptId: 'att-1', recipientPhoneLast4: '1111' },
+        { attemptId: 'att-1', recipientPhoneLast4: '8326' },
+      ]);
+      await noHorizontalScroll(page);
+      await shot(page, `web${width}-w59-quet-ma-retry-done`);
+
+      const footer = page.locator(width >= 768 ? 'footer:not([data-compact-footer])' : 'footer[data-compact-footer]');
+      await footer.scrollIntoViewIfNeeded();
+      await expect(footer).toBeVisible();
+      const box = await footer.boundingBox();
+      // Chân trang gọn (W59): điện thoại không quá ~một phần ba màn, máy tính không thành bức tường chữ.
+      expect(box!.height).toBeLessThanOrEqual(width >= 768 ? 460 : 300);
+      if (SHOTS) await footer.screenshot({ path: `${SHOTS}/web${width}-w59-footer.png` });
+    });
+  }
+});

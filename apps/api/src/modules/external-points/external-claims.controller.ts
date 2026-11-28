@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { MyExternalClaimsResponse, SubmitExternalClaimResponse } from '@tubutree/shared-types';
 import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
@@ -16,6 +16,13 @@ export class SubmitExternalClaimDto {
   @IsOptional() @IsString() @Matches(/^\d{4}$/, { message: 'Bạn nhập đúng 4 chữ số cuối của số điện thoại người nhận.' }) recipientPhoneLast4?: string;
 }
 
+/** W59: nhập lại 4 số cuối từ dòng lịch sử. Đúng một trong `claimId`/`attemptId`. */
+export class RetryExternalClaimPhoneDto {
+  @IsOptional() @IsString() @MaxLength(40) claimId?: string;
+  @IsOptional() @IsString() @MaxLength(40) attemptId?: string;
+  @IsString() @Matches(/^\d{4}$/, { message: 'Bạn nhập đúng 4 chữ số cuối của số điện thoại người nhận.' }) recipientPhoneLast4!: string;
+}
+
 export class MyClaimsQuery extends PaginationQuery {
   /** SCAN (mặc định) = đơn sàn khách nhập mã; PHONE = đơn chat/điện thoại tự cộng theo SĐT. */
   @IsOptional() @IsIn(['SCAN', 'PHONE']) kind?: 'SCAN' | 'PHONE';
@@ -30,6 +37,14 @@ export class ExternalClaimsController {
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   submit(@CurrentUser('sub') userId: string, @Body() dto: SubmitExternalClaimDto): Promise<SubmitExternalClaimResponse> {
     return this.claims.submit(userId, dto.code, dto.via, dto.recipientPhoneLast4);
+  }
+
+  /** W59: khách chạm dòng "Cần xác nhận SĐT" trong lịch sử và nhập 4 số cuối, không phải quét lại. Cùng trần gửi mã (10 lần/phút). */
+  @Post('claims/phone-retry')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  retryPhone(@CurrentUser('sub') userId: string, @Body() dto: RetryExternalClaimPhoneDto): Promise<SubmitExternalClaimResponse> {
+    if (!dto.claimId === !dto.attemptId) throw new BadRequestException('Cần đúng một dòng lịch sử để nhập lại 4 số cuối.');
+    return this.claims.retryPhone(userId, { claimId: dto.claimId, attemptId: dto.attemptId }, dto.recipientPhoneLast4);
   }
 
   @Get('claims')

@@ -8,6 +8,7 @@ import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 const mocks = vi.hoisted(() => ({
   getPublicConfig: vi.fn(),
   submitExternalClaim: vi.fn(),
+  retryExternalClaimPhone: vi.fn(),
   getMyExternalClaims: vi.fn(),
   scanCode: vi.fn(),
   navigate: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
 vi.mock('../services/external-points-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   submitExternalClaim: mocks.submitExternalClaim,
+  retryExternalClaimPhone: mocks.retryExternalClaimPhone,
   getMyExternalClaims: mocks.getMyExternalClaims,
 }));
 vi.mock('../services/zmp-bridge', () => ({
@@ -72,6 +74,7 @@ import ExternalPointsPage, { cardEntryOf, claimStateView } from './external-poin
 import { __resetEntrySourceForTest } from '../utils/entry-source';
 import { setCardGiftNote } from '../services/card-gift-note';
 import { formatDate } from '../utils/format';
+import { MARKETPLACE_CLAIM_COPY, PHONE_CONFIRM_COPY } from '@tubutree/app-core/marketplace-claim-copy';
 
 // Mốc tương lai tính từ giờ chạy test, để ca "mốc chưa qua" không tự hỏng khi đồng hồ đi qua một ngày cố định.
 const futureIso = () => new Date(Date.now() + 7 * 864e5).toISOString();
@@ -1132,7 +1135,7 @@ describe('Trang Tích điểm đơn sàn — W46: xác nhận 4 số cuối SĐT
     await typeAndSend();
     expect(await screen.findByTestId('phone-confirm-sheet')).toHaveTextContent('trên đơn Lazada');
     await confirmWith('9921');
-    expect(await screen.findByText('4 số cuối chưa khớp (còn 2 lượt thử)')).toBeTruthy();
+    expect(await screen.findByText('Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại (còn 2 lượt).')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Nhắn CSKH Tubu' }));
     expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('SPX***789'));
     await waitFor(() => expect(last4().value).toBe(''));
@@ -1181,3 +1184,134 @@ describe('Trang Tích điểm đơn sàn — W46: xác nhận 4 số cuối SĐT
   });
 });
 
+describe('Trang Tích điểm đơn sàn — W59: không claim REVIEW rác, nhập lại 4 số cuối từ lịch sử', () => {
+  const confirmRejection = (code: string, status: number, extra: Record<string, unknown> = {}) =>
+    Object.assign(new Error('x'), { isHttpError: true, response: { status, data: { code, message: 'máy chủ', requiredDigits: 4, ...extra } } });
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 'c7',
+    kind: 'SCAN',
+    channel: 'Shopee',
+    maskedCode: 'SPX***777',
+    state: 'REVIEW',
+    points: 900,
+    expectedCreditAt: null,
+    creditedAt: null,
+    holdUntil: null,
+    createdAt: '2026-11-27T00:00:00Z',
+    ...over,
+  });
+  const last4 = () => screen.getByTestId('phone-confirm-input') as HTMLInputElement;
+  const confirmWith = (digits: string) => {
+    fireEvent.change(last4(), { target: { value: digits } });
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận & Tích điểm' }));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.phase = 'authenticated';
+    mocks.search = '';
+    mocks.hasOA = true;
+    mocks.getOaPromptState.mockResolvedValue({ promptSeen: true, followed: false });
+    mocks.setOaPromptState.mockResolvedValue(undefined);
+    window.history.replaceState({}, '', '/points/scan');
+    __resetEntrySourceForTest();
+    setCardGiftNote(null);
+    mocks.user = { phone: '0901234567' };
+    mocks.getPublicConfig.mockResolvedValue({ loyalty: LOYALTY });
+    mocks.getMyExternalClaims.mockReset().mockResolvedValue(EMPTY_LIST);
+    mocks.retryExternalClaimPhone.mockReset();
+    mocks.locState = null;
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0, pointsConvertedBalance: 0, pointsMarketplaceBalance: 0, lockedPoints: 0 });
+  });
+
+  it('đóng hộp 4 số mà chưa khớp: báo mã chưa tích và nằm ở lịch sử, làm mới lịch sử', async () => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'shopee' }));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    await screen.findByTestId('phone-confirm-sheet');
+    const before = mocks.getMyExternalClaims.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(await screen.findByText(PHONE_CONFIRM_COPY.later)).toBeTruthy();
+    await waitFor(() => expect(mocks.getMyExternalClaims.mock.calls.length).toBeGreaterThan(before));
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+  });
+
+  it('sai đủ 3 lần (đơn khoá) rồi đóng hộp: báo câu khoá, không mời nhập lại từ lịch sử', async () => {
+    mocks.submitExternalClaim
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_REQUIRED', 403, { channel: 'shopee' }))
+      .mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_LOCKED', 429, { channel: 'shopee', remainingAttempts: 0 }));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    await screen.findByTestId('phone-confirm-sheet');
+    confirmWith('1111');
+    expect(await screen.findByText(PHONE_CONFIRM_COPY.locked, { selector: '[role="alert"]' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(await screen.findByText(PHONE_CONFIRM_COPY.locked, { selector: '[role="status"]' })).toBeTruthy();
+    expect(screen.queryByText(PHONE_CONFIRM_COPY.later)).toBeNull();
+  });
+
+  it('đúng 4 số từ lịch sử nhưng máy chủ đưa đơn vào kiểm tra (REVIEW): báo đang kiểm tra, không hiện điểm chờ cộng', async () => {
+    mocks.getMyExternalClaims.mockResolvedValue({ ...EMPTY_LIST, needsPhone: [{ attemptId: 'a1', channel: 'shopee', maskedCode: 'SPX***001', createdAt: '2026-11-28T01:00:00Z' }] });
+    mocks.retryExternalClaimPhone.mockResolvedValueOnce({ status: 'REVIEW', claimId: 'c9', channel: 'shopee', maskedCode: 'SPX***001', points: 9000, expectedCreditAt: null, message: 'ok' });
+    renderPage();
+    await screen.findByTestId('claim-needs-phone');
+    fireEvent.click(screen.getByTestId('claim-needs-phone-row').querySelector('[role="button"]')!);
+    await screen.findByTestId('phone-confirm-sheet');
+    confirmWith('5511');
+    const done = await screen.findByTestId('claim-retry-done');
+    expect(done).toHaveTextContent('Đã ghi nhận đơn Shopee SPX***001');
+    expect(done).toHaveTextContent(MARKETPLACE_CLAIM_COPY.resultReview);
+    expect(done).not.toHaveTextContent('Điểm Xanh đang chờ cộng');
+  });
+
+  it('dòng "Chờ bạn nhập 4 số cuối": chạm mở hộp (không có "Quét đơn khác"), đúng 4 số gửi attemptId và báo đã ghi nhận', async () => {
+    mocks.getMyExternalClaims.mockResolvedValue({ ...EMPTY_LIST, needsPhone: [{ attemptId: 'a1', channel: 'shopee', maskedCode: 'SPX***001', createdAt: '2026-11-28T01:00:00Z' }] });
+    mocks.retryExternalClaimPhone.mockResolvedValueOnce({ status: 'CLAIMED', claimId: 'c9', channel: 'shopee', maskedCode: 'SPX***001', points: 700, expectedCreditAt: null, message: 'ok' });
+    renderPage();
+    const group = await screen.findByTestId('claim-needs-phone');
+    expect(group).toHaveTextContent(PHONE_CONFIRM_COPY.retryTitle);
+    expect(group).toHaveTextContent('Nhập 4 số cuối');
+    fireEvent.click(screen.getByTestId('claim-needs-phone-row').querySelector('[role="button"]')!);
+    expect(await screen.findByTestId('phone-confirm-sheet')).toHaveTextContent('trên đơn Shopee');
+    expect(screen.queryByRole('button', { name: 'Quét đơn khác' })).toBeNull();
+    confirmWith('5511');
+    await waitFor(() => expect(mocks.retryExternalClaimPhone).toHaveBeenCalledWith({ attemptId: 'a1' }, '5511'));
+    const done = await screen.findByTestId('claim-retry-done');
+    expect(done).toHaveTextContent('Đã ghi nhận đơn Shopee SPX***001');
+    expect(done).toHaveTextContent('700 Điểm Xanh đang chờ cộng');
+    await waitFor(() => expect(screen.queryByTestId('phone-confirm-sheet')).toBeNull());
+  });
+
+  it('claim chờ chỉ vì SĐT: nhãn "Nhập 4 số cuối" thay "Đang kiểm tra", chạm gửi claimId; sai báo lời PO trong hộp', async () => {
+    mocks.getMyExternalClaims.mockResolvedValue({ ...EMPTY_LIST, data: [row({ phoneRetry: true }), row({ id: 'c8', maskedCode: 'SPX***888' })], meta: { page: 1, limit: 10, total: 2 } });
+    mocks.retryExternalClaimPhone.mockRejectedValueOnce(confirmRejection('PHONE_CONFIRM_WRONG', 403, { channel: 'shopee', remainingAttempts: 2 }));
+    renderPage();
+    const retryRow = await screen.findByTestId('claim-row-retry');
+    expect(retryRow).toHaveTextContent('Nhập 4 số cuối');
+    expect(retryRow).not.toHaveTextContent('Đang kiểm tra');
+    expect(screen.getAllByTestId('claim-row-retry')).toHaveLength(1);
+    fireEvent.click(retryRow.querySelector('[role="button"]')!);
+    await screen.findByTestId('phone-confirm-sheet');
+    confirmWith('0000');
+    await waitFor(() => expect(mocks.retryExternalClaimPhone).toHaveBeenCalledWith({ claimId: 'c7' }, '0000'));
+    expect(await screen.findByText(PHONE_CONFIRM_COPY.wrong(2))).toBeTruthy();
+  });
+
+  it('dòng không còn để nhập lại (409): đóng hộp, báo câu máy chủ', async () => {
+    mocks.getMyExternalClaims.mockResolvedValue({ ...EMPTY_LIST, data: [row({ phoneRetry: true })], meta: { page: 1, limit: 10, total: 1 } });
+    mocks.retryExternalClaimPhone.mockRejectedValueOnce(
+      new HttpError('Request failed with status code 409', 'ERR_BAD_REQUEST', {
+        status: 409,
+        data: { statusCode: 409, code: 'PHONE_RETRY_GONE', message: 'Đơn này không còn cần nhập 4 số cuối. Bạn xem trạng thái mới trong lịch sử nhé.' },
+      } as never),
+    );
+    renderPage();
+    fireEvent.click((await screen.findByTestId('claim-row-retry')).querySelector('[role="button"]')!);
+    await screen.findByTestId('phone-confirm-sheet');
+    confirmWith('5511');
+    expect(await screen.findByTestId('claim-retry-notice')).toHaveTextContent('không còn cần nhập 4 số cuối');
+    await waitFor(() => expect(screen.queryByTestId('phone-confirm-sheet')).toBeNull());
+  });
+});

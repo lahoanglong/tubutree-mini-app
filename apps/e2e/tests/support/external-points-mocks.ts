@@ -6,6 +6,7 @@ import { publicConfig, reply, type MockApi } from './mock-api';
  *   GET  /config/public                  loyalty.marketplaceClaimEnabled, earnPct, marketplaceEarnPct
  *   GET  /me/external-points/claims      external-claims.controller.ts (danh sách + searching)
  *   POST /me/external-points/claims      gửi mã; lỗi nghiệp vụ trả { statusCode, error, code, message }
+ *   POST /me/external-points/claims/phone-retry   W59: nhập 4 số cuối từ dòng lịch sử (`retry`), cùng dạng trả lời
  */
 export const EMPTY_CLAIMS: MyExternalClaimsResponse = { data: [], meta: { page: 1, limit: 10, total: 0 }, searching: [] };
 
@@ -22,7 +23,10 @@ type SubmitMock = SubmitExternalClaimResponse | ExternalClaimRejectMock;
  * `submit` là một câu trả lời cho mọi lần gửi, hoặc một dãy trả lần lượt (lần thứ n nhận phần tử n, hết dãy thì lặp phần tử cuối), để dựng
  * luồng nhiều bước như hỏi 4 số cuối SĐT rồi gửi lại.
  */
-export function mockExternalPoints(api: MockApi, opts: { enabled?: boolean; claims?: MyExternalClaimsResponse; submit?: SubmitMock | readonly SubmitMock[] } = {}) {
+export function mockExternalPoints(
+  api: MockApi,
+  opts: { enabled?: boolean; claims?: MyExternalClaimsResponse; submit?: SubmitMock | readonly SubmitMock[]; retry?: SubmitMock | readonly SubmitMock[] } = {},
+) {
   api.get(
     '/config/public',
     publicConfig({
@@ -38,14 +42,17 @@ export function mockExternalPoints(api: MockApi, opts: { enabled?: boolean; clai
   );
   api.post('/events', { accepted: 1 });
   api.get('/me/external-points/claims', opts.claims ?? EMPTY_CLAIMS);
-  const submit = opts.submit;
-  if (!submit) return;
-  const steps: readonly SubmitMock[] = Array.isArray(submit) ? submit : [submit as SubmitMock];
+  if (opts.submit) api.post('/me/external-points/claims', sequence(opts.submit));
+  if (opts.retry) api.post('/me/external-points/claims/phone-retry', sequence(opts.retry));
+}
+
+function sequence(mock: SubmitMock | readonly SubmitMock[]) {
+  const steps: readonly SubmitMock[] = Array.isArray(mock) ? mock : [mock as SubmitMock];
   let n = 0;
-  api.post('/me/external-points/claims', () => {
+  return () => {
     const step = steps[Math.min(n++, steps.length - 1)]!;
     return 'rejectCode' in step
       ? reply(step.status, { statusCode: step.status, error: step.rejectCode, code: step.rejectCode, message: step.message, ...step.extra })
       : step;
-  });
+  };
 }

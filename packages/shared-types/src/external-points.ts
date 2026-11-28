@@ -108,9 +108,22 @@ export interface MyExternalClaimItem {
   /** Chỉ claim PHONE ở HELD_NO_MEMBER: hạn giữ điểm; quá hạn mà chưa là thành viên thì mất (LAPSED). */
   holdUntil: string | null;
   createdAt: string;
+  /**
+   * W59: claim REVIEW chỉ vì SĐT (SĐT web chưa xác minh, SĐT lệch): khách chạm dòng, nhập 4 số cuối SĐT người nhận
+   * (`POST /me/external-points/claims/phone-retry` với `claimId`) là sang chờ cộng. Vắng ở API cũ.
+   */
+  phoneRetry?: true;
 }
 
 export interface MySearchingAttempt {
+  maskedCode: string;
+  createdAt: string;
+}
+
+/** W59: mã đã quét mà dừng ở bước 4 số cuối SĐT người nhận (chưa nhập, nhập sai), đơn chưa ai tích. Không phải claim, không vào hàng CSKH. */
+export interface MyPhoneRetryAttempt {
+  attemptId: string;
+  channel: string | null;
   maskedCode: string;
   createdAt: string;
 }
@@ -120,6 +133,15 @@ export interface MyExternalClaimsResponse {
   meta: { page: number; limit: number; total: number };
   /** Mã đã gửi mà chưa tìm thấy đơn (chỉ trang 1). */
   searching: MySearchingAttempt[];
+  /** W59: mã chờ khách nhập 4 số cuối (chỉ trang 1, tối đa 10, trong 7 ngày). Vắng ở API cũ. */
+  needsPhone?: MyPhoneRetryAttempt[];
+}
+
+/** W59: nhập lại 4 số cuối từ một dòng lịch sử: đúng một trong `claimId` (claim REVIEW có `phoneRetry`) hoặc `attemptId` (`needsPhone`). */
+export interface RetryExternalClaimPhoneRequest {
+  claimId?: string;
+  attemptId?: string;
+  recipientPhoneLast4: string;
 }
 
 /**

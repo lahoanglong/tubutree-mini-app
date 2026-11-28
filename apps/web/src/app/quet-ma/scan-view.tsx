@@ -30,8 +30,8 @@ import { CLAIM_HISTORY_PAGE_SIZE, ClaimHistory } from './claim-history';
  * - Khách chưa đăng nhập: hướng dẫn + "Đăng nhập để tích điểm" (quay lại đúng trang, giữ nguồn `utm_*`/`card` của mã QR bỏ hộp) và lối phụ mở
  *   màn quét trong Tubu Tree trên Zalo.
  * - Đã đăng nhập: khung quét camera trình duyệt ngay đầu thẻ (W46, mọi máy, iPhone đọc bằng bộ đọc JS), lối chụp/chọn ảnh và nhập mã thủ công,
- *   thẻ kết quả, nút mua sắm và lịch sử tích điểm đơn sàn. Đã có đơn sàn trong lịch sử thì hướng dẫn 3 bước gập thành một dòng. Tài khoản chưa có SĐT (W45): nhập số ngay tại đây rồi quét; SĐT chưa xác minh qua Zalo (`phoneVerified`
- *   false) thì nói trước đơn sẽ được CSKH đối chiếu (máy chủ đưa claim vào REVIEW thay vì từ chối 403).
+ *   thẻ kết quả, nút mua sắm và lịch sử tích điểm đơn sàn. Đã có đơn sàn trong lịch sử thì hướng dẫn 3 bước gập thành một dòng. Tài khoản chưa có
+ *   SĐT (W45): nhập số ngay tại đây rồi quét. SĐT khớp đơn (hoặc 4 số cuối đúng) thì chờ cộng ngay, kể cả số tự gõ chưa xác minh (W59).
  * Cờ `loyalty.marketplace_claim_enabled` tắt: chỉ báo "sắp mở", không hứa tỉ lệ tích. Cấu hình chưa về: chỉ tiêu đề.
  */
 const noSubscribe = () => () => undefined;
@@ -106,15 +106,9 @@ function AuthedScan({ search }: { search: string }) {
   if (meQ.isPending) return <Loading />;
   // Lỗi tải hồ sơ: vẫn cho gửi mã, máy chủ là nơi quyết điều kiện SĐT.
   const noPhone = meQ.isSuccess && !meQ.data?.phone;
-  // API cũ chưa gửi `phoneVerified` (vắng): không đoán, không hiện ghi chú.
-  const unverified = meQ.isSuccess && !!meQ.data?.phone && meQ.data.phoneVerified === false;
   return (
     <>
-      {noPhone ? (
-        <PhoneEntry verifyHref={verifyHref} />
-      ) : (
-        <ClaimForm initialCode={initialCode} codeParamRejected={codeParamRejected} verifyHref={verifyHref} unverified={unverified} />
-      )}
+      {noPhone ? <PhoneEntry verifyHref={verifyHref} /> : <ClaimForm initialCode={initialCode} codeParamRejected={codeParamRejected} verifyHref={verifyHref} />}
       <ClaimHistory />
     </>
   );

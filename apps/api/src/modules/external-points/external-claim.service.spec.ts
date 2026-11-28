@@ -41,6 +41,7 @@ function build(
     externalOrder: {
       findFirst: jest.fn(async () => (opts.order ? { id: 'x1' } : null)),
       findUniqueOrThrow: jest.fn(async () => opts.order),
+      findMany: jest.fn(async () => [] as unknown[]),
     },
     externalPointsClaim: {
       findUnique: jest.fn(async () => null as unknown),
@@ -49,6 +50,7 @@ function build(
       count: jest.fn(async () => 0),
       aggregate: jest.fn(async () => ({ _sum: { points: 0 } })),
       createManyAndReturn: jest.fn(async () => [{ id: 'c1' }]),
+      updateMany: jest.fn(async () => ({ count: 1 })),
     },
   };
   const prisma = { ...tx, $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)) };
@@ -312,14 +314,13 @@ describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa
   const created = (tx: { externalPointsClaim: { createManyAndReturn: jest.Mock } }) =>
     (tx.externalPointsClaim.createManyAndReturn.mock.calls[0]?.[0] as { data: Record<string, unknown>[] } | undefined)?.data[0];
 
-  it('SĐT trên đơn khớp SĐT liên hệ: claim vào REVIEW chờ CSKH, không còn 403; lý do ghi khớp bao nhiêu chữ số của đơn che số', async () => {
+  it('W59: SĐT trên đơn khớp SĐT liên hệ: claim PENDING ngay (không REVIEW chờ CSKH); mức khớp ghi vào sổ claim', async () => {
     const { svc, tx } = build({ config: flagOn, order: order(), user: webUser });
     const res = await svc.submit('u1', 'SPXVN0123456789');
-    expect(res).toMatchObject({ status: 'REVIEW', points: 10_000 });
-    expect(created(tx)).toMatchObject({
-      state: 'REVIEW',
-      reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu; SĐT tự nhập chỉ khớp 5/10 chữ số nhìn thấy trên đơn sàn',
-      userId: 'u1',
+    expect(res).toMatchObject({ status: 'CLAIMED', points: 10_000 });
+    expect(created(tx)).toMatchObject({ state: 'PENDING', reviewReason: null, userId: 'u1' });
+    expect(tx.externalClaimEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: 'CLAIM_CREATED', note: 'SĐT tự nhập chỉ khớp 5/10 chữ số nhìn thấy trên đơn sàn' }),
     });
   });
   it('đơn không có SĐT nhưng khách đã có đơn app giao thành công: REVIEW', async () => {
@@ -341,10 +342,11 @@ describe('ExternalClaimService.submit: SĐT liên hệ tự gõ trên Web, chưa
     expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('PHONE_CONFIRM_REQUIRED');
     expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_PHONE_CONFIRM_REQUIRED' }) });
   });
-  it('SĐT lệch + nhập đúng 4 số: claim vẫn REVIEW (SĐT chưa xác minh), lý do ghi đã xác nhận 4 số', async () => {
+  it('W59: SĐT lệch + nhập đúng 4 số: claim PENDING, sổ claim ghi đã xác nhận 4 số (lúc cộng đọc lại)', async () => {
     const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }), user: webUser });
-    expect(await svc.submit('u1', 'SPXVN0123456789', 'scan', '5511')).toMatchObject({ status: 'REVIEW' });
-    expect(created(tx)).toMatchObject({ state: 'REVIEW', reviewReason: `SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu; ${PHONE_CONFIRMED_NOTE}` });
+    expect(await svc.submit('u1', 'SPXVN0123456789', 'scan', '5511')).toMatchObject({ status: 'CLAIMED' });
+    expect(created(tx)).toMatchObject({ state: 'PENDING', reviewReason: null });
+    expect(tx.externalClaimEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: 'CLAIM_CREATED', note: PHONE_CONFIRMED_NOTE }) });
   });
   it('chưa thấy đơn: SEARCHING (ghi UNMATCHED để cron ghép lại)', async () => {
     const { svc, tx } = build({ config: flagOn, order: null, user: webUser });
@@ -475,5 +477,224 @@ describe('ExternalClaimService.submit: xác nhận 4 số cuối SĐT người n
     const cfg = { enabled: true, earnPct: 1, dailyAttempts: 10, dailyMax: 3, monthlyPointsCap: 200_000, maxAgeDays: 60, reviewAboveVnd: 2_000_000, pendingDays: 14, externalSince: null };
     expect(await (b.svc as unknown as { rematchOne: (id: string, c: unknown, now: Date) => Promise<string> }).rematchOne('a1', cfg, NOW)).toBe('RESOLVED');
     expect(b.tx.externalClaimAttempt.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ result: 'REJECTED_PHONE_MISMATCH' }) }));
+  });
+});
+
+describe('W59: quét đơn không tạo claim REVIEW rác khi SĐT nhận hàng chưa khớp (PO 28/11)', () => {
+  const webUser = { id: 'u1', phone: '0912345678', phoneVerifiedAt: null, zaloId: null, isBlocked: false, role: 'CUSTOMER' };
+  // Đơn mang SĐT người nhà: 098*****11 lệch cả số Zalo lẫn số web 0912345678 của khách; 4 số cuối đúng là "xx11" (đơn che chỉ còn đuôi 11).
+  const relativeOrder = () => order({ phoneMask: '098*****11', phoneLast3: '011' });
+  const messageOf = async (p: Promise<unknown>): Promise<string> => {
+    try {
+      await p;
+      return 'OK';
+    } catch (e) {
+      return ((e as HttpException).getResponse() as { message: string }).message;
+    }
+  };
+
+  it.each([
+    ['SĐT Zalo', undefined],
+    ['SĐT web chưa xác minh (kể cả đã có đơn app giao)', webUser],
+  ])('(a) %s: bỏ qua bước 4 số hoặc nhập sai không tạo claim nào, chỉ ghi lần thử', async (_label, user) => {
+    const skip = build({ config: flagOn, order: relativeOrder(), user, deliveredAppOrders: 2 });
+    expect(await codeOf(skip.svc.submit('u1', 'SPXVN0123456789'))).toBe('PHONE_CONFIRM_REQUIRED');
+    expect(skip.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+    expect(skip.attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.required }) });
+
+    const wrong = build({ config: flagOn, order: relativeOrder(), user, deliveredAppOrders: 2 });
+    expect(await codeOf(wrong.svc.submit('u1', 'SPXVN0123456789', 'scan', '0000'))).toBe('PHONE_CONFIRM_WRONG');
+    expect(wrong.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+    expect(wrong.attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: PHONE_CONFIRM_RESULTS.wrong, externalOrderId: 'x1' }) });
+  });
+  it('(a) câu báo sai 4 số theo đúng lời PO, không lộ chữ số nào của đơn', async () => {
+    const { svc } = build({ config: flagOn, order: relativeOrder() });
+    const msg = await messageOf(svc.submit('u1', 'SPXVN0123456789', 'scan', '0000'));
+    expect(msg).toBe('Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại.');
+    expect(msg).not.toMatch(/11|098/);
+  });
+  it('(a) mã vẫn để trống sau lần sai: quay lại nhập đúng 4 số thì tích được ngay (PENDING)', async () => {
+    const { svc, tx } = build({ config: flagOn, order: relativeOrder(), user: webUser });
+    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789', 'scan', '0000'))).toBe('PHONE_CONFIRM_WRONG');
+    expect(await svc.submit('u1', 'SPXVN0123456789', 'scan', '5511')).toMatchObject({ status: 'CLAIMED', claimId: 'c1' });
+    expect(tx.externalPointsClaim.createManyAndReturn).toHaveBeenCalledTimes(1);
+  });
+  it('(b) đúng SĐT: tích một lần; người thứ hai (kể cả nhập đúng 4 số) và lần tranh cùng lúc đều ALREADY_CLAIMED', async () => {
+    const first = build({ config: flagOn, order: order() });
+    expect((await first.svc.submit('u1', 'SPXVN0123456789')).status).toBe('CLAIMED');
+
+    const second = build({ config: flagOn, order: relativeOrder(), user: { ...webUser, id: 'u2' } });
+    second.tx.externalPointsClaim.findUnique.mockResolvedValue({ id: 'c1', state: 'PENDING', claimedCode: 'SPXVN0123456789', decidedById: null, userId: 'u1' });
+    expect(await codeOf(second.svc.submit('u2', 'SPXVN0123456789', 'scan', '5511'))).toBe('ALREADY_CLAIMED');
+    expect(second.tx.externalPointsClaim.createManyAndReturn).not.toHaveBeenCalled();
+
+    const race = build({ config: flagOn, order: order() });
+    race.tx.externalPointsClaim.createManyAndReturn.mockResolvedValue([]);
+    expect(await codeOf(race.svc.submit('u1', 'SPXVN0123456789'))).toBe('ALREADY_CLAIMED');
+  });
+  it('(d) đơn không có SĐT trên Pancake: vẫn vào REVIEW an toàn (khách Zalo; khách web đã có đơn app giao)', async () => {
+    const noPhone = () => order({ phone: null, phoneMask: null, phoneLast3: null });
+    const zalo = build({ config: flagOn, order: noPhone() });
+    expect((await zalo.svc.submit('u1', 'SPXVN0123456789')).status).toBe('REVIEW');
+    const web = build({ config: flagOn, order: noPhone(), user: webUser, deliveredAppOrders: 1 });
+    expect((await web.svc.submit('u1', 'SPXVN0123456789')).status).toBe('REVIEW');
+    expect(((web.tx.externalPointsClaim.createManyAndReturn as jest.Mock).mock.calls[0]?.[0] as { data: { state: string }[] }).data[0]).toMatchObject({ state: 'REVIEW' });
+  });
+});
+
+describe('W59: nhập lại 4 số cuối từ dòng lịch sử (retryPhone)', () => {
+  const reviewClaim = (over: Record<string, unknown> = {}) => ({
+    id: 'c9',
+    userId: 'u1',
+    kind: 'SCAN',
+    state: 'REVIEW',
+    reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu; SĐT tự nhập chỉ khớp 2/10 chữ số nhìn thấy trên đơn sàn',
+    decidedById: null,
+    points: 3_000,
+    externalOrderId: 'x1',
+    releaseAt: null,
+    claimedCode: 'SPXVN0123456789',
+    ...over,
+  });
+  const setup = (claim: Record<string, unknown> | null, opts: { order?: Record<string, unknown> } = {}) => {
+    const b = build({ config: flagOn, order: opts.order ?? order({ phoneMask: '098*****11', phoneLast3: '011' }) });
+    b.tx.externalPointsClaim.findUnique.mockResolvedValue({ externalOrderId: 'x1' });
+    (b.tx.$queryRaw as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce(claim ? [claim] : []);
+    return b;
+  };
+
+  it('(c) claim REVIEW chỉ vì SĐT + đúng 4 số: sang PENDING, ghi sổ PHONE_CONFIRMED (lúc cộng đọc lại), báo chờ cộng', async () => {
+    const { svc, tx, notifications } = setup(reviewClaim());
+    const res = await svc.retryPhone('u1', { claimId: 'c9' }, '5511');
+    expect(res).toMatchObject({ status: 'CLAIMED', claimId: 'c9', points: 3_000 });
+    expect(tx.externalPointsClaim.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c9', userId: 'u1', state: 'REVIEW', decidedById: null },
+      data: { state: 'PENDING', reviewReason: null },
+    });
+    expect(tx.externalClaimEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ claimId: 'c9', action: 'PHONE_CONFIRMED', fromState: 'REVIEW', toState: 'PENDING', userIdAfter: 'u1', note: PHONE_CONFIRMED_NOTE }),
+    });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'EXTERNAL_POINTS_PENDING', expect.anything(), { dedupeKey: 'ext-pending:c9' });
+  });
+  it('(c) sai 4 số: claim giữ nguyên, ghi một lần sai cho đơn (khoá 3 lần), 403 PHONE_CONFIRM_WRONG kèm lượt còn lại', async () => {
+    const { svc, tx, attemptCreate } = setup(reviewClaim());
+    let body: Record<string, unknown> = {};
+    try {
+      await svc.retryPhone('u1', { claimId: 'c9' }, '0000');
+    } catch (e) {
+      body = (e as HttpException).getResponse() as Record<string, unknown>;
+    }
+    expect(body).toMatchObject({ code: 'PHONE_CONFIRM_WRONG', remainingAttempts: 2, channel: 'shopee', requiredDigits: 4 });
+    expect(tx.externalPointsClaim.updateMany).not.toHaveBeenCalled();
+    expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', result: PHONE_CONFIRM_RESULTS.wrong, externalOrderId: 'x1' }) });
+  });
+  it.each([
+    ['claim của người khác', { userId: 'u2' }],
+    ['đã có người duyệt', { decidedById: 'staff1' }],
+    ['không còn REVIEW', { state: 'PENDING' }],
+    ['lý do khác SĐT (vượt ngưỡng)', { reviewReason: 'Giá trị đơn vượt ngưỡng tự duyệt' }],
+    ['đơn không có SĐT để so', { reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu; Đơn sàn không có thông tin SĐT để đối chiếu tự động' }],
+  ])('(c) %s: 409 PHONE_RETRY_GONE, không đổi claim, không ghi lần thử', async (_label, over) => {
+    const { svc, tx, attemptCreate } = setup(reviewClaim(over));
+    expect(await codeOf(svc.retryPhone('u1', { claimId: 'c9' }, '5511'))).toBe('PHONE_RETRY_GONE');
+    expect(tx.externalPointsClaim.updateMany).not.toHaveBeenCalled();
+    expect(attemptCreate).not.toHaveBeenCalled();
+  });
+  it('(c) lượt dừng ở bước 4 số (attemptId): chạy lại luồng gửi mã với mã đã lưu và 4 số khách nhập', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }) });
+    tx.externalClaimAttempt.findFirst.mockResolvedValue({ code: 'SPXVN0123456789' });
+    expect(await svc.retryPhone('u1', { attemptId: 'a1' }, '5511')).toMatchObject({ status: 'CLAIMED' });
+    expect(tx.externalClaimAttempt.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: 'a1', userId: 'u1', result: { in: [PHONE_CONFIRM_RESULTS.required, PHONE_CONFIRM_RESULTS.wrong, PHONE_CONFIRM_RESULTS.locked] } }) }),
+    );
+    expect(tx.externalPointsClaim.createManyAndReturn).toHaveBeenCalledTimes(1);
+  });
+  it('(c) attemptId: sự kiện gửi mã ghi via "history" để phễu tách khỏi lượt quét/gõ', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order({ phoneMask: '098*****11', phoneLast3: '011' }) });
+    tx.externalClaimAttempt.findFirst.mockResolvedValue({ code: 'SPXVN0123456789' });
+    const submit = jest.spyOn(svc, 'submit');
+    await svc.retryPhone('u1', { attemptId: 'a1' }, '5511');
+    expect(submit).toHaveBeenCalledWith('u1', 'SPXVN0123456789', 'history', '5511');
+  });
+  it('(c) attemptId lạ, của người khác hoặc quá 7 ngày: 409 PHONE_RETRY_GONE', async () => {
+    const { svc } = build({ config: flagOn });
+    expect(await codeOf(svc.retryPhone('u1', { attemptId: 'zz' }, '5511'))).toBe('PHONE_RETRY_GONE');
+  });
+});
+
+describe('W59: listMine trả dòng "cần nhập 4 số" cho lịch sử', () => {
+  it('claim REVIEW chỉ vì SĐT có phoneRetry; lượt dừng ở bước 4 số thành needsPhone (một dòng mỗi đơn, bỏ đơn đã có người tích)', async () => {
+    const { svc, tx } = build({ config: flagOn });
+    const now = new Date('2026-11-28T10:00:00Z');
+    const claimRow = (id: string, over: Record<string, unknown>) => ({
+      id,
+      kind: 'SCAN',
+      state: 'REVIEW',
+      points: 3_000,
+      decidedById: null,
+      reviewReason: 'SĐT đăng ký trên Web chưa xác thực Zalo — chờ CSKH đối chiếu',
+      creditedAt: null,
+      holdUntil: null,
+      createdAt: now,
+      externalOrder: { channel: 'shopee', trackingCode: 'SPXVN0123456789', status: 'OPEN', deliveredAt: null, phone: null, phoneMask: '******11' },
+      ...over,
+    });
+    (tx.externalPointsClaim.findMany as jest.Mock).mockImplementation(async (args: { where: { userId?: string } }) =>
+      args.where.userId
+        ? [claimRow('c1', {}), claimRow('c2', { reviewReason: 'Giá trị đơn vượt ngưỡng tự duyệt' }), claimRow('c3', { state: 'PENDING', reviewReason: null })]
+        : [{ externalOrderId: 'x2' }],
+    );
+    (tx.externalClaimAttempt.findMany as jest.Mock).mockImplementation(async (args: { where: { result: unknown } }) =>
+      args.where.result === 'UNMATCHED'
+        ? []
+        : [
+            { id: 'a3', code: 'SPXVN0000000003', externalOrderId: 'x1', createdAt: new Date('2026-11-28T09:00:00Z') },
+            { id: 'a2', code: 'SPXVN0000000002', externalOrderId: 'x2', createdAt: new Date('2026-11-28T08:00:00Z') },
+            { id: 'a1', code: 'SPXVN0000000003', externalOrderId: 'x1', createdAt: new Date('2026-11-28T07:00:00Z') },
+          ],
+    );
+    tx.externalOrder.findMany.mockResolvedValue([
+      { id: 'x1', channel: 'tiktok', status: 'OPEN' },
+      { id: 'x2', channel: 'shopee', status: 'OPEN' },
+    ]);
+    const res = await svc.listMine('u1', 1, 10, 'SCAN', now);
+    expect(res.data.map((d) => [d.id, d.phoneRetry ?? false])).toEqual([
+      ['c1', true],
+      ['c2', false],
+      ['c3', false],
+    ]);
+    expect(res.needsPhone).toEqual([{ attemptId: 'a3', channel: 'tiktok', maskedCode: expect.any(String), createdAt: '2026-11-28T09:00:00.000Z' }]);
+    expect(JSON.stringify(res)).not.toContain('******11');
+  });
+  it('lượt "cần 4 số" mà sau đó đã bị từ chối vĩnh viễn (quá hạn, mã đã có người tích ở dòng khác): không còn là dòng nhập lại', async () => {
+    const { svc, tx } = build({ config: flagOn });
+    const now = new Date('2026-11-28T10:00:00Z');
+    tx.externalPointsClaim.findMany.mockResolvedValue([]);
+    (tx.externalClaimAttempt.findMany as jest.Mock).mockImplementation(async (args: { where: { result: unknown } }) => {
+      const inList = (args.where.result as { in?: string[] } | undefined)?.in ?? [];
+      if (inList.includes('REJECTED_TOO_OLD')) {
+        return [
+          { externalOrderId: 'x1', createdAt: new Date('2026-11-28T09:30:00Z') },
+          { externalOrderId: 'x2', createdAt: new Date('2026-11-28T07:00:00Z') },
+        ];
+      }
+      if (inList.length === 0) return [];
+      return [
+        { id: 'a1', code: 'SPXVN0000000001', externalOrderId: 'x1', createdAt: new Date('2026-11-28T09:00:00Z') },
+        { id: 'a2', code: 'SPXVN0000000002', externalOrderId: 'x2', createdAt: new Date('2026-11-28T08:00:00Z') },
+      ];
+    });
+    tx.externalOrder.findMany.mockResolvedValue([
+      { id: 'x1', channel: 'tiktok', status: 'OPEN' },
+      { id: 'x2', channel: 'shopee', status: 'OPEN' },
+    ]);
+    const res = await svc.listMine('u1', 1, 10, 'SCAN', now);
+    expect(res.needsPhone?.map((n) => n.attemptId)).toEqual(['a2']);
+  });
+  it('trang 2 hay danh sách PHONE: không đọc needsPhone', async () => {
+    const { svc, tx } = build({ config: flagOn });
+    const res = await svc.listMine('u1', 2, 10, 'SCAN');
+    expect(res.needsPhone).toEqual([]);
+    expect(tx.externalClaimAttempt.findMany).not.toHaveBeenCalled();
   });
 });

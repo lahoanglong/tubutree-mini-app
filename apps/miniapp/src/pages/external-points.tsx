@@ -3,13 +3,15 @@ import { Page, useLocation } from 'zmp-ui';
 import { canPop, useSmartNavigate } from '../lib/smart-nav';
 import { isBackableRoot } from '../components/nav-config';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ChevronDown, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
 import {
   externalClaimPhoneConfirm,
   externalClaimRejectCode,
   getMyExternalClaims,
+  retryExternalClaimPhone,
   submitExternalClaim,
   type MyExternalClaimItem,
+  type PhoneRetryTarget,
   type SubmitExternalClaimResponse,
 } from '../services/external-points-api';
 import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
@@ -26,10 +28,13 @@ import { extractClaimCode, normalizeClaimCode } from '@tubutree/app-core/claim-c
 import { MARKETPLACE_SCAN_COPY, marketplaceScanSteps, scanGuideCollapsed, scanSuccessCtaLabel } from '@tubutree/app-core/marketplace-scan-guide';
 import {
   DEAD_CLAIM_STATES,
+  PHONE_CONFIRM_COPY,
   claimDetail as claimDetailOf,
   claimResultDetail,
+  retryDoneView,
   claimStateView,
   isPastMilestone,
+  marketplaceChannelName,
   phoneConfirmErrorText,
 } from '@tubutree/app-core/marketplace-claim-copy';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -178,15 +183,127 @@ function SupportButton({ maskedCode }: { maskedCode: string }) {
   );
 }
 
+/** Dòng lịch sử đang mở hộp nhập 4 số cuối (W59): dòng nào, sàn, mã che, câu lỗi máy chủ, đơn đã khoá chưa, lần trả lời thứ mấy. */
+interface HistoryRetry {
+  target: PhoneRetryTarget;
+  channel: string | null;
+  maskedCode: string;
+  error: string | null;
+  locked: boolean;
+  attempt: number;
+}
+
+/**
+ * "Đơn sàn của bạn". W59 (PO 28/11): mã dừng ở bước 4 số cuối (`needsPhone`) và claim chờ chỉ vì SĐT (`phoneRetry`) là dòng chạm được: khách nhập
+ * 4 số cuối SĐT người nhận ngay tại đây, không quét lại; cùng luồng với web `/quet-ma`.
+ */
 function ClaimList() {
+  const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [retry, setRetry] = useState<HistoryRetry | null>(null);
+  const [done, setDone] = useState<{ result: SubmitExternalClaimResponse; channel: string | null } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const q = useQuery({ queryKey: ['external-claims', page], queryFn: () => getMyExternalClaims(page, PAGE_SIZE) });
+  const send = useLockedMutation({
+    mutationFn: (v: { target: PhoneRetryTarget; last4: string; channel: string | null }) => retryExternalClaimPhone(v.target, v.last4),
+    onSuccess: (result, v) => {
+      haptic('medium');
+      setDone({ result, channel: result.channel ?? v.channel });
+      setRetry(null);
+      setNotice(null);
+      void qc.invalidateQueries({ queryKey: ['external-claims'] });
+    },
+    onError: (e) => {
+      const prompt = externalClaimPhoneConfirm(e);
+      if (prompt) {
+        haptic('light');
+        setRetry((c) =>
+          c
+            ? { ...c, channel: prompt.channel ?? c.channel, error: phoneConfirmErrorText(prompt.code, prompt.remainingAttempts), locked: prompt.code === 'PHONE_CONFIRM_LOCKED', attempt: c.attempt + 1 }
+            : c,
+        );
+        return undefined;
+      }
+      const rejected = externalClaimRejectCode(e);
+      // Dòng không còn để nhập lại (người khác vừa duyệt, đã có claim...): đóng hộp, báo câu máy chủ, giữ khoá tới khi lịch sử mới về.
+      if (rejected || isStaleStateError(e)) {
+        setRetry(null);
+        setNotice(rejected ? t.reject[rejected] : getErrorMessage(e));
+        return settleWithin(qc.invalidateQueries({ queryKey: ['external-claims'] }));
+      }
+      setRetry((c) => (c ? { ...c, error: getErrorMessage(e), attempt: c.attempt + 1 } : c));
+      return undefined;
+    },
+  });
+  const open = (target: PhoneRetryTarget, channel: string | null, maskedCode: string) => {
+    setDone(null);
+    setNotice(null);
+    setRetry({ target, channel, maskedCode, error: null, locked: false, attempt: 0 });
+  };
+  const sheet = (
+    <PhoneConfirmSheet
+      open={retry !== null}
+      channel={retry?.channel ?? null}
+      error={retry?.error ?? null}
+      locked={retry?.locked ?? false}
+      pending={send.isPending}
+      attempt={retry?.attempt ?? 0}
+      onSubmit={(last4) => {
+        if (retry) send.mutate({ target: retry.target, last4, channel: retry.channel });
+      }}
+      onClose={() => setRetry(null)}
+      onSupport={hasOA && retry ? () => openOAChat(t.chatSupportMessage(retry.maskedCode)) : undefined}
+    />
+  );
   if (q.isPending) return <Skeleton height={96} radius="var(--radius-card)" />;
   if (q.isError) return <ErrorState message={t.listLoadFailed} onRetry={() => q.refetch()} />;
   const { data, meta, searching } = q.data;
+  const needsPhone = q.data.needsPhone ?? [];
   const pages = Math.max(1, Math.ceil(meta.total / meta.limit));
   return (
     <div>
+      {done && (
+        <div role="status" data-testid="claim-retry-done" style={{ marginBottom: 'var(--space-inline-md)' }}>
+          {retryDoneView(done.result, formatDate).recorded && (
+            <Text variant="label" tone="brand" as="div">
+              {PHONE_CONFIRM_COPY.retryDone(marketplaceChannelName(done.channel), done.result.maskedCode)}
+            </Text>
+          )}
+          <Text variant="body-sm" tone="secondary" as="div">
+            {retryDoneView(done.result, formatDate).detail}
+          </Text>
+        </div>
+      )}
+      {notice && (
+        <Text variant="body-sm" tone="secondary" as="div" style={{ marginBottom: 'var(--space-inline-md)' }}>
+          <span role="status" data-testid="claim-retry-notice">{notice}</span>
+        </Text>
+      )}
+      {needsPhone.length > 0 && (
+        <div data-testid="claim-needs-phone" style={{ marginBottom: 'var(--space-inline-md)' }}>
+          <Text variant="label" tone="secondary" as="div" style={{ marginBottom: 'var(--space-stack-xs)' }}>
+            {PHONE_CONFIRM_COPY.retryTitle}
+          </Text>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
+            {needsPhone.map((n) => (
+              <li key={n.attemptId} data-testid="claim-needs-phone-row">
+                <Card variant="outline" padding={12} onPress={() => open({ attemptId: n.attemptId }, n.channel, n.maskedCode)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-stack-sm)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <Text variant="label" as="div">{marketplaceChannelName(n.channel)}</Text>
+                      <Text variant="caption" tone="tertiary" as="div">{n.maskedCode}</Text>
+                    </div>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-inline-xs)', flexShrink: 0 }}>
+                      <Badge tone="warning">{t.state.needPhone}</Badge>
+                      <ChevronRight size={16} aria-hidden="true" />
+                    </span>
+                  </div>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {searching.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <Text variant="label" tone="secondary" as="div" style={{ marginBottom: 6 }}>
@@ -200,7 +317,7 @@ function ClaimList() {
           ))}
         </div>
       )}
-      {data.length === 0 && searching.length === 0 ? (
+      {data.length === 0 && searching.length === 0 && needsPhone.length === 0 ? (
         <Text variant="body-sm" tone="secondary" as="p">
           {t.listEmpty}
         </Text>
@@ -209,9 +326,10 @@ function ClaimList() {
           {data.map((item) => {
             const view = claimStateView(item);
             const detail = claimDetail(item);
+            const retryable = item.state === 'REVIEW' && item.phoneRetry === true;
             return (
-              <li key={item.id}>
-                <Card variant="raised" padding={12}>
+              <li key={item.id} data-testid={retryable ? 'claim-row-retry' : undefined}>
+                <Card variant="raised" padding={12} onPress={retryable ? () => open({ claimId: item.id }, item.channel, item.maskedCode) : undefined}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                     <div style={{ minWidth: 0 }}>
                       <Text variant="label" as="div">{item.channel ?? t.channelFallback}</Text>
@@ -242,6 +360,7 @@ function ClaimList() {
           <Button variant="ghost" disabled={page >= pages} onPress={() => setPage((p) => Math.min(pages, p + 1))}>{t.next}</Button>
         </div>
       )}
+      {sheet}
     </div>
   );
 }
@@ -574,7 +693,12 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
           if (confirm) submit.mutate({ code: confirm.code, via: confirm.via, last4 });
         }}
         onOther={scanAnother}
-        onClose={() => setConfirm(null)}
+        onClose={() => {
+          // Đóng hộp mà chưa khớp (W59): không có claim nào, mã nằm ở lịch sử "Chờ bạn nhập 4 số cuối"; làm mới để dòng đó hiện ra.
+          setNotice(confirm?.locked ? PHONE_CONFIRM_COPY.locked : PHONE_CONFIRM_COPY.later);
+          setConfirm(null);
+          void qc.invalidateQueries({ queryKey: ['external-claims'] });
+        }}
         onSupport={hasOA && confirm ? () => openOAChat(t.chatSupportMessage(maskForSupport(confirm.code))) : undefined}
       />
       {oaNote && (

@@ -36,6 +36,8 @@ export const MARKETPLACE_CLAIM_COPY = {
     waitDelivery: 'Chờ giao hàng',
     waitCredit: 'Chờ cộng điểm',
     review: 'Đang kiểm tra',
+    // W59: claim REVIEW chỉ vì SĐT, khách tự gỡ bằng 4 số cuối (chạm dòng).
+    needPhone: 'Nhập 4 số cuối',
     credited: 'Đã cộng',
     voided: 'Đã huỷ',
     reversed: 'Đã thu hồi',
@@ -78,10 +80,17 @@ export const PHONE_CONFIRM_COPY = {
   submit: 'Xác nhận & Tích điểm',
   other: 'Quét đơn khác',
   empty: 'Bạn nhập đủ 4 chữ số nhé.',
-  wrong: (remaining: number) => `4 số cuối chưa khớp (còn ${remaining} lượt thử)`,
-  wrongNoCount: '4 số cuối chưa khớp.',
+  // W59: lời PO 28/11. Sai 4 số không tạo claim nào, mã vẫn chờ khách nhập đúng.
+  wrong: (remaining: number) => `Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại (còn ${remaining} lượt).`,
+  wrongNoCount: 'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại.',
   locked: 'Bạn đã nhập sai 3 lần. Thử lại đơn này sau 24 giờ hoặc nhắn CSKH.',
   support: 'Nhắn CSKH Tubu',
+  /** W59: khách đóng hộp mà chưa xác nhận: mã chưa tích, nằm ở lịch sử chờ nhập lại. */
+  later: 'Đơn này chưa tích điểm. Có phiếu giao thì chạm đơn ở lịch sử để nhập 4 số cuối.',
+  /** W59: nhóm dòng lịch sử chờ khách nhập 4 số cuối (lượt quét dừng ở hộp xác nhận). */
+  retryTitle: 'Chờ bạn nhập 4 số cuối',
+  retryRow: (channelName: string, code: string) => `Nhập 4 số cuối SĐT nhận hàng cho đơn ${channelName} ${code}`,
+  retryDone: (channelName: string, code: string) => `Đã ghi nhận đơn ${channelName} ${code}`,
 } as const;
 
 const CHANNEL_NAMES: Record<string, string> = { shopee: 'Shopee', tiktok: 'TikTok Shop', lazada: 'Lazada' };
@@ -99,14 +108,14 @@ export function phoneConfirmErrorText(code: 'PHONE_CONFIRM_REQUIRED' | 'PHONE_CO
 }
 
 /**
- * Chữ riêng của web `/quet-ma` (W44, PO 27/11: quét và tích điểm làm được ngay trên web). Web không xin SĐT Zalo như Mini App. Từ W45 khách chỉ
- * có SĐT liên hệ tự gõ trên web (chưa xác minh qua Zalo) vẫn gửi mã được: đơn khớp số đó, hoặc khách đã có đơn app giao thành công, vào hàng
- * CSKH đối chiếu trước khi cộng; chưa có SĐT thì nhập ngay trên màn quét. Xác minh trên Zalo vẫn là lối cộng tự động, nên vẫn được mời.
+ * Chữ riêng của web `/quet-ma` (W44, PO 27/11: quét và tích điểm làm được ngay trên web). Web không xin SĐT Zalo như Mini App. Khách chỉ có SĐT
+ * liên hệ tự gõ trên web vẫn gửi mã được (W45); từ W59 đơn khớp số đó hoặc khách nhập đúng 4 số cuối thì chờ cộng như SĐT Zalo, chưa có SĐT thì
+ * nhập ngay trên màn quét.
  * Camera: mọi máy đều có nút quét (iPhone đọc bằng bộ đọc JS) và lối chụp/chọn ảnh khi trình duyệt chặn camera.
  */
 export const MARKETPLACE_CLAIM_WEB_COPY = {
   loginCta: 'Đăng nhập để tích điểm',
-  loginWhy: 'Đăng nhập Zalo để Tubu ghép đơn sàn theo số điện thoại.',
+  loginWhy: 'Đăng nhập để ghép đơn sàn theo số điện thoại của bạn.',
   openMiniAlt: 'Hoặc quét trong Tubu Tree trên Zalo',
   // W46 camera trước: khung quét nằm ngay đầu thẻ, hai lối phụ dạng viên thuốc bên dưới.
   scanSheetTitle: 'Quét mã vận đơn',
@@ -124,7 +133,7 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   photoReading: 'Đang đọc ảnh…',
   photoUnreadable: 'Chưa đọc được mã trong ảnh. Bạn chụp gần và rõ hơn.',
   phoneTitle: 'Thêm số điện thoại để tích điểm',
-  phoneBody: 'Nhập số di động đã dùng khi mua trên Shopee, TikTok Shop, Lazada để Tubu ghép đơn nhé.',
+  phoneBody: 'Số di động bạn dùng khi mua trên Shopee, TikTok Shop, Lazada.',
   phoneLabel: 'Số điện thoại đặt hàng',
   phonePlaceholder: '0912 345 678',
   phoneEmpty: 'Nhập số điện thoại di động 10 số.',
@@ -132,9 +141,8 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   phoneSave: 'Lưu số và tích điểm',
   phoneAlt: 'Hoặc xác minh số trên Zalo để cộng điểm tự động',
   phoneCta: 'Xác minh số trên Zalo',
-  unverifiedNote: 'Số điện thoại chưa xác minh qua Zalo: CSKH đối chiếu đơn trước khi cộng điểm.',
   notVerified: 'Đơn này cần SĐT đã xác minh qua Zalo để ghép.',
-  rateLimited: 'Bạn gửi mã hơi nhanh. Bạn chờ một phút rồi thử lại nhé.',
+  rateLimited: 'Bạn gửi hơi nhanh. Chờ 1 phút rồi thử lại nhé.',
   historyTitle: 'Lịch sử tích điểm đơn sàn',
 } as const;
 
@@ -147,7 +155,8 @@ export const DEAD_CLAIM_STATES: readonly ExternalClaimState[] = ['VOIDED', 'REVE
 const S = MARKETPLACE_CLAIM_COPY.state;
 
 /** Nhãn + tông của một dòng lịch sử. PENDING chưa có mốc cộng là đơn chưa giao xong. */
-export function claimStateView(item: Pick<MyExternalClaimItem, 'state' | 'expectedCreditAt'>): { label: string; tone: ClaimStateTone } {
+export function claimStateView(item: Pick<MyExternalClaimItem, 'state' | 'expectedCreditAt' | 'phoneRetry'>): { label: string; tone: ClaimStateTone } {
+  if (item.state === 'REVIEW' && item.phoneRetry) return { label: S.needPhone, tone: 'warning' };
   switch (item.state) {
     case 'PENDING':
       return item.expectedCreditAt ? { label: S.waitCredit, tone: 'info' } : { label: S.waitDelivery, tone: 'warning' };
@@ -184,4 +193,14 @@ export function claimResultDetail(r: SubmitExternalClaimResponse, fmtDate: (iso:
   if (r.status === 'REVIEW') return MARKETPLACE_CLAIM_COPY.resultReview;
   if (isPastMilestone(r, now)) return r.message;
   return r.expectedCreditAt ? MARKETPLACE_CLAIM_COPY.resultCreditAt(fmtDate(r.expectedCreditAt)) : MARKETPLACE_CLAIM_COPY.resultAfterDelivery;
+}
+
+/**
+ * W59: thông báo sau khi khách nhập đúng 4 số từ dòng lịch sử. `recorded`: có claim của khách (chờ cộng hoặc đang kiểm tra), mới hiện dòng
+ * "Đã ghi nhận đơn …"; `detail`: số điểm chờ cộng khi đã nhận, còn lại câu của thẻ kết quả (đơn vượt ngưỡng tự duyệt vào REVIEW thì báo đang kiểm tra).
+ */
+export function retryDoneView(r: SubmitExternalClaimResponse, fmtDate: (iso: string) => string): { recorded: boolean; detail: string } {
+  const recorded = r.status === 'CLAIMED' || r.status === 'REVIEW';
+  const detail = r.status === 'CLAIMED' && r.points != null ? MARKETPLACE_CLAIM_COPY.resultPoints(r.points) : claimResultDetail(r, fmtDate);
+  return { recorded, detail };
 }

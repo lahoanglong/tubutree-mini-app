@@ -16,6 +16,8 @@ export type ClaimEventAction =
   | 'FLAG_PARTIAL'
   | 'LINK_PHONE'
   | 'PHONE_CHANGED'
+  /** W59: khách nhập đúng 4 số cuối SĐT người nhận từ dòng lịch sử, claim REVIEW (chỉ vì SĐT) sang PENDING. */
+  | 'PHONE_CONFIRMED'
   | 'HOLD_NO_MEMBER'
   | 'LAPSE';
 

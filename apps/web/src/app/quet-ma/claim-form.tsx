@@ -11,6 +11,7 @@ import { externalClaimRejectCode, phoneConfirmPrompt, submitExternalClaim } from
 import {
   MARKETPLACE_CLAIM_COPY as COPY,
   MARKETPLACE_CLAIM_WEB_COPY as WEB,
+  PHONE_CONFIRM_COPY,
   claimResultDetail,
   isPastMilestone,
   phoneConfirmErrorText,
@@ -129,20 +130,10 @@ const errorBody = (e: unknown): unknown => (e as { body?: unknown } | null)?.bod
  * Thẻ gửi mã của web `/quet-ma` (W44; W46 camera trước): khung quét camera ngay đầu thẻ, đọc được mã là tự gửi (không bấm thêm). Hai lối phụ
  * dưới khung: chụp/chọn ảnh và "Nhập mã thủ công" (mở ô nhập mã + nút "Tích điểm"; màn mở với `?code=` thì ô này mở sẵn). Gửi xong là thẻ kết
  * quả và nút mua sắm. Một nút chính tại mỗi lúc: chưa có mã thì "Bật camera quét ngay"; mã đã sẵn thì "Tích điểm"; gửi xong thì nút mua sắm.
- * Đơn có SĐT người nhận khác SĐT tài khoản (PHONE_CONFIRM_REQUIRED): hộp hỏi 4 số cuối SĐT trên đơn rồi gửi lại đúng mã đó.
- * `unverified`: SĐT là số liên hệ tự gõ trên web, nói trước rằng đơn sẽ được CSKH đối chiếu (máy chủ đưa vào REVIEW).
+ * Đơn có SĐT người nhận khác SĐT tài khoản (PHONE_CONFIRM_REQUIRED): hộp hỏi 4 số cuối SĐT trên đơn rồi gửi lại đúng mã đó. Đóng hộp khi chưa
+ * khớp (W59): không có claim nào được tạo, mã nằm ở lịch sử ("Chờ bạn nhập 4 số cuối") để khách quay lại nhập.
  */
-export function ClaimForm({
-  initialCode,
-  codeParamRejected,
-  verifyHref,
-  unverified = false,
-}: {
-  initialCode: string;
-  codeParamRejected: boolean;
-  verifyHref: string;
-  unverified?: boolean;
-}) {
+export function ClaimForm({ initialCode, codeParamRejected, verifyHref }: { initialCode: string; codeParamRejected: boolean; verifyHref: string }) {
   const qc = useQueryClient();
   const [code, setCode] = useState(initialCode);
   const [scanned, setScanned] = useState<string | null>(initialCode || null);
@@ -150,6 +141,7 @@ export function ClaimForm({
   const [error, setError] = useState<ClaimError | null>(codeParamRejected ? { text: COPY.codeLinkInvalid, verify: false } : null);
   const [result, setResult] = useState<SubmitExternalClaimResponse | null>(null);
   const [confirm, setConfirm] = useState<PhoneConfirm | null>(null);
+  const [later, setLater] = useState<string | null>(null);
   const [restartKey, setRestartKey] = useState(0);
   const sending = useRef(false);
   const resultRef = useRef<HTMLDivElement>(null);
@@ -171,6 +163,7 @@ export function ClaimForm({
     onSuccess: (r) => {
       setResult(r);
       setError(null);
+      setLater(null);
       setConfirm(null);
       setCode('');
       setScanned(null);
@@ -214,6 +207,7 @@ export function ClaimForm({
     }
     sending.current = true;
     setResult(null);
+    setLater(null);
     try {
       await submit.mutateAsync({ code: trimmed, via, ...(last4 ? { last4 } : {}) });
     } catch {
@@ -237,6 +231,7 @@ export function ClaimForm({
 
   const scanAnother = () => {
     setConfirm(null);
+    setLater(null);
     setCode('');
     setScanned(null);
     setError(null);
@@ -293,9 +288,11 @@ export function ClaimForm({
               </Text>
             </div>
           )}
-          {unverified && (
-            <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
-              <span data-testid="claim-unverified-note">{WEB.unverifiedNote}</span>
+          {later && (
+            <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
+              <span role="status" data-testid="claim-later">
+                {later}
+              </span>
             </Text>
           )}
           {error && (
@@ -333,7 +330,12 @@ export function ClaimForm({
           if (confirm) void send(confirm.code, confirm.via, last4);
         }}
         onOther={scanAnother}
-        onClose={() => setConfirm(null)}
+        onClose={() => {
+          // Đóng hộp mà chưa khớp: lượt hỏi 4 số đã ghi ở máy chủ nên làm mới lịch sử để dòng "Chờ bạn nhập 4 số cuối" hiện ra.
+          setLater(confirm?.locked ? PHONE_CONFIRM_COPY.locked : PHONE_CONFIRM_COPY.later);
+          setConfirm(null);
+          void qc.invalidateQueries({ queryKey: ['external-claims'] });
+        }}
       />
     </div>
   );
@@ -341,7 +343,7 @@ export function ClaimForm({
 
 /**
  * Khách đã đăng nhập mà tài khoản chưa có SĐT (W45): nhập số ngay trên màn quét (`PATCH /me/contact-phone`, số liên hệ chưa xác minh) rồi quét
- * tiếp; đơn tích bằng số này vào hàng CSKH đối chiếu. Lối phụ: xác minh số trên Zalo để cộng tự động. Lưu xong thì hồ sơ `['me']` có SĐT và màn
+ * tiếp; đơn khớp số này (hoặc 4 số cuối đúng) thì chờ cộng như số Zalo (W59). Lối phụ: xác minh số trên Zalo. Lưu xong thì hồ sơ `['me']` có SĐT và màn
  * tự chuyển sang thẻ gửi mã.
  */
 export function PhoneEntry({ verifyHref }: { verifyHref: string }) {
