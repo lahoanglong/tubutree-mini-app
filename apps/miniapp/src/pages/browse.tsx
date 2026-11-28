@@ -348,6 +348,7 @@ export default function BrowsePage() {
           popular={popular}
           categories={categories.entries}
           products={suggest.products}
+          didYouMean={suggest.didYouMean}
           flashSales={flashQ.data}
           loading={suggest.isFetching}
           error={suggest.isError}

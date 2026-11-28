@@ -335,4 +335,20 @@ describe('BannerCarousel (web)', () => {
     expect(document.querySelectorAll('img')).toHaveLength(1);
     expect(link('Giảm 20% mỹ phẩm').textContent).toBe('Giảm 20% mỹ phẩm');
   });
+
+  it('onOpen: chạm slide báo đúng slide đó (không báo khi chỉ bấm chấm hay nút Dừng); không truyền onOpen thì vẫn bấm được', () => {
+    const onOpen = vi.fn();
+    mountPlain(<BannerCarousel slides={SLIDES} onOpen={onOpen} />);
+    click(document.querySelector('[data-banner-pause]') as HTMLElement);
+    click(document.querySelector('button[aria-label="Xem chương trình 2"]') as HTMLElement);
+    expect(onOpen).not.toHaveBeenCalled();
+    click(document.querySelector('a[href="/campaign/b"]') as HTMLElement);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledWith(SLIDES[1]);
+  });
+
+  it('không truyền onOpen: bấm slide không lỗi', () => {
+    mountPlain(<BannerCarousel slides={SLIDES} />);
+    expect(() => click(document.querySelector('a[href="/campaign/a"]') as HTMLElement)).not.toThrow();
+  });
 });

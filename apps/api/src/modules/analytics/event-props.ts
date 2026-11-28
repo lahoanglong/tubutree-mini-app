@@ -175,6 +175,9 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   // Web điện thoại tự mở Zalo Mini App (W42): kết quả và mẫu route của trang khách đang xem, không URL thật, không tham số.
   miniapp_auto_open: { props: { result: oneOf(MINIAPP_AUTO_OPEN_RESULTS), path: ROUTE }, required: ['result'] },
   miniapp_smartbar_click: { props: { action: oneOf(MINIAPP_SMARTBAR_ACTIONS), path: ROUTE }, required: ['action'] },
+  // Hiệu quả chiến dịch (w52-01): chỉ id chiến dịch (cuid công khai), không mang slug, tên hay khách. Admin đếm theo `props.campaignId` (campaign-roi.ts).
+  campaign_banner_click: { props: { campaignId: ID }, required: ['campaignId'] },
+  campaign_landing_view: { props: { campaignId: ID }, required: ['campaignId'] },
 };
 
 /**

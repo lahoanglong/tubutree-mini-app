@@ -69,6 +69,8 @@ export const CLIENT_EVENT_NAMES = [
   'repurchase_due_dismiss',
   'miniapp_auto_open',
   'miniapp_smartbar_click',
+  'campaign_banner_click',
+  'campaign_landing_view',
 ] as const;
 
 /**
@@ -245,6 +247,9 @@ export interface PurchaseEventProps {
   /** Lối vào Mini App từ web điện thoại (W42): không thuộc phễu mua nhưng dùng chung `trackOncePerSession`. `path` là mẫu route. */
   miniapp_auto_open: { result: MiniappAutoOpenResult; path: string };
   miniapp_smartbar_click: { action: MiniappSmartbarAction; path: string };
+  /** Hiệu quả chiến dịch (admin Chiến dịch): khách chạm banner ở Trang chủ/Ưu đãi, hoặc mở trang chiến dịch. Chỉ id chiến dịch, không mang thông tin khách. */
+  campaign_banner_click: { campaignId: string };
+  campaign_landing_view: { campaignId: string };
 }
 export type PurchaseEventName = keyof PurchaseEventProps;
 

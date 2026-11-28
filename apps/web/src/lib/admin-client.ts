@@ -969,6 +969,12 @@ export interface AdminCoupon {
   title?: string | null;
   /** Lô thẻ in (mỗi mã một lượt cho một thẻ): có giá trị thì không hiện ở mục Nhận mã được. */
   batch?: string | null;
+  /** Hiệu quả tiền trên các đơn đang chạy hoặc đã giao dùng mã (cùng định nghĩa doanh thu với báo cáo); thiếu khi máy chủ là bản cũ. */
+  ordersCount?: number;
+  gmv?: number;
+  /** Tổng tiền giảm do mã. */
+  discountCost?: number;
+  avgOrderValue?: number;
 }
 export type CouponStatusFilter = '' | 'active' | 'upcoming' | 'inactive' | 'expired';
 export async function listCoupons(params: { page: number; limit: number; q?: string; status?: CouponStatusFilter }) {

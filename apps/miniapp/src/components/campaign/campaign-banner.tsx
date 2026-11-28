@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import type { CampaignPlacement } from '@tubutree/app-core/api/campaign';
 import { OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint, type HomeKindState } from '@tubutree/app-core/home-layout';
 import { useCampaignSlides } from '../../hooks/use-campaign-slides';
+import { trackEvent } from '../../services/analytics';
 import { browserStorage } from '../../utils/recently-viewed';
 import { Skeleton } from '../ui/skeleton';
 
@@ -38,7 +39,7 @@ export function CampaignBanner({ placement, kind }: { placement: CampaignPlaceme
   return (
     <Suspense fallback={hinted ? <BannerFrame /> : null}>
       <div style={{ padding: FRAME_PADDING }}>
-        <BannerCarousel slides={slides} />
+        <BannerCarousel slides={slides} onOpen={(s) => trackEvent('campaign_banner_click', 'miniapp', { campaignId: s.id })} />
       </div>
     </Suspense>
   );

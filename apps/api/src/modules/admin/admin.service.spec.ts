@@ -1123,6 +1123,24 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(out.meta.total).toBe(1);
   });
 
+  it('listCoupons: kèm hiệu quả tiền của từng mã (số đơn, GMV, tiền giảm, giá trị đơn trung bình); mã chưa có đơn thì 0', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'c1', code: 'SALE10', isActive: true }, { id: 'c2', code: 'NEW5', isActive: true }]);
+    const $queryRaw = jest.fn().mockResolvedValue([{ id: 'c1', orders: 4n, gmv: 1_000_000n, discount: 80_000n }]);
+    const prisma = makePrisma({ coupon: { findMany, count: jest.fn().mockResolvedValue(2) }, couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) }, $queryRaw });
+    const out = await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'SALE' });
+    expect($queryRaw).toHaveBeenCalledTimes(1);
+    expect((($queryRaw.mock.calls[0][1] as { values: unknown[] }).values)).toEqual(['c1', 'c2']);
+    expect(out.data[0]).toMatchObject({ code: 'SALE10', ordersCount: 4, gmv: 1_000_000, discountCost: 80_000, avgOrderValue: 250_000 });
+    expect(out.data[1]).toMatchObject({ code: 'NEW5', ordersCount: 0, gmv: 0, discountCost: 0, avgOrderValue: 0 });
+  });
+
+  it('listCoupons: trang rỗng không chạy truy vấn hiệu quả', async () => {
+    const $queryRaw = jest.fn();
+    const prisma = makePrisma({ coupon: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) }, couponRedemption: { groupBy: jest.fn() }, $queryRaw });
+    await mkAdmin(prisma).listCoupons({ page: 1, limit: 20, q: 'KHONGCO' });
+    expect($queryRaw).not.toHaveBeenCalled();
+  });
+
   it('D2-03: tạo mã ẩn (CLAIM) chỉ khách mới → ghi đúng scope và cờ; mặc định cờ tắt', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'c1' });
     const prisma = makePrisma({ coupon: { create } });

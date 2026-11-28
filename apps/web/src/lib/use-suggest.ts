@@ -2,8 +2,8 @@
 
 import { useRef } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import type { ProductSuggestion } from '@tubutree/app-core/api/catalog';
-import { suggestQuery } from '@tubutree/app-core/queries/catalog';
+import { normalizeSuggestMeta, suggestCorrection, type ProductSuggestion, type SuggestMeta } from '@tubutree/app-core/api/catalog';
+import { suggestMetaQuery } from '@tubutree/app-core/queries/catalog';
 import { popularSearchesQuery } from '@tubutree/app-core/browse/search-ux';
 import { coreHttp } from './core-http';
 import { useDebounced } from './use-debounced';
@@ -17,20 +17,24 @@ export const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_
 
 /**
  * Gợi ý sản phẩm khi gõ: debounce 250ms, từ 2 ký tự; lỗi thì báo "Không tải được gợi ý" kèm Thử lại (không nuốt lỗi), lịch sử tìm vẫn hiện.
+ * Gọi `/search/suggest?meta=1` nên nhận thêm cụm `didYouMean` khi bước chịu gõ sai (cờ `catalog.search_fuzzy_enabled`) đã thay kết quả; cờ tắt
+ * thì API không báo sửa và `didYouMean` luôn null.
  * Query key theo từ khoá đã debounce nên phản hồi muộn của từ khoá cũ chỉ vào cache của chính nó. Cổng "đủ dài" xét cả
- * từ khoá hiện tại (chưa debounce): xoá xuống dưới 2 ký tự thì ẩn gợi ý ngay. Danh sách đang hiện giữ trong ref, ghi đồng
+ * từ khoá hiện tại (chưa debounce): xoá xuống dưới 2 ký tự thì ẩn gợi ý ngay. Kết quả đang hiện giữ trong ref, ghi đồng
  * bộ lúc render: về rỗng ngay khi cổng đóng, nên mở lại cổng luôn bắt đầu từ rỗng.
  */
-export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean; isError: boolean; refetch: () => void } {
+export function useSuggest(draft: string): { products: ProductSuggestion[]; didYouMean: string | null; isFetching: boolean; isError: boolean; refetch: () => void } {
   const term = useDebounced(draft.trim(), SUGGEST_DEBOUNCE_MS);
   const enabled = isSuggestable(term) && isSuggestable(draft);
-  const q = useQuery({ ...suggestQuery(coreHttp, term), enabled, staleTime: 30_000, retry: false });
-  const lastShown = useRef<ProductSuggestion[]>([]);
-  if (!enabled) lastShown.current = [];
+  const q = useQuery({ ...suggestMetaQuery(coreHttp, term), enabled, staleTime: 30_000, retry: false });
+  const lastShown = useRef<SuggestMeta | null>(null);
+  if (!enabled) lastShown.current = null;
   else if (q.data) lastShown.current = q.data;
+  const shown = enabled ? (q.data ?? lastShown.current) : null;
   // Lỗi chỉ báo khi chưa có gì để hiện: gợi ý cũ của từ khoá trước vẫn dùng được hơn một dòng lỗi.
   return {
-    products: enabled ? (q.data ?? lastShown.current) : [],
+    products: shown?.items ?? [],
+    didYouMean: suggestCorrection(shown ?? undefined),
     isFetching: enabled && q.isFetching,
     isError: enabled && q.isError && !q.data,
     refetch: () => void q.refetch(),
@@ -45,12 +49,7 @@ export const HEADER_SUGGEST_DEBOUNCE_MS = 150;
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
 
-export interface SuggestMeta {
-  items: ProductSuggestion[];
-  /** Bước chịu gõ sai đã thay kết quả (cờ `catalog.search_fuzzy_enabled`): `didYouMean` là cụm đang hiện. */
-  corrected: boolean;
-  didYouMean: string | null;
-}
+export type { SuggestMeta };
 
 /**
  * `/search/suggest?meta=1` qua `fetch` thẳng để nhận AbortSignal: React Query huỷ yêu cầu của từ khoá cũ ngay khi khoá đổi. Endpoint công
@@ -59,10 +58,7 @@ export interface SuggestMeta {
 export async function fetchSuggestMeta(q: string, signal?: AbortSignal): Promise<SuggestMeta> {
   const res = await fetch(`${API_BASE}/search/suggest?q=${encodeURIComponent(q)}&meta=1`, { signal, credentials: 'omit', headers: { 'X-Client-Platform': 'web' } });
   if (!res.ok) throw new Error(`suggest ${res.status}`);
-  const body = (await res.json()) as unknown;
-  if (Array.isArray(body)) return { items: body as ProductSuggestion[], corrected: false, didYouMean: null };
-  const b = (body ?? {}) as Partial<SuggestMeta>;
-  return { items: Array.isArray(b.items) ? b.items : [], corrected: b.corrected === true, didYouMean: typeof b.didYouMean === 'string' ? b.didYouMean : null };
+  return normalizeSuggestMeta((await res.json()) as unknown);
 }
 
 /**

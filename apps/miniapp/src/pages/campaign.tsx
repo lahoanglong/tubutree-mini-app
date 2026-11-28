@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Page, useNavigate, useParams } from 'zmp-ui';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { campaignDateRange, campaignProductPages, campaignVoucherViews } from '@tubutree/app-core/commerce/campaign';
@@ -6,6 +6,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { campaignProductsQuery, campaignQuery } from '@tubutree/app-core/queries/campaign';
 import { coreHttp } from '../services/core-http';
 import { getLoadErrorMessage, isNotFoundError } from '../services/api';
+import { trackEvent } from '../services/analytics';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { serverNow } from '../utils/server-clock';
 import { Button } from '../components/ui/button';
@@ -57,6 +58,10 @@ export default function CampaignPage() {
   const { copy } = useCouponUse();
   const q = useQuery({ ...campaignQuery(coreHttp, slug), staleTime: STALE_MS });
   const c = q.data;
+  const campaignId = c?.id;
+  useEffect(() => {
+    if (campaignId) trackEvent('campaign_landing_view', 'miniapp', { campaignId });
+  }, [campaignId]);
   const vouchers = useMemo(() => (c ? campaignVoucherViews(c.coupons, serverNow()) : []), [c]);
 
   if (!c) {

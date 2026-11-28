@@ -464,6 +464,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             popular={popular}
             categories={entries}
             products={suggest.products}
+            didYouMean={suggest.didYouMean}
             loading={suggest.isFetching}
             error={suggest.isError}
             onRetry={suggest.refetch}

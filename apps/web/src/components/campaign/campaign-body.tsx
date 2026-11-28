@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import type { CampaignDetail } from '@tubutree/app-core/api/campaign';
 import type { PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
@@ -8,6 +8,7 @@ import { campaignDateRange, campaignProductPages, campaignVoucherViews } from '@
 import { campaignProductsQuery } from '@tubutree/app-core/queries/campaign';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { trackWebEvent } from '@/lib/analytics';
 import { coreHttp } from '@/lib/core-http';
 import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { CAMPAIGN_HERO_SIZES } from '@/lib/image-sizes';
@@ -60,6 +61,9 @@ const HERO_SIZES = CAMPAIGN_HERO_SIZES;
 
 export function CampaignBody({ campaign: c, initialProducts }: { campaign: CampaignDetail; initialProducts?: PageResponse<ProductCard> | undefined }) {
   const { copy, notice } = useCouponUse();
+  useEffect(() => {
+    trackWebEvent('campaign_landing_view', { campaignId: c.id });
+  }, [c.id]);
   const vouchers = useMemo(() => campaignVoucherViews(c.coupons, serverNow()), [c.coupons]);
   const range = campaignDateRange(c);
   const couponsLabel = fillCopy('campaign.sectionCoupons');

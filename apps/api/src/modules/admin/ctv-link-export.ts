@@ -42,14 +42,22 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: 'Quản trị',
 };
 
-const TARGET_LABEL: Record<string, string> = { HOMEPAGE: 'Trang chủ', DEAL: 'Giờ vàng', PRODUCT: 'Sản phẩm', CATEGORY: 'Danh mục' };
+const TARGET_LABEL: Record<string, string> = {
+  HOMEPAGE: 'Trang chủ',
+  DEAL: 'Giờ vàng',
+  PRODUCT: 'Sản phẩm',
+  CATEGORY: 'Danh mục',
+  CAMPAIGN: 'Chiến dịch',
+  COMBO: 'Bộ quà tặng',
+};
 
-/** Tên đích link như CTV thấy; sản phẩm/danh mục đã xoá hoặc ngừng bán ghi rõ để kế toán không đi tìm. */
+/** Tên đích link như CTV thấy; sản phẩm/danh mục/chiến dịch đã xoá, ngừng bán hoặc hết hạn ghi rõ để kế toán không đi tìm. */
 export function linkTargetText(l: { targetType: string } & Pick<LinkTargetInfo, 'targetLabel' | 'targetAvailable'>): string {
   const kind = TARGET_LABEL[l.targetType] ?? l.targetType;
-  if (l.targetType !== 'PRODUCT' && l.targetType !== 'CATEGORY') return kind;
+  if (l.targetType !== 'PRODUCT' && l.targetType !== 'CATEGORY' && l.targetType !== 'CAMPAIGN') return kind;
   if (!l.targetLabel) return `${kind}: (đã xoá)`;
-  return `${kind}: ${l.targetLabel}${l.targetAvailable ? '' : ' (ngừng bán)'}`;
+  const gone = l.targetType === 'CAMPAIGN' ? ' (đã tắt hoặc kết thúc)' : ' (ngừng bán)';
+  return `${kind}: ${l.targetLabel}${l.targetAvailable ? '' : gone}`;
 }
 
 const LIVE_STATUSES = ['PENDING', 'LOCKED', 'APPROVED', 'PAID'] as const;

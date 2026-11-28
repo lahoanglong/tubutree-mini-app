@@ -11,13 +11,14 @@ import { SuggestList } from './suggest-list';
 const P: ProductSuggestion = { slug: 'hat-dieu', name: 'Hạt điều rang', thumbnail: null, basePrice: 180_000, salePrice: 159_000 };
 
 let mounted: Rendered | null = null;
-function mount() {
+function mount(didYouMean: string | null = null) {
   mounted = render(
     <SuggestList
       draft="hạt"
       recent={[]}
       categories={[]}
       products={[P]}
+      didYouMean={didYouMean}
       loading={false}
       onPickKeyword={vi.fn()}
       onPickCategory={vi.fn()}
@@ -53,6 +54,25 @@ describe('SuggestList: giá sản phẩm', () => {
     const rows = Array.from(c.querySelectorAll('button'));
     expect(rows.length).toBeGreaterThan(0);
     for (const b of rows) expect(b.className).toContain('tubu-press');
+  });
+});
+
+describe('SuggestList: didYouMean (chịu gõ sai)', () => {
+  it('có cụm sửa: một dòng "Đang hiện kết quả cho …" nằm trong nhóm Sản phẩm', () => {
+    const c = mount('hạt điều');
+    const note = c.querySelector('[data-testid="suggest-did-you-mean"]');
+    expect(note?.textContent).toBe('Đang hiện kết quả cho "hạt điều"');
+    expect(note?.closest('[role="group"]')?.getAttribute('aria-label')).toBe('Sản phẩm');
+  });
+
+  it('không có cụm sửa (cờ tắt hoặc API cũ): không có dòng nào', () => {
+    expect(mount(null).querySelector('[data-testid="suggest-did-you-mean"]')).toBeNull();
+  });
+
+  it('cụm là dữ liệu nên chỉ render dạng chữ, không dựng HTML', () => {
+    const c = mount('<img src=x onerror=alert(1)>');
+    expect(c.querySelector('[data-testid="suggest-did-you-mean"] img')).toBeNull();
+    expect(c.querySelector('[data-testid="suggest-did-you-mean"]')?.textContent).toContain('<img');
   });
 });
 

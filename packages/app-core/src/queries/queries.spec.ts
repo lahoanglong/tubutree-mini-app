@@ -32,6 +32,7 @@ const cases: Case[] = [
   ['categories', (h) => catalog.categoriesQuery(h), ['categories'], '/categories'],
   ['forYou', (h) => catalog.forYouQuery(h), ['for-you'], '/products/for-you'],
   ['suggest', (h) => catalog.suggestQuery(h, 'sữa'), ['search-suggest', 'sữa'], '/search/suggest'],
+  ['suggestMeta', (h) => catalog.suggestMetaQuery(h, 'sữa'), ['search-suggest-meta', 'sữa'], '/search/suggest'],
   ['recentlyViewed', (h) => catalog.recentlyViewedQuery(h, ['a', 'b']), ['recently-viewed-products', 'a,b'], '/products'],
   ['catalogCount', (h) => catalog.catalogCountQuery(h, 'q=a', { page: 1, limit: 1 }), ['products', 'count', 'q=a'], '/products'],
   ['suggestedRail', (h) => catalog.suggestedRailQuery(h), ['products', 'suggested-rail'], '/products'],

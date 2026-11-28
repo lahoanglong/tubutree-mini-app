@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
+import { couponRoiText } from '@/lib/admin-roi';
 import { COUPON_END_PAST_MESSAGE, vnTodayKey } from '@/lib/admin-reports';
 import { AdminPagination } from './admin-pagination';
 import { useConfirm } from './confirm-dialog';
@@ -178,6 +179,7 @@ export function CouponList() {
       <ul ref={listTopRef} className="scroll-mt-24 space-y-2">
         {q.data?.data.map((c) => {
           const st = couponState(c, now);
+          const roi = couponRoiText(c);
           return (
             <li key={c.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -197,6 +199,11 @@ export function CouponList() {
                 {c.claimedCount != null ? ` · Đã nhận ${c.claimedCount}` : ''} · Đã dùng {c.redeemedCount}
                 {c.usageLimit != null ? `/${c.usageLimit}` : ''} lượt · {c.perUserLimit > 0 ? `${c.perUserLimit} lượt/khách` : 'không giới hạn/khách'}
               </p>
+              {roi && (
+                <p data-testid="coupon-roi" className="mt-0.5 break-words text-xs tabular-nums text-stone-600">
+                  {roi}
+                </p>
+              )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button type="button" className={BTN_XS_SECONDARY} disabled={patch.isPending} onClick={() => void toggle(c)}>
                   {c.isActive ? 'Tắt mã' : 'Bật lại'}

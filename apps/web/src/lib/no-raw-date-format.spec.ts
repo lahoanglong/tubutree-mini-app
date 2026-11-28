@@ -51,6 +51,7 @@ const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = 
   'components/settlement-table.tsx': { count: 1, why: 'formatPct: phần trăm phí sàn / phí Tubu giao hộ' },
   'components/admin/account-deletion-panel.tsx': { count: 1, why: 'pointsConvertedBalance (điểm không hết hạn)' },
   'components/admin/pos-screen.tsx': { count: 2, why: 'tổng Điểm Xanh của hội viên' },
+  'lib/admin-roi.ts': { count: 1, why: 'count: lượt xem, lượt chạm banner và số đơn ở dòng hiệu quả chiến dịch / mã giảm giá' },
   'lib/admin-config-forms.ts': { count: 2, why: 'cận min và max của ô cấu hình số nguyên' },
   'lib/commission-rates.ts': { count: 1, why: 'formatRate: phần trăm hoa hồng' },
   'lib/dealer-accounts-client.ts': { count: 1, why: 'formatTierPct: phần trăm chiết khấu bậc đại lý' },

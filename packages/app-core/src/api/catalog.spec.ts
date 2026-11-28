@@ -11,7 +11,10 @@ import {
   fetchProducts,
   fetchProductsBySlugs,
   fetchRelated,
+  normalizeSuggestMeta,
+  suggestCorrection,
   suggestProducts,
+  suggestProductsMeta,
   type BrandCount,
   type CategoryDTO,
   type PageResponse,
@@ -206,5 +209,33 @@ describe('catalog — hợp đồng gọi API', () => {
     const plain = fakeHttp();
     await fetchForYou(plain.http);
     expect(plain.calls[0]).toEqual({ method: 'get', path: '/products/for-you' });
+  });
+});
+
+describe('gợi ý tìm kiếm kèm meta (`?meta=1`)', () => {
+  const item = { slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65000 };
+
+  it('suggestProductsMeta gọi GET /search/suggest với q và meta=1', async () => {
+    const { http, calls } = fakeHttp(() => ({ items: [item], corrected: true, didYouMean: 'nước rửa chén' }));
+    await expect(suggestProductsMeta(http, 'nuoc rua chen')).resolves.toEqual({ items: [item], corrected: true, didYouMean: 'nước rửa chén' });
+    expect(calls).toEqual([{ method: 'get', path: '/search/suggest', opts: { query: { q: 'nuoc rua chen', meta: '1' } } }]);
+  });
+
+  it('normalizeSuggestMeta: mảng trần (API trước meta) đọc được, coi như không sửa', () => {
+    expect(normalizeSuggestMeta([item])).toEqual({ items: [item], corrected: false, didYouMean: null });
+  });
+
+  it('normalizeSuggestMeta: thân lạ, thiếu trường hoặc sai kiểu không làm vỡ', () => {
+    expect(normalizeSuggestMeta(null)).toEqual({ items: [], corrected: false, didYouMean: null });
+    expect(normalizeSuggestMeta({ items: 'x', corrected: 'true', didYouMean: 5 })).toEqual({ items: [], corrected: false, didYouMean: null });
+    expect(normalizeSuggestMeta({ items: [item] })).toEqual({ items: [item], corrected: false, didYouMean: null });
+  });
+
+  it('suggestCorrection: chỉ trả cụm khi API báo đã sửa (cờ chịu gõ sai tắt thì null)', () => {
+    expect(suggestCorrection({ corrected: true, didYouMean: ' nước rửa chén ' })).toBe('nước rửa chén');
+    expect(suggestCorrection({ corrected: false, didYouMean: 'nước rửa chén' })).toBeNull();
+    expect(suggestCorrection({ corrected: true, didYouMean: '  ' })).toBeNull();
+    expect(suggestCorrection({ corrected: true, didYouMean: null })).toBeNull();
+    expect(suggestCorrection(undefined)).toBeNull();
   });
 });

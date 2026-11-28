@@ -381,7 +381,7 @@ export class AffiliateService {
     if (user?.role === 'CUSTOMER' && !(await this.commissionEligibleRoles()).has('CUSTOMER')) throw new ForbiddenException(AFFILIATE_NOT_CTV_MESSAGE);
   }
 
-  /** Link tới Trang chủ, Giờ vàng, một sản phẩm hoặc một danh mục; đích phải còn tồn tại (affiliate-link-target.ts). Trả kèm tên/slug đích như listLinks. */
+  /** Link tới Trang chủ, Giờ vàng, Bộ quà tặng, một sản phẩm, danh mục hoặc chiến dịch; đích phải còn tồn tại (affiliate-link-target.ts). Trả kèm tên/slug đích như listLinks. */
   async createLink(userId: string, targetType: string, targetId?: string) {
     await this.assertAffiliateAccess(this.prisma, userId);
     const target = await resolveLinkTargetForCreate(this.prisma, targetType, targetId);

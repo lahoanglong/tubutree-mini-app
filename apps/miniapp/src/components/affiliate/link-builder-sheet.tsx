@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import {
   AFFILIATE_LINK_TARGETS,
   LINK_BUILDER_COPY as T,
+  linkCampaignOptions,
   linkCategoryOptions,
   linkTargetNeedsPick,
   type AffiliateLinkTarget,
 } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { campaignsQuery } from '@tubutree/app-core/queries/campaign';
+import { coreHttp } from '../../services/core-http';
 import { pickerProducts } from '../../services/storefront-api';
 import { fetchCategories } from '../../services/shop-api';
 import { CATEGORIES_KEY } from '../../hooks/use-categories';
+import { serverNow } from '../../utils/server-clock';
 import { useDebounced } from '../../utils/use-debounced';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -77,8 +81,8 @@ function OptionRow({ active, label, sub, onPick }: { active: boolean; label: str
 }
 
 /**
- * Bộ tạo link CTV: chọn link mở tới Trang chủ, một sản phẩm có hoa hồng (tìm trong danh sách chọn sản phẩm của CTV), một danh mục, hay trang
- * Giờ vàng; một nút "Tạo link". Link sâu dựng ở `commerce/affiliate-deep-link.ts`. Bản web: apps/web/src/components/affiliate/link-builder-sheet.tsx.
+ * Bộ tạo link CTV: chọn link mở tới Trang chủ, một sản phẩm có hoa hồng (tìm trong danh sách chọn sản phẩm của CTV), một danh mục, trang
+ * Giờ vàng, một chiến dịch đang chạy hay trang Bộ quà tặng; một nút "Tạo link". Link sâu dựng ở `commerce/affiliate-deep-link.ts`. Bản web: apps/web/src/components/affiliate/link-builder-sheet.tsx.
  */
 export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkBuilderSheetProps) {
   const [type, setType] = useState<AffiliateLinkTarget>('PRODUCT');
@@ -96,6 +100,11 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
   const productsQ = useQuery({ queryKey: ['affiliate-link-picker', q], queryFn: () => pickerProducts(q), enabled: open && type === 'PRODUCT', staleTime: 60_000 });
   const categoriesQ = useQuery({ queryKey: CATEGORIES_KEY, queryFn: fetchCategories, enabled: open && type === 'CATEGORY', staleTime: 60_000, retry: false });
   const categories = useMemo(() => linkCategoryOptions(categoriesQ.data), [categoriesQ.data]);
+  const campaignQs = useQueries({
+    queries: (['HOME_TOP', 'OFFERS_TOP'] as const).map((placement) => ({ ...campaignsQuery(coreHttp, placement), enabled: open && type === 'CAMPAIGN', staleTime: 60_000, retry: false })),
+  });
+  const campaigns = linkCampaignOptions(campaignQs.map((c) => c.data), serverNow());
+  const campaignState = { isError: campaignQs.some((c) => c.isError) && campaigns.length === 0, isLoading: campaignQs.some((c) => c.isLoading) && campaigns.length === 0, refetch: () => campaignQs.forEach((c) => void c.refetch()) };
   const products = (productsQ.data ?? []).filter((p) => p.maxAffiliateRate > 0);
 
   const needsPick = linkTargetNeedsPick(type);
@@ -108,8 +117,9 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
   const list = (() => {
     if (type === 'HOMEPAGE') return <Text variant="body-sm" tone="secondary" as="p">{T.homeHint}</Text>;
     if (type === 'DEAL') return <Text variant="body-sm" tone="secondary" as="p">{T.dealHint}</Text>;
-    const query = type === 'PRODUCT' ? productsQ : categoriesQ;
-    const groupLabel = type === 'PRODUCT' ? T.pickProduct : T.pickCategory;
+    if (type === 'COMBO') return <Text variant="body-sm" tone="secondary" as="p">{T.comboHint}</Text>;
+    const query = type === 'PRODUCT' ? productsQ : type === 'CAMPAIGN' ? campaignState : categoriesQ;
+    const groupLabel = type === 'PRODUCT' ? T.pickProduct : type === 'CAMPAIGN' ? T.pickCampaign : T.pickCategory;
     if (query.isError) return <ErrorState variant="inline" message={T.loadError} onRetry={() => query.refetch()} />;
     if (query.isLoading)
       return (
@@ -122,11 +132,11 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
     const rows =
       type === 'PRODUCT'
         ? products.map((p) => ({ id: p.id, label: p.name, sub: p.brand || undefined }))
-        : categories.map((c) => ({ id: c.id, label: c.label, sub: undefined }));
+        : (type === 'CAMPAIGN' ? campaigns : categories).map((c) => ({ id: c.id, label: c.label, sub: undefined }));
     if (rows.length === 0)
       return (
         <Text variant="body-sm" tone="secondary" as="p">
-          {type === 'PRODUCT' ? T.noProduct : T.noCategory}
+          {type === 'PRODUCT' ? T.noProduct : type === 'CAMPAIGN' ? T.noCampaign : T.noCategory}
         </Text>
       );
     return (
@@ -164,6 +174,7 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
         <SegmentedTabs
           label={T.targetLabel}
           items={AFFILIATE_LINK_TARGETS.map((t) => ({ key: t.key, label: t.label }))}
+          scroll
           value={type}
           onChange={(k) => {
             setType(k as AffiliateLinkTarget);

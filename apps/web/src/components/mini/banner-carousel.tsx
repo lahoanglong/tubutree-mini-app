@@ -24,6 +24,8 @@ export interface BannerCarouselProps {
   intervalMs?: number;
   /** `sizes` của ảnh slide; mặc định theo Trang chủ (lg chiếm 8/12 cột). */
   sizes?: string;
+  /** Gọi khi khách chạm một slide, trước khi chuyển trang (đếm lượt chạm banner theo chiến dịch). */
+  onOpen?: (slide: BannerSlide) => void;
 }
 
 const SETTLE_MS = 700;
@@ -104,7 +106,7 @@ const isPauseButton = (node: EventTarget | null) => node instanceof Element && n
  * gặp trước các slide. Slide không hiện là `inert` nên Tab không rơi vào liên kết nằm ngoài khung nhìn. Cuộn ngang tự vuốt
  * (scroll-snap), không có thư viện carousel.
  */
-export function BannerCarousel({ slides, intervalMs, sizes }: BannerCarouselProps) {
+export function BannerCarousel({ slides, intervalMs, sizes, onOpen }: BannerCarouselProps) {
   const count = slides.length;
   const trackRef = useRef<HTMLDivElement>(null);
   const settleUntil = useRef(0);
@@ -226,7 +228,7 @@ export function BannerCarousel({ slides, intervalMs, sizes }: BannerCarouselProp
             {...(i === current ? NOT_INERT : INERT)}
             style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start' }}
           >
-            <Link href={s.href} className="tubu-press" style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
+            <Link href={s.href} className="tubu-press" onClick={() => onOpen?.(s)} style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
               <SlideImage slide={s} eager={i === 0} sizes={sizes ?? SLIDE_SIZES} />
             </Link>
           </div>

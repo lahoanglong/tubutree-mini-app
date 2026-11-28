@@ -690,9 +690,37 @@ describe('BrowseView — gõ tìm kiếm', () => {
     typeInto(input, 'nước');
     await act(async () => { await vi.advanceTimersByTimeAsync(300); });
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
-    expect(http.get).toHaveBeenCalledWith('/search/suggest', { query: { q: 'nước' } });
+    expect(http.get).toHaveBeenCalledWith('/search/suggest', { query: { q: 'nước', meta: '1' } });
     click(buttonByName(container, /Nước rửa chén/));
     expect(nav.pushes).toEqual(['/san-pham/nrc']);
+  });
+
+  it('gợi ý khi gõ sai: dòng "Đang hiện kết quả cho …" hiện trong nhóm Sản phẩm khi API báo đã sửa', async () => {
+    routes['/search/suggest'] = () => ({ items: [{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65000 }], corrected: true, didYouMean: 'nước rửa chén' });
+    vi.useFakeTimers();
+    const { container } = mount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => input.focus());
+    typeInto(input, 'nuoc rua chen');
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(container.querySelector('[data-testid="suggest-did-you-mean"]')?.textContent).toBe('Đang hiện kết quả cho "nước rửa chén"');
+    expect(buttonByName(container, /Nước rửa chén/)).toBeTruthy();
+  });
+
+  it('gợi ý khi cờ chịu gõ sai tắt (corrected=false): không có dòng sửa', async () => {
+    routes['/search/suggest'] = () => ({ items: [{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65000 }], corrected: false, didYouMean: null });
+    vi.useFakeTimers();
+    const { container } = mount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => input.focus());
+    typeInto(input, 'nước');
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(buttonByName(container, /Nước rửa chén/)).toBeTruthy();
+    expect(container.querySelector('[data-testid="suggest-did-you-mean"]')).toBeNull();
   });
 
   it('ô trống + có lịch sử: chạm vào ô hiện "Tìm gần đây"; chạm từ khoá ghi q; "Xoá lịch sử tìm" xoá khoá lưu', async () => {

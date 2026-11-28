@@ -63,6 +63,7 @@ import {
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
 import { GMV_ORDER_SQL, REVENUE_ORDER_SQL } from './admin-revenue';
+import { couponRoiBatch, ZERO_COUPON_ROI } from './coupon-roi';
 import { NEW_CUSTOMER_SQL } from './admin-source-report';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
@@ -2049,9 +2050,11 @@ export class AdminService {
       ]);
     }
     const ids = rows.map((r) => r.id);
-    const grouped = ids.length
-      ? await this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } })
-      : [];
+    // Hiệu quả tiền (số đơn, GMV, tiền giảm, giá trị đơn trung bình) đọc cùng lượt với số lượt dùng: một truy vấn gom cho cả trang, xem coupon-roi.ts.
+    const [grouped, roi] = await Promise.all([
+      ids.length ? this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } }) : [],
+      couponRoiBatch(this.prisma, ids),
+    ]);
     const used = new Map(grouped.map((g) => [g.couponId, g._count._all]));
     const claimIds = rows.filter((r) => r.scope === 'CLAIM').map((r) => r.id);
     const claimed = new Map(
@@ -2062,7 +2065,12 @@ export class AdminService {
         : [],
     );
     return paginated(
-      rows.map((r) => ({ ...r, redeemedCount: used.get(r.id) ?? 0, claimedCount: r.scope === 'CLAIM' ? claimed.get(r.id) ?? 0 : null })),
+      rows.map((r) => ({
+        ...r,
+        redeemedCount: used.get(r.id) ?? 0,
+        claimedCount: r.scope === 'CLAIM' ? claimed.get(r.id) ?? 0 : null,
+        ...(roi.get(r.id) ?? ZERO_COUPON_ROI),
+      })),
       q.page,
       q.limit,
       total,

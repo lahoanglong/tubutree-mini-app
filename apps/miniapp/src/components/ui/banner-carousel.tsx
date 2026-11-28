@@ -17,6 +17,8 @@ export interface BannerCarouselProps {
   slides: BannerSlide[];
   /** Dưới 5000 thì vẫn lấy 5000 (WCAG 2.2.2); chỉ để kéo dài. */
   intervalMs?: number;
+  /** Gọi khi khách chạm một slide, trước khi chuyển trang (đếm lượt chạm banner theo chiến dịch). */
+  onOpen?: (slide: BannerSlide) => void;
 }
 
 const SETTLE_MS = 700;
@@ -82,7 +84,7 @@ const isPauseButton = (node: EventTarget | null) => node instanceof Element && n
  * gặp trước các slide. Slide không hiện là `inert` nên Tab không rơi vào liên kết nằm ngoài khung nhìn. Cuộn ngang tự vuốt
  * (scroll-snap), không có thư viện carousel.
  */
-export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
+export function BannerCarousel({ slides, intervalMs, onOpen }: BannerCarouselProps) {
   const navigate = useNavigate();
   const count = slides.length;
   const trackRef = useRef<HTMLDivElement>(null);
@@ -210,7 +212,10 @@ export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
             {...(i === current ? NOT_INERT : INERT)}
             style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start' }}
           >
-            <a href={s.href} onClick={(e) => open(e, s.href)} className="tubu-press" style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
+            <a href={s.href} onClick={(e) => {
+                onOpen?.(s);
+                open(e, s.href);
+              }} className="tubu-press" style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}>
               <SlideImage slide={s} eager={i === 0} />
             </a>
           </div>

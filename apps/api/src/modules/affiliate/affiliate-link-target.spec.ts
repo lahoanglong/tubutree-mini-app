@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   attachLinkTargets,
+  LINK_CAMPAIGN_GONE,
   LINK_CATEGORY_GONE,
   LINK_PRODUCT_GONE,
   LINK_PRODUCT_NO_COMMISSION,
@@ -11,21 +12,23 @@ import {
 } from './affiliate-link-target';
 import { CreateLinkDto } from './affiliate.controller';
 
-const dbOf = (opts: { product?: unknown; category?: unknown; products?: unknown[]; categories?: unknown[] } = {}) => ({
+const dbOf = (opts: { product?: unknown; category?: unknown; campaign?: unknown; products?: unknown[]; categories?: unknown[]; campaigns?: unknown[] } = {}) => ({
   product: { findFirst: jest.fn().mockResolvedValue(opts.product ?? null), findMany: jest.fn().mockResolvedValue(opts.products ?? []) },
   category: { findUnique: jest.fn().mockResolvedValue(opts.category ?? null), findMany: jest.fn().mockResolvedValue(opts.categories ?? []) },
+  campaign: { findFirst: jest.fn().mockResolvedValue(opts.campaign ?? null), findMany: jest.fn().mockResolvedValue(opts.campaigns ?? []) },
 });
 type Db = Parameters<typeof resolveLinkTargetForCreate>[0];
 
 describe('resolveLinkTargetForCreate', () => {
-  it.each(['HOMEPAGE', 'DEAL'])('%s: không cần đích, bỏ targetId client gửi kèm, không đọc DB', async (type) => {
+  it.each(['HOMEPAGE', 'DEAL', 'COMBO'])('%s: không cần đích, bỏ targetId client gửi kèm, không đọc DB', async (type) => {
     const db = dbOf();
     await expect(resolveLinkTargetForCreate(db as unknown as Db, type, 'x')).resolves.toEqual({ targetType: type, targetId: null });
     expect(db.product.findFirst).not.toHaveBeenCalled();
     expect(db.category.findUnique).not.toHaveBeenCalled();
+    expect(db.campaign.findFirst).not.toHaveBeenCalled();
   });
 
-  it.each(['PRODUCT', 'CATEGORY'])('%s thiếu targetId (hoặc toàn khoảng trắng) → 400', async (type) => {
+  it.each(['PRODUCT', 'CATEGORY', 'CAMPAIGN'])('%s thiếu targetId (hoặc toàn khoảng trắng) → 400', async (type) => {
     await expect(resolveLinkTargetForCreate(dbOf() as unknown as Db, type)).rejects.toThrow(new BadRequestException(LINK_TARGET_ID_REQUIRED));
     await expect(resolveLinkTargetForCreate(dbOf() as unknown as Db, type, '   ')).rejects.toThrow(LINK_TARGET_ID_REQUIRED);
   });
@@ -47,6 +50,17 @@ describe('resolveLinkTargetForCreate', () => {
     const ok = dbOf({ category: { id: 'c1' } });
     await expect(resolveLinkTargetForCreate(ok as unknown as Db, 'CATEGORY', 'c1')).resolves.toEqual({ targetType: 'CATEGORY', targetId: 'c1' });
     await expect(resolveLinkTargetForCreate(dbOf() as unknown as Db, 'CATEGORY', 'c1')).rejects.toThrow(new NotFoundException(LINK_CATEGORY_GONE));
+  });
+
+  it('CAMPAIGN: chỉ nhận chiến dịch đang chạy (bật, trong khung ngày), không thì 404', async () => {
+    const now = new Date('2026-12-01T03:00:00.000Z');
+    const ok = dbOf({ campaign: { id: 'cmp1' } });
+    await expect(resolveLinkTargetForCreate(ok as unknown as Db, 'CAMPAIGN', ' cmp1 ', now)).resolves.toEqual({ targetType: 'CAMPAIGN', targetId: 'cmp1' });
+    expect(ok.campaign.findFirst).toHaveBeenCalledWith({
+      where: { id: 'cmp1', linkType: 'CAMPAIGN_PAGE', isActive: true, startAt: { lte: now }, endAt: { gt: now } },
+      select: { id: true },
+    });
+    await expect(resolveLinkTargetForCreate(dbOf() as unknown as Db, 'CAMPAIGN', 'cmp1', now)).rejects.toThrow(new NotFoundException(LINK_CAMPAIGN_GONE));
   });
 
   it('loại lạ (lọt qua DTO) → 400', async () => {
@@ -95,19 +109,48 @@ describe('attachLinkTargets', () => {
     expect(rows[0]).toMatchObject({ shortCode: 's1', clicks: 1 });
   });
 
-  it('trang chỉ có Trang chủ/Giờ vàng: không truy vấn DB', async () => {
+  it('trang chỉ có Trang chủ/Giờ vàng/Bộ quà tặng: không truy vấn DB', async () => {
     const db = dbOf();
-    await attachLinkTargets(db as unknown as Db, [link('1', 'HOMEPAGE', null), link('2', 'DEAL', null)]);
+    await attachLinkTargets(db as unknown as Db, [link('1', 'HOMEPAGE', null), link('2', 'DEAL', null), link('3', 'COMBO', null)]);
     expect(db.product.findMany).not.toHaveBeenCalled();
     expect(db.category.findMany).not.toHaveBeenCalled();
+    expect(db.campaign.findMany).not.toHaveBeenCalled();
+  });
+
+  it('CAMPAIGN: một truy vấn gom cả trang; hết hạn, tắt hoặc đã xoá thì targetAvailable=false nhưng vẫn trả tên khi còn dòng', async () => {
+    const now = new Date('2026-12-01T03:00:00.000Z');
+    const day = (d: string) => new Date(`${d}T00:00:00.000Z`);
+    const db = dbOf({
+      campaigns: [
+        { id: 'k1', slug: 'tet-xanh', title: 'Tết Xanh', isActive: true, startAt: day('2026-11-20'), endAt: day('2026-12-20') },
+        { id: 'k2', slug: 'da-het', title: 'Đã hết', isActive: true, startAt: day('2026-10-01'), endAt: day('2026-11-01') },
+        { id: 'k3', slug: 'dang-tat', title: 'Đang tắt', isActive: false, startAt: day('2026-11-20'), endAt: day('2026-12-20') },
+        { id: 'k4', slug: 'sap-chay', title: 'Sắp chạy', isActive: true, startAt: day('2026-12-10'), endAt: day('2026-12-30') },
+      ],
+    });
+    const rows = await attachLinkTargets(
+      db as unknown as Db,
+      [link('1', 'CAMPAIGN', 'k1'), link('2', 'CAMPAIGN', 'k1'), link('3', 'CAMPAIGN', 'k2'), link('4', 'CAMPAIGN', 'k3'), link('5', 'CAMPAIGN', 'k4'), link('6', 'CAMPAIGN', 'k9')],
+      now,
+    );
+    expect(db.campaign.findMany).toHaveBeenCalledTimes(1);
+    expect(db.campaign.findMany.mock.calls[0][0].where).toEqual({ id: { in: ['k1', 'k2', 'k3', 'k4', 'k9'] } });
+    expect(rows.map((r) => [r.id, r.targetSlug, r.targetLabel, r.targetAvailable, r.targetCommissionBlocked])).toEqual([
+      ['1', 'tet-xanh', 'Tết Xanh', true, false],
+      ['2', 'tet-xanh', 'Tết Xanh', true, false],
+      ['3', 'da-het', 'Đã hết', false, false],
+      ['4', 'dang-tat', 'Đang tắt', false, false],
+      ['5', 'sap-chay', 'Sắp chạy', false, false],
+      ['6', null, null, false, false],
+    ]);
   });
 });
 
 describe('CreateLinkDto', () => {
   const errorsOf = async (body: Record<string, unknown>) => (await validate(plainToInstance(CreateLinkDto, body))).map((e) => e.property);
 
-  it('nhận đủ 4 loại đích; loại lạ bị chặn', async () => {
-    for (const targetType of ['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL']) expect(await errorsOf({ targetType, targetId: 'p1' })).toEqual([]);
+  it('nhận đủ 6 loại đích; loại lạ bị chặn', async () => {
+    for (const targetType of ['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL', 'CAMPAIGN', 'COMBO']) expect(await errorsOf({ targetType, targetId: 'p1' })).toEqual([]);
     expect(await errorsOf({ targetType: 'STORE' })).toEqual(['targetType']);
   });
 

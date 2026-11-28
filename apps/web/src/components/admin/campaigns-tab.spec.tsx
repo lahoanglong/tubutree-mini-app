@@ -106,6 +106,13 @@ describe('CampaignsTab: danh sách', () => {
     for (const t of ['Đang chạy', 'Sắp chạy', 'Đã kết thúc', 'Đang tắt']) expect(c.textContent).toContain(t);
   });
 
+  it('hiệu quả: dòng lượt xem, lượt chạm banner, đơn dùng mã và doanh thu theo từng chiến dịch; máy chủ cũ không trả số liệu thì không có dòng', async () => {
+    mocks.list.mockResolvedValue([row('a', { views: 1234, clicks: 56, ordersCount: 4, gmv: 1_000_000 }), row('b')]);
+    const c = await mount();
+    const lines = Array.from(c.querySelectorAll('[data-testid="campaign-roi"]')).map((n) => n.textContent);
+    expect(lines).toEqual(['1.234 lượt xem · 56 lượt chạm banner · 4 đơn dùng mã · 1.000.000đ']);
+  });
+
   it('không có chiến dịch nào: một câu hướng dẫn thay cho danh sách trống', async () => {
     mocks.list.mockResolvedValue([]);
     const c = await mount();

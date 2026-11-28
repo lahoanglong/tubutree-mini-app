@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { readBannerHint, type HomeKindState } from '@tubutree/app-core/home-layout';
 import { useHomeBanners } from '../../hooks/use-home-banners';
+import { trackEvent } from '../../services/analytics';
 import { browserStorage } from '../../utils/recently-viewed';
 import { Skeleton } from '../ui/skeleton';
 
@@ -27,7 +28,7 @@ export function HomeBanner({ kind }: { kind: HomeKindState }) {
     return (
       <Suspense fallback={<BannerFrame />}>
         <div style={{ padding: '0 16px' }}>
-          <BannerCarousel slides={slides} />
+          <BannerCarousel slides={slides} onOpen={(s) => trackEvent('campaign_banner_click', 'miniapp', { campaignId: s.id })} />
         </div>
       </Suspense>
     );

@@ -24,6 +24,8 @@ export interface SuggestListProps {
   popular?: string[];
   categories: CategoryEntry[];
   products: ProductSuggestion[];
+  /** Cụm đang hiện thay cho từ khoá gõ sai (cờ `catalog.search_fuzzy_enabled`): một dòng nhỏ đầu nhóm sản phẩm; null thì không có dòng. */
+  didYouMean?: string | null;
   /** Đợt Giờ vàng đang chạy, để giá gợi ý khớp thẻ sản phẩm. */
   flashSales?: FlashSaleActiveItem[];
   loading: boolean;
@@ -46,7 +48,7 @@ const ELLIPSIS: CSSProperties = { display: 'block', overflow: 'hidden', textOver
  * nên chỉ được render dạng text của React (không bao giờ HTML).
  * Không có gì để hiện (chưa gõ + chưa có lịch sử) → không vẽ khung rỗng.
  */
-export function SuggestList({ draft, recent, popular = [], categories, products, flashSales = [], loading, error = false, onRetry, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
+export function SuggestList({ draft, recent, popular = [], categories, products, didYouMean = null, flashSales = [], loading, error = false, onRetry, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
   const term = draft.trim();
   const recentShown = term ? recent.filter((r) => includesFolded(r, term)).slice(0, SUGGEST_LIMITS.recent) : recent;
   const categoriesShown = term ? categories.filter((c) => includesFolded(c.label, term)).slice(0, SUGGEST_LIMITS.categories) : [];
@@ -108,6 +110,11 @@ export function SuggestList({ draft, recent, popular = [], categories, products,
       )}
       {productsShown.length > 0 && (
         <Group title={vi.browse.suggest.products}>
+          {didYouMean && (
+            <Text variant="caption" tone="secondary" as="p" data-testid="suggest-did-you-mean" style={{ margin: 0, paddingBottom: 'var(--space-stack-xs)', overflowWrap: 'anywhere' }}>
+              {fillCopy('search.showingFor', { q: didYouMean })}
+            </Text>
+          )}
           {productsShown.map((p, i) => (
             <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={<PriceTag value={tilePricing(p, flashSales).price} size="sm" />} onPress={() => onPickProduct(p, i)}>
               {p.name}

@@ -23,6 +23,12 @@ export interface AdminCampaignRow {
   status: AdminCampaignStatus;
   /** Kết quả kiểm trước khi bật, tính như thể chiến dịch đang bật. */
   health: { blockers: number; warnings: number };
+  /** Hiệu quả trong khung ngày của chiến dịch; thiếu khi máy chủ là bản cũ. `views`/`clicks` là số sự kiện, không phải số khách. */
+  views?: number;
+  clicks?: number;
+  /** Đơn đang chạy hoặc đã giao dùng một mã gắn vào chiến dịch, và tổng giá trị các đơn đó. */
+  ordersCount?: number;
+  gmv?: number;
 }
 
 export type CampaignIssueLevel = 'BLOCK' | 'WARN';

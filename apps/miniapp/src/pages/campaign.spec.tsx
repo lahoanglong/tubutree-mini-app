@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), navigate: vi.fn(), copy: vi.fn(), authStatus: 'guest' as string }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), navigate: vi.fn(), copy: vi.fn(), track: vi.fn(), authStatus: 'guest' as string }));
+vi.mock('../services/analytics', async (orig) => ({ ...(await orig<Record<string, unknown>>()), trackEvent: mocks.track }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -181,5 +182,20 @@ describe('Trang chiến dịch (Mini)', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1, name: 'Chương trình' })).toBeInTheDocument();
     expect(screen.getByTestId('campaign-loading')).toBeInTheDocument();
+  });
+
+  it('mở trang: một sự kiện campaign_landing_view chỉ mang id chiến dịch khi dữ liệu về; chưa có dữ liệu hay 404 thì không đếm', async () => {
+    route();
+    const first = renderPage();
+    expect(mocks.track).not.toHaveBeenCalledWith('campaign_landing_view', expect.anything(), expect.anything());
+    await screen.findByRole('heading', { level: 1, name: 'Giữa Thu' });
+    const views = mocks.track.mock.calls.filter(([n]) => n === 'campaign_landing_view');
+    expect(views).toEqual([['campaign_landing_view', 'miniapp', { campaignId: 'c1' }]]);
+    first.unmount();
+    mocks.track.mockClear();
+    route({ detail: httpError(404) });
+    renderPage();
+    await screen.findByText('Chương trình đã kết thúc');
+    expect(mocks.track.mock.calls.filter(([n]) => n === 'campaign_landing_view')).toEqual([]);
   });
 });

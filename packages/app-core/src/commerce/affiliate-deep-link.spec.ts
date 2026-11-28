@@ -15,8 +15,10 @@ import {
   ctvFunnelLine,
   LINK_BUILDER_COPY,
   LINK_POSTER_COPY,
+  linkCampaignOptions,
   linkCategoryOptions,
   linkOpensTarget,
+  linkTargetNeedsPick,
 } from './affiliate-deep-link';
 
 const link = (o: Partial<Parameters<typeof affiliateLinkPath>[0]> = {}) => ({ shortCode: 'Ab3_-xY', targetType: 'HOMEPAGE', ...o });
@@ -159,6 +161,40 @@ describe('commissionUnlockNote', () => {
   });
 });
 
+describe('đích Chiến dịch và Bộ quà tặng', () => {
+  const campaign = link({ targetType: 'CAMPAIGN', targetId: 'cmp_1', targetSlug: 'tet-xanh', targetLabel: 'Tết Xanh', targetAvailable: true });
+
+  it('Chiến dịch: web /chien-dich/<slug>, Mini /campaign/<slug>, kèm ref và mã link', () => {
+    expect(affiliateLinkPath(campaign, 'LINH123', 'web')).toBe('/chien-dich/tet-xanh?ref=LINH123&l=Ab3_-xY');
+    expect(affiliateLinkPath(campaign, 'LINH123', 'miniapp')).toBe('/campaign/tet-xanh?ref=LINH123&l=Ab3_-xY');
+    expect(affiliateLinkPath({ ...campaign, targetSlug: 'a b/c' }, 'LINH123', 'web')).toBe('/chien-dich/a%20b%2Fc?ref=LINH123&l=Ab3_-xY');
+  });
+
+  it('Bộ quà tặng: web /bo-qua-tang, Mini /gift-combos, không cần đích', () => {
+    const combo = link({ targetType: 'COMBO' });
+    expect(affiliateLinkPath(combo, 'LINH123', 'web')).toBe('/bo-qua-tang?ref=LINH123&l=Ab3_-xY');
+    expect(affiliateLinkPath(combo, 'LINH123', 'miniapp')).toBe('/gift-combos?ref=LINH123&l=Ab3_-xY');
+    expect(linkOpensTarget(combo)).toBe(true);
+  });
+
+  it('chiến dịch đã kết thúc hoặc thiếu slug: link mở Trang chủ và dòng phụ nói rõ', () => {
+    const gone = { ...campaign, targetAvailable: false };
+    expect(linkOpensTarget(gone)).toBe(false);
+    expect(affiliateLinkPath(gone, 'LINH123', 'web')).toBe('/?ref=LINH123&l=Ab3_-xY');
+    expect(affiliateLinkCaption({ ...gone, clicks: 2 })).toBe('2 lượt bấm · 0 đơn · Đích không còn, link mở Trang chủ');
+    expect(linkOpensTarget({ ...campaign, targetSlug: ' ' })).toBe(false);
+  });
+
+  it('tên dòng link và ảnh QR đi cùng đường dẫn web của đích', () => {
+    expect(affiliateLinkTitle(campaign)).toBe('Chiến dịch · Tết Xanh');
+    expect(affiliateLinkTitle({ targetType: 'COMBO' })).toBe('Bộ quà tặng');
+    expect(linkTargetNeedsPick('CAMPAIGN')).toBe(true);
+    expect(linkTargetNeedsPick('COMBO')).toBe(false);
+    expect(affiliateLinkPoster(campaign, 'LINH123')).toMatchObject({ kind: 'store', title: 'Chiến dịch · Tết Xanh', path: '/chien-dich/tet-xanh', referralCode: 'LINH123', linkCode: 'Ab3_-xY' });
+    expect(affiliateLinkPoster(link({ targetType: 'COMBO' }), 'LINH123')).toMatchObject({ kind: 'store', title: 'Bộ quà tặng', path: '/bo-qua-tang' });
+  });
+});
+
 describe('linkCategoryOptions', () => {
   it('phẳng theo thứ tự cây, con kèm tên cha, bỏ danh mục hết hàng nhưng vẫn xét con của nó', () => {
     const tree = [
@@ -177,9 +213,44 @@ describe('linkCategoryOptions', () => {
   });
 });
 
+describe('linkCampaignOptions', () => {
+  const now = Date.parse('2026-12-01T03:00:00.000Z');
+  const c = (id: string, title: string, startAt = '2026-11-20T00:00:00.000Z', endAt = '2026-12-20T00:00:00.000Z', linkType: 'CAMPAIGN_PAGE' | 'PRODUCT' | 'CATEGORY' | 'URL_INTERNAL' = 'CAMPAIGN_PAGE') => ({
+    id,
+    title,
+    startAt,
+    endAt,
+    linkType,
+  });
+
+  it('gộp các vị trí, bỏ trùng id, giữ thứ tự, bỏ chiến dịch đã hết hoặc chưa tới giờ', () => {
+    const home = [c('a', 'Tết Xanh'), c('old', 'Đã hết', '2026-10-01T00:00:00.000Z', '2026-11-01T00:00:00.000Z')];
+    const offers = [c('a', 'Tết Xanh'), c('b', 'Ưu đãi cuối năm'), c('soon', 'Sắp chạy', '2026-12-10T00:00:00.000Z')];
+    expect(linkCampaignOptions([home, offers], now)).toEqual([
+      { id: 'a', label: 'Tết Xanh' },
+      { id: 'b', label: 'Ưu đãi cuối năm' },
+    ]);
+  });
+
+  it('chỉ chiến dịch có trang riêng (CAMPAIGN_PAGE): banner trỏ sản phẩm, danh mục hay màn nội bộ không vào danh sách', () => {
+    const home = [c('page', 'Có trang'), c('prod', 'Trỏ sản phẩm', undefined, undefined, 'PRODUCT'), c('cat', 'Trỏ danh mục', undefined, undefined, 'CATEGORY'), c('route', 'Trỏ màn', undefined, undefined, 'URL_INTERNAL')];
+    expect(linkCampaignOptions([home], now)).toEqual([{ id: 'page', label: 'Có trang' }]);
+  });
+
+  it('danh sách chưa về hoặc rỗng: không có lựa chọn', () => {
+    expect(linkCampaignOptions([undefined, []], now)).toEqual([]);
+    expect(linkCampaignOptions([], now)).toEqual([]);
+  });
+
+  it('đúng lúc endAt là đã hết, đúng lúc startAt là đã chạy', () => {
+    expect(linkCampaignOptions([[c('a', 'A', '2026-12-01T03:00:00.000Z', '2026-12-02T00:00:00.000Z')]], now)).toHaveLength(1);
+    expect(linkCampaignOptions([[c('a', 'A', '2026-11-30T00:00:00.000Z', '2026-12-01T03:00:00.000Z')]], now)).toHaveLength(0);
+  });
+});
+
 describe('chữ của bộ tạo link', () => {
-  it('đủ 4 đích theo thứ tự API, không dùng thuật ngữ cấm', () => {
-    expect(AFFILIATE_LINK_TARGETS.map((t) => t.key)).toEqual(['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL']);
+  it('đủ 6 đích theo thứ tự API, không dùng thuật ngữ cấm', () => {
+    expect(AFFILIATE_LINK_TARGETS.map((t) => t.key)).toEqual(['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL', 'CAMPAIGN', 'COMBO']);
     const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), ...Object.values(LINK_POSTER_COPY), CTV_FUNNEL_NOTE, COMMISSION_AWAITING_PAYMENT_NOTE];
     for (const text of texts) for (const { pattern } of FORBIDDEN_TERMS) expect(text).not.toMatch(pattern);
   });

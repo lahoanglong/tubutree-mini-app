@@ -13,6 +13,7 @@ import {
   type AdminCampaignStatus,
 } from '@/lib/admin-campaigns-client';
 import { formatVnRange } from '@/lib/admin-campaign-form';
+import { campaignRoiText } from '@/lib/admin-roi';
 import type { Tone } from '@/lib/recycling';
 import { AUDIENCE_LABELS, CampaignForm, PLACEMENT_LABELS } from './campaign-form';
 import { useConfirm } from './confirm-dialog';
@@ -117,6 +118,7 @@ function CampaignRow({
     `${row.productCount} sản phẩm`,
     `${row.couponCount} mã`,
   ].join(' · ');
+  const roi = campaignRoiText(row);
   return (
     <div className="flex flex-wrap items-center gap-3">
       {row.image ? (
@@ -141,6 +143,11 @@ function CampaignRow({
           {formatVnRange(row.startAt, row.endAt)}
         </div>
         <div className="break-words text-xs text-stone-500">{meta}</div>
+        {roi && (
+          <div data-testid="campaign-roi" className="break-words text-xs tabular-nums text-stone-600">
+            {roi}
+          </div>
+        )}
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-2">
         <button

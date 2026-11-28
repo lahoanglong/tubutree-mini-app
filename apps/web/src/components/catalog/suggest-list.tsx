@@ -31,6 +31,7 @@ export function SuggestList({
   popular = [],
   categories,
   products,
+  didYouMean = null,
   loading,
   error = false,
   onRetry,
@@ -45,6 +46,8 @@ export function SuggestList({
   popular?: string[];
   categories: CategoryEntry[];
   products: ProductSuggestion[];
+  /** Cụm đang hiện thay cho từ khoá gõ sai (cờ `catalog.search_fuzzy_enabled`): một dòng nhỏ đầu nhóm sản phẩm; null thì không có dòng. */
+  didYouMean?: string | null;
   loading: boolean;
   /** Gợi ý sản phẩm tải lỗi (không phải rỗng): báo và cho thử lại, lịch sử tìm vẫn hiện. */
   error?: boolean;
@@ -115,6 +118,11 @@ export function SuggestList({
       )}
       {productsShown.length > 0 && (
         <Group title={browseText.suggest.products}>
+          {didYouMean && (
+            <p data-testid="suggest-did-you-mean" className="break-words pb-1 text-xs text-[color:var(--color-text-secondary)]">
+              {fillCopy('search.showingFor', { q: didYouMean })}
+            </p>
+          )}
           {productsShown.map((p, i) => (
             <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={formatVnd(cardPricing(p, flash).price)} onPress={() => onPickProduct(p, i)}>
               {p.name}

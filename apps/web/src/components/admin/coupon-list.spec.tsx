@@ -44,6 +44,27 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     expect(text).toContain('đơn từ 199.000');
   });
 
+  it('hiệu quả tiền: mã có đơn hiện đơn, doanh thu, tiền giảm, trung bình; mã chưa có đơn một câu ngắn; máy chủ cũ không trả số liệu thì không có dòng', async () => {
+    const api = mockFetch({
+      '/admin/coupons': {
+        body: {
+          data: [
+            coupon({ id: 'a', code: 'CODEA', ordersCount: 4, gmv: 1_000_000, discountCost: 80_000, avgOrderValue: 250_000 }),
+            coupon({ id: 'b', code: 'CODEB', ordersCount: 0, gmv: 0, discountCost: 0, avgOrderValue: 0 }),
+            coupon({ id: 'c', code: 'CODEC' }),
+          ],
+          meta: { page: 1, limit: 20, total: 3 },
+        },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    const lines = Array.from(r.container.querySelectorAll('[data-testid="coupon-roi"]')).map((n) => n.textContent);
+    expect(lines).toEqual(['4 đơn · doanh thu 1.000.000đ · giảm 80.000đ · trung bình 250.000đ/đơn', 'Chưa có đơn dùng mã']);
+  });
+
   it('mã ẩn thẻ hộp hàng: nhãn "Ẩn · thẻ hộp hàng", "Chỉ khách mới" và số khách đã nhận (D2-03)', async () => {
     const api = mockFetch({
       '/admin/coupons': {

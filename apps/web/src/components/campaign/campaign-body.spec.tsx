@@ -6,7 +6,8 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), copyText: vi.fn(async (_t: string) => true), push: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), copyText: vi.fn(async (_t: string) => true), push: vi.fn(), track: vi.fn() }));
+vi.mock('@/lib/analytics', async (orig) => ({ ...(await orig<Record<string, unknown>>()), trackWebEvent: mocks.track }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null, retrySession: vi.fn() }) }));
@@ -54,6 +55,7 @@ beforeEach(() => {
     throw new Error(`không mock ${path}`);
   });
   mocks.copyText.mockClear().mockResolvedValue(true);
+  mocks.track.mockClear();
 });
 afterEach(() => {
   mounted?.unmount();
@@ -247,5 +249,17 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
       await flush(8);
       expect(byText(c, 'button', 'Thử lại')).toBeNull();
     });
+  });
+
+  it('mở trang: đúng một sự kiện campaign_landing_view chỉ mang id chiến dịch; render lại cùng chiến dịch không đếm thêm', async () => {
+    const ui = <CampaignBody campaign={DETAIL} initialProducts={page([1, 2, 3], 1, 3)} />;
+    await mount(ui);
+    const views = mocks.track.mock.calls.filter(([n]) => n === 'campaign_landing_view');
+    expect(views).toEqual([['campaign_landing_view', { campaignId: 'c1' }]]);
+    const client = newTestClient();
+    // Cùng hình cây như `mount` (render() đã bọc một provider, mount bọc thêm một): đổi hình cây sẽ dựng lại thân trang.
+    act(() => mounted!.root.render(<QueryClientProvider client={client}><QueryClientProvider client={client}>{ui}</QueryClientProvider></QueryClientProvider>));
+    await flush(4);
+    expect(mocks.track.mock.calls.filter(([n]) => n === 'campaign_landing_view')).toHaveLength(1);
   });
 });

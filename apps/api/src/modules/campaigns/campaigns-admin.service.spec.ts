@@ -117,6 +117,32 @@ describe('CampaignsAdminService.list', () => {
     expect(rows[0]).toMatchObject({ productCount: 3, couponCount: 1 });
   });
 
+  it('ROI: gom hai truy vấn (sự kiện, đơn) cho cả danh sách và gắn views/clicks/ordersCount/gmv vào từng dòng; chiến dịch không có dữ liệu thì 0', async () => {
+    const { svc, prisma } = setup();
+    prisma.campaign.findMany.mockResolvedValue([
+      { ...row({ id: 'a' }), _count: { products: 0, coupons: 1 } },
+      { ...row({ id: 'b' }), _count: { products: 0, coupons: 0 } },
+    ]);
+    // Kiểm sức khoẻ cũng đọc qua `$queryRaw`: phân biệt truy vấn ROI theo bảng nó đọc, không theo thứ tự gọi.
+    prisma.$queryRaw.mockImplementation((strings: TemplateStringsArray) => {
+      const text = strings.join('?');
+      if (text.includes('analytics_events')) return Promise.resolve([{ id: 'a', views: 12n, clicks: 30n }]);
+      if (text.includes('campaign_coupons cc')) return Promise.resolve([{ id: 'a', orders: 3n, gmv: 1_250_000n }]);
+      return Promise.resolve([]);
+    });
+    const rows = await svc.list(undefined, NOW);
+    const roiQueries = prisma.$queryRaw.mock.calls.filter(([strings]: [TemplateStringsArray]) => /analytics_events|campaign_coupons cc/.test(strings.join('?')));
+    expect(roiQueries).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ id: 'a', views: 12, clicks: 30, ordersCount: 3, gmv: 1_250_000 });
+    expect(rows[1]).toMatchObject({ id: 'b', views: 0, clicks: 0, ordersCount: 0, gmv: 0 });
+  });
+
+  it('danh sách rỗng: không chạy truy vấn ROI', async () => {
+    const { svc, prisma } = setup();
+    await svc.list(undefined, NOW);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
   it('ảnh base64 ra thành tham chiếu /public-image, không nhúng cả ảnh vào danh sách', async () => {
     const { svc, prisma } = setup();
     prisma.campaign.findMany.mockResolvedValue([{ ...row(), _count: { products: 0, coupons: 0 } }]);

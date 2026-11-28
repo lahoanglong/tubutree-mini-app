@@ -51,7 +51,7 @@ describe('useSuggest', () => {
     expect(mocks.get).not.toHaveBeenCalled();
     await advance(1);
     expect(mocks.get).toHaveBeenCalledTimes(1);
-    expect(mocks.get).toHaveBeenCalledWith('/search/suggest', { query: { q: 'nuo' } });
+    expect(mocks.get).toHaveBeenCalledWith('/search/suggest', { query: { q: 'nuo', meta: '1' } });
     await advance(0);
     expect(result.products).toEqual([P]);
   });
@@ -70,6 +70,35 @@ describe('useSuggest', () => {
     expect(result.products).toEqual([P]);
     show('n');
     expect(result.products).toEqual([]);
+  });
+
+  it('phản hồi kèm meta: trả sản phẩm và cụm didYouMean khi API báo đã sửa gõ sai', async () => {
+    mocks.get.mockResolvedValue({ items: [P], corrected: true, didYouMean: 'nước rửa chén' });
+    show('nuoc rua chen');
+    await advance(SUGGEST_DEBOUNCE_MS + 100);
+    expect(result.products).toEqual([P]);
+    expect(result.didYouMean).toBe('nước rửa chén');
+  });
+
+  it('cờ chịu gõ sai tắt (corrected=false) hoặc API cũ trả mảng: didYouMean luôn null', async () => {
+    mocks.get.mockResolvedValue({ items: [P], corrected: false, didYouMean: 'nước rửa chén' });
+    show('nuoc rua');
+    await advance(SUGGEST_DEBOUNCE_MS + 100);
+    expect(result.didYouMean).toBeNull();
+    mocks.get.mockResolvedValue([P]);
+    show('nuoc rua chen');
+    await advance(SUGGEST_DEBOUNCE_MS + 100);
+    expect(result.products).toEqual([P]);
+    expect(result.didYouMean).toBeNull();
+  });
+
+  it('xoá xuống dưới 2 ký tự: cụm didYouMean cũng ẩn ngay', async () => {
+    mocks.get.mockResolvedValue({ items: [P], corrected: true, didYouMean: 'nước rửa chén' });
+    show('nuoc rua chen');
+    await advance(SUGGEST_DEBOUNCE_MS + 100);
+    expect(result.didYouMean).toBe('nước rửa chén');
+    show('n');
+    expect(result.didYouMean).toBeNull();
   });
 
   it('lỗi mạng: không có gợi ý và báo isError để màn hiện "Không tải được gợi ý"', async () => {

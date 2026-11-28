@@ -6,11 +6,12 @@
  * nó, trừ đơn huỷ/trả. Đơn đặt trước khi có cột này không mang mã nên không vào số của link nào. Câu phễu trên danh sách vẫn là số chung của CTV
  * (mọi link, gian hàng, mã giới thiệu, đơn đặt hộ).
  */
+import type { CampaignBanner } from '../api/campaign';
 import type { PosterInput } from './share-poster-link';
 import { vnd } from './money';
 
 
-export type AffiliateLinkTarget = 'HOMEPAGE' | 'PRODUCT' | 'CATEGORY' | 'DEAL';
+export type AffiliateLinkTarget = 'HOMEPAGE' | 'PRODUCT' | 'CATEGORY' | 'DEAL' | 'CAMPAIGN' | 'COMBO';
 export type AffiliateLinkPlatform = 'web' | 'miniapp';
 
 /** Thứ tự và nhãn của bộ chọn đích (cùng tập giá trị với `CreateLinkDto.targetType` của API). */
@@ -19,17 +20,19 @@ export const AFFILIATE_LINK_TARGETS: readonly { key: AffiliateLinkTarget; label:
   { key: 'PRODUCT', label: 'Sản phẩm' },
   { key: 'CATEGORY', label: 'Danh mục' },
   { key: 'DEAL', label: 'Giờ vàng' },
+  { key: 'CAMPAIGN', label: 'Chiến dịch' },
+  { key: 'COMBO', label: 'Bộ quà tặng' },
 ];
 
-/** Đích cần chọn thêm một sản phẩm hoặc danh mục trước khi tạo link. */
-export const linkTargetNeedsPick = (t: AffiliateLinkTarget): boolean => t === 'PRODUCT' || t === 'CATEGORY';
+/** Đích cần chọn thêm một sản phẩm, danh mục hoặc chiến dịch trước khi tạo link. */
+export const linkTargetNeedsPick = (t: AffiliateLinkTarget): boolean => t === 'PRODUCT' || t === 'CATEGORY' || t === 'CAMPAIGN';
 
 export const isAffiliateLinkTarget = (v: string): v is AffiliateLinkTarget => AFFILIATE_LINK_TARGETS.some((t) => t.key === v);
 
-/** Đường dẫn mỗi nền tảng (route-map.json: /product/:slug ↔ /san-pham/:slug, /browse ↔ /san-pham, /flash-sale ↔ /gio-vang). */
-const PATHS: Record<AffiliateLinkPlatform, { home: string; product: string; browse: string; deal: string }> = {
-  web: { home: '/', product: '/san-pham', browse: '/san-pham', deal: '/gio-vang' },
-  miniapp: { home: '/', product: '/product', browse: '/browse', deal: '/flash-sale' },
+/** Đường dẫn mỗi nền tảng (route-map.json: /product/:slug ↔ /san-pham/:slug, /browse ↔ /san-pham, /flash-sale ↔ /gio-vang, /campaign/:slug ↔ /chien-dich/:slug, /gift-combos ↔ /bo-qua-tang). */
+const PATHS: Record<AffiliateLinkPlatform, { home: string; product: string; browse: string; deal: string; campaign: string; combo: string }> = {
+  web: { home: '/', product: '/san-pham', browse: '/san-pham', deal: '/gio-vang', campaign: '/chien-dich', combo: '/bo-qua-tang' },
+  miniapp: { home: '/', product: '/product', browse: '/browse', deal: '/flash-sale', campaign: '/campaign', combo: '/gift-combos' },
 };
 
 /** Cùng khuôn với `withReferral`/entry-source của hai app; mã khác khuôn bị bỏ khỏi URL. */
@@ -53,21 +56,24 @@ export function linkOpensTarget(link: AffiliateLinkLike): boolean {
   if (link.targetAvailable === false) return false;
   if (link.targetType === 'PRODUCT') return Boolean(link.targetSlug?.trim());
   if (link.targetType === 'CATEGORY') return Boolean(link.targetId?.trim());
-  return link.targetType === 'HOMEPAGE' || link.targetType === 'DEAL';
+  if (link.targetType === 'CAMPAIGN') return Boolean(link.targetSlug?.trim());
+  return link.targetType === 'HOMEPAGE' || link.targetType === 'DEAL' || link.targetType === 'COMBO';
 }
 
-/** Đường dẫn tới đích của link (kèm `category=` nếu là danh mục), chưa có `ref`/`l`. */
+/** Đường dẫn tới đích của link (kèm `category=` nếu là danh mục), chưa có `ref`/`l`. Đích không có trang riêng thì mở Trang chủ. */
 function targetPath(link: AffiliateLinkLike, platform: AffiliateLinkPlatform): { path: string; params: string[] } {
   const p = PATHS[platform];
   if (!linkOpensTarget(link)) return { path: p.home, params: [] };
   if (link.targetType === 'PRODUCT') return { path: `${p.product}/${encodeURIComponent(link.targetSlug!.trim())}`, params: [] };
   if (link.targetType === 'CATEGORY') return { path: p.browse, params: [`category=${encodeURIComponent(link.targetId!.trim())}`] };
+  if (link.targetType === 'CAMPAIGN') return { path: `${p.campaign}/${encodeURIComponent(link.targetSlug!.trim())}`, params: [] };
+  if (link.targetType === 'COMBO') return { path: p.combo, params: [] };
   return { path: link.targetType === 'DEAL' ? p.deal : p.home, params: [] };
 }
 
 /**
- * Đường dẫn (không gồm gốc) của một link CTV: web `/san-pham/<slug>?ref=…&l=…`, `/san-pham?category=<id>&ref=…&l=…`, `/gio-vang?ref=…&l=…`;
- * Mini App cùng dạng với `/product`, `/browse`, `/flash-sale`. Ghép với `SITE_URL` (web) hoặc `miniAppLink()` (Mini App).
+ * Đường dẫn (không gồm gốc) của một link CTV: web `/san-pham/<slug>?ref=…&l=…`, `/san-pham?category=<id>&ref=…&l=…`, `/gio-vang?ref=…&l=…`, `/chien-dich/<slug>?ref=…&l=…`,
+ * `/bo-qua-tang?ref=…&l=…`; Mini App cùng dạng với `/product`, `/browse`, `/flash-sale`, `/campaign`, `/gift-combos`. Ghép với `SITE_URL` (web) hoặc `miniAppLink()` (Mini App).
  */
 export function affiliateLinkPath(link: AffiliateLinkLike, affiliateCode: string, platform: AffiliateLinkPlatform): string {
   const { path, params } = targetPath(link, platform);
@@ -91,7 +97,7 @@ export function affiliateLinkPoster(link: AffiliateLinkLike, affiliateCode: stri
 
 const TARGET_LABEL = Object.fromEntries(AFFILIATE_LINK_TARGETS.map((t) => [t.key, t.label])) as Record<AffiliateLinkTarget, string>;
 
-/** Tên dòng link: "Trang chủ", "Giờ vàng", "Sản phẩm · <tên>", "Danh mục · <tên>". Loại lạ (API mới hơn app) gọi chung là "Link". */
+/** Tên dòng link: "Trang chủ", "Giờ vàng", "Bộ quà tặng", "Sản phẩm · <tên>", "Danh mục · <tên>", "Chiến dịch · <tên>". Loại lạ (API mới hơn app) gọi chung là "Link". */
 export function affiliateLinkTitle(link: Pick<AffiliateLinkLike, 'targetType' | 'targetLabel'>): string {
   if (!isAffiliateLinkTarget(link.targetType)) return 'Link';
   const kind = TARGET_LABEL[link.targetType];
@@ -182,6 +188,9 @@ export const LINK_BUILDER_COPY = {
   loadError: 'Chưa tải được danh sách.',
   homeHint: 'Khách mở Trang chủ Tubu Tree.',
   dealHint: 'Khách mở trang Giờ vàng đang diễn ra.',
+  comboHint: 'Khách mở trang Bộ quà tặng & combo.',
+  pickCampaign: 'Chọn một chiến dịch',
+  noCampaign: 'Chưa có chiến dịch nào đang chạy.',
   submit: 'Tạo link',
   submitting: 'Đang tạo…',
   created: 'Đã tạo link, chạm Sao chép để gửi khách.',
@@ -229,5 +238,32 @@ export function linkCategoryOptions(tree: readonly CategoryLike[] | undefined): 
     }
   };
   walk(tree ?? [], null);
+  return out;
+}
+
+/** Một lựa chọn chiến dịch trong bộ tạo link. */
+export interface LinkCampaignOption {
+  id: string;
+  label: string;
+}
+
+/**
+ * Banner đang chạy ở các vị trí (Trang chủ, Ưu đãi) gộp thành danh sách chọn cho link CTV: bỏ trùng id (một chiến dịch chỉ ở một vị trí), giữ thứ tự theo
+ * vị trí rồi theo API, bỏ chiến dịch đã quá hạn nằm trong bộ nhớ đệm. Chỉ giữ chiến dịch có trang riêng (`CAMPAIGN_PAGE`): banner trỏ sản phẩm, danh mục hay màn
+ * nội bộ không có sản phẩm hay mã gắn kèm, link tới trang của nó gần như trống. Danh sách chưa về (undefined) bị bỏ qua.
+ */
+export function linkCampaignOptions(
+  lists: readonly (readonly Pick<CampaignBanner, 'id' | 'title' | 'startAt' | 'endAt' | 'linkType'>[] | undefined)[],
+  now: number = Date.now(),
+): LinkCampaignOption[] {
+  const out: LinkCampaignOption[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const c of list ?? []) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      if (c.linkType === 'CAMPAIGN_PAGE' && Date.parse(c.startAt) <= now && now < Date.parse(c.endAt)) out.push({ id: c.id, label: c.title });
+    }
+  }
   return out;
 }

@@ -118,6 +118,18 @@ describe('checkEventProps', () => {
     expect(checkEventProps('order_zalo_friend_click', {})).not.toBe('ok');
   });
 
+  it('campaign_banner_click / campaign_landing_view: chỉ nhận id chiến dịch; khoá lạ, thiếu id hay id sai khuôn thì bỏ', () => {
+    for (const name of ['campaign_banner_click', 'campaign_landing_view']) {
+      expect(checkEventProps(name, { campaignId: 'clx9campaign01' })).toBe('ok');
+      expect(checkEventProps(name, { campaignId: 'camp_1-A' })).toBe('ok');
+      expect(checkEventProps(name, {})).toBe('missing_key');
+      expect(checkEventProps(name, { campaignId: 'tet-2026/slug' })).toBe('bad_value');
+      expect(checkEventProps(name, { campaignId: 'a'.repeat(65) })).toBe('bad_value');
+      expect(checkEventProps(name, { campaignId: 'clx1', slug: 'tet-2026' })).toBe('unknown_key');
+      expect(checkEventProps(name, { campaignId: 'clx1', phone: '0912345678' })).toBe('unknown_key');
+    }
+  });
+
   it('tên không có luật → bỏ', () => {
     expect(checkEventProps('order_paid', {})).toBe('unknown_key');
   });

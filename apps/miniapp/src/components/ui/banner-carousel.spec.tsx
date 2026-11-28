@@ -249,4 +249,15 @@ describe('BannerCarousel', () => {
     expect(screen.getByText('Giảm 20% mỹ phẩm')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Giảm 20% mỹ phẩm' })).toBeInTheDocument();
   });
+
+  it('onOpen: chạm slide báo đúng slide đó, trước khi điều hướng; bấm chấm hay nút Dừng không báo', () => {
+    const onOpen = vi.fn();
+    render(<BannerCarousel slides={SLIDES} onOpen={onOpen} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Dừng tự chuyển' }));
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('link', { name: 'Giờ vàng 20:00' }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledWith(SLIDES[1]);
+    expect(mocks.navigate).toHaveBeenCalled();
+  });
 });

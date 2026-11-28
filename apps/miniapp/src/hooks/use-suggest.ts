@@ -1,8 +1,9 @@
 import { useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { suggestCorrection, type SuggestMeta } from '@tubutree/app-core/api/catalog';
 import { popularSearchesQuery } from '@tubutree/app-core/browse/search-ux';
 import { coreHttp } from '../services/core-http';
-import { suggestProducts, type ProductSuggestion } from '../services/shop-api';
+import { suggestProductsMeta, type ProductSuggestion } from '../services/shop-api';
 import { foldVietnamese } from '../utils/vn-fold';
 import { useDebounced } from '../utils/use-debounced';
 
@@ -18,27 +19,31 @@ export const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_
  *   không bao giờ ghi đè kết quả của từ khoá mới.
  * - Cổng "đủ dài" xét cả từ khoá hiện tại (chưa debounce): xoá bớt xuống dưới 2 ký tự thì ẩn gợi ý
  *   ngay thay vì còn hiện kết quả cũ trong 250ms.
- * - Đổi từ khoá khi cổng vẫn mở → giữ danh sách của từ khoá trước trong lúc tải, không nhấp nháy. Danh sách
+ * - Gọi `/search/suggest?meta=1` nên nhận thêm `didYouMean` khi bước chịu gõ sai (cờ `catalog.search_fuzzy_enabled`) đã thay kết quả; cờ tắt thì
+ *   API không báo sửa và `didYouMean` luôn null.
+ * - Đổi từ khoá khi cổng vẫn mở → giữ kết quả của từ khoá trước trong lúc tải, không nhấp nháy. Kết quả
  *   "đang hiện" được giữ trong ref, GHI ĐỒNG BỘ trong lúc render: về rỗng ngay khi cổng đóng và chỉ nhận
  *   dữ liệu thật của từ khoá hiện tại. Nhờ vậy mở lại cổng (xoá xuống <2 ký tự rồi gõ từ khoá mới) luôn
  *   bắt đầu từ rỗng, kể cả khi render lại nhiều lần lúc request còn đang bay.
  */
-export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean; isError: boolean; refetch: () => void } {
+export function useSuggest(draft: string): { products: ProductSuggestion[]; didYouMean: string | null; isFetching: boolean; isError: boolean; refetch: () => void } {
   const term = useDebounced(draft.trim(), SUGGEST_DEBOUNCE_MS);
   const enabled = isSuggestable(term) && isSuggestable(draft);
   const q = useQuery({
-    queryKey: ['search-suggest', term],
-    queryFn: () => suggestProducts(term),
+    queryKey: ['search-suggest-meta', term],
+    queryFn: () => suggestProductsMeta(term),
     enabled,
     staleTime: 30_000,
     retry: false,
   });
-  const lastShown = useRef<ProductSuggestion[]>([]);
-  if (!enabled) lastShown.current = [];
+  const lastShown = useRef<SuggestMeta | null>(null);
+  if (!enabled) lastShown.current = null;
   else if (q.data) lastShown.current = q.data;
+  const shown = enabled ? (q.data ?? lastShown.current) : null;
   // Lỗi chỉ báo khi chưa có gì để hiện: gợi ý cũ của từ khoá trước vẫn dùng được hơn một dòng lỗi.
   return {
-    products: enabled ? q.data ?? lastShown.current : [],
+    products: shown?.items ?? [],
+    didYouMean: suggestCorrection(shown ?? undefined),
     isFetching: enabled && q.isFetching,
     isError: enabled && q.isError && !q.data,
     refetch: () => void q.refetch(),

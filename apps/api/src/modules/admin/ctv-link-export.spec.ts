@@ -181,6 +181,10 @@ describe('linkTargetText', () => {
     [link('PRODUCT', null, false), 'Sản phẩm: (đã xoá)'],
     [link('CATEGORY', 'Bếp'), 'Danh mục: Bếp'],
     [link('CATEGORY', null, false), 'Danh mục: (đã xoá)'],
+    [link('COMBO', null), 'Bộ quà tặng'],
+    [link('CAMPAIGN', 'Tết Xanh'), 'Chiến dịch: Tết Xanh'],
+    [link('CAMPAIGN', 'Tết Xanh', false), 'Chiến dịch: Tết Xanh (đã tắt hoặc kết thúc)'],
+    [link('CAMPAIGN', null, false), 'Chiến dịch: (đã xoá)'],
   ])('%j → %s', (l, expected) => {
     expect(linkTargetText(l)).toBe(expected);
   });

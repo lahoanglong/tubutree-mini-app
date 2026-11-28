@@ -5,6 +5,7 @@ import type { CampaignPlacement } from '@tubutree/app-core/api/campaign';
 import { OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint, type HomeKindState } from '@tubutree/app-core/home-layout';
 import { Skeleton } from '@/components/mini';
 import { BannerCarousel, WIDE_SLIDE_SIZES } from '@/components/mini/banner-carousel';
+import { trackWebEvent } from '@/lib/analytics';
 import { browserStorage } from '@/lib/recently-viewed';
 import { useCampaignSlides } from './use-campaign-slides';
 
@@ -44,7 +45,7 @@ export function CampaignBanner({ placement, kind }: { placement: CampaignPlaceme
   if (!has) return loading && hinted ? <BannerFrame /> : null;
   return (
     <div data-offers-banner="" className={WIDE_RATIO}>
-      <BannerCarousel slides={slides} sizes={WIDE_SLIDE_SIZES} />
+      <BannerCarousel slides={slides} sizes={WIDE_SLIDE_SIZES} onOpen={(s) => trackWebEvent('campaign_banner_click', { campaignId: s.id })} />
     </div>
   );
 }

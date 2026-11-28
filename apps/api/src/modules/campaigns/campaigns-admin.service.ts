@@ -9,9 +9,10 @@ import { normalizeCouponCode } from '../coupons/coupons.service';
 import { assertWindow, campaignStatus, normalizeLink, RESERVED_CAMPAIGN_SLUGS, slugFromTitle, type CampaignStatus } from './campaign-admin-rules';
 import { campaignPhase, countHealth, needsCleanSlate, saveVerdict, type HealthIssue, type HealthSubject, type SaveVerdict, type VerdictState } from './campaign-health';
 import { campaignHealthBatch } from './campaign-health-loader';
+import { campaignRoiBatch, ZERO_CAMPAIGN_ROI, type CampaignRoi } from './campaign-roi';
 import { CAMPAIGN_MAX_COUPONS, CAMPAIGN_MAX_PRODUCTS, type CheckCampaignDto, type CreateCampaignDto, type UpdateCampaignDto } from './dto/campaign.dto';
 
-export interface AdminCampaignRow {
+export interface AdminCampaignRow extends CampaignRoi {
   id: string;
   slug: string;
   title: string;
@@ -31,6 +32,7 @@ export interface AdminCampaignRow {
   status: CampaignStatus;
   /** Kết quả kiểm trước khi bật (xem campaign-health.ts), tính như chiến dịch đang bật. */
   health: { blockers: number; warnings: number };
+  // `views`, `clicks`, `ordersCount`, `gmv`: hiệu quả trong khung ngày của chiến dịch, xem `CampaignRoi` (campaign-roi.ts).
 }
 
 export interface CampaignCheckResult {
@@ -41,7 +43,7 @@ export interface CampaignCheckResult {
   verdict: { blocked: boolean; codes: string[]; reason?: string };
 }
 
-export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount' | 'health'> {
+export interface AdminCampaignDetail extends Omit<AdminCampaignRow, 'image' | 'productCount' | 'couponCount' | 'health' | keyof CampaignRoi> {
   /** Ảnh nguyên bản (URL https hoặc base64) để form sửa gửi lại đúng giá trị. */
   image: string;
   products: { id: string; name: string; slug: string }[];
@@ -146,9 +148,13 @@ export class CampaignsAdminService {
       take: LIST_LIMIT,
       include: { _count: { select: { products: true, coupons: true } } },
     });
-    const health = await campaignHealthBatch(this.prisma, rows.map((c) => ({ subject: subjectOf(c) })), now);
+    const [health, roi] = await Promise.all([
+      campaignHealthBatch(this.prisma, rows.map((c) => ({ subject: subjectOf(c) })), now),
+      campaignRoiBatch(this.prisma, rows.map((c) => ({ id: c.id, startAt: c.startAt, endAt: c.endAt }))),
+    ]);
     return rows.map((c, i) => ({
       ...baseFields(c, now),
+      ...(roi.get(c.id) ?? ZERO_CAMPAIGN_ROI),
       image: publicImage('campaign', c.id, 'cover', c.image),
       productCount: c._count.products,
       couponCount: c._count.coupons,

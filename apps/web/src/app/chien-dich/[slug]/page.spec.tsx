@@ -119,6 +119,59 @@ describe('/chien-dich/[slug] — trang chiến dịch (server)', () => {
     expect(box.textContent).toContain('Chương trình chưa có sản phẩm');
   });
 
+  describe('JSON-LD (CollectionPage + BreadcrumbList)', () => {
+    interface LdNode {
+      '@type': string;
+      name?: string;
+      description?: string;
+      url?: string;
+      mainEntity?: { numberOfItems: number; itemListElement: { position: number; name: string; url: string }[] };
+      itemListElement?: { name: string }[];
+    }
+    const graphOf = (box: HTMLElement): LdNode[] => {
+      const tag = box.querySelector('script[type="application/ld+json"]');
+      return tag ? (JSON.parse(tag.textContent ?? '')['@graph'] as LdNode[]) : [];
+    };
+
+    it('có đúng một khối: CollectionPage mang tên/mô tả/canonical của trang, ItemList là các sản phẩm trang 1, BreadcrumbList Trang chủ > chương trình', async () => {
+      const box = await html();
+      expect(box.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(1);
+      const [page, crumbs] = graphOf(box);
+      expect(page!['@type']).toBe('CollectionPage');
+      expect(page!.name).toBe('Giữa Thu');
+      expect(page!.description).toBe('Giảm sâu mùa trăng');
+      expect(page!.url).toMatch(/\/chien-dich\/giua-thu$/);
+      expect(page!.mainEntity!.numberOfItems).toBe(2);
+      expect(page!.mainEntity!.itemListElement.map((i) => [i.position, i.name, i.url.replace(/^.*(?=\/san-pham\/)/, '')])).toEqual([
+        [1, 'Sản phẩm 1', '/san-pham/sp-1'],
+        [2, 'Sản phẩm 2', '/san-pham/sp-2'],
+      ]);
+      expect(crumbs!['@type']).toBe('BreadcrumbList');
+      expect(crumbs!.itemListElement!.map((i) => i.name)).toEqual(['Trang chủ', 'Giữa Thu']);
+    });
+
+    it('sản phẩm trang 1 lỗi hoặc chiến dịch chưa có sản phẩm: vẫn có CollectionPage + BreadcrumbList, không có ItemList', async () => {
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/campaigns/giua-thu') return DETAIL;
+        throw new FakeUnavailable('503');
+      });
+      const [page] = graphOf(await html());
+      expect(page!['@type']).toBe('CollectionPage');
+      expect(page!.mainEntity).toBeUndefined();
+    });
+
+    it('chiến dịch không có mô tả phụ: mô tả JSON-LD cùng câu mặc định với thẻ meta', async () => {
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/campaigns/giua-thu') return { ...DETAIL, subtitle: null, productCount: 0 };
+        throw new Error(`không nên gọi ${path}`);
+      });
+      const [page] = graphOf(await html());
+      expect(page!.description).toBe('Ưu đãi đang diễn ra trên Tubu Tree');
+      expect((await generateMetadata({ params })).description).toBe(page!.description);
+    });
+
+  });
+
   it('tiêu đề tab và thẻ chia sẻ lấy từ chương trình; không có chương trình thì tiêu đề chung', async () => {
     const meta = await generateMetadata({ params });
     expect(meta.title).toBe('Giữa Thu');

@@ -1,7 +1,7 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
 import type { DeliverySchedule } from '@tubutree/app-core/api/config';
 import { flashAllowancePath } from '@tubutree/app-core/api/flash-allowance';
-import type { BrandCount } from '@tubutree/app-core/api/catalog';
+import { normalizeSuggestMeta, type BrandCount, type SuggestMeta } from '@tubutree/app-core/api/catalog';
 import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
@@ -458,6 +458,10 @@ export const fetchBoughtTogether = (slug: string) =>
 export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; salePrice?: number | null }
 export const suggestProducts = (q: string) =>
   api.get<ProductSuggestion[]>('/search/suggest', { params: { q } }).then((r) => r.data);
+
+/** `/search/suggest?meta=1`: gợi ý kèm cụm `didYouMean` khi bước chịu gõ sai (cờ `catalog.search_fuzzy_enabled`) đã thay kết quả. Phản hồi mảng (API trước meta) vẫn đọc được. */
+export const suggestProductsMeta = (q: string): Promise<SuggestMeta> =>
+  api.get<unknown>('/search/suggest', { params: { q, meta: '1' } }).then((r) => normalizeSuggestMeta(r.data));
 
 // ── Catalog có bộ lọc (dự án 4b) ──
 export type CatalogSort = 'best_seller' | 'newest' | 'price_asc' | 'price_desc';

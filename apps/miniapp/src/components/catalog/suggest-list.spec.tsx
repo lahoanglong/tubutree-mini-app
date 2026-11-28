@@ -34,6 +34,30 @@ describe('SuggestList', () => {
     expect(p.onClearRecent).toHaveBeenCalledTimes(1);
   });
 
+  it('didYouMean (chịu gõ sai): một dòng "Đang hiện kết quả cho …" đầu nhóm Sản phẩm, không phải nút', () => {
+    renderList({ draft: 'nuoc rua chen', products: PRODUCTS, didYouMean: 'nước rửa chén' });
+    const group = within(screen.getByRole('group', { name: 'Sản phẩm' }));
+    const note = screen.getByTestId('suggest-did-you-mean');
+    expect(note.textContent).toBe('Đang hiện kết quả cho "nước rửa chén"');
+    expect(group.getAllByRole('button')).toHaveLength(PRODUCTS.length);
+    expect(note.compareDocumentPosition(group.getAllByRole('button')[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('không có didYouMean (cờ chịu gõ sai tắt hoặc API cũ) → không có dòng sửa', () => {
+    renderList({ draft: 'nuoc', products: PRODUCTS });
+    expect(screen.queryByTestId('suggest-did-you-mean')).toBeNull();
+    renderList({ draft: 'nuoc', products: PRODUCTS, didYouMean: null });
+    expect(screen.queryByTestId('suggest-did-you-mean')).toBeNull();
+  });
+
+  it('cụm sửa là dữ liệu: chỉ render dạng chữ, không dựng HTML; ô trống thì không hiện kể cả khi caller còn giữ cụm cũ', () => {
+    const { container } = renderList({ draft: 'nuoc', products: PRODUCTS, didYouMean: '<b>x</b>' });
+    expect(container.querySelector('[data-testid="suggest-did-you-mean"] b')).toBeNull();
+    expect(screen.getByTestId('suggest-did-you-mean').textContent).toContain('<b>x</b>');
+    const empty = renderList({ draft: '', products: PRODUCTS, didYouMean: 'nước rửa chén' });
+    expect(empty.container.querySelector('section')?.textContent ?? '').not.toContain('Đang hiện kết quả cho');
+  });
+
   it('chưa gõ và chưa có lịch sử → không vẽ gì (không có khung rỗng)', () => {
     const { container } = renderList({ recent: [] });
     expect(container).toBeEmptyDOMElement();

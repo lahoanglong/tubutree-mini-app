@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), fetchCatalog: vi.fn(), fetchBrands: vi.fn(), fetchCategories: vi.fn(), suggestProducts: vi.fn(), coreGet: vi.fn(), fetchProducts: vi.fn(),
+  navigate: vi.fn(), fetchCatalog: vi.fn(), fetchBrands: vi.fn(), fetchCategories: vi.fn(), suggestProductsMeta: vi.fn(), coreGet: vi.fn(), fetchProducts: vi.fn(),
   routerNavigate: undefined as undefined | ((to: string) => void),
   trackFilterApplied: vi.fn(), trackSearchPerformed: vi.fn(), trackSearchResultClicked: vi.fn(), trackEvent: vi.fn(),
   getPublicConfig: vi.fn((): Promise<unknown> => Promise.reject(new Error('không có cấu hình'))),
@@ -19,7 +19,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCatalog: mocks.fetchCatalog, fetchBrands: mocks.fetchBrands, fetchCategories: mocks.fetchCategories,
-  suggestProducts: mocks.suggestProducts, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn(), getPublicConfig: mocks.getPublicConfig,
+  suggestProductsMeta: mocks.suggestProductsMeta, fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn(), getPublicConfig: mocks.getPublicConfig,
   fetchProductsBySlugs: vi.fn().mockResolvedValue([{ id: 'id-old-1', slug: 'old-1', brand: 'Tubu', name: 'Sản phẩm xem trước', thumbnail: null, basePrice: 45000, salePrice: null, isFeatured: false, inStock: true }]),
 }));
 vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
@@ -112,7 +112,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     mocks.fetchCatalog.mockResolvedValue(pageOf([card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')]));
     mocks.fetchBrands.mockResolvedValue([{ brand: 'Tubu', count: 2 }]);
     mocks.fetchCategories.mockResolvedValue([]);
-    mocks.suggestProducts.mockResolvedValue([]);
+    mocks.suggestProductsMeta.mockResolvedValue({ items: [], corrected: false, didYouMean: null });
     mocks.coreGet.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
     mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 10, total: 0 } });
     // `useNavigate` của zmp-ui bị thay bằng vi.fn(): chuyển các lượt mở Danh mục vào router thật để thấy URL đổi.
@@ -296,7 +296,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     const input = screen.getByRole('searchbox');
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'nuoc rua' } });
-    await waitFor(() => expect(mocks.suggestProducts).toHaveBeenCalledWith('nuoc rua'));
+    await waitFor(() => expect(mocks.suggestProductsMeta).toHaveBeenCalledWith('nuoc rua'));
     expect(catalogCalls().some((q) => q.q === 'nuoc rua')).toBe(false);
     fireEvent.submit(screen.getByRole('search'));
     await waitFor(() => expect(loc()).toBe('/browse?q=nuoc+rua'));
@@ -312,13 +312,13 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     renderAt('/browse?q=nuoc');
     await listPainted();
     await wait(SUGGEST_DEBOUNCE_MS + 150);
-    expect(mocks.suggestProducts).not.toHaveBeenCalled();
+    expect(mocks.suggestProductsMeta).not.toHaveBeenCalled();
     fireEvent.focus(screen.getByRole('searchbox'));
-    await waitFor(() => expect(mocks.suggestProducts).toHaveBeenCalledWith('nuoc'));
+    await waitFor(() => expect(mocks.suggestProductsMeta).toHaveBeenCalledWith('nuoc'));
   });
 
   it('chọn một sản phẩm gợi ý → search_result_clicked (source suggest) + mở PDP với listSource search_suggest', async () => {
-    mocks.suggestProducts.mockResolvedValue([{ id: 'p9', slug: 'p9', name: 'Nước rửa tay', brand: 'Tubu', thumbnail: null, basePrice: 50000, salePrice: null }]);
+    mocks.suggestProductsMeta.mockResolvedValue({ items: [{ id: 'p9', slug: 'p9', name: 'Nước rửa tay', brand: 'Tubu', thumbnail: null, basePrice: 50000, salePrice: null }], corrected: false, didYouMean: null });
     renderAt('/browse');
     const input = screen.getByRole('searchbox');
     fireEvent.focus(input);

@@ -229,6 +229,29 @@ export const fetchBoughtTogether = (http: HttpClient, slug: string) =>
   http.get<ProductCard[]>(`/products/${slug}/bought-together`);
 export const suggestProducts = (http: HttpClient, q: string) =>
   http.get<ProductSuggestion[]>('/search/suggest', { query: { q } });
+
+/** `/search/suggest?meta=1`: gợi ý kèm kết quả bước chịu gõ sai (cờ `catalog.search_fuzzy_enabled`); `didYouMean` là cụm đang hiện khi `corrected`. */
+export interface SuggestMeta {
+  items: ProductSuggestion[];
+  corrected: boolean;
+  didYouMean: string | null;
+}
+
+/** Đọc phản hồi `/search/suggest?meta=1`; mảng trần (API trước meta) vẫn đọc được và coi như không sửa gì. */
+export function normalizeSuggestMeta(body: unknown): SuggestMeta {
+  if (Array.isArray(body)) return { items: body as ProductSuggestion[], corrected: false, didYouMean: null };
+  const b = (body ?? {}) as Partial<SuggestMeta>;
+  return { items: Array.isArray(b.items) ? b.items : [], corrected: b.corrected === true, didYouMean: typeof b.didYouMean === 'string' ? b.didYouMean : null };
+}
+
+/** Cụm hiện thay cho từ khoá khách gõ, chỉ khi API báo đã sửa; cờ chịu gõ sai tắt thì luôn null. */
+export function suggestCorrection(m: Pick<SuggestMeta, 'corrected' | 'didYouMean'> | undefined): string | null {
+  const phrase = m?.corrected ? m.didYouMean?.trim() : undefined;
+  return phrase ? phrase : null;
+}
+
+export const suggestProductsMeta = (http: HttpClient, q: string) =>
+  http.get<unknown>('/search/suggest', { query: { q, meta: '1' } }).then(normalizeSuggestMeta);
 export const fetchCategories = (http: HttpClient) => http.get<CategoryDTO[]>('/categories');
 
 /** Tham số mà API trước 4b không biết — ValidationPipe `forbidNonWhitelisted` trả 400 nếu gửi. */

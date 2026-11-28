@@ -10,6 +10,7 @@ import {
   fetchProductsBySlugs,
   fetchRelated,
   suggestProducts,
+  suggestProductsMeta,
   type CatalogQuery,
 } from '../api/catalog';
 
@@ -34,6 +35,11 @@ export const forYouQuery = (http: HttpClient) => ({ queryKey: ['for-you'] as con
 export const suggestQuery = (http: HttpClient, term: string) => ({
   queryKey: ['search-suggest', term] as const,
   queryFn: () => suggestProducts(http, term),
+});
+/** Ô gợi ý khi gõ ở trang Danh mục: cùng khoá với hộp gợi ý ở thanh đầu web (cùng dạng `SuggestMeta`), nên gõ ở một nơi thì nơi kia dùng lại được. */
+export const suggestMetaQuery = (http: HttpClient, term: string) => ({
+  queryKey: ['search-suggest-meta', term] as const,
+  queryFn: () => suggestProductsMeta(http, term),
 });
 export const recentlyViewedQuery = (http: HttpClient, slugs: string[]) => ({
   queryKey: ['recently-viewed-products', slugs.join(',')] as const,

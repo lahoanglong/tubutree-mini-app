@@ -3,14 +3,17 @@
 // Nguồn: apps/miniapp/src/components/affiliate/link-builder-sheet.tsx
 import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import {
   AFFILIATE_LINK_TARGETS,
   LINK_BUILDER_COPY as T,
+  linkCampaignOptions,
   linkCategoryOptions,
   linkTargetNeedsPick,
   type AffiliateLinkTarget,
 } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { campaignsQuery } from '@tubutree/app-core/queries/campaign';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { pickerQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
@@ -54,8 +57,8 @@ function OptionRow({ active, label, sub, onPick }: { active: boolean; label: str
 }
 
 /**
- * Bộ tạo link CTV: chọn link mở tới Trang chủ, một sản phẩm có hoa hồng (tìm trong danh sách chọn sản phẩm của CTV), một danh mục, hay trang
- * Giờ vàng; một nút "Tạo link". Link sâu dựng ở `commerce/affiliate-deep-link.ts`.
+ * Bộ tạo link CTV: chọn link mở tới Trang chủ, một sản phẩm có hoa hồng (tìm trong danh sách chọn sản phẩm của CTV), một danh mục, trang
+ * Giờ vàng, một chiến dịch đang chạy hay trang Bộ quà tặng; một nút "Tạo link". Link sâu dựng ở `commerce/affiliate-deep-link.ts`.
  */
 export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkBuilderSheetProps) {
   const [type, setType] = useState<AffiliateLinkTarget>('PRODUCT');
@@ -73,6 +76,11 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
   const productsQ = useQuery({ ...pickerQuery(coreHttp, q), enabled: open && type === 'PRODUCT', staleTime: 60_000 });
   const categoriesQ = useQuery({ ...categoriesQuery(coreHttp), enabled: open && type === 'CATEGORY', staleTime: 60_000 });
   const categories = useMemo(() => linkCategoryOptions(categoriesQ.data), [categoriesQ.data]);
+  const campaignQs = useQueries({
+    queries: (['HOME_TOP', 'OFFERS_TOP'] as const).map((placement) => ({ ...campaignsQuery(coreHttp, placement), enabled: open && type === 'CAMPAIGN', staleTime: 60_000, retry: false })),
+  });
+  const campaigns = linkCampaignOptions(campaignQs.map((c) => c.data), serverNow());
+  const campaignState = { isError: campaignQs.some((c) => c.isError) && campaigns.length === 0, isLoading: campaignQs.some((c) => c.isLoading) && campaigns.length === 0, refetch: () => campaignQs.forEach((c) => void c.refetch()) };
   const products = (productsQ.data ?? []).filter((p) => p.maxAffiliateRate > 0);
 
   const needsPick = linkTargetNeedsPick(type);
@@ -85,8 +93,9 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
   const list = (() => {
     if (type === 'HOMEPAGE') return <p className="text-sm text-stone-600">{T.homeHint}</p>;
     if (type === 'DEAL') return <p className="text-sm text-stone-600">{T.dealHint}</p>;
-    const query = type === 'PRODUCT' ? productsQ : categoriesQ;
-    const groupLabel = type === 'PRODUCT' ? T.pickProduct : T.pickCategory;
+    if (type === 'COMBO') return <p className="text-sm text-stone-600">{T.comboHint}</p>;
+    const query = type === 'PRODUCT' ? productsQ : type === 'CAMPAIGN' ? campaignState : categoriesQ;
+    const groupLabel = type === 'PRODUCT' ? T.pickProduct : type === 'CAMPAIGN' ? T.pickCampaign : T.pickCategory;
     if (query.isError) return <ErrorState variant="inline" message={T.loadError} onRetry={() => query.refetch()} />;
     if (query.isLoading)
       return (
@@ -99,8 +108,8 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
     const rows =
       type === 'PRODUCT'
         ? products.map((p) => ({ id: p.id, label: p.name, sub: p.brand || undefined }))
-        : categories.map((c) => ({ id: c.id, label: c.label, sub: undefined }));
-    if (rows.length === 0) return <p className="text-sm text-stone-600">{type === 'PRODUCT' ? T.noProduct : T.noCategory}</p>;
+        : (type === 'CAMPAIGN' ? campaigns : categories).map((c) => ({ id: c.id, label: c.label, sub: undefined }));
+    if (rows.length === 0) return <p className="text-sm text-stone-600">{type === 'PRODUCT' ? T.noProduct : type === 'CAMPAIGN' ? T.noCampaign : T.noCategory}</p>;
     return (
       <div role="radiogroup" aria-label={groupLabel} className="flex flex-col gap-2">
         {rows.map((r) => (
@@ -141,6 +150,7 @@ export function LinkBuilderSheet({ open, onClose, busy, error, onCreate }: LinkB
         <SegmentedTabs
           label={T.targetLabel}
           items={AFFILIATE_LINK_TARGETS.map((t) => ({ key: t.key, label: t.label }))}
+          scroll
           value={type}
           onChange={(k) => {
             setType(k as AffiliateLinkTarget);
