@@ -11,13 +11,14 @@ import {
   mergeKeyThenSwipe,
   miniToday,
   mockMiniGames,
+  openMiniGameHub,
   playConveyorRound,
   playMergeToEnd,
   startRound,
 } from './support/game-mini-mocks';
 
 /**
- * Hai game thao tác ở Mini App (tubu-w48-01b): lưới 2 cột "Chơi hôm nay" có hình và nhãn "Mới", một ván Ghép Mầm Xanh chơi bằng phím và vuốt tới
+ * Hai game thao tác ở Mini App (tubu-w48-01b): hai thẻ đầu Sảnh Game có hình và nhãn "Mới", một ván Ghép Mầm Xanh chơi bằng phím và vuốt tới
  * hết nước đi, một ván Băng Chuyền Xanh 30 giây phân loại bằng chạm thùng, vuốt và phím; bài nộp đúng dạng máy chủ chấm lại, màn kết quả có
  * "Chơi lại". Chạy ở 360 và 375px; có VISUAL_DIR thì chụp lưới thẻ, bàn chơi và kết quả để so với web.
  */
@@ -41,32 +42,32 @@ for (const viewport of [
   test.describe(`Mini App ${viewport.width}px`, () => {
     test.use({ viewport });
 
-    test('lưới "Chơi hôm nay": hai game thao tác ngay sau Đố Xanh, nhãn "Mới", hình vector, hai thẻ một hàng', async ({ page, api }) => {
+    test('Sảnh Game: hai game thao tác đứng đầu, nhãn "Mới", hình vector, hai thẻ một hàng', async ({ page, api }) => {
       member(api);
       mockMiniGames(api, { today: withArcade() });
-      await page.goto('/game');
-      const card = page.getByTestId('mini-play-today');
-      await expect(card).toBeVisible({ timeout: 15_000 });
-      const ids = await card.locator('[data-testid^="mini-play-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-      expect(ids.slice(0, 3)).toEqual(['mini-play-row-daily_quiz', 'mini-play-row-eco_merge', 'mini-play-row-green_conveyor']);
+      await openMiniGameHub(page);
+      const hub = page.getByTestId('arcade-hub');
+      await expect(hub).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('mini-play-row-eco_merge')).toBeVisible({ timeout: 15_000 });
+      const ids = await hub.locator('article[data-testid]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+      expect(ids.slice(0, 3)).toEqual(['mini-play-row-eco_merge', 'mini-play-row-green_conveyor', 'arcade-game-dew_catcher']);
       for (const id of ['eco_merge', 'green_conveyor']) {
         const row = page.getByTestId(`mini-play-row-${id}`);
         await expect(row).toContainText(gameCopy('card.new'));
-        await expect(row.locator('svg.tubu-mg-gcard-svg')).toBeVisible();
+        await expect(row.locator('svg.tubu-hub-art-svg')).toBeVisible();
       }
       await expect(page.getByTestId('mini-play-row-sort')).not.toContainText(gameCopy('card.new'));
-      const quiz = (await page.getByTestId('mini-play-row-daily_quiz').boundingBox())!;
       const merge = (await page.getByTestId('mini-play-row-eco_merge').boundingBox())!;
       const conveyor = (await page.getByTestId('mini-play-row-green_conveyor').boundingBox())!;
-      expect(merge.y, 'Đố Xanh và Ghép Mầm Xanh chung hàng đầu').toBeCloseTo(quiz.y, 0);
-      expect(merge.x).toBeGreaterThan(quiz.x + quiz.width);
-      expect(conveyor.x, 'Băng Chuyền Xanh mở hàng thứ hai').toBeCloseTo(quiz.x, 0);
-      expect(conveyor.y).toBeGreaterThan(quiz.y + quiz.height);
-      expect(merge.height).toBeGreaterThanOrEqual(132);
-      expect(merge.height).toBeLessThanOrEqual(160);
-      await expectTargets44(card);
+      const dew = (await page.getByTestId('arcade-game-dew_catcher').boundingBox())!;
+      expect(conveyor.y, 'Ghép Mầm Xanh và Băng Chuyền Xanh chung hàng đầu').toBeCloseTo(merge.y, 0);
+      expect(conveyor.x).toBeGreaterThan(merge.x + merge.width);
+      expect(merge.width, 'thẻ rộng chưa tới nửa màn').toBeLessThan(viewport.width / 2);
+      expect(dew.x, 'Hứng Sương mở hàng thứ hai').toBeCloseTo(merge.x, 0);
+      expect(dew.y).toBeGreaterThan(merge.y + merge.height);
+      await expectTargets44(hub);
       await expectNoHorizontalOverflow(page);
-      await card.scrollIntoViewIfNeeded();
+      await hub.scrollIntoViewIfNeeded();
       await shot(page, `mini-${viewport.width}-play-today`);
     });
 
@@ -74,7 +75,7 @@ for (const viewport of [
       test.setTimeout(120_000);
       member(api);
       const { submits } = mockMiniGames(api, { today: withArcade() });
-      await page.goto('/game');
+      await openMiniGameHub(page);
       await page.getByTestId('mini-play-row-eco_merge').click();
       await expect(page).toHaveURL(/\/game\/play\/eco_merge$/);
       await startRound(page);
@@ -113,7 +114,7 @@ for (const viewport of [
       test.setTimeout(120_000);
       member(api);
       const { submits } = mockMiniGames(api, { today: withArcade() });
-      await page.goto('/game');
+      await openMiniGameHub(page);
       await page.getByTestId('mini-play-row-green_conveyor').click();
       await expect(page).toHaveURL(/\/game\/play\/green_conveyor$/);
       await startRound(page);

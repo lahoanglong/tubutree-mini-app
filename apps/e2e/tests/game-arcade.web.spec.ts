@@ -17,7 +17,7 @@ import {
 } from './support/game-mini-mocks';
 
 /**
- * Hai game thao tác trên web khổ điện thoại (tubu-w48-01b), cùng hành vi với Mini App (`game-arcade.miniapp.spec.ts`): lưới 2 cột có hình và nhãn
+ * Hai game thao tác trên web khổ điện thoại (tubu-w48-01b), cùng hành vi với Mini App (`game-arcade.miniapp.spec.ts`): hai thẻ đầu Sảnh Game có hình và nhãn
  * "Mới" là liên kết tới `/vuon-xanh/choi/<game>`, một ván Ghép Mầm Xanh bằng phím và vuốt tới hết nước đi, một ván Băng Chuyền Xanh 30 giây.
  * Chạy ở 360 và 375px; có VISUAL_DIR thì chụp cùng các màn như Mini App để so cặp.
  */
@@ -52,31 +52,32 @@ for (const viewport of [
     test.use({ viewport });
     test.beforeEach(({}, testInfo) => test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ điện thoại chạy ở project Web Customer Mobile'));
 
-    test('lưới "Chơi hôm nay": hai game thao tác ngay sau Đố Xanh, nhãn "Mới", hình vector, liên kết tới màn chơi', async ({ page, api }) => {
+    test('Sảnh Game: hai game thao tác đứng đầu, nhãn "Mới", hình vector, liên kết tới màn chơi', async ({ page, api }) => {
       member(api);
       mockMiniGames(api, { today: withArcade() });
       await signedIn(page);
-      await page.goto('/vuon-xanh');
-      const card = page.getByTestId('mini-play-today');
-      await expect(card).toBeVisible({ timeout: 15_000 });
-      const ids = await card.locator('[data-testid^="mini-play-row-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-      expect(ids.slice(0, 3)).toEqual(['mini-play-row-daily_quiz', 'mini-play-row-eco_merge', 'mini-play-row-green_conveyor']);
+      await page.goto('/vuon-xanh?tab=games');
+      const hub = page.getByTestId('arcade-hub');
+      await expect(hub).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('mini-play-row-eco_merge')).toBeVisible({ timeout: 15_000 });
+      const ids = await hub.locator('article[data-testid]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+      expect(ids.slice(0, 3)).toEqual(['mini-play-row-eco_merge', 'mini-play-row-green_conveyor', 'arcade-card-dew_catcher']);
       for (const id of ['eco_merge', 'green_conveyor']) {
         const row = page.getByTestId(`mini-play-row-${id}`);
-        await expect(row).toHaveAttribute('href', `/vuon-xanh/choi/${id}`);
+        await expect(row.getByRole('link')).toHaveAttribute('href', `/vuon-xanh/choi/${id}`);
         await expect(row).toContainText(gameCopy('card.new'));
-        await expect(row.locator('svg.tubu-mg-gcard-svg')).toBeVisible();
+        await expect(row.locator('svg.tubu-hub-art-svg')).toBeVisible();
       }
-      const quiz = (await page.getByTestId('mini-play-row-daily_quiz').boundingBox())!;
       const merge = (await page.getByTestId('mini-play-row-eco_merge').boundingBox())!;
       const conveyor = (await page.getByTestId('mini-play-row-green_conveyor').boundingBox())!;
-      expect(merge.y, 'Đố Xanh và Ghép Mầm Xanh chung hàng đầu').toBeCloseTo(quiz.y, 0);
-      expect(conveyor.x, 'Băng Chuyền Xanh mở hàng thứ hai').toBeCloseTo(quiz.x, 0);
-      expect(merge.height).toBeGreaterThanOrEqual(132);
-      expect(merge.height).toBeLessThanOrEqual(160);
-      await expectTargets44(card);
+      const dew = (await page.getByTestId('arcade-card-dew_catcher').boundingBox())!;
+      expect(conveyor.y, 'Ghép Mầm Xanh và Băng Chuyền Xanh chung hàng đầu').toBeCloseTo(merge.y, 0);
+      expect(merge.width, 'thẻ rộng chưa tới nửa màn').toBeLessThan(viewport.width / 2);
+      expect(dew.x, 'Hứng Sương mở hàng thứ hai').toBeCloseTo(merge.x, 0);
+      expect(dew.y).toBeGreaterThan(merge.y + merge.height);
+      await expectTargets44(hub);
       await expectNoHorizontalOverflow(page);
-      await card.scrollIntoViewIfNeeded();
+      await hub.scrollIntoViewIfNeeded();
       await shot(page, `web-${viewport.width}-play-today`);
     });
 
@@ -85,8 +86,8 @@ for (const viewport of [
       member(api);
       const { submits } = mockMiniGames(api, { today: withArcade() });
       await signedIn(page);
-      await page.goto('/vuon-xanh');
-      await page.getByTestId('mini-play-row-eco_merge').click();
+      await page.goto('/vuon-xanh?tab=games');
+      await page.getByTestId('mini-play-row-eco_merge').getByRole('link').click();
       await expect(page).toHaveURL(/\/vuon-xanh\/choi\/eco_merge$/);
       await startRound(page);
       const board = page.getByTestId('mini-eco-merge');
@@ -115,8 +116,8 @@ for (const viewport of [
       member(api);
       const { submits } = mockMiniGames(api, { today: withArcade() });
       await signedIn(page);
-      await page.goto('/vuon-xanh');
-      await page.getByTestId('mini-play-row-green_conveyor').click();
+      await page.goto('/vuon-xanh?tab=games');
+      await page.getByTestId('mini-play-row-green_conveyor').getByRole('link').click();
       await expect(page).toHaveURL(/\/vuon-xanh\/choi\/green_conveyor$/);
       await startRound(page);
       await expect(page.getByTestId('mini-green-conveyor')).toBeVisible();
