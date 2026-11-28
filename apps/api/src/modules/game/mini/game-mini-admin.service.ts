@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, type GameContentItem } from '@prisma/client';
-import { MINI_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, type MiniGameId } from '@tubutree/shared-types';
+import { MINI_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, type MiniContentGameId, type MiniGameId } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { paginated } from '../../../common/pagination';
@@ -8,11 +8,12 @@ import { vnDateKey } from '../../../common/vn-time';
 import { GameMiniContentService, LEGACY_QUIZ_PREFIX } from './game-mini-content.service';
 import { readMiniSettings } from './game-mini.settings';
 import { MINI_GAMES, type MiniContentRow } from './games';
+import { ARCADE_ID_PREFIX } from './games/arcade';
 import { SLUG_RE, isRecord } from './games/game-def';
 import { MATCHER_GAME, matcherPayloadError } from './matcher/matcher.rules';
 
-/** Loại mục do máy chủ đặt theo game (cột `kind`), admin không gửi. */
-export const MINI_CONTENT_KIND: Record<MiniGameId, string> = {
+/** Loại mục do máy chủ đặt theo game (cột `kind`), admin không gửi. Game thao tác (Ghép Mầm Xanh, Băng Chuyền Xanh) không có mục. */
+export const MINI_CONTENT_KIND: Record<MiniContentGameId, string> = {
   sort: 'sort_item',
   daily_quiz: 'quiz_question',
   match: 'match_pair',
@@ -28,7 +29,7 @@ const STATS_DAYS_MAX = 60;
 const STATS_ITEMS_MAX = 200;
 
 export interface MiniContentCreateInput {
-  game: MiniGameId;
+  game: MiniContentGameId;
   payload: unknown;
   explanation: string;
   sourceUrl: string;
@@ -247,13 +248,15 @@ export class GameMiniAdminService {
           FROM "game_play_rounds" WHERE "dayKey" >= ${from} AND "dayKey" <= ${today}
          GROUP BY "dayKey", "game" ORDER BY "dayKey" DESC, "game"`,
       this.prisma.gameGlobalDaily.findMany({ where: { dayKey: { gte: from, lte: today } }, orderBy: { dayKey: 'desc' } }),
-      // Ván Chọn Chuẩn Xanh không có đáp án đúng (contentIds là mã bộ kết quả): tính vào thì tỉ lệ đúng của bộ luôn là 0.
+      // Ván Chọn Chuẩn Xanh không có đáp án đúng (contentIds là mã bộ kết quả): tính vào thì tỉ lệ đúng của bộ luôn là 0. Game thao tác
+      // ghi một id mục ảo (`arcade:`) không có câu để xem tỉ lệ đúng.
       this.prisma.$queryRaw<Array<{ contentId: string; game: string; shown: bigint; correct: bigint }>>`
         SELECT c."contentId", r."game",
                COUNT(*) AS shown,
                COUNT(*) FILTER (WHERE c."contentId" = ANY(r."correctIds")) AS correct
           FROM "game_play_rounds" r CROSS JOIN LATERAL unnest(r."contentIds") AS c("contentId")
          WHERE r."submittedAt" IS NOT NULL AND r."dayKey" >= ${from} AND r."dayKey" <= ${today} AND r."game" <> ${MATCHER_GAME}
+           AND c."contentId" NOT LIKE ${`${ARCADE_ID_PREFIX}%`}
          GROUP BY c."contentId", r."game"
          ORDER BY COUNT(*) DESC, c."contentId"
          LIMIT ${STATS_ITEMS_MAX}`,

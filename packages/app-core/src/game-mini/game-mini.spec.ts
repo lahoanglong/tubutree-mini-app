@@ -323,7 +323,7 @@ describe('định dạng', () => {
   });
 
   it('Mini App và web chơi cùng bộ game mini: mọi game có bàn chơi ở cả hai nơi', () => {
-    expect([...PLAYABLE_MINI_GAMES]).toEqual(['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap']);
+    expect([...PLAYABLE_MINI_GAMES]).toEqual(['daily_quiz', 'eco_merge', 'green_conveyor', 'sort', 'match', 'origin', 'basket', 'kitchen_swap']);
   });
 
   it('dòng trạng thái: chơi thử / còn n lượt / đã nhận đủ', () => {

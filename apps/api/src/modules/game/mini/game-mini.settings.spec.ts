@@ -17,7 +17,7 @@ const NAMES = Object.keys(MINI_NUMERIC_SETTINGS) as Name[];
 
 const settings = (over: Partial<MiniSettings> = {}): MiniSettings => ({
   enabled: true,
-  games: { sort: true, daily_quiz: true, match: true, origin: true, basket: true, kitchen_swap: true },
+  games: { sort: true, daily_quiz: true, match: true, origin: true, basket: true, kitchen_swap: true, eco_merge: true, green_conveyor: true },
   roundsPerGame: 2,
   waterCap: 40,
   pointsCap: 100,
@@ -131,12 +131,14 @@ describe('miniGameFlagKey', () => {
     origin: 'game.mini.origin.enabled',
     basket: 'game.mini.basket.enabled',
     kitchen_swap: 'game.mini.kitchen_swap.enabled',
+    eco_merge: 'game.mini.eco_merge.enabled',
+    green_conveyor: 'game.mini.green_conveyor.enabled',
   };
 
-  it('trả đúng 6 khoá, mỗi game một khoá', () => {
+  it('trả đúng 8 khoá, mỗi game một khoá', () => {
     const keys = MINI_GAME_IDS.map((g) => miniGameFlagKey(g));
-    expect(keys).toHaveLength(6);
-    expect(new Set(keys).size).toBe(6);
+    expect(keys).toHaveLength(8);
+    expect(new Set(keys).size).toBe(8);
     expect(Object.fromEntries(MINI_GAME_IDS.map((g) => [g, miniGameFlagKey(g)]))).toEqual(EXPECTED);
   });
 
@@ -150,8 +152,8 @@ describe('isGameOn', () => {
   it('cần cả cờ chung và cờ của game', () => {
     expect(isGameOn(settings(), 'sort')).toBe(true);
     expect(isGameOn(settings({ enabled: false }), 'sort')).toBe(false);
-    expect(isGameOn(settings({ games: { sort: false, daily_quiz: true, match: true, origin: true, basket: true, kitchen_swap: true } }), 'sort')).toBe(false);
-    expect(isGameOn(settings({ games: { sort: false, daily_quiz: true, match: true, origin: true, basket: true, kitchen_swap: true } }), 'match')).toBe(true);
+    expect(isGameOn(settings({ games: { sort: false, daily_quiz: true, match: true, origin: true, basket: true, kitchen_swap: true, eco_merge: true, green_conveyor: true } }), 'sort')).toBe(false);
+    expect(isGameOn(settings({ games: { sort: false, daily_quiz: true, match: true, origin: true, basket: true, kitchen_swap: true, eco_merge: true, green_conveyor: true } }), 'match')).toBe(true);
   });
 });
 
@@ -159,7 +161,7 @@ describe('readMiniSettings', () => {
   it('không có khoá nào trong DB thì mọi cờ tắt và mọi số về mặc định', async () => {
     const s = await readMiniSettings(configOf({}));
     expect(s.enabled).toBe(false);
-    expect(s.games).toEqual({ sort: false, daily_quiz: false, match: false, origin: false, basket: false, kitchen_swap: false });
+    expect(s.games).toEqual({ sort: false, daily_quiz: false, match: false, origin: false, basket: false, kitchen_swap: false, eco_merge: false, green_conveyor: false });
     expect(s).toMatchObject({
       roundsPerGame: 2,
       waterCap: 40,
@@ -189,7 +191,7 @@ describe('readMiniSettings', () => {
       }),
     );
     expect(s.enabled).toBe(true);
-    expect(s.games).toEqual({ sort: true, daily_quiz: true, match: false, origin: false, basket: false, kitchen_swap: false });
+    expect(s.games).toEqual({ sort: true, daily_quiz: true, match: false, origin: false, basket: false, kitchen_swap: false, eco_merge: false, green_conveyor: false });
     expect(s.roundsPerGame).toBe(3);
     expect(s.waterCap).toBe(200);
     expect(s.pointsCap).toBe(500);
@@ -207,12 +209,12 @@ describe('readMiniSettings', () => {
     expect((await readMiniSettings(configOf({ 'game.tank_capacity': 300.9 }))).tankCapacity).toBe(300);
   });
 
-  it('đọc đủ 14 khoá (cờ chung, 6 cờ game, 6 khoá số, sức chứa bình) và truyền mặc định theo từng khoá', async () => {
+  it('đọc đủ 16 khoá (cờ chung, 8 cờ game, 6 khoá số, sức chứa bình) và truyền mặc định theo từng khoá', async () => {
     const cfg = configOf({});
     await readMiniSettings(cfg);
     const keys = cfg.get.mock.calls.map((c) => c[0]);
-    expect(keys).toHaveLength(14);
-    expect(new Set(keys).size).toBe(14);
+    expect(keys).toHaveLength(16);
+    expect(new Set(keys).size).toBe(16);
     expect(keys).toEqual(expect.arrayContaining([MINI_ENABLED_KEY, ...MINI_GAME_IDS.map((g) => miniGameFlagKey(g)), 'game.tank_capacity']));
     for (const n of NAMES) {
       expect(cfg.get).toHaveBeenCalledWith(MINI_NUMERIC_SETTINGS[n].key, MINI_NUMERIC_SETTINGS[n].fallback);

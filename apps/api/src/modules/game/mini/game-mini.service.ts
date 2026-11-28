@@ -6,10 +6,11 @@ import {
   MINI_GAME_IDS,
   MINI_GAME_RULES,
   MINI_MAX_ROUNDS_PER_GAME_PER_DAY,
-  MINI_MIN_ROUND_MS,
   MINI_ROUND_TTL_MS,
+  isMiniArcadeGameId,
   isMiniGameId,
   miniBaseReward,
+  miniMinRoundMs,
   type MiniCheckInResult,
   type MiniErrorCode,
   type MiniGameId,
@@ -28,7 +29,7 @@ import { vnDateKey } from '../../../common/vn-time';
 import { ensureGameProfile } from '../game-profile';
 import { GameMiniContentService } from './game-mini-content.service';
 import { GameMiniRewardService, MINI_TX_OPTIONS } from './game-mini-reward.service';
-import { deviceHash, matchCardId, readGuestRound, signGuestRound } from './game-mini-crypto';
+import { arcadeSeed, deviceHash, matchCardId, readGuestRound, signGuestRound } from './game-mini-crypto';
 import { MINI_GAMES, type MiniBuildCtx, type MiniContentRow } from './games';
 import { readMiniSettings, rewardedRoundsFor, type MiniSettings } from './game-mini.settings';
 
@@ -49,6 +50,7 @@ function miniError(status: HttpStatus, code: MiniErrorCode, message: string): Ht
 const disabled = () => miniError(HttpStatus.NOT_FOUND, MINI_ERROR_CODES.disabled, 'Trò chơi này đang tạm nghỉ. Bạn quay lại sau nhé.');
 const noContent = () =>
   miniError(HttpStatus.NOT_FOUND, MINI_ERROR_CODES.noContent, 'Trò chơi này đang được cập nhật nội dung. Bạn chơi trò khác nhé.');
+const tooFast = () => miniError(HttpStatus.BAD_REQUEST, MINI_ERROR_CODES.tooFast, 'Ván này nộp nhanh quá. Bạn đọc kỹ rồi nộp lại nhé.');
 
 /** [0, 1) từ bộ sinh số của hệ điều hành: thứ tự mục và thẻ không đoán trước được. */
 const cryptoRng = (): number => randomInt(0, 2 ** 47) / 2 ** 47;
@@ -101,6 +103,7 @@ export class GameMiniService {
       products: new Map(),
       sortHazardous: false,
       cardId: (contentId, side) => matchCardId(secret, roundKey, contentId, side),
+      arcadeSeed: arcadeSeed(secret, roundKey),
       ...extra,
     };
   }
@@ -203,7 +206,11 @@ export class GameMiniService {
         orderBy: { issuedAt: 'desc' },
         select: roundSelect,
       });
-      if (open) return { round: open, resumed: true };
+      if (open && !isMiniArcadeGameId(game)) return { round: open, resumed: true };
+      // Game thao tác không nhận lại ván mở: bàn dựng từ mã ván, nhận lại thì người chơi đã biết trước mọi ô sắp mọc (hay mọi món sắp ra) và
+      // chơi lại bàn quen trên cùng ô thưởng. Ván dở được cho hết hạn ngay, ô thưởng của nó trả lại như ván mất mạng giữa chừng, ván mới có
+      // mã và bàn mới; mỗi lần bắt đầu lại vẫn tính vào trần ván mỗi ngày.
+      if (open) await tx.gamePlayRound.updateMany({ where: { id: open.id, submittedAt: null }, data: { expiresAt: now } });
       const started = await tx.gamePlayRound.count({ where: { userId, game, dayKey } });
       if (started >= MINI_MAX_ROUNDS_PER_GAME_PER_DAY) {
         throw miniError(HttpStatus.TOO_MANY_REQUESTS, MINI_ERROR_CODES.roundLimit, 'Hôm nay bạn đã chơi trò này rất nhiều ván. Mai mình chơi tiếp nhé.');
@@ -254,23 +261,22 @@ export class GameMiniService {
     };
   }
 
-  private assertTiming(issuedAt: number, now: Date): number {
+  private assertTiming(game: MiniGameId, issuedAt: number, now: Date): number {
     const elapsed = now.getTime() - issuedAt;
     if (elapsed > MINI_ROUND_TTL_MS) {
       throw miniError(HttpStatus.BAD_REQUEST, MINI_ERROR_CODES.roundExpired, 'Ván này đã quá 10 phút nên không chấm được. Bạn chơi ván mới nhé.');
     }
-    if (elapsed < MINI_MIN_ROUND_MS) {
-      throw miniError(HttpStatus.BAD_REQUEST, MINI_ERROR_CODES.tooFast, 'Ván này nộp nhanh quá. Bạn đọc kỹ rồi nộp lại nhé.');
-    }
+    if (elapsed < miniMinRoundMs(game)) throw tooFast();
     return elapsed;
   }
 
-  private grade(game: MiniGameId, rows: MiniContentRow[], answers: unknown[], ctx: MiniBuildCtx) {
+  private grade(game: MiniGameId, rows: MiniContentRow[], answers: unknown[], ctx: MiniBuildCtx, durationMs: number) {
     const def = MINI_GAMES[game];
     const parsed = def.parseAnswers(answers, rows, ctx);
     if (parsed === null) {
       throw miniError(HttpStatus.BAD_REQUEST, MINI_ERROR_CODES.answersInvalid, 'Bài nộp chưa đúng dạng. Bạn tải lại trò chơi rồi thử lại nhé.');
     }
+    if (def.minDurationMs && durationMs < def.minDurationMs(parsed)) throw tooFast();
     return def.grade(rows, parsed, ctx);
   }
 
@@ -314,10 +320,10 @@ export class GameMiniService {
     if (round.submittedAt) {
       throw miniError(HttpStatus.CONFLICT, MINI_ERROR_CODES.roundSubmitted, 'Ván này đã nộp rồi. Bạn bấm Chơi để bắt đầu ván mới nhé.');
     }
-    const durationMs = this.assertTiming(round.issuedAt.getTime(), now);
+    const durationMs = this.assertTiming(game, round.issuedAt.getTime(), now);
     const rows = await this.content.byIds(game, round.contentIds);
     if (!rows) throw noContent();
-    const graded = this.grade(game, rows, input.answers, this.buildCtx(round.id, round.dayKey));
+    const graded = this.grade(game, rows, input.answers, this.buildCtx(round.id, round.dayKey), durationMs);
 
     const user = await this.user(userId);
     const real = isRealUser(user);
@@ -378,12 +384,12 @@ export class GameMiniService {
     if (!guest || guest.game !== game) {
       throw miniError(HttpStatus.BAD_REQUEST, MINI_ERROR_CODES.tokenInvalid, 'Mã ván chưa hợp lệ. Bạn bấm Chơi để bắt đầu ván mới nhé.');
     }
-    const durationMs = this.assertTiming(guest.issuedAt, now);
+    const durationMs = this.assertTiming(game, guest.issuedAt, now);
     const rows = await this.content.byIds(game, guest.contentIds);
     if (!rows) {
       throw miniError(HttpStatus.BAD_REQUEST, MINI_ERROR_CODES.tokenInvalid, 'Mã ván chưa hợp lệ. Bạn bấm Chơi để bắt đầu ván mới nhé.');
     }
-    const graded = this.grade(game, rows, answers, this.buildCtx(guest.nonce, vnDateKey(new Date(guest.issuedAt))));
+    const graded = this.grade(game, rows, answers, this.buildCtx(guest.nonce, vnDateKey(new Date(guest.issuedAt))), durationMs);
     await this.track('game_round_completed', userId, {
       game,
       correct: graded.correct,

@@ -1,4 +1,6 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { arcadeCopy } from '@tubutree/app-core/game-mini/arcade-copy';
+import { arcadeResultView, isMiniArcadeGameId, readArcadeBest, saveArcadeBest } from '@tubutree/app-core/game-mini/arcade';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { MINI_RECYCLE_PATH, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
 import { kitchenReviewRows } from '@tubutree/app-core/game-mini/kitchen';
@@ -9,6 +11,8 @@ import { Heading, Text } from '../../ui/text';
 import { SilentBoundary } from '../../route-shell';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
+import { arcadeStorage } from './arcade-platform';
+import { formatNumber } from '../../../utils/format';
 
 // Sản phẩm của ván và "Thêm vào giỏ" là một chunk lười riêng; Đúng Thùng không có sản phẩm nên không tải nó. Tải chunk lỗi (mạng chập chờn)
 // thì chỉ khối này biến mất, điểm và "Vì sao" của ván vẫn còn.
@@ -58,20 +62,60 @@ function ReviewList({ rows }: { rows: MiniReviewRow[] }) {
   );
 }
 
-/** Màn kết quả (chunk lười `mini-result`, khung ván tải trước lúc bắt đầu chơi): điểm, phần thưởng, một nút chính, sản phẩm vừa học, "Vì sao". */
-export default function MiniResult({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
+/**
+ * Màn kết quả (chunk lười `mini-result`, khung ván tải trước lúc bắt đầu chơi): điểm, phần thưởng, một nút chính, sản phẩm vừa học, "Vì sao".
+ * Game thao tác (Ghép Mầm Xanh, Băng Chuyền Xanh) thay "Vì sao" bằng dòng điểm ván, kỷ lục trên máy và nút phụ "Chơi lại".
+ */
+export default function MiniResult({
+  game,
+  state,
+  onDone,
+  onLogin,
+  onAgain,
+}: {
+  game: PlayableMiniGame;
+  state: RoundState;
+  onDone: () => void;
+  onLogin: () => void;
+  onAgain?: () => void;
+}) {
   const navigate = useSmartNavigate();
   const waste = usePublicConfig().waste.enabled;
   const r = state.result!;
   const summary = miniResultSummary(r);
+  const arcade = arcadeResultView(r.review);
+  // Đọc kỷ lục cũ một lần trước khi ghi điểm ván này, để chữ "Kỷ lục mới" không mất khi màn vẽ lại.
+  const [previousBest] = useState(() => (isMiniArcadeGameId(game) ? readArcadeBest(arcadeStorage(), game) : 0));
+  useEffect(() => {
+    if (arcade && isMiniArcadeGameId(game)) saveArcadeBest(arcadeStorage(), game, arcade.score);
+  }, [arcade?.score, game]);
+  const newBest = arcade !== null && previousBest > 0 && arcade.score > previousBest;
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
         {gameCopy('result.title')}
       </Heading>
       <Heading as="p" variant="display-md" className="tubu-mg-score" data-testid="mini-result-score">
-        {summary.score}
+        {arcade?.headline ?? summary.score}
       </Heading>
+      {arcade && (
+        <div className="tubu-mg-gains" data-testid="mini-result-arcade">
+          <Text variant="body-md" as="p" numeric>
+            {arcade.line}
+          </Text>
+          {newBest ? (
+            <span className="tubu-mg-chip" data-tone="brand" data-testid="mini-result-best">
+              {arcadeCopy('result.best')}
+            </span>
+          ) : (
+            previousBest > 0 && (
+              <Text variant="caption" tone="secondary" as="p" numeric>
+                {arcadeCopy('result.bestWas', { n: formatNumber(previousBest) })}
+              </Text>
+            )
+          )}
+        </div>
+      )}
       {summary.gains.length > 0 && (
         <div className="tubu-mg-gains">
           {summary.gains.map((g) => (
@@ -95,28 +139,38 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
       <Button fullWidth size="lg" onPress={summary.loginToReward ? onLogin : onDone}>
         {gameCopy(summary.loginToReward ? 'result.login' : 'result.done')}
       </Button>
-      <SilentBoundary>
-        <Suspense fallback={null}>
-          <AlbumLine roundId={r.roundId} />
-        </Suspense>
-      </SilentBoundary>
-      {game === 'sort' && waste && (
-        <button type="button" className="tubu-mg-link" onClick={() => navigate(MINI_RECYCLE_PATH.miniapp)}>
-          {gameCopy('invite.sort')}
-        </button>
-      )}
-      {game !== 'sort' && (
-        <SilentBoundary>
-          <Suspense fallback={null}>
-            <ResultProducts game={game} state={state} />
-          </Suspense>
-        </SilentBoundary>
-      )}
-      <Heading as="h3" variant="title-sm" font="ui">
-        {gameCopy('result.review')}
-      </Heading>
-      {state.round && (
-        <ReviewList rows={game === 'kitchen_swap' ? kitchenReviewRows(r.review, state.round.content) : miniReviewRows(r.review, state.round.content, state.answers)} />
+      {arcade ? (
+        onAgain && (
+          <Button fullWidth size="lg" variant="secondary" onPress={onAgain}>
+            {gameCopy('result.again')}
+          </Button>
+        )
+      ) : (
+        <>
+          <SilentBoundary>
+            <Suspense fallback={null}>
+              <AlbumLine roundId={r.roundId} />
+            </Suspense>
+          </SilentBoundary>
+          {game === 'sort' && waste && (
+            <button type="button" className="tubu-mg-link" onClick={() => navigate(MINI_RECYCLE_PATH.miniapp)}>
+              {gameCopy('invite.sort')}
+            </button>
+          )}
+          {game !== 'sort' && (
+            <SilentBoundary>
+              <Suspense fallback={null}>
+                <ResultProducts game={game} state={state} />
+              </Suspense>
+            </SilentBoundary>
+          )}
+          <Heading as="h3" variant="title-sm" font="ui">
+            {gameCopy('result.review')}
+          </Heading>
+          {state.round && (
+            <ReviewList rows={game === 'kitchen_swap' ? kitchenReviewRows(r.review, state.round.content) : miniReviewRows(r.review, state.round.content, state.answers)} />
+          )}
+        </>
       )}
     </section>
   );

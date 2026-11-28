@@ -26,6 +26,7 @@ export * from './copy-claims-guard';
 export * from './catalog-copy';
 export * from './order-discount';
 export * from './game-mini';
+export * from './game-arcade';
 export * from './engagement';
 export * from './review-green-corner';
 export * from './freeship-upsell';

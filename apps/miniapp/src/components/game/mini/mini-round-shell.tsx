@@ -22,6 +22,8 @@ import './mini-game-b.css';
 
 // Mỗi game một chunk lười: màn chơi chỉ tải bàn chơi của game đang mở, nội dung ván lấy từ API lúc bắt đầu (`/game/mini/:game/start`).
 const BOARDS: Record<PlayableMiniGame, ComponentType<MiniBoardProps<never>>> = {
+  eco_merge: lazy(() => import('./mini-eco-merge')) as ComponentType<MiniBoardProps<never>>,
+  green_conveyor: lazy(() => import('./mini-green-conveyor')) as ComponentType<MiniBoardProps<never>>,
   daily_quiz: lazy(() => import('./mini-daily-quiz')) as ComponentType<MiniBoardProps<never>>,
   sort: lazy(() => import('./mini-sort')) as ComponentType<MiniBoardProps<never>>,
   match: lazy(() => import('./mini-match')) as ComponentType<MiniBoardProps<never>>,
@@ -124,8 +126,12 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   const authed = phase === 'authenticated';
   const todayQ = useQuery({ ...miniTodayQuery(coreHttp, authed, refreshSession), enabled: phase !== 'loading' });
   const streakQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed && game === 'daily_quiz' });
-  const { state, dispatch, start } = useMiniRound(game, authed);
+  const { state, dispatch, start: startRound } = useMiniRound(game, authed);
   const [status, setStatus] = useState<MiniBoardStatus | null>(null);
+  const start = () => {
+    setStatus(null);
+    startRound();
+  };
   const onStatus = useCallback(
     (s: MiniBoardStatus) =>
       setStatus((prev) => (prev && prev.done === s.done && prev.total === s.total && Math.ceil(prev.msLeft / 1000) === Math.ceil(s.msLeft / 1000) ? prev : s)),
@@ -199,7 +205,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   } else if (state.phase === 'result' && state.result) {
     body = (
       <Suspense fallback={skeleton}>
-        <MiniResult game={game} state={state} onDone={back} onLogin={() => void login()} />
+        <MiniResult game={game} state={state} onDone={back} onLogin={() => void login()} onAgain={start} />
       </Suspense>
     );
   } else if (state.phase === 'expired') {

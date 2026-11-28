@@ -1,4 +1,4 @@
-import { MINI_MIN_ROUND_MS, MINI_ROUND_TTL_MS, type MiniStartResponse, type MiniSubmitResponse } from '@tubutree/shared-types';
+import { MINI_MIN_ROUND_MS, MINI_ROUND_TTL_MS, miniMinRoundMs, type MiniStartResponse, type MiniSubmitResponse } from '@tubutree/shared-types';
 import type { RoundFailure } from './api';
 
 /**
@@ -109,11 +109,13 @@ export function submitDelayMs(s: RoundState, now: number): number {
   if (s.phase !== 'submitting') return 0;
   if (s.attempts <= 1) {
     if (s.receivedAt === null) return 0;
-    return Math.max(0, s.receivedAt + MINI_MIN_ROUND_MS + MIN_ROUND_PAD_MS - now);
+    // Băng Chuyền Xanh có mức nộp sớm nhất riêng (20 giây), cao hơn mức chung.
+    const min = s.round ? miniMinRoundMs(s.round.game) : MINI_MIN_ROUND_MS;
+    return Math.max(0, s.receivedAt + min + MIN_ROUND_PAD_MS - now);
   }
   const backoff = SUBMIT_BACKOFF_MS[Math.min(s.attempts - 2, SUBMIT_BACKOFF_MS.length - 1)]!;
   // `too_fast` nghĩa là máy chủ thấy ván ngắn hơn mức tối thiểu: đợi đủ mức đó chứ không chỉ khoảng lùi.
-  return s.failure === 'too_fast' ? Math.max(backoff, MINI_MIN_ROUND_MS) : backoff;
+  return s.failure === 'too_fast' ? Math.max(backoff, s.round ? miniMinRoundMs(s.round.game) : MINI_MIN_ROUND_MS) : backoff;
 }
 
 /** Mili giây còn lại tới hạn ván (không âm); chưa có ván thì null. */

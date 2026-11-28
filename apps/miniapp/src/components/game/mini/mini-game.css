@@ -67,6 +67,93 @@
   white-space: nowrap;
 }
 
+/* Lưới 2 cột thẻ game có hình (w48-01b): nền theo tông của từng game, nhãn "Mới" ở góc. */
+.tubu-mg-gcards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-inline-sm);
+  margin: var(--space-stack-xs) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-mg-gcards > li {
+  display: flex;
+}
+.tubu-mg-gcard {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 132px;
+  padding: var(--space-inline-md) var(--space-inline-md) var(--space-stack-sm);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 90ms var(--ease-out);
+}
+.tubu-mg-gcard:active {
+  transform: scale(0.97);
+}
+.tubu-mg-gcard:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.tubu-mg-gcard[data-tone='leaf'] { background: var(--color-story-ambient-leaf); }
+.tubu-mg-gcard[data-tone='sky'] { background: var(--color-story-ambient-sky); }
+.tubu-mg-gcard[data-tone='amber'] { background: var(--color-story-ambient-amber); }
+.tubu-mg-gcard[data-tone='rose'] { background: var(--color-story-ambient-rose); }
+.tubu-mg-gcard[data-tone='sand'] { background: var(--color-story-ambient-sand); }
+.tubu-mg-gcard[data-tone='mint'] { background: color-mix(in srgb, var(--color-story-ambient-leaf) 55%, var(--color-story-ambient-sky)); }
+.tubu-mg-gcard[data-tone='peach'] { background: color-mix(in srgb, var(--color-story-ambient-rose) 50%, var(--color-story-ambient-amber)); }
+.tubu-mg-gcard[data-tone='fern'] { background: color-mix(in srgb, var(--color-story-ambient-leaf) 60%, var(--color-story-ambient-sand)); }
+.tubu-mg-gcard[data-tone='lilac'] { background: color-mix(in srgb, var(--color-story-ambient-sky) 50%, var(--color-story-ambient-rose)); }
+.tubu-mg-gcard-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-stack-xs);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+}
+.tubu-mg-gcard-svg {
+  display: block;
+  width: 36px;
+  height: 36px;
+}
+.tubu-mg-gcard-badge {
+  position: absolute;
+  top: var(--space-inline-sm);
+  right: var(--space-inline-sm);
+  padding: 2px var(--space-inline-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-action-primary-bg);
+  color: var(--color-action-primary-fg);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-caption-lh);
+}
+.tubu-mg-gcard-title,
+.tubu-mg-gcard-desc {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 /* ── Khung ván ── */
 .tubu-mg-shell {
   display: flex;
@@ -348,7 +435,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tubu-mg-fill,
-  .tubu-mg-card {
+  .tubu-mg-card,
+  .tubu-mg-gcard {
     transition: none;
   }
 }

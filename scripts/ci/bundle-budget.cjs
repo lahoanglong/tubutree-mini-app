@@ -11,9 +11,10 @@
 //                          (w28-01 hạ từ 2350 sau khi gom chuỗi lặp của từng chunk đưa bản dựng từ 2168 KB về 2082 KB; trước đó: W177 hạ từ 2500 xuống 2350 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB; w3-09 nâng lên 2380 khi gộp 9 tính năng đợt 3,
 //                          gồm cả 6 game chơi ngay trong Mini App, đưa bản dựng lên 2357 KB; w6-03 hạ lại 2350 sau khi cắt 4 tệp Inter
 //                          về bộ glyph trình duyệt dùng mặc định (−43 KB, chữ hiển thị trùng từng pixel, xem packages/design-tokens/src/fonts.css), bản dựng còn ~2335 KB).
-//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk JS `mini-*` (khung ván, màn kết quả, bàn chơi game mini, tải lười), raw, mặc định 40000: khung ván,
-//                                 màn kết quả (kèm chunk thêm giỏ `mini-result-cart`) và bàn chơi của cả 6 game mini chơi ngay trong Mini App; không nâng
-//                                 hơn. Chọn Chuẩn Xanh là route riêng (chunk `game-matcher`) nên chỉ nằm trong tổng 2350 KB. CSS game mini không
+//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk JS `mini-*` (khung ván, màn kết quả, bàn chơi game mini, tải lười), raw, mặc định 50000: khung ván,
+//                                 màn kết quả (kèm chunk thêm giỏ `mini-result-cart`) và bàn chơi của cả 8 game mini chơi ngay trong Mini App; không nâng
+//                                 hơn (w48-01b nâng từ 40000 khi thêm hai game thao tác Ghép Mầm Xanh và Băng Chuyền Xanh: hai bàn chơi, hình vector và
+//                                 hook vuốt/phím/âm thanh dùng chung đưa tổng từ 30659 lên ~48100 byte). Chọn Chuẩn Xanh là route riêng (chunk `game-matcher`) nên chỉ nằm trong tổng 2350 KB. CSS game mini không
 //                                 tính: Rollup đặt tên file CSS theo chunk dùng chung nên tên không ổn định. Mỗi chunk còn có trần riêng: `mini-round-shell`
 //                                 10 KB, chunk `mini-*` khác 6 KB. Không thấy chunk `mini-*` nào (Rollup gộp chunk nhỏ vào chunk tên khác) cũng là cảnh báo,
 //                                 để ngưỡng không xanh vì không đo được gì.
@@ -60,7 +61,7 @@ function main() {
   const strict = process.env.BUNDLE_BUDGET_STRICT === '1';
   const entryWarn = threshold('MINIAPP_ENTRY_WARN_KB', 312);
   const totalWarn = threshold('MINIAPP_TOTAL_WARN_KB', 2210);
-  const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 40000).value;
+  const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 50000).value;
 
   if (!fs.existsSync(dir)) {
     console.log(`::warning title=Bundle miniapp::không thấy thư mục ${dir}: bản build đổi chỗ đầu ra hoặc build chưa chạy, nên chưa đo được kích thước.`);

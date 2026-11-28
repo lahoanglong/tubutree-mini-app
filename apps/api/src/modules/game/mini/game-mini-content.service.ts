@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { MINI_MIN_ACTIVE_ITEMS, type MiniGameId, type MiniProductCard } from '@tubutree/shared-types';
+import { MINI_MIN_ACTIVE_ITEMS, isMiniArcadeGameId, type MiniGameId, type MiniProductCard } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PUBLIC_PRODUCT_WHERE } from '../../catalog/public-product';
 import { publicProductThumb } from '../../../common/public-image';
 import { MINI_GAMES, type MiniContentRow } from './games';
 import { kitchenSwapReady } from './games/kitchen-swap';
+import { ARCADE_CONTENT_ID, arcadeRow } from './games/arcade';
 import type { MiniPickCtx } from './games/game-def';
 
 /** Câu `game_quizzes` đi qua bộ chuyển mang id có tiền tố này, để không đụng id của `game_content_items`. */
@@ -85,6 +86,8 @@ export class GameMiniContentService {
 
   /** Kho đang bật của một game, kèm thẻ sản phẩm và việc game có đủ nội dung để hiện hay không. */
   async pool(game: MiniGameId, dayKey: string): Promise<MiniPool> {
+    // Game thao tác chạy theo luật cài sẵn: luôn đủ "nội dung", không đọc DB.
+    if (isMiniArcadeGameId(game)) return { rows: [arcadeRow(game)], products: new Map(), usableCount: 1, available: true, sortHazardous: false };
     const def = MINI_GAMES[game];
     const items = (await this.prisma.gameContentItem.findMany({ where: { game, active: true }, select: CONTENT_SELECT })).map((r) =>
       this.toRow(r),
@@ -104,6 +107,7 @@ export class GameMiniContentService {
    * (id lạ hoặc không thuộc game này).
    */
   async byIds(game: MiniGameId, ids: readonly string[]): Promise<MiniContentRow[] | null> {
+    if (isMiniArcadeGameId(game)) return ids.length === 1 && ids[0] === ARCADE_CONTENT_ID[game] ? [arcadeRow(game)] : null;
     const legacyIds = ids.filter((id) => id.startsWith(LEGACY_QUIZ_PREFIX)).map((id) => id.slice(LEGACY_QUIZ_PREFIX.length));
     const plainIds = ids.filter((id) => !id.startsWith(LEGACY_QUIZ_PREFIX));
     if (legacyIds.length > 0 && game !== 'daily_quiz') return null;

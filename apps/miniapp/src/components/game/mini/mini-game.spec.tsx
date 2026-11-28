@@ -83,6 +83,22 @@ describe('PlayTodayCard', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/game/matcher?from=play_today');
   });
 
+  it('game thao tác đứng ngay sau Đố Xanh kèm nhãn "Mới", hình vector nạp lười hiện trong ô hình; game cũ giữ biểu tượng', async () => {
+    mocks.get.mockResolvedValue({ enabled: false });
+    const arcade = { items: 8, timeLimitMs: 180_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 };
+    const t = today();
+    render(wrap(<PlayTodayCard today={{ ...t, games: [...t.games, { game: 'eco_merge', ...arcade }, { game: 'green_conveyor', ...arcade, items: 24 }] }} />));
+    const rows = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid'));
+    expect(rows).toEqual(['mini-play-row-daily_quiz', 'mini-play-row-eco_merge', 'mini-play-row-green_conveyor', 'mini-play-row-sort', 'mini-play-row-match']);
+    const merge = screen.getByTestId('mini-play-row-eco_merge');
+    expect(merge).toHaveTextContent(gameCopy('card.new'));
+    await waitFor(() => expect(merge.querySelector('svg.tubu-mg-gcard-svg')).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId('mini-play-row-green_conveyor').querySelector('svg.tubu-mg-gcard-svg')).not.toBeNull());
+    expect(screen.getByTestId('mini-play-row-sort').querySelector('svg.tubu-mg-gcard-svg')).toBeNull();
+    fireEvent.click(screen.getByTestId('mini-play-row-green_conveyor'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/game/play/green_conveyor');
+  });
+
   it('Chọn Chuẩn Xanh: cờ tắt thì không có dòng', async () => {
     mocks.get.mockResolvedValue({ enabled: false });
     render(wrap(<PlayTodayCard today={today()} />));

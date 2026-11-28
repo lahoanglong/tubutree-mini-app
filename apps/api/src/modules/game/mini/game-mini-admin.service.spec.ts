@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { MINI_GAME_IDS, type MiniGameId, type MiniProductCard } from '@tubutree/shared-types';
+import { MINI_CONTENT_GAME_IDS, type MiniContentGameId, type MiniProductCard } from '@tubutree/shared-types';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { SystemConfigService } from '../../system-config/system-config.service';
 import type { GameMiniContentService } from './game-mini-content.service';
@@ -8,7 +8,7 @@ import { MINI_GAMES } from './games';
 
 const SLUGS = ['gio-dung-1', 'gio-dung-2', 'gio-dung-3', 'gio-sai-1', 'gio-sai-2', 'gio-sai-3'];
 
-const VALID: Record<MiniGameId, Record<string, unknown>> = {
+const VALID: Record<MiniContentGameId, Record<string, unknown>> = {
   sort: { label: 'Chai nhựa', bin: 'recycle', emoji: '🍼' },
   daily_quiz: { prompt: 'Vỏ chuối bỏ vào thùng nào?', options: ['Rác hữu cơ', 'Rác tái chế', 'Rác khác'], answer: 0 },
   origin: { prompt: 'Cà phê Buôn Ma Thuột thuộc vùng nào?', options: ['Tây Nguyên', 'Tây Bắc'], answer: 0 },
@@ -28,7 +28,7 @@ const VALID: Record<MiniGameId, Record<string, unknown>> = {
   },
 };
 /** Mỗi payload sai theo cách khác nhau cho từng game: đủ để payloadError của game đó từ chối. */
-const INVALID: Record<MiniGameId, Record<string, unknown>> = {
+const INVALID: Record<MiniContentGameId, Record<string, unknown>> = {
   sort: { label: 'Chai nhựa', bin: 'plastic' },
   daily_quiz: { prompt: 'Câu?', options: ['Chỉ một lựa chọn'], answer: 0 },
   origin: { prompt: 'Câu?', options: ['A', 'B'], answer: 5 },
@@ -36,7 +36,7 @@ const INVALID: Record<MiniGameId, Record<string, unknown>> = {
   basket: { task: 'Rửa bình sữa', correct: SLUGS.slice(0, 2), wrong: [] },
   kitchen_swap: { corner: 'kitchen', item: 'Chai nhựa', hidden: 'Vỏ nhựa', options: [{ slug: SLUGS[0], fact: 'Can 10L' }], answer: SLUGS[0] },
 };
-const GAME_NAME: Record<MiniGameId, string> = {
+const GAME_NAME: Record<MiniContentGameId, string> = {
   sort: 'Đúng Thùng',
   daily_quiz: 'Đố Xanh',
   origin: 'Đoán Xuất Xứ',
@@ -45,7 +45,7 @@ const GAME_NAME: Record<MiniGameId, string> = {
   kitchen_swap: 'Căn Bếp Xanh',
 };
 
-const input = (game: MiniGameId, over: Partial<MiniContentCreateInput> = {}): MiniContentCreateInput => ({
+const input = (game: MiniContentGameId, over: Partial<MiniContentCreateInput> = {}): MiniContentCreateInput => ({
   game,
   payload: VALID[game],
   explanation: 'Vỏ chuối là rác hữu cơ, ủ phân được.',
@@ -53,7 +53,7 @@ const input = (game: MiniGameId, over: Partial<MiniContentCreateInput> = {}): Mi
   ...over,
 });
 
-const stored = (game: MiniGameId, over: Record<string, unknown> = {}) => ({
+const stored = (game: MiniContentGameId, over: Record<string, unknown> = {}) => ({
   id: 'item-1',
   game,
   kind: MINI_CONTENT_KIND[game],
@@ -130,7 +130,7 @@ describe('GameMiniAdminService.create', () => {
   });
 
   describe('payload', () => {
-    it.each(MINI_GAME_IDS)('%s: payload sai → 400 với đúng câu lỗi của game đó, không ghi DB', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: payload sai → 400 với đúng câu lỗi của game đó, không ghi DB', async (game) => {
       const m = makeSvc();
       const promise = m.svc.create(input(game, { payload: INVALID[game] }));
       await expect(promise).rejects.toBeInstanceOf(BadRequestException);
@@ -157,7 +157,7 @@ describe('GameMiniAdminService.create', () => {
       expect(m.prisma.gameContentItem.create).not.toHaveBeenCalled();
     });
 
-    it.each(MINI_GAME_IDS)('%s: payload hợp lệ được lưu nguyên', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: payload hợp lệ được lưu nguyên', async (game) => {
       const m = makeSvc();
       await m.svc.create(input(game));
       expect(createdData(m).payload).toEqual(VALID[game]);
@@ -176,7 +176,7 @@ describe('GameMiniAdminService.create', () => {
       });
     });
 
-    it.each(MINI_GAME_IDS)('%s: kind do máy chủ đặt theo game, admin gửi kind khác cũng bị bỏ qua', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: kind do máy chủ đặt theo game, admin gửi kind khác cũng bị bỏ qua', async (game) => {
       const m = makeSvc();
       await m.svc.create({ ...input(game), kind: 'admin_tu_dat' } as MiniContentCreateInput);
       expect(createdData(m).kind).toBe(MINI_CONTENT_KIND[game]);
@@ -329,7 +329,7 @@ describe('GameMiniAdminService.update', () => {
       expect(m.prisma.gameContentItem.update).not.toHaveBeenCalled();
     });
 
-    it.each(MINI_GAME_IDS)('%s: payload cũ sai thì không bật được, payload cũ đúng thì bật được', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: payload cũ sai thì không bật được, payload cũ đúng thì bật được', async (game) => {
       const m = makeSvc();
       m.prisma.gameContentItem.findUnique.mockResolvedValue(stored(game, { payload: INVALID[game] }));
       await expect(m.svc.update('item-1', { active: true })).rejects.toThrow(GAME_NAME[game]);
@@ -366,7 +366,7 @@ describe('GameMiniAdminService.update', () => {
   });
 
   describe('kiểm trường khi sửa', () => {
-    it.each(MINI_GAME_IDS)('%s: sửa payload sai → 400 với câu của game', async (game) => {
+    it.each(MINI_CONTENT_GAME_IDS)('%s: sửa payload sai → 400 với câu của game', async (game) => {
       const m = makeSvc();
       m.prisma.gameContentItem.findUnique.mockResolvedValue(stored(game));
       await expect(m.svc.update('item-1', { payload: INVALID[game] })).rejects.toThrow(GAME_NAME[game]);

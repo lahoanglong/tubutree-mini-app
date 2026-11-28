@@ -40,6 +40,7 @@ const pickCtx = (over: Partial<MiniPickCtx> = {}): MiniPickCtx => ({ rng: seeded
 const buildCtx = (over: Partial<MiniBuildCtx> = {}): MiniBuildCtx => ({
   ...pickCtx(),
   sortHazardous: false,
+  arcadeSeed: 0,
   cardId: (id, side) => `${side}:${id}`,
   ...over,
 });

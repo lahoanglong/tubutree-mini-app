@@ -3,7 +3,7 @@ import { FUWA3E_SKUS,
   MINI_GAME_RULES,
   MINI_MIN_ACTIVE_ITEMS,
   MINI_SORT_BINS,
-  type MiniGameId,
+  type MiniContentGameId,
   type MiniProductCard,
 } from '@tubutree/shared-types';
 import {
@@ -30,11 +30,11 @@ import { MINI_EXPLANATION_MAX } from './game-mini-admin.service';
  * được một ván bằng đúng các mục đang bật. Số mục bật ghi cứng để mọi lần thêm hay tắt mục là thay đổi có chủ ý. Căn Bếp Xanh nạp tắt hết
  * (chờ chuyên gia duyệt) nên không nằm trong `GAMES` (game đang hiện); phần riêng của nó chơi thử bằng mọi món như thể đã bật.
  */
-const GAMES: MiniGameId[] = ['sort', 'daily_quiz', 'match', 'origin', 'basket'];
-const ALL_GAMES: MiniGameId[] = [...GAMES, 'kitchen_swap'];
+const GAMES: MiniContentGameId[] = ['sort', 'daily_quiz', 'match', 'origin', 'basket'];
+const ALL_GAMES: MiniContentGameId[] = [...GAMES, 'kitchen_swap'];
 const pack = loadGameMiniPack();
 const clone = (): GameMiniPack => JSON.parse(JSON.stringify(pack)) as GameMiniPack;
-const allItems = (): (GameMiniItem & { game: MiniGameId })[] => ALL_GAMES.flatMap((game) => pack.games[game].map((i) => ({ ...i, game })));
+const allItems = (): (GameMiniItem & { game: MiniContentGameId })[] => ALL_GAMES.flatMap((game) => pack.games[game].map((i) => ({ ...i, game })));
 
 function seeded(seed: number): () => number {
   let s = seed >>> 0;
@@ -65,7 +65,7 @@ const legacyRows = (): MiniContentRow[] =>
   });
 
 /** Kho như `GameMiniContentService.pool` dựng: mục đang bật, cộng câu cũ có nguồn cho Đố Xanh. */
-const poolOf = (game: MiniGameId): MiniContentRow[] => {
+const poolOf = (game: MiniContentGameId): MiniContentRow[] => {
   const rows = pack.games[game]
     .filter((i) => i.active)
     .map((i) => ({ id: i.id, game, payload: i.payload, explanation: i.explanation, sourceUrl: i.sourceUrl, productSlug: i.productSlug ?? null }));
@@ -77,11 +77,12 @@ const buildCtx = (rng: () => number, dayKey: string, sortHazardous: boolean): Mi
   dayKey,
   products,
   sortHazardous,
+  arcadeSeed: 0,
   cardId: (id, side) => `c-${side === 'ingredient' ? 'i' : 'u'}-${id}`,
 });
 
 /** Đáp án đúng máy chủ biết, theo dạng khách gửi lên. */
-const correctAnswers = (game: MiniGameId, rows: MiniContentRow[], ctx: MiniBuildCtx): unknown[] => {
+const correctAnswers = (game: MiniContentGameId, rows: MiniContentRow[], ctx: MiniBuildCtx): unknown[] => {
   switch (game) {
     case 'sort':
       return rows.map((r) => readSortPayload(r.payload)!.bin);
@@ -121,7 +122,7 @@ describe('gói nội dung game mini', () => {
   it('id không trùng trên toàn gói và mỗi id mang tiền tố game của nó', () => {
     const ids = allItems().map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
-    const prefix: Record<MiniGameId, string> = {
+    const prefix: Record<MiniContentGameId, string> = {
       sort: 'gm-sort-',
       daily_quiz: 'gm-quiz-',
       match: 'gm-match-',
@@ -146,7 +147,7 @@ describe('gói nội dung game mini', () => {
   it('mục tắt đều ghi lý do; mục bật không mang lý do tắt', () => {
     const inactive = allItems().filter((i) => !i.active);
     expect(inactive.map((i) => i.game).sort()).toEqual(
-      ['basket', 'daily_quiz', 'daily_quiz', 'match', 'sort', 'sort', 'sort', 'sort', 'sort', 'sort', ...Array<MiniGameId>(12).fill('kitchen_swap')].sort(),
+      ['basket', 'daily_quiz', 'daily_quiz', 'match', 'sort', 'sort', 'sort', 'sort', 'sort', 'sort', ...Array<MiniContentGameId>(12).fill('kitchen_swap')].sort(),
     );
     for (const i of inactive) expect(i.inactiveReason?.trim().length ?? 0).toBeGreaterThan(10);
     expect(allItems().filter((i) => i.active && i.inactiveReason).map((i) => i.id)).toEqual([]);
@@ -311,7 +312,7 @@ describe('cụm cấm', () => {
 });
 
 describe('bộ kiểm gói bắt lỗi', () => {
-  const firstActive = (p: GameMiniPack, game: MiniGameId) => p.games[game].find((i) => i.active)!;
+  const firstActive = (p: GameMiniPack, game: MiniContentGameId) => p.games[game].find((i) => i.active)!;
 
   it.each<[string, (p: GameMiniPack) => void, RegExp]>([
     ['sourceUrl http', (p) => (firstActive(p, 'sort').sourceUrl = 'http://example.org/x'), /https/],
@@ -430,6 +431,7 @@ describe('mỗi game chơi trọn một ván bằng nội dung thật', () => {
       expect(answers).not.toBeNull();
       const grade = def.grade(rows!, answers, ctx);
       expect(grade.correct).toBe(grade.total);
+      if (!('items' in grade.review)) throw new Error(`${game}: phần chấm thiếu items`);
       expect(grade.review.items.every((i) => i.correct)).toBe(true);
       for (const item of grade.review.items) {
         expect(item.sourceUrl.startsWith('https://')).toBe(true);

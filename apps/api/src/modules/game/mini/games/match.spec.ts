@@ -34,6 +34,7 @@ const pickCtx = (rng: () => number = seeded(5)): MiniPickCtx => ({ rng, dayKey: 
 const buildCtx = (over: Partial<MiniBuildCtx> = {}): MiniBuildCtx => ({
   ...pickCtx(),
   sortHazardous: false,
+  arcadeSeed: 0,
   cardId: (id, side) => matchCardId(SECRET, ROUND, id, side),
   ...over,
 });
