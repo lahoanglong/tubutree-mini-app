@@ -26,7 +26,7 @@ export const MARKETPLACE_SCAN_COPY = {
   ctaShopWeb: 'Mua sắm ngay',
   /** Tính năng chưa mở (cờ `loyalty.marketplace_claim_enabled` tắt), cùng ý với màn "sắp mở" của Mini App. */
   soonTitle: 'Tích điểm đơn sàn sắp mở',
-  webSoonBody: 'Bạn cứ giữ lại phiếu giao hàng. Khi tính năng mở, bạn quét mã vận đơn ngay trên web hoặc trong Tubu Tree trên Zalo để tích điểm cho đơn này.',
+  webSoonBody: 'Giữ lại phiếu giao hàng. Khi mở, bạn quét mã trên web hoặc Tubu Tree trên Zalo để tích điểm.',
 } as const;
 
 const okPct = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;

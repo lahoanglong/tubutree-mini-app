@@ -33,6 +33,26 @@ describe('SiteFooter', () => {
     expect(compact.match(/<nav[^>]*aria-label="Chính sách \(điện thoại\)"[^>]*>[\s\S]*?<\/nav>/)?.[0].match(/href="\/chinh-sach\//g)).toHaveLength(5);
   });
 
+  it('W59 gọn: chân trang điện thoại một hàng liên hệ (chữ "Hotline:" chỉ cho trình đọc màn hình), chính sách và kênh cộng đồng chữ nhỏ, không khối cao', async () => {
+    mocks.getPublicSupport.mockResolvedValue({
+      hotline: '0984 606 774',
+      email: 'tubutree@gmail.com',
+      community: { zaloGroupUrl: 'https://zalo.me/g/abc' },
+    });
+    const out = await html();
+    const compact = out.match(/<footer[^>]*data-compact-footer[^>]*>[\s\S]*?<\/footer>/)?.[0] ?? '';
+    expect(compact).toMatch(/<a href="tel:0984606774"[^>]*>[\s\S]*?<span class="sr-only">Hotline: <\/span>0984 606 774/);
+    expect(compact).not.toMatch(/py-4|mt-8/);
+    for (const label of ['Chính sách', 'Chính sách \\(điện thoại\\)']) {
+      const nav = out.match(new RegExp(`<nav[^>]*aria-label="${label}"[^>]*>[\\s\\S]*?</nav>`))?.[0] ?? '';
+      for (const a of nav.match(/<a [^>]*>/g) ?? []) expect(a).toContain('min-h-11');
+      expect(nav.match(/<a [^>]*class="[^"]*text-xs/g)).toHaveLength(5);
+    }
+    const channels = out.match(/<nav aria-label="Kênh cộng đồng"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
+    expect(channels).toMatch(/<a [^>]*class="[^"]*min-h-11[^"]*text-xs/);
+    expect(out).not.toMatch(/<footer class="[^"]*py-8/);
+  });
+
   it('tổng đài cấu hình số liền 18001234: hiển thị "1800 1234", tel: vẫn là số gốc (R5-BUYER-5)', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '18001234', email: 'tubutree@gmail.com' });
     const out = await html();
@@ -200,10 +220,11 @@ describe('SiteFooter', () => {
     });
   });
 
-  it('máy tính: 4 cột, có lối vào Vườn Xanh, Đổi rác, Kho quà, Cộng tác viên, Đại lý, Câu chuyện thương hiệu, Blog (mở https://blog.tubutree.com)', async () => {
+  it('máy tính: lưới 5 rãnh, Khám phá chiếm 2 rãnh chia 2 cột con; có lối vào Vườn Xanh, Đổi rác, Kho quà, Cộng tác viên, Đại lý, Câu chuyện thương hiệu, Blog (mở https://blog.tubutree.com)', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     const out = await html();
-    expect(out).toMatch(/<div class="[^"]*lg:grid-cols-4/);
+    expect(out).toMatch(/<div class="[^"]*lg:grid-cols-5/);
+    expect(out).toMatch(/<nav aria-label="Khám phá" class="lg:col-span-2"><h2[^>]*>Khám phá<\/h2><ul class="[^"]*grid-cols-2/);
     for (const to of ['/vuon-xanh', '/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/hoc-vien', '/cau-chuyen', '/gioi-thieu', '/mua-chung', 'https://blog.tubutree.com']) {
       expect(out).toContain(`href="${to}"`);
     }

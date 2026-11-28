@@ -115,7 +115,7 @@ export function phoneConfirmErrorText(code: 'PHONE_CONFIRM_REQUIRED' | 'PHONE_CO
  */
 export const MARKETPLACE_CLAIM_WEB_COPY = {
   loginCta: 'Đăng nhập để tích điểm',
-  loginWhy: 'Đăng nhập Zalo để Tubu ghép đơn sàn theo số điện thoại.',
+  loginWhy: 'Đăng nhập để ghép đơn sàn theo số điện thoại của bạn.',
   openMiniAlt: 'Hoặc quét trong Tubu Tree trên Zalo',
   // W46 camera trước: khung quét nằm ngay đầu thẻ, hai lối phụ dạng viên thuốc bên dưới.
   scanSheetTitle: 'Quét mã vận đơn',
@@ -133,7 +133,7 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   photoReading: 'Đang đọc ảnh…',
   photoUnreadable: 'Chưa đọc được mã trong ảnh. Bạn chụp gần và rõ hơn.',
   phoneTitle: 'Thêm số điện thoại để tích điểm',
-  phoneBody: 'Nhập số di động đã dùng khi mua trên Shopee, TikTok Shop, Lazada để Tubu ghép đơn nhé.',
+  phoneBody: 'Số di động bạn dùng khi mua trên Shopee, TikTok Shop, Lazada.',
   phoneLabel: 'Số điện thoại đặt hàng',
   phonePlaceholder: '0912 345 678',
   phoneEmpty: 'Nhập số điện thoại di động 10 số.',
@@ -142,7 +142,7 @@ export const MARKETPLACE_CLAIM_WEB_COPY = {
   phoneAlt: 'Hoặc xác minh số trên Zalo để cộng điểm tự động',
   phoneCta: 'Xác minh số trên Zalo',
   notVerified: 'Đơn này cần SĐT đã xác minh qua Zalo để ghép.',
-  rateLimited: 'Bạn gửi mã hơi nhanh. Bạn chờ một phút rồi thử lại nhé.',
+  rateLimited: 'Bạn gửi hơi nhanh. Chờ 1 phút rồi thử lại nhé.',
   historyTitle: 'Lịch sử tích điểm đơn sàn',
 } as const;
 

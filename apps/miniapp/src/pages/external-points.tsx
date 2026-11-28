@@ -262,7 +262,7 @@ function ClaimList() {
   return (
     <div>
       {done && (
-        <div role="status" data-testid="claim-retry-done" style={{ marginBottom: 12 }}>
+        <div role="status" data-testid="claim-retry-done" style={{ marginBottom: 'var(--space-inline-md)' }}>
           <Text variant="label" tone="brand" as="div">
             {PHONE_CONFIRM_COPY.retryDone(marketplaceChannelName(done.channel), done.result.maskedCode)}
           </Text>
@@ -274,25 +274,25 @@ function ClaimList() {
         </div>
       )}
       {notice && (
-        <Text variant="body-sm" tone="secondary" as="div" style={{ marginBottom: 12 }}>
+        <Text variant="body-sm" tone="secondary" as="div" style={{ marginBottom: 'var(--space-inline-md)' }}>
           <span role="status" data-testid="claim-retry-notice">{notice}</span>
         </Text>
       )}
       {needsPhone.length > 0 && (
-        <div data-testid="claim-needs-phone" style={{ marginBottom: 12 }}>
-          <Text variant="label" tone="secondary" as="div" style={{ marginBottom: 6 }}>
+        <div data-testid="claim-needs-phone" style={{ marginBottom: 'var(--space-inline-md)' }}>
+          <Text variant="label" tone="secondary" as="div" style={{ marginBottom: 'var(--space-stack-xs)' }}>
             {PHONE_CONFIRM_COPY.retryTitle}
           </Text>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
             {needsPhone.map((n) => (
               <li key={n.attemptId} data-testid="claim-needs-phone-row">
                 <Card variant="outline" padding={12} onPress={() => open({ attemptId: n.attemptId }, n.channel, n.maskedCode)}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-stack-sm)' }}>
                     <div style={{ minWidth: 0 }}>
                       <Text variant="label" as="div">{marketplaceChannelName(n.channel)}</Text>
                       <Text variant="caption" tone="tertiary" as="div">{n.maskedCode}</Text>
                     </div>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-inline-xs)', flexShrink: 0 }}>
                       <Badge tone="warning">{t.state.needPhone}</Badge>
                       <ChevronRight size={16} aria-hidden="true" />
                     </span>
