@@ -10,9 +10,7 @@ import {
   AFFILIATE_LINK_TARGETS,
   COMMISSION_AWAITING_PAYMENT_NOTE,
   commissionUnlockNote,
-  CTV_FUNNEL_NOTE,
   ctvFunnel,
-  ctvFunnelLine,
   LINK_BUILDER_COPY,
   LINK_POSTER_COPY,
   linkCategoryOptions,
@@ -123,19 +121,16 @@ describe('affiliateLinkPoster', () => {
   });
 });
 
-describe('ctvFunnel / ctvFunnelLine', () => {
-  it('tỉ lệ = đơn / lượt bấm, một chữ số thập phân, dấu phẩy thập phân', () => {
-    const f = ctvFunnel({ totalClicks: 340, totalConversions: 12 });
-    expect(f).toEqual({ clicks: 340, orders: 12, ratePct: 3.5 });
-    expect(ctvFunnelLine(f)).toBe('Tỉ lệ ra đơn chung 3,5% · 12 đơn / 340 lượt bấm');
-    expect(ctvFunnelLine(ctvFunnel({ totalClicks: 4, totalConversions: 4 }))).toBe('Tỉ lệ ra đơn chung 100% · 4 đơn / 4 lượt bấm');
+describe('ctvFunnel', () => {
+  it('tỉ lệ = đơn / lượt bấm, một chữ số thập phân', () => {
+    expect(ctvFunnel({ totalClicks: 340, totalConversions: 12 })).toEqual({ clicks: 340, orders: 12, ratePct: 3.5 });
+    expect(ctvFunnel({ totalClicks: 4, totalConversions: 4 })).toEqual({ clicks: 4, orders: 4, ratePct: 100 });
   });
 
   it('chưa có lượt bấm, hoặc đơn nhiều hơn lượt bấm (đơn từ gian hàng/mã): không nêu phần trăm', () => {
     expect(ctvFunnel(undefined)).toEqual({ clicks: 0, orders: 0, ratePct: null });
-    expect(ctvFunnelLine(ctvFunnel(undefined))).toBe('Chưa có lượt bấm nào. Gửi link đầu tiên để bắt đầu.');
-    expect(ctvFunnelLine(ctvFunnel({ totalClicks: 0, totalConversions: 3 }))).toBe('3 đơn / 0 lượt bấm');
-    expect(ctvFunnelLine(ctvFunnel({ totalClicks: 2, totalConversions: 5 }))).toBe('5 đơn / 2 lượt bấm');
+    expect(ctvFunnel({ totalClicks: 0, totalConversions: 3 })).toEqual({ clicks: 0, orders: 3, ratePct: null });
+    expect(ctvFunnel({ totalClicks: 2, totalConversions: 5 })).toEqual({ clicks: 2, orders: 5, ratePct: null });
     expect(ctvFunnel({ totalClicks: -1, totalConversions: -2 })).toEqual({ clicks: 0, orders: 0, ratePct: null });
   });
 });
@@ -180,7 +175,7 @@ describe('linkCategoryOptions', () => {
 describe('chữ của bộ tạo link', () => {
   it('đủ 4 đích theo thứ tự API, không dùng thuật ngữ cấm', () => {
     expect(AFFILIATE_LINK_TARGETS.map((t) => t.key)).toEqual(['HOMEPAGE', 'PRODUCT', 'CATEGORY', 'DEAL']);
-    const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), ...Object.values(LINK_POSTER_COPY), CTV_FUNNEL_NOTE, COMMISSION_AWAITING_PAYMENT_NOTE];
+    const texts = [...AFFILIATE_LINK_TARGETS.map((t) => t.label), ...Object.values(LINK_BUILDER_COPY), ...Object.values(LINK_POSTER_COPY), COMMISSION_AWAITING_PAYMENT_NOTE];
     for (const text of texts) for (const { pattern } of FORBIDDEN_TERMS) expect(text).not.toMatch(pattern);
   });
 });

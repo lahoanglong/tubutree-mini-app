@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
@@ -76,6 +76,7 @@ vi.mock('../services/affiliate-api', () => ({
 vi.mock('../hooks/use-public-config', () => ({
   usePublicConfig: () => ({
     affiliatePitWithhold: { pct: 0.1, threshold: 2_000_000 },
+    newCustomer: { welcomeVoucher: { amount: 30_000, minOrder: 199_000 } },
     isLoaded: true,
   }),
 }));
@@ -123,6 +124,12 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     vi.clearAllMocks();
     mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
     mocks.copyText.mockResolvedValue(true);
+    // clearAllMocks không xoá giá trị đã đặt: ca đổi số liệu không được rò sang ca sau.
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 125_000, pendingCommission: 0, withdrawableCommission: 0,
+      totalClicks: 4, totalConversions: 1, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
   });
 
   it('lối tắt Chia sẻ mở bảng chia sẻ có QR, Zalo, sao chép link và lời đăng, link là link Mini App', async () => {
@@ -154,12 +161,67 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 
-  it('tab Chia sẻ: nút trong thẻ mã là "Sao chép mã" và chép đúng mã', async () => {
+  it('tab Chia sẻ: thẻ chia sẻ có mã, ưu đãi khách mới và đúng ba số (lượt bấm, đơn thành công, hoa hồng chờ rút)', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 30_000, withdrawableCommission: 200_000,
+      totalClicks: 1240, totalConversions: 31, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
     await screen.findByRole('tab', { name: 'Chia sẻ' });
     openTab('Chia sẻ');
-    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép mã' }));
-    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('TUBU88'));
+    const card = await screen.findByTestId('ctv-share-card');
+    expect(within(card).getByTestId('ctv-share-code')).toHaveTextContent('TUBU88');
+    expect(within(card).getByTestId('ctv-share-offer')).toHaveTextContent('30.000đ');
+    const strip = within(card).getByTestId('ctv-metric-strip');
+    expect(within(strip).getByTestId('ctv-metric-clicks')).toHaveTextContent('1.240Lượt bấm');
+    expect(within(strip).getByTestId('ctv-metric-orders')).toHaveTextContent('31Đơn thành công');
+    expect(within(strip).getByTestId('ctv-metric-pending')).toHaveTextContent('230.000đHoa hồng chờ rút');
+    expect(strip.children).toHaveLength(3);
+  });
+
+  it('tab Chia sẻ: "Chia sẻ Zalo" gửi link Trang chủ kèm mã, thẻ mở bằng dòng ưu đãi', async () => {
+    mocks.shareLink.mockResolvedValue(undefined);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ Zalo' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    const arg = mocks.shareLink.mock.calls[0]![0] as { path: string; description: string };
+    expect(arg.path).toBe('/?ref=TUBU88');
+    expect(arg.description.startsWith('Tubu Tree tặng khách mới mã 30.000đ')).toBe(true);
+    expect(arg.description).toContain('TUBU88');
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
+  it('tab Chia sẻ: "Sao chép link" chép link Mini App kèm mã (không chép riêng mã), có thông báo', async () => {
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép link' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88'));
+    expect(mocks.copyText).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã sao chép link', type: 'success' })));
+  });
+
+  it('tab Chia sẻ: shareLink bị từ chối thì chép link kèm mã và báo, không im lặng', async () => {
+    mocks.shareLink.mockRejectedValue(new Error('zalo từ chối'));
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ Zalo' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88');
+  });
+
+  it('tab Chia sẻ: chưa có mã giới thiệu thì không có nút chia sẻ nào (link thiếu mã không tính hoa hồng)', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: '', walletBalance: 0 });
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    await screen.findByTestId('ctv-share-card');
+    expect(screen.queryByRole('button', { name: 'Chia sẻ Zalo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sao chép link' })).toBeNull();
   });
 
   it('tab Chia sẻ: sao chép link đã tạo dùng link Mini App kèm mã và mã link', async () => {
@@ -171,7 +233,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88&l=abc123'));
   });
 
-  it('link sâu: sản phẩm, danh mục, Giờ vàng mở đúng trang Mini App; đích mất thì mở Trang chủ; phễu ghi tỉ lệ ra đơn chung', async () => {
+  it('link sâu: sản phẩm, danh mục, Giờ vàng mở đúng trang Mini App; đích mất thì mở Trang chủ; dải số ghi lượt bấm và đơn thành công chung', async () => {
     vi.mocked(getAffiliateLinks).mockResolvedValue([
       { id: 'a', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, shortCode: 'prod01', clicks: 2 },
       { id: 'b', targetType: 'CATEGORY', targetId: 'c1', targetSlug: 'bep', targetLabel: 'Bếp', targetAvailable: true, shortCode: 'cate01', clicks: 1 },
@@ -185,7 +247,8 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     expect(screen.getByText('Danh mục · Bếp')).toBeInTheDocument();
     expect(screen.getByText('Giờ vàng')).toBeInTheDocument();
     expect(screen.getByText('0 lượt bấm · 0 đơn · Đích không còn, link mở Trang chủ')).toBeInTheDocument();
-    expect(screen.getByTestId('ctv-funnel')).toHaveTextContent('Tỉ lệ ra đơn chung 25% · 1 đơn / 4 lượt bấm');
+    expect(screen.getByTestId('ctv-metric-clicks')).toHaveTextContent('4Lượt bấm');
+    expect(screen.getByTestId('ctv-metric-orders')).toHaveTextContent('1Đơn thành công');
     const copies = screen.getAllByRole('button', { name: 'Sao chép' });
     expect(copies).toHaveLength(4);
     for (const b of copies) fireEvent.click(b);

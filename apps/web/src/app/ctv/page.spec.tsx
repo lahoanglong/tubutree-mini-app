@@ -652,13 +652,82 @@ describe('/ctv — bảng điều khiển', () => {
     expect(dialog().textContent).toContain('Chưa chia sẻ được');
   });
 
-  it('tab Chia sẻ: nút trong thẻ mã là "Sao chép mã" và chép đúng mã', async () => {
+  it('tab Chia sẻ: thẻ chia sẻ có mã, ưu đãi khách mới và đúng ba số (lượt bấm, đơn thành công, hoa hồng chờ rút)', async () => {
+    state.tab = 'share';
+    state.config = { newCustomer: { welcomeVoucher: { amount: 30_000, minOrder: 199_000 } } };
+    state.dash = { ...DASH, totalClicks: 1240, totalConversions: 31 };
+    const { container } = mount();
+    await flush();
+    const card = container.querySelector('[data-testid="ctv-share-card"]')!;
+    expect(card.querySelector('[data-testid="ctv-share-code"]')?.textContent).toBe('TUBU88');
+    expect(card.querySelector('[data-testid="ctv-share-offer"]')?.textContent).toContain('30.000đ');
+    const strip = card.querySelector('[data-testid="ctv-metric-strip"]')!;
+    expect(strip.children).toHaveLength(3);
+    expect(strip.querySelector('[data-testid="ctv-metric-clicks"]')?.textContent).toBe('1.240Lượt bấm');
+    expect(strip.querySelector('[data-testid="ctv-metric-orders"]')?.textContent).toBe('31Đơn thành công');
+    // đang chờ 30.000 + chờ chuyển 80.000
+    expect(strip.querySelector('[data-testid="ctv-metric-pending"]')?.textContent).toBe('110.000đHoa hồng chờ rút');
+  });
+
+  it('tab Chia sẻ: "Chia sẻ Zalo" gọi bridge với Trang chủ kèm mã, dòng ưu đãi đứng đầu; chép thay thế thì báo đã chép, thất bại thì báo chép thủ công', async () => {
+    state.tab = 'share';
+    state.config = { newCustomer: { welcomeVoucher: { amount: 30_000, minOrder: 199_000 } } };
+    const { container } = mount();
+    await flush();
+    state.share = vi.fn(async () => 'shared');
+    click(byText(container, 'button', 'Chia sẻ Zalo'));
+    await flush();
+    expect(state.share).toHaveBeenCalledTimes(1);
+    const arg = (state.share as ReturnType<typeof vi.fn>).mock.calls[0]![0] as { path: string; text: string };
+    expect(arg.path).toBe('/?ref=TUBU88');
+    expect(arg.text.startsWith('Tubu Tree tặng khách mới mã 30.000đ')).toBe(true);
+    expect(arg.text).toContain('TUBU88');
+    expect(container.textContent).not.toContain('Đã sao chép link');
+    state.share = vi.fn(async () => 'copied');
+    click(byText(container, 'button', 'Chia sẻ Zalo'));
+    await flush();
+    expect(container.textContent).toContain('Đã sao chép link');
+    state.share = vi.fn(async () => 'failed');
+    click(byText(container, 'button', 'Chia sẻ Zalo'));
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không sao chép được');
+  });
+
+  it('tab Chia sẻ: "Sao chép link" chép link web kèm mã (không chép riêng mã) và báo đã chép', async () => {
     state.tab = 'share';
     const { container } = mount();
     await flush();
-    click(byText(container, 'button', 'Sao chép mã'));
+    click(byText(container, 'button', 'Sao chép link'));
     await flush();
-    expect(state.copied).toEqual(['TUBU88']);
+    expect(state.copied).toHaveLength(1);
+    expect(state.copied[0]!.replace(/^https?:\/\/[^/]+/, '')).toBe('/?ref=TUBU88');
+    expect(container.textContent).toContain('Đã sao chép link');
+  });
+
+  it('tab Chia sẻ: hai cú bấm sát nhau chỉ gọi hộp chia sẻ một lần', async () => {
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    let release!: () => void;
+    state.share = vi.fn(() => new Promise<string>((r) => (release = () => r('shared'))));
+    const btn = byText(container, 'button', 'Chia sẻ Zalo');
+    click(btn);
+    click(btn);
+    click(byText(container, 'button', 'Sao chép link'));
+    await flush();
+    expect(state.share).toHaveBeenCalledTimes(1);
+    expect(state.copied).toEqual([]);
+    release();
+    await flush();
+  });
+
+  it('tab Chia sẻ: chưa có mã giới thiệu thì không có nút chia sẻ nào (link thiếu mã không tính hoa hồng)', async () => {
+    state.tab = 'share';
+    state.me = { isAffiliate: true, referralCode: '', walletBalance: 0 };
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[data-testid="ctv-share-card"]')).not.toBeNull();
+    expect(Array.from(container.querySelectorAll('button')).some((b) => /Chia sẻ Zalo|Sao chép link/.test(b.textContent ?? ''))).toBe(false);
   });
 
   it('danh sách link: rỗng có lời mời; có link thì sao chép đúng URL kèm ref và l', async () => {
@@ -718,7 +787,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(posts()).toEqual([{ method: 'post', path: '/affiliate/links', body: { targetType: 'DEAL' } }]);
   });
 
-  it('link sâu: sản phẩm, danh mục, Giờ vàng chép đúng đường dẫn web kèm ref và l; phễu ghi rõ số chung, dòng link có số riêng', async () => {
+  it('link sâu: sản phẩm, danh mục, Giờ vàng chép đúng đường dẫn web kèm ref và l; dải số ghi lượt bấm và đơn thành công chung, dòng link có số riêng', async () => {
     state.tab = 'share';
     state.links = [
       { id: 'l1', shortCode: 'prod01', targetType: 'PRODUCT', targetId: 'p1', targetSlug: 'nuoc-rua-chen', targetLabel: 'Nước rửa chén', targetAvailable: true, clicks: 7, conversions: 0, revenue: 0, createdAt: '2026-10-01T00:00:00Z' },
@@ -733,8 +802,8 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Danh mục · Nhà bếp');
     expect(t).toContain('Giờ vàng');
     expect(t).toContain('0 lượt bấm · 0 đơn · Đích không còn, link mở Trang chủ');
-    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Tỉ lệ ra đơn chung 25% · 1 đơn / 4 lượt bấm');
-    expect(container.querySelector('[data-testid="ctv-funnel"]')?.textContent).toContain('Số trên từng link chỉ tính đơn đến từ link đó');
+    expect(container.querySelector('[data-testid="ctv-metric-clicks"]')?.textContent).toBe('4Lượt bấm');
+    expect(container.querySelector('[data-testid="ctv-metric-orders"]')?.textContent).toBe('1Đơn thành công');
     const copies = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Sao chép');
     for (const b of copies) click(b);
     await flush();
@@ -1013,7 +1082,7 @@ describe('/ctv — kiểu Mini App ở điện thoại (trạng thái rỗng, m�
     state.tab = 'share';
     const { container } = mount();
     await flush();
-    const code = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'TUBU88')!;
+    const code = container.querySelector('[data-testid="ctv-share-code"]')!;
     expect(code.className).toContain('max-md:font-ui');
     expect(code.className).toContain('max-md:font-bold');
     expect(code.className).toContain('max-md:tracking-[1px]');

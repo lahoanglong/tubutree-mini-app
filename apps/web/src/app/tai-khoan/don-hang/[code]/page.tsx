@@ -14,7 +14,7 @@ import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { serverNow } from '@tubutree/app-core/server-clock';
-import { orderLineReviewSlot, revealReviewTarget, reviewFocusIndex } from '@tubutree/app-core/order-line-review';
+import { orderLineReviewLabel, orderLineReviewSlot, revealReviewTarget, reviewFocusIndex, reviewRewardOn } from '@tubutree/app-core/order-line-review';
 import { wantsReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { useAuth } from '@/lib/auth-context';
 import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
@@ -270,6 +270,7 @@ export default function OrderDetailPage() {
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
   const returnDays = cfgQ.data?.returnWindowDays ?? 7;
+  const rewardOn = reviewRewardOn(cfgQ.data?.reviewGreenCorner);
   const ctx = {
     now: serverNow(),
     userId: user?.id,
@@ -439,12 +440,12 @@ export default function OrderDetailPage() {
                     reviewSlot && (
                       <Link
                         href={reviewHref(reviewSlot.slug, o.id)}
-                        aria-label={`${reviewSlot.kind === 'edit' ? 'Sửa đánh giá' : 'Viết đánh giá'} ${it.productName}`}
+                        aria-label={`${orderLineReviewLabel(reviewSlot.kind, rewardOn)} ${it.productName}`}
                         data-review-focus={focusTarget ? 'cta' : undefined}
                         className="tubu-hit-44 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
                       >
                         <Star className="h-4 w-4" aria-hidden="true" />
-                        {reviewSlot.kind === 'edit' ? 'Sửa đánh giá' : 'Viết đánh giá'}
+                        {orderLineReviewLabel(reviewSlot.kind, rewardOn)}
                       </Link>
                     )
                   )}

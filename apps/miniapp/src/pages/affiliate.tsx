@@ -65,7 +65,10 @@ import { miniAppLink } from '../utils/miniapp-link';
 import { pickerProducts } from '../services/storefront-api';
 import { AffiliateFeaturedProducts } from '../components/affiliate/featured-products';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
-import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkPoster, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY, LINK_POSTER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkPoster, affiliateLinkTitle, commissionUnlockNote, LINK_BUILDER_COPY, LINK_POSTER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { ctvShareMetrics } from '@tubutree/app-core/commerce/ctv-share-card';
+import { welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
+import { ReferralShareCard } from '../components/affiliate/referral-share-card';
 import { SharePoster } from '../components/share-poster';
 import { LinkBuilderSheet, type LinkBuilderTarget } from '../components/affiliate/link-builder-sheet';
 import { INPUT_LIMITS } from '../utils/input-limits';
@@ -408,7 +411,6 @@ function Dashboard() {
   });
 
   const d = dashQ.data;
-  const funnel = ctvFunnel(d);
   const referral = meQ.data?.referralCode ?? '';
   const featuredQ = useQuery({ queryKey: ['affiliate-featured-products'], queryFn: () => pickerProducts(''), enabled: tab === 'share' && referral !== '', staleTime: 60_000 });
   const featured = useMemo(
@@ -418,15 +420,12 @@ function Dashboard() {
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
-  const { affiliatePitWithhold: heroPit } = usePublicConfig();
+  const publicCfg = usePublicConfig();
+  const heroPit = publicCfg.affiliatePitWithhold;
   const needsTaxId = needsTaxIdForAutoTransfer(head.big, heroPit, meQ.data?.personalTaxId, d?.withdrawTaxPreview);
   const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
   const copyWithToast = (text: string, okText: string, failText = 'Không sao chép được — hãy chọn và chép thủ công.') =>
     void copyText(text).then((ok) => openSnackbar(ok ? { text: okText, type: 'success' } : { text: failText, type: 'error' }));
-  const copyReferral = () => {
-    haptic('light');
-    copyWithToast(referral, 'Đã sao chép mã giới thiệu');
-  };
   const captions = [
     `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
     `Sống xanh an lành cùng Tubu Tree 🌱 Nhập mã ${referral} khi mua để ủng hộ mình nha!`,
@@ -746,22 +745,14 @@ function Dashboard() {
         <>
       {/* Mã giới thiệu + chia sẻ */}
       <Section title="Mã giới thiệu của bạn">
-        <div
-          style={{
-            padding: 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8,
-            background: 'var(--color-action-secondary-bg)',
-            borderRadius: 'var(--radius-control)',
-          }}
-        >
-          <Text variant="price-lg" tone="brand" style={{ letterSpacing: 1 }}>
-            {referral}
-          </Text>
-          <Button onPress={copyReferral}>Sao chép mã</Button>
-        </div>
+        <ReferralShareCard
+          code={referral}
+          offer={welcomeOfferOf(publicCfg)}
+          caption={captions[0] ?? ''}
+          title="Tubu Tree — Sống xanh An Lành"
+          metrics={d ? ctvShareMetrics(d) : null}
+          metricsLoading={dashQ.isLoading}
+        />
 
         {/* Caption gợi ý (§6.8.4) — chạm để copy */}
         <Text variant="caption" as="div" style={{ ...BOLD, marginTop: 12, marginBottom: 6 }}>
@@ -810,17 +801,6 @@ function Dashboard() {
           </Button>
         }
       >
-        {/* Phễu chung của CTV (mọi kênh); từng dòng link có lượt bấm, đơn, tỉ lệ và doanh số riêng của link đó. */}
-        {d && (
-          <div data-testid="ctv-funnel" style={{ marginBottom: 'var(--space-stack-sm)' }}>
-            <Text variant="body-sm" as="p" numeric style={BOLD}>
-              {ctvFunnelLine(funnel)}
-            </Text>
-            <Text variant="caption" tone="tertiary" as="p">
-              {CTV_FUNNEL_NOTE}
-            </Text>
-          </div>
-        )}
         {linksQ.isError ? (
           // Phân biệt rõ "chưa có link" vs "lỗi tải" — tránh user tưởng rằng họ chưa tạo link.
           <ErrorState variant="inline" message={getLoadErrorMessage(linksQ.error)} onRetry={() => linksQ.refetch()} />

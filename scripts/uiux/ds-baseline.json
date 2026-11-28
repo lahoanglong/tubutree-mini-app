@@ -120,7 +120,7 @@
   "apps/web/src/app/cong-dong/feed-shell.tsx": 3,
   "apps/web/src/app/cong-dong/feed-view.tsx": 29,
   "apps/web/src/app/cong-dong/su-kien/page.tsx": 1,
-  "apps/web/src/app/ctv/ctv-page.tsx": 19,
+  "apps/web/src/app/ctv/ctv-page.tsx": 13,
   "apps/web/src/app/ctv/gian-hang/page.tsx": 3,
   "apps/web/src/app/gio-hang/cart-page.tsx": 76,
   "apps/web/src/app/gio-hang/empty-cart.tsx": 2,
@@ -209,7 +209,7 @@
   "apps/web/src/components/ui/error-state.tsx": 9,
   "apps/web/src/components/ui/page-header.tsx": 16,
   "apps/web/src/components/variation-chip.tsx": 19,
-  "apps/web/src/lib/phone-ui.ts": 21
+  "apps/web/src/lib/phone-ui.ts": 27
  },
  "px": {
   "apps/miniapp/src/components/account-deletion-section.tsx": 10,
@@ -378,7 +378,7 @@
   "apps/miniapp/src/pages/about.tsx": 22,
   "apps/miniapp/src/pages/academy.tsx": 17,
   "apps/miniapp/src/pages/addresses.tsx": 21,
-  "apps/miniapp/src/pages/affiliate.tsx": 89,
+  "apps/miniapp/src/pages/affiliate.tsx": 87,
   "apps/miniapp/src/pages/ai-advisor.tsx": 23,
   "apps/miniapp/src/pages/bank-payment.tsx": 39,
   "apps/miniapp/src/pages/best-sellers.tsx": 10,

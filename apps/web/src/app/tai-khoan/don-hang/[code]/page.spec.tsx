@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   configPending: false,
   eta: null as null | { minDays: number; maxDays: number },
   refillFirstEnabled: false,
+  reviewGreenCorner: undefined as unknown,
   landing: { enabled: false, pairs: [] } as unknown,
   paths: [] as string[],
 }));
@@ -30,7 +31,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path !== '/config/public') throw new Error(`chưa mock ${path}`);
       if (mocks.configPending) return new Promise(() => undefined);
       if (mocks.support instanceof Error) throw mocks.support;
-      return { support: mocks.support, shippingEta: mocks.eta, refillFirstEnabled: mocks.refillFirstEnabled };
+      return { support: mocks.support, shippingEta: mocks.eta, refillFirstEnabled: mocks.refillFirstEnabled, reviewGreenCorner: mocks.reviewGreenCorner };
     },
     post: async () => ({ recorded: true }),
   },
@@ -116,6 +117,7 @@ beforeEach(() => {
   mocks.configPending = false;
   mocks.eta = null;
   mocks.refillFirstEnabled = false;
+  mocks.reviewGreenCorner = undefined;
   mocks.landing = { enabled: false, pairs: [] };
   mocks.paths = [];
 });
@@ -599,6 +601,29 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
     expect(links.map((a) => a.textContent)).toEqual(['Viết đánh giá']);
     expect(links[0]!.getAttribute('href')).toBe('/san-pham/dau-goi-bo-ket?danh-gia=ord-1#danh-gia');
     expect(links[0]!.className).toContain('min-h-11');
+  });
+
+  it('Góc Sống Xanh đang thưởng → dòng còn viết được ghi "Đánh giá nhận Điểm Xanh" (cùng đường dẫn, tên truy cập kèm tên món); sửa đánh giá không hứa điểm', async () => {
+    mocks.reviewGreenCorner = { enabled: true, rewardPoints: 100, dailyCap: 3, maxPhotos: 3 };
+    mocks.order = delivered({ reviewId: null, reviewable: true });
+    const write = await mount();
+    const links = Array.from(write.container.querySelectorAll('a')).filter((a) => /đánh giá/i.test(a.textContent ?? ''));
+    expect(links.map((a) => a.textContent)).toEqual(['Đánh giá nhận Điểm Xanh']);
+    expect(links[0]!.getAttribute('href')).toBe('/san-pham/dau-goi-bo-ket?danh-gia=ord-1#danh-gia');
+    expect(links[0]!.getAttribute('aria-label')).toMatch(/^Đánh giá nhận Điểm Xanh /);
+    mocks.order = delivered({ reviewId: 'rv-1', reviewable: false });
+    const edit = await mount();
+    expect(reviewLinks(edit.container).map((a) => a.textContent)).toEqual(['Sửa đánh giá']);
+  });
+
+  it('thưởng 0 điểm hoặc cờ tắt → vẫn "Viết đánh giá": không hứa điểm khi không cộng', async () => {
+    mocks.reviewGreenCorner = { enabled: true, rewardPoints: 0, dailyCap: 3, maxPhotos: 3 };
+    mocks.order = delivered({ reviewId: null, reviewable: true });
+    const zero = await mount();
+    expect(reviewLinks(zero.container).map((a) => a.textContent)).toEqual(['Viết đánh giá']);
+    mocks.reviewGreenCorner = { enabled: false, rewardPoints: 100, dailyCap: 3, maxPhotos: 3 };
+    const off = await mount();
+    expect(reviewLinks(off.container).map((a) => a.textContent)).toEqual(['Viết đánh giá']);
   });
 
   it('dòng đã đánh giá ở đơn này → "Sửa đánh giá" (cùng đường dẫn, trang sản phẩm mở sửa đúng đánh giá)', async () => {

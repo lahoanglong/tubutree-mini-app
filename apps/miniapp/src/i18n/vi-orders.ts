@@ -34,8 +34,6 @@ export const viOrders = {
   searchNoMatch: orderCopy.searchNoMatch,
   payBy: (when: string) => `Hạn ${when}`,
   pointsUsed: 'Điểm Xanh đã dùng',
-  reviewItem: 'Viết đánh giá',
-  editReviewItem: 'Sửa đánh giá',
   pointsCredited: (n: string) => `Đã cộng +${n} Điểm Xanh vào tài khoản`,
   pointsReversed: 'Điểm Xanh của đơn này đã được thu hồi',
   pointsCreditedPartlyReversed: (earned: string, reversed: string) => `Đã cộng +${earned}, đã thu lại tối đa ${reversed} do trả hàng`,

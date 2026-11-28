@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { orderLineReviewSlot, revealReviewTarget, reviewFocusIndex, type RevealTarget, type ReviewLine } from './order-line-review';
+import {
+  REVIEW_REWARD_LABEL,
+  orderLineReviewLabel,
+  orderLineReviewSlot,
+  revealReviewTarget,
+  reviewFocusIndex,
+  reviewRewardOn,
+  type RevealTarget,
+  type ReviewLine,
+} from './order-line-review';
 import { wantsReviewFocus, withReviewFocus } from './order-review-cta';
 
 const line = (over: Partial<ReviewLine> = {}): ReviewLine => ({ productSlug: 'sua-tam', quantity: 2, ...over });
@@ -112,5 +121,28 @@ describe('revealReviewTarget', () => {
     revealReviewTarget(row, null);
     expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
     expect(rowFocus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+});
+
+describe('orderLineReviewLabel / reviewRewardOn (tubu-w56-01)', () => {
+  it('chỉ nói "nhận Điểm Xanh" khi cờ Góc Sống Xanh bật, thưởng > 0 và trần ngày > 0', () => {
+    expect(reviewRewardOn({ enabled: true, rewardPoints: 100, dailyCap: 3 })).toBe(true);
+    expect(reviewRewardOn({ enabled: false, rewardPoints: 100, dailyCap: 3 })).toBe(false);
+    expect(reviewRewardOn({ enabled: true, rewardPoints: 0, dailyCap: 3 })).toBe(false);
+    expect(reviewRewardOn({ enabled: true, rewardPoints: 100, dailyCap: 0 })).toBe(false);
+    expect(reviewRewardOn({ enabled: true, rewardPoints: Number.NaN, dailyCap: 3 })).toBe(false);
+    expect(reviewRewardOn(undefined)).toBe(false);
+    expect(reviewRewardOn(null)).toBe(false);
+  });
+
+  it('viết mới đổi chữ theo thưởng; sửa đánh giá luôn là "Sửa đánh giá" (sửa không cộng thêm điểm)', () => {
+    expect(orderLineReviewLabel('write', true)).toBe(REVIEW_REWARD_LABEL);
+    expect(orderLineReviewLabel('write', false)).toBe('Viết đánh giá');
+    expect(orderLineReviewLabel('edit', true)).toBe('Sửa đánh giá');
+    expect(orderLineReviewLabel('edit', false)).toBe('Sửa đánh giá');
+  });
+
+  it('nhãn thưởng gọn một dòng (≤ 24 ký tự) để vừa nút ở 320px', () => {
+    expect(REVIEW_REWARD_LABEL.length).toBeLessThanOrEqual(24);
   });
 });

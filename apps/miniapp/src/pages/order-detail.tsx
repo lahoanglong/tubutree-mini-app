@@ -67,7 +67,7 @@ import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView as CoreOrderView } from '@tubutree/app-core/api/orders';
 import { canEditOrder } from '@tubutree/app-core/api/order-edit';
 import { ORDER_EDIT_COPY, orderEditLinkAria } from '@tubutree/app-core/order-edit-copy';
-import { orderLineReviewSlot, revealReviewTarget, reviewFocusIndex } from '@tubutree/app-core/order-line-review';
+import { orderLineReviewLabel, orderLineReviewSlot, revealReviewTarget, reviewFocusIndex, reviewRewardOn } from '@tubutree/app-core/order-line-review';
 import { wantsReviewFocus } from '@tubutree/app-core/order-review-cta';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
@@ -338,6 +338,7 @@ export default function OrderDetailPage() {
   // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
   const itemLinks = o.items.map((it) => ({ it, slug: openProductSlug(it), review: orderLineReviewSlot(o.status, it) }));
   const reviewTarget = reviewFocusIndex(o);
+  const rewardOn = reviewRewardOn(publicConfig.reviewGreenCorner);
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const refundMode = cancelRefundMode(o);
   const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
@@ -558,7 +559,7 @@ export default function OrderDetailPage() {
                   type="button"
                   className="tubu-press tubu-hit-44"
                   style={REVIEW_LINK}
-                  aria-label={`${review.kind === 'edit' ? viOrders.editReviewItem : viOrders.reviewItem} ${it.productName}`}
+                  aria-label={`${orderLineReviewLabel(review.kind, rewardOn)} ${it.productName}`}
                   data-review-focus={i === reviewTarget ? 'cta' : undefined}
                   onClick={() => {
                     haptic('light');
@@ -566,7 +567,7 @@ export default function OrderDetailPage() {
                   }}
                 >
                   <Icon icon={Star} size="sm" tone="brand" />
-                  {review.kind === 'edit' ? viOrders.editReviewItem : viOrders.reviewItem}
+                  {orderLineReviewLabel(review.kind, rewardOn)}
                 </button>
               )
             )}

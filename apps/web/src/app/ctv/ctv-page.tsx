@@ -31,7 +31,10 @@ import { SITE_URL } from '@/lib/site';
 import { pickerQuery } from '@tubutree/app-core/queries/storefront';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { featuredAffiliateProducts } from '@tubutree/app-core/commerce/affiliate-share';
-import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkPoster, affiliateLinkTitle, commissionUnlockNote, CTV_FUNNEL_NOTE, ctvFunnel, ctvFunnelLine, LINK_BUILDER_COPY, LINK_POSTER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { affiliateLinkCaption, affiliateLinkPath, affiliateLinkPoster, affiliateLinkTitle, commissionUnlockNote, LINK_BUILDER_COPY, LINK_POSTER_COPY } from '@tubutree/app-core/commerce/affiliate-deep-link';
+import { ctvShareMetrics } from '@tubutree/app-core/commerce/ctv-share-card';
+import { welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
+import { ReferralShareCard } from '@/components/affiliate/referral-share-card';
 import type { PosterInput } from '@tubutree/app-core/commerce/share-poster-link';
 import { LinkBuilderSheet, type LinkBuilderTarget } from '@/components/affiliate/link-builder-sheet';
 import { AffiliateFeaturedProducts } from '@/components/affiliate/featured-products';
@@ -426,7 +429,6 @@ function Dashboard() {
   };
 
   const d = dashQ.data;
-  const funnel = ctvFunnel(d);
   const me = meQ.data;
   const referral = me?.referralCode ?? '';
   const featuredQ = useQuery({ ...pickerQuery(coreHttp, ''), queryKey: ['affiliate-featured-products'], enabled: tab === 'share' && referral !== '', staleTime: 60_000 });
@@ -447,8 +449,6 @@ function Dashboard() {
       : []),
     ...(hasCourses && isWebRouteReady('/hoc-vien') ? [{ key: 'learn', label: 'Học khoá đầu tiên', Icon: GraduationCap, href: '/hoc-vien' }] : []),
   ];
-  const copyReferral = () => void copy(referral, 'Đã sao chép mã giới thiệu', 'Không sao chép được — hãy chọn và chép thủ công.');
-
   const copy = async (text: string, okText: string, failText: string) => {
     const ok = await copyToClipboard(text);
     setNotice({ text: ok ? okText : failText, error: !ok });
@@ -628,12 +628,15 @@ function Dashboard() {
         {tab === 'share' && (
           <>
           <Section title="Mã giới thiệu của bạn">
-            <div className="flex items-center justify-between gap-2 rounded-control bg-forest-50 p-3">
-              <span className="font-display text-xl font-semibold tracking-wide text-forest-700 max-md:font-ui max-md:text-[length:var(--type-price-lg-size)] max-md:font-bold max-md:leading-[var(--type-price-lg-lh)] max-md:tracking-[1px] max-md:text-[var(--color-text-brand)]">{referral}</span>
-              <button type="button" onClick={copyReferral} className={ui.btnPrimary}>
-                Sao chép mã
-              </button>
-            </div>
+            <ReferralShareCard
+              code={referral}
+              offer={welcomeOfferOf(cfgQ.data)}
+              caption={captions[0] ?? ''}
+              title="Tubu Tree — Sống xanh An Lành"
+              metrics={d ? ctvShareMetrics(d) : null}
+              metricsLoading={dashQ.isLoading}
+              onNote={(text, error) => setNotice({ text, error })}
+            />
             <div className="mb-1.5 mt-3 text-xs font-semibold text-stone-900">Lời đăng gợi ý (chạm để sao chép)</div>
             <ul className="space-y-1.5">
               {captions.map((cap) => (
@@ -660,13 +663,6 @@ function Dashboard() {
               </button>
             }
           >
-            {/* Phễu chung của CTV (mọi kênh); từng dòng link có lượt bấm, đơn, tỉ lệ và doanh số riêng của link đó. */}
-            {d && (
-              <div data-testid="ctv-funnel" className="mb-2">
-                <p className="text-sm font-semibold tabular-nums text-stone-900">{ctvFunnelLine(funnel)}</p>
-                <p className={`text-xs text-stone-600 ${phoneCaption}`}>{CTV_FUNNEL_NOTE}</p>
-              </div>
-            )}
             {linksQ.isError ? (
               <ErrorState variant="inline" message={errText(linksQ.error)} onRetry={() => linksQ.refetch()} />
             ) : linksQ.data && linksQ.data.length > 0 ? (

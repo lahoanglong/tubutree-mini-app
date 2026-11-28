@@ -121,10 +121,13 @@ test.describe('Web khách: CTV', () => {
     const row = page.getByRole('listitem').filter({ hasText: '0 lượt bấm' });
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('Trang chủ');
-    // Dòng link ghi số của riêng link (link mới: 0 đơn, chưa có tỉ lệ); dòng phễu là số chung của CTV.
+    // Dòng link ghi số của riêng link (link mới: 0 đơn, chưa có tỉ lệ); dải số ở thẻ chia sẻ là số chung của CTV.
     await expect(row).toContainText('0 lượt bấm · 0 đơn');
     await expect(row.getByRole('button', { name: 'Ảnh QR của link' })).toBeVisible();
-    await expect(page.getByTestId('ctv-funnel')).toContainText('1 đơn / 4 lượt bấm');
+    await expect(page.getByTestId('ctv-metric-clicks')).toContainText('4');
+    await expect(page.getByTestId('ctv-metric-clicks')).toContainText('Lượt bấm');
+    await expect(page.getByTestId('ctv-metric-orders')).toContainText('1');
+    await expect(page.getByTestId('ctv-metric-orders')).toContainText('Đơn thành công');
     const calls = api.callsTo('POST', '/affiliate/links');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ targetType: 'HOMEPAGE' });

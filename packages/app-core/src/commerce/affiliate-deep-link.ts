@@ -150,19 +150,6 @@ export function ctvFunnel(d: { totalClicks?: number; totalConversions?: number }
 
 const pctText = (n: number) => `${String(n).replace('.', ',')}%`;
 
-/**
- * Một dòng tóm tắt phễu của CTV, đặt trên danh sách link. Số đơn gồm cả đơn từ gian hàng, mã giới thiệu và đơn đặt hộ, còn lượt bấm chỉ đến từ link,
- * nên nhãn ghi "chung" (không phải tỉ lệ của riêng link); `CTV_FUNNEL_NOTE` nói rõ bên dưới.
- */
-export function ctvFunnelLine(f: CtvFunnel): string {
-  if (f.clicks === 0 && f.orders === 0) return 'Chưa có lượt bấm nào. Gửi link đầu tiên để bắt đầu.';
-  const ratio = `${f.orders} đơn / ${f.clicks} lượt bấm`;
-  return f.ratePct === null ? ratio : `Tỉ lệ ra đơn chung ${pctText(f.ratePct)} · ${ratio}`;
-}
-
-/** Ghi chú dưới dòng phễu: nói rõ số nào tính chung, số nào theo link. */
-export const CTV_FUNNEL_NOTE = 'Dòng trên tính chung mọi kênh của bạn. Số trên từng link chỉ tính đơn đến từ link đó, trừ đơn huỷ/trả.';
-
 /** Nút mở ảnh QR của một link (nhãn cho trình đọc màn hình, nút chỉ có biểu tượng) và tiêu đề bảng ảnh. */
 export const LINK_POSTER_COPY = {
   open: 'Ảnh QR của link',

@@ -205,6 +205,38 @@ describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', (
     expect(screen.queryByText('Sửa đánh giá')).toBeNull();
   });
 
+  describe('Góc Sống Xanh đang thưởng (tubu-w56-01)', () => {
+    const cfg = (reviewGreenCorner: unknown) => ({ freeshipThreshold: 199_000, waste: { enabled: false }, reviewGreenCorner });
+    afterEach(() => mocks.getPublicConfig.mockReset());
+
+    it('cờ bật và thưởng > 0: dòng còn viết được ghi "Đánh giá nhận Điểm Xanh", vẫn mở trang sản phẩm kèm đúng đơn', async () => {
+      mocks.getPublicConfig.mockResolvedValue(cfg({ enabled: true, rewardPoints: 100, dailyCap: 3, maxPhotos: 3 }));
+      mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: true }));
+      renderPage();
+      const btn = await screen.findByRole('button', { name: 'Đánh giá nhận Điểm Xanh Xà bông thảo mộc' });
+      expect(btn).toHaveTextContent('Đánh giá nhận Điểm Xanh');
+      expect(screen.queryByText('Viết đánh giá')).toBeNull();
+      fireEvent.click(btn);
+      expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong', { state: { reviewOrderId: 'o1' } });
+    });
+
+    it('sửa đánh giá không hứa điểm: vẫn "Sửa đánh giá" dù cờ bật', async () => {
+      mocks.getPublicConfig.mockResolvedValue(cfg({ enabled: true, rewardPoints: 100, dailyCap: 3, maxPhotos: 3 }));
+      mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: 'r1', reviewable: false }));
+      renderPage();
+      expect(await screen.findByRole('button', { name: 'Sửa đánh giá Xà bông thảo mộc' })).toBeInTheDocument();
+      expect(screen.queryByText(/Điểm Xanh/)).toBeNull();
+    });
+
+    it('thưởng 0 điểm: không hứa điểm, giữ "Viết đánh giá"', async () => {
+      mocks.getPublicConfig.mockResolvedValue(cfg({ enabled: true, rewardPoints: 0, dailyCap: 3, maxPhotos: 3 }));
+      mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: true }));
+      renderPage();
+      expect(await screen.findByRole('button', { name: 'Viết đánh giá Xà bông thảo mộc' })).toBeInTheDocument();
+      expect(screen.queryByText('Đánh giá nhận Điểm Xanh')).toBeNull();
+    });
+  });
+
   it('đơn không tính để đánh giá (vd. CTV đặt hộ) → không có lối vào đánh giá', async () => {
     mocks.fetchOrder.mockResolvedValue(withItem({ reviewId: null, reviewable: false }));
     renderPage();

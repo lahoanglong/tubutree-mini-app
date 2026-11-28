@@ -25,5 +25,9 @@ export const phoneBand = 'max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md
 /** Dải trắng chỉ đệm ngang 16px, đệm dọc do khối tự đặt thêm (khối con của cột thông tin trang sản phẩm). */
 export const phoneBandPad = 'max-md:bg-[var(--color-bg-surface)] max-md:px-4';
 
+/** Mã giới thiệu CTV như `Text variant="price-lg" tone="brand"` của Mini App: Inter đậm 20px, cách chữ 1px, màu thương hiệu. Ghép sau các lớp chữ của máy tính. */
+export const phoneCode =
+  'max-md:font-ui max-md:text-[length:var(--type-price-lg-size)] max-md:font-bold max-md:leading-[var(--type-price-lg-lh)] max-md:tracking-[1px] max-md:text-[var(--color-text-brand)]';
+
 /** Nhãn nhỏ xanh đậm đậm nét như dòng "Tubu Tree giao hàng" và "Nhận Điểm Xanh" của Mini App. Ghép sau `text-sm`. */
 export const phoneBrandLabel = 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]';

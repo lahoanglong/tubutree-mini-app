@@ -23,6 +23,21 @@ export type OrderLineReviewSlot =
   | { kind: 'edit'; slug: string }
   | { kind: 'returned'; label: string };
 
+export const REVIEW_WRITE_LABEL = 'Viết đánh giá';
+export const REVIEW_EDIT_LABEL = 'Sửa đánh giá';
+export const REVIEW_REWARD_LABEL = 'Đánh giá nhận Điểm Xanh';
+
+/** Góc Sống Xanh đang thưởng: cờ bật, thưởng > 0 và trần ngày > 0 (cùng điều kiện `greenCornerHint` dùng để hứa điểm trong form; API cũ chưa trả thì không hứa). */
+export function reviewRewardOn(cfg: { enabled: boolean; rewardPoints: number; dailyCap: number } | null | undefined): boolean {
+  return cfg?.enabled === true && Number.isFinite(cfg.rewardPoints) && cfg.rewardPoints > 0 && Number.isFinite(cfg.dailyCap) && cfg.dailyCap > 0;
+}
+
+/** Chữ nút dưới một món: viết mới nói thẳng có Điểm Xanh khi đang thưởng; sửa đánh giá không cộng thêm nên giữ chữ "Sửa đánh giá". */
+export function orderLineReviewLabel(kind: 'write' | 'edit', rewardOn: boolean): string {
+  if (kind === 'edit') return REVIEW_EDIT_LABEL;
+  return rewardOn ? REVIEW_REWARD_LABEL : REVIEW_WRITE_LABEL;
+}
+
 export const REFUNDED_LINE_LABEL = 'Đã hoàn tiền';
 export const RETURN_APPROVED_LINE_LABEL = 'Đã duyệt trả';
 
