@@ -218,7 +218,7 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     await flush();
     expect(events()).toEqual(['Đang giao hàng', 'Đang vận chuyển', 'Đã lấy hàng', 'Chờ lấy hàng']);
     expect(container.textContent).toContain('Giao Hàng Nhanh');
-    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Chép mã') ?? null);
+    click(container.querySelector('[data-testid="order-shipping"] [data-testid="order-tracking-pill"] button'));
     await flush();
     expect(mocks.writeText).toHaveBeenCalledWith('GHN6789012345');
   });
@@ -230,7 +230,7 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
     expect(container.querySelector('[data-testid="order-action-note"]')?.textContent).toMatch(/Còn 2 giờ/);
   });
 
-  it('đơn huỷ mà lịch sử vận chuyển toàn dòng rác: không dựng khung vận chuyển trống', async () => {
+  it('đơn huỷ mà lịch sử vận chuyển toàn dòng rác: thẻ Vận chuyển chỉ còn địa chỉ nhận (W47), không dựng danh sách mốc hãng hay khung trống', async () => {
     mocks.order = {
       ...BASE,
       status: 'CANCELLED',
@@ -238,13 +238,16 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
       shippingHistory: [{ at: hoursFromNow(-6) }, { at: hoursFromNow(-5), status: '', code: null }, null],
     };
     const { container } = await mount();
-    expect(container.textContent).toContain('Đơn đã huỷ.');
-    expect(container.querySelector('[data-testid="order-shipping"]')).toBeNull();
+    expect(container.querySelector('[data-testid="status-hero"] h2')?.textContent).toBe('Đã huỷ');
+    const card = container.querySelector('[data-testid="order-shipping"]')!;
+    expect(card.querySelector('[data-testid="order-address"]')).not.toBeNull();
+    expect(card.querySelector('ul[aria-label="Mốc vận chuyển"]')).toBeNull();
+    expect(card.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
     const emptyFrames = Array.from(container.querySelectorAll('section')).filter((s) => !s.textContent?.trim());
     expect(emptyFrames).toHaveLength(0);
   });
 
-  it('đơn chuyển khoản đã huỷ mà API chưa trả cancelReason: chỉ nói "Đơn đã huỷ.", không suy ra lý do quá hạn thanh toán', async () => {
+  it('đơn chuyển khoản đã huỷ mà API chưa trả cancelReason: chỉ nói "Đã huỷ" và bước kế mua lại, không suy ra lý do quá hạn thanh toán', async () => {
     mocks.order = {
       ...BASE,
       status: 'CANCELLED',
@@ -253,7 +256,8 @@ describe('chi tiết đơn web — nút theo trạng thái (gói hl)', () => {
       statusTimes: { CANCELLED: hoursFromNow(-6) },
     };
     const { container } = await mount();
-    expect(container.textContent).toContain('Đơn đã huỷ.');
+    expect(container.querySelector('[data-testid="status-hero"] h2')?.textContent).toBe('Đã huỷ');
+    expect(container.querySelector('[data-testid="order-next"]')?.textContent).toBe('Bạn có thể mua lại các sản phẩm trong đơn.');
     expect(container.textContent).not.toContain('quá hạn thanh toán');
     expect(container.querySelector('[data-testid="order-cancel-reason"]')).toBeNull();
   });

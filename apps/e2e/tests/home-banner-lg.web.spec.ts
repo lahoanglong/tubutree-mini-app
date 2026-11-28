@@ -5,7 +5,7 @@ import { serverWithoutCampaigns } from './support/server-initial';
 
 /**
  * Web, Trang chủ: khách có cookie phiên, máy chưa nhớ loại khách (HTML dựng sẵn "chưa biết") và nhớ "lần trước có banner"; không có suất Giờ vàng nào nên ô
- * khuyến mãi là banner. Trong lúc banner chưa về, khung giữ chỗ banner phải đứng đúng chỗ của banner thật: ô khuyến mãi ngay trên khối Khám phá theo Thương hiệu (từ lg
+ * khuyến mãi là banner. Trong lúc banner chưa về, khung giữ chỗ banner phải đứng đúng chỗ của banner thật: ô khuyến mãi ngay trên lưới Gợi ý cho bạn (từ lg
  * rộng 2/3 cột nội dung); chỉ có MỘT khung ở mỗi khổ; banner về không làm trang nhảy.
  *
  * Danh sách chiến dịch phải đến từ trình duyệt (mock). API thật trả mảng (kể cả rỗng) thì server đã đưa nó vào HTML và trình duyệt không hỏi lại, nên spec chặn
@@ -96,7 +96,7 @@ const cls = (page: Page) =>
 
 const box = async (page: Page, selector: string) => (await page.locator(selector).first().boundingBox())!;
 
-/** Khung giữ chỗ (hoặc banner thật) nằm trong ô khuyến mãi, và ô này đứng ngay trên khối Khám phá theo Thương hiệu. */
+/** Khung giữ chỗ (hoặc banner thật) nằm trong ô khuyến mãi, và ô này đứng ngay trên lưới Gợi ý cho bạn. */
 async function expectPromoAboveSuggest(page: Page, target: { y: number; height: number }): Promise<void> {
   const order = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('[data-home-block]')).map((el) => el.dataset.homeBlock));
   expect(order.indexOf('banner'), `thứ tự khối ${order.join(',')}`).toBe(order.indexOf('suggest') - 1);

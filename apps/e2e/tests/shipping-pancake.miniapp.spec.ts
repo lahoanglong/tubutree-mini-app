@@ -98,9 +98,11 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
 
     const shipping = page.getByTestId('order-shipping');
     await expect(shipping.getByText('Vận chuyển', { exact: true })).toBeVisible();
-    await expect(shipping.getByText('Giao Hàng Nhanh', { exact: true })).toBeVisible();
-    await expect(shipping.getByText('Mã vận đơn', { exact: true })).toBeVisible();
-    await expect(shipping.getByText('GHN123456789', { exact: true })).toBeVisible();
+    // W47: hãng và mã in chung trên viên vận đơn (chạm là chép), không còn dòng nhãn "Mã vận đơn" riêng.
+    const pill = shipping.getByTestId('order-tracking-pill');
+    await expect(pill).toContainText('GHN123456789');
+    await expect(pill).toContainText('Giao Hàng Nhanh');
+    await expect(shipping.getByText('Mã vận đơn', { exact: true })).toHaveCount(0);
     // Trạng thái VC hiện ở dòng tóm tắt VÀ ở chặng mới nhất của hành trình.
     await expect(page.getByText('Đang vận chuyển tới người nhận', { exact: true })).toHaveCount(2);
 
@@ -143,7 +145,11 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     await page.goto(`/order/${ORDER_PENDING.code}`);
     await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
 
-    await expect(page.getByTestId('order-shipping')).toHaveCount(0);
+    // W47: thẻ Vận chuyển luôn giữ địa chỉ nhận; chưa có hãng thì không viên vận đơn, không dòng hãng hay trạng thái hãng rỗng.
+    const shipping = page.getByTestId('order-shipping');
+    await expect(shipping.getByTestId('order-shipping-address')).toBeVisible();
+    await expect(shipping.getByTestId('order-tracking-pill')).toHaveCount(0);
+    await expect(shipping.getByText('Đơn vị vận chuyển', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Mã vận đơn')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Sao chép mã vận đơn/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);

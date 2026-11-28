@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/orders/order-status-hero.tsx
-import { shortDateTime, type OrderHeadline } from '@tubutree/app-core/commerce/order-tracking';
+import { orderHeroLine, shortDateTime, type OrderHeadline, type OrderHeroLineKind } from '@tubutree/app-core/commerce/order-tracking';
 import { Heading, Text } from '@/components/mini/text';
 
 export interface OrderStatusHeroProps {
@@ -14,11 +14,15 @@ export interface OrderStatusHeroProps {
   tone: { bg: string; fg: string };
 }
 
-/** Đầu trang theo dõi đơn: trạng thái, một câu nói đơn đang ở đâu, lý do huỷ (đơn đã huỷ), mốc cần biết (ngày giao, hạn trả, hạn đổi/trả) và bước kế tiếp. */
+const HERO_LINE_TESTID: Record<OrderHeroLineKind, string> = { reason: 'order-cancel-reason', milestone: 'order-milestone', next: 'order-next', sentence: 'order-hero-sentence' };
+
+/**
+ * Đầu trang theo dõi đơn, tối đa ba phần tử quét một lượt (W47): mốc ngày ("Đặt lúc", "Giao lúc"...), trạng thái, và MỘT câu khách cần biết tiếp theo
+ * (`orderHeroLine`: lý do huỷ, hạn thanh toán, ngày giao dự kiến, hạn đổi/trả, hay bước kế của đơn đã xong).
+ */
 export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderStatusHeroProps) {
   const inherit = { color: 'inherit' } as const;
-  // Lý do huỷ có thể là chữ khách gõ (link, số tài khoản) không có dấu cách: không ngắt thì web cắt mất cuối dòng, Mini cuộn ngang cả trang.
-  const wrap = { ...inherit, overflowWrap: 'anywhere' } as const;
+  const line = orderHeroLine(headline);
   return (
     <section
       data-testid="status-hero"
@@ -31,24 +35,10 @@ export function OrderStatusHero({ headline, statusLabel, stamp, tone }: OrderSta
       <Heading variant="title-sm" as="h2" font="ui" style={inherit}>
         {statusLabel}
       </Heading>
-      {headline.sentence && (
-        <Text variant="body-md" as="p" style={wrap}>
-          {headline.sentence}
-        </Text>
-      )}
-      {headline.reason && (
-        <Text variant="body-sm" as="p" data-testid="order-cancel-reason" style={{ ...wrap, fontWeight: 600 }}>
-          {headline.reason}
-        </Text>
-      )}
-      {headline.milestone && (
-        <Text variant="body-sm" as="p" numeric data-testid="order-milestone" style={{ ...wrap, fontWeight: 600 }}>
-          {headline.milestone}
-        </Text>
-      )}
-      {headline.next && (
-        <Text variant="caption" as="p" numeric data-testid="order-next" style={wrap}>
-          {headline.next}
+      {line && (
+        // Lý do huỷ có thể là chữ khách gõ (link, số tài khoản) không có dấu cách: không ngắt thì web cắt mất cuối dòng, Mini cuộn ngang cả trang.
+        <Text variant="body-sm" as="p" numeric data-testid={HERO_LINE_TESTID[line.kind]} style={{ ...inherit, overflowWrap: 'anywhere', fontWeight: 600 }}>
+          {line.text}
         </Text>
       )}
     </section>

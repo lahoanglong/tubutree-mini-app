@@ -4,7 +4,7 @@ import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { BINH_SUA, SHIPPING_CODE, XA_PHONG, catalogHandler, mockDiscovery, toCard } from './support/discovery-mocks';
 import { eventsNamed, flushEvents } from './support/events';
 import { expectChipHitArea44 } from './support/hit-area';
-import { BRAND_SHOWCASE, LOADING_GRID_OUTSIDE_BRANDS } from './support/home-brands';
+import { HOME_SUGGEST, LOADING_GRID_OUTSIDE_SUGGEST } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E — Dự án 4b "Khám phá & tìm kiếm" (spec §5), phần Trang chủ. API mock toàn bộ.
@@ -26,17 +26,17 @@ async function waitHomeSettled(page: Page, api: MockApi): Promise<void> {
   await expect.poll(() => api.callsTo('GET', '/categories').length, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
   await expect(page.getByTestId('category-grid-loading')).toHaveCount(0);
-  await expect(page.locator(LOADING_GRID_OUTSIDE_BRANDS)).toHaveCount(0);
+  await expect(page.locator(LOADING_GRID_OUTSIDE_SUGGEST)).toHaveCount(0);
   await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
 }
 
 test.describe('Buy-flow 4b — Trang chủ', () => {
-  test('Khách cũ có đơn đang giao: tìm → dải Việc cần làm (thay thẻ thành viên) → Danh mục → Bán chạy nhất → Mua lại → lối tắt → Khám phá theo Thương hiệu', async ({ page, api }) => {
+  test('Khách cũ có đơn đang giao: tìm → dải Việc cần làm (thay thẻ thành viên) → Danh mục → Bán chạy nhất → Mua lại → lối tắt → Gợi ý cho bạn', async ({ page, api }) => {
     mockDiscovery(api, { returning: true, shipping: true, subscription: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Việc cần làm' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible();
+    await expect(page.getByRole('region', { name: HOME_SUGGEST })).toBeVisible();
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
@@ -47,12 +47,12 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     expect(blocks).not.toContain('welcome');
   });
 
-  test('Khách mới: dải Quà khách mới (không Mua lại / Việc cần làm); Danh mục, Bán chạy nhất (theo lượt bán 30 ngày), lối tắt rồi Khám phá theo Thương hiệu', async ({ page, api }) => {
+  test('Khách mới: dải Quà khách mới (không Mua lại / Việc cần làm); Danh mục, Bán chạy nhất (theo lượt bán 30 ngày), lối tắt rồi Gợi ý cho bạn', async ({ page, api }) => {
     mockDiscovery(api, { forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
     const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
     await expect(best).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible();
+    await expect(page.getByRole('region', { name: HOME_SUGGEST })).toBeVisible();
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
@@ -133,10 +133,10 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
       localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'user-4b', kind: 'returning' }));
     });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: HOME_SUGGEST })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('purchased-rail-loading')).toBeVisible();
     const before = await visibleBlocks(page);
-    // Thứ tự của khách cũ: không có Quà khách mới, Danh mục rồi Bán chạy nhất đứng trước Khám phá theo Thương hiệu.
+    // Thứ tự của khách cũ: không có Quà khách mới, Danh mục rồi Bán chạy nhất đứng trước Gợi ý cho bạn.
     expect(before).not.toContain('welcome');
     expect(before.indexOf('categories')).toBeGreaterThanOrEqual(0);
     expect(before.indexOf('categories')).toBeLessThan(before.indexOf('bestSellers'));

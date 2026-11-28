@@ -1,14 +1,8 @@
-import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, RefreshCw, ShoppingBasket, Sprout, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
-import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
+import { Gift, HeartHandshake, MessagesSquare, Recycle, RefreshCw, ShoppingBasket, Sprout, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
 import { liveRoute } from '@tubutree/app-core/merch/route-fallback';
 import type { HomePillarId, HomeShortcutId } from '@tubutree/app-core/home-layout';
 
 export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
-  flash: Zap,
-  orders: Package,
-  rewards: Gift,
-  recycle: Recycle,
-  groupBuy: Users,
   coupons: Ticket,
   gifts: ShoppingBasket,
   earn: HeartHandshake,
@@ -25,15 +19,10 @@ export const PILLAR_ICONS: Record<HomePillarId, LucideIcon> = {
 };
 
 /**
- * Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả"
+ * Đích điều hướng của lối tắt phụ; `null` = mở sheet thay vì sang trang (Kiếm tiền). Mã giảm giá và Bộ quà tặng đi qua `liveRoute` cùng nguồn với "Xem tất cả"
  * của khối tương ứng (Mã giảm giá: tab Săn mã của Ưu đãi, kho mã mở sẵn).
  */
 export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
-  flash: liveRoute('/flash-sale', 'mini'),
-  orders: '/orders',
-  rewards: offersTabHref('/offers', 'rewards'),
-  recycle: '/recycle',
-  groupBuy: '/group-buy',
   coupons: liveRoute('/vouchers', 'mini'),
   gifts: liveRoute('/gift-combos', 'mini'),
   earn: null,

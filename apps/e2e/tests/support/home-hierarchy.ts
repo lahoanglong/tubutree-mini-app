@@ -1,48 +1,48 @@
 import type { Page } from '@playwright/test';
 
 /**
- * Thứ bậc lối vào Trang chủ (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác), hàng 2 bốn ô phụ (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ).
- * Không có suất Giờ vàng nào thì thẻ "Mua lẻ · Giờ vàng" bị bỏ: `heroes: 1` (thẻ Vườn Xanh trải hết hàng 1).
+ * Lối tắt Trang chủ (W47): MỘT lưới biểu tượng 4 cột, tối đa 2 hàng, 4–8 ô cùng cỡ (sáu lối vào hệ sinh thái, lối tắt phụ, ô "Thêm"). Không còn thẻ chính
+ * hay ô phụ (`data-tier`). `retail: false` = không có suất Giờ vàng nào: ô Giờ vàng bị bỏ, lưới vẫn đủ hai hàng.
  * Đo hình học thật trên trình duyệt; trả về danh sách lỗi (rỗng = đúng). Dùng chung cho Mini App (375/360/320) và web điện thoại.
  */
-export async function homeHierarchyProblems(page: Page, { heroes: heroCount = 2 }: { heroes?: 1 | 2 } = {}): Promise<string[]> {
-  return page.evaluate((heroCount) => {
+export async function homeHierarchyProblems(page: Page, { retail = true }: { retail?: boolean } = {}): Promise<string[]> {
+  return page.evaluate((retail) => {
     const grid = document.querySelector<HTMLElement>('[data-testid="shortcut-grid"]');
     if (!grid) return ['không có shortcut-grid'];
     const rect = (el: Element) => el.getBoundingClientRect();
-    const heroes = Array.from(grid.querySelectorAll<HTMLElement>('[data-tier="hero"]'));
-    const chips = Array.from(grid.querySelectorAll<HTMLElement>('[data-tier="chip"]'));
+    const cells = Array.from(grid.querySelectorAll<HTMLElement>('.tubu-shortcut-cell'));
     const problems: string[] = [];
-    if (heroes.length !== heroCount) problems.push(`thẻ chính: ${heroes.length} (cần ${heroCount})`);
-    if (chips.length !== 4) problems.push(`ô phụ: ${chips.length} (cần 4)`);
+    if (grid.querySelector('[data-tier]')) problems.push('còn thẻ chính/ô phụ (data-tier) của lưới ba tầng cũ');
+    if (cells.length < 4 || cells.length > 8) problems.push(`số ô: ${cells.length} (cần 4–8)`);
+    const hasRetail = grid.querySelector('[data-pillar="retail"]') !== null;
+    if (hasRetail !== retail) problems.push(retail ? 'thiếu ô Giờ vàng' : 'còn ô Giờ vàng dù không có suất nào');
     if (problems.length) return problems;
 
-    const row = (els: HTMLElement[]) => new Set(els.map((e) => Math.round(rect(e).top))).size;
-    if (row(heroes) !== 1) problems.push('các thẻ chính không cùng một hàng');
-    if (row(chips) !== 1) problems.push('bốn ô phụ không cùng một hàng');
+    const rows = new Map<number, HTMLElement[]>();
+    for (const el of cells) {
+      const top = Math.round(rect(el).top);
+      rows.set(top, [...(rows.get(top) ?? []), el]);
+    }
+    if (rows.size > 2) problems.push(`lưới ${rows.size} hàng (tối đa 2)`);
+    for (const [top, row] of rows) if (row.length > 4) problems.push(`hàng ở ${top}px có ${row.length} ô (tối đa 4)`);
 
-    const heroBottom = Math.max(...heroes.map((e) => rect(e).bottom));
-    const chipTop = Math.min(...chips.map((e) => rect(e).top));
-    if (chipTop < heroBottom) problems.push(`hàng ô phụ (${Math.round(chipTop)}) nằm trên đáy thẻ chính (${Math.round(heroBottom)})`);
+    const widths = cells.map((e) => Math.round(rect(e).width));
+    const heights = cells.map((e) => Math.round(rect(e).height));
+    if (Math.max(...widths) - Math.min(...widths) > 1) problems.push(`ô không cùng rộng: ${Math.min(...widths)}–${Math.max(...widths)}px`);
+    if (Math.max(...heights) - Math.min(...heights) > 1) problems.push(`ô không cùng cao: ${Math.min(...heights)}–${Math.max(...heights)}px`);
 
-    const minHero = Math.min(...heroes.map((e) => rect(e).height));
-    const maxChip = Math.max(...chips.map((e) => rect(e).height));
-    if (!(minHero > maxChip)) problems.push(`thẻ chính (${Math.round(minHero)}px) phải cao hơn ô phụ (${Math.round(maxChip)}px)`);
-    const minHeroW = Math.min(...heroes.map((e) => rect(e).width));
-    const maxChipW = Math.max(...chips.map((e) => rect(e).width));
-    if (!(minHeroW > maxChipW)) problems.push(`thẻ chính (${Math.round(minHeroW)}px) phải rộng hơn ô phụ (${Math.round(maxChipW)}px)`);
-
-    for (const el of [...heroes, ...chips]) {
+    for (const el of cells) {
       const r = rect(el);
-      const name = el.dataset.pillar;
+      const name = el.dataset.pillar ?? el.dataset.shortcut ?? 'more';
       if (r.height < 44 || r.width < 44) problems.push(`${name}: vùng chạm ${Math.round(r.width)}×${Math.round(r.height)} dưới 44px`);
       if (r.right > window.innerWidth + 0.5 || r.left < -0.5) problems.push(`${name}: tràn khỏi màn (${Math.round(r.left)}..${Math.round(r.right)} / ${window.innerWidth})`);
       if (el.scrollWidth > el.clientWidth + 1) problems.push(`${name}: nội dung tràn ngang ${el.scrollWidth} > ${el.clientWidth}`);
     }
-    for (const label of Array.from(grid.querySelectorAll<HTMLElement>('[data-tier="chip"] [data-pillar-title]'))) {
-      if (getComputedStyle(label).fontVariantNumeric.indexOf('tabular-nums') === -1) problems.push(`${label.textContent}: thiếu tabular-nums`);
+    for (const label of Array.from(grid.querySelectorAll<HTMLElement>('[data-shortcut-label]'))) {
       if (label.scrollHeight > label.clientHeight + 1) problems.push(`${label.textContent}: nhãn bị cắt (${label.scrollHeight}px nội dung trong ${label.clientHeight}px)`);
+      const words = (label.textContent ?? '').trim().split(/\s+/).length;
+      if (words > 3) problems.push(`${label.textContent}: nhãn ${words} chữ (tối đa 2 từ ghép)`);
     }
     return problems;
-  }, heroCount);
+  }, retail);
 }

@@ -10,11 +10,11 @@ const card = (n: number, name: string) => ({
 });
 const pageOf = <T>(data: T[], limit: number) => ({ data, meta: { page: 1, limit, total: data.length } });
 
-const MERGED_FOR_YOU = 'Gợi ý từ request gộp';
+export const MERGED_FOR_YOU = 'Gợi ý từ request gộp';
 export const MERGED_PURCHASED = 'Mua lại từ request gộp';
-/** Nhãn đứng đầu khối "Khám phá theo Thương hiệu" (nhiều sản phẩm nhất). */
+/** Nhãn nhiều sản phẩm nhất: chip đầu của thanh Thương hiệu dưới Danh mục. */
 export const MERGED_BRAND = 'Tubu';
-/** Đủ nhiều nhãn để Trang chủ dài như khách thật (spec Back giữ vị trí cuộn cần cuộn sâu hơn 1.500px). */
+/** Nhiều nhãn thật như PROD: thanh chip Thương hiệu dưới Danh mục chỉ hiện khi có ít nhất hai nhãn khác "Tubu Tree" (W47). */
 const MERGED_BRANDS = [
   { brand: MERGED_BRAND, count: 12 },
   { brand: 'Fuwa3e', count: 9 },
@@ -63,7 +63,7 @@ export const MERGED_LONE_ENDPOINTS = [
 export function mockMergedHome(api: MockApi): void {
   api.get('/home', HOME_PUBLIC);
   api.get('/home/me', HOME_ME);
-  // Web không dựng thương hiệu từ /home: hàng chip và khối cuối Trang chủ hỏi /brands ở trình duyệt. Mini lấy từ khối gộp, không gọi.
+  // Web không lấy thương hiệu từ /home: thanh chip Thương hiệu hỏi /brands ở trình duyệt khi HTML đầu chưa có. Mini lấy từ khối gộp, không gọi.
   api.get('/brands', MERGED_BRANDS);
 }
 

@@ -192,310 +192,68 @@ body.has-sticky-bar [data-bottom-nav] {
   content: attr(data-initial);
 }
 
-/* Hệ sinh thái 6 lối vào (W171, W177): Bento Hub Trang chủ, hàng 1 hai thẻ chính, hàng 2 bốn ô phụ ở mọi cỡ màn + hàng lối tắt nhanh.
+/* Lối tắt Trang chủ (W47): MỘT lưới biểu tượng 4 cột × 2 hàng ở mọi cỡ màn, cùng số đo với Mini App (ecosystem-hub.css).
    Dùng lớp ngữ nghĩa trong CSS để không thêm số px viết tay hay max-md: vào file TSX. */
-.tubu-bento-hub {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-inline-sm);
-}
-
-.tubu-bento-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-inline-sm);
-}
-
-.tubu-bento-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 86px;
-  min-height: 44px;
-  min-width: 0;
-  padding: 7px 10px;
-  box-sizing: border-box;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-card);
-  background: var(--color-bg-surface);
-  box-shadow: var(--elevation-1);
-  color: var(--color-text-primary);
-  text-align: left;
-  text-decoration: none;
-  transition: border-color var(--motion-tap), box-shadow var(--motion-tap), transform var(--motion-tap);
-}
-
-.tubu-bento-card:hover {
-  border-color: var(--color-action-secondary-border);
-  box-shadow: var(--elevation-2);
-}
-
-.tubu-bento-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-width: 0;
-}
-
-.tubu-bento-icon {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  border-radius: var(--radius-tag);
-  background: var(--color-action-secondary-bg);
-  color: var(--color-action-secondary-fg);
-}
-
-.tubu-bento-icon--warm {
-  background: var(--color-promo-bg);
-  color: var(--color-promo-fg);
-}
-
-.tubu-bento-tag {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: var(--radius-pill);
-  padding: 1px 6px;
-  background: var(--color-action-secondary-bg);
-  color: var(--color-action-secondary-fg);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-lh);
-  font-weight: var(--type-label-weight);
-}
-
-.tubu-bento-tag--warm {
-  background: var(--color-promo-bg);
-  color: var(--color-promo-fg);
-}
-
-.tubu-bento-copy {
-  min-width: 0;
-}
-
-.tubu-bento-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  white-space: normal;
-  overflow-wrap: break-word;
-  color: var(--color-text-primary);
-  font-size: 13px;
-  line-height: 16px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.tubu-bento-sub {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-secondary);
-  font-size: var(--type-label-size);
-  line-height: 16px;
-}
-
-/* Hàng 1 (W177): hai thẻ chính. Cao cố định như trước để CLS = 0; tên được phép hai dòng nên "Đổi rác — Miễn ship đơn sau" không bị cắt ở 320px. */
-.tubu-bento-card--hero {
-  height: 96px;
-  padding: 10px 12px;
-}
-
-.tubu-bento-card--hero .tubu-bento-title {
-  font-size: 15px;
-  line-height: 18px;
-}
-
-/* Hàng 2 (W177): bốn ô phụ, mỗi ô cao cố định 64px (>= 44px chạm), biểu tượng trên tên, tên tối đa hai dòng, số đều. */
-.tubu-chip-row {
+.tubu-shortcut-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-stack-xs);
+  gap: var(--space-stack-xs) var(--space-inline-sm);
 }
 
-.tubu-chip {
+/* Ô cao cố định: biểu tượng 44 + cách 4 + nhãn giữ chỗ hai dòng 32, nên lưới luôn cao như nhau (CLS = 0). */
+.tubu-shortcut-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  height: 64px;
-  min-height: 44px;
+  gap: 4px;
   min-width: 0;
-  padding: 5px 2px;
-  box-sizing: border-box;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-surface);
+  min-height: 80px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--color-text-primary);
   font-family: inherit;
   text-decoration: none;
   cursor: pointer;
-  transition: border-color var(--motion-tap), background-color var(--motion-tap);
 }
 
-.tubu-chip:hover {
-  border-color: var(--color-action-secondary-border);
+.tubu-shortcut-cell:hover .tubu-shortcut-label {
+  color: var(--color-text-brand);
+}
+
+.tubu-shortcut-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-card);
+}
+
+.tubu-shortcut-icon--more {
   background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
 }
 
-.tubu-chip-label {
+.tubu-shortcut-label {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   max-width: 100%;
+  height: 32px;
   overflow: hidden;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   text-align: center;
-  font-size: var(--type-label-size);
-  line-height: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-size: var(--type-caption-size);
+  line-height: 16px;
+  font-weight: 500;
 }
 
-.tubu-quick-pills {
-  margin-top: var(--space-stack-sm);
-  display: flex;
-  align-items: center;
-  gap: var(--space-stack-xs);
-}
-
-.tubu-quick-pill {
-  flex: 1 1 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  height: 44px;
-  min-height: 44px;
-  min-width: 0;
-  padding: 0 7px;
-  box-sizing: border-box;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-control);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-lh);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  text-decoration: none;
-  cursor: pointer;
-  transition: border-color var(--motion-tap), background-color var(--motion-tap);
-}
-
-.tubu-quick-pill svg {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-}
-
-.tubu-quick-pill:hover {
-  border-color: var(--color-action-secondary-border);
-  background: var(--color-bg-subtle);
-}
-
-.tubu-quick-pill--more {
-  flex: 0 0 auto;
-  background: var(--color-bg-subtle);
-  color: var(--color-text-secondary);
-  padding: 0 8px;
-}
-
+/* Từ md lưới đủ rộng cho cả tám ô trên MỘT hàng. */
 @media (min-width: 768px) {
-  .tubu-bento-hub {
+  .tubu-shortcut-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     gap: var(--space-inline-md);
-  }
-
-  .tubu-bento-grid {
-    gap: var(--space-inline-md);
-  }
-
-  .tubu-bento-card {
-    height: auto;
-    min-height: 100px;
-    padding: 14px 16px;
-    gap: 10px;
-  }
-
-  .tubu-bento-card--hero {
-    height: auto;
-    min-height: 120px;
-    padding: 16px 20px;
-  }
-
-  .tubu-bento-card--hero .tubu-bento-title {
-    font-size: var(--type-title-md-size);
-    line-height: var(--type-title-md-lh);
-  }
-
-  .tubu-chip-row {
-    gap: var(--space-inline-md);
-  }
-
-  .tubu-chip {
-    flex-direction: row;
-    justify-content: center;
-    gap: 10px;
-    height: auto;
-    min-height: 64px;
-    padding: 10px 16px;
-  }
-
-  /* Hai dòng (không một): ở 768px mỗi ô phụ chỉ còn ~110px cho nhãn nên "Mua xoay vòng" bị cắt thành "Mua xoay…"; hàng cao tối thiểu 64px nên chữ hai dòng vẫn vừa. */
-  .tubu-chip-label {
-    -webkit-line-clamp: 2;
-    font-family: var(--font-display);
-    font-size: var(--type-body-md-size);
-    line-height: var(--type-body-md-lh);
-  }
-
-  .tubu-bento-icon {
-    width: 34px;
-    height: 34px;
-    border-radius: var(--radius-control);
-  }
-
-  .tubu-bento-tag {
-    padding: 2px 9px;
-  }
-
-  .tubu-bento-title {
-    font-family: var(--font-display);
-    font-size: var(--type-title-sm-size);
-    line-height: var(--type-title-sm-lh);
-  }
-
-  .tubu-bento-sub {
-    margin-top: 2px;
-    font-size: var(--type-caption-size);
-    line-height: var(--type-caption-lh);
-  }
-
-  .tubu-quick-pills {
-    margin-top: var(--space-inline-md);
-    gap: var(--space-inline-sm);
-  }
-
-  .tubu-quick-pill {
-    flex: 0 1 auto;
-    gap: 6px;
-    padding: 0 14px;
-    font-size: var(--type-caption-size);
-    letter-spacing: normal;
-  }
-
-  .tubu-quick-pill svg {
-    width: 14px;
-    height: 14px;
   }
 }

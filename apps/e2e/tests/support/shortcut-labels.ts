@@ -1,13 +1,9 @@
 import type { Page } from '@playwright/test';
 
-/** Mỗi nhãn trong Bento Hub và hàng lối tắt nhanh đọc đủ chữ: không tràn ngang khung chứa, không quá hai dòng. */
+/** Mỗi nhãn của lưới lối tắt (W47) đọc đủ chữ: không tràn ngang khung chứa, không quá hai dòng. */
 export async function shortcutLabelProblems(page: Page): Promise<string[]> {
   return page.evaluate(() =>
-    Array.from(
-      document.querySelectorAll<HTMLElement>(
-        '[data-testid="shortcut-grid"] [data-pillar-title], [data-testid="shortcut-grid"] [data-quick-label]',
-      ),
-    ).flatMap((label) => {
+    Array.from(document.querySelectorAll<HTMLElement>('[data-testid="shortcut-grid"] [data-shortcut-label]')).flatMap((label) => {
       const range = document.createRange();
       range.selectNodeContents(label);
       const lines = new Set(Array.from(range.getClientRects()).map((r) => Math.round(r.top))).size;

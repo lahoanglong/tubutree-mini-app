@@ -9,7 +9,8 @@ import { mockTourWorld, tourUser } from './support/tour-world';
 /**
  * Đợt tốc độ trên máy khách, phía web:
  * - HTML đầu của Trang chủ chỉ có ô giữ chỗ cho lưới Gợi ý và dải Story (dựng ở trình duyệt khi khách cuộn tới gần; dải không đủ món thì khối rỗng,
- *   không giữ chỗ), và dữ liệu `suggest`/`brands` không theo vào dữ liệu RSC của trang.
+ *   không giữ chỗ), và dữ liệu `suggest` không theo vào dữ liệu RSC của trang. `brands` thì có (W47): thanh chip Thương hiệu nằm trong khối Danh mục ở
+ *   màn đầu, HTML đầu phải biết có vẽ thanh hay không.
  * - Ô giữ chỗ cao bằng dải Story thật (đo HTML không chạy JS so với trang đã dựng), cuộn hết trang thì lưới Gợi ý hiện và CLS ≤ 0,1, ở 360, 390, 768 và 1440.
  * - Cờ `perf.rum_enabled` tắt (mặc định của DB e2e sau migration): ẩn trang không gửi sự kiện `web_vital` nào, trong khi sự kiện web thường vẫn đi.
  */
@@ -57,7 +58,7 @@ test.beforeEach(async ({ api, page, request }, testInfo) => {
 const blockHeight = (page: Page, block: string) =>
   page.locator(`[data-home-block="${block}"]`).evaluate((el) => Math.round(el.getBoundingClientRect().height));
 
-test('HTML đầu: lưới Gợi ý (và dải Story khi dải có món) chỉ là ô giữ chỗ, dữ liệu suggest/brands không theo vào dữ liệu RSC', async ({ request }) => {
+test('HTML đầu: lưới Gợi ý (và dải Story khi dải có món) chỉ là ô giữ chỗ, dữ liệu suggest không theo vào dữ liệu RSC', async ({ request }) => {
   const html = await (await request.get('/')).text();
   const placeholder = (block: string) => new RegExp(`data-home-block="${block}"[^>]*><div aria-hidden="true" data-testid="home-defer"`);
   expect(html, 'khối suggest là ô giữ chỗ').toMatch(placeholder('suggest'));
@@ -68,7 +69,6 @@ test('HTML đầu: lưới Gợi ý (và dải Story khi dải có món) chỉ l
   );
   expect(html.match(/data-testid="home-defer"/g)?.length ?? 0, 'tối đa hai ô giữ chỗ').toBeLessThanOrEqual(DEFERRED.length);
   expect(html, 'dữ liệu RSC không mang suggest').not.toMatch(/\\"suggest\\":/);
-  expect(html, 'dữ liệu RSC không mang brands').not.toMatch(/\\"brands\\":/);
 });
 
 for (const size of SIZES) {

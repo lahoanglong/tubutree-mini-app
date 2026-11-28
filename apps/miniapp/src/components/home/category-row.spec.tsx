@@ -2,7 +2,7 @@ import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testin
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Baby, LayoutGrid } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { CategoryEntry } from '../../hooks/use-categories';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), fetchBrands: vi.fn() }));
@@ -248,17 +248,13 @@ describe('CategoryRow — một hàng 5 ô: 4 danh mục + "Tất cả"', () => 
   });
 });
 
-describe('CategoryRow — thanh nhảy nhanh theo thương hiệu', () => {
+describe('CategoryRow — thanh chip thương hiệu (lối duyệt theo thương hiệu duy nhất của Trang chủ, W47)', () => {
   const BRANDS = [
     { brand: 'Tubu Tree', count: 30 },
-    { brand: 'Fuwa3e', count: 20 },
+    { brand: 'Fuwa3e', count: 20, slug: 'fuwa3e' },
     { brand: 'Pơ Lang', count: 6 },
   ];
-  const bar = () => screen.getByTestId('home-brand-bar');
-
-  afterEach(() => {
-    document.getElementById('home-brand-fuwa3e')?.remove();
-  });
+  const bar = () => screen.queryByTestId('home-brand-bar');
 
   it('chip theo số sản phẩm giảm dần, "Tubu Tree" luôn cuối; vùng cuộn ngang có tên "Thương hiệu"', async () => {
     mocks.fetchBrands.mockResolvedValue(BRANDS);
@@ -267,44 +263,38 @@ describe('CategoryRow — thanh nhảy nhanh theo thương hiệu', () => {
     expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fuwa3e', 'Pơ Lang', 'Tubu Tree']);
   });
 
-  it('hàng luôn cao BRAND_BAR_HEIGHT: lúc tải (khung chờ), lúc có chip và lúc rỗng, nên khối dưới không nhảy', async () => {
+  it('lúc tải giữ chỗ BRAND_BAR_HEIGHT (khung chờ), có chip thì vẫn đúng chiều cao đó', async () => {
     let resolve: (v: typeof BRANDS) => void = () => undefined;
     mocks.fetchBrands.mockReturnValue(new Promise((r) => (resolve = r)));
     renderRow(4);
     expect(bar()).toHaveStyle({ height: `${BRAND_BAR_HEIGHT}px` });
-    expect(bar().querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(bar()!.querySelector('[aria-hidden="true"]')).not.toBeNull();
     resolve(BRANDS);
     await screen.findByRole('button', { name: 'Fuwa3e' });
     expect(bar()).toHaveStyle({ height: `${BRAND_BAR_HEIGHT}px` });
   });
 
-  it('không có nhãn nào (hay lỗi): không vẽ chip, hàng vẫn giữ chỗ', async () => {
+  it('lỗi hay rỗng: không vẽ hàng (không để dải trống)', async () => {
     mocks.fetchBrands.mockRejectedValue(new Error('down'));
     renderRow(4);
     await waitFor(() => expect(mocks.fetchBrands).toHaveBeenCalled());
-    await waitFor(() => expect(bar().querySelector('[aria-hidden="true"]')).toBeNull());
-    expect(within(bar()).queryAllByRole('button')).toHaveLength(0);
-    expect(bar()).toHaveStyle({ height: `${BRAND_BAR_HEIGHT}px` });
+    await waitFor(() => expect(bar()).toBeNull());
   });
 
-  it('chạm chip khi khối thương hiệu đã dựng nhãn: cuộn tới neo #home-brand-<slug>, không chuyển trang', async () => {
+  it('chỉ "Tubu Tree" hay một nhãn thật kèm "Tubu Tree": không có lựa chọn nên không vẽ hàng', async () => {
+    mocks.fetchBrands.mockResolvedValue([{ brand: 'Tubu Tree', count: 30 }, { brand: 'Fuwa3e', count: 20 }]);
+    renderRow(4);
+    await waitFor(() => expect(mocks.fetchBrands).toHaveBeenCalled());
+    await waitFor(() => expect(bar()).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Fuwa3e' })).toBeNull();
+  });
+
+  it('chạm chip: mở trang nhãn khi có slug, không thì danh sách lọc theo nhãn', async () => {
     mocks.fetchBrands.mockResolvedValue(BRANDS);
-    const anchor = document.createElement('section');
-    anchor.id = 'home-brand-fuwa3e';
-    const scrollIntoView = vi.fn();
-    anchor.scrollIntoView = scrollIntoView;
-    document.body.appendChild(anchor);
     renderRow(4);
     fireEvent.click(await screen.findByRole('button', { name: 'Fuwa3e' }));
-    expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }));
-    expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it('chạm chip khi nhãn chưa dựng (khối hoãn, lỗi hay hết món): mở danh sách lọc theo nhãn', async () => {
-    mocks.fetchBrands.mockResolvedValue(BRANDS);
-    renderRow(4);
-    fireEvent.click(await screen.findByRole('button', { name: 'Pơ Lang' }));
-    expect(mocks.navigate).toHaveBeenCalledTimes(1);
-    expect(mocks.navigate.mock.calls[0]![0]).toContain('brand=');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/brand/fuwa3e');
+    fireEvent.click(screen.getByRole('button', { name: 'Pơ Lang' }));
+    expect(mocks.navigate.mock.calls.at(-1)![0]).toContain('brand=');
   });
 });

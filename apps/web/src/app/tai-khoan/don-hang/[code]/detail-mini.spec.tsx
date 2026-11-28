@@ -115,7 +115,7 @@ describe('chi tiết đơn như Mini App', () => {
     expect(container.querySelector('[data-page-bleed]')).not.toBeNull();
   });
 
-  it('dải trạng thái: nền theo trạng thái, mốc thời gian đứng trên nhãn', async () => {
+  it('dải trạng thái: nền theo trạng thái, mốc thời gian đứng trên nhãn, tối đa ba phần (W47)', async () => {
     mocks.order = structuredClone(COD_DELIVERED);
     const { container } = await mount();
     const hero = container.querySelector('[data-testid="status-hero"]') as HTMLElement;
@@ -123,7 +123,9 @@ describe('chi tiết đơn như Mini App', () => {
     expect(hero.style.color).toBe('var(--color-status-success-fg)');
     expect(hero.firstElementChild!.textContent).toMatch(/^Giao lúc/);
     expect(text(hero)).toContain('Giao thành công');
-    expect(text(hero)).toContain('Đơn đã giao thành công.');
+    // W47: mốc giờ, trạng thái, một câu mốc kế tiếp; câu lặp lại trạng thái ("Đơn đã giao thành công.") không còn.
+    expect(hero.children.length).toBeLessThanOrEqual(3);
+    expect(text(hero)).not.toContain('Đơn đã giao thành công.');
   });
 
   it('hành trình: đơn COD bỏ bước chờ thanh toán, nhãn như Mini App', async () => {

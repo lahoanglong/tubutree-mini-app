@@ -203,9 +203,13 @@ export function customerKind(purchasedCount: number | undefined): HomeCustomerKi
   return (purchasedCount ?? 0) > 0 ? 'returning' : 'new';
 }
 
-// ---- Lối tắt ----
+// ---- Lưới lối tắt (W47): MỘT lưới biểu tượng 4 cột × 2 hàng ----
 
-export type HomeShortcutId = 'flash' | 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'gifts' | 'earn' | 'community';
+/**
+ * Lối tắt phụ: chỉ những đích chưa có lối vào nào khác ở Trang chủ. Giờ vàng, Đổi rác, Mua chung và Đổi quà đã là ô trụ cột của lưới (một đích một nút trên
+ * một màn); Đơn hàng nằm ở tab Cá nhân và dải "Việc cần làm"; Vườn Xanh là ô trụ cột; Tích điểm đơn sàn là tab giữa "Quét mã" của thanh đáy.
+ */
+export type HomeShortcutId = 'coupons' | 'gifts' | 'earn' | 'community';
 export type ShortcutTint = 'forest' | 'sage' | 'clay' | 'amber' | 'sky' | 'rose';
 
 export interface HomeShortcutSpec {
@@ -214,155 +218,66 @@ export interface HomeShortcutSpec {
   /** Câu đọc đầy đủ cho trình đọc màn hình. */
   ariaLabel: string;
   tint: ShortcutTint;
-  /** Mục chỉ hiện khi cờ này bật. */
-  flag?: 'waste';
-}
-
-export interface HomeFlags {
-  wasteEnabled: boolean;
-  /** Khách còn yêu cầu đổi rác đang mở: mục Đổi rác vẫn hiện (ghi "Yêu cầu") dù chương trình tạm dừng. */
-  recycleOpenRequests?: boolean;
-  /** `false` = đã biết không có suất Giờ vàng nào (đang chạy hay sắp tới) có món: bỏ lối vào Giờ vàng thay vì dẫn tới trang trống. Chưa biết thì giữ. */
-  flashLive?: boolean;
 }
 
 export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
-/** Nhãn lối tắt Trang chủ (ô 5 cột, một dòng): ngắn hơn tên đầy đủ, câu đọc vẫn là tên đầy đủ. */
+/** Nhãn ô lưới lối tắt (ô 4 cột, tối đa hai dòng): ngắn hơn tên đầy đủ, câu đọc vẫn là tên đầy đủ. */
 export const RECYCLE_REQUESTS_SHORTCUT_LABEL = 'Yêu cầu';
 
-// Thứ tự = thứ tự ưu tiên: 4 mục đầu là 4 ô cố định (Q7), phần còn lại nằm trong sheet "Tất cả".
+/** Thứ tự = thứ tự ưu tiên lấp ô còn trống của lưới; phần không lên lưới nằm trong sheet "Thêm". */
 export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
-  { id: 'flash', label: 'Giờ vàng', ariaLabel: 'Giờ vàng, ưu đãi có hạn', tint: 'amber' },
   { id: 'coupons', label: 'Mã giảm giá', ariaLabel: 'Mã giảm giá của tôi và mã đang phát', tint: 'rose' },
-  { id: 'recycle', label: 'Đổi rác', ariaLabel: 'Đổi rác lấy quà', tint: 'sage', flag: 'waste' },
-  { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
-  { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
-  { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
+  { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
   { id: 'gifts', label: 'Bộ quà tặng', ariaLabel: 'Bộ quà tặng và combo khởi đầu', tint: 'rose' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
-  { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
 ];
-
-/**
- * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là thẻ chính của khối lối vào ngay trên) và Tích điểm đơn sàn (tab giữa
- * "Quét mã" của thanh đáy đã dẫn tới đó, một đích chỉ có một lối). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
- * đổi nhãn thành "Yêu cầu" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
- */
-export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
-  return HOME_SHORTCUTS.flatMap((s): HomeShortcutSpec[] => {
-    if (s.flag === 'waste') {
-      if (flags.wasteEnabled) return [s];
-      return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_SHORTCUT_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
-    }
-    if (s.id === 'flash' && flags.flashLive === false) return [];
-    return [s];
-  });
-}
-
-/** Số ô lối tắt cố định ở Trang chủ; còn lại vào sheet "Tất cả" (Q7). */
-export const HOME_SHORTCUT_SLOTS = 4;
-
-/** `pinned` = 4 ô cố định (mục cờ tắt bị bỏ thì mục kế lấp chỗ); `all` = mọi mục còn hiển thị, cho sheet "Tất cả". */
-export function homeShortcutSlots(flags: HomeFlags): { pinned: HomeShortcutSpec[]; all: HomeShortcutSpec[] } {
-  const all = visibleHomeShortcuts(flags);
-  return { pinned: all.slice(0, HOME_SHORTCUT_SLOTS), all };
-}
-
-// ---- Hệ sinh thái 6 lối vào: 2 thẻ chính + 4 ô phụ (W177) ----
 
 export type HomePillarId = 'retail' | 'recycle' | 'groupBuy' | 'subscription' | 'garden' | 'rewards';
 
 export interface HomeEcosystemPillarSpec {
   id: HomePillarId;
-  /** `hero` = thẻ lớn hàng 1 (có phụ đề và nhãn); `chip` = ô phụ hàng 2 (chỉ biểu tượng và tên ngắn). */
-  tier: 'hero' | 'chip';
+  /** Tên đầy đủ, đứng đầu câu đọc của ô. */
   title: string;
+  /** Nhãn ô lưới: một hai chữ, tối đa hai dòng ở ô 4 cột 320px. */
+  short: string;
   subtitle: string;
-  badge: string;
-  tone: 'botanical' | 'warm';
+  tint: ShortcutTint;
   webHref: string;
   miniRoute: string;
 }
 
 /**
- * Thứ tự = thứ tự vẽ. Hàng 1 là hai thẻ chính (Mua lẻ / Giờ vàng, Vườn Xanh), hàng 2 là bốn lối vào phụ (Đổi rác đứng đầu).
- * Vườn Xanh lên hàng 1 từ khi tab giữa thanh đáy thành "Quét mã" (W42): nó cần một lối vào nổi ở Trang chủ, mang luôn chấm "có việc hôm nay".
- * Cả sáu giữ nguyên lối vào và `data-pillar` của W171 để đo 14 ngày; chỉ thứ bậc hiển thị đổi.
+ * Sáu lối vào hệ sinh thái, thứ tự = thứ tự ô trong lưới. Cả sáu giữ nguyên lối vào và `data-pillar` của W171 để số đo trước và sau so được với nhau.
+ * Vườn Xanh mang chấm "có việc hôm nay" từ khi tab giữa thanh đáy thành "Quét mã" (W42).
  */
 export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
-  {
-    id: 'retail',
-    tier: 'hero',
-    title: 'Mua lẻ · Giờ vàng',
-    subtitle: 'Giá tốt theo giờ',
-    badge: 'Giờ vàng',
-    tone: 'warm',
-    webHref: '/gio-vang',
-    miniRoute: '/flash-sale',
-  },
-  {
-    id: 'garden',
-    tier: 'hero',
-    title: 'Vườn Xanh',
-    subtitle: 'Tưới cây mỗi ngày nhận quà thật',
-    badge: 'Quà thật',
-    tone: 'botanical',
-    webHref: '/vuon-xanh',
-    miniRoute: '/game',
-  },
-  {
-    id: 'recycle',
-    tier: 'chip',
-    title: 'Đổi rác',
-    subtitle: 'Miễn ship đơn sau, nhận Điểm Xanh',
-    badge: 'Điểm Xanh',
-    tone: 'botanical',
-    webHref: '/doi-rac',
-    miniRoute: '/recycle',
-  },
-  {
-    id: 'groupBuy',
-    tier: 'chip',
-    title: 'Mua chung',
-    subtitle: 'Rủ bạn đủ nhóm giảm sâu',
-    badge: 'Giá kho',
-    tone: 'warm',
-    webHref: '/mua-chung',
-    miniRoute: '/group-buy',
-  },
+  { id: 'retail', title: 'Mua lẻ · Giờ vàng', short: 'Giờ vàng', subtitle: 'Giá tốt theo giờ', tint: 'amber', webHref: '/gio-vang', miniRoute: '/flash-sale' },
+  { id: 'garden', title: 'Vườn Xanh', short: 'Vườn Xanh', subtitle: 'Tưới cây mỗi ngày nhận quà thật', tint: 'forest', webHref: '/vuon-xanh', miniRoute: '/game' },
+  { id: 'recycle', title: 'Đổi rác', short: 'Đổi rác', subtitle: 'Miễn ship đơn sau, nhận Điểm Xanh', tint: 'sage', webHref: '/doi-rac', miniRoute: '/recycle' },
+  { id: 'groupBuy', title: 'Mua chung', short: 'Mua chung', subtitle: 'Rủ bạn đủ nhóm giảm sâu', tint: 'sky', webHref: '/mua-chung', miniRoute: '/group-buy' },
   {
     id: 'subscription',
-    tier: 'chip',
     title: 'Mua xoay vòng',
+    short: 'Định kỳ',
     subtitle: fillBootCopy('home.pillar.subscribe.subtitle'),
-    badge: fillBootCopy('home.pillar.subscribe.badge'),
-    tone: 'botanical',
+    tint: 'forest',
     webHref: '/san-pham?filter=subscription',
     miniRoute: '/subscriptions',
   },
-  {
-    id: 'rewards',
-    tier: 'chip',
-    title: 'Kho quà 0đ',
-    subtitle: 'Đổi Điểm Xanh lấy quà & mã giảm giá',
-    badge: 'Điểm Xanh',
-    tone: 'warm',
-    webHref: '/kho-qua',
-    miniRoute: '/offers?tab=rewards',
-  },
+  { id: 'rewards', title: 'Kho quà 0đ', short: 'Kho quà', subtitle: 'Đổi Điểm Xanh lấy quà & mã giảm giá', tint: 'clay', webHref: '/kho-qua', miniRoute: '/offers?tab=rewards' },
 ];
 
 export interface HomePillarOptions {
   wastePausedWithOpenRequests?: boolean;
   /** Tỉ lệ giảm của đơn định kỳ do máy chủ cấu hình (0,12 = 12%). Chưa có cấu hình thật thì không hứa con số nào. */
   subscribeDiscountPct?: number | null;
-  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Vườn Xanh giãn hết hàng (cùng chiều cao, không làm trang nhảy). */
+  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ ô Giờ vàng, lối tắt kế tiếp lấp chỗ (lưới vẫn đủ hai hàng, không làm trang nhảy). */
   flashLive?: boolean;
 }
 
 /**
- * Lối vào vẽ ngay từ khung hình đầu. Khi chương trình Đổi rác tạm dừng mà khách còn yêu cầu mở, thẻ Đổi rác đổi lời mời sang theo dõi yêu cầu đang mở
- * mà giữ nguyên kích thước. Thẻ Mua xoay vòng chỉ nói con số tiết kiệm lấy từ cấu hình.
+ * Lối vào vẽ ngay từ khung hình đầu. Khi chương trình Đổi rác tạm dừng mà khách còn yêu cầu mở, ô Đổi rác đổi sang theo dõi yêu cầu đang mở. Câu đọc của
+ * ô Mua xoay vòng chỉ nói con số tiết kiệm lấy từ cấu hình.
  */
 export function resolveHomeEcosystemPillars(opts: HomePillarOptions = {}): HomeEcosystemPillarSpec[] {
   const pct = opts.subscribeDiscountPct != null && opts.subscribeDiscountPct > 0 ? Math.round(opts.subscribeDiscountPct * 100) : null;
@@ -373,36 +288,52 @@ export function resolveHomeEcosystemPillars(opts: HomePillarOptions = {}): HomeE
         {
           ...p,
           title: RECYCLE_REQUESTS_LABEL,
+          short: RECYCLE_REQUESTS_SHORTCUT_LABEL,
           subtitle: 'Theo dõi yêu cầu đổi rác đang mở',
-          badge: RECYCLE_REQUESTS_SHORTCUT_LABEL,
           webHref: '/doi-rac/yeu-cau',
           miniRoute: '/recycle/requests',
         },
       ];
     }
-    if (p.id === 'subscription' && pct !== null) {
-      return [{ ...p, subtitle: fillBootCopy('home.pillar.subscribe.subtitlePct', { pct }), badge: fillBootCopy('home.pillar.subscribe.badgePct', { pct }) }];
-    }
+    if (p.id === 'subscription' && pct !== null) return [{ ...p, subtitle: fillBootCopy('home.pillar.subscribe.subtitlePct', { pct }) }];
     return [p];
   });
 }
 
-/** Tách theo thứ bậc để hai app vẽ cùng một cấu trúc: `heroes` ở hàng 1, `chips` ở hàng 2. */
-export function splitHomeEcosystemPillars(pillars: readonly HomeEcosystemPillarSpec[]): {
-  heroes: HomeEcosystemPillarSpec[];
-  chips: HomeEcosystemPillarSpec[];
-} {
-  return {
-    heroes: pillars.filter((p) => p.tier === 'hero'),
-    chips: pillars.filter((p) => p.tier === 'chip'),
-  };
+/** Lưới lối tắt: 4 cột × 2 hàng, ô cuối là "Thêm" khi còn lối tắt chưa lên lưới. */
+export const HOME_GRID_COLUMNS = 4;
+export const HOME_GRID_CELLS = 8;
+
+export type HomeGridCell =
+  | { kind: 'pillar'; id: HomePillarId; label: string; ariaLabel: string; tint: ShortcutTint; webHref: string; miniRoute: string; dot?: boolean }
+  | { kind: 'shortcut'; id: HomeShortcutId; label: string; ariaLabel: string; tint: ShortcutTint };
+
+export interface HomeShortcutGridOptions extends HomePillarOptions {
+  /** Lối tắt phụ có đích dùng được trên nền này không (web bỏ đích chưa có trang). Mặc định là có. */
+  shortcutReady?: (s: HomeShortcutSpec) => boolean;
+  /** Vườn Xanh có việc hôm nay (chưa điểm danh hoặc chưa làm Đố Xanh): ô mang chấm và câu đọc nói điều đó. */
+  gardenDot?: boolean;
 }
 
 /**
- * Hai lối tắt nhanh ngay dưới hàng ô phụ (trước nút "Thêm" mở đầy đủ danh sách). Giờ vàng không còn ở đây vì đã là thẻ chính "Mua lẻ · Giờ vàng":
- * một đích chỉ có một nút trên một màn.
+ * Trang chủ Mini App và web: MỘT lưới biểu tượng, mọi ô cùng cỡ để khách quét một lượt. Sáu lối vào hệ sinh thái lên trước, lối tắt phụ lấp
+ * ô còn lại; quá `HOME_GRID_CELLS` thì ô cuối là "Thêm" và `more` là các lối tắt còn lại (sheet không lặp lại đích đã có trên lưới). Bỏ ô Giờ vàng
+ * (`flashLive === false`) thì lối tắt kế tiếp lên lưới: lưới giữ đủ hai hàng nên khối dưới không nhảy.
  */
-export const HOME_QUICK_SHORTCUT_IDS: readonly HomeShortcutId[] = ['coupons', 'community'];
+export function homeShortcutGrid(opts: HomeShortcutGridOptions = {}): { cells: HomeGridCell[]; more: HomeShortcutSpec[] } {
+  const pillars: HomeGridCell[] = resolveHomeEcosystemPillars(opts).map((p) => {
+    const dot = p.id === 'garden' && opts.gardenDot === true;
+    // Câu đọc bắt đầu bằng đúng nhãn nhìn thấy (WCAG 2.5.3), tên đầy đủ trong ngoặc khi khác nhãn.
+    const label = p.title === p.short ? p.short : `${p.short} (${p.title})`;
+    const name = dot ? fillBootCopy('home.pillar.garden.dot', { name: label }) : label;
+    return { kind: 'pillar', id: p.id, label: p.short, ariaLabel: `${name}. ${p.subtitle}`, tint: p.tint, webHref: p.webHref, miniRoute: p.miniRoute, ...(dot ? { dot } : {}) };
+  });
+  const extras = HOME_SHORTCUTS.filter((s) => opts.shortcutReady?.(s) ?? true);
+  const toCell = (s: HomeShortcutSpec): HomeGridCell => ({ kind: 'shortcut', id: s.id, label: s.label, ariaLabel: s.ariaLabel, tint: s.tint });
+  if (pillars.length + extras.length <= HOME_GRID_CELLS) return { cells: [...pillars, ...extras.map(toCell)], more: [] };
+  const room = Math.max(0, HOME_GRID_CELLS - 1 - pillars.length);
+  return { cells: [...pillars.slice(0, HOME_GRID_CELLS - 1), ...extras.slice(0, room).map(toCell)], more: extras.slice(room) };
+}
 
 // ---- Thanh đáy ----
 
@@ -861,8 +792,8 @@ export function categoriesBlockHeight(cells: number): number {
 }
 
 /**
- * Thanh nhảy nhanh theo thương hiệu ngay dưới lưới Danh mục ở Trang chủ: một hàng chip 36 cuộn ngang, đệm trên dưới 4 (vùng chạm 44 của chip không bị
- * cắt). Luôn giữ đúng chiều cao này kể cả khi thương hiệu chưa về, lỗi hay rỗng, để khối dưới không nhảy (web không tải thương hiệu ở máy chủ).
+ * Thanh chip thương hiệu ngay dưới lưới Danh mục ở Trang chủ: một hàng chip 36 cuộn ngang, đệm trên dưới 4 (vùng chạm 44 của chip không bị cắt). Đang tải
+ * thì giữ đúng chiều cao này (cửa hàng thật có nhiều nhãn nên thanh thường ở lại); không đủ hai nhãn thật (`hasBrandChoice`), lỗi hay rỗng thì không vẽ.
  */
 export const BRAND_BAR_HEIGHT = 44;
 
@@ -878,8 +809,8 @@ export function homeCategoriesBlockHeight(cells: number): number {
 export const HOME_SETTLING_HEIGHTS = {
   // Banner tỉ lệ 5:2 (`--banner-ratio`) ở 375px trừ đệm 16 mỗi bên.
   banner: Math.round((375 - 32) / 2.5),
-  // Hàng 1 hai thẻ chính 96 + khe 8 + hàng 2 bốn ô phụ 64 (= 168) + khe 8 + hàng lối tắt nhanh 44 = 220 (W177; trước đó Bento 2x3 là 326).
-  shortcuts: 220,
+  // Lưới lối tắt 4 cột luôn đủ hai hàng (`homeShortcutGrid`): ô 80 (biểu tượng 44 + 4 + nhãn hai dòng 32) + khe 8 + ô 80 = 168.
+  shortcuts: 168,
   // Dải Story: tiêu đề 24 + 8, vòng 72 (ảnh 64 + viền 4 mỗi bên), 6, nhãn hai dòng 32 = 142, làm tròn 144. Khối thật đặt đúng chiều cao này.
   stories: 144,
   flash: FLASH_SKELETON_HEIGHT,

@@ -7,6 +7,7 @@ import { offeredIntentFilters } from '@tubutree/app-core/browse/intent-filters';
 import { browseText } from '@/lib/browse-text';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { EMPTY_FILTER_DRAFT, MIN_RATING_OPTION, PRICE_RANGES, activeFilterCount, priceRangeLabel, type SearchState } from '@/lib/search-state';
+import { hasBrandChoice } from '@tubutree/app-core/merch/brand-showcase';
 
 const ROW =
   'flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left text-sm transition hover:bg-forest-50';
@@ -102,7 +103,8 @@ export function FilterSidebar({
         </Check>
       </Group>
 
-      {brands.length > 0 && (
+      {/* Chỉ một nhãn thật (hay chỉ "Tubu Tree") thì không có gì để chọn: ẩn cả nhóm như bộ lọc điện thoại (W47, `hasBrandChoice`). */}
+      {hasBrandChoice(brands) && (
         <Group title={browseText.filter.brand}>
           {shownBrands.map((b) => (
             <Check key={b.brand} checked={state.brands.includes(b.brand)} onChange={() => toggleBrand(b.brand)}>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { brandJumpHref, brandShowcase } from '@tubutree/app-core/merch/brand-showcase';
+import { brandJumpHref, brandShowcase, hasBrandChoice } from '@tubutree/app-core/merch/brand-showcase';
 import { brandsQuery } from '@tubutree/app-core/queries/catalog';
 import { BRAND_BAR_HEIGHT, CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_GUTTER, CATEGORY_TILE_SIZE, categorySkeletonCells, homeCategoryEntries, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
@@ -74,75 +74,35 @@ function Label({ children, card = false }: { children: string; card?: boolean })
   );
 }
 
-/** Khối "Khám phá theo Thương hiệu" còn là khung giữ chỗ của `DeferUntilNear` (chưa tới gần khung nhìn nên chưa dựng nhãn nào). */
-const DEFERRED_BRANDS = '[data-home-block="suggest"] [data-testid="home-defer"]';
-const ANCHOR_POLL_MS = 50;
-const ANCHOR_POLL_TRIES = 30;
-
-const scrollBehavior = (): ScrollBehavior =>
-  typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-
-/** Cuộn mượt tới nhãn trong khối "Khám phá theo Thương hiệu" (khách bật giảm chuyển động thì nhảy thẳng). Trả false khi trang chưa có neo của nhãn. */
-function scrollToBrandAnchor(anchorId: string): boolean {
-  const el = document.getElementById(anchorId);
-  if (!el) return false;
-  el.scrollIntoView?.({ behavior: scrollBehavior(), block: 'start' });
-  return true;
-}
-
 /**
- * Chip của thanh nhảy nhanh. Khối còn hoãn (vừa mở trang, khối ở xa dưới màn đầu): cuộn tới khung giữ chỗ để khối dựng, rồi chờ neo của nhãn tối đa
- * `ANCHOR_POLL_TRIES` x `ANCHOR_POLL_MS` và cuộn tiếp tới nhãn; khách vẫn ở Trang chủ như khi khối đã dựng. Khối đã dựng mà không có nhãn đó (nhãn tải lỗi
- * hay hết món), hoặc chờ quá lâu, thì đi tới đích dự phòng `brandJumpHref`. Khách rời Trang chủ trong lúc chờ thì thôi.
- */
-function jumpToBrand(anchorId: string, fallback: () => void): void {
-  if (scrollToBrandAnchor(anchorId)) return;
-  const deferred = document.querySelector<HTMLElement>(DEFERRED_BRANDS);
-  if (!deferred) {
-    fallback();
-    return;
-  }
-  deferred.scrollIntoView?.({ behavior: scrollBehavior(), block: 'start' });
-  let tries = 0;
-  const poll = () => {
-    if (!document.querySelector('[data-home-block="suggest"]') || scrollToBrandAnchor(anchorId)) return;
-    if (++tries >= ANCHOR_POLL_TRIES) fallback();
-    else window.setTimeout(poll, ANCHOR_POLL_MS);
-  };
-  window.setTimeout(poll, ANCHOR_POLL_MS);
-}
-
-/**
- * Thanh nhảy nhanh theo thương hiệu dưới lưới Danh mục (bản web của thanh trong `category-row.tsx` ở Mini App): chip theo số sản phẩm giảm dần, "Tubu Tree" cuối
- * (`brandShowcase`). Chạm thì cuộn tới nhãn đó ở khối "Khám phá theo Thương hiệu" (`jumpToBrand`, kể cả khi khối còn hoãn dưới màn đầu).
- * Máy chủ không tải thương hiệu cho Trang chủ nên hàng luôn cao `BRAND_BAR_HEIGHT` (khung chờ, chip, hay trống khi lỗi/rỗng): khối dưới không nhảy.
+ * Thanh chip thương hiệu dưới lưới Danh mục (bản web của thanh trong `category-row.tsx` ở Mini App; lối duyệt theo thương hiệu DUY NHẤT của Trang chủ từ W47):
+ * chip theo số sản phẩm giảm dần, "Tubu Tree" cuối (`brandShowcase`), chạm thì mở trang của nhãn (không có thì danh sách lọc theo nhãn). Máy chủ dựng sẵn
+ * danh sách thương hiệu (`HomeInitial.brands`) nên HTML đầu đã biết có vẽ thanh hay không; chỉ khi máy chủ không có thì giữ chỗ `BRAND_BAR_HEIGHT` trong lúc tải.
+ * Cửa hàng không có ít nhất hai nhãn thật (`hasBrandChoice`), lỗi hay rỗng thì không vẽ gì.
  */
 function BrandBar() {
   const router = useRouter();
   const q = useQuery({ ...brandsQuery(coreHttp), staleTime: 60_000, retry: false });
-  const brands = useMemo(() => brandShowcase(q.data), [q.data]);
+  const brands = useMemo(() => (hasBrandChoice(q.data) ? brandShowcase(q.data) : []), [q.data]);
+  if (q.isLoading) {
+    return (
+      <div data-testid="home-brand-bar" aria-hidden="true" className={BLEED} style={{ ...BRAND_ROW, display: 'flex', height: BRAND_BAR_HEIGHT, overflow: 'hidden', boxSizing: 'border-box' }}>
+        {BRAND_SKELETON_WIDTHS.map((w, i) => (
+          <Skeleton key={i} width={w} height={36} radius="var(--radius-pill)" style={{ flex: 'none' }} />
+        ))}
+      </div>
+    );
+  }
+  if (brands.length === 0) return null;
   return (
     <div data-testid="home-brand-bar" style={{ height: BRAND_BAR_HEIGHT }}>
-      {q.isLoading ? (
-        <div aria-hidden="true" className={BLEED} style={{ ...BRAND_ROW, display: 'flex', overflow: 'hidden' }}>
-          {BRAND_SKELETON_WIDTHS.map((w, i) => (
-            <Skeleton key={i} width={w} height={36} radius="var(--radius-pill)" style={{ flex: 'none' }} />
-          ))}
-        </div>
-      ) : brands.length > 0 ? (
-        <ScrollRow label={homeCopy.categories.brands} className={BLEED} style={BRAND_ROW}>
-          {brands.map((b) => (
-            <Chip
-              key={b.key}
-              onPress={() => {
-                jumpToBrand(b.anchorId, () => router.push(brandJumpHref(b, 'web')));
-              }}
-            >
-              {b.brand}
-            </Chip>
-          ))}
-        </ScrollRow>
-      ) : null}
+      <ScrollRow label={homeCopy.categories.brands} className={BLEED} style={BRAND_ROW}>
+        {brands.map((b) => (
+          <Chip key={b.key} onPress={() => router.push(brandJumpHref(b, 'web'))}>
+            {b.brand}
+          </Chip>
+        ))}
+      </ScrollRow>
     </div>
   );
 }

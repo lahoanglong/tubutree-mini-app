@@ -4,7 +4,7 @@ import { useNavigate } from 'zmp-ui';
 import { LayoutGrid } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { brandJumpHref, brandShowcase } from '@tubutree/app-core/merch/brand-showcase';
+import { brandJumpHref, brandShowcase, hasBrandChoice } from '@tubutree/app-core/merch/brand-showcase';
 import { BRAND_BAR_HEIGHT, CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_SIZE, categorySkeletonCells, homeCategoryEntries, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import { fetchBrands } from '../../services/shop-api';
 import { haptic } from '../../utils/haptic';
@@ -64,49 +64,39 @@ function Label({ children }: { children: string }) {
 }
 
 /**
- * Chip của thanh nhảy nhanh: cuộn mượt tới nhãn trong khối "Khám phá theo Thương hiệu" (khách bật giảm chuyển động thì nhảy thẳng). Trả false khi khối chưa
- * dựng nhãn đó (chunk dưới màn đầu chưa về, nhãn tải lỗi hay hết món): nơi gọi đi tới đích dự phòng `brandJumpHref`.
- */
-function scrollToBrandAnchor(anchorId: string): boolean {
-  const el = document.getElementById(anchorId);
-  if (!el) return false;
-  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  el.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-  return true;
-}
-
-/**
- * Thanh nhảy nhanh theo thương hiệu dưới lưới Danh mục: chip theo số sản phẩm giảm dần, "Tubu Tree" cuối (`brandShowcase`). Chạm thì cuộn tới nhãn đó ở khối
- * "Khám phá theo Thương hiệu"; khối chưa dựng nhãn đó thì mở trang của nhãn. Thương hiệu đến từ khối gộp `/home` (cùng khoá với tab Danh mục); hàng luôn cao
- * `BRAND_BAR_HEIGHT` (khung chờ, chip, hay trống khi lỗi/rỗng) để khối dưới không nhảy.
+ * Thanh chip thương hiệu dưới lưới Danh mục (lối duyệt theo thương hiệu DUY NHẤT của Trang chủ từ W47): chip theo số sản phẩm giảm dần, "Tubu Tree" cuối
+ * (`brandShowcase`), chạm thì mở trang của nhãn (không có thì danh sách lọc theo nhãn). Thương hiệu đến từ khối gộp `/home` (cùng khoá với tab Danh mục).
+ * Đang tải thì giữ chỗ `BRAND_BAR_HEIGHT`; cửa hàng không có ít nhất hai nhãn thật (`hasBrandChoice`), lỗi hay rỗng thì không vẽ gì.
  */
 function BrandBar() {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000, retry: false });
-  const brands = useMemo(() => brandShowcase(q.data), [q.data]);
+  const brands = useMemo(() => (hasBrandChoice(q.data) ? brandShowcase(q.data) : []), [q.data]);
+  if (q.isLoading) {
+    return (
+      <div data-testid="home-brand-bar" aria-hidden="true" style={{ ...BRAND_ROW, height: BRAND_BAR_HEIGHT, overflow: 'hidden', boxSizing: 'border-box' }}>
+        {BRAND_SKELETON_WIDTHS.map((w, i) => (
+          <Skeleton key={i} width={w} height={36} radius="var(--radius-pill)" style={{ flex: 'none' }} />
+        ))}
+      </div>
+    );
+  }
+  if (brands.length === 0) return null;
   return (
     <div data-testid="home-brand-bar" style={{ height: BRAND_BAR_HEIGHT }}>
-      {q.isLoading ? (
-        <div aria-hidden="true" style={{ ...BRAND_ROW, overflow: 'hidden' }}>
-          {BRAND_SKELETON_WIDTHS.map((w, i) => (
-            <Skeleton key={i} width={w} height={36} radius="var(--radius-pill)" style={{ flex: 'none' }} />
-          ))}
-        </div>
-      ) : brands.length > 0 ? (
-        <ScrollRow label={homeCopy.categories.brands} style={BRAND_ROW}>
-          {brands.map((b) => (
-            <Chip
-              key={b.key}
-              onPress={() => {
-                haptic('light');
-                if (!scrollToBrandAnchor(b.anchorId)) navigate(brandJumpHref(b, 'mini'));
-              }}
-            >
-              {b.brand}
-            </Chip>
-          ))}
-        </ScrollRow>
-      ) : null}
+      <ScrollRow label={homeCopy.categories.brands} style={BRAND_ROW}>
+        {brands.map((b) => (
+          <Chip
+            key={b.key}
+            onPress={() => {
+              haptic('light');
+              navigate(brandJumpHref(b, 'mini'));
+            }}
+          >
+            {b.brand}
+          </Chip>
+        ))}
+      </ScrollRow>
     </div>
   );
 }

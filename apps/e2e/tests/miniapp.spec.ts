@@ -1,7 +1,6 @@
 import type { CartSummary, PageResponse, ProductCard, ProductDetail } from '../../miniapp/src/services/shop-api';
 import { test, expect, makeUser, mockSession } from './support/mock-api';
 import { publicConfig } from './support/checkout-mocks';
-import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Zalo Mini App E2E - Luồng mua hàng Guest
@@ -92,8 +91,8 @@ test.describe('Zalo Mini App E2E - Luồng Đặt hàng Guest', () => {
     await page.goto('/');
 
     // ProductCard render với aria-label = product.name
-    // Sản phẩm nằm ở khối Khám phá theo Thương hiệu cuối Trang chủ, chỉ tải khi khối gần màn hình (suggest-feed.tsx): cuộn tới như khách.
-    await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
+    // Sản phẩm nằm ở lưới Gợi ý cho bạn cuối Trang chủ, chỉ tải khi khối gần màn hình (suggest-feed.tsx): cuộn tới như khách.
+    await page.getByRole('region', { name: 'Gợi ý cho bạn' }).scrollIntoViewIfNeeded();
     const card = page.locator('[aria-label="Nước Rửa Chén Sinh Học Tubu"]').first();
     await expect(card).toBeVisible({ timeout: 15_000 });
 

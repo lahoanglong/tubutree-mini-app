@@ -20,8 +20,8 @@ export const copyTrackingLabel = (code: string, partner?: string | null) =>
   partner ? fillCopy('order.shipping.copyAriaPartner', { code, partner }) : fillCopy('order.shipping.copyAria', { code });
 
 /**
- * Chép mã vận đơn, dùng chung cho viên vận đơn và nút chép ở khối Vận chuyển của đơn đã huỷ/hoàn (nơi viên bị ẩn): khoá chạm đúp trong cùng khung hình,
- * kết quả tự tắt sau 2 giây (chép được) hoặc 4 giây (không chép được). `announce` đổi mỗi lần để vùng báo đọc lại cả khi kết quả giống lần trước.
+ * Chép mã vận đơn của viên: khoá chạm đúp trong cùng khung hình, kết quả tự tắt sau 2 giây (chép được) hoặc 4 giây (không chép được).
+ * `announce` đổi mỗi lần để vùng báo đọc lại cả khi kết quả giống lần trước.
  */
 export function useCopyTrackingCode(code: string) {
   const [result, setResult] = useState<'ok' | 'fail' | null>(null);
@@ -60,14 +60,13 @@ export function CopyTrackingStatus({ result, announce }: { result: 'ok' | 'fail'
 }
 
 /**
- * Viên vận đơn ngay dưới thẻ trạng thái của Chi tiết đơn, cùng chỗ và cùng hình với viên tra cứu của web, để khách đang chờ hàng lấy mã mà không phải cuộn.
- * Mini App không mở trang hãng (chính sách Zalo 4.1) nên chạm viên là chép mã để dán vào ứng dụng của hãng. Đơn còn chờ hàng thì đây là nút chép DUY NHẤT
- * của trang; đơn đã huỷ/hoàn không có viên và nút chép nằm ở khối Vận chuyển (`OrderShipping` `copyable`).
+ * Viên mã vận đơn trong thẻ Vận chuyển của Chi tiết đơn (`OrderShipping`), cùng hình với viên của web. Mini App không mở trang hãng (chính sách Zalo 4.1)
+ * nên chạm viên là chép mã để dán vào ứng dụng của hãng; đây là nút chép DUY NHẤT của trang, ở mọi trạng thái đơn có mã (kể cả đơn đã huỷ/hoàn, để đối chiếu).
  */
 export function OrderTrackingPill({ code, partner }: OrderTrackingPillProps) {
   const { copy, result, announce } = useCopyTrackingCode(code);
   return (
-    <div className="tubu-order-track" data-testid="order-tracking-pill">
+    <div data-testid="order-tracking-pill">
       <button type="button" className="tubu-press touch-target tubu-order-track-pill" aria-label={copyTrackingLabel(code, partner)} onClick={() => void copy()}>
         <Truck className="tubu-order-track-icon" aria-hidden="true" />
         <span className="tubu-order-track-code" style={{ fontVariantNumeric: 'tabular-nums' }}>

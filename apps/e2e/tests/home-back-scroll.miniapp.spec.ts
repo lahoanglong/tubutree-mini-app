@@ -1,8 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './support/mock-api';
-import { catalogHandler, mockDiscovery } from './support/discovery-mocks';
+import { mockDiscovery } from './support/discovery-mocks';
 import { mockMergedHome } from './support/home-merged';
-import { BRAND_SHOWCASE } from './support/home-brands';
 
 const scrollerOf = (page: Page) => page.locator('.zaui-page').first();
 const scrollTop = (page: Page) => scrollerOf(page).evaluate((el) => Math.round(el.scrollTop));
@@ -13,17 +12,8 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     mockDiscovery(api, { returning: true });
     mockMergedHome(api);
-    // Catalog mock chỉ có món của Tubu và Mộc An: nhãn khác của khối gộp mượn món Tubu để mọi nhãn có lưới, Trang chủ dài như khách thật.
-    const catalog = catalogHandler();
-    api.get('/products', ({ call }) => {
-      const brand = call.query.get('brand');
-      if (!brand || brand === 'Tubu' || brand === 'Mộc An') return catalog({ call });
-      const query = new URLSearchParams(call.query);
-      query.set('brand', 'Tubu');
-      return catalog({ call: { ...call, query } });
-    });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 20_000 });
   });
 
   async function scrollDeep(page: Page): Promise<number> {
@@ -46,7 +36,7 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     expect(before).toBeGreaterThan(1500);
 
     // Món Gợi ý cuối cùng đang nằm trọn trong màn ở độ sâu hiện tại: không cuộn thêm, để vị trí lúc chạm vẫn là vị trí sâu.
-    const tiles = page.getByRole('region', { name: BRAND_SHOWCASE }).locator('button.tubu-tile-link');
+    const tiles = page.getByRole('region', { name: 'Gợi ý cho bạn' }).locator('button.tubu-tile-link');
     let tile = tiles.first();
     let found = false;
     for (let i = (await tiles.count()) - 1; i >= 0; i--) {
@@ -63,7 +53,7 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     await expect(page.locator('.zaui-page')).toHaveCount(1, { timeout: 5_000 });
     await page.goBack();
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 15_000 });
     // Vòng khôi phục thử lại tới 1 s khi máy chậm: chờ tới khi đạt thay vì đọc một lần sau mốc cứng.
     await expect.poll(async () => Math.abs((await scrollTop(page)) - y), { timeout: 5_000 }).toBeLessThanOrEqual(2);
     const after = await scrollTop(page);
@@ -78,7 +68,7 @@ test.describe('Mini App: Trang chủ — Back giữ vị trí cuộn', () => {
     await expect(page.locator('.zaui-page')).toHaveCount(1, { timeout: 5_000 });
     await page.getByRole('navigation').getByRole('button', { name: /^Trang chủ/ }).click();
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-    await expect(page.getByRole('region', { name: BRAND_SHOWCASE })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 15_000 });
     // Máy tải nặng: trang cũ còn trượt ra, hay lượt khôi phục vị trí cũ tới muộn rồi đẩy trang xuống lại. Chờ hết hiệu ứng, rồi đòi về 0 và đứng yên ở 0
     // qua năm lần đọc liền nhau (~0,8 s): một lần đọc 0 thoáng qua trước khi bị đẩy xuống không được tính là đạt.
     await expect(page.locator('.zaui-page')).toHaveCount(1, { timeout: 5_000 });

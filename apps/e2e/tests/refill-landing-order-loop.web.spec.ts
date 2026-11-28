@@ -37,17 +37,21 @@ test.describe('w17-01 vòng sau mua trên web', () => {
     test.skip(!runsHere(testInfo.project.name), 'chỉ hai project web khách');
   });
 
-  test('Chi tiết đơn đang giao: viên tra cứu hành trình dưới thẻ trạng thái, một lối tra cứu, mở tab mới', async ({ page, api }) => {
+  test('Chi tiết đơn đang giao: thẻ Vận chuyển gồm viên chép mã và một lối tra cứu hành trình mở tab mới (W47)', async ({ page, api }) => {
     const w = await mockWorld(api, page, 'web', stateOf('shipping'), Date.now());
     await page.goto(`/tai-khoan/don-hang/${w.order.code}`);
-    const pill = page.getByTestId('order-tracking-pill');
+    const card = page.getByTestId('order-shipping');
+    const pill = card.getByTestId('order-tracking-pill');
     await expect(pill).toBeVisible({ timeout: 20_000 });
-    await expect(pill).toContainText('Tra cứu hành trình');
+    await expect(pill).toContainText('GHN6789012345');
     await expect(pill).toContainText('Giao Hàng Nhanh');
-    await expect(pill).toHaveAttribute('href', 'https://tracking.ghn.vn/?code=GHN6789012345');
-    await expect(pill).toHaveAttribute('target', '_blank');
+    const link = card.getByTestId('order-tracking-link');
+    await expect(link).toContainText('Tra cứu hành trình');
+    await expect(link).toHaveAttribute('href', 'https://tracking.ghn.vn/?code=GHN6789012345');
+    await expect(link).toHaveAttribute('target', '_blank');
     await expect(page.locator('a[href^="https://tracking.ghn.vn"]').filter({ visible: true })).toHaveCount(1);
-    expect((await pill.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await pill.getByRole('button').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     expect(await noHorizontalScroll(page)).toBe(true);
     await shot(page, 'order-tracking-pill');
   });
@@ -64,7 +68,8 @@ test.describe('w17-01 vòng sau mua trên web', () => {
     await expect(card.getByRole('heading', { name: 'Lần sau rót lại bằng Refill' })).toBeVisible();
     await expect(card).toContainText('Chọn túi Refill 5L tiết kiệm 170.000đ (~26%)');
     await expect(card.getByRole('button', { name: /Refill Nước Rửa Chén Sinh Học Tubu 5L/ })).toHaveCount(1);
-    await expect(page.getByTestId('order-tracking-pill')).toHaveCount(0);
+    // Thẻ Refill là phần phụ sau mua: nằm DƯỚI thẻ Vận chuyển (W47).
+    expect((await card.boundingBox())!.y).toBeGreaterThan((await page.getByTestId('order-shipping').boundingBox())!.y);
     expect(await noHorizontalScroll(page)).toBe(true);
     await shot(page, 'order-refill');
     const add = card.getByTestId('pdp-refill-add');

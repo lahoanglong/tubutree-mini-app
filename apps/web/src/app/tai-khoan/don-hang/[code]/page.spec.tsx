@@ -286,7 +286,8 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     mocks.order = { ...ORDER, paymentDeadline: '2999-01-01T00:00:00Z' };
     const { container } = await mount();
     expect(mocks.qr.calls).toBeGreaterThan(0);
-    expect(container.textContent).toContain('Đơn đang chờ bạn thanh toán.');
+    expect(container.querySelector('[data-testid="status-hero"] h2')?.textContent).toBe('Chờ thanh toán');
+    expect(container.querySelector('[data-testid="order-milestone"]')?.textContent).toMatch(/^Thanh toán trước/);
   });
 
   it('lần dò QR bị từ chối chốt (409) khi đang mở trang: dòng "Quét mã bên dưới" biến mất cùng lúc khung chuyển sang đóng', async () => {
@@ -346,54 +347,65 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).toContain('Đã huỷ');
   });
 
-  it('viên tra cứu hành trình ngay dưới thẻ trạng thái, là liên kết tra cứu DUY NHẤT (khối Vận chuyển chỉ còn hãng, mã và nút chép)', async () => {
+  it('W47: thẻ Vận chuyển gộp ngay dưới thẻ trạng thái: viên chép mã, MỘT liên kết tra cứu, địa chỉ nhận; Sản phẩm, Thanh toán rồi mới tới phần phụ', async () => {
     mocks.order = {
       ...ORDER, status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID',
       shippingPartner: 'Best Express', shippingCode: 'BE123', trackingLink: 'https://tracking.example/BE123',
     };
     const { container } = await mount();
+    const shipping = container.querySelector('[data-testid="order-shipping"]')!;
     const links = container.querySelectorAll<HTMLAnchorElement>('a[href="https://tracking.example/BE123"]');
     expect(links).toHaveLength(1);
-    const pill = container.querySelector<HTMLAnchorElement>('[data-testid="order-tracking-pill"]')!;
-    expect(pill).toBe(links[0]);
-    expect(pill.textContent).toContain('Tra cứu hành trình');
+    expect(shipping.contains(links[0]!)).toBe(true);
+    expect(links[0]!.target).toBe('_blank');
+    expect(links[0]!.rel).toContain('noopener');
+    const pill = shipping.querySelector('[data-testid="order-tracking-pill"]')!;
+    expect(pill.textContent).toContain('BE123');
     expect(pill.textContent).toContain('Best Express');
-    expect(pill.target).toBe('_blank');
-    expect(pill.rel).toContain('noopener');
-    const hero = container.querySelector('[data-testid="status-hero"]')!;
-    const shipping = container.querySelector('[data-testid="order-shipping"]')!;
-    expect(hero.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(pill.compareDocumentPosition(shipping) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(pill.parentElement!.className).toContain('order-1');
-    expect(shipping.querySelector('a')).toBeNull();
-    expect(shipping.textContent).toContain('BE123');
+    expect(container.querySelectorAll('[data-testid="order-tracking-pill"]')).toHaveLength(1);
+    expect(shipping.querySelector('[data-testid="order-shipping-address"]')).not.toBeNull();
+    expect(shipping.querySelector('[data-testid="order-timeline"], [data-testid="order-journey"]')).not.toBeNull();
+    // Điện thoại xếp theo `order-N` của flex: trạng thái 1, Vận chuyển 3, Sản phẩm 4, Thanh toán 5, phần phụ 10.
+    const orderOf = (el: Element | null) => {
+      for (let n = el as HTMLElement | null; n; n = n.parentElement) {
+        const m = typeof n.className === 'string' ? /(?:^|\s)order-(\d+)(?:\s|$)/.exec(n.className) : null;
+        if (m) return Number(m[1]);
+      }
+      return NaN;
+    };
+    const productsTitle = Array.from(container.querySelectorAll('h2')).find((h) => h.textContent === 'Sản phẩm')!;
+    const paymentTitle = Array.from(container.querySelectorAll('h2')).find((h) => h.textContent === 'Thanh toán')!;
+    expect(orderOf(container.querySelector('[data-testid="status-hero"]'))).toBe(1);
+    expect(orderOf(shipping)).toBe(3);
+    expect(orderOf(productsTitle)).toBe(4);
+    expect(orderOf(paymentTitle)).toBe(5);
     expect(smallTouchTargets(container)).toEqual([]);
   });
 
-  it.each(['CANCELLED', 'RETURNED'])('tubu-w19-03: đơn %s có link tra cứu: KHÔNG có viên (PO A3, như Mini), mã vẫn in ở khối Vận chuyển', async (status) => {
+  it.each(['CANCELLED', 'RETURNED'])('đơn %s có link tra cứu: không có liên kết tra cứu (PO A3), mã vẫn chép được ở viên trong thẻ Vận chuyển', async (status) => {
     mocks.order = {
       ...ORDER, status, paymentMethod: 'COD', paymentStatus: 'UNPAID',
       shippingPartner: 'Best Express', shippingCode: 'BE123', trackingLink: 'https://tracking.example/BE123',
     };
     const { container } = await mount();
-    expect(container.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
     expect(container.querySelector('a[href="https://tracking.example/BE123"]')).toBeNull();
-    expect(container.querySelector('[data-testid="order-shipping"]')!.textContent).toContain('BE123');
+    expect(container.querySelector('[data-testid="order-shipping"] [data-testid="order-tracking-pill"]')!.textContent).toContain('BE123');
   });
 
-  it.each(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'])('đơn %s có link tra cứu: có viên', async (status) => {
+  it.each(['CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'])('đơn %s có link tra cứu: có liên kết trong thẻ Vận chuyển', async (status) => {
     mocks.order = {
       ...ORDER, status, paymentMethod: 'COD', paymentStatus: 'UNPAID',
       shippingPartner: 'Best Express', shippingCode: 'BE123', trackingLink: 'https://tracking.example/BE123',
     };
     const { container } = await mount();
-    expect(container.querySelector('[data-testid="order-tracking-pill"]')!.getAttribute('href')).toBe('https://tracking.example/BE123');
+    expect(container.querySelector('[data-testid="order-tracking-link"]')!.getAttribute('href')).toBe('https://tracking.example/BE123');
   });
 
-  it('không có link tra cứu: không có viên', async () => {
+  it('không có link tra cứu: không có liên kết, vẫn có viên chép mã', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING', paymentMethod: 'COD', shippingPartner: 'GHN', shippingCode: 'G1', trackingLink: null };
     const { container } = await mount();
-    expect(container.querySelector('[data-testid="order-tracking-pill"]')).toBeNull();
+    expect(container.querySelector('[data-testid="order-tracking-link"]')).toBeNull();
+    expect(container.querySelector('[data-testid="order-tracking-pill"]')).not.toBeNull();
   });
 
   describe('lối tắt Refill ở đơn đã giao (tubu-w17-01)', () => {
@@ -832,18 +844,22 @@ describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi
     return orderOf(el!);
   };
 
-  it('khối xếp theo thứ tự của Mini App ở điện thoại: hành trình, vận chuyển, sản phẩm, thanh toán, địa chỉ, ghi chú, thao tác, hỗ trợ', async () => {
+  it('khối xếp theo thứ tự của Mini App ở điện thoại (W47): Vận chuyển (kèm hành trình và địa chỉ), sản phẩm, thanh toán, ghi chú, thao tác, hỗ trợ', async () => {
     mocks.order = shipping({ note: 'x', shippingPartner: 'GHN', shippingCode: 'GHN001' });
     const { container } = await mount();
     const layout = container.querySelector('[data-testid="order-layout"]')!;
-    const orders = ['Hành trình đơn hàng', 'Vận chuyển', 'Sản phẩm', 'Thanh toán', 'Địa chỉ giao hàng', 'Ghi chú'].map((h) => blockOrder(layout, h));
+    const orders = ['Vận chuyển', 'Sản phẩm', 'Thanh toán', 'Ghi chú'].map((h) => blockOrder(layout, h));
     expect([...orders].sort((a, b) => a - b)).toEqual(orders);
     expect(new Set(orders).size).toBe(orders.length);
+    const card = layout.querySelector('[data-testid="order-shipping"]')!;
+    expect(card.querySelector('[data-testid="order-timeline"], [data-testid="order-journey"]')).not.toBeNull();
+    expect(card.querySelector('[data-testid="order-address"]')?.textContent).toContain('Địa chỉ giao hàng');
+    expect(layout.textContent).not.toContain('Hành trình đơn hàng');
     const actions = orderOf(layout.querySelector('[aria-label="Thao tác với đơn hàng"]')!.parentElement!);
     expect(orders[orders.length - 1]).toBeLessThan(actions);
   });
 
-  it('máy tính (lg): hai cột gọn, trái là trạng thái + hành trình + sản phẩm, phải là tiền + địa chỉ + nút thao tác', async () => {
+  it('máy tính (lg): hai cột gọn, trái là trạng thái + thẻ Vận chuyển (hành trình, địa chỉ) + sản phẩm, phải là nút thao tác + tiền', async () => {
     mocks.order = shipping({ note: 'x', shippingPartner: 'GHN', shippingCode: 'GHN001' });
     const { container } = await mount();
     const layout = container.querySelector('[data-testid="order-layout"]')!;
@@ -851,11 +867,9 @@ describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi
     expect(layout.className).toMatch(/lg:grid-cols-\[minmax\(0,1fr\)_21rem\]/);
     const main = layout.querySelector('[data-testid="order-main"]')!;
     const side = layout.querySelector('[data-testid="order-side"]')!;
-    for (const part of ['status-hero', 'order-shipping']) expect(main.querySelector(`[data-testid="${part}"]`)).not.toBeNull();
-    expect(main.textContent).toContain('Hành trình đơn hàng');
+    for (const part of ['status-hero', 'order-shipping', 'order-address']) expect(main.querySelector(`[data-testid="${part}"]`)).not.toBeNull();
     expect(main.textContent).toContain('Sản phẩm');
     expect(side.textContent).toContain('Tạm tính');
-    expect(side.textContent).toContain('Địa chỉ giao hàng');
     expect(side.querySelector('[aria-label="Thao tác với đơn hàng"]')).not.toBeNull();
     expect(side.querySelector('[data-testid="status-hero"]')).toBeNull();
   });
@@ -927,14 +941,15 @@ describe('/tai-khoan/don-hang/[code] — khách tự sửa địa chỉ và ghi 
     expect(openLinks(again.container)).toHaveLength(0);
   });
 
-  it('canEdit=true: đúng một lối "Sửa" ở tiêu đề khối địa chỉ, mở tấm sửa với địa chỉ và ghi chú của khách', async () => {
+  it('canEdit=true: đúng một lối "Sửa" ở tiêu đề khối địa chỉ (trong thẻ Vận chuyển, W47), mở tấm sửa với địa chỉ và ghi chú của khách', async () => {
     mocks.order = editable();
     const { container } = await mount();
     const links = openLinks(container);
     expect(links).toHaveLength(1);
     expect(links[0]!.textContent).toBe('Sửa');
     expect(links[0]!.getAttribute('aria-label')).toBe('Sửa địa chỉ và ghi chú đơn TB-9');
-    expect(links[0]!.closest('section')!.querySelector('h2')!.textContent).toBe('Địa chỉ giao hàng');
+    expect(links[0]!.closest('[data-testid="order-address"]')!.querySelector('h3')!.textContent).toBe('Địa chỉ giao hàng');
+    expect(links[0]!.closest('[data-testid="order-shipping"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="order-edit-sheet-stub"]')).toBeNull();
     act(() => links[0]!.click());
     await flush(4);

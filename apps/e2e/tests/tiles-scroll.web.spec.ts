@@ -4,7 +4,6 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { homeCombos, mockHomeCombos } from './support/bundle-mocks';
 import { liveItem, mockFlashSlots, mockNoSession, SLOT_LIVE } from './support/flash-slot-mocks';
-import { BRAND_SHOWCASE } from './support/home-brands';
 
 /**
  * Web 375px, gói F10a (P1 #1, #3, #4, #9 của review hình bước chốt), cùng bốn kiểm với tiles-scroll.miniapp.spec.ts: Trang chủ có khối cuộn chứa giá không tràn
@@ -35,8 +34,6 @@ const BEST = [
   card('b5', 'Ống hút tre', { ratingAvg: 4.9, sold: 1_234 }),
 ];
 const FEED = [card('f1', 'Sản phẩm gợi ý một', { sold: 340 }), card('f2', 'Sản phẩm gợi ý hai dài hơn một chút', { sold: 1_234 }), card('f3', 'Gợi ý ba', { sold: 8_200 }), card('f4', 'Gợi ý bốn', { sold: 52 }), card('f5', 'Gợi ý năm', { sold: 123_400 })];
-/** Lưới của một nhãn ở "Khám phá theo Thương hiệu" (4 món, hỏi `/products?brand=`): có món từ 100k lượt bán để gặp ca đổi sang bản gọn. */
-const BRAND_ROWS = [FEED[0]!, FEED[1]!, FEED[2]!, FEED[4]!];
 
 /** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (chép từ shop.web.spec.ts). */
 async function refetchStale(page: Page, api: MockApi, method: string, pattern: string, minCalls = 1) {
@@ -73,7 +70,7 @@ function mockHome(api: MockApi, { promo = 'flash' }: { promo?: 'flash' | 'combos
   ]);
   api.get('/brands', [{ brand: 'Tubu', count: 3 }]);
   api.get('/search/suggest', []);
-  api.get('/products', ({ call }) => (call.query.get('brand') ? pageOf(BRAND_ROWS, 8) : call.query.get('sort') === 'best_seller_30d' ? pageOf(BEST, 12) : pageOf(FEED)));
+  api.get('/products', ({ call }) => (call.query.get('sort') === 'best_seller_30d' ? pageOf(BEST, 12) : pageOf(FEED)));
   api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12, loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000 } });
   api.get('/flash-sales/active', () => {
     if (promo !== 'flash') return [];
@@ -175,18 +172,18 @@ test.describe('Web 375px: thẻ và hàng cuộn của Trang chủ', () => {
       const rank = await metaCells(best);
       expect(rank.map((c) => c.text)).toEqual(['Đã bán 8,2k+', 'Đã bán 99,9k+', 'Đã bán 12', 'Đã bán 999', 'Đã bán 1,2k+']);
       expect(rank.filter((c) => c.width <= 0 || c.clipped).map(describeCell)).toEqual([]);
-      await page.getByRole('region', { name: BRAND_SHOWCASE }).scrollIntoViewIfNeeded();
-      await expect(page.getByRole('region', { name: BRAND_SHOWCASE }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('region', { name: 'Gợi ý cho bạn' }).scrollIntoViewIfNeeded();
+      await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
       const all = await metaCells(page.locator('body'));
       expect(all.length).toBeGreaterThan(rank.length);
       expect(all.filter((c) => c.width <= 0 || c.clipped).map(describeCell)).toEqual([]);
     });
   }
 
-  test('360px (điện thoại Android phổ biến nhất): lưới Khám phá theo Thương hiệu rộng 142px vẫn giữ sao ở dòng meta, lượt bán từ 100k đổi sang bản gọn thay vì bị cắt', async ({ page, api }) => {
+  test('360px (điện thoại Android phổ biến nhất): lưới Gợi ý cho bạn rộng 142px vẫn giữ sao ở dòng meta, lượt bán từ 100k đổi sang bản gọn thay vì bị cắt', async ({ page, api }) => {
     mockHome(api);
     await openHome(page, api, 360);
-    const grid = page.getByRole('region', { name: BRAND_SHOWCASE });
+    const grid = page.getByRole('region', { name: 'Gợi ý cho bạn' });
     await grid.scrollIntoViewIfNeeded();
     await expect(grid.locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
     await shot(grid, 'home-grid-360');
@@ -196,7 +193,7 @@ test.describe('Web 375px: thẻ và hàng cuộn của Trang chủ', () => {
       expect(c.width, describeCell(c)).toBeGreaterThanOrEqual(132);
       expect(c.clipped, describeCell(c)).toBe(false);
     }
-    expect(cells.map((c) => c.text)).toEqual(['★ 4,7 · Đã bán 340', '★ 4,7 · Đã bán 1,2k+', '★ 4,7 · Đã bán 8,2k+', 'Đã bán 123,4k+']);
+    expect(cells.map((c) => c.text)).toEqual(['★ 4,7 · Đã bán 340', '★ 4,7 · Đã bán 1,2k+', '★ 4,7 · Đã bán 8,2k+', '★ 4,7 · Đã bán 52', 'Đã bán 123,4k+']);
   });
 });
 

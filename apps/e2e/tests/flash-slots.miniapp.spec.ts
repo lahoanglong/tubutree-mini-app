@@ -231,12 +231,14 @@ test.describe('Mini App — Trang chủ dẫn tới Giờ vàng', () => {
     mockFlashSlots(api);
   });
 
-  test('thẻ chính "Mua lẻ · Giờ vàng" ở Trang chủ mở /flash-sale', async ({ page }) => {
+  test('ô "Giờ vàng" của lưới lối tắt ở Trang chủ mở /flash-sale', async ({ page }) => {
     await page.goto('/');
     const grid = page.getByTestId('shortcut-grid');
     const flashBtn = grid.locator('[data-pillar="retail"]');
     await expect(flashBtn).toBeVisible({ timeout: 15_000 });
-    await expect(flashBtn).toContainText('Mua lẻ · Giờ vàng');
+    // W47: nhãn ô 1–2 từ; tên đầy đủ của lối vào nằm ở tên đọc.
+    await expect(flashBtn.locator('[data-shortcut-label]')).toHaveText('Giờ vàng');
+    await expect(flashBtn).toHaveAttribute('aria-label', /^Giờ vàng \(Mua lẻ · Giờ vàng\)/);
     await flashBtn.click();
     await expect(page).toHaveURL(/\/flash-sale$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Giờ vàng' })).toBeVisible({ timeout: 15_000 });

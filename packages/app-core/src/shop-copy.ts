@@ -76,7 +76,6 @@ export const SHOP_COPY: Record<string, string> = {
   'order.step.PACKED': 'Đang đóng gói',
   'order.step.SHIPPING': 'Đang giao',
   'order.step.DELIVERED': 'Giao thành công',
-  'order.timeline.title': 'Hành trình đơn hàng',
   'order.timeline.more': 'Xem thêm {n} mốc',
   'order.timeline.less': 'Thu gọn',
   'order.timeline.done': 'đã qua',
@@ -169,7 +168,6 @@ export const SHOP_COPY: Record<string, string> = {
   'support.orderContext': 'Hỗ trợ đơn {code}',
   'order.shipping.title': 'Vận chuyển',
   'order.shipping.carrier': 'Đơn vị vận chuyển',
-  'order.shipping.code': 'Mã vận đơn',
   'order.shipping.copy': 'Chép mã',
   'order.shipping.track': 'Tra cứu hành trình',
   'order.shipping.history': 'Hành trình vận chuyển',
@@ -386,8 +384,6 @@ export const SHOP_COPY: Record<string, string> = {
   // Dải đánh giá ảnh đã duyệt ở Trang chủ (GreenCornerStrip); nhãn đọc của mỗi thẻ (thẻ là liên kết tới khối đánh giá của sản phẩm).
   'home.greenCorner.title': 'Khách hàng sống xanh cùng Tubu Tree',
   'home.greenCorner.cardLabel': '{product}, {author} đánh giá {rating} sao',
-  // Khối cuối Trang chủ (block `suggest`): mỗi thương hiệu một tiêu đề, câu giới thiệu, "Tất cả (n)" và 4 món bán chạy; thanh chip dưới Danh mục nhảy tới từng nhãn.
-  'home.brands.title': 'Khám phá theo Thương hiệu',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
   // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
   'pdp.brandShelf': 'Cùng thương hiệu',

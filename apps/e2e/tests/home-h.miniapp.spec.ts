@@ -227,9 +227,13 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
     await page.goto('/');
     await openCount;
     await expect(page.getByTestId('shortcut-grid')).toBeVisible({ timeout: 15_000 });
-    // Đơn hàng nằm ngoài 4 ô cố định: mở ô "Thêm" (hộp thoại "Tất cả lối tắt") mới thấy đủ mục, và ở đó cũng không được có lối vào Yêu cầu.
+    // Ô Đổi rác giữ nhãn thường (không đổi sang "Yêu cầu"). Hộp "Thêm lối tắt" chỉ gồm lối tắt chưa lên lưới (không lặp Giờ vàng, không có Đơn hàng):
+    // ở đó cũng không được có lối vào Yêu cầu.
+    await expect(page.getByTestId('shortcut-grid').locator('[data-pillar="recycle"] [data-shortcut-label]')).toHaveText('Đổi rác');
     await page.getByRole('button', { name: 'Thêm lối tắt' }).click();
-    await expect(page.getByText('Đơn hàng của tôi', { exact: true })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Thêm lối tắt' });
+    await expect(dialog.getByRole('button', { name: /Kiếm tiền/ })).toBeVisible();
+    await expect(dialog.getByText(/Đơn hàng|Giờ vàng/)).toHaveCount(0);
     await expect(page.getByText(/Yêu cầu của tôi/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ })).toHaveCount(0);
   });

@@ -17,7 +17,7 @@ function setup(state = EMPTY_SEARCH_STATE) {
   const onClearCategory = vi.fn();
   const onPatch = vi.fn();
   const r = render(
-    <FilterSidebar state={state} entries={ENTRIES} brands={[{ brand: 'Visante', count: 3 }]} onPickCategory={onPickCategory} onClearCategory={onClearCategory} onPatch={onPatch} />,
+    <FilterSidebar state={state} entries={ENTRIES} brands={[{ brand: 'Visante', count: 3 }, { brand: 'Hector', count: 2 }]} onPickCategory={onPickCategory} onClearCategory={onClearCategory} onPatch={onPatch} />,
   );
   return { c: r.container, onPickCategory, onClearCategory, onPatch };
 }

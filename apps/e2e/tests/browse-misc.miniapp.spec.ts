@@ -58,10 +58,10 @@ test.describe('Danh mục quá một màn', () => {
     await expect(more).toHaveText('Thêm');
     await expect(homeCategories(page).getByRole('button', { name: 'Tất cả danh mục', exact: true })).toHaveText('Tất cả');
     await more.click();
-    await expect(page.getByRole('dialog', { name: 'Tất cả lối tắt' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('dialog', { name: 'Thêm lối tắt' })).toBeVisible({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/$/);
-    await page.getByRole('dialog', { name: 'Tất cả lối tắt' }).getByRole('button', { name: 'Đóng' }).click();
-    await expect(page.getByRole('dialog', { name: 'Tất cả lối tắt' })).toHaveCount(0);
+    await page.getByRole('dialog', { name: 'Thêm lối tắt' }).getByRole('button', { name: 'Đóng' }).click();
+    await expect(page.getByRole('dialog', { name: 'Thêm lối tắt' })).toHaveCount(0);
     await homeCategories(page).getByRole('button', { name: 'Tất cả danh mục', exact: true }).click();
     await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
   });

@@ -27,7 +27,6 @@ export const viOrders = {
   products: 'Sản phẩm',
   note: 'Ghi chú',
   paymentLabel: 'Thanh toán',
-  timeline: 'Hành trình đơn hàng',
   payNow: orderCopy.payNow,
   searchLabel: orderCopy.searchLabel,
   searchPlaceholder: orderCopy.searchPlaceholder,

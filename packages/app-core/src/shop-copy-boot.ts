@@ -134,9 +134,7 @@ export const BOOT_COPY = {
   'fbt.error': 'Chưa thêm được vào giỏ. Bạn thử lại nhé.',
   // Trang chủ gọn: thẻ Mua xoay vòng chỉ nêu con số tiết kiệm khi máy chủ đã gửi cấu hình; dải Việc cần làm một dòng; nút ＋ thêm nhanh trên thẻ sản phẩm.
   'home.pillar.subscribe.subtitle': 'Đặt định kỳ, khỏi lo hết hàng',
-  'home.pillar.subscribe.badge': 'Định kỳ',
   'home.pillar.subscribe.subtitlePct': 'Đặt định kỳ tiết kiệm tới {pct}%',
-  'home.pillar.subscribe.badgePct': 'Định kỳ -{pct}%',
   'home.todo.more': '+{n} việc khác',
   'home.todo.moreAria': 'Xem {n} việc khác trong Đơn hàng',
   'card.quickAdd': 'Thêm {name} vào giỏ',

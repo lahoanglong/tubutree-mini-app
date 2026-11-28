@@ -2,14 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { Ellipsis } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { fillBootCopy } from '@tubutree/app-core/shop-copy-boot';
-import {
-  HOME_QUICK_SHORTCUT_IDS,
-  resolveHomeEcosystemPillars,
-  splitHomeEcosystemPillars,
-  visibleHomeShortcuts,
-  type HomeShortcutSpec,
-} from '@tubutree/app-core/home-layout';
+import { homeShortcutGrid, SHORTCUT_TINT_VARS, type HomeGridCell, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { isRootPath, useSmartNavigate } from '../../lib/smart-nav';
 import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
@@ -25,17 +18,15 @@ const EarnSheet = lazy(() => import('./earn-sheet').then((m) => ({ default: m.Ea
 const ShortcutsSheet = lazy(() => import('./shortcuts-sheet').then((m) => ({ default: m.ShortcutsSheet })));
 
 export interface ShortcutGridProps {
-  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ · Giờ vàng" và lối tắt Giờ vàng. Chưa biết (`undefined`) thì giữ cả hai. */
+  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ ô Giờ vàng, lối tắt kế tiếp lấp chỗ. Chưa biết (`undefined`) thì giữ. */
   flashLive?: boolean;
 }
 
 /**
- * Hệ sinh thái 6 lối vào ở Trang chủ Mini App (W177, W42): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Vườn Xanh), hàng 2 bốn ô phụ
- * (Đổi rác, Mua chung, Mua xoay vòng, Kho quà 0đ), rồi hàng lối tắt nhanh.
- * - Dựng tĩnh ngay từ khung hình đầu (CLS = 0, vùng chạm ≥ 44px). Không có Giờ vàng thì thẻ Vườn Xanh trải hết hàng 1, cùng chiều cao 96.
- * - Thẻ Vườn Xanh mang chấm "có việc hôm nay" (chưa điểm danh hoặc chưa làm Đố Xanh), trước đây nằm ở tab giữa thanh đáy.
- * - Con số tiết kiệm của Mua xoay vòng chỉ nói khi cấu hình đã về từ máy chủ.
- * - Hàng dưới giữ nhanh Mã giảm giá · Cộng đồng và nút "Thêm" mở hộp thoại mọi lối tắt (Giờ vàng, Đơn hàng, Tích điểm đơn sàn...).
+ * Lối tắt Trang chủ Mini App (W47): MỘT lưới biểu tượng 4 cột × 2 hàng (`homeShortcutGrid`), mọi ô cùng cỡ để khách quét một lượt. Sáu lối vào hệ
+ * sinh thái giữ `data-pillar` của W171, lối tắt phụ lấp ô còn lại, ô cuối "Thêm" mở sheet các lối tắt chưa lên lưới (không lặp đích đã có trên lưới).
+ * - Dựng tĩnh ngay từ khung hình đầu, nhãn giữ chỗ hai dòng: lưới luôn cao như nhau (CLS = 0), vùng chạm ≥ 44px.
+ * - Ô Vườn Xanh mang chấm "có việc hôm nay" (chưa điểm danh hoặc chưa làm Đố Xanh).
  */
 export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
   const navigate = useNavigate();
@@ -50,33 +41,20 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
   // Cùng khoá truy vấn với thanh đáy (đang hiện ở Trang chủ) nên không thêm lệnh gọi.
   const gardenDot = useEngagementDots(true, 0).garden;
 
-  const { heroes, chips } = splitHomeEcosystemPillars(
-    resolveHomeEcosystemPillars({
-      wastePausedWithOpenRequests: wastePaused && recycleOpenRequests,
-      subscribeDiscountPct: cfg.isLoaded ? cfg.subscribeDiscountPct : null,
-      flashLive,
-    }),
-  );
-
-  const all = visibleHomeShortcuts({
-    recycleOpenRequests,
-    wasteEnabled: !cfg.isLoaded || cfg.waste.enabled,
+  const { cells, more } = homeShortcutGrid({
+    wastePausedWithOpenRequests: wastePaused && recycleOpenRequests,
+    subscribeDiscountPct: cfg.isLoaded ? cfg.subscribeDiscountPct : null,
     flashLive,
-  });
-
-  const quickItems = HOME_QUICK_SHORTCUT_IDS.flatMap((id) => {
-    const spec = all.find((s) => s.id === id);
-    const to = SHORTCUT_ROUTES[id];
-    return spec && to ? [{ spec, to }] : [];
+    gardenDot,
   });
 
   const goSmart = useSmartNavigate();
-  // Lối tắt tới trang con (Bộ quà tặng, Đơn hàng...) đi qua smartNavigate: đích chính là trang ngay trước thì lùi thật, không chồng bản sao
+  // Lối tắt tới trang con (Bộ quà tặng, Mã giảm giá...) đi qua smartNavigate: đích chính là trang ngay trước thì lùi thật, không chồng bản sao
   // vào lịch sử. Đích là tab gốc (Ưu đãi) giữ cách mở như cũ của Trang chủ.
   const go = (to: string) => (isRootPath(to.split(/[?#]/)[0]!) ? navigate(to) : goSmart(to));
 
-  const open = (s: HomeShortcutSpec) => {
-    const to = SHORTCUT_ROUTES[s.id];
+  const openShortcut = (id: HomeShortcutSpec['id']) => {
+    const to = SHORTCUT_ROUTES[id];
     if (to) go(to);
     else {
       setEarnUsed(true);
@@ -84,106 +62,58 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
     }
   };
 
-  return (
-    <section aria-label={homeCopy.shortcuts.title} data-testid="shortcut-grid" className="tubu-bento-section">
-      <div data-testid="ecosystem-bento-hub" className="tubu-bento-hub">
-        <div className="tubu-bento-grid">
-          {heroes.map((p) => {
-            const dot = p.id === 'garden' && gardenDot;
-            return (
-            <button
-              key={p.id}
-              type="button"
-              data-pillar={p.id}
-              data-tier="hero"
-              aria-label={dot ? `${fillBootCopy('home.pillar.garden.dot', { name: p.title })}. ${p.subtitle}` : undefined}
-              className="tubu-bento-card tubu-bento-card--hero tubu-press"
-              style={heroes.length === 1 ? { gridColumn: '1 / -1' } : undefined}
-              onClick={() => {
-                haptic('light');
-                navigate(p.miniRoute);
-              }}
-            >
-              <span className="tubu-bento-head">
-                <span aria-hidden="true" className={`tubu-bento-icon${p.tone === 'warm' ? ' tubu-bento-icon--warm' : ''}`}>
-                  <Icon icon={PILLAR_ICONS[p.id]} size="sm" tone="current" />
-                  {dot && <span data-testid="garden-card-dot" className="tubu-remind-dot tubu-remind-dot--card" />}
-                </span>
-                <span data-pillar-tag="" className={`tubu-bento-tag${p.tone === 'warm' ? ' tubu-bento-tag--warm' : ''}`}>
-                  {p.badge}
-                </span>
-              </span>
-              <span className="tubu-bento-copy">
-                <span data-pillar-title="" className="tubu-bento-title">
-                  {p.title}
-                </span>
-                <span data-pillar-sub="" className="tubu-bento-sub">
-                  {p.subtitle}
-                </span>
-              </span>
-            </button>
-            );
-          })}
-        </div>
-        <div className="tubu-chip-row">
-          {chips.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              data-pillar={p.id}
-              data-tier="chip"
-              aria-label={`${p.title}. ${p.subtitle}`}
-              className="tubu-chip tubu-press"
-              onClick={() => {
-                haptic('light');
-                navigate(p.miniRoute);
-              }}
-            >
-              <span aria-hidden="true" className={`tubu-bento-icon${p.tone === 'warm' ? ' tubu-bento-icon--warm' : ''}`}>
-                <Icon icon={PILLAR_ICONS[p.id]} size="sm" tone="current" />
-              </span>
-              <span data-pillar-title="" className="tubu-chip-label">
-                {p.title}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+  const press = (c: HomeGridCell) => {
+    haptic('light');
+    if (c.kind === 'pillar') navigate(c.miniRoute);
+    else openShortcut(c.id);
+  };
 
-      <div data-testid="shortcut-quick-pills" className="tubu-quick-pills">
-        {quickItems.map(({ spec, to }) => (
+  return (
+    <section aria-label={homeCopy.shortcuts.title} data-testid="shortcut-grid" className="tubu-shortcut-section">
+      <div className="tubu-shortcut-grid">
+        {cells.map((c) => {
+          const dot = c.kind === 'pillar' && c.dot === true;
+          const tint = SHORTCUT_TINT_VARS[c.tint];
+          return (
+            <button
+              key={`${c.kind}:${c.id}`}
+              type="button"
+              data-pillar={c.kind === 'pillar' ? c.id : undefined}
+              data-shortcut={c.kind === 'shortcut' ? c.id : undefined}
+              aria-label={c.ariaLabel}
+              className="tubu-shortcut-cell tubu-press"
+              onClick={() => press(c)}
+            >
+              <span aria-hidden="true" className="tubu-shortcut-icon" style={{ background: tint.bg, color: tint.fg }}>
+                <Icon icon={c.kind === 'pillar' ? PILLAR_ICONS[c.id] : SHORTCUT_ICONS[c.id]} size="md" tone="current" />
+                {dot && <span data-testid="garden-card-dot" className="tubu-remind-dot tubu-remind-dot--card" />}
+              </span>
+              <span data-shortcut-label="" className="tubu-shortcut-label">
+                {c.label}
+              </span>
+            </button>
+          );
+        })}
+        {more.length > 0 && (
           <button
-            key={spec.id}
             type="button"
-            aria-label={spec.ariaLabel}
-            className="tubu-quick-pill tubu-press"
+            aria-label={homeCopy.shortcuts.moreAria}
+            aria-haspopup="dialog"
+            className="tubu-shortcut-cell tubu-press"
             onClick={() => {
               haptic('light');
-              go(to);
+              setAllUsed(true);
+              setAllOpen(true);
             }}
           >
-            <span aria-hidden="true">
-              <Icon icon={SHORTCUT_ICONS[spec.id]} size="sm" tone="current" />
+            <span aria-hidden="true" className="tubu-shortcut-icon tubu-shortcut-icon--more">
+              <Icon icon={Ellipsis} size="md" tone="current" />
             </span>
-            <span data-quick-label="">{spec.label}</span>
+            <span data-shortcut-label="" className="tubu-shortcut-label">
+              {homeCopy.shortcuts.more}
+            </span>
           </button>
-        ))}
-        <button
-          type="button"
-          aria-label={homeCopy.shortcuts.moreAria}
-          aria-haspopup="dialog"
-          className="tubu-quick-pill tubu-quick-pill--more tubu-press"
-          onClick={() => {
-            haptic('light');
-            setAllUsed(true);
-            setAllOpen(true);
-          }}
-        >
-          <span aria-hidden="true">
-            <Icon icon={Ellipsis} size="sm" tone="current" />
-          </span>
-          <span data-quick-label="">{homeCopy.shortcuts.more}</span>
-        </button>
+        )}
       </div>
 
       {allUsed && (
@@ -191,10 +121,10 @@ export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
           <ShortcutsSheet
             open={allOpen}
             onClose={() => setAllOpen(false)}
-            items={all}
+            items={more}
             onSelect={(s) => {
               setAllOpen(false);
-              open(s);
+              openShortcut(s.id);
             }}
           />
         </Suspense>

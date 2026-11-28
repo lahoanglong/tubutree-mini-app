@@ -10,10 +10,13 @@ export function stateOf(key: string): OrderState {
 
 const shown = (page: Page, name: string) => page.getByRole('button', { name, exact: true }).locator('visible=true');
 
-/** Đơn đang giao: hero một câu, hành trình có bước hiện tại và mốc hãng mới nhất trên cùng, thẻ vận chuyển có mã + nút chép, một nút chính "Liên hệ", không có nút bị cấm. */
+/** Đơn đang giao: hero ba phần (mốc kế tiếp là ngày giao dự kiến), hành trình có bước hiện tại và mốc hãng mới nhất trên cùng, thẻ vận chuyển có mã + nút chép, một nút chính "Liên hệ", không có nút bị cấm. */
 export async function expectShippingTracking(page: Page): Promise<void> {
   const hero = page.getByTestId('status-hero');
-  await expect(hero).toContainText('Đơn đang trên đường giao đến bạn.');
+  // W47: hero tối đa ba phần; câu "Đơn đang trên đường giao đến bạn." lặp trạng thái nên nhường chỗ cho ngày giao dự kiến.
+  await expect(hero.getByRole('heading', { level: 2 })).toHaveText('Đang giao');
+  await expect(hero.getByTestId('order-milestone')).toHaveText(/^Dự kiến giao /);
+  await expect(hero).not.toContainText('Đơn đang trên đường giao đến bạn.');
 
   const track = page.getByRole('list', { name: 'Hành trình đơn hàng' });
   await expect(track).toBeVisible();
@@ -42,7 +45,7 @@ export async function expectShippingTracking(page: Page): Promise<void> {
   const shipping = page.getByTestId('order-shipping');
   await expect(shipping).toContainText('Giao Hàng Nhanh');
   await expect(shipping).toContainText('GHN6789012345');
-  // Đúng một nút chép mỗi trang: web ở khối Vận chuyển, Mini App ở viên vận đơn dưới thẻ trạng thái.
+  // Đúng một nút chép mỗi trang: viên vận đơn trong thẻ Vận chuyển (W47, cả Mini App lẫn web).
   await expect(page.getByRole('button', { name: 'Sao chép mã vận đơn GHN6789012345' }).locator('visible=true')).toHaveCount(1);
 
   await expect(shown(page, 'Liên hệ Tubu')).toHaveCount(1);
@@ -55,7 +58,9 @@ export async function expectShippingTracking(page: Page): Promise<void> {
 /** Đơn chờ thanh toán: hạn trả và thời gian còn lại ở hero, nút chính "Thanh toán ngay", "Huỷ đơn" chỉ nằm trong menu. */
 export async function expectPendingPayment(page: Page): Promise<void> {
   const hero = page.getByTestId('status-hero');
-  await expect(hero).toContainText('Đơn đang chờ bạn thanh toán.');
+  // W47: hero chỉ ba phần (mốc giờ, trạng thái, một câu mốc kế tiếp): câu "Đơn đang chờ bạn thanh toán." lặp trạng thái nên nhường chỗ cho hạn trả.
+  await expect(hero.getByRole('heading', { level: 2 })).toHaveText('Chờ thanh toán');
+  await expect(hero).not.toContainText('Đơn đang chờ bạn thanh toán.');
   await expect(page.getByTestId('order-milestone')).toContainText(/Thanh toán trước \d{2}:\d{2} \d{2}\/\d{2}, còn 2 giờ \d+ phút/);
 
   await expect(shown(page, 'Thanh toán ngay')).toHaveCount(1);

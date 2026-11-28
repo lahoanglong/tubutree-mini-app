@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAND_ORIGINS, SHELL_BRAND_TAGLINE } from '../brand-origins';
-import {
-  BRAND_SHOWCASE_ITEMS,
-  brandJumpHref,
-  brandShowcase,
-  brandShowcaseHref,
-  brandShowcaseItems,
-  brandShowcaseSkeletonCount,
-} from './brand-showcase';
+import { brandJumpHref, brandShowcase, hasBrandChoice, realBrandCount } from './brand-showcase';
 
 /** Số đếm của `GET /brands` trên PROD 24/11/2026 (111 SKU, nhãn suy từ tên). */
 const PROD = [
@@ -22,7 +15,7 @@ const PROD = [
   { brand: 'Cobote', count: 2, slug: null },
 ];
 
-describe('brandShowcase: thứ tự nhãn của thanh nhảy nhanh và khối Khám phá theo Thương hiệu', () => {
+describe('brandShowcase: thứ tự nhãn của thanh chip thương hiệu', () => {
   it('xếp theo số sản phẩm giảm dần (hoà thì theo tên), "Tubu Tree" luôn cuối dù nhiều sản phẩm hơn nhãn khác', () => {
     expect(brandShowcase(PROD).map((b) => b.brand)).toEqual([
       'Fuwa3e', 'Pơ Lang', 'BH.Nong', 'Sokfarm', 'Hector', 'Visante', 'Le Plateau Coffee', 'Cobote', 'Tubu Tree',
@@ -43,14 +36,6 @@ describe('brandShowcase: thứ tự nhãn của thanh nhảy nhanh và khối Kh
     expect(brandShowcase([{ brand: 'Pineboo', count: 3 }])[0]!.tagline).toBeNull();
   });
 
-  it('id neo `home-brand-<slug>`, thiếu slug thì theo tên đã chuẩn hoá; chỉ gồm chữ thường, số, gạch nối', () => {
-    const list = brandShowcase(PROD);
-    expect(list.find((b) => b.brand === 'Fuwa3e')!.anchorId).toBe('home-brand-fuwa3e');
-    expect(list.find((b) => b.brand === 'Pơ Lang')!.anchorId).toBe('home-brand-polang');
-    expect(list.find((b) => b.brand === 'BH.Nong')!.anchorId).toBe('home-brand-bhnong');
-    for (const b of list) expect(b.anchorId).toMatch(/^home-brand-[a-z0-9-]+$/);
-  });
-
   it('bỏ nhãn trống, không còn sản phẩm, trùng sau khi chuẩn hoá; chưa tải thì rỗng', () => {
     expect(brandShowcase(undefined)).toEqual([]);
     const list = brandShowcase([
@@ -68,40 +53,34 @@ describe('brandShowcase: thứ tự nhãn của thanh nhảy nhanh và khối Kh
   });
 });
 
-describe('đích của nhãn', () => {
-  it('"Tất cả (n)": danh sách lọc đúng `?brand=` theo nền', () => {
-    expect(brandShowcaseHref({ brand: 'Pơ Lang' }, 'web')).toBe('/san-pham?brand=P%C6%A1+Lang');
-    expect(brandShowcaseHref({ brand: 'Fuwa3e' }, 'mini')).toBe('/browse?brand=Fuwa3e');
-  });
-
-  it('chip khi khối chưa dựng: trang nhãn nếu có slug, không thì lọc theo nhãn (journeyBrandHref)', () => {
+describe('đích của chip thương hiệu', () => {
+  it('trang nhãn nếu có slug, không thì lọc theo nhãn (journeyBrandHref)', () => {
     expect(brandJumpHref({ key: 'fuwa3e', brand: 'Fuwa3e', slug: 'fuwa3e' }, 'web')).toBe('/brand/fuwa3e');
     expect(brandJumpHref({ key: 'polang', brand: 'Pơ Lang', slug: null }, 'web')).toBe('/san-pham?brand=P%C6%A1+Lang');
     expect(brandJumpHref({ key: 'tubutree', brand: 'Tubu Tree', slug: null }, 'mini')).toBe('/browse?brand=Tubu+Tree');
   });
 });
 
-describe('brandShowcaseItems: món của một nhãn', () => {
-  const p = (slug: string, inStock = true) => ({ slug, inStock });
-
-  it('ưu tiên món chưa hiện ở kệ trên, đủ 4 món thì không lặp món đã hiện', () => {
-    const items = [p('a'), p('b'), p('c'), p('d'), p('e'), p('f')];
-    expect(brandShowcaseItems(items, new Set(['a', 'c'])).map((x) => x.slug)).toEqual(['b', 'd', 'e', 'f']);
+describe('hasBrandChoice (W47): lối duyệt theo thương hiệu chỉ khi có ít nhất hai nhãn thật', () => {
+  it('PROD 24/11 có 8 nhãn thật (không tính "Tubu Tree"): có lựa chọn', () => {
+    expect(realBrandCount(PROD)).toBe(8);
+    expect(hasBrandChoice(PROD)).toBe(true);
   });
 
-  it('thiếu món mới thì bù bằng món đã hiện (giữ thứ tự máy chủ) để nhãn vẫn đủ 4 món', () => {
-    const items = [p('a'), p('b'), p('c'), p('d'), p('e')];
-    expect(brandShowcaseItems(items, new Set(['a', 'b', 'c', 'd'])).map((x) => x.slug)).toEqual(['e', 'a', 'b', 'c']);
+  it('chỉ "Tubu Tree", hay một nhãn thật kèm "Tubu Tree": không có lựa chọn', () => {
+    expect(hasBrandChoice([{ brand: 'Tubu Tree', count: 40 }])).toBe(false);
+    expect(hasBrandChoice([{ brand: 'Tubu Tree', count: 40 }, { brand: 'Fuwa3e', count: 12 }])).toBe(false);
+    expect(hasBrandChoice([{ brand: 'tubu tree', count: 3 }, { brand: 'TUBU TREE', count: 2 }])).toBe(false);
   });
 
-  it('còn hàng đứng trước món hết hàng; nhãn ít món thì vẽ đúng số đang có', () => {
-    expect(brandShowcaseItems([p('x', false), p('y'), p('z')], new Set()).map((x) => x.slug)).toEqual(['y', 'z', 'x']);
-    expect(brandShowcaseItems([], new Set())).toEqual([]);
+  it('nhãn trùng sau chuẩn hoá đếm một lần; nhãn hết sản phẩm hay tên trống không tính; chưa tải hay lỗi thì không có lựa chọn', () => {
+    expect(realBrandCount([{ brand: 'Pơ Lang', count: 5 }, { brand: 'PƠ LANG', count: 2 }])).toBe(1);
+    expect(realBrandCount([{ brand: 'Visante', count: 0 }, { brand: ' ', count: 3 }, { brand: 'Hector', count: 1 }])).toBe(1);
+    expect(hasBrandChoice(undefined)).toBe(false);
+    expect(hasBrandChoice([])).toBe(false);
   });
 
-  it('khung chờ bằng số món sẽ vẽ: tối đa 4, ít nhất 1', () => {
-    expect(brandShowcaseSkeletonCount({ count: 44 })).toBe(BRAND_SHOWCASE_ITEMS);
-    expect(brandShowcaseSkeletonCount({ count: 2 })).toBe(2);
-    expect(brandShowcaseSkeletonCount({ count: 0 })).toBe(1);
+  it('hai nhãn thật là đủ', () => {
+    expect(hasBrandChoice([{ brand: 'Fuwa3e', count: 1 }, { brand: 'Hector', count: 1 }])).toBe(true);
   });
 });

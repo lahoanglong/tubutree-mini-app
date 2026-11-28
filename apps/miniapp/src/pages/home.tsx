@@ -13,9 +13,8 @@ import { FlashSale, type FlashSaleProps } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import {
   HomeBestSellerRail,
-  HomeCommunityPreview,
+  HomeInterleave,
   HomePurchasedRail,
-  HomeQuiz,
   HomeStoryReel,
   HomeSuggestFeed,
   HomeScrollRestoration,
@@ -62,8 +61,8 @@ import { noteMiniRum, type MiniRum } from '../lib/vitals/mini-vitals';
 /**
  * Trang chủ gọn, tối đa 9 khối: header dính 56px (logo, ô tìm, chuông, giỏ) → MỘT dải ngữ cảnh cao 64px (Việc cần làm một dòng, Quà khách mới thu gọn hoặc thẻ thành viên)
  * → Danh mục một hàng → kệ Bán chạy nhất có hạng (thẻ đầu lộ trong màn đầu) → MỘT ô khuyến mãi (Giờ vàng đang chạy, không thì banner chiến dịch, không thì combo; không có gì thì ẩn)
- * → Mua lại (khách cũ) → hai thẻ chính + bốn ô phụ + lối tắt nhanh → dải Story → MỘT lưới Gợi ý hôm nay cuộn vô tận, có một thẻ chen sau 8 thẻ đầu (Chẩn đoán tổ ấm hoặc Cộng đồng,
- * luân phiên theo ngày). Thứ tự khối ở app-core (`homeRenderOrder`), dùng chung với web; `useHomeShelves` chống trùng món giữa các kệ hàng. Thẻ sản phẩm có nút ＋ thêm nhanh
+ * → Mua lại (khách cũ) → MỘT lưới lối tắt 4 × 2 → dải Story → MỘT lưới "Gợi ý cho bạn" 2 cột, có một thẻ chen sau 8 thẻ đầu (dải "Khách hàng sống xanh",
+ * không đủ đánh giá ảnh thì Chẩn đoán tổ ấm hoặc Cộng đồng luân phiên theo ngày). Thứ tự khối ở app-core (`homeRenderOrder`), dùng chung với web; `useHomeShelves` chống trùng món giữa các kệ hàng. Thẻ sản phẩm có nút ＋ thêm nhanh
  * (`HomeQuickAddProvider`). Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
 // Chunk các khối dưới màn đầu tải song song với dữ liệu ngay khi mã trang chủ chạy, không đợi tới lúc render. Mã này chạy cả khi app mở thẳng
@@ -132,8 +131,8 @@ export default function HomePage() {
     if (flashSettledEmpty) writeFlashHint(browserStorage(), false);
   }, [flashSettledEmpty]);
 
-  // Thẻ chen trong lưới Gợi ý luân phiên theo ngày Việt Nam, cùng hạt giống ngày với lưới.
-  const interleave = useMemo(() => (homeInterleaveCard(vnDateSeed(serverNow())) === 'quiz' ? <HomeQuiz /> : <HomeCommunityPreview />), []);
+  // Thẻ chen trong lưới Gợi ý: dải "Khách hàng sống xanh", không đủ đánh giá ảnh thì thẻ luân phiên theo ngày Việt Nam (cùng hạt giống ngày với lưới).
+  const interleave = useMemo(() => <HomeInterleave fallback={homeInterleaveCard(vnDateSeed(serverNow()))} />, []);
 
   // Quay lại từ PDP/danh mục về đúng chỗ đã cuộn (zmp Page gỡ trang cũ nên không tự giữ). Chỉ khôi phục khi các khối cao đã có dữ liệu thật, nếu không trang còn ngắn và vị trí bị kẹp.
   const scrollReady = !settling && !restoring && !categories.isLoading && !shelves.bestSellerQuery.isLoading;

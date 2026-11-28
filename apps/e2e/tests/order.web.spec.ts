@@ -247,7 +247,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
     await expect(page.getByTestId('status-hero')).toContainText('Thanh toán trước');
-    await expect(page.getByTestId('status-hero')).toContainText('Đơn đang chờ bạn thanh toán.');
+    await expect(page.getByTestId('status-hero').getByRole('heading', { level: 2 })).toHaveText('Chờ thanh toán');
     await expect(page.getByText('Chuyển khoản trước')).toHaveCount(0);
     const bar = page.getByTestId('order-action-bar');
     await expect(bar.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);

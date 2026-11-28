@@ -372,10 +372,10 @@ export function DsGallery() {
 
         <Group name="order-tracking-pill">
           <Variant label="có hãng">
-            <OrderTrackingPill href="https://tracking.ghn.vn/?order_code=GHNAB12CD34" partner="Giao Hàng Nhanh" />
+            <OrderTrackingPill code="GHNAB12CD34" partner="Giao Hàng Nhanh" />
           </Variant>
           <Variant label="không có hãng">
-            <OrderTrackingPill href="https://tracking.ghn.vn/?order_code=GHNAB12CD34" />
+            <OrderTrackingPill code="GHNAB12CD34" />
           </Variant>
         </Group>
 
