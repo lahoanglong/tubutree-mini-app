@@ -2,12 +2,11 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeQuizQuestions, pickKitProducts, type HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
-import type { ArcadeStatus, HomeQuizResult } from '@tubutree/app-core/api/game';
+import { completeHomeQuiz, type HomeQuizResult } from '@tubutree/app-core/api/home-quiz';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
-import { useRealUser } from '../../hooks/use-real-user';
 import { vi } from '../../i18n/vi';
-import { arcadeStatusQuery, submitHomeQuiz } from '../../services/arcade-api';
+import { coreHttp } from '../../services/core-http';
 import { fetchProducts } from '../../services/shop-api';
 import { haptic } from '../../utils/haptic';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -17,7 +16,8 @@ import { ProductCard } from '../ui/product-card';
 import { ProductTileSkeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 import { useKitQuickAdd } from './use-kit-quick-add';
-import '../../css/home-quiz.css';
+// Không import css/home-quiz.css: sheet chỉ được HomeQuizCard nạp lười và thẻ đã nạp CSS đó. Import ở đây làm chunk sheet import tĩnh chunk lười home-below,
+// trái luật scripts/ci/mini-lazy-chunks.cjs.
 
 /** Đủ rộng để món khớp từ khoá nằm ngoài top bán chạy vẫn lọt vào, vẫn là một request. */
 const QUIZ_FETCH_LIMIT = 40;
@@ -28,20 +28,21 @@ type Claim = { status: 'idle' | 'saving' | 'saved' | 'error'; result?: HomeQuizR
 
 export interface HomeQuizSheetProps {
   open: boolean;
+  /** Khách thật đã đăng nhập (luật `useRealUser`, thẻ tính và truyền xuống). */
+  real: boolean;
   onClose: () => void;
-  /** Quà đã ghi xong (kể cả "đã nhận từ trước"): thẻ mời đổi dòng phụ dù Trang chủ không tải trạng thái mini game. */
+  /** Quà đã ghi xong (kể cả "đã nhận từ trước"): thẻ mời đổi dòng phụ và vá cache trạng thái dù Trang chủ không tải trạng thái mini game. */
   onClaimed?: () => void;
 }
 
 /**
  * Sheet ba câu của Chẩn đoán tổ ấm: chạm một đáp án là tự sang câu kế (có tiến độ "Câu 1/3" và nút Quay lại), xong thì tải sản phẩm đang bán thật và hiện 2–3 món
- * `pickKitProducts` chọn, mỗi món một chạm vào giỏ. Đã đăng nhập thì nhận quà Giọt nước đúng một lần (`submitHomeQuiz`); khách xem đủ kết quả và có nút đăng nhập,
+ * `pickKitProducts` chọn, mỗi món một chạm vào giỏ. Đã đăng nhập thì nhận quà Giọt nước đúng một lần (`completeHomeQuiz`); khách xem đủ kết quả và có nút đăng nhập,
  * đăng nhập xong thì quà tự được ghi.
  */
-export function HomeQuizSheet({ open, onClose, onClaimed }: HomeQuizSheetProps) {
+export function HomeQuizSheet({ open, real, onClose, onClaimed }: HomeQuizSheetProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const real = useRealUser();
   const login = useLoginWithNotice();
   const questions = useMemo(() => homeQuizQuestions(), []);
   const [answers, setAnswers] = useState<Partial<HomeQuizAnswers>>({});
@@ -67,11 +68,9 @@ export function HomeQuizSheet({ open, onClose, onClaimed }: HomeQuizSheetProps) 
   const claimGift = useCallback(
     (a: HomeQuizAnswers) => {
       setClaim({ status: 'saving' });
-      submitHomeQuiz(a).then(
+      completeHomeQuiz(coreHttp, a).then(
         (result) => {
           setClaim({ status: 'saved', result });
-          // Bản trạng thái đã có trong cache (Vườn Xanh) được vá ngay: thẻ mời chỉ đọc cache, không tự tải lại. Chưa có bản nào thì không dựng bản giả.
-          queryClient.setQueryData<ArcadeStatus>(arcadeStatusQuery.queryKey, (old) => (old ? { ...old, quizClaimed: true } : old));
           onClaimed?.();
           // Số Giọt nước ở Vườn đổi theo quà này.
           void queryClient.invalidateQueries({ queryKey: ['game'] });

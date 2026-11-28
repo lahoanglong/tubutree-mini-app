@@ -105,6 +105,14 @@ const openConfirm = async (c: HTMLElement, name: string) => {
   await flush(3);
 };
 const confirmBtn = () => byText(dialog()!, 'button', 'Xác nhận đổi');
+/** Câu dài của thẻ quà nằm trong sheet chi tiết: bấm tên quà (nút phủ cả thẻ) để mở. */
+const openDetail = async (c: HTMLElement, name: string) => {
+  click(card(c, name).querySelector<HTMLElement>('button.tubu-reward-hit')!);
+  await flush(3);
+  const d = document.querySelector<HTMLElement>('[data-testid="reward-detail"]');
+  if (!d) throw new Error(`không mở được chi tiết ${name}`);
+  return d;
+};
 
 beforeEach(() => {
   state.phase = 'authenticated';
@@ -165,8 +173,9 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     const c = await mount();
     const voucher = card(c, 'Miễn phí vận chuyển');
     expect(voucher.querySelector('[data-testid="reward-icon"] svg.lucide-ticket')).not.toBeNull();
-    const price = Array.from(voucher.querySelectorAll('div')).find((d) => /điểm$/.test(d.textContent ?? '') && d.children.length === 0)!;
-    expect(price.parentElement).toBe(byText(voucher, 'button', 'Đổi')!.parentElement);
+    const price = voucher.querySelector<HTMLElement>('[data-testid="reward-points"]')!;
+    expect(price.textContent).toMatch(/điểm$/);
+    expect(price.closest('.tubu-reward-row')).toBe(byText(voucher, 'button', 'Đổi')!.closest('.tubu-reward-row'));
     click(tab(c, 'Cây và hạt'));
     await flush(2);
     expect(card(c, 'Gói hạt giống Tubu').querySelector('[data-testid="reward-icon"] svg.lucide-leaf')).not.toBeNull();
@@ -226,8 +235,25 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     const c = await mount();
     click(tab(c, 'Cây và hạt'));
     await flush(2);
-    expect(card(c, 'Gói hạt giống Tubu').textContent).toContain('Còn 3');
-    expect(card(c, 'Gói hạt giống Tubu').textContent).toContain('Nhận tại kho Tubu TP.HCM');
+    const seed = card(c, 'Gói hạt giống Tubu');
+    expect(seed.querySelector('[data-testid="reward-pill"]')?.textContent).toBe('Còn 3');
+    expect(seed.textContent).not.toContain('Nhận tại kho Tubu TP.HCM');
+    const detail = await openDetail(c, 'Gói hạt giống Tubu');
+    expect(detail.textContent).toContain('Nhận tại kho Tubu TP.HCM');
+    expect(detail.textContent).toContain('Còn 3 phần quà');
+  });
+
+  it('sheet chi tiết: nút "Đổi · N điểm" ở chân sheet mở thẳng bước xác nhận', async () => {
+    const c = await mount();
+    click(tab(c, 'Cây và hạt'));
+    await flush(2);
+    await openDetail(c, 'Gói hạt giống Tubu');
+    const redeem = Array.from(document.querySelectorAll<HTMLElement>('[data-sheet-footer] button')).find((b) => /^Đổi · .+ điểm$/.test(b.textContent ?? ''))!;
+    click(redeem);
+    await flush(3);
+    expect(document.querySelector('[data-testid="reward-detail"]')).toBeNull();
+    expect(dialog()!.textContent).toContain('Xác nhận đổi quà');
+    expect(state.calls.filter((x) => x.method === 'post')).toHaveLength(0);
   });
 
   it('đủ điểm nhưng phần đổi được đang khoá → "Chờ mở khoá điểm" bị tắt, không "Cần thêm"', async () => {
@@ -384,8 +410,11 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(names[0]).toContain('Giảm 50.000đ');
     expect(names[1]).toContain('Miễn phí vận chuyển');
     const free = card(c, 'Miễn phí vận chuyển');
-    expect(free.textContent).toContain('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ');
+    expect(free.querySelector('[data-testid="reward-pill"]')?.textContent).toBe('Trùng quyền lợi hạng');
     expect(free.textContent).not.toContain('Phổ biến');
+    expect((await openDetail(c, 'Miễn phí vận chuyển')).textContent).toContain('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ');
+    click(document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Đóng"]')!);
+    await flush(3);
     expect((byText(free, 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
     expect((byText(card(c, 'Giảm 50.000đ'), 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
     await openConfirm(c, 'Miễn phí vận chuyển');
@@ -405,7 +434,10 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(card(c, 'Miễn phí vận chuyển').textContent).not.toContain(LABEL);
     click(tab(c, 'Cây và hạt'));
     await flush(2);
-    expect(card(c, 'Gói hạt giống Tubu').textContent).toContain(LABEL);
+    expect(card(c, 'Gói hạt giống Tubu').textContent).not.toContain(LABEL);
+    expect((await openDetail(c, 'Gói hạt giống Tubu')).textContent).toContain(LABEL);
+    click(document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Đóng"]')!);
+    await flush(3);
     expect(card(c, 'Góp quỹ trồng cây').textContent).not.toContain(LABEL);
     expect(c.textContent).not.toContain('Chỉ nhận tại kho');
     await openConfirm(c, 'Gói hạt giống Tubu');

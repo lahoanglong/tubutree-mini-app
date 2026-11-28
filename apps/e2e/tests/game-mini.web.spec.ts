@@ -52,30 +52,32 @@ test.describe('Web 390px (điện thoại)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
   test.beforeEach(({}, testInfo) => test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ điện thoại chạy ở project Web Customer Mobile'));
 
-  test('cờ tắt (404): Vườn Xanh giữ sảnh arcade và khối đố vui, không có thẻ Chơi hôm nay', async ({ page, api }) => {
+  test('cờ tắt (404): Sảnh Game giữ hai game hành động và khối đố vui, không có thẻ Chơi hôm nay', async ({ page, api }) => {
     member(api);
     await signedIn(page);
-    await page.goto('/vuon-xanh');
+    await page.goto('/vuon-xanh?tab=games');
     await expect(page.getByTestId('arcade-hub')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('#game-quiz')).toHaveCount(1);
     await expect(page.getByTestId('mini-play-today')).toHaveCount(0);
   });
 
-  test('cờ bật: một thẻ Chơi hôm nay thay sảnh arcade và khối đố vui; Đố Xanh trọn ván bằng chạm, CLS ≤ 0,1', async ({ page, api }) => {
+  test('cờ bật: Sảnh Game gom hai game hành động và mọi game mini, khối đố vui cũ ẩn; Đố Xanh trọn ván bằng chạm, CLS ≤ 0,1', async ({ page, api }) => {
     member(api);
     const { submits } = mockMiniGames(api);
     await signedIn(page);
     await observeCls(page);
-    await page.goto('/vuon-xanh');
-    const card = page.getByTestId('mini-play-today');
+    await page.goto('/vuon-xanh?tab=games');
+    const card = page.getByTestId('arcade-hub');
     await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card).toHaveCount(1);
-    await expect(page.getByTestId('arcade-hub')).toHaveCount(0);
+    await expect(page.getByTestId('mini-play-today')).toHaveCount(0);
+    await expect(page.getByTestId('arcade-card-dew_catcher')).toBeVisible();
+    await expect(page.getByTestId('arcade-card-refill_rush')).toBeVisible();
     await expect(page.locator('#game-quiz')).toHaveCount(0);
-    await expect(page.getByTestId('mini-play-row-daily_quiz')).toHaveAttribute('href', '/vuon-xanh/choi/daily_quiz');
+    const quizLink = page.getByTestId('mini-play-row-daily_quiz').getByRole('link');
+    await expect(quizLink).toHaveAttribute('href', '/vuon-xanh/choi/daily_quiz');
     await expectTargets44(card);
     await expectNoHorizontalOverflow(page);
-    await page.getByTestId('mini-play-row-daily_quiz').click();
+    await quizLink.click();
     await expect(page).toHaveURL(/\/vuon-xanh\/choi\/daily_quiz$/);
     await startRound(page);
     await expectTargets44(page.getByTestId('mini-quiz'));
@@ -88,6 +90,10 @@ test.describe('Web 390px (điện thoại)', () => {
     await expectNoHorizontalOverflow(page);
     const { cls, sources } = await readClsTotal(page);
     expect(cls, sources.join('\n')).toBeLessThanOrEqual(0.1);
+    // Nút xong ván về `/vuon-xanh` không kèm tab: dấu đặt lúc chạm thẻ đưa khách về lại Sảnh Game chứ không rơi về Chăm vườn.
+    await page.getByRole('button', { name: gameCopy('result.done') }).click();
+    await expect(page).toHaveURL(/\/vuon-xanh\?tab=games$/);
+    await expect(page.getByRole('tab', { name: 'Sảnh Game' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('khách chưa đăng nhập: thẻ dưới cổng đăng nhập, chơi thử Đúng Thùng bằng mã ván, nút chính là Đăng nhập để nhận thưởng', async ({ page, api }) => {
@@ -95,8 +101,8 @@ test.describe('Web 390px (điện thoại)', () => {
     const { submits } = mockMiniGames(api, { guest: 'NOT_LOGGED_IN' });
     await page.goto('/vuon-xanh');
     await expect(page.getByTestId('mini-play-status-sort')).toHaveText(gameCopy('row.trial'), { timeout: 15_000 });
-    await expect(page.getByTestId('arcade-hub')).toHaveCount(0);
-    await page.getByTestId('mini-play-row-sort').click();
+    await expect(page.getByTestId('arcade-hub')).toBeVisible();
+    await page.getByTestId('mini-play-row-sort').getByRole('link').click();
     await expect(page.getByTestId('mini-no-reward')).toBeVisible();
     await startRound(page);
     await finishSort(page, 0);

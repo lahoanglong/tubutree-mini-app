@@ -168,10 +168,12 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     expect(c.textContent).toContain('Tích điểm ×1,5');
   });
 
-  it('thiếu mốc chi tiêu: nói theo điểm tích từ mua hàng kèm số tiền tương ứng', async () => {
+  it('thiếu mốc chi tiêu: một dòng theo điểm, kèm số tiền tương ứng trong ngoặc, phần số in đậm', async () => {
     state.loyalty = { ...state.loyalty!, nextTier: { id: 't2', name: 'Lộc Biếc', minPoints: 200, minSpending: null, pointsToGo: 120 } };
     const c = await mount();
-    expect(c.textContent).toContain('Còn 120 điểm tích từ mua hàng (tương đương khoảng 6.000đ mua hàng) để lên hạng Lộc Biếc');
+    const line = c.querySelector('[data-testid="tier-next-line"]')!;
+    expect(line.textContent).toBe('Còn 120 điểm (≈ 6.000đ mua hàng) để lên hạng Lộc Biếc');
+    expect(line.querySelector('b')!.textContent).toBe('120 điểm');
   });
 
   it('luật tích/dùng nằm trong mục gập "Cách kiếm và dùng Điểm Xanh" (h2 bọc nút): đóng mặc định, bấm mở, bấm lại đóng; thẻ hạng không còn hai dòng đó', async () => {
@@ -346,7 +348,9 @@ describe('/tai-khoan/diem-xanh — hạn giữ hạng, biểu tượng theo th�
   it('đổi tên hạng trong admin: biểu tượng vẫn theo thứ hạng, tên hạng không xuống dòng', async () => {
     state.loyalty = { ...state.loyalty, tier: { ...(state.loyalty as { tier: object }).tier, id: 't2', name: 'Hạng Bạc Đặc Biệt' } };
     const c = await mount();
-    expect(c.querySelector('section[aria-label="Hạng thành viên"]')!.textContent).toContain('🌿');
+    const medal = c.querySelector('section[aria-label="Hạng thành viên"] [data-testid="tier-medallion"]')!;
+    expect(medal.getAttribute('data-kind')).toBe('sapling');
+    expect(c.querySelector('section[aria-label="Hạng thành viên"]')!.textContent).not.toMatch(/🌱|🌿|🌳|🌲/);
     const names = Array.from(c.querySelectorAll('section[aria-label="Các hạng"] li span.whitespace-nowrap')).map((x) => x.textContent);
     expect(names).toEqual(['Mầm Xanh', 'Lộc Biếc', 'Đại Thụ']);
   });
@@ -673,7 +677,7 @@ describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', (
   it('thẻ hạng giữ màu nền theo hạng (không bị nền trắng của thẻ đè), không viền ở điện thoại', async () => {
     const c = await mount();
     const card = c.querySelector('section[aria-label="Hạng thành viên"]')!;
-    expect(card.classList.contains('bg-sage-50')).toBe(true);
+    expect((card as HTMLElement).style.background).toBe('var(--sage-50)');
     expect(card.classList.contains('bg-stone-0')).toBe(false);
     expect(card.classList.contains('border')).toBe(false);
   });

@@ -186,3 +186,43 @@ export function sortRedemptions<T extends { status: string; createdAt: string; c
   const rank = (r: T) => (r.status === 'READY' ? 0 : newCode && r.couponCode === newCode ? 1 : 2);
   return [...list].sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt));
 }
+
+/** Viên trên thẻ quà gọn khi quà trùng quyền lợi freeship của hạng (câu đầy đủ nằm trong sheet chi tiết). */
+export const REWARD_COVERED_PILL = 'Trùng quyền lợi hạng';
+/** Viên trên thẻ quà hiện vật (câu đầy đủ `WAREHOUSE_ONLY_LABEL` nằm trong sheet chi tiết). */
+export const REWARD_WAREHOUSE_PILL = 'Gửi kèm đơn kế tiếp';
+
+/**
+ * Thẻ quà gọn chỉ còn biểu tượng, tên, viên giá điểm, nút Đổi và tối đa MỘT viên ngắn; mọi câu dài (mô tả, cách nhận, ghi chú hạng,
+ * nơi nhận) chuyển vào sheet chi tiết mở khi chạm thẻ. Thứ tự viên: trùng quyền lợi hạng, rồi tồn kho, rồi cách nhận quà hiện vật, rồi nhãn admin.
+ * Quà đã hết không có viên (thẻ đã có huy hiệu "Đã hết").
+ */
+export function rewardPill(
+  r: Pick<RewardItemDTO, 'kind' | 'label' | 'stockRemaining' | 'soldOut'>,
+  opts: { covered: boolean; formatNumber: (n: number) => string },
+): string | null {
+  if (r.soldOut) return null;
+  if (opts.covered) return REWARD_COVERED_PILL;
+  if (r.stockRemaining != null) return `Còn ${opts.formatNumber(r.stockRemaining)}`;
+  if (isWarehousePickup(r)) return REWARD_WAREHOUSE_PILL;
+  return r.label || null;
+}
+
+/**
+ * Các dòng của sheet chi tiết quà, theo thứ tự đọc; rỗng thì thẻ không mở sheet (không có gì thêm để xem). Nhãn admin chỉ có dòng ở đây khi
+ * viên trên thẻ đã nhường chỗ cho thứ đứng trước nó trong `rewardPill` (cùng điều kiện, `freeNote` khác null là trùng quyền lợi hạng).
+ */
+export function rewardDetailLines(
+  r: Pick<RewardItemDTO, 'kind' | 'label' | 'description' | 'claimInstructions' | 'stockRemaining' | 'soldOut'>,
+  opts: { freeNote: string | null; formatNumber: (n: number) => string },
+): string[] {
+  const labelOnCard = !r.soldOut && opts.freeNote === null && r.stockRemaining == null && !isWarehousePickup(r);
+  return [
+    labelOnCard ? null : r.label,
+    r.description,
+    opts.freeNote,
+    isWarehousePickup(r) ? WAREHOUSE_ONLY_LABEL : null,
+    r.claimInstructions,
+    r.stockRemaining != null && !r.soldOut ? `Còn ${opts.formatNumber(r.stockRemaining)} phần quà` : null,
+  ].filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+}

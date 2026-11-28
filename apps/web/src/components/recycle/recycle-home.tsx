@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { Info } from 'lucide-react';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { wasteCatalogueQuery, wasteMeQuery, wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
 import { wasteRepeatOn } from '@tubutree/app-core/refill/refill-api';
 import { lastCompletedRequest } from '@tubutree/app-core/refill/repeat-waste';
-import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -34,6 +35,7 @@ import { RecycleLinkRow } from './recycle-link-row';
 import { useRecyclePageFooter } from './recycle-page-footer';
 import { RecycleTimeline } from './recycle-timeline';
 import { WasteItemThumb } from './waste-item-thumb';
+import { WasteRulesSheet, WasteStepStrip } from './waste-steps';
 import { WebRecyclePhoneCard } from './web-recycle-phone-card';
 import {
   BLOCKED_TEXT,
@@ -75,6 +77,37 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
       {children}
       {footer}
     </main>
+  );
+}
+
+const RULES_HREF = '/doi-rac/quy-dinh';
+
+/**
+ * Khối "Cách đổi" (như Mini `HowTo`): tiêu đề + nút "ⓘ Thể lệ" mở sheet, dải 3 bước có biểu tượng, rồi nút chính (nếu có).
+ * Câu đầy đủ từng bước và các cách giao nằm trong sheet để màn chính chỉ còn một hàng bước và một nút.
+ */
+function HowTo({ methods = [], children }: { methods?: readonly WasteMethod[]; children?: ReactNode }) {
+  const cfg = usePublicConfig();
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="tubu-waste-howto">
+      <div className="tubu-waste-howto-head">
+        <h2 className={skin.sectionTitle}>{wasteGuestCopy.stepsTitle}</h2>
+        <button type="button" onClick={() => setOpen(true)} className={`${ui.btnText} flex-none gap-1.5 text-forest-700 no-underline`}>
+          <Info className="h-4 w-4" aria-hidden="true" />
+          {wasteRulesSheetCopy.button}
+        </button>
+      </div>
+      {cfg.isLoaded ? <WasteStepStrip flags={cfg.waste} /> : <Skeleton height={64} rounded="rounded-card" />}
+      {children}
+      <WasteRulesSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        steps={wasteIntroCopy(cfg.waste).steps}
+        methods={methods.map((m) => ({ label: METHOD_LABELS[m], line: METHOD_LINE[m] }))}
+        rulesHref={RULES_HREF}
+      />
+    </section>
   );
 }
 
@@ -121,22 +154,8 @@ function GuestOverview({ items }: { items: readonly WasteItemDTO[] | undefined }
         <h2 className={skin.sectionTitle}>{wasteGuestCopy.introTitle}</h2>
         {cfg.isLoaded ? <p className="text-sm text-stone-700">{intro.intro}</p> : <Skeleton height={40} rounded="rounded-card" />}
       </div>
-      <section className="space-y-2">
-        <h2 className={skin.sectionTitle}>{wasteGuestCopy.stepsTitle}</h2>
-        {cfg.isLoaded ? (
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-900">
-            {intro.steps.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ol>
-        ) : (
-          <Skeleton height={64} rounded="rounded-card" />
-        )}
-      </section>
+      <HowTo />
       {items === undefined ? <Skeleton height={120} rounded="rounded-card" /> : <ItemList items={items} />}
-      <div className={`${skin.plain}`}>
-        <RecycleLinkRow bare href="/doi-rac/quy-dinh" title={wasteGuestCopy.rulesLink} />
-      </div>
     </>
   );
 }
@@ -327,7 +346,7 @@ export function RecycleHome() {
   const impact = impactLine(me.impactGrams);
   const giftNames = rewardsQ.data?.rewards.slice(0, 2).map((r) => r.name).join(', ');
 
-  // Máy tính (từ lg): hai cột cân đối chia theo thứ tự DOM của Mini (thẻ điểm và yêu cầu đang xử lý bên trái, cách đổi, món nhận và lối vào kho quà bên phải).
+  // Máy tính (từ lg): hai cột cân đối chia theo thứ tự DOM của Mini (thẻ điểm, khối Cách đổi và yêu cầu đang xử lý bên trái; món nhận và lối vào kho quà bên phải).
   // Dưới lg hai khung cột là `contents` nên các khối vẫn xếp một cột cách nhau 16px như trước.
   return (
     <Shell showHistory>
@@ -353,16 +372,19 @@ export function RecycleHome() {
                 )}
               </div>
             )}
-            {methods.length > 0 && lastDone ? (
-              <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/doi-rac/tao" />
-            ) : (
-              methods.length > 0 && (
+          </div>
+
+          {methods.length > 0 && (
+            <HowTo methods={methods}>
+              {lastDone ? (
+                <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/doi-rac/tao" />
+              ) : (
                 <Link href="/doi-rac/tao" className={`${ui.btnPrimary} w-full sm:w-auto`}>
                   Đổi rác ngay
                 </Link>
-              )
-            )}
-          </div>
+              )}
+            </HowTo>
+          )}
 
           {recentBlock}
 
@@ -370,27 +392,11 @@ export function RecycleHome() {
         </div>
 
         <div data-recycle-col="side" className="contents lg:flex lg:flex-col lg:gap-4">
-          <div className="grid gap-6">
-            {methods.length > 0 && (
-              <section className="space-y-2">
-                <h2 className={skin.sectionTitle}>Cách đổi</h2>
-                <ul className="space-y-2">
-                  {methods.map((m) => (
-                    <li key={m}>
-                      <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
-                      <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            <ItemList items={items} />
-          </div>
+          <ItemList items={items} />
 
           <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
             <RecycleLinkRow bare href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
-            <RecycleLinkRow bare href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
+            {methods.length === 0 && <RecycleLinkRow bare href={RULES_HREF} title="Thể lệ chương trình" />}
           </div>
         </div>
       </div>

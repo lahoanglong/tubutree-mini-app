@@ -253,7 +253,7 @@ describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (EN
   it('dòng "còn X điểm" kèm số tiền mua hàng tương ứng', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
     renderPage();
-    expect(await screen.findByText(/tương đương khoảng 62\.500đ mua hàng/)).toBeInTheDocument();
+    expect(await screen.findByText(/\(≈ 62\.500đ mua hàng\) để lên hạng/)).toBeInTheDocument();
   });
 
   it('danh sách hạng quy mốc ra tiền mua hàng 12 tháng', async () => {
@@ -533,11 +533,14 @@ describe('LoyaltyPage — hạn giữ hạng, lịch sử, biểu tượng hạn
     expect(mocks.getPointsTransactions).toHaveBeenCalledTimes(3);
   });
 
-  it('đổi tên hạng trong admin: biểu tượng vẫn theo thứ hạng', async () => {
+  it('đổi tên hạng trong admin: huy chương vẫn theo thứ hạng (SVG, không emoji của hệ điều hành)', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: { id: 't2', name: 'Hạng Bạc Đặc Biệt', multiplier: 1.2, perks: [] } });
     const { container } = renderPage();
     await screen.findByText(/Tích điểm ×1,2/);
-    expect(container.textContent).toContain('🌿');
+    const hero = container.querySelector('.tubu-tier-hero-medal [data-testid="tier-medallion"]')!;
+    expect(hero.getAttribute('data-kind')).toBe('sapling');
+    expect(hero.getAttribute('data-size')).toBe('lg');
+    expect(container.textContent).not.toMatch(/🌱|🌿|🌳|🌲/);
   });
 
   it('thẻ thành viên chỉ tải khi khách mở thẻ', async () => {
@@ -664,12 +667,12 @@ describe('LoyaltyPage — cảnh báo React trùng key', () => {
 describe('LoyaltyPage — dải "Mua trong Mini App tích gấp đôi"', () => {
   const ON = { isLoaded: true, loyalty: { earnPct: 2, vndPerPoint: 50, marketplaceEarnPct: 1, marketplaceClaimEnabled: true } };
 
-  it('cờ tích đơn sàn bật: dải nằm trên thẻ hạng; tắt: không có', async () => {
+  it('cờ tích đơn sàn bật: thẻ hạng đứng đầu, dải nằm ngay dưới; tắt: không có', async () => {
     boost.cfg = ON;
     const { unmount } = renderPage();
     const strip = await screen.findByTestId('points-boost');
     expect(strip).toHaveTextContent('Mua trong Mini App: tích gấp đôi');
-    expect(strip.compareDocumentPosition(await screen.findByText(/Tích điểm ×/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect((await screen.findByText(/Tích điểm ×/)).compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     unmount();
     boost.cfg = { isLoaded: true, loyalty: { ...ON.loyalty, marketplaceClaimEnabled: false } };
     renderPage();

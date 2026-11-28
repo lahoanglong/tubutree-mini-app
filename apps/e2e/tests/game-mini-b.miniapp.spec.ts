@@ -16,6 +16,7 @@ import {
   miniToday,
   mockMiniGames,
   mockMiniShop,
+  openMiniGameHub,
   ORIGIN_ITEMS,
   ORIGIN_PRODUCT,
   playMatch,
@@ -41,9 +42,9 @@ const todayAll = () => miniToday({ games: [...miniToday().games, KITCHEN_TODAY_R
 const gameWrites = (api: MockApi) => api.calls.filter((c) => c.method !== 'GET' && c.path.startsWith('/game')).length;
 const kitchenOption = (i: number) => KITCHEN_SWAPS[i]!.options.findIndex((o) => o.product.slug === KITCHEN_PICKS[i]);
 
-/** Mở game từ dòng của "Chơi hôm nay" (màn chơi nằm trong Mini App) rồi bấm Bắt đầu. */
+/** Mở game từ thẻ của Sảnh Game (màn chơi nằm trong Mini App) rồi bấm Bắt đầu. */
 async function openFromToday(page: Page, game: string) {
-  await page.goto('/game');
+  await openMiniGameHub(page);
   await page.getByTestId(`mini-play-row-${game}`).click();
   await expect(page).toHaveURL(new RegExp(`/game/play/${game}$`));
   await startRound(page);
@@ -56,14 +57,14 @@ for (const viewport of [
   test.describe(`Mini App ${viewport.width}px: game mini chơi ngay trong app`, () => {
     test.use({ viewport });
 
-    test('Chơi hôm nay: đủ 6 game là dòng chơi được, không còn dòng chơi trên tubutree.com', async ({ page, api }) => {
+    test('Sảnh Game: đủ 6 game mini là thẻ chơi được, không còn lối chơi trên tubutree.com', async ({ page, api }) => {
       member(api);
       mockMiniGames(api, { today: todayAll() });
-      await page.goto('/game');
-      const card = page.getByTestId('mini-play-today');
+      await openMiniGameHub(page);
+      const card = page.getByTestId('arcade-hub');
       await expect(card).toBeVisible({ timeout: 15_000 });
       for (const g of ALL_GAMES) await expect(page.getByTestId(`mini-play-row-${g}`)).toBeVisible();
-      await expect(card.getByRole('button')).toHaveCount(ALL_GAMES.length);
+      for (const g of ALL_GAMES) await expect(page.getByTestId(`mini-play-row-${g}`).getByRole('button')).toHaveCount(1);
       await expect(card).not.toContainText('tubutree.com');
       await expectTargets44(card);
       await expectNoHorizontalOverflow(page);

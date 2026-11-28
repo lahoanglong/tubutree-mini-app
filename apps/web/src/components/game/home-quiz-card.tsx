@@ -16,9 +16,9 @@ const HomeQuizSheet = dynamic(() => import('./home-quiz-sheet').then((m) => m.Ho
 const ALREADY_CLAIMED: HomeQuizResult = { granted: 0, alreadyClaimed: true, totalSeeds: 0 };
 
 /**
- * Thẻ mời "Chẩn đoán tổ ấm" (30 giây) ở Vườn Xanh và khối `quiz` của Trang chủ. Khách thấy dòng hứa quà; đã đăng nhập mà `quizClaimed` thì dòng đó nói
+ * Thẻ mời "Chẩn đoán tổ ấm" (30 giây) ở khối `quiz` của Trang chủ. Khách thấy dòng hứa quà; đã đăng nhập mà `quizClaimed` thì dòng đó nói
  * đã nhận quà (không hứa lần nữa). `quizClaimed` chỉ ĐỌC từ bộ nhớ đệm của khoá `['game','arcade']` (`enabled: false`): thẻ không bao giờ tự gọi mạng,
- * nên Trang chủ không có thêm request; ở Vườn Xanh sảnh mini game nạp cùng khoá và thẻ nhận kết quả ngay. Trong lúc nơi khác đang nạp khoá đó dòng quà ẩn
+ * nên Trang chủ không có thêm request; khách đã ghé Vườn Xanh thì Sảnh Game đã nạp cùng khoá và thẻ có kết quả ngay. Trong lúc nơi khác đang nạp khoá đó dòng quà ẩn
  * (`invisible`, vẫn chiếm chỗ) để không hiện lời hứa rồi đổi, và thẻ không đổi chiều cao.
  * Sheet ba câu và danh sách sản phẩm chỉ nạp và chỉ gọi mạng khi khách bấm "Bắt đầu".
  */

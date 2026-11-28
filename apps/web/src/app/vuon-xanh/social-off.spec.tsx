@@ -78,16 +78,16 @@ describe('Vườn Xanh web khi cờ GAME_SOCIAL_ON_WEB tắt', () => {
     expect(GAME_SOCIAL_ON_WEB).toBe(false);
   });
 
-  it('chỉ hai tab Hôm nay / Vườn, không có tab hay khung Cộng đồng', async () => {
+  it('ba tab Chăm vườn / Sảnh Game / Khu vườn như Mini App, không có tab hay khung Cộng đồng', async () => {
     const c = await mount();
-    expect(Array.from(c.querySelectorAll('[role="tab"]')).map((t) => t.textContent)).toEqual(['Hôm nay', 'Vườn']);
+    expect(Array.from(c.querySelectorAll('[role="tab"]')).map((t) => t.textContent)).toEqual(['Chăm vườn', 'Sảnh Game', 'Khu vườn']);
     expect(panel(c, 'Cộng đồng')).toBeNull();
   });
 
-  it('?tab=community rơi về Hôm nay và không tải bảng xếp hạng, bạn bè', async () => {
+  it('?tab=community rơi về Chăm vườn và không tải bảng xếp hạng, bạn bè', async () => {
     state.search = 'tab=community';
     const c = await mount();
-    expect(panel(c, 'Hôm nay')!.hidden).toBe(false);
+    expect(panel(c, 'Chăm vườn')!.hidden).toBe(false);
     expect(state.calls).not.toContain('/game/friends');
     expect(state.calls).not.toContain('/game/leaderboard');
   });
@@ -98,7 +98,7 @@ describe('Vườn Xanh web khi cờ GAME_SOCIAL_ON_WEB tắt', () => {
     state.data['/game/collection'] = [];
     state.data['/game/community'] = { goal: null, myDrops: 0, pct: 0 };
     const c = await mount();
-    const garden = panel(c, 'Vườn')!;
+    const garden = panel(c, 'Khu vườn')!;
     expect(garden.textContent).toContain('Mùa Thu Xanh');
     const feed = garden.querySelector<HTMLAnchorElement>('a[href="/cong-dong"]');
     expect(feed?.textContent).toContain('Bảng tin cộng đồng');

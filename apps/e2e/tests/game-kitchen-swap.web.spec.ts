@@ -120,14 +120,14 @@ for (const vp of [
     test.use({ viewport: vp });
     test.beforeEach(({}, testInfo) => test.skip(testInfo.project.name !== 'Web Customer Mobile', 'khổ chạm chạy ở project Web Customer Mobile'));
 
-    test('từ "Chơi hôm nay" vào ván, đổi 3 góc bằng chạm, thêm 3 sản phẩm vào giỏ dùng thử đúng một lần', async ({ page, api }) => {
+    test('từ Sảnh Game vào ván, đổi 3 góc bằng chạm, thêm 3 sản phẩm vào giỏ dùng thử đúng một lần', async ({ page, api }) => {
       const { cartPosts, submits } = setup(api);
       await signedIn(page);
-      await page.goto('/vuon-xanh');
+      await page.goto('/vuon-xanh?tab=games');
       const row = page.getByTestId('mini-play-row-kitchen_swap');
-      await expect(row).toHaveAttribute('href', '/vuon-xanh/choi/kitchen_swap', { timeout: 15_000 });
+      await expect(row.getByRole('link')).toHaveAttribute('href', '/vuon-xanh/choi/kitchen_swap', { timeout: 15_000 });
       await expect(row).toContainText(gameCopy('game.kitchen_swap.title'));
-      await row.click();
+      await row.getByRole('link').click();
       await expect(page).toHaveURL(/\/vuon-xanh\/choi\/kitchen_swap$/);
       await startRound(page);
       await playByTouch(page, `w${vp.width}`);

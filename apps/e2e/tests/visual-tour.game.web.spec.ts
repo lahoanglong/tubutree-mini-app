@@ -28,7 +28,7 @@ for (const state of NEWBIE_STATES) {
     api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     mockNewbieGame(api, state);
     await page.goto('/vuon-xanh');
-    await expect(page.getByRole('tab', { name: 'Hôm nay' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('tab', { name: 'Chăm vườn' })).toBeVisible({ timeout: 30_000 });
     await settle(page);
     mkdirSync(path.join(OUT!, 'web'), { recursive: true });
     await page.screenshot({ path: path.join(OUT!, 'web', `${state}.png`), fullPage: true });

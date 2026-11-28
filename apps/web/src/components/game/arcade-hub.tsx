@@ -1,19 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { Gamepad2 } from 'lucide-react';
-import { ARCADE_GAME_IDS, type ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
+import { ChevronRight } from 'lucide-react';
+import type { MiniTodayResponse } from '@tubutree/shared-types';
+import type { ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
 import { arcadeWindowBadge } from '@tubutree/app-core/arcade/badge';
+import { buildHubCards, hubCardLabel, type HubCard } from '@tubutree/app-core/game-hub/cards';
+import { browserSessionStore, markHubReturn } from '@tubutree/app-core/game-hub/hub-return';
+import { miniPlayPath } from '@tubutree/app-core/game-mini/format';
+import { MATCHER_PATH } from '@tubutree/app-core/game-mini/matcher';
+import { matcherOn, matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { gameArcadeStatusQuery } from '@tubutree/app-core/queries/game';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { Button, Card, Heading, Text } from '@/components/mini';
-import { ARCADE_COPY_KEY, ArcadeGameOverlay, rewardLines } from './arcade-game-overlay';
+import { sfx } from '@/lib/sfx';
+import { Button, Heading, Icon, SectionHeader, Text } from '@/components/mini';
+import { ArcadeGameOverlay, rewardLines } from './arcade-game-overlay';
 import { readGuestBest } from './arcade-storage';
-import { GameCard } from './game-card';
+import { HubArtIcon } from './hub-art';
 import { usePendingArcadeSave, type PendingSaveState } from './use-arcade-save';
 
 const MINUTE_MS = 60_000;
@@ -74,95 +82,150 @@ function PendingSaved({ state, retry }: { state: PendingSaveState; retry: () => 
   );
 }
 
+function cardTestId(card: HubCard): string {
+  if (card.action.kind === 'arcade') return `arcade-card-${card.id}`;
+  if (card.action.kind === 'wheel') return 'hub-card-wheel';
+  return `mini-play-row-${card.id}`;
+}
+
+function statusTestId(card: HubCard): string | undefined {
+  if (card.action.kind === 'arcade') return `arcade-used-${card.id}`;
+  if (card.action.kind === 'mini') return `mini-play-status-${card.id}`;
+  return undefined;
+}
+
+/** Đường dẫn của thẻ mở trang riêng (game mini, Chọn Chuẩn Xanh): là liên kết thật để mở tab mới, chép link được. */
+function cardHref(card: HubCard): string | null {
+  if (card.action.kind === 'mini') return miniPlayPath.web(card.action.game);
+  if (card.action.kind === 'matcher') return `${MATCHER_PATH}?from=play_today`;
+  return null;
+}
+
+/** Một thẻ (bản web của Mini `HubCardView`, cùng lớp CSS): hình trên nền chuyển màu, tên (h3, chứa nút hoặc liên kết phủ cả thẻ), thưởng, kỷ lục, lượt. */
+function HubCardView({ card, loading, onPlay }: { card: HubCard; loading: boolean; onPlay: (card: HubCard) => void }) {
+  const metaId = useId();
+  const href = cardHref(card);
+  const hit = { className: 'tubu-hub-hit', 'aria-label': hubCardLabel(card), 'aria-describedby': metaId };
+  return (
+    <li>
+      <article className="tubu-hub-card" data-testid={cardTestId(card)}>
+        <span className="tubu-hub-art" data-tone={card.tone}>
+          {card.badge && (
+            <span className="tubu-hub-badge" data-kind={card.badge.kind}>
+              {card.badge.text}
+            </span>
+          )}
+          <HubArtIcon art={card.art} />
+        </span>
+        <span className="tubu-hub-body">
+          <Heading as="h3" variant="title-sm" font="ui" className="tubu-hub-title">
+            {href ? (
+              <Link
+                href={href}
+                {...hit}
+                onClick={() => {
+                  sfx.play('pop');
+                  markHubReturn(browserSessionStore);
+                }}
+              >
+                {card.title}
+              </Link>
+            ) : (
+              <button type="button" {...hit} onClick={() => onPlay(card)}>
+                {card.title}
+              </button>
+            )}
+          </Heading>
+          <span id={metaId} className="tubu-hub-meta-stack">
+            {card.reward && <span className="tubu-hub-chip">{card.reward}</span>}
+            {card.best && (
+              <Text variant="caption" tone="secondary" as="span" numeric>
+                {card.best}
+              </Text>
+            )}
+            {card.status ? (
+              <Text variant="caption" tone={card.status.tone} as="span" className="tubu-hub-status" numeric data-testid={statusTestId(card)}>
+                {card.status.text}
+              </Text>
+            ) : (
+              loading && <span className="tubu-skeleton tubu-hub-meta" aria-hidden />
+            )}
+          </span>
+          <Text variant="body-sm" as="span" className="tubu-hub-cta" aria-hidden>
+            {card.cta}
+            <Icon icon={ChevronRight} size="sm" tone="current" />
+          </Text>
+        </span>
+      </article>
+    </li>
+  );
+}
+
 /**
- * Sảnh mini game ở Vườn Xanh: huy hiệu khung giờ thưởng, hai thẻ game (tên, một dòng mô tả, kỷ lục, nút Chơi). Giữ luôn trạng thái mở
- * `ArcadeGameOverlay` nên nơi gắn chỉ là `<ArcadeHub />`. Đã đăng nhập: kỷ lục và số lượt thưởng hôm nay lấy từ máy chủ; khách chơi thử,
- * kỷ lục lưu trên máy (`readGuestBest`).
+ * Sảnh Game của Vườn Xanh (bản web của Mini `ArcadeHub`, cùng props): MỌI game chơi được trong một lưới hai cột thẻ có hình (hai game hành động
+ * canvas, game mini của "Chơi hôm nay", Chọn Chuẩn Xanh, Vòng quay); danh sách dựng ở `buildHubCards`. Thẻ mở trang game riêng đặt dấu
+ * `markHubReturn` để ván xong quay về đúng Sảnh Game. Đã đăng nhập: kỷ lục và số lượt thưởng lấy từ máy chủ; khách chơi thử, kỷ lục lưu trên máy (`readGuestBest`). Giữ luôn trạng thái mở
+ * `ArcadeGameOverlay` và dải báo ván chơi trước khi đăng nhập. `wheel`: thẻ Vòng quay cuộn tới khối vòng quay (có `anchorId`) cùng tab.
  */
-export function ArcadeHub() {
+export function ArcadeHub({ mini, wheel = null }: { mini: MiniTodayResponse | null; wheel?: { cost: number; anchorId: string } | null }) {
   const authed = useAuthPhase() === 'authenticated';
   const status = useQuery({ ...gameArcadeStatusQuery(coreHttp), enabled: authed });
+  const matcher = matcherOn(useQuery({ ...matcherStatusQuery(coreHttp), enabled: mini !== null }).data);
   const badge = arcadeWindowBadge(useMinuteClock());
   const pending = usePendingArcadeSave(authed);
   const [open, setOpen] = useState<ArcadeGameId | null>(null);
+  const headingId = useId();
   // Đọc kỷ lục khách sau khi mount và mỗi lần đóng lớp phủ: máy chủ dựng HTML không có localStorage nên không đọc trong lúc render.
   const [guestBest, setGuestBest] = useState<Record<ArcadeGameId, number> | null>(null);
   useEffect(() => {
     if (open === null) setGuestBest({ dew_catcher: readGuestBest('dew_catcher'), refill_rush: readGuestBest('refill_rush') });
   }, [open]);
+  const cards = buildHubCards({
+    real: authed,
+    arcade: status.data,
+    guestBest: authed ? null : guestBest,
+    bonusWindow: badge.activeWindow !== null,
+    mini,
+    matcher,
+    wheelCost: wheel?.cost ?? null,
+  });
+
+  const play = (card: HubCard) => {
+    sfx.play('pop');
+    const a = card.action;
+    if (a.kind === 'arcade') setOpen(a.game);
+    else if (a.kind === 'wheel' && wheel) document.getElementById(wheel.anchorId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
-    <>
-      <GameCard title={fillCopy('arcade.hub.title')} icon={Gamepad2}>
-        <div data-testid="arcade-hub" className="flex flex-col gap-3">
-          <Text variant="body-sm" tone="secondary" as="p">
-            {fillCopy('arcade.hub.sub')}
-          </Text>
-          {/* Cùng kiểu với bản Mini (arcade.css `.tubu-arcade-badge`): nền dịu, khung đang chạy thì nền xanh nhạt kèm viền trong. */}
-          <div
-            role="note"
-            data-testid="arcade-badge"
-            data-active={badge.activeWindow ?? undefined}
-            className={`flex flex-col gap-1 rounded-card p-3 ${badge.activeWindow ? 'bg-[var(--color-action-secondary-bg)] shadow-[inset_0_0_0_1px_var(--color-action-secondary-border)]' : 'bg-[var(--color-bg-subtle)]'}`}
-          >
-            <Text variant="caption" tone="primary" as="p">
-              {badge.label}
-            </Text>
-            <Text variant="caption" tone={badge.activeWindow ? 'brand' : 'secondary'} as="p" style={badge.activeWindow ? { fontWeight: 'var(--type-label-weight)' } : undefined}>
-              {badge.hint}
-            </Text>
-          </div>
-          <PendingSaved state={pending.state} retry={pending.retry} />
-          {!authed && (
-            <Text variant="caption" tone="tertiary" as="p">
-              {fillCopy('arcade.guest.demo')}
-            </Text>
-          )}
-          {/* Hai thẻ cạnh nhau khi đủ rộng (mỗi thẻ tối thiểu 18rem), một cột ở điện thoại và ở cột hẹp của Vườn Xanh: không cần điểm ngắt. */}
-          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-2 p-0">
-            {ARCADE_GAME_IDS.map((id) => {
-              const k = ARCADE_COPY_KEY[id];
-              const title = fillCopy(`arcade.${k}.title`);
-              const play = fillCopy(authed ? 'arcade.play' : 'arcade.tryPlay');
-              const mine = status.data?.games[id];
-              const best = authed ? mine?.bestScore : guestBest?.[id];
-              return (
-                <li key={id} data-testid={`arcade-card-${id}`}>
-                  <Card variant="outline" padding={12}>
-                    <div className="flex items-center gap-3">
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <Heading variant="title-sm" font="ui" as="h3">
-                          {title}
-                        </Heading>
-                        <Text variant="body-sm" tone="secondary" as="p">
-                          {fillCopy(`arcade.${k}.desc`)}
-                        </Text>
-                        {/* Giữ chỗ một dòng chữ nhỏ lúc trạng thái chưa về để thẻ không nhảy khi kỷ lục và số lượt hiện ra. */}
-                        <div className="min-h-[calc(var(--type-caption-size)*var(--type-caption-lh))]">
-                          {best ? (
-                            <Text variant="caption" tone="secondary" as="p" numeric>
-                              {fillCopy('arcade.best', { n: best })}
-                            </Text>
-                          ) : null}
-                          {authed && mine && (
-                            <Text variant="caption" tone="secondary" as="p" numeric data-testid={`arcade-used-${id}`}>
-                              {fillCopy('arcade.result.used', { n: mine.used, m: mine.cap })}
-                            </Text>
-                          )}
-                        </div>
-                      </div>
-                      <Button variant="secondary" className="flex-none" aria-label={`${play} ${title}`} onPress={() => setOpen(id)}>
-                        {play}
-                      </Button>
-                    </div>
-                  </Card>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </GameCard>
+    <section aria-labelledby={headingId} className="flex flex-col gap-3" data-testid="arcade-hub">
+      <SectionHeader id={headingId} title={fillCopy('arcade.hub.title')} subtitle={fillCopy('arcade.hub.sub')} />
+      {/* Cùng kiểu với bản Mini (arcade.css `.tubu-arcade-badge`): nền dịu, khung đang chạy thì nền xanh nhạt kèm viền trong. */}
+      <div
+        role="note"
+        data-testid="arcade-badge"
+        data-active={badge.activeWindow ?? undefined}
+        className={`flex flex-col gap-1 rounded-card p-3 ${badge.activeWindow ? 'bg-[var(--color-action-secondary-bg)] shadow-[inset_0_0_0_1px_var(--color-action-secondary-border)]' : 'bg-[var(--color-bg-subtle)]'}`}
+      >
+        <Text variant="caption" tone="primary" as="p">
+          {badge.label}
+        </Text>
+        <Text variant="caption" tone={badge.activeWindow ? 'brand' : 'secondary'} as="p" style={badge.activeWindow ? { fontWeight: 'var(--type-label-weight)' } : undefined}>
+          {badge.hint}
+        </Text>
+      </div>
+      <PendingSaved state={pending.state} retry={pending.retry} />
+      {!authed && (
+        <Text variant="caption" tone="secondary" as="p">
+          {fillCopy('arcade.guest.demo')}
+        </Text>
+      )}
+      <ul className="tubu-hub-grid">
+        {cards.map((card) => (
+          <HubCardView key={card.id} card={card} loading={authed && card.action.kind === 'arcade' && status.isLoading} onPlay={play} />
+        ))}
+      </ul>
       {open && <ArcadeGameOverlay key={open} gameId={open} onClose={() => setOpen(null)} />}
-    </>
+    </section>
   );
 }

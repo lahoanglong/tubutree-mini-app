@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Info } from 'lucide-react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
-import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy, wasteRulesSheetCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { getWasteCatalogue, getWasteMe, listWasteRequests, WASTE_QUERY_KEYS } from '../services/waste-api';
@@ -15,6 +16,7 @@ import { useAuthStore } from '../store/auth';
 import { useRecycleLogin } from '../hooks/use-recycle-login';
 import { trackRecycleStep } from '../services/recycle-funnel';
 import { WasteItemThumb } from '../components/waste-item-thumb';
+import { WasteRulesSheet, WasteStepStrip } from '../components/waste-steps';
 import { RecyclePageSkeleton } from '../components/recycle-page-skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -30,7 +32,7 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
 import { Timeline } from '../components/ui/timeline';
 import { Heading, Text } from '../components/ui/text';
-import { formatNumber, formatPoints, formatVnd } from '../utils/format';
+import { formatPoints, formatVnd } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import {
   METHOD_LABELS,
@@ -45,14 +47,8 @@ import {
   requestStatusText,
   ruleText,
   timelineFor,
+  impactLine,
 } from '../utils/waste-labels';
-
-/** Một chữ số thập phân; dưới 50 g làm tròn về 0 kg thì không có dòng nào (null). */
-export function impactLine(grams: number | null | undefined): string | null {
-  if (grams == null) return null;
-  const kg = Math.round(grams / 100) / 10;
-  return kg > 0 ? `Bạn đã gửi khoảng ${formatNumber(kg)} kg bao bì cho Tubu` : null;
-}
 
 const BLOCKED_TEXT = 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree';
 
@@ -66,6 +62,36 @@ const METHOD_LINE: Record<WasteMethod, string> = {
 };
 
 const SECTION_STYLE = { display: 'flex', flexDirection: 'column', gap: 8 } as const;
+
+/**
+ * Khối "Cách đổi": tiêu đề + nút "ⓘ Thể lệ" mở sheet, dải 3 bước có biểu tượng, rồi nút chính (nếu có).
+ * Câu đầy đủ từng bước và các cách giao nằm trong sheet để màn chính chỉ còn một hàng bước và một nút.
+ */
+function HowTo({ methods = [], onRules, children }: { methods?: readonly WasteMethod[]; onRules: () => void; children?: React.ReactNode }) {
+  const cfg = usePublicConfig();
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="tubu-waste-howto">
+      <div className="tubu-waste-howto-head">
+        <Heading variant="title-md" as="h2">
+          {wasteGuestCopy.stepsTitle}
+        </Heading>
+        <Button variant="ghost" icon={Info} onPress={() => setOpen(true)} style={{ flexShrink: 0 }}>
+          {wasteRulesSheetCopy.button}
+        </Button>
+      </div>
+      <WasteStepStrip flags={cfg.waste} />
+      {children}
+      <WasteRulesSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        steps={wasteIntroCopy(cfg.waste).steps}
+        methods={methods.map((m) => ({ label: METHOD_LABELS[m], line: METHOD_LINE[m] }))}
+        onFullRules={onRules}
+      />
+    </section>
+  );
+}
 
 function NoticeCard({ text }: { text: string }) {
   return (
@@ -129,24 +155,8 @@ function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | un
           {intro.intro}
         </Text>
       </div>
-      <section style={SECTION_STYLE}>
-        <Heading variant="title-md" as="h2">
-          {wasteGuestCopy.stepsTitle}
-        </Heading>
-        <ol style={{ margin: 0, paddingLeft: 20, listStyle: 'decimal', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {intro.steps.map((t) => (
-            <li key={t}>
-              <Text variant="body-sm" as="span">
-                {t}
-              </Text>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <HowTo onRules={onRules} />
       {items === undefined ? <Skeleton height={120} radius="var(--radius-card)" /> : <ItemList items={items} />}
-      <div>
-        <ListRow title={wasteGuestCopy.rulesLink} trailing="chevron" onPress={onRules} />
-      </div>
     </>
   );
 }
@@ -390,47 +400,30 @@ export default function RecyclePage() {
               )}
             </div>
           )}
-          {methods.length > 0 && lastDone ? (
-            <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/recycle/new" />
-          ) : (
-            methods.length > 0 && (
-              <Button fullWidth onPress={() => navigate('/recycle/new')}>
-                Đổi rác ngay
-              </Button>
-            )
-          )}
         </div>
       </Card>
+
+      {methods.length > 0 && (
+        <HowTo methods={methods} onRules={() => navigate('/recycle/rules')}>
+          {lastDone ? (
+            <RepeatWasteCard request={lastDone} methodLabel={METHOD_LABELS[lastDone.method]} items={me.items} methods={methods} newHref="/recycle/new" />
+          ) : (
+            <Button fullWidth onPress={() => navigate('/recycle/new')}>
+              Đổi rác ngay
+            </Button>
+          )}
+        </HowTo>
+      )}
 
       {recentBlock}
 
       {requestsBlock}
 
-      {methods.length > 0 && (
-        <section style={SECTION_STYLE}>
-          <Heading variant="title-md" as="h2">
-            Cách đổi
-          </Heading>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {methods.map((m) => (
-              <li key={m}>
-                <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-                  {METHOD_LABELS[m]}
-                </Text>
-                <Text variant="caption" tone="secondary" as="div">
-                  {METHOD_LINE[m]}
-                </Text>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <ItemList items={items} />
 
       <div>
         <ListRow title="Kho quà" subtitle={giftNames || undefined} trailing="chevron" onPress={() => goSmart(offersTabHref('/offers', 'rewards'))} />
-        <ListRow title="Thể lệ chương trình" trailing="chevron" onPress={() => navigate('/recycle/rules')} />
+        {methods.length === 0 && <ListRow title="Thể lệ chương trình" trailing="chevron" onPress={() => navigate('/recycle/rules')} />}
       </div>
     </>,
   );

@@ -1,12 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { Lightbulb } from 'lucide-react';
 import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '@tubutree/app-core/api/game';
+import { hubCopy } from '@tubutree/app-core/game-hub/copy';
+import { treeStageLabel } from '@tubutree/app-core/game-hub/scene';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import type { CouponNotice } from '@/lib/use-coupon-use';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
+import { sfx } from '@/lib/sfx';
+import { Burst } from './burst';
 import { rarityBorder, rarityLabel, rarityText } from './game-utils';
+import { GardenTreeArt } from './garden-tree-art';
 
 const CONFETTI = [
   ['6%', 'bg-forest-500', 0],
@@ -31,7 +36,7 @@ function Confetti() {
   );
 }
 
-// Harvest celebration. 🌳 lớn, 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
+// Harvest celebration. Cây vector đã ra quả (cùng hình thẻ đầu Vườn), 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
 export function HarvestCelebration({
   open,
   coupons,
@@ -90,6 +95,9 @@ export function HarvestCelebration({
   const loginSent = useRef(false);
   useEffect(() => {
     if (open) loginSent.current = false;
+  }, [open]);
+  useEffect(() => {
+    if (open) sfx.play('harvest');
   }, [open]);
   const seedling = sprout || (points != null && points > 0);
   const showPoints = points != null && points > 0;
@@ -158,10 +166,11 @@ export function HarvestCelebration({
     >
       <div className="relative text-center">
         {open && <Confetti />}
-        <div className="text-6xl leading-tight" aria-hidden="true">
+        <div className="tubu-harvest-art">
           <span key={String(open)} className="tubu-grow">
-            🌳
+            <GardenTreeArt stage="bloom" label={hubCopy('hero.treeAria', { stage: treeStageLabel('bloom') })} />
           </span>
+          {open && <Burst />}
         </div>
         <p className="mt-1 text-sm text-stone-700">
           {certificate ? t.fund : seedling ? t.seedling : t.grown}

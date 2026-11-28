@@ -290,3 +290,10 @@ export function isOpenNow(hours: WasteOpeningHours, now: Date): boolean {
 }
 
 export { pointAddress };
+
+/** Một chữ số thập phân; dưới 50 g làm tròn về 0 kg thì không có dòng nào (null). */
+export function impactLine(grams: number | null | undefined): string | null {
+  if (grams == null) return null;
+  const kg = Math.round(grams / 100) / 10;
+  return kg > 0 ? `Bạn đã gửi khoảng ${formatNumber(kg)} kg bao bì cho Tubu` : null;
+}

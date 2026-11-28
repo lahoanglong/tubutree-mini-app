@@ -92,6 +92,11 @@ beforeEach(() => {
   mocks.getLoyalty.mockResolvedValue({ pointsBalance: 30_000, pointsConvertedBalance: 5000, lockedPoints: 0, redeemablePoints: 30_000 });
 });
 const card = (name: string) => screen.getByText(name).closest('[data-reward]') as HTMLElement;
+/** Chạm tên quà mở sheet chi tiết (câu dài không còn nằm trên thẻ gọn). */
+const openDetail = async (name: string) => {
+  fireEvent.click(within(card(name)).getByRole('button', { name: new RegExp(name) }));
+  return screen.findByTestId('reward-detail');
+};
 
 describe('/rewards Kho quà (§4.8)', () => {
   it('số dư tổng hai lô, ghi chú luật, liên kết "Quà của tôi"', async () => {
@@ -144,13 +149,14 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(within(c50).getByTestId('progress-fill')).toHaveStyle({ width: '60%' });
     expect(within(c50).queryByRole('button', { name: 'Đổi' })).toBeNull();
   });
-  it('thẻ quà: biểu tượng theo loại, giá và nút Đổi cùng một hàng', async () => {
+  it('thẻ quà gọn: biểu tượng theo loại, tên, viên giá điểm và nút Đổi cùng một hàng', async () => {
     renderPage();
     const voucher = await waitFor(() => card('Miễn phí vận chuyển'));
     expect(within(voucher).getByTestId('reward-icon').querySelector('svg.lucide-ticket')).not.toBeNull();
-    const price = within(voucher).getByText(/điểm$/, { selector: 'div' });
+    const price = within(voucher).getByTestId('reward-points');
+    expect(price.textContent).toMatch(/điểm$/);
     const button = within(voucher).getByRole('button', { name: 'Đổi' });
-    expect(price.parentElement).toBe(button.parentElement);
+    expect(price.closest('.tubu-reward-row')).toBe(button.closest('.tubu-reward-row'));
     fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
     expect(within(card('Gói hạt giống Tubu')).getByTestId('reward-icon').querySelector('svg.lucide-leaf')).not.toBeNull();
     expect(within(card('Góp quỹ trồng cây')).getByTestId('reward-icon').querySelector('svg.lucide-sprout')).not.toBeNull();
@@ -165,11 +171,16 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(within(bag).queryByTestId('progress-fill')).toBeNull();
     expect(within(bag).queryByText(/Cần thêm/)).toBeNull();
   });
-  it('tồn kho và nơi nhận trên thẻ gói hạt', async () => {
+  it('tồn kho là viên ngắn trên thẻ gói hạt; cách nhận chỉ ở sheet chi tiết (chạm tên quà), sheet có nút Đổi', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Cây và hạt' }));
-    expect(within(card('Gói hạt giống Tubu')).getByText('Còn 3')).toBeInTheDocument();
-    expect(within(card('Gói hạt giống Tubu')).getByText('Nhận tại kho Tubu TP.HCM')).toBeInTheDocument();
+    const seeds = card('Gói hạt giống Tubu');
+    expect(within(seeds).getByTestId('reward-pill').textContent).toBe('Còn 3');
+    expect(within(seeds).queryByText('Nhận tại kho Tubu TP.HCM')).toBeNull();
+    const detail = await openDetail('Gói hạt giống Tubu');
+    expect(within(detail).getByText('Nhận tại kho Tubu TP.HCM')).toBeInTheDocument();
+    expect(within(detail).getByText('Còn 3 phần quà')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Đổi · / })).toBeEnabled();
   });
   it('W179-C: phoneVerified=false hiện đúng 1 thẻ thông báo xác minh SĐT trên tab quà vật lý (1 nút), khoá nút Đổi trên thẻ quà vật lý, không ảnh hưởng Mã giảm giá', async () => {
     const base = makeRewardCatalog();
@@ -310,9 +321,11 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(names[0]).toContain('Giảm 50.000đ');
     expect(names[1]).toContain('Miễn phí vận chuyển');
     const free = card('Miễn phí vận chuyển');
-    expect(within(free).getByText('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ')).toBeInTheDocument();
+    expect(within(free).getByTestId('reward-pill').textContent).toBe('Trùng quyền lợi hạng');
     expect(within(free).getByRole('button', { name: 'Đổi' })).toBeEnabled();
     expect(within(free).queryByText('Phổ biến')).toBeNull();
+    expect(within(await openDetail('Miễn phí vận chuyển')).getByText('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     expect(within(card('Giảm 50.000đ')).getByRole('button', { name: 'Đổi' })).toBeEnabled();
     fireEvent.click(within(free).getByRole('button', { name: 'Đổi' }));
     const sheet = await screen.findByRole('dialog');
@@ -329,7 +342,9 @@ describe('/rewards Kho quà (§4.8)', () => {
     renderPage();
     expect(within(await waitFor(() => card('Miễn phí vận chuyển'))).queryByText(LABEL)).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
-    expect(within(card('Gói hạt giống Tubu')).getByText(LABEL)).toBeInTheDocument();
+    expect(within(card('Gói hạt giống Tubu')).queryByText(LABEL)).toBeNull();
+    expect(within(await openDetail('Gói hạt giống Tubu')).getByText(LABEL)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     expect(within(card('Góp quỹ trồng cây')).queryByText(LABEL)).toBeNull();
     expect(document.body.textContent).not.toContain('Chỉ nhận tại kho');
     fireEvent.click(within(card('Gói hạt giống Tubu')).getByRole('button', { name: 'Đổi' }));

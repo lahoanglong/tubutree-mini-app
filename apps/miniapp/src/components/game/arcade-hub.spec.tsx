@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { MiniTodayResponse } from '@tubutree/shared-types';
 import type { ArcadeStatus } from '@tubutree/app-core/api/game';
 import type { ArcadeMountOptions } from '@tubutree/app-core/arcade/arcade-canvas';
+import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +13,16 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn(),
   mount: vi.fn(),
   controller: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn() },
+  navigate: vi.fn(),
+  matcher: vi.fn(),
+  play: vi.fn(),
+}));
+vi.mock('../../lib/smart-nav', () => ({ useSmartNavigate: () => mocks.navigate }));
+vi.mock('../../utils/sfx', () => ({ sfx: { play: (cue: string) => mocks.play(cue) } }));
+vi.mock('../../pages/game-album', () => ({ AlbumLine: () => <div data-testid="album-line" /> }));
+vi.mock('@tubutree/app-core/game-mini/matcher-status', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  matcherStatusQuery: () => ({ queryKey: ['game', 'matcher', 'status'], queryFn: () => mocks.matcher() }),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../store/auth', () => {
@@ -50,9 +62,21 @@ const STATUS: ArcadeStatus = {
   quizClaimed: false,
 };
 
-function renderHub() {
+const TODAY: MiniTodayResponse = {
+  dayKey: '2026-11-28',
+  games: [
+    { game: 'sort', items: 10, timeLimitMs: 45_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
+    { game: 'daily_quiz', items: 3, timeLimitMs: 60_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 1, playedToday: 1 },
+  ],
+  rewardEligible: true,
+  noRewardReason: null,
+  caps: { waterUsed: 0, waterCap: 40, pointsUsed: 0, pointsCap: 100, accountCapReached: false, pointsBudgetExhausted: false },
+  dailyQuizDoneToday: false,
+};
+
+function renderHub(props: Partial<Parameters<typeof ArcadeHub>[0]> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return { qc, ...render(<QueryClientProvider client={qc}><ArcadeHub /></QueryClientProvider>) };
+  return { qc, ...render(<QueryClientProvider client={qc}><ArcadeHub mini={null} {...props} /></QueryClientProvider>) };
 }
 const game = (id: 'dew_catcher' | 'refill_rush') => within(screen.getByTestId(`arcade-game-${id}`));
 const at = (iso: string) => vi.useFakeTimers({ toFake: ['Date'], now: new Date(iso) });
@@ -62,6 +86,7 @@ beforeEach(() => {
   mocks.phase = 'authenticated';
   mocks.status.mockResolvedValue(STATUS);
   mocks.start.mockResolvedValue({ runId: 'r1.dew_catcher.1.x.sig', startedAt: '2026-11-15T01:00:00.000Z', expiresAt: '2026-11-15T01:10:00.000Z' });
+  mocks.matcher.mockResolvedValue({ enabled: false });
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -69,26 +94,25 @@ afterEach(() => {
 });
 
 describe('ArcadeHub: sảnh mini game', () => {
-  it('có tiêu đề h2 "Mini game", danh sách đúng hai game, mỗi game một h3 và một nút Chơi có tên rõ', async () => {
+  it('có tiêu đề h2 "Mini game", danh sách đúng hai game, mỗi game một h3 chứa nút có tên rõ và dòng thưởng', async () => {
     renderHub();
     expect(screen.getByRole('heading', { level: 2, name: fillCopy('arcade.hub.title') })).toBeInTheDocument();
     expect(screen.getByText(fillCopy('arcade.hub.sub'))).toBeInTheDocument();
     const items = within(screen.getByRole('list')).getAllByRole('listitem');
     expect(items).toHaveLength(2);
-    expect(game('dew_catcher').getByRole('heading', { level: 3, name: 'Hứng Sương Tinh Khiết' })).toBeInTheDocument();
-    expect(game('refill_rush').getByRole('heading', { level: 3, name: 'Phân Loại Vỏ Chai Thần Tốc' })).toBeInTheDocument();
-    expect(game('dew_catcher').getByText(fillCopy('arcade.dew.desc'))).toBeInTheDocument();
-    expect(game('refill_rush').getByText(fillCopy('arcade.rush.desc'))).toBeInTheDocument();
+    expect(game('dew_catcher').getByRole('heading', { level: 3, name: /Hứng Sương Tinh Khiết/ })).toBeInTheDocument();
+    expect(game('refill_rush').getByRole('heading', { level: 3, name: /Phân Loại Vỏ Chai Thần Tốc/ })).toBeInTheDocument();
+    expect(game('dew_catcher').getByText('+💧 Giọt nước')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chơi Hứng Sương Tinh Khiết' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chơi Phân Loại Vỏ Chai Thần Tốc' })).toBeInTheDocument();
     await game('dew_catcher').findByText(fillCopy('arcade.best', { n: 240 }));
   });
 
-  it('đã đăng nhập: kỷ lục và lượt thưởng đã dùng/trần lấy từ máy chủ; game chưa chơi chỉ có lượt', async () => {
+  it('đã đăng nhập: kỷ lục và lượt thưởng còn lại lấy từ máy chủ; game chưa chơi chỉ có lượt', async () => {
     renderHub();
     expect(await game('dew_catcher').findByText(fillCopy('arcade.best', { n: 240 }))).toBeInTheDocument();
-    expect(game('dew_catcher').getByText(fillCopy('arcade.result.used', { n: 2, m: 3 }))).toBeInTheDocument();
-    expect(await game('refill_rush').findByText(fillCopy('arcade.result.used', { n: 0, m: 3 }))).toBeInTheDocument();
+    expect(game('dew_catcher').getByTestId('arcade-status-dew_catcher')).toHaveTextContent(gameCopy('row.left', { n: 1 }));
+    expect(await game('refill_rush').findByText(gameCopy('row.left', { n: 3 }))).toBeInTheDocument();
     expect(game('refill_rush').queryByText(/^Kỷ lục/)).toBeNull();
     expect(mocks.status).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(fillCopy('arcade.guest.demo'))).toBeNull();
@@ -100,7 +124,7 @@ describe('ArcadeHub: sảnh mini game', () => {
     expect(screen.getAllByRole('button', { name: /^Chơi / })).toHaveLength(2);
     await waitFor(() => expect(mocks.status).toHaveBeenCalled());
     await waitFor(() => expect(document.querySelector('.tubu-skeleton')).toBeNull());
-    expect(screen.queryByText(/Đã dùng \d+\/\d+ lượt thưởng/)).toBeNull();
+    expect(screen.queryByText(/Còn \d+ lượt thưởng/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Chơi Hứng Sương Tinh Khiết' })).toBeEnabled();
   });
 
@@ -113,7 +137,7 @@ describe('ArcadeHub: sảnh mini game', () => {
     expect(screen.getAllByText(fillCopy('arcade.guest.demo'))).toHaveLength(1);
     expect(game('refill_rush').getByText(fillCopy('arcade.best', { n: 310 }))).toBeInTheDocument();
     expect(game('dew_catcher').queryByText(/^Kỷ lục/)).toBeNull();
-    expect(screen.queryByText(/Đã dùng \d+\/\d+ lượt thưởng/)).toBeNull();
+    expect(screen.queryByText(/Còn \d+ lượt thưởng/)).toBeNull();
     expect(mocks.status).not.toHaveBeenCalled();
   });
 
@@ -124,7 +148,7 @@ describe('ArcadeHub: sảnh mini game', () => {
     expect(screen.getByRole('button', { name: 'Chơi thử Hứng Sương Tinh Khiết' })).toBeInTheDocument();
     expect(screen.getAllByText(fillCopy('arcade.guest.demo'))).toHaveLength(1);
     expect(game('dew_catcher').getByText(fillCopy('arcade.best', { n: 120 }))).toBeInTheDocument();
-    expect(screen.queryByText(/Đã dùng \d+\/\d+ lượt thưởng/)).toBeNull();
+    expect(screen.queryByText(/Còn \d+ lượt thưởng/)).toBeNull();
     expect(mocks.status).not.toHaveBeenCalled();
   });
 
@@ -132,7 +156,56 @@ describe('ArcadeHub: sảnh mini game', () => {
     mocks.phase = 'loading';
     renderHub();
     expect(mocks.status).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Đã dùng \d+\/\d+ lượt thưởng/)).toBeNull();
+    expect(screen.queryByText(/Còn \d+ lượt thưởng/)).toBeNull();
+  });
+});
+
+describe('ArcadeHub: Sảnh Game gom mọi game', () => {
+  it('cờ game mini bật: hai game hành động VẪN hiện cùng game mini (lỗi cũ: bị ẩn), thứ tự cố định, mỗi thẻ một hình', async () => {
+    renderHub({ mini: TODAY });
+    const ids = within(screen.getByRole('list'))
+      .getAllByRole('article')
+      .map((a) => a.getAttribute('data-testid'));
+    expect(ids).toEqual(['arcade-game-dew_catcher', 'arcade-game-refill_rush', 'mini-play-row-daily_quiz', 'mini-play-row-sort']);
+    expect(screen.getByTestId('mini-play-status-daily_quiz')).toHaveTextContent(gameCopy('row.left', { n: 1 }));
+    expect(within(screen.getByTestId('mini-play-row-sort')).getByText('+💧 · Điểm Xanh')).toBeInTheDocument();
+    expect(document.querySelectorAll('.tubu-hub-art-svg')).toHaveLength(4);
+    expect(await screen.findByTestId('album-line')).toBeInTheDocument();
+  });
+
+  it('chạm thẻ game mini mở màn chơi trong Mini App và kêu "pop"', () => {
+    renderHub({ mini: TODAY });
+    fireEvent.click(screen.getByRole('button', { name: 'Chơi Đúng Thùng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/game/play/sort');
+    expect(mocks.play).toHaveBeenCalledWith('pop');
+  });
+
+  it('Chọn Chuẩn Xanh khi cờ bật; Vòng quay cuộn tới khối vòng quay cùng tab', async () => {
+    mocks.matcher.mockResolvedValue({ enabled: true });
+    const anchor = document.createElement('div');
+    anchor.id = 'game-wheel';
+    anchor.scrollIntoView = vi.fn();
+    document.body.appendChild(anchor);
+    renderHub({ mini: TODAY, wheel: { cost: 10_000, anchorId: 'game-wheel' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Mở Chọn Chuẩn Xanh' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/game/matcher?from=play_today');
+    expect(within(screen.getByTestId('hub-card-wheel')).getByText('10.000 Điểm Xanh mỗi lượt')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Quay Vòng Quay May Mắn' }));
+    expect(anchor.scrollIntoView).toHaveBeenCalled();
+    anchor.remove();
+  });
+
+  it('không có game mini thì không hỏi cờ Chọn Chuẩn Xanh và không có dòng Sổ tay', () => {
+    renderHub();
+    expect(mocks.matcher).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('album-line')).toBeNull();
+  });
+
+  it('trong khung giờ thưởng, hai game hành động mang huy hiệu "Giờ thưởng"', () => {
+    at('2026-11-14T00:00:00Z');
+    renderHub({ mini: TODAY });
+    expect(screen.getAllByText('Giờ thưởng')).toHaveLength(2);
+    expect(within(screen.getByTestId('mini-play-row-sort')).queryByText('Giờ thưởng')).toBeNull();
   });
 });
 

@@ -44,12 +44,12 @@ for (const { width, height, project } of [
     test.use({ viewport: { width, height } });
     test.beforeEach(({}, testInfo) => test.skip(testInfo.project.name !== project, `khổ ${width}px chạy ở project ${project}`));
 
-    test('dòng lối vào dưới Chơi hôm nay mở sổ: một nút chính, chip cuộn ngang, lưới đúng số cột, trang noindex', async ({ page, api }) => {
+    test('dòng lối vào dưới lưới Sảnh Game mở sổ: một nút chính, chip cuộn ngang, lưới đúng số cột, trang noindex', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       mockAlbum(api);
       await signedIn(page);
-      await page.goto('/vuon-xanh');
+      await page.goto('/vuon-xanh?tab=games');
       const entry = page.getByTestId('album-entry');
       await expect(entry).toHaveText(albumCopy('entry', { n: 6, m: 86 }), { timeout: 15_000 });
       await expect(entry).toHaveAttribute('href', '/vuon-xanh/so-tay');
@@ -140,8 +140,8 @@ test.describe('Web 390px: ván ôn, dòng +N, cờ tắt, khách, lỗi mạng',
     mockMiniGames(api);
     mockAlbum(api, { off: true });
     await signedIn(page);
-    await page.goto('/vuon-xanh');
-    await expect(page.getByTestId('mini-play-today')).toBeVisible({ timeout: 15_000 });
+    await page.goto('/vuon-xanh?tab=games');
+    await expect(page.getByTestId('mini-play-row-sort')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('album-entry')).toHaveCount(0);
     await page.goto('/vuon-xanh/so-tay');
     await expect(page.getByText(albumCopy('off'))).toBeVisible({ timeout: 15_000 });

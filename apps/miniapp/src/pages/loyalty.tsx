@@ -39,23 +39,10 @@ import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
+import { TierMedallion } from '../components/loyalty/tier-medallion';
+import { tierMedalAt, tierNextLine } from '@tubutree/app-core/loyalty-medal';
 import { convertedPointsNote, expiringPointsNote, marketplacePointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
-
-/**
- * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
- * primitive v2 (thang sage → forest → clay): hạng phân biệt nhau theo độ "già" của xanh, không có
- * token semantic --color-* nào diễn đạt được, và scripts/check-undefined-css-vars.mjs chỉ biết các
- * token trong design-tokens/tokens.css nên token riêng của trang sẽ bị báo "chưa định nghĩa".
- */
-const TIER_STYLES: readonly { emoji: string; color: string; bg: string }[] = [
-  { emoji: '🌱', color: 'var(--sage-700)', bg: 'var(--sage-50)' },
-  { emoji: '🌿', color: 'var(--sage-600)', bg: 'var(--sage-100)' },
-  { emoji: '🌳', color: 'var(--forest-700)', bg: 'var(--forest-50)' },
-  { emoji: '🌲', color: 'var(--forest-900)', bg: 'var(--clay-50)' },
-];
-/** Tra theo THỨ HẠNG (không theo tên): đổi tên hạng trong admin vẫn giữ biểu tượng và màu. */
-const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TIER_STYLES.length - 1)]!;
 
 /** Lề của các thẻ khối dưới thẻ hạng (dòng điểm danh, dòng sang Ưu đãi, mục gập luật). */
 const BLOCK_INSET: CSSProperties = { margin: '0 var(--space-gutter) var(--space-inset-card)' };
@@ -101,7 +88,8 @@ export default function LoyaltyPage() {
   };
 
   const data = loyaltyQ.data;
-  const tierStyle = tierStyleAt(data ? tierRank(data.tiers, { id: data.tier?.id }) : 0);
+  const rank = data ? tierRank(data.tiers, { id: data.tier?.id }) : 0;
+  const tierStyle = tierMedalAt(rank);
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
   const perks = Array.isArray(data?.tier?.perks) ? (data.tier.perks as string[]) : [];
 
@@ -111,6 +99,7 @@ export default function LoyaltyPage() {
   const rates = data?.rates;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   const progress = data ? tierProgressPercent(data) : 0;
+  const nextLine = next ? tierNextLine(next, { money: moneyShort, points: formatNumber, spendFor: rates ? (p) => pointsToSpend(p, rates) : null }) : null;
   // Con số khách thấy là tổng hai lô.
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
@@ -161,8 +150,7 @@ export default function LoyaltyPage() {
         <ErrorState message={getLoadErrorMessage(loyaltyQ.error)} onRetry={() => loyaltyQ.refetch()} />
       ) : data ? (
         <>
-          <PointsBoostStrip placement="wallet" />
-          {/* Medallion hạng */}
+          {/* Thẻ hạng đứng đầu trang; dải tăng điểm nằm ngay dưới. */}
           <div style={{ padding: 16 }}>
             <div
               style={{
@@ -173,10 +161,10 @@ export default function LoyaltyPage() {
                 boxShadow: 'var(--elevation-1)',
               }}
             >
-              <div aria-hidden style={{ fontSize: 56, lineHeight: '64px' }}>
-                {tierStyle.emoji}
+              <div className="tubu-tier-hero-medal">
+                <TierMedallion rank={rank} size="lg" />
               </div>
-              <Heading variant="title-lg" as="h2" style={{ color: tierStyle.color, marginTop: 4 }}>
+              <Heading variant="title-lg" as="h2" style={{ color: tierStyle.ink, marginTop: 4 }}>
                 {tierName}
               </Heading>
               <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
@@ -204,7 +192,7 @@ export default function LoyaltyPage() {
                 </Text>
               )}
 
-              {next ? (
+              {nextLine ? (
                 <div style={{ marginTop: 16 }}>
                   <div
                     role="progressbar"
@@ -223,28 +211,20 @@ export default function LoyaltyPage() {
                       style={{
                         height: '100%',
                         width: `${progress}%`,
-                        background: tierStyle.color,
+                        background: tierStyle.ink,
                         borderRadius: 'var(--radius-pill)',
                         transition: 'width var(--motion-emphasize)',
                       }}
                     />
                   </div>
-                  <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-                    {next.spendingToGo != null ? (
-                      <>
-                        Còn <b>{moneyShort(next.spendingToGo)}</b> mua hàng để lên hạng {next.name}
-                      </>
-                    ) : (
-                      <>
-                        Còn <b>{formatNumber(next.pointsToGo)}</b> điểm tích từ mua hàng
-                        {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để
-                        lên hạng {next.name}
-                      </>
-                    )}
+                  <Text variant="caption" tone="secondary" as="div" className="tubu-tier-progress-line" data-testid="tier-next-line">
+                    {nextLine.before}
+                    <b>{nextLine.amount}</b>
+                    {nextLine.after}
                   </Text>
                 </div>
               ) : (
-                <Text variant="caption" as="div" style={{ color: tierStyle.color, marginTop: 8 }}>
+                <Text variant="caption" as="div" style={{ color: tierStyle.ink, marginTop: 8 }}>
                   Bạn đang ở hạng cao nhất 🎉
                 </Text>
               )}
@@ -271,6 +251,7 @@ export default function LoyaltyPage() {
               </div>
             </div>
           </div>
+          <PointsBoostStrip placement="wallet" />
 
           {/* Điểm danh chỉ làm ở Vườn Xanh: trang này chỉ báo hôm nay đã/chưa và mở Vườn Xanh. */}
           <OffersCheckInStrip
@@ -321,7 +302,7 @@ export default function LoyaltyPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {data.tiers.map((t, rank) => {
                 const active = data.tier ? t.id === data.tier.id : rank === 0;
-                const ts = tierStyleAt(rank);
+                const ts = tierMedalAt(rank);
                 return (
                   <div
                     key={t.id}
@@ -333,11 +314,11 @@ export default function LoyaltyPage() {
                       padding: 12,
                       borderRadius: 'var(--radius-control)',
                       background: active ? ts.bg : 'transparent',
-                      border: active ? `1px solid ${ts.color}` : '1px solid var(--color-border-subtle)',
+                      border: active ? `1px solid ${ts.ink}` : '1px solid var(--color-border-subtle)',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span aria-hidden>{ts.emoji}</span>
+                      <TierMedallion rank={rank} size="md" />
                       <Text variant="body-sm" style={{ fontWeight: active ? 700 : 400, whiteSpace: 'nowrap' }}>
                         {t.name}
                       </Text>
@@ -422,8 +403,11 @@ export default function LoyaltyPage() {
         }
       >
         <div style={{ textAlign: 'center' }}>
-          <Badge size="md" style={{ background: tierStyle.bg, color: tierStyle.color }}>
-            <span aria-hidden>{tierStyle.emoji}</span> Hạng {tierName} · {formatNumber(lots?.total ?? 0)} Điểm Xanh
+          <Badge size="md" style={{ background: tierStyle.bg, color: tierStyle.ink }}>
+            <span className="tubu-inline-medal">
+              <TierMedallion rank={rank} size="sm" />
+              {`Hạng ${tierName} · ${formatNumber(lots?.total ?? 0)} Điểm Xanh`}
+            </span>
           </Badge>
         </div>
 
@@ -513,8 +497,8 @@ export default function LoyaltyPage() {
       >
         {sheetCelebrate && (
           <div style={{ textAlign: 'center' }}>
-            <div aria-hidden style={{ fontSize: 64, lineHeight: '72px' }}>
-              {tierStyleAt(tierRank(data?.tiers ?? [], { name: sheetCelebrate })).emoji}🎉
+            <div className="tubu-tier-celebrate">
+              <TierMedallion rank={tierRank(data?.tiers ?? [], { name: sheetCelebrate })} size="xl" />
             </div>
             <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>
               Bạn vừa mở khoá quyền lợi mới của hạng {sheetCelebrate}. Cảm ơn bạn đã đồng hành sống xanh

@@ -166,13 +166,13 @@ afterEach(() => {
 describe('Vườn Xanh: tab Vườn', () => {
   it('lô đất, sổ tay và tác động xanh nằm ở tab Vườn; tặng nước, mục tiêu và xếp hạng ở tab Cộng đồng', async () => {
     const c = await mount('tab=garden');
-    const garden = panel(c, 'Vườn');
+    const garden = panel(c, 'Khu vườn');
     expect(garden.textContent).toContain('Lô đất của bạn (3/5)');
     expect(garden.textContent).toContain('Sổ tay loài cây (2/3)');
     expect(garden.textContent).toContain('Tác động xanh của bạn');
     expect(garden.textContent).toContain('Mục tiêu cộng đồng');
     expect(garden.textContent).not.toContain('Tặng nước cho bạn bè');
-    expect(panel(c, 'Hôm nay').textContent).not.toContain('Lô đất');
+    expect(panel(c, 'Chăm vườn').textContent).not.toContain('Lô đất');
     const community = panel(await mount('tab=community'), 'Cộng đồng');
     for (const t of ['Tặng nước cho bạn bè', 'Chuỗi điểm danh dài nhất', 'Xếp hạng góp nước mùa này']) {
       expect(community.textContent).toContain(t);
@@ -203,7 +203,7 @@ describe('Vườn Xanh: tab Vườn', () => {
       plots: [HOME, plot(2, { progress: 1_250, target: 2_500, treeHealth: 'WILTED' }), plot(3, { progress: 20, target: 20, treeHealth: 'DEAD' }), plot(4, { progress: 2, target: 20 })],
     });
     const c = await mount('tab=garden');
-    const plots = panel(c, 'Vườn');
+    const plots = panel(c, 'Khu vườn');
     expect(plots.textContent).toContain('1.250/2.500💧');
     expect(plots.textContent).toContain('héo');
     expect(plots.textContent).not.toContain('chết');
@@ -218,7 +218,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     state.posts['/game/garden/plot/p2/water'] = () => ({ progress: 6, target: 20, harvested: false, treesPlanted: 2, revivedFromDead: false });
     state.posts['/game/garden/plot/p3/water'] = () => ({ progress: 6, target: 20, harvested: false, treesPlanted: 2, revivedFromDead: false });
     const c = await mount('tab=garden');
-    const waters = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
+    const waters = Array.from(panel(c, 'Khu vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
     expect(waters).toHaveLength(2);
     click(waters[0]!);
     click(waters[0]!);
@@ -244,7 +244,7 @@ describe('Vườn Xanh: tab Vườn', () => {
       throw new Error('Cây đã chết');
     };
     const c = await mount('tab=garden');
-    const w = () => Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Tưới'))!;
+    const w = () => Array.from(panel(c, 'Khu vườn').querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Tưới'))!;
     click(w());
     await flush(6);
     expect(toastAlert().textContent).toBe('Cây đã chết');
@@ -260,7 +260,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     });
     const c = await mount('tab=garden');
     const before = getsOf('/game/garden').length;
-    click(Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Tưới'))!);
+    click(Array.from(panel(c, 'Khu vườn').querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Tưới'))!);
     await flush(8);
     const dlg = document.querySelector('[role="dialog"]')!;
     expect(dlg.textContent).toContain('Thu hoạch thành công!');
@@ -275,7 +275,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     state.hold.set('/game/garden/unlock', new Promise<void>((r) => (release = r)));
     state.posts['/game/garden/unlock'] = () => plot(4);
     const c = await mount('tab=garden');
-    const b = btn(panel(c, 'Vườn'), 'Mở lô');
+    const b = btn(panel(c, 'Khu vườn'), 'Mở lô');
     expect(b.textContent).toContain('1.200💧');
     click(b);
     click(b);
@@ -296,7 +296,7 @@ describe('Vườn Xanh: tab Vườn', () => {
       throw new Error('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
     };
     const c = await mount('tab=garden');
-    const b = btn(panel(c, 'Vườn'), 'Mở lô');
+    const b = btn(panel(c, 'Khu vườn'), 'Mở lô');
     click(b);
     await flush(8);
     expect(toastAlert().textContent).toBe('Danh sách lô đất đã thay đổi, hãy tải lại trang.');
@@ -308,7 +308,7 @@ describe('Vườn Xanh: tab Vườn', () => {
   it('đã đủ lô: không còn nút mở, hiện thông báo tối đa', async () => {
     state.data['/game/garden'] = GARDEN({ nextUnlock: null });
     const c = await mount('tab=garden');
-    expect(byText(panel(c, 'Vườn'), 'button', 'Mở lô')).toBeNull();
+    expect(byText(panel(c, 'Khu vườn'), 'button', 'Mở lô')).toBeNull();
     expect(c.textContent).toContain('Bạn đã mở tối đa số lô đất');
   });
 
@@ -578,7 +578,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     state.data['/game/garden'] = GARDEN();
     state.posts['/game/garden/plot/p2/water'] = () => ({ progress: 0, target: 20, harvested: true, treesPlanted: 2, revivedFromDead: false, reward: { certificate: 'TT-9' } });
     const c = await mount('tab=garden');
-    const waters = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
+    const waters = Array.from(panel(c, 'Khu vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
     click(waters[0]!);
     await flush(8);
     const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
@@ -644,10 +644,10 @@ describe('Vườn Xanh: bố cục tab Vườn và Cộng đồng', () => {
     state.ready = new Set(['/cong-dong']);
     const c = await mount('tab=community');
     const tabs = Array.from(c.querySelectorAll('[role="tab"]'));
-    click(tabs[1] as HTMLElement);
+    click(tabs.find((t) => t.textContent === 'Khu vườn') as HTMLElement);
     await flush();
     expect(state.replace).toHaveBeenCalledWith('/vuon-xanh?tab=garden', { scroll: false });
-    for (const label of ['Vườn', 'Cộng đồng']) {
+    for (const label of ['Khu vườn', 'Cộng đồng']) {
       for (const h of Array.from(panel(c, label).querySelectorAll('h2'))) expect(h.textContent!.length).toBeGreaterThan(0);
     }
     expect(headingProblems(c)).toEqual([]);
@@ -682,7 +682,7 @@ describe('Vườn Xanh: làm mới Điểm Xanh ở tab Vườn và Cộng đồ
     state.posts['/game/garden/unlock'] = () => plot(4);
     const c = await mount('tab=garden');
     spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
-    click(btn(panel(c, 'Vườn'), 'Mở lô'));
+    click(btn(panel(c, 'Khu vườn'), 'Mở lô'));
     await flush(8);
     expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
   });

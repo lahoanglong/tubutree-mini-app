@@ -1,6 +1,9 @@
 @import '@tubutree/design-tokens/src/fonts.css';
 @import '@tubutree/design-tokens/src/tokens.css';
 @import '../components/mini/mini.css';
+@import '../components/game/game-hub.css';
+@import '../components/loyalty/member-polish.css';
+@import '../components/recycle/waste-steps.css';
 
 /* Phông dự phòng chỉnh cỡ theo Inter (số đo công bố của Inter so với Arial): trong lúc Inter chưa tải, chữ chiếm gần đúng bề rộng và chiều cao
    cuối cùng nên lúc đổi phông trang ít xê dịch. design-tokens khai ngăn xếp `'Inter', system-ui` không có chỗ cho nó, nên khai lại ở đây. */

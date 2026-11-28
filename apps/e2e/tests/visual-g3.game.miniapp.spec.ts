@@ -90,7 +90,7 @@ test('chụp g3 chưa có mùa, thân rỗng từ server (Mini App)', async ({ p
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
   api.get('/game/season', () => replyEmptyBody());
   await page.goto('/game');
-  await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+  await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
   await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-season-empty', false);
@@ -114,7 +114,7 @@ test('chụp g3 màn lỗi tải có nút Thử lại (Mini App)', async ({ page
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
   api.get('/game/garden', () => reply(500, { message: 'lỗi' }));
   await page.goto('/game');
-  await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+  await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
   await expect(page.getByText(/Chưa tải được vườn/)).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-load-error', false);

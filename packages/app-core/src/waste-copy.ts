@@ -33,6 +33,33 @@ export function wasteIntroCopy(flags: { dropoff: boolean; mailin: boolean }): { 
   return { intro: `Đổi bao bì sạch lấy Điểm Xanh. ${tail}`, steps: [first, 'Chọn cách giao đang mở khi tạo yêu cầu', last] };
 }
 
+export type WasteStepKind = 'pick' | 'deliver' | 'points';
+
+/**
+ * Dải 3 bước có biểu tượng ở màn Đổi rác (Mini App và web): nhãn ngắn để ba cột vừa khổ 360px, câu đầy đủ của
+ * `wasteIntroCopy` nằm trong sheet Thể lệ. Bước giữa theo cùng cờ công khai như `wasteIntroCopy`.
+ */
+export function wasteStepStrip(flags: { dropoff: boolean; mailin: boolean }): readonly [
+  { kind: 'pick'; label: string },
+  { kind: 'deliver'; label: string },
+  { kind: 'points'; label: string },
+] {
+  const deliver = flags.dropoff && flags.mailin ? 'Mang tới điểm hoặc gửi kho' : flags.dropoff ? 'Mang tới điểm nhận' : flags.mailin ? 'Gửi về kho Tubu' : 'Chọn cách giao';
+  return [
+    { kind: 'pick', label: 'Chọn món' },
+    { kind: 'deliver', label: deliver },
+    { kind: 'points', label: 'Nhận Điểm Xanh' },
+  ];
+}
+
+export const wasteRulesSheetCopy = {
+  button: 'Thể lệ',
+  title: 'Thể lệ Đổi rác',
+  stepsTitle: 'Các bước',
+  methodsTitle: 'Cách giao',
+  stripLabel: 'Ba bước đổi rác',
+} as const;
+
 export const wasteStepCopy = {
   items: 'Bước 1/2: Chọn món',
   method: 'Bước 2/2: Chọn cách giao',

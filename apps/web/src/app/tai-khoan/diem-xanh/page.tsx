@@ -47,18 +47,11 @@ import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
 import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
+import { tierMedalAt, tierNextLine } from '@tubutree/app-core/loyalty-medal';
+import { TierMedallion } from '@/components/loyalty/tier-medallion';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
 const TIER_KEY = 'tubu_last_tier_min_v2';
-
-const TIER_STYLES: readonly { emoji: string; bg: string; fg: string }[] = [
-  { emoji: '🌱', bg: 'bg-sage-50', fg: 'text-sage-700' },
-  { emoji: '🌿', bg: 'bg-sage-100', fg: 'text-sage-600' },
-  { emoji: '🌳', bg: 'bg-forest-50', fg: 'text-forest-700' },
-  { emoji: '🌲', bg: 'bg-stone-100', fg: 'text-forest-900' },
-];
-/** Tra theo THỨ HẠNG (không theo tên): đổi tên hạng trong admin vẫn giữ biểu tượng và màu. */
-const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TIER_STYLES.length - 1)]!;
 
 const errText = loadErrorText;
 
@@ -140,7 +133,8 @@ export default function LoyaltyPage() {
   }
 
   const tierName = data.tier?.name ?? 'Mầm Xanh';
-  const tierStyle = tierStyleAt(tierRank(data.tiers, { id: data.tier?.id }));
+  const rank = tierRank(data.tiers, { id: data.tier?.id });
+  const tierStyle = tierMedalAt(rank);
   const graceLine = tierGraceLine(data.tierGrace, tierName, { money: moneyShort, points: formatCount, date: formatDate });
   const perks = Array.isArray(data.tier?.perks) ? (data.tier.perks as string[]) : [];
   const next = data.nextTier;
@@ -153,17 +147,20 @@ export default function LoyaltyPage() {
   const history = txnQ.data?.pages.flat() ?? [];
   const offersRow = loyaltyOffersRow('/uu-dai', couponsQ.data?.length, expiringRedeemCta(expiring, { redeemable: data.redeemablePoints, total: lots.total }));
   const ruleLines = rates ? [earnRuleLine(rates, data.tier?.multiplier ?? 1), redeemRuleLine(rates)] : [];
-  const celebrateStyle = tierStyleAt(celebrate ? tierRank(data.tiers, { name: celebrate }) : 0);
+  const celebrateRank = celebrate ? tierRank(data.tiers, { name: celebrate }) : 0;
+  const nextLine = next ? tierNextLine(next, { money: moneyShort, points: formatCount, spendFor: rates ? (p) => pointsToSpend(p, rates) : null }) : null;
 
   return (
     <LedgerShell title={TITLE} wide>
       {/* Dòng Hộ chiếu Xanh là một hàng auto nữa ở cột trái: thêm hàng và cho cột phải trải thêm một hàng, để lịch sử vẫn nằm ở hàng 1fr cuối. */}
       <div className={`grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start ${passportQ.isSuccess ? 'lg:grid-rows-[auto_auto_auto_auto_1fr]' : 'lg:grid-rows-[auto_auto_auto_1fr]'}`}>
-          <section aria-label="Hạng thành viên" className={`p-5 text-center tabular-nums lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
-            <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
-              {tierStyle.emoji}
+          <section aria-label="Hạng thành viên" className={`p-5 text-center tabular-nums lg:col-span-2 ${miniSurface}`} style={{ background: tierStyle.bg }}>
+            <div className="tubu-tier-hero-medal">
+              <TierMedallion rank={rank} size="lg" />
             </div>
-            <h2 className={`mt-2 font-display text-xl font-semibold max-md:text-[length:var(--type-title-lg-size)] ${tierStyle.fg}`}>{tierName}</h2>
+            <h2 className="mt-1 font-display text-xl font-semibold max-md:text-[length:var(--type-title-lg-size)]" style={{ color: tierStyle.ink }}>
+              {tierName}
+            </h2>
             <p className="mt-0.5 text-sm text-stone-700">
               Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatCount(lots.total)} Điểm Xanh
             </p>
@@ -177,7 +174,7 @@ export default function LoyaltyPage() {
             {expiring && <p className={`mt-1.5 text-caption ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
             {expiryPolicy && <p className="mt-0.5 text-caption text-stone-600">{expiryPolicy}</p>}
 
-            {next ? (
+            {nextLine ? (
               <div className="mt-4 text-left">
                 <div
                   role="progressbar"
@@ -187,24 +184,18 @@ export default function LoyaltyPage() {
                   aria-valuenow={progress}
                   className="h-2.5 overflow-hidden rounded-full bg-stone-0"
                 >
-                  <div className={`h-full rounded-full bg-current ${tierStyle.fg}`} style={{ width: `${progress}%` }} />
+                  <div className="h-full rounded-full" style={{ width: `${progress}%`, background: tierStyle.ink }} />
                 </div>
-                <p className="mt-1.5 text-center text-caption text-stone-700">
-                  {next.spendingToGo != null ? (
-                    <>
-                      Còn <b>{moneyShort(next.spendingToGo)}</b> mua hàng để lên hạng {next.name}
-                    </>
-                  ) : (
-                    <>
-                      Còn <b>{formatCount(next.pointsToGo)}</b> điểm tích từ mua hàng
-                      {rates && next.pointsToGo > 0 ? ` (tương đương khoảng ${moneyShort(pointsToSpend(next.pointsToGo, rates))} mua hàng)` : ''} để lên hạng{' '}
-                      {next.name}
-                    </>
-                  )}
+                <p className="tubu-tier-progress-line text-center text-caption text-stone-700" data-testid="tier-next-line">
+                  {nextLine.before}
+                  <b>{nextLine.amount}</b>
+                  {nextLine.after}
                 </p>
               </div>
             ) : (
-              <p className={`mt-3 text-sm ${tierStyle.fg}`}>Bạn đang ở hạng cao nhất 🎉</p>
+              <p className="mt-3 text-sm" style={{ color: tierStyle.ink }}>
+                Bạn đang ở hạng cao nhất 🎉
+              </p>
             )}
 
             {graceLine && <p className="mt-2 text-caption font-semibold text-warning-fg">{graceLine}</p>}
@@ -270,15 +261,16 @@ export default function LoyaltyPage() {
             <ul className="space-y-1.5">
               {data.tiers.map((t, rank) => {
                 const active = data.tier ? t.id === data.tier.id : rank === 0;
-                const ts = tierStyleAt(rank);
+                const ts = tierMedalAt(rank);
                 return (
                   <li
                     key={t.id}
                     aria-current={active ? 'true' : undefined}
-                    className={`flex items-center justify-between gap-2 rounded-control border p-3 ${active ? `${ts.bg} border-forest-600` : 'border-stone-200'}`}
+                    className={`flex items-center justify-between gap-2 rounded-control border p-3 ${active ? 'border-forest-600' : 'border-stone-200'}`}
+                    style={active ? { background: ts.bg } : undefined}
                   >
                     <div className="flex flex-none items-center gap-2">
-                      <span aria-hidden="true">{ts.emoji}</span>
+                      <TierMedallion rank={rank} size="md" />
                       <span className={`whitespace-nowrap text-sm ${active ? 'font-bold' : ''}`}>{t.name}</span>
                     </div>
                     <span className="min-w-0 text-right text-caption text-stone-700">
@@ -337,7 +329,7 @@ export default function LoyaltyPage() {
         error={cardQ.isError ? errText(cardQ.error) : null}
         onRetry={() => cardQ.refetch()}
         tierLabel={`Hạng ${tierName} · ${formatCount(lots.total)} Điểm Xanh`}
-        tierEmoji={tierStyle.emoji}
+        tierRank={rank}
       />
 
       <Sheet
@@ -351,8 +343,8 @@ export default function LoyaltyPage() {
         }
       >
         <div className="text-center">
-          <div aria-hidden="true" className="text-6xl leading-none">
-            {celebrateStyle.emoji}🎉
+          <div className="tubu-tier-celebrate">
+            <TierMedallion rank={celebrateRank} size="xl" />
           </div>
           <p className="mt-2 text-sm text-stone-700">
             Bạn vừa mở khoá quyền lợi mới của hạng {celebrate}. Cảm ơn bạn đã đồng hành sống xanh cùng Tubu 🌿
@@ -381,7 +373,7 @@ function MemberCardSheet({
   error,
   onRetry,
   tierLabel,
-  tierEmoji,
+  tierRank,
 }: {
   open: boolean;
   onClose: () => void;
@@ -390,7 +382,7 @@ function MemberCardSheet({
   error: string | null;
   onRetry: () => void | PromiseLike<unknown>;
   tierLabel: string;
-  tierEmoji: string;
+  tierRank: number;
 }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
@@ -424,7 +416,10 @@ function MemberCardSheet({
     >
       <div className="text-center">
         <Badge tone="brand">
-          <span aria-hidden="true">{tierEmoji}</span> {tierLabel}
+          <span className="tubu-inline-medal">
+            <TierMedallion rank={tierRank} size="sm" />
+            {tierLabel}
+          </span>
         </Badge>
       </div>
       <div className="mt-4 rounded-card border border-stone-200 bg-stone-50 p-3 text-center">

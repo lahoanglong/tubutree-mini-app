@@ -69,14 +69,14 @@ for (const vp of [
     test.use({ viewport: { width: vp.width, height: vp.height } });
     test.beforeEach(({}, testInfo) => test.skip(testInfo.project.name !== vp.project, `khổ ${vp.width}px chạy ở project ${vp.project}`));
 
-    test('thành viên: lối vào ở Chơi hôm nay, 5 bước dưới 60 giây, thêm cả bộ một lệnh 4 món, không tự chuyển trang', async ({ page, api }) => {
+    test('thành viên: lối vào ở Sảnh Game, 5 bước dưới 60 giây, thêm cả bộ một lệnh 4 món, không tự chuyển trang', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       matcherOn(api);
       api.post('/cart/items/batch', { items: [], subtotal: 0, discount: 0, itemCount: 4 });
       await signedIn(page);
-      await page.goto('/vuon-xanh');
-      const row = page.getByTestId('mini-play-row-matcher');
+      await page.goto('/vuon-xanh?tab=games');
+      const row = page.getByTestId('mini-play-row-matcher').getByRole('link');
       await expect(row).toHaveAttribute('href', `${PATH}?from=play_today`, { timeout: 15_000 });
       await row.click();
       await expect(page).toHaveURL(new RegExp(`${PATH}\\?from=play_today$`));
@@ -158,13 +158,13 @@ for (const vp of [
       await expectNoHorizontalOverflow(page);
     });
 
-    test('cờ tắt (mặc định PROD): trang chỉ báo tạm nghỉ, Chơi hôm nay không có dòng Chọn Chuẩn Xanh', async ({ page, api }) => {
+    test('cờ tắt (mặc định PROD): trang chỉ báo tạm nghỉ, Sảnh Game không có thẻ Chọn Chuẩn Xanh', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       api.get('/game/matcher', reply(404, { statusCode: 404, code: 'GAME_DISABLED', message: 'Trò chơi đang tạm tắt' }));
       await signedIn(page);
-      await page.goto('/vuon-xanh');
-      await expect(page.getByTestId('mini-play-today')).toBeVisible({ timeout: 15_000 });
+      await page.goto('/vuon-xanh?tab=games');
+      await expect(page.getByTestId('mini-play-row-sort')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('mini-play-row-matcher')).toHaveCount(0);
       await page.goto(PATH);
       await expect(page.getByTestId('matcher-off')).toContainText(matcherCopy('error.disabled'));

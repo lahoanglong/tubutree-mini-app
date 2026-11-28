@@ -159,7 +159,7 @@ describe('LoyaltyPage — thuật ngữ thống nhất và số có dấu nghìn
   it('điểm còn thiếu, ngưỡng hạng và lịch sử điểm đều có dấu phân cách nghìn', async () => {
     renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
-    expect(await screen.findByText('1.250', { selector: 'b' })).toBeInTheDocument();
+    expect(await screen.findByText('1.250 điểm', { selector: 'b' })).toBeInTheDocument();
     expect(screen.getByText(/từ 2\.500 điểm tích luỹ/)).toBeInTheDocument();
     expect(screen.getByText('+1.250')).toBeInTheDocument();
     expect(screen.getByText('-2.500')).toBeInTheDocument();

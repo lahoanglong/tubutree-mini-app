@@ -18,7 +18,7 @@ for (const state of NEWBIE_STATES) {
     mockSession(api, makeUser({ id: 'u-newbie', fullName: 'Khách mới', pointsBalance: 0 }));
     mockNewbieGame(api, state);
     await page.goto('/game');
-    await expect(page.getByRole('tab', { name: 'Hôm nay' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: 'Chăm vườn' })).toBeVisible({ timeout: 15_000 });
     await settle(page);
     mkdirSync(path.join(OUT!, 'miniapp'), { recursive: true });
     await page.screenshot({ path: path.join(OUT!, 'miniapp', `${state}.png`), fullPage: true });

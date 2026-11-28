@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { FORBIDDEN_TERMS } from './shop-copy';
 import {
   GIFT_ATTACH_HINT,
+  REWARD_COVERED_PILL,
   REWARD_TABS,
+  REWARD_WAREHOUSE_PILL,
+  rewardDetailLines,
+  rewardPill,
   WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
   freeShipCovered,
@@ -184,5 +189,50 @@ describe('rewardsGuideCopy.earnItems', () => {
     expect(purchase).not.toContain('Zalo');
     expect(checkIn).toContain('đăng nhập Zalo');
     expect(garden).toContain('đăng nhập Zalo');
+  });
+});
+
+describe('thẻ quà gọn: một viên ngắn, câu dài vào sheet chi tiết', () => {
+  const n = (x: number) => x.toLocaleString('vi-VN');
+  const base = { kind: 'VOUCHER' as const, label: null, stockRemaining: null, soldOut: false, description: null, claimInstructions: null };
+
+  it('viên theo thứ tự: trùng quyền lợi hạng → tồn kho → quà hiện vật → nhãn admin; hết hàng thì không có viên', () => {
+    expect(rewardPill({ ...base, stockRemaining: 3, label: 'Mới' }, { covered: true, formatNumber: n })).toBe(REWARD_COVERED_PILL);
+    expect(rewardPill({ ...base, kind: 'SEED_PACK', stockRemaining: 1200 }, { covered: false, formatNumber: n })).toBe('Còn 1.200');
+    expect(rewardPill({ ...base, kind: 'GIFT' }, { covered: false, formatNumber: n })).toBe(REWARD_WAREHOUSE_PILL);
+    expect(rewardPill({ ...base, label: 'Phổ biến' }, { covered: false, formatNumber: n })).toBe('Phổ biến');
+    expect(rewardPill(base, { covered: false, formatNumber: n })).toBeNull();
+    expect(rewardPill({ ...base, soldOut: true, stockRemaining: 0 }, { covered: true, formatNumber: n })).toBeNull();
+  });
+
+  it('dòng chi tiết: mô tả, ghi chú hạng, cách nhận quà hiện vật, hướng dẫn, tồn kho; bỏ dòng rỗng', () => {
+    expect(
+      rewardDetailLines(
+        { ...base, kind: 'SEED_PACK', description: 'Hạt rau mầm', claimInstructions: 'Mang mã tới quầy', stockRemaining: 3 },
+        { freeNote: null, formatNumber: n },
+      ),
+    ).toEqual(['Hạt rau mầm', WAREHOUSE_ONLY_LABEL, 'Mang mã tới quầy', 'Còn 3 phần quà']);
+    expect(rewardDetailLines({ ...base, description: '  ' }, { freeNote: null, formatNumber: n })).toEqual([]);
+    expect(rewardDetailLines(base, { freeNote: 'Hạng X đã được miễn phí giao hàng', formatNumber: n })).toEqual(['Hạng X đã được miễn phí giao hàng']);
+  });
+
+  it('nhãn admin không mất: viên trên thẻ là tồn kho, quà hiện vật hay trùng hạng thì nhãn thành dòng đầu của sheet; nhãn đang là viên thì không lặp', () => {
+    type R = Parameters<typeof rewardDetailLines>[0] & Parameters<typeof rewardPill>[0];
+    const pillOf = (r: R, freeNote: string | null) => rewardPill(r, { covered: freeNote !== null, formatNumber: n });
+    const cases: Array<[R, string | null]> = [
+      [{ ...base, label: 'Mới', stockRemaining: 5 }, null],
+      [{ ...base, kind: 'GIFT', label: 'Mới' }, null],
+      [{ ...base, label: 'Mới' }, 'Hạng X đã được miễn phí giao hàng'],
+      [{ ...base, label: 'Mới' }, null],
+    ];
+    for (const [r, freeNote] of cases) {
+      const shown = [pillOf(r, freeNote), ...rewardDetailLines(r, { freeNote, formatNumber: n })].filter((x) => x === 'Mới');
+      expect(shown, JSON.stringify(r)).toEqual(['Mới']);
+    }
+    expect(rewardDetailLines({ ...base, label: 'Mới', stockRemaining: 5 }, { freeNote: null, formatNumber: n })[0]).toBe('Mới');
+  });
+
+  it('chữ ngắn không dùng thuật ngữ cấm', () => {
+    for (const t of FORBIDDEN_TERMS) for (const s of [REWARD_COVERED_PILL, REWARD_WAREHOUSE_PILL]) expect(s).not.toMatch(t.pattern);
   });
 });

@@ -153,7 +153,7 @@ const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b)
 describe('GamePage — một h1 ở mọi trạng thái (C-114)', () => {
   it('đã tải xong: đúng một h1 "Vườn Xanh"', async () => {
     const { container } = renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
+    await screen.findByRole('tab', { name: 'Chăm vườn' });
     const h1s = container.querySelectorAll('h1');
     expect(h1s).toHaveLength(1);
     expect(h1s[0]).toHaveTextContent('Vườn Xanh');
@@ -182,18 +182,18 @@ describe('GamePage — một h1 ở mọi trạng thái (C-114)', () => {
 
 /** Khối của tab Vườn chỉ tải khi mở tab: mở rồi quay lại Hôm nay để các phép kiểm khác thấy tab mặc định. */
 async function loadGardenTab() {
-  fireEvent.click(await screen.findByRole('tab', { name: 'Vườn' }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Khu vườn' }));
   await screen.findByText('Lô 2 · Mận');
-  fireEvent.click(screen.getByRole('tab', { name: 'Hôm nay' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Chăm vườn' }));
 }
 
 describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
-  it('chỉ có hai tab Hôm nay / Vườn (Cộng đồng chỉ đọc nên không có tab), mở sẵn Hôm nay', async () => {
+  it('ba tab Chăm vườn / Sảnh Game / Khu vườn (Cộng đồng chỉ đọc nên không có tab), mở sẵn Chăm vườn', async () => {
     renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
-    expect(tabs().map((t) => t.textContent)).toEqual(['Hôm nay', 'Vườn']);
-    expect(screen.getByRole('tab', { name: 'Hôm nay' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'false');
+    await screen.findByRole('tab', { name: 'Chăm vườn' });
+    expect(tabs().map((t) => t.textContent)).toEqual(['Chăm vườn', 'Sảnh Game', 'Khu vườn']);
+    expect(screen.getByRole('tab', { name: 'Chăm vườn' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Khu vườn' })).toHaveAttribute('aria-selected', 'false');
   });
 
   // App chạy immersive và trang này không dùng className="page" (chỉ PageHeader đệm safe-top, khối đó cuộn đi),
@@ -208,16 +208,16 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 
   it('chỉ khối của tab đang chọn nhìn thấy được; đổi tab thì đổi khối', async () => {
     renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
-    expect(tabPanel('Hôm nay')).toBeVisible();
-    expect(tabPanel('Vườn')).not.toBeVisible();
+    await screen.findByRole('tab', { name: 'Chăm vườn' });
+    expect(tabPanel('Chăm vườn')).toBeVisible();
+    expect(tabPanel('Khu vườn')).not.toBeVisible();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Khu vườn' }));
     await screen.findByText('Lô 2 · Mận');
-    expect(tabPanel('Vườn')).toBeVisible();
-    expect(tabPanel('Hôm nay')).not.toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'true');
-    expect(within(tabPanel('Vườn')).getByText('Lô 2 · Mận')).toBeVisible();
+    expect(tabPanel('Khu vườn')).toBeVisible();
+    expect(tabPanel('Chăm vườn')).not.toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Khu vườn' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(tabPanel('Khu vườn')).getByText('Lô 2 · Mận')).toBeVisible();
   });
 
   it('Mini App không có bảng xếp hạng người chơi và tặng nước bạn bè (Zalo 4.6); lối đọc bảng tin nằm ở tab Vườn', async () => {
@@ -230,69 +230,70 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     expect(mocks.api.getFriends).not.toHaveBeenCalled();
     expect(mocks.api.getLeaderboard).not.toHaveBeenCalled();
     expect(mocks.api.getSeasonLeaderboard).not.toHaveBeenCalled();
-    expect(within(tabPanel('Vườn')).getByText('Bảng tin cộng đồng')).toBeInTheDocument();
+    expect(within(tabPanel('Khu vườn')).getByText('Bảng tin cộng đồng')).toBeInTheDocument();
   });
 
-  it('mỗi khối đặt vào đúng tab: nút chính/điểm danh/nhiệm vụ/quiz/vòng quay ở Hôm nay, lô đất ở Vườn', async () => {
+  it('mỗi khối đặt vào đúng tab: thẻ vườn/nút chính/điểm danh/nhiệm vụ ở Chăm vườn, game/quiz/vòng quay ở Sảnh Game, lô đất ở Khu vườn', async () => {
     renderPage();
     await loadGardenTab();
-    const today = within(tabPanel('Hôm nay'));
+    const today = within(tabPanel('Chăm vườn'));
+    expect(today.getByTestId('garden-hero')).toBeInTheDocument();
     expect(today.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
     expect(today.getByText(/^Chuỗi \d+ ngày$/)).toBeInTheDocument();
     expect(today.getByRole('heading', { name: 'Nhiệm vụ' })).toBeInTheDocument();
-    expect(today.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' })).toBeInTheDocument();
-    expect(today.getByTestId('wheel')).toBeInTheDocument();
+    expect(today.queryByTestId('arcade-hub')).toBeNull();
+    expect(today.queryByTestId('wheel')).toBeNull();
     // Khối ở tab đang ẩn không vào cây accessibility nên kiểm theo chữ + thẻ h2.
-    expect(within(tabPanel('Vườn')).getByText(/Lô đất của bạn/).tagName).toBe('H2');
-    expect(within(tabPanel('Vườn')).getByText('Tác động xanh của bạn').tagName).toBe('H2');
+    const games = within(tabPanel('Sảnh Game'));
+    expect(games.getByTestId('arcade-hub')).toBeInTheDocument();
+    expect(games.getByText('Câu đố Sống Xanh hôm nay').tagName).toBe('H2');
+    expect(games.getByTestId('wheel')).toBeInTheDocument();
+    expect(within(tabPanel('Khu vườn')).getByText(/Lô đất của bạn/).tagName).toBe('H2');
+    expect(within(tabPanel('Khu vườn')).getByText('Tác động xanh của bạn').tagName).toBe('H2');
   });
 
   it('đổi tab không dựng lại khối: vòng quay chỉ mount một lần', async () => {
     renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
-    fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Hôm nay' }));
+    await screen.findByRole('tab', { name: 'Chăm vườn' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Khu vườn' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chăm vườn' }));
     expect(mocks.wheel.mounts).toBe(1);
     expect(mocks.wheel.unmounts).toBe(0);
   });
 });
 
 describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
-  it('trong tab Hôm nay: thẻ vườn → tab → nút chính → thẻ chuỗi → nhiệm vụ → quiz', async () => {
+  it('trong tab Chăm vườn: tab → thẻ vườn → nút chính → thẻ chuỗi → nhiệm vụ; trang có ba khối tab', async () => {
     const { container } = renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
-    const hero = screen.getByText('Sồi');
+    await screen.findByRole('tab', { name: 'Chăm vườn' });
     const tabList = screen.getByRole('tablist');
+    const hero = screen.getByText('Sồi');
     const water = screen.getByRole('button', { name: 'Nhận nước hôm nay' });
     const checkIn = screen.getByText(/^Chuỗi \d+ ngày$/);
     const missions = screen.getByRole('heading', { name: 'Nhiệm vụ' });
-    const quiz = screen.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' });
-    const order = [hero, tabList, water, checkIn, missions, quiz];
+    const order = [tabList, hero, water, checkIn, missions];
     for (let i = 0; i + 1 < order.length; i += 1) expect(follows(order[i]!, order[i + 1]!)).toBe(true);
-    // 3 hành động chính đứng trước mọi khối phụ của tab (vòng quay, đổi vỏ chai).
-    expect(follows(missions, screen.getByTestId('wheel'))).toBe(true);
-    expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
   });
 
-  it('mini game và Chẩn đoán tổ ấm (W164) đứng ngay dưới thẻ chuỗi, trên Nhiệm vụ, trong tab Hôm nay, mỗi khối một h2', async () => {
+  it('Sảnh Game: lưới game (h2 Mini game, đủ hai game hành động) → quiz → vòng quay; Chẩn đoán tổ ấm chỉ còn ở Trang chủ', async () => {
     renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
-    const today = within(tabPanel('Hôm nay'));
-    const checkIn = today.getByText(/^Chuỗi \d+ ngày$/);
-    const arcade = today.getByRole('heading', { level: 2, name: 'Mini game' });
-    const quiz = today.getByRole('heading', { level: 2, name: 'Chẩn đoán tổ ấm' });
-    const missions = today.getByRole('heading', { name: 'Nhiệm vụ' });
-    const order = [checkIn, arcade, quiz, missions];
-    for (let i = 0; i + 1 < order.length; i += 1) expect(follows(order[i]!, order[i + 1]!)).toBe(true);
-    expect(within(tabPanel('Vườn')).queryByText('Mini game')).toBeNull();
-    expect(today.getByTestId('arcade-game-dew_catcher')).toBeInTheDocument();
-    expect(today.getByTestId('arcade-game-refill_rush')).toBeInTheDocument();
-    expect(today.getByRole('button', { name: 'Bắt đầu Chẩn đoán tổ ấm' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sảnh Game' }));
+    const games = within(tabPanel('Sảnh Game'));
+    const arcade = games.getByRole('heading', { level: 2, name: 'Mini game' });
+    const quiz = games.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' });
+    const wheel = games.getByTestId('wheel');
+    expect(follows(arcade, quiz)).toBe(true);
+    expect(follows(quiz, wheel)).toBe(true);
+    expect(games.getByTestId('arcade-game-dew_catcher')).toBeInTheDocument();
+    expect(games.getByTestId('arcade-game-refill_rush')).toBeInTheDocument();
+    expect(within(tabPanel('Khu vườn')).queryByText('Mini game')).toBeNull();
+    expect(screen.queryByText('Chẩn đoán tổ ấm')).toBeNull();
   });
 
   it('chỉ có một nút điểm danh trên trang Vườn (nút chính trên cây), kèm dòng nói rõ nhận giọt nước và Điểm Xanh', async () => {
     renderPage();
-    await screen.findByRole('tab', { name: 'Hôm nay' });
+    await screen.findByRole('tab', { name: 'Chăm vườn' });
     expect(screen.getAllByRole('button', { name: /(Điểm danh|Nhận nước hôm nay)/ })).toHaveLength(1);
     expect(screen.getByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
   });

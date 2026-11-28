@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Lightbulb } from 'lucide-react';
 import { useSnackbar } from 'zmp-ui';
 import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '../../services/game-api';
@@ -9,6 +10,12 @@ import { rowKeyboardProps } from '../ui/row-keyboard';
 import { Text } from '../ui/text';
 import { rarityColor, rarityLabel } from './game-utils';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import { hubCopy } from '@tubutree/app-core/game-hub/copy';
+import { treeStageLabel } from '@tubutree/app-core/game-hub/scene';
+import { sfx } from '../../utils/sfx';
+import { Burst } from './burst';
+import { GardenTreeArt } from './garden-tree-art';
+import '../../css/game-hub.css';
 
 const CONFETTI = [
   ['6%', 'var(--forest-500)', 0],
@@ -78,6 +85,9 @@ export function HarvestCelebration({
   const seedling = sprout || (points != null && points > 0);
   const showPoints = points != null && points > 0;
   const hasCoupon = coupons.length > 0;
+  useEffect(() => {
+    if (open) sfx.play('harvest');
+  }, [open]);
   return (
     <BottomSheet
       open={open}
@@ -108,11 +118,12 @@ export function HarvestCelebration({
     >
       <div style={{ textAlign: 'center', position: 'relative' }}>
         {open && <Confetti />}
-        <div style={{ fontSize: 56, lineHeight: 1.2 }}>
-          {/* Dựng lại mỗi lần mở để hoạt ảnh lớn lên chạy lại. */}
+        <div className="tubu-harvest-art">
+          {/* Dựng lại mỗi lần mở để hoạt ảnh lớn lên và chùm lấp lánh chạy lại. */}
           <span key={String(open)} className="tubu-grow">
-            🌳
+            <GardenTreeArt stage="bloom" label={hubCopy('hero.treeAria', { stage: treeStageLabel('bloom') })} />
           </span>
+          {open && <Burst />}
         </div>
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
           {certificate ? t.fund : seedling ? t.seedling : t.grown}

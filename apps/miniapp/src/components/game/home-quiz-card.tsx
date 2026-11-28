@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useId, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ArcadeStatus } from '@tubutree/app-core/api/game';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { useRealUser } from '../../hooks/use-real-user';
-import { arcadeStatusQuery } from '../../services/arcade-api';
+import { useAuthStore } from '../../store/auth';
+import { isGuestUser } from '../../utils/guest-user';
 import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -12,18 +13,30 @@ import '../../css/home-quiz.css';
 // Sheet ba câu và bộ gợi ý chỉ tải khi khách chạm Bắt đầu: thẻ mời ở Trang chủ không gánh chúng.
 const HomeQuizSheet = lazy(() => import('./home-quiz-sheet').then((m) => ({ default: m.HomeQuizSheet })));
 
+// Thẻ và sheet không import mô-đun nào Vườn Xanh cũng dùng (services/arcade-api, hooks/use-real-user, api/game): phần dùng chung đó nhỏ hơn
+// `experimentalMinChunkSize` nên Rollup gộp vào entry. Vì vậy khoá cache và luật khách thật được viết lại ở đây, spec giữ chúng trùng bản gốc.
+/** Cùng khoá `arcadeStatusQuery` (services/arcade-api). */
+export const ARCADE_STATUS_KEY = ['game', 'arcade'] as const;
+
 /**
- * Thẻ mời "Chẩn đoán tổ ấm" (30 giây, gợi ý bộ sản phẩm hợp nhà bạn) dùng ở khối Trang chủ `quiz` và ở Vườn Xanh cạnh sảnh mini game. Thẻ tự nó KHÔNG tạo request nào (sheet và gợi ý sản phẩm chỉ gọi API khi khách mở sheet), còn trạng thái mini game chỉ được đọc từ cache cùng khoá với `ArcadeHub` (Vườn Xanh tải, Trang chủ không). Cache báo quà đã nhận (hoặc sheet vừa
- * ghi quà xong) thì dòng phụ không hứa quà nữa; chưa biết thì giữ lời hứa mặc định. Khách và tài khoản khách theo thiết bị luôn thấy lời hứa. Sheet ở lại (chỉ đóng) sau lần mở đầu để giữ câu trả
- * lời và kết quả nếu khách mở lại.
+ * Thẻ mời "Chẩn đoán tổ ấm" (30 giây, gợi ý bộ sản phẩm hợp nhà bạn) ở khối Trang chủ `quiz`. Thẻ tự nó KHÔNG tạo request nào (sheet và gợi ý
+ * sản phẩm chỉ gọi API khi khách mở sheet); trạng thái mini game chỉ đọc từ cache cùng khoá với `ArcadeHub`, có khi khách đã ghé Vườn Xanh trong
+ * phiên. Cache báo quà đã nhận (hoặc sheet vừa ghi quà xong) thì dòng phụ không hứa quà nữa; chưa biết thì giữ lời hứa mặc định. Khách và tài
+ * khoản khách theo thiết bị luôn thấy lời hứa. Sheet ở lại (chỉ đóng) sau lần mở đầu để giữ câu trả lời và kết quả nếu khách mở lại.
  */
 export function HomeQuizCard() {
   const titleId = useId();
-  const real = useRealUser();
-  // Chỉ đọc cache, không bao giờ tải: ngân sách request của Trang chủ không có chỗ cho trạng thái mini game. Ở Vườn Xanh `ArcadeHub` tải cùng khoá nên thẻ vẫn cập nhật.
-  const status = useQuery({ ...arcadeStatusQuery, enabled: false });
+  // Cùng luật `useRealUser`: tài khoản khách theo thiết bị có phiên nhưng máy chủ không phát quà.
+  const real = useAuthStore((s) => s.status === 'authenticated' && s.user !== null && s.user !== undefined && !isGuestUser(s.user));
+  const queryClient = useQueryClient();
+  // Chỉ đọc cache, không bao giờ tải: ngân sách request của Trang chủ không có chỗ cho trạng thái mini game. Khách đã ghé Vườn Xanh thì `ArcadeHub` đã tải cùng khoá.
+  const status = useQuery<ArcadeStatus>({ queryKey: ARCADE_STATUS_KEY, queryFn: skipToken });
   const [claimedNow, setClaimedNow] = useState(false);
-  const onClaimed = useCallback(() => setClaimedNow(true), []);
+  const onClaimed = useCallback(() => {
+    setClaimedNow(true);
+    // Bản trạng thái đã có trong cache (khách đã ghé Vườn Xanh) được vá ngay: thẻ chỉ đọc cache, không tự tải lại. Chưa có bản nào thì không dựng bản giả.
+    queryClient.setQueryData<ArcadeStatus>(ARCADE_STATUS_KEY, (old) => (old ? { ...old, quizClaimed: true } : old));
+  }, [queryClient]);
   const claimed = real && (claimedNow || status.data?.quizClaimed === true);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
@@ -54,7 +67,7 @@ export function HomeQuizCard() {
       </Card>
       {loaded && (
         <Suspense fallback={null}>
-          <HomeQuizSheet open={open} onClose={() => setOpen(false)} onClaimed={onClaimed} />
+          <HomeQuizSheet open={open} real={real} onClose={() => setOpen(false)} onClaimed={onClaimed} />
         </Suspense>
       )}
     </section>

@@ -5,6 +5,8 @@ import { HttpError } from '../../services/http';
 import { pickKitProducts, type HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as RealUserModule from '../../hooks/use-real-user';
+import type * as ArcadeApiModule from '../../services/arcade-api';
 
 const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as 'authenticated' | 'unauthenticated', user: null as { id: string; phone: string | null; zaloId: string | null } | null },
@@ -32,8 +34,8 @@ vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => mocks
 vi.mock('../../services/arcade-api', () => ({
   arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: () => mocks.arcadeStatus() },
   submitArcadeRun: vi.fn(),
-  submitHomeQuiz: (answers: unknown) => mocks.submit(answers),
 }));
+vi.mock('@tubutree/app-core/api/home-quiz', () => ({ completeHomeQuiz: (_http: unknown, answers: unknown) => mocks.submit(answers) }));
 vi.mock('../../services/shop-api', () => ({
   fetchProducts: (q: unknown) => mocks.fetchProducts(q),
   fetchProduct: (slug: string) => mocks.fetchProduct(slug),
@@ -59,7 +61,7 @@ vi.mock('../ui/product-card', () => ({
   ),
 }));
 
-import { HomeQuizCard } from './home-quiz-card';
+import { ARCADE_STATUS_KEY, HomeQuizCard } from './home-quiz-card';
 
 const REAL_USER = { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' };
 const DEVICE_USER = { id: 'g1', phone: null, zaloId: 'guest_abc' };
@@ -143,6 +145,35 @@ describe('HomeQuizCard: dòng quà trên thẻ', () => {
   const claimedStatus = (quizClaimed: boolean) => ({ games: {}, window: null, windowBonus: false, nextWindowAt: null, quizClaimed });
 
   const settle = () => act(async () => { await Promise.resolve(); });
+
+  it('khoá cache của thẻ trùng khoá arcadeStatusQuery thật (thẻ không import services/arcade-api)', async () => {
+    const actual = await vi.importActual<typeof ArcadeApiModule>('../../services/arcade-api');
+    expect(ARCADE_STATUS_KEY).toEqual(actual.arcadeStatusQuery.queryKey);
+  });
+
+  it('luật khách thật của thẻ trùng useRealUser ở mọi trạng thái phiên', async () => {
+    const { useRealUser } = await vi.importActual<typeof RealUserModule>('../../hooks/use-real-user');
+    function RealProbe() {
+      return <output data-testid="real-probe">{String(useRealUser())}</output>;
+    }
+    const cases = [
+      ['unauthenticated', null],
+      ['authenticated', null],
+      ['authenticated', DEVICE_USER],
+      ['authenticated', REAL_USER],
+    ] as const;
+    for (const [status, user] of cases) {
+      mocks.auth.status = status;
+      mocks.auth.user = user;
+      const { unmount } = renderCard(claimedStatus(true));
+      const probe = render(<RealProbe />);
+      await settle();
+      const expected = probe.getByTestId('real-probe').textContent === 'true';
+      expect({ status, user: user?.id ?? null, real: screen.queryByText(CLAIMED) !== null }).toEqual({ status, user: user?.id ?? null, real: expected });
+      probe.unmount();
+      unmount();
+    }
+  });
 
   it('Trang chủ (cache chưa có trạng thái): giữ lời hứa mặc định và thẻ KHÔNG tạo request mạng nào', async () => {
     mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));

@@ -65,7 +65,7 @@ test.describe('Vườn Xanh', () => {
     await expect(page.getByTestId('week-rhythm')).toHaveCount(1);
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
 
-    await page.getByText('Vườn', { exact: true }).first().click();
+    await page.getByRole('tab', { name: 'Khu vườn' }).click();
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(/ })).toBeVisible();
     await expect(page.getByText('Lô đất của bạn (2/4)')).toBeVisible();
     await expect(page.getByText('Lô 2 · Cây Lim Xanh')).toBeVisible();
@@ -106,7 +106,7 @@ test.describe('Vườn Xanh', () => {
     mockGame(api);
     api.get('/game/season', () => replyEmptyBody());
     await page.goto('/game');
-    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
     await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
   });
 
@@ -115,7 +115,7 @@ test.describe('Vườn Xanh', () => {
     let failing = true;
     api.get('/game/garden', () => (failing ? reply(500, { message: 'lỗi' }) : GARDEN));
     await page.goto('/game');
-    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
     await expect(page.getByText(/Chưa tải được vườn/)).toBeVisible({ timeout: 15_000 });
     failing = false;
     await page.getByRole('button', { name: 'Thử lại' }).click();
@@ -148,7 +148,7 @@ test.describe('Vườn Xanh', () => {
     );
     await page.goto('/game');
 
-    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
     await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
     await expect(page.getByText('Góp quỹ trồng cây?')).toBeVisible();
     expect(api.callsTo('POST', '/game/tree/buy')).toHaveLength(0);
@@ -182,7 +182,7 @@ test.describe('Vườn Xanh', () => {
     });
     await page.goto('/game');
 
-    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
     await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
     await page.getByRole('button', { name: 'Xác nhận' }).click();
     await expect(page.getByText('Không đủ Điểm Xanh để góp cây.')).toBeVisible();
@@ -207,7 +207,7 @@ test.describe('Vườn Xanh', () => {
     });
     await page.goto('/game');
 
-    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
     await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
     await page.getByRole('button', { name: 'Xác nhận' }).click();
     await expect(page.getByText('Góp quỹ trồng cây?')).toBeVisible();
@@ -226,7 +226,7 @@ test.describe('Vườn Xanh', () => {
     api.post('/game/garden/plot/:id/water', slow({ progress: 50, target: 60, harvested: false, treesPlanted: 0, revivedFromDead: false }));
     await page.goto('/game');
 
-    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Khu vườn' }).click({ timeout: 15_000 });
     const water = page.getByRole('button', { name: 'Tưới', exact: true });
     await expect(water).toBeVisible();
     await water.evaluate((el) => {

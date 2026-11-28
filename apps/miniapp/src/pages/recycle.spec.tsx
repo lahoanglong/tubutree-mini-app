@@ -56,6 +56,12 @@ function renderPage() {
   return { ...utils, qc, invalidate };
 }
 
+/** Cách giao và câu đầy đủ từng bước nằm trong sheet "ⓘ Thể lệ" của khối Cách đổi. */
+async function openRules() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Thể lệ' }));
+  return within(await screen.findByTestId('waste-rules'));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
@@ -133,9 +139,10 @@ describe('/recycle trang vào (§4.1)', () => {
     mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' }));
     renderPage();
-    expect(await screen.findByText('Mang tới điểm nhận')).toBeInTheDocument();
-    expect(screen.queryByText('Gửi về kho Tubu HCM')).toBeNull();
-    expect(screen.queryByText('Thu kèm đơn mua')).toBeNull();
+    const rules = await openRules();
+    expect(rules.getByText('Mang tới điểm nhận')).toBeInTheDocument();
+    expect(rules.queryByText('Gửi về kho Tubu HCM')).toBeNull();
+    expect(rules.queryByText('Thu kèm đơn mua')).toBeNull();
   });
   it('không cách giao nào mở với khách này → ẩn "Đổi rác ngay" nhưng vẫn hiện số dư', async () => {
     mocks.publicConfig.waste = { enabled: true, dropoff: false, mailin: false, pickup: false };
@@ -150,32 +157,53 @@ describe('/recycle trang vào (§4.1)', () => {
   });
   it('cờ pickup tắt → không có thẻ Thu kèm đơn', async () => {
     renderPage();
-    expect(await screen.findByText('Gửi về kho Tubu HCM')).toBeInTheDocument();
-    expect(screen.queryByText('Thu kèm đơn mua')).toBeNull();
+    const rules = await openRules();
+    expect(rules.getByText('Gửi về kho Tubu HCM')).toBeInTheDocument();
+    expect(rules.queryByText('Thu kèm đơn mua')).toBeNull();
+  });
+  it('khối Cách đổi: dải 3 bước có biểu tượng, nút chính ngay dưới; màn chính không còn danh sách cách giao', async () => {
+    renderPage();
+    const strip = await screen.findByTestId('waste-step-strip');
+    expect(strip.tagName).toBe('OL');
+    expect(Array.from(strip.querySelectorAll('li')).map((li) => li.getAttribute('data-step'))).toEqual(['pick', 'deliver', 'points']);
+    expect(strip.querySelectorAll('svg')).toHaveLength(3);
+    const how = strip.closest('section') as HTMLElement;
+    expect(within(how).getByRole('heading', { name: 'Cách đổi' })).toBeInTheDocument();
+    expect(within(how).getByRole('button', { name: 'Đổi rác ngay' })).toBeInTheDocument();
+    expect(screen.queryByText('Gửi về kho Tubu HCM')).toBeNull();
+    expect(screen.queryByText('Thể lệ chương trình')).toBeNull();
+    const rules = await openRules();
+    expect(rules.getByText('Mang tới điểm nhận hoặc gửi về kho Tubu')).toBeInTheDocument();
+    expect(rules.getByText('Miễn phí, nhận điểm khi người ở điểm xác nhận')).toBeInTheDocument();
   });
   it('cờ pickup bật → thẻ Shipper lấy tận nhà đứng sau Thu kèm đơn, nói trừ phí ship bằng Điểm Xanh; cờ tắt hay khoá đường kho thì ẩn', async () => {
     mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } }));
     const on = renderPage();
-    expect(await screen.findByText('Shipper lấy tận nhà')).toBeInTheDocument();
-    expect(screen.getByText('Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh')).toBeInTheDocument();
+    let rules = await openRules();
+    expect(rules.getByText('Shipper lấy tận nhà')).toBeInTheDocument();
+    expect(rules.getByText('Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh')).toBeInTheDocument();
     const names = ['Mang tới điểm nhận', 'Gửi về kho Tubu HCM', 'Thu kèm đơn mua', 'Shipper lấy tận nhà'];
-    const at = (n: string) => on.container.textContent!.indexOf(n);
+    const text = screen.getByTestId('waste-rules').textContent!;
+    const at = (n: string) => text.indexOf(n);
+    expect(names.map(at).every((i) => i >= 0)).toBe(true);
     expect(names.map(at)).toEqual([...names.map(at)].sort((a, b) => a - b));
     on.unmount();
 
     mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false };
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: false } }));
     const off = renderPage();
-    expect(await screen.findByText('Gửi về kho Tubu HCM')).toBeInTheDocument();
-    expect(screen.queryByText('Shipper lấy tận nhà')).toBeNull();
+    rules = await openRules();
+    expect(rules.getByText('Gửi về kho Tubu HCM')).toBeInTheDocument();
+    expect(rules.queryByText('Shipper lấy tận nhà')).toBeNull();
     off.unmount();
 
     mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' }));
     renderPage();
-    expect(await screen.findByText('Mang tới điểm nhận')).toBeInTheDocument();
-    expect(screen.queryByText('Shipper lấy tận nhà')).toBeNull();
+    rules = await openRules();
+    expect(rules.getByText('Mang tới điểm nhận')).toBeInTheDocument();
+    expect(rules.queryByText('Shipper lấy tận nhà')).toBeNull();
   });
   it('danh sách món: quy tắc + chuẩn bị; món sắp nhận mờ, nhãn "Sắp nhận"', async () => {
     renderPage();
@@ -247,9 +275,11 @@ describe('/recycle trang vào (§4.1)', () => {
     await waitFor(() => expect(screen.getByText(/Chương trình đang tạm dừng|Tài khoản của bạn tạm không tham gia/)).toBeInTheDocument());
     expect(screen.queryByText(/Nhận hàng tại điểm/)).toBeNull();
   });
-  it('liên kết Thể lệ', async () => {
+  it('liên kết Thể lệ: nút "Thể lệ" mở sheet, nút cuối sheet sang trang Thể lệ chương trình', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Thể lệ/ }));
+    await openRules();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem Thể lệ chương trình' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/rules');
   });
 });
@@ -378,6 +408,10 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(screen.getAllByText('Chỉ kho TP.HCM nhận')).toHaveLength(1);
     expect(screen.getByText('Cần số điện thoại để cộng Điểm Xanh đúng tài khoản của bạn.')).toBeInTheDocument();
     expect(mocks.getWasteMe).not.toHaveBeenCalled();
+    expect(screen.getByTestId('waste-step-strip')).toBeInTheDocument();
+    const rules = await openRules();
+    expect(rules.getByText('Chọn món và số lượng bạn có')).toBeInTheDocument();
+    expect(rules.queryByText('Cách giao')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Xem Thể lệ chương trình/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/rules');
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi rác' }));

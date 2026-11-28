@@ -33,7 +33,9 @@ const RUNTIME_PREFIXES = ['zaui-safe-area-'];
 // Tên đúng (không phải họ) do mã app đặt lúc chạy trên <html>. Không định nghĩa ở :root vì chỗ dùng có giá trị dự phòng riêng
 // (vd cart.tsx `var(--sticky-bar-h, 150px)`), mặc định ở :root sẽ đè mất dự phòng đó.
 //  - `--sticky-bar-h`: StickyActionBar (components/ui/sticky-action-bar.tsx) đo chiều cao thanh đang gắn.
-const RUNTIME_NAMES = new Set(['sticky-bar-h']);
+//  - `--dx`, `--dd`: lệch ngang và độ trễ của từng giọt nước khi tưới (components/game/garden-hero.tsx), đặt inline trên từng `.tubu-drop`.
+//  - `--bx`, `--by`, `--bd`: hướng bay và độ trễ của từng mảnh pháo giấy (components/game/burst.tsx), đặt inline trên từng `.tubu-burst-bit`.
+const RUNTIME_NAMES = new Set(['sticky-bar-h', 'dx', 'dd', 'bx', 'by', 'bd']);
 const SKIP_FILE = /\.(spec|test)\.[cm]?[jt]sx?$/;
 
 function walk(dir, exts, out = []) {

@@ -16,9 +16,11 @@ import { loadErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
 import { loginHref } from '@/lib/return-to';
 import { useModalA11y } from '@/lib/use-modal-a11y';
+import { sfx } from '@/lib/sfx';
 import { Badge, Button, Chip, Heading, IconButton, Skeleton, Text } from '@/components/mini';
 import { SR_ONLY } from '@/components/mini/sr-only';
 import { rememberPendingArcade, type ArcadeRunTicket } from './arcade-pending';
+import { Burst } from './burst';
 import { readGuestBest, writeGuestBest } from './arcade-storage';
 import { useArcadeSave, type ArcadeSaveState, type ArcadeTicketPromise } from './use-arcade-save';
 
@@ -268,6 +270,11 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
 
   const title = fillCopy(`arcade.${k}.title`);
   const lines = useMemo(() => (end ? summaryLines(end, authed, save.state) : []), [end, authed, save.state]);
+  // Kỷ lục mới hoặc ván được thưởng: chùm lấp lánh trên màn kết quả và một tiếng "thắng" (tắt được bằng nút âm thanh của trang).
+  const win = phase === 'ended' && end !== null && (end.guestNew || (save.state.status === 'done' && (save.state.data.isNewBest || save.state.data.rewarded)));
+  useEffect(() => {
+    if (win) sfx.play('win');
+  }, [win]);
   const tip = useMemo(() => (end ? endTip(gameId, end.result.stats) : null), [end, gameId]);
   if (typeof document === 'undefined') return null;
 
@@ -343,6 +350,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
               aria-busy={saving || undefined}
               className="absolute inset-0 flex flex-col gap-3 overflow-y-auto bg-[var(--color-bg-surface)] p-4 outline-none"
             >
+              {win && <Burst />}
               <Heading id="arcade-result-title" variant="title-sm" font="ui" as="h3">
                 {fillCopy('arcade.result.title')}
               </Heading>

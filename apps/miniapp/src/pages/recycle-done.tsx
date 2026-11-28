@@ -20,9 +20,8 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { formatNumber, formatPoints } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
-import { nextRewardProgress } from '../utils/waste-labels';
+import { impactLine, nextRewardProgress } from '../utils/waste-labels';
 import { DeclaredCountedTable } from './recycle-request';
-import { impactLine } from './recycle';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 

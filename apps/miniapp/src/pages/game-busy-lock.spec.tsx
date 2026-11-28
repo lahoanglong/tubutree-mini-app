@@ -120,7 +120,7 @@ async function tapTogether(...targets: HTMLElement[]) {
   });
 }
 
-async function openTab(name: 'Hôm nay' | 'Vườn') {
+async function openTab(name: 'Chăm vườn' | 'Sảnh Game' | 'Khu vườn') {
   fireEvent.click(await screen.findByRole('tab', { name }));
 }
 
@@ -158,7 +158,7 @@ interface Case {
   label: string;
   api: () => ReturnType<typeof vi.fn>;
   setup?: () => void;
-  tab?: 'Vườn';
+  tab?: 'Sảnh Game' | 'Khu vườn';
   /** Danh sách cú chạm theo thứ tự: cùng một nút hai lần, hoặc hai nút khác nhau của cùng một thao tác. */
   targets: () => Promise<HTMLElement[]>;
 }
@@ -189,6 +189,7 @@ const CASES: Case[] = [
   {
     label: 'trả lời quiz (cùng đáp án)',
     api: () => mocks.api.answerQuiz,
+    tab: 'Sảnh Game',
     setup: () => mocks.api.getTodayQuiz.mockResolvedValue([Q1]),
     targets: async () => {
       const opt = await screen.findByRole('button', { name: 'Cây' });
@@ -198,27 +199,28 @@ const CASES: Case[] = [
   {
     label: 'trả lời quiz (hai đáp án khác nhau)',
     api: () => mocks.api.answerQuiz,
+    tab: 'Sảnh Game',
     setup: () => mocks.api.getTodayQuiz.mockResolvedValue([Q1]),
     targets: async () => [await screen.findByRole('button', { name: 'Cây' }), await screen.findByRole('button', { name: 'Đá' })],
   },
   {
     label: 'tưới lô đất',
     api: () => mocks.api.waterPlot,
-    tab: 'Vườn',
+    tab: 'Khu vườn',
     setup: () => mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A], maxPlots: 4, nextUnlock: null }),
     targets: byName('Tưới'),
   },
   {
     label: 'mở lô đất',
     api: () => mocks.api.unlockPlot,
-    tab: 'Vườn',
+    tab: 'Khu vườn',
     setup: () => mocks.api.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 3, nextUnlock: { slot: 2, seedCost: 1_200 } }),
     targets: byName('Mở lô (1.200💧)'),
   },
   {
     label: 'nhận thưởng Chặng Mùa',
     api: () => mocks.api.claimSeasonPass,
-    tab: 'Vườn',
+    tab: 'Khu vườn',
     setup: () => {
       mocks.features.seasonPass = true;
       mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: TIERS });
@@ -241,7 +243,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
   it('góp quỹ trồng cây: xác nhận hai lần trong cùng khung hình chỉ gọi buyTree một lần', async () => {
     mocks.api.buyTree.mockReturnValue(pending<unknown>().promise);
     renderPage();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
     const ok = await screen.findByRole('button', { name: 'Xác nhận' });
     await tapTogether(ok, ok);
@@ -251,7 +253,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
   it('(W111A, W118A) góp quỹ bị từ chối 400: khoá của hộp xác nhận giữ tới khi hồ sơ tải lại xong, chạm lại bị bỏ qua, về rồi hộp đóng và mở lại gửi khoá mới', async () => {
     mocks.api.buyTree.mockRejectedValue(new HttpError('Không đủ Điểm Xanh', undefined, { status: 400, data: { message: 'Không đủ Điểm Xanh' } } as never));
     renderPage();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
     const ok = await screen.findByRole('button', { name: 'Xác nhận' });
     const refetched = pending<unknown>();
@@ -284,7 +286,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
     it.each([[404], [409]])('bị từ chối %i: hộp còn mở trong lúc hồ sơ tải lại, đóng sau khi dữ liệu mới về, báo một lần, mở lại gửi khoá mới', async (status) => {
       mocks.api.buyTree.mockRejectedValueOnce(rejected(status)).mockResolvedValue({ certificateCode: 'TUBU-9', cost: 50 });
       renderPage();
-      await openTab('Vườn');
+      await openTab('Khu vườn');
       const ok = await openConfirm();
       const refetched = pending<unknown>();
       mocks.api.getGameProfile.mockClear();
@@ -307,7 +309,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
     it('bị từ chối 422 (không có gì để tải lại): hộp đóng ngay, không tải lại hồ sơ, mở lại gửi khoá mới', async () => {
       mocks.api.buyTree.mockRejectedValueOnce(rejected(422)).mockResolvedValue({ certificateCode: 'TUBU-9', cost: 50 });
       renderPage();
-      await openTab('Vườn');
+      await openTab('Khu vườn');
       const ok = await openConfirm();
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 30));
@@ -324,7 +326,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
     it('máy chủ lỗi 500: hộp ở lại, "Xác nhận" gửi lại đúng khoá cũ', async () => {
       mocks.api.buyTree.mockRejectedValueOnce(rejected(500)).mockResolvedValue({ certificateCode: 'TUBU-9', cost: 50 });
       renderPage();
-      await openTab('Vườn');
+      await openTab('Khu vườn');
       const ok = await openConfirm();
       await tapTogether(ok);
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
@@ -342,7 +344,7 @@ describe('GamePage — khoá chỉ theo đích của thao tác', () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: null });
     mocks.api.waterPlot.mockReturnValue(pending<unknown>().promise);
     renderPage();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     await screen.findByText('Lô 2 · Mận');
     const [a, b] = screen.getAllByRole('button', { name: 'Tưới' }) as [HTMLElement, HTMLElement];
     await tapTogether(a, a, b, b);
@@ -370,7 +372,7 @@ describe('GamePage — nhả khoá để bấm lại được', () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A], maxPlots: 4, nextUnlock: null });
     mocks.api.waterPlot.mockRejectedValueOnce(new Error('boom'));
     renderPage();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     const btn = await screen.findByRole('button', { name: 'Tưới' });
     await tapTogether(btn, btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));

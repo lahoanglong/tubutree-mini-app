@@ -47,15 +47,15 @@ import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
 import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
 import { MissionsCard } from '../components/game/missions-card';
 import { ArcadeHub } from '../components/game/arcade-hub';
-import { HomeQuizCard } from '../components/game/home-quiz-card';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
 import { WheelPrizeSheet } from '../components/game/wheel-prize-sheet';
-import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
+import { GAME_TABS, GameTabPanel, useGameTab, type GameTabKey } from '../components/game/game-tabs';
 import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestMeta, type HarvestReward } from '../components/game/use-game-actions';
 import { SEASON_PASS_ENABLED } from '../utils/features';
-import { PlayTodayCard, useMiniToday } from '../components/game/mini/play-today-card';
+import { useMiniToday } from '../components/game/mini/play-today-card';
+import { SoundToggle } from '../components/game/sound-toggle';
 
 export default function GamePage() {
   const phase = useAuthPhase();
@@ -66,7 +66,7 @@ export default function GamePage() {
   const referralCode = useAuthStore((s) => s.user?.referralCode);
   const authed = phase === 'authenticated';
 
-  const [tab, setTab] = useState<GameTabKey>('today');
+  const [tab, setTab] = useGameTab();
   const { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, gardenQ, seasonPass } =
     useGameData(authed, tab === 'garden');
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
@@ -77,6 +77,7 @@ export default function GamePage() {
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
   const [harvested, setHarvested] = useState(false);
+  const [waterTick, setWaterTick] = useState(0);
   const [harvestCoupons, setHarvestCoupons] = useState<string[]>([]);
   const [harvestTerms, setHarvestTerms] = useState<HarvestCouponTerms[]>([]);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
@@ -130,7 +131,7 @@ export default function GamePage() {
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
   const shell = (children: ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(var(--space-section) + var(--safe-bottom))' }}>
-      <PageHeader title="Vườn Xanh" />
+      <PageHeader title="Vườn Xanh" actions={<SoundToggle />} />
       {children}
     </Page>
   );
@@ -141,7 +142,7 @@ export default function GamePage() {
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
-  if (!authed) return shell(<><GameLoginGate onLogin={() => login()} />{mini.today && <PlayTodayCard today={mini.today} inset />}</>);
+  if (!authed) return shell(<><GameLoginGate onLogin={() => login()} /><div style={{ padding: 'var(--space-stack-sm) var(--space-inset-page) 0' }}><ArcadeHub mini={mini.today} /></div></>);
 
   // Profile là dữ liệu chủ đạo của trang (streak/giọt nước/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
@@ -169,14 +170,6 @@ export default function GamePage() {
     <>
       <div style={{ padding: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <GuestBanner />
-        <GardenHero
-          eco={eco}
-          totalSeeds={profile?.totalSeeds}
-          streakDays={status?.streakDays ?? profile?.streakDays} rhythm={{ lastCheckInAt: profile?.lastCheckInAt, activeToday: checkedInToday || dewToday || (status?.checkedInToday ?? false) }}
-          harvestReady={profile?.harvestReady}
-          tankCapacity={profile?.tankCapacity}
-          wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
-        />
 
         {/* Điều hướng nội bộ: giữ thanh tab trong tầm tay khi cuộn hết khối dài của "Hôm nay".
             top = safe-top vì app immersive: dính mép 0 thì tab "Cộng đồng" nằm dưới status bar/capsule Zalo. */}
@@ -184,8 +177,10 @@ export default function GamePage() {
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={(key) => setTab(key as GameTabKey)} />
         </div>
 
-        {/* Hôm nay: hành động chính của ngày nằm trong hai màn hình đầu (tưới, điểm danh, nhiệm vụ). */}
+        {/* Chăm vườn: thẻ cây rồi hành động chính của ngày (tưới, điểm danh, nhiệm vụ) trong hai màn hình đầu. */}
         <GameTabPanel tab="today" active={tab === 'today'}>
+          <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} waterTick={waterTick} harvestReady={profile?.harvestReady} tankCapacity={profile?.tankCapacity} wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
+            streakDays={status?.streakDays ?? profile?.streakDays} rhythm={{ lastCheckInAt: profile?.lastCheckInAt, activeToday: checkedInToday || dewToday || (status?.checkedInToday ?? false) }} />
           <TreeHealthAlert health={profile?.treeHealth} />
 
           {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
@@ -218,7 +213,7 @@ export default function GamePage() {
             checkInSeeds={checkInSeeds}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
-            onWater={(drops) => waterM.mutate(drops)}
+            onWater={(drops) => waterM.mutate(drops, { onSuccess: () => setWaterTick((k) => k + 1) })}
             onHarvest={() => waterM.mutate(0)}
             onEarn={() => openEarn()}
           />
@@ -240,8 +235,6 @@ export default function GamePage() {
           />
           </div>
 
-          {mini.today ? <PlayTodayCard today={mini.today} /> : <ArcadeHub />}
-          <HomeQuizCard />
           <MissionsCard
             missions={missions}
             streakDays={profile?.streakDays}
@@ -250,6 +243,22 @@ export default function GamePage() {
             onClaim={(code) => claimMissionM.mutate(code)}
             onGo={goMission}
           />
+
+          {/* Lối vào Đổi rác lấy quà (spec 4.9) */}
+          {publicConfig.waste.enabled && (
+            <GameLinkRow
+              icon={Recycle}
+              title="Đổi rác lấy quà"
+              badge="Mới"
+              hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm"
+              onClick={() => navigate('/recycle')}
+            />
+          )}
+        </GameTabPanel>
+
+        {/* Sảnh Game: mọi game chơi được (hai game hành động, game mini, Chọn Chuẩn Xanh) và Vòng quay trong một lưới thẻ. */}
+        <GameTabPanel tab="games" active={tab === 'games'}>
+          <ArcadeHub mini={mini.today} wheel={{ cost: profile?.spinCostPoints ?? 10_000, anchorId: 'game-wheel' }} />
           {!mini.quiz && <div id="game-quiz">
             <QuizCard
               quiz={quiz}
@@ -264,26 +273,16 @@ export default function GamePage() {
               answeredToday={profile?.quizAnsweredToday}
             />
           </div>}
-
-          <LuckyWheelCard
-            cost={profile?.spinCostPoints ?? 10_000}
-            points={wheelPoints}
-            onEarnPoints={() => navigate('/loyalty')}
-            onSpin={handleSpin}
-            onResult={wheelPrize.onResult}
-          />
-          <MarketplacePointsNote note={marketplaceNote} />
-
-          {/* Lối vào Đổi rác lấy quà (spec 4.9) */}
-          {publicConfig.waste.enabled && (
-            <GameLinkRow
-              icon={Recycle}
-              title="Đổi rác lấy quà"
-              badge="Mới"
-              hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm"
-              onClick={() => navigate('/recycle')}
+          <div id="game-wheel" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-stack-sm)' }}>
+            <LuckyWheelCard
+              cost={profile?.spinCostPoints ?? 10_000}
+              points={wheelPoints}
+              onEarnPoints={() => navigate('/loyalty')}
+              onSpin={handleSpin}
+              onResult={wheelPrize.onResult}
             />
-          )}
+            <MarketplacePointsNote note={marketplaceNote} />
+          </div>
         </GameTabPanel>
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
@@ -370,7 +369,7 @@ export default function GamePage() {
         onDew={() => dewM.mutate()}
         quiz={mini.quiz?.earn ?? quizState}
         onRetryQuiz={() => (quizQ.isFetching ? undefined : quizQ.refetch())}
-        onGoQuiz={() => (mini.quiz ? (closeEarn(), navigate(mini.quiz.path)) : goTab('today', 'game-quiz'))}
+        onGoQuiz={() => (mini.quiz ? (closeEarn(), navigate(mini.quiz.path)) : goTab('games', 'game-quiz'))}
         error={earnError}
       />
 

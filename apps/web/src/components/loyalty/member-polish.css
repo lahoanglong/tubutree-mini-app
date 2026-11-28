@@ -1,0 +1,148 @@
+/*
+ * Huy chương hạng (Hạng thành viên) và thẻ quà gọn (Đổi điểm). Số đo đặt ở đây (bánh cóc px chỉ đếm TSX), màu qua token.
+ * Bản Mini: apps/miniapp/src/css/member-polish.css (giữ giống hệt).
+ */
+/* ── Huy chương hạng ── */
+.tubu-tier-medal {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+.tubu-tier-medal[data-size='sm'] {
+  width: 18px;
+  height: 20px;
+}
+.tubu-tier-medal[data-size='md'] {
+  width: 28px;
+  height: 32px;
+}
+.tubu-tier-medal[data-size='lg'] {
+  width: 64px;
+  height: 72px;
+  filter: drop-shadow(0 3px 4px color-mix(in srgb, var(--color-text-primary) 14%, transparent));
+}
+.tubu-tier-medal[data-size='xl'] {
+  width: 88px;
+  height: 99px;
+  filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--color-text-primary) 16%, transparent));
+}
+.tubu-tier-hero-medal {
+  display: flex;
+  justify-content: center;
+}
+.tubu-tier-celebrate {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+.tubu-tier-progress-line {
+  margin-top: 6px;
+  text-wrap: balance;
+}
+.tubu-inline-medal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Thẻ quà gọn (Đổi điểm): biểu tượng, tên, viên giá điểm, một viên ngắn, nút Đổi; câu dài ở sheet chi tiết ── */
+.tubu-reward-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tubu-reward-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tubu-reward-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-control);
+  background: var(--color-action-secondary-bg);
+}
+.tubu-reward-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.tubu-reward-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.tubu-reward-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.tubu-reward-points,
+.tubu-reward-pill {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tubu-reward-points {
+  background: var(--color-action-secondary-bg);
+  color: var(--color-text-brand);
+  font-weight: 700;
+}
+.tubu-reward-pill {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+.tubu-reward-cta {
+  position: relative;
+  z-index: 2;
+  flex: none;
+}
+/* Tên là nút mở sheet chi tiết; `::after` phủ cả thẻ (thẻ có `position: relative`), nút Đổi ở `.tubu-reward-cta` nổi trên lớp phủ. */
+.tubu-reward-hit {
+  margin: 0;
+  padding: 0 20px 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-reward-hit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--radius-card);
+}
+.tubu-reward-hit:focus-visible {
+  outline: none;
+}
+.tubu-reward-hit:focus-visible::after {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+/* Cạnh một SVG luôn là chỗ được ngắt dòng (U+2060 hay NBSP không chặn được), nên ⓘ nằm trong hộp rộng 0: dòng không bao giờ phải ngắt
+   trước nó, ⓘ luôn đứng ngay sau từ cuối của tên. Nút chừa lề phải 20px (4 + 16) cho ⓘ tràn vào. */
+.tubu-reward-info {
+  display: inline-block;
+  width: 0;
+  white-space: nowrap;
+}
+.tubu-reward-info > svg {
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: -2px;
+}

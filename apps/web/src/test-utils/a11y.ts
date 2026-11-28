@@ -93,13 +93,13 @@ const px44 = (value: string) => /^\d+(?:\.\d+)?px$/.test(value) && parseFloat(va
 
 let cssHitClasses: ReadonlySet<string> | null = null;
 /**
- * Lớp `.tubu-*` mà mini.css tự khai vùng chạm 44px trong luật chỉ một lớp, vd `.tubu-consent-line`, `.tubu-cart-total`: cao (`height`/`min-height`)
+ * Lớp `.tubu-*` mà mini.css (và game-hub.css của Vườn Xanh) tự khai vùng chạm 44px trong luật chỉ một lớp, vd `.tubu-consent-line`, `.tubu-cart-total`: cao (`height`/`min-height`)
  * ≥ 44px VÀ rộng (`width`/`min-width` ≥ 44px hoặc `width: 100%`), để nút chỉ có biểu tượng mà quên bề ngang không lọt. jsdom không nạp CSS nên
  * đọc thẳng file, như bộ kiểm vùng chạm của Mini App đọc declutter.css.
  */
 function cssHit44Classes(): ReadonlySet<string> {
   if (cssHitClasses) return cssHitClasses;
-  const css = readFileSync(resolve(__dirname, '../components/mini/mini.css'), 'utf8');
+  const css = ['../components/mini/mini.css', '../components/game/game-hub.css'].map((f) => readFileSync(resolve(__dirname, f), 'utf8')).join('\n');
   const found = new Set<string>();
   for (const m of css.matchAll(/(?:^|\n)\.([\w-]+)\s*\{([^}]*)\}/g)) {
     const h = /(?:^|[;\s])(?:min-)?height:\s*(\d+)px/.exec(m[2]!);
@@ -111,8 +111,24 @@ function cssHit44Classes(): ReadonlySet<string> {
   return found;
 }
 
+let overlayHitClasses: ReadonlySet<string> | null = null;
+/**
+ * Lớp có `::after` phủ kín cả thẻ (`position: absolute; inset: 0`), vd `.tubu-hub-hit` của thẻ Sảnh Game (game-hub.css), `.tubu-reward-hit` của
+ * thẻ quà (member-polish.css): thẻ cao hơn 44px nên vùng chạm là cả thẻ. Đọc luật thật trong CSS: bỏ lớp phủ thì nút chỉ còn chữ tên và kiểm này đỏ.
+ */
+function cssOverlayHitClasses(): ReadonlySet<string> {
+  if (overlayHitClasses) return overlayHitClasses;
+  const css = ['../components/game/game-hub.css', '../components/loyalty/member-polish.css'].map((f) => readFileSync(resolve(__dirname, f), 'utf8')).join('\n');
+  const found = new Set<string>();
+  for (const m of css.matchAll(/(?:^|\n)\.([\w-]+)::after\s*\{([^}]*)\}/g)) {
+    if (/(?:^|[;\s])position:\s*absolute\b/.test(m[2]!) && /(?:^|[;\s])inset:\s*0\b/.test(m[2]!)) found.add(m[1]!);
+  }
+  overlayHitClasses = found;
+  return found;
+}
+
 const hasHit44 = (el: HTMLElement) =>
-  Array.from(el.classList).some((c) => cssHit44Classes().has(c)) ||
+  Array.from(el.classList).some((c) => cssHit44Classes().has(c) || cssOverlayHitClasses().has(c)) ||
   el.classList.contains('tubu-hit-44-square') ||
   (el.classList.contains('tubu-hit-44') && (/\b(?:min-w-11|w-11)\b/.test(el.className) || px44(el.style.minWidth)));
 
