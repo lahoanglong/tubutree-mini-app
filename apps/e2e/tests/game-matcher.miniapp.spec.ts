@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { matcherCopy } from '../../../packages/app-core/src/game-mini/matcher-copy';
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
 import { mockNewbieGame } from './support/game-newbie-states';
-import { expectNoHorizontalOverflow, expectTargets44, gameCopy, mockMiniGames } from './support/game-mini-mocks';
+import { expectNoHorizontalOverflow, expectTargets44, gameCopy, mockMiniGames, openMiniGameHub } from './support/game-mini-mocks';
 import { MATCHER_RESULT, mockMatcherOn } from './support/matcher-mocks';
 
 /**
@@ -50,7 +50,7 @@ for (const viewport of [
   test.describe(`Mini App ${viewport.width}px Chọn Chuẩn Xanh`, () => {
     test.use({ viewport });
 
-    test('cờ bật: dòng ở Chơi hôm nay mở màn chơi trong app, 5 bước, thêm cả bộ một lệnh 4 món, Xem giỏ mở giỏ Mini App', async ({ page, api }) => {
+    test('cờ bật: thẻ ở Sảnh Game mở màn chơi trong app, 5 bước, thêm cả bộ một lệnh 4 món, Xem giỏ mở giỏ Mini App', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       mockMatcherOn(api);
@@ -60,11 +60,11 @@ for (const viewport of [
         return { items: [], subtotal: 0, discount: 0, itemCount: 4 };
       });
       api.allowUnmocked('GET /cart', 'GET /cart/count');
-      await page.goto('/game');
+      await openMiniGameHub(page);
       const row = page.getByTestId('mini-play-row-matcher');
       await expect(row).toContainText(gameCopy('game.matcher.title'), { timeout: 15_000 });
-      await expect(page.getByTestId('mini-play-today')).not.toContainText('tubutree.com');
-      await expectTargets44(page.getByTestId('mini-play-today'));
+      await expect(page.getByTestId('arcade-hub')).not.toContainText('tubutree.com');
+      await expectTargets44(page.getByTestId('arcade-hub'));
       await row.click();
       await expect(page).toHaveURL(/\/game\/matcher\?from=play_today$/);
       await play(page, ['kitchen', 'machine', 'large']);
@@ -97,13 +97,13 @@ for (const viewport of [
       await expectNoHorizontalOverflow(page);
     });
 
-    test('cờ tắt: Chơi hôm nay không có dòng; mở thẳng /game/matcher báo tạm nghỉ, nút về Vườn Xanh', async ({ page, api }) => {
+    test('cờ tắt: Sảnh Game không có thẻ; mở thẳng /game/matcher báo tạm nghỉ, nút về Vườn Xanh', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       api.get('/game/matcher', reply(404, { statusCode: 404, code: 'GAME_DISABLED', message: 'Trò chơi đang tạm tắt' }));
       api.get('/game/matcher/status', { enabled: false });
-      await page.goto('/game');
-      await expect(page.getByTestId('mini-play-today')).toBeVisible({ timeout: 15_000 });
+      await openMiniGameHub(page);
+      await expect(page.getByTestId('mini-play-row-sort')).toBeVisible({ timeout: 15_000 });
       // Đợi câu trả lời của cờ về (không chỉ lúc lệnh vừa gửi) rồi mới khẳng định không có dòng.
       await expect.poll(() => api.calls.some((c) => c.method === 'GET' && c.path === '/game/matcher/status')).toBe(true);
       await page.waitForLoadState('networkidle');

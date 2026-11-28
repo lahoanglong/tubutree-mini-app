@@ -102,9 +102,11 @@ describe('GardenHero', () => {
     expect(screen.queryByText(/400/)).toBeNull();
     expect(screen.getByText(/thu hoạch ngay/i)).toBeInTheDocument();
   });
-  it('dòng chú thích không lặp chuỗi ngày (chuỗi nằm ở dải Nhịp Sống Xanh), dải có bảy ô', () => {
+  it('hai chip thành tích, viên chuỗi chỉ ghi "N ngày" (không lặp nguyên văn "Chuỗi N ngày" của thẻ Điểm danh), dải có bảy ô', () => {
     const { container } = render(hero({ eco: { progress: 10, target: 60, treeType: 'Sồi', treesPlanted: 2 }, totalSeeds: 10, streakDays: 5 }));
-    expect(container.textContent).toContain('10/60💧 · 🌳 Đã thu hoạch 2 cây');
+    expect(screen.getByText('10/60💧')).toBeInTheDocument();
+    expect(screen.getByText('🌳 Đã thu hoạch 2 cây')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Chuỗi điểm danh 5 ngày' })).toHaveTextContent('5 ngày');
     expect(container.textContent).not.toContain('Chuỗi 5 ngày');
     expect(screen.getByTestId('week-rhythm').querySelectorAll('li')).toHaveLength(7);
   });

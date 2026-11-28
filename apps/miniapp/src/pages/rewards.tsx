@@ -9,13 +9,14 @@ import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import {
   REWARD_TABS,
-  WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
   freeShipConfirmText,
   rewardPhoneVerifyCopy,
   rewardsGuideCopy,
   NEW_COUPON_PARAM,
+  rewardDetailLines,
   rewardFreeShipNote,
+  rewardPill,
   isWarehousePickup,
   openingHoursText,
   orderRewards,
@@ -48,6 +49,7 @@ import { pointsSummary } from '../utils/points-lots';
 import { pointsRulesNote } from '../utils/points-rules-note';
 import { settleWithin } from '../utils/settle-within';
 import { pointAddress } from '../utils/waste-labels';
+import '../css/member-polish.css';
 
 export { REWARD_TABS, openingHoursText };
 
@@ -172,48 +174,117 @@ const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
   GIFT: Gift,
 };
 
-function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; preview?: boolean }) {
+/** Phần nút của thẻ quà theo trạng thái (Đổi, Đã hết, Chờ mở khoá, Cần thêm): dùng chung cho thẻ và chân sheet chi tiết. */
+function RewardAction({ s, preview, onRedeem }: { s: ReturnType<typeof rewardCardState>; preview: boolean; onRedeem: () => void }) {
+  if (s.kind === 'soldOut') return <Badge>Đã hết</Badge>;
+  if (preview) return null;
+  if (s.kind === 'redeem') return <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>;
+  if (s.kind === 'needPhoneVerify') return <Button disabled>Đổi</Button>;
+  if (s.kind === 'locked') return <Button disabled>Chờ mở khoá điểm</Button>;
+  return <Text variant="caption" tone="secondary" as="div" numeric>{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>;
+}
+
+/**
+ * Thẻ quà gọn: biểu tượng, tên, viên giá điểm, tối đa một viên ngắn (`rewardPill`) và nút Đổi. Câu dài (mô tả, ghi chú hạng, nơi nhận, cách nhận)
+ * nằm trong sheet chi tiết: quà có nội dung thêm thì tên là nút phủ cả thẻ (`.tubu-reward-hit`), nút Đổi đứng trên lớp phủ.
+ */
+function RewardCard({ reward, catalog, onRedeem, onDetail, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; onDetail: () => void; preview?: boolean }) {
   const s = rewardCardState(reward, catalog);
   const freeNote = preview ? null : rewardFreeShipNote(reward, catalog, formatVnd);
+  const pill = rewardPill(reward, { covered: freeNote !== null, formatNumber });
+  const hasDetail = rewardDetailLines(reward, { freeNote, formatNumber }).length > 0;
   return (
-    <Card variant="outline">
-      <div data-reward style={{ ...COLUMN, gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <span
-            data-testid="reward-icon"
-            style={{
-              flexShrink: 0, width: 40, height: 40, borderRadius: 'var(--radius-control)',
-              background: 'var(--color-action-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
+    <Card variant="outline" style={{ position: 'relative' }}>
+      <div data-reward className="tubu-reward-card">
+        <div className="tubu-reward-row">
+          <span data-testid="reward-icon" className="tubu-reward-icon">
             <Icon icon={KIND_ICON[reward.kind]} tone="brand" />
           </span>
-          <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-              <Text variant="body-md" as="div" numeric style={{ fontWeight: 600 }}>{reward.name}</Text>
-              {reward.label && !freeNote && <Badge tone="brand">{reward.label}</Badge>}
+          <div className="tubu-reward-main">
+            <Text variant="body-md" as="div" numeric className="tubu-reward-title" style={{ fontWeight: 600 }}>
+              {hasDetail ? (
+                <button type="button" className="tubu-reward-hit" aria-haspopup="dialog" onClick={onDetail}>
+                  {reward.name}
+                  <span className="tubu-reward-info">
+                    <Icon icon={Info} size="sm" tone="muted" />
+                  </span>
+                </button>
+              ) : (
+                reward.name
+              )}
+            </Text>
+            <div className="tubu-reward-meta">
+              <span className="tubu-reward-points" data-testid="reward-points">{formatPoints(reward.pointsCost)}</span>
+              {pill && <span className="tubu-reward-pill" data-testid="reward-pill">{pill}</span>}
             </div>
-            {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
-            {reward.stockRemaining != null && !reward.soldOut && (
-              <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
-            )}
-            {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
-            {freeNote && <Text variant="caption" tone="secondary" as="div">{freeNote}</Text>}
-            {isWarehousePickup(reward) && <Text variant="caption" tone="secondary" as="div">{WAREHOUSE_ONLY_LABEL}</Text>}
           </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text variant="body-sm" tone="brand" as="div" numeric style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
-          {!preview && s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
-          {!preview && s.kind === 'needPhoneVerify' && <Button disabled>Đổi</Button>}
-          {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
-          {!preview && s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
-          {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div" numeric>{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
+          <div className="tubu-reward-cta">
+            <RewardAction s={s} preview={preview} onRedeem={onRedeem} />
+          </div>
         </div>
         {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} ariaLabel={`${reward.name}: điểm đang có so với điểm cần để đổi`} />}
       </div>
     </Card>
   );
+}
+
+/** Danh sách thẻ quà kèm MỘT sheet chi tiết (mô tả, ghi chú, nơi nhận) dùng chung; chân sheet có nút Đổi khi quà đổi được. */
+function RewardList({ rewards, catalog, onRedeem, preview = false }: { rewards: readonly RewardItemDTO[]; catalog: RewardCatalogDTO; onRedeem: (r: RewardItemDTO) => void; preview?: boolean }) {
+  const [detail, setDetail] = useState<RewardItemDTO | null>(null);
+  const shown = useLastNonNull(detail);
+  const s = shown ? rewardCardState(shown, catalog) : null;
+  const lines = shown ? rewardDetailLines(shown, { freeNote: preview ? null : rewardFreeShipNote(shown, catalog, formatVnd), formatNumber }) : [];
+  return (
+    <>
+      <div style={{ ...COLUMN, gap: 12 }}>
+        {rewards.map((r) => (
+          <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => onRedeem(r)} onDetail={() => setDetail(r)} preview={preview} />
+        ))}
+      </div>
+      <BottomSheet
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        title={shown?.name ?? ''}
+        footer={
+          shown && s && !preview && s.kind === 'redeem' ? (
+            <Button
+              fullWidth
+              onPress={() => {
+                setDetail(null);
+                onRedeem(shown);
+              }}
+            >
+              {`Đổi · ${formatPoints(shown.pointsCost)}`}
+            </Button>
+          ) : (
+            <Button fullWidth variant="secondary" onPress={() => setDetail(null)}>
+              Đóng
+            </Button>
+          )
+        }
+      >
+        {shown && (
+          <div style={{ ...COLUMN, gap: 'var(--space-stack-sm)' }} data-testid="reward-detail">
+            <div className="tubu-reward-meta">
+              <span className="tubu-reward-points">{formatPoints(shown.pointsCost)}</span>
+            </div>
+            {lines.map((l) => (
+              <Text key={l} variant="body-sm" tone="secondary" as="p">
+                {l}
+              </Text>
+            ))}
+          </div>
+        )}
+      </BottomSheet>
+    </>
+  );
+}
+
+/** Giữ giá trị khác null gần nhất: sheet còn chạy hoạt ảnh đóng sau khi state về null, nội dung không được biến mất giữa chừng. */
+function useLastNonNull<T>(value: T | null): T | null {
+  const ref = useRef<T | null>(value);
+  if (value !== null) ref.current = value;
+  return ref.current;
 }
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
@@ -351,11 +422,7 @@ function RewardsBody() {
       {shown.length === 0 ? (
         <Text variant="body-sm" tone="secondary" as="div">Chưa có quà trong mục này</Text>
       ) : (
-        <div style={{ ...COLUMN, gap: 12 }}>
-          {shown.map((r) => (
-            <RewardCard key={r.id} reward={r} catalog={c} onRedeem={() => setConfirmReward(r)} />
-          ))}
-        </div>
+        <RewardList rewards={shown} catalog={c} onRedeem={setConfirmReward} />
       )}
       <BottomSheet
         open={confirmReward !== null}
@@ -406,11 +473,7 @@ function GuestRewards() {
           {shown.length === 0 ? (
             <Text variant="body-sm" tone="secondary" as="div">Chưa có quà trong mục này</Text>
           ) : (
-            <div style={{ ...COLUMN, gap: 12 }}>
-              {shown.map((r) => (
-                <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
-              ))}
-            </div>
+            <RewardList rewards={shown} catalog={catalog} onRedeem={() => undefined} preview />
           )}
         </>
       )}

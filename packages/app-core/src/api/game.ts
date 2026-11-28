@@ -1,7 +1,6 @@
 import type { HttpClient } from '../http';
 import { errorCode, errorStatus } from './error-status';
 import type { ArcadeGameId, ArcadeWindowId } from '../arcade/arcade-config';
-import type { HomeQuizAnswers } from '../arcade/home-quiz';
 import type { CheckInResult, PointsBlocked } from './loyalty';
 
 export interface GameProfile {
@@ -367,11 +366,7 @@ export interface ArcadeStatus {
   nextWindowAt: string | null;
   quizClaimed: boolean;
 }
-export interface HomeQuizResult {
-  granted: number;
-  alreadyClaimed: boolean;
-  totalSeeds: number;
-}
+export type { HomeQuizResult } from './home-quiz';
 /** Xin mã ván lúc khách bấm Chơi (công khai: khách chưa đăng nhập cũng xin được, để đăng nhập xong vẫn nhận thưởng ván đó). */
 /** Mã lỗi của 409 "mã ván đã dùng" (khớp ARCADE_RUN_USED_CODE của apps/api game-arcade.constants.ts). */
 export const ARCADE_RUN_USED_CODE = 'ARCADE_RUN_USED';
@@ -401,5 +396,4 @@ export const completeArcade = (http: HttpClient, body: ArcadeCompleteBody) =>
     runId: body.runId,
   });
 export const getArcadeStatus = (http: HttpClient) => http.get<ArcadeStatus>('/game/arcade/status');
-export const completeHomeQuiz = (http: HttpClient, answers: HomeQuizAnswers) =>
-  http.post<HomeQuizResult>('/game/home-quiz/complete', { family: answers.family, worry: answers.worry, format: answers.format });
+export { completeHomeQuiz } from './home-quiz';

@@ -80,7 +80,7 @@ function renderPage() {
 describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', () => {
   it('giọt nước và mục tiêu cộng đồng theo kiểu "1.250.000", giá góp quỹ là Điểm Xanh, không có số trần', async () => {
     const { container } = renderPage();
-    fireEvent.click(await screen.findByRole('tab', { name: 'Vườn' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Khu vườn' }));
     expect(await screen.findByText(/Góp quỹ trồng cây/)).toBeInTheDocument();
     await screen.findByText(/Rừng Tubu/);
     const text = container.textContent ?? '';

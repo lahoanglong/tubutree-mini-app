@@ -109,10 +109,14 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
-const openTab = async (name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') => fireEvent.click(await screen.findByRole('tab', { name }));
+const openTab = async (name: 'Chăm vườn' | 'Sảnh Game' | 'Khu vườn') => fireEvent.click(await screen.findByRole('tab', { name }));
 const todayPanel = async () => {
-  await screen.findByRole('tab', { name: 'Hôm nay' });
-  return within(screen.getByRole('tabpanel', { name: 'Hôm nay' }));
+  await screen.findByRole('tab', { name: 'Chăm vườn' });
+  return within(screen.getByRole('tabpanel', { name: 'Chăm vườn' }));
+};
+const gamesPanel = async () => {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Sảnh Game' }));
+  return within(screen.getByRole('tabpanel', { name: 'Sảnh Game' }));
 };
 /** Hàng việc trong sheet "Kiếm nước": tiêu đề nằm trong div cạnh nút. */
 const rowOf = (title: string | RegExp) => within(screen.getByText(title).parentElement!.parentElement!);
@@ -195,7 +199,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
       mocks.api.getGameProfile.mockResolvedValue(STUCK);
       mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT], maxPlots: 4, nextUnlock: { slot: 3, seedCost: 100 } });
       renderPage();
-      if (tab === 'Vườn') await openTab('Vườn');
+      if (tab === 'Vườn') await openTab('Khu vườn');
       fireEvent.click(await screen.findByRole('button', { name }));
       expect(await screen.findByRole('heading', { name: 'Kiếm nước' })).toBeInTheDocument();
       expect(screen.getByText(new RegExp(need.replace('.', '\\.')))).toBeInTheDocument();
@@ -460,33 +464,34 @@ describe('Vườn Xanh người mới — thiếu điểm và lô phụ', () => 
   it('vòng quay thiếu điểm: hiện "Bạn có X / 10.000 Điểm Xanh", không có nút quay, nút "Cách kiếm Điểm Xanh" sang /loyalty', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 3_000, redeemablePoints: 3_000, redeemableTotal: 3_000 });
     renderPage();
-    expect(await (await todayPanel()).findByText('Bạn có 3.000 / 10.000 Điểm Xanh cho 1 lượt quay')).toBeInTheDocument();
-    expect((await todayPanel()).queryByRole('button', { name: /Quay ngay/ })).not.toBeInTheDocument();
-    fireEvent.click((await todayPanel()).getByRole('button', { name: 'Cách kiếm Điểm Xanh' }));
+    const games = await gamesPanel();
+    expect(await games.findByText('Bạn có 3.000 / 10.000 Điểm Xanh cho 1 lượt quay')).toBeInTheDocument();
+    expect(games.queryByRole('button', { name: /Quay ngay/ })).not.toBeInTheDocument();
+    fireEvent.click(games.getByRole('button', { name: 'Cách kiếm Điểm Xanh' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/loyalty');
     expect(mocks.api.spin).not.toHaveBeenCalled();
   });
 
   it('vòng quay đủ điểm hoặc chưa biết số dư: vẫn là nút "Quay ngay"', async () => {
     const view = renderPage();
-    expect(await (await todayPanel()).findByRole('button', { name: /Quay ngay/ })).toBeInTheDocument();
+    expect(await (await gamesPanel()).findByRole('button', { name: /Quay ngay/ })).toBeInTheDocument();
     view.unmount();
     mocks.getLoyalty.mockRejectedValue(new Error('boom'));
     renderPage();
-    expect(await (await todayPanel()).findByRole('button', { name: /Quay ngay/ })).toBeInTheDocument();
+    expect(await (await gamesPanel()).findByRole('button', { name: /Quay ngay/ })).toBeInTheDocument();
   });
 
   it('vòng quay chỉ tính điểm dùng được: điểm bị khoá theo đơn chưa hết hạn đổi trả không được tính', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 12_000, redeemablePoints: 4_000, redeemableTotal: 4_000 });
     renderPage();
-    expect(await (await todayPanel()).findByText('Bạn có 4.000 / 10.000 Điểm Xanh cho 1 lượt quay')).toBeInTheDocument();
+    expect(await (await gamesPanel()).findByText('Bạn có 4.000 / 10.000 Điểm Xanh cho 1 lượt quay')).toBeInTheDocument();
   });
 
   it('góp quỹ nằm ở tab Vườn (không còn ở Hôm nay); thiếu điểm hiện số dư và "Cách kiếm Điểm Xanh"', async () => {
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 1_000, redeemablePoints: 1_000, redeemableTotal: 1_000 });
     renderPage();
-    await openTab('Vườn');
-    const garden = within(screen.getByRole('tabpanel', { name: 'Vườn' }));
+    await openTab('Khu vườn');
+    const garden = within(screen.getByRole('tabpanel', { name: 'Khu vườn' }));
     expect(await garden.findByText('Bạn có 1.000 / 50.000 Điểm Xanh')).toBeInTheDocument();
     expect(garden.queryByRole('button', { name: /Góp quỹ trồng cây/ })).not.toBeInTheDocument();
     fireEvent.click(garden.getByRole('button', { name: 'Cách kiếm Điểm Xanh' }));
@@ -498,14 +503,14 @@ describe('Vườn Xanh người mới — thiếu điểm và lô phụ', () => 
     renderPage();
     expect(await (await todayPanel()).findByRole('button', { name: /Điểm danh nhận/ })).toBeInTheDocument();
     expect((await todayPanel()).queryByRole('button', { name: /Góp quỹ trồng cây/ })).not.toBeInTheDocument();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     expect(await screen.findByRole('button', { name: 'Góp quỹ trồng cây (50.000 điểm)' })).toBeInTheDocument();
   });
 
   it('lô phụ ẩn tới khi thu hoạch cây thứ 2, thay bằng một dòng gợi ý', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 } });
     renderPage();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     expect(await screen.findByText('Thu hoạch cây thứ 2 để mở thêm lô đất.')).toBeInTheDocument();
     expect(screen.queryByText(/Lô đất của bạn/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mở lô|Còn thiếu/ })).not.toBeInTheDocument();
@@ -514,7 +519,7 @@ describe('Vườn Xanh người mới — thiếu điểm và lô phụ', () => 
   it('đã thu hoạch cây thứ 2: lô đất hiện, nút mở lô ghi giá khi đủ nước', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, totalSeeds: 500, ecoImpact: { progress: 5, target: 600, treeType: 'Cây', treesPlanted: 2 } });
     renderPage();
-    await openTab('Vườn');
+    await openTab('Khu vườn');
     expect(await screen.findByRole('button', { name: 'Mở lô (100💧)' })).toBeInTheDocument();
     expect(screen.queryByText('Thu hoạch cây thứ 2 để mở thêm lô đất.')).not.toBeInTheDocument();
   });

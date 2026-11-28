@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo } from 'react';
 import { useNavigate } from 'zmp-ui';
 import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import { arcadeWaterFor } from '@tubutree/app-core/arcade/arcade-config';
@@ -7,12 +7,15 @@ import type { ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
+import { sfx } from '../../utils/sfx';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
 import { Heading, Text } from '../ui/text';
 import type { ArcadeSaveStatus } from './use-arcade-complete';
+import { Burst } from './burst';
 import '../../css/arcade.css';
+import '../../css/game-hub.css';
 
 // Khoá theo chuỗi: lý do máy chủ trả thêm mà bảng này chưa biết thì không hiện dòng giải thích, chứ không làm hỏng bảng điểm.
 const REASON_COPY: Record<string, string> = {
@@ -48,9 +51,15 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
   // Ván mới xin mã khi ván này chưa ghi xong thì mã mới cấp TRƯỚC lúc ván này ghi (lastRunAt) và bị 409: chờ ghi xong mới cho chơi lại. `idle` của người thật là khoảng trước khi lượt gửi bắt đầu.
   const busy = real && (save.status === 'saving' || save.status === 'idle');
   const best = saved ? { best: saved.bestScore, isNewBest: saved.isNewBest } : real ? null : local;
+  // Thắng ván: phá kỷ lục hoặc được thưởng. Bung chùm lấp lánh và kêu một lần khi điều đó vừa thành sự thật (kết quả máy chủ về muộn).
+  const win = Boolean(best?.isNewBest || saved?.rewarded);
+  useEffect(() => {
+    if (win) sfx.play('win');
+  }, [win]);
 
   return (
     <div className="tubu-arcade-panel" role="region" aria-labelledby={headingId} aria-busy={busy || undefined} data-testid="arcade-result">
+      {win && <Burst />}
       <div className="tubu-arcade-live" aria-live="polite">
         <Heading as="h3" id={headingId} variant="title-sm" font="ui">
           {fillCopy('arcade.result.title')}

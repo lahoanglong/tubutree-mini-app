@@ -109,8 +109,9 @@ afterEach(() => {
 });
 
 /** Tải xong bằng timer thật, rồi mới chuyển sang timer giả để điều khiển 3,6 giây quay. */
-async function openToday() {
+async function openGames() {
   renderPage();
+  fireEvent.click(await screen.findByRole('tab', { name: 'Sảnh Game' }));
   const spinBtn = await screen.findByRole('button', { name: /Quay ngay/ });
   vi.useFakeTimers();
   vi.spyOn(Math, 'random').mockReturnValue(0);
@@ -118,8 +119,8 @@ async function openToday() {
 }
 
 describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đang xem', () => {
-  it('ở lại tab Hôm nay: hộp kết quả hiện ra sau khi quay xong', async () => {
-    const spinBtn = await openToday();
+  it('ở lại tab Sảnh Game: hộp kết quả hiện ra sau khi quay xong', async () => {
+    const spinBtn = await openGames();
     fireEvent.click(spinBtn);
     await advance(SPIN_MS);
     expect(mocks.api.spin).toHaveBeenCalledTimes(1);
@@ -138,7 +139,7 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
         coupon: { code: 'GAME20000-ABCDE-1234', minOrder: 120000, expiresAt: '2026-11-13T09:00:00.000Z' },
       },
     });
-    const spinBtn = await openToday();
+    const spinBtn = await openGames();
     fireEvent.click(spinBtn);
     await advance(SPIN_MS);
     expect(screen.getByText('GAME20000-ABCDE-1234')).toBeVisible();
@@ -149,8 +150,8 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
     expect(screen.queryByText('GAME20000-ABCDE-1234')).not.toBeInTheDocument();
   });
 
-  it.each(['Vườn'])('đổi sang tab %s trong lúc quay: hộp kết quả vẫn nhìn thấy được', async (tabName) => {
-    const spinBtn = await openToday();
+  it.each(['Chăm vườn', 'Khu vườn'])('đổi sang tab %s trong lúc quay: hộp kết quả vẫn nhìn thấy được', async (tabName) => {
+    const spinBtn = await openGames();
     fireEvent.click(spinBtn);
     await advance(1000);
     fireEvent.click(screen.getByRole('tab', { name: tabName }));
@@ -161,10 +162,10 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
   });
 
   it('đổi tab rồi đóng hộp: trang hết khoá cuộn và tab vẫn là tab đã chọn', async () => {
-    const spinBtn = await openToday();
+    const spinBtn = await openGames();
     fireEvent.click(spinBtn);
     await advance(1000);
-    fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Khu vườn' }));
     await advance(SPIN_MS);
     expect(screen.getByText('Chúc mừng!')).toBeVisible();
     expect(pageEl().classList.contains('disable-scrolling')).toBe(true);
@@ -172,11 +173,11 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
     await advance(500);
     expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();
     expect(pageEl().classList.contains('disable-scrolling')).toBe(false);
-    expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Khu vườn' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('đóng hộp rồi quay lần hai: gọi spin lần 2 và hộp hiện lại', async () => {
-    const spinBtn = await openToday();
+    const spinBtn = await openGames();
     fireEvent.click(spinBtn);
     await advance(SPIN_MS);
     fireEvent.click(screen.getByRole('button', { name: 'Tuyệt vời!' }));
@@ -190,7 +191,7 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
 
   it('quay lỗi: không có hộp kết quả, trang không bị khoá cuộn', async () => {
     mocks.api.spin.mockRejectedValue(new Error('hết giọt nước'));
-    const spinBtn = await openToday();
+    const spinBtn = await openGames();
     fireEvent.click(spinBtn);
     await advance(SPIN_MS);
     expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();

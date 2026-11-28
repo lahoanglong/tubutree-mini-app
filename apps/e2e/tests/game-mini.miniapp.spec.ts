@@ -8,6 +8,7 @@ import {
   gameCopy,
   miniToday,
   mockMiniGames,
+  openMiniGameHub,
   playQuiz,
   QUIZ_PRODUCT,
   sortProgress,
@@ -16,7 +17,7 @@ import {
 } from './support/game-mini-mocks';
 
 /**
- * Game mini đợt A ở Mini App: thẻ "Chơi hôm nay" thay khối đố vui và sảnh arcade khi cờ bật, giữ nguyên bố cục khi cờ tắt (404 như PROD),
+ * Game mini đợt A ở Mini App: tab Sảnh Game gom hai game hành động và game mini (cờ bật thì khối đố vui cũ ẩn; cờ tắt 404 như PROD giữ khối đố vui),
  * một ván Đố Xanh và một ván Đúng Thùng trọn vẹn với API mock, vùng chạm, tràn ngang và CLS ở 360 và 393px.
  */
 
@@ -40,29 +41,32 @@ for (const viewport of [
   test.describe(`Mini App ${viewport.width}px`, () => {
     test.use({ viewport });
 
-    test('cờ tắt (404): Vườn Xanh giữ sảnh arcade và khối đố vui, không có thẻ Chơi hôm nay', async ({ page, api }) => {
+    test('cờ tắt (404): Sảnh Game giữ hai game hành động và khối đố vui, không có thẻ Chơi hôm nay', async ({ page, api }) => {
       member(api);
-      await page.goto('/game');
+      await openMiniGameHub(page);
       await expect(page.getByTestId('arcade-hub')).toBeVisible({ timeout: 15_000 });
       await expect(page.locator('#game-quiz')).toHaveCount(1);
       await expect(page.getByTestId('mini-play-today')).toHaveCount(0);
       expect(api.calls.some((c) => c.method === 'GET' && c.path === '/game/mini/today')).toBe(true);
     });
 
-    test('cờ bật: một thẻ Chơi hôm nay thay sảnh arcade và khối đố vui, dòng gọn ghi lượt thưởng còn lại', async ({ page, api }) => {
+    test('cờ bật: Sảnh Game gom hai game hành động và mọi game mini trong lưới 2 cột; khối đố vui cũ ẩn; thẻ ghi lượt thưởng còn lại', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
-      await page.goto('/game');
-      const card = page.getByTestId('mini-play-today');
-      await expect(card).toBeVisible({ timeout: 15_000 });
-      await expect(card).toHaveCount(1);
-      await expect(page.getByTestId('arcade-hub')).toHaveCount(0);
+      await openMiniGameHub(page);
+      const hub = page.getByTestId('arcade-hub');
+      await expect(hub).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('mini-play-today')).toHaveCount(0);
+      await expect(page.getByTestId('arcade-game-dew_catcher')).toBeVisible();
+      await expect(page.getByTestId('arcade-game-refill_rush')).toBeVisible();
       await expect(page.locator('#game-quiz')).toHaveCount(0);
       await expect(page.getByTestId('mini-play-status-daily_quiz')).toHaveText(gameCopy('row.left', { n: 1 }));
       await expect(page.getByTestId('mini-play-status-sort')).toHaveText(gameCopy('row.left', { n: 2 }));
-      const rowH = await page.getByTestId('mini-play-row-sort').evaluate((el) => el.getBoundingClientRect().height);
-      expect(rowH, 'dòng gọn: ít nhất 6 dòng trên màn 640px').toBeLessThanOrEqual(640 / 6);
-      await expectTargets44(card);
+      const [a, b] = await Promise.all(['arcade-game-dew_catcher', 'arcade-game-refill_rush'].map((id) => page.getByTestId(id).evaluate((el) => el.getBoundingClientRect())));
+      expect(Math.abs(a!.top - b!.top), 'hai thẻ đầu cùng một hàng').toBeLessThanOrEqual(1);
+      expect(a!.width, 'thẻ rộng chưa tới nửa màn').toBeLessThan(viewport.width / 2);
+      await expect(hub.locator('.tubu-hub-badge', { hasText: 'Hot' })).toHaveCount(0);
+      await expectTargets44(hub);
       await expectNoHorizontalOverflow(page);
     });
 
@@ -71,7 +75,7 @@ for (const viewport of [
       api.get('/me/daily-check-in', { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 3, currentCycleDay: 3, todayPoints: 0, todayWater: 10, rewards: [] });
       const { submits } = mockMiniGames(api);
       await observeCls(page);
-      await page.goto('/game');
+      await openMiniGameHub(page);
       await page.getByTestId('mini-play-row-daily_quiz').click();
       await expect(page).toHaveURL(/\/game\/play\/daily_quiz$/);
       await expect(page.getByTestId('mini-streak')).toHaveText(gameCopy('top.streak', { n: 3 }));
@@ -102,6 +106,10 @@ for (const viewport of [
       await expect.poll(() => api.calls.filter((c) => c.method === 'GET' && c.path === '/me/daily-check-in').length).toBeGreaterThanOrEqual(2);
       const { cls, sources } = await readClsTotal(page);
       expect(cls, sources.join('\n')).toBeLessThanOrEqual(0.1);
+      // Nút xong ván về `/game` không kèm tab: dấu đặt lúc chạm thẻ đưa khách về lại Sảnh Game chứ không rơi về Chăm vườn.
+      await page.getByRole('button', { name: gameCopy('result.done') }).click();
+      await expect(page).toHaveURL(/\/game$/);
+      await expect(page.getByRole('tab', { name: 'Sảnh Game' })).toHaveAttribute('aria-selected', 'true');
     });
 
     test('Đúng Thùng trọn ván: chạm thẻ rồi thùng, chạm thẳng thùng, kéo thả; thả ngoài thì thẻ về chỗ; chạm đúp tính một lần', async ({ page, api }) => {
@@ -170,7 +178,7 @@ for (const viewport of [
       member(api);
       const today = miniToday();
       mockMiniGames(api, { today: { ...today, games: today.games.map((g) => (g.game === 'daily_quiz' ? { ...g, rewardedRoundsLeft: 0, playedToday: 1 } : g)) } });
-      await page.goto('/game');
+      await openMiniGameHub(page);
       await expect(page.getByTestId('mini-play-status-daily_quiz')).toHaveText(gameCopy('row.full'), { timeout: 15_000 });
       await page.getByTestId('mini-play-row-daily_quiz').click();
       await expect(page.getByTestId('mini-no-reward')).toHaveText(gameCopy('intro.noReward'), { timeout: 15_000 });
@@ -202,7 +210,7 @@ for (const viewport of [
     test('tài khoản khách theo thiết bị: chơi thử được, ván gắn nhãn không tính thưởng, nút chính là Đăng nhập để nhận thưởng', async ({ page, api }) => {
       deviceGuest(api);
       mockMiniGames(api, { guest: 'NOT_REAL_USER' });
-      await page.goto('/game');
+      await openMiniGameHub(page);
       await expect(page.getByTestId('mini-play-status-sort')).toHaveText(gameCopy('row.trial'), { timeout: 15_000 });
       await page.getByTestId('mini-play-row-sort').click();
       await expect(page.getByTestId('mini-no-reward')).toBeVisible();

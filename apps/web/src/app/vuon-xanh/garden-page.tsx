@@ -1,10 +1,11 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
+import { browserSessionStore, clearHubReturn, hasHubReturn } from '@tubutree/app-core/game-hub/hub-return';
 import { GAME_SOCIAL_ON_WEB, SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
 import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, gameNewbieCopy, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
@@ -36,7 +37,6 @@ import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
 import { GAME_TAB_KEYS, GAME_COL, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
-import { HomeQuizCard } from '@/components/game/home-quiz-card';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { OrderWaterCard } from '@/components/game/order-water-card';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
@@ -64,7 +64,7 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import { miniEarnQuizLeft, miniPlayPath, playableToday } from '@tubutree/app-core/game-mini/format';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
-import { PlayTodayCard } from '@/components/game/mini/play-today-card';
+import { SoundToggle } from '@/components/game/sound-toggle';
 
 // Chỉ vẽ khi có "Chơi hôm nay": chunk riêng để trang không nặng thêm khi cờ game mini hay cờ sổ tắt.
 const AlbumLine = dynamic(() => import('@/components/game-album/album-line').then((m) => m.AlbumLine), { ssr: false });
@@ -90,8 +90,14 @@ function GameBody() {
   const { notice, notify } = useGameNotice();
   const headerOffset = useHeaderOffset();
   const [tab, setTab] = useTabParam(GAME_TAB_KEYS, 'today');
+  useEffect(() => {
+    if (!hasHubReturn(browserSessionStore)) return;
+    clearHubReturn(browserSessionStore);
+    if (tab === 'today') setTab('games');
+  }, [tab, setTab]);
   // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
   const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
+  const [waterTick, setWaterTick] = useState(0);
   const couponUse = useCouponUse();
   const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, gardenQ, boardQ, seasonPass } = useGameData(true, {
     garden: tab === 'garden',
@@ -208,23 +214,24 @@ function GameBody() {
   return (
     <>
       <div className="flex flex-col gap-3">
-        <GardenHero
-          eco={eco}
-          totalSeeds={profile?.totalSeeds}
-          streakDays={status?.streakDays ?? profile?.streakDays}
-          rhythm={{ lastCheckInAt: profile?.lastCheckInAt, activeToday: checkedInToday || dewToday || (status?.checkedInToday ?? false) }}
-          harvestReady={profile?.harvestReady}
-          tankCapacity={profile?.tankCapacity}
-          wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
-        />
-
-        {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
+        {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Chăm vườn". */}
         <div className="sticky-below-back sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} label="Vườn Xanh" />
         </div>
 
         <GameTabPanel tab="today" active={tab === ('today' satisfies GameTabKey)} layout="split">
           <GameCol place={GAME_COL.top}>
+          <GardenHero
+            eco={eco}
+            totalSeeds={profile?.totalSeeds}
+            waterTick={waterTick}
+            streakDays={status?.streakDays ?? profile?.streakDays}
+            rhythm={{ lastCheckInAt: profile?.lastCheckInAt, activeToday: checkedInToday || dewToday || (status?.checkedInToday ?? false) }}
+            harvestReady={profile?.harvestReady}
+            tankCapacity={profile?.tankCapacity}
+            wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
+          />
+
           <TreeHealthAlert health={profile?.treeHealth} />
 
           {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
@@ -255,7 +262,7 @@ function GameBody() {
             checkInSeeds={checkInSeeds}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
-            onWater={(drops) => waterM.mutate(drops)}
+            onWater={(drops) => waterM.mutate(drops, { onSuccess: () => setWaterTick((k) => k + 1) })}
             onHarvest={() => waterM.mutate(0)}
             onEarn={() => openEarn()}
           />
@@ -278,10 +285,6 @@ function GameBody() {
           />
           </div>
 
-          {miniToday ? <PlayTodayCard today={miniToday} /> : <ArcadeHub />}
-          {miniToday && <AlbumLine />}
-          <HomeQuizCard />
-
           <div className="empty:hidden">
           <MissionsCard
             missions={missions}
@@ -295,6 +298,22 @@ function GameBody() {
           </GameCol>
 
           <GameCol place={GAME_COL.bottom}>
+          {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
+          {wasteLink && (
+            <div>
+              <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
+            </div>
+          )}
+          </GameCol>
+        </GameTabPanel>
+
+        {/* Sảnh Game: mọi game chơi được (hai game hành động, game mini, Chọn Chuẩn Xanh) và Vòng quay trong một lưới thẻ, như Mini App. */}
+        <GameTabPanel tab="games" active={tab === 'games'}>
+          <div className="flex flex-col gap-3">
+            <ArcadeHub mini={miniToday} wheel={{ cost: profile?.spinCostPoints ?? 10_000, anchorId: 'game-wheel' }} />
+            {miniToday && <AlbumLine />}
+          </div>
+
           {!miniQuiz && (
             <div id="game-quiz">
               <QuizCard
@@ -312,7 +331,7 @@ function GameBody() {
             </div>
           )}
 
-          <div>
+          <div id="game-wheel">
           <LuckyWheelCard
             cost={profile?.spinCostPoints ?? 10_000}
             points={wheelPoints}
@@ -327,13 +346,6 @@ function GameBody() {
           )}
           </div>
 
-          {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
-          {wasteLink && (
-            <div>
-              <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
-            </div>
-          )}
-          </GameCol>
         </GameTabPanel>
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
@@ -426,7 +438,7 @@ function GameBody() {
         quiz={quizState}
         onRetryQuiz={() => quizQ.refetch()}
         onGoQuiz={() => {
-          if (!miniQuiz) return goTab('today', 'game-quiz');
+          if (!miniQuiz) return goTab('games', 'game-quiz');
           closeEarn();
           router.push(miniPlayPath.web('daily_quiz'));
         }}
@@ -474,15 +486,14 @@ export default function GamePage() {
   const guestMini = useMiniToday(false, phase === 'guest' && hydrated);
   return (
     <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pt-0`}>
-      <PageHeader title={TITLE} backHref="/" />
+      <PageHeader title={TITLE} backHref="/" actions={<SoundToggle />} />
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}
         {phase === 'unavailable' && <SessionUnavailable />}
         {phase === 'guest' && (
           <div className="flex flex-col gap-3">
             <GameLoginGate returnTo="/vuon-xanh" />
-            {hydrated && (guestMini ? <PlayTodayCard today={guestMini} /> : <ArcadeHub />)}
-            {hydrated && <HomeQuizCard />}
+            {hydrated && <ArcadeHub mini={guestMini} />}
           </div>
         )}
         {phase === 'authenticated' && (

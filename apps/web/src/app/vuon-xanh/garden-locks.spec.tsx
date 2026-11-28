@@ -302,7 +302,7 @@ describe('Vườn Xanh: tab Vườn', () => {
   it('mở lô: hai cú chạm cùng khung hình chỉ POST một lần', async () => {
     state.posts['/game/garden/unlock'] = () => plot(4);
     const c = await mount('tab=garden');
-    const b = btn(panel(c, 'Vườn'), 'Mở lô');
+    const b = btn(panel(c, 'Khu vườn'), 'Mở lô');
     await tapTogether(b, b);
     await flush(8);
     expect(postsOf('/game/garden/unlock')).toHaveLength(1);
@@ -312,7 +312,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     state.posts['/game/garden/plot/p2/water'] = () => WATERED;
     state.posts['/game/garden/plot/p3/water'] = () => WATERED;
     const c = await mount('tab=garden');
-    const waters = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
+    const waters = Array.from(panel(c, 'Khu vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
     expect(waters).toHaveLength(2);
     await tapTogether(waters[0]!, waters[0]!, waters[1]!);
     await flush(8);
@@ -327,7 +327,7 @@ describe('Vườn Xanh: tab Vườn', () => {
       return WATERED;
     };
     const c = await mount('tab=garden');
-    const b = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((x) => x.textContent?.includes('Tưới'))[0]!;
+    const b = Array.from(panel(c, 'Khu vườn').querySelectorAll<HTMLButtonElement>('button')).filter((x) => x.textContent?.includes('Tưới'))[0]!;
     await tapTogether(b, b);
     await flush(8);
     expect(toastAlert().textContent).toBe('Cây đã chết');
@@ -343,7 +343,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(getsOf('/game/garden')).toHaveLength(1);
     const g = gate();
     state.getHold.set('/game/garden', g.p);
-    const retry = btn(panel(c, 'Vườn'), gameNewbieCopy.loadError.retry);
+    const retry = btn(panel(c, 'Khu vườn'), gameNewbieCopy.loadError.retry);
     await tapTogether(retry, retry);
     await flush();
     expect(getsOf('/game/garden')).toHaveLength(2);
@@ -351,7 +351,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     g.open();
     await flush(8);
     expect(getsOf('/game/garden')).toHaveLength(2);
-    expect(panel(c, 'Vườn').textContent).toContain('Lô đất của bạn');
+    expect(panel(c, 'Khu vườn').textContent).toContain('Lô đất của bạn');
   });
 
   it('góp quỹ: xác nhận hai lần cùng khung hình chỉ POST một lần; nút Xác nhận bận không disabled; khoá giữ tới khi điểm mới về', async () => {

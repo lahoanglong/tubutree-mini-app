@@ -99,6 +99,9 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await expect(page.getByRole('link', { name: /TR-8K2M9/ })).toHaveAttribute('href', '/doi-rac/yeu-cau/req-1');
     await expect(page.getByRole('link', { name: 'Đổi rác ngay' })).toHaveAttribute('href', '/doi-rac/tao');
     await expect(page.getByRole('link', { name: 'Yêu cầu của tôi' })).toHaveAttribute('href', '/doi-rac/yeu-cau');
+    await expect(page.getByTestId('waste-step-strip').getByRole('listitem')).toHaveCount(3);
+    await page.getByRole('button', { name: 'Thể lệ', exact: true }).click();
+    await expect(page.getByTestId('waste-rules')).toContainText('Mang tới điểm nhận');
     await expect(page.getByRole('link', { name: /Thể lệ chương trình/ })).toHaveAttribute('href', '/doi-rac/quy-dinh');
   });
 

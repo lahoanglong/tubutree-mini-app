@@ -65,9 +65,9 @@ test.describe('Web 390px (điện thoại) đợt B', () => {
     mockMiniShop(api);
     const { submits } = mockMiniGames(api);
     await signedIn(page);
-    await page.goto('/vuon-xanh');
-    await expect(page.getByTestId('mini-play-row-match')).toHaveAttribute('href', '/vuon-xanh/choi/match', { timeout: 15_000 });
-    await page.getByTestId('mini-play-row-match').click();
+    await page.goto('/vuon-xanh?tab=games');
+    await expect(page.getByTestId('mini-play-row-match').getByRole('link')).toHaveAttribute('href', '/vuon-xanh/choi/match', { timeout: 15_000 });
+    await page.getByTestId('mini-play-row-match').getByRole('link').click();
     await expect(page).toHaveURL(/\/vuon-xanh\/choi\/match$/);
     await startRound(page);
     const board = page.getByTestId('mini-match');

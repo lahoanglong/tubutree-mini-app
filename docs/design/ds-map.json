@@ -1063,8 +1063,65 @@
       "miniapp": "apps/miniapp/src/components/game/home-quiz-card.tsx",
       "web": "apps/web/src/components/game/home-quiz-card.tsx",
       "screens": [
-        "/",
+        "/"
+      ]
+    },
+    {
+      "name": "GardenHero",
+      "miniapp": "apps/miniapp/src/components/game/garden-hero.tsx",
+      "web": "apps/web/src/components/game/garden-hero.tsx",
+      "screens": [
         "/game"
+      ]
+    },
+    {
+      "name": "SoundToggle",
+      "miniapp": "apps/miniapp/src/components/game/sound-toggle.tsx",
+      "web": "apps/web/src/components/game/sound-toggle.tsx",
+      "screens": [
+        "/game"
+      ]
+    },
+    {
+      "name": "Burst",
+      "miniapp": "apps/miniapp/src/components/game/burst.tsx",
+      "web": "apps/web/src/components/game/burst.tsx",
+      "screens": [
+        "/game"
+      ]
+    },
+    {
+      "name": "TierMedallion",
+      "miniapp": "apps/miniapp/src/components/loyalty/tier-medallion.tsx",
+      "web": "apps/web/src/components/loyalty/tier-medallion.tsx",
+      "screens": [
+        "/loyalty"
+      ]
+    },
+    {
+      "name": "WasteStepStrip",
+      "miniapp": "apps/miniapp/src/components/waste-steps.tsx",
+      "web": "apps/web/src/components/recycle/waste-steps.tsx",
+      "screens": [
+        "/recycle"
+      ]
+    },
+    {
+      "name": "WasteRulesSheet",
+      "miniapp": "apps/miniapp/src/components/waste-steps.tsx",
+      "web": "apps/web/src/components/recycle/waste-steps.tsx",
+      "props": "WasteRulesSheetProps",
+      "propsDiff": {
+        "miniOnly": [
+          "onFullRules"
+        ],
+        "webOnly": [
+          "rulesHref"
+        ],
+        "reason": "lối sang trang Thể lệ chương trình: Mini đóng sheet rồi điều hướng bằng router zmp (`onFullRules`), web dùng `Link` tới đường dẫn (`rulesHref`)"
+      },
+      "screens": [
+        "/recycle"
       ]
     },
     {

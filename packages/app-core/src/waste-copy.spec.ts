@@ -19,6 +19,7 @@ import {
   timelineCaption,
   wasteIntroCopy,
   wasteItemIconKey,
+  wasteStepStrip,
   writeLastPointId,
 } from './waste-copy';
 
@@ -173,6 +174,26 @@ describe('wasteIntroCopy', () => {
   it('tắt cả hai: câu trung tính, không nhắc điểm nhận hay kho', () => {
     const c = wasteIntroCopy({ dropoff: false, mailin: false });
     expect(`${c.intro} ${c.steps.join(' ')}`).not.toMatch(/điểm nhận|kho/);
+  });
+});
+
+describe('wasteStepStrip', () => {
+  it('ba bước cố định thứ tự chọn món, giao, nhận điểm; nhãn ngắn (≤ 26 ký tự) để ba cột vừa 360px', () => {
+    for (const flags of [
+      { dropoff: true, mailin: true },
+      { dropoff: true, mailin: false },
+      { dropoff: false, mailin: true },
+      { dropoff: false, mailin: false },
+    ]) {
+      const s = wasteStepStrip(flags);
+      expect(s.map((x) => x.kind)).toEqual(['pick', 'deliver', 'points']);
+      for (const x of s) expect(x.label.length).toBeLessThanOrEqual(26);
+    }
+  });
+  it('bước giữa theo cờ như wasteIntroCopy: không hứa đường giao đã tắt', () => {
+    expect(wasteStepStrip({ dropoff: true, mailin: false })[1].label).not.toMatch(/kho/);
+    expect(wasteStepStrip({ dropoff: false, mailin: true })[1].label).not.toMatch(/điểm/);
+    expect(wasteStepStrip({ dropoff: false, mailin: false })[1].label).not.toMatch(/điểm nhận|kho/);
   });
 });
 

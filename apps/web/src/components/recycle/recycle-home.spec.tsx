@@ -58,6 +58,18 @@ const mount = async () => {
   return r.container;
 };
 const link = (c: HTMLElement, href: string) => c.querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
+/** Cách giao và câu đầy đủ từng bước nằm trong sheet "ⓘ Thể lệ" của khối Cách đổi (sheet dựng qua portal vào body). */
+const openRules = async (c: HTMLElement) => {
+  click(byText(c, '.tubu-waste-howto-head button', 'Thể lệ')!);
+  await flush(3);
+  const d = document.querySelector<HTMLElement>('[data-testid="waste-rules"]');
+  if (!d) throw new Error('không mở được sheet Thể lệ');
+  return d;
+};
+const closeRules = async () => {
+  click(document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Đóng"]')!);
+  await flush(3);
+};
 
 beforeEach(() => {
   state.phase = 'authenticated';
@@ -113,17 +125,36 @@ describe('/doi-rac trang vào (§4.1)', () => {
     state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
     state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' });
     const c = await mount();
-    expect(c.textContent).toContain('Mang tới điểm nhận');
-    expect(c.textContent).not.toContain('Gửi về kho Tubu HCM');
-    expect(c.textContent).not.toContain('Thu kèm đơn mua');
+    const rules = await openRules(c);
+    expect(rules.textContent).toContain('Mang tới điểm nhận');
+    expect(rules.textContent).not.toContain('Gửi về kho Tubu HCM');
+    expect(rules.textContent).not.toContain('Thu kèm đơn mua');
   });
 
   it('cờ pickup tắt → không có thẻ Thu kèm đơn; tiêu đề khối không đếm số thẻ', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Gửi về kho Tubu HCM');
-    expect(c.textContent).not.toContain('Thu kèm đơn mua');
     expect(byText(c, 'h2', 'Cách đổi')).not.toBeNull();
     expect(c.textContent).not.toContain('Ba cách đổi');
+    const rules = await openRules(c);
+    expect(rules.textContent).toContain('Gửi về kho Tubu HCM');
+    expect(rules.textContent).not.toContain('Thu kèm đơn mua');
+  });
+
+  it('khối Cách đổi: dải 3 bước có biểu tượng, nút chính ngay dưới; màn chính không còn danh sách cách giao hay hàng Thể lệ', async () => {
+    const c = await mount();
+    const strip = c.querySelector<HTMLElement>('[data-testid="waste-step-strip"]')!;
+    expect(strip.tagName).toBe('OL');
+    expect(Array.from(strip.querySelectorAll('li')).map((li) => li.getAttribute('data-step'))).toEqual(['pick', 'deliver', 'points']);
+    expect(strip.querySelectorAll('svg')).toHaveLength(3);
+    const how = strip.closest('section')!;
+    expect(byText(how, 'h2', 'Cách đổi')).not.toBeNull();
+    expect(link(how, '/doi-rac/tao')?.textContent).toBe('Đổi rác ngay');
+    expect(c.textContent).not.toContain('Gửi về kho Tubu HCM');
+    expect(link(c, '/doi-rac/quy-dinh')).toBeNull();
+    const rules = await openRules(c);
+    expect(rules.textContent).toContain('Mang tới điểm nhận hoặc gửi về kho Tubu');
+    expect(rules.textContent).toContain('Miễn phí, nhận điểm khi người ở điểm xác nhận');
+    expect(document.querySelector('[data-sheet-footer] a[href="/doi-rac/quy-dinh"]')?.textContent).toBe('Xem Thể lệ chương trình');
   });
 
   it('không cách giao nào mở với khách này → ẩn "Đổi rác ngay" nhưng vẫn hiện số dư', async () => {
@@ -189,6 +220,15 @@ describe('/doi-rac trang vào (§4.1)', () => {
     const c = await mount();
     expect(link(c, '/kho-qua')?.textContent).toContain('Kho quà');
     expect(link(c, '/doi-rac/quay')?.textContent).toContain('Nhận hàng tại điểm');
+    expect(link(c, '/doi-rac/quy-dinh')).toBeNull();
+    await openRules(c);
+    expect(document.querySelector('[data-sheet-footer] a[href="/doi-rac/quy-dinh"]')?.textContent).toContain('Thể lệ chương trình');
+  });
+
+  it('không cách giao nào mở: không có khối Cách đổi, Thể lệ chương trình về lại hàng cuối trang', async () => {
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: false, mailin: false, pickup: false } };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="waste-step-strip"]')).toBeNull();
     expect(link(c, '/doi-rac/quy-dinh')?.textContent).toContain('Thể lệ chương trình');
   });
 
@@ -331,11 +371,15 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     const c = await mount();
     expect(state.calls).toContain('/waste/catalogue');
     expect(c.textContent).toContain('Đổi bao bì lấy Điểm Xanh');
-    expect(c.querySelectorAll('ol li')).toHaveLength(3);
+    expect(c.querySelectorAll('[data-testid="waste-step-strip"] li')).toHaveLength(3);
     expect(c.querySelectorAll('[data-item]')).toHaveLength(2);
     expect(byText(c, '[data-item]', 'Vỏ hộp sữa')!.textContent).toContain('Chỉ kho TP.HCM nhận');
     expect(byText(c, '[data-item]', 'Thùng carton')!.textContent).not.toContain('Chỉ kho TP.HCM nhận');
-    expect(link(c, '/doi-rac/quy-dinh')).not.toBeNull();
+    const rules = await openRules(c);
+    expect(rules.querySelectorAll('ol li')).toHaveLength(3);
+    expect(rules.textContent).not.toContain('Cách giao');
+    expect(document.querySelector('[data-sheet-footer] a[href="/doi-rac/quy-dinh"]')).not.toBeNull();
+    await closeRules();
     const login = c.querySelector('a[href*="/dang-nhap"]')!;
     expect(login.textContent).toContain('Đăng nhập để đổi rác');
     expect(c.textContent).toContain('Cần số điện thoại để cộng Điểm Xanh');
@@ -450,9 +494,14 @@ describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
     expect(c.querySelector('a[aria-label="Trang chủ"]')).toBeNull();
   });
 
-  it('Cách đổi là danh sách chữ phẳng, không viền để khách khỏi tưởng bấm được', async () => {
+  it('dải bước và cách giao là chữ phẳng, không viền để khách khỏi tưởng bấm được', async () => {
     const c = await mount();
-    const row = byText(c, 'p', 'Mang tới điểm nhận')!.parentElement!;
+    for (const li of Array.from(c.querySelectorAll<HTMLElement>('[data-testid="waste-step-strip"] li'))) {
+      expect(li.className).not.toContain('border');
+      expect(li.className).not.toContain('shadow');
+    }
+    const rules = await openRules(c);
+    const row = byText(rules, 'p', 'Mang tới điểm nhận')!.parentElement!;
     expect(row.tagName).toBe('LI');
     expect(row.className).not.toContain('border');
     expect(row.className).not.toContain('shadow');
@@ -470,7 +519,7 @@ describe('/doi-rac — máy tính: hai cột cân đối từ lg', () => {
   const classes = (el: Element) => el.className.split(/\s+/);
   const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-  it('hai cột chia theo thứ tự DOM của Mini: thẻ điểm và yêu cầu đang xử lý bên trái; Cách đổi, món nhận và lối vào Kho quà bên phải', async () => {
+  it('hai cột chia theo thứ tự DOM của Mini: thẻ điểm, Cách đổi và yêu cầu đang xử lý bên trái; món nhận và lối vào Kho quà bên phải', async () => {
     state.me = makeWasteMe({ openRequests: [makeRequestSummary()] });
     const c = await mount();
     const layout = c.querySelector('[data-testid="recycle-home-layout"]') as HTMLElement;
@@ -483,17 +532,17 @@ describe('/doi-rac — máy tính: hai cột cân đối từ lg', () => {
     const requests = byText(c, 'h2', 'Yêu cầu đang xử lý')!;
     const methods = byText(c, 'h2', 'Cách đổi')!;
     const kho = link(side!, '/kho-qua')!;
-    expect(main!.contains(points) && main!.contains(requests)).toBe(true);
-    expect(side!.contains(methods) && side!.contains(kho) && side!.contains(link(c, '/doi-rac/quy-dinh')!)).toBe(true);
+    expect(main!.contains(points) && main!.contains(methods) && main!.contains(requests)).toBe(true);
+    expect(side!.contains(kho)).toBe(true);
     expect(side!.querySelector('[data-item]')).not.toBeNull();
-    expect(before(points, requests) && before(requests, methods) && before(methods, kho)).toBe(true);
+    expect(before(points, methods) && before(methods, requests) && before(requests, kho)).toBe(true);
   });
 
-  it('cột Cách đổi và món nhận xếp dọc trong cột phải (không còn lưới 2 cột lồng trong cột nửa trang)', async () => {
+  it('món nhận nằm thẳng trong cột phải (không còn lưới lồng trong cột nửa trang)', async () => {
     const c = await mount();
-    const grid = byText(c, 'h2', 'Cách đổi')!.parentElement!.parentElement as HTMLElement;
-    expect(classes(grid)).toEqual(expect.arrayContaining(['grid', 'gap-6']));
-    expect(classes(grid).some((x) => x.startsWith('lg:grid-cols'))).toBe(false);
+    const side = c.querySelector('[data-recycle-col="side"]')!;
+    const items = byText(c, 'h2', 'Tubu nhận những món này')!.parentElement!;
+    expect(items.parentElement).toBe(side);
   });
 
   it('yêu cầu đang xử lý: hai thẻ một hàng từ md, nhưng một hàng mỗi yêu cầu ở lg vì cột chỉ nửa khung; trang tạm dừng giữ hai thẻ', async () => {
@@ -517,21 +566,28 @@ describe('/doi-rac: thẻ Shipper lấy tận nhà', () => {
     state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
     state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
     let c = await mount();
-    expect(c.textContent).toContain('Shipper lấy tận nhà');
-    expect(c.textContent).toContain('Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh');
-    const at = (n: string) => c.textContent!.indexOf(n);
+    let rules = await openRules(c);
+    expect(rules.textContent).toContain('Shipper lấy tận nhà');
+    expect(rules.textContent).toContain('Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh');
+    const text = rules.textContent!;
+    const at = (n: string) => text.indexOf(n);
     const names = ['Mang tới điểm nhận', 'Gửi về kho Tubu HCM', 'Thu kèm đơn mua', 'Shipper lấy tận nhà'];
+    expect(names.map(at).every((i) => i >= 0)).toBe(true);
     expect(names.map(at)).toEqual([...names.map(at)].sort((a, b) => a - b));
+    await closeRules();
 
     state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } };
     state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: false } });
     c = await mount();
-    expect(c.textContent).not.toContain('Shipper lấy tận nhà');
+    rules = await openRules(c);
+    expect(rules.textContent).not.toContain('Shipper lấy tận nhà');
+    await closeRules();
 
     state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
     state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' });
     c = await mount();
-    expect(c.textContent).not.toContain('Shipper lấy tận nhà');
+    rules = await openRules(c);
+    expect(rules.textContent).not.toContain('Shipper lấy tận nhà');
   });
 });
 

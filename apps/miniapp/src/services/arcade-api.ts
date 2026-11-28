@@ -1,6 +1,5 @@
-import { completeArcade, completeHomeQuiz, startArcade, type ArcadeCompleteBody } from '@tubutree/app-core/api/game';
+import { completeArcade, startArcade, type ArcadeCompleteBody } from '@tubutree/app-core/api/game';
 import type { ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
-import type { HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
 import { gameArcadeStatusQuery } from '@tubutree/app-core/queries/game';
 import { coreHttp } from './core-http';
 
@@ -12,5 +11,3 @@ export const startArcadeRun = (gameId: ArcadeGameId) => startArcade(coreHttp, ga
 
 /** Mỗi lời gọi là một ván: nơi gọi tự chặn gọi đúp (xem `use-arcade-complete`). */
 export const submitArcadeRun = (body: ArcadeCompleteBody) => completeArcade(coreHttp, body);
-
-export const submitHomeQuiz = (answers: HomeQuizAnswers) => completeHomeQuiz(coreHttp, answers);

@@ -1,7 +1,7 @@
 import { Page, useLocation } from 'zmp-ui';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { useSmartNavigate } from '../lib/smart-nav';
-import { GIFT_ATTACH_HINT, NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
+import { GIFT_ATTACH_HINT, NEW_COUPON_BADGE, NEW_COUPON_PARAM, openingHoursText, sortRedemptions } from '@tubutree/app-core/reward-rules';
 import { redemptionCouponLine } from '@tubutree/app-core/redemption-coupon';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +23,6 @@ import { Heading, Text } from '../components/ui/text';
 import { QrCode } from '../components/qr-code';
 import { formatDate, formatPoints } from '../utils/format';
 import { pointAddress } from '../utils/waste-labels';
-import { openingHoursText } from './rewards';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 

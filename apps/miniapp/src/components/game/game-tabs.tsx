@@ -1,11 +1,22 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { hubCopy } from '@tubutree/app-core/game-hub/copy';
+import { browserSessionStore, clearHubReturn, hasHubReturn } from '@tubutree/app-core/game-hub/hub-return';
 
+/** Ba tab của Vườn Xanh: việc chăm cây hằng ngày, mọi game, và khu vườn (lô đất, sổ tay loài, tác động xanh, quỹ cây, mùa). Khoá giữ như cũ cho link sẵn có. */
 export const GAME_TABS = [
-  { key: 'today', label: 'Hôm nay' },
-  { key: 'garden', label: 'Vườn' },
+  { key: 'today', label: hubCopy('tab.care') },
+  { key: 'games', label: hubCopy('tab.games') },
+  { key: 'garden', label: hubCopy('tab.garden') },
 ] as const;
 
 export type GameTabKey = (typeof GAME_TABS)[number]['key'];
+
+/** Tab đang mở của Vườn Xanh: mặc định Chăm vườn; mở lại ngay sau một ván ở màn game riêng (dấu `markHubReturn`) thì về Sảnh Game. */
+export function useGameTab() {
+  const [tab, setTab] = useState<GameTabKey>(() => (hasHubReturn(browserSessionStore) ? 'games' : 'today'));
+  useEffect(() => clearHubReturn(browserSessionStore), []);
+  return [tab, setTab] as const;
+}
 
 /**
  * Mỗi tab là một khối luôn được dựng, chỉ ẩn khi không chọn: vòng quay đang quay và đáp án quiz đang hiện

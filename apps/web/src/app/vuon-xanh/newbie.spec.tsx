@@ -139,7 +139,7 @@ afterEach(() => {
 describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt', () => {
   it('hồ sơ mới 0 giọt: nút đầu tiên của tab Hôm nay là điểm danh nhận 65💧, bấm gọi check-in, không tưới', async () => {
     const c = await mount();
-    const first = panel(c, 'Hôm nay').querySelector('button')!;
+    const first = panel(c, 'Chăm vườn').querySelector('button')!;
     expect(first.textContent).toContain('Điểm danh nhận 65💧');
     click(first);
     await flush(6);
@@ -169,8 +169,8 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     { label: 'nút chính', name: 'Kiếm thêm nước', path: '/game/tree/water', need: 'Bạn đang có 0💧' },
     { label: 'vé giữ lửa', name: 'Giữ chuỗi (cần thêm 40💧)', path: '/game/streak-freeze/buy', need: 'Bạn cần thêm 40💧 nữa.' },
     { label: 'hồi sinh chuỗi', name: 'Còn thiếu 50💧', path: '/game/streak/repair', need: 'Bạn cần thêm 50💧 nữa.' },
-    { label: 'tưới lô phụ', tab: 'Vườn', name: 'Tưới', path: '/game/garden/plot/pa/water', need: 'Bạn cần thêm 20💧 nữa.' },
-    { label: 'mở lô', tab: 'Vườn', name: 'Còn thiếu 100💧', path: '/game/garden/unlock', need: 'Bạn cần thêm 100💧 nữa.' },
+    { label: 'tưới lô phụ', tab: 'Khu vườn', name: 'Tưới', path: '/game/garden/plot/pa/water', need: 'Bạn cần thêm 20💧 nữa.' },
+    { label: 'mở lô', tab: 'Khu vườn', name: 'Còn thiếu 100💧', path: '/game/garden/unlock', need: 'Bạn cần thêm 100💧 nữa.' },
   ];
   it.each(cases)('mọi nút thiếu nước mở sheet "Kiếm nước", không gọi API, không báo lỗi: $label', async ({ tab: t, name, path, need }) => {
     state.data['/game/profile'] = DRY({ totalSeeds: 0, streakRepairable: true, brokenStreakDays: 5 });
@@ -371,7 +371,7 @@ describe('Vườn Xanh người mới (web): thiếu điểm và lô phụ', () 
   it('vòng quay thiếu điểm: hiện "Bạn có X / 10.000 Điểm Xanh", không nút quay, "Cách kiếm Điểm Xanh" sang trang Điểm Xanh', async () => {
     state.data['/me/loyalty'] = { pointsBalance: 3_000, redeemablePoints: 3_000, redeemableTotal: 3_000 };
     const c = await mount();
-    const t = panel(c, 'Hôm nay');
+    const t = panel(c, 'Sảnh Game');
     expect(t.textContent).toContain('Bạn có 3.000 / 10.000 Điểm Xanh cho 1 lượt quay');
     expect(maybeBtn(t, /Quay ngay/)).toBeUndefined();
     click(btn(t, 'Cách kiếm Điểm Xanh'));
@@ -381,29 +381,29 @@ describe('Vườn Xanh người mới (web): thiếu điểm và lô phụ', () 
 
   it('đủ điểm hoặc chưa biết số dư: vẫn là nút "Quay ngay"', async () => {
     let c = await mount();
-    expect(maybeBtn(panel(c, 'Hôm nay'), /Quay ngay/)).toBeDefined();
+    expect(maybeBtn(panel(c, 'Sảnh Game'), /Quay ngay/)).toBeDefined();
     mounted.forEach((m) => m.unmount());
     mounted = [];
     delete state.data['/me/loyalty'];
     c = await mount();
-    expect(maybeBtn(panel(c, 'Hôm nay'), /Quay ngay/)).toBeDefined();
+    expect(maybeBtn(panel(c, 'Sảnh Game'), /Quay ngay/)).toBeDefined();
   });
 
   it('vòng quay chỉ tính điểm dùng được (không tính điểm đang khoá)', async () => {
     state.data['/me/loyalty'] = { pointsBalance: 12_000, redeemablePoints: 4_000, redeemableTotal: 4_000 };
     const c = await mount();
-    expect(panel(c, 'Hôm nay').textContent).toContain('Bạn có 4.000 / 10.000 Điểm Xanh cho 1 lượt quay');
+    expect(panel(c, 'Sảnh Game').textContent).toContain('Bạn có 4.000 / 10.000 Điểm Xanh cho 1 lượt quay');
   });
 
   it('góp quỹ nằm ở tab Vườn, không ở Hôm nay; thiếu điểm hiện số dư và "Cách kiếm Điểm Xanh"', async () => {
     const c = await mount();
-    expect(maybeBtn(panel(c, 'Hôm nay'), /Góp quỹ trồng cây/)).toBeUndefined();
-    expect(maybeBtn(panel(c, 'Vườn'), 'Góp quỹ trồng cây (50.000 điểm)')).toBeDefined();
+    expect(maybeBtn(panel(c, 'Chăm vườn'), /Góp quỹ trồng cây/)).toBeUndefined();
+    expect(maybeBtn(panel(c, 'Khu vườn'), 'Góp quỹ trồng cây (50.000 điểm)')).toBeDefined();
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.data['/me/loyalty'] = { pointsBalance: 1_000, redeemablePoints: 1_000, redeemableTotal: 1_000 };
     const c2 = await mount();
-    const garden = panel(c2, 'Vườn');
+    const garden = panel(c2, 'Khu vườn');
     expect(garden.textContent).toContain('Bạn có 1.000 / 50.000 Điểm Xanh');
     expect(maybeBtn(garden, /Góp quỹ trồng cây/)).toBeUndefined();
     click(btn(garden, 'Cách kiếm Điểm Xanh'));
@@ -414,14 +414,14 @@ describe('Vườn Xanh người mới (web): thiếu điểm và lô phụ', () 
     state.search = 'tab=garden';
     state.data['/game/profile'] = DRY({ ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 } });
     let c = await mount();
-    expect(panel(c, 'Vườn').textContent).toContain('Thu hoạch cây thứ 2 để mở thêm lô đất.');
-    expect(panel(c, 'Vườn').textContent).not.toContain('Lô đất của bạn');
+    expect(panel(c, 'Khu vườn').textContent).toContain('Thu hoạch cây thứ 2 để mở thêm lô đất.');
+    expect(panel(c, 'Khu vườn').textContent).not.toContain('Lô đất của bạn');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.data['/game/profile'] = DRY({ totalSeeds: 500, ecoImpact: { progress: 5, target: 600, treeType: 'Cây', treesPlanted: 2 } });
     c = await mount();
-    expect(maybeBtn(panel(c, 'Vườn'), 'Mở lô (100💧)')).toBeDefined();
-    expect(panel(c, 'Vườn').textContent).not.toContain('Thu hoạch cây thứ 2');
+    expect(maybeBtn(panel(c, 'Khu vườn'), 'Mở lô (100💧)')).toBeDefined();
+    expect(panel(c, 'Khu vườn').textContent).not.toContain('Thu hoạch cây thứ 2');
   });
 });
 

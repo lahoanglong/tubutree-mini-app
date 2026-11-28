@@ -181,11 +181,24 @@ Chỉ ở Mini, thay phần tương ứng của zmp-ui để gói nhẹ hơn (tu
 
 | Cần | Dùng |
 |---|---|
-| sảnh hai mini-game ở Vườn Xanh (`Hứng Sương Tinh Khiết`, `Phân Loại Vỏ Chai Thần Tốc`) kèm huy hiệu khung giờ thưởng và kỷ lục cá nhân | `ArcadeHub` (không props, tự giữ trạng thái mở lớp phủ; lượt dùng hôm nay từ `gameArcadeStatusQuery`) |
+| tab Sảnh Game của Vườn Xanh: lưới 2 cột thẻ có hình cho mọi game (hai mini-game arcade, mini game hằng ngày, Vòng quay), mỗi thẻ một dòng trạng thái, nhãn "Mới" (không dùng "Hot") | `ArcadeHub` (`mini` là dữ liệu mini game hôm nay, `wheel` là giá và neo của Vòng quay; thẻ dựng từ `buildHubCards` ở `packages/app-core/src/game-hub/cards.ts`, tự giữ trạng thái mở lớp phủ; lượt arcade từ `gameArcadeStatusQuery`) |
+| đầu tab Chăm vườn: cây theo giai đoạn có bầu trời theo giờ, giọt nước rơi khi tưới, chip chuỗi ngày và Giọt nước | `GardenHero` (cảnh từ `game-hub/scene.ts`; giảm chuyển động thì đứng yên) |
+| bật/tắt âm thanh của Vườn Xanh (WebAudio, nhớ trong `localStorage`) | `SoundToggle` (âm từ `game-hub/sfx.ts`; chưa chọn thì mặc định có âm, riêng máy bật giảm chuyển động thì mặc định im) |
+| chùm lấp lánh CSS khi thắng ván hoặc thu hoạch cây | `Burst` (không props, `aria-hidden`; CSS ở game-hub.css, giảm chuyển động thì ẩn) |
 | lớp phủ toàn màn chơi một ván, bảng kết quả, Tip Sạch Lành, nút đăng nhập cho khách | `ArcadeGameOverlay` (`gameId`, `onClose`; không có route, canvas dựng bằng `mountArcade`, tải bằng `import()` động) |
-| thẻ "Chọn bộ chăm nhà chuẩn cho gia đình bạn (30 giây)": 3 câu, gợi ý 2–3 sản phẩm thật, "+ Thêm vào giỏ" | `HomeQuizCard` (ở Vườn Xanh và khối `quiz` của Trang chủ, sau `journey`) |
+| thẻ "Chọn bộ chăm nhà chuẩn cho gia đình bạn (30 giây)": 3 câu, gợi ý 2–3 sản phẩm thật, "+ Thêm vào giỏ" | `HomeQuizCard` (chỉ ở khối `quiz` của Trang chủ, sau `journey`; Mini không import mô-đun nào Vườn Xanh dùng chung, xem ghi chú trong tệp) |
 
 Logic ở `packages/app-core/src/arcade/`: engine thuần không DOM (`dew-catcher.ts`, `refill-rush.ts`, toạ độ chuẩn hoá 0..1, `rng` tiêm vào để test), bộ vẽ và nhập liệu `arcade-canvas.ts` (nhận canvas qua giao diện cấu trúc tối thiểu, `raf/caf/now` tiêm vào, màu qua `theme` do app đọc từ token ngữ nghĩa nên không có hex), khung giờ thưởng giờ VN `arcade-config.ts`, `badge.ts`, `home-quiz.ts` (`pickKitProducts`), tip `arcade-tips.ts`. Tổng mã `arcade/` (không tính spec) dưới 30KB, `arcade-guard.spec` canh. Số liệu thưởng và trần chống cày ở máy chủ (`game-arcade.constants.ts`, `POST /game/arcade-complete`): 3 lượt thưởng mỗi ngày mỗi game, thêm 1 lượt khi ván xong trong khung `06:30–09:00` hoặc `20:00–22:00` giờ VN; hết lượt vẫn chơi và phá kỷ lục. Khách chưa đăng nhập chơi trọn vẹn, chỉ không lưu và không nhận thưởng. Chữ ở `arcade.*` và `homeQuiz.*` của `shop-copy.ts`. Hai câu hứa sản phẩm trong Tip (Bồ Hòn 0% Paraben & SLS; giữ vỏ chai TubuTree đổi Điểm Xanh & Quà tặng) là nguyên văn spec W164, các câu khác chỉ là lời khuyên sống xanh.
+
+### Hạng thành viên, Đổi điểm, Đổi rác (tubu-w48-01)
+
+| Cần | Dùng |
+|---|---|
+| huy chương SVG của một hạng (mầm, cây non, cây, vương miện; xanh đậm dần theo thứ hạng, hạng cao nhất viền mật ong) ở thẻ hạng, bậc thang hạng và hộp chúc mừng lên hạng | `TierMedallion` (`rank`, `size` `sm`/`md`/`lg`/`xl`; tra theo thứ hạng ở `packages/app-core/src/loyalty-medal.ts`, đổi tên hạng trong admin vẫn giữ hình) |
+| dải 3 bước có biểu tượng của màn Đổi rác (Chọn món, cách giao theo cờ, Nhận Điểm Xanh) | `WasteStepStrip` (`flags` từ cấu hình công khai; nhãn từ `wasteStepStrip` ở `waste-copy.ts`) |
+| sheet "ⓘ Thể lệ" của màn Đổi rác: các bước đầy đủ, cách giao đang mở, lối sang Thể lệ chương trình | `WasteRulesSheet` (Mini `onFullRules`, web `rulesHref`) |
+
+Màn Hạng thành viên mở bằng thẻ hạng có huy chương, rồi `PointsBoostStrip`, tiến độ lên hạng một dòng (`tierNextLine`). Thẻ quà ở Đổi điểm là một dòng gọn (biểu tượng, tên, viên giá điểm, tối đa một viên ngắn, nút Đổi); câu dài nằm trong sheet chi tiết mở khi chạm tên. CSS: Mini `css/member-polish.css` và `css/waste-steps.css`, web `components/loyalty/member-polish.css` và `components/recycle/waste-steps.css` (từng cặp giữ giống hệt).
 
 ### Góc Sống Xanh: đánh giá ảnh có duyệt (tubu-w3-01)
 

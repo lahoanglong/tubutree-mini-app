@@ -1,0 +1,466 @@
+/*
+ * Vườn Xanh: Sảnh Game hai cột, thẻ đầu có bầu trời theo giờ VN và cây vector, giọt nước khi tưới, chùm lấp lánh khi thắng, nút âm thanh.
+ * Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX) và đi qua token. Bản web: apps/web/src/components/game/game-hub.css (giữ giống hệt).
+ * Mọi chuyển động tắt khi máy bật giảm chuyển động (cuối tệp).
+ */
+
+/* ── Nút âm thanh (đầu trang) ── */
+.tubu-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.tubu-sound-toggle:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Sảnh Game: lưới hai cột thẻ có hình ── */
+.tubu-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 1024px) {
+  .tubu-hub-grid[data-wide] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.tubu-hub-grid > li {
+  display: flex;
+  min-width: 0;
+}
+.tubu-hub-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 160ms ease-out;
+}
+.tubu-hub-card:active {
+  transform: scale(0.97);
+}
+.tubu-hub-card:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.tubu-hub-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 84px;
+  background: linear-gradient(150deg, var(--forest-500), var(--forest-700));
+}
+.tubu-hub-art[data-tone='sky'] {
+  background: linear-gradient(150deg, var(--blue-600), var(--forest-600));
+}
+.tubu-hub-art[data-tone='mint'] {
+  background: linear-gradient(150deg, var(--forest-400), var(--forest-600));
+}
+.tubu-hub-art[data-tone='sun'] {
+  background: linear-gradient(150deg, var(--honey-500), var(--clay-600));
+}
+.tubu-hub-art[data-tone='berry'] {
+  background: linear-gradient(150deg, var(--red-600), var(--clay-700));
+}
+.tubu-hub-art[data-tone='earth'] {
+  background: linear-gradient(150deg, var(--sage-600), var(--clay-700));
+}
+.tubu-hub-art[data-tone='leaf'] {
+  background: linear-gradient(150deg, var(--forest-500), var(--forest-800));
+}
+/* Hai đốm sáng mờ làm nền có chiều sâu, không thành mảng màu phẳng. */
+.tubu-hub-art::before,
+.tubu-hub-art::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: var(--stone-0);
+  opacity: 0.12;
+  pointer-events: none;
+}
+.tubu-hub-art::before {
+  top: -18px;
+  right: -14px;
+  width: 64px;
+  height: 64px;
+}
+.tubu-hub-art::after {
+  bottom: -22px;
+  left: -10px;
+  width: 52px;
+  height: 52px;
+}
+.tubu-hub-art-svg {
+  position: relative;
+  z-index: 1;
+  width: 60px;
+  height: 60px;
+  filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--color-text-primary) 20%, transparent));
+  animation: tubu-hub-bob 3.4s ease-in-out infinite;
+}
+.tubu-hub-grid > li:nth-child(2n) .tubu-hub-art-svg {
+  animation-delay: -1.7s;
+}
+@keyframes tubu-hub-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.tubu-hub-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--clay-500);
+  color: var(--stone-0);
+  font-size: var(--type-label-size);
+  font-weight: 700;
+  line-height: var(--type-label-lh);
+}
+.tubu-hub-badge[data-kind='bonus'] {
+  background: var(--amber-50);
+  color: var(--amber-600);
+}
+.tubu-hub-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-stack-sm);
+}
+.tubu-hub-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+/* Nút thật nằm trong tiêu đề (tiêu đề không được nằm trong nút); `::after` phủ cả thẻ nên chạm đâu trên thẻ cũng là chạm nút. */
+.tubu-hub-hit {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-hub-hit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: var(--radius-card);
+}
+.tubu-hub-hit:focus-visible {
+  outline: none;
+}
+.tubu-hub-hit:focus-visible::after {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+.tubu-hub-meta-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.tubu-hub-chip {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-secondary-bg);
+  color: var(--color-text-brand);
+  font-size: var(--type-label-size);
+  font-weight: 600;
+  line-height: var(--type-label-lh);
+}
+.tubu-hub-status {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--color-bg-subtle);
+}
+.tubu-hub-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 2px;
+  color: var(--color-text-brand);
+  font-weight: 700;
+}
+.tubu-hub-meta {
+  min-height: calc(var(--type-caption-size) * var(--type-caption-lh));
+}
+
+/* ── Thẻ đầu Vườn Xanh: bầu trời đổi theo giờ VN ── */
+.tubu-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 12px 16px 14px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-2);
+  background: linear-gradient(175deg, var(--forest-600), var(--forest-700));
+  text-align: center;
+}
+.tubu-hero[data-sky='dawn'] {
+  background: linear-gradient(175deg, color-mix(in srgb, var(--honey-600) 55%, var(--forest-600)) 0%, var(--forest-600) 48%, var(--forest-700) 100%);
+}
+.tubu-hero[data-sky='day'] {
+  background: linear-gradient(175deg, color-mix(in srgb, var(--blue-600) 70%, var(--forest-600)) 0%, var(--forest-600) 55%, var(--forest-700) 100%);
+}
+.tubu-hero[data-sky='dusk'] {
+  background: linear-gradient(175deg, color-mix(in srgb, var(--clay-600) 70%, var(--forest-700)) 0%, var(--forest-700) 60%, var(--forest-800) 100%);
+}
+.tubu-hero[data-sky='night'] {
+  background: linear-gradient(175deg, var(--navy-900) 0%, color-mix(in srgb, var(--navy-800) 50%, var(--forest-800)) 50%, var(--forest-900) 100%);
+}
+/* Sao đêm: vài chấm sáng tĩnh. */
+.tubu-hero[data-sky='night']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--color-text-inverse) 70%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 30% 8%, color-mix(in srgb, var(--color-text-inverse) 50%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 74% 26%, color-mix(in srgb, var(--color-text-inverse) 60%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--color-text-inverse) 50%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 56% 16%, color-mix(in srgb, var(--color-text-inverse) 40%, transparent) 0 1px, transparent 2px);
+  pointer-events: none;
+}
+.tubu-hero-orb {
+  position: absolute;
+  top: 54px;
+  right: 22px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.tubu-hero[data-sky='dawn'] .tubu-hero-orb {
+  background: var(--honey-500);
+  box-shadow: 0 0 18px 6px color-mix(in srgb, var(--honey-500) 55%, transparent);
+}
+.tubu-hero[data-sky='day'] .tubu-hero-orb {
+  background: var(--amber-50);
+  box-shadow: 0 0 22px 8px color-mix(in srgb, var(--amber-50) 45%, transparent);
+}
+.tubu-hero[data-sky='dusk'] .tubu-hero-orb {
+  background: var(--clay-500);
+  box-shadow: 0 0 18px 6px color-mix(in srgb, var(--clay-500) 50%, transparent);
+}
+.tubu-hero[data-sky='night'] .tubu-hero-orb {
+  background: transparent;
+  box-shadow: inset -7px 3px 0 0 var(--stone-100);
+}
+.tubu-hero > * {
+  position: relative;
+}
+.tubu-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tubu-hero-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--stone-0) 16%, transparent);
+  color: var(--color-text-inverse);
+}
+.tubu-hero-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  height: 112px;
+  margin-top: 2px;
+}
+.tubu-tree-art {
+  width: 124px;
+  height: 112px;
+  overflow: visible;
+}
+.tubu-tree-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: tubu-tree-sway 4.2s ease-in-out infinite;
+}
+@keyframes tubu-tree-sway {
+  0%,
+  100% {
+    transform: rotate(-2.2deg);
+  }
+  50% {
+    transform: rotate(2.2deg);
+  }
+}
+.tubu-tree-art[data-stage='wilted'] {
+  filter: saturate(0.6);
+}
+.tubu-drops {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tubu-drop {
+  position: absolute;
+  top: 0;
+  left: calc(50% + var(--dx, 0) * 1px);
+  width: 8px;
+  height: 11px;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  background: var(--blue-50);
+  box-shadow: inset 0 -2px 0 var(--blue-600);
+  opacity: 0;
+  animation: tubu-drop-fall 820ms cubic-bezier(0.55, 0, 1, 0.45) forwards;
+  animation-delay: calc(var(--dd, 0) * 1ms);
+}
+@keyframes tubu-drop-fall {
+  0% {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(86px);
+    opacity: 0;
+  }
+}
+.tubu-hero-progress {
+  height: 10px;
+  margin: 8px 24px 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--forest-800);
+}
+.tubu-hero-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-inverse);
+  transition: width var(--motion-emphasize);
+}
+.tubu-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--stone-0) 14%, transparent);
+}
+
+/* Hộp thu hoạch: cây đã ra quả (thay emoji 56px) và chùm lấp lánh bung quanh cây. */
+.tubu-harvest-art {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  height: 104px;
+}
+.tubu-harvest-art .tubu-tree-art {
+  width: 116px;
+  height: 104px;
+}
+
+/* ── Chùm lấp lánh khi thắng ván, thu hoạch ── */
+.tubu-burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.tubu-burst-bit {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: tubu-burst 900ms cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+  animation-delay: calc(var(--bd, 0) * 1ms);
+}
+.tubu-burst-bit[data-round] {
+  border-radius: 50%;
+}
+@keyframes tubu-burst {
+  0% {
+    transform: translate(0, 0) scale(0.4) rotate(0deg);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(var(--bx, 0) * 1px), calc(var(--by, 0) * 1px)) scale(1) rotate(200deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-burst,
+  .tubu-drops {
+    display: none;
+  }
+  .tubu-tree-sway,
+  .tubu-hub-art-svg {
+    animation: none;
+  }
+  .tubu-hub-card,
+  .tubu-hub-card:active {
+    transition: none;
+    transform: none;
+  }
+  .tubu-hero-progress > span {
+    transition: none;
+  }
+}

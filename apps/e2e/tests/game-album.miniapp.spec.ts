@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
 import { mockNewbieGame } from './support/game-newbie-states';
 import { ALBUM_CARDS, albumCopy, albumResponse, mockAlbum, REVIEW_ITEMS } from './support/game-album-mocks';
-import { expectNoHorizontalOverflow, expectTargets44, gameCopy, mockMiniGames, mockMiniShop, playQuiz, startRound } from './support/game-mini-mocks';
+import { expectNoHorizontalOverflow, expectTargets44, gameCopy, mockMiniGames, mockMiniShop, openMiniGameHub, playQuiz, startRound } from './support/game-mini-mocks';
 
 /**
  * Sổ tay Xanh ở Mini App (API mock như máy chủ khi cờ `game.album_enabled` bật): dòng lối vào dưới "Chơi hôm nay", lọc chủ đề, mở thẻ và thêm
@@ -34,14 +34,14 @@ for (const viewport of [
   test.describe(`Mini App ${viewport.width}px`, () => {
     test.use({ viewport });
 
-    test('dòng lối vào dưới Chơi hôm nay mở sổ: tiến độ, một nút chính, chip cuộn ngang, lưới 2 cột, ô "?" mờ', async ({ page, api }) => {
+    test('dòng lối vào dưới lưới Sảnh Game mở sổ: tiến độ, một nút chính, chip cuộn ngang, lưới 2 cột, ô "?" mờ', async ({ page, api }) => {
       member(api);
       mockMiniGames(api);
       mockAlbum(api);
-      await page.goto('/game');
+      await openMiniGameHub(page);
       const entry = page.getByTestId('album-entry');
       await expect(entry).toHaveText(albumCopy('entry', { n: 6, m: 86 }), { timeout: 15_000 });
-      await expectTargets44(page.getByTestId('mini-play-today').locator('..'));
+      await expectTargets44(page.getByTestId('arcade-hub'));
       await entry.scrollIntoViewIfNeeded();
       await shot(page, `mini-${viewport.width}-entry`);
       await entry.click();
@@ -116,8 +116,8 @@ for (const viewport of [
       member(api);
       mockMiniGames(api);
       mockAlbum(api, { off: true });
-      await page.goto('/game');
-      await expect(page.getByTestId('mini-play-today')).toBeVisible({ timeout: 15_000 });
+      await openMiniGameHub(page);
+      await expect(page.getByTestId('mini-play-row-sort')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId('album-entry')).toHaveCount(0);
       await page.goto('/game/album');
       await expect(page.getByText(albumCopy('off'))).toBeVisible({ timeout: 15_000 });

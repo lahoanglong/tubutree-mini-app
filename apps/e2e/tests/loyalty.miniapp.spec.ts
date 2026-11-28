@@ -187,7 +187,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     const strip = page.getByRole('region', { name: 'Hôm nay bạn chưa điểm danh' });
     await expect(strip).toBeVisible({ timeout: 15_000 });
     // Tiến độ hạng theo điểm XÉT HẠNG (pointsToGo), không theo số dư.
-    await expect(page.getByText('điểm tích từ mua hàng để lên hạng Lộc Biếc')).toBeVisible();
+    await expect(page.getByTestId('tier-next-line')).toContainText(/điểm.* để lên hạng Lộc Biếc/);
     await expect(page.getByTestId('daily-check-in')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^(Đã )?[Đđ]iểm danh/ })).toHaveCount(0);
 

@@ -10,11 +10,11 @@ import { mockNewbieGame } from './support/game-newbie-states';
  */
 const GAME_OWNED = /^GET \/(game\/|me\/loyalty$|me\/daily-check-in$)/;
 
-test('mở /game: tối đa 8 lần gọi API của game, tab Vườn tải khi mở', async ({ page, api }) => {
+test('mở /game: tối đa 8 lần gọi API của game, tab Khu vườn tải khi mở', async ({ page, api }) => {
   mockSession(api, makeUser({ id: 'u-newbie', fullName: 'Khách mới', pointsBalance: 0 }));
   mockNewbieGame(api, 'new');
   await page.goto('/game');
-  await expect(page.getByRole('tab', { name: 'Hôm nay' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('tab', { name: 'Chăm vườn' })).toBeVisible({ timeout: 15_000 });
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(800);
   const opened = api.calls.map((c) => `${c.method} ${c.path}`);
@@ -23,7 +23,7 @@ test('mở /game: tối đa 8 lần gọi API của game, tab Vườn tải khi 
   expect(opened.filter((c) => c === 'GET /game/daily')).toHaveLength(1);
   expect(opened.some((c) => /game\/(garden|forest|collection|community|season)/.test(c))).toBe(false);
   const before = opened.length;
-  await page.getByRole('tab', { name: 'Vườn' }).click();
+  await page.getByRole('tab', { name: 'Khu vườn' }).click();
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(500);
   const all = api.calls.map((c) => `${c.method} ${c.path}`);

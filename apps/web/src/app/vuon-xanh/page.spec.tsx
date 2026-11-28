@@ -189,13 +189,14 @@ describe('Vườn Xanh: trạng thái trang', () => {
 });
 
 describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
-  it('ba tab Hôm nay / Vườn / Cộng đồng, mở sẵn Hôm nay, khối của tab khác ẩn nhưng vẫn dựng', async () => {
+  it('bốn tab Chăm vườn / Sảnh Game / Khu vườn / Cộng đồng, mở sẵn Chăm vườn, khối của tab khác ẩn nhưng vẫn dựng', async () => {
     const c = await mount();
     const tabs = Array.from(c.querySelectorAll('[role="tab"]'));
-    expect(tabs.map((t) => t.textContent)).toEqual(['Hôm nay', 'Vườn', 'Cộng đồng']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Chăm vườn', 'Sảnh Game', 'Khu vườn', 'Cộng đồng']);
     expect(tabs[0]!.getAttribute('aria-selected')).toBe('true');
-    expect(visible(c, 'Hôm nay')).toBe(true);
-    expect(visible(c, 'Vườn')).toBe(false);
+    expect(visible(c, 'Chăm vườn')).toBe(true);
+    expect(visible(c, 'Sảnh Game')).toBe(false);
+    expect(visible(c, 'Khu vườn')).toBe(false);
     expect(visible(c, 'Cộng đồng')).toBe(false);
   });
 
@@ -203,23 +204,24 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     state.search = 'tab=community';
     const c = await mount();
     expect(visible(c, 'Cộng đồng')).toBe(true);
-    expect(visible(c, 'Hôm nay')).toBe(false);
-    click(byText(c, '[role="tab"]', 'Vườn'));
+    expect(visible(c, 'Chăm vườn')).toBe(false);
+    click(byText(c, '[role="tab"]', 'Khu vườn'));
     expect(state.replace).toHaveBeenCalledWith('/vuon-xanh?tab=garden', { scroll: false });
-    click(byText(c, '[role="tab"]', 'Hôm nay'));
+    click(byText(c, '[role="tab"]', 'Chăm vườn'));
     expect(state.replace).toHaveBeenLastCalledWith('/vuon-xanh', { scroll: false });
   });
 
   it('giá trị ?tab= lạ rơi về Hôm nay', async () => {
     state.search = 'tab=xyz';
     const c = await mount();
-    expect(visible(c, 'Hôm nay')).toBe(true);
+    expect(visible(c, 'Chăm vườn')).toBe(true);
   });
 
   it('thẻ vườn: tên cây, tiến độ và dòng tổng hợp có dấu phân cách nghìn', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Cây Sưa');
-    expect(c.textContent).toContain('600/1.000💧 · 🌳 Đã thu hoạch 2 cây');
+    const hero = c.querySelector('[data-testid="garden-hero"]')!;
+    expect(Array.from(hero.querySelectorAll('.tubu-hero-chip')).map((x) => x.textContent)).toEqual(['600/1.000💧', '🌳 Đã thu hoạch 2 cây']);
     expect(c.querySelector('[role="progressbar"][aria-label="Tiến độ cây"]')!.getAttribute('aria-valuenow')).toBe('60');
   });
 
@@ -227,18 +229,21 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     state.data['/game/profile'] = PROFILE({ ecoImpact: null, totalSeeds: undefined, streakDays: undefined });
     const c = await mount();
     expect(c.textContent).toContain('Vườn của bạn');
-    expect(c.textContent).toContain('0/0💧 · 🌳 Đã thu hoạch 0 cây');
+    expect(c.textContent).toContain('0/0💧');
+    expect(c.textContent).toContain('🌳 Đã thu hoạch 0 cây');
   });
 
-  it('giai đoạn cây: <=50% mầm, >50% cành, 100% cây', async () => {
+  it('giai đoạn cây (hình vector như Mini): dưới 25% mầm non, từ 25% cây con, từ 60% cây lớn, 100% ra quả; tên đọc theo giai đoạn', async () => {
     const stage = async (progress: number) => {
       state.data['/game/profile'] = PROFILE({ ecoImpact: { progress, target: 1000, treeType: 'X', treesPlanted: 0 } });
       const c = await mount();
-      return c.querySelector('[data-testid="garden-stage"]')!.textContent;
+      const svg = c.querySelector('[data-testid="garden-stage"] svg')!;
+      return [svg.getAttribute('data-stage'), svg.getAttribute('aria-label')];
     };
-    expect(await stage(500)).toBe('🌱');
-    expect(await stage(600)).toBe('🌿');
-    expect(await stage(1000)).toBe('🌳');
+    expect(await stage(100)).toEqual(['sprout', 'Cây của bạn: mầm non']);
+    expect(await stage(500)).toEqual(['sapling', 'Cây của bạn: cây con']);
+    expect(await stage(600)).toEqual(['tree', 'Cây của bạn: cây lớn']);
+    expect(await stage(1000)).toEqual(['bloom', 'Cây của bạn: đã ra quả']);
   });
 
   it('banner mùa (tab Cộng đồng) hiện chủ đề, vùng và loài nổi bật; không có mùa thì ẩn', async () => {
@@ -268,14 +273,20 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     expect(c.querySelector('a[href="/doi-rac"]')).toBeNull();
   });
 
-  it('khối nào ở tab nào: tưới, điểm danh, nhiệm vụ, quiz, vòng quay, mini game, Chẩn đoán tổ ấm thuộc Hôm nay, mỗi khối có h2; tác động xanh ở tab Vườn', async () => {
+  it('khối nào ở tab nào: thẻ vườn, tưới, điểm danh, nhiệm vụ ở Chăm vườn; mini game, quiz, vòng quay ở Sảnh Game; mỗi khối có h2; tác động xanh ở Khu vườn', async () => {
     const c = await mount();
-    const today = panel(c, 'Hôm nay');
+    const today = panel(c, 'Chăm vườn');
+    expect(today.querySelector('[data-testid="garden-hero"]')).not.toBeNull();
     for (const t of ['Nhận nước hôm nay', 'Chuỗi 3 ngày']) expect(today.textContent).toContain(t);
-    expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
-      expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn', 'Mini game', 'Chẩn đoán tổ ấm']),
+    expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Nhiệm vụ');
+    const games = panel(c, 'Sảnh Game');
+    expect(Array.from(games.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
+      expect.arrayContaining(['Mini game', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn']),
     );
-    expect(panel(c, 'Vườn').textContent).toContain('Tác động xanh của bạn');
+    expect(today.querySelector('[data-testid="arcade-hub"]')).toBeNull();
+    // Chẩn đoán tổ ấm chỉ còn ở Trang chủ: không lặp ở Vườn Xanh.
+    expect(c.textContent).not.toContain('Chẩn đoán tổ ấm');
+    expect(panel(c, 'Khu vườn').textContent).toContain('Tác động xanh của bạn');
     expect(today.textContent).not.toContain('Tác động xanh của bạn');
   });
 
@@ -830,89 +841,83 @@ describe('Vườn Xanh: khung rộng và thanh tab', () => {
     }
   });
 
-  it('từ lg tab Hôm nay chia cố định 2/3 + 1/3 (điểm danh và nhiệm vụ ở cột phụ), tab khác xếp hai cột đều; tab ẩn vẫn hidden; điện thoại một cột', async () => {
+  it('từ lg tab Chăm vườn chia cố định 2/3 + 1/3 (điểm danh và nhiệm vụ ở cột phụ), tab khác xếp hai cột đều; tab ẩn vẫn hidden; điện thoại một cột', async () => {
     const c = await mount();
-    const today = panel(c, 'Hôm nay');
+    const today = panel(c, 'Chăm vườn');
     expect(today.className).toContain('lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
     expect(today.className).toContain('flex-col');
-    // Thứ tự DOM = thứ tự nhìn ở điện thoại (WCAG 2.4.3): việc chính, rồi điểm danh + nhiệm vụ, rồi quiz + vòng quay; từ lg ba khối đặt vào ô lưới.
+    // Thứ tự DOM = thứ tự nhìn ở điện thoại (WCAG 2.4.3): thẻ vườn + việc chính, rồi điểm danh + nhiệm vụ, rồi lối Đổi rác; từ lg ba khối đặt vào ô lưới.
     const [top, side, bottom] = Array.from(today.children) as HTMLElement[];
     for (const col of [top!, side!, bottom!]) expect(col.className).toContain('contents');
+    expect(top!.querySelector('[data-testid="garden-hero"]')).not.toBeNull();
     expect(side!.querySelector('#game-checkin')).not.toBeNull();
-    expect(bottom!.querySelector('#game-quiz')).not.toBeNull();
-    expect(top!.querySelector('#game-quiz')).toBeNull();
+    expect(today.querySelector('#game-quiz')).toBeNull();
+    expect(panel(c, 'Sảnh Game').querySelector('#game-quiz')).not.toBeNull();
+    expect(panel(c, 'Sảnh Game').querySelector('#game-wheel')).not.toBeNull();
     expect(top!.className).toContain('lg:col-start-1 lg:row-start-1');
     expect(side!.className).toContain('lg:col-start-2 lg:row-span-2');
     expect(bottom!.className).toContain('lg:col-start-1 lg:row-start-2');
     expect(today.innerHTML).not.toContain('max-lg:order-1');
-    expect(panel(c, 'Vườn').className).toBe('hidden');
+    expect(panel(c, 'Khu vườn').className).toBe('hidden');
   });
 });
 
-describe('Vườn Xanh: mini game và Chẩn đoán tổ ấm', () => {
+describe('Vườn Xanh: Sảnh Game', () => {
   const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-  it('cột phụ của Hôm nay: điểm danh, rồi sảnh mini game và thẻ Chẩn đoán tổ ấm, rồi Nhiệm vụ', async () => {
+  it('tab Sảnh Game: lưới game, rồi quiz, rồi vòng quay; thanh tab đứng trên thẻ vườn', async () => {
     const c = await mount();
-    const [, side] = Array.from(panel(c, 'Hôm nay').children) as HTMLElement[];
-    const hub = side!.querySelector('[data-testid="arcade-hub"]')!;
-    const quiz = side!.querySelector('[data-testid="home-quiz-card"]')!;
-    const missions = Array.from(side!.querySelectorAll('h2')).find((h) => h.textContent === 'Nhiệm vụ')!;
-    expect(after(side!.querySelector('#game-checkin')!, hub)).toBe(true);
-    expect(after(hub, quiz)).toBe(true);
-    expect(after(quiz, missions)).toBe(true);
+    const games = panel(c, 'Sảnh Game');
+    const hub = games.querySelector('[data-testid="arcade-hub"]')!;
+    expect(after(hub, games.querySelector('#game-quiz')!)).toBe(true);
+    expect(after(games.querySelector('#game-quiz')!, games.querySelector('#game-wheel')!)).toBe(true);
+    expect(after(c.querySelector('[role="tablist"]')!, c.querySelector('[data-testid="garden-hero"]')!)).toBe(true);
   });
 
-  it('đã đăng nhập: thẻ game ghi kỷ lục và số lượt thưởng đã dùng từ máy chủ, mỗi game một nút Chơi', async () => {
+  it('đã đăng nhập: thẻ game ghi kỷ lục và số lượt thưởng còn lại từ máy chủ, mỗi game một nút Chơi', async () => {
     const c = await mount();
     expect(getsOf('/game/arcade/status')).toHaveLength(1);
     const dew = c.querySelector('[data-testid="arcade-card-dew_catcher"]')!;
     expect(dew.textContent).toContain('Kỷ lục 520');
-    expect(c.querySelector('[data-testid="arcade-used-dew_catcher"]')!.textContent).toBe('Đã dùng 1/3 lượt thưởng hôm nay');
-    expect(c.querySelector('[data-testid="arcade-used-refill_rush"]')!.textContent).toBe('Đã dùng 0/3 lượt thưởng hôm nay');
+    expect(c.querySelector('[data-testid="arcade-used-dew_catcher"]')!.textContent).toBe('Còn 2 lượt thưởng');
+    expect(c.querySelector('[data-testid="arcade-used-refill_rush"]')!.textContent).toBe('Còn 3 lượt thưởng');
     expect(Array.from(c.querySelectorAll('[data-testid^="arcade-card-"] button')).map((b) => b.getAttribute('aria-label'))).toEqual([
       'Chơi Hứng Sương Tinh Khiết',
       'Chơi Phân Loại Vỏ Chai Thần Tốc',
     ]);
   });
 
-  it('khách vẫn chơi thử được: sảnh nằm dưới cổng đăng nhập, không gọi API trạng thái, nút "Chơi thử"', async () => {
+  it('thẻ Vòng quay của sảnh cuộn tới khối vòng quay cùng tab', async () => {
+    const c = await mount();
+    const wheel = panel(c, 'Sảnh Game').querySelector<HTMLElement>('#game-wheel')!;
+    wheel.scrollIntoView = vi.fn();
+    click(c.querySelector<HTMLButtonElement>('[data-testid="hub-card-wheel"] h3 button')!);
+    expect(wheel.scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách vẫn chơi thử được: sảnh nằm dưới cổng đăng nhập, không gọi API trạng thái, nút "Chơi thử"; không có thẻ Chẩn đoán tổ ấm', async () => {
     state.phase = 'guest';
     const c = await mount();
     expect(c.querySelector('a[href="/dang-nhap?returnTo=%2Fvuon-xanh"]')).not.toBeNull();
     const buttons = Array.from(c.querySelectorAll('[data-testid^="arcade-card-"] button'));
-    expect(buttons.map((b) => b.textContent)).toEqual(['Chơi thử', 'Chơi thử']);
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Chơi thử Hứng Sương Tinh Khiết', 'Chơi thử Phân Loại Vỏ Chai Thần Tốc']);
     expect(c.textContent).toContain('Bạn đang chơi thử, kỷ lục lưu trên máy này');
     expect(getsOf('/game/arcade/status')).toHaveLength(0);
     expect(c.querySelectorAll('h1')).toHaveLength(1);
     expect(headingProblems(c)).toEqual([]);
+    expect(c.querySelector('[data-testid="home-quiz-card"]')).toBeNull();
   });
 
-  it('khách cũng thấy thẻ Chẩn đoán tổ ấm (dưới sảnh game), thẻ vẫn hứa quà và không gọi API nào', async () => {
-    state.phase = 'guest';
+  it('nút âm thanh ở đầu trang: một chạm tắt, lưu trên máy, chạm lại bật', async () => {
     const c = await mount();
-    const card = c.querySelector('[data-testid="home-quiz-card"]')!;
-    expect(card).not.toBeNull();
-    expect(card.querySelector('h2')!.textContent).toBe('Chẩn đoán tổ ấm');
-    expect(card.textContent).toContain('Lần đầu hoàn thành có quà Giọt nước');
-    const hub = c.querySelector('[data-testid="arcade-hub"]')!;
-    expect(hub.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(getsOf('/game/arcade/status')).toHaveLength(0);
-    expect(state.calls.filter((x) => x.path === '/products' || x.path.startsWith('/game/home-quiz'))).toEqual([]);
-  });
-
-  it('đã đăng nhập mà máy chủ báo quizClaimed: thẻ không hứa quà lần nữa', async () => {
-    state.data['/game/arcade/status'] = { ...ARCADE_STATUS, quizClaimed: true };
-    const c = await mount();
-    const card = c.querySelector('[data-testid="home-quiz-card"]')!;
-    expect(card.textContent).not.toContain('Lần đầu hoàn thành có quà Giọt nước');
-    expect(card.textContent).toContain('Bạn đã nhận quà Giọt nước của Chẩn đoán tổ ấm');
-  });
-
-  it('thẻ Chẩn đoán tổ ấm tĩnh: không gọi API sản phẩm hay quà trước khi bấm Bắt đầu', async () => {
-    const c = await mount();
-    expect(state.calls.filter((x) => x.path === '/products' || x.path.startsWith('/game/home-quiz'))).toEqual([]);
-    expect(c.querySelector('[data-testid="home-quiz-card"] button')!.textContent).toBe('Bắt đầu');
+    const toggle = c.querySelector<HTMLButtonElement>('[data-testid="sound-toggle"]')!;
+    expect(toggle.getAttribute('aria-label')).toBe('Âm thanh trò chơi');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(localStorage.getItem('tubu.sfx.muted')).toBe('1');
+    click(toggle);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
   });
 });
 

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const http = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('./core-http', () => ({ coreHttp: http }));
 
-import { arcadeStatusQuery, startArcadeRun, submitArcadeRun, submitHomeQuiz } from './arcade-api';
+import { arcadeStatusQuery, startArcadeRun, submitArcadeRun } from './arcade-api';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -33,11 +33,5 @@ describe('arcade-api', () => {
     expect(arcadeStatusQuery.queryKey).toEqual(['game', 'arcade']);
     await arcadeStatusQuery.queryFn();
     expect(http.get).toHaveBeenCalledWith('/game/arcade/status');
-  });
-
-  it('quiz gửi đúng ba đáp án tới /game/home-quiz/complete', async () => {
-    http.post.mockResolvedValue({ granted: 20, alreadyClaimed: false, totalSeeds: 20 });
-    await submitHomeQuiz({ family: 'baby_pet', worry: 'grease', format: 'refill' });
-    expect(http.post).toHaveBeenCalledWith('/game/home-quiz/complete', { family: 'baby_pet', worry: 'grease', format: 'refill' });
   });
 });

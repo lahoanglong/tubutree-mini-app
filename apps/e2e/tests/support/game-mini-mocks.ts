@@ -507,16 +507,23 @@ export async function finishSort(page: Page, from: number) {
   }
 }
 
+/** Mini App: lưới game nằm ở tab "Sảnh Game" của /game (tab không ghi lên URL), nên mở trang rồi chạm tab. */
+export async function openMiniGameHub(page: Page): Promise<void> {
+  await page.goto('/game');
+  await page.getByRole('tab', { name: 'Sảnh Game' }).click({ timeout: 15_000 });
+}
+
 /**
- * Mọi phần tử bấm được trong `scope` cao ít nhất 44px (vùng chạm tối thiểu). Tên thẻ sản phẩm (`.tubu-tile-link`) nhận chạm qua `::after` phủ cả
- * vỏ thẻ, nên đo vỏ thẻ (khối định vị gần nhất) chứ không đo dòng chữ.
+ * Mọi phần tử bấm được trong `scope` cao ít nhất 44px (vùng chạm tối thiểu). Tên thẻ sản phẩm (`.tubu-tile-link`), tên thẻ Sảnh Game
+ * (`.tubu-hub-hit`) và tên thẻ quà (`.tubu-reward-hit`) nhận chạm qua `::after` phủ cả vỏ thẻ, nên đo vỏ thẻ (khối định vị gần nhất) chứ không đo dòng chữ.
  */
 export async function expectTargets44(scope: Locator) {
   const small = await scope.evaluate((root) =>
     [...root.querySelectorAll<HTMLElement>('button, a[href], [role="button"]')]
       .filter((el) => el.offsetParent !== null)
       .map((el) => {
-        const box = (el.classList.contains('tubu-tile-link') ? (el.offsetParent as HTMLElement) : el).getBoundingClientRect();
+        const coversCard = ['tubu-tile-link', 'tubu-hub-hit', 'tubu-reward-hit'].some((c) => el.classList.contains(c));
+        const box = (coversCard ? (el.offsetParent as HTMLElement) : el).getBoundingClientRect();
         return { el: (el.getAttribute('data-testid') ?? el.textContent ?? '').trim().slice(0, 40), h: box.height, w: box.width };
       })
       .filter((x) => x.h < 44 || x.w < 44),

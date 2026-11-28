@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import { GAME_SOCIAL_ON_WEB } from '@tubutree/app-core/features';
+import { hubCopy } from '@tubutree/app-core/game-hub/copy';
 
 const ALL_GAME_TABS = [
-  { key: 'today', label: 'Hôm nay' },
-  { key: 'garden', label: 'Vườn' },
+  { key: 'today', label: hubCopy('tab.care') },
+  { key: 'games', label: hubCopy('tab.games') },
+  { key: 'garden', label: hubCopy('tab.garden') },
   { key: 'community', label: 'Cộng đồng' },
 ] as const;
 
