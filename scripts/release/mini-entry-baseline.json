@@ -1,6 +1,6 @@
 {
-  "$comment": "Số byte thô của entry Mini App (script module trong apps/miniapp/www/index.html) trên bản build có .env.production như gói ZMP. scripts/release/pre-submit-check.sh chặn khi entry khác số này: entry đổi phải có chủ đích, đo lại rồi sửa số này trong cùng PR (UPDATE_MINI_ENTRY_BASELINE=1 ghi số mới). Đo ở tubu-w47-01 trên feat/tubu-w47-01 (gốc 75fdeaf88 của w46-03): entry 299.686 B (+985 B so với 298.701 B của tubu-w46-03), tổng www 2.162.630 B. Không thành phần mới nào của w47-01 nằm trong entry (dải chọn cách mua, Điểm nổi bật, dòng gập Chi tiết sản phẩm, hàng Điểm Xanh, câu đồng ý đều ở chunk lười); phần tăng là do Rollup xếp lại chunk dùng chung khi import của Giỏ, Thanh toán, trang chi tiết đổi: experimentalMinChunkSize 2000 gộp chunk nhỏ (ảnh đại diện hồ sơ, chữ luật đổi điểm của loyalty-copy) vào entry, trong khi keyset-paging và vi-community ra khỏi entry.",
-  "entryBytes": 299686,
-  "totalBytes": 2162630,
-  "measuredOn": "tubu-w47-01"
+  "$comment": "Số byte thô của entry Mini App (script module trong apps/miniapp/www/index.html) trên bản build có .env.production như gói ZMP. scripts/release/pre-submit-check.sh chặn khi entry khác số này: entry đổi phải có chủ đích, đo lại rồi sửa số này trong cùng PR (UPDATE_MINI_ENTRY_BASELINE=1 ghi số mới). Đo ở tubu-w47-03 trên wave/w47-03-release (w46-03 75fdeaf88 + merge feat/tubu-w47-01 và feat/tubu-w47-02): entry 297.051 B (-1.650 B so với 298.701 B của tubu-w46-03; w47-01 đo riêng +985 B vì Rollup gộp chunk nhỏ vào entry, w47-02 đo riêng -2.664 B; hai nhánh gộp lệch +29 B so với tổng hai số), tổng www 2.157.681 B.",
+  "entryBytes": 297051,
+  "totalBytes": 2157681,
+  "measuredOn": "tubu-w47-03"
 }
