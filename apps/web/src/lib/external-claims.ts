@@ -143,6 +143,7 @@ export const EVENT_ACTION_LABEL: Record<string, string> = {
   HOLD_NO_MEMBER: 'Giữ điểm chờ khách thành viên',
   LAPSE: 'Hết hạn giữ điểm',
   PHONE_CHANGED: 'SĐT trên đơn đổi, chuyển chờ duyệt',
+  PHONE_CONFIRMED: 'Khách xác nhận 4 số cuối SĐT nhận hàng, chuyển chờ cộng',
   AUTO_REVERSE: 'Hệ thống tự đảo điểm',
 };
 

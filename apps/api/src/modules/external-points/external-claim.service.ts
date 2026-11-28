@@ -5,6 +5,7 @@ import type {
   ExternalClaimRejectCode,
   MyExternalClaimItem,
   MyExternalClaimsResponse,
+  MyPhoneRetryAttempt,
   SubmitExternalClaimResponse,
 } from '@tubutree/shared-types';
 import { formatPoints } from '../../common/format-points';
@@ -17,12 +18,15 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig, type ClaimConfig } from './external-claim.config';
 import { recordClaimEvent } from './external-claim-audit';
 import { recordExtClaimEvent } from './external-claim-events';
+import { lockOrderThenClaim } from './external-claim-status';
 import { ExternalClaimLookupService } from './external-claim-lookup.service';
 import {
   evaluateClaimRules,
+  evaluateReviewPhoneRetry,
   lockedUntil,
   PHONE_CONFIRM_RESULTS,
   PHONE_CONFIRMED_NOTE,
+  phoneRetryableReason,
   type ClaimDecision,
   type ClaimFacts,
 } from './external-claim.rules';
@@ -79,7 +83,8 @@ export const REJECT_HTTP: Record<ExternalClaimRejectCode, { status: HttpStatus; 
   },
   // W46: app bản cũ (chưa có màn nhập 4 số) đọc thẳng câu này.
   PHONE_CONFIRM_REQUIRED: { status: HttpStatus.FORBIDDEN, message: 'Cần xác nhận 4 số cuối SĐT người nhận trên đơn sàn để tích điểm đơn này.' },
-  PHONE_CONFIRM_WRONG: { status: HttpStatus.FORBIDDEN, message: '4 số cuối SĐT người nhận chưa khớp đơn sàn.' },
+  // W59 (PO 28/11): sai 4 số không tạo claim nào, mã vẫn để trống cho khách quay lại nhập đúng.
+  PHONE_CONFIRM_WRONG: { status: HttpStatus.FORBIDDEN, message: 'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại.' },
   PHONE_CONFIRM_LOCKED: {
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: 'Bạn đã nhập sai 4 số cuối SĐT người nhận 3 lần. Bạn thử lại đơn này sau 24 giờ hoặc liên hệ Tubu Tree nhé.',
@@ -165,6 +170,30 @@ function submittedProps(out: Persisted, orderChannel: string | null, via?: 'scan
       return { ...base, result: 'SEARCHING' };
   }
 }
+
+/** W59: dòng lịch sử hết đường thử lại (đã có người duyệt, đã sang trạng thái khác, không còn của khách): 409 để app làm mới lịch sử. */
+function retryGone(): HttpException {
+  const message = 'Đơn này không còn cần nhập 4 số cuối. Bạn xem trạng thái mới trong lịch sử nhé.';
+  return new HttpException({ statusCode: HttpStatus.CONFLICT, error: 'PHONE_RETRY_GONE', code: 'PHONE_RETRY_GONE', message }, HttpStatus.CONFLICT);
+}
+
+/** W59: claim REVIEW của khách mà lý do chỉ là SĐT, chưa ai duyệt, có điểm và đơn có SĐT để so 4 số cuối: dòng lịch sử cho khách tự nhập lại. */
+function reviewPhoneRetryable(
+  c: { kind: string; state: string; reviewReason: string | null; decidedById: string | null; points: number },
+  o: { phone: string | null; phoneMask: string | null },
+): boolean {
+  return c.kind === 'SCAN' && c.state === 'REVIEW' && c.decidedById === null && c.points > 0 && phoneRetryableReason(c.reviewReason) && orderPhoneVisibleDigits(o) > 0;
+}
+
+/** Ghi chú dòng CLAIM_CREATED: đã xác nhận 4 số cuối (lúc cộng điểm đọc lại), mức khớp SĐT web chưa xác minh (W59), rồi lý do REVIEW. */
+export function claimCreatedNote(reviewReason: string | null, phoneConfirmed: boolean, trustNote?: string): string | null {
+  const parts = [phoneConfirmed ? PHONE_CONFIRMED_NOTE : null, trustNote ?? null, ...(reviewReason ? reviewReason.split('; ') : [])].filter((p): p is string => !!p);
+  return parts.length > 0 ? [...new Set(parts)].join('; ') : null;
+}
+
+/** W59: lượt hỏi 4 số cuối còn mở để khách quay lại nhập (danh sách "Cần xác nhận SĐT" trong lịch sử). */
+export const PHONE_RETRY_DAYS = 7;
+const PHONE_RETRY_ATTEMPT_RESULTS = [PHONE_CONFIRM_RESULTS.required, PHONE_CONFIRM_RESULTS.wrong, PHONE_CONFIRM_RESULTS.locked];
 
 /** Claim sẵn có của chính khách gửi mã: trả lại trạng thái, không ghi lần thử. */
 export interface OwnClaim {
@@ -296,18 +325,19 @@ export class ExternalClaimService {
   }
 
   /** "Đơn ngoài app của bạn": không trả SĐT hay payload, mã che bớt. */
-  async listMine(userId: string, page: number, limit: number, kind: 'SCAN' | 'PHONE' = 'SCAN'): Promise<MyExternalClaimsResponse> {
+  async listMine(userId: string, page: number, limit: number, kind: 'SCAN' | 'PHONE' = 'SCAN', now: Date = new Date()): Promise<MyExternalClaimsResponse> {
     const cfg = await loadClaimConfig(this.config);
     const where: Prisma.ExternalPointsClaimWhereInput = { userId, kind };
-    const [rows, total, attempts] = await Promise.all([
+    const firstScanPage = page === 1 && kind === 'SCAN';
+    const [rows, total, attempts, needsPhone] = await Promise.all([
       this.prisma.externalPointsClaim.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         ...skipTake(page, limit),
-        include: { externalOrder: { select: { channel: true, trackingCode: true, status: true, deliveredAt: true } } },
+        include: { externalOrder: { select: { channel: true, trackingCode: true, status: true, deliveredAt: true, phone: true, phoneMask: true } } },
       }),
       this.prisma.externalPointsClaim.count({ where }),
-      page === 1 && kind === 'SCAN'
+      firstScanPage
         ? this.prisma.externalClaimAttempt.findMany({
             where: { userId, result: 'UNMATCHED', resolvedAt: null },
             orderBy: { createdAt: 'desc' },
@@ -315,6 +345,7 @@ export class ExternalClaimService {
             select: { code: true, createdAt: true },
           })
         : Promise.resolve([] as { code: string; createdAt: Date }[]),
+      firstScanPage ? this.openPhoneRetries(userId, now) : Promise.resolve([]),
     ]);
     const data: MyExternalClaimItem[] = rows.map((r) => {
       const open = r.state === 'PENDING' || r.state === 'REVIEW';
@@ -330,12 +361,123 @@ export class ExternalClaimService {
         creditedAt: r.creditedAt?.toISOString() ?? null,
         holdUntil: r.holdUntil?.toISOString() ?? null,
         createdAt: r.createdAt.toISOString(),
+        ...(reviewPhoneRetryable(r, o) ? { phoneRetry: true as const } : {}),
       };
     });
     return {
       ...paginated(data, page, limit, total),
       searching: attempts.map((a) => ({ maskedCode: maskClaimCode(a.code), createdAt: a.createdAt.toISOString() })),
+      needsPhone,
     };
+  }
+
+  /**
+   * W59: mã khách đã quét mà dừng ở bước 4 số cuối (chưa nhập, nhập sai, đang khoá) trong 7 ngày, đơn chưa ai tích: một dòng mỗi đơn, mới nhất trước.
+   * Không có claim nào được tạo cho các lượt này nên chúng không vào hàng CSKH; khách chạm dòng để nhập lại 4 số.
+   */
+  private async openPhoneRetries(userId: string, now: Date): Promise<MyPhoneRetryAttempt[]> {
+    const rows = await this.prisma.externalClaimAttempt.findMany({
+      where: { userId, result: { in: PHONE_RETRY_ATTEMPT_RESULTS }, externalOrderId: { not: null }, createdAt: { gte: new Date(now.getTime() - PHONE_RETRY_DAYS * DAY_MS) } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, code: true, externalOrderId: true, createdAt: true },
+    });
+    const latest = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) if (r.externalOrderId && !latest.has(r.externalOrderId)) latest.set(r.externalOrderId, r);
+    if (latest.size === 0) return [];
+    const ids = [...latest.keys()];
+    const [taken, orders] = await Promise.all([
+      this.prisma.externalPointsClaim.findMany({ where: { externalOrderId: { in: ids }, state: { not: 'VOIDED' } }, select: { externalOrderId: true } }),
+      this.prisma.externalOrder.findMany({ where: { id: { in: ids } }, select: { id: true, channel: true, status: true } }),
+    ]);
+    const takenIds = new Set(taken.map((t) => t.externalOrderId));
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+    const out: MyPhoneRetryAttempt[] = [];
+    for (const [orderId, a] of latest) {
+      const o = orderById.get(orderId);
+      if (!o || takenIds.has(orderId) || o.status === 'CANCELLED' || o.status === 'RETURNED' || o.status === 'DELETED') continue;
+      out.push({ attemptId: a.id, channel: o.channel, maskedCode: maskClaimCode(a.code), createdAt: a.createdAt.toISOString() });
+      if (out.length >= 10) break;
+    }
+    return out;
+  }
+
+  /**
+   * W59: khách nhập 4 số cuối SĐT người nhận từ một dòng lịch sử, không phải quét lại. `attemptId`: lượt dừng ở bước 4 số (chạy lại đúng luồng gửi
+   * mã với mã đã lưu). `claimId`: claim REVIEW của chính khách mà lý do chỉ là SĐT (W45/W42): đúng 4 số thì sang PENDING, sai thì ghi một lần sai
+   * (tính vào khoá 3 lần của đơn và khoá 24h của khách), claim giữ nguyên.
+   */
+  async retryPhone(userId: string, target: { claimId?: string; attemptId?: string }, last4: string): Promise<SubmitExternalClaimResponse> {
+    const cfg = await loadClaimConfig(this.config);
+    if (!cfg.enabled) throw rejectionOf('DISABLED');
+    const now = new Date();
+    if (target.attemptId) {
+      const attempt = await this.prisma.externalClaimAttempt.findFirst({
+        where: { id: target.attemptId, userId, result: { in: PHONE_RETRY_ATTEMPT_RESULTS }, createdAt: { gte: new Date(now.getTime() - PHONE_RETRY_DAYS * DAY_MS) } },
+        select: { code: true },
+      });
+      if (!attempt) throw retryGone();
+      return this.submit(userId, attempt.code, undefined, last4);
+    }
+    if (!target.claimId) throw retryGone();
+    const claimId = target.claimId;
+
+    const out = await this.prisma.$transaction(
+      async (tx): Promise<{ kind: 'REJECT'; code: ExternalClaimRejectCode; confirm?: ExternalClaimPhoneConfirmInfo } | { kind: 'GONE' } | { kind: 'DONE'; created: CreatedClaim }> => {
+        await advisoryUserLock(tx, userId);
+        if (!(await lockOrderThenClaim(tx, claimId))) return { kind: 'GONE' };
+        const [claim] = await tx.$queryRaw<{ id: string; userId: string | null; kind: string; state: string; reviewReason: string | null; decidedById: string | null; points: number; externalOrderId: string; releaseAt: Date | null; claimedCode: string | null }[]>`
+          SELECT "id", "userId", "kind"::text AS "kind", "state"::text AS "state", "reviewReason", "decidedById", "points", "externalOrderId", "releaseAt", "claimedCode"
+            FROM "external_points_claims" WHERE "id" = ${claimId} FOR UPDATE`;
+        if (!claim || claim.userId !== userId || claim.kind !== 'SCAN' || claim.state !== 'REVIEW' || claim.decidedById !== null || claim.points <= 0) return { kind: 'GONE' };
+        if (!phoneRetryableReason(claim.reviewReason)) return { kind: 'GONE' };
+        const order = await tx.externalOrder.findUniqueOrThrow({ where: { id: claim.externalOrderId }, select: { channel: true, phone: true, phoneMask: true, trackingCode: true } });
+        if (orderPhoneVisibleDigits(order) === 0) return { kind: 'GONE' };
+        const since = new Date(now.getTime() - 2 * DAY_MS);
+        const [counted, attemptsToday, wrong] = await Promise.all([
+          tx.externalClaimAttempt.findMany({ where: { userId, result: { in: [...LOCK_COUNTED_RESULTS] }, createdAt: { gte: since } }, select: { createdAt: true } }),
+          tx.externalClaimAttempt.count({ where: { userId, dayKey: vnDateKey(now) } }),
+          tx.externalClaimAttempt.findMany({ where: { userId, externalOrderId: claim.externalOrderId, result: PHONE_CONFIRM_RESULTS.wrong, createdAt: { gte: since } }, select: { createdAt: true } }),
+        ]);
+        const code = claim.claimedCode ?? normalizeTrackingCode(order.trackingCode) ?? '';
+        const decision = evaluateReviewPhoneRetry({
+          now,
+          lockedUntil: lockedUntil(counted.map((c) => c.createdAt), now),
+          attemptsToday,
+          dailyAttempts: cfg.dailyAttempts,
+          phoneConfirm: { last4, matches: recipientLast4MatchesOrder(last4, order), wrongTimes: wrong.map((w) => w.createdAt) },
+        });
+        if (decision) {
+          if (decision.attemptResult) {
+            await tx.externalClaimAttempt.create({ data: { userId, code, result: decision.attemptResult, dayKey: vnDateKey(now), externalOrderId: claim.externalOrderId, note: 'Nhập 4 số cuối từ lịch sử' } });
+          }
+          const confirm: ExternalClaimPhoneConfirmInfo | undefined = decision.code.startsWith('PHONE_CONFIRM_')
+            ? { channel: order.channel, requiredDigits: RECIPIENT_LAST_DIGITS, ...(decision.remainingAttempts !== undefined ? { remainingAttempts: decision.remainingAttempts } : {}) }
+            : undefined;
+          return { kind: 'REJECT', code: decision.code, confirm };
+        }
+        const moved = await tx.externalPointsClaim.updateMany({
+          where: { id: claim.id, userId, state: 'REVIEW', decidedById: null },
+          data: { state: 'PENDING', reviewReason: null },
+        });
+        if (moved.count !== 1) return { kind: 'GONE' };
+        await recordClaimEvent(tx, { claimId: claim.id, action: 'PHONE_CONFIRMED', actorId: userId, fromState: 'REVIEW', toState: 'PENDING', userIdBefore: userId, userIdAfter: userId, note: PHONE_CONFIRMED_NOTE });
+        await tx.externalClaimAttempt.updateMany({
+          where: { userId, externalOrderId: claim.externalOrderId, result: PHONE_CONFIRM_RESULTS.required },
+          data: { result: PHONE_CONFIRM_RESULTS.confirmed, resolvedAt: now, note: PHONE_CONFIRMED_NOTE },
+        });
+        await recordExtClaimEvent(tx, { name: 'ext_claim_submitted', userId, at: now, props: { via: 'history', result: 'CLAIMED', channel: order.channel, points: claim.points, phoneConfirmed: true } });
+        return {
+          kind: 'DONE',
+          created: { claimId: claim.id, state: 'PENDING', points: claim.points, channel: order.channel, maskedCode: maskClaimCode(code), expectedCreditAt: claim.releaseAt, phoneConfirmed: true },
+        };
+      },
+      { timeout: 15_000, maxWait: 10_000 },
+    );
+    if (out.kind === 'GONE') throw retryGone();
+    if (out.kind === 'REJECT') throw rejectionOf(out.code, out.confirm);
+    await this.notifyPending(userId, out.created);
+    return this.toSubmitResponse(out.created, cfg);
   }
 
   /** Đọc không khoá để biết có nên tốn một lượt tra Pancake không. Quyết định thật vẫn nằm trong transaction. */
@@ -591,7 +733,7 @@ export class ExternalClaimService {
       userIdBefore: a.existingClaimId ? (a.existingClaimOwnerId ?? null) : null,
       userIdAfter: userId,
       // Sổ claim phải nói claim qua được bằng 4 số cuối SĐT người nhận: lúc cộng điểm đọc dòng này để không đưa claim về REVIEW vì SĐT lệch.
-      note: phoneConfirmed && !decision.reviewReason?.includes(PHONE_CONFIRMED_NOTE) ? [PHONE_CONFIRMED_NOTE, decision.reviewReason].filter(Boolean).join('; ') : decision.reviewReason,
+      note: claimCreatedNote(decision.reviewReason, phoneConfirmed, decision.trustNote),
     });
     if (a.attemptId) {
       await tx.externalClaimAttempt.updateMany({

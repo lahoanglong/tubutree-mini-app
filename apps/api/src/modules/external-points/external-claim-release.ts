@@ -45,7 +45,7 @@ async function approvedDespiteStale(tx: Pick<Prisma.TransactionClient, 'external
  */
 async function confirmedByRecipientPhone(tx: Pick<Prisma.TransactionClient, 'externalClaimEvent'>, row: { id: string; userId: string | null }): Promise<boolean> {
   const e = await tx.externalClaimEvent.findFirst({
-    where: { claimId: row.id, action: { in: ['CLAIM_CREATED', 'REOPEN_CLAIM'] } },
+    where: { claimId: row.id, action: { in: ['CLAIM_CREATED', 'REOPEN_CLAIM', 'PHONE_CONFIRMED'] } },
     orderBy: { createdAt: 'desc' },
     select: { userIdAfter: true, note: true },
   });

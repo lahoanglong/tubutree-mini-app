@@ -80,8 +80,11 @@ export type ClaimDecision =
   | { kind: 'UNMATCHED' }
   | { kind: 'UNKNOWN_SOURCE' }
   | { kind: 'OWN_CLAIM'; claimId: string; state: string }
-  /** `phoneConfirmed`: SĐT tài khoản khác SĐT trên đơn, khách đã nhập đúng 4 số cuối SĐT người nhận (W46). */
-  | { kind: 'CLAIM'; state: 'PENDING' | 'REVIEW'; reviewReason: string | null; points: number; phoneConfirmed?: true };
+  /**
+   * `phoneConfirmed`: SĐT tài khoản khác SĐT trên đơn, khách đã nhập đúng 4 số cuối SĐT người nhận (W46). `trustNote` (W59): SĐT web chưa xác minh
+   * khớp đơn tới mức nào, ghi vào sổ claim khi claim đi PENDING (không còn nằm ở lý do REVIEW).
+   */
+  | { kind: 'CLAIM'; state: 'PENDING' | 'REVIEW'; reviewReason: string | null; points: number; phoneConfirmed?: true; trustNote?: string };
 
 /**
  * Khoá 24h sau 5 lần gửi mã không tìm thấy. Khoá tính từ lần thứ 5 (lần mới nhất trong chuỗi): lúc đó ba lần gần nhất cộng với lần
@@ -105,8 +108,9 @@ export function lockedUntil(notFoundTimes: readonly Date[], now: Date, threshold
  * PHONE_MISMATCH đứng ngay sau loại đơn: người cầm mã của người khác không dò được đơn đó đã huỷ, đã tích hay quá hạn. Claim của chính
  * khách (gửi lại mã đã có) không bị chặn ở đây để khách vẫn xem được trạng thái claim cũ dù đã đổi SĐT.
  *
- * SĐT liên hệ tự gõ trên Web, chưa xác minh qua Zalo (W45): chỉ đi tiếp khi SĐT trên đơn khớp SĐT đó, hoặc khách đã có đơn mua trong app giao
- * thành công; claim luôn vào REVIEW để CSKH đối chiếu. Không thoả thì NOT_ELIGIBLE_USER, có ghi lần thử (đã tra đơn nên phải tính vào trần).
+ * SĐT liên hệ tự gõ trên Web, chưa xác minh qua Zalo (W45): chỉ đi tiếp khi SĐT trên đơn khớp SĐT đó (hoặc khách nhập đúng 4 số cuối), hoặc
+ * khách đã có đơn mua trong app giao thành công. Từ W59 khớp SĐT thì PENDING như SĐT Zalo; chỉ lối "đã có đơn app giao" (đơn không có SĐT để so)
+ * vào REVIEW. Không thoả thì NOT_ELIGIBLE_USER, có ghi lần thử (đã tra đơn nên phải tính vào trần).
  */
 /**
  * SĐT tự gõ trên Web do chính khách chọn, nên MATCH với đơn che còn 2 số cuối chỉ là trùng 1/100: nói rõ đã khớp bao nhiêu số để CSKH không
@@ -181,8 +185,55 @@ export function evaluateClaimRules(f: ClaimFacts): ClaimDecision {
   // cộng không kiểm lại SĐT.
   // Khách đã xác nhận 4 số cuối SĐT người nhận (W46) thì SĐT lệch không còn là lý do chờ duyệt: claim vào PENDING như đơn khớp SĐT.
   if (order.phoneMatch === 'MISMATCH' && !phoneConfirmed) reviewReason = [PHONE_MISMATCH_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
-  if (!f.phoneVerified) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, unverifiedMatchNote(order, phoneConfirmed), reviewReason].filter(Boolean).join('; ');
-  return { kind: 'CLAIM', state: reviewReason ? 'REVIEW' : 'PENDING', reviewReason, points: points ?? 0, ...(phoneConfirmed ? { phoneConfirmed: true as const } : {}) };
+  // W59 (PO 28/11): SĐT tự gõ trên Web mà khớp SĐT trên đơn (hoặc khách nhập đúng 4 số cuối) đi PENDING như SĐT Zalo; claim REVIEW "chờ CSKH"
+  // chỉ còn khi đơn không có SĐT để so (khách đi tiếp nhờ đã có đơn app giao). Mức khớp vẫn ghi vào sổ claim (`trustNote`) cho CSKH tra lại.
+  if (!f.phoneVerified && !phoneOk) reviewReason = [WEB_UNVERIFIED_PHONE_REVIEW_REASON, reviewReason].filter(Boolean).join('; ');
+  const trustNote = !f.phoneVerified && phoneOk ? unverifiedMatchNote(order, phoneConfirmed) : null;
+  return {
+    kind: 'CLAIM',
+    state: reviewReason ? 'REVIEW' : 'PENDING',
+    reviewReason,
+    points: points ?? 0,
+    ...(phoneConfirmed ? { phoneConfirmed: true as const } : {}),
+    ...(trustNote && trustNote !== PHONE_CONFIRMED_NOTE ? { trustNote } : {}),
+  };
+}
+
+/** Phần lý do REVIEW chỉ nói về SĐT (W45 SĐT web chưa xác minh, W42 SĐT lệch): khách tự gỡ được bằng 4 số cuối SĐT người nhận. */
+const PHONE_ONLY_REASON = [
+  WEB_UNVERIFIED_PHONE_REVIEW_REASON,
+  PHONE_MISMATCH_REVIEW_REASON,
+  PHONE_CONFIRMED_NOTE,
+  'SĐT tự nhập khớp số đầy đủ trên đơn sàn',
+  /^SĐT tự nhập chỉ khớp \d+\/10 chữ số nhìn thấy trên đơn sàn$/,
+] as const;
+const isPhoneOnlyPart = (part: string) => PHONE_ONLY_REASON.some((p) => (typeof p === 'string' ? p === part : p.test(part)));
+
+/**
+ * W59: claim REVIEW mà mọi lý do chỉ là SĐT (SĐT web chưa xác minh, SĐT lệch): khách chạm dòng lịch sử, nhập đúng 4 số cuối SĐT người nhận là
+ * claim sang PENDING, không cần CSKH. Có thêm lý do khác (tiền hàng, nhân viên, vượt ngưỡng, hoàn một phần, thiếu SĐT trên đơn...) thì vẫn chờ người.
+ */
+export function phoneRetryableReason(reviewReason: string | null): boolean {
+  if (!reviewReason) return false;
+  const parts = reviewReason.split('; ').map((p) => p.trim()).filter(Boolean);
+  return parts.length > 0 && parts.every(isPhoneOnlyPart) && (parts.includes(WEB_UNVERIFIED_PHONE_REVIEW_REASON) || parts.includes(PHONE_MISMATCH_REVIEW_REASON));
+}
+
+/**
+ * W59: luật cho lượt khách nhập 4 số cuối từ một claim REVIEW (chỉ vì SĐT) trong lịch sử. Cùng trần chống dò như lượt gửi mã: khoá 24h của khách,
+ * lần thử/ngày, khoá 3 lần sai của đơn. Đúng 4 số thì trả null (claim sang PENDING).
+ */
+export function evaluateReviewPhoneRetry(f: {
+  now: Date;
+  lockedUntil: Date | null;
+  attemptsToday: number;
+  dailyAttempts: number;
+  phoneConfirm: { last4: string; matches: boolean; wrongTimes: readonly Date[] };
+}): Extract<ClaimDecision, { kind: 'REJECT' }> | null {
+  if (f.lockedUntil && f.lockedUntil.getTime() > f.now.getTime()) return { kind: 'REJECT', code: 'LOCKED' };
+  if (f.attemptsToday >= f.dailyAttempts) return { kind: 'REJECT', code: 'DAILY_ATTEMPTS' };
+  const step = phoneConfirmStep(f.phoneConfirm, f.now);
+  return step && step.kind === 'REJECT' ? step : null;
 }
 
 /**
