@@ -66,6 +66,16 @@ function currentNumber(rows: ConfigRow[] | undefined, f: NumberField): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : f.fallback;
 }
 
+/**
+ * Tỉ lệ tích điểm đơn sàn (%) đang cấu hình cho thẻ bỏ hộp. Bảng cấu hình chưa tải được: null (thẻ không in con số). Đã tải mà chưa có dòng:
+ * mặc định của API, đúng số API đang cộng.
+ */
+export function marketplaceEarnPct(rows: ConfigRow[] | undefined): number | null {
+  if (!rows) return null;
+  const field = O2O_NUMBER_FIELDS.find((f) => f.key === 'loyalty.marketplace_earn_pct');
+  return field ? currentNumber(rows, field) : null;
+}
+
 export function readO2oSettings(rows: ConfigRow[] | undefined): O2oSettingsForm {
   const switches = {} as O2oSettingsForm['switches'];
   for (const flag of O2O_SWITCHES) switches[flag.key as O2oSwitchKey] = currentSwitch(rows, flag);

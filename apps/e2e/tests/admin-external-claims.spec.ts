@@ -243,6 +243,21 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     api.put('/admin/config', () => ({ ok: true }));
     const wholeConfigCalls = () => api.callsTo('GET', '/admin/config').filter((c) => !c.query.get('category')).length;
 
+    // Hộp thoại in thật không chạy được trong headless: thay `print` của khung in ẩn bằng hàm ghi lại HTML khung đang có, để bắt đúng lần bấm nút.
+    await p.addInitScript(() => {
+      const w = window as unknown as { __printed?: string[] };
+      const append = Node.prototype.appendChild;
+      Node.prototype.appendChild = function <T extends Node>(this: Node, node: T): T {
+        const out = append.call(this, node) as T;
+        if (node instanceof HTMLIFrameElement && node.contentWindow) {
+          const frame = node;
+          frame.contentWindow!.print = () => {
+            (w.__printed ??= []).push(frame.contentDocument!.documentElement.outerHTML);
+          };
+        }
+        return out;
+      };
+    });
     await p.goto('/admin?tab=externalClaims');
 
     const card = p.locator('[data-external-funnel]');
@@ -279,13 +294,13 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     await expect(qr.locator('code')).toHaveText(/\/quet-ma\?utm_source=tiktok&card=box-2026-11$/);
 
     const svgDl = p.waitForEvent('download');
-    await qr.getByRole('button', { name: 'Tải SVG' }).click();
+    await qr.getByRole('button', { name: 'Tải SVG', exact: true }).click();
     const svg = await svgDl;
     expect(svg.suggestedFilename()).toBe('tubu-qr-tiktok-box-2026-11.svg');
     expect(await readFile((await svg.path())!, 'utf8')).toContain('shape-rendering="crispEdges"');
 
     const pngDl = p.waitForEvent('download');
-    await qr.getByRole('button', { name: 'Tải PNG' }).click();
+    await qr.getByRole('button', { name: 'Tải PNG', exact: true }).click();
     const png = await pngDl;
     expect(png.suggestedFilename()).toBe('tubu-qr-tiktok-box-2026-11.png');
     const bytes = await readFile((await png.path())!);
@@ -296,6 +311,94 @@ test.describe('Web Admin - Tích điểm đơn sàn', () => {
     await png.saveAs(testInfo.outputPath('insert-qr.png'));
     await svg.saveAs(testInfo.outputPath('insert-qr.svg'));
     await testInfo.attach('insert-qr-link', { body: (await qr.locator('code').innerText()).trim(), contentType: 'text/plain' });
+
+    // W49-02: thẻ A6 sẵn in. PNG vẽ thật trong Chromium: đúng 1240×1748 (A6, 300 DPI) và có khối pHYs 11811 điểm ảnh/mét.
+    await expect(qr.getByRole('img', { name: /^Thẻ A6 TikTok Shop, mã QR dẫn tới / })).toBeVisible();
+    const a6Dl = p.waitForEvent('download');
+    await qr.getByRole('button', { name: 'Tải PNG thẻ A6 sẵn in (300 DPI)' }).click();
+    const a6 = await a6Dl;
+    expect(a6.suggestedFilename()).toBe('tubu-the-a6-tiktok-box-2026-11.png');
+    const a6Bytes = await readFile((await a6.path())!);
+    expect(a6Bytes.subarray(1, 4).toString('latin1')).toBe('PNG');
+    expect([a6Bytes.readUInt32BE(16), a6Bytes.readUInt32BE(20)]).toEqual([1240, 1748]);
+    expect(a6Bytes.subarray(37, 41).toString('latin1')).toBe('pHYs');
+    expect([a6Bytes.readUInt32BE(41), a6Bytes.readUInt32BE(45), a6Bytes[49]]).toEqual([11811, 11811, 1]);
+    await a6.saveAs(process.env.E2E_EVIDENCE_DIR ? `${process.env.E2E_EVIDENCE_DIR}/insert-qr-card-a6-tiktok-box-2026-11.png` : testInfo.outputPath('insert-qr-card-a6.png'));
+
+    // Thẻ ghi đúng tỉ lệ cấu hình (5%), và hiện dòng nói rõ điều đó.
+    await expect(qr.locator('[data-card-earn-pct]')).toContainText('Nhận 5% Điểm Xanh');
+
+    // In / Lưu PDF: bấm nút thì khung in ẩn được dựng và `print` gọi đúng một lần với trang A6 chứa thẻ SVG cỡ mm; mở đúng HTML đó ra PDF thì ra một trang A6 (≈ 297,6 × 419,5 pt).
+    await qr.getByRole('button', { name: 'In / Lưu PDF thẻ A6 (10×15cm)' }).click();
+    const printed = () => p.evaluate(() => (window as unknown as { __printed?: string[] }).__printed ?? []);
+    await expect.poll(async () => (await printed()).length, { timeout: 5_000 }).toBe(1);
+    const printHtml = (await printed())[0]!;
+    expect(printHtml).toContain('@page{size:105mm 148mm;margin:0}');
+    expect(printHtml).toContain('width="105mm" height="148mm"');
+    expect(printHtml).toContain('Mua trên TikTok Shop');
+    expect(printHtml).toContain('Nhận 5%');
+    const pdfPage = await p.context().newPage();
+    await pdfPage.setContent(printHtml);
+    const pdf = (await pdfPage.pdf({ preferCSSPageSize: true, printBackground: true })).toString('latin1');
+    await pdfPage.close();
+    const box = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(pdf);
+    expect(box, 'PDF có MediaBox').not.toBeNull();
+    // Chromium làm tròn MediaBox về điểm nguyên: A6 = 297,64 × 419,53 pt, sai lệch dưới 1 pt.
+    expect(Math.abs(Number(box![1]) - 297.64)).toBeLessThan(1);
+    expect(Math.abs(Number(box![2]) - 419.53)).toBeLessThan(1);
+    expect(pdf.match(/\/Type\s*\/Page\b(?!s)/g)).toHaveLength(1);
     expect(api.unexpectedUnmocked()).toEqual([]);
   });
+
+  for (const width of [360, 375]) {
+    test(`W49-02: thẻ A6 bỏ hộp ở ${width}px nằm gọn trong khung, hai nút thẻ A6 đủ 44px và không lòi qua mép`, async ({ page: p, api }, testInfo) => {
+      mockClaimLists(api, { claims: () => [] });
+      api.get('/admin/external-claims/funnel', () => ({
+        period: '30d',
+        from: '2026-10-28T03:00:00.000Z',
+        to: '2026-11-27T03:00:00.000Z',
+        submissions: { total: 0, scan: 0, typed: 0 },
+        matchedOrders: 0,
+        phoneMismatch: { rejected: 0, review: 0 },
+        noPhoneReview: { review: 0, waiting: 0 },
+        unmatched: 0,
+        pending: { claims: 0, points: 0 },
+        credited: { claims: 0, points: 0, users: 0 },
+        converted: { users: 0, orders: 0, gmv: 0, rate: 0 },
+      } satisfies ExternalClaimFunnel));
+      api.get('/admin/config', ({ call }) =>
+        call.query.get('category')
+          ? { 'loyalty.marketplace_claim_enabled': true }
+          : [
+              { key: 'loyalty.marketplace_claim_enabled', value: true, description: null, category: 'loyalty' },
+              { key: 'loyalty.marketplace_earn_pct', value: 5, description: null, category: 'loyalty' },
+            ],
+      );
+      await p.setViewportSize({ width, height: 900 });
+      await p.goto('/admin?tab=externalClaims');
+      const setup = p.locator('details[data-external-setup]');
+      await expect(setup.locator('summary')).toBeVisible({ timeout: 15_000 });
+      await setup.locator('summary').click();
+      const qr = setup.locator('[data-external-insert-qr]');
+      await expect(qr).toBeVisible();
+      await qr.scrollIntoViewIfNeeded();
+
+      const frame = (await qr.boundingBox())!;
+      expect(frame.x).toBeGreaterThanOrEqual(0);
+      expect(frame.x + frame.width).toBeLessThanOrEqual(width);
+      expect(await qr.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      for (const name of ['Tải PNG thẻ A6 sẵn in (300 DPI)', 'In / Lưu PDF thẻ A6 (10×15cm)']) {
+        const b = (await qr.getByRole('button', { name }).boundingBox())!;
+        expect(b.height, name).toBeGreaterThanOrEqual(44);
+        expect(b.x, name).toBeGreaterThanOrEqual(frame.x);
+        expect(b.x + b.width, name).toBeLessThanOrEqual(frame.x + frame.width + 1);
+      }
+      const preview = (await qr.locator('[data-a6-card-preview]').boundingBox())!;
+      expect(preview.height / preview.width).toBeCloseTo(148 / 105, 1);
+      expect(preview.x + preview.width).toBeLessThanOrEqual(width);
+      const dir = process.env.E2E_EVIDENCE_DIR;
+      await qr.screenshot({ path: dir ? `${dir}/admin-insert-qr-a6-${width}.png` : testInfo.outputPath(`admin-insert-qr-a6-${width}.png`) });
+      expect(api.unexpectedUnmocked()).toEqual([]);
+    });
+  }
 });
