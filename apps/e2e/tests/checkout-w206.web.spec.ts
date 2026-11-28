@@ -120,7 +120,7 @@ test.describe('w2-06 thanh toán web', () => {
     await expect(card).toContainText(BANK_QR.bank.name);
     await expect(card).toContainText(BANK_QR.bank.accountName);
     await expect(card).toContainText(vnd(CHECKOUT_QUOTE.total));
-    await expect(card).toContainText('Mã QR có đúng số tiền và nội dung sẽ hiện ngay sau khi bạn bấm Đặt hàng.');
+    await expect(card).toContainText('Mã QR đúng số tiền và nội dung hiện ngay sau khi bạn bấm Đặt hàng.');
     await expect(card).not.toContainText(BANK_QR.bank.accountNo);
     await expect(page.locator('img[alt="VietQR"], canvas, [data-testid*="qr" i]')).toHaveCount(0);
     await shoot(page, 'transfer-preview');

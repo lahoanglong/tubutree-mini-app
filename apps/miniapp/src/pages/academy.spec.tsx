@@ -376,7 +376,7 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
 describe('AcademyPage — khách thường (API trả 403)', () => {
   const forbidden = () => new HttpError('Request failed with status code 403', 'ERR_BAD_REQUEST', { status: 403, data: {} });
   const NOTICE_TITLE = 'Học viện CTV dành cho cộng tác viên';
-  const NOTICE_BODY = 'Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.';
+  const NOTICE_BODY = 'Tài khoản chưa có quyền học. Tìm hiểu cách trở thành cộng tác viên nhé.';
 
   it('danh sách: hiện khối thông báo, nút dẫn tới /affiliate, không có Thử lại', async () => {
     mocks.fetchCourses.mockRejectedValue(forbidden());

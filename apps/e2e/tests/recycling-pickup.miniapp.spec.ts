@@ -405,7 +405,7 @@ test.describe('W178 — Shipper lấy tận nhà khi thiếu Điểm Xanh', () =
 
     await page.goto('/recycle/new');
     await expect(page.getByTestId('waste-max-open-notice')).toHaveText(
-      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.',
+      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới nhé.',
     );
     await page.getByRole('button', { name: 'Xem yêu cầu đang mở' }).click();
     await expect(page).toHaveURL(/\/recycle\/requests/);

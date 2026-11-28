@@ -538,7 +538,7 @@ describe('/tai-khoan/ho-so — ảnh đại diện', () => {
     click(saveBtn(container));
     await flush(8);
     expect(mocks.patch).toHaveBeenCalledTimes(2);
-    expect(statusText(container)).toContain('Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.');
+    expect(statusText(container)).toContain('Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử lại sau nhé.');
     expect(container.textContent).not.toContain('Đã cập nhật hồ sơ');
     expect(mocks.auth.updateProfile).toHaveBeenCalledWith({ fullName: 'Lan', avatarUrl: null });
   });

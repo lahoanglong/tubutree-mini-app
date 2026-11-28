@@ -96,7 +96,7 @@ test.describe('Trước gửi duyệt: thanh toán web (COD, chuyển khoản, �
     await expect(placeButton(page)).toBeEnabled({ timeout: 20_000 });
 
     await expect(zaloBox(page)).toBeChecked();
-    await expect(recipientBlock(page)).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn luôn gửi về Zalo số 090•••4567.');
+    await expect(recipientBlock(page)).toContainText('Số nhận hàng khác số tài khoản. Tin xác nhận đơn gửi về Zalo số 090•••4567.');
     await expect(recipientBox(page)).not.toBeChecked();
     await recipientRow(page).click();
     await expect(recipientBox(page)).toBeChecked();

@@ -267,7 +267,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     await expect(modal.getByText(MEMBER_CODE, { exact: true })).toBeVisible({ timeout: 5_000 });
     // QrCode (components/qr-code.tsx) vẽ ảnh PNG từ memberCode — không còn barcode giả.
     await expect(modal.getByRole('img', { name: 'QR' })).toHaveAttribute('src', /^data:image\/png;base64,/);
-    await expect(modal.getByText('Tích Điểm Xanh khi mua tại cửa hàng chưa được áp dụng', { exact: false })).toBeVisible();
+    await expect(modal.getByText('Hiện Điểm Xanh chỉ tích khi mua hàng online', { exact: false })).toBeVisible();
     await expect(modal.getByText('Đưa mã QR này cho thu ngân', { exact: false })).toHaveCount(0);
 
     await modal.getByText('Chép', { exact: true }).click();

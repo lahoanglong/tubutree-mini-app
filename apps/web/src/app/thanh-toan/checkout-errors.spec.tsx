@@ -65,7 +65,7 @@ describe('/thanh-toan — lỗi đặt đơn như Mini App', () => {
     await flush(8);
     const alert = r.container.querySelector('[data-testid="checkout-price-changed"]')!;
     expect(alert.textContent).toContain('Giá ưu đãi đã thay đổi');
-    expect(alert.textContent).toContain('Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ nên giá đã đổi. Bạn cập nhật giá mới rồi đặt tiếp nhé.');
+    expect(alert.textContent).toContain('Vài món Giờ vàng đã hết suất hoặc hết giờ nên giá đổi. Bạn cập nhật rồi đặt tiếp nhé.');
     expect(alert.querySelector('a')!.getAttribute('href')).toBe('/gio-hang');
     expect(alert.querySelector('a')!.textContent).toBe('Xem lại giỏ hàng');
     expect(byText(alert, 'button', 'Cập nhật giá mới')).toBeTruthy();
@@ -141,7 +141,7 @@ describe('/thanh-toan — gửi lỗi mạng giữ nguyên đơn (hk)', () => {
     expect(retry).toBeTruthy();
     expect(retry.disabled).toBe(false);
     expect(byText(r.container, 'button', 'Đặt hàng · ')).toBeNull();
-    expect(r.container.textContent).toContain('Chưa rõ đơn đã được ghi nhận chưa. Bấm Thử lại để gửi lại đúng đơn này, hệ thống không tạo đơn trùng.');
+    expect(r.container.textContent).toContain('Chưa rõ đơn đã ghi nhận chưa. Bấm Thử lại để gửi lại, hệ thống không tạo đơn trùng.');
     click(retry);
     await flush(8);
     expect(m.placeOrder).toHaveBeenCalledTimes(2);
@@ -149,13 +149,13 @@ describe('/thanh-toan — gửi lỗi mạng giữ nguyên đơn (hk)', () => {
     expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
   });
 
-  it('lỗi 4xx rõ ràng: nút vẫn là "Đặt hàng · tổng", không nói "Chưa rõ đơn đã được ghi nhận chưa"', async () => {
+  it('lỗi 4xx rõ ràng: nút vẫn là "Đặt hàng · tổng", không nói "Chưa rõ đơn đã ghi nhận chưa"', async () => {
     m.placeOrder.mockRejectedValue(new ApiError('Địa chỉ không hợp lệ.', 400));
     const r = await mount();
     click(placeButton(r));
     await flush(8);
     expect(byText(r.container, 'button', 'Đặt hàng · 130.000đ')).toBeTruthy();
-    expect(r.container.textContent).not.toContain('Chưa rõ đơn đã được ghi nhận chưa');
+    expect(r.container.textContent).not.toContain('Chưa rõ đơn đã ghi nhận chưa');
   });
 
   it('khung báo lỗi theo tên nút: nói Bấm Thử lại, không còn "Bấm Đặt hàng lần nữa để thử lại"', async () => {

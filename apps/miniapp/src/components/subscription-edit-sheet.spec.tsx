@@ -84,7 +84,7 @@ describe('SubscriptionEditSheet: đổi chu kỳ giao (Q22)', () => {
     fireEvent.click(await screen.findByRole('button', { name: '10 tuần' }));
     expect(screen.getByText('Lần giao kế tiếp: 19/12/2026')).toBeInTheDocument();
     expect(
-      screen.getByText('Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.'),
+      screen.getByText('Đang tạm dừng: nếu ngày này đã qua khi bật lại, kỳ giao tính từ ngày bật lại.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/được tính lại khi bạn bật lại gói/)).toBeNull();
   });

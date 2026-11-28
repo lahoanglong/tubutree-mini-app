@@ -407,7 +407,7 @@ describe('Ảnh đại diện: không báo thành công khi ảnh không đượ
     await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.',
+        text: 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử lại sau nhé.',
         type: 'warning',
         position: 'top',
       }),

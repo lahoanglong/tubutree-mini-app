@@ -313,7 +313,7 @@ describe('/tai-khoan/diem-xanh — điểm danh chỉ ở Vườn Xanh: trang ch
   it('không còn thẻ 7 ô, luật điểm danh hay ô báo kết quả điểm danh', async () => {
     state.readyRoutes = new Set(['/vuon-xanh']);
     const c = await mount();
-    for (const gone of ['Điểm danh mỗi ngày', 'Ngày 3/7', 'N1', 'Một lần bấm nhận cả Điểm Xanh và giọt nước']) expect(c.textContent).not.toContain(gone);
+    for (const gone of ['Điểm danh mỗi ngày', 'Ngày 3/7', 'N1', 'Mỗi ngày nhận 1 lần cả Điểm Xanh và giọt nước']) expect(c.textContent).not.toContain(gone);
     expect(c.querySelector('[data-testid="daily-check-in"]')).toBeNull();
   });
 
@@ -477,7 +477,7 @@ describe('/tai-khoan/diem-xanh — thẻ thành viên số', () => {
   it('posCreditEnabled=false: không hứa tích điểm tại quầy', async () => {
     state.card = { ...state.card!, posCreditEnabled: false };
     await open();
-    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('chưa được áp dụng');
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('chỉ tích khi mua hàng online');
   });
 
   it('chép mã thành công: báo "Đã sao chép", nút đổi thành "Đã chép"', async () => {

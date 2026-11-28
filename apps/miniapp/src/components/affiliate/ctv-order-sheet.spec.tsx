@@ -515,7 +515,7 @@ describe('CtvOrderSheet — mạng chậm không tạo đơn thứ hai (R5-CHECK
     fireEvent.click(submitBtn());
 
     const alert = await screen.findByRole('alert', {}, { timeout: 4000 });
-    expect(alert).toHaveTextContent('Mạng yếu nên chưa biết đơn đã được tạo chưa.');
+    expect(alert).toHaveTextContent('Mạng yếu, chưa rõ đơn đã tạo chưa.');
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
     expect(keyOfCall(1)).toBe(keyOfCall(0));
 
@@ -536,7 +536,7 @@ describe('CtvOrderSheet — mạng chậm không tạo đơn thứ hai (R5-CHECK
 
     fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Đơn gửi lúc nãy có thể đã được tạo');
+    expect(alert).toHaveTextContent('Đơn lúc nãy có thể đã tạo');
     await waitFor(() => expect(submitBtn()).not.toBeDisabled());
     fireEvent.click(submitBtn());
     await screen.findByText(/Đã tạo đơn hộ khách/);

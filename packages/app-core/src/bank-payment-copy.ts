@@ -18,7 +18,7 @@ export const BANK_QR_SAVE_FAILED = 'Chưa lưu được. Bạn nhấn giữ vào
 export const COD_SWITCH_CTA = 'Đổi sang trả tiền khi nhận (COD)';
 export const COD_SWITCH_CONFIRM_TITLE = 'Đổi sang trả tiền khi nhận?';
 export const codSwitchConfirmBody = (total: string) =>
-  `Bạn trả ${total} cho shipper khi nhận hàng, không cần chuyển khoản nữa. Nếu bạn đã chuyển khoản rồi thì đừng đổi: Tubu tự xác nhận khi tiền về.`;
+  `Bạn trả ${total} cho shipper khi nhận hàng. Đã chuyển khoản rồi thì đừng đổi: Tubu tự xác nhận khi tiền về.`;
 export const COD_SWITCH_CONFIRM = 'Đổi sang COD';
 export const COD_SWITCH_KEEP = 'Giữ chuyển khoản';
 export const COD_SWITCH_DONE = 'Đã đổi sang trả tiền khi nhận. Đơn đã được xác nhận.';

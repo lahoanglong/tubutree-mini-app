@@ -711,7 +711,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     click(byText(container, 'button', 'Tôi đã chuyển khoản'));
     await flush();
     expect(container.querySelector('[data-testid="bank-check-result"]')?.textContent).toBe(
-      'Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.',
+      'Giao dịch không thành công hoặc đã hoàn lại. Liên hệ Tubu để được hỗ trợ.',
     );
   });
 

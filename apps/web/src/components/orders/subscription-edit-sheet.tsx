@@ -160,7 +160,7 @@ export function SubscriptionEditSheet({
         </div>
         {nextRun && !patch.nextRunDate && <p className="text-xs tabular-nums text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
         {sub.status === 'PAUSED' && weeks !== sub.intervalWeeks && (
-          <p className="text-xs text-stone-600">Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.</p>
+          <p className="text-xs text-stone-600">Đang tạm dừng: nếu ngày này đã qua khi bật lại, kỳ giao tính từ ngày bật lại.</p>
         )}
         </>
       )}

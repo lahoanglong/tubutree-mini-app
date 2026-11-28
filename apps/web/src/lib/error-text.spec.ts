@@ -13,7 +13,7 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   });
   it('mất mạng / quá hạn / lỗi lạ', () => {
     expect(loadErrorText(new NetworkError(true))).toBe('Tải chậm quá, thử lại nhé.');
-    expect(actionErrorText(new NetworkError(true))).toBe('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.');
+    expect(actionErrorText(new NetworkError(true))).toBe('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại nhé.');
     expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
   });
   it('không có phản hồi nhưng máy còn mạng (máy chủ/CORS không đáp): máy chủ bận; thật sự mất mạng: câu mất mạng', () => {

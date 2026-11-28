@@ -242,7 +242,7 @@ test.describe('Web /quet-ma: xác nhận 4 số cuối SĐT người nhận (W46
       await expect(field).toHaveAttribute('pattern', '[0-9]*');
       await expect(field).toHaveAttribute('maxlength', '4');
       await expect(dialog).toContainText(
-        'Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng Shopee (có thể khác SĐT tài khoản hiện tại của bạn).',
+        'Đây là số người nhận ghi trên đơn Shopee, có thể khác số tài khoản của bạn.',
       );
       await expect(dialog.getByRole('button', { name: 'Xác nhận & Tích điểm' })).toBeVisible();
       await expect(dialog.getByRole('button', { name: 'Quét đơn khác' })).toBeVisible();

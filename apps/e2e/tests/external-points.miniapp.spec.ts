@@ -57,7 +57,7 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
     await page.getByLabel('Hoặc nhập mã vận đơn').fill('SPXVN0123456789');
     await page.getByRole('button', { name: 'Tích điểm' }).click();
 
-    await expect(page.getByRole('alert').filter({ hasText: 'Mã này đã được dùng để tích điểm trước đó.' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('alert').filter({ hasText: 'Mã này đã tích điểm trước đó.' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('claim-result')).toHaveCount(0);
   });
 
@@ -74,7 +74,7 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
     await page.getByRole('button', { name: 'Tích điểm' }).click();
 
     const result = page.getByTestId('claim-result');
-    await expect(result).toContainText('Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.', { timeout: 15_000 });
+    await expect(result).toContainText('Mã này đang tích điểm cho tài khoản khác. Nếu là đơn của bạn, liên hệ CSKH nhé.', { timeout: 15_000 });
     await expect(result).not.toContainText('Chưa thấy đơn này');
     await expect(result).not.toContainText('Đã ghi nhận đơn');
     expect(api.callsTo('POST', '/me/external-points/claims').map((c) => c.body)).toEqual([{ code: 'SPXVN0123456789', via: 'typed' }]);
@@ -127,7 +127,7 @@ test.describe('Zalo Mini App E2E - Tích điểm đơn sàn', () => {
       mockSession(api, makeUser({ id: 'user-nophone', phone: null }));
       mockExternalPoints(api);
       await page.goto('/points/scan?src=tiktok&card=2611');
-      await expect(page.getByText('Tubu dùng số điện thoại Zalo của bạn để ghép đúng đơn và báo khi điểm được cộng.')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Tubu dùng số điện thoại Zalo để ghép đơn và báo khi cộng điểm.')).toBeVisible({ timeout: 15_000 });
     });
 
     test('quét ngoài Zalo không đọc được: báo nhập tay, mã gõ sẵn vẫn giữ', async ({ page, api }) => {

@@ -8,8 +8,8 @@ export const viStorefront = {
   viewProducts: 'Xem sản phẩm',
   moreAtTubu: 'Xem thêm ở Tubu Tree',
   emptyHeading: 'Gian hàng chưa có sản phẩm nào để xem',
-  emptyBody: 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.',
-  emptyOwnerBody: 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.',
+  emptyBody: 'Gian hàng đang bổ sung sản phẩm. Bạn xem thử món đang bán trên Tubu Tree nhé.',
+  emptyOwnerBody: 'Gian hàng chưa có sản phẩm nào khách xem được. Thêm sản phẩm nhé.',
   badgePartner: 'Đối tác của Tubu Tree',
   badgeBrand: BRAND_BADGE,
   badgeSelectedCtv: 'CTV tuyển chọn',
@@ -25,6 +25,6 @@ export const viStorefront = {
 } as const;
 
 export const viShareFallback = {
-  failedCopied: 'Chưa chia sẻ được qua Zalo — đã sao chép liên kết, bạn dán vào tin nhắn để gửi nhé.',
-  failedManual: 'Chưa chia sẻ được qua Zalo và cũng không sao chép được — hãy chọn rồi chép liên kết thủ công.',
+  failedCopied: 'Chưa chia sẻ qua Zalo được, đã chép liên kết, bạn dán vào tin nhắn nhé.',
+  failedManual: 'Chưa chia sẻ hay sao chép được, bạn chọn rồi chép liên kết thủ công nhé.',
 } as const;

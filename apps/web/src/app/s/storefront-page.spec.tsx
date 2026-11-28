@@ -129,7 +129,7 @@ describe('/s/[slug] — gian hàng mở qua subdomain', () => {
     mounted.unmount();
     auth.user = { referralCode: 'CTVONE1' };
     mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
-    expect(mounted.container.textContent).toContain('Gian hàng của bạn chưa có sản phẩm nào khách xem được');
+    expect(mounted.container.textContent).toContain('Gian hàng chưa có sản phẩm nào khách xem được');
     expect(Array.from(mounted.container.querySelectorAll('a')).some((x) => x.getAttribute('href') === '/ctv/gian-hang')).toBe(true);
   });
 

@@ -94,7 +94,7 @@ describe('tiến độ, kg, lý do chặn', () => {
   it('chip kg chỉ tới trần; lời nhắc nêu trần theo kg định dạng Việt', () => {
     const v = pickupWeightView(2500);
     expect(v.chips.map((c) => c.label)).toEqual(['0,5 kg', '1 kg', '2 kg']);
-    expect(v.note).toBe('Bưu tá Best Express giao đơn mới và nhận lại gói rác đã bọc gọn (tối đa 2,5 kg theo kiện mua). Điểm Xanh cộng sau khi kho kiểm nhận.');
+    expect(v.note).toBe('Bưu tá Best Express giao đơn mới và nhận gói rác đã bọc (tối đa 2,5 kg theo kiện mua). Điểm Xanh cộng sau khi kho kiểm.');
   });
 
   it('mỗi lần chỉ một lý do chặn nút Xong', () => {

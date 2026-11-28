@@ -13,6 +13,6 @@ describe('đổi chuyển khoản sang trả tiền khi nhận', () => {
     expect(COD_SWITCH_CTA).toBe('Đổi sang trả tiền khi nhận (COD)');
     const body = codSwitchConfirmBody('250.000đ');
     expect(body).toContain('250.000đ');
-    expect(body).toMatch(/đã chuyển khoản rồi thì đừng đổi/);
+    expect(body).toMatch(/chuyển khoản rồi thì đừng đổi/);
   });
 });

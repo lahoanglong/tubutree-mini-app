@@ -222,7 +222,7 @@ describe('/doi-rac/diem-nhan — món chỉ kho nhận', () => {
   it('kho đang nhận: bảo khách chọn kho hoặc bỏ món', async () => {
     state.points = [HCM, warehouse];
     const c = await mount();
-    expect(c.textContent).toMatch(/Vỏ hộp sữa chỉ kho TP\.HCM nhận, nên các điểm đại lý đang bị khoá.*chọn kho Tubu/);
+    expect(c.textContent).toMatch(/Vỏ hộp sữa chỉ kho TP\.HCM nhận nên điểm đại lý đang khoá.*chọn kho Tubu/);
   });
   it('kho không có trong danh sách (không ACTIVE): không bảo chọn kho, nói chưa có điểm nhận món này', async () => {
     state.points = [HCM];

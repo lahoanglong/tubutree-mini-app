@@ -28,7 +28,7 @@ import { Input } from '../components/ui/input';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
-const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
+const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử lại sau nhé.';
 
 // avatarUrl chỉ nhận URL đã lưu (từ hồ sơ hoặc vừa tải lên Cloudinary): API không nhận base64 cho ảnh đại diện.
 type ProfileForm = { fullName: string; email: string; avatarUrl: string | null };

@@ -8,8 +8,8 @@ export const viReviews = {
   eligibilityFailed: 'Chưa kiểm tra được quyền đánh giá.',
   hiddenNotice: (orderCode: string | null) =>
     `Đánh giá${orderCode ? ` cho đơn ${orderCode}` : ''} của bạn đang được Tubu xem xét nên chưa hiện công khai. Sửa nội dung không làm nó hiện lại.`,
-  editHiddenNote: 'Đánh giá này đang chờ Tubu xem xét nên chưa hiện công khai. Lưu lại không làm nó hiện.',
-  savedHidden: 'Đã lưu. Đánh giá của bạn đang được Tubu xem xét nên chưa hiện công khai.',
+  editHiddenNote: 'Đánh giá đang chờ Tubu xem xét nên chưa hiện công khai.',
+  savedHidden: 'Đã lưu. Đánh giá đang được Tubu xem xét nên chưa hiện công khai.',
 } as const;
 
 export const viContentKit = {

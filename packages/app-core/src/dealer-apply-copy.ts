@@ -26,5 +26,5 @@ export function dealerReviewLine(hours: number | null | undefined): string {
 
 export const PARTNER_STOREFRONT_TITLE = 'Gian hàng đối tác';
 export const PARTNER_STOREFRONT_WEB_HINT =
-  'Quản lý gian hàng đối tác (sản phẩm, đơn, đối soát) trên web Tubu Tree, mục Gian hàng đối tác. Đăng nhập cùng tài khoản Zalo.';
+  'Quản lý sản phẩm, đơn, đối soát ở mục Gian hàng đối tác trên web Tubu Tree. Đăng nhập cùng Zalo.';
 export const PARTNER_STOREFRONT_WEB_CTA = 'Mở trang quản lý';

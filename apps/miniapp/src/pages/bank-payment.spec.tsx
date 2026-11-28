@@ -117,7 +117,7 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
     fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.openSnackbar).toHaveBeenCalledWith({
-      text: 'Giao dịch không thành công hoặc đã được hoàn lại. Liên hệ Tubu để được hỗ trợ.',
+      text: 'Giao dịch không thành công hoặc đã hoàn lại. Liên hệ Tubu để được hỗ trợ.',
       type: 'error',
       position: 'top',
     });

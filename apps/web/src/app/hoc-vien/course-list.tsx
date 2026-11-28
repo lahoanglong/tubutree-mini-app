@@ -65,7 +65,7 @@ export function CtvOnlyNotice() {
   return (
     <section className={`${ui.card} p-8 text-center`}>
       <h2 className="font-display text-base font-semibold text-stone-900">Học viện CTV dành cho cộng tác viên</h2>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tài khoản chưa có quyền học. Tìm hiểu cách trở thành cộng tác viên nhé.</p>
       <BackAwareLink href="/ctv" className={`${ui.btnPrimary} mt-4`}>
         Tìm hiểu về CTV
       </BackAwareLink>

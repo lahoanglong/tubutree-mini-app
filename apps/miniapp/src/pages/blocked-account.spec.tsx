@@ -49,7 +49,7 @@ import { useAuthStore } from '../store/auth';
 const BLOCKED = 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để được hỗ trợ.';
 
 const PAGES: { name: string; load: () => Promise<{ default: ComponentType }>; generic: RegExp }[] = [
-  { name: 'Cá nhân', load: () => import('./profile'), generic: /Đăng nhập để xem tích điểm/ },
+  { name: 'Cá nhân', load: () => import('./profile'), generic: /Đăng nhập để xem điểm/ },
   { name: 'Ưu đãi', load: () => import('./offers'), generic: /Đăng nhập/ },
   { name: 'Điểm Xanh', load: () => import('./loyalty'), generic: /Đăng nhập/ },
   // `/rewards` chỉ còn là chuyển hướng: thân Kho quà nằm ở tab Đổi quà của Ưu đãi.

@@ -141,7 +141,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ qua Zalo/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=TUBU88'));
-    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/Chưa chia sẻ được qua Zalo/);
+    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/Chưa chia sẻ (qua Zalo được|hay sao chép được)/);
   });
 
   it('chia sẻ được thì không báo gì thêm', async () => {
@@ -332,7 +332,7 @@ describe('Đăng ký CTV — khách vãng lai phải liên kết Zalo trước (
     await submit();
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.registerAffiliate).not.toHaveBeenCalled();
-    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/liên kết Zalo/);
+    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/liên kết Zalo/i);
   });
 
   it('ensurePhone ném lỗi: cũng dừng, không gọi API', async () => {

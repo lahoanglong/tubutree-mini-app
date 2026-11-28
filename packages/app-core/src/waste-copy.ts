@@ -65,7 +65,7 @@ export function requestListPendingPoints(r: { status: string; estimatedPoints?: 
 
 /** W179-B: câu thông báo và nhãn nút duy nhất khi khách đã mở đủ trần yêu cầu đổi rác. */
 export function maxOpenNotice(max: number): string {
-  return `Bạn đang có ${(max + 0).toLocaleString('vi-VN')} yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.`;
+  return `Bạn đang có ${(max + 0).toLocaleString('vi-VN')} yêu cầu đổi rác chưa xong. Hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới nhé.`;
 }
 
 export const MAX_OPEN_VIEW_CTA = 'Xem yêu cầu đang mở';
@@ -176,7 +176,7 @@ export function pausedNote(
 export function warehouseOnlyPointsNote(names: readonly string[], warehouseAvailable: boolean): string {
   const list = names.join(', ');
   return warehouseAvailable
-    ? `${list} chỉ kho TP.HCM nhận, nên các điểm đại lý đang bị khoá. Bạn có thể chọn kho Tubu hoặc bỏ món này khỏi yêu cầu.`
+    ? `${list} chỉ kho TP.HCM nhận nên điểm đại lý đang khoá. Bạn chọn kho Tubu hoặc bỏ món này nhé.`
     : `${list} chỉ kho TP.HCM nhận, mà kho chưa nhận được lúc này. Hiện chưa có điểm nào nhận món này, bạn có thể bỏ món này khỏi yêu cầu.`;
 }
 
@@ -306,7 +306,7 @@ export const homePickupCopy = {
     cancelDoneRefundCash: (points: string | null, cash: string) =>
       points ? `Đã huỷ đơn thu gom, hoàn ${points} điểm và ${cash} về Ví` : `Đã huỷ đơn thu gom, hoàn ${cash} về Ví`,
     qrTitle: 'Chuyển khoản phí lấy rác',
-    qrHint: 'Đơn thu gom tự tạo sau khi kế toán xác nhận nhận khoản này. Nếu huỷ hoặc bưu tá không lấy được rác, khoản phí hoàn về Ví Tubu.',
+    qrHint: 'Đơn thu gom tự tạo sau khi kế toán xác nhận khoản này. Huỷ hoặc bưu tá không lấy được rác, phí hoàn về Ví Tubu.',
     qrBankLabel: 'Ngân hàng',
     qrAccountLabel: 'Số tài khoản',
     qrHolderLabel: 'Chủ tài khoản',

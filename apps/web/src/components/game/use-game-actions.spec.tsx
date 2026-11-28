@@ -22,7 +22,7 @@ describe('useGameActions: lỗi khi bấm nút', () => {
     api.collectDew.mockRejectedValue(new NetworkError(true));
     const { notify, invalidate, hook } = setup();
     await act(async () => hook.result.current.dewM.mutate());
-    await waitFor(() => expect(notify).toHaveBeenCalledWith('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.', 'error'));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại nhé.', 'error'));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['game'] });
   });
 

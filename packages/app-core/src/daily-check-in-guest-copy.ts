@@ -6,7 +6,7 @@ const drops = (v: number) => `${v.toLocaleString('vi-VN')}💧`;
 /** Chữ riêng cho khách vãng lai (API báo `pointsBlocked`); tách file để khỏi nằm trong entry Mini App, nơi chỉ cần câu báo sau khi bấm. */
 export const guestCheckInCopy = {
   cta: 'Đăng nhập Zalo',
-  rule: 'Mỗi ngày điểm danh 1 lần (giờ Việt Nam) để nhận giọt nước. Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại.',
+  rule: 'Điểm danh mỗi ngày 1 lần (giờ Việt Nam) để nhận giọt nước. Lỡ 1 ngày: có vé giữ lửa thì giữ chuỗi, không thì lịch 7 ngày bắt đầu lại.',
   dayAria: (day: number, claimed: boolean) => `Ngày ${day}${claimed ? ', đã nhận' : ''}`,
   /** Câu phụ dưới "Chuỗi N ngày" của thẻ Vườn Xanh (bản user thật có thêm "kèm Điểm Xanh"). */
   streakSub: (daily: number | null, first: number) =>

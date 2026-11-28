@@ -202,7 +202,7 @@ describe('memberCardHint', () => {
   it('backend TẮT → KHÔNG hứa tích điểm tại cửa hàng', () => {
     const hint = memberCardHint(card(false));
     expect(hint).not.toMatch(/thu ngân/);
-    expect(hint).toMatch(/chưa/i);
+    expect(hint).toMatch(/chỉ tích khi mua hàng online/);
   });
 });
 

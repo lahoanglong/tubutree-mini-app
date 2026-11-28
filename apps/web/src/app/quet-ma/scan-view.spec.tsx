@@ -476,7 +476,7 @@ describe('/quet-ma — xác nhận 4 số cuối SĐT người nhận (W46)', ()
     const box = sheet()!;
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(PHONE_CONFIRM_COPY.title);
     expect(box.textContent).toContain('Nhập 4 số cuối SĐT nhận hàng trên đơn Shopee');
-    expect(box.textContent).toContain('Lưu ý: Đây là số điện thoại người nhận ghi trên đơn hàng Shopee (có thể khác SĐT tài khoản hiện tại của bạn).');
+    expect(box.textContent).toContain('Đây là số người nhận ghi trên đơn Shopee, có thể khác số tài khoản của bạn.');
     const field = last4Input()!;
     expect(field.getAttribute('inputmode')).toBe('numeric');
     expect(field.getAttribute('pattern')).toBe('[0-9]*');

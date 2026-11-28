@@ -109,7 +109,7 @@ describe('chữ thanh toán dùng chung', () => {
     expect(fillCopy('checkout.fewerLines')).toBe('Thu gọn');
     expect(fillCopy('checkout.placeWith', { price: '330.000đ' })).toBe('Đặt hàng · 330.000đ');
     expect(fillCopy('coupon.autoApplied')).toBe('Tubu đã tự áp mã tốt nhất');
-    expect(fillCopy('flash.priceChangedBody')).toBe('Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ. Bạn xem lại giỏ trước khi đặt nhé.');
+    expect(fillCopy('flash.priceChangedBody')).toBe('Vài món Giờ vàng vừa hết suất hoặc hết giờ. Bạn xem lại giỏ nhé.');
   });
 });
 

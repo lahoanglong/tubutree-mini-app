@@ -58,7 +58,7 @@ test.describe('w16-01 Mini: lời mời bạn sau khi đặt hàng', () => {
       await flushEvents(page);
       await expect.poll(() => eventsNamed(api, 'green_card_shared').map((e) => e.props), { timeout: 5_000 }).toEqual([{ method: 'share', surface: 'order' }]);
       await expect(nudge).not.toHaveAttribute('aria-busy', 'true', { timeout: 5_000 });
-      await expect(page.getByText('Chưa chia sẻ được qua Zalo', { exact: false })).toHaveCount(0);
+      await expect(page.getByText(/Chưa chia sẻ (qua Zalo được|hay sao chép được)/)).toHaveCount(0);
     });
   }
 

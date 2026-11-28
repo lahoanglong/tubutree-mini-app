@@ -151,7 +151,7 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     c = await mount();
     click(byText(c, 'button', 'Thể lệ')!);
     await flush(2);
-    expect(document.body.textContent).toContain('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
+    expect(document.body.textContent).toContain('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu, không trừ phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
   });
 
   it('không lặp số dư: dòng "Đổi quà dùng được" chỉ hiện khi khác tổng', async () => {

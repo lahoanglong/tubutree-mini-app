@@ -252,7 +252,7 @@ describe('SubscriptionsPanel', () => {
       await flush(6);
       click(btn('10 tuần'));
       expect(document.body.textContent).toContain('Lần giao kế tiếp: 19/12/2026');
-      expect(document.body.textContent).toContain('Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.');
+      expect(document.body.textContent).toContain('Đang tạm dừng: nếu ngày này đã qua khi bật lại, kỳ giao tính từ ngày bật lại.');
     });
 
     it('API cũ không có khoá lastOrderAt: không hiện chọn chu kỳ, không bao giờ gửi intervalWeeks', async () => {

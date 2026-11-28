@@ -188,7 +188,7 @@ describe('W179 Điểm tạm tính & Trần 2 yêu cầu mở', () => {
   });
 
   it('thông báo và nút khi đạt trần yêu cầu mở', () => {
-    expect(maxOpenNotice(2)).toBe('Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.');
+    expect(maxOpenNotice(2)).toBe('Bạn đang có 2 yêu cầu đổi rác chưa xong. Hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới nhé.');
     expect(MAX_OPEN_VIEW_CTA).toBe('Xem yêu cầu đang mở');
   });
 });

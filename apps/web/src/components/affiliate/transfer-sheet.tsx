@@ -145,7 +145,7 @@ function TransferForm({
           <div className={`mt-1 text-xs ${taxId.trim() && !view.taxIdValid ? 'text-danger-fg' : 'text-stone-600'}`}>
             {taxId.trim() && !view.taxIdValid
               ? 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.'
-              : 'Tubu Tree dùng số này để kê khai thuế đã khấu trừ và cấp chứng từ khấu trừ cho bạn. Chỉ cần nhập một lần.'}
+              : 'Dùng để kê khai thuế đã khấu trừ và cấp chứng từ cho bạn. Chỉ nhập một lần.'}
           </div>
         </div>
       )}

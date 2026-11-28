@@ -13,7 +13,7 @@ export const ORDER_EDIT_COPY = {
   streetLabel: 'Số nhà, tên đường',
   noteLabel: 'Ghi chú cho đơn',
   notePlaceholder: 'Ví dụ: gọi trước khi giao, giao giờ hành chính',
-  noteOnly: 'Địa chỉ của đơn này chưa theo địa giới mới nên chỉ sửa được ghi chú.',
+  noteOnly: 'Địa chỉ chưa theo địa giới mới nên chỉ sửa được ghi chú.',
   save: 'Lưu thay đổi',
   close: 'Đóng',
   noChange: 'Bạn chưa đổi gì.',
@@ -31,25 +31,25 @@ export const orderEditSplitNote = (code: string) => `Thay đổi chỉ áp dụn
 export function orderEditRefusalText(reason: OrderEditRefusalReason, province?: string): string {
   switch (reason) {
     case 'DISABLED':
-      return 'Tính năng tự sửa đơn đang tạm tắt. Bạn nhắn Zalo OA hoặc gọi hotline Tubu để đổi địa chỉ nhé.';
+      return 'Sửa đơn đang tạm tắt. Nhắn Zalo OA hoặc gọi hotline Tubu để đổi địa chỉ nhé.';
     case 'NOT_ELIGIBLE':
-      return 'Đơn này không tự sửa được. Bạn nhắn Zalo OA hoặc gọi hotline Tubu để được hỗ trợ nhé.';
+      return 'Đơn này không tự sửa được. Nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
     case 'NOT_EDITABLE_STATUS':
-      return 'Đơn đã vào khâu đóng gói nên không sửa được nữa. Bạn nhắn Zalo OA hoặc gọi hotline Tubu để được hỗ trợ nhé.';
+      return 'Đơn đã vào khâu đóng gói nên không sửa được. Nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
     case 'HANDED_OVER':
-      return 'Đơn đã bàn giao cho đơn vị vận chuyển nên không sửa được nữa. Bạn nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
+      return 'Đơn đã giao cho đơn vị vận chuyển nên không sửa được. Nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
     case 'PACKING_ON_PANCAKE':
-      return 'Kho đã bắt đầu đóng gói đơn này nên không sửa được nữa. Bạn nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
+      return 'Kho đã đóng gói đơn này nên không sửa được. Nhắn Zalo OA hoặc gọi hotline Tubu nhé.';
     case 'PANCAKE_UNREACHABLE':
       return 'Kho chưa phản hồi, bạn thử lại sau ít phút nhé.';
     case 'SYNCING':
       return 'Đơn đang được chuyển sang kho, bạn thử lại sau ít phút nhé.';
     case 'EDIT_LIMIT':
-      return 'Đơn đã sửa đủ 3 lần. Bạn nhắn Zalo OA hoặc gọi hotline Tubu nếu cần đổi thêm nhé.';
+      return 'Đơn đã sửa đủ 3 lần. Nhắn Zalo OA hoặc gọi hotline Tubu nếu cần đổi thêm nhé.';
     case 'PROVINCE_CHANGED':
       return `Chỉ đổi được địa chỉ trong ${province?.trim() || 'tỉnh/thành của đơn'}. Muốn giao tỉnh khác, bạn huỷ đơn rồi đặt lại nhé.`;
     case 'PROVINCE_LOCKED':
-      return 'Địa chỉ của đơn này chưa theo địa giới mới nên chỉ sửa được ghi chú. Bạn nhắn Zalo OA hoặc gọi hotline Tubu để đổi địa chỉ nhé.';
+      return 'Địa chỉ chưa theo địa giới mới nên chỉ sửa được ghi chú. Nhắn Zalo OA hoặc gọi hotline Tubu để đổi địa chỉ nhé.';
   }
 }
 

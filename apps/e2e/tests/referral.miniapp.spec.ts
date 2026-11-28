@@ -95,7 +95,7 @@ test.describe('Giới thiệu bạn bè', () => {
     // ngoài Zalo trả về bình thường: không có thông báo lỗi, nút vẫn bấm được. Nhánh dự phòng (SDK từ chối → chép
     // liên kết + báo; người dùng huỷ → im lặng) do profile-hub.spec.tsx kiểm, vì e2e không ép được SDK từ chối.
     await page.waitForTimeout(500);
-    await expect(page.getByText(/Chưa chia sẻ được qua Zalo|Mã giới thiệu của bạn/)).toHaveCount(0);
+    await expect(page.getByText(/Chưa chia sẻ qua Zalo được|Chưa chia sẻ hay sao chép được|Mã giới thiệu của bạn/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Chia sẻ qua Zalo', exact: true })).toBeEnabled();
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
   });

@@ -36,7 +36,7 @@ describe('quy tắc chữ Điểm Xanh dùng chung', () => {
 
   it('memberCardHint chỉ hứa tích điểm tại quầy khi posCreditEnabled', () => {
     expect(memberCardHint({ posCreditEnabled: true })).toContain('Đưa mã QR này cho thu ngân');
-    expect(memberCardHint({ posCreditEnabled: false })).toContain('chưa được áp dụng');
+    expect(memberCardHint({ posCreditEnabled: false })).toContain('chỉ tích khi mua hàng online');
   });
 
   it('tierProgressPercent đo theo tiền 12 tháng khi hạng có mốc chi tiêu, không thì theo điểm xét hạng', () => {

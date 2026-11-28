@@ -114,7 +114,7 @@ export const homeCopy = {
     statWallet: 'Ví Tubu',
     referralMilestone: (remaining: number, bonus: string) => `Mời thêm ${remaining} bạn để nhận ${bonus}`,
     guestTitle: 'Liên kết Zalo để giữ điểm và nhận quà',
-    guestBody: 'Bạn đang dùng tài khoản khách. Liên kết Zalo để không mất điểm, đơn hàng và nhận quà khách mới.',
+    guestBody: 'Bạn đang dùng tài khoản khách. Liên kết Zalo để giữ điểm, đơn hàng và nhận quà.',
     guestCta: 'Liên kết Zalo',
   },
 } as const;

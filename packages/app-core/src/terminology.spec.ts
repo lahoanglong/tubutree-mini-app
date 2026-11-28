@@ -166,7 +166,7 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/web/src/lib/ledger-labels.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'packages/app-core/src/legal.ts', use: USE.voice, max: 6, reason: REASON.LEGAL },
   { file: 'packages/app-core/src/dealer-apply-copy.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
-  { file: 'packages/app-core/src/loyalty-copy.ts', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },
+  { file: 'packages/app-core/src/loyalty-copy.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
 ];
 
 // Đối chứng trên nguồn giả: mẫu quét phải bắt đúng chữ hiển thị và bỏ qua mã (comment, tên biến, className, import, kiểu literal).

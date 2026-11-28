@@ -103,7 +103,7 @@ function SubscriptionPitch() {
   const pct = subscribePct(cfg.isLoaded ? cfg.subscribeDiscountPct : null);
   return (
     <p className="mt-1 text-sm text-[color:var(--color-text-primary)]">
-      Giao tự động sản phẩm tiêu dùng thiết yếu theo chu kỳ 4 · 6 · 8 · 10 tuần — tiết kiệm {pct === null ? '' : `${pct}% `}mỗi kỳ, đổi ngày hoặc tạm dừng bất cứ lúc nào.
+      Giao tự động theo chu kỳ 4 · 6 · 8 · 10 tuần, tiết kiệm {pct === null ? '' : `${pct}% `}mỗi kỳ, tạm dừng lúc nào cũng được.
     </p>
   );
 }
@@ -514,9 +514,6 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                     </Link>
                   </div>
                   <SubscriptionPitch />
-                  <p className="mt-1 text-xs text-[color:var(--color-text-secondary)]">
-                    Chọn món cần dùng bên dưới, mở chi tiết sản phẩm và bấm Đặt định kỳ để nhận giá ưu đãi xoay vòng.
-                  </p>
                 </section>
               </div>
             )}
