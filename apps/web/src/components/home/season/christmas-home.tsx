@@ -11,7 +11,9 @@ import { adventTileClock, adventView, msUntilNextVnDay, vnDayKeyOf, type AdventV
 import { BURST_FLAKES, GIFT_ART, GIFT_VIEWBOX, ICON_VIEWBOX, SNOWFLAKES, TREE_ART, TREE_VIEWBOX, XMAS_ICONS, type Flake } from '@tubutree/app-core/seasonal/christmas-art';
 import { christmasCopy as c } from '@tubutree/app-core/seasonal/christmas-copy';
 import { adventLeadLine, christmasHeroView, giftPreview, readSnowOff, settleOpening, SHAKE_MS, shouldClaim, type GiftPhase, writeSnowOff } from '@tubutree/app-core/seasonal/christmas-hero';
+import { snowActionProps } from '@tubutree/app-core/seasonal/xmas-track';
 import { serverNow } from '@tubutree/app-core/server-clock';
+import { trackWebEvent } from '@/lib/analytics';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { browserStorage } from '@/lib/recently-viewed';
@@ -30,6 +32,7 @@ export default function ChristmasHome() {
     const next = !snowOn;
     setSnowOn(next);
     writeSnowOff(browserStorage(), !next);
+    trackWebEvent('noel_action', snowActionProps(next));
   };
   return (
     <>

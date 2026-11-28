@@ -118,6 +118,20 @@ describe('checkEventProps', () => {
     expect(checkEventProps('order_zalo_friend_click', {})).not.toBe('ok');
   });
 
+  it('noel_action (w58-02): chỉ thao tác và món cố định; mã khách, mã mời, nội dung thiệp thì bỏ', () => {
+    expect(checkEventProps('noel_action', { action: 'share_tap' })).toBe('ok');
+    expect(checkEventProps('noel_action', { action: 'snow_off' })).toBe('ok');
+    expect(checkEventProps('noel_action', { action: 'snow_on' })).toBe('ok');
+    expect(checkEventProps('noel_action', { action: 'ornament_unlock', slot: 'gifts' })).toBe('ok');
+    expect(checkEventProps('noel_action', { action: 'ornament_on', slot: 'baubles' })).toBe('ok');
+    expect(checkEventProps('noel_action', { action: 'ornament_off', slot: 'wreath' })).toBe('ok');
+    expect(checkEventProps('noel_action', {})).toBe('missing_key');
+    expect(checkEventProps('noel_action', { action: 'tree_shake' })).toBe('bad_value');
+    expect(checkEventProps('noel_action', { action: 'ornament_on', slot: 'santa' })).toBe('bad_value');
+    expect(checkEventProps('noel_action', { action: 'share_tap', refCode: 'ABC123' })).toBe('unknown_key');
+    expect(checkEventProps('noel_action', { action: 'share_tap', text: 'gọi 0912345678' })).toBe('unknown_key');
+  });
+
   it('tên không có luật → bỏ', () => {
     expect(checkEventProps('order_paid', {})).toBe('unknown_key');
   });

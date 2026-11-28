@@ -424,6 +424,26 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Tab Phân tích (admin) có số liệu thì hỏi thêm cohort tháng và phễu theo ngày: mặc định chưa có dòng snapshot nào.
       api.fallback('GET', '/admin/analytics/cohort-repeat', []);
       api.fallback('GET', '/admin/analytics/funnel-daily', []);
+      // Tab Noel (admin) chỉ mở khi `theme.seasonal` = christmas; mặc định mùa tắt nên số liệu rỗng, đủ khối để vẽ không lỗi.
+      api.fallback('GET', '/admin/analytics/noel', {
+        generatedAt: '2026-10-28T03:00:00.000Z',
+        days: 7,
+        seasonalTheme: 'none',
+        fromDayKey: '2026-10-22',
+        toDayKey: '2026-10-28',
+        claims: { users: 0, claims: 0, perDay: [], reachedStreak3: 0, reachedStreak7: 0 },
+        advent: { year: 2026, phase: 'before', daysElapsed: 0, requiredDays: 0, opensByDay: [], openedAny: 0, completed: null, completionPct: null },
+        ornaments: [],
+        share: { users: 0, taps: 0 },
+        snow: { on: { users: 0, taps: 0 }, off: { users: 0, taps: 0 }, offSharePct: null },
+        games: [],
+        economy: {
+          caps: { miniWaterPerUserDay: 0, miniPointsPerUserDay: 0, miniGlobalPointsPerDay: 0 },
+          current: { fromDayKey: '2026-10-22', toDayKey: '2026-10-28', miniUsers: 0, miniRewardedRounds: 0, miniWater: 0, miniPoints: 0, maxUserWaterInDay: 0, maxUserPointsInDay: 0, maxGlobalPointsInDay: 0, arcadeRewardedRuns: 0, arcadeWater: 0 },
+          previous: { fromDayKey: '2026-10-15', toDayKey: '2026-10-21', miniUsers: 0, miniRewardedRounds: 0, miniWater: 0, miniPoints: 0, maxUserWaterInDay: 0, maxUserPointsInDay: 0, maxGlobalPointsInDay: 0, arcadeRewardedRuns: 0, arcadeWater: 0 },
+        },
+        retention: { cohortFromDayKey: '2026-10-20', cohortToDayKey: '2026-10-26', noel: { userDays: 0, returned: 0, ratePct: null }, other: { userDays: 0, returned: 0, ratePct: null } },
+      });
       // Phễu đơn sàn → điểm → mua lại của tab "Tích điểm đơn sàn" (admin): mặc định kỳ 30 ngày chưa có lượt gửi mã nào.
       api.fallback('GET', '/admin/external-claims/funnel', {
         period: '30d',

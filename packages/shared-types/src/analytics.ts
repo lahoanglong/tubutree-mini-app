@@ -69,6 +69,7 @@ export const CLIENT_EVENT_NAMES = [
   'repurchase_due_dismiss',
   'miniapp_auto_open',
   'miniapp_smartbar_click',
+  'noel_action',
 ] as const;
 
 /**
@@ -320,6 +321,7 @@ export interface RecycleFunnelProps {
 
 export const SERVER_EVENT_NAMES = [
   'add_to_cart',
+  'arcade_run',
   'coupon_applied',
   'engagement_action',
   'ext_claim_credited',

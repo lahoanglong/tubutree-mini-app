@@ -21,6 +21,7 @@ import {
   WEB_VITAL_NAMES,
   type ClientEventName,
 } from '@tubutree/shared-types';
+import { NOEL_ORNAMENT_SLOTS } from './noel-metrics-window';
 import { isVitalRoute } from './vitals/vitals-rules';
 
 // Cách khách gửi link mời từ thẻ thành tích Sổ tay Xanh. Không đặt ở shared-types: gói đó (CJS) nằm trọn trong chunk khởi động của web.
@@ -29,6 +30,8 @@ const GREEN_CARD_SHARE_METHODS = ['share', 'copy'] as const;
 const GREEN_CARD_SHARE_SURFACES = ['order', 'account'] as const;
 // Nơi hiện thẻ "Mua lại" hàng tiêu hao (w36-01): khối đầu trang Tài khoản, hoặc giỏ trống. Không đặt ở shared-types, cùng lý do trên.
 const REPURCHASE_DUE_SURFACES = ['account', 'cart_empty'] as const;
+// Thao tác Noel Xanh ở máy khách (tab Noel của Admin): mở khoá/treo/gỡ món trên cây thông, bấm chia sẻ thiệp, bật/tắt tuyết. Không có hằng này ở shared-types vì lý do trên.
+export const NOEL_ACTIONS = ['ornament_unlock', 'ornament_on', 'ornament_off', 'share_tap', 'snow_on', 'snow_off'] as const;
 
 type Rule = (v: unknown) => boolean;
 
@@ -175,6 +178,8 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   // Web điện thoại tự mở Zalo Mini App (W42): kết quả và mẫu route của trang khách đang xem, không URL thật, không tham số.
   miniapp_auto_open: { props: { result: oneOf(MINIAPP_AUTO_OPEN_RESULTS), path: ROUTE }, required: ['result'] },
   miniapp_smartbar_click: { props: { action: oneOf(MINIAPP_SMARTBAR_ACTIONS), path: ROUTE }, required: ['action'] },
+  // Noel Xanh (wave tubu-w58-02): thao tác và món (một trong sáu món cố định), không mang mã khách, mã mời hay nội dung thiệp.
+  noel_action: { props: { action: oneOf(NOEL_ACTIONS), slot: oneOf(NOEL_ORNAMENT_SLOTS) }, required: ['action'] },
 };
 
 /**

@@ -14,6 +14,8 @@ import {
   type OrnamentId,
   type OrnamentProgress,
 } from '@tubutree/app-core/seasonal/xmas-tree';
+import { ornamentActionProps, SHARE_ACTION_PROPS } from '@tubutree/app-core/seasonal/xmas-track';
+import { trackEvent } from '../../services/analytics';
 import { shareLink } from '../../services/zmp-bridge';
 import { useAuthStore } from '../../store/auth';
 import { browserStorage } from '../../utils/recently-viewed';
@@ -52,6 +54,8 @@ export default function ChristmasGarden({ progress }: ChristmasGardenProps) {
     if (next === tree) return;
     setTree(next);
     writeTreeState(browserStorage(), next);
+    const noel = ornamentActionProps(event, id);
+    if (noel) trackEvent('noel_action', 'miniapp', noel);
     if (event === 'off') {
       sfx.play('pop');
       return;
@@ -63,6 +67,7 @@ export default function ChristmasGarden({ progress }: ChristmasGardenProps) {
   const share = () => {
     if (sharing) return;
     setSharing(true);
+    trackEvent('noel_action', 'miniapp', SHARE_ACTION_PROPS);
     shareLink({ title: c.zaloTitle(name), description: c.zaloText(tree.on.length), path: withReferral('/game', referralCode) })
       .catch(() => undefined)
       .finally(() => setSharing(false));

@@ -7,8 +7,10 @@ import { adventTileClock, adventView, msUntilNextVnDay, vnDayKeyOf, type AdventV
 import { BURST_FLAKES, GIFT_ART, GIFT_VIEWBOX, ICON_VIEWBOX, SNOWFLAKES, TREE_ART, TREE_VIEWBOX, XMAS_ICONS, type Flake } from '@tubutree/app-core/seasonal/christmas-art';
 import { christmasCopy as c } from '@tubutree/app-core/seasonal/christmas-copy';
 import { adventLeadLine, christmasHeroView, giftPreview, readSnowOff, settleOpening, SHAKE_MS, shouldClaim, type GiftPhase, writeSnowOff } from '@tubutree/app-core/seasonal/christmas-hero';
+import { snowActionProps } from '@tubutree/app-core/seasonal/xmas-track';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
+import { trackEvent } from '../../services/analytics';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { browserStorage } from '../../utils/recently-viewed';
@@ -26,6 +28,7 @@ export default function ChristmasHome() {
     const next = !snowOn;
     setSnowOn(next);
     writeSnowOff(browserStorage(), !next);
+    trackEvent('noel_action', 'miniapp', snowActionProps(next));
   };
   return (
     <>

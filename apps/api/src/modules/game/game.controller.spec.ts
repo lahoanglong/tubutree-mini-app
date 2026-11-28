@@ -7,11 +7,12 @@ import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { GameController } from './game.controller';
 import type { GameGardenService } from './game-garden.service';
 import type { GameArcadeService } from './game-arcade.service';
+import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { GameService } from './game.service';
 
 function controllerWith(game: Partial<GameService>) {
   const none = {} as never;
-  return new GameController(game as GameService, none, none, none, none, none, none, none, none, none);
+  return new GameController(game as GameService, none, none, none, none, none, none, none, none, none, none);
 }
 
 describe('GameController.buyTree', () => {
@@ -43,7 +44,7 @@ describe('GameController.unlockPlot', () => {
   it('chuyển slot tới GameGardenService.unlockPlot', async () => {
     const unlockPlot = jest.fn().mockResolvedValue({ slot: 2 });
     const none = {} as never;
-    const ctrl = new GameController(none, none, none, none, none, none, none, { unlockPlot } as unknown as GameGardenService, none, none);
+    const ctrl = new GameController(none, none, none, none, none, none, none, { unlockPlot } as unknown as GameGardenService, none, none, none);
     await ctrl.unlockPlot('u1', { currency: 'SEEDS', slot: 2 });
     expect(unlockPlot).toHaveBeenCalledWith('u1', 'SEEDS', 2);
   });
@@ -63,9 +64,9 @@ describe('GameController — điểm danh', () => {
 });
 
 describe('GameController — mini-game arcade và thẻ chẩn đoán tổ ấm', () => {
-  const arcadeCtrl = (arcade: Partial<GameArcadeService>) => {
+  const arcadeCtrl = (arcade: Partial<GameArcadeService>, analytics: Partial<AnalyticsEventsService> = { recordBestEffort: jest.fn() }) => {
     const none = {} as never;
-    return new GameController(none, none, none, none, none, none, none, none, none, arcade as GameArcadeService);
+    return new GameController(none, none, none, none, none, none, none, none, none, arcade as GameArcadeService, analytics as AnalyticsEventsService);
   };
   const dtoOf = (method: string, index = 1) =>
     (Reflect.getMetadata('design:paramtypes', GameController.prototype, method) as Array<new () => object>)[index]!;
@@ -77,6 +78,34 @@ describe('GameController — mini-game arcade và thẻ chẩn đoán tổ ấm'
     const complete = jest.fn().mockResolvedValue({ rewarded: true });
     await arcadeCtrl({ complete }).arcadeComplete('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000, runId: RUN });
     expect(complete).toHaveBeenCalledWith('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000, runId: RUN });
+  });
+
+  it('arcade-complete ghi sự kiện máy chủ arcade_run (điểm, có thưởng, giọt, điểm) sau khi service xong, không chứa tên hay SĐT', async () => {
+    const complete = jest.fn().mockResolvedValue({ rewarded: true, waterEarned: 5, pointsEarned: 1, score: 120 });
+    const recordBestEffort = jest.fn().mockResolvedValue(undefined);
+    const out = await arcadeCtrl({ complete }, { recordBestEffort }).arcadeComplete('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000, runId: RUN });
+    expect(out).toMatchObject({ rewarded: true, waterEarned: 5 });
+    expect(recordBestEffort).toHaveBeenCalledTimes(1);
+    expect(recordBestEffort).toHaveBeenCalledWith({
+      eventName: 'arcade_run',
+      userId: 'u1',
+      platform: 'system',
+      props: { gameId: 'refill_rush', score: 120, rewarded: true, water: 5, points: 1 },
+    });
+    expect(complete.mock.invocationCallOrder[0]!).toBeLessThan(recordBestEffort.mock.invocationCallOrder[0]!);
+  });
+
+  it('arcade-complete bị từ chối (400/409) thì không ghi arcade_run và lỗi vẫn tới khách', async () => {
+    const complete = jest.fn().mockRejectedValue(new Error('RUN_USED'));
+    const recordBestEffort = jest.fn();
+    await expect(arcadeCtrl({ complete }, { recordBestEffort }).arcadeComplete('u1', { gameId: 'dew_catcher', score: 1, durationMs: 40_000, runId: RUN })).rejects.toThrow('RUN_USED');
+    expect(recordBestEffort).not.toHaveBeenCalled();
+  });
+
+  it('ghi sự kiện đo đạc lỗi không làm hỏng ván: kết quả thưởng vẫn trả về', async () => {
+    const complete = jest.fn().mockResolvedValue({ rewarded: false, waterEarned: 0, pointsEarned: 0 });
+    const recordBestEffort = jest.fn().mockResolvedValue(undefined);
+    await expect(arcadeCtrl({ complete }, { recordBestEffort }).arcadeComplete('u1', { gameId: 'dew_catcher', score: 5, durationMs: 40_000, runId: RUN })).resolves.toMatchObject({ rewarded: false });
   });
 
   it('POST /game/arcade-start chuyển game tới GameArcadeService.start, không cần userId', () => {

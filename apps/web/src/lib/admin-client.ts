@@ -26,6 +26,8 @@ import type {
   ExternalClaimState,
   ZaloBridgeState,
   LaunchWatchDTO,
+  NoelMetricsDTO,
+  NoelWindowDays,
 } from '@tubutree/shared-types';
 
 export interface DealerApp {
@@ -1819,6 +1821,9 @@ export const getRetentionDaily = (days = 30) =>
 
 /** Bảng theo dõi sau launch (chỉ ADMIN): phễu Đổi rác, chống gian lận, đơn thứ hai; API giữ kết quả 60 giây. */
 export const getLaunchWatch = () => apiFetch<LaunchWatchDTO>('/admin/analytics/launch-watch');
+
+/** Số liệu Noel Xanh cho tab Noel (chỉ ADMIN, 1/7/14 ngày giờ VN); API giữ kết quả 60 giây. */
+export const getNoelMetrics = (days: NoelWindowDays) => apiFetch<NoelMetricsDTO>(`/admin/analytics/noel?days=${days}`);
 
 // ── Ô chọn (khách / sản phẩm / bậc đại lý), duyệt đánh giá, gói định kỳ (C-092) ──
 export interface AdminVariationHit {

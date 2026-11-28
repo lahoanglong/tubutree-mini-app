@@ -11,6 +11,7 @@ import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, 
 import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 import { EXTERNAL_FUNNEL, EXTERNAL_FUNNEL_PATH } from '@/test-utils/fixtures/external-funnel';
+import { emptyNoelMetrics } from '@/test-utils/fixtures/noel-metrics';
 
 /** Tab tải lười (next/dynamic) hiện sau vài lượt chờ: đợi tới khi điều kiện đúng thay vì đoán số lượt flush. */
 async function waitFor(cond: () => boolean, timeoutMs = 5000) {
@@ -55,6 +56,7 @@ beforeAll(async () => {
     import('@/components/admin/reports-tab'),
     import('./analytics-tab'),
     import('@/components/admin/launch-watch-tab'),
+    import('@/components/admin/noel-metrics-tab'),
   ]);
 }, 60_000);
 
@@ -3112,6 +3114,67 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     expect(navItems(container)).not.toContain('Theo dõi 72h sau launch');
     expect(container.textContent).not.toContain('Phễu Đổi rác');
     expect(api.calls.some((c) => c.url.includes('/admin/analytics/launch-watch'))).toBe(false);
+  });
+
+  describe('tab Noel (chỉ ADMIN, chỉ khi theme.seasonal = christmas)', () => {
+    const SEASON_ROW = (value: unknown) => ({ key: 'theme.seasonal', value, description: 'Giao diện mùa', category: 'theme' });
+    const noelApi = () => mockFetch({ '/admin/analytics/noel': { body: emptyNoelMetrics() } });
+    const noelCalls = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/admin/analytics/noel'));
+
+    it('mùa Noel đang bật: menu có Noel (nhóm Tổng quan), ?tab=noel vẽ tab và gọi API đúng một lần', async () => {
+      mocks.config = [SEASON_ROW('christmas')];
+      window.history.replaceState(null, '', '/admin?tab=noel');
+      const api = noelApi();
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = await mount();
+      await waitFor(() => container.textContent?.includes('Noel Xanh') ?? false);
+      expect(container.querySelector('h2')?.textContent).toBe('Noel Xanh');
+      expect(navItems(container)).toContain('Noel');
+      expect(noelCalls(api.calls)).toHaveLength(1);
+      expect(window.location.search).toBe('?tab=noel');
+    });
+
+    it('chưa bật mùa Noel (không có dòng cấu hình, hoặc mùa khác): menu không có Noel và ?tab=noel rơi về tab đầu', async () => {
+      for (const rows of [[], [SEASON_ROW('')], [SEASON_ROW('tet')]]) {
+        mocks.config = rows;
+        window.history.replaceState(null, '', '/admin?tab=noel');
+        const api = noelApi();
+        vi.stubGlobal('fetch', vi.fn(api.fn));
+        const r = await mount();
+        await flush();
+        expect(navItems(r.container)).not.toContain('Noel');
+        expect(r.container.textContent).not.toContain('Noel Xanh');
+        expect(noelCalls(api.calls)).toHaveLength(0);
+        expect(window.location.search).not.toContain('noel');
+        r.unmount();
+        mounted = [];
+      }
+    });
+
+    it('đang tải cấu hình: tab Noel chưa vào menu', async () => {
+      mocks.config = [SEASON_ROW('christmas')];
+      window.history.replaceState(null, '', '/admin');
+      vi.stubGlobal('fetch', vi.fn(noelApi().fn));
+      const r = render(<AdminPage />);
+      mounted.push(r);
+      expect(navLabels(r.container)).not.toContain('Noel');
+      await flush();
+      expect(navLabels(r.container)).toContain('Noel');
+    });
+
+    it('nhân viên đủ mọi nhóm việc không thấy Noel dù mùa đang bật; ?tab=noel rơi về mục đầu và không gọi API Noel', async () => {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+      mocks.config = [SEASON_ROW('christmas')];
+      window.history.replaceState(null, '', '/admin?tab=noel');
+      const api = noelApi();
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = await mount();
+      await flush();
+      expect(navItems(container)).not.toContain('Noel');
+      expect(container.textContent).not.toContain('Noel Xanh');
+      expect(noelCalls(api.calls)).toHaveLength(0);
+    });
   });
 
   it('Chat CSKH: chỉ nhân viên CSKH và ADMIN thấy; KHO thì không và URL ?tab=supportChat rơi về tab đầu được phép', async () => {

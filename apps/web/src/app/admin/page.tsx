@@ -244,6 +244,7 @@ type Tab =
   | 'subscriptions'
   | 'analytics'
   | 'launchWatch'
+  | 'noel'
   | 'growth'
   | 'catalogQuality'
   | 'merchShelves'
@@ -282,6 +283,7 @@ const BundlesTab = dynamic(() => import('@/components/admin/bundles-tab').then((
 const NotificationTemplatesTab = dynamic(() => import('@/components/admin/notification-templates-tab').then((m) => m.NotificationTemplatesTab), { loading: tabLoading });
 const AnalyticsTab = dynamic(() => import('./analytics-tab').then((m) => m.AnalyticsTab), { loading: tabLoading });
 const LaunchWatchTab = dynamic(() => import('@/components/admin/launch-watch-tab').then((m) => m.LaunchWatchTab), { loading: tabLoading });
+const NoelMetricsTab = dynamic(() => import('@/components/admin/noel-metrics-tab').then((m) => m.NoelMetricsTab), { loading: tabLoading });
 const GrowthHubTab = dynamic(() => import('./growth-hub/growth-hub-tab').then((m) => m.GrowthHubTab), { loading: tabLoading });
 const CatalogQualityTab = dynamic(() => import('./catalog-quality-tab').then((m) => m.CatalogQualityTab), { loading: tabLoading });
 const MerchShelvesTab = dynamic(() => import('@/components/admin/merch-shelves/merch-shelves-tab').then((m) => m.MerchShelvesTab), { loading: tabLoading });
@@ -319,6 +321,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'growth', label: 'Trung tâm tăng trưởng', keywords: 'phễu chuyển đổi quay lại mua lần 2 game bật tắt ghép cặp đoán xuất xứ giỏ đúng việc chọn chuẩn xanh căn bếp không nhựa điểm danh trần điểm xanh hộ chiếu xanh mời bạn mss zalo banner miễn phí giao quà tặng 0đ' },
       { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
       { k: 'launchWatch', label: 'Theo dõi 72h sau launch', keywords: 'launch phễu đổi rác gian lận đơn thứ hai 72 giờ' },
+      { k: 'noel', label: 'Noel', keywords: 'noel giáng sinh cây thông tuyết lịch quà trang trí thiệp quay lại hôm sau game thưởng' },
       { k: 'reports', label: 'Báo cáo' },
     ],
   },
@@ -520,6 +523,23 @@ function staffTabs(perms: readonly string[]): Set<Tab> {
 
 const TAB_KEYS = new Set<Tab>(TABS.map((t) => t.k));
 const ALL_TABS: ReadonlySet<Tab> = TAB_KEYS;
+const ALL_TABS_WITHOUT_NOEL: ReadonlySet<Tab> = new Set([...TAB_KEYS].filter((k) => k !== 'noel'));
+
+/** Tab Noel chỉ có khi giao diện mùa đang là Noel (`theme.seasonal`, cùng khoá nhóm "Giao diện theo mùa" ở Trung tâm tăng trưởng). */
+type NoelTabState = 'on' | 'off' | 'loading';
+const SEASONAL_THEME_ROW = 'theme.seasonal';
+function noelTabState(isAdmin: boolean, loading: boolean, rows: ReadonlyArray<{ key: string; value: unknown }> | undefined): NoelTabState {
+  if (!isAdmin) return 'off';
+  if (loading) return 'loading';
+  return rows?.find((r) => r.key === SEASONAL_THEME_ROW)?.value === 'christmas' ? 'on' : 'off';
+}
+/**
+ * Tab ADMIN được mở. Đang tải cấu hình thì Noel vẫn được mở (link `?tab=noel` không bị đá về tab đầu và ghi đè URL) nhưng chưa vào menu (`forMenu`):
+ * tải xong mà mùa không phải Noel thì tab biến mất.
+ */
+function adminTabs(noel: NoelTabState, forMenu = false): ReadonlySet<Tab> {
+  return noel === 'on' || (noel === 'loading' && !forMenu) ? ALL_TABS : ALL_TABS_WITHOUT_NOEL;
+}
 
 /** Tab đầu tiên (theo thứ tự thanh bên) mà người xem được phép mở; nơi rơi về khi URL xin tab bị cấm. */
 function firstAllowedTab(allowed: ReadonlySet<Tab>): Tab {
@@ -600,6 +620,9 @@ export default function AdminPage() {
   // Cờ tích điểm tại quầy đang tắt thì không mời vào màn thu ngân; chưa biết (đang tải hoặc lỗi) thì vẫn hiện để nhân viên quầy không mất lối vào.
   // Chỉ hỏi sau khi có phiên: trước đó /me/loyalty/member-card trả 401 ở mỗi lần mở /admin (token chưa được làm mới xong).
   const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000, enabled: status === 'authenticated' });
+  // Chung khoá `admin-config` với Trung tâm tăng trưởng và tab Cấu hình, nên không thêm lượt gọi khi họ đã mở.
+  const configQ = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig(), staleTime: 60_000, enabled: status === 'authenticated' && role === 'ADMIN' });
+  const noel = noelTabState(role === 'ADMIN', role === 'ADMIN' && configQ.isLoading, configQ.data);
   const accessQ = useQuery({
     queryKey: ['admin-ops-access'],
     queryFn: getOpsAccess,
@@ -633,10 +656,10 @@ export default function AdminPage() {
   useEffect(() => {
     if (!initialized || status !== 'authenticated') return;
     if (role !== 'ADMIN' && !(role === 'STAFF' && accessQ.data)) return;
-    const allowedTabs: ReadonlySet<Tab> = role === 'ADMIN' ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
+    const allowedTabs: ReadonlySet<Tab> = role === 'ADMIN' ? adminTabs(noel) : staffTabs(accessQ.data?.staffPermissions ?? []);
     if (allowedTabs.has(tab) || readUrlState().tab !== tab) return;
     writeUrlState(firstAllowedTab(allowedTabs), '', '');
-  }, [initialized, status, role, accessQ.data, tab]);
+  }, [initialized, status, role, accessQ.data, noel, tab]);
 
   const setTab = (t: Tab) => {
     setConsignmentSeed(0);
@@ -826,8 +849,8 @@ export default function AdminPage() {
   if (role === 'STAFF' && !accessQ.data) return <Center>Không tải được quyền của bạn. Tải lại trang để thử lại.</Center>;
 
   const isAdmin = role === 'ADMIN';
-  const allowed: ReadonlySet<Tab> = isAdmin ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
-  const groups = adminNavGroups(allowed, isAdmin, accessQ.data?.staffPermissions ?? []);
+  const allowed: ReadonlySet<Tab> = isAdmin ? adminTabs(noel) : staffTabs(accessQ.data?.staffPermissions ?? []);
+  const groups = adminNavGroups(isAdmin ? adminTabs(noel, true) : allowed, isAdmin, accessQ.data?.staffPermissions ?? []);
   const active: Tab = allowed.has(tab) ? tab : firstAllowedTab(allowed);
   const canReviewReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH');
   const canReceiveReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO');
@@ -936,6 +959,7 @@ export default function AdminPage() {
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab onOpenReports={allowed.has('reports') ? () => setTab('reports') : undefined} />}
           {active === 'launchWatch' && <LaunchWatchTab />}
+          {active === 'noel' && noel === 'on' && <NoelMetricsTab />}
           {active === 'growth' && (
             <GrowthHubTab
               onOpenConfig={allowed.has('config') ? () => setTab('config') : undefined}

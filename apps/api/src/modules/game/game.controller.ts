@@ -14,6 +14,7 @@ import { GameGiftService } from './game-gift.service';
 import { GameGardenService } from './game-garden.service';
 import { SeasonPassService } from './season-pass.service';
 import { GameArcadeService } from './game-arcade.service';
+import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { ARCADE_GAME_IDS, type ArcadeGameId } from './game-arcade.constants';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
@@ -59,6 +60,7 @@ export class GameController {
     private readonly garden: GameGardenService,
     private readonly seasonPass: SeasonPassService,
     private readonly arcade: GameArcadeService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   @Get('profile')
@@ -168,8 +170,16 @@ export class GameController {
   // Mỗi ván gọi một lần lúc kết thúc; 12 ván/phút là nhiều hơn mức người chơi thật chạm tới (ván ngắn nhất 5 giây).
   @Throttle({ default: { limit: 12, ttl: 60_000 } })
   @Post('arcade-complete')
-  arcadeComplete(@CurrentUser('sub') userId: string, @Body() dto: ArcadeCompleteDto) {
-    return this.arcade.complete(userId, dto);
+  async arcadeComplete(@CurrentUser('sub') userId: string, @Body() dto: ArcadeCompleteDto) {
+    const result = await this.arcade.complete(userId, dto);
+    // Số đo cho tab Noel của Admin (điểm TB, số ván kể cả ván không thưởng): ghi SAU khi giao dịch thưởng đã xong, ngoài nó, không bao giờ ném.
+    void this.analytics.recordBestEffort({
+      eventName: 'arcade_run',
+      userId,
+      platform: 'system',
+      props: { gameId: dto.gameId, score: dto.score, rewarded: result.rewarded, water: result.waterEarned, points: result.pointsEarned },
+    });
+    return result;
   }
 
   @Get('arcade/status')
