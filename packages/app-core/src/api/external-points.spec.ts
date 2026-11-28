@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fakeHttp } from './fake-http';
-import { EXTERNAL_CLAIM_REJECT_CODES, externalClaimRejectCode, getMyExternalClaims, phoneConfirmPrompt, submitExternalClaim } from './external-points';
+import { EXTERNAL_CLAIM_REJECT_CODES, externalClaimRejectCode, getMyExternalClaims, phoneConfirmPrompt, retryExternalClaimPhone, submitExternalClaim } from './external-points';
 
 describe('external-points — hợp đồng gọi API', () => {
   it('gửi mã và xem lịch sử (mặc định trang 1, 10 dòng)', async () => {
@@ -16,6 +16,15 @@ describe('external-points — hợp đồng gọi API', () => {
       { method: 'post', path: '/me/external-points/claims', body: { code: 'SPXVN125', via: 'typed', recipientPhoneLast4: '8326' } },
       { method: 'get', path: '/me/external-points/claims', opts: { query: { page: 1, limit: 10 } } },
       { method: 'get', path: '/me/external-points/claims', opts: { query: { page: 3, limit: 5 } } },
+    ]);
+  });
+  it('W59: nhập lại 4 số cuối từ dòng lịch sử gửi đúng một khoá (claimId hoặc attemptId)', async () => {
+    const { http, calls } = fakeHttp();
+    await retryExternalClaimPhone(http, { claimId: 'c1' }, '8326');
+    await retryExternalClaimPhone(http, { attemptId: 'a1' }, '0011');
+    expect(calls).toEqual([
+      { method: 'post', path: '/me/external-points/claims/phone-retry', body: { claimId: 'c1', recipientPhoneLast4: '8326' } },
+      { method: 'post', path: '/me/external-points/claims/phone-retry', body: { attemptId: 'a1', recipientPhoneLast4: '0011' } },
     ]);
   });
 });

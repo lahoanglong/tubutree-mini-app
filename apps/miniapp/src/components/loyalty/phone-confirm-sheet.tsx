@@ -31,7 +31,8 @@ export function PhoneConfirmSheet({
   pending: boolean;
   attempt: number;
   onSubmit: (last4: string) => void;
-  onOther: () => void;
+  /** Vắng (W59, hộp mở từ dòng lịch sử): không có nút "Quét đơn khác". */
+  onOther?: () => void;
   onClose: () => void;
   onSupport?: () => void;
 }) {
@@ -71,9 +72,11 @@ export function PhoneConfirmSheet({
           <Button fullWidth size="lg" loading={pending} disabled={locked} onPress={submit}>
             {C.submit}
           </Button>
-          <Button fullWidth size="lg" variant="secondary" onPress={onOther}>
-            {C.other}
-          </Button>
+          {onOther && (
+            <Button fullWidth size="lg" variant="secondary" onPress={onOther}>
+              {C.other}
+            </Button>
+          )}
         </div>
       }
     >

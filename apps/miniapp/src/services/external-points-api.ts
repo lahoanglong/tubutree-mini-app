@@ -3,7 +3,9 @@ import type {
   MyExternalClaimsResponse,
   SubmitExternalClaimResponse,
 } from '@tubutree/shared-types';
-import { phoneConfirmPrompt, type PhoneConfirmPrompt } from '@tubutree/app-core/api/external-points';
+import { phoneConfirmPrompt, type PhoneConfirmPrompt, type PhoneRetryTarget } from '@tubutree/app-core/api/external-points';
+
+export type { PhoneRetryTarget } from '@tubutree/app-core/api/external-points';
 import { api } from './api';
 import { isHttpError } from './http';
 
@@ -24,6 +26,10 @@ export const submitExternalClaim = (code: string, via?: 'scan' | 'typed', recipi
       ...(recipientPhoneLast4 ? { recipientPhoneLast4 } : {}),
     })
     .then((r) => r.data);
+
+/** W59: nhập 4 số cuối SĐT người nhận từ dòng lịch sử (claim REVIEW chỉ vì SĐT, hoặc lượt quét dừng ở hộp xác nhận), không quét lại. */
+export const retryExternalClaimPhone = (target: PhoneRetryTarget, recipientPhoneLast4: string) =>
+  api.post<SubmitExternalClaimResponse>('/me/external-points/claims/phone-retry', { ...target, recipientPhoneLast4 }).then((r) => r.data);
 
 export const getMyExternalClaims = (page = 1, limit = 10) =>
   api.get<MyExternalClaimsResponse>('/me/external-points/claims', { params: { page, limit } }).then((r) => r.data);

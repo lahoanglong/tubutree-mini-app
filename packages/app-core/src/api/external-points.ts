@@ -12,6 +12,13 @@ export const submitExternalClaim = (http: HttpClient, code: string, via?: 'scan'
     ...(recipientPhoneLast4 ? { recipientPhoneLast4 } : {}),
   });
 
+/** W59: dòng lịch sử để nhập lại 4 số cuối: claim REVIEW có `phoneRetry`, hoặc lượt quét trong `needsPhone`. */
+export type PhoneRetryTarget = { claimId: string } | { attemptId: string };
+
+/** W59: nhập 4 số cuối SĐT người nhận từ dòng lịch sử, không quét lại. Lỗi PHONE_CONFIRM_* giống `submitExternalClaim`. */
+export const retryExternalClaimPhone = (http: HttpClient, target: PhoneRetryTarget, recipientPhoneLast4: string) =>
+  http.post<SubmitExternalClaimResponse>('/me/external-points/claims/phone-retry', { ...target, recipientPhoneLast4 });
+
 export const getMyExternalClaims = (http: HttpClient, page = 1, limit = 10) =>
   http.get<MyExternalClaimsResponse>('/me/external-points/claims', { query: { page, limit } });
 

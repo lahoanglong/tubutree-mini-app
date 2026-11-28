@@ -30,8 +30,8 @@ describe('MARKETPLACE_CLAIM_WEB_COPY', () => {
     expect(MARKETPLACE_CLAIM_WEB_COPY.loginCta).toBe('Đăng nhập để tích điểm');
   });
 
-  it('SĐT tự gõ trên web (W45): nói rõ đơn được CSKH đối chiếu, không hứa cộng ngay; vẫn mời xác minh trên Zalo', () => {
-    expect(MARKETPLACE_CLAIM_WEB_COPY.unverifiedNote).toContain('CSKH đối chiếu');
+  it('SĐT tự gõ trên web: không còn câu "CSKH đối chiếu" (W59, khớp SĐT là chờ cộng ngay); vẫn mời xác minh trên Zalo', () => {
+    expect('unverifiedNote' in MARKETPLACE_CLAIM_WEB_COPY).toBe(false);
     expect(MARKETPLACE_CLAIM_WEB_COPY.phoneAlt).toContain('xác minh số trên Zalo');
     expect(MARKETPLACE_CLAIM_WEB_COPY.notVerified).toContain('xác minh qua Zalo');
   });
@@ -72,9 +72,12 @@ describe('PHONE_CONFIRM_COPY (W46): xác nhận 4 số cuối SĐT người nh�
 
   it('câu lỗi theo mã: sai kèm lượt còn lại, khoá, lần hỏi đầu không báo lỗi', () => {
     expect(phoneConfirmErrorText('PHONE_CONFIRM_REQUIRED', null)).toBeNull();
-    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', 2)).toBe('4 số cuối chưa khớp (còn 2 lượt thử)');
-    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', null)).toBe('4 số cuối chưa khớp.');
-    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', 0)).toBe('4 số cuối chưa khớp.');
+    // W59: đúng lời PO 28/11, kèm lượt còn lại khi máy chủ gửi.
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', 2)).toBe(
+      'Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại (còn 2 lượt).',
+    );
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', null)).toBe('Số điện thoại nhận hàng chưa khớp — kiểm tra lại 4 số cuối trên phiếu giao hàng rồi thử lại.');
+    expect(phoneConfirmErrorText('PHONE_CONFIRM_WRONG', 0)).toBe(PHONE_CONFIRM_COPY.wrongNoCount);
     expect(phoneConfirmErrorText('PHONE_CONFIRM_LOCKED', 0)).toBe(PHONE_CONFIRM_COPY.locked);
   });
 });
@@ -88,6 +91,9 @@ describe('claimStateView / claimDetail / claimResultDetail (Mini và web cùng l
     expect(claimStateView({ state: 'REVERSED', expectedCreditAt: null }).label).toBe('Đã thu hồi');
     expect(claimStateView({ state: 'LAPSED', expectedCreditAt: null }).label).toBe('Hết hạn');
     expect(claimStateView({ state: 'VOIDED', expectedCreditAt: null })).toEqual({ label: 'Đã huỷ', tone: 'danger' });
+    // W59: REVIEW chỉ vì SĐT không hiện "Đang kiểm tra" mà mời khách tự nhập 4 số cuối.
+    expect(claimStateView({ state: 'REVIEW', expectedCreditAt: null, phoneRetry: true })).toEqual({ label: 'Nhập 4 số cuối', tone: 'warning' });
+    expect(claimStateView({ state: 'REVIEW', expectedCreditAt: null })).toEqual({ label: 'Đang kiểm tra', tone: 'warning' });
   });
   it('dòng phụ: ngày cộng hoặc ngày dự kiến', () => {
     expect(claimDetail({ state: 'CREDITED', creditedAt: '2026-11-05T01:00:00Z', expectedCreditAt: null }, fmt)).toBe('Đã cộng 2026-11-05');
